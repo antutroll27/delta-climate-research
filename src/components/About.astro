@@ -9,13 +9,13 @@ const pillars = [
 
 <section id="about" class="section divider-top" aria-labelledby="about-title">
   <span class="draw-line" data-draw aria-hidden="true"></span>
-  <div class="wrap about-grid">
-    <div class="about-lead" data-reveal>
+  <div class="wrap grid grid-cols-1 gap-(--space-about-gap) min-[900px]:grid-cols-[6fr_4fr] min-[900px]:items-start">
+    <div data-reveal>
       <p class="sec-index">01 — About</p>
       <h2 id="about-title" class="sec-title">
         Between the data and the <em>decision.</em>
       </h2>
-      <p class="about-body">
+      <p class="mt-[1.75rem] max-w-[56ch] text-body leading-[1.6] text-ink-muted">
         Delta Climate Research is a boutique consultancy sitting between raw
         earth-science data and the institutions that must act on it. We turn
         decision-grade measurement into standards-aligned, defensible adaptation
@@ -23,11 +23,11 @@ const pillars = [
         strategy.
       </p>
 
-      <ul class="pillars" data-reveal-group data-stagger="80">
+      <ul class="list-none m-0 p-0 grid gap-0 mt-[2.5rem]" data-reveal-group data-stagger="80">
         {pillars.map((p) => (
-          <li>
-            <span class="pillar-k">{p.k}</span>
-            <span class="pillar-v">{p.v}</span>
+          <li class="flex flex-col gap-[0.3rem] py-[1.1rem] border-t border-hairline [&:last-child]:border-b">
+            <span class="font-semibold text-[1.0625rem] text-paper">{p.k}</span>
+            <span class="font-mono text-[0.8125rem] text-ink-faint">{p.v}</span>
           </li>
         ))}
       </ul>
@@ -37,55 +37,12 @@ const pillars = [
          so the GSAP clip and the IntersectionObserver reveal never co-own opacity. -->
     <aside class="about-visual" aria-hidden="true" data-clip style="--clip-radius: 14px;">
       <span class="visual-bg" data-parallax="-0.05" aria-hidden="true"></span>
-      <span class="visual-tag">FIG. 01 — SYSTEMS MAP</span>
+      <span class="absolute top-[1rem] left-[1rem] font-mono text-[0.6875rem] tracking-[0.14em] text-cyan-muted">FIG. 01 — SYSTEMS MAP</span>
     </aside>
   </div>
 </section>
 
 <style>
-  .about-grid {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: clamp(2rem, 5vw, 4rem);
-  }
-  @media (min-width: 900px) {
-    .about-grid { grid-template-columns: 6fr 4fr; align-items: start; }
-  }
-
-  .about-body {
-    margin: 1.75rem 0 0;
-    max-width: 56ch;
-    font-size: clamp(1rem, 1.4vw, 1.2rem);
-    line-height: 1.6;
-    color: var(--color-ink-muted);
-  }
-
-  .pillars {
-    list-style: none;
-    margin: 2.5rem 0 0;
-    padding: 0;
-    display: grid;
-    gap: 0;
-  }
-  .pillars li {
-    display: flex;
-    flex-direction: column;
-    gap: 0.3rem;
-    padding: 1.1rem 0;
-    border-top: 1px solid var(--color-hairline);
-  }
-  .pillars li:last-child { border-bottom: 1px solid var(--color-hairline); }
-  .pillar-k {
-    font-weight: 600;
-    font-size: 1.0625rem;
-    color: var(--color-paper);
-  }
-  .pillar-v {
-    font-family: var(--font-mono);
-    font-size: 0.8125rem;
-    color: var(--color-ink-faint);
-  }
-
   .about-visual {
     position: relative;
     min-height: 320px;
@@ -102,14 +59,5 @@ const pillars = [
     inset: -12% -4%;
     background: radial-gradient(40% 50% at 30% 30%, rgb(176 141 87 / 0.22), transparent 70%);
     pointer-events: none;
-  }
-  .visual-tag {
-    position: absolute;
-    top: 1rem;
-    left: 1rem;
-    font-family: var(--font-mono);
-    font-size: 0.6875rem;
-    letter-spacing: 0.14em;
-    color: var(--color-cyan-muted);
   }
 </style>
