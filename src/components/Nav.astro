@@ -38,6 +38,9 @@ const links = [
   </nav>
 </header>
 
+<!-- page scroll-progress line (driven by scroll-effects.ts) -->
+<div class="nav-progress" data-progress aria-hidden="true"></div>
+
 <!-- mobile full-screen overlay; generative background remains visible behind it -->
 <div id="mobile-menu" class="mobile-menu" data-open="false" hidden>
   <ul>
@@ -58,6 +61,20 @@ const links = [
        (The data-scrolled attribute is still toggled in JS so a subtle scrim
        can be reintroduced later once there's scrolling content below.) */
     background: transparent;
+  }
+
+  .nav-progress {
+    position: fixed;
+    top: 80px; /* sits at the nav's bottom edge */
+    left: 0;
+    z-index: 50;
+    height: 2px;
+    width: 100%;
+    background: var(--color-cyan);
+    box-shadow: 0 0 12px rgb(111 202 214 / 0.5);
+    transform: scaleX(0);
+    transform-origin: 0 50%;
+    pointer-events: none;
   }
 
   .nav-inner {
