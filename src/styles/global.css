@@ -103,6 +103,43 @@
     border-top: 1px solid var(--color-hairline);
   }
 
+  /* --- scroll effects --- */
+
+  /* sections become the positioning context for their draw-line overlay */
+  .section { position: relative; }
+
+  /* draw-line: cyan accent overlaying the divider hairline, scaled in on scroll */
+  .draw-line {
+    position: absolute;
+    top: -1px;
+    left: 0;
+    height: 1px;
+    width: 100%;
+    background: var(--color-cyan);
+    opacity: 0.6;
+    transform: scaleX(0);
+    transform-origin: 0 50%;
+    pointer-events: none;
+  }
+
+  /* clip-path reveal: hide the "from" state pre-paint so there is no first-load
+     flash. Reuses the existing reveal-ready gate (added only when motion is OK),
+     so no-JS / reduced-motion keeps the panels fully visible.
+     NOTE: 16% must match CLIP_INSET in scroll-effects.ts. */
+  @media (prefers-reduced-motion: no-preference) {
+    .reveal-ready [data-clip] {
+      clip-path: inset(16% round var(--clip-radius, 14px));
+      opacity: 0.6;
+    }
+  }
+
+  /* reduced motion: decorative scaled-from-zero overlays would otherwise sit
+     invisible; hide them outright for tidiness. */
+  @media (prefers-reduced-motion: reduce) {
+    .draw-line,
+    .nav-progress { display: none; }
+  }
+
   /* shared section header: large bronze index + serif-accentable h2 */
   .sec-index {
     font-family: var(--font-mono);
