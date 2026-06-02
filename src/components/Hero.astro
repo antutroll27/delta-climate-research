@@ -8,21 +8,23 @@ const pre = ['Navigating', 'the', 'systems', 'of', 'a'];
   <div class="grain" aria-hidden="true"></div>
 
   <div class="hero-inner">
-    <p class="kicker" style="--i:0">Research-led climate intelligence</p>
+    <p class="kicker" style="--i:0" data-parallax="-0.04">Research-led climate intelligence</p>
 
-    <h1 class="headline">
+    <h1 class="headline" data-parallax="-0.06">
       {pre.map((w, i) => (
         <span class="word" style={`--i:${i + 1}`}>{w}{' '}</span>
       ))}
       <span class="word accent" style="--i:7">changing&nbsp;planet.</span>
     </h1>
 
-    <p class="lede word" style="--i:9">
-      Decision-grade climate-risk and embodied-carbon intelligence, interpreted with rigor.
-    </p>
+    <div data-parallax="-0.08">
+      <p class="lede word" style="--i:9">
+        Decision-grade climate-risk and embodied-carbon intelligence, interpreted with rigor.
+      </p>
+    </div>
   </div>
 
-  <p class="corner" style="--i:10">Built for the frontier.</p>
+  <p class="corner" style="--i:10" data-parallax="0.06">Built for the frontier.</p>
 </section>
 
 <style>

@@ -4,6 +4,7 @@
 ---
 
 <section id="medni" class="section divider-top" aria-labelledby="medni-title">
+  <span class="draw-line" data-draw aria-hidden="true"></span>
   <div class="wrap medni-head" data-reveal>
     <p class="sec-index">04 — Medni</p>
     <h2 id="medni-title" class="sec-title">Living <em>intelligence,</em> by location.</h2>
@@ -13,7 +14,9 @@
   </div>
 
   <div class="wrap">
-    <div class="dashboard" data-reveal>
+    <!-- data-clip owns the entrance (wipe + fade); no data-reveal, so the GSAP
+         clip and the IntersectionObserver reveal never co-own opacity. -->
+    <div class="dashboard" data-clip style="--clip-radius: 16px;">
       <div class="map" aria-label="Interactive climate map (placeholder)">
         <span class="map-grid" aria-hidden="true"></span>
         <span class="map-tag">22.57°N · 88.36°E — KOLKATA</span>
@@ -49,6 +52,7 @@
     gap: 1.25rem;
     border: 1px solid var(--color-hairline);
     border-radius: 16px;
+    overflow: hidden;
     padding: 1.25rem;
     background: var(--color-surface);
   }
