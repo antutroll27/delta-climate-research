@@ -30,7 +30,7 @@ const projects = [
 
 <section id="projects" class="section divider-top" aria-labelledby="projects-title">
   <span class="draw-line" data-draw aria-hidden="true"></span>
-  <div class="wrap projects-head" data-reveal>
+  <div class="wrap flex items-end justify-between gap-[1.5rem] mb-(--space-head-mb)" data-reveal>
     <div>
       <p class="sec-index">02 — Projects</p>
       <h2 id="projects-title" class="sec-title">Proof, before <em>theory.</em></h2>
@@ -38,20 +38,20 @@ const projects = [
     <a class="accent-link" href="/projects">All case studies ↗</a>
   </div>
 
-  <div class="rail-wrap">
-    <ul class="rail" role="list" data-reveal-group data-stagger="90">
+  <div class="rail-wrap overflow-x-auto">
+    <ul class="rail grid grid-flow-col auto-cols-[minmax(300px,30vw)] gap-[1.25rem] list-none m-0 px-(--space-gutter)" role="list" data-reveal-group data-stagger="90">
       {projects.map((p) => (
         <li class="card">
-          <a href={p.href} class="card-link">
+          <a href={p.href} class="card-link flex flex-col h-full border border-hairline rounded-[14px] overflow-hidden bg-surface no-underline">
             <span class="cover" aria-hidden="true"></span>
-            <span class="card-body">
-              <span class="card-tags">{p.tags}</span>
-              <span class="card-title">
-                <span class="card-id">{p.id}</span>{p.title}
+            <span class="card-body flex flex-col px-[1.25rem] pt-[1.25rem] pb-[1.4rem]">
+              <span class="card-tags font-mono text-[0.6875rem] tracking-[0.1em] uppercase text-cyan-muted">{p.tags}</span>
+              <span class="card-title mt-[0.6rem] font-bold text-[1.25rem] tracking-[-0.01em] text-paper">
+                <span class="card-id font-mono text-[0.8125rem] text-bronze mr-[0.5rem]">{p.id}</span>{p.title}
               </span>
-              <span class="card-sub">{p.sub}</span>
-              <span class="card-blurb">{p.blurb}</span>
-              <span class="card-arrow" aria-hidden="true">↗</span>
+              <span class="card-sub mt-[0.2rem] text-[0.875rem] text-ink-muted">{p.sub}</span>
+              <span class="card-blurb mt-[0.9rem] text-[0.875rem] leading-[1.5] text-ink-faint max-w-[40ch]">{p.blurb}</span>
+              <span class="card-arrow mt-[1.1rem] text-cyan text-[1.1rem]" aria-hidden="true">↗</span>
             </span>
           </a>
         </li>
@@ -61,43 +61,20 @@ const projects = [
 </section>
 
 <style>
-  .projects-head {
-    display: flex;
-    align-items: flex-end;
-    justify-content: space-between;
-    gap: 1.5rem;
-    margin-bottom: clamp(2rem, 4vw, 3rem);
-  }
-
-  .rail-wrap { overflow-x: auto; scrollbar-width: thin; }
-  .rail {
-    display: grid;
-    grid-auto-flow: column;
-    grid-auto-columns: minmax(300px, 30vw);
-    gap: 1.25rem;
-    list-style: none;
-    margin: 0;
-    padding: 0 clamp(1rem, 4vw, 2.5rem);
-    scroll-snap-type: x mandatory;
-  }
+  /* Retained: scrollbar-width has no utility; snap + media kept verbatim. */
+  .rail-wrap { scrollbar-width: thin; }
+  .rail { scroll-snap-type: x mandatory; }
   @media (max-width: 720px) {
     .rail { grid-auto-columns: minmax(82vw, 82vw); }
   }
 
   .card { scroll-snap-align: start; }
-  .card-link {
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-    border: 1px solid var(--color-hairline);
-    border-radius: 14px;
-    overflow: hidden;
-    background: var(--color-surface);
-    text-decoration: none;
-    transition: border-color 0.25s ease, transform 0.25s ease;
-  }
+
+  /* Retained: hover + transition (not in no-hover screenshots). */
+  .card-link { transition: border-color 0.25s ease, transform 0.25s ease; }
   .card-link:hover { border-color: var(--color-cyan); transform: translateY(-3px); }
 
+  /* Retained: gradient cover, aspect-ratio, grayscale filter + hover. */
   .cover {
     display: block;
     aspect-ratio: 16 / 10;
@@ -109,40 +86,7 @@ const projects = [
   }
   .card-link:hover .cover { filter: grayscale(0); }
 
-  .card-body { display: flex; flex-direction: column; padding: 1.25rem 1.25rem 1.4rem; }
-  .card-tags {
-    font-family: var(--font-mono);
-    font-size: 0.6875rem;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--color-cyan-muted);
-  }
-  .card-title {
-    margin-top: 0.6rem;
-    font-weight: 700;
-    font-size: 1.25rem;
-    letter-spacing: -0.01em;
-    color: var(--color-paper);
-  }
-  .card-id {
-    font-family: var(--font-mono);
-    font-size: 0.8125rem;
-    color: var(--color-bronze);
-    margin-right: 0.5rem;
-  }
-  .card-sub { margin-top: 0.2rem; font-size: 0.875rem; color: var(--color-ink-muted); }
-  .card-blurb {
-    margin-top: 0.9rem;
-    font-size: 0.875rem;
-    line-height: 1.5;
-    color: var(--color-ink-faint);
-    max-width: 40ch;
-  }
-  .card-arrow {
-    margin-top: 1.1rem;
-    color: var(--color-cyan);
-    font-size: 1.1rem;
-    transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
-  }
+  /* Retained: arrow transition + hover. */
+  .card-arrow { transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1); }
   .card-link:hover .card-arrow { transform: translate(3px, -3px); }
 </style>
