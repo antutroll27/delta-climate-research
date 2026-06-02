@@ -8,6 +8,7 @@ const pillars = [
 ---
 
 <section id="about" class="section divider-top" aria-labelledby="about-title">
+  <span class="draw-line" data-draw aria-hidden="true"></span>
   <div class="wrap about-grid">
     <div class="about-lead" data-reveal>
       <p class="sec-index">01 — About</p>
@@ -32,7 +33,8 @@ const pillars = [
       </ul>
     </div>
 
-    <aside class="about-visual" aria-hidden="true" data-reveal>
+    <aside class="about-visual" aria-hidden="true" data-reveal data-clip>
+      <span class="visual-bg" data-parallax="-0.05"></span>
       <span class="visual-tag">FIG. 01 — SYSTEMS MAP</span>
     </aside>
   </div>
@@ -85,11 +87,19 @@ const pillars = [
   .about-visual {
     position: relative;
     min-height: 320px;
+    overflow: hidden;
     border: 1px solid var(--color-hairline);
     border-radius: 14px;
     background:
       radial-gradient(80% 80% at 70% 20%, rgb(111 202 214 / 0.08), transparent 60%),
       var(--color-surface);
+  }
+  /* parallax layer — drifts slower than the frame for depth */
+  .visual-bg {
+    position: absolute;
+    inset: -12% -4%;
+    background: radial-gradient(40% 50% at 30% 30%, rgb(176 141 87 / 0.22), transparent 70%);
+    pointer-events: none;
   }
   .visual-tag {
     position: absolute;
