@@ -22,3 +22,8 @@ Thumbs.db
 # Astro
 .astro/
 .vercel
+
+# tailwind-migration verification artifacts (temporary)
+screenshots/
+scripts/_shot.mjs
+scripts/_diff.mjs
