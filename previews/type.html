@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Delta — Playfair Display × Satoshi type test</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap" rel="stylesheet">
+<link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700,900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --base:#050606; --surface:#0B2C2E; --surface-2:#093A3E;
+    --hairline:rgba(111,202,214,.14);
+    --paper:#ECEDF0; --ink-muted:#8FA3A5; --ink-faint:#5C7173;
+    --cyan:#6FCAD6; --cyan-muted:#92C2CB; --bronze:#B08D57;
+    --serif:"Playfair Display", Georgia, serif;
+    --sans:"Satoshi", ui-sans-serif, system-ui, sans-serif;
+    --mono: ui-monospace,"SF Mono","JetBrains Mono",monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0; background:var(--base); color:var(--paper); font-family:var(--sans);
+       -webkit-font-smoothing:antialiased; padding:56px clamp(16px,6vw,96px); line-height:1.55}
+  .sectitle{font-family:var(--mono); font-size:12px; color:var(--ink-faint); text-transform:uppercase;
+            letter-spacing:.2em; border-bottom:1px solid var(--hairline); padding-bottom:10px; margin:56px 0 26px}
+  .kicker{font-family:var(--mono); font-size:11px; letter-spacing:.2em; text-transform:uppercase; color:var(--cyan-muted)}
+
+  /* hero — Satoshi base, Playfair only on the accent word */
+  h1{font-family:var(--sans); font-weight:700; font-size:clamp(40px,7vw,86px); line-height:1.02;
+     letter-spacing:-.02em; margin:14px 0 0; max-width:15ch}
+  h1 em{font-family:var(--serif); font-style:italic; color:var(--cyan); font-weight:500; letter-spacing:0}
+  .lede{font-family:var(--sans); font-weight:400; color:var(--ink-muted); font-size:clamp(15px,1.5vw,18px);
+        max-width:54ch; margin-top:22px}
+
+  /* weights of satoshi */
+  .w div{margin-bottom:6px}
+  .w .a{font-weight:400} .w .b{font-weight:500} .w .c{font-weight:700} .w .d{font-weight:900}
+
+  /* Satoshi headline base, Playfair italic accent word */
+  .pf div{font-family:var(--sans); font-weight:700; font-size:40px; line-height:1.12; letter-spacing:-.02em; margin-bottom:10px}
+  .pf em{font-family:var(--serif); font-style:italic; font-weight:500; color:var(--cyan); letter-spacing:0}
+
+  /* small-size fragility demo */
+  .demo{display:grid; grid-template-columns:1fr 1fr; gap:24px}
+  .demo .box{border:1px solid var(--hairline); border-radius:10px; padding:20px; background:var(--surface)}
+  .demo .lbl{font-family:var(--mono); font-size:10px; color:var(--cyan-muted); letter-spacing:.1em; margin-bottom:12px}
+  .bad{font-family:var(--serif); font-size:13px; color:var(--paper)}
+  .good{font-family:var(--sans); font-size:13px; color:var(--paper)}
+  .x{color:#d66} .ok{color:var(--cyan)}
+
+  /* feed row */
+  .row{display:grid; grid-template-columns:auto 1fr auto; gap:24px; padding:30px 4px; border-bottom:1px solid var(--hairline)}
+  .row .idx{font-family:var(--mono); color:var(--bronze); font-size:13px}
+  .row .m{font-family:var(--mono); font-size:11px; color:var(--cyan-muted); letter-spacing:.08em; margin-bottom:8px}
+  .row h3{font-family:var(--sans); font-weight:700; font-size:22px; letter-spacing:-.01em; margin:0 0 8px}
+  .row p{font-family:var(--sans); color:var(--ink-muted); font-size:14px; max-width:60ch; margin:0}
+  .row .ar{color:var(--cyan); font-size:18px}
+
+  .cta{display:inline-block; margin-top:8px; font-family:var(--sans); font-weight:500; color:var(--cyan);
+       border:1px solid var(--cyan); padding:12px 20px; border-radius:8px; font-size:14px; letter-spacing:.02em}
+</style>
+</head>
+<body>
+
+  <div class="kicker">Research-led climate intelligence</div>
+  <h1>Navigating the systems of a <em>changing planet.</em></h1>
+  <p class="lede">Decision-grade climate-risk and embodied-carbon intelligence — measured with instruments, interpreted with rigor, communicated with design.</p>
+
+  <div class="sectitle">Playfair — accent words only (one per headline, italic)</div>
+  <div class="pf">
+    <div class="h2">The <em>interpretation</em> layer</div>
+    <div class="h2">Built for the <em>frontier</em></div>
+    <div class="h2">Climate <em>intelligence</em>, made decision-grade</div>
+  </div>
+
+  <div class="sectitle">Satoshi — everything else (headings, subheads, body, UI)</div>
+  <div class="w">
+    <div class="a">Regular 400 — High-density body copy explaining the boutique consultancy model, bridging climate science, urban-heat research, and industrial strategy at a comfortable reading measure.</div>
+    <div class="b">Medium 500 — UI labels, buttons, nav links, emphasis.</div>
+    <div class="c">Bold 700 — sub-section headings and strong emphasis.</div>
+    <div class="d">Black 900 — rare, for loud numeric or label moments.</div>
+  </div>
+
+  <div class="sectitle">Why Playfair stays large (small-size fragility on near-black)</div>
+  <div class="demo">
+    <div class="box"><div class="lbl">✗ PLAYFAIR @ 13PX BODY</div><div class="bad">This is body text set in Playfair Display. Notice how the hairline strokes thin out and shimmer against the near-black — it reads fragile and tiring at paragraph sizes. <span class="x">Avoid.</span></div></div>
+    <div class="box"><div class="lbl">✓ SATOSHI @ 13PX BODY</div><div class="good">This is the same body text set in Satoshi. Even strokes, stable on dark, comfortable to read in long passages. <span class="ok">Use for all body.</span></div></div>
+  </div>
+
+  <div class="sectitle">In context — White Papers feed row</div>
+  <div class="row">
+    <div class="idx">[01]</div>
+    <div><div class="m">12.06.2026 — BLUE CARBON</div><h3>Soil organic carbon accounting under VM0033</h3><p>Belowground biomass and sediment-core MRV for tidal-wetland restoration, and why SOC defensibility separates premium credits.</p></div>
+    <div class="ar">↗</div>
+  </div>
+  <div style="margin-top:24px"><a class="cta">Access Planetary Insights →</a></div>
+
+</body>
+</html>

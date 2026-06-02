@@ -1,0 +1,57 @@
+---
+const year = 2026;
+const links = [
+  { label: 'About', href: '/#about' },
+  { label: 'Projects', href: '/#projects' },
+  { label: 'White Papers', href: '/white-papers' },
+  { label: 'Medni', href: '/#medni' },
+];
+---
+
+<footer class="site-footer divider-top">
+  <div class="wrap footer-inner">
+    <span class="footer-logo">Delta<span class="dot">·</span>Climate</span>
+
+    <ul class="footer-links" role="list">
+      {links.map((l) => <li><a href={l.href}>{l.label}</a></li>)}
+    </ul>
+
+    <p class="footer-meta">© {year} Delta Climate Research — Built for the frontier.</p>
+  </div>
+</footer>
+
+<style>
+  .site-footer { padding-block: clamp(2.5rem, 5vw, 4rem); }
+  .footer-inner {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.5rem;
+  }
+  .footer-logo { font-weight: 700; font-size: 1.0625rem; color: var(--color-paper); }
+  .footer-logo .dot { color: var(--color-cyan); }
+
+  .footer-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: clamp(1rem, 2.5vw, 2rem);
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+  .footer-links a { color: var(--color-ink-muted); text-decoration: none; transition: color 0.2s ease; }
+  .footer-links a:hover { color: var(--color-paper); }
+
+  .footer-meta {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    letter-spacing: 0.06em;
+    color: var(--color-ink-faint);
+  }
+</style>

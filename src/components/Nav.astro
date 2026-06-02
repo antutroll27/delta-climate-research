@@ -1,0 +1,214 @@
+---
+const links = [
+  { label: 'About', href: '/#about' },
+  { label: 'Projects', href: '/#projects' },
+  { label: 'White Papers', href: '/white-papers' },
+  { label: 'Medni', href: '/#medni' },
+];
+---
+
+<!-- sentinel: observed to toggle the nav's scrolled state without a scroll listener -->
+<div id="nav-sentinel" aria-hidden="true"></div>
+
+<header id="site-nav" class="site-nav" data-scrolled="false">
+  <nav class="nav-inner" aria-label="Primary">
+    <a href="/" class="logo" aria-label="Delta Climate Research — home">
+      Delta<span class="dot">·</span>Climate
+    </a>
+
+    <ul class="nav-links">
+      {links.map((l) => (
+        <li><a href={l.href}>{l.label}</a></li>
+      ))}
+      <li>
+        <a href="/#medni" class="databank">Databank <span aria-hidden="true">↗</span></a>
+      </li>
+    </ul>
+
+    <button
+      type="button"
+      class="menu-toggle"
+      data-navigation-toggle
+      aria-expanded="false"
+      aria-controls="mobile-menu"
+      aria-label="Open menu"
+    >
+      <span></span><span></span>
+    </button>
+  </nav>
+</header>
+
+<!-- mobile full-screen overlay; generative background remains visible behind it -->
+<div id="mobile-menu" class="mobile-menu" data-open="false" hidden>
+  <ul>
+    {links.map((l) => (
+      <li><a href={l.href} data-mobile-link>{l.label}</a></li>
+    ))}
+    <li><a href="/#medni" data-mobile-link class="databank">Databank ↗</a></li>
+  </ul>
+</div>
+
+<style>
+  .site-nav {
+    position: fixed;
+    inset: 0 0 auto 0;
+    z-index: 50;
+    height: 80px;
+    /* intentionally transparent — blends into the background.
+       (The data-scrolled attribute is still toggled in JS so a subtle scrim
+       can be reintroduced later once there's scrolling content below.) */
+    background: transparent;
+  }
+
+  .nav-inner {
+    max-width: 1400px;
+    margin: 0 auto;
+    height: 100%;
+    padding: 0 clamp(1rem, 4vw, 2.5rem);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .logo {
+    font-weight: 700;
+    font-size: 1.25rem;
+    letter-spacing: -0.01em;
+    color: var(--color-paper);
+    text-decoration: none;
+  }
+  .logo .dot { color: var(--color-cyan); }
+
+  .nav-links {
+    display: flex;
+    align-items: center;
+    gap: clamp(1.75rem, 3.2vw, 3rem);
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    font-family: var(--font-mono);
+    font-size: 0.875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+  }
+  .nav-links a {
+    color: #f4f6f8; /* lighter off-white (brighter than --paper #ECEDF0, not pure white) */
+    font-weight: 300;
+    opacity: 0.9;
+    text-decoration: none;
+    transition: opacity 0.2s ease;
+  }
+  .nav-links a:hover { opacity: 1; }
+
+  /* solid primary button (specific selector so color/weight beat .nav-links a) */
+  .nav-links .databank {
+    background-color: var(--color-cyan);
+    color: var(--color-base);
+    opacity: 1;
+    font-weight: 500;
+    border: 1px solid var(--color-cyan);
+    border-radius: 8px;
+    padding: 0.85rem 1.5rem;
+    transition: background-color 0.25s ease, border-color 0.25s ease,
+      color 0.25s ease, box-shadow 0.25s ease;
+  }
+  .nav-links .databank:hover {
+    background-color: #f4f6f8;
+    border-color: #f4f6f8;
+    color: var(--color-base); /* off-black, not pure #000 */
+    font-weight: 700;
+    box-shadow: 0 0 30px rgb(244 246 248 / 0.5);
+  }
+
+  /* mobile toggle */
+  .menu-toggle {
+    display: none;
+    flex-direction: column;
+    gap: 6px;
+    background: none;
+    border: 0;
+    cursor: pointer;
+    padding: 8px;
+  }
+  .menu-toggle span {
+    width: 28px;
+    height: 2px;
+    background: var(--color-paper);
+    transition: transform 0.3s ease, opacity 0.3s ease;
+  }
+  .menu-toggle[aria-expanded='true'] span:first-child { transform: translateY(3.5px) rotate(45deg); }
+  .menu-toggle[aria-expanded='true'] span:last-child { transform: translateY(-3.5px) rotate(-45deg); }
+
+  .mobile-menu {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    display: grid;
+    place-items: center;
+    background: rgb(5 6 6 / 0.82);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.35s ease;
+  }
+  .mobile-menu[data-open='true'] { opacity: 1; pointer-events: auto; }
+  .mobile-menu ul { list-style: none; margin: 0; padding: 0; text-align: center; }
+  .mobile-menu li { margin: 0.5rem 0; }
+  .mobile-menu a {
+    font-size: clamp(2rem, 8vw, 3rem);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--color-paper);
+    text-decoration: none;
+  }
+  .mobile-menu .databank { border: 0; color: var(--color-cyan) !important; padding: 0; }
+
+  @media (max-width: 820px) {
+    .nav-links { display: none; }
+    .menu-toggle { display: flex; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .site-nav, .menu-toggle span, .mobile-menu { transition: none; }
+  }
+</style>
+
+<script>
+  function initNav() {
+    const nav = document.getElementById('site-nav');
+    const sentinel = document.getElementById('nav-sentinel');
+    const toggle = document.querySelector<HTMLButtonElement>('[data-navigation-toggle]');
+    const menu = document.getElementById('mobile-menu');
+    if (!nav || !sentinel) return;
+
+    // toggle scrolled state when the top sentinel leaves the viewport
+    const io = new IntersectionObserver(
+      ([entry]) => nav.setAttribute('data-scrolled', String(!entry.isIntersecting)),
+      { rootMargin: '-1px 0px 0px 0px', threshold: 0 }
+    );
+    io.observe(sentinel);
+
+    // mobile menu
+    if (toggle && menu) {
+      const setOpen = (open: boolean) => {
+        toggle.setAttribute('aria-expanded', String(open));
+        toggle.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
+        menu.setAttribute('data-open', String(open));
+        if (open) menu.hidden = false;
+        document.body.style.overflow = open ? 'hidden' : '';
+      };
+      toggle.addEventListener('click', () =>
+        setOpen(toggle.getAttribute('aria-expanded') !== 'true')
+      );
+      menu.querySelectorAll('[data-mobile-link]').forEach((a) =>
+        a.addEventListener('click', () => setOpen(false))
+      );
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') setOpen(false);
+      });
+    }
+  }
+
+  initNav();
+  document.addEventListener('astro:page-load', initNav);
+</script>

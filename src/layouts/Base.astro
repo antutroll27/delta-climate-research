@@ -1,0 +1,145 @@
+---
+import { ClientRouter } from 'astro:transitions';
+// Self-hosted variable fonts (Vite rewrites the woff2 URLs when imported here)
+import '@fontsource/spectral/latin-500-italic.css';
+import '@fontsource-variable/geist-mono/index.css';
+import 'lenis/dist/lenis.css';
+import '../styles/global.css';
+
+interface Props {
+  title?: string;
+  description?: string;
+}
+
+const {
+  title = 'Delta Climate Research — Research-led climate intelligence',
+  description = 'A boutique consultancy turning decision-grade climate-risk and embodied-carbon intelligence into standards-aligned adaptation decisions.',
+} = Astro.props;
+
+const canonical = new URL(Astro.url.pathname, Astro.site);
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta name="twitter:card" content="summary_large_image" />
+
+    <!-- Satoshi is self-hosted (variable woff2) via @font-face in global.css -->
+    <link
+      rel="preload"
+      href="/fonts/Satoshi-Variable.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+
+    <ClientRouter />
+
+    <!-- pre-paint: only enable reveal-hiding when motion is allowed (flash-safe; no-JS shows all) -->
+    <script is:inline>
+      try {
+        if (window.matchMedia('(prefers-reduced-motion: no-preference)').matches) {
+          document.documentElement.classList.add('reveal-ready');
+        }
+      } catch (e) {}
+    </script>
+  </head>
+  <body>
+    <slot />
+
+    <script>
+      import Lenis from 'lenis';
+
+      let lenis: Lenis | undefined;
+      let rafId = 0;
+
+      function setupSmoothScroll() {
+        // Respect reduced motion: fall back to native scroll entirely.
+        if (!window.matchMedia('(prefers-reduced-motion: no-preference)').matches) return;
+
+        // idempotent: tear down any prior instance + rAF before re-init
+        cancelAnimationFrame(rafId);
+        lenis?.destroy();
+        lenis = new Lenis({
+          lerp: 0.1, // interpolation factor — the "buttery" amount
+          wheelMultiplier: 1,
+          smoothWheel: true,
+        });
+
+        function raf(time: number) {
+          lenis!.raf(time);
+          rafId = requestAnimationFrame(raf);
+        }
+        rafId = requestAnimationFrame(raf);
+
+        // smooth same-page anchor navigation (nav links, CTAs)
+        document.querySelectorAll<HTMLAnchorElement>('a[href^="#"], a[href^="/#"]').forEach((a) => {
+          a.addEventListener('click', (e) => {
+            const hash = a.getAttribute('href')!.split('#')[1];
+            const target = hash && document.getElementById(hash);
+            if (target) {
+              e.preventDefault();
+              lenis!.scrollTo(target, { offset: -80, duration: 1.1 });
+            }
+          });
+        });
+
+        // tear down cleanly before a view-transition swap
+        document.addEventListener(
+          'astro:before-swap',
+          () => {
+            cancelAnimationFrame(rafId);
+            lenis?.destroy();
+            lenis = undefined;
+          },
+          { once: true }
+        );
+      }
+      // (rafId/lenis are module-scoped so re-init can cancel the prior loop)
+
+      setupSmoothScroll();
+      document.addEventListener('astro:page-load', setupSmoothScroll);
+
+      function setupReveals() {
+        if (!document.documentElement.classList.contains('reveal-ready')) return;
+        const io = new IntersectionObserver(
+          (entries, obs) => {
+            for (const entry of entries) {
+              if (!entry.isIntersecting) continue;
+              const el = entry.target as HTMLElement;
+              if (el.hasAttribute('data-reveal-group')) {
+                const step = parseInt(el.getAttribute('data-stagger') || '70', 10);
+                Array.from(el.children).forEach((child, i) => {
+                  (child as HTMLElement).style.transitionDelay = `${i * step}ms`;
+                  child.classList.add('is-inview');
+                });
+              } else {
+                el.classList.add('is-inview');
+              }
+              obs.unobserve(el);
+            }
+          },
+          { rootMargin: '0px 0px -4% 0px', threshold: 0.05 }
+        );
+        document
+          .querySelectorAll('[data-reveal], [data-reveal-group]')
+          .forEach((el) => io.observe(el));
+      }
+
+      setupReveals();
+      document.addEventListener('astro:page-load', setupReveals);
+    </script>
+  </body>
+</html>

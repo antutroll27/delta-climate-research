@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>B vs D vs B+D hybrid</title>
+<style>
+  :root{ --base:#050606; --surface:#0B2C2E; --surface-2:#093A3E;
+         --paper:#ECEDF0; --ink-muted:#8FA3A5; --bronze:#B08D57;
+         --sans: ui-sans-serif,"Inter",system-ui,sans-serif; --mono: ui-monospace,"SF Mono",monospace; }
+  *{box-sizing:border-box}
+  body{margin:0;background:#000;color:var(--paper);font-family:var(--sans);display:grid;grid-template-columns:1fr 1fr 1fr;min-height:100vh}
+  .col{padding:28px clamp(14px,2vw,26px);border-right:1px solid rgba(255,255,255,.07);background:var(--base);display:flex;flex-direction:column;gap:20px}
+  .tag{font-family:var(--mono);font-size:12px;color:var(--ink-muted);letter-spacing:.06em}
+  .tag b{color:var(--paper);font-family:var(--sans);font-size:13px}
+  .nav{display:flex;justify-content:space-between;align-items:center;border:1px solid rgba(111,202,214,.16);border-radius:8px;padding:10px 12px;font-size:12px}
+  .nav .logo{font-weight:700}
+  .nav .db{border:1px solid var(--accent);color:var(--accent);border-radius:6px;padding:4px 9px}
+  h1{font-weight:700;font-size:30px;line-height:1.05;letter-spacing:-.02em;margin:6px 0}
+  h1 em{font-style:italic;font-family:Georgia,serif;color:var(--accent)}
+  .meta{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--meta)}
+  .row{border-top:1px solid rgba(111,202,214,.16);padding-top:14px}
+  .row h3{font-weight:700;font-size:18px;margin:6px 0 6px}
+  .row p{color:var(--ink-muted);font-size:13px;margin:0}
+  .idx{font-family:var(--mono);color:var(--bronze);font-size:12px}
+  a.link{color:var(--accent);text-decoration:none;font-size:14px}
+  .cta{display:inline-block;border:1px solid var(--accent);color:var(--accent);border-radius:8px;padding:10px 16px;font-size:13px;text-decoration:none}
+  .cta.filled{background:var(--accent);color:var(--base);border:none;font-weight:600}
+  .arrow{color:var(--accent)}
+  .drawer{background:var(--surface-2);border:1px solid rgba(111,202,214,.16);border-radius:10px;padding:12px;font-family:var(--mono);font-size:11px;color:var(--ink-muted)}
+  .drawer .live{color:var(--meta)}
+</style>
+</head>
+<body>
+
+  <!-- B only -->
+  <div class="col" style="--accent:#6FCAD6;--meta:#6FCAD6">
+    <div class="tag"><b>B only</b> — #6FCAD6 everywhere</div>
+    <div class="nav"><span class="logo">DELTA·CLIMATE</span><span class="db">Databank ↗</span></div>
+    <h1>Navigating a <em>changing planet.</em></h1>
+    <div class="meta">[01] — 12.06.2026 — BLUE CARBON</div>
+    <div class="row"><span class="idx">[01]</span><h3>Soil carbon under VM0033</h3><p>Sediment-core MRV for tidal-wetland restoration. <a class="link" href="#">Read ↗</a></p></div>
+    <div style="display:flex;gap:10px"><a class="cta filled" href="#">Access Insights</a><a class="cta" href="#">Contact</a></div>
+    <div class="drawer"><span class="live">// LIVE AI PROCESSING</span><br>&gt; computing HVI…</div>
+  </div>
+
+  <!-- D only -->
+  <div class="col" style="--accent:#92C2CB;--meta:#92C2CB">
+    <div class="tag"><b>D only</b> — #92C2CB everywhere</div>
+    <div class="nav"><span class="logo">DELTA·CLIMATE</span><span class="db">Databank ↗</span></div>
+    <h1>Navigating a <em>changing planet.</em></h1>
+    <div class="meta">[01] — 12.06.2026 — BLUE CARBON</div>
+    <div class="row"><span class="idx">[01]</span><h3>Soil carbon under VM0033</h3><p>Sediment-core MRV for tidal-wetland restoration. <a class="link" href="#">Read ↗</a></p></div>
+    <div style="display:flex;gap:10px"><a class="cta filled" href="#">Access Insights</a><a class="cta" href="#">Contact</a></div>
+    <div class="drawer"><span class="live">// LIVE AI PROCESSING</span><br>&gt; computing HVI…</div>
+  </div>
+
+  <!-- Hybrid: B accent + D meta -->
+  <div class="col" style="--accent:#6FCAD6;--meta:#92C2CB;border-right:none;outline:1px solid #6FCAD6">
+    <div class="tag"><b>Hybrid (rec.)</b> — B accent + D meta</div>
+    <div class="nav"><span class="logo">DELTA·CLIMATE</span><span class="db">Databank ↗</span></div>
+    <h1>Navigating a <em>changing planet.</em></h1>
+    <div class="meta">[01] — 12.06.2026 — BLUE CARBON</div>
+    <div class="row"><span class="idx">[01]</span><h3>Soil carbon under VM0033</h3><p>Sediment-core MRV for tidal-wetland restoration. <a class="link" href="#">Read ↗</a></p></div>
+    <div style="display:flex;gap:10px"><a class="cta filled" href="#">Access Insights</a><a class="cta" href="#">Contact</a></div>
+    <div class="drawer"><span class="live">// LIVE AI PROCESSING</span><br>&gt; computing HVI…</div>
+  </div>
+
+</body>
+</html>

@@ -1,0 +1,147 @@
+---
+// Section 3 — Projects. Horizontal-scroll case-study cards.
+const projects = [
+  {
+    id: '01',
+    title: 'Project Kolkata',
+    sub: 'Urban Heat Mitigation',
+    tags: 'ECOSTRESS · HVI',
+    blurb: 'Street-scale heat diagnostics to ward-level intervention spec.',
+    href: '/projects/kolkata',
+  },
+  {
+    id: '02',
+    title: 'Mangrove Blue Carbon',
+    sub: 'Biochar Sequestration',
+    tags: 'VERRA VM0033 · MRV',
+    blurb: 'Soil-carbon-rigorous restoration accounting for premium credits.',
+    href: '/projects/mangrove-blue-carbon',
+  },
+  {
+    id: '03',
+    title: 'Sustainable Materials Trading',
+    sub: 'UAE–India Corridor',
+    tags: 'EPD · CBAM',
+    blurb: 'Embodied-carbon dossiers and CBAM compliance for exporters.',
+    href: '/projects/materials-trading',
+  },
+];
+---
+
+<section id="projects" class="section divider-top" aria-labelledby="projects-title">
+  <div class="wrap projects-head" data-reveal>
+    <div>
+      <p class="sec-index">02 — Projects</p>
+      <h2 id="projects-title" class="sec-title">Proof, before <em>theory.</em></h2>
+    </div>
+    <a class="accent-link" href="/projects">All case studies ↗</a>
+  </div>
+
+  <div class="rail-wrap">
+    <ul class="rail" role="list" data-reveal-group data-stagger="90">
+      {projects.map((p) => (
+        <li class="card">
+          <a href={p.href} class="card-link">
+            <span class="cover" aria-hidden="true"></span>
+            <span class="card-body">
+              <span class="card-tags">{p.tags}</span>
+              <span class="card-title">
+                <span class="card-id">{p.id}</span>{p.title}
+              </span>
+              <span class="card-sub">{p.sub}</span>
+              <span class="card-blurb">{p.blurb}</span>
+              <span class="card-arrow" aria-hidden="true">↗</span>
+            </span>
+          </a>
+        </li>
+      ))}
+    </ul>
+  </div>
+</section>
+
+<style>
+  .projects-head {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 1.5rem;
+    margin-bottom: clamp(2rem, 4vw, 3rem);
+  }
+
+  .rail-wrap { overflow-x: auto; scrollbar-width: thin; }
+  .rail {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(300px, 30vw);
+    gap: 1.25rem;
+    list-style: none;
+    margin: 0;
+    padding: 0 clamp(1rem, 4vw, 2.5rem);
+    scroll-snap-type: x mandatory;
+  }
+  @media (max-width: 720px) {
+    .rail { grid-auto-columns: minmax(82vw, 82vw); }
+  }
+
+  .card { scroll-snap-align: start; }
+  .card-link {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    border: 1px solid var(--color-hairline);
+    border-radius: 14px;
+    overflow: hidden;
+    background: var(--color-surface);
+    text-decoration: none;
+    transition: border-color 0.25s ease, transform 0.25s ease;
+  }
+  .card-link:hover { border-color: var(--color-cyan); transform: translateY(-3px); }
+
+  .cover {
+    display: block;
+    aspect-ratio: 16 / 10;
+    background:
+      radial-gradient(70% 90% at 30% 20%, rgb(111 202 214 / 0.12), transparent 60%),
+      linear-gradient(140deg, #0e3236, #07191b);
+    filter: grayscale(0.6);
+    transition: filter 0.4s ease;
+  }
+  .card-link:hover .cover { filter: grayscale(0); }
+
+  .card-body { display: flex; flex-direction: column; padding: 1.25rem 1.25rem 1.4rem; }
+  .card-tags {
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--color-cyan-muted);
+  }
+  .card-title {
+    margin-top: 0.6rem;
+    font-weight: 700;
+    font-size: 1.25rem;
+    letter-spacing: -0.01em;
+    color: var(--color-paper);
+  }
+  .card-id {
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    color: var(--color-bronze);
+    margin-right: 0.5rem;
+  }
+  .card-sub { margin-top: 0.2rem; font-size: 0.875rem; color: var(--color-ink-muted); }
+  .card-blurb {
+    margin-top: 0.9rem;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    color: var(--color-ink-faint);
+    max-width: 40ch;
+  }
+  .card-arrow {
+    margin-top: 1.1rem;
+    color: var(--color-cyan);
+    font-size: 1.1rem;
+    transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  .card-link:hover .card-arrow { transform: translate(3px, -3px); }
+</style>

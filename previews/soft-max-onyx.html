@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Onyx Aurora — darker (Direction 01 refined)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@1,500&family=Geist+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --sans:"Satoshi",system-ui,sans-serif; --serif:"Spectral",Georgia,serif; --mono:"Geist Mono",ui-monospace,monospace;
+    --paper:#ecedf0; --ink-muted:#c4d3d2; --ink-faint:#7f9694; --cyan:#6fcad6; --cyan-muted:#92c2cb;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{font-family:var(--sans);background:#020203;color:var(--paper)}
+
+  .hero{position:relative;min-height:100dvh;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end;
+        /* near-pure black base */
+        background:#010102;}
+
+  /* aurora blobs — fainter glows in deep darkness */
+  .blob{position:absolute;border-radius:50%;filter:blur(95px);z-index:1;pointer-events:none}
+  .blob.a{width:46vw;height:46vw;left:-12vw;top:-10vw;background:rgba(111,202,214,.24)}     /* teal */
+  .blob.b{width:38vw;height:38vw;right:-10vw;top:18vw;background:rgba(176,141,87,.14)}        /* bronze */
+  .blob.c{width:34vw;height:34vw;left:28vw;bottom:-18vw;background:rgba(86,60,120,.24)}      /* violet */
+  .blob.d{width:28vw;height:28vw;right:14vw;bottom:-12vw;background:rgba(20,90,96,.30)}        /* deep teal */
+
+  /* vignette: deep, pulling the field down to pure black at the edges */
+  .vignette{position:absolute;inset:0;z-index:2;pointer-events:none;
+            background:radial-gradient(115% 105% at 50% 32%, transparent 28%, rgba(0,0,0,.72) 70%, #000 100%)}
+
+  .grain{position:absolute;inset:0;z-index:3;pointer-events:none;opacity:.06;
+         background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+
+  /* nav */
+  nav{position:absolute;top:0;left:0;right:0;z-index:6;height:80px;display:flex;align-items:center;justify-content:space-between;
+      padding:0 clamp(16px,4vw,48px);max-width:1400px;margin:0 auto}
+  .logo{font-weight:700;font-size:1.25rem}.logo .d{color:var(--cyan)}
+  .links{display:flex;gap:clamp(1.75rem,3vw,3rem);align-items:center;font-family:var(--mono);font-size:.875rem;
+         text-transform:uppercase;letter-spacing:.12em;font-weight:300}
+  .links a{color:#f4f6f8;opacity:.9;text-decoration:none}
+  .db{background:var(--cyan);color:#030304;font-weight:500;border-radius:8px;padding:.85rem 1.5rem;opacity:1}
+
+  .inner{position:relative;z-index:5;padding:0 clamp(16px,4vw,48px) clamp(3rem,9vh,6rem);max-width:1400px;width:100%;margin:0 auto}
+  .kicker{font-family:var(--mono);font-size:.6875rem;letter-spacing:.22em;text-transform:uppercase;color:var(--cyan-muted);margin:0 0 1.25rem}
+  .head{font-weight:700;font-size:clamp(2.5rem,7vw,6rem);line-height:1.04;letter-spacing:-.02em;margin:0;max-width:16ch;color:var(--paper)}
+  .head em{font-family:var(--serif);font-style:italic;font-weight:500;color:var(--cyan);letter-spacing:0}
+  .lede{margin:1.5rem 0 0;font-size:clamp(.95rem,1.4vw,1.125rem);line-height:1.5;max-width:46ch;color:var(--paper)}
+  .corner{position:absolute;right:clamp(16px,4vw,48px);bottom:clamp(3rem,9vh,6rem);z-index:5;margin:0;max-width:18ch;text-align:right;font-size:.8125rem;color:var(--ink-faint)}
+</style>
+</head>
+<body>
+  <div class="hero">
+    <div class="blob a"></div><div class="blob b"></div><div class="blob c"></div><div class="blob d"></div>
+    <div class="vignette"></div>
+    <div class="grain"></div>
+
+    <nav>
+      <span class="logo">Delta<span class="d">·</span>Climate</span>
+      <span class="links"><a>ABOUT</a><a>PROJECTS</a><a>WHITE PAPERS</a><a>MEDNI</a><a class="db">Databank ↗</a></span>
+    </nav>
+
+    <div class="inner">
+      <p class="kicker">Research-led climate intelligence</p>
+      <h1 class="head">Navigating the systems of a <em>changing&nbsp;planet.</em></h1>
+      <p class="lede">Decision-grade climate-risk and embodied-carbon intelligence, interpreted with rigor.</p>
+    </div>
+    <p class="corner">Built for the frontier.</p>
+  </div>
+</body>
+</html>

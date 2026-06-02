@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Serif accent candidates</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant:ital,wght@1,500;1,600&family=Bodoni+Moda:ital,wght@1,500;1,600&family=DM+Serif+Display:ital@1&family=Playfair+Display:ital,wght@1,500;1,600&family=Cormorant+Garamond:ital,wght@1,500;1,600&display=swap" rel="stylesheet">
+<link href="https://api.fontshare.com/v2/css?f[]=satoshi@700&display=swap" rel="stylesheet">
+<style>
+  :root{ --base:#050606; --paper:#ecedf0; --ink-muted:#8fa3a5; --cyan:#6fcad6;
+         --sans:"Satoshi",system-ui,sans-serif; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--base);color:var(--paper);font-family:var(--sans);padding:40px clamp(16px,5vw,72px)}
+  h1{font-weight:700;font-size:24px;margin:0 0 4px}
+  .sub{color:var(--ink-muted);font-size:14px;margin:0 0 36px;max-width:70ch}
+  .row{border-top:1px solid rgb(111 202 214 / .14);padding:28px 0}
+  .label{font-family:ui-monospace,monospace;font-size:12px;color:var(--cyan);letter-spacing:.06em;margin-bottom:14px}
+  .label .free{color:#7ddf8a} .label .paid{color:#e0a85f}
+  .head{font-weight:700;font-size:clamp(2rem,5vw,4.25rem);line-height:1.05;letter-spacing:-.02em;max-width:18ch}
+  .acc{font-style:italic;font-weight:500;color:var(--cyan);letter-spacing:0}
+  .big{font-style:italic;font-weight:600;color:var(--cyan);font-size:clamp(3rem,9vw,7rem);line-height:1;display:block;margin-top:6px}
+</style>
+</head>
+<body>
+  <h1>Serif accent — capturing the "sacré" feel</h1>
+  <p class="sub">Each row: the hero headline (Satoshi) with the accent word in a candidate italic serif, plus the word "sacré / planet" large so you can read the letterforms. Target reference is a calligraphic high-contrast italic (Ogg/Canela family — commercial).</p>
+
+  <div class="row">
+    <div class="label">PLAYFAIR DISPLAY ITALIC — <span class="free">current · free</span></div>
+    <div class="head">Navigating a <span class="acc" style="font-family:'Playfair Display'">changing planet.</span></div>
+    <span class="big" style="font-family:'Playfair Display'">sacré</span>
+  </div>
+
+  <div class="row">
+    <div class="label">CORMORANT ITALIC — <span class="free">free · closest to the calligraphic look</span></div>
+    <div class="head">Navigating a <span class="acc" style="font-family:'Cormorant'">changing planet.</span></div>
+    <span class="big" style="font-family:'Cormorant'">sacré</span>
+  </div>
+
+  <div class="row">
+    <div class="label">CORMORANT GARAMOND ITALIC — <span class="free">free · slightly softer</span></div>
+    <div class="head">Navigating a <span class="acc" style="font-family:'Cormorant Garamond'">changing planet.</span></div>
+    <span class="big" style="font-family:'Cormorant Garamond'">sacré</span>
+  </div>
+
+  <div class="row">
+    <div class="label">BODONI MODA ITALIC — <span class="free">free · sharper / more didone</span></div>
+    <div class="head">Navigating a <span class="acc" style="font-family:'Bodoni Moda'">changing planet.</span></div>
+    <span class="big" style="font-family:'Bodoni Moda'">sacré</span>
+  </div>
+
+  <div class="row">
+    <div class="label">DM SERIF DISPLAY ITALIC — <span class="free">free · heavier</span></div>
+    <div class="head">Navigating a <span class="acc" style="font-family:'DM Serif Display'">changing planet.</span></div>
+    <span class="big" style="font-family:'DM Serif Display'">sacré</span>
+  </div>
+</body>
+</html>

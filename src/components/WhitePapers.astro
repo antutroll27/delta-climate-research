@@ -1,0 +1,127 @@
+---
+// Section 4 — White Papers feed (preview rows link to /white-papers).
+const papers = [
+  {
+    id: '01',
+    date: '2026.05',
+    cat: 'BLUE CARBON',
+    title: 'Soil organic carbon accounting under VM0033',
+    excerpt:
+      'Belowground biomass and sediment-core MRV for tidal-wetland restoration, and why SOC defensibility separates premium credits.',
+    href: '/white-papers/soc-accounting-vm0033',
+  },
+  {
+    id: '02',
+    date: '2026.04',
+    cat: 'URBAN HEAT',
+    title: 'Street-scale heat vulnerability from ECOSTRESS',
+    excerpt:
+      'Downscaling 70 m land-surface temperature into a sub-block Heat Vulnerability Index for dense Indian wards.',
+    href: '/white-papers/ecostress-heat-vulnerability',
+  },
+  {
+    id: '03',
+    date: '2026.03',
+    cat: 'MATERIALS · CBAM',
+    title: 'Embodied-carbon dossiers for the India–UAE corridor',
+    excerpt:
+      'EPD generation under ISO 14025 and CBAM emissions data for cement, steel, and aluminium exporters.',
+    href: '/white-papers/embodied-carbon-cbam',
+  },
+];
+---
+
+<section id="papers" class="section divider-top" aria-labelledby="papers-title">
+  <div class="wrap papers-head" data-reveal>
+    <div>
+      <p class="sec-index">03 — White Papers</p>
+      <h2 id="papers-title" class="sec-title">The thinking <em>behind</em> the work.</h2>
+    </div>
+    <a class="accent-link" href="/white-papers">All white papers ↗</a>
+  </div>
+
+  <div class="wrap">
+    <ul class="feed" role="list" data-reveal-group data-stagger="90">
+      {papers.map((p) => (
+        <li class="row">
+          <a href={p.href} class="row-link">
+            <span class="node" aria-hidden="true"></span>
+            <span class="row-main">
+              <span class="row-meta">
+                <span class="row-id">[{p.id}]</span> {p.date} — {p.cat}
+              </span>
+              <span class="row-title">{p.title}</span>
+              <span class="row-excerpt">{p.excerpt}</span>
+            </span>
+            <span class="row-arrow" aria-hidden="true">↗</span>
+          </a>
+        </li>
+      ))}
+    </ul>
+  </div>
+</section>
+
+<style>
+  .papers-head {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 1.5rem;
+    margin-bottom: clamp(1.5rem, 3vw, 2.5rem);
+  }
+
+  .feed { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--color-hairline); }
+  .row { border-bottom: 1px solid var(--color-hairline); }
+
+  .row-link {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: clamp(1rem, 3vw, 2rem);
+    align-items: start;
+    padding: clamp(1.5rem, 3vw, 2.25rem) 0;
+    text-decoration: none;
+    transition: opacity 0.3s ease, background-color 0.3s ease;
+  }
+  /* focus-pull: dim siblings when the feed is hovered, restore the hovered row.
+     opacity-only (no blur) so it stays fully composited / 120fps-safe. */
+  .feed:hover .row-link { opacity: 0.4; }
+  .feed .row-link:hover { opacity: 1; background-color: rgb(111 202 214 / 0.03); }
+
+  .node {
+    width: 11px; height: 11px; margin-top: 0.5rem;
+    border: 1px solid var(--color-bronze);
+    border-radius: 50%;
+    transition: background-color 0.25s ease;
+  }
+  .row-link:hover .node { background-color: var(--color-bronze); }
+
+  .row-meta {
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--color-cyan-muted);
+  }
+  .row-id { color: var(--color-bronze); }
+  .row-title {
+    display: block;
+    margin: 0.55rem 0 0.5rem;
+    font-weight: 700;
+    font-size: clamp(1.15rem, 2vw, 1.5rem);
+    letter-spacing: -0.01em;
+    color: var(--color-paper);
+  }
+  .row-excerpt {
+    display: block;
+    max-width: 62ch;
+    font-size: 0.9375rem;
+    line-height: 1.55;
+    color: var(--color-ink-muted);
+  }
+  .row-arrow {
+    color: var(--color-cyan);
+    font-size: 1.15rem;
+    transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  .row-link:hover .row-arrow { transform: translate(3px, -3px); }
+</style>

@@ -1,0 +1,123 @@
+---
+// Section 5 — Medni: the interactive data bank (product highlight).
+// Map + map-island mount later; this is the dashboard shell structure.
+---
+
+<section id="medni" class="section divider-top" aria-labelledby="medni-title">
+  <div class="wrap medni-head" data-reveal>
+    <p class="sec-index">04 — Medni</p>
+    <h2 id="medni-title" class="sec-title">Living <em>intelligence,</em> by location.</h2>
+    <p class="medni-sub">
+      Hyper-local climate-risk and adaptation guidance, on one geospatial spine.
+    </p>
+  </div>
+
+  <div class="wrap">
+    <div class="dashboard" data-reveal>
+      <div class="map" aria-label="Interactive climate map (placeholder)">
+        <span class="map-grid" aria-hidden="true"></span>
+        <span class="map-tag">22.57°N · 88.36°E — KOLKATA</span>
+        <span class="map-overlay" aria-hidden="true"></span>
+      </div>
+
+      <aside class="drawer">
+        <p class="drawer-live">// LIVE AI PROCESSING</p>
+        <ul class="stream" role="list">
+          <li>&gt; ingesting LST raster…</li>
+          <li>&gt; computing heat-vulnerability index…</li>
+          <li>&gt; cross-referencing cool-roof SRI…</li>
+          <li class="cursor">&gt; recommending intervention spec</li>
+        </ul>
+        <a href="#access" class="cta-box">Access Planetary Insights →</a>
+      </aside>
+    </div>
+  </div>
+</section>
+
+<style>
+  .medni-head { margin-bottom: clamp(2rem, 4vw, 3rem); }
+  .medni-sub {
+    margin: 1rem 0 0;
+    max-width: 50ch;
+    font-size: clamp(1rem, 1.3vw, 1.15rem);
+    color: var(--color-ink-muted);
+  }
+
+  .dashboard {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1.25rem;
+    border: 1px solid var(--color-hairline);
+    border-radius: 16px;
+    padding: 1.25rem;
+    background: var(--color-surface);
+  }
+  @media (min-width: 900px) {
+    .dashboard { grid-template-columns: 1fr 320px; }
+  }
+
+  .map {
+    position: relative;
+    min-height: clamp(300px, 48vh, 460px);
+    border-radius: 12px;
+    overflow: hidden;
+    background:
+      radial-gradient(60% 80% at 35% 40%, rgb(111 202 214 / 0.28), transparent 60%),
+      var(--color-surface-2);
+  }
+  .map-grid {
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(var(--color-hairline) 1px, transparent 1px),
+      linear-gradient(90deg, var(--color-hairline) 1px, transparent 1px);
+    background-size: 32px 32px;
+    opacity: 0.5;
+  }
+  .map-overlay {
+    position: absolute; inset: 0;
+    background: radial-gradient(28% 36% at 38% 42%, rgb(176 141 87 / 0.4), transparent 70%);
+    mix-blend-mode: screen;
+  }
+  .map-tag {
+    position: absolute; left: 1rem; bottom: 1rem;
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    letter-spacing: 0.1em;
+    color: var(--color-cyan-muted);
+  }
+
+  .drawer {
+    display: flex;
+    flex-direction: column;
+    border-radius: 12px;
+    padding: 1.25rem;
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-hairline);
+    font-family: var(--font-mono);
+  }
+  .drawer-live { margin: 0 0 1rem; font-size: 0.75rem; letter-spacing: 0.08em; color: var(--color-cyan); }
+  .stream { list-style: none; margin: 0 0 auto; padding: 0; display: grid; gap: 0.55rem; }
+  .stream li { font-size: 0.78rem; line-height: 1.5; color: var(--color-ink-muted); }
+  .cursor::after {
+    content: '▋';
+    color: var(--color-cyan);
+    margin-left: 2px;
+    animation: blink 1.1s steps(2) infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { .cursor::after { animation: none; } }
+
+  .cta-box {
+    margin-top: 1.5rem;
+    text-align: center;
+    font-size: 0.8125rem;
+    letter-spacing: 0.03em;
+    color: var(--color-cyan);
+    border: 1px solid var(--color-cyan);
+    border-radius: 8px;
+    padding: 0.85rem 1rem;
+    text-decoration: none;
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
+  .cta-box:hover { background-color: var(--color-cyan); color: var(--color-base); }
+</style>

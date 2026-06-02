@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Soft maximalism — hero directions</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@1,500;1,600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700,900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --sans:"Satoshi",system-ui,sans-serif;
+    --serif:"Spectral",Georgia,serif;
+    --mono:"Geist Mono",ui-monospace,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:var(--sans);background:#0a0a0a;color:#fff}
+  .intro{padding:34px clamp(16px,5vw,72px);background:#0a0a0a;border-bottom:1px solid rgba(255,255,255,.1)}
+  .intro h1{font-size:24px;margin:0 0 6px}
+  .intro p{color:#9aa;font-size:14px;margin:0;max-width:78ch}
+
+  .variant{position:relative;min-height:90vh;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end;padding:0}
+  .vtag{position:absolute;top:24px;left:clamp(16px,4vw,48px);z-index:5;font-family:var(--mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase}
+  .vtag b{font-family:var(--sans);font-weight:700;text-transform:none;font-size:15px;display:block;letter-spacing:0;margin-top:4px}
+  .vnote{position:absolute;top:24px;right:clamp(16px,4vw,48px);z-index:5;font-family:var(--mono);font-size:11px;max-width:30ch;text-align:right;line-height:1.5;opacity:.8}
+  .inner{position:relative;z-index:4;padding:0 clamp(16px,5vw,72px) clamp(3rem,8vh,5rem);max-width:1300px;width:100%;margin:0 auto}
+  .kicker{font-family:var(--mono);font-size:.7rem;letter-spacing:.2em;text-transform:uppercase;margin:0 0 1.1rem}
+  .head{font-family:var(--sans);font-weight:700;font-size:clamp(2.4rem,6.5vw,5.5rem);line-height:1.04;letter-spacing:-.02em;margin:0;max-width:17ch}
+  .head em{font-family:var(--serif);font-style:italic;font-weight:500;letter-spacing:0}
+  .lede{margin:1.4rem 0 0;font-size:clamp(.95rem,1.4vw,1.1rem);line-height:1.55;max-width:46ch}
+  .grain{position:absolute;inset:0;z-index:2;pointer-events:none;opacity:.06;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+  .blob{position:absolute;border-radius:50%;filter:blur(70px);z-index:1;pointer-events:none}
+  .ring{position:absolute;border-radius:50%;border:1px solid currentColor;z-index:1;pointer-events:none}
+
+  /* ============ V1 · ONYX AURORA (dark soft-max) ============ */
+  .v1{background:#070809;color:#ecedf0}
+  .v1 .blob.a{width:46vw;height:46vw;left:-8vw;top:-6vw;background:rgba(111,202,214,.30)}
+  .v1 .blob.b{width:40vw;height:40vw;right:-6vw;top:18vw;background:rgba(176,141,87,.22)}
+  .v1 .blob.c{width:34vw;height:34vw;left:30vw;bottom:-14vw;background:rgba(86,60,120,.30)}
+  .v1 .kicker{color:#92c2cb}
+  .v1 .head em{color:#9be0e8}
+  .v1 .lede{color:#c4d3d2}
+
+  /* ============ V2 · WARM FIELD (light warm soft-max) ============ */
+  .v2{background:#ece5d8;color:#241f1a}
+  .v2 .blob.a{width:42vw;height:42vw;left:-6vw;top:-8vw;background:rgba(180,101,74,.45)}      /* clay */
+  .v2 .blob.b{width:38vw;height:38vw;right:-8vw;top:6vw;background:rgba(126,140,107,.5)}        /* sage */
+  .v2 .blob.c{width:34vw;height:34vw;right:10vw;bottom:-12vw;background:rgba(42,90,90,.4)}       /* deep teal */
+  .v2 .blob.d{width:24vw;height:24vw;left:18vw;bottom:-6vw;background:rgba(199,160,106,.5)}      /* bronze */
+  .v2 .grain{opacity:.09;mix-blend-mode:multiply}
+  .v2 .kicker{color:#8a4a36}
+  .v2 .head{color:#241f1a}
+  .v2 .head em{color:#2a5a5a}
+  .v2 .lede{color:#4a4038}
+
+  /* ============ V3 · ATMOSPHERIC DATA (dark instrument soft-max) ============ */
+  .v3{background:radial-gradient(120% 120% at 70% 20%,#0b2c2e 0%,#061416 55%,#050606 100%);color:#ecedf0}
+  .v3 .ring{color:rgba(111,202,214,.16)}
+  .v3 .ring.r1{width:60vw;height:60vw;right:-18vw;top:-18vw}
+  .v3 .ring.r2{width:42vw;height:42vw;right:-8vw;top:-6vw}
+  .v3 .ring.r3{width:26vw;height:26vw;right:2vw;top:6vw}
+  .v3 .bigword{position:absolute;z-index:1;right:-2vw;top:34%;font-family:var(--serif);font-style:italic;font-size:22vw;line-height:1;color:rgba(111,202,214,.05);pointer-events:none}
+  .v3 .contour{position:absolute;inset:0;z-index:1;opacity:.5;pointer-events:none;background-image:repeating-radial-gradient(circle at 75% 25%,transparent 0 38px,rgba(111,202,214,.05) 38px 39px)}
+  .v3 .kicker{color:#92c2cb}
+  .v3 .head em{color:#6fcad6}
+  .v3 .lede{color:#a9c2c0}
+
+  /* ============ V4 · TWILIGHT DRENCH (committed colour soft-max) ============ */
+  .v4{background:linear-gradient(150deg,#3a1538 0%,#1d2447 45%,#0d3236 100%);color:#f3eef5}
+  .v4 .blob.a{width:48vw;height:48vw;left:-10vw;top:-10vw;background:rgba(216,168,95,.28)}
+  .v4 .blob.b{width:40vw;height:40vw;right:-8vw;top:20vw;background:rgba(111,202,214,.30)}
+  .v4 .blob.c{width:30vw;height:30vw;left:34vw;bottom:-12vw;background:rgba(180,90,150,.30)}
+  .v4 .kicker{color:#e8c79a}
+  .v4 .head em{color:#9be0e8}
+  .v4 .lede{color:#d8cfe0}
+
+  /* shared CTA */
+  .cta{display:inline-block;margin-top:1.6rem;font-family:var(--mono);font-size:.8rem;letter-spacing:.04em;padding:.8rem 1.4rem;border-radius:8px;text-decoration:none}
+  .v1 .cta{background:#6fcad6;color:#070809;font-weight:600}
+  .v2 .cta{background:#241f1a;color:#ece5d8;font-weight:600}
+  .v3 .cta{background:#6fcad6;color:#050606;font-weight:600}
+  .v4 .cta{background:#e8c79a;color:#1d2447;font-weight:600}
+</style>
+</head>
+<body>
+  <div class="intro">
+    <h1>Soft maximalism — four hero directions</h1>
+    <p>Same Delta content + fonts (Satoshi · Spectral italic · Geist Mono). Each explores "rich but calm": layered colour, soft depth, texture. V1/V3/V4 stay dark; V2 shows the warm-light end of the trend. These are mood probes, not committed designs — tell me which energy pulls you.</p>
+  </div>
+
+  <!-- V1 -->
+  <section class="variant v1">
+    <span class="vtag">Direction 01<b>Onyx Aurora</b></span>
+    <span class="vnote">dark base + soft blurred aurora blobs (teal · bronze · violet) + grain. Cozy depth, keeps our palette.</span>
+    <div class="blob a"></div><div class="blob b"></div><div class="blob c"></div>
+    <div class="grain"></div>
+    <div class="inner">
+      <p class="kicker">Research-led climate intelligence</p>
+      <h1 class="head">Navigating the systems of a <em>changing planet.</em></h1>
+      <p class="lede">Decision-grade climate-risk and embodied-carbon intelligence, interpreted with rigor.</p>
+      <a class="cta">Access Planetary Insights</a>
+    </div>
+  </section>
+
+  <!-- V2 -->
+  <section class="variant v2">
+    <span class="vtag">Direction 02<b>Warm Field</b></span>
+    <span class="vnote">light bone base + earthy blobs (clay · sage · teal · bronze). The classic warm soft-max; a big departure from dark.</span>
+    <div class="blob a"></div><div class="blob b"></div><div class="blob c"></div><div class="blob d"></div>
+    <div class="grain"></div>
+    <div class="inner">
+      <p class="kicker">Research-led climate intelligence</p>
+      <h1 class="head">Navigating the systems of a <em>changing planet.</em></h1>
+      <p class="lede">Decision-grade climate-risk and embodied-carbon intelligence, interpreted with rigor.</p>
+      <a class="cta">Access Planetary Insights</a>
+    </div>
+  </section>
+
+  <!-- V3 -->
+  <section class="variant v3">
+    <span class="vtag">Direction 03<b>Atmospheric Data</b></span>
+    <span class="vnote">dark, but filled with soft instrument ornament: concentric rings, faint contour field, ghost display word. Rich + on-theme.</span>
+    <div class="contour"></div>
+    <div class="ring r1"></div><div class="ring r2"></div><div class="ring r3"></div>
+    <span class="bigword">delta</span>
+    <div class="grain"></div>
+    <div class="inner">
+      <p class="kicker">Research-led climate intelligence</p>
+      <h1 class="head">Navigating the systems of a <em>changing planet.</em></h1>
+      <p class="lede">Decision-grade climate-risk and embodied-carbon intelligence, interpreted with rigor.</p>
+      <a class="cta">Access Planetary Insights</a>
+    </div>
+  </section>
+
+  <!-- V4 -->
+  <section class="variant v4">
+    <span class="vtag">Direction 04<b>Twilight Drench</b></span>
+    <span class="vnote">committed colour: plum→indigo→teal gradient drench + soft glows. Brand-bold, still soft. (Echoes the plum you tried.)</span>
+    <div class="blob a"></div><div class="blob b"></div><div class="blob c"></div>
+    <div class="grain"></div>
+    <div class="inner">
+      <p class="kicker">Research-led climate intelligence</p>
+      <h1 class="head">Navigating the systems of a <em>changing planet.</em></h1>
+      <p class="lede">Decision-grade climate-risk and embodied-carbon intelligence, interpreted with rigor.</p>
+      <a class="cta">Access Planetary Insights</a>
+    </div>
+  </section>
+</body>
+</html>

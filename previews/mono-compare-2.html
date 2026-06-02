@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Mono candidates (set 2) — nav / buttons / data</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Martian+Mono:wght@400;500;700&family=Spline+Sans+Mono:wght@400;500;700&family=DM+Mono:wght@400;500&family=Red+Hat+Mono:wght@400;500;700&family=Fira+Code:wght@400;500;700&display=swap" rel="stylesheet">
+<!-- Commit Mono is not on Google Fonts; load from @fontsource via jsDelivr for this preview -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/commit-mono@latest/400.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/commit-mono@latest/700.css">
+<style>
+  :root{ --base:#050606; --surface:#0b2c2e; --surface-2:#093a3e;
+         --hairline:rgb(111 202 214 / .14); --paper:#ecedf0; --ink-muted:#8fa3a5; --ink-faint:#5c7173;
+         --cyan:#6fcad6; --cyan-muted:#92c2cb; --bronze:#b08d57;
+         --sans: ui-sans-serif,"Inter",system-ui,sans-serif; }
+  *{box-sizing:border-box}
+  body{margin:0;background:#000;color:var(--paper);font-family:var(--sans)}
+  h1{font-weight:700;font-size:22px;margin:0;padding:26px clamp(16px,4vw,40px) 4px}
+  .sub{color:var(--ink-muted);font-size:13px;padding:0 clamp(16px,4vw,40px) 18px;margin:0;max-width:72ch}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:rgba(255,255,255,.06)}
+  @media(max-width:900px){.grid{grid-template-columns:1fr}}
+  .col{background:var(--base);padding:24px clamp(16px,3vw,30px) 30px}
+  .name{font-family:var(--sans);font-weight:700;font-size:15px;margin:0 0 2px}
+  .name span{color:var(--cyan)}
+  .role{font-family:var(--sans);color:var(--ink-faint);font-size:12px;margin:0 0 20px}
+
+  .nav{display:flex;align-items:center;justify-content:space-between;border:1px solid var(--hairline);border-radius:8px;padding:12px 14px;margin-bottom:18px;gap:12px;flex-wrap:wrap}
+  .logo{font-family:var(--sans);font-weight:700;font-size:14px}
+  .logo .d{color:var(--cyan)}
+  .links{display:flex;gap:14px;align-items:center;font-size:12px;letter-spacing:.02em}
+  .links a{color:var(--ink-muted);text-decoration:none}
+  .links .db{color:var(--cyan);border:1px solid var(--cyan);border-radius:6px;padding:5px 9px}
+
+  .btns{display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap}
+  .btn{font-size:13px;letter-spacing:.03em;padding:11px 18px;border-radius:8px;border:1px solid var(--cyan);background:transparent;color:var(--cyan)}
+  .btn.filled{background:var(--cyan);color:var(--base);border:none;font-weight:600}
+
+  .data{border-top:1px solid var(--hairline);padding-top:16px;font-size:12.5px;line-height:1.9;letter-spacing:.02em;color:var(--ink-muted)}
+  .data .meta{color:var(--cyan-muted);text-transform:uppercase;letter-spacing:.12em;font-size:11px}
+  .data .idx{color:var(--bronze)}
+  .data .live{color:var(--cyan)}
+  .data .num{color:var(--paper)}
+
+  .col .nav, .col .btn, .col .data, .col .links a, .col .links .db { font-family: var(--m); }
+</style>
+</head>
+<body>
+  <h1>Mono candidates (set 2) — in nav, buttons &amp; data</h1>
+  <p class="sub">Satoshi stays for headline/body; the mono drives nav, button labels, and all data/meta. Same palette + content across all six. (Preview via CDN; final self-hosted via @fontsource.)</p>
+
+  <div class="grid">
+    <!-- Martian Mono -->
+    <div class="col" style="--m:'Martian Mono', monospace">
+      <p class="name">Martian <span>Mono</span></p>
+      <p class="role">condensed · telemetry / space-instrument feel · great in caps</p>
+      <div class="nav"><span class="logo">DELTA<span class="d">·</span>CLIMATE</span><span class="links"><a>About</a><a>Projects</a><a>White Papers</a><a>Medni</a><a class="db">Databank ↗</a></span></div>
+      <div class="btns"><button class="btn filled">Access Insights</button><button class="btn">Contact</button></div>
+      <div class="data"><div class="meta"><span class="idx">[01]</span> — 12.06.2026 — BLUE CARBON</div><div>LAT <span class="num">22.5726°</span>  LON <span class="num">88.3639°</span></div><div>CO₂ <span class="num">414.2 ppm</span>  ·  LST <span class="num">+5.3°C</span>  ·  v1.4.2</div><div class="live">// LIVE AI PROCESSING</div></div>
+    </div>
+
+    <!-- Spline Sans Mono -->
+    <div class="col" style="--m:'Spline Sans Mono', monospace">
+      <p class="name">Spline Sans <span>Mono</span></p>
+      <p class="role">humanist · friendly · modern, less rigid</p>
+      <div class="nav"><span class="logo">DELTA<span class="d">·</span>CLIMATE</span><span class="links"><a>About</a><a>Projects</a><a>White Papers</a><a>Medni</a><a class="db">Databank ↗</a></span></div>
+      <div class="btns"><button class="btn filled">Access Insights</button><button class="btn">Contact</button></div>
+      <div class="data"><div class="meta"><span class="idx">[01]</span> — 12.06.2026 — BLUE CARBON</div><div>LAT <span class="num">22.5726°</span>  LON <span class="num">88.3639°</span></div><div>CO₂ <span class="num">414.2 ppm</span>  ·  LST <span class="num">+5.3°C</span>  ·  v1.4.2</div><div class="live">// LIVE AI PROCESSING</div></div>
+    </div>
+
+    <!-- DM Mono -->
+    <div class="col" style="--m:'DM Mono', monospace">
+      <p class="name">DM <span>Mono</span></p>
+      <p class="role">geometric · light · elegant (max weight 500 — softer buttons)</p>
+      <div class="nav"><span class="logo">DELTA<span class="d">·</span>CLIMATE</span><span class="links"><a>About</a><a>Projects</a><a>White Papers</a><a>Medni</a><a class="db">Databank ↗</a></span></div>
+      <div class="btns"><button class="btn filled">Access Insights</button><button class="btn">Contact</button></div>
+      <div class="data"><div class="meta"><span class="idx">[01]</span> — 12.06.2026 — BLUE CARBON</div><div>LAT <span class="num">22.5726°</span>  LON <span class="num">88.3639°</span></div><div>CO₂ <span class="num">414.2 ppm</span>  ·  LST <span class="num">+5.3°C</span>  ·  v1.4.2</div><div class="live">// LIVE AI PROCESSING</div></div>
+    </div>
+
+    <!-- Red Hat Mono -->
+    <div class="col" style="--m:'Red Hat Mono', monospace">
+      <p class="name">Red Hat <span>Mono</span></p>
+      <p class="role">clean · corporate-neutral · steady legibility</p>
+      <div class="nav"><span class="logo">DELTA<span class="d">·</span>CLIMATE</span><span class="links"><a>About</a><a>Projects</a><a>White Papers</a><a>Medni</a><a class="db">Databank ↗</a></span></div>
+      <div class="btns"><button class="btn filled">Access Insights</button><button class="btn">Contact</button></div>
+      <div class="data"><div class="meta"><span class="idx">[01]</span> — 12.06.2026 — BLUE CARBON</div><div>LAT <span class="num">22.5726°</span>  LON <span class="num">88.3639°</span></div><div>CO₂ <span class="num">414.2 ppm</span>  ·  LST <span class="num">+5.3°C</span>  ·  v1.4.2</div><div class="live">// LIVE AI PROCESSING</div></div>
+    </div>
+
+    <!-- Fira Code -->
+    <div class="col" style="--m:'Fira Code', monospace">
+      <p class="name">Fira <span>Code</span></p>
+      <p class="role">developer classic · wide · ligatures (code feel)</p>
+      <div class="nav"><span class="logo">DELTA<span class="d">·</span>CLIMATE</span><span class="links"><a>About</a><a>Projects</a><a>White Papers</a><a>Medni</a><a class="db">Databank ↗</a></span></div>
+      <div class="btns"><button class="btn filled">Access Insights</button><button class="btn">Contact</button></div>
+      <div class="data"><div class="meta"><span class="idx">[01]</span> — 12.06.2026 — BLUE CARBON</div><div>LAT <span class="num">22.5726°</span>  LON <span class="num">88.3639°</span></div><div>CO₂ <span class="num">414.2 ppm</span>  ·  LST <span class="num">+5.3°C</span>  ·  v1.4.2</div><div class="live">// LIVE AI PROCESSING</div></div>
+    </div>
+
+    <!-- Commit Mono -->
+    <div class="col" style="--m:'Commit Mono', monospace">
+      <p class="name">Commit <span>Mono</span></p>
+      <p class="role">intentionally neutral · calm · highly legible UI mono</p>
+      <div class="nav"><span class="logo">DELTA<span class="d">·</span>CLIMATE</span><span class="links"><a>About</a><a>Projects</a><a>White Papers</a><a>Medni</a><a class="db">Databank ↗</a></span></div>
+      <div class="btns"><button class="btn filled">Access Insights</button><button class="btn">Contact</button></div>
+      <div class="data"><div class="meta"><span class="idx">[01]</span> — 12.06.2026 — BLUE CARBON</div><div>LAT <span class="num">22.5726°</span>  LON <span class="num">88.3639°</span></div><div>CO₂ <span class="num">414.2 ppm</span>  ·  LST <span class="num">+5.3°C</span>  ·  v1.4.2</div><div class="live">// LIVE AI PROCESSING</div></div>
+    </div>
+  </div>
+</body>
+</html>

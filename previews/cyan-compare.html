@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Cyan candidates — lighter / Swiss</title>
+<style>
+  :root{ --base:#050606; --surface:#0B2C2E; --surface-2:#093A3E;
+         --paper:#ECEDF0; --ink-muted:#8FA3A5;
+         --sans: ui-sans-serif,"Inter",system-ui,sans-serif; --mono: ui-monospace,"SF Mono",monospace; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--base);color:var(--paper);font-family:var(--sans);padding:40px clamp(16px,4vw,64px);line-height:1.5}
+  h1{font-weight:700;letter-spacing:-.02em;font-size:26px;margin:0 0 6px}
+  .sub{color:var(--ink-muted);font-size:14px;margin:0 0 28px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:18px}
+  .card{border:1px solid rgba(255,255,255,.08);border-radius:12px;overflow:hidden;background:var(--base)}
+  .head{padding:14px 16px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;justify-content:space-between;align-items:center;font-family:var(--mono);font-size:12px}
+  .head b{font-family:var(--sans);font-size:13px}
+  .head .ratio{color:var(--ink-muted)}
+  .chip{width:26px;height:26px;border-radius:6px;border:1px solid rgba(255,255,255,.15)}
+  .body{padding:18px 16px;display:flex;flex-direction:column;gap:14px}
+  .display{font-size:30px;font-weight:700;letter-spacing:-.02em}
+  .meta{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase}
+  .row{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  a.link{text-decoration:none;font-size:14px}
+  .ghost{border:1px solid currentColor;padding:9px 16px;border-radius:8px;font-size:13px;background:transparent}
+  .filled{padding:9px 16px;border-radius:8px;font-size:13px;color:var(--base);font-weight:600;border:none}
+  .arrow{font-size:18px}
+  .fill{height:8px;border-radius:4px}
+  .onsurf{background:var(--surface);border-radius:8px;padding:10px 12px;font-size:13px}
+</style>
+</head>
+<body>
+  <h1>Cyan candidates — lighter &amp; more Swiss</h1>
+  <p class="sub">Same base (#050606) and surfaces. Each card shows a display accent word, mono meta label, link, ghost + filled buttons, the kinetic arrow, a fill bar, and the accent on a surface. Contrast ratio is vs the #050606 base.</p>
+
+  <div class="grid">
+
+    <!-- Current -->
+    <div class="card">
+      <div class="head"><span style="display:flex;gap:10px;align-items:center"><span class="chip" style="background:#3AAFB9"></span><b>Current</b></span><span class="ratio">#3AAFB9 · 7.5:1</span></div>
+      <div class="body" style="--c:#3AAFB9">
+        <div class="display" style="color:var(--c)">changing planet</div>
+        <div class="meta" style="color:var(--c)">12.06.2026 — BLUE CARBON</div>
+        <div class="row"><a class="link" style="color:var(--c)" href="#">Access insights →</a><span class="ghost" style="color:var(--c)">Ghost CTA</span><span class="filled" style="background:var(--c)">Filled CTA</span><span class="arrow" style="color:var(--c)">↗</span></div>
+        <div class="fill" style="background:var(--c)"></div>
+        <div class="onsurf" style="color:var(--c)">accent on surface</div>
+      </div>
+    </div>
+
+    <!-- A -->
+    <div class="card">
+      <div class="head"><span style="display:flex;gap:10px;align-items:center"><span class="chip" style="background:#5BC5CF"></span><b>A · promote bright</b></span><span class="ratio">#5BC5CF · ~9:1</span></div>
+      <div class="body" style="--c:#5BC5CF">
+        <div class="display" style="color:var(--c)">changing planet</div>
+        <div class="meta" style="color:var(--c)">12.06.2026 — BLUE CARBON</div>
+        <div class="row"><a class="link" style="color:var(--c)" href="#">Access insights →</a><span class="ghost" style="color:var(--c)">Ghost CTA</span><span class="filled" style="background:var(--c)">Filled CTA</span><span class="arrow" style="color:var(--c)">↗</span></div>
+        <div class="fill" style="background:var(--c)"></div>
+        <div class="onsurf" style="color:var(--c)">accent on surface</div>
+      </div>
+    </div>
+
+    <!-- B recommended -->
+    <div class="card" style="outline:1px solid #6FCAD6">
+      <div class="head"><span style="display:flex;gap:10px;align-items:center"><span class="chip" style="background:#6FCAD6"></span><b>B · lighter (rec.)</b></span><span class="ratio">#6FCAD6 · ~10.4:1</span></div>
+      <div class="body" style="--c:#6FCAD6">
+        <div class="display" style="color:var(--c)">changing planet</div>
+        <div class="meta" style="color:var(--c)">12.06.2026 — BLUE CARBON</div>
+        <div class="row"><a class="link" style="color:var(--c)" href="#">Access insights →</a><span class="ghost" style="color:var(--c)">Ghost CTA</span><span class="filled" style="background:var(--c)">Filled CTA</span><span class="arrow" style="color:var(--c)">↗</span></div>
+        <div class="fill" style="background:var(--c)"></div>
+        <div class="onsurf" style="color:var(--c)">accent on surface</div>
+      </div>
+    </div>
+
+    <!-- C lightest -->
+    <div class="card">
+      <div class="head"><span style="display:flex;gap:10px;align-items:center"><span class="chip" style="background:#82D2DD"></span><b>C · lightest / airy</b></span><span class="ratio">#82D2DD · ~11.5:1</span></div>
+      <div class="body" style="--c:#82D2DD">
+        <div class="display" style="color:var(--c)">changing planet</div>
+        <div class="meta" style="color:var(--c)">12.06.2026 — BLUE CARBON</div>
+        <div class="row"><a class="link" style="color:var(--c)" href="#">Access insights →</a><span class="ghost" style="color:var(--c)">Ghost CTA</span><span class="filled" style="background:var(--c)">Filled CTA</span><span class="arrow" style="color:var(--c)">↗</span></div>
+        <div class="fill" style="background:var(--c)"></div>
+        <div class="onsurf" style="color:var(--c)">accent on surface</div>
+      </div>
+    </div>
+
+    <!-- D desaturated swiss -->
+    <div class="card">
+      <div class="head"><span style="display:flex;gap:10px;align-items:center"><span class="chip" style="background:#92C2CB"></span><b>D · desaturated Swiss</b></span><span class="ratio">#92C2CB · ~10:1</span></div>
+      <div class="body" style="--c:#92C2CB">
+        <div class="display" style="color:var(--c)">changing planet</div>
+        <div class="meta" style="color:var(--c)">12.06.2026 — BLUE CARBON</div>
+        <div class="row"><a class="link" style="color:var(--c)" href="#">Access insights →</a><span class="ghost" style="color:var(--c)">Ghost CTA</span><span class="filled" style="background:var(--c)">Filled CTA</span><span class="arrow" style="color:var(--c)">↗</span></div>
+        <div class="fill" style="background:var(--c)"></div>
+        <div class="onsurf" style="color:var(--c)">accent on surface</div>
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>

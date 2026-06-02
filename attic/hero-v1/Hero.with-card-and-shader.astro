@@ -1,0 +1,190 @@
+---
+// Hero — Section 1. Atmospheric WebGL field + thesis headline.
+// taste-skill discipline: <=4 text elements, headline <=2 lines, no scroll cue, no CTA.
+const pre = ['Navigating', 'the', 'systems', 'of', 'a'];
+---
+
+<section id="hero" class="hero" aria-label="Introduction">
+  <canvas id="hero-canvas" class="hero-canvas" aria-hidden="true"></canvas>
+  <div class="grain" aria-hidden="true"></div>
+
+  <div class="hero-inner">
+    <div class="hero-card">
+      <p class="kicker" style="--i:0">Research-led climate intelligence</p>
+
+      <h1 class="headline">
+        {pre.map((w, i) => (
+          <span class="word" style={`--i:${i + 1}`}>{w}{' '}</span>
+        ))}
+        <span class="word accent" style="--i:7">changing&nbsp;planet.</span>
+      </h1>
+
+      <p class="lede word" style="--i:9">
+        Decision-grade climate-risk and embodied-carbon intelligence, interpreted with rigor.
+      </p>
+    </div>
+  </div>
+
+  <p class="corner" style="--i:10">Built for the frontier.</p>
+</section>
+
+<style>
+  .hero {
+    position: relative;
+    min-height: 100dvh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    /* static fallback shown before/instead of the WebGL canvas */
+    background:
+      radial-gradient(120% 130% at 12% 8%, rgb(111 202 214 / 0.12), transparent 55%),
+      radial-gradient(90% 120% at 92% 100%, rgb(9 58 62 / 0.9), transparent 60%),
+      linear-gradient(165deg, #050606, #07191b 70%, #050606);
+  }
+
+  .hero-canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+    z-index: 0;
+  }
+
+  /* subtle film grain over the field — fixed, never repaints on scroll */
+  .grain {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    opacity: 0.04;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  .hero-inner {
+    position: relative;
+    z-index: 2;
+    max-width: 1400px;
+    width: 100%;
+    margin: 0 auto;
+    padding: 0 clamp(1rem, 4vw, 2.5rem) clamp(3rem, 9vh, 6rem);
+  }
+
+  /* frosted card guarantees text contrast over the animated field */
+  .hero-card {
+    width: fit-content;
+    max-width: min(54rem, 100%);
+    padding: clamp(1.5rem, 3vw, 2.5rem) clamp(1.5rem, 3.2vw, 2.75rem);
+    border: 1px solid var(--color-hairline);
+    border-radius: 18px;
+    background: rgb(5 6 6 / 0.22);
+    backdrop-filter: blur(14px) saturate(130%);
+    -webkit-backdrop-filter: blur(14px) saturate(130%);
+    box-shadow:
+      inset 0 1px 0 rgb(236 237 240 / 0.06),
+      0 24px 70px rgb(0 0 0 / 0.4);
+  }
+  @media (prefers-reduced-transparency: reduce) {
+    .hero-card {
+      background: rgb(5 6 6 / 0.8);
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+    }
+  }
+
+  .kicker {
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--color-cyan-muted);
+    margin: 0 0 1.25rem;
+  }
+
+  .headline {
+    margin: 0;
+    max-width: 16ch;
+    font-weight: 700;
+    font-size: clamp(2.5rem, 7vw, 6rem);
+    line-height: 1.04;
+    letter-spacing: -0.02em;
+    color: var(--color-paper);
+  }
+  /* white-space: pre preserves the trailing space inside each inline-block word
+     (otherwise the stagger spans collapse into "Navigatingthesystems...") */
+  .headline .word { display: inline-block; white-space: pre; }
+  .headline .accent {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-weight: 500;
+    letter-spacing: 0;
+    color: var(--color-cyan);
+    /* italic descender clearance */
+    line-height: 1.1;
+    padding-bottom: 0.08em;
+  }
+
+  .lede {
+    max-width: 46ch;
+    margin: 1.5rem 0 0;
+    font-size: clamp(0.95rem, 1.4vw, 1.125rem);
+    line-height: 1.5;
+    color: var(--color-ink-muted);
+  }
+
+  .corner {
+    position: absolute;
+    z-index: 2;
+    right: clamp(1rem, 4vw, 2.5rem);
+    bottom: clamp(3rem, 9vh, 6rem);
+    margin: 0;
+    max-width: 18ch;
+    text-align: right;
+    font-size: 0.8125rem;
+    line-height: 1.4;
+    color: var(--color-ink-faint);
+    text-shadow: 0 1px 10px rgb(5 6 6 / 0.85);
+  }
+  @media (max-width: 820px) {
+    .corner { display: none; }
+  }
+
+  /* word-stagger entrance */
+  .word {
+    opacity: 0;
+    transform: translateY(0.5em);
+    animation: rise 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    animation-delay: calc(var(--i, 0) * 0.07s + 0.15s);
+  }
+  .headline .accent {
+    transform: translateY(0.5em) scale(0.985);
+    animation-duration: 0.95s;
+  }
+  @keyframes rise {
+    to { opacity: 1; transform: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .word { opacity: 1; transform: none; animation: none; }
+  }
+</style>
+
+<script>
+  import { initFluidBackground } from '../scripts/fluid-background';
+
+  let dispose: (() => void) | undefined;
+
+  function mount() {
+    const canvas = document.getElementById('hero-canvas');
+    if (!(canvas instanceof HTMLCanvasElement)) return;
+    dispose?.();
+    dispose = initFluidBackground(canvas);
+  }
+
+  mount();
+  document.addEventListener('astro:page-load', mount);
+  document.addEventListener('astro:before-swap', () => {
+    dispose?.();
+    dispose = undefined;
+  });
+</script>
