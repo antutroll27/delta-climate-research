@@ -34,6 +34,9 @@ export function initScrollEffects() {
   });
 
   // CLIP-PATH wipe-open + slight fade, scrubbed over the entrance.
+  // Reads the element's real corner radius so the JS "from" clip matches the
+  // pre-paint CSS clip (.reveal-ready [data-clip]); keep --clip-radius in sync
+  // with each clip element's actual border-radius to avoid a corner pop.
   document.querySelectorAll<HTMLElement>('[data-clip]').forEach((el) => {
     const radius = getComputedStyle(el).borderTopLeftRadius || '0px';
     gsap.fromTo(

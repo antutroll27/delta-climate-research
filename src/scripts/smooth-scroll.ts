@@ -10,8 +10,12 @@ let tickerFn: ((time: number) => void) | undefined;
 const motionOK = () =>
   window.matchMedia('(prefers-reduced-motion: no-preference)').matches;
 
+// Delegated handler: one listener on document, so teardown is symmetric and it
+// survives any DOM swap that preserves the listener owner. Matches same-page
+// anchors (#id, /#id) and lets everything else fall through to native nav.
 function onAnchorClick(e: MouseEvent) {
-  const a = e.currentTarget as HTMLAnchorElement;
+  const a = (e.target as HTMLElement)?.closest<HTMLAnchorElement>('a[href^="#"], a[href^="/#"]');
+  if (!a) return;
   const hash = a.getAttribute('href')!.split('#')[1];
   const target = hash ? document.getElementById(hash) : null;
   if (target && lenis) {
@@ -33,10 +37,8 @@ export function initSmoothScroll() {
   gsap.ticker.add(tickerFn);
   gsap.ticker.lagSmoothing(0);
 
-  // Smooth same-page anchor navigation (nav links, CTAs).
-  document
-    .querySelectorAll<HTMLAnchorElement>('a[href^="#"], a[href^="/#"]')
-    .forEach((a) => a.addEventListener('click', onAnchorClick));
+  // Smooth same-page anchor navigation (nav links, CTAs) — one delegated listener.
+  document.addEventListener('click', onAnchorClick);
 }
 
 export function destroySmoothScroll() {
@@ -44,6 +46,7 @@ export function destroySmoothScroll() {
     gsap.ticker.remove(tickerFn);
     tickerFn = undefined;
   }
+  document.removeEventListener('click', onAnchorClick);
   lenis?.destroy();
   lenis = undefined;
 }
