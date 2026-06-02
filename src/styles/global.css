@@ -46,6 +46,32 @@
   --font-sans: "Satoshi", ui-sans-serif, system-ui, sans-serif;
   --font-serif: "Spectral", Georgia, "Times New Roman", serif;
   --font-mono: "Geist Mono Variable", ui-monospace, "SF Mono", monospace;
+
+  /* fluid type scale (each = the exact existing clamp it replaces — pixel-identical) */
+  --text-hero: clamp(2.5rem, 7vw, 6rem);
+  --text-section: clamp(2.6rem, 5.5vw, 4.5rem);
+  --text-cta: clamp(2.2rem, 5.5vw, 4.5rem);
+  --text-mobilenav: clamp(2rem, 8vw, 3rem);
+  --text-rowtitle: clamp(1.15rem, 2vw, 1.5rem);
+  --text-secindex: clamp(1rem, 1.6vw, 1.25rem);
+  --text-body: clamp(1rem, 1.4vw, 1.2rem);
+  --text-ctabody: clamp(1rem, 1.4vw, 1.15rem);
+  --text-mednisub: clamp(1rem, 1.3vw, 1.15rem);
+  --text-lede: clamp(0.95rem, 1.4vw, 1.125rem);
+
+  /* fluid space scale (exact existing clamps) */
+  --space-section: clamp(5rem, 12vh, 9rem);
+  --space-gutter: clamp(1rem, 4vw, 2.5rem);
+  --space-hero-bottom: clamp(3rem, 9vh, 6rem);
+  --space-footer: clamp(2.5rem, 5vw, 4rem);
+  --space-about-gap: clamp(2rem, 5vw, 4rem);
+  --space-head-mb: clamp(2rem, 4vw, 3rem);
+  --space-papershead-mb: clamp(1.5rem, 3vw, 2.5rem);
+  --space-rowpad: clamp(1.5rem, 3vw, 2.25rem);
+  --space-rowgap: clamp(1rem, 3vw, 2rem);
+  --space-footergap: clamp(1rem, 2.5vw, 2rem);
+  --space-map-h: clamp(300px, 48vh, 460px);
+  --space-navgap: clamp(2.25rem, 4vw, 3.75rem);
 }
 
 /* Light theme — "Warm Field" soft-maximalism. Dark is the default (:root above).
@@ -156,6 +182,14 @@
     max-width: 18ch;
   }
   .sec-title em {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-weight: 500;
+    color: var(--color-cyan);
+    letter-spacing: 0;
+  }
+  /* reusable heading accent — italic serif cyan (applied to <em> in section/cta titles) */
+  .em-accent {
     font-family: var(--font-serif);
     font-style: italic;
     font-weight: 500;
