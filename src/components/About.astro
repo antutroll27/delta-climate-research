@@ -33,8 +33,10 @@ const pillars = [
       </ul>
     </div>
 
-    <aside class="about-visual" aria-hidden="true" data-reveal data-clip>
-      <span class="visual-bg" data-parallax="-0.05"></span>
+    <!-- data-clip owns this panel's entrance (wipe + fade); no data-reveal here,
+         so the GSAP clip and the IntersectionObserver reveal never co-own opacity. -->
+    <aside class="about-visual" aria-hidden="true" data-clip>
+      <span class="visual-bg" data-parallax="-0.05" aria-hidden="true"></span>
       <span class="visual-tag">FIG. 01 — SYSTEMS MAP</span>
     </aside>
   </div>

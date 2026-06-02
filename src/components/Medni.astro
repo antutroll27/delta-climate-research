@@ -14,7 +14,9 @@
   </div>
 
   <div class="wrap">
-    <div class="dashboard" data-reveal data-clip style="--clip-radius: 16px;">
+    <!-- data-clip owns the entrance (wipe + fade); no data-reveal, so the GSAP
+         clip and the IntersectionObserver reveal never co-own opacity. -->
+    <div class="dashboard" data-clip style="--clip-radius: 16px;">
       <div class="map" aria-label="Interactive climate map (placeholder)">
         <span class="map-grid" aria-hidden="true"></span>
         <span class="map-tag">22.57°N · 88.36°E — KOLKATA</span>
