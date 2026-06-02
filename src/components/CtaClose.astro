@@ -2,62 +2,20 @@
 // Section 6 — closing conversion beat (single ask).
 ---
 
-<section id="access" class="section divider-top cta-close" aria-labelledby="cta-title">
+<section id="access" class="section divider-top relative text-center" aria-labelledby="cta-title">
   <span class="draw-line" data-draw aria-hidden="true"></span>
-  <div class="wrap cta-inner" data-reveal-group data-stagger="90">
+  <div class="wrap flex flex-col items-center" data-reveal-group data-stagger="90">
     <p class="sec-index">05 — Access</p>
-    <h2 id="cta-title" class="cta-title">
-      Put planetary intelligence to <em>work.</em>
+    <h2 id="cta-title" class="mt-4 font-bold text-cta leading-[1.05] tracking-[-0.02em] text-paper max-w-[16ch]">
+      Put planetary intelligence to <em class="em-accent">work.</em>
     </h2>
-    <p class="cta-body">
+    <p class="mt-6 max-w-[48ch] text-ctabody leading-[1.6] text-ink-muted">
       For institutions, municipalities, and corporates navigating a changing
       climate. Request access to the data bank or start a conversation.
     </p>
-    <a href="mailto:hello@delta-climate.example" class="cta-primary">Request access</a>
+    <a href="mailto:hello@delta-climate.example"
+       class="mt-9 font-mono text-[0.875rem] tracking-[0.03em] text-[color:var(--color-base)] bg-cyan rounded-lg px-8 py-4 no-underline transition-[background-color,color,box-shadow] duration-[250ms] hover:bg-[#f4f6f8] hover:text-[color:var(--color-base)] hover:shadow-[0_0_30px_rgb(244_246_248/0.45)]">
+      Request access
+    </a>
   </div>
 </section>
-
-<style>
-  .cta-close { text-align: center; }
-  .cta-inner { display: flex; flex-direction: column; align-items: center; }
-  .cta-title {
-    margin: 1rem 0 0;
-    font-weight: 700;
-    font-size: clamp(2.2rem, 5.5vw, 4.5rem);
-    line-height: 1.05;
-    letter-spacing: -0.02em;
-    color: var(--color-paper);
-    max-width: 16ch;
-  }
-  .cta-title em {
-    font-family: var(--font-serif);
-    font-style: italic;
-    font-weight: 500;
-    color: var(--color-cyan);
-    letter-spacing: 0;
-  }
-  .cta-body {
-    margin: 1.5rem 0 0;
-    max-width: 48ch;
-    font-size: clamp(1rem, 1.4vw, 1.15rem);
-    line-height: 1.6;
-    color: var(--color-ink-muted);
-  }
-  .cta-primary {
-    margin-top: 2.25rem;
-    font-family: var(--font-mono);
-    font-size: 0.875rem;
-    letter-spacing: 0.03em;
-    color: var(--color-base);
-    background: var(--color-cyan);
-    border-radius: 8px;
-    padding: 1rem 2rem;
-    text-decoration: none;
-    transition: background-color 0.25s ease, color 0.25s ease, box-shadow 0.25s ease;
-  }
-  .cta-primary:hover {
-    background: #f4f6f8;
-    color: var(--color-base);
-    box-shadow: 0 0 30px rgb(244 246 248 / 0.45);
-  }
-</style>
