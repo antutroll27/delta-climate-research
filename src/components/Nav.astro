@@ -10,10 +10,10 @@ const links = [
 <!-- sentinel: observed to toggle the nav's scrolled state without a scroll listener -->
 <div id="nav-sentinel" aria-hidden="true"></div>
 
-<header id="site-nav" class="site-nav" data-scrolled="false">
-  <nav class="nav-inner" aria-label="Primary">
-    <a href="/" class="logo" aria-label="Delta Climate Research — home">
-      Delta<span class="dot">·</span>Climate
+<header id="site-nav" class="fixed inset-x-0 top-0 z-50 h-20 bg-transparent" data-scrolled="false">
+  <nav class="max-w-[1400px] mx-auto h-full px-(--space-gutter) flex items-center justify-between" aria-label="Primary">
+    <a href="/" class="font-bold text-[1.25rem] tracking-[-0.01em] text-paper no-underline" aria-label="Delta Climate Research — home">
+      Delta<span class="text-cyan">·</span>Climate
     </a>
 
     <ul class="nav-links">
@@ -52,17 +52,6 @@ const links = [
 </div>
 
 <style>
-  .site-nav {
-    position: fixed;
-    inset: 0 0 auto 0;
-    z-index: 50;
-    height: 80px;
-    /* intentionally transparent — blends into the background.
-       (The data-scrolled attribute is still toggled in JS so a subtle scrim
-       can be reintroduced later once there's scrolling content below.) */
-    background: transparent;
-  }
-
   .nav-progress {
     position: fixed;
     top: 80px; /* sits at the nav's bottom edge */
@@ -76,25 +65,6 @@ const links = [
     transform-origin: 0 50%;
     pointer-events: none;
   }
-
-  .nav-inner {
-    max-width: 1400px;
-    margin: 0 auto;
-    height: 100%;
-    padding: 0 clamp(1rem, 4vw, 2.5rem);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-
-  .logo {
-    font-weight: 700;
-    font-size: 1.25rem;
-    letter-spacing: -0.01em;
-    color: var(--color-paper);
-    text-decoration: none;
-  }
-  .logo .dot { color: var(--color-cyan); }
 
   .nav-links {
     display: flex;
