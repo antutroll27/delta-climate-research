@@ -5,10 +5,10 @@
 
 <section id="medni" class="section divider-top" aria-labelledby="medni-title">
   <span class="draw-line" data-draw aria-hidden="true"></span>
-  <div class="wrap medni-head" data-reveal>
+  <div class="wrap mb-(--space-head-mb)" data-reveal>
     <p class="sec-index">04 — Medni</p>
     <h2 id="medni-title" class="sec-title">Living <em>intelligence,</em> by location.</h2>
-    <p class="medni-sub">
+    <p class="mt-4 max-w-[50ch] text-mednisub text-ink-muted">
       Hyper-local climate-risk and adaptation guidance, on one geospatial spine.
     </p>
   </div>
@@ -23,29 +23,21 @@
         <span class="map-overlay" aria-hidden="true"></span>
       </div>
 
-      <aside class="drawer">
-        <p class="drawer-live">// LIVE AI PROCESSING</p>
-        <ul class="stream" role="list">
-          <li>&gt; ingesting LST raster…</li>
-          <li>&gt; computing heat-vulnerability index…</li>
-          <li>&gt; cross-referencing cool-roof SRI…</li>
-          <li class="cursor">&gt; recommending intervention spec</li>
+      <aside class="flex flex-col rounded-[12px] p-[1.25rem] bg-surface-2 border border-hairline font-mono">
+        <p class="m-0 mb-[1rem] text-[0.75rem] tracking-[0.08em] text-cyan">// LIVE AI PROCESSING</p>
+        <ul class="list-none m-0 mb-auto p-0 grid gap-[0.55rem]" role="list">
+          <li class="text-[0.78rem] leading-[1.5] text-ink-muted">&gt; ingesting LST raster…</li>
+          <li class="text-[0.78rem] leading-[1.5] text-ink-muted">&gt; computing heat-vulnerability index…</li>
+          <li class="text-[0.78rem] leading-[1.5] text-ink-muted">&gt; cross-referencing cool-roof SRI…</li>
+          <li class="cursor text-[0.78rem] leading-[1.5] text-ink-muted">&gt; recommending intervention spec</li>
         </ul>
-        <a href="#access" class="cta-box">Access Planetary Insights →</a>
+        <a href="#access" class="mt-6 text-center text-[0.8125rem] tracking-[0.03em] text-cyan border border-cyan rounded-lg px-4 py-[0.85rem] no-underline transition-[background-color,color] duration-200 hover:bg-cyan hover:text-[color:var(--color-base)]">Access Planetary Insights →</a>
       </aside>
     </div>
   </div>
 </section>
 
 <style>
-  .medni-head { margin-bottom: clamp(2rem, 4vw, 3rem); }
-  .medni-sub {
-    margin: 1rem 0 0;
-    max-width: 50ch;
-    font-size: clamp(1rem, 1.3vw, 1.15rem);
-    color: var(--color-ink-muted);
-  }
-
   .dashboard {
     display: grid;
     grid-template-columns: 1fr;
@@ -90,18 +82,6 @@
     color: var(--color-cyan-muted);
   }
 
-  .drawer {
-    display: flex;
-    flex-direction: column;
-    border-radius: 12px;
-    padding: 1.25rem;
-    background: var(--color-surface-2);
-    border: 1px solid var(--color-hairline);
-    font-family: var(--font-mono);
-  }
-  .drawer-live { margin: 0 0 1rem; font-size: 0.75rem; letter-spacing: 0.08em; color: var(--color-cyan); }
-  .stream { list-style: none; margin: 0 0 auto; padding: 0; display: grid; gap: 0.55rem; }
-  .stream li { font-size: 0.78rem; line-height: 1.5; color: var(--color-ink-muted); }
   .cursor::after {
     content: '▋';
     color: var(--color-cyan);
@@ -110,18 +90,4 @@
   }
   @keyframes blink { 50% { opacity: 0; } }
   @media (prefers-reduced-motion: reduce) { .cursor::after { animation: none; } }
-
-  .cta-box {
-    margin-top: 1.5rem;
-    text-align: center;
-    font-size: 0.8125rem;
-    letter-spacing: 0.03em;
-    color: var(--color-cyan);
-    border: 1px solid var(--color-cyan);
-    border-radius: 8px;
-    padding: 0.85rem 1rem;
-    text-decoration: none;
-    transition: background-color 0.2s ease, color 0.2s ease;
-  }
-  .cta-box:hover { background-color: var(--color-cyan); color: var(--color-base); }
 </style>

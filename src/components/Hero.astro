@@ -4,11 +4,11 @@
 const pre = ['Navigating', 'the', 'systems', 'of', 'a'];
 ---
 
-<section id="hero" class="hero" aria-label="Introduction">
+<section id="hero" class="relative min-h-dvh overflow-hidden flex flex-col justify-end bg-base" aria-label="Introduction">
   <div class="grain" aria-hidden="true"></div>
 
-  <div class="hero-inner">
-    <p class="kicker" style="--i:0" data-parallax="-0.04">Research-led climate intelligence</p>
+  <div class="relative z-[2] max-w-[1400px] w-full mx-auto pt-0 px-(--space-gutter) pb-(--space-hero-bottom)">
+    <p class="font-mono text-[0.6875rem] tracking-[0.22em] uppercase text-cyan-muted m-0 mb-[1.25rem]" style="--i:0" data-parallax="-0.04">Research-led climate intelligence</p>
 
     <h1 class="headline" data-parallax="-0.06">
       {pre.map((w, i) => (
@@ -24,21 +24,10 @@ const pre = ['Navigating', 'the', 'systems', 'of', 'a'];
     </div>
   </div>
 
-  <p class="corner" style="--i:10" data-parallax="0.06">Built for the frontier.</p>
+  <p class="absolute z-[2] right-(--space-gutter) bottom-(--space-hero-bottom) m-0 max-w-[18ch] text-right text-[0.8125rem] leading-[1.4] text-ink-faint max-[820px]:hidden" style="--i:10" data-parallax="0.06">Built for the frontier.</p>
 </section>
 
 <style>
-  .hero {
-    position: relative;
-    min-height: 100dvh;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-end;
-    /* solid background for now — swap in a new treatment here later */
-    background: var(--color-base);
-  }
-
   /* subtle static film grain */
   .grain {
     position: absolute;
@@ -47,24 +36,6 @@ const pre = ['Navigating', 'the', 'systems', 'of', 'a'];
     pointer-events: none;
     opacity: 0.04;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-  }
-
-  .hero-inner {
-    position: relative;
-    z-index: 2;
-    max-width: 1400px;
-    width: 100%;
-    margin: 0 auto;
-    padding: 0 clamp(1rem, 4vw, 2.5rem) clamp(3rem, 9vh, 6rem);
-  }
-
-  .kicker {
-    font-family: var(--font-mono);
-    font-size: 0.6875rem;
-    letter-spacing: 0.22em;
-    text-transform: uppercase;
-    color: var(--color-cyan-muted);
-    margin: 0 0 1.25rem;
   }
 
   .headline {
@@ -96,22 +67,6 @@ const pre = ['Navigating', 'the', 'systems', 'of', 'a'];
     font-size: clamp(0.95rem, 1.4vw, 1.125rem);
     line-height: 1.5;
     color: var(--color-paper);
-  }
-
-  .corner {
-    position: absolute;
-    z-index: 2;
-    right: clamp(1rem, 4vw, 2.5rem);
-    bottom: clamp(3rem, 9vh, 6rem);
-    margin: 0;
-    max-width: 18ch;
-    text-align: right;
-    font-size: 0.8125rem;
-    line-height: 1.4;
-    color: var(--color-ink-faint);
-  }
-  @media (max-width: 820px) {
-    .corner { display: none; }
   }
 
   /* word-stagger entrance (text reveal, not a background animation) */

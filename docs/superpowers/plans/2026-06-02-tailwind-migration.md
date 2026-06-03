@@ -38,7 +38,7 @@ revert the risky rule to CSS and re-verify.
 | `max-width:48ch` | `max-w-[48ch]` |
 | `min-height:clamp(...)` | `min-h-(--space-map-h)` |
 | `font-family:var(--font-mono)` | `font-mono` (mapped from `--font-mono`) |
-| `font-size:0.75rem` | `text-xs` only if exact; else `text-[0.75rem]`; clamp → `text-(--text-xxx)` wrapped as `text-[length:var(--text-xxx)]` |
+| `font-size:0.75rem` | **NEVER use built-in `text-xs/sm/base/lg…`** — they ship a paired `line-height` that the original `font-size`-only CSS didn't have (confirmed 2px mobile regression). Use `text-[0.75rem]` (arbitrary = font-size only, no line-height) or a `--text-*` fluid token (also font-size only). |
 | `font-weight:700` | `font-bold`; `500` → `font-medium`; `300` → `font-light` |
 | `letter-spacing:0.1em` | `tracking-[0.1em]` |
 | `line-height:1.6` | `leading-[1.6]` |
