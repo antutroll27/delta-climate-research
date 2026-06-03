@@ -1,0 +1,24 @@
+---
+import Base from '../layouts/Base.astro';
+import Nav from '../components/Nav.astro';
+import Footer from '../components/Footer.astro';
+---
+
+<Base
+  title="Page not found — Delta Climate Research"
+  description="The page you're looking for doesn't exist."
+>
+  <Nav />
+  <main
+    class="wrap"
+    style="min-height:100dvh; display:flex; flex-direction:column; justify-content:center; padding-block:8rem;"
+  >
+    <p class="sec-index">404</p>
+    <h1 class="sec-title" style="max-width:24ch;">This page drifted <em>off-map.</em></h1>
+    <p style="margin-top:1.25rem; max-width:56ch; color:var(--color-ink-muted); line-height:1.6;">
+      The page you're looking for doesn't exist or has moved. Head back to the
+      <a class="accent-link" href="/">home page ↗</a>.
+    </p>
+  </main>
+  <Footer />
+</Base>
