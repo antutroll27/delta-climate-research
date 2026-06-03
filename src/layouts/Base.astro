@@ -22,6 +22,8 @@ const {
 const canonical = new URL(Astro.url.pathname, Astro.site);
 
 // Demo-safe structured data: only truthfully-assertable facts (no contact/socials).
+// `Astro.site!` relies on `site` being set in astro.config.mjs (it always is — the
+// sitemap integration requires it too); build fails loudly if that invariant breaks.
 const site = Astro.site!.href.replace(/\/$/, '');
 const jsonLd = {
   '@context': 'https://schema.org',

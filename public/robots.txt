@@ -1,3 +1,4 @@
+# Sitemap domain must stay in sync with `site` in astro.config.mjs.
 User-agent: *
 Allow: /
 
