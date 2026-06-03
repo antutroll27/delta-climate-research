@@ -42,11 +42,14 @@ all fixes are small and low-risk.
 
 ## 🟠 Important
 
-5. **Geist Mono ships all 6 Unicode subsets (~45 KB wasted).** `Base.astro` imports
-   `@fontsource-variable/geist-mono/index.css`, which pulls cyrillic, cyrillic-ext, vietnamese,
-   latin-ext, symbols2 **and** latin. The site is `lang="en"`. **Fix:** import
-   `@fontsource-variable/geist-mono/latin.css` only → drops ~45 KB of font fetches (cyrillic
-   12.6 + 6.0, vietnamese 7.5, latin-ext 14.4, symbols2 5.7).
+5. **Geist Mono ships all 6 Unicode subsets (~45 KB in `dist/`).** `Base.astro` imports
+   `@fontsource-variable/geist-mono/index.css`, copying cyrillic, cyrillic-ext, vietnamese,
+   latin-ext, symbols2 and latin woff2 into the build. **CORRECTION (verified):** these
+   `@font-face` rules carry `unicode-range`, so an English-content browser **only downloads the
+   latin subset** — the other 5 are never fetched by users. So this is ~45 KB of unused *CDN
+   storage*, **not** user bandwidth; there is no real-world perf win. The package also ships no
+   `latin.css` entry point. **Verdict: leave as-is** (a dist-trim would require self-hosting the
+   latin woff2 — not worth it for zero UX gain). Reclassified from 🟠 to non-issue.
 
 6. **Duplicate meta description.** `/white-papers` reuses the generic home description verbatim.
    Duplicate descriptions dilute relevance. **Fix:** pass a unique `description` to the
