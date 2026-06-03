@@ -126,13 +126,12 @@ Buyers ready to hire. Map these to **service pages** (one page per niche).
 
 | Keyword cluster | Competition | Note |
 | --- | --- | --- |
-| `CBAM consultant India`, `CBAM compliance services`, `CBAM consultant for steel/cement/aluminium exporters` | Med (live competitors: GreenSutra, Sentra, CleanCarbon) | **Top priority** — high intent, exporter-specific, matches the materials-trading case study |
-| `EPD consultant India`, `Environmental Product Declaration services`, `EPD generation cement/steel` | Low–Med (emerging 2026) | **High-value, rising** — get in early |
-| `embodied carbon consultant`, `embodied carbon assessment services` | Med | Pairs with EPD |
-| `climate risk assessment consultancy`, `climate risk advisory` | **High** (WTW, Jupiter, S&P) | Don't lead here — too competitive; win via niche |
-| `urban heat island mapping services`, `heat vulnerability assessment consultant` | **Low** | **Underserved niche** — strong opportunity, matches Kolkata case study |
-| `blue carbon project developer`, `blue carbon MRV services`, `mangrove carbon credit consultant` | Low–Med | Matches the mangrove case study |
-| UAE corridor: `CBAM compliance UAE`, `ESG consultant UAE`, `carbon accounting Dubai` | Med | Regional expansion terms |
+| `urban heat island mapping services`, `heat vulnerability assessment consultant` | **Low** | **★ Lead niche** — underserved, research-led, matches Kolkata/ECOSTRESS case study |
+| `blue carbon project developer`, `blue carbon MRV services`, `mangrove carbon credit consultant` | Low–Med | **★ Lead niche** — matches the mangrove/VM0033 case study |
+| `embodied carbon consultant`, `embodied carbon assessment services`, `EPD consultant India` | Low–Med (emerging 2026) | **★ Lead niche** — core service, rising demand, get in early |
+| `climate risk assessment consultancy`, `climate risk advisory` | **High** (WTW, Jupiter, S&P) | Don't lead here — too competitive; win via the niches above |
+| `CBAM consultant`, `CBAM compliance for steel/cement/aluminium exporters` | Med (live competitors: GreenSutra, Sentra, CleanCarbon) | **Adjacency, NOT a core niche** — high market intent but off the research-led positioning; pursue opportunistically via the materials-trading case study, don't lead with it |
+| UAE corridor: `ESG consultant UAE`, `carbon accounting Dubai` | Med | Regional expansion terms |
 
 ### B. Informational (top-of-funnel — blog/white-paper targets, build authority)
 Higher volume, lower intent → capture early, nurture to the service pages.
@@ -151,9 +150,11 @@ white-paper titles** — publishing those as full articles targets them directly
 - `VM0033 soil organic carbon accounting` / `mangrove blue carbon credit India MRV`
 - `cool roof intervention heat mitigation` + `[city]`
 
-**High-value / low-competition flags:** the **urban-heat/HVI** and **EPD-India** clusters are the
-least contested relative to intent; **CBAM-India long-tail** is the highest-intent. Lead the site's
-SEO with these three, not with generic "climate risk".
+**High-value / low-competition flags:** lead the site's SEO with the three **research-led niches** —
+**urban-heat/HVI**, **blue-carbon/VM0033**, and **embodied-carbon/EPD** — which are the least
+contested relative to intent and match the brand's positioning + existing case studies. **CBAM**
+stays as an opportunistic adjacency (high market intent, but off the research-led core — don't
+anchor the brand on it). Avoid leading with generic "climate risk" (dominated by WTW/Jupiter/S&P).
 
 ### D. 2025–26 SEO tactics checklist (prioritised)
 
