@@ -11,12 +11,49 @@ interface Props {
   description?: string;
 }
 
+const BRAND_DESCRIPTION =
+  'A boutique consultancy turning decision-grade climate-risk and embodied-carbon intelligence into standards-aligned adaptation decisions.';
+
 const {
   title = 'Delta Climate Research — Research-led climate intelligence',
-  description = 'A boutique consultancy turning decision-grade climate-risk and embodied-carbon intelligence into standards-aligned adaptation decisions.',
+  description = BRAND_DESCRIPTION,
 } = Astro.props;
 
 const canonical = new URL(Astro.url.pathname, Astro.site);
+
+// Demo-safe structured data: only truthfully-assertable facts (no contact/socials).
+const site = Astro.site!.href.replace(/\/$/, '');
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@graph': [
+    {
+      '@type': ['Organization', 'ProfessionalService'],
+      '@id': `${site}/#organization`,
+      name: 'Delta Climate Research',
+      url: `${site}/`,
+      logo: `${site}/favicon.svg`,
+      description: BRAND_DESCRIPTION,
+      areaServed: ['India', 'United Arab Emirates'],
+      knowsAbout: [
+        'Urban heat vulnerability mapping',
+        'Heat Vulnerability Index',
+        'Blue carbon MRV',
+        'Mangrove soil organic carbon',
+        'Embodied carbon accounting',
+        'Environmental Product Declarations',
+        'Climate risk intelligence',
+        'Carbon Border Adjustment Mechanism',
+      ],
+    },
+    {
+      '@type': 'WebSite',
+      '@id': `${site}/#website`,
+      url: `${site}/`,
+      name: 'Delta Climate Research',
+      publisher: { '@id': `${site}/#organization` },
+    },
+  ],
+};
 ---
 
 <!doctype html>
@@ -31,10 +68,17 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
 
     <!-- Open Graph -->
     <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Delta Climate Research" />
+    <meta property="og:locale" content="en" />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
     <meta property="og:url" content={canonical} />
-    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="author" content="Delta Climate Research" />
+    <meta name="theme-color" content="#050606" />
+
+    <!-- Structured data (demo-safe: only truthful facts) -->
+    <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />
 
     <!-- Satoshi is self-hosted (variable woff2) via @font-face in global.css -->
     <link
