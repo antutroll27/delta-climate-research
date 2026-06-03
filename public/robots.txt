@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://delta-climate-research.vercel.app/sitemap-index.xml
