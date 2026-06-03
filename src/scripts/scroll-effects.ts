@@ -69,9 +69,9 @@ export function initScrollEffects() {
   if (progress) {
     gsap.fromTo(
       progress,
-      { scaleX: 0 },
+      { scaleY: 0 },
       {
-        scaleX: 1,
+        scaleY: 1,
         ease: 'none',
         scrollTrigger: {
           trigger: document.documentElement,
