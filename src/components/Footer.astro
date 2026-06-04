@@ -8,12 +8,12 @@ const links = [
 ];
 ---
 
-<footer class="divider-top relative py-(--space-footer)">
+<footer class="divider-top relative py-footer">
   <span class="draw-line" data-draw aria-hidden="true"></span>
   <div class="wrap flex flex-wrap items-center justify-between gap-6">
     <span class="font-bold text-[1.0625rem] text-paper">Delta<span class="text-cyan">·</span>Climate</span>
 
-    <ul class="flex flex-wrap gap-(--space-footergap) list-none m-0 p-0 font-mono text-[0.75rem] uppercase tracking-[0.1em]" role="list">
+    <ul class="flex flex-wrap gap-footergap list-none m-0 p-0 font-mono text-[0.75rem] uppercase tracking-[0.1em]" role="list">
       {links.map((l) => (
         <li><a href={l.href} class="text-ink-muted no-underline transition-colors hover:text-paper">{l.label}</a></li>
       ))}
