@@ -91,7 +91,7 @@
   --tracking-display: -0.02em;
 
   /* line-height */
-  --leading-body: 1.6;  --leading-excerpt: 1.55;  --leading-title: 1.05;  --leading-headline: 1.04;  --leading-cosy: 1.4;
+  --leading-body: 1.6;  --leading-excerpt: 1.55;  --leading-title: 1.05;  --leading-cosy: 1.4;
 
   /* misc systemic */
   --shadow-glow: 0 0 30px rgb(244 246 248 / 0.45);
