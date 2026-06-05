@@ -45,14 +45,14 @@ const papers = [
     <ul class="feed list-none m-0 p-0 border-t border-hairline" role="list" data-reveal-group data-stagger="90">
       {papers.map((p) => (
         <li class="row border-b border-hairline">
-          <a href={p.href} class="row-link grid grid-cols-[auto_1fr_auto] gap-[clamp(1rem,3vw,2rem)] items-start py-[clamp(1.5rem,3vw,2.25rem)] no-underline">
+          <a href={p.href} class="row-link grid grid-cols-[auto_1fr_auto] gap-[clamp(1rem,3vw,2rem)] items-start py-rowpad no-underline">
             <span class="node" aria-hidden="true"></span>
             <span class="row-main">
-              <span class="row-meta font-mono text-[0.6875rem] tracking-[0.1em] uppercase text-cyan-muted">
+              <span class="row-meta font-mono text-tag tracking-widest uppercase text-cyan-muted">
                 <span class="row-id text-bronze">[{p.id}]</span> {p.date} — {p.cat}
               </span>
-              <span class="row-title block mt-[0.55rem] mb-[0.5rem] font-bold text-rowtitle tracking-[-0.01em] text-paper">{p.title}</span>
-              <span class="row-excerpt block max-w-[62ch] text-[0.9375rem] leading-[1.55] text-ink-muted">{p.excerpt}</span>
+              <span class="row-title block mt-xs mb-2 font-bold text-rowtitle tracking-title text-paper">{p.title}</span>
+              <span class="row-excerpt block max-w-[62ch] text-note leading-excerpt text-ink-muted">{p.excerpt}</span>
             </span>
             <span class="row-arrow" aria-hidden="true">↗</span>
           </a>
