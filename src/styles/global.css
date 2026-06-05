@@ -41,6 +41,7 @@
   --color-cyan-dim: #4fb0bc;   /* pressed / :active */
   --color-bronze: #b08d57;     /* warm secondary accent */
   --color-glow: rgb(244 246 248 / 0.5); /* CTA hover glow */
+  --color-paper-bright: #f4f6f8; /* brighter off-white — hover fills */
 
   /* type */
   --font-sans: "Satoshi", ui-sans-serif, system-ui, sans-serif;
