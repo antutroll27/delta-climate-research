@@ -41,6 +41,7 @@
   --color-cyan-dim: #4fb0bc;   /* pressed / :active */
   --color-bronze: #b08d57;     /* warm secondary accent */
   --color-glow: rgb(244 246 248 / 0.5); /* CTA hover glow */
+  --color-paper-bright: #f4f6f8; /* brighter off-white — hover fills */
 
   /* type */
   --font-sans: "Satoshi", ui-sans-serif, system-ui, sans-serif;
@@ -60,18 +61,44 @@
   --text-lede: clamp(0.95rem, 1.4vw, 1.125rem);
 
   /* fluid space scale (exact existing clamps) */
-  --space-section: clamp(5rem, 12vh, 9rem);
-  --space-gutter: clamp(1rem, 4vw, 2.5rem);
-  --space-hero-bottom: clamp(3rem, 9vh, 6rem);
-  --space-footer: clamp(2.5rem, 5vw, 4rem);
-  --space-about-gap: clamp(2rem, 5vw, 4rem);
-  --space-head-mb: clamp(2rem, 4vw, 3rem);
-  --space-papershead-mb: clamp(1.5rem, 3vw, 2.5rem);
-  --space-rowpad: clamp(1.5rem, 3vw, 2.25rem);
-  --space-rowgap: clamp(1rem, 3vw, 2rem);
-  --space-footergap: clamp(1rem, 2.5vw, 2rem);
-  --space-map-h: clamp(300px, 48vh, 460px);
-  --space-navgap: clamp(2.25rem, 4vw, 3.75rem);
+  --spacing-section: clamp(5rem, 12vh, 9rem);
+  --spacing-gutter: clamp(1rem, 4vw, 2.5rem);
+  --spacing-hero-bottom: clamp(3rem, 9vh, 6rem);
+  --spacing-footer: clamp(2.5rem, 5vw, 4rem);
+  --spacing-about-gap: clamp(2rem, 5vw, 4rem);
+  --spacing-head-mb: clamp(2rem, 4vw, 3rem);
+  --spacing-papershead-mb: clamp(1.5rem, 3vw, 2.5rem);
+  --spacing-rowpad: clamp(1.5rem, 3vw, 2.25rem);
+  --spacing-rowgap: clamp(1rem, 3vw, 2rem);
+  --spacing-footergap: clamp(1rem, 2.5vw, 2rem);
+  --spacing-map-h: clamp(300px, 48vh, 460px);
+  --spacing-navgap: clamp(2.25rem, 4vw, 3.75rem);
+
+  /* static type (font-size only — no line-height) */
+  --text-tag: 0.6875rem;     --text-label: 0.75rem;      --text-stream: 0.78rem;
+  --text-meta: 0.8125rem;    --text-body-sm: 0.875rem;   --text-note: 0.9375rem;
+  --text-logo: 1.0625rem;    --text-arrow: 1.1rem;       --text-cardtitle: 1.25rem;
+
+  /* off-grid micro spacing (t-shirt) */
+  --spacing-3xs: 0.2rem;  --spacing-2xs: 0.3rem;  --spacing-xs: 0.55rem;  --spacing-sm: 0.6rem;
+  --spacing-md: 0.85rem;  --spacing-lg: 0.9rem;   --spacing-xl: 1.1rem;   --spacing-2xl: 1.4rem;
+
+  /* radius */
+  --radius-card: 14px;
+
+  /* letter-spacing (named to avoid native tracking-tight/wide/widest) */
+  --tracking-kicker: 0.22em;  --tracking-tag: 0.14em;   --tracking-label: 0.08em;
+  --tracking-meta: 0.06em;    --tracking-cta: 0.03em;   --tracking-title: -0.01em;
+  --tracking-display: -0.02em;
+
+  /* line-height */
+  --leading-body: 1.6;  --leading-excerpt: 1.55;  --leading-title: 1.05;  --leading-cosy: 1.4;
+
+  /* misc systemic */
+  --shadow-glow: 0 0 30px rgb(244 246 248 / 0.45);
+  --container-site: 1400px;
+  --breakpoint-wide: 900px;
+  --color-on-accent: #050606;
 }
 
 /* Light theme — "Warm Field" soft-maximalism. Dark is the default (:root above).

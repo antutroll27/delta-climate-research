@@ -30,7 +30,7 @@ const projects = [
 
 <section id="projects" class="section divider-top" aria-labelledby="projects-title">
   <span class="draw-line" data-draw aria-hidden="true"></span>
-  <div class="wrap flex items-end justify-between gap-[1.5rem] mb-(--space-head-mb)" data-reveal>
+  <div class="wrap flex items-end justify-between gap-6 mb-head-mb" data-reveal>
     <div>
       <p class="sec-index">02 — Projects</p>
       <h2 id="projects-title" class="sec-title">Proof, before <em>theory.</em></h2>
@@ -40,19 +40,19 @@ const projects = [
 
   <div class="wrap">
     <div class="rail-wrap overflow-x-auto">
-      <ul class="rail grid grid-flow-col auto-cols-[minmax(280px,1fr)] gap-[1.25rem] list-none m-0" role="list" data-reveal-group data-stagger="90">
+      <ul class="rail grid grid-flow-col auto-cols-[minmax(280px,1fr)] gap-5 list-none m-0" role="list" data-reveal-group data-stagger="90">
       {projects.map((p) => (
         <li class="card">
-          <a href={p.href} class="card-link flex flex-col h-full border border-hairline rounded-[14px] overflow-hidden bg-surface no-underline">
+          <a href={p.href} class="card-link flex flex-col h-full border border-hairline rounded-card overflow-hidden bg-surface no-underline">
             <span class="cover" aria-hidden="true"></span>
-            <span class="card-body flex flex-col px-[1.25rem] pt-[1.25rem] pb-[1.4rem]">
-              <span class="card-tags font-mono text-[0.6875rem] tracking-[0.1em] uppercase text-cyan-muted">{p.tags}</span>
-              <span class="card-title mt-[0.6rem] font-bold text-[1.25rem] tracking-[-0.01em] text-paper">
-                <span class="card-id font-mono text-[0.8125rem] text-bronze mr-[0.5rem]">{p.id}</span>{p.title}
+            <span class="card-body flex flex-col px-5 pt-5 pb-2xl">
+              <span class="card-tags font-mono text-tag tracking-widest uppercase text-cyan-muted">{p.tags}</span>
+              <span class="card-title mt-sm font-bold text-cardtitle tracking-title text-paper">
+                <span class="card-id font-mono text-meta text-bronze mr-2">{p.id}</span>{p.title}
               </span>
-              <span class="card-sub mt-[0.2rem] text-[0.875rem] text-ink-muted">{p.sub}</span>
-              <span class="card-blurb mt-[0.9rem] text-[0.875rem] leading-[1.5] text-ink-faint max-w-[40ch]">{p.blurb}</span>
-              <span class="card-arrow mt-[1.1rem] text-cyan text-[1.1rem]" aria-hidden="true">↗</span>
+              <span class="card-sub mt-3xs text-body-sm text-ink-muted">{p.sub}</span>
+              <span class="card-blurb mt-lg text-body-sm leading-normal text-ink-faint max-w-[40ch]">{p.blurb}</span>
+              <span class="card-arrow mt-xl text-cyan text-arrow" aria-hidden="true">↗</span>
             </span>
           </a>
         </li>

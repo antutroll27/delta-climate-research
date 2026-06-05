@@ -9,13 +9,13 @@ const pillars = [
 
 <section id="about" class="section divider-top" aria-labelledby="about-title">
   <span class="draw-line" data-draw aria-hidden="true"></span>
-  <div class="wrap grid grid-cols-1 gap-(--space-about-gap) min-[900px]:grid-cols-[6fr_4fr] min-[900px]:items-start">
+  <div class="wrap grid grid-cols-1 gap-about-gap wide:grid-cols-[6fr_4fr] wide:items-start">
     <div data-reveal>
       <p class="sec-index">01 — About</p>
       <h2 id="about-title" class="sec-title">
         Between the data and the <em>decision.</em>
       </h2>
-      <p class="mt-[1.75rem] max-w-[56ch] text-body leading-[1.6] text-ink-muted">
+      <p class="mt-7 max-w-[56ch] text-body leading-body text-ink-muted">
         Delta Climate Research is a boutique consultancy sitting between raw
         earth-science data and the institutions that must act on it. We turn
         decision-grade measurement into standards-aligned, defensible adaptation
@@ -23,11 +23,11 @@ const pillars = [
         strategy.
       </p>
 
-      <ul class="list-none m-0 p-0 grid gap-0 mt-[2.5rem]" data-reveal-group data-stagger="80">
+      <ul class="list-none m-0 p-0 grid gap-0 mt-10" data-reveal-group data-stagger="80">
         {pillars.map((p) => (
-          <li class="flex flex-col gap-[0.3rem] py-[1.1rem] border-t border-hairline [&:last-child]:border-b">
-            <span class="font-semibold text-[1.0625rem] text-paper">{p.k}</span>
-            <span class="font-mono text-[0.8125rem] text-ink-faint">{p.v}</span>
+          <li class="flex flex-col gap-2xs py-xl border-t border-hairline [&:last-child]:border-b">
+            <span class="font-semibold text-logo text-paper">{p.k}</span>
+            <span class="font-mono text-meta text-ink-faint">{p.v}</span>
           </li>
         ))}
       </ul>
@@ -37,7 +37,7 @@ const pillars = [
          so the GSAP clip and the IntersectionObserver reveal never co-own opacity. -->
     <aside class="about-visual" aria-hidden="true" data-clip style="--clip-radius: 14px;">
       <span class="visual-bg" data-parallax="-0.05" aria-hidden="true"></span>
-      <span class="absolute top-[1rem] left-[1rem] font-mono text-[0.6875rem] tracking-[0.14em] text-cyan-muted">FIG. 01 — SYSTEMS MAP</span>
+      <span class="absolute top-4 left-4 font-mono text-tag tracking-tag text-cyan-muted">FIG. 01 — SYSTEMS MAP</span>
     </aside>
   </div>
 </section>
