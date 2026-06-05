@@ -45,7 +45,7 @@ const papers = [
     <ul class="feed list-none m-0 p-0 border-t border-hairline" role="list" data-reveal-group data-stagger="90">
       {papers.map((p) => (
         <li class="row border-b border-hairline">
-          <a href={p.href} class="row-link grid grid-cols-[auto_1fr_auto] gap-[clamp(1rem,3vw,2rem)] items-start py-rowpad no-underline">
+          <a href={p.href} class="row-link grid grid-cols-[auto_1fr_auto] gap-rowgap items-start py-rowpad no-underline">
             <span class="node" aria-hidden="true"></span>
             <span class="row-main">
               <span class="row-meta font-mono text-tag tracking-widest uppercase text-cyan-muted">
