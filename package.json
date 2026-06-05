@@ -21,7 +21,6 @@
   "devDependencies": {
     "@astrojs/check": "^0.9.9",
     "@tailwindcss/postcss": "^4.3.0",
-    "puppeteer-core": "^23.11.1",
     "typescript": "^6.0.3"
   },
   "overrides": {

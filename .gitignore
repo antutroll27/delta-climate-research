@@ -24,7 +24,3 @@ Thumbs.db
 .vercel
 
 
-# idiomatic-tailwind verification artifacts (temporary)
-screenshots/
-scripts/_shot.mjs
-scripts/_diff.mjs
