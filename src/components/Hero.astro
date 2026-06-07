@@ -6,8 +6,8 @@ const pre = ['Navigating', 'the', 'systems', 'of', 'a'];
 ---
 
 <section id="hero" class="relative min-h-dvh overflow-hidden flex flex-col justify-end bg-base" aria-label="Introduction">
-  <div class="vortex-bg" aria-hidden="true" style="opacity:0.85">
-    <VortexShader client:visible offsetX={0.55} />
+  <div class="vortex-bg vortex-bg--fade-b" aria-hidden="true" style="opacity:0.7">
+    <VortexShader client:visible offsetX={0.6} zoom={0.72} fog={0.15} mouse={0.8} />
   </div>
   <div class="grain" aria-hidden="true"></div>
 
@@ -57,7 +57,7 @@ const pre = ['Navigating', 'the', 'systems', 'of', 'a'];
   .headline .accent {
     font-family: var(--font-serif);
     font-style: italic;
-    font-weight: 500; /* Spectral italic medium */
+    font-weight: 500; /* Moonscape Serif italic medium */
     letter-spacing: 0;
     color: var(--color-cyan);
     /* italic descender clearance */

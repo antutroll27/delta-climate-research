@@ -1,7 +1,6 @@
 ---
 import { ClientRouter } from 'astro:transitions';
 // Self-hosted variable fonts (Vite rewrites the woff2 URLs when imported here)
-import '@fontsource/spectral/latin-500-italic.css';
 import '@fontsource-variable/geist-mono/index.css';
 import 'lenis/dist/lenis.css';
 import '../styles/global.css';
@@ -86,6 +85,14 @@ const jsonLd = {
     <link
       rel="preload"
       href="/fonts/Satoshi-Variable.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <!-- Moonscape Serif italic-500 accent face — above the fold in the hero headline -->
+    <link
+      rel="preload"
+      href="/fonts/moonscapeserif/MoonscapeSerif-MediumItalic.woff2"
       as="font"
       type="font/woff2"
       crossorigin

@@ -16,8 +16,29 @@
   font-display: swap;
 }
 
-/* Note: @fontsource Playfair is imported from Base.astro's frontmatter so Vite
-   rewrites the woff2 URLs correctly (a CSS @import here does not). */
+/* Self-hosted Moonscape Serif — the cyan italic accent face (used at 500 italic;
+   regular/italic registered as fallbacks). Replaces Spectral. */
+@font-face {
+  font-family: 'Moonscape Serif';
+  src: url('/fonts/moonscapeserif/MoonscapeSerif-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Moonscape Serif';
+  src: url('/fonts/moonscapeserif/MoonscapeSerif-Italic.woff2') format('woff2');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Moonscape Serif';
+  src: url('/fonts/moonscapeserif/MoonscapeSerif-MediumItalic.woff2') format('woff2');
+  font-weight: 500;
+  font-style: italic;
+  font-display: swap;
+}
 
 /* ----------------------------------------------------------------------------
    Design tokens — Delta Climate Research (locked palette + type)
@@ -45,7 +66,7 @@
 
   /* type */
   --font-sans: "Satoshi", ui-sans-serif, system-ui, sans-serif;
-  --font-serif: "Spectral", Georgia, "Times New Roman", serif;
+  --font-serif: "Moonscape Serif", Georgia, "Times New Roman", serif;
   --font-mono: "Geist Mono Variable", ui-monospace, "SF Mono", monospace;
 
   /* fluid type scale (each = the exact existing clamp it replaces — pixel-identical) */
@@ -268,3 +289,9 @@
 /* Astro wraps the island in <astro-island>; collapse it so the canvas's
    containing block is .vortex-bg (which is sized via inset:0). */
 .vortex-bg astro-island { display: contents; }
+/* Bottom fade — dissolves the vortex into the base toward the section footer
+   so it blends seamlessly into the next section (used on the Hero). */
+.vortex-bg--fade-b {
+  -webkit-mask-image: linear-gradient(to bottom, #000 45%, transparent 92%);
+          mask-image: linear-gradient(to bottom, #000 45%, transparent 92%);
+}
