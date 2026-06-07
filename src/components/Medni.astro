@@ -1,11 +1,15 @@
 ---
 // Section 5 — Medni: the interactive data bank (product highlight).
 // Map + map-island mount later; this is the dashboard shell structure.
+import VortexShader from './VortexShader';
 ---
 
-<section id="medni" class="section divider-top" aria-labelledby="medni-title">
+<section id="medni" class="section divider-top relative overflow-hidden" aria-labelledby="medni-title">
+  <div class="vortex-bg" aria-hidden="true" style="opacity:0.5">
+    <VortexShader client:visible offsetX={0.78} fog={0.16} />
+  </div>
   <span class="draw-line" data-draw aria-hidden="true"></span>
-  <div class="wrap mb-head-mb" data-reveal>
+  <div class="wrap relative z-[1] mb-head-mb" data-reveal>
     <p class="sec-index">04 — Medni</p>
     <h2 id="medni-title" class="sec-title">Living <em>intelligence,</em> by location.</h2>
     <p class="mt-4 max-w-[50ch] text-mednisub text-ink-muted">
@@ -13,7 +17,7 @@
     </p>
   </div>
 
-  <div class="wrap">
+  <div class="wrap relative z-[1]">
     <!-- data-clip owns the entrance (wipe + fade); no data-reveal, so the GSAP
          clip and the IntersectionObserver reveal never co-own opacity. -->
     <div class="dashboard" data-clip style="--clip-radius: 16px;">

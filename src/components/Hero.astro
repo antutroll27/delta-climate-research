@@ -1,10 +1,14 @@
 ---
 // Hero — Section 1. Static background (animated field archived in attic/hero-v1).
 // taste-skill discipline: <=4 text elements, headline <=2 lines, no scroll cue, no CTA.
+import VortexShader from './VortexShader';
 const pre = ['Navigating', 'the', 'systems', 'of', 'a'];
 ---
 
 <section id="hero" class="relative min-h-dvh overflow-hidden flex flex-col justify-end bg-base" aria-label="Introduction">
+  <div class="vortex-bg" aria-hidden="true" style="opacity:0.85">
+    <VortexShader client:visible offsetX={0.55} />
+  </div>
   <div class="grain" aria-hidden="true"></div>
 
   <div class="relative z-[2] max-w-site w-full mx-auto pt-0 px-gutter pb-hero-bottom">

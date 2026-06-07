@@ -253,3 +253,18 @@
     }
   }
 }
+
+/* Vortex backdrop wrapper — z-0 layer behind grain (z-1) + content (z-2).
+   Fallback gradient shows pre-hydration / no-JS / no-WebGL. */
+.vortex-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(60% 80% at 78% 50%, rgb(111 202 214 / 0.10), transparent 60%),
+    var(--color-base);
+}
+/* Astro wraps the island in <astro-island>; collapse it so the canvas's
+   containing block is .vortex-bg (which is sized via inset:0). */
+.vortex-bg astro-island { display: contents; }

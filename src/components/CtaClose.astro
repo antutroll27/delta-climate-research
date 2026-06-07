@@ -1,10 +1,14 @@
 ---
 // Section 6 — closing conversion beat (single ask).
+import VortexShader from './VortexShader';
 ---
 
-<section id="access" class="section divider-top relative text-center" aria-labelledby="cta-title">
+<section id="access" class="section divider-top relative overflow-hidden text-center" aria-labelledby="cta-title">
+  <div class="vortex-bg" aria-hidden="true" style="opacity:0.6">
+    <VortexShader client:visible offsetX={0.7} fog={0.13} />
+  </div>
   <span class="draw-line" data-draw aria-hidden="true"></span>
-  <div class="wrap flex flex-col items-center" data-reveal-group data-stagger="90">
+  <div class="wrap relative z-[1] flex flex-col items-center" data-reveal-group data-stagger="90">
     <p class="sec-index">05 — Access</p>
     <h2 id="cta-title" class="mt-4 font-bold text-cta leading-title tracking-display text-paper max-w-[16ch]">
       Put planetary intelligence to <em class="em-accent">work.</em>
