@@ -16,6 +16,23 @@
   font-display: swap;
 }
 
+/* Self-hosted Mona Sans (variable, wght 200–900) — the single sans for display
+   + body. Replaces Satoshi (kept available via --font-sans-alt). */
+@font-face {
+  font-family: 'Mona Sans';
+  src: url('/fonts/MonaSans-Variable.woff2') format('woff2');
+  font-weight: 200 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Mona Sans';
+  src: url('/fonts/MonaSans-VariableItalic.woff2') format('woff2');
+  font-weight: 200 900;
+  font-style: italic;
+  font-display: swap;
+}
+
 /* Self-hosted Moonscape Serif — the cyan accent face (used bold italic at 700;
    regular registered as a fallback). Replaces Spectral. */
 @font-face {
@@ -68,7 +85,9 @@
   --color-paper-bright: #f4f6f8; /* brighter off-white — hover fills */
 
   /* type */
-  --font-sans: "Satoshi", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Mona Sans", ui-sans-serif, system-ui, sans-serif;
+  /* old sans, kept for reuse — Satoshi @font-face is still defined above */
+  --font-sans-alt: "Satoshi", ui-sans-serif, system-ui, sans-serif;
   --font-serif: "Moonscape Serif", Georgia, "Times New Roman", serif;
   --font-mono: "Noplato Mono", ui-monospace, "SF Mono", monospace;
   /* old mono, kept for reuse — needs the Geist import re-enabled in Base.astro to render */
