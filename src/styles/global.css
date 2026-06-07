@@ -244,6 +244,7 @@
     font-size: clamp(1rem, 1.6vw, 1.25rem);
     letter-spacing: 0.08em;
     color: var(--color-bronze);
+    margin-bottom: clamp(0.75rem, 1.3vw, 1.2rem);
   }
   .sec-title {
     font-weight: 400; /* Satoshi Regular */
