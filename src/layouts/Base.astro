@@ -1,7 +1,8 @@
 ---
 import { ClientRouter } from 'astro:transitions';
-// Self-hosted variable fonts (Vite rewrites the woff2 URLs when imported here)
-import '@fontsource-variable/geist-mono/index.css';
+// Fonts are self-hosted via @font-face in global.css (Satoshi, Moonscape Serif, Noplato Mono).
+// Old mono kept available — uncomment to load Geist Mono (use via the --font-mono-alt token):
+// import '@fontsource-variable/geist-mono/index.css';
 import 'lenis/dist/lenis.css';
 import '../styles/global.css';
 
@@ -93,6 +94,14 @@ const jsonLd = {
     <link
       rel="preload"
       href="/fonts/moonscapeserif/MoonscapeSerif-Bold.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <!-- Noplato Mono — above-the-fold mono labels (kicker, nav) -->
+    <link
+      rel="preload"
+      href="/fonts/NoplatoMono.woff2"
       as="font"
       type="font/woff2"
       crossorigin

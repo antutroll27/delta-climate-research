@@ -33,6 +33,16 @@
   font-display: swap;
 }
 
+/* Self-hosted Noplato Mono (demo) — the mono label face. Replaces Geist Mono.
+   Note: this demo cut lacks °, ·, → (they fall back to ui-monospace). */
+@font-face {
+  font-family: 'Noplato Mono';
+  src: url('/fonts/NoplatoMono.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 /* ----------------------------------------------------------------------------
    Design tokens — Delta Climate Research (locked palette + type)
    See docs/superpowers/specs/2026-06-01-delta-climate-research-design.md §3
@@ -60,7 +70,9 @@
   /* type */
   --font-sans: "Satoshi", ui-sans-serif, system-ui, sans-serif;
   --font-serif: "Moonscape Serif", Georgia, "Times New Roman", serif;
-  --font-mono: "Geist Mono Variable", ui-monospace, "SF Mono", monospace;
+  --font-mono: "Noplato Mono", ui-monospace, "SF Mono", monospace;
+  /* old mono, kept for reuse — needs the Geist import re-enabled in Base.astro to render */
+  --font-mono-alt: "Geist Mono Variable", ui-monospace, "SF Mono", monospace;
 
   /* fluid type scale (each = the exact existing clamp it replaces — pixel-identical) */
   --text-hero: clamp(2.5rem, 7vw, 6rem);
@@ -228,6 +240,10 @@
     font-weight: 700;
     color: var(--color-cyan);
     letter-spacing: 0;
+    /* taller letterforms — vertical stretch from the baseline */
+    display: inline-block;
+    transform: scaleY(1.18);
+    transform-origin: bottom;
   }
   /* reusable heading accent — bold upright serif cyan (applied to <em> in section/cta titles) */
   .em-accent {
@@ -236,6 +252,10 @@
     font-weight: 700;
     color: var(--color-cyan);
     letter-spacing: 0;
+    /* taller letterforms — vertical stretch from the baseline */
+    display: inline-block;
+    transform: scaleY(1.18);
+    transform-origin: bottom;
   }
   .accent-link {
     font-family: var(--font-mono);
