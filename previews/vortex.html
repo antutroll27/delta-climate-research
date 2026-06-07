@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Liquid-metal vortex — tamed for Delta (ambient backdrop)</title>
+<style>
+  :root{--color-base:#050606;--color-cyan:#6fcad6;--color-cyan-muted:#92c2cb;--color-paper:#ecedf0;--color-ink-faint:#5c7173;
+    --font-sans:ui-sans-serif,system-ui,sans-serif;--font-serif:Georgia,serif;--font-mono:ui-monospace,"SF Mono",monospace;}
+  *{box-sizing:border-box;} body{margin:0;background:var(--color-base);color:var(--color-paper);font-family:var(--font-sans);-webkit-font-smoothing:antialiased;}
+  .hero{position:relative;min-height:100dvh;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end;background:var(--color-base);}
+  .vortex{position:absolute;inset:0;z-index:0;pointer-events:none;opacity:0.85;}
+  .vortex canvas{width:100%!important;height:100%!important;display:block;}
+  .scrim{position:absolute;inset:0;z-index:1;pointer-events:none;background:linear-gradient(180deg,rgb(5 6 6 /0.25) 0%,transparent 30%,rgb(5 6 6 /0.55) 100%);}
+  .grain{position:absolute;inset:0;z-index:2;pointer-events:none;opacity:0.04;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");}
+  .inner{position:relative;z-index:3;max-width:1400px;width:100%;margin:0 auto;padding:0 clamp(1rem,4vw,2.5rem) clamp(3rem,9vh,6rem);}
+  .kicker{font-family:var(--font-mono);font-size:.6875rem;letter-spacing:.22em;text-transform:uppercase;color:var(--color-cyan-muted);margin:0 0 1.25rem;}
+  .headline{margin:0;max-width:16ch;font-weight:700;font-size:clamp(2.5rem,7vw,6rem);line-height:1.04;letter-spacing:-.02em;}
+  .headline em{font-family:var(--font-serif);font-style:italic;font-weight:500;color:var(--color-cyan);}
+  .lede{max-width:46ch;margin:1.5rem 0 0;font-size:clamp(.95rem,1.4vw,1.125rem);line-height:1.5;}
+  .corner{position:absolute;z-index:3;right:clamp(1rem,4vw,2.5rem);bottom:clamp(3rem,9vh,6rem);margin:0;max-width:18ch;text-align:right;font-size:.8125rem;color:var(--color-ink-faint);}
+  .panel{position:fixed;right:1rem;bottom:1rem;z-index:50;background:rgb(9 20 22 /0.94);border:1px solid rgb(111 202 214 /0.18);border-radius:12px;padding:.9rem 1rem;font-family:var(--font-mono);font-size:.72rem;backdrop-filter:blur(10px);width:260px;max-height:92vh;overflow:auto;}
+  .panel h4{margin:0 0 .5rem;font-size:.7rem;letter-spacing:.12em;text-transform:uppercase;color:var(--color-cyan-muted);}
+  .panel .row{margin-top:.5rem;} .panel input[type=range]{width:100%;accent-color:var(--color-cyan);} .panel .val{color:var(--color-cyan);float:right;}
+  .panel label.chk{display:flex;gap:.4rem;align-items:center;margin-top:.55rem;cursor:pointer;color:var(--color-paper);}
+  .panel .hint{color:var(--color-ink-faint);margin-top:.6rem;line-height:1.5;}
+</style>
+</head>
+<body>
+  <section class="hero">
+    <div class="vortex" id="vortex" aria-hidden="true"><canvas id="cv"></canvas></div>
+    <div class="scrim" aria-hidden="true"></div>
+    <div class="grain" aria-hidden="true"></div>
+    <div class="inner">
+      <p class="kicker">Research-led climate intelligence</p>
+      <h1 class="headline">Navigating the systems of a <em>changing&nbsp;planet.</em></h1>
+      <p class="lede">Decision-grade climate-risk and embodied-carbon intelligence, interpreted with rigor.</p>
+    </div>
+    <p class="corner">Built for the frontier.</p>
+  </section>
+
+  <div class="panel">
+    <h4>Liquid-metal vortex · tamed</h4>
+    <div class="row">Hue <span class="val" id="huv">186</span><input id="hu" type="range" min="150" max="230" step="1" value="186"></div>
+    <div class="row">Saturation <span class="val" id="sav">0.45</span><input id="sa" type="range" min="0" max="1" step="0.05" value="0.45"></div>
+    <div class="row">Brightness <span class="val" id="brv">0.70</span><input id="br" type="range" min="0.2" max="1.5" step="0.05" value="0.7"></div>
+    <div class="row">Complexity <span class="val" id="cxv">1.0</span><input id="cx" type="range" min="0" max="2.5" step="0.1" value="1"></div>
+    <div class="row">Flow speed <span class="val" id="spv">0.35</span><input id="sp" type="range" min="0" max="1.5" step="0.05" value="0.35"></div>
+    <div class="row">Twist <span class="val" id="twv">5.0</span><input id="tw" type="range" min="1" max="10" step="0.5" value="5"></div>
+    <div class="row">X position <span class="val" id="oxv">0.55</span><input id="ox" type="range" min="-1" max="1" step="0.05" value="0.55"></div>
+    <div class="row">Zoom <span class="val" id="zmv">1.00</span><input id="zm" type="range" min="0.5" max="2" step="0.05" value="1"></div>
+    <div class="row">Fog (darkness) <span class="val" id="fgv">0.16</span><input id="fg" type="range" min="0.03" max="0.4" step="0.01" value="0.16"></div>
+    <div class="row">Visibility <span class="val" id="opv">0.85</span><input id="op" type="range" min="0.1" max="1" step="0.05" value="0.85"></div>
+    <div class="row">Mouse influence <span class="val" id="miv">0.10</span><input id="mi" type="range" min="0" max="1" step="0.05" value="0.1"></div>
+    <p class="hint">Raymarched liquid-metal vortex (raw WebGL) tamed to Delta: locked teal, auto-drift, off-center column, dark fog. Tell me the values you like.</p>
+  </div>
+
+  <script>
+    const canvas=document.getElementById('cv');
+    const host=document.getElementById('vortex');
+    const reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const gl=canvas.getContext('webgl',{antialias:true,alpha:true,premultipliedAlpha:false});
+
+    const P={hue:186,sat:0.45,bright:0.70,complexity:1.0,speed:0.35,twist:5.0,offx:0.55,zoom:1.0,fog:0.16,mouse:0.10};
+    const mouse={x:0.5,y:0.5};
+
+    const vs=`attribute vec2 position;void main(){gl_Position=vec4(position,0.0,1.0);}`;
+    const fs=`precision highp float;
+    uniform float iTime; uniform vec2 iResolution; uniform vec2 iMouse;
+    uniform float uHue,uSat,uBright,uComplexity,uSpeed,uTwist,uOffX,uZoom,uFog,uMouse;
+    vec3 hsv2rgb(vec3 c){vec3 rgb=clamp(abs(mod(c.x*6.0+vec3(0.0,4.0,2.0),6.0)-3.0)-1.0,0.0,1.0);return c.z*mix(vec3(1.0),rgb,c.y);}
+    mat2 rotate2d(float a){return mat2(cos(a),-sin(a),sin(a),cos(a));}
+    mat3 rotationMatrix(vec3 axis,float angle){axis=normalize(axis);float s=sin(angle),c=cos(angle),oc=1.0-c;
+      return mat3(oc*axis.x*axis.x+c,oc*axis.x*axis.y-axis.z*s,oc*axis.z*axis.x+axis.y*s,
+                  oc*axis.x*axis.y+axis.z*s,oc*axis.y*axis.y+c,oc*axis.y*axis.z-axis.x*s,
+                  oc*axis.z*axis.x-axis.y*s,oc*axis.y*axis.z+axis.x*s,oc*axis.z*axis.z+c);}
+    vec3 mod289(vec3 x){return x-floor(x*(1.0/289.0))*289.0;}
+    vec2 mod289(vec2 x){return x-floor(x*(1.0/289.0))*289.0;}
+    vec3 permute(vec3 x){return mod289(((x*34.0)+1.0)*x);}
+    float snoise(vec2 v){const vec4 C=vec4(0.211324865405187,0.366025403784439,-0.577350269189626,0.024390243902439);
+      vec2 i=floor(v+dot(v,C.yy));vec2 x0=v-i+dot(i,C.xx);
+      vec2 i1=(x0.x>x0.y)?vec2(1.0,0.0):vec2(0.0,1.0);
+      vec4 x12=x0.xyxy+C.xxzz;x12.xy-=i1;i=mod289(i);
+      vec3 p=permute(permute(i.y+vec3(0.0,i1.y,1.0))+i.x+vec3(0.0,i1.x,1.0));
+      vec3 m=max(0.5-vec3(dot(x0,x0),dot(x12.xy,x12.xy),dot(x12.zw,x12.zw)),0.0);m=m*m;m=m*m;
+      vec3 x=2.0*fract(p*C.www)-1.0;vec3 h=abs(x)-0.5;vec3 ox=floor(x+0.5);vec3 a0=x-ox;
+      m*=1.79284291400159-0.85373472095314*(a0*a0+h*h);
+      vec3 g;g.x=a0.x*x0.x+h.x*x0.y;g.yz=a0.yz*x12.xz+h.yz*x12.yw;return 130.0*dot(m,g);}
+    float map(vec3 p){float t=iTime*uSpeed;float tw=uTwist*p.y;p.xz=rotate2d(tw)*p.xz;
+      float disp=snoise(p.xy*3.0+t)*0.1*uComplexity;return length(p.xz)-0.5+disp;}
+    float rayMarch(vec3 ro,vec3 rd){float d=0.0;for(int i=0;i<64;i++){vec3 p=ro+rd*d;float ds=map(p);d+=ds;if(d>50.0||abs(ds)<0.001)break;}return d;}
+    vec3 getNormal(vec3 p){vec2 e=vec2(0.001,0.0);return normalize(vec3(map(p+e.xyy)-map(p-e.xyy),map(p+e.yxy)-map(p-e.yxy),map(p+e.yyx)-map(p-e.yyx)));}
+    void main(){
+      vec2 uv=(gl_FragCoord.xy-0.5*iResolution.xy)/iResolution.y;
+      uv.x-=uOffX; uv*=uZoom;
+      // calm auto-drift instead of mouse-lurch; faint mouse parallax layered on
+      float t=iTime*0.08;
+      vec2 m=(iMouse-0.5)*uMouse + vec2(sin(t)*0.25, cos(t*1.3)*0.18);
+      vec3 ro=vec3(0.0,0.0,-3.0); vec3 rd=normalize(vec3(uv,1.0));
+      mat3 rot=rotationMatrix(normalize(vec3(m.y,m.x,0.0001)),length(m)*2.0);
+      ro=rot*ro; rd=rot*rd;
+      float d=rayMarch(ro,rd); vec3 col=vec3(0.0);
+      if(d<50.0){vec3 p=ro+rd*d;vec3 n=getNormal(p);
+        vec3 lightDir=normalize(vec3(1.0,1.0,-1.0));
+        float diffuse=max(dot(n,lightDir),0.0);
+        float fres=pow(1.0-max(dot(n,-rd),0.0),3.0);
+        vec3 baseColor=hsv2rgb(vec3(uHue/360.0,uSat,0.8));
+        vec3 refl=mix(vec3(0.5,0.6,0.62), baseColor*1.3, 0.4); // cool metallic, not pure white
+        col=baseColor*diffuse + refl*fres;
+        col=mix(col,vec3(0.0),1.0-exp(-uFog*d));
+        col*=uBright;
+      }
+      float a=clamp(max(col.r,max(col.g,col.b))*1.6,0.0,1.0); // alpha follows luminance → black is transparent
+      gl_FragColor=vec4(col,a);
+    }`;
+
+    function compile(src,type){const s=gl.createShader(type);gl.shaderSource(s,src);gl.compileShader(s);
+      if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)){console.error(gl.getShaderInfoLog(s));return null;}return s;}
+    const prog=gl.createProgram();
+    gl.attachShader(prog,compile(vs,gl.VERTEX_SHADER));gl.attachShader(prog,compile(fs,gl.FRAGMENT_SHADER));
+    gl.linkProgram(prog);gl.useProgram(prog);
+    const buf=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,buf);
+    gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,-1,1,1,-1,1,1]),gl.STATIC_DRAW);
+    const loc=gl.getAttribLocation(prog,'position');gl.enableVertexAttribArray(loc);gl.vertexAttribPointer(loc,2,gl.FLOAT,false,0,0);
+    gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    const U={};['iTime','iResolution','iMouse','uHue','uSat','uBright','uComplexity','uSpeed','uTwist','uOffX','uZoom','uFog','uMouse'].forEach(n=>U[n]=gl.getUniformLocation(prog,n));
+
+    const DPR=Math.min(1.5,window.devicePixelRatio||1);
+    function resize(){const w=host.clientWidth,h=host.clientHeight;canvas.width=w*DPR;canvas.height=h*DPR;gl.viewport(0,0,canvas.width,canvas.height);gl.uniform2f(U.iResolution,canvas.width,canvas.height);}
+    addEventListener('resize',resize);resize();
+    addEventListener('mousemove',e=>{const r=host.getBoundingClientRect();mouse.x=(e.clientX-r.left)/r.width;mouse.y=1.0-(e.clientY-r.top)/r.height;});
+
+    const start=performance.now();
+    function frame(){const time=(performance.now()-start)/1000;
+      gl.uniform1f(U.iTime,time);gl.uniform2f(U.iMouse,mouse.x,mouse.y);
+      gl.uniform1f(U.uHue,P.hue);gl.uniform1f(U.uSat,P.sat);gl.uniform1f(U.uBright,P.bright);
+      gl.uniform1f(U.uComplexity,P.complexity);gl.uniform1f(U.uSpeed,reduce?0:P.speed);
+      gl.uniform1f(U.uTwist,P.twist);gl.uniform1f(U.uOffX,P.offx);gl.uniform1f(U.uZoom,P.zoom);
+      gl.uniform1f(U.uFog,P.fog);gl.uniform1f(U.uMouse,P.mouse);
+      gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT);
+      gl.drawArrays(gl.TRIANGLES,0,6);
+      if(!reduce) requestAnimationFrame(frame);
+    }
+    frame(); if(reduce){/* draw one static frame */ }
+
+    const bind=(id,vid,key,fmt)=>{const e=document.getElementById(id),v=document.getElementById(vid);
+      e.addEventListener('input',()=>{P[key]=+e.value;v.textContent=fmt?fmt(+e.value):e.value;});};
+    bind('hu','huv','hue');bind('sa','sav','sat');bind('br','brv','bright');bind('cx','cxv','complexity');
+    bind('sp','spv','speed');bind('tw','twv','twist');bind('ox','oxv','offx');bind('zm','zmv','zoom');
+    bind('fg','fgv','fog');bind('mi','miv','mouse');
+    document.getElementById('op').addEventListener('input',e=>{host.style.opacity=e.value;document.getElementById('opv').textContent=e.value;});
+  </script>
+</body>
+</html>

@@ -24,3 +24,9 @@ Thumbs.db
 .vercel
 
 
+
+# firecrawl CLI scrape cache
+.firecrawl/
+
+# preview scratch artifacts (headless screenshots + verification scripts)
+previews/_*
