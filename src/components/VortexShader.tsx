@@ -122,6 +122,7 @@ export default function VortexShader({
     resize();
 
     const onMouse = (e: MouseEvent) => {
+      if (propsRef.current.mouse === 0) return; // parallax off → no forced reflow
       const r = canvas.getBoundingClientRect();
       mousePos.x = (e.clientX - r.left) / r.width;
       mousePos.y = 1.0 - (e.clientY - r.top) / r.height;
@@ -130,6 +131,7 @@ export default function VortexShader({
     const start = performance.now();
     let raf = 0;
     let running = false;
+    let visible = false; // single source of truth for on-screen state (set by the IO)
 
     const draw = () => {
       const p = propsRef.current;
@@ -144,16 +146,22 @@ export default function VortexShader({
       gl.drawArrays(gl.TRIANGLES, 0, 6);
     };
     const loop = () => { draw(); raf = requestAnimationFrame(loop); };
-    const startLoop = () => { if (running || reduce) return; running = true; raf = requestAnimationFrame(loop); };
-    const stopLoop = () => { running = false; if (raf) cancelAnimationFrame(raf); raf = 0; };
-
-    const inView = () => {
-      const r = canvas.getBoundingClientRect();
-      return r.bottom > -200 && r.top < window.innerHeight + 200;
+    // mousemove is only attached while the loop runs, so off-screen instances cost nothing
+    const startLoop = () => {
+      if (running || reduce) return;
+      running = true;
+      window.addEventListener('mousemove', onMouse);
+      raf = requestAnimationFrame(loop);
+    };
+    const stopLoop = () => {
+      running = false;
+      window.removeEventListener('mousemove', onMouse);
+      if (raf) cancelAnimationFrame(raf);
+      raf = 0;
     };
 
     const io = new IntersectionObserver((entries) => {
-      const visible = entries.some(e => e.isIntersecting);
+      visible = entries.some(e => e.isIntersecting);
       if (visible && document.visibilityState !== 'hidden') startLoop();
       else stopLoop();
     }, { rootMargin: '200px' });
@@ -161,22 +169,20 @@ export default function VortexShader({
 
     const onVis = () => {
       if (document.visibilityState === 'hidden') stopLoop();
-      else if (inView()) startLoop();
+      else if (visible) startLoop();
     };
     const onLost = (e: Event) => { e.preventDefault(); stopLoop(); };
 
     window.addEventListener('resize', resize);
-    window.addEventListener('mousemove', onMouse);
     document.addEventListener('visibilitychange', onVis);
     canvas.addEventListener('webglcontextlost', onLost);
 
     if (reduce) draw(); // single static frame, no loop
 
     return () => {
-      stopLoop();
+      stopLoop(); // also removes the mousemove listener
       io.disconnect();
       window.removeEventListener('resize', resize);
-      window.removeEventListener('mousemove', onMouse);
       document.removeEventListener('visibilitychange', onVis);
       canvas.removeEventListener('webglcontextlost', onLost);
       if (!gl.isContextLost()) {
