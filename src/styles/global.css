@@ -16,7 +16,7 @@
   font-display: swap;
 }
 
-/* Self-hosted Moonscape Serif — the cyan accent face (used upright at 700;
+/* Self-hosted Moonscape Serif — the cyan accent face (used bold italic at 700;
    regular registered as a fallback). Replaces Spectral. */
 @font-face {
   font-family: 'Moonscape Serif';
@@ -27,9 +27,9 @@
 }
 @font-face {
   font-family: 'Moonscape Serif';
-  src: url('/fonts/moonscapeserif/MoonscapeSerif-Bold.woff2') format('woff2');
+  src: url('/fonts/moonscapeserif/MoonscapeSerif-BoldItalic.woff2') format('woff2');
   font-weight: 700;
-  font-style: normal;
+  font-style: italic;
   font-display: swap;
 }
 
@@ -236,7 +236,7 @@
   }
   .sec-title em {
     font-family: var(--font-serif);
-    font-style: normal;
+    font-style: italic;
     font-weight: 700;
     color: var(--color-cyan);
     letter-spacing: 0;
@@ -248,7 +248,7 @@
   /* reusable heading accent — bold upright serif cyan (applied to <em> in section/cta titles) */
   .em-accent {
     font-family: var(--font-serif);
-    font-style: normal;
+    font-style: italic;
     font-weight: 700;
     color: var(--color-cyan);
     letter-spacing: 0;
