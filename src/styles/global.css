@@ -257,6 +257,9 @@
     transform: scaleY(1.18);
     transform-origin: bottom;
   }
+  /* capitalize the first letter of the serif accent within each sentence */
+  .sec-title em::first-letter,
+  .em-accent::first-letter { text-transform: uppercase; }
   .accent-link {
     font-family: var(--font-mono);
     font-size: 0.8125rem;
