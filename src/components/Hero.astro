@@ -1,37 +1,74 @@
 ---
-// Hero — Section 1. Static background (animated field archived in attic/hero-v1).
-// taste-skill discipline: <=4 text elements, headline <=2 lines, no scroll cue, no CTA.
+// Hero — Section 1. Colossal stacked wordmark (Noomo-inspired typography) over
+// the tamed vortex. Kept lean: kicker, 3-line headline, lede, one corner label.
+// Each word stays a .word span so the --i stagger entrance still runs.
 import VortexShader from './VortexShader';
-const pre = ['Navigating', 'the', 'systems', 'of', 'a'];
 ---
 
-<section id="hero" class="relative min-h-dvh overflow-hidden flex flex-col justify-end bg-base" aria-label="Introduction">
-  <div class="vortex-bg vortex-bg--fade-b" aria-hidden="true" style="opacity:0.7">
-    <VortexShader client:visible offsetX={0.6} zoom={0.72} fog={0.15} mouse={0.8} />
+<section id="hero" class="relative min-h-dvh overflow-hidden flex flex-col bg-base" aria-label="Introduction">
+  <div class="vortex-bg vortex-bg--fade-b vortex-hero" aria-hidden="true">
+    <VortexShader client:visible offsetX={0.6} zoom={0.72} fog={0.30} mouse={0.8} />
   </div>
+  <div class="vortex-dim" aria-hidden="true"></div>
   <div class="grain" aria-hidden="true"></div>
 
-  <div class="relative z-[2] max-w-site w-full mx-auto pt-0 px-gutter pb-hero-bottom">
-    <p class="font-mono text-tag tracking-kicker uppercase text-cyan-muted m-0 mb-5" style="--i:0" data-parallax="-0.04">Research-led climate intelligence</p>
+  <div class="relative z-[2] min-h-dvh flex flex-col justify-between max-w-site w-full mx-auto px-gutter pt-[6.5rem] pb-hero-bottom">
+    <p class="font-mono text-tag tracking-kicker uppercase text-cyan-muted m-0" style="--i:0" data-parallax="-0.04">Climate-risk&nbsp;· Embodied carbon&nbsp;· Urban-heat adaptation</p>
 
-    <h1 class="headline" data-parallax="-0.06">
-      {pre.map((w, i) => (
-        <span class="word" style={`--i:${i + 1}`}>{w}{' '}</span>
-      ))}
-      <span class="word accent" style="--i:7">changing&nbsp;planet.</span>
-    </h1>
+    <div class="hero-foot">
+      <h1 class="headline mb-[clamp(1.5rem,4vh,3rem)]" data-parallax="-0.06">
+        <span class="line"><span class="word" style="--i:1">Navigating</span></span>
+        <span class="line"><span class="word" style="--i:2">the </span><span class="word" style="--i:3">systems</span></span>
+        <span class="line"><span class="word" style="--i:4">of </span><span class="word" style="--i:5">a </span><span class="word accent" style="--i:6">changing&nbsp;planet.</span></span>
+      </h1>
 
-    <div data-parallax="-0.08">
-      <p class="lede word" style="--i:9">
-        Decision-grade climate-risk and embodied-carbon intelligence, interpreted with rigor.
-      </p>
+      <div class="feet">
+        <p class="lede word" style="--i:8" data-parallax="-0.08">
+          Decision-grade intelligence for institutions, municipalities, and corporates navigating a changing climate.
+        </p>
+        <p class="font-mono text-meta tracking-meta uppercase text-ink-faint whitespace-nowrap max-[820px]:hidden word"
+           style="--i:9" data-parallax="0.06">Built for the frontier</p>
+      </div>
     </div>
   </div>
-
-  <p class="absolute z-[2] right-gutter bottom-hero-bottom m-0 max-w-[18ch] text-right text-meta leading-cosy text-ink-faint max-[820px]:hidden" style="--i:10" data-parallax="0.06">Built for the frontier.</p>
 </section>
 
 <style>
+  /* wrapper opacity: desktop restrained, mobile slightly lifted */
+  .vortex-hero { opacity: 0.40; }
+  @media (max-width: 640px) {
+    .vortex-hero {
+      opacity: 0.38;
+      transform: translateY(18%);
+    }
+  }
+
+  /* dark radial vignette over the vortex hot-spot — pulls it deeper into the base */
+  .vortex-dim {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    /* desktop: heavy vignette centred upper-right */
+    background: radial-gradient(
+      ellipse 60% 52% at 70% 30%,
+      rgba(5, 6, 6, 0.78) 0%,
+      rgba(5, 6, 6, 0.40) 40%,
+      transparent 68%
+    );
+  }
+  @media (max-width: 640px) {
+    /* mobile: much lighter, shifted to mid-frame so tornado shows through */
+    .vortex-dim {
+      background: radial-gradient(
+        ellipse 75% 55% at 58% 52%,
+        rgba(5, 6, 6, 0.55) 0%,
+        rgba(5, 6, 6, 0.22) 45%,
+        transparent 70%
+      );
+    }
+  }
+
   /* subtle static film grain */
   .grain {
     position: absolute;
@@ -42,17 +79,18 @@ const pre = ['Navigating', 'the', 'systems', 'of', 'a'];
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   }
 
+  /* colossal stacked wordmark — type as the protagonist */
   .headline {
     margin: 0;
-    max-width: 16ch;
-    font-weight: 700;
-    font-size: clamp(2.5rem, 7vw, 6rem);
-    line-height: 1.04;
-    letter-spacing: -0.02em;
+    font-weight: 800;
+    font-size: clamp(2.5rem, 7vw, 7rem);
+    line-height: 0.89;
+    letter-spacing: -0.038em;
     color: var(--color-paper);
   }
+  .headline .line { display: block; }
   /* white-space: pre preserves the trailing space inside each inline-block word
-     (otherwise the stagger spans collapse into "Navigatingthesystems...") */
+     (otherwise the stagger spans collapse into "thesystems"). */
   .headline .word { display: inline-block; white-space: pre; }
   .headline .accent {
     font-family: var(--font-serif);
@@ -60,22 +98,29 @@ const pre = ['Navigating', 'the', 'systems', 'of', 'a'];
     font-weight: 700; /* Moonscape Serif bold italic */
     letter-spacing: 0;
     color: var(--color-cyan);
-    line-height: 1.1;
-    padding-bottom: 0.08em;
-    /* taller letterforms — vertical stretch from the baseline */
+    line-height: 1.0;
+    padding-bottom: 0.06em;
+    /* taller letterforms — vertical stretch from the baseline (eased vs section
+       accents because the wordmark leading is tight) */
     display: inline-block;
-    transform: scaleY(1.18);
+    transform: scaleY(1.14);
     transform-origin: bottom;
   }
-  /* capitalize the first letter of the serif accent */
   .headline .accent::first-letter { text-transform: uppercase; }
 
+  /* feet row: lede left, corner label right */
+  .feet {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 2rem;
+  }
   .lede {
-    max-width: 46ch;
-    margin: 1.5rem 0 0;
+    max-width: 42ch;
+    margin: 0;
     font-size: clamp(0.95rem, 1.4vw, 1.125rem);
     line-height: 1.5;
-    color: var(--color-paper);
+    color: var(--color-ink-muted);
   }
 
   /* word-stagger entrance (text reveal, not a background animation) */
@@ -85,14 +130,21 @@ const pre = ['Navigating', 'the', 'systems', 'of', 'a'];
     animation: rise 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;
     animation-delay: calc(var(--i, 0) * 0.07s + 0.15s);
   }
+  /* accent fades in only — keeps its static scaleY (the rise keyframe's
+     `transform: none` would otherwise wipe the taller stretch). */
   .headline .accent {
-    transform: translateY(0.5em) scale(0.985);
-    animation-duration: 0.95s;
+    opacity: 0;
+    animation: fadein 0.95s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    animation-delay: calc(var(--i, 0) * 0.07s + 0.15s);
   }
   @keyframes rise {
     to { opacity: 1; transform: none; }
   }
+  @keyframes fadein {
+    to { opacity: 1; }
+  }
   @media (prefers-reduced-motion: reduce) {
     .word { opacity: 1; transform: none; animation: none; }
+    .headline .accent { opacity: 1; animation: none; }
   }
 </style>
