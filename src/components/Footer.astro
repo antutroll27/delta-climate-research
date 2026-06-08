@@ -1,7 +1,7 @@
 ---
 import WarpShader from './WarpShader';
 
-const year = 2026;
+const year = new Date().getFullYear();
 const nav = [
   { label: 'About', href: '/#about' },
   { label: 'Projects', href: '/#projects' },
@@ -299,6 +299,10 @@ const connect = [
 </style>
 
 <script>
+  // Module scripts are singletons per session — this block runs once.
+  // astro:page-load re-fits the watermark on view-transition navigations.
+  let resizeRegistered = false;
+
   function fitWatermark() {
     const svg = document.getElementById('footer-wm');
     const text = document.getElementById('footer-wm-text') as SVGTextElement | null;
@@ -308,14 +312,16 @@ const connect = [
       svg.setAttribute('viewBox', `${b.x} ${b.y} ${b.width} ${b.height}`);
     } catch (e) {}
   }
+
   function initFooter() {
     fitWatermark();
-    if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitWatermark);
+    document.fonts?.ready.then(fitWatermark);
+    if (!resizeRegistered) {
+      resizeRegistered = true;
+      window.addEventListener('resize', fitWatermark);
+    }
   }
+
   initFooter();
   document.addEventListener('astro:page-load', initFooter);
-  if (!(window as any).__footerWmResize) {
-    (window as any).__footerWmResize = true;
-    window.addEventListener('resize', fitWatermark);
-  }
 </script>

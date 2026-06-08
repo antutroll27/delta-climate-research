@@ -3,12 +3,10 @@
 import Lenis from 'lenis';
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
+import { motionOK } from '../utils/motion';
 
 let lenis: Lenis | undefined;
 let tickerFn: ((time: number) => void) | undefined;
-
-const motionOK = () =>
-  window.matchMedia('(prefers-reduced-motion: no-preference)').matches;
 
 // Delegated handler: one listener on document, so teardown is symmetric and it
 // survives any DOM swap that preserves the listener owner. Matches same-page

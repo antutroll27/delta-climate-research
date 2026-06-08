@@ -3,6 +3,7 @@
 // page progress. Driven by data-* attributes; built only when motion is allowed.
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
+import { motionOK } from '../utils/motion';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -11,9 +12,6 @@ gsap.registerPlugin(ScrollTrigger);
 const PARALLAX_SCALE = 2.0;
 const CLIP_INSET = 16;
 const CLIP_OPACITY = 0.6;
-
-const motionOK = () =>
-  window.matchMedia('(prefers-reduced-motion: no-preference)').matches;
 
 export function initScrollEffects() {
   if (!motionOK()) return;
