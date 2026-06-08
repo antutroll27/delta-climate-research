@@ -54,7 +54,7 @@ const links = [
 <style>
   .nav-progress {
     position: fixed;
-    top: 0; /* vertical rail down the left edge, nudged in from the edge */
+    top: 0;
     left: 4rem;
     z-index: 50;
     width: 2px;
@@ -62,8 +62,11 @@ const links = [
     background: var(--color-cyan);
     box-shadow: 0 0 12px rgb(111 202 214 / 0.5);
     transform: scaleY(0);
-    transform-origin: 50% 0; /* grows top -> bottom */
+    transform-origin: 50% 0;
     pointer-events: none;
+  }
+  @media (max-width: 640px) {
+    .nav-progress { left: 0; }
   }
 
   .nav-links {
