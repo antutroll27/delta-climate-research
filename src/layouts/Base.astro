@@ -117,6 +117,21 @@ const jsonLd = {
         }
       } catch (e) {}
     </script>
+
+    <!-- pre-paint loader gate: first-visit instrument loader, home only, once per
+         session, motion allowed. Sets the attribute before the body paints so
+         returning visitors never see a flash. -->
+    <script is:inline>
+      try {
+        if (
+          location.pathname === '/' &&
+          !sessionStorage.getItem('delta:loaded') &&
+          window.matchMedia('(prefers-reduced-motion: no-preference)').matches
+        ) {
+          document.documentElement.setAttribute('data-loader', 'show');
+        }
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <slot />

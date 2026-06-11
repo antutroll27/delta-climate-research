@@ -1,0 +1,354 @@
+---
+// First-visit loader — "instrument boot". The Δ mark draws in, a counter
+// climbs to 100%, and four rows resolve to LIVE telemetry about the visitor's
+// location (geojs.io → lat/lon/timezone, open-meteo → temperature + humidity).
+// Shown once per session, on the home page, only when motion is allowed.
+// Visibility is gated by the html[data-loader="show"] attribute, which the
+// pre-paint inline script in Base.astro sets before the body renders.
+---
+
+<div class="site-loader" id="site-loader" role="status" aria-label="Loading">
+  <div class="sl-sweep" data-sweep aria-hidden="true"></div>
+
+  <!-- top -->
+  <div class="sl-top">
+    <div class="sl-id">
+      <svg class="sl-mark" viewBox="0 0 150 130" aria-hidden="true">
+        <polygon data-tri points="75,12 138,120 12,120" />
+      </svg>
+      <span class="sl-name">Delta</span>
+    </div>
+    <div class="sl-status" data-status>Acquiring telemetry<span class="sl-dot"></span></div>
+  </div>
+
+  <!-- center -->
+  <div class="sl-center">
+    <div class="sl-pct" data-pct>0%</div>
+    <div class="sl-rows" data-rows>
+      <div class="sl-row" data-th="22"><span class="k">Geo lock</span><span class="v" data-f="geo">—</span><span class="ok">✓ ok</span></div>
+      <div class="sl-row" data-th="44"><span class="k">Ground station</span><span class="v" data-f="station">—</span><span class="ok">✓ ok</span></div>
+      <div class="sl-row" data-th="66"><span class="k">Surface temp</span><span class="v" data-f="temp">—</span><span class="ok">✓ ok</span></div>
+      <div class="sl-row" data-th="88"><span class="k">Atmosphere</span><span class="v" data-f="atmo">—</span><span class="ok">✓ ok</span></div>
+    </div>
+  </div>
+
+  <!-- bottom -->
+  <div class="sl-bottom">
+    <div class="sl-bar"><span class="fill" data-fill></span></div>
+    <div class="sl-foot">
+      <span>Delta Climate Research</span>
+      <span>Decision-grade intelligence</span>
+    </div>
+  </div>
+</div>
+
+<style>
+  .site-loader {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: none; /* shown only via html[data-loader="show"] (see :global below) */
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 7vh 7vw;
+    background: var(--color-base);
+    will-change: opacity, transform;
+  }
+
+  .sl-mark polygon {
+    fill: none;
+    stroke: var(--color-cyan);
+    stroke-width: 6;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+  }
+
+  /* top */
+  .sl-top { display: flex; align-items: flex-start; justify-content: space-between; }
+  .sl-id { display: flex; align-items: center; gap: 0.95rem; }
+  .sl-mark { width: 28px; height: 24px; overflow: visible; }
+  .sl-name {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.34em;
+    text-transform: uppercase;
+    color: var(--color-paper);
+  }
+  .sl-status {
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--color-ink-faint);
+    text-align: right;
+  }
+  .sl-dot {
+    display: inline-block;
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: var(--color-cyan);
+    margin-left: 0.55rem;
+    vertical-align: middle;
+    animation: sl-blink 1.3s steps(2) infinite;
+  }
+  @keyframes sl-blink { 50% { opacity: 0.25; } }
+
+  /* center */
+  .sl-center {
+    align-self: center;
+    width: 100%;
+    max-width: 660px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 1.7rem;
+  }
+  .sl-pct {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-weight: 300;
+    font-size: clamp(3rem, 11vw, 7rem);
+    line-height: 0.9;
+    letter-spacing: -0.01em;
+    color: var(--color-cyan);
+  }
+  .sl-rows { display: flex; flex-direction: column; gap: 0.6rem; }
+  .sl-row {
+    display: flex;
+    align-items: baseline;
+    gap: 1rem;
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.06em;
+    opacity: 0.22;
+    transition: opacity 0.35s cubic-bezier(0.2, 0, 0, 1);
+  }
+  .sl-row.on { opacity: 1; }
+  .sl-row .k {
+    color: var(--color-ink-faint);
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    min-width: 13ch;
+  }
+  .sl-row .v {
+    color: var(--color-cyan);
+    font-variant-numeric: tabular-nums;
+    margin-right: auto;
+  }
+  .sl-row .ok {
+    color: var(--color-bronze);
+    font-size: 0.58rem;
+    letter-spacing: 0.16em;
+    opacity: 0;
+    transition: opacity 0.3s cubic-bezier(0.2, 0, 0, 1);
+  }
+  .sl-row.on .ok { opacity: 1; }
+
+  /* bottom */
+  .sl-bar { position: relative; height: 1px; background: rgb(236 237 240 / 0.10); }
+  .sl-bar .fill { position: absolute; inset: 0 100% 0 0; background: var(--color-cyan); transition: right 0.1s linear; }
+  .sl-foot {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 0.75rem;
+    font-family: var(--font-mono);
+    font-size: 0.6rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--color-ink-faint);
+  }
+
+  /* vertical scan sweep */
+  .sl-sweep {
+    position: absolute;
+    left: 0; right: 0;
+    height: 1px;
+    top: 0;
+    opacity: 0;
+    pointer-events: none;
+    background: linear-gradient(to right, transparent, rgb(111 202 214 / 0.5), transparent);
+  }
+
+  @media (max-width: 640px) {
+    .site-loader { padding: 8vh 8vw; }
+    .sl-row .k { min-width: 11ch; }
+  }
+</style>
+
+<!-- gate + scroll-lock (references <html>, so kept global) -->
+<style is:global>
+  html[data-loader="show"] .site-loader { display: flex; }
+  html[data-loader="show"],
+  html[data-loader="show"] body { overflow: hidden; }
+</style>
+
+<script>
+  // ── only run when the pre-paint gate decided to show the loader ──
+  const root = document.documentElement;
+  const el = document.getElementById('site-loader');
+
+  function finishSession() {
+    try { sessionStorage.setItem('delta:loaded', '1'); } catch (e) {}
+  }
+
+  if (el && root.getAttribute('data-loader') === 'show') {
+    // Mark the session immediately so a refresh / error never re-traps the user.
+    finishSession();
+    runLoader(el);
+  } else if (el) {
+    el.remove();
+  }
+
+  function runLoader(loader: HTMLElement) {
+    const EASE = (t: number) => 1 - Math.pow(1 - t, 3);
+    const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
+    const rand = (n: number) => ((Math.sin(n * 999.13) * 43758.5453) % 1 + 1) % 1;
+
+    const q = <T extends Element = HTMLElement>(sel: string) => loader.querySelector(sel) as T | null;
+    const tri = q<SVGPolygonElement>('[data-tri]');
+    const pct = q('[data-pct]')!;
+    const fill = q('[data-fill]') as HTMLElement;
+    const sweep = q('[data-sweep]') as HTMLElement;
+    const status = q('[data-status]')!;
+    const rows = Array.from(loader.querySelectorAll<HTMLElement>('[data-rows] .sl-row'));
+
+    // timing
+    const LOAD_MS = 2400;
+    const OUTRO_HOLD = 850;
+    const FAILSAFE_MS = 9000;
+
+    // ── live telemetry (graceful, hard-capped) ──
+    const telemetry: Record<string, string> = { geo: '—°N · —°E', station: 'Offline', temp: '—', atmo: '—' };
+    let telemetryReady = false;
+
+    const withTimeout = (url: string, ms: number) => {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), ms);
+      return fetch(url, { signal: ctrl.signal })
+        .then((r) => r.json())
+        .finally(() => clearTimeout(t));
+    };
+
+    (async function fetchTelemetry() {
+      try {
+        const g = await withTimeout('https://get.geojs.io/v1/ip/geo.json', 2200);
+        const lat = parseFloat(g.latitude), lon = parseFloat(g.longitude);
+        if (!isFinite(lat) || !isFinite(lon)) throw new Error('geo');
+        const ns = lat >= 0 ? 'N' : 'S', ew = lon >= 0 ? 'E' : 'W';
+        telemetry.geo = `${Math.abs(lat).toFixed(4)}°${ns} · ${Math.abs(lon).toFixed(4)}°${ew}`;
+        const place = g.city || (g.timezone ? g.timezone.split('/').pop().replace(/_/g, ' ') : '');
+        telemetry.station = [place, g.country_code].filter(Boolean).join(', ') || g.country || 'Unknown';
+
+        const w = await withTimeout(
+          `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m`,
+          2200
+        );
+        const c = (w && w.current) || {};
+        if (c.temperature_2m != null) telemetry.temp = `${c.temperature_2m.toFixed(1)} °C`;
+        if (c.relative_humidity_2m != null) telemetry.atmo = `${c.relative_humidity_2m}% RH`;
+      } catch (e) {
+        /* keep fallbacks */
+      } finally {
+        telemetryReady = true;
+      }
+    })();
+
+    // ── Δ stroke-draw setup ──
+    let triLen = 360;
+    if (tri && typeof tri.getTotalLength === 'function') {
+      triLen = tri.getTotalLength();
+      tri.style.strokeDasharray = String(triLen);
+      tri.style.strokeDashoffset = String(triLen);
+    }
+
+    const scramble = (n: number, key: string) => {
+      const chars = '0123456789.°NEWΔ ';
+      const len = key === 'station' ? 12 : (key === 'temp' || key === 'atmo') ? 6 : 18;
+      let s = '';
+      for (let i = 0; i < len; i++) s += chars[Math.floor(rand(n + i) * chars.length)];
+      return s;
+    };
+
+    let raf = 0;
+    let done = false;
+    const DRAW_MS = 650;
+    const start = performance.now();
+    let tickN = 0;
+
+    // hard failsafe — never trap the user
+    const failsafe = setTimeout(() => exit(), FAILSAFE_MS);
+
+    function frame(now: number) {
+      const elapsed = now - start;
+
+      if (tri) {
+        const dp = clamp(elapsed / DRAW_MS, 0, 1);
+        tri.style.strokeDashoffset = String(triLen * (1 - EASE(dp)));
+      }
+
+      const p = clamp(elapsed / LOAD_MS, 0, 1);
+      const e = EASE(p);
+      const shown = Math.round(e * 100);
+      pct.textContent = shown + '%';
+      (pct as HTMLElement).style.opacity = String(0.5 + e * 0.5);
+      fill.style.right = (100 - e * 100) + '%';
+      sweep.style.opacity = '0.55';
+      sweep.style.top = (e * 100) + '%';
+
+      tickN++;
+      for (const r of rows) {
+        const th = Number(r.dataset.th);
+        const v = r.querySelector('.v') as HTMLElement;
+        const key = v.dataset.f!;
+        if (shown >= th) {
+          if (telemetryReady) {
+            if (!r.classList.contains('on')) { r.classList.add('on'); v.textContent = telemetry[key]; v.style.opacity = '1'; }
+          } else if (tickN % 3 === 0) {
+            v.textContent = scramble(tickN, key); v.style.opacity = '0.6';
+          }
+        } else if (shown >= th - 16 && tickN % 3 === 0) {
+          v.textContent = scramble(tickN, key); v.style.opacity = '0.5';
+        }
+      }
+
+      if (p < 1) { raf = requestAnimationFrame(frame); }
+      else { outro(); }
+    }
+    raf = requestAnimationFrame(frame);
+
+    function outro() {
+      const lockAndExit = () => {
+        for (const r of rows) {
+          r.classList.add('on');
+          const v = r.querySelector('.v') as HTMLElement;
+          v.textContent = telemetry[v.dataset.f!];
+          v.style.opacity = '1';
+        }
+        (status.firstChild as Text).textContent = 'Systems online';
+        sweep.style.transition = 'opacity 0.5s ease';
+        sweep.style.opacity = '0';
+        setTimeout(exit, OUTRO_HOLD);
+      };
+      // brief grace for late telemetry, then finish regardless
+      if (telemetryReady) { lockAndExit(); return; }
+      const t0 = performance.now();
+      (function wait() {
+        if (telemetryReady || performance.now() - t0 > 1400) lockAndExit();
+        else requestAnimationFrame(wait);
+      })();
+    }
+
+    function exit() {
+      if (done) return;
+      done = true;
+      cancelAnimationFrame(raf);
+      clearTimeout(failsafe);
+      loader.style.transition = 'opacity 0.85s cubic-bezier(0.6,0,0.2,1), transform 0.95s cubic-bezier(0.6,0,0.2,1)';
+      loader.style.opacity = '0';
+      loader.style.transform = 'translateY(-2.5%)';
+      const cleanup = () => { root.removeAttribute('data-loader'); loader.remove(); };
+      loader.addEventListener('transitionend', cleanup, { once: true });
+      setTimeout(cleanup, 1200); // fallback if transitionend doesn't fire
+    }
+  }
+</script>
