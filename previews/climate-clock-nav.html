@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Climate Clock · B-2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500&family=Inter:wght@300;400;500;700;800&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --base:      #050606;
+    --paper:     #ecedf0;
+    --cyan:      #6fcad6;
+    --red:       #eb1c23;
+    --ink-muted: #8a9099;
+    --ink-faint: #4a5058;
+    --hairline:  rgba(236,237,240,0.10);
+    --font-sans: 'Inter', system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', 'Courier New', monospace;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #080909;
+    color: var(--paper);
+    font-family: var(--font-sans);
+    padding: 3rem 0 10rem;
+  }
+
+  .page-label {
+    font-family: var(--font-mono);
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--ink-faint);
+    text-align: center;
+    margin-bottom: 0.3rem;
+  }
+  .page-sub {
+    font-family: var(--font-mono);
+    font-size: 0.575rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: rgba(74,80,88,0.55);
+    text-align: center;
+    margin-bottom: 3.5rem;
+  }
+  .section-label {
+    font-family: var(--font-mono);
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--ink-faint);
+    padding: 0 3rem;
+    margin-bottom: 0.8rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+  .section-label::after { content: ''; flex: 1; height: 1px; background: var(--hairline); }
+
+  .notes {
+    padding: 0 3rem;
+    margin-top: 0.9rem;
+    font-family: var(--font-mono);
+    font-size: 0.64rem;
+    color: var(--ink-faint);
+    line-height: 1.85;
+  }
+  .notes b { color: var(--ink-muted); font-weight: 400; }
+  .section-spacer { height: 1px; background: var(--hairline); margin: 0 3rem 3.5rem; }
+
+  /* ── nav shell ───────────────────────────────── */
+  .nav-shell {
+    background: var(--base);
+    border-bottom: 1px solid var(--hairline);
+    padding: 0 3rem;
+  }
+  .nav-inner {
+    max-width: 1280px;
+    margin: 0 auto;
+    height: 5rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 2rem;
+  }
+  .logo {
+    font-family: var(--font-sans);
+    font-weight: 700;
+    font-size: 1rem;
+    letter-spacing: -0.01em;
+    color: var(--paper);
+    text-decoration: none;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .logo .dot { color: var(--cyan); }
+  .nav-links {
+    display: flex;
+    align-items: center;
+    gap: clamp(1.25rem, 2.2vw, 2.5rem);
+    list-style: none;
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+  }
+  .nav-links a { color: rgba(236,237,240,0.7); text-decoration: none; font-weight: 300; }
+  .nav-links .btn {
+    background: var(--cyan);
+    color: var(--base);
+    font-weight: 500;
+    border-radius: 8px;
+    padding: 0.7rem 1.25rem;
+    white-space: nowrap;
+  }
+
+  /* ── hero stub ───────────────────────────────── */
+  .hero-stub {
+    background: linear-gradient(to bottom, rgba(5,6,6,0.92), transparent),
+                radial-gradient(ellipse 60% 60% at 65% 40%, rgba(111,202,214,0.07), transparent 70%),
+                #050606;
+    height: 150px;
+    display: flex;
+    align-items: flex-end;
+    padding: 1.5rem 3rem;
+    border-bottom: 1px solid var(--hairline);
+  }
+  .hero-stub p {
+    font-size: clamp(1.5rem, 3vw, 2.25rem);
+    font-weight: 800;
+    line-height: 0.9;
+    letter-spacing: -0.03em;
+    color: var(--paper);
+    opacity: 0.12;
+  }
+  .hero-stub .accent { font-family: Georgia, serif; font-style: italic; color: var(--cyan); }
+
+  /* ══════════════════════════════════════════════
+     THE PILL
+     Flat. No glow. No gradient. Two solid zones.
+     Inspired by climateclock.world widget design.
+     ══════════════════════════════════════════════ */
+
+  .climate-pill {
+    position: relative;
+    /* lifted surface — distinct from pure-black nav */
+    background: #111214;
+    /* clean border, no shadow */
+    border: 1px solid rgba(235, 28, 35, 0.50);
+    border-radius: 6px;
+    overflow: hidden;
+    flex-shrink: 0;
+    cursor: default;
+    user-select: none;
+    transition: border-color 0.2s;
+  }
+  .climate-pill:hover {
+    border-color: rgba(235, 28, 35, 0.80);
+  }
+
+  /* ── deadline zone (red) ─────────────────────── */
+  .pill-dead {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    padding: 0.5rem 0.8rem 0.44rem;
+    /* flat solid tint — same spirit as the widget's red panel */
+    background: rgba(235, 28, 35, 0.12);
+  }
+
+  /* pulsing dot */
+  .pill-dot {
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .pill-dot.red  { background: var(--red);  animation: dot 2.2s ease-in-out infinite; }
+  .pill-dot.cyan { background: var(--cyan); animation: dot 2.8s ease-in-out infinite 0.4s; }
+  @keyframes dot {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50%       { opacity: 0.38; transform: scale(0.62); }
+  }
+
+  /* numbers */
+  .segs {
+    display: flex;
+    align-items: baseline;
+    gap: 0.28rem;
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+  .seg-group { display: flex; align-items: baseline; gap: 1.5px; }
+
+  .seg-num {
+    font-size: 0.72rem;
+    letter-spacing: 0.03em;
+    color: var(--red);
+    font-weight: 400;
+    line-height: 1;
+  }
+  /* inline unit labels: YRS / D */
+  .seg-unit {
+    font-size: 0.49rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: rgba(235, 28, 35, 0.72);
+    font-weight: 300;
+    line-height: 1;
+  }
+  /* mid-dot between segments */
+  .seg-mid {
+    font-size: 0.48rem;
+    color: rgba(235, 28, 35, 0.35);
+    align-self: center;
+    padding: 0 0.04rem;
+  }
+  /* time: H:M:S */
+  .seg-time { display: flex; align-items: baseline; }
+  .seg-colon {
+    font-size: 0.72rem;
+    color: rgba(235, 28, 35, 0.48);
+    margin: 0 0.5px;
+    line-height: 1;
+  }
+
+  /* "1.5°C / deadline" label flush right */
+  .dead-label {
+    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: 0.49rem;
+    text-transform: uppercase;
+    letter-spacing: 0.13em;
+    color: rgba(235, 28, 35, 0.65);
+    white-space: nowrap;
+    line-height: 1.35;
+    text-align: right;
+  }
+
+  /* ── divider ─────────────────────────────────── */
+  /* solid line — colour-coded on each side */
+  .pill-sep {
+    height: 1px;
+    background: linear-gradient(
+      to right,
+      rgba(235, 28, 35, 0.30) 0%,
+      rgba(235, 28, 35, 0.18) 50%,
+      rgba(111, 202, 214, 0.18) 50%,
+      rgba(111, 202, 214, 0.30) 100%
+    );
+  }
+
+  /* ── renewables zone (cyan) ──────────────────── */
+  .pill-life {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.34rem 0.8rem 0.40rem;
+    /* flat solid tint — same spirit as the widget's blue panel */
+    background: rgba(111, 202, 214, 0.09);
+  }
+
+  .life-arrow {
+    font-size: 0.6rem;
+    color: var(--cyan);
+    line-height: 1;
+    flex-shrink: 0;
+  }
+  .life-num {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-size: 0.69rem;
+    letter-spacing: 0.03em;
+    color: var(--cyan);
+    font-weight: 400;
+  }
+  .life-pct {
+    font-family: var(--font-mono);
+    font-size: 0.55rem;
+    color: rgba(111, 202, 214, 0.80);
+    margin-left: 0.5px;
+  }
+  .life-label {
+    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: 0.48rem;
+    text-transform: uppercase;
+    letter-spacing: 0.13em;
+    color: rgba(111, 202, 214, 0.55);
+    white-space: nowrap;
+    text-align: right;
+    line-height: 1.35;
+  }
+
+  /* ── zoom ────────────────────────────────────── */
+  .zoom-wrap { padding: 0 3rem; margin-bottom: 4rem; }
+  .zoom-row  { display: flex; gap: 3.5rem; flex-wrap: wrap; align-items: flex-start; }
+  .zoom-item { display: flex; flex-direction: column; gap: 0.7rem; }
+  .zoom-tag  {
+    font-family: var(--font-mono);
+    font-size: 0.56rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--ink-faint);
+  }
+  /* scale wrapper — correct layout footprint */
+  .scale-2x {
+    transform: scale(2);
+    transform-origin: top left;
+    /* bounding box compensation:
+       pill is ~220px wide, ~76px tall at natural size */
+    width:  220px; height: 76px;
+    margin-bottom: calc(76px * 2 - 76px);
+    margin-right:  calc(220px * 2 - 220px);
+  }
+</style>
+</head>
+<body>
+
+<p class="page-label">Delta Climate Research — Climate Clock Widget</p>
+<p class="page-sub">B-2 · flat / no glow · two solid zones</p>
+
+
+<!-- ════════════════════════════
+     In-nav — actual size
+     ════════════════════════════ -->
+<div style="margin-bottom: 0.75rem;">
+  <div class="section-label">In nav — actual size</div>
+
+  <div class="nav-shell">
+    <div class="nav-inner">
+      <a class="logo" href="#">Delta<span class="dot">·</span>Climate</a>
+      <ul class="nav-links">
+        <li><a href="#">About</a></li>
+        <li><a href="#">Projects</a></li>
+        <li><a href="#">White Papers</a></li>
+        <li><a href="#">Medni</a></li>
+        <li>
+          <div class="climate-pill">
+            <div class="pill-dead">
+              <span class="pill-dot red"></span>
+              <div class="segs">
+                <div class="seg-group">
+                  <span class="seg-num" id="n-yr">3</span><span class="seg-unit">Y</span>
+                </div>
+                <span class="seg-mid">·</span>
+                <div class="seg-group">
+                  <span class="seg-num" id="n-dy">043</span><span class="seg-unit">D</span>
+                </div>
+                <span class="seg-mid">·</span>
+                <div class="seg-time">
+                  <span class="seg-num" id="n-hh">03</span><span class="seg-colon">:</span><span class="seg-num" id="n-mm">55</span><span class="seg-colon">:</span><span class="seg-num" id="n-ss">27</span>
+                </div>
+              </div>
+              <span class="dead-label">1.5°C<br>deadline</span>
+            </div>
+            <div class="pill-sep"></div>
+            <div class="pill-life">
+              <span class="life-arrow">↑</span>
+              <span class="life-num" id="n-ren">15.550</span><span class="life-pct">%</span>
+              <span class="life-label">global<br>renewables</span>
+            </div>
+          </div>
+        </li>
+        <li><a href="#" class="btn">Databank ↗</a></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="hero-stub">
+    <p>Navigating the systems<br>of a <span class="accent">changing planet.</span></p>
+  </div>
+  <div class="notes">
+    Flat treatment — no glow, no gradient overlay. Two solid tinted zones mirror the widget's red/blue panel structure.
+    Hover intensifies the border only.
+  </div>
+</div>
+
+
+<div class="section-spacer"></div>
+
+
+<!-- ════════════════════════════
+     2× enlarged — detail
+     ════════════════════════════ -->
+<div class="section-label">2× enlarged — default / hover</div>
+
+<div class="zoom-wrap">
+  <div class="zoom-row">
+
+    <div class="zoom-item">
+      <span class="zoom-tag">Default</span>
+      <div class="scale-2x">
+        <div class="climate-pill">
+          <div class="pill-dead">
+            <span class="pill-dot red"></span>
+            <div class="segs">
+              <div class="seg-group"><span class="seg-num" id="z-yr">3</span><span class="seg-unit">Y</span></div>
+              <span class="seg-mid">·</span>
+              <div class="seg-group"><span class="seg-num" id="z-dy">043</span><span class="seg-unit">D</span></div>
+              <span class="seg-mid">·</span>
+              <div class="seg-time">
+                <span class="seg-num" id="z-hh">03</span><span class="seg-colon">:</span><span class="seg-num" id="z-mm">55</span><span class="seg-colon">:</span><span class="seg-num" id="z-ss">27</span>
+              </div>
+            </div>
+            <span class="dead-label">1.5°C<br>deadline</span>
+          </div>
+          <div class="pill-sep"></div>
+          <div class="pill-life">
+            <span class="life-arrow">↑</span>
+            <span class="life-num" id="z-ren">15.550</span><span class="life-pct">%</span>
+            <span class="life-label">global<br>renewables</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="zoom-item">
+      <span class="zoom-tag">Hover</span>
+      <div class="scale-2x">
+        <div class="climate-pill" style="border-color: rgba(235,28,35,0.80);">
+          <div class="pill-dead">
+            <span class="pill-dot red"></span>
+            <div class="segs">
+              <div class="seg-group"><span class="seg-num" id="zh-yr">3</span><span class="seg-unit">Y</span></div>
+              <span class="seg-mid">·</span>
+              <div class="seg-group"><span class="seg-num" id="zh-dy">043</span><span class="seg-unit">D</span></div>
+              <span class="seg-mid">·</span>
+              <div class="seg-time">
+                <span class="seg-num" id="zh-hh">03</span><span class="seg-colon">:</span><span class="seg-num" id="zh-mm">55</span><span class="seg-colon">:</span><span class="seg-num" id="zh-ss">27</span>
+              </div>
+            </div>
+            <span class="dead-label">1.5°C<br>deadline</span>
+          </div>
+          <div class="pill-sep"></div>
+          <div class="pill-life">
+            <span class="life-arrow">↑</span>
+            <span class="life-num" id="zh-ren">15.550</span><span class="life-pct">%</span>
+            <span class="life-label">global<br>renewables</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+
+<!-- ── live script ───────────────────────────── -->
+<script>
+  const DEADLINE   = new Date("2029-07-22T16:00:00+00:00");
+  const REN_ORIGIN = new Date("2020-01-01T00:00:00+00:00");
+  const REN_INIT   = 11.4;
+  const REN_RATE   = 2.0428359571070087e-08;
+
+  function pad(n, w) { return String(Math.floor(n)).padStart(w, '0'); }
+
+  const SETS = ['n', 'z', 'zh'];
+
+  function tick() {
+    const ms = Math.max(0, DEADLINE - Date.now());
+    const ts = Math.floor(ms / 1000);
+    const yr = Math.floor(ts / (365 * 86400));
+    const dy = Math.floor(ts / 86400) % 365;
+    const hh = Math.floor(ts / 3600) % 24;
+    const mm = Math.floor(ts / 60) % 60;
+    const ss = ts % 60;
+    const ren = (REN_INIT + REN_RATE * ((Date.now() - REN_ORIGIN) / 1000)).toFixed(3);
+
+    SETS.forEach(p => {
+      const q = id => document.getElementById(`${p}-${id}`);
+      if (q('yr'))  q('yr').textContent  = yr;
+      if (q('dy'))  q('dy').textContent  = pad(dy, 3);
+      if (q('hh'))  q('hh').textContent  = pad(hh, 2);
+      if (q('mm'))  q('mm').textContent  = pad(mm, 2);
+      if (q('ss'))  q('ss').textContent  = pad(ss, 2);
+      if (q('ren')) q('ren').textContent = ren;
+    });
+  }
+
+  tick();
+  setInterval(tick, 1000);
+</script>
+
+</body>
+</html>
