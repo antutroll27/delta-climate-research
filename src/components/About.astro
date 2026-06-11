@@ -7,8 +7,7 @@ const pillars = [
 ];
 ---
 
-<section id="about" class="section divider-top" aria-labelledby="about-title">
-  <span class="draw-line" data-draw aria-hidden="true"></span>
+<section id="about" class="section" aria-labelledby="about-title">
   <div class="wrap grid grid-cols-1 gap-about-gap wide:grid-cols-[6fr_4fr] wide:items-start">
     <div data-reveal>
       <p class="sec-index">01 — About</p>
@@ -43,6 +42,10 @@ const pillars = [
 </section>
 
 <style>
+  /* About is the first section after the full-viewport hero — intentional gap,
+     but smaller than the default section padding. */
+  #about { padding-block-start: clamp(5rem, 12vh, 9rem); }
+
   .about-visual {
     position: relative;
     min-height: 320px;
