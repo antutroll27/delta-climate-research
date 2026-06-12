@@ -5,29 +5,10 @@
 // mouse-tilts in 3D, a cyan pill cursor replaces the OS cursor over it, and a
 // segmented rail tracks progress. Choreography in section-effects.ts.
 // Degrades to a flowing list + static preview (no-JS / reduced-motion / mobile).
-const projects = [
-  {
-    id: '01',
-    title: 'Project Kolkata',
-    sub: 'Urban heat mitigation',
-    tags: 'ECOSTRESS · HVI — street-scale heat diagnostics to ward-level spec',
-    href: '/projects/kolkata',
-  },
-  {
-    id: '02',
-    title: 'Mangrove Blue Carbon',
-    sub: 'Biochar sequestration',
-    tags: 'VERRA VM0033 · MRV — soil-carbon-rigorous restoration accounting',
-    href: '/projects/mangrove-blue-carbon',
-  },
-  {
-    id: '03',
-    title: 'Sustainable Materials Trading',
-    sub: 'UAE–India corridor',
-    tags: 'EPD · CBAM — embodied-carbon dossiers for exporters',
-    href: '/projects/materials-trading',
-  },
-];
+// Catalogue lives in src/data/projects.ts (shared with /projects pages).
+import { projects as catalogue, projectHref } from '../data/projects';
+
+const projects = catalogue.map((p) => ({ ...p, href: projectHref(p) }));
 ---
 
 <div id="projects" class="proj-wrap">

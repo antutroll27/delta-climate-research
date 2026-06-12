@@ -1,0 +1,36 @@
+---
+// Per-case-study page. Until a project ships (`published: true` in
+// src/data/projects.ts plus real content here), this renders the
+// drafting-table coming-soon sheet with the project's own survey readout.
+import Base from '../../layouts/Base.astro';
+import Nav from '../../components/Nav.astro';
+import Footer from '../../components/Footer.astro';
+import SoonDraft from '../../components/SoonDraft.astro';
+import { projects } from '../../data/projects';
+
+export function getStaticPaths() {
+  return projects.map((project) => ({ params: { slug: project.slug }, props: { project } }));
+}
+
+const { project } = Astro.props;
+---
+
+<Base
+  title={`${project.title} — Delta Climate Research`}
+  description={project.blurb}
+>
+  <Nav />
+  <SoonDraft
+    kicker={`Case Study CS/${project.id} — ${project.sub}`}
+    sub={project.blurb}
+    coords={project.coords}
+    sheet={`CS/${project.id}`}
+    rev={project.rev}
+    progress={project.progress}
+    backHref="/projects"
+    backLabel="All case studies"
+  >
+    {project.title}
+  </SoonDraft>
+  <Footer />
+</Base>

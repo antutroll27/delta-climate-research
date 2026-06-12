@@ -1,0 +1,66 @@
+---
+// Case-study index — drafting-table coming-soon until the first project
+// flips `published: true` in src/data/projects.ts and this becomes a real feed.
+import Base from '../../layouts/Base.astro';
+import Nav from '../../components/Nav.astro';
+import Footer from '../../components/Footer.astro';
+import SoonDraft from '../../components/SoonDraft.astro';
+import { projects, projectHref } from '../../data/projects';
+---
+
+<Base
+  title="Ongoing Projects — Delta Climate Research"
+  description="Case studies in urban heat mitigation, blue-carbon MRV, and embodied-carbon trade — currently in preparation."
+>
+  <Nav />
+  <SoonDraft
+    kicker="02 Ongoing Projects"
+    sub="Three case studies are being surveyed, measured, and written up. Each publishes when the evidence holds — the sheets below show where every one of them stands."
+    coords="KOLKATA — SUNDARBANS — UAE CORRIDOR"
+    sheet="CS/INDEX"
+    rev="0.3"
+    progress={0.3}
+    backHref="/#projects"
+    backLabel="Back to selected work"
+  >
+    Three sheets, still on the <em>drafting table.</em>
+    <ul class="sheet-list" slot="extra" role="list">
+      {projects.map((p) => (
+        <li>
+          <a href={projectHref(p)}>
+            <span class="sl-id">CS/{p.id}</span>
+            <span class="sl-t">{p.title}</span>
+            <span class="sl-rev">REV {p.rev}</span>
+            <span class="sl-ar" aria-hidden="true">↗</span>
+          </a>
+        </li>
+      ))}
+    </ul>
+  </SoonDraft>
+  <Footer />
+</Base>
+
+<style>
+  .sheet-list {
+    list-style: none;
+    margin: clamp(2.5rem, 5vh, 4rem) 0 0;
+    padding: 0;
+    max-width: 40rem;
+    border-top: 1px solid var(--color-hairline);
+  }
+  .sheet-list a {
+    display: grid;
+    grid-template-columns: auto 1fr auto auto;
+    gap: 1.6rem;
+    align-items: baseline;
+    padding: 1.1rem 0.4rem;
+    border-bottom: 1px solid var(--color-hairline);
+    text-decoration: none;
+    transition: background-color 0.25s ease;
+  }
+  .sheet-list a:hover { background: rgb(111 202 214 / 0.04); }
+  .sl-id { font-family: var(--font-mono); font-size: 0.66rem; letter-spacing: 0.14em; color: var(--color-bronze); }
+  .sl-t { font-size: 1.02rem; font-weight: 500; color: var(--color-paper); }
+  .sl-rev { font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 0.14em; color: var(--color-ink-faint); }
+  .sl-ar { color: var(--color-cyan); font-size: 0.95rem; }
+</style>

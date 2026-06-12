@@ -1,23 +1,37 @@
 ---
-// Minimal stub so the nav link resolves; full feed index is a later build.
+// Conceptual-research index — night-tide coming-soon until the first paper
+// flips `published: true` in src/data/papers.ts and this becomes a real feed.
 import Base from '../../layouts/Base.astro';
 import Nav from '../../components/Nav.astro';
 import Footer from '../../components/Footer.astro';
+import SoonTide from '../../components/SoonTide.astro';
+import { papers, paperHref } from '../../data/papers';
+
+const first = papers[0];
 ---
 
 <Base
-  title="White Papers — Delta Climate Research"
-  description="Research notes from Delta Climate Research on urban-heat vulnerability mapping, blue-carbon MRV, and embodied-carbon accounting."
+  title="Conceptual Research — Delta Climate Research"
+  description="Research notes from Delta Climate Research on urban-heat vulnerability mapping, blue-carbon MRV, and embodied-carbon accounting — currently in preparation."
 >
   <Nav />
-  <main class="wrap" style="min-height:100dvh; display:flex; flex-direction:column; justify-content:center; padding-block:8rem;">
-    <p class="sec-index">03 White Papers</p>
-    <h1 class="sec-title" style="max-width:24ch;">The feed <em>index</em> lives here.</h1>
-    <p style="margin-top:1.25rem; max-width:56ch; color:var(--color-ink-muted); line-height:1.6;">
-      Placeholder. The full white-papers index and individual paper pages are a
-      later build step. For now, see the feed preview on the
-      <a class="accent-link" href="/#papers">home page ↗</a>.
-    </p>
-  </main>
+  <SoonTide
+    kicker="03 Conceptual Research"
+    sub="The research feed is below the waterline — three papers are being written, each surfacing with its evidence base intact. The first one lands this cycle."
+    ghost="03"
+    gaugeLabel="FEED — 0.3"
+    statusRows={[
+      { k: 'Status', v: 'In preparation', live: true },
+      { k: 'Queued', v: `${String(papers.length).padStart(2, '0')} papers` },
+      { k: 'First up', v: first.cat },
+    ]}
+    backHref="/#papers"
+    backLabel="Back to the feed"
+    nextHref={paperHref(first)}
+    nextLabel={`Preview WP/${first.id}`}
+    notifySubject="Notify me — Conceptual Research feed"
+  >
+    The tide is still <em>coming in.</em>
+  </SoonTide>
   <Footer />
 </Base>
