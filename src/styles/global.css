@@ -304,11 +304,14 @@
   }
 
   /* masked line reveal: hidden state only under .reveal-ready (motion-gated,
-     same tradeoff as data-reveal); section-effects.ts animates spans to 0. */
-  .sec-title .ln { display: block; overflow: hidden; }
+     same tradeoff as data-reveal); section-effects.ts animates spans to 0.
+     padding-top headroom (+ cancelling margin) keeps the scaleY(1.18) em
+     accent's ascenders inside the clip; 118% offset still fully hides the
+     taller glyphs below the mask before reveal. */
+  .sec-title .ln { display: block; overflow: hidden; padding-top: 0.24em; margin-top: -0.24em; }
   .sec-title .ln > span { display: block; }
   @media (prefers-reduced-motion: no-preference) {
-    .reveal-ready .sec-title .ln > span { transform: translateY(112%); }
+    .reveal-ready .sec-title .ln > span { transform: translateY(118%); }
   }
 
   /* rolling-letter link — chars split by section-effects.ts; no-JS = plain link */

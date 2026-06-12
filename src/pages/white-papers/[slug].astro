@@ -1,0 +1,127 @@
+---
+// Per-paper page. Until a paper ships (`published: true` in src/data/papers.ts
+// plus real content here), this renders the branded "in preparation"
+// instrument page: ghost index, status telemetry, and a route back to the feed.
+import Base from '../../layouts/Base.astro';
+import Nav from '../../components/Nav.astro';
+import Footer from '../../components/Footer.astro';
+import { papers } from '../../data/papers';
+
+export function getStaticPaths() {
+  return papers.map((paper) => ({ params: { slug: paper.slug }, props: { paper } }));
+}
+
+const { paper } = Astro.props;
+const idx = papers.findIndex((p) => p.slug === paper.slug);
+const next = papers[(idx + 1) % papers.length];
+---
+
+<Base
+  title={`${paper.title} — Delta Climate Research`}
+  description={paper.excerpt}
+>
+  <Nav />
+  <main class="wp-soon">
+    <span class="ghost-index wp-ghost" aria-hidden="true">{paper.id}</span>
+
+    <div class="wrap wp-core" data-reveal-group data-stagger="110">
+      <p class="sec-kicker">White Paper WP/{paper.id}</p>
+
+      <h1 class="sec-title wp-title">{paper.title}</h1>
+
+      <p class="wp-excerpt">{paper.excerpt}</p>
+
+      <div class="wp-status corners">
+        <span class="ck tl"></span><span class="ck tr"></span><span class="ck bl"></span><span class="ck br"></span>
+        <span class="st-row"><span class="st-k">Status</span><span class="st-v st-live"><i class="dot"></i>In preparation</span></span>
+        <span class="st-row"><span class="st-k">Series</span><span class="st-v">{paper.cat}</span></span>
+        <span class="st-row"><span class="st-k">Window</span><span class="st-v">{paper.date}</span></span>
+        <span class="st-row"><span class="st-k">Access</span><span class="st-v">On publication</span></span>
+      </div>
+
+      <div class="wp-actions">
+        <a class="roll-link" href="/#papers" data-roll>Back to the feed <span class="arrow" aria-hidden="true">↙</span></a>
+        <a class="roll-link" href={`/white-papers/${next.slug}`} data-roll>Next: WP/{next.id} <span class="arrow" aria-hidden="true">↗</span></a>
+        <a class="accent-link" href="mailto:hello@delta-climate.example?subject=Notify%20me%20%E2%80%94%20WP/{paper.id}">Request a notification ↗</a>
+      </div>
+    </div>
+  </main>
+  <Footer />
+</Base>
+
+<style>
+  .wp-soon {
+    position: relative;
+    min-height: 100dvh;
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+    padding-block: 9rem 6rem;
+    background:
+      radial-gradient(55% 45% at 70% 30%, rgb(111 202 214 / 0.06), transparent 65%),
+      var(--color-base);
+  }
+  .wp-ghost {
+    position: absolute;
+    right: clamp(0.5rem, 6vw, 7rem);
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: clamp(12rem, 34vw, 30rem);
+    pointer-events: none;
+    z-index: 0;
+  }
+  .wp-core { position: relative; z-index: 1; }
+
+  .wp-title { max-width: 18ch; }
+
+  .wp-excerpt {
+    margin-top: 1.5rem;
+    max-width: 52ch;
+    font-size: clamp(1rem, 1.4vw, 1.2rem);
+    font-weight: 300;
+    line-height: 1.65;
+    color: var(--color-ink-muted);
+  }
+
+  /* status block — instrument readout */
+  .wp-status {
+    display: inline-flex;
+    flex-direction: column;
+    gap: 0.55rem;
+    margin-top: clamp(2.5rem, 5vh, 4rem);
+    padding: 1.4rem 1.7rem;
+    border: 1px solid var(--color-hairline);
+    background: rgb(11 44 46 / 0.25);
+  }
+  .st-row {
+    display: flex;
+    gap: 2.2rem;
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+  .st-k { min-width: 7ch; color: var(--color-ink-faint); }
+  .st-v { color: var(--color-paper); }
+  .st-live { color: var(--color-cyan); display: inline-flex; align-items: center; gap: 0.5rem; }
+  .st-live .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--color-cyan);
+    animation: wp-blink 1.4s steps(2) infinite;
+  }
+  @keyframes wp-blink { 50% { opacity: 0.25; } }
+  @media (prefers-reduced-motion: reduce) { .st-live .dot { animation: none; } }
+
+  .wp-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: clamp(1.5rem, 4vw, 3rem);
+    margin-top: clamp(2.5rem, 5vh, 4rem);
+  }
+  .wp-actions .accent-link { font-size: 0.78rem; letter-spacing: 0.14em; text-transform: uppercase; }
+
+  @media (max-width: 760px) {
+    .wp-ghost { right: -1rem; opacity: 0.6; }
+  }
+</style>

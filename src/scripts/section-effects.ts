@@ -173,22 +173,37 @@ function initPaperChip(signal: AbortSignal) {
   gsap.set(chip, { xPercent: -50, yPercent: -62, scale: 0.85, rotation: -2, opacity: 0 });
   const cx = gsap.quickTo(chip, 'x', { duration: 0.45, ease: 'power3.out' });
   const cy = gsap.quickTo(chip, 'y', { duration: 0.45, ease: 'power3.out' });
+  let chipShown = false;
   window.addEventListener('mousemove', (e) => { cx(e.clientX); cy(e.clientY); }, { signal });
 
   section.querySelectorAll<HTMLElement>('[data-chip]').forEach((row) => {
     row.addEventListener(
       'mouseenter',
-      () => {
+      (e) => {
+        // while hidden, snap to the cursor (quickTo's start arg) so the first
+        // reveal never tweens in from a stale position / the viewport origin
+        if (!chipShown) {
+          cx(e.clientX, e.clientX);
+          cy(e.clientY, e.clientY);
+        }
+        chipShown = true;
         const i = parseInt(row.dataset.chip || '1', 10) - 1;
         chipCovers.forEach((c, ci) => c.classList.toggle('on', ci === i));
         if (tag) tag.textContent = `FIG — WP/${String(i + 1).padStart(2, '0')}`;
-        gsap.to(chip, { opacity: 1, scale: 1, rotation: 0, duration: 0.4, ease: 'power3.out' });
+        gsap.to(chip, { opacity: 1, scale: 1, rotation: 0, duration: 0.4, ease: 'power3.out', overwrite: 'auto' });
       },
       { signal }
     );
     row.addEventListener(
       'mouseleave',
-      () => gsap.to(chip, { opacity: 0, scale: 0.85, rotation: -2, duration: 0.3, ease: 'power3.in' }),
+      () => {
+        // flag flips only when the fade-out actually finishes — a row-to-row
+        // move re-enters first, overwrites this tween, and keeps the glide
+        gsap.to(chip, {
+          opacity: 0, scale: 0.85, rotation: -2, duration: 0.3, ease: 'power3.in', overwrite: 'auto',
+          onComplete: () => { chipShown = false; },
+        });
+      },
       { signal }
     );
   });
@@ -244,24 +259,56 @@ export function initSectionEffects() {
     });
   });
 
-  // center-band row activation (About pillars + Papers rows)
+  // center-band row activation (Papers rows) — exclusive per section: of the
+  // rows intersecting the 38–62% viewport band, only the one nearest the
+  // band's centre is active (independent toggles let two open at once on
+  // short viewports). Grouped by section so future bands stay independent.
+  const bandGroups = new Map<Element, HTMLElement[]>();
   document.querySelectorAll<HTMLElement>('[data-band]').forEach((row) => {
-    ScrollTrigger.create({
-      trigger: row,
-      start: 'top 62%',
-      end: 'bottom 38%',
-      onToggle: (self) => {
-        row.classList.toggle('active', self.isActive);
+    const key = row.closest('section') ?? document.body;
+    bandGroups.set(key, [...(bandGroups.get(key) ?? []), row]);
+  });
+  bandGroups.forEach((rows, groupEl) => {
+    let current = -1;
+    const setActive = (idx: number) => {
+      if (idx === current) return;
+      current = idx;
+      rows.forEach((row, i) => {
+        const on = i === idx;
+        row.classList.toggle('active', on);
         const wipe = row.querySelector<HTMLElement>('[data-wipe]');
         if (wipe) {
           gsap.to(wipe, {
-            clipPath: self.isActive ? 'inset(0 0% 0 0)' : 'inset(0 100% 0 0)',
+            clipPath: on ? 'inset(0 0% 0 0)' : 'inset(0 100% 0 0)',
             duration: 0.6,
             ease: 'power3.out',
+            overwrite: 'auto',
           });
         }
-      },
+      });
+    };
+    const update = () => {
+      const vh = window.innerHeight;
+      const bandTop = vh * 0.38;
+      const bandBottom = vh * 0.62;
+      let best = -1;
+      let bestDist = Infinity;
+      rows.forEach((row, i) => {
+        const r = row.getBoundingClientRect();
+        if (r.bottom < bandTop || r.top > bandBottom) return; // outside band
+        const d = Math.abs(r.top + r.height / 2 - vh * 0.5);
+        if (d < bestDist) { bestDist = d; best = i; }
+      });
+      setActive(best);
+    };
+    ScrollTrigger.create({
+      trigger: groupEl,
+      start: 'top bottom',
+      end: 'bottom top',
+      onUpdate: update,
+      onRefresh: update,
     });
+    update();
   });
 
   splitRollLinks();
