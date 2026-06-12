@@ -212,16 +212,17 @@ export function initSectionEffects() {
     });
   });
 
-  // ghost index drift-in
+  // ghost index scrub-in (opacity/scale only — never fights the element's own
+  // translate positioning)
   document.querySelectorAll<HTMLElement>('.ghost-index').forEach((g) => {
     gsap.fromTo(
       g,
-      { yPercent: 30, opacity: 0 },
+      { opacity: 0, scale: 1.08 },
       {
-        yPercent: -10,
         opacity: 1,
+        scale: 1,
         ease: 'none',
-        scrollTrigger: { trigger: g, start: 'top 95%', end: 'top 30%', scrub: true },
+        scrollTrigger: { trigger: g.parentElement ?? g, start: 'top 92%', end: 'top 42%', scrub: true },
       }
     );
   });

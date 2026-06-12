@@ -1,89 +1,131 @@
 ---
-// Section 01 — About. Baffait-inspired editorial rebuild: masked title lines,
-// ghost index, scrub-blur statement (word-by-word focus pull on scroll),
-// offset sub-paragraph, center-band-activated pillar rows, and a sticky FIG
-// panel with crosshair corner marks + parallax. Choreography lives in
-// src/scripts/section-effects.ts; everything degrades to static content.
+// Section 01 — About. Centered cathedral in a living GPU wave field: masked
+// title with the ghost index to its right, scrub-blur statement, three pillar
+// columns, and three image rafts floating on the same sea (about-field.ts —
+// the field calms as the section scrolls: data → decision). Static fallbacks:
+// without WebGL/motion the rafts render as plain <img> rows and the field is
+// a quiet gradient. Type choreography lives in section-effects.ts.
 const pillars = [
-  { id: '/01', k: 'Climate science', v: 'Remote sensing · MRV · carbon accounting' },
-  { id: '/02', k: 'Urban heat', v: 'LST · vulnerability indices' },
-  { id: '/03', k: 'Industrial strategy', v: 'Embodied carbon · trade compliance' },
+  { id: '/01', k: 'Climate science', v: 'Remote sensing · MRV · carbon accounting', img: '/images/about/climate-science.jpg', alt: 'Earth at night from orbit' },
+  { id: '/02', k: 'Urban heat', v: 'LST · vulnerability indices', img: '/images/about/urban-heat.jpg', alt: 'Dense city skyline in haze' },
+  { id: '/03', k: 'Industrial strategy', v: 'Embodied carbon · trade compliance', img: '/images/about/industrial.jpg', alt: 'Industrial plant pipework' },
 ];
 ---
 
-<section id="about" class="section" aria-labelledby="about-title">
-  <div class="wrap">
-    <div class="sec-head">
-      <div>
-        <p class="sec-kicker">01 — About</p>
-        <h2 id="about-title" class="sec-title" data-mask>
-          <span class="ln"><span>Between the data</span></span>
-          <span class="ln"><span>and the <em>decision.</em></span></span>
-        </h2>
-      </div>
+<section id="about" aria-labelledby="about-title">
+  <canvas data-field aria-hidden="true"></canvas>
+  <div class="field-dim" aria-hidden="true"></div>
+
+  <div class="sec-frame corners" aria-hidden="true">
+    <span class="ck tl"></span><span class="ck tr"></span><span class="ck bl"></span><span class="ck br"></span>
+  </div>
+
+  <div class="about-core">
+    <p class="sec-kicker">01 About</p>
+
+    <div class="about-head">
       <span class="ghost-index" aria-hidden="true">01</span>
+      <h2 id="about-title" class="sec-title" data-mask>
+        <span class="ln"><span>Between the data</span></span>
+        <span class="ln"><span>and the <em>decision.</em></span></span>
+      </h2>
     </div>
 
-    <div class="about-grid">
-      <div>
-        <p class="statement" data-words>
-          Delta sits between raw earth-science data and the institutions that
-          must act on it — turning <span class="em">decision-grade</span> measurement
-          into standards-aligned, <span class="em">defensible</span> adaptation strategy.
-        </p>
+    <p class="statement" data-words>
+      Delta sits between raw earth-science data and the institutions that must
+      act on it — turning <span class="em">decision-grade</span> measurement into
+      standards-aligned, <span class="em">defensible</span> adaptation strategy.
+    </p>
 
-        <p class="about-sub">
-          A boutique consultancy bridging climate science, urban-heat research
-          and industrial strategy — built for institutions, municipalities and
-          corporates that need their next move to hold up under scrutiny.
-        </p>
+    <ul class="pillars" role="list" data-reveal-group data-stagger="110">
+      {pillars.map((p) => (
+        <li class="pillar">
+          <span class="p-id">{p.id}</span>
+          <span class="p-k">{p.k}</span>
+          <span class="p-v" set:html={p.v.replaceAll(' · ', '<br />')} />
+        </li>
+      ))}
+    </ul>
 
-        <ul class="pillars" role="list">
-          {pillars.map((p) => (
-            <li class="pillar" data-band>
-              <span class="wipe" data-wipe aria-hidden="true"></span>
-              <span class="p-id">{p.id}</span>
-              <span class="p-k">{p.k}</span>
-              <span class="p-v">{p.v}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
-
-      <aside class="about-visual" aria-hidden="true">
-        <div class="fig corners">
-          <span class="ck tl"></span><span class="ck tr"></span><span class="ck bl"></span><span class="ck br"></span>
-          <span class="fig-bg" data-parallax="-0.07"></span>
-          <span class="fig-grid"></span>
-          <span class="fig-tag">FIG. 01 — SYSTEMS MAP</span>
-          <span class="fig-meta">22.5726°N · 88.3639°E<br />EOS / ECOSTRESS</span>
-        </div>
-      </aside>
+    <!-- water deck: the rafts render here inside the canvas; the <img>s are
+         the static fallback (no-JS / reduced-motion / no-WebGL) and the
+         texture source for the WebGL rafts. -->
+    <div class="water-deck" data-deck>
+      {pillars.map((p) => (
+        <img data-raft-img src={p.img} alt={p.alt} loading="lazy" decoding="async" width="1200" height="790" />
+      ))}
     </div>
+  </div>
+
+  <div class="sec-meta" aria-hidden="true">
+    <span class="live">FIELD — LIVE</span><br />
+    22.5726°N · 88.3639°E<br />
+    EOS / ECOSTRESS
   </div>
 </section>
 
 <style>
-  /* redesigned sections speak in the heavier display voice */
-  .sec-title { font-weight: 800; letter-spacing: -0.03em; line-height: 1.02; }
+  #about {
+    position: relative;
+    overflow: hidden;
+    padding-block: clamp(7rem, 16vh, 12rem);
+    /* quiet gradient — all the field non-WebGL users get */
+    background:
+      radial-gradient(60% 45% at 50% 62%, rgb(111 202 214 / 0.05), transparent 70%),
+      var(--color-base);
+  }
 
-  .about-grid {
-    display: grid;
-    grid-template-columns: minmax(0, 7fr) minmax(0, 4fr);
-    gap: clamp(2rem, 6vw, 6rem);
-    align-items: start;
-    margin-top: clamp(2.5rem, 6vh, 4.5rem);
+  [data-field] { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+  /* vignette keeps type sovereign over the field */
+  .field-dim {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(55% 42% at 50% 38%, rgb(5 6 6 / 0.62) 0%, rgb(5 6 6 / 0.30) 55%, transparent 80%),
+      linear-gradient(to bottom, var(--color-base) 0%, transparent 14%, transparent 86%, var(--color-base) 100%);
+  }
+
+  /* crosshair frame around the whole section */
+  .sec-frame { position: absolute; inset: clamp(1.2rem, 3vw, 2.6rem); pointer-events: none; z-index: 5; }
+
+  .about-core { position: relative; z-index: 2; text-align: center; }
+  .sec-kicker { display: block; text-align: center; margin-bottom: 0; }
+
+  .sec-title {
+    position: relative;
+    z-index: 1;
+    margin: 1.6rem auto 0;
+    max-width: none;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    line-height: 1.02;
+    font-size: clamp(2.6rem, 5.6vw, 5.2rem);
+  }
+
+  .about-head { position: relative; }
+  /* ghost index — right of the header */
+  .ghost-index {
+    position: absolute;
+    right: clamp(1rem, 5vw, 5rem);
+    top: 50%;
+    transform: translateY(-54%);
+    font-size: clamp(8rem, 19vw, 16rem);
+    -webkit-text-stroke: 1px rgb(176 141 87 / 0.22);
+    z-index: 0;
   }
 
   /* the statement — words get .w spans from section-effects.ts (scrub-blur) */
   .statement {
-    margin: 0;
-    font-size: clamp(1.45rem, 2.6vw, 2.4rem);
+    margin: clamp(3rem, 7vh, 5rem) auto 0;
+    max-width: 56ch;
+    font-size: clamp(1.15rem, 1.9vw, 1.6rem);
     font-weight: 500;
-    line-height: 1.38;
-    letter-spacing: -0.01em;
+    line-height: 1.55;
+    letter-spacing: -0.005em;
+    padding-inline: 1.25rem;
     color: var(--color-paper);
-    max-width: 24ch;
   }
   .statement :global(.w) { display: inline-block; white-space: pre-wrap; will-change: opacity, filter; }
   .statement .em {
@@ -93,118 +135,68 @@ const pillars = [
     color: var(--color-cyan);
   }
 
-  /* offset sub-paragraph — editorial asymmetry */
-  .about-sub {
-    margin: clamp(2.5rem, 6vh, 4rem) 0 0 22%;
-    max-width: 44ch;
-    font-size: 0.95rem;
-    line-height: 1.65;
-    color: var(--color-ink-muted);
-  }
-
-  /* pillars — center-band activated rows */
+  /* pillars — three centered columns (rise via the data-reveal-group system) */
   .pillars {
-    list-style: none;
-    margin: clamp(3rem, 7vh, 5rem) 0 0;
-    padding: 0;
-    border-top: 1px solid var(--color-hairline);
-  }
-  .pillar {
+    max-width: 1080px;
+    margin: clamp(4rem, 9vh, 7rem) auto 0;
+    padding: 0 clamp(1.25rem, 4vw, 4rem);
     display: grid;
-    grid-template-columns: auto 1fr auto;
-    gap: 1.4rem;
-    align-items: baseline;
-    padding: 1.35rem 0.25rem;
-    border-bottom: 1px solid var(--color-hairline);
-    position: relative;
-    overflow: hidden;
+    grid-template-columns: repeat(3, 1fr);
+    gap: clamp(1.5rem, 4vw, 3.5rem);
+    list-style: none;
+    text-align: center;
   }
-  .pillar .wipe {
-    position: absolute;
-    inset: 0;
-    background: rgb(111 202 214 / 0.05);
-    clip-path: inset(0 100% 0 0);
-    pointer-events: none;
-  }
-  .pillar .p-id { font-family: var(--font-mono); font-size: 0.65rem; color: var(--color-bronze); }
-  .pillar .p-k {
-    font-weight: 700;
-    font-size: 1.05rem;
-    letter-spacing: -0.01em;
-    color: var(--color-paper);
-    transition: color 0.4s ease;
-  }
+  .pillar .p-id { font-family: var(--font-mono); font-size: 0.62rem; color: var(--color-bronze); display: block; margin-bottom: 0.7rem; }
+  .pillar .p-k { font-weight: 700; font-size: 1.1rem; display: block; margin-bottom: 0.45rem; color: var(--color-paper); }
   .pillar .p-v {
     font-family: var(--font-mono);
-    font-size: 0.62rem;
+    font-size: 0.58rem;
     letter-spacing: 0.1em;
     text-transform: uppercase;
     color: var(--color-ink-faint);
-    text-align: right;
-  }
-  /* dimmed resting state only when the choreography will run */
-  @media (prefers-reduced-motion: no-preference) {
-    :global(.reveal-ready) .pillar .p-k { color: var(--color-ink-muted); }
-    :global(.reveal-ready) .pillar.active .p-k { color: var(--color-paper); }
+    line-height: 1.8;
   }
 
-  /* FIG panel — sticky, crosshair corners, parallax bg */
-  .about-visual { position: sticky; top: 14vh; }
-  .fig {
-    position: relative;
-    overflow: hidden;
-    aspect-ratio: 4 / 5;
+  /* water deck — the rafts' stage. Fallback <img>s show as a static row
+     until the WebGL field marks the section .field-on. */
+  .water-deck {
+    height: clamp(18rem, 38vh, 26rem);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: clamp(1rem, 3vw, 2.5rem);
+    padding-inline: clamp(1.25rem, 4vw, 4rem);
+  }
+  .water-deck img {
+    width: min(26%, 320px);
+    height: auto;
     border: 1px solid var(--color-hairline);
-    background:
-      radial-gradient(80% 80% at 70% 20%, rgb(111 202 214 / 0.08), transparent 60%),
-      var(--color-surface);
+    opacity: 0.92;
   }
-  .fig-bg {
-    position: absolute;
-    inset: -18% -6%;
-    background:
-      radial-gradient(42% 50% at 30% 32%, rgb(176 141 87 / 0.25), transparent 70%),
-      radial-gradient(50% 60% at 75% 75%, rgb(111 202 214 / 0.14), transparent 70%);
-    will-change: transform;
+  :global(#about.field-on) .water-deck img {
+    visibility: hidden; /* textures live on — the WebGL rafts take over */
   }
-  .fig-grid {
+
+  /* coordinates meta — bottom right */
+  .sec-meta {
     position: absolute;
-    inset: 0;
-    opacity: 0.16;
-    background-image:
-      linear-gradient(rgb(236 237 240 / 0.25) 1px, transparent 1px),
-      linear-gradient(90deg, rgb(236 237 240 / 0.25) 1px, transparent 1px);
-    background-size: 56px 56px;
-    mask-image: radial-gradient(80% 80% at 50% 45%, black, transparent 75%);
-  }
-  .fig-tag {
-    position: absolute;
-    top: 0.9rem;
-    left: 0.9rem;
-    z-index: 2;
-    font-family: var(--font-mono);
-    font-size: 0.6rem;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    color: var(--color-cyan-muted);
-  }
-  .fig-meta {
-    position: absolute;
-    bottom: 0.9rem;
-    right: 0.9rem;
-    z-index: 2;
+    bottom: clamp(1.6rem, 4vw, 3rem);
+    right: clamp(1.6rem, 4vw, 3.2rem);
+    z-index: 4;
     font-family: var(--font-mono);
     font-size: 0.55rem;
     letter-spacing: 0.14em;
     text-transform: uppercase;
     color: var(--color-ink-faint);
     text-align: right;
-    line-height: 1.7;
+    line-height: 1.8;
   }
+  .sec-meta .live { color: var(--color-cyan-muted); }
 
-  @media (max-width: 860px) {
-    .about-grid { grid-template-columns: 1fr; }
-    .about-visual { position: relative; top: 0; max-width: 420px; }
-    .about-sub { margin-left: 8%; }
+  @media (max-width: 760px) {
+    .pillars { grid-template-columns: 1fr; gap: 2rem; }
+    .water-deck { flex-direction: row; flex-wrap: wrap; }
+    .water-deck img { width: min(44%, 240px); }
+    .ghost-index { right: 0.5rem; }
   }
 </style>

@@ -140,18 +140,22 @@ const jsonLd = {
       import { initSmoothScroll, destroySmoothScroll } from '../scripts/smooth-scroll';
       import { initScrollEffects, destroyScrollEffects } from '../scripts/scroll-effects';
       import { initSectionEffects, destroySectionEffects } from '../scripts/section-effects';
+      import { initAboutField, destroyAboutField } from '../scripts/about-field';
 
       function initScroll() {
         // destroy-first makes init idempotent (page-load can fire after a prior init)
+        destroyAboutField();
         destroySectionEffects();
         destroyScrollEffects();
         destroySmoothScroll();
         initSmoothScroll();
         initScrollEffects();
         initSectionEffects();
+        initAboutField(); // async (three.js code-split); no-ops off the home page
       }
 
       function teardownScroll() {
+        destroyAboutField();
         destroySectionEffects();
         destroyScrollEffects();
         destroySmoothScroll();
