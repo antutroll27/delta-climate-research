@@ -33,22 +33,7 @@
   font-display: swap;
 }
 
-/* Self-hosted Moonscape Serif — the cyan accent face (used bold italic at 700;
-   regular registered as a fallback). Replaces Spectral. */
-@font-face {
-  font-family: 'Moonscape Serif';
-  src: url('/fonts/moonscapeserif/MoonscapeSerif-Regular.woff2') format('woff2');
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: 'Moonscape Serif';
-  src: url('/fonts/moonscapeserif/MoonscapeSerif-BoldItalic.woff2') format('woff2');
-  font-weight: 700;
-  font-style: italic;
-  font-display: swap;
-}
+/* Moonscape Serif removed — see src/styles/_serif-stash.css to restore. */
 
 /* Self-hosted Noplato Mono (demo) — the mono label face. Replaces Geist Mono.
    Note: this demo cut lacks °, ·, → (they fall back to ui-monospace). */
@@ -88,7 +73,7 @@
   --font-sans: "Mona Sans", ui-sans-serif, system-ui, sans-serif;
   /* old sans, kept for reuse — Satoshi @font-face is still defined above */
   --font-sans-alt: "Satoshi", ui-sans-serif, system-ui, sans-serif;
-  --font-serif: "Moonscape Serif", Georgia, "Times New Roman", serif;
+  --font-serif: "Mona Sans", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "Noplato Mono", ui-monospace, "SF Mono", monospace;
   /* old mono, kept for reuse — needs the Geist import re-enabled in Base.astro to render */
   --font-mono-alt: "Geist Mono Variable", ui-monospace, "SF Mono", monospace;
@@ -247,7 +232,7 @@
     margin-bottom: clamp(0.75rem, 1.3vw, 1.2rem);
   }
   .sec-title {
-    font-weight: 400; /* Satoshi Regular */
+    font-weight: 500;
     font-size: clamp(2.6rem, 5.5vw, 4.5rem);
     line-height: 1.04;
     letter-spacing: -0.025em;
@@ -256,8 +241,8 @@
   }
   .sec-title em {
     font-family: var(--font-serif);
-    font-style: italic;
-    font-weight: 700;
+    font-style: normal;
+    font-weight: 800;
     color: var(--color-cyan);
     letter-spacing: 0;
     /* taller letterforms — vertical stretch from the baseline */
@@ -268,8 +253,8 @@
   /* reusable heading accent — bold upright serif cyan (applied to <em> in section/cta titles) */
   .em-accent {
     font-family: var(--font-serif);
-    font-style: italic;
-    font-weight: 700;
+    font-style: normal;
+    font-weight: 800;
     color: var(--color-cyan);
     letter-spacing: 0;
     /* taller letterforms — vertical stretch from the baseline */
