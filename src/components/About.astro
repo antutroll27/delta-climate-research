@@ -58,7 +58,7 @@ const pillars = [
   </div>
 
   <div class="sec-meta" aria-hidden="true">
-    <span class="live">FIELD — LIVE</span><br />
+    <span class="live">OCEAN — LIVE</span><br />
     22.5726°N · 88.3639°E<br />
     EOS / ECOSTRESS
   </div>
@@ -77,14 +77,15 @@ const pillars = [
 
   [data-field] { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 
-  /* vignette keeps type sovereign over the field */
+  /* vignette keeps type sovereign and melts the ocean into the page base */
   .field-dim {
     position: absolute;
     inset: 0;
     pointer-events: none;
     background:
-      radial-gradient(55% 42% at 50% 38%, rgb(5 6 6 / 0.62) 0%, rgb(5 6 6 / 0.30) 55%, transparent 80%),
-      linear-gradient(to bottom, var(--color-base) 0%, transparent 14%, transparent 86%, var(--color-base) 100%);
+      radial-gradient(52% 38% at 50% 36%, rgb(5 6 6 / 0.58) 0%, rgb(5 6 6 / 0.26) 55%, transparent 80%),
+      linear-gradient(to bottom, var(--color-base) 0%, transparent 20%, transparent 80%, var(--color-base) 100%),
+      linear-gradient(to right, var(--color-base) 0%, transparent 9%, transparent 91%, var(--color-base) 100%);
   }
 
   /* crosshair frame around the whole section */

@@ -1,21 +1,24 @@
 // src/scripts/about-field.ts
-// The About section's living stage: a GPU wave field (three.js Points displaced
-// by layered sines in the vertex shader, adapted from the fable-3 sample) plus
-// three image "rafts" that ride the SAME sea — height from the wave, tilt from
-// its slope, buoyant spring lag, cursor swell, hover grow/tilt-forward — and
-// the whole field calms as the section scrolls (uScroll): data → decision.
+// The About section's living stage: a NIGHT OCEAN — three.js examples Water
+// (planar reflections + normal-map ripples) in Delta deep-teal under a
+// twinkling star dome (with sparse bronze anomalies), moonlit low-poly
+// icebergs riding a long swell, and three image "rafts" with buoyant physics
+// (heave with spring lag, pitch/roll from the swell slope, 56° recline,
+// hover grows 1.9× and tips forward). The sea CALMS as the section scrolls:
+// data → decision.
 //
-// three.js is imported dynamically so it only loads on pages that have the
-// field (home). On success the section gets `.field-on`, hiding the static
-// <img> fallbacks; reduced-motion / no-WebGL / failures keep the fallbacks.
-// destroyAboutField() disposes everything (view-transition safe).
+// three.js + the Water addon are imported dynamically so they only load on
+// pages that have the field (home). On success the section gets `.field-on`,
+// hiding the static <img> fallbacks; reduced-motion / no-WebGL / failures
+// keep the fallbacks and never fetch the chunks. destroyAboutField()
+// disposes everything (view-transition safe).
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { motionOK } from '../utils/motion';
 
 gsap.registerPlugin(ScrollTrigger);
 
-let gen = 0; // generation token — invalidates an init still awaiting three
+let gen = 0; // generation token — invalidates an init still awaiting chunks
 let cleanup: (() => void) | undefined;
 
 export async function initAboutField() {
@@ -25,12 +28,16 @@ export async function initAboutField() {
   if (!section || !canvas || !motionOK()) return;
 
   let THREE: typeof import('three');
+  let Water: typeof import('three/examples/jsm/objects/Water.js').Water;
   try {
-    THREE = await import('three');
+    [THREE, { Water }] = await Promise.all([
+      import('three'),
+      import('three/examples/jsm/objects/Water.js'),
+    ]);
   } catch {
-    return; // chunk failed to load — static fallback stays
+    return; // chunks failed — static fallback stays
   }
-  if (my !== gen) return; // destroyed while the chunk was loading
+  if (my !== gen) return; // destroyed while chunks were loading
 
   const isMobile = window.matchMedia('(max-width: 760px)').matches;
 
@@ -40,115 +47,123 @@ export async function initAboutField() {
   } catch {
     return; // no WebGL — static fallback stays
   }
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 0.78;
 
   const ac = new AbortController();
   const { signal } = ac;
+  const disposables: { dispose(): void }[] = [];
 
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 100);
+  scene.background = new THREE.Color(0x050606); // night for reflections to sample
+  scene.fog = new THREE.FogExp2(0x050606, 0.006); // horizon melts into the base
+  const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 2000);
   const baseCam = new THREE.Vector3(0, 2.4, 7.5);
   camera.position.copy(baseCam);
   camera.lookAt(0, 0, 0);
 
-  /* ── the sea: grid of points displaced in the vertex shader ── */
-  const COLS = isMobile ? 110 : 180;
-  const ROWS = isMobile ? 60 : 90;
-  const W = 26;
-  const H = 13;
-  const count = COLS * ROWS;
-  const positions = new Float32Array(count * 3);
-  const seeds = new Float32Array(count);
-  let i = 0;
-  for (let y = 0; y < ROWS; y++) {
-    for (let x = 0; x < COLS; x++) {
-      positions[i * 3 + 0] = (x / (COLS - 1) - 0.5) * W;
-      positions[i * 3 + 1] = 0;
-      positions[i * 3 + 2] = (y / (ROWS - 1) - 0.5) * H;
-      seeds[i] = Math.random();
-      i++;
+  /* ── moonlight ── */
+  const moon = new THREE.DirectionalLight(0xbfdfe4, 1.15);
+  moon.position.set(30, 60, -80);
+  scene.add(moon);
+  scene.add(new THREE.AmbientLight(0x22383b, 0.8));
+
+  /* ── the water (planar reflection + normal-map ripples) ── */
+  const waterGeo = new THREE.PlaneGeometry(1600, 1600);
+  const waterNormals = new THREE.TextureLoader().load('/textures/waternormals.jpg', (t) => {
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  });
+  const water = new Water(waterGeo, {
+    textureWidth: isMobile ? 256 : 512,
+    textureHeight: isMobile ? 256 : 512,
+    waterNormals,
+    sunDirection: new THREE.Vector3(0.25, 0.4, -0.7).normalize(),
+    sunColor: 0x7fb6bd, // cool moon glints
+    waterColor: 0x05201d, // Delta deep teal, near-black
+    distortionScale: 3.2,
+    fog: true,
+    alpha: 1.0,
+  });
+  water.rotation.x = -Math.PI / 2;
+  scene.add(water);
+  disposables.push(waterGeo, water.material, waterNormals);
+
+  /* ── the stars — two clouds, counter-phased twinkle, bronze anomalies ── */
+  function makeStars(n: number, size: number) {
+    const pos = new Float32Array(n * 3);
+    const col = new Float32Array(n * 3);
+    const cyan = new THREE.Color(0xd9f2f5);
+    const dim = new THREE.Color(0x7fa6ab);
+    const bronze = new THREE.Color(0xc9a36a);
+    for (let i = 0; i < n; i++) {
+      const r = 700 + Math.random() * 200;
+      const el = (3 + Math.random() * 72) * (Math.PI / 180);
+      const az = Math.random() * Math.PI * 2;
+      pos[i * 3 + 0] = r * Math.cos(el) * Math.sin(az);
+      pos[i * 3 + 1] = r * Math.sin(el);
+      pos[i * 3 + 2] = r * Math.cos(el) * Math.cos(az);
+      const c = Math.random() < 0.04 ? bronze : Math.random() < 0.5 ? cyan : dim;
+      col[i * 3 + 0] = c.r;
+      col[i * 3 + 1] = c.g;
+      col[i * 3 + 2] = c.b;
     }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    const m = new THREE.PointsMaterial({
+      size,
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.6,
+      sizeAttenuation: true,
+      fog: false,
+      depthWrite: false,
+    });
+    const p = new THREE.Points(g, m);
+    scene.add(p);
+    disposables.push(g, m);
+    return p;
   }
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-  geometry.setAttribute('aSeed', new THREE.BufferAttribute(seeds, 1));
+  const stars1 = makeStars(isMobile ? 500 : 950, 1.9);
+  const stars2 = makeStars(isMobile ? 300 : 600, 2.8);
 
-  const uniforms = {
-    uTime: { value: 0 },
-    uMouse: { value: new THREE.Vector2(0, 0) },
-    uScroll: { value: 0 },
-    uPixelRatio: { value: Math.min(window.devicePixelRatio, 2) },
-    uColInk: { value: new THREE.Color('#0a1f21') },
-    uColCyanLo: { value: new THREE.Color('#4fb0bc') },
-    uColCyanHi: { value: new THREE.Color('#6fcad6') },
-    uColBronze: { value: new THREE.Color('#b08d57') },
-  };
-
-  const material = new THREE.ShaderMaterial({
-    uniforms,
-    transparent: true,
-    depthWrite: false,
-    vertexShader: /* glsl */ `
-      uniform float uTime;
-      uniform vec2 uMouse;
-      uniform float uScroll;
-      uniform float uPixelRatio;
-      attribute float aSeed;
-      varying float vElev;
-      varying float vSeed;
-
-      void main() {
-        vec3 p = position;
-        float t = uTime * 0.5;
-        float e = 0.0;
-        e += sin(p.x * 0.55 + t) * 0.55;
-        e += sin(p.z * 0.85 + t * 1.4) * 0.35;
-        e += sin((p.x + p.z) * 0.35 + t * 0.8) * 0.45;
-
-        float mDist = distance(p.xz * vec2(1.0, 2.0), uMouse * vec2(13.0, 6.5));
-        e += smoothstep(5.0, 0.0, mDist) * 1.1;
-
-        // the thesis: the field CALMS as the section resolves
-        e *= (1.0 - uScroll * 0.85);
-
-        p.y = e;
-        vElev = e;
-        vSeed = aSeed;
-
-        vec4 mv = modelViewMatrix * vec4(p, 1.0);
-        gl_Position = projectionMatrix * mv;
-        gl_PointSize = (1.5 + aSeed * 1.7) * uPixelRatio * (6.0 / -mv.z);
-      }
-    `,
-    fragmentShader: /* glsl */ `
-      uniform vec3 uColInk;
-      uniform vec3 uColCyanLo;
-      uniform vec3 uColCyanHi;
-      uniform vec3 uColBronze;
-      varying float vElev;
-      varying float vSeed;
-
-      void main() {
-        float d = length(gl_PointCoord - 0.5);
-        if (d > 0.5) discard;
-
-        float energy = smoothstep(0.12, 1.25, abs(vElev));
-        vec3 hue = mix(uColCyanLo, uColCyanHi, vSeed);
-        if (vSeed > 0.93) hue = uColBronze; // sparse bronze anomalies
-        vec3 col = mix(uColInk, hue, energy);
-
-        float alpha = (0.26 + energy * 0.62) * (0.5 + vSeed * 0.5);
-        gl_FragColor = vec4(col, alpha);
-      }
-    `,
+  /* ── icebergs — jittered icosahedra on a long slow swell ── */
+  const seeded = (n: number) => (((Math.sin(n * 127.1) * 43758.5453) % 1) + 1) % 1;
+  const bergMat = new THREE.MeshStandardMaterial({
+    color: 0xdfeef0,
+    flatShading: true,
+    roughness: 0.82,
+    metalness: 0.02,
+    emissive: 0x0a2022,
+    emissiveIntensity: 0.35,
+  });
+  disposables.push(bergMat);
+  const BERG_DEFS = [
+    { x: -55, z: -110, s: 16, seed: 1 },
+    { x: 38, z: -85, s: 10, seed: 2 },
+    { x: -18, z: -150, s: 22, seed: 3 },
+    { x: 85, z: -160, s: 14, seed: 4 },
+    { x: -95, z: -190, s: 26, seed: 5 },
+  ];
+  const bergs: { mesh: import('three').Mesh; baseY: number; phase: number; amp: number }[] = [];
+  BERG_DEFS.forEach((d) => {
+    const geo = new THREE.IcosahedronGeometry(d.s, 1);
+    const p = geo.attributes.position;
+    for (let i = 0; i < p.count; i++) {
+      const jit = 0.66 + seeded(d.seed * 100 + i) * 0.6;
+      p.setXYZ(i, p.getX(i) * jit, Math.max(p.getY(i) * jit * 0.62, -d.s * 0.18), p.getZ(i) * jit);
+    }
+    geo.computeVertexNormals();
+    const mesh = new THREE.Mesh(geo, bergMat);
+    mesh.position.set(d.x, -d.s * 0.12, d.z);
+    mesh.rotation.y = seeded(d.seed) * Math.PI * 2;
+    scene.add(mesh);
+    disposables.push(geo);
+    bergs.push({ mesh, baseY: -d.s * 0.12, phase: seeded(d.seed) * Math.PI * 2, amp: 0.35 + seeded(d.seed * 7) * 0.3 });
   });
 
-  const points = new THREE.Points(geometry, material);
-  points.rotation.x = -0.12;
-  points.position.z = -0.8; // sea sits just behind the raft plane
-  scene.add(points);
-
-  /* ── image rafts — buoyant on the same sea, nearest plane in the scene ── */
+  /* ── image rafts — buoyant on the swell, nearest plane in the scene ── */
   const CARD_Z = 6.2;
   const BASE_SCALE = isMobile ? 0.38 : 1; // three-across must fit a phone
   const CARD_TILT = (-56 * Math.PI) / 180;
@@ -162,7 +177,6 @@ export async function initAboutField() {
   };
   const cards: Card[] = [];
   const cardMeshes: import('three').Mesh[] = [];
-  const disposables: { dispose(): void }[] = [geometry, material];
   const texLoader = new THREE.TextureLoader();
 
   const imgEls = [...section.querySelectorAll<HTMLImageElement>('[data-raft-img]')];
@@ -172,7 +186,7 @@ export async function initAboutField() {
     texLoader.load(img.currentSrc || img.src, (tex) => {
       tex.colorSpace = THREE.SRGBColorSpace;
       mat.map = tex;
-      mat.color = new THREE.Color('#c9d2d4'); // slight dim — sits in the scene, not on it
+      mat.color = new THREE.Color('#c9d2d4');
       mat.needsUpdate = true;
       disposables.push(tex);
     });
@@ -187,21 +201,18 @@ export async function initAboutField() {
     cardMeshes.push(mesh);
   });
 
-  // exact JS mirror of the GLSL wave — same sea, same physics
-  function waveAt(x: number, z: number, t: number, mx: number, my2: number, scroll: number) {
+  // gentle analytic swell for raft physics (the Water's visual waves are
+  // shader-only; this keeps the rafts' motion consistent with the scene)
+  function waveAt(x: number, z: number, t: number, scroll: number) {
     let e = 0;
-    e += Math.sin(x * 0.55 + t) * 0.55;
-    e += Math.sin(z * 0.85 + t * 1.4) * 0.35;
-    e += Math.sin((x + z) * 0.35 + t * 0.8) * 0.45;
-    const dx = x - mx * 13.0;
-    const dz = z * 2.0 - my2 * 6.5;
-    const mDist = Math.sqrt(dx * dx + dz * dz);
-    let s = Math.min(1, Math.max(0, (5.0 - mDist) / 5.0));
-    e += s * s * (3 - 2 * s) * 1.1;
+    e += Math.sin(x * 0.55 + t) * 0.45;
+    e += Math.sin(z * 0.85 + t * 1.35) * 0.3;
+    e += Math.sin((x + z) * 0.35 + t * 0.8) * 0.35;
     return e * (1 - scroll * 0.85);
   }
 
-  // place each raft under its pillar column at the fixed near plane
+  const uState = { scroll: 0 };
+
   function placeCards() {
     const pillarEls = section!.querySelectorAll<HTMLElement>('.pillar');
     const deck = section!.querySelector<HTMLElement>('[data-deck]');
@@ -240,9 +251,9 @@ export async function initAboutField() {
   }
   resize();
   window.addEventListener('resize', resize, { signal });
-  const placeTimer = setTimeout(placeCards, 600); // after fonts/layout settle
+  const placeTimer = setTimeout(placeCards, 600);
 
-  /* ── pointer: swell, parallax, raycast hover ── */
+  /* ── pointer: parallax + raycast hover ── */
   const mouse = { x: 0, y: 0, tx: 0, ty: 0 };
   const raycaster = new THREE.Raycaster();
   const pointerNdc = new THREE.Vector2(-2, -2);
@@ -263,17 +274,17 @@ export async function initAboutField() {
     );
   }
 
-  // scroll across the section calms the sea
+  // scroll calms the sea: ripple distortion + raft swell ease together
   const st = ScrollTrigger.create({
     trigger: section,
     start: 'top 70%',
     end: 'bottom 60%',
     onUpdate: (self) => {
-      uniforms.uScroll.value = self.progress;
+      uState.scroll = self.progress;
+      water.material.uniforms.distortionScale.value = 3.2 * (1 - self.progress * 0.8);
     },
   });
 
-  // render only while on screen
   let visible = false;
   const io = new IntersectionObserver(([en]) => (visible = en.isIntersecting));
   io.observe(section);
@@ -281,12 +292,21 @@ export async function initAboutField() {
   const clock = new THREE.Clock();
   renderer.setAnimationLoop(() => {
     if (!visible) return;
-    uniforms.uTime.value = clock.getElapsedTime();
+    const elapsed = clock.getElapsedTime();
+    water.material.uniforms.time.value = elapsed * 0.55;
+
+    (stars1.material as import('three').PointsMaterial).opacity = 0.58 + Math.sin(elapsed * 0.55) * 0.12;
+    (stars2.material as import('three').PointsMaterial).opacity = 0.62 + Math.cos(elapsed * 0.42) * 0.1;
+
+    bergs.forEach((b) => {
+      b.mesh.position.y = b.baseY + Math.sin(elapsed * 0.18 + b.phase) * b.amp;
+      b.mesh.rotation.z = Math.sin(elapsed * 0.12 + b.phase) * 0.018;
+      b.mesh.rotation.x = Math.cos(elapsed * 0.1 + b.phase * 2) * 0.014;
+    });
+
     mouse.x += (mouse.tx - mouse.x) * 0.05;
     mouse.y += (mouse.ty - mouse.y) * 0.05;
-    uniforms.uMouse.value.set(mouse.x, mouse.y);
 
-    // hover raycast
     if (!isMobile) {
       raycaster.setFromCamera(pointerNdc, camera);
       const hits = raycaster.intersectObjects(cardMeshes, false);
@@ -297,28 +317,24 @@ export async function initAboutField() {
       }
     }
 
-    // raft buoyancy
-    const t = uniforms.uTime.value * 0.5;
-    const scroll = uniforms.uScroll.value;
+    const t = elapsed * 0.5;
     cards.forEach((c, idx) => {
-      const e = waveAt(c.x, c.z, t, mouse.x, mouse.y, scroll);
-      const slopeX = (waveAt(c.x + DELTA, c.z, t, mouse.x, mouse.y, scroll) -
-                      waveAt(c.x - DELTA, c.z, t, mouse.x, mouse.y, scroll)) / (2 * DELTA);
-      const slopeZ = (waveAt(c.x, c.z + DELTA, t, mouse.x, mouse.y, scroll) -
-                      waveAt(c.x, c.z - DELTA, t, mouse.x, mouse.y, scroll)) / (2 * DELTA);
+      const e = waveAt(c.x, c.z, t, uState.scroll);
+      const sx = (waveAt(c.x + DELTA, c.z, t, uState.scroll) - waveAt(c.x - DELTA, c.z, t, uState.scroll)) / (2 * DELTA);
+      const sz = (waveAt(c.x, c.z + DELTA, t, uState.scroll) - waveAt(c.x, c.z - DELTA, t, uState.scroll)) / (2 * DELTA);
 
       c.hoverT += ((idx === hoveredCard ? 1 : 0) - c.hoverT) * 0.055;
       const held = c.hoverT;
       const damp = 1 - held * 0.7;
 
       c.y += (c.yBase + e * 0.085 + held * 0.06 - c.y) * 0.075;
-      c.rx += (-slopeZ * 0.18 * damp - c.rx) * 0.05;
-      c.rz += (slopeX * 0.18 * damp - c.rz) * 0.05;
+      c.rx += (-sz * 0.18 * damp - c.rx) * 0.05;
+      c.rz += (sx * 0.18 * damp - c.rz) * 0.05;
 
       c.mesh.position.set(c.x, c.y, c.z);
       const baseTilt = CARD_TILT + (HOVER_TILT - CARD_TILT) * held;
       c.mesh.rotation.set(baseTilt + c.rx, 0, c.rz);
-      c.mesh.scale.setScalar(BASE_SCALE * (1 + held * 0.9)); // gradual growth, capped 1.9×
+      c.mesh.scale.setScalar(BASE_SCALE * (1 + held * 0.9));
     });
 
     camera.position.x = mouse.x * 0.45;
@@ -344,7 +360,7 @@ export async function initAboutField() {
 }
 
 export function destroyAboutField() {
-  gen++; // invalidate any init still awaiting the three chunk
+  gen++; // invalidate any init still awaiting chunks
   cleanup?.();
   cleanup = undefined;
 }

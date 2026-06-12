@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Delta · 01 About — Night Ocean (Water + Stars + Icebergs)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500&family=Inter:wght@300;400;500;700;800&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --base:      #050606;
+    --paper:     #ecedf0;
+    --ink-muted: #8fa3a5;
+    --ink-faint: #5c7173;
+    --cyan:      #6fcad6;
+    --cyan-mut:  #92c2cb;
+    --bronze:    #b08d57;
+    --hairline:  rgba(236,237,240,0.10);
+    --font-sans: 'Inter', system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+    --font-serif: Georgia, 'Times New Roman', serif;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { background: var(--base); }
+  body { background: var(--base); color: var(--paper); font-family: var(--font-sans); overflow-x: clip; }
+  ::selection { background: var(--cyan); color: var(--base); }
+
+  .grain {
+    position: fixed; inset: 0; z-index: 60; pointer-events: none; opacity: 0.04;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  .banner {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 70;
+    display: flex; justify-content: space-between; padding: 0.7rem 1.25rem;
+    background: rgba(5,6,6,0.85); backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--hairline);
+    font-family: var(--font-mono); font-size: 0.62rem;
+    letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-faint);
+  }
+  .banner b { color: var(--cyan); font-weight: 400; }
+
+  .hero-stub {
+    min-height: 86vh; display: flex; flex-direction: column; justify-content: flex-end;
+    padding: 0 clamp(1.25rem, 4vw, 4rem) 6vh;
+    background: radial-gradient(ellipse 55% 50% at 68% 30%, rgba(111,202,214,0.09), transparent 68%), var(--base);
+  }
+  .hero-stub h1 { font-size: clamp(2.2rem, 5.5vw, 5rem); font-weight: 800; line-height: 0.9; letter-spacing: -0.035em; opacity: 0.5; }
+  .hero-stub .accent { font-family: var(--font-serif); font-style: italic; color: var(--cyan); }
+  .hero-stub .hint { margin-top: 2rem; font-family: var(--font-mono); font-size: 0.62rem; letter-spacing: 0.22em; text-transform: uppercase; color: var(--ink-faint); }
+
+  /* ════════════════════════════════════════════════
+     01 ABOUT — night ocean
+     ════════════════════════════════════════════════ */
+  #about {
+    position: relative;
+    overflow: hidden;
+    padding-block: clamp(7rem, 16vh, 12rem);
+  }
+  #field-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  /* lighter vignette — let the stars and water breathe, keep type sovereign */
+  .field-dim {
+    position: absolute; inset: 0; pointer-events: none;
+    background:
+      radial-gradient(52% 38% at 50% 36%, rgba(5,6,6,0.58) 0%, rgba(5,6,6,0.26) 55%, transparent 80%),
+      linear-gradient(to bottom, var(--base) 0%, transparent 20%, transparent 80%, var(--base) 100%),
+      linear-gradient(to right, var(--base) 0%, transparent 9%, transparent 91%, var(--base) 100%);
+  }
+  .sec-frame { position: absolute; inset: clamp(1.2rem, 3vw, 2.6rem); pointer-events: none; z-index: 5; }
+  .ck { position: absolute; width: 16px; height: 16px; }
+  .ck::before, .ck::after { content: ''; position: absolute; background: rgba(236,237,240,0.4); }
+  .ck::before { width: 100%; height: 1px; top: 50%; }
+  .ck::after { height: 100%; width: 1px; left: 50%; }
+  .ck.tl { top: 0; left: 0; } .ck.tr { top: 0; right: 0; }
+  .ck.bl { bottom: 0; left: 0; } .ck.br { bottom: 0; right: 0; }
+
+  .about-core { position: relative; z-index: 2; text-align: center; }
+
+  .kicker {
+    font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.22em;
+    text-transform: uppercase; color: var(--bronze);
+  }
+
+  .about-head { position: relative; margin-top: 1.6rem; }
+  .ghost {
+    position: absolute; right: clamp(1rem, 5vw, 5rem); top: 50%; transform: translateY(-54%);
+    font-family: var(--font-mono); font-size: clamp(8rem, 19vw, 16rem); font-weight: 300; line-height: 1;
+    color: transparent; -webkit-text-stroke: 1px rgba(176,141,87,0.22);
+    user-select: none; pointer-events: none; z-index: 0;
+  }
+  .sec-title {
+    position: relative; z-index: 1;
+    font-size: clamp(2.6rem, 5.6vw, 5.2rem);
+    font-weight: 800; letter-spacing: -0.03em; line-height: 1.02;
+    text-shadow: 0 2px 24px rgba(5,6,6,0.8);
+  }
+  .sec-title .ln { display: block; overflow: hidden; }
+  .sec-title .ln > span { display: block; transform: translateY(112%); }
+  .sec-title em { font-family: var(--font-serif); font-style: italic; color: var(--cyan); font-weight: 700; letter-spacing: 0; }
+
+  .statement {
+    margin: clamp(3rem, 7vh, 5rem) auto 0;
+    max-width: 56ch;
+    font-size: clamp(1.15rem, 1.9vw, 1.6rem);
+    font-weight: 500; line-height: 1.55; letter-spacing: -0.005em;
+    padding-inline: 1.25rem;
+    text-shadow: 0 1px 14px rgba(5,6,6,0.85);
+  }
+  .statement .w { display: inline-block; white-space: pre-wrap; opacity: 0.08; filter: blur(7px); }
+  .statement .em { font-family: var(--font-serif); font-style: italic; color: var(--cyan); font-weight: 700; }
+
+  .pillars {
+    max-width: 1080px; margin: clamp(4rem, 9vh, 7rem) auto 0;
+    padding-inline: clamp(1.25rem, 4vw, 4rem);
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: clamp(1.5rem, 4vw, 3.5rem);
+    list-style: none; text-align: center;
+  }
+  .pillar { opacity: 0; transform: translateY(24px); }
+  .pillar .p-id { font-family: var(--font-mono); font-size: 0.62rem; color: var(--bronze); display: block; margin-bottom: 0.7rem; }
+  .pillar .p-k { font-weight: 700; font-size: 1.1rem; display: block; margin-bottom: 0.45rem; text-shadow: 0 1px 10px rgba(5,6,6,0.9); }
+  .pillar .p-v { font-family: var(--font-mono); font-size: 0.58rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-faint); line-height: 1.8; }
+
+  #water-deck { height: clamp(18rem, 38vh, 26rem); }
+
+  .sec-meta {
+    position: absolute; bottom: clamp(1.6rem, 4vw, 3rem); right: clamp(1.6rem, 4vw, 3.2rem); z-index: 4;
+    font-family: var(--font-mono); font-size: 0.55rem; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--ink-faint); text-align: right; line-height: 1.8;
+  }
+  .sec-meta .live { color: var(--cyan-mut); }
+
+  .end-stub {
+    min-height: 70vh; display: grid; place-items: center;
+    border-top: 1px solid var(--hairline);
+    font-family: var(--font-mono); font-size: 0.65rem; letter-spacing: 0.2em;
+    text-transform: uppercase; color: var(--ink-faint); text-align: center; line-height: 2.2;
+  }
+
+  @media (max-width: 760px) {
+    .pillars { grid-template-columns: 1fr; gap: 2rem; }
+  }
+</style>
+<script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+    }
+  }
+</script>
+</head>
+<body>
+
+<div class="banner">
+  <span>Delta — 01 About <b>night ocean · Water + stars + icebergs</b></span>
+  <span>sea calms as you scroll · hover the rafts</span>
+</div>
+<div class="grain"></div>
+
+<header class="hero-stub">
+  <h1>Navigating the systems<br>of a <span class="accent">changing planet.</span></h1>
+  <p class="hint">↓ scroll — open water ahead</p>
+</header>
+
+<!-- ══════════ 01 ABOUT ══════════ -->
+<section id="about">
+  <canvas id="field-canvas"></canvas>
+  <div class="field-dim"></div>
+
+  <div class="sec-frame" aria-hidden="true">
+    <span class="ck tl"></span><span class="ck tr"></span><span class="ck bl"></span><span class="ck br"></span>
+  </div>
+
+  <div class="about-core">
+    <div class="kicker">01 About</div>
+
+    <div class="about-head">
+      <span class="ghost" aria-hidden="true">01</span>
+      <h2 class="sec-title">
+        <span class="ln"><span>Between the data</span></span>
+        <span class="ln"><span>and the <em>decision.</em></span></span>
+      </h2>
+    </div>
+
+    <p class="statement" id="statement">
+      Delta sits between raw earth-science data and the institutions that must
+      act on it — turning <span class="em">decision-grade</span> measurement into
+      standards-aligned, <span class="em">defensible</span> adaptation strategy.
+    </p>
+
+    <ul class="pillars" id="pillars">
+      <li class="pillar"><span class="p-id">/01</span><span class="p-k">Climate science</span><span class="p-v">Remote sensing · MRV<br>carbon accounting</span></li>
+      <li class="pillar"><span class="p-id">/02</span><span class="p-k">Urban heat</span><span class="p-v">LST · vulnerability<br>indices</span></li>
+      <li class="pillar"><span class="p-id">/03</span><span class="p-k">Industrial strategy</span><span class="p-v">Embodied carbon<br>trade compliance</span></li>
+    </ul>
+
+    <div id="water-deck" aria-hidden="true"></div>
+  </div>
+
+  <div class="sec-meta" aria-hidden="true">
+    <span class="live">OCEAN — LIVE</span><br>
+    22.5726°N · 88.3639°E<br>
+    EOS / ECOSTRESS
+  </div>
+</section>
+
+<div class="end-stub"><span>— 02 Projects continues below —</span></div>
+
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/lenis@1.1.13/dist/lenis.min.js"></script>
+<script type="module">
+import * as THREE from 'three';
+import { Water } from 'three/addons/objects/Water.js';
+
+gsap.registerPlugin(ScrollTrigger);
+const lenis = new Lenis({ lerp: 0.07 });
+lenis.on('scroll', ScrollTrigger.update);
+gsap.ticker.add((t) => lenis.raf(t * 1000));
+gsap.ticker.lagSmoothing(0);
+
+/* ════ night ocean scene ════ */
+function initOcean() {
+  const canvas = document.getElementById('field-canvas');
+  const section = document.getElementById('about');
+  if (!canvas) return;
+
+  const isMobile = matchMedia('(max-width: 760px)').matches;
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 1.75));
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 0.78;
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x050606); // real night for the reflections to sample
+  scene.fog = new THREE.FogExp2(0x050606, 0.006); // horizon melts into the base
+  const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 2000);
+  const baseCam = new THREE.Vector3(0, 2.4, 7.5);
+  camera.position.copy(baseCam);
+  camera.lookAt(0, 0, 0);
+
+  /* ── moonlight ── */
+  const moon = new THREE.DirectionalLight(0xbfdfe4, 1.15);
+  moon.position.set(30, 60, -80);
+  scene.add(moon);
+  scene.add(new THREE.AmbientLight(0x22383b, 0.8));
+
+  /* ── the water (three.js examples Water — planar reflection + normal ripples) ── */
+  const waterGeo = new THREE.PlaneGeometry(1600, 1600);
+  const water = new Water(waterGeo, {
+    textureWidth: isMobile ? 256 : 512,
+    textureHeight: isMobile ? 256 : 512,
+    waterNormals: new THREE.TextureLoader().load(
+      'https://cdn.jsdelivr.net/gh/mrdoob/three.js@r170/examples/textures/waternormals.jpg',
+      (t) => { t.wrapS = t.wrapT = THREE.RepeatWrapping; }
+    ),
+    sunDirection: new THREE.Vector3(0.25, 0.4, -0.7).normalize(),
+    sunColor: 0x7fb6bd,                 // cool moon glints, not hollywood gold
+    waterColor: 0x05201d,               // Delta deep teal, near-black
+    distortionScale: 3.2,
+    fog: true,
+    alpha: 1.0,
+  });
+  water.rotation.x = -Math.PI / 2;
+  scene.add(water);
+
+  /* ── the stars (two clouds, counter-phased twinkle; bronze anomalies) ── */
+  function makeStars(n, sizeMin, sizeMax) {
+    const pos = new Float32Array(n * 3);
+    const col = new Float32Array(n * 3);
+    const cyan = new THREE.Color(0xd9f2f5);
+    const dim = new THREE.Color(0x7fa6ab);
+    const bronze = new THREE.Color(0xc9a36a);
+    for (let i = 0; i < n; i++) {
+      // dome: radius 700–900, elevation 3°–75°, full azimuth
+      const r = 700 + Math.random() * 200;
+      const el = (3 + Math.random() * 72) * (Math.PI / 180);
+      const az = Math.random() * Math.PI * 2;
+      pos[i * 3 + 0] = r * Math.cos(el) * Math.sin(az);
+      pos[i * 3 + 1] = r * Math.sin(el);
+      pos[i * 3 + 2] = r * Math.cos(el) * Math.cos(az);
+      const c = Math.random() < 0.04 ? bronze : (Math.random() < 0.5 ? cyan : dim);
+      col[i * 3 + 0] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    const m = new THREE.PointsMaterial({
+      size: sizeMin + Math.random() * (sizeMax - sizeMin),
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.9,
+      sizeAttenuation: true,
+      fog: false,
+      depthWrite: false,
+    });
+    const p = new THREE.Points(g, m);
+    scene.add(p);
+    return p;
+  }
+  const stars1 = makeStars(isMobile ? 500 : 950, 1.6, 2.2);
+  const stars2 = makeStars(isMobile ? 300 : 600, 2.4, 3.2);
+
+  /* ── icebergs (titanic much) — jittered icosahedra, flat-shaded ── */
+  const bergs = [];
+  const bergMat = new THREE.MeshStandardMaterial({
+    color: 0xdfeef0,
+    flatShading: true,
+    roughness: 0.82,
+    metalness: 0.02,
+    emissive: 0x0a2022,
+    emissiveIntensity: 0.35,
+  });
+  const BERG_DEFS = [
+    { x: -55, z: -110, s: 16, seed: 1 },
+    { x: 38,  z: -85,  s: 10, seed: 2 },
+    { x: -18, z: -150, s: 22, seed: 3 },
+    { x: 85,  z: -160, s: 14, seed: 4 },
+    { x: -95, z: -190, s: 26, seed: 5 },
+  ];
+  function rand(n) { return ((Math.sin(n * 127.1) * 43758.5453) % 1 + 1) % 1; }
+  BERG_DEFS.forEach((d) => {
+    const geo = new THREE.IcosahedronGeometry(d.s, 1);
+    const p = geo.attributes.position;
+    for (let i = 0; i < p.count; i++) {
+      const jit = 0.66 + rand(d.seed * 100 + i) * 0.6;
+      p.setXYZ(i, p.getX(i) * jit, Math.max(p.getY(i) * jit * 0.62, -d.s * 0.18), p.getZ(i) * jit);
+    }
+    geo.computeVertexNormals();
+    const mesh = new THREE.Mesh(geo, bergMat);
+    mesh.position.set(d.x, -d.s * 0.12, d.z);
+    mesh.rotation.y = rand(d.seed) * Math.PI * 2;
+    scene.add(mesh);
+    bergs.push({ mesh, baseY: -d.s * 0.12, phase: rand(d.seed) * Math.PI * 2, amp: 0.35 + rand(d.seed * 7) * 0.3 });
+  });
+
+  /* ── image rafts — same buoyancy system as before ── */
+  const CARD_Z = 6.2;
+  const CARD_TILT = (-56 * Math.PI) / 180;
+  const HOVER_TILT = (-12 * Math.PI) / 180;
+  const DELTA = 0.35;
+  const CARD_IMGS = [
+    'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=900&q=70&fm=jpg',
+    'https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?w=900&q=70&fm=jpg',
+    'https://images.unsplash.com/photo-1513828583688-c52646db42da?w=900&q=70&fm=jpg',
+  ];
+  const cards = [];
+  const cardMeshes = [];
+  const texLoader = new THREE.TextureLoader();
+  texLoader.setCrossOrigin('anonymous');
+  CARD_IMGS.forEach((url, i) => {
+    const geo = new THREE.PlaneGeometry(0.38, 0.253);
+    const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color('#0e3236'), toneMapped: false });
+    texLoader.load(url, (tex) => {
+      tex.colorSpace = THREE.SRGBColorSpace;
+      mat.map = tex; mat.color = new THREE.Color('#c9d2d4'); mat.needsUpdate = true;
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    const edge = new THREE.LineSegments(
+      new THREE.EdgesGeometry(geo),
+      new THREE.LineBasicMaterial({ color: 0x6fcad6, transparent: true, opacity: 0.35 })
+    );
+    mesh.add(edge);
+    scene.add(mesh);
+    cards.push({ mesh, x: 0, z: CARD_Z, y: 0, yBase: 0, rx: 0, rz: 0, hoverT: 0 });
+    cardMeshes.push(mesh);
+  });
+
+  // gentle analytic swell for raft physics (visually consistent with the
+  // normal-map water; the real Water's waves are shader-only)
+  function waveAt(x, z, t, scroll) {
+    let e = 0;
+    e += Math.sin(x * 0.55 + t) * 0.45;
+    e += Math.sin(z * 0.85 + t * 1.35) * 0.3;
+    e += Math.sin((x + z) * 0.35 + t * 0.8) * 0.35;
+    return e * (1 - scroll * 0.85);
+  }
+
+  const uState = { scroll: 0 };
+
+  function placeCards() {
+    const pillarEls = document.querySelectorAll('#pillars .pillar');
+    const deck = document.getElementById('water-deck');
+    if (!deck || pillarEls.length < cards.length) return;
+    camera.position.copy(baseCam);
+    camera.lookAt(0, 0, 0);
+    camera.updateMatrixWorld();
+    const secR = section.getBoundingClientRect();
+    const dR = deck.getBoundingClientRect();
+    const ndcY = -((((dR.top + dR.height * 0.5) - secR.top) / secR.height) * 2 - 1);
+    cards.forEach((c, i) => {
+      let ndcX;
+      if (isMobile) ndcX = [-0.55, 0, 0.55][i] ?? 0;
+      else {
+        const r = pillarEls[i].getBoundingClientRect();
+        ndcX = (((r.left + r.width / 2) - secR.left) / secR.width) * 2 - 1;
+      }
+      const v = new THREE.Vector3(ndcX, ndcY, 0.5).unproject(camera);
+      const dir = v.sub(baseCam).normalize();
+      const s = (CARD_Z - baseCam.z) / dir.z;
+      const hit = baseCam.clone().add(dir.multiplyScalar(s));
+      c.x = hit.x; c.z = CARD_Z; c.yBase = hit.y;
+    });
+  }
+
+  function resize() {
+    const w = section.clientWidth, h = section.clientHeight;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    placeCards();
+  }
+  resize();
+  addEventListener('resize', resize);
+  setTimeout(placeCards, 600);
+
+  /* pointer: parallax + raycast hover */
+  const mouse = { x: 0, y: 0, tx: 0, ty: 0 };
+  const raycaster = new THREE.Raycaster();
+  const pointerNdc = new THREE.Vector2(-2, -2);
+  let hoveredCard = -1;
+  if (!isMobile) {
+    addEventListener('pointermove', (e) => {
+      mouse.tx = (e.clientX / innerWidth) * 2 - 1;
+      mouse.ty = -((e.clientY / innerHeight) * 2 - 1);
+      const r = canvas.getBoundingClientRect();
+      pointerNdc.set(((e.clientX - r.left) / r.width) * 2 - 1, -(((e.clientY - r.top) / r.height) * 2 - 1));
+    });
+  }
+
+  // scroll calms the sea: ripple distortion + raft swell ease together
+  ScrollTrigger.create({
+    trigger: section,
+    start: 'top 70%',
+    end: 'bottom 60%',
+    onUpdate: (self) => {
+      uState.scroll = self.progress;
+      water.material.uniforms.distortionScale.value = 3.2 * (1 - self.progress * 0.8);
+    },
+  });
+
+  let visible = false;
+  new IntersectionObserver(([en]) => (visible = en.isIntersecting)).observe(section);
+
+  const clock = new THREE.Clock();
+  renderer.setAnimationLoop(() => {
+    if (!visible) return;
+    const elapsed = clock.getElapsedTime();
+    water.material.uniforms.time.value = elapsed * 0.55;
+
+    // star twinkle — two clouds counter-phased
+    stars1.material.opacity = 0.58 + Math.sin(elapsed * 0.55) * 0.12;
+    stars2.material.opacity = 0.62 + Math.cos(elapsed * 0.42) * 0.1;
+
+    // icebergs ride a long slow swell
+    bergs.forEach((b) => {
+      b.mesh.position.y = b.baseY + Math.sin(elapsed * 0.18 + b.phase) * b.amp;
+      b.mesh.rotation.z = Math.sin(elapsed * 0.12 + b.phase) * 0.018;
+      b.mesh.rotation.x = Math.cos(elapsed * 0.1 + b.phase * 2) * 0.014;
+    });
+
+    mouse.x += (mouse.tx - mouse.x) * 0.05;
+    mouse.y += (mouse.ty - mouse.y) * 0.05;
+
+    // raft hover raycast
+    if (!isMobile) {
+      raycaster.setFromCamera(pointerNdc, camera);
+      const hits = raycaster.intersectObjects(cardMeshes, false);
+      const next = hits.length ? cardMeshes.indexOf(hits[0].object) : -1;
+      if (next !== hoveredCard) {
+        hoveredCard = next;
+        document.body.style.cursor = hoveredCard >= 0 ? 'pointer' : '';
+      }
+    }
+
+    // raft buoyancy
+    const t = elapsed * 0.5;
+    cards.forEach((c, i) => {
+      const e = waveAt(c.x, c.z, t, uState.scroll);
+      const sx = (waveAt(c.x + DELTA, c.z, t, uState.scroll) - waveAt(c.x - DELTA, c.z, t, uState.scroll)) / (2 * DELTA);
+      const sz = (waveAt(c.x, c.z + DELTA, t, uState.scroll) - waveAt(c.x, c.z - DELTA, t, uState.scroll)) / (2 * DELTA);
+      c.hoverT += ((i === hoveredCard ? 1 : 0) - c.hoverT) * 0.055;
+      const held = c.hoverT;
+      const damp = 1 - held * 0.7;
+      c.y += (c.yBase + e * 0.085 + held * 0.06 - c.y) * 0.075;
+      c.rx += (-sz * 0.18 * damp - c.rx) * 0.05;
+      c.rz += (sx * 0.18 * damp - c.rz) * 0.05;
+      c.mesh.position.set(c.x, c.y, c.z);
+      const baseTilt = CARD_TILT + (HOVER_TILT - CARD_TILT) * held;
+      c.mesh.rotation.set(baseTilt + c.rx, 0, c.rz);
+      c.mesh.scale.setScalar(1 + held * 0.9);
+    });
+
+    camera.position.x = mouse.x * 0.45;
+    camera.position.y = 2.4 + mouse.y * 0.22;
+    camera.lookAt(0, 0, 0);
+    renderer.render(scene, camera);
+  });
+}
+initOcean();
+
+/* ════ type choreography (unchanged) ════ */
+gsap.to('.sec-title .ln > span', {
+  y: 0, duration: 1.05, ease: 'power3.out', stagger: 0.09,
+  scrollTrigger: { trigger: '.sec-title', start: 'top 86%' },
+});
+gsap.fromTo('.ghost', { opacity: 0, scale: 1.08 }, {
+  opacity: 1, scale: 1, ease: 'none',
+  scrollTrigger: { trigger: '.about-head', start: 'top 92%', end: 'top 42%', scrub: true },
+});
+const st = document.getElementById('statement');
+(function walk(node) {
+  [...node.childNodes].forEach((n) => {
+    if (n.nodeType === 3) {
+      const frag = document.createDocumentFragment();
+      n.textContent.split(/(\s+)/).forEach((part) => {
+        if (!part) return;
+        if (/^\s+$/.test(part)) return frag.appendChild(document.createTextNode(part));
+        const w = document.createElement('span');
+        w.className = 'w'; w.textContent = part;
+        frag.appendChild(w);
+      });
+      n.replaceWith(frag);
+    } else if (n.nodeType === 1) walk(n);
+  });
+})(st);
+st.querySelectorAll('.w').forEach((w) => {
+  gsap.to(w, {
+    opacity: 1, filter: 'blur(0px)', ease: 'none',
+    scrollTrigger: { trigger: w, start: 'top 84%', end: 'top 60%', scrub: true },
+  });
+});
+gsap.to('#pillars .pillar', {
+  opacity: 1, y: 0, duration: 0.9, ease: 'power3.out', stagger: 0.12,
+  scrollTrigger: { trigger: '#pillars', start: 'top 85%' },
+});
+</script>
+</body>
+</html>
