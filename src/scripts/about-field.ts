@@ -20,13 +20,41 @@ gsap.registerPlugin(ScrollTrigger);
 
 let gen = 0; // generation token — invalidates an init still awaiting chunks
 let cleanup: (() => void) | undefined;
+let disarm: (() => void) | undefined;
 
-export async function initAboutField() {
-  const my = ++gen;
+// Cheap sync entry: the heavy boot (three + Water + textures, ~1MB) is
+// deferred past the critical path — it fires on the user's first scroll
+// intent, or once the main thread goes idle, whichever comes first. (The
+// section sits directly under the 100dvh hero, so an IntersectionObserver
+// would fire at load and defer nothing.)
+export function initAboutField() {
   const section = document.getElementById('about');
   const canvas = section?.querySelector<HTMLCanvasElement>('[data-field]');
   if (!section || !canvas || !motionOK()) return;
+  const my = ++gen;
 
+  let idleId: number | undefined;
+  const fire = () => {
+    disarm?.();
+    disarm = undefined;
+    if (my !== gen) return;
+    boot(section, canvas, my);
+  };
+  disarm = () => {
+    window.removeEventListener('scroll', fire);
+    window.removeEventListener('pointerdown', fire);
+    if (idleId !== undefined && 'cancelIdleCallback' in window) window.cancelIdleCallback(idleId);
+  };
+  window.addEventListener('scroll', fire, { once: true, passive: true });
+  window.addEventListener('pointerdown', fire, { once: true, passive: true });
+  if (typeof window.requestIdleCallback === 'function') {
+    idleId = window.requestIdleCallback(fire, { timeout: 3500 });
+  } else {
+    setTimeout(fire, 1500); // Safari < 17 fallback
+  }
+}
+
+async function boot(section: HTMLElement, canvas: HTMLCanvasElement, my: number) {
   let THREE: typeof import('three');
   let Water: typeof import('three/examples/jsm/objects/Water.js').Water;
   try {
@@ -71,7 +99,7 @@ export async function initAboutField() {
 
   /* ── the water (planar reflection + normal-map ripples) ── */
   const waterGeo = new THREE.PlaneGeometry(1600, 1600);
-  const waterNormals = new THREE.TextureLoader().load('/textures/waternormals.jpg', (t) => {
+  const waterNormals = new THREE.TextureLoader().load('/textures/waternormals.webp', (t) => {
     t.wrapS = t.wrapT = THREE.RepeatWrapping;
   });
   const water = new Water(waterGeo, {
@@ -177,19 +205,25 @@ export async function initAboutField() {
   };
   const cards: Card[] = [];
   const cardMeshes: import('three').Mesh[] = [];
-  const texLoader = new THREE.TextureLoader();
 
   const imgEls = [...section.querySelectorAll<HTMLImageElement>('[data-raft-img]')];
   imgEls.forEach((img) => {
     const geo = new THREE.PlaneGeometry(0.38, 0.253);
     const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color('#0e3236'), toneMapped: false });
-    texLoader.load(img.currentSrc || img.src, (tex) => {
-      tex.colorSpace = THREE.SRGBColorSpace;
+    // texture from the DOM image itself — one network fetch, not two
+    // (img.decode() forces the lazy fetch if it hasn't started yet)
+    const tex = new THREE.Texture(img);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    disposables.push(tex);
+    const applyTex = () => {
+      if (!img.naturalWidth) return;
+      tex.needsUpdate = true;
       mat.map = tex;
       mat.color = new THREE.Color('#c9d2d4');
       mat.needsUpdate = true;
-      disposables.push(tex);
-    });
+    };
+    if (img.complete && img.naturalWidth) applyTex();
+    else img.decode().then(applyTex).catch(() => {});
     const mesh = new THREE.Mesh(geo, mat);
     const edgeGeo = new THREE.EdgesGeometry(geo);
     const edgeMat = new THREE.LineBasicMaterial({ color: 0x6fcad6, transparent: true, opacity: 0.35 });
@@ -361,6 +395,8 @@ export async function initAboutField() {
 
 export function destroyAboutField() {
   gen++; // invalidate any init still awaiting chunks
+  disarm?.();
+  disarm = undefined;
   cleanup?.();
   cleanup = undefined;
 }
