@@ -305,15 +305,6 @@
     text-transform: uppercase;
     color: var(--color-bronze);
     margin-bottom: 1rem;
-    display: flex;
-    align-items: center;
-    gap: 0.8rem;
-  }
-  .sec-kicker::after {
-    content: '';
-    width: 56px;
-    height: 1px;
-    background: rgb(176 141 87 / 0.4);
   }
 
   /* oversized outlined index — the number as section marker */
