@@ -1,66 +1,210 @@
 ---
-// Section 2 — About / mission. 60/40 split.
+// Section 01 — About. Baffait-inspired editorial rebuild: masked title lines,
+// ghost index, scrub-blur statement (word-by-word focus pull on scroll),
+// offset sub-paragraph, center-band-activated pillar rows, and a sticky FIG
+// panel with crosshair corner marks + parallax. Choreography lives in
+// src/scripts/section-effects.ts; everything degrades to static content.
 const pillars = [
-  { k: 'Climate science', v: 'Remote sensing, MRV, carbon accounting' },
-  { k: 'Urban heat', v: 'Land-surface temperature, vulnerability indices' },
-  { k: 'Industrial strategy', v: 'Embodied carbon, trade-corridor compliance' },
+  { id: '/01', k: 'Climate science', v: 'Remote sensing · MRV · carbon accounting' },
+  { id: '/02', k: 'Urban heat', v: 'LST · vulnerability indices' },
+  { id: '/03', k: 'Industrial strategy', v: 'Embodied carbon · trade compliance' },
 ];
 ---
 
 <section id="about" class="section" aria-labelledby="about-title">
-  <div class="wrap grid grid-cols-1 gap-about-gap wide:grid-cols-[6fr_4fr] wide:items-start">
-    <div data-reveal>
-      <p class="sec-index">01 — About</p>
-      <h2 id="about-title" class="sec-title">
-        Between the data and the <em>decision.</em>
-      </h2>
-      <p class="mt-7 max-w-[56ch] text-body leading-body text-ink-muted">
-        Delta Climate Research is a boutique consultancy sitting between raw
-        earth-science data and the institutions that must act on it. We turn
-        decision-grade measurement into standards-aligned, defensible adaptation
-        strategy, bridging climate science, urban-heat research, and industrial
-        strategy.
-      </p>
-
-      <ul class="list-none m-0 p-0 grid gap-0 mt-10" data-reveal-group data-stagger="80">
-        {pillars.map((p) => (
-          <li class="flex flex-col gap-2xs py-xl border-t border-hairline [&:last-child]:border-b">
-            <span class="font-semibold text-logo text-paper">{p.k}</span>
-            <span class="font-mono text-meta text-ink-faint">{p.v}</span>
-          </li>
-        ))}
-      </ul>
+  <div class="wrap">
+    <div class="sec-head">
+      <div>
+        <p class="sec-kicker">01 — About</p>
+        <h2 id="about-title" class="sec-title" data-mask>
+          <span class="ln"><span>Between the data</span></span>
+          <span class="ln"><span>and the <em>decision.</em></span></span>
+        </h2>
+      </div>
+      <span class="ghost-index" aria-hidden="true">01</span>
     </div>
 
-    <!-- data-clip owns this panel's entrance (wipe + fade); no data-reveal here,
-         so the GSAP clip and the IntersectionObserver reveal never co-own opacity. -->
-    <aside class="about-visual" aria-hidden="true" data-clip style="--clip-radius: 14px;">
-      <span class="visual-bg" data-parallax="-0.05" aria-hidden="true"></span>
-      <span class="absolute top-4 left-4 font-mono text-tag tracking-tag text-cyan-muted">FIG. 01 — SYSTEMS MAP</span>
-    </aside>
+    <div class="about-grid">
+      <div>
+        <p class="statement" data-words>
+          Delta sits between raw earth-science data and the institutions that
+          must act on it — turning <span class="em">decision-grade</span> measurement
+          into standards-aligned, <span class="em">defensible</span> adaptation strategy.
+        </p>
+
+        <p class="about-sub">
+          A boutique consultancy bridging climate science, urban-heat research
+          and industrial strategy — built for institutions, municipalities and
+          corporates that need their next move to hold up under scrutiny.
+        </p>
+
+        <ul class="pillars" role="list">
+          {pillars.map((p) => (
+            <li class="pillar" data-band>
+              <span class="wipe" data-wipe aria-hidden="true"></span>
+              <span class="p-id">{p.id}</span>
+              <span class="p-k">{p.k}</span>
+              <span class="p-v">{p.v}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <aside class="about-visual" aria-hidden="true">
+        <div class="fig corners">
+          <span class="ck tl"></span><span class="ck tr"></span><span class="ck bl"></span><span class="ck br"></span>
+          <span class="fig-bg" data-parallax="-0.07"></span>
+          <span class="fig-grid"></span>
+          <span class="fig-tag">FIG. 01 — SYSTEMS MAP</span>
+          <span class="fig-meta">22.5726°N · 88.3639°E<br />EOS / ECOSTRESS</span>
+        </div>
+      </aside>
+    </div>
   </div>
 </section>
 
 <style>
-  /* About is the first section after the full-viewport hero — intentional gap,
-     but smaller than the default section padding. */
-  #about { padding-block-start: clamp(5rem, 12vh, 9rem); }
+  /* redesigned sections speak in the heavier display voice */
+  .sec-title { font-weight: 800; letter-spacing: -0.03em; line-height: 1.02; }
 
-  .about-visual {
+  .about-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 7fr) minmax(0, 4fr);
+    gap: clamp(2rem, 6vw, 6rem);
+    align-items: start;
+    margin-top: clamp(2.5rem, 6vh, 4.5rem);
+  }
+
+  /* the statement — words get .w spans from section-effects.ts (scrub-blur) */
+  .statement {
+    margin: 0;
+    font-size: clamp(1.45rem, 2.6vw, 2.4rem);
+    font-weight: 500;
+    line-height: 1.38;
+    letter-spacing: -0.01em;
+    color: var(--color-paper);
+    max-width: 24ch;
+  }
+  .statement :global(.w) { display: inline-block; white-space: pre-wrap; will-change: opacity, filter; }
+  .statement .em {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-weight: 700;
+    color: var(--color-cyan);
+  }
+
+  /* offset sub-paragraph — editorial asymmetry */
+  .about-sub {
+    margin: clamp(2.5rem, 6vh, 4rem) 0 0 22%;
+    max-width: 44ch;
+    font-size: 0.95rem;
+    line-height: 1.65;
+    color: var(--color-ink-muted);
+  }
+
+  /* pillars — center-band activated rows */
+  .pillars {
+    list-style: none;
+    margin: clamp(3rem, 7vh, 5rem) 0 0;
+    padding: 0;
+    border-top: 1px solid var(--color-hairline);
+  }
+  .pillar {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 1.4rem;
+    align-items: baseline;
+    padding: 1.35rem 0.25rem;
+    border-bottom: 1px solid var(--color-hairline);
     position: relative;
-    min-height: 320px;
     overflow: hidden;
+  }
+  .pillar .wipe {
+    position: absolute;
+    inset: 0;
+    background: rgb(111 202 214 / 0.05);
+    clip-path: inset(0 100% 0 0);
+    pointer-events: none;
+  }
+  .pillar .p-id { font-family: var(--font-mono); font-size: 0.65rem; color: var(--color-bronze); }
+  .pillar .p-k {
+    font-weight: 700;
+    font-size: 1.05rem;
+    letter-spacing: -0.01em;
+    color: var(--color-paper);
+    transition: color 0.4s ease;
+  }
+  .pillar .p-v {
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--color-ink-faint);
+    text-align: right;
+  }
+  /* dimmed resting state only when the choreography will run */
+  @media (prefers-reduced-motion: no-preference) {
+    :global(.reveal-ready) .pillar .p-k { color: var(--color-ink-muted); }
+    :global(.reveal-ready) .pillar.active .p-k { color: var(--color-paper); }
+  }
+
+  /* FIG panel — sticky, crosshair corners, parallax bg */
+  .about-visual { position: sticky; top: 14vh; }
+  .fig {
+    position: relative;
+    overflow: hidden;
+    aspect-ratio: 4 / 5;
     border: 1px solid var(--color-hairline);
-    border-radius: 14px;
     background:
       radial-gradient(80% 80% at 70% 20%, rgb(111 202 214 / 0.08), transparent 60%),
       var(--color-surface);
   }
-  /* parallax layer — drifts slower than the frame for depth */
-  .visual-bg {
+  .fig-bg {
     position: absolute;
-    inset: -12% -4%;
-    background: radial-gradient(40% 50% at 30% 30%, rgb(176 141 87 / 0.22), transparent 70%);
-    pointer-events: none;
+    inset: -18% -6%;
+    background:
+      radial-gradient(42% 50% at 30% 32%, rgb(176 141 87 / 0.25), transparent 70%),
+      radial-gradient(50% 60% at 75% 75%, rgb(111 202 214 / 0.14), transparent 70%);
+    will-change: transform;
+  }
+  .fig-grid {
+    position: absolute;
+    inset: 0;
+    opacity: 0.16;
+    background-image:
+      linear-gradient(rgb(236 237 240 / 0.25) 1px, transparent 1px),
+      linear-gradient(90deg, rgb(236 237 240 / 0.25) 1px, transparent 1px);
+    background-size: 56px 56px;
+    mask-image: radial-gradient(80% 80% at 50% 45%, black, transparent 75%);
+  }
+  .fig-tag {
+    position: absolute;
+    top: 0.9rem;
+    left: 0.9rem;
+    z-index: 2;
+    font-family: var(--font-mono);
+    font-size: 0.6rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--color-cyan-muted);
+  }
+  .fig-meta {
+    position: absolute;
+    bottom: 0.9rem;
+    right: 0.9rem;
+    z-index: 2;
+    font-family: var(--font-mono);
+    font-size: 0.55rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--color-ink-faint);
+    text-align: right;
+    line-height: 1.7;
+  }
+
+  @media (max-width: 860px) {
+    .about-grid { grid-template-columns: 1fr; }
+    .about-visual { position: relative; top: 0; max-width: 420px; }
+    .about-sub { margin-left: 8%; }
   }
 </style>

@@ -139,16 +139,20 @@ const jsonLd = {
     <script>
       import { initSmoothScroll, destroySmoothScroll } from '../scripts/smooth-scroll';
       import { initScrollEffects, destroyScrollEffects } from '../scripts/scroll-effects';
+      import { initSectionEffects, destroySectionEffects } from '../scripts/section-effects';
 
       function initScroll() {
         // destroy-first makes init idempotent (page-load can fire after a prior init)
+        destroySectionEffects();
         destroyScrollEffects();
         destroySmoothScroll();
         initSmoothScroll();
         initScrollEffects();
+        initSectionEffects();
       }
 
       function teardownScroll() {
+        destroySectionEffects();
         destroyScrollEffects();
         destroySmoothScroll();
       }

@@ -1,19 +1,23 @@
 ---
-// Section 4 — White Papers feed (preview rows link to /white-papers).
+// Section 03 — White Papers. Baffait-inspired index rows: big outlined
+// numerals that fill bronze when the row crosses the viewport's center band,
+// title brightens, excerpt unfolds, a cyan wipe sweeps the row, and hovering
+// glues a preview chip to the cursor (desktop). Choreography in
+// section-effects.ts; degrades to a fully-visible static list.
 const papers = [
   {
     id: '01',
     date: '2026.05',
-    cat: 'BLUE CARBON',
+    cat: 'Blue carbon',
     title: 'Soil organic carbon accounting under VM0033',
     excerpt:
-      'Belowground biomass and sediment-core MRV for tidal-wetland restoration, and why SOC defensibility separates premium credits.',
+      'Belowground biomass and sediment-core MRV for tidal-wetland restoration — why SOC defensibility separates premium credits.',
     href: '/white-papers/soc-accounting-vm0033',
   },
   {
     id: '02',
     date: '2026.04',
-    cat: 'URBAN HEAT',
+    cat: 'Urban heat',
     title: 'Street-scale heat vulnerability from ECOSTRESS',
     excerpt:
       'Downscaling 70 m land-surface temperature into a sub-block Heat Vulnerability Index for dense Indian wards.',
@@ -22,70 +26,173 @@ const papers = [
   {
     id: '03',
     date: '2026.03',
-    cat: 'MATERIALS · CBAM',
+    cat: 'Materials · CBAM',
     title: 'Embodied-carbon dossiers for the India–UAE corridor',
     excerpt:
-      'EPD generation under ISO 14025 and CBAM emissions data for cement, steel, and aluminium exporters.',
+      'EPD generation under ISO 14025 and CBAM emissions data for cement, steel and aluminium exporters.',
     href: '/white-papers/embodied-carbon-cbam',
   },
 ];
 ---
 
-<section id="papers" class="section divider-top" aria-labelledby="papers-title">
-  <span class="draw-line" data-draw aria-hidden="true"></span>
-  <div class="wrap flex items-end justify-between gap-6 mb-papershead-mb" data-reveal>
-    <div>
-      <p class="sec-index">03 — White Papers</p>
-      <h2 id="papers-title" class="sec-title">The thinking <em>behind</em> the work.</h2>
-    </div>
-    <a class="accent-link" href="/white-papers">All white papers ↗</a>
-  </div>
-
+<section id="papers" class="section" aria-labelledby="papers-title">
   <div class="wrap">
-    <ul class="feed list-none m-0 p-0 border-t border-hairline" role="list" data-reveal-group data-stagger="90">
-      {papers.map((p) => (
-        <li class="row border-b border-hairline">
-          <a href={p.href} class="row-link grid grid-cols-[auto_1fr_auto] gap-rowgap items-start py-rowpad no-underline">
-            <span class="node" aria-hidden="true"></span>
-            <span class="row-main">
-              <span class="row-meta font-mono text-tag tracking-widest uppercase text-cyan-muted">
-                <span class="row-id text-bronze">[{p.id}]</span> {p.date} — {p.cat}
+    <div class="sec-head">
+      <div>
+        <p class="sec-kicker">03 — White Papers</p>
+        <h2 id="papers-title" class="sec-title" data-mask>
+          <span class="ln"><span>The thinking</span></span>
+          <span class="ln"><span><em>behind</em> the work.</span></span>
+        </h2>
+      </div>
+      <a class="roll-link" href="/white-papers" data-roll>All white papers <span class="arrow" aria-hidden="true">↗</span></a>
+    </div>
+
+    <ul class="feed" role="list">
+      {papers.map((p, i) => (
+        <li>
+          <a class="frow" href={p.href} data-band data-chip={i + 1}>
+            <span class="f-wipe" data-wipe aria-hidden="true"></span>
+            <span class="f-in">
+              <span class="f-id" aria-hidden="true">{p.id}</span>
+              <span>
+                <span class="f-meta">{p.date} — {p.cat}</span>
+                <span class="f-title">{p.title}</span>
+                <span class="f-ex">{p.excerpt}</span>
               </span>
-              <span class="row-title block mt-xs mb-2 font-bold text-rowtitle tracking-title text-paper">{p.title}</span>
-              <span class="row-excerpt block max-w-[62ch] text-note leading-excerpt text-ink-muted">{p.excerpt}</span>
+              <span class="f-arrow" aria-hidden="true">↗</span>
             </span>
-            <span class="row-arrow" aria-hidden="true">↗</span>
           </a>
         </li>
       ))}
     </ul>
   </div>
+
+  <!-- cursor-glued preview chip (desktop, motion-permitting) -->
+  <div class="chip corners" data-chip-el aria-hidden="true">
+    <span class="ck tl"></span><span class="ck tr"></span><span class="ck bl"></span><span class="ck br"></span>
+    <span class="cover cover-1 on"></span>
+    <span class="cover cover-2"></span>
+    <span class="cover cover-3"></span>
+    <span class="chip-tag">FIG — WP/01</span>
+  </div>
 </section>
 
 <style>
-  /* Retained: hover focus-pull (sibling-hover dimming — not expressible as
-     utilities) and the row-link transition that animates it. The screenshot
-     diff is captured WITHOUT hover, so these rules are not diff-verified. */
-  .row-link {
-    transition: opacity 0.3s ease, background-color 0.3s ease;
-  }
-  /* focus-pull: dim siblings when the feed is hovered, restore the hovered row.
-     opacity-only (no blur) so it stays fully composited / 120fps-safe. */
-  .feed:hover .row-link { opacity: 0.4; }
-  .feed .row-link:hover { opacity: 1; background-color: rgb(111 202 214 / 0.03); }
+  .sec-title { font-weight: 800; letter-spacing: -0.03em; line-height: 1.02; }
 
-  .node {
-    width: 11px; height: 11px; margin-top: 0.5rem;
-    border: 1px solid var(--color-bronze);
-    border-radius: 50%;
-    transition: background-color 0.25s ease;
+  .feed {
+    list-style: none;
+    margin: clamp(3rem, 7vh, 5rem) 0 0;
+    padding: 0;
+    border-top: 1px solid var(--color-hairline);
   }
-  .row-link:hover .node { background-color: var(--color-bronze); }
-
-  .row-arrow {
+  .frow {
+    display: block;
+    position: relative;
+    border-bottom: 1px solid var(--color-hairline);
+    overflow: hidden;
+    text-decoration: none;
+  }
+  .f-wipe {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, rgb(111 202 214 / 0.07), rgb(111 202 214 / 0.02));
+    clip-path: inset(0 100% 0 0);
+    pointer-events: none;
+  }
+  .f-in {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: clamp(1.2rem, 3vw, 2.6rem);
+    align-items: baseline;
+    padding: clamp(1.5rem, 3.5vh, 2.4rem) 0.5rem;
+    position: relative;
+  }
+  .f-id {
+    font-family: var(--font-mono);
+    font-size: clamp(1.6rem, 3vw, 2.6rem);
+    font-weight: 300;
+    line-height: 1;
+    color: transparent;
+    -webkit-text-stroke: 1px rgb(176 141 87 / 0.4);
+    transition: color 0.4s ease;
+  }
+  .frow.active .f-id { color: var(--color-bronze); -webkit-text-stroke: 1px transparent; }
+  .f-meta {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 0.6rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--color-ink-faint);
+    margin-bottom: 0.4rem;
+  }
+  .f-title {
+    display: block;
+    font-size: clamp(1.3rem, 2.5vw, 2.1rem);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.12;
+    color: var(--color-paper);
+    transition: color 0.4s ease;
+  }
+  .f-ex {
+    display: block;
+    margin-top: 0.55rem;
+    max-width: 58ch;
+    font-size: 0.85rem;
+    line-height: 1.6;
+    color: var(--color-ink-faint);
+    transition: opacity 0.45s ease, transform 0.45s ease;
+  }
+  .f-arrow {
+    font-size: 1.3rem;
     color: var(--color-cyan);
-    font-size: 1.15rem;
-    transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+    transition: opacity 0.4s ease, transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
   }
-  .row-link:hover .row-arrow { transform: translate(3px, -3px); }
+  .frow:hover .f-arrow { transform: translate(4px, -4px); }
+
+  /* dimmed/folded resting states only when the band choreography runs */
+  @media (prefers-reduced-motion: no-preference) {
+    :global(.reveal-ready) .f-title { color: rgb(236 237 240 / 0.38); }
+    :global(.reveal-ready) .frow.active .f-title { color: var(--color-paper); }
+    :global(.reveal-ready) .f-ex { opacity: 0; transform: translateY(6px); }
+    :global(.reveal-ready) .frow.active .f-ex { opacity: 1; transform: none; }
+    :global(.reveal-ready) .f-arrow { opacity: 0.25; }
+    :global(.reveal-ready) .frow.active .f-arrow { opacity: 1; }
+  }
+
+  /* cursor-glued preview chip */
+  .chip {
+    position: fixed;
+    z-index: 75;
+    top: 0;
+    left: 0;
+    width: 230px;
+    aspect-ratio: 16 / 10;
+    pointer-events: none;
+    border: 1px solid var(--color-hairline);
+    overflow: hidden;
+    opacity: 0;
+    background: var(--color-surface);
+  }
+  .chip .cover { position: absolute; inset: 0; opacity: 0; transition: opacity 0.35s ease; }
+  .chip .cover.on { opacity: 1; }
+  .cover-1 { background: radial-gradient(70% 90% at 30% 20%, rgb(111 202 214 / 0.4), transparent 60%), linear-gradient(140deg, #0e3236, #07191b); }
+  .cover-2 { background: radial-gradient(70% 90% at 70% 30%, rgb(176 141 87 / 0.45), transparent 65%), linear-gradient(160deg, #11302a, #060f0e); }
+  .cover-3 { background: radial-gradient(80% 80% at 40% 70%, rgb(146 194 203 / 0.35), transparent 60%), linear-gradient(120deg, #1b2b33, #0a1216); }
+  .chip-tag {
+    position: absolute;
+    bottom: 0.5rem;
+    left: 0.6rem;
+    font-family: var(--font-mono);
+    font-size: 0.52rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: rgb(236 237 240 / 0.85);
+  }
+  @media (max-width: 820px), (prefers-reduced-motion: reduce) {
+    .chip { display: none; }
+  }
 </style>

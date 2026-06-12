@@ -290,6 +290,85 @@
   }
   .accent-link:hover { opacity: 0.7; }
 
+  /* ── section-redesign primitives (01 About / 02 Projects / 03 Papers) ──
+     Shared by the three redesigned sections; animated by section-effects.ts. */
+  .sec-head {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 2rem;
+  }
+  .sec-kicker {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--color-bronze);
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+  }
+  .sec-kicker::after {
+    content: '';
+    width: 56px;
+    height: 1px;
+    background: rgb(176 141 87 / 0.4);
+  }
+
+  /* oversized outlined index — the number as section marker */
+  .ghost-index {
+    font-family: var(--font-mono);
+    font-size: clamp(5rem, 14vw, 11rem);
+    font-weight: 300;
+    line-height: 0.8;
+    color: transparent;
+    -webkit-text-stroke: 1px rgb(176 141 87 / 0.35);
+    user-select: none;
+  }
+
+  /* masked line reveal: hidden state only under .reveal-ready (motion-gated,
+     same tradeoff as data-reveal); section-effects.ts animates spans to 0. */
+  .sec-title .ln { display: block; overflow: hidden; }
+  .sec-title .ln > span { display: block; }
+  @media (prefers-reduced-motion: no-preference) {
+    .reveal-ready .sec-title .ln > span { transform: translateY(112%); }
+  }
+
+  /* rolling-letter link — chars split by section-effects.ts; no-JS = plain link */
+  .roll-link {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--color-cyan);
+    text-decoration: none;
+    white-space: nowrap;
+    display: inline-flex;
+    gap: 0.05em;
+  }
+  .roll-link .ch { display: inline-block; position: relative; overflow: hidden; height: 1.1em; }
+  .roll-link .ch i {
+    display: block;
+    font-style: normal;
+    transition: transform 0.5s cubic-bezier(0.87, 0, 0.13, 1);
+    transition-delay: calc(var(--i) * 24ms);
+  }
+  .roll-link .ch i.dup { position: absolute; top: 100%; left: 0; }
+  .roll-link:hover .ch i { transform: translateY(-100%); }
+
+  /* crosshair corner marks (instrument/viewfinder motif) */
+  .corners { position: relative; }
+  .corners .ck { position: absolute; width: 14px; height: 14px; z-index: 3; pointer-events: none; }
+  .corners .ck::before,
+  .corners .ck::after { content: ''; position: absolute; background: rgb(236 237 240 / 0.55); }
+  .corners .ck::before { width: 100%; height: 1px; top: 50%; }
+  .corners .ck::after { height: 100%; width: 1px; left: 50%; }
+  .corners .ck.tl { top: -7px; left: -7px; }
+  .corners .ck.tr { top: -7px; right: -7px; }
+  .corners .ck.bl { bottom: -7px; left: -7px; }
+  .corners .ck.br { bottom: -7px; right: -7px; }
+
   /* scroll-reveal system (FIELD-style: IntersectionObserver + CSS, native scroll).
      Hidden state only applies once JS adds .reveal-ready to <html> (pre-paint,
      and only when motion is allowed) — so no-JS / reduced-motion shows everything. */

@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Delta · Sections 01/02/03 Redesign — Baffait-inspired</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500&family=Inter:wght@300;400;500;700;800&display=swap" rel="stylesheet" />
+<style>
+  /* ── Delta tokens (approx — real site: Mona Sans / Moonscape Serif / Noplato Mono) ── */
+  :root {
+    --base:      #050606;
+    --surface:   #0b2c2e;
+    --paper:     #ecedf0;
+    --ink-muted: #8fa3a5;
+    --ink-faint: #5c7173;
+    --cyan:      #6fcad6;
+    --cyan-mut:  #92c2cb;
+    --bronze:    #b08d57;
+    --hairline:  rgba(236,237,240,0.10);
+    --font-sans: 'Inter', system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+    --font-serif: Georgia, 'Times New Roman', serif;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { background: var(--base); }
+  body {
+    background: var(--base);
+    color: var(--paper);
+    font-family: var(--font-sans);
+    overflow-x: clip;
+  }
+  ::selection { background: var(--cyan); color: var(--base); }
+
+  .grain {
+    position: fixed; inset: 0; z-index: 60; pointer-events: none; opacity: 0.04;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  .wrap { max-width: 1280px; margin: 0 auto; padding-inline: clamp(1.25rem, 4vw, 4rem); }
+
+  /* ── preview banner ── */
+  .banner {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 70;
+    display: flex; justify-content: space-between; padding: 0.7rem 1.25rem;
+    background: rgba(5,6,6,0.8); backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--hairline);
+    font-family: var(--font-mono); font-size: 0.62rem;
+    letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-faint);
+  }
+  .banner b { color: var(--cyan); font-weight: 400; }
+
+  /* ── hero stub (context only) ── */
+  .hero-stub {
+    min-height: 92vh;
+    display: flex; flex-direction: column; justify-content: flex-end;
+    padding-bottom: 6vh;
+    background: radial-gradient(ellipse 55% 50% at 68% 30%, rgba(111,202,214,0.09), transparent 68%), var(--base);
+  }
+  .hero-stub h1 {
+    font-size: clamp(2.4rem, 6.5vw, 6rem); font-weight: 800;
+    line-height: 0.9; letter-spacing: -0.035em;
+  }
+  .hero-stub .accent { font-family: var(--font-serif); font-style: italic; color: var(--cyan); font-weight: 700; }
+  .hero-stub .hint {
+    margin-top: 2.5rem; font-family: var(--font-mono); font-size: 0.62rem;
+    letter-spacing: 0.22em; text-transform: uppercase; color: var(--ink-faint);
+  }
+
+  /* ════════════════════════════════════════════════════════════
+     SHARED SECTION LANGUAGE
+     ════════════════════════════════════════════════════════════ */
+  .sec-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 2rem; }
+
+  /* oversized ghost index — the number IS the section marker */
+  .ghost-index {
+    font-family: var(--font-mono);
+    font-size: clamp(5rem, 14vw, 11rem);
+    font-weight: 300;
+    line-height: 0.8;
+    color: transparent;
+    -webkit-text-stroke: 1px rgba(176, 141, 87, 0.35);
+    user-select: none;
+    display: block;
+  }
+  .sec-kicker {
+    font-family: var(--font-mono); font-size: 0.7rem;
+    letter-spacing: 0.22em; text-transform: uppercase; color: var(--bronze);
+    margin-bottom: 1rem; display: flex; align-items: center; gap: 0.8rem;
+  }
+  .sec-kicker::after { content: ''; width: 56px; height: 1px; background: rgba(176,141,87,0.4); }
+
+  /* masked line reveal for titles */
+  .sec-title {
+    font-size: clamp(2.2rem, 4.6vw, 4.2rem);
+    font-weight: 800; letter-spacing: -0.03em; line-height: 1.02;
+  }
+  .sec-title .ln { display: block; overflow: hidden; }
+  .sec-title .ln > span { display: block; transform: translateY(112%); }
+  .sec-title em { font-family: var(--font-serif); font-style: italic; font-weight: 700; color: var(--cyan); letter-spacing: 0; }
+
+  /* rolling-letter accent links */
+  .roll-link {
+    font-family: var(--font-mono); font-size: 0.78rem;
+    letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--cyan); text-decoration: none; white-space: nowrap;
+    display: inline-flex; gap: 0.05em;
+  }
+  .roll-link .ch { display: inline-block; position: relative; overflow: hidden; height: 1.1em; }
+  .roll-link .ch i { display: block; font-style: normal; transition: transform 0.5s cubic-bezier(0.87, 0, 0.13, 1); transition-delay: calc(var(--i) * 24ms); }
+  .roll-link .ch i.dup { position: absolute; top: 100%; left: 0; }
+  .roll-link:hover .ch i { transform: translateY(-100%); }
+  .roll-link .arrow { color: var(--cyan); }
+
+  /* crosshair corner marks (instrument motif) */
+  .corners { position: relative; }
+  .corners .ck {
+    position: absolute; width: 14px; height: 14px; z-index: 3; pointer-events: none;
+  }
+  .corners .ck::before, .corners .ck::after { content: ''; position: absolute; background: rgba(236,237,240,0.55); }
+  .corners .ck::before { width: 100%; height: 1px; top: 50%; }
+  .corners .ck::after  { height: 100%; width: 1px; left: 50%; }
+  .corners .ck.tl { top: -7px; left: -7px; }
+  .corners .ck.tr { top: -7px; right: -7px; }
+  .corners .ck.bl { bottom: -7px; left: -7px; }
+  .corners .ck.br { bottom: -7px; right: -7px; }
+
+  /* ════════════════════════════════════════════════════════════
+     01 — ABOUT  (asymmetric editorial + scrub-blur statement)
+     ════════════════════════════════════════════════════════════ */
+  #about { padding-block: clamp(6rem, 14vh, 11rem); position: relative; }
+
+  .about-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 7fr) minmax(0, 4fr);
+    gap: clamp(2rem, 6vw, 6rem);
+    align-items: start;
+    margin-top: clamp(2.5rem, 6vh, 4.5rem);
+  }
+
+  /* the statement — scrub-blur word reveal */
+  .statement {
+    font-size: clamp(1.45rem, 2.6vw, 2.4rem);
+    font-weight: 500;
+    line-height: 1.38;
+    letter-spacing: -0.01em;
+    color: var(--paper);
+    max-width: 24ch;
+  }
+  .statement .w { display: inline-block; white-space: pre-wrap; opacity: 0.08; filter: blur(7px); will-change: opacity, filter; }
+  .statement .em { font-family: var(--font-serif); font-style: italic; color: var(--cyan); font-weight: 700; }
+
+  /* offset sub-paragraph (editorial asymmetry) */
+  .about-sub {
+    margin-top: clamp(2.5rem, 6vh, 4rem);
+    margin-left: 22%;
+    max-width: 44ch;
+    font-size: 0.95rem;
+    line-height: 1.65;
+    color: var(--ink-muted);
+  }
+
+  /* pillars — scroll-activated rows (center band) */
+  .pillars { list-style: none; margin-top: clamp(3rem, 7vh, 5rem); border-top: 1px solid var(--hairline); }
+  .pillar {
+    display: grid; grid-template-columns: auto 1fr auto;
+    gap: 1.4rem; align-items: baseline;
+    padding: 1.35rem 0.25rem;
+    border-bottom: 1px solid var(--hairline);
+    position: relative; overflow: hidden;
+  }
+  .pillar .wipe {
+    position: absolute; inset: 0; background: rgba(111,202,214,0.05);
+    clip-path: inset(0 100% 0 0); pointer-events: none;
+  }
+  .pillar .p-id { font-family: var(--font-mono); font-size: 0.65rem; color: var(--bronze); }
+  .pillar .p-k { font-weight: 700; font-size: 1.05rem; letter-spacing: -0.01em; color: var(--ink-muted); transition: color 0.4s ease; }
+  .pillar .p-v { font-family: var(--font-mono); font-size: 0.62rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-faint); text-align: right; }
+  .pillar.active .p-k { color: var(--paper); }
+
+  /* FIG panel — parallax + crosshair corners */
+  .about-visual { position: sticky; top: 14vh; }
+  .fig {
+    position: relative; overflow: hidden;
+    aspect-ratio: 4 / 5;
+    border: 1px solid var(--hairline);
+    background: radial-gradient(80% 80% at 70% 20%, rgba(111,202,214,0.08), transparent 60%), var(--surface);
+  }
+  .fig .fig-bg {
+    position: absolute; inset: -18% -6%;
+    background:
+      radial-gradient(42% 50% at 30% 32%, rgba(176,141,87,0.25), transparent 70%),
+      radial-gradient(50% 60% at 75% 75%, rgba(111,202,214,0.14), transparent 70%);
+    will-change: transform;
+  }
+  .fig .fig-grid {
+    position: absolute; inset: 0; opacity: 0.16;
+    background-image:
+      linear-gradient(rgba(236,237,240,0.25) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(236,237,240,0.25) 1px, transparent 1px);
+    background-size: 56px 56px;
+    mask-image: radial-gradient(80% 80% at 50% 45%, black, transparent 75%);
+  }
+  .fig-tag {
+    position: absolute; top: 0.9rem; left: 0.9rem; z-index: 2;
+    font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 0.18em;
+    text-transform: uppercase; color: var(--cyan-mut);
+  }
+  .fig-meta {
+    position: absolute; bottom: 0.9rem; right: 0.9rem; z-index: 2;
+    font-family: var(--font-mono); font-size: 0.55rem; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--ink-faint); text-align: right; line-height: 1.7;
+  }
+
+  /* ════════════════════════════════════════════════════════════
+     02 — PROJECTS  (pinned set piece: list + fixed preview)
+     ════════════════════════════════════════════════════════════ */
+  #projects-wrap { height: 340vh; position: relative; }
+  #projects-pin {
+    position: sticky; top: 0; height: 100vh; overflow: hidden;
+    display: flex; flex-direction: column; justify-content: center;
+    border-top: 1px solid var(--hairline);
+  }
+
+  .proj-head { position: absolute; top: clamp(3.5rem, 8vh, 5.5rem); left: 0; right: 0; }
+
+  .proj-cols {
+    display: grid;
+    grid-template-columns: minmax(0, 46fr) minmax(0, 44fr);
+    gap: clamp(2rem, 6vw, 6rem);
+    align-items: center;
+    margin-top: clamp(4rem, 10vh, 7rem);
+  }
+
+  .proj-list { list-style: none; }
+  .proj-item {
+    padding: 1.5rem 0;
+    border-bottom: 1px solid var(--hairline);
+    cursor: pointer;
+    will-change: transform;
+  }
+  .proj-item:first-child { border-top: 1px solid var(--hairline); }
+  .proj-item .pi-meta {
+    display: flex; gap: 1rem; align-items: baseline;
+    font-family: var(--font-mono); font-size: 0.6rem;
+    letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-faint);
+    margin-bottom: 0.45rem;
+  }
+  .proj-item .pi-meta .pid { color: var(--bronze); }
+  .proj-item .pi-title {
+    font-size: clamp(1.6rem, 3.2vw, 2.7rem);
+    font-weight: 800; letter-spacing: -0.025em; line-height: 1.05;
+    color: rgba(236,237,240,0.26);
+    transition: color 0.45s ease;
+  }
+  .proj-item.active .pi-title { color: var(--paper); }
+  .proj-item .pi-tags {
+    margin-top: 0.5rem;
+    font-family: var(--font-mono); font-size: 0.62rem;
+    letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--cyan-mut); opacity: 0; transform: translateY(4px);
+    transition: opacity 0.45s ease, transform 0.45s ease;
+  }
+  .proj-item.active .pi-tags { opacity: 1; transform: none; }
+
+  /* fixed preview card */
+  .proj-preview { perspective: 900px; }
+  .pcard {
+    position: relative;
+    aspect-ratio: 16 / 11;
+    border: 1px solid var(--hairline);
+    overflow: hidden;
+    background: var(--surface);
+    transform-style: preserve-3d;
+    will-change: transform;
+  }
+  .pcard .cover {
+    position: absolute; inset: 0;
+    opacity: 0; transform: scale(1.06);
+    transition: opacity 0.5s ease, transform 0.9s cubic-bezier(0.2, 0, 0, 1);
+  }
+  .pcard .cover.on { opacity: 1; transform: scale(1); }
+  .cover-1 { background: radial-gradient(70% 90% at 30% 20%, rgba(111,202,214,0.35), transparent 60%), linear-gradient(140deg, #0e3236, #07191b); }
+  .cover-2 { background: radial-gradient(70% 90% at 70% 30%, rgba(176,141,87,0.4), transparent 65%), linear-gradient(160deg, #11302a, #060f0e); }
+  .cover-3 { background: radial-gradient(80% 80% at 40% 70%, rgba(146,194,203,0.3), transparent 60%), linear-gradient(120deg, #1b2b33, #0a1216); }
+  .pcard .p-meta {
+    position: absolute; top: 0.8rem; left: 0.9rem; right: 0.9rem; z-index: 2;
+    display: flex; justify-content: space-between;
+    font-family: var(--font-mono); font-size: 0.58rem;
+    letter-spacing: 0.16em; text-transform: uppercase; color: rgba(236,237,240,0.7);
+  }
+  .pcard .p-count {
+    position: absolute; bottom: 0.8rem; right: 0.9rem; z-index: 2;
+    font-family: var(--font-mono); font-size: 0.62rem; color: var(--cyan);
+    letter-spacing: 0.1em;
+  }
+
+  /* pill cursor */
+  #pill-cursor {
+    position: fixed; z-index: 80; top: 0; left: 0;
+    pointer-events: none;
+    background: var(--cyan); color: var(--base);
+    font-family: var(--font-mono); font-size: 0.62rem; font-weight: 500;
+    letter-spacing: 0.14em; text-transform: uppercase;
+    padding: 0.7rem 1.1rem; border-radius: 99px;
+    transform: translate(-50%, -50%) scale(0);
+    white-space: nowrap;
+  }
+
+  /* progress rail for the pinned section */
+  .proj-rail {
+    position: absolute; right: clamp(1.25rem, 4vw, 4rem); top: 50%;
+    transform: translateY(-50%);
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .proj-rail .seg { width: 2px; height: 34px; background: rgba(236,237,240,0.12); position: relative; overflow: hidden; }
+  .proj-rail .seg i { position: absolute; inset: 0; background: var(--cyan); transform: scaleY(0); transform-origin: top; display: block; }
+
+  /* ════════════════════════════════════════════════════════════
+     03 — WHITE PAPERS  (center-band activated index rows)
+     ════════════════════════════════════════════════════════════ */
+  #papers { padding-block: clamp(6rem, 14vh, 11rem); position: relative; }
+
+  .feed { list-style: none; margin-top: clamp(3rem, 7vh, 5rem); border-top: 1px solid var(--hairline); }
+  .frow {
+    position: relative;
+    border-bottom: 1px solid var(--hairline);
+    overflow: hidden;
+    cursor: pointer;
+  }
+  .frow .f-wipe {
+    position: absolute; inset: 0;
+    background: linear-gradient(90deg, rgba(111,202,214,0.07), rgba(111,202,214,0.02));
+    clip-path: inset(0 100% 0 0);
+    pointer-events: none;
+  }
+  .frow .f-in {
+    display: grid;
+    grid-template-columns: auto minmax(0,1fr) auto;
+    gap: clamp(1.2rem, 3vw, 2.6rem);
+    align-items: baseline;
+    padding: clamp(1.5rem, 3.5vh, 2.4rem) 0.5rem;
+    position: relative;
+  }
+  .frow .f-id {
+    font-family: var(--font-mono);
+    font-size: clamp(1.6rem, 3vw, 2.6rem);
+    font-weight: 300;
+    color: transparent;
+    -webkit-text-stroke: 1px rgba(176,141,87,0.4);
+    transition: color 0.4s ease;
+    line-height: 1;
+  }
+  .frow.active .f-id { color: var(--bronze); -webkit-text-stroke: 1px transparent; }
+  .frow .f-meta {
+    font-family: var(--font-mono); font-size: 0.6rem;
+    letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-faint);
+    margin-bottom: 0.4rem; display: block;
+  }
+  .frow .f-title {
+    font-size: clamp(1.3rem, 2.5vw, 2.1rem);
+    font-weight: 700; letter-spacing: -0.02em; line-height: 1.12;
+    color: rgba(236,237,240,0.38);
+    transition: color 0.4s ease;
+    display: block;
+  }
+  .frow.active .f-title { color: var(--paper); }
+  .frow .f-ex {
+    display: block; margin-top: 0.55rem; max-width: 58ch;
+    font-size: 0.85rem; line-height: 1.6; color: var(--ink-faint);
+    opacity: 0; transform: translateY(6px);
+    transition: opacity 0.45s ease, transform 0.45s ease;
+  }
+  .frow.active .f-ex { opacity: 1; transform: none; }
+  .frow .f-arrow {
+    font-size: 1.3rem; color: var(--cyan);
+    opacity: 0.25; transition: opacity 0.4s ease, transform 0.4s cubic-bezier(0.2,0.8,0.2,1);
+  }
+  .frow.active .f-arrow { opacity: 1; }
+  .frow:hover .f-arrow { transform: translate(4px, -4px); }
+
+  /* cursor-glued preview chip */
+  #chip {
+    position: fixed; z-index: 75; top: 0; left: 0;
+    width: 230px; aspect-ratio: 16/10;
+    pointer-events: none;
+    border: 1px solid var(--hairline);
+    opacity: 0; transform: translate(-50%, -60%) scale(0.85) rotate(-2deg);
+    overflow: hidden;
+  }
+  #chip .chip-bg { position: absolute; inset: 0; }
+  #chip .chip-tag {
+    position: absolute; bottom: 0.5rem; left: 0.6rem;
+    font-family: var(--font-mono); font-size: 0.52rem;
+    letter-spacing: 0.16em; text-transform: uppercase; color: rgba(236,237,240,0.85);
+  }
+
+  .end-stub {
+    min-height: 60vh; display: grid; place-items: center;
+    border-top: 1px solid var(--hairline);
+    font-family: var(--font-mono); font-size: 0.65rem; letter-spacing: 0.2em;
+    text-transform: uppercase; color: var(--ink-faint);
+  }
+
+  /* ── mobile degradation ── */
+  @media (max-width: 860px) {
+    .about-grid { grid-template-columns: 1fr; }
+    .about-visual { position: relative; top: 0; max-width: 420px; }
+    .about-sub { margin-left: 8%; }
+    #projects-wrap { height: auto; }
+    #projects-pin { position: relative; height: auto; padding-block: 5rem; overflow: visible; }
+    .proj-head { position: relative; top: 0; }
+    .proj-cols { grid-template-columns: 1fr; margin-top: 2.5rem; }
+    .proj-preview { display: none; }
+    .proj-rail { display: none; }
+    .proj-item .pi-title { color: var(--paper); }
+    #chip, #pill-cursor { display: none; }
+    .frow .f-title { color: var(--paper); }
+    .frow .f-ex { opacity: 1; transform: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="banner">
+  <span>Delta — sections <b>01 About · 02 Projects · 03 White Papers</b> redesign preview</span>
+  <span>scroll slowly · gsap + scrolltrigger + lenis live</span>
+</div>
+<div class="grain"></div>
+
+<!-- hero stub -->
+<header class="hero-stub">
+  <div class="wrap">
+    <h1>Navigating the systems<br>of a <span class="accent">changing planet.</span></h1>
+    <p class="hint">↓ scroll — the three sections below are the redesign</p>
+  </div>
+</header>
+
+<!-- ════════════════ 01 ABOUT ════════════════ -->
+<section id="about">
+  <div class="wrap">
+    <div class="sec-head">
+      <div>
+        <p class="sec-kicker">01 — About</p>
+        <h2 class="sec-title">
+          <span class="ln"><span>Between the data</span></span>
+          <span class="ln"><span>and the <em>decision.</em></span></span>
+        </h2>
+      </div>
+      <span class="ghost-index" aria-hidden="true">01</span>
+    </div>
+
+    <div class="about-grid">
+      <div>
+        <p class="statement" id="statement">
+          Delta sits between raw earth-science data and the institutions that must act on it — turning <span class="em">decision-grade</span> measurement into standards-aligned, <span class="em">defensible</span> adaptation strategy.
+        </p>
+
+        <p class="about-sub">
+          A boutique consultancy bridging climate science, urban-heat research and
+          industrial strategy — built for institutions, municipalities and corporates
+          that need their next move to hold up under scrutiny.
+        </p>
+
+        <ul class="pillars">
+          <li class="pillar" data-band>
+            <span class="wipe"></span>
+            <span class="p-id">/01</span>
+            <span class="p-k">Climate science</span>
+            <span class="p-v">Remote sensing · MRV · carbon accounting</span>
+          </li>
+          <li class="pillar" data-band>
+            <span class="wipe"></span>
+            <span class="p-id">/02</span>
+            <span class="p-k">Urban heat</span>
+            <span class="p-v">LST · vulnerability indices</span>
+          </li>
+          <li class="pillar" data-band>
+            <span class="wipe"></span>
+            <span class="p-id">/03</span>
+            <span class="p-k">Industrial strategy</span>
+            <span class="p-v">Embodied carbon · trade compliance</span>
+          </li>
+        </ul>
+      </div>
+
+      <aside class="about-visual">
+        <div class="fig corners">
+          <span class="ck tl"></span><span class="ck tr"></span><span class="ck bl"></span><span class="ck br"></span>
+          <span class="fig-bg" id="fig-bg"></span>
+          <span class="fig-grid"></span>
+          <span class="fig-tag">FIG. 01 — SYSTEMS MAP</span>
+          <span class="fig-meta">22.5726°N · 88.3639°E<br>EOS / ECOSTRESS</span>
+        </div>
+      </aside>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════ 02 PROJECTS (pinned) ════════════════ -->
+<div id="projects-wrap">
+  <section id="projects-pin">
+    <div class="wrap proj-head">
+      <div class="sec-head">
+        <div>
+          <p class="sec-kicker">02 — Projects</p>
+          <h2 class="sec-title">
+            <span class="ln"><span>Proof, before <em>theory.</em></span></span>
+          </h2>
+        </div>
+        <a class="roll-link" href="#" data-roll>All case studies <span class="arrow">↗</span></a>
+      </div>
+    </div>
+
+    <div class="wrap proj-cols">
+      <ul class="proj-list" id="proj-list">
+        <li class="proj-item" data-idx="0">
+          <div class="pi-meta"><span class="pid">01</span><span>Urban heat mitigation</span></div>
+          <div class="pi-title">Project Kolkata</div>
+          <div class="pi-tags">ECOSTRESS · HVI — street-scale heat diagnostics to ward-level spec</div>
+        </li>
+        <li class="proj-item" data-idx="1">
+          <div class="pi-meta"><span class="pid">02</span><span>Biochar sequestration</span></div>
+          <div class="pi-title">Mangrove Blue Carbon</div>
+          <div class="pi-tags">VERRA VM0033 · MRV — soil-carbon-rigorous restoration accounting</div>
+        </li>
+        <li class="proj-item" data-idx="2">
+          <div class="pi-meta"><span class="pid">03</span><span>UAE–India corridor</span></div>
+          <div class="pi-title">Sustainable Materials Trading</div>
+          <div class="pi-tags">EPD · CBAM — embodied-carbon dossiers for exporters</div>
+        </li>
+      </ul>
+
+      <div class="proj-preview">
+        <div class="pcard corners" id="pcard">
+          <span class="ck tl"></span><span class="ck tr"></span><span class="ck bl"></span><span class="ck br"></span>
+          <span class="cover cover-1 on" data-cover="0"></span>
+          <span class="cover cover-2" data-cover="1"></span>
+          <span class="cover cover-3" data-cover="2"></span>
+          <span class="p-meta"><span id="p-meta-l">CASE — 01</span><span>PREVIEW</span></span>
+          <span class="p-count" id="p-count">01 / 03</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="proj-rail" aria-hidden="true">
+      <span class="seg"><i data-seg="0"></i></span>
+      <span class="seg"><i data-seg="1"></i></span>
+      <span class="seg"><i data-seg="2"></i></span>
+    </div>
+  </section>
+</div>
+
+<!-- ════════════════ 03 WHITE PAPERS ════════════════ -->
+<section id="papers">
+  <div class="wrap">
+    <div class="sec-head">
+      <div>
+        <p class="sec-kicker">03 — White Papers</p>
+        <h2 class="sec-title">
+          <span class="ln"><span>The thinking</span></span>
+          <span class="ln"><span><em>behind</em> the work.</span></span>
+        </h2>
+      </div>
+      <a class="roll-link" href="#" data-roll>All white papers <span class="arrow">↗</span></a>
+    </div>
+
+    <ul class="feed">
+      <li class="frow" data-band data-chip="1">
+        <span class="f-wipe"></span>
+        <div class="f-in">
+          <span class="f-id">01</span>
+          <span>
+            <span class="f-meta">2026.05 — Blue carbon</span>
+            <span class="f-title">Soil organic carbon accounting under VM0033</span>
+            <span class="f-ex">Belowground biomass and sediment-core MRV for tidal-wetland restoration — why SOC defensibility separates premium credits.</span>
+          </span>
+          <span class="f-arrow">↗</span>
+        </div>
+      </li>
+      <li class="frow" data-band data-chip="2">
+        <span class="f-wipe"></span>
+        <div class="f-in">
+          <span class="f-id">02</span>
+          <span>
+            <span class="f-meta">2026.04 — Urban heat</span>
+            <span class="f-title">Street-scale heat vulnerability from ECOSTRESS</span>
+            <span class="f-ex">Downscaling 70 m land-surface temperature into a sub-block Heat Vulnerability Index for dense Indian wards.</span>
+          </span>
+          <span class="f-arrow">↗</span>
+        </div>
+      </li>
+      <li class="frow" data-band data-chip="3">
+        <span class="f-wipe"></span>
+        <div class="f-in">
+          <span class="f-id">03</span>
+          <span>
+            <span class="f-meta">2026.03 — Materials · CBAM</span>
+            <span class="f-title">Embodied-carbon dossiers for the India–UAE corridor</span>
+            <span class="f-ex">EPD generation under ISO 14025 and CBAM emissions data for cement, steel and aluminium exporters.</span>
+          </span>
+          <span class="f-arrow">↗</span>
+        </div>
+      </li>
+    </ul>
+  </div>
+</section>
+
+<div class="end-stub"><span>— Medni · CTA · footer continue below (unchanged) —</span></div>
+
+<!-- floating UI -->
+<div id="pill-cursor">View case</div>
+<div id="chip"><span class="chip-bg" id="chip-bg"></span><span class="chip-tag" id="chip-tag">PREVIEW — FIG</span></div>
+
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/lenis@1.1.13/dist/lenis.min.js"></script>
+<script>
+gsap.registerPlugin(ScrollTrigger);
+
+/* ── Lenis (heavy, floaty — Baffait uses 0.06) ── */
+const lenis = new Lenis({ lerp: 0.07 });
+lenis.on('scroll', ScrollTrigger.update);
+gsap.ticker.add((t) => lenis.raf(t * 1000));
+gsap.ticker.lagSmoothing(0);
+
+const isMobile = matchMedia('(max-width: 860px)').matches;
+
+/* ── rolling-letter links ── */
+document.querySelectorAll('[data-roll]').forEach((link) => {
+  const arrow = link.querySelector('.arrow');
+  const text = link.childNodes[0].textContent;
+  link.childNodes[0].remove();
+  const frag = document.createDocumentFragment();
+  [...text].forEach((c, i) => {
+    const ch = document.createElement('span');
+    ch.className = 'ch';
+    ch.style.setProperty('--i', i);
+    if (c === ' ') { ch.innerHTML = '<i>&nbsp;</i><i class="dup">&nbsp;</i>'; }
+    else ch.innerHTML = `<i>${c}</i><i class="dup">${c}</i>`;
+    frag.appendChild(ch);
+  });
+  link.insertBefore(frag, arrow);
+});
+
+/* ── masked title line reveals ── */
+document.querySelectorAll('.sec-title').forEach((title) => {
+  gsap.to(title.querySelectorAll('.ln > span'), {
+    y: 0, duration: 1.05, ease: 'power3.out', stagger: 0.09,
+    scrollTrigger: { trigger: title, start: 'top 86%' },
+  });
+});
+
+/* ── ghost index drift ── */
+document.querySelectorAll('.ghost-index').forEach((g) => {
+  gsap.fromTo(g, { yPercent: 30, opacity: 0 }, {
+    yPercent: -10, opacity: 1, ease: 'none',
+    scrollTrigger: { trigger: g, start: 'top 95%', end: 'top 30%', scrub: true },
+  });
+});
+
+/* ════ 01 ABOUT ════ */
+/* scrub-blur word reveal */
+const st = document.getElementById('statement');
+(function splitWords(el) {
+  const walk = (node) => {
+    [...node.childNodes].forEach((n) => {
+      if (n.nodeType === 3) {
+        const frag = document.createDocumentFragment();
+        n.textContent.split(/(\s+)/).forEach((part) => {
+          if (!part) return;
+          if (/^\s+$/.test(part)) { frag.appendChild(document.createTextNode(part)); return; }
+          const w = document.createElement('span');
+          w.className = 'w';
+          w.textContent = part;
+          frag.appendChild(w);
+        });
+        n.replaceWith(frag);
+      } else if (n.nodeType === 1) walk(n);
+    });
+  };
+  walk(el);
+})(st);
+
+st.querySelectorAll('.w').forEach((w) => {
+  gsap.to(w, {
+    opacity: 1, filter: 'blur(0px)', ease: 'none',
+    scrollTrigger: { trigger: w, start: 'top 82%', end: 'top 58%', scrub: true },
+  });
+});
+
+/* fig parallax */
+gsap.fromTo('#fig-bg', { yPercent: -14 }, {
+  yPercent: 14, ease: 'none',
+  scrollTrigger: { trigger: '.about-visual', start: 'top bottom', end: 'bottom top', scrub: true },
+});
+
+/* center-band activation (pillars + paper rows) */
+document.querySelectorAll('[data-band]').forEach((row) => {
+  ScrollTrigger.create({
+    trigger: row,
+    start: 'top 62%',
+    end: 'bottom 38%',
+    onToggle: (self) => {
+      row.classList.toggle('active', self.isActive);
+      const wipe = row.querySelector('.wipe, .f-wipe');
+      if (wipe) gsap.to(wipe, {
+        clipPath: self.isActive ? 'inset(0 0% 0 0)' : 'inset(0 100% 0 0)',
+        duration: 0.6, ease: 'power3.out',
+      });
+    },
+  });
+});
+
+/* ════ 02 PROJECTS — pinned set piece ════ */
+if (!isMobile) {
+  const items = [...document.querySelectorAll('.proj-item')];
+  const covers = [...document.querySelectorAll('.pcard .cover')];
+  const segs = [...document.querySelectorAll('[data-seg]')];
+  const metaL = document.getElementById('p-meta-l');
+  const count = document.getElementById('p-count');
+  let active = 0;
+
+  const setActive = (idx) => {
+    if (idx === active) return;
+    active = idx;
+    items.forEach((it, i) => it.classList.toggle('active', i === idx));
+    covers.forEach((c, i) => c.classList.toggle('on', i === idx));
+    metaL.textContent = `CASE — 0${idx + 1}`;
+    count.textContent = `0${idx + 1} / 03`;
+  };
+  items[0].classList.add('active');
+
+  ScrollTrigger.create({
+    trigger: '#projects-wrap',
+    start: 'top top',
+    end: 'bottom bottom',
+    scrub: true,
+    onUpdate: (self) => {
+      const p = self.progress;
+      // 3 zones
+      setActive(p < 0.34 ? 0 : p < 0.67 ? 1 : 2);
+      // segmented rail
+      segs.forEach((s, i) => {
+        const lo = i / 3, hi = (i + 1) / 3;
+        const local = Math.min(1, Math.max(0, (p - lo) / (hi - lo)));
+        s.style.transform = `scaleY(${local})`;
+      });
+      // fisheye push — distance from active
+      items.forEach((it, i) => {
+        const d = Math.abs(i - active);
+        gsap.to(it, { x: d === 0 ? 44 : d === 1 ? 14 : 0, duration: 0.5, ease: 'power2.out', overwrite: 'auto' });
+      });
+    },
+  });
+
+  /* click row → jump scroll to its zone */
+  items.forEach((it, i) => {
+    it.addEventListener('click', () => {
+      const wrap = document.getElementById('projects-wrap');
+      const top = wrap.offsetTop + (wrap.offsetHeight - innerHeight) * (i / 3 + 0.17);
+      lenis.scrollTo(top, { duration: 1.1 });
+    });
+  });
+
+  /* mouse-tilt on preview card */
+  const pcard = document.getElementById('pcard');
+  const tiltX = gsap.quickTo(pcard, 'rotationY', { duration: 0.55, ease: 'power2.out' });
+  const tiltY = gsap.quickTo(pcard, 'rotationX', { duration: 0.55, ease: 'power2.out' });
+  document.getElementById('projects-pin').addEventListener('mousemove', (e) => {
+    const r = pcard.getBoundingClientRect();
+    const nx = (e.clientX - r.left) / r.width - 0.5;
+    const ny = (e.clientY - r.top) / r.height - 0.5;
+    tiltX(nx * 9); tiltY(ny * -7);
+  });
+  document.getElementById('projects-pin').addEventListener('mouseleave', () => { tiltX(0); tiltY(0); });
+
+  /* pill cursor over preview */
+  const pill = document.getElementById('pill-cursor');
+  const px = gsap.quickTo(pill, 'x', { duration: 0.35, ease: 'power3.out' });
+  const py = gsap.quickTo(pill, 'y', { duration: 0.35, ease: 'power3.out' });
+  addEventListener('mousemove', (e) => { px(e.clientX); py(e.clientY); });
+  pcard.addEventListener('mouseenter', () => { gsap.to(pill, { scale: 1, duration: 0.35, ease: 'power3.out' }); pcard.style.cursor = 'none'; });
+  pcard.addEventListener('mouseleave', () => gsap.to(pill, { scale: 0, duration: 0.3, ease: 'power3.in' }));
+}
+
+/* ════ 03 WHITE PAPERS — cursor chip ════ */
+if (!isMobile) {
+  const chip = document.getElementById('chip');
+  const chipBg = document.getElementById('chip-bg');
+  const chipTag = document.getElementById('chip-tag');
+  const cx = gsap.quickTo(chip, 'x', { duration: 0.45, ease: 'power3.out' });
+  const cy = gsap.quickTo(chip, 'y', { duration: 0.45, ease: 'power3.out' });
+  const bgs = {
+    1: 'radial-gradient(70% 90% at 30% 20%, rgba(111,202,214,0.4), transparent 60%), linear-gradient(140deg,#0e3236,#07191b)',
+    2: 'radial-gradient(70% 90% at 70% 30%, rgba(176,141,87,0.45), transparent 65%), linear-gradient(160deg,#11302a,#060f0e)',
+    3: 'radial-gradient(80% 80% at 40% 70%, rgba(146,194,203,0.35), transparent 60%), linear-gradient(120deg,#1b2b33,#0a1216)',
+  };
+  addEventListener('mousemove', (e) => { cx(e.clientX); cy(e.clientY); });
+  document.querySelectorAll('[data-chip]').forEach((row) => {
+    row.addEventListener('mouseenter', () => {
+      chipBg.style.background = bgs[row.dataset.chip];
+      chipTag.textContent = `FIG — WP/0${row.dataset.chip}`;
+      gsap.to(chip, { opacity: 1, scale: 1, rotate: 0, duration: 0.4, ease: 'power3.out' });
+    });
+    row.addEventListener('mouseleave', () => {
+      gsap.to(chip, { opacity: 0, scale: 0.85, rotate: -2, duration: 0.3, ease: 'power3.in' });
+    });
+  });
+}
+</script>
+</body>
+</html>

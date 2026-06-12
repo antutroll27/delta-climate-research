@@ -27,7 +27,9 @@ export function initSmoothScroll() {
   if (!motionOK()) return;
   destroySmoothScroll(); // idempotent re-init
 
-  lenis = new Lenis({ lerp: 0.1, wheelMultiplier: 1, smoothWheel: true });
+  // lerp 0.07 — heavier/floatier glide so scrubbed choreography (statement
+  // blur reveal, projects pin) eases instead of stepping (preview-approved).
+  lenis = new Lenis({ lerp: 0.07, wheelMultiplier: 1, smoothWheel: true });
 
   // Keep ScrollTrigger in sync with Lenis's smoothed scroll position.
   lenis.on('scroll', ScrollTrigger.update);

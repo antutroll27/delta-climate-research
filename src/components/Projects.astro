@@ -1,94 +1,275 @@
 ---
-// Section 3 — Projects. Horizontal-scroll case-study cards.
+// Section 02 — Projects. Baffait-inspired pinned set piece: the section pins
+// for ~3 viewports and the scrollbar drives which case study is active —
+// active row swells + pushes right (fisheye), the preview card crossfades and
+// mouse-tilts in 3D, a cyan pill cursor replaces the OS cursor over it, and a
+// segmented rail tracks progress. Choreography in section-effects.ts.
+// Degrades to a flowing list + static preview (no-JS / reduced-motion / mobile).
 const projects = [
   {
     id: '01',
     title: 'Project Kolkata',
-    sub: 'Urban Heat Mitigation',
-    tags: 'ECOSTRESS · HVI',
-    blurb: 'Street-scale heat diagnostics to ward-level intervention spec.',
+    sub: 'Urban heat mitigation',
+    tags: 'ECOSTRESS · HVI — street-scale heat diagnostics to ward-level spec',
     href: '/projects/kolkata',
   },
   {
     id: '02',
     title: 'Mangrove Blue Carbon',
-    sub: 'Biochar Sequestration',
-    tags: 'VERRA VM0033 · MRV',
-    blurb: 'Soil-carbon-rigorous restoration accounting for premium credits.',
+    sub: 'Biochar sequestration',
+    tags: 'VERRA VM0033 · MRV — soil-carbon-rigorous restoration accounting',
     href: '/projects/mangrove-blue-carbon',
   },
   {
     id: '03',
     title: 'Sustainable Materials Trading',
-    sub: 'UAE–India Corridor',
-    tags: 'EPD · CBAM',
-    blurb: 'Embodied-carbon dossiers and CBAM compliance for exporters.',
+    sub: 'UAE–India corridor',
+    tags: 'EPD · CBAM — embodied-carbon dossiers for exporters',
     href: '/projects/materials-trading',
   },
 ];
 ---
 
-<section id="projects" class="section divider-top" aria-labelledby="projects-title">
-  <span class="draw-line" data-draw aria-hidden="true"></span>
-  <div class="wrap flex items-end justify-between gap-6 mb-head-mb" data-reveal>
-    <div>
-      <p class="sec-index">02 — Projects</p>
-      <h2 id="projects-title" class="sec-title">Proof, before <em>theory.</em></h2>
+<div id="projects" class="proj-wrap">
+  <section class="proj-pin" aria-labelledby="projects-title">
+    <div class="wrap proj-head">
+      <div class="sec-head">
+        <div>
+          <p class="sec-kicker">02 — Projects</p>
+          <h2 id="projects-title" class="sec-title" data-mask>
+            <span class="ln"><span>Proof, before <em>theory.</em></span></span>
+          </h2>
+        </div>
+        <a class="roll-link" href="/projects" data-roll>All case studies <span class="arrow" aria-hidden="true">↗</span></a>
+      </div>
     </div>
-    <a class="accent-link" href="/projects">All case studies ↗</a>
-  </div>
 
-  <div class="wrap">
-    <div class="rail-wrap overflow-x-auto">
-      <ul class="rail grid grid-flow-col auto-cols-[minmax(280px,1fr)] gap-5 list-none m-0" role="list" data-reveal-group data-stagger="90">
-      {projects.map((p) => (
-        <li class="card">
-          <a href={p.href} class="card-link flex flex-col h-full border border-hairline rounded-card overflow-hidden bg-surface no-underline">
-            <span class="cover" aria-hidden="true"></span>
-            <span class="card-body flex flex-col px-5 pt-5 pb-2xl">
-              <span class="card-tags font-mono text-tag tracking-widest uppercase text-cyan-muted">{p.tags}</span>
-              <span class="card-title mt-sm font-bold text-cardtitle tracking-title text-paper">
-                <span class="card-id font-mono text-meta text-bronze mr-2">{p.id}</span>{p.title}
-              </span>
-              <span class="card-sub mt-3xs text-body-sm text-ink-muted">{p.sub}</span>
-              <span class="card-blurb mt-lg text-body-sm leading-normal text-ink-faint max-w-[40ch]">{p.blurb}</span>
-              <span class="card-arrow mt-xl text-cyan text-arrow" aria-hidden="true">↗</span>
-            </span>
-          </a>
-        </li>
-      ))}
+    <div class="wrap proj-cols">
+      <ul class="proj-list" role="list">
+        {projects.map((p, i) => (
+          <li>
+            <a class="proj-item" href={p.href} data-idx={i}>
+              <span class="pi-meta"><span class="pid">{p.id}</span><span>{p.sub}</span></span>
+              <span class="pi-title">{p.title}</span>
+              <span class="pi-tags">{p.tags}</span>
+            </a>
+          </li>
+        ))}
       </ul>
+
+      <div class="proj-preview">
+        <a class="pcard corners" href={projects[0].href} aria-label="Open the active case study">
+          <span class="ck tl"></span><span class="ck tr"></span><span class="ck bl"></span><span class="ck br"></span>
+          <span class="cover cover-1 on" aria-hidden="true"></span>
+          <span class="cover cover-2" aria-hidden="true"></span>
+          <span class="cover cover-3" aria-hidden="true"></span>
+          <span class="p-meta"><span data-pmeta>CASE — 01</span><span>PREVIEW</span></span>
+          <span class="p-count" data-pcount>01 / 03</span>
+        </a>
+      </div>
     </div>
-  </div>
-</section>
+
+    <div class="proj-rail" aria-hidden="true">
+      {projects.map(() => (
+        <span class="seg"><i data-seg></i></span>
+      ))}
+    </div>
+  </section>
+
+  <!-- pill cursor (desktop, motion-permitting; scaled in by section-effects.ts) -->
+  <div class="pill-cursor" data-pill aria-hidden="true">View case ↗</div>
+</div>
 
 <style>
-  /* Retained: scrollbar-width has no utility; snap + media kept verbatim. */
-  .rail-wrap { scrollbar-width: thin; }
-  .rail { scroll-snap-type: x mandatory; }
-  @media (max-width: 720px) {
-    .rail { grid-auto-columns: minmax(82vw, 82vw); }
+  .sec-title { font-weight: 800; letter-spacing: -0.03em; line-height: 1.02; }
+
+  .proj-wrap { position: relative; border-top: 1px solid var(--color-hairline); }
+
+  /* flowing by default; becomes a pinned set piece only when the choreography
+     will actually run (desktop + motion + reveal-ready). */
+  .proj-pin { padding-block: clamp(5rem, 12vh, 9rem); }
+  @media (min-width: 821px) and (prefers-reduced-motion: no-preference) {
+    :global(.reveal-ready) .proj-wrap { height: 340vh; }
+    :global(.reveal-ready) .proj-pin {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding-block: 0;
+    }
+    :global(.reveal-ready) .proj-head {
+      position: absolute;
+      top: clamp(3.5rem, 8vh, 5.5rem);
+      left: 0;
+      right: 0;
+    }
   }
 
-  .card { scroll-snap-align: start; }
+  .proj-cols {
+    display: grid;
+    grid-template-columns: minmax(0, 46fr) minmax(0, 44fr);
+    gap: clamp(2rem, 6vw, 6rem);
+    align-items: center;
+    margin-top: clamp(4rem, 10vh, 7rem);
+  }
 
-  /* Retained: hover + transition (not in no-hover screenshots). */
-  .card-link { transition: border-color 0.25s ease, transform 0.25s ease; }
-  .card-link:hover { border-color: var(--color-cyan); transform: translateY(-3px); }
-
-  /* Retained: gradient cover, aspect-ratio, grayscale filter + hover. */
-  .cover {
+  .proj-list { list-style: none; margin: 0; padding: 0; }
+  .proj-list li:first-child .proj-item { border-top: 1px solid var(--color-hairline); }
+  .proj-item {
     display: block;
-    aspect-ratio: 16 / 9;
-    background:
-      radial-gradient(70% 90% at 30% 20%, rgb(111 202 214 / 0.12), transparent 60%),
-      linear-gradient(140deg, #0e3236, #07191b);
-    filter: grayscale(0.6);
-    transition: filter 0.4s ease;
+    padding: 1.5rem 0;
+    border-bottom: 1px solid var(--color-hairline);
+    text-decoration: none;
+    will-change: transform;
   }
-  .card-link:hover .cover { filter: grayscale(0); }
+  .pi-meta {
+    display: flex;
+    gap: 1rem;
+    align-items: baseline;
+    font-family: var(--font-mono);
+    font-size: 0.6rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--color-ink-faint);
+    margin-bottom: 0.45rem;
+  }
+  .pi-meta .pid { color: var(--color-bronze); }
+  .pi-title {
+    display: block;
+    font-size: clamp(1.6rem, 3.2vw, 2.7rem);
+    font-weight: 800;
+    letter-spacing: -0.025em;
+    line-height: 1.05;
+    color: var(--color-paper);
+    transition: color 0.45s ease;
+  }
+  .pi-tags {
+    display: block;
+    margin-top: 0.5rem;
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--color-cyan-muted);
+    transition: opacity 0.45s ease, transform 0.45s ease;
+  }
+  /* dimmed/hidden resting states only when the pin choreography runs */
+  @media (min-width: 821px) and (prefers-reduced-motion: no-preference) {
+    :global(.reveal-ready) .pi-title { color: rgb(236 237 240 / 0.26); }
+    :global(.reveal-ready) .proj-item.active .pi-title { color: var(--color-paper); }
+    :global(.reveal-ready) .pi-tags { opacity: 0; transform: translateY(4px); }
+    :global(.reveal-ready) .proj-item.active .pi-tags { opacity: 1; transform: none; }
+  }
 
-  /* Retained: arrow transition + hover. */
-  .card-arrow { transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1); }
-  .card-link:hover .card-arrow { transform: translate(3px, -3px); }
+  /* preview card */
+  .proj-preview { perspective: 900px; }
+  .pcard {
+    display: block;
+    position: relative;
+    aspect-ratio: 16 / 11;
+    border: 1px solid var(--color-hairline);
+    overflow: hidden;
+    background: var(--color-surface);
+    transform-style: preserve-3d;
+    will-change: transform;
+  }
+  .pcard .cover {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    transform: scale(1.06);
+    transition: opacity 0.5s ease, transform 0.9s cubic-bezier(0.2, 0, 0, 1);
+  }
+  .pcard .cover.on { opacity: 1; transform: scale(1); }
+  .cover-1 { background: radial-gradient(70% 90% at 30% 20%, rgb(111 202 214 / 0.35), transparent 60%), linear-gradient(140deg, #0e3236, #07191b); }
+  .cover-2 { background: radial-gradient(70% 90% at 70% 30%, rgb(176 141 87 / 0.4), transparent 65%), linear-gradient(160deg, #11302a, #060f0e); }
+  .cover-3 { background: radial-gradient(80% 80% at 40% 70%, rgb(146 194 203 / 0.3), transparent 60%), linear-gradient(120deg, #1b2b33, #0a1216); }
+  .pcard .p-meta {
+    position: absolute;
+    top: 0.8rem;
+    left: 0.9rem;
+    right: 0.9rem;
+    z-index: 2;
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--font-mono);
+    font-size: 0.58rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: rgb(236 237 240 / 0.7);
+  }
+  .pcard .p-count {
+    position: absolute;
+    bottom: 0.8rem;
+    right: 0.9rem;
+    z-index: 2;
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    color: var(--color-cyan);
+    letter-spacing: 0.1em;
+  }
+
+  /* segmented progress rail */
+  .proj-rail {
+    position: absolute;
+    right: clamp(1rem, 4vw, 2.5rem);
+    top: 50%;
+    transform: translateY(-50%);
+    display: none;
+    flex-direction: column;
+    gap: 6px;
+  }
+  @media (min-width: 821px) and (prefers-reduced-motion: no-preference) {
+    :global(.reveal-ready) .proj-rail { display: flex; }
+  }
+  .proj-rail .seg {
+    width: 2px;
+    height: 34px;
+    background: rgb(236 237 240 / 0.12);
+    position: relative;
+    overflow: hidden;
+  }
+  .proj-rail .seg i {
+    position: absolute;
+    inset: 0;
+    background: var(--color-cyan);
+    transform: scaleY(0);
+    transform-origin: top;
+    display: block;
+  }
+
+  /* pill cursor */
+  .pill-cursor {
+    position: fixed;
+    z-index: 80;
+    top: 0;
+    left: 0;
+    pointer-events: none;
+    background: var(--color-cyan);
+    color: var(--color-base);
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    font-weight: 500;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    padding: 0.7rem 1.1rem;
+    border-radius: 99px;
+    transform: scale(0);
+    white-space: nowrap;
+  }
+  /* hide the OS cursor over the card only while the pill replaces it */
+  @media (min-width: 821px) and (prefers-reduced-motion: no-preference) {
+    :global(.reveal-ready) .pcard { cursor: none; }
+  }
+  @media (max-width: 820px), (prefers-reduced-motion: reduce) {
+    .pill-cursor { display: none; }
+  }
+
+  @media (max-width: 860px) {
+    .proj-cols { grid-template-columns: 1fr; margin-top: 2.5rem; }
+    .proj-preview { display: none; }
+  }
 </style>
