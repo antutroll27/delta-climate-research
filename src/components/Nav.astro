@@ -1,16 +1,17 @@
 ---
 const links = [
   { label: 'About', href: '/#about' },
-  { label: 'Projects', href: '/#projects' },
-  { label: 'White Papers', href: '/white-papers' },
-  { label: 'Medni', href: '/#medni' },
+  { label: 'Ongoing Projects', href: '/#projects' },
+  { label: 'Conceptual Research', href: '/white-papers' },
+  { label: 'Climate Highlights', href: '/#papers' },
+  { label: 'Our Team', href: '/#medni' },
 ];
 ---
 
 <!-- sentinel: observed to toggle the nav's scrolled state without a scroll listener -->
 <div id="nav-sentinel" aria-hidden="true"></div>
 
-<header id="site-nav" class="fixed inset-x-0 top-4 z-50 h-20 bg-transparent" data-scrolled="false">
+<header id="site-nav" class="fixed inset-x-0 top-8 z-50 h-20 bg-transparent" data-scrolled="false">
   <nav class="max-w-site mx-auto h-full px-gutter flex items-center justify-between" aria-label="Primary">
     <a href="/" class="font-bold text-cardtitle tracking-title text-paper no-underline" aria-label="Delta Climate Research — home">
       Delta<span class="text-cyan">·</span>Climate
@@ -21,7 +22,7 @@ const links = [
         <li><a href={l.href}>{l.label}</a></li>
       ))}
       <li>
-        <a href="/#medni" class="databank">Databank <span aria-hidden="true">↗</span></a>
+        <a href="/#medni" class="databank">Medni (Data Library) <span aria-hidden="true">↗</span></a>
       </li>
     </ul>
 
@@ -47,7 +48,7 @@ const links = [
     {links.map((l) => (
       <li><a href={l.href} data-mobile-link>{l.label}</a></li>
     ))}
-    <li><a href="/#medni" data-mobile-link class="databank">Databank ↗</a></li>
+    <li><a href="/#medni" data-mobile-link class="databank">Medni (Data Library) ↗</a></li>
   </ul>
 </div>
 
@@ -67,6 +68,35 @@ const links = [
   }
   @media (max-width: 640px) {
     .nav-progress { left: 0; }
+  }
+
+  /* fallback trigger for pages without a #hero: a short strip pinned to the
+     document top, so the backdrop arrives after ~200px of scroll */
+  #nav-sentinel {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 1px;
+    height: 200px;
+    pointer-events: none;
+  }
+
+  /* scrolled state — the sentinel observer flips data-scrolled once the page
+     leaves the top. The bar docks flush to the viewport edge and a frosted
+     layer fades in behind it so links stay legible over passing content. */
+  #site-nav {
+    transition: top 0.35s cubic-bezier(0.2, 0.8, 0.2, 1), background-color 0.35s ease,
+      backdrop-filter 0.35s ease, box-shadow 0.35s ease;
+  }
+  #site-nav[data-scrolled='true'] {
+    top: 0;
+    background: rgb(8 10 11 / 0.62);
+    backdrop-filter: blur(16px) saturate(1.15);
+    -webkit-backdrop-filter: blur(16px) saturate(1.15);
+    box-shadow: 0 1px 0 rgb(244 246 248 / 0.08), 0 12px 32px rgb(0 0 0 / 0.25);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #site-nav { transition: none; }
   }
 
   .nav-links {
@@ -171,12 +201,16 @@ const links = [
     const menu = document.getElementById('mobile-menu');
     if (!nav || !sentinel) return;
 
-    // toggle scrolled state when the top sentinel leaves the viewport
+    // frosted state: on the home page, track the hero itself — the backdrop
+    // appears only once the hero has scrolled past the nav and clears again
+    // as soon as any of the hero is back under it. Other pages fall back to
+    // the top sentinel (a short strip, so a zero-area target never misfires).
+    const hero = document.getElementById('hero');
     const io = new IntersectionObserver(
       ([entry]) => nav.setAttribute('data-scrolled', String(!entry.isIntersecting)),
-      { rootMargin: '-1px 0px 0px 0px', threshold: 0 }
+      { rootMargin: '-96px 0px 0px 0px', threshold: 0 }
     );
-    io.observe(sentinel);
+    io.observe(hero ?? sentinel);
 
     // mobile menu
     if (toggle && menu) {
