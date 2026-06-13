@@ -102,6 +102,28 @@ const jsonLd = {
 
     <ClientRouter />
 
+    <!-- pre-paint: a hard reload always lands on the hero, never a deep-linked
+         section. Runs in <head> before the body parses, so stripping the hash
+         beats the browser's native anchor jump; manual scrollRestoration stops
+         it restoring the prior scroll position. Only fires on a real 'reload'
+         navigation — fresh deep-links (/#about typed or clicked from another
+         page) and back/forward keep their anchor. View transitions don't re-run
+         inline head scripts, so in-site navigation is untouched. -->
+    <script is:inline>
+      try {
+        var nav = performance.getEntriesByType('navigation')[0];
+        var isReload = nav
+          ? nav.type === 'reload'
+          : performance.navigation && performance.navigation.type === 1;
+        if (isReload) {
+          history.scrollRestoration = 'manual';
+          if (location.hash) {
+            history.replaceState(null, '', location.pathname + location.search);
+          }
+        }
+      } catch (e) {}
+    </script>
+
     <!-- pre-paint: only enable reveal-hiding when motion is allowed (flash-safe; no-JS shows all) -->
     <script is:inline>
       try {
