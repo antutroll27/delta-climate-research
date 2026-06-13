@@ -233,7 +233,7 @@
   }
   .sec-title {
     font-weight: 500;
-    font-size: clamp(2.9rem, 6.2vw, 5.2rem);
+    font-size: clamp(3.15rem, 6.7vw, 5.7rem);
     line-height: 1.04;
     letter-spacing: -0.025em;
     color: var(--color-paper);
@@ -285,8 +285,8 @@
   }
   .sec-kicker {
     font-family: var(--font-mono);
-    font-size: 0.7rem;
-    letter-spacing: 0.22em;
+    font-size: clamp(1rem, 1.6vw, 1.25rem); /* match .sec-index (04/05 kickers) */
+    letter-spacing: 0.14em; /* eased from 0.22em so uppercase doesn't over-stretch at the larger size */
     text-transform: uppercase;
     color: var(--color-bronze);
     margin-bottom: 1rem;

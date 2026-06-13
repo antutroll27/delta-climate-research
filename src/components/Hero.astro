@@ -85,11 +85,18 @@ import ClimateClock from './ClimateClock.astro';
     margin: 0;
     font-weight: 500;
     font-size: clamp(2.5rem, 7vw, 7rem);
-    line-height: 0.89;
+    /* 0.89 was too tight: the scaleY-stretched accent on the last line grew up
+       into the descenders of the line above ("systems" / "Changing"). */
+    line-height: 0.95;
     letter-spacing: -0.038em;
     color: var(--color-paper);
   }
   .headline .line { display: block; }
+  /* extra breathing room above the last line: it holds the scaleY-stretched
+     accent, whose caps otherwise sit close to the line-2 descenders ("y" of
+     systems ↔ "C" of Changing). Line-height can't fix this — each .line is a
+     block, so the accent's inline-block box fixes the gap regardless. */
+  .headline .line:last-child { margin-top: 0.12em; }
   /* white-space: pre preserves the trailing space inside each inline-block word
      (otherwise the stagger spans collapse into "thesystems"). */
   .headline .word { display: inline-block; white-space: pre; }
@@ -99,12 +106,12 @@ import ClimateClock from './ClimateClock.astro';
     font-weight: 800;
     letter-spacing: 0;
     color: var(--color-cyan);
-    line-height: 1.0;
-    padding-bottom: 0.06em;
-    /* taller letterforms — vertical stretch from the baseline (eased vs section
-       accents because the wordmark leading is tight) */
+    /* tight own-leading + eased stretch so the inline-block box doesn't add
+       height above the baseline and collide with the line above */
+    line-height: 0.72;
+    /* taller letterforms — vertical stretch from the baseline */
     display: inline-block;
-    transform: scaleY(1.14);
+    transform: scaleY(1.08);
     transform-origin: bottom;
   }
   .headline .accent::first-letter { text-transform: uppercase; }

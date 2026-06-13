@@ -83,7 +83,10 @@ const projects = catalogue.map((p) => ({ ...p, href: projectHref(p) }));
     }
     :global(.reveal-ready) .proj-head {
       position: absolute;
-      top: clamp(3.5rem, 8vh, 5.5rem);
+      /* floor clears the 80px docked nav (data-scrolled) at short viewport
+         heights — below ~1000px tall, 8vh fell under the bar and the "02
+         Projects" kicker was clipped by the frosted nav. */
+      top: clamp(6rem, 9vh, 7rem);
       left: 0;
       right: 0;
     }

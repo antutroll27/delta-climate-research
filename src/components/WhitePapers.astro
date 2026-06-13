@@ -11,13 +11,13 @@ import { papers, paperHref } from '../data/papers';
   <div class="wrap">
     <div class="sec-head">
       <div>
-        <p class="sec-kicker">03 White Papers</p>
+        <p class="sec-kicker">03 Conceptual Research</p>
         <h2 id="papers-title" class="sec-title" data-mask>
           <span class="ln"><span>The thinking</span></span>
           <span class="ln"><span><em>behind</em> the work.</span></span>
         </h2>
       </div>
-      <a class="roll-link" href="/white-papers" data-roll>All white papers <span class="arrow" aria-hidden="true">↗</span></a>
+      <a class="roll-link" href="/white-papers" data-roll>All conceptual research <span class="arrow" aria-hidden="true">↗</span></a>
     </div>
 
     <ul class="feed" role="list">
@@ -26,12 +26,10 @@ import { papers, paperHref } from '../data/papers';
           <a class="frow" href={paperHref(p)} data-band data-chip={i + 1}>
             <span class="f-wipe" data-wipe aria-hidden="true"></span>
             <span class="f-in">
+              <span class="f-meta">{p.date} — {p.cat}</span>
               <span class="f-id" aria-hidden="true">{p.id}</span>
-              <span>
-                <span class="f-meta">{p.date} — {p.cat}</span>
-                <span class="f-title">{p.title}</span>
-                <span class="f-ex">{p.excerpt}</span>
-              </span>
+              <span class="f-title">{p.title}</span>
+              <span class="f-ex">{p.excerpt}</span>
               <span class="f-arrow" aria-hidden="true">↗</span>
             </span>
           </a>
@@ -76,12 +74,20 @@ import { papers, paperHref } from '../data/papers';
   .f-in {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto;
-    gap: clamp(1.2rem, 3vw, 2.6rem);
+    /* number shares the title's row (shared baseline); date/cat meta sits as an
+       eyebrow above the title, excerpt below — so the big numeral lines up with
+       its heading instead of riding up to the small meta line. */
+    grid-template-areas:
+      '.  meta  .'
+      'id title arrow'
+      '.  ex    .';
+    column-gap: clamp(1.2rem, 3vw, 2.6rem);
     align-items: baseline;
     padding: clamp(1.5rem, 3.5vh, 2.4rem) 0.5rem;
     position: relative;
   }
   .f-id {
+    grid-area: id;
     font-family: var(--font-mono);
     font-size: clamp(1.6rem, 3vw, 2.6rem);
     font-weight: 300;
@@ -92,6 +98,7 @@ import { papers, paperHref } from '../data/papers';
   }
   .frow.active .f-id { color: var(--color-bronze); -webkit-text-stroke: 1px transparent; }
   .f-meta {
+    grid-area: meta;
     display: block;
     font-family: var(--font-mono);
     font-size: 0.6rem;
@@ -101,6 +108,7 @@ import { papers, paperHref } from '../data/papers';
     margin-bottom: 0.4rem;
   }
   .f-title {
+    grid-area: title;
     display: block;
     font-size: clamp(1.3rem, 2.5vw, 2.1rem);
     font-weight: 700;
@@ -110,6 +118,7 @@ import { papers, paperHref } from '../data/papers';
     transition: color 0.4s ease;
   }
   .f-ex {
+    grid-area: ex;
     display: block;
     margin-top: 0.55rem;
     max-width: 58ch;
@@ -119,6 +128,7 @@ import { papers, paperHref } from '../data/papers';
     transition: opacity 0.45s ease, transform 0.45s ease;
   }
   .f-arrow {
+    grid-area: arrow;
     font-size: 1.3rem;
     color: var(--color-cyan);
     transition: opacity 0.4s ease, transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
