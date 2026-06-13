@@ -102,23 +102,24 @@ const links = [
   .nav-links {
     display: flex;
     align-items: center;
-    gap: clamp(2.25rem, 4vw, 3.75rem);
+    gap: clamp(1.75rem, 2.6vw, 2.5rem);
     list-style: none;
     margin: 0;
     padding: 0;
     font-family: var(--font-mono);
-    font-size: 0.8125rem;
+    font-size: 0.7rem;
     text-transform: uppercase;
     letter-spacing: 0.12em;
   }
   .nav-links a {
-    color: #f4f6f8; /* lighter off-white (brighter than --paper #ECEDF0, not pure white) */
+    color: rgb(244 246 248 / 0.85); /* lighter off-white, not pure white */
     font-weight: 300;
-    opacity: 0.9;
     text-decoration: none;
-    transition: opacity 0.2s ease;
+    transition: color 0.2s ease;
   }
-  .nav-links a:hover { opacity: 1; }
+  .nav-links a:hover { color: #f4f6f8; }
+  /* a touch more air before the CTA so it reads as separate from the links */
+  .nav-links li:last-child { margin-left: clamp(0.5rem, 1.5vw, 1.5rem); }
 
   /* solid primary button (specific selector so color/weight beat .nav-links a) */
   .nav-links .databank {
@@ -128,7 +129,7 @@ const links = [
     font-weight: 500;
     border: 1px solid var(--color-cyan);
     border-radius: 8px;
-    padding: 0.85rem 1.5rem;
+    padding: 0.7rem 1.35rem;
     transition: background-color 0.25s ease, border-color 0.25s ease,
       color 0.25s ease, box-shadow 0.25s ease;
   }
