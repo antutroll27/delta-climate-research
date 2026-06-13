@@ -1,0 +1,182 @@
+---
+// Our Team — the leadership bench, McBride-inspired giant-name roster rendered
+// in Delta's dark instrument language: mono bronze kicker, masked section
+// title, hairline rows that invert to a bronze fill on hover (off-black text),
+// and a cursor-glued circular monogram card (desktop, motion-permitting; wired
+// in section-effects.ts). Roster data lives in src/data/team.ts.
+import Base from '../layouts/Base.astro';
+import Nav from '../components/Nav.astro';
+import Footer from '../components/Footer.astro';
+import { team } from '../data/team';
+---
+
+<Base
+  title="Our Team — Delta Climate Research"
+  description="The climatologists, climate-policy specialists, and operators behind Delta Climate Research — a small, senior bench turning earth-science data into defensible decisions."
+>
+  <Nav />
+  <main class="team-page">
+    <section class="wrap team-intro">
+      <p class="sec-kicker">Our Team</p>
+      <h1 class="sec-title team-title" data-mask>
+        <span class="ln"><span>The people behind the</span></span>
+        <span class="ln"><span><em>measurement.</em></span></span>
+      </h1>
+      <div class="team-meta" data-reveal-group data-stagger="120">
+        {/* Lede paragraph hidden per request — restore by uncommenting (CEO may want it back):
+        <p class="team-lede">A small, senior bench of climate-risk analysts, policy specialists, and the operators who turn earth-science data into decisions that hold up.</p>
+        */}
+        <div class="team-stats">
+          <div><b>04</b><span>Specialists</span></div>
+          <div><b>03</b><span>Disciplines</span></div>
+          <div><b>100%</b><span>Senior bench</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="wrap">
+      <ul class="roster" id="team-roster" data-reveal-group data-stagger="90" role="list">
+        {team.map((m, i) => (
+          <li
+            class="trow"
+            data-trow
+            data-i={i}
+            data-mono={m.mono}
+            data-cover={m.cover}
+            data-name={`${m.first} ${m.last}`}
+          >
+            <span class="trow-fill" aria-hidden="true"></span>
+            <span class="trow-in">
+              <span class="t-left">
+                <span class="t-id" aria-hidden="true">{m.id}</span>
+                <span class="t-role">
+                  <span class="t-tier">{m.tier}</span>
+                  <span class="t-disc">{m.discipline}</span>
+                </span>
+              </span>
+              <span class="t-name"><span class="first">{m.first}</span> <span class="last">{m.last}</span></span>
+            </span>
+          </li>
+        ))}
+      </ul>
+      <p class="team-foot" data-reveal>// Delta·Climate·Research — leadership bench</p>
+    </section>
+  </main>
+
+  <!-- cursor-glued circular monogram card (desktop + motion; driven by section-effects.ts) -->
+  <div class="tcard" data-tcard aria-hidden="true">
+    <span class="tdisc">
+      <span class="tcv tcv-1 on"></span><span class="tcv tcv-2"></span><span class="tcv tcv-3"></span><span class="tcv tcv-4"></span>
+      <span class="tmono" data-tmono>AB</span>
+    </span>
+    <span class="ttag"><span data-tname>ANGAD BURMAN</span><span class="sep">·</span><span data-tid>DCR/01</span></span>
+  </div>
+
+  <Footer />
+</Base>
+
+<style>
+  .team-page {
+    position: relative;
+    background:
+      radial-gradient(55% 40% at 72% 14%, rgb(111 202 214 / 0.05), transparent 64%),
+      var(--color-base);
+  }
+
+  /* intro */
+  .team-intro { padding-top: clamp(15rem, 30vh, 22rem); padding-bottom: clamp(2.5rem, 6vh, 5rem); }
+  .team-title { max-width: 20ch; font-size: clamp(3.4rem, 7.4vw, 6.5rem); }
+  .team-meta { margin-top: clamp(1.5rem, 3vh, 2.4rem); }
+  .team-lede {
+    max-width: 56ch; font-weight: 300; font-size: clamp(1rem, 1.4vw, 1.2rem);
+    line-height: 1.65; color: var(--color-ink-muted);
+  }
+  .team-stats { display: flex; flex-wrap: wrap; gap: clamp(2rem, 5vw, 4rem); margin-top: clamp(2.5rem, 5vh, 3.5rem); font-family: var(--font-mono); }
+  .team-stats b { display: block; font-weight: 400; font-size: clamp(2.1rem, 3vw, 2.7rem); letter-spacing: -0.01em; color: var(--color-paper); margin-bottom: 0.35rem; }
+  .team-stats span { font-size: 0.72rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--color-ink-faint); }
+
+  /* roster */
+  .roster { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--color-hairline); }
+  .trow {
+    display: block; position: relative; overflow: hidden;
+    border-bottom: 1px solid var(--color-hairline);
+  }
+  .trow-fill {
+    position: absolute; inset: 0; background: var(--color-bronze);
+    clip-path: inset(0 100% 0 0);
+    transition: clip-path 0.5s cubic-bezier(0.2, 0.8, 0.2, 1);
+    pointer-events: none;
+  }
+  .trow-in {
+    position: relative; z-index: 1; /* above the bronze fill */
+    display: grid; grid-template-columns: minmax(11rem, 22vw) minmax(0, 1fr);
+    gap: clamp(1.5rem, 4vw, 3.5rem); align-items: center;
+    padding: clamp(1.6rem, 4.2vh, 2.8rem) clamp(0.4rem, 1vw, 1rem);
+  }
+  .t-left { display: flex; align-items: baseline; gap: clamp(1rem, 2vw, 1.8rem); }
+  .t-id {
+    font-family: var(--font-mono); font-size: clamp(0.9rem, 1.4vw, 1.15rem); font-weight: 300;
+    line-height: 1; color: transparent; -webkit-text-stroke: 1px rgb(176 141 87 / 0.45);
+    transition: color 0.4s ease, -webkit-text-stroke 0.4s ease;
+  }
+  .t-role { font-family: var(--font-mono); }
+  .t-tier { display: block; font-size: 0.62rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--color-cyan-muted); transition: color 0.4s ease; }
+  .t-disc { display: block; margin-top: 0.35rem; font-size: 0.62rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--color-ink-faint); transition: color 0.4s ease; }
+
+  .t-name {
+    font-weight: 350; font-size: clamp(2rem, 5.4vw, 4.6rem); line-height: 1.0;
+    letter-spacing: -0.03em; white-space: nowrap;
+    color: var(--color-paper); transition: color 0.45s ease, transform 0.55s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  .t-name .last { color: var(--color-ink-muted); transition: color 0.45s ease; }
+
+  /* hover inversion — pointer devices only (touch shows readable names, no fill) */
+  @media (hover: hover) and (pointer: fine) {
+    .roster .t-name { color: rgb(236 237 240 / 0.42); }
+    .roster .t-name .last { color: rgb(236 237 240 / 0.26); }
+    .roster:hover .trow:not(:hover) .t-name,
+    .roster:hover .trow:not(:hover) .t-name .last { color: rgb(236 237 240 / 0.24); }
+    .trow:hover .trow-fill { clip-path: inset(0 0 0 0); }
+    .trow:hover .t-name,
+    .trow:hover .t-name .last { color: var(--color-base); }
+    .trow:hover .t-id { color: var(--color-base); -webkit-text-stroke: 1px transparent; }
+    .trow:hover .t-tier { color: var(--color-base); }
+    .trow:hover .t-disc { color: rgb(5 6 6 / 0.7); }
+  }
+
+  .team-foot {
+    margin-top: clamp(2.5rem, 6vh, 4rem); padding-bottom: clamp(4rem, 10vh, 7rem);
+    font-family: var(--font-mono); font-size: 0.62rem; letter-spacing: 0.16em;
+    text-transform: uppercase; color: var(--color-ink-faint);
+  }
+
+  /* cursor-glued circular monogram card */
+  .tcard {
+    position: fixed; z-index: 75; top: 0; left: 0; width: 300px;
+    pointer-events: none; opacity: 0;
+    display: flex; flex-direction: column; align-items: center; gap: 1rem;
+  }
+  .tdisc {
+    position: relative; width: 300px; height: 300px; border-radius: 50%;
+    overflow: hidden; border: 1px solid var(--color-hairline); background: var(--color-surface);
+    box-shadow: 0 0 0 8px var(--color-base), 0 0 0 9px rgb(111 202 214 / 0.2);
+  }
+  .tcv { position: absolute; inset: 0; opacity: 0; transition: opacity 0.4s ease; }
+  .tcv.on { opacity: 1; }
+  .tcv-1 { background: radial-gradient(70% 70% at 32% 22%, rgb(111 202 214 / 0.5), transparent 60%), linear-gradient(150deg, #0e3236, #061416); }
+  .tcv-2 { background: radial-gradient(70% 70% at 68% 26%, rgb(176 141 87 / 0.5), transparent 62%), linear-gradient(160deg, #2a2113, #0b0904); }
+  .tcv-3 { background: radial-gradient(72% 72% at 40% 70%, rgb(146 194 203 / 0.45), transparent 60%), linear-gradient(120deg, #14272d, #07110f); }
+  .tcv-4 { background: radial-gradient(70% 70% at 60% 34%, rgb(111 202 214 / 0.35), transparent 64%), linear-gradient(135deg, #10343a, #060f10); }
+  .tmono { position: absolute; inset: 0; display: grid; place-items: center; font-weight: 300; font-size: 6.2rem; letter-spacing: -0.04em; color: rgb(244 246 248 / 0.92); }
+  .ttag { font-family: var(--font-mono); font-size: 0.56rem; letter-spacing: 0.12em; text-transform: uppercase; color: rgb(236 237 240 / 0.85); display: flex; align-items: center; gap: 0.55rem; }
+  .ttag .sep { color: var(--color-cyan); }
+
+  @media (max-width: 860px), (hover: none) { .tcard { display: none; } }
+  @media (max-width: 860px) {
+    .t-name { white-space: normal; }
+    .trow-in { grid-template-columns: 1fr; gap: 0.9rem; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .trow-fill { transition: none; }
+  }
+</style>

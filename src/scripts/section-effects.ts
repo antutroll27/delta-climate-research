@@ -161,6 +161,58 @@ function initProjectsPin(signal: AbortSignal) {
   }
 }
 
+/* ── team roster cursor card ─────────────────────────────────────── */
+
+// Cursor-glued circular monogram card on /team: hovering a roster row swaps the
+// card's cover + initials + readout and glides it to the cursor. The bronze
+// row inversion itself is pure CSS (:hover), so it survives without this; this
+// only adds the floating card (desktop + motion, like the papers chip).
+function initTeamRoster(signal: AbortSignal) {
+  const card = document.querySelector<HTMLElement>('[data-tcard]');
+  const roster = document.getElementById('team-roster');
+  const rows = roster ? [...roster.querySelectorAll<HTMLElement>('[data-trow]')] : [];
+  if (!card || !roster || !rows.length) return;
+
+  const covers = [...card.querySelectorAll<HTMLElement>('.tcv')];
+  const monoEl = card.querySelector<HTMLElement>('[data-tmono]');
+  const nameEl = card.querySelector<HTMLElement>('[data-tname]');
+  const idEl = card.querySelector<HTMLElement>('[data-tid]');
+
+  gsap.set(card, { xPercent: -50, yPercent: -52, opacity: 0 });
+  const cx = gsap.quickTo(card, 'x', { duration: 0.4, ease: 'power3.out' });
+  const cy = gsap.quickTo(card, 'y', { duration: 0.4, ease: 'power3.out' });
+  let shown = false;
+  window.addEventListener('mousemove', (e) => { cx(e.clientX); cy(e.clientY); }, { signal });
+
+  rows.forEach((row) => {
+    row.addEventListener(
+      'mouseenter',
+      (e) => {
+        const cv = row.dataset.cover || '1';
+        covers.forEach((c) => c.classList.toggle('on', c.classList.contains('tcv-' + cv)));
+        if (monoEl) monoEl.textContent = row.dataset.mono || '';
+        if (nameEl) nameEl.textContent = (row.dataset.name || '').toUpperCase();
+        if (idEl) idEl.textContent = `DCR/${String(parseInt(row.dataset.i || '0', 10) + 1).padStart(2, '0')}`;
+        // snap to the cursor on first reveal so it never tweens in from origin
+        if (!shown) { cx(e.clientX, e.clientX); cy(e.clientY, e.clientY); shown = true; }
+        gsap.to(card, { opacity: 1, duration: 0.32, ease: 'power3.out', overwrite: 'auto' });
+      },
+      { signal }
+    );
+  });
+
+  roster.addEventListener(
+    'mouseleave',
+    () => {
+      gsap.to(card, {
+        opacity: 0, duration: 0.26, ease: 'power3.in', overwrite: 'auto',
+        onComplete: () => { shown = false; },
+      });
+    },
+    { signal }
+  );
+}
+
 /* ── white papers cursor chip ───────────────────────────────────── */
 
 function initPaperChip(signal: AbortSignal) {
@@ -317,6 +369,7 @@ export function initSectionEffects() {
   if (isDesktop()) {
     initProjectsPin(signal);
     initPaperChip(signal);
+    initTeamRoster(signal);
   }
 
   ScrollTrigger.refresh();
