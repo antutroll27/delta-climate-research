@@ -110,6 +110,7 @@ const connect = [
   .fcard {
     position: relative;
     overflow: hidden;
+    min-width: 0; /* grid items default to min-width:auto; let them shrink on narrow phones */
     border: 1px solid var(--color-hairline);
     border-radius: var(--radius-card);
   }
@@ -223,7 +224,7 @@ const connect = [
   }
   @keyframes footer-pulse { 50% { opacity: 0.35; } }
 
-  .nav-cols { display: flex; gap: 72px; padding-top: 6px; }
+  .nav-cols { display: flex; flex-wrap: wrap; gap: 72px; padding-top: 6px; }
   .col-title { font-family: var(--font-mono); font-size: var(--text-tag); letter-spacing: 0.14em; text-transform: uppercase; color: var(--bronze-ink-soft); margin-bottom: 1rem; }
   .col a {
     display: block;
@@ -237,6 +238,10 @@ const connect = [
     transition: opacity 0.2s ease;
   }
   .col a:hover { opacity: 1; }
+  /* roomier tap targets on touch devices (footer links are small) */
+  @media (pointer: coarse) {
+    .col a { padding-block: 0.45rem; margin-bottom: 0.3rem; }
+  }
 
   .bottom { display: flex; align-items: flex-end; justify-content: space-between; margin-top: 2.75rem; gap: 1.5rem; }
   .copyright { font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.04em; color: var(--bronze-ink-soft); margin: 0; }
@@ -252,7 +257,7 @@ const connect = [
     padding: 5px;
   }
   .subscribe input {
-    flex: 1; padding: 11px 14px;
+    flex: 1; min-width: 0; padding: 11px 14px;
     background: transparent; border: 0; outline: none;
     color: var(--bronze-ink);
     font-family: var(--font-sans); font-size: 0.85rem;
