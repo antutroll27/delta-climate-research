@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { gsap } from 'gsap';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { createRiverScene, type RiverScene } from '../scripts/river-scene';
+
+gsap.registerPlugin(ScrollTrigger);
 
 // Hero river island. Owns the lifecycle (IntersectionObserver gate, visibility
 // pause, contextlost, full dispose) like VortexShader, but renders the three.js
@@ -21,6 +24,32 @@ export default function HeroRiver() {
     catch (e) { console.error('[HeroRiver] init failed', e); return; } // CSS base shows through
 
     scene.onReady(() => setLoaded(true));
+
+    // ── scroll choreography: ONE ScrollTrigger scrubs the #hero-track and drives
+    //    scene.setScrollProgress (dolly-dive → splash). It rides the EXISTING global
+    //    Lenis (smooth-scroll.ts already wires lenis.on('scroll', ScrollTrigger.update))
+    //    — no 2nd Lenis, no 2nd RAF. Built only on desktop + motion via matchMedia. ──
+    const mm = gsap.matchMedia();
+    let activeST: ScrollTrigger | undefined;
+    let fadeEls: NodeListOf<HTMLElement> | null = null;
+    const setProgress = (p: number) => {
+      scene.setScrollProgress(p);
+      const o = String(1 - gsap.utils.clamp(0, 1, (p - 0.25) / 0.4)); // overlays fade as the dive commits
+      fadeEls?.forEach((el) => { el.style.opacity = o; });
+    };
+    scene.onReady(() => {
+      const track = document.getElementById('hero-track');
+      fadeEls = document.querySelectorAll<HTMLElement>('[data-hero-content]');
+      if (!track) return;
+      mm.add('(prefers-reduced-motion: no-preference) and (min-width: 768px)', () => {
+        activeST = ScrollTrigger.create({
+          trigger: track, start: 'top top', end: 'bottom bottom', scrub: 0.6,
+          onUpdate: (self) => setProgress(self.progress),
+        });
+        ScrollTrigger.refresh();
+        return () => { activeST?.kill(); activeST = undefined; setProgress(0); fadeEls?.forEach((el) => { el.style.opacity = ''; }); };
+      });
+    });
 
     let visible = false;
     // render-gate: only render while on-screen and the tab is visible.
@@ -45,6 +74,7 @@ export default function HeroRiver() {
 
     return () => {
       gsap.ticker.remove(onTick);
+      mm.revert();                          // kills the scroll trigger + restores content opacity
       io.disconnect();
       window.removeEventListener('resize', onResize);
       canvas.removeEventListener('webglcontextlost', onLost);

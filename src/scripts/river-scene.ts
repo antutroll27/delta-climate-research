@@ -11,6 +11,7 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 
 export interface RiverScene {
@@ -234,6 +235,25 @@ export function createRiverScene(canvas: HTMLCanvasElement, opts: Opts = {}): Ri
   const bloom = new UnrealBloomPass(new THREE.Vector2(sizeW(), sizeH()), 1.1, 0.8, 0.78);   // slightly more bloom (user, 2026-06-18)
   comp.addPass(bloom);
   comp.addPass(new OutputPass());
+  // ── splash: a ripple-dissolve transition pass driven by scroll progress (the "splash into About") ──
+  const USPLASH = { value: 0 };   // smoothstep(0.92,1, scrollP) — 0 = passthrough
+  // ripple-dissolve = a hand-port of gl-transitions WaterDrop.glsl (Pawel Plociennik, MIT)
+  // — an expanding concentric wavefront that displaces then crossfades the river frame to the brand base.
+  const splashPass = new ShaderPass({
+    uniforms: { tDiffuse: { value: null }, uSplash: USPLASH, uBase: { value: FOG } },
+    vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
+    fragmentShader: `
+      uniform sampler2D tDiffuse; uniform float uSplash; uniform vec3 uBase; varying vec2 vUv;
+      const float amp = 18.0, speed = 22.0;
+      void main(){
+        vec2 dir = vUv - 0.5; float dist = length(dir);
+        vec3 col;
+        if (dist > uSplash) { col = mix(texture2D(tDiffuse, vUv).rgb, uBase, uSplash); }
+        else { vec2 off = dir * sin(dist*amp - uSplash*speed); col = mix(texture2D(tDiffuse, vUv+off).rgb, uBase, uSplash); }
+        gl_FragColor = vec4(col, 1.0);
+      }`,
+  });
+  comp.addPass(splashPass);
   comp.setSize(sizeW(), sizeH());
 
   function applyTier(t: number) {
@@ -241,6 +261,7 @@ export function createRiverScene(canvas: HTMLCanvasElement, opts: Opts = {}): Ri
     renderer.setPixelRatio(Math.min(cfg.dpr, window.devicePixelRatio || 1));
     comp.setSize(sizeW(), sizeH()); bloom.setSize(sizeW(), sizeH());
     bloom.enabled = cfg.bloom;
+    splashPass.enabled = t < 2;            // skip the extra fullscreen pass on the minimal tier
     UTIER.value = t;
   }
 
@@ -295,11 +316,24 @@ export function createRiverScene(canvas: HTMLCanvasElement, opts: Opts = {}): Ri
     if (!ready) return;
     const dt = clock.getDelta();
     if (!reduce) { UTIME.value += dt; if (UTIME.value > 3600) UTIME.value -= 3600; }
+    // ── scroll choreography (tick is the SOLE camera writer): dolly-in → dive/takeover → splash ──
+    const sm = THREE.MathUtils.smoothstep;
+    const e1 = sm(scrollP, 0.0, 0.62);     // phase 1: dolly-in
+    const e2 = sm(scrollP, 0.62, 0.92);    // phase 2: dive + cyan takeover
+    const e3 = sm(scrollP, 0.92, 1.0);     // phase 3: ripple splash
+    const dolly = e1 * 7.5 + e2 * 1.5;     // z: 16 → 8.5 → 7
+    const takeover = e2;                   // camera dives + bloom floods cyan
+    const lookY = e1 * 1.2 + e2 * 1.2;     // look.y: -3.2 → -2.0 → -0.8 (sink toward the surface)
+    const par = 1 - e1;                    // fade the drone parallax as the dive commits
     camO.x += (camT.x - camO.x) * 0.04; camO.y += (camT.y - camO.y) * 0.04;
-    camera.position.x = camO.x * 4.0;
-    camera.position.y = camBaseY - camO.y * 1.6;
-    camera.position.z = camBaseZ;
-    camera.lookAt(look);
+    camera.position.x = camO.x * 4.0 * par;
+    camera.position.y = (camBaseY - camO.y * 1.6 * par) - takeover * 5.2;
+    camera.position.z = camBaseZ - dolly;
+    const fov = 40 - e1 * 6;               // 40 → 34: NARROW on approach (wide+dolly = motion sickness)
+    if (Math.abs(camera.fov - fov) > 0.01) { camera.fov = fov; camera.updateProjectionMatrix(); }
+    look.set(0, -3.2 + lookY, -7); camera.lookAt(look);
+    renderer.toneMappingExposure = 1.0 + takeover * 0.3;   // bloom blooms harder → cyan floods the frame
+    (splashPass.uniforms as any).uSplash.value = e3;       // ShaderPass clones its uniforms — write the clone, not USPLASH
     comp.render();
     if (!reduce && TIER < 2) {
       if (fpsWarm < 30) fpsWarm++;
@@ -320,14 +354,14 @@ export function createRiverScene(canvas: HTMLCanvasElement, opts: Opts = {}): Ri
     });
     disposables.forEach(d => d.dispose());
     envRT.dispose?.(); pmrem.dispose();
-    (comp as any).dispose?.(); bloom.dispose?.();
+    (comp as any).dispose?.(); bloom.dispose?.(); splashPass.material?.dispose?.();
     renderer.dispose();
     renderer.forceContextLoss?.();
   }
 
   return {
     tick, resize, dispose,
-    setScrollProgress(p: number) { scrollP = Math.max(0, Math.min(1, p)); void scrollP; /* applied in the scroll step */ },
+    setScrollProgress(p: number) { scrollP = Math.max(0, Math.min(1, p)); },
     onReady(cb) { if (ready) cb(); else readyCbs.push(cb); },
     get ready() { return ready; },
     camera,
