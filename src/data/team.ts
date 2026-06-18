@@ -11,8 +11,10 @@ export interface Member {
   last: string;
   tier: string; // role tier, e.g. 'Principal Consultant'
   discipline: string; // focus area
-  mono: string; // initials for the cursor card + sheet portrait
-  cover: 1 | 2 | 3 | 4; // which gradient
+  mono: string; // initials — fallback behind the photo (cursor card + sheet)
+  cover: 1 | 2 | 3 | 4; // gradient shown behind/while the photo loads
+  photo: string; // /images/team/*.jpeg — real portrait
+  photoPos: string; // object-position to frame the face in the circular disc
   bio: string[]; // detail-panel paragraphs (placeholder)
   focus: string[];
   background: string[];
@@ -23,24 +25,28 @@ export interface Member {
 export const team: Member[] = [
   {
     id: '01', first: 'Angad', last: 'Burman', tier: 'Principal Consultant', discipline: 'Climate Risk Analytics', mono: 'AB', cover: 1,
+    photo: '/images/team/angad.jpeg', photoPos: '50% 45%',
     bio: LOREM, focus: ['Hazard modelling', 'Exposure & vulnerability', 'ECOSTRESS / LST'],
     background: ['Lorem ipsum, University of Lorem', 'MSc Climatology, 20XX'], work: ['Lorem heat-risk atlas', 'Ipsum coastal exposure'],
     email: 'angad@delta-climate.example',
   },
   {
     id: '02', first: 'Shirsha', last: 'Sen', tier: 'Principal Consultant', discipline: 'Climate Policy & Regulation', mono: 'SS', cover: 2,
+    photo: '/images/team/shirsha.jpeg', photoPos: '50% 44%',
     bio: LOREM, focus: ['CBAM', 'Carbon markets', 'Regulatory strategy'],
     background: ['Lorem School of Policy', 'LLM Lorem, 20XX'], work: ['Ipsum policy brief', 'Dolor compliance dossier'],
     email: 'shirsha@delta-climate.example',
   },
   {
     id: '03', first: 'Dhruv', last: 'Maniktala', tier: 'Lead', discipline: 'Operations Research', mono: 'DM', cover: 3,
+    photo: '/images/team/dhruv.jpeg', photoPos: '50% 20%',
     bio: LOREM, focus: ['Optimization', 'Field logistics', 'Data pipelines'],
     background: ['Lorem Institute of Technology', 'BSc Lorem, 20XX'], work: ['Sit amet survey ops', 'Consectetur routing model'],
     email: 'dhruv@delta-climate.example',
   },
   {
     id: '04', first: 'Antariksha', last: 'Kumar', tier: 'Lead', discipline: 'Technology Implementation', mono: 'AK', cover: 4,
+    photo: '/images/team/antariksha.jpeg', photoPos: '50% 42%',
     bio: LOREM, focus: ['Platform engineering', 'Geospatial tooling', 'Automation'],
     background: ['Lorem University', 'BTech Lorem, 20XX'], work: ['Adipiscing data platform', 'Elit geospatial toolkit'],
     email: 'antariksha@delta-climate.example',

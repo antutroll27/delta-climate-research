@@ -177,6 +177,7 @@ function initTeamRoster(signal: AbortSignal) {
   const monoEl = card.querySelector<HTMLElement>('[data-tmono]');
   const nameEl = card.querySelector<HTMLElement>('[data-tname]');
   const idEl = card.querySelector<HTMLElement>('[data-tid]');
+  const photoEl = card.querySelector<HTMLImageElement>('[data-tphoto]');
 
   gsap.set(card, { xPercent: -50, yPercent: -52, opacity: 0 });
   const cx = gsap.quickTo(card, 'x', { duration: 0.4, ease: 'power3.out' });
@@ -191,6 +192,11 @@ function initTeamRoster(signal: AbortSignal) {
         const cv = row.dataset.cover || '1';
         covers.forEach((c) => c.classList.toggle('on', c.classList.contains('tcv-' + cv)));
         if (monoEl) monoEl.textContent = row.dataset.mono || '';
+        if (photoEl && row.dataset.photo) {
+          photoEl.src = row.dataset.photo;
+          photoEl.style.objectPosition = row.dataset.pos || '50% 30%';
+          photoEl.classList.add('on');
+        }
         if (nameEl) nameEl.textContent = (row.dataset.name || '').toUpperCase();
         if (idEl) idEl.textContent = `DCR/${String(parseInt(row.dataset.i || '0', 10) + 1).padStart(2, '0')}`;
         // snap to the cursor on first reveal so it never tweens in from origin

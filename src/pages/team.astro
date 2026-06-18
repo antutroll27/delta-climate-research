@@ -48,6 +48,8 @@ import { team } from '../data/team';
               data-i={i}
               data-mono={m.mono}
               data-cover={m.cover}
+              data-photo={m.photo}
+              data-pos={m.photoPos}
               data-name={`${m.first} ${m.last}`}
               aria-haspopup="dialog"
               aria-label={`Open profile — ${m.first} ${m.last}, ${m.tier}`}
@@ -85,7 +87,10 @@ import { team } from '../data/team';
         <article class="panel" data-panel={i} hidden>
           <div class="panel-in">
             <div class="p-photo">
-              <div class={`pdisc pcv-${m.cover}`}><span class="pmono">{m.mono}</span></div>
+              <div class={`pdisc pcv-${m.cover}`}>
+                <span class="pmono">{m.mono}</span>
+                <img class="pphoto" src={m.photo} alt={`${m.first} ${m.last}`} style={`object-position:${m.photoPos}`} loading="lazy" decoding="async" width="260" height="260" />
+              </div>
               <span class="p-id">DCR/{m.id}</span>
             </div>
             <div class="p-body">
@@ -110,6 +115,7 @@ import { team } from '../data/team';
     <span class="tdisc">
       <span class="tcv tcv-1 on"></span><span class="tcv tcv-2"></span><span class="tcv tcv-3"></span><span class="tcv tcv-4"></span>
       <span class="tmono" data-tmono>AB</span>
+      <img class="tphoto" data-tphoto alt="" />
     </span>
     <span class="ttag"><span data-tname>ANGAD BURMAN</span><span class="sep">·</span><span data-tid>DCR/01</span></span>
   </div>
@@ -231,6 +237,8 @@ import { team } from '../data/team';
   .pcv-3 { background: radial-gradient(72% 72% at 40% 70%, rgb(146 194 203 / 0.45), transparent 60%), linear-gradient(120deg, #14272d, #07110f); }
   .pcv-4 { background: radial-gradient(70% 70% at 60% 34%, rgb(111 202 214 / 0.35), transparent 64%), linear-gradient(135deg, #10343a, #060f10); }
   .pmono { position: absolute; inset: 0; display: grid; place-items: center; font-weight: 300; font-size: clamp(3.4rem, 7vw, 5.6rem); letter-spacing: -0.04em; color: rgb(244 246 248 / 0.92); }
+  /* real portrait — sits over the gradient+mono (mono shows only if the image fails) */
+  .pphoto { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
   .p-id { font-family: var(--font-mono); font-size: 0.58rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--color-cyan); }
 
   .p-role { font-family: var(--font-mono); font-size: 0.62rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--color-cyan-muted); }
@@ -264,6 +272,9 @@ import { team } from '../data/team';
   .tcv-3 { background: radial-gradient(72% 72% at 40% 70%, rgb(146 194 203 / 0.45), transparent 60%), linear-gradient(120deg, #14272d, #07110f); }
   .tcv-4 { background: radial-gradient(70% 70% at 60% 34%, rgb(111 202 214 / 0.35), transparent 64%), linear-gradient(135deg, #10343a, #060f10); }
   .tmono { position: absolute; inset: 0; display: grid; place-items: center; font-weight: 300; font-size: 6.2rem; letter-spacing: -0.04em; color: rgb(244 246 248 / 0.92); }
+  /* cursor-card portrait — src + object-position set on hover by section-effects.ts */
+  .tphoto { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity 0.25s ease; }
+  .tphoto.on { opacity: 1; }
   .ttag { font-family: var(--font-mono); font-size: 0.56rem; letter-spacing: 0.12em; text-transform: uppercase; color: rgb(236 237 240 / 0.85); display: flex; align-items: center; gap: 0.55rem; }
   .ttag .sep { color: var(--color-cyan); }
 
