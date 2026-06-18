@@ -36,11 +36,13 @@
 /* Moonscape Serif removed — see src/styles/_serif-stash.css to restore. */
 
 /* Self-hosted Noplato Mono — the mono label face. Replaces Geist Mono.
-   NOTE: this /fonts/NoplatoMono.woff2 is a 119-glyph DEMO cut that lacks ° ² · → ↗
-   (verified against the binary). Those 5 are patched in below from JetBrains Mono. */
+   This is the CONDENSED license-plate cut (internal name "Noplato Demo Mono", 119 glyphs) —
+   the intended brand look (NOT a placeholder; the wider 226-glyph .otf is wrong, see git a357ac8).
+   Filename is versioned (-condensed) to bust the font cache after that bad swap. The symbols it
+   lacks (° ² · Δ … ↑ → ↔ ↗ ↙ ─ ▋ ✓) are patched from JetBrains Mono below. */
 @font-face {
   font-family: 'Noplato Mono';
-  src: url('/fonts/NoplatoMono.woff2') format('woff2');
+  src: url('/fonts/noplato-mono-condensed.woff2') format('woff2');
   font-weight: 400;
   font-style: normal;
   font-display: swap;
