@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>The Plunge — river → sea splash · Delta</title>
+<style>
+  :root{ --cyan:#6fcad6; --base:#050606; --paper:#ecedf0; --faint:#5c7173; }
+  *{ box-sizing:border-box; margin:0; } html,body{ height:100%; }
+  body{ background:var(--base); color:var(--paper); font-family:ui-monospace,"SF Mono",monospace; overflow:hidden; }
+  canvas{ position:fixed; inset:0; width:100%; height:100%; display:block; }
+  #loading{ position:fixed; inset:0; display:grid; place-items:center; color:var(--faint); font-size:12px; letter-spacing:.18em; text-transform:uppercase; }
+  .panel{ position:fixed; top:18px; left:18px; z-index:10; background:rgb(8 12 12 / .82); backdrop-filter:blur(8px);
+    border:1px solid rgb(111 202 214 / .18); border-radius:12px; padding:16px 18px; width:320px; font-size:12px; }
+  .panel h1{ font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:var(--cyan); margin-bottom:4px; font-weight:600; }
+  .panel p{ color:var(--faint); font-size:10.5px; line-height:1.5; margin-bottom:14px; }
+  .row{ display:flex; align-items:center; gap:8px; margin-bottom:11px; }
+  label{ color:var(--faint); letter-spacing:.04em; min-width:74px; }
+  input[type=range]{ flex:1; accent-color:var(--cyan); }
+  .val{ color:var(--cyan); min-width:46px; text-align:right; font-variant-numeric:tabular-nums; }
+  .btns{ display:flex; gap:8px; margin-top:4px; }
+  .btns button{ flex:1; appearance:none; cursor:pointer; background:rgb(111 202 214 / .12); color:var(--paper);
+    border:1px solid rgb(111 202 214 / .3); border-radius:8px; padding:9px; font:inherit; font-size:10.5px; letter-spacing:.06em; }
+  .btns button:hover{ background:rgb(111 202 214 / .22); }
+  .phase{ margin-top:12px; color:var(--faint); font-size:10px; line-height:1.6; border-top:1px solid rgb(111 202 214 / .12); padding-top:10px; }
+  .phase b{ color:var(--cyan); font-weight:400; }
+</style>
+</head>
+<body>
+<div id="loading">loading river scan…</div>
+<div class="panel">
+  <h1>The Plunge — rotate · dolly · engulf</h1>
+  <p>Scrub <b style="color:var(--paper)">Progress</b> 0→1. 0–0.55 = the river turns (Y+Z) + dollies in. 0.55–1 = water rises, refracts, foams, and engulfs → reveals 01.</p>
+  <div class="row"><label>Progress</label><input id="prog" type="range" min="0" max="1" step="0.001" value="0"><span class="val" id="progV">0.00</span></div>
+  <div class="row"><label>Turn °</label><input id="ang" type="range" min="0" max="90" step="1" value="90"><span class="val" id="angV">90°</span></div>
+  <div class="row"><label>Splash speed</label><input id="speed" type="range" min="1" max="4" step="0.1" value="1.8"><span class="val" id="speedV">1.8</span></div>
+  <div class="row"><label>Ripple</label><input id="amp" type="range" min="0" max="0.12" step="0.005" value="0.06"><span class="val" id="ampV">0.06</span></div>
+  <div class="row"><label>Foam</label><input id="foam" type="range" min="0" max="1.5" step="0.05" value="0.9"><span class="val" id="foamV">0.90</span></div>
+  <div class="btns"><button id="play">▶ Play</button><button id="loop">↻ Loop splash</button></div>
+  <div class="phase">Phase: <b id="ph">hero</b></div>
+</div>
+
+<script type="importmap">{ "imports":{
+  "three":"https://unpkg.com/three@0.184.0/build/three.module.js",
+  "three/addons/":"https://unpkg.com/three@0.184.0/examples/jsm/" }}</script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+const GLB = (location.protocol==='file:' ? 'http://localhost:8099' : '') + '/public/models/river-2k.glb';
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,1.6));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x050606, 0.015);
+const camera = new THREE.PerspectiveCamera(40, innerWidth/innerHeight, 0.1, 1000);
+const LOOK = new THREE.Vector3(0,-3.2,-7), CAM = new THREE.Vector3(0,6,16);
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+const keyL=new THREE.DirectionalLight(0xbfe2e8,1.1); keyL.position.set(30,40,25); scene.add(keyL);
+const rimL=new THREE.DirectionalLight(0x6fcad6,0.5); rimL.position.set(-40,18,-30); scene.add(rimL);
+scene.add(new THREE.HemisphereLight(0x7d9aa0,0x04070a,0.35));
+
+const pivot = new THREE.Group(); pivot.position.set(0,-3.5,-5); scene.add(pivot);
+const loader = new GLTFLoader(); loader.setMeshoptDecoder(MeshoptDecoder);
+let river;
+loader.load(GLB,(g)=>{
+  river=g.scene; river.traverse(o=>{ if(o.isMesh) o.frustumCulled=false; });
+  const b=new THREE.Box3().setFromObject(river), c=b.getCenter(new THREE.Vector3()), s=b.getSize(new THREE.Vector3());
+  const scl=120/s.x; river.scale.setScalar(scl); river.position.set(-c.x*scl,-c.y*scl,-c.z*scl);
+  pivot.add(river); document.getElementById('loading').remove();
+}, undefined, e=>{ document.getElementById('loading').textContent='load failed: '+(e?.message||e); });
+
+// ── post: bloom + the water-takeover splash pass ──
+const comp = new EffectComposer(renderer);
+comp.addPass(new RenderPass(scene,camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth,innerHeight), 1.1, 0.8, 0.78);
+comp.addPass(bloom);
+
+const SPLASH = {
+  uniforms:{
+    tDiffuse:{value:null}, uProgress:{value:0}, uTime:{value:0},
+    uRes:{value:new THREE.Vector2(innerWidth,innerHeight)},
+    uDeep:{value:new THREE.Color(0x062028)}, uCyan:{value:new THREE.Color(0x6fcad6)},
+    uAmp:{value:0.06}, uFoam:{value:0.9}, uSpeed:{value:1.8},
+  },
+  vertexShader:`varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
+  fragmentShader:`
+    uniform sampler2D tDiffuse; uniform float uProgress,uTime,uAmp,uFoam,uSpeed; uniform vec2 uRes;
+    uniform vec3 uDeep,uCyan; varying vec2 vUv;
+    // simplex noise (Ashima/McEwan, MIT)
+    vec3 mod289(vec3 x){return x-floor(x*(1.0/289.0))*289.0;}
+    vec2 mod289(vec2 x){return x-floor(x*(1.0/289.0))*289.0;}
+    vec3 permute(vec3 x){return mod289(((x*34.0)+1.0)*x);}
+    float snoise(vec2 v){const vec4 C=vec4(0.211324865405187,0.366025403784439,-0.577350269189626,0.024390243902439);
+      vec2 i=floor(v+dot(v,C.yy));vec2 x0=v-i+dot(i,C.xx);
+      vec2 i1=(x0.x>x0.y)?vec2(1.0,0.0):vec2(0.0,1.0);vec4 x12=x0.xyxy+C.xxzz;x12.xy-=i1;i=mod289(i);
+      vec3 p=permute(permute(i.y+vec3(0.0,i1.y,1.0))+i.x+vec3(0.0,i1.x,1.0));
+      vec3 m=max(0.5-vec3(dot(x0,x0),dot(x12.xy,x12.xy),dot(x12.zw,x12.zw)),0.0);m=m*m;m=m*m;
+      vec3 x=2.0*fract(p*C.www)-1.0;vec3 h=abs(x)-0.5;vec3 ox=floor(x+0.5);vec3 a0=x-ox;
+      m*=1.79284291400159-0.85373472095314*(a0*a0+h*h);
+      vec3 g;g.x=a0.x*x0.x+h.x*x0.y;g.yz=a0.yz*x12.xz+h.yz*x12.yw;return 130.0*dot(m,g);}
+    float fbm(vec2 p){float s=0.0,a=0.5;for(int i=0;i<4;i++){s+=a*snoise(p);p*=2.0;a*=0.5;}return s*0.5+0.5;}
+    void main(){
+      float winEnd = clamp(0.58 + 0.34/uSpeed, 0.66, 0.96);   // faster splash → tighter window
+      float sp = smoothstep(0.56, winEnd, uProgress);          // splash amount
+      vec2 uv=vUv; float t=uTime;
+      // radial engulf: a DRY centre that shrinks → water closes in from ALL edges
+      vec2 q=(uv-0.5); q.x*=uRes.x/uRes.y; float dist=length(q);
+      float dry = mix(1.22, -0.06, sp);                        // dry-circle radius collapses to 0
+      float feather=0.22;
+      float water = smoothstep(dry, dry+feather, dist);        // 1 = under water (outer), 0 = dry centre
+      float crest = smoothstep(feather, 0.0, abs(dist-dry));   // churning ring at the advancing edge
+      // ripple normal from fbm height (livelier time)
+      float e=1.6/uRes.y;
+      float h0=fbm(uv*6.0+vec2(0.0,t*0.35));
+      float hx=fbm((uv+vec2(e,0.0))*6.0+vec2(0.0,t*0.35));
+      float hy=fbm((uv+vec2(0.0,e))*6.0+vec2(0.0,t*0.35));
+      vec2 n=vec2(h0-hx,h0-hy)*8.0;
+      float amp=uAmp*water + uAmp*1.8*crest;
+      vec3 scene=texture2D(tDiffuse, uv+n*amp).rgb;            // refracted frame under the surface
+      // caustics web under water
+      float ca=fbm(uv*9.0+vec2(t*0.30,-t*0.22));
+      ca=pow(1.0-abs(ca-0.5)*2.0,3.0);
+      vec3 uw=scene + uCyan*ca*0.42*water;
+      uw=mix(uw, uDeep, water*(0.42+0.45*sp));                 // deeper, darker tint with progress
+      vec3 col=mix(texture2D(tDiffuse,uv).rgb, uw, water);
+      // foam crest ring
+      float foam=crest*smoothstep(0.45,0.8, fbm(uv*20.0+t*0.85));
+      col+=foam*vec3(0.8,0.92,1.0)*uFoam*(0.5+0.6*sp);
+      // full submersion near the end → flat deep (cut point to 01)
+      col=mix(col, uDeep, smoothstep(winEnd, min(winEnd+0.12,1.0), uProgress)*0.94);
+      gl_FragColor=vec4(col,1.0);
+    }`,
+};
+const splash=new ShaderPass(SPLASH); comp.addPass(splash);
+comp.addPass(new OutputPass());
+
+// ── controls / choreography ──
+const $=id=>document.getElementById(id);
+let playing=false, looping=false;
+const clock=new THREE.Clock();
+const sm=THREE.MathUtils.smoothstep;
+$('play').onclick=()=>{ playing=!playing; looping=false; $('play').textContent=playing?'❚❚ Pause':'▶ Play'; };
+$('loop').onclick=()=>{ looping=!looping; playing=false; $('play').textContent='▶ Play'; if(looping)$('prog').value='0.55'; };
+
+function frame(){
+  requestAnimationFrame(frame);
+  const dt=clock.getDelta(); splash.uniforms.uTime.value+=dt;
+  if(playing){ let p=parseFloat($('prog').value)+dt*0.18; if(p>1)p=1; $('prog').value=p.toFixed(3); if(p>=1)playing=false; }
+  if(looping){ let p=parseFloat($('prog').value)+dt*0.12; if(p>1)p=0.55; $('prog').value=p.toFixed(3); }
+  const p=parseFloat($('prog').value), turn=parseFloat($('ang').value)*Math.PI/180;
+  splash.uniforms.uAmp.value=parseFloat($('amp').value); splash.uniforms.uFoam.value=parseFloat($('foam').value);
+  splash.uniforms.uSpeed.value=parseFloat($('speed').value);
+  $('progV').textContent=p.toFixed(2); $('angV').textContent=$('ang').value+'°'; $('ampV').textContent=parseFloat($('amp').value).toFixed(2); $('foamV').textContent=parseFloat($('foam').value).toFixed(2); $('speedV').textContent=parseFloat($('speed').value).toFixed(1);
+  const p1=sm(p,0.0,0.55);                              // rotate + dolly phase
+  if(river){ pivot.rotation.set(0,0,0); pivot.rotation.y=-p1*turn; pivot.rotation.z=-p1*turn*0.5; }
+  camera.position.set(CAM.x, CAM.y - p1*1.5, CAM.z - p1*8.5);
+  camera.lookAt(LOOK);
+  splash.uniforms.uProgress.value=p;
+  renderer.toneMappingExposure = 1.0 + sm(p,0.55,0.92)*0.35;
+  $('ph').textContent = p<0.55 ? 'hero → rotate + dolly' : p<0.93 ? 'WATER ENGULF' : 'submerged → reveal 01';
+  comp.render();
+}
+frame();
+addEventListener('resize',()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); comp.setSize(innerWidth,innerHeight);
+  splash.uniforms.uRes.value.set(innerWidth,innerHeight); });
+</script>
+</body>
+</html>
