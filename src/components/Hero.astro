@@ -2,13 +2,13 @@
 // Hero — Section 1. Colossal stacked wordmark (Noomo-inspired typography) over
 // the tamed vortex. Kept lean: kicker, 3-line headline, lede, one corner label.
 // Each word stays a .word span so the --i stagger entrance still runs.
-import VortexShader from './VortexShader';
+import HeroRiver from './HeroRiver';
 import ClimateClock from './ClimateClock.astro';
 ---
 
 <section id="hero" class="relative min-h-dvh overflow-hidden flex flex-col bg-base" aria-label="Introduction">
   <div class="vortex-bg vortex-bg--fade-b vortex-hero" aria-hidden="true">
-    <VortexShader client:visible offsetX={0.6} zoom={0.72} fog={0.30} mouse={0.8} />
+    <HeroRiver client:visible />
   </div>
   <div class="vortex-dim" aria-hidden="true"></div>
   <div class="grain" aria-hidden="true"></div>
@@ -35,14 +35,9 @@ import ClimateClock from './ClimateClock.astro';
 </section>
 
 <style>
-  /* wrapper opacity: desktop restrained, mobile slightly lifted */
-  .vortex-hero { opacity: 0.40; }
-  @media (max-width: 640px) {
-    .vortex-hero {
-      opacity: 0.38;
-      transform: translateY(18%);
-    }
-  }
+  /* the river is the hero protagonist now — full presence (its own fog/grade/
+     edge-feather carry the mood), unlike the faint vortex backdrop it replaced. */
+  .vortex-hero { opacity: 1; }
 
   /* dark radial vignette over the vortex hot-spot — pulls it deeper into the base */
   .vortex-dim {
