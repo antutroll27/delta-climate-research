@@ -35,14 +35,30 @@
 
 /* Moonscape Serif removed — see src/styles/_serif-stash.css to restore. */
 
-/* Self-hosted Noplato Mono (demo) — the mono label face. Replaces Geist Mono.
-   Note: this demo cut lacks °, ·, → (they fall back to ui-monospace). */
+/* Self-hosted Noplato Mono — the mono label face. Replaces Geist Mono.
+   This is the CONDENSED license-plate cut (internal name "Noplato Demo Mono", 119 glyphs) —
+   the intended brand look (NOT a placeholder; the wider 226-glyph .otf is wrong, see git a357ac8).
+   Filename is versioned (-condensed) to bust the font cache after that bad swap. The symbols it
+   lacks (° ² · Δ … ↑ → ↔ ↗ ↙ ─ ▋ ✓) are patched from JetBrains Mono below. */
 @font-face {
   font-family: 'Noplato Mono';
-  src: url('/fonts/NoplatoMono.woff2') format('woff2');
+  src: url('/fonts/noplato-mono-condensed.woff2') format('woff2');
   font-weight: 400;
   font-style: normal;
   font-display: swap;
+}
+/* Glyph patch: the symbols the Noplato demo omits but the UI uses — ° ² · Δ … ↑ → ↔ ↗ ↙ ─ ▋ ✓
+   (found by scanning every font-mono component vs the Noplato binary). Borrowed from JetBrains
+   Mono (SIL OFL, see JetBrainsMono-OFL.txt) — a MONOSPACE face, subset to exactly those
+   codepoints (~1 KB). Declared AFTER the Noplato face so it wins for these; everything else
+   (incl. © – —, which Noplato HAS) stays Noplato. No markup changes; applies wherever mono renders. */
+@font-face {
+  font-family: 'Noplato Mono';
+  src: url('/fonts/noplato-symbol-patch.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0394, U+00B0, U+00B2, U+00B7, U+2026, U+2191, U+2192, U+2194, U+2197, U+2199, U+2500, U+258B, U+2713;
 }
 
 /* ----------------------------------------------------------------------------

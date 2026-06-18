@@ -30,3 +30,12 @@ Thumbs.db
 
 # preview scratch artifacts (headless screenshots + verification scripts)
 previews/_*
+models-src/
+
+# heavy/unshipped 3D assets — keep local, out of git (move to Git LFS when wiring production)
+public/models/river-8k.glb
+# flora assets (feature not yet built into the hero)
+public/models/flora.glb
+public/models/flora_raw.glb
+public/models/flowers_pack_4.glb
+public/models/nature_vegetation_pack.glb

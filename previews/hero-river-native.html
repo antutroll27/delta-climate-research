@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Hero River — native water (animate the scan's own river) · Delta Climate Research</title>
+<style>
+  @font-face{font-family:'Mona Sans';src:url('../public/fonts/MonaSans-Variable.woff2') format('woff2-variations');font-weight:200 900;font-display:swap}
+  @font-face{font-family:'Noplato Mono';src:url('../public/fonts/NoplatoMono.woff2') format('woff2');font-weight:300 700;font-display:swap}
+  :root{--base:#050606;--paper:#ecedf0;--ink-muted:#8fa3a5;--ink-faint:#5c7173;--cyan:#6fcad6;--bronze:#b08d57;--sans:'Mona Sans',system-ui,sans-serif;--mono:'Noplato Mono',monospace}
+  *{box-sizing:border-box;margin:0}html,body{height:100%}body{background:var(--base);color:var(--paper);font-family:var(--sans);overflow:hidden}
+  #gl{position:fixed;inset:0;width:100%;height:100%;display:block;z-index:0}
+  .vignette{position:fixed;inset:0;z-index:1;pointer-events:none;background:radial-gradient(125% 95% at 50% 36%,transparent 42%,rgb(5 6 6/.6) 100%)}
+  .grain{position:fixed;inset:0;z-index:1;pointer-events:none;opacity:.05;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+  .content{position:fixed;inset:0;z-index:2;pointer-events:none;display:flex;flex-direction:column;justify-content:flex-end;max-width:90rem;margin-inline:auto;padding:0 clamp(1.5rem,4vw,4rem) clamp(3rem,9vh,7rem)}
+  .nav{position:fixed;top:2rem;left:0;right:0;z-index:2;display:flex;justify-content:space-between;align-items:center;padding:0 clamp(1.5rem,4vw,4rem);font-family:var(--mono);font-size:.7rem;letter-spacing:.12em;text-transform:uppercase;color:rgb(244 246 248/.85)}
+  .nav b{font-family:var(--sans);font-weight:700;font-size:1.05rem;letter-spacing:-.01em;text-transform:none}.nav b i{font-style:normal;color:var(--cyan)}
+  .headline{font-weight:500;font-size:clamp(2.5rem,7vw,7rem);line-height:.95;letter-spacing:-.038em}.headline .l{display:block}.headline .accent{color:var(--cyan);font-weight:800;display:inline-block}
+  .lede{margin-top:clamp(1.2rem,3vh,2rem);max-width:42ch;font-size:clamp(.95rem,1.4vw,1.1rem);line-height:1.5;color:var(--ink-muted)}
+  .loading{position:fixed;inset:0;z-index:4;display:grid;place-items:center;font-family:var(--mono);font-size:.7rem;letter-spacing:.14em;text-transform:uppercase;color:var(--cyan);background:var(--base)}
+  .panel{position:fixed;z-index:5;bottom:1.1rem;left:50%;transform:translateX(-50%);display:flex;gap:.4rem;align-items:center;background:rgb(5 6 6/.85);backdrop-filter:blur(10px);border:1px solid rgb(111 202 214/.16);border-radius:99px;padding:.4rem .55rem;flex-wrap:wrap;justify-content:center;max-width:94vw}
+  .panel button{appearance:none;border:0;background:transparent;cursor:pointer;font-family:var(--mono);font-size:.58rem;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-muted);padding:.5rem .8rem;border-radius:99px}
+  .panel button.on{background:var(--cyan);color:var(--base);font-weight:700}
+  .panel label{font-family:var(--mono);font-size:.52rem;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint);display:flex;align-items:center;gap:.3rem}
+  .panel input[type=range]{width:66px;accent-color:var(--cyan)}.panel .sep{width:1px;height:18px;background:rgb(111 202 214/.18);margin:0 .25rem}
+  .fps{position:fixed;top:5rem;right:clamp(1.5rem,4vw,4rem);z-index:5;font-family:var(--mono);font-size:.6rem;letter-spacing:.1em;color:var(--ink-faint)}
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<div class="vignette" id="vig"></div><div class="grain"></div>
+<div class="loading" id="loading">loading river scan…</div>
+<div class="nav"><b>Delta<i>·</i>Climate<i>·</i>Research</b><span>menu</span></div>
+<div class="content">
+  <h1 class="headline"><span class="l">Navigating</span><span class="l">the systems</span><span class="l">of a <span class="accent">changing&nbsp;planet.</span></span></h1>
+  <p class="lede">Decision-grade intelligence for institutions, municipalities, and corporates navigating a changing climate.</p>
+</div>
+<div class="fps" id="fps">–</div>
+<div class="panel">
+  <button data-q="2k">2K·12M</button>
+  <button data-q="4k">4K·21M</button>
+  <button data-q="8k">8K·41M</button>
+  <span class="sep"></span>
+  <button data-grade="1">Graded</button>
+  <button data-grade="0" class="on">Natural</button>
+  <span class="sep"></span>
+  <button data-flow="1" class="on">Water flow</button>
+  <button data-ffield="1" class="on">Flow field</button>
+  <span class="sep"></span>
+  <label>grade<input id="sGrade" type="range" min="0" max="1.4" step="0.05" value="0.55"></label>
+  <label>detect<input id="sWGain" type="range" min="0" max="3" step="0.05" value="1.2"></label>
+  <label>flow<input id="sWFlow" type="range" min="0" max="0.6" step="0.01" value="0.22"></label>
+  <label>ripple<input id="sWAmp" type="range" min="0" max="1.2" step="0.05" value="0.45"></label>
+  <label>tile<input id="sScaleN" type="range" min="3" max="16" step="0.5" value="8"></label>
+  <label>foam<input id="sFoam" type="range" min="0" max="1.2" step="0.05" value="0.35"></label>
+  <label>edge<input id="sEdge" type="range" min="0" max="0.8" step="0.02" value="0.34"></label>
+  <span class="sep"></span>
+  <label>cam<input id="sCam" type="range" min="6" max="30" step="0.5" value="14"></label>
+  <label>bloom<input id="sBloom" type="range" min="0" max="2.5" step="0.05" value="0.9"></label>
+  <label>fog<input id="sFog" type="range" min="0" max="0.06" step="0.002" value="0.02"></label>
+</div>
+
+<script type="importmap">{ "imports":{
+  "three":"https://unpkg.com/three@0.184.0/build/three.module.js",
+  "three/addons/":"https://unpkg.com/three@0.184.0/examples/jsm/" }}</script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+function pickInitialTier(){
+  const q = new URLSearchParams(location.search).get('tier');
+  if(q!=null) return Math.max(0,Math.min(2,+q));
+  const coarse = matchMedia('(pointer:coarse)').matches;
+  const mem = navigator.deviceMemory ?? 8;
+  const cores = navigator.hardwareConcurrency ?? 8;
+  let t = 0;
+  if(coarse) t = 1;
+  if(mem <= 2 || cores <= 4) t = 2;
+  return t;
+}
+const TIERS = [
+  { q:'4k', flow:'river-flow.png',    dpr:1.6,  bloom:true  },
+  { q:'2k', flow:'river-flow-sm.png', dpr:1.25, bloom:false },
+  { q:'2k', flow:'river-flow-sm.png', dpr:1.0,  bloom:false },
+];
+let TIER = pickInitialTier();
+console.log('[river] initial tier', TIER);
+const Q = (new URLSearchParams(location.search).get('q') || TIERS[TIER].q).toLowerCase();
+const GLBNAME = ['2k','4k','8k'].includes(Q) ? `river-${Q}.glb` : `river-${TIERS[TIER].q}.glb`;
+const GLB = location.protocol==='file:' ? `http://localhost:8099/public/models/${GLBNAME}` : `/public/models/${GLBNAME}`;
+
+const canvas=document.getElementById('gl');
+const renderer=new THREE.WebGLRenderer({canvas,antialias:false,alpha:false,powerPreference:'high-performance'});
+renderer.setPixelRatio(Math.min(TIERS[TIER].dpr,devicePixelRatio||1));   // initial tier DPR (applyTier re-applies on load)
+renderer.setSize(innerWidth,innerHeight);
+renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=1.0;
+
+const scene=new THREE.Scene(); scene.background=new THREE.Color('#050606');
+const FOG=new THREE.Color('#050606'); scene.fog=new THREE.FogExp2(FOG.getHex(),0.02);
+const pmrem=new THREE.PMREMGenerator(renderer); scene.environment=pmrem.fromScene(new RoomEnvironment(),0.03).texture;
+
+const camera=new THREE.PerspectiveCamera(40,innerWidth/innerHeight,0.1,400);
+let camBaseY=14, camBaseZ=16;                 // drone framing: high + angled down so the channel runs across screen
+const look=new THREE.Vector3(0,-3.2,-7);
+camera.position.set(0,camBaseY,camBaseZ); camera.lookAt(look);
+
+// lights (dim, cool)
+const key=new THREE.DirectionalLight(0xbfe2e8,1.1); key.position.set(30,40,25); scene.add(key);
+const rim=new THREE.DirectionalLight(0x6fcad6,0.5); rim.position.set(-40,18,-30); scene.add(rim);
+scene.add(new THREE.HemisphereLight(0x7d9aa0,0x04070a,0.35));
+
+const UG={value:0.55}, UTIME={value:0}, UWGAIN={value:1.2}, UWFLOW={value:0.12}, UWAMP={value:0.5};
+const UFFIELD={value:1}, USCALEN={value:8.0}, UFOAM={value:0.35};   // flow-field on, ripple tiling, foam amount
+const UEDGE={value:0.34};   // silhouette edge-feather width (grazing fade into the background)
+const UTIER={value: TIER};   // shader-complexity tier (driven by applyTier)
+const grades=[]; // collect material uniforms to drive
+const TEXBASE = location.protocol==='file:' ? 'http://localhost:8099/public/textures/' : '/public/textures/';
+const waterNorm = new THREE.TextureLoader().load(TEXBASE+'waternormals.webp', t=>{ t.wrapS=t.wrapT=THREE.RepeatWrapping; t.colorSpace=THREE.NoColorSpace; });
+// baked channel flow-field: RG = downstream unit tangent, B = speed (narrows fast), A = channel presence
+const flowTex = new THREE.TextureLoader().load(TEXBASE+TIERS[TIER].flow, undefined, undefined, ()=>{ if(TIERS[TIER].flow!=='river-flow.png') new THREE.TextureLoader().load(TEXBASE+'river-flow.png', t=>{ t.wrapS=t.wrapT=THREE.ClampToEdgeWrapping; t.flipY=false; t.generateMipmaps=false; t.minFilter=t.magFilter=THREE.LinearFilter; t.colorSpace=THREE.NoColorSpace; flowTex.image=t.image; flowTex.needsUpdate=true; }); });
+flowTex.wrapS=flowTex.wrapT=THREE.ClampToEdgeWrapping; flowTex.flipY=false; flowTex.generateMipmaps=false;
+flowTex.minFilter=flowTex.magFilter=THREE.LinearFilter; flowTex.colorSpace=THREE.NoColorSpace;
+const STRIP_MIN=new THREE.Vector2(-117.416,-26.216), STRIP_MAX=new THREE.Vector2(103.660,36.553);  // model-space XZ bbox the bake used
+
+/* Animate the scan's OWN river: detect water texels by colour (teal/grey vs the
+   yellow-green banks), then give ONLY those flowing normals + teal→cyan grade +
+   rim glow. Banks stay the natural low-grade look. No overlay plane, no mask bake. */
+function gradeMaterial(mat){
+  mat.fog=true; mat.envMapIntensity=0.35;
+  const u={ uTime:UTIME, uGrade:UG, uWGain:UWGAIN, uWFlow:UWFLOW, uWAmp:UWAMP,
+    uShadow:{value:new THREE.Color('#05080a')}, uMid:{value:new THREE.Color('#6b4f2e')}, uHigh:{value:new THREE.Color('#6fcad6')},
+    uRim:{value:new THREE.Color('#6fcad6')}, uWaterDeep:{value:new THREE.Color('#08323a')}, uWaterNorm:{value:waterNorm},
+    uFlowMap:{value:flowTex}, uStripMin:{value:STRIP_MIN}, uStripMax:{value:STRIP_MAX},
+    uScaleN:USCALEN, uFField:UFFIELD, uFoam:{value:new THREE.Color('#9fe6ee')}, uFoamAmt:UFOAM,
+    uEdgeFade:UEDGE, uTier:UTIER, uFogCol:{value:FOG} };
+  mat.onBeforeCompile=(sh)=>{
+    Object.assign(sh.uniforms,u);
+    // ── varyings: world pos + LOCAL (object-space) pos — local is invariant to the runtime rescale/recenter/mirror, so flow-map sampling stays stable ──
+    sh.vertexShader = `varying vec3 vWPos; varying vec3 vLocalXZ3;\n` + sh.vertexShader;
+    sh.vertexShader = sh.vertexShader.replace('#include <begin_vertex>', `
+      #include <begin_vertex>
+      vWPos = (modelMatrix * vec4(transformed,1.0)).xyz;
+      vLocalXZ3 = transformed;`);
+    // ── fragment: globals (mutable, file scope) ──
+    sh.fragmentShader = `
+      uniform float uTime,uGrade,uWGain,uWFlow,uWAmp,uScaleN,uFField,uFoamAmt,uEdgeFade,uTier;
+      uniform vec3 uShadow,uMid,uHigh,uRim,uWaterDeep,uFoam,uFogCol; uniform sampler2D uWaterNorm,uFlowMap; uniform vec2 uStripMin,uStripMax;
+      varying vec3 vWPos; varying vec3 vLocalXZ3;
+      float gWater=0.0, gGlint=0.0, gSpd=0.0, gChan=0.0, gTj=0.0, gFoam=0.0; vec2 gFuv=vec2(0.0), gDir=vec2(1.0,0.0);
+    ` + sh.fragmentShader;
+    // ── detect water + duotone grade (water grades teal→cyan, banks shadow→bronze→cyan) ──
+    sh.fragmentShader = sh.fragmentShader.replace('#include <map_fragment>', `
+      #include <map_fragment>
+      {
+        vec3 c = diffuseColor.rgb;
+        float lum = dot(c, vec3(0.299,0.587,0.114));
+        float maxc=max(max(c.r,c.g),c.b), minc=min(min(c.r,c.g),c.b);
+        float sat = maxc-minc;
+        float teal = clamp((c.b - max(c.r,c.g))*8.0, 0.0, 1.0);
+        float grey = clamp((0.16 - sat)*4.0,0.0,1.0)*smoothstep(0.42,0.75,lum);
+        gWater = clamp(max(teal, grey)*uWGain, 0.0, 1.0);
+        // ── sample the baked flow-field FIRST; its presence channel is the PRIMARY water mask (colour detector is too sparse) ──
+        gFuv = (vLocalXZ3.xz - uStripMin) / (uStripMax - uStripMin);       // local-space → flow-map UV (rescale/mirror-invariant)
+        if(uFField>0.5){ vec4 fm = texture2D(uFlowMap, gFuv); gDir = normalize(fm.rg*2.0-1.0 + 1e-5); gSpd = fm.b; gChan = fm.a; }
+        else           { gDir = vec2(1.0,0.0); gSpd = 0.45; gChan = smoothstep(0.02,0.25,gWater); }   // A/B: colour-mask + global +X
+        float wmask = max(gWater, gChan*0.9);                              // channel reads as water even where albedo isn't teal
+        // duotone grade (water → teal→cyan, banks → shadow→bronze→cyan)
+        float L = pow(clamp(lum*1.15,0.0,1.0), 1.25);
+        vec3 gBank = mix(uShadow, uMid, smoothstep(0.04,0.5,L));
+        gBank = mix(gBank, uHigh, smoothstep(0.5,0.92,L));
+        vec3 gWat = mix(uWaterDeep, uHigh, smoothstep(0.25,0.8,L));
+        vec3 g = mix(gBank, gWat, wmask);
+        float amt = max(clamp(uGrade,0.0,1.4), wmask*0.7);
+        diffuseColor.rgb = mix(diffuseColor.rgb, g, amt);
+        // ── flowing current along the channel (gated by baked presence) ──
+        if(gChan>0.001 && uWFlow>0.0001){
+          gTj = uTime*uWFlow*(0.5+gSpd*0.55) + texture2D(uWaterNorm, gFuv*3.1).r;   // softer speed→time so high-speed phase doesn't outrun precision; jitter smears the reset
+          vec2 dirT = (uTier < 1.5) ? gDir : vec2(1.0,0.0);   // full+lite follow channel; minimal = global +X
+          float sAlong = dot(vLocalXZ3.xz, dirT);                          // distance downstream
+          float streaks = sin(sAlong*0.5 - gTj*6.0)*0.5 + sin(sAlong*1.05 - gTj*9.5 + 1.7)*0.5;  // lower freq → less aliasing
+          float glint = smoothstep(0.5, 1.0, streaks*0.5 + 0.5);
+          gGlint = glint * gChan;
+          diffuseColor.rgb += uHigh * gGlint * 0.24;
+          diffuseColor.rgb = mix(diffuseColor.rgb, uWaterDeep, gChan*0.14*(1.0-glint));
+          // foam: channel-edge waterline + rapids (high speed), scrolled along flow
+          if(uTier < 1.5){                                                   // no foam on minimal
+            mat2 frot = mat2(dirT.y,dirT.x,-dirT.x,dirT.y); vec2 ruvF = frot*(gFuv*uScaleN); ruvF.y*=0.45;
+            float shore = smoothstep(0.06,0.4,gChan)*(1.0-smoothstep(0.4,0.85,gChan));
+            float rapids = (uTier < 0.5) ? smoothstep(0.74,1.0,gSpd)*gChan*0.55 : 0.0;  // rapids foam: full only
+            float fn = texture2D(uWaterNorm, ruvF*1.7 - vec2(0.0,fract(gTj))).g;
+            gFoam = smoothstep(0.5,0.8,fn)*max(shore,rapids);
+            diffuseColor.rgb = mix(diffuseColor.rgb, uFoam, gFoam*uFoamAmt);
+          }
+        }
+      }`);
+    // ── flow-steered TWO-PHASE normal advection: ripples rotate to follow the channel; crossfade kills swimming/reset ──
+    sh.fragmentShader = sh.fragmentShader.replace('#include <normal_fragment_maps>', `
+      #include <normal_fragment_maps>
+      if(gChan>0.001 && uWFlow>0.0001){
+        vec2 dirN = (uTier < 1.5) ? gDir : vec2(1.0,0.0);
+        float p0=fract(gTj), p1=fract(gTj+0.5);
+        vec3 wn;
+        if(uTier < 0.5){                                                     // FULL: rotate tile down-channel
+          mat2 rot = mat2(dirN.y,dirN.x,-dirN.x,dirN.y);
+          vec2 ruv = rot*(gFuv*uScaleN); ruv.y*=0.45;
+          vec3 n0 = texture2D(uWaterNorm, ruv - vec2(0.0,p0)).xyz*2.0-1.0;
+          vec3 n1 = texture2D(uWaterNorm, ruv - vec2(0.0,p1)).xyz*2.0-1.0;
+          wn = mix(n0, n1, 1.0-abs(1.0-2.0*fract(gTj)));
+          wn.xy = transpose(rot)*wn.xy;
+        } else {                                                            // LITE/MINIMAL: unrotated tile, offset along dirN (channel for lite, +X for minimal)
+          vec2 ruv = gFuv*uScaleN;
+          vec3 n0 = texture2D(uWaterNorm, ruv - dirN*p0).xyz*2.0-1.0;
+          vec3 n1 = texture2D(uWaterNorm, ruv - dirN*p1).xyz*2.0-1.0;
+          wn = mix(n0, n1, 1.0-abs(1.0-2.0*fract(gTj)));
+        }
+        normal = normalize(normal + vec3(wn.xy,0.0)*gChan*uWAmp);
+      }`);
+    // ── cyan fresnel rim into emissive (blooms); water glows extra + mask debug ──
+    sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>', `
+      #include <emissivemap_fragment>
+      {
+        vec3 V = normalize(vViewPosition);
+        float fr = pow(1.0 - clamp(dot(normalize(normal), V),0.0,1.0), 3.0);
+        totalEmissiveRadiance += uRim * fr * (0.5*clamp(uGrade,0.0,1.2) + gWater*0.6);
+        totalEmissiveRadiance += uHigh * gGlint * 0.3;                      // flowing glints bloom downstream
+        totalEmissiveRadiance += uFoam * gFoam * 0.15;                      // foam catches light at shore/rapids
+      }`);
+    // silhouette edge-feather at output: dissolve the grazing rim into the background so ragged scan edges round off
+    sh.fragmentShader = sh.fragmentShader.replace('#include <dithering_fragment>', `
+      #include <dithering_fragment>
+      // ── silhouette edge-feather: dissolve grazing rim into the background so ragged photogrammetry edges round off ──
+      { float graze = abs(dot(normalize(normal), normalize(vViewPosition)));
+        float ef = smoothstep(0.0, max(uEdgeFade,0.001), graze);
+        gl_FragColor.rgb = mix(uFogCol, gl_FragColor.rgb, ef); }
+`);
+    grades.push(sh.uniforms);
+  };
+  mat.needsUpdate=true;
+}
+
+/* fireflies */
+const FA=reduce?0:520; const faGeo=new THREE.BufferGeometry();
+const fp=new Float32Array(Math.max(FA,1)*3), fs=new Float32Array(Math.max(FA,1)), fk=new Float32Array(Math.max(FA,1));
+for(let i=0;i<FA;i++){ fp[i*3]=(Math.random()-0.5)*60; fp[i*3+1]=-1+Math.random()*7; fp[i*3+2]=-6+(Math.random()-0.5)*30; fs[i]=Math.random()*100; fk[i]=Math.random()<0.62?0:1; }
+faGeo.setAttribute('position',new THREE.BufferAttribute(fp,3)); faGeo.setAttribute('aSeed',new THREE.BufferAttribute(fs,1)); faGeo.setAttribute('aKind',new THREE.BufferAttribute(fk,1));
+const faMat=new THREE.ShaderMaterial({ transparent:true,depthWrite:false,blending:THREE.AdditiveBlending, uniforms:{uTime:UTIME,uPix:{value:renderer.getPixelRatio()},uCyan:{value:new THREE.Color('#6fcad6')},uBronze:{value:new THREE.Color('#b08d57')}},
+  vertexShader:`uniform float uTime,uPix;attribute float aSeed,aKind;varying float vK,vTw;void main(){vK=aKind;vec3 p=position;p.x+=sin(uTime*0.3+aSeed)*1.3;p.y+=sin(uTime*0.45+aSeed*1.7)*0.5;p.z+=cos(uTime*0.25+aSeed)*1.1;vTw=0.5+0.5*sin(uTime*1.7+aSeed*5.0);vec4 mv=modelViewMatrix*vec4(p,1.0);gl_PointSize=(0.7+1.4*fract(aSeed))*uPix*(150.0/-mv.z);gl_Position=projectionMatrix*mv;}`,
+  fragmentShader:`uniform vec3 uCyan,uBronze;varying float vK,vTw;void main(){float d=length(gl_PointCoord-vec2(0.5));if(d>0.5)discard;float a=smoothstep(0.5,0.0,d);a*=a;a*=(0.3+0.7*vTw);gl_FragColor=vec4(mix(uCyan,uBronze,vK),a*0.85);}`});
+const fauna=new THREE.Points(faGeo,faMat); fauna.frustumCulled=false; /* particles removed per request — keep code, don't add to scene */
+
+/* post */
+const comp=new EffectComposer(renderer); comp.addPass(new RenderPass(scene,camera));
+const bloom=new UnrealBloomPass(new THREE.Vector2(innerWidth,innerHeight),0.9,0.8,0.78); comp.addPass(bloom);
+comp.addPass(new OutputPass());
+function applyTier(t){
+  TIER=t; const cfg=TIERS[t];
+  renderer.setPixelRatio(Math.min(cfg.dpr, devicePixelRatio||1));
+  comp.setSize(innerWidth,innerHeight); bloom.setSize(innerWidth,innerHeight);
+  bloom.enabled=cfg.bloom;
+  UTIER.value=t;
+  console.log('[river] applyTier', t, 'dpr', renderer.getPixelRatio(), 'bloom', cfg.bloom);
+}
+window.__diag = ()=>({tier:TIER, glb:GLBNAME, flow:TIERS[TIER].flow, dpr:renderer.getPixelRatio(), bloom:bloom.enabled});
+
+/* mirror-tiling: extend the river by cloning + mirroring alternate copies end-to-end
+   (edges meet by mirror symmetry → seamless silhouette; fog hides far joins). */
+let TILES = 1;
+let tiles = [];
+function buildTiles(n){
+  TILES = n;
+  tiles.forEach(t=>scene.remove(t)); tiles=[];
+  const unit=window.__unit; if(!unit) return;
+  const W=window.__unitW, bp=window.__basePos, sc=window.__baseScl;
+  const STEP = W*0.86; // 14% overlap so ragged edges interleave (no gap seam) when n>1
+  for(let i=0;i<n;i++){
+    const k = i - (n-1)/2;
+    const cl = unit.clone();
+    cl.position.copy(bp); cl.position.x = bp.x + k*STEP;
+    cl.scale.setScalar(sc);
+    if(Math.abs(k)%2===1){ cl.scale.x = -sc; cl.position.y = bp.y - 0.15; } // mirror + tiny y to avoid z-fight in overlap
+    scene.add(cl); tiles.push(cl);
+  }
+}
+
+/* load scan */
+const loader=new GLTFLoader(); loader.setMeshoptDecoder(MeshoptDecoder);
+let river;
+loader.load(GLB,(g)=>{
+  river=g.scene;
+  river.traverse(o=>{ if(o.isMesh){ gradeMaterial(o.material); o.frustumCulled=false; } });
+  // frame: center, scale to ~50 wide, lay flat crossing X, sink slightly below text zone
+  const box=new THREE.Box3().setFromObject(river); const c=box.getCenter(new THREE.Vector3()); const s=box.getSize(new THREE.Vector3());
+  // scale ONE instance to span well beyond the viewport so its ragged ends sit
+  // off-screen and dissolve into fog → a single continuous river, no seams.
+  const scl=120/s.x; river.scale.setScalar(scl);
+  river.position.set(-c.x*scl, -c.y*scl - 3.5, -c.z*scl - 5);
+  window.__unit=river; window.__unitW=s.x*scl; window.__basePos=river.position.clone(); window.__baseScl=scl;
+  buildTiles(TILES);            // single seamless instance (ragged ends fogged off-screen)
+  document.getElementById('loading').style.display='none';
+  window.__ready=true; window.__river=river; window.__box={c,s,scl};
+  applyControls();
+  applyTier(TIER);
+},(p)=>{ const pct=p.total?Math.round(p.loaded/p.total*100):0; document.getElementById('loading').textContent=`loading river scan… ${pct}%`; },
+ (e)=>{ document.getElementById('loading').textContent='load error: '+e.message; });
+
+/* controls */
+const $=id=>document.getElementById(id);
+let flowOn=true;
+function applyControls(){
+  UG.value=+$('sGrade').value;
+  UWGAIN.value=+$('sWGain').value;
+  UWFLOW.value=flowOn ? +$('sWFlow').value : 0;
+  UWAMP.value=+$('sWAmp').value;
+  camBaseY=+$('sCam').value;
+  bloom.strength=+$('sBloom').value; scene.fog.density=+$('sFog').value;
+  USCALEN.value=+$('sScaleN').value; UFOAM.value=+$('sFoam').value; UEDGE.value=+$('sEdge').value;
+}
+['sGrade','sWGain','sWFlow','sWAmp','sScaleN','sFoam','sEdge','sCam','sBloom','sFog'].forEach(id=>$(id).addEventListener('input',applyControls));
+document.querySelectorAll('.panel button[data-flow]').forEach(b=>b.addEventListener('click',()=>{
+  flowOn=!flowOn; b.classList.toggle('on',flowOn); b.textContent=flowOn?'Water flow':'Flow paused'; applyControls();
+}));
+document.querySelectorAll('.panel button[data-ffield]').forEach(b=>b.addEventListener('click',()=>{
+  const on=!b.classList.contains('on'); b.classList.toggle('on',on); b.textContent=on?'Flow field':'Global +X'; UFFIELD.value=on?1:0;
+}));
+document.querySelectorAll('.panel button[data-grade]').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('.panel button[data-grade]').forEach(x=>x.classList.toggle('on',x===b));
+  $('sGrade').value=b.dataset.grade==='1'?'1':'0'; applyControls();
+}));
+// quality switch — reloads with the chosen GLB
+document.querySelectorAll('.panel button[data-q]').forEach(b=>{
+  if(b.dataset.q===Q) b.classList.add('on');
+  b.addEventListener('click',()=>{ const u=new URL(location.href); u.searchParams.set('q',b.dataset.q); location.href=u.toString(); });
+});
+
+/* camera parallax (subtle drone drift) */
+const camT={x:0,y:0},camO={x:0,y:0};
+addEventListener('pointermove',e=>{camT.x=e.clientX/innerWidth-0.5;camT.y=e.clientY/innerHeight-0.5;},{passive:true});
+
+addEventListener('resize',()=>{renderer.setSize(innerWidth,innerHeight);comp.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();faMat.uniforms.uPix.value=renderer.getPixelRatio();});
+
+const clock=new THREE.Clock(); let frames=0,fpsT=performance.now();
+const FPSCAP = +(new URLSearchParams(location.search).get('fpscap')||0);   // dev: force a low fps reading to test downgrades
+let fpsWarm=0, fpsAcc=0, fpsN=0;
+function loop(){ requestAnimationFrame(loop); const dt=clock.getDelta(); UTIME.value+=reduce?0:dt; if(UTIME.value>3600.0) UTIME.value-=3600.0;  // wrap → never drift into float-precision banding
+  camO.x+=(camT.x-camO.x)*0.04; camO.y+=(camT.y-camO.y)*0.04;
+  camera.position.x=camO.x*4.0; camera.position.y=camBaseY-camO.y*1.6; camera.position.z=camBaseZ; camera.lookAt(look);
+  comp.render(); frames++; const n=performance.now(); if(n-fpsT>500){$('fps').textContent=Math.round(frames*1000/(n-fpsT))+' fps';frames=0;fpsT=n;}
+  if(!reduce && TIER<2){
+    if(fpsWarm<30){ fpsWarm++; }
+    else { fpsAcc += (FPSCAP>0?FPSCAP:(dt>0?1/dt:60)); fpsN++;   // FPSCAP=20 → feeds 20fps → forces downgrade
+      if(fpsN>=60){ const medianish=fpsAcc/fpsN; if(medianish<45){ applyTier(TIER+1); } fpsAcc=0; fpsN=0; } }
+  }
+}
+if(reduce){ /* render one frame after load */ const t=setInterval(()=>{ if(window.__ready){ comp.render(); clearInterval(t);} },200); }
+else loop();
+window.__camset=(x,y,z,lx,ly,lz)=>{camera.position.set(x,y,z);look.set(lx,ly,lz);camera.lookAt(look);};
+</script>
+</body>
+</html>
