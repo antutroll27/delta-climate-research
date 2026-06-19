@@ -68,6 +68,7 @@ export function createRiverScene(canvas: HTMLCanvasElement, opts: Opts = {}): Ri
   const scene = new THREE.Scene();
   scene.background = new THREE.Color('#050606');
   const FOG = new THREE.Color('#050606');
+  const DEEP = new THREE.Color('#062028');   // engulf deep-sea tint (darker than FOG; user-locked 2026-06-19)
   scene.fog = new THREE.FogExp2(FOG.getHex(), 0.015);   // slightly less fog (user, 2026-06-18)
   const pmrem = new THREE.PMREMGenerator(renderer);
   const envRT = pmrem.fromScene(new RoomEnvironment(), 0.03);
@@ -235,22 +236,56 @@ export function createRiverScene(canvas: HTMLCanvasElement, opts: Opts = {}): Ri
   const bloom = new UnrealBloomPass(new THREE.Vector2(sizeW(), sizeH()), 1.1, 0.8, 0.78);   // slightly more bloom (user, 2026-06-18)
   comp.addPass(bloom);
   comp.addPass(new OutputPass());
-  // ── splash: a ripple-dissolve transition pass driven by scroll progress (the "splash into About") ──
-  const USPLASH = { value: 0 };   // smoothstep(0.92,1, scrollP) — 0 = passthrough
-  // ripple-dissolve = a hand-port of gl-transitions WaterDrop.glsl (Pawel Plociennik, MIT)
-  // — an expanding concentric wavefront that displaces then crossfades the river frame to the brand base.
+  // ── splash: radial water-engulf driven by scroll progress (river → sea, "The Plunge") ──
+  // Dark water irises in from every edge, refracting the frame via an FBM-normal (Ashima snoise, MIT),
+  // caustics + deep tint, then settles to DEEP → hands off to 01. Ported from previews/plunge.html.
   const splashPass = new ShaderPass({
-    uniforms: { tDiffuse: { value: null }, uSplash: USPLASH, uBase: { value: FOG } },
+    uniforms: {
+      tDiffuse: { value: null }, uProgress: { value: 0 }, uTime: { value: 0 },
+      uRes: { value: new THREE.Vector2(sizeW(), sizeH()) },
+      uDeep: { value: DEEP }, uCyan: { value: new THREE.Color('#6fcad6') },
+      uAmp: { value: 0.07 }, uFoam: { value: 0.0 }, uSpeed: { value: 3.3 },
+    },
     vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
     fragmentShader: `
-      uniform sampler2D tDiffuse; uniform float uSplash; uniform vec3 uBase; varying vec2 vUv;
-      const float amp = 18.0, speed = 22.0;
+      uniform sampler2D tDiffuse; uniform float uProgress,uTime,uAmp,uFoam,uSpeed; uniform vec2 uRes;
+      uniform vec3 uDeep,uCyan; varying vec2 vUv;
+      vec3 mod289(vec3 x){return x-floor(x*(1.0/289.0))*289.0;}
+      vec2 mod289(vec2 x){return x-floor(x*(1.0/289.0))*289.0;}
+      vec3 permute(vec3 x){return mod289(((x*34.0)+1.0)*x);}
+      float snoise(vec2 v){const vec4 C=vec4(0.211324865405187,0.366025403784439,-0.577350269189626,0.024390243902439);
+        vec2 i=floor(v+dot(v,C.yy));vec2 x0=v-i+dot(i,C.xx);
+        vec2 i1=(x0.x>x0.y)?vec2(1.0,0.0):vec2(0.0,1.0);vec4 x12=x0.xyxy+C.xxzz;x12.xy-=i1;i=mod289(i);
+        vec3 p=permute(permute(i.y+vec3(0.0,i1.y,1.0))+i.x+vec3(0.0,i1.x,1.0));
+        vec3 m=max(0.5-vec3(dot(x0,x0),dot(x12.xy,x12.xy),dot(x12.zw,x12.zw)),0.0);m=m*m;m=m*m;
+        vec3 x=2.0*fract(p*C.www)-1.0;vec3 h=abs(x)-0.5;vec3 ox=floor(x+0.5);vec3 a0=x-ox;
+        m*=1.79284291400159-0.85373472095314*(a0*a0+h*h);
+        vec3 g;g.x=a0.x*x0.x+h.x*x0.y;g.yz=a0.yz*x12.xz+h.yz*x12.yw;return 130.0*dot(m,g);}
+      float fbm(vec2 p){float s=0.0,a=0.5;for(int i=0;i<4;i++){s+=a*snoise(p);p*=2.0;a*=0.5;}return s*0.5+0.5;}
       void main(){
-        vec2 dir = vUv - 0.5; float dist = length(dir);
-        vec3 col;
-        if (dist > uSplash) { col = mix(texture2D(tDiffuse, vUv).rgb, uBase, uSplash); }
-        else { vec2 off = dir * sin(dist*amp - uSplash*speed); col = mix(texture2D(tDiffuse, vUv+off).rgb, uBase, uSplash); }
-        gl_FragColor = vec4(col, 1.0);
+        float winEnd = clamp(0.58 + 0.34/uSpeed, 0.66, 0.96);
+        float sp = smoothstep(0.56, winEnd, uProgress);
+        vec2 uv=vUv; float t=uTime;
+        vec2 q=(uv-0.5); q.x*=uRes.x/uRes.y; float dist=length(q);
+        float dry = mix(1.22, -0.06, sp);
+        float feather=0.22;
+        float water = smoothstep(dry, dry+feather, dist);
+        float crest = smoothstep(feather, 0.0, abs(dist-dry));
+        float e=1.6/uRes.y;
+        float h0=fbm(uv*6.0+vec2(0.0,t*0.35));
+        float hx=fbm((uv+vec2(e,0.0))*6.0+vec2(0.0,t*0.35));
+        float hy=fbm((uv+vec2(0.0,e))*6.0+vec2(0.0,t*0.35));
+        vec2 n=vec2(h0-hx,h0-hy)*8.0;
+        float amp=uAmp*water + uAmp*1.8*crest;
+        vec3 scene=texture2D(tDiffuse, uv+n*amp).rgb;
+        float ca=fbm(uv*9.0+vec2(t*0.30,-t*0.22)); ca=pow(1.0-abs(ca-0.5)*2.0,3.0);
+        vec3 uw=scene + uCyan*ca*0.42*water;
+        uw=mix(uw, uDeep, water*(0.42+0.45*sp));
+        vec3 col=mix(texture2D(tDiffuse,uv).rgb, uw, water);
+        float foam=crest*smoothstep(0.45,0.8, fbm(uv*20.0+t*0.85));
+        col+=foam*vec3(0.8,0.92,1.0)*uFoam*(0.5+0.6*sp);
+        col=mix(col, uDeep, smoothstep(winEnd, min(winEnd+0.12,1.0), uProgress)*0.94);
+        gl_FragColor=vec4(col,1.0);
       }`,
   });
   comp.addPass(splashPass);
@@ -267,6 +302,7 @@ export function createRiverScene(canvas: HTMLCanvasElement, opts: Opts = {}): Ri
 
   // load scan
   let river: THREE.Object3D | null = null;
+  let pivot: THREE.Group | null = null; // wraps `river` so the model spins about its own centre
   let ready = false;
   const readyCbs: (() => void)[] = [];
   const loader = new GLTFLoader(); loader.setMeshoptDecoder(MeshoptDecoder);
@@ -276,9 +312,13 @@ export function createRiverScene(canvas: HTMLCanvasElement, opts: Opts = {}): Ri
     const box = new THREE.Box3().setFromObject(river);
     const cc = box.getCenter(new THREE.Vector3()); const s = box.getSize(new THREE.Vector3());
     const scl = 120 / s.x; river.scale.setScalar(scl);
-    river.position.set(-cc.x * scl, -cc.y * scl - 3.5, -cc.z * scl - 5);
-    river.updateMatrixWorld(true);
-    scene.add(river);
+    // centre the model at the pivot origin so pivot.rotation spins it in place (not orbiting the GLB origin)
+    river.position.set(-cc.x * scl, -cc.y * scl, -cc.z * scl);
+    pivot = new THREE.Group();
+    pivot.position.set(0, -3.5, -5);          // same world centre as before → identical framing
+    pivot.add(river);
+    pivot.updateMatrixWorld(true);
+    scene.add(pivot);
     applyTier(TIER);
     ready = true;
     readyCbs.forEach(cb => cb());
@@ -316,24 +356,19 @@ export function createRiverScene(canvas: HTMLCanvasElement, opts: Opts = {}): Ri
     if (!ready) return;
     const dt = clock.getDelta();
     if (!reduce) { UTIME.value += dt; if (UTIME.value > 3600) UTIME.value -= 3600; }
-    // ── scroll choreography (tick is the SOLE camera writer): dolly-in → dive/takeover → splash ──
+    // ── "The Plunge": phase 1 (0→0.55) rotate Y+Z 90° CW + dolly; phase 2 (0.56→~0.68) radial water engulf ──
     const sm = THREE.MathUtils.smoothstep;
-    const e1 = sm(scrollP, 0.0, 0.62);     // phase 1: dolly-in
-    const e2 = sm(scrollP, 0.62, 0.92);    // phase 2: dive + cyan takeover
-    const e3 = sm(scrollP, 0.92, 1.0);     // phase 3: ripple splash
-    const dolly = e1 * 7.5 + e2 * 1.5;     // z: 16 → 8.5 → 7
-    const takeover = e2;                   // camera dives + bloom floods cyan
-    const lookY = e1 * 1.2 + e2 * 1.2;     // look.y: -3.2 → -2.0 → -0.8 (sink toward the surface)
-    const par = 1 - e1;                    // fade the drone parallax as the dive commits
+    const p1 = sm(scrollP, 0.0, 0.55);     // rotate + dolly amount
+    const par = 1 - p1;                    // fade the idle drone parallax as the move commits
     camO.x += (camT.x - camO.x) * 0.04; camO.y += (camT.y - camO.y) * 0.04;
+    if (pivot) { pivot.rotation.set(0, 0, 0); pivot.rotation.y = -p1 * (Math.PI / 2); pivot.rotation.z = -p1 * (Math.PI / 4); }
     camera.position.x = camO.x * 4.0 * par;
-    camera.position.y = (camBaseY - camO.y * 1.6 * par) - takeover * 5.2;
-    camera.position.z = camBaseZ - dolly;
-    const fov = 40 - e1 * 6;               // 40 → 34: NARROW on approach (wide+dolly = motion sickness)
-    if (Math.abs(camera.fov - fov) > 0.01) { camera.fov = fov; camera.updateProjectionMatrix(); }
-    look.set(0, -3.2 + lookY, -7); camera.lookAt(look);
-    renderer.toneMappingExposure = 1.0 + takeover * 0.3;   // bloom blooms harder → cyan floods the frame
-    (splashPass.uniforms as any).uSplash.value = e3;       // ShaderPass clones its uniforms — write the clone, not USPLASH
+    camera.position.y = (camBaseY - camO.y * 1.6 * par) - p1 * 1.5;
+    camera.position.z = camBaseZ - p1 * 8.5;
+    look.set(0, -3.2, -7); camera.lookAt(look);
+    renderer.toneMappingExposure = 1.0 + sm(scrollP, 0.55, 0.92) * 0.35;   // bloom catches the surface
+    const su = splashPass.uniforms as any;  // ShaderPass clones its uniforms — write the clone
+    su.uProgress.value = scrollP; su.uTime.value = UTIME.value;
     comp.render();
     if (!reduce && TIER < 2) {
       if (fpsWarm < 30) fpsWarm++;
@@ -345,6 +380,7 @@ export function createRiverScene(canvas: HTMLCanvasElement, opts: Opts = {}): Ri
     const w = sizeW(), h = sizeH();
     renderer.setSize(w, h, false); comp.setSize(w, h); bloom.setSize(w, h);
     camera.aspect = w / h; camera.updateProjectionMatrix();
+    (splashPass.uniforms as any).uRes.value.set(w, h);
   }
 
   function dispose() {

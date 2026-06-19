@@ -1,0 +1,19 @@
+# Vercel uploads the working dir for CLI deploys; keep it to what the build needs.
+# (GitHub deploys build from git and already exclude these via .gitignore.)
+.git
+node_modules
+dist
+.vercel
+
+# raw / oversized model sources — NOT used by the build (only the baked
+# public/models/river-2k.glb + river-4k.glb ship). The raw glb is 268 MB and
+# blows past Vercel's 100 MB-per-file limit.
+models-src
+public/models/river-8k.glb
+public/models/flora.glb
+public/models/flora_raw.glb
+public/models/flowers_pack_4.glb
+public/models/nature_vegetation_pack.glb
+
+# local-only scratch
+previews
