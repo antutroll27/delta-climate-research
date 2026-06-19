@@ -356,7 +356,6 @@ export function createRiverScene(canvas: HTMLCanvasElement, opts: Opts = {}): Ri
     if (!ready) return;
     const dt = clock.getDelta();
     if (!reduce) { UTIME.value += dt; if (UTIME.value > 3600) UTIME.value -= 3600; }
-    // ── scroll choreography (tick is the SOLE camera writer): dolly-in → dive/takeover → splash ──
     // ── "The Plunge": phase 1 (0→0.55) rotate Y+Z 90° CW + dolly; phase 2 (0.56→~0.68) radial water engulf ──
     const sm = THREE.MathUtils.smoothstep;
     const p1 = sm(scrollP, 0.0, 0.55);     // rotate + dolly amount
