@@ -267,6 +267,7 @@ export function createRiverScene(canvas: HTMLCanvasElement, opts: Opts = {}): Ri
 
   // load scan
   let river: THREE.Object3D | null = null;
+  let pivot: THREE.Group | null = null; // wraps `river` so the model spins about its own centre
   let ready = false;
   const readyCbs: (() => void)[] = [];
   const loader = new GLTFLoader(); loader.setMeshoptDecoder(MeshoptDecoder);
@@ -276,9 +277,13 @@ export function createRiverScene(canvas: HTMLCanvasElement, opts: Opts = {}): Ri
     const box = new THREE.Box3().setFromObject(river);
     const cc = box.getCenter(new THREE.Vector3()); const s = box.getSize(new THREE.Vector3());
     const scl = 120 / s.x; river.scale.setScalar(scl);
-    river.position.set(-cc.x * scl, -cc.y * scl - 3.5, -cc.z * scl - 5);
-    river.updateMatrixWorld(true);
-    scene.add(river);
+    // centre the model at the pivot origin so pivot.rotation spins it in place (not orbiting the GLB origin)
+    river.position.set(-cc.x * scl, -cc.y * scl, -cc.z * scl);
+    pivot = new THREE.Group();
+    pivot.position.set(0, -3.5, -5);          // same world centre as before → identical framing
+    pivot.add(river);
+    pivot.updateMatrixWorld(true);
+    scene.add(pivot);
     applyTier(TIER);
     ready = true;
     readyCbs.forEach(cb => cb());

@@ -24,6 +24,7 @@ export default function HeroRiver() {
     catch (e) { console.error('[HeroRiver] init failed', e); return; } // CSS base shows through
 
     scene.onReady(() => setLoaded(true));
+    (window as any).__riverProgress = (p: number) => scene.setScrollProgress(p); // TEMP — removed in Task 4
 
     // ── scroll choreography: ONE ScrollTrigger scrubs the #hero-track and drives
     //    scene.setScrollProgress (dolly-dive → splash). It rides the EXISTING global
