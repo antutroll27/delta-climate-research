@@ -357,25 +357,19 @@ export function createRiverScene(canvas: HTMLCanvasElement, opts: Opts = {}): Ri
     const dt = clock.getDelta();
     if (!reduce) { UTIME.value += dt; if (UTIME.value > 3600) UTIME.value -= 3600; }
     // ── scroll choreography (tick is the SOLE camera writer): dolly-in → dive/takeover → splash ──
+    // ── "The Plunge": phase 1 (0→0.55) rotate Y+Z 90° CW + dolly; phase 2 (0.56→~0.68) radial water engulf ──
     const sm = THREE.MathUtils.smoothstep;
-    const e1 = sm(scrollP, 0.0, 0.62);     // phase 1: dolly-in
-    const e2 = sm(scrollP, 0.62, 0.92);    // phase 2: dive + cyan takeover
-    const e3 = sm(scrollP, 0.92, 1.0);     // phase 3: ripple splash
-    const dolly = e1 * 7.5 + e2 * 1.5;     // z: 16 → 8.5 → 7
-    const takeover = e2;                   // camera dives + bloom floods cyan
-    const lookY = e1 * 1.2 + e2 * 1.2;     // look.y: -3.2 → -2.0 → -0.8 (sink toward the surface)
-    const par = 1 - e1;                    // fade the drone parallax as the dive commits
+    const p1 = sm(scrollP, 0.0, 0.55);     // rotate + dolly amount
+    const par = 1 - p1;                    // fade the idle drone parallax as the move commits
     camO.x += (camT.x - camO.x) * 0.04; camO.y += (camT.y - camO.y) * 0.04;
+    if (pivot) { pivot.rotation.set(0, 0, 0); pivot.rotation.y = -p1 * (Math.PI / 2); pivot.rotation.z = -p1 * (Math.PI / 4); }
     camera.position.x = camO.x * 4.0 * par;
-    camera.position.y = (camBaseY - camO.y * 1.6 * par) - takeover * 5.2;
-    camera.position.z = camBaseZ - dolly;
-    const fov = 40 - e1 * 6;               // 40 → 34: NARROW on approach (wide+dolly = motion sickness)
-    if (Math.abs(camera.fov - fov) > 0.01) { camera.fov = fov; camera.updateProjectionMatrix(); }
-    look.set(0, -3.2 + lookY, -7); camera.lookAt(look);
-    renderer.toneMappingExposure = 1.0 + takeover * 0.3;   // bloom blooms harder → cyan floods the frame
-    // splash uniforms (uProgress/uTime) are driven in Task 3's tick() rewrite; until then the pass
-    // stays at its init default uProgress=0 → fully passthrough. (The stale splash write that targeted
-    // the renamed uniform was removed here — it threw a TypeError every frame.)
+    camera.position.y = (camBaseY - camO.y * 1.6 * par) - p1 * 1.5;
+    camera.position.z = camBaseZ - p1 * 8.5;
+    look.set(0, -3.2, -7); camera.lookAt(look);
+    renderer.toneMappingExposure = 1.0 + sm(scrollP, 0.55, 0.92) * 0.35;   // bloom catches the surface
+    const su = splashPass.uniforms as any;  // ShaderPass clones its uniforms — write the clone
+    su.uProgress.value = scrollP; su.uTime.value = UTIME.value;
     comp.render();
     if (!reduce && TIER < 2) {
       if (fpsWarm < 30) fpsWarm++;
