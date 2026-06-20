@@ -50,3 +50,6 @@ export function destroySmoothScroll() {
   lenis?.destroy();
   lenis = undefined;
 }
+
+/** The active Lenis instance (or undefined under reduced-motion / before init). For programmatic scrollTo from other modules. */
+export function getLenis(): Lenis | undefined { return lenis; }
