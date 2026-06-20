@@ -273,22 +273,6 @@ export function createRiverScene(canvas: HTMLCanvasElement, opts: Opts = {}): Ri
       // subtle volumetric light from the surface above (not god-rays); hand-written
       vec3 depthGlow(vec2 uv){ float v=smoothstep(1.25,-0.35,uv.y); float sh=0.7+0.3*fbm(uv*4.0+vec2(0.0,uTime*0.25));
         return uCyan*pow(v,2.0)*sh*0.6; }
-      // living sea: clean-room exp(sin) FBM ocean (technique origin: afl_ext; reimplemented). iq + Ashima MIT.
-      vec2 wavedx(vec2 p,vec2 d,float freq,float tt){ float x=dot(d,p)*freq+tt; float w=exp(sin(x)-1.0); return vec2(w,-w*cos(x)); }
-      float seaWaves(vec2 p,int iters,float tt){ float f=1.0,spd=2.0,wt=1.0,sum=0.0,sw=0.0,ang=0.0;
-        for(int i=0;i<8;i++){ if(i>=iters)break; vec2 d=vec2(sin(ang),cos(ang)); vec2 r=wavedx(p,d,f,tt*spd);
-          p+=d*r.y*wt*0.30; sum+=r.x*wt; sw+=wt; wt=mix(wt,0.0,0.2); f*=1.18; spd*=1.07; ang+=12.0; } return sum/sw; }
-      vec3 nightSky(vec3 rd){ float h=clamp(rd.y*0.5+0.5,0.0,1.0); vec3 sky=mix(uDeep*1.6,uDeep*0.6,h);
-        vec3 L=normalize(vec3(0.35,0.12,-1.0)); float moon=pow(max(dot(rd,L),0.0),200.0); return sky+uCyan*moon*0.8; }
-      vec3 livingSea(vec2 uv,float tt){
-        vec2 s=(uv-0.5); s.x*=uRes.x/uRes.y; vec3 rd=normalize(vec3(s.x,s.y+0.18,-1.0));
-        if(rd.y>-0.001) return nightSky(rd);
-        float dist=-1.0/rd.y; vec3 hit=rd*dist; vec2 wp=hit.xz*0.6; float e=0.06;
-        float H=seaWaves(wp,8,tt); float Hx=seaWaves(wp+vec2(e,0.0),8,tt); float Hy=seaWaves(wp+vec2(0.0,e),8,tt);
-        vec3 N=normalize(vec3(H-Hx,e*2.0,H-Hy)); N=mix(N,vec3(0.0,1.0,0.0),0.8*min(1.0,sqrt(dist*0.01)*1.1));
-        vec3 V=-rd,R=reflect(rd,N); R.y=abs(R.y); float F=0.04+0.96*pow(1.0-max(0.0,dot(N,V)),5.0);
-        vec3 refl=nightSky(R); vec3 sss=uCyan*0.12*(0.2+H); vec3 c=mix(uDeep,refl,F)+sss;
-        c+=smoothstep(0.85,1.0,H)*vec3(0.8,0.92,1.0)*0.5; return c; }
       void main(){
         float winEnd = clamp(0.58 + 0.34/uSpeed, 0.66, 0.96);
         float sp = smoothstep(0.56, winEnd, uProgress);
@@ -314,8 +298,7 @@ export function createRiverScene(canvas: HTMLCanvasElement, opts: Opts = {}): Ri
         col+=foam*vec3(0.8,0.92,1.0)*uFoam*(0.5+0.6*sp);
         float gGate=smoothstep(0.55,0.95,uProgress);
         if(gGate>0.001) col+=depthGlow(uv)*gGate*0.2;   // 0.2 = locked subtle amount
-        float endMix=smoothstep(winEnd, min(winEnd+0.18,1.0), uProgress);
-        if(endMix>0.001) col=mix(col, livingSea(vUv,uTime*0.6), endMix);   // resolve into the night sea → seamless cut to 01
+        col=mix(col, uDeep, smoothstep(winEnd, min(winEnd+0.18,1.0), uProgress)*0.94);
         gl_FragColor=vec4(col,1.0);
       }`,
   });
