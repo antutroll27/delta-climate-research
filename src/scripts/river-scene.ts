@@ -270,6 +270,9 @@ export function createRiverScene(canvas: HTMLCanvasElement, opts: Opts = {}): Ri
           c+=1.0/length(vec2(p.x/(sin(i.x+tt)/inten), p.y/(cos(i.y+tt)/inten))); }
         c/=4.0; c=1.17-pow(c,1.4); return pow(abs(c),8.0);
       }
+      // subtle volumetric light from the surface above (not god-rays); hand-written
+      vec3 depthGlow(vec2 uv){ float v=smoothstep(1.25,-0.35,uv.y); float sh=0.7+0.3*fbm(uv*4.0+vec2(0.0,uTime*0.25));
+        return uCyan*pow(v,2.0)*sh*0.6; }
       void main(){
         float winEnd = clamp(0.58 + 0.34/uSpeed, 0.66, 0.96);
         float sp = smoothstep(0.56, winEnd, uProgress);
@@ -293,7 +296,9 @@ export function createRiverScene(canvas: HTMLCanvasElement, opts: Opts = {}): Ri
         vec3 col=mix(texture2D(tDiffuse,uv).rgb, uw, water);
         float foam=crest*smoothstep(0.45,0.8, fbm(uv*20.0+t*0.85));
         col+=foam*vec3(0.8,0.92,1.0)*uFoam*(0.5+0.6*sp);
-        col=mix(col, uDeep, smoothstep(winEnd, min(winEnd+0.12,1.0), uProgress)*0.94);
+        float gGate=smoothstep(0.55,0.95,uProgress);
+        if(gGate>0.001) col+=depthGlow(uv)*gGate*0.2;   // 0.2 = locked subtle amount
+        col=mix(col, uDeep, smoothstep(winEnd, min(winEnd+0.18,1.0), uProgress)*0.94);
         gl_FragColor=vec4(col,1.0);
       }`,
   });
