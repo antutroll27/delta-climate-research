@@ -36,6 +36,10 @@
   <div class="row"><label>Splash speed</label><input id="speed" type="range" min="1" max="4" step="0.1" value="1.8"><span class="val" id="speedV">1.8</span></div>
   <div class="row"><label>Ripple</label><input id="amp" type="range" min="0" max="0.12" step="0.005" value="0.06"><span class="val" id="ampV">0.06</span></div>
   <div class="row"><label>Foam</label><input id="foam" type="range" min="0" max="1.5" step="0.05" value="0.9"><span class="val" id="foamV">0.90</span></div>
+  <div class="row"><label>Atmos mode</label><input id="mode" type="range" min="0" max="5" step="1" value="0"><span class="val" id="modeV" style="min-width:84px">god-rays</span></div>
+  <div class="row"><label>Atmos amt</label><input id="god" type="range" min="0" max="2" step="0.05" value="1"><span class="val" id="godV">1.0</span></div>
+  <div class="row"><label>Living-sea</label><input id="sea" type="range" min="0" max="1" step="1" value="1"><span class="val" id="seaV">on</span></div>
+  <div class="row"><label>Caustics+</label><input id="cau" type="range" min="0" max="1" step="0.05" value="0"><span class="val" id="cauV">0.00</span></div>
   <div class="btns"><button id="play">▶ Play</button><button id="loop">↻ Loop splash</button></div>
   <div class="phase">Phase: <b id="ph">hero</b></div>
 </div>
@@ -95,10 +99,11 @@ const SPLASH = {
     uRes:{value:new THREE.Vector2(innerWidth,innerHeight)},
     uDeep:{value:new THREE.Color(0x062028)}, uCyan:{value:new THREE.Color(0x6fcad6)},
     uAmp:{value:0.06}, uFoam:{value:0.9}, uSpeed:{value:1.8},
+    uHi:{value:new THREE.Vector2(0.5,1.15)}, uGod:{value:1.0}, uSea:{value:1.0}, uCau:{value:0.0}, uMode:{value:0.0},
   },
   vertexShader:`varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
   fragmentShader:`
-    uniform sampler2D tDiffuse; uniform float uProgress,uTime,uAmp,uFoam,uSpeed; uniform vec2 uRes;
+    uniform sampler2D tDiffuse; uniform float uProgress,uTime,uAmp,uFoam,uSpeed,uGod,uSea,uCau,uMode; uniform vec2 uRes,uHi;
     uniform vec3 uDeep,uCyan; varying vec2 vUv;
     // simplex noise (Ashima/McEwan, MIT)
     vec3 mod289(vec3 x){return x-floor(x*(1.0/289.0))*289.0;}
@@ -113,6 +118,81 @@ const SPLASH = {
       m*=1.79284291400159-0.85373472095314*(a0*a0+h*h);
       vec3 g;g.x=a0.x*x0.x+h.x*x0.y;g.yz=a0.yz*x12.xz+h.yz*x12.yw;return 130.0*dot(m,g);}
     float fbm(vec2 p){float s=0.0,a=0.5;for(int i=0;i<4;i++){s+=a*snoise(p);p*=2.0;a*=0.5;}return s*0.5+0.5;}
+    // ── god-rays: GPU Gems 3 radial light-scattering, analytic-disc source (Erkaman/glsl-godrays, MIT) ──
+    vec3 godrays(vec2 uv){
+      const int NUM=24; float Density=1.0,Decay=0.96;
+      vec2 dir=uv-uHi;
+      float ang=atan(dir.y, dir.x*(uRes.x/uRes.y));               // angle of this pixel from the source
+      float streak=pow(0.5+0.5*sin(ang*15.0 + fbm(vec2(ang*2.0,uTime*0.18))*9.0), 3.0); // discrete shafts, drifting
+      vec2 delta=dir*(1.0/float(NUM))*Density;
+      vec2 p=uv; float illum=1.0, acc=0.0;
+      for(int i=0;i<NUM;i++){ p-=delta;
+        float d=length((p-uHi)*vec2(uRes.x/uRes.y,1.0));
+        acc+=smoothstep(1.05,0.0,d)*illum;                        // radial scatter toward the surface light
+        illum*=Decay; }
+      return uCyan*acc*streak*0.05;                               // *0.05 = base intensity (uGod scales it)
+    }
+    // ── caustics: joltz0r/Hoskins iterative-trig (Maxon Redshift FakeCaustics.osl, Apache-2.0) ──
+    float caustic(vec2 uv,float time){
+      vec2 p=mod(uv*6.28318530718,6.28318530718)-250.0; vec2 i=p; float c=1.0; const float inten=0.005;
+      for(int n=0;n<4;n++){ float tt=time*(1.0-3.5/float(n+1));
+        i=p+vec2(cos(tt-i.x)+sin(tt+i.y), sin(tt-i.y)+cos(tt+i.x));
+        c+=1.0/length(vec2(p.x/(sin(i.x+tt)/inten), p.y/(cos(i.y+tt)/inten))); }
+      c/=4.0; c=1.17-pow(c,1.4); return pow(abs(c),8.0);
+    }
+    // ── living sea: clean-room exp(sin) FBM ocean (technique origin: afl_ext; reimplemented) ──
+    vec2 wavedx(vec2 p,vec2 d,float freq,float tt){ float x=dot(d,p)*freq+tt; float w=exp(sin(x)-1.0); return vec2(w,-w*cos(x)); }
+    float seaWaves(vec2 p,int iters,float tt){ float f=1.0,spd=2.0,wt=1.0,sum=0.0,sw=0.0,ang=0.0;
+      for(int i=0;i<8;i++){ if(i>=iters)break; vec2 d=vec2(sin(ang),cos(ang)); vec2 r=wavedx(p,d,f,tt*spd);
+        p+=d*r.y*wt*0.30; sum+=r.x*wt; sw+=wt; wt=mix(wt,0.0,0.2); f*=1.18; spd*=1.07; ang+=12.0; }
+      return sum/sw; }
+    vec3 nightSky(vec3 rd){ float h=clamp(rd.y*0.5+0.5,0.0,1.0); vec3 sky=mix(uDeep*1.6,uDeep*0.6,h);
+      vec3 L=normalize(vec3(0.35,0.12,-1.0)); float moon=pow(max(dot(rd,L),0.0),200.0); return sky+uCyan*moon*0.8; }
+    vec3 livingSea(vec2 uv,float tt){
+      vec2 s=(uv-0.5); s.x*=uRes.x/uRes.y; vec3 rd=normalize(vec3(s.x,s.y+0.18,-1.0));
+      if(rd.y>-0.001) return nightSky(rd);
+      float dist=-1.0/rd.y; vec3 hit=rd*dist; vec2 wp=hit.xz*0.6; float e=0.06;
+      float H=seaWaves(wp,8,tt); float Hx=seaWaves(wp+vec2(e,0.0),8,tt); float Hy=seaWaves(wp+vec2(0.0,e),8,tt);
+      vec3 N=normalize(vec3(H-Hx,e*2.0,H-Hy));
+      N=mix(N,vec3(0.0,1.0,0.0),0.8*min(1.0,sqrt(dist*0.01)*1.1));
+      vec3 V=-rd,R=reflect(rd,N); R.y=abs(R.y);
+      float F=0.04+0.96*pow(1.0-max(0.0,dot(N,V)),5.0); vec3 refl=nightSky(R);
+      vec3 sss=uCyan*0.12*(0.2+H); vec3 c=mix(uDeep,refl,F)+sss;
+      c+=smoothstep(0.85,1.0,H)*vec3(0.8,0.92,1.0)*0.5; return c; }
+    // ── ALTERNATIVE atmosphere effects (single-pass) for the submersion beat ──
+    float hash21(vec2 p){ p=fract(p*vec2(123.34,456.21)); p+=dot(p,p+45.32); return fract(p.x*p.y); }
+    vec3 marineSnow(vec2 uv){   // drifting glowing motes (deep-sea plankton/dust)
+      vec3 acc=vec3(0.0); float aspect=uRes.x/uRes.y;
+      for(int L=0;L<3;L++){ float sc=9.0+float(L)*11.0;
+        vec2 g=uv*vec2(aspect,1.0)*sc; g.y-=uTime*(0.6+0.3*float(L));
+        vec2 id=floor(g); vec2 f=fract(g)-0.5;
+        vec2 o=(vec2(hash21(id+1.3),hash21(id+2.7))-0.5)*0.7; float h=hash21(id+float(L)*17.0);
+        float tw=0.5+0.5*sin(uTime*1.6+h*40.0); float d=length(f-o);
+        acc+=uCyan*smoothstep(0.10,0.0,d)*tw*(0.3+0.7*h)/float(L+1); }
+      return acc*0.8;
+    }
+    vec3 depthGlow(vec2 uv){    // soft volumetric light from the surface above (no shafts)
+      float v=smoothstep(1.25,-0.35,uv.y); float sh=0.7+0.3*fbm(uv*4.0+vec2(0.0,uTime*0.25));
+      return uCyan*pow(v,2.0)*sh*0.6;
+    }
+    vec3 lightStreaks(vec2 uv, vec3 base){   // radial zoom-blur toward the light (motion/plunge streaks)
+      vec2 dir=(uHi-uv)*0.045; vec2 p=uv; vec3 acc=vec3(0.0); float w=1.0,tot=0.0;
+      for(int i=0;i<14;i++){ acc+=texture2D(tDiffuse,p).rgb*w; tot+=w; p+=dir; w*=0.86; }
+      vec3 s=acc/tot; float lum=max(s.r,max(s.g,s.b));
+      return mix(base, s+uCyan*0.25*pow(lum,2.0), 0.75);
+    }
+    vec3 bubbles(vec2 uv){      // streams of bubbles rising past the camera
+      vec3 acc=vec3(0.0); float aspect=uRes.x/uRes.y;
+      for(int L=0;L<3;L++){ float sc=5.0+float(L)*4.0;
+        vec2 g=uv*vec2(aspect,1.0)*sc; g.y-=uTime*(0.4+0.25*float(L));
+        vec2 id=floor(g); vec2 f=fract(g)-0.5;
+        float h=hash21(id+float(L)*23.0); float on=step(0.6,h);
+        vec2 c=(vec2(hash21(id+3.1),hash21(id+5.7))-0.5)*0.5; float r=0.14+0.10*h; float d=length(f-c);
+        float ring=smoothstep(r,r-0.035,d)-smoothstep(r-0.035,r-0.08,d);
+        float hi=smoothstep(0.05,0.0,length(f-c-vec2(0.03,0.03)));
+        acc+=uCyan*(ring*0.8+hi*0.5)*on; }
+      return acc*0.75;
+    }
     void main(){
       float winEnd = clamp(0.58 + 0.34/uSpeed, 0.66, 0.96);   // faster splash → tighter window
       float sp = smoothstep(0.56, winEnd, uProgress);          // splash amount
@@ -131,17 +211,28 @@ const SPLASH = {
       vec2 n=vec2(h0-hx,h0-hy)*8.0;
       float amp=uAmp*water + uAmp*1.8*crest;
       vec3 scene=texture2D(tDiffuse, uv+n*amp).rgb;            // refracted frame under the surface
-      // caustics web under water
-      float ca=fbm(uv*9.0+vec2(t*0.30,-t*0.22));
-      ca=pow(1.0-abs(ca-0.5)*2.0,3.0);
+      // caustics web under water (toggle: old fbm ↔ new iterative-trig caustic)
+      float ca=fbm(uv*9.0+vec2(t*0.30,-t*0.22)); ca=pow(1.0-abs(ca-0.5)*2.0,3.0);
+      if(uCau>0.001){ float caNew=caustic(uv*vec2(uRes.x/uRes.y,1.0)*7.0,t*0.8); caNew*=(1.0-smoothstep(0.0,0.55,uv.y)); ca=mix(ca,caNew,uCau); }
       vec3 uw=scene + uCyan*ca*0.42*water;
       uw=mix(uw, uDeep, water*(0.42+0.45*sp));                 // deeper, darker tint with progress
       vec3 col=mix(texture2D(tDiffuse,uv).rgb, uw, water);
       // foam crest ring
       float foam=crest*smoothstep(0.45,0.8, fbm(uv*20.0+t*0.85));
       col+=foam*vec3(0.8,0.92,1.0)*uFoam*(0.5+0.6*sp);
-      // full submersion near the end → flat deep (cut point to 01)
-      col=mix(col, uDeep, smoothstep(winEnd, min(winEnd+0.12,1.0), uProgress)*0.94);
+      // atmosphere effect (uMode): 0 god-rays · 1 marine-snow · 2 depth-glow · 3 light-streaks · 4 bubbles · 5 caustic-dapple
+      float gGate=smoothstep(0.55,0.95,uProgress);
+      if(gGate>0.001 && uGod>0.001){
+        if(uMode<0.5)      col+=godrays(uv)*gGate*uGod;
+        else if(uMode<1.5) col+=marineSnow(uv)*gGate*uGod;
+        else if(uMode<2.5) col+=depthGlow(uv)*gGate*uGod;
+        else if(uMode<3.5) col=mix(col, lightStreaks(uv,col), gGate*min(uGod,1.0));
+        else if(uMode<4.5) col+=bubbles(uv)*gGate*uGod;
+        else               col+=uCyan*caustic(uv*vec2(uRes.x/uRes.y,1.0)*6.0,uTime*0.8)*0.5*smoothstep(1.2,-0.2,uv.y)*gGate*uGod;
+      }
+      // end-state: resolve into a LIVING SEA (uSea) or flat deep — the seamless cut to 01
+      float endMix=smoothstep(winEnd, min(winEnd+0.18,1.0), uProgress);
+      if(endMix>0.001){ vec3 endState=(uSea>0.5)? livingSea(vUv,uTime*0.6) : mix(col,uDeep,0.94); col=mix(col,endState,endMix); }
       gl_FragColor=vec4(col,1.0);
     }`,
 };
@@ -155,6 +246,10 @@ const clock=new THREE.Clock();
 const sm=THREE.MathUtils.smoothstep;
 $('play').onclick=()=>{ playing=!playing; looping=false; $('play').textContent=playing?'❚❚ Pause':'▶ Play'; };
 $('loop').onclick=()=>{ looping=!looping; playing=false; $('play').textContent='▶ Play'; if(looping)$('prog').value='0.55'; };
+// URL params → land on a specific effect: ?mode=2&prog=0.9&god=1.3&loop=1
+{ const qp=new URLSearchParams(location.search);
+  ['mode','prog','god','sea','cau','ang','speed','amp','foam'].forEach(k=>{ if(qp.has(k)&&$(k)) $(k).value=qp.get(k); });
+  if(qp.has('loop')) setTimeout(()=>$('loop').click(),300); }
 
 function frame(){
   requestAnimationFrame(frame);
@@ -164,6 +259,11 @@ function frame(){
   const p=parseFloat($('prog').value), turn=parseFloat($('ang').value)*Math.PI/180;
   splash.uniforms.uAmp.value=parseFloat($('amp').value); splash.uniforms.uFoam.value=parseFloat($('foam').value);
   splash.uniforms.uSpeed.value=parseFloat($('speed').value);
+  splash.uniforms.uGod.value=parseFloat($('god').value); splash.uniforms.uSea.value=parseFloat($('sea').value); splash.uniforms.uCau.value=parseFloat($('cau').value);
+  splash.uniforms.uMode.value=parseFloat($('mode').value);
+  const MODES=['god-rays','marine snow','depth glow','light streaks','bubbles','caustic dapple'];
+  $('modeV').textContent=MODES[parseInt($('mode').value)];
+  $('godV').textContent=parseFloat($('god').value).toFixed(1); $('seaV').textContent=$('sea').value==='1'?'on':'off'; $('cauV').textContent=parseFloat($('cau').value).toFixed(2);
   $('progV').textContent=p.toFixed(2); $('angV').textContent=$('ang').value+'°'; $('ampV').textContent=parseFloat($('amp').value).toFixed(2); $('foamV').textContent=parseFloat($('foam').value).toFixed(2); $('speedV').textContent=parseFloat($('speed').value).toFixed(1);
   const p1=sm(p,0.0,0.55);                              // rotate + dolly phase
   if(river){ pivot.rotation.set(0,0,0); pivot.rotation.y=-p1*turn; pivot.rotation.z=-p1*turn*0.5; }
