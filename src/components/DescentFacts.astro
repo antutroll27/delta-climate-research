@@ -1,0 +1,35 @@
+---
+// Descent facts — Climate Clock statements that surface during the engulf's dark-water
+// descent (driven by src/scripts/descent-facts.ts; desktop + motion only). Static markup
+// with fallback values inlined so first paint shows real numbers; the script overrides
+// with live API values + scrubs the count/fade to scroll.
+const FACTS = [
+  { key: 'carbon_deadline_1',            kick: 'Time left · 1.5°C', unit: 'YRS',        lab: 'until the 1.5°C carbon budget runs out', src: 'climateclock.world', fb: 5,    dec: 0, thou: false },
+  { key: 'actnow',                       kick: 'If we act now',     unit: '$ Trillion', lab: 'saved by acting now vs. delay',           src: 'lifeline',          fb: 32,   dec: 0, thou: false },
+  { key: 'renewables_1',                 kick: 'World energy',      unit: '%',          lab: "of the world's energy is now renewable",  src: 'lifeline',          fb: 11.4, dec: 1, thou: false },
+  { key: 'initiative_30x30',             kick: 'Protected',         unit: '%',          lab: "of Earth's land & waters are protected",  src: '30×30',             fb: 17.6, dec: 1, thou: false },
+  { key: 'ff_divestment_stand_dot_earth',kick: 'Divested',          unit: '$ Trillion', lab: 'pulled out of fossil fuels',              src: 'stand.earth',       fb: 40.8, dec: 1, thou: false },
+];
+const fmt = (v: number, d: number, t: boolean) => d > 0 ? v.toFixed(d) : (t ? Math.round(v).toLocaleString('en-US') : String(Math.round(v)));
+---
+<div class="dfacts" aria-hidden="true">
+  {FACTS.map((f) => (
+    <div class="dfact" data-key={f.key} data-fb={f.fb} data-dec={f.dec} data-thou={String(f.thou)}>
+      <div class="dkick">{f.kick}</div>
+      <div class="dval"><span data-n>{fmt(f.fb, f.dec, f.thou)}</span><span class="du">{f.unit}</span></div>
+      <div class="dlab">{f.lab}</div>
+      <div class="dsrc">{f.src}</div>
+    </div>
+  ))}
+</div>
+
+<style>
+  .dfacts { position: absolute; inset: 0; z-index: 3; display: grid; place-items: center; pointer-events: none; }
+  .dfact { position: absolute; text-align: center; width: min(90vw, 1100px); opacity: 0; will-change: opacity, transform; }
+  .dkick { font-family: var(--font-mono); font-size: 0.74rem; letter-spacing: 0.24em; text-transform: uppercase; color: var(--color-bronze); margin-bottom: 1.4rem; }
+  .dval { font-weight: 500; font-size: clamp(3.2rem, 11vw, 9rem); line-height: 0.95; letter-spacing: -0.03em; color: var(--color-paper); }
+  .dval .du { color: var(--color-cyan); font-size: 0.42em; letter-spacing: -0.01em; margin-left: 0.2em; }
+  .dlab { margin-top: 1.4rem; font-size: clamp(1rem, 1.6vw, 1.35rem); color: var(--color-ink-faint); }
+  .dsrc { margin-top: 1rem; font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 0.18em; text-transform: uppercase; color: rgb(111 202 214 / 0.4); }
+  @media (max-width: 767px), (prefers-reduced-motion: reduce) { .dfacts { display: none; } }
+</style>

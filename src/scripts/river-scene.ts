@@ -244,7 +244,7 @@ export function createRiverScene(canvas: HTMLCanvasElement, opts: Opts = {}): Ri
       tDiffuse: { value: null }, uProgress: { value: 0 }, uTime: { value: 0 },
       uRes: { value: new THREE.Vector2(sizeW(), sizeH()) },
       uDeep: { value: DEEP }, uCyan: { value: new THREE.Color('#6fcad6') },
-      uAmp: { value: 0.07 }, uFoam: { value: 0.0 }, uSpeed: { value: 3.3 },
+      uAmp: { value: 0.12 }, uFoam: { value: 0.60 }, uSpeed: { value: 1.8 },   // Phase-2 locked: rougher ripple, foam back on, slower window
     },
     vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
     fragmentShader: `
@@ -262,6 +262,17 @@ export function createRiverScene(canvas: HTMLCanvasElement, opts: Opts = {}): Ri
         m*=1.79284291400159-0.85373472095314*(a0*a0+h*h);
         vec3 g;g.x=a0.x*x0.x+h.x*x0.y;g.yz=a0.yz*x12.xz+h.yz*x12.yw;return 130.0*dot(m,g);}
       float fbm(vec2 p){float s=0.0,a=0.5;for(int i=0;i<4;i++){s+=a*snoise(p);p*=2.0;a*=0.5;}return s*0.5+0.5;}
+      // caustics: joltz0r/Hoskins iterative-trig (Maxon Redshift FakeCaustics.osl, Apache-2.0)
+      float caustic(vec2 uv,float time){
+        vec2 p=mod(uv*6.28318530718,6.28318530718)-250.0; vec2 i=p; float c=1.0; const float inten=0.005;
+        for(int n=0;n<4;n++){ float tt=time*(1.0-3.5/float(n+1));
+          i=p+vec2(cos(tt-i.x)+sin(tt+i.y), sin(tt-i.y)+cos(tt+i.x));
+          c+=1.0/length(vec2(p.x/(sin(i.x+tt)/inten), p.y/(cos(i.y+tt)/inten))); }
+        c/=4.0; c=1.17-pow(c,1.4); return pow(abs(c),8.0);
+      }
+      // subtle volumetric light from the surface above (not god-rays); hand-written
+      vec3 depthGlow(vec2 uv){ float v=smoothstep(1.25,-0.35,uv.y); float sh=0.7+0.3*fbm(uv*4.0+vec2(0.0,uTime*0.25));
+        return uCyan*pow(v,2.0)*sh*0.6; }
       void main(){
         float winEnd = clamp(0.58 + 0.34/uSpeed, 0.66, 0.96);
         float sp = smoothstep(0.56, winEnd, uProgress);
@@ -278,13 +289,16 @@ export function createRiverScene(canvas: HTMLCanvasElement, opts: Opts = {}): Ri
         vec2 n=vec2(h0-hx,h0-hy)*8.0;
         float amp=uAmp*water + uAmp*1.8*crest;
         vec3 scene=texture2D(tDiffuse, uv+n*amp).rgb;
-        float ca=fbm(uv*9.0+vec2(t*0.30,-t*0.22)); ca=pow(1.0-abs(ca-0.5)*2.0,3.0);
-        vec3 uw=scene + uCyan*ca*0.42*water;
+        float ca=caustic(uv*vec2(uRes.x/uRes.y,1.0)*7.0, t*0.8);
+        ca*=(1.0-smoothstep(0.0,0.55,uv.y));            // perspective floor fade
+        vec3 uw=scene + uCyan*ca*0.42*water;            // additive, masked by water
         uw=mix(uw, uDeep, water*(0.42+0.45*sp));
         vec3 col=mix(texture2D(tDiffuse,uv).rgb, uw, water);
         float foam=crest*smoothstep(0.45,0.8, fbm(uv*20.0+t*0.85));
         col+=foam*vec3(0.8,0.92,1.0)*uFoam*(0.5+0.6*sp);
-        col=mix(col, uDeep, smoothstep(winEnd, min(winEnd+0.12,1.0), uProgress)*0.94);
+        float gGate=smoothstep(0.55,0.95,uProgress);
+        if(gGate>0.001) col+=depthGlow(uv)*gGate*0.2;   // 0.2 = locked subtle amount
+        col=mix(col, uDeep, smoothstep(winEnd, min(winEnd+0.18,1.0), uProgress)*0.94);
         gl_FragColor=vec4(col,1.0);
       }`,
   });
