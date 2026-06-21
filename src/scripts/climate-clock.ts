@@ -8,10 +8,7 @@ export async function getClimateModules(): Promise<any> {
   try {
     const cached = sessionStorage.getItem(CACHE_KEY);
     if (cached) { const c = JSON.parse(cached); if (Date.now() - c.at < 86400000) return c.data?.modules; }
-    const ctrl = new AbortController();
-    const to = setTimeout(() => ctrl.abort(), 4000);
-    const res = await fetch('https://api.climateclock.world/v2/clock.json', { signal: ctrl.signal });
-    clearTimeout(to);
+    const res = await fetch('https://api.climateclock.world/v2/clock.json', { signal: AbortSignal.timeout(4000) });
     const data = (await res.json())?.data;
     if (data) sessionStorage.setItem(CACHE_KEY, JSON.stringify({ at: Date.now(), data }));
     return data?.modules;
