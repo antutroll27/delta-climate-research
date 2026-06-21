@@ -187,6 +187,7 @@
 </style>
 
 <script>
+  import { getClimateModules } from '../scripts/climate-clock';
   // ── data model: constants are the current real values; the API fetch only
   //    keeps them fresh if the org revises a figure. Lifeline value =
   //    initial + rate * secondsSince(origin).  rate = 0 → static.           ──
@@ -248,22 +249,7 @@
 
   async function refreshFromApi() {
     try {
-      const CACHE_KEY = 'cc:clock';
-      let data: any;
-      const cached = sessionStorage.getItem(CACHE_KEY);
-      if (cached) {
-        const c = JSON.parse(cached);
-        if (Date.now() - c.at < 86400000) data = c.data;
-      }
-      if (!data) {
-        const ctrl = new AbortController();
-        const to = setTimeout(() => ctrl.abort(), 4000);
-        const res = await fetch('https://api.climateclock.world/v2/clock.json', { signal: ctrl.signal });
-        clearTimeout(to);
-        data = (await res.json())?.data;
-        if (data) sessionStorage.setItem(CACHE_KEY, JSON.stringify({ at: Date.now(), data }));
-      }
-      const mods = data?.modules;
+      const mods = await getClimateModules();
       if (!mods) return;
       const dl = mods.carbon_deadline_1?.timestamp;
       if (dl) deadlineMs = new Date(dl).getTime();

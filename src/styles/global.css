@@ -33,7 +33,6 @@
   font-display: swap;
 }
 
-/* Moonscape Serif removed — see src/styles/_serif-stash.css to restore. */
 
 /* Self-hosted Noplato Mono — the mono label face. Replaces Geist Mono.
    This is the CONDENSED license-plate cut (internal name "Noplato Demo Mono", 119 glyphs) —
@@ -91,8 +90,6 @@
   --font-sans-alt: "Satoshi", ui-sans-serif, system-ui, sans-serif;
   --font-serif: "Mona Sans", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "Noplato Mono", ui-monospace, "SF Mono", monospace;
-  /* old mono, kept for reuse — needs the Geist import re-enabled in Base.astro to render */
-  --font-mono-alt: "Geist Mono Variable", ui-monospace, "SF Mono", monospace;
 
   /* fluid type scale (each = the exact existing clamp it replaces — pixel-identical) */
   --text-hero: clamp(2.5rem, 7vw, 6rem);

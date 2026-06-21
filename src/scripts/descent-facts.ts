@@ -5,30 +5,16 @@
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { motionOK } from '../utils/motion';
+import { getClimateModules } from './climate-clock';
 
 gsap.registerPlugin(ScrollTrigger);
 
 let st: ScrollTrigger | undefined;
-const CACHE_KEY = 'cc:v2';
 const YEAR_MS = 365.25 * 24 * 3600 * 1000;
 const DEADLINE_FALLBACK = Date.parse('2029-07-22T16:00:00+00:00');
 
 const sm = (a: number, b: number, x: number) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 const fmt = (v: number, d: number, t: boolean) => d > 0 ? v.toFixed(d) : (t ? Math.round(v).toLocaleString('en-US') : String(Math.round(v)));
-
-async function getModules(): Promise<any> {
-  try {
-    const cached = sessionStorage.getItem(CACHE_KEY);
-    if (cached) { const c = JSON.parse(cached); if (Date.now() - c.at < 86400000) return c.data?.modules; }
-    const ctrl = new AbortController();
-    const to = setTimeout(() => ctrl.abort(), 4000);
-    const res = await fetch('https://api.climateclock.world/v2/clock.json', { signal: ctrl.signal });
-    clearTimeout(to);
-    const data = (await res.json())?.data;
-    if (data) sessionStorage.setItem(CACHE_KEY, JSON.stringify({ at: Date.now(), data }));
-    return data?.modules;
-  } catch { return undefined; }
-}
 
 export async function initDescentFacts() {
   destroyDescentFacts();
@@ -37,7 +23,7 @@ export async function initDescentFacts() {
   const nodes = [...document.querySelectorAll<HTMLElement>('.dfact')];
   if (!track || !nodes.length) return;
 
-  const mods = await getModules();
+  const mods = await getClimateModules();
   if (st) return; // a teardown raced us during the await
   // resolve each fact's target value (live, else the inlined fallback)
   const facts = nodes.map((el) => {
