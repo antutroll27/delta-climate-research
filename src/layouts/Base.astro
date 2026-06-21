@@ -1,8 +1,6 @@
 ---
 import { ClientRouter } from 'astro:transitions';
-// Fonts are self-hosted via @font-face in global.css (Satoshi, Moonscape Serif, Noplato Mono).
-// Old mono kept available — uncomment to load Geist Mono (use via the --font-mono-alt token):
-// import '@fontsource-variable/geist-mono/index.css';
+// Fonts are self-hosted via @font-face in global.css (Satoshi, Noplato Mono).
 import 'lenis/dist/lenis.css';
 import '../styles/global.css';
 
@@ -90,7 +88,6 @@ const jsonLd = {
       type="font/woff2"
       crossorigin
     />
-    <!-- Moonscape Serif removed — see src/styles/_serif-stash.css to restore -->
     <!-- Noplato Mono — above-the-fold mono labels (kicker, nav) -->
     <link
       rel="preload"

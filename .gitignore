@@ -39,3 +39,5 @@ public/models/flora.glb
 public/models/flora_raw.glb
 public/models/flowers_pack_4.glb
 public/models/nature_vegetation_pack.glb
+previews/*.html
+inspiration/
