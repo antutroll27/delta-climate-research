@@ -156,6 +156,7 @@ const jsonLd = {
       import { initScrollEffects, destroyScrollEffects } from '../scripts/scroll-effects';
       import { initSectionEffects, destroySectionEffects } from '../scripts/section-effects';
       import { initSeamSnap, destroySeamSnap } from '../scripts/seam-snap';
+      import { initDescentFacts, destroyDescentFacts } from '../scripts/descent-facts';
       import { initAboutField, destroyAboutField } from '../scripts/about-field';
 
       function initScroll() {
@@ -165,10 +166,12 @@ const jsonLd = {
         destroyScrollEffects();
         destroySmoothScroll();
         destroySeamSnap();
+        destroyDescentFacts();
         initSmoothScroll();
         initScrollEffects();
         initSectionEffects();
         initSeamSnap();
+        initDescentFacts();
         initAboutField(); // async (three.js code-split); no-ops off the home page
       }
 
@@ -178,6 +181,7 @@ const jsonLd = {
         destroyScrollEffects();
         destroySmoothScroll();
         destroySeamSnap();
+        destroyDescentFacts();
       }
 
       // astro:page-load fires on first load AND after every view-transition nav.
