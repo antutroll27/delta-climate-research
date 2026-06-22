@@ -101,7 +101,7 @@ import { team } from '../data/team';
                 <div><h3>Focus</h3><div class="p-tags">{m.focus.map((f) => <span class="p-tag">{f}</span>)}</div></div>
                 <div><h3>Background</h3><ul>{m.background.map((b) => <li>{b}</li>)}</ul></div>
                 <div><h3>Selected work</h3><ul>{m.work.map((w) => <li>{w}</li>)}</ul></div>
-                <div><h3>Contact</h3><ul><li><a href={`mailto:${m.email}`}>{m.email}</a></li><li><a href="#">LinkedIn ↗</a></li></ul></div>
+                <div><h3>Contact</h3><ul>{m.email && <li><a href={`mailto:${m.email}`}>{m.email}</a></li>}<li><a href="#">LinkedIn ↗</a></li></ul></div>
               </div>
             </div>
           </div>

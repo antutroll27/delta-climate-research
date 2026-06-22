@@ -28,7 +28,7 @@ export const team: Member[] = [
     focus: ['Geospatial intelligence', 'Climate modelling', 'Decarbonisation strategy'],
     background: ['Climate governance — Columbia University', "Earth systems — King's College London"],
     work: ['Climate-technology scaling', 'Corporate sustainability strategy'],
-    email: 'angad@delta-climate.example',
+    email: 'angad@deltaclimate.earth',
   },
   {
     id: '02', first: 'Shirsha', last: 'Sen', tier: 'Co-Founder · Principal Consultant', discipline: 'Climate Policy', mono: 'SS', cover: 2,
@@ -40,7 +40,7 @@ export const team: Member[] = [
     focus: ['Climate policy', 'Regulatory frameworks', 'Green budgeting'],
     background: ['MA Public Policy — OP Jindal Global', 'EY India · GIZ'],
     work: ['State green budgeting', 'Public-sector climate programs'],
-    email: 'shirsha@delta-climate.example',
+    email: 'shirsha@deltaclimate.earth',
   },
   {
     id: '03', first: 'Dhruv', last: 'Maniktala', tier: 'Lead', discipline: 'Operations Research', mono: 'DM', cover: 3,
@@ -52,7 +52,7 @@ export const team: Member[] = [
     focus: ['Quantitative risk', 'Resource optimisation', 'Low-carbon logistics'],
     background: ['Banking & quantitative finance', 'Regional logistics operations'],
     work: ['Low-carbon logistics modelling', 'Climate-infrastructure finance'],
-    email: 'dhruv@delta-climate.example',
+    email: '',
   },
   {
     id: '04', first: 'Antariksha', last: 'Kumar', tier: 'Lead', discipline: 'Technology Implementation', mono: 'AK', cover: 4,
@@ -64,7 +64,7 @@ export const team: Member[] = [
     focus: ['Platform engineering', 'Data visualisation', 'Agentic workflows'],
     background: ['MSc Human-Computer Interaction — Nottingham', 'BTech Computer Science'],
     work: ['Real-time data pipelines', 'Analytics dashboards'],
-    email: 'antariksha@delta-climate.example',
+    email: 'kumarantar98@gmail.com',
   },
   {
     id: '05', first: 'Roshni', last: 'Rakshit', tier: 'Lead', discipline: 'Communications', mono: 'RR', cover: 2,
@@ -76,6 +76,6 @@ export const team: Member[] = [
     focus: ['Science storytelling', 'Media & PR', 'Brand campaigns'],
     background: ['BA Communication — Simon Fraser University'],
     work: ['Cross-functional comms', 'Multi-channel campaigns'],
-    email: 'roshni@delta-climate.example',
+    email: '',
   },
 ];
