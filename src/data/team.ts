@@ -51,4 +51,11 @@ export const team: Member[] = [
     background: ['Lorem University', 'BTech Lorem, 20XX'], work: ['Adipiscing data platform', 'Elit geospatial toolkit'],
     email: 'antariksha@delta-climate.example',
   },
+  {
+    id: '05', first: 'Roshni', last: 'Rakshit', tier: 'Lead', discipline: 'Communications', mono: 'RR', cover: 2,
+    photo: '/images/team/roshni.jpeg', photoPos: '50% 32%',
+    bio: LOREM, focus: ['Brand & narrative', 'Media & PR', 'Stakeholder engagement'],
+    background: ['Lorem School of Communications', 'MA Lorem, 20XX'], work: ['Lorem launch campaign', 'Ipsum press dossier'],
+    email: 'roshni@delta-climate.example',
+  },
 ];
