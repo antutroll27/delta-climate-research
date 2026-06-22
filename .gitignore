@@ -41,3 +41,6 @@ public/models/flowers_pack_4.glb
 public/models/nature_vegetation_pack.glb
 previews/*.html
 inspiration/
+
+# personal Claude Code permission posture (not shared)
+.claude/settings.local.json
