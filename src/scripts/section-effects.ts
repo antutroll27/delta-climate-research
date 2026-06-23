@@ -311,7 +311,7 @@ export function initSectionEffects() {
           opacity: 1,
           filter: 'blur(0px)',
           ease: 'none',
-          scrollTrigger: { trigger: w, start: 'top 82%', end: 'top 58%', scrub: true },
+          scrollTrigger: { trigger: w, start: 'top 92%', end: 'top 74%', scrub: true },
         }
       );
     });

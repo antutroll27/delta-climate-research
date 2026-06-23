@@ -26,6 +26,11 @@ const fmt = (v: number, d: number, t: boolean) => d > 0 ? v.toFixed(d) : (t ? Ma
 <style>
   .dfacts { position: absolute; inset: 0; z-index: 3; display: grid; place-items: center; pointer-events: none; }
   .dfact { position: absolute; text-align: center; width: min(90vw, 1100px); opacity: 0; will-change: opacity, transform; }
+  /* legibility scrim — a soft dark pool behind the fact so it reads over the bright early-engulf frames.
+     Lives on the fact, so it rides the fact's own opacity fade (appears only while a fact shows; clean between). */
+  .dfact::before { content: ''; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 120vmin; height: 82vmin; z-index: 0; pointer-events: none; background: radial-gradient(ellipse at center, rgb(5 6 6 / 0.66) 0%, rgb(5 6 6 / 0.40) 38%, transparent 72%); }
+  .dfact > * { position: relative; z-index: 1; }
+  .dkick, .dval, .dlab { text-shadow: 0 2px 28px rgb(0 0 0 / 0.78), 0 1px 4px rgb(0 0 0 / 0.55); }
   .dkick { font-family: var(--font-mono); font-size: 0.74rem; letter-spacing: 0.24em; text-transform: uppercase; color: var(--color-bronze); margin-bottom: 1.4rem; }
   .dval { font-weight: 500; font-size: clamp(3.2rem, 11vw, 9rem); line-height: 0.95; letter-spacing: -0.03em; color: var(--color-paper); }
   .dval .du { color: var(--color-cyan); font-size: 0.42em; letter-spacing: -0.01em; margin-left: 0.2em; }
