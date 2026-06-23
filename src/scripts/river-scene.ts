@@ -88,8 +88,10 @@ export function createRiverScene(canvas: HTMLCanvasElement, opts: Opts = {}): Ri
   // user-tuned riverbed values (editor dump 2026-06-18): grade 0.55, detect 2.6,
   // flow 0.36, ripple 0.45, tile 7.5, foam 0.45, edge 0.56. Camera kept at the
   // frozen cam-6 framing (the dump's cam=14 was the editor default, not a choice).
-  const UG = { value: 0.55 }, UTIME = { value: 0 }, UWGAIN = { value: 2.6 }, UWFLOW = { value: 0.36 }, UWAMP = { value: 0.45 };
+  const UG = { value: 0.55 }, UTIME = { value: 0 }, UWGAIN = { value: 2.6 }, UWFLOW = { value: 0.36 }, UWAMP = { value: 1.0 };
   const UFFIELD = { value: 1 }, USCALEN = { value: 7.5 }, UFOAM = { value: 0.45 }, UEDGE = { value: 0.56 };
+  // finer/faster 2nd normal octave — micro-detail borrowed from the Mancini water study (preview-approved 2026-06-23)
+  const UNOCT = { value: 1.2 }, UNTILE = { value: 3.8 }, UNSPD = { value: 3.0 };
   const UTIER = { value: TIER };
   const UGRASS = { value: 0.6 }, URIPPLE = { value: 0.7 };   // grass-green boost; hover-ripple strength
   const RIPPLE_MAX = 12;
@@ -119,6 +121,7 @@ export function createRiverScene(canvas: HTMLCanvasElement, opts: Opts = {}): Ri
       uScaleN: USCALEN, uFField: UFFIELD, uFoam: { value: new THREE.Color('#9fe6ee') }, uFoamAmt: UFOAM,
       uEdgeFade: UEDGE, uTier: UTIER, uFogCol: { value: FOG },
       uGrassAmt: UGRASS, uRippleAmp: URIPPLE, uRipples: { value: rippleArr },
+      uNoiseOct: UNOCT, uNoiseTile: UNTILE, uNoiseSpd: UNSPD,
     };
     mat.onBeforeCompile = (sh: any) => {
       Object.assign(sh.uniforms, u);
@@ -128,7 +131,7 @@ export function createRiverScene(canvas: HTMLCanvasElement, opts: Opts = {}): Ri
         vWPos = (modelMatrix * vec4(transformed,1.0)).xyz;
         vLocalXZ3 = transformed;`);
       sh.fragmentShader = `
-        uniform float uTime,uGrade,uWGain,uWFlow,uWAmp,uScaleN,uFField,uFoamAmt,uEdgeFade,uTier,uGrassAmt,uRippleAmp;
+        uniform float uTime,uGrade,uWGain,uWFlow,uWAmp,uScaleN,uFField,uFoamAmt,uEdgeFade,uTier,uGrassAmt,uRippleAmp,uNoiseOct,uNoiseTile,uNoiseSpd;
         uniform vec3 uShadow,uMid,uHigh,uRim,uWaterDeep,uFoam,uFogCol,uRipples[12]; uniform sampler2D uWaterNorm,uFlowMap; uniform vec2 uStripMin,uStripMax;
         varying vec3 vWPos; varying vec3 vLocalXZ3;
         float gWater=0.0, gGlint=0.0, gSpd=0.0, gChan=0.0, gTj=0.0, gFoam=0.0; vec2 gFuv=vec2(0.0), gDir=vec2(1.0,0.0);
@@ -197,6 +200,15 @@ export function createRiverScene(canvas: HTMLCanvasElement, opts: Opts = {}): Ri
             wn = mix(n0, n1, 1.0-abs(1.0-2.0*fract(gTj)));
           }
           normal = normalize(normal + vec3(wn.xy,0.0)*gChan*uWAmp);
+          // ── finer/faster 2nd normal octave (preview-approved micro-detail); desktop/tablet tiers only ──
+          if(uNoiseOct > 0.001 && uTier < 1.5){
+            mat2 rotE = mat2(dirN.y,dirN.x,-dirN.x,dirN.y);
+            vec2 ruvE = (uTier < 0.5) ? rotE*(gFuv*uScaleN*uNoiseTile) : (gFuv*uScaleN*uNoiseTile);
+            ruvE.y *= 0.45;
+            vec3 nE = texture2D(uWaterNorm, ruvE - dirN*fract(gTj*uNoiseSpd)).xyz*2.0-1.0;
+            if(uTier < 0.5) nE.xy = transpose(rotE)*nE.xy;
+            normal = normalize(normal + vec3(nE.xy,0.0)*gChan*uWAmp*uNoiseOct);
+          }
           // ── hover ripples: radial rings expanding from recent cursor positions (desktop tiers only) ──
           if(uTier < 1.5 && uRippleAmp > 0.001){
             vec2 rn = vec2(0.0);
