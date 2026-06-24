@@ -17,7 +17,7 @@ import { team } from '../data/team';
   description="The climatologists, climate-policy specialists, and operators behind Delta Climate Research — a small, senior bench turning earth-science data into defensible decisions."
 >
   <Nav />
-  <main class="team-page">
+  <main id="main" tabindex="-1" class="team-page">
     <section class="wrap team-intro">
       <p class="sec-kicker">Our Team</p>
       <h1 class="sec-title team-title" data-mask>
@@ -101,7 +101,7 @@ import { team } from '../data/team';
                 <div><h3>Focus</h3><div class="p-tags">{m.focus.map((f) => <span class="p-tag">{f}</span>)}</div></div>
                 <div><h3>Background</h3><ul>{m.background.map((b) => <li>{b}</li>)}</ul></div>
                 <div><h3>Selected work</h3><ul>{m.work.map((w) => <li>{w}</li>)}</ul></div>
-                <div><h3>Contact</h3><ul>{m.email && <li><a href={`mailto:${m.email}`}>{m.email}</a></li>}<li><a href="#">LinkedIn ↗</a></li></ul></div>
+                <div><h3>Contact</h3><ul>{m.email && <li><a href={`mailto:${m.email}`}>{m.email}</a></li>}<li><span class="p-link-soon" aria-disabled="true">LinkedIn — soon</span></li></ul></div>
               </div>
             </div>
           </div>
@@ -184,9 +184,9 @@ import { team } from '../data/team';
   /* hover inversion — pointer devices only (touch shows readable names, no fill) */
   @media (hover: hover) and (pointer: fine) {
     .roster .t-name { color: rgb(236 237 240 / 0.42); }
-    .roster .t-name .last { color: rgb(236 237 240 / 0.26); }
-    .roster:hover .trow:not(:hover) .t-name,
-    .roster:hover .trow:not(:hover) .t-name .last { color: rgb(236 237 240 / 0.24); }
+    .roster .t-name .last { color: rgb(236 237 240 / 0.6); }
+    .roster:hover .trow:not(:hover) .t-name { color: rgb(236 237 240 / 0.42); }
+    .roster:hover .trow:not(:hover) .t-name .last { color: rgb(236 237 240 / 0.6); }
     .trow:hover .trow-fill { clip-path: inset(0 0 0 0); }
     .trow:hover .t-name,
     .trow:hover .t-name .last { color: var(--color-base); }
@@ -250,6 +250,7 @@ import { team } from '../data/team';
   .p-grid li { font-size: 0.82rem; line-height: 1.55; color: var(--color-ink-muted); margin-bottom: 0.35rem; }
   .p-tag { display: inline-block; font-family: var(--font-mono); font-size: 0.62rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-cyan-muted); border: 1px solid var(--color-hairline); border-radius: 99px; padding: 0.3rem 0.7rem; margin: 0 0.35rem 0.4rem 0; }
   .p-grid a { color: var(--color-cyan); text-decoration: none; border-bottom: 1px solid rgb(111 202 214 / 0.3); }
+  .p-link-soon { color: var(--color-ink-faint); cursor: default; }
 
   /* hide the hover card while a sheet is open (it would otherwise float over it) */
   :global(body.team-sheet-open) .tcard { opacity: 0 !important; }
@@ -301,12 +302,22 @@ import { team } from '../data/team';
   // unlike the cursor card which is motion-gated in section-effects.ts).
   let teamKeyBound = false;
 
+  // Page landmarks outside the sheet — made inert while it's open so Tab/AT
+  // stay within the dialog (the sheet + its backdrop are excluded).
+  function teamSheetSiblings() {
+    const sheet = document.getElementById('team-sheet');
+    return [...document.body.children].filter(
+      (el) => el !== sheet && !el.classList.contains('team-backdrop')
+    ) as HTMLElement[];
+  }
+
   function closeTeamSheet() {
     const sheet = document.getElementById('team-sheet');
     if (!sheet) return;
     document.querySelector('.team-backdrop')?.classList.remove('on');
     sheet.classList.remove('on');
     sheet.setAttribute('aria-hidden', 'true');
+    teamSheetSiblings().forEach((el) => el.removeAttribute('inert'));
     document.body.classList.remove('team-sheet-open');
     document.body.style.overflow = '';
     const trigger = (window as any).__teamTrigger;
@@ -329,6 +340,7 @@ import { team } from '../data/team';
         backdrop?.classList.add('on');
         sheet.classList.add('on');
         sheet.setAttribute('aria-hidden', 'false');
+        teamSheetSiblings().forEach((el) => el.setAttribute('inert', ''));
         document.body.classList.add('team-sheet-open');
         document.body.style.overflow = 'hidden';
         sheet.scrollTop = 0;
@@ -344,7 +356,23 @@ import { team } from '../data/team';
     if (!teamKeyBound) {
       teamKeyBound = true;
       document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && document.getElementById('team-sheet')?.classList.contains('on')) closeTeamSheet();
+        const open = document.getElementById('team-sheet');
+        if (!open?.classList.contains('on')) return;
+        if (e.key === 'Escape') { closeTeamSheet(); return; }
+        if (e.key !== 'Tab') return;
+        // Trap Tab within the sheet (inert keeps AT out; this keeps the caret in).
+        const focusable = [...open.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        )].filter((el) => !el.closest('[hidden]') && el.offsetParent !== null);
+        if (!focusable.length) { e.preventDefault(); return; }
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        const active = document.activeElement as HTMLElement | null;
+        if (e.shiftKey && (active === first || !open.contains(active))) {
+          e.preventDefault(); last.focus();
+        } else if (!e.shiftKey && active === last) {
+          e.preventDefault(); first.focus();
+        }
       });
     }
   }

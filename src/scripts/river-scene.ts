@@ -47,7 +47,7 @@ function pickInitialTier(): number {
 }
 
 const TIERS = [
-  { q: '4k', flow: 'river-flow.png', dpr: 1.6, bloom: true },
+  { q: '2k', flow: 'river-flow.png', dpr: 1.6, bloom: true },   // 2k geometry/texture even on high tier — the look is shader-driven; saves ~10MB + matches the river-2k preload (audit 2026-06-24)
   { q: '2k', flow: 'river-flow-sm.png', dpr: 1.25, bloom: false },
   { q: '2k', flow: 'river-flow-sm.png', dpr: 1.0, bloom: false },
 ];
@@ -330,9 +330,11 @@ export function createRiverScene(canvas: HTMLCanvasElement, opts: Opts = {}): Ri
   let river: THREE.Object3D | null = null;
   let pivot: THREE.Group | null = null; // wraps `river` so the model spins about its own centre
   let ready = false;
+  let disposed = false; // dropped late GLB resolutions after teardown (Astro nav mid-fetch)
   const readyCbs: (() => void)[] = [];
   const loader = new GLTFLoader(); loader.setMeshoptDecoder(MeshoptDecoder);
   loader.load(MODELS + `river-${TIERS[TIER].q}.glb`, (g) => {
+    if (disposed) return; // late resolution on a torn-down/force-lost context — drop it
     river = g.scene;
     river.traverse((o: any) => { if (o.isMesh) { gradeMaterial(o.material); o.frustumCulled = false; } });
     const box = new THREE.Box3().setFromObject(river);
@@ -410,6 +412,8 @@ export function createRiverScene(canvas: HTMLCanvasElement, opts: Opts = {}): Ri
   }
 
   function dispose() {
+    disposed = true;
+    readyCbs.length = 0;
     window.removeEventListener('pointermove', onPointer);
     scene.traverse((o: any) => {
       if (o.isMesh) { o.geometry?.dispose?.(); const m = o.material; (Array.isArray(m) ? m : [m]).forEach((mm: any) => mm?.dispose?.()); }

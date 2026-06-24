@@ -219,7 +219,7 @@ const links = [
         toggle.setAttribute('aria-expanded', String(open));
         toggle.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
         menu.setAttribute('data-open', String(open));
-        if (open) menu.hidden = false;
+        menu.hidden = !open;
         document.body.style.overflow = open ? 'hidden' : '';
       };
       toggle.addEventListener('click', () =>

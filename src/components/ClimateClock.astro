@@ -252,14 +252,22 @@
       const mods = await getClimateModules();
       if (!mods) return;
       const dl = mods.carbon_deadline_1?.timestamp;
-      if (dl) deadlineMs = new Date(dl).getTime();
+      if (dl) {
+        const dlMs = new Date(dl).getTime();
+        if (Number.isFinite(dlMs)) deadlineMs = dlMs;
+      }
       for (const id in LIFELINES) {
         const l = LIFELINES[id];
         const m = mods[l.key];
         if (m && m.initial != null && m.rate != null && m.timestamp) {
-          l.initial = m.initial;
-          l.rate = m.rate;
-          l.originMs = new Date(m.timestamp).getTime();
+          const initial = Number(m.initial);
+          const rate = Number(m.rate);
+          const originMs = new Date(m.timestamp).getTime();
+          if (Number.isFinite(initial) && Number.isFinite(rate) && Number.isFinite(originMs)) {
+            l.initial = initial;
+            l.rate = rate;
+            l.originMs = originMs;
+          }
         }
       }
     } catch (e) {

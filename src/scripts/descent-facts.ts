@@ -10,6 +10,7 @@ import { getClimateModules } from './climate-clock';
 gsap.registerPlugin(ScrollTrigger);
 
 let st: ScrollTrigger | undefined;
+let gen = 0;
 const YEAR_MS = 365.25 * 24 * 3600 * 1000;
 const DEADLINE_FALLBACK = Date.parse('2029-07-22T16:00:00+00:00');
 
@@ -18,13 +19,14 @@ const fmt = (v: number, d: number, t: boolean) => d > 0 ? v.toFixed(d) : (t ? Ma
 
 export async function initDescentFacts() {
   destroyDescentFacts();
+  const myGen = ++gen;
   if (!motionOK() || !window.matchMedia('(min-width: 768px)').matches) return;
   const track = document.getElementById('hero-track');
   const nodes = [...document.querySelectorAll<HTMLElement>('.dfact')];
   if (!track || !nodes.length) return;
 
   const mods = await getClimateModules();
-  if (st) return; // a teardown raced us during the await
+  if (myGen !== gen) return; // an init/teardown raced us during the await
   // resolve each fact's target value (live, else the inlined fallback)
   const facts = nodes.map((el) => {
     const key = el.dataset.key!;
@@ -62,6 +64,7 @@ export async function initDescentFacts() {
 }
 
 export function destroyDescentFacts() {
+  gen++;
   st?.kill(); st = undefined;
   document.querySelectorAll<HTMLElement>('.dfact').forEach((el) => { el.style.opacity = ''; el.style.transform = ''; });
 }
