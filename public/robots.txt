@@ -2,4 +2,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://delta-climate-research.vercel.app/sitemap-index.xml
+Sitemap: https://deltaclimate.earth/sitemap-index.xml

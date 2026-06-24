@@ -7,9 +7,12 @@ import Footer from '../components/Footer.astro';
 <Base
   title="Page not found — Delta Climate Research"
   description="The page you're looking for doesn't exist."
+  noindex={true}
 >
   <Nav />
   <main
+    id="main"
+    tabindex="-1"
     class="wrap"
     style="min-height:100dvh; display:flex; flex-direction:column; justify-content:center; padding-block:8rem;"
   >

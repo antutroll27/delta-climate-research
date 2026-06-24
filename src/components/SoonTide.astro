@@ -43,7 +43,7 @@ const stars = Array.from({ length: 70 }, () => ({
 }));
 ---
 
-<main class="soon-tide">
+<main id="main" tabindex="-1" class="soon-tide">
   <div class="stars" aria-hidden="true">
     {stars.map((s) => <i style={`left:${s.x}%; top:${s.y}%; animation-delay:${s.d}s; --o:${s.o}`}></i>)}
   </div>

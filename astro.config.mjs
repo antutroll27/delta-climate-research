@@ -8,7 +8,7 @@ import react from '@astrojs/react';
 // to avoid a rolldown-vite binding incompatibility in Astro 6.
 // https://astro.build/config
 export default defineConfig({
-  site: 'https://delta-climate-research.vercel.app',
+  site: 'https://deltaclimate.earth',
   integrations: [sitemap(), react()],
   vite: {
     // Pre-bundle three + EVERY addon both WebGL islands use (the hero river AND

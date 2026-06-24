@@ -1,23 +1,7 @@
 @import "tailwindcss";
 
-/* Self-hosted Satoshi variable (300–900 axis) — enables any weight, e.g. 350. */
-@font-face {
-  font-family: 'Satoshi';
-  src: url('/fonts/Satoshi-Variable.woff2') format('woff2');
-  font-weight: 300 900;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: 'Satoshi';
-  src: url('/fonts/Satoshi-VariableItalic.woff2') format('woff2');
-  font-weight: 300 900;
-  font-style: italic;
-  font-display: swap;
-}
-
 /* Self-hosted Mona Sans (variable, wght 200–900) — the single sans for display
-   + body. Replaces Satoshi (kept available via --font-sans-alt). */
+   + body. Replaces Satoshi. */
 @font-face {
   font-family: 'Mona Sans';
   src: url('/fonts/MonaSans-Variable.woff2') format('woff2');
@@ -86,8 +70,6 @@
 
   /* type */
   --font-sans: "Mona Sans", ui-sans-serif, system-ui, sans-serif;
-  /* old sans, kept for reuse — Satoshi @font-face is still defined above */
-  --font-sans-alt: "Satoshi", ui-sans-serif, system-ui, sans-serif;
   --font-serif: "Mona Sans", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "Noplato Mono", ui-monospace, "SF Mono", monospace;
 
