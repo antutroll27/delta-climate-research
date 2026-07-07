@@ -134,6 +134,8 @@ import { team } from '../data/team';
   /* intro */
   .team-intro { padding-top: clamp(15rem, 30vh, 22rem); padding-bottom: clamp(2.5rem, 6vh, 5rem); }
   .team-title { max-width: 20ch; font-size: clamp(3.4rem, 7.4vw, 6.5rem); }
+  /* phones: the 3.4rem clamp floor clips "Measurement." inside the reveal mask */
+  @media (max-width: 480px) { .team-title { font-size: clamp(2.3rem, 11.5vw, 3.4rem); } }
   .team-meta { margin-top: clamp(1.5rem, 3vh, 2.4rem); }
   .team-lede {
     max-width: 56ch; font-weight: 300; font-size: clamp(1rem, 1.4vw, 1.2rem);
@@ -213,6 +215,7 @@ import { team } from '../data/team';
   .team-sheet {
     position: fixed; inset-inline: 0; bottom: 0; z-index: 71; max-height: 88vh;
     display: flex; flex-direction: column;
+    padding-bottom: env(safe-area-inset-bottom); /* clear the iOS home indicator */
     background: var(--color-base); border-top: 1px solid var(--color-hairline);
     transform: translateY(101%);
     transition: transform 1.15s cubic-bezier(0.5, 0.02, 0.3, 1); /* slow, deliberate rise */

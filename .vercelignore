@@ -6,10 +6,12 @@ dist
 .vercel
 
 # raw / oversized model sources — NOT used by the build (only the baked
-# public/models/river-2k.glb + river-4k.glb ship). The raw glb is 268 MB and
+# public/models/river-2k.glb + river-1k.glb ship). The raw glb is 268 MB and
 # blows past Vercel's 100 MB-per-file limit.
 models-src
 public/models/river-8k.glb
+public/models/river-4k.glb
+public/models/._nature_vegetation_pack.glb
 public/models/flora.glb
 public/models/flora_raw.glb
 public/models/flowers_pack_4.glb

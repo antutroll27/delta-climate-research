@@ -48,8 +48,8 @@ function pickInitialTier(): number {
 
 const TIERS = [
   { q: '2k', flow: 'river-flow.png', dpr: 1.6, bloom: true },   // 2k geometry/texture even on high tier — the look is shader-driven; saves ~10MB + matches the river-2k preload (audit 2026-06-24)
-  { q: '2k', flow: 'river-flow-sm.png', dpr: 1.25, bloom: false },
-  { q: '2k', flow: 'river-flow-sm.png', dpr: 1.0, bloom: false },
+  { q: '1k', flow: 'river-flow-sm.png', dpr: 1.25, bloom: false }, // mobile: 44k-tri quantized recut of the same scan (0.75MB vs 12.6MB; mobile audit 2026-07-07)
+  { q: '1k', flow: 'river-flow-sm.png', dpr: 1.0, bloom: false },
 ];
 
 export function createRiverScene(canvas: HTMLCanvasElement, opts: Opts = {}): RiverScene {

@@ -137,8 +137,10 @@ import { papers, paperHref } from '../data/papers';
 
   /* dimmed/folded resting states only when the band choreography runs.
      Hover and :focus-visible get full parity with .active so pointing at a
-     row (or tabbing to it) never leaves it dimmed with a hidden excerpt. */
-  @media (prefers-reduced-motion: no-preference) {
+     row (or tabbing to it) never leaves it dimmed with a hidden excerpt.
+     Width-gated like Projects: on phones the band never highlights reliably,
+     leaving titles at 38% with hidden excerpts — mobile gets the static list. */
+  @media (prefers-reduced-motion: no-preference) and (min-width: 821px) {
     :global(.reveal-ready) .f-title { color: rgb(236 237 240 / 0.38); }
     :global(.reveal-ready) .frow.active .f-title,
     :global(.reveal-ready) .frow:hover .f-title,
