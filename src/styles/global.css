@@ -162,6 +162,9 @@
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
   }
+  /* kill the default grey/blue tap flash on iOS/Android; :focus-visible below
+     still provides the accessible focus affordance */
+  a, button { -webkit-tap-highlight-color: transparent; }
   /* Visible, on-brand focus ring */
   :focus-visible {
     outline: 2px solid var(--color-cyan);
@@ -238,6 +241,11 @@
     color: var(--color-paper);
     max-width: 18ch;
   }
+  /* phones: the clamp() minimum above freezes at ~50px, which clips long accent
+     words ("Measurement.") inside the reveal masks at 360-390px. Scale down. */
+  @media (max-width: 480px) {
+    .sec-title { font-size: clamp(2.2rem, 11vw, 3.15rem); }
+  }
   .sec-title em {
     font-family: var(--font-serif);
     font-style: normal;
@@ -281,6 +289,12 @@
     align-items: flex-end;
     justify-content: space-between;
     gap: 2rem;
+  }
+  /* phones: the nowrap roll-link can't share a row with the title at ~390px —
+     without this it stretches the layout viewport (~438px) and clips the whole
+     page's right edge (hamburger included). Wrap instead. */
+  @media (max-width: 640px) {
+    .sec-head { flex-wrap: wrap; align-items: flex-start; row-gap: 1.25rem; }
   }
   .sec-kicker {
     font-family: var(--font-mono);

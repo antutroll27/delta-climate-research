@@ -260,7 +260,7 @@ const connect = [
     flex: 1; min-width: 0; padding: 11px 14px;
     background: transparent; border: 0; outline: none;
     color: var(--bronze-ink);
-    font-family: var(--font-sans); font-size: 0.85rem;
+    font-family: var(--font-sans); font-size: 1rem; /* ≥16px: stops iOS Safari's zoom-on-focus */
   }
   .subscribe input::placeholder { color: var(--bronze-ink-soft); }
   .subscribe button {
