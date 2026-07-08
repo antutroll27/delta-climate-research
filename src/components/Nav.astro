@@ -206,6 +206,13 @@ const links = [
     const toggle = document.querySelector<HTMLButtonElement>('[data-navigation-toggle]');
     const menu = document.getElementById('mobile-menu');
     if (!nav || !sentinel) return;
+    // idempotency guard: initNav runs both inline AND on astro:page-load (which
+    // fires on first load too), so without this the hamburger got TWO click
+    // listeners — one opened the menu, the second closed it in the same tap, so
+    // it never appeared. A view-transition nav swaps in a fresh #site-nav with
+    // no flag, so it still re-binds correctly on the new DOM.
+    if (nav.dataset.navReady) return;
+    nav.dataset.navReady = '1';
 
     // frosted state: on the home page, track the hero itself — the backdrop
     // appears only once the hero has scrolled past the nav and clears again
