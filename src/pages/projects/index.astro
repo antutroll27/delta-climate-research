@@ -11,6 +11,7 @@ import { projects, projectHref } from '../../data/projects';
 <Base
   title="Ongoing Projects — Delta Climate Research"
   description="Case studies in urban heat mitigation, blue-carbon MRV, and embodied-carbon trade — currently in preparation."
+  noindex={!projects.some((p) => p.published)}
 >
   <Nav />
   <SoonDraft
