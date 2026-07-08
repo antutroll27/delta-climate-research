@@ -1,12 +1,4 @@
 {
-  "redirects": [
-    {
-      "source": "/:path*",
-      "has": [{ "type": "host", "value": "www.deltaclimate.earth" }],
-      "destination": "https://deltaclimate.earth/:path*",
-      "permanent": true
-    }
-  ],
   "headers": [
     {
       "source": "/images/(.*)",
