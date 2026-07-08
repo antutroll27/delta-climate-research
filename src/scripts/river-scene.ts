@@ -7,6 +7,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
+import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
@@ -48,7 +49,7 @@ function pickInitialTier(): number {
 
 const TIERS = [
   { q: '2k', flow: 'river-flow.png', dpr: 1.6, bloom: true },   // 2k geometry/texture even on high tier — the look is shader-driven; saves ~10MB + matches the river-2k preload (audit 2026-06-24)
-  { q: '1k', flow: 'river-flow-sm.png', dpr: 1.25, bloom: false }, // mobile: 44k-tri quantized recut of the same scan (0.75MB vs 12.6MB; mobile audit 2026-07-07)
+  { q: '1k', flow: 'river-flow-sm.png', dpr: 1.25, bloom: false }, // mobile: Draco recut, full geometry + 12-bit octahedral normals (1.9MB vs 12.6MB). meshopt's 8-bit normals flattened the water shading into a teal flare — Draco keeps precise normals (audit 2026-07-08)
   { q: '1k', flow: 'river-flow-sm.png', dpr: 1.0, bloom: false },
 ];
 
@@ -333,6 +334,10 @@ export function createRiverScene(canvas: HTMLCanvasElement, opts: Opts = {}): Ri
   let disposed = false; // dropped late GLB resolutions after teardown (Astro nav mid-fetch)
   const readyCbs: (() => void)[] = [];
   const loader = new GLTFLoader(); loader.setMeshoptDecoder(MeshoptDecoder);
+  // mobile tiers load a Draco-compressed recut (12-bit octahedral normals — meshopt's
+  // 8-bit normals flattened the water shading into a teal flare; audit 2026-07-08).
+  // Decoder fetched only when a Draco file is actually decoded → desktop (meshopt) never pays it.
+  const dracoLoader = new DRACOLoader(); dracoLoader.setDecoderPath('/draco/'); loader.setDRACOLoader(dracoLoader);
   loader.load(MODELS + `river-${TIERS[TIER].q}.glb`, (g) => {
     if (disposed) return; // late resolution on a torn-down/force-lost context — drop it
     river = g.scene;
@@ -415,6 +420,7 @@ export function createRiverScene(canvas: HTMLCanvasElement, opts: Opts = {}): Ri
     disposed = true;
     readyCbs.length = 0;
     window.removeEventListener('pointermove', onPointer);
+    dracoLoader.dispose();
     scene.traverse((o: any) => {
       if (o.isMesh) { o.geometry?.dispose?.(); const m = o.material; (Array.isArray(m) ? m : [m]).forEach((mm: any) => mm?.dispose?.()); }
     });
