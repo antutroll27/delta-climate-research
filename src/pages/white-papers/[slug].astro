@@ -21,6 +21,7 @@ const next = papers[(idx + 1) % papers.length];
   title={`${paper.title} — Delta Climate Research`}
   description={paper.excerpt}
   noindex={!paper.published}
+  ogType={paper.published ? 'article' : 'website'}
 >
   <Nav />
   <SoonTide
