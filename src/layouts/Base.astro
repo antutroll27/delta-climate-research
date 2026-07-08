@@ -1,5 +1,6 @@
 ---
 import { ClientRouter } from 'astro:transitions';
+import Analytics from '@vercel/analytics/astro';
 // Fonts are self-hosted via @font-face in global.css (Satoshi, Noplato Mono).
 import 'lenis/dist/lenis.css';
 import '../styles/global.css';
@@ -172,6 +173,11 @@ const jsonLd = {
   <body>
     <a class="skip-link" href="#main">Skip to content</a>
     <slot />
+
+    <!-- Vercel Web Analytics — cookieless page-view/visitor counts; only sends on
+         the production deployment (no-ops in dev). Astro-native component. -->
+    <Analytics />
+
 
     <script>
       import { initSmoothScroll, destroySmoothScroll } from '../scripts/smooth-scroll';
