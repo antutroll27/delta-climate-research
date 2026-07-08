@@ -1,6 +1,7 @@
 ---
 import { ClientRouter } from 'astro:transitions';
 import Analytics from '@vercel/analytics/astro';
+import SpeedInsights from '@vercel/speed-insights/astro';
 // Fonts are self-hosted via @font-face in global.css (Satoshi, Noplato Mono).
 import 'lenis/dist/lenis.css';
 import '../styles/global.css';
@@ -177,6 +178,10 @@ const jsonLd = {
     <!-- Vercel Web Analytics — cookieless page-view/visitor counts; only sends on
          the production deployment (no-ops in dev). Astro-native component. -->
     <Analytics />
+
+    <!-- Vercel Speed Insights — measures web performance and Core Web Vitals;
+         only active on production deployment. Astro-native component. -->
+    <SpeedInsights />
 
 
     <script>
