@@ -10,11 +10,47 @@ import Base from '../layouts/Base.astro';
 import Nav from '../components/Nav.astro';
 import Footer from '../components/Footer.astro';
 import { team } from '../data/team';
+
+// Per-page structured data: a Person for each member (E-E-A-T — jobTitle,
+// alumniOf, expertise, worksFor → the sitewide Organization) plus a breadcrumb.
+// alumniOf is parsed from the background lines' "role — institution" form; only
+// corporate emails are exposed (personal addresses stay out of the markup).
+const site = Astro.site!.href.replace(/\/$/, '');
+const teamJsonLd = {
+  '@context': 'https://schema.org',
+  '@graph': [
+    {
+      '@type': 'BreadcrumbList',
+      itemListElement: [
+        { '@type': 'ListItem', position: 1, name: 'Home', item: `${site}/` },
+        { '@type': 'ListItem', position: 2, name: 'Team', item: `${site}/team/` },
+      ],
+    },
+    ...team.map((m) => {
+      const alumniOf = m.background
+        .map((b) => b.split('—')[1]?.trim())
+        .filter(Boolean)
+        .map((name) => ({ '@type': 'EducationalOrganization', name }));
+      return {
+        '@type': 'Person',
+        '@id': `${site}/team/#${m.first}-${m.last}`.toLowerCase(),
+        name: `${m.first} ${m.last}`,
+        jobTitle: m.tier,
+        description: m.discipline,
+        worksFor: { '@id': `${site}/#organization` },
+        knowsAbout: m.focus,
+        ...(alumniOf.length ? { alumniOf } : {}),
+        ...(m.email.endsWith('@deltaclimate.earth') ? { email: m.email } : {}),
+      };
+    }),
+  ],
+};
 ---
 
 <Base
-  title="Our Team — Delta Climate Research"
-  description="The climatologists, climate-policy specialists, and operators behind Delta Climate Research — a small, senior bench turning earth-science data into defensible decisions."
+  title="Team — Climate & Policy Specialists · Delta Climate Research"
+  description="Meet the climatologists, policy specialists, and engineers behind Delta Climate Research — a senior bench turning earth-science data into defensible decisions."
+  structuredData={teamJsonLd}
 >
   <Nav />
   <main id="main" tabindex="-1" class="team-page">

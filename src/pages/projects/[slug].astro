@@ -18,6 +18,7 @@ const { project } = Astro.props;
 <Base
   title={`${project.title} — Delta Climate Research`}
   description={project.blurb}
+  noindex={!project.published}
 >
   <Nav />
   <SoonDraft

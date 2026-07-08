@@ -8,6 +8,9 @@ interface Props {
   title?: string;
   description?: string;
   noindex?: boolean;
+  // Optional page-specific JSON-LD (e.g. Person + BreadcrumbList on /team),
+  // emitted alongside the sitewide Organization/WebSite graph below.
+  structuredData?: object;
 }
 
 const BRAND_DESCRIPTION =
@@ -17,6 +20,7 @@ const {
   title = 'Delta Climate Research — Research-led climate intelligence',
   description = BRAND_DESCRIPTION,
   noindex = false,
+  structuredData,
 } = Astro.props;
 
 const canonical = new URL(Astro.url.pathname, Astro.site);
@@ -88,6 +92,9 @@ const jsonLd = {
 
     <!-- Structured data (demo-safe: only truthful facts) -->
     <script is:inline type="application/ld+json" set:html={JSON.stringify(jsonLd)} />
+    {structuredData && (
+      <script is:inline type="application/ld+json" set:html={JSON.stringify(structuredData)} />
+    )}
 
     <!-- Mona Sans (variable woff2) — the site's display + body sans, above the fold -->
     <link
