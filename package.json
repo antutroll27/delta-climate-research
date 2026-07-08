@@ -13,6 +13,7 @@
     "@astrojs/react": "^5.0.7",
     "@astrojs/sitemap": "^3.7.3",
     "@paper-design/shaders-react": "^0.0.76",
+    "@vercel/analytics": "^2.0.1",
     "astro": "^6.4.2",
     "gsap": "^3.13.0",
     "lenis": "^1.3.23",
