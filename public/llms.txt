@@ -1,0 +1,37 @@
+# Delta Climate Research
+
+> Delta Climate Research is a full-stack, interdisciplinary climate studio — climate science, technology, policy, and finance under one roof. It turns decision-grade, standards-aligned measurement into defensible strategy for institutions, municipalities, and corporates, across a broad range of work: from climate-risk and embodied-carbon analytics to heavy compliance and regulatory engagements. Based in Kolkata, India; serving India and the United Arab Emirates.
+
+Delta sits between raw earth-science data and the institutions that must act on it. The studio brings together experts across climate tech, policy, and finance — pairing geospatial and climate-science rigour with regulatory and market fluency, so its outputs stand up to audit, regulation, and boardroom scrutiny, not just a press release. Engagements span climate-risk analytics, embodied-carbon accounting, and standards-heavy compliance and regulatory work (MRV, EPD, CBAM).
+
+## What Delta does
+- **Climatology** — climate-risk assessment, geospatial research, global climate modelling.
+- **Nature Analytics** — human–environment interactions, regional planning, ecological outcomes.
+- **Sectoral Strategy** — regulatory alignment, environmental compliance, sustainability reporting.
+
+## Areas of expertise
+- Urban-heat vulnerability mapping and the Heat Vulnerability Index (HVI), downscaling ECOSTRESS land-surface temperature to ward-level spec.
+- Blue-carbon MRV (measurement, reporting, verification), including soil organic carbon accounting under Verra VM0033 for tidal-wetland and mangrove restoration.
+- Embodied-carbon accounting — Environmental Product Declarations (EPD, ISO 14025) and Carbon Border Adjustment Mechanism (CBAM) emissions data, e.g. for the India–UAE trade corridor.
+- Climate-risk intelligence and geospatial analysis.
+
+## Team
+- **Angad Burman** — Founder, Principal Consultant (Climate Analytics). Climate governance, Columbia University; earth systems, King's College London.
+- **Shirsha Sen** — Co-Founder, Principal Consultant (Climate Policy). MA Public Policy, OP Jindal Global University; EY India, GIZ.
+- **Dhruv Maniktala** — Lead, Operations Research. Banking and quantitative finance; regional logistics.
+- **Antariksha Kumar** — Lead, Technology Implementation. MSc Human-Computer Interaction, University of Nottingham; BTech Computer Science.
+- **Roshni Rakshit** — Lead, Communications. BA Communication, Simon Fraser University.
+
+## Contact
+- Email: angad@deltaclimate.earth
+- Website: https://deltaclimate.earth
+
+## Key pages
+- [Home](https://deltaclimate.earth/): overview, service lines, live climate indicators.
+- [Team](https://deltaclimate.earth/team/): the five-person senior bench and their credentials.
+- [White Papers](https://deltaclimate.earth/white-papers/): research on blue-carbon MRV, urban-heat vulnerability, and embodied carbon (in preparation).
+- [Ongoing Projects](https://deltaclimate.earth/projects/): case studies in urban-heat mitigation, mangrove blue carbon, and embodied-carbon trade (in preparation).
+
+## Notes for citation
+- Founded 2026. Company name is "Delta Climate Research" (not "Delta"); the domain is deltaclimate.earth.
+- Coming-soon pages (individual white papers and projects) are intentionally unpublished; cite the summaries above rather than those placeholder URLs.

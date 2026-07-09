@@ -1,0 +1,95 @@
+---
+// FAQ — plain-language answers to the questions people (and AI answer engines)
+// actually ask about Delta. Rendered as visible text AND emitted as FAQPage
+// JSON-LD; the schema `text` matches the visible answer verbatim (Google/AI
+// require the answer to be present on the page). Answers are self-contained and
+// citable, drawn from the same facts as the rest of the site.
+const faqs = [
+  {
+    q: 'What does Delta Climate Research do?',
+    a: 'Delta Climate Research is a full-stack, interdisciplinary climate studio, bringing together climate science, technology, policy, and finance. It turns decision-grade, standards-aligned measurement into defensible strategy for institutions, municipalities, and corporates — across work ranging from climate-risk and embodied-carbon analytics to heavy compliance and regulatory engagements.',
+  },
+  {
+    q: 'Who founded Delta Climate Research?',
+    a: 'Delta was founded in 2026 by Angad Burman (Principal Consultant, Climate Analytics) and Shirsha Sen (Principal Consultant, Climate Policy), supported by a senior bench across operations research, technology, and communications.',
+  },
+  {
+    q: 'Where is Delta Climate Research based?',
+    a: 'Delta operates from Kolkata, India, and serves clients across India and the United Arab Emirates.',
+  },
+  {
+    q: 'What does Delta Climate Research specialise in?',
+    a: 'Three practice lines — Climatology, Nature Analytics, and Sectoral Strategy — with deep focus on urban-heat vulnerability (the Heat Vulnerability Index), blue-carbon MRV under Verra VM0033, and embodied-carbon accounting (EPD and CBAM).',
+  },
+  {
+    q: 'How can I contact Delta Climate Research?',
+    a: 'Email angad@deltaclimate.earth, or request access to the data bank from anywhere on the site.',
+  },
+];
+
+const faqSchema = {
+  '@context': 'https://schema.org',
+  '@type': 'FAQPage',
+  mainEntity: faqs.map((f) => ({
+    '@type': 'Question',
+    name: f.q,
+    acceptedAnswer: { '@type': 'Answer', text: f.a },
+  })),
+};
+---
+
+<section id="faq" class="section" aria-labelledby="faq-title">
+  <div class="wrap faq-grid">
+    <div class="faq-head">
+      <p class="sec-kicker">FAQ</p>
+      <h2 id="faq-title" class="sec-title" data-mask>
+        <span class="ln"><span>Questions,</span></span>
+        <span class="ln"><span><em>answered.</em></span></span>
+      </h2>
+    </div>
+
+    <dl class="faq-list">
+      {faqs.map((f) => (
+        <div class="faq-row" data-reveal>
+          <dt class="faq-q">{f.q}</dt>
+          <dd class="faq-a">{f.a}</dd>
+        </div>
+      ))}
+    </dl>
+  </div>
+</section>
+
+<script type="application/ld+json" set:html={JSON.stringify(faqSchema)} is:inline />
+
+<style>
+  .faq-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr);
+    gap: clamp(2rem, 6vw, 5rem);
+    align-items: start;
+  }
+  .faq-head { position: sticky; top: 8rem; }
+  .faq-list { margin: 0; }
+  .faq-row {
+    padding: 1.65rem 0;
+    border-top: 1px solid var(--color-hairline);
+  }
+  .faq-row:first-child { border-top: 0; padding-top: 0; }
+  .faq-q {
+    font-size: clamp(1.1rem, 1.6vw, 1.35rem);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--color-paper);
+  }
+  .faq-a {
+    margin: 0.7rem 0 0;
+    font-size: clamp(0.95rem, 1.2vw, 1.05rem);
+    line-height: 1.65;
+    color: var(--color-ink-faint);
+    max-width: 64ch;
+  }
+  @media (max-width: 820px) {
+    .faq-grid { grid-template-columns: 1fr; gap: 2.4rem; }
+    .faq-head { position: static; }
+  }
+</style>

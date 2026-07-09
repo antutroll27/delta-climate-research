@@ -2,4 +2,30 @@
 User-agent: *
 Allow: /
 
+# AI answer engines are explicitly welcome to read + cite this site.
+# (A curated summary for them lives at /llms.txt.)
+User-agent: GPTBot
+Allow: /
+
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: anthropic-ai
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Perplexity-User
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
 Sitemap: https://deltaclimate.earth/sitemap-index.xml
