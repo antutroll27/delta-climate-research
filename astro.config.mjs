@@ -10,6 +10,10 @@ import react from '@astrojs/react';
 import { papers } from './src/data/papers.ts';
 import { projects } from './src/data/projects.ts';
 
+// Stamp every sitemap URL with the build time as <lastmod> — a real crawl /
+// AI-freshness signal (the default output omits it). Updates on each deploy.
+const BUILD_ISO = new Date().toISOString();
+
 const sitemapFilter = (page) => {
   const path = new URL(page).pathname;
   if (path === '/climate-highlights/') return false;               // always coming-soon (no publish flag)
@@ -27,7 +31,10 @@ const sitemapFilter = (page) => {
 // https://astro.build/config
 export default defineConfig({
   site: 'https://deltaclimate.earth',
-  integrations: [sitemap({ filter: sitemapFilter }), react()],
+  integrations: [
+    sitemap({ filter: sitemapFilter, serialize: (item) => ({ ...item, lastmod: BUILD_ISO }) }),
+    react(),
+  ],
   vite: {
     // Pre-bundle three + EVERY addon both WebGL islands use (the hero river AND
     // the About ocean's code-split Water.js), so Vite optimizes once at startup

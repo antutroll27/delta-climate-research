@@ -18,7 +18,7 @@ interface Props {
 }
 
 const BRAND_DESCRIPTION =
-  'A boutique consultancy turning decision-grade climate-risk and embodied-carbon intelligence into standards-aligned adaptation decisions.';
+  'A full-stack, interdisciplinary climate studio uniting science, technology, policy, and finance to turn decision-grade measurement into defensible strategy.';
 
 const {
   title = 'Delta Climate Research — Research-led climate intelligence',
@@ -32,9 +32,11 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
 const ogImage = new URL('/images/og-default.jpg', Astro.site).href;
 const ogImageAlt = 'Delta Climate Research — research-led climate intelligence';
 
-// Demo-safe structured data: only truthfully-assertable facts (no contact/socials).
-// `Astro.site!` relies on `site` being set in astro.config.mjs (it always is — the
-// sitemap integration requires it too); build fails loudly if that invariant breaks.
+// Structured data: only truthfully-assertable facts (public founder email; no
+// `sameAs` until real socials exist). `Astro.site!` relies on `site` being set in
+// astro.config.mjs (it always is — the sitemap integration requires it too);
+// build fails loudly if that invariant breaks. `founder` refs the Person @ids
+// emitted on /team (team.astro), so AI engines resolve the org→founders link.
 const site = Astro.site!.href.replace(/\/$/, '');
 const jsonLd = {
   '@context': 'https://schema.org',
@@ -57,6 +59,24 @@ const jsonLd = {
         'Climate risk intelligence',
         'Carbon Border Adjustment Mechanism',
       ],
+      foundingDate: '2026',
+      slogan: 'Between the data and the decision.',
+      founder: [
+        { '@id': `${site}/team/#angad-burman` },
+        { '@id': `${site}/team/#shirsha-sen` },
+      ],
+      address: {
+        '@type': 'PostalAddress',
+        addressLocality: 'Kolkata',
+        addressRegion: 'West Bengal',
+        addressCountry: 'IN',
+      },
+      contactPoint: {
+        '@type': 'ContactPoint',
+        email: 'angad@deltaclimate.earth',
+        contactType: 'business inquiries',
+        areaServed: ['IN', 'AE'],
+      },
     },
     {
       '@type': 'WebSite',
