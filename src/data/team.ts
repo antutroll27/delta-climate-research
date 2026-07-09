@@ -6,9 +6,9 @@ export interface Member {
   last: string;
   tier: string; // role tier, e.g. 'Principal Consultant'
   discipline: string; // focus area
-  mono: string; // initials — fallback behind the photo (cursor card + sheet)
+  mono: string; // initials 
   cover: 1 | 2 | 3 | 4; // gradient shown behind/while the photo loads
-  photo: string; // /images/team/*.jpeg — real portrait
+  photo: string; // /images/team/*.jpeg , real portrait
   photoPos: string; // object-position to frame the face in the circular disc
   bio: string[]; // detail-panel paragraphs
   focus: string[];
