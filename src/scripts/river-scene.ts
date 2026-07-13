@@ -128,6 +128,14 @@ export function createRiverScene(canvas: HTMLCanvasElement, opts: Opts = {}): Ri
 
   function gradeMaterial(mat: THREE.MeshStandardMaterial) {
     mat.fog = true; mat.envMapIntensity = 0.35;
+    // Anisotropic filtering on the scan's textures — the drone camera views the
+    // bed at a grazing angle, where the three.js default (anisotropy=1) blurs
+    // everything past mid-distance regardless of texture resolution. The flow
+    // map is exempt (no mips → anisotropy is inert there).
+    const aniso = Math.min(TIER === 0 ? 16 : 8, renderer.capabilities.getMaxAnisotropy());
+    [mat.map, mat.normalMap, mat.roughnessMap, mat.metalnessMap].forEach((t) => {
+      if (t) t.anisotropy = aniso;
+    });
     const u: Record<string, IUniform<unknown>> = {
       uTime: UTIME, uGrade: UG, uWGain: UWGAIN, uWFlow: UWFLOW, uWAmp: UWAMP,
       uShadow: { value: new THREE.Color('#05080a') }, uMid: { value: new THREE.Color('#6b4f2e') }, uHigh: { value: new THREE.Color('#6fcad6') },
@@ -405,7 +413,71 @@ export function createRiverScene(canvas: HTMLCanvasElement, opts: Opts = {}): Ri
     timer.reset();
     ready = true;
     readyCbs.forEach(cb => cb());
+    scheduleTextureUpgrade();
   }, undefined, (e) => { console.error('[river] load error', e); });
+
+  // ── desktop-only progressive texture upgrade ─────────────────────────────
+  // The shipped GLB carries 1k textures so first paint stays ~2MB; once the
+  // scene is rendering and the main thread is idle, fetch the original scan's
+  // 2k albedo + normal (~2MB, immutable-cached) and hot-swap them in. Failure
+  // or a mid-session tier downgrade silently keeps the 1k set.
+  function scheduleTextureUpgrade() {
+    if (TIER !== 0) return;
+    const conn = (navigator as { connection?: { saveData?: boolean } }).connection;
+    if (conn?.saveData) return;
+    if (typeof window.requestIdleCallback === 'function') {
+      window.requestIdleCallback(() => { void upgradeTextures(); }, { timeout: 4000 });
+    } else {
+      window.setTimeout(() => { void upgradeTextures(); }, 2000);
+    }
+  }
+
+  async function upgradeTextures() {
+    if (disposed || TIER !== 0 || !river) return;
+    const mats: THREE.MeshStandardMaterial[] = [];
+    river.traverse((object) => {
+      if (!(object instanceof THREE.Mesh)) return;
+      (Array.isArray(object.material) ? object.material : [object.material]).forEach((m) => {
+        if (m instanceof THREE.MeshStandardMaterial && m.map) mats.push(m);
+      });
+    });
+    if (!mats.length) return;
+
+    // ImageBitmapLoader decodes off the main thread; 'none' matches GLTF's
+    // flipY=false convention so the UVs line up with the 1k set.
+    const bmLoader = new THREE.ImageBitmapLoader();
+    bmLoader.setOptions({ imageOrientation: 'none' });
+    let albedoBm: ImageBitmap, normalBm: ImageBitmap;
+    try {
+      [albedoBm, normalBm] = await Promise.all([
+        bmLoader.loadAsync(TEX + 'river-albedo-2k.webp'),
+        bmLoader.loadAsync(TEX + 'river-normal-2k.webp'),
+      ]);
+    } catch { return; } // offline / blocked — the 1k textures stay
+    if (disposed || TIER !== 0) { albedoBm.close(); normalBm.close(); return; }
+
+    const albedo = adoptTexture(albedoBm, mats[0].map!, THREE.SRGBColorSpace);
+    const normal = mats[0].normalMap ? adoptTexture(normalBm, mats[0].normalMap, THREE.NoColorSpace) : null;
+    const retired = new Set<THREE.Texture>();
+    mats.forEach((m) => {
+      if (m.map) { retired.add(m.map); m.map = albedo; }
+      if (normal && m.normalMap) { retired.add(m.normalMap); m.normalMap = normal; }
+    });
+    retired.forEach((t) => t.dispose());
+  }
+
+  // Wrap a decoded bitmap in a Texture that inherits the outgoing texture's
+  // sampling params, and upload it NOW (idle) so the swap never hitches a frame.
+  function adoptTexture(bitmap: ImageBitmap, prev: THREE.Texture, colorSpace: string) {
+    const tex = new THREE.Texture(bitmap);
+    tex.flipY = false;
+    tex.colorSpace = colorSpace;
+    tex.wrapS = prev.wrapS; tex.wrapT = prev.wrapT;
+    tex.anisotropy = prev.anisotropy;
+    tex.needsUpdate = true;
+    renderer.initTexture(tex);
+    return tex;
+  }
 
   // subtle drone parallax + hover-ripple injection
   const camT = { x: 0, y: 0 }, camO = { x: 0, y: 0 };
