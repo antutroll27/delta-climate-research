@@ -11,6 +11,7 @@ export {
   ClampToEdgeWrapping,
   Color,
   DirectionalLight,
+  DoubleSide,
   EdgesGeometry,
   FogExp2,
   Group,

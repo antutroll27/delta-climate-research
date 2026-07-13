@@ -391,11 +391,16 @@ export function createRiverScene(canvas: HTMLCanvasElement, opts: Opts = {}): Ri
       return;
     }
     river = g.scene;
+    let scanMesh: THREE.Mesh | null = null;
+    let scanAlbedo: THREE.Texture | null = null;
     river.traverse((object) => {
       if (!(object instanceof THREE.Mesh)) return;
       const materials = Array.isArray(object.material) ? object.material : [object.material];
       materials.forEach((material) => {
-        if (material instanceof THREE.MeshStandardMaterial) gradeMaterial(material);
+        if (material instanceof THREE.MeshStandardMaterial) {
+          gradeMaterial(material);
+          if (!scanMesh) { scanMesh = object; scanAlbedo = material.map; }
+        }
       });
       object.frustumCulled = false;
     });
@@ -410,11 +415,81 @@ export function createRiverScene(canvas: HTMLCanvasElement, opts: Opts = {}): Ri
     pivot.updateMatrixWorld(true);
     scene.add(pivot);
     applyTier(TIER);
+    if (scanMesh) void buildSkirt(scanMesh, scanAlbedo);
     timer.reset();
     ready = true;
     readyCbs.forEach(cb => cb());
     scheduleTextureUpgrade();
   }, undefined, (e) => { console.error('[river] load error', e); });
+
+  // ── the skirt: extruded side walls that give the scan mass ────────────────
+  // The photogrammetry scan is an open shell — a thin crust you can see through
+  // at the rim. scripts/build-river-skirt.mjs bakes its boundary edges into a
+  // compact vertex buffer (offline: ~1.5M edge lookups is far too slow here);
+  // this streams it, shares the scan's own albedo so the rim seam is invisible,
+  // and fades the wall into the void colour so the slab dissolves into black
+  // rather than ending in a hard cut. Fetched in parallel with the GLB.
+  const SKIRT_ON = new URLSearchParams(location.hash.replace(/^#/, '')).get('thick') !== 'off';
+  const skirtBuf: Promise<ArrayBuffer | null> = SKIRT_ON
+    ? fetch(MODELS + 'river-skirt.bin').then(r => (r.ok ? r.arrayBuffer() : null)).catch(() => null)
+    : Promise.resolve(null);
+  let skirtMat: THREE.MeshStandardMaterial | null = null;
+
+  async function buildSkirt(scanMesh: THREE.Mesh, albedo: THREE.Texture | null) {
+    const buf = await skirtBuf;
+    if (!buf || disposed || !albedo) return;
+
+    const [vertCount, idxCount, idxBytes] = new Uint32Array(buf, 0, 3);
+    const frame = new Float32Array(buf.slice(12, 36));      // origin xyz + extent xyz
+    let o = 36;
+    const qPos = new Uint16Array(buf.slice(o, o + vertCount * 3 * 2)); o += vertCount * 3 * 2;
+    const qUv = new Uint16Array(buf.slice(o, o + vertCount * 2 * 2)); o += vertCount * 2 * 2;
+    const idx = idxBytes === 2
+      ? new Uint16Array(buf.slice(o, o + idxCount * 2))
+      : new Uint32Array(buf.slice(o, o + idxCount * 4));
+
+    // dequantize (u16 → local space); ~20k verts, sub-millisecond
+    const pos = new Float32Array(vertCount * 3);
+    const uv = new Float32Array(vertCount * 2);
+    for (let i = 0; i < vertCount; i++) {
+      for (let c = 0; c < 3; c++) pos[i * 3 + c] = frame[c] + (qPos[i * 3 + c] / 65535) * frame[3 + c];
+      for (let c = 0; c < 2; c++) uv[i * 2 + c] = qUv[i * 2 + c] / 65535;
+    }
+
+    // first half of the verts is the rim (fade 0), second half the extruded
+    // bottom (fade 1) — derived, never stored.
+    const half = vertCount / 2;
+    const down = new Float32Array(vertCount);
+    for (let i = half; i < vertCount; i++) down[i] = 1;
+
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+    geo.setAttribute('aDown', new THREE.BufferAttribute(down, 1));
+    geo.setIndex(new THREE.BufferAttribute(idx, 1));
+    geo.computeVertexNormals();
+
+    skirtMat = new THREE.MeshStandardMaterial({
+      map: albedo, roughness: 0.95, metalness: 0, side: THREE.DoubleSide, fog: true,
+    });
+    skirtMat.envMapIntensity = 0.35;             // match the scan, else the room env blows it out
+    skirtMat.onBeforeCompile = (sh) => {
+      sh.uniforms.uVoid = { value: FOG };
+      sh.vertexShader = `attribute float aDown; varying float vDown;\n` +
+        sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n  vDown = aDown;');
+      sh.fragmentShader = `uniform vec3 uVoid; varying float vDown;\n` +
+        sh.fragmentShader.replace('#include <color_fragment>', `
+          #include <color_fragment>
+          // strata: the rim UVs are smeared down the wall, so darken with depth
+          // and dissolve into the void — the slab reads as mass, not a cut edge.
+          diffuseColor.rgb *= mix(0.72, 0.16, vDown);
+          diffuseColor.rgb = mix(diffuseColor.rgb, uVoid, smoothstep(0.12, 0.92, vDown) * 0.94);`);
+    };
+
+    const skirt = new THREE.Mesh(geo, skirtMat);
+    skirt.frustumCulled = false;
+    scanMesh.add(skirt);                          // child of the mesh → shares its local space exactly
+  }
 
   // ── desktop-only progressive texture upgrade ─────────────────────────────
   // The shipped GLB carries 1k textures so first paint stays ~2MB; once the
@@ -463,6 +538,9 @@ export function createRiverScene(canvas: HTMLCanvasElement, opts: Opts = {}): Ri
       if (m.map) { retired.add(m.map); m.map = albedo; }
       if (normal && m.normalMap) { retired.add(m.normalMap); m.normalMap = normal; }
     });
+    // the skirt shares the scan's albedo — repoint it before the old one is
+    // disposed, else the side walls would sample a freed texture.
+    if (skirtMat) { skirtMat.map = albedo; skirtMat.needsUpdate = true; }
     retired.forEach((t) => t.dispose());
   }
 
