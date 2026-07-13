@@ -2,7 +2,7 @@
 import { ClientRouter } from 'astro:transitions';
 import Analytics from '@vercel/analytics/astro';
 import SpeedInsights from '@vercel/speed-insights/astro';
-// Fonts are self-hosted via @font-face in global.css (Satoshi, Noplato Mono).
+// Fonts are self-hosted via @font-face in global.css (Mona Sans, Noplato Mono).
 import 'lenis/dist/lenis.css';
 import '../styles/global.css';
 
@@ -155,9 +155,7 @@ const jsonLd = {
     <script is:inline>
       try {
         var nav = performance.getEntriesByType('navigation')[0];
-        var isReload = nav
-          ? nav.type === 'reload'
-          : performance.navigation && performance.navigation.type === 1;
+        var isReload = nav && nav.type === 'reload';
         if (isReload) {
           history.scrollRestoration = 'manual';
           if (location.hash) {
@@ -246,6 +244,7 @@ const jsonLd = {
       let revealIO: IntersectionObserver | undefined;
 
       function setupReveals() {
+        teardownReveals();
         if (!document.documentElement.classList.contains('reveal-ready')) return;
         revealIO = new IntersectionObserver(
           (entries, obs) => {
@@ -276,7 +275,6 @@ const jsonLd = {
         revealIO = undefined;
       }
 
-      setupReveals();
       document.addEventListener('astro:page-load', setupReveals);
       document.addEventListener('astro:before-swap', teardownReveals);
     </script>

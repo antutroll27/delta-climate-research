@@ -22,7 +22,7 @@ const socials = [
 
 <header id="site-nav" class="fixed inset-x-0 top-8 z-50 h-20 bg-transparent" data-scrolled="false">
   <nav class="max-w-site mx-auto h-full px-gutter flex items-center justify-between" aria-label="Primary">
-    <a href="/" class="font-bold text-cardtitle tracking-title text-paper no-underline" aria-label="Delta Climate Research — home">
+    <a href="/" class="font-bold text-cardtitle tracking-title text-paper no-underline" aria-label="Delta Climate Research home" data-navigation-static>
       Delta<span class="text-cyan">·</span>Climate<span class="text-cyan">·</span>Research
     </a>
 
@@ -52,7 +52,15 @@ const socials = [
 <div class="nav-progress" data-progress aria-hidden="true"></div>
 
 <!-- mobile full-screen overlay; generative background remains visible behind it -->
-<div id="mobile-menu" class="mobile-menu" data-open="false" hidden>
+<div
+  id="mobile-menu"
+  class="mobile-menu"
+  data-open="false"
+  role="dialog"
+  aria-modal="true"
+  aria-label="Site navigation"
+  hidden
+>
   <nav class="mm-nav" aria-label="Mobile">
     <ul>
       {links.map((l) => (
@@ -114,11 +122,13 @@ const socials = [
      leaves the top. The bar docks flush to the viewport edge and a frosted
      layer fades in behind it so links stay legible over passing content. */
   #site-nav {
-    transition: top 0.35s cubic-bezier(0.2, 0.8, 0.2, 1), background-color 0.35s ease,
+    top: 0;
+    transform: translateY(2rem);
+    transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.35s ease,
       backdrop-filter 0.35s ease, box-shadow 0.35s ease;
   }
   #site-nav[data-scrolled='true'] {
-    top: 0;
+    transform: translateY(0);
     padding-top: env(safe-area-inset-top); /* keep the docked bar clear of the notch/Dynamic Island */
     background: rgb(8 10 11 / 0.62);
     backdrop-filter: blur(16px) saturate(1.15);
@@ -211,6 +221,7 @@ const socials = [
     pointer-events: none;
     transition: opacity 0.35s ease;
   }
+  .mobile-menu[hidden] { display: none; }
   .mobile-menu[data-open='true'] { opacity: 1; pointer-events: auto; }
 
   .mm-nav ul { list-style: none; margin: 0; padding: 0; }
@@ -271,6 +282,8 @@ const socials = [
 </style>
 
 <script>
+  let navCleanup: (() => void) | undefined;
+
   function initNav() {
     const nav = document.getElementById('site-nav');
     const sentinel = document.getElementById('nav-sentinel');
@@ -283,7 +296,11 @@ const socials = [
     // it never appeared. A view-transition nav swaps in a fresh #site-nav with
     // no flag, so it still re-binds correctly on the new DOM.
     if (nav.dataset.navReady) return;
+    navCleanup?.();
     nav.dataset.navReady = '1';
+
+    const ac = new AbortController();
+    const { signal } = ac;
 
     // frosted state: on the home page, track the hero itself — the backdrop
     // appears only once the hero has scrolled past the nav and clears again
@@ -298,25 +315,118 @@ const socials = [
 
     // mobile menu
     if (toggle && menu) {
-      const setOpen = (open: boolean) => {
+      const mobileMedia = matchMedia('(max-width: 820px)');
+      const staticNav = nav.querySelector<HTMLElement>('[data-navigation-static]');
+      const staticTabIndex = staticNav?.getAttribute('tabindex') ?? null;
+      const staticAriaHidden = staticNav?.getAttribute('aria-hidden') ?? null;
+      let restoreFocus: HTMLElement | null = null;
+      let inerted: HTMLElement[] = [];
+
+      const setPageInert = (open: boolean) => {
+        if (open) {
+          inerted = [...document.body.children].filter((el) => {
+            if (!(el instanceof HTMLElement)) return false;
+            if (el === nav || el === menu || el.hasAttribute('inert')) return false;
+            return true;
+          }) as HTMLElement[];
+          inerted.forEach((el) => el.setAttribute('inert', ''));
+          staticNav?.setAttribute('tabindex', '-1');
+          staticNav?.setAttribute('aria-hidden', 'true');
+          return;
+        }
+
+        inerted.forEach((el) => el.removeAttribute('inert'));
+        inerted = [];
+        if (staticNav) {
+          if (staticTabIndex === null) staticNav.removeAttribute('tabindex');
+          else staticNav.setAttribute('tabindex', staticTabIndex);
+          if (staticAriaHidden === null) staticNav.removeAttribute('aria-hidden');
+          else staticNav.setAttribute('aria-hidden', staticAriaHidden);
+        }
+      };
+
+      const menuFocusables = () => [
+        toggle,
+        ...menu.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        ),
+      ].filter((el) => el.offsetParent !== null);
+
+      const setOpen = (open: boolean, returnFocus = true) => {
+        const wasOpen = toggle.getAttribute('aria-expanded') === 'true';
+        if (open === wasOpen) return;
+
+        if (open) restoreFocus = document.activeElement as HTMLElement | null;
         toggle.setAttribute('aria-expanded', String(open));
         toggle.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
         menu.setAttribute('data-open', String(open));
         menu.hidden = !open;
         document.body.style.overflow = open ? 'hidden' : '';
+        setPageInert(open);
+
+        if (open) {
+          menu.querySelector<HTMLElement>('a[href], button:not([disabled])')?.focus();
+        } else if (returnFocus) {
+          (restoreFocus?.isConnected ? restoreFocus : toggle).focus();
+        }
       };
-      toggle.addEventListener('click', () =>
-        setOpen(toggle.getAttribute('aria-expanded') !== 'true')
+      toggle.addEventListener(
+        'click',
+        () => setOpen(toggle.getAttribute('aria-expanded') !== 'true'),
+        { signal }
       );
       menu.querySelectorAll('[data-mobile-link]').forEach((a) =>
-        a.addEventListener('click', () => setOpen(false))
+        a.addEventListener('click', () => setOpen(false, false), { signal })
       );
+      mobileMedia.addEventListener('change', (event) => {
+        if (!event.matches) setOpen(false, false);
+      }, { signal });
       document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') setOpen(false);
-      });
+        if (toggle.getAttribute('aria-expanded') !== 'true') return;
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          setOpen(false);
+          return;
+        }
+        if (e.key !== 'Tab') return;
+
+        const focusable = menuFocusables();
+        if (!focusable.length) {
+          e.preventDefault();
+          toggle.focus();
+          return;
+        }
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        const active = document.activeElement as HTMLElement | null;
+        if (e.shiftKey && (active === first || !active || (!nav.contains(active) && !menu.contains(active)))) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && (active === last || !active || (!nav.contains(active) && !menu.contains(active)))) {
+          e.preventDefault();
+          first.focus();
+        }
+      }, { signal });
+
+      navCleanup = () => {
+        setOpen(false, false);
+        io.disconnect();
+        ac.abort();
+      };
+    } else {
+      navCleanup = () => {
+        io.disconnect();
+        ac.abort();
+      };
     }
+  }
+
+  function destroyNav() {
+    navCleanup?.();
+    navCleanup = undefined;
   }
 
   initNav();
   document.addEventListener('astro:page-load', initNav);
+  document.addEventListener('astro:before-swap', destroyNav);
 </script>

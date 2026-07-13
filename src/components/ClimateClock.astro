@@ -6,9 +6,20 @@
 // Mobile: fixed, centre-right of the hero.
 // Data: api.climateclock.world (fetched once, cached 24h); ticks from accurate
 // constants immediately so it is never blank, even offline.
+const deadlineFallbackMs = Date.parse('2029-07-22T16:00:00+00:00');
+const initialTotal = Math.max(0, Math.floor((deadlineFallbackMs - Date.now()) / 1000));
+const initialDeadline = {
+  years: Math.floor(initialTotal / (365 * 86400)),
+  days: Math.floor(initialTotal / 86400) % 365,
+  hours: Math.floor(initialTotal / 3600) % 24,
+  minutes: Math.floor(initialTotal / 60) % 60,
+  seconds: initialTotal % 60,
+};
+const initialPad = (value: number, width: number) => String(value).padStart(width, '0');
+const initialDeadlineLabel = `${initialDeadline.years} years, ${initialDeadline.days} days, ${initialDeadline.hours} hours, ${initialDeadline.minutes} minutes, and ${initialDeadline.seconds} seconds remaining`;
 ---
 
-<div class="cc-wrap" aria-hidden="false">
+<div class="cc-wrap">
   <div class="max-w-site mx-auto px-gutter flex justify-end cc-inner">
     <div class="climate-clock" role="group" aria-label="Climate clock: time left to the 1.5°C deadline and global climate-solution lifelines">
 
@@ -18,12 +29,12 @@
           <span class="cc-led" aria-hidden="true"></span>
           <span class="cc-label">Time left to 1.5°C</span>
         </div>
-        <div class="cc-screen">
-          <span class="cc-n" data-yr>3</span><span class="cc-u">Y</span>
+        <div class="cc-screen" role="timer" aria-live="off" aria-atomic="true" aria-label={initialDeadlineLabel}>
+          <span class="cc-n" data-yr>{initialDeadline.years}</span><span class="cc-u">Y</span>
           <span class="cc-sep" aria-hidden="true">·</span>
-          <span class="cc-n" data-dy>041</span><span class="cc-u">D</span>
+          <span class="cc-n" data-dy>{initialPad(initialDeadline.days, 3)}</span><span class="cc-u">D</span>
           <span class="cc-sep" aria-hidden="true">·</span>
-          <span class="cc-n" data-hh>00</span><span class="cc-c">:</span><span class="cc-n" data-mm>00</span><span class="cc-c">:</span><span class="cc-n" data-ss>00</span>
+          <span class="cc-n" data-hh>{initialPad(initialDeadline.hours, 2)}</span><span class="cc-c">:</span><span class="cc-n" data-mm>{initialPad(initialDeadline.minutes, 2)}</span><span class="cc-c">:</span><span class="cc-n" data-ss>{initialPad(initialDeadline.seconds, 2)}</span>
         </div>
       </div>
 
@@ -33,7 +44,7 @@
           <span class="cc-arrow" aria-hidden="true">↑</span>
           <span class="cc-label">World energy · renewables</span>
         </div>
-        <div class="cc-screen"><span class="cc-n" data-ren>15.555</span><span class="cc-u">%</span></div>
+        <div class="cc-screen" role="group" aria-label="World energy from renewables: 15.555 percent"><span class="cc-n" data-ren>15.555</span><span class="cc-u">%</span></div>
       </div>
 
       <!-- regenerative agriculture (bronze) -->
@@ -42,7 +53,7 @@
           <span class="cc-arrow" aria-hidden="true">↑</span>
           <span class="cc-label">Regenerative cropland</span>
         </div>
-        <div class="cc-screen"><span class="cc-n" data-regen>1,836,452</span><span class="cc-u">ha</span></div>
+        <div class="cc-screen" role="group" aria-label="Regenerative cropland: 1,836,452 hectares"><span class="cc-n" data-regen>1,836,452</span><span class="cc-u">ha</span></div>
       </div>
 
       <!-- indigenous-protected land (teal) -->
@@ -51,7 +62,7 @@
           <span class="cc-arrow" aria-hidden="true">↑</span>
           <span class="cc-label">Indigenous-protected land</span>
         </div>
-        <div class="cc-screen"><span class="cc-n" data-land>43.5</span><span class="cc-u">M km²</span></div>
+        <div class="cc-screen" role="group" aria-label="Indigenous-protected land: 43.5 million square kilometres"><span class="cc-n" data-land>43.5</span><span class="cc-u">M km²</span></div>
       </div>
 
     </div>
@@ -96,7 +107,7 @@
     flex-direction: column;
     gap: 0.39rem;
   }
-  .cc-mod--dead  { --c: #eb1c23; }
+  .cc-mod--dead  { --c: #ff4d52; }
   .cc-mod--ren   { --c: #6fcad6; }
   .cc-mod--regen { --c: #b08d57; }
   .cc-mod--land  { --c: #4fb0bc; }
@@ -105,7 +116,7 @@
   .cc-head { display: flex; align-items: center; gap: 0.5rem; }
   .cc-label {
     font-family: var(--font-mono);
-    font-size: 0.525rem;
+    font-size: 0.625rem;
     letter-spacing: 0.12em;
     text-transform: uppercase;
     font-weight: 600;
@@ -148,11 +159,11 @@
     color: var(--c);
   }
   .cc-u {
-    font-size: 0.5rem;
+    font-size: 0.6rem;
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--c);
-    opacity: 0.7;
+    opacity: 0.9;
     margin-left: -0.12rem;
   }
   .cc-sep {
@@ -177,9 +188,8 @@
       top: 46%; /* a touch above centre so the card clears the headline on short phones */
       transform: translateY(-50%);
     }
-    /* proportional shrink (not a reflow) — keeps the widget's own type scale intact */
-    .climate-clock { width: min(17rem, 75vw); transform: scale(0.86); transform-origin: center right; }
-    .cc-n { font-size: 0.9rem; }
+    /* Keep the instrument readable instead of scaling its already-small labels. */
+    .climate-clock { width: min(18.25rem, calc(100vw - 2rem)); }
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -226,20 +236,42 @@
       regen: root.querySelector('[data-regen]'),
       land: root.querySelector('[data-land]'),
     };
+    const screens: Record<string, HTMLElement | null> = {
+      deadline: root.querySelector('.cc-mod--dead .cc-screen'),
+      ren: root.querySelector('.cc-mod--ren .cc-screen'),
+      regen: root.querySelector('.cc-mod--regen .cc-screen'),
+      land: root.querySelector('.cc-mod--land .cc-screen'),
+    };
 
     const tick = () => {
       const now = Date.now();
       const total = Math.max(0, Math.floor((deadlineMs - now) / 1000));
-      yr.textContent = String(Math.floor(total / (365 * 86400)));
-      dy.textContent = pad(Math.floor(total / 86400) % 365, 3);
-      hh.textContent = pad(Math.floor(total / 3600) % 24, 2);
-      mm.textContent = pad(Math.floor(total / 60) % 60, 2);
-      ss.textContent = pad(total % 60, 2);
+      const years = Math.floor(total / (365 * 86400));
+      const days = Math.floor(total / 86400) % 365;
+      const hours = Math.floor(total / 3600) % 24;
+      const minutes = Math.floor(total / 60) % 60;
+      const seconds = total % 60;
+      yr.textContent = String(years);
+      dy.textContent = pad(days, 3);
+      hh.textContent = pad(hours, 2);
+      mm.textContent = pad(minutes, 2);
+      ss.textContent = pad(seconds, 2);
+      screens.deadline?.setAttribute(
+        'aria-label',
+        `${years} years, ${days} days, ${hours} hours, ${minutes} minutes, and ${seconds} seconds remaining`
+      );
       for (const id in LIFELINES) {
         const cell = cells[id];
         if (!cell) continue;
         const l = LIFELINES[id];
-        cell.textContent = fmt(l.initial + l.rate * ((now - l.originMs) / 1000), l);
+        const value = fmt(l.initial + l.rate * ((now - l.originMs) / 1000), l);
+        cell.textContent = value;
+        const label = id === 'ren'
+          ? `World energy from renewables: ${value} percent`
+          : id === 'regen'
+            ? `Regenerative cropland: ${value} hectares`
+            : `Indigenous-protected land: ${value} million square kilometres`;
+        screens[id]?.setAttribute('aria-label', label);
       }
     };
 
@@ -280,7 +312,6 @@
     if (timer) { clearInterval(timer); timer = undefined; }
   }
 
-  initClock();
   document.addEventListener('astro:page-load', initClock);
   document.addEventListener('astro:before-swap', teardownClock);
 </script>

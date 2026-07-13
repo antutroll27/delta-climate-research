@@ -3,12 +3,16 @@
 .git
 node_modules
 dist
+.astro
 .vercel
+.claude
+.firecrawl
 
-# raw / oversized model sources — NOT used by the build (only the baked
-# public/models/river-2k.glb + river-1k.glb ship). The raw glb is 268 MB and
-# blows past Vercel's 100 MB-per-file limit.
+# Raw and oversized model sources are not used by the production build. Only
+# the Draco-compressed public/models/river-1k.glb is requested at runtime.
 models-src
+public/models/._river-1k.glb
+public/models/river-2k.glb
 public/models/river-8k.glb
 public/models/river-4k.glb
 public/models/._nature_vegetation_pack.glb
@@ -17,5 +21,12 @@ public/models/flora_raw.glb
 public/models/flowers_pack_4.glb
 public/models/nature_vegetation_pack.glb
 
-# local-only scratch
+# Research, design history, and local-only scratch. NOTE: scripts/ must NOT be
+# ignored here — the build command runs node scripts/prune-dist-assets.mjs, and
+# CLI deploys upload the working dir, so excluding it breaks the remote build.
+attic
+docs
+inspiration
 previews
+Delta_Climate_Research_Speedrun_Guide.pdf
+Delta_Climate_Research_Visual_Layout_Guide.pdf

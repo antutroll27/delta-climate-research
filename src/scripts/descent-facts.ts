@@ -20,39 +20,51 @@ const fmt = (v: number, d: number, t: boolean) => d > 0 ? v.toFixed(d) : (t ? Ma
 export async function initDescentFacts() {
   destroyDescentFacts();
   const myGen = ++gen;
-  if (!motionOK() || !window.matchMedia('(min-width: 768px)').matches) return;
   const track = document.getElementById('hero-track');
-  const nodes = [...document.querySelectorAll<HTMLElement>('.dfact')];
-  if (!track || !nodes.length) return;
+  const nodes = [...document.querySelectorAll<HTMLElement>('[data-dfact]')];
+  if (!nodes.length) return;
 
   const mods = await getClimateModules();
   if (myGen !== gen) return; // an init/teardown raced us during the await
-  // resolve each fact's target value (live, else the inlined fallback)
+  // Resolve every animated and static copy from the same live value, falling
+  // back to the build-time number when the network is unavailable.
   const facts = nodes.map((el) => {
     const key = el.dataset.key!;
     const dec = parseInt(el.dataset.dec || '0', 10);
     const thou = el.dataset.thou === 'true';
     let target = parseFloat(el.dataset.fb || '0');
     if (key === 'carbon_deadline_1') {
-      const ts = mods?.carbon_deadline_1?.timestamp ? Date.parse(mods.carbon_deadline_1.timestamp) : DEADLINE_FALLBACK;
+      const candidate = mods?.carbon_deadline_1?.timestamp
+        ? Date.parse(mods.carbon_deadline_1.timestamp)
+        : DEADLINE_FALLBACK;
+      const ts = Number.isFinite(candidate) ? candidate : DEADLINE_FALLBACK;
       target = Math.max(0, Math.floor((ts - Date.now()) / YEAR_MS));
     } else {
       const m = mods?.[key];
       if (m && m.initial != null) {
-        const rate = typeof m.rate === 'number' ? m.rate : 0;
+        const initial = Number(m.initial);
+        const rate = Number(m.rate ?? 0);
         const origin = m.timestamp ? Date.parse(m.timestamp) : Date.now();
-        target = m.initial + rate * ((Date.now() - origin) / 1000);
+        if (Number.isFinite(initial) && Number.isFinite(rate) && Number.isFinite(origin)) {
+          target = initial + rate * ((Date.now() - origin) / 1000);
+        }
       }
     }
-    return { el, n: el.querySelector<HTMLElement>('[data-n]')!, dec, thou, target };
+    const n = el.querySelector<HTMLElement>('[data-n]')!;
+    n.textContent = fmt(target, dec, thou);
+    return { el, n, dec, thou, target };
   });
 
-  const START = 0.58, END = 0.92, seg = (END - START) / facts.length;
+  if (!track || !motionOK() || !window.matchMedia('(min-width: 768px)').matches) return;
+  const animatedFacts = facts.filter((fact) => fact.el.classList.contains('dfact'));
+  if (!animatedFacts.length) return;
+
+  const START = 0.58, END = 0.92, seg = (END - START) / animatedFacts.length;
   st = ScrollTrigger.create({
     trigger: track, start: 'top top', end: 'bottom bottom', scrub: true,
     onUpdate: (self) => {
       const p = self.progress;
-      facts.forEach((f, i) => {
+      animatedFacts.forEach((f, i) => {
         const a = START + i * seg, b = a + seg;
         const local = sm(a, b, p);
         f.el.style.opacity = String(Math.sin(Math.PI * local));        // fade in then out

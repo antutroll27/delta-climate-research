@@ -36,21 +36,24 @@ export function initAboutField() {
 
   const my = ++gen;
   let idleId: number | undefined;
+  let fallbackId: number | undefined;
 
   // the deferred trigger — runs boot() once, whichever signal lands first
   const fire = () => {
-    disarm?.();
-    disarm = undefined;
+    cancelTrigger();
+    if (disarm === cancelTrigger) disarm = undefined;
     if (my !== gen) return;
     boot(section, canvas, my);
   };
 
   // tears the trigger down again (used by fire() and by destroyAboutField)
-  disarm = () => {
+  const cancelTrigger = () => {
     window.removeEventListener('scroll', fire);
     window.removeEventListener('pointerdown', fire);
     if (idleId !== undefined && 'cancelIdleCallback' in window) window.cancelIdleCallback(idleId);
+    if (fallbackId !== undefined) window.clearTimeout(fallbackId);
   };
+  disarm = cancelTrigger;
 
   window.addEventListener('scroll', fire, { once: true, passive: true });
   window.addEventListener('pointerdown', fire, { once: true, passive: true });
@@ -58,18 +61,63 @@ export function initAboutField() {
   if (typeof window.requestIdleCallback === 'function') {
     idleId = window.requestIdleCallback(fire, { timeout: 3500 });
   } else {
-    setTimeout(fire, 1500); // Safari < 17 fallback
+    fallbackId = window.setTimeout(fire, 1500); // Safari < 17 fallback
   }
 }
 
 
 async function boot(section: HTMLElement, canvas: HTMLCanvasElement, my: number) {
   // ── dynamic import: three + the Water addon (only fetched on the home page) ──
-  let THREE: typeof import('three');
+  type AboutThree = Pick<typeof import('./three-runtime'),
+    | 'ACESFilmicToneMapping'
+    | 'AmbientLight'
+    | 'BufferAttribute'
+    | 'BufferGeometry'
+    | 'Color'
+    | 'DirectionalLight'
+    | 'EdgesGeometry'
+    | 'FogExp2'
+    | 'IcosahedronGeometry'
+    | 'LineBasicMaterial'
+    | 'LineSegments'
+    | 'Mesh'
+    | 'MeshBasicMaterial'
+    | 'MeshStandardMaterial'
+    | 'PerspectiveCamera'
+    | 'PlaneGeometry'
+    | 'Points'
+    | 'PointsMaterial'
+    | 'Raycaster'
+    | 'RepeatWrapping'
+    | 'Scene'
+    | 'SRGBColorSpace'
+    | 'Texture'
+    | 'TextureLoader'
+    | 'Timer'
+    | 'Vector2'
+    | 'Vector3'
+    | 'WebGLRenderer'
+  >;
+  let THREE: AboutThree;
   let Water: typeof import('three/examples/jsm/objects/Water.js').Water;
   try {
+    const loadThree = import('./three-runtime').then(({
+      ACESFilmicToneMapping, AmbientLight, BufferAttribute, BufferGeometry,
+      Color, DirectionalLight, EdgesGeometry, FogExp2, IcosahedronGeometry,
+      LineBasicMaterial, LineSegments, Mesh, MeshBasicMaterial,
+      MeshStandardMaterial, PerspectiveCamera, PlaneGeometry, Points,
+      PointsMaterial, Raycaster, RepeatWrapping, Scene, SRGBColorSpace,
+      Texture, TextureLoader, Timer, Vector2, Vector3, WebGLRenderer,
+    }) => ({
+      ACESFilmicToneMapping, AmbientLight, BufferAttribute, BufferGeometry,
+      Color, DirectionalLight, EdgesGeometry, FogExp2, IcosahedronGeometry,
+      LineBasicMaterial, LineSegments, Mesh, MeshBasicMaterial,
+      MeshStandardMaterial, PerspectiveCamera, PlaneGeometry, Points,
+      PointsMaterial, Raycaster, RepeatWrapping, Scene, SRGBColorSpace,
+      Texture, TextureLoader, Timer, Vector2, Vector3, WebGLRenderer,
+    }));
     [THREE, { Water }] = await Promise.all([
-      import('three'),
+      loadThree,
       import('three/examples/jsm/objects/Water.js'),
     ]);
   } catch {
@@ -379,11 +427,13 @@ async function boot(section: HTMLElement, canvas: HTMLCanvasElement, my: number)
 
 
   /* ── the render loop ── */
-  const clock = new THREE.Clock();
+  const timer = new THREE.Timer();
+  timer.connect(document);
   renderer.setAnimationLoop(() => {
     if (!visible) return;
 
-    const elapsed = clock.getElapsedTime();
+    timer.update();
+    const elapsed = timer.getElapsed();
 
     // water
     water.material.uniforms.time.value = elapsed * 0.55;
@@ -456,6 +506,7 @@ async function boot(section: HTMLElement, canvas: HTMLCanvasElement, my: number)
     io.disconnect();
     st.kill();
     renderer.setAnimationLoop(null);
+    timer.dispose();
     disposables.forEach((d) => d.dispose());
     renderer.dispose();
     document.body.style.cursor = '';

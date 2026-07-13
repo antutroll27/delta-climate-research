@@ -3,8 +3,11 @@
 // descent (driven by src/scripts/descent-facts.ts; desktop + motion only). Static markup
 // with fallback values inlined so first paint shows real numbers; the script overrides
 // with live API values + scrubs the count/fade to scroll.
+const DEADLINE_FALLBACK = Date.parse('2029-07-22T16:00:00+00:00');
+const YEAR_MS = 365.25 * 24 * 3600 * 1000;
+const deadlineYears = Math.max(0, Math.floor((DEADLINE_FALLBACK - Date.now()) / YEAR_MS));
 const FACTS = [
-  { key: 'carbon_deadline_1',            kick: 'Time left · 1.5°C', unit: 'YRS',        lab: 'until the 1.5°C carbon budget runs out', src: 'climateclock.world', fb: 5,    dec: 0, thou: false },
+  { key: 'carbon_deadline_1',            kick: 'Time left · 1.5°C', unit: 'YRS',        lab: 'until the 1.5°C carbon budget runs out', src: 'climateclock.world', fb: deadlineYears, dec: 0, thou: false },
   { key: 'actnow',                       kick: 'If we act now',     unit: '$ Trillion', lab: 'saved by acting now vs. delay',           src: 'lifeline',          fb: 32,   dec: 0, thou: false },
   { key: 'renewables_1',                 kick: 'World energy',      unit: '%',          lab: "of the world's energy is now renewable",  src: 'lifeline',          fb: 11.4, dec: 1, thou: false },
   { key: 'initiative_30x30',             kick: 'Protected',         unit: '%',          lab: "of Earth's land & waters are protected",  src: '30×30',             fb: 17.6, dec: 1, thou: false },
@@ -14,7 +17,7 @@ const fmt = (v: number, d: number, t: boolean) => d > 0 ? v.toFixed(d) : (t ? Ma
 ---
 <div class="dfacts" aria-hidden="true">
   {FACTS.map((f) => (
-    <div class="dfact" data-key={f.key} data-fb={f.fb} data-dec={f.dec} data-thou={String(f.thou)}>
+    <div class="dfact" data-dfact data-key={f.key} data-fb={f.fb} data-dec={f.dec} data-thou={String(f.thou)}>
       <div class="dkick">{f.kick}</div>
       <div class="dval"><span data-n>{fmt(f.fb, f.dec, f.thou)}</span><span class="du">{f.unit}</span></div>
       <div class="dlab">{f.lab}</div>
@@ -22,6 +25,23 @@ const fmt = (v: number, d: number, t: boolean) => d > 0 ? v.toFixed(d) : (t ? Ma
     </div>
   ))}
 </div>
+
+<section class="dfacts-static" aria-labelledby="dfacts-static-title">
+  <div class="dfacts-static-head">
+    <p class="sec-index">Climate indicators</p>
+    <h2 id="dfacts-static-title">Signals behind the descent</h2>
+  </div>
+  <ul role="list">
+    {FACTS.map((f) => (
+      <li data-dfact data-key={f.key} data-fb={f.fb} data-dec={f.dec} data-thou={String(f.thou)}>
+        <span class="ds-kick">{f.kick}</span>
+        <strong><span data-n>{fmt(f.fb, f.dec, f.thou)}</span> <small>{f.unit}</small></strong>
+        <span class="ds-lab">{f.lab}</span>
+        <span class="ds-src">Source: {f.src}</span>
+      </li>
+    ))}
+  </ul>
+</section>
 
 <style>
   .dfacts { position: absolute; inset: 0; z-index: 3; display: grid; place-items: center; pointer-events: none; }
@@ -35,6 +55,88 @@ const fmt = (v: number, d: number, t: boolean) => d > 0 ? v.toFixed(d) : (t ? Ma
   .dval { font-weight: 500; font-size: clamp(3.2rem, 11vw, 9rem); line-height: 0.95; letter-spacing: -0.03em; color: var(--color-paper); }
   .dval .du { color: var(--color-cyan); font-size: 0.42em; letter-spacing: -0.01em; margin-left: 0.2em; }
   .dlab { margin-top: 1.4rem; font-size: clamp(1rem, 1.6vw, 1.35rem); color: var(--color-ink-faint); }
-  .dsrc { margin-top: 1rem; font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 0.18em; text-transform: uppercase; color: rgb(111 202 214 / 0.4); }
-  @media (max-width: 767px), (prefers-reduced-motion: reduce) { .dfacts { display: none; } }
+  .dsrc { margin-top: 1rem; font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 0.18em; text-transform: uppercase; color: rgb(111 202 214 / 0.72); }
+
+  /* The scroll choreography is optional. Mobile and reduced-motion visitors
+     receive the same facts as a static, readable evidence strip. */
+  .dfacts-static {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  @media (max-width: 767px), (prefers-reduced-motion: reduce) {
+    .dfacts { display: none; }
+    .dfacts-static {
+      order: 3;
+      position: relative;
+      z-index: 3;
+      display: block;
+      width: min(100%, 72rem);
+      height: auto;
+      margin: 0 auto;
+      padding: clamp(3rem, 8vw, 5rem) var(--spacing-gutter);
+      overflow: visible;
+      clip: auto;
+      clip-path: none;
+      white-space: normal;
+      border-top: 1px solid var(--color-hairline);
+      background: var(--color-base);
+    }
+    .dfacts-static-head { max-width: 42rem; }
+    .dfacts-static h2 {
+      margin: 0.75rem 0 0;
+      font-size: clamp(1.8rem, 7vw, 3rem);
+      line-height: 1.05;
+      color: var(--color-paper);
+    }
+    .dfacts-static ul {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+      gap: 1px;
+      margin: 2rem 0 0;
+      padding: 1px;
+      list-style: none;
+      background: var(--color-hairline);
+    }
+    .dfacts-static li {
+      min-width: 0;
+      padding: 1.25rem;
+      background: var(--color-base);
+    }
+    .ds-kick,
+    .ds-lab,
+    .ds-src { display: block; }
+    .ds-kick,
+    .ds-src {
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+    .ds-kick { color: var(--color-bronze); }
+    .dfacts-static strong {
+      display: block;
+      margin-top: 1rem;
+      font-size: clamp(2rem, 8vw, 3.5rem);
+      line-height: 1;
+      color: var(--color-paper);
+    }
+    .dfacts-static strong small {
+      font-size: 0.38em;
+      color: var(--color-cyan);
+    }
+    .ds-lab {
+      margin-top: 0.75rem;
+      max-width: 30ch;
+      color: var(--color-ink-muted);
+      line-height: 1.5;
+    }
+    .ds-src { margin-top: 1rem; color: var(--color-cyan-muted); }
+  }
 </style>

@@ -14,7 +14,6 @@ import DescentFacts from './DescentFacts.astro';
   </div>
   <div class="vortex-dim" aria-hidden="true"></div>
   <div class="grain" aria-hidden="true"></div>
-  <DescentFacts />
 
   <div data-hero-content class="relative z-[2] min-h-dvh flex flex-col max-w-site w-full mx-auto px-gutter pt-[6.5rem] pb-[clamp(2rem,5vh,4rem)]">
     <div class="hero-foot">
@@ -33,6 +32,11 @@ import DescentFacts from './DescentFacts.astro';
       </div>
     </div>
   </div>
+
+  <!-- Keep the readable facts after the page's h1 in DOM order. Their desktop
+       overlay remains absolutely positioned, while mobile and reduced-motion
+       visitors receive the static evidence strip in a logical reading order. -->
+  <DescentFacts />
 
   <div data-hero-content>
     <ClimateClock />

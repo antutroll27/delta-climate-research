@@ -21,21 +21,21 @@ import VortexShader from './VortexShader';
     <!-- data-clip owns the entrance (wipe + fade); no data-reveal, so the GSAP
          clip and the IntersectionObserver reveal never co-own opacity. -->
     <div class="dashboard" data-clip style="--clip-radius: 16px;">
-      <div class="map" aria-label="Interactive climate map (placeholder)">
+      <div class="map" role="img" aria-label="Medni geospatial intelligence preview for Kolkata">
         <span class="map-grid" aria-hidden="true"></span>
         <span class="map-tag">22.57°N · 88.36°E — KOLKATA</span>
         <span class="map-overlay" aria-hidden="true"></span>
       </div>
 
       <aside class="flex flex-col rounded-xl p-5 bg-surface-2 border border-hairline font-mono">
-        <p class="m-0 mb-4 text-label tracking-label text-cyan">// LIVE AI PROCESSING</p>
+        <p class="m-0 mb-4 text-label tracking-label text-cyan">// MODEL WORKFLOW PREVIEW</p>
         <ul class="list-none m-0 mb-auto p-0 grid gap-xs" role="list">
           <li class="text-stream leading-normal text-ink-muted">&gt; ingesting LST raster…</li>
           <li class="text-stream leading-normal text-ink-muted">&gt; computing heat-vulnerability index…</li>
           <li class="text-stream leading-normal text-ink-muted">&gt; cross-referencing cool-roof SRI…</li>
           <li class="cursor text-stream leading-normal text-ink-muted">&gt; recommending intervention spec</li>
         </ul>
-        <a href="#access" class="mt-6 text-center text-meta tracking-cta text-cyan border border-cyan rounded-lg px-4 py-md no-underline transition-[background-color,color] duration-200 hover:bg-cyan hover:text-on-accent">Access Planetary Insights →</a>
+        <a href="#access" class="mt-6 text-center text-meta tracking-cta text-cyan border border-cyan rounded-lg px-4 py-md no-underline transition-[background-color,color] duration-200 hover:bg-cyan hover:text-on-accent">Request Medni access →</a>
       </aside>
     </div>
   </div>
