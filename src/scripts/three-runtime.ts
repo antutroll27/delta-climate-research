@@ -16,6 +16,7 @@ export {
   Group,
   HemisphereLight,
   IcosahedronGeometry,
+  ImageBitmapLoader,
   LineBasicMaterial,
   LinearFilter,
   LineSegments,
