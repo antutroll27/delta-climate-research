@@ -32,7 +32,7 @@ export const team: Member[] = [
   },
   {
     id: '02', first: 'Shirsha', last: 'Sen', tier: 'Co-Founder · Principal Consultant', discipline: 'Climate Policy', mono: 'SS', cover: 2,
-    photo: '/images/team/shirsha.jpeg', photoPos: '50% 44%',
+    photo: '/images/team/shirsha.jpeg', photoPos: '55% 22%',
     bio: [
       "Shirsha sits at the intersection of public policy, climate consulting, and multi-stakeholder ecosystem management. Combining an MA in Public Policy from OP Jindal Global University with focused experience at EY India and GIZ, she transforms complex environmental mandates into scalable institutional frameworks.",
       "As Principal Consultant for Climate Policy, Shirsha translates intricate field insights, supply-chain tracking, and regulatory requirements into targeted climate strategies. Her background building state-level green-budgeting methodologies and managing public-sector initiatives aligns environmental governance with measurable data outcomes — anchoring the team's analytics in compliance, cross-sector policy pathways, and systemic sustainable development.",
