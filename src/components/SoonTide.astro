@@ -145,9 +145,10 @@ const stars = Array.from({ length: 70 }, () => ({
     position: absolute; right: 1rem; white-space: nowrap;
     font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 0.14em;
     color: var(--color-cyan);
+    bottom: 30%;
     animation: tide-rise 8s ease-in-out infinite;
   }
-  @keyframes tide-rise { 0%, 100% { bottom: 30%; } 50% { bottom: 42%; } }
+  @keyframes tide-rise { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4.08vh); } }
 
   /* drifting waves */
   .sea { position: absolute; inset-inline: 0; bottom: 0; height: 38vh; z-index: 1; overflow: hidden; }

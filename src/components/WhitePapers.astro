@@ -139,9 +139,9 @@ import { papers, paperHref } from '../data/papers';
      Hover and :focus-visible get full parity with .active so pointing at a
      row (or tabbing to it) never leaves it dimmed with a hidden excerpt.
      Width-gated like Projects: on phones the band never highlights reliably,
-     leaving titles at 38% with hidden excerpts — mobile gets the static list. */
+     leaving titles muted with hidden excerpts — mobile gets the static list. */
   @media (prefers-reduced-motion: no-preference) and (min-width: 821px) {
-    :global(.reveal-ready) .f-title { color: rgb(236 237 240 / 0.38); }
+    :global(.reveal-ready) .f-title { color: rgb(236 237 240 / 0.52); }
     :global(.reveal-ready) .frow.active .f-title,
     :global(.reveal-ready) .frow:hover .f-title,
     :global(.reveal-ready) .frow:focus-visible .f-title { color: var(--color-paper); }

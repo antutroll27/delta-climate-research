@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 export interface VortexShaderProps {
   /** base teal hue in degrees */            hue?: number;
@@ -71,6 +71,7 @@ export default function VortexShader({
   twist = 5.0, offsetX = 0.55, zoom = 0.95, fog = 0.11, mouse = 0.0, renderScale = 0.6,
 }: VortexShaderProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [contextVersion, setContextVersion] = useState(0);
   const propsRef = useRef({ hue, sat, bright, complexity, speed, twist, offsetX, zoom, fog, mouse });
   propsRef.current = { hue, sat, bright, complexity, speed, twist, offsetX, zoom, fog, mouse };
 
@@ -86,22 +87,39 @@ export default function VortexShader({
       const s = gl.createShader(type);
       if (!s) return null;
       gl.shaderSource(s, src); gl.compileShader(s);
-      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) { console.error(gl.getShaderInfoLog(s)); return null; }
+      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+        console.error('[vortex] shader compile failed', gl.getShaderInfoLog(s));
+        gl.deleteShader(s);
+        return null;
+      }
       return s;
     };
     const vsh = compile(VERT, gl.VERTEX_SHADER);
+    if (!vsh) return;
     const fsh = compile(FRAG, gl.FRAGMENT_SHADER);
-    if (!vsh || !fsh) return;
+    if (!fsh) { gl.deleteShader(vsh); return; }
     const prog = gl.createProgram();
-    if (!prog) return;
+    if (!prog) { gl.deleteShader(vsh); gl.deleteShader(fsh); return; }
     gl.attachShader(prog, vsh); gl.attachShader(prog, fsh); gl.linkProgram(prog);
-    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) { console.error(gl.getProgramInfoLog(prog)); return; }
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+      console.error('[vortex] program link failed', gl.getProgramInfoLog(prog));
+      gl.deleteProgram(prog); gl.deleteShader(vsh); gl.deleteShader(fsh);
+      return;
+    }
     gl.useProgram(prog);
 
     const buf = gl.createBuffer();
+    if (!buf) {
+      gl.deleteProgram(prog); gl.deleteShader(vsh); gl.deleteShader(fsh);
+      return;
+    }
     gl.bindBuffer(gl.ARRAY_BUFFER, buf);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,1,-1,-1,1,-1,1,1,-1,1,1]), gl.STATIC_DRAW);
     const posLoc = gl.getAttribLocation(prog, 'position');
+    if (posLoc < 0) {
+      gl.deleteBuffer(buf); gl.deleteProgram(prog); gl.deleteShader(vsh); gl.deleteShader(fsh);
+      return;
+    }
     gl.enableVertexAttribArray(posLoc);
     gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
     gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
@@ -172,10 +190,12 @@ export default function VortexShader({
       else if (visible) startLoop();
     };
     const onLost = (e: Event) => { e.preventDefault(); stopLoop(); };
+    const onRestored = () => setContextVersion((version) => version + 1);
 
     window.addEventListener('resize', resize);
     document.addEventListener('visibilitychange', onVis);
     canvas.addEventListener('webglcontextlost', onLost);
+    canvas.addEventListener('webglcontextrestored', onRestored);
 
     if (reduce) draw(); // single static frame, no loop
 
@@ -185,11 +205,12 @@ export default function VortexShader({
       window.removeEventListener('resize', resize);
       document.removeEventListener('visibilitychange', onVis);
       canvas.removeEventListener('webglcontextlost', onLost);
+      canvas.removeEventListener('webglcontextrestored', onRestored);
       if (!gl.isContextLost()) {
         gl.deleteProgram(prog); gl.deleteShader(vsh); gl.deleteShader(fsh); gl.deleteBuffer(buf);
       }
     };
-  }, [renderScale]);
+  }, [renderScale, contextVersion]);
 
   return <canvas ref={canvasRef} aria-hidden="true" style={{ width: '100%', height: '100%', display: 'block' }} />;
 }

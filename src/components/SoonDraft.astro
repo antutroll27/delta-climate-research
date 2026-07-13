@@ -108,7 +108,7 @@ const pct = Math.round(Math.min(1, Math.max(0, progress)) * 100);
     letter-spacing: 0.3em; text-transform: uppercase;
     padding: 1rem 1.6rem; opacity: 0.85;
     box-shadow: 0 0 0 5px rgb(176 141 87 / 0.07);
-    animation: draft-stamp 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) 0.8s backwards;
+    animation: draft-stamp 0.55s cubic-bezier(0.16, 1, 0.3, 1) 0.8s backwards;
   }
   @keyframes draft-stamp { from { transform: rotate(-9deg) scale(1.8); opacity: 0; } }
 
@@ -131,9 +131,10 @@ const pct = Math.round(Math.min(1, Math.max(0, progress)) * 100);
   .meter .bar i {
     position: absolute; inset-block: 0; left: 0; width: var(--p, 35%);
     background: var(--color-bronze);
+    transform-origin: left;
     animation: draft-surveyor 5s ease-in-out infinite alternate;
   }
-  @keyframes draft-surveyor { from { margin-right: 0; } to { transform: scaleX(1.12); transform-origin: left; } }
+  @keyframes draft-surveyor { from { transform: scaleX(1); } to { transform: scaleX(1.12); } }
   .meter .lab {
     display: flex; justify-content: space-between; margin-top: 0.6rem;
     font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 0.18em;

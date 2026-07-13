@@ -1,45 +1,46 @@
 ---
 // First-visit loader — "instrument boot". The Δ mark draws in, a counter
-// climbs to 100%, and four rows resolve to LIVE telemetry about the visitor's
-// location (geojs.io → lat/lon/timezone, open-meteo → temperature + humidity).
+// climbs to 100%, and four rows resolve to local runtime diagnostics. No
+// location, IP, or weather data leaves the browser.
 // Shown once per session, on the home page, only when motion is allowed.
 // Visibility is gated by the html[data-loader="show"] attribute, which the
 // pre-paint inline script in Base.astro sets before the body renders.
 ---
 
-<div class="site-loader" id="site-loader" role="status" aria-label="Loading">
+<div class="site-loader" id="site-loader" role="status" aria-live="polite" aria-atomic="true" aria-busy="true">
+  <span class="sl-sr" data-loader-announcement>Preparing Delta Climate Research.</span>
   <div class="sl-sweep" data-sweep aria-hidden="true"></div>
 
   <!-- top -->
-  <div class="sl-top">
+  <div class="sl-top" aria-hidden="true">
     <div class="sl-id">
       <svg class="sl-mark" viewBox="0 0 150 130" aria-hidden="true">
         <polygon data-tri points="75,12 138,120 12,120" />
       </svg>
       <span class="sl-name">Delta</span>
     </div>
-    <div class="sl-status" data-status>Acquiring telemetry<span class="sl-dot"></span></div>
+    <div class="sl-status" data-status>Preparing local diagnostics<span class="sl-dot"></span></div>
   </div>
 
   <!-- center -->
-  <div class="sl-center">
+  <div class="sl-center" aria-hidden="true">
     <div class="sl-pct" data-pct>0%</div>
     <div class="sl-rows" data-rows>
-      <div class="sl-row" data-th="22"><span class="k">Geo lock</span><span class="v" data-f="geo">—</span><span class="ok">✓ ok</span></div>
-      <div class="sl-row" data-th="44"><span class="k">Ground station</span><span class="v" data-f="station">—</span><span class="ok">✓ ok</span></div>
-      <div class="sl-row" data-th="66"><span class="k">Surface temp</span><span class="v" data-f="temp">—</span><span class="ok">✓ ok</span></div>
-      <div class="sl-row" data-th="88"><span class="k">Atmosphere</span><span class="v" data-f="atmo">—</span><span class="ok">✓ ok</span></div>
+      <div class="sl-row" data-th="22"><span class="k">Session</span><span class="v" data-f="session">—</span><span class="ok">✓ ok</span></div>
+      <div class="sl-row" data-th="44"><span class="k">Time zone</span><span class="v" data-f="timezone">—</span><span class="ok">✓ ok</span></div>
+      <div class="sl-row" data-th="66"><span class="k">Viewport</span><span class="v" data-f="viewport">—</span><span class="ok">✓ ok</span></div>
+      <div class="sl-row" data-th="88"><span class="k">Motion</span><span class="v" data-f="motion">—</span><span class="ok">✓ ok</span></div>
     </div>
   </div>
 
   <!-- bottom -->
-  <div class="sl-bottom">
+  <div class="sl-bottom" aria-hidden="true">
     <div class="sl-bar"><span class="fill" data-fill></span></div>
     <div class="sl-foot">
       <span>Delta Climate Research</span>
       <span>Decision-grade intelligence</span>
     </div>
-    <p class="sl-note">approx. location via geojs · weather via open-meteo</p>
+    <p class="sl-note">local diagnostics only · no location request</p>
   </div>
 </div>
 
@@ -54,6 +55,18 @@
     padding: 7vh 7vw;
     background: var(--color-base);
     will-change: opacity, transform;
+  }
+
+  .sl-sr {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
   }
 
   .sl-mark polygon {
@@ -147,7 +160,7 @@
 
   /* bottom */
   .sl-bar { position: relative; height: 1px; background: rgb(236 237 240 / 0.10); }
-  .sl-bar .fill { position: absolute; inset: 0 100% 0 0; background: var(--color-cyan); transition: right 0.1s linear; }
+  .sl-bar .fill { position: absolute; inset: 0; background: var(--color-cyan); transform: scaleX(0); transform-origin: left; transition: transform 0.1s linear; }
   .sl-foot {
     display: flex;
     justify-content: space-between;
@@ -173,7 +186,9 @@
     left: 0; right: 0;
     height: 1px;
     top: 0;
+    transform: translateY(calc(var(--sweep-progress, 0) * 100dvh));
     opacity: 0;
+    will-change: transform, opacity;
     pointer-events: none;
     background: linear-gradient(to right, transparent, rgb(111 202 214 / 0.5), transparent);
   }
@@ -219,6 +234,7 @@
     const fill = q('[data-fill]') as HTMLElement;
     const sweep = q('[data-sweep]') as HTMLElement;
     const status = q('[data-status]')!;
+    const announcement = q('[data-loader-announcement]');
     const rows = Array.from(loader.querySelectorAll<HTMLElement>('[data-rows] .sl-row'));
 
     // timing
@@ -226,41 +242,14 @@
     const OUTRO_HOLD = 850;
     const FAILSAFE_MS = 9000;
 
-    // ── live telemetry (graceful, hard-capped) ──
-    const telemetry: Record<string, string> = { geo: '—°N · —°E', station: 'Offline', temp: '—', atmo: '—' };
-    let telemetryReady = false;
-
-    const withTimeout = (url: string, ms: number) => {
-      const ctrl = new AbortController();
-      const t = setTimeout(() => ctrl.abort(), ms);
-      return fetch(url, { signal: ctrl.signal })
-        .then((r) => r.json())
-        .finally(() => clearTimeout(t));
+    // Local-only diagnostics preserve the instrument boot without transmitting
+    // the visitor's IP-derived location or coordinates to third parties.
+    const telemetry: Record<string, string> = {
+      session: 'Private',
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Local',
+      viewport: `${window.innerWidth} × ${window.innerHeight}`,
+      motion: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'Reduced' : 'Standard',
     };
-
-    (async function fetchTelemetry() {
-      try {
-        const g = await withTimeout('https://get.geojs.io/v1/ip/geo.json', 2200);
-        const lat = parseFloat(g.latitude), lon = parseFloat(g.longitude);
-        if (!isFinite(lat) || !isFinite(lon)) throw new Error('geo');
-        const ns = lat >= 0 ? 'N' : 'S', ew = lon >= 0 ? 'E' : 'W';
-        telemetry.geo = `${Math.abs(lat).toFixed(4)}°${ns} · ${Math.abs(lon).toFixed(4)}°${ew}`;
-        const place = g.city || (g.timezone ? g.timezone.split('/').pop().replace(/_/g, ' ') : '');
-        telemetry.station = [place, g.country_code].filter(Boolean).join(', ') || g.country || 'Unknown';
-
-        const w = await withTimeout(
-          `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m`,
-          2200
-        );
-        const c = (w && w.current) || {};
-        if (c.temperature_2m != null) telemetry.temp = `${c.temperature_2m.toFixed(1)} °C`;
-        if (c.relative_humidity_2m != null) telemetry.atmo = `${c.relative_humidity_2m}% RH`;
-      } catch (e) {
-        /* keep fallbacks */
-      } finally {
-        telemetryReady = true;
-      }
-    })();
 
     // ── Δ stroke-draw setup ──
     let triLen = 360;
@@ -272,7 +261,7 @@
 
     const scramble = (n: number, key: string) => {
       const chars = '0123456789.°NEWΔ ';
-      const len = key === 'station' ? 12 : (key === 'temp' || key === 'atmo') ? 6 : 18;
+      const len = key === 'timezone' ? 18 : key === 'viewport' ? 11 : 9;
       let s = '';
       for (let i = 0; i < len; i++) s += chars[Math.floor(rand(n + i) * chars.length)];
       return s;
@@ -300,9 +289,9 @@
       const shown = Math.round(e * 100);
       pct.textContent = shown + '%';
       (pct as HTMLElement).style.opacity = String(0.5 + e * 0.5);
-      fill.style.right = (100 - e * 100) + '%';
+      fill.style.transform = `scaleX(${e})`;
       sweep.style.opacity = '0.55';
-      sweep.style.top = (e * 100) + '%';
+      sweep.style.setProperty('--sweep-progress', String(e));
 
       tickN++;
       for (const r of rows) {
@@ -310,11 +299,7 @@
         const v = r.querySelector('.v') as HTMLElement;
         const key = v.dataset.f!;
         if (shown >= th) {
-          if (telemetryReady) {
-            if (!r.classList.contains('on')) { r.classList.add('on'); v.textContent = telemetry[key]; v.style.opacity = '1'; }
-          } else if (tickN % 3 === 0) {
-            v.textContent = scramble(tickN, key); v.style.opacity = '0.6';
-          }
+          if (!r.classList.contains('on')) { r.classList.add('on'); v.textContent = telemetry[key]; v.style.opacity = '1'; }
         } else if (shown >= th - 16 && tickN % 3 === 0) {
           v.textContent = scramble(tickN, key); v.style.opacity = '0.5';
         }
@@ -326,25 +311,18 @@
     raf = requestAnimationFrame(frame);
 
     function outro() {
-      const lockAndExit = () => {
-        for (const r of rows) {
-          r.classList.add('on');
-          const v = r.querySelector('.v') as HTMLElement;
-          v.textContent = telemetry[v.dataset.f!];
-          v.style.opacity = '1';
-        }
-        (status.firstChild as Text).textContent = 'Systems online';
-        sweep.style.transition = 'opacity 0.5s ease';
-        sweep.style.opacity = '0';
-        setTimeout(exit, OUTRO_HOLD);
-      };
-      // brief grace for late telemetry, then finish regardless
-      if (telemetryReady) { lockAndExit(); return; }
-      const t0 = performance.now();
-      (function wait() {
-        if (telemetryReady || performance.now() - t0 > 1400) lockAndExit();
-        else requestAnimationFrame(wait);
-      })();
+      for (const r of rows) {
+        r.classList.add('on');
+        const v = r.querySelector('.v') as HTMLElement;
+        v.textContent = telemetry[v.dataset.f!];
+        v.style.opacity = '1';
+      }
+      (status.firstChild as Text).textContent = 'Systems online';
+      loader.setAttribute('aria-busy', 'false');
+      if (announcement) announcement.textContent = 'Delta Climate Research is ready.';
+      sweep.style.transition = 'opacity 0.5s ease';
+      sweep.style.opacity = '0';
+      setTimeout(exit, OUTRO_HOLD);
     }
 
     function exit() {

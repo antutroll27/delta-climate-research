@@ -10,10 +10,7 @@ import react from '@astrojs/react';
 import { papers } from './src/data/papers.ts';
 import { projects } from './src/data/projects.ts';
 
-// Stamp every sitemap URL with the build time as <lastmod> — a real crawl /
-// AI-freshness signal (the default output omits it). Updates on each deploy.
-const BUILD_ISO = new Date().toISOString();
-
+/** @param {string} page */
 const sitemapFilter = (page) => {
   const path = new URL(page).pathname;
   if (path === '/climate-highlights/') return false;               // always coming-soon (no publish flag)
@@ -32,10 +29,15 @@ const sitemapFilter = (page) => {
 export default defineConfig({
   site: 'https://deltaclimate.earth',
   integrations: [
-    sitemap({ filter: sitemapFilter, serialize: (item) => ({ ...item, lastmod: BUILD_ISO }) }),
+    // Omit <lastmod> until routes have content-owned modification dates. A
+    // deploy timestamp would falsely mark every page as newly updated.
+    sitemap({ filter: sitemapFilter }),
     react(),
   ],
   vite: {
+    // The shared, tree-shaken Three runtime is ~549 kB raw / ~142 kB gzip.
+    // Retain a warning boundary just above it so future vendor growth is noisy.
+    build: { chunkSizeWarningLimit: 600 },
     // Pre-bundle three + EVERY addon both WebGL islands use (the hero river AND
     // the About ocean's code-split Water.js), so Vite optimizes once at startup
     // and never re-optimizes mid-session — which otherwise 504s ("Outdated
@@ -46,6 +48,7 @@ export default defineConfig({
         'three', 'gsap', 'gsap/ScrollTrigger', 'lenis',
         'three/examples/jsm/objects/Water.js',
         'three/examples/jsm/loaders/GLTFLoader.js',
+        'three/examples/jsm/loaders/DRACOLoader.js',
         'three/examples/jsm/libs/meshopt_decoder.module.js',
         'three/examples/jsm/postprocessing/EffectComposer.js',
         'three/examples/jsm/postprocessing/RenderPass.js',

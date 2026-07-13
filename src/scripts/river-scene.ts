@@ -4,7 +4,8 @@
 // flow-field, with a 3-tier perf ladder. The React island (HeroRiver.tsx) owns
 // the lifecycle (IntersectionObserver gate, gsap.ticker, dispose); this module
 // owns the scene and exposes tick/resize/dispose/onReady/setScrollProgress.
-import * as THREE from 'three';
+import * as THREE from './three-runtime';
+import type { IUniform, Material, WebGLProgramParametersWithUniforms } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
@@ -34,12 +35,22 @@ export interface RiverScene {
 
 interface Opts { reduce?: boolean }
 
+interface NavigatorWithDeviceMemory extends Navigator {
+  readonly deviceMemory?: number;
+}
+
+interface SplashUniforms extends Record<string, { value: unknown }> {
+  uProgress: { value: number };
+  uTime: { value: number };
+  uRes: { value: THREE.Vector2 };
+}
+
 const MODELS = '/models/';
 const TEX = '/textures/';
 
 function pickInitialTier(): number {
   const coarse = matchMedia('(pointer:coarse)').matches;
-  const mem = (navigator as any).deviceMemory ?? 8;
+  const mem = (navigator as NavigatorWithDeviceMemory).deviceMemory ?? 8;
   const cores = navigator.hardwareConcurrency ?? 8;
   let t = 0;
   if (coarse) t = 1;
@@ -48,8 +59,11 @@ function pickInitialTier(): number {
 }
 
 const TIERS = [
-  { q: '2k', flow: 'river-flow.png', dpr: 1.6, bloom: true },   // 2k geometry/texture even on high tier — the look is shader-driven; saves ~10MB + matches the river-2k preload (audit 2026-06-24)
-  { q: '1k', flow: 'river-flow-sm.png', dpr: 1.25, bloom: false }, // mobile: Draco recut, full geometry + 12-bit octahedral normals (1.9MB vs 12.6MB). meshopt's 8-bit normals flattened the water shading into a teal flare — Draco keeps precise normals (audit 2026-07-08)
+  // The Draco 1k recut keeps precise 12-bit octahedral normals at 1.9MB. The
+  // shader, full-resolution flow map, DPR and bloom still distinguish the high
+  // tier without making first-view visitors download the former 12.6MB model.
+  { q: '1k', flow: 'river-flow.png', dpr: 1.6, bloom: true },
+  { q: '1k', flow: 'river-flow-sm.png', dpr: 1.25, bloom: false },
   { q: '1k', flow: 'river-flow-sm.png', dpr: 1.0, bloom: false },
 ];
 
@@ -114,7 +128,7 @@ export function createRiverScene(canvas: HTMLCanvasElement, opts: Opts = {}): Ri
 
   function gradeMaterial(mat: THREE.MeshStandardMaterial) {
     mat.fog = true; mat.envMapIntensity = 0.35;
-    const u: Record<string, { value: any }> = {
+    const u: Record<string, IUniform<unknown>> = {
       uTime: UTIME, uGrade: UG, uWGain: UWGAIN, uWFlow: UWFLOW, uWAmp: UWAMP,
       uShadow: { value: new THREE.Color('#05080a') }, uMid: { value: new THREE.Color('#6b4f2e') }, uHigh: { value: new THREE.Color('#6fcad6') },
       uRim: { value: new THREE.Color('#6fcad6') }, uWaterDeep: { value: new THREE.Color('#08323a') }, uWaterNorm: { value: waterNorm },
@@ -124,7 +138,7 @@ export function createRiverScene(canvas: HTMLCanvasElement, opts: Opts = {}): Ri
       uGrassAmt: UGRASS, uRippleAmp: URIPPLE, uRipples: { value: rippleArr },
       uNoiseOct: UNOCT, uNoiseTile: UNTILE, uNoiseSpd: UNSPD,
     };
-    mat.onBeforeCompile = (sh: any) => {
+    mat.onBeforeCompile = (sh: WebGLProgramParametersWithUniforms) => {
       Object.assign(sh.uniforms, u);
       sh.vertexShader = `varying vec3 vWPos; varying vec3 vLocalXZ3;\n` + sh.vertexShader;
       sh.vertexShader = sh.vertexShader.replace('#include <begin_vertex>', `
@@ -245,10 +259,12 @@ export function createRiverScene(canvas: HTMLCanvasElement, opts: Opts = {}): Ri
 
   // post
   const comp = new EffectComposer(renderer);
-  comp.addPass(new RenderPass(scene, camera));
+  const renderPass = new RenderPass(scene, camera);
+  comp.addPass(renderPass);
   const bloom = new UnrealBloomPass(new THREE.Vector2(sizeW(), sizeH()), 1.1, 0.8, 0.78);   // slightly more bloom (user, 2026-06-18)
   comp.addPass(bloom);
-  comp.addPass(new OutputPass());
+  const outputPass = new OutputPass();
+  comp.addPass(outputPass);
   // ── splash: radial water-engulf driven by scroll progress (river → sea, "The Plunge") ──
   // Dark water irises in from every edge, refracting the frame via an FBM-normal (Ashima snoise, MIT),
   // caustics + deep tint, then settles to DEEP → hands off to 01. Ported from previews/plunge.html.
@@ -315,6 +331,7 @@ export function createRiverScene(canvas: HTMLCanvasElement, opts: Opts = {}): Ri
         gl_FragColor=vec4(col,1.0);
       }`,
   });
+  const splashUniforms = splashPass.uniforms as unknown as SplashUniforms;
   comp.addPass(splashPass);
   comp.setSize(sizeW(), sizeH());
 
@@ -333,15 +350,47 @@ export function createRiverScene(canvas: HTMLCanvasElement, opts: Opts = {}): Ri
   let ready = false;
   let disposed = false; // dropped late GLB resolutions after teardown (Astro nav mid-fetch)
   const readyCbs: (() => void)[] = [];
+  const timer = new THREE.Timer();
+  timer.connect(document);
   const loader = new GLTFLoader(); loader.setMeshoptDecoder(MeshoptDecoder);
-  // mobile tiers load a Draco-compressed recut (12-bit octahedral normals — meshopt's
-  // 8-bit normals flattened the water shading into a teal flare; audit 2026-07-08).
-  // Decoder fetched only when a Draco file is actually decoded → desktop (meshopt) never pays it.
+  // Every tier uses the Draco-compressed recut. The decoder remains a separate,
+  // cacheable asset and is fetched only when the model is decoded.
   const dracoLoader = new DRACOLoader(); dracoLoader.setDecoderPath('/draco/'); loader.setDRACOLoader(dracoLoader);
+
+  const disposeObject = (root: THREE.Object3D) => {
+    const materials = new Set<Material>();
+    const textures = new Set<THREE.Texture>();
+
+    root.traverse((object) => {
+      if (!(object instanceof THREE.Mesh)) return;
+      object.geometry.dispose();
+      const meshMaterials = Array.isArray(object.material) ? object.material : [object.material];
+      meshMaterials.forEach((material) => materials.add(material));
+    });
+
+    materials.forEach((material) => {
+      Object.values(material).forEach((value) => {
+        if (value instanceof THREE.Texture) textures.add(value);
+      });
+      material.dispose();
+    });
+    textures.forEach((texture) => texture.dispose());
+  };
+
   loader.load(MODELS + `river-${TIERS[TIER].q}.glb`, (g) => {
-    if (disposed) return; // late resolution on a torn-down/force-lost context — drop it
+    if (disposed) {
+      disposeObject(g.scene);
+      return;
+    }
     river = g.scene;
-    river.traverse((o: any) => { if (o.isMesh) { gradeMaterial(o.material); o.frustumCulled = false; } });
+    river.traverse((object) => {
+      if (!(object instanceof THREE.Mesh)) return;
+      const materials = Array.isArray(object.material) ? object.material : [object.material];
+      materials.forEach((material) => {
+        if (material instanceof THREE.MeshStandardMaterial) gradeMaterial(material);
+      });
+      object.frustumCulled = false;
+    });
     const box = new THREE.Box3().setFromObject(river);
     const cc = box.getCenter(new THREE.Vector3()); const s = box.getSize(new THREE.Vector3());
     const scl = 120 / s.x; river.scale.setScalar(scl);
@@ -353,6 +402,7 @@ export function createRiverScene(canvas: HTMLCanvasElement, opts: Opts = {}): Ri
     pivot.updateMatrixWorld(true);
     scene.add(pivot);
     applyTier(TIER);
+    timer.reset();
     ready = true;
     readyCbs.forEach(cb => cb());
   }, undefined, (e) => { console.error('[river] load error', e); });
@@ -381,13 +431,13 @@ export function createRiverScene(canvas: HTMLCanvasElement, opts: Opts = {}): Ri
   window.addEventListener('pointermove', onPointer, { passive: true });
 
   // FPS-adaptive downgrade
-  const clock = new THREE.Clock();
   let fpsWarm = 0, fpsAcc = 0, fpsN = 0;
   let scrollP = 0; // 0..1 — wired by the scroll step; static frame at 0
 
   function tick() {
     if (!ready) return;
-    const dt = clock.getDelta();
+    timer.update();
+    const dt = timer.getDelta();
     if (!reduce) { UTIME.value += dt; if (UTIME.value > 3600) UTIME.value -= 3600; }
     // ── "The Plunge": phase 1 (0→0.55) rotate Y+Z 90° CW + dolly; phase 2 (0.56→~0.68) radial water engulf ──
     const sm = THREE.MathUtils.smoothstep;
@@ -400,8 +450,8 @@ export function createRiverScene(canvas: HTMLCanvasElement, opts: Opts = {}): Ri
     camera.position.z = camBaseZ - p1 * 8.5;
     look.set(0, -3.2, -7); camera.lookAt(look);
     renderer.toneMappingExposure = 1.0 + sm(scrollP, 0.55, 0.92) * 0.35;   // bloom catches the surface
-    const su = splashPass.uniforms as any;  // ShaderPass clones its uniforms — write the clone
-    su.uProgress.value = scrollP; su.uTime.value = UTIME.value;
+    splashUniforms.uProgress.value = scrollP;
+    splashUniforms.uTime.value = UTIME.value;
     comp.render();
     if (!reduce && TIER < 2) {
       if (fpsWarm < 30) fpsWarm++;
@@ -413,20 +463,19 @@ export function createRiverScene(canvas: HTMLCanvasElement, opts: Opts = {}): Ri
     const w = sizeW(), h = sizeH();
     renderer.setSize(w, h, false); comp.setSize(w, h); bloom.setSize(w, h);
     camera.aspect = w / h; camera.updateProjectionMatrix();
-    (splashPass.uniforms as any).uRes.value.set(w, h);
+    splashUniforms.uRes.value.set(w, h);
   }
 
   function dispose() {
     disposed = true;
     readyCbs.length = 0;
     window.removeEventListener('pointermove', onPointer);
+    timer.dispose();
     dracoLoader.dispose();
-    scene.traverse((o: any) => {
-      if (o.isMesh) { o.geometry?.dispose?.(); const m = o.material; (Array.isArray(m) ? m : [m]).forEach((mm: any) => mm?.dispose?.()); }
-    });
+    disposeObject(scene);
     disposables.forEach(d => d.dispose());
-    envRT.dispose?.(); pmrem.dispose();
-    (comp as any).dispose?.(); bloom.dispose?.(); splashPass.material?.dispose?.();
+    envRT.dispose(); pmrem.dispose();
+    renderPass.dispose(); bloom.dispose(); outputPass.dispose(); splashPass.dispose(); comp.dispose();
     renderer.dispose();
     renderer.forceContextLoss?.();
   }

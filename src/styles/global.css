@@ -58,7 +58,8 @@
   /* text */
   --color-paper: #ecedf0;      /* primary text (off-white) */
   --color-ink-muted: #8fa3a5;  /* body / excerpts */
-  --color-ink-faint: #5c7173;  /* meta / captions */
+  /* AA on both base (6.36:1) and surface (4.65:1), while remaining quieter than body text. */
+  --color-ink-faint: oklch(65.07% 0.0241 203.6);  /* meta / captions */
 
   /* accents — Swiss hybrid */
   --color-cyan: #6fcad6;       /* brand / action */
@@ -124,23 +125,6 @@
   --container-site: 1400px;
   --breakpoint-wide: 900px;
   --color-on-accent: #050606;
-}
-
-/* Light theme — "Warm Field" soft-maximalism. Dark is the default (:root above).
-   :root[data-theme='light'] outranks :root so it wins regardless of source order. */
-:root[data-theme='light'] {
-  --color-base: #ece5d8;       /* bone */
-  --color-surface: #e4dac9;
-  --color-surface-2: #dccfb9;
-  --color-hairline: rgb(36 31 26 / 0.14);
-  --color-paper: #241f1a;      /* warm near-black text */
-  --color-ink-muted: #4a4038;
-  --color-ink-faint: #6b5f54;
-  --color-cyan: #2a5a5a;       /* brand/action = deep teal */
-  --color-cyan-muted: #5f7468;
-  --color-cyan-dim: #1f4444;
-  --color-bronze: #b4654a;     /* clay */
-  --color-glow: rgb(42 90 90 / 0.32);
 }
 
 @layer base {

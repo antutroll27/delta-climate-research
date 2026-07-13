@@ -112,7 +112,7 @@ const teamJsonLd = {
 
   <!-- slide-up detail sheet (dark, slow rise) — panels rendered once, toggled by the script -->
   <div class="team-backdrop" data-sheet-close aria-hidden="true"></div>
-  <aside class="team-sheet" id="team-sheet" role="dialog" aria-modal="true" aria-label="Team member profile" aria-hidden="true">
+  <aside class="team-sheet" id="team-sheet" role="dialog" aria-modal="true" aria-label="Team member profile" aria-hidden="true" inert>
     <span class="sheet-grip" aria-hidden="true"></span>
     <div class="sheet-bar">
       <span class="sheet-tag" data-sheet-tag>Delta·Climate·Research — Team</span>
@@ -221,16 +221,16 @@ const teamJsonLd = {
 
   /* hover inversion — pointer devices only (touch shows readable names, no fill) */
   @media (hover: hover) and (pointer: fine) {
-    .roster .t-name { color: rgb(236 237 240 / 0.42); }
-    .roster .t-name .last { color: rgb(236 237 240 / 0.6); }
-    .roster:hover .trow:not(:hover) .t-name { color: rgb(236 237 240 / 0.42); }
-    .roster:hover .trow:not(:hover) .t-name .last { color: rgb(236 237 240 / 0.6); }
+    .roster .t-name { color: var(--color-paper); }
+    .roster .t-name .last { color: var(--color-ink-muted); }
+    .roster:hover .trow:not(:hover) .t-name { color: var(--color-ink-muted); }
+    .roster:hover .trow:not(:hover) .t-name .last { color: var(--color-ink-faint); }
     .trow:hover .trow-fill { clip-path: inset(0 0 0 0); }
     .trow:hover .t-name,
     .trow:hover .t-name .last { color: var(--color-base); }
     .trow:hover .t-id { color: var(--color-base); -webkit-text-stroke: 1px transparent; }
     .trow:hover .t-tier { color: var(--color-base); }
-    .trow:hover .t-disc { color: rgb(5 6 6 / 0.7); }
+    .trow:hover .t-disc { color: var(--color-base); }
     .trow:hover .t-plus { color: var(--color-base); opacity: 1; transform: rotate(90deg); }
   }
   .trow:focus-visible { outline: 1px solid var(--color-cyan); outline-offset: -2px; }
@@ -261,7 +261,7 @@ const teamJsonLd = {
   .sheet-grip { display: block; width: 44px; height: 4px; border-radius: 99px; background: var(--color-hairline); margin: 0.9rem auto 0; flex: none; }
   .sheet-bar { display: flex; justify-content: space-between; align-items: center; padding: 0.7rem clamp(1.5rem, 4vw, 4rem) 0.5rem; flex: none; }
   .sheet-tag { font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--color-ink-faint); }
-  .sheet-x { appearance: none; background: none; border: 1px solid var(--color-hairline); color: var(--color-paper); border-radius: 99px; width: 36px; height: 36px; cursor: pointer; font-size: 1rem; line-height: 1; transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease; }
+  .sheet-x { appearance: none; background: none; border: 1px solid var(--color-hairline); color: var(--color-paper); border-radius: 99px; width: 44px; height: 44px; cursor: pointer; font-size: 1rem; line-height: 1; transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease; }
   .sheet-x:hover { background: var(--color-cyan); color: var(--color-base); border-color: var(--color-cyan); }
   .sheet-scroll { overflow-y: auto; }
   .panel[hidden] { display: none; }
@@ -339,84 +339,107 @@ const teamJsonLd = {
 <script>
   // Detail-sheet open/close — page-scoped, runs regardless of motion (essential,
   // unlike the cursor card which is motion-gated in section-effects.ts).
-  let teamKeyBound = false;
-
-  // Page landmarks outside the sheet — made inert while it's open so Tab/AT
-  // stay within the dialog (the sheet + its backdrop are excluded).
-  function teamSheetSiblings() {
-    const sheet = document.getElementById('team-sheet');
-    return [...document.body.children].filter(
-      (el) => el !== sheet && !el.classList.contains('team-backdrop')
-    ) as HTMLElement[];
-  }
-
-  function closeTeamSheet() {
-    const sheet = document.getElementById('team-sheet');
-    if (!sheet) return;
-    document.querySelector('.team-backdrop')?.classList.remove('on');
-    sheet.classList.remove('on');
-    sheet.setAttribute('aria-hidden', 'true');
-    teamSheetSiblings().forEach((el) => el.removeAttribute('inert'));
-    document.body.classList.remove('team-sheet-open');
-    document.body.style.overflow = '';
-    const trigger = (window as any).__teamTrigger;
-    if (trigger && typeof trigger.focus === 'function') trigger.focus();
-  }
+  let teamCleanup: (() => void) | undefined;
 
   function initTeamSheet() {
-    const sheet = document.getElementById('team-sheet');
+    teamCleanup?.();
+    const sheet = document.getElementById('team-sheet') as HTMLElement | null;
     if (!sheet) return;
-    const backdrop = document.querySelector('.team-backdrop');
+    const ac = new AbortController();
+    const { signal } = ac;
+    const backdrop = document.querySelector<HTMLElement>('.team-backdrop');
     const panels = [...sheet.querySelectorAll<HTMLElement>('[data-panel]')];
     const tag = sheet.querySelector<HTMLElement>('[data-sheet-tag]');
+    const closeButton = sheet.querySelector<HTMLButtonElement>('.sheet-x');
+    const sheetScroll = sheet.querySelector<HTMLElement>('.sheet-scroll');
+    let trigger: HTMLButtonElement | null = null;
+    let inerted: HTMLElement[] = [];
+    let bodyOverflow = '';
+
+    const close = (returnFocus = true) => {
+      const wasOpen = sheet.classList.contains('on');
+      backdrop?.classList.remove('on');
+      sheet.classList.remove('on');
+      sheet.setAttribute('aria-hidden', 'true');
+      sheet.setAttribute('inert', '');
+      inerted.forEach((el) => el.removeAttribute('inert'));
+      inerted = [];
+      document.body.classList.remove('team-sheet-open');
+      document.body.style.overflow = bodyOverflow;
+      if (wasOpen && returnFocus && trigger?.isConnected) trigger.focus();
+    };
+
+    const open = (button: HTMLButtonElement) => {
+      const i = parseInt(button.dataset.open || '0', 10);
+      const name = button.dataset.name || 'Team member';
+      panels.forEach((panel, idx) => { panel.hidden = idx !== i; });
+      if (tag) tag.textContent = `Team · DCR/${String(i + 1).padStart(2, '0')}`;
+      trigger = button;
+      bodyOverflow = document.body.style.overflow;
+      inerted = [...document.body.children].filter((el): el is HTMLElement => {
+        if (!(el instanceof HTMLElement)) return false;
+        if (el === sheet || el === backdrop || el.hasAttribute('inert')) return false;
+        return true;
+      });
+      inerted.forEach((el) => el.setAttribute('inert', ''));
+      backdrop?.classList.add('on');
+      sheet.removeAttribute('inert');
+      sheet.classList.add('on');
+      sheet.setAttribute('aria-hidden', 'false');
+      sheet.setAttribute('aria-label', `${name} profile`);
+      document.body.classList.add('team-sheet-open');
+      document.body.style.overflow = 'hidden';
+      sheetScroll?.scrollTo(0, 0);
+      closeButton?.focus();
+    };
 
     document.querySelectorAll<HTMLButtonElement>('[data-open]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const i = parseInt(btn.dataset.open || '0', 10);
-        panels.forEach((p, idx) => { p.hidden = idx !== i; });
-        if (tag) tag.textContent = `Team — DCR/${String(i + 1).padStart(2, '0')}`;
-        (window as any).__teamTrigger = btn;
-        backdrop?.classList.add('on');
-        sheet.classList.add('on');
-        sheet.setAttribute('aria-hidden', 'false');
-        teamSheetSiblings().forEach((el) => el.setAttribute('inert', ''));
-        document.body.classList.add('team-sheet-open');
-        document.body.style.overflow = 'hidden';
-        sheet.scrollTop = 0;
-        sheet.querySelector<HTMLElement>('.sheet-scroll')?.scrollTo(0, 0);
-        sheet.querySelector<HTMLButtonElement>('.sheet-x')?.focus();
-      });
+      btn.addEventListener('click', () => open(btn), { signal });
     });
 
     document.querySelectorAll('[data-sheet-close]').forEach((el) =>
-      el.addEventListener('click', closeTeamSheet)
+      el.addEventListener('click', () => close(), { signal })
     );
 
-    if (!teamKeyBound) {
-      teamKeyBound = true;
-      document.addEventListener('keydown', (e) => {
-        const open = document.getElementById('team-sheet');
-        if (!open?.classList.contains('on')) return;
-        if (e.key === 'Escape') { closeTeamSheet(); return; }
-        if (e.key !== 'Tab') return;
-        // Trap Tab within the sheet (inert keeps AT out; this keeps the caret in).
-        const focusable = [...open.querySelectorAll<HTMLElement>(
-          'a[href], button:not([disabled]), input, select, textarea, [tabindex]:not([tabindex="-1"])'
-        )].filter((el) => !el.closest('[hidden]') && el.offsetParent !== null);
-        if (!focusable.length) { e.preventDefault(); return; }
-        const first = focusable[0];
-        const last = focusable[focusable.length - 1];
-        const active = document.activeElement as HTMLElement | null;
-        if (e.shiftKey && (active === first || !open.contains(active))) {
-          e.preventDefault(); last.focus();
-        } else if (!e.shiftKey && active === last) {
-          e.preventDefault(); first.focus();
-        }
-      });
-    }
+    document.addEventListener('keydown', (event) => {
+      if (!sheet.classList.contains('on')) return;
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        close();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const focusable = [...sheet.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      )].filter((el) => !el.closest('[hidden]') && el.offsetParent !== null);
+      if (!focusable.length) {
+        event.preventDefault();
+        closeButton?.focus();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement as HTMLElement | null;
+      if (event.shiftKey && (active === first || !sheet.contains(active))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (active === last || !sheet.contains(active))) {
+        event.preventDefault();
+        first.focus();
+      }
+    }, { signal });
+
+    teamCleanup = () => {
+      close(false);
+      ac.abort();
+    };
   }
 
-  initTeamSheet();
+  function destroyTeamSheet() {
+    teamCleanup?.();
+    teamCleanup = undefined;
+  }
+
   document.addEventListener('astro:page-load', initTeamSheet);
-  document.addEventListener('astro:before-swap', closeTeamSheet);
+  document.addEventListener('astro:before-swap', destroyTeamSheet);
 </script>

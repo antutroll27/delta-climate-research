@@ -142,7 +142,7 @@ const projects = catalogue.map((p) => ({ ...p, href: projectHref(p) }));
   }
   /* dimmed/hidden resting states only when the pin choreography runs */
   @media (min-width: 821px) and (prefers-reduced-motion: no-preference) {
-    :global(.reveal-ready) .pi-title { color: rgb(236 237 240 / 0.26); }
+    :global(.reveal-ready) .pi-title { color: rgb(236 237 240 / 0.52); }
     :global(.reveal-ready) .proj-item.active .pi-title { color: var(--color-paper); }
     :global(.reveal-ready) .pi-tags { opacity: 0; transform: translateY(4px); }
     :global(.reveal-ready) .proj-item.active .pi-tags { opacity: 1; transform: none; }

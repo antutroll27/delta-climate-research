@@ -9,7 +9,8 @@
     "docs",
     "previews",
     "inspiration",
-    "attic"
+    "attic",
+    "public/draco"
   ],
   "compilerOptions": {
     "jsx": "react-jsx",
