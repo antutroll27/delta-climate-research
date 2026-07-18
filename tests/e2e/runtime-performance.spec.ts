@@ -176,3 +176,31 @@ test.describe('footer shader runtime', () => {
     expect(await currentFrame()).toBe(stoppedAt);
   });
 });
+
+test.describe('adaptive render quality', () => {
+  test.use({ viewport: { width: 1280, height: 900 }, deviceScaleFactor: 2 });
+
+  test('low-capability signals lower the footer framebuffer without removing content', async ({ page }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, 'hardwareConcurrency', { configurable: true, value: 2 });
+      Object.defineProperty(navigator, 'deviceMemory', { configurable: true, value: 2 });
+    });
+    await visitWithMotion(page);
+
+    const shader = page.locator('.fcard.left .shader [data-paper-shader]');
+    await page.locator('footer').scrollIntoViewIfNeeded();
+    await expect(shader).toHaveCount(1, { timeout: 10_000 });
+
+    const resolution = await shader.evaluate((element) => {
+      const canvas = element.querySelector('canvas');
+      if (!canvas) return null;
+      return {
+        cssArea: element.clientWidth * element.clientHeight,
+        pixelArea: canvas.width * canvas.height,
+      };
+    });
+    expect(resolution).not.toBeNull();
+    expect(Math.sqrt(resolution!.pixelArea / resolution!.cssArea)).toBeLessThanOrEqual(1.02);
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+  });
+});

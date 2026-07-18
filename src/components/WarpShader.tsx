@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { Warp, type PaperShaderElement } from '@paper-design/shaders-react';
 import { createFrameGate } from '../utils/frame-gate';
+import {
+  beginRenderQualityMonitoring,
+  getRenderQuality,
+  subscribeRenderQuality,
+  type RenderQualityProfile,
+} from '../utils/render-quality';
 
 const WARP_SPEED = 0.6;
 const WARP_PIXEL_RATIO_CAP = 1.25;
@@ -28,10 +34,13 @@ export default function WarpShader() {
   const shaderRef = useRef<PaperShaderElement>(null);
   const animationFrame = useRef(0);
   const [isVisible, setIsVisible] = useState(false);
+  const [quality, setQuality] = useState<RenderQualityProfile>(() => getRenderQuality());
   const [pixelBudget, setPixelBudget] = useState(WARP_INITIAL_PIXEL_BUDGET);
   const reduce =
     typeof window !== 'undefined' &&
     window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  useEffect(() => subscribeRenderQuality(setQuality), []);
 
   useEffect(() => {
     const mount = mountRef.current;
@@ -52,7 +61,8 @@ export default function WarpShader() {
       const width = mount.clientWidth;
       const height = mount.clientHeight;
       if (width <= 0 || height <= 0) return;
-      setPixelBudget(Math.ceil(width * height * WARP_PIXEL_RATIO_CAP ** 2));
+      const pixelRatio = Math.min(WARP_PIXEL_RATIO_CAP, quality.maxDevicePixelRatio);
+      setPixelBudget(Math.ceil(width * height * pixelRatio ** 2));
     };
     const resizeObserver = 'ResizeObserver' in window
       ? new ResizeObserver(syncPixelBudget)
@@ -64,12 +74,13 @@ export default function WarpShader() {
       visibilityObserver?.disconnect();
       resizeObserver?.disconnect();
     };
-  }, [reduce]);
+  }, [reduce, quality.maxDevicePixelRatio]);
 
   useEffect(() => {
     if (reduce || !isVisible) return;
 
-    const frameGate = createFrameGate(60);
+    const frameGate = createFrameGate(quality.targetFps);
+    const stopQualityMonitoring = beginRenderQualityMonitoring();
     let raf = 0;
     let lastRenderAt: number | undefined;
 
@@ -86,8 +97,11 @@ export default function WarpShader() {
     };
 
     raf = requestAnimationFrame(render);
-    return () => cancelAnimationFrame(raf);
-  }, [isVisible, reduce]);
+    return () => {
+      cancelAnimationFrame(raf);
+      stopQualityMonitoring();
+    };
+  }, [isVisible, reduce, quality.targetFps]);
 
   if (reduce) return null;
 

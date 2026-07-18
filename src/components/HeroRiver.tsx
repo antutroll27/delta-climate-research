@@ -3,6 +3,11 @@ import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { createRiverScene, type RiverScene } from '../scripts/river-scene';
 import { createFrameGate } from '../utils/frame-gate';
+import {
+  beginRenderQualityMonitoring,
+  getRenderQuality,
+  subscribeRenderQuality,
+} from '../utils/render-quality';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -53,7 +58,11 @@ export default function HeroRiver() {
     });
 
     let visible = false;
-    const frameGate = createFrameGate(60);
+    let stopQualityMonitoring: (() => void) | undefined;
+    const frameGate = createFrameGate(getRenderQuality().targetFps);
+    const unsubscribeRenderQuality = subscribeRenderQuality((profile) => {
+      frameGate.setTargetFps(profile.targetFps);
+    });
     // render-gate: only render while on-screen and the tab is visible.
     const onTick = (time: number) => {
       if (visible && document.visibilityState !== 'hidden' && frameGate.shouldRender(time * 1000)) scene.tick();
@@ -68,7 +77,13 @@ export default function HeroRiver() {
     const io = new IntersectionObserver(
       (entries) => {
         const nextVisible = entries.some(e => e.isIntersecting);
-        if (nextVisible && !visible) frameGate.reset();
+        if (nextVisible && !visible) {
+          frameGate.reset();
+          if (!reduce) stopQualityMonitoring = beginRenderQualityMonitoring();
+        } else if (!nextVisible && visible) {
+          stopQualityMonitoring?.();
+          stopQualityMonitoring = undefined;
+        }
         visible = nextVisible;
       },
       { rootMargin: '200px' }
@@ -82,6 +97,8 @@ export default function HeroRiver() {
 
     return () => {
       gsap.ticker.remove(onTick);
+      stopQualityMonitoring?.();
+      unsubscribeRenderQuality();
       mm.revert();                          // kills the scroll trigger + restores content opacity
       io.disconnect();
       window.removeEventListener('resize', onResize);

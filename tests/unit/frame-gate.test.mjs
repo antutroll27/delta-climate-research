@@ -33,6 +33,16 @@ test('reset permits an immediate frame after resuming', () => {
   assert.equal(gate.shouldRender(105), true);
 });
 
+test('changes cadence live when a quality tier is downgraded', () => {
+  const gate = createFrameGate(60);
+
+  assert.equal(gate.shouldRender(0), true);
+  gate.setTargetFps(30);
+  assert.equal(gate.shouldRender(8), true);
+  assert.equal(gate.shouldRender(20), false);
+  assert.equal(gate.shouldRender(41), true);
+});
+
 test('recovers from a long suspension without emitting a burst', () => {
   const gate = createFrameGate(60);
 

@@ -16,6 +16,11 @@
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { createFrameGate } from '../utils/frame-gate';
+import {
+  beginRenderQualityMonitoring,
+  getRenderQuality,
+  subscribeRenderQuality,
+} from '../utils/render-quality';
 import { motionOK } from '../utils/motion';
 
 gsap.registerPlugin(ScrollTrigger);
@@ -120,6 +125,7 @@ async function boot(section: HTMLElement, canvas: HTMLCanvasElement, my: number)
   if (my !== gen) return; // destroyed while chunks were loading
 
   const isMobile = window.matchMedia('(max-width: 760px)').matches;
+  let quality = getRenderQuality();
 
   // ── renderer ──
   let renderer: import('three').WebGLRenderer;
@@ -133,7 +139,7 @@ async function boot(section: HTMLElement, canvas: HTMLCanvasElement, my: number)
   } catch {
     return; // no WebGL — static fallback stays
   }
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, quality.maxDevicePixelRatio));
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 0.78;
 
@@ -166,8 +172,8 @@ async function boot(section: HTMLElement, canvas: HTMLCanvasElement, my: number)
   });
 
   const water = new Water(waterGeo, {
-    textureWidth: isMobile ? 256 : 512,
-    textureHeight: isMobile ? 256 : 512,
+    textureWidth: isMobile ? Math.min(256, quality.waterReflectionSize) : quality.waterReflectionSize,
+    textureHeight: isMobile ? Math.min(256, quality.waterReflectionSize) : quality.waterReflectionSize,
     waterNormals,
     sunDirection: new THREE.Vector3(0.25, 0.4, -0.7).normalize(),
     sunColor: 0x7fb6bd,   // cool moon glints
@@ -423,7 +429,14 @@ async function boot(section: HTMLElement, canvas: HTMLCanvasElement, my: number)
   // returning from the callback would still wake it at the display refresh rate.
   let visible = false;
   let running = false;
-  const frameGate = createFrameGate(60);
+  let stopQualityMonitoring: (() => void) | undefined;
+  const frameGate = createFrameGate(quality.targetFps);
+  const unsubscribeRenderQuality = subscribeRenderQuality((nextQuality) => {
+    quality = nextQuality;
+    frameGate.setTargetFps(nextQuality.targetFps);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, nextQuality.maxDevicePixelRatio));
+    resize();
+  });
 
 
   /* ── the render loop ── */
@@ -501,11 +514,14 @@ async function boot(section: HTMLElement, canvas: HTMLCanvasElement, my: number)
     if (running) return;
     running = true;
     frameGate.reset();
+    stopQualityMonitoring = beginRenderQualityMonitoring();
     renderer.setAnimationLoop(renderFrame);
   };
   const stopLoop = () => {
     if (!running) return;
     running = false;
+    stopQualityMonitoring?.();
+    stopQualityMonitoring = undefined;
     renderer.setAnimationLoop(null);
   };
 
@@ -529,6 +545,7 @@ async function boot(section: HTMLElement, canvas: HTMLCanvasElement, my: number)
     io.disconnect();
     st.kill();
     stopLoop();
+    unsubscribeRenderQuality();
     timer.dispose();
     disposables.forEach((d) => d.dispose());
     renderer.dispose();

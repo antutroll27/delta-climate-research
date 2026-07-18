@@ -3,6 +3,15 @@ export interface FrameGate {
   shouldRender(timestampMs: number): boolean;
   /** Make the next timestamp render immediately. */
   reset(): void;
+  /** Change cadence without recreating the render surface. */
+  setTargetFps(targetFps: number): void;
+}
+
+function intervalFor(targetFps: number): number {
+  if (!Number.isFinite(targetFps) || targetFps <= 0) {
+    throw new RangeError('targetFps must be a positive finite number');
+  }
+  return 1000 / targetFps;
 }
 
 /**
@@ -13,11 +22,7 @@ export interface FrameGate {
  * and 144 Hz panels while still recovering cleanly after a suspended tab.
  */
 export function createFrameGate(targetFps = 60): FrameGate {
-  if (!Number.isFinite(targetFps) || targetFps <= 0) {
-    throw new RangeError('targetFps must be a positive finite number');
-  }
-
-  const intervalMs = 1000 / targetFps;
+  let intervalMs = intervalFor(targetFps);
   const toleranceMs = 0.5;
   let nextFrameAt: number | undefined;
 
@@ -43,6 +48,11 @@ export function createFrameGate(targetFps = 60): FrameGate {
     },
 
     reset() {
+      nextFrameAt = undefined;
+    },
+
+    setTargetFps(nextTargetFps) {
+      intervalMs = intervalFor(nextTargetFps);
       nextFrameAt = undefined;
     },
   };

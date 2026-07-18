@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { createFrameGate } from '../utils/frame-gate';
+import {
+  beginRenderQualityMonitoring,
+  getRenderQuality,
+  subscribeRenderQuality,
+} from '../utils/render-quality';
 
 export interface VortexShaderProps {
   /** base teal hue in degrees */            hue?: number;
@@ -19,7 +24,7 @@ const VERT = `attribute vec2 position;void main(){gl_Position=vec4(position,0.0,
 
 const FRAG = `precision highp float;
 uniform float iTime; uniform vec2 iResolution; uniform vec2 iMouse;
-uniform float uHue,uSat,uBright,uComplexity,uSpeed,uTwist,uOffX,uZoom,uFog,uMouse;
+uniform float uHue,uSat,uBright,uComplexity,uSpeed,uTwist,uOffX,uZoom,uFog,uMouse; uniform int uIterations;
 vec3 hsv2rgb(vec3 c){vec3 rgb=clamp(abs(mod(c.x*6.0+vec3(0.0,4.0,2.0),6.0)-3.0)-1.0,0.0,1.0);return c.z*mix(vec3(1.0),rgb,c.y);}
 mat2 rotate2d(float a){return mat2(cos(a),-sin(a),sin(a),cos(a));}
 mat3 rotationMatrix(vec3 axis,float angle){axis=normalize(axis);float s=sin(angle),c=cos(angle),oc=1.0-c;
@@ -40,7 +45,7 @@ float snoise(vec2 v){const vec4 C=vec4(0.211324865405187,0.366025403784439,-0.57
   vec3 g;g.x=a0.x*x0.x+h.x*x0.y;g.yz=a0.yz*x12.xz+h.yz*x12.yw;return 130.0*dot(m,g);}
 float map(vec3 p){float t=iTime*uSpeed;float tw=uTwist*p.y;p.xz=rotate2d(tw)*p.xz;
   float disp=snoise(p.xy*3.0+t)*0.1*uComplexity;return length(p.xz)-0.5+disp;}
-float rayMarch(vec3 ro,vec3 rd){float d=0.0;for(int i=0;i<64;i++){vec3 p=ro+rd*d;float ds=map(p);d+=ds;if(d>50.0||abs(ds)<0.001)break;}return d;}
+float rayMarch(vec3 ro,vec3 rd){float d=0.0;for(int i=0;i<64;i++){if(i>=uIterations)break;vec3 p=ro+rd*d;float ds=map(p);d+=ds;if(d>50.0||abs(ds)<0.001)break;}return d;}
 vec3 getNormal(vec3 p){vec2 e=vec2(0.001,0.0);return normalize(vec3(map(p+e.xyy)-map(p-e.xyy),map(p+e.yxy)-map(p-e.yxy),map(p+e.yyx)-map(p-e.yyx)));}
 void main(){
   vec2 uv=(gl_FragCoord.xy-0.5*iResolution.xy)/iResolution.y;
@@ -65,7 +70,7 @@ void main(){
   gl_FragColor=vec4(col,a);
 }`;
 
-const UNIFORM_NAMES = ['iTime','iResolution','iMouse','uHue','uSat','uBright','uComplexity','uSpeed','uTwist','uOffX','uZoom','uFog','uMouse'] as const;
+const UNIFORM_NAMES = ['iTime','iResolution','iMouse','uHue','uSat','uBright','uComplexity','uSpeed','uTwist','uOffX','uZoom','uFog','uMouse','uIterations'] as const;
 
 export default function VortexShader({
   hue = 186, sat = 0.45, bright = 0.95, complexity = 1.0, speed = 0.35,
@@ -133,13 +138,14 @@ export default function VortexShader({
     const U: Record<string, WebGLUniformLocation | null> = {};
     for (const n of UNIFORM_NAMES) U[n] = gl.getUniformLocation(prog, n);
 
-    const DPR = Math.min(1.5, window.devicePixelRatio || 1);
+    let quality = getRenderQuality();
     const mousePos = { x: 0.5, y: 0.5 };
 
     const resize = () => {
       const w = canvas.clientWidth, h = canvas.clientHeight;
-      canvas.width = Math.max(1, Math.floor(w * DPR * renderScale));
-      canvas.height = Math.max(1, Math.floor(h * DPR * renderScale));
+      const dpr = Math.min(quality.maxDevicePixelRatio, window.devicePixelRatio || 1);
+      canvas.width = Math.max(1, Math.floor(w * dpr * renderScale));
+      canvas.height = Math.max(1, Math.floor(h * dpr * renderScale));
       gl.viewport(0, 0, canvas.width, canvas.height);
       gl.uniform2f(U.iResolution, canvas.width, canvas.height);
     };
@@ -156,7 +162,13 @@ export default function VortexShader({
     let raf = 0;
     let running = false;
     let visible = false; // single source of truth for on-screen state (set by the IO)
-    const frameGate = createFrameGate(60);
+    let stopQualityMonitoring: (() => void) | undefined;
+    const frameGate = createFrameGate(quality.targetFps);
+    const unsubscribeRenderQuality = subscribeRenderQuality((nextQuality) => {
+      quality = nextQuality;
+      frameGate.setTargetFps(nextQuality.targetFps);
+      resize();
+    });
 
     const draw = () => {
       const p = propsRef.current;
@@ -167,6 +179,7 @@ export default function VortexShader({
       gl.uniform1f(U.uComplexity, p.complexity); gl.uniform1f(U.uSpeed, reduce ? 0 : p.speed);
       gl.uniform1f(U.uTwist, p.twist); gl.uniform1f(U.uOffX, p.offsetX); gl.uniform1f(U.uZoom, p.zoom);
       gl.uniform1f(U.uFog, p.fog); gl.uniform1f(U.uMouse, p.mouse);
+      gl.uniform1i(U.uIterations, quality.vortexIterations);
       gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
       gl.drawArrays(gl.TRIANGLES, 0, 6);
     };
@@ -179,12 +192,15 @@ export default function VortexShader({
       if (running || reduce) return;
       running = true;
       frameGate.reset();
+      stopQualityMonitoring = beginRenderQualityMonitoring();
       window.addEventListener('mousemove', onMouse);
       raf = requestAnimationFrame(loop);
     };
     const stopLoop = () => {
       running = false;
       window.removeEventListener('mousemove', onMouse);
+      stopQualityMonitoring?.();
+      stopQualityMonitoring = undefined;
       if (raf) cancelAnimationFrame(raf);
       raf = 0;
     };
@@ -212,6 +228,7 @@ export default function VortexShader({
 
     return () => {
       stopLoop(); // also removes the mousemove listener
+      unsubscribeRenderQuality();
       io.disconnect();
       window.removeEventListener('resize', resize);
       document.removeEventListener('visibilitychange', onVis);
