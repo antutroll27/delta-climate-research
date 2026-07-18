@@ -15,6 +15,7 @@
 
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
+import { createFrameGate } from '../utils/frame-gate';
 import { motionOK } from '../utils/motion';
 
 gsap.registerPlugin(ScrollTrigger);
@@ -24,21 +25,19 @@ let cleanup: (() => void) | undefined;
 let disarm: (() => void) | undefined;
 
 
-// Cheap sync entry: the heavy boot (three + Water + textures, ~1MB) is
-// deferred past the critical path — it fires on the user's first scroll
-// intent, or once the main thread goes idle, whichever comes first. (The
-// section sits directly under the 100dvh hero, so an IntersectionObserver
-// would fire at load and defer nothing.)
+// Cheap sync entry: the heavy boot (three + Water + textures, ~1MB) starts
+// shortly before the About section approaches the viewport. The hero's long
+// scroll track means first-scroll/idle triggers would fetch this scene far too
+// early, while the static composition remains available during the wait.
 export function initAboutField() {
   const section = document.getElementById('about');
   const canvas = section?.querySelector<HTMLCanvasElement>('[data-field]');
   if (!section || !canvas || !motionOK()) return;
 
   const my = ++gen;
-  let idleId: number | undefined;
-  let fallbackId: number | undefined;
+  let observer: IntersectionObserver | undefined;
 
-  // the deferred trigger — runs boot() once, whichever signal lands first
+  // The deferred trigger runs boot() once when the preload margin is reached.
   const fire = () => {
     cancelTrigger();
     if (disarm === cancelTrigger) disarm = undefined;
@@ -48,21 +47,16 @@ export function initAboutField() {
 
   // tears the trigger down again (used by fire() and by destroyAboutField)
   const cancelTrigger = () => {
-    window.removeEventListener('scroll', fire);
-    window.removeEventListener('pointerdown', fire);
-    if (idleId !== undefined && 'cancelIdleCallback' in window) window.cancelIdleCallback(idleId);
-    if (fallbackId !== undefined) window.clearTimeout(fallbackId);
+    observer?.disconnect();
+    observer = undefined;
   };
   disarm = cancelTrigger;
 
-  window.addEventListener('scroll', fire, { once: true, passive: true });
-  window.addEventListener('pointerdown', fire, { once: true, passive: true });
-
-  if (typeof window.requestIdleCallback === 'function') {
-    idleId = window.requestIdleCallback(fire, { timeout: 3500 });
-  } else {
-    fallbackId = window.setTimeout(fire, 1500); // Safari < 17 fallback
-  }
+  observer = new IntersectionObserver(
+    (entries) => { if (entries.some((entry) => entry.isIntersecting)) fire(); },
+    { rootMargin: '100% 0px' }
+  );
+  observer.observe(section);
 }
 
 
@@ -130,7 +124,12 @@ async function boot(section: HTMLElement, canvas: HTMLCanvasElement, my: number)
   // ── renderer ──
   let renderer: import('three').WebGLRenderer;
   try {
-    renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+    renderer = new THREE.WebGLRenderer({
+      canvas,
+      antialias: true,
+      alpha: true,
+      powerPreference: 'high-performance',
+    });
   } catch {
     return; // no WebGL — static fallback stays
   }
@@ -420,17 +419,18 @@ async function boot(section: HTMLElement, canvas: HTMLCanvasElement, my: number)
     },
   });
 
-  // only run the render loop while the section is on screen
+  // Only attach Three's animation loop while the section is on screen. Merely
+  // returning from the callback would still wake it at the display refresh rate.
   let visible = false;
-  const io = new IntersectionObserver(([en]) => (visible = en.isIntersecting));
-  io.observe(section);
+  let running = false;
+  const frameGate = createFrameGate(60);
 
 
   /* ── the render loop ── */
   const timer = new THREE.Timer();
   timer.connect(document);
-  renderer.setAnimationLoop(() => {
-    if (!visible) return;
+  const renderFrame = (timestamp: number) => {
+    if (!frameGate.shouldRender(timestamp)) return;
 
     timer.update();
     const elapsed = timer.getElapsed();
@@ -495,7 +495,30 @@ async function boot(section: HTMLElement, canvas: HTMLCanvasElement, my: number)
     camera.lookAt(0, 0, 0);
 
     renderer.render(scene, camera);
+  };
+
+  const startLoop = () => {
+    if (running) return;
+    running = true;
+    frameGate.reset();
+    renderer.setAnimationLoop(renderFrame);
+  };
+  const stopLoop = () => {
+    if (!running) return;
+    running = false;
+    renderer.setAnimationLoop(null);
+  };
+
+  const syncLoop = () => {
+    if (visible && document.visibilityState !== 'hidden') startLoop();
+    else stopLoop();
+  };
+  const io = new IntersectionObserver(([entry]) => {
+    visible = entry.isIntersecting;
+    syncLoop();
   });
+  io.observe(section);
+  document.addEventListener('visibilitychange', syncLoop, { signal });
 
   // WebGL is live — hide the static fallbacks
   section.classList.add('field-on');
@@ -505,7 +528,7 @@ async function boot(section: HTMLElement, canvas: HTMLCanvasElement, my: number)
     ac.abort();
     io.disconnect();
     st.kill();
-    renderer.setAnimationLoop(null);
+    stopLoop();
     timer.dispose();
     disposables.forEach((d) => d.dispose());
     renderer.dispose();

@@ -202,6 +202,9 @@
 <!-- gate + scroll-lock (references <html>, so kept global) -->
 <style is:global>
   html[data-loader="show"] .site-loader { display: flex; }
+  /* Keep the loader mounted for its short fade after removing the root gate.
+     Removing the gate at exit start releases the page's scroll lock at once. */
+  .site-loader.is-exiting { display: flex; pointer-events: none; }
   html[data-loader="show"],
   html[data-loader="show"] body { overflow: hidden; }
 </style>
@@ -210,6 +213,13 @@
   // ── only run when the pre-paint gate decided to show the loader ──
   const root = document.documentElement;
   const el = document.getElementById('site-loader');
+  const loaderWindow = window as Window & { __deltaLoaderFailsafe?: number };
+
+  function clearPrepaintFailsafe() {
+    if (loaderWindow.__deltaLoaderFailsafe === undefined) return;
+    clearTimeout(loaderWindow.__deltaLoaderFailsafe);
+    delete loaderWindow.__deltaLoaderFailsafe;
+  }
 
   function finishSession() {
     try { sessionStorage.setItem('delta:loaded', '1'); } catch (e) {}
@@ -218,8 +228,16 @@
   if (el && root.getAttribute('data-loader') === 'show') {
     // Mark the session immediately so a refresh / error never re-traps the user.
     finishSession();
-    runLoader(el);
+    try {
+      runLoader(el);
+    } catch {
+      // A synchronous setup failure must not leave the pre-paint gate behind.
+      clearPrepaintFailsafe();
+      root.removeAttribute('data-loader');
+      el.remove();
+    }
   } else if (el) {
+    clearPrepaintFailsafe();
     el.remove();
   }
 
@@ -238,9 +256,12 @@
     const rows = Array.from(loader.querySelectorAll<HTMLElement>('[data-rows] .sl-row'));
 
     // timing
-    const LOAD_MS = 2400;
-    const OUTRO_HOLD = 850;
-    const FAILSAFE_MS = 9000;
+    // A brief, deterministic instrument boot. Diagnostics are synchronous, so
+    // the counter is never used to simulate a long-running network operation.
+    // Normal visible time is ~920ms including the exit transition.
+    const LOAD_MS = 560;
+    const OUTRO_HOLD = 100;
+    const FAILSAFE_MS = 1200;
 
     // Local-only diagnostics preserve the instrument boot without transmitting
     // the visitor's IP-derived location or coordinates to third parties.
@@ -269,12 +290,13 @@
 
     let raf = 0;
     let done = false;
-    const DRAW_MS = 650;
+    const DRAW_MS = 360;
     const start = performance.now();
     let tickN = 0;
 
-    // hard failsafe — never trap the user
-    const failsafe = setTimeout(() => exit(), FAILSAFE_MS);
+    // Hard failsafe: at 1.2s remove the gate immediately rather than starting
+    // another transition, so a runtime error can never trap the user.
+    const failsafe = setTimeout(forceCleanup, FAILSAFE_MS);
 
     function frame(now: number) {
       const elapsed = now - start;
@@ -320,9 +342,18 @@
       (status.firstChild as Text).textContent = 'Systems online';
       loader.setAttribute('aria-busy', 'false');
       if (announcement) announcement.textContent = 'Delta Climate Research is ready.';
-      sweep.style.transition = 'opacity 0.5s ease';
+      sweep.style.transition = 'opacity 0.16s ease';
       sweep.style.opacity = '0';
       setTimeout(exit, OUTRO_HOLD);
+    }
+
+    function forceCleanup() {
+      if (done) return;
+      done = true;
+      cancelAnimationFrame(raf);
+      clearPrepaintFailsafe();
+      root.removeAttribute('data-loader');
+      loader.remove();
     }
 
     function exit() {
@@ -330,12 +361,19 @@
       done = true;
       cancelAnimationFrame(raf);
       clearTimeout(failsafe);
-      loader.style.transition = 'opacity 0.85s cubic-bezier(0.6,0,0.2,1), transform 0.95s cubic-bezier(0.6,0,0.2,1)';
+      clearPrepaintFailsafe();
+      loader.classList.add('is-exiting');
+      root.removeAttribute('data-loader');
+      loader.style.transition = 'opacity 0.26s cubic-bezier(0.6,0,0.2,1), transform 0.3s cubic-bezier(0.6,0,0.2,1)';
       loader.style.opacity = '0';
       loader.style.transform = 'translateY(-2.5%)';
-      const cleanup = () => { root.removeAttribute('data-loader'); loader.remove(); };
-      loader.addEventListener('transitionend', cleanup, { once: true });
-      setTimeout(cleanup, 1200); // fallback if transitionend doesn't fire
+      const cleanup = () => loader.remove();
+      loader.addEventListener('transitionend', (event) => {
+        // Child transitions bubble through the loader. Wait for the loader's
+        // own opacity fade so the short outro is not cut off early.
+        if (event.target === loader && event.propertyName === 'opacity') cleanup();
+      });
+      setTimeout(cleanup, 400); // fallback if transitionend doesn't fire
     }
   }
 </script>

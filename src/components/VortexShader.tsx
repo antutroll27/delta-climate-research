@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createFrameGate } from '../utils/frame-gate';
 
 export interface VortexShaderProps {
   /** base teal hue in degrees */            hue?: number;
@@ -80,7 +81,12 @@ export default function VortexShader({
     if (!canvas) return;
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-    const gl = canvas.getContext('webgl', { antialias: true, alpha: true, premultipliedAlpha: false });
+    const gl = canvas.getContext('webgl', {
+      antialias: false,
+      alpha: true,
+      premultipliedAlpha: false,
+      powerPreference: 'high-performance',
+    });
     if (!gl) return; // CSS fallback gradient shows
 
     const compile = (src: string, type: number): WebGLShader | null => {
@@ -150,6 +156,7 @@ export default function VortexShader({
     let raf = 0;
     let running = false;
     let visible = false; // single source of truth for on-screen state (set by the IO)
+    const frameGate = createFrameGate(60);
 
     const draw = () => {
       const p = propsRef.current;
@@ -163,11 +170,15 @@ export default function VortexShader({
       gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
       gl.drawArrays(gl.TRIANGLES, 0, 6);
     };
-    const loop = () => { draw(); raf = requestAnimationFrame(loop); };
+    const loop = (timestamp: number) => {
+      if (frameGate.shouldRender(timestamp)) draw();
+      raf = requestAnimationFrame(loop);
+    };
     // mousemove is only attached while the loop runs, so off-screen instances cost nothing
     const startLoop = () => {
       if (running || reduce) return;
       running = true;
+      frameGate.reset();
       window.addEventListener('mousemove', onMouse);
       raf = requestAnimationFrame(loop);
     };

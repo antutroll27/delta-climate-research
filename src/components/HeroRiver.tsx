@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { createRiverScene, type RiverScene } from '../scripts/river-scene';
+import { createFrameGate } from '../utils/frame-gate';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -52,8 +53,11 @@ export default function HeroRiver() {
     });
 
     let visible = false;
+    const frameGate = createFrameGate(60);
     // render-gate: only render while on-screen and the tab is visible.
-    const onTick = () => { if (visible && document.visibilityState !== 'hidden') scene.tick(); };
+    const onTick = (time: number) => {
+      if (visible && document.visibilityState !== 'hidden' && frameGate.shouldRender(time * 1000)) scene.tick();
+    };
 
     if (reduce) {
       scene.onReady(() => scene.tick()); // one static frame, no ticker
@@ -62,7 +66,11 @@ export default function HeroRiver() {
     }
 
     const io = new IntersectionObserver(
-      (entries) => { visible = entries.some(e => e.isIntersecting); },
+      (entries) => {
+        const nextVisible = entries.some(e => e.isIntersecting);
+        if (nextVisible && !visible) frameGate.reset();
+        visible = nextVisible;
+      },
       { rootMargin: '200px' }
     );
     io.observe(canvas);

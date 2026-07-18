@@ -184,7 +184,18 @@ const jsonLd = {
           !sessionStorage.getItem('delta:loaded') &&
           window.matchMedia('(prefers-reduced-motion: no-preference)').matches
         ) {
+          // Commit the once-per-session decision before deferred modules run.
+          // If any later setup fails, a refresh cannot trap the visitor again.
+          sessionStorage.setItem('delta:loaded', '1');
           document.documentElement.setAttribute('data-loader', 'show');
+          // Start the safety clock in the head, not in the deferred loader
+          // module. This bounds the scroll lock even when module evaluation is
+          // delayed by a cold browser or a busy main thread.
+          window.__deltaLoaderFailsafe = window.setTimeout(function () {
+            document.documentElement.removeAttribute('data-loader');
+            var loader = document.getElementById('site-loader');
+            if (loader) loader.remove();
+          }, 1200);
         }
       } catch (e) {}
     </script>
