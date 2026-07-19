@@ -2,8 +2,9 @@
 // "Night tide" coming-soon page body (Research side). Ties the empty research
 // pages to the About night ocean: drifting wave lines, a twinkling star field,
 // the ghost numeral bobbing like a berg, and a tide gauge tracking the draft
-// revision. Star positions are generated at build time — the page ships as
-// static HTML with pure-CSS animation; everything stills under reduced motion.
+// revision. Star positions are generated deterministically at build time — the
+// page ships as static HTML with pure-CSS animation; everything stills under
+// reduced motion.
 // Title goes in the default slot so pages can mark up <em> accents.
 interface StatusRow {
   k: string;
@@ -35,11 +36,23 @@ const {
   notifySubject,
 } = Astro.props;
 
+let starSeed = `${ghost}:${kicker}`.split('').reduce(
+  (seed, character) => Math.imul(seed ^ character.charCodeAt(0), 16777619) >>> 0,
+  2166136261,
+);
+const starRandom = () => {
+  starSeed = (starSeed + 0x6d2b79f5) >>> 0;
+  let value = starSeed;
+  value = Math.imul(value ^ (value >>> 15), value | 1);
+  value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+  return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+};
+
 const stars = Array.from({ length: 70 }, () => ({
-  x: +(Math.random() * 100).toFixed(2),
-  y: +(Math.random() * 55).toFixed(2),
-  d: +(Math.random() * 4).toFixed(2),
-  o: +(0.2 + Math.random() * 0.5).toFixed(2),
+  x: +(starRandom() * 100).toFixed(2),
+  y: +(starRandom() * 55).toFixed(2),
+  d: +(starRandom() * 4).toFixed(2),
+  o: +(0.2 + starRandom() * 0.5).toFixed(2),
 }));
 ---
 

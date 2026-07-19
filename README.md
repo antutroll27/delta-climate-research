@@ -21,7 +21,11 @@ The development server is available at `http://localhost:4321` by default.
 | `npm run dev` | Start Astro in development mode |
 | `npm run check` | Run Astro and TypeScript diagnostics |
 | `npm run build` | Create the production build in `dist/` |
-| `npm run verify` | Run diagnostics, then create a production build |
+| `npm run test:unit` | Run dependency-free scheduling tests |
+| `npm run report:build` | Measure the built asset and JavaScript graph |
+| `npm run check:publication` | Validate indexing, canonicals, placeholders, and sitemap membership |
+| `npm run verify` | Run diagnostics, unit tests, build, and both build contracts |
+| `npm run test:e2e` | Build, preview, and run accessibility and normal-motion browser tests |
 | `npm run preview` | Serve the production build locally |
 
 ## Project structure
@@ -40,9 +44,12 @@ The development server is available at `http://localhost:4321` by default.
 
 Projects and papers remain honest coming-soon pages until their catalogue entry has real route content and its `published` flag is set to `true` in `src/data/projects.ts` or `src/data/papers.ts`. The same flags control route indexing and sitemap inclusion.
 
+`npm run verify` writes machine-readable diagnostic reports to `.astro/reports/`. The build report separates startup JavaScript from lazy-reachable modules, inline executable scripts, and public helpers. The publication contract derives its expected routes from the project and paper manifests, then fails if build output disagrees with their publication flags. Reports are ignored by Git and never copied into `dist/`.
+
 ## Runtime and accessibility contracts
 
 - Essential content and actions must remain available without WebGL or animation.
 - Reduced-motion and lower-powered devices receive static or lighter-weight equivalents.
 - The production hero uses `public/models/river-1k.glb`. Larger river models remain available as source inputs and are excluded from the Vercel build upload.
 - Run `npm run verify` before deploying.
+- Run `npm run test:e2e` after installing Playwright's Chromium browser when changing navigation, accessibility, loader, or WebGL lifecycle behavior.

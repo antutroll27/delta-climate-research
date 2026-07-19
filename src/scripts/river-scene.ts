@@ -15,6 +15,7 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import { getRenderQuality, subscribeRenderQuality, type RenderTier } from '../utils/render-quality';
 
 export interface RiverScene {
   /** render one frame (advances time + camera). No-op until the GLB is ready. */
@@ -35,10 +36,6 @@ export interface RiverScene {
 
 interface Opts { reduce?: boolean }
 
-interface NavigatorWithDeviceMemory extends Navigator {
-  readonly deviceMemory?: number;
-}
-
 interface SplashUniforms extends Record<string, { value: unknown }> {
   uProgress: { value: number };
   uTime: { value: number };
@@ -47,16 +44,6 @@ interface SplashUniforms extends Record<string, { value: unknown }> {
 
 const MODELS = '/models/';
 const TEX = '/textures/';
-
-function pickInitialTier(): number {
-  const coarse = matchMedia('(pointer:coarse)').matches;
-  const mem = (navigator as NavigatorWithDeviceMemory).deviceMemory ?? 8;
-  const cores = navigator.hardwareConcurrency ?? 8;
-  let t = 0;
-  if (coarse) t = 1;
-  if (mem <= 2 || cores <= 4) t = 2;
-  return t;
-}
 
 const TIERS = [
   // The Draco 1k recut keeps precise 12-bit octahedral normals at 1.9MB. The
@@ -67,9 +54,14 @@ const TIERS = [
   { q: '1k', flow: 'river-flow-sm.png', dpr: 1.0, bloom: false },
 ];
 
+// The scene's historic ordering is full → balanced → low, while the shared
+// profile uses low → balanced → full. Keeping this conversion local avoids
+// leaking a renderer-specific convention into every other surface.
+const riverTier = (tier: RenderTier) => 2 - tier;
+
 export function createRiverScene(canvas: HTMLCanvasElement, opts: Opts = {}): RiverScene {
   const reduce = !!opts.reduce;
-  let TIER = pickInitialTier();
+  let TIER = riverTier(getRenderQuality().tier);
 
   const sizeW = () => canvas.clientWidth || window.innerWidth;
   const sizeH = () => canvas.clientHeight || window.innerHeight;
@@ -351,6 +343,9 @@ export function createRiverScene(canvas: HTMLCanvasElement, opts: Opts = {}): Ri
     splashPass.enabled = t < 2;            // skip the extra fullscreen pass on the minimal tier
     UTIER.value = t;
   }
+  const unsubscribeRenderQuality = subscribeRenderQuality((profile) => {
+    applyTier(riverTier(profile.tier));
+  });
 
   // load scan
   let river: THREE.Object3D | null = null;
@@ -580,8 +575,6 @@ export function createRiverScene(canvas: HTMLCanvasElement, opts: Opts = {}): Ri
   };
   window.addEventListener('pointermove', onPointer, { passive: true });
 
-  // FPS-adaptive downgrade
-  let fpsWarm = 0, fpsAcc = 0, fpsN = 0;
   let scrollP = 0; // 0..1 — wired by the scroll step; static frame at 0
 
   function tick() {
@@ -603,10 +596,6 @@ export function createRiverScene(canvas: HTMLCanvasElement, opts: Opts = {}): Ri
     splashUniforms.uProgress.value = scrollP;
     splashUniforms.uTime.value = UTIME.value;
     comp.render();
-    if (!reduce && TIER < 2) {
-      if (fpsWarm < 30) fpsWarm++;
-      else { fpsAcc += dt > 0 ? 1 / dt : 60; fpsN++; if (fpsN >= 60) { if (fpsAcc / fpsN < 45) applyTier(TIER + 1); fpsAcc = 0; fpsN = 0; } }
-    }
   }
 
   function resize() {
@@ -618,6 +607,7 @@ export function createRiverScene(canvas: HTMLCanvasElement, opts: Opts = {}): Ri
 
   function dispose() {
     disposed = true;
+    unsubscribeRenderQuality();
     readyCbs.length = 0;
     window.removeEventListener('pointermove', onPointer);
     timer.dispose();

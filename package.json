@@ -8,8 +8,12 @@
     "build": "astro build && node scripts/prune-dist-assets.mjs",
     "preview": "astro preview",
     "check": "astro check",
-    "verify": "astro check && npm run build",
-    "test:e2e": "playwright test"
+    "test:unit": "node --experimental-strip-types --test tests/unit/*.test.mjs",
+    "report:build": "node scripts/report-build.mjs",
+    "check:publication": "node scripts/check-publication-contract.mjs",
+    "verify": "npm run check && npm run test:unit && npm run build && npm run report:build && npm run check:publication",
+    "test:e2e": "npm run build && npm run test:e2e:built",
+    "test:e2e:built": "playwright test"
   },
   "engines": {
     "node": ">=22.12.0",
