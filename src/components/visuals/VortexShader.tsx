@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { createFrameGate } from '../utils/frame-gate';
+import { createFrameGate } from '../../utils/frame-gate';
 import {
   beginRenderQualityMonitoring,
   getRenderQuality,
   subscribeRenderQuality,
-} from '../utils/render-quality';
+} from '../../utils/render-quality';
 
 export interface VortexShaderProps {
   /** base teal hue in degrees */            hue?: number;

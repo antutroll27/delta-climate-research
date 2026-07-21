@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { Warp, type PaperShaderElement } from '@paper-design/shaders-react';
-import { createFrameGate } from '../utils/frame-gate';
+import { createFrameGate } from '../../utils/frame-gate';
 import {
   beginRenderQualityMonitoring,
   getRenderQuality,
   subscribeRenderQuality,
   type RenderQualityProfile,
-} from '../utils/render-quality';
+} from '../../utils/render-quality';
 
 const WARP_SPEED = 0.6;
 const WARP_PIXEL_RATIO_CAP = 1.25;

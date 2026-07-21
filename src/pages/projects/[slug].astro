@@ -3,9 +3,9 @@
 // src/data/projects.ts plus real content here), this renders the
 // drafting-table coming-soon sheet with the project's own survey readout.
 import Base from '../../layouts/Base.astro';
-import Nav from '../../components/Nav.astro';
-import Footer from '../../components/Footer.astro';
-import SoonDraft from '../../components/SoonDraft.astro';
+import Nav from '../../components/layout/Nav.astro';
+import Footer from '../../components/layout/Footer.astro';
+import SoonDraft from '../../components/states/SoonDraft.astro';
 import { projects } from '../../data/projects';
 
 export function getStaticPaths() {

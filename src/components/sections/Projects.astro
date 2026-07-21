@@ -6,7 +6,7 @@
 // segmented rail tracks progress. Choreography in section-effects.ts.
 // Degrades to a flowing list + static preview (no-JS / reduced-motion / mobile).
 // Catalogue lives in src/data/projects.ts (shared with /projects pages).
-import { projects as catalogue, projectHref } from '../data/projects';
+import { projects as catalogue, projectHref } from '../../data/projects';
 
 const projects = catalogue.map((p) => ({ ...p, href: projectHref(p) }));
 ---

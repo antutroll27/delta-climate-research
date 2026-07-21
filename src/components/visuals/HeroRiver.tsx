@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
-import { createRiverScene, type RiverScene } from '../scripts/river-scene';
-import { createFrameGate } from '../utils/frame-gate';
+import { createRiverScene, type RiverScene } from '../../scripts/river-scene';
+import { createFrameGate } from '../../utils/frame-gate';
 import {
   beginRenderQualityMonitoring,
   getRenderQuality,
   subscribeRenderQuality,
-} from '../utils/render-quality';
+} from '../../utils/render-quality';
 
 gsap.registerPlugin(ScrollTrigger);
 

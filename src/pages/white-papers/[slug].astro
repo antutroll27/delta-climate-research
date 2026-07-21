@@ -3,9 +3,9 @@
 // plus real content here), this renders the night-tide "in preparation" page:
 // drifting waves, star field, bobbing ghost numeral, and the status readout.
 import Base from '../../layouts/Base.astro';
-import Nav from '../../components/Nav.astro';
-import Footer from '../../components/Footer.astro';
-import SoonTide from '../../components/SoonTide.astro';
+import Nav from '../../components/layout/Nav.astro';
+import Footer from '../../components/layout/Footer.astro';
+import SoonTide from '../../components/states/SoonTide.astro';
 import { papers } from '../../data/papers';
 
 export function getStaticPaths() {
