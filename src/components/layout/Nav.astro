@@ -1,9 +1,33 @@
 ---
-const links = [
+// Simple links shown before the dropdown menus.
+const leadLinks = [
   { label: 'About', href: '/#about' },
   { label: 'Ongoing Projects', href: '/#projects' },
-  { label: 'White Papers', href: '/#papers' },
-  { label: 'Climate Highlights', href: '/climate-highlights' },
+];
+
+// Hover/focus mega-menus. Each item carries a short 3-5 word summary (sans-serif)
+// under its mono title. `menuFlow` orders lead links, menus, then tail links so
+// the desktop bar and mobile overlay stay in sync from one source.
+const menus = [
+  {
+    label: 'Insights',
+    items: [
+      { label: 'White Papers', href: '/white-papers', summary: 'Peer-grade climate research' },
+      { label: 'Blog', href: '/blog', summary: 'Musings, stories & ideas' },
+      { label: 'Climate Highlights', href: '/climate-highlights', summary: 'Curated climate signals' },
+    ],
+  },
+  {
+    label: 'Interactive Tools',
+    items: [
+      { label: 'Heat Map', href: '/heat-map', summary: 'Interactive urban-heat explorer' },
+      { label: 'CBAM Calculator', href: '/cbam-calculator', summary: 'Estimate carbon border costs' },
+    ],
+  },
+];
+
+// Simple links shown after the dropdown menus.
+const tailLinks = [
   { label: 'Our Team', href: '/team' },
 ];
 
@@ -27,9 +51,42 @@ const socials = [
     </a>
 
     <ul class="nav-links">
-      {links.map((l) => (
+      {leadLinks.map((l) => (
         <li><a href={l.href}>{l.label}</a></li>
       ))}
+
+      {menus.map((m, i) => (
+        <li class="has-menu" data-menu>
+          <button
+            type="button"
+            class="trigger"
+            aria-expanded="false"
+            aria-controls={`nav-panel-${i}`}
+          >
+            {m.label}
+            <svg viewBox="0 0 14 15" fill="none" aria-hidden="true">
+              <path stroke="currentColor" stroke-width="1.5" d="M3.5 5.75 7 9.25l3.5-3.5" />
+            </svg>
+          </button>
+          <div class="panel" id={`nav-panel-${i}`} aria-label={m.label}>
+            <ul>
+              {m.items.map((it) => (
+                <li>
+                  <a class="menu-item" href={it.href}>
+                    <span class="mi-title">{it.label}</span>
+                    <span class="mi-summary">{it.summary}</span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </li>
+      ))}
+
+      {tailLinks.map((l) => (
+        <li><a href={l.href}>{l.label}</a></li>
+      ))}
+
       <li>
         <a href="/#medni" class="databank">Medni (Data Library) <span aria-hidden="true">↗</span></a>
       </li>
@@ -63,7 +120,29 @@ const socials = [
 >
   <nav class="mm-nav" aria-label="Mobile">
     <ul>
-      {links.map((l) => (
+      {leadLinks.map((l) => (
+        <li><a href={l.href} data-mobile-link>{l.label}</a></li>
+      ))}
+    </ul>
+
+    {menus.map((m) => (
+      <div class="mm-section">
+        <p class="mm-label">{m.label}</p>
+        <ul>
+          {m.items.map((it) => (
+            <li>
+              <a href={it.href} data-mobile-link class="mm-sub">
+                <span class="mi-title">{it.label}</span>
+                <span class="mi-summary">{it.summary}</span>
+              </a>
+            </li>
+          ))}
+        </ul>
+      </div>
+    ))}
+
+    <ul>
+      {tailLinks.map((l) => (
         <li><a href={l.href} data-mobile-link>{l.label}</a></li>
       ))}
       <li><a href="/#medni" data-mobile-link class="databank">Medni (Data Library) <span aria-hidden="true">↗</span></a></li>
@@ -142,7 +221,7 @@ const socials = [
   .nav-links {
     display: flex;
     align-items: center;
-    gap: clamp(1.75rem, 2.6vw, 2.5rem);
+    gap: clamp(1.75rem, 3vw, 3rem);
     list-style: none;
     margin: 0;
     padding: 0;
@@ -151,18 +230,136 @@ const socials = [
     text-transform: uppercase;
     letter-spacing: 0.12em;
   }
-  .nav-links a {
+  .nav-links > li { position: relative; }
+  .nav-links a,
+  .nav-links .trigger {
     color: rgb(244 246 248 / 0.85); /* lighter off-white, not pure white */
     font-weight: 300;
     text-decoration: none;
     transition: color 0.2s ease;
   }
-  .nav-links a:hover { color: #f4f6f8; }
-  /* a touch more air before the CTA so it reads as separate from the links */
-  .nav-links li:last-child { margin-left: clamp(0.5rem, 1.5vw, 1.5rem); }
+  .nav-links a:hover,
+  .nav-links .trigger:hover,
+  .has-menu[data-open='true'] .trigger { color: #f4f6f8; }
+
+  /* dropdown trigger — a button styled to sit flush with the mono links */
+  .nav-links .trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    background: none;
+    border: 0;
+    padding: 0;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: inherit;
+    letter-spacing: inherit;
+    text-transform: inherit;
+  }
+  .trigger svg {
+    width: 11px;
+    height: 11px;
+    opacity: 0.6;
+    transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease;
+  }
+  .has-menu[data-open='true'] .trigger svg { transform: rotate(180deg); opacity: 1; }
+
+  /* invisible hover-bridge: spans the gap between trigger and panel so a
+     diagonal cursor path doesn't drop the menu (paired with a JS close delay) */
+  .has-menu::after {
+    content: '';
+    position: absolute;
+    left: -1rem;
+    right: -1rem;
+    top: 100%;
+    height: 1.75rem;
+  }
+
+  /* dropdown panel — 60fps: only opacity + transform animate, never layout */
+  .panel {
+    position: absolute;
+    top: calc(100% + 1.75rem);
+    left: 50%;
+    min-width: 420px;
+    padding: 1rem 1.25rem;
+    background: rgb(10 13 14 / 0.92);
+    backdrop-filter: blur(20px) saturate(1.2);
+    -webkit-backdrop-filter: blur(20px) saturate(1.2);
+    border: 1px solid rgb(244 246 248 / 0.08);
+    border-radius: 14px;
+    box-shadow: 0 24px 60px rgb(0 0 0 / 0.5), 0 1px 0 rgb(244 246 248 / 0.06) inset;
+    opacity: 0;
+    transform: translate(-50%, -8px) scale(0.98);
+    pointer-events: none;
+    transition: opacity 0.32s cubic-bezier(0.16, 1, 0.3, 1),
+      transform 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .has-menu[data-open='true'] .panel {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+    pointer-events: auto;
+  }
+  .panel ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  /* hard reset: no ancestor rule (e.g. a nav :last-child margin) may ever
+     nudge a panel row horizontally — items align flush, always. */
+  .panel li { margin: 0; }
+  .panel .menu-item { margin: 0; }
+
+  .menu-item {
+    display: grid;
+    gap: 0.7rem;
+    padding: 1.05rem 1.9rem;
+    border-radius: 10px;
+    text-decoration: none;
+    color: inherit;
+    transition: background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+      transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .menu-item:hover { background: rgb(111 202 214 / 0.1); transform: translateX(3px); }
+  .mi-title {
+    font-family: var(--font-mono);
+    font-size: 0.9rem;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    text-transform: none;
+    color: var(--color-paper-bright);
+    transition: color 0.2s ease;
+  }
+  .menu-item:hover .mi-title { color: var(--color-cyan); }
+  .mi-summary {
+    font-family: var(--font-sans);
+    font-size: 0.78rem;
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--color-cyan-muted);
+    opacity: 0.85;
+  }
+
+  /* per-item rise on open (compositor-only), subtle stagger */
+  .has-menu .menu-item {
+    opacity: 0;
+    transform: translateY(6px);
+    transition: opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+      transform 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+      background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .has-menu[data-open='true'] .menu-item { opacity: 1; transform: translateY(0); }
+  .has-menu[data-open='true'] li:nth-child(2) .menu-item { transition-delay: 0.05s; }
+  .has-menu[data-open='true'] li:nth-child(3) .menu-item { transition-delay: 0.09s; }
+  /* a touch more air before the CTA so it reads as separate from the links.
+     Anchored to the CTA element itself (not `:last-child`) so it can never
+     leak into a dropdown panel's own last <li>. */
 
   /* solid primary button (specific selector so color/weight beat .nav-links a) */
   .nav-links .databank {
+    margin-left: clamp(0.5rem, 1.5vw, 1.5rem);
     background-color: var(--color-cyan);
     color: var(--color-base);
     opacity: 1;
@@ -241,6 +438,30 @@ const socials = [
   .mobile-menu .databank { color: var(--color-cyan); margin-top: 0.4rem; }
   .mobile-menu .databank span { font-size: 0.62em; }
 
+  /* mobile dropdown groups — the desktop menus flatten into labelled sections */
+  .mm-section { margin-top: 1.75rem; }
+  .mm-section .mm-label { margin-bottom: 0.9rem; }
+  .mobile-menu .mm-sub {
+    display: grid;
+    gap: 0.3rem;
+    margin-bottom: 1.1rem;
+  }
+  .mm-sub .mi-title {
+    font-family: var(--font-mono);
+    font-size: 1.5rem;
+    font-weight: 500;
+    letter-spacing: 0;
+    color: var(--color-paper);
+  }
+  .mobile-menu .mm-sub:active .mi-title { color: var(--color-cyan); }
+  .mm-sub .mi-summary {
+    font-family: var(--font-sans);
+    font-size: 0.85rem;
+    font-weight: 400;
+    letter-spacing: 0;
+    color: var(--color-cyan-muted);
+  }
+
   /* bottom meta — Contact + Social, pinned to the base like the reference */
   .mm-meta { margin-top: auto; padding-top: 2.5rem; display: flex; flex-direction: column; gap: 1.5rem; }
   .mm-label {
@@ -278,6 +499,11 @@ const socials = [
   }
   @media (prefers-reduced-motion: reduce) {
     .menu-toggle span, .mobile-menu { transition: none; }
+    .panel, .menu-item, .trigger svg {
+      transition: opacity 0.15s linear !important;
+      transform: none !important;
+    }
+    .has-menu[data-open='true'] .panel { transform: translateX(-50%) !important; }
   }
 </style>
 
@@ -312,6 +538,36 @@ const socials = [
       { rootMargin: '-96px 0px 0px 0px', threshold: 0 }
     );
     io.observe(hero ?? sentinel);
+
+    // desktop hover/focus mega-menus. Open on pointer-enter or focus; close on
+    // leave after a short grace delay so a diagonal cursor path from trigger to
+    // panel doesn't snap it shut (paired with the CSS ::after hover-bridge).
+    // Only opacity/transform animate (see CSS), so it holds 60fps.
+    const CLOSE_DELAY = 140;
+    nav.querySelectorAll<HTMLElement>('[data-menu]').forEach((menu) => {
+      const trigger = menu.querySelector<HTMLButtonElement>('.trigger');
+      if (!trigger) return;
+      let closeTimer: ReturnType<typeof setTimeout> | undefined;
+      const open = () => {
+        clearTimeout(closeTimer);
+        menu.setAttribute('data-open', 'true');
+        trigger.setAttribute('aria-expanded', 'true');
+      };
+      const close = () => {
+        menu.setAttribute('data-open', 'false');
+        trigger.setAttribute('aria-expanded', 'false');
+      };
+      menu.addEventListener('mouseenter', open, { signal });
+      menu.addEventListener('mouseleave', () => { closeTimer = setTimeout(close, CLOSE_DELAY); }, { signal });
+      trigger.addEventListener('focus', open, { signal });
+      // close when focus leaves the whole menu (Tab past the last link)
+      menu.addEventListener('focusout', (e) => {
+        if (!menu.contains(e.relatedTarget as Node)) close();
+      }, { signal });
+      menu.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') { close(); trigger.focus(); }
+      }, { signal });
+    });
 
     // mobile menu
     if (toggle && menu) {
