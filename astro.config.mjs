@@ -14,6 +14,8 @@ import { projects } from './src/data/projects.ts';
 const sitemapFilter = (page) => {
   const path = new URL(page).pathname;
   if (path === '/climate-highlights/') return false;               // always coming-soon (no publish flag)
+  if (path === '/heat-map/') return false;                         // noindex until a measured LST raster is wired
+  if (path === '/HeatMapVisualizer/') return false;               // legacy stub route, removed
   if (path === '/white-papers/') return papers.some((p) => p.published);
   if (path === '/projects/') return projects.some((p) => p.published);
   const wp = path.match(/^\/white-papers\/([^/]+)\/$/);
@@ -45,7 +47,8 @@ export default defineConfig({
     // 'three' also keeps them on the SAME three instance (no duplicate-module bug).
     optimizeDeps: {
       include: [
-        'three', 'gsap', 'gsap/ScrollTrigger', 'lenis',
+        'three', 'gsap', 'gsap/ScrollTrigger', 'lenis', 'maplibre-gl',
+        'three/examples/jsm/utils/BufferGeometryUtils.js',
         'three/examples/jsm/objects/Water.js',
         'three/examples/jsm/loaders/GLTFLoader.js',
         'three/examples/jsm/loaders/DRACOLoader.js',

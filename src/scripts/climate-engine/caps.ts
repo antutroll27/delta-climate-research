@@ -1,0 +1,148 @@
+/**
+ * Heat-map runtime capability detection + tier -> workload mapping.
+ *
+ * Sibling of render-quality.ts. That module already classifies the *device* into
+ * a RenderTier (0 low · 1 balanced · 2 full) from hardware + GPU hints; this one
+ * reuses that verdict and adds only the two probes the heat sim specifically
+ * needs — WebGPU compute and WebGL2 float render targets — then maps the tier
+ * onto a concrete sim grid, backend, and default map mode.
+ *
+ * Runs on the main thread (needs `document`/`navigator`). The resolved HeatCaps
+ * is postMessage'd into the sim worker, which never re-probes.
+ */
+import type { RenderTier } from '../../utils/render-quality';
+
+/** Which HeatSim implementation the worker should instantiate. */
+export type SimBackend =
+  | 'gpu' // GPU ping-pong stencil (WebGPU or WebGL2 float RT); full tier only
+  | 'wasm' // future sim-wasm.ts behind the same ABI; never auto-selected yet
+  | 'ts' // sim-ts.ts CPU solver in the worker; the universal floor
+  | 'baked'; // no live sim: cross-fade prebaked scenario frames (runtime demotion)
+
+export type MapMode = 'relief' | 'isotherm';
+
+export interface SimCapabilities {
+  /** navigator.gpu.requestAdapter() actually returned an adapter. */
+  webgpu: boolean;
+  /** WebGL2 + EXT_color_buffer_float — render-to-float for a ping-pong stencil. */
+  floatRenderTargets: boolean;
+}
+
+export interface HeatCaps {
+  tier: RenderTier;
+  backend: SimBackend;
+  /** N for the N×N finite-difference grid. FD is O(N²): halving N is 4× cheaper. */
+  grid: number;
+  mode: MapMode;
+  /** false -> reduced-motion: render ONE static frame, never step the sim. */
+  animate: boolean;
+  webgpu: boolean;
+  floatRenderTargets: boolean;
+  /** Diagnostic only; render-quality's in-memory GPU label. Never transmitted. */
+  gpuLabel: string;
+}
+
+/** Grid + default map mode per tier. FD cost scales with grid²; keep them coupled. */
+const TIER_GRID: Record<RenderTier, number> = { 2: 256, 1: 128, 0: 64 };
+const TIER_MODE: Record<RenderTier, MapMode> = { 2: 'relief', 1: 'relief', 0: 'isotherm' };
+
+/** WebGPU counts as available only if an adapter resolves — the API can exist with none. */
+async function probeWebGpu(): Promise<boolean> {
+  if (typeof navigator === 'undefined' || !navigator.gpu) return false;
+  try {
+    return (await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' })) != null;
+  } catch {
+    return false;
+  }
+}
+
+/** Render-to-float is what a WebGL2 ping-pong stencil needs; half-float-only igpus fail here. */
+function probeFloatRenderTargets(): boolean {
+  if (typeof document === 'undefined') return false;
+  try {
+    const gl = document.createElement('canvas').getContext('webgl2');
+    if (!gl) return false;
+    const ok = gl.getExtension('EXT_color_buffer_float') != null;
+    (gl.getExtension('WEBGL_lose_context') as { loseContext?: () => void } | null)?.loseContext?.();
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Pure tier -> workload decision, split from I/O so it is trivially checkable
+ * (see assertCapsLogic). GPU compute is gated on tier 2 on purpose: render-quality
+ * already demotes software renderers and old igpus to tier 0/1, and on those a
+ * shared-memory ping-pong + readback is routinely slower than the CPU loop it
+ * would replace. So GPU is an opt-in accelerator for hardware that already earned
+ * full fidelity — never the floor.
+ */
+export function resolveHeatCaps(
+  tier: RenderTier,
+  animate: boolean,
+  caps: SimCapabilities,
+  gpuLabel: string,
+): HeatCaps {
+  const backend: SimBackend = !animate
+    ? 'ts' // one static frame — no point spinning up a GPU context
+    : tier === 2 && (caps.webgpu || caps.floatRenderTargets)
+      ? 'gpu'
+      : 'ts'; // universal CPU floor; sim-wasm.ts swaps in here later, same ABI
+  return {
+    tier,
+    backend,
+    grid: TIER_GRID[tier],
+    mode: TIER_MODE[tier],
+    animate,
+    webgpu: caps.webgpu,
+    floatRenderTargets: caps.floatRenderTargets,
+    gpuLabel,
+  };
+}
+
+/**
+ * Detect once on the main thread; hand the result to the sim worker. The two
+ * render-quality helpers are pulled in dynamically so this module has no static
+ * runtime deps — that is what lets assertCapsLogic run in isolation under Node.
+ */
+export async function detectHeatCaps(): Promise<HeatCaps> {
+  const [{ getRenderQuality }, { motionOK }] = await Promise.all([
+    import('../../utils/render-quality'),
+    import('../../utils/motion'),
+  ]);
+  const quality = getRenderQuality();
+  const animate = typeof window === 'undefined' ? true : motionOK();
+  const webgpu = await probeWebGpu();
+  const floatRenderTargets = probeFloatRenderTargets();
+  return resolveHeatCaps(quality.tier, animate, { webgpu, floatRenderTargets }, quality.gpuLabel);
+}
+
+/**
+ * Runnable check for the pure decision logic. The repo has no unit runner, so run
+ * this directly (Node 24 strips the types):
+ *   node --experimental-strip-types -e "import('./caps.ts').then(m => m.assertCapsLogic())"
+ * Unused in the browser, so it tree-shakes out of the production bundle.
+ */
+export function assertCapsLogic(): void {
+  const none: SimCapabilities = { webgpu: false, floatRenderTargets: false };
+  const gpu: SimCapabilities = { webgpu: true, floatRenderTargets: false };
+  const assert = (ok: boolean, msg: string) => {
+    if (!ok) throw new Error(`caps: ${msg}`);
+  };
+
+  // grid shrinks 4× in cost per tier drop (O(N²))
+  assert(resolveHeatCaps(2, true, none, '').grid === 256, 'tier 2 grid = 256');
+  assert(resolveHeatCaps(1, true, none, '').grid === 128, 'tier 1 grid = 128');
+  assert(resolveHeatCaps(0, true, none, '').grid === 64, 'tier 0 grid = 64');
+  // GPU only on the full tier AND only with a real GPU compute path
+  assert(resolveHeatCaps(2, true, gpu, '').backend === 'gpu', 'tier 2 + gpu path -> gpu');
+  assert(resolveHeatCaps(2, true, none, '').backend === 'ts', 'tier 2 no path -> ts');
+  assert(resolveHeatCaps(1, true, gpu, '').backend === 'ts', 'tier 1 never gpu');
+  // reduced motion never animates and never spins up the GPU
+  const rm = resolveHeatCaps(2, false, gpu, '');
+  assert(!rm.animate && rm.backend === 'ts', 'reduced-motion -> static ts');
+  // potato defaults to the cheap 2D view
+  assert(resolveHeatCaps(0, true, none, '').mode === 'isotherm', 'tier 0 -> isotherm');
+  assert(resolveHeatCaps(2, true, none, '').mode === 'relief', 'tier 2 -> relief');
+}
