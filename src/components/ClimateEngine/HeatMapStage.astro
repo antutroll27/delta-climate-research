@@ -47,6 +47,7 @@
       </div>
     </aside>
 
+    <div class="rail-r">
     <aside class="panel right">
       <div class="metric livem">
         <div class="k">Live ambient · Met Norway <span class="livedot" id="livedot"></span></div>
@@ -83,6 +84,7 @@
       <div class="ramp"></div>
       <div class="sc"><span>26</span><span>32</span><span>37</span><span>42</span><span>48+</span></div>
       <div class="attr">Basemap © OpenStreetMap · OpenFreeMap · Footprints © Microsoft (ODbL) · Heights Google Open Buildings 2.5D (CC BY 4.0) · left-drag orbit · right-drag pan · scroll zoom</div>
+    </div>
     </div>
   </div>
 
@@ -145,7 +147,11 @@
   .panel{position:absolute;background:rgb(9 20 22 /.82);border:1px solid var(--line);border-radius:14px;backdrop-filter:blur(16px);box-shadow:0 20px 60px rgb(0 0 0 /.5);z-index:4}
   .panel .h{font-family:var(--mono);font-size:.58rem;letter-spacing:.18em;color:var(--ink);padding:14px 18px 0;text-transform:uppercase}
   .left{left:26px;top:26px;bottom:26px;width:270px;padding-bottom:16px;overflow:auto}
-  .right{right:26px;top:26px;width:280px}
+  /* right rail: one bounded column (like .left) so the data card + legend can
+     never overlap — the data card scrolls internally when the viewport is short,
+     the legend stays pinned to the bottom via margin-top:auto. */
+  .rail-r{position:absolute;right:26px;top:26px;bottom:26px;width:280px;display:flex;flex-direction:column;gap:14px;overflow-y:auto;z-index:4}
+  .right{position:static;width:100%;flex:none}
 
   .ctl{padding:14px 18px;border-bottom:1px solid var(--line)}
   .ctl:last-child{border-bottom:0}
@@ -183,7 +189,7 @@
   .histo i{flex:1;background:linear-gradient(var(--cyan),var(--surface2));border-radius:1px;opacity:.8;min-height:2px;transition:height .4s}
   .cta{margin:14px 18px 18px;display:block;width:calc(100% - 36px);background:var(--bronze);color:#0d0a05;border:0;border-radius:9px;padding:.8rem;font-family:var(--mono);font-size:.62rem;letter-spacing:.14em;text-transform:uppercase;font-weight:400;cursor:pointer}
 
-  .legend{position:absolute;right:26px;bottom:26px;width:280px;background:rgb(9 20 22 /.82);border:1px solid var(--line);border-radius:12px;backdrop-filter:blur(16px);padding:13px 16px;z-index:4}
+  .legend{position:static;width:100%;flex:none;margin-top:auto;background:rgb(9 20 22 /.82);border:1px solid var(--line);border-radius:12px;backdrop-filter:blur(16px);padding:13px 16px}
   .legend .k{font-family:var(--mono);font-size:.52rem;letter-spacing:.16em;color:var(--ink);display:flex;justify-content:space-between;margin-bottom:.5rem;text-transform:uppercase}
   .ramp{height:8px;border-radius:4px;background:linear-gradient(90deg,#6fcad6,#9fb98a,#b08d57,#d46b4a,#e5484d)}
   .legend .sc{display:flex;justify-content:space-between;font-family:var(--mono);font-size:.5rem;color:var(--faint);margin-top:.35rem}
@@ -210,8 +216,7 @@
      ~540px; true phone layout (bottom sheets) is the separate P5 mobile task. ── */
   @media (max-width:1180px){
     .left{width:250px;left:18px;top:18px;bottom:18px}
-    .right{width:256px;right:18px;top:18px}
-    .legend{width:256px;right:18px;bottom:18px}
+    .rail-r{width:256px;right:18px;top:18px;bottom:18px}
     .place .n{font-size:clamp(1.7rem,3.2vw,2.7rem)}
     .synthetic{font-size:.5rem;letter-spacing:.16em}
   }
@@ -224,7 +229,7 @@
   }
   @media (max-width:820px){
     .tabs{display:none}                 /* ward switch lives in the bottom strip at this width */
-    .left,.right{width:238px}
+    .left,.rail-r{width:238px}
     .synthetic{font-size:.44rem;letter-spacing:.12em;padding:.34rem .62rem}
   }
 </style>
