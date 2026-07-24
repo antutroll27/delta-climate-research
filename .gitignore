@@ -10,6 +10,15 @@ dist/
 .env.local
 .env.*.local
 
+# Secrets — GCP/Earth Engine service-account keys must NEVER enter the repo.
+# They live at ~/.config/delta-climate/ and are read via GOOGLE_APPLICATION_CREDENTIALS.
+# (src/ is bundler-visible AND .vercelignore does not exclude src/, so a key here
+#  would ship to the client and to the Vercel build machine.)
+*service-account*.json
+*-credentials.json
+gcp-*.json
+deltaclimate-*.json
+
 # OS
 .DS_Store
 Thumbs.db
