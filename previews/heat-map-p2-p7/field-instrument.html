@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Field Instrument concept · Urban Heat Explorer</title>
+    <link rel="icon" href="../../public/favicon.svg" />
+    <link rel="stylesheet" href="prototype.css?v=7" />
+  </head>
+  <body>
+    <a class="skip-link desktop-skip-link" href="#scenario-controls">Skip to scenario controls</a>
+    <a class="skip-link mobile-skip-link" id="mobile-skip-link" href="#sheet-open">Skip to scenario workspace</a>
+    <main class="instrument" id="main" tabindex="-1">
+      <header class="tool-topbar">
+        <a class="tool-brand" href="../../index.html" aria-label="Delta Climate Research home">
+          <span class="arrow" aria-hidden="true">←</span>
+          <span class="full">Delta<span class="dot">·</span>Climate<span class="dot">·</span>Research</span>
+          <span class="compact" aria-hidden="true">Δ Delta</span>
+        </a>
+
+        <div class="ward-radio" role="group" aria-label="Active ward">
+          <button type="button" data-ward="Ballygunge" aria-pressed="true">Ballygunge</button>
+          <button type="button" data-ward="Baruipur" aria-pressed="false">Baruipur</button>
+          <button type="button" data-ward="Barrackpore" aria-pressed="false">Barrackpore</button>
+        </div>
+
+        <div class="tool-title">
+          <div>
+            <h1>Urban Heat Scenario Explorer</h1>
+            <p>Medni · screening instrument</p>
+          </div>
+        </div>
+      </header>
+
+      <section class="map-stage" aria-labelledby="map-title" aria-describedby="map-description">
+        <h2 class="sr-only" id="map-title">Modelled surface temperature map for Ballygunge</h2>
+        <p class="sr-only" id="map-description">
+          A screening-grade visualisation of modelled ward surface temperature. All numeric results are also available in the results panel.
+        </p>
+
+        <svg class="mock-map" viewBox="0 0 1200 760" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+          <path class="ward-boundary" d="M210 102 425 44 692 82 912 211 1006 449 864 652 594 707 338 612 166 376Z" />
+          <path class="road-major" d="M94 585C260 505 379 463 561 356S839 158 1110 119" />
+          <path class="road-major" d="M277 37C350 219 479 322 629 418s235 184 321 301" />
+          <path class="road-minor" d="M168 265 1001 531M192 435 897 179M318 119 780 684M138 335 1054 351M424 59 390 692M701 82 702 704" />
+          <path class="road-minor" d="M250 185 952 436M246 540 836 111M526 72 908 600M185 390 1017 273" />
+          <g>
+            <rect class="block warm" x="304" y="169" width="72" height="48" rx="3" transform="rotate(-9 304 169)" />
+            <rect class="block hot" x="394" y="140" width="48" height="74" rx="3" transform="rotate(11 394 140)" />
+            <rect class="block severe" x="467" y="164" width="91" height="52" rx="3" transform="rotate(-4 467 164)" />
+            <rect class="block" x="588" y="125" width="65" height="91" rx="3" transform="rotate(8 588 125)" />
+            <rect class="block severe" x="687" y="157" width="95" height="55" rx="3" transform="rotate(17 687 157)" />
+            <rect class="block hot" x="801" y="213" width="72" height="67" rx="3" transform="rotate(-5 801 213)" />
+            <rect class="block" x="256" y="257" width="88" height="61" rx="3" transform="rotate(7 256 257)" />
+            <rect class="block severe" x="369" y="242" width="76" height="96" rx="3" transform="rotate(-11 369 242)" />
+            <rect class="block hot" x="481" y="265" width="58" height="82" rx="3" transform="rotate(6 481 265)" />
+            <rect class="block" x="564" y="242" width="96" height="62" rx="3" transform="rotate(-3 564 242)" />
+            <rect class="block hot" x="690" y="260" width="70" height="88" rx="3" transform="rotate(12 690 260)" />
+            <rect class="block severe" x="785" y="312" width="98" height="56" rx="3" transform="rotate(-8 785 312)" />
+            <rect class="block" x="226" y="367" width="76" height="84" rx="3" transform="rotate(-3 226 367)" />
+            <rect class="block hot" x="328" y="371" width="94" height="56" rx="3" transform="rotate(12 328 371)" />
+            <rect class="block severe" x="465" y="378" width="89" height="80" rx="3" transform="rotate(-7 465 378)" />
+            <rect class="block hot" x="590" y="359" width="61" height="101" rx="3" transform="rotate(4 590 359)" />
+            <rect class="block" x="684" y="388" width="88" height="66" rx="3" transform="rotate(-13 684 388)" />
+            <rect class="block severe" x="803" y="407" width="99" height="77" rx="3" transform="rotate(7 803 407)" />
+            <rect class="block warm" x="278" y="496" width="99" height="61" rx="3" transform="rotate(-7 278 496)" />
+            <rect class="block" x="402" y="484" width="68" height="95" rx="3" transform="rotate(8 402 484)" />
+            <rect class="block hot" x="510" y="505" width="101" height="59" rx="3" transform="rotate(-3 510 505)" />
+            <rect class="block severe" x="648" y="486" width="75" height="88" rx="3" transform="rotate(10 648 486)" />
+            <rect class="block" x="757" y="519" width="88" height="53" rx="3" transform="rotate(-11 757 519)" />
+          </g>
+        </svg>
+        <div class="map-haze" aria-hidden="true"></div>
+
+        <div class="honesty-tag">
+          <span class="dot" aria-hidden="true"></span>
+          Live basemap context · modelled heat field · screening grade
+        </div>
+
+        <div class="place-label" aria-hidden="true">
+          <strong id="place-name">Bally<em>gunge</em></strong>
+          <span id="place-zone">Urban Core · Ward 68</span>
+        </div>
+
+        <aside class="panel panel-left" id="scenario-controls" aria-labelledby="controls-title">
+          <div class="panel-head">
+            <p class="kicker">Scenario controls</p>
+            <h2 id="controls-title">Green infrastructure</h2>
+          </div>
+
+          <div class="field">
+            <label for="trees">Tree canopy corridors <output id="trees-output" for="trees">0 km</output></label>
+            <input id="trees" name="trees" type="range" min="0" max="50" value="0" aria-describedby="trees-help" />
+            <span class="sr-only" id="trees-help">Kilometres of prioritised tree canopy corridors</span>
+          </div>
+
+          <div class="field">
+            <label for="roof">Cool-roof coverage <output id="roof-output" for="roof">0%</output></label>
+            <input id="roof" name="roof" type="range" min="0" max="100" step="5" value="0" />
+          </div>
+
+          <div class="field">
+            <label for="parks">Pocket parks and wetlands <output id="parks-output" for="parks">0 sites</output></label>
+            <input id="parks" name="parks" type="range" min="0" max="10" value="0" />
+          </div>
+
+          <div class="field">
+            <label for="facades">Vertical green façades <output id="facades-output" for="facades">0 blocks</output></label>
+            <input id="facades" name="facades" type="range" min="0" max="15" value="0" />
+          </div>
+
+          <div class="field">
+            <span class="mini-label" id="phase-label">Diurnal phase</span>
+            <div class="segment" role="group" aria-labelledby="phase-label">
+              <button type="button" data-field-phase="peak" aria-pressed="true">13:00 peak</button>
+              <button type="button" data-field-phase="retained" aria-pressed="false">22:00 retained</button>
+            </div>
+          </div>
+
+          <div class="field">
+            <span class="mini-label" id="pathway-label">Projection pathway</span>
+            <div class="segment" role="group" aria-labelledby="pathway-label">
+              <button type="button" aria-pressed="false">2025</button>
+              <button type="button" aria-pressed="true">Δ target ’30</button>
+              <button type="button" aria-pressed="false">BAU ’40</button>
+            </div>
+          </div>
+
+          <div class="score-line">
+            <div class="score-ring" id="score">24</div>
+            <div class="score-copy">
+              <strong>Green Score</strong>
+              <span id="score-copy">Move a control to compare interventions.</span>
+            </div>
+          </div>
+        </aside>
+
+        <aside class="panel panel-right" id="scenario-results" aria-labelledby="results-title">
+          <div class="panel-head">
+            <p class="kicker">Model response</p>
+            <h2 id="results-title">Ballygunge scenario</h2>
+          </div>
+
+          <div class="live-row" aria-label="Live ambient conditions">
+            <div class="live-cell"><strong>32.1</strong><span>Air °C</span></div>
+            <div class="live-cell"><strong>38.4</strong><span>Feels °C</span></div>
+            <div class="live-cell"><strong>71</strong><span>RH %</span></div>
+            <div class="live-cell"><strong>2.3</strong><span>Wind m/s</span></div>
+          </div>
+
+          <div class="hero-metric">
+            <span class="mini-label">Mean surface temperature · modelled</span>
+            <output class="value" id="mean-result">39.6°C</output>
+          </div>
+
+          <div class="metric-pair">
+            <div><span class="mini-label">UHI vs rural</span><strong id="uhi-result">+3.8°</strong></div>
+            <div><span class="mini-label">Area over 40°C</span><strong id="area-result">43%</strong></div>
+          </div>
+
+          <div class="histogram" aria-label="Heat stress distribution">
+            <i style="height:18%"></i><i style="height:24%"></i><i style="height:34%"></i><i style="height:48%"></i>
+            <i style="height:63%"></i><i style="height:82%"></i><i style="height:100%"></i><i style="height:91%"></i>
+            <i style="height:72%"></i><i style="height:54%"></i><i style="height:31%"></i><i style="height:14%"></i>
+          </div>
+
+          <div class="panel-action">
+            <a class="primary-action report-link" href="scenario-brief.html">Preview scenario brief ↗</a>
+            <a class="method-link" href="#method-note">How this screening model works</a>
+          </div>
+        </aside>
+
+        <div class="view-controls">
+          <div class="segment" role="group" aria-label="Map view">
+            <button type="button" data-map-view="relief" aria-pressed="true">3D relief</button>
+            <button type="button" data-map-view="isotherm" aria-pressed="false">2D isotherm</button>
+            <a class="secondary-action compare-action" href="paired-bench.html">Compare wards</a>
+            <a class="secondary-action" href="research-console.html">Lightweight view</a>
+          </div>
+        </div>
+
+        <div class="mobile-dock" id="mobile-dock" data-sheet-state="collapsed">
+          <button class="mobile-summary" id="sheet-open" type="button" aria-expanded="false" aria-controls="mobile-sheet">
+            <span class="ward-name"><strong id="summary-ward">Ballygunge</strong><span>Explore scenario</span></span>
+            <span class="summary-stat"><strong id="summary-mean">39.6°</strong><span>Mean</span></span>
+            <span class="summary-stat"><strong id="summary-uhi">+3.8°</strong><span>UHI</span></span>
+            <span class="summary-stat"><strong id="summary-area">43%</strong><span>&gt;40°</span></span>
+            <span class="sheet-chevron" aria-hidden="true">↑</span>
+          </button>
+
+          <section class="mobile-sheet" id="mobile-sheet" aria-label="Scenario workspace" inert>
+            <div class="sheet-head">
+              <div>
+                <div class="sheet-grip" aria-hidden="true"></div>
+                <strong id="sheet-title">Ballygunge scenario</strong>
+              </div>
+              <div class="sheet-actions">
+                <button class="sheet-expand" id="sheet-expand" type="button" aria-label="Expand scenario workspace to full screen" aria-pressed="false">⤢</button>
+                <button class="sheet-close" id="sheet-close" type="button" aria-label="Collapse scenario workspace">↓</button>
+              </div>
+            </div>
+
+            <div class="sheet-tabs" role="tablist" aria-label="Scenario workspace sections">
+              <button id="tab-controls" type="button" role="tab" tabindex="0" aria-selected="true" aria-controls="mobile-controls">Controls</button>
+              <button id="tab-results" type="button" role="tab" tabindex="-1" aria-selected="false" aria-controls="mobile-results">Results</button>
+              <button id="tab-wards" type="button" role="tab" tabindex="-1" aria-selected="false" aria-controls="mobile-wards">Wards</button>
+            </div>
+
+            <div class="sheet-content">
+              <div class="sheet-panel" id="mobile-controls" role="tabpanel" aria-labelledby="tab-controls">
+                <div class="field">
+                  <label for="m-trees">Tree corridors <output id="m-trees-output" for="m-trees">0 km</output></label>
+                  <input id="m-trees" type="range" min="0" max="50" value="0" />
+                </div>
+                <div class="field">
+                  <label for="m-roof">Cool roofs <output id="m-roof-output" for="m-roof">0%</output></label>
+                  <input id="m-roof" type="range" min="0" max="100" step="5" value="0" />
+                </div>
+                <div class="field">
+                  <label for="m-parks">Pocket parks <output id="m-parks-output" for="m-parks">0 sites</output></label>
+                  <input id="m-parks" type="range" min="0" max="10" value="0" />
+                </div>
+                <div class="field">
+                  <label for="m-facades">Green façades <output id="m-facades-output" for="m-facades">0 blocks</output></label>
+                  <input id="m-facades" type="range" min="0" max="15" value="0" />
+                </div>
+                <aside class="sheet-detail full-only" aria-label="Screening model context">
+                  <p class="eyebrow">Full workspace</p>
+                  <h2>Screening model context</h2>
+                  <div class="sheet-detail-grid">
+                    <span><strong>ECOSTRESS</strong>Surface baseline</span>
+                    <span><strong>v0.8</strong>Model version</span>
+                    <span><strong>±1.2°C</strong>Indicative range</span>
+                  </div>
+                  <p>Use this view for detailed controls, methodology notes and large-text layouts. Values remain screening-grade until field validation.</p>
+                  <a class="secondary-action" href="research-console.html#methodology">Read methodology</a>
+                </aside>
+              </div>
+
+              <div class="sheet-panel" id="mobile-results" role="tabpanel" aria-labelledby="tab-results" hidden>
+                <div class="mobile-results">
+                  <div class="mobile-result"><span>Mean surface</span><strong id="m-mean-result">39.6°C</strong></div>
+                  <div class="mobile-result"><span>Cooling</span><strong id="m-cooling-result">0.0°C</strong></div>
+                  <div class="mobile-result"><span>UHI vs rural</span><strong id="m-uhi-result">+3.8°</strong></div>
+                  <div class="mobile-result"><span>Capital estimate</span><strong id="m-cost-result">₹0.0 cr</strong></div>
+                </div>
+                <div class="mobile-actions">
+                  <a class="primary-action report-link" href="scenario-brief.html">Preview scenario brief ↗</a>
+                  <a class="secondary-action" href="research-console.html">Open accessible 2D view</a>
+                </div>
+              </div>
+
+              <div class="sheet-panel" id="mobile-wards" role="tabpanel" aria-labelledby="tab-wards" hidden>
+                <div class="mobile-wards" role="group" aria-label="Active ward">
+                  <button type="button" data-ward="Ballygunge" aria-pressed="true"><span><strong>Ballygunge</strong><span>Urban Core</span></span><span>39.6°C</span></button>
+                  <button type="button" data-ward="Baruipur" aria-pressed="false"><span><strong>Baruipur</strong><span>Peri-Urban Fringe</span></span><span>35.4°C</span></button>
+                  <button type="button" data-ward="Barrackpore" aria-pressed="false"><span><strong>Barrackpore</strong><span>Industrial Corridor</span></span><span>38.1°C</span></button>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <p class="sr-only" id="method-note">
+          Screening-grade two-dimensional energy balance model. Results are relative scenario estimates, not an engineering specification.
+        </p>
+        <p class="sr-only" id="scenario-status" role="status" aria-live="polite"></p>
+      </section>
+
+      <nav class="ward-strip" aria-label="Ward comparison">
+        <button type="button" data-ward="Ballygunge" aria-pressed="true">
+          <span class="ward-swatch"></span><span class="ward-copy"><strong>Ballygunge</strong><span>Urban Core</span></span><span class="ward-temp">39.6°C</span>
+        </button>
+        <button type="button" data-ward="Baruipur" aria-pressed="false">
+          <span class="ward-swatch" style="filter:hue-rotate(70deg)"></span><span class="ward-copy"><strong>Baruipur</strong><span>Peri-Urban Fringe</span></span><span class="ward-temp">35.4°C</span>
+        </button>
+        <button type="button" data-ward="Barrackpore" aria-pressed="false">
+          <span class="ward-swatch" style="filter:hue-rotate(-18deg)"></span><span class="ward-copy"><strong>Barrackpore</strong><span>Industrial Corridor</span></span><span class="ward-temp">38.1°C</span>
+        </button>
+      </nav>
+    </main>
+
+    <script src="prototype.js"></script>
+  </body>
+</html>

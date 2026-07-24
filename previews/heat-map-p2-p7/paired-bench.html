@@ -1,0 +1,404 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Paired Ward Bench · Urban Heat Explorer</title>
+    <link rel="icon" href="../../public/favicon.svg" />
+    <link rel="stylesheet" href="prototype.css?v=7" />
+  </head>
+  <body class="bench-body">
+    <a class="skip-link" href="#shared-settings">Skip to shared scenario settings</a>
+
+    <svg class="bench-map-defs" aria-hidden="true">
+      <defs>
+        <symbol id="geometry-ballygunge" viewBox="0 0 620 460">
+          <path class="study-boundary" fill="#071819" stroke="#d5ebeb" stroke-opacity=".6" stroke-width="1.4" d="M76 69 243 31 421 52 552 164 574 331 461 424 266 432 94 350 45 190Z" />
+          <path class="thermal thermal-cool" fill="#307d82" stroke="#edf1eb" stroke-opacity=".12" opacity=".67" d="M51 128C143 43 276 72 305 157c28 84-55 139-143 139S-24 198 51 128Z" />
+          <path class="thermal thermal-mid" fill="#d69745" stroke="#edf1eb" stroke-opacity=".12" opacity=".65" d="M189 78c96-50 229-25 297 47 68 73 43 167-39 195-82 29-123-44-201-25-79 18-158-12-160-85-2-57 45-102 103-132Z" />
+          <path class="thermal thermal-high" fill="#d94d3f" stroke="#edf1eb" stroke-opacity=".12" opacity=".65" d="M294 117c85-35 202 2 221 87 18 85-65 151-145 126-80-26-125-7-162-66-38-59 15-118 86-147Z" />
+          <path class="road-major" fill="none" stroke="#e6eede" stroke-opacity=".72" stroke-width="2.2" d="M31 371C138 311 233 281 321 214S456 93 596 74" />
+          <path class="road-major" fill="none" stroke="#e6eede" stroke-opacity=".72" stroke-width="2.2" d="M159 25c39 113 104 191 188 247s138 112 179 175" />
+          <path class="road-minor" fill="none" stroke="#e0eae8" stroke-opacity=".38" stroke-width=".85" d="M58 164 563 338M71 283 529 126M172 51 439 426M49 222 579 230M246 42 222 423M409 50 413 429" />
+          <g class="urban-blocks" fill="#4c181b" fill-opacity=".56" stroke="#ffdeca" stroke-opacity=".25" stroke-width=".6">
+            <rect x="132" y="106" width="52" height="35" rx="2" transform="rotate(-8 132 106)" />
+            <rect x="198" y="91" width="34" height="53" rx="2" transform="rotate(10 198 91)" />
+            <rect x="250" y="108" width="65" height="37" rx="2" transform="rotate(-4 250 108)" />
+            <rect x="335" y="83" width="46" height="65" rx="2" transform="rotate(7 335 83)" />
+            <rect x="402" y="112" width="69" height="39" rx="2" transform="rotate(15 402 112)" />
+            <rect x="112" y="172" width="63" height="44" rx="2" transform="rotate(7 112 172)" />
+            <rect x="193" y="164" width="55" height="68" rx="2" transform="rotate(-10 193 164)" />
+            <rect x="273" y="180" width="41" height="58" rx="2" transform="rotate(5 273 180)" />
+            <rect x="332" y="165" width="69" height="44" rx="2" transform="rotate(-3 332 165)" />
+            <rect x="421" y="177" width="50" height="63" rx="2" transform="rotate(11 421 177)" />
+            <rect x="91" y="249" width="55" height="59" rx="2" transform="rotate(-2 91 249)" />
+            <rect x="164" y="252" width="67" height="40" rx="2" transform="rotate(11 164 252)" />
+            <rect x="260" y="257" width="64" height="57" rx="2" transform="rotate(-6 260 257)" />
+            <rect x="350" y="244" width="44" height="72" rx="2" transform="rotate(4 350 244)" />
+            <rect x="417" y="263" width="62" height="47" rx="2" transform="rotate(-11 417 263)" />
+            <rect x="131" y="337" width="71" height="43" rx="2" transform="rotate(-6 131 337)" />
+            <rect x="221" y="328" width="49" height="68" rx="2" transform="rotate(8 221 328)" />
+            <rect x="298" y="343" width="72" height="42" rx="2" transform="rotate(-3 298 343)" />
+            <rect x="395" y="330" width="54" height="63" rx="2" transform="rotate(9 395 330)" />
+          </g>
+        </symbol>
+
+        <symbol id="geometry-baruipur" viewBox="0 0 620 460">
+          <path class="study-boundary" fill="#071819" stroke="#d5ebeb" stroke-opacity=".6" stroke-width="1.4" d="M62 102 202 38 402 47 559 144 580 308 478 408 283 434 112 372 35 236Z" />
+          <path class="thermal thermal-cool" fill="#307d82" stroke="#edf1eb" stroke-opacity=".12" opacity=".67" d="M29 113C119 33 275 14 370 77s93 139 27 184c-67 45-127 13-190 57-62 43-170 18-189-62-12-52-29-107 11-143Z" />
+          <path class="thermal thermal-mid" fill="#d69745" stroke="#edf1eb" stroke-opacity=".12" opacity=".65" d="M292 82c80-26 195 7 232 77 38 71-6 134-71 150-66 15-101-36-165-16-65 21-129-15-123-78 5-52 61-111 127-133Z" />
+          <path class="thermal thermal-high" fill="#d94d3f" stroke="#edf1eb" stroke-opacity=".12" opacity=".65" d="M382 132c52-18 127 15 135 72 8 56-52 96-102 75-50-22-86-18-94-67-8-37 24-67 61-80Z" />
+          <path class="water-line" fill="none" stroke="#53b6c7" stroke-opacity=".75" stroke-width="7" d="M66 398C142 340 134 267 217 247s95-87 153-121 129-45 195-103" />
+          <path class="road-major" fill="none" stroke="#e6eede" stroke-opacity=".72" stroke-width="2.2" d="M29 290c106-21 202-62 271-113S423 89 586 113" />
+          <path class="road-major" fill="none" stroke="#e6eede" stroke-opacity=".72" stroke-width="2.2" d="M198 34c19 102 52 165 126 220s116 102 137 174" />
+          <path class="road-minor" fill="none" stroke="#e0eae8" stroke-opacity=".38" stroke-width=".85" d="M48 182 545 317M102 356 524 145M165 64 425 409M56 251 565 225M302 55 274 424" />
+          <g class="urban-blocks sparse" fill="#4f391f" fill-opacity=".47" stroke="#ffdeca" stroke-opacity=".25" stroke-width=".6">
+            <rect x="130" y="114" width="49" height="32" rx="2" transform="rotate(-8 130 114)" />
+            <rect x="218" y="95" width="31" height="47" rx="2" transform="rotate(11 218 95)" />
+            <rect x="325" y="102" width="57" height="35" rx="2" transform="rotate(-3 325 102)" />
+            <rect x="432" y="135" width="52" height="41" rx="2" transform="rotate(8 432 135)" />
+            <rect x="98" y="205" width="54" height="39" rx="2" transform="rotate(5 98 205)" />
+            <rect x="206" y="188" width="47" height="59" rx="2" transform="rotate(-9 206 188)" />
+            <rect x="309" y="208" width="55" height="40" rx="2" transform="rotate(6 309 208)" />
+            <rect x="430" y="218" width="49" height="53" rx="2" transform="rotate(-7 430 218)" />
+            <rect x="132" y="293" width="51" height="48" rx="2" transform="rotate(8 132 293)" />
+            <rect x="263" y="298" width="59" height="37" rx="2" transform="rotate(-4 263 298)" />
+            <rect x="390" y="310" width="53" height="46" rx="2" transform="rotate(9 390 310)" />
+          </g>
+          <g class="green-patches" fill="#588b60" fill-opacity=".72" stroke="#bee0b5" stroke-opacity=".32" stroke-width=".8">
+            <circle cx="85" cy="130" r="22" />
+            <circle cx="189" cy="288" r="29" />
+            <circle cx="333" cy="366" r="31" />
+            <circle cx="505" cy="336" r="24" />
+          </g>
+        </symbol>
+
+        <symbol id="geometry-barrackpore" viewBox="0 0 620 460">
+          <path class="study-boundary" fill="#071819" stroke="#d5ebeb" stroke-opacity=".6" stroke-width="1.4" d="M88 60 282 31 474 74 565 198 538 359 395 429 199 416 62 316 43 154Z" />
+          <path class="thermal thermal-cool" fill="#307d82" stroke="#edf1eb" stroke-opacity=".12" opacity=".67" d="M48 89c91-59 225-45 276 28 51 74-6 131-74 164-69 33-104 89-179 48-74-41-95-193-23-240Z" />
+          <path class="thermal thermal-mid" fill="#d69745" stroke="#edf1eb" stroke-opacity=".12" opacity=".65" d="M212 66c93-34 236 7 293 84s9 161-73 185-132-39-211-12c-78 27-141-23-126-92 13-62 53-142 117-165Z" />
+          <path class="thermal thermal-high" fill="#d94d3f" stroke="#edf1eb" stroke-opacity=".12" opacity=".65" d="M344 105c74-15 170 33 173 105 3 71-78 113-143 76-64-37-113-20-119-83-6-48 43-89 89-98Z" />
+          <path class="water-line broad" fill="none" stroke="#53b6c7" stroke-opacity=".75" stroke-width="15" d="M61 446C92 349 87 288 116 216S135 75 191 3" />
+          <path class="road-major" fill="none" stroke="#e6eede" stroke-opacity=".72" stroke-width="2.2" d="M47 341c132-72 239-91 329-159S483 102 579 66" />
+          <path class="road-major" fill="none" stroke="#e6eede" stroke-opacity=".72" stroke-width="2.2" d="M251 22c30 110 72 190 156 251s91 97 101 169" />
+          <path class="road-minor" fill="none" stroke="#e0eae8" stroke-opacity=".38" stroke-width=".85" d="M68 136 539 352M89 268 532 116M183 53 413 422M47 211 560 229M328 43 297 425" />
+          <g class="urban-blocks industrial" fill="#581c1f" fill-opacity=".58" stroke="#ffdeca" stroke-opacity=".25" stroke-width=".6">
+            <rect x="157" y="92" width="101" height="39" rx="2" transform="rotate(-5 157 92)" />
+            <rect x="286" y="88" width="56" height="72" rx="2" transform="rotate(8 286 88)" />
+            <rect x="374" y="114" width="118" height="48" rx="2" transform="rotate(-4 374 114)" />
+            <rect x="144" y="187" width="78" height="55" rx="2" transform="rotate(6 144 187)" />
+            <rect x="256" y="188" width="111" height="45" rx="2" transform="rotate(-3 256 188)" />
+            <rect x="403" y="202" width="82" height="61" rx="2" transform="rotate(7 403 202)" />
+            <rect x="139" y="281" width="116" height="47" rx="2" transform="rotate(-4 139 281)" />
+            <rect x="290" y="273" width="70" height="77" rx="2" transform="rotate(5 290 273)" />
+            <rect x="397" y="297" width="97" height="51" rx="2" transform="rotate(-8 397 297)" />
+          </g>
+        </symbol>
+      </defs>
+    </svg>
+
+    <main class="paired-bench" id="paired-bench">
+      <header class="bench-topbar">
+        <a class="bench-brand" href="../../index.html" aria-label="Delta Climate Research home">
+          <span aria-hidden="true">←</span>
+          <strong>Delta<span>·</span>Climate<span>·</span>Research</strong>
+        </a>
+
+        <nav class="bench-mode" aria-label="Explorer mode">
+          <a id="bench-explore-link" href="field-instrument.html">Explore</a>
+          <a href="paired-bench.html" aria-current="page">Compare</a>
+        </nav>
+
+        <div class="bench-heading">
+          <p class="kicker">Controlled comparison</p>
+          <h1>Paired Ward Bench</h1>
+          <p id="bench-pair-title">Ballygunge A ↔ Baruipur B</p>
+        </div>
+
+        <div class="evidence-stamp" aria-label="Prototype evidence state">
+          <span><i aria-hidden="true"></i> Prototype evidence state</span>
+          <strong>13:00 · matched reference</strong>
+          <small>Synthetic values · schematic maps</small>
+          <small>Production stamp → forcing ID · model/grid version · screening</small>
+        </div>
+      </header>
+
+      <div class="bench-grid">
+        <aside class="bench-settings" id="shared-settings" aria-labelledby="shared-settings-title">
+          <div class="bench-section-head">
+            <p class="kicker">One policy rule</p>
+            <h2 id="shared-settings-title">Shared scenario settings</h2>
+            <p>Applied to Ward A and Ward B</p>
+          </div>
+
+          <div class="bench-field">
+            <label for="pair-trees">
+              <span>Tree corridors<small>Eligible priority-road network</small></span>
+              <span class="bench-output" id="pair-trees-output" aria-hidden="true">55%</span>
+            </label>
+            <input id="pair-trees" type="range" min="0" max="100" step="1" value="55" />
+          </div>
+
+          <div class="bench-field">
+            <label for="pair-roof">
+              <span>Cool roofs<small>Eligible roof stock</small></span>
+              <span class="bench-output" id="pair-roof-output" aria-hidden="true">65%</span>
+            </label>
+            <input id="pair-roof" type="range" min="0" max="100" step="5" value="65" />
+          </div>
+
+          <div class="bench-field">
+            <label for="pair-parks">
+              <span>Pocket parks<small>Planted-area share of each 1.4 × 1.4 km window</small></span>
+              <span class="bench-output" id="pair-parks-output" aria-hidden="true">3%</span>
+            </label>
+            <input id="pair-parks" type="range" min="0" max="4" step="0.1" value="3" />
+          </div>
+
+          <div class="bench-field">
+            <label for="pair-facades">
+              <span>Green façades<small>Eligible façade area</small></span>
+              <span class="bench-output" id="pair-facades-output" aria-hidden="true">35%</span>
+            </label>
+            <input id="pair-facades" type="range" min="0" max="100" step="0.1" value="35" />
+          </div>
+
+          <div class="bench-control-block">
+            <span class="mini-label" id="bench-phase-label">Shared diurnal phase</span>
+            <div class="bench-segment" role="group" aria-labelledby="bench-phase-label">
+              <button type="button" data-bench-phase="peak" aria-pressed="true">13:00 peak</button>
+              <button type="button" data-bench-phase="retained" aria-pressed="false">22:00 retained</button>
+            </div>
+          </div>
+
+          <div class="bench-control-block">
+            <span class="mini-label">Reference pathway</span>
+            <div class="bench-reference">
+              <strong>2025 reference</strong>
+              <span>Target ’30 and BAU ’40 remain illustrative and are excluded here.</span>
+            </div>
+          </div>
+
+          <div class="bench-settings-actions">
+            <button type="button" class="bench-reset" id="bench-reset">Reset interventions</button>
+            <span>Matched by coverage, not raw quantity or budget.</span>
+          </div>
+        </aside>
+
+        <section class="bench-map-workspace" aria-labelledby="paired-maps-title">
+          <h2 class="sr-only" id="paired-maps-title">Synthetic approval preview of proposed paired production surface-temperature maps</h2>
+
+          <div class="pair-toolbar">
+            <label class="ward-select ward-select-a" for="ward-a">
+              <span><b>A</b> Study area</span>
+              <select id="ward-a" aria-describedby="pair-rule">
+                <option value="Ballygunge" selected>Ballygunge</option>
+                <option value="Baruipur">Baruipur</option>
+                <option value="Barrackpore">Barrackpore</option>
+              </select>
+            </label>
+
+            <div class="pair-rule" id="pair-rule">
+              <span aria-hidden="true">A</span>
+              <i aria-hidden="true"></i>
+              <strong>Matched</strong>
+              <i aria-hidden="true"></i>
+              <span aria-hidden="true">B</span>
+            </div>
+
+            <button type="button" class="swap-pair" id="swap-pair" aria-label="Swap Ward A and Ward B">
+              <span aria-hidden="true">⇄</span> Swap
+            </button>
+
+            <label class="ward-select ward-select-b" for="ward-b">
+              <span><b>B</b> Study area</span>
+              <select id="ward-b" aria-describedby="pair-rule">
+                <option value="Ballygunge">Ballygunge</option>
+                <option value="Baruipur" selected>Baruipur</option>
+                <option value="Barrackpore">Barrackpore</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="paired-maps">
+            <figure class="bench-map" id="bench-map-a" data-map-ward="ballygunge" aria-describedby="map-description-a">
+              <figcaption>
+                <span><b>A</b><strong id="map-name-a">Ballygunge</strong><small id="map-zone-a">Dense urban core</small></span>
+                <span><small>Scenario mean</small><strong id="map-mean-a">≈38.2°C</strong></span>
+              </figcaption>
+              <p class="sr-only" id="map-description-a" hidden>Schematic pattern: a broad central hotspot crossed by a dense road network, with cooler edges.</p>
+              <div class="bench-map-canvas">
+                <svg viewBox="0 0 620 460" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+                  <use id="map-use-a" href="#geometry-ballygunge"></use>
+                </svg>
+                <div class="map-coordinate">1.4 km window · schematic</div>
+                <div class="map-scale"><i></i>250 m</div>
+                <div class="north-arrow" aria-label="North is up"><span>N</span>↑</div>
+                <div class="map-reading">
+                  <span>Cooling from baseline</span>
+                  <strong id="map-cooling-a">≈−1.4°C</strong>
+                </div>
+              </div>
+            </figure>
+
+            <div class="calibration-spine" aria-hidden="true"><span>same extent</span></div>
+
+            <figure class="bench-map" id="bench-map-b" data-map-ward="baruipur" aria-describedby="map-description-b">
+              <figcaption>
+                <span><b>B</b><strong id="map-name-b">Baruipur</strong><small id="map-zone-b">Peri-urban fringe</small></span>
+                <span><small>Scenario mean</small><strong id="map-mean-b">≈34.4°C</strong></span>
+              </figcaption>
+              <p class="sr-only" id="map-description-b" hidden>Schematic pattern: an eastern hotspot beside a cooler western corridor and dispersed green patches.</p>
+              <div class="bench-map-canvas">
+                <svg viewBox="0 0 620 460" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+                  <use id="map-use-b" href="#geometry-baruipur"></use>
+                </svg>
+                <div class="map-coordinate">1.4 km window · schematic</div>
+                <div class="map-scale"><i></i>250 m</div>
+                <div class="north-arrow" aria-label="North is up"><span>N</span>↑</div>
+                <div class="map-reading">
+                  <span>Cooling from baseline</span>
+                  <strong id="map-cooling-b">≈−1.0°C</strong>
+                </div>
+              </div>
+            </figure>
+          </div>
+
+          <div class="shared-legend" aria-label="Synthetic preview of the proposed production surface-temperature scale from 26 to 48 degrees Celsius">
+            <div>
+              <span>Proposed shared surface-temperature scale</span>
+              <strong>26–48°C</strong>
+            </div>
+            <div class="legend-scale" aria-hidden="true">
+              <i></i>
+              <span>26</span><span>32</span><span>36</span><span>40</span><span>44</span><span>48°C</span>
+            </div>
+            <p>Production comparison uses 2D isotherms so both study areas share one temperature scale.</p>
+          </div>
+        </section>
+
+        <aside class="bench-response" aria-labelledby="paired-response-title">
+          <div class="bench-section-head">
+            <p class="kicker">Paired response</p>
+            <h2 id="paired-response-title">Same policy. Different fabric.</h2>
+            <p id="pair-synthesis">Both study areas cool under the shared package; the response is not a ward ranking.</p>
+          </div>
+
+          <div class="response-table-wrap" role="region" aria-label="Paired response table; scroll horizontally if needed" tabindex="0">
+            <table class="response-table">
+              <caption>Synthetic approval preview of proposed production model response under matched forcing and coverage rules</caption>
+              <thead>
+                <tr><th scope="col">Measure</th><th scope="col" id="table-head-a">A</th><th scope="col" id="table-head-b">B</th></tr>
+              </thead>
+              <tbody>
+                <tr><th scope="row">Baseline mean</th><td id="baseline-a">≈39.6°C</td><td id="baseline-b">≈35.4°C</td></tr>
+                <tr><th scope="row">Scenario mean</th><td id="scenario-a">≈38.2°C</td><td id="scenario-b">≈34.4°C</td></tr>
+                <tr><th scope="row">Cooling</th><td id="cooling-a">≈−1.4°C</td><td id="cooling-b">≈−1.0°C</td></tr>
+                <tr><th scope="row">Grid area &gt;40°C</th><td id="hot-area-a">31%</td><td id="hot-area-b">3%</td></tr>
+                <tr><th scope="row">Hot-area change</th><td id="hot-change-a">−12 pp</td><td id="hot-change-b">−9 pp</td></tr>
+                <tr><th scope="row">Modelled rural contrast</th><td id="contrast-a">≈+2.7°C</td><td id="contrast-b">≈+0.6°C</td></tr>
+                <tr><th scope="row">Capital works range</th><td id="cost-a">₹— cr</td><td id="cost-b">₹— cr</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <section class="delivered-works" aria-labelledby="delivered-title">
+            <div class="delivered-head">
+              <h3 id="delivered-title">Delivered by matched rules</h3>
+              <span>Indicative</span>
+            </div>
+            <div class="delivered-columns">
+              <div>
+                <strong id="delivered-name-a">A · Ballygunge</strong>
+                <span id="trees-a">17.5 km corridors</span>
+                <span id="roof-a">270,400 m² roofs</span>
+                <span id="parks-a">5.9 ha · ≈7.5 site eq.</span>
+                <span id="facades-a">15,800 m² façades</span>
+              </div>
+              <div>
+                <strong id="delivered-name-b">B · Baruipur</strong>
+                <span id="trees-b">10.7 km corridors</span>
+                <span id="roof-b">161,200 m² roofs</span>
+                <span id="parks-b">5.9 ha · ≈7.5 site eq.</span>
+                <span id="facades-b">8,400 m² façades</span>
+              </div>
+            </div>
+          </section>
+
+          <div class="bench-actions">
+            <button type="button" class="primary-action" id="preview-paired-brief">Preview paired brief</button>
+            <button type="button" class="secondary-action" id="copy-pair-link">Copy comparison link</button>
+            <a href="#comparison-method">How comparison works ↓</a>
+          </div>
+
+          <details class="comparison-method" id="comparison-method">
+            <summary>Comparison integrity</summary>
+            <p>Production comparison will use equal 1.4 km study windows, one frozen regional forcing, one model version, north-up 2D maps and a fixed 26–48°C scale.</p>
+            <p>Production outputs will compare model response—not vulnerability, equity, feasibility or investment priority.</p>
+            <p>Production share links will pin forcing, model, grid/data and backend release identifiers so a saved comparison remains reproducible.</p>
+            <p>Capital works use regional benchmark ranges and exclude operations, maintenance, land, design, utilities, irrigation and site constraints. Park cost follows planted area; site equivalents use the 0.785 ha standard.</p>
+          </details>
+
+          <div class="screening-note">
+            <span class="screening-mark" aria-hidden="true">S</span>
+            <p>Approval prototype · schematic study areas · synthetic response values. Production contract: matched forcing and coverage rules · real footprints and mapped roads · heat response modelled.</p>
+          </div>
+        </aside>
+      </div>
+
+      <footer class="bench-readout" aria-label="Paired bench summary">
+        <div>
+          <span id="readout-name-a">A · Ballygunge</span>
+          <strong id="readout-main-a">≈38.2°C</strong>
+          <small id="readout-delta-a">≈−1.4°C from baseline</small>
+        </div>
+        <div class="readout-calibration">
+          <span>26–48°C fixed scale</span>
+          <i aria-hidden="true"></i>
+          <strong id="readout-shared">2025 · 13:00 peak · matched coverage</strong>
+          <i aria-hidden="true"></i>
+          <span>1.4 × 1.4 km each</span>
+        </div>
+        <div>
+          <span id="readout-name-b">B · Baruipur</span>
+          <strong id="readout-main-b">≈34.4°C</strong>
+          <small id="readout-delta-b">≈−1.0°C from baseline</small>
+        </div>
+      </footer>
+
+      <p class="sr-only" id="pair-status" role="status" aria-live="polite"></p>
+    </main>
+
+    <dialog class="paired-brief-dialog" id="paired-brief-dialog" aria-labelledby="paired-brief-title">
+      <form method="dialog">
+        <header>
+          <div>
+            <p class="kicker">Decision record · prototype</p>
+            <h2 id="paired-brief-title">Paired screening brief</h2>
+          </div>
+          <button type="submit" aria-label="Close paired brief">×</button>
+        </header>
+        <p class="dialog-lede">Same policy intensity. Same reference heat day. Two different urban fabrics.</p>
+        <div class="dialog-pair">
+          <section>
+            <span>A</span>
+            <h3 id="dialog-name-a">Ballygunge</h3>
+            <strong id="dialog-mean-a">≈38.2°C</strong>
+            <p id="dialog-delta-a">≈−1.4°C from its baseline</p>
+          </section>
+          <div aria-hidden="true">↔</div>
+          <section>
+            <span>B</span>
+            <h3 id="dialog-name-b">Baruipur</h3>
+            <strong id="dialog-mean-b">≈34.4°C</strong>
+            <p id="dialog-delta-b">≈−1.0°C from its baseline</p>
+          </section>
+        </div>
+        <p class="dialog-note">Synthetic approval prototype only. The production brief will not rank wards or imply vulnerability, ownership, feasibility, operations or maintenance evidence.</p>
+        <button type="submit" class="secondary-action">Return to bench</button>
+      </form>
+    </dialog>
+
+    <script src="prototype.js"></script>
+  </body>
+</html>

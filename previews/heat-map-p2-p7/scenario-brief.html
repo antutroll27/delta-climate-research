@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Ballygunge scenario brief · Delta Climate Research</title>
+    <link rel="icon" href="../../public/favicon.svg" />
+    <link rel="stylesheet" href="prototype.css?v=7" />
+  </head>
+  <body class="brief-body">
+    <header class="brief-toolbar">
+      <a href="field-instrument.html" aria-label="Return to Urban Heat Scenario Explorer">← Back to instrument</a>
+      <div>
+        <a class="brief-link" href="research-console.html">Accessible research view</a>
+        <button type="button" id="copy-link">Copy scenario link</button>
+        <button class="print" type="button" id="print-brief">Print · Save PDF</button>
+      </div>
+    </header>
+
+    <main class="brief" id="main">
+      <div class="brief-brand">Delta<span>·</span>Climate<span>·</span>Research</div>
+
+      <header class="brief-head">
+        <div>
+          <p class="brief-section-label">Urban Heat Scenario Brief · Prototype</p>
+          <h1><span id="brief-ward">Bally</span><em>gunge</em> intervention scenario.</h1>
+          <span class="screening-label">● Screening-grade modelled estimate</span>
+        </div>
+
+        <div class="brief-meta">
+          <div><span>Scenario</span><strong>DCR-HM-068-A</strong></div>
+          <div><span>Generated</span><strong>24 Jul 2026</strong></div>
+          <div><span>Diurnal phase</span><strong>13:00 peak</strong></div>
+          <div><span>Pathway</span><strong>Δ target ’30</strong></div>
+        </div>
+      </header>
+
+      <section class="brief-summary" aria-labelledby="brief-summary-title">
+        <figure class="brief-map" style="margin:0">
+          <svg class="mock-map" viewBox="0 0 620 500" preserveAspectRatio="xMidYMid slice" role="img" aria-labelledby="brief-map-title brief-map-description">
+            <title id="brief-map-title">Ballygunge scenario heat map</title>
+            <desc id="brief-map-description">Static map of the modelled ward heat field used in this scenario brief.</desc>
+            <path class="ward-boundary" d="M57 84 220 29 433 60 565 178 587 350 471 453 279 472 108 392 32 227Z" />
+            <path class="road-major" d="M0 401C119 348 205 291 315 224S488 111 618 75" />
+            <path class="road-major" d="M138 0C197 131 259 205 352 278s145 126 197 220" />
+            <path class="road-minor" d="M34 164 590 358M70 293 532 105M184 34 451 475M21 231 610 244M247 29 227 471M411 54 409 482" />
+            <g>
+              <rect class="block hot" x="137" y="109" width="53" height="39" rx="3" />
+              <rect class="block severe" x="211" y="84" width="49" height="69" rx="3" />
+              <rect class="block warm" x="284" y="114" width="72" height="47" rx="3" />
+              <rect class="block hot" x="381" y="98" width="55" height="75" rx="3" />
+              <rect class="block severe" x="461" y="144" width="67" height="57" rx="3" />
+              <rect class="block" x="105" y="208" width="71" height="58" rx="3" />
+              <rect class="block severe" x="198" y="189" width="64" height="86" rx="3" />
+              <rect class="block hot" x="291" y="205" width="76" height="58" rx="3" />
+              <rect class="block severe" x="395" y="219" width="57" height="80" rx="3" />
+              <rect class="block hot" x="478" y="236" width="65" height="53" rx="3" />
+              <rect class="block warm" x="131" y="321" width="82" height="55" rx="3" />
+              <rect class="block hot" x="238" y="303" width="61" height="78" rx="3" />
+              <rect class="block severe" x="331" y="319" width="81" height="51" rx="3" />
+              <rect class="block" x="435" y="318" width="69" height="67" rx="3" />
+            </g>
+          </svg>
+        </figure>
+
+        <div>
+          <p class="brief-section-label">Scenario reading</p>
+          <h2 id="brief-summary-title">A combined intervention package reduces the modelled ward mean while prioritising affordable roof treatment.</h2>
+          <p>
+            This scenario combines corridor trees, cool-roof coverage, pocket parks and targeted green façades. Results are relative screening estimates based on the current intervention assumptions.
+          </p>
+          <div class="delta-line">
+            <strong id="brief-cooling">−1.4°C</strong>
+            <span>modelled mean surface-temperature change from baseline</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="brief-metrics" aria-label="Scenario results">
+        <div class="brief-metric"><span>Baseline mean</span><strong id="brief-baseline">39.6°C</strong></div>
+        <div class="brief-metric"><span>Scenario mean</span><strong id="brief-mean">38.2°C</strong></div>
+        <div class="brief-metric"><span>Area above 40°C</span><strong id="brief-area">31%</strong></div>
+        <div class="brief-metric"><span>Capital estimate</span><strong id="brief-cost">₹8.2 cr</strong></div>
+      </section>
+
+      <section class="intervention-list" aria-labelledby="interventions-title">
+        <p class="brief-section-label">Selected interventions</p>
+        <h2 id="interventions-title" style="margin:0; font-size:1.35rem">Scenario composition</h2>
+
+        <div class="intervention-row">
+          <strong>Tree canopy corridors</strong>
+          <span class="measure" aria-hidden="true"><i id="brief-trees-bar" style="--amount:48%"></i></span>
+          <output id="brief-trees">24 km</output>
+        </div>
+        <div class="intervention-row">
+          <strong>Cool-roof coverage</strong>
+          <span class="measure" aria-hidden="true"><i id="brief-roof-bar" style="--amount:65%"></i></span>
+          <output id="brief-roof">65%</output>
+        </div>
+        <div class="intervention-row">
+          <strong>Pocket parks and wetlands</strong>
+          <span class="measure" aria-hidden="true"><i id="brief-parks-bar" style="--amount:40%"></i></span>
+          <output id="brief-parks">4 sites</output>
+        </div>
+        <div class="intervention-row">
+          <strong>Vertical green façades</strong>
+          <span class="measure" aria-hidden="true"><i id="brief-facades-bar" style="--amount:33%"></i></span>
+          <output id="brief-facades">5 blocks</output>
+        </div>
+      </section>
+
+      <section class="brief-notes">
+        <div>
+          <p class="brief-section-label">Interpretation</p>
+          <h2>What this result can support</h2>
+          <p>
+            Early intervention comparison, stakeholder discussion, prioritisation of measured follow-up work and preparation of a ward-scale assessment brief.
+          </p>
+        </div>
+        <div>
+          <p class="brief-section-label">Evidence chain</p>
+          <h2>Inputs and assumptions</h2>
+          <ul>
+            <li>Building footprints: Microsoft Open Buildings, ODbL.</li>
+            <li>Height context: Google Open Buildings 2.5D, CC BY 4.0.</li>
+            <li>Ambient context: Met Norway location forecast.</li>
+            <li>Intervention constants: cited Delta screening model.</li>
+          </ul>
+        </div>
+      </section>
+
+      <div class="brief-disclaimer">
+        <strong>Use limitation:</strong> This is a screening-grade modelled scenario, not an engineering specification, measured land-surface-temperature raster, municipal heat-action plan or investment recommendation. Field validation and measured remote-sensing inputs are required before decision-grade publication.
+      </div>
+    </main>
+
+    <script src="prototype.js"></script>
+  </body>
+</html>
