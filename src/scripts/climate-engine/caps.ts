@@ -5,7 +5,8 @@
  * a RenderTier (0 low · 1 balanced · 2 full) from hardware + GPU hints; this one
  * reuses that verdict and adds only the two probes the heat sim specifically
  * needs — WebGPU compute and WebGL2 float render targets — then maps the tier
- * onto a concrete sim grid, backend, and default map mode.
+ * onto a backend and default map mode. The analytical grid stays canonical;
+ * capability tiers may only change execution and display quality.
  *
  * Runs on the main thread (needs `document`/`navigator`). The resolved HeatCaps
  * is postMessage'd into the sim worker, which never re-probes.
@@ -31,8 +32,8 @@ export interface SimCapabilities {
 export interface HeatCaps {
   tier: RenderTier;
   backend: SimBackend;
-  /** N for the N×N finite-difference grid. FD is O(N²): halving N is 4× cheaper. */
-  grid: number;
+  /** Canonical N for the N×N finite-difference grid. */
+  grid: 192;
   mode: MapMode;
   /** false -> reduced-motion: render ONE static frame, never step the sim. */
   animate: boolean;
@@ -42,8 +43,6 @@ export interface HeatCaps {
   gpuLabel: string;
 }
 
-/** Grid + default map mode per tier. FD cost scales with grid²; keep them coupled. */
-const TIER_GRID: Record<RenderTier, number> = { 2: 256, 1: 128, 0: 64 };
 const TIER_MODE: Record<RenderTier, MapMode> = { 2: 'relief', 1: 'relief', 0: 'isotherm' };
 
 /** WebGPU counts as available only if an adapter resolves — the API can exist with none. */
@@ -92,7 +91,7 @@ export function resolveHeatCaps(
   return {
     tier,
     backend,
-    grid: TIER_GRID[tier],
+    grid: 192,
     mode: TIER_MODE[tier],
     animate,
     webgpu: caps.webgpu,
@@ -131,10 +130,10 @@ export function assertCapsLogic(): void {
     if (!ok) throw new Error(`caps: ${msg}`);
   };
 
-  // grid shrinks 4× in cost per tier drop (O(N²))
-  assert(resolveHeatCaps(2, true, none, '').grid === 256, 'tier 2 grid = 256');
-  assert(resolveHeatCaps(1, true, none, '').grid === 128, 'tier 1 grid = 128');
-  assert(resolveHeatCaps(0, true, none, '').grid === 64, 'tier 0 grid = 64');
+  // capability may alter the backend, never the calibrated analytical grid
+  assert(resolveHeatCaps(2, true, none, '').grid === 192, 'tier 2 keeps canonical grid');
+  assert(resolveHeatCaps(1, true, none, '').grid === 192, 'tier 1 keeps canonical grid');
+  assert(resolveHeatCaps(0, true, none, '').grid === 192, 'tier 0 keeps canonical grid');
   // GPU only on the full tier AND only with a real GPU compute path
   assert(resolveHeatCaps(2, true, gpu, '').backend === 'gpu', 'tier 2 + gpu path -> gpu');
   assert(resolveHeatCaps(2, true, none, '').backend === 'ts', 'tier 2 no path -> ts');

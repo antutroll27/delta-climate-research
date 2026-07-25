@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Research Console concept · Urban Heat Explorer</title>
+    <link rel="icon" href="../../public/favicon.svg" />
+    <link rel="stylesheet" href="prototype.css?v=7" />
+  </head>
+  <body class="console-page">
+    <a class="skip-link" href="#console-main">Skip to research console</a>
+    <header class="console-nav">
+      <a class="tool-brand" href="../../index.html" aria-label="Delta Climate Research home">
+        <span class="arrow" aria-hidden="true">←</span>
+        <span class="full">Delta<span class="dot">·</span>Climate<span class="dot">·</span>Research</span>
+        <span class="compact" aria-hidden="true">Δ Delta</span>
+      </a>
+      <div class="tool-title">
+        <div>
+          <h1>Urban Heat Scenario Explorer</h1>
+          <p>Accessible research view</p>
+        </div>
+      </div>
+    </header>
+
+    <main class="console-wrap" id="console-main" tabindex="-1">
+      <section class="console-intro">
+        <div>
+          <p class="kicker">Ballygunge · Ward 68</p>
+          <h1>Heat evidence, without the <em>rendering dependency.</em></h1>
+        </div>
+
+        <div>
+          <div class="status-banner" role="status">
+            <span class="status-dot" aria-hidden="true"></span>
+            <div>
+              <strong>Accessible 2D research view</strong>
+              <span>The same scenario model is available without 3D buildings, continuous animation or a WebGL requirement.</span>
+            </div>
+          </div>
+          <p class="lede" style="margin-top:1rem">
+            Use this view on low-power devices, with reduced motion, after a rendering failure, or whenever a document-style workflow is more useful.
+          </p>
+        </div>
+      </section>
+
+      <div class="console-grid">
+        <section aria-labelledby="fallback-map-title">
+          <div class="section-heading">
+            <h2 id="fallback-map-title">Static ward heat field</h2>
+            <span>Modelled · 13:00 peak</span>
+          </div>
+
+          <figure class="static-map" style="margin:0">
+            <svg class="mock-map" viewBox="0 0 760 520" preserveAspectRatio="xMidYMid slice" role="img" aria-labelledby="static-map-name static-map-desc">
+              <title id="static-map-name">Modelled Ballygunge heat field</title>
+              <desc id="static-map-desc">A static two-dimensional ward map showing hotter building clusters in red and cooler corridors in cyan.</desc>
+              <path class="ward-boundary" d="M94 68 273 24 486 57 664 177 703 353 572 478 353 499 151 416 61 235Z" />
+              <path class="road-major" d="M31 423C158 355 246 310 368 237S566 107 735 82" />
+              <path class="road-major" d="M168 16C230 151 306 232 407 302s162 128 220 211" />
+              <path class="road-minor" d="M73 174 686 366M101 309 622 118M224 36 530 490M52 237 722 251M287 31 270 493M476 51 477 500" />
+              <g>
+                <rect class="block hot" x="172" y="115" width="61" height="42" rx="3" />
+                <rect class="block severe" x="251" y="91" width="52" height="74" rx="3" />
+                <rect class="block warm" x="329" y="122" width="74" height="48" rx="3" />
+                <rect class="block hot" x="437" y="104" width="58" height="81" rx="3" />
+                <rect class="block severe" x="520" y="151" width="72" height="62" rx="3" />
+                <rect class="block" x="135" y="219" width="75" height="62" rx="3" />
+                <rect class="block severe" x="237" y="199" width="68" height="91" rx="3" />
+                <rect class="block hot" x="338" y="215" width="81" height="63" rx="3" />
+                <rect class="block severe" x="455" y="231" width="61" height="84" rx="3" />
+                <rect class="block hot" x="547" y="248" width="72" height="56" rx="3" />
+                <rect class="block warm" x="162" y="337" width="86" height="58" rx="3" />
+                <rect class="block hot" x="279" y="318" width="65" height="83" rx="3" />
+                <rect class="block severe" x="380" y="335" width="87" height="54" rx="3" />
+                <rect class="block" x="494" y="334" width="74" height="71" rx="3" />
+              </g>
+            </svg>
+            <figcaption class="static-map-caption">
+              <div><strong>Ballygunge · Urban Core</strong><span>Static scenario frame · no continuous animation</span></div>
+              <b id="console-map-temp">39.6°C</b>
+            </figcaption>
+          </figure>
+
+          <div class="methodology" style="margin-top:2rem">
+            <div>
+              <h2>What remains available</h2>
+              <p>Ward comparison, intervention controls, temperature deltas, UHI estimate, heat-stress share, cost range, methodology and report preview.</p>
+            </div>
+            <div>
+              <h2>What is intentionally removed</h2>
+              <p>3D massing, camera orbit, continuous simulation frames, decorative transitions and GPU-dependent temperature readback.</p>
+            </div>
+          </div>
+        </section>
+
+        <section aria-labelledby="fallback-controls-title">
+          <div class="section-heading">
+            <h2 id="fallback-controls-title">Scenario controls</h2>
+            <span>Updates on release</span>
+          </div>
+
+          <div class="console-controls">
+            <div class="field">
+              <label for="trees">Tree canopy corridors <output id="trees-output" for="trees">0 km</output></label>
+              <input id="trees" type="range" min="0" max="50" value="0" />
+            </div>
+            <div class="field">
+              <label for="roof">Cool-roof coverage <output id="roof-output" for="roof">0%</output></label>
+              <input id="roof" type="range" min="0" max="100" step="5" value="0" />
+            </div>
+            <div class="field">
+              <label for="parks">Pocket parks and wetlands <output id="parks-output" for="parks">0 sites</output></label>
+              <input id="parks" type="range" min="0" max="10" value="0" />
+            </div>
+            <div class="field">
+              <label for="facades">Vertical green façades <output id="facades-output" for="facades">0 blocks</output></label>
+              <input id="facades" type="range" min="0" max="15" value="0" />
+            </div>
+          </div>
+
+          <div class="section-heading" style="margin-top:2rem">
+            <h2>Model response</h2>
+            <span>Screening estimate</span>
+          </div>
+
+          <table class="metric-table">
+            <tbody>
+              <tr><th scope="row">Mean surface temperature</th><td id="mean-result">39.6°C</td></tr>
+              <tr><th scope="row">Cooling from baseline</th><td id="m-cooling-result">0.0°C</td></tr>
+              <tr><th scope="row">UHI versus rural reference</th><td id="uhi-result">+3.8°</td></tr>
+              <tr><th scope="row">Area above 40°C</th><td id="area-result">43%</td></tr>
+              <tr><th scope="row">Indicative capital estimate</th><td id="m-cost-result">₹0.0 cr</td></tr>
+            </tbody>
+          </table>
+
+          <div class="console-actions">
+            <a class="primary-action report-link" href="scenario-brief.html">Preview scenario brief ↗</a>
+            <a class="secondary-action" href="field-instrument.html">Try immersive view</a>
+          </div>
+
+          <p id="scenario-status" class="sr-only" role="status" aria-live="polite"></p>
+        </section>
+      </div>
+
+      <section class="methodology" id="methodology" aria-labelledby="methodology-title">
+        <div>
+          <p class="kicker">Methodology</p>
+          <h2 id="methodology-title">Transparent by default</h2>
+        </div>
+        <div>
+          <p>
+            The displayed field is a screening-grade, two-dimensional energy-balance scenario. It combines real building footprints and cited intervention assumptions, but it is not a measured ward raster or an engineering specification.
+          </p>
+          <ul>
+            <li>Model response is relative to the selected baseline.</li>
+            <li>Capital estimates are indicative and should be presented as ranges.</li>
+            <li>Measured surface-temperature data remains the publication gate.</li>
+          </ul>
+        </div>
+      </section>
+    </main>
+
+    <script src="prototype.js"></script>
+  </body>
+</html>

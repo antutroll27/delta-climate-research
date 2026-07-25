@@ -292,6 +292,9 @@ const routeContracts = [
   routeContract('/', 'core', true),
   routeContract('/team/', 'core', true),
   routeContract('/climate-highlights/', 'permanent-preview', false, true),
+  routeContract('/heat-map/', 'heat-map-tool', false),
+  routeContract('/heat-map/compare/', 'heat-map-tool', false),
+  routeContract('/heat-map/brief/', 'heat-map-tool', false),
   routeContract('/white-papers/', 'paper-hub', anyPaperPublished, !anyPaperPublished),
   ...papers.map((paper) => routeContract(
     `/white-papers/${paper.slug}/`,

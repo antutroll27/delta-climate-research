@@ -116,6 +116,9 @@ function publicationContracts() {
     { route: '/', indexable: true, placeholder: false },
     { route: '/team/', indexable: true, placeholder: false },
     { route: '/climate-highlights/', indexable: false, placeholder: true },
+    { route: '/heat-map/', indexable: false, placeholder: false },
+    { route: '/heat-map/compare/', indexable: false, placeholder: false },
+    { route: '/heat-map/brief/', indexable: false, placeholder: false },
     { route: '/white-papers/', indexable: anyPaperPublished, placeholder: !anyPaperPublished },
     ...papers.map((paper) => ({
       route: `/white-papers/${paper.slug}/`,

@@ -33,6 +33,10 @@ Thumbs.db
 .vercel
 playwright-report/
 test-results/
+# Playwright CLI trace/session cache and agent run artifacts (screenshots, reports —
+# tens of MB, regenerated on demand; never belong in git)
+.playwright-cli/
+output/
 
 
 

@@ -1,0 +1,24 @@
+---
+import Base from '../../layouts/Base.astro';
+import HeatMapBrief from '../../components/ClimateEngine/brief/HeatMapBrief.astro';
+---
+<Base
+  title="Urban Heat Scenario Brief — Delta Climate Research"
+  description="A printable screening-grade record for an Urban Heat Explorer comparison scenario."
+  noindex={true}
+  nativeScroll={true}
+>
+  <HeatMapBrief />
+</Base>
+
+<script>
+  import { mountPairedBrief } from '../../scripts/climate-engine/compare/paired-brief';
+
+  let dispose: (() => void) | null = null;
+  const boot = () => {
+    if (document.querySelector('[data-brief-root]') && !dispose) dispose = mountPairedBrief();
+  };
+  boot();
+  document.addEventListener('astro:page-load', boot);
+  document.addEventListener('astro:before-swap', () => { dispose?.(); dispose = null; });
+</script>
