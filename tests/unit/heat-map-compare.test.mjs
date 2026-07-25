@@ -11,12 +11,22 @@ import { DEFAULT_PARAMS } from '../../src/scripts/climate-engine/types.ts';
 import { rasterizeWardBuilt, rasterWardBase } from '../../src/scripts/climate-engine/ward-raster.ts';
 
 test('coverage controls convert once into the existing model units', () => {
-  const coverage = normalizeCoverage({ trees: 55, roofs: 65, parks: 3, facades: 35 });
+  const coverage = normalizeCoverage({ trees: 55, roofs: 65, facades: 35 });
   const interventions = coverageToInterventions(coverage);
   assert.ok(Math.abs(interventions.trees - 27.5) < 1e-9);
   assert.equal(interventions.roof, 65);
-  assert.ok(Math.abs(interventions.parks - (3 / 100 * 196 / 0.785)) < 1e-9);
   assert.ok(Math.abs(interventions.facades - 5.25) < 1e-9);
+});
+
+test('parks is retired from Compare and can never be applied from input', () => {
+  // The lever has no control, so no request — URL, default, or otherwise — may
+  // reintroduce it. A non-zero value here would be an invisible intervention.
+  assert.equal(normalizeCoverage({ parks: 3 }).parks, 0);
+  assert.equal(normalizeCoverage({}).parks, 0);
+  assert.equal(coverageToInterventions(normalizeCoverage({ parks: 4 })).parks, 0);
+  const legacy = parsePairedScenario('?a=ballygunge&b=baruipur&parks=3.5');
+  assert.equal(legacy.coverage.parks, 0);
+  assert.ok(!serializePairedScenario(legacy).includes('parks'));
 });
 
 test('park coverage retains a fractional final patch rather than rounding upward', () => {
@@ -40,8 +50,10 @@ test('park coverage retains a fractional final patch rather than rounding upward
   assert.ok(Math.abs(layers.albedo[second] - 0.16) < 1e-6);
 });
 
+// parks is retired from the Compare UI, but its delivered-quantity maths is kept
+// for the day the control returns — exercise it directly so it cannot rot.
 test('delivered park area reports the requested fractional area', () => {
-  const quantities = deliveredQuantities(normalizeCoverage({ parks: 3 }), {
+  const quantities = deliveredQuantities({ trees: 55, roofs: 0, parks: 3, facades: 0 }, {
     corridorSorted: new Int32Array(100), corridorKm: 0,
     parkCenters: Array.from({ length: 10 }, (_, index) => [index * 10, index * 10]),
     roofM2: 500_000, facadeM2: 0, cellArea: 53.1, cellM: 7.29,
@@ -80,10 +92,10 @@ test('footprint rasterisation is deterministic and unions subcell coverage', () 
 });
 
 test('scenario URLs normalize duplicate wards and preserve reproducible state', () => {
-  const state = parsePairedScenario('?a=ballygunge&b=ballygunge&trees=55.4&roof=63&parks=3.04&facades=35.04&phase=retained');
+  const state = parsePairedScenario('?a=ballygunge&b=ballygunge&trees=55.4&roof=63&facades=35.04&phase=retained');
   assert.equal(state.a, 'ballygunge');
   assert.notEqual(state.a, state.b);
-  assert.deepEqual(state.coverage, { trees: 55, roofs: 65, parks: 3, facades: 35 });
+  assert.deepEqual(state.coverage, { trees: 55, roofs: 65, parks: 0, facades: 35 });
   const roundTrip = parsePairedScenario(`?${serializePairedScenario(state)}`);
   assert.deepEqual(roundTrip, state);
 });

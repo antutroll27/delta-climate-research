@@ -14,7 +14,6 @@ export function mountPairedBrief(): () => void {
   if (link) link.href = `/heat-map/compare/?${serializePairedScenario(state)}`;
   set('[data-value="trees"]', `${state.coverage.trees}% modelled corridor cells`);
   set('[data-value="roofs"]', `${state.coverage.roofs}% mapped roof stock`);
-  set('[data-value="parks"]', `${state.coverage.parks.toFixed(1)}% of study-window area`);
   set('[data-value="facades"]', `${state.coverage.facades.toFixed(1)}% modelled programme intensity`);
   set('[data-value="phase"]', state.phase === 'peak' ? '13:00 peak' : '22:00 retained');
   const print = root.querySelector<HTMLButtonElement>('[data-action="print"]');

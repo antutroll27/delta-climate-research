@@ -7,7 +7,12 @@ export interface CoverageScenario {
   trees: number;
   /** Percent of modelled roof stock. */
   roofs: number;
-  /** Planted-area share of the 196 ha study window. */
+  /**
+   * Planted-area share of the 196 ha study window.
+   * Retired from Compare: pinned to 0 so the paired result cannot carry a lever
+   * the interface does not expose. The coverage maths stays intact for the day
+   * the control returns.
+   */
   parks: number;
   /** Percent of modelled façade programme intensity. */
   facades: number;
@@ -25,7 +30,7 @@ export interface PairedScenarioState {
 export const ILLUSTRATIVE_COVERAGE: CoverageScenario = {
   trees: 55,
   roofs: 65,
-  parks: 3,
+  parks: 0,
   facades: 35,
 };
 
@@ -45,7 +50,9 @@ export function normalizeCoverage(input: Partial<CoverageScenario>): CoverageSce
   return {
     trees: quantize(clamp(Number(input.trees ?? ILLUSTRATIVE_COVERAGE.trees), 0, 100), 1),
     roofs: quantize(clamp(Number(input.roofs ?? ILLUSTRATIVE_COVERAGE.roofs), 0, 100), 5),
-    parks: Number(quantize(clamp(Number(input.parks ?? ILLUSTRATIVE_COVERAGE.parks), 0, 4), 0.1).toFixed(1)),
+    // parks is retired from Compare — force 0 so a stale ?parks= link cannot
+    // apply an intervention with no visible control.
+    parks: 0,
     facades: Number(quantize(clamp(Number(input.facades ?? ILLUSTRATIVE_COVERAGE.facades), 0, 100), 0.1).toFixed(1)),
   };
 }

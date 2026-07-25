@@ -26,7 +26,8 @@ export function parsePairedScenario(search: string): PairedScenarioState {
     coverage: normalizeCoverage({
       trees: numeric(params, 'trees', DEFAULT_PAIRED_SCENARIO.coverage.trees),
       roofs: numeric(params, 'roof', DEFAULT_PAIRED_SCENARIO.coverage.roofs),
-      parks: numeric(params, 'parks', DEFAULT_PAIRED_SCENARIO.coverage.parks),
+      // parks is retired — normalizeCoverage pins it to 0, so any legacy
+      // ?parks= value in an old link is ignored rather than silently applied.
       facades: numeric(params, 'facades', DEFAULT_PAIRED_SCENARIO.coverage.facades),
     }),
     phase,
@@ -41,7 +42,6 @@ export function serializePairedScenario(state: PairedScenarioState): string {
     b: state.b,
     trees: String(state.coverage.trees),
     roof: String(state.coverage.roofs),
-    parks: String(state.coverage.parks),
     facades: String(state.coverage.facades),
     phase: state.phase,
     contract: state.contract,

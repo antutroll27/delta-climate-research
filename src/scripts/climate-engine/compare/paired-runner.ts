@@ -5,7 +5,6 @@ import {
   buildSpatial,
   computeCost,
   currentParamsForReference,
-  PARK_HA,
   RESET_BURST,
   type Ambient,
   type RoadsData,
@@ -150,9 +149,3 @@ export async function runPairedScenario(state: PairedScenarioState, signal?: Abo
   }
   return { a, b, forcing, settledAt: new Date().toISOString(), contract: 'paired-coverage-v1' };
 }
-
-export function formatParkEquivalent(quantity: DeliveredQuantities): string {
-  return `${quantity.appliedParkHa.toFixed(2)} ha, ${quantity.parkSiteEquivalents.toFixed(1)} site eq.`;
-}
-
-export const PARK_SITE_HECTARES = PARK_HA;

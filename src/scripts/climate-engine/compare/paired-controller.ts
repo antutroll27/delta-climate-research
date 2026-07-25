@@ -13,7 +13,8 @@ import type {
 type SheetState = 'collapsed' | 'half' | 'full';
 type BenchTab = 'settings' | 'evidence' | 'wards';
 
-const coverageKeys = ['trees', 'roofs', 'parks', 'facades'] as const;
+/** Exposed levers. `parks` is retired from Compare and stays pinned at 0. */
+const coverageKeys = ['trees', 'roofs', 'facades'] as const;
 
 function formatTemperature(value: number): string {
   return `${value.toFixed(1)}°C`;
@@ -29,7 +30,7 @@ function formatMetric(metric: MetricValue): string {
 
 function formatDelivered(result: WardScenarioResult): string {
   const quantity = result.delivered;
-  return `${quantity.treeCorridorCells.toLocaleString()} corridor cells, ${(quantity.roofAreaM2 / 1000).toFixed(1)}k m² roofs, ${quantity.appliedParkHa.toFixed(2)} ha parks, ${quantity.facadeIntensityPct.toFixed(1)}% façade intensity`;
+  return `${quantity.treeCorridorCells.toLocaleString()} corridor cells, ${(quantity.roofAreaM2 / 1000).toFixed(1)}k m² roofs, ${quantity.facadeIntensityPct.toFixed(1)}% façade intensity`;
 }
 
 export function mountPairedBench(): () => void {
@@ -176,7 +177,7 @@ export function mountPairedBench(): () => void {
     for (const key of coverageKeys) {
       const input = one<HTMLInputElement>(`[data-input="${key}"]`);
       if (input) input.value = String(state.coverage[key]);
-      const decimals = key === 'parks' || key === 'facades' ? 1 : 0;
+      const decimals = key === 'facades' ? 1 : 0;
       setText(`[data-output="${key}"]`, `${state.coverage[key].toFixed(decimals)}%`);
     }
     const phase = one<HTMLInputElement>(`[data-input="phase"][value="${state.phase}"]`);
