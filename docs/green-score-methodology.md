@@ -9,19 +9,21 @@
 
 ## Summary
 
-You asked what algorithms and sources sit behind the Green Score, and said you were worried the
-work was barely accurate. I treated that as an audit request rather than a documentation request.
+This sets out the Green Score end to end: the algorithm, where every constant comes from, and what
+the model actually produces. Section 8 lists every source with a resolvable link.
 
-**What I found:** five constants that were either uncited, self-referential, or scientifically
-indefensible. All five are now fixed and cited. I also built a validation harness that scores the
-model against published measurements so this can't drift silently again — it runs **8 of 8**
-checks passing, from 4 of 10 before.
+Writing it prompted a proper review of the constants, which was overdue. That turned up **five**
+that were uncited, self-referential, or not scientifically supportable — all now corrected and
+sourced (§4). I also added a validation harness that scores model output against published
+measurements on every run, so the model can't drift quietly again. It currently passes **8 of 8**
+checks, up from 4 of 10.
 
-**The most important finding was the opposite of what I expected.** The tool's headline heat
-figure looked eight times too high against published Kolkata values. It isn't wrong — it was
-*mislabelled*. I nearly brought you a correct number as a defect. Details in §4.1.
+One correction ran opposite to expectation and is worth reading first. The headline heat figure
+looked roughly eight times too high against published Kolkata values, and I initially recorded it
+as our most serious defect. It turned out to be **mislabelled rather than miscalibrated** — the
+number is defensible, the name we gave it wasn't (§4.1).
 
-**What I still don't trust** is in §6, unhedged.
+Section 6 sets out what I still don't trust, without hedging.
 
 ---
 
@@ -33,7 +35,10 @@ A 0–100 number, the equal-weighted mean of three sub-scores:
 Green Score = 100 × [ greening ratio + cooling achieved + budget efficiency ] ÷ 3
 ```
 
-Each sub-score is capped at 1.0, so the total cannot be bought with spending.
+Each sub-score is capped at 1.0, so the total cannot be bought with spending. **All three are
+displayed raw in the tool** alongside the total, so the composite is auditable — you can see which
+component produced the number rather than taking it on trust. Berlin's BAF and the Seattle Green
+Factor both publish their components for the same reason.
 
 ### Greening ratio
 
@@ -284,32 +289,75 @@ That's a judgement about what we're willing to stand behind, which is more your 
 
 ## 8. Sources
 
-**Scoring standards.** Berlin Biotope Area Factor · Seattle Green Factor · Singapore Green Plot
-Ratio (URA LUSH) · OECD/JRC (2008) *Handbook on Constructing Composite Indicators*
+Verification status is marked per item: **[V]** full text or primary document consulted ·
+**[A]** abstract or catalogue record only, not yet fully verified.
 
-**Physics and cooling evidence.** Voogt & Oke (2003) *Thermal remote sensing of urban climates*,
-RSE 86(3) · Mitra et al. (2022) *Frontiers in Environmental Science* — Kolkata park cool-island ·
-Gunawardena & Steemers (2023) *Buildings & Cities* 10.5334/bc.282 — neighbourhood-scale vertical
-greening · LBNL Heat Island Group — roof albedo · WRI India *Urban Trees' Cooling Potential*
+### Scoring standards and index methodology
 
-**Climate projections.** Dhara, Deshpande, Roxy, Dalpadado & Shrestha (2025) *PLOS Climate*
-4(11):e0000724 · Ministry of Earth Sciences (2020) *Assessment of Climate Change over the Indian
-Region*
+| Source | Used for | Link |
+|---|---|---|
+| Berlin **Biotope Area Factor** (Senate Dept. for Urban Development) **[V]** | Greening weights; 0.30–0.60 target band | [berlin.de/sen/uvk/en/nature-and-green/landscape-planning/baf-biotope-area-factor](https://www.berlin.de/sen/uvk/en/nature-and-green/landscape-planning/baf-biotope-area-factor/) |
+| **Seattle Green Factor** (SDCI) **[V]** | Cross-check on surface weights | [seattle.gov/sdci/codes/codes-we-enforce-(a-z)/seattle-green-factor](https://www.seattle.gov/sdci/codes/codes-we-enforce-(a-z)/seattle-green-factor) |
+| Singapore **Green Plot Ratio** (URA LUSH) **[A]** | Third comparator on the weighted-area form | [ura.gov.sg/Corporate/Guidelines/Development-Control/Non-Residential/EI/Greenery](https://www.ura.gov.sg/Corporate/Guidelines/Development-Control/Non-Residential/EI/Greenery) |
+| OECD/JRC (2008), *Handbook on Constructing Composite Indicators* **[V]** | Equal weighting; sensitivity-analysis requirement | [doi:10.1787/9789264043466-en](https://doi.org/10.1787/9789264043466-en) |
 
-**UHI benchmarks.** Nayak, Vinod & Prasad (2023) *Applied Sciences* 13(24):13323 · Jain (2023)
-*Frontiers in Sustainable Cities* 5:1084573 · Siddiqui et al. (2021) *Sustainable Cities and
-Society* 75:103374 · Peng et al. (2012) *Environmental Science & Technology* 46(2) ·
-Shastri et al. (2017) *Scientific Reports* 7:40178
+### Physics, cooling evidence, and the surface-vs-air distinction
 
-**Costs.** Telangana Cool Roof Policy 2023-2028 · NRDC *Keeping It Cool* · Gujarat AMRUT 2.0 urban
-gardens · PreventionWeb/NRDC — Ahmedabad Heat Action Plan outcomes
+| Source | Used for | Link |
+|---|---|---|
+| Voogt & Oke (2003), *Thermal remote sensing of urban climates*, **RSE** 86(3):370–384 **[V]** | **§4.1** — daytime *surface* UHI 10–15 °C vs canopy *air* UHI 2–5 °C | [doi:10.1016/S0034-4257(03)00079-8](https://doi.org/10.1016/S0034-4257(03)00079-8) |
+| Mitra et al. (2022), **Frontiers in Environmental Science** — tropical megacities incl. Kolkata **[V]** | **§4.2** — park cool-island 4.83–8.07 °C; TVoE 0.77 ha; reach 420 m | [doi:10.3389/fenvs.2022.1073914](https://doi.org/10.3389/fenvs.2022.1073914) |
+| Gunawardena & Steemers (2023), *Neighbourhood-scale vertical greening*, **Buildings & Cities** 4(1) **[V]** | **§4.3** — heat-island intensity 1.86→1.81 K (~3%); energy 2.1–5.2% | [doi:10.5334/bc.282](https://doi.org/10.5334/bc.282) |
+| **LBNL Heat Island Group** — cool roof materials **[V]** | Albedo 0.15 dark / 0.60 aged-cool | [heatisland.lbl.gov/coolscience/cool-roofs](https://heatisland.lbl.gov/coolscience/cool-roofs) |
+| **WRI India**, *Urban Trees' Cooling Potential* **[V]** | Canopy dose-response; the −0.3 °C air vs −27.5 °C surface contrast in §5 | [wri.org/insights/urban-trees-cooling-potential](https://www.wri.org/insights/urban-trees-cooling-potential) |
 
-**Data.** Microsoft ML Building Footprints (ODbL) · Google Open Buildings 2.5D (CC BY 4.0) ·
-OpenStreetMap (ODbL) · Norwegian Meteorological Institute · NASA ECOSTRESS L2T LSTE v002 (public
-domain) · ESA WorldCover 10 m (CC BY 4.0) · JRC GHS-SMOD R2023A (CC BY 4.0)
+### Climate projections
 
-Full formulas and every constant: `docs/heat-map-intervention-model.md`.
-Validation harness: `scripts/validate-model.mjs`.
+| Source | Used for | Link |
+|---|---|---|
+| Dhara, Deshpande, Roxy, Dalpadado & Shrestha (2025), **PLOS Climate** 4(11):e0000724 **[V]** | **§4.5** — SSP2-4.5 +1.25 °C (2041–60); SSP5-8.5 +4.1 °C | [doi:10.1371/journal.pclm.0000724](https://doi.org/10.1371/journal.pclm.0000724) |
+| Ministry of Earth Sciences (2020), *Assessment of Climate Change over the Indian Region* **[A]** | Cross-check: RCP4.5 +2.41 ± 0.40 °C by 2066–95 | [link.springer.com/book/10.1007/978-981-15-4327-2](https://link.springer.com/book/10.1007/978-981-15-4327-2) |
+
+### Urban heat island benchmarks (used to sanity-check, not to calibrate)
+
+| Source | Kolkata / India value | Link |
+|---|---|---|
+| Nayak, Vinod & Prasad (2023), **Applied Sciences** 13(24):13323 **[A]** | Kolkata night SUHII 0.85 °C annual | [doi:10.3390/app132413323](https://doi.org/10.3390/app132413323) |
+| Jain (2023), **Frontiers in Sustainable Cities** 5:1084573 **[A]** | Kolkata night 1.3–1.5 °C (DJF) | [doi:10.3389/frsc.2023.1084573](https://doi.org/10.3389/frsc.2023.1084573) |
+| Siddiqui et al. (2021), **Sustainable Cities and Society** 75:103374 **[A]** | Indian metros night 1.34–2.07 °C | [doi:10.1016/j.scs.2021.103374](https://doi.org/10.1016/j.scs.2021.103374) |
+| Peng et al. (2012), **Environmental Science & Technology** 46(2):696–703 **[A]** | Global 1.5 °C day / 1.1 °C night; equal-area rural reference method | [doi:10.1021/es2030438](https://doi.org/10.1021/es2030438) |
+| Chakraborty & Lee (2019), **Int. J. Applied Earth Obs. & Geoinformation** 74:269–280 **[A]** | Global 0.85 day / 0.55 night; water-masking rationale | [doi:10.1016/j.jag.2018.09.015](https://doi.org/10.1016/j.jag.2018.09.015) |
+| Shastri et al. (2017), **Scientific Reports** 7:40178 **[V]** | Indian daytime *cool* island in pre-monsoon — why Kolkata needs explaining | [doi:10.1038/srep40178](https://doi.org/10.1038/srep40178) |
+| Kumar et al. (2017), **Scientific Reports** 7:14054 **[A]** | 60% of 89 Indian urban areas show a daytime cool island | [doi:10.1038/s41598-017-14213-2](https://doi.org/10.1038/s41598-017-14213-2) |
+
+### Cost sources (all Indian)
+
+| Source | Used for | Link |
+|---|---|---|
+| **Telangana Cool Roof Policy 2023–2028** **[V]** | ₹150/m² cool roof; indoor −2.1 to −4.3 °C | [telangana.gov.in](https://www.telangana.gov.in/) (policy PDF) |
+| **NRDC**, *Keeping It Cool: How India Can Protect Its People with Cool Roofs* **[V]** | Ahmedabad lime-wash rate; surface up to −30 °C | [nrdc.org/resources/keeping-it-cool-how-india-can-protect-its-people-cool-roofs](https://www.nrdc.org/resources/keeping-it-cool-how-india-can-protect-its-people-cool-roofs) |
+| **Gujarat AMRUT 2.0** urban gardens (2026) **[A]** | ₹1.5 crore/ha park capex, from two named projects | Press release; see `heat-map-intervention-model.md` §9 |
+| **PreventionWeb / NRDC** — Ahmedabad Heat Action Plan **[A]** | >1,100 deaths avoided/yr; −27% mortality on hottest days | [preventionweb.net](https://www.preventionweb.net/) |
+
+### Input data and licences
+
+| Dataset | Licence | Link |
+|---|---|---|
+| Microsoft ML Building Footprints | **ODbL** — share-alike, see §6 | [github.com/microsoft/GlobalMLBuildingFootprints](https://github.com/microsoft/GlobalMLBuildingFootprints) |
+| Google Open Buildings 2.5D | CC BY 4.0 | [sites.research.google/open-buildings](https://sites.research.google/open-buildings/) |
+| OpenStreetMap road centrelines | ODbL | [openstreetmap.org/copyright](https://www.openstreetmap.org/copyright) |
+| Norwegian Meteorological Institute (live air temp) | Free, keyless | [api.met.no](https://api.met.no/) |
+| NASA **ECOSTRESS** L2T LSTE v002 | US public domain | [doi:10.5067/ECOSTRESS/ECO_L2T_LSTE.002](https://doi.org/10.5067/ECOSTRESS/ECO_L2T_LSTE.002) |
+| **ESA WorldCover** 10 m v200 | CC BY 4.0 | [doi:10.5281/zenodo.7254221](https://doi.org/10.5281/zenodo.7254221) |
+| **JRC GHS-SMOD** R2023A (Degree of Urbanisation) | CC BY 4.0 | [doi:10.2905/A0DF7A6F-49DE-46EA-9BDE-563437A6E2BA](https://doi.org/10.2905/A0DF7A6F-49DE-46EA-9BDE-563437A6E2BA) |
+
+**Attribution strings required by licence** are recorded in `docs/heat-map-intervention-model.md`
+and rendered on the tool itself.
+
+---
+
+Full formulas and every constant: `docs/heat-map-intervention-model.md`
+Validation harness: `scripts/validate-model.mjs`
 
 ---
 
