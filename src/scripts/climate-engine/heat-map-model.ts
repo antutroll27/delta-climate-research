@@ -4,14 +4,14 @@
  * module is the single source of truth for them and is unit-testable via
  * `assertInterventionLogic()` (run with `node --experimental-strip-types`).
  *
- * Canvas rasterisation of footprints (`rasterBase`) lives in the app module
- * because it needs a 2D context; everything here is array math.
+ * Deterministic footprint rasterisation lives in `ward-raster.ts`; everything
+ * here is pure array math.
  */
 // .ts extension: keeps this module runnable under `node --experimental-strip-types`
 // for assertInterventionLogic() (node doesn't do extensionless resolution).
-import { DEFAULT_PARAMS, type SimParams, type SimLayers } from './types.ts';
+import { CANONICAL_GRID_N, DEFAULT_PARAMS, type SimParams, type SimLayers } from './types.ts';
 
-export const SIM_N = 192;                     // grid side (ward 1400 m → dx ≈ 7.29 m/cell)
+export const SIM_N = CANONICAL_GRID_N;         // grid side (ward 1400 m → dx ≈ 7.29 m/cell)
 export const RAMP_MIN = 26, RAMP_MAX = 48;    // °C colour-ramp bounds
 export const SIM_D = 2.5;                     // §2 diffusion — λ≈47 m: LST contrast + park halo
 export const RESET_BURST = 600;               // diffusion-relax steps after each reset
@@ -23,7 +23,8 @@ export const FALLBACK_TAIR = 32;              // used only when the live feed is
 const ALB_BASE = 0.15, ALB_COOL = 0.60;       // §3.2 dark vs aged-cool-roof albedo (LBNL)
 const TREE_CAP = 0.7, PARK_R_M = 50;          // §3.1 crown-closure cap · §3.3 blob = Kolkata TVoE
 const FACADE_Q = 0.30;                        // §3.4 anthropogenic-heat reduction fraction
-const TREES_PER_KM = 110, PARK_HA = 0.785;
+const TREES_PER_KM = 110;
+export const PARK_HA = 0.785;
 
 export interface WardData { center: [number, number]; sizeM: number; count: number; b: number[][]; [k: string]: unknown; }
 export interface RoadsData { ways: { w: number; p: number[] }[]; }
@@ -116,10 +117,20 @@ export function applyInterventions(base: SimLayers, iv: Interventions, sp: Spati
   if (fF > 0) for (let i = 0; i < N2; i++) { const b = base.built[i]; if (b > 0) veg[i] = Math.min(1, veg[i] + Math.min(0.25, fF * b * 0.15)); }
   if (sp && iv.trees > 0) { const cs = sp.corridorSorted, k = Math.floor((iv.trees / 50) * cs.length); for (let q = 0; q < k; q++) { const i = cs[q]; veg[i] = Math.min(TREE_CAP, veg[i] + 0.6); albedo[i] = Math.min(0.85, albedo[i] + 0.04); } }
   if (sp && iv.parks > 0) {
-    const r = Math.round(PARK_R_M / sp.cellM), r2 = r * r, np = Math.min(iv.parks, sp.parkCenters.length);
-    for (let kk = 0; kk < np; kk++) { const c = sp.parkCenters[kk];
+    const r = Math.round(PARK_R_M / sp.cellM), r2 = r * r;
+    const requested = Math.min(Math.max(0, iv.parks), sp.parkCenters.length);
+    const fullParks = Math.floor(requested), finalFraction = requested - fullParks;
+    const patchCount = fullParks + (finalFraction > 0 ? 1 : 0);
+    for (let kk = 0; kk < patchCount; kk++) { const c = sp.parkCenters[kk];
+      const coverage = kk < fullParks ? 1 : finalFraction;
       for (let y = Math.max(0, c[1] - r); y <= Math.min(SIM_N - 1, c[1] + r); y++) for (let x = Math.max(0, c[0] - r); x <= Math.min(SIM_N - 1, c[0] + r); x++) {
-        const dx = x - c[0], dy = y - c[1]; if (dx * dx + dy * dy <= r2) { const i = y * SIM_N + x; veg[i] = Math.max(veg[i], 0.90); albedo[i] = Math.max(albedo[i], 0.20); }
+        const dx = x - c[0], dy = y - c[1]; if (dx * dx + dy * dy <= r2) {
+          const i = y * SIM_N + x;
+          // The final patch is blended by requested area fraction. This keeps a
+          // 0.1% control from rounding up to a whole 0.785 ha intervention.
+          veg[i] = Math.max(veg[i], veg[i] + (0.90 - veg[i]) * coverage);
+          albedo[i] = Math.max(albedo[i], albedo[i] + (0.20 - albedo[i]) * coverage);
+        }
       } }
   }
   return { albedo, veg, built: base.built, water: base.water };
@@ -156,6 +167,25 @@ export function currentParams(s: ScenarioState): SimParams {
   return s.phase === 'peak'
     ? { ...b, sun: 1 * (1 - 0.6 * cloud), tAir: baseTair, tSky: 17 }
     : { ...b, sun: 0, tAir: baseTair - 2.5, tSky: 11 };
+}
+
+/**
+ * Controlled Compare forcing has a named record for each phase. Unlike Explore,
+ * retained conditions are not derived from a latest-observation shortcut.
+ */
+export function currentParamsForReference(
+  ambient: Ambient,
+  phase: 'peak' | 'night',
+  iv: Interventions,
+): SimParams {
+  const wind = Math.min(2.5, Math.max(0.3, ambient.wind / 3));
+  const cloud = ambient.cloud / 100;
+  const evap = 0.6 + 0.6 * (1 - ambient.rh / 100);
+  const Q = DEFAULT_PARAMS.Q * (1 - FACADE_Q * (iv.facades / 15));
+  const base: SimParams = { ...DEFAULT_PARAMS, D: SIM_D, Q, wind, L: DEFAULT_PARAMS.L * evap, tAir: ambient.tAir };
+  return phase === 'peak'
+    ? { ...base, sun: 1 * (1 - 0.6 * cloud), tSky: 17 }
+    : { ...base, sun: 0, tSky: 11 };
 }
 
 /** Green Score 0–100 (§5 eq 8): greening + cooling achieved + budget efficiency. */

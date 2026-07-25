@@ -17,6 +17,18 @@ export interface GridSpec {
   cellMeters: number;
 }
 
+/**
+ * The intervention model is calibrated in cell units. All production analytical
+ * results therefore use this one canonical grid until a separately versioned
+ * metre-based recalibration and convergence study exists.
+ */
+export const CANONICAL_GRID_N = 192;
+export const CANONICAL_GRID_VERSION = 'hm-grid-192-v1';
+
+export function isCanonicalGrid(grid: GridSpec): boolean {
+  return grid.n === CANONICAL_GRID_N;
+}
+
 /** Per-cell input layers, each n*n in [0,1], row-major. */
 export interface SimLayers {
   albedo: Float32Array;

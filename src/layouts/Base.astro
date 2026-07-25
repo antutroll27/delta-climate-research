@@ -10,6 +10,8 @@ interface Props {
   title?: string;
   description?: string;
   noindex?: boolean;
+  /** Interactive tools manage their own native scrolling and must not start Lenis. */
+  nativeScroll?: boolean;
   // Optional page-specific JSON-LD (e.g. Person + BreadcrumbList on /team),
   // emitted alongside the sitewide Organization/WebSite graph below.
   structuredData?: object;
@@ -24,6 +26,7 @@ const {
   title = 'Delta Climate Research — Research-led climate intelligence',
   description = BRAND_DESCRIPTION,
   noindex = false,
+  nativeScroll = false,
   structuredData,
   ogType = 'website',
 } = Astro.props;
@@ -200,7 +203,7 @@ const jsonLd = {
       } catch (e) {}
     </script>
   </head>
-  <body>
+  <body data-native-scroll={nativeScroll ? 'true' : undefined}>
     <a class="skip-link" href="#main">Skip to content</a>
     <slot />
 
@@ -228,6 +231,7 @@ const jsonLd = {
         destroySmoothScroll();
         destroySeamSnap();
         destroyDescentFacts();
+        if (document.body.dataset.nativeScroll === 'true') return;
         initSmoothScroll();
         initScrollEffects();
         initSectionEffects();

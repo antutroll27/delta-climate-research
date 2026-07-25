@@ -2,6 +2,9 @@ import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
   testDir: './tests/e2e',
+  // macOS may create AppleDouble sidecars beside copied test files. They are
+  // binary metadata, not executable specs, and must never enter discovery.
+  testIgnore: ['**/._*'],
   fullyParallel: true,
   // The suite exercises several live WebGL surfaces and one wall-clock loader
   // contract. A single browser worker avoids test-induced GPU/CPU contention

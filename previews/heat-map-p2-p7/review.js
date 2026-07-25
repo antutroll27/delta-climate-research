@@ -12,7 +12,7 @@ let activeSheet = 'collapsed';
 function frameUrl() {
   const query = new URLSearchParams();
   if (activeDevice === 'zoom') query.set('text', '200');
-  if (activePage === 'field-instrument.html') query.set('sheet', activeSheet);
+  if (['field-instrument.html', 'paired-bench.html'].includes(activePage)) query.set('sheet', activeSheet);
   const search = query.toString();
   return `${activePage}${search ? `?${search}` : ''}`;
 }
@@ -63,10 +63,12 @@ for (const button of deviceButtons) {
 
 for (const button of sheetButtons) {
   button.addEventListener('click', () => {
-    activePage = 'field-instrument.html';
+    if (!['field-instrument.html', 'paired-bench.html'].includes(activePage)) {
+      activePage = 'field-instrument.html';
+      pressByValue(previewButtons, 'preview', activePage);
+    }
     activeDevice = 'mobile';
     activeSheet = button.dataset.sheet;
-    pressByValue(previewButtons, 'preview', activePage);
     pressByValue(deviceButtons, 'device', activeDevice);
     setPressed(sheetButtons, button);
     refreshFrame();

@@ -262,41 +262,45 @@ if (dock && mobileSheet && sheetOpen && sheetClose) {
   });
 }
 
-const tabs = [...document.querySelectorAll('[role="tab"]')];
-const tabList = document.querySelector('[role="tablist"]');
-if (tabList) {
-  tabList.setAttribute('aria-orientation', isText200 ? 'vertical' : 'horizontal');
-}
-
 function selectTab(activeTab, { moveFocus = false } = {}) {
-  for (const peer of tabs) {
+  const tabList = activeTab?.closest('[role="tablist"]');
+  if (!tabList) return;
+  const localTabs = [...tabList.querySelectorAll('[role="tab"]')];
+  for (const peer of localTabs) {
     const selected = peer === activeTab;
     peer.setAttribute('aria-selected', String(selected));
     peer.tabIndex = selected ? 0 : -1;
     const panel = document.getElementById(peer.getAttribute('aria-controls'));
     if (panel) panel.hidden = !selected;
   }
+  const scrollContainer = tabList.parentElement?.querySelector('.sheet-content, .mobile-bench-sheet-content');
+  if (scrollContainer) scrollContainer.scrollTop = 0;
   if (moveFocus) activeTab.focus();
 }
 
-for (const tab of tabs) {
-  tab.addEventListener('click', () => {
-    selectTab(tab);
-  });
+for (const tabList of document.querySelectorAll('[role="tablist"]')) {
+  const localTabs = [...tabList.querySelectorAll('[role="tab"]')];
+  tabList.setAttribute('aria-orientation', isText200 ? 'vertical' : 'horizontal');
 
-  tab.addEventListener('keydown', (event) => {
-    const vertical = tabList?.getAttribute('aria-orientation') === 'vertical';
-    const previousKey = vertical ? 'ArrowUp' : 'ArrowLeft';
-    const nextKey = vertical ? 'ArrowDown' : 'ArrowRight';
-    let nextIndex = null;
-    if (event.key === previousKey) nextIndex = (tabs.indexOf(tab) - 1 + tabs.length) % tabs.length;
-    if (event.key === nextKey) nextIndex = (tabs.indexOf(tab) + 1) % tabs.length;
-    if (event.key === 'Home') nextIndex = 0;
-    if (event.key === 'End') nextIndex = tabs.length - 1;
-    if (nextIndex === null) return;
-    event.preventDefault();
-    selectTab(tabs[nextIndex], { moveFocus: true });
-  });
+  for (const tab of localTabs) {
+    tab.addEventListener('click', () => {
+      selectTab(tab);
+    });
+
+    tab.addEventListener('keydown', (event) => {
+      const vertical = tabList.getAttribute('aria-orientation') === 'vertical';
+      const previousKey = vertical ? 'ArrowUp' : 'ArrowLeft';
+      const nextKey = vertical ? 'ArrowDown' : 'ArrowRight';
+      let nextIndex = null;
+      if (event.key === previousKey) nextIndex = (localTabs.indexOf(tab) - 1 + localTabs.length) % localTabs.length;
+      if (event.key === nextKey) nextIndex = (localTabs.indexOf(tab) + 1) % localTabs.length;
+      if (event.key === 'Home') nextIndex = 0;
+      if (event.key === 'End') nextIndex = localTabs.length - 1;
+      if (nextIndex === null) return;
+      event.preventDefault();
+      selectTab(localTabs[nextIndex], { moveFocus: true });
+    });
+  }
 }
 
 function renderBrief() {
@@ -395,15 +399,18 @@ if (pairRoot) {
   }
 
   const pairControls = {
-    trees: document.getElementById('pair-trees'),
-    roof: document.getElementById('pair-roof'),
-    parks: document.getElementById('pair-parks'),
-    facades: document.getElementById('pair-facades'),
+    trees: ['pair-trees', 'm-pair-trees'].map((id) => document.getElementById(id)).filter(Boolean),
+    roof: ['pair-roof', 'm-pair-roof'].map((id) => document.getElementById(id)).filter(Boolean),
+    parks: ['pair-parks', 'm-pair-parks'].map((id) => document.getElementById(id)).filter(Boolean),
+    facades: ['pair-facades', 'm-pair-facades'].map((id) => document.getElementById(id)).filter(Boolean),
   };
-  const selectA = document.getElementById('ward-a');
-  const selectB = document.getElementById('ward-b');
+  const pairSelects = {
+    a: ['ward-a', 'm-ward-a'].map((id) => document.getElementById(id)).filter(Boolean),
+    b: ['ward-b', 'm-ward-b'].map((id) => document.getElementById(id)).filter(Boolean),
+  };
   const studyAreaKm2 = 1.96;
   let pairAnnouncementTimer;
+  let pairUndoState = null;
   const coverageValueText = {
     trees: (value) => `${value} percent of eligible priority-road network`,
     roof: (value) => `${value} percent of eligible roof stock`,
@@ -500,69 +507,110 @@ if (pairRoot) {
   }
 
   function updateSelectOptions() {
-    if (!selectA || !selectB) return;
-    selectA.value = pairState.a;
-    selectB.value = pairState.b;
-    [...selectA.options].forEach((option) => {
-      option.disabled = option.value === pairState.b && option.value !== pairState.a;
-    });
-    [...selectB.options].forEach((option) => {
-      option.disabled = option.value === pairState.a && option.value !== pairState.b;
-    });
+    for (const select of pairSelects.a) {
+      select.value = pairState.a;
+      [...select.options].forEach((option) => {
+        option.disabled = option.value === pairState.b && option.value !== pairState.a;
+      });
+    }
+    for (const select of pairSelects.b) {
+      select.value = pairState.b;
+      [...select.options].forEach((option) => {
+        option.disabled = option.value === pairState.a && option.value !== pairState.b;
+      });
+    }
+    text('m-ward-a-help', `${pairState.b} is already Ward B.`);
+    text('m-ward-b-help', `${pairState.a} is already Ward A.`);
   }
 
   function updateMap(side, name, result) {
-    const map = document.getElementById(`bench-map-${side}`);
-    if (!map) return;
-    map.dataset.mapWard = result.profile.slug;
-    map.style.setProperty('--cooling-ratio', String(Math.min(0.8, result.delta / 2.2)));
-    document.getElementById(`map-use-${side}`)?.setAttribute('href', `#geometry-${result.profile.slug}`);
+    const maps = [
+      document.getElementById(`bench-map-${side}`),
+      document.getElementById(`mobile-bench-map-${side}`),
+    ].filter(Boolean);
+    for (const map of maps) {
+      map.dataset.mapWard = result.profile.slug;
+      map.style.setProperty('--cooling-ratio', String(Math.min(0.8, result.delta / 2.2)));
+      const coordinate = map.querySelector('.map-coordinate');
+      if (coordinate) coordinate.textContent = result.profile.coordinate;
+    }
+    for (const useId of [`map-use-${side}`, `m-map-use-${side}`]) {
+      document.getElementById(useId)?.setAttribute('href', `#geometry-${result.profile.slug}`);
+    }
     text(`map-name-${side}`, name);
     text(`map-zone-${side}`, result.profile.zone);
     text(`map-mean-${side}`, approxTemperature(result.mean));
     text(`map-cooling-${side}`, coolingTemperature(result.delta));
     text(`map-description-${side}`, result.profile.pattern);
-    const coordinate = map.querySelector('.map-coordinate');
-    if (coordinate) coordinate.textContent = result.profile.coordinate;
+    text(`m-map-name-${side}`, name);
+    text(`m-map-zone-${side}`, result.profile.zone);
+    text(`m-map-mean-${side}`, approxTemperature(result.mean));
+    text(`m-map-cooling-${side}`, `${coolingTemperature(result.delta)} from baseline`);
+    text(
+      `m-map-description-${side}`,
+      `North-up schematic 1.4 kilometre study window using the shared fixed temperature scale. ${result.profile.pattern}`,
+    );
+    const mobileCaption = document.querySelector(`[data-mobile-ward-target="${side}"]`);
+    mobileCaption?.setAttribute('aria-label', `Change Ward ${side.toUpperCase()}, currently ${name}`);
   }
 
   function updateDelivered(side, name, works) {
-    text(`delivered-name-${side}`, `${side.toUpperCase()} · ${name}`);
-    text(`trees-${side}`, `${works.treesKm.toFixed(1)} km corridors`);
-    text(`roof-${side}`, `${formatArea(works.roofM2)} m² roofs`);
+    const prefixValues = {
+      deliveredName: `${side.toUpperCase()} · ${name}`,
+      trees: `${works.treesKm.toFixed(1)} km corridors`,
+      roof: `${formatArea(works.roofM2)} m² roofs`,
+      facades: `${formatArea(works.facadeM2)} m² façades`,
+    };
     const siteEquivalent = works.parkSiteEquivalents < 0.05
       ? '0 site eq.'
       : `≈${works.parkSiteEquivalents.toFixed(1)} site eq.`;
-    text(`parks-${side}`, `${works.parkHa.toFixed(1)} ha · ${siteEquivalent}`);
-    text(`facades-${side}`, `${formatArea(works.facadeM2)} m² façades`);
+    const parks = `${works.parkHa.toFixed(1)} ha · ${siteEquivalent}`;
+    text(`delivered-name-${side}`, prefixValues.deliveredName);
+    text(`trees-${side}`, prefixValues.trees);
+    text(`roof-${side}`, prefixValues.roof);
+    text(`parks-${side}`, parks);
+    text(`facades-${side}`, prefixValues.facades);
+    text(`m-delivered-name-${side}`, prefixValues.deliveredName);
+    text(`m-trees-${side}`, prefixValues.trees);
+    text(`m-roof-${side}`, prefixValues.roof);
+    text(`m-parks-${side}`, parks);
+    text(`m-facades-${side}`, prefixValues.facades);
   }
 
   function updateTable(side, result) {
-    text(`baseline-${side}`, approxTemperature(result.baseline));
-    text(`scenario-${side}`, approxTemperature(result.mean));
-    text(`cooling-${side}`, coolingTemperature(result.delta));
-    const hotAreaCell = document.getElementById(`hot-area-${side}`);
-    const hotChangeCell = document.getElementById(`hot-change-${side}`);
+    for (const prefix of ['', 'm-']) {
+      text(`${prefix}baseline-${side}`, approxTemperature(result.baseline));
+      text(`${prefix}scenario-${side}`, approxTemperature(result.mean));
+      text(`${prefix}cooling-${side}`, coolingTemperature(result.delta));
+      text(`${prefix}contrast-${side}`, approximateContrast(result.contrast));
+      text(`${prefix}cost-${side}`, formatCapitalRange(result.works.low, result.works.high));
+    }
+    const hotAreaCells = [
+      document.getElementById(`hot-area-${side}`),
+      document.getElementById(`m-hot-area-${side}`),
+    ].filter(Boolean);
+    const hotChangeCells = [
+      document.getElementById(`hot-change-${side}`),
+      document.getElementById(`m-hot-change-${side}`),
+    ].filter(Boolean);
     if (result.hotArea === null) {
-      for (const cell of [hotAreaCell, hotChangeCell].filter(Boolean)) {
+      for (const cell of [...hotAreaCells, ...hotChangeCells]) {
         cell.textContent = '—';
         cell.title = 'Not evaluated at 22:00 in this prototype';
         cell.setAttribute('aria-label', 'Not evaluated at 22:00 in this prototype');
       }
     } else {
-      if (hotAreaCell) {
-        hotAreaCell.textContent = `${result.hotArea}%`;
-        hotAreaCell.removeAttribute('title');
-        hotAreaCell.removeAttribute('aria-label');
+      for (const cell of hotAreaCells) {
+        cell.textContent = `${result.hotArea}%`;
+        cell.removeAttribute('title');
+        cell.removeAttribute('aria-label');
       }
-      if (hotChangeCell) {
-        hotChangeCell.textContent = result.hotChange ? `−${result.hotChange} pp` : '0 pp';
-        hotChangeCell.removeAttribute('title');
-        hotChangeCell.removeAttribute('aria-label');
+      for (const cell of hotChangeCells) {
+        cell.textContent = result.hotChange ? `−${result.hotChange} pp` : '0 pp';
+        cell.removeAttribute('title');
+        cell.removeAttribute('aria-label');
       }
     }
-    text(`contrast-${side}`, approximateContrast(result.contrast));
-    text(`cost-${side}`, formatCapitalRange(result.works.low, result.works.high));
   }
 
   function updateReadout(side, name, result) {
@@ -582,11 +630,13 @@ if (pairRoot) {
     const resultB = pairResult(pairState.b);
     updateSelectOptions();
 
-    for (const [key, input] of Object.entries(pairControls)) {
-      if (!input) continue;
-      input.value = String(pairState[key]);
+    for (const [key, inputs] of Object.entries(pairControls)) {
+      for (const input of inputs) {
+        input.value = String(pairState[key]);
+        input.setAttribute('aria-valuetext', coverageValueText[key](pairState[key]));
+      }
       text(`pair-${key}-output`, `${pairState[key]}%`);
-      input.setAttribute('aria-valuetext', coverageValueText[key](pairState[key]));
+      text(`m-pair-${key}-output`, `${pairState[key]}%`);
     }
 
     document.querySelectorAll('[data-bench-phase]').forEach((button) => {
@@ -594,10 +644,17 @@ if (pairRoot) {
     });
 
     text('bench-pair-title', `${pairState.a} A ↔ ${pairState.b} B`);
+    text('m-sheet-pair-title', `${pairState.a} A ↔ ${pairState.b} B`);
     text('table-head-a', 'A');
     text('table-head-b', 'B');
     document.getElementById('table-head-a')?.setAttribute('aria-label', `Ward A, ${pairState.a}`);
     document.getElementById('table-head-b')?.setAttribute('aria-label', `Ward B, ${pairState.b}`);
+    for (const [side, name] of [['a', pairState.a], ['b', pairState.b]]) {
+      text(`m-tape-name-${side}`, name);
+      for (const metric of ['baseline', 'scenario', 'cooling', 'hot-area', 'hot-change', 'contrast', 'cost']) {
+        text(`m-${metric}-name-${side}`, name);
+      }
+    }
 
     updateMap('a', pairState.a, resultA);
     updateMap('b', pairState.b, resultB);
@@ -612,6 +669,16 @@ if (pairRoot) {
 
     const phaseLabel = pairState.phase === 'retained' ? '22:00 retained' : '13:00 peak';
     text('readout-shared', `2025 · ${phaseLabel} · matched coverage`);
+    text('m-bench-shared-state', `2025 · ${phaseLabel} · matched coverage`);
+    text('m-bench-phase-stamp', `${phaseLabel} · fixed 26–48°C scale`);
+    text('m-tape-mean-a', approxTemperature(resultA.mean).replace('°C', '°'));
+    text('m-tape-mean-b', approxTemperature(resultB.mean).replace('°C', '°'));
+    text('m-tape-cooling-a', coolingTemperature(resultA.delta).replace('°C', '°'));
+    text('m-tape-cooling-b', coolingTemperature(resultB.delta).replace('°C', '°'));
+    text('m-band-mean-a', approxTemperature(resultA.mean));
+    text('m-band-mean-b', approxTemperature(resultB.mean));
+    text('m-band-cooling-a', coolingTemperature(resultA.delta));
+    text('m-band-cooling-b', coolingTemperature(resultB.delta));
     const evidenceStrong = document.querySelector('.evidence-stamp strong');
     if (evidenceStrong) {
       evidenceStrong.textContent = pairState.phase === 'retained'
@@ -636,6 +703,17 @@ if (pairRoot) {
       'pair-synthesis',
       `${pairState.a} shows ${coolingTemperature(resultA.delta)} and ${pairState.b} ${coolingTemperature(resultB.delta)} under the shared package. These are within-area responses, not a ward ranking.`,
     );
+    text(
+      'm-pair-synthesis',
+      `${pairState.a} shows ${coolingTemperature(resultA.delta)} and ${pairState.b} ${coolingTemperature(resultB.delta)} under the shared package. These are within-area responses, not a ward ranking.`,
+    );
+
+    const interventionsAtZero = ['trees', 'roof', 'parks', 'facades']
+      .every((key) => pairState[key] === 0);
+    for (const id of ['bench-reset', 'm-bench-reset']) {
+      const resetButton = document.getElementById(id);
+      if (resetButton) resetButton.disabled = interventionsAtZero;
+    }
 
     if (announce) {
       window.clearTimeout(pairAnnouncementTimer);
@@ -648,28 +726,50 @@ if (pairRoot) {
     }
   }
 
-  for (const [key, input] of Object.entries(pairControls)) {
-    input?.addEventListener('input', () => {
-      pairState[key] = Number(input.value);
-      renderPair();
-    });
-    input?.addEventListener('change', () => renderPair({ announce: true }));
+  function clearPairUndo() {
+    pairUndoState = null;
+    document.getElementById('m-bench-undo')?.setAttribute('hidden', '');
   }
 
-  selectA?.addEventListener('change', () => {
-    pairState.a = selectA.value;
-    renderPair({ announce: true });
-  });
+  for (const [key, inputs] of Object.entries(pairControls)) {
+    for (const input of inputs) {
+      input.addEventListener('input', () => {
+        clearPairUndo();
+        pairState[key] = Number(input.value);
+        renderPair();
+      });
+      input.addEventListener('change', () => {
+        clearPairUndo();
+        pairState[key] = Number(input.value);
+        renderPair({ announce: true });
+      });
+    }
+  }
 
-  selectB?.addEventListener('change', () => {
-    pairState.b = selectB.value;
+  function selectPairWard(side, value) {
+    const other = side === 'a' ? 'b' : 'a';
+    if (!(value in pairProfiles) || value === pairState[other]) {
+      renderPair();
+      return;
+    }
+    pairState[side] = value;
     renderPair({ announce: true });
-  });
+  }
 
-  document.getElementById('swap-pair')?.addEventListener('click', () => {
+  for (const [side, selects] of Object.entries(pairSelects)) {
+    for (const select of selects) {
+      select.addEventListener('change', () => selectPairWard(side, select.value));
+    }
+  }
+
+  function swapPair() {
     [pairState.a, pairState.b] = [pairState.b, pairState.a];
     renderPair({ announce: true });
-  });
+  }
+
+  for (const id of ['swap-pair', 'm-swap-pair']) {
+    document.getElementById(id)?.addEventListener('click', swapPair);
+  }
 
   document.querySelectorAll('[data-bench-phase]').forEach((button) => {
     button.addEventListener('click', () => {
@@ -678,18 +778,40 @@ if (pairRoot) {
     });
   });
 
-  document.getElementById('bench-reset')?.addEventListener('click', () => {
+  function resetPair() {
+    const interventionsAtZero = ['trees', 'roof', 'parks', 'facades']
+      .every((key) => pairState[key] === 0);
+    if (interventionsAtZero) return;
+    pairUndoState = {
+      trees: pairState.trees,
+      roof: pairState.roof,
+      parks: pairState.parks,
+      facades: pairState.facades,
+    };
     pairState.trees = 0;
     pairState.roof = 0;
     pairState.parks = 0;
     pairState.facades = 0;
+    document.getElementById('m-bench-undo')?.removeAttribute('hidden');
+    renderPair({ announce: true });
+  }
+
+  for (const id of ['bench-reset', 'm-bench-reset']) {
+    document.getElementById(id)?.addEventListener('click', resetPair);
+  }
+
+  document.getElementById('m-bench-undo')?.addEventListener('click', () => {
+    if (!pairUndoState) return;
+    Object.assign(pairState, pairUndoState);
+    clearPairUndo();
     renderPair({ announce: true });
   });
 
-  document.getElementById('copy-pair-link')?.addEventListener('click', async (event) => {
+  async function copyPairLink(event) {
     const button = event.currentTarget;
+    const originalText = button.textContent;
     const url = new URL(location.href);
-    url.search = new URLSearchParams({
+    const shareState = new URLSearchParams({
       a: pairState.a,
       b: pairState.b,
       pairTrees: String(pairState.trees),
@@ -700,7 +822,9 @@ if (pairRoot) {
       returnView: pairState.returnView,
       contract: 'paired-coverage-v1',
       prototype: 'synthetic',
-    }).toString();
+    });
+    if (document.documentElement.classList.contains('text-200')) shareState.set('text', '200');
+    url.search = shareState.toString();
     try {
       await navigator.clipboard.writeText(url.href);
       button.textContent = 'Comparison link copied';
@@ -708,17 +832,145 @@ if (pairRoot) {
       button.textContent = 'Copy unavailable';
     }
     window.setTimeout(() => {
-      button.textContent = 'Copy comparison link';
+      button.textContent = originalText;
     }, 1800);
-  });
+  }
+
+  for (const id of ['copy-pair-link', 'm-copy-pair-link']) {
+    document.getElementById(id)?.addEventListener('click', copyPairLink);
+  }
 
   const pairedBriefDialog = document.getElementById('paired-brief-dialog');
-  document.getElementById('preview-paired-brief')?.addEventListener('click', () => {
-    pairedBriefDialog?.showModal();
-  });
+  for (const id of ['preview-paired-brief', 'm-preview-paired-brief']) {
+    document.getElementById(id)?.addEventListener('click', () => {
+      pairedBriefDialog?.showModal();
+    });
+  }
 
   document.querySelector('.bench-actions a[href="#comparison-method"]')?.addEventListener('click', () => {
     document.getElementById('comparison-method')?.setAttribute('open', '');
+  });
+
+  const pairDock = document.getElementById('pair-mobile-dock');
+  const pairSheet = document.getElementById('pair-mobile-sheet');
+  const pairMobileStage = pairRoot.querySelector('.mobile-bench-stage');
+  const pairSheetOpen = document.getElementById('pair-sheet-open');
+  const pairSheetClose = document.getElementById('pair-sheet-close');
+  const pairSheetExpand = document.getElementById('pair-sheet-expand');
+  const pairSheetStates = new Set(['collapsed', 'half', 'full']);
+  const pairSheetStorageKey = 'dcr:paired-bench:mobile-sheet';
+  const pairTabStorageKey = 'dcr:paired-bench:mobile-tab';
+  const pairTabIds = new Set(['m-bench-tab-settings', 'm-bench-tab-evidence', 'm-bench-tab-wards']);
+
+  function storedPairPreference(key, validValues) {
+    try {
+      const stored = sessionStorage.getItem(key);
+      return validValues.has(stored) ? stored : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function storePairPreference(key, value) {
+    try {
+      sessionStorage.setItem(key, value);
+    } catch {
+      // The workspace remains fully usable when storage is unavailable.
+    }
+  }
+
+  function setPairSheetState(next, { focusWorkspace = false, persist = false } = {}) {
+    if (isText200 && next === 'half') next = 'full';
+    if (!pairDock || !pairSheet || !pairSheetOpen || !pairSheetStates.has(next)) return;
+    const isOpen = next !== 'collapsed';
+    pairDock.classList.toggle('is-half', next === 'half');
+    pairDock.classList.toggle('is-full', next === 'full');
+    pairDock.dataset.sheetState = next;
+    pairRoot.dataset.mobileSheetState = next;
+    document.body.classList.toggle('paired-mobile-collapsed', next === 'collapsed');
+    pairSheetOpen.setAttribute('aria-expanded', String(isOpen));
+    pairSheet.toggleAttribute('inert', !isOpen);
+    pairSheet.setAttribute('aria-hidden', String(!isOpen));
+    pairMobileStage?.toggleAttribute('inert', isOpen);
+    pairMobileStage?.setAttribute('aria-hidden', String(isOpen));
+
+    if (pairSheetExpand) {
+      const isFull = next === 'full';
+      pairSheetExpand.textContent = isFull ? '⤡' : '⤢';
+      pairSheetExpand.setAttribute('aria-pressed', String(isFull));
+      pairSheetExpand.setAttribute(
+        'aria-label',
+        isFull ? 'Return paired comparison workspace to half height' : 'Expand paired comparison workspace to full screen',
+      );
+    }
+
+    if (persist) storePairPreference(pairSheetStorageKey, next);
+    if (isText200 && isOpen) window.scrollTo({ top: 0, behavior: 'auto' });
+    if (focusWorkspace && isOpen) {
+      pairSheet.querySelector('[role="tab"][aria-selected="true"]')?.focus();
+    }
+  }
+
+  function setPairTab(tabId, { moveFocus = false, persist = true } = {}) {
+    if (!pairTabIds.has(tabId)) return;
+    const tab = document.getElementById(tabId);
+    if (!tab) return;
+    selectTab(tab, { moveFocus });
+    if (persist) storePairPreference(pairTabStorageKey, tabId);
+  }
+
+  if (pairDock && pairSheet && pairSheetOpen && pairSheetClose) {
+    const requestedSheetState = params.get('sheet');
+    const initialSheetState = pairSheetStates.has(requestedSheetState)
+      ? requestedSheetState
+      : isText200
+        ? 'full'
+        : storedPairPreference(pairSheetStorageKey, pairSheetStates) ?? 'collapsed';
+    const initialTab = storedPairPreference(pairTabStorageKey, pairTabIds) ?? 'm-bench-tab-evidence';
+    setPairTab(initialTab, { persist: false });
+    setPairSheetState(initialSheetState);
+
+    pairSheetOpen.addEventListener('click', () => {
+      setPairSheetState(isText200 ? 'full' : 'half', { focusWorkspace: true, persist: true });
+    });
+
+    pairSheetClose.addEventListener('click', () => {
+      setPairSheetState('collapsed', { persist: true });
+      pairSheetOpen.focus();
+    });
+
+    pairSheetExpand?.addEventListener('click', () => {
+      setPairSheetState(pairDock.dataset.sheetState === 'full' ? 'half' : 'full', { persist: true });
+    });
+
+    document.getElementById('m-view-both-maps')?.addEventListener('click', () => {
+      setPairSheetState('collapsed', { persist: true });
+      pairSheetOpen.focus();
+    });
+
+    document.querySelector('.mobile-bench-skip')?.addEventListener('click', (event) => {
+      if (!matchMedia('(max-width: 767px)').matches) return;
+      event.preventDefault();
+      setPairSheetState(isText200 ? 'full' : 'half', { focusWorkspace: true, persist: true });
+    });
+  }
+
+  document.querySelectorAll('#mobile-bench-tabs [role="tab"]').forEach((tab) => {
+    tab.addEventListener('click', () => storePairPreference(pairTabStorageKey, tab.id));
+  });
+
+  document.getElementById('m-adjust-shared-settings')?.addEventListener('click', () => {
+    setPairTab('m-bench-tab-settings', { moveFocus: true });
+  });
+
+  document.querySelectorAll('[data-mobile-ward-target]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const side = button.dataset.mobileWardTarget;
+      setPairTab('m-bench-tab-wards');
+      setPairSheetState(isText200 ? 'full' : 'half', { persist: true });
+      const mobileSelect = document.getElementById(`m-ward-${side}`);
+      window.requestAnimationFrame(() => mobileSelect?.focus());
+    });
   });
 
   renderPair();

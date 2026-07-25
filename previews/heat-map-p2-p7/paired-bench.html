@@ -5,10 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>Paired Ward Bench · Urban Heat Explorer</title>
     <link rel="icon" href="../../public/favicon.svg" />
-    <link rel="stylesheet" href="prototype.css?v=7" />
+    <link rel="stylesheet" href="prototype.css?v=8" />
   </head>
   <body class="bench-body">
-    <a class="skip-link" href="#shared-settings">Skip to shared scenario settings</a>
+    <a class="skip-link desktop-bench-skip" href="#shared-settings">Skip to shared scenario settings</a>
+    <a class="skip-link mobile-bench-skip" href="#mobile-bench-tabs">Skip to mobile comparison workspace</a>
 
     <svg class="bench-map-defs" aria-hidden="true">
       <defs>
@@ -122,6 +123,291 @@
           <small>Production stamp → forcing ID · model/grid version · screening</small>
         </div>
       </header>
+
+      <section class="mobile-bench" aria-labelledby="mobile-bench-title">
+        <h2 class="sr-only" id="mobile-bench-title">Mobile Paired Ward Bench</h2>
+
+        <div class="mobile-bench-stage">
+          <div class="mobile-bench-evidence">
+            <span><i aria-hidden="true"></i> Synthetic approval preview</span>
+            <strong id="m-bench-phase-stamp">13:00 peak · fixed 26–48°C scale</strong>
+          </div>
+
+          <div class="mobile-paired-maps">
+            <figure class="bench-map mobile-bench-map" id="mobile-bench-map-a" data-map-ward="ballygunge" aria-describedby="m-map-description-a">
+              <figcaption>
+                <button type="button" class="mobile-map-caption" data-mobile-ward-target="a" aria-label="Change Ward A, currently Ballygunge">
+                  <span><b>A</b><span><strong id="m-map-name-a">Ballygunge</strong><small id="m-map-zone-a">Dense urban core</small></span></span>
+                  <span><strong id="m-map-mean-a">≈38.2°C</strong><small id="m-map-cooling-a">≈−1.4°C from baseline</small></span>
+                </button>
+              </figcaption>
+              <p class="sr-only" id="m-map-description-a">Schematic pattern: a broad central hotspot crossed by a dense road network, with cooler edges.</p>
+              <div class="bench-map-canvas">
+                <svg viewBox="0 0 620 460" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+                  <use id="m-map-use-a" href="#geometry-ballygunge"></use>
+                </svg>
+                <div class="map-coordinate">1.4 km window · schematic</div>
+                <div class="map-scale"><i></i>250 m</div>
+                <div class="north-arrow" aria-hidden="true"><span>N</span>↑</div>
+              </div>
+            </figure>
+
+            <div class="mobile-calibration-rule" aria-label="Both maps use the same study extent and fixed temperature scale">
+              <span>Same 1.4 km extent</span>
+              <i aria-hidden="true"></i>
+              <strong>26–48°C fixed scale</strong>
+            </div>
+
+            <figure class="bench-map mobile-bench-map" id="mobile-bench-map-b" data-map-ward="baruipur" aria-describedby="m-map-description-b">
+              <figcaption>
+                <button type="button" class="mobile-map-caption" data-mobile-ward-target="b" aria-label="Change Ward B, currently Baruipur">
+                  <span><b>B</b><span><strong id="m-map-name-b">Baruipur</strong><small id="m-map-zone-b">Peri-urban fringe</small></span></span>
+                  <span><strong id="m-map-mean-b">≈34.4°C</strong><small id="m-map-cooling-b">≈−1.0°C from baseline</small></span>
+                </button>
+              </figcaption>
+              <p class="sr-only" id="m-map-description-b">Schematic pattern: an eastern hotspot beside a cooler western corridor and dispersed green patches.</p>
+              <div class="bench-map-canvas">
+                <svg viewBox="0 0 620 460" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+                  <use id="m-map-use-b" href="#geometry-baruipur"></use>
+                </svg>
+                <div class="map-coordinate">1.4 km window · schematic</div>
+                <div class="map-scale"><i></i>250 m</div>
+                <div class="north-arrow" aria-hidden="true"><span>N</span>↑</div>
+              </div>
+            </figure>
+          </div>
+        </div>
+
+        <div class="mobile-bench-dock" id="pair-mobile-dock" data-sheet-state="collapsed">
+          <button class="mobile-bench-summary" id="pair-sheet-open" type="button" aria-expanded="false" aria-controls="pair-mobile-sheet">
+            <span class="mobile-summary-copy">
+              <strong>Shared settings applied to A + B</strong>
+              <small id="m-bench-shared-state">2025 · 13:00 peak · matched coverage</small>
+            </span>
+            <span class="mobile-summary-pair">
+              <span><b>A</b><strong id="m-tape-mean-a">≈38.2°</strong><small id="m-tape-cooling-a">≈−1.4°</small></span>
+              <i aria-hidden="true"></i>
+              <span><b>B</b><strong id="m-tape-mean-b">≈34.4°</strong><small id="m-tape-cooling-b">≈−1.0°</small></span>
+            </span>
+            <span class="mobile-summary-open" aria-hidden="true">↑</span>
+          </button>
+
+          <section class="mobile-bench-sheet" id="pair-mobile-sheet" aria-label="Paired comparison workspace" aria-hidden="true" inert>
+            <header class="mobile-bench-sheet-head">
+              <div>
+                <span>Controlled comparison</span>
+                <strong id="m-sheet-pair-title">Ballygunge A ↔ Baruipur B</strong>
+              </div>
+              <div class="mobile-bench-sheet-actions">
+                <button id="pair-sheet-expand" type="button" aria-label="Expand paired comparison workspace to full screen" aria-pressed="false">⤢</button>
+                <button id="pair-sheet-close" type="button" aria-label="Collapse workspace and view both maps">↓</button>
+              </div>
+            </header>
+
+            <div class="mobile-pair-evidence" aria-label="Current paired scenario response">
+              <span>
+                <b>A</b>
+                <span><strong id="m-tape-name-a">Ballygunge</strong><small>Scenario mean</small></span>
+                <span><strong id="m-band-mean-a">≈38.2°C</strong><small id="m-band-cooling-a">≈−1.4°C</small></span>
+              </span>
+              <span>
+                <b>B</b>
+                <span><strong id="m-tape-name-b">Baruipur</strong><small>Scenario mean</small></span>
+                <span><strong id="m-band-mean-b">≈34.4°C</strong><small id="m-band-cooling-b">≈−1.0°C</small></span>
+              </span>
+            </div>
+
+            <div class="mobile-bench-tabs" id="mobile-bench-tabs" role="tablist" aria-label="Paired comparison sections">
+              <button id="m-bench-tab-settings" type="button" role="tab" tabindex="-1" aria-selected="false" aria-controls="mobile-bench-settings">Settings</button>
+              <button id="m-bench-tab-evidence" type="button" role="tab" tabindex="0" aria-selected="true" aria-controls="mobile-bench-evidence">Evidence</button>
+              <button id="m-bench-tab-wards" type="button" role="tab" tabindex="-1" aria-selected="false" aria-controls="mobile-bench-wards">Wards</button>
+            </div>
+
+            <div class="mobile-bench-sheet-content">
+              <section class="mobile-bench-panel" id="mobile-bench-settings" role="tabpanel" aria-labelledby="m-bench-tab-settings" hidden>
+                <div class="mobile-panel-intro">
+                  <p class="kicker">One policy rule</p>
+                  <h3>Shared scenario settings</h3>
+                  <p>Matched by coverage, not raw quantity or budget. Every change applies to A and B.</p>
+                </div>
+
+                <div class="bench-field">
+                  <label for="m-pair-trees">
+                    <span>Tree corridors<small>Eligible priority-road network</small></span>
+                    <span class="bench-output" id="m-pair-trees-output" aria-hidden="true">55%</span>
+                  </label>
+                  <input id="m-pair-trees" type="range" min="0" max="100" step="1" value="55" />
+                </div>
+
+                <div class="bench-field">
+                  <label for="m-pair-roof">
+                    <span>Cool roofs<small>Eligible roof stock</small></span>
+                    <span class="bench-output" id="m-pair-roof-output" aria-hidden="true">65%</span>
+                  </label>
+                  <input id="m-pair-roof" type="range" min="0" max="100" step="5" value="65" />
+                </div>
+
+                <div class="bench-field">
+                  <label for="m-pair-parks">
+                    <span>Pocket parks<small>Planted-area share of each study window</small></span>
+                    <span class="bench-output" id="m-pair-parks-output" aria-hidden="true">3%</span>
+                  </label>
+                  <input id="m-pair-parks" type="range" min="0" max="4" step="0.1" value="3" />
+                </div>
+
+                <div class="bench-field">
+                  <label for="m-pair-facades">
+                    <span>Green façades<small>Eligible façade area</small></span>
+                    <span class="bench-output" id="m-pair-facades-output" aria-hidden="true">35%</span>
+                  </label>
+                  <input id="m-pair-facades" type="range" min="0" max="100" step="0.1" value="35" />
+                </div>
+
+                <div class="bench-control-block">
+                  <span class="mini-label" id="m-bench-phase-label">Shared diurnal phase</span>
+                  <div class="bench-segment" role="group" aria-labelledby="m-bench-phase-label">
+                    <button type="button" data-bench-phase="peak" aria-pressed="true">13:00 peak</button>
+                    <button type="button" data-bench-phase="retained" aria-pressed="false">22:00 retained</button>
+                  </div>
+                </div>
+
+                <div class="mobile-reference-row">
+                  <span>Reference pathway</span>
+                  <strong>2025 reference</strong>
+                  <small>Target ’30 and BAU ’40 remain illustrative and are excluded.</small>
+                </div>
+
+                <div class="mobile-settings-actions">
+                  <button type="button" class="bench-reset" id="m-bench-reset">Reset interventions</button>
+                  <button type="button" class="mobile-undo" id="m-bench-undo" hidden>Undo reset</button>
+                </div>
+              </section>
+
+              <section class="mobile-bench-panel" id="mobile-bench-evidence" role="tabpanel" aria-labelledby="m-bench-tab-evidence">
+                <div class="mobile-panel-intro">
+                  <p class="kicker">Paired response</p>
+                  <h3>Same policy. Different fabric.</h3>
+                  <p id="m-pair-synthesis">Both study areas cool under the shared package. This is not a ward ranking.</p>
+                  <button type="button" class="mobile-settings-shortcut" id="m-adjust-shared-settings">Adjust shared settings</button>
+                </div>
+
+                <dl class="mobile-evidence-list">
+                  <div>
+                    <dt>Baseline mean</dt>
+                    <dd><span>A · <b id="m-baseline-name-a">Ballygunge</b></span><strong id="m-baseline-a">≈39.6°C</strong></dd>
+                    <dd><span>B · <b id="m-baseline-name-b">Baruipur</b></span><strong id="m-baseline-b">≈35.4°C</strong></dd>
+                  </div>
+                  <div>
+                    <dt>Scenario mean</dt>
+                    <dd><span>A · <b id="m-scenario-name-a">Ballygunge</b></span><strong id="m-scenario-a">≈38.2°C</strong></dd>
+                    <dd><span>B · <b id="m-scenario-name-b">Baruipur</b></span><strong id="m-scenario-b">≈34.4°C</strong></dd>
+                  </div>
+                  <div>
+                    <dt>Cooling from baseline</dt>
+                    <dd><span>A · <b id="m-cooling-name-a">Ballygunge</b></span><strong id="m-cooling-a">≈−1.4°C</strong></dd>
+                    <dd><span>B · <b id="m-cooling-name-b">Baruipur</b></span><strong id="m-cooling-b">≈−1.0°C</strong></dd>
+                  </div>
+                  <div>
+                    <dt>Grid area over 40°C</dt>
+                    <dd><span>A · <b id="m-hot-area-name-a">Ballygunge</b></span><strong id="m-hot-area-a">31%</strong></dd>
+                    <dd><span>B · <b id="m-hot-area-name-b">Baruipur</b></span><strong id="m-hot-area-b">3%</strong></dd>
+                  </div>
+                  <div>
+                    <dt>Hot-area change</dt>
+                    <dd><span>A · <b id="m-hot-change-name-a">Ballygunge</b></span><strong id="m-hot-change-a">−12 pp</strong></dd>
+                    <dd><span>B · <b id="m-hot-change-name-b">Baruipur</b></span><strong id="m-hot-change-b">−9 pp</strong></dd>
+                  </div>
+                  <div>
+                    <dt>Modelled rural contrast</dt>
+                    <dd><span>A · <b id="m-contrast-name-a">Ballygunge</b></span><strong id="m-contrast-a">≈+2.7°C</strong></dd>
+                    <dd><span>B · <b id="m-contrast-name-b">Baruipur</b></span><strong id="m-contrast-b">≈+0.6°C</strong></dd>
+                  </div>
+                  <div>
+                    <dt>Capital works range</dt>
+                    <dd><span>A · <b id="m-cost-name-a">Ballygunge</b></span><strong id="m-cost-a">₹— cr</strong></dd>
+                    <dd><span>B · <b id="m-cost-name-b">Baruipur</b></span><strong id="m-cost-b">₹— cr</strong></dd>
+                  </div>
+                </dl>
+
+                <div class="mobile-bench-full-only">
+                  <details class="mobile-bench-details">
+                    <summary>Delivered by matched rules</summary>
+                    <div class="mobile-delivered-pair">
+                      <div>
+                        <strong id="m-delivered-name-a">A · Ballygunge</strong>
+                        <span id="m-trees-a">17.5 km corridors</span>
+                        <span id="m-roof-a">270,400 m² roofs</span>
+                        <span id="m-parks-a">5.9 ha · ≈7.5 site eq.</span>
+                        <span id="m-facades-a">15,800 m² façades</span>
+                      </div>
+                      <div>
+                        <strong id="m-delivered-name-b">B · Baruipur</strong>
+                        <span id="m-trees-b">10.7 km corridors</span>
+                        <span id="m-roof-b">161,200 m² roofs</span>
+                        <span id="m-parks-b">5.9 ha · ≈7.5 site eq.</span>
+                        <span id="m-facades-b">8,400 m² façades</span>
+                      </div>
+                    </div>
+                  </details>
+
+                  <details class="mobile-bench-details">
+                    <summary>Comparison integrity</summary>
+                    <p>Equal 1.4 km study windows, one frozen regional forcing, one model version, north-up 2D maps and one fixed 26–48°C scale.</p>
+                    <p>Outputs compare model response—not vulnerability, equity, feasibility or investment priority.</p>
+                  </details>
+
+                  <div class="mobile-bench-actions">
+                    <button type="button" class="primary-action" id="m-preview-paired-brief">Preview paired brief</button>
+                    <button type="button" class="secondary-action" id="m-copy-pair-link">Copy comparison link</button>
+                    <button type="button" class="mobile-view-maps" id="m-view-both-maps">View both maps</button>
+                  </div>
+
+                  <div class="mobile-screening-note">
+                    <span aria-hidden="true">S</span>
+                    <p>Schematic study areas and synthetic response values. Production requires pinned forcing, model, grid/data and backend release identifiers.</p>
+                  </div>
+                </div>
+              </section>
+
+              <section class="mobile-bench-panel" id="mobile-bench-wards" role="tabpanel" aria-labelledby="m-bench-tab-wards" hidden>
+                <div class="mobile-panel-intro">
+                  <p class="kicker">Study pair</p>
+                  <h3>Choose two distinct study areas</h3>
+                  <p>The shared package stays fixed while you change either study area.</p>
+                </div>
+
+                <label class="mobile-ward-select" for="m-ward-a">
+                  <span><b>A</b> Study area</span>
+                  <select id="m-ward-a" aria-describedby="m-ward-a-help">
+                    <option value="Ballygunge" selected>Ballygunge</option>
+                    <option value="Baruipur">Baruipur</option>
+                    <option value="Barrackpore">Barrackpore</option>
+                  </select>
+                  <small id="m-ward-a-help">Baruipur is already Ward B.</small>
+                </label>
+
+                <button type="button" class="mobile-swap-pair" id="m-swap-pair"><span aria-hidden="true">⇅</span> Swap A and B</button>
+
+                <label class="mobile-ward-select" for="m-ward-b">
+                  <span><b>B</b> Study area</span>
+                  <select id="m-ward-b" aria-describedby="m-ward-b-help">
+                    <option value="Ballygunge">Ballygunge</option>
+                    <option value="Baruipur" selected>Baruipur</option>
+                    <option value="Barrackpore">Barrackpore</option>
+                  </select>
+                  <small id="m-ward-b-help">Ballygunge is already Ward A.</small>
+                </label>
+
+                <div class="mobile-ward-contract">
+                  <span>Comparison contract</span>
+                  <strong>Same forcing · same phase · same extent · fixed scale</strong>
+                  <p>Changing wards updates both maps and every paired evidence row without changing the policy package.</p>
+                </div>
+              </section>
+            </div>
+          </section>
+        </div>
+      </section>
 
       <div class="bench-grid">
         <aside class="bench-settings" id="shared-settings" aria-labelledby="shared-settings-title">

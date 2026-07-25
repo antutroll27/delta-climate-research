@@ -1,0 +1,24 @@
+---
+import Base from '../../layouts/Base.astro';
+import PairedBench from '../../components/ClimateEngine/compare/PairedBench.astro';
+---
+<Base
+  title="Compare Urban Heat Scenarios — Delta Climate Research"
+  description="Compare one modelled green-infrastructure package across two Kolkata study areas under a shared screening contract."
+  noindex={true}
+  nativeScroll={true}
+>
+  <PairedBench />
+</Base>
+
+<script>
+  import { mountPairedBench } from '../../scripts/climate-engine/compare/paired-controller';
+
+  let dispose: (() => void) | null = null;
+  const boot = () => {
+    if (document.querySelector('[data-compare-root]') && !dispose) dispose = mountPairedBench();
+  };
+  boot();
+  document.addEventListener('astro:page-load', boot);
+  document.addEventListener('astro:before-swap', () => { dispose?.(); dispose = null; });
+</script>

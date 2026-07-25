@@ -15,6 +15,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { GpuHeatSim } from './sim-gpu';
 import { DEFAULT_PARAMS, type SimLayers } from './types';
 import * as M from './heat-map-model';
+import { rasterWardBase } from './ward-raster';
 
 interface WardMeta { name: string; zone: string; coord: string; lat: number; lon: number; veg: number; }
 const WARDS: Record<string, WardMeta> = {
@@ -205,19 +206,6 @@ export function mountHeatMap(): () => void {
     },
   };
 
-  /* ── rasterise footprints → sim base layers (canvas 2D) ── */
-  function rasterBase(d: M.WardData, vegBase: number): SimLayers {
-    const n = SIM_N, half = d.sizeM / 2;
-    const c = document.createElement('canvas'); c.width = c.height = n;
-    const ctx = c.getContext('2d', { willReadFrequently: true })!;
-    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, n, n); ctx.fillStyle = '#fff';
-    for (const b of d.b) { ctx.beginPath(); ctx.moveTo((b[1] + half) / d.sizeM * n, (half - b[2]) / d.sizeM * n); for (let i = 3; i < b.length; i += 2) ctx.lineTo((b[i] + half) / d.sizeM * n, (half - b[i + 1]) / d.sizeM * n); ctx.closePath(); ctx.fill(); }
-    const px = ctx.getImageData(0, 0, n, n).data, N2 = n * n;
-    const albedo = new Float32Array(N2), veg = new Float32Array(N2), built = new Float32Array(N2), water = new Float32Array(N2);
-    for (let i = 0; i < N2; i++) { const bMask = px[i * 4] / 255, x = i % n, y = (i / n) | 0, j = (n - 1 - y) * n + x; built[j] = bMask; const nz = 0.5 + 0.5 * noise01(x * 0.13, y * 0.13); veg[j] = vegBase * (1 - bMask) * nz; albedo[j] = 0.32 - 0.12 * bMask + 0.06 * nz; }
-    return { albedo, veg, built, water };
-  }
-
   /* ── heat ramp for building extrusion vertex jitter (grow) — via aCtr sample ── */
   const cache: Record<string, M.WardData> = {}, roadsCache: Record<string, M.RoadsData> = {};
   let growStart = 0; const GROW_MS = 1900; let opBase = 0.5;
@@ -226,7 +214,7 @@ export function mountHeatMap(): () => void {
     const load = el('loadchip'); load?.classList.add('on');
     await new Promise(r => setTimeout(r, 30));
     if (!cache[name]) cache[name] = await (await fetch(`/heat-map/data/${name}.json`)).json();
-    const d = cache[name], w = WARDS[name]; state.ward = name;
+    const d = cache[name], w = WARDS[name]; state.ward = name; updateCompareHref();
 
     const geos: THREE.BufferGeometry[] = [], halfM = d.sizeM / 2;
     for (const b of d.b) {
@@ -256,7 +244,7 @@ export function mountHeatMap(): () => void {
     const mc = maplibregl.MercatorCoordinate.fromLngLat([w.lon, w.lat], 0);
     modelTransform = { x: mc.x, y: mc.y, z: mc.z ?? 0, scale: mc.meterInMercatorCoordinateUnits() };
 
-    state.base = rasterBase(d, w.veg);
+    state.base = rasterWardBase(d, w.veg);
     if (!roadsCache[name]) { try { roadsCache[name] = await (await fetch(`/heat-map/data/${name}-roads.json`)).json(); } catch { roadsCache[name] = { ways: [] }; } }
     state.spatial = M.buildSpatial(d, state.base, roadsCache[name]);
     state.live = liveCache[name] ?? null; paintLive();
@@ -336,6 +324,19 @@ export function mountHeatMap(): () => void {
   /* ── DOM helpers ── */
   function setText(id: string, v: string) { const e = el(id); if (e) e.textContent = v; }
   function setHTML(id: string, v: string) { const e = el(id); if (e) e.innerHTML = v; }
+  function updateCompareHref() {
+    const link = el('compare-mode-link') as HTMLAnchorElement | null;
+    if (!link) return;
+    const params = new URLSearchParams({
+      a: state.ward,
+      trees: String(Math.round(state.iv.trees / 50 * 100)),
+      roof: String(Math.round(state.iv.roof / 5) * 5),
+      parks: String(Math.round(state.iv.parks * M.PARK_HA / 196 * 1000) / 10),
+      facades: String(Math.round(state.iv.facades / 15 * 1000) / 10),
+      phase: state.phase === 'night' ? 'retained' : 'peak',
+    });
+    link.href = `/heat-map/compare/?${params}`;
+  }
 
   /* ── instrument wiring ── */
   const onEl = (node: Element | null, ev: string, fn: EventListenerOrEventListenerObject) => { if (node) { node.addEventListener(ev, fn); cleanup.push(() => node.removeEventListener(ev, fn)); } };
@@ -343,11 +344,11 @@ export function mountHeatMap(): () => void {
   const bindSlider = (id: string, label: string, kk: keyof M.Interventions, fmt: (v: string) => string) => {
     const s = el(id) as HTMLInputElement | null; if (!s) return;
     onEl(s, 'input', () => { setText(label, fmt(s.value)); nudgeOrbit(); });
-    onEl(s, 'change', () => { state.iv[kk] = +s.value; resetSim(); });
+    onEl(s, 'change', () => { state.iv[kk] = +s.value; updateCompareHref(); resetSim(); });
   };
   bindSlider('ivTrees', 'v1', 'trees', v => v); bindSlider('ivRoof', 'v2', 'roof', v => v + '%');
   bindSlider('ivFacades', 'v4', 'facades', v => v);
-  document.querySelectorAll('#segPhase button').forEach(b => onEl(b, 'click', () => { state.phase = (b as HTMLElement).dataset.p as 'peak' | 'night'; document.querySelectorAll('#segPhase button').forEach(x => x.classList.toggle('on', x === b)); resetSim(); }));
+  document.querySelectorAll('#segPhase button').forEach(b => onEl(b, 'click', () => { state.phase = (b as HTMLElement).dataset.p as 'peak' | 'night'; document.querySelectorAll('#segPhase button').forEach(x => x.classList.toggle('on', x === b)); updateCompareHref(); resetSim(); }));
   document.querySelectorAll('#segPath button').forEach(b => onEl(b, 'click', () => { state.path = (b as HTMLElement).dataset.p!; document.querySelectorAll('#segPath button').forEach(x => x.classList.toggle('on', x === b)); resetSim(); }));
   document.querySelectorAll('#modechip button').forEach(b => onEl(b, 'click', () => {
     mode = (b as HTMLElement).dataset.m === 'iso' ? 'iso' : 'relief';
