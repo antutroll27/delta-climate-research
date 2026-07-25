@@ -107,16 +107,16 @@ TARGET_CRS = "EPSG:32645"          # UTM 45N — Kolkata
 TARGET_RES = 70.0                  # native ECOSTRESS L2T resolution
 
 
-def target_grid():
-    l, b, r, t = transform_bounds("EPSG:4326", TARGET_CRS, *BBOX, densify_pts=21)
+def target_grid(bbox=None):
+    l, b, r, t = transform_bounds("EPSG:4326", TARGET_CRS, *(bbox or BBOX), densify_pts=21)
     w = int(np.ceil((r - l) / TARGET_RES))
     h = int(np.ceil((t - b) / TARGET_RES))
     return from_origin(l, t, TARGET_RES, TARGET_RES), w, h
 
 
-def read_window(path: str, nodata=np.nan, dtype="float32"):
+def read_window(path: str, nodata=np.nan, dtype="float32", bbox=None):
     """Reproject a COG band onto the shared target grid. Returns (array, transform, crs)."""
-    tf, w, h = target_grid()
+    tf, w, h = target_grid(bbox)
     dst = np.full((h, w), nodata, dtype=dtype)
     with rasterio.open(path) as src:
         reproject(
