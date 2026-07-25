@@ -101,8 +101,10 @@ def main():
 
     tok = census.token()
     flag = "day" if args.day else "night"
-    y, m, d = args.date.split("-")
-    nxt = f"{y}-{m}-{int(d)+1:02d}"
+    # proper date arithmetic — naive +1 breaks on month ends (2025-01-31 -> 01-32)
+    from datetime import date as _date, timedelta as _td
+    _d = _date.fromisoformat(args.date)
+    nxt = (_d + _td(days=1)).isoformat()
     acqs = census.cmr_search(flag, args.date, 20, nxt)
     if not acqs:
         sys.exit(f"no {flag} acquisitions on {args.date}")
