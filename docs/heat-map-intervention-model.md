@@ -41,7 +41,16 @@ Water cells relax toward `Tair − 1.5` (thermal-mass shortcut, `sim-gpu.ts` fra
 
 ---
 
-## 2 · Cooling spread — the diffusion length λ (the key design rule)
+## 2 · Cooling spread — the empirical influence kernel λ (the key design rule)
+
+> **Reframed 2026-07-25.** `D` is **not a thermal diffusivity** and this document previously
+> implied it was. Lateral heat conduction between 7.29 m cells is physically negligible — the
+> diurnal damping depth in soil is ≈ 0.12 m, some eight orders of magnitude short. Real
+> horizontal coupling in the urban surface layer comes from **advection**, which is directional
+> and wind-dependent, not isotropic Fickian diffusion. `D` is an **empirical spatial-influence
+> kernel**; λ, not D, is the meaningful quantity. λ is kept deliberately short (≈47 m) because
+> this field is land-surface temperature, which real thermal imagery shows as sharp; the
+> 120–300 m park-cooling distances in the literature are an air-temperature phenomenon.
 
 **Do not add a separate distance-decay kernel.** Equation (1) already produces one: its
 steady state is a *screened diffusion* (modified-Helmholtz) equation whose point-response
@@ -136,9 +145,16 @@ Honest mapping — **never add ground `veg`**:
 
 ```
 f = slider/15   (fraction of stock retrofitted)
-Q_eff,cell   = Q·built·(1 − βq·f)            βq  = 0.30  ← modelling assumption*
-Δveg_built   = min(0.25, f·(P·h_g/A_fp)·η)   η  = 0.15   ← modelling assumption*            (7)
+Q_eff,cell = Q·built·(1 − βq·f)     βq = 0.03  ← CITED (was 0.30, uncited)         (7)
 ```
+**Corrected 2026-07-25.** βq was 0.30 with no source. Gunawardena & Steemers 2023
+(*Buildings & Cities*, 10.5334/bc.282) is the only neighbourhood-scale measurement found:
+green facades cut space-conditioning energy 2.1 %, living walls 5.2 %, and moved heat-island
+intensity 1.86 K → 1.81 K (**~3 %**). The dramatic −13 to −20 °C figures are *local wall
+surface* effects; the same authors found the vapour flux "advects away to background levels".
+**The Δveg_built term is deleted** — its η = 0.15 had no measurement support, and adding
+ground vegetation for a wall treatment was double-counting. Facades act on Q only, and are
+now correctly shown as a marginal ward-scale lever.
 *βq/η are **ET/shading coefficients**, not costs — no cost source covers them; set so
 ward-scale facade effect stays ≪ 1 °C, consistent with the wall −13–20 °C *local*-only
 evidence [15]. Facade **₹ cost is now solid** (₹9,500/m², §5). Revisit βq/η only if a facade
@@ -154,8 +170,10 @@ real footprints + heights already in `data/*.json`.
 ```
 peak 13:00:   sun = 1·(1 − 0.6·cloud_live)    tAir = tAir_live + Δpath    tSky = 17
 night 22:00:  sun = 0                          tAir = tAir_live − 2.5 + Δpath  tSky = 11
-Δpath: 2025 = 0 · Δ-Target'30 = −1.2 · BAU'40 = +2.4   ← policy-narrative placeholders;
-       label "illustrative pathways" in UI until anchored to cited regional projections
+Δpath: 2025 = 0 · SSP2-4.5 '50 = +1.25 · SSP5-8.5 '80 = +4.1   ← CITED (Dhara et al. 2025,
+       PLOS Climate 4(11):e0000724, post-AR6 India update). The former −1.2 °C "target"
+       pathway is DELETED: no emissions scenario produces regional cooling over India, so a
+       negative delta on a physical-temperature axis reads as a forecast and cannot be one.
 wind_sim = clamp(wind_live/3, 0.3, 2.5)        (3 m/s ≈ sim wind 1)
 ```
 
@@ -171,7 +189,7 @@ Factor** [2], Singapore **Green Plot Ratio** [3], Malmö GSF — share one shape
 and budget efficiency:
 
 ```
-GreenScore = 100 · clamp( 0.40·min(1, G/G_ref) + 0.40·min(1, ΔT_cool/ΔT_ref) + 0.20·E , 0, 1)  (8)
+GreenScore = 100 · clamp( [ min(1,G/G_ref) + min(1,ΔT_cool/ΔT_ref) + E ] / 3 , 0, 1)          (8)
 
 G  = mean over domain of  g_cell
 g_cell = clamp( 1.0·veg_ground + 0.6·Δveg_corridor + 0.6·facadeGreen·built
@@ -186,9 +204,16 @@ tree canopy 0.6 · green facade 0.6 · water/wetland 0.8 · in-ground park 1.0**
 - `ΔT_cool = eqMean(baseline) − mean(T)` (already computed) with `ΔT_ref = 2.5 °C`
   (ward-scale cooling beyond ~2–3 °C is not credible [research §B])
 - `E` = budget efficiency = `clamp( (ΔT_cool / cost_₹crore) / E_ref , 0, 1)`, provisional
-  **E_ref = 0.15 °C per ₹ crore** (≈ the cool-roof-only lever, our cheapest intervention =
-  the efficiency benchmark). **Calibrate on first live run** to the cool-roof scenario's
-  actual °C/₹ — flagged, not invented.
+  **E_ref = 0.15 °C per ₹ crore**. **This is TOOL-RELATIVE, not an external benchmark** — no
+  published cost-per-degree-cooled figure exists to normalise against, so a ward can only score
+  well relative to what this model can produce. Labelled as such rather than presented as
+  grounded.
+
+**Weights corrected 2026-07-25: equal thirds, was 40/40/20.** The old split had no published
+precedent and implied greening and cooling were each exactly twice as important as cost. Equal
+weighting is the most commonly applied approach in composite-indicator practice (OECD/JRC 2008,
+*Handbook on Constructing Composite Indicators*) and the convention in urban-resilience indices.
+An arbitrary split dressed as a derived one is worse than a plain citable one.
 - **UI must expose the three sub-scores raw** (greening ratio, °C cooled, °C per ₹ crore) —
   transparency is what makes a BAF-style score trusted [1,2].
 
