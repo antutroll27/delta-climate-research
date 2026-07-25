@@ -51,6 +51,14 @@
         </div>
         <div class="t"><b>Green Score</b><span id="scoreTxt">move a slider to intervene</span></div>
       </div>
+      <!-- The three sub-scores, shown raw. A composite index is only trustworthy
+           if you can see what it is made of (Berlin BAF / Seattle Green Factor
+           both publish their components); equal-weighted per OECD/JRC 2008. -->
+      <div class="subs" id="subs" title="Equal-weighted thirds. Greening: weighted-area ratio vs Berlin BAF 0.45. Cooling: modelled ΔT vs a 2.5 °C credible ceiling. ₹ efficiency: °C per crore vs 0.15 — tool-relative, no external benchmark exists.">
+        <div><b id="sGreen">—</b><span>greening</span></div>
+        <div><b id="sCool">—</b><span>cooling</span></div>
+        <div><b id="sEff">—</b><span>₹ efficiency</span></div>
+      </div>
     </aside>
 
     <div class="rail-r">
@@ -179,6 +187,10 @@
   .score{display:flex;align-items:center;gap:14px;padding:16px 18px}
   .score .g{position:relative;width:64px;height:64px;flex:none}
   .score .g .num{position:absolute;inset:0;display:grid;place-items:center;font-family:var(--mono);font-size:1.05rem;color:var(--cyan)}
+  .subs{display:flex;gap:1px;background:var(--line);margin:0 18px 16px;border-radius:7px;overflow:hidden}
+  .subs>div{flex:1;background:rgb(9 20 22 /.55);padding:8px 4px;text-align:center}
+  .subs b{display:block;font-family:var(--mono);font-weight:400;font-size:.92rem;color:var(--cyan);letter-spacing:.02em}
+  .subs span{font-family:var(--mono);font-size:.42rem;letter-spacing:.09em;color:var(--ink);text-transform:uppercase}
   .score .t{font-size:.66rem;color:var(--ink);line-height:1.5}
   .score .t b{display:block;color:var(--paper);font-size:.82rem;font-family:var(--sans);font-weight:600;letter-spacing:-.01em;margin-bottom:2px}
 

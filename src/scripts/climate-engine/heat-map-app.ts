@@ -313,8 +313,15 @@ export function mountHeatMap(): () => void {
     const mx = Math.max(...bins, 1);
     histo?.childNodes.forEach((elm, i) => { (elm as HTMLElement).style.height = `${Math.max(4, bins[i] / mx * 100)}%`; });
     const cooling = Math.max(0, state.baselineMean - st.meanC), iv = state.iv;
-    const cost = M.computeCost(iv, state.spatial), score = M.greenScore(state.greenG, cooling, cost);
+    const cost = M.computeCost(iv, state.spatial);
+    // Show the sub-scores raw alongside the total — a composite index is only
+    // auditable if you can see which component produced the number.
+    const parts = M.greenScoreParts(state.greenG, cooling, cost);
+    const score = parts.total;
     setText('scoreNum', String(score));
+    setText('sGreen', `${Math.round(parts.greening * 100)}`);
+    setText('sCool', `${Math.round(parts.cooling * 100)}`);
+    setText('sEff', `${Math.round(parts.efficiency * 100)}`);
     el('scoreArc')?.setAttribute('stroke-dashoffset', String(97 - score * 0.97));
     const anyIv = iv.trees || iv.roof || iv.parks || iv.facades;
     setHTML('scoreTxt', anyIv ? `−${cooling.toFixed(2)}°C · ${(state.greenG * 100).toFixed(0)}% green<br>₹${M.fmtCr(cost)} capital cost` : 'move a slider to intervene');
