@@ -191,13 +191,23 @@ def main():
         lo, hi = min(results), max(results)
         print(f"\nSUHII {np.mean(results):+.2f} °C   (range {lo:+.2f} to {hi:+.2f} "
               f"across {len(results)} rural definitions, spread {hi-lo:.2f} °C)")
-        pub = (0.85, 1.5)
-        verdict = ("consistent with published Kolkata values"
-                   if pub[0] <= np.mean(results) <= 2.5 else
-                   "OUTSIDE the published range — suspect processing error"
-                   if np.mean(results) > 2.5 else
-                   "BELOW published Kolkata values — check rural class for contamination")
-        print(f"published Kolkata night SUHII: {pub[0]}–{pub[1]} °C  →  {verdict}")
+        m = float(np.mean(results))
+        # Sanity bands differ by phase. Indian DAYTIME SUHII is routinely small or
+        # negative in pre-monsoon: rural land goes barren and its evapotranspiration
+        # collapses, so the countryside outruns the city (Shastri et al. 2017;
+        # Kumar et al. 2017 find >60% of Indian urban areas show a daytime cool
+        # island). A negative daytime value here is a real signal, not an error.
+        if args.day:
+            band, label = (-1.0, 1.5), "Kolkata/India daytime"
+        else:
+            band, label = (0.85, 2.5), "Kolkata night"
+        if m > band[1]:
+            verdict = "ABOVE the published range — suspect processing error (unmasked water or cloud leakage)"
+        elif m < band[0]:
+            verdict = "BELOW the published range — check the rural class for contamination"
+        else:
+            verdict = "consistent with published values"
+        print(f"published {label} SUHII: {band[0]} to {band[1]} °C  ->  {verdict}")
 
 
 if __name__ == "__main__":
