@@ -83,7 +83,14 @@ export const DEFAULT_PARAMS: SimParams = {
   sun: 1,
   kRad: 0.02,
   tSky: 17,
-  L: 0.5,
+  // Evapotranspiration cooling. Was 0.5, which put a fully-vegetated surface
+  // 5.8 K below air temperature — more cooling than ET can physically deliver.
+  // 0.36 is the midpoint of the range satisfying TWO independent constraints:
+  //   · park cool-island 4.83–8.07 °C  (Mitra et al. 2022, measured in Kolkata)
+  //   · vegetated surface <4 K below air (physical ceiling on ET)
+  // Valid range is [0.40, 0.46] once currentParams' humidity gate (×0.84 at
+  // rh=60) is accounted for; see scripts/validate-model.mjs.
+  L: 0.43,
   h: 0.04,
   wind: 1,
   Q: 0.55,

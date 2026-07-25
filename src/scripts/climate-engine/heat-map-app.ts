@@ -40,7 +40,8 @@ export function mountHeatMap(): () => void {
     base: SimLayers | null; baselineMean: number; live: M.Ambient | null;
     spatial: M.Spatial | null; greenG: number; lastMean: Record<string, number>;
   }
-  const state: State = { ward: 'ballygunge', phase: 'peak', path: 'target', iv: { trees: 0, roof: 0, parks: 0, facades: 0 }, base: null, baselineMean: 0, live: null, spatial: null, greenG: 0, lastMean: {} };
+  
+  const state: State = { ward: 'ballygunge', phase: 'peak', path: '2025', iv: { trees: 0, roof: 0, parks: 0, facades: 0 }, base: null, baselineMean: 0, live: null, spatial: null, greenG: 0, lastMean: {} };
   let mode: 'relief' | 'iso' = 'relief', env = 'dark';
 
   /* ── MapLibre basemap ── */

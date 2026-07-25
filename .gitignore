@@ -18,6 +18,9 @@ dist/
 *-credentials.json
 gcp-*.json
 deltaclimate-*.json
+# NASA Earthdata bearer tokens / netrc — live in ~/.config/delta-climate/
+*earthdata*token*
+.netrc
 
 # OS
 .DS_Store

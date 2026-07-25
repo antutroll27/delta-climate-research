@@ -43,7 +43,7 @@
       <div class="ctl"><label>Cool-roof albedo <span class="v" id="v2">0%</span></label><input type="range" id="ivRoof" min="0" max="100" value="0" step="5" aria-label="Cool-roof albedo, percent of roofs treated"></div>
       <div class="ctl"><label>Vertical green facades <span class="v" id="v4">0</span></label><input type="range" id="ivFacades" min="0" max="15" value="0" aria-label="Vertical green facades"></div>
       <div class="ctl"><label style="margin-bottom:.35rem">Diurnal phase</label><div class="seg" id="segPhase"><button class="on" data-p="peak">13:00 Peak</button><button data-p="night">22:00 Retained</button></div></div>
-      <div class="ctl"><label style="margin-bottom:.35rem">Projection pathway</label><div class="seg" id="segPath"><button data-p="2025">2025</button><button class="on" data-p="target">Δ-Target ’30</button><button data-p="bau">BAU ’40</button></div></div>
+      <div class="ctl"><label style="margin-bottom:.35rem" title="All-India warming deltas from Dhara et al. 2025, PLOS Climate (post-AR6). No emissions scenario produces regional cooling, so there is no negative pathway.">Warming pathway</label><div class="seg" id="segPath"><button class="on" data-p="2025">2025</button><button data-p="ssp245">SSP2-4.5 ’50</button><button data-p="ssp585">SSP5-8.5 ’80</button></div></div>
       <div class="score">
         <div class="g">
           <svg viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="15.5" fill="none" stroke="#093a3e" stroke-width="3"></circle><circle id="scoreArc" cx="18" cy="18" r="15.5" fill="none" stroke="#6fcad6" stroke-width="3" stroke-dasharray="97" stroke-dashoffset="97" stroke-linecap="round" transform="rotate(-90 18 18)"></circle></svg>
@@ -69,7 +69,7 @@
         <div class="lst" id="lst" style="color:var(--red)">—<span class="u">°C</span></div>
       </div>
       <div class="mrow">
-        <div><div class="k">UHI Δ vs rural</div><div class="val" style="color:var(--cyan)" id="uhi">—</div></div>
+        <div><div class="k" title="Modelled land-cover thermal contrast: this ward's mean surface temperature minus a fully-vegetated reference cell under identical forcing. NOT a measured urban heat island — published Kolkata surface UHI is 0.85–1.5 °C from 1 km satellite data, a different quantity.">Δ vs all-green ref</div><div class="val" style="color:var(--cyan)" id="uhi">—</div></div>
         <div><div class="k">Area &gt; 40°C</div><div class="val" style="color:var(--red)" id="area">—</div></div>
       </div>
       <div class="metric" style="border-top:1px solid var(--line);border-bottom:0"><div class="k">Heat-stress distribution</div></div>

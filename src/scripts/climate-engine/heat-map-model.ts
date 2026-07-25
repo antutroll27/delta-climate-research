@@ -13,16 +13,50 @@ import { CANONICAL_GRID_N, DEFAULT_PARAMS, type SimParams, type SimLayers } from
 
 export const SIM_N = CANONICAL_GRID_N;         // grid side (ward 1400 m → dx ≈ 7.29 m/cell)
 export const RAMP_MIN = 26, RAMP_MAX = 48;    // °C colour-ramp bounds
-export const SIM_D = 2.5;                     // §2 diffusion — λ≈47 m: LST contrast + park halo
-export const RESET_BURST = 600;               // diffusion-relax steps after each reset
-export const GREEN_REF = 0.45, DT_REF = 2.5, E_REF = 0.15;   // §5 score normalisers
+/**
+ * Empirical spatial-influence kernel — NOT a thermal diffusivity.
+ * Lateral heat conduction between 7.29 m cells is physically negligible (soil
+ * diurnal damping depth ≈ 0.12 m, ~8 orders of magnitude short), so this term
+ * does not represent conduction. It is a smoothing kernel whose steady state
+ * has decay length λ = dx·√(D/k) ≈ 47 m, deliberately kept short because our
+ * field is land-surface temperature, which real thermal imagery shows as sharp.
+ * The 120–300 m park-cooling distances in the literature are an AIR-temperature
+ * phenomenon driven by advection, which this model does not represent.
+ */
+export const SIM_D = 2.5;
+export const RESET_BURST = 600;               // relaxation steps after each reset
+/** §5 score normalisers. GREEN_REF: Berlin BAF 0.30–0.60 target band midpoint.
+ *  DT_REF: ward-scale cooling beyond ~2–3 °C is not credible.
+ *  E_REF is TOOL-RELATIVE, not an external benchmark — no published
+ *  cost-per-degree-cooled figure exists to normalise against. Labelled as such. */
+export const GREEN_REF = 0.45, DT_REF = 2.5, E_REF = 0.15;
 export const COST = { roofM2: 150, tree: 1500, parkCr: 1.5, facadeM2: 9500 };  // ₹ [C1–C5]
-export const PATH_DELTA: Record<string, number> = { '2025': 0, target: -1.2, bau: 2.4 };
+/**
+ * Regional warming deltas, °C. All positive: no emissions scenario produces
+ * regional cooling over India — the previous −1.2 °C "target" pathway was a
+ * mitigation aspiration drawn on a physical-temperature axis and is deleted.
+ * Source: Dhara et al. 2025, PLOS Climate 4(11):e0000724 (post-AR6 India update).
+ */
+export const PATH_DELTA: Record<string, number> = {
+  '2025': 0,        // observed baseline
+  ssp245: 1.25,     // SSP2-4.5, 2041–2060 all-India mean (+1.2 to +1.3)
+  ssp585: 4.1,      // SSP5-8.5, 2065–2094 max temperature vs 1985–2014
+};
 export const FALLBACK_TAIR = 32;              // used only when the live feed is down
 
 const ALB_BASE = 0.15, ALB_COOL = 0.60;       // §3.2 dark vs aged-cool-roof albedo (LBNL)
 const TREE_CAP = 0.7, PARK_R_M = 50;          // §3.1 crown-closure cap · §3.3 blob = Kolkata TVoE
-const FACADE_Q = 0.30;                        // §3.4 anthropogenic-heat reduction fraction
+/**
+ * Neighbourhood-scale anthropogenic-heat reduction from vertical greening.
+ * Was 0.30 (uncited). Gunawardena & Steemers 2023 (Buildings & Cities,
+ * 10.5334/bc.282) is the only neighbourhood-scale measurement found: green
+ * facades cut space-conditioning energy 2.1% and living walls 5.2%, and moved
+ * heat-island intensity 1.86 K → 1.81 K (~3%). The dramatic −13 to −20 °C
+ * figures are LOCAL wall-surface effects; the authors found the vapour flux
+ * "advects away to background levels" beyond a proximate zone.
+ * Facades are a marginal ward-scale lever, and the model now says so.
+ */
+const FACADE_Q = 0.03;
 const TREES_PER_KM = 110;
 export const PARK_HA = 0.785;
 
@@ -113,8 +147,11 @@ export function applyInterventions(base: SimLayers, iv: Interventions, sp: Spati
   const N2 = SIM_N * SIM_N, albedo = base.albedo.slice(), veg = base.veg.slice();
   const dAlb = ALB_COOL - ALB_BASE;
   if (iv.roof > 0) for (let i = 0; i < N2; i++) { const b = base.built[i]; if (b > 0) albedo[i] = Math.min(0.85, albedo[i] + b * (iv.roof / 100) * dAlb); }
-  const fF = iv.facades / 15;
-  if (fF > 0) for (let i = 0; i < N2; i++) { const b = base.built[i]; if (b > 0) veg[i] = Math.min(1, veg[i] + Math.min(0.25, fF * b * 0.15)); }
+  // Facades act ONLY through the anthropogenic-heat term (FACADE_Q, applied in
+  // currentParams). The previous ground-vegetation addition used an ET-equivalence
+  // factor η = 0.15 for which no neighbourhood-scale measurement exists, and
+  // Gunawardena & Steemers 2023 found green-wall vapour flux advects away rather
+  // than accumulating. Adding ground veg for a wall treatment was double-counting.
   if (sp && iv.trees > 0) { const cs = sp.corridorSorted, k = Math.floor((iv.trees / 50) * cs.length); for (let q = 0; q < k; q++) { const i = cs[q]; veg[i] = Math.min(TREE_CAP, veg[i] + 0.6); albedo[i] = Math.min(0.85, albedo[i] + 0.04); } }
   if (sp && iv.parks > 0) {
     const r = Math.round(PARK_R_M / sp.cellM), r2 = r * r;
@@ -188,10 +225,29 @@ export function currentParamsForReference(
     : { ...base, sun: 0, tSky: 11 };
 }
 
-/** Green Score 0–100 (§5 eq 8): greening + cooling achieved + budget efficiency. */
+/**
+ * Green Score 0–100 — equal-weighted composite of three sub-scores.
+ *
+ * Weights were 0.40 / 0.40 / 0.20, which had no published precedent and implied
+ * that greening and cooling were each exactly twice as important as cost. Equal
+ * weighting is the most commonly applied approach in composite indicator practice
+ * (OECD/JRC 2008, Handbook on Constructing Composite Indicators) and is the
+ * convention in urban-resilience indices. An arbitrary split dressed as a derived
+ * one is worse than a plain, citable one.
+ *
+ * The three sub-scores are returned alongside the total so the UI can show them
+ * raw — transparency is what makes a BAF-style score trusted.
+ */
+export function greenScoreParts(greenG: number, coolingC: number, cost: number) {
+  const greening = Math.min(1, greenG / GREEN_REF);
+  const cooling = Math.min(1, Math.max(0, coolingC) / DT_REF);
+  const efficiency = cost > 0 ? Math.min(1, (Math.max(0, coolingC) / Math.max(0.02, cost / 1e7)) / E_REF) : 0;
+  const total = Math.max(0, Math.min(100, Math.round(100 * (greening + cooling + efficiency) / 3)));
+  return { greening, cooling, efficiency, total };
+}
+
 export function greenScore(greenG: number, coolingC: number, cost: number): number {
-  const E = cost > 0 ? Math.min(1, (Math.max(0, coolingC) / Math.max(0.02, cost / 1e7)) / E_REF) : 0;
-  return Math.max(0, Math.min(100, Math.round(100 * (0.40 * Math.min(1, greenG / GREEN_REF) + 0.40 * Math.min(1, Math.max(0, coolingC) / DT_REF) + 0.20 * E))));
+  return greenScoreParts(greenG, coolingC, cost).total;
 }
 
 /** Runnable self-check (no DOM/GL). node --experimental-strip-types -e
