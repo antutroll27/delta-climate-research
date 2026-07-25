@@ -1,9 +1,8 @@
 # Green Score — algorithms, sources, and an audit
 
-**For:** Shirsha (Co-founder, Climate Policy)
 **From:** Engineering
 **Date:** 2026-07-25
-**Subject:** What the Green Score computes, where every number comes from, and what changed when I checked
+**Subject:** What the Green Score computes, where every number comes from, and what the latest review changed
 
 ---
 
@@ -277,13 +276,18 @@ written into the code for you to check.
 
 ---
 
-## 7. What I'd ask of you
+## 7. Open decision
 
-Whether the Green Score should keep the **cooling term** at all before the physics is validated
-against our own measurements. A score built only on the greening ratio and cost would be weaker
-but fully defensible today. Including modelled cooling makes it more useful and less certain.
+Whether the Green Score should retain the **cooling term** before the physics is validated against
+our own measurements.
 
-That's a judgement about what we're willing to stand behind, which is more your call than mine.
+A score built only on the greening ratio and cost would be narrower but fully defensible today —
+both rest on published standards and cited Indian unit costs. Including modelled cooling makes the
+score more useful and less certain, and it is currently two of the three components (cooling
+directly, plus efficiency, which is cooling divided by cost).
+
+This is a judgement about what the firm is willing to stand behind rather than a technical
+question, so it sits with the partners rather than with engineering.
 
 ---
 
@@ -361,6 +365,6 @@ Validation harness: `scripts/validate-model.mjs`
 
 ---
 
-*This document leads with defects rather than capabilities by design. If anything reads as
-understated, ask — I would rather over-disclose internally than have a municipal client find it
-first.*
+*This document leads with limitations rather than capabilities by design. Anything that reads as
+understated should be queried — better to over-disclose internally than to have a municipal client
+discover it first.*
