@@ -90,7 +90,132 @@ def align(path, nodata, dtype, resampling=Resampling.nearest):
     return dst
 
 
+# Centre longitude of the study bbox, for true local solar time. ISS precession
+# means acquisitions land at any hour, so solar time — not a fixed +5:30 offset —
+# is the physically meaningful variable when comparing scenes.
+LON_CENTRE = (BBOX[0] + BBOX[2]) / 2
+
+
+def local_solar_hour(iso_utc: str) -> float:
+    hh, mm = int(iso_utc[11:13]), int(iso_utc[14:16])
+    return (hh + mm / 60 + LON_CENTRE / 15.0) % 24
+
+
+def measure_scene(date: str, phase: str, want_view: bool = False) -> dict | None:
+    """
+    Measure SUHII for one acquisition date.
+
+    Returns a result dict, or a dict with status='skipped' and a reason, or None
+    if nothing was retrievable. NEVER calls sys.exit — a single bad granule must
+    not kill a 237-scene sweep.
+
+    want_view controls fetching view_zenith (3.3 MB/tile, vs 1.1 MB for all the
+    other bands combined). It feeds one control check, so the sweep fetches it
+    only for scenes that already cleared the usability bar.
+    """
+    from datetime import date as _date, timedelta as _td
+    row = {"date": date, "phase": phase, "status": "ok", "reason": ""}
+    try:
+        tok = census.token()
+        nxt = (_date.fromisoformat(date) + _td(days=1)).isoformat()
+        acqs = census.cmr_search(phase, date, None, nxt, bbox=BBOX)
+    except Exception as exc:
+        return {**row, "status": "error", "reason": f"cmr: {str(exc)[:60]}"}
+    if not acqs:
+        return {**row, "status": "skipped", "reason": "no acquisitions"}
+
+    when = acqs[0][0]
+    row["utc"] = when
+    row["local_solar_hour"] = round(local_solar_hour(when), 2)
+    row["month"] = int(date[5:7])
+
+    lst = view = water = None
+    tiles = set()
+    for _t, grans in acqs:
+        for g in grans:
+            try:
+                u_lst = census.band_url(g, "_LST.tif")
+                p_lst = census.fetch(u_lst, tok)
+                if not p_lst:
+                    continue
+                a = align(p_lst, np.nan, "float32")
+                good = np.isfinite(a) & (a > 200) & (a < 400)
+
+                pq = census.fetch(census.band_url(g, "_QC.tif"), tok)
+                if pq:
+                    q = align(pq, 0xFFFF, "uint16")
+                    good &= (q != 0xFFFF) & ((q & 0b11) == 0)
+                pc = census.fetch(census.band_url(g, "_cloud.tif"), tok)
+                if pc:
+                    good &= align(pc, 255, "uint16") != 1
+
+                cel = np.where(good, a - 273.15, np.nan)
+                lst = cel if lst is None else np.where(np.isfinite(lst), lst, cel)
+                tiles.add(g["GranuleUR"].split("_")[5])
+
+                pw = census.fetch(census.band_url(g, "_water.tif"), tok)
+                if pw:
+                    w_ = align(pw, 0, "uint16") == 1
+                    water = w_ if water is None else (water | w_)
+                if want_view:
+                    pv = census.fetch(census.band_url(g, "_view_zenith.tif"), tok)
+                    if pv:
+                        v_ = align(pv, np.nan, "float32")
+                        view = v_ if view is None else np.where(np.isfinite(view), view, v_)
+            except Exception as exc:
+                row["reason"] = f"tile: {str(exc)[:50]}"
+                continue
+
+    if lst is None or not np.isfinite(lst).any():
+        return {**row, "status": "skipped", "reason": "no usable LST pixels"}
+    if water is None:
+        water = np.zeros(lst.shape, bool)
+
+    smod = align(SMOD, -200, "int16")
+    valid = np.isfinite(lst) & (smod > 0) & ~water & (smod != 10)
+    row["tiles"] = "+".join(sorted(tiles))
+    row["usable_frac"] = round(float(np.isfinite(lst).mean()), 4)
+    row["valid_px"] = int(valid.sum())
+    row["water_px"] = int(water.sum())
+
+    urb = valid & np.isin(smod, list(URBAN))
+    if urb.sum() < 50:
+        return {**row, "status": "skipped", "reason": "too few urban pixels"}
+    u_mean = float(np.nanmean(lst[urb]))
+    row["urban_mean"] = round(u_mean, 3)
+    row["urban_px"] = int(urb.sum())
+
+    suhii = {}
+    for name, codes in RURAL_DEFS.items():
+        rur = valid & np.isin(smod, list(codes))
+        if rur.sum() < 50:
+            continue
+        r_mean = float(np.nanmean(lst[rur]))
+        key = name.split()[0]
+        suhii[key] = u_mean - r_mean
+        row[f"rural_{key}"] = round(r_mean, 3)
+        row[f"suhii_{key}"] = round(u_mean - r_mean, 3)
+    if not suhii:
+        return {**row, "status": "skipped", "reason": "too few rural pixels"}
+
+    vals = list(suhii.values())
+    row["suhii"] = round(float(np.mean(vals)), 3)
+    row["suhii_spread"] = round(float(max(vals) - min(vals)), 3)
+
+    # QC accuracy distribution is intentionally not recomputed here; the census
+    # script reports it per scene and it is invariant for a given granule set.
+    if view is not None:
+        rur0 = valid & np.isin(smod, list(RURAL_DEFS["strict   (11,12,13)"]))
+        vu = float(np.nanmean(np.abs(view[urb])))
+        vr = float(np.nanmean(np.abs(view[rur0])))
+        row["view_urban"] = round(vu, 2)
+        row["view_rural"] = round(vr, 2)
+        row["view_delta"] = round(abs(vu - vr), 2)
+    return row
+
+
 def main():
+
     ap = argparse.ArgumentParser()
     ap.add_argument("--date", default="2025-04-24", help="acquisition date, YYYY-MM-DD")
     ap.add_argument("--day", action="store_true")
