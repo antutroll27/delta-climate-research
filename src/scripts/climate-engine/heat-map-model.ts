@@ -10,6 +10,7 @@
 // .ts extension: keeps this module runnable under `node --experimental-strip-types`
 // for assertInterventionLogic() (node doesn't do extensionless resolution).
 import { CANONICAL_GRID_N, DEFAULT_PARAMS, type SimParams, type SimLayers } from './types.ts';
+import { skyTemperatureC, dewpointC } from './sky.ts';
 
 export const SIM_N = CANONICAL_GRID_N;         // grid side (ward 1400 m → dx ≈ 7.29 m/cell)
 export const RAMP_MIN = 26, RAMP_MAX = 48;    // °C colour-ramp bounds
@@ -57,6 +58,45 @@ const TREE_CAP = 0.7, PARK_R_M = 50;          // §3.1 crown-closure cap · §3.
  * Facades are a marginal ward-scale lever, and the model now says so.
  */
 const FACADE_Q = 0.03;
+
+/**
+ * Evapotranspiration after dark, as a fraction of the daytime rate.
+ *
+ * Stomata close at night, so transpiration all but stops; what remains is soil
+ * and canopy-interception evaporation. Eddy-covariance studies over urban and
+ * peri-urban vegetation put nocturnal latent flux at 5–15 % of midday. Running
+ * the full daytime L overnight was giving parks a cooling advantage they cannot
+ * physically hold once the sun is down.
+ */
+const NIGHT_ET_FRACTION = 0.10;
+
+/**
+ * Anthropogenic heat at night, as a fraction of the daytime rate.
+ *
+ * Traffic, air-conditioning and commercial load all fall after dark but none go
+ * to zero. 0.5 is the round midpoint of the diurnal Q profiles reported for
+ * South and East Asian cities; Phase 2 fits it against measurement rather than
+ * leaving it at a guess.
+ */
+const Q_NIGHT_RATIO = 0.5;
+
+/**
+ * Night ET gate: below the dewpoint the surface is condensing, not evaporating,
+ * so the latent term must not keep removing heat.
+ *
+ * The gate depends on the answer it modifies, so it is evaluated on the no-ET
+ * equilibrium of a representative vegetated cell and applied to the whole
+ * field.
+ * ponytail: one scalar test per frame, not per cell. Cells span ~2 K at night,
+ * so a per-cell gate would only differ on the handful straddling the dewpoint;
+ * move it into eqCell/the shader if that edge ever matters.
+ */
+function nightLatent(p: SimParams, rh: number): number {
+  const L = p.L * NIGHT_ET_FRACTION;
+  const dry: SimParams = { ...p, L: 0 };
+  const surface = eqCell(dry, 0.18, 0.6, 0);   // eqCell(p, albedo, veg, built)
+  return surface <= dewpointC(p.tAir, rh) ? 0 : L;
+}
 const TREES_PER_KM = 110;
 export const PARK_HA = 0.785;
 
@@ -201,9 +241,12 @@ export function currentParams(s: ScenarioState): SimParams {
   const rh = L ? L.rh : 60, evap = 0.6 + 0.6 * (1 - rh / 100);
   const Q = DEFAULT_PARAMS.Q * (1 - FACADE_Q * (s.iv.facades / 15));
   const b: SimParams = { ...DEFAULT_PARAMS, D: SIM_D, Q, wind, L: DEFAULT_PARAMS.L * evap };
-  return s.phase === 'peak'
-    ? { ...b, sun: 1 * (1 - 0.6 * cloud), tAir: baseTair, tSky: 17 }
-    : { ...b, sun: 0, tAir: baseTair - 2.5, tSky: 11 };
+  if (s.phase === 'peak') {
+    return { ...b, sun: 1 * (1 - 0.6 * cloud), tAir: baseTair, tSky: skyTemperatureC(baseTair, rh, cloud) };
+  }
+  const tAir = baseTair - 2.5;
+  const night: SimParams = { ...b, sun: 0, tAir, Q: Q * Q_NIGHT_RATIO, tSky: skyTemperatureC(tAir, rh, cloud) };
+  return { ...night, L: nightLatent(night, rh) };
 }
 
 /**
@@ -220,9 +263,10 @@ export function currentParamsForReference(
   const evap = 0.6 + 0.6 * (1 - ambient.rh / 100);
   const Q = DEFAULT_PARAMS.Q * (1 - FACADE_Q * (iv.facades / 15));
   const base: SimParams = { ...DEFAULT_PARAMS, D: SIM_D, Q, wind, L: DEFAULT_PARAMS.L * evap, tAir: ambient.tAir };
-  return phase === 'peak'
-    ? { ...base, sun: 1 * (1 - 0.6 * cloud), tSky: 17 }
-    : { ...base, sun: 0, tSky: 11 };
+  const tSky = skyTemperatureC(ambient.tAir, ambient.rh, cloud);
+  if (phase === 'peak') return { ...base, sun: 1 * (1 - 0.6 * cloud), tSky };
+  const night: SimParams = { ...base, sun: 0, Q: Q * Q_NIGHT_RATIO, tSky };
+  return { ...night, L: nightLatent(night, ambient.rh) };
 }
 
 /**
