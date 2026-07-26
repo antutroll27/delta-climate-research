@@ -81,21 +81,31 @@ const NIGHT_ET_FRACTION = 0.10;
 const Q_NIGHT_RATIO = 0.5;
 
 /**
- * Night ET gate: below the dewpoint the surface is condensing, not evaporating,
- * so the latent term must not keep removing heat.
+ * Width of the dewpoint taper, K. Evaporation is driven by the vapour-pressure
+ * deficit, which closes continuously as the surface cools toward the dewpoint —
+ * so ET must ramp to zero, not switch off.
  *
- * The gate depends on the answer it modifies, so it is evaluated on the no-ET
- * equilibrium of a representative vegetated cell and applied to the whole
- * field.
- * ponytail: one scalar test per frame, not per cell. Cells span ~2 K at night,
- * so a per-cell gate would only differ on the handful straddling the dewpoint;
- * move it into eqCell/the shader if that edge ever matters.
+ * A hard cutoff put a 0.39 K step on park cells at RH ≈ 86 %, which is squarely
+ * inside the 85–95 % band Kolkata monsoon nights occupy: the live humidity feed
+ * would have jerked the map every time it drifted across the threshold.
+ */
+const DEWPOINT_TAPER_K = 1.0;
+
+/**
+ * Night latent term: below the dewpoint the surface is condensing rather than
+ * evaporating, so ET cannot keep removing heat.
+ *
+ * The taper depends on the answer it modifies, so it is evaluated on the no-ET
+ * equilibrium of a representative vegetated cell and applied to the whole field.
+ * ponytail: one scalar evaluation per frame, not per cell. Cells span ~2 K at
+ * night, so a per-cell taper would only differ on those straddling the
+ * dewpoint; move it into eqCell/the shader if that edge ever matters.
  */
 function nightLatent(p: SimParams, rh: number): number {
-  const L = p.L * NIGHT_ET_FRACTION;
   const dry: SimParams = { ...p, L: 0 };
   const surface = eqCell(dry, 0.18, 0.6, 0);   // eqCell(p, albedo, veg, built)
-  return surface <= dewpointC(p.tAir, rh) ? 0 : L;
+  const headroom = (surface - dewpointC(p.tAir, rh)) / DEWPOINT_TAPER_K;
+  return p.L * NIGHT_ET_FRACTION * Math.min(1, Math.max(0, headroom));
 }
 const TREES_PER_KM = 110;
 export const PARK_HA = 0.785;
@@ -325,4 +335,21 @@ export function assertInterventionLogic(): void {
   // score bounded, rises with cooling
   a(greenScore(0.3, 0, 0) >= 0 && greenScore(0.3, 2, 1e7) <= 100, 'score bounded 0–100');
   a(greenScore(0.4, 2, 5e7) > greenScore(0.4, 0.5, 5e7), 'score rewards cooling');
+
+  // REGRESSION: the night ET taper must stay continuous in humidity. A hard
+  // dewpoint cutoff put a 0.39 K step on park cells at RH ~86 %, right inside
+  // the band Kolkata monsoon nights occupy, so the live feed jerked the map.
+  const zero = { trees: 0, roof: 0, parks: 0, facades: 0 };
+  let prev = NaN, worst = 0;
+  for (let rh = 40; rh <= 99; rh += 0.5) {
+    const np = currentParamsForReference({ tAir: 28, rh, wind: 3, cloud: 0, feels: 30 }, 'night', zero);
+    const park = eqCell(np, 0.20, 0.75, 0.05);
+    if (!Number.isNaN(prev)) worst = Math.max(worst, Math.abs(park - prev));
+    prev = park;
+  }
+  a(worst < 0.1, `night ET must vary smoothly with humidity (worst step ${worst.toFixed(3)} K per 0.5 % RH)`);
+
+  // ...and must still shut off entirely once the surface is condensing
+  const soaked = currentParamsForReference({ tAir: 28, rh: 97, wind: 3, cloud: 0, feels: 30 }, 'night', zero);
+  a(soaked.L === 0, 'ET must reach zero below the dewpoint');
 }

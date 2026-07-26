@@ -27,7 +27,7 @@ therefore direct, with no timezone arithmetic to get wrong.
 
 Output: data/calibration/met-forcing.csv
 """
-import csv, json, os, subprocess, sys
+import csv, datetime, json, os, subprocess, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.join(HERE, "..")
@@ -78,9 +78,14 @@ def main():
     for s in scenes:
         # POWER keys are YYYYMMDDHH in local solar time; round the scene's solar
         # hour to the nearest stamp rather than truncating, so a 13:50 overpass
-        # takes the 14:00 reading it is closest to.
-        hour = int(round(float(s["local_solar_hour"]))) % 24
-        key = s["date"].replace("-", "") + f"{hour:02d}"
+        # takes the 14:00 reading it is closest to. Rounding 23.84 up to 24 must
+        # roll the DATE forward too, or the scene silently takes a reading 24
+        # hours early.
+        hour = int(round(float(s["local_solar_hour"])))
+        day = datetime.date.fromisoformat(s["date"])
+        if hour >= 24:
+            hour, day = hour - 24, day + datetime.timedelta(days=1)
+        key = day.strftime("%Y%m%d") + f"{hour:02d}"
         vals = {k: p[k].get(key) for k in ("T2M", "RH2M", "WS2M", "CLOUD_AMT")}
         if any(v is None or v <= -900 for v in vals.values()):   # POWER fill = -999
             missing += 1
