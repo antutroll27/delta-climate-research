@@ -1,0 +1,7 @@
+date,phase,status,reason,utc,local_solar_hour,month,tiles,usable_frac,valid_px,water_px,urban_mean,urban_px,rural_strict,suhii_strict,rural_+rural,suhii_+rural,rural_wide,suhii_wide,suhii,suhii_spread,view_urban,view_rural,view_delta
+2025-04-01,day,skipped,no usable LST pixels,2025-04-01T04:55:38,10.81,4,,,,,,,,,,,,,,,,,
+2025-04-02,day,ok,,2025-04-02T04:07:05,10.01,4,45QWE+45QWF+45QXE+45QXF,0.9628,1622147,126173,33.626,617068,32.994,0.632,32.987,0.638,33.128,0.497,0.589,0.141,17.42,16.8,0.62
+2025-04-03,night,ok,,2025-04-03T13:09:09,19.05,4,45QWE+45QWF+45QXE+45QXF,0.6057,998017,126202,28.87,374069,28.725,0.144,28.728,0.142,28.676,0.194,0.16,0.052,6.87,8.04,1.16
+2025-04-09,day,skipped,no usable LST pixels,2025-04-09T01:46:51,7.66,4,,,,,,,,,,,,,,,,,
+2025-04-10,day,skipped,no usable LST pixels,2025-04-10T00:58:03,6.86,4,,,,,,,,,,,,,,,,,
+2025-04-13,night,skipped,usable 6% < 30%,2025-04-13T23:24:31,5.29,4,45QWE+45QWF+45QXE+45QXF,0.0564,88894,126329,24.066,54364,23.341,0.725,23.344,0.722,23.261,0.805,0.751,0.082,,,
