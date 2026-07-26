@@ -58,28 +58,52 @@ def token() -> str:
     return open(TOKEN_PATH).read().strip()
 
 
-def cmr_search(day_night: str, start: str, limit: int, end: str = "") -> list:
-    """Distinct acquisitions, newest first. Deduplicated across the two tiles."""
-    params = {
-        "short_name": "ECO_L2T_LSTE", "version": "002",
-        "bounding_box": ",".join(map(str, BBOX)),
-        "temporal": f"{start}T00:00:00Z,{end + 'T00:00:00Z' if end else ''}",
-        "day_night_flag": day_night, "page_size": "200",
-        "sort_key": "-start_date",
-    }
-    out = subprocess.run(
-        ["curl", "-s", "-H", "User-Agent: DeltaClimateResearch/1.0",
-         f"{CMR}?{urllib.parse.urlencode(params)}"],
-        capture_output=True, text=True, timeout=180).stdout
-    items = json.loads(out).get("items", [])
-    by_time = defaultdict(list)
-    for it in items:
-        u = it["umm"]
-        by_time[u["TemporalExtent"]["RangeDateTime"]["BeginningDateTime"][:19]].append(u)
-    return sorted(by_time.items(), reverse=True)[:limit]
+def cmr_search(day_night: str, start: str, limit: int | None = None, end: str = "",
+               bbox=None) -> list:
+    """
+    Distinct acquisitions, newest first, deduplicated across MGRS tiles.
+
+    PAGINATES. The previous version hardcoded page_size=200 and sliced [:limit]
+    AFTER dedup, which silently truncated: the night query over 2024-2026 alone
+    returns 369 granules. For a calibration sweep that is the worst possible
+    failure — it biases the sample invisibly rather than erroring. `limit=None`
+    now means "every acquisition in range".
+    """
+    seen, after = {}, None
+    for _ in range(50):                       # hard stop; 50 x 2000 >> any real query
+        params = {
+            "short_name": "ECO_L2T_LSTE", "version": "002",
+            "bounding_box": ",".join(map(str, bbox or BBOX)),
+            "temporal": f"{start}T00:00:00Z,{end + 'T00:00:00Z' if end else ''}",
+            "day_night_flag": day_night, "page_size": "2000",
+            "sort_key": "-start_date",
+        }
+        cmd = ["curl", "-s", "-D", "-", "-H", "User-Agent: DeltaClimateResearch/1.0"]
+        if after:
+            cmd += ["-H", f"CMR-Search-After: {after}"]
+        raw = subprocess.run(cmd + [f"{CMR}?{urllib.parse.urlencode(params)}"],
+                             capture_output=True, text=True, timeout=300).stdout
+        head, _, body = raw.partition("\r\n\r\n")
+        if not body:
+            head, _, body = raw.partition("\n\n")
+        after = next((ln.split(":", 1)[1].strip() for ln in head.splitlines()
+                      if ln.lower().startswith("cmr-search-after:")), None)
+        items = json.loads(body).get("items", []) if body.strip() else []
+        for it in items:
+            u = it["umm"]
+            seen.setdefault(
+                u["TemporalExtent"]["RangeDateTime"]["BeginningDateTime"][:19], []).append(u)
+        if not after or not items:
+            break
+    out = sorted(seen.items(), reverse=True)
+    return out[:limit] if limit else out
 
 
-def fetch(url: str, tok: str) -> str | None:
+def fetch(url: str | None, tok: str) -> str | None:
+    # band_url() returns None for an absent band; without this guard the very
+    # next line raises AttributeError and kills a whole sweep.
+    if not url:
+        return None
     os.makedirs(CACHE, exist_ok=True)
     path = os.path.join(CACHE, url.rsplit("/", 1)[-1])
     if os.path.exists(path) and os.path.getsize(path) > 2000:
