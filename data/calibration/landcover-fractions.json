@@ -1,0 +1,40 @@
+{
+  "source": "ESA WorldCover 10m v200 (2021), CC BY 4.0, tile N21E087",
+  "grid": "aligned onto the same 70 m UTM 45N grid as the SUHII measurement, clipped to BBOX",
+  "masks": "GHS-SMOD R2023A R7_C27; urban = class 30, rural = classes 11/12/13",
+  "albedo_source": "Bonan (2016) Ecological Climatology Table 12.1 / MODIS albedo climatology",
+  "note": "WorldCover is a 2021 epoch held time-invariant over the 2024-2026 window; Kolkata is urbanising, so built fraction is a mild underestimate at the late end.",
+  "classes": {
+    "urban": {
+      "pixels": 686420,
+      "veg": 0.7206,
+      "built": 0.1622,
+      "albedo": 0.1392,
+      "cover_breakdown": {
+        "Tree cover": 0.4585,
+        "Cropland": 0.2651,
+        "Built-up": 0.1622,
+        "Permanent water": 0.0812,
+        "Grassland": 0.0207,
+        "Bare / sparse": 0.0085,
+        "Herbaceous wetland": 0.0031
+      }
+    },
+    "rural": {
+      "pixels": 320071,
+      "veg": 0.7974,
+      "built": 0.0077,
+      "albedo": 0.1515,
+      "cover_breakdown": {
+        "Cropland": 0.559,
+        "Tree cover": 0.253,
+        "Permanent water": 0.097,
+        "Mangroves": 0.0477,
+        "Grassland": 0.0186,
+        "Bare / sparse": 0.011,
+        "Built-up": 0.0077,
+        "Herbaceous wetland": 0.0059
+      }
+    }
+  }
+}

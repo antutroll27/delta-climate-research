@@ -1,0 +1,45 @@
+{
+  "fitted": {
+    "Q_day": 0.6,
+    "kRad_h_ratio": 0.15,
+    "brutsaert_c": 1.4
+  },
+  "bounds": {
+    "Q_day": [
+      0.02,
+      0.6
+    ],
+    "kRad_h_ratio": [
+      0.15,
+      1.5
+    ],
+    "brutsaert_c": [
+      1.2,
+      1.4
+    ]
+  },
+  "scenes": 32,
+  "excluded": 13,
+  "near_nadir_only": true,
+  "view_cut_deg": 0.75,
+  "residuals_K": {
+    "rmse": 3.755,
+    "rmse_before_fit": 6.4023,
+    "urban_bias": -0.9189,
+    "rural_bias": -2.4602,
+    "max_abs": 10.4368
+  },
+  "suhii_K": {
+    "modelled_median": 1.8389,
+    "measured_median": 0.343
+  },
+  "method": "scipy least_squares TRF, bounded; residuals on urban AND rural absolutes, weighted by sqrt(usable pixel fraction)",
+  "land_cover": "data/calibration/landcover-fractions.json (fixed, not fitted)",
+  "pinned_to_bounds": [
+    "Q_day",
+    "kRad_h_ratio",
+    "brutsaert_c"
+  ],
+  "ship": false,
+  "verdict": "STOP CONDITION MET: RMSE exceeds the +/-2 K spec bar and parameters are pinned to their bounds. These values must NOT be written into DEFAULT_PARAMS -- the model structure is wrong, not its constants."
+}
