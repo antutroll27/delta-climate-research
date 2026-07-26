@@ -61,7 +61,14 @@ rather than to transplanted literature, and its residuals become quantified and 
 Currently we have 5 scenes. Fitting ~6 parameters to 6 numbers is exactly determined: zero
 residual, and no way to distinguish a good model from a curve-fit.
 
-**Target:** ≥20 scenes across ≥2 years, both phases, all seasons.
+**Target:** ≥20 usable scenes across ≥2 years, both phases, all seasons.
+
+**Available population (measured, not estimated).** CMR over 2024-01-01 → 2026-07-01 for the wide
+bbox returns **237 distinct acquisitions — 86 day, 151 night** — spread across **four** MGRS tiles
+(45QXE, 45QXF, **45QWE, 45QWF**), not the two the ward bbox touches. Since core bands are ~1.1 MB
+per tile-acquisition, the **entire population is affordable to sweep**; no sampling is required and
+therefore no sampling bias is introduced. How many survive cloud and quality masking is unknown in
+advance — on the 2025 subset the rate was roughly 3-in-10 at night and 7-in-14 by day.
 
 **Per scene, record:**
 
@@ -245,6 +252,8 @@ Calibration is not contained to the physics module.
 | **Phase 3 scope creep** | Hard gate: fail the §6.3 test, build nothing |
 | **SMAP 9 km too coarse** | Accepted — SUHII is city-scale. If terciles do not separate, that is a test failure, not a reason to subdivide |
 | **Cherry-picking scenes** | Every scene meeting the §3 acceptance bar enters the set. Exclusions require a stated reason recorded in the CSV |
+| **Silent truncation of the population** | `cmr_search` hardcodes `page_size=200` and slices `[:limit]` *after* deduplication. With 369 night granules in range it would drop data without warning. Pagination is a Phase 0 prerequisite, not an optimisation |
+| **Crash mid-sweep on a missing band** | `fetch(None)` raises `AttributeError` when a granule lacks a band. Never triggered on five scenes; a 237-scene sweep is exactly where it surfaces. Guard before sweeping |
 
 ---
 

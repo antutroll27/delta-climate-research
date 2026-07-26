@@ -13,8 +13,8 @@ Phase 3's outcome, so the night model ships regardless of what the soil-moisture
 
 ```
 scripts/
-  ecostress-census.py          EXISTS — scene discovery + cloud/QC masking
-  ecostress-suhii.py           EXISTS — per-scene SUHII, GHS-SMOD urban/rural
+  ecostress-census.py          FIX    P0 · fetch() None-guard, cmr_search pagination
+  ecostress-suhii.py           EXTEND P0 · expose measure_scene(); no sys.exit on failure
   build-calibration-set.py     NEW  P0 · sweep scenes → versioned CSV
   fetch-smap.py                NEW  P3 · SMAP L3 rural soil moisture per scene
   fit-physics.py               NEW  P2 · bounded least-squares → fitted constants
@@ -38,25 +38,56 @@ Compare's reference forcing.
 
 ## Phase 0 — Build the calibration set (½ day)
 
-**`scripts/build-calibration-set.py`** — sweeps a date range, runs the existing SUHII logic per
-scene, writes one CSV row each.
+> **Revised after auditing the plan against the code.** Four assumptions were wrong; each is now a
+> concrete task below. The net effect is favourable — a *full* sweep turns out to be affordable, so
+> no sampling and no sampling bias.
 
-Steps:
+### 0a · Fix three defects before sweeping anything
 
-- [ ] Refactor `ecostress-suhii.py`'s `main()` so the per-scene computation is importable as
-      `measure_scene(date, phase) -> dict`. No behaviour change; the CLI keeps working.
-- [ ] Sweep **2024-01-01 → 2026-07-01**, both phases, via `census.cmr_search`.
-- [ ] Skip scenes below 30 % usable; **record the skip and its reason in the CSV** rather than
-      dropping silently — the spec forbids invisible exclusions.
-- [ ] Emit `data/calibration/ecostress-suhii.csv` with the §3 columns, plus a `local_solar_hour`
-      computed from longitude rather than a fixed UTC offset.
-- [ ] Print a season × phase coverage matrix so gaps are visible.
+- [ ] **`fetch(None)` crashes.** `band_url()` returns `None` for an absent band and `fetch()`
+      immediately calls `url.rsplit`. Guard with an early `if not url: return None`. Latent on five
+      scenes; certain to surface across 237.
+- [ ] **`cmr_search` silently truncates.** `page_size=200` is hardcoded and `[:limit]` is applied
+      *after* dedup, but the night query alone returns 369 granules. Add `CMR-Search-After` header
+      pagination and make `limit=None` mean "all". **Silent data loss is the worst failure mode
+      here** — it would bias the calibration set invisibly.
+- [ ] **Four tiles, not two.** The wide bbox touches `45QXE`, `45QXF`, `45QWE`, `45QWF`. The mosaic
+      loop already handles arbitrary tile counts, but cost and runtime estimates assumed two.
 
-**Verify:** ≥20 scenes, ≥4 night, all four seasons present. If the bar is missed, widen the range
-to 2023 before proceeding — do not lower the bar.
+### 0b · Two-stage band fetching
 
-**Cost note:** ~30 scenes × 4 bands × 2 tiles ≈ 240 COGs. The cache is persistent, so this is a
-one-off ~1–2 GB download. Run it once, commit the CSV, and nobody repeats it.
+Measured band sizes: **LST 0.9 MB · QC 0.2 MB · cloud ~0 · water ~0 · view_zenith 3.3 MB.**
+
+`view_zenith` is **three times the cost of everything else combined** and feeds a single control
+check. So:
+
+- [ ] **Stage 1** — fetch LST + QC + cloud + water for all 237 acquisitions (~1.0 GB), compute
+      usable fraction and SUHII.
+- [ ] **Stage 2** — fetch `view_zenith` only for scenes clearing the usability bar (~25 × 4 tiles
+      ≈ 0.3 GB) and attach the urban/rural angle check to those rows only.
+
+Scenes without a view-angle check are marked as such in the CSV rather than silently lacking it.
+
+### 0c · The sweep
+
+- [ ] Refactor `ecostress-suhii.py`'s `main()` so per-scene computation is importable as
+      `measure_scene(date, phase, want_view=False) -> dict | None`. **Return `None` on failure —
+      do not `sys.exit()`**, which currently would kill the whole sweep on one bad scene.
+- [ ] Sweep **2024-01-01 → 2026-07-01**, both phases.
+- [ ] Below 30 % usable → row still written, with `status=skipped` and a reason. The spec forbids
+      invisible exclusions.
+- [ ] Emit `data/calibration/ecostress-suhii.csv`, including `local_solar_hour` derived from
+      longitude rather than a fixed +5:30, since ISS precession makes true solar time the
+      physically meaningful variable.
+- [ ] Print a season × phase coverage matrix so gaps are visible before fitting.
+- [ ] Make the sweep **resumable** — skip dates already present in the CSV. A ~1.3 GB download over
+      a domestic connection will be interrupted.
+
+**Verify:** ≥20 usable scenes, ≥4 night, all four seasons. Short of that, widen to 2023 — do not
+lower the bar.
+
+**Cost:** ~1.3 GB total, one-off. The cache is persistent and the CSV is committed, so this runs
+once for the project.
 
 ---
 
@@ -183,6 +214,8 @@ wrong and more tuning will not fix it.
 | | Symptom | Response |
 |---|---|---|
 | Not enough scenes | <20 after the sweep | Widen to 2023. Do not lower the bar |
+| Sweep dies partway | One bad granule aborts the run | `measure_scene` returns `None`, never exits; sweep is resumable from the CSV |
+| Population silently truncated | Fewer acquisitions than the 237 measured | Pagination assertion — fail loudly if the count drops |
 | SUHII moves in Phase 1 | Sky term not cancelling | Wiring bug — find it before Phase 2 |
 | Residuals stay large | >±2 K after fitting | **Stop.** Report a structural problem |
 | SMAP terciles do not separate | Test fails on sample | Honest FAIL, take branch 3d |
