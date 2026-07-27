@@ -36,6 +36,15 @@ D = os.path.join(ROOT, "data", "dc-urs")
 CAL = os.path.join(ROOT, "data", "calibration", "met-forcing.csv")
 OUT = os.path.join(D, "inputs.json")
 
+# THE FILE THE BROWSER ACTUALLY FETCHES. heat-map-app.ts requests
+# /heat-map/data/dc-urs-inputs.json, which Astro serves verbatim from public/.
+# This script used to write OUT alone, so `public/` was a hand-maintained copy —
+# and it drifted: socioVuln landed in data/dc-urs/inputs.json, the site built
+# green, deployed green, and served placeholder zeros to production. Nothing
+# failed, because nothing compared the two. Writing both here is what makes the
+# duplicate a mirror instead of a second source of truth.
+SERVED = os.path.join(ROOT, "public", "heat-map", "data", "dc-urs-inputs.json")
+
 VIEW_CUT = 0.75          # near-nadir only, matching the thermal calibration
 
 
@@ -204,8 +213,11 @@ def main() -> None:
         sys.exit("no ward assembled")
 
     os.makedirs(D, exist_ok=True)
-    with open(OUT, "w") as fh:
-        json.dump(out, fh, indent=2)
+    os.makedirs(os.path.dirname(SERVED), exist_ok=True)
+    blob = json.dumps(out, indent=2)
+    for path in (OUT, SERVED):
+        with open(path, "w") as fh:
+            fh.write(blob)
 
     # report, loudly, what is not yet measured
     print(f"  {'ward':<14}{'measured':>10}{'placeholder':>13}")
@@ -221,6 +233,7 @@ def main() -> None:
         print(f"  {wid:<14}{measured:>10}{len(placeholders):>13}")
     print(f"\n  still placeholder: {', '.join(sorted(still)) or 'none'}")
     print(f"  written to {os.path.relpath(OUT, ROOT)}")
+    print(f"       and to {os.path.relpath(SERVED, ROOT)}  (the file the browser fetches)")
     if still - {"canopyFrac"}:
         print("\n  NOT READY FOR PHASE 4 — placeholders other than canopyFrac remain.")
 

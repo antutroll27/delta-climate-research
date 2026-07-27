@@ -5,7 +5,7 @@
   "private": true,
   "scripts": {
     "dev": "astro dev",
-    "build": "astro build && node scripts/prune-dist-assets.mjs",
+    "build": "node scripts/verify-served-data.mjs && astro build && node scripts/prune-dist-assets.mjs",
     "preview": "astro preview",
     "check": "astro check",
     "test:unit": "node --experimental-strip-types --test tests/unit/*.test.mjs",
