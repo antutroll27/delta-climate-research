@@ -1,0 +1,40 @@
+---
+// Blog — night-tide coming-soon, matching its two Insights siblings
+// (/white-papers, /climate-highlights). The nav has linked here since the
+// Insights dropdown shipped, and the route did not exist: every visitor who
+// opened that menu item got a 404 on a site that sells defensible rigour.
+//
+// SoonTide rather than SoonDraft because this is an Insights feed, not an
+// instrument. The register is set per section, not per page.
+import Base from '../layouts/Base.astro';
+import Nav from '../components/layout/Nav.astro';
+import Footer from '../components/layout/Footer.astro';
+import SoonTide from '../components/states/SoonTide.astro';
+---
+
+<Base
+  title="Blog — Delta Climate Research"
+  description="Field notes and working thinking from Delta Climate Research — what the data actually says about urban heat, blue carbon, and embodied carbon, including the parts that did not work. Currently in preparation."
+  noindex
+>
+  <Nav />
+  <SoonTide
+    kicker="Blog"
+    sub="Shorter than a white paper and franker: what we are reading, what a dataset turned out not to support, and the working notes behind the published work. No date attached — it opens when there is something worth reading."
+    ghost="✎"
+    gaugeLabel="NOTES — 0.1"
+    statusRows={[
+      { k: 'Status', v: 'In preparation', live: true },
+      { k: 'Format', v: 'Field notes' },
+      { k: 'Cadence', v: 'When it earns it' },
+    ]}
+    backHref="/"
+    backLabel="Back to home"
+    nextHref="/white-papers"
+    nextLabel="White papers"
+    notifySubject="Notify me — Blog"
+  >
+    Still writing in the <em>margins.</em>
+  </SoonTide>
+  <Footer />
+</Base>

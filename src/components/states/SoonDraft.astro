@@ -155,9 +155,39 @@ const pct = Math.round(Math.min(1, Math.max(0, progress)) * 100);
   }
   .coords b { color: var(--color-cyan-muted); font-weight: 400; }
 
+  /* MOBILE. `.soon-draft` is a flex ROW, and the desktop layout only works
+     because .stamp and .coords are absolutely positioned — out of flow. The old
+     mobile rule made .coords static WITHOUT changing the row, so it became a
+     flex item beside the content: sized to its own text, vertically centred,
+     and running off the right edge (clipped by overflow:hidden, so it read as
+     truncated rather than as a scrollbar). Stacking the column is the fix, and
+     it lets the stamp sit in flow above the kicker instead of landing on top of
+     it — at 390px the absolute stamp covered both the kicker and the headline.
+
+     padding-inline matches .wrap exactly. `--gutter` is not a token in this
+     codebase, so `var(--gutter, 1.5rem)` was always the fallback and the coords
+     never lined up with the content edge above them. */
   @media (max-width: 820px) {
-    .stamp { right: 1rem; top: 14%; }
-    .coords { position: static; margin-top: 3rem; text-align: left; padding-inline: var(--gutter, 1.5rem); }
+    .soon-draft {
+      flex-direction: column;
+      align-items: stretch;
+      justify-content: center;
+      padding-block: 7rem 4rem;
+    }
+    .stamp {
+      position: static;
+      align-self: flex-start;
+      margin: 0 0 2rem clamp(1rem, 4vw, 2.5rem);
+      transform: rotate(-2deg);
+      transform-origin: left center;
+    }
+    @keyframes draft-stamp { from { transform: rotate(-7deg) scale(1.6); opacity: 0; } }
+    .coords {
+      position: static;
+      margin-top: 3rem;
+      text-align: left;
+      padding-inline: clamp(1rem, 4vw, 2.5rem);
+    }
   }
   @media (prefers-reduced-motion: reduce) {
     .contours path { animation: none; stroke-dashoffset: 0; }

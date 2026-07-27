@@ -14,6 +14,8 @@ import { projects } from './src/data/projects.ts';
 const sitemapFilter = (page) => {
   const path = new URL(page).pathname;
   if (path === '/climate-highlights/') return false;               // always coming-soon (no publish flag)
+  if (path === '/blog/') return false;                             // coming-soon, no publish flag yet
+  if (path === '/cbam-calculator/') return false;                  // coming-soon, no publish flag yet
   if (path === '/heat-map/' || path.startsWith('/heat-map/')) return false; // tool routes remain noindex until the measured-raster gate passes
   if (path === '/HeatMapVisualizer/') return false;               // legacy stub route, removed
   if (path === '/white-papers/') return papers.some((p) => p.published);

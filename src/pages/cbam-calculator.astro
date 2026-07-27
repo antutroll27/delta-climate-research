@@ -1,0 +1,40 @@
+---
+// CBAM Calculator — drafting-table coming-soon, matching its Interactive Tools
+// sibling register (/heat-map is the shipped instrument; this is the one still
+// on the board). SoonDraft rather than SoonTide because this is an instrument
+// under construction, and its bronze UNDER CONSTRUCTION stamp says exactly that.
+//
+// The nav has linked here since the Interactive Tools dropdown shipped and the
+// route did not exist — a 404 straight out of the main menu.
+//
+// COPY DELIBERATELY DOES NOT OVERSELL. CBAM is an adjacency for Delta, not a
+// core niche: the positioning leads with urban heat, blue carbon and embodied
+// carbon. A placeholder that promises a full CBAM compliance product would
+// commit the firm to a market it has not chosen, so this describes a screening
+// estimator and says plainly what it will not be.
+import Base from '../layouts/Base.astro';
+import Nav from '../components/layout/Nav.astro';
+import Footer from '../components/layout/Footer.astro';
+import SoonDraft from '../components/states/SoonDraft.astro';
+---
+
+<Base
+  title="CBAM Calculator — Delta Climate Research"
+  description="A screening estimator for EU Carbon Border Adjustment Mechanism exposure on Indian exports — embodied emissions in, indicative cost out. Currently under construction."
+  noindex
+>
+  <Nav />
+  <SoonDraft
+    kicker="CBAM Calculator"
+    sub="A screening estimator for Carbon Border Adjustment Mechanism exposure on Indian exports: embodied emissions in, indicative cost out, with the emission factors and their sources shown rather than buried. Screening-grade by design — it sizes the question, it does not file the declaration."
+    coords="22.5726° N, 88.3639° E"
+    sheet="CBAM/01"
+    rev="0.1"
+    progress={0.2}
+    backHref="/"
+    backLabel="Back to home"
+  >
+    Still on the <em>drafting table.</em>
+  </SoonDraft>
+  <Footer />
+</Base>
