@@ -27,12 +27,15 @@
     "kolkata": {
       "_ward": "ballygunge",
       "census2011": {
-        "_source": "Census of India 2011, District Census Handbook, Kolkata (Series 20, Part XII-B)",
-        "_retrieved": null,
-        "population_total": null,
-        "population_under_5": null,
-        "population_65_plus": null,
-        "slum_population": null
+        "_source": "Census of India 2011, Table C-14 'Population in five-year age group by residence and sex', West Bengal (DDW state file 19). Total-area rows.",
+        "_retrieved": "2026-07-27",
+        "population_total": 4496694,
+        "population_under_5": 231308,
+        "population_65_plus": 346996,
+        "slum_population": 1409721,
+        "_url": "https://censusindia.gov.in/nada/index.php/catalog/1541/download/4653",
+        "_crosscheck": "population_total agrees EXACTLY with Table A-2 'Decadal Variation in Population', 2011 row, same district \u2014 two independent census tables, same figure. That agreement is what makes the row pairing trustworthy.",
+        "_slum_source": "Census of India 2011, Primary Census Abstract for Slum, town row 'Kolkata (M Corp.)'. https://censusindia.gov.in/nada/index.php/catalog/6190/download/9267 . MATCHED PAIR: Kolkata Municipal Corporation is coterminous with Kolkata district, so this town slum count and the district total from C-14 describe the same area. 31.4% \u2014 consistent with the widely-cited 'about a third of Kolkata lives in bustees'."
       },
       "nfhs5": {
         "_source": "NFHS-5 (2019-21) District Fact Sheet, Kolkata, West Bengal",
@@ -56,12 +59,15 @@
     "south_24_parganas": {
       "_ward": "baruipur",
       "census2011": {
-        "_source": "Census of India 2011, District Census Handbook, South Twenty Four Parganas",
-        "_retrieved": null,
-        "population_total": null,
-        "population_under_5": null,
-        "population_65_plus": null,
-        "slum_population": null
+        "_source": "Census of India 2011, Table C-14 'Population in five-year age group by residence and sex', West Bengal (DDW state file 19). Total-area rows.",
+        "_retrieved": "2026-07-27",
+        "population_total": 8161961,
+        "population_under_5": 718069,
+        "population_65_plus": 422733,
+        "slum_population": null,
+        "_url": "https://censusindia.gov.in/nada/index.php/catalog/1541/download/4653",
+        "_crosscheck": "population_total agrees EXACTLY with Table A-2 'Decadal Variation in Population', 2011 row, same district \u2014 two independent census tables, same figure. That agreement is what makes the row pairing trustworthy.",
+        "_slum_blocked": "NUMERATOR FOUND, DENOMINATOR NOT. The slum PCA gives Baruipur (M) = 13,679 slum residents, but that file is TOWN-level with no district code, so it cannot be aggregated to the district the age data uses. The A-4 town-population tables did not yield a matching 'Baruipur (M)' 2011 row under any column searched. Pairing this numerator with the DISTRICT total would understate the share by an order of magnitude; pairing it with a guessed town total is worse. Kolkata is exempt only because its corporation and district are the same area. Needs: 2011 population of Baruipur (M) from A-4 or the town PCA."
       },
       "nfhs5": {
         "_source": "NFHS-5 (2019-21) District Fact Sheet, South Twenty Four Parganas, West Bengal",
@@ -85,12 +91,15 @@
     "north_24_parganas": {
       "_ward": "barrackpore",
       "census2011": {
-        "_source": "Census of India 2011, District Census Handbook, North Twenty Four Parganas",
-        "_retrieved": null,
-        "population_total": null,
-        "population_under_5": null,
-        "population_65_plus": null,
-        "slum_population": null
+        "_source": "Census of India 2011, Table C-14 'Population in five-year age group by residence and sex', West Bengal (DDW state file 19). Total-area rows.",
+        "_retrieved": "2026-07-27",
+        "population_total": 10009781,
+        "population_under_5": 666917,
+        "population_65_plus": 656849,
+        "slum_population": null,
+        "_url": "https://censusindia.gov.in/nada/index.php/catalog/1541/download/4653",
+        "_crosscheck": "population_total agrees EXACTLY with Table A-2 'Decadal Variation in Population', 2011 row, same district \u2014 two independent census tables, same figure. That agreement is what makes the row pairing trustworthy.",
+        "_slum_blocked": "NUMERATOR FOUND, DENOMINATOR NOT. The slum PCA gives Barrackpore (M) = 21,432 slum residents, but that file is TOWN-level with no district code, so it cannot be aggregated to the district the age data uses. The A-4 town-population tables did not yield a matching 'Barrackpore (M)' 2011 row under any column searched. Pairing this numerator with the DISTRICT total would understate the share by an order of magnitude; pairing it with a guessed town total is worse. Kolkata is exempt only because its corporation and district are the same area. Needs: 2011 population of Barrackpore (M) from A-4 or the town PCA."
       },
       "nfhs5": {
         "_source": "NFHS-5 (2019-21) District Fact Sheet, North Twenty Four Parganas, West Bengal",
