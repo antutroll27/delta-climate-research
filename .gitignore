@@ -62,3 +62,6 @@ inspiration/
 
 # personal Claude Code permission posture (not shared)
 .claude/settings.local.json
+
+# python bytecode from the data-pipeline scripts
+scripts/__pycache__/
