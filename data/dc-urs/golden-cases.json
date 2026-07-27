@@ -1,0 +1,59 @@
+{
+  "note": "Frozen regression fixture (dc-urs-spec.md §7). Ballygunge and Baruipur only — their inputs come from the CEO's worked examples in dc-urs-source-of-truth.md. Barrackpore is IN SCOPE for the product but held out of this fixture until Phase 1 supplies measured inputs; freezing estimated values would test every future change against a fiction.",
+  "engine": "geometric aggregation, guarded VSI, FVC+CanopyFrac+VSI greenness, /25 daytime anchor",
+  "frozen": "2026-07-27",
+  "cases": [
+    {
+      "id": "ballygunge",
+      "expected": 21.13,
+      "actual": 21.13,
+      "tier": "critical",
+      "pillars": {
+        "aci": 0.2159,
+        "evi": 0.804,
+        "thi": 0.7733,
+        "ugs": 0.2011
+      },
+      "inputs": {
+        "lstDayC": 42.5,
+        "lstNightC": 31,
+        "ruralBaseC": 32,
+        "popDensity": 22000,
+        "far": 3.8,
+        "socioVuln": 7.2,
+        "fvc": 0.12,
+        "canopyFrac": 0.1,
+        "ndviMean": 0.18,
+        "ndviStd": 0.08,
+        "albedo": 0.15,
+        "distCoolM": 800
+      }
+    },
+    {
+      "id": "baruipur",
+      "expected": 64.16,
+      "actual": 64.16,
+      "tier": "moderate",
+      "pillars": {
+        "aci": 0.5224,
+        "evi": 0.2315,
+        "thi": 0.3076,
+        "ugs": 0.5822
+      },
+      "inputs": {
+        "lstDayC": 34.1,
+        "lstNightC": 24.5,
+        "ruralBaseC": 32,
+        "popDensity": 4500,
+        "far": 0.8,
+        "socioVuln": 4.1,
+        "fvc": 0.54,
+        "canopyFrac": 0.42,
+        "ndviMean": 0.58,
+        "ndviStd": 0.04,
+        "albedo": 0.22,
+        "distCoolM": 250
+      }
+    }
+  ]
+}

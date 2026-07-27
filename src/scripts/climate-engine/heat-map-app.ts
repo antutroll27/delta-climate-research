@@ -9,6 +9,7 @@
  * `mountHeatMap()` returns a dispose fn (call it on astro:before-swap).
  */
 import maplibregl from 'maplibre-gl';
+import { WARD_MAP } from '../../data/wards.ts';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
@@ -18,12 +19,9 @@ import * as M from './heat-map-model';
 import { ACCURACY, bandLabel } from './accuracy';
 import { rasterWardBase } from './ward-raster';
 
-interface WardMeta { name: string; zone: string; coord: string; lat: number; lon: number; veg: number; }
-const WARDS: Record<string, WardMeta> = {
-  ballygunge:  { name: 'Bally<em>gunge</em>', zone: 'Urban Core · Ward 68', coord: '22.528° N · 88.366° E', lat: 22.528, lon: 88.3659, veg: 0.12 },
-  baruipur:    { name: 'Baru<em>ipur</em>', zone: 'Peri-Urban Fringe', coord: '22.365° N · 88.432° E', lat: 22.3654, lon: 88.4319, veg: 0.62 },
-  barrackpore: { name: 'Barrack<em>pore</em>', zone: 'Industrial River Corridor', coord: '22.762° N · 88.371° E', lat: 22.7621, lon: 88.3713, veg: 0.28 },
-};
+// Ward set lives in src/data/wards.ts so widening beyond three is a data change,
+// not a code change (dc-urs-spec.md §1).
+const WARDS = WARD_MAP;
 const { SIM_N, RAMP_MIN, RAMP_MAX, RESET_BURST } = M;
 const STYLES = { dark: 'https://tiles.openfreemap.org/styles/dark', studio: 'https://tiles.openfreemap.org/styles/positron' };
 
