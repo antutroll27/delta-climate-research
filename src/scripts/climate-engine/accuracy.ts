@@ -56,6 +56,20 @@ export const ACCURACY: Record<'peak' | 'night', PhaseAccuracy> = {
   },
 };
 
+/**
+ * Shown on the resilience score while an indicator that can move it is unmeasured.
+ *
+ * Written for a municipal officer, not a statistician. It names WHICH direction
+ * the error runs, because a reader who does not know that will assume it cancels
+ * out — and it does not: an unmeasured vulnerability reads as no vulnerability,
+ * which always flatters.
+ */
+export const UNMEASURED_NOTE =
+    'One of twelve indicators is not yet measured: the share of residents least able to cope '
+  + 'with heat — older people, young children, low-income and informal households. Until it '
+  + 'lands, every ward is scored at its most optimistic. The true score is up to 8.8 points '
+  + 'lower. Ward-to-ward ranking is unaffected — the shift is the same for all three.';
+
 /** Formats the band for display, e.g. "± 3.5". */
 export function bandLabel(phase: 'peak' | 'night'): string {
   return `± ${ACCURACY[phase].bandK.toFixed(1)}`;

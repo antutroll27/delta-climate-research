@@ -208,6 +208,70 @@ export function structuralFloor(i: DcUrsInputs): StructuralFloor {
   return { ceiling, withheld: 100 - ceiling, current, headroom: ceiling - current };
 }
 
+/* ── What the score does not know ───────────────────────────────────────────*/
+
+/**
+ * Each indicator's share of the final 0–100 score.
+ *
+ * DERIVED from `W`, never re-typed from the spec, so this cannot drift from the
+ * formula. `assertDcUrsLogic()` re-measures the socio entry against the engine
+ * by finite difference rather than trusting the arithmetic here.
+ *
+ * The shares sum above 1 on purpose: `lstDayC` and `ruralBaseC` both feed the
+ * UHI term. This answers "how much of the score moves if THIS field is wrong",
+ * which is the question a disclosure needs, and two fields feeding one term
+ * legitimately overlap.
+ *
+ * `canopyFrac` is 0 and that zero is LOAD-BEARING: it is collected for v2 and
+ * inert in v1, so it must never raise a disclosure about a score it cannot move.
+ */
+export const SCORE_WEIGHT: Record<keyof DcUrsInputs, number> = {
+  lstDayC:    W.thi * (W.thiDay + W.thiUhi),
+  lstNightC:  W.thi * W.thiNight,
+  ruralBaseC: W.thi * W.thiUhi,
+  popDensity: W.evi * W.eviPop,
+  far:        W.evi * W.eviFar,
+  socioVuln:  W.evi * W.eviSocio,
+  fvc:        W.aci * W.aciUgs * W.ugsFvc,
+  ndviMean:   W.aci * W.aciUgs * (W.ugsNdvi + W.ugsVsi),
+  ndviStd:    W.aci * W.aciUgs * W.ugsVsi,
+  albedo:     W.aci * W.aciCri,
+  distCoolM:  W.aci * W.aciTra,
+  canopyFrac: 0,
+} as const;
+
+export interface Unmeasured {
+  /** not yet observed AND able to move the score */
+  readonly fields: readonly (keyof DcUrsInputs)[];
+  /** points of the 0–100 score resting on them, over each indicator's full range */
+  readonly points: number;
+}
+
+/**
+ * What the score is standing in for, and what that is worth in points.
+ *
+ * While this returns anything, the number on screen is a BOUND rather than a
+ * claim. `socioVuln` measures vulnerability, so its unmeasured zero is the most
+ * flattering value in its range: the displayed score is the maximum the ward
+ * could achieve, never wrong, only loose — and `points` says how loose.
+ *
+ * That distinction is what keeps a placeholder out of production. An unlabelled
+ * zero is an estimate nobody made; a labelled endpoint of a declared range is a
+ * fact about the scale.
+ *
+ * It stops on its own. `build-dcurs-inputs.py` writes `measured` the day
+ * `socio.json` lands, `points` falls to zero, and the disclosure disappears —
+ * there is no string for anyone to forget to delete.
+ *
+ * `weakestProvenance()` is deliberately NOT used here: it would report
+ * `placeholder` forever, on `canopyFrac` alone, long after socio arrives.
+ */
+export function unmeasured(i: DcUrsInputs): Unmeasured {
+  const fields = (Object.keys(SCORE_WEIGHT) as (keyof DcUrsInputs)[])
+    .filter(k => i[k].source === 'placeholder' && SCORE_WEIGHT[k] > 0);
+  return { fields, points: 100 * fields.reduce((s, k) => s + SCORE_WEIGHT[k], 0) };
+}
+
 /* ── Self-check ─────────────────────────────────────────────────────────────*/
 
 const m = (v: number) => ({ value: v, source: 'measured' as const });
@@ -322,6 +386,31 @@ export function assertDcUrsLogic(): void {
   a(f.ceiling > f.current, 'ceiling must exceed current');
   a(Math.abs(f.withheld + f.ceiling - 100) < 1e-9, 'withheld + ceiling must be 100');
   a(Math.abs((f.current + f.headroom) - f.ceiling) < 1e-9, 'current + headroom must be ceiling');
+
+  // ── the disclosure ───────────────────────────────────────────────────────
+  // Its magnitude must be MEASURED off the engine, not asserted by a table
+  // someone edits. Finite-difference socioVuln end to end.
+  const svLo = dcUrs({ ...base, socioVuln: { ...base.socioVuln, value: 0 } });
+  const svHi = dcUrs({ ...base, socioVuln: { ...base.socioVuln, value: ANCHORS.socioVulnMax } });
+  a(Math.abs((svLo - svHi) - 100 * SCORE_WEIGHT.socioVuln) < 1e-9,
+    `SCORE_WEIGHT.socioVuln claims ${(100 * SCORE_WEIGHT.socioVuln).toFixed(2)} pts but the ` +
+    `engine moves ${(svLo - svHi).toFixed(2)} — the disclosure would understate itself`);
+
+  // The copy says "best case". That holds only because zero is the FLATTERING
+  // end of this indicator, which is true only because it measures vulnerability.
+  a(svLo > svHi, 'zero vulnerability must be the optimistic end — the "best case" wording rests on it');
+
+  // An inert field must never raise a disclosure about a score it cannot move.
+  a(SCORE_WEIGHT.canopyFrac === 0, 'canopyFrac carries no weight and must not be reported as a gap');
+
+  // and the accounting itself
+  const gapNone = unmeasured(GOLDEN[0].inputs);
+  a(gapNone.points === 0, 'fully measured inputs must report no gap');
+  const gapSocio = unmeasured({ ...base, socioVuln: { ...base.socioVuln, source: 'placeholder' } });
+  a(gapSocio.fields.length === 1 && gapSocio.fields[0] === 'socioVuln',
+    'an unmeasured socioVuln must be reported, alone');
+  const gapCanopy = unmeasured({ ...base, canopyFrac: { ...base.canopyFrac, source: 'placeholder' } });
+  a(gapCanopy.points === 0, 'an unmeasured but inert field must not be reported');
 
   // a zero pillar must not produce NaN or a negative score
   const dead = inputsOf({

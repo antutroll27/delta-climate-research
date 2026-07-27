@@ -16,7 +16,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { GpuHeatSim } from './sim-gpu';
 import { DEFAULT_PARAMS, type SimLayers } from './types';
 import * as M from './heat-map-model';
-import { ACCURACY, bandLabel } from './accuracy';
+import { ACCURACY, bandLabel, UNMEASURED_NOTE } from './accuracy';
 import * as U from './dc-urs';
 import { applyScenario } from './dc-urs-scenario';
 import type { DcUrsInputs } from './dc-urs-inputs';
@@ -389,9 +389,27 @@ export function mountHeatMap(): () => void {
       if (tierEl) { tierEl.textContent = tier.label; (tierEl as HTMLElement).style.color = tier.colour; }
       // Headroom vs structural floor: what greening can still win, against what
       // no intervention can touch. This is the tool's sharpest statement.
+      /* What the score does not know. Read from the data file's own provenance,
+         never from a constant here: the day socio.json lands the build stamps
+         `measured`, points falls to zero, and this disappears by itself. */
+      const gap = U.unmeasured(base);
+      const chip = el('scoreConf');
+      if (chip) {
+        chip.toggleAttribute('hidden', gap.points < 0.05);
+        chip.textContent = `best case · up to ${gap.points.toFixed(1)} pts lower`;
+        (chip as HTMLElement).title = UNMEASURED_NOTE;
+      }
+      // The error sits entirely inside exposure. Mark where it lives, in the
+      // colour this instrument already uses for "not decision-grade".
+      el('sCool')?.classList.toggle('soft', gap.fields.includes('socioVuln'));
+
       setHTML('scoreTxt', anyIv
         ? `${(now - U.dcUrs(base)).toFixed(1)} pts from this plan · ₹${M.fmtCr(cost)}<br>${tier.guidance}`
-        : `${floor.headroom.toFixed(0)} pts reachable · <b>${floor.withheld.toFixed(0)} withheld</b> by exposure`);
+        // `headroom` is exactly invariant to the missing input — it shifts ceiling
+        // and current equally — so it needs no hedge. `withheld` only ever RISES,
+        // so one word makes it true instead of understated by a quarter.
+        : `${floor.headroom.toFixed(0)} pts reachable · <b>${gap.points > 0.05 ? 'at least ' : ''}`
+          + `${floor.withheld.toFixed(0)} withheld</b> by exposure`);
     } else {
       setText('scoreNum', '—');
       setHTML('scoreTxt', 'resilience inputs unavailable');

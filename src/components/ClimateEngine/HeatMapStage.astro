@@ -62,6 +62,10 @@
         <div><b id="sCool">—</b><span>exposure</span></div>
         <div><b id="sEff">—</b><span>hazard</span></div>
       </div>
+      <!-- Written by the app from unmeasured(), which reads the data file's own
+           provenance. Deliberately no copy in this file for anyone to forget to
+           delete: when socio.json lands the chip removes itself. -->
+      <div class="conf indicative scoreconf" id="scoreConf" hidden></div>
     </aside>
 
     <div class="rail-r">
@@ -200,6 +204,11 @@
   /* Own line: the tier is a verdict, not a prefix to the sentence beneath it.
      Inline it ran straight into the text — "Vulnerable24 pts reachable". */
   .score .t .tier{display:block;font-family:var(--mono);font-size:.5rem;letter-spacing:.16em;text-transform:uppercase;margin-bottom:3px}
+  .scoreconf{margin:0 18px 16px}
+  .conf[hidden]{display:none}
+  /* the pillar the missing indicator sits in, in the colour this instrument
+     already uses for "not decision-grade" */
+  .subs b.soft{color:var(--bronze)}
 
   .metric{padding:16px 18px;border-bottom:1px solid var(--line)}
   .metric .k{font-family:var(--mono);font-size:.54rem;letter-spacing:.16em;color:var(--ink);text-transform:uppercase}
