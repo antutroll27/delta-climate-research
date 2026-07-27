@@ -46,7 +46,9 @@ import urllib.parse
 from typing import Any, TypeAlias
 
 import numpy as np
+import numpy.typing as npt
 import rasterio
+from affine import Affine
 from rasterio.transform import from_origin
 from rasterio.enums import Resampling  # canonical home; rasterio.warp only re-exports
 from rasterio.warp import reproject, transform_bounds
@@ -180,7 +182,7 @@ __all__ = ["BBOX", "CACHE", "CMR", "TARGET_CRS", "TARGET_RES", "TOKEN_PATH",
            "fetch", "read_window", "target_grid", "token", "transform_bounds"]
 
 
-def target_grid(bbox: Bbox | None = None) -> tuple[Any, int, int]:
+def target_grid(bbox: Bbox | None = None) -> tuple[Affine, int, int]:
     """(affine transform, width, height) of the shared UTM 45N grid."""
     l, b, r, t = transform_bounds("EPSG:4326", TARGET_CRS, *(bbox or BBOX), densify_pts=21)
     w = int(np.ceil((r - l) / TARGET_RES))
@@ -189,13 +191,19 @@ def target_grid(bbox: Bbox | None = None) -> tuple[Any, int, int]:
 
 
 def align(path: str, nodata: float, dtype: str, bbox: Bbox | None = None,
-          resampling: Resampling = Resampling.nearest) -> Any:
+          resampling: Resampling = Resampling.nearest) -> npt.NDArray[Any]:
     """
     Reproject one COG band onto the shared target grid.
 
     `resampling` defaults to nearest and should stay there for anything masked:
     interpolating across a cloud edge invents temperatures that were never
     measured, and the result looks entirely plausible.
+
+    NDArray[Any], not a concrete element type: `dtype` is a caller-chosen string
+    (float32 for LST, uint16 for QC, int16 for SMOD), so the element type is not
+    knowable here without an overload per dtype literal — machinery the four
+    call sites do not justify. The ARRAY structure is what matters: a misspelled
+    method or a non-array use now fails the check, which bare `Any` never did.
     """
     tf, w, h = target_grid(bbox)
     dst = np.full((h, w), nodata, dtype=dtype)
@@ -208,7 +216,7 @@ def align(path: str, nodata: float, dtype: str, bbox: Bbox | None = None,
 
 
 def read_window(path: str, nodata: float = np.nan, dtype: str = "float32",
-                bbox: Bbox | None = None) -> tuple[Any, Any, Any]:
+                bbox: Bbox | None = None) -> tuple[npt.NDArray[Any], Affine, rasterio.crs.CRS]:
     """align(), plus the grid it was aligned to. Returns (array, transform, crs)."""
     tf, _w, _h = target_grid(bbox)
     return align(path, nodata, dtype, bbox), tf, rasterio.crs.CRS.from_string(TARGET_CRS)

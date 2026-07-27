@@ -42,6 +42,7 @@ if HERE not in sys.path:
 import _types  # noqa: E402  (path must be set first — the scripts are not a package)
 
 import numpy as np
+import numpy.typing as npt
 import rasterio
 from rasterio.windows import from_bounds
 
@@ -109,7 +110,7 @@ def search(lat: float, lon: float, year: int) -> list[dict[str, Any]]:
 GRID = FOOTPRINT_M // 10          # 140 x 140
 
 
-def read_window(href: str, lat: float, lon: float) -> Any | None:
+def read_window(href: str, lat: float, lon: float) -> npt.NDArray[np.float32] | None:
     """Read the ward window from a COG, resampled to the common grid."""
     try:
         with rasterio.open(href) as src:

@@ -21,7 +21,7 @@ bucket (no credentials).
 
 Output: data/calibration/landcover-fractions.json
 """
-import importlib.util, json, os, subprocess, sys
+import json, os, subprocess, sys
 from typing import TypedDict, cast
 
 import numpy as np
@@ -30,12 +30,7 @@ HERE_ = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE_)
 import _types
 from _types import I16, U8
-
-_spec = importlib.util.spec_from_file_location("suhii", os.path.join(HERE_, "ecostress-suhii.py"))
-if _spec is None or _spec.loader is None:
-    sys.exit("cannot load scripts/ecostress-suhii.py — the file is missing or unreadable")
-suhii = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(suhii)
+from _ecostress import align
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.join(HERE, "..")
@@ -98,19 +93,6 @@ class LandcoverFile(TypedDict):
     classes: dict[str, ClassStats]
 
 
-def check_study_window() -> None:
-    """Fail if the window the grid actually comes from is not the shared one.
-
-    suhii.BBOX is reached through spec_from_file_location, so it is `Any` to the
-    checker and nothing but this runtime check stands between the two copies.
-    """
-    if tuple(suhii.BBOX) != _types.STUDY_BBOX:
-        sys.exit(f"study window mismatch: ecostress-suhii.py BBOX is {tuple(suhii.BBOX)} "
-                 f"but _types.STUDY_BBOX is {_types.STUDY_BBOX}. The grid these fractions "
-                 f"are measured on comes from the former; every other script's window "
-                 f"comes from the latter. Reconcile them before trusting this output.")
-
-
 def ensure_worldcover() -> str:
     if os.path.exists(WC):
         return WC
@@ -125,7 +107,6 @@ def ensure_worldcover() -> str:
 
 
 def main() -> None:
-    check_study_window()
     if not os.path.exists(SMOD):
         sys.exit(f"GHS-SMOD tile not cached at {SMOD}")
     wc_path = ensure_worldcover()
@@ -140,10 +121,12 @@ def main() -> None:
     # subsamples one 10 m cell per 70 m cell. That is unbiased for estimating
     # class FRACTIONS over a mask of this size (~1.9 M cells), which is all that
     # is wanted here; it is not a dominant-class map.
-    # cast, not annotate: suhii is loaded by path so align() returns `Any`, and a
-    # bare annotation would let a future dtype change pass unremarked.
-    cover = cast(U8, suhii.align(wc_path, 0, "uint8"))
-    smod = cast(I16, suhii.align(SMOD, -200, "int16"))
+    # There used to be a runtime check here reconciling this script's window
+    # against ecostress-suhii's, because each held its own copy of the bbox
+    # behind an untypeable spec loader. Both now read _types.STUDY_BBOX, so the
+    # invariant holds by construction and the check had nothing left to detect.
+    cover = cast(U8, align(wc_path, 0, "uint8", bbox=_types.STUDY_BBOX))
+    smod = cast(I16, align(SMOD, -200, "int16", bbox=_types.STUDY_BBOX))
 
     out: LandcoverFile = {
         "source": "ESA WorldCover 10m v200 (2021), CC BY 4.0, tile N21E087",

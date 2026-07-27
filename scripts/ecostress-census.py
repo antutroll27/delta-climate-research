@@ -34,6 +34,9 @@ from collections import defaultdict
 from typing import Any
 
 import numpy as np
+import numpy.typing as npt
+import rasterio
+from affine import Affine
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 if HERE not in sys.path:
@@ -89,11 +92,14 @@ def main() -> None:
         # Evaluate each tile INDEPENDENTLY, then merge the results. Masking after
         # merging the raw bands is wrong: where a tile has no coverage its QC
         # reads as fill, and OR-ing "bad" across tiles condemns the whole scene.
-        tf: Any = None
-        crs: Any = None
-        merged_c: Any = None
-        merged_raw: Any = None
-        merged_cloud: Any = None
+        tf: Affine | None = None
+        crs: rasterio.crs.CRS | None = None
+        # ONE Optional, not three. celsius/raw/cloud are None together and set
+        # together — as three separate locals that invariant lives only in the
+        # author's head, and the checker (rightly) flagged every use: narrowing
+        # merged_c said nothing about merged_raw. As a single tuple the invariant
+        # is the type.
+        merged: tuple[npt.NDArray[Any], npt.NDArray[Any], npt.NDArray[Any]] | None = None
         acc_hist: defaultdict[int, int] = defaultdict(int)
         for g in grans:
             u_lst, u_cld, u_qc = (band_url(g, s) for s in ("_LST.tif", "_cloud.tif", "_QC.tif"))
@@ -102,10 +108,11 @@ def main() -> None:
             p_lst = fetch(u_lst, tok)
             if not p_lst:
                 continue
-            a, t_, c_ = read_window(p_lst)
-            if a is None:
-                continue
-            tf, crs = t_, c_
+            # read_window returns an array or raises — it has no None branch.
+            # (An `if a is None: continue` guard sat here for months, kept
+            # plausible by the Any it was hidden behind; typed, it is provably
+            # unreachable and mypy said so.)
+            a, tf, crs = read_window(p_lst)
 
             raw_t = np.isfinite(a) & (a > 200) & (a < 400)
             cloud_t = np.zeros_like(raw_t)
@@ -123,21 +130,20 @@ def main() -> None:
 
             good_t = raw_t & ~cloud_t & qc_ok_t
             c_t = np.where(good_t, a - 273.15, np.nan)
-            if merged_c is None:
-                merged_c, merged_raw, merged_cloud = c_t, raw_t, cloud_t & raw_t
+            if merged is None:
+                merged = (c_t, raw_t, cloud_t & raw_t)
             else:                                        # first valid pixel wins
-                merged_c = np.where(np.isfinite(merged_c), merged_c, c_t)
-                merged_raw |= raw_t
-                merged_cloud |= (cloud_t & raw_t)
-        if merged_c is None or tf is None or crs is None:
-            # tf and crs are set on the same line as merged_c, so this is one
-            # condition written three ways — stated explicitly so the ward
-            # sampling below can index tf without a None check per attribute.
+                merged = (np.where(np.isfinite(merged[0]), merged[0], c_t),
+                          merged[1] | raw_t,
+                          merged[2] | (cloud_t & raw_t))
+        if merged is None or tf is None or crs is None:
+            # all three are set in the same iteration, so this is one condition
+            # written three ways — stated explicitly so the ward sampling below
+            # can index tf without a None check per attribute.
             continue
 
-        raw, cloudy = merged_raw, merged_cloud
-        good = np.isfinite(merged_c)
-        celsius = merged_c
+        celsius, raw, cloudy = merged
+        good = np.isfinite(celsius)
         if good.sum() < 50:
             print(f"{when[:16].replace('T',' '):<18}{100*raw.mean():>6.1f}%{100*cloudy.mean():>7.1f}%"
                   f"{100*good.mean():>8.1f}%      — below usable threshold")

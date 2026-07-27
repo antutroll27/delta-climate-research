@@ -96,7 +96,7 @@ WARDS: dict[WardId, Ward] = {
 # The study bbox for the thermal work: deliberately wider than the wards so it
 # contains genuine rural hinterland for the urban-rural difference. Duplicated
 # in two files with a "must match" comment, which is how they came to differ.
-STUDY_BBOX = (88.00, 22.05, 88.85, 22.95)
+STUDY_BBOX: Bbox = (88.00, 22.05, 88.85, 22.95)
 
 
 # ── geo helpers ─────────────────────────────────────────────────────────────

@@ -4,3 +4,7 @@
 mypy==2.3.0
 scipy-stubs==1.18.0.1
 types-rasterio==1.5.0.20260724
+# affine 2.4.0 has inline hints but ships no py.typed marker, so mypy discards
+# them and every Affine — src.transform, target_grid()'s first element — decays
+# to Any. The stub package restores it; tf.a/tf.c/tf.e become checked floats.
+types-affine==0.1.0

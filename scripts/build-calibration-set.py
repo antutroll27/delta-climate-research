@@ -22,7 +22,6 @@ Output: data/calibration/ecostress-suhii.csv
 """
 import argparse
 import csv
-import importlib.util
 import os
 import sys
 import time
@@ -35,35 +34,15 @@ if HERE not in sys.path:
 
 import _types  # noqa: E402
 from _ecostress import cmr_search  # noqa: E402  (path must be set first)
-
-# ecostress-suhii.py is a CLI script with a hyphen in its name, so it cannot be
-# imported — only measure_scene() is needed and it is genuinely script-scoped
-# (it owns the wide SUHII bbox and the SMOD urban-extent definitions). The
-# access layer both files share moved to _ecostress and is imported normally
-# above; this loader is what remains, and it is now typed at its one boundary.
-_spec = importlib.util.spec_from_file_location("suhii", os.path.join(HERE, "ecostress-suhii.py"))
-if _spec is None or _spec.loader is None:
-    sys.exit("cannot load scripts/ecostress-suhii.py — it must sit beside this file")
-suhii = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(suhii)
-
-
-def measure_scene(date: str, phase: str, want_view: bool = False) -> _types.SceneRow:
-    """Typed boundary onto the dynamically-loaded module.
-
-    Everything reached through `suhii.` is Any. Funnelling the one call through
-    a declared signature puts the contract back, so a change to measure_scene's
-    return shape fails here rather than producing blank CSV columns.
-    """
-    return cast(_types.SceneRow, suhii.measure_scene(date, phase, want_view))
-
+from _suhii import BBOX as SUHII_MODULE_BBOX, measure_scene  # noqa: E402
 
 #: The wide SUHII bbox — rural hinterland included. main() MUST search the same
 #: extent measure_scene() measures: searching the narrow ward bbox here would
 #: queue only the acquisitions that touch the wards, while each of those scenes
 #: was then measured over the wide box. The sweep would look complete and
-#: silently omit every scene covering hinterland but not ward centre.
-SUHII_BBOX: _types.Bbox = cast(_types.Bbox, tuple(suhii.BBOX))
+#: silently omit every scene covering hinterland but not ward centre. It is now
+#: literally the same object rather than a reconciled copy.
+SUHII_BBOX = SUHII_MODULE_BBOX
 
 OUT = os.path.join(HERE, "..", "data", "calibration", "ecostress-suhii.csv")
 USABLE_BAR = 0.30          # spec §3: scenes below this are recorded, not measured further
