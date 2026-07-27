@@ -16,7 +16,7 @@ source-of-truth file and is not restated except where a correction changes it.
 | # | Question | Decision | Consequence |
 |---|---|---|---|
 | 1 | Spatial unit | **Three wards for now**, widen later | Rank-correlation validation is impossible at n=3 (§7). Pipeline must make widening a config change, not a rewrite |
-| 2 | Demographics | **WorldPop** current-year for `ρ_pop`, **Census 2011** for `HVI_socio` | Census 2021 does not exist — postponed to Census 2027 (ref. date 1 Mar 2027). Vintage shown on the tool |
+| 2 | Demographics | **WorldPop** for `ρ_pop`; **NFHS-5 (2019–21) + Census 2011** for `HVI_socio` | Census 2021 does not exist — deferred to Census 2027 (ref. date 1 Mar 2027). NFHS-5 supplies 2021-vintage levels at district resolution; Census 2011 supplies the ward-level spatial pattern. Both vintages shown on the tool |
 | 3 | Normalisation anchors | **As specified by the CEO**, researched | Recorded in §4 for auditability; not re-derived |
 | 4 | Public tier labels | **Ship as written**, including "Critical Hotspot" | No change to §6 of the source document |
 
@@ -128,22 +128,38 @@ implementation starts — this table is the contract.
 | `LST_day` | NASA ECOSTRESS L2T LSTE v002 | US public domain | 2024–26, 49 scenes | 70 m | **yes** |
 | `LST_night` | NASA ECOSTRESS L2T LSTE v002 | US public domain | 2024–26, 31 scenes | 70 m | **yes** |
 | `UHI_Δ` | derived: urban − rural, GHS-SMOD masks | CC BY 4.0 | as above | 70 m | **yes** |
-| `FVC` | Sentinel-2 L2A via Earth Engine | free, attribution | seasonal composites | 10 m | build |
+| `FVC` | Sentinel-2 L2A via keyless STAC | free, attribution | seasonal composites | 10 m | build |
 | `CanopyFrac` | ESA WorldCover v200 class 10 | CC BY 4.0 | 2021 | 10 m | partial |
-| `VSI` | Sentinel-2 / Landsat annual series | free, attribution | ≥5 years | 10–30 m | build |
-| `CRI` (albedo) | Sentinel-2 bands, source doc's coefficients | free, attribution | seasonal | 10 m | build |
+| `VSI` | Sentinel-2 / Landsat annual series via STAC | free, attribution | ≥5 years | 10–30 m | build |
+| `CRI` (albedo) | Sentinel-2 bands via STAC, source doc's coefficients | free, attribution | seasonal | 10 m | build |
 | `FAR` | Google Open Buildings 2.5D + MS footprints | CC BY 4.0 / ODbL | 2023–25 | per-building | **inputs held** |
 | `TRA` | OSM parks, water, cooling centres | ODbL | live | vector | build |
-| `ρ_pop` | WorldPop constrained, current release | CC BY 4.0 | annual | 100 m | build |
-| `HVI_socio` | Census of India 2011, areal-interpolated | Govt. of India open | **2011** | ward/town | build |
+| `ρ_pop` | WorldPop constrained, UN-adjusted | CC BY 4.0 | **2020** (latest confirmed) | 100 m | build |
+| `HVI_socio` | NFHS-5 levels × Census 2011 spatial pattern | Govt. of India open / DHS | **2019–21 + 2011** | district × ward | build |
+
+**No Earth Engine dependency.** Every satellite input is reachable through keyless public STAC
+catalogues — Microsoft Planetary Computer, Copernicus Data Space, and AWS Earth Search all verified
+live (HTTP 200, 2026-07-27). Earth Engine was only ever the access path we happened to hold
+credentials for from the AlphaEarth work; it is not part of the CEO's design. Dropping it removes a
+credential to maintain and a token to expire.
 
 **Seasonality is not optional.** Kolkata's NDVI swings enormously between monsoon and dry season —
 the same seasonal signal measured in the thermal work. Every vegetation input is a **seasonal
 composite**, never a single scene. Czekajlo used 33 years of annual composites for this reason.
 
-**Vintage is displayed, not buried.** `HVI_socio` rests on 15-year-old enumeration because no newer
-Indian census exists. Rathi et al. (2021) and Azhar et al. (2017) have the same constraint. The tool
-states it.
+**Vintage is displayed, not buried.** `HVI_socio` is the only genuinely constrained input. Its
+variables — share over 65, share under 5, low-income proxy, informal-settlement fraction — come from
+a *census*, and India held none in 2021; the enumeration was deferred to Census 2027.
+
+The build therefore pairs two sources rather than pretending one is current:
+
+- **NFHS-5 (fielded 2019–21)** for present-day *levels* — a real national survey with age structure
+  and wealth quintiles, distributed through the DHS Program. Resolves to **district**, not ward.
+- **Census 2011** for the ward-level *spatial pattern* — the only enumeration that resolves to the
+  geography DC-URS needs.
+
+That is as close to 2021 as Indian data permits. Rathi et al. (2021) and Azhar et al. (2017) face
+exactly the same constraint. The tool states both vintages.
 
 ---
 

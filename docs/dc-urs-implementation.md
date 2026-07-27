@@ -74,8 +74,8 @@ src/components/ClimateEngine/
 
 scripts/
   fetch-worldpop.py              NEW  P2 · population density per footprint
-  fetch-census-2011.py           NEW  P2 · HVI_socio, areal-interpolated
-  fetch-sentinel-composites.py   NEW  P1 · seasonal FVC, albedo, multi-year NDVI series
+  fetch-socio.py                 NEW  P2 · HVI_socio — NFHS-5 levels x Census 2011 pattern
+  fetch-sentinel-composites.py   NEW  P1 · seasonal FVC, albedo, NDVI series (keyless STAC)
   compute-far.py                 NEW  P1 · FAR from Google 2.5D + MS footprints
   compute-tra.py                 NEW  P1 · distance-to-refuge from OSM
   build-dcurs-inputs.py          NEW  P1 · assemble → data/dc-urs/inputs.json
@@ -93,7 +93,7 @@ audit.
 
 ---
 
-## Phase 0 — The engine (½ day, unblocked)
+## Phase 0 — The engine (½ day) — **DONE 2026-07-27, commit 73669f7**
 
 No data acquisition. Everything here runs on hand-fed inputs.
 
@@ -232,13 +232,32 @@ export function assertDcUrsLogic(): void {
 
 **Verify:** `assertDcUrsLogic()` passes; `npm run check` 0 errors. Nothing user-visible changes yet.
 
+**Outcome.** Golden cases reproduced exactly — Ballygunge **21.13**, Baruipur **64.16**.
+`npm run verify` green (0 errors, 26/26 unit tests, publication contract 77/77).
+
+One assertion written for this phase was **wrong**, and recording why matters: it claimed a ward at
+47 °C must never outscore one at 31 °C, and it failed (43.2 vs 39.2). The engine was right.
+Geometric aggregation removes FULL compensation, not ALL compensation — it is still a weighted
+product, and `w_aci` (0.40) exceeds `w_thi` (0.25), so a 4.7x adaptive-capacity advantage can
+outweigh a large hazard disadvantage. That is the CEO's weighting choice. "Fixing" the engine to
+satisfy the test would have silently overridden his weights. The assertions now test what geometric
+aggregation actually guarantees, and the reasoning is written into the module.
+
+Structural floor for Ballygunge under the geometric form is **harsher** than the additive dry run
+suggested: ceiling **54.8** (not 61.4), **45.2 points withheld**. A physically perfect retrofit
+cannot lift it out of "Vulnerable".
+
 ---
 
 ## Phase 1 — Observed pillars (1 day)
 
 Real satellite and vector data for everything except demographics.
 
-- [ ] **`fetch-sentinel-composites.py`** — Sentinel-2 L2A via the existing EE service account.
+- [ ] **`fetch-sentinel-composites.py`** — Sentinel-2 L2A via **keyless public STAC**. No Earth
+      Engine: all three of Microsoft Planetary Computer, Copernicus Data Space and AWS Earth Search
+      were verified live (HTTP 200, 2026-07-27). EE was only the path we held credentials for from
+      the AlphaEarth work and is not part of the CEO's design; dropping it removes a credential to
+      maintain and a readiness check to run.
       **Seasonal composites, never single scenes** (spec §3): Kolkata NDVI swings hard between
       monsoon and dry season. Emit per ward: `fvc`, `albedo`, and a ≥5-year annual NDVI series for
       `ndviMean` / `ndviStd`.
@@ -265,17 +284,27 @@ cities (street trees occlude roofs). Record the caveat; do not correct for it si
 
 ## Phase 2 — Demographics (½ day)
 
-- [ ] **`fetch-worldpop.py`** — WorldPop constrained, current release, clipped to each 1400 m
-      footprint → `popDensity` in persons/km². CC BY 4.0, attribution recorded.
-- [ ] **`fetch-census-2011.py`** — `HVI_socio` from Census of India 2011, composed the Rathi (2021)
-      / Azhar (2017) way: elderly >65, children <5, low-income proxy, informal settlement fraction.
-      **Areal interpolation** onto the 1400 m footprint, because the three wards sit under three
-      different local bodies and no single body's ward figures cover them (spec §1).
-- [ ] Vintage surfaced in `inputs.json` and rendered in the UI. **Census 2021 does not exist** —
-      postponed to Census 2027, reference date 1 March 2027.
+- [ ] **`fetch-worldpop.py`** — WorldPop constrained UN-adjusted, clipped to each 1400 m footprint
+      → `popDensity` in persons/km². CC BY 4.0, attribution recorded.
+      **Latest confirmed release is 2020**, not 2021 — `ind_ppp_2020_UNadj_constrained.tif` and the
+      1 km density product both resolve (HTTP 200); check for a newer year at build time rather than
+      assuming one exists.
+- [ ] **`fetch-socio.py`** — `HVI_socio` from **two** sources, composed the Rathi (2021) /
+      Azhar (2017) way (share >65, share <5, low-income proxy, informal-settlement fraction):
+      - **NFHS-5 (2019–21)** for present-day levels — distributed via DHS Program
+        (`dhsprogram.com`, HTTP 200; microdata needs free registration). Resolves to **district**.
+      - **Census 2011** for the ward-level spatial pattern — the only enumeration at the geography
+        DC-URS needs.
+      Combine as district level × ward-relative pattern, then **areal-interpolate** onto the 1400 m
+      footprint, because the three wards sit under three different local bodies and no single body's
+      figures cover them (spec §1).
+- [ ] Both vintages surfaced in `inputs.json` and rendered in the UI. **Census 2021 does not
+      exist** — deferred to Census 2027, reference date 1 March 2027. NFHS-5 is the closest
+      2021-vintage source in existence, at coarser geography.
 
 **Verify:** EVI complete for all three wards; population sanity-checked against published Kolkata
-ward densities; the WorldPop-vs-Census gap recorded rather than reconciled.
+ward densities; the WorldPop-vs-Census gap recorded rather than reconciled; the district-to-ward
+downscaling assumption stated explicitly in `inputs.json`, not buried in a script.
 
 ---
 
@@ -344,6 +373,7 @@ never leaves 0–100.
 | Sensitivity dominated by one input | One indicator moves the score, ten don't | Weighting problem. Report with the table; CEO decides |
 | Seasonal NDVI ambiguity | FVC differs wildly by composite window | Fix the window in the spec and record it; do not average monsoon with dry |
 | Census interpolation implausible | A ward's density is obviously wrong | Say so. Do not smooth it into looking reasonable |
+| NFHS-5 district masks real ward variation | Three wards inherit near-identical socio values | Expected — NFHS-5 is district-resolution. Census 2011 supplies the within-district pattern; if that still flattens them, report it rather than inventing spread |
 | Wards land in one tier | Real inputs compress the range | Report before adjusting anchors — the anchors are the CEO's and researched |
 | Score jumps vs Green Score | Users see a different number | Expected and pre-agreed. Document the delta per ward |
 | Uncertainty band is large | ±10 points or worse | Publish it. That is the honest outcome and the precedent is set |
