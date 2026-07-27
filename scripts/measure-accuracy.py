@@ -30,7 +30,8 @@ import json
 import math
 import os
 import sys
-from typing import Literal, Sequence, TypedDict
+from collections.abc import Sequence
+from typing import Literal, TypedDict
 
 import numpy as np
 

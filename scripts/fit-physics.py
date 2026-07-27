@@ -40,7 +40,8 @@ import json
 import math
 import os
 import sys
-from typing import Sequence, TypedDict
+from collections.abc import Sequence
+from typing import TypedDict
 
 import numpy as np
 from scipy.optimize import least_squares
@@ -62,7 +63,6 @@ X0: Params = (0.55, 0.5, 1.24)
 LO: Params = (0.02, 0.15, 1.20)
 HI: Params = (0.60, 1.50, 1.40)
 
-NAMES = ("Q_day", "kRad_h_ratio", "brutsaert_c")
 SPEC_BAR_K = 2.0        # the +/-2 K accuracy bar the product promises
 PINNED_TOL = 1e-4       # how close to a bound counts as pinned
 

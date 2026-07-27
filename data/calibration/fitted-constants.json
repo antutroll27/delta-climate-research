@@ -18,20 +18,20 @@
       1.4
     ]
   },
-  "scenes": 45,
-  "excluded": 0,
-  "near_nadir_only": false,
-  "view_cut_deg": null,
+  "scenes": 32,
+  "excluded": 13,
+  "near_nadir_only": true,
+  "view_cut_deg": 0.75,
   "residuals_K": {
-    "rmse": 3.9482,
-    "rmse_before_fit": 6.9521,
-    "urban_bias": -1.2449,
-    "rural_bias": -2.8073,
+    "rmse": 3.755,
+    "rmse_before_fit": 6.4023,
+    "urban_bias": -0.9189,
+    "rural_bias": -2.4602,
     "max_abs": 10.4368
   },
   "suhii_K": {
-    "modelled_median": 1.8169,
-    "measured_median": 0.223
+    "modelled_median": 1.8389,
+    "measured_median": 0.343
   },
   "method": "scipy least_squares TRF, bounded; residuals on urban AND rural absolutes, weighted by sqrt(usable pixel fraction)",
   "land_cover": "data/calibration/landcover-fractions.json (fixed, not fitted)",
