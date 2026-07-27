@@ -33,6 +33,12 @@ Output: data/dc-urs/worldpop.json
 """
 import json, math, os, subprocess, sys
 
+HERE = os.path.dirname(os.path.abspath(__file__))
+if HERE not in sys.path:
+    sys.path.insert(0, HERE)
+
+import _types  # noqa: E402  (path must be set first — the scripts are not a package)
+
 import numpy as np
 import rasterio
 from rasterio.windows import from_bounds
@@ -104,10 +110,10 @@ def ensure() -> tuple[str, str]:
     sys.exit("no GHS-POP tile reachable — every candidate epoch failed")
 
 
-def main():
+def main() -> None:
     year, path = ensure()
 
-    out = {
+    out: _types.PopFile = {
         "source": "JRC GHS-POP R2023A, 100 m, Mollweide, tile R7_C27 (CC BY 4.0)",
         "product": os.path.basename(path),
         "vintage": year,
@@ -142,12 +148,12 @@ def main():
             arr = src.read(1, window=win, boundless=True, fill_value=0).astype("float64")
             arr = np.where(arr < 0, 0, arr)          # GHS-POP nodata is negative
             total = float(arr.sum())
-            out["wards"][w] = {
-                "density": round(total / area_km2, 1),
-                "population": round(total),
-                "cells": int(arr.size),
-                "area_km2": round(area_km2, 3),
-            }
+            out["wards"][w] = _types.PopWard(
+                density=round(total / area_km2, 1),
+                population=round(total),
+                cells=int(arr.size),
+                area_km2=round(area_km2, 3),
+            )
 
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     with open(OUT, "w") as fh:

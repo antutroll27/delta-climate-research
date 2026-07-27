@@ -26,18 +26,32 @@ Data gotchas this script encodes (each cost real debugging time):
   * Kolkata spans tiles 45QXE (south, incl. Baruipur) and 45QXF (north). They
     overlap ~9.8 km, so acquisitions are deduplicated by timestamp.
 """
-import argparse, json, os, subprocess, sys, urllib.parse, warnings
+import argparse
+import os
+import sys
+import warnings
 from collections import defaultdict
+from typing import Any
 
 import numpy as np
-import rasterio
-from rasterio.warp import transform_bounds, reproject, Resampling
-from rasterio.transform import from_origin
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+if HERE not in sys.path:
+    sys.path.insert(0, HERE)
+
+from _ecostress import (  # noqa: E402  (path must be set first — not a package)
+    BBOX, TARGET_CRS, Bbox, band_url, cmr_search, fetch, read_window, transform_bounds,
+    token,
+)
 
 warnings.filterwarnings("ignore")
 np.seterr(all="ignore")
 
-BBOX = (88.30, 22.36, 88.45, 22.77)          # all three ward centroids + margin
+# BBOX, CACHE, TOKEN_PATH, CMR, TARGET_CRS, TARGET_RES and the six access
+# functions now live in _ecostress, shared with ecostress-suhii and
+# build-calibration-set. They were duplicated into those scripts by an
+# importlib.spec_from_file_location loader, which is what a hyphenated filename
+# forces and what cost every one of their types.
 WARDS = {
     "Ballygunge":  (22.528, 88.366),
     "Baruipur":    (22.365, 88.432),
@@ -50,107 +64,6 @@ CMR = "https://cmr.earthdata.nasa.gov/search/granules.umm_json"
 # QC bit fields, ECOSTRESS L2 User Guide v002 Table 6 (bit 0 = LSB)
 QC_MANDATORY = {0: "produced by TES", 1: "produced, caveat", 2: "(unset)", 3: "NOT PRODUCED"}
 QC_LST_ACC = {0: ">2 K poor", 1: "1.5-2 K marginal", 2: "1-1.5 K good", 3: "<1 K excellent"}
-
-
-def token() -> str:
-    if not os.path.exists(TOKEN_PATH):
-        sys.exit(f"No Earthdata token at {TOKEN_PATH}. Generate one at urs.earthdata.nasa.gov.")
-    return open(TOKEN_PATH).read().strip()
-
-
-def cmr_search(day_night: str, start: str, limit: int | None = None, end: str = "",
-               bbox=None) -> list:
-    """
-    Distinct acquisitions, newest first, deduplicated across MGRS tiles.
-
-    PAGINATES. The previous version hardcoded page_size=200 and sliced [:limit]
-    AFTER dedup, which silently truncated: the night query over 2024-2026 alone
-    returns 369 granules. For a calibration sweep that is the worst possible
-    failure — it biases the sample invisibly rather than erroring. `limit=None`
-    now means "every acquisition in range".
-    """
-    seen, after = {}, None
-    for _ in range(50):                       # hard stop; 50 x 2000 >> any real query
-        params = {
-            "short_name": "ECO_L2T_LSTE", "version": "002",
-            "bounding_box": ",".join(map(str, bbox or BBOX)),
-            "temporal": f"{start}T00:00:00Z,{end + 'T00:00:00Z' if end else ''}",
-            "day_night_flag": day_night, "page_size": "2000",
-            "sort_key": "-start_date",
-        }
-        cmd = ["curl", "-s", "-D", "-", "-H", "User-Agent: DeltaClimateResearch/1.0"]
-        if after:
-            cmd += ["-H", f"CMR-Search-After: {after}"]
-        raw = subprocess.run(cmd + [f"{CMR}?{urllib.parse.urlencode(params)}"],
-                             capture_output=True, text=True, timeout=300).stdout
-        head, _, body = raw.partition("\r\n\r\n")
-        if not body:
-            head, _, body = raw.partition("\n\n")
-        after = next((ln.split(":", 1)[1].strip() for ln in head.splitlines()
-                      if ln.lower().startswith("cmr-search-after:")), None)
-        items = json.loads(body).get("items", []) if body.strip() else []
-        for it in items:
-            u = it["umm"]
-            seen.setdefault(
-                u["TemporalExtent"]["RangeDateTime"]["BeginningDateTime"][:19], []).append(u)
-        if not after or not items:
-            break
-    out = sorted(seen.items(), reverse=True)
-    return out[:limit] if limit else out
-
-
-def fetch(url: str | None, tok: str) -> str | None:
-    # band_url() returns None for an absent band; without this guard the very
-    # next line raises AttributeError and kills a whole sweep.
-    if not url:
-        return None
-    os.makedirs(CACHE, exist_ok=True)
-    path = os.path.join(CACHE, url.rsplit("/", 1)[-1])
-    if os.path.exists(path) and os.path.getsize(path) > 2000:
-        return path
-    rc = subprocess.run(
-        ["curl", "-sL", "--fail", "-H", f"Authorization: Bearer {tok}",
-         "-H", "User-Agent: DeltaClimateResearch/1.0", "-o", path, url],
-        timeout=600).returncode
-    if rc != 0 or not os.path.exists(path) or os.path.getsize(path) < 2000:
-        if os.path.exists(path):
-            os.remove(path)
-        return None
-    return path
-
-
-def band_url(granule: dict, suffix: str) -> str | None:
-    return next((u["URL"] for u in granule.get("RelatedUrls", [])
-                 if u.get("URL", "").startswith("https") and u["URL"].endswith(suffix)), None)
-
-
-# Fixed target grid. The two MGRS tiles share a CRS but not an origin, so
-# window-reading each one gives different shapes and they cannot be combined.
-# Reprojecting both onto one grid fixes that and handles the ~9.8 km overlap.
-TARGET_CRS = "EPSG:32645"          # UTM 45N — Kolkata
-TARGET_RES = 70.0                  # native ECOSTRESS L2T resolution
-
-
-def target_grid(bbox=None):
-    l, b, r, t = transform_bounds("EPSG:4326", TARGET_CRS, *(bbox or BBOX), densify_pts=21)
-    w = int(np.ceil((r - l) / TARGET_RES))
-    h = int(np.ceil((t - b) / TARGET_RES))
-    return from_origin(l, t, TARGET_RES, TARGET_RES), w, h
-
-
-def read_window(path: str, nodata=np.nan, dtype="float32", bbox=None):
-    """Reproject a COG band onto the shared target grid. Returns (array, transform, crs)."""
-    tf, w, h = target_grid(bbox)
-    dst = np.full((h, w), nodata, dtype=dtype)
-    with rasterio.open(path) as src:
-        reproject(
-            source=rasterio.band(src, 1), destination=dst,
-            src_transform=src.transform, src_crs=src.crs,
-            dst_transform=tf, dst_crs=TARGET_CRS,
-            resampling=Resampling.nearest,      # never interpolate across cloud edges
-            src_nodata=src.nodata, dst_nodata=nodata,
-        )
-    return dst, tf, rasterio.crs.CRS.from_string(TARGET_CRS)
 
 
 def main() -> None:
@@ -170,14 +83,18 @@ def main() -> None:
     print(f"{'acquired (UTC)':<18}{'raw%':>7}{'cloud%':>8}{'usable%':>9}{'mean':>7}{'min':>7}{'max':>7}   wards")
     print("-" * 104)
 
-    usable, rows = 0, []
+    usable = 0
+    rows: list[tuple[str, float, float, defaultdict[int, int]]] = []
     for when, grans in acqs:
         # Evaluate each tile INDEPENDENTLY, then merge the results. Masking after
         # merging the raw bands is wrong: where a tile has no coverage its QC
         # reads as fill, and OR-ing "bad" across tiles condemns the whole scene.
-        tf = crs = None
-        merged_c = merged_raw = merged_cloud = None
-        acc_hist = defaultdict(int)
+        tf: Any = None
+        crs: Any = None
+        merged_c: Any = None
+        merged_raw: Any = None
+        merged_cloud: Any = None
+        acc_hist: defaultdict[int, int] = defaultdict(int)
         for g in grans:
             u_lst, u_cld, u_qc = (band_url(g, s) for s in ("_LST.tif", "_cloud.tif", "_QC.tif"))
             if not u_lst:
@@ -212,7 +129,10 @@ def main() -> None:
                 merged_c = np.where(np.isfinite(merged_c), merged_c, c_t)
                 merged_raw |= raw_t
                 merged_cloud |= (cloud_t & raw_t)
-        if merged_c is None:
+        if merged_c is None or tf is None or crs is None:
+            # tf and crs are set on the same line as merged_c, so this is one
+            # condition written three ways — stated explicitly so the ward
+            # sampling below can index tf without a None check per attribute.
             continue
 
         raw, cloudy = merged_raw, merged_cloud
@@ -241,7 +161,7 @@ def main() -> None:
         best = max(rows, key=lambda r: r[1])
         print(f"best coverage: {best[0][:16].replace('T',' ')} UTC — "
               f"{100*best[1]:.1f}% usable, mean {best[2]:.1f} °C")
-        tot = defaultdict(int)
+        tot: defaultdict[int, int] = defaultdict(int)
         for _, _, _, h in rows:
             for k, c in h.items():
                 tot[k] += c

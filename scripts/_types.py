@@ -25,7 +25,7 @@ a heavier dependency than this pipeline warrants.
 from __future__ import annotations
 
 import math
-from typing import Literal, NamedTuple, NotRequired, TypedDict
+from typing import TypeAlias, Literal, NamedTuple, NotRequired, TypedDict
 
 import numpy as np
 import numpy.typing as npt
@@ -55,6 +55,10 @@ Mask = npt.NDArray[np.bool_]
 # change to this file alone — no script may hardcode a ward id or a count." A
 # three-value Literal would write that violation into the type system. It is also
 # already false: compute-far.py discovers wards from the filesystem.
+#: west, south, east, north — degrees, EPSG:4326. Same alias as _ecostress.Bbox;
+#: declared here so scripts that never touch rasterio can still name a bbox.
+Bbox: TypeAlias = tuple[float, float, float, float]
+
 WardId = str
 
 Phase = Literal["day", "night"]
@@ -285,3 +289,48 @@ class MetRow(TypedDict):
     rh: str
     wind: str
     cloud: str
+
+
+#: One ECOSTRESS acquisition measured for SUHII (scripts/ecostress-suhii.py).
+#:
+#: `total=False` because the row is built up as the measurement proceeds and
+#: every early return is a legitimate partial: a scene that yields no usable LST
+#: pixels has `status` and `reason` but no `suhii`, and a consumer that assumes
+#: otherwise is the bug this type exists to catch. Only `date`, `phase`,
+#: `status` and `reason` are set unconditionally.
+#:
+#: FUNCTIONAL SYNTAX, not the class form, because one key is `rural_+rural` —
+#: not a valid Python identifier. That name is already the CSV column written by
+#: build-calibration-set.py and read back by _physics.py, so it is a data
+#: contract on disk, not a free choice. The three rural definitions it comes
+#: from are fixed (RURAL_DEFS), which is what makes the six-key set closed and
+#: worth typing at all.
+SceneRow = TypedDict("SceneRow", {
+    "date": str,
+    "phase": str,
+    "status": Literal["ok", "skipped", "error"],
+    "reason": str,
+    "utc": str,
+    "local_solar_hour": float,
+    "month": int,
+    "tiles": str,
+    "usable_frac": float,
+    "valid_px": int,
+    "water_px": int,
+    "urban_mean": float,
+    "urban_px": int,
+    "suhii": float,
+    "suhii_spread": float,
+    # per rural definition — the spread across these three is `suhii_spread`,
+    # and it is the honest uncertainty of the urban-extent product choice
+    "rural_strict": float,
+    "suhii_strict": float,
+    "rural_+rural": float,
+    "suhii_+rural": float,
+    "rural_wide": float,
+    "suhii_wide": float,
+    # view-zenith control, only fetched for scenes that already cleared the bar
+    "view_urban": float,
+    "view_rural": float,
+    "view_delta": float,
+}, total=False)

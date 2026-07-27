@@ -45,20 +45,23 @@ error — most often unmasked water or cloud leakage. Expect to land somewhat
 higher than the 1 km MODIS literature: 70 m pixels resolve hot roofs that a
 1 km pixel dilutes.
 """
-import argparse, os, sys, warnings
+import argparse
+import os
+import sys
+import warnings
 from collections import defaultdict
+from typing import Any
 
 import numpy as np
-import rasterio
-from rasterio.warp import transform_bounds, reproject, Resampling
-from rasterio.transform import from_origin
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import importlib.util
-_spec = importlib.util.spec_from_file_location(
-    "census", os.path.join(os.path.dirname(os.path.abspath(__file__)), "ecostress-census.py"))
-census = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(census)
+HERE = os.path.dirname(os.path.abspath(__file__))
+if HERE not in sys.path:
+    sys.path.insert(0, HERE)
+
+import _types  # noqa: E402
+from _ecostress import (  # noqa: E402  (path must be set first — not a package)
+    Acquisition, Bbox, align as _align, band_url, cmr_search, fetch, token,
+)
 
 warnings.filterwarnings("ignore")
 np.seterr(all="ignore")
@@ -79,15 +82,15 @@ RURAL_DEFS = {
 }
 
 
-def align(path, nodata, dtype, resampling=Resampling.nearest):
-    tf, w, h = census.target_grid(BBOX)
-    dst = np.full((h, w), nodata, dtype=dtype)
-    with rasterio.open(path) as src:
-        reproject(source=rasterio.band(src, 1), destination=dst,
-                  src_transform=src.transform, src_crs=src.crs,
-                  dst_transform=tf, dst_crs=census.TARGET_CRS,
-                  resampling=resampling, src_nodata=src.nodata, dst_nodata=nodata)
-    return dst
+def align(path: str, nodata: float, dtype: str) -> Any:
+    """Shared align(), pinned to THIS script's wider bbox.
+
+    The wide bbox is the whole point of the file — SUHII needs rural hinterland
+    that the ward bbox does not contain — so it must be passed on every call. A
+    bare `_align(path, ...)` silently uses the ward bbox and measures the urban
+    core against itself.
+    """
+    return _align(path, nodata, dtype, bbox=BBOX)
 
 
 # Centre longitude of the study bbox, for true local solar time. ISS precession
@@ -101,7 +104,7 @@ def local_solar_hour(iso_utc: str) -> float:
     return (hh + mm / 60 + LON_CENTRE / 15.0) % 24
 
 
-def measure_scene(date: str, phase: str, want_view: bool = False) -> dict | None:
+def measure_scene(date: str, phase: str, want_view: bool = False) -> _types.SceneRow:
     """
     Measure SUHII for one acquisition date.
 
@@ -114,11 +117,11 @@ def measure_scene(date: str, phase: str, want_view: bool = False) -> dict | None
     only for scenes that already cleared the usability bar.
     """
     from datetime import date as _date, timedelta as _td
-    row = {"date": date, "phase": phase, "status": "ok", "reason": ""}
+    row: _types.SceneRow = {"date": date, "phase": phase, "status": "ok", "reason": ""}
     try:
-        tok = census.token()
+        tok = token()
         nxt = (_date.fromisoformat(date) + _td(days=1)).isoformat()
-        acqs = census.cmr_search(phase, date, None, nxt, bbox=BBOX)
+        acqs = cmr_search(phase, date, None, nxt, bbox=BBOX)
     except Exception as exc:
         return {**row, "status": "error", "reason": f"cmr: {str(exc)[:60]}"}
     if not acqs:
@@ -134,18 +137,18 @@ def measure_scene(date: str, phase: str, want_view: bool = False) -> dict | None
     for _t, grans in acqs:
         for g in grans:
             try:
-                u_lst = census.band_url(g, "_LST.tif")
-                p_lst = census.fetch(u_lst, tok)
+                u_lst = band_url(g, "_LST.tif")
+                p_lst = fetch(u_lst, tok)
                 if not p_lst:
                     continue
                 a = align(p_lst, np.nan, "float32")
                 good = np.isfinite(a) & (a > 200) & (a < 400)
 
-                pq = census.fetch(census.band_url(g, "_QC.tif"), tok)
+                pq = fetch(band_url(g, "_QC.tif"), tok)
                 if pq:
                     q = align(pq, 0xFFFF, "uint16")
                     good &= (q != 0xFFFF) & ((q & 0b11) == 0)
-                pc = census.fetch(census.band_url(g, "_cloud.tif"), tok)
+                pc = fetch(band_url(g, "_cloud.tif"), tok)
                 if pc:
                     good &= align(pc, 255, "uint16") != 1
 
@@ -153,12 +156,12 @@ def measure_scene(date: str, phase: str, want_view: bool = False) -> dict | None
                 lst = cel if lst is None else np.where(np.isfinite(lst), lst, cel)
                 tiles.add(g["GranuleUR"].split("_")[5])
 
-                pw = census.fetch(census.band_url(g, "_water.tif"), tok)
+                pw = fetch(band_url(g, "_water.tif"), tok)
                 if pw:
                     w_ = align(pw, 0, "uint16") == 1
                     water = w_ if water is None else (water | w_)
                 if want_view:
-                    pv = census.fetch(census.band_url(g, "_view_zenith.tif"), tok)
+                    pv = fetch(band_url(g, "_view_zenith.tif"), tok)
                     if pv:
                         v_ = align(pv, np.nan, "float32")
                         view = v_ if view is None else np.where(np.isfinite(view), view, v_)
@@ -185,16 +188,27 @@ def measure_scene(date: str, phase: str, want_view: bool = False) -> dict | None
     row["urban_mean"] = round(u_mean, 3)
     row["urban_px"] = int(urb.sum())
 
-    suhii = {}
+    # Written through an explicitly-keyed table rather than f-string keys. The
+    # six column names are a contract on disk — build-calibration-set.py lists
+    # them as CSV fieldnames and _physics.py reads rural_strict back — so a typo
+    # in an f-string would produce a column nobody reads and a blank one where
+    # the data was meant to go, with no error at any point.
+    rural_mean: dict[str, float] = {}
     for name, codes in RURAL_DEFS.items():
         rur = valid & np.isin(smod, list(codes))
         if rur.sum() < 50:
             continue
-        r_mean = float(np.nanmean(lst[rur]))
-        key = name.split()[0]
-        suhii[key] = u_mean - r_mean
-        row[f"rural_{key}"] = round(r_mean, 3)
-        row[f"suhii_{key}"] = round(u_mean - r_mean, 3)
+        rural_mean[name.split()[0]] = float(np.nanmean(lst[rur]))
+    suhii = {k: u_mean - v for k, v in rural_mean.items()}
+    if "strict" in rural_mean:
+        row["rural_strict"] = round(rural_mean["strict"], 3)
+        row["suhii_strict"] = round(suhii["strict"], 3)
+    if "+rural" in rural_mean:
+        row["rural_+rural"] = round(rural_mean["+rural"], 3)
+        row["suhii_+rural"] = round(suhii["+rural"], 3)
+    if "wide" in rural_mean:
+        row["rural_wide"] = round(rural_mean["wide"], 3)
+        row["suhii_wide"] = round(suhii["wide"], 3)
     if not suhii:
         return {**row, "status": "skipped", "reason": "too few rural pixels"}
 
@@ -214,7 +228,7 @@ def measure_scene(date: str, phase: str, want_view: bool = False) -> dict | None
     return row
 
 
-def main():
+def main() -> None:
 
     ap = argparse.ArgumentParser()
     ap.add_argument("--date", default="2025-04-24", help="acquisition date, YYYY-MM-DD")
@@ -224,13 +238,13 @@ def main():
     if not os.path.exists(SMOD):
         sys.exit(f"GHS-SMOD tile not cached at {SMOD}")
 
-    tok = census.token()
+    tok = token()
     flag = "day" if args.day else "night"
     # proper date arithmetic — naive +1 breaks on month ends (2025-01-31 -> 01-32)
     from datetime import date as _date, timedelta as _td
     _d = _date.fromisoformat(args.date)
     nxt = (_d + _td(days=1)).isoformat()
-    acqs = census.cmr_search(flag, args.date, 20, nxt)
+    acqs = cmr_search(flag, args.date, 20, nxt)
     if not acqs:
         sys.exit(f"no {flag} acquisitions on {args.date}")
 
@@ -238,31 +252,31 @@ def main():
     lst = view = water = None
     for when, grans in acqs:
         for g in grans:
-            u_lst = census.band_url(g, "_LST.tif")
+            u_lst = band_url(g, "_LST.tif")
             if not u_lst:
                 continue
-            p = census.fetch(u_lst, tok)
+            p = fetch(u_lst, tok)
             if not p:
                 continue
             a = align(p, np.nan, "float32")
             good = np.isfinite(a) & (a > 200) & (a < 400)
 
-            pq = census.fetch(census.band_url(g, "_QC.tif"), tok)
+            pq = fetch(band_url(g, "_QC.tif"), tok)
             if pq:
                 q = align(pq, 0xFFFF, "uint16")
                 good &= (q != 0xFFFF) & ((q & 0b11) == 0)
-            pc = census.fetch(census.band_url(g, "_cloud.tif"), tok)
+            pc = fetch(band_url(g, "_cloud.tif"), tok)
             if pc:
                 good &= align(pc, 255, "uint16") != 1
 
             cel = np.where(good, a - 273.15, np.nan)
             lst = cel if lst is None else np.where(np.isfinite(lst), lst, cel)
 
-            pw = census.fetch(census.band_url(g, "_water.tif"), tok)
+            pw = fetch(band_url(g, "_water.tif"), tok)
             if pw:
                 w_ = align(pw, 0, "uint16") == 1
                 water = w_ if water is None else (water | w_)
-            pv = census.fetch(census.band_url(g, "_view_zenith.tif"), tok)
+            pv = fetch(band_url(g, "_view_zenith.tif"), tok)
             if pv:
                 v_ = align(pv, np.nan, "float32")
                 view = v_ if view is None else np.where(np.isfinite(view), view, v_)

@@ -33,6 +33,13 @@ Output: data/dc-urs/sentinel.json
 """
 import argparse, json, os, subprocess, sys
 from collections import defaultdict
+from typing import Any
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+if HERE not in sys.path:
+    sys.path.insert(0, HERE)
+
+import _types  # noqa: E402  (path must be set first — the scripts are not a package)
 
 import numpy as np
 import rasterio
@@ -65,7 +72,7 @@ WARDS = {
 }
 
 
-def search(lat: float, lon: float, year: int) -> list:
+def search(lat: float, lon: float, year: int) -> list[dict[str, Any]]:
     """Lowest-cloud scenes for one year, spread across the calendar."""
     d = 0.02   # ~2 km box around the ward centre
     body = json.dumps({
@@ -102,7 +109,7 @@ def search(lat: float, lon: float, year: int) -> list:
 GRID = FOOTPRINT_M // 10          # 140 x 140
 
 
-def read_window(href: str, lat: float, lon: float):
+def read_window(href: str, lat: float, lon: float) -> Any | None:
     """Read the ward window from a COG, resampled to the common grid."""
     try:
         with rasterio.open(href) as src:
@@ -123,7 +130,7 @@ def read_window(href: str, lat: float, lon: float):
         return None
 
 
-def scene_metrics(feat: dict, lat: float, lon: float):
+def scene_metrics(feat: dict[str, Any], lat: float, lon: float) -> tuple[float, float] | None:
     """NDVI and albedo arrays for one scene, or None if unreadable."""
     assets = feat["assets"]
     if not all(b in assets for b in BANDS):
@@ -162,7 +169,7 @@ def scene_metrics(feat: dict, lat: float, lon: float):
     return float(np.nanmedian(ndvi)), float(np.nanmedian(albedo))
 
 
-def ward(name: str, lat: float, lon: float, years: list[int]) -> dict:
+def ward(name: str, lat: float, lon: float, years: list[int]) -> _types.SentinelWard:
     os.makedirs(CACHE, exist_ok=True)
     cache = os.path.join(CACHE, f"{name}.json")
     if os.path.exists(cache):
@@ -208,13 +215,19 @@ def ward(name: str, lat: float, lon: float, years: list[int]) -> dict:
         "albedo": round(float(np.median([u["albedo"] for u in used])), 4),
         "years": len(used),
         "scenes_total": sum(u["scenes"] for u in used),
-        "per_year": {y: {k: round(v, 4) if isinstance(v, float) else v
-                         for k, v in annual[str(y)].items()}
-                     for y in years if str(y) in annual},
+        # str(y), not y. json.dump silently stringifies int keys on write, so
+        # the dict in memory was keyed by int and the identical dict read back
+        # from disk was keyed by str — the round-trip was not an identity, and
+        # any in-process consumer would miss on `per_year["2021"]`.
+        "per_year": {str(y): _types.SentinelYear(
+            ndvi=round(float(annual[str(y)]["ndvi"]), 4),
+            albedo=round(float(annual[str(y)]["albedo"]), 4),
+            scenes=int(annual[str(y)]["scenes"]),
+        ) for y in years if str(y) in annual},
     }
 
 
-def main():
+def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--years", type=int, default=6)
     ap.add_argument("--ward", default=None)
@@ -223,7 +236,7 @@ def main():
     years = list(range(2026 - args.years, 2026))
     todo = {args.ward: WARDS[args.ward]} if args.ward else WARDS
 
-    out = {
+    out: _types.SentinelFile = {
         "source": "Sentinel-2 L2A via AWS earth-search STAC / public sentinel-cogs bucket (keyless)",
         "method": f"Per year, up to {SCENES_PER_YEAR} scenes spread across months with cloud < "
                   f"{MAX_CLOUD}%, median-reduced to one value per year. Reported NDVI is the mean "
