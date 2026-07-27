@@ -1,26 +1,46 @@
 # Green Score — algorithms, sources, and an audit
 
-**From:** Engineering
-**Date:** 2026-07-25
-**Subject:** What the Green Score computes, where every number comes from, and what the latest review changed
+**From:** Engineering  
+**Date:** 2026-07-27 (revised; first issued 2026-07-25)  
+**Subject:** What the Green Score computes, where every number comes from, and how accurate it is
 
 ---
 
 ## Summary
 
-This sets out the Green Score end to end: the algorithm, where every constant comes from, and what
-the model actually produces. Section 8 lists every source with a resolvable link.
+This sets out the Green Score end to end: the algorithm, where every constant comes from, what the
+model actually produces, and — new in this revision — **how accurate it is against satellite
+measurement**. Section 8 lists every source with a resolvable link.
 
 Writing it prompted a proper review of the constants, which was overdue. That turned up **five**
 that were uncited, self-referential, or not scientifically supportable — all now corrected and
-sourced (§4). I also added a validation harness that scores model output against published
-measurements on every run, so the model can't drift quietly again. It currently passes **8 of 8**
-checks, up from 4 of 10.
+sourced (§4). A validation harness scores model output against published measurements on every run,
+so the model can't drift quietly again. It passes **8 of 8** checks, up from 4 of 10.
 
-One correction ran opposite to expectation and is worth reading first. The headline heat figure
-looked roughly eight times too high against published Kolkata values, and I initially recorded it
-as our most serious defect. It turned out to be **mislabelled rather than miscalibrated** — the
-number is defensible, the name we gave it wasn't (§4.1).
+**What changed since the first issue.** The previous version said plainly that nothing had been
+validated against measurement for our own wards. That is no longer true. We built a calibration set
+of **49 usable NASA ECOSTRESS scenes** over Kolkata (2024-01 → 2026-07, 179 acquisitions attempted,
+every exclusion recorded), attached hour-matched meteorology to each, and compared the model to
+observation scene by scene. Section 5A reports what that found, including the parts that did not go
+our way.
+
+The headline result is a number we can now put on the tool:
+
+| | measured accuracy | status in the interface |
+|---|---|---|
+| **Night** | **± 3.5 °C** (20 scenes) | labelled *calibrated* |
+| **Day** | **± 5.0 °C** (12 scenes) | labelled *indicative only* |
+
+Daytime is worse for a reason that no amount of engineering will fix, and §5A explains it: the limit
+is the resolution of the weather data driving the model, not the physics inside it. Both figures are
+now shown next to the temperature readout on the tool itself, rather than living only in this
+document.
+
+Two earlier findings are worth reading before the detail. The headline heat figure looked roughly
+eight times too high against published Kolkata values and was initially recorded as our most serious
+defect; it turned out to be **mislabelled rather than miscalibrated** (§4.1). And the attempt to
+fit the model's remaining free constants to measurement **failed its acceptance test** — reported in
+§5A rather than quietly retried, because the failure is informative.
 
 Section 6 sets out what I still don't trust, without hedging.
 
@@ -88,9 +108,12 @@ against our own output · **Placeholder** = explicitly temporary.
 | Dark roof albedo | 0.15 | Cited — high | LBNL Heat Island Group |
 | Aged cool-roof albedo | 0.60 | Cited — high | LBNL *aged* value, not fresh-white 0.85 — deliberately conservative |
 | Pocket park radius | 50 m (0.785 ha) | Cited — **Kolkata-specific** | Mitra et al. 2022, threshold value of efficiency |
-| **Evapotranspiration L** | **0.43** | **Derived — see §4.2** | Solved against two independent constraints |
+| **Evapotranspiration L** | **0.43** | **Derived — see §4.2; contested by satellite fit, see §5A** | Solved against two independent constraints |
 | **Facade heat reduction** | **0.03** | **Cited — corrected from 0.30** | Gunawardena & Steemers 2023 |
 | Influence kernel λ | ≈47 m | Empirical, honestly labelled | See §4.4 |
+| **Sky temperature** | **computed, not fixed** | **Cited** | Brutsaert (1975) clear-sky emissivity, cloud-screened; replaced two hard-coded values |
+| **Night evapotranspiration** | **10 % of daytime** | **Cited** | Stomata close after dark; tapers to zero below the dewpoint |
+| **Night anthropogenic heat** | **50 % of daytime** | **Estimated, bounded** | Diurnal load profiles, South and East Asian cities |
 | **Warming pathways** | **+1.25 / +4.1 °C** | **Cited — corrected** | Dhara et al. 2025, PLOS Climate |
 
 ### Score parameters
@@ -105,8 +128,13 @@ against our own output · **Placeholder** = explicitly temporary.
 ### Input geometry — genuinely measured
 
 Microsoft ML Building Footprints (ODbL) · Google Open Buildings 2.5D heights (CC BY 4.0) ·
-OpenStreetMap road centrelines (ODbL) · Norwegian Meteorological Institute live air temperature ·
-NASA ECOSTRESS night surface temperature (public domain, added this week)
+OpenStreetMap road centrelines (ODbL) · Norwegian Meteorological Institute live air temperature
+
+Added for validation (§5A): NASA ECOSTRESS 70 m land-surface temperature (public domain) · NASA
+POWER hourly meteorology (public domain) · ESA WorldCover 10 m land cover (CC BY 4.0) · GHS-SMOD
+R2023A settlement classification (CC BY 4.0). All four are free and redistributable; none carries a
+non-commercial clause. Open-Meteo was the easier route for historical weather and was **rejected on
+licence grounds**, being non-commercial.
 
 ---
 
@@ -229,8 +257,8 @@ composite-indicator practice (OECD/JRC 2008) and the convention in urban-resilie
 | Land-cover thermal contrast | 10.35 °C | 8–18 °C | ok |
 | Max ward cooling ≤ local park cooling | 4.45 °C | ≤ 5.42 °C | ok |
 | Local park cooling | 5.42 °C | 4.83–8.07 °C | ok |
-| Vegetated surface below air | 3.52 K | ≤ 4 K | ok |
-| Built surface above air | 12.17 K | 5–25 K | ok |
+| Vegetated surface below air | 1.61 K | ≤ 4 K | ok |
+| Built surface above air | 14.08 K | 5–25 K | ok |
 | Facade vs cool-roof cost per m² | 63× | 40–80× | ok |
 | Score at zero intervention | 2 | 0–10 | ok |
 | Score at full intervention | 66 | 0–100 | ok |
@@ -248,11 +276,100 @@ written into the code for you to check.
 
 ---
 
+## 5A. Validation against measurement — what it found
+
+This section is new. Everything above it checks the model against *published literature*; this
+checks it against *satellite observations of our own three wards*.
+
+### The calibration set
+
+| | |
+|---|---|
+| Source | NASA ECOSTRESS L2T LSTE v002, 70 m land-surface temperature |
+| Window | 2024-01-01 → 2026-07-01, both day and night overpasses |
+| Attempted | 179 acquisitions |
+| Usable | **49 scenes** (31 night), after cloud and coverage screening |
+| Excluded | 130, **each recorded with its reason** — no silent exclusions |
+| Urban / rural classes | GHS-SMOD R2023A (EU/UN Degree of Urbanisation), not a temperature threshold |
+| Meteorology | NASA POWER hourly, matched to each overpass in local solar time |
+| Land cover | ESA WorldCover 10 m, measured inside the same masks — not assumed |
+
+Two controls were run rather than assumed. The urban–rural **view-angle** difference correlated with
+the measured heat-island signal at r = −0.322 (p = 0.024), meaning about 10 % of the apparent signal
+was sensor geometry rather than climate; restricting to near-nadir scenes (≤ 0.75°) removes it and
+retains 36 scenes. The three alternative definitions of "rural" disagree by only 0.08 °C, so that
+choice is not a material source of uncertainty.
+
+### How accurate the model is
+
+The important question is not only "how close is our model" but "**how close could any model get**
+with the data available". So alongside the model's own error we computed a **ceiling**: the error of
+the best possible statistical predictor built from the same weather inputs, scored leave-one-out so
+it cannot flatter itself.
+
+| | scenes | best achievable | our model | reported |
+|---|---|---|---|---|
+| Night | 20 | 2.18 °C | 3.13 °C | **± 3.5 °C** |
+| Day | 12 | 3.33 °C | 4.61 °C | **± 5.0 °C** |
+
+Read the "best achievable" column first. **At night the model has real headroom** — a better model
+could reach ~2.2 °C, so continued work is worthwhile. **By day, no model driven by this weather data
+can beat ~3.3 °C.** Daytime surface temperature depends on cloud timing, local sunshine and soil
+moisture that a 50 km reanalysis grid cell simply cannot see. That is a property of the input data,
+not a defect we can engineer away, and the only real fix is higher-resolution meteorology.
+
+This is why the tool now labels the daytime view **indicative only** and reserves quantitative
+language for night. Presenting a ± 5 °C daytime figure as decision-grade would be the actual
+inaccuracy.
+
+### The fit failed, and that is the honest result
+
+We then attempted to fit the model's three remaining free constants — anthropogenic heat, the
+radiative-to-convective coupling ratio, and the sky-emissivity coefficient — to the measured scenes,
+with residuals taken on urban *and* rural absolute temperatures rather than on their difference
+alone. Matching a difference while both sides are wrong is not a calibration.
+
+It did not pass. **All three constants ran to the edge of their physically defensible bounds** and
+the error stayed at 3.75 °C against a ± 2 °C acceptance bar. Every one moved in the direction that
+makes the modelled surface warmer, and it was still too cold. Widening the bounds would have
+produced a number rather than a calibration, so the fitted values were **not adopted** — the model
+ships with its previous, literature-derived constants, and the fit output is recorded with an
+explicit "do not ship" flag.
+
+Three candidate explanations were tested and none survived:
+
+| Hypothesis | Result |
+|---|---|
+| Missing heat-storage / thermal inertia | Error moved only 3.75 → 3.41 °C. Insufficient. |
+| Evapotranspiration limited by soil moisture rather than air dryness | Removed the bias but *worsened* the scatter; the parameter ran to its bound, so it merely reduced evaporation overall. |
+| Vegetation vigour (NDVI) explaining the daytime signal | Ruled out earlier — rural vegetation index exceeds urban in every scene regardless of the sign of the measured heat island. |
+
+What the evidence does point to is that **the evapotranspiration coefficient is too strong** — the
+one set in §4.2 from local park-cooling measurements. Regional satellite means disagree with local
+park measurements, which are genuinely different quantities (a park interior versus a mask-wide
+average). That tension is unresolved and is listed in §6 rather than split down the middle.
+
+### Why the acceptance bar itself was wrong
+
+The ± 2 °C bar was written before anyone knew what was achievable. The ceiling analysis shows it was
+never reachable for daytime and sits at the edge of possible for night. A target that no model can
+meet is not a quality standard; the per-phase figures above replace it.
+
+---
+
 ## 6. What I still don't trust
 
-- **Nothing has been validated against measurement for our own wards.** Every check is against
-  published literature. We now have NASA ECOSTRESS night surface temperature over all three wards,
-  and comparing model to measurement is the obvious next step. It has not been done.
+- **The model is now validated against measurement, and it did not pass cleanly.** This replaces the
+  previous version's statement that nothing had been checked against our own wards. It has been
+  (§5A), and the result is ± 3.5 °C at night and ± 5.0 °C by day — usable for screening and ranking
+  interventions, not for anything requiring a defensible absolute temperature. The daytime figure
+  cannot be improved without better weather data.
+
+- **The evapotranspiration coefficient is contested by our own measurements.** §4.2 derives L = 0.43
+  from local park-cooling studies and it satisfies those constraints. The satellite fit says it is
+  too strong. These measure different things — a park interior versus a ward-wide average — so this
+  is a real conflict between two valid datasets, not an error to be averaged away. It needs a
+  deliberate decision.
 
 - **The greening benchmark is transplanted.** Berlin's 0.30–0.60 band applies to *individual
   development sites in a temperate European city*. We apply it to *whole wards in tropical
@@ -278,16 +395,28 @@ written into the code for you to check.
 
 ## 7. Open decision
 
-Whether the Green Score should retain the **cooling term** before the physics is validated against
-our own measurements.
+Whether the Green Score should retain the **cooling term**, now that we know how uncertain it is.
+
+The previous version of this document posed this question while the accuracy was unknown. It is now
+measured: ± 3.5 °C at night, ± 5.0 °C by day. That changes the question from *"can we trust it?"* to
+*"is this precision good enough for what we sell?"*
 
 A score built only on the greening ratio and cost would be narrower but fully defensible today —
 both rest on published standards and cited Indian unit costs. Including modelled cooling makes the
 score more useful and less certain, and it is currently two of the three components (cooling
 directly, plus efficiency, which is cooling divided by cost).
 
-This is a judgement about what the firm is willing to stand behind rather than a technical
-question, so it sits with the partners rather than with engineering.
+Two things worth weighing. In its favour: the score uses cooling as a **relative** quantity — ranking
+interventions against each other under identical forcing — and much of the absolute error is common
+to both sides of that comparison, so the ranking is more reliable than the ± figure suggests.
+Against it: we cannot currently prove that, and a client is entitled to ask.
+
+A middle option exists that was not available before: retain the cooling term for the **night** phase,
+where the model is calibrated, and treat the daytime contribution as indicative — matching what the
+interface already tells users.
+
+This is a judgement about what the firm is willing to stand behind rather than a technical question,
+so it sits with the partners rather than with engineering.
 
 ---
 
@@ -354,9 +483,23 @@ Verification status is marked per item: **[V]** full text or primary document co
 | NASA **ECOSTRESS** L2T LSTE v002 | US public domain | [doi:10.5067/ECOSTRESS/ECO_L2T_LSTE.002](https://doi.org/10.5067/ECOSTRESS/ECO_L2T_LSTE.002) |
 | **ESA WorldCover** 10 m v200 | CC BY 4.0 | [doi:10.5281/zenodo.7254221](https://doi.org/10.5281/zenodo.7254221) |
 | **JRC GHS-SMOD** R2023A (Degree of Urbanisation) | CC BY 4.0 | [doi:10.2905/A0DF7A6F-49DE-46EA-9BDE-563437A6E2BA](https://doi.org/10.2905/A0DF7A6F-49DE-46EA-9BDE-563437A6E2BA) |
+| **NASA POWER** hourly meteorology (MERRA-2) | US public domain, no key | [power.larc.nasa.gov](https://power.larc.nasa.gov/) |
+| Open-Meteo historical archive | **Non-commercial — rejected** | [open-meteo.com/en/license](https://open-meteo.com/en/license) |
 
 **Attribution strings required by licence** are recorded in `docs/heat-map-intervention-model.md`
 and rendered on the tool itself.
+
+### Methods used in the validation (§5A)
+
+| Source | Used for | Link |
+|---|---|---|
+| Brutsaert (1975), *Water Resources Research* 11(5):742–744 **[V]** | Clear-sky emissivity, replacing two hard-coded sky temperatures | [doi:10.1029/WR011i005p00742](https://doi.org/10.1029/WR011i005p00742) |
+| Peng et al. (2012), *Environ. Sci. Technol.* 46(2) **[A]** | Equal-area rural reference method for the heat-island difference | [doi:10.1021/es2030438](https://doi.org/10.1021/es2030438) |
+| Voogt & Oke (2003), *Remote Sensing of Environment* 86(3) **[V]** | Surface vs air heat island are different quantities; view-angle sensitivity of thermal remote sensing | [doi:10.1016/S0034-4257(03)00079-8](https://doi.org/10.1016/S0034-4257(03)00079-8) |
+| Spencer (1971), *Search* 2(5):172 **[A]** | Solar declination series, for per-scene sun angle | — |
+| LP DAAC, *ECOSTRESS L2T LSTE v002 known issues* **[V]** | Quality-flag caveat: two documented QC bits are unset in v002 | [lpdaac.usgs.gov](https://lpdaac.usgs.gov/products/eco_l2t_lstev002/) |
+
+**[V]** verified against full text · **[A]** verified from abstract or documentation only — see §6.
 
 ---
 
