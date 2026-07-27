@@ -1,0 +1,226 @@
+{
+  "generated": "build-dcurs-inputs.py",
+  "engine": "v1 \u2014 see docs/dc-urs-source-of-truth.md",
+  "note": "Every field carries source and vintage. 'placeholder' means NOT YET MEASURED and must not reach production.",
+  "known_limitations": [
+    "LST day/night and the rural reference are bbox-wide, not per-ward: ECOSTRESS at 70 m gives only ~20x20 pixels over a 1400 m ward, too few to separate the three wards reliably. All three currently share the urban figure, so the thermal pillar does not yet discriminate between them."
+  ],
+  "wards": {
+    "ballygunge": {
+      "lstDayC": {
+        "value": 30.14,
+        "source": "measured",
+        "vintage": "2024-2026",
+        "cite": "NASA ECOSTRESS L2T LSTE v002"
+      },
+      "lstNightC": {
+        "value": 25.4,
+        "source": "measured",
+        "vintage": "2024-2026",
+        "cite": "NASA ECOSTRESS L2T LSTE v002"
+      },
+      "ruralBaseC": {
+        "value": 29.96,
+        "source": "measured",
+        "vintage": "2024-2026",
+        "cite": "ECOSTRESS urban-rural, GHS-SMOD masks"
+      },
+      "popDensity": {
+        "value": 68810.2,
+        "source": "measured",
+        "vintage": "2020",
+        "cite": "WorldPop"
+      },
+      "far": {
+        "value": 1.1609,
+        "source": "measured",
+        "vintage": "2023-2025",
+        "cite": "MS footprints + Google Open Buildings 2.5D"
+      },
+      "socioVuln": {
+        "value": 0,
+        "source": "placeholder",
+        "cite": "NFHS-5 levels x Census 2011 pattern"
+      },
+      "fvc": {
+        "value": 0.3291,
+        "source": "measured",
+        "vintage": "5 yr",
+        "cite": "Sentinel-2 L2A"
+      },
+      "canopyFrac": {
+        "value": 0.0,
+        "source": "placeholder",
+        "cite": "v2 only \u2014 inert in the v1 greenness formula"
+      },
+      "ndviMean": {
+        "value": 0.2968,
+        "source": "measured",
+        "vintage": "5 yr",
+        "cite": "Sentinel-2 L2A"
+      },
+      "ndviStd": {
+        "value": 0.0302,
+        "source": "measured",
+        "vintage": "5 yr",
+        "cite": "Sentinel-2 L2A, across-year std of annual medians"
+      },
+      "albedo": {
+        "value": 0.1248,
+        "source": "measured",
+        "vintage": "5 yr",
+        "cite": "Sentinel-2, source doc \u00a73B coefficients"
+      },
+      "distCoolM": {
+        "value": 77.8,
+        "source": "measured",
+        "vintage": "2021",
+        "cite": "ESA WorldCover, patches >= 0.77 ha"
+      }
+    },
+    "baruipur": {
+      "lstDayC": {
+        "value": 30.14,
+        "source": "measured",
+        "vintage": "2024-2026",
+        "cite": "NASA ECOSTRESS L2T LSTE v002"
+      },
+      "lstNightC": {
+        "value": 25.4,
+        "source": "measured",
+        "vintage": "2024-2026",
+        "cite": "NASA ECOSTRESS L2T LSTE v002"
+      },
+      "ruralBaseC": {
+        "value": 29.96,
+        "source": "measured",
+        "vintage": "2024-2026",
+        "cite": "ECOSTRESS urban-rural, GHS-SMOD masks"
+      },
+      "popDensity": {
+        "value": 36728.2,
+        "source": "measured",
+        "vintage": "2020",
+        "cite": "WorldPop"
+      },
+      "far": {
+        "value": 0.3416,
+        "source": "measured",
+        "vintage": "2023-2025",
+        "cite": "MS footprints + Google Open Buildings 2.5D"
+      },
+      "socioVuln": {
+        "value": 0,
+        "source": "placeholder",
+        "cite": "NFHS-5 levels x Census 2011 pattern"
+      },
+      "fvc": {
+        "value": 0.4469,
+        "source": "measured",
+        "vintage": "5 yr",
+        "cite": "Sentinel-2 L2A"
+      },
+      "canopyFrac": {
+        "value": 0.0,
+        "source": "placeholder",
+        "cite": "v2 only \u2014 inert in the v1 greenness formula"
+      },
+      "ndviMean": {
+        "value": 0.3852,
+        "source": "measured",
+        "vintage": "5 yr",
+        "cite": "Sentinel-2 L2A"
+      },
+      "ndviStd": {
+        "value": 0.0167,
+        "source": "measured",
+        "vintage": "5 yr",
+        "cite": "Sentinel-2 L2A, across-year std of annual medians"
+      },
+      "albedo": {
+        "value": 0.1436,
+        "source": "measured",
+        "vintage": "5 yr",
+        "cite": "Sentinel-2, source doc \u00a73B coefficients"
+      },
+      "distCoolM": {
+        "value": 27.3,
+        "source": "measured",
+        "vintage": "2021",
+        "cite": "ESA WorldCover, patches >= 0.77 ha"
+      }
+    },
+    "barrackpore": {
+      "lstDayC": {
+        "value": 30.14,
+        "source": "measured",
+        "vintage": "2024-2026",
+        "cite": "NASA ECOSTRESS L2T LSTE v002"
+      },
+      "lstNightC": {
+        "value": 25.4,
+        "source": "measured",
+        "vintage": "2024-2026",
+        "cite": "NASA ECOSTRESS L2T LSTE v002"
+      },
+      "ruralBaseC": {
+        "value": 29.96,
+        "source": "measured",
+        "vintage": "2024-2026",
+        "cite": "ECOSTRESS urban-rural, GHS-SMOD masks"
+      },
+      "popDensity": {
+        "value": 8772.3,
+        "source": "measured",
+        "vintage": "2020",
+        "cite": "WorldPop"
+      },
+      "far": {
+        "value": 0.6151,
+        "source": "measured",
+        "vintage": "2023-2025",
+        "cite": "MS footprints + Google Open Buildings 2.5D"
+      },
+      "socioVuln": {
+        "value": 0,
+        "source": "placeholder",
+        "cite": "NFHS-5 levels x Census 2011 pattern"
+      },
+      "fvc": {
+        "value": 0.3089,
+        "source": "measured",
+        "vintage": "5 yr",
+        "cite": "Sentinel-2 L2A"
+      },
+      "canopyFrac": {
+        "value": 0.0,
+        "source": "placeholder",
+        "cite": "v2 only \u2014 inert in the v1 greenness formula"
+      },
+      "ndviMean": {
+        "value": 0.2817,
+        "source": "measured",
+        "vintage": "5 yr",
+        "cite": "Sentinel-2 L2A"
+      },
+      "ndviStd": {
+        "value": 0.0225,
+        "source": "measured",
+        "vintage": "5 yr",
+        "cite": "Sentinel-2 L2A, across-year std of annual medians"
+      },
+      "albedo": {
+        "value": 0.1373,
+        "source": "measured",
+        "vintage": "5 yr",
+        "cite": "Sentinel-2, source doc \u00a73B coefficients"
+      },
+      "distCoolM": {
+        "value": 93.3,
+        "source": "measured",
+        "vintage": "2021",
+        "cite": "ESA WorldCover, patches >= 0.77 ha"
+      }
+    }
+  }
+}

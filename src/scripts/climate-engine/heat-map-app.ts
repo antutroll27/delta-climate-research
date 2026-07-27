@@ -17,6 +17,9 @@ import { GpuHeatSim } from './sim-gpu';
 import { DEFAULT_PARAMS, type SimLayers } from './types';
 import * as M from './heat-map-model';
 import { ACCURACY, bandLabel } from './accuracy';
+import * as U from './dc-urs';
+import { applyScenario } from './dc-urs-scenario';
+import type { DcUrsInputs } from './dc-urs-inputs';
 import { rasterWardBase } from './ward-raster';
 
 // Ward set lives in src/data/wards.ts so widening beyond three is a data change,
@@ -38,9 +41,12 @@ export function mountHeatMap(): () => void {
     ward: string; phase: 'peak' | 'night'; path: string; iv: M.Interventions;
     base: SimLayers | null; baselineMean: number; live: M.Ambient | null;
     spatial: M.Spatial | null; greenG: number; lastMean: Record<string, number>;
+    /* Observed DC-URS inputs per ward, loaded once. null while unloaded or if the
+       fetch failed — the score reports itself unavailable rather than inventing one. */
+    dcurs: Record<string, DcUrsInputs> | null;
   }
   
-  const state: State = { ward: 'ballygunge', phase: 'peak', path: '2025', iv: { trees: 0, roof: 0, parks: 0, facades: 0 }, base: null, baselineMean: 0, live: null, spatial: null, greenG: 0, lastMean: {} };
+  const state: State = { ward: 'ballygunge', phase: 'peak', path: '2025', iv: { trees: 0, roof: 0, parks: 0, facades: 0 }, base: null, baselineMean: 0, live: null, spatial: null, greenG: 0, lastMean: {}, dcurs: null };
   let mode: 'relief' | 'iso' = 'relief', env = 'dark';
 
   /* ── MapLibre basemap ── */
@@ -210,9 +216,21 @@ export function mountHeatMap(): () => void {
   const cache: Record<string, M.WardData> = {}, roadsCache: Record<string, M.RoadsData> = {};
   let growStart = 0; const GROW_MS = 1900; let opBase = 0.5;
 
+  /* DC-URS baseline inputs — observed, loaded once and shared by every ward.
+     Failure is non-fatal: the heat field still works, the score reports itself
+     unavailable rather than inventing one. */
+  async function loadDcUrs() {
+    if (state.dcurs) return;
+    try {
+      const r = await fetch('/heat-map/data/dc-urs-inputs.json');
+      state.dcurs = (await r.json()).wards as Record<string, DcUrsInputs>;
+    } catch { state.dcurs = null; }
+  }
+
   async function loadWard(name: string) {
     const load = el('loadchip'); load?.classList.add('on');
     await new Promise(r => setTimeout(r, 30));
+    await loadDcUrs();
     if (!cache[name]) cache[name] = await (await fetch(`/heat-map/data/${name}.json`)).json();
     const d = cache[name], w = WARDS[name]; state.ward = name; updateCompareHref();
 
@@ -343,17 +361,41 @@ export function mountHeatMap(): () => void {
     histo?.childNodes.forEach((elm, i) => { (elm as HTMLElement).style.height = `${Math.max(4, bins[i] / mx * 100)}%`; });
     const cooling = Math.max(0, state.baselineMean - st.meanC), iv = state.iv;
     const cost = M.computeCost(iv, state.spatial);
-    // Show the sub-scores raw alongside the total — a composite index is only
-    // auditable if you can see which component produced the number.
-    const parts = M.greenScoreParts(state.greenG, cooling, cost);
-    const score = parts.total;
-    setText('scoreNum', String(score));
-    setText('sGreen', `${Math.round(parts.greening * 100)}`);
-    setText('sCool', `${Math.round(parts.cooling * 100)}`);
-    setText('sEff', `${Math.round(parts.efficiency * 100)}`);
-    el('scoreArc')?.setAttribute('stroke-dashoffset', String(97 - score * 0.97));
     const anyIv = iv.trees || iv.roof || iv.parks || iv.facades;
-    setHTML('scoreTxt', anyIv ? `−${cooling.toFixed(2)}°C · ${(state.greenG * 100).toFixed(0)}% green<br>₹${M.fmtCr(cost)} capital cost` : 'move a slider to intervene');
+
+    /* ── DC-URS ────────────────────────────────────────────────────────────
+       One score, evaluated twice: the observed baseline, and the same ward with
+       the sliders' modelled changes applied. The ward-mean surface temperature
+       the heat field just produced feeds the thermal pillar, so the physics and
+       the index describe the same scenario. */
+    const base = state.dcurs?.[state.ward];
+    if (base) {
+      const phaseLst = state.phase === 'night' ? { nightC: st.meanC } : { dayC: st.meanC };
+      const scen = applyScenario(base, iv, anyIv ? phaseLst : undefined);
+      const now = U.dcUrs(anyIv ? scen.inputs : base);
+      const p = U.pillars(anyIv ? scen.inputs : base);
+      const tier = U.tierFor(now);
+      const floor = U.structuralFloor(base);
+
+      setText('scoreNum', String(Math.round(now)));
+      // The three pillars raw, as the Green Score's components were: a composite
+      // is only auditable if you can see which part produced the number.
+      setText('sGreen', `${Math.round(p.aci * 100)}`);
+      setText('sCool', `${Math.round((1 - p.evi) * 100)}`);
+      setText('sEff', `${Math.round((1 - p.thi) * 100)}`);
+      el('scoreArc')?.setAttribute('stroke-dashoffset', String(97 - now * 0.97));
+      el('scoreArc')?.setAttribute('stroke', tier.colour);
+      const tierEl = el('scoreTier');
+      if (tierEl) { tierEl.textContent = tier.label; (tierEl as HTMLElement).style.color = tier.colour; }
+      // Headroom vs structural floor: what greening can still win, against what
+      // no intervention can touch. This is the tool's sharpest statement.
+      setHTML('scoreTxt', anyIv
+        ? `${(now - U.dcUrs(base)).toFixed(1)} pts from this plan · ₹${M.fmtCr(cost)}<br>${tier.guidance}`
+        : `${floor.headroom.toFixed(0)} pts reachable · <b>${floor.withheld.toFixed(0)} withheld</b> by exposure`);
+    } else {
+      setText('scoreNum', '—');
+      setHTML('scoreTxt', 'resilience inputs unavailable');
+    }
     state.lastMean[state.ward] = st.meanC;
     setHTML(`big-${state.ward}`, `${st.meanC.toFixed(1)}<span>°C mean</span>`);
   }

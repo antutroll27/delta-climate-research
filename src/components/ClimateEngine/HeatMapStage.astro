@@ -49,15 +49,18 @@
           <svg viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="15.5" fill="none" stroke="#093a3e" stroke-width="3"></circle><circle id="scoreArc" cx="18" cy="18" r="15.5" fill="none" stroke="#6fcad6" stroke-width="3" stroke-dasharray="97" stroke-dashoffset="97" stroke-linecap="round" transform="rotate(-90 18 18)"></circle></svg>
           <div class="num" id="scoreNum">—</div>
         </div>
-        <div class="t"><b>Green Score</b><span id="scoreTxt">move a slider to intervene</span></div>
+        <div class="t"><b>Resilience Score</b><span class="tier" id="scoreTier">—</span><span id="scoreTxt">move a slider to intervene</span></div>
       </div>
-      <!-- The three sub-scores, shown raw. A composite index is only trustworthy
-           if you can see what it is made of (Berlin BAF / Seattle Green Factor
-           both publish their components); equal-weighted per OECD/JRC 2008. -->
-      <div class="subs" id="subs" title="Equal-weighted thirds. Greening: weighted-area ratio vs Berlin BAF 0.45. Cooling: modelled ΔT vs a 2.5 °C credible ceiling. ₹ efficiency: °C per crore vs 0.15 — tool-relative, no external benchmark exists.">
-        <div><b id="sGreen">—</b><span>greening</span></div>
-        <div><b id="sCool">—</b><span>cooling</span></div>
-        <div><b id="sEff">—</b><span>₹ efficiency</span></div>
+      <!-- The three pillars, shown raw. A composite index is only trustworthy if
+           you can see what it is made of; the Green Score published its three
+           components for the same reason. Exposure and hazard are shown as their
+           COMPLEMENTS (1 − EVI, 1 − THI) so that on every bar, higher is better —
+           mixing polarities in one strip is how a reader misreads the worst ward
+           as the best. -->
+      <div class="subs" id="subs" title="DC-URS pillars, IPCC AR6 framing. Capacity: greenness, albedo and refuge access. Exposure: shown as 1 − EVI, so higher is better; driven by population, built density and social vulnerability, none of which any intervention can move. Hazard: shown as 1 − THI, from measured ECOSTRESS surface temperature.">
+        <div><b id="sGreen">—</b><span>capacity</span></div>
+        <div><b id="sCool">—</b><span>exposure</span></div>
+        <div><b id="sEff">—</b><span>hazard</span></div>
       </div>
     </aside>
 
@@ -194,6 +197,9 @@
   .subs span{font-family:var(--mono);font-size:.42rem;letter-spacing:.09em;color:var(--ink);text-transform:uppercase}
   .score .t{font-size:.66rem;color:var(--ink);line-height:1.5}
   .score .t b{display:block;color:var(--paper);font-size:.82rem;font-family:var(--sans);font-weight:600;letter-spacing:-.01em;margin-bottom:2px}
+  /* Own line: the tier is a verdict, not a prefix to the sentence beneath it.
+     Inline it ran straight into the text — "Vulnerable24 pts reachable". */
+  .score .t .tier{display:block;font-family:var(--mono);font-size:.5rem;letter-spacing:.16em;text-transform:uppercase;margin-bottom:3px}
 
   .metric{padding:16px 18px;border-bottom:1px solid var(--line)}
   .metric .k{font-family:var(--mono);font-size:.54rem;letter-spacing:.16em;color:var(--ink);text-transform:uppercase}
