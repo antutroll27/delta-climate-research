@@ -129,12 +129,20 @@ def scene_metrics(feat: dict, lat: float, lon: float):
     if not all(b in assets for b in BANDS):
         return None
 
-    # BOA_ADD_OFFSET: -1000 from processing baseline 04.00 (2022-01-25 onward).
-    # Ignoring it inflates reflectance by 0.1 on every post-2022 scene.
-    off = feat["properties"].get("earthsearch:boa_offset_applied")
-    offset = -1000.0 if (off is False or feat["properties"]["datetime"] >= "2022-01-25") else 0.0
-    if off is True:
-        offset = 0.0
+    # BOA_ADD_OFFSET. Introduced at processing baseline 04.00; BEFORE that there is
+    # no offset in the product at all, so there is nothing to remove.
+    #
+    # The gate must be on BASELINE, not on date. The archive is reprocessed, so a
+    # 2021 acquisition appears twice — once as baseline 03.01 and again as a
+    # reprocessed 05.00 — and the two need opposite treatment. Keying off the date
+    # applied -0.1 to old-baseline scenes that never had it, and since a negative
+    # offset RAISES NDVI (it shrinks the denominator), that inflated Barrackpore's
+    # 2021 NDVI to 0.497 against 0.267-0.313 for every later year. It read as a
+    # step change in land cover and was not one.
+    props = feat["properties"]
+    baseline = str(props.get("s2:processing_baseline", "99.99"))
+    already = props.get("earthsearch:boa_offset_applied") is True
+    offset = -1000.0 if (baseline >= "04.00" and not already) else 0.0
 
     refl = {}
     for b in BANDS:

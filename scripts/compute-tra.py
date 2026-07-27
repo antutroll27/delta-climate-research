@@ -35,12 +35,16 @@ ward, not the accessibility of the average distance.
 
 Output: data/dc-urs/tra.json
 """
-import json, math, os, sys
+import json, os, sys
 
 import numpy as np
 import rasterio
+from rasterio.io import DatasetReader
 from rasterio.windows import from_bounds
 from scipy.ndimage import distance_transform_edt, label
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _types import WARDS, F64, Mask, TraFile, TraWard, Ward, m_per_deg, ward_bounds
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.join(HERE, "..")
@@ -48,7 +52,8 @@ OUT = os.path.join(ROOT, "data", "dc-urs", "tra.json")
 WC = os.path.expanduser("~/.cache/delta-climate/worldcover/N21E087.tif")
 
 LAMBDA = 0.002                       # per metre, as specified
-FOOTPRINT_M = 1400                   # ward analysis footprint
+# The ward analysis footprint is NOT set here — it is Ward.footprint_m in
+# _types.py, the single ward table this pipeline shares.
 # Search beyond the ward: the nearest refuge to an edge cell is often outside it.
 PAD_M = 2000
 
@@ -69,22 +74,10 @@ MIN_REFUGE_HA = 0.77
 CLASS_NAME = {10: "tree cover", 20: "shrubland", 30: "grassland",
               80: "permanent water", 90: "wetland", 95: "mangroves"}
 
-WARDS = {
-    "ballygunge":  (22.528,  88.3659),
-    "baruipur":    (22.3654, 88.4319),
-    "barrackpore": (22.7621, 88.3713),
-}
-
-
-def m_per_deg(lat: float) -> tuple[float, float]:
-    return 111_320.0 * math.cos(math.radians(lat)), 110_540.0
-
-
-def ward_tra(src, ward: str, lat: float, lon: float) -> dict:
-    mx, my = m_per_deg(lat)
-    half = FOOTPRINT_M / 2 + PAD_M
-    win = from_bounds(lon - half / mx, lat - half / my,
-                      lon + half / mx, lat + half / my, src.transform)
+def ward_tra(src: DatasetReader, w: Ward) -> TraWard:
+    ward = w.id
+    mx, my = m_per_deg(w.centre.lat)
+    win = from_bounds(*ward_bounds(w, PAD_M), transform=src.transform)
     cover = src.read(1, window=win)
     if cover.size == 0:
         sys.exit(f"{ward}: empty WorldCover window — the tile does not cover this ward")
@@ -93,7 +86,7 @@ def ward_tra(src, ward: str, lat: float, lon: float) -> dict:
     px_deg = abs(src.transform.a)
     cell_x, cell_y = px_deg * mx, px_deg * my
 
-    raw = np.isin(cover, list(REFUGE_CLASSES))
+    raw: Mask = np.isin(cover, list(REFUGE_CLASSES))
     if not raw.any():
         sys.exit(f"{ward}: no refuge class present within {PAD_M} m. That is a data "
                  f"failure, not a measurement — refusing to write TRA=0.")
@@ -112,13 +105,13 @@ def ward_tra(src, ward: str, lat: float, lon: float) -> dict:
     sizes = np.bincount(lab.ravel())
     sizes[0] = 0                                   # background
     keep = np.flatnonzero(sizes >= min_cells)
-    refuge = np.isin(lab, keep) if keep.size else np.zeros_like(raw)
+    refuge: Mask = np.isin(lab, keep) if keep.size else np.zeros_like(raw)
     if not refuge.any():
         sys.exit(f"{ward}: no refuge patch reaches {MIN_REFUGE_HA} ha within {PAD_M} m. "
                  f"Largest was {sizes.max() * cell_area_m2 / 10_000:.2f} ha.")
 
     # distance (metres) from every cell to the nearest refuge cell
-    d = distance_transform_edt(~refuge, sampling=(cell_y, cell_x))
+    d: F64 = distance_transform_edt(~refuge, sampling=(cell_y, cell_x))
 
     # crop back to the ward footprint before averaging
     py, px = int(round(PAD_M / cell_y)), int(round(PAD_M / cell_x))
@@ -143,8 +136,8 @@ def ward_tra(src, ward: str, lat: float, lon: float) -> dict:
     if cover_ward.size == 0:
         cover_ward, refuge_ward = cover, refuge
 
-    counts = {CLASS_NAME[c]: int((cover_ward == c).sum()) for c in sorted(REFUGE_CLASSES)
-              if (cover_ward == c).any()}
+    counts: dict[str, int] = {CLASS_NAME[c]: int((cover_ward == c).sum())
+                              for c in sorted(REFUGE_CLASSES) if (cover_ward == c).any()}
     # largest patch AS SEEN WITHIN THE WARD — a patch may extend well beyond it,
     # so this is the in-ward area, not the patch's true total extent.
     lab_ward = np.where(refuge_ward, lab[py:-py or None, px:-px or None], 0)
@@ -164,11 +157,11 @@ def ward_tra(src, ward: str, lat: float, lon: float) -> dict:
     }
 
 
-def main():
+def main() -> None:
     if not os.path.exists(WC):
         sys.exit(f"WorldCover not cached at {WC}. Run scripts/landcover-fractions.py first.")
 
-    out = {
+    out: TraFile = {
         "source": "ESA WorldCover 10 m v200 (2021), CC BY 4.0, tile N21E087",
         "method": f"TRA = mean over the ward footprint of exp(-{LAMBDA}*d), d = Euclidean "
                   f"distance to the nearest refuge cell. Mean of the decay, NOT decay of the "
@@ -192,16 +185,16 @@ def main():
         "wards": {},
     }
     with rasterio.open(WC) as src:
-        for w, (lat, lon) in WARDS.items():
-            out["wards"][w] = ward_tra(src, w, lat, lon)
+        for wid, w in WARDS.items():
+            out["wards"][wid] = ward_tra(src, w)
 
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     with open(OUT, "w") as fh:
         json.dump(out, fh, indent=2)
 
     print(f"  {'ward':<14}{'TRA':>8}{'med d':>9}{'max d':>9}{'refuge':>9}{'largest':>13}")
-    for w, v in out["wards"].items():
-        print(f"  {w:<14}{v['tra']:>8.3f}{v['median_dist_m']:>9.0f}"
+    for wid, v in out["wards"].items():
+        print(f"  {wid:<14}{v['tra']:>8.3f}{v['median_dist_m']:>9.0f}"
               f"{v['max_dist_m']:>9.0f}{v['refuge_cell_fraction'] * 100:>8.1f}%"
               f"{v['largest_patch_in_ward_ha']:>10.1f} ha")
         print(f"                 {', '.join(f'{k} {n:,}' for k, n in v['refuge_classes_present'].items())}")

@@ -1,0 +1,287 @@
+"""
+Shared vocabulary for the data-pipeline scripts.
+
+WHY THE LEADING UNDERSCORE. The entrypoints are hyphenated — `fit-physics.py`,
+`compute-far.py` — which are not valid module names, so four scripts currently
+reach each other through `importlib.util.spec_from_file_location`. That hack
+makes the imported module `Any`, so every cross-script call is unchecked: 17
+`census.*` call sites in `ecostress-suhii.py` alone. A leading underscore keeps
+this file out of the CLI namespace while making it a normal, checkable import.
+
+WHAT BELONGS HERE. Vocabulary that more than one script needs, and the JSON file
+contracts. Physics and fetching stay in their own scripts.
+
+WHY TypedDict AND NOT dataclass. Every one of these shapes is written to or read
+from JSON. A TypedDict *is* a dict at runtime — `json.dump` takes it unchanged
+and no serialisation layer is needed. A dataclass would add `asdict()` on the way
+out and a constructor on the way in for no gain, and the TypeScript frontend
+reads these files directly, so the Python type should be the JSON.
+
+WHAT THIS CANNOT DO. `cast(FarFile, json.load(fh))` is an assertion, not a
+validation — it documents the contract and buys checking downstream, but it will
+not catch a malformed file at runtime. That would need a schema library, which is
+a heavier dependency than this pipeline warrants.
+"""
+from __future__ import annotations
+
+import math
+from typing import Literal, NamedTuple, NotRequired, TypedDict
+
+import numpy as np
+import numpy.typing as npt
+
+# ── numpy ───────────────────────────────────────────────────────────────────
+#
+# Four aliases, used on every signature. Never bare `np.ndarray` — under
+# `disallow_any_generics` it errors, which is the point.
+#
+# Rank is deliberately NOT annotated. It reads badly, it evaporates through
+# arithmetic (one multiply and `NDArray[tuple[int, int], ...]` becomes
+# `tuple[Any, ...]`), and it would not have caught the bug that motivates the
+# question: the Sentinel-2 10 m / 20 m mismatch was two rank-2 arrays of
+# different EXTENT, and extents are not in the type system at all. That bug is
+# prevented structurally — every band goes through one reader with a fixed
+# `out_shape` — not by an annotation.
+F64 = npt.NDArray[np.float64]
+F32 = npt.NDArray[np.float32]
+U8 = npt.NDArray[np.uint8]
+I16 = npt.NDArray[np.int16]
+Mask = npt.NDArray[np.bool_]
+
+# ── vocabulary ──────────────────────────────────────────────────────────────
+
+# NOT a Literal of the three ward ids, deliberately. src/data/wards.ts states the
+# project's own rule: "Widening from three wards to all 144 KMC wards must be a
+# change to this file alone — no script may hardcode a ward id or a count." A
+# three-value Literal would write that violation into the type system. It is also
+# already false: compute-far.py discovers wards from the filesystem.
+WardId = str
+
+Phase = Literal["day", "night"]
+Provenance = Literal["measured", "modelled", "estimated", "placeholder"]
+
+
+class LatLon(NamedTuple):
+    lat: float
+    lon: float
+
+
+class MetresPerDegree(NamedTuple):
+    """Named because the two values differ by under 1 % at Kolkata's latitude,
+    so transposing them yields a plausible wrong answer rather than an error."""
+    east: float
+    north: float
+
+
+class Ward(NamedTuple):
+    id: WardId
+    centre: LatLon
+    footprint_m: int
+
+
+# THE ward table. Mirrors src/data/wards.ts. Five scripts carried private copies
+# of this and they had already diverged — ecostress-census.py used capitalised
+# keys and coordinates 10–44 m away from the others. Sub-pixel at ECOSTRESS's
+# 70 m, but four pixels at Sentinel's 10 m.
+WARDS: dict[WardId, Ward] = {
+    "ballygunge":  Ward("ballygunge",  LatLon(22.528,  88.3659), 1400),
+    "baruipur":    Ward("baruipur",    LatLon(22.3654, 88.4319), 1400),
+    "barrackpore": Ward("barrackpore", LatLon(22.7621, 88.3713), 1400),
+}
+
+# The study bbox for the thermal work: deliberately wider than the wards so it
+# contains genuine rural hinterland for the urban-rural difference. Duplicated
+# in two files with a "must match" comment, which is how they came to differ.
+STUDY_BBOX = (88.00, 22.05, 88.85, 22.95)
+
+
+# ── geo helpers ─────────────────────────────────────────────────────────────
+def m_per_deg(lat: float) -> MetresPerDegree:
+    """Local metres-per-degree, WGS-84 spherical approximation.
+
+    Good to well under 0.1 % over a few km. Three scripts open-coded this, two
+    of them inline and in reciprocal form, one with numpy and two with math.
+    """
+    return MetresPerDegree(111_320.0 * math.cos(math.radians(lat)), 110_540.0)
+
+
+def ward_bounds(w: Ward, pad_m: float = 0.0) -> tuple[float, float, float, float]:
+    """(west, south, east, north) in EPSG:4326 around a ward centre.
+
+    Returned in rasterio's `from_bounds` order. Getting that order wrong reads
+    the wrong window silently rather than raising, which is why this exists once
+    rather than four times.
+    """
+    mx, my = m_per_deg(w.centre.lat)
+    half = w.footprint_m / 2 + pad_m
+    return (w.centre.lon - half / mx, w.centre.lat - half / my,
+            w.centre.lon + half / mx, w.centre.lat + half / my)
+
+
+# ── file contracts ──────────────────────────────────────────────────────────
+# Verified against the real files in data/dc-urs/ rather than assumed.
+
+class Sourced[T](TypedDict):
+    """Mirrors Sourced<T> in src/scripts/climate-engine/dc-urs-inputs.ts."""
+    value: T
+    source: Provenance
+    vintage: NotRequired[str]
+    cite: NotRequired[str]
+
+
+class DcUrsWard(TypedDict):
+    """The twelve indicators. camelCase because the TypeScript reads this file
+    directly and the names must match DcUrsInputs field-for-field."""
+    lstDayC: Sourced[float]
+    lstNightC: Sourced[float]
+    ruralBaseC: Sourced[float]
+    popDensity: Sourced[float]
+    far: Sourced[float]
+    socioVuln: Sourced[float]
+    fvc: Sourced[float]
+    canopyFrac: Sourced[float]
+    ndviMean: Sourced[float]
+    ndviStd: Sourced[float]
+    albedo: Sourced[float]
+    distCoolM: Sourced[float]
+
+
+class DcUrsInputsFile(TypedDict):
+    generated: str
+    engine: str
+    note: str
+    known_limitations: list[str]
+    wards: dict[WardId, DcUrsWard]
+
+
+class FarWard(TypedDict):
+    far: float
+    built_fraction: float
+    buildings: int
+    degenerate_polygons: int
+    land_m2: float
+    footprint_m2: float
+    floor_m2: float
+    height_m: dict[str, float]
+    floors: dict[str, float]
+
+
+class FarFile(TypedDict):
+    source: str
+    method: str
+    assumption: str
+    provenance: Provenance
+    wards: dict[WardId, FarWard]
+
+
+class TraWard(TypedDict):
+    tra: float
+    median_dist_m: float
+    max_dist_m: float
+    refuge_cell_fraction: float
+    refuge_patches_in_ward: int
+    largest_patch_in_ward_ha: float
+    refuge_patches_in_search_window: int
+    min_patch_ha: float
+    refuge_classes_present: dict[str, int]
+    cells: int
+
+
+class TraFile(TypedDict):
+    source: str
+    method: str
+    refuge_definition: str
+    why_not_osm: str
+    caveat: str
+    provenance: Provenance
+    wards: dict[WardId, TraWard]
+
+
+class SentinelYear(TypedDict):
+    ndvi: float
+    albedo: float
+    scenes: int
+
+
+class SentinelWard(TypedDict):
+    ndvi_mean: float
+    ndvi_std: float
+    fvc: float
+    albedo: float
+    years: int
+    scenes_total: int
+    per_year: dict[str, SentinelYear]
+
+
+class SentinelFile(TypedDict):
+    source: str
+    method: str
+    fvc: str
+    albedo: str
+    baseline_offset: str
+    provenance: Provenance
+    years_requested: list[int]
+    wards: dict[WardId, SentinelWard]
+
+
+class PopWard(TypedDict):
+    density: float
+    population: int
+    cells: int
+    area_km2: float
+
+
+class PopFile(TypedDict):
+    source: str
+    product: str
+    vintage: str
+    method: str
+    caveat: str
+    why_not_worldpop: str
+    provenance: Provenance
+    wards: dict[WardId, PopWard]
+
+
+class SocioWard(TypedDict):
+    """data/dc-urs/socio.json — SPECIFIED BEFORE ITS PRODUCER EXISTS.
+
+    This is the one contract we get to write down rather than reverse-engineer.
+    `hvi` is the 0–10 socio-economic heat vulnerability composite that fills
+    `socioVuln`; the name difference between the two is an unforced translation
+    step and the producer must not invent a third spelling.
+    """
+    hvi: float
+    elderly_frac: float
+    children_frac: float
+    low_income_frac: float
+    informal_frac: float
+
+
+class SocioFile(TypedDict):
+    source: str
+    method: str
+    vintage: str
+    caveat: str
+    provenance: Provenance
+    wards: dict[WardId, SocioWard]
+
+
+class MetRow(TypedDict):
+    """One row of data/calibration/met-forcing.csv.
+
+    EVERY VALUE IS str. This is csv.DictReader output, and typing these as float
+    is the single most tempting mistake in this file — the numbers are numbers,
+    but they arrive as text and must be coerced at the point of use.
+    """
+    date: str
+    phase: str
+    local_solar_hour: str
+    view_delta: str
+    usable_frac: str
+    urban_mean: str
+    rural_strict: str
+    suhii: str
+    tAir: str
+    rh: str
+    wind: str
+    cloud: str

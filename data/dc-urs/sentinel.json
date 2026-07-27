@@ -14,20 +14,20 @@
   ],
   "wards": {
     "ballygunge": {
-      "ndvi_mean": 0.306,
-      "ndvi_std": 0.0259,
-      "fvc": 0.3414,
-      "albedo": 0.1247,
+      "ndvi_mean": 0.2968,
+      "ndvi_std": 0.0302,
+      "fvc": 0.3291,
+      "albedo": 0.1248,
       "years": 5,
       "scenes_total": 30,
       "per_year": {
         "2021": {
-          "ndvi": 0.3038,
-          "albedo": 0.1025,
+          "ndvi": 0.2711,
+          "albedo": 0.131,
           "scenes": 6
         },
         "2022": {
-          "ndvi": 0.3064,
+          "ndvi": 0.293,
           "albedo": 0.1153,
           "scenes": 6
         },
@@ -49,20 +49,20 @@
       }
     },
     "baruipur": {
-      "ndvi_mean": 0.3882,
-      "ndvi_std": 0.0198,
-      "fvc": 0.4509,
+      "ndvi_mean": 0.3852,
+      "ndvi_std": 0.0167,
+      "fvc": 0.4469,
       "albedo": 0.1436,
       "years": 5,
       "scenes_total": 30,
       "per_year": {
         "2021": {
           "ndvi": 0.365,
-          "albedo": 0.1098,
+          "albedo": 0.1379,
           "scenes": 6
         },
         "2022": {
-          "ndvi": 0.4091,
+          "ndvi": 0.3938,
           "albedo": 0.1328,
           "scenes": 6
         },
@@ -84,20 +84,20 @@
       }
     },
     "barrackpore": {
-      "ndvi_mean": 0.3299,
-      "ndvi_std": 0.0955,
-      "fvc": 0.3732,
-      "albedo": 0.1298,
+      "ndvi_mean": 0.2817,
+      "ndvi_std": 0.0225,
+      "fvc": 0.3089,
+      "albedo": 0.1373,
       "years": 5,
-      "scenes_total": 29,
+      "scenes_total": 30,
       "per_year": {
         "2021": {
-          "ndvi": 0.4973,
-          "albedo": 0.092,
+          "ndvi": 0.2699,
+          "albedo": 0.1422,
           "scenes": 6
         },
         "2022": {
-          "ndvi": 0.2667,
+          "ndvi": 0.2567,
           "albedo": 0.1279,
           "scenes": 6
         },
@@ -107,9 +107,9 @@
           "scenes": 6
         },
         "2024": {
-          "ndvi": 0.2995,
-          "albedo": 0.1317,
-          "scenes": 5
+          "ndvi": 0.2958,
+          "albedo": 0.1373,
+          "scenes": 6
         },
         "2025": {
           "ndvi": 0.313,

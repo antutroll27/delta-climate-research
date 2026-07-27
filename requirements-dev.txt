@@ -1,0 +1,6 @@
+# Type-checking toolchain for the data-pipeline scripts.
+# Pinned: warn_unused_ignores makes the check depend on which stubs are present,
+# so a floating version would make CI and local disagree.
+mypy==2.3.0
+scipy-stubs==1.18.0.1
+types-rasterio==1.5.0.20260724

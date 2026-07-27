@@ -22,11 +22,18 @@ bucket (no credentials).
 Output: data/calibration/landcover-fractions.json
 """
 import importlib.util, json, os, subprocess, sys
+from typing import TypedDict, cast
 
 import numpy as np
 
 HERE_ = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE_)
+import _types
+from _types import I16, U8
+
 _spec = importlib.util.spec_from_file_location("suhii", os.path.join(HERE_, "ecostress-suhii.py"))
+if _spec is None or _spec.loader is None:
+    sys.exit("cannot load scripts/ecostress-suhii.py — the file is missing or unreadable")
 suhii = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(suhii)
 
@@ -40,8 +47,13 @@ WC = os.path.expanduser("~/.cache/delta-climate/worldcover/N21E087.tif")
 SMOD = os.path.expanduser(
     "~/.cache/delta-climate/ghsl/GHS_SMOD_E2020_GLOBE_R2023A_54009_1000_V2_0_R7_C27.tif")
 
-BBOX = (88.00, 22.05, 88.85, 22.95)   # must match ecostress-suhii.py BBOX
-# BBOX is already (west, south, east, north) = rasterio window(left, bottom, right, top)
+# NO BBOX IS DEFINED HERE. A local copy used to sit at this line carrying the
+# comment "must match ecostress-suhii.py BBOX", and it was referenced nowhere:
+# the study window arrives with the grid, from suhii.align() -> census.target_grid()
+# -> ecostress-suhii.py's own BBOX. A maintainer widening the window here would
+# have seen the fractions not move and concluded the widening had no effect.
+# check_study_window() below asserts the real dependency against _types.STUDY_BBOX
+# instead, so a divergence fails loudly rather than being silently ignored.
 
 URBAN = {30}
 RURAL = {11, 12, 13}
@@ -68,6 +80,37 @@ WC_CLASS = {
 }
 
 
+class ClassStats(TypedDict):
+    pixels: int
+    veg: float
+    built: float
+    albedo: float
+    cover_breakdown: dict[str, float]
+
+
+class LandcoverFile(TypedDict):
+    """data/calibration/landcover-fractions.json — consumed by fit-physics.py."""
+    source: str
+    grid: str
+    masks: str
+    albedo_source: str
+    note: str
+    classes: dict[str, ClassStats]
+
+
+def check_study_window() -> None:
+    """Fail if the window the grid actually comes from is not the shared one.
+
+    suhii.BBOX is reached through spec_from_file_location, so it is `Any` to the
+    checker and nothing but this runtime check stands between the two copies.
+    """
+    if tuple(suhii.BBOX) != _types.STUDY_BBOX:
+        sys.exit(f"study window mismatch: ecostress-suhii.py BBOX is {tuple(suhii.BBOX)} "
+                 f"but _types.STUDY_BBOX is {_types.STUDY_BBOX}. The grid these fractions "
+                 f"are measured on comes from the former; every other script's window "
+                 f"comes from the latter. Reconcile them before trusting this output.")
+
+
 def ensure_worldcover() -> str:
     if os.path.exists(WC):
         return WC
@@ -81,7 +124,8 @@ def ensure_worldcover() -> str:
     return WC
 
 
-def main():
+def main() -> None:
+    check_study_window()
     if not os.path.exists(SMOD):
         sys.exit(f"GHS-SMOD tile not cached at {SMOD}")
     wc_path = ensure_worldcover()
@@ -96,10 +140,12 @@ def main():
     # subsamples one 10 m cell per 70 m cell. That is unbiased for estimating
     # class FRACTIONS over a mask of this size (~1.9 M cells), which is all that
     # is wanted here; it is not a dominant-class map.
-    cover = suhii.align(wc_path, 0, "uint8")
-    smod = suhii.align(SMOD, -200, "int16")
+    # cast, not annotate: suhii is loaded by path so align() returns `Any`, and a
+    # bare annotation would let a future dtype change pass unremarked.
+    cover = cast(U8, suhii.align(wc_path, 0, "uint8"))
+    smod = cast(I16, suhii.align(SMOD, -200, "int16"))
 
-    out = {
+    out: LandcoverFile = {
         "source": "ESA WorldCover 10m v200 (2021), CC BY 4.0, tile N21E087",
         "grid": "aligned onto the same 70 m UTM 45N grid as the SUHII measurement, clipped to BBOX",
         "masks": "GHS-SMOD R2023A R7_C27; urban = class 30, rural = classes 11/12/13",
@@ -116,7 +162,7 @@ def main():
             sys.exit(f"no {label} pixels — mask alignment is wrong")
         px = cover[mask]
         veg = built = alb = 0.0
-        breakdown = {}
+        breakdown: dict[str, float] = {}
         for code, (name, v, b, a) in WC_CLASS.items():
             f = float((px == code).sum()) / n
             if f > 0.001:

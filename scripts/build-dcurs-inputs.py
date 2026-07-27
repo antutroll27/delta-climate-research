@@ -24,6 +24,11 @@ incomplete record cannot be mistaken for a complete one.
 Output: data/dc-urs/inputs.json
 """
 import csv, json, os, statistics, sys
+from typing import TypedDict, cast
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _types import (WARDS, DcUrsInputsFile, DcUrsWard, FarFile, MetRow, PopFile,
+                    Provenance, SentinelFile, SocioFile, Sourced, TraFile)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.join(HERE, "..")
@@ -31,19 +36,57 @@ D = os.path.join(ROOT, "data", "dc-urs")
 CAL = os.path.join(ROOT, "data", "calibration", "met-forcing.csv")
 OUT = os.path.join(D, "inputs.json")
 
-WARDS = ["ballygunge", "baruipur", "barrackpore"]
 VIEW_CUT = 0.75          # near-nadir only, matching the thermal calibration
 
 
-def load(name: str):
+class Lst(TypedDict):
+    day: float
+    night: float
+    rural: float
+    scenes: int
+
+
+def load[T](name: str) -> T | None:
+    """Read one data/dc-urs file, or None if it has not been produced yet.
+
+    ABSENT AND CORRUPT ARE DIFFERENT ANSWERS. A missing file is the ordinary
+    "Phase 2 has not run yet" case and returns None, which the caller reports as
+    a placeholder. A file that exists but does not parse is a broken artefact,
+    and letting json raise a bare JSONDecodeError here names no filename and
+    fires before the caller's own "Phase 1 incomplete" message can run — so it
+    is caught and reported against the file it came from.
+
+    The cast is an assertion, not a validation: see the note in _types.py.
+    """
     p = os.path.join(D, name)
     if not os.path.exists(p):
         return None
     with open(p) as fh:
-        return json.load(fh)
+        try:
+            return cast(T, json.load(fh))
+        except json.JSONDecodeError as e:
+            sys.exit(f"{os.path.relpath(p, ROOT)} exists but is not valid JSON "
+                     f"(line {e.lineno}, column {e.colno}: {e.msg}). Re-run the script "
+                     f"that produces it; a truncated file is not a missing file.")
 
 
-def lst_from_calibration() -> dict | None:
+def sourced[T](value: T, source: Provenance, vintage: str | None = None,
+               cite: str | None = None) -> Sourced[T]:
+    """One indicator with its provenance attached.
+
+    `is not None`, not truthiness: an empty-string vintage is a legitimate value
+    and a truthiness test would silently drop it, which is precisely the kind of
+    quiet omission this file exists to prevent.
+    """
+    d: Sourced[T] = {"value": value, "source": source}
+    if vintage is not None:
+        d["vintage"] = vintage
+    if cite is not None:
+        d["cite"] = cite
+    return d
+
+
+def lst_from_calibration() -> Lst | None:
     """
     Day and night surface temperature, and the rural reference.
 
@@ -57,7 +100,8 @@ def lst_from_calibration() -> dict | None:
     if not os.path.exists(CAL):
         return None
     with open(CAL, newline="") as fh:
-        rows = [r for r in csv.DictReader(fh) if float(r["view_delta"]) <= VIEW_CUT]
+        rows = [r for r in cast(list[MetRow], list(csv.DictReader(fh)))
+                if float(r["view_delta"]) <= VIEW_CUT]
     if not rows:
         return None
     day = [float(r["urban_mean"]) for r in rows if r["phase"] == "day"]
@@ -73,9 +117,12 @@ def lst_from_calibration() -> dict | None:
     }
 
 
-def main():
-    far, tra, sen = load("far.json"), load("tra.json"), load("sentinel.json")
-    pop, socio = load("worldpop.json"), load("socio.json")
+def main() -> None:
+    far: FarFile | None = load("far.json")
+    tra: TraFile | None = load("tra.json")
+    sen: SentinelFile | None = load("sentinel.json")
+    pop: PopFile | None = load("worldpop.json")
+    socio: SocioFile | None = load("socio.json")
     lst = lst_from_calibration()
 
     missing_sources = [n for n, v in
@@ -84,7 +131,7 @@ def main():
         sys.exit(f"Phase 1 incomplete — missing {', '.join(missing_sources)}. "
                  f"Run the corresponding scripts first.")
 
-    out = {
+    out: DcUrsInputsFile = {
         "generated": "build-dcurs-inputs.py",
         "engine": "v1 — see docs/dc-urs-source-of-truth.md",
         "note": "Every field carries source and vintage. 'placeholder' means NOT YET MEASURED "
@@ -102,20 +149,20 @@ def main():
         f = far["wards"].get(w) if far else None
         t = tra["wards"].get(w) if tra else None
         s = sen["wards"].get(w) if sen else None
+        # .get, not [w], for pop and socio too. Indexing them directly raised an
+        # unlabelled KeyError for a file that exists but is missing this ward —
+        # after the careful "Phase 1 incomplete" check above had already passed,
+        # so the one message designed to explain a partial pipeline never ran.
+        # A ward absent from a present file is a placeholder, like any other
+        # unmeasured value.
+        p = pop["wards"].get(w) if pop else None
+        so = socio["wards"].get(w) if socio else None
         if not (f and t and s):
             print(f"  {w}: SKIPPED — missing "
                   f"{', '.join(n for n, v in (('far', f), ('tra', t), ('sentinel', s)) if not v)}")
             continue
 
-        def sourced(value, source, vintage=None, cite=None):
-            d = {"value": value, "source": source}
-            if vintage:
-                d["vintage"] = vintage
-            if cite:
-                d["cite"] = cite
-            return d
-
-        rec = {
+        rec: DcUrsWard = {
             # ── Thermal Hazard ────────────────────────────────────────────
             "lstDayC": sourced(lst["day"] if lst else 0, "measured" if lst else "placeholder",
                                "2024-2026", "NASA ECOSTRESS L2T LSTE v002"),
@@ -124,21 +171,26 @@ def main():
             "ruralBaseC": sourced(lst["rural"] if lst else 0, "measured" if lst else "placeholder",
                                   "2024-2026", "ECOSTRESS urban-rural, GHS-SMOD masks"),
             # ── Exposure & Sensitivity ────────────────────────────────────
-            "popDensity": sourced(pop["wards"][w]["density"] if pop else 0,
-                                  "measured" if pop else "placeholder",
-                                  pop.get("vintage") if pop else None, "WorldPop"),
+            "popDensity": sourced(p["density"] if p else 0,
+                                  "measured" if p else "placeholder",
+                                  pop["vintage"] if pop and p else None, "WorldPop"),
             "far": sourced(f["far"], "measured", "2023-2025",
                            "MS footprints + Google Open Buildings 2.5D"),
-            "socioVuln": sourced(socio["wards"][w]["hvi"] if socio else 0,
-                                 "measured" if socio else "placeholder",
-                                 socio.get("vintage") if socio else None,
+            "socioVuln": sourced(so["hvi"] if so else 0,
+                                 "measured" if so else "placeholder",
+                                 socio["vintage"] if socio and so else None,
                                  "NFHS-5 levels x Census 2011 pattern"),
             # ── Adaptive Capacity ─────────────────────────────────────────
             "fvc": sourced(s["fvc"], "measured", f"{s['years']} yr", "Sentinel-2 L2A"),
             "canopyFrac": sourced(0.0, "placeholder", None,
                                   "v2 only — inert in the v1 greenness formula"),
             "ndviMean": sourced(s["ndvi_mean"], "measured", f"{s['years']} yr", "Sentinel-2 L2A"),
-            "ndviStd": sourced(s["ndvi_std"], "measured", f"{s['years']} yr across annual medians"),
+            # ndviStd was the only measured field shipped without a cite, in a
+            # file whose entire purpose is per-field provenance — and it put its
+            # method description in the vintage slot, so the vintage read
+            # "5 yr across annual medians" while every neighbour read "5 yr".
+            "ndviStd": sourced(s["ndvi_std"], "measured", f"{s['years']} yr",
+                               "Sentinel-2 L2A, across-year std of annual medians"),
             "albedo": sourced(s["albedo"], "measured", f"{s['years']} yr",
                               "Sentinel-2, source doc §3B coefficients"),
             "distCoolM": sourced(t["median_dist_m"], "measured", "2021",
@@ -157,12 +209,16 @@ def main():
 
     # report, loudly, what is not yet measured
     print(f"  {'ward':<14}{'measured':>10}{'placeholder':>13}")
-    still = set()
-    for w, rec in out["wards"].items():
-        m = sum(1 for v in rec.values() if v["source"] == "measured")
-        p = [k for k, v in rec.items() if v["source"] == "placeholder"]
-        still.update(p)
-        print(f"  {w:<14}{m:>10}{len(p):>13}")
+    still: set[str] = set()
+    for wid, ward_rec in out["wards"].items():
+        # A TypedDict's .values() is typed `object`, since in general its values
+        # differ per key. Here every one of the twelve is a Sourced[float], so
+        # say that once rather than at each use.
+        fields = cast(dict[str, Sourced[float]], ward_rec)
+        measured = len([v for v in fields.values() if v["source"] == "measured"])
+        placeholders = [k for k, v in fields.items() if v["source"] == "placeholder"]
+        still.update(placeholders)
+        print(f"  {wid:<14}{measured:>10}{len(placeholders):>13}")
     print(f"\n  still placeholder: {', '.join(sorted(still)) or 'none'}")
     print(f"  written to {os.path.relpath(OUT, ROOT)}")
     if still - {"canopyFrac"}:
