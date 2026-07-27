@@ -218,8 +218,17 @@ export function assertDcUrsLogic(): void {
 ```
 
 - [ ] Freeze `data/dc-urs/golden-cases.json` from the dry run already performed:
-      **Ballygunge 21.13**, **Baruipur 64.16**. Barrackpore is *excluded* until Phase 1 supplies
-      real inputs — its dry-run 40.14 used estimated values and must not be frozen as truth.
+      **Ballygunge 21.13**, **Baruipur 64.16**.
+
+      **Barrackpore is in scope everywhere else** — it is one of the three study wards and Phases 1,
+      2 and 4 all cover it. It is held out of *this fixture only*, and only until Phase 1.
+      The reason: Ballygunge and Baruipur have real inputs, worked out in the CEO's own
+      specification. Barrackpore has none, so its dry-run 40.14 was computed from **invented**
+      inputs (`fvc 0.26`, `canopy 0.20`, `socio 6.0`, …) chosen as plausible for an industrial
+      corridor, purely to check that geometric aggregation kept three wards in three distinct tiers.
+      A golden case is a frozen assertion that a number is *correct*; freezing estimates would test
+      every future change against a fiction. **Barrackpore joins the fixture the moment Phase 1
+      supplies measured inputs.**
 
 **Verify:** `assertDcUrsLogic()` passes; `npm run check` 0 errors. Nothing user-visible changes yet.
 
