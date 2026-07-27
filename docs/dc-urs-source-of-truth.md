@@ -3,9 +3,10 @@
 > **Status:** CEO-approved specification for the Delta Climate Urban Resilience Score v1 engine.
 > **Provenance:** authored by the CEO, captured 2026-07-27 from the shared Gemini conversation
 > `gemini.google.com/share/7fd738ca3e98`.
-> **Companion:** [`dc-urs-engineering-review.md`](dc-urs-engineering-review.md) — approved
-> 2026-07-27. The eight corrections in that review apply on top of this document. Where the two
-> conflict, the review wins; where the review is silent, **this document governs**.
+> **PRECEDENCE (decided 2026-07-27): this document is the FINAL source of truth for v1.**
+> The engine ships it as written, plus exactly three fixes — each a case where this document
+> contradicts itself or the maths misbehaves. The other five findings in
+> [`dc-urs-engineering-review.md`](dc-urs-engineering-review.md) are **deferred to v2**.
 >
 > Formulas below were de-mangled from the source page's rendering. Content is otherwise verbatim.
 
@@ -304,21 +305,30 @@ Baruipur   {'DC_URS': 65.23, 'ACI': 0.548, 'EVI': 0.231, 'THI': 0.344, 'UGS': 0.
 
 ---
 
-## Approved deltas from the engineering review
+## What v1 ships
 
-Recorded here so this file stays usable on its own. Full reasoning in
-[`dc-urs-engineering-review.md`](dc-urs-engineering-review.md).
+**IN — three fixes.** Each is a case where this document contradicts itself or the maths
+misbehaves, so v1 cannot ship without them.
 
-| # | Change | Section affected |
+| # | Fix | Why it is not optional |
 |---|---|---|
-| 1 | Aggregation becomes **geometric**: `100 × ACI^0.40 × (1−EVI)^0.35 × (1−THI)^0.25` | §2 |
-| 2 | Drop `FVC` — it is an affine transform of NDVI; reallocate its weight | §3 UGS |
-| 3 | Fix `VSI` — currently returns 1.00 for water (negative NDVI) | §3 UGS |
-| 4 | `VSI` frozen or dropped in scenario mode; it cannot be simulated | §3 UGS |
-| 5 | Reconcile §4 weights table with §5 code (EVI and ACI disagree) | §4 / §5 |
-| 6 | Replace min-max normalisation with **fixed anchors** (as §5 code already does) | §3 |
-| 7 | Address `LST_day` saturation at 45 °C | §5 |
-| 8 | Credit Czekajlo for the concept; do not attribute the formula to it | §1 / §3 |
+| 3 | `VSI` guarded at `NDVI_mean > 0.10` | Unguarded it returns **1.00 for water**: negative NDVI → negative ratio → `clip` floors it at 0 → `1 − 0 = 1`. The Hooghly would score as perfect vegetation stability |
+| 5 | §5 **code** wins over the §4 table on pillar weights | The two disagree on EVI and ACI. The code is what produced this document's published 20.01 / 65.23 |
+| 6 | Fixed anchors, not min-max | §3 says min-max, §5 uses fixed divisors. Min-max would silently rescore every existing ward when a fourth is added |
 
-Open, awaiting CEO/consultant input: spatial unit across the three local bodies, socio-economic
-input derivation, and public tier-label wording.
+**OUT — deferred to v2 by decision.** Each is marked *KNOWN LIMITATION for v2* at the point in
+`dc-urs.ts` where it bites, and pinned by an assertion so it cannot be changed silently.
+
+| # | Deferred | Effect while deferred |
+|---|---|---|
+| 1 | Geometric aggregation | The weighted sum permits **full compensation**: a ward at THI 0.85 / ACI 0.90 scores 8.3 points above one at THI 0.30 / ACI 0.35 |
+| 2 | Drop the redundant `FVC` term | `FVC` is an affine transform of NDVI by §3's own definition, so 0.80 of the greenness weight rests on one variable counted twice |
+| 4 | Canopy fraction as an independent input | Collected in Phase 1 but inert in v1; an assertion pins it inert |
+| 7 | `/25` daytime anchor | The `/20` term saturates at 45 °C, so the index cannot discriminate above that |
+| 8 | Czekajlo attribution wording | Documentation only; no code effect |
+
+**Verified:** the shipped engine reproduces this document's own worked examples exactly —
+**Ballygunge 20.01**, **Baruipur 65.23**.
+
+Settled: three wards for v1; WorldPop + NFHS-5/Census 2011 for demographics; anchors as specified
+here; tier labels ship as written.

@@ -3,10 +3,21 @@
  *
  * Pure: no DOM, no GL, no I/O. Self-checked via `assertDcUrsLogic()`.
  *
- * Contract:
- *   docs/dc-urs-source-of-truth.md   the CEO-approved engine definition
- *   docs/dc-urs-engineering-review.md  eight approved corrections, applied here
- *   docs/dc-urs-spec.md §2           how those corrections are implemented
+ * Contract: **docs/dc-urs-source-of-truth.md is the final source of truth for v1.**
+ * The engine ships the CEO's formulation as written, plus exactly THREE fixes,
+ * each one a case where that document contradicts itself or the maths misbehaves:
+ *
+ *   1. VSI guarded          unguarded it returns 1.00 for water — a river scoring
+ *                           as perfect vegetation stability
+ *   2. §5 code over §4 table where the two disagree on pillar weights; the code is
+ *                           what produced the document's published 20.01 / 65.23
+ *   3. fixed anchors        §3 specifies min-max, §5 uses fixed divisors; min-max
+ *                           would rescore every ward when a fourth is added
+ *
+ * The other five review findings — geometric aggregation, dropping the redundant
+ * FVC term, canopy fraction, the /25 daytime anchor, Czekajlo attribution — are
+ * DEFERRED TO v2 by decision, and each is marked "KNOWN LIMITATION for v2" at the
+ * point in the code where it bites.
  *
  * This module composes INDICATORS. `heat-map-model.ts` computes PHYSICS. They are
  * deliberately separate — mixing the two is what made the Green Score hard to
@@ -27,10 +38,10 @@ const clamp = (x: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, x
  * constants so a disputed score traces to a constant and its owner.
  * ────────────────────────────────────────────────────────────────────────────*/
 export const ANCHORS = {
-  /** °C. Denominator widened 20 → 25 per review delta 7: at /20 the term
-   *  saturated at 45 °C, leaving the index blind in exactly the wards a heat
-   *  action plan exists for. 25 puts the ceiling at 50 °C. */
-  lstDayBase: 25, lstDaySpan: 25,
+  /** °C. v1 ships the CEO's /20 as written. KNOWN LIMITATION for v2: the term
+   *  saturates at 45 °C, so the index cannot discriminate above that — precisely
+   *  the wards a heat action plan exists for. Review delta 7 proposed /25. */
+  lstDayBase: 25, lstDaySpan: 20,
   lstNightBase: 20, lstNightSpan: 15,
   uhiSpan: 10,
   popDensityMax: 25_000,
@@ -53,10 +64,12 @@ export const W = {
   thiDay: 0.40, thiNight: 0.40, thiUhi: 0.20,
   eviPop: 0.45, eviFar: 0.30, eviSocio: 0.25,
   aciUgs: 0.50, aciCri: 0.30, aciTra: 0.20,
-  /** UGS: FVC replaces raw NDVI (delta 2 — FVC is an affine transform of NDVI,
-   *  so counting both spent 80 % of the greenness weight on one variable).
-   *  CanopyFrac is structurally independent of NDVI. */
-  ugsFvc: 0.50, ugsCanopy: 0.30, ugsVsi: 0.20,
+  /** UGS as the source document specifies: NDVI, FVC, VSI at 0.40/0.40/0.20.
+   *  KNOWN LIMITATION for v2: FVC is an affine transform of NDVI by the source
+   *  document's own §3 definition, so 0.80 of the greenness weight rests on one
+   *  variable counted twice. Review delta 2 proposed replacing FVC with an
+   *  independent structural input (tree-canopy fraction). Deferred to v2. */
+  ugsNdvi: 0.40, ugsFvc: 0.40, ugsVsi: 0.20,
 } as const;
 
 /**
@@ -92,9 +105,9 @@ export function pillars(i: DcUrsInputs): Pillars {
     + W.eviSocio * clamp(i.socioVuln.value  / A.socioVulnMax,  0, 1);
 
   const ugs =
-      W.ugsFvc    * clamp(i.fvc.value,        0, 1)
-    + W.ugsCanopy * clamp(i.canopyFrac.value, 0, 1)
-    + W.ugsVsi    * vsi(i.ndviMean.value, i.ndviStd.value);
+      W.ugsNdvi * clamp(i.ndviMean.value, 0, 1)
+    + W.ugsFvc  * clamp(i.fvc.value,      0, 1)
+    + W.ugsVsi  * vsi(i.ndviMean.value, i.ndviStd.value);
 
   const aci =
       W.aciUgs * ugs
@@ -107,17 +120,18 @@ export function pillars(i: DcUrsInputs): Pillars {
 /**
  * DC-URS, 0–100. Higher is more resilient.
  *
- * GEOMETRIC, not additive (review delta 1). IPCC AR6 risk is conjunctive: a
- * near-zero pillar must drag the score down rather than be bought off by a
- * strong one. Under the original weighted sum a ward at THI 0.85 / ACI 0.90
- * scored 8.3 points BETTER than one at THI 0.30 / ACI 0.35 — greenery buying
- * its way out of lethal heat.
+ * v1 ships the source document's WEIGHTED SUM as written.
+ *
+ * KNOWN LIMITATION for v2. IPCC AR6 risk is conjunctive — a near-zero pillar
+ * should drag the score down rather than be bought off by a strong one — and a
+ * weighted sum permits full compensation. Measured: a ward at THI 0.85 /
+ * ACI 0.90 scores 8.3 points BETTER than one at THI 0.30 / ACI 0.35, so
+ * greenery buys its way out of lethal heat. Review delta 1 proposed
+ * `100 × ACI^0.40 × (1−EVI)^0.35 × (1−THI)^0.25`, which flips that ordering and
+ * moves the CEO's own worked wards by only ~1 point. Deferred to v2 by decision.
  */
 export function aggregate(aci: number, evi: number, thi: number): number {
-  // floor at 0.001 so a single zero pillar cannot annihilate the score and
-  // 0 ** 0.4 is never evaluated
-  const g = (x: number) => clamp(x, 0.001, 1);
-  return 100 * g(aci) ** W.aci * g(1 - evi) ** W.evi * g(1 - thi) ** W.thi;
+  return 100 * (W.aci * aci + W.evi * (1 - evi) + W.thi * (1 - thi));
 }
 
 export function dcUrs(i: DcUrsInputs): number {
@@ -225,7 +239,7 @@ export function inputsOf(o: {
 export const GOLDEN = [
   {
     id: 'ballygunge',
-    expected: 21.13,
+    expected: 20.01,
     inputs: inputsOf({
       lstDayC: 42.5, lstNightC: 31.0, ruralBaseC: 32.0,
       popDensity: 22_000, far: 3.8, socioVuln: 7.2,
@@ -235,7 +249,7 @@ export const GOLDEN = [
   },
   {
     id: 'baruipur',
-    expected: 64.16,
+    expected: 65.23,
     inputs: inputsOf({
       lstDayC: 34.1, lstNightC: 24.5, ruralBaseC: 32.0,
       popDensity: 4_500, far: 0.8, socioVuln: 4.1,
@@ -269,41 +283,38 @@ export function assertDcUrsLogic(): void {
   a(tierFor(dcUrs(GOLDEN[1].inputs)).id === 'moderate', 'Baruipur should be Moderate Resilience');
   a(tierFor(100).id === 'optimal' && tierFor(0).id === 'critical', 'tier bounds');
 
-  // ── What geometric aggregation actually guarantees ───────────────────────
-  // NOTE, because this is easy to get wrong and one of these assertions was
-  // wrong on first writing: geometric aggregation removes FULL compensation,
-  // not ALL compensation. It is still a weighted product, and w_aci (0.40)
-  // exceeds w_thi (0.25) — so a large enough adaptive-capacity advantage CAN
-  // still outweigh a large hazard disadvantage. That is the CEO's weighting
-  // choice, not a defect. What it guarantees is the two properties below.
+  // ── v1 KNOWN LIMITATION, asserted so it stays visible ────────────────────
+  // The source document's weighted sum permits FULL compensation: a strong
+  // pillar can buy off a lethal one. This is pinned as a test rather than left
+  // implicit, so that (a) nobody mistakes it for an accident, and (b) the day
+  // v2 adopts geometric aggregation, this assertion fails loudly and forces the
+  // limitation note to be removed with it.
+  const HOT = { aci: 0.90, evi: 0.50, thi: 0.85 };   // dangerous heat, lush
+  const COOL = { aci: 0.35, evi: 0.50, thi: 0.30 };  // cool, bare
+  const hotS = aggregate(HOT.aci, HOT.evi, HOT.thi);
+  const coolS = aggregate(COOL.aci, COOL.evi, COOL.thi);
+  a(hotS > coolS,
+    `v1 additive aggregation is EXPECTED to rank the hot ward above the cool one ` +
+    `(${hotS.toFixed(1)} vs ${coolS.toFixed(1)}). If this now fails, aggregation has ` +
+    `changed — adopt the v2 note in dcUrs() and delete this assertion.`);
 
-  // 1. On the case the review was written against — matched pillar magnitudes —
-  //    the additive form ranked the dangerously hot ward 8.3 points ABOVE the
-  //    cool one. Geometric must not.
-  const addv = (aci: number, evi: number, thi: number) =>
-    100 * (W.aci * aci + W.evi * (1 - evi) + W.thi * (1 - thi));
-  const HOT = { aci: 0.90, evi: 0.50, thi: 0.85 };
-  const COOL = { aci: 0.35, evi: 0.50, thi: 0.30 };
-  a(addv(HOT.aci, HOT.evi, HOT.thi) > addv(COOL.aci, COOL.evi, COOL.thi),
-    'sanity: the additive form should exhibit the bug we are fixing');
-  a(aggregate(HOT.aci, HOT.evi, HOT.thi) <= aggregate(COOL.aci, COOL.evi, COOL.thi),
-    `geometric must not rank the hot ward above the cool one ` +
-    `(${aggregate(HOT.aci, HOT.evi, HOT.thi).toFixed(1)} vs ${aggregate(COOL.aci, COOL.evi, COOL.thi).toFixed(1)})`);
-
-  // 2. A pillar approaching its extreme dominates, however good the others are.
-  //    This is the property full compensation would destroy.
-  a(aggregate(0.90, 0.46, 0.999) < 20,
-    `lethal hazard must crush the score even with excellent capacity, got ${aggregate(0.90, 0.46, 0.999).toFixed(1)}`);
-  a(aggregate(0.001, 0.46, 0.10) < 20,
-    'zero adaptive capacity must crush the score even in a cool ward');
+  // monotone in hazard, which the weighted sum does guarantee
   a(aggregate(0.90, 0.46, 0.99) < aggregate(0.90, 0.46, 0.85),
-    'score must fall monotonically as hazard rises');
+    'score must fall as hazard rises');
+  a(aggregate(0.90, 0.46, 0.5) > aggregate(0.30, 0.46, 0.5),
+    'score must rise with adaptive capacity');
 
   // monotone in each pillar
   const base = GOLDEN[0].inputs;
   a(dcUrs({ ...base, fvc: { ...base.fvc, value: 0.9 } }) > dcUrs(base), 'more vegetation must raise the score');
   a(dcUrs({ ...base, lstDayC: { ...base.lstDayC, value: 48 } }) <= dcUrs(base), 'more heat must not raise the score');
   a(dcUrs({ ...base, popDensity: { ...base.popDensity, value: 25_000 } }) < dcUrs(base), 'more exposure must lower the score');
+
+  // canopyFrac is collected but NOT used by the v1 greenness formula (it is the
+  // v2 replacement for the redundant FVC term). Assert it is genuinely inert, so
+  // that wiring it in cannot happen silently.
+  const withCanopy = { ...base, canopyFrac: { ...base.canopyFrac, value: 1 } };
+  a(dcUrs(withCanopy) === dcUrs(base), 'canopyFrac must not affect the v1 score');
 
   // structural floor
   const f = structuralFloor(GOLDEN[0].inputs);

@@ -232,7 +232,10 @@ export function assertDcUrsLogic(): void {
 
 **Verify:** `assertDcUrsLogic()` passes; `npm run check` 0 errors. Nothing user-visible changes yet.
 
-**Outcome.** Golden cases reproduced exactly — Ballygunge **21.13**, Baruipur **64.16**.
+**Outcome.** Golden cases reproduce the source document's own worked examples **exactly** —
+Ballygunge **20.01**, Baruipur **65.23**. v1 ships that document as written plus three fixes
+(guarded VSI, §5 code over the §4 table, fixed anchors); the five design refinements are deferred
+to v2 and each is pinned by an assertion so it cannot change silently.
 `npm run verify` green (0 errors, 26/26 unit tests, publication contract 77/77).
 
 One assertion written for this phase was **wrong**, and recording why matters: it claimed a ward at
@@ -243,9 +246,8 @@ outweigh a large hazard disadvantage. That is the CEO's weighting choice. "Fixin
 satisfy the test would have silently overridden his weights. The assertions now test what geometric
 aggregation actually guarantees, and the reasoning is written into the module.
 
-Structural floor for Ballygunge under the geometric form is **harsher** than the additive dry run
-suggested: ceiling **54.8** (not 61.4), **45.2 points withheld**. A physically perfect retrofit
-cannot lift it out of "Vulnerable".
+Structural floor for Ballygunge: current **20.0**, ceiling **67.0** under a physically perfect
+retrofit, **33.0 points withheld** by demographic exposure that no intervention touches.
 
 ---
 

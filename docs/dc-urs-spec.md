@@ -44,12 +44,30 @@ Adding wards must never require touching the pipeline.
 
 ---
 
-## 2 · The engine as it will be implemented
+## 2 · The engine as implemented
 
-The source document governs except where an approved review delta applies. Four deltas change the
-maths; they are written out here in full so this section can be implemented without cross-reading.
+**PRECEDENCE (decided 2026-07-27): the source document is the FINAL source of truth for v1.**
+It ships as written, plus exactly three fixes — VSI guarded, §5 code over the §4 table, fixed
+anchors instead of min-max — each a case where that document contradicts itself or the maths
+misbehaves. The five design refinements below are **deferred to v2** and are recorded here so the
+v2 work has its starting point.
 
-### 2.1 Aggregation — geometric (delta 1)
+Verified: the shipped engine reproduces the source document's worked examples exactly,
+**Ballygunge 20.01** and **Baruipur 65.23**.
+
+### 2.0 · Deferred to v2
+
+| Refinement | Why it was proposed | Effect of deferring |
+|---|---|---|
+| Geometric aggregation | IPCC AR6 risk is conjunctive | Weighted sum permits full compensation — a ward at THI 0.85 / ACI 0.90 outscores one at THI 0.30 / ACI 0.35 by 8.3 points |
+| Drop `FVC` | Affine transform of NDVI | 0.80 of greenness weight on one variable counted twice |
+| `CanopyFrac` | Structurally independent of NDVI | Collected in Phase 1, inert in v1, pinned inert by assertion |
+| `/25` daytime anchor | `/20` saturates at 45 °C | Index cannot discriminate above 45 °C |
+| Czekajlo attribution | Formula is not their metric | Documentation only |
+
+Each is marked *KNOWN LIMITATION for v2* in `dc-urs.ts` at the point it bites.
+
+### 2.1 Aggregation — weighted sum (v1) · geometric deferred to v2
 
 ```
 DC-URS = 100 × ACI^0.40 × (1 − EVI)^0.35 × (1 − THI)^0.25
@@ -62,7 +80,7 @@ THI 0.85 / ACI 0.90 scored 8.3 points *better* than one at THI 0.30 / ACI 0.35.
 Guard: clamp each pillar to `[0.001, 1.0]` before exponentiation so a single zero cannot annihilate
 the score, and so `0^0.4` is never evaluated.
 
-### 2.2 Urban Greenness Score — FVC replaces NDVI, canopy joins (deltas 2, 3, 4)
+### 2.2 Urban Greenness Score — NDVI + FVC + VSI (v1), VSI guarded (fix 3)
 
 ```
 UGS = 0.50·FVC + 0.30·CanopyFrac + 0.20·VSI
@@ -87,7 +105,7 @@ The threshold fixes the water bug. Unguarded, water's negative mean NDVI makes t
 river**. Below the threshold there is no vegetation whose stability could be measured, so the
 correct answer is 0.
 
-### 2.3 Daytime hazard — anchor extended (delta 7)
+### 2.3 Daytime hazard — `/20` as specified (v1) · `/25` deferred to v2
 
 ```
 THI_day_term = clamp((LST_day − 25.0) / 25.0, 0, 1)
@@ -97,7 +115,7 @@ The original `/20.0` saturates at 45 °C, making the index blind above that — 
 heat action plan exists for. Extending to a 50 °C ceiling keeps discrimination across the observed
 Kolkata surface range. All other anchors are unchanged (§4).
 
-### 2.4 Pillar weights — code wins (delta 5)
+### 2.4 Pillar weights — §5 code wins over the §4 table (fix 5)
 
 The source document's §4 table and §5 code disagree on two pillars. The **code** is normative:
 
@@ -109,7 +127,7 @@ The source document's §4 table and §5 code disagree on two pillars. The **code
 
 Top-level weights are unchanged: `w_A = 0.40`, `w_E = 0.35`, `w_H = 0.25`.
 
-### 2.5 Attribution (delta 8)
+### 2.5 Attribution — deferred to v2
 
 Czekajlo et al. (2020) is credited for the *concept* — that current greenness and its multi-year
 trajectory are jointly meaningful and satellite-measurable. The formula above is ours and is
