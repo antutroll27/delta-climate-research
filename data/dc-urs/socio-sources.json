@@ -1,0 +1,88 @@
+{
+  "_README": [
+    "HUMAN-ENTERED SOURCE VALUES for the DC-URS socio-economic pillar.",
+    "",
+    "This file is edited by a person, not written by a script, and that is deliberate.",
+    "Every automated route was tested and none is usable:",
+    "  - WorldPop gridded age structure: 1.5 GB per band x 12 bands, server rejects range reads",
+    "  - GHSL: publishes no socio-demographic layer",
+    "  - NFHS-5 state report FR374: a HEALTH survey — carries no 65+ population share and no",
+    "    slum variable. Verified by reading the report, not assumed.",
+    "  - census2011.co.in: returned HUGLI district data for a Kolkata URL and described Hooghly",
+    "    as part of Maharashtra. Factually wrong; unusable.",
+    "  - censusindia.gov.in: authoritative, but tables are XLSX/PDF behind navigation.",
+    "",
+    "So each number below is transcribed by hand from a primary source and carries its own",
+    "citation. fetch-socio.py validates them and computes the composite; it does not invent them.",
+    "A value left null blocks that ward, loudly — it never silently becomes zero.",
+    "",
+    "HYBRID VINTAGE (option C, decided 2026-07-27):",
+    "  age structure + informal settlement  <- Census of India 2011 (the only instrument that",
+    "                                          measures them; no newer census exists — the 2021",
+    "                                          round was deferred to Census 2027)",
+    "  deprivation                          <- NFHS-5 2019-21 district factsheet",
+    "Both vintages are displayed on the tool. Do not average them into one date."
+  ],
+
+  "districts": {
+    "kolkata": {
+      "_ward": "ballygunge",
+      "census2011": {
+        "_source": "Census of India 2011, District Census Handbook, Kolkata (Series 20, Part XII-B)",
+        "_retrieved": null,
+        "population_total": null,
+        "population_under_5": null,
+        "population_65_plus": null,
+        "slum_population": null
+      },
+      "nfhs5": {
+        "_source": "NFHS-5 (2019-21) District Fact Sheet, Kolkata, West Bengal",
+        "_retrieved": null,
+        "lowest_wealth_quintile_pct": null,
+        "improved_sanitation_pct": null,
+        "clean_cooking_fuel_pct": null
+      }
+    },
+    "south_24_parganas": {
+      "_ward": "baruipur",
+      "census2011": {
+        "_source": "Census of India 2011, District Census Handbook, South Twenty Four Parganas",
+        "_retrieved": null,
+        "population_total": null,
+        "population_under_5": null,
+        "population_65_plus": null,
+        "slum_population": null
+      },
+      "nfhs5": {
+        "_source": "NFHS-5 (2019-21) District Fact Sheet, South Twenty Four Parganas, West Bengal",
+        "_retrieved": null,
+        "lowest_wealth_quintile_pct": null,
+        "improved_sanitation_pct": null,
+        "clean_cooking_fuel_pct": null
+      }
+    },
+    "north_24_parganas": {
+      "_ward": "barrackpore",
+      "census2011": {
+        "_source": "Census of India 2011, District Census Handbook, North Twenty Four Parganas",
+        "_retrieved": null,
+        "population_total": null,
+        "population_under_5": null,
+        "population_65_plus": null,
+        "slum_population": null
+      },
+      "nfhs5": {
+        "_source": "NFHS-5 (2019-21) District Fact Sheet, North Twenty Four Parganas, West Bengal",
+        "_retrieved": null,
+        "lowest_wealth_quintile_pct": null,
+        "improved_sanitation_pct": null,
+        "clean_cooking_fuel_pct": null
+      }
+    }
+  },
+
+  "_where_to_get_them": {
+    "census2011": "censusindia.gov.in -> Census Tables -> 2011 -> West Bengal -> District Census Handbook. Table C-13 gives single-year age; Table A-2 gives slum population. Alternatively the DCHB district PDF, Primary Census Abstract.",
+    "nfhs5": "rchiips.org/nfhs -> NFHS-5 -> District Fact Sheets -> West Bengal. Two pages per district. (This host blocks some networks; reachable from India.)"
+  }
+}
