@@ -6,19 +6,31 @@
   "baseline_offset": "BOA_ADD_OFFSET = -1000 applied for processing baseline 04.00 (2022-01-25 onward); ignoring it would inflate reflectance by 0.1",
   "provenance": "measured",
   "years_requested": [
+    2021,
+    2022,
     2023,
     2024,
     2025
   ],
   "wards": {
     "ballygunge": {
-      "ndvi_mean": 0.3067,
-      "ndvi_std": 0.0366,
-      "fvc": 0.3422,
-      "albedo": 0.1248,
-      "years": 3,
-      "scenes_total": 18,
+      "ndvi_mean": 0.306,
+      "ndvi_std": 0.0259,
+      "fvc": 0.3414,
+      "albedo": 0.1247,
+      "years": 5,
+      "scenes_total": 30,
       "per_year": {
+        "2021": {
+          "ndvi": 0.3038,
+          "albedo": 0.1025,
+          "scenes": 6
+        },
+        "2022": {
+          "ndvi": 0.3064,
+          "albedo": 0.1153,
+          "scenes": 6
+        },
         "2023": {
           "ndvi": 0.2811,
           "albedo": 0.1353,
@@ -32,6 +44,76 @@
         "2025": {
           "ndvi": 0.3486,
           "albedo": 0.1248,
+          "scenes": 6
+        }
+      }
+    },
+    "baruipur": {
+      "ndvi_mean": 0.3882,
+      "ndvi_std": 0.0198,
+      "fvc": 0.4509,
+      "albedo": 0.1436,
+      "years": 5,
+      "scenes_total": 30,
+      "per_year": {
+        "2021": {
+          "ndvi": 0.365,
+          "albedo": 0.1098,
+          "scenes": 6
+        },
+        "2022": {
+          "ndvi": 0.4091,
+          "albedo": 0.1328,
+          "scenes": 6
+        },
+        "2023": {
+          "ndvi": 0.3717,
+          "albedo": 0.1436,
+          "scenes": 6
+        },
+        "2024": {
+          "ndvi": 0.406,
+          "albedo": 0.1473,
+          "scenes": 6
+        },
+        "2025": {
+          "ndvi": 0.3893,
+          "albedo": 0.1477,
+          "scenes": 6
+        }
+      }
+    },
+    "barrackpore": {
+      "ndvi_mean": 0.3299,
+      "ndvi_std": 0.0955,
+      "fvc": 0.3732,
+      "albedo": 0.1298,
+      "years": 5,
+      "scenes_total": 29,
+      "per_year": {
+        "2021": {
+          "ndvi": 0.4973,
+          "albedo": 0.092,
+          "scenes": 6
+        },
+        "2022": {
+          "ndvi": 0.2667,
+          "albedo": 0.1279,
+          "scenes": 6
+        },
+        "2023": {
+          "ndvi": 0.2729,
+          "albedo": 0.1458,
+          "scenes": 6
+        },
+        "2024": {
+          "ndvi": 0.2995,
+          "albedo": 0.1317,
+          "scenes": 5
+        },
+        "2025": {
+          "ndvi": 0.313,
+          "albedo": 0.1298,
           "scenes": 6
         }
       }

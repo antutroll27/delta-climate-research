@@ -1,0 +1,29 @@
+{
+  "source": "JRC GHS-POP R2023A, 100 m, Mollweide, tile R7_C27 (CC BY 4.0)",
+  "product": "GHS_POP_E2020_GLOBE_R2023A_54009_100_V1_0_R7_C27.tif",
+  "vintage": "2020",
+  "method": "Sum of per-cell population counts over the ward footprint, divided by footprint area. GHS-POP cells are COUNTS, not densities, so they are summed and then divided \u2014 averaging the cells would give persons per cell, which is a different and wrong quantity.",
+  "caveat": "Modelled, not enumerated. India's last completed census is 2011 (the 2021 round was deferred to Census 2027), so no current enumerated figure exists. GHS-POP disaggregates census counts using satellite-observed built-up surface, so it captures post-2011 expansion that the census cannot.",
+  "why_not_worldpop": "The spec named WorldPop. Its India raster is 466 MB, its server rejects HTTP range requests, and the full download timed out. GHS-POP is the same 100 m resolution, pre-tiled at 46 MB, on the same Mollweide grid and the same R7_C27 tile as the GHS-SMOD masks this project already uses.",
+  "provenance": "measured",
+  "wards": {
+    "ballygunge": {
+      "density": 68810.2,
+      "population": 134868,
+      "cells": 270,
+      "area_km2": 1.96
+    },
+    "baruipur": {
+      "density": 36728.2,
+      "population": 71987,
+      "cells": 270,
+      "area_km2": 1.96
+    },
+    "barrackpore": {
+      "density": 8772.3,
+      "population": 17194,
+      "cells": 270,
+      "area_km2": 1.96
+    }
+  }
+}

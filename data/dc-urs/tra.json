@@ -10,14 +10,15 @@
       "tra": 0.7799,
       "median_dist_m": 77.8,
       "max_dist_m": 670.4,
-      "refuge_cell_fraction": 0.1356,
-      "refuge_patches": 79,
-      "largest_patch_ha": 91.66,
+      "refuge_cell_fraction": 0.1768,
+      "refuge_patches_in_ward": 9,
+      "largest_patch_in_ward_ha": 19.92,
+      "refuge_patches_in_search_window": 79,
       "min_patch_ha": 0.77,
       "refuge_classes_present": {
-        "tree cover": 57710,
-        "grassland": 4280,
-        "permanent water": 4953
+        "tree cover": 5668,
+        "grassland": 273,
+        "permanent water": 2
       },
       "cells": 24928
     },
@@ -25,15 +26,16 @@
       "tra": 0.9135,
       "median_dist_m": 27.3,
       "max_dist_m": 245.0,
-      "refuge_cell_fraction": 0.7656,
-      "refuge_patches": 18,
-      "largest_patch_ha": 2201.77,
+      "refuge_cell_fraction": 0.304,
+      "refuge_patches_in_ward": 11,
+      "largest_patch_in_ward_ha": 47.21,
+      "refuge_patches_in_search_window": 18,
       "min_patch_ha": 0.77,
       "refuge_classes_present": {
-        "tree cover": 277467,
-        "grassland": 6203,
-        "permanent water": 813,
-        "wetland": 2334
+        "tree cover": 9001,
+        "grassland": 76,
+        "permanent water": 119,
+        "wetland": 15
       },
       "cells": 24776
     },
@@ -41,15 +43,15 @@
       "tra": 0.8279,
       "median_dist_m": 93.3,
       "max_dist_m": 344.8,
-      "refuge_cell_fraction": 0.4594,
-      "refuge_patches": 84,
-      "largest_patch_ha": 738.91,
+      "refuge_cell_fraction": 0.1664,
+      "refuge_patches_in_ward": 7,
+      "largest_patch_in_ward_ha": 14.2,
+      "refuge_patches_in_search_window": 84,
       "min_patch_ha": 0.77,
       "refuge_classes_present": {
-        "tree cover": 136419,
-        "grassland": 6532,
-        "permanent water": 37926,
-        "wetland": 3201
+        "tree cover": 5154,
+        "grassland": 272,
+        "permanent water": 19
       },
       "cells": 24776
     }
