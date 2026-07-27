@@ -6,7 +6,7 @@
     "Every automated route was tested and none is usable:",
     "  - WorldPop gridded age structure: 1.5 GB per band x 12 bands, server rejects range reads",
     "  - GHSL: publishes no socio-demographic layer",
-    "  - NFHS-5 state report FR374: a HEALTH survey — carries no 65+ population share and no",
+    "  - NFHS-5 state report FR374: a HEALTH survey \u2014 carries no 65+ population share and no",
     "    slum variable. Verified by reading the report, not assumed.",
     "  - census2011.co.in: returned HUGLI district data for a Kolkata URL and described Hooghly",
     "    as part of Maharashtra. Factually wrong; unusable.",
@@ -14,16 +14,15 @@
     "",
     "So each number below is transcribed by hand from a primary source and carries its own",
     "citation. fetch-socio.py validates them and computes the composite; it does not invent them.",
-    "A value left null blocks that ward, loudly — it never silently becomes zero.",
+    "A value left null blocks that ward, loudly \u2014 it never silently becomes zero.",
     "",
     "HYBRID VINTAGE (option C, decided 2026-07-27):",
     "  age structure + informal settlement  <- Census of India 2011 (the only instrument that",
-    "                                          measures them; no newer census exists — the 2021",
+    "                                          measures them; no newer census exists \u2014 the 2021",
     "                                          round was deferred to Census 2027)",
     "  deprivation                          <- NFHS-5 2019-21 district factsheet",
     "Both vintages are displayed on the tool. Do not average them into one date."
   ],
-
   "districts": {
     "kolkata": {
       "_ward": "ballygunge",
@@ -40,7 +39,18 @@
         "_retrieved": null,
         "lowest_wealth_quintile_pct": null,
         "improved_sanitation_pct": null,
-        "clean_cooking_fuel_pct": null
+        "clean_cooking_fuel_pct": null,
+        "_superseded_by": "niti_mpi \u2014 see that block"
+      },
+      "niti_mpi": {
+        "_source": "NITI Aayog, National Multidimensional Poverty Index: A Progress Review 2023, 'West Bengal: Overview of Districts', p.264 of the report (PDF page 292). Computed on NFHS-5 (2019-21).",
+        "_url": "https://www.niti.gov.in/sites/default/files/2023-08/India-National-Multidimentional-Poverty-Index-2023.pdf",
+        "_retrieved": "2026-07-27",
+        "_note": "Transcribed from the PDF using layout-preserving extraction so that district rows and numeric columns stay aligned. Plain text extraction returns the names and the numbers as separate runs, and reconstructing the pairing by inference is how a plausible-but-wrong number gets into a published index.",
+        "mpi_headcount_pct_nfhs5": 2.56,
+        "mpi_intensity_pct_nfhs5": 40.79,
+        "mpi_nfhs5": 0.01,
+        "mpi_headcount_pct_nfhs4": null
       }
     },
     "south_24_parganas": {
@@ -58,7 +68,18 @@
         "_retrieved": null,
         "lowest_wealth_quintile_pct": null,
         "improved_sanitation_pct": null,
-        "clean_cooking_fuel_pct": null
+        "clean_cooking_fuel_pct": null,
+        "_superseded_by": "niti_mpi \u2014 see that block"
+      },
+      "niti_mpi": {
+        "_source": "NITI Aayog, National Multidimensional Poverty Index: A Progress Review 2023, 'West Bengal: Overview of Districts', p.264 of the report (PDF page 292). Computed on NFHS-5 (2019-21).",
+        "_url": "https://www.niti.gov.in/sites/default/files/2023-08/India-National-Multidimentional-Poverty-Index-2023.pdf",
+        "_retrieved": "2026-07-27",
+        "_note": "Transcribed from the PDF using layout-preserving extraction so that district rows and numeric columns stay aligned. Plain text extraction returns the names and the numbers as separate runs, and reconstructing the pairing by inference is how a plausible-but-wrong number gets into a published index.",
+        "mpi_headcount_pct_nfhs5": 10.96,
+        "mpi_intensity_pct_nfhs5": 41.22,
+        "mpi_nfhs5": 0.045,
+        "mpi_headcount_pct_nfhs4": null
       }
     },
     "north_24_parganas": {
@@ -76,11 +97,21 @@
         "_retrieved": null,
         "lowest_wealth_quintile_pct": null,
         "improved_sanitation_pct": null,
-        "clean_cooking_fuel_pct": null
+        "clean_cooking_fuel_pct": null,
+        "_superseded_by": "niti_mpi \u2014 see that block"
+      },
+      "niti_mpi": {
+        "_source": "NITI Aayog, National Multidimensional Poverty Index: A Progress Review 2023, 'West Bengal: Overview of Districts', p.264 of the report (PDF page 292). Computed on NFHS-5 (2019-21).",
+        "_url": "https://www.niti.gov.in/sites/default/files/2023-08/India-National-Multidimentional-Poverty-Index-2023.pdf",
+        "_retrieved": "2026-07-27",
+        "_note": "Transcribed from the PDF using layout-preserving extraction so that district rows and numeric columns stay aligned. Plain text extraction returns the names and the numbers as separate runs, and reconstructing the pairing by inference is how a plausible-but-wrong number gets into a published index.",
+        "mpi_headcount_pct_nfhs5": 4.37,
+        "mpi_intensity_pct_nfhs5": 40.11,
+        "mpi_nfhs5": 0.018,
+        "mpi_headcount_pct_nfhs4": null
       }
     }
   },
-
   "_where_to_get_them": {
     "census2011": "censusindia.gov.in -> Census Tables -> 2011 -> West Bengal -> District Census Handbook. Table C-13 gives single-year age; Table A-2 gives slum population. Alternatively the DCHB district PDF, Primary Census Abstract.",
     "nfhs5": "rchiips.org/nfhs -> NFHS-5 -> District Fact Sheets -> West Bengal. Two pages per district. (This host blocks some networks; reachable from India.)"
