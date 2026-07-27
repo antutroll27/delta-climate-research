@@ -88,6 +88,8 @@ class CensusBlock(TypedDict):
     population_under_5: float | None
     population_65_plus: float | None
     slum_population: float | None
+    #: the slum count's OWN denominator — the municipality, not the district
+    slum_town_population: float | None
 
 
 class NfhsBlock(TypedDict):
@@ -144,7 +146,7 @@ def main() -> None:
         # Report every gap at once rather than exiting on the first, so one pass
         # through the PDFs collects everything.
         missing = [k for k, v in list(c.items()) + list(n.items())
-                   if not k.startswith("_") and v is None]
+                   if not k.startswith("_") and not isinstance(v, str) and v is None]
         if missing:
             unfilled.append(f"  {district} ({ward}): {', '.join(missing)}")
             continue
@@ -152,7 +154,14 @@ def main() -> None:
         total = c["population_total"]
         elderly = frac(c["population_65_plus"], total, "population_65_plus", district)
         children = frac(c["population_under_5"], total, "population_under_5", district)
-        informal = frac(c["slum_population"], total, "slum_population", district)
+        # THE SLUM TERM HAS ITS OWN DENOMINATOR, and using `total` here is a bug that
+        # produces a plausible number. The slum count is TOWN-level (Primary Census
+        # Abstract for Slum); the district population is not its denominator. Dividing
+        # Baruipur's 13,679 town slum residents by South 24 Parganas' 8.16 M gives 0.2 %
+        # instead of 25.7 % — a real share, in the right units, understated 150-fold.
+        # Kolkata masks the error because its corporation and district are the same area.
+        informal = frac(c["slum_population"], c["slum_town_population"],
+                        "slum_population (over its own town)", district)
         low_income = pct(n["lowest_wealth_quintile_pct"], "lowest_wealth_quintile_pct", district)
 
         hvi = HVI_SCALE * (

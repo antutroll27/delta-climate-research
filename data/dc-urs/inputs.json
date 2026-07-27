@@ -38,9 +38,10 @@
         "cite": "MS footprints + Google Open Buildings 2.5D"
       },
       "socioVuln": {
-        "value": 0,
-        "source": "placeholder",
-        "cite": "NFHS-5 levels x Census 2011 pattern"
+        "value": 4.263,
+        "source": "measured",
+        "vintage": "2011 (age, slum) + 2019-21 (wealth)",
+        "cite": "Census 2011 age + slum, NITI Aayog MPI (NFHS-5)"
       },
       "fvc": {
         "value": 0.3291,
@@ -110,9 +111,10 @@
         "cite": "MS footprints + Google Open Buildings 2.5D"
       },
       "socioVuln": {
-        "value": 0,
-        "source": "placeholder",
-        "cite": "NFHS-5 levels x Census 2011 pattern"
+        "value": 4.624,
+        "source": "measured",
+        "vintage": "2011 (age, slum) + 2019-21 (wealth)",
+        "cite": "Census 2011 age + slum, NITI Aayog MPI (NFHS-5)"
       },
       "fvc": {
         "value": 0.4469,
@@ -182,9 +184,10 @@
         "cite": "MS footprints + Google Open Buildings 2.5D"
       },
       "socioVuln": {
-        "value": 0,
-        "source": "placeholder",
-        "cite": "NFHS-5 levels x Census 2011 pattern"
+        "value": 3.354,
+        "source": "measured",
+        "vintage": "2011 (age, slum) + 2019-21 (wealth)",
+        "cite": "Census 2011 age + slum, NITI Aayog MPI (NFHS-5)"
       },
       "fvc": {
         "value": 0.3089,

@@ -1,0 +1,30 @@
+{
+  "source": "Census of India 2011 (age structure, slum population) + NFHS-5 2019-21 district fact sheets (wealth quintile). Hand-transcribed; see data/dc-urs/socio-sources.json for the per-value citations.",
+  "method": "Equal-weighted composite on a 0-10 scale of four shares, each normalised against a fixed ceiling: 65+ /0.15, under-5 /0.15, lowest wealth quintile /0.4, slum /0.4. Ceilings are plausible-range values for Indian urban districts, NOT the max over these three \u2014 a max over three units makes the worst of them 1.0 by construction and rescores every ward when a fourth is added.",
+  "vintage": "2011 (age, slum) + 2019-21 (wealth)",
+  "caveat": "TWO LIMITATIONS, both structural. (1) Vintage: age structure and slum share can only come from a census, and India's last was 2011 \u2014 the 2021 round was deferred to Census 2027. NFHS-5 is current but is a health survey and carries neither variable. (2) Resolution: these are DISTRICT figures. The three wards sit in three different districts so the values do vary between them, but a ward inherits its district's average and within-district variation is invisible.",
+  "provenance": "measured",
+  "wards": {
+    "ballygunge": {
+      "hvi": 4.263,
+      "elderly_frac": 0.0772,
+      "children_frac": 0.0514,
+      "low_income_frac": 0.0256,
+      "informal_frac": 0.3135
+    },
+    "baruipur": {
+      "hvi": 4.624,
+      "elderly_frac": 0.0518,
+      "children_frac": 0.088,
+      "low_income_frac": 0.1096,
+      "informal_frac": 0.2575
+    },
+    "barrackpore": {
+      "hvi": 3.354,
+      "elderly_frac": 0.0656,
+      "children_frac": 0.0666,
+      "low_income_frac": 0.0437,
+      "informal_frac": 0.1403
+    }
+  }
+}

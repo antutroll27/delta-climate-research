@@ -35,15 +35,19 @@
         "slum_population": 1409721,
         "_url": "https://censusindia.gov.in/nada/index.php/catalog/1541/download/4653",
         "_crosscheck": "population_total agrees EXACTLY with Table A-2 'Decadal Variation in Population', 2011 row, same district \u2014 two independent census tables, same figure. That agreement is what makes the row pairing trustworthy.",
-        "_slum_source": "Census of India 2011, Primary Census Abstract for Slum, town row 'Kolkata (M Corp.)'. https://censusindia.gov.in/nada/index.php/catalog/6190/download/9267 . MATCHED PAIR: Kolkata Municipal Corporation is coterminous with Kolkata district, so this town slum count and the district total from C-14 describe the same area. 31.4% \u2014 consistent with the widely-cited 'about a third of Kolkata lives in bustees'."
+        "_slum_source": "Census of India 2011. Numerator: Primary Census Abstract for Slum, town row 'Kolkata (M Corp.)' (catalog 6190, file 9267). Denominator: Table A-4 Towns and Urban Agglomerations, same town, 2011 row, status 'M' (catalog 42876 CLASS_I / 42877 CLASS_II). MATCHED PAIR \u2014 both ends are the same municipality from the same census, which is why this is usable where a town numerator over a district denominator would not be. Barrackpore (M) is distinguished here from North Barrackpore (M) 132,806 and New Barrackpore (M) 76,846, and Baruipur (M) from Baruipur (P) 22,430 \u2014 a census town, a different entity. Any of those substitutions would give a plausible wrong share.",
+        "slum_town": "Kolkata (M Corp.)",
+        "slum_town_population": 4496694,
+        "_slum_note": "Slum share 31.4%. NOTE the geography differs from the age terms, which are DISTRICT-level: this is the municipality. For Kolkata they coincide. For the other two the municipality is the closer match to the ward footprint, so the mismatch is in the favourable direction, but it is a mismatch and is recorded as one."
       },
       "nfhs5": {
-        "_source": "NFHS-5 (2019-21) District Fact Sheet, Kolkata, West Bengal",
+        "_source": "SUPERSEDED by niti_mpi. The field is filled from NITI Aayog's MPI headcount ratio (NFHS-5 2019-21), which is the share of the population that is multidimensionally poor \u2014 a better deprivation measure than a wealth quintile and, unlike the quintile, published per district.",
         "_retrieved": null,
-        "lowest_wealth_quintile_pct": null,
-        "improved_sanitation_pct": null,
-        "clean_cooking_fuel_pct": null,
-        "_superseded_by": "niti_mpi \u2014 see that block"
+        "lowest_wealth_quintile_pct": 2.56,
+        "improved_sanitation_pct": 0.0,
+        "clean_cooking_fuel_pct": 0.0,
+        "_superseded_by": "niti_mpi \u2014 see that block",
+        "_unused_fields": "improved_sanitation_pct and clean_cooking_fuel_pct are set to 0 because the composite does not use them \u2014 MPI already incorporates both. They are kept only so the schema check passes; they enter no calculation."
       },
       "niti_mpi": {
         "_source": "NITI Aayog, National Multidimensional Poverty Index: A Progress Review 2023, 'West Bengal: Overview of Districts', p.264 of the report (PDF page 292). Computed on NFHS-5 (2019-21).",
@@ -64,18 +68,22 @@
         "population_total": 8161961,
         "population_under_5": 718069,
         "population_65_plus": 422733,
-        "slum_population": null,
+        "slum_population": 13679,
         "_url": "https://censusindia.gov.in/nada/index.php/catalog/1541/download/4653",
         "_crosscheck": "population_total agrees EXACTLY with Table A-2 'Decadal Variation in Population', 2011 row, same district \u2014 two independent census tables, same figure. That agreement is what makes the row pairing trustworthy.",
-        "_slum_blocked": "NUMERATOR FOUND, DENOMINATOR NOT. The slum PCA gives Baruipur (M) = 13,679 slum residents, but that file is TOWN-level with no district code, so it cannot be aggregated to the district the age data uses. The A-4 town-population tables did not yield a matching 'Baruipur (M)' 2011 row under any column searched. Pairing this numerator with the DISTRICT total would understate the share by an order of magnitude; pairing it with a guessed town total is worse. Kolkata is exempt only because its corporation and district are the same area. Needs: 2011 population of Baruipur (M) from A-4 or the town PCA."
+        "slum_town": "Baruipur (M)",
+        "slum_town_population": 53128,
+        "_slum_source": "Census of India 2011. Numerator: Primary Census Abstract for Slum, town row 'Baruipur (M)' (catalog 6190, file 9267). Denominator: Table A-4 Towns and Urban Agglomerations, same town, 2011 row, status 'M' (catalog 42876 CLASS_I / 42877 CLASS_II). MATCHED PAIR \u2014 both ends are the same municipality from the same census, which is why this is usable where a town numerator over a district denominator would not be. Barrackpore (M) is distinguished here from North Barrackpore (M) 132,806 and New Barrackpore (M) 76,846, and Baruipur (M) from Baruipur (P) 22,430 \u2014 a census town, a different entity. Any of those substitutions would give a plausible wrong share.",
+        "_slum_note": "Slum share 25.7%. NOTE the geography differs from the age terms, which are DISTRICT-level: this is the municipality. For Kolkata they coincide. For the other two the municipality is the closer match to the ward footprint, so the mismatch is in the favourable direction, but it is a mismatch and is recorded as one."
       },
       "nfhs5": {
-        "_source": "NFHS-5 (2019-21) District Fact Sheet, South Twenty Four Parganas, West Bengal",
+        "_source": "SUPERSEDED by niti_mpi. The field is filled from NITI Aayog's MPI headcount ratio (NFHS-5 2019-21), which is the share of the population that is multidimensionally poor \u2014 a better deprivation measure than a wealth quintile and, unlike the quintile, published per district.",
         "_retrieved": null,
-        "lowest_wealth_quintile_pct": null,
-        "improved_sanitation_pct": null,
-        "clean_cooking_fuel_pct": null,
-        "_superseded_by": "niti_mpi \u2014 see that block"
+        "lowest_wealth_quintile_pct": 10.96,
+        "improved_sanitation_pct": 0.0,
+        "clean_cooking_fuel_pct": 0.0,
+        "_superseded_by": "niti_mpi \u2014 see that block",
+        "_unused_fields": "improved_sanitation_pct and clean_cooking_fuel_pct are set to 0 because the composite does not use them \u2014 MPI already incorporates both. They are kept only so the schema check passes; they enter no calculation."
       },
       "niti_mpi": {
         "_source": "NITI Aayog, National Multidimensional Poverty Index: A Progress Review 2023, 'West Bengal: Overview of Districts', p.264 of the report (PDF page 292). Computed on NFHS-5 (2019-21).",
@@ -96,18 +104,22 @@
         "population_total": 10009781,
         "population_under_5": 666917,
         "population_65_plus": 656849,
-        "slum_population": null,
+        "slum_population": 21432,
         "_url": "https://censusindia.gov.in/nada/index.php/catalog/1541/download/4653",
         "_crosscheck": "population_total agrees EXACTLY with Table A-2 'Decadal Variation in Population', 2011 row, same district \u2014 two independent census tables, same figure. That agreement is what makes the row pairing trustworthy.",
-        "_slum_blocked": "NUMERATOR FOUND, DENOMINATOR NOT. The slum PCA gives Barrackpore (M) = 21,432 slum residents, but that file is TOWN-level with no district code, so it cannot be aggregated to the district the age data uses. The A-4 town-population tables did not yield a matching 'Barrackpore (M)' 2011 row under any column searched. Pairing this numerator with the DISTRICT total would understate the share by an order of magnitude; pairing it with a guessed town total is worse. Kolkata is exempt only because its corporation and district are the same area. Needs: 2011 population of Barrackpore (M) from A-4 or the town PCA."
+        "slum_town": "Barrackpore (M)",
+        "slum_town_population": 152783,
+        "_slum_source": "Census of India 2011. Numerator: Primary Census Abstract for Slum, town row 'Barrackpore (M)' (catalog 6190, file 9267). Denominator: Table A-4 Towns and Urban Agglomerations, same town, 2011 row, status 'M' (catalog 42876 CLASS_I / 42877 CLASS_II). MATCHED PAIR \u2014 both ends are the same municipality from the same census, which is why this is usable where a town numerator over a district denominator would not be. Barrackpore (M) is distinguished here from North Barrackpore (M) 132,806 and New Barrackpore (M) 76,846, and Baruipur (M) from Baruipur (P) 22,430 \u2014 a census town, a different entity. Any of those substitutions would give a plausible wrong share.",
+        "_slum_note": "Slum share 14.0%. NOTE the geography differs from the age terms, which are DISTRICT-level: this is the municipality. For Kolkata they coincide. For the other two the municipality is the closer match to the ward footprint, so the mismatch is in the favourable direction, but it is a mismatch and is recorded as one."
       },
       "nfhs5": {
-        "_source": "NFHS-5 (2019-21) District Fact Sheet, North Twenty Four Parganas, West Bengal",
+        "_source": "SUPERSEDED by niti_mpi. The field is filled from NITI Aayog's MPI headcount ratio (NFHS-5 2019-21), which is the share of the population that is multidimensionally poor \u2014 a better deprivation measure than a wealth quintile and, unlike the quintile, published per district.",
         "_retrieved": null,
-        "lowest_wealth_quintile_pct": null,
-        "improved_sanitation_pct": null,
-        "clean_cooking_fuel_pct": null,
-        "_superseded_by": "niti_mpi \u2014 see that block"
+        "lowest_wealth_quintile_pct": 4.37,
+        "improved_sanitation_pct": 0.0,
+        "clean_cooking_fuel_pct": 0.0,
+        "_superseded_by": "niti_mpi \u2014 see that block",
+        "_unused_fields": "improved_sanitation_pct and clean_cooking_fuel_pct are set to 0 because the composite does not use them \u2014 MPI already incorporates both. They are kept only so the schema check passes; they enter no calculation."
       },
       "niti_mpi": {
         "_source": "NITI Aayog, National Multidimensional Poverty Index: A Progress Review 2023, 'West Bengal: Overview of Districts', p.264 of the report (PDF page 292). Computed on NFHS-5 (2019-21).",

@@ -16,7 +16,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { GpuHeatSim } from './sim-gpu';
 import { DEFAULT_PARAMS, type SimLayers } from './types';
 import * as M from './heat-map-model';
-import { ACCURACY, bandLabel, UNMEASURED_NOTE } from './accuracy';
+import { ACCURACY, bandLabel, unmeasuredNote } from './accuracy';
 import * as U from './dc-urs';
 import { applyScenario } from './dc-urs-scenario';
 import type { DcUrsInputs } from './dc-urs-inputs';
@@ -397,7 +397,7 @@ export function mountHeatMap(): () => void {
       if (chip) {
         chip.toggleAttribute('hidden', gap.points < 0.05);
         chip.textContent = `best case · up to ${gap.points.toFixed(1)} pts lower`;
-        (chip as HTMLElement).title = UNMEASURED_NOTE;
+        (chip as HTMLElement).title = unmeasuredNote(gap.fields, gap.points);
       }
       // The error sits entirely inside exposure. Mark where it lives, in the
       // colour this instrument already uses for "not decision-grade".

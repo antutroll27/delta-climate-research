@@ -63,12 +63,38 @@ export const ACCURACY: Record<'peak' | 'night', PhaseAccuracy> = {
  * the error runs, because a reader who does not know that will assume it cancels
  * out — and it does not: an unmeasured vulnerability reads as no vulnerability,
  * which always flatters.
+ *
+ * BUILT FROM THE GAP, not hardcoded. The previous constant named socioVuln and
+ * its 8.8 points in prose. That was true when it was written and false the day
+ * socio.json landed — and it would have gone on being displayed, confidently
+ * describing a missing indicator that is now measured, because nothing in a
+ * string can go stale loudly.
  */
-export const UNMEASURED_NOTE =
-    'One of twelve indicators is not yet measured: the share of residents least able to cope '
-  + 'with heat — older people, young children, low-income and informal households. Until it '
-  + 'lands, every ward is scored at its most optimistic. The true score is up to 8.8 points '
-  + 'lower. Ward-to-ward ranking is unaffected — the shift is the same for all three.';
+const FIELD_LABEL: Record<string, string> = {
+  socioVuln: 'the share of residents least able to cope with heat — older people, young '
+           + 'children, low-income and informal households',
+  popDensity: 'how many people live in each hectare',
+  far: 'how densely the ward is built',
+  fvc: 'green cover',
+  ndviMean: 'vegetation vigour',
+  ndviStd: 'how stable that vegetation is year to year',
+  albedo: 'how much sunlight the surface reflects',
+  distCoolM: 'how far residents walk to the nearest cool refuge',
+  lstDayC: 'daytime surface temperature',
+  lstNightC: 'night surface temperature',
+  ruralBaseC: 'the rural baseline the heat island is measured against',
+};
+
+export function unmeasuredNote(fields: readonly string[], points: number): string {
+  if (fields.length === 0) return '';
+  const named = fields.map(f => FIELD_LABEL[f] ?? f);
+  const list = named.length === 1 ? named[0]
+    : `${named.slice(0, -1).join('; ')}; and ${named[named.length - 1]}`;
+  return `${fields.length === 1 ? 'One indicator is' : `${fields.length} indicators are`} `
+    + `not yet measured: ${list}. Until ${fields.length === 1 ? 'it lands' : 'they land'}, every `
+    + `ward is scored at its most optimistic. The true score is up to ${points.toFixed(1)} points `
+    + `lower. Ward-to-ward ranking is unaffected — the shift applies to all three.`;
+}
 
 /** Formats the band for display, e.g. "± 3.5". */
 export function bandLabel(phase: 'peak' | 'night'): string {
@@ -90,4 +116,12 @@ export function assertAccuracyLogic(): void {
   a(ACCURACY.peak.ceilingRmseK > ACCURACY.night.ceilingRmseK,
     'daytime ceiling should exceed night — check for an in-sample overfit');
   a(ACCURACY.peak.confidence === 'indicative', 'daytime must not claim quantitative status');
+
+  // the note must not survive the gap closing — the exact failure it replaced
+  a(unmeasuredNote([], 0) === '', 'no gap must produce no note, not a stale sentence');
+  const one = unmeasuredNote(['socioVuln'], 8.75);
+  a(one.includes('One indicator is') && one.includes('8.8 points'),
+    'a single gap must be described in the singular, with its own point count');
+  a(unmeasuredNote(['socioVuln', 'far'], 12).includes('2 indicators are'),
+    'two gaps must not be described as one');
 }

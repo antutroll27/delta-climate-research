@@ -179,7 +179,7 @@ def main() -> None:
             "socioVuln": sourced(so["hvi"] if so else 0,
                                  "measured" if so else "placeholder",
                                  socio["vintage"] if socio and so else None,
-                                 "NFHS-5 levels x Census 2011 pattern"),
+                                 "Census 2011 age + slum, NITI Aayog MPI (NFHS-5)"),
             # ── Adaptive Capacity ─────────────────────────────────────────
             "fvc": sourced(s["fvc"], "measured", f"{s['years']} yr", "Sentinel-2 L2A"),
             "canopyFrac": sourced(0.0, "placeholder", None,
