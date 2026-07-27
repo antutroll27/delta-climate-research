@@ -75,6 +75,7 @@
       <div class="metric">
         <div class="k">Mean Surface Temp · modelled</div>
         <div class="lst" id="lst" style="color:var(--red)">—<span class="u">°C</span></div>
+        <div class="conf" id="conf"></div>
       </div>
       <div class="mrow">
         <div><div class="k" title="Modelled land-cover thermal contrast: this ward's mean surface temperature minus a fully-vegetated reference cell under identical forcing. NOT a measured urban heat island — published Kolkata surface UHI is 0.85–1.5 °C from 1 km satellite data, a different quantity.">Δ vs all-green ref</div><div class="val" style="color:var(--cyan)" id="uhi">—</div></div>
@@ -198,6 +199,12 @@
   .metric .k{font-family:var(--mono);font-size:.54rem;letter-spacing:.16em;color:var(--ink);text-transform:uppercase}
   .metric .lst{font-family:var(--mono);font-weight:400;font-size:2.7rem;line-height:1;margin-top:.35rem;letter-spacing:.01em;transition:color .4s}
   .metric .lst .u{font-size:1rem;color:var(--ink);margin-left:.15rem}
+  /* measured uncertainty, not decoration — the model's out-of-sample error
+     against ECOSTRESS for the phase on screen (see accuracy.ts) */
+  .metric .lst .band{font-size:.9rem;color:var(--ink);margin-left:.5rem;letter-spacing:.02em}
+  .conf{font-family:var(--mono);font-size:.52rem;letter-spacing:.14em;text-transform:uppercase;margin-top:.5rem;padding:.28rem .5rem;border-radius:3px;display:inline-block;cursor:help}
+  .conf.quantitative{color:var(--cyan);background:rgb(111 202 214 /.1);border:1px solid rgb(111 202 214 /.28)}
+  .conf.indicative{color:var(--bronze);background:rgb(176 141 87 /.12);border:1px solid rgb(176 141 87 /.32)}
   .livem .k{display:flex;align-items:center;gap:.5rem}
   .livedot{width:6px;height:6px;border-radius:50%;background:var(--bronze);display:inline-block;flex:none}
   .livedot.on{background:#3fb950;box-shadow:0 0 0 3px rgb(63 185 80 /.18);animation:hmPulse 2.4s infinite}

@@ -1,0 +1,27 @@
+{
+  "generated_from": "data/calibration/met-forcing.csv + landcover-fractions.json",
+  "scenes": 32,
+  "view_cut_deg": 0.75,
+  "method": {
+    "ceiling": "best LEAVE-ONE-OUT least-squares over {tAir} and {tAir,rh,wind,cloud,solar}; an out-of-sample upper bound on any model using this forcing. In-sample fits overfit badly at n=12.",
+    "model": "the physical model at its fitted (bound-pinned) parameters"
+  },
+  "phases": {
+    "night": {
+      "n": 20,
+      "ceiling_rmse_K": 2.18,
+      "model_rmse_K": 3.13,
+      "reported_band_K": 3.5,
+      "confidence": "quantitative",
+      "why": "air temperature explains night surface temperature well (r ~ 0.9), so a calibrated model is meaningful here"
+    },
+    "day": {
+      "n": 12,
+      "ceiling_rmse_K": 3.33,
+      "model_rmse_K": 4.61,
+      "reported_band_K": 5.0,
+      "confidence": "indicative",
+      "why": "daytime surface temperature depends on site-level insolation, cloud timing and soil moisture that 50 km reanalysis forcing cannot resolve; no model on this data can do better"
+    }
+  }
+}

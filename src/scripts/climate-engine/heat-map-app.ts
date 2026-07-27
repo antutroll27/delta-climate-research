@@ -15,6 +15,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { GpuHeatSim } from './sim-gpu';
 import { DEFAULT_PARAMS, type SimLayers } from './types';
 import * as M from './heat-map-model';
+import { ACCURACY, bandLabel } from './accuracy';
 import { rasterWardBase } from './ward-raster';
 
 interface WardMeta { name: string; zone: string; coord: string; lat: number; lon: number; veg: number; }
@@ -299,11 +300,41 @@ export function mountHeatMap(): () => void {
 
   /* ── readouts ── */
   const lstColor = (t: number) => t >= 40 ? 'var(--red)' : t >= 37 ? '#d46b4a' : t >= 33 ? 'var(--bronze)' : 'var(--cyan)';
+
+  /**
+   * Show how much to trust the number on screen. Night is calibratable against
+   * ECOSTRESS (data ceiling 2.18 K); daytime is not (3.33 K), because noon
+   * surface temperature depends on local insolation, cloud timing and soil
+   * moisture that 50 km reanalysis forcing cannot resolve. Presenting the
+   * daytime figure as decision-grade would be the real inaccuracy, so it is
+   * labelled indicative and carries its measured band.
+   */
+  function applyConfidence() {
+    const a = ACCURACY[state.phase];
+    const tag = el('conf');
+    if (tag) {
+      tag.textContent = a.confidence === 'quantitative'
+        ? `calibrated · ±${a.bandK.toFixed(1)} °C (n=${a.n})`
+        : `indicative only · ±${a.bandK.toFixed(1)} °C (n=${a.n})`;
+      tag.className = `conf ${a.confidence}`;
+      (tag as HTMLElement).title = a.note;
+    }
+    const lstEl = el('lst');
+    if (lstEl) (lstEl as HTMLElement).title = a.note;
+  }
   const histo = el('histo'); if (histo) for (let i = 0; i < 12; i++) histo.appendChild(document.createElement('i'));
   function refreshStats() {
     if (!sim || !sim.gridN) return;
     const st = sim.stats(40), t = sim.temperature();
-    const lst = el('lst'); if (lst) { lst.innerHTML = `${st.meanC.toFixed(1)}<span class="u">°C</span>`; (lst as HTMLElement).style.color = lstColor(st.meanC); }
+    const lst = el('lst');
+    if (lst) {
+      // The band is measured, not decorative: it is this model's out-of-sample
+      // error against ECOSTRESS for the phase on screen. See accuracy.ts.
+      lst.innerHTML = `${st.meanC.toFixed(1)}<span class="u">°C</span>`
+        + `<span class="band">${bandLabel(state.phase)}</span>`;
+      (lst as HTMLElement).style.color = lstColor(st.meanC);
+    }
+    applyConfidence();
     const p = M.currentParams(state), kk = p.kRad + p.h * p.wind;
     const ruralRef = (p.S * 0.75 * p.sun - p.L + p.kRad * p.tSky + p.h * p.wind * p.tAir) / kk, uhi = st.meanC - ruralRef;
     setText('uhi', `${uhi >= 0 ? '+' : ''}${uhi.toFixed(1)}°`);
