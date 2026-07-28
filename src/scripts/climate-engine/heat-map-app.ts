@@ -16,7 +16,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { GpuHeatSim } from './sim-gpu';
 import { DEFAULT_PARAMS, type SimLayers } from './types';
 import * as M from './heat-map-model';
-import { ACCURACY, bandLabel, unmeasuredNote } from './accuracy';
+import { ACCURACY, SPATIAL, bandLabel, unmeasuredNote } from './accuracy';
 import * as U from './dc-urs';
 import { applyScenario } from './dc-urs-scenario';
 import type { DcUrsInputs } from './dc-urs-inputs';
@@ -344,10 +344,26 @@ export function mountHeatMap(): () => void {
         ? `calibrated · ±${a.bandK.toFixed(1)} °C (n=${a.n})`
         : `indicative only · ±${a.bandK.toFixed(1)} °C (n=${a.n})`;
       tag.className = `conf ${a.confidence}`;
-      (tag as HTMLElement).title = a.note;
+      // Both figures on one tooltip. The phase note covers ward-LEVEL error; the
+      // spatial note covers whether the pattern inside the ward means anything.
+      // A reader who sees only the first will read the hot blocks as measured —
+      // they are not (SPATIAL.rModel 0.11, below a plain vegetation map's 0.23).
+      (tag as HTMLElement).title = `${a.note}\n\n${SPATIAL.note}`;
     }
     const lstEl = el('lst');
-    if (lstEl) (lstEl as HTMLElement).title = a.note;
+    if (lstEl) (lstEl as HTMLElement).title = `${a.note}\n\n${SPATIAL.note}`;
+  }
+  /* The legend states the limit of what its own colours mean. Written from the
+     measured constant so it cannot drift from the number in accuracy.ts — the
+     same reason unmeasuredNote() stopped being a hardcoded string. */
+  {
+    const pn = el('patternNote');
+    // Deliberately ONE line. The legend sits directly above the ward strip with
+    // ~27 px of slack; a two-line note pushed the OpenStreetMap attribution
+    // underneath the strip, and that line is a licence obligation, not decoration.
+    // The full sentence — and n — is on the tooltip and in SPATIAL.note.
+    if (pn) pn.textContent = `Block pattern illustrative · r ${SPATIAL.rModel.toFixed(2)}`;
+    (pn as HTMLElement | null)?.setAttribute('title', SPATIAL.note);
   }
   const histo = el('histo'); if (histo) for (let i = 0; i < 12; i++) histo.appendChild(document.createElement('i'));
   function refreshStats() {

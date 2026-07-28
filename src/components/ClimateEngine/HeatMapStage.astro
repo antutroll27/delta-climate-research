@@ -25,7 +25,7 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
 
   <div class="map">
     <div id="mlmap"></div>
-    <div class="synthetic"><span class="d"></span><span class="full">Live basemap + real footprints &amp; Google heights · </span>heat field modelled</div>
+    <div class="synthetic"><span class="d"></span><span class="full">Live basemap + real footprints &amp; Google heights · </span>heat field modelled<span class="sp"> · block detail illustrative</span></div>
     <div class="stamp-slot"><ConstructionStamp /></div>
     <div class="loadchip" id="loadchip">Building ward…</div>
 
@@ -107,6 +107,10 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
       <div class="k" style="margin:.9rem 0 .5rem"><span>Land Surface Temp</span><span>°C</span></div>
       <div class="ramp"></div>
       <div class="sc"><span>26</span><span>32</span><span>37</span><span>42</span><span>48+</span></div>
+      <!-- Filled from accuracy.ts SPATIAL, never hardcoded here: the legend is
+           where a reader goes to interpret the colours, so it is where the limit
+           of what the colours mean belongs. -->
+      <p class="pattern-note" id="patternNote"></p>
       <div class="attr">Basemap © OpenStreetMap · OpenFreeMap · Footprints © Microsoft (ODbL) · Heights Google Open Buildings 2.5D (CC BY 4.0) · left-drag orbit · right-drag pan · scroll zoom</div>
     </div>
     </div>
@@ -169,6 +173,7 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
   body.studio .loadchip{color:#0e7b8c}
 
   .synthetic{position:absolute;top:20px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:.5rem;font-family:var(--mono);font-size:.56rem;letter-spacing:.2em;color:var(--bronze);background:rgb(176 141 87 /.14);border:1px solid rgb(176 141 87 /.3);border-radius:20px;padding:.42rem .9rem;z-index:3;text-transform:uppercase;backdrop-filter:blur(8px)}
+  .synthetic .sp{opacity:.82}
   .synthetic .d{width:6px;height:6px;border-radius:50%;background:var(--bronze);animation:hmPulse 2.2s infinite}
   @keyframes hmPulse{0%,100%{opacity:1}50%{opacity:.3}}
   /* Build-status stamp, grouped with the honesty banner directly above it —
@@ -184,6 +189,11 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
   .stamp-slot{position:absolute;left:50%;top:68px;transform:translateX(-50%);z-index:3;pointer-events:none;
               --stamp-size:.62rem;--stamp-pad:.5rem 1rem;--stamp-tracking:.26em;--stamp-rot:-2.5deg}
   .stamp-slot :global(.con-stamp){opacity:1;background:rgb(6 14 16 /.72);backdrop-filter:blur(8px)}
+  /* The within-ward caveat. Bronze, like every other provenance statement on
+     this page, and directly under the colour ramp it qualifies. */
+  .pattern-note{margin:.32rem 0 0;font-family:var(--mono);font-size:.5rem;line-height:1.75;
+                letter-spacing:.09em;color:var(--bronze);text-transform:uppercase;
+                border-top:1px solid rgb(176 141 87 /.22);padding-top:.42rem;white-space:nowrap}
   .loadchip{position:absolute;top:118px;left:50%;transform:translateX(-50%);font-family:var(--mono);font-size:.52rem;letter-spacing:.26em;color:var(--cyan);z-index:3;text-transform:uppercase;opacity:0;transition:opacity .25s}
   .loadchip.on{opacity:1}
 
@@ -250,11 +260,16 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
   .histo i{flex:1;background:linear-gradient(var(--cyan),var(--surface2));border-radius:1px;opacity:.8;min-height:2px;transition:height .4s}
   .cta{margin:14px 18px 18px;display:block;width:calc(100% - 36px);background:var(--bronze);color:#0d0a05;border:0;border-radius:9px;padding:.8rem;font-family:var(--mono);font-size:.62rem;letter-spacing:.14em;text-transform:uppercase;font-weight:400;cursor:pointer}
 
-  .legend{position:static;width:100%;flex:none;margin-top:auto;background:rgb(9 20 22 /.82);border:1px solid var(--line);border-radius:12px;backdrop-filter:blur(16px);padding:13px 16px}
+  /* position:relative + z-index so the panel sits ABOVE maplibre's attribution
+     control, which is z-index 1 and anchored to the same corner. As `static` the
+     z-index never applied, and the control has been covering the bottom of this
+     panel — the source attribution line was already half-hidden before the
+     pattern note made it obvious. */
+  .legend{position:relative;z-index:5;width:100%;flex:none;margin-top:auto;background:rgb(9 20 22 /.82);border:1px solid var(--line);border-radius:12px;backdrop-filter:blur(16px);padding:10px 16px 4px}
   .legend .k{font-family:var(--mono);font-size:.52rem;letter-spacing:.16em;color:var(--ink);display:flex;justify-content:space-between;margin-bottom:.5rem;text-transform:uppercase}
   .ramp{height:8px;border-radius:4px;background:linear-gradient(90deg,#6fcad6,#9fb98a,#b08d57,#d46b4a,#e5484d)}
   .legend .sc{display:flex;justify-content:space-between;font-family:var(--mono);font-size:.5rem;color:var(--faint);margin-top:.35rem}
-  .cindex{display:flex;flex-direction:column;gap:.42rem}
+  .cindex{display:flex;flex-direction:column;gap:.3rem}
   .cindex .ci{display:flex;align-items:center;gap:.55rem;font-size:.68rem;color:var(--paper)}
   .cindex .ci .d{width:14px;height:14px;border-radius:4px;flex:none}
   .legend .attr{font-family:var(--mono);font-size:.46rem;letter-spacing:.05em;color:var(--faint);margin-top:.8rem;line-height:1.7;text-transform:none}
