@@ -1,0 +1,25 @@
+{
+  "source": "Sentinel-2 L2A via Earth Search STAC, NDVI -> FVC with the same NDVI_BARE/NDVI_VEG endpoints as the ward composites.",
+  "why": "The calibration used WorldCover CLASS fractions and the runtime uses FVC. Feeding two different quantities to the same -L*v term made the validated model and the displayed model different models.",
+  "seed": 20260729,
+  "samples_per_mask": 3,
+  "years": [
+    2024
+  ],
+  "masks": {
+    "urban": {
+      "fvc_mean": 0.6784,
+      "fvc_sd": 0.1005,
+      "fvc_stderr": 0.058,
+      "n_usable": 3,
+      "class_fraction_veg": 0.7206
+    },
+    "rural": {
+      "fvc_mean": 0.654,
+      "fvc_sd": 0.0892,
+      "fvc_stderr": 0.0515,
+      "n_usable": 3,
+      "class_fraction_veg": 0.7974
+    }
+  }
+}

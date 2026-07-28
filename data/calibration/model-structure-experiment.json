@@ -1,0 +1,257 @@
+{
+  "note": "EXPERIMENT ONLY \u2014 not a calibration, never shipped. fit-physics.py remains the calibration entrypoint.",
+  "scenes": 32,
+  "candidates": [
+    {
+      "key": "A",
+      "label": "baseline \u2014 shipping structure",
+      "fitted": {
+        "q_day": 0.6,
+        "ratio": 0.15,
+        "c": 1.4
+      },
+      "bounds": {
+        "q_day": [
+          0.02,
+          0.6
+        ],
+        "ratio": [
+          0.15,
+          1.5
+        ],
+        "c": [
+          1.2,
+          1.4
+        ]
+      },
+      "pinned": [
+        "q_day",
+        "ratio",
+        "c"
+      ],
+      "rmse_K": 3.066,
+      "urban_bias_K": -0.919,
+      "rural_bias_K": -2.46,
+      "bias_spread_K": 1.541,
+      "suhii_modelled_K": 1.839,
+      "suhii_measured_K": 0.343
+    },
+    {
+      "key": "B",
+      "label": "+ ET coefficient free",
+      "fitted": {
+        "q_day": 0.6,
+        "ratio": 0.15,
+        "c": 1.4,
+        "l_et": 0.2751
+      },
+      "bounds": {
+        "q_day": [
+          0.02,
+          0.6
+        ],
+        "ratio": [
+          0.15,
+          1.5
+        ],
+        "c": [
+          1.2,
+          1.4
+        ],
+        "l_et": [
+          0.05,
+          0.6
+        ]
+      },
+      "pinned": [
+        "q_day",
+        "ratio",
+        "c"
+      ],
+      "rmse_K": 2.852,
+      "urban_bias_K": -0.076,
+      "rural_bias_K": -1.527,
+      "bias_spread_K": 1.451,
+      "suhii_modelled_K": 1.813,
+      "suhii_measured_K": 0.343
+    },
+    {
+      "key": "C",
+      "label": "+ ET and absorbed solar free",
+      "fitted": {
+        "q_day": 0.6,
+        "ratio": 0.15,
+        "c": 1.4,
+        "l_et": 0.1378,
+        "s_solar": 0.3006
+      },
+      "bounds": {
+        "q_day": [
+          0.02,
+          0.6
+        ],
+        "ratio": [
+          0.15,
+          1.5
+        ],
+        "c": [
+          1.2,
+          1.4
+        ],
+        "l_et": [
+          0.05,
+          0.6
+        ],
+        "s_solar": [
+          0.2,
+          1.2
+        ]
+      },
+      "pinned": [
+        "q_day",
+        "ratio",
+        "c"
+      ],
+      "rmse_K": 2.785,
+      "urban_bias_K": -0.083,
+      "rural_bias_K": -1.444,
+      "bias_spread_K": 1.361,
+      "suhii_modelled_K": 1.781,
+      "suhii_measured_K": 0.343
+    },
+    {
+      "key": "D",
+      "label": "+ ET free, saturating in vegetation",
+      "fitted": {
+        "q_day": 0.6,
+        "ratio": 0.15,
+        "c": 1.4,
+        "l_et": 0.215,
+        "vsat": 0.05
+      },
+      "bounds": {
+        "q_day": [
+          0.02,
+          0.6
+        ],
+        "ratio": [
+          0.15,
+          1.5
+        ],
+        "c": [
+          1.2,
+          1.4
+        ],
+        "l_et": [
+          0.05,
+          0.6
+        ],
+        "vsat": [
+          0.05,
+          5.0
+        ]
+      },
+      "pinned": [
+        "q_day",
+        "ratio",
+        "c",
+        "vsat"
+      ],
+      "rmse_K": 2.834,
+      "urban_bias_K": -0.173,
+      "rural_bias_K": -1.475,
+      "bias_spread_K": 1.302,
+      "suhii_modelled_K": 1.723,
+      "suhii_measured_K": 0.343
+    },
+    {
+      "key": "E",
+      "label": "+ ET free, coupling-ratio bound opened",
+      "fitted": {
+        "q_day": 0.5413,
+        "ratio": 0.01,
+        "c": 1.4,
+        "l_et": 0.275
+      },
+      "bounds": {
+        "q_day": [
+          0.02,
+          0.6
+        ],
+        "ratio": [
+          0.01,
+          1.5
+        ],
+        "c": [
+          1.2,
+          1.4
+        ],
+        "l_et": [
+          0.05,
+          0.6
+        ]
+      },
+      "pinned": [
+        "ratio",
+        "c"
+      ],
+      "rmse_K": 2.731,
+      "urban_bias_K": 0.312,
+      "rural_bias_K": -1.194,
+      "bias_spread_K": 1.506,
+      "suhii_modelled_K": 1.854,
+      "suhii_measured_K": 0.343
+    },
+    {
+      "key": "F",
+      "label": "+ ET free, sky-view factor per mask",
+      "fitted": {
+        "q_day": 0.6,
+        "ratio": 0.15,
+        "c": 1.4,
+        "l_et": 0.2927,
+        "svf_urban": 0.2,
+        "svf_rural": 0.6
+      },
+      "bounds": {
+        "q_day": [
+          0.02,
+          0.6
+        ],
+        "ratio": [
+          0.15,
+          1.5
+        ],
+        "c": [
+          1.2,
+          1.4
+        ],
+        "l_et": [
+          0.05,
+          0.6
+        ],
+        "svf_urban": [
+          0.2,
+          0.9
+        ],
+        "svf_rural": [
+          0.6,
+          1.0
+        ]
+      },
+      "pinned": [
+        "q_day",
+        "ratio",
+        "c",
+        "svf_urban",
+        "svf_rural"
+      ],
+      "rmse_K": 2.755,
+      "urban_bias_K": 0.2,
+      "rural_bias_K": -1.446,
+      "bias_spread_K": 1.647,
+      "suhii_modelled_K": 2.032,
+      "suhii_measured_K": 0.343
+    }
+  ]
+}
