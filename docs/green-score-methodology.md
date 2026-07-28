@@ -10,7 +10,10 @@
 
 This sets out the Green Score end to end: the algorithm, where every constant comes from, what the
 model actually produces, and — new in this revision — **how accurate it is against satellite
-measurement**. Section 8 lists every source with a resolvable link.
+measurement**, in both senses: how close the ward-level temperature is (§5A), and whether the
+pattern *within* a ward is real (§5A, "What those figures do NOT cover"). The second answer is
+largely no, it is disclosed in the product, and it matters more than the first for anyone reading
+the map block by block. Section 8 lists every source with a resolvable link.
 
 Writing it prompted a proper review of the constants, which was overdue. That turned up **five**
 that were uncited, self-referential, or not scientifically supportable — all now corrected and
@@ -322,6 +325,66 @@ This is why the tool now labels the daytime view **indicative only** and reserve
 language for night. Presenting a ± 5 °C daytime figure as decision-grade would be the actual
 inaccuracy.
 
+### What those figures do NOT cover — spatial skill
+
+Everything in the table above is a **ward-mean** error: how far the model's average temperature sits
+from ECOSTRESS's average over the same 1400 m box. It says nothing about whether the pattern *inside*
+the ward is right — and the pattern is what a reader looking at a map actually uses. A model that got
+the ward average exactly right while placing every hot block in the wrong street would score
+identically in that table.
+
+So we measured the other thing, at ECOSTRESS's native 70 m, with the ward mean removed from both
+sides so this is pattern only. 81 ward-scenes across 32 near-nadir scenes and three wards:
+
+| predictor | overall r | day | night |
+|---|---|---|---|
+| **Our model** | **0.113** | 0.175 | 0.074 |
+| Built fraction alone | 0.037 | -0.012 | 0.067 |
+| **Vegetation alone** | **0.229** | 0.297 | 0.186 |
+
+**A plain vegetation map predicts within-ward heat about twice as well as our full physics model.**
+The two null predictors are the reason that is legible at all: r = 0.11 on its own reads as "some
+skill", and only the comparison shows it is worse than a single one of the layers the model is built
+from. Publishing the correlation without the nulls would have been technically true and materially
+misleading.
+
+Decomposing the field into its three spatially-varying terms says why:
+
+| term | correlation with measured heat | spatial variation it contributes |
+|---|---|---|
+| Solar / albedo | 0.040 | 0.02 °C |
+| **Built fraction** | **0.037** | **1.46 °C** |
+| Vegetation | 0.229 | 0.53 °C |
+
+The built-fraction term contributes most of the picture and carries no measurable skill; the
+vegetation term carries the skill and is outweighed roughly three to one. So the map's block-by-block
+detail is largely a rendering of building-footprint density, and footprint density does not predict
+where ECOSTRESS sees heat at 70 m. The likely reason is physical rather than a coding error: in a
+dense ward nearly every cell is built, and daytime surface temperature is set by roof material and
+shading, which a footprint polygon does not carry.
+
+**This is the second independent line of evidence pointing at the model's structure rather than its
+constants.** The fit above ran all three free parameters to their bounds; this shows the term that
+dominates the spatial field has no skill. Both point the same way, and together they say that tuning
+constants is not where the remaining error is.
+
+**What this does not affect.** Ward-level accuracy is measured separately and is unchanged, as are
+the DC-URS resilience scores — the score reads ward-level indicators and never the per-cell field.
+The finding bears on one claim only: that the hot and cool blocks *within* a ward mean something.
+
+**What we did about it.** The tool now states it. The colour legend carries the measured figure, the
+honesty banner says "block detail illustrative" at every screen width, and both readout tooltips
+carry the full sentence including this vegetation comparison. The figures are held as data in
+`src/scripts/climate-engine/accuracy.ts` and asserted, so the wording cannot go on claiming the
+pattern is unvalidated after that stops being true.
+
+Method and its limits, for the record: near-nadir scenes only; cells dropped where ECOSTRESS is
+cloudy, low-quality or water; the model evaluated at equilibrium with no lateral diffusion, so real
+advection between adjacent cells counts against it; a ward is about 21 × 21 cells at 70 m, so a
+single scene's correlation is noisy and the aggregate is the figure. Reproduce with
+`python3 scripts/measure-spatial-accuracy.py`; full per-scene output in
+`data/calibration/spatial-accuracy.json`.
+
 ### The fit failed, and that is the honest result
 
 We then attempted to fit the model's three remaining free constants — anthropogenic heat, the
@@ -364,6 +427,14 @@ meet is not a quality standard; the per-phase figures above replace it.
   (§5A), and the result is ± 3.5 °C at night and ± 5.0 °C by day — usable for screening and ranking
   interventions, not for anything requiring a defensible absolute temperature. The daytime figure
   cannot be improved without better weather data.
+
+- **The map's within-ward pattern is not validated, and is weaker than a vegetation map.** Measured
+  against ECOSTRESS at 70 m (§5A), our field scores r = 0.11 where vegetation cover alone scores
+  0.23. The built-fraction term contributes 1.46 °C of spatial variation against vegetation's
+  0.53 °C while correlating at 0.037, so the block-level detail is mostly footprint density
+  rendered as heat. It is disclosed in the product. Ward-level figures and the DC-URS scores are
+  unaffected. Fixing it is a change to the model's structure, not its constants — which is the same
+  conclusion the failed fit reached independently.
 
 - **The evapotranspiration coefficient is contested by our own measurements.** §4.2 derives L = 0.43
   from local park-cooling studies and it satisfies those constraints. The satellite fit says it is

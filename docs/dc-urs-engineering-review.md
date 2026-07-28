@@ -14,7 +14,12 @@ a better instrument than what it replaces, for two reasons beyond the ones in yo
 
 **It shrinks our biggest exposure.** We spent last week measuring how accurate our heat model
 actually is: **± 3.5 °C at night, ± 5.0 °C by day**, and the daytime figure cannot be improved
-without better weather data. In the Green Score, modelled cooling carried two-thirds of the
+without better weather data. (Since this note was first issued we have also measured the *spatial*
+skill — whether the map places heat correctly *within* a ward — and it is weak: r = 0.11, below
+the r = 0.23 of a plain vegetation map. That is disclosed in the product and detailed in
+§5A of the methodology. It strengthens rather than weakens the argument below: DC-URS scores on
+ward-level indicators and never touches the per-cell field, so the finding does not reach the index
+at all.) In the Green Score, modelled cooling carried two-thirds of the
 weight — so that uncertainty went almost straight through to the headline number. In DC-URS, heat
 carries `w_H = 0.25` and is normalised over a 20 K span, so the same error moves the score by
 about **5 points out of 100**, a quarter of one tier band. Your index makes our known weakness
@@ -206,7 +211,8 @@ Full formulas and every constant will land in `docs/dc-urs-spec.md` before imple
 | Rathi, Chakraborty, Mishra & Dutta (2021), *Int. J. Environ. Res. Public Health* | Heat vulnerability index for urbanites of four Indian cities, including Kolkata | [doi:10.3390/ijerph19010283](https://doi.org/10.3390/ijerph19010283) |
 | Azhar, Saha, Ganguly & Mavalankar (2017), *Int. J. Environ. Res. Public Health* | Heat-wave vulnerability mapping for India from Census 2011 + DLHS | [doi:10.3390/ijerph14040357](https://doi.org/10.3390/ijerph14040357) |
 | IPCC AR6 WGII | Risk as hazard × exposure × vulnerability | [ipcc.ch/report/ar6/wg2](https://www.ipcc.ch/report/ar6/wg2/) |
-| Delta measured accuracy | ± 3.5 °C night / ± 5.0 °C day, 49 ECOSTRESS scenes | `docs/green-score-methodology.md` §5A |
+| Delta measured accuracy, ward level | ± 3.5 °C night / ± 5.0 °C day, 49 ECOSTRESS scenes | `docs/green-score-methodology.md` §5A |
+| Delta measured accuracy, within a ward | r = 0.11 against ECOSTRESS at 70 m, below the r = 0.23 of a vegetation map — pattern **not** validated | `docs/green-score-methodology.md` §5A |
 
 ---
 
