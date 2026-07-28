@@ -106,7 +106,9 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
       </div>
       <div class="k" style="margin:.9rem 0 .5rem"><span>Land Surface Temp</span><span>°C</span></div>
       <div class="ramp"></div>
-      <div class="sc"><span>26</span><span>32</span><span>37</span><span>42</span><span>48+</span></div>
+      <!-- filled by syncRamp(): the scale moves with the weather, so hardcoded
+           numbers here would contradict the colours above them. -->
+      <div class="sc" id="rampSc"><span>26</span><span>32</span><span>37</span><span>42</span><span>48</span></div>
       <!-- Filled from accuracy.ts SPATIAL, never hardcoded here: the legend is
            where a reader goes to interpret the colours, so it is where the limit
            of what the colours mean belongs. -->

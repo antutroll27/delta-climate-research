@@ -14,7 +14,7 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { GpuHeatSim } from './sim-gpu';
-import { DEFAULT_PARAMS, type SimLayers } from './types';
+import { DEFAULT_PARAMS, type SimLayers, type SimParams } from './types';
 import * as M from './heat-map-model';
 import { ACCURACY, SPATIAL, bandLabel, unmeasuredNote } from './accuracy';
 import * as U from './dc-urs';
@@ -26,7 +26,7 @@ import { loadWardSurface, type WardSurface } from './surface-raster';
 // Ward set lives in src/data/wards.ts so widening beyond three is a data change,
 // not a code change (dc-urs-spec.md §1).
 const WARDS = WARD_MAP;
-const { SIM_N, RAMP_MIN, RAMP_MAX, RESET_BURST } = M;
+const { SIM_N, RESET_BURST } = M;
 const STYLES = { dark: 'https://tiles.openfreemap.org/styles/dark', studio: 'https://tiles.openfreemap.org/styles/positron' };
 
 export function mountHeatMap(): () => void {
@@ -99,6 +99,11 @@ export function mountHeatMap(): () => void {
   let sim: GpuHeatSim | null = null;
   try { sim = new GpuHeatSim(simRenderer); } catch (e) { console.warn('GPU sim unavailable:', (e as Error).message); }
   const heatData = new Float32Array(SIM_N * SIM_N * 4);
+  /* Colour-ramp bounds for the CURRENT forcing. Recomputed whenever the phase,
+     pathway or live ambient changes, and shared by the ground overlay, the
+     facades and the histogram so all three always speak the same scale.
+     Ward-independent by construction — see rampBounds() in heat-map-model. */
+  let ramp: [number, number] = [M.RAMP_MIN, M.RAMP_MAX];
   const heatTex = new THREE.DataTexture(heatData, SIM_N, SIM_N, THREE.RGBAFormat, THREE.FloatType);
   heatTex.minFilter = heatTex.magFilter = THREE.LinearFilter; heatTex.needsUpdate = true;
   const blurTmp = new Float32Array(SIM_N * SIM_N);
@@ -115,13 +120,17 @@ export function mountHeatMap(): () => void {
   const growU = { value: 1 }, studioU = { value: 0 }, sizeU = { value: 1400 }, tintU = { value: 1 };
   const noise01 = M.noise01;
 
+  /* Shared uniform objects so the facade shader tracks the ramp without being
+     recompiled — assigning a new {value:…} each frame would not reach the GPU. */
+  const heatMinU = { value: M.RAMP_MIN }, heatMaxU = { value: M.RAMP_MAX };
+
   /* ── facade material (grow-in · live tint · line-art · tint modes) ── */
   function makeFacade() {
     const m = new THREE.MeshStandardMaterial({ roughness: .84, metalness: .05 });
     m.onBeforeCompile = (sh) => {
       sh.uniforms.uGrow = growU; sh.uniforms.uStudio = studioU; sh.uniforms.uSize = sizeU; sh.uniforms.uTintMode = tintU;
       sh.uniforms.tField = { value: heatTex };
-      sh.uniforms.uHeatMin = { value: RAMP_MIN }; sh.uniforms.uHeatMax = { value: RAMP_MAX };
+      sh.uniforms.uHeatMin = heatMinU; sh.uniforms.uHeatMax = heatMaxU;
       sh.vertexShader = 'attribute float aDelay; attribute float aH; attribute vec2 aCtr;\n'
         + 'varying vec3 vFp; varying vec3 vFn; varying float vTop; varying float vT;\n'
         + 'uniform float uGrow; uniform float uSize; uniform sampler2D tField;\n'
@@ -187,7 +196,7 @@ export function mountHeatMap(): () => void {
       threeRenderer.autoClear = false;
       overlay = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.ShaderMaterial({
         transparent: true, depthWrite: false,
-        uniforms: { tT: { value: heatTex }, uMin: { value: RAMP_MIN }, uMax: { value: RAMP_MAX }, uOp: { value: 0.5 } },
+        uniforms: { tT: { value: heatTex }, uMin: heatMinU, uMax: heatMaxU, uOp: { value: 0.5 } },
         vertexShader: 'varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
         fragmentShader: `varying vec2 vUv; uniform sampler2D tT; uniform float uMin,uMax,uOp;
           vec3 ramp(float t){ vec3 cA=vec3(.204,.412,.529),cB=vec3(.318,.635,.729),c0=vec3(.435,.792,.839),c1=vec3(.624,.725,.541),c2=vec3(.690,.553,.341),c3=vec3(.831,.420,.290),c4=vec3(.898,.282,.302);
@@ -365,6 +374,20 @@ export function mountHeatMap(): () => void {
     if (pn) pn.textContent = `Block pattern illustrative · r ${SPATIAL.rModel.toFixed(2)}`;
     (pn as HTMLElement | null)?.setAttribute('title', SPATIAL.note);
   }
+  /* Push the bounds to every consumer AND to the legend, so the printed numbers
+     can never disagree with the colours above them. */
+  function syncRamp(p: SimParams) {
+    ramp = M.rampBounds(p);
+    heatMinU.value = ramp[0]; heatMaxU.value = ramp[1];
+    const sc = el('rampSc');
+    // A narrow span needs a decimal: the retained phase can be 3 K wide, where
+    // whole degrees print "24 · 24 · 25 · 26 · 27" — a repeated label reads as a
+    // rendering bug and tells the reader nothing about the gradient.
+    const dp = ramp[1] - ramp[0] < 8 ? 1 : 0;
+    if (sc) sc.innerHTML = [0, .25, .5, .75, 1]
+      .map(f => `<span>${(ramp[0] + (ramp[1] - ramp[0]) * f).toFixed(dp)}</span>`).join('');
+  }
+
   const histo = el('histo'); if (histo) for (let i = 0; i < 12; i++) histo.appendChild(document.createElement('i'));
   function refreshStats() {
     if (!sim || !sim.gridN) return;
@@ -379,11 +402,12 @@ export function mountHeatMap(): () => void {
     }
     applyConfidence();
     const p = M.currentParams(state), kk = p.kRad + p.h * p.wind;
+    syncRamp(p);
     const ruralRef = (p.S * 0.75 * p.sun - p.L + p.kRad * p.tSky + p.h * p.wind * p.tAir) / kk, uhi = st.meanC - ruralRef;
     setText('uhi', `${uhi >= 0 ? '+' : ''}${uhi.toFixed(1)}°`);
     setText('area', `${(st.fracAbove * 100).toFixed(0)}%`);
     const bins = new Array(12).fill(0);
-    for (let i = 0; i < t.length; i++) { const b = Math.min(11, Math.max(0, ((t[i] - RAMP_MIN) / (RAMP_MAX - RAMP_MIN) * 12) | 0)); bins[b]++; }
+    for (let i = 0; i < t.length; i++) { const b = Math.min(11, Math.max(0, ((t[i] - ramp[0]) / (ramp[1] - ramp[0]) * 12) | 0)); bins[b]++; }
     const mx = Math.max(...bins, 1);
     histo?.childNodes.forEach((elm, i) => { (elm as HTMLElement).style.height = `${Math.max(4, bins[i] / mx * 100)}%`; });
     const cooling = Math.max(0, state.baselineMean - st.meanC), iv = state.iv;

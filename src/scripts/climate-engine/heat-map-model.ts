@@ -13,7 +13,43 @@ import { CANONICAL_GRID_N, DEFAULT_PARAMS, STORE_NIGHT, type SimParams, type Sim
 import { skyTemperatureC, dewpointC } from './sky.ts';
 
 export const SIM_N = CANONICAL_GRID_N;         // grid side (ward 1400 m → dx ≈ 7.29 m/cell)
-export const RAMP_MIN = 26, RAMP_MAX = 48;    // °C colour-ramp bounds
+/**
+ * Colour-ramp bounds, °C. Kept as the LEGACY FIXED PAIR for anything that still
+ * wants a constant; `rampBounds()` below is what the map uses.
+ */
+export const RAMP_MIN = 26, RAMP_MAX = 48;
+
+/**
+ * Reference surface extremes, p2–p98 of the MEASURED Sentinel-2 texture and the
+ * footprint raster across all three wards. These make `rampBounds` depend on the
+ * CONDITION but not on which ward is open — so two wards at the same conditions
+ * still share a colour scale and remain visually comparable, which per-ward
+ * autoscaling would quietly destroy.
+ */
+const REF = { vegHi: 0.878, vegLo: 0.0, albHi: 0.190, albLo: 0.088, builtHi: 1.0, builtLo: 0.0 };
+
+/**
+ * Colour-ramp bounds for the current forcing.
+ *
+ * WHY THIS IS NOT A FIXED PAIR ANY MORE. 26–48 °C was chosen before the model
+ * was calibrated and it fits almost nothing the model produces. On a normal day
+ * the field spans 28–39 °C, which lands entirely in the ramp's lower half — the
+ * whole ward renders one flat green and the instrument looks inert. On a
+ * heatwave the field reaches 76 °C and EVERY cell clips: 100 % of the ward
+ * becomes one shade of red, so the map stops discriminating on precisely the
+ * day a reader opens it.
+ *
+ * The bounds are therefore evaluated from the same physics the field uses, at a
+ * coolest-plausible and hottest-plausible cell. The scale moves with the
+ * weather and the pathway; it does not move with the ward. The legend always
+ * prints the numbers, so a reader is never guessing what a colour means.
+ */
+export function rampBounds(p: SimParams): [number, number] {
+  const lo = eqCell(p, REF.albHi, REF.vegHi, REF.builtLo);   // shaded, green, unbuilt
+  const hi = eqCell(p, REF.albLo, REF.vegLo, REF.builtHi);   // dark, bare, fully built
+  // A degenerate span would divide by ~zero in the shader and flatten the map.
+  return hi - lo < 1 ? [lo - 0.5, lo + 0.5] : [lo, hi];
+}
 /**
  * Empirical spatial-influence kernel — NOT a thermal diffusivity.
  * Lateral heat conduction between 7.29 m cells is physically negligible (soil
