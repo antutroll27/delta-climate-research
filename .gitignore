@@ -47,7 +47,13 @@ output/
 .firecrawl/
 
 # preview scratch artifacts (headless screenshots + verification scripts)
-previews/_*
+#
+# The whole directory, not just its top level. The old patterns were
+# `previews/_*` plus `previews/*.html` further down, which matched neither
+# subdirectories nor the .png/.mjs inside them — so 61 MB of screenshots and
+# throwaway verification scripts across 11 sub-folders sat untracked and one
+# `git add -A` from entering the history permanently.
+previews/
 models-src/
 
 # heavy/unshipped 3D assets — keep local, out of git (move to Git LFS when wiring production)
@@ -57,7 +63,6 @@ public/models/flora.glb
 public/models/flora_raw.glb
 public/models/flowers_pack_4.glb
 public/models/nature_vegetation_pack.glb
-previews/*.html
 inspiration/
 
 # personal Claude Code permission posture (not shared)
