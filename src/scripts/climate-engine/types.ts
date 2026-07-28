@@ -55,6 +55,21 @@ export interface SimParams {
   /** anthropogenic heat per unit built. */
   Q: number;
   tAir: number;
+  /**
+   * Heat stored by day and released at night, °C/step-unit. ZERO BY DAY.
+   *
+   * The storage flux (ΔQs) a steady-state surface balance omits by
+   * construction. Without it the model computes a weighted mean of air and a
+   * sky 10–20 K colder and puts the night surface BELOW air — measured, the
+   * ward surface sits 2.10 K ABOVE it, because the fabric is still discharging
+   * the day's heat. That is a sign error, and no coupling constant fixes a
+   * sign.
+   *
+   * Fitted at ward scale against 79 ECOSTRESS ward-scenes; it does NOT scale
+   * with built fraction, which was tested and came back at zero — the rural
+   * mask sits above air at night too.
+   */
+  store: number;
 }
 
 export interface SimStats {
@@ -81,7 +96,11 @@ export const DEFAULT_PARAMS: SimParams = {
   D: 0.15,
   S: 0.6,
   sun: 1,
-  kRad: 0.02,
+  // Radiative-to-convective coupling. Was 0.02/0.04. Fitted at ward scale, held
+  // inside the physically defensible band (linearised radiative coupling
+  // ~4εσT³ ≈ 6 W/m²K against a convective 10–30, so kRad:h belongs in roughly
+  // 0.2–0.6; this is 0.2).
+  kRad: 0.01,
   tSky: 17,
   // Evapotranspiration cooling. Was 0.5, which put a fully-vegetated surface
   // 5.8 K below air temperature — more cooling than ET can physically deliver.
@@ -90,12 +109,33 @@ export const DEFAULT_PARAMS: SimParams = {
   //   · vegetated surface <4 K below air (physical ceiling on ET)
   // Valid range is [0.40, 0.46] once currentParams' humidity gate (×0.84 at
   // rh=60) is accounted for; see scripts/validate-model.mjs.
-  L: 0.43,
-  h: 0.04,
+  // 0.46 — the top of the [0.40, 0.46] band that satisfies BOTH the Kolkata
+  // park cool-island measurements and the physical ceiling on ET. The
+  // unconstrained ward-scale fit wanted 0.8, which is roughly twice what
+  // evapotranspiration can deliver; it was refused. Fitting better with a
+  // constant nobody can defend is not an improvement.
+  L: 0.46,
+  h: 0.05,
   wind: 1,
-  Q: 0.55,
+  // 0.4131, down from 0.55. The old value was inflated by a calibration that
+  // asked one term to carry the entire urban–rural difference between two
+  // GHS-SMOD masks that are, measured, the same landscape. Halving it is what
+  // the ward-scale evidence says, and it directly reduces the built term's
+  // over-dominance of the within-ward pattern.
+  Q: 0.4131,
   tAir: 32,
+  // Day. `currentParams` substitutes STORE_NIGHT for the retained phase.
+  store: 0,
 };
+
+/**
+ * Nocturnal heat release, °C/step-unit — the storage term, night only.
+ *
+ * Ward-scale fit against 79 ECOSTRESS ward-scenes. With it the modelled night
+ * surface sits above air as measured (bias +0.13 K, was −0.97 K); without it
+ * the sign is wrong no matter how the constants are tuned.
+ */
+export const STORE_NIGHT = 0.1052;
 
 /** CFL bound for the 5-point explicit Laplacian (dx=1). The pure-diffusion 2D
  *  limit is D·dt ≤ 0.25, but the source/sink term (−k·T) tips the checkerboard
@@ -120,7 +160,7 @@ export function stableDt(p: SimParams, requested: number): number {
  * (instant convergence, no cold start) and to sanity-check shader tuning.
  */
 export function equilibriumC(p: SimParams, albedo: number, veg: number, built: number): number {
-  const gain = p.S * (1 - albedo) * p.sun + p.Q * built - p.L * veg;
+  const gain = p.S * (1 - albedo) * p.sun + p.Q * built - p.L * veg + p.store;
   const k = p.kRad + p.h * p.wind;
   const pull = p.kRad * p.tSky + p.h * p.wind * p.tAir;
   return (gain + pull) / k;

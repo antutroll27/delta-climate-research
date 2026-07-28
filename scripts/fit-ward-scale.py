@@ -182,6 +182,14 @@ CANDIDATES = [
     Cand("A", "ward-scale baseline (shipping structure)",
          ("q_day", "ratio", "c"), (0.30, 0.50, 1.24),
          (0.02, 0.15, 1.20), (0.60, 1.50, 1.40), False),
+    # THE HONEST BASELINE. A fits c to 1.40, which assertSkyLogic rejects — at
+    # Kolkata humidity it makes the clear sky as warm as the air. Comparing a
+    # candidate against a baseline that itself violates the physics flatters the
+    # candidate. This is the shipping structure with every constant admissible,
+    # and it is what any change has to beat.
+    Cand("A2", "baseline, c held admissible at 1.24",
+         ("q_day", "ratio"), (0.30, 0.50),
+         (0.02, 0.15), (0.60, 1.50), False),
     Cand("B", "+ ET coefficient free",
          ("q_day", "ratio", "c", "l_et"), (0.30, 0.50, 1.24, 0.43),
          (0.02, 0.15, 1.20, 0.05), (0.60, 1.50, 1.40, 0.60), False),
@@ -207,6 +215,46 @@ CANDIDATES = [
          (0.30, 0.30, 1.24, 0.43),
          (0.02, 0.01, 1.20, 0.05),
          (0.60, 1.50, 1.60, 0.80), False),
+    # THE SHIPPABLE ONE. D and E both drive L_ET to 0.8, which is not a free
+    # choice: types.ts records [0.40, 0.46] as the range satisfying BOTH the
+    # Kolkata park cool-island measurements (Mitra et al. 2022) and the physical
+    # ceiling on what evapotranspiration can deliver, and validate-model.mjs
+    # asserts a consequence of it. A fit that wants 0.8 is asking for roughly
+    # twice the cooling ET can produce; adopting it would trade a calibration
+    # failure for an unphysical constant, which is the same mistake in a nicer
+    # suit. Held inside the defensible range, the rest is free to move.
+    Cand("F", "storage + ratio open, ET held physical [0.40,0.46]",
+         ("q_day", "ratio", "c", "l_et", "release_base", "release_built"),
+         (0.30, 0.30, 1.24, 0.43, 0.05, 0.05),
+         (0.02, 0.01, 1.20, 0.40, 0.00, 0.00),
+         (0.60, 1.50, 1.60, 0.46, 0.50, 0.50), True),
+    # FULLY PHYSICAL. F keeps ET defensible but buys it by driving the coupling
+    # ratio to 0.029, and that is unphysical in the other direction: linearised
+    # radiative coupling is ~4*eps*sigma*T^3 ~ 6 W/m2K against a convective
+    # 10-30, so kRad:h belongs in roughly 0.2-0.6. A fit is not "physical"
+    # because the parameter you were watching stayed in range.
+    #
+    # So every constant is held inside its defensible range at once and the
+    # storage term — the one mechanism that is genuinely missing rather than
+    # mis-valued — is given room to do the work. If this cannot fit, that is a
+    # real result: it means the remaining error is not reachable by any
+    # admissible parameter set, and the honest move is to report the gap rather
+    # than buy it with a constant nobody can defend.
+    # c is bounded [1.23, 1.26], NOT the literature's [1.20, 1.40]. Two existing
+    # invariants pin it: the clear sky must stay below air (fails at c >= 1.33 in
+    # Kolkata humidity), and T_sky at 28/80 must land 19-21 C, a validated local
+    # expectation that holds only in this narrow window. The fit wanted 1.40 and
+    # was refused. The published range is global; local humidity is what binds.
+    # c is NOT FITTED. Two invariants pin it to a 0.03-wide window (1.23-1.26)
+    # and it is a literature constant validated against a Kolkata night
+    # expectation, not a free parameter. Fitting inside a window that narrow just
+    # produces another parameter resting on a bound and pretends it was chosen.
+    # Held at the published 1.24.
+    Cand("G", "storage free, ALL constants held physical",
+         ("q_day", "ratio", "l_et", "release_base", "release_built"),
+         (0.30, 0.40, 0.43, 0.10, 0.05),
+         (0.02, 0.20, 0.40, 0.00, 0.00),
+         (0.60, 0.60, 0.46, 1.20, 1.20), True),
 ]
 
 

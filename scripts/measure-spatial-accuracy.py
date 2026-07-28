@@ -187,7 +187,7 @@ def measured_field(ward: _types.Ward, date: str, phase: str, tok: str
 
 def modelled_field(sc: _physics.Scene, veg: npt.NDArray[np.float32],
                    alb: npt.NDArray[np.float32], built: npt.NDArray[np.float32],
-                   q_day: float, ratio: float, c: float) -> npt.NDArray[np.float32]:
+                   q_day: float, ratio: float, c: float, store: float) -> npt.NDArray[np.float32]:
     """Equilibrium surface temperature per cell, °C.
 
     The scalar assembly below is `_physics.predict` with the two land-cover masks
@@ -214,14 +214,15 @@ def modelled_field(sc: _physics.Scene, veg: npt.NDArray[np.float32],
         headroom = (dry_veg - _physics.dewpoint(sc.tAir, sc.rh)) / _physics.DEWPOINT_TAPER_K
         L = L * _physics.NIGHT_ET_FRACTION * min(1.0, max(0.0, headroom))
 
+    stored = store if night else 0.0
     field: npt.NDArray[np.float32] = (
-        (_physics.S_SOLAR * (1 - alb) * sun + Q * built - L * veg + pull) / k
+        (_physics.S_SOLAR * (1 - alb) * sun + Q * built - L * veg + stored + pull) / k
     ).astype(np.float32)
     return field
 
 
-def live_constants() -> tuple[float, float, float]:
-    """(Q, kRad/h ratio, Brutsaert c) as the browser runs them.
+def live_constants() -> tuple[float, float, float, float]:
+    """(Q, kRad/h ratio, Brutsaert c, nocturnal storage) as the browser runs them.
 
     Parsed from the TypeScript rather than duplicated here. A second copy of
     these numbers is a second thing to update, and the whole point of this
@@ -242,7 +243,12 @@ def live_constants() -> tuple[float, float, float]:
         m = re.search(r"skyTemperatureC\([^)]*c\s*=\s*([0-9.]+)", fh.read())
     if not m:
         sys.exit("could not read the Brutsaert coefficient default from sky.ts")
-    return vals["Q"], vals["kRad"] / vals["h"], float(m.group(1))
+    st = re.search(r"STORE_NIGHT\s*=\s*([0-9.]+)", text)
+    if not st:
+        sys.exit("could not read STORE_NIGHT from types.ts — the model gained a "
+                 "nocturnal storage term and this measurement must include it, or it "
+                 "scores a model the browser does not run.")
+    return vals["Q"], vals["kRad"] / vals["h"], float(m.group(1)), float(st.group(1))
 
 
 def model_terms(sc: _physics.Scene, veg: npt.NDArray[np.float32],
@@ -290,8 +296,8 @@ def main() -> None:
     # run — this pass exists to describe what a visitor actually sees, so it
     # reads DEFAULT_PARAMS from src/scripts/climate-engine/types.ts and
     # skyTemperatureC's default from sky.ts.
-    q_day, ratio, c = live_constants()
-    print(f"  shipping constants: Q={q_day}  kRad/h={ratio}  brutsaert_c={c}\n")
+    q_day, ratio, c, store = live_constants()
+    print(f"  shipping constants: Q={q_day}  kRad/h={ratio}  brutsaert_c={c}  store={store}\n")
 
     scenes, _lc, dropped = _physics.load(all_angles=False)
     if args.limit:
@@ -329,7 +335,7 @@ def main() -> None:
             if int(m.sum()) < MIN_CELLS:
                 continue
 
-            mod = modelled_field(sc, lay["veg"], lay["alb"], lay["built"], q_day, ratio, c)
+            mod = modelled_field(sc, lay["veg"], lay["alb"], lay["built"], q_day, ratio, c, store)
             o = obs[m].astype(np.float64)
             terms = model_terms(sc, lay["veg"], lay["alb"], lay["built"], q_day, ratio)
             rows.append({
@@ -382,7 +388,8 @@ def main() -> None:
                   for t in ("solar_albedo", "built", "veg")},
         "constants": {"note": "DEFAULT_PARAMS from types.ts + sky.ts — what ships, NOT "
                               "fitted-constants.json, which carries ship:false",
-                      "Q": q_day, "kRad_over_h": ratio, "brutsaert_c": c},
+                      "Q": q_day, "kRad_over_h": ratio, "brutsaert_c": c,
+                      "store_night": store},
         "rows": rows,
     }
     os.makedirs(os.path.dirname(OUT), exist_ok=True)

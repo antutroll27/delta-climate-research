@@ -70,7 +70,9 @@ export class TsHeatSim implements HeatSim {
             - p.kRad * (temperature - p.tSky)
             - p.L * layers.veg[index]
             - p.h * ventilation * (temperature - p.tAir)
-            + p.Q * layers.built[index];
+            + p.Q * layers.built[index]
+            // nocturnal storage release; zero by day (see SimParams.store)
+            + p.store;
           const next = temperature + safeDt * delta;
           this.scratch[index] = Math.max(0, Math.min(80, next * (1 - layers.water[index] * 0.35)
             + (p.tAir - 1.5) * layers.water[index] * 0.35));

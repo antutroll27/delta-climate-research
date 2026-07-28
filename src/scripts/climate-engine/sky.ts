@@ -25,7 +25,22 @@ export function saturationVapourPressure(tC: number): number {
  * @param rh     relative humidity, %
  * @param cloud  cloud fraction 0–1
  * @param c      Brutsaert coefficient. 1.24 original; 1.20–1.40 is the range
- *               reported by GWR recalibration studies. Fitted in Phase 2.
+ *               reported by GWR recalibration studies.
+ *
+ *               STAYS AT 1.24, and the ward-scale fit was refused here. The fit
+ *               wanted 1.40 — the top of the published range — because a warmer
+ *               sky warms the modelled surface, which is what it needed. Two
+ *               invariants in assertSkyLogic say no:
+ *
+ *                 · the clear sky must stay below air temperature, and at
+ *                   Kolkata humidity (rh 80–95 % is routine) c ≥ 1.33 pushes
+ *                   Brutsaert emissivity high enough that it does not;
+ *                 · T_sky at 28 °C / 80 % must land 19–21 °C, a validated
+ *                   Kolkata night expectation, which holds only for c ≈ 1.23–1.26.
+ *
+ *               The published range is global; local humidity is what binds. A
+ *               constant that fits better by making a clear sky as warm as the
+ *               air is not a better constant.
  */
 export function skyTemperatureC(tC: number, rh: number, cloud = 0, c = 1.24): number {
   const tK = tC + 273.15;

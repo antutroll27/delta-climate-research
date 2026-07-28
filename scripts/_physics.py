@@ -47,8 +47,14 @@ LC = os.path.join(ROOT, "data", "calibration", "landcover-fractions.json")
 
 # Fixed model constants, mirrored from src/scripts/climate-engine/types.ts.
 S_SOLAR = 0.6
-L_ET = 0.43
-K_SUM = 0.02 + 0.04          # kRad + h at wind = 1; the RATIO is fitted, the sum is held
+L_ET = 0.46                  # ward-scale fit, top of the defensible [0.40, 0.46] band
+K_SUM = 0.01 + 0.05          # kRad + h at wind = 1; the RATIO is fitted, the sum is held
+
+#: Nocturnal heat release, night only — the storage flux (ΔQs) a steady-state
+#: balance omits. Mirrors STORE_NIGHT in types.ts. Without it the modelled night
+#: surface sits BELOW air while the measurement puts it 2.10 K above; that is a
+#: sign error and no constant fixes a sign.
+STORE_NIGHT = 0.1052
 NIGHT_ET_FRACTION = 0.10
 Q_NIGHT_RATIO = 0.5
 DEWPOINT_TAPER_K = 1.0
@@ -180,10 +186,15 @@ def solar_factor(hour: float, doy: int, lat: float = 22.55) -> float:
 
 
 def _eq(cover: LandCoverClass, sun: float, Q: float, L: float,
-        pull: float, k: float) -> float:
-    """Equilibrium temperature of one mask, °C. Mirrors eqCell."""
+        pull: float, k: float, store: float = 0.0) -> float:
+    """Equilibrium temperature of one mask, °C. Mirrors eqCell.
+
+    `store` is zero by day and STORE_NIGHT at night — the same split eqCell
+    makes via SimParams.store. Both sides must carry it or the Python mirror
+    stops mirroring, which is the one thing this file exists to avoid.
+    """
     a, v, b = cover["albedo"], cover["veg"], cover["built"]
-    return (S_SOLAR * (1 - a) * sun + Q * b - L * v + pull) / k
+    return (S_SOLAR * (1 - a) * sun + Q * b - L * v + store + pull) / k
 
 
 def predict(sc: Scene, lc: LandCoverClasses,
@@ -202,15 +213,17 @@ def predict(sc: Scene, lc: LandCoverClasses,
     pull = kRad * tSky + h * wind * tAir
 
     L = L_ET * (0.6 + 0.6 * (1 - rh / 100))
+    store = 0.0
     if night:
         # taper ET to zero as the surface approaches the dewpoint, matching
         # nightLatent() in heat-map-model.ts
         dry_veg = (Q * lc["rural"]["built"] + pull) / k
         headroom = (dry_veg - dewpoint(tAir, rh)) / DEWPOINT_TAPER_K
         L = L * NIGHT_ET_FRACTION * min(1.0, max(0.0, headroom))
+        store = STORE_NIGHT
 
-    return Prediction(urban=_eq(lc["urban"], sun, Q, L, pull, k),
-                      rural=_eq(lc["rural"], sun, Q, L, pull, k))
+    return Prediction(urban=_eq(lc["urban"], sun, Q, L, pull, k, store),
+                      rural=_eq(lc["rural"], sun, Q, L, pull, k, store))
 
 
 # ── observations ────────────────────────────────────────────────────────────

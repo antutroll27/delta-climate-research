@@ -45,6 +45,9 @@ const STEP_FRAG = /* glsl */ `
   varying vec2 vUv;
   uniform sampler2D tT, tLayers;
   uniform float uTexel, uDt, uD, uS, uSun, uKRad, uTSky, uL, uH, uWind, uQ, uTAir;
+  // nocturnal storage release; zero by day. Must mirror sim-ts.ts and eqCell —
+  // a GPU/CPU divergence here shows up as the two backends disagreeing at night.
+  uniform float uStore;
   void main(){
     float T  = texture2D(tT, vUv).r;
     float Tl = texture2D(tT, vUv - vec2(uTexel, 0.0)).r;
@@ -62,7 +65,8 @@ const STEP_FRAG = /* glsl */ `
              - uKRad * (T - uTSky)
              - uL * Ly.g
              - uH * vent * (T - uTAir)
-             + uQ * Ly.b;
+             + uQ * Ly.b
+             + uStore;
     // water cells relax hard toward air temp (thermal mass shortcut)
     float Tn = T + uDt * dT;
     Tn = mix(Tn, uTAir - 1.5, Ly.a * 0.35);
@@ -90,6 +94,7 @@ export class GpuHeatSim implements HeatSim {
       tT: { value: null }, tLayers: { value: null }, uTexel: { value: 0 }, uDt: { value: 1 },
       uD: { value: 0 }, uS: { value: 0 }, uSun: { value: 0 }, uKRad: { value: 0 }, uTSky: { value: 0 },
       uL: { value: 0 }, uH: { value: 0 }, uWind: { value: 0 }, uQ: { value: 0 }, uTAir: { value: 0 },
+      uStore: { value: 0 },
     }});
     this.scene.add(new Mesh(new PlaneGeometry(2, 2), this.mat));
   }
@@ -141,7 +146,7 @@ export class GpuHeatSim implements HeatSim {
     u.uDt.value = stableDt(p, dt);
     u.uD.value = p.D; u.uS.value = p.S; u.uSun.value = p.sun; u.uKRad.value = p.kRad;
     u.uTSky.value = p.tSky; u.uL.value = p.L; u.uH.value = p.h; u.uWind.value = p.wind;
-    u.uQ.value = p.Q; u.uTAir.value = p.tAir;
+    u.uQ.value = p.Q; u.uTAir.value = p.tAir; u.uStore.value = p.store;
     const prevRT = this.renderer.getRenderTarget();
     for (let i = 0; i < steps; i++) {
       u.tT.value = this.front.texture;

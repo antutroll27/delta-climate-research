@@ -9,7 +9,7 @@
  */
 // .ts extension: keeps this module runnable under `node --experimental-strip-types`
 // for assertInterventionLogic() (node doesn't do extensionless resolution).
-import { CANONICAL_GRID_N, DEFAULT_PARAMS, type SimParams, type SimLayers } from './types.ts';
+import { CANONICAL_GRID_N, DEFAULT_PARAMS, STORE_NIGHT, type SimParams, type SimLayers } from './types.ts';
 import { skyTemperatureC, dewpointC } from './sky.ts';
 
 export const SIM_N = CANONICAL_GRID_N;         // grid side (ward 1400 m → dx ≈ 7.29 m/cell)
@@ -125,12 +125,14 @@ export const fmtCr = (r: number) =>
 export const noise01 = (x: number, y: number) => { const h = Math.sin(x * 127.1 + y * 311.7) * 43758.5453; return h - Math.floor(h); };
 export const eqCell = (p: SimParams, a: number, v: number, b: number) => {
   const k = p.kRad + p.h * p.wind, pull = p.kRad * p.tSky + p.h * p.wind * p.tAir;
-  return (p.S * (1 - a) * p.sun + p.Q * b - p.L * v + pull) / k;
+  // `p.store` is zero by day; at night it is the fabric discharging the day's
+  // heat, which is what puts the measured surface ABOVE air. See SimParams.store.
+  return (p.S * (1 - a) * p.sun + p.Q * b - p.L * v + p.store + pull) / k;
 };
 export function eqMean(layers: SimLayers, p: SimParams): number {
   const k = p.kRad + p.h * p.wind, pull = p.kRad * p.tSky + p.h * p.wind * p.tAir;
   let s = 0; const N = layers.albedo.length;
-  for (let i = 0; i < N; i++) s += (p.S * (1 - layers.albedo[i]) * p.sun + p.Q * layers.built[i] - p.L * layers.veg[i] + pull) / k;
+  for (let i = 0; i < N; i++) s += (p.S * (1 - layers.albedo[i]) * p.sun + p.Q * layers.built[i] - p.L * layers.veg[i] + p.store + pull) / k;
   return s / N;
 }
 
@@ -255,7 +257,8 @@ export function currentParams(s: ScenarioState): SimParams {
     return { ...b, sun: 1 * (1 - 0.6 * cloud), tAir: baseTair, tSky: skyTemperatureC(baseTair, rh, cloud) };
   }
   const tAir = baseTair - 2.5;
-  const night: SimParams = { ...b, sun: 0, tAir, Q: Q * Q_NIGHT_RATIO, tSky: skyTemperatureC(tAir, rh, cloud) };
+  const night: SimParams = { ...b, sun: 0, tAir, Q: Q * Q_NIGHT_RATIO,
+    tSky: skyTemperatureC(tAir, rh, cloud), store: STORE_NIGHT };
   return { ...night, L: nightLatent(night, rh) };
 }
 
@@ -275,7 +278,10 @@ export function currentParamsForReference(
   const base: SimParams = { ...DEFAULT_PARAMS, D: SIM_D, Q, wind, L: DEFAULT_PARAMS.L * evap, tAir: ambient.tAir };
   const tSky = skyTemperatureC(ambient.tAir, ambient.rh, cloud);
   if (phase === 'peak') return { ...base, sun: 1 * (1 - 0.6 * cloud), tSky };
-  const night: SimParams = { ...base, sun: 0, Q: Q * Q_NIGHT_RATIO, tSky };
+  // store: the compare view runs the same physics as the explorer. Omitting it
+  // here would make the two views disagree at night by ~1.7 K, and only one of
+  // them would be right.
+  const night: SimParams = { ...base, sun: 0, Q: Q * Q_NIGHT_RATIO, tSky, store: STORE_NIGHT };
   return { ...night, L: nightLatent(night, ambient.rh) };
 }
 
@@ -349,7 +355,24 @@ export function assertInterventionLogic(): void {
   }
   a(worst < 0.1, `night ET must vary smoothly with humidity (worst step ${worst.toFixed(3)} K per 0.5 % RH)`);
 
-  // ...and must still shut off entirely once the surface is condensing
-  const soaked = currentParamsForReference({ tAir: 28, rh: 97, wind: 3, cloud: 0, feels: 30 }, 'night', zero);
-  a(soaked.L === 0, 'ET must reach zero below the dewpoint');
+  // ...and must still shut off entirely once the surface is condensing.
+  //
+  // THE CASE CHANGED WHEN THE STORAGE TERM LANDED, and the change is correct.
+  // This used to test tAir 28 / rh 97. Under the old constants the surface was
+  // dragged BELOW air by strong sky coupling, so it fell under the dewpoint and
+  // ET shut off. It no longer does: the nocturnal storage release holds the
+  // surface at 29.1 °C against a 27.5 °C dewpoint. That is not a regression —
+  // 28 °C at 97 % RH is muggy monsoon air, and Kolkata's monsoon nights are not
+  // dewy. Asserting condensation there was asserting something false that the
+  // old constants happened to satisfy.
+  //
+  // Dew forms on a radiative-cooling winter night: cold, near-saturated, calm.
+  // The taper still fires there, which is what this now checks. Verified across
+  // the range: it shuts off at tAir <= 12 with rh >= 98, and tapers smoothly
+  // above it rather than switching.
+  const frost = currentParamsForReference({ tAir: 10, rh: 100, wind: 1, cloud: 0, feels: 10 }, 'night', zero);
+  a(frost.L === 0, 'ET must reach zero once the surface is below the dewpoint');
+  // and it must NOT shut off in warm humid air, where no dew forms
+  const muggy = currentParamsForReference({ tAir: 28, rh: 97, wind: 3, cloud: 0, feels: 30 }, 'night', zero);
+  a(muggy.L > 0, 'ET must keep running in warm humid air — a warm surface does not condense');
 }
