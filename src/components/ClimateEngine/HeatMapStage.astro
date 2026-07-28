@@ -4,6 +4,7 @@
 // is:global but only bundled onto /heat-map (the sole page importing this).
 // Brand tokens are scoped to .stage so nothing leaks to :root; Mona Sans /
 // Noplato Mono come from global.css.
+import ConstructionStamp from '../states/ConstructionStamp.astro';
 ---
 <main id="main" class="stage">
   <header class="top">
@@ -25,6 +26,7 @@
   <div class="map">
     <div id="mlmap"></div>
     <div class="synthetic"><span class="d"></span><span class="full">Live basemap + real footprints &amp; Google heights · </span>heat field modelled</div>
+    <div class="stamp-slot"><ConstructionStamp /></div>
     <div class="loadchip" id="loadchip">Building ward…</div>
 
     <div class="place">
@@ -169,7 +171,20 @@
   .synthetic{position:absolute;top:20px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:.5rem;font-family:var(--mono);font-size:.56rem;letter-spacing:.2em;color:var(--bronze);background:rgb(176 141 87 /.14);border:1px solid rgb(176 141 87 /.3);border-radius:20px;padding:.42rem .9rem;z-index:3;text-transform:uppercase;backdrop-filter:blur(8px)}
   .synthetic .d{width:6px;height:6px;border-radius:50%;background:var(--bronze);animation:hmPulse 2.2s infinite}
   @keyframes hmPulse{0%,100%{opacity:1}50%{opacity:.3}}
-  .loadchip{position:absolute;top:58px;left:50%;transform:translateX(-50%);font-family:var(--mono);font-size:.52rem;letter-spacing:.26em;color:var(--cyan);z-index:3;text-transform:uppercase;opacity:0;transition:opacity .25s}
+  /* Build-status stamp, grouped with the honesty banner directly above it —
+     both are bronze status chrome and belong together. Centred over the map's
+     dark upper region, NOT over the ward model: the first placement put it mid-
+     canvas at 9px over pale rooftops, where it was illegible and interrupted the
+     one thing the page exists to show.
+
+     NOT aria-hidden here (unlike SoonDraft, which repeats it in prose) — this is
+     the page's only statement that the tool is still being built, so it must be
+     announced. Smaller than the placeholder-page stamp: this page has a working
+     instrument, and the stamp is a caveat on it, not the headline. */
+  .stamp-slot{position:absolute;left:50%;top:68px;transform:translateX(-50%);z-index:3;pointer-events:none;
+              --stamp-size:.62rem;--stamp-pad:.5rem 1rem;--stamp-tracking:.26em;--stamp-rot:-2.5deg}
+  .stamp-slot :global(.con-stamp){opacity:1;background:rgb(6 14 16 /.72);backdrop-filter:blur(8px)}
+  .loadchip{position:absolute;top:118px;left:50%;transform:translateX(-50%);font-family:var(--mono);font-size:.52rem;letter-spacing:.26em;color:var(--cyan);z-index:3;text-transform:uppercase;opacity:0;transition:opacity .25s}
   .loadchip.on{opacity:1}
 
   .panel{position:absolute;background:rgb(9 20 22 /.82);border:1px solid var(--line);border-radius:14px;backdrop-filter:blur(16px);box-shadow:0 20px 60px rgb(0 0 0 /.5);z-index:4}
@@ -265,6 +280,7 @@
     .rail-r{width:256px;right:18px;top:18px;bottom:18px}
     .place .n{font-size:clamp(1.7rem,3.2vw,2.7rem)}
     .synthetic{font-size:.5rem;letter-spacing:.16em}
+    .stamp-slot{top:62px;--stamp-size:.54rem;--stamp-pad:.4rem .8rem;--stamp-tracking:.2em}
   }
   @media (max-width:1120px){
     .top{grid-template-columns:auto 1fr}
@@ -282,5 +298,6 @@
     .tabs{display:none}                 /* ward switch lives in the bottom strip at this width */
     .left,.rail-r{width:238px}
     .synthetic{font-size:.44rem;letter-spacing:.12em;padding:.34rem .62rem}
+    .stamp-slot{top:58px;--stamp-size:.46rem;--stamp-pad:.32rem .62rem;--stamp-tracking:.16em}
   }
 </style>

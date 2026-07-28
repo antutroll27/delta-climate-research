@@ -16,7 +16,14 @@ const sitemapFilter = (page) => {
   if (path === '/climate-highlights/') return false;               // always coming-soon (no publish flag)
   if (path === '/blog/') return false;                             // coming-soon, no publish flag yet
   if (path === '/cbam-calculator/') return false;                  // coming-soon, no publish flag yet
-  if (path === '/heat-map/' || path.startsWith('/heat-map/')) return false; // tool routes remain noindex until the measured-raster gate passes
+  // /heat-map is indexable and carries its caveats on the page. Its SUB-routes
+  // are not: /heat-map/brief and /heat-map/compare are deep-link views of the
+  // same tool, and indexing near-duplicates makes them compete with the page
+  // they are views of.
+  // NOTE the `!== '/heat-map/'`. Sitemap paths carry a trailing slash, so the
+  // main route IS '/heat-map/' and a bare startsWith would exclude the very page
+  // this change exists to include.
+  if (path !== '/heat-map/' && path.startsWith('/heat-map/')) return false;
   if (path === '/HeatMapVisualizer/') return false;               // legacy stub route, removed
   if (path === '/white-papers/') return papers.some((p) => p.published);
   if (path === '/projects/') return projects.some((p) => p.published);

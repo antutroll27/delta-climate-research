@@ -2,14 +2,21 @@
 import Base from '../layouts/Base.astro';
 import HeatMapStage from '../components/ClimateEngine/HeatMapStage.astro';
 
-// noindex until a measured raster (Landsat LST) is wired — the heat FIELD is
-// modelled, and Delta sells defensible rigour. Sitemap exclusion lives alongside
-// this flag in astro.config.mjs so the two never drift (page-spec §7.8).
+// INDEXABLE, with the build status stated on the page instead of hidden from
+// search. The page was noindex "until a measured raster is wired", which treated
+// invisibility as the honest option — but a noindexed page is not more honest,
+// it is just unfindable, and it left the site with two indexable routes and
+// nothing ranking. The caveats a reader needs are now ON the page: an UNDER
+// CONSTRUCTION stamp, the "heat field modelled" banner, and a per-phase accuracy
+// band that says outright when a number is indicative rather than decision-grade.
+//
+// /heat-map/brief and /heat-map/compare stay noindex — they are deep-link views
+// of this same tool with thin standalone content, and indexing them would put
+// three near-duplicate pages into search competing with each other.
 ---
 <Base
   title="Urban Heat Scenario Explorer — Delta Climate Research"
   description="Interactive urban-heat-island simulator for three Kolkata wards — test green interventions and see cooling in °C and cost in ₹ on a live 3D map. Modelled scenario, screening-grade."
-  noindex={true}
 >
   <HeatMapStage />
 </Base>

@@ -1,0 +1,55 @@
+---
+/**
+ * The bronze UNDER CONSTRUCTION stamp.
+ *
+ * Extracted because it is now used in two places that must look identical:
+ * the SoonDraft placeholder pages (/projects, /cbam-calculator) and the live
+ * /heat-map tool. It is a brand mark, and two copies of a brand mark drift.
+ *
+ * VISUAL ONLY — the caller owns placement. SoonDraft pins it to the page
+ * margin; the heat map sits it in the map's corner. Positioning inside here
+ * would mean one of the two callers fighting it, and Astro's style scoping
+ * would make that fight invisible from the outside.
+ *
+ * `decorative` controls whether screen readers see it. On SoonDraft the page
+ * body already says the thing in prose, so the stamp is decoration and repeating
+ * it is noise. On the heat map it is the ONLY statement of build status, so it
+ * must be announced — a sighted user reads "under construction" and a screen
+ * reader user would otherwise be told the tool is finished.
+ */
+interface Props {
+  label?: string;
+  /** true = aria-hidden; use only where the status is already in the page text */
+  decorative?: boolean;
+  /** extra class for the caller's own sizing hooks */
+  class?: string;
+}
+const { label = 'Under Construction', decorative = false, class: className = '' } = Astro.props;
+---
+
+<span class:list={['con-stamp', className]} aria-hidden={decorative ? 'true' : undefined}>{label}</span>
+
+<style>
+  /* Sizing comes from --stamp-size / --stamp-pad so a caller can shrink it
+     without redeclaring the treatment. */
+  .con-stamp {
+    display: inline-block;
+    border: 2px solid var(--color-bronze, #b08d57);
+    color: var(--color-bronze, #b08d57);
+    font-family: var(--font-mono, var(--mono));
+    font-size: var(--stamp-size, clamp(0.8rem, 1.4vw, 1.05rem));
+    letter-spacing: var(--stamp-tracking, 0.3em);
+    text-transform: uppercase;
+    padding: var(--stamp-pad, 1rem 1.6rem);
+    opacity: 0.85;
+    transform: rotate(var(--stamp-rot, -4deg));
+    box-shadow: 0 0 0 5px rgb(176 141 87 / 0.07);
+    animation: con-stamp-in 0.55s cubic-bezier(0.16, 1, 0.3, 1) 0.8s backwards;
+  }
+  @keyframes con-stamp-in {
+    from { transform: rotate(-9deg) scale(1.8); opacity: 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .con-stamp { animation: none; }
+  }
+</style>

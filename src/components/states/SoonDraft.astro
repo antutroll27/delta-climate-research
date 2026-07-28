@@ -5,6 +5,8 @@
 // readout (coords / sheet / rev) in the corner. Pure CSS/SVG animation —
 // everything freezes gracefully under prefers-reduced-motion.
 // Title goes in the default slot so pages can mark up <em> accents.
+import ConstructionStamp from './ConstructionStamp.astro';
+
 interface Props {
   kicker: string;
   sub: string;
@@ -40,7 +42,7 @@ const pct = Math.round(Math.min(1, Math.max(0, progress)) * 100);
     </svg>
   </div>
 
-  <span class="stamp" aria-hidden="true">Under Construction</span>
+  <div class="stamp-slot"><ConstructionStamp decorative /></div>
 
   <div class="wrap core" data-reveal-group data-stagger="110">
     <p class="sec-kicker">{kicker}</p>
@@ -100,17 +102,8 @@ const pct = Math.round(Math.min(1, Math.max(0, progress)) * 100);
   .contours path:nth-child(5) { animation-delay: 2.4s; }
   @keyframes draft-draw { to { stroke-dashoffset: 0; } }
 
-  .stamp {
-    position: absolute; right: clamp(2rem, 10vw, 12rem); top: 22%; z-index: 1;
-    transform: rotate(-4deg);
-    border: 2px solid var(--color-bronze); color: var(--color-bronze);
-    font-family: var(--font-mono); font-size: clamp(0.8rem, 1.4vw, 1.05rem);
-    letter-spacing: 0.3em; text-transform: uppercase;
-    padding: 1rem 1.6rem; opacity: 0.85;
-    box-shadow: 0 0 0 5px rgb(176 141 87 / 0.07);
-    animation: draft-stamp 0.55s cubic-bezier(0.16, 1, 0.3, 1) 0.8s backwards;
-  }
-  @keyframes draft-stamp { from { transform: rotate(-9deg) scale(1.8); opacity: 0; } }
+  /* Positioning only — the stamp's own look lives in ConstructionStamp.astro. */
+  .stamp-slot { position: absolute; right: clamp(2rem, 10vw, 12rem); top: 22%; z-index: 1; }
 
   .draft-title { max-width: 16ch; }
   .plot-cursor {
@@ -174,14 +167,12 @@ const pct = Math.round(Math.min(1, Math.max(0, progress)) * 100);
       justify-content: center;
       padding-block: 7rem 4rem;
     }
-    .stamp {
+    .stamp-slot {
       position: static;
       align-self: flex-start;
       margin: 0 0 2rem clamp(1rem, 4vw, 2.5rem);
-      transform: rotate(-2deg);
-      transform-origin: left center;
+      --stamp-rot: -2deg;
     }
-    @keyframes draft-stamp { from { transform: rotate(-7deg) scale(1.6); opacity: 0; } }
     .coords {
       position: static;
       margin-top: 3rem;
@@ -191,6 +182,6 @@ const pct = Math.round(Math.min(1, Math.max(0, progress)) * 100);
   }
   @media (prefers-reduced-motion: reduce) {
     .contours path { animation: none; stroke-dashoffset: 0; }
-    .stamp, .plot-cursor, .meter .bar i { animation: none; }
+    .plot-cursor, .meter .bar i { animation: none; }
   }
 </style>
