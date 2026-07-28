@@ -21,6 +21,7 @@ import * as U from './dc-urs';
 import { applyScenario } from './dc-urs-scenario';
 import type { DcUrsInputs } from './dc-urs-inputs';
 import { rasterWardBase } from './ward-raster';
+import { loadWardSurface, type WardSurface } from './surface-raster';
 
 // Ward set lives in src/data/wards.ts so widening beyond three is a data change,
 // not a code change (dc-urs-spec.md §1).
@@ -214,6 +215,10 @@ export function mountHeatMap(): () => void {
 
   /* ── heat ramp for building extrusion vertex jitter (grow) — via aCtr sample ── */
   const cache: Record<string, M.WardData> = {}, roadsCache: Record<string, M.RoadsData> = {};
+  /* Measured Sentinel-2 surface, one per ward, fetched once. A miss is non-fatal
+     and falls back to a flat field at the measured ward mean — never to
+     synthesised structure. */
+  const surfaceCache: Record<string, WardSurface> = {};
   let growStart = 0; const GROW_MS = 1900; let opBase = 0.5;
 
   /* DC-URS baseline inputs — observed, loaded once and shared by every ward.
@@ -262,7 +267,13 @@ export function mountHeatMap(): () => void {
     const mc = maplibregl.MercatorCoordinate.fromLngLat([w.lon, w.lat], 0);
     modelTransform = { x: mc.x, y: mc.y, z: mc.z ?? 0, scale: mc.meterInMercatorCoordinateUnits() };
 
-    state.base = rasterWardBase(d, w.veg);
+    /* Vegetation and albedo are MEASURED per cell, from Sentinel-2, and pinned to
+       the same ward means the resilience score reads. loadWardSurface verifies
+       that pairing before either reaches the model, so the map and the score
+       cannot end up drawn from different vintages of the same measurement. */
+    surfaceCache[name] ??= await loadWardSurface(name);
+    const { means, surface } = surfaceCache[name];
+    state.base = rasterWardBase(d, means, surface);
     if (!roadsCache[name]) { try { roadsCache[name] = await (await fetch(`/heat-map/data/${name}-roads.json`)).json(); } catch { roadsCache[name] = { ways: [] }; } }
     state.spatial = M.buildSpatial(d, state.base, roadsCache[name]);
     state.live = liveCache[name] ?? null; paintLive();

@@ -12,6 +12,7 @@ import {
 } from '../heat-map-model.ts';
 import { loadWard } from '../ward-loader.ts';
 import { rasterWardBase } from '../ward-raster.ts';
+import { loadWardSurface } from '../surface-raster.ts';
 import { WARDS, type WardId } from '../wards.ts';
 import { coverageToInterventions, deliveredQuantities, type DeliveredQuantities } from '../scenario/coverage.ts';
 import type { PairedScenarioState } from '../scenario/scenario-state.ts';
@@ -93,7 +94,12 @@ async function runWard(
   assertNotAborted(signal);
   const loaded = await loadWard(id, signal);
   assertNotAborted(signal);
-  const base = rasterWardBase(loaded.ward, WARDS[id].vegetationBaseline);
+  // Same measured surface the explorer uses, through the same checked loader —
+  // a comparison drawn from different inputs than the single-ward view would be
+  // worse than no comparison.
+  const { means, surface } = await loadWardSurface(id, signal);
+  assertNotAborted(signal);
+  const base = rasterWardBase(loaded.ward, means, surface);
   const spatial = buildSpatial(loaded.ward, base, loaded.roads);
   const interventions = coverageToInterventions(state.coverage);
   const phase = state.phase === 'peak' ? 'peak' : 'night';

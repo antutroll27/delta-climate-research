@@ -1,18 +1,17 @@
+/**
+ * Footprint rasterisation and the per-cell surface layers the heat sim runs on.
+ *
+ * `built` is derived from real building footprints. `veg` and `albedo` come from
+ * a measured Sentinel-2 texture (surface-raster.ts) — they used to be generated
+ * by a hash function here, which meant two of `eqCell`'s three inputs were
+ * invented and every within-ward pattern on the map was decoration.
+ */
 import { CANONICAL_GRID_N, type SimLayers } from './types.ts';
 import type { WardData } from './heat-map-model.ts';
+import { resample, type SurfaceMeans, type SurfaceRaster } from './surface-raster.ts';
 
 const SAMPLE_OFFSETS = [0.25, 0.75] as const;
 const COVERAGE_BY_BITS = [0, 0.25, 0.25, 0.5, 0.25, 0.5, 0.5, 0.75, 0.25, 0.5, 0.5, 0.75, 0.5, 0.75, 0.75, 1] as const;
-
-function stableGridNoise01(x: number, y: number): number {
-  let hash = Math.imul(x + 0x6d2b79f5, 0x1b873593) ^ Math.imul(y + 0x85ebca6b, 0xcc9e2d51);
-  hash ^= hash >>> 16;
-  hash = Math.imul(hash, 0x7feb352d);
-  hash ^= hash >>> 15;
-  hash = Math.imul(hash, 0x846ca68b);
-  hash ^= hash >>> 16;
-  return (hash >>> 0) / 0xffffffff;
-}
 
 function pointOnSegment(
   x: number,
@@ -95,21 +94,41 @@ export function rasterizeWardBuilt(ward: WardData, n = CANONICAL_GRID_N): Float3
   return built;
 }
 
-/** Pure footprint and surface-layer preparation for the canonical analytical grid. */
-export function rasterWardBase(ward: WardData, vegetationBaseline: number): SimLayers {
+/**
+ * Footprint and surface-layer preparation for the canonical analytical grid.
+ *
+ * `surface` is the measured Sentinel-2 texture at its own resolution (140² for a
+ * 1400 m ward); it is resampled onto the 192² display grid here. `means` is the
+ * measured ward average of each layer — the same scalars in
+ * data/dc-urs/inputs.json that the resilience score reads.
+ *
+ * WHEN `surface` IS NULL the layers are FLAT at those means. That is deliberate:
+ * a uniform field states plainly that we know the ward average and not the
+ * within-ward pattern. The previous fallback multiplied the mean by a hash, which
+ * produced convincing-looking structure with no measurement behind it — the map
+ * showed hot and cool blocks that were an artefact of `Math.imul`.
+ *
+ * Vegetation is NOT re-scaled by the built mask. The satellite already sees the
+ * roofs: a cell that is 90 % building measures low NDVI because it IS mostly
+ * roof, so multiplying by `(1 - built)` would subtract the same buildings twice
+ * and drive dense cells to a vegetation floor no city has.
+ */
+export function rasterWardBase(
+  ward: WardData,
+  means: SurfaceMeans,
+  surface: SurfaceRaster | null = null,
+): SimLayers {
   const n = CANONICAL_GRID_N;
   const count = n * n;
-  const albedo = new Float32Array(count);
-  const veg = new Float32Array(count);
   const built = rasterizeWardBuilt(ward, n);
   const water = new Float32Array(count);
-  for (let index = 0; index < count; index += 1) {
-    const x = index % n;
-    const y = Math.floor(index / n);
-    const mask = built[index];
-    const noise = 0.5 + 0.5 * stableGridNoise01(x, y);
-    veg[index] = vegetationBaseline * (1 - mask) * noise;
-    albedo[index] = 0.32 - 0.12 * mask + 0.06 * noise;
-  }
+
+  const veg = surface
+    ? resample(surface.veg, surface.n, n)
+    : new Float32Array(count).fill(means.fvc);
+  const albedo = surface
+    ? resample(surface.albedo, surface.n, n)
+    : new Float32Array(count).fill(means.albedo);
+
   return { albedo, veg, built, water };
 }
