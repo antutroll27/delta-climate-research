@@ -31,8 +31,14 @@ The headline result is a number we can now put on the tool:
 
 | | measured accuracy | status in the interface |
 |---|---|---|
-| **Night** | **± 3.5 °C** (20 scenes) | labelled *calibrated* |
-| **Day** | **± 5.0 °C** (12 scenes) | labelled *indicative only* |
+| **Night** | **± 3.0 °C** (50 ward-scenes) | labelled *calibrated* |
+| **Day** | **± 4.5 °C** (29 ward-scenes) | labelled *indicative only* |
+
+**Both figures improved in the July revision, and the night one changed in kind
+rather than degree.** The model used to put the night surface *below* air
+temperature; measured, it sits 2.10 °C above — the nocturnal heat island is the
+defining signature of the thing we are selling, and we had its sign backwards.
+§5B has the diagnosis and the fix.
 
 Daytime is worse for a reason that no amount of engineering will fix, and §5A explains it: the limit
 is the resolution of the weather data driving the model, not the physics inside it. Both figures are
@@ -310,10 +316,14 @@ with the data available". So alongside the model's own error we computed a **cei
 the best possible statistical predictor built from the same weather inputs, scored leave-one-out so
 it cannot flatter itself.
 
-| | scenes | best achievable | our model | reported |
+| | ward-scenes | best achievable | our model | reported |
 |---|---|---|---|---|
-| Night | 20 | 2.18 °C | 3.13 °C | **± 3.5 °C** |
-| Day | 12 | 3.33 °C | 4.61 °C | **± 5.0 °C** |
+| Night | 50 | 2.23 °C | 2.93 °C | **± 3.0 °C** |
+| Day | 29 | 3.34 °C | 4.42 °C | **± 4.5 °C** |
+
+*Revised July 2026. These are measured at WARD scale — see §5B, which explains
+why the previous mask-scale figures described a different surface than the one
+the tool renders.*
 
 Read the "best achievable" column first. **At night the model has real headroom** — a better model
 could reach ~2.2 °C, so continued work is worthwhile. **By day, no model driven by this weather data
@@ -420,11 +430,98 @@ meet is not a quality standard; the per-phase figures above replace it.
 
 ---
 
+## 5B. Why the fit failed, and what fixed it (July 2026)
+
+§5A above records a calibration that ran all three of its free constants to the
+edge of their bounds and stopped, with the verdict *"the model structure is
+wrong, not its constants."* That was half right. The structure did need two
+changes — but the reason nothing worked was that **the fit's target was the
+wrong geography.**
+
+### The masks were not what they were called
+
+The old fit scored the model against two GHS-SMOD classes: an "urban" mask of
+3,363 km² and a "rural" one of 1,568. We sampled both with Sentinel-2, sixteen
+windows each, and they are the same landscape:
+
+| mask | area | vegetation (FVC) | built |
+|---|---|---|---|
+| "urban" | 3,363 km² | **0.678** | 0.16 |
+| "rural" | 1,568 km² | 0.654 | 0.01 |
+| **the wards we actually render** | 1.4 km each | **0.31 – 0.45** | 0.22 – 0.37 |
+
+The "urban" side is marginally the *greener*. Their measured temperature
+difference is 0.34 °C, and now we know why: it is the difference between delta
+with villages and delta with crops, not an urban heat island. Meanwhile the
+wards are twice as built and half as vegetated as the mask named "urban". We
+were fitting one question and shipping the answer to another, and no constant
+can make a two-thirds-vegetated landscape behave like a city block. That is why
+every parameter ran to its bound.
+
+The calibration set is now built at ward scale: 79 ward-scenes of ECOSTRESS at its
+native 70 m inside each ward footprint, paired with that ward's own measured
+vegetation, albedo and building coverage — the same three numbers the browser
+draws with.
+
+### Two structural faults, both real
+
+**The night sign was wrong.** Measured, the ward surface sits **2.10 °C above**
+air at night — stored daytime heat discharging, which is the nocturnal heat
+island. The model put it 3.45 °C *below*, because a steady-state balance
+computes a weighted mean of air and a sky 10–20 °C colder with nothing holding
+the surface up. A sign error is not a tuning problem. It needed the storage term
+(ΔQs) that a steady-state formulation omits by construction.
+
+**No lever could warm a vegetated surface.** The evapotranspiration coefficient
+was held fixed at a value derived from park-*interior* cooling measurements and
+applied to an area mean — the tension §6 already flagged as unresolved. Freed
+inside its defensible range, it moved to the top of that range.
+
+### The result
+
+| | old structure | shipped | best achievable |
+|---|---|---|---|
+| Night | 3.27 °C (bias **−1.54**) | **2.93 °C** (bias **+0.18**) | 2.23 °C |
+| Day | 4.91 °C (bias +2.55) | **4.42 °C** (bias +0.91) | 3.34 °C |
+
+Out-of-sample, holding one ward back and fitting on the other two: 3.95 → 3.62 °C.
+
+Night's bias is the headline — it moved from the wrong side of air temperature
+to the right one. Day improved but sits 1.08 °C above its ceiling, so the daytime
+structure is still incomplete and that gap is ours, not the data's.
+
+### What we refused
+
+The unconstrained fit wanted a sky-emissivity coefficient of 1.40 — the top of
+the published range — and an ET coefficient roughly twice what evapotranspiration
+can physically deliver. Both were refused. Our own invariants caught them: at
+Kolkata humidity a coefficient of 1.40 makes the clear sky as warm as the air,
+and a second check requires the modelled night sky at 28 °C / 80 % to land
+19–21 °C, which holds only in a narrow window around the published 1.24.
+
+Holding every constant inside a defensible range simultaneously costs about
+0.13 °C of accuracy against the unconstrained fit. We paid it. A model that fits
+better using a constant nobody can defend is not a better model, and a client is
+entitled to ask where each number came from.
+
+### The within-ward pattern improved but is still not validated
+
+Halving the anthropogenic-heat term cut the built-fraction term's spatial
+dominance from 1.46 °C to 0.82 °C, now comparable to vegetation's 0.62 °C rather
+than three times it. Spatial correlation rose from 0.113 to 0.162. It remains
+below the 0.229 of a plain vegetation map, so the disclosure on the tool stands
+unchanged. A ward-mean fit cannot fix this — building coverage is a single
+number per ward in that fit, so nothing in it constrains how the field varies
+*inside* a ward. That needs a per-cell calibration, which the cached
+observations now make possible.
+
+---
+
 ## 6. What I still don't trust
 
 - **The model is now validated against measurement, and it did not pass cleanly.** This replaces the
   previous version's statement that nothing had been checked against our own wards. It has been
-  (§5A), and the result is ± 3.5 °C at night and ± 5.0 °C by day — usable for screening and ranking
+  (§5A, §5B), and the result is ± 3.0 °C at night and ± 4.5 °C by day — usable for screening and ranking
   interventions, not for anything requiring a defensible absolute temperature. The daytime figure
   cannot be improved without better weather data.
 
@@ -469,7 +566,7 @@ meet is not a quality standard; the per-phase figures above replace it.
 Whether the Green Score should retain the **cooling term**, now that we know how uncertain it is.
 
 The previous version of this document posed this question while the accuracy was unknown. It is now
-measured: ± 3.5 °C at night, ± 5.0 °C by day. That changes the question from *"can we trust it?"* to
+measured: ± 3.0 °C at night, ± 4.5 °C by day. That changes the question from *"can we trust it?"* to
 *"is this precision good enough for what we sell?"*
 
 A score built only on the greening ratio and cost would be narrower but fully defensible today —

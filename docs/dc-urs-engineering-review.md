@@ -13,13 +13,21 @@ reference implementation, stress-tested the formulation, and checked the anchor 
 a better instrument than what it replaces, for two reasons beyond the ones in your document.
 
 **It shrinks our biggest exposure.** We spent last week measuring how accurate our heat model
-actually is: **± 3.5 °C at night, ± 5.0 °C by day**, and the daytime figure cannot be improved
-without better weather data. (Since this note was first issued we have also measured the *spatial*
+actually is: **± 3.0 °C at night, ± 4.5 °C by day** (revised July 2026 — see below), and the
+daytime figure cannot be improved much further without better weather data. (Since this note was first issued we have also measured the *spatial*
 skill — whether the map places heat correctly *within* a ward — and it is weak: r = 0.11, below
 the r = 0.23 of a plain vegetation map. That is disclosed in the product and detailed in
 §5A of the methodology. It strengthens rather than weakens the argument below: DC-URS scores on
 ward-level indicators and never touches the per-cell field, so the finding does not reach the index
-at all.) In the Green Score, modelled cooling carried two-thirds of the
+at all. The July recalibration improved it to 0.16 without clearing that bar, so the
+disclosure on the tool stands.)
+
+**And it corrected a sign error we had been shipping.** The model put the night
+surface *below* air temperature; measured, it sits 2.10 °C above. Nocturnal heat
+retention is the defining signature of an urban heat island — the thing the
+instrument exists to show — and we had it backwards. Fixed in July; §5B of the
+methodology has the diagnosis. Worth knowing before the index is presented to
+anyone, because it is the kind of thing a reviewer finds first. In the Green Score, modelled cooling carried two-thirds of the
 weight — so that uncertainty went almost straight through to the headline number. In DC-URS, heat
 carries `w_H = 0.25` and is normalised over a 20 K span, so the same error moves the score by
 about **5 points out of 100**, a quarter of one tier band. Your index makes our known weakness
@@ -196,7 +204,7 @@ engineering one, and I'd rather raise it now than after publication.
 | 0 | Settle the spatial unit across the three local bodies. Nothing downstream is meaningful without it. |
 | 1 | Observed pillars — greenness, albedo, built density, refuge access — from satellite and OSM. No modelling. |
 | 2 | Exposure pillar from Census 2011, built the Rathi/Azhar way, vintage disclosed. |
-| 3 | Validation — rank correlation against published Kolkata vulnerability, sensitivity analysis, and an uncertainty band carried through from our measured ± 3.5 / ± 5.0 °C. |
+| 3 | Validation — rank correlation against published Kolkata vulnerability, sensitivity analysis, and an uncertainty band carried through from our measured ± 3.0 / ± 4.5 °C. |
 | 4 | Scenario layer over the pillars that can honestly move, with the fixed portion shown explicitly. |
 
 Full formulas and every constant will land in `docs/dc-urs-spec.md` before implementation starts.
@@ -211,7 +219,7 @@ Full formulas and every constant will land in `docs/dc-urs-spec.md` before imple
 | Rathi, Chakraborty, Mishra & Dutta (2021), *Int. J. Environ. Res. Public Health* | Heat vulnerability index for urbanites of four Indian cities, including Kolkata | [doi:10.3390/ijerph19010283](https://doi.org/10.3390/ijerph19010283) |
 | Azhar, Saha, Ganguly & Mavalankar (2017), *Int. J. Environ. Res. Public Health* | Heat-wave vulnerability mapping for India from Census 2011 + DLHS | [doi:10.3390/ijerph14040357](https://doi.org/10.3390/ijerph14040357) |
 | IPCC AR6 WGII | Risk as hazard × exposure × vulnerability | [ipcc.ch/report/ar6/wg2](https://www.ipcc.ch/report/ar6/wg2/) |
-| Delta measured accuracy, ward level | ± 3.5 °C night / ± 5.0 °C day, 49 ECOSTRESS scenes | `docs/green-score-methodology.md` §5A |
+| Delta measured accuracy, ward level | ± 3.0 °C night / ± 4.5 °C day, 79 ECOSTRESS ward-scenes | `docs/green-score-methodology.md` §5A, §5B |
 | Delta measured accuracy, within a ward | r = 0.11 against ECOSTRESS at 70 m, below the r = 0.23 of a vegetation map — pattern **not** validated | `docs/green-score-methodology.md` §5A |
 
 ---
