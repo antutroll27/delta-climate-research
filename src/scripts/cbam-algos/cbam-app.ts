@@ -253,7 +253,7 @@ export function initCbam(): void {
 
   function run(): void {
     if (!pack || !cn!.value || !country!.value || !route!.value || !mass!.value) {
-      out!.innerHTML = '<p class="cb-idle">Choose a good, an origin, a route and a mass.</p>';
+      out!.innerHTML = '<p class="cb-idle">Choose a good, origin, route and mass to see the provisional exposure.</p>';
       return;
     }
     // REFUSE AN IMPOSSIBLE MASS RATHER THAN PRICING IT. `min="0"` on the input is

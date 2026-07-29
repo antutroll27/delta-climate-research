@@ -101,8 +101,12 @@ import Footer from '../../components/layout/Footer.astro';
              sighted users learn about is not a refusal. -->
         <section class="cb-out" aria-labelledby="cb-res-h" aria-live="polite">
           <h2 id="cb-res-h" class="cb-sr">Provisional exposure</h2>
+          <!-- The empty state is a CARD, not bare text. Without the shell the right
+               column reads as a rendering failure rather than a waiting instrument —
+               there is nothing on that side of the grid until the first estimate
+               resolves. Matches the source design, which does the same. -->
           <div id="cbOut">
-            <p class="cb-idle">Choose a good, an origin, a route and a mass.</p>
+            <p class="cb-idle">Choose a good, origin, route and mass to see the provisional exposure.</p>
           </div>
           <p class="cb-source" id="cbProv"></p>
         </section>
@@ -208,7 +212,9 @@ import Footer from '../../components/layout/Footer.astro';
     font-family: var(--font-mono); font-size: 0.66rem; letter-spacing: 0.1em;
     color: var(--color-cyan); min-height: 1em;
   }
-  .cb-idle { color: var(--color-ink-faint); font-size: 0.88rem; }
+  /* .cb-idle is styled in the is:global block below — cbam-app.ts re-renders it
+     via innerHTML, so a scoped rule reaches the static copy here and not the two
+     runtime ones. */
   .cb-source, .cb-foot {
     margin-top: 1.25rem; font-family: var(--font-data); font-size: 0.68rem;
     line-height: 1.75; color: var(--color-ink-faint);
@@ -222,6 +228,16 @@ import Footer from '../../components/layout/Footer.astro';
      exist at build time and Astro's scoped styles cannot reach them — the first
      render came out as unstyled text. Global, but every selector is namespaced
      under .cb-out so nothing escapes this page. */
+
+  /* The empty state wears the card fill too, so the right column holds its shape
+     from first paint. Bare text there read as a rendering failure rather than an
+     instrument waiting for input. */
+  .cb-out .cb-idle {
+    border-radius: 10px; padding: 1.15rem 1.25rem;
+    background: var(--color-instrument);
+    font-family: var(--font-data); font-size: 0.75rem; line-height: 1.7;
+    color: var(--color-ink-faint);
+  }
 
   /* The instrument card. No border, no shadow, no gradient — flat fill only. */
   .cb-out .cb-card {
