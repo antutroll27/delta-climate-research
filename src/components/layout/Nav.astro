@@ -22,7 +22,15 @@ const menus = [
     label: 'Interactive Tools',
     items: [
       { label: 'Heat Map', href: '/heat-map', summary: 'Interactive urban-heat explorer' },
-      { label: 'CBAM Calculator', href: '/cbam/cbam-calculator', summary: 'Estimate carbon border costs' },
+      // ENTERS THROUGH /cbam, NOT STRAIGHT INTO THE ESTIMATOR. The pair is a
+      // funnel: /cbam explains the mechanism and is the page meant to be indexed,
+      // and it carries the button through to the estimator. Deep-linking past it
+      // dropped a first-time visitor into a form full of CN codes and production
+      // routes with nothing telling them what any of it was.
+      //
+      // The label follows the destination. "CBAM Calculator" pointing at an
+      // explainer is a link whose text does not describe where it goes (WCAG 2.4.4).
+      { label: 'CBAM', href: '/cbam', summary: 'Border-carbon rules & estimator' },
     ],
   },
 ];
