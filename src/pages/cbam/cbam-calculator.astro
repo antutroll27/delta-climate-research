@@ -8,13 +8,24 @@
 // the SaaS's own cards as an Astro island, and its reasoning is sound: the
 // honesty states are enforced inside those components, so taking them means the
 // honesty travels for free. Two things pointed the other way. §6.7 — the cards
-// carry GeoCBAM's design tokens (bg-card, text-teal, text-gold), and this site
-// has its own @theme; importing a second palette would clash with the
-// survey-instrument language, and restyling four card files costs about what
-// building native ones does. And precedent: the heat map, far more complex than
-// a form, is vanilla TS here. So the engine is verbatim, the UI is native, and
-// the honesty states are held instead by an exhaustive switch in cbam-app.ts plus
-// a test asserting every branch renders what it owes.
+// carry GeoCBAM's design tokens, and this site has its own @theme; and
+// precedent: the heat map, far more complex than a form, is vanilla TS here. So
+// the engine is verbatim, the UI is native, and the honesty states are held
+// instead by an exhaustive switch in cbam-app.ts plus a test asserting every
+// branch renders what it owes.
+//
+// THE LOOK follows docs/cbam-calculator-ui-astro.md — its layout, spacing,
+// instrument-card structure and the behaviours in its §6 — expressed in this
+// site's palette rather than GeoCBAM's. The doc's own colour law ("gold means
+// default values, teal means verified") is already this site's law with bronze
+// and cyan, so the semantics ported without translation.
+//
+// TWO PLACES THE DOC IS WRONG FOR THIS BUILD, both checked rather than assumed:
+//   §5 says the form must be a client-framework island with client:load, because
+//   "Astro components shed their interactivity". Not so — the interactivity is a
+//   plain <script> module, and the dependent route field works. No Vue, no React.
+//   §9 lists the result-card internals as not covered; the waterfall, provenance
+//   stamp and status tags were already built here.
 //
 // THE FRAMING BANNER IS MARKUP, NOT JAVASCRIPT (dossier §7.1). It must be on the
 // page whether or not the script runs, whether or not the pack loads.
@@ -31,58 +42,69 @@ import Footer from '../../components/layout/Footer.astro';
   <Nav />
 
   <main id="main" tabindex="-1" class="cb-page">
-    <div class="wrap">
-      <p class="sec-index">Interactive tools</p>
-      <h1 class="sec-title">CBAM certificate <em>estimator.</em></h1>
+    <div class="cb-shell">
+      <h1 class="cb-title">Estimator</h1>
+      <p class="cb-eyebrow">Provisional · defaults only · in-browser</p>
 
       <!-- NON-NEGOTIABLE §7.1 — ships with the calculator, always, in markup. -->
       <div class="cb-banner" role="note">
-        <strong>Prototype estimator · Commission default values only · decision-support, not a
-        declaration.</strong> Computed in your browser from the same published rules, and never
-        sent anywhere. For a 2026 import no final figure exists — the cross-sectoral correction
-        factor is unpublished — so any number below is a labelled what-if. This is not a filing,
-        not validated by the EU CBAM Registry, and not a statement of monetary liability.
+        Prototype estimator · Commission default values only · decision-support, not a
+        declaration. Computed in your browser from the published rules, and never sent
+        anywhere. For a 2026 import no final figure exists — the cross-sectoral correction
+        factor is unpublished — so any number below is a labelled what-if. This is not a
+        filing, not validated by the EU CBAM Registry, and not a statement of monetary
+        liability.
       </div>
 
       <div class="cb-grid">
         <section class="cb-form" aria-labelledby="cb-form-h">
-          <h2 id="cb-form-h" class="cb-h">The line</h2>
+          <h2 id="cb-form-h" class="cb-sr">The line</h2>
 
-          <label>
-            <span>Good — CN code</span>
-            <input id="cbCn" list="cbCnList" autocomplete="off" placeholder="e.g. 25231000" />
+          <div>
+            <label class="cb-label" for="cbCn">Good (CN code)</label>
+            <input id="cbCn" class="cb-field" list="cbCnList" autocomplete="off"
+                   placeholder="e.g. 25231000 — cement clinker" />
             <datalist id="cbCnList"></datalist>
-          </label>
+          </div>
 
-          <label>
-            <span>Country of origin</span>
-            <select id="cbCountry"><option value="" disabled selected>Select origin…</option></select>
-          </label>
+          <div>
+            <label class="cb-label" for="cbCountry">Country of origin</label>
+            <select id="cbCountry" class="cb-field cb-select">
+              <option value="" disabled selected>Select origin…</option>
+            </select>
+          </div>
 
-          <label>
-            <span>Production route</span>
-            <select id="cbRoute" disabled><option value="">Choose a good and origin first</option></select>
-          </label>
+          <div>
+            <label class="cb-label" for="cbRoute">Production route</label>
+            <!-- §6 — the select explains its own dependency. An empty disabled box
+                 reads as broken; this reads as an instruction. -->
+            <select id="cbRoute" class="cb-field cb-select" disabled>
+              <option value="">Choose a good and origin first</option>
+            </select>
+          </div>
 
-          <label>
-            <span>Net mass (tonnes)</span>
-            <input id="cbMass" type="number" min="0" step="any" value="100" />
-          </label>
-
-          <label>
-            <span>Import date</span>
-            <input id="cbDate" type="date" value="2026-03-15" />
-          </label>
+          <div class="cb-row2">
+            <div>
+              <label class="cb-label" for="cbMass">Net mass (tonnes)</label>
+              <input id="cbMass" class="cb-field" type="number" min="0" step="any" value="100" />
+            </div>
+            <div>
+              <label class="cb-label" for="cbDate">Import date</label>
+              <input id="cbDate" class="cb-field" type="date" value="2026-03-15" />
+            </div>
+          </div>
 
           <p class="cb-note" id="cbStatus" role="status" aria-live="polite"></p>
         </section>
 
         <!-- aria-live: the figure AND the refusal both need announcing. A refusal only
              sighted users learn about is not a refusal. -->
-        <section class="cb-result" aria-labelledby="cb-res-h" aria-live="polite">
-          <h2 id="cb-res-h" class="cb-h">Provisional exposure</h2>
-          <div id="cbOut"><p class="cb-idle">Choose a good, an origin, a route and a mass.</p></div>
-          <p class="cb-prov-line" id="cbProv"></p>
+        <section class="cb-out" aria-labelledby="cb-res-h" aria-live="polite">
+          <h2 id="cb-res-h" class="cb-sr">Provisional exposure</h2>
+          <div id="cbOut">
+            <p class="cb-idle">Choose a good, an origin, a route and a mass.</p>
+          </div>
+          <p class="cb-source" id="cbProv"></p>
         </section>
       </div>
 
@@ -108,48 +130,90 @@ import Footer from '../../components/layout/Footer.astro';
 </script>
 
 <style>
-  .cb-page { min-height: 100dvh; padding-block: 9rem 6rem; background: var(--color-base); }
-  .cb-h {
-    font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 0.2em;
-    text-transform: uppercase; color: var(--color-ink-muted); margin: 0 0 1.1rem;
+  /* Shell padding — the doc's responsive scale, lifted onto this site's nav offset. */
+  .cb-page { min-height: 100dvh; background: var(--color-base); padding-block: 9rem 4rem; }
+  .cb-shell { padding-inline: 1rem; max-width: 96rem; margin-inline: auto; }
+  @media (min-width: 640px)  { .cb-shell { padding-inline: 1.75rem; } }
+  @media (min-width: 1280px) { .cb-shell { padding-inline: 2.6rem; } }
+
+  .cb-sr {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip-path: inset(50%); white-space: nowrap;
   }
 
-  /* The framing banner. Bronze, bordered, unmissable — it is the first thing read
-     and it is not decoration. */
+  .cb-title { font-size: 1.65rem; font-weight: 900; letter-spacing: -0.02em; line-height: 1.1; }
+  @media (min-width: 640px) { .cb-title { font-size: 1.85rem; } }
+
+  /* Eyebrow labels stay NOPLATO — the brand mono, and the one role its condensed
+     license-plate cut is actually drawn for. */
+  .cb-eyebrow {
+    margin-top: 0.65rem; font-family: var(--font-mono); font-size: 0.69rem;
+    text-transform: uppercase; letter-spacing: 0.14em; color: var(--color-ink-faint);
+  }
+
+  /* Bronze tint, no border. Bronze is this site's colour for provenance and
+     caution, which is exactly what the source design spends gold on. */
   .cb-banner {
-    margin: 2.2rem 0 2.8rem; max-width: 76ch;
-    border: 1px solid rgb(176 141 87 / 0.34);
-    background: rgb(176 141 87 / 0.07); border-radius: 10px; padding: 1.1rem 1.3rem;
-    font-size: 0.88rem; line-height: 1.7; color: var(--color-ink-muted);
+    margin-top: 1.5rem; max-width: 96ch; border-radius: 10px; padding: 0.85rem 1.15rem;
+    background: color-mix(in srgb, var(--color-bronze) 7%, transparent);
+    font-family: var(--font-data); font-size: 0.72rem; line-height: 1.75;
+    color: color-mix(in srgb, var(--color-bronze) 62%, var(--color-paper));
   }
-  .cb-banner strong { color: var(--color-bronze); font-weight: 500; }
 
-  .cb-grid { display: grid; grid-template-columns: minmax(0, 20rem) minmax(0, 1fr); gap: 2rem; align-items: start; }
-  @media (max-width: 900px) { .cb-grid { grid-template-columns: 1fr; } }
+  .cb-grid { display: grid; grid-template-columns: 1fr; gap: 2.25rem 3rem; margin-top: 2rem; }
+  @media (min-width: 1024px) { .cb-grid { grid-template-columns: 1fr 1.1fr; } }
 
-  .cb-form, .cb-result {
-    background: rgb(9 20 22 / 0.6); border: 1px solid rgb(111 202 214 / 0.16);
-    border-radius: 14px; padding: 1.4rem 1.5rem;
+  .cb-form { display: flex; flex-direction: column; gap: 1.25rem; }
+  .cb-label {
+    display: block; margin-bottom: 0.4rem; font-family: var(--font-mono); font-size: 0.66rem;
+    text-transform: uppercase; letter-spacing: 0.14em; color: var(--color-ink-faint);
   }
-  .cb-form label { display: block; margin-bottom: 1.1rem; }
-  .cb-form label > span {
-    display: block; font-family: var(--font-mono); font-size: 0.58rem; letter-spacing: 0.16em;
-    text-transform: uppercase; color: var(--color-ink-faint); margin-bottom: 0.45rem;
-  }
-  .cb-form input, .cb-form select {
-    width: 100%; background: rgb(5 6 6 / 0.7); color: var(--color-paper);
-    border: 1px solid rgb(111 202 214 / 0.22); border-radius: 8px;
-    padding: 0.62rem 0.7rem; font: inherit; font-size: 0.92rem;
-    /* keeps the native date picker and select panels dark (dossier §6.8) */
+
+  /* NO BORDER, deliberately — the source system's rule is "separation by fill
+     contrast alone", and a hairline reads as a form rather than an instrument.
+     The cost is real and stated: the well lands at 1.31:1 against the page, below
+     the 3:1 WCAG 1.4.11 asks for a control boundary. No fill can clear that bar on
+     a near-black ground (3:1 needs a mid-grey), so this takes the same trade the
+     source design does and mitigates it the same way — every field carries a
+     persistent label directly above it, so the control is identifiable without an
+     edge. The focus ring below is unaffected. */
+  .cb-field {
+    width: 100%; border: 0; border-radius: 10px;
+    background: var(--color-well); color: var(--color-paper);
+    font-family: var(--font-data); font-size: 0.82rem; line-height: 1;
+    padding: 0.78rem 0.9rem; outline: none;
+    /* keeps the native date picker and select panels dark (doc §3.1) */
     color-scheme: dark;
   }
-  .cb-form input:focus-visible, .cb-form select:focus-visible {
-    outline: 2px solid var(--color-cyan); outline-offset: 1px;
-  }
-  .cb-form select:disabled { opacity: 0.5; }
-  .cb-note { font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 0.1em; color: var(--color-cyan); min-height: 1em; }
+  .cb-field::placeholder { color: var(--color-ink-faint); }
+  .cb-field:focus-visible { outline: 2px solid var(--color-cyan); outline-offset: 2px; }
 
-  .cb-idle { color: var(--color-ink-faint); font-size: 0.9rem; }
+  /* Native <select> ignores vertical padding under UA appearance, so it renders
+     visibly shorter than the inputs beside it. Dropping appearance lets padding
+     apply; the chevron is ours. Doc §3.1 — a real bug in the source app. */
+  .cb-select {
+    appearance: none; padding-right: 2.5rem;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6' fill='none'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%238fa3a5' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 14px center;
+  }
+  /* §6 — disabled fields RECEDE rather than ghost. opacity:.5 on this ground takes
+     the text to roughly 2.3:1, which is unreadable; dropping the fill a step keeps
+     the label legible. */
+  .cb-select:disabled { background-color: var(--color-instrument); color: var(--color-ink-faint); }
+
+  .cb-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  @media (max-width: 480px) { .cb-row2 { grid-template-columns: 1fr; } }
+
+  .cb-note {
+    font-family: var(--font-mono); font-size: 0.66rem; letter-spacing: 0.1em;
+    color: var(--color-cyan); min-height: 1em;
+  }
+  .cb-idle { color: var(--color-ink-faint); font-size: 0.88rem; }
+  .cb-source, .cb-foot {
+    margin-top: 1.25rem; font-family: var(--font-data); font-size: 0.68rem;
+    line-height: 1.75; color: var(--color-ink-faint);
+  }
+  .cb-foot { margin-top: 2.75rem; max-width: 96ch; }
 </style>
 
 <style is:global>
@@ -157,42 +221,99 @@ import Footer from '../../components/layout/Footer.astro';
      cbam-app.ts builds the result panel with innerHTML, so these elements never
      exist at build time and Astro's scoped styles cannot reach them — the first
      render came out as unstyled text. Global, but every selector is namespaced
-     under .cb-result so nothing escapes this page. */
-  /* result */
-.cb-result .cb-tag{
-    display: inline-block; font-family: var(--font-mono); font-size: 0.56rem; letter-spacing: 0.18em;
-    text-transform: uppercase; padding: 0.34rem 0.7rem; border-radius: 20px; margin-bottom: 1.1rem;
+     under .cb-out so nothing escapes this page. */
+
+  /* The instrument card. No border, no shadow, no gradient — flat fill only. */
+  .cb-out .cb-card {
+    border-radius: 28px; padding: 1.6rem 1.75rem; min-width: 0;
+    background: var(--color-instrument);
   }
-.cb-result .cb-tag.ok{ color: var(--color-cyan); background: rgb(111 202 214 / 0.13); border: 1px solid rgb(111 202 214 / 0.35); }
-.cb-result .cb-tag.pending{ color: var(--color-bronze); background: rgb(176 141 87 / 0.13); border: 1px solid rgb(176 141 87 / 0.4); }
-.cb-result .cb-tag.unavail{ color: #e5a34d; background: rgb(229 163 77 / 0.1); border: 1px solid rgb(229 163 77 / 0.36); }
-
-.cb-result .cb-fig{ display: flex; align-items: baseline; gap: 0.6rem; }
-.cb-result .cb-n{ font-size: clamp(2.4rem, 6vw, 4rem); font-weight: 500; letter-spacing: -0.03em; color: var(--color-paper); line-height: 1; }
-.cb-result .cb-u{ font-family: var(--font-mono); font-size: 0.62rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--color-ink-faint); }
-.cb-result .cb-cost{ margin-top: 0.5rem; font-size: 1.5rem; color: var(--color-cyan); }
-.cb-result .cb-sub{ margin-top: 0.9rem; font-size: 0.84rem; line-height: 1.65; color: var(--color-ink-muted); max-width: 62ch; }
-.cb-result .cb-warn{ color: var(--color-bronze); }
-
-.cb-result .cb-water{ margin-top: 1.4rem; border-top: 1px solid rgb(111 202 214 / 0.12); padding-top: 0.9rem; }
-.cb-result .cb-row{ display: flex; justify-content: space-between; gap: 1rem; padding: 0.3rem 0; font-family: var(--font-mono); font-size: 0.68rem; color: var(--color-ink-faint); }
-.cb-result .cb-row b{ color: var(--color-paper); font-weight: 400; }
-.cb-result .cb-row.cb-net b{ color: var(--color-cyan); }
-
-.cb-result .cb-reason{ margin: 0 0 1rem; font-size: 0.95rem; line-height: 1.7; color: var(--color-paper); max-width: 62ch; }
-.cb-result .cb-sel{ display: flex; flex-direction: column; gap: 0.3rem; margin-bottom: 1rem; }
-.cb-result .cb-sel span{ font-family: var(--font-mono); font-size: 0.56rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--color-ink-faint); }
-.cb-result .cb-sel code{ font-family: var(--font-mono); font-size: 0.72rem; color: #e5a34d; word-break: break-all; }
-
-.cb-result .cb-stamp{ margin-top: 1.4rem; border-top: 1px solid rgb(176 141 87 / 0.22); padding-top: 0.9rem; }
-.cb-result .cb-stamp-h{ font-family: var(--font-mono); font-size: 0.56rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--color-bronze); margin-bottom: 0.6rem; }
-.cb-result .cb-prov{ margin-top: 0.6rem; font-family: var(--font-mono); font-size: 0.58rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-bronze); }
-.cb-result .cb-notes{ margin: 0.7rem 0 0; padding-left: 1.1rem; }
-.cb-result .cb-notes li{ font-size: 0.8rem; line-height: 1.65; color: var(--color-ink-muted); margin-bottom: 0.4rem; }
-
-.cb-result .cb-prov-line, .cb-result .cb-foot{
-    margin-top: 1.2rem; font-family: var(--font-mono); font-size: 0.58rem;
-    letter-spacing: 0.1em; line-height: 1.9; color: var(--color-ink-faint);
+  .cb-out .cb-card + .cb-card { margin-top: 1.1rem; }
+  .cb-out .cb-card-head {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 0.65rem;
   }
-.cb-result .cb-foot{ margin-top: 2.4rem; max-width: 90ch; }
+  .cb-out .cb-card-label {
+    font-family: var(--font-mono); font-size: 0.69rem; text-transform: uppercase;
+    letter-spacing: 0.16em; color: var(--color-ink-muted);
+  }
+
+  /* Status pill. The dot carries the state redundantly with the hue, so the tag
+     does not rely on colour alone. */
+  .cb-out .cb-tag {
+    display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+    font-family: var(--font-mono); font-size: 0.6rem; font-weight: 600;
+    letter-spacing: 0.12em; text-transform: uppercase;
+    padding: 3px 9px; border-radius: 20px;
+    color: var(--c); background: color-mix(in srgb, var(--c) 15%, transparent);
+  }
+  .cb-out .cb-tag::before {
+    content: ""; width: 5px; height: 5px; border-radius: 50%; background: currentColor;
+  }
+  .cb-out .cb-tag.ok      { --c: var(--color-cyan); }
+  .cb-out .cb-tag.pending { --c: var(--color-bronze); }
+  .cb-out .cb-tag.unavail { --c: #e5a34d; }
+
+  /* tabular-nums throughout: the figure recomputes per keystroke and jitters
+     horizontally without it (doc §6). */
+  .cb-out .cb-fig { margin-top: 1.1rem; }
+  .cb-out .cb-n {
+    font-family: var(--font-data); font-weight: 600; font-size: clamp(2.6rem, 6vw, 3.5rem);
+    line-height: 1; letter-spacing: -0.02em; color: var(--color-paper);
+    font-variant-numeric: tabular-nums;
+  }
+  .cb-out .cb-u {
+    margin-top: 0.4rem; font-family: var(--font-mono); font-size: 0.66rem;
+    text-transform: uppercase; letter-spacing: 0.16em; color: var(--color-ink-faint);
+  }
+  .cb-out .cb-cost {
+    margin-top: 0.85rem; font-family: var(--font-data); font-size: 1.35rem;
+    color: var(--color-cyan); font-variant-numeric: tabular-nums;
+  }
+
+  .cb-out .cb-sub {
+    margin-top: 1rem; font-size: 0.8rem; line-height: 1.7;
+    color: var(--color-ink-muted); max-width: 60ch;
+  }
+  .cb-out .cb-warn { color: color-mix(in srgb, var(--color-bronze) 55%, var(--color-paper)); }
+  .cb-out .cb-reason {
+    margin-top: 1rem; font-size: 0.92rem; line-height: 1.7;
+    color: var(--color-paper); max-width: 60ch;
+  }
+
+  .cb-out .cb-water { margin-top: 1.25rem; display: flex; flex-direction: column; gap: 2px; }
+  .cb-out .cb-row {
+    display: flex; justify-content: space-between; gap: 0.75rem; padding: 0.3rem 0;
+    font-family: var(--font-data); font-size: 0.72rem; color: var(--color-ink-faint);
+    font-variant-numeric: tabular-nums;
+  }
+  .cb-out .cb-row b { font-weight: 600; color: var(--color-paper); }
+  .cb-out .cb-row.cb-net b { color: var(--color-cyan); }
+
+  .cb-out .cb-sel { margin-top: 0.9rem; }
+  .cb-out .cb-sel span {
+    display: block; margin-bottom: 0.35rem; font-family: var(--font-mono); font-size: 0.6rem;
+    font-weight: 600; text-transform: uppercase; letter-spacing: 0.16em; color: var(--color-ink-faint);
+  }
+  /* The selector is a literal quotation of the missing rule, so it is set in the
+     DATA mono — Noplato's small-caps would render column-B as COLUMN-B. */
+  .cb-out .cb-sel code {
+    font-family: var(--font-data); font-size: 0.75rem; color: #e5a34d; word-break: break-all;
+  }
+
+  .cb-out .cb-stamp {
+    margin-top: 1.4rem; padding-top: 1rem;
+    border-top: 1px solid color-mix(in srgb, var(--color-bronze) 22%, transparent);
+  }
+  .cb-out .cb-stamp-h {
+    margin-bottom: 0.6rem; font-family: var(--font-mono); font-size: 0.6rem; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.18em; color: var(--color-bronze);
+  }
+  .cb-out .cb-prov {
+    margin-top: 0.6rem; font-family: var(--font-mono); font-size: 0.62rem;
+    letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-bronze);
+  }
+  .cb-out .cb-notes { margin: 0.7rem 0 0; padding-left: 1.1rem; }
+  .cb-out .cb-notes li {
+    margin-bottom: 0.4rem; font-size: 0.78rem; line-height: 1.65; color: var(--color-ink-muted);
+  }
 </style>

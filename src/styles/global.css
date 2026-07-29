@@ -44,6 +44,31 @@
   unicode-range: U+0394, U+00B0, U+00B2, U+00B7, U+2026, U+2191, U+2192, U+2194, U+2197, U+2199, U+2500, U+258B, U+2713;
 }
 
+/* Geist Mono — the DATA mono, used only by the CBAM estimator (--font-data).
+   Noplato stays the brand mono and keeps every uppercase eyebrow label; it is a
+   condensed license-plate cut whose lowercase are small-caps, which is right for
+   `PROVENANCE` and wrong for two things the estimator needs:
+     · mono prose — the framing banner renders as a shouted paragraph
+     · mixed-case regulatory identifiers — benchmark/…/column-B/(F) becomes
+       COLUMN-B, so it stops being a faithful quotation of the missing rule.
+   Licence: SIL OFL 1.1, vendored at /fonts/GeistMono-OFL.txt. GeoCBAM ships these
+   woff2s with no licence file beside them; its own porting doc (§2.3) flags that
+   as a gap to close before a public site, so it is closed here. */
+@font-face {
+  font-family: 'Geist Mono';
+  src: url('/fonts/geist-mono-400.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Geist Mono';
+  src: url('/fonts/geist-mono-600.woff2') format('woff2');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
 /* ----------------------------------------------------------------------------
    Design tokens — Delta Climate Research (locked palette + type)
    See docs/superpowers/specs/2026-06-01-delta-climate-research-design.md §3
@@ -73,6 +98,18 @@
   --font-sans: "Mona Sans", ui-sans-serif, system-ui, sans-serif;
   --font-serif: "Mona Sans", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "Noplato Mono", ui-monospace, "SF Mono", monospace;
+  /* Data mono — figures, waterfall rows, regulatory identifiers. See the
+     @font-face note above for why this is not --font-mono. */
+  --font-data: "Geist Mono", ui-monospace, "SF Mono", monospace;
+
+  /* Instrument surfaces (CBAM estimator). --color-surface #0b2c2e was drawn for
+     feed rows; at card scale it reads heavily teal-green and fights the calm the
+     layout depends on. These are quiet near-blacks whose STEPS match the source
+     design's exactly — card:canvas and field:card are 1.13 here, 1.12 there.
+     That near-invisible separation is the system's intent ("no borders anywhere,
+     separation is by fill contrast alone"), so it is matched, not "improved". */
+  --color-instrument: #10181c;   /* card fill  — 1.13:1 on base */
+  --color-well: #1a262c;         /* field fill — 1.16:1 on card */
 
   /* fluid type scale (each = the exact existing clamp it replaces — pixel-identical) */
   --text-hero: clamp(2.5rem, 7vw, 6rem);

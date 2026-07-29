@@ -60,6 +60,26 @@ const num = (s: string, dp = 3) => {
 const eur = (s: string | null) =>
   s === null ? null : `€${Number(s).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+/**
+ * The card shell. Every branch renders one, so the status tag is the ONLY thing
+ * distinguishing a priced line from a refusal at a glance — which is why the tag
+ * text is passed in per branch rather than derived.
+ */
+const card = (tone: 'ok' | 'pending' | 'unavail', tag: string, body: string) => `
+  <section class="cb-card cb-res">
+    <div class="cb-card-head">
+      <h3 class="cb-card-label">Certificate exposure</h3>
+      <span class="cb-tag ${tone}">${esc(tag)}</span>
+    </div>
+    ${body}
+  </section>`;
+
+/** The figure block. Never rendered by `unavailable` — see NON-NEGOTIABLE 2. */
+const figure = (certs: string, costEur: string | null) => `
+  <div class="cb-fig"><span class="cb-n">${num(certs)}</span></div>
+  <div class="cb-u">certificates</div>
+  ${costEur ? `<div class="cb-cost">${eur(costEur)}</div>` : ''}`;
+
 /* ── the provenance stamp — rendered on EVERY branch, refusals included ─────── */
 function renderStamp(e: CertificateEstimate): string {
   const s = e.stamp;
@@ -104,59 +124,46 @@ function renderWaterfall(e: Extract<CertificateEstimate, { terms: unknown }>, fi
 export function renderResult(e: CertificateEstimate): string {
   switch (e.status) {
     case 'ok':
-      return `
-        <div class="cb-res cb-ok">
-          <div class="cb-tag ok">Priced</div>
-          <div class="cb-fig"><span class="cb-n">${num(e.figure.certificates)}</span><span class="cb-u">certificates</span></div>
-          ${e.figure.costEur ? `<div class="cb-cost">${eur(e.figure.costEur)}</div>` : ''}
-          <div class="cb-sub">Cross-sectoral correction factor ${esc(e.cscf)}</div>
-          ${renderWaterfall(e, e.figure)}${renderStamp(e)}
-        </div>`;
+      return card('ok', 'Priced', `
+        ${figure(e.figure.certificates, e.figure.costEur)}
+        <div class="cb-sub">Cross-sectoral correction factor ${esc(e.cscf)}</div>
+        ${renderWaterfall(e, e.figure)}${renderStamp(e)}`);
 
     case 'zero_by_fiat':
       // Electricity. Free allocation is nil because Art 2(2) says so, not because a
       // calculation produced zero — so this figure IS final even in 2026, and saying
       // "CSCF pending" here would be wrong in the other direction.
-      return `
-        <div class="cb-res cb-ok">
-          <div class="cb-tag ok">Priced · free allocation nil by law</div>
-          <div class="cb-fig"><span class="cb-n">${num(e.figure.certificates)}</span><span class="cb-u">certificates</span></div>
-          ${e.figure.costEur ? `<div class="cb-cost">${eur(e.figure.costEur)}</div>` : ''}
-          <div class="cb-sub">No free allocation applies · ${esc(e.locator)}</div>
-          ${renderWaterfall(e, e.figure)}${renderStamp(e)}
-        </div>`;
+      return card('ok', 'Priced · free allocation nil by law', `
+        ${figure(e.figure.certificates, e.figure.costEur)}
+        <div class="cb-sub">No free allocation applies · ${esc(e.locator)}</div>
+        ${renderWaterfall(e, e.figure)}${renderStamp(e)}`);
 
     case 'cscf_pending':
       // NON-NEGOTIABLE 3. The Commission has not published the cross-sectoral
       // correction factor for this year, so no final figure exists. What is shown is
       // explicitly a what-if at the last CSCF actually set (1.0, for 2021-25). The
-      // word "scenario" and the assumed factor are in the markup, not a tooltip.
-      return `
-        <div class="cb-res cb-pending">
-          <div class="cb-tag pending">What-if · CSCF for ${esc(String(e.cscfYear))} unpublished</div>
-          <div class="cb-fig"><span class="cb-n">${num(e.scenario.certificates)}</span><span class="cb-u">certificates</span></div>
-          ${e.scenario.costEur ? `<div class="cb-cost">${eur(e.scenario.costEur)}</div>` : ''}
-          <div class="cb-sub cb-warn">
-            Not a final figure. The Commission has not published the cross-sectoral correction
-            factor for ${esc(String(e.cscfYear))}; this assumes CSCF&nbsp;=&nbsp;${esc(e.scenario.assumedCscf)},
-            the last value actually set (2021–25). The real figure cannot be higher, and may be lower.
-          </div>
-          ${renderWaterfall(e, e.scenario)}${renderStamp(e)}
-        </div>`;
+      // word "what-if" and the assumed factor are in the markup, not a tooltip.
+      return card('pending', `What-if · CSCF for ${e.cscfYear} unpublished`, `
+        ${figure(e.scenario.certificates, e.scenario.costEur)}
+        <p class="cb-sub cb-warn">
+          Not a final figure. The Commission has not published the cross-sectoral correction
+          factor for ${esc(String(e.cscfYear))}; this assumes CSCF&nbsp;=&nbsp;${esc(e.scenario.assumedCscf)},
+          the last value actually set (2021–25). The real figure cannot be higher, and may be lower.
+        </p>
+        ${renderWaterfall(e, e.scenario)}${renderStamp(e)}`);
 
     case 'unavailable':
       // NON-NEGOTIABLE 2. No number. Not zero, not a placeholder, not a range — the
       // rules do not price this line and the honest output is to say which rule is
       // missing. 183 of 574 offered goods land here, 181 of them iron and steel.
-      return `
-        <div class="cb-res cb-unavail">
-          <div class="cb-tag unavail">No estimate — the rules do not price this line</div>
-          <p class="cb-reason">${esc(e.reason)}</p>
-          ${e.selector ? `<div class="cb-sel"><span>Missing rule</span><code>${esc(e.selector)}</code></div>` : ''}
-          <p class="cb-sub">We show no deduction rather than guess one. Picking a nearby benchmark
-             would produce a number that looks authoritative and is not.</p>
-          ${renderStamp(e)}
-        </div>`;
+      // Note this branch calls neither figure() nor renderWaterfall(): the card is
+      // styled as an answer because it IS one, but it carries no number anywhere.
+      return card('unavail', 'No estimate', `
+        <p class="cb-reason">${esc(e.reason)}</p>
+        ${e.selector ? `<div class="cb-sel"><span>Missing rule</span><code>${esc(e.selector)}</code></div>` : ''}
+        <p class="cb-sub">We show no deduction rather than guess one. Picking a nearby benchmark
+           would produce a number that looks authoritative and is not.</p>
+        ${renderStamp(e)}`);
 
     default: {
       // A new status upstream must break the build here rather than render nothing.
@@ -225,7 +232,12 @@ export function initCbam(): void {
   function syncRoutes(): void {
     // Read the user's pick BEFORE the rebuild wipes it.
     const prev = route!.value;
-    if (!pack || !cn!.value || !country!.value) { route!.innerHTML = '<option value="">—</option>'; route!.disabled = true; return; }
+    // The select explains its own dependency rather than showing a bare dash — an
+    // empty disabled box reads as broken, this reads as an instruction (doc §6).
+    if (!pack || !cn!.value || !country!.value) {
+      route!.innerHTML = '<option value="">Choose a good and origin first</option>';
+      route!.disabled = true; return;
+    }
     const year = Number(date!.value.slice(0, 4)) || 2026;
     const rs = routesFor(pack, cn!.value, country!.value, year);
     route!.disabled = rs.length === 0;
