@@ -1,4 +1,6 @@
 // @ts-check
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { defineConfig } from 'astro/config';
 import sitemap from '@astrojs/sitemap';
 
@@ -46,6 +48,18 @@ export default defineConfig({
     react(),
   ],
   vite: {
+    // KEEP VITE'S CACHE OFF THIS REPO'S VOLUME.
+    //
+    // The working copy lives on an exFAT external disk. Vite and esbuild MMAP
+    // the dependency-optimisation cache, and "Re-optimizing dependencies"
+    // rewrites those files underneath the live mapping. APFS tolerates that;
+    // exFAT via macOS's fskit driver does not, and the process dies with
+    // `zsh: bus error` (SIGBUS) — a fault in the memory mapping, not in any JS.
+    //
+    // tmpdir() is APFS on macOS and /tmp on Linux, so this is correct on a
+    // laptop and on the Vercel builder without branching. The only cost is an
+    // occasional cold pre-bundle when the OS reaps the temp directory.
+    cacheDir: join(tmpdir(), 'vite-delta-climate'),
     // The shared, tree-shaken Three runtime is ~549 kB raw / ~142 kB gzip.
     // Retain a warning boundary just above it so future vendor growth is noisy.
     build: { chunkSizeWarningLimit: 600 },
@@ -67,6 +81,15 @@ export default defineConfig({
         'three/examples/jsm/postprocessing/UnrealBloomPass.js',
         'three/examples/jsm/postprocessing/OutputPass.js',
         'three/examples/jsm/environments/RoomEnvironment.js',
+        // Astro's ClientRouter virtual modules. These are NOT three addons and
+        // they are the actual cause of the first-load "504 Outdated Optimize
+        // Dep": Vite cannot see them by static analysis, discovers them on the
+        // first navigation, re-optimises and forces a reload. Naming them here
+        // moves that work to startup, where nothing is waiting on it.
+        'astro/virtual-modules/transitions-router.js',
+        'astro/virtual-modules/transitions-types.js',
+        'astro/virtual-modules/transitions-events.js',
+        'astro/virtual-modules/transitions-swap-functions.js',
       ],
     },
   },
