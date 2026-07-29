@@ -17,7 +17,11 @@ const sitemapFilter = (page) => {
   const path = new URL(page).pathname;
   if (path === '/climate-highlights/') return false;               // always coming-soon (no publish flag)
   if (path === '/blog/') return false;                             // coming-soon, no publish flag yet
-  if (path === '/cbam-calculator/') return false;                  // coming-soon, no publish flag yet
+  if (path === '/cbam/cbam-calculator/') return false;             // coming-soon, no publish flag yet
+  // /cbam is the informational half of the CBAM pair and IS meant to be indexed
+  // — but only once it has the explainer copy. Until then it is noindex like any
+  // other coming-soon page, and this line comes out with the placeholder.
+  if (path === '/cbam/') return false;
   // /heat-map is indexable and carries its caveats on the page. Its SUB-routes
   // are not: /heat-map/brief and /heat-map/compare are deep-link views of the
   // same tool, and indexing near-duplicates makes them compete with the page
@@ -41,6 +45,10 @@ const sitemapFilter = (page) => {
 // https://astro.build/config
 export default defineConfig({
   site: 'https://deltaclimate.earth',
+  // The calculator moved under /cbam/ so the pair reads as a hierarchy. The flat
+  // URL was already deployed and is in the nav of any cached page, so it
+  // redirects rather than 404s.
+  redirects: { '/cbam-calculator': '/cbam/cbam-calculator' },
   integrations: [
     // Omit <lastmod> until routes have content-owned modification dates. A
     // deploy timestamp would falsely mark every page as newly updated.

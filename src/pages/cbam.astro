@@ -1,0 +1,89 @@
+---
+// CBAM — the explainer page, coming-soon while the copy is written.
+//
+// WHY THIS EXISTS SEPARATELY FROM /cbam-calculator. They answer different
+// questions and, in search terms, different intents: this one is informational
+// ("what is CBAM, does it apply to me"), the calculator is transactional
+// ("CBAM calculator"). Serving both from one URL means ranking for neither.
+//
+// SoonTide rather than SoonDraft: this is an Insights page, editorial, and its
+// two siblings there (/white-papers, /climate-highlights) use the same register.
+// The drafting-table stamp belongs to instruments — /cbam-calculator has it.
+//
+// The `extra` slot carries the one thing this page can already do: send a
+// visitor to the estimator. A placeholder that offers only a mailto wastes the
+// visit when a working tool is one click away.
+import Base from '../layouts/Base.astro';
+import Nav from '../components/layout/Nav.astro';
+import Footer from '../components/layout/Footer.astro';
+import SoonTide from '../components/states/SoonTide.astro';
+---
+
+<Base
+  title="CBAM explained — Delta Climate Research"
+  description="What the EU Carbon Border Adjustment Mechanism is, which goods and exporters it reaches, and what it costs — written for exporters being asked for embedded-emissions data for the first time. Currently in preparation."
+  noindex
+>
+  <Nav />
+  <SoonTide
+    kicker="Carbon Border Adjustment Mechanism"
+    sub="Your European buyer has asked for embedded-emissions data and a deadline. This page will explain what the mechanism is, which goods it reaches, what you will be asked to provide, and — the part most guidance skips — which parts of the rulebook the Commission has not published yet."
+    ghost="CO₂"
+    gaugeLabel="DRAFT — 0.2"
+    statusRows={[
+      { k: 'Status', v: 'In preparation', live: true },
+      { k: 'Written for', v: 'Exporters' },
+      { k: 'Definitive period', v: 'From Jan 2026' },
+    ]}
+    backHref="/"
+    backLabel="Back to home"
+    notifySubject="Notify me — CBAM explainer"
+  >
+    The rules are <em>still being written.</em>
+
+    <div slot="extra" class="cbam-cta">
+      <a class="cbam-btn" href="/cbam/cbam-calculator">
+        Open the CBAM estimator <span aria-hidden="true">↗</span>
+      </a>
+      <!-- FUTURE TENSE, DELIBERATELY. The estimator is not live yet — the link
+           goes to another placeholder. An earlier draft of this said "runs in
+           your browser · no sign-up", which describes a tool that does not exist
+           on this site, on a page whose whole argument is that we say what is
+           not settled. -->
+      <p class="cbam-note">
+        Also in preparation · will run in your browser, with no sign-up
+      </p>
+    </div>
+  </SoonTide>
+  <Footer />
+</Base>
+
+<style>
+  /* Bronze primary action, matching the heat map's `Generate ward report`.
+     Bronze is this site's colour for meta and provenance; cyan is reserved for
+     interactive chrome, and a full-width cyan button here would outshout the
+     nav dock. */
+  .cbam-cta { margin-top: clamp(2rem, 4vh, 3rem); }
+  .cbam-btn {
+    display: inline-flex; align-items: center; gap: 0.6rem;
+    background: var(--color-bronze); color: #0d0a05;
+    border-radius: 9px; padding: 0.85rem 1.5rem;
+    font-family: var(--font-mono); font-size: 0.68rem;
+    letter-spacing: 0.16em; text-transform: uppercase; text-decoration: none;
+    transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), filter 0.35s;
+  }
+  /* transform + filter only — never layout properties, per the site's motion rule */
+  .cbam-btn:hover { transform: translateY(-2px); filter: brightness(1.08); }
+  .cbam-btn:focus-visible { outline: 2px solid var(--color-cyan); outline-offset: 3px; }
+
+  .cbam-note {
+    margin-top: 0.9rem;
+    font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 0.16em;
+    text-transform: uppercase; color: var(--color-ink-faint);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .cbam-btn { transition: none; }
+    .cbam-btn:hover { transform: none; }
+  }
+</style>

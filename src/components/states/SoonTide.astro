@@ -102,6 +102,11 @@ const stars = Array.from({ length: 70 }, () => ({
       </div>
     )}
 
+    <!-- Optional call to action. SoonDraft has had this slot since it shipped;
+         SoonTide gaining it means a coming-soon page can point somewhere real
+         instead of only offering a mailto. -->
+    <slot name="extra" />
+
     <div class="actions">
       <a class="roll-link" href={backHref} data-roll>{backLabel} <span class="arrow" aria-hidden="true">↙</span></a>
       {nextHref && nextLabel && (
