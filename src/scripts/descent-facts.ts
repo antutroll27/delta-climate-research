@@ -60,6 +60,29 @@ export async function initDescentFacts() {
   if (!animatedFacts.length) return;
 
   const START = 0.58, END = 0.92, seg = (END - START) / animatedFacts.length;
+
+  /**
+   * How far into a fact's segment the count-up finishes, as a fraction of it.
+   *
+   * THE NUMBER IS A FUNCTION OF SCROLL POSITION, so wherever a reader stops is
+   * the value they are left looking at. This was 0.55 — the count finished at
+   * the same moment the fact reached full opacity — which meant 54 % of the time
+   * a fact was legible (opacity > 0.5) it was showing the WRONG figure, by up to
+   * 78 %. Stopping mid-descent left "$18 Trillion" on screen against a true 32,
+   * at 81 % opacity. Multiple people reported it, and a screenshot taken there
+   * captures a claim we do not make.
+   *
+   * At 0.15 the count completes while the fact is still fading in, at opacity
+   * 0.45 — so by the time it is legible it is already true. Measured over the
+   * legible window: 0 % wrong, worst visible error 0 %.
+   *
+   * The count-up survives as a flourish during the fade rather than the main
+   * event. That is the trade: this is a one-constant fix for the reported bug,
+   * not the full one. It does NOT address scrolling UP counting DOWN, which is
+   * the same root cause — a displayed value derived from scroll position rather
+   * than from which fact is showing.
+   */
+  const COUNT_DONE_AT = 0.15;
   st = ScrollTrigger.create({
     trigger: track, start: 'top top', end: 'bottom bottom', scrub: true,
     onUpdate: (self) => {
@@ -69,7 +92,7 @@ export async function initDescentFacts() {
         const local = sm(a, b, p);
         f.el.style.opacity = String(Math.sin(Math.PI * local));        // fade in then out
         f.el.style.transform = `translateY(${(0.5 - local) * 70}px)`;  // gentle rise
-        f.n.textContent = fmt(f.target * sm(a, a + seg * 0.55, p), f.dec, f.thou); // count up as you enter
+        f.n.textContent = fmt(f.target * sm(a, a + seg * COUNT_DONE_AT, p), f.dec, f.thou); // count up as you enter
       });
     },
   });
