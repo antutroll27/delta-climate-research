@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import { renderResult } from '../../src/scripts/cbam-algos/cbam-app.ts';
+import { nextRoute, renderResult } from '../../src/scripts/cbam-algos/cbam-app.ts';
 import { estimateFromPack, routesFor } from '../../src/scripts/cbam-algos/estimator/estimate-from-pack.ts';
 
 /**
@@ -48,6 +48,43 @@ test('§8 — the stranded steel line refuses, and names the missing rule', () =
 
 test('§8 — route lookup is unchanged', () => {
   assert.deepEqual(routesFor(pack, '72083800', 'IN', 2026), ['(C)']);
+});
+
+/* ── the route the form ends up pricing ────────────────────────────────────── */
+
+test('a valid route survives a change to any other field', () => {
+  // The defect: rebuilding the <select> made the browser select option 0, so
+  // changing ONLY the import date reverted (B) to (A) and moved the headline
+  // figure 58.148 -> 71.465 certificates with nothing saying so.
+  assert.equal(nextRoute(['(A)', '(B)'], '(B)'), '(B)');
+  assert.equal(nextRoute(['(A)', '(B)', '(C)'], '(C)'), '(C)');
+});
+
+test('when several routes are published and none is chosen, none is chosen FOR the user', () => {
+  assert.equal(nextRoute(['(A)', '(B)'], ''), '',
+    'auto-selecting the first route prices a line the user never asked for');
+  // The other half: the previous pick is no longer published for this pairing.
+  // Falling back to option 0 here is the same guess by a different route.
+  assert.equal(nextRoute(['(C)', '(D)'], '(B)'), '');
+});
+
+test('a single published route is selected — there is no choice to make', () => {
+  assert.equal(nextRoute(['(C)'], ''), '(C)');
+  assert.equal(nextRoute(['default'], '(B)'), 'default');
+});
+
+test('no published routes yields no selection', () => {
+  assert.equal(nextRoute([], '(A)'), '');
+});
+
+test('the real pack: 72083800/IN publishes one route, so it needs no pick', () => {
+  const rs = routesFor(pack, '72083800', 'IN', 2026);
+  assert.deepEqual(rs, ['(C)']);
+  assert.equal(nextRoute(rs, ''), '(C)');
+  // ...whereas 25231000/DZ publishes two, and must not be resolved for the user.
+  const many = routesFor(pack, '25231000', 'DZ', 2026);
+  assert.ok(many.length > 1, `expected several routes, got ${many}`);
+  assert.equal(nextRoute(many, ''), '');
 });
 
 /* ── §7 non-negotiables, per branch ────────────────────────────────────────── */

@@ -53,7 +53,9 @@ const countryName = (code: string) => {
 /** tCO2e and certificate counts carry long decimal tails; 3 dp is plenty to read. */
 const num = (s: string, dp = 3) => {
   const n = Number(s);
-  return Number.isFinite(n) ? n.toLocaleString('en-GB', { maximumFractionDigits: dp }) : s;
+  // esc() on the fallback: every other path into innerHTML in this file is escaped,
+  // and this is the only one that returns its argument verbatim.
+  return Number.isFinite(n) ? n.toLocaleString('en-GB', { maximumFractionDigits: dp }) : esc(s);
 };
 const eur = (s: string | null) =>
   s === null ? null : `€${Number(s).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -164,6 +166,30 @@ export function renderResult(e: CertificateEstimate): string {
   }
 }
 
+/**
+ * Which route should be selected once the published list changes, given what the
+ * user had picked before.
+ *
+ * WHY THIS IS NOT "just keep the old value if it is still there". Rebuilding the
+ * route <select> makes the browser select its first option, so changing only the
+ * import date used to revert (B) to (A) and move the headline figure from 58.148
+ * to 71.465 certificates — 23% — with nothing saying so. Restoring the previous
+ * value fixes that case but leaves the other one: when the published list changes
+ * and the user's route is gone, index 0 is still auto-selected and we price a
+ * route they never chose.
+ *
+ * So auto-selection itself is the defect, and the rule is:
+ *   one published route  → select it; there is no choice to make
+ *   several              → '' , and the caller shows the idle prompt until the
+ *                          user picks. Route materially changes the figure, and
+ *                          choosing one for them is a guess this tool does not make.
+ *   previous still valid → keep it, whatever the trigger was.
+ */
+export function nextRoute(published: readonly string[], previous: string): string {
+  if (published.length === 1) return published[0]!;
+  return published.includes(previous) ? previous : '';
+}
+
 /* ── wiring ────────────────────────────────────────────────────────────────── */
 export function initCbam(): void {
   const cn = $<HTMLInputElement>('cbCn'), country = $<HTMLSelectElement>('cbCountry');
@@ -197,18 +223,37 @@ export function initCbam(): void {
   }
 
   function syncRoutes(): void {
+    // Read the user's pick BEFORE the rebuild wipes it.
+    const prev = route!.value;
     if (!pack || !cn!.value || !country!.value) { route!.innerHTML = '<option value="">—</option>'; route!.disabled = true; return; }
     const year = Number(date!.value.slice(0, 4)) || 2026;
     const rs = routesFor(pack, cn!.value, country!.value, year);
     route!.disabled = rs.length === 0;
-    route!.innerHTML = rs.length
-      ? rs.map((r) => `<option value="${esc(r)}">${r === 'default' ? 'single route' : esc(r)}</option>`).join('')
-      : '<option value="">no route published for this pairing</option>';
+    if (!rs.length) { route!.innerHTML = '<option value="">no route published for this pairing</option>'; return; }
+    const opts = rs.map((r) => `<option value="${esc(r)}">${r === 'default' ? 'single route' : esc(r)}</option>`).join('');
+    const want = nextRoute(rs, prev);
+    // want === '' means the pairing publishes several routes and the user has not
+    // chosen among them. A disabled placeholder holds the selection empty, and
+    // run() falls through to the idle prompt rather than pricing a guess.
+    route!.innerHTML = (want ? '' : '<option value="" disabled selected>Select a production route…</option>') + opts;
+    if (want) route!.value = want;
   }
 
   function run(): void {
     if (!pack || !cn!.value || !country!.value || !route!.value || !mass!.value) {
       out!.innerHTML = '<p class="cb-idle">Choose a good, an origin, a route and a mass.</p>';
+      return;
+    }
+    // REFUSE AN IMPOSSIBLE MASS RATHER THAN PRICING IT. `min="0"` on the input is
+    // inert here — there is no form and no submit, so constraint validation never
+    // runs and the `input` event fires anyway. A mass of -500 t used to render
+    // "-682 tCO₂e embedded" and a confident "0 certificates · €0.00": nonsense
+    // input wearing the shape of a computed answer, which is exactly what the
+    // fail-closed rule exists to stop. Checked here, not against the markup's
+    // `min`, so that editing the .astro cannot silently disarm it.
+    const massT = Number(mass!.value);
+    if (!Number.isFinite(massT) || massT < 0) {
+      out!.innerHTML = '<p class="cb-idle">Net mass must be a number of tonnes, zero or greater.</p>';
       return;
     }
     try {
@@ -232,5 +277,14 @@ export function initCbam(): void {
   country.addEventListener('change', onPick);
   date.addEventListener('change', onPick);
   route.addEventListener('change', run);
-  mass.addEventListener('input', run);
+  // DEBOUNCED, because #cbOut sits inside aria-live="polite". Bound directly to
+  // `input`, typing "1250" re-rendered the panel four times and a screen-reader
+  // user heard the whole result — tag, figure, waterfall, provenance — read out
+  // once per keystroke. Switching to `change` would cost nothing but stops the
+  // figure tracking as you type, which is worse on a calculator.
+  let massTimer: number | undefined;
+  mass.addEventListener('input', () => {
+    clearTimeout(massTimer);
+    massTimer = window.setTimeout(run, 250);
+  });
 }
