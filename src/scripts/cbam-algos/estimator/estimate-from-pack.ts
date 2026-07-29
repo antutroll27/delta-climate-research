@@ -1,5 +1,7 @@
 import Decimal from 'decimal.js'
 import { isAssignedAlpha2, OTHER_ORIGIN } from '../regulatory/iso-3166'
+import { sectorForCn } from '../cbam/sector'
+import { evaluateThreshold, type ThresholdState } from '../threshold/evaluate'
 import {
   estimateCertificates,
   unavailableEstimate,
@@ -41,6 +43,13 @@ export interface EstimatorPack {
   cscf: FreeAllocationTables['cscf']
   prices: FreeAllocationTables['prices']
   sources: FreeAllocationTables['sources']
+  thresholds: Array<{
+    id: string
+    calendarYear: number
+    thresholdT: string
+    includedSectors: string[]
+    sourceLocator: string
+  }>
 }
 
 export interface EstimatorInput {
@@ -50,6 +59,12 @@ export interface EstimatorInput {
   massT: string
   /** import date; the reporting year is its first four characters. */
   date: string
+  /**
+   * 'direct' (process only) or 'direct_and_indirect' (adds the electricity default the
+   * Commission publishes for cement, fertilisers and hydrogen). Defaults to 'direct', which is
+   * the only scope the definitive period charges for iron & steel and aluminium.
+   */
+  emissionsScope?: 'direct' | 'direct_and_indirect'
 }
 
 /** The default-values corpus spells a route-independent good as 'default'; the Annex uses ''. */
@@ -174,6 +189,69 @@ export function selectFactorFromPack(
   return null
 }
 
+export interface ThresholdView {
+  state: ThresholdState
+  knownEligibleMassT: string
+  thresholdT: string
+  calendarYear: number
+  sector: string
+  sourceLocator: string
+}
+
+/**
+ * Where this ONE line sits against the de minimis threshold (Reg (EU) 2023/956 Art 2(3)).
+ *
+ * The threshold is ANNUAL and per importer, so a single line can only ever prove the "above"
+ * case: 60 t in one consignment is already past 50 t whatever else the year holds. Below that,
+ * the honest state is INDETERMINATE, never "exempt" — which is exactly what evaluateThreshold
+ * returns for a 'partial' view, and why completeness is hard-coded to 'partial' here.
+ *
+ * Returns null when the good's sector is unknown or the sector is not one the threshold covers
+ * (hydrogen and electricity are absent from the 2026 row), because there is then no threshold
+ * statement to make rather than a favourable one to assume.
+ */
+export function resolveThreshold(
+  pack: EstimatorPack,
+  input: { cn: string; massT: string; date: string },
+): ThresholdView | null {
+  const year = Number(input.date.slice(0, 4))
+  const rule = pack.thresholds.find(t => t.calendarYear === year)
+  if (!rule) return null
+  const sector = sectorForCn(input.cn)
+  if (!sector || !rule.includedSectors.includes(sector)) return null
+  const evaluated = evaluateThreshold({
+    knownEligibleMassT: input.massT,
+    completeness: 'partial',
+    thresholdT: rule.thresholdT,
+  })
+  return { ...evaluated, calendarYear: rule.calendarYear, sector, sourceLocator: rule.sourceLocator }
+}
+
+/**
+ * The indirect (electricity) default for this selector, or null when the Commission publishes
+ * none. Same origin fallback and same deepest-scope rule as the direct lookup, so an indirect
+ * figure can never rest on a broader scope than the direct one it accompanies.
+ */
+export function selectIndirectFactorFromPack(
+  pack: EstimatorPack,
+  input: EstimatorInput,
+): EstimatorPack['defaultFactors'][number] | null {
+  const year = Number(input.date.slice(0, 4))
+  for (const origin of originsFor(pack, input.country)) {
+    if (!isOfferedGood(pack, input.cn)) return null
+    const covering = pack.defaultFactors.filter(f =>
+      f.originCountry === origin && f.emissionsType === 'indirect' &&
+      f.reportingYear === year && input.cn.startsWith(f.scopeCode))
+    if (covering.length === 0) continue
+    const deepest = Math.max(...covering.map(f => f.scopeCode.length))
+    // Indirect rows are published per good, not per production route, so the route is not part
+    // of the match; taking the deepest scope keeps it consistent with the direct lookup.
+    const found = covering.find(f => f.scopeCode.length === deepest)
+    if (found) return found
+  }
+  return null
+}
+
 export function estimateFromPack(pack: EstimatorPack, input: EstimatorInput): CertificateEstimate {
   const year = Number(input.date.slice(0, 4))
   const factor = selectFactorFromPack(pack, input)
@@ -193,6 +271,7 @@ export function estimateFromPack(pack: EstimatorPack, input: EstimatorInput): Ce
     routeIndicator: benchmarkRoute(input.route),
     importDate: input.date,
     precursors: [],
+    indirectTco2e: '0',
     snapshotHash: 'browser-prototype',
     linePackage: dvPackageId(pack),
     customsLineId: 'estimator-prototype',
@@ -209,5 +288,17 @@ export function estimateFromPack(pack: EstimatorPack, input: EstimatorInput): Ce
     .mul(new Decimal(1).plus(new Decimal(factor.markupPct).div(100)))
   const emissions = markedUp.mul(input.massT).toFixed()
 
-  return estimateCertificates({ ...baseInput, emissionsTco2e: emissions }, tables)
+  // Indirect is opt-in and silent when the Commission publishes nothing for the good: asking for
+  // it must never fabricate a component, and must never fail a good that has only a direct row.
+  let indirectTco2e = '0'
+  if (input.emissionsScope === 'direct_and_indirect') {
+    const indirect = selectIndirectFactorFromPack(pack, input)
+    if (indirect) {
+      indirectTco2e = new Decimal(indirect.baseIntensity)
+        .mul(new Decimal(1).plus(new Decimal(indirect.markupPct).div(100)))
+        .mul(input.massT).toFixed()
+    }
+  }
+
+  return estimateCertificates({ ...baseInput, emissionsTco2e: emissions, indirectTco2e }, tables)
 }

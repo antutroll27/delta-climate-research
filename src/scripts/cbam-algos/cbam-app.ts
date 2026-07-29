@@ -23,7 +23,10 @@
  *   4. no filing/validation claim .... nothing here says "declaration" or "filed"
  *   5. residual-basis note travels ... stamp.notes rendered verbatim, every branch
  */
-import { estimateFromPack, routesFor, type EstimatorPack } from './estimator/estimate-from-pack.ts';
+import {
+  estimateFromPack, resolveThreshold, routesFor, selectIndirectFactorFromPack,
+  type EstimatorPack, type ThresholdView,
+} from './estimator/estimate-from-pack.ts';
 import type { CertificateEstimate } from './cbam/certificate-estimate.ts';
 
 const PACK_URL = '/cbam/estimator-pack.json';
@@ -102,14 +105,66 @@ function renderStamp(e: CertificateEstimate): string {
     </div>`;
 }
 
+/**
+ * Where this ONE line sits against the annual de minimis threshold — Reg (EU)
+ * 2023/956 Art 2(3) as amended by Reg (EU) 2025/2083, 50 t per importer per
+ * calendar year across cement, iron & steel, aluminium and fertilisers.
+ *
+ * WHY THIS CARD EXISTS AT ALL. Below the threshold an importer owes nothing, and
+ * without it the tool quoted a four-figure cost to someone who may be exempt —
+ * an error in the most expensive direction, on a page whose argument is that it
+ * says what it cannot compute.
+ *
+ * WHY IT NEVER SAYS "EXEMPT". The engine evaluates this line with completeness
+ * 'partial', because a single line is not an annual total. One line can PROVE you
+ * are above 50 t; nothing here can prove you are below it, since we cannot see
+ * the rest of the year's imports. So the states are "above" and "indeterminate",
+ * and indeterminate is reported as what it is — a question we cannot close —
+ * rather than dressed up as good news.
+ */
+export function renderThreshold(t: ThresholdView): string {
+  const above = t.state === 'above_threshold';
+  return `
+    <section class="cb-card cb-thresh">
+      <div class="cb-card-head">
+        <h3 class="cb-card-label">Annual de minimis</h3>
+        <span class="cb-tag ${above ? 'unavail' : 'ok'}">${above ? 'Above threshold' : 'Indeterminate'}</span>
+      </div>
+      <div class="cb-water">
+        <div class="cb-row"><span>This line</span><b>${num(t.knownEligibleMassT)} t</b></div>
+        <div class="cb-row"><span>Threshold · ${esc(String(t.calendarYear))}</span><b>${num(t.thresholdT)} t</b></div>
+        <div class="cb-row"><span>Sector</span><b>${esc(t.sector.replace(/_/g, ' '))}</b></div>
+      </div>
+      <p class="cb-sub">${above
+        ? `This line alone exceeds the ${num(t.thresholdT)}&nbsp;t annual threshold, so the exemption
+           does not apply and the exposure below stands.`
+        : `Below ${num(t.thresholdT)}&nbsp;t an importer owes nothing for the year. This is ONE line,
+           not your annual total, so it cannot show you are under the threshold — only that this
+           line by itself does not cross it. Add your other ${esc(t.sector.replace(/_/g, ' '))}
+           imports for ${esc(String(t.calendarYear))} before relying on the exemption.`}</p>
+      <p class="cb-prov">${esc(t.sourceLocator)} · as amended by Reg (EU) 2025/2083</p>
+    </section>`;
+}
+
 /** The subtraction, shown as terms rather than a single opaque number. */
 function renderWaterfall(e: Extract<CertificateEstimate, { terms: unknown }>, fig: {
   faaTco2e: string; netTco2e: string; certificates: string; costEur: string | null;
+  indirectTco2e?: string;
 }): string {
+  // The indirect row is rendered SEPARATELY and after the deduction, because that
+  // is where it sits in the arithmetic: free allocation is a direct-emission
+  // benchmark, so indirect emissions receive none of it and pass into the charge
+  // in full. Folding them into "embedded emissions" would show a deduction being
+  // taken against electricity that was never granted against it.
+  const indirect = fig.indirectTco2e && Number(fig.indirectTco2e) > 0
+    ? `<div class="cb-row"><span>+ Indirect (electricity) · no free allocation</span><b>${
+        num(fig.indirectTco2e)} tCO₂e</b></div>`
+    : '';
   return `
     <div class="cb-water">
-      <div class="cb-row"><span>Embedded emissions</span><b>${num(e.emissionsTco2e)} tCO₂e</b></div>
+      <div class="cb-row"><span>Embedded emissions (direct)</span><b>${num(e.emissionsTco2e)} tCO₂e</b></div>
       <div class="cb-row"><span>− Free allocation</span><b>${num(fig.faaTco2e)} tCO₂e</b></div>
+      ${indirect}
       <div class="cb-row cb-net"><span>= Chargeable</span><b>${num(fig.netTco2e)} tCO₂e</b></div>
       <div class="cb-row"><span>CBAM factor ${esc(String(e.terms.cbamFactorYear))}</span><b>${esc(e.terms.cbamFactor)}</b></div>
       <div class="cb-row"><span>Certificate price ${esc(e.priceQuarter)}</span><b>${
@@ -203,6 +258,7 @@ export function initCbam(): void {
   const route = $<HTMLSelectElement>('cbRoute'), mass = $<HTMLInputElement>('cbMass');
   const date = $<HTMLInputElement>('cbDate'), out = $('cbOut'), status = $('cbStatus');
   const list = $<HTMLDataListElement>('cbCnList'), prov = $('cbProv');
+  const scope = $<HTMLSelectElement>('cbScope'), scopeRow = $('cbScopeRow');
   if (!cn || !country || !route || !mass || !date || !out || !status) return;
 
   let pack: EstimatorPack | null = null;
@@ -251,6 +307,28 @@ export function initCbam(): void {
     if (want) route!.value = want;
   }
 
+  /**
+   * The emissions-scope control only exists for goods the Commission publishes an
+   * indirect default for — cement, fertilisers and sintered iron ore. Everywhere
+   * else it is a no-op (the engine returns 0 either way), and a control that
+   * cannot change the answer is noise on a form this dense.
+   *
+   * IT DEFAULTS TO INCLUDING INDIRECT. The definitive regime covers indirect
+   * emissions for those sectors, so direct-only is an understatement there, not a
+   * simpler view — for cement it drops 6.6 tCO₂e and €497 on a 100 t line. The
+   * control exists so someone with verified direct-only data can say so, not so
+   * the tool can quietly answer low by default.
+   */
+  function syncScope(): void {
+    if (!scope || !scopeRow) return;
+    const has = !!pack && !!cn!.value && !!country!.value && !!route!.value
+      && selectIndirectFactorFromPack(pack, {
+        cn: cn!.value, country: country!.value, route: route!.value,
+        massT: mass!.value || '1', date: date!.value,
+      }) !== null;
+    scopeRow.hidden = !has;
+  }
+
   function run(): void {
     if (!pack || !cn!.value || !country!.value || !route!.value || !mass!.value) {
       out!.innerHTML = '<p class="cb-idle">Choose a good, origin, route and mass to see the provisional exposure.</p>';
@@ -272,8 +350,15 @@ export function initCbam(): void {
       const e = estimateFromPack(pack, {
         cn: cn!.value, country: country!.value, route: route!.value,
         massT: mass!.value, date: date!.value,
+        emissionsScope: (scope?.value as 'direct' | 'direct_and_indirect') ?? 'direct_and_indirect',
       });
-      out!.innerHTML = renderResult(e);
+      // The threshold statement needs only the good and the mass, so it survives a
+      // selector the estimate itself cannot price — a refused line still gets told
+      // whether it is even in scope for CBAM this year. It renders ABOVE the
+      // exposure because "you may owe nothing at all" outranks "here is what you
+      // would owe".
+      const t = resolveThreshold(pack, { cn: cn!.value, massT: mass!.value, date: date!.value });
+      out!.innerHTML = (t ? renderThreshold(t) : '') + renderResult(e);
     } catch (err) {
       // A DomainError is the engine refusing, and it names what is missing. Show it
       // rather than a generic failure — the reason is the useful part.
@@ -283,12 +368,13 @@ export function initCbam(): void {
     }
   }
 
-  const onPick = async () => { if (await ensurePack()) { syncRoutes(); run(); } };
+  const onPick = async () => { if (await ensurePack()) { syncRoutes(); syncScope(); run(); } };
+  route.addEventListener('change', () => { syncScope(); run(); });
+  scope?.addEventListener('change', run);
   cn.addEventListener('change', onPick);
   cn.addEventListener('focus', () => { void ensurePack(); }, { once: true });
   country.addEventListener('change', onPick);
   date.addEventListener('change', onPick);
-  route.addEventListener('change', run);
   // DEBOUNCED, because #cbOut sits inside aria-live="polite". Bound directly to
   // `input`, typing "1250" re-rendered the panel four times and a screen-reader
   // user heard the whole result — tag, figure, waterfall, provenance — read out

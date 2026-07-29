@@ -45,6 +45,13 @@ export interface CertificateEstimateInput {
   importDate: string
   precursors: SefaInput['precursors']
   /**
+   * Indirect (electricity) embedded emissions for the line, when the good's sector charges them
+   * (cement, fertilisers, hydrogen). Absent or '0' for the direct-only sectors. Kept SEPARATE
+   * from emissionsTco2e because the free-allocation benchmark applies to the direct figure
+   * alone; summing them first would silently deduct a direct benchmark from electricity.
+   */
+  indirectTco2e?: string
+  /**
    * Where the DEFAULT that produced these emissions came from:
    *  - 'country'  — the origin's own published values
    *  - 'residual' — the Commission's "Other Countries and Territories" sheet, i.e. a
@@ -65,6 +72,13 @@ export interface EstimateFigure {
   netTco2e: string
   certificates: string
   costEur: string | null
+  /**
+   * The indirect (electricity) component carried into the charge, and the full embedded total.
+   * Free allocation is a DIRECT-emission benchmark, so indirect emissions receive no deduction
+   * and pass through to the charge in full — netTco2e already includes them.
+   */
+  indirectTco2e: string
+  totalEmbeddedTco2e: string
 }
 
 export interface ProvenanceStamp {
@@ -129,14 +143,20 @@ function figureFrom(
   quantityT: string,
   sefaPerT: string,
   price: string | null,
+  indirectTco2e = '0',
 ): EstimateFigure {
   const faa = new Decimal(sefaPerT).mul(quantityT)
   // Free allocation can exceed the good's own emissions (a clean producer against a dirtier
   // benchmark). The regulation surrenders certificates, never issues them: the floor is zero.
-  const net = Decimal.max(0, new Decimal(emissionsTco2e).minus(faa))
+  // The floor is applied to the DIRECT side alone: a generous direct benchmark must not wipe out
+  // indirect emissions it was never granted against.
+  const indirect = new Decimal(indirectTco2e)
+  const net = Decimal.max(0, new Decimal(emissionsTco2e).minus(faa)).plus(indirect)
   return {
     faaTco2e: faa.toFixed(),
     netTco2e: net.toFixed(),
+    indirectTco2e: indirect.toFixed(),
+    totalEmbeddedTco2e: new Decimal(emissionsTco2e).plus(indirect).toFixed(),
     // Certificate rounding is not settled in law (see the dossier's open questions), so this
     // reports decimal certificate-equivalents rather than inventing a rounding rule.
     // toFixed() (not toString()) so a tiny residual renders as 0.0000001, never as '1e-7'.
@@ -225,6 +245,12 @@ export function estimateCertificates(
       'Art 9 deduction for a carbon price paid in the country of origin is not modelled (the implementing act is still a draft), so this figure is conservative.',
       'Certificate rounding is not settled in law; decimal certificate-equivalents are shown.',
     ]
+    if (input.indirectTco2e && !new Decimal(input.indirectTco2e).isZero()) {
+      notes.push(
+        'Indirect (electricity) emissions are included in the charge and receive NO free ' +
+        'allocation: the benchmarks are direct-emission benchmarks.',
+      )
+    }
     if (price.status === 'pending') {
       notes.push(`The Commission has not published the ${quarter} certificate price, so no cost is shown.`)
     }
@@ -251,7 +277,7 @@ export function estimateCertificates(
           assumedCscf: adjustment.scenario.assumedCscf,
           ...figureFrom(
             input.emissionsTco2e, input.quantityT,
-            adjustment.scenario.valueTco2ePerT, priceEur,
+            adjustment.scenario.valueTco2ePerT, priceEur, input.indirectTco2e,
           ),
         },
       }
@@ -263,7 +289,7 @@ export function estimateCertificates(
         ...priced,
         status: 'zero_by_fiat',
         locator: adjustment.locator,
-        figure: figureFrom(input.emissionsTco2e, input.quantityT, '0', priceEur),
+        figure: figureFrom(input.emissionsTco2e, input.quantityT, '0', priceEur, input.indirectTco2e),
       }
     }
     return {
@@ -274,6 +300,7 @@ export function estimateCertificates(
       cscf: adjustment.cscf,
       figure: figureFrom(
         input.emissionsTco2e, input.quantityT, adjustment.valueTco2ePerT, priceEur,
+        input.indirectTco2e,
       ),
     }
   } catch (error) {

@@ -8,12 +8,13 @@
     "build": "node scripts/verify-served-data.mjs && astro build && node scripts/prune-dist-assets.mjs",
     "preview": "astro preview",
     "check": "astro check",
-    "test:unit": "node --import tsx --test tests/unit/*.test.mjs",
+    "test:unit": "node scripts/cbam-sync-check.mjs && node --import tsx --test tests/unit/*.test.mjs",
     "report:build": "node scripts/report-build.mjs",
     "check:publication": "node scripts/check-publication-contract.mjs",
     "verify": "npm run check && npm run test:unit && npm run build && npm run report:build && npm run check:publication",
     "test:e2e": "npm run build && npm run test:e2e:built",
-    "test:e2e:built": "playwright test"
+    "test:e2e:built": "playwright test",
+    "cbam:sync-check": "node scripts/cbam-sync-check.mjs"
   },
   "engines": {
     "node": ">=22.12.0",

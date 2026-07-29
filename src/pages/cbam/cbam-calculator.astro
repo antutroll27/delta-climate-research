@@ -83,6 +83,23 @@ import Footer from '../../components/layout/Footer.astro';
             </select>
           </div>
 
+          <!-- Only rendered for goods the Commission publishes an indirect default
+               for — cement, fertilisers and sintered iron ore. Hidden elsewhere,
+               where the engine returns 0 either way and the control cannot change
+               the answer. Defaults to INCLUDING indirect: the definitive regime
+               covers it for those sectors, so direct-only understates. -->
+          <div id="cbScopeRow" hidden>
+            <label class="cb-label" for="cbScope">Emissions scope</label>
+            <select id="cbScope" class="cb-field cb-select">
+              <option value="direct_and_indirect" selected>Direct + indirect (electricity)</option>
+              <option value="direct">Direct only</option>
+            </select>
+            <p class="cb-hint">
+              Indirect emissions are charged for this sector and receive no free allocation —
+              the benchmarks are direct-emission benchmarks.
+            </p>
+          </div>
+
           <div class="cb-row2">
             <div>
               <label class="cb-label" for="cbMass">Net mass (tonnes)</label>
@@ -212,6 +229,12 @@ import Footer from '../../components/layout/Footer.astro';
     font-family: var(--font-mono); font-size: 0.66rem; letter-spacing: 0.1em;
     color: var(--color-cyan); min-height: 1em;
   }
+  .cb-hint {
+    margin-top: 0.45rem; font-family: var(--font-data); font-size: 0.68rem;
+    line-height: 1.65; color: var(--color-ink-faint); max-width: 46ch;
+  }
+  /* `hidden` must win over the flex/grid display the container would otherwise take. */
+  [hidden] { display: none !important; }
   /* .cb-idle is styled in the is:global block below — cbam-app.ts re-renders it
      via innerHTML, so a scoped rule reaches the static copy here and not the two
      runtime ones. */

@@ -3,8 +3,10 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import { nextRoute, renderResult } from '../../src/scripts/cbam-algos/cbam-app.ts';
-import { estimateFromPack, routesFor } from '../../src/scripts/cbam-algos/estimator/estimate-from-pack.ts';
+import { nextRoute, renderResult, renderThreshold } from '../../src/scripts/cbam-algos/cbam-app.ts';
+import {
+  estimateFromPack, resolveThreshold, routesFor,
+} from '../../src/scripts/cbam-algos/estimator/estimate-from-pack.ts';
 
 /**
  * The CBAM engine is the GeoCBAM SaaS's, copied byte-for-byte. Its UI is not — the
@@ -48,6 +50,82 @@ test('§8 — the stranded steel line refuses, and names the missing rule', () =
 
 test('§8 — route lookup is unchanged', () => {
   assert.deepEqual(routesFor(pack, '72083800', 'IN', 2026), ['(C)']);
+});
+
+/* ── the de minimis threshold ──────────────────────────────────────────────── */
+
+const thresh = (cn, massT, date = '2026-03-15') => resolveThreshold(pack, { cn, massT, date });
+
+test('a line under 50 t is INDETERMINATE, never exempt', () => {
+  // The failure that matters. One line is not an annual total: it can prove you are
+  // ABOVE the threshold and can never prove you are below it. Reporting a small line
+  // as "exempt" would tell an importer they owe nothing on evidence that cannot
+  // support it — the most expensive possible way for this tool to be wrong.
+  const t = thresh('25231000', '10');
+  assert.equal(t.state, 'indeterminate');
+  const html = renderThreshold(t);
+  assert.doesNotMatch(html, /\bexempt\b(?!\.)/i,
+    'the card must not assert exemption from a single line');
+  assert.match(html, /annual total/i, 'it must say why one line cannot settle it');
+});
+
+test('a line over 50 t is ABOVE the threshold, and says the exposure stands', () => {
+  const t = thresh('25231000', '100');
+  assert.equal(t.state, 'above_threshold');
+  assert.match(renderThreshold(t), /exceeds/i);
+});
+
+test('the threshold card always cites the amending regulation', () => {
+  // The pack's own sourceLocator names only the consolidated article; the 50 t
+  // figure was put there by Reg (EU) 2025/2083 and a provenance tool must say so.
+  for (const m of ['10', '100']) {
+    assert.match(renderThreshold(thresh('25231000', m)), /2025\/2083/,
+      'the amending act must be cited, not just the consolidated article');
+  }
+});
+
+test('hydrogen and electricity are outside the exemption, so no card is shown', () => {
+  // Reg (EU) 2025/2083 excludes them from the 50 t exemption. Rendering an
+  // "indeterminate" card for hydrogen would imply an exemption it cannot have.
+  assert.equal(thresh('28041000', '10'), null, 'hydrogen must resolve to no threshold rule');
+});
+
+/* ── indirect (electricity) emissions ──────────────────────────────────────── */
+
+const withScope = (emissionsScope) => estimateFromPack(pack, {
+  cn: '25231000', country: 'DZ', route: '(A)', massT: '100',
+  date: '2026-03-15', emissionsScope,
+});
+
+test('indirect emissions are charged for cement and receive NO free allocation', () => {
+  const direct = withScope('direct'), both = withScope('direct_and_indirect');
+  assert.equal(direct.scenario.indirectTco2e, '0');
+  assert.equal(both.scenario.indirectTco2e, '6.6');
+  // Free allocation is a DIRECT-emission benchmark, so the deduction must not grow
+  // when indirect is added — the indirect tonnes pass into the charge in full.
+  assert.equal(direct.scenario.faaTco2e, both.scenario.faaTco2e,
+    'free allocation must be unchanged by indirect emissions');
+  assert.equal(both.scenario.netTco2e, '78.065');
+  assert.equal(direct.scenario.netTco2e, '71.465');
+});
+
+test('the indirect component is shown as its own line, never folded into embedded', () => {
+  const html = renderResult(withScope('direct_and_indirect'));
+  assert.match(html, /Indirect \(electricity\)/i, 'the indirect term must be visible');
+  assert.match(html, /no free allocation/i, 'and must say it gets no deduction');
+  assert.match(html, /Embedded emissions \(direct\)/i,
+    'the direct term must be labelled direct, or the two read as one number');
+});
+
+test('a direct-only sector is unaffected by the scope control', () => {
+  // Steel publishes no indirect default, so asking for indirect must not fabricate
+  // a component — and must not fail the estimate either.
+  const ask = estimateFromPack(pack, { cn: '72083800', country: 'IN', route: '(C)',
+    massT: '100', date: '2026-03-15', emissionsScope: 'direct_and_indirect' });
+  assert.equal(ask.scenario.indirectTco2e, '0');
+  assert.equal(ask.scenario.netTco2e, '337.225');
+  assert.doesNotMatch(renderResult(ask), /Indirect \(electricity\)/i,
+    'no indirect row when there is no indirect default');
 });
 
 /* ── the route the form ends up pricing ────────────────────────────────────── */
