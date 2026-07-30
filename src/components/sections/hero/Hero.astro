@@ -130,7 +130,10 @@ import DescentFacts from './DescentFacts.astro';
     transform: scaleY(1.08);
     transform-origin: bottom;
   }
-  .headline .accent::first-letter { text-transform: uppercase; }
+  /* The accent word stays lowercase. It is mid-sentence — "of a changing planet."
+     — so capitalising the c only ever made the headline read as though a new
+     sentence started there. The markup was always lowercase; this rule was
+     overriding it in the browser. */
 
   /* mt-auto pushes hero-foot to the flex container's bottom, regardless of
      how tall min-h-dvh resolves — more reliable than justify-between. */
