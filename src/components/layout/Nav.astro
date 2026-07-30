@@ -378,6 +378,16 @@ const socials = [
 
   /* solid primary button (specific selector so color/weight beat .nav-links a) */
   .nav-links .databank {
+    /* MUST NOT BE `inline`. This carries a background, a border and a radius, and
+       an inline box that wraps renders its background as TWO offset rectangles —
+       one per line fragment — which read as a broken stepped block rather than a
+       button. It was inheriting `inline` and doing exactly that below ~1100px,
+       where "Medni (Data Library) ↗" no longer fits on one line. inline-flex keeps
+       it a single unbreakable box; nowrap stops the wrap happening at all. */
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4em;
+    white-space: nowrap;
     margin-left: clamp(0.5rem, 1.5vw, 1.5rem);
     background-color: var(--color-cyan);
     color: var(--color-base);
@@ -512,7 +522,21 @@ const socials = [
   /* placeholder — muted + non-interactive until a URL is added to the data */
   .mobile-menu .mm-social span { color: rgb(143 163 165 / 0.45); cursor: default; }
 
-  @media (max-width: 820px) {
+  /* THE NAV NEEDS MORE ROOM THAN THE REST OF THE SITE, so it switches to the
+     mobile menu earlier than the site-wide 820px breakpoint.
+     Measured: the wordmark ends at a fixed 269px while the links slide left as
+     the viewport narrows, and the gap between them closes to ZERO at 1095px and
+     below — "Delta·Climate·Research" then overlaps "About". Gap by width:
+       1055px -> 0px (overlapping)   1100px -> 17px   1150px -> 59px
+     So the desktop bar is only usable from about 1150px up.
+     DELIBERATELY LOCAL to the nav. 820px is shared by nine other components
+     (Faq, WhitePapers, Projects, ClimateClock, SoonDraft, SoonTide,
+     HeatMapStage, section-effects' isDesktop); moving it globally would relayout
+     all of them to fix one bar. The nav owns a complete mobile menu, so it can
+     cross over on its own schedule without touching anything else.
+     KEEP IN SYNC with the matchMedia query in the script below — if the CSS and
+     the JS disagree, the bar hides while the toggle still thinks it is desktop. */
+  @media (max-width: 1150px) {
     .nav-links { display: none; }
     .menu-toggle { display: flex; }
   }
@@ -590,7 +614,12 @@ const socials = [
 
     // mobile menu
     if (toggle && menu) {
-      const mobileMedia = matchMedia('(max-width: 820px)');
+      // KEEP IN SYNC with the `@media (max-width: 1150px)` rule in the styles
+      // above, which hides .nav-links and shows .menu-toggle. If these two drift
+      // apart the bar and the toggle disagree about which mode the page is in:
+      // the links vanish while this still believes it is desktop, so the menu
+      // never opens and the nav becomes unreachable.
+      const mobileMedia = matchMedia('(max-width: 1150px)');
       const staticNav = nav.querySelector<HTMLElement>('[data-navigation-static]');
       const staticTabIndex = staticNav?.getAttribute('tabindex') ?? null;
       const staticAriaHidden = staticNav?.getAttribute('aria-hidden') ?? null;
