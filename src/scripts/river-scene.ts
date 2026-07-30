@@ -414,8 +414,25 @@ export function createRiverScene(canvas: HTMLCanvasElement, opts: Opts = {}): Ri
     timer.reset();
     ready = true;
     readyCbs.forEach(cb => cb());
+    // Window events rather than a callback API: the hologram loader is an
+    // is:inline script that runs before any module (including this one) is
+    // even fetched, so it cannot import us. Events decouple the two entirely —
+    // if the hologram is absent or skipped, these dispatches fall on no ears.
+    window.dispatchEvent(new CustomEvent('delta:river-ready'));
     scheduleTextureUpgrade();
-  }, undefined, (e) => { console.error('[river] load error', e); });
+  }, (e) => {
+    // Real GLB byte progress for the hologram's reconstruction stages. `total`
+    // is 0 when the server omits content-length; the listener treats that as
+    // indeterminate rather than as 0%.
+    if (!disposed) window.dispatchEvent(new CustomEvent('delta:river-progress', {
+      detail: { loaded: e.loaded, total: e.total },
+    }));
+  }, (e) => {
+    console.error('[river] load error', e);
+    // Tells the hologram to clean up rather than promise a river that will
+    // never arrive.
+    window.dispatchEvent(new CustomEvent('delta:river-error'));
+  });
 
   // ── the skirt: extruded side walls that give the scan mass ────────────────
   // The photogrammetry scan is an open shell — a thin crust you can see through

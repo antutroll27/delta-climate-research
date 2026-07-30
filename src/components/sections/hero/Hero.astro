@@ -12,6 +12,25 @@ import DescentFacts from './DescentFacts.astro';
   <div class="vortex-bg vortex-bg--fade-b vortex-hero" aria-hidden="true">
     <HeroRiver client:visible />
   </div>
+
+  <!-- THE HOLOGRAM LOADER. A worker-driven reconstruction of the same river
+       valley — points, then surface, then mesh — standing in for the scan
+       while its 2MB GLB streams. Stages advance on REAL loader bytes. Shows
+       for a minimum of 1.5s even on a warm cache (deliberate: the loader is
+       part of the composition, not an apology), then the real river wipes in
+       left-to-right as this wipes out. Skipped under reduced motion and on
+       repeat views within a session. The is:inline script below runs during
+       HTML parse, before hydration — the worker is usually painting before
+       React exists. -->
+  <div class="holo-stage" id="holo-stage">
+    <canvas id="holo-canvas" aria-hidden="true"></canvas>
+    <div class="holo-status" role="status" aria-live="polite">
+      <p class="hs-kicker">Δ Field survey · river reach</p>
+      <p class="hs-line" id="holo-msg">Acquiring point cloud</p>
+      <div class="hs-rail"><i id="holo-fill"></i></div>
+      <p class="hs-meta">photogrammetry scan · mesh tier 1k · draco</p>
+    </div>
+  </div>
   <div class="vortex-dim" aria-hidden="true"></div>
   <div class="grain" aria-hidden="true"></div>
 
@@ -38,6 +57,126 @@ import DescentFacts from './DescentFacts.astro';
        visitors receive the static evidence strip in a logical reading order. -->
   <DescentFacts />
 
+  <script is:inline>
+  // HOLOGRAM ORCHESTRATOR. is:inline so it runs during HTML parse — before any
+  // module is fetched, before React hydrates, before the GLB request even
+  // starts. It owns the loader's whole lifecycle; the engine (public/
+  // holo-engine.js) owns every drawn pixel, in a Worker when the browser
+  // allows. Communication with the river is via window CustomEvents
+  // (delta:river-progress/-ready/-error) dispatched by river-scene.ts — the
+  // two never import each other.
+  (function () {
+    var stage = document.getElementById('holo-stage');
+    if (!stage) return;
+    var skip =
+      matchMedia('(prefers-reduced-motion: reduce)').matches ||   // static hero path
+      sessionStorage.getItem('delta-holo') === '1';               // once per session
+    if (skip) { stage.remove(); return; }
+    try { sessionStorage.setItem('delta-holo', '1'); } catch (e) {}
+
+    var canvas = document.getElementById('holo-canvas');
+    var msgEl = document.getElementById('holo-msg');
+    var fillEl = document.getElementById('holo-fill');
+    var vortex = document.querySelector('.vortex-hero');
+    var tShow = performance.now();
+    var MIN_SHOW = 1500;            // the loader runs at least this long, warm cache included
+    var WIPE_MS = 950;
+    var finished = false;
+
+    // The river stays clipped out until the reveal. Set NOW, before the island
+    // exists, so its first painted frame is already behind the curtain.
+    if (vortex) vortex.style.clipPath = 'inset(0 100% 0 0)';
+
+    var applyTelem = function (m) {
+      if (m.telem) {
+        if (m.telem.msg) msgEl.textContent = m.telem.msg;
+        if (m.telem.p !== undefined) fillEl.style.transform = 'scaleX(' + m.telem.p + ')';
+      }
+      if (m.done) cleanup();
+    };
+
+    var worker = null, engineSend;
+    if ('transferControlToOffscreen' in canvas && typeof Worker === 'function') {
+      var off = canvas.transferControlToOffscreen();
+      worker = new Worker('/holo-engine.js');
+      worker.onmessage = function (e) { applyTelem(e.data); };
+      worker.postMessage({ type: 'init', canvas: off, width: innerWidth, height: innerHeight,
+                           dpr: devicePixelRatio || 1 }, [off]);
+      engineSend = function (m) { worker.postMessage(m); };
+    } else {
+      // Fallback: same engine inline. Correct, just not stall-proof.
+      var s = document.createElement('script');
+      s.src = '/holo-engine.js';
+      s.onload = function () {
+        if (finished) return;
+        window.HoloEnginePostHook(applyTelem);
+        window.HoloEngine.init(canvas, { width: innerWidth, height: innerHeight, dpr: devicePixelRatio || 1 });
+      };
+      document.head.appendChild(s);
+      engineSend = function (m) {
+        if (!window.HoloEngine) return;
+        if (m.type === 'progress') window.HoloEngine.progress(m.loaded, m.total);
+        if (m.type === 'resolve') window.HoloEngine.resolve();
+        if (m.type === 'stop') window.HoloEngine.stop();
+      };
+    }
+
+    var onResize = function () {
+      engineSend({ type: 'resize', width: innerWidth, height: innerHeight, dpr: devicePixelRatio || 1 });
+    };
+    addEventListener('resize', onResize);
+
+    var onProgress = function (e) {
+      engineSend({ type: 'progress', loaded: e.detail.loaded, total: e.detail.total });
+    };
+    addEventListener('delta:river-progress', onProgress);
+
+    // THE HANDOFF. River ready -> honour the minimum -> two complementary
+    // clip-path wipes: the hologram exits left-to-right while the river
+    // manifests left-to-right beneath it. The engine keeps animating its
+    // surviving right side through the wipe (resolve adds the pulse + lift).
+    var reveal = function () {
+      if (finished) return;
+      var wait = Math.max(0, MIN_SHOW - (performance.now() - tShow));
+      setTimeout(function () {
+        if (finished) return;
+        engineSend({ type: 'resolve' });
+        var ease = 'cubic-bezier(0.16, 1, 0.3, 1)';
+        if (vortex) {
+          vortex.style.transition = 'clip-path ' + WIPE_MS + 'ms ' + ease;
+          vortex.style.clipPath = 'inset(0 0 0 0)';
+        }
+        stage.style.transition = 'clip-path ' + WIPE_MS + 'ms ' + ease;
+        stage.style.clipPath = 'inset(0 0 0 100%)';
+        setTimeout(cleanup, WIPE_MS + 250);
+      }, wait);
+    };
+    addEventListener('delta:river-ready', reveal, { once: true });
+
+    // The river failed: no curtain-holding for a show that will not start.
+    addEventListener('delta:river-error', function () { cleanup(); }, { once: true });
+    // Hard cap: never hold the hero hostage (offline, stalled CDN, no WebGL).
+    var cap = setTimeout(cleanup, 25000);
+
+    function cleanup() {
+      if (finished) return;
+      finished = true;
+      clearTimeout(cap);
+      engineSend({ type: 'stop' });
+      if (worker) worker.terminate();
+      removeEventListener('resize', onResize);
+      removeEventListener('delta:river-progress', onProgress);
+      if (vortex) {
+        // leave the river unclipped and drop the inline styles so nothing
+        // lingers to fight later choreography (the dive scrub, resizes)
+        vortex.style.clipPath = '';
+        vortex.style.transition = '';
+      }
+      stage.remove();
+    }
+  })();
+  </script>
+
   <div data-hero-content>
     <ClimateClock />
   </div>
@@ -48,6 +187,43 @@ import DescentFacts from './DescentFacts.astro';
   /* the river is the hero protagonist now — full presence (its own fog/grade/
      edge-feather carry the mood), unlike the faint vortex backdrop it replaced. */
   .vortex-hero { opacity: 1; }
+
+  /* ── hologram loader stage ──
+     z-index 1: above the river background (z 0 within the section flow), below
+     the hero content at z-[2]. pointer-events none throughout — it is scenery.
+     The left-to-right handoff animates CLIP-PATH, a deliberate, one-shot
+     exception to the transform/opacity-only motion rule: inset clip-path
+     animation is compositor-driven in modern engines, and the two clips (this
+     wiping out, the river wiping in) are exact complements, so no frame shows
+     both or neither. Both are set inline by the orchestrator script. */
+  .holo-stage {
+    position: absolute; inset: 0; z-index: 1; pointer-events: none;
+  }
+  .holo-stage canvas { width: 100%; height: 100%; display: block; }
+  .holo-status {
+    position: absolute; left: var(--spacing-gutter, 2rem); top: 6.4rem;
+  }
+  .hs-kicker {
+    font-family: var(--font-mono); font-size: 0.62rem; letter-spacing: 0.22em;
+    text-transform: uppercase; color: var(--color-bronze); margin-bottom: 0.55rem;
+  }
+  .hs-line {
+    font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.16em;
+    text-transform: uppercase; color: var(--color-paper); min-height: 1em;
+  }
+  .hs-rail {
+    margin-top: 0.6rem; width: min(240px, 38vw); height: 1px;
+    background: rgb(244 246 248 / 0.18); position: relative; overflow: hidden;
+  }
+  .hs-rail i {
+    position: absolute; inset: 0; transform-origin: left;
+    background: var(--color-paper); transform: scaleX(0); transition: transform 0.3s linear;
+  }
+  .hs-meta {
+    margin-top: 0.5rem; font-family: var(--font-mono); font-size: 0.56rem;
+    letter-spacing: 0.14em; text-transform: uppercase; color: var(--color-ink-faint);
+  }
+  @media (max-width: 640px) { .holo-status { top: 5.6rem; } .hs-meta { display: none; } }
 
   /* sticky scroll track: the hero holds fixed (CSS sticky, NOT ScrollTrigger pin —
      sidesteps the Lenis+pin blank-space bug) while ~1.5 viewports of scroll drive the
