@@ -57,7 +57,7 @@ import DescentFacts from './DescentFacts.astro';
        visitors receive the static evidence strip in a logical reading order. -->
   <DescentFacts />
 
-  <script is:inline>
+  <script is:inline data-astro-rerun>
   // HOLOGRAM ORCHESTRATOR. is:inline so it runs during HTML parse — before any
   // module is fetched, before React hydrates, before the GLB request even
   // starts. It owns the loader's whole lifecycle; the engine (public/
@@ -65,6 +65,14 @@ import DescentFacts from './DescentFacts.astro';
   // allows. Communication with the river is via window CustomEvents
   // (delta:river-progress/-ready/-error) dispatched by river-scene.ts — the
   // two never import each other.
+  //
+  // data-astro-rerun IS LOAD-BEARING. ClientRouter runs inline scripts once per
+  // page session, but every soft navigation back here swaps in a FRESH
+  // #holo-stage. Without the rerun, that markup arrives with nobody driving
+  // it: no worker, no session guard, nothing to remove it — a frozen
+  // "Acquiring point cloud" overlaying a river that loaded fine. With it, the
+  // script re-runs, the guard sees the session flag, and the stage is removed
+  // before paint.
   (function () {
     var stage = document.getElementById('holo-stage');
     if (!stage) return;
@@ -155,6 +163,11 @@ import DescentFacts from './DescentFacts.astro';
 
     // The river failed: no curtain-holding for a show that will not start.
     addEventListener('delta:river-error', function () { cleanup(); }, { once: true });
+    // Leaving mid-show (ClientRouter soft nav) strikes the set. Without this
+    // the swap discards the stage DOM but the worker lives on, animating an
+    // OffscreenCanvas nobody can see. cleanup() is idempotent, so this firing
+    // after a normal finish is a no-op.
+    addEventListener('astro:before-swap', function () { cleanup(); }, { once: true });
     // Hard cap: never hold the hero hostage (offline, stalled CDN, no WebGL).
     var cap = setTimeout(cleanup, 25000);
 
