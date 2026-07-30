@@ -18,6 +18,22 @@ let ac: AbortController | undefined;
 
 const isDesktop = () => window.matchMedia('(min-width: 821px)').matches;
 
+/**
+ * The Projects pin additionally needs vertical room.
+ *
+ * Its header sits above a 100dvh stage and the columns take what is left; below
+ * this height there is not enough left for the choreography to read, and a 340vh
+ * scroll track on a short viewport is a long crawl through a cramped stage.
+ *
+ * KEEP IN SYNC with the `(min-height: 740px)` media queries in Projects.astro.
+ * If the CSS un-pins while this still returns true, GSAP animates a stage that
+ * is no longer sticky; if this returns false while the CSS still pins, every row
+ * stays dimmed because nothing ever adds `.active`.
+ */
+const PIN_MIN_HEIGHT = 740;
+const canPinProjects = () =>
+  isDesktop() && window.matchMedia(`(min-height: ${PIN_MIN_HEIGHT}px)`).matches;
+
 /* ── split helpers ──────────────────────────────────────────────── */
 
 // Wrap every word of [data-words] in a .w span (descends into <span class="em">
@@ -373,7 +389,9 @@ export function initSectionEffects() {
 
   // desktop-only set pieces (pin choreography, cursors, tilt)
   if (isDesktop()) {
-    initProjectsPin(signal);
+    // Projects alone also needs the height: see canPinProjects. The other two are
+    // width-only set pieces and are unaffected by a short viewport.
+    if (canPinProjects()) initProjectsPin(signal);
     initPaperChip(signal);
     initTeamRoster(signal);
   }

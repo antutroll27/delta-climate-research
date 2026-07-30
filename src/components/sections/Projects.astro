@@ -69,26 +69,42 @@ const projects = catalogue.map((p) => ({ ...p, href: projectHref(p) }));
   /* flowing by default; becomes a pinned set piece only when the choreography
      will actually run (desktop + motion + reveal-ready). */
   .proj-pin { padding-block: clamp(5rem, 12vh, 9rem); }
-  @media (min-width: 821px) and (prefers-reduced-motion: no-preference) {
+  /* THE PIN NEEDS VERTICAL ROOM, so it is gated on height as well as width.
+     Below ~740px tall the choreography has nowhere to play: a 340vh scroll track
+     on a 560px viewport is a long crawl through a cramped stage. Short viewports
+     fall through to the static layout below, which already works. Keep the
+     740px in sync with PIN_MIN_HEIGHT in scripts/section-effects.ts — if the CSS
+     un-pins while the JS still drives the pin, GSAP animates a stage that is no
+     longer there. */
+  @media (min-width: 821px) and (min-height: 740px) and (prefers-reduced-motion: no-preference) {
     :global(.reveal-ready) .proj-wrap { height: 340vh; }
+    /* GRID, NOT FLEX-CENTRE-PLUS-ABSOLUTE-HEADER.
+       The header used to be position:absolute so it could sit clear of the nav,
+       which took it out of flow — and an element out of flow cannot participate
+       in the centring that is supposed to leave room for it. The header's bottom
+       stayed pinned at 209px while the flex-centred columns rose as the viewport
+       shrank, so the two met and overlapped below ~740px tall (measured: -29px at
+       680, -61px at 620, -91px at 560).
+       `auto 1fr` puts the header back in flow: it takes exactly the height it
+       needs, the columns take everything left, and no viewport height can make
+       them collide. */
     :global(.reveal-ready) .proj-pin {
       position: sticky;
       top: 0;
       height: 100dvh;
       overflow: hidden;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      padding-block: 0;
+      display: grid;
+      grid-template-rows: auto 1fr;
+      /* Same clearance the absolute `top` used to provide: the floor keeps the
+         "02 Projects" kicker below the 80px docked nav (data-scrolled) on short
+         viewports, where an earlier 8vh let the frosted bar clip it. */
+      padding-block: clamp(6rem, 9vh, 7rem) 0;
     }
-    :global(.reveal-ready) .proj-head {
-      position: absolute;
-      /* floor clears the 80px docked nav (data-scrolled) at short viewport
-         heights — below ~1000px tall, 8vh fell under the bar and the "02
-         Projects" kicker was clipped by the frosted nav. */
-      top: clamp(6rem, 9vh, 7rem);
-      left: 0;
-      right: 0;
+    /* The columns keep their centred feel, now within the row the grid gave them
+       rather than within the whole pin. */
+    :global(.reveal-ready) .proj-cols {
+      align-self: center;
+      margin-top: 0;
     }
   }
 
@@ -141,7 +157,11 @@ const projects = catalogue.map((p) => ({ ...p, href: projectHref(p) }));
     transition: opacity 0.45s ease, transform 0.45s ease;
   }
   /* dimmed/hidden resting states only when the pin choreography runs */
-  @media (min-width: 821px) and (prefers-reduced-motion: no-preference) {
+  /* GATED ON THE SAME HEIGHT AS THE PIN, and this one is not cosmetic: these rules
+     dim every row and hide every tag until the pin's JS adds `.active`. If the pin
+     stops running while these still apply, all three projects sit permanently
+     greyed out with their tags invisible and nothing ever restores them. */
+  @media (min-width: 821px) and (min-height: 740px) and (prefers-reduced-motion: no-preference) {
     :global(.reveal-ready) .pi-title { color: rgb(236 237 240 / 0.52); }
     :global(.reveal-ready) .proj-item.active .pi-title { color: var(--color-paper); }
     :global(.reveal-ready) .pi-tags { opacity: 0; transform: translateY(4px); }
@@ -206,7 +226,9 @@ const projects = catalogue.map((p) => ({ ...p, href: projectHref(p) }));
     flex-direction: column;
     gap: 6px;
   }
-  @media (min-width: 821px) and (prefers-reduced-motion: no-preference) {
+  /* The segment rail is a readout of the pin's progress; without the pin it would
+     show a position that never advances. */
+  @media (min-width: 821px) and (min-height: 740px) and (prefers-reduced-motion: no-preference) {
     :global(.reveal-ready) .proj-rail { display: flex; }
   }
   .proj-rail .seg {
@@ -245,10 +267,13 @@ const projects = catalogue.map((p) => ({ ...p, href: projectHref(p) }));
     white-space: nowrap;
   }
   /* hide the OS cursor over the card only while the pill replaces it */
-  @media (min-width: 821px) and (prefers-reduced-motion: no-preference) {
+  /* `cursor: none` only makes sense while the custom pill cursor is drawn in its
+     place. Both are pin-era chrome, so both follow the pin's gate — otherwise a
+     short viewport hides the real cursor and draws nothing instead. */
+  @media (min-width: 821px) and (min-height: 740px) and (prefers-reduced-motion: no-preference) {
     :global(.reveal-ready) .pcard { cursor: none; }
   }
-  @media (max-width: 820px), (prefers-reduced-motion: reduce) {
+  @media (max-width: 820px), (max-height: 739px), (prefers-reduced-motion: reduce) {
     .pill-cursor { display: none; }
   }
 
