@@ -8,6 +8,15 @@ dist
 .claude
 .firecrawl
 
+# The Go pipeline is NOT part of the site. It is a parallel implementation of the
+# raster/numeric work that runs offline on a workstation, and the site consumes only
+# the committed artefacts in public/heat-map/data/ — which Python still produces.
+# Nothing under src/ imports it, no WASM is shipped, and the build never invokes go.
+# Excluded so CLI deploys stop uploading the source and its ~594 KB of parity
+# fixtures to a build machine that has no use for either.
+go
+tests/fixtures/geo-oracle
+
 # Raw and oversized model sources are not used by the production build. Only
 # the Draco-compressed public/models/river-1k.glb is requested at runtime.
 models-src
