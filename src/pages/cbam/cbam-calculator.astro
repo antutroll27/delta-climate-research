@@ -304,8 +304,14 @@ import Footer from '../../components/layout/Footer.astro';
     margin-top: 0.4rem; font-family: var(--font-mono); font-size: 0.66rem;
     text-transform: uppercase; letter-spacing: 0.16em; color: var(--color-ink-faint);
   }
+  /* The cost is what a reader actually came for, so it carries real weight — and
+     600 is a shipped Geist cut, not a synthesised bold, which is why both weights
+     are vendored. It stays below the certificate count in the hierarchy: that is
+     the figure the regulation defines, and the euro amount is what it implies at
+     one quarter's price. Same tabular-nums as everything else, or it jitters. */
   .cb-out .cb-cost {
-    margin-top: 0.85rem; font-family: var(--font-data); font-size: 1.35rem;
+    margin-top: 0.9rem; font-family: var(--font-data); font-weight: 600;
+    font-size: clamp(1.75rem, 3.6vw, 2.25rem); line-height: 1.1; letter-spacing: -0.02em;
     color: var(--color-cyan); font-variant-numeric: tabular-nums;
   }
 
