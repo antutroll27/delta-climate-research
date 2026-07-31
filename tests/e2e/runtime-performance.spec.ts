@@ -43,6 +43,20 @@ test.describe('normal-motion runtime', () => {
   });
 
   test('the About renderer stays deferred until its preload boundary', async ({ page }) => {
+    // Same GPU-less-runner problem as the view-transition test below, hitting a
+    // different assertion. Both halves of this contract are frame-bound: a
+    // window.scrollTo takes ~3 frames to be reflected in scrollY, and the
+    // IntersectionObserver that arms the preload can only deliver on a frame
+    // boundary after that. Locally the module is requested 56ms after the jump
+    // (still 63ms under 4x CPU throttle), but CI renders the About canvas in
+    // software at ~0.8 fps, so those four frames alone cost ~5s of the 10s
+    // budget and the margin occasionally vanishes. It is intermittent, not
+    // deterministic: run 457006b passed this test and failed the other one.
+    // Widen the budget rather than weaken the contract — the assertions either
+    // side of the boundary are unchanged, so this still fails if the renderer
+    // ever loads eagerly.
+    test.setTimeout(120_000);
+
     const waterModuleRequests: string[] = [];
     page.on('request', (request) => {
       const url = request.url();
@@ -66,7 +80,7 @@ test.describe('normal-motion runtime', () => {
     expect(waterModuleRequests).toHaveLength(0);
 
     await page.evaluate((y) => window.scrollTo(0, y), boundary.after);
-    await expect.poll(() => waterModuleRequests.length, { timeout: 10_000 }).toBeGreaterThan(0);
+    await expect.poll(() => waterModuleRequests.length, { timeout: 45_000 }).toBeGreaterThan(0);
   });
 
   test('reduced motion skips the loader and decorative heavy scenes', async ({ page }) => {
