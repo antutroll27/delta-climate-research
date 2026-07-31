@@ -106,6 +106,16 @@ const projects = catalogue.map((p) => ({ ...p, href: projectHref(p) }));
       align-self: center;
       margin-top: 0;
     }
+    /* AUTO MARGINS BEAT `justify-self: stretch`, SO THE WRAPS MUST BE TOLD TO FILL.
+       `.wrap` is written for block flow: max-width + `margin-inline: auto` centres a
+       full-width block. The moment the pin becomes a grid (above), those auto margins
+       take precedence over the grid's default stretch — each wrap shrinks to its own
+       content and centres THERE. The header is ~1118px of title+link, the columns are
+       ~1311px of list+preview, so their left edges landed (1311-1118)/2 = 97px apart
+       and the "02 Projects" kicker sat inboard of the case list under it.
+       Constant offset at every width, and invisible to reduced-motion tests, which
+       never enter this media query. */
+    :global(.reveal-ready) .proj-pin > .wrap { width: 100%; }
   }
 
   .proj-cols {
