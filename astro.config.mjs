@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { defineConfig } from 'astro/config';
 import sitemap from '@astrojs/sitemap';
+import tailwindcss from '@tailwindcss/vite';
 
 import react from '@astrojs/react';
 
@@ -40,11 +41,20 @@ const sitemapFilter = (page) => {
   return true;
 };
 
-// Tailwind v4 runs via PostCSS (postcss.config.mjs) rather than the Vite plugin,
-// to avoid a rolldown-vite binding incompatibility in Astro 6.
+// Tailwind v4 runs through its Vite plugin. Astro 6 could not do this — the
+// rolldown-vite binding it shipped was incompatible with the plugin, so Tailwind
+// went via PostCSS instead. Astro 7 ships real Vite 8, where the plugin works and
+// the PostCSS route does NOT: Vite 8's postcss-import resolves `@import
+// "tailwindcss"` as a relative file path and the build dies with ENOENT.
 // https://astro.build/config
 export default defineConfig({
   site: 'https://deltaclimate.earth',
+  // Astro 7 changed this default to 'jsx', which strips whitespace between
+  // inline elements by JSX rules rather than HTML-aware ones. That is a silent
+  // visual change on a site whose typography is deliberate, so hold the v6
+  // behaviour. ponytail: drop this line to take the v7 default once the type
+  // has been eyeballed against it.
+  compressHTML: true,
   // The calculator moved under /cbam/ so the pair reads as a hierarchy. The flat
   // URL was already deployed and is in the nav of any cached page, so it
   // redirects rather than 404s.
@@ -56,6 +66,7 @@ export default defineConfig({
     react(),
   ],
   vite: {
+    plugins: [tailwindcss()],
     // KEEP VITE'S CACHE OFF THIS REPO'S VOLUME.
     //
     // The working copy lives on an exFAT external disk. Vite and esbuild MMAP
