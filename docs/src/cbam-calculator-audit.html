@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CBAM certificate estimator: algorithms and mathematics</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm 20mm; }
+  * { box-sizing: border-box; }
+  body { font: 10.5pt/1.55 "Charter", "Georgia", "Times New Roman", serif; color: #14181a; margin: 0; }
+  code, pre, .mono { font-family: "SF Mono", "Menlo", "Consolas", monospace; }
+
+  h1 { font-size: 19pt; line-height: 1.2; margin: 0 0 2mm; letter-spacing: -0.01em; }
+  .sub { font-size: 10pt; color: #4a5560; margin: 0 0 1mm; }
+  .meta { font-family: "SF Mono", Menlo, monospace; font-size: 8pt; color: #6b7680;
+          letter-spacing: 0.04em; text-transform: uppercase; }
+  .rule { border: 0; border-top: 1.5pt solid #14181a; margin: 4mm 0 6mm; }
+
+  h2 { font-size: 12.5pt; margin: 7mm 0 2.5mm; padding-bottom: 1.2mm;
+       border-bottom: 0.5pt solid #c8d0d6; page-break-after: avoid; }
+  h3 { font-size: 10.5pt; margin: 5mm 0 1.5mm; page-break-after: avoid; }
+  p  { margin: 0 0 2.5mm; }
+  ul { margin: 0 0 3mm; padding-left: 5mm; }
+  li { margin-bottom: 1.2mm; }
+
+  pre { background: #f4f6f7; border: 0.5pt solid #d6dde2; border-radius: 2pt;
+        padding: 3mm 3.5mm; font-size: 8.4pt; line-height: 1.5; overflow-x: auto;
+        white-space: pre; margin: 0 0 3.5mm; page-break-inside: avoid; }
+  code { background: #f0f3f4; padding: 0.3mm 1mm; border-radius: 1.5pt; font-size: 9pt; }
+  pre code { background: none; padding: 0; font-size: inherit; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 9.2pt; margin: 0 0 3.5mm;
+          page-break-inside: avoid; }
+  th { text-align: left; border-bottom: 1pt solid #14181a; padding: 1.4mm 2mm 1.4mm 0;
+       font-size: 8.2pt; text-transform: uppercase; letter-spacing: 0.06em; color: #4a5560; }
+  td { border-bottom: 0.4pt solid #dfe5e9; padding: 1.6mm 2mm 1.6mm 0; vertical-align: top; }
+  td.n { font-family: "SF Mono", Menlo, monospace; white-space: nowrap; }
+
+  .callout { border-left: 2.5pt solid #14181a; background: #f7f9fa;
+             padding: 2.5mm 3.5mm; margin: 0 0 3.5mm; page-break-inside: avoid; }
+  .callout p:last-child { margin-bottom: 0; }
+  .callout .h { font-weight: 700; }
+  .flag { border: 0.8pt solid #a8541f; background: #fdf6f0; }
+  .flag .h { color: #a8541f; }
+  .new { border: 0.8pt solid #1f5e8f; background: #f2f7fb; }
+  .new .h { color: #1f5e8f; }
+
+  footer { margin-top: 8mm; padding-top: 2.5mm; border-top: 0.5pt solid #c8d0d6;
+           font-size: 8pt; color: #6b7680; }
+</style>
+</head>
+<body>
+
+<div class="meta">Delta Climate Research &middot; technical audit pack</div>
+<h1>CBAM certificate estimator</h1>
+<p class="sub">Algorithms, equations and rounding, prepared for external review</p>
+<p class="meta">Version 1.1 &middot; 31 July 2026 &middot; engine snapshot: rule pack 2026-07-29</p>
+<hr class="rule">
+
+<p><strong>Scope of this document.</strong> It states exactly what the estimator computes, which
+published instrument each value comes from, and where the calculation deliberately refuses to
+produce a number. Every figure below was traced from the running engine rather than
+reconstructed from documentation.</p>
+
+<p><strong>Status of the tool.</strong> Screening grade decision support. It is not a filing, it
+is not validated by the EU CBAM Registry, and it is not a statement of monetary liability. It
+runs entirely in the visitor's browser from Commission default values; no input is transmitted.</p>
+
+<div class="callout new">
+  <p><span class="h">Changes in version 1.1.</span> Section 2.2 is new. It states which
+  calculation paths the browser estimator does <em>not</em> take, and why, with the size of the
+  Column A / Column B divergence measured across the shipped rule pack. Added in response to
+  external review, which correctly identified Column A as the boundary of what this tool does.
+  No figure, equation or rounding rule has changed.</p>
+</div>
+
+<h2>1. Computation chain</h2>
+<pre><code>CN code + origin + production route + net mass + import date + scope
+      |
+      +--&gt; default intensity     I  =  baseIntensity x (1 + markupPct/100)
+      |    direct emissions      E  =  I x mass
+      |    indirect emissions    G  =  I_ind x mass        (opt-in; 3 sectors only)
+      |
+      +--&gt; SEFA per tonne        S  =  CBAM_y x CSCF_y x SUM(BM_i x q_i)
+      |    free allocation       F  =  S x mass
+      |
+      +--&gt; chargeable            N  =  max(0, E - F) + G
+      +--&gt; certificates          C  =  N                   (1 certificate = 1 tCO2e)
+      +--&gt; cost                  EUR = C x price_quarter</code></pre>
+
+<h2>2. Governing equations</h2>
+<p>SEFA, the specific embedded free allocation, per Implementing Regulation (EU) 2025/2620:</p>
+<pre><code>Eq 2  (actual data)    SFAProc = CBAM_y x CSCF_y x BM_A(process)
+Eq 4  (complex good)   SEFA    = SFAProc + SUM(mass_i x SEFA_i)
+Eq 6  (default path)   SEFA    = CBAM_y x CSCF_y x BM_B(good)</code></pre>
+
+<p>This calculator runs <strong>Equation 6 exclusively</strong>. It uses Commission default
+values, so the emissions figure is all inclusive and the deduction must be the full product
+Column B benchmark.</p>
+
+<h3>2.1 Column A against Column B</h3>
+<p>This is the most consequential decision in the engine. It is driven by the <em>scope of the
+emissions figure being deducted from</em>, not by whether the data was verified.</p>
+
+<table>
+  <thead><tr><th style="width:24%">Scope</th><th style="width:14%">Column</th><th>Reason</th></tr></thead>
+  <tbody>
+    <tr><td class="n">full_product</td><td class="n"><strong>B</strong></td>
+        <td>The figure already embeds the good's precursors, so the deduction must be the full product benchmark.</td></tr>
+    <tr><td class="n">process_only</td><td class="n"><strong>A</strong> + Eq 4</td>
+        <td>The figure covers this installation's process alone and precursors are carried separately, so the deduction is the process benchmark plus each precursor's own Column B value.</td></tr>
+  </tbody>
+</table>
+
+<div class="callout">
+  <p><span class="h">Why it matters.</span> Deducting a process only benchmark from an all
+  inclusive emissions figure leaves precursor emissions in the chargeable total with no matching
+  free allocation, over charging the importer several fold. For a cement grinder, whose Column A
+  is zero, it removes the deduction entirely.</p>
+</div>
+
+<p>The engine also refuses the inverse error outright. A <code>full_product</code> scope
+submitted with precursors raises <code>COLUMN_B_ALREADY_COVERS_PRECURSORS</code>, because
+Column B already covers them and adding precursors on top would double count the deduction and
+under charge.</p>
+
+<h3>2.2 What this estimator does not do, and why</h3>
+<p>The browser estimator takes the <strong>defaults path only</strong>. Its input construction is
+fixed, at <code>estimator/estimate-from-pack.ts</code>:</p>
+<pre><code>scope:       'full_product'    // -&gt; Column B, on every line
+precursors:  []                // -&gt; Eq 4 never runs
+tier:        'default+markup'
+emissionsType: 'direct'</code></pre>
+
+<p>Equation 2 and Equation 4, and with them the whole Column A path, are <strong>fully
+implemented</strong> in <code>cbam/sefa.ts</code>. They are the same audited code the GeoCBAM
+ledger runs. They are simply not reachable from this tool, by design.</p>
+
+<p><strong>The reason is what Column A means.</strong> A Column A deduction is only correct
+against a <em>process only</em> emissions figure with its precursors declared separately: an
+operator's own verified data plus a precursor list. A public screening tool has no way to obtain
+either. Offering the choice would invite users to select Column A against a Commission default,
+which is all inclusive, and that is the expensive error described in 2.1.</p>
+
+<p><strong>The size of the divergence, measured on the shipped pack</strong> (2026-07-29), so
+the consequence of choosing wrongly is not left as an assertion:</p>
+
+<table>
+  <thead><tr><th style="width:62%">Measure</th><th>Value</th></tr></thead>
+  <tbody>
+    <tr><td>Column A benchmark rows in the pack</td><td class="n">661</td></tr>
+    <tr><td>Goods publishing <em>both</em> a Column A and a Column B value</td><td class="n">141</td></tr>
+    <tr><td>Of those, goods where <strong>A does not equal B</strong></td><td class="n">102 (72%)</td></tr>
+    <tr><td>Column A values that are exactly <strong>zero</strong></td><td class="n">9</td></tr>
+  </tbody>
+</table>
+
+<p>The zero rows are the clearest case. Three of them are cement grinding goods, where the
+Column B value is substantial:</p>
+
+<table>
+  <thead><tr><th style="width:20%">CN</th><th style="width:14%">Route</th><th style="width:16%">Column A</th><th style="width:16%">Column B</th><th>Good</th></tr></thead>
+  <tbody>
+    <tr><td class="n">25232100</td><td class="n">any</td><td class="n">0</td><td class="n">0.859</td><td>White Portland cement</td></tr>
+    <tr><td class="n">25232900</td><td class="n">any</td><td class="n">0</td><td class="n">0.666</td><td>Other Portland cement</td></tr>
+    <tr><td class="n">25239000</td><td class="n">(A)</td><td class="n">0</td><td class="n">0.666</td><td>Other hydraulic cements</td></tr>
+    <tr><td class="n">25239000</td><td class="n">(B)</td><td class="n">0</td><td class="n">0.847</td><td>Other hydraulic cements</td></tr>
+    <tr><td class="n">28080000</td><td class="n">any</td><td class="n">0.151</td><td class="n">0.582</td><td>Nitric acid</td></tr>
+  </tbody>
+</table>
+
+<p>On a 100 tonne line of CN 25232900, taking Column A against a default emissions figure would
+value the free allocation at <strong>zero</strong> instead of 0.666 tCO2e per tonne. At the 2026
+CBAM factor and the 2026-Q1 certificate price that is a deduction of roughly 64.9 tCO2e, about
+&euro;4,890, silently withdrawn from the importer's favour.</p>
+
+<div class="callout new">
+  <p><span class="h">Where Column A does belong.</span> The operator data path, in the workspace
+  product, where a declarant supplies a verified process only figure together with the precursor
+  quantities the good actually consumed. The engine is ready for it. Exposing it in a public
+  screening tool would require taking precursor inputs from users who mostly do not have them,
+  and every wrong entry moves the bill in the importer's disfavour without warning. That is a
+  product decision, not an arithmetic one, and it is deliberately not taken here.</p>
+</div>
+
+<h2>3. Worked example, fully traced</h2>
+<p>CN 25231000 (cement clinker), origin Algeria, production route (A), 100 tonnes, import date
+2026-03-15, scope direct and indirect.</p>
+
+<pre><code>default factor      baseIntensity 1.24    markupPct 10    type direct
+  I  = 1.24 x 1.10                                = 1.364    tCO2e/t
+  E  = 1.364 x 100                                = 136.4    tCO2e
+
+indirect factor     baseIntensity 0.06    markupPct 10
+  G  = 0.06 x 1.10 x 100                          = 6.6      tCO2e
+
+benchmark, Column B, route (A), scope 25231000    = 0.666    tCO2e/t
+  IR (EU) 2025/2620 Annex, Column B route (A)
+
+CBAM factor 2026                                  = 0.975
+  Dir 2003/87/EC Art 10a(1a), free allocation retained in 2026
+
+CSCF 2026                                         = null, status PENDING
+  DR (EU) 2019/331 Art 14(6), no CSCF published for 2026
+
+  S  = 0.975 x 1 x 0.666                          = 0.64935  tCO2e/t   [CSCF assumed 1]
+  F  = 0.64935 x 100                              = 64.935   tCO2e
+  N  = max(0, 136.4 - 64.935) + 6.6               = 78.065   tCO2e
+  C  = 78.065 certificates
+  EUR = 78.065 x 75.36                            = 5,882.98</code></pre>
+
+<p>Independently checkable by hand: 136.4 &minus; 64.935 = 71.465; 71.465 + 6.6 = 78.065;
+78.065 &times; 75.36 = 5,882.98.</p>
+
+<h2>4. Three rules to test hardest</h2>
+
+<h3>4.1 The zero floor applies to the direct side only</h3>
+<pre><code>net = Decimal.max(0, E - F).plus(indirect)</code></pre>
+<p>Free allocation can exceed a clean producer's own emissions, where a low emitter is measured
+against a dirtier benchmark. The regulation surrenders certificates and never issues them, so
+the floor is zero. It is applied <em>before</em> indirect emissions are added, because a generous
+direct benchmark must not wipe out indirect emissions it was never granted against. Verified in
+the running tool: free allocation stayed at 64.935 tCO2e in both the direct only and the direct
+plus indirect runs, while the charge rose.</p>
+
+<h3>4.2 The CSCF is unpublished, and is never silently treated as 1.0</h3>
+<p>For 2026 the rule pack holds <code>value: null, status: pending</code>. The engine returns a
+distinct <code>cscf_pending</code> result whose type gives the caller nowhere to read a final
+value from. What is shown instead is a scenario explicitly labelled with
+<code>assumedCscf: "1"</code>, the last value the Commission actually set, covering 2021 to 2025.
+The real figure cannot be higher and may be lower.</p>
+
+<h3>4.3 Electricity is zero by law, not zero by arithmetic</h3>
+<p>IR (EU) 2025/2620 Art 2(2) sets electricity's free allocation to nil outright. The engine
+returns a separate <code>zero_by_fiat</code> status. An earlier version returned an ordinary
+priced result carrying a fabricated <code>cscf: '0'</code>, and the interface reported "CSCF
+published, CSCF 0", which was a false statement about a regulation whose CSCF is unpublished. A
+zero set by law and a zero produced by calculation are different claims and no longer share a
+data shape.</p>
+
+<h2>5. Lookup discipline: fail closed</h2>
+<p>A miss raises <code>REGULATION_NOT_FOUND</code>. A tie raises
+<code>REGULATION_AMBIGUOUS</code>. Never a default, never a first match.</p>
+<ul>
+  <li><strong>Route fallback.</strong> An exact route match wins. Failing that, a row with an
+      empty route indicator is route independent in the Annex and applies to any route. Where
+      the Annex does enumerate routes and none matches the declared one, there is no fallback
+      row and the lookup fails closed.</li>
+  <li><strong>CN fallback.</strong> Some goods are listed at heading level rather than at eight
+      digits, so the most specific listed prefix wins. An equal length tie is ambiguous rather
+      than arbitrary.</li>
+  <li><strong>Precursors are collected before multiplying.</strong> If one precursor benchmark is
+      missing the whole SEFA becomes unavailable, rather than silently becoming a smaller
+      deduction. A smaller deduction is a larger bill charged on our authority.</li>
+</ul>
+<p>At present <strong>183 of the 574 goods offered resolve to no figure</strong>, and 181 of
+those are iron and steel.</p>
+
+<h2>6. Arithmetic and rounding</h2>
+<p>All arithmetic uses <code>decimal.js</code> configured at <strong>precision 34, rounding
+ROUND_HALF_EVEN</strong>. This is deliberately identical to the GeoCBAM ledger's configuration so
+the two implementations cannot disagree even at the 34th significant digit. Currency alone uses
+<code>toFixed(2, ROUND_HALF_UP)</code>.</p>
+<p><strong>Certificate rounding is not settled in law.</strong> The engine therefore reports
+decimal certificate equivalents rather than inventing a rounding rule.</p>
+
+<h2>7. Disclosed limitations</h2>
+<ul>
+  <li><strong>Column A and Equation 4 are not reachable from this tool.</strong> See section 2.2.
+      The code exists and is audited; the input mode is deliberately absent.</li>
+  <li><strong>Article 9 is not modelled.</strong> The deduction for a carbon price already paid in
+      the country of origin is omitted because the implementing act remains a draft. Figures are
+      therefore conservative, that is, they may overstate exposure.</li>
+  <li><strong>Residual origin values are flagged.</strong> Where the Commission publishes no
+      default for a given origin, the "Other Countries and Territories" residual is used, and the
+      output says so on the same surface as the number.</li>
+  <li><strong>De minimis threshold.</strong> Reg (EU) 2023/956 Art 2(3) as amended by Reg (EU)
+      2025/2083 sets 50 tonnes per importer per calendar year, covering cement, iron and steel,
+      aluminium and fertilisers. Electricity and hydrogen are excluded from the exemption. A
+      single customs line can only ever prove the "above threshold" case; below that the state is
+      reported as indeterminate, never as exempt, because one line is not an annual total.</li>
+</ul>
+
+<h2>8. Source files for review</h2>
+<table>
+  <thead><tr><th style="width:52%">File</th><th style="width:12%">Lines</th><th>Contents</th></tr></thead>
+  <tbody>
+    <tr><td class="n">cbam/sefa.ts</td><td class="n">234</td><td>Equations 2, 4 and 6; Column A/B selection; CSCF handling</td></tr>
+    <tr><td class="n">cbam/certificate-estimate.ts</td><td class="n">352</td><td>figureFrom, the zero floor, the result union</td></tr>
+    <tr><td class="n">cbam/resolve-fa.ts</td><td class="n">164</td><td>Fail closed lookups, route and CN fallback</td></tr>
+    <tr><td class="n">estimator/estimate-from-pack.ts</td><td class="n">374</td><td>Factor selection, mark up, threshold, and the fixed scope in section 2.2</td></tr>
+  </tbody>
+</table>
+<p>All four sit under <code>src/scripts/cbam-algos/</code>.</p>
+
+<h2>9. Provenance and verification</h2>
+<ul>
+  <li>The engine is <strong>byte identical</strong> to the GeoCBAM SaaS implementation. This is
+      enforced mechanically by <code>scripts/cbam-sync-check.mjs</code>, which runs before every
+      test and fails if any vendored file's hash moves or if upstream has advanced.</li>
+  <li>Every rule value in the pack carries a <code>sourceLocator</code> naming the instrument and
+      article it came from. These appear in the tool's provenance stamp on every result,
+      including refusals.</li>
+  <li>50 unit tests pin the figures in section 3 and assert, per result branch, both what must
+      appear and what must not. A refusal that quietly rendered a zero is the failure mode those
+      tests exist to prevent.</li>
+</ul>
+
+<div class="callout flag">
+  <p><span class="h">Known gap, disclosed.</span> Two of the four result branches,
+  <code>ok</code> and <code>zero_by_fiat</code>, are currently unreachable with the shipped rule
+  pack. No CSCF is published for any year that also has production routes, so every 2026 line
+  resolves to <code>cscf_pending</code>; and the pack contains no electricity classifications at
+  all. Both paths are correct by inspection and covered by unit tests against synthetic input,
+  but neither is exercised by real data today.</p>
+</div>
+
+<footer>
+  Delta Climate Research &middot; deltaclimate.earth &middot; version 1.1, 31 July 2026.
+  Screening grade decision support. Not a filing, not validated by the EU CBAM Registry,
+  and not a statement of monetary liability.
+</footer>
+
+</body>
+</html>

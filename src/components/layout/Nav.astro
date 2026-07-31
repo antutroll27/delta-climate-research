@@ -65,8 +65,21 @@ const socials = [
 
 <header id="site-nav" class="fixed inset-x-0 top-8 z-50 h-20 bg-transparent" data-scrolled="false">
   <nav class="max-w-site mx-auto h-full px-gutter flex items-center justify-between" aria-label="Primary">
-    <a href="/" class="font-bold text-cardtitle tracking-title text-paper no-underline" aria-label="Delta Climate Research home" data-navigation-static>
-      Delta<span class="text-cyan">·</span>Climate<span class="text-cyan">·</span>Research
+    <a href="/" class="brandmark font-bold text-cardtitle tracking-title text-paper no-underline" aria-label="Delta Climate Research home" data-navigation-static>
+      {/* The mark is decorative: the anchor already carries the accessible name,
+          so alt="" keeps a screen reader from announcing the brand twice.
+          width/height are set to reserve the box before the image lands — a
+          fixed-height nav shifting on load is the classic CLS source. */}
+      <img
+        src="/logo-mark-96.webp"
+        alt=""
+        width="34"
+        height="34"
+        decoding="async"
+        fetchpriority="high"
+        class="bm-mark"
+      />
+      <span>Delta<span class="text-cyan">·</span>Climate<span class="text-cyan">·</span>Research</span>
     </a>
 
     <ul class="nav-links">
@@ -522,6 +535,34 @@ const socials = [
   /* placeholder — muted + non-interactive until a URL is added to the data */
   .mobile-menu .mm-social span { color: rgb(143 163 165 / 0.45); cursor: default; }
 
+  /* Brand lockup: mark + wordmark on one baseline. The anchor was a plain text
+     link, so it needs to become a flex row for the mark to sit beside the type
+     rather than on its own line. The gap is optical, not the type's own spacing:
+     the mark's triangle has visual weight at its base, so a touch more room
+     reads as balanced than a metric-equal gap would. */
+  .brandmark {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.58rem;
+  }
+  .brandmark .bm-mark {
+    /* Sized in rem so the mark tracks the wordmark if its type scale changes,
+       and never larger than the cap height it sits against. */
+    width: 2.05rem;
+    height: 2.05rem;
+    flex: none;
+    display: block;
+  }
+  /* The docked (scrolled) nav shrinks; the mark comes with it. */
+  :global(#site-nav[data-scrolled='true']) .brandmark .bm-mark {
+    width: 1.8rem;
+    height: 1.8rem;
+  }
+  @media (max-width: 640px) {
+    .brandmark { gap: 0.45rem; }
+    .brandmark .bm-mark { width: 1.75rem; height: 1.75rem; }
+  }
+
   /* THE NAV NEEDS MORE ROOM THAN THE REST OF THE SITE, so it switches to the
      mobile menu earlier than the site-wide 820px breakpoint.
      Measured: the wordmark ends at a fixed 269px while the links slide left as
@@ -536,7 +577,15 @@ const socials = [
      cross over on its own schedule without touching anything else.
      KEEP IN SYNC with the matchMedia query in the script below — if the CSS and
      the JS disagree, the bar hides while the toggle still thinks it is desktop. */
-  @media (max-width: 1150px) {
+  /* RAISED FROM 1150 WHEN THE MARK JOINED THE WORDMARK. The lockup grew by the
+     mark plus its gap (~43px), and that came straight out of the breathing room:
+     at the old 1151px crossover the gap to "About" fell from 60px to 18px —
+     back into the cramped band this breakpoint exists to avoid. Re-measured with
+     the mark in place:
+       1151px -> 18px (tight)   1200px -> 59px   1280px -> 125px
+     1200 restores the same ~59px the bar had before the logo, so the standard is
+     unchanged; only the width needed to meet it moved. */
+  @media (max-width: 1200px) {
     .nav-links { display: none; }
     .menu-toggle { display: flex; }
   }
@@ -614,12 +663,12 @@ const socials = [
 
     // mobile menu
     if (toggle && menu) {
-      // KEEP IN SYNC with the `@media (max-width: 1150px)` rule in the styles
+      // KEEP IN SYNC with the `@media (max-width: 1200px)` rule in the styles
       // above, which hides .nav-links and shows .menu-toggle. If these two drift
       // apart the bar and the toggle disagree about which mode the page is in:
       // the links vanish while this still believes it is desktop, so the menu
       // never opens and the nav becomes unreachable.
-      const mobileMedia = matchMedia('(max-width: 1150px)');
+      const mobileMedia = matchMedia('(max-width: 1200px)');
       const staticNav = nav.querySelector<HTMLElement>('[data-navigation-static]');
       const staticTabIndex = staticNav?.getAttribute('tabindex') ?? null;
       const staticAriaHidden = staticNav?.getAttribute('aria-hidden') ?? null;

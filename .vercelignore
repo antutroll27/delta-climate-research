@@ -17,6 +17,12 @@ dist
 go
 tests/fixtures/geo-oracle
 
+# The 1024px logo master. It is the input to scripts/build-icons.mjs, and every
+# icon it produces is generated ahead of time and committed, so the build never
+# reads it — but sitting in public/ it would be uploaded AND served at 1.44 MB
+# for nothing. Kept in the repo (regenerating icons needs it), kept off the CDN.
+public/deltalogo.png
+
 # Raw and oversized model sources are not used by the production build. Only
 # the Draco-compressed public/models/river-1k.glb is requested at runtime.
 models-src

@@ -97,6 +97,18 @@ const jsonLd = {
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    {/* ICONS. Order matters: a browser takes the LAST declaration it understands,
+        so the SVG stays last to win in engines that support it, while the .ico and
+        the PNG serve everything else.
+        The .ico is not decoration — browsers request /favicon.ico unprompted, and
+        it was 404ing on production. It carries three images: the full contoured
+        mark at 32 and 48, and a simplified outline at 16 where the contours
+        collapse into a blur.
+        The 96px PNG is there for GOOGLE SEARCH specifically: it selects a square
+        icon whose side is a multiple of 48, and without one the result can fall
+        back to a generic globe. Regenerate the set with scripts/build-icons.mjs. */}
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
+    <link rel="icon" type="image/png" href="/favicon-96.png" sizes="96x96" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/site.webmanifest" />
