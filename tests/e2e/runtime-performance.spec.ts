@@ -93,6 +93,21 @@ test.describe('normal-motion runtime', () => {
   });
 
   test('view transitions do not surface runtime errors across repeat navigation', async ({ page }) => {
+    // THIS TEST IS LEGITIMATELY SLOW, AND ONLY ON A GPU-LESS RUNNER.
+    // It drives two full soft-navigation round trips while the About field is
+    // live, which is the point — three.js teardown/recreate across a swap is
+    // exactly where a runtime error would surface. CI has no GPU, so that
+    // canvas is rasterised by SwiftShader and the page renders at ~0.8 fps
+    // (measured from the trace: screencast frames 1.3s apart). Playwright's
+    // click waits for the target's box to be unchanged across two consecutive
+    // animation frames, so every actionability check costs seconds of
+    // wall-clock: one click took 16.4s and passed, the next exceeded the 30s
+    // default and failed the suite.
+    // The default was never chosen for this work — raise it deliberately
+    // rather than trade away the WebGL coverage that makes the test useful.
+    // Locally (real frame rates) it still finishes in ~14s.
+    test.setTimeout(180_000);
+
     const runtimeErrors: Error[] = [];
     page.on('pageerror', (error) => runtimeErrors.push(error));
     await page.addInitScript(() => {
