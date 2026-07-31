@@ -9,7 +9,7 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
 <main id="main" class="stage">
   <header class="top">
     <div class="top-start">
-      <a class="brand" href="/" aria-label="Back to Delta Climate Research home"><span class="ar" aria-hidden="true">←</span>Delta<span class="dot">·</span>Climate<span class="dot">·</span>Research</a>
+      <a class="brand" href="/" aria-label="Back to Delta Climate Research home"><span class="ar" aria-hidden="true">←</span><img class="bm" src="/logo-mark-96.webp" alt="" width="30" height="30" decoding="async" /></a>
       <nav class="tool-modes" aria-label="Heat explorer modes">
         <a href="/heat-map/" aria-current="page">Explore</a>
         <a id="compare-mode-link" href="/heat-map/compare/">Compare</a>
@@ -140,12 +140,16 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
 
   .top{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:1rem;padding:18px 26px;border-bottom:1px solid var(--line);position:relative;z-index:5;background:rgb(5 6 6 /.55);backdrop-filter:blur(8px)}
   .top-start{display:flex;align-items:center;gap:clamp(.7rem,1.4vw,1.2rem);min-width:0}
-  .brand{display:inline-flex;align-items:center;gap:9px;font-weight:700;font-size:.98rem;letter-spacing:-.01em;color:var(--paper);text-decoration:none;transition:color .2s}
-  .brand .ar{color:var(--cyan);opacity:.5;font-weight:400;transition:opacity .2s,transform .2s}
-  .brand:hover{color:#fff}
+  /* Mark, not wordmark: the tool header is a dense instrument bar and the name is
+     already in <title> + the aria-label. Same asset as the site nav on purpose —
+     /favicon.svg is the SIMPLIFIED cut drawn for the 16px favicon slot (no contour
+     lines), so using it here would show a different logo than every other page. */
+  .brand{display:inline-flex;align-items:center;gap:9px;text-decoration:none}
+  .brand .ar{color:var(--cyan);opacity:.5;font-size:.98rem;line-height:1;transition:opacity .2s,transform .2s}
+  .brand .bm{width:30px;height:30px;display:block;transition:opacity .2s}
   .brand:hover .ar{opacity:1;transform:translateX(-3px)}
+  .brand:hover .bm{opacity:.82}
   .brand:focus-visible{outline:2px solid var(--cyan);outline-offset:4px;border-radius:5px}
-  .brand .dot{color:var(--cyan)}
   .tool-modes{display:flex;gap:2px;padding:3px;border:1px solid var(--line);border-radius:8px;background:rgb(9 58 62 /.35)}
   .tool-modes a{padding:.42rem .58rem;border-radius:5px;color:var(--ink);font:400 .51rem var(--mono);letter-spacing:.1em;text-decoration:none;text-transform:uppercase}
   .tool-modes a[aria-current]{background:var(--surface2);color:var(--paper)}
