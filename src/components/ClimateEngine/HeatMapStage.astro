@@ -190,7 +190,11 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
      instrument, and the stamp is a caveat on it, not the headline. */
   .stamp-slot{position:absolute;left:50%;top:68px;transform:translateX(-50%);z-index:3;pointer-events:none;
               --stamp-size:.62rem;--stamp-pad:.5rem 1rem;--stamp-tracking:.26em;--stamp-rot:-2.5deg}
-  .stamp-slot :global(.con-stamp){opacity:1;background:rgb(6 14 16 /.72);backdrop-filter:blur(8px)}
+  /* NOT :global(.con-stamp) — this block is `is:global`, so Astro runs no scoping pass
+     over it and never strips the `:global()`. It would ship verbatim, and the browser
+     drops the whole rule as an invalid selector, leaving the stamp unbacked over the
+     basemap. Inside is:global every selector is already global. */
+  .stamp-slot .con-stamp{opacity:1;background:rgb(6 14 16 /.72);backdrop-filter:blur(8px)}
   /* The within-ward caveat. Bronze, like every other provenance statement on
      this page, and directly under the colour ramp it qualifies. */
   .pattern-note{margin:.32rem 0 0;font-family:var(--mono);font-size:.5rem;line-height:1.75;
