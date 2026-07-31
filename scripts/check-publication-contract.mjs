@@ -292,7 +292,12 @@ const routeContracts = [
   routeContract('/', 'core', true),
   routeContract('/team/', 'core', true),
   routeContract('/climate-highlights/', 'permanent-preview', false, true),
-  routeContract('/heat-map/', 'heat-map-tool', false),
+  // /heat-map/ IS indexable — it carries its caveats on the page (04f7777). Its two
+  // sub-routes are not: Compare and Brief are deep-link views of the same instrument,
+  // and indexing near-duplicates makes them compete with the page they are views of.
+  // This mirrors `sitemapFilter` in astro.config.mjs; the two must agree or the build
+  // and this contract disagree about the same route.
+  routeContract('/heat-map/', 'heat-map-tool', true),
   routeContract('/heat-map/compare/', 'heat-map-tool', false),
   routeContract('/heat-map/brief/', 'heat-map-tool', false),
   routeContract('/white-papers/', 'paper-hub', anyPaperPublished, !anyPaperPublished),

@@ -116,7 +116,12 @@ function publicationContracts() {
     { route: '/', indexable: true, placeholder: false },
     { route: '/team/', indexable: true, placeholder: false },
     { route: '/climate-highlights/', indexable: false, placeholder: true },
-    { route: '/heat-map/', indexable: false, placeholder: false },
+    // ponytail: this list mirrors `routeContracts` in check-publication-contract.mjs by
+    // hand — a third place encoding "is /heat-map/ indexable", after that script and
+    // astro.config.mjs's sitemapFilter. That triplication is what let the three drift
+    // apart in the first place. Export the contract list from the checker and import it
+    // here if it drifts again.
+    { route: '/heat-map/', indexable: true, placeholder: false },
     { route: '/heat-map/compare/', indexable: false, placeholder: false },
     { route: '/heat-map/brief/', indexable: false, placeholder: false },
     { route: '/white-papers/', indexable: anyPaperPublished, placeholder: !anyPaperPublished },
