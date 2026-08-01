@@ -48,9 +48,17 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
       <button type="button" id="tipX" aria-label="Dismiss hint">✕</button>
     </div>
 
-    <!-- Walk-time ring labels, anchored to each ring's north point. -->
-    <div class="ringlab" id="ring5" hidden>5 min · 400 m</div>
-    <div class="ringlab wide" id="ring10" hidden>10 min · 800 m · past the study window</div>
+    <!-- Walk-time ring labels. Text is STATIC: the app only toggles `hidden` and
+         writes a transform, so nothing rewrites strings on every repaint.
+         Two lines each — the headline is the human unit (minutes), the second
+         line is the caveat, because a circle drawn on a map reads as "you can
+         reach all of this" and a straight-line radius is not that. -->
+    <div class="ringlab primary" id="ring5" hidden>
+      <b>5 min walk</b><span>400 m · straight line</span>
+    </div>
+    <div class="ringlab" id="ring10" hidden>
+      <b>10 min walk</b><span>800 m · runs past the study area</span>
+    </div>
 
     <!-- Click-to-inspect. Positioned from the building's own ward-metre centroid
          every time MapLibre repaints, so it tracks orbit, pan, zoom and flyTo. -->
@@ -67,6 +75,7 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
           <dt>Albedo</dt><dd id="bcAl">—</dd>
           <dt>Surface</dt><dd id="bcT">—</dd>
         </dl>
+        <p class="bc-rings" id="bcRings"></p>
         <p class="bc-ins" id="bcIns"></p>
         <button class="bc-x" id="bcX" type="button" aria-label="Close building details">Close ✕</button>
       </div>
@@ -226,13 +235,36 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
   body.studio .tiphint{background:rgb(245 244 241 /.9);color:#16292b;border-color:rgb(20 40 42 /.25)}
   @media (prefers-reduced-motion: reduce){ .tiphint{animation:none} }
 
-  /* ── walk-time ring labels ── */
+  /* ── walk-time ring labels ──
+     Sized to be read, not decoded. The minutes are the point, so they get Mona
+     Sans at a real reading size; the metres-and-caveat line stays in the mono
+     label voice underneath. The 5-minute chip is filled because it is the one
+     that matters — most heat-relief guidance is written around a five-minute
+     walk — and the 10-minute chip is outlined so the two do not compete. */
   .ringlab{position:absolute;z-index:6;pointer-events:none;will-change:transform;
-    transform-origin:0 0;margin:-9px 0 0 -46px;width:92px;text-align:center;
-    font-family:var(--mono);font-size:.46rem;letter-spacing:.1em;text-transform:uppercase;color:var(--cyan);
-    background:rgb(9 20 22 /.72);border:1px solid var(--line);border-radius:99px;padding:.25rem 0}
-  .ringlab.wide{width:150px;margin-left:-75px;color:var(--ink)}
-  body.studio .ringlab{background:rgb(245 244 241 /.85);color:#0d6b7d}
+    margin:-15px 0 0 -84px;width:168px;text-align:center;line-height:1.25;
+    background:rgb(9 20 22 /.9);border:1px solid rgb(111 202 214 /.42);border-radius:9px;
+    padding:.32rem .3rem;backdrop-filter:blur(8px);box-shadow:0 6px 18px rgb(0 0 0 /.4)}
+  .ringlab b{display:block;font-family:var(--sans);font-weight:600;font-size:.78rem;
+    letter-spacing:-.01em;color:var(--paper)}
+  .ringlab span{display:block;font-family:var(--mono);font-size:.44rem;letter-spacing:.09em;
+    text-transform:uppercase;color:var(--ink);margin-top:1px}
+  .ringlab.primary{background:var(--cyan);border-color:var(--cyan);box-shadow:0 6px 20px rgb(111 202 214 /.3)}
+  .ringlab.primary b{color:#062226}
+  .ringlab.primary span{color:rgb(6 34 38 /.72)}
+  body.studio .ringlab{background:rgb(245 244 241 /.92);border-color:rgb(20 40 42 /.22)}
+  body.studio .ringlab b{color:#16292b}
+  body.studio .ringlab.primary{background:#0d6b7d;border-color:#0d6b7d}
+  body.studio .ringlab.primary b{color:#f2fbfc}
+  body.studio .ringlab.primary span{color:rgb(242 251 252 /.75)}
+
+  /* The sentence that says what the rings are FOR. Lives inside the building
+     card, which is the only time the rings exist. */
+  .bc-rings{margin:.5rem 0 0;padding:.45rem .55rem;border-radius:7px;
+    background:rgb(111 202 214 /.09);border:1px solid rgb(111 202 214 /.2);
+    font-size:.62rem;line-height:1.5;color:var(--paper);text-transform:none;letter-spacing:0}
+  .bc-rings b{color:var(--cyan);font-weight:550}
+  body.studio .bc-rings{background:rgb(13 107 125 /.08);border-color:rgb(13 107 125 /.22);color:#16292b}
 
   /* MapLibre's own scale bar — a geospatial tool with no distance reference is
      asking the reader to guess. Restyled to the instrument's language.

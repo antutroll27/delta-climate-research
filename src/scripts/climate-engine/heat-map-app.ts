@@ -195,13 +195,22 @@ export function mountHeatMap(): () => void {
         ? 'At the ward mean'
         : `<b class="${d > 0 ? 'hot' : 'cool'}">${d > 0 ? '+' : '−'}${Math.abs(d).toFixed(1)} K</b> vs ward mean`);
     }
+    /* Say what the rings are FOR, in a sentence, in plain words. A circle drawn
+       on a map is not self-explanatory — and the reader who commissioned it had
+       to ask, which is the only usability test that matters. Written from the
+       live distance so the sentence and the ring can never disagree. */
+    const mins = nearestCool ? Math.max(1, Math.round(nearestCool.distM / WALK_M_PER_MIN)) : 0;
+    setHTML('bcRings', nearestCool
+      ? `The rings show how far you could walk from this building in 5 and 10 minutes. `
+        + `The nearest greenery is <b>about ${mins} minute${mins === 1 ? '' : 's'} away</b>.`
+      : 'The rings show how far you could walk from this building in 5 and 10 minutes.');
+
     /* Straight-line distance to the nearest measured cooling surface, in the
        same minutes the rings are labelled in. Never called a refuge: the client
        has no water mask and no notion of public access (see cooling-surfaces.ts),
        so a gated lawn and a public park look identical from here. */
     if (nearestCool) {
-      const mins = Math.max(1, Math.round(nearestCool.distM / WALK_M_PER_MIN));
-      parts.push(`Nearest cooling surface <b>${Math.round(nearestCool.distM)} m ≈ ${mins} min</b> · straight line, vegetation only`);
+      parts.push(`Nearest cooling surface <b>${Math.round(nearestCool.distM)} m</b> · straight line, vegetation only`);
     } else if (cooling) {
       parts.push('No vegetated cooling surface of 0.77 ha or more in this ward');
     }
@@ -218,20 +227,40 @@ export function mountHeatMap(): () => void {
     /* Park each ring's label at whichever compass point of that ring is highest
        on screen. Four projections per ring, so the label follows the bearing as
        the map orbits instead of sliding under the city. */
-    for (const { min, r, el: id } of RINGS) {
+    /* The card is the biggest thing on the map and it always sits beside the
+       selection, so "topmost on screen" walked the labels straight underneath
+       it. Score candidates that clear the card first and only fall back to a
+       covered one if the ring has nowhere else to put its label. */
+    const cardBox = bcard.hasAttribute('hidden') ? null : bcard.getBoundingClientRect();
+    const cvBox = cv.getBoundingClientRect();
+    const clearsCard = (x: number, y: number) => {
+      if (!cardBox) return true;
+      const px = x + cvBox.left, py = y + cvBox.top;
+      return px < cardBox.left - 88 || px > cardBox.right + 88
+        || py < cardBox.top - 26 || py > cardBox.bottom + 26;
+    };
+    for (const { r, el: id } of RINGS) {
       const lab = el(id); if (!lab) continue;
-      let bx = 0, by = Infinity, ok = false;
+      /* Gather every on-screen candidate, then choose in two passes: topmost
+         among those clear of the card, else topmost overall. Two cheap loops
+         beat one clever one nobody can read six months from now. */
+      const cands: { x: number; y: number; free: boolean }[] = [];
       for (const [dx, dz] of [[0, r], [0, -r], [r, 0], [-r, 0]] as const) {
         const q = projectWard(pickMatrix, selected.cx + dx, 1, selected.cz + dz, w, h);
-        if (q.w <= 0 || q.y > h - 30 || q.y < 30) continue;
-        if (q.y < by) { by = q.y; bx = q.x; ok = true; }
+        /* The chip is taller now, so it needs more headroom before it would be
+           clipped by the top edge or buried under the footer strip. */
+        if (q.w <= 0 || q.y > h - 46 || q.y < 44) continue;
+        cands.push({ x: q.x, y: q.y, free: clearsCard(q.x, q.y) });
       }
+      const pool = cands.filter(c => c.free);
+      const pick = (pool.length ? pool : cands).reduce<typeof cands[0] | null>(
+        (best, c) => (!best || c.y < best.y ? c : best), null);
+      const ok = !!pick, bx = pick?.x ?? 0, by = pick?.y ?? 0;
       if (!ok) { lab.setAttribute('hidden', ''); continue; }
       lab.removeAttribute('hidden');
+      /* Transform only. The label text is static markup — rewriting the same
+         string on every repaint was work with no output. */
       lab.style.transform = `translate3d(${Math.round(bx)}px, ${Math.round(by)}px, 0)`;
-      lab.textContent = min === 5
-        ? `${min} min · ${r} m walk`
-        : `${min} min · ${r} m · past the study window`;
     }
     const p = projectWard(pickMatrix, selected.cx, selected.h, selected.cz, w, h);
     if (p.w <= 0) { bcard.style.opacity = '0'; bsel.style.opacity = '0'; return; }
