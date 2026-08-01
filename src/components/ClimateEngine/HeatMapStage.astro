@@ -29,6 +29,26 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
     <div class="stamp-slot"><ConstructionStamp /></div>
     <div class="loadchip" id="loadchip">Building ward…</div>
 
+    <!-- Click-to-inspect. Positioned from the building's own ward-metre centroid
+         every time MapLibre repaints, so it tracks orbit, pan, zoom and flyTo. -->
+    <div class="bsel" id="bsel" hidden aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+    <div class="bcard" id="bcard" hidden role="dialog" aria-label="Selected building">
+      <span class="lead"></span>
+      <div class="bcard-in">
+        <div class="bc-h"><span>Building</span><span id="bcId">—</span></div>
+        <dl>
+          <dt>Height</dt><dd id="bcH">—</dd>
+          <dt>Floors ≈</dt><dd id="bcF">—</dd>
+          <dt>Footprint</dt><dd id="bcA">—</dd>
+          <dt>Vegetation</dt><dd id="bcV">—</dd>
+          <dt>Albedo</dt><dd id="bcAl">—</dd>
+          <dt>Surface</dt><dd id="bcT">—</dd>
+        </dl>
+        <p class="bc-ins" id="bcIns"></p>
+        <button class="bc-x" id="bcX" type="button" aria-label="Close building details">Close ✕</button>
+      </div>
+    </div>
+
     <div class="place">
       <div class="n" id="pname">Bally<em>gunge</em></div>
       <div class="z" id="pzone">Urban Core · Ward 68</div>
@@ -150,6 +170,54 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
   .brand:hover .ar{opacity:1;transform:translateX(-3px)}
   .brand:hover .bm{opacity:.82}
   .brand:focus-visible{outline:2px solid var(--cyan);outline-offset:4px;border-radius:5px}
+  /* ── click-to-inspect ─────────────────────────────────────────────────────
+     Both nodes are positioned in CSS pixels by heat-map-app.ts on MapLibre's
+     `render` event, which only fires when a repaint actually happened. They move
+     with transform ONLY — never left/top — so tracking the camera costs no
+     layout, and the pointer must stay off the map or the card would eat the
+     drag-to-orbit gesture. */
+  .bsel{position:absolute;z-index:6;pointer-events:none;width:54px;height:54px;margin:-27px 0 0 -27px;
+    will-change:transform;transition:opacity .18s ease}
+  .bsel i{position:absolute;width:13px;height:13px;border:1.6px solid var(--cyan)}
+  .bsel i:nth-child(1){left:0;top:0;border-right:0;border-bottom:0}
+  .bsel i:nth-child(2){right:0;top:0;border-left:0;border-bottom:0}
+  .bsel i:nth-child(3){left:0;bottom:0;border-right:0;border-top:0}
+  .bsel i:nth-child(4){right:0;bottom:0;border-left:0;border-top:0}
+
+  /* The −50% lives on THIS node, not on .bcard-in: `.lead` is positioned at
+     top:50% of .bcard, and a transform on a child does not move the parent box
+     the percentage resolves against — so shifting the inner card alone left the
+     leader line pinned to the card's bottom edge instead of the building. */
+  .bcard{position:absolute;z-index:7;width:230px;will-change:transform;pointer-events:none}
+  .bcard .lead{position:absolute;top:50%;width:30px;height:1px;background:rgb(111 202 214 /.55)}
+  .bcard .lead::before{content:'';position:absolute;top:-3px;width:6px;height:6px;border-radius:50%;background:var(--cyan)}
+  .bcard[data-side='right'] .lead{right:100%}
+  .bcard[data-side='right'] .lead::before{left:-3px}
+  .bcard[data-side='left'] .lead{left:100%}
+  .bcard[data-side='left'] .lead::before{right:-3px}
+  .bcard-in{pointer-events:auto;background:rgb(5 6 6 /.86);backdrop-filter:blur(9px);
+    border:1px solid rgb(111 202 214 /.4);border-radius:11px;padding:11px 13px;
+    box-shadow:0 14px 40px rgb(0 0 0 /.45)}
+  .bc-h{display:flex;justify-content:space-between;font:400 .5rem var(--mono);letter-spacing:.16em;
+    text-transform:uppercase;color:var(--cyan);margin-bottom:.5rem}
+  .bcard dl{display:grid;grid-template-columns:auto 1fr;gap:.22rem .7rem;margin:0;font-size:.7rem}
+  .bcard dt{font:400 .5rem var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--ink);align-self:baseline}
+  .bcard dd{margin:0;text-align:right;font-weight:550;letter-spacing:-.01em;color:var(--paper)}
+  .bcard dd small{display:block;font:400 .46rem var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--bronze)}
+  .bc-ins{margin:.55rem 0 0;padding-top:.5rem;border-top:1px solid rgb(111 202 214 /.18);
+    font:400 .5rem var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--ink);line-height:1.75}
+  .bc-ins b{font-weight:400}
+  .bc-ins .hot{color:var(--red)} .bc-ins .cool{color:var(--cyan)}
+  .bc-x{margin-top:.55rem;width:100%;cursor:pointer;font:400 .48rem var(--mono);letter-spacing:.12em;
+    text-transform:uppercase;color:var(--ink);background:rgb(9 58 62 /.4);border:1px solid var(--line);
+    border-radius:6px;padding:.4rem 0}
+  .bc-x:hover{color:var(--paper)}
+  .bc-x:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+  body.studio .bcard-in{background:rgb(245 244 241 /.9);border-color:rgb(20 40 42 /.22);box-shadow:0 14px 40px rgb(20 40 42 /.16)}
+  body.studio .bcard dd{color:#16292b}
+  body.studio .bc-x{background:rgb(20 40 42 /.06);color:#4a5c5e}
+  @media (max-width: 640px){ .bcard{width:196px} }
+
   .tool-modes{display:flex;gap:2px;padding:3px;border:1px solid var(--line);border-radius:8px;background:rgb(9 58 62 /.35)}
   .tool-modes a{padding:.42rem .58rem;border-radius:5px;color:var(--ink);font:400 .51rem var(--mono);letter-spacing:.1em;text-decoration:none;text-transform:uppercase}
   .tool-modes a[aria-current]{background:var(--surface2);color:var(--paper)}

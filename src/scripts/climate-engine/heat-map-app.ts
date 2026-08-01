@@ -22,6 +22,7 @@ import { applyScenario } from './dc-urs-scenario';
 import type { DcUrsInputs } from './dc-urs-inputs';
 import { rasterWardBase } from './ward-raster';
 import { loadWardSurface, type WardSurface } from './surface-raster';
+import { buildRegistry, pickBuilding, projectWard, type BuildingMeta } from './explore/building-pick';
 
 // Ward set lives in src/data/wards.ts so widening beyond three is a data change,
 // not a code change (dc-urs-spec.md §1).
@@ -94,6 +95,115 @@ export function mountHeatMap(): () => void {
   }
   let dragId = raf(dragFrame);
 
+  /* ── click-to-inspect: select a building, read what is measured about it ──
+     A tap and a drag start identically on this canvas (the orbit gesture owns
+     pointerdown), so selection commits on pointerUP and only when the pointer
+     barely moved. 6 px is the usual slop budget for "tap, not drag" and keeps a
+     shaky trackpad from silently swallowing the click. */
+  const bcard = el('bcard'), bsel = el('bsel');
+  let downAt: { x: number; y: number; t: number } | null = null;
+
+  function cellIndexAt(cx: number, cz: number): number {
+    const size = sizeU.value;
+    const gx = Math.min(SIM_N - 1, Math.max(0, Math.floor((cx / size + 0.5) * SIM_N)));
+    const gy = Math.min(SIM_N - 1, Math.max(0, Math.floor((cz / size + 0.5) * SIM_N)));
+    return gy * SIM_N + gx;
+  }
+
+  function paintCard(b: BuildingMeta) {
+    const i = cellIndexAt(b.cx, b.cz);
+    const localC = heatData[i * 4 + 1];            // G = raw field, the same sample the facade tints from
+    const veg = state.base ? state.base.veg[i] : NaN;
+    const alb = state.base ? state.base.albedo[i] : NaN;
+    const wardMean = state.lastMean[state.ward];
+
+    setText('bcId', `#${b.idx}`);
+    /* 2.5 m is Google's fill value where a real height was never derived. Saying
+       "2.5 m" flat would present a placeholder as a measurement. */
+    setHTML('bcH', b.fill
+      ? '2.5 m<small>fill value · unmeasured</small>'
+      : `${b.h.toFixed(1)} m`);
+    setText('bcF', b.fill ? '—' : String(Math.max(1, Math.round(b.h / 3.2))));
+    setText('bcA', `${Math.round(b.areaM2).toLocaleString()} m²`);
+    setHTML('bcV', Number.isFinite(veg)
+      ? `${Math.round(veg * 100)}%<small>measured · 10 m</small>` : '—');
+    setHTML('bcAl', Number.isFinite(alb)
+      ? `${alb.toFixed(2)}<small>measured · 10 m</small>` : '—');
+    setHTML('bcT', Number.isFinite(localC)
+      ? `${localC.toFixed(1)} °C<small>modelled · illustrative</small>` : '—');
+
+    /* The one honest comparison this scale supports. SPATIAL says within-ward
+       pattern is not validated (r = 0.16), so the delta is offered as context,
+       never as a claim about this particular roof. */
+    const parts: string[] = [];
+    if (Number.isFinite(localC) && Number.isFinite(wardMean)) {
+      const d = localC - wardMean;
+      parts.push(Math.abs(d) < 0.25
+        ? 'At the ward mean'
+        : `<b class="${d > 0 ? 'hot' : 'cool'}">${d > 0 ? '+' : '−'}${Math.abs(d).toFixed(1)} K</b> vs ward mean`);
+    }
+    const cool = state.dcurs?.[state.ward]?.distCoolM?.value;
+    if (Number.isFinite(cool)) {
+      parts.push(`Ward median walk to a cool refuge <b>${Math.round(cool as number)} m</b> · measured`);
+    }
+    parts.push('Block detail illustrative — within-ward pattern is not validated');
+    setHTML('bcIns', parts.join('<br>'));
+  }
+
+  /** Move the card and brackets onto the selection. Transform only — no layout. */
+  function placeCard() {
+    if (!selected || !bcard || !bsel) return;
+    const w = cv.clientWidth, h = cv.clientHeight;
+    const p = projectWard(pickMatrix, selected.cx, selected.h, selected.cz, w, h);
+    if (p.w <= 0) { bcard.style.opacity = '0'; bsel.style.opacity = '0'; return; }
+    bcard.style.opacity = '1'; bsel.style.opacity = '1';
+    bsel.style.transform = `translate3d(${Math.round(p.x)}px, ${Math.round(p.y)}px, 0)`;
+    /* Flip to the near side rather than let the card leave the viewport. */
+    const side = p.x > w - 268 ? 'left' : 'right';
+    bcard.dataset.side = side;
+    const dx = side === 'right' ? p.x + 30 : p.x - 260;
+    bcard.style.transform = `translate3d(${Math.round(dx)}px, ${Math.round(p.y)}px, 0) translateY(-50%)`;
+  }
+
+  function select(b: BuildingMeta | null) {
+    selected = b;
+    if (b) {
+      selCtrU.value.set(b.cx, b.cz);
+      paintCard(b);
+      bcard?.removeAttribute('hidden'); bsel?.removeAttribute('hidden');
+      placeCard();
+    } else {
+      selCtrU.value.set(1e9, 1e9);
+      bcard?.setAttribute('hidden', ''); bsel?.setAttribute('hidden', '');
+    }
+    map.triggerRepaint();
+  }
+
+  const onPickDown = (e: PointerEvent) => { if (e.button === 0) downAt = { x: e.clientX, y: e.clientY, t: performance.now() }; };
+  const onPickUp = (e: PointerEvent) => {
+    if (!downAt || e.button !== 0) { downAt = null; return; }
+    const moved = Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y);
+    downAt = null;
+    if (moved > 6 || !registry.length) return;
+    const r = cv.getBoundingClientRect();
+    const hit = pickBuilding(pickMatrix, registry, e.clientX - r.left, e.clientY - r.top, cv.clientWidth, cv.clientHeight);
+    select(hit >= 0 ? registry.find(b => b.idx === hit) ?? null : null);
+  };
+  cv.addEventListener('pointerdown', onPickDown);
+  cv.addEventListener('pointerup', onPickUp);
+  const onPickKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && selected) select(null); };
+  window.addEventListener('keydown', onPickKey);
+  el('bcX')?.addEventListener('click', () => select(null));
+  /* MapLibre fires `render` only when a repaint actually happened, so this is the
+     cheapest possible hook for keeping the card glued to the building. */
+  map.on('render', placeCard);
+  cleanup.push(() => {
+    cv.removeEventListener('pointerdown', onPickDown);
+    cv.removeEventListener('pointerup', onPickUp);
+    window.removeEventListener('keydown', onPickKey);
+    map.off('render', placeCard);
+  });
+
   /* ── offscreen GPU heat sim + field bridge (R=blur ground · G=raw buildings) ── */
   const simRenderer = new THREE.WebGLRenderer({ canvas: document.createElement('canvas'), antialias: false });
   let sim: GpuHeatSim | null = null;
@@ -124,6 +234,12 @@ export function mountHeatMap(): () => void {
      recompiled — assigning a new {value:…} each frame would not reach the GPU. */
   const heatMinU = { value: M.RAMP_MIN }, heatMaxU = { value: M.RAMP_MAX };
 
+  /* Selected-building highlight. Keyed on the CENTROID, not a new id attribute:
+     every vertex already carries `aCtr`, so one vec2 uniform lights exactly one
+     building with no extra buffer and no geometry rebuild. Parked far outside any
+     ward (half-extent is 700 m) so nothing matches while nothing is selected. */
+  const selCtrU = { value: new THREE.Vector2(1e9, 1e9) };
+
   /* ── facade material (grow-in · live tint · line-art · tint modes) ── */
   function makeFacade() {
     const m = new THREE.MeshStandardMaterial({ roughness: .84, metalness: .05 });
@@ -131,16 +247,18 @@ export function mountHeatMap(): () => void {
       sh.uniforms.uGrow = growU; sh.uniforms.uStudio = studioU; sh.uniforms.uSize = sizeU; sh.uniforms.uTintMode = tintU;
       sh.uniforms.tField = { value: heatTex };
       sh.uniforms.uHeatMin = heatMinU; sh.uniforms.uHeatMax = heatMaxU;
+      sh.uniforms.uSelCtr = selCtrU;
       sh.vertexShader = 'attribute float aDelay; attribute float aH; attribute vec2 aCtr;\n'
-        + 'varying vec3 vFp; varying vec3 vFn; varying float vTop; varying float vT;\n'
-        + 'uniform float uGrow; uniform float uSize; uniform sampler2D tField;\n'
+        + 'varying vec3 vFp; varying vec3 vFn; varying float vTop; varying float vT; varying float vSel;\n'
+        + 'uniform float uGrow; uniform float uSize; uniform sampler2D tField; uniform vec2 uSelCtr;\n'
         + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
           float gT = clamp((uGrow - aDelay*0.55)/0.45, 0.0, 1.0);
           float gE = 1.0 + 2.70158*pow(gT-1.0,3.0) + 1.70158*pow(gT-1.0,2.0);
           transformed.y *= gE; vFp = transformed; vFn = normal;
           vTop = position.y / max(aH, 0.001);
-          vT = texture2D(tField, clamp(aCtr/uSize + 0.5, 0.0, 1.0)).g;`);
-      sh.fragmentShader = 'varying vec3 vFp; varying vec3 vFn; varying float vTop; varying float vT;\n'
+          vT = texture2D(tField, clamp(aCtr/uSize + 0.5, 0.0, 1.0)).g;
+          vSel = 1.0 - step(0.5, distance(aCtr, uSelCtr));`);
+      sh.fragmentShader = 'varying vec3 vFp; varying vec3 vFn; varying float vTop; varying float vT; varying float vSel;\n'
         + 'uniform float uStudio, uSize, uHeatMin, uHeatMax, uTintMode; uniform sampler2D tField;\n'
         + 'float dh(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}\n'
         + 'vec3 rampc(float t){ vec3 c0=vec3(.435,.792,.839),c1=vec3(.624,.725,.541),c2=vec3(.690,.553,.341),c3=vec3(.831,.420,.290),c4=vec3(.898,.282,.302);\n'
@@ -172,11 +290,25 @@ export function mountHeatMap(): () => void {
             body *= mix(1.0, mix(0.93, 1.05, dh(floor(vFp.xz*0.7))), spk);
           }
           float ao = mix(studio ? 0.76 : 0.58, 1.0, smoothstep(0.0, 14.0, vFp.y));
-          diffuseColor.rgb = body * ao;`);
+          body *= ao;
+          /* Selected building: lift toward the brand cyan and brighten its top
+             edge, so it reads as picked without hiding the heat tint that is the
+             whole point of the surface. Everything else is untouched — no clay
+             recede, no dimming pass. */
+          if (vSel > 0.5) {
+            body = mix(body, vec3(0.027, 0.788, 0.992), 0.42);
+            body += vec3(0.10, 0.16, 0.18) * smoothstep(0.90, 0.99, vTop);
+          }
+          diffuseColor.rgb = body;`);
     };
     return m;
   }
   const facade = makeFacade();
+
+  /* ── click-to-inspect state (see explore/building-pick.ts for why it is not a raycast) ── */
+  const pickMatrix = new THREE.Matrix4();
+  let registry: BuildingMeta[] = [];
+  let selected: BuildingMeta | null = null;
 
   /* ── three.js custom layer (shares MapLibre's GL context) ── */
   let threeScene: THREE.Scene | null = null, threeCam: THREE.Camera, threeRenderer: THREE.WebGLRenderer;
@@ -216,6 +348,11 @@ export function mountHeatMap(): () => void {
         .scale(new THREE.Vector3(s, -s, s))
         .multiply(new THREE.Matrix4().makeRotationX(Math.PI / 2));
       threeCam.projectionMatrix = new THREE.Matrix4().fromArray(matrix as unknown as number[]).multiply(l);
+      /* Keep the exact matrix the vertex shader is about to use. building-pick
+         projects footprints with THIS, so a hit test can never disagree with what
+         was drawn — including mid-flyTo, where a matrix rebuilt from map state
+         would be a frame out. */
+      pickMatrix.copy(threeCam.projectionMatrix);
       threeRenderer.resetState();
       threeRenderer.render(threeScene, threeCam);
       if (growU.value < 1 || fieldDirty) { fieldDirty = false; map.triggerRepaint(); }
@@ -247,6 +384,12 @@ export function mountHeatMap(): () => void {
     await loadDcUrs();
     if (!cache[name]) cache[name] = await (await fetch(`/heat-map/data/${name}.json`)).json();
     const d = cache[name], w = WARDS[name]; state.ward = name; updateCompareHref();
+
+    /* Rebuild the pick registry from the SAME rows the extrusions come from, and
+       drop any selection: building #1759 in Ballygunge is a different building in
+       Baruipur, so carrying the index across a ward switch would lie. */
+    select(null);
+    registry = buildRegistry(d.b);
 
     const geos: THREE.BufferGeometry[] = [], halfM = d.sizeM / 2;
     for (const b of d.b) {
