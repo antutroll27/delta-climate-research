@@ -23,7 +23,6 @@
   "dependencies": {
     "@astrojs/react": "^6.0.2",
     "@astrojs/sitemap": "^3.7.3",
-    "@google/earthengine": "^1.7.36",
     "@paper-design/shaders-react": "^0.0.76",
     "@vercel/analytics": "^2.0.1",
     "@vercel/speed-insights": "^2.0.0",

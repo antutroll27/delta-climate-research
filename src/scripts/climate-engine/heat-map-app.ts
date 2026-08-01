@@ -410,7 +410,7 @@ export function mountHeatMap(): () => void {
     for (let i = 0; i < t.length; i++) { const b = Math.min(11, Math.max(0, ((t[i] - ramp[0]) / (ramp[1] - ramp[0]) * 12) | 0)); bins[b]++; }
     const mx = Math.max(...bins, 1);
     histo?.childNodes.forEach((elm, i) => { (elm as HTMLElement).style.height = `${Math.max(4, bins[i] / mx * 100)}%`; });
-    const cooling = Math.max(0, state.baselineMean - st.meanC), iv = state.iv;
+    const iv = state.iv;
     const cost = M.computeCost(iv, state.spatial);
     const anyIv = iv.trees || iv.roof || iv.parks || iv.facades;
 

@@ -11,7 +11,6 @@
  * adjust the model, or record why the benchmark does not apply.
  */
 const M = await import('../src/scripts/climate-engine/heat-map-model.ts');
-const { DEFAULT_PARAMS } = await import('../src/scripts/climate-engine/types.ts');
 
 const N = M.SIM_N, N2 = N * N;
 const results = [];

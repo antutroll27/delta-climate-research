@@ -13,7 +13,7 @@ import {
 import { loadWard } from '../ward-loader.ts';
 import { rasterWardBase } from '../ward-raster.ts';
 import { loadWardSurface } from '../surface-raster.ts';
-import { WARDS, type WardId } from '../wards.ts';
+import { type WardId } from '../wards.ts';
 import { coverageToInterventions, deliveredQuantities, type DeliveredQuantities } from '../scenario/coverage.ts';
 import type { PairedScenarioState } from '../scenario/scenario-state.ts';
 import { resolveReferenceForcing, type CompareReferenceForcing } from './reference-forcing.ts';

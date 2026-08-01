@@ -79,9 +79,17 @@ export default defineConfig({
     // laptop and on the Vercel builder without branching. The only cost is an
     // occasional cold pre-bundle when the OS reaps the temp directory.
     cacheDir: join(tmpdir(), 'vite-delta-climate'),
-    // The shared, tree-shaken Three runtime is ~549 kB raw / ~142 kB gzip.
-    // Retain a warning boundary just above it so future vendor growth is noisy.
-    build: { chunkSizeWarningLimit: 600 },
+    // Warning boundary above the LARGEST chunk we knowingly ship, so growth is
+    // noisy and the warning still means something.
+    //
+    // 600 was set against the shared three runtime (~568 kB raw / ~142 kB gzip)
+    // and was wrong from the start: /heat-map's page entry inlines maplibre-gl
+    // and has always been ~797 kB raw / 214 kB gzip, so every single build
+    // printed the warning and nobody could have spotted a real regression in it.
+    // That chunk is deliberate — maplibre loads on /heat-map ONLY (verified
+    // absent from / and /team), and it imports three from the shared chunk
+    // rather than duplicating it.
+    build: { chunkSizeWarningLimit: 850 },
     // Pre-bundle three + EVERY addon both WebGL islands use (the hero river AND
     // the About ocean's code-split Water.js), so Vite optimizes once at startup
     // and never re-optimizes mid-session — which otherwise 504s ("Outdated
