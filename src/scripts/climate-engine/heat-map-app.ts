@@ -610,6 +610,12 @@ export function mountHeatMap(): () => void {
     }
     state.lastMean[state.ward] = st.meanC;
     setHTML(`big-${state.ward}`, `${st.meanC.toFixed(1)}<span>°C mean</span>`);
+    /* Repaint the open building card from the SAME snapshot these stats came
+       from. Without this it keeps whatever it read at selection time: move a
+       slider or flip to night and the map recolours, the ward mean moves, and
+       the card sits there quoting a temperature that is no longer true — and
+       its "vs ward mean" line silently becomes wrong as well. */
+    if (selected) paintCard(selected);
   }
 
   /* ── DOM helpers ── */
