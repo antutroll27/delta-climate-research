@@ -51,7 +51,7 @@ export function mountHeatMap(): () => void {
     dcurs: Record<string, DcUrsInputs> | null;
   }
   
-  const state: State = { ward: 'ballygunge', phase: 'peak', path: '2025', iv: { trees: 0, roof: 0, parks: 0, facades: 0 }, sunNow: null, base: null, baselineMean: 0, live: null, spatial: null, greenG: 0, lastMean: {}, dcurs: null };
+  const state: State = { ward: 'ballygunge', phase: 'peak', path: '2025', iv: { trees: 0, roof: 0, parks: 0, facades: 0 }, sunNow: 0, base: null, baselineMean: 0, live: null, spatial: null, greenG: 0, lastMean: {}, dcurs: null };
   let mode: 'relief' | 'iso' = 'relief', env = 'dark';
 
   /* ── MapLibre basemap ── */
@@ -806,6 +806,11 @@ export function mountHeatMap(): () => void {
 
   function resetSim() {
     if (!sim || !state.base) return;
+    /* Re-read the sun before every reset, so the FIRST simulation of the session
+       is already at the right elevation. `sunNow` starts at 0 purely as a "live
+       mode is on" sentinel; without this the opening frame would run night
+       physics at noon and then visibly flip when the stats tick corrected it. */
+    refreshNowSun();
     const p = M.currentParams(state);
     state.baselineMean = M.eqMean(state.base, { ...p, Q: DEFAULT_PARAMS.Q });
     const layers = M.applyInterventions(state.base, state.iv, state.spatial);

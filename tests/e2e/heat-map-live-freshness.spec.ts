@@ -126,10 +126,14 @@ test.describe('the now phase', () => {
     await page.goto('/heat-map/');
     await expect(page.locator('#clockw')).toBeVisible({ timeout: 60_000 });
 
-    // The default view is a SCENARIO and must say so — a clock reading 03:00
-    // beside an unqualified 39 °C is what sent the reader looking for a bug.
-    await expect(page.locator('#lstPhase')).toHaveText('modelled at 13:00');
+    // The page now OPENS live: the reading agrees with the clock beside it
+    // rather than being a 13:00 scenario the reader has to infer.
+    await expect(page.locator('#lstPhase')).toHaveText('modelled now');
+    await expect(page.locator('#segPhase button[data-p="now"]')).toHaveClass(/\bon\b/);
 
+    // The scenarios are still one click away, and still label themselves.
+    await page.locator('#segPhase button[data-p="peak"]').click();
+    await expect(page.locator('#lstPhase')).toHaveText('modelled at 13:00', { timeout: 60_000 });
     await page.locator('#segPhase button[data-p="now"]').click();
     await expect(page.locator('#lstPhase')).toHaveText('modelled now', { timeout: 60_000 });
 
