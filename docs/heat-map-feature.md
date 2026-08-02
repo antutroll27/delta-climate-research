@@ -294,6 +294,27 @@ shared from there.
 **Production docs:** [`heat-map-page-spec.md`](heat-map-page-spec.md) (what the page is) ·
 [`heat-map-implementation.md`](heat-map-implementation.md) (how to build it in the repo).
 
+## Validation status (2026-08-02) — and the next campaign
+
+The accuracy story moved from "measured" to "measured, with known uncertainty":
+
+- **Published figures now carry bootstrap CIs** (over overpasses, not ward-scenes):
+  night 2.93 K → 95 % CI 1.90–3.64 (20 overpasses) · peak 4.42 K → **2.91–6.65 K
+  (12 overpasses)**. The daytime error bar is uncertain by ±1.87 K; sample size, not
+  physics, is the weakest daytime claim.
+- **Validation protocol corrected.** Leave-one-scene/ward-out leaks weather through
+  sibling wards on the same pass; the honest split is **leave-one-overpass-out**. A
+  daytime statistical correction that looked worth 1.5 K under the leaky split is worth
+  exactly nothing under the honest one — recorded as ruled-out in
+  [`heat-map-calibration-spec.md`](heat-map-calibration-spec.md) §1. The night-phase
+  weather regression survives (2.81 → 2.14–2.31 K) and awaits its own shipping decision.
+- **Next campaign:** Landsat 8/9 C2 L2 surface temperature as a second, independent
+  thermal source — triples the daytime sample, adds a 10:30 diurnal regime, and is the
+  acquisition an observed-LST layer for uncalibrated wards will reuse. Spec:
+  [`superpowers/specs/2026-08-02-landsat-thermal-validation-design.md`](superpowers/specs/2026-08-02-landsat-thermal-validation-design.md).
+  Evidence for all of the above regenerates from
+  `scripts/experiment-validation-uncertainty.py`.
+
 ## Phases
 1. **Skeleton + render** — route, canvas, Three scene, `DataTexture` static synthetic field, colormap shader.
 2. **Sim in worker** — `sim-ts.ts` + `sim.worker.ts` + transferables; play/pause; prove 60fps, no main-thread contention.
