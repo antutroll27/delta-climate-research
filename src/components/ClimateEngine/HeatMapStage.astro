@@ -32,14 +32,22 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
     <!-- North reference. The idle orbit turns the map continuously, so without
          this there is no way to know which way you are facing, and no way back. -->
     <button class="compass" id="compass" type="button" title="Face north" aria-label="Reset the map to face north">
-      <svg viewBox="0 0 40 40" aria-hidden="true">
-        <circle cx="20" cy="20" r="18.2" class="c-ring" />
-        <g id="compassNeedle">
-          <path d="M20 6 L24.4 21 L20 18.4 L15.6 21 Z" class="c-n" />
-          <path d="M20 34 L15.6 19 L20 21.6 L24.4 19 Z" class="c-s" />
+      <svg viewBox="0 0 48 48" aria-hidden="true">
+        <circle cx="24" cy="24" r="21.2" class="c-ring" />
+        <!-- Everything that should point at the world lives in this group, which
+             JS rotates to the inverse of the map bearing. The N and S letters
+             ride along but are counter-rotated by the same angle about their own
+             anchors, so they travel to the right compass point while staying
+             upright — a letter lying on its side is decoration, not a reading. -->
+        <g id="compassDial">
+          <path d="M24 9 L29 26 L24 22.6 L19 26 Z" class="c-n" />
+          <path d="M24 39 L19 22 L24 25.4 L29 22 Z" class="c-s" />
+          <circle cx="38.4" cy="24" r="1.15" class="c-tick" />
+          <circle cx="9.6" cy="24" r="1.15" class="c-tick" />
+          <text id="compassN" x="24" y="6.4" class="c-lab c-lab-n">N</text>
+          <text id="compassS" x="24" y="45.2" class="c-lab">S</text>
         </g>
       </svg>
-      <span class="c-lab" id="compassLab">N</span>
     </button>
 
     <!-- First-run affordance: the buildings became clickable and nothing said so. -->
@@ -64,8 +72,15 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
     <!-- The finding: nearest greenery, the number that changes with every
          click. Data-chip anatomy (big value, small label) in the cooling
          green so it belongs to the patches it stands on. -->
+    <!-- Two nodes on purpose: the OUTER one is written by the render loop every
+         repaint (translate3d onto the cooling patch), the INNER one owns the
+         pop-in. Animating one element with both would have the frame loop
+         stamping over the animation's transform sixty times a second. Same
+         split as .bcard / .bcard-in. -->
     <div class="cooltag" id="coolTag" hidden>
-      <b id="coolTagM">—</b><span>nearest greenery · straight line</span>
+      <div class="cooltag-in" id="coolTagIn">
+        <b id="coolTagM">—</b><span>Nearest greenery</span>
+      </div>
     </div>
 
     <!-- Click-to-inspect. Positioned from the building's own ward-metre centroid
@@ -217,19 +232,23 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
   /* Sits clear of the toolbox, not under it: .left is 270 px wide at a 26 px
      offset, so its right edge is 296 px and anything below 312 px would be
      overlapped. The two follow the panel down at each breakpoint. */
-  .compass{position:absolute;left:312px;bottom:26px;z-index:6;width:46px;height:46px;padding:0;cursor:pointer;
-    background:rgb(9 20 22 /.8);border:1px solid var(--line);border-radius:50%;backdrop-filter:blur(12px);
+  .compass{position:absolute;left:312px;bottom:26px;z-index:6;width:54px;height:54px;padding:0;cursor:pointer;
+    background:rgb(9 20 22 /.82);border:1px solid var(--line);border-radius:50%;backdrop-filter:blur(12px);
     display:grid;place-items:center;transition:border-color .2s,transform .2s}
-  .compass:hover{border-color:var(--cyan);transform:scale(1.05)}
+  .compass:hover{border-color:var(--cyan);transform:scale(1.06)}
   .compass:focus-visible{outline:2px solid var(--cyan);outline-offset:3px}
-  .compass svg{width:40px;height:40px;position:absolute}
+  .compass svg{width:48px;height:48px;display:block}
   .compass .c-ring{fill:none;stroke:var(--line);stroke-width:1}
   .compass .c-n{fill:var(--red)}
-  .compass .c-s{fill:rgb(236 237 240 /.35)}
-  .compass #compassNeedle{transform-origin:20px 20px;transition:transform .12s linear}
-  .compass .c-lab{position:relative;font-family:var(--mono);font-size:.44rem;letter-spacing:.1em;
-    color:var(--ink);transform:translateY(13px)}
+  .compass .c-s{fill:rgb(236 237 240 /.34)}
+  .compass .c-tick{fill:rgb(236 237 240 /.28)}
+  .compass .c-lab{font-family:var(--sans);font-weight:700;font-size:8.4px;text-anchor:middle;
+    fill:rgb(236 237 240 /.62)}
+  .compass .c-lab-n{fill:var(--red)}
   body.studio .compass{background:rgb(245 244 241 /.86);border-color:rgb(20 40 42 /.2)}
+  body.studio .compass .c-s{fill:rgb(20 40 42 /.34)}
+  body.studio .compass .c-tick{fill:rgb(20 40 42 /.28)}
+  body.studio .compass .c-lab{fill:rgb(20 40 42 /.66)}
 
   /* ── first-run hint ── */
   .tiphint{position:absolute;left:50%;bottom:88px;transform:translateX(-50%);z-index:7;display:flex;align-items:center;gap:.6rem;
@@ -260,17 +279,28 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
      Big value over a small label, in the cooling green of the patches it
      stands on. Anchored at the nearest cooling cell; the value is written once
      per selection and only the transform moves per frame. */
+  /* Caribbean green, solid, no border. Ink is the stage's own near-black rather
+     than pure black: 9.7:1 on this fill, and the label at 72% still measures
+     5.9:1, so both clear AA without the value having to shout. The fill is a
+     flat brand colour in a panel language built on translucency — that is the
+     point, it is the one element on the map that is a finding rather than
+     chrome, and it is the same green as the patch it stands on. */
   .cooltag{position:absolute;z-index:6;pointer-events:none;will-change:transform;
-    margin:-16px 0 0 -86px;width:172px;text-align:center;line-height:1.2;
-    background:rgb(6 35 26 /.92);border:1px solid rgb(89 180 137 /.6);border-radius:9px;
-    padding:.34rem .3rem;backdrop-filter:blur(8px);box-shadow:0 6px 18px rgb(0 0 0 /.4)}
-  .cooltag b{display:block;font-family:var(--sans);font-weight:600;font-size:.8rem;
-    letter-spacing:-.01em;color:#8fe0bb}
-  .cooltag span{display:block;font-family:var(--mono);font-size:.44rem;letter-spacing:.09em;
-    text-transform:uppercase;color:rgb(143 224 187 /.66);margin-top:1px}
-  body.studio .cooltag{background:rgb(240 249 244 /.94);border-color:rgb(26 122 82 /.5)}
-  body.studio .cooltag b{color:#1a7a52}
-  body.studio .cooltag span{color:rgb(26 122 82 /.72)}
+    margin:-16px 0 0 -73px;width:146px;text-align:center;line-height:1.14}
+  .cooltag-in{background:#00cc99;border-radius:9px;padding:.34rem .28rem .36rem;
+    box-shadow:0 7px 18px rgb(0 32 24 /.42);will-change:transform,opacity}
+  /* No mono anywhere inside: this is a spoken result ("about a hundred and fifty
+     metres"), not a machine readout, and Mona Sans reads faster at a glance.
+     tabular-nums keeps the count-up from jittering as digits change width. */
+  .cooltag b{display:block;font-family:var(--sans);font-weight:750;font-size:1.02rem;
+    letter-spacing:-.02em;color:#052018;font-variant-numeric:tabular-nums}
+  /* Sentence case, not caps: the label is a phrase to read, and uppercase costs
+     the word-shapes that make it readable at this size. The weight makes up the
+     presence the caps were providing, and the tracking comes back to near-normal
+     because letter-spacing set for caps loosens sentence case badly. */
+  .cooltag span{display:block;font-family:var(--sans);font-weight:600;font-size:.56rem;
+    letter-spacing:.005em;color:rgb(5 32 24 /.78);margin-top:1px}
+  body.studio .cooltag-in{box-shadow:0 8px 22px rgb(0 32 24 /.24)}
 
   /* The sentence that says what the rings are FOR. Lives inside the building
      card, which is the only time the rings exist. */
@@ -287,10 +317,31 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
      invalid selector — taking the entire rule with it. That is exactly how the
      bar ended up unstyled and sitting on top of the toolbox. The attribution
      rules below have always used plain selectors for the same reason. */
-  .maplibregl-ctrl-scale{background:rgb(9 20 22 /.72)!important;border:1px solid var(--line)!important;
-    border-top:0!important;color:var(--ink)!important;font-family:var(--mono)!important;font-size:.46rem!important;
-    letter-spacing:.1em!important;padding:1px 5px 2px!important;border-radius:0 0 5px 5px!important;backdrop-filter:blur(10px)}
-  .maplibregl-ctrl-bottom-left{margin:0 0 30px 372px}
+  /* Made to read as a RULER, not a chip. The ⊔ bracket — rule along the bottom,
+     ticks turning up at each end — is the cartographic idiom, and it was being
+     smothered: a filled background with a full rounded border turned it into a
+     label box, and 7.4px type put the number below any useful reading size.
+     Now: no fill, brighter 1.5px bracket, the number sitting above the rule at
+     a legible size with a shadow so it survives a bright basemap. */
+  .maplibregl-ctrl-scale{background:none!important;border:1.5px solid rgb(111 202 214 /.72)!important;
+    border-top:0!important;border-radius:0!important;color:var(--paper)!important;
+    font-family:var(--sans)!important;font-weight:600!important;font-size:.58rem!important;
+    letter-spacing:.01em!important;padding:0 0 9px!important;text-align:center!important;
+    text-shadow:0 1px 3px rgb(0 0 0 /.85);
+    /* Quarter ticks, drawn as a repeating gradient rather than markup because
+       MapLibre owns this element's contents — it rewrites the label on every
+       zoom and would discard any children. Percentage stops mean the ticks stay
+       at the quarter points as the bar's pixel width changes with zoom, which is
+       what makes them readable as subdivisions rather than decoration. */
+    background-image:repeating-linear-gradient(90deg,
+      rgb(111 202 214 /.72) 0 1.5px, transparent 1.5px 25%)!important;
+    background-size:100% 7px!important;background-repeat:no-repeat!important;
+    background-position:left bottom!important;background-origin:padding-box!important}
+  body.studio .maplibregl-ctrl-scale{color:#16292b!important;border-color:rgb(13 107 125 /.7)!important;
+    text-shadow:0 1px 3px rgb(255 255 255 /.85);
+    background-image:repeating-linear-gradient(90deg,
+      rgb(13 107 125 /.7) 0 1.5px, transparent 1.5px 25%)!important}
+  .maplibregl-ctrl-bottom-left{margin:0 0 30px 396px}
 
   /* ── click-to-inspect ─────────────────────────────────────────────────────
      Both nodes are positioned in CSS pixels by heat-map-app.ts on MapLibre's
@@ -495,7 +546,7 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
     /* Above the chip row, not beside it: from here the centred chips reach far
        enough left to sit under the compass. */
     .compass{left:284px;bottom:120px}
-    .maplibregl-ctrl-bottom-left{margin:0 0 22px 344px}
+    .maplibregl-ctrl-bottom-left{margin:0 0 22px 368px}
     .rail-r{width:222px;right:18px;top:18px;bottom:18px}
     .place .n{font-size:clamp(1.7rem,3.2vw,2.7rem)}
     .synthetic{font-size:.5rem;letter-spacing:.16em}
@@ -517,7 +568,7 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
     .tabs{display:none}                 /* ward switch lives in the bottom strip at this width */
     .left,.rail-r{width:210px}
     .compass{left:244px}
-    .maplibregl-ctrl-bottom-left{margin:0 0 22px 304px}
+    .maplibregl-ctrl-bottom-left{margin:0 0 22px 328px}
     .synthetic{font-size:.44rem;letter-spacing:.12em;padding:.34rem .62rem}
     .stamp-slot{top:58px;--stamp-size:.46rem;--stamp-pad:.32rem .62rem;--stamp-tracking:.16em}
   }
