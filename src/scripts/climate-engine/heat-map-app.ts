@@ -246,9 +246,55 @@ export function mountHeatMap(): () => void {
     const clearsCard = (x: number, y: number) => {
       if (!cardBox) return true;
       const px = x + cvBox.left, py = y + cvBox.top;
-      return px < cardBox.left - 88 || px > cardBox.right + 88
-        || py < cardBox.top - 26 || py > cardBox.bottom + 26;
+      /* Half the chip's rendered box (104×22 now — these shrank with the
+         contour-label restyle; stale margins left the 1-min label half-under
+         the card). */
+      return px < cardBox.left - 56 || px > cardBox.right + 56
+        || py < cardBox.top - 15 || py > cardBox.bottom + 15;
     };
+    /* Nearest-greenery tag rides its cooling cell. The majority of buildings
+       sit within ~40 m of greenery, which parks the patch — and therefore the
+       tag — right where the card is. Hiding it for the majority case would
+       re-create the very complaint this tag exists to fix ("nothing on the map
+       changes"), so it climbs a ladder instead: at the patch, then lifted
+       above it (the dashed line still points at the true spot), and only if
+       both land under the card does it hide — the card carries the same fact
+       in prose, so nothing is lost. Exact rectangles, no slop margins: a
+       near-miss is not a collision. */
+    if (nearestCool) {
+      const tag = el('coolTag');
+      if (tag) {
+        const q = projectWard(pickMatrix, nearestCool.x, 1.2, nearestCool.z, w, h);
+        if (q.w <= 0) tag.style.visibility = 'hidden';
+        else {
+          const cvB = cv.getBoundingClientRect();
+          const cardB = bcard.hasAttribute('hidden') ? null : bcard.getBoundingClientRect();
+          // .cooltag box: margin -16px 0 0 -86px, 172 wide, ~36 tall
+          const fits = (y: number) => {
+            if (!cardB) return true;
+            const L = q.x + cvB.left - 86, T = y + cvB.top - 16;
+            return L + 172 < cardB.left || L > cardB.right || T + 36 < cardB.top || T > cardB.bottom;
+          };
+          const lifted = q.y - 72;
+          let tx = q.x, ty: number | null = null;
+          if (fits(q.y)) ty = q.y;
+          else if (lifted > 40 && fits(lifted)) ty = lifted;
+          else if (cardB) {
+            /* Final rung: dock to the card's top edge as a badge. At close range
+               the patch lives exactly where the card does, and no offset from
+               the true anchor stays honest — so stop pretending. The dashed
+               line still points at the real spot; the docked tag reads as the
+               dialog's own finding, and it is visible for the majority case
+               instead of vanishing. Below the card if the top is offscreen. */
+            tx = (cardB.left + cardB.right) / 2 - cvB.left;
+            ty = cardB.top - cvB.top - 32;
+            if (ty < 44) ty = cardB.bottom - cvB.top + 34;
+          }
+          tag.style.visibility = ty === null ? 'hidden' : 'visible';
+          if (ty !== null) tag.style.transform = `translate3d(${Math.round(tx)}px, ${Math.round(ty)}px, 0)`;
+        }
+      }
+    }
     for (const { r, el: id } of RINGS) {
       const lab = el(id); if (!lab) continue;
       /* Gather every on-screen candidate, then choose in two passes: topmost
@@ -293,6 +339,21 @@ export function mountHeatMap(): () => void {
       const lo = coolingLo ? nearestCooling(coolingLo, b.cx, b.cz, SIM_N, sizeU.value, b.ring) : null;
       const hi = coolingHi ? nearestCooling(coolingHi, b.cx, b.cz, SIM_N, sizeU.value, b.ring) : null;
       coolRangeM = lo && hi ? [Math.min(lo.distM, hi.distM), Math.max(lo.distM, hi.distM)] : null;
+      /* The tag's value is written HERE, once — placeCard only moves it. */
+      if (nearestCool) {
+        setText('coolTagM', `≈${Math.round(nearestCool.distM / 10) * 10 || 10} m`);
+        el('coolTag')?.removeAttribute('hidden');
+      } else {
+        el('coolTag')?.setAttribute('hidden', '');
+      }
+      if (coolLine && nearestCool) {
+        const pos = coolLine.geometry.getAttribute('position') as THREE.BufferAttribute;
+        pos.setXYZ(0, b.cx, 1.2, b.cz);
+        pos.setXYZ(1, nearestCool.x, 1.2, nearestCool.z);
+        pos.needsUpdate = true;
+        coolLine.computeLineDistances();
+        coolLine.visible = true;
+      } else if (coolLine) coolLine.visible = false;
       if (ringGroup) {
         ringGroup.visible = true;
         for (const m of ringGroup.children) m.position.set(b.cx, 0.75, b.cz);
@@ -304,6 +365,8 @@ export function mountHeatMap(): () => void {
     } else {
       selCtrU.value.set(1e9, 1e9);
       nearestCool = null; coolRangeM = null;
+      el('coolTag')?.setAttribute('hidden', '');
+      if (coolLine) coolLine.visible = false;
       if (ringGroup) ringGroup.visible = false;
       coolU.value = 0;
       bcard?.setAttribute('hidden', ''); bsel?.setAttribute('hidden', '');
@@ -482,6 +545,23 @@ export function mountHeatMap(): () => void {
   let nearestCool: { x: number; z: number; distM: number } | null = null;
   let coolRangeM: [number, number] | null = null;
 
+  /* Dashed line from the selected building to its nearest cooling cell — shows
+     WHICH patch won, and the dashes say "straight line, not a route" without a
+     word of copy. Two vertices, repositioned per selection, transparent-pass so
+     buildings occlude it correctly. */
+  let coolLine: THREE.Line | null = null;
+  function buildCoolLine() {
+    if (coolLine || !threeScene) return;
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
+    coolLine = new THREE.Line(g, new THREE.LineDashedMaterial({
+      color: 0x59b489, transparent: true, opacity: 0.85, dashSize: 7, gapSize: 6, depthWrite: false,
+    }));
+    coolLine.visible = false;
+    coolLine.renderOrder = -1;
+    threeScene.add(coolLine);
+  }
+
   function buildRings() {
     if (ringGroup || !threeScene) return;
     ringGroup = new THREE.Group();
@@ -545,6 +625,7 @@ export function mountHeatMap(): () => void {
       }));
       overlay.rotation.x = -Math.PI / 2; overlay.position.y = 0.6; overlay.renderOrder = -1; threeScene.add(overlay);
       buildRings();
+      buildCoolLine();
     },
     render(_gl, matrix) {
       if (!modelTransform || !threeScene) return;

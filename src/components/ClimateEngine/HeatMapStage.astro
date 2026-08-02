@@ -53,11 +53,19 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
          Two lines each — the headline is the human unit (minutes), the second
          line is the caveat, because a circle drawn on a map reads as "you can
          reach all of this" and a straight-line radius is not that. -->
-    <div class="ringlab primary" id="ringNear" hidden>
-      <b>1 min walk</b><span>80 m · straight line</span>
-    </div>
-    <div class="ringlab" id="ringFar" hidden>
-      <b>5 min walk</b><span>400 m · straight line</span>
+    <!-- Ring labels are RULER MARKINGS, not findings: one quiet mono line, in
+         the ring's own colour, sitting on the circumference like a contour
+         label. The old data-chip styling promised a per-building measurement
+         and delivered a constant — the reader who commissioned the rings
+         misread them twice for exactly that reason. -->
+    <div class="ringlab" id="ringNear" hidden>1 min · 80 m</div>
+    <div class="ringlab" id="ringFar" hidden>5 min · 400 m</div>
+
+    <!-- The finding: nearest greenery, the number that changes with every
+         click. Data-chip anatomy (big value, small label) in the cooling
+         green so it belongs to the patches it stands on. -->
+    <div class="cooltag" id="coolTag" hidden>
+      <b id="coolTagM">—</b><span>nearest greenery · straight line</span>
     </div>
 
     <!-- Click-to-inspect. Positioned from the building's own ward-metre centroid
@@ -236,27 +244,33 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
   @media (prefers-reduced-motion: reduce){ .tiphint{animation:none} }
 
   /* ── walk-time ring labels ──
-     Sized to be read, not decoded. The minutes are the point, so they get Mona
-     Sans at a real reading size; the metres-and-caveat line stays in the mono
-     label voice underneath. The 5-minute chip is filled because it is the one
-     that matters — most heat-relief guidance is written around a five-minute
-     walk — and the 10-minute chip is outlined so the two do not compete. */
+     Contour-label treatment: one quiet mono line in the ring's own cyan,
+     sitting on the circumference. Constant things must LOOK constant — the
+     previous data-chip styling (filled pill, bold Mona Sans value) made two
+     fixed radii read as per-building findings, and the reader misread them
+     twice. The finding lives in .cooltag; this is just the ruler. */
   .ringlab{position:absolute;z-index:6;pointer-events:none;will-change:transform;
-    margin:-15px 0 0 -84px;width:168px;text-align:center;line-height:1.25;
-    background:rgb(9 20 22 /.9);border:1px solid rgb(111 202 214 /.42);border-radius:9px;
-    padding:.32rem .3rem;backdrop-filter:blur(8px);box-shadow:0 6px 18px rgb(0 0 0 /.4)}
-  .ringlab b{display:block;font-family:var(--sans);font-weight:600;font-size:.78rem;
-    letter-spacing:-.01em;color:var(--paper)}
-  .ringlab span{display:block;font-family:var(--mono);font-size:.44rem;letter-spacing:.09em;
-    text-transform:uppercase;color:var(--ink);margin-top:1px}
-  .ringlab.primary{background:var(--cyan);border-color:var(--cyan);box-shadow:0 6px 20px rgb(111 202 214 /.3)}
-  .ringlab.primary b{color:#062226}
-  .ringlab.primary span{color:rgb(6 34 38 /.72)}
-  body.studio .ringlab{background:rgb(245 244 241 /.92);border-color:rgb(20 40 42 /.22)}
-  body.studio .ringlab b{color:#16292b}
-  body.studio .ringlab.primary{background:#0d6b7d;border-color:#0d6b7d}
-  body.studio .ringlab.primary b{color:#f2fbfc}
-  body.studio .ringlab.primary span{color:rgb(242 251 252 /.75)}
+    margin:-9px 0 0 -52px;width:104px;text-align:center;white-space:nowrap;
+    font-family:var(--mono);font-size:.5rem;letter-spacing:.12em;text-transform:uppercase;
+    color:var(--cyan);background:rgb(9 20 22 /.82);border:1px solid rgb(111 202 214 /.4);
+    border-radius:99px;padding:.22rem 0}
+  body.studio .ringlab{background:rgb(245 244 241 /.88);color:#0d6b7d;border-color:rgb(13 107 125 /.4)}
+
+  /* ── nearest-greenery tag: the FINDING, so it gets the data-chip anatomy ──
+     Big value over a small label, in the cooling green of the patches it
+     stands on. Anchored at the nearest cooling cell; the value is written once
+     per selection and only the transform moves per frame. */
+  .cooltag{position:absolute;z-index:6;pointer-events:none;will-change:transform;
+    margin:-16px 0 0 -86px;width:172px;text-align:center;line-height:1.2;
+    background:rgb(6 35 26 /.92);border:1px solid rgb(89 180 137 /.6);border-radius:9px;
+    padding:.34rem .3rem;backdrop-filter:blur(8px);box-shadow:0 6px 18px rgb(0 0 0 /.4)}
+  .cooltag b{display:block;font-family:var(--sans);font-weight:600;font-size:.8rem;
+    letter-spacing:-.01em;color:#8fe0bb}
+  .cooltag span{display:block;font-family:var(--mono);font-size:.44rem;letter-spacing:.09em;
+    text-transform:uppercase;color:rgb(143 224 187 /.66);margin-top:1px}
+  body.studio .cooltag{background:rgb(240 249 244 /.94);border-color:rgb(26 122 82 /.5)}
+  body.studio .cooltag b{color:#1a7a52}
+  body.studio .cooltag span{color:rgb(26 122 82 /.72)}
 
   /* The sentence that says what the rings are FOR. Lives inside the building
      card, which is the only time the rings exist. */
