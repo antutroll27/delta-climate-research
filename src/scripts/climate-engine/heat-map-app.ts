@@ -820,13 +820,31 @@ export function mountHeatMap(): () => void {
      weather that has had time to change, and past six it is a different day's
      shape — the ring goes red and says so rather than pulsing green forever. */
   const AGE_FRESH_MIN = 90, AGE_STALE_MIN = 360;
-  const RING_LEN = 133.2;                       // 2πr at r = 21.2, matches the CSS
-  const IST_OFFSET_MIN = 330;                   // ward-local; the wards are all IST
+
+  /* IANA zone, not a fixed offset. A hardcoded +5:30 happens to be right for
+     India, which observes no DST — but it is right by luck, and it is the first
+     thing that breaks when a European or East Asian ward is added. Intl reads
+     the zone database and handles the transitions we do not have yet. */
+  const WARD_TZ = 'Asia/Kolkata';
+  const wardClock = new Intl.DateTimeFormat('en-GB', {
+    timeZone: WARD_TZ, hour: '2-digit', minute: '2-digit', hour12: false,
+  });
+
+  /* CLOCK SKEW, MEASURED FROM THE SAME REQUEST.
+     The reading's age is (now - validAt), and `now` comes from the visitor's
+     machine — so a device with a wrong clock reports a wrong age and gets the
+     wrong freshness colour. Rather than add a time API (a second network
+     dependency, its own failure mode, to learn something the browser already
+     believes), take it from the `Date` header met.no already sends with the
+     forecast. Same request, no extra byte, and it is the authority on when the
+     reading was served. */
+  let clockSkewMs = 0;
+  const now = () => Date.now() + clockSkewMs;
 
   function ageMinutes(iso: string | undefined): number | null {
     if (!iso) return null;
     const t = Date.parse(iso);
-    return Number.isFinite(t) ? Math.max(0, (Date.now() - t) / 60000) : null;
+    return Number.isFinite(t) ? Math.max(0, (now() - t) / 60000) : null;
   }
 
   function paintClock() {
@@ -837,36 +855,36 @@ export function mountHeatMap(): () => void {
     if (!L) return;
 
     const mins = ageMinutes(L.validAt);
-    const hand = el('clockHand'), ring = el('clockAge');
+    const bar = el('clockBar');
+
+    /* THE BIG DIGITS ARE THE WARD'S CLOCK, NOT THE READING'S HOUR.
+       They used to be the reading's validity hour, which was arithmetically
+       right and read as a broken clock: it showed 00:30 while Kolkata said
+       01:29, because a 19:00Z reading IS 00:30 IST. Nobody reads a large time
+       as "the hour of the observation" — they read it as "the time". So the
+       clock says the time, and the reading's age qualifies it underneath. */
+    setText('clockTime', wardClock.format(new Date(now())));
 
     if (mins === null) {
-      /* Unknown age must not render as fresh. Empty ring, no hand angle claimed. */
+      /* Unknown age must not render as fresh: empty bar, nothing claimed. */
       btn.dataset.age = 'unknown';
-      setText('clockAgeLab', '—');
-      ring?.setAttribute('style', `stroke-dashoffset:${RING_LEN}`);
-      btn.title = 'Live reading · time unknown. Activate to re-read.';
+      setText('clockAgeLab', 'age —');
+      bar?.setAttribute('style', 'transform:scaleX(0)');
+      btn.title = `Ward clock, ${WARD_TZ}. Live reading age unknown. Activate to re-read.`;
       return;
     }
 
-    /* Hand: 24-hour dial in WARD-LOCAL time, so a glance separates a morning
-       reading from an evening one. One revolution per day — not a wall clock. */
-    const local = new Date(Date.parse(L.validAt!) + IST_OFFSET_MIN * 60000);
-    const hours = local.getUTCHours() + local.getUTCMinutes() / 60;
-    hand?.setAttribute('transform', `rotate(${(hours / 24) * 360} 24 24)`);
-
-    /* Ring drains as the reading ages: full at zero, empty at stale. */
-    const frac = Math.min(1, mins / AGE_STALE_MIN);
-    ring?.setAttribute('style', `stroke-dashoffset:${RING_LEN * frac}`);
+    /* The bar empties as the reading ages: full at zero, gone at stale. */
+    bar?.setAttribute('style', `transform:scaleX(${Math.max(0, 1 - mins / AGE_STALE_MIN).toFixed(3)})`);
     btn.dataset.age = mins <= AGE_FRESH_MIN ? 'fresh'
       : mins <= AGE_STALE_MIN ? 'aging' : 'stale';
 
     const label = mins < 60 ? `${Math.round(mins)}m` : `${Math.floor(mins / 60)}h`;
-    setText('clockAgeLab', label);
-    const hh = String(local.getUTCHours()).padStart(2, '0');
-    const mm = String(local.getUTCMinutes()).padStart(2, '0');
-    btn.title = `Live reading valid ${hh}:${mm} IST · ${label} old. `
-      + 'This is the weather driving the simulation, not the map’s time of day. '
-      + 'Activate to re-read.';
+    setText('clockAgeLab', `read ${label} ago`);
+    const validLocal = wardClock.format(new Date(Date.parse(L.validAt!)));
+    btn.title = `Ward clock (${WARD_TZ}). The live reading driving this simulation `
+      + `is valid for ${validLocal} and is ${label} old. `
+      + 'The map itself shows a modelled phase, not a time of day. Activate to re-read.';
   }
 
   function paintLive() {
@@ -903,6 +921,15 @@ export function mountHeatMap(): () => void {
       if (force || !liveCache[name]) {
         const r = await fetch(`https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=${w.lat}&lon=${w.lon}`);
         if (!r.ok) throw new Error('met.no ' + r.status);
+        /* Trust the server's clock over the visitor's for the AGE arithmetic.
+           Measured before the body is read so transfer time is not counted as
+           skew; a wrong device clock would otherwise silently mis-colour the
+           freshness bar. Ignored unless it is large enough to matter. */
+        const served = Date.parse(r.headers.get('date') ?? '');
+        if (Number.isFinite(served)) {
+          const skew = served - Date.now();
+          clockSkewMs = Math.abs(skew) > 120_000 ? skew : 0;
+        }
         const ts = (await r.json()).properties.timeseries[0];
         const dd = ts.data.instant.details;
         /* `ts.time` is the hour this reading is VALID FOR, which is what the

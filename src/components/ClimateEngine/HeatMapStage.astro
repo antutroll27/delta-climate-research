@@ -60,19 +60,12 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
          weather. Click to re-read. -->
     <button class="clockw" id="clockw" type="button" hidden
             aria-label="Live reading freshness. Activate to fetch current conditions.">
-      <svg viewBox="0 0 48 48" aria-hidden="true">
-        <circle cx="24" cy="24" r="21.2" class="k-ring" />
-        <circle cx="24" cy="24" r="21.2" class="k-age" id="clockAge" />
-        <!-- 24-hour dial: one revolution per day, so a glance separates a
-             morning reading from an evening one without reading digits. -->
-        <circle cx="24" cy="7.5" r="1.05" class="k-tick" />
-        <circle cx="24" cy="40.5" r="1.05" class="k-tick" />
-        <circle cx="40.5" cy="24" r="1.05" class="k-tick" />
-        <circle cx="7.5" cy="24" r="1.05" class="k-tick" />
-        <g id="clockHand"><path d="M24 24 L24 11.5" class="k-hand" /></g>
-        <circle cx="24" cy="24" r="1.9" class="k-hub" />
-      </svg>
-      <span class="k-age-lab" id="clockAgeLab">—</span>
+      <span class="k-time" id="clockTime">--:--</span>
+      <span class="k-sub"><span class="k-age-lab" id="clockAgeLab">—</span></span>
+      <!-- Freshness survives the move to digits as a draining rule along the
+           bottom edge: the digits say WHEN, the bar says HOW STALE, and the bar
+           is the only thing that animates (one transform, no layout). -->
+      <span class="k-bar" aria-hidden="true"><i id="clockBar"></i></span>
     </button>
 
     <!-- First-run affordance: the buildings became clickable and nothing said so. -->
@@ -275,37 +268,41 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
      the two read as one instrument cluster: where you are facing, and when the
      data is from. Deliberately NOT styled as a wall clock — no minute hand, no
      numerals — because the map has no time of day to show. */
-  /* bottom: compass sits at 26 + its 54px height = 80, plus the age label's own
-     ~13px and a 9px gap. Measured, not guessed — at 88px the label overlapped
-     the compass's top edge by 5px. */
-  .clockw{position:absolute;left:312px;bottom:106px;z-index:6;width:54px;height:54px;padding:0;cursor:pointer;
-    display:grid;place-items:center;border-radius:50%;border:1px solid var(--line);
+  /* Digital readout, not a dial, parked immediately left of the evidence rail.
+     It qualifies the LIVE AMBIENT block — same row, arm's length — so the
+     freshness sits beside the readings it describes rather than beside the
+     compass, which answers an unrelated question. right: 306 clears the rail
+     (right 26 + width 280) with a 14px gap. */
+  .clockw{position:absolute;right:320px;top:52px;z-index:6;padding:7px 11px 8px;cursor:pointer;
+    display:flex;flex-direction:column;align-items:flex-start;gap:1px;
+    border-radius:9px;border:1px solid var(--line);
     background:rgb(9 20 22 /.72);backdrop-filter:blur(10px);
     transition:border-color .2s,transform .2s}
-  .clockw:hover{border-color:var(--cyan);transform:scale(1.06)}
+  .clockw:hover{border-color:var(--cyan);transform:translateY(-1px)}
   .clockw:focus-visible{outline:2px solid var(--cyan);outline-offset:3px}
   .clockw[disabled]{cursor:progress;opacity:.7}
-  .clockw svg{width:48px;height:48px;display:block}
-  .clockw .k-ring{fill:none;stroke:var(--line);stroke-width:1}
-  /* The age ring is a stroke-dashoffset arc — one property, no layout, and it
-     is the only thing that animates as the reading ages. */
-  .clockw .k-age{fill:none;stroke:var(--cyan);stroke-width:2;stroke-linecap:round;
-    transform:rotate(-90deg);transform-origin:24px 24px;
-    stroke-dasharray:133.2;stroke-dashoffset:133.2;transition:stroke-dashoffset .5s ease,stroke .5s ease}
-  .clockw[data-age="aging"] .k-age{stroke:var(--bronze)}
-  .clockw[data-age="stale"] .k-age{stroke:var(--red)}
-  .clockw .k-tick{fill:rgb(236 237 240 /.26)}
-  .clockw .k-hand{stroke:var(--paper);stroke-width:1.7;stroke-linecap:round;fill:none}
-  .clockw .k-hub{fill:var(--cyan)}
-  .clockw[data-age="stale"] .k-hub{fill:var(--red)}
-  .clockw .k-age-lab{position:absolute;bottom:-14px;left:50%;transform:translateX(-50%);
-    font-family:var(--mono);font-size:.46rem;letter-spacing:.08em;color:var(--ink);white-space:nowrap}
+  /* tabular-nums so the digits do not reflow as minutes tick over */
+  .clockw .k-time{font-family:var(--sans);font-weight:650;font-size:1.02rem;line-height:1;
+    letter-spacing:-.01em;color:var(--paper);font-variant-numeric:tabular-nums}
+  .clockw[data-age="stale"] .k-time{color:var(--red)}
+  .clockw .k-sub{display:flex;gap:.42rem;align-items:baseline;
+    font-family:var(--mono);font-size:.46rem;letter-spacing:.1em;color:var(--faint)}
+  .clockw .k-age-lab{color:var(--ink)}
   .clockw[data-age="stale"] .k-age-lab{color:var(--red)}
+  .clockw .k-bar{display:block;width:100%;height:2px;margin-top:5px;border-radius:1px;
+    background:rgb(236 237 240 /.12);overflow:hidden}
+  /* scaleX only — transform, never width, so ageing costs no layout */
+  .clockw .k-bar i{display:block;height:100%;background:var(--cyan);border-radius:1px;
+    transform-origin:left center;transform:scaleX(1);
+    transition:transform .5s ease,background-color .5s ease}
+  .clockw[data-age="aging"] .k-bar i{background:var(--bronze)}
+  .clockw[data-age="stale"] .k-bar i{background:var(--red)}
   body.studio .clockw{background:rgb(245 244 241 /.86);border-color:rgb(20 40 42 /.2)}
-  body.studio .clockw .k-tick{fill:rgb(20 40 42 /.28)}
-  body.studio .clockw .k-hand{stroke:rgb(20 40 42 /.8)}
-  body.studio .clockw .k-age-lab{color:rgb(20 40 42 /.66)}
-  @media (prefers-reduced-motion: reduce){ .clockw .k-age{transition:none} }
+  body.studio .clockw .k-time{color:#14282a}
+  body.studio .clockw .k-sub{color:rgb(20 40 42 /.55)}
+  body.studio .clockw .k-age-lab{color:rgb(20 40 42 /.75)}
+  body.studio .clockw .k-bar{background:rgb(20 40 42 /.14)}
+  @media (prefers-reduced-motion: reduce){ .clockw .k-bar i{transition:none} }
 
   body.studio .compass{background:rgb(245 244 241 /.86);border-color:rgb(20 40 42 /.2)}
   body.studio .compass .c-s{fill:rgb(20 40 42 /.34)}
