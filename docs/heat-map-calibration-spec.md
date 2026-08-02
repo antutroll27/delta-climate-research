@@ -46,6 +46,19 @@ above ~0.5 — where all these values sit. **The mechanism may still be right; N
 residual correction looked like a 1.5 K daytime win under leave-one-scene-out (4.67 → 3.12 K) and
 evaporated entirely under leave-one-overpass-out (4.67 → 4.67 K): each satellite pass covers all
 three wards, so scene- and ward-level splits leak the held-out row's weather through its siblings.
+
+**Refitting on a slightly larger set of the SAME evidence is not worth a PR** (added
+2026-08-03). Two May-2026 ECOSTRESS overpasses gained POWER forcing after publication —
+NASA's hourly product lags real time — taking the ward-scale set from 79 to 85 rows. The
+refit was run rather than assumed: RMSE 3.605 → **3.602**, bias +0.164 → +0.275, `ratio`
+and `c` still pinned to their bounds, `meets_all_criteria` still null. Three thousandths
+of a Kelvin against a ±4.5 K published band, with the bias moving the wrong way.
+
+The general rule this buys: **more rows of the same instrument, wards and forcing move the
+constants, not the error.** Accuracy comes from a different instrument, a different forcing
+resolution, or a different model structure — not from waiting for the archive to grow. The
+one thing archive growth genuinely buys is a tighter interval on the error itself, which is
+what the Landsat campaign delivered (±1.87 → ±0.49 K).
 Do not retry statistics on the daytime residual — it is not predictable from POWER forcing. The
 night-phase regression is the one that survives (2.81 → 2.14–2.31 K depending on term count) and
 has its own shipping decision pending (see the 2026-08-02 Landsat validation spec, §7.1).

@@ -70,3 +70,9 @@ inspiration/
 
 # python bytecode from the data-pipeline scripts
 scripts/__pycache__/
+
+# Swept in by an over-broad `git add -A` during the Landsat campaign.
+# A 2 MB Claude Code session transcript and a 582 KB PDF that regenerates
+# from thermal-splatting-brief.md — neither belongs in version control.
+docs/dataset/*.jsonl
+docs/*.pdf
