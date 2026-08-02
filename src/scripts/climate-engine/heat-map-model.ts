@@ -149,7 +149,17 @@ export const PARK_HA = 0.785;
 export interface WardData { center: [number, number]; sizeM: number; count: number; b: number[][]; [k: string]: unknown; }
 export interface RoadsData { ways: { w: number; p: number[] }[]; }
 export interface Interventions { trees: number; roof: number; parks: number; facades: number; }
-export interface Ambient { tAir: number; rh: number; wind: number; cloud: number; feels: number; }
+export interface Ambient {
+  tAir: number; rh: number; wind: number; cloud: number; feels: number;
+  /**
+   * ISO instant the reading is valid for (met.no's `timeseries[0].time`).
+   * Optional because the physics never needs it — but the UI does: this reading
+   * sets the simulation's boundary conditions, so "how old is it" is a property
+   * of the answer on screen, not a decoration. Absent means unknown, which the
+   * dial must render as unknown rather than as fresh.
+   */
+  validAt?: string;
+}
 export interface Spatial {
   corridorSorted: Int32Array; corridorKm: number; parkCenters: [number, number][];
   roofM2: number; facadeM2: number; cellArea: number; cellM: number;

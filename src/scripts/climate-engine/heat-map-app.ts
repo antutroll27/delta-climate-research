@@ -814,20 +814,101 @@ export function mountHeatMap(): () => void {
 
   /* ── live ambient (Met Norway direct; production proxies via /api/ambient) ── */
   const liveCache: Record<string, M.Ambient> = {};
+  /* ── live-reading freshness dial ──
+     met.no publishes hourly, so a reading is at worst an hour behind reality by
+     construction: FRESH covers that. Past two hours the sim is running on
+     weather that has had time to change, and past six it is a different day's
+     shape — the ring goes red and says so rather than pulsing green forever. */
+  const AGE_FRESH_MIN = 90, AGE_STALE_MIN = 360;
+  const RING_LEN = 133.2;                       // 2πr at r = 21.2, matches the CSS
+  const IST_OFFSET_MIN = 330;                   // ward-local; the wards are all IST
+
+  function ageMinutes(iso: string | undefined): number | null {
+    if (!iso) return null;
+    const t = Date.parse(iso);
+    return Number.isFinite(t) ? Math.max(0, (Date.now() - t) / 60000) : null;
+  }
+
+  function paintClock() {
+    const btn = el('clockw') as HTMLButtonElement | null;
+    if (!btn) return;
+    const L = state.live;
+    btn.hidden = !L;
+    if (!L) return;
+
+    const mins = ageMinutes(L.validAt);
+    const hand = el('clockHand'), ring = el('clockAge');
+
+    if (mins === null) {
+      /* Unknown age must not render as fresh. Empty ring, no hand angle claimed. */
+      btn.dataset.age = 'unknown';
+      setText('clockAgeLab', '—');
+      ring?.setAttribute('style', `stroke-dashoffset:${RING_LEN}`);
+      btn.title = 'Live reading · time unknown. Activate to re-read.';
+      return;
+    }
+
+    /* Hand: 24-hour dial in WARD-LOCAL time, so a glance separates a morning
+       reading from an evening one. One revolution per day — not a wall clock. */
+    const local = new Date(Date.parse(L.validAt!) + IST_OFFSET_MIN * 60000);
+    const hours = local.getUTCHours() + local.getUTCMinutes() / 60;
+    hand?.setAttribute('transform', `rotate(${(hours / 24) * 360} 24 24)`);
+
+    /* Ring drains as the reading ages: full at zero, empty at stale. */
+    const frac = Math.min(1, mins / AGE_STALE_MIN);
+    ring?.setAttribute('style', `stroke-dashoffset:${RING_LEN * frac}`);
+    btn.dataset.age = mins <= AGE_FRESH_MIN ? 'fresh'
+      : mins <= AGE_STALE_MIN ? 'aging' : 'stale';
+
+    const label = mins < 60 ? `${Math.round(mins)}m` : `${Math.floor(mins / 60)}h`;
+    setText('clockAgeLab', label);
+    const hh = String(local.getUTCHours()).padStart(2, '0');
+    const mm = String(local.getUTCMinutes()).padStart(2, '0');
+    btn.title = `Live reading valid ${hh}:${mm} IST · ${label} old. `
+      + 'This is the weather driving the simulation, not the map’s time of day. '
+      + 'Activate to re-read.';
+  }
+
   function paintLive() {
     const L = state.live;
     setText('liveT', L ? L.tAir.toFixed(1) : '—'); setText('liveFeel', L ? L.feels.toFixed(1) : '—');
     setText('liveRH', L ? String(Math.round(L.rh)) : '—'); setText('liveWind', L ? L.wind.toFixed(1) : '—');
-    el('livedot')?.classList.toggle('on', !!L);
+    /* The dot claims "live"; it may only do so while the reading still is. */
+    const mins = ageMinutes(L?.validAt);
+    el('livedot')?.classList.toggle('on', !!L && (mins === null || mins <= AGE_STALE_MIN));
+    paintClock();
   }
-  async function fetchLive(name: string) {
+
+  const onClock = async () => {
+    const btn = el('clockw') as HTMLButtonElement | null;
+    if (!btn || btn.disabled) return;
+    btn.disabled = true;
+    try { await fetchLive(state.ward, true); } finally { btn.disabled = false; paintClock(); }
+  };
+  el('clockw')?.addEventListener('click', onClock);
+  cleanup.push(() => el('clockw')?.removeEventListener('click', onClock));
+  /* Age advances with the wall clock, not with any event, so it needs its own
+     slow tick. One minute is far below the resolution of the thing being shown
+     and costs nothing next to the sim. */
+  const clockTick = window.setInterval(paintClock, 60_000);
+  cleanup.push(() => clearInterval(clockTick));
+  /* `force` bypasses the session cache. Without it this fetched once per ward
+     per session and never again: a tab left open overnight kept a pulsing green
+     "live" dot over yesterday evening's weather, while that same reading went on
+     setting the simulation's boundary conditions. The freshness dial exposes the
+     age; this is how a reader acts on it. */
+  async function fetchLive(name: string, force = false) {
     const w = WARDS[name];
     try {
-      if (!liveCache[name]) {
+      if (force || !liveCache[name]) {
         const r = await fetch(`https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=${w.lat}&lon=${w.lon}`);
         if (!r.ok) throw new Error('met.no ' + r.status);
-        const dd = (await r.json()).properties.timeseries[0].data.instant.details;
-        liveCache[name] = { tAir: dd.air_temperature, rh: dd.relative_humidity, wind: dd.wind_speed, cloud: dd.cloud_area_fraction ?? 0, feels: M.heatIndexC(dd.air_temperature, dd.relative_humidity) };
+        const ts = (await r.json()).properties.timeseries[0];
+        const dd = ts.data.instant.details;
+        /* `ts.time` is the hour this reading is VALID FOR, which is what the
+           dial must show — not the moment we happened to fetch it. They differ
+           by up to an hour and only the former is a property of the data. */
+        liveCache[name] = { tAir: dd.air_temperature, rh: dd.relative_humidity, wind: dd.wind_speed, cloud: dd.cloud_area_fraction ?? 0, feels: M.heatIndexC(dd.air_temperature, dd.relative_humidity), validAt: ts.time };
       }
       if (state.ward !== name) return;
       state.live = liveCache[name]; paintLive(); resetSim();
