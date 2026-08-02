@@ -271,9 +271,14 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
   /* Digital readout, not a dial, parked immediately left of the evidence rail.
      It qualifies the LIVE AMBIENT block — same row, arm's length — so the
      freshness sits beside the readings it describes rather than beside the
-     compass, which answers an unrelated question. right: 306 clears the rail
-     (right 26 + width 280) with a 14px gap. */
-  .clockw{position:absolute;right:320px;top:52px;z-index:6;padding:7px 11px 8px;cursor:pointer;
+     compass, which answers an unrelated question.
+
+     top: 76 IS LOAD-BEARING, NOT TASTE. The honesty banner is centred and grows
+     with its own text, so at 1280 it reaches x 955 while this sits at 891 —
+     they overlap horizontally and only the vertical gap keeps them apart. At
+     top:52 that gap was 3px, which held on macOS and collided on CI's Linux
+     font metrics. 76 puts a real ~27px between them on both. */
+  .clockw{position:absolute;right:320px;top:76px;z-index:6;padding:7px 11px 8px;cursor:pointer;
     display:flex;flex-direction:column;align-items:flex-start;gap:1px;
     border-radius:9px;border:1px solid var(--line);
     background:rgb(9 20 22 /.72);backdrop-filter:blur(10px);

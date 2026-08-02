@@ -82,15 +82,22 @@ test.describe('live reading freshness', () => {
     const m = await page.evaluate(() => {
       const box = (s: string) => document.querySelector(s)?.getBoundingClientRect() ?? null;
       const c = box('.clockw'), rail = box('.rail-r'), banner = box('.synthetic');
-      const overlaps = (a: DOMRect | null, b: DOMRect | null) =>
-        !!a && !!b && !(a.right < b.left || a.left > b.right || a.bottom < b.top || a.top > b.bottom);
-      return { gapToRail: c && rail ? rail.left - c.right : null, hitsBanner: overlaps(c, banner) };
+      return {
+        gapToRail: c && rail ? rail.left - c.right : null,
+        // The banner is centred and grows with its own text, so at narrower
+        // widths it reaches UNDER this readout horizontally. Only the vertical
+        // gap separates them, which makes that gap the thing to assert.
+        gapBelowBanner: c && banner ? c.top - banner.bottom : null,
+      };
     });
-    // The readout is parked left of the rail so it reads as qualifying the live
-    // block. It must not touch the rail, nor the honesty banner above it.
     expect(m.gapToRail).not.toBeNull();
     expect(m.gapToRail!).toBeGreaterThan(8);
-    expect(m.hitsBanner).toBe(false);
+    // A MARGIN, NOT MERE NON-OVERLAP. This first shipped with 3px of clearance,
+    // which passed on macOS and collided on CI's Linux font metrics — the
+    // banner renders a hair taller there. Anything under ~10px is luck, and a
+    // test that only forbids overlap would have let it through again.
+    expect(m.gapBelowBanner).not.toBeNull();
+    expect(m.gapBelowBanner!).toBeGreaterThan(10);
   });
 
   test('digits and freshness bar move together', async ({ page }) => {
