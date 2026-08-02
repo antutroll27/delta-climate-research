@@ -32,14 +32,22 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
     <!-- North reference. The idle orbit turns the map continuously, so without
          this there is no way to know which way you are facing, and no way back. -->
     <button class="compass" id="compass" type="button" title="Face north" aria-label="Reset the map to face north">
-      <svg viewBox="0 0 40 40" aria-hidden="true">
-        <circle cx="20" cy="20" r="18.2" class="c-ring" />
-        <g id="compassNeedle">
-          <path d="M20 6 L24.4 21 L20 18.4 L15.6 21 Z" class="c-n" />
-          <path d="M20 34 L15.6 19 L20 21.6 L24.4 19 Z" class="c-s" />
+      <svg viewBox="0 0 48 48" aria-hidden="true">
+        <circle cx="24" cy="24" r="21.2" class="c-ring" />
+        <!-- Everything that should point at the world lives in this group, which
+             JS rotates to the inverse of the map bearing. The N and S letters
+             ride along but are counter-rotated by the same angle about their own
+             anchors, so they travel to the right compass point while staying
+             upright — a letter lying on its side is decoration, not a reading. -->
+        <g id="compassDial">
+          <path d="M24 9 L29 26 L24 22.6 L19 26 Z" class="c-n" />
+          <path d="M24 39 L19 22 L24 25.4 L29 22 Z" class="c-s" />
+          <circle cx="38.4" cy="24" r="1.15" class="c-tick" />
+          <circle cx="9.6" cy="24" r="1.15" class="c-tick" />
+          <text id="compassN" x="24" y="6.4" class="c-lab c-lab-n">N</text>
+          <text id="compassS" x="24" y="45.2" class="c-lab">S</text>
         </g>
       </svg>
-      <span class="c-lab" id="compassLab">N</span>
     </button>
 
     <!-- First-run affordance: the buildings became clickable and nothing said so. -->
@@ -224,19 +232,23 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
   /* Sits clear of the toolbox, not under it: .left is 270 px wide at a 26 px
      offset, so its right edge is 296 px and anything below 312 px would be
      overlapped. The two follow the panel down at each breakpoint. */
-  .compass{position:absolute;left:312px;bottom:26px;z-index:6;width:46px;height:46px;padding:0;cursor:pointer;
-    background:rgb(9 20 22 /.8);border:1px solid var(--line);border-radius:50%;backdrop-filter:blur(12px);
+  .compass{position:absolute;left:312px;bottom:26px;z-index:6;width:62px;height:62px;padding:0;cursor:pointer;
+    background:rgb(9 20 22 /.82);border:1px solid var(--line);border-radius:50%;backdrop-filter:blur(12px);
     display:grid;place-items:center;transition:border-color .2s,transform .2s}
-  .compass:hover{border-color:var(--cyan);transform:scale(1.05)}
+  .compass:hover{border-color:var(--cyan);transform:scale(1.06)}
   .compass:focus-visible{outline:2px solid var(--cyan);outline-offset:3px}
-  .compass svg{width:40px;height:40px;position:absolute}
+  .compass svg{width:56px;height:56px;display:block}
   .compass .c-ring{fill:none;stroke:var(--line);stroke-width:1}
   .compass .c-n{fill:var(--red)}
-  .compass .c-s{fill:rgb(236 237 240 /.35)}
-  .compass #compassNeedle{transform-origin:20px 20px;transition:transform .12s linear}
-  .compass .c-lab{position:relative;font-family:var(--mono);font-size:.44rem;letter-spacing:.1em;
-    color:var(--ink);transform:translateY(13px)}
+  .compass .c-s{fill:rgb(236 237 240 /.34)}
+  .compass .c-tick{fill:rgb(236 237 240 /.28)}
+  .compass .c-lab{font-family:var(--sans);font-weight:700;font-size:8.4px;text-anchor:middle;
+    fill:rgb(236 237 240 /.62)}
+  .compass .c-lab-n{fill:var(--red)}
   body.studio .compass{background:rgb(245 244 241 /.86);border-color:rgb(20 40 42 /.2)}
+  body.studio .compass .c-s{fill:rgb(20 40 42 /.34)}
+  body.studio .compass .c-tick{fill:rgb(20 40 42 /.28)}
+  body.studio .compass .c-lab{fill:rgb(20 40 42 /.66)}
 
   /* ── first-run hint ── */
   .tiphint{position:absolute;left:50%;bottom:88px;transform:translateX(-50%);z-index:7;display:flex;align-items:center;gap:.6rem;
@@ -305,9 +317,19 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
      invalid selector — taking the entire rule with it. That is exactly how the
      bar ended up unstyled and sitting on top of the toolbox. The attribution
      rules below have always used plain selectors for the same reason. */
-  .maplibregl-ctrl-scale{background:rgb(9 20 22 /.72)!important;border:1px solid var(--line)!important;
-    border-top:0!important;color:var(--ink)!important;font-family:var(--mono)!important;font-size:.46rem!important;
-    letter-spacing:.1em!important;padding:1px 5px 2px!important;border-radius:0 0 5px 5px!important;backdrop-filter:blur(10px)}
+  /* Made to read as a RULER, not a chip. The ⊔ bracket — rule along the bottom,
+     ticks turning up at each end — is the cartographic idiom, and it was being
+     smothered: a filled background with a full rounded border turned it into a
+     label box, and 7.4px type put the number below any useful reading size.
+     Now: no fill, brighter 1.5px bracket, the number sitting above the rule at
+     a legible size with a shadow so it survives a bright basemap. */
+  .maplibregl-ctrl-scale{background:none!important;border:1.5px solid rgb(111 202 214 /.72)!important;
+    border-top:0!important;border-radius:0!important;color:var(--paper)!important;
+    font-family:var(--sans)!important;font-weight:600!important;font-size:.58rem!important;
+    letter-spacing:.01em!important;padding:0 0 2px!important;text-align:center!important;
+    text-shadow:0 1px 3px rgb(0 0 0 /.85)}
+  body.studio .maplibregl-ctrl-scale{color:#16292b!important;border-color:rgb(13 107 125 /.7)!important;
+    text-shadow:0 1px 3px rgb(255 255 255 /.85)}
   .maplibregl-ctrl-bottom-left{margin:0 0 30px 372px}
 
   /* ── click-to-inspect ─────────────────────────────────────────────────────

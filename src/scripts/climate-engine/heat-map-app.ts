@@ -81,9 +81,19 @@ export function mountHeatMap(): () => void {
      click is the way out of a rotation nobody asked for — so it does NOT
      schedule the orbit to resume. The next drag re-arms it through nudgeOrbit,
      which is the point at which the reader has asked for motion again. */
-  const compassEl = el('compass'), needleEl = el('compassNeedle');
+  const compassEl = el('compass');
+  const dialEl = el('compassDial'), nLabEl = el('compassN'), sLabEl = el('compassS');
   function syncCompass() {
-    if (needleEl) needleEl.style.transform = `rotate(${-map.getBearing()}deg)`;
+    if (!dialEl) return;
+    const b = map.getBearing();
+    /* SVG transform attributes, not CSS: rotate() here takes its own origin, so
+       the dial turns about the face centre and each letter turns back about its
+       own anchor. The anchors are in the group's PRE-rotation coordinates, which
+       is exactly where they sit before the dial moves them — so the letters end
+       up at the right compass point and upright, with no trigonometry. */
+    dialEl.setAttribute('transform', `rotate(${-b} 24 24)`);
+    nLabEl?.setAttribute('transform', `rotate(${b} 24 6.4)`);
+    sLabEl?.setAttribute('transform', `rotate(${b} 24 45.2)`);
   }
   const onCompass = () => {
     orbit = false; clearTimeout(orbitResume);
