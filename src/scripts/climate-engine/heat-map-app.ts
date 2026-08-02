@@ -195,24 +195,34 @@ export function mountHeatMap(): () => void {
         ? 'At the ward mean'
         : `<b class="${d > 0 ? 'hot' : 'cool'}">${d > 0 ? '+' : '−'}${Math.abs(d).toFixed(1)} K</b> vs ward mean`);
     }
-    /* Say what the rings are FOR, in a sentence, in plain words. A circle drawn
-       on a map is not self-explanatory — and the reader who commissioned it had
-       to ask, which is the only usability test that matters. Written from the
-       live distance so the sentence and the ring can never disagree. */
-    const mins = nearestCool ? Math.max(1, Math.round(nearestCool.distM / WALK_M_PER_MIN)) : 0;
-    setHTML('bcRings', nearestCool
-      ? `The rings show how far you could walk from this building in 5 and 10 minutes. `
-        + `The nearest greenery is <b>about ${mins} minute${mins === 1 ? '' : 's'} away</b>.`
-      : 'The rings show how far you could walk from this building in 5 and 10 minutes.');
-
-    /* Straight-line distance to the nearest measured cooling surface, in the
-       same minutes the rings are labelled in. Never called a refuge: the client
-       has no water mask and no notion of public access (see cooling-surfaces.ts),
-       so a gated lawn and a public park look identical from here. */
+    /* Say what the rings are FOR, in plain words — a circle on a map is not
+       self-explanatory — and state the answer as a BAND against the rings.
+       The band is the only claim this data supports: the ring radii are exact
+       geometry, while the metres swing up to 5.8x on where "vegetated" is drawn
+       (the sensitivity table is in cooling-surfaces.ts). So the sentence asserts
+       the band, and the metres appear once, rounded and marked approximate. */
+    const intro = 'The rings show how far you could walk from this building in 1 and 5 minutes.';
     if (nearestCool) {
-      parts.push(`Nearest cooling surface <b>${Math.round(nearestCool.distM)} m</b> · straight line, vegetation only`);
-    } else if (cooling) {
-      parts.push('No vegetated cooling surface of 0.77 ha or more in this ward');
+      const d = nearestCool.distM;
+      const say = (m: number) => {
+        if (m < 40) return 'right beside it';
+        if (m <= RINGS[0].r) return 'under a minute away';
+        const mins = Math.max(1, Math.round(m / WALK_M_PER_MIN));
+        return `about ${mins} minute${mins === 1 ? '' : 's'} away`;
+      };
+      setHTML('bcRings', `${intro} The nearest greenery is <b>${say(d)}</b>.`);
+      /* Rounded to 10 m: the grid cell is 7.3 m, so a finer figure would be
+         claiming precision the raster does not have. */
+      const rnd = (m: number) => Math.round(m / 10) * 10;
+      parts.push(`Nearest greenery ≈<b>${rnd(d)} m</b> · straight line from the building edge`);
+      /* The spread across greenery definitions, stated rather than buried. It is
+         usually larger than every other error in this card combined. */
+      if (coolRangeM && rnd(coolRangeM[1]) - rnd(coolRangeM[0]) >= 20) {
+        parts.push(`${rnd(coolRangeM[0])}–${rnd(coolRangeM[1])} m depending on how dense “green” must be`);
+      }
+    } else {
+      setHTML('bcRings', intro);
+      if (cooling) parts.push('No vegetated cooling surface of 0.77 ha or more in this ward');
     }
     parts.push('Block detail illustrative — within-ward pattern is not validated');
     setHTML('bcIns', parts.join('<br>'));
@@ -277,7 +287,12 @@ export function mountHeatMap(): () => void {
     selected = b;
     if (b) {
       selCtrU.value.set(b.cx, b.cz);
-      nearestCool = cooling ? nearestCooling(cooling, b.cx, b.cz, SIM_N, sizeU.value) : null;
+      /* b.ring so the walk is measured from the building's nearest corner, not
+         from a point inside it — nobody sets off from the middle of a block. */
+      nearestCool = cooling ? nearestCooling(cooling, b.cx, b.cz, SIM_N, sizeU.value, b.ring) : null;
+      const lo = coolingLo ? nearestCooling(coolingLo, b.cx, b.cz, SIM_N, sizeU.value, b.ring) : null;
+      const hi = coolingHi ? nearestCooling(coolingHi, b.cx, b.cz, SIM_N, sizeU.value, b.ring) : null;
+      coolRangeM = lo && hi ? [Math.min(lo.distM, hi.distM), Math.max(lo.distM, hi.distM)] : null;
       if (ringGroup) {
         ringGroup.visible = true;
         for (const m of ringGroup.children) m.position.set(b.cx, 0.75, b.cz);
@@ -288,7 +303,7 @@ export function mountHeatMap(): () => void {
       placeCard();
     } else {
       selCtrU.value.set(1e9, 1e9);
-      nearestCool = null;
+      nearestCool = null; coolRangeM = null;
       if (ringGroup) ringGroup.visible = false;
       coolU.value = 0;
       bcard?.setAttribute('hidden', ''); bsel?.setAttribute('hidden', '');
@@ -434,12 +449,36 @@ export function mountHeatMap(): () => void {
      with it. The resting map is unchanged, and each one answers a question the
      reader has actually just asked by clicking — how far is that, and where is
      the nearest relief. */
-  const WALK_M_PER_MIN = 80;                       // 4.8 km/h, the usual planning figure
-  const RINGS = [{ min: 5, r: 400, el: 'ring5' }, { min: 10, r: 800, el: 'ring10' }] as const;
+  /* 4.8 km/h, the usual planning figure for a healthy adult on the flat. The
+     ring radii are DERIVED from it rather than written as 400/800, so the
+     geometry and the minutes on the label can never drift apart — and so that
+     anyone revisiting the walk speed (heat slows people down; 60–70 m/min is
+     the realistic figure for an older adult at 40 °C) moves both together. */
+  const WALK_M_PER_MIN = 80;
+  /* 1 and 5 minutes, NOT 5 and 10.
+     Measured across all three wards, distance from a building to the nearest
+     greenery runs: median 29–76 m, p90 122–319 m, max 527 m. So a 10-minute
+     ring (800 m) could never contain information — 100% of buildings sat inside
+     it — and it always ran past the 700 m study boundary, which is why it
+     needed a caveat nobody should have had to read. A 5-minute ring swallowed
+     96–100% on its own.
+     The 1-minute ring sits at 80 m, right around the median, so roughly half
+     the buildings have greenery inside it and half do not. That is the ring
+     that actually tells you something about the building you clicked. */
+  const RINGS = [
+    { min: 1, r: 1 * WALK_M_PER_MIN, el: 'ring5' },
+    { min: 5, r: 5 * WALK_M_PER_MIN, el: 'ring10' },
+  ] as const;
+  /* Thresholds bracketing VEG_THRESHOLD, so the reported distance can carry the
+     uncertainty from the one constant that dominates it instead of hiding it. */
+  const VEG_BRACKET = [0.45, 0.55] as const;
   const coolU = { value: 0 };
   let ringGroup: THREE.Group | null = null;
   let cooling: CoolingSurfaces | null = null;
+  let coolingLo: CoolingSurfaces | null = null;   // veg >= 0.45, the generous reading
+  let coolingHi: CoolingSurfaces | null = null;   // veg >= 0.55, the strict one
   let nearestCool: { x: number; z: number; distM: number } | null = null;
+  let coolRangeM: [number, number] | null = null;
 
   function buildRings() {
     if (ringGroup || !threeScene) return;
@@ -598,6 +637,11 @@ export function mountHeatMap(): () => void {
        planting trees in the model must not invent a park that is not there. */
     const cellM2 = (d.sizeM / SIM_N) * (d.sizeM / SIM_N);
     cooling = findCoolingSurfaces(state.base.veg, SIM_N, cellM2);
+    /* Two more passes at the bracketing thresholds. Three flood fills over 37k
+       cells is a few milliseconds once per ward, and it buys the only honest
+       way to show a figure this parameter-sensitive: as a range. */
+    coolingLo = findCoolingSurfaces(state.base.veg, SIM_N, cellM2, VEG_BRACKET[0]);
+    coolingHi = findCoolingSurfaces(state.base.veg, SIM_N, cellM2, VEG_BRACKET[1]);
     for (let i = 0; i < SIM_N * SIM_N; i++) heatData[i * 4 + 2] = cooling.mask[i];
     heatTex.needsUpdate = true;
     state.live = liveCache[name] ?? null; paintLive();
