@@ -83,6 +83,25 @@ test('ward-scale validation is stratified, bounded and honestly split', (t) => {
   }
 });
 
+test('the shipping calibration reads one instrument unless told otherwise', async () => {
+  // accuracy.ts names fit-ward-scale.py in its own regeneration recipe, and
+  // ward-observations.json now holds two instruments. A loader that took every
+  // row would refit the published calibration across ECOSTRESS and Landsat —
+  // two instruments AND two times of day — at the same moment the
+  // intercomparison reports their offset is not measurable on this archive.
+  // "More evidence arrived" must never silently mean "the calibration moved".
+  const src = await readFile(join(ROOT, 'scripts/fit-ward-scale.py'), 'utf8');
+  assert.match(src, /DEFAULT_SENSORS[^\n]*=\s*\("ecostress",\)/,
+    'fit-ward-scale must default to a single instrument');
+  assert.match(src, /def load_rows\(sensors[^)]*=\s*DEFAULT_SENSORS\)/,
+    'load_rows must apply that default rather than reading every row');
+
+  // And the validation must be the thing that opts in, explicitly.
+  const meas = await readFile(join(ROOT, 'scripts/measure-accuracy.py'), 'utf8');
+  assert.match(meas, /load_rows\(sensors=None\)/,
+    'the cross-sensor validation should opt in to both instruments by name');
+});
+
 test('more overpasses bought a tighter interval than the 12-scene baseline', (t) => {
   const ws = ACCURACY.ward_scale;
   if (!ws) return t.skip('ward_scale block absent');

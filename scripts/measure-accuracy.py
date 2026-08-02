@@ -179,7 +179,7 @@ def _ward_scale_validation() -> dict[str, Any] | None:
     params = dict(fws.SHIP)
     params.update(fitted)
 
-    rows = fws.load_rows()
+    rows = fws.load_rows(sensors=None)      # validation spans BOTH instruments
     if len(rows) != len(raw):
         return None                       # loader and file disagree; say nothing
     err = np.array([fws.predict(params, r, False) - r.lst for r in rows])
