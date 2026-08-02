@@ -16,7 +16,8 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { GpuHeatSim } from './sim-gpu';
 import { DEFAULT_PARAMS, type SimLayers, type SimParams } from './types';
 import * as M from './heat-map-model';
-import { ACCURACY, SPATIAL, bandLabel, unmeasuredNote } from './accuracy';
+import { ACCURACY, SPATIAL, bandLabel, unmeasuredNote, isTransitionHour, TRANSITION_RMSE_K } from './accuracy';
+import { solarElevationFactor } from './sky';
 import * as U from './dc-urs';
 import { applyScenario } from './dc-urs-scenario';
 import type { DcUrsInputs } from './dc-urs-inputs';
@@ -42,6 +43,7 @@ export function mountHeatMap(): () => void {
   /* ── state ── */
   interface State {
     ward: string; phase: 'peak' | 'night'; path: string; iv: M.Interventions;
+    sunNow: number | null;
     base: SimLayers | null; baselineMean: number; live: M.Ambient | null;
     spatial: M.Spatial | null; greenG: number; lastMean: Record<string, number>;
     /* Observed DC-URS inputs per ward, loaded once. null while unloaded or if the
@@ -49,7 +51,7 @@ export function mountHeatMap(): () => void {
     dcurs: Record<string, DcUrsInputs> | null;
   }
   
-  const state: State = { ward: 'ballygunge', phase: 'peak', path: '2025', iv: { trees: 0, roof: 0, parks: 0, facades: 0 }, base: null, baselineMean: 0, live: null, spatial: null, greenG: 0, lastMean: {}, dcurs: null };
+  const state: State = { ward: 'ballygunge', phase: 'peak', path: '2025', iv: { trees: 0, roof: 0, parks: 0, facades: 0 }, sunNow: 0, base: null, baselineMean: 0, live: null, spatial: null, greenG: 0, lastMean: {}, dcurs: null };
   let mode: 'relief' | 'iso' = 'relief', env = 'dark';
 
   /* ── MapLibre basemap ── */
@@ -804,6 +806,11 @@ export function mountHeatMap(): () => void {
 
   function resetSim() {
     if (!sim || !state.base) return;
+    /* Re-read the sun before every reset, so the FIRST simulation of the session
+       is already at the right elevation. `sunNow` starts at 0 purely as a "live
+       mode is on" sentinel; without this the opening frame would run night
+       physics at noon and then visibly flip when the stats tick corrected it. */
+    refreshNowSun();
     const p = M.currentParams(state);
     state.baselineMean = M.eqMean(state.base, { ...p, Q: DEFAULT_PARAMS.Q });
     const layers = M.applyInterventions(state.base, state.iv, state.spatial);
@@ -955,12 +962,34 @@ export function mountHeatMap(): () => void {
    */
   function applyConfidence() {
     const a = ACCURACY[state.phase];
+    /* THE ERROR BAR MOVES WITH THE SUN, because the measurement does.
+       In "now" mode the reader can land on an hour no published figure covers:
+       sunrise to mid-morning scored 7.54 K out-of-sample against a 4.5 K daytime
+       band, since a steady-state solution cannot represent a surface that is
+       shedding stored heat while the sun is already loading it. Reporting ±4.5
+       there would be the one dishonest thing this page does. */
+    const live = state.sunNow != null;
+    const transition = live && isTransitionHour(wardSolarHour());
+    /* Phase label: the clock made its absence a contradiction — a reader saw
+       03:00 beside 39.4 °C and had no way to know that was the 13:00 scenario. */
+    setText('lstPhase', live ? 'modelled now' : state.phase === 'night' ? 'modelled at 22:00' : 'modelled at 13:00');
     const tag = el('conf');
     if (tag) {
-      tag.textContent = a.confidence === 'quantitative'
-        ? `calibrated · ±${a.bandK.toFixed(1)} °C (n=${a.n})`
-        : `indicative only · ±${a.bandK.toFixed(1)} °C (n=${a.n})`;
-      tag.className = `conf ${a.confidence}`;
+      tag.textContent = transition
+        ? `outside validation · ~±${TRANSITION_RMSE_K.toFixed(1)} °C at this hour`
+        : a.confidence === 'quantitative'
+          ? `calibrated · ±${a.bandK.toFixed(1)} °C (n=${a.n})`
+          : `indicative only · ±${a.bandK.toFixed(1)} °C (n=${a.n})`;
+      tag.className = `conf ${transition ? 'indicative' : a.confidence}`;
+      if (transition) {
+        (tag as HTMLElement).title =
+          'Sunrise to mid-morning is the one window neither published figure '
+          + `covers. Scored out-of-sample it reaches ${TRANSITION_RMSE_K.toFixed(2)} K — the surface is `
+          + 'still releasing stored heat while the sun is already loading it, and a '
+          + 'steady-state model cannot represent a system that far from equilibrium.'
+          + `\n\n${SPATIAL.note}`;
+        return;
+      }
       // Both figures on one tooltip. The phase note covers ward-LEVEL error; the
       // spatial note covers whether the pattern inside the ward means anything.
       // A reader who sees only the first will read the hot blocks as measured —
@@ -1081,6 +1110,15 @@ export function mountHeatMap(): () => void {
        the card sits there quoting a temperature that is no longer true — and
        its "vs ward mean" line silently becomes wrong as well. */
     if (selected) paintCard(selected);
+    /* Keep "now" actually now. The solar factor drifts continuously, so a view
+       left open through sunset must follow it rather than freeze at whatever the
+       sun was when the button was pressed. Cheap: trigonometry, once per stats
+       tick, and resetSim only when the day/night branch actually flips. */
+    if (state.sunNow != null) {
+      const wasNight = state.phase === 'night';
+      refreshNowSun();
+      if ((state.phase === 'night') !== wasNight) resetSim();
+    }
   }
 
   /* ── DOM helpers ── */
@@ -1110,7 +1148,35 @@ export function mountHeatMap(): () => void {
   };
   bindSlider('ivTrees', 'v1', 'trees', v => v); bindSlider('ivRoof', 'v2', 'roof', v => v + '%');
   bindSlider('ivFacades', 'v4', 'facades', v => v);
-  document.querySelectorAll('#segPhase button').forEach(b => onEl(b, 'click', () => { state.phase = (b as HTMLElement).dataset.p as 'peak' | 'night'; document.querySelectorAll('#segPhase button').forEach(x => x.classList.toggle('on', x === b)); updateCompareHref(); resetSim(); }));
+  /* ── diurnal phase, now with a live option ──
+     "Now" is not a third value of `state.phase` — every downstream consumer
+     (ACCURACY lookup, bandLabel, the DC-URS day/night split, the Compare
+     deep-link) is written against the binary, and widening it would mean four
+     edits to say one thing. Instead it sets `state.sunNow`, and the binary phase
+     is DERIVED from whether the sun is actually up. One flag, no fan-out. */
+  function wardSolarHour(): number {
+    /* Local SOLAR time, not clock time. The wards sit at ~88.37°E while IST is
+       drawn on 82.5°E, so solar noon in Kolkata falls ~23 minutes before 12:00
+       IST. Using the clock hour would put the modelled sun peak in the wrong
+       place by that much, every day. */
+    const lon = WARDS[state.ward]?.lon ?? 88.3659;
+    const utcH = (now() / 3_600_000) % 24;
+    return ((utcH + lon / 15) % 24 + 24) % 24;
+  }
+  function refreshNowSun() {
+    if (state.sunNow === undefined || state.sunNow === null) return;
+    const h = wardSolarHour();
+    const doy = Math.floor((now() - Date.UTC(new Date(now()).getUTCFullYear(), 0, 0)) / 86_400_000);
+    state.sunNow = solarElevationFactor(h, doy, WARDS[state.ward]?.lat ?? 22.55);
+    state.phase = state.sunNow > M.SUN_LIT ? 'peak' : 'night';
+  }
+  document.querySelectorAll('#segPhase button').forEach(b => onEl(b, 'click', () => {
+    const p = (b as HTMLElement).dataset.p;
+    if (p === 'now') { state.sunNow = 0; refreshNowSun(); }
+    else { state.sunNow = null; state.phase = p as 'peak' | 'night'; }
+    document.querySelectorAll('#segPhase button').forEach(x => x.classList.toggle('on', x === b));
+    updateCompareHref(); resetSim();
+  }));
   document.querySelectorAll('#segPath button').forEach(b => onEl(b, 'click', () => { state.path = (b as HTMLElement).dataset.p!; document.querySelectorAll('#segPath button').forEach(x => x.classList.toggle('on', x === b)); resetSim(); }));
   document.querySelectorAll('#modechip button').forEach(b => onEl(b, 'click', () => {
     mode = (b as HTMLElement).dataset.m === 'iso' ? 'iso' : 'relief';

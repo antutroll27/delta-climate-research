@@ -117,3 +117,39 @@ test.describe('live reading freshness', () => {
     expect(num(aged)).toBeLessThan(num(fresh));
   });
 });
+
+test.describe('the now phase', () => {
+  test.setTimeout(180_000);
+
+  test('Now labels itself, and reads sanely against the air temperature', async ({ page }) => {
+    await stubMet(page, 0);
+    await page.goto('/heat-map/');
+    await expect(page.locator('#clockw')).toBeVisible({ timeout: 60_000 });
+
+    // The page now OPENS live: the reading agrees with the clock beside it
+    // rather than being a 13:00 scenario the reader has to infer.
+    await expect(page.locator('#lstPhase')).toHaveText('modelled now');
+    await expect(page.locator('#segPhase button[data-p="now"]')).toHaveClass(/\bon\b/);
+
+    // The scenarios are still one click away, and still label themselves.
+    await page.locator('#segPhase button[data-p="peak"]').click();
+    await expect(page.locator('#lstPhase')).toHaveText('modelled at 13:00', { timeout: 60_000 });
+    await page.locator('#segPhase button[data-p="now"]').click();
+    await expect(page.locator('#lstPhase')).toHaveText('modelled now', { timeout: 60_000 });
+
+    // Whatever hour the suite runs at, "now" must sit within a physically
+    // sane distance of the observed air temperature — the failure this guards
+    // is the 13:00 scenario leaking into the live view.
+    const [air, lst] = await Promise.all([
+      page.locator('#liveT').textContent(),
+      page.locator('#lst').textContent(),
+    ]);
+    const a = Number(air), t = Number(/(-?\d+\.\d+)/.exec(lst ?? '')?.[1]);
+    expect(Number.isFinite(a) && Number.isFinite(t)).toBe(true);
+    expect(t).toBeGreaterThan(a - 6);
+    expect(t).toBeLessThan(a + 22);   // midday surfaces run hot; 3am ones do not
+
+    // The confidence chip must still be making a claim, of some kind.
+    await expect(page.locator('#conf')).not.toBeEmpty();
+  });
+});
