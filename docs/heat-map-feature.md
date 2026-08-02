@@ -320,11 +320,28 @@ The accuracy story moved from "measured" to "measured, with known uncertainty":
     "sensor difference" that is really the diurnal cycle: a steady-state model runs
     cool against 10:30 readings and warm against afternoon ones. That number is a
     trap and is not published.
-  - **Recalibration pending.** POWER's hourly product lags real time, so two
-    May-2026 overpasses gained forcing after `accuracy.ts` was written — the
-    ECOSTRESS daytime set is 35 rows against a published `n = 29`. Recorded in
-    `model-accuracy.json.ward_scale.pending_recalibration`; the unit guard fails if
-    that record goes missing or stale. Adopting the figures is its own reviewed PR.
+  - **Recalibration: MEASURED AND DECLINED (2026-08-03).** POWER's hourly product
+    lags real time, so two May-2026 overpasses gained forcing after `accuracy.ts`
+    was written — the ECOSTRESS daytime set is 35 rows against a published
+    `n = 29`. Before opening a PR for it, the refit was actually run:
+
+    | on | RMSE | bias | day bias | night bias | q_day |
+    |---|---|---|---|---|---|
+    | 79 rows (published) | 3.605 | +0.164 | +2.044 | −0.926 | 0.4134 |
+    | 85 rows (refit) | 3.602 | +0.275 | +2.121 | −1.018 | 0.3949 |
+
+    **0.003 K** on a figure published to ±4.5 K, and the bias moves the wrong way.
+    `ratio` and `c` stay pinned to their bounds and `meets_all_criteria` stays null,
+    so the refit does not move the fit out of the not-adopted state either. Six more
+    ward-scenes is 7 % more data of the same instrument, same wards, same forcing —
+    and it changes the answer by 0.08 %.
+
+    So the published numbers are right and only their stated `n` is stale. The
+    drift is recorded in `model-accuracy.json.ward_scale.pending_recalibration`, the
+    unit guard fails if that record goes missing or goes stale, and the `n`
+    correction rides along with whatever next touches `accuracy.ts` for a real
+    reason. **Do not spend a PR on this in isolation** — the measurement above is
+    what that PR would have produced.
   - Spec + measured acceptance:
     [`superpowers/specs/2026-08-02-landsat-thermal-validation-design.md`](superpowers/specs/2026-08-02-landsat-thermal-validation-design.md)
     §9. Plan: [`heat-map-landsat-validation-implementation.md`](heat-map-landsat-validation-implementation.md).
