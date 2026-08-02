@@ -64,8 +64,15 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
     <!-- The finding: nearest greenery, the number that changes with every
          click. Data-chip anatomy (big value, small label) in the cooling
          green so it belongs to the patches it stands on. -->
+    <!-- Two nodes on purpose: the OUTER one is written by the render loop every
+         repaint (translate3d onto the cooling patch), the INNER one owns the
+         pop-in. Animating one element with both would have the frame loop
+         stamping over the animation's transform sixty times a second. Same
+         split as .bcard / .bcard-in. -->
     <div class="cooltag" id="coolTag" hidden>
-      <b id="coolTagM">—</b><span>nearest greenery · straight line</span>
+      <div class="cooltag-in" id="coolTagIn">
+        <b id="coolTagM">—</b><span>nearest greenery · straight line</span>
+      </div>
     </div>
 
     <!-- Click-to-inspect. Positioned from the building's own ward-metre centroid
@@ -260,17 +267,24 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
      Big value over a small label, in the cooling green of the patches it
      stands on. Anchored at the nearest cooling cell; the value is written once
      per selection and only the transform moves per frame. */
+  /* Caribbean green, solid, no border. Ink is the stage's own near-black rather
+     than pure black: 9.7:1 on this fill, and the label at 72% still measures
+     5.9:1, so both clear AA without the value having to shout. The fill is a
+     flat brand colour in a panel language built on translucency — that is the
+     point, it is the one element on the map that is a finding rather than
+     chrome, and it is the same green as the patch it stands on. */
   .cooltag{position:absolute;z-index:6;pointer-events:none;will-change:transform;
-    margin:-16px 0 0 -86px;width:172px;text-align:center;line-height:1.2;
-    background:rgb(6 35 26 /.92);border:1px solid rgb(89 180 137 /.6);border-radius:9px;
-    padding:.34rem .3rem;backdrop-filter:blur(8px);box-shadow:0 6px 18px rgb(0 0 0 /.4)}
-  .cooltag b{display:block;font-family:var(--sans);font-weight:600;font-size:.8rem;
-    letter-spacing:-.01em;color:#8fe0bb}
-  .cooltag span{display:block;font-family:var(--mono);font-size:.44rem;letter-spacing:.09em;
-    text-transform:uppercase;color:rgb(143 224 187 /.66);margin-top:1px}
-  body.studio .cooltag{background:rgb(240 249 244 /.94);border-color:rgb(26 122 82 /.5)}
-  body.studio .cooltag b{color:#1a7a52}
-  body.studio .cooltag span{color:rgb(26 122 82 /.72)}
+    margin:-19px 0 0 -93px;width:186px;text-align:center;line-height:1.18}
+  .cooltag-in{background:#00cc99;border-radius:10px;padding:.42rem .3rem .46rem;
+    box-shadow:0 8px 22px rgb(0 32 24 /.42);will-change:transform,opacity}
+  /* No mono anywhere inside: this is a spoken result ("about a hundred and fifty
+     metres"), not a machine readout, and Mona Sans reads faster at a glance.
+     tabular-nums keeps the count-up from jittering as digits change width. */
+  .cooltag b{display:block;font-family:var(--sans);font-weight:650;font-size:.95rem;
+    letter-spacing:-.015em;color:#052018;font-variant-numeric:tabular-nums}
+  .cooltag span{display:block;font-family:var(--sans);font-weight:500;font-size:.5rem;
+    letter-spacing:.1em;text-transform:uppercase;color:rgb(5 32 24 /.72);margin-top:2px}
+  body.studio .cooltag-in{box-shadow:0 8px 22px rgb(0 32 24 /.24)}
 
   /* The sentence that says what the rings are FOR. Lives inside the building
      card, which is the only time the rings exist. */

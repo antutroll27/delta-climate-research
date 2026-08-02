@@ -329,6 +329,47 @@ export function mountHeatMap(): () => void {
     bcard.style.transform = `translate3d(${Math.round(dx)}px, ${Math.round(p.y)}px, 0) translateY(-50%)`;
   }
 
+  /* ── the tag's entrance ──
+     Two things at once, both cheap: the chip scales up with a small overshoot,
+     and the metres count from zero to the answer. It fires on every selection,
+     which is what makes the tag legible as THE thing that changed — a static
+     number in a corner is what let two fixed radii pass for a measurement.
+     The scale lives on the inner node so the render loop can keep owning the
+     outer transform. Count-up writes into a fixed-width, tabular-nums element,
+     so twenty-odd text changes cannot reflow anything around them. */
+  let coolPop: Animation | null = null;
+  let coolCount = 0;
+  function popCoolTag(metres: number) {
+    if (!el('coolTagM')) return;
+    cancelAnimationFrame(coolCount);
+    /* Reduced motion gets the answer, not a performance. */
+    if (reduceMotion) { setText('coolTagM', `≈${metres} m`); return; }
+    /* Park the value at zero now so the pending frame never shows the previous
+       building's distance under the new selection. */
+    setText('coolTagM', '≈0 m');
+
+    coolPop?.cancel();
+    const inner = el('coolTagIn'), value = el('coolTagM')!;
+    coolPop = inner?.animate?.([
+      { transform: 'scale(.72)', opacity: 0 },
+      { transform: 'scale(1.06)', opacity: 1, offset: 0.62 },
+      { transform: 'scale(1)', opacity: 1 },
+    ], { duration: 420, easing: 'cubic-bezier(.42,0,.58,1)', fill: 'both' }) ?? null;
+
+    /* Count up on the same curve, landing a beat before the scale settles so the
+       number is readable while the chip is still arriving. */
+    const t0 = performance.now(), dur = 380;
+    const step = (t: number) => {
+      const k = Math.min(1, (t - t0) / dur);
+      const eased = k < 0.5 ? 2 * k * k : 1 - ((-2 * k + 2) ** 2) / 2;
+      const shown = Math.round(metres * eased / 5) * 5;
+      value.textContent = `≈${k >= 1 ? metres : shown} m`;
+      if (k < 1) coolCount = requestAnimationFrame(step);
+    };
+    coolCount = requestAnimationFrame(step);
+  }
+  cleanup.push(() => { cancelAnimationFrame(coolCount); coolPop?.cancel(); });
+
   function select(b: BuildingMeta | null) {
     selected = b;
     if (b) {
@@ -339,10 +380,11 @@ export function mountHeatMap(): () => void {
       const lo = coolingLo ? nearestCooling(coolingLo, b.cx, b.cz, SIM_N, sizeU.value, b.ring) : null;
       const hi = coolingHi ? nearestCooling(coolingHi, b.cx, b.cz, SIM_N, sizeU.value, b.ring) : null;
       coolRangeM = lo && hi ? [Math.min(lo.distM, hi.distM), Math.max(lo.distM, hi.distM)] : null;
-      /* The tag's value is written HERE, once — placeCard only moves it. */
+      /* The tag's value is written HERE, once per selection — placeCard only
+         moves it. Rounded to 10 m because the grid cell is 7.3 m. */
       if (nearestCool) {
-        setText('coolTagM', `≈${Math.round(nearestCool.distM / 10) * 10 || 10} m`);
         el('coolTag')?.removeAttribute('hidden');
+        popCoolTag(Math.round(nearestCool.distM / 10) * 10 || 10);
       } else {
         el('coolTag')?.setAttribute('hidden', '');
       }
