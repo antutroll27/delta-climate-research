@@ -41,6 +41,24 @@ The likely reason: NDVI measures *greenness*, not *water availability*. Bengal's
 green through the dry season while soil moisture and evapotranspiration fall, and NDVI saturates
 above ~0.5 — where all these values sit. **The mechanism may still be right; NDVI cannot see it.**
 
+**Daytime statistical bias-correction does not survive honest cross-validation** (added
+2026-08-02, evidence in `scripts/experiment-validation-uncertainty.py`). A weather-regressed
+residual correction looked like a 1.5 K daytime win under leave-one-scene-out (4.67 → 3.12 K) and
+evaporated entirely under leave-one-overpass-out (4.67 → 4.67 K): each satellite pass covers all
+three wards, so scene- and ward-level splits leak the held-out row's weather through its siblings.
+Do not retry statistics on the daytime residual — it is not predictable from POWER forcing. The
+night-phase regression is the one that survives (2.81 → 2.14–2.31 K depending on term count) and
+has its own shipping decision pending (see the 2026-08-02 Landsat validation spec, §7.1).
+
+**Binding protocol from the same finding:** every future correction, refit or structure change is
+judged at **leave-one-overpass-out** level or not at all. Scene- and ward-level scores may be
+reported for comparison but never decide anything.
+
+**The published error bars are themselves uncertain** — bootstrap over overpasses puts the day
+figure's 95 % CI at 2.91–6.65 K (n = 12 overpasses) and night at 1.90–3.64 K (n = 20). Growing
+the daytime sample is therefore worth more than any model change; that campaign is specified in
+`docs/superpowers/specs/2026-08-02-landsat-thermal-validation-design.md`.
+
 ---
 
 ## 2 · Model class and claim limits (unchanged)

@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>3D Water — height-field ripple surface</title>
+<style>
+  *{box-sizing:border-box;margin:0}
+  html,body{height:100%;overflow:hidden;background:#05060a}
+  #gl{position:fixed;inset:0;display:block}
+  .hud{position:fixed;left:16px;bottom:14px;z-index:5;font:11px/1.5 ui-monospace,"SF Mono",monospace;color:#9fb4c4;letter-spacing:.04em;text-shadow:0 1px 2px #000}
+  .hud b{color:#7fd4e6}
+  .fps{position:fixed;right:16px;top:14px;z-index:5;font:11px ui-monospace,monospace;color:#5c7173}
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<div class="hud"><b>drag</b> orbit · <b>scroll</b> zoom · <b>click / move</b> on the water to make ripples</div>
+<div class="fps" id="fps">–</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.184.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.184.0/examples/jsm/"
+}}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+const canvas = document.getElementById('gl');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias:true });
+renderer.setPixelRatio(Math.min(1.75, devicePixelRatio||1));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.18;
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(45, innerWidth/innerHeight, 0.1, 200);
+camera.position.set(3.6, 3.0, 4.4);
+const controls = new OrbitControls(camera, canvas);
+controls.target.set(0, -0.2, 0); controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.minDistance = 2.4; controls.maxDistance = 16; controls.maxPolarAngle = Math.PI*0.495;
+
+/* ── sunset environment: a canvas gradient → equirect → PMREM (background + IBL) ── */
+function sunsetEnv() {
+  const c = document.createElement('canvas'); c.width = 512; c.height = 256;
+  const x = c.getContext('2d');
+  const g = x.createLinearGradient(0, 0, 0, 256);
+  g.addColorStop(0.0, '#0a1430'); g.addColorStop(0.42, '#243a63');
+  g.addColorStop(0.60, '#9a6a52'); g.addColorStop(0.70, '#e8a766');
+  g.addColorStop(0.74, '#ffd9a0'); g.addColorStop(0.80, '#3a3550'); g.addColorStop(1.0, '#0b0e1a');
+  x.fillStyle = g; x.fillRect(0, 0, 512, 256);
+  // sun disc
+  const sx = 512*0.5, sy = 256*0.73;
+  const sg = x.createRadialGradient(sx, sy, 0, sx, sy, 46);
+  sg.addColorStop(0, '#fff3da'); sg.addColorStop(0.5, 'rgba(255,221,160,.6)'); sg.addColorStop(1, 'rgba(255,200,120,0)');
+  x.fillStyle = sg; x.beginPath(); x.arc(sx, sy, 46, 0, 7); x.fill();
+  const tex = new THREE.CanvasTexture(c); tex.mapping = THREE.EquirectangularReflectionMapping; tex.colorSpace = THREE.SRGBColorSpace;
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const env = pmrem.fromEquirectangular(tex).texture;
+  scene.background = tex; scene.environment = env;
+}
+sunsetEnv();
+scene.fog = new THREE.FogExp2(0x0a1020, 0.02);
+
+const sun = new THREE.DirectionalLight(0xffe6c2, 2.2); sun.position.set(2, 4, -3); scene.add(sun);
+scene.add(new THREE.AmbientLight(0x33415f, 0.6));
+
+/* ── pool: tiled floor + low walls (gives refraction + caustics something to bend) ── */
+const SIZE = 6, DEPTH = 1.4;
+const floorTex = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 256; const x = c.getContext('2d');
+  x.fillStyle = '#2d7e8c'; x.fillRect(0,0,256,256);
+  for (let i=0;i<8;i++) for (let j=0;j<8;j++){ if((i+j)%2){ x.fillStyle='#3fa0b0'; x.fillRect(i*32,j*32,32,32);} }
+  x.strokeStyle='rgba(180,235,245,.22)'; x.lineWidth=2; for(let i=0;i<=8;i++){x.beginPath();x.moveTo(i*32,0);x.lineTo(i*32,256);x.moveTo(0,i*32);x.lineTo(256,i*32);x.stroke();}
+  const t=new THREE.CanvasTexture(c); t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(3,3); t.colorSpace=THREE.SRGBColorSpace; return t;
+})();
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(SIZE, SIZE), new THREE.MeshStandardMaterial({ map:floorTex, roughness:0.85, metalness:0 }));
+floor.rotation.x = -Math.PI/2; floor.position.y = -DEPTH; scene.add(floor);
+const wallMat = new THREE.MeshStandardMaterial({ color:0x0a1420, roughness:0.7, side:THREE.DoubleSide });
+for (const [px,pz,ry] of [[0,-SIZE/2,0],[0,SIZE/2,0],[-SIZE/2,0,Math.PI/2],[SIZE/2,0,Math.PI/2]]) {
+  const w = new THREE.Mesh(new THREE.PlaneGeometry(SIZE, DEPTH), wallMat);
+  w.position.set(px, -DEPTH/2, pz); w.rotation.y = ry; scene.add(w);
+}
+
+/* ── GPU height-field ripple sim (ping-pong) — the wave equation on a texture ── */
+const SIMRES = 256;
+const rtOpts = { type: THREE.HalfFloatType, format: THREE.RGBAFormat, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer:false };
+let rtA = new THREE.WebGLRenderTarget(SIMRES, SIMRES, rtOpts);
+let rtB = new THREE.WebGLRenderTarget(SIMRES, SIMRES, rtOpts);
+const simScene = new THREE.Scene();
+const simCam = new THREE.OrthographicCamera(-1,1,1,-1,0,1);
+const simUniforms = {
+  tPrev: { value: null }, uTexel: { value: 1/SIMRES },
+  uDrop: { value: new THREE.Vector2(-9,-9) }, uDropAmp: { value: 0 }, uDamp: { value: 0.994 },
+};
+const simMat = new THREE.ShaderMaterial({
+  uniforms: simUniforms,
+  vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=vec4(position.xy,0.,1.); }`,
+  fragmentShader: `
+    precision highp float; varying vec2 vUv; uniform sampler2D tPrev; uniform float uTexel,uDamp,uDropAmp; uniform vec2 uDrop;
+    void main(){
+      vec4 s = texture2D(tPrev, vUv);          // r = height, g = previous height
+      float h = s.r, hp = s.g;
+      float l = texture2D(tPrev, vUv+vec2(uTexel,0.)).r + texture2D(tPrev, vUv-vec2(uTexel,0.)).r
+              + texture2D(tPrev, vUv+vec2(0.,uTexel)).r + texture2D(tPrev, vUv-vec2(0.,uTexel)).r - 4.0*h;
+      float nh = (2.0*h - hp + l*0.32) * uDamp;       // wave eqn + damping
+      nh += uDropAmp * smoothstep(0.045, 0.0, distance(vUv, uDrop));  // inject a drop
+      gl_FragColor = vec4(nh, h, 0.0, 1.0);
+    }`,
+});
+simScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2,2), simMat));
+function stepSim(){
+  simUniforms.tPrev.value = rtA.texture;
+  renderer.setRenderTarget(rtB); renderer.render(simScene, simCam); renderer.setRenderTarget(null);
+  [rtA, rtB] = [rtB, rtA];
+  simUniforms.uDropAmp.value = 0;            // one-shot drop
+}
+
+/* ── the water surface: glass MeshPhysicalMaterial displaced + re-normalled by the height field ── */
+const waterGeo = new THREE.PlaneGeometry(SIZE, SIZE, 200, 200);
+waterGeo.rotateX(-Math.PI/2);
+const waterUniforms = { uHeight: { value: rtA.texture }, uTexel: { value: 1/SIMRES }, uDisp: { value: 0.085 } };
+const waterMat = new THREE.MeshPhysicalMaterial({
+  color: 0x57b9c9, roughness: 0.04, metalness: 0, transmission: 1.0, ior: 1.33,
+  thickness: 0.32, transparent: true, envMapIntensity: 1.5, attenuationColor: new THREE.Color(0x86dceb), attenuationDistance: 8.0,
+});
+waterMat.onBeforeCompile = (sh) => {
+  sh.uniforms.uHeight = waterUniforms.uHeight; sh.uniforms.uTexel = waterUniforms.uTexel; sh.uniforms.uDisp = waterUniforms.uDisp;
+  sh.vertexShader = `uniform sampler2D uHeight; uniform float uTexel, uDisp;\n` + sh.vertexShader;
+  sh.vertexShader = sh.vertexShader.replace('#include <begin_vertex>', `
+    #include <begin_vertex>
+    vec2 huv = uv;
+    float h  = texture2D(uHeight, huv).r;
+    float hx = texture2D(uHeight, huv+vec2(uTexel,0.)).r - texture2D(uHeight, huv-vec2(uTexel,0.)).r;
+    float hz = texture2D(uHeight, huv+vec2(0.,uTexel)).r - texture2D(uHeight, huv-vec2(0.,uTexel)).r;
+    transformed.y += h * uDisp;
+  `);
+  // rebuild the normal from the height gradient (the Mancini 4-tap trick)
+  sh.vertexShader = sh.vertexShader.replace('#include <beginnormal_vertex>', `
+    #include <beginnormal_vertex>
+    {
+      float hx2 = texture2D(uHeight, uv+vec2(uTexel,0.)).r - texture2D(uHeight, uv-vec2(uTexel,0.)).r;
+      float hz2 = texture2D(uHeight, uv+vec2(0.,uTexel)).r - texture2D(uHeight, uv-vec2(0.,uTexel)).r;
+      objectNormal = normalize(vec3(-hx2*uDisp*40.0, 1.0, -hz2*uDisp*40.0));
+    }
+  `);
+};
+const water = new THREE.Mesh(waterGeo, waterMat);
+water.position.y = 0; scene.add(water);
+
+/* ── pointer → raycast the water → inject ripples ── */
+const ray = new THREE.Raycaster(); const ndc = new THREE.Vector2();
+let lastDrop = 0;
+function dropAt(clientX, clientY, amp){
+  ndc.x = (clientX/innerWidth)*2-1; ndc.y = -(clientY/innerHeight)*2+1;
+  ray.setFromCamera(ndc, camera);
+  const hit = ray.intersectObject(water, false)[0];
+  if (!hit) return;
+  // local plane uv: map world xz (−SIZE/2..SIZE/2) → 0..1
+  simUniforms.uDrop.value.set((hit.point.x/SIZE)+0.5, (hit.point.z/SIZE)+0.5);
+  simUniforms.uDropAmp.value = amp;
+}
+addEventListener('pointermove', e => { const n=performance.now(); if(n-lastDrop>28){ dropAt(e.clientX,e.clientY,0.2); lastDrop=n; } }, {passive:true});
+addEventListener('pointerdown', e => dropAt(e.clientX, e.clientY, 1.0));
+// a few opening drops
+setTimeout(()=>{ for(let i=0;i<5;i++){ simUniforms.uDrop.value.set(Math.random(),Math.random()); simUniforms.uDropAmp.value=1.2; stepSim(); } }, 200);
+
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight); });
+
+let frames=0, fpsT=performance.now(), tick=0;
+renderer.setAnimationLoop(()=>{
+  tick++;
+  if (tick % 12 === 0) { simUniforms.uDrop.value.set(Math.random(), Math.random()); simUniforms.uDropAmp.value = 0.1; } // gentle ambient chop so the surface always catches the light
+  stepSim(); stepSim();                       // 2 sim substeps / frame
+  waterUniforms.uHeight.value = rtA.texture;
+  controls.update();
+  renderer.render(scene, camera);
+  frames++; const n=performance.now(); if(n-fpsT>500){ document.getElementById('fps').textContent=Math.round(frames*1000/(n-fpsT))+' fps'; frames=0; fpsT=n; }
+});
+</script>
+</body>
+</html>

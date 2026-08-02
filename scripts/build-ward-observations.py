@@ -35,6 +35,8 @@ Output: data/calibration/ward-observations.npz   (grids + a parallel index)
 from __future__ import annotations
 
 import argparse
+import csv
+import datetime as _dt
 import json
 import os
 import sys
@@ -58,6 +60,8 @@ SURFACE_DIR = os.path.join(ROOT, "public", "heat-map", "data")
 BUILT_CACHE = os.path.expanduser("~/.cache/delta-climate/built")
 OUT_NPZ = os.path.join(ROOT, "data", "calibration", "ward-observations.npz")
 OUT_JSON = os.path.join(ROOT, "data", "calibration", "ward-observations.json")
+LANDSAT_LST = os.path.join(ROOT, "data", "calibration", "landsat-ward-lst.json")
+MET_CSV = os.path.join(ROOT, "data", "calibration", "met-forcing.csv")
 
 VEG_RANGE = (0.0, 1.0)
 ALBEDO_RANGE = (0.0, 0.5)
@@ -127,6 +131,73 @@ def ward_lst(ward: _types.Ward, date: str, phase: str, tok: str
     return lst
 
 
+def landsat_rows(surf: dict[str, tuple[float, float, float]]) -> list[dict[str, Any]]:
+    """Landsat ward-scenes, in the ECOSTRESS row shape, joined to their forcing.
+
+    NO GRIDS. The .npz carries one 21x21 ECOSTRESS grid per row for the
+    spatial work; Landsat's 30 m window is a different shape entirely, and
+    stacking two shapes would need a ragged array or a resample that invents
+    detail. These rows serve the WARD-MEAN fit, which is what the accuracy
+    figures are scored on, so the mean is all that is required — and the
+    .npz index below is written from the ECOSTRESS rows only, deliberately.
+
+    A Landsat pass with no usable POWER hour is DROPPED and COUNTED, never
+    interpolated past tolerance: the same rule ECOSTRESS scenes live under.
+    """
+    if not os.path.exists(LANDSAT_LST):
+        print("  no landsat-ward-lst.json — skipping Landsat merge")
+        return []
+    with open(LANDSAT_LST) as fh:
+        lrows = json.load(fh)["rows"]
+
+    # Read the forcing CSV directly rather than through _physics.load(). That
+    # loader builds ECOSTRESS SUHII scenes and rightly refuses rows without an
+    # urban/rural mask pair, which every Landsat row lacks — going through it
+    # dropped all 50 silently. The weather columns are in the CSV regardless of
+    # which instrument the row belongs to.
+    forcing: dict[str, dict[str, float]] = {}
+    with open(MET_CSV, newline="") as fh:
+        for m in csv.DictReader(fh):
+            if m["suhii"]:
+                continue                     # an ECOSTRESS row, not a Landsat pass
+            forcing[m["date"]] = {
+                "tAir": float(m["tAir"]), "rh": float(m["rh"]),
+                "wind": float(m["wind"]), "cloud": float(m["cloud"]),
+                "hour": float(m["local_solar_hour"]),
+            }
+
+    out: list[dict[str, Any]] = []
+    missing = 0
+    for r in lrows:
+        f = forcing.get(r["date"])
+        if f is None:
+            missing += 1
+            continue
+        fvc, alb, built = surf[r["ward"]]
+        # Same solar-geometry term the ECOSTRESS scenes carry, from the same
+        # function, so the two sensors' `sun` means one thing.
+        doy = _dt.date.fromisoformat(r["date"]).timetuple().tm_yday
+        sun = _physics.solar_factor(f["hour"], doy)
+        out.append({
+            "date": r["date"], "phase": "day", "ward": r["ward"],
+            "lst_mean_c": r["lst_mean_c"], "lst_sd_c": r["lst_sd_c"],
+            "cells": r["cells"], "cell_frac": r["cell_frac"],
+            "fvc": round(fvc, 4), "albedo": round(alb, 4), "built": round(built, 4),
+            "tAir": f["tAir"], "rh": f["rh"], "wind": f["wind"], "cloud": f["cloud"],
+            "sun": round(sun, 4),
+            # The row's OWN overpass hour, not the forcing scene's. Landsat sits
+            # near 10:30 and this column is what the morning stratum is cut on.
+            "hour": r["hour_lst"],
+            "sensor": "landsat",
+            # The reference's own stated uncertainty, carried so P5 can report
+            # it beside the model error instead of implying a perfect ruler.
+            "st_qa_mean_k": r.get("st_qa_mean_k"),
+        })
+    if missing:
+        print(f"  {missing} Landsat ward-scenes dropped: no POWER forcing at their hour")
+    return out
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--limit", type=int, default=0)
@@ -164,6 +235,11 @@ def main() -> None:
                 # scene forcing, already coerced and solar-time matched by _physics
                 "tAir": sc.tAir, "rh": sc.rh, "wind": sc.wind, "cloud": sc.cloud,
                 "sun": round(sc.sun, 4), "hour": sc.hour,
+                # Which instrument saw this. ECOSTRESS drifts across all hours;
+                # Landsat is pinned near 10:30 local solar. Pooling them without
+                # a measured offset would put morning rows in the peak stratum,
+                # so the sensor must travel with the row, not be inferred later.
+                "sensor": "ecostress",
             })
             # NaN is the masking signal and must survive to the cache; a
             # nan_to_num here would erase the distinction between "cloudy"
@@ -174,6 +250,10 @@ def main() -> None:
 
     if not rows:
         sys.exit("no ward-scenes survived masking — nothing to calibrate against")
+
+    n_eco = len(rows)
+    rows.extend(landsat_rows(surf))
+    print(f"\n  {n_eco} ECOSTRESS + {len(rows) - n_eco} Landsat = {len(rows)} ward-scenes")
 
     stack = np.stack(grids)
     os.makedirs(os.path.dirname(OUT_NPZ), exist_ok=True)

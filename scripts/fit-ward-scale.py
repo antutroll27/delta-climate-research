@@ -101,12 +101,35 @@ class Cand(NamedTuple):
     night_release: bool
 
 
-def load_rows() -> list[Row]:
+#: Instruments this fit is willing to pool.
+#:
+#: ONE SENSOR BY DEFAULT, AND THAT DEFAULT IS LOad-BEARING. ward-observations.json
+#: carries ECOSTRESS and Landsat since the 2026-08-02 validation campaign, and
+#: accuracy.ts names THIS script in its regeneration recipe. A loader that reads
+#: every row would quietly refit the shipping calibration across two instruments
+#: — and across two times of day, since Landsat is pinned near 10:30 while
+#: ECOSTRESS drifts — at the same moment measure-accuracy.py reports that the
+#: offset between them is not measurable on this archive (only 2 ECOSTRESS
+#: overpasses fall in Landsat's window, against a minimum of 5).
+#:
+#: So "more evidence arrived" must never silently mean "the calibration moved".
+#: Multi-sensor work opts in explicitly: load_rows(sensors=None).
+DEFAULT_SENSORS: tuple[str, ...] = ("ecostress",)
+
+
+def load_rows(sensors: tuple[str, ...] | None = DEFAULT_SENSORS) -> list[Row]:
+    """Ward-scene rows for the fit. `sensors=None` disables the filter entirely.
+
+    Rows written before the campaign have no `sensor` key and are ECOSTRESS by
+    construction, so the default treats a missing key as such.
+    """
     if not os.path.exists(OBS):
         sys.exit(f"{os.path.relpath(OBS, ROOT)} is missing — run "
                  f"`python3 scripts/build-ward-observations.py` first.")
     with open(OBS) as fh:
         raw = json.load(fh)["rows"]
+    if sensors is not None:
+        raw = [r for r in raw if r.get("sensor", "ecostress") in sensors]
     return [Row(ward=r["ward"], phase=r["phase"], lst=r["lst_mean_c"], fvc=r["fvc"],
                 albedo=r["albedo"], built=r["built"], tAir=r["tAir"], rh=r["rh"],
                 wind=r["wind"], cloud=r["cloud"], sun=r["sun"],

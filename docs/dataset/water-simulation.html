@@ -1,0 +1,1019 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WATER — FLIP/PIC Incompressible Fluid</title>
+<style>
+  html, body { margin:0; padding:0; height:100%; overflow:hidden; background:#06080f;
+    font-family: ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif; }
+  #c { position:fixed; inset:0; width:100%; height:100%; display:block; cursor:crosshair; }
+  .hud { position:fixed; z-index:10; color:#dfe7f5; pointer-events:none; user-select:none; }
+  .panel { background:rgba(8,12,24,.42); border:1px solid rgba(255,255,255,.08);
+    border-radius:12px; padding:10px 14px; backdrop-filter: blur(10px); box-shadow:0 4px 24px rgba(0,0,0,.35); }
+  #title { top:18px; left:20px; }
+  #title h1 { margin:0; font-size:15px; font-weight:600; letter-spacing:.35em;
+    background:linear-gradient(90deg,#9fd8ff,#e8f6ff,#ffd9a8); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  #title p { margin:4px 0 0; font-size:10.5px; letter-spacing:.08em; color:rgba(210,225,245,.55); }
+  #stats { top:18px; right:20px; text-align:right; font-variant-numeric:tabular-nums;
+    font-size:11px; letter-spacing:.08em; color:rgba(210,225,245,.75); }
+  #stats b { color:#bfe3ff; font-weight:600; }
+  #hints { bottom:16px; left:50%; transform:translateX(-50%); font-size:11px;
+    letter-spacing:.12em; color:rgba(215,228,245,.6); white-space:nowrap; }
+  #hints span { color:#cfe8ff; }
+  #err { top:50%; left:50%; transform:translate(-50%,-50%); color:#ffb0a8; font-size:14px; display:none; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="hud panel" id="title">
+  <h1>W A T E R</h1>
+  <p>FLIP / PIC · incompressible Euler equations · MAC-grid pressure projection</p>
+</div>
+<div class="hud panel" id="stats"><b id="fps">--</b> fps<br><b id="np">--</b> particles</div>
+<div class="hud panel" id="hints">MOVE <span>stir</span> &nbsp;·&nbsp; CLICK <span>pour water</span> &nbsp;·&nbsp; R <span>reset</span></div>
+<div class="hud panel" id="err"></div>
+
+<script>
+"use strict";
+/* ============================================================================
+   PHYSICS — a FLIP/PIC hybrid fluid solver (Brackbill & Ruppel 1986;
+   Zhu & Bridson 2005 — the method used for water in film VFX).
+
+   We solve the incompressible Euler equations (Navier–Stokes with the
+   viscosity term dropped — water's kinematic viscosity ~1e-6 m²/s is
+   negligible at this scale and time step):
+
+        ∂u/∂t + (u·∇)u = -∇p/ρ + g        (momentum)
+        ∇·u = 0                            (incompressibility / mass conservation)
+
+   via operator splitting (Chorin projection):
+     1. Advection      — Lagrangian particles carry velocity (exact, no
+                         numerical diffusion of the convective term).
+     2. Body forces    — gravity g = 9.81 m/s², applied to particles.
+     3. Pressure solve — particle velocities are transferred to a staggered
+                         MAC grid, then a pressure Poisson problem is solved
+                         (Gauss–Seidel with over-relaxation) so the resulting
+                         grid field satisfies ∇·u = 0 with solid-wall boundary
+                         conditions (u·n = wall velocity).
+     4. Update         — the pressure-induced velocity *change* is transferred
+                         back to particles (FLIP), blended with 10% direct
+                         interpolation (PIC) for stability.
+
+   Volume conservation drift is corrected with Müller's particle-density
+   push-out term, and particle overlap is resolved with a position solve —
+   together these reproduce the near-incompressibility of real water.
+   World units are SI: meters, seconds, the tank is 3 m tall.
+============================================================================ */
+
+const FLUID = 0, AIR = 1, SOLID = 2;
+const clamp = (x, a, b) => x < a ? a : (x > b ? b : x);
+
+class FlipFluid {
+  constructor(interiorW, interiorH, res, maxParticles) {
+    // grid: 'res' interior rows + 1-cell solid walls all round
+    this.h = interiorH / res;
+    this.fInvSpacing = 1 / this.h;
+    this.fNumY = res + 2;
+    this.fNumX = Math.round(interiorW / this.h) + 2;
+    this.fNumCells = this.fNumX * this.fNumY;
+    this.worldW = this.fNumX * this.h;
+    this.worldH = this.fNumY * this.h;
+
+    const nc = this.fNumCells;
+    this.u = new Float32Array(nc);      this.v = new Float32Array(nc);
+    this.du = new Float32Array(nc);     this.dv = new Float32Array(nc);
+    this.prevU = new Float32Array(nc);  this.prevV = new Float32Array(nc);
+    this.s = new Float32Array(nc);                 // 0 = solid, 1 = fluid-capable
+    this.cellType = new Int32Array(nc);
+    this.particleDensity = new Float32Array(nc);
+    this.particleRestDensity = 0;
+    this.obstacleCells = [];
+
+    // particles
+    this.maxParticles = maxParticles;
+    this.numParticles = 0;
+    this.particleRadius = 0.3 * this.h;
+    this.pos  = new Float32Array(maxParticles * 2);
+    this.vel  = new Float32Array(maxParticles * 2);
+    this.foam = new Float32Array(maxParticles);
+    this.turb = new Float32Array(maxParticles);
+
+    // spatial hash for the particle separation pass
+    this.pInvSpacing = 1 / (2.2 * this.particleRadius);
+    this.pNumX = Math.floor(this.worldW * this.pInvSpacing) + 1;
+    this.pNumY = Math.floor(this.worldH * this.pInvSpacing) + 1;
+    this.pNumCells = this.pNumX * this.pNumY;
+    this.numCellParticles  = new Int32Array(this.pNumCells);
+    this.firstCellParticle = new Int32Array(this.pNumCells + 1);
+    this.cellParticleIds   = new Int32Array(maxParticles);
+  }
+
+  // ---- scene setup -------------------------------------------------------
+  fillDamBreak() {
+    this.numParticles = 0;
+    this.particleRestDensity = 0;
+    this.foam.fill(0);
+    this.vel.fill(0);
+    const r = this.particleRadius, h = this.h;
+    const dx = 2 * r, dy = Math.sqrt(3) / 2 * dx;
+    const x0 = h + r, y0 = h + r;
+    const x1 = h + (this.worldW - 2 * h) * 0.62;
+    const y1 = h + (this.worldH - 2 * h) * 0.68;
+    let row = 0;
+    for (let y = y0; y < y1; y += dy, row++) {
+      for (let x = x0 + (row % 2 === 0 ? 0 : r); x < x1; x += dx) {
+        if (this.numParticles >= this.maxParticles) return;
+        const i = this.numParticles++;
+        this.pos[2*i] = x; this.pos[2*i+1] = y;
+        this.vel[2*i] = 0; this.vel[2*i+1] = 0;
+      }
+    }
+  }
+
+  spawnBlob(cx, cy, R) {
+    const r = this.particleRadius, h = this.h;
+    const dx = 2 * r, dy = Math.sqrt(3) / 2 * dx;
+    const capacity = Math.floor(0.85 * (this.worldW - 2*h) * (this.worldH - 2*h) / (dx * dy));
+    let row = 0;
+    for (let y = cy - R; y <= cy + R; y += dy, row++) {
+      for (let x = cx - R + (row % 2 === 0 ? 0 : r); x <= cx + R; x += dx) {
+        const ddx = x - cx, ddy = y - cy;
+        if (ddx*ddx + ddy*ddy > R*R) continue;
+        if (this.numParticles >= this.maxParticles || this.numParticles >= capacity) return;
+        const px = clamp(x, h + r, this.worldW - h - r);
+        const py = clamp(y, h + r, this.worldH - h - r);
+        const i = this.numParticles++;
+        this.pos[2*i] = px; this.pos[2*i+1] = py;
+        this.vel[2*i] = 0;  this.vel[2*i+1] = -2.0;
+        this.foam[i] = 0.6;
+      }
+    }
+  }
+
+  // ---- solver stages -----------------------------------------------------
+  integrateParticles(dt, gravity) {
+    const pos = this.pos, vel = this.vel, n = this.numParticles;
+    const g = dt * gravity;
+    const vmax = 9.0, vmax2 = vmax * vmax;   // CFL guard against tunneling
+    for (let i = 0; i < n; i++) {
+      vel[2*i+1] += g;
+      const vx = vel[2*i], vy = vel[2*i+1];
+      const s2 = vx*vx + vy*vy;
+      if (s2 > vmax2) {
+        const sc = vmax / Math.sqrt(s2);
+        vel[2*i] = vx * sc; vel[2*i+1] = vy * sc;
+      }
+      pos[2*i]   += vel[2*i]   * dt;
+      pos[2*i+1] += vel[2*i+1] * dt;
+    }
+  }
+
+  pushParticlesApart(numIters) {
+    const n = this.numParticles, pos = this.pos;
+    const pInv = this.pInvSpacing, pNumX = this.pNumX, pNumY = this.pNumY, pNumCells = this.pNumCells;
+    const counts = this.numCellParticles, firstId = this.firstCellParticle, ids = this.cellParticleIds;
+
+    // count-sort particles into a hash grid
+    counts.fill(0);
+    for (let i = 0; i < n; i++) {
+      const xi = clamp(Math.floor(pos[2*i]   * pInv), 0, pNumX - 1);
+      const yi = clamp(Math.floor(pos[2*i+1] * pInv), 0, pNumY - 1);
+      counts[xi * pNumY + yi]++;
+    }
+    let first = 0;
+    for (let i = 0; i < pNumCells; i++) { first += counts[i]; firstId[i] = first; }
+    firstId[pNumCells] = first;
+    for (let i = 0; i < n; i++) {
+      const xi = clamp(Math.floor(pos[2*i]   * pInv), 0, pNumX - 1);
+      const yi = clamp(Math.floor(pos[2*i+1] * pInv), 0, pNumY - 1);
+      ids[--firstId[xi * pNumY + yi]] = i;
+    }
+
+    const minDist = 2 * this.particleRadius, minDist2 = minDist * minDist;
+    for (let iter = 0; iter < numIters; iter++) {
+      for (let i = 0; i < n; i++) {
+        const px = pos[2*i], py = pos[2*i+1];
+        const pxi = clamp(Math.floor(px * pInv), 0, pNumX - 1);
+        const pyi = clamp(Math.floor(py * pInv), 0, pNumY - 1);
+        const x0 = pxi > 0 ? pxi - 1 : 0, x1 = pxi < pNumX - 1 ? pxi + 1 : pxi;
+        const y0 = pyi > 0 ? pyi - 1 : 0, y1 = pyi < pNumY - 1 ? pyi + 1 : pyi;
+        for (let xi = x0; xi <= x1; xi++) {
+          const base = xi * pNumY;
+          for (let yi = y0; yi <= y1; yi++) {
+            const cell = base + yi;
+            const a = firstId[cell], b = firstId[cell + 1];
+            for (let k = a; k < b; k++) {
+              const id = ids[k];
+              if (id <= i) continue;       // each pair resolved once, symmetrically
+              let dx = pos[2*id] - px, dy = pos[2*id+1] - py;
+              const d2 = dx*dx + dy*dy;
+              if (d2 > minDist2 || d2 === 0) continue;
+              const d = Math.sqrt(d2), sc = 0.5 * (minDist - d) / d;
+              dx *= sc; dy *= sc;
+              pos[2*i]   -= dx; pos[2*i+1]  -= dy;
+              pos[2*id]  += dx; pos[2*id+1] += dy;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  handleParticleCollisions(obs) {
+    const h = this.h, r = this.particleRadius;
+    const minX = h + r, maxX = this.worldW - h - r;
+    const minY = h + r, maxY = this.worldH - h - r;
+    const oR = obs.active ? obs.r + r : 0, oR2 = oR * oR;
+    for (let i = 0; i < this.numParticles; i++) {
+      let x = this.pos[2*i], y = this.pos[2*i+1];
+      if (obs.active) {
+        const dx = x - obs.x, dy = y - obs.y, d2 = dx*dx + dy*dy;
+        if (d2 < oR2) {
+          const d = Math.sqrt(d2) || 1e-9;
+          x = obs.x + dx / d * oR;
+          y = obs.y + dy / d * oR;
+          this.vel[2*i] = obs.vx; this.vel[2*i+1] = obs.vy;
+          this.foam[i] = Math.min(1, this.foam[i] + 0.04 * Math.hypot(obs.vx, obs.vy));
+        }
+      }
+      if (x < minX) { x = minX; this.vel[2*i] = 0; }
+      if (x > maxX) { x = maxX; this.vel[2*i] = 0; }
+      if (y < minY) { y = minY; this.vel[2*i+1] = 0; }
+      if (y > maxY) { y = maxY; this.vel[2*i+1] = 0; }
+      this.pos[2*i] = x; this.pos[2*i+1] = y;
+    }
+  }
+
+  updateSolids(obs) {
+    const n = this.fNumY;
+    this.s.fill(1);
+    for (let i = 0; i < this.fNumX; i++) { this.s[i*n] = 0; this.s[i*n + n - 1] = 0; }
+    for (let j = 0; j < this.fNumY; j++) { this.s[j] = 0; this.s[(this.fNumX-1)*n + j] = 0; }
+    this.obstacleCells.length = 0;
+    if (!obs.active) return;
+    const h = this.h, R = obs.r;
+    const i0 = Math.max(1, Math.floor((obs.x - R) * this.fInvSpacing));
+    const i1 = Math.min(this.fNumX - 2, Math.floor((obs.x + R) * this.fInvSpacing));
+    const j0 = Math.max(1, Math.floor((obs.y - R) * this.fInvSpacing));
+    const j1 = Math.min(this.fNumY - 2, Math.floor((obs.y + R) * this.fInvSpacing));
+    for (let i = i0; i <= i1; i++) {
+      for (let j = j0; j <= j1; j++) {
+        const dx = (i + 0.5) * h - obs.x, dy = (j + 0.5) * h - obs.y;
+        if (dx*dx + dy*dy < R*R) { this.s[i*n + j] = 0; this.obstacleCells.push(i*n + j); }
+      }
+    }
+  }
+
+  stampObstacleVelocity(vx, vy) {
+    // moving-solid boundary condition: u·n = obstacle velocity on its faces
+    const n = this.fNumY;
+    for (const c of this.obstacleCells) {
+      this.u[c] = vx; this.u[c + n] = vx;
+      this.v[c] = vy; this.v[c + 1] = vy;
+    }
+  }
+
+  transferVelocities(toGrid, flipRatio) {
+    const n = this.fNumY, h = this.h, h1 = this.fInvSpacing, h2 = 0.5 * h;
+    const nx = this.fNumX, ny = this.fNumY, np = this.numParticles;
+    const pos = this.pos, vel = this.vel, cellType = this.cellType, turb = this.turb;
+    const maxX = (nx - 1) * h, maxY = (ny - 1) * h;
+
+    if (toGrid) {
+      this.u.fill(0); this.v.fill(0); this.du.fill(0); this.dv.fill(0);
+      const s = this.s;
+      for (let i = 0; i < this.fNumCells; i++)
+        cellType[i] = s[i] === 0 ? SOLID : AIR;
+      for (let i = 0; i < np; i++) {
+        const xi = clamp(Math.floor(pos[2*i]   * h1), 0, nx - 1);
+        const yi = clamp(Math.floor(pos[2*i+1] * h1), 0, ny - 1);
+        const c = xi * n + yi;
+        if (cellType[c] === AIR) cellType[c] = FLUID;
+      }
+    } else {
+      turb.fill(0);
+    }
+
+    for (let comp = 0; comp < 2; comp++) {
+      // staggered MAC grid: u lives on vertical faces, v on horizontal faces
+      const dx = comp === 0 ? 0 : h2;
+      const dy = comp === 0 ? h2 : 0;
+      const f = comp === 0 ? this.u : this.v;
+      const prevF = comp === 0 ? this.prevU : this.prevV;
+      const dArr = comp === 0 ? this.du : this.dv;
+      const offset = comp === 0 ? n : 1;
+
+      for (let i = 0; i < np; i++) {
+        const x = clamp(pos[2*i],   h, maxX);
+        const y = clamp(pos[2*i+1], h, maxY);
+        const x0 = Math.min(Math.floor((x - dx) * h1), nx - 2);
+        const tx = ((x - dx) - x0 * h) * h1;
+        const x1 = Math.min(x0 + 1, nx - 2);
+        const y0 = Math.min(Math.floor((y - dy) * h1), ny - 2);
+        const ty = ((y - dy) - y0 * h) * h1;
+        const y1 = Math.min(y0 + 1, ny - 2);
+        const sx = 1 - tx, sy = 1 - ty;
+        const d0 = sx*sy, d1 = tx*sy, d2 = tx*ty, d3 = sx*ty;
+        const nr0 = x0*n + y0, nr1 = x1*n + y0, nr2 = x1*n + y1, nr3 = x0*n + y1;
+
+        if (toGrid) {
+          const pv = vel[2*i + comp];
+          f[nr0] += pv*d0; dArr[nr0] += d0;
+          f[nr1] += pv*d1; dArr[nr1] += d1;
+          f[nr2] += pv*d2; dArr[nr2] += d2;
+          f[nr3] += pv*d3; dArr[nr3] += d3;
+        } else {
+          // only sample faces that touch at least one non-air cell
+          const v0 = (cellType[nr0] !== AIR || cellType[nr0 - offset] !== AIR) ? 1 : 0;
+          const v1 = (cellType[nr1] !== AIR || cellType[nr1 - offset] !== AIR) ? 1 : 0;
+          const v2 = (cellType[nr2] !== AIR || cellType[nr2 - offset] !== AIR) ? 1 : 0;
+          const v3 = (cellType[nr3] !== AIR || cellType[nr3 - offset] !== AIR) ? 1 : 0;
+          const dsum = v0*d0 + v1*d1 + v2*d2 + v3*d3;
+          if (dsum > 0) {
+            const picV = (v0*d0*f[nr0] + v1*d1*f[nr1] + v2*d2*f[nr2] + v3*d3*f[nr3]) / dsum;
+            const corr = (v0*d0*(f[nr0]-prevF[nr0]) + v1*d1*(f[nr1]-prevF[nr1])
+                        + v2*d2*(f[nr2]-prevF[nr2]) + v3*d3*(f[nr3]-prevF[nr3])) / dsum;
+            const flipV = vel[2*i + comp] + corr;
+            vel[2*i + comp] = (1 - flipRatio) * picV + flipRatio * flipV;
+            turb[i] += Math.abs(flipV - picV);   // velocity deviation → whitewater
+          }
+        }
+      }
+
+      if (toGrid) {
+        for (let i = 0; i < f.length; i++) if (dArr[i] > 0) f[i] /= dArr[i];
+      }
+    }
+
+    if (toGrid) {
+      // solid faces: enforce static-wall no-penetration (obstacle stamped after)
+      const u = this.u, v = this.v;
+      for (let i = 0; i < nx; i++) {
+        const base = i * n;
+        for (let j = 0; j < ny; j++) {
+          const c = base + j;
+          const solid = cellType[c] === SOLID;
+          if (solid || (i > 0 && cellType[c - n] === SOLID)) u[c] = 0;
+          if (solid || (j > 0 && cellType[c - 1] === SOLID)) v[c] = 0;
+        }
+      }
+    }
+  }
+
+  updateParticleDensity() {
+    const n = this.fNumY, h = this.h, h1 = this.fInvSpacing, h2 = 0.5 * h;
+    const nx = this.fNumX, ny = this.fNumY, np = this.numParticles, pos = this.pos;
+    const d = this.particleDensity;
+    d.fill(0);
+    for (let i = 0; i < np; i++) {
+      const x = clamp(pos[2*i],   h, (nx - 1) * h);
+      const y = clamp(pos[2*i+1], h, (ny - 1) * h);
+      const x0 = Math.floor((x - h2) * h1), tx = ((x - h2) - x0 * h) * h1;
+      const x1 = Math.min(x0 + 1, nx - 2);
+      const y0 = Math.floor((y - h2) * h1), ty = ((y - h2) - y0 * h) * h1;
+      const y1 = Math.min(y0 + 1, ny - 2);
+      const sx = 1 - tx, sy = 1 - ty;
+      d[x0*n + y0] += sx*sy; d[x1*n + y0] += tx*sy;
+      d[x1*n + y1] += tx*ty; d[x0*n + y1] += sx*ty;
+    }
+    if (this.particleRestDensity === 0) {
+      let sum = 0, cnt = 0;
+      for (let i = 0; i < this.fNumCells; i++)
+        if (this.cellType[i] === FLUID) { sum += d[i]; cnt++; }
+      if (cnt > 0) this.particleRestDensity = sum / cnt;
+    }
+  }
+
+  solveIncompressibility(numIters, overRelaxation, compensateDrift) {
+    // Pressure projection: drive ∇·u → 0 in every fluid cell.
+    this.prevU.set(this.u);
+    this.prevV.set(this.v);
+    const n = this.fNumY, nx = this.fNumX, ny = this.fNumY;
+    const u = this.u, v = this.v, s = this.s, cellType = this.cellType;
+    const pd = this.particleDensity, rest = this.particleRestDensity;
+    const drift = rest > 0 && compensateDrift;
+    for (let iter = 0; iter < numIters; iter++) {
+      for (let i = 1; i < nx - 1; i++) {
+        const base = i * n;
+        for (let j = 1; j < ny - 1; j++) {
+          const center = base + j;
+          if (cellType[center] !== FLUID) continue;
+          const left = center - n, right = center + n;
+          const bottom = center - 1, top = center + 1;
+          const sx0 = s[left], sx1 = s[right], sy0 = s[bottom], sy1 = s[top];
+          const sSum = sx0 + sx1 + sy0 + sy1;
+          if (sSum === 0) continue;
+          let div = u[right] - u[center] + v[top] - v[center];
+          if (drift) {
+            const compression = pd[center] - rest;
+            if (compression > 0) div -= compression;   // volume-drift correction
+          }
+          const p = -div / sSum * overRelaxation;
+          u[center] -= sx0 * p; u[right] += sx1 * p;
+          v[center] -= sy0 * p; v[top]   += sy1 * p;
+        }
+      }
+    }
+  }
+
+  updateFoam(dt) {
+    const decay = Math.exp(-3.0 * dt);
+    for (let i = 0; i < this.numParticles; i++) {
+      const t = Math.max(0, this.turb[i] - 0.75);
+      this.foam[i] = Math.min(1, this.foam[i] * decay + t * 0.22);
+    }
+  }
+
+  simulate(dt, gravity, flipRatio, pressureIters, particleIters, overRelaxation, obs) {
+    this.updateSolids(obs);
+    this.integrateParticles(dt, gravity);
+    this.pushParticlesApart(particleIters);
+    this.handleParticleCollisions(obs);
+    this.transferVelocities(true, 0);
+    if (obs.active) this.stampObstacleVelocity(obs.vx, obs.vy);
+    this.updateParticleDensity();
+    this.solveIncompressibility(pressureIters, overRelaxation, true);
+    this.transferVelocities(false, flipRatio);
+    this.updateFoam(dt);
+  }
+}
+
+/* ============================================================================
+   RENDERING — WebGL2.
+   Pass 1: particles are splatted as velocity-stretched soft kernels into a
+           half-resolution float field (density, velocity, foam).
+   Pass 2: a full-screen shader reconstructs the free surface from the density
+           field (metaball iso-surface), derives normals from its gradient and
+           shades real water optics: refraction of the sunset environment,
+           Beer–Lambert absorption, Fresnel reflection, sun glints, whitewater
+           foam, spray mist and faux caustics. ACES tone-mapped.
+============================================================================ */
+
+const SPLAT_VS = `#version 300 es
+layout(location=0) in vec2 aCorner;
+layout(location=1) in vec2 aPos;
+layout(location=2) in vec2 aVel;
+layout(location=3) in float aFoam;
+uniform vec2 uOff, uSpan;
+uniform float uSplatR;
+out vec2 vUv; out vec2 vVel; out float vFoam;
+void main(){
+  float sp = length(aVel);
+  vec2 dir = sp > 1e-3 ? aVel / sp : vec2(1.0, 0.0);
+  float sx = clamp(1.0 + sp * 0.05, 1.0, 1.7);   // streak droplets along motion
+  float sy = 1.0 / sx;
+  vec2 perp = vec2(-dir.y, dir.x);
+  vec2 world = aPos + (dir * aCorner.x * sx + perp * aCorner.y * sy) * uSplatR;
+  vec2 ndc = ((world - uOff) / uSpan) * 2.0 - 1.0;
+  gl_Position = vec4(ndc, 0.0, 1.0);
+  vUv = aCorner; vVel = aVel; vFoam = aFoam;
+}`;
+
+const SPLAT_FS = `#version 300 es
+precision highp float;
+in vec2 vUv; in vec2 vVel; in float vFoam;
+out vec4 frag;
+void main(){
+  float r2 = dot(vUv, vUv);
+  float w = max(0.0, 1.0 - r2);
+  w *= w;
+  frag = vec4(w, vVel * w, vFoam * w);
+}`;
+
+const QUAD_VS = `#version 300 es
+void main(){
+  vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));
+  gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
+}`;
+
+// the procedural sky is expensive (fbm mountains, stars, sun glow) — render it
+// once per frame into a small texture instead of evaluating it 3x per pixel
+const SKY_FS = `#version 300 es
+precision highp float;
+uniform vec2 uSkyRes;
+uniform float uTime;
+uniform float uAspect;
+out vec4 frag;
+
+float hash(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+float noise(vec2 p){
+  vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  float a = hash(i), b = hash(i + vec2(1, 0)), c = hash(i + vec2(0, 1)), d = hash(i + vec2(1, 1));
+  return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+float fbm(vec2 p){
+  float v = 0.0, a = 0.5;
+  for (int i = 0; i < 4; i++) { v += a * noise(p); p *= 2.03; a *= 0.5; }
+  return v;
+}
+
+vec3 sky(vec2 uv){
+  vec3 top = vec3(0.045, 0.065, 0.17);
+  vec3 mid = vec3(0.36, 0.17, 0.30);
+  vec3 hor = vec3(0.98, 0.46, 0.17);
+  vec3 c = mix(hor, mid, smoothstep(0.04, 0.45, uv.y));
+  c = mix(c, top, smoothstep(0.35, 0.95, uv.y));
+  // sun
+  vec2 sp = vec2(0.70, 0.56);
+  vec2 d = (uv - sp) * vec2(uAspect, 1.0);
+  float dist = length(d);
+  c += vec3(1.0, 0.76, 0.46) * exp(-dist * 22.0) * 2.3;
+  c += vec3(1.0, 0.50, 0.24) * exp(-dist * 4.5) * 0.55;
+  c += vec3(1.0, 0.60, 0.30) * exp(-abs(uv.y - sp.y) * 30.0) * exp(-dist * 2.0) * 0.25;
+  // stars
+  vec2 sg = floor(uv * vec2(200.0 * uAspect, 200.0));
+  float st = step(0.997, hash(sg)) * smoothstep(0.55, 0.9, uv.y);
+  st *= 0.5 + 0.5 * sin(uTime * 2.0 + hash(sg + 7.0) * 40.0);
+  c += vec3(0.8, 0.85, 1.0) * st * 0.45;
+  // mountain silhouettes
+  float m1 = 0.34 + 0.05*sin(uv.x*5.0 + 1.7) + 0.03*sin(uv.x*11.0 + 4.0) + 0.04*fbm(vec2(uv.x*6.0, 3.7));
+  float m2 = 0.27 + 0.04*sin(uv.x*7.0 + 0.5) + 0.02*sin(uv.x*17.0)       + 0.03*fbm(vec2(uv.x*9.0, 8.2));
+  c = mix(c, vec3(0.16, 0.10, 0.22), smoothstep(m1 + 0.006, m1 - 0.006, uv.y) * 0.92);
+  c = mix(c, vec3(0.09, 0.06, 0.15), smoothstep(m2 + 0.005, m2 - 0.005, uv.y) * 0.96);
+  // glowing dusk haze below the ridgeline (mostly seen through the water)
+  float below = smoothstep(0.26, 0.04, uv.y);
+  vec3 deep = mix(vec3(0.10, 0.09, 0.18), vec3(0.55, 0.22, 0.12),
+                  exp(-abs((uv.x - 0.70) * uAspect) * 1.6));
+  c = mix(c, deep, below * 0.9);
+  c += vec3(1.0, 0.55, 0.25) * exp(-abs((uv.x - 0.70) * uAspect) * 3.0) * below * 0.30;
+  return c;
+}
+
+void main(){
+  frag = vec4(sky(gl_FragCoord.xy / uSkyRes), 1.0);
+}`;
+
+const COMPOSITE_FS = `#version 300 es
+precision highp float;
+uniform sampler2D uField;
+uniform sampler2D uSky;
+uniform vec2 uRes;
+uniform vec2 uFieldPx;
+uniform float uTime;
+uniform float uAspect;
+uniform vec3 uObstacle;     // uv x, uv y, uv radius (y units)
+uniform float uObsActive;
+out vec4 frag;
+
+float hash(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+float noise(vec2 p){
+  vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  float a = hash(i), b = hash(i + vec2(1, 0)), c = hash(i + vec2(0, 1)), d = hash(i + vec2(1, 1));
+  return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+float fbm(vec2 p){
+  float v = 0.0, a = 0.5;
+  for (int i = 0; i < 3; i++) { v += a * noise(p); p *= 2.03; a *= 0.5; }
+  return v;
+}
+
+vec3 sky(vec2 uv){ return texture(uSky, clamp(uv, 0.0, 1.0)).rgb; }
+
+float dnorm(float d){ return d / (d + 2.0); }
+
+vec3 aces(vec3 x){
+  return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);
+}
+
+void main(){
+  vec2 uv = gl_FragCoord.xy / uRes;
+  vec4 fld = texture(uField, uv);
+  float d = fld.r;
+  vec2 vel = fld.gb / max(d, 1e-3);
+  float foamRaw = fld.a / max(d, 1e-3);
+  float dn = dnorm(d);
+
+  const float T = 0.5;
+  float edge = smoothstep(T - 0.05, T + 0.05, dn);
+
+  // surface normal from density gradient (+ interior shimmer)
+  vec2 e = uFieldPx * 1.5;
+  float dr = dnorm(texture(uField, uv + vec2(e.x, 0)).r);
+  float dl = dnorm(texture(uField, uv - vec2(e.x, 0)).r);
+  float dt = dnorm(texture(uField, uv + vec2(0, e.y)).r);
+  float db = dnorm(texture(uField, uv - vec2(0, e.y)).r);
+  vec2 grad = vec2(dr - dl, dt - db);
+  vec2 wob = (vec2(noise(uv * vec2(uAspect,1.0) * 14.0 + uTime * 0.35),
+                   noise(uv * vec2(uAspect,1.0) * 14.0 + 9.7 - uTime * 0.31)) - 0.5) * 0.07 * edge;
+  vec3 n = normalize(vec3(-grad * 11.0 + wob + vel * 0.015, 0.62));
+
+  float th = clamp(d * 0.14, 0.0, 1.6);   // optical thickness proxy
+
+  vec3 bg = sky(uv);
+
+  // refraction + Beer-Lambert absorption
+  vec2 ruv = uv + n.xy * 0.065 * (0.4 + th) + vel * 0.0022;
+  vec3 bgR = sky(ruv);
+  vec3 trans = exp(-vec3(0.55, 0.18, 0.08) * th * 2.0);
+  vec3 water = bgR * mix(vec3(1.0), trans, 0.85);
+  water += vec3(0.015, 0.11, 0.15) * (1.0 - exp(-th * 1.5));
+
+  // Fresnel reflection of the sky
+  float F = 0.02 + 0.98 * pow(1.0 - clamp(n.z, 0.0, 1.0), 5.0);
+  vec3 refl = sky(vec2(uv.x + n.x * 0.2, uv.y + abs(n.y) * 0.35 + 0.22));
+  water = mix(water, refl, F * 0.7);
+
+  // sun specular
+  vec3 L = normalize(vec3(0.45, 0.55, 0.62));
+  vec3 H = normalize(L + vec3(0.0, 0.0, 1.0));
+  float dNH = max(dot(n, H), 0.0);
+  water += vec3(1.0, 0.78, 0.5) * (pow(dNH, 180.0) * 3.2 + pow(dNH, 16.0) * 0.12);
+
+  // caustic shimmer in the deep
+  vec2 q = uv * vec2(uAspect, 1.0) * 9.0;
+  q += 0.4 * vec2(noise(q * 0.8 + uTime * 0.22), noise(q * 0.8 - uTime * 0.19));
+  float ca = pow(0.5 + 0.5 * sin(q.x * 3.4) * sin(q.y * 3.1 + uTime * 0.8), 5.0);
+  water += vec3(1.0, 0.85, 0.6) * ca * 0.12 * smoothstep(0.6, 1.3, th) * smoothstep(0.45, 0.05, uv.y);
+
+  // whitewater: advected per-particle foam + fast crests near the surface
+  float foam = smoothstep(0.18, 0.65, foamRaw);
+  float crest = smoothstep(T + 0.02, T + 0.15, dn) * (1.0 - smoothstep(T + 0.15, T + 0.4, dn));
+  crest *= smoothstep(1.3, 3.4, length(vel));
+  float foamAll = clamp(foam + crest * 0.7, 0.0, 1.0);
+  foamAll *= 0.55 + 0.45 * fbm(uv * vec2(uAspect, 1.0) * 42.0 - vel * 0.02 + uTime * 0.15);
+  vec3 foamCol = vec3(0.93, 0.96, 1.0) * (0.55 + 0.45 * max(dot(n, L), 0.0));
+  water = mix(water, foamCol, clamp(foamAll, 0.0, 0.95) * edge);
+
+  vec3 col = mix(bg, water, edge);
+
+  // spray / mist where density is below the surface threshold
+  float mist = smoothstep(0.06, 0.42, dn) * (1.0 - edge);
+  col += mist * vec3(0.8, 0.88, 1.0) * 0.22;
+  col += mist * vec3(1.0, 0.75, 0.5) * 0.10;
+
+  // stirring cursor: soft glass ring
+  if (uObsActive > 0.001) {
+    vec2 od = (uv - uObstacle.xy) * vec2(uAspect, 1.0);
+    float r = length(od) / max(uObstacle.z, 1e-4);
+    float rim = smoothstep(0.18, 0.0, abs(r - 1.0));
+    col += rim * vec3(0.55, 0.75, 1.0) * 0.35 * uObsActive;
+  }
+
+  // vignette, grain, tonemap
+  vec2 vc = (uv - 0.5) * vec2(uAspect * 0.78, 1.0);
+  col *= 1.0 - 0.38 * pow(length(vc) * 1.18, 2.4);
+  col += (hash(uv * 731.7 + fract(uTime) * 13.1) - 0.5) * 0.010;
+  col = aces(col * 1.28);   // colors are display-referred; ACES as soft shoulder only
+  frag = vec4(col, 1.0);
+}`;
+
+class Renderer {
+  constructor(canvas) {
+    this.canvas = canvas;
+    const gl = canvas.getContext("webgl2", { antialias: false, alpha: false });
+    if (!gl) throw new Error("WebGL2 is not supported by this browser/GPU.");
+    this.gl = gl;
+    this.halfFloat = !!gl.getExtension("EXT_color_buffer_float");
+
+    this.splatProg = this.makeProgram(SPLAT_VS, SPLAT_FS);
+    this.skyProg   = this.makeProgram(QUAD_VS, SKY_FS);
+    this.compProg  = this.makeProgram(QUAD_VS, COMPOSITE_FS);
+
+    // unit quad + per-instance particle attributes
+    this.vao = gl.createVertexArray();
+    gl.bindVertexArray(this.vao);
+    const corners = new Float32Array([-1,-1, 1,-1, -1,1, 1,1]);
+    const cb = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, cb);
+    gl.bufferData(gl.ARRAY_BUFFER, corners, gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+
+    this.posBuf = gl.createBuffer();
+    this.velBuf = gl.createBuffer();
+    this.foamBuf = gl.createBuffer();
+    gl.bindVertexArray(null);
+
+    this.fieldTex = null; this.fbo = gl.createFramebuffer();
+    this.fieldW = 0; this.fieldH = 0;
+    this.skyTex = null; this.skyFbo = gl.createFramebuffer();
+    this.skyW = 0; this.skyH = 0;
+
+    this.u = {
+      splat: {
+        off: gl.getUniformLocation(this.splatProg, "uOff"),
+        span: gl.getUniformLocation(this.splatProg, "uSpan"),
+        r: gl.getUniformLocation(this.splatProg, "uSplatR"),
+      },
+      sky: {
+        res: gl.getUniformLocation(this.skyProg, "uSkyRes"),
+        time: gl.getUniformLocation(this.skyProg, "uTime"),
+        aspect: gl.getUniformLocation(this.skyProg, "uAspect"),
+      },
+      comp: {
+        field: gl.getUniformLocation(this.compProg, "uField"),
+        sky: gl.getUniformLocation(this.compProg, "uSky"),
+        res: gl.getUniformLocation(this.compProg, "uRes"),
+        fieldPx: gl.getUniformLocation(this.compProg, "uFieldPx"),
+        time: gl.getUniformLocation(this.compProg, "uTime"),
+        aspect: gl.getUniformLocation(this.compProg, "uAspect"),
+        obstacle: gl.getUniformLocation(this.compProg, "uObstacle"),
+        obsActive: gl.getUniformLocation(this.compProg, "uObsActive"),
+      }
+    };
+  }
+
+  makeProgram(vsSrc, fsSrc) {
+    const gl = this.gl;
+    const compile = (type, src) => {
+      const sh = gl.createShader(type);
+      gl.shaderSource(sh, src);
+      gl.compileShader(sh);
+      if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS))
+        throw new Error("Shader compile error: " + gl.getShaderInfoLog(sh));
+      return sh;
+    };
+    const prog = gl.createProgram();
+    gl.attachShader(prog, compile(gl.VERTEX_SHADER, vsSrc));
+    gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, fsSrc));
+    gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS))
+      throw new Error("Program link error: " + gl.getProgramInfoLog(prog));
+    return prog;
+  }
+
+  allocBuffers(maxParticles) {
+    const gl = this.gl;
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.posBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, maxParticles * 8, gl.DYNAMIC_DRAW);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.velBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, maxParticles * 8, gl.DYNAMIC_DRAW);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.foamBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, maxParticles * 4, gl.DYNAMIC_DRAW);
+
+    gl.bindVertexArray(this.vao);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.posBuf);
+    gl.enableVertexAttribArray(1);
+    gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 0, 0);
+    gl.vertexAttribDivisor(1, 1);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.velBuf);
+    gl.enableVertexAttribArray(2);
+    gl.vertexAttribPointer(2, 2, gl.FLOAT, false, 0, 0);
+    gl.vertexAttribDivisor(2, 1);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.foamBuf);
+    gl.enableVertexAttribArray(3);
+    gl.vertexAttribPointer(3, 1, gl.FLOAT, false, 0, 0);
+    gl.vertexAttribDivisor(3, 1);
+    gl.bindVertexArray(null);
+  }
+
+  resizeSky(w, h) {
+    const gl = this.gl;
+    if (this.skyTex) gl.deleteTexture(this.skyTex);
+    this.skyW = w; this.skyH = h;
+    this.skyTex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, this.skyTex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.skyFbo);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.skyTex, 0);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  }
+
+  resizeField(w, h) {
+    const gl = this.gl;
+    if (this.fieldTex) gl.deleteTexture(this.fieldTex);
+    this.fieldW = w; this.fieldH = h;
+    this.fieldTex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, this.fieldTex);
+    if (this.halfFloat)
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, w, h, 0, gl.RGBA, gl.HALF_FLOAT, null);
+    else
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbo);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.fieldTex, 0);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  }
+
+  draw(fluid, time, obsUv) {
+    const gl = this.gl, N = fluid.numParticles;
+    // upload particle state
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.posBuf);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, fluid.pos.subarray(0, N * 2));
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.velBuf);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, fluid.vel.subarray(0, N * 2));
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.foamBuf);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, fluid.foam.subarray(0, N));
+
+    // pass 0: bake the procedural sky at low resolution
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.skyFbo);
+    gl.viewport(0, 0, this.skyW, this.skyH);
+    gl.useProgram(this.skyProg);
+    gl.uniform2f(this.u.sky.res, this.skyW, this.skyH);
+    gl.uniform1f(this.u.sky.time, time);
+    gl.uniform1f(this.u.sky.aspect, this.canvas.width / this.canvas.height);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+    // pass 1: splat density/velocity/foam field
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbo);
+    gl.viewport(0, 0, this.fieldW, this.fieldH);
+    gl.clearColor(0, 0, 0, 0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.ONE, gl.ONE);
+    gl.useProgram(this.splatProg);
+    const h = fluid.h;
+    gl.uniform2f(this.u.splat.off, h, h);
+    gl.uniform2f(this.u.splat.span, fluid.worldW - 2 * h, fluid.worldH - 2 * h);
+    gl.uniform1f(this.u.splat.r, 1.9 * h);
+    gl.bindVertexArray(this.vao);
+    gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, N);
+    gl.bindVertexArray(null);
+    gl.disable(gl.BLEND);
+
+    // pass 2: composite
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+    gl.useProgram(this.compProg);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, this.fieldTex);
+    gl.uniform1i(this.u.comp.field, 0);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, this.skyTex);
+    gl.uniform1i(this.u.comp.sky, 1);
+    gl.uniform2f(this.u.comp.res, this.canvas.width, this.canvas.height);
+    gl.uniform2f(this.u.comp.fieldPx, 1 / this.fieldW, 1 / this.fieldH);
+    gl.uniform1f(this.u.comp.time, time);
+    gl.uniform1f(this.u.comp.aspect, this.canvas.width / this.canvas.height);
+    gl.uniform3f(this.u.comp.obstacle, obsUv.x, obsUv.y, obsUv.r);
+    gl.uniform1f(this.u.comp.obsActive, obsUv.fade);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+}
+
+/* ============================================================================
+   MAIN
+============================================================================ */
+(function () {
+  const canvas = document.getElementById("c");
+  const errEl = document.getElementById("err");
+  let renderer;
+  try {
+    renderer = new Renderer(canvas);
+  } catch (e) {
+    errEl.style.display = "block";
+    errEl.textContent = e.message;
+    return;
+  }
+
+  const GRID_RES = 64;            // interior cells along the vertical
+  const WORLD_H = 3.0;            // tank interior height, meters
+  const GRAVITY = -9.81;          // m/s²
+  const FLIP_RATIO = 0.9;         // 90% FLIP / 10% PIC
+  const OVER_RELAX = 1.9;
+  const PARTICLE_ITERS = 2;
+
+  let fluid = null;
+  let substeps = 2, pressureIters = 30;
+  let simMsAvg = 5;
+
+  const obstacle = { active: false, x: 0, y: 0, vx: 0, vy: 0, r: 0.30, fade: 0 };
+  const pointer = { x: 0, y: 0, has: false, lastMove: -1e9 };
+
+  // dynamic resolution: scaled down automatically until we hold ~60 fps
+  let renderScale = 1.0;
+
+  function resizeRender() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 1.25);
+    canvas.width = Math.max(2, Math.floor(canvas.clientWidth * dpr * renderScale));
+    canvas.height = Math.max(2, Math.floor(canvas.clientHeight * dpr * renderScale));
+    renderer.resizeField(Math.ceil(canvas.width / 2), Math.ceil(canvas.height / 2));
+    renderer.resizeSky(Math.max(160, Math.ceil(canvas.width / 3)),
+                       Math.max(90,  Math.ceil(canvas.height / 3)));
+  }
+
+  function init() {
+    resizeRender();
+    const aspect = clamp(canvas.width / canvas.height, 0.5, 2.2);
+
+    const interiorW = WORLD_H * aspect;
+    // capacity: a completely full tank of hex-packed particles, plus margin
+    const hGuess = WORLD_H / GRID_RES, rGuess = 0.3 * hGuess;
+    const maxP = Math.ceil((interiorW * WORLD_H) / (2 * rGuess * Math.sqrt(3) * rGuess)) + 2000;
+
+    fluid = new FlipFluid(interiorW, WORLD_H, GRID_RES, maxP);
+    fluid.fillDamBreak();
+    renderer.allocBuffers(maxP);
+    document.getElementById("np").textContent = fluid.numParticles;
+  }
+
+  // world <-> screen mapping (interior of the tank fills the canvas)
+  function screenToWorld(cx, cy) {
+    const rect = canvas.getBoundingClientRect();
+    const h = fluid.h;
+    return {
+      x: h + ((cx - rect.left) / rect.width) * (fluid.worldW - 2 * h),
+      y: h + (1 - (cy - rect.top) / rect.height) * (fluid.worldH - 2 * h),
+    };
+  }
+
+  canvas.addEventListener("pointermove", (e) => {
+    const w = screenToWorld(e.clientX, e.clientY);
+    pointer.x = w.x; pointer.y = w.y; pointer.has = true;
+    pointer.lastMove = performance.now() / 1000;
+  });
+  canvas.addEventListener("pointerleave", () => { pointer.has = false; });
+  canvas.addEventListener("pointerdown", (e) => {
+    const w = screenToWorld(e.clientX, e.clientY);
+    fluid.spawnBlob(w.x, w.y, 0.28);
+    document.getElementById("np").textContent = fluid.numParticles;
+  });
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "r" || e.key === "R") {
+      fluid.fillDamBreak();
+      document.getElementById("np").textContent = fluid.numParticles;
+    }
+  });
+
+  let resizeTimer = null;
+  window.addEventListener("resize", () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(init, 250);
+  });
+
+  init();
+
+  // deterministic fast-forward for testing: ?ff=<seconds>
+  const ff = parseFloat(new URLSearchParams(location.search).get("ff") || "0");
+  if (ff > 0) {
+    for (let f = 0; f < Math.min(ff, 30) * 60; f++)
+      for (let s = 0; s < 2; s++)
+        fluid.simulate(1 / 120, GRAVITY, FLIP_RATIO, pressureIters, PARTICLE_ITERS, OVER_RELAX, obstacle);
+  }
+
+  // FPS metering
+  let frames = 0, lastFpsT = performance.now();
+  let prevObsX = null, prevObsY = null;
+  const t0 = performance.now();
+
+  function frame() {
+    const now = performance.now();
+    const time = (now - t0) / 1000;
+    const dt = 1 / 60;
+
+    // obstacle follows the pointer; active while it is moving
+    const moving = pointer.has && (now / 1000 - pointer.lastMove) < 0.35;
+    if (moving) {
+      if (prevObsX === null) { prevObsX = pointer.x; prevObsY = pointer.y; }
+      const ovx = clamp((pointer.x - prevObsX) / dt, -8, 8);
+      const ovy = clamp((pointer.y - prevObsY) / dt, -8, 8);
+      obstacle.active = true;
+      obstacle.x = pointer.x; obstacle.y = pointer.y;
+      obstacle.vx = ovx; obstacle.vy = ovy;
+      prevObsX = pointer.x; prevObsY = pointer.y;
+      obstacle.fade = Math.min(1, obstacle.fade + dt * 6);
+    } else {
+      obstacle.active = false;
+      prevObsX = prevObsY = null;
+      obstacle.fade = Math.max(0, obstacle.fade - dt * 4);
+    }
+
+    const simStart = performance.now();
+    const sdt = dt / substeps;
+    for (let s = 0; s < substeps; s++)
+      fluid.simulate(sdt, GRAVITY, FLIP_RATIO, pressureIters, PARTICLE_ITERS, OVER_RELAX, obstacle);
+    const simMs = performance.now() - simStart;
+    simMsAvg = simMsAvg * 0.95 + simMs * 0.05;
+    // adapt cost if the machine struggles
+    if (simMsAvg > 12 && substeps === 2) { substeps = 1; pressureIters = 45; }
+    else if (simMsAvg < 5 && substeps === 1) { substeps = 2; pressureIters = 30; }
+
+    const h = fluid.h;
+    renderer.draw(fluid, time, {
+      x: (obstacle.x - h) / (fluid.worldW - 2 * h),
+      y: (obstacle.y - h) / (fluid.worldH - 2 * h),
+      r: obstacle.r / (fluid.worldH - 2 * h),
+      fade: obstacle.fade,
+    });
+
+    frames++;
+    if (now - lastFpsT > 500) {
+      const fps = frames * 1000 / (now - lastFpsT);
+      document.getElementById("fps").textContent = Math.round(fps);
+      // auto quality: trade resolution for frame rate (skip the startup jank)
+      if (time > 2) {
+        if (fps < 45 && renderScale > 0.45) {
+          renderScale = Math.max(0.45, renderScale * 0.8);
+          resizeRender();
+        } else if (fps > 58 && renderScale < 1.0) {
+          renderScale = Math.min(1.0, renderScale * 1.12);
+          resizeRender();
+        }
+      }
+      frames = 0; lastFpsT = now;
+    }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
