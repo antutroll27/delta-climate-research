@@ -465,9 +465,11 @@ export function mountHeatMap(): () => void {
      The 1-minute ring sits at 80 m, right around the median, so roughly half
      the buildings have greenery inside it and half do not. That is the ring
      that actually tells you something about the building you clicked. */
+  /* ids are radius-agnostic on purpose — they were ring5/ring10 when the radii
+     were 400/800 m, and the names survived a rescale they no longer described. */
   const RINGS = [
-    { min: 1, r: 1 * WALK_M_PER_MIN, el: 'ring5' },
-    { min: 5, r: 5 * WALK_M_PER_MIN, el: 'ring10' },
+    { min: 1, r: 1 * WALK_M_PER_MIN, el: 'ringNear' },
+    { min: 5, r: 5 * WALK_M_PER_MIN, el: 'ringFar' },
   ] as const;
   /* Thresholds bracketing VEG_THRESHOLD, so the reported distance can carry the
      uncertainty from the one constant that dominates it instead of hiding it. */

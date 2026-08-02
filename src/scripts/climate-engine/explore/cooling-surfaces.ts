@@ -20,15 +20,16 @@
  *
  * READ THIS BEFORE QUOTING ANY DISTANCE THIS MODULE PRODUCES AS A FACT.
  * The result is far more sensitive to this constant than to any geometry.
- * Measured across all three wards, median distance from a building to the
- * nearest surviving patch:
+ * Measured across all three wards, median distance from a building EDGE to the
+ * nearest surviving patch (the shipped measurement — centroid numbers ran ~11 m
+ * higher):
  *
  *     threshold      Ballygunge   Baruipur   Barrackpore
- *     veg >= 0.45        42 m        12 m        60 m
- *     veg >= 0.50        86 m        32 m        66 m
- *     veg >= 0.55       242 m        66 m        92 m
+ *     veg >= 0.45        33 m         5 m        52 m
+ *     veg >= 0.50        73 m        25 m        58 m
+ *     veg >= 0.55       232 m        57 m        84 m
  *
- * A 0.05 nudge moves the answer by up to 5.8x. 0.50 is chosen because it lands
+ * A 0.05 nudge moves the answer by up to 10x. 0.50 is chosen because it lands
  * within +10% (Ballygunge) and +16% (Baruipur) of the independent offline TRA
  * pipeline's ward medians — Barrackpore diverges because that ward sits on the
  * Hooghly and the browser has no water mask — but "within 10% of another
