@@ -117,6 +117,17 @@ const NIGHT_ET_FRACTION = 0.10;
 const Q_NIGHT_RATIO = 0.5;
 
 /**
+ * Solar elevation factor above which "now" runs the daytime branch.
+ *
+ * cos(zenith) = 0.05 is the sun about 3° above the horizon — past civil
+ * twilight, low enough that the surface is still storage-dominated, high enough
+ * that a real shortwave term has begun. A CLOCK HOUR WOULD BE WRONG: Kolkata's
+ * sunrise swings roughly 40 minutes between solstices, so a fixed 06:00 cutoff
+ * models night in June and day in December at the same instant.
+ */
+export const SUN_LIT = 0.05;
+
+/**
  * Width of the dewpoint taper, K. Evaporation is driven by the vapour-pressure
  * deficit, which closes continuously as the surface cools toward the dewpoint —
  * so ET must ramp to zero, not switch off.
@@ -164,7 +175,21 @@ export interface Spatial {
   corridorSorted: Int32Array; corridorKm: number; parkCenters: [number, number][];
   roofM2: number; facadeM2: number; cellArea: number; cellM: number;
 }
-export interface ScenarioState { live: Ambient | null; phase: 'peak' | 'night'; path: string; iv: Interventions; }
+export interface ScenarioState {
+  live: Ambient | null; phase: 'peak' | 'night'; path: string; iv: Interventions;
+  /**
+   * Clear-sky solar elevation factor for RIGHT NOW at the ward, 0–1, or null
+   * for the two canonical phases.
+   *
+   * When present the scenario stops being "a representative midday" and becomes
+   * "this ward, this hour": the sun term is real astronomy rather than a fixed 1,
+   * and the day/night branch follows the actual sun rather than a button. It also
+   * removes an incoherence the canonical peak carries — `peak` applies FULL noon
+   * insolation to whatever air temperature was last observed, so at 03:00 it
+   * models midday sun on 3 a.m. air, a combination that exists at no real moment.
+   */
+  sunNow?: number | null;
+}
 
 export const fmtCr = (r: number) =>
   r >= 1e7 ? `${(r / 1e7).toFixed(2)} cr` : r >= 1e5 ? `${(r / 1e5).toFixed(1)} L` : `${Math.round(r).toLocaleString('en-IN')}`;
@@ -299,6 +324,22 @@ export function currentParams(s: ScenarioState): SimParams {
   const rh = L ? L.rh : 60, evap = 0.6 + 0.6 * (1 - rh / 100);
   const Q = DEFAULT_PARAMS.Q * (1 - FACADE_Q * (s.iv.facades / 15));
   const b: SimParams = { ...DEFAULT_PARAMS, D: SIM_D, Q, wind, L: DEFAULT_PARAMS.L * evap };
+
+  /* ── "now": real solar geometry, live air, branch chosen by the sun ──
+     Unlike the canonical phases this uses the observed air temperature AS
+     OBSERVED — no −2.5 K retained-night convention — because the reading and
+     the hour describe the same moment. The day/night split is SUN_LIT rather
+     than a clock hour so it tracks the season: Kolkata's sunrise moves about
+     40 minutes across the year and a fixed 06:00 cutoff would be wrong at both
+     solstices. */
+  if (s.sunNow != null) {
+    const lit = s.sunNow > SUN_LIT;
+    const tSky = skyTemperatureC(baseTair, rh, cloud);
+    if (lit) return { ...b, sun: s.sunNow * (1 - 0.6 * cloud), tAir: baseTair, tSky };
+    const dark: SimParams = { ...b, sun: 0, tAir: baseTair, Q: Q * Q_NIGHT_RATIO, tSky, store: STORE_NIGHT };
+    return { ...dark, L: nightLatent(dark, rh) };
+  }
+
   if (s.phase === 'peak') {
     return { ...b, sun: 1 * (1 - 0.6 * cloud), tAir: baseTair, tSky: skyTemperatureC(baseTair, rh, cloud) };
   }

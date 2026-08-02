@@ -169,6 +169,37 @@ export function bandLabel(phase: 'peak' | 'night'): string {
   return `± ${ACCURACY[phase].bandK.toFixed(1)}`;
 }
 
+/**
+ * The hours where neither published figure applies, in local solar time.
+ *
+ * The 2026-08-02 Landsat campaign scored the model in four time-of-day strata
+ * (`data/calibration/model-accuracy.json` → `ward_scale.strata`). Three came out
+ * close to their published bands. One did not:
+ *
+ *     morning_ecostress   hours 7.09–11.06   LOO-overpass 7.54 K   n=11
+ *     morning_landsat     hours 10.39–10.41  LOO-overpass 2.25 K   n=213
+ *     peak_ecostress      hours 11.76–17.45  LOO-overpass 2.40 K   n=24
+ *     night               hours 0.7–23.84    LOO-overpass 2.79 K   n=50
+ *
+ * Sunrise to mid-morning is where a STEADY-STATE model has least to work with:
+ * the surface is still shedding stored heat while the sun is already loading it,
+ * and an equilibrium solution cannot represent a system that is not near
+ * equilibrium. 7.54 K is two and a half times the daytime band.
+ *
+ * The upper bound stops at 9.5 rather than 11.06 because Landsat's 213 scenes
+ * pin 10:30 at 2.25 K — the stratum is only unreliable BEFORE that anchor, and
+ * shading the good hours would overstate the caveat.
+ *
+ * A live "now" view can enter this window, so it must be able to say so.
+ */
+export const TRANSITION_HOURS: readonly [number, number] = [5, 9.5];
+export const TRANSITION_RMSE_K = 7.54;
+
+/** True when a local solar hour falls in the sunrise window neither band covers. */
+export function isTransitionHour(solarHour: number): boolean {
+  return solarHour >= TRANSITION_HOURS[0] && solarHour < TRANSITION_HOURS[1];
+}
+
 /** ponytail: one runnable check */
 export function assertAccuracyLogic(): void {
   const a = (ok: boolean, m: string) => { if (!ok) throw new Error(`accuracy: ${m}`); };
