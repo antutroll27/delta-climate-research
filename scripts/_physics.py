@@ -257,10 +257,17 @@ def load(all_angles: bool) -> tuple[list[Scene], LandCoverClasses, int]:
     scenes: list[Scene] = []
     dropped = 0
     for r in rows:
-        if not all_angles and float(r["view_delta"]) > VIEW_CUT:
+        # met-forcing.csv now carries two kinds of row. This loader builds
+        # ECOSTRESS SUHII scenes — urban-minus-rural at a measured view angle —
+        # and a Landsat pass is not one of those: it has no urban/rural mask pair
+        # and no off-nadir angle to cut on (its whole swath is within 7.5 deg).
+        # Skipping them EXPLICITLY beats letting `float("")` raise, which is how
+        # this surfaced, and beats writing zeros into the file, which would have
+        # fed the SUHII fit scenes that never measured a SUHII.
+        if not r["view_delta"] or not r["rural_strict"]:
             dropped += 1
             continue
-        if not r["rural_strict"]:
+        if not all_angles and float(r["view_delta"]) > VIEW_CUT:
             dropped += 1
             continue
         d = datetime.date.fromisoformat(r["date"])

@@ -47,6 +47,7 @@ import _types  # noqa: E402  (path must be set first — the scripts are not a p
 
 ROOT = os.path.join(HERE, "..")
 SCENES = os.path.join(ROOT, "data", "calibration", "ecostress-suhii.csv")
+LANDSAT = os.path.join(ROOT, "data", "calibration", "landsat-ward-lst.json")
 OUT = os.path.join(ROOT, "data", "calibration", "met-forcing.csv")
 CACHE = os.path.expanduser("~/.cache/delta-climate/power-hourly.json")
 
@@ -177,10 +178,47 @@ def reading(param: dict[str, dict[str, float]], stamp: str) -> tuple[float, ...]
     return tuple(values)
 
 
+def landsat_scenes() -> list[SuhiiRow]:
+    """Landsat overpasses, shaped like SUHII rows so the join below is unchanged.
+
+    ONE ENTRY PER OVERPASS, not per ward-row. Three wards share a pass's forcing
+    — POWER is a single point for the whole study area — so emitting three rows
+    would triple the work and put three identical readings in the file.
+
+    The SUHII-only columns (view_delta, urban_mean, suhii …) have no meaning for
+    a Landsat pass and are written empty rather than zero: a zero SUHII is a
+    measurement, an empty one is an absence, and downstream readers already
+    treat these as strings.
+    """
+    if not os.path.exists(LANDSAT):
+        return []
+    with open(LANDSAT) as fh:
+        rows = json.load(fh)["rows"]
+    by_pass: dict[str, SuhiiRow] = {}
+    for r in rows:
+        # Key on the date, not the scene id: two WRS tiles can deliver the same
+        # overpass as two items, and they share one forcing hour.
+        by_pass.setdefault(r["date"], cast("SuhiiRow", {
+            "date": r["date"], "phase": "day", "status": "ok",
+            "local_solar_hour": f'{r["hour_lst"]:.2f}',
+            "view_delta": "", "usable_frac": "",
+            "urban_mean": "", "rural_strict": "", "suhii": "",
+        }))
+    return sorted(by_pass.values(), key=lambda r: r["date"])
+
+
 def main() -> None:
     with open(SCENES, newline="") as fh:
         rows_in = cast(list[SuhiiRow], list(csv.DictReader(fh)))
     scenes = [r for r in rows_in if r["status"] == "ok"]
+    n_ecostress = len(scenes)
+    # Landsat passes join through exactly the same LST-rounding path below. If
+    # the two sources ever disagree about what `local_solar_hour` means, this is
+    # where it would show up as forcing attached to the wrong hour, which is why
+    # both go through one loop rather than two.
+    scenes = scenes + landsat_scenes()
+    print(f"  scenes: {n_ecostress} ECOSTRESS + {len(scenes) - n_ecostress} Landsat "
+          f"overpasses = {len(scenes)}")
     if not scenes:
         sys.exit("no usable scenes in the calibration CSV")
 
