@@ -50,6 +50,24 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
       </svg>
     </button>
 
+    <!-- Live-reading freshness.
+         NOT A CLOCK FOR THE MAP. The simulation is steady-state at one of two
+         representative phases; it has no 14:32. This dial describes the DATA —
+         the hour met.no's reading is valid for, and how long ago that was — which
+         matters because that reading sets the sim's boundary conditions and was,
+         until now, fetched once per ward per session and never refreshed. A tab
+         left open overnight showed a pulsing green "live" dot over yesterday's
+         weather. Click to re-read. -->
+    <button class="clockw" id="clockw" type="button" hidden
+            aria-label="Live reading freshness. Activate to fetch current conditions.">
+      <span class="k-time" id="clockTime">--:--</span>
+      <span class="k-sub"><span class="k-age-lab" id="clockAgeLab">—</span></span>
+      <!-- Freshness survives the move to digits as a draining rule along the
+           bottom edge: the digits say WHEN, the bar says HOW STALE, and the bar
+           is the only thing that animates (one transform, no layout). -->
+      <span class="k-bar" aria-hidden="true"><i id="clockBar"></i></span>
+    </button>
+
     <!-- First-run affordance: the buildings became clickable and nothing said so. -->
     <div class="tiphint" id="tiphint" hidden>
       <span>Click any building for its data</span>
@@ -245,6 +263,52 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
   .compass .c-lab{font-family:var(--sans);font-weight:700;font-size:8.4px;text-anchor:middle;
     fill:rgb(236 237 240 /.62)}
   .compass .c-lab-n{fill:var(--red)}
+  /* ── live-reading freshness dial ───────────────────────────────────────────
+     Sits directly above the compass and borrows its whole visual language, so
+     the two read as one instrument cluster: where you are facing, and when the
+     data is from. Deliberately NOT styled as a wall clock — no minute hand, no
+     numerals — because the map has no time of day to show. */
+  /* Digital readout, not a dial, parked immediately left of the evidence rail.
+     It qualifies the LIVE AMBIENT block — same row, arm's length — so the
+     freshness sits beside the readings it describes rather than beside the
+     compass, which answers an unrelated question.
+
+     top: 76 IS LOAD-BEARING, NOT TASTE. The honesty banner is centred and grows
+     with its own text, so at 1280 it reaches x 955 while this sits at 891 —
+     they overlap horizontally and only the vertical gap keeps them apart. At
+     top:52 that gap was 3px, which held on macOS and collided on CI's Linux
+     font metrics. 76 puts a real ~27px between them on both. */
+  .clockw{position:absolute;right:320px;top:76px;z-index:6;padding:7px 11px 8px;cursor:pointer;
+    display:flex;flex-direction:column;align-items:flex-start;gap:1px;
+    border-radius:9px;border:1px solid var(--line);
+    background:rgb(9 20 22 /.72);backdrop-filter:blur(10px);
+    transition:border-color .2s,transform .2s}
+  .clockw:hover{border-color:var(--cyan);transform:translateY(-1px)}
+  .clockw:focus-visible{outline:2px solid var(--cyan);outline-offset:3px}
+  .clockw[disabled]{cursor:progress;opacity:.7}
+  /* tabular-nums so the digits do not reflow as minutes tick over */
+  .clockw .k-time{font-family:var(--sans);font-weight:650;font-size:1.02rem;line-height:1;
+    letter-spacing:-.01em;color:var(--paper);font-variant-numeric:tabular-nums}
+  .clockw[data-age="stale"] .k-time{color:var(--red)}
+  .clockw .k-sub{display:flex;gap:.42rem;align-items:baseline;
+    font-family:var(--mono);font-size:.46rem;letter-spacing:.1em;color:var(--faint)}
+  .clockw .k-age-lab{color:var(--ink)}
+  .clockw[data-age="stale"] .k-age-lab{color:var(--red)}
+  .clockw .k-bar{display:block;width:100%;height:2px;margin-top:5px;border-radius:1px;
+    background:rgb(236 237 240 /.12);overflow:hidden}
+  /* scaleX only — transform, never width, so ageing costs no layout */
+  .clockw .k-bar i{display:block;height:100%;background:var(--cyan);border-radius:1px;
+    transform-origin:left center;transform:scaleX(1);
+    transition:transform .5s ease,background-color .5s ease}
+  .clockw[data-age="aging"] .k-bar i{background:var(--bronze)}
+  .clockw[data-age="stale"] .k-bar i{background:var(--red)}
+  body.studio .clockw{background:rgb(245 244 241 /.86);border-color:rgb(20 40 42 /.2)}
+  body.studio .clockw .k-time{color:#14282a}
+  body.studio .clockw .k-sub{color:rgb(20 40 42 /.55)}
+  body.studio .clockw .k-age-lab{color:rgb(20 40 42 /.75)}
+  body.studio .clockw .k-bar{background:rgb(20 40 42 /.14)}
+  @media (prefers-reduced-motion: reduce){ .clockw .k-bar i{transition:none} }
+
   body.studio .compass{background:rgb(245 244 241 /.86);border-color:rgb(20 40 42 /.2)}
   body.studio .compass .c-s{fill:rgb(20 40 42 /.34)}
   body.studio .compass .c-tick{fill:rgb(20 40 42 /.28)}
