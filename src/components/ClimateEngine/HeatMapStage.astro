@@ -71,7 +71,7 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
          split as .bcard / .bcard-in. -->
     <div class="cooltag" id="coolTag" hidden>
       <div class="cooltag-in" id="coolTagIn">
-        <b id="coolTagM">—</b><span>nearest greenery · straight line</span>
+        <b id="coolTagM">—</b><span>Nearest greenery</span>
       </div>
     </div>
 
@@ -274,16 +274,20 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
      point, it is the one element on the map that is a finding rather than
      chrome, and it is the same green as the patch it stands on. */
   .cooltag{position:absolute;z-index:6;pointer-events:none;will-change:transform;
-    margin:-19px 0 0 -93px;width:186px;text-align:center;line-height:1.18}
-  .cooltag-in{background:#00cc99;border-radius:10px;padding:.42rem .3rem .46rem;
-    box-shadow:0 8px 22px rgb(0 32 24 /.42);will-change:transform,opacity}
+    margin:-16px 0 0 -73px;width:146px;text-align:center;line-height:1.14}
+  .cooltag-in{background:#00cc99;border-radius:9px;padding:.34rem .28rem .36rem;
+    box-shadow:0 7px 18px rgb(0 32 24 /.42);will-change:transform,opacity}
   /* No mono anywhere inside: this is a spoken result ("about a hundred and fifty
      metres"), not a machine readout, and Mona Sans reads faster at a glance.
      tabular-nums keeps the count-up from jittering as digits change width. */
-  .cooltag b{display:block;font-family:var(--sans);font-weight:650;font-size:.95rem;
-    letter-spacing:-.015em;color:#052018;font-variant-numeric:tabular-nums}
-  .cooltag span{display:block;font-family:var(--sans);font-weight:500;font-size:.5rem;
-    letter-spacing:.1em;text-transform:uppercase;color:rgb(5 32 24 /.72);margin-top:2px}
+  .cooltag b{display:block;font-family:var(--sans);font-weight:750;font-size:1.02rem;
+    letter-spacing:-.02em;color:#052018;font-variant-numeric:tabular-nums}
+  /* Sentence case, not caps: the label is a phrase to read, and uppercase costs
+     the word-shapes that make it readable at this size. The weight makes up the
+     presence the caps were providing, and the tracking comes back to near-normal
+     because letter-spacing set for caps loosens sentence case badly. */
+  .cooltag span{display:block;font-family:var(--sans);font-weight:600;font-size:.56rem;
+    letter-spacing:.005em;color:rgb(5 32 24 /.78);margin-top:1px}
   body.studio .cooltag-in{box-shadow:0 8px 22px rgb(0 32 24 /.24)}
 
   /* The sentence that says what the rings are FOR. Lives inside the building

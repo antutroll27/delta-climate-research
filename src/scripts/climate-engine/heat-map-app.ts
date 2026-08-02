@@ -269,11 +269,15 @@ export function mountHeatMap(): () => void {
         else {
           const cvB = cv.getBoundingClientRect();
           const cardB = bcard.hasAttribute('hidden') ? null : bcard.getBoundingClientRect();
-          // .cooltag box: margin -16px 0 0 -86px, 172 wide, ~36 tall
+          /* .cooltag box, kept in step with the CSS: margin -16px 0 0 -73px,
+             146 wide, ~41 tall. These are the chip's real dimensions — a stale
+             width here silently tests a rectangle the tag no longer occupies. */
+          const TAG_W = 146, TAG_H = 41, TAG_DX = 73, TAG_DY = 16;
           const fits = (y: number) => {
             if (!cardB) return true;
-            const L = q.x + cvB.left - 86, T = y + cvB.top - 16;
-            return L + 172 < cardB.left || L > cardB.right || T + 36 < cardB.top || T > cardB.bottom;
+            const L = q.x + cvB.left - TAG_DX, T = y + cvB.top - TAG_DY;
+            return L + TAG_W < cardB.left || L > cardB.right
+              || T + TAG_H < cardB.top || T > cardB.bottom;
           };
           const lifted = q.y - 72;
           let tx = q.x, ty: number | null = null;
@@ -287,8 +291,10 @@ export function mountHeatMap(): () => void {
                dialog's own finding, and it is visible for the majority case
                instead of vanishing. Below the card if the top is offscreen. */
             tx = (cardB.left + cardB.right) / 2 - cvB.left;
-            ty = cardB.top - cvB.top - 32;
-            if (ty < 44) ty = cardB.bottom - cvB.top + 34;
+            /* Sit the chip's BOTTOM ~9px clear of the card: its box runs from
+               ty - TAG_DY to ty - TAG_DY + TAG_H. */
+            ty = cardB.top - cvB.top - (TAG_H - TAG_DY) - 9;
+            if (ty < 44) ty = cardB.bottom - cvB.top + TAG_DY + 9;
           }
           tag.style.visibility = ty === null ? 'hidden' : 'visible';
           if (ty !== null) tag.style.transform = `translate3d(${Math.round(tx)}px, ${Math.round(ty)}px, 0)`;
