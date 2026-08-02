@@ -232,12 +232,12 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
   /* Sits clear of the toolbox, not under it: .left is 270 px wide at a 26 px
      offset, so its right edge is 296 px and anything below 312 px would be
      overlapped. The two follow the panel down at each breakpoint. */
-  .compass{position:absolute;left:312px;bottom:26px;z-index:6;width:62px;height:62px;padding:0;cursor:pointer;
+  .compass{position:absolute;left:312px;bottom:26px;z-index:6;width:54px;height:54px;padding:0;cursor:pointer;
     background:rgb(9 20 22 /.82);border:1px solid var(--line);border-radius:50%;backdrop-filter:blur(12px);
     display:grid;place-items:center;transition:border-color .2s,transform .2s}
   .compass:hover{border-color:var(--cyan);transform:scale(1.06)}
   .compass:focus-visible{outline:2px solid var(--cyan);outline-offset:3px}
-  .compass svg{width:56px;height:56px;display:block}
+  .compass svg{width:48px;height:48px;display:block}
   .compass .c-ring{fill:none;stroke:var(--line);stroke-width:1}
   .compass .c-n{fill:var(--red)}
   .compass .c-s{fill:rgb(236 237 240 /.34)}
@@ -326,11 +326,22 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
   .maplibregl-ctrl-scale{background:none!important;border:1.5px solid rgb(111 202 214 /.72)!important;
     border-top:0!important;border-radius:0!important;color:var(--paper)!important;
     font-family:var(--sans)!important;font-weight:600!important;font-size:.58rem!important;
-    letter-spacing:.01em!important;padding:0 0 2px!important;text-align:center!important;
-    text-shadow:0 1px 3px rgb(0 0 0 /.85)}
+    letter-spacing:.01em!important;padding:0 0 9px!important;text-align:center!important;
+    text-shadow:0 1px 3px rgb(0 0 0 /.85);
+    /* Quarter ticks, drawn as a repeating gradient rather than markup because
+       MapLibre owns this element's contents — it rewrites the label on every
+       zoom and would discard any children. Percentage stops mean the ticks stay
+       at the quarter points as the bar's pixel width changes with zoom, which is
+       what makes them readable as subdivisions rather than decoration. */
+    background-image:repeating-linear-gradient(90deg,
+      rgb(111 202 214 /.72) 0 1.5px, transparent 1.5px 25%)!important;
+    background-size:100% 7px!important;background-repeat:no-repeat!important;
+    background-position:left bottom!important;background-origin:padding-box!important}
   body.studio .maplibregl-ctrl-scale{color:#16292b!important;border-color:rgb(13 107 125 /.7)!important;
-    text-shadow:0 1px 3px rgb(255 255 255 /.85)}
-  .maplibregl-ctrl-bottom-left{margin:0 0 30px 372px}
+    text-shadow:0 1px 3px rgb(255 255 255 /.85);
+    background-image:repeating-linear-gradient(90deg,
+      rgb(13 107 125 /.7) 0 1.5px, transparent 1.5px 25%)!important}
+  .maplibregl-ctrl-bottom-left{margin:0 0 30px 396px}
 
   /* ── click-to-inspect ─────────────────────────────────────────────────────
      Both nodes are positioned in CSS pixels by heat-map-app.ts on MapLibre's
@@ -535,7 +546,7 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
     /* Above the chip row, not beside it: from here the centred chips reach far
        enough left to sit under the compass. */
     .compass{left:284px;bottom:120px}
-    .maplibregl-ctrl-bottom-left{margin:0 0 22px 344px}
+    .maplibregl-ctrl-bottom-left{margin:0 0 22px 368px}
     .rail-r{width:222px;right:18px;top:18px;bottom:18px}
     .place .n{font-size:clamp(1.7rem,3.2vw,2.7rem)}
     .synthetic{font-size:.5rem;letter-spacing:.16em}
@@ -557,7 +568,7 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
     .tabs{display:none}                 /* ward switch lives in the bottom strip at this width */
     .left,.rail-r{width:210px}
     .compass{left:244px}
-    .maplibregl-ctrl-bottom-left{margin:0 0 22px 304px}
+    .maplibregl-ctrl-bottom-left{margin:0 0 22px 328px}
     .synthetic{font-size:.44rem;letter-spacing:.12em;padding:.34rem .62rem}
     .stamp-slot{top:58px;--stamp-size:.46rem;--stamp-pad:.32rem .62rem;--stamp-tracking:.16em}
   }
