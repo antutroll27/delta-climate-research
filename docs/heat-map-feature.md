@@ -308,12 +308,28 @@ The accuracy story moved from "measured" to "measured, with known uncertainty":
   exactly nothing under the honest one — recorded as ruled-out in
   [`heat-map-calibration-spec.md`](heat-map-calibration-spec.md) §1. The night-phase
   weather regression survives (2.81 → 2.14–2.31 K) and awaits its own shipping decision.
-- **Next campaign:** Landsat 8/9 C2 L2 surface temperature as a second, independent
-  thermal source — triples the daytime sample, adds a 10:30 diurnal regime, and is the
-  acquisition an observed-LST layer for uncalibrated wards will reuse. Spec:
-  [`superpowers/specs/2026-08-02-landsat-thermal-validation-design.md`](superpowers/specs/2026-08-02-landsat-thermal-validation-design.md).
-  Evidence for all of the above regenerates from
-  `scripts/experiment-validation-uncertainty.py`.
+- **Landsat campaign: LANDED (2026-08-02).** 213 ward-scenes over **50 overpasses**
+  from Landsat 8/9 C2 L2 via Planetary Computer — no credentials, no new dependency.
+  The daytime CI half-width goes **±1.87 K → ±0.49 K** on the Landsat morning
+  stratum, better than the ±1.1 K the spec asked for. Strata are published
+  separately by hour: night · morning_ecostress (7.1–11.1 h) · morning_landsat
+  (10.4 h) · peak_ecostress (11.8–17.4 h).
+  - **Sensor pooling is BLOCKED, honestly.** Only 2 ECOSTRESS overpasses fall in
+    Landsat's 9.5–11.5 h window against a minimum of 5, so the offset is not
+    measurable here. Comparing the two across all daytime hours produces a −3.73 K
+    "sensor difference" that is really the diurnal cycle: a steady-state model runs
+    cool against 10:30 readings and warm against afternoon ones. That number is a
+    trap and is not published.
+  - **Recalibration pending.** POWER's hourly product lags real time, so two
+    May-2026 overpasses gained forcing after `accuracy.ts` was written — the
+    ECOSTRESS daytime set is 35 rows against a published `n = 29`. Recorded in
+    `model-accuracy.json.ward_scale.pending_recalibration`; the unit guard fails if
+    that record goes missing or stale. Adopting the figures is its own reviewed PR.
+  - Spec + measured acceptance:
+    [`superpowers/specs/2026-08-02-landsat-thermal-validation-design.md`](superpowers/specs/2026-08-02-landsat-thermal-validation-design.md)
+    §9. Plan: [`heat-map-landsat-validation-implementation.md`](heat-map-landsat-validation-implementation.md).
+    Evidence regenerates from `scripts/experiment-validation-uncertainty.py`, kept as
+    an independent cross-check of the promoted machinery.
 
 ## Phases
 1. **Skeleton + render** — route, canvas, Three scene, `DataTexture` static synthetic field, colormap shader.

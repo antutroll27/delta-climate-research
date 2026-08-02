@@ -283,9 +283,27 @@ def _ward_scale_validation() -> dict[str, Any] | None:
     covered = sum(s["n_scenes"] for s in strata.values() if s)
     if covered != int(err.size):
         strata["_coverage_error"] = {"stratified": covered, "rows": int(err.size)}
+    # Does accuracy.ts still describe the evidence that exists? The published
+    # figures were computed on an ECOSTRESS-only set; that set grows whenever
+    # NASA POWER publishes forcing for a recent overpass (its hourly product
+    # lags real time by days to weeks), so drift here is ordinary and expected.
+    # What must never happen is drift that nobody can see: this records it in
+    # the generated file, and the unit test fails if it is neither matched nor
+    # recorded. Adopting the new figures is a separate, reviewed change.
+    n_eco_day = int((is_day & eco).sum())
+    n_eco_night = int(((phase == "night") & eco).sum())
+    pending = {
+        "reason": "the ECOSTRESS evidence set grew after accuracy.ts was written",
+        "published_in_accuracy_ts": {"night": 50, "peak": 29},
+        "ecostress_rows_now": {"night": n_eco_night, "day": n_eco_day},
+        "action": "recalibrate and update accuracy.ts in a reviewed change; this "
+                  "campaign deliberately does not move published constants",
+    }
+
     return {
         "method": ("leave-one-OVERPASS-out; scene- and ward-level splits leak "
                    "through shared overpasses and are not published"),
+        "pending_recalibration": pending,
         "bootstrap": {"seed": BOOTSTRAP_SEED, "resamples": BOOTSTRAP_N,
                       "unit": "overpass"},
         "intercomparison": inter,

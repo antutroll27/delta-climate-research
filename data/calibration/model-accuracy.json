@@ -26,6 +26,18 @@
   },
   "ward_scale": {
     "method": "leave-one-OVERPASS-out; scene- and ward-level splits leak through shared overpasses and are not published",
+    "pending_recalibration": {
+      "reason": "the ECOSTRESS evidence set grew after accuracy.ts was written",
+      "published_in_accuracy_ts": {
+        "night": 50,
+        "peak": 29
+      },
+      "ecostress_rows_now": {
+        "night": 50,
+        "day": 35
+      },
+      "action": "recalibrate and update accuracy.ts in a reviewed change; this campaign deliberately does not move published constants"
+    },
     "bootstrap": {
       "seed": 7,
       "resamples": 4000,

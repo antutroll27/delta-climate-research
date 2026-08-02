@@ -188,7 +188,47 @@ New: `tests/unit/heat-map-validation.test.mjs`
 - **POWER hourly gaps at Landsat times** — same interpolation rules as ECOSTRESS
   scenes; scenes without usable forcing are excluded and counted, not patched.
 
-## 9 · Acceptance
+## 9 · Acceptance — MET, 2026-08-02
+
+Measured yield, replacing the 35–55 estimate this spec was written with:
+
+| stage | count |
+| --- | --- |
+| STAC candidates (T1, Landsat 8/9, cloud < 80) | 177 items / 95 dates |
+| dates covering all three wards | 90 |
+| ward-attempts below the `cell_frac` floor | 318 |
+| **committed ward-scenes** | **213** |
+| **distinct overpasses** | **50** |
+| with POWER forcing | 50 (0 dropped) |
+
+Stratified result:
+
+| stratum | n | overpasses | RMSE | LOO-overpass | CI half-width | hours |
+| --- | --- | --- | --- | --- | --- | --- |
+| night | 50 | 20 | 2.81 | 2.79 | ±0.87 | 0.7–23.8 |
+| morning_ecostress | 11 | 5 | 6.33 | 7.54 | ±2.93 | 7.1–11.1 |
+| **morning_landsat** | **213** | **50** | **2.66** | **2.25** | **±0.49** | 10.4 |
+| peak_ecostress | 24 | 9 | 3.38 | 2.40 | ±1.25 | 11.8–17.4 |
+
+- ✅ ≥ 30 daytime overpasses — **50**
+- ✅ Daytime CI half-width ≤ ±1.1 K — **±0.49 K** on the Landsat stratum, against
+  ±1.87 K before the campaign
+- ✅ Intercomparison recorded — and **`pooling: blocked`**, on the honest ground that
+  only 2 ECOSTRESS overpasses fall inside Landsat's 9.5–11.5 h window against a
+  minimum of 5. An earlier cut compared ECOSTRESS across 7.1–17.4 h with Landsat's
+  fixed 10.4 h and produced a −3.73 K "sensor offset" that was almost entirely the
+  diurnal cycle; comparing outside matched hours measures the time of day, not the
+  instrument.
+- ✅ `heat-map-validation.test.mjs` green; `npm run verify` green (62/62 unit)
+- ✅ `accuracy.ts` untouched
+- ⚠️ **Recalibration now pending.** NASA POWER's hourly product lags real time, so two
+  May-2026 ECOSTRESS overpasses gained forcing after `accuracy.ts` was written: the
+  ECOSTRESS daytime set is 35 rows against the published `n = 29`. Recorded in
+  `model-accuracy.json.ward_scale.pending_recalibration`, and the unit guard fails if
+  that record is absent or stale. Adopting the figures is a separate reviewed change,
+  as this spec requires.
+
+### Original acceptance list
 
 - `fetch-landsat-lst.py` committed, cached, idempotent; ward-observations regenerated
   with `sensor`, ≥ 30 total daytime overpasses (else: ship what landed + the measured

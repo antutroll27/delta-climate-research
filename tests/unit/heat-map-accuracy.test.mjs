@@ -34,12 +34,34 @@ test('the UI figures match the ward-scale calibration that produced them', async
     await readFile(join(ROOT, 'data/calibration/ward-scale-fit.json'), 'utf8'));
   const obs = JSON.parse(
     await readFile(join(ROOT, 'data/calibration/ward-observations.json'), 'utf8'));
+  // model-accuracy.json is where the generated record of any drift lives.
+  const accuracyJson = JSON.parse(
+    await readFile(join(ROOT, 'data/calibration/model-accuracy.json'), 'utf8'));
 
-  // scene counts must match the observation set the fit ran on
+  // ECOSTRESS ONLY. ward-observations.json now carries two instruments, and
+  // accuracy.ts's figures were computed on ECOSTRESS alone — counting Landsat
+  // rows against an ECOSTRESS-derived constant compares nothing to nothing.
+  const eco = obs.rows.filter((r) => (r.sensor ?? 'ecostress') === 'ecostress');
+
+  // Drift is allowed to EXIST but never to be SILENT. The evidence set grows on
+  // its own: NASA POWER's hourly product lags real time, so an overpass can gain
+  // its forcing months later and legitimately enter the set. What must be
+  // impossible is publishing a figure whose evidence has moved without anyone
+  // recording it — so a mismatch is only tolerated when measure-accuracy.py has
+  // written down exactly what moved.
+  const pending = accuracyJson?.ward_scale?.pending_recalibration ?? null;
   for (const [phase, key] of [['night', 'night'], ['peak', 'day']]) {
-    const n = obs.rows.filter((r) => r.phase === key).length;
-    assert.equal(ACCURACY[phase].n, n,
-      `${phase}: scene count drifted from data/calibration/ward-observations.json`);
+    const n = eco.filter((r) => r.phase === key).length;
+    if (ACCURACY[phase].n === n) continue;
+    assert.ok(pending,
+      `${phase}: accuracy.ts says n=${ACCURACY[phase].n} but the ECOSTRESS set now `
+      + `holds ${n} — and nothing recorded the drift. Re-run scripts/measure-accuracy.py.`);
+    assert.equal(pending.ecostress_rows_now[key], n,
+      `${phase}: the recorded drift (${pending.ecostress_rows_now[key]}) does not match `
+      + `the file (${n}) — the record is stale, which is worse than no record.`);
+    assert.equal(pending.published_in_accuracy_ts[phase], ACCURACY[phase].n,
+      `${phase}: the record claims accuracy.ts publishes `
+      + `${pending.published_in_accuracy_ts[phase]}, but it publishes ${ACCURACY[phase].n}.`);
   }
   // and the calibration must still be the one marked not-yet-adopted-by-hand
   assert.equal(typeof fit.meets_all_criteria !== 'undefined', true,
