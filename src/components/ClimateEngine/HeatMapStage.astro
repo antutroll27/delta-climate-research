@@ -29,6 +29,37 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
     <div class="stamp-slot"><ConstructionStamp /></div>
     <div class="loadchip" id="loadchip">Building ward…</div>
 
+    <!-- North reference. The idle orbit turns the map continuously, so without
+         this there is no way to know which way you are facing, and no way back. -->
+    <button class="compass" id="compass" type="button" title="Face north" aria-label="Reset the map to face north">
+      <svg viewBox="0 0 40 40" aria-hidden="true">
+        <circle cx="20" cy="20" r="18.2" class="c-ring" />
+        <g id="compassNeedle">
+          <path d="M20 6 L24.4 21 L20 18.4 L15.6 21 Z" class="c-n" />
+          <path d="M20 34 L15.6 19 L20 21.6 L24.4 19 Z" class="c-s" />
+        </g>
+      </svg>
+      <span class="c-lab" id="compassLab">N</span>
+    </button>
+
+    <!-- First-run affordance: the buildings became clickable and nothing said so. -->
+    <div class="tiphint" id="tiphint" hidden>
+      <span>Click any building for its data</span>
+      <button type="button" id="tipX" aria-label="Dismiss hint">✕</button>
+    </div>
+
+    <!-- Walk-time ring labels. Text is STATIC: the app only toggles `hidden` and
+         writes a transform, so nothing rewrites strings on every repaint.
+         Two lines each — the headline is the human unit (minutes), the second
+         line is the caveat, because a circle drawn on a map reads as "you can
+         reach all of this" and a straight-line radius is not that. -->
+    <div class="ringlab primary" id="ringNear" hidden>
+      <b>1 min walk</b><span>80 m · straight line</span>
+    </div>
+    <div class="ringlab" id="ringFar" hidden>
+      <b>5 min walk</b><span>400 m · straight line</span>
+    </div>
+
     <!-- Click-to-inspect. Positioned from the building's own ward-metre centroid
          every time MapLibre repaints, so it tracks orbit, pan, zoom and flyTo. -->
     <div class="bsel" id="bsel" hidden aria-hidden="true"><i></i><i></i><i></i><i></i></div>
@@ -44,6 +75,7 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
           <dt>Albedo</dt><dd id="bcAl">—</dd>
           <dt>Surface</dt><dd id="bcT">—</dd>
         </dl>
+        <p class="bc-rings" id="bcRings"></p>
         <p class="bc-ins" id="bcIns"></p>
         <button class="bc-x" id="bcX" type="button" aria-label="Close building details">Close ✕</button>
       </div>
@@ -170,6 +202,82 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
   .brand:hover .ar{opacity:1;transform:translateX(-3px)}
   .brand:hover .bm{opacity:.82}
   .brand:focus-visible{outline:2px solid var(--cyan);outline-offset:4px;border-radius:5px}
+  /* ── north compass ────────────────────────────────────────────────────────
+     Sits opposite the legend so it never fights the right rail. The needle is
+     rotated by JS on MapLibre's `render`; only the inner <g> turns, so the dial
+     and the label stay upright and readable at any bearing. */
+  /* Sits clear of the toolbox, not under it: .left is 270 px wide at a 26 px
+     offset, so its right edge is 296 px and anything below 312 px would be
+     overlapped. The two follow the panel down at each breakpoint. */
+  .compass{position:absolute;left:312px;bottom:26px;z-index:6;width:46px;height:46px;padding:0;cursor:pointer;
+    background:rgb(9 20 22 /.8);border:1px solid var(--line);border-radius:50%;backdrop-filter:blur(12px);
+    display:grid;place-items:center;transition:border-color .2s,transform .2s}
+  .compass:hover{border-color:var(--cyan);transform:scale(1.05)}
+  .compass:focus-visible{outline:2px solid var(--cyan);outline-offset:3px}
+  .compass svg{width:40px;height:40px;position:absolute}
+  .compass .c-ring{fill:none;stroke:var(--line);stroke-width:1}
+  .compass .c-n{fill:var(--red)}
+  .compass .c-s{fill:rgb(236 237 240 /.35)}
+  .compass #compassNeedle{transform-origin:20px 20px;transition:transform .12s linear}
+  .compass .c-lab{position:relative;font-family:var(--mono);font-size:.44rem;letter-spacing:.1em;
+    color:var(--ink);transform:translateY(13px)}
+  body.studio .compass{background:rgb(245 244 241 /.86);border-color:rgb(20 40 42 /.2)}
+
+  /* ── first-run hint ── */
+  .tiphint{position:absolute;left:50%;bottom:88px;transform:translateX(-50%);z-index:7;display:flex;align-items:center;gap:.6rem;
+    background:rgb(9 20 22 /.86);border:1px solid rgb(111 202 214 /.35);border-radius:99px;padding:.5rem .55rem .5rem .95rem;
+    backdrop-filter:blur(10px);font-family:var(--mono);font-size:.53rem;letter-spacing:.12em;text-transform:uppercase;color:var(--paper);
+    animation:tipIn .45s cubic-bezier(.2,0,0,1) both}
+  .tiphint button{background:none;border:0;color:var(--ink);cursor:pointer;font-size:.6rem;line-height:1;padding:.25rem .4rem;border-radius:50%}
+  .tiphint button:hover{color:var(--paper)}
+  .tiphint button:focus-visible{outline:2px solid var(--cyan);outline-offset:1px}
+  @keyframes tipIn{from{opacity:0;transform:translate(-50%,8px)}to{opacity:1;transform:translate(-50%,0)}}
+  body.studio .tiphint{background:rgb(245 244 241 /.9);color:#16292b;border-color:rgb(20 40 42 /.25)}
+  @media (prefers-reduced-motion: reduce){ .tiphint{animation:none} }
+
+  /* ── walk-time ring labels ──
+     Sized to be read, not decoded. The minutes are the point, so they get Mona
+     Sans at a real reading size; the metres-and-caveat line stays in the mono
+     label voice underneath. The 5-minute chip is filled because it is the one
+     that matters — most heat-relief guidance is written around a five-minute
+     walk — and the 10-minute chip is outlined so the two do not compete. */
+  .ringlab{position:absolute;z-index:6;pointer-events:none;will-change:transform;
+    margin:-15px 0 0 -84px;width:168px;text-align:center;line-height:1.25;
+    background:rgb(9 20 22 /.9);border:1px solid rgb(111 202 214 /.42);border-radius:9px;
+    padding:.32rem .3rem;backdrop-filter:blur(8px);box-shadow:0 6px 18px rgb(0 0 0 /.4)}
+  .ringlab b{display:block;font-family:var(--sans);font-weight:600;font-size:.78rem;
+    letter-spacing:-.01em;color:var(--paper)}
+  .ringlab span{display:block;font-family:var(--mono);font-size:.44rem;letter-spacing:.09em;
+    text-transform:uppercase;color:var(--ink);margin-top:1px}
+  .ringlab.primary{background:var(--cyan);border-color:var(--cyan);box-shadow:0 6px 20px rgb(111 202 214 /.3)}
+  .ringlab.primary b{color:#062226}
+  .ringlab.primary span{color:rgb(6 34 38 /.72)}
+  body.studio .ringlab{background:rgb(245 244 241 /.92);border-color:rgb(20 40 42 /.22)}
+  body.studio .ringlab b{color:#16292b}
+  body.studio .ringlab.primary{background:#0d6b7d;border-color:#0d6b7d}
+  body.studio .ringlab.primary b{color:#f2fbfc}
+  body.studio .ringlab.primary span{color:rgb(242 251 252 /.75)}
+
+  /* The sentence that says what the rings are FOR. Lives inside the building
+     card, which is the only time the rings exist. */
+  .bc-rings{margin:.5rem 0 0;padding:.45rem .55rem;border-radius:7px;
+    background:rgb(111 202 214 /.09);border:1px solid rgb(111 202 214 /.2);
+    font-size:.62rem;line-height:1.5;color:var(--paper);text-transform:none;letter-spacing:0}
+  .bc-rings b{color:var(--cyan);font-weight:550}
+  body.studio .bc-rings{background:rgb(13 107 125 /.08);border-color:rgb(13 107 125 /.22);color:#16292b}
+
+  /* MapLibre's own scale bar — a geospatial tool with no distance reference is
+     asking the reader to guess. Restyled to the instrument's language.
+     NOT :global(...): this whole block is `is:global`, so Astro runs no scoping
+     pass and would ship the :global() verbatim, which the browser discards as an
+     invalid selector — taking the entire rule with it. That is exactly how the
+     bar ended up unstyled and sitting on top of the toolbox. The attribution
+     rules below have always used plain selectors for the same reason. */
+  .maplibregl-ctrl-scale{background:rgb(9 20 22 /.72)!important;border:1px solid var(--line)!important;
+    border-top:0!important;color:var(--ink)!important;font-family:var(--mono)!important;font-size:.46rem!important;
+    letter-spacing:.1em!important;padding:1px 5px 2px!important;border-radius:0 0 5px 5px!important;backdrop-filter:blur(10px)}
+  .maplibregl-ctrl-bottom-left{margin:0 0 30px 372px}
+
   /* ── click-to-inspect ─────────────────────────────────────────────────────
      Both nodes are positioned in CSS pixels by heat-map-app.ts on MapLibre's
      `render` event, which only fires when a repaint actually happened. They move
@@ -370,6 +478,10 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
      ~540px; true phone layout (bottom sheets) is the separate P5 mobile task. ── */
   @media (max-width:1180px){
     .left{width:250px;left:18px;top:18px;bottom:18px}
+    /* Above the chip row, not beside it: from here the centred chips reach far
+       enough left to sit under the compass. */
+    .compass{left:284px;bottom:120px}
+    .maplibregl-ctrl-bottom-left{margin:0 0 22px 344px}
     .rail-r{width:222px;right:18px;top:18px;bottom:18px}
     .place .n{font-size:clamp(1.7rem,3.2vw,2.7rem)}
     .synthetic{font-size:.5rem;letter-spacing:.16em}
@@ -390,6 +502,8 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
     .top{grid-template-columns:1fr;padding-inline:18px}
     .tabs{display:none}                 /* ward switch lives in the bottom strip at this width */
     .left,.rail-r{width:210px}
+    .compass{left:244px}
+    .maplibregl-ctrl-bottom-left{margin:0 0 22px 304px}
     .synthetic{font-size:.44rem;letter-spacing:.12em;padding:.34rem .62rem}
     .stamp-slot{top:58px;--stamp-size:.46rem;--stamp-pad:.32rem .62rem;--stamp-tracking:.16em}
   }

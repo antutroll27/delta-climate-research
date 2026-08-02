@@ -23,6 +23,7 @@ import type { DcUrsInputs } from './dc-urs-inputs';
 import { rasterWardBase } from './ward-raster';
 import { loadWardSurface, type WardSurface } from './surface-raster';
 import { buildRegistry, pickBuilding, projectWard, type BuildingMeta } from './explore/building-pick';
+import { findCoolingSurfaces, nearestCooling, type CoolingSurfaces } from './explore/cooling-surfaces';
 
 // Ward set lives in src/data/wards.ts so widening beyond three is a data change,
 // not a code change (dc-urs-spec.md §1).
@@ -58,6 +59,9 @@ export function mountHeatMap(): () => void {
     antialias: true, attributionControl: false, pixelRatio: Math.min(devicePixelRatio, 1.75),
   });
   map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right');
+  /* A distance reference. The instrument shows a 1.4 km window at a pitch that
+     foreshortens it, and until now nothing on screen said how big anything was. */
+  map.addControl(new maplibregl.ScaleControl({ maxWidth: 104, unit: 'metric' }), 'bottom-left');
 
   /* ── idle auto-orbit (pauses on any interaction, resumes after 2.5 s) ── */
   let orbit = !reduceMotion, orbitResume = 0, lastT = 0;
@@ -69,6 +73,24 @@ export function mountHeatMap(): () => void {
   }
   let orbitId = raf(orbitFrame);
   function nudgeOrbit() { orbit = false; clearTimeout(orbitResume); orbitResume = window.setTimeout(() => { if (!reduceMotion && mode === 'relief') orbit = true; }, 2500); }
+
+  /* ── north compass ──
+     The idle orbit turns the map forever, which is pleasant to watch and
+     disorienting to read: bearing drifts a full turn every ~4 minutes and
+     nothing said which way you were facing. The needle answers that, and the
+     click is the way out of a rotation nobody asked for — so it does NOT
+     schedule the orbit to resume. The next drag re-arms it through nudgeOrbit,
+     which is the point at which the reader has asked for motion again. */
+  const compassEl = el('compass'), needleEl = el('compassNeedle');
+  function syncCompass() {
+    if (needleEl) needleEl.style.transform = `rotate(${-map.getBearing()}deg)`;
+  }
+  const onCompass = () => {
+    orbit = false; clearTimeout(orbitResume);
+    map.easeTo({ bearing: 0, pitch: mode === 'iso' ? 0 : 60, duration: 700 });
+  };
+  compassEl?.addEventListener('click', onCompass);
+  cleanup.push(() => compassEl?.removeEventListener('click', onCompass));
   const cv = map.getCanvas();
   const nudgeEvents: (keyof HTMLElementEventMap)[] = ['mousedown', 'wheel', 'touchstart', 'keydown'];
   nudgeEvents.forEach(ev => cv.addEventListener(ev, nudgeOrbit, { passive: true }));
@@ -102,6 +124,37 @@ export function mountHeatMap(): () => void {
      shaky trackpad from silently swallowing the click. */
   const bcard = el('bcard'), bsel = el('bsel');
   let downAt: { x: number; y: number; t: number } | null = null;
+
+  /* ── first-run hint ──
+     Click-to-inspect is invisible until you try it. Shown once per session, and
+     retired the moment the reader proves they have found it. */
+  const tipEl = el('tiphint');
+  const TIP_KEY = 'delta:hm-tip';
+  function dismissTip() {
+    if (!tipEl || tipEl.hasAttribute('hidden')) return;
+    tipEl.setAttribute('hidden', '');
+    try { sessionStorage.setItem(TIP_KEY, '1'); } catch { /* private mode */ }
+  }
+  try { if (!sessionStorage.getItem(TIP_KEY)) tipEl?.removeAttribute('hidden'); }
+  catch { tipEl?.removeAttribute('hidden'); }
+  el('tipX')?.addEventListener('click', dismissTip);
+
+  /* ── hover affordance ──
+     The coarse pass alone: a centroid projection per building, no polygon work.
+     Throttled to ~11 fps because a cursor does not need to be frame-accurate,
+     and skipped entirely mid-drag so orbiting never pays for it. */
+  let hoverAt = 0;
+  const onHover = (e: PointerEvent) => {
+    if (drag || !registry.length || e.pointerType !== 'mouse') return;
+    const now = performance.now();
+    if (now - hoverAt < 90) return;
+    hoverAt = now;
+    const r = cv.getBoundingClientRect();
+    const hit = pickBuilding(pickMatrix, registry, e.clientX - r.left, e.clientY - r.top, cv.clientWidth, cv.clientHeight, 34);
+    cv.style.cursor = hit >= 0 ? 'pointer' : '';
+  };
+  cv.addEventListener('pointermove', onHover, { passive: true });
+  cleanup.push(() => { cv.removeEventListener('pointermove', onHover); cv.style.cursor = ''; });
 
   function cellIndexAt(cx: number, cz: number): number {
     const size = sizeU.value;
@@ -142,18 +195,83 @@ export function mountHeatMap(): () => void {
         ? 'At the ward mean'
         : `<b class="${d > 0 ? 'hot' : 'cool'}">${d > 0 ? '+' : '−'}${Math.abs(d).toFixed(1)} K</b> vs ward mean`);
     }
-    const cool = state.dcurs?.[state.ward]?.distCoolM?.value;
-    if (Number.isFinite(cool)) {
-      parts.push(`Ward median walk to a cool refuge <b>${Math.round(cool as number)} m</b> · measured`);
+    /* Say what the rings are FOR, in plain words — a circle on a map is not
+       self-explanatory — and state the answer as a BAND against the rings.
+       The band is the only claim this data supports: the ring radii are exact
+       geometry, while the metres swing up to 5.8x on where "vegetated" is drawn
+       (the sensitivity table is in cooling-surfaces.ts). So the sentence asserts
+       the band, and the metres appear once, rounded and marked approximate. */
+    const intro = 'The rings show how far you could walk from this building in 1 and 5 minutes.';
+    if (nearestCool) {
+      const d = nearestCool.distM;
+      const say = (m: number) => {
+        if (m < 40) return 'right beside it';
+        if (m <= RINGS[0].r) return 'under a minute away';
+        const mins = Math.max(1, Math.round(m / WALK_M_PER_MIN));
+        return `about ${mins} minute${mins === 1 ? '' : 's'} away`;
+      };
+      setHTML('bcRings', `${intro} The nearest greenery is <b>${say(d)}</b>.`);
+      /* Rounded to 10 m: the grid cell is 7.3 m, so a finer figure would be
+         claiming precision the raster does not have. */
+      const rnd = (m: number) => Math.round(m / 10) * 10;
+      parts.push(`Nearest greenery ≈<b>${rnd(d)} m</b> · straight line from the building edge`);
+      /* The spread across greenery definitions, stated rather than buried. It is
+         usually larger than every other error in this card combined. */
+      if (coolRangeM && rnd(coolRangeM[1]) - rnd(coolRangeM[0]) >= 20) {
+        parts.push(`${rnd(coolRangeM[0])}–${rnd(coolRangeM[1])} m depending on how dense “green” must be`);
+      }
+    } else {
+      setHTML('bcRings', intro);
+      if (cooling) parts.push('No vegetated cooling surface of 0.77 ha or more in this ward');
     }
     parts.push('Block detail illustrative — within-ward pattern is not validated');
     setHTML('bcIns', parts.join('<br>'));
   }
 
-  /** Move the card and brackets onto the selection. Transform only — no layout. */
+  /** Move the card, brackets and ring labels onto the selection, and keep the
+      compass needle honest. Transform only — no layout. */
   function placeCard() {
+    syncCompass();
     if (!selected || !bcard || !bsel) return;
     const w = cv.clientWidth, h = cv.clientHeight;
+    /* Park each ring's label at whichever compass point of that ring is highest
+       on screen. Four projections per ring, so the label follows the bearing as
+       the map orbits instead of sliding under the city. */
+    /* The card is the biggest thing on the map and it always sits beside the
+       selection, so "topmost on screen" walked the labels straight underneath
+       it. Score candidates that clear the card first and only fall back to a
+       covered one if the ring has nowhere else to put its label. */
+    const cardBox = bcard.hasAttribute('hidden') ? null : bcard.getBoundingClientRect();
+    const cvBox = cv.getBoundingClientRect();
+    const clearsCard = (x: number, y: number) => {
+      if (!cardBox) return true;
+      const px = x + cvBox.left, py = y + cvBox.top;
+      return px < cardBox.left - 88 || px > cardBox.right + 88
+        || py < cardBox.top - 26 || py > cardBox.bottom + 26;
+    };
+    for (const { r, el: id } of RINGS) {
+      const lab = el(id); if (!lab) continue;
+      /* Gather every on-screen candidate, then choose in two passes: topmost
+         among those clear of the card, else topmost overall. Two cheap loops
+         beat one clever one nobody can read six months from now. */
+      const cands: { x: number; y: number; free: boolean }[] = [];
+      for (const [dx, dz] of [[0, r], [0, -r], [r, 0], [-r, 0]] as const) {
+        const q = projectWard(pickMatrix, selected.cx + dx, 1, selected.cz + dz, w, h);
+        /* The chip is taller now, so it needs more headroom before it would be
+           clipped by the top edge or buried under the footer strip. */
+        if (q.w <= 0 || q.y > h - 46 || q.y < 44) continue;
+        cands.push({ x: q.x, y: q.y, free: clearsCard(q.x, q.y) });
+      }
+      const pool = cands.filter(c => c.free);
+      const pick = (pool.length ? pool : cands).reduce<typeof cands[0] | null>(
+        (best, c) => (!best || c.y < best.y ? c : best), null);
+      const ok = !!pick, bx = pick?.x ?? 0, by = pick?.y ?? 0;
+      if (!ok) { lab.setAttribute('hidden', ''); continue; }
+      lab.removeAttribute('hidden');
+      /* Transform only. The label text is static markup — rewriting the same
+         string on every repaint was work with no output. */
+      lab.style.transform = `translate3d(${Math.round(bx)}px, ${Math.round(by)}px, 0)`;
+    }
     const p = projectWard(pickMatrix, selected.cx, selected.h, selected.cz, w, h);
     if (p.w <= 0) { bcard.style.opacity = '0'; bsel.style.opacity = '0'; return; }
     bcard.style.opacity = '1'; bsel.style.opacity = '1';
@@ -169,12 +287,27 @@ export function mountHeatMap(): () => void {
     selected = b;
     if (b) {
       selCtrU.value.set(b.cx, b.cz);
+      /* b.ring so the walk is measured from the building's nearest corner, not
+         from a point inside it — nobody sets off from the middle of a block. */
+      nearestCool = cooling ? nearestCooling(cooling, b.cx, b.cz, SIM_N, sizeU.value, b.ring) : null;
+      const lo = coolingLo ? nearestCooling(coolingLo, b.cx, b.cz, SIM_N, sizeU.value, b.ring) : null;
+      const hi = coolingHi ? nearestCooling(coolingHi, b.cx, b.cz, SIM_N, sizeU.value, b.ring) : null;
+      coolRangeM = lo && hi ? [Math.min(lo.distM, hi.distM), Math.max(lo.distM, hi.distM)] : null;
+      if (ringGroup) {
+        ringGroup.visible = true;
+        for (const m of ringGroup.children) m.position.set(b.cx, 0.75, b.cz);
+      }
+      coolU.value = 1;
       paintCard(b);
       bcard?.removeAttribute('hidden'); bsel?.removeAttribute('hidden');
       placeCard();
     } else {
       selCtrU.value.set(1e9, 1e9);
+      nearestCool = null; coolRangeM = null;
+      if (ringGroup) ringGroup.visible = false;
+      coolU.value = 0;
       bcard?.setAttribute('hidden', ''); bsel?.setAttribute('hidden', '');
+      for (const { el: id } of RINGS) el(id)?.setAttribute('hidden', '');
     }
     map.triggerRepaint();
   }
@@ -187,6 +320,7 @@ export function mountHeatMap(): () => void {
     if (moved > 6 || !registry.length) return;
     const r = cv.getBoundingClientRect();
     const hit = pickBuilding(pickMatrix, registry, e.clientX - r.left, e.clientY - r.top, cv.clientWidth, cv.clientHeight);
+    if (hit >= 0) dismissTip();
     select(hit >= 0 ? registry.find(b => b.idx === hit) ?? null : null);
   };
   cv.addEventListener('pointerdown', onPickDown);
@@ -310,6 +444,72 @@ export function mountHeatMap(): () => void {
   let registry: BuildingMeta[] = [];
   let selected: BuildingMeta | null = null;
 
+  /* ── walk-time rings + cooling surfaces ──
+     Both are SELECTION-SCOPED: they appear when a building is picked and vanish
+     with it. The resting map is unchanged, and each one answers a question the
+     reader has actually just asked by clicking — how far is that, and where is
+     the nearest relief. */
+  /* 4.8 km/h, the usual planning figure for a healthy adult on the flat. The
+     ring radii are DERIVED from it rather than written as 400/800, so the
+     geometry and the minutes on the label can never drift apart — and so that
+     anyone revisiting the walk speed (heat slows people down; 60–70 m/min is
+     the realistic figure for an older adult at 40 °C) moves both together. */
+  const WALK_M_PER_MIN = 80;
+  /* 1 and 5 minutes, NOT 5 and 10.
+     Measured across all three wards, distance from a building to the nearest
+     greenery runs: median 29–76 m, p90 122–319 m, max 527 m. So a 10-minute
+     ring (800 m) could never contain information — 100% of buildings sat inside
+     it — and it always ran past the 700 m study boundary, which is why it
+     needed a caveat nobody should have had to read. A 5-minute ring swallowed
+     96–100% on its own.
+     The 1-minute ring sits at 80 m, right around the median, so roughly half
+     the buildings have greenery inside it and half do not. That is the ring
+     that actually tells you something about the building you clicked. */
+  /* ids are radius-agnostic on purpose — they were ring5/ring10 when the radii
+     were 400/800 m, and the names survived a rescale they no longer described. */
+  const RINGS = [
+    { min: 1, r: 1 * WALK_M_PER_MIN, el: 'ringNear' },
+    { min: 5, r: 5 * WALK_M_PER_MIN, el: 'ringFar' },
+  ] as const;
+  /* Thresholds bracketing VEG_THRESHOLD, so the reported distance can carry the
+     uncertainty from the one constant that dominates it instead of hiding it. */
+  const VEG_BRACKET = [0.45, 0.55] as const;
+  const coolU = { value: 0 };
+  let ringGroup: THREE.Group | null = null;
+  let cooling: CoolingSurfaces | null = null;
+  let coolingLo: CoolingSurfaces | null = null;   // veg >= 0.45, the generous reading
+  let coolingHi: CoolingSurfaces | null = null;   // veg >= 0.55, the strict one
+  let nearestCool: { x: number; z: number; distM: number } | null = null;
+  let coolRangeM: [number, number] | null = null;
+
+  function buildRings() {
+    if (ringGroup || !threeScene) return;
+    ringGroup = new THREE.Group();
+    ringGroup.visible = false;
+    for (const { r } of RINGS) {
+      const mat = new THREE.ShaderMaterial({
+        transparent: true, depthWrite: false, side: THREE.DoubleSide,
+        uniforms: { uCol: { value: new THREE.Color(0x6fcad6) }, uOp: { value: 0.85 }, uDash: { value: r > 500 ? 1 : 0 } },
+        vertexShader: `varying vec3 vW; varying float vA;
+          void main(){ vW=(modelMatrix*vec4(position,1.0)).xyz; vA=atan(position.y, position.x);
+            gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
+        /* The 10-minute ring is 800 m from a point inside a 1,400 m window, so it
+           necessarily leaves the study area. Rather than draw a confident circle
+           over ground we have no data for, it fades out at the boundary — and
+           its label says so in words. */
+        fragmentShader: `varying vec3 vW; varying float vA; uniform vec3 uCol; uniform float uOp,uDash;
+          void main(){ float edge = 1.0 - smoothstep(600.0, 700.0, max(abs(vW.x), abs(vW.z)));
+            float dash = uDash > 0.5 ? step(0.42, fract(vA*7.0)) : 1.0;
+            float a = uOp*edge*dash; if(a < 0.01) discard; gl_FragColor=vec4(uCol, a); }`,
+      });
+      const m = new THREE.Mesh(new THREE.RingGeometry(r - 2.4, r + 2.4, 128), mat);
+      m.rotation.x = -Math.PI / 2;
+      m.renderOrder = -1;                          // with the ground overlay, under the city
+      ringGroup.add(m);
+    }
+    threeScene.add(ringGroup);
+  }
+
   /* ── three.js custom layer (shares MapLibre's GL context) ── */
   let threeScene: THREE.Scene | null = null, threeCam: THREE.Camera, threeRenderer: THREE.WebGLRenderer;
   let cityMesh: THREE.Mesh | null = null, overlay: THREE.Mesh;
@@ -328,17 +528,23 @@ export function mountHeatMap(): () => void {
       threeRenderer.autoClear = false;
       overlay = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.ShaderMaterial({
         transparent: true, depthWrite: false,
-        uniforms: { tT: { value: heatTex }, uMin: heatMinU, uMax: heatMaxU, uOp: { value: 0.5 } },
+        uniforms: { tT: { value: heatTex }, uMin: heatMinU, uMax: heatMaxU, uOp: { value: 0.5 }, uCool: coolU },
         vertexShader: 'varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
-        fragmentShader: `varying vec2 vUv; uniform sampler2D tT; uniform float uMin,uMax,uOp;
+        fragmentShader: `varying vec2 vUv; uniform sampler2D tT; uniform float uMin,uMax,uOp,uCool;
           vec3 ramp(float t){ vec3 cA=vec3(.204,.412,.529),cB=vec3(.318,.635,.729),c0=vec3(.435,.792,.839),c1=vec3(.624,.725,.541),c2=vec3(.690,.553,.341),c3=vec3(.831,.420,.290),c4=vec3(.898,.282,.302);
             if(t<0.0) return t<-.20 ? mix(cB,cA,clamp((-t-.20)/.30,0.,1.)) : mix(c0,cB,-t/.20);
             return t<.35?mix(c0,c1,t/.35):t<.6?mix(c1,c2,(t-.35)/.25):t<.8?mix(c2,c3,(t-.6)/.2):mix(c3,c4,min((t-.8)/.2,1.)); }
-          void main(){ float T=texture2D(tT, vec2(vUv.x, 1.0-vUv.y)).r; float t=clamp((T-uMin)/(uMax-uMin),-0.5,1.);
+          void main(){ vec4 F=texture2D(tT, vec2(vUv.x, 1.0-vUv.y)); float t=clamp((F.r-uMin)/(uMax-uMin),-0.5,1.);
             float edge=smoothstep(0.0,0.16, min(min(vUv.x,1.0-vUv.x), min(vUv.y,1.0-vUv.y)));
-            gl_FragColor=vec4(ramp(t), uOp*edge); }`,
+            /* B carries the cooling-surface mask (see explore/cooling-surfaces.ts).
+               It rides the field texture's spare channel, so showing it costs no
+               second plane, no second texture and no extra overdraw. */
+            float cool = F.b * uCool;
+            vec3 col = mix(ramp(t), vec3(.353,.722,.541), cool*0.62);
+            gl_FragColor=vec4(col, (uOp + cool*0.16)*edge); }`,
       }));
       overlay.rotation.x = -Math.PI / 2; overlay.position.y = 0.6; overlay.renderOrder = -1; threeScene.add(overlay);
+      buildRings();
     },
     render(_gl, matrix) {
       if (!modelTransform || !threeScene) return;
@@ -428,6 +634,18 @@ export function mountHeatMap(): () => void {
     state.base = rasterWardBase(d, means, surface);
     if (!roadsCache[name]) { try { roadsCache[name] = await (await fetch(`/heat-map/data/${name}-roads.json`)).json(); } catch { roadsCache[name] = { ways: [] }; } }
     state.spatial = M.buildSpatial(d, state.base, roadsCache[name]);
+    /* Cooling surfaces are a property of the MEASURED vegetation, so they are
+       computed from the ward's base layers and never move when a scenario does —
+       planting trees in the model must not invent a park that is not there. */
+    const cellM2 = (d.sizeM / SIM_N) * (d.sizeM / SIM_N);
+    cooling = findCoolingSurfaces(state.base.veg, SIM_N, cellM2);
+    /* Two more passes at the bracketing thresholds. Three flood fills over 37k
+       cells is a few milliseconds once per ward, and it buys the only honest
+       way to show a figure this parameter-sensitive: as a range. */
+    coolingLo = findCoolingSurfaces(state.base.veg, SIM_N, cellM2, VEG_BRACKET[0]);
+    coolingHi = findCoolingSurfaces(state.base.veg, SIM_N, cellM2, VEG_BRACKET[1]);
+    for (let i = 0; i < SIM_N * SIM_N; i++) heatData[i * 4 + 2] = cooling.mask[i];
+    heatTex.needsUpdate = true;
     state.live = liveCache[name] ?? null; paintLive();
     resetSim();
 
