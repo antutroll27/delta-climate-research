@@ -1,0 +1,37 @@
+{
+  "release": "2026-07-22.0",
+  "retrieved": "2026-08-04",
+  "source": "Overture Maps Foundation (ODbL)",
+  "wards": {
+    "ballygunge": {
+      "count": 3527,
+      "sha256": "6db0d37147aa69cc7edef1a6a3ea25070d60a57b84af2211ca7c7b47c18aecfd",
+      "skipped": {
+        "not_polygon": 0,
+        "tiny": 0,
+        "outside": 64,
+        "holes_dropped": 17
+      }
+    },
+    "barrackpore": {
+      "count": 4702,
+      "sha256": "fa1366e22758d7e89187b6d8e120778a25f3f9c9f3fc1aa43935b7c62e841558",
+      "skipped": {
+        "not_polygon": 0,
+        "tiny": 0,
+        "outside": 57,
+        "holes_dropped": 1
+      }
+    },
+    "baruipur": {
+      "count": 4538,
+      "sha256": "0f1f8da129dcd40441058ebc78b35fc365b79afbcdceb205171e679932a52ad2",
+      "skipped": {
+        "not_polygon": 0,
+        "tiny": 1,
+        "outside": 57,
+        "holes_dropped": 0
+      }
+    }
+  }
+}

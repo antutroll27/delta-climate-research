@@ -51,7 +51,7 @@ WARDS = {
 #: past this means the raw parquet changed under the manifest. Filled on the
 #: first run and pinned before commit.
 EXPECT_COUNT: dict[str, int | None] = {
-    "ballygunge": 3390, "barrackpore": None, "baruipur": None,
+    "ballygunge": 3527, "barrackpore": 4702, "baruipur": 4538,
 }
 
 
