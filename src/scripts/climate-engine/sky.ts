@@ -61,6 +61,46 @@ export function dewpointC(tC: number, rh: number): number {
 }
 
 /**
+ * Wet-bulb temperature, °C. Stull (2011), valid roughly 5–99 % RH.
+ *
+ * Here to make one thing checkable rather than assumed: 35 °C wet-bulb is the
+ * limit of human thermoregulation, and an atmosphere past it has never been
+ * observed on Earth. A scenario that produces one is not a severe scenario, it
+ * is a broken one.
+ */
+export function wetBulbC(tC: number, rh: number): number {
+  const r = Math.min(99, Math.max(5, rh));
+  return (
+    tC * Math.atan(0.151977 * Math.sqrt(r + 8.313659))
+    + Math.atan(tC + r)
+    - Math.atan(r - 1.676331)
+    + 0.00391838 * r ** 1.5 * Math.atan(0.023101 * r)
+    - 4.686035
+  );
+}
+
+/**
+ * The relative humidity at `tTargetC` that holds the SAME ABSOLUTE humidity as
+ * `tNowC`/`rhNow` — i.e. today's air mass, warmed.
+ *
+ * WHY NOT SIMPLY KEEP THE RELATIVE VALUE. Relative humidity is a ratio against a
+ * saturation pressure that itself climbs steeply with temperature, so holding it
+ * while raising the air by 8 K silently doubles the water in the air. Kolkata at
+ * 30 °C / 96 % taken to the 1-in-100 heat of 38.4 °C at the same 96 % is a
+ * wet-bulb of 37.9 °C: past the survivability limit, and never recorded
+ * anywhere. Preserving vapour pressure gives 60 % and 31.6 °C instead.
+ *
+ * The honest framing this earns is "today's air mass at 1-in-100 heat". Holding
+ * the ratio would instead invent heatwave-day humidity, which is precisely the
+ * record we do not have — we hold 74 years of air TEMPERATURE.
+ */
+export function shiftAirPreservingVapour(tNowC: number, rhNow: number, tTargetC: number): number {
+  const vapour = saturationVapourPressure(tNowC) * (rhNow / 100);
+  const ratio = (100 * vapour) / saturationVapourPressure(tTargetC);
+  return Math.min(100, Math.max(5, ratio));
+}
+
+/**
  * Solar elevation factor, 0–1 — cos(solar zenith), clamped at the horizon.
  *
  * The model used sun = 1 for "peak" and 0 for "night", which is only correct at
@@ -107,6 +147,21 @@ export function assertSkyLogic(): void {
   const dp = dewpointC(28, 80);
   ok(dp > 23.5 && dp < 25, `dewpoint at 28/80 = ${dp.toFixed(1)}, expected ~24.2`);
   ok(dewpointC(28, 100) > 27.9, 'dewpoint at saturation should equal air temperature');
+
+  /* Heatwave forcing: today's air mass, warmed — and never an impossible one.
+     The envelope spans the muggiest live reading the wards produce (96 % RH) to
+     a dry pre-monsoon afternoon, all taken to the 74-year p99 of 38.4 °C. */
+  const HEAT_P99 = 38.4;
+  for (const [t, r] of [[30, 96], [32.5, 76], [31.4, 60], [28, 88], [35, 40]] as const) {
+    const shifted = shiftAirPreservingVapour(t, r, HEAT_P99);
+    ok(shifted < r, `warming ${t}→${HEAT_P99} should LOWER relative humidity, got ${shifted.toFixed(0)}%`);
+    const wb = wetBulbC(HEAT_P99, shifted);
+    ok(wb < 35, `heatwave wet-bulb ${wb.toFixed(1)} at ${t}/${r} — past human survivability`);
+  }
+  // …and holding the ratio instead is exactly what breaks it, which is why we do not.
+  ok(wetBulbC(HEAT_P99, 96) > 35, 'the RH-preserving alternative should be demonstrably impossible');
+  // vapour is conserved: shifting to the same temperature changes nothing
+  ok(Math.abs(shiftAirPreservingVapour(31, 70, 31) - 70) < 1e-9, 'no-op shift must be exact');
 
   // solar geometry: sun is down at night, near-overhead at Kolkata midsummer noon
   ok(solarElevationFactor(1, 180) === 0, 'sun should be below horizon at 01:00');

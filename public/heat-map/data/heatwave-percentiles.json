@@ -1,0 +1,21 @@
+{
+  "city": "Kolkata",
+  "source": "India Meteorological Department, via data.opencity.in",
+  "licence": "Public Domain",
+  "retrieved": "2026-08-03",
+  "span": {
+    "from": "1951-01-01",
+    "to": "2024-06-21"
+  },
+  "rows": {
+    "total": 26806,
+    "usable": 26747
+  },
+  "method": "linear",
+  "tmaxC": {
+    "p50": 31.7,
+    "p95": 36.3,
+    "p99": 38.4,
+    "max": 43.0
+  }
+}

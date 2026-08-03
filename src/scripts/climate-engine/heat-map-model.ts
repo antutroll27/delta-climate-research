@@ -10,7 +10,7 @@
 // .ts extension: keeps this module runnable under `node --experimental-strip-types`
 // for assertInterventionLogic() (node doesn't do extensionless resolution).
 import { CANONICAL_GRID_N, DEFAULT_PARAMS, STORE_NIGHT, type SimParams, type SimLayers } from './types.ts';
-import { skyTemperatureC, dewpointC } from './sky.ts';
+import { skyTemperatureC, dewpointC, shiftAirPreservingVapour } from './sky.ts';
 
 export const SIM_N = CANONICAL_GRID_N;         // grid side (ward 1400 m → dx ≈ 7.29 m/cell)
 /**
@@ -159,6 +159,9 @@ export const PARK_HA = 0.785;
 
 export interface WardData { center: [number, number]; sizeM: number; count: number; b: number[][]; [k: string]: unknown; }
 export interface RoadsData { ways: { w: number; p: number[] }[]; }
+/** {ward}-water.json — OSM polygons in the roads contract's frame. `k` is the
+ * broad class ('water' | 'river' | 'pool'); `p` is flat [x,y,…] ward metres. */
+export interface WaterData { polys: { k: string; p: number[] }[]; }
 export interface Interventions { trees: number; roof: number; parks: number; facades: number; }
 export interface Ambient {
   tAir: number; rh: number; wind: number; cloud: number; feels: number;
@@ -177,6 +180,13 @@ export interface Spatial {
 }
 export interface ScenarioState {
   live: Ambient | null; phase: 'peak' | 'night'; path: string; iv: Interventions;
+  /* HEATWAVE IS A FORCING OVERRIDE, NOT A THIRD PHASE — the same shape `sunNow`
+     takes, and for the same reason its comment gives: every consumer downstream
+     (ACCURACY, bandLabel, the DC-URS split, the Compare link, the phase label)
+     is written against the binary phase. Non-null substitutes this air
+     temperature for the observed one and holds today's VAPOUR PRESSURE while
+     doing it; the phase stays 'peak'. */
+  heatTairC?: number | null;
   /**
    * Clear-sky solar elevation factor for RIGHT NOW at the ward, 0–1, or null
    * for the two canonical phases.
@@ -318,10 +328,23 @@ export function computeCost(iv: Interventions, sp: Spatial | null): number {
 
 /** Scenario forcing → SimParams (§2 D retune, §3.4 facade Q cut, §4 diurnal/pathway). */
 export function currentParams(s: ScenarioState): SimParams {
-  const L = s.live, baseTair = (L ? L.tAir : FALLBACK_TAIR) + (PATH_DELTA[s.path] ?? 0);
+  const L = s.live, obsTair = L ? L.tAir : FALLBACK_TAIR, obsRh = L ? L.rh : 60;
+  /* PATH_DELTA STAYS ADDITIVE ON TOP OF THE OVERRIDE. Replacing the whole
+     expression would make the warming-pathway control silently dead whenever
+     heatwave was on — a button that does nothing and says nothing, which is the
+     fan-out the `sunNow` note exists to refuse. Composed, it reads as what it
+     is: a 1-in-100 day under SSP5-8.5. Both are additive forcing shifts. */
+  const baseTair = (s.heatTairC ?? obsTair) + (PATH_DELTA[s.path] ?? 0);
   const wind = L ? Math.min(2.5, Math.max(0.3, L.wind / 3)) : 1, cloud = L ? L.cloud / 100 : 0;
-  // humidity gates evaporative cooling: dry air cools harder, muggy monsoon air stalls it.
-  const rh = L ? L.rh : 60, evap = 0.6 + 0.6 * (1 - rh / 100);
+  /* Humidity gates evaporative cooling: dry air cools harder, muggy monsoon air
+     stalls it. Under a heatwave the air mass is TODAY'S, warmed — so absolute
+     humidity is preserved and the relative value falls out of it. Holding the
+     ratio instead would invent heatwave-day humidity, the one thing a 74-year
+     record of air TEMPERATURE cannot supply, and on a muggy day it produces a
+     wet-bulb past human survivability (see shiftAirPreservingVapour). */
+  const rh = s.heatTairC == null ? obsRh
+    : shiftAirPreservingVapour(obsTair, obsRh, s.heatTairC);
+  const evap = 0.6 + 0.6 * (1 - rh / 100);
   const Q = DEFAULT_PARAMS.Q * (1 - FACADE_Q * (s.iv.facades / 15));
   const b: SimParams = { ...DEFAULT_PARAMS, D: SIM_D, Q, wind, L: DEFAULT_PARAMS.L * evap };
 
@@ -409,6 +432,30 @@ export function assertInterventionLogic(): void {
   for (let i = 0; i < N2; i++) { const built = (i % 2 === 0) ? 1 : 0; base.built[i] = built; base.albedo[i] = built ? 0.2 : 0.32; base.veg[i] = built ? 0 : 0.05; if (!built) streets.push(i); }
   const sp: Spatial = { corridorSorted: Int32Array.from(streets), corridorKm: 40, parkCenters: [[48, 48], [140, 140]], roofM2: 5e5, facadeM2: 8e5, cellArea: 53.1, cellM: 7.29 };
   const p: SimParams = currentParams({ live: null, phase: 'peak', path: '2025', iv: { trees: 0, roof: 0, parks: 0, facades: 0 } });
+
+  /* ── heatwave: a FORCING OVERRIDE, and only that ─────────────────────────
+     The risk this pins down is scope creep in a substitution. The override must
+     move air temperature (and the humidity that travels with it) and leave every
+     other term of the forcing exactly where the plain peak scenario put it. */
+  const iv0 = { trees: 0, roof: 0, parks: 0, facades: 0 };
+  const live = { tAir: 30, rh: 96, wind: 3, cloud: 20, feels: 40 } as Ambient;
+  const P99 = 38.4;
+  const plain = currentParams({ live, phase: 'peak', path: '2025', iv: iv0 });
+  const heat = currentParams({ live, phase: 'peak', path: '2025', iv: iv0, heatTairC: P99 });
+  a(Math.abs(heat.tAir - P99) < 1e-9, `heatwave tAir ${heat.tAir}, expected ${P99}`);
+  a(heat.sun === plain.sun && heat.wind === plain.wind && heat.Q === plain.Q,
+    'heatwave changed sun, wind or Q — it may only change the air');
+  a(heat.store === plain.store, 'heatwave changed the storage term');
+  // hotter air holds more, so the same water is a LOWER relative humidity, and the
+  // drier air evaporates harder — L must rise, never fall.
+  a(heat.L > plain.L, 'heatwave should dry the air and raise the latent term');
+  // the pathway composes on top rather than being replaced by the override
+  const hot585 = currentParams({ live, phase: 'peak', path: 'ssp585', iv: iv0, heatTairC: P99 });
+  a(Math.abs(hot585.tAir - (P99 + PATH_DELTA.ssp585)) < 1e-9,
+    `heatwave + ssp585 = ${hot585.tAir}, expected ${P99 + PATH_DELTA.ssp585} — the pathway was swallowed`);
+  // absent, it must be exactly the old behaviour
+  a(currentParams({ live, phase: 'peak', path: '2025', iv: iv0, heatTairC: null }).tAir === plain.tAir,
+    'a null override changed the forcing');
 
   const base0 = eqMean(base, p);
   const roofed = eqMean(applyInterventions(base, { trees: 0, roof: 100, parks: 0, facades: 0 }, sp), p);
