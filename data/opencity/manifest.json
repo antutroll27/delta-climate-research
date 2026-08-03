@@ -1,0 +1,143 @@
+{
+  "generated_by": "scripts/fetch-opencity.py",
+  "catalogue": "https://data.opencity.in",
+  "retrieved": "2026-08-03",
+  "note": "Raw acquisition. Nothing here is served to the browser \u2014 derived artefacts go to public/heat-map/data/. A row with a non-empty blockers list must not be displayed until those facts are settled.",
+  "artefacts": {
+    "imd-kolkata-daily": {
+      "path": "data/opencity/imd-kolkata-daily.csv",
+      "source_url": "https://data.opencity.in/dataset/e57cd149-fd78-4853-80b8-47d3d082845e/resource/2f2fd6a8-cfad-4648-989c-08272d01982b/download",
+      "retrieved": "2026-08-03",
+      "licence": "Public Domain",
+      "sha256": "f07d6af8edc494c69485f23558bad461507820c2afcc3326be08fbeade05c661",
+      "bytes": 1089407,
+      "records": 26806,
+      "notes": "IMD Kolkata daily Date/Rain/Temp Max/Temp Min, 74 years. Downloaded by scripts/build-heatwave-percentiles.py, which owns its derivation and asserts 26,806 rows / 26,747 usable; it is listed here so the ONE archive that feeds a SERVED artefact (heatwave-percentiles.json) is hash-pinned like every other, rather than being the exception.",
+      "blockers": [],
+      "display": true
+    },
+    "microwatersheds": {
+      "path": "data/opencity/microwatersheds.geojson",
+      "source_url": "https://data.opencity.in/dataset/e6360adc-99b7-42b8-8c4d-7d6d8ec2bd20/resource/a53210e3-28c3-4154-a104-2152b3889492/download",
+      "retrieved": "2026-08-03",
+      "licence": "Public Domain",
+      "sha256": "426a61e118cf3f36c6b89d78404b89250738a1c424f704333438d2dfe964076d",
+      "bytes": 6308092,
+      "records": 535,
+      "notes": "535 catchment polygons. All three wards verified inside a containing polygon by point-in-polygon: Ballygunge MWS 2A1A5k3, Baruipur 2A1A5h3, Barrackpore 2A1C1a5, all basin 2A. BUT the median polygon is ~5-8x the 196 ha ward window, so this is CITY-SCALE DRAINAGE CONTEXT and not a finer layer for the heat map. It is a second instrument with its own route and its own spec; acquisition only here.",
+      "blockers": [],
+      "display": true
+    },
+    "water-census": {
+      "path": "data/opencity/water-census.kml",
+      "source_url": "https://data.opencity.in/dataset/d9c9b5e1-01e2-4fa4-8c7c-ff335d327f96/resource/8b4faaae-746e-4079-8d08-93c54fa04956/download",
+      "retrieved": "2026-08-03",
+      "licence": "Public Domain",
+      "sha256": "1f7f8c027bd36b7ab322ad02c918acd0766a2f9aace024e3647034096dd06356",
+      "bytes": 5706677,
+      "records": 3051,
+      "notes": "Jal Dharohar census 2018-19. 3,051 records, ZERO polygons \u2014 points only, so it cannot supply water geometry; that comes from OSM (scripts/fetch-water.py). Coverage is KMC-only: nearest record is 11.4 km from Baruipur and 14.5 km from Barrackpore, and just one falls inside Ballygunge's window. What it uniquely carries is attributes OSM lacks \u2014 water_spread_area, storage capacity, max depth \u2014 for a future join on the Ballygunge polygons.",
+      "blockers": [],
+      "display": true
+    },
+    "kmc-parks": {
+      "path": "data/opencity/kmc-parks.csv",
+      "source_url": "https://data.opencity.in/dataset/a940e732-e38e-49ba-b0bb-33aea7deddf2/resource/4640f53a-9cbe-4bb9-8595-fb3593f70c25/download",
+      "retrieved": "2026-08-03",
+      "licence": "not stated",
+      "sha256": "bab75ecd84d38c846b98a252a4afc454f0e361bd8ef3e605433ea774a9d185c5",
+      "bytes": 7651,
+      "records": 93,
+      "notes": "93 KMC parks, keyed by KMC ward number. Of our three wards only Ballygunge is inside KMC \u2014 Baruipur and Barrackpore are separate municipalities \u2014 so an indicator built from this can score one ward of three, which kills the DC-URS route considered for it. Recorded so nobody retries it.",
+      "blockers": [
+        "licence not stated by the publisher \u2014 confirm before any client-facing use",
+        "Area column units unstated and present on only 34 of 93 rows"
+      ],
+      "display": false
+    },
+    "aqi-ballygunge": {
+      "path": "data/opencity/aqi/ballygunge.csv",
+      "source_url": "https://data.opencity.in/dataset/3a0c1c28-dbd2-42f0-8d76-7acb0b2f9e18/resource/251013c7-808c-4c24-955f-67e27445b5f8/download",
+      "retrieved": "2026-08-03",
+      "licence": "Public Domain",
+      "sha256": "b1bc6dc350152f7d2847192e9ef3f6ab14313e809b40cbc86cc2c766feef5c6d",
+      "bytes": 193762,
+      "records": 1844,
+      "notes": "WBPCB hourly air quality, 2017-2023, ballygunge station. THIS STATION IS A MODELLED WARD \u2014 a measured multi-year record beside a simulated one.",
+      "blockers": [],
+      "display": true
+    },
+    "aqi-bidhannagar": {
+      "path": "data/opencity/aqi/bidhannagar.csv",
+      "source_url": "https://data.opencity.in/dataset/3a0c1c28-dbd2-42f0-8d76-7acb0b2f9e18/resource/ad9debfa-aa31-4776-bd67-c7419b34f42d/download",
+      "retrieved": "2026-08-03",
+      "licence": "Public Domain",
+      "sha256": "3ac96027c35fcd45a2a769930fe971e69f9cc68e3b31ad8391442629f452ffed",
+      "bytes": 189396,
+      "records": 1853,
+      "notes": "WBPCB hourly air quality, 2017-2023, bidhannagar station.",
+      "blockers": [],
+      "display": true
+    },
+    "aqi-fort-william": {
+      "path": "data/opencity/aqi/fort-william.csv",
+      "source_url": "https://data.opencity.in/dataset/3a0c1c28-dbd2-42f0-8d76-7acb0b2f9e18/resource/a6cf271a-bee4-434e-a844-4b080b651158/download",
+      "retrieved": "2026-08-03",
+      "licence": "Public Domain",
+      "sha256": "6002ff704bfacf212969eb1bed753b0a76bc6ac68eb897ddf85a8cf198f67591",
+      "bytes": 196221,
+      "records": 1936,
+      "notes": "WBPCB hourly air quality, 2017-2023, fort william station.",
+      "blockers": [],
+      "display": true
+    },
+    "aqi-jadavpur": {
+      "path": "data/opencity/aqi/jadavpur.csv",
+      "source_url": "https://data.opencity.in/dataset/3a0c1c28-dbd2-42f0-8d76-7acb0b2f9e18/resource/40843135-dbcc-467a-9672-91d2beff390b/download",
+      "retrieved": "2026-08-03",
+      "licence": "Public Domain",
+      "sha256": "cc8eb4e28690336f7676df4ce4eaf636671977ab42d6e36bd0bca34c7b6666f2",
+      "bytes": 200951,
+      "records": 1936,
+      "notes": "WBPCB hourly air quality, 2017-2023, jadavpur station.",
+      "blockers": [],
+      "display": true
+    },
+    "aqi-rabindra-bharati": {
+      "path": "data/opencity/aqi/rabindra-bharati.csv",
+      "source_url": "https://data.opencity.in/dataset/3a0c1c28-dbd2-42f0-8d76-7acb0b2f9e18/resource/8b972781-07fa-4f8a-a4ab-a35494384d53/download",
+      "retrieved": "2026-08-03",
+      "licence": "Public Domain",
+      "sha256": "337fa0f8ff8ee89609b61b9136558a6fb35d4d45219b2bf7a99575efa4d9ad18",
+      "bytes": 248670,
+      "records": 2592,
+      "notes": "WBPCB hourly air quality, 2017-2023, rabindra bharati station.",
+      "blockers": [],
+      "display": true
+    },
+    "aqi-rabindra-sarobar": {
+      "path": "data/opencity/aqi/rabindra-sarobar.csv",
+      "source_url": "https://data.opencity.in/dataset/3a0c1c28-dbd2-42f0-8d76-7acb0b2f9e18/resource/caf1333b-6684-479a-864e-bf20bf5f0884/download",
+      "retrieved": "2026-08-03",
+      "licence": "Public Domain",
+      "sha256": "635905b6d060f103353ec41679fa4ea7ab33b17762f07c344164d89c42e99eee",
+      "bytes": 182021,
+      "records": 1872,
+      "notes": "WBPCB hourly air quality, 2017-2023, rabindra sarobar station.",
+      "blockers": [],
+      "display": true
+    },
+    "aqi-victoria": {
+      "path": "data/opencity/aqi/victoria.csv",
+      "source_url": "https://data.opencity.in/dataset/3a0c1c28-dbd2-42f0-8d76-7acb0b2f9e18/resource/538a8db9-88b8-4fb1-ac1d-90aa29f6a041/download",
+      "retrieved": "2026-08-03",
+      "licence": "Public Domain",
+      "sha256": "a19e1e2549e1906109fb592e4e530b41dd06dd16a807a603338ddeb28ffca4bb",
+      "bytes": 244726,
+      "records": 2592,
+      "notes": "WBPCB hourly air quality, 2017-2023, victoria station.",
+      "blockers": [],
+      "display": true
+    }
+  }
+}
