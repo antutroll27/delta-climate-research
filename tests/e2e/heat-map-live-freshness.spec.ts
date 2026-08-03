@@ -46,9 +46,17 @@ test.describe('live reading freshness', () => {
     await expect(page.locator(dial)).toHaveAttribute('title', /not a time of day/);
     // The big digits are the WARD's clock — they must agree with the zone, not
     // with the reading's validity hour (that mismatch is what read as broken).
-    const truth = await page.evaluate(() => new Intl.DateTimeFormat('en-GB',
-      { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date()));
+    // Twelve-hour is the default face, and the meridiem lives in the stacked
+    // pair beside it, so the digits themselves must carry NO am/pm suffix.
+    const truth = await page.evaluate(() => new Intl.DateTimeFormat('en-US',
+      { timeZone: 'Asia/Kolkata', hour: 'numeric', minute: '2-digit', hourCycle: 'h12' })
+      .formatToParts(new Date())
+      .filter(t => t.type === 'hour' || t.type === 'minute' || t.type === 'literal')
+      .map(t => t.value).join('').trim());
     await expect(page.locator('#clockTime')).toHaveText(truth);
+    await expect(page.locator('#clockTime')).not.toHaveText(/[AP]M/i);
+    // Exactly one of the meridiem pair is lit — the whole point of stacking both.
+    await expect(page.locator('#clockw .k-mer.on')).toHaveCount(1);
   });
 
   test('an overnight-stale reading loses the live claim', async ({ page }) => {
@@ -67,7 +75,9 @@ test.describe('live reading freshness', () => {
     await expect(page.locator('#liveT')).toHaveText('24.0');
 
     await stubMet(page, 0, 33.7);          // fresher weather is now available
-    await page.locator(dial).click();
+    // The re-read lives on the age line, not the whole tile: the face owns the
+    // 12/24-hour toggle. Clicking the shell must NOT be what refreshes.
+    await page.locator('#clockAge').click();
 
     await expect(page.locator(dial)).toHaveAttribute('data-age', 'fresh', { timeout: 60_000 });
     // Not just the label — the forcing that feeds the sim actually changed.
@@ -100,16 +110,56 @@ test.describe('live reading freshness', () => {
     expect(m.gapBelowBanner!).toBeGreaterThan(10);
   });
 
+  test('the face toggles 12/24-hour, remembers it, and never re-fetches', async ({ page }) => {
+    // THE TILE CARRIES TWO ACTIONS AND THEY MUST NOT BLEED. The face changes how
+    // the time is written; the age line goes to the network. Before the split
+    // there was one button and the re-read was the only way to refresh a stale
+    // reading — so a toggle that quietly ate that click would leave a dial
+    // reporting 14-hour-old data with no way to fix it.
+    let met = 0;
+    await page.route('**/api.met.no/**', (r) => { met += 1; r.continue(); });
+    await stubMet(page, 0, 33.7);
+    await page.goto('/heat-map/');
+    await expect(page.locator(dial)).toHaveAttribute('data-h12', 'true', { timeout: 60_000 });
+    await expect(page.locator('#clockFace')).toHaveAttribute('aria-pressed', 'false');
+
+    const afterLoad = met;
+    await page.locator('#clockFace').click();
+    await expect(page.locator(dial)).toHaveAttribute('data-h12', 'false');
+    await expect(page.locator('#clockFace')).toHaveAttribute('aria-pressed', 'true');
+    // 24-hour is zero-padded, and the meridiem pair is REPLACED rather than
+    // dimmed — a greyed "AM" beside a 24-hour readout would be stating a
+    // half-truth about a clock that no longer has halves.
+    await expect(page.locator('#clockTime')).toHaveText(/^\d{2}:\d{2}$/);
+    await expect(page.locator('#clock24')).toBeVisible();
+    await expect(page.locator('#clockAm')).toBeHidden();
+    await expect(page.locator('#clockPm')).toBeHidden();
+    expect(met, 'the format toggle must be a pure re-render').toBe(afterLoad);
+
+    // ...and back again.
+    await page.locator('#clockFace').click();
+    await expect(page.locator(dial)).toHaveAttribute('data-h12', 'true');
+    await expect(page.locator('#clockTime')).toHaveText(/^\d{1,2}:\d{2}$/);
+    await expect(page.locator('#clock24')).toBeHidden();
+
+    // The choice is about the reader, not the visit, so it outlives a reload.
+    await page.locator('#clockFace').click();
+    await page.reload();
+    await expect(page.locator(dial)).toHaveAttribute('data-h12', 'false', { timeout: 60_000 });
+  });
+
   test('digits and freshness bar move together', async ({ page }) => {
     await stubMet(page, 0);
     await page.goto('/heat-map/');
     await expect(page.locator(dial)).toHaveAttribute('data-age', 'fresh', { timeout: 60_000 });
     // Digits are a real ward-local clock reading, not a placeholder.
-    await expect(page.locator('#clockTime')).toHaveText(/^\d{2}:\d{2}$/);
+    await expect(page.locator('#clockTime')).toHaveText(/^\d{1,2}:\d{2}$/);
     const fresh = await page.locator('#clockBar').getAttribute('style');
 
     await stubMet(page, 4);
-    await page.locator(dial).click();
+    // The age line, not the tile: since the face took over the 12/24-hour
+    // toggle, a click on the shell refreshes nothing.
+    await page.locator('#clockAge').click();
     await expect(page.locator(dial)).toHaveAttribute('data-age', 'aging', { timeout: 60_000 });
     const aged = await page.locator('#clockBar').getAttribute('style');
     const num = (s: string | null) => Number(/scaleX\(([\d.]+)\)/.exec(s ?? '')?.[1] ?? NaN);

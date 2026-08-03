@@ -836,6 +836,42 @@ export function mountHeatMap(): () => void {
   const wardClock = new Intl.DateTimeFormat('en-GB', {
     timeZone: WARD_TZ, hour: '2-digit', minute: '2-digit', hour12: false,
   });
+  /* TWELVE-HOUR FOR THE DIAL, TWENTY-FOUR EVERYWHERE ELSE.
+     The face carries a stacked AM/PM pair, which only means anything against a
+     12-hour reading — and for a heat instrument "is it the middle of the night
+     there" is the most load-bearing fact about a temperature, which 24-hour
+     buries in a leading digit. `wardClock` stays 24-hour because the tooltip and
+     the validity hour are records, not glanceable state.
+     `hourCycle: 'h12'` and not `hour12: true`: the latter emits "24" for
+     midnight under some ICU builds, which would render a 24:07 clock face. */
+  const wardFaceFmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: WARD_TZ, hour: 'numeric', minute: '2-digit', hourCycle: 'h12',
+  });
+  /* Digits only. A 12-hour format emits "1:39 PM", and the stacked pair beside
+     the digits already says PM — printing it twice is the one thing the stacked
+     indicator exists to avoid. formatToParts drops the dayPeriod without
+     string-slicing a locale-dependent suffix. */
+  const wardFace = (d: Date) => wardFaceFmt.formatToParts(d)
+    .filter(p => p.type === 'hour' || p.type === 'minute' || p.type === 'literal')
+    .map(p => p.value).join('').trim();
+  /* CLOCK FORMAT IS THE READER'S, AND IT PERSISTS.
+     Twelve-hour is the default because the stacked meridiem is what makes the
+     face glanceable, but half the world reads 24-hour and a scientist reading a
+     thermal instrument may well prefer it. localStorage rather than session:
+     this is a preference about the person, not about the visit, and having to
+     re-set it every time would make the toggle feel broken. Both accesses are
+     guarded — storage throws outright in some privacy modes, and a clock is not
+     worth taking the page down for. */
+  const H12_KEY = 'delta:heat-clock-h12';
+  let hour12 = true;
+  try { hour12 = localStorage.getItem(H12_KEY) !== '0'; } catch { /* default stands */ }
+
+  /* The ward's weekday, three letters, uppercased at the call site rather than
+     by CSS so screen readers get the real word and not a styled abbreviation. */
+  const wardDay = new Intl.DateTimeFormat('en-US', { timeZone: WARD_TZ, weekday: 'short' });
+  const wardHour24 = new Intl.DateTimeFormat('en-GB', {
+    timeZone: WARD_TZ, hour: '2-digit', hourCycle: 'h23',
+  });
 
   /* CLOCK SKEW, MEASURED FROM THE SAME REQUEST.
      The reading's age is (now - validAt), and `now` comes from the visitor's
@@ -855,7 +891,10 @@ export function mountHeatMap(): () => void {
   }
 
   function paintClock() {
-    const btn = el('clockw') as HTMLButtonElement | null;
+    /* The shell is a <div> since the tile split into two buttons; casting it to
+       HTMLButtonElement compiled fine and would have been a lie the day someone
+       reached for .disabled on it. */
+    const btn = el('clockw');
     if (!btn) return;
     const L = state.live;
     btn.hidden = !L;
@@ -870,14 +909,37 @@ export function mountHeatMap(): () => void {
        01:29, because a 19:00Z reading IS 00:30 IST. Nobody reads a large time
        as "the hour of the observation" — they read it as "the time". So the
        clock says the time, and the reading's age qualifies it underneath. */
-    setText('clockTime', wardClock.format(new Date(now())));
+    const at = new Date(now());
+    /* One switch, two formatters already built — the 24-hour one is `wardClock`,
+       which the tooltip has always used, so no third Intl instance is created. */
+    setText('clockTime', hour12 ? wardFace(at) : wardClock.format(at));
+    btn.dataset.h12 = String(hour12);
+    /* Uppercased here, not by CSS: text-transform styles the glyphs but leaves
+       the accessible name as "Mon", and this string also lands in the title. */
+    const dayLabel = wardDay.format(at).toUpperCase();
+    setText('clockDay', dayLabel);
+    /* Meridiem from an explicit h23 read rather than parsing the 12-hour string
+       — no locale surprises, and midnight is 00 rather than 12 or 24. */
+    const pm = Number(wardHour24.format(at)) >= 12;
+    el('clockAm')?.classList.toggle('on', !pm);
+    el('clockPm')?.classList.toggle('on', pm);
+    const face = el('clockFace');
+    /* aria-pressed on the FACE, not the tile: the button is "24-hour clock",
+       pressed when 24-hour is showing. The label names the destination so a
+       screen-reader user is told what activating it will do, not what it is. */
+    face?.setAttribute('aria-pressed', String(!hour12));
+    face?.setAttribute('aria-label', hour12
+      ? `Ward clock, ${dayLabel} ${wardFace(at)} ${pm ? 'PM' : 'AM'}. Switch to 24-hour.`
+      : `Ward clock, ${dayLabel} ${wardClock.format(at)}, 24-hour. Switch to 12-hour.`);
 
     if (mins === null) {
       /* Unknown age must not render as fresh: empty bar, nothing claimed. */
       btn.dataset.age = 'unknown';
       setText('clockAgeLab', 'age —');
+      el('clockAge')?.setAttribute('aria-label',
+        'Live reading age unknown. Activate to fetch current conditions.');
       bar?.setAttribute('style', 'transform:scaleX(0)');
-      btn.title = `Ward clock, ${WARD_TZ}. Live reading age unknown. Activate to re-read.`;
+      btn.title = `Ward clock (${WARD_TZ}) — ${dayLabel} ${wardClock.format(at)}. Live reading age unknown. Activate to re-read.`;
       return;
     }
 
@@ -888,8 +950,16 @@ export function mountHeatMap(): () => void {
 
     const label = mins < 60 ? `${Math.round(mins)}m` : `${Math.floor(mins / 60)}h`;
     setText('clockAgeLab', `read ${label} ago`);
+    /* The visible text is "read 11m ago", which states a fact and not an
+       action. The button needs to say what activating it DOES. */
+    el('clockAge')?.setAttribute('aria-label',
+      `Live reading is ${label} old. Activate to fetch current conditions.`);
     const validLocal = wardClock.format(new Date(Date.parse(L.validAt!)));
-    btn.title = `Ward clock (${WARD_TZ}). The live reading driving this simulation `
+    /* The DAY is in the name because the digits are the ward's, not the
+       reader's: at 18:30 in London this face says 12:00 AM, and only the
+       weekday reveals that Kolkata is already on the next day. */
+    btn.title = `Ward clock (${WARD_TZ}) — ${dayLabel} ${wardClock.format(at)}. `
+      + `The live reading driving this simulation `
       + `is valid for ${validLocal} and is ${label} old. `
       + 'The map itself shows a modelled phase, not a time of day. Activate to re-read.';
   }
@@ -905,13 +975,20 @@ export function mountHeatMap(): () => void {
   }
 
   const onClock = async () => {
-    const btn = el('clockw') as HTMLButtonElement | null;
+    const btn = el('clockAge') as HTMLButtonElement | null;
     if (!btn || btn.disabled) return;
     btn.disabled = true;
     try { await fetchLive(state.ward, true); } finally { btn.disabled = false; paintClock(); }
   };
-  el('clockw')?.addEventListener('click', onClock);
-  cleanup.push(() => el('clockw')?.removeEventListener('click', onClock));
+  const onFormat = () => {
+    hour12 = !hour12;
+    try { localStorage.setItem(H12_KEY, hour12 ? '1' : '0'); } catch { /* preference is transient */ }
+    paintClock();
+  };
+  el('clockAge')?.addEventListener('click', onClock);
+  cleanup.push(() => el('clockAge')?.removeEventListener('click', onClock));
+  el('clockFace')?.addEventListener('click', onFormat);
+  cleanup.push(() => el('clockFace')?.removeEventListener('click', onFormat));
   /* Age advances with the wall clock, not with any event, so it needs its own
      slow tick. One minute is far below the resolution of the thing being shown
      and costs nothing next to the sim. */
