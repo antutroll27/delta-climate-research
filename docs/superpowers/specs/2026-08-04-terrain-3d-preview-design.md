@@ -82,10 +82,42 @@ run by construction. Caught while writing the implementation plan.
 **Measured on the first bake (2026-08-04):** raw → smoothed p5–p95 is 8.9 → 7.7
 (Ballygunge), 6.6 → 4.9 (Barrackpore), 7.4 → 6.7 m (Baruipur), around medians of
 10.6 / 11.6 / 10.3 m ASL. The raw figures reproduce the independent 2026-08-03
-measurement, which cross-checks the tile sampling. Note the filter removes less than
-the ~3–5 m bare-earth expectation implies: what survives is broad-scale variation,
-not individual rooftops. Whether that residual reads as honest ground or as
-contamination is one of the things the preview is for.
+measurement, which cross-checks the tile sampling.
+
+**The residual is ground, not rooftops — measured, not assumed.** The filter removes
+less than the ~3–5 m bare-earth expectation implies, which raised the obvious worry
+that the surviving relief is just built-up mass the filter missed. Tested by
+correlating each ward's residual field against built volume (Σ footprint area ×
+height) per terrain cell: **r = +0.009 / +0.006 / −0.011**, and the gap between the
+densest and emptiest built deciles is ±0.2–0.35 m against a 4.9–7.7 m span. There is
+no relationship. The 40 m median filter did its job; what survives is genuine
+broad-scale ground variation, so exaggeration amplifies real terrain rather than
+amplifying error.
+
+**But two independent DEMs disagree about that ground by a third of it.** Asked
+whether this could be made "extremely accurate", the terrarium field was
+cross-checked against Copernicus GLO-30 (TanDEM-X, an independent instrument) over
+the identical windows and the identical 40 m filter:
+
+| ward | shape agreement r | per-cell RMSE | against a smoothed span of |
+|---|---|---|---|
+| Ballygunge | +0.493 | 2.11 m | 7.7 m |
+| Barrackpore | +0.480 | 1.47 m | 4.9 m |
+| Baruipur | +0.665 | 1.49 m | 6.7 m |
+
+Absolute medians differ by 1.3–2.4 m as well. Two instruments that share only
+r² ≈ 0.24–0.44 of the variance are not measuring an agreed shape: the disagreement
+is **20–30 % of the entire signal**. The relief is real (it is not buildings), but
+its FORM is only about half reproducible between sources.
+
+**Consequence, recorded as a limit rather than a caveat: this terrain cannot be
+made accurate from free DEM data, at any exaggeration.** On a delta whose whole
+relief is 5–8 m, the instruments' mutual disagreement is the same order as the
+feature. It is defensible as *indicative broad-scale form* and not as measured
+ground — which means it is a visual layer, and must never sit beside the measured
+LST figures as though it carried comparable confidence. Genuine accuracy here
+needs survey or LiDAR elevation for Kolkata, which is a procurement question, not
+a pipeline one.
 
 Size: ~74 KB per ward raw (a few KB gzipped). Artefacts live in
 `previews/terrain-3d/data/` — NOT `public/` — because this is a prototype. That
