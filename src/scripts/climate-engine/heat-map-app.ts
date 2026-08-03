@@ -708,7 +708,13 @@ export function mountHeatMap(): () => void {
       /* The water shimmer advances only here — it rides whatever repaints the
          map already does (orbit, drags, the sim bridge). Reduced motion means
          still water, by never advancing the clock. */
-      if (!reduceMotion) waterLayer?.setTime(performance.now() / 1000);
+      if (waterLayer) {
+        /* The specular streak needs the map's own view direction — the three
+           camera here carries a hand-assigned projection matrix and no usable
+           world transform, so it is taken from MapLibre each frame. */
+        waterLayer.setView(map.getBearing(), map.getPitch());
+        if (!reduceMotion) waterLayer.setTime(performance.now() / 1000);
+      }
       threeRenderer.resetState();
       threeRenderer.render(threeScene, threeCam);
       if (growU.value < 1 || fieldDirty) { fieldDirty = false; map.triggerRepaint(); }

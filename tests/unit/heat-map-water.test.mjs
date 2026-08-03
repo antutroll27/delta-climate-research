@@ -52,3 +52,29 @@ test('the water feature is render-only: nothing writes the sim water layer', asy
   assert.match(raster, /const water = new Float32Array\(count\);/,
     'the zero water layer must remain explicit, not vanish silently');
 });
+
+test('shore distance is the depth proxy, and it scales with the body', async () => {
+  // The look is derived from geometry alone — no bathymetry exists for these
+  // wards and the pond census that might have carried depth covers one of the
+  // three. Distance from the nearest shore is what stands in, because
+  // shorelines shelve: a river reads deep, a rooftop tank reads shallow, with
+  // nothing invented and no per-feature tuning.
+  const { buildDepthField, assertWaterDepthLogic } =
+    await import('../../src/scripts/climate-engine/water-depth.ts');
+  assertWaterDepthLogic();
+
+  const depths = {};
+  for (const ward of WARDS) {
+    const d = JSON.parse(await readFile(
+      join(ROOT, `public/heat-map/data/${ward}-water.json`), 'utf8'));
+    const field = buildDepthField(d.polys, 1520);
+    assert.ok(field.maxDistM > 0, `${ward} has water, so something must be off-shore`);
+    assert.ok(field.data.some(v => v === 255), `${ward} must have a deepest point`);
+    assert.ok(field.data.some(v => v === 0), `${ward} must have land`);
+    depths[ward] = field.maxDistM;
+  }
+  // Barrackpore holds the Hooghly edge; Ballygunge holds tanks. If that ever
+  // inverts, either the fetch or the field has gone wrong.
+  assert.ok(depths.barrackpore > depths.ballygunge,
+    `the river ward should out-deep the tank ward, got ${JSON.stringify(depths)}`);
+});
