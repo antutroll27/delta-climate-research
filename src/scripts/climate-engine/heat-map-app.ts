@@ -25,6 +25,7 @@ import { rasterWardBase } from './ward-raster';
 import { loadWardSurface, type WardSurface } from './surface-raster';
 import { buildRegistry, pickBuilding, projectWard, type BuildingMeta } from './explore/building-pick';
 import { createWaterLayer, type WaterLayer } from './water-layer';
+import { selectPhase } from './phase-select';
 import { findCoolingSurfaces, nearestCooling, type CoolingSurfaces } from './explore/cooling-surfaces';
 
 // Ward set lives in src/data/wards.ts so widening beyond three is a data change,
@@ -45,6 +46,9 @@ export function mountHeatMap(): () => void {
   interface State {
     ward: string; phase: 'peak' | 'night'; path: string; iv: M.Interventions;
     sunNow: number | null;
+    /* Non-null forces the 1-in-100 air temperature in place of the observed one.
+       A scenario override, not a phase — see phase-select.ts. */
+    heatTairC: number | null;
     base: SimLayers | null; baselineMean: number; live: M.Ambient | null;
     spatial: M.Spatial | null; greenG: number; lastMean: Record<string, number>;
     /* Observed DC-URS inputs per ward, loaded once. null while unloaded or if the
@@ -52,7 +56,7 @@ export function mountHeatMap(): () => void {
     dcurs: Record<string, DcUrsInputs> | null;
   }
   
-  const state: State = { ward: 'ballygunge', phase: 'peak', path: '2025', iv: { trees: 0, roof: 0, parks: 0, facades: 0 }, sunNow: 0, base: null, baselineMean: 0, live: null, spatial: null, greenG: 0, lastMean: {}, dcurs: null };
+  const state: State = { ward: 'ballygunge', phase: 'peak', path: '2025', iv: { trees: 0, roof: 0, parks: 0, facades: 0 }, sunNow: 0, heatTairC: null, base: null, baselineMean: 0, live: null, spatial: null, greenG: 0, lastMean: {}, dcurs: null };
   let mode: 'relief' | 'iso' = 'relief', env = 'dark';
 
   /* ── MapLibre basemap ── */
@@ -724,6 +728,19 @@ export function mountHeatMap(): () => void {
   /* DC-URS baseline inputs — observed, loaded once and shared by every ward.
      Failure is non-fatal: the heat field still works, the score reports itself
      unavailable rather than inventing one. */
+  /* The heatwave scenario's air temperature: p99 of 74 years of IMD daily maxima.
+     A miss leaves it null, which makes the Heatwave button inert rather than
+     pushing undefined into the physics — the swallow-to-empty posture the roads
+     and water loaders take. */
+  let heatwaveP99: number | null = null;
+  async function loadHeatwave() {
+    if (heatwaveP99 != null) return;
+    try {
+      const r = await fetch('/heat-map/data/heatwave-percentiles.json');
+      if (r.ok) heatwaveP99 = (await r.json())?.tmaxC?.p99 ?? null;
+    } catch { heatwaveP99 = null; }
+  }
+
   async function loadDcUrs() {
     if (state.dcurs) return;
     try {
@@ -736,6 +753,7 @@ export function mountHeatMap(): () => void {
     const load = el('loadchip'); load?.classList.add('on');
     await new Promise(r => setTimeout(r, 30));
     await loadDcUrs();
+    await loadHeatwave();
     if (!cache[name]) cache[name] = await (await fetch(`/heat-map/data/${name}.json`)).json();
     const d = cache[name], w = WARDS[name]; state.ward = name; updateCompareHref();
 
@@ -1068,7 +1086,12 @@ export function mountHeatMap(): () => void {
     const transition = live && isTransitionHour(wardSolarHour());
     /* Phase label: the clock made its absence a contradiction — a reader saw
        03:00 beside 39.4 °C and had no way to know that was the 13:00 scenario. */
-    setText('lstPhase', live ? 'modelled now' : state.phase === 'night' ? 'modelled at 22:00' : 'modelled at 13:00');
+    /* A scenario forcing must name itself. Without this the reader sees 39 °C
+       under "modelled at 13:00" with nothing saying the air was replaced — the
+       same contradiction the clock work fixed for Now. */
+    setText('lstPhase', live ? 'modelled now'
+      : state.heatTairC != null ? 'modelled at 13:00 · 1-in-100 heat'
+      : state.phase === 'night' ? 'modelled at 22:00' : 'modelled at 13:00');
     const tag = el('conf');
     if (tag) {
       tag.textContent = transition
@@ -1267,9 +1290,14 @@ export function mountHeatMap(): () => void {
     state.phase = state.sunNow > M.SUN_LIT ? 'peak' : 'night';
   }
   document.querySelectorAll('#segPhase button').forEach(b => onEl(b, 'click', () => {
-    const p = (b as HTMLElement).dataset.p;
-    if (p === 'now') { state.sunNow = 0; refreshNowSun(); }
-    else { state.sunNow = null; state.phase = p as 'peak' | 'night'; }
+    /* selectPhase decides; this only applies. An unrecognised data-p returns
+       null and nothing moves — not the physics, and not even the highlight,
+       which is why the guard sits above the class toggle. It replaces a blind
+       `as 'peak' | 'night'` cast on a raw string. */
+    const sel = selectPhase((b as HTMLElement).dataset.p ?? '', heatwaveP99);
+    if (!sel) return;
+    state.phase = sel.phase; state.sunNow = sel.sunNow; state.heatTairC = sel.heatTairC;
+    if (sel.sunNow != null) refreshNowSun();
     document.querySelectorAll('#segPhase button').forEach(x => x.classList.toggle('on', x === b));
     updateCompareHref(); resetSim();
   }));
