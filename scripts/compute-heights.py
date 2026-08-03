@@ -33,6 +33,9 @@ import sys
 
 import ee
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _types                                       # noqa: E402  (path set above)
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.join(HERE, "..")
 GEOM = os.path.join(ROOT, "data", "geometry")
@@ -72,9 +75,15 @@ def height_image() -> ee.Image:
 
 
 def to_lonlat(x: float, y: float, ward: str) -> list[float]:
-    """Local metres -> degrees. Exact inverse of fetch_buildings.to_local (y southward)."""
+    """Local metres -> degrees. Exact inverse of fetch-buildings.to_local.
+
+    y is NORTHWARD. The first parity run used a southward inverse and mirrored
+    every building about the ward centre line, which sampled a neighbour instead
+    of the building itself -- 27 % within 2 m, at every statistic.
+    """
     clat, clon = WARDS[ward]
-    return [clon + x / (111320.0 * math.cos(math.radians(clat))), clat - y / 110574.0]
+    mx, my = _types.m_per_deg(clat)
+    return [clon + x / mx, clat + y / my]
 
 
 def parity_features(ward: str) -> list[dict]:

@@ -434,53 +434,51 @@ the same gate the water activation carries. Not a quiet swap.
 two Tier-1 upgrades. That strengthens the procurement case recorded in
 [`superpowers/specs/2026-08-04-terrain-3d-preview-design.md`](superpowers/specs/2026-08-04-terrain-3d-preview-design.md).
 
-### The shipped heights cannot be reproduced, and their provenance note is wrong (2026-08-04)
+### Reproducing the shipped heights: one bug of ours, one real gap (2026-08-04)
 
 The geometry-pipeline plan opened with a **parity oracle**: before a new pipeline may
-generate heights, it must first reproduce the committed ones over the committed
-footprints. It ran. **It failed, and the failure is the finding.** Reproduce with
-`scripts/compute-heights.py --mode parity` (Earth Engine credentials required).
+generate heights, it must reproduce the committed ones over the committed footprints.
+It ran, it failed, and the plan stopped — correctly. Two rounds of diagnosis followed.
 
-Against `GOOGLE/Research/open-buildings-temporal/v1`, 2023 epoch, 4 m scale, over
-Ballygunge's own shipped footprints (n = 1,967 comparable buildings, fill values
-excluded): **median |Δ| = 4.00 m, only 23.6 % within 2 m.** Two distinct causes,
-separated by a percentile sweep over 384 buildings:
+**Round 1 was our own bug, and it invalidated its own conclusion.** The first run gave
+median |Δ| = 4.00 m, 23.6 % within 2 m, and a percentile sweep appeared to show the
+shipped heights sitting at **p85**. That conclusion was wrong. The local-metre →
+lon/lat inverse used a SOUTHWARD y convention while the shipped geometry (like
+`fetch-water.py`, like the roads fetcher, like `scripts/_types.m_per_deg`) is
+**NORTHWARD** — so every footprint was mirrored about the ward's centre line and
+sampled a different building. Verified empirically rather than by inspection: matching
+Overture centroids against ours scores 8.1 m mean-nearest northward against 13.9 m
+southward. With the sign corrected, parity improved to **median |Δ| = 1.40 m, 64.0 %
+within 2 m**, and the apparent p85 signature vanished — higher percentiles had merely
+been compensating for sampling the wrong, generally smaller, buildings.
+
+**Round 2 is the real remaining gap.** Correctly registered, over 483 comparable
+Ballygunge buildings:
 
 | zonal statistic | median ratio to shipped | median Δ | within 2 m |
 |---|---|---|---|
-| p50 | 0.408 | −3.86 m | 20 % |
-| mean | 0.62 | −2.97 m | 25 % |
-| p75 | 0.813 | −1.30 m | 29 % |
-| **p85** | **1.010** | **+0.07 m** | 27 % |
-| p95 | 1.209 | +1.51 m | 23 % |
+| mean | 0.834 | −1.20 m | 63 % |
+| **p70** | **1.086** | **+0.62 m** | **67 %** |
+| p75 | 1.143 | +0.96 m | 65 % |
+| p85 | 1.264 | +1.85 m | 49 % |
 
-**1 · The documented method is not the method.** Every ward JSON says *"zonal-mean per
-Microsoft footprint"*. A zonal mean lands at ratio 0.62 — it is **38 % below** what we
-ship. The shipped values sit at **p85**. Whatever produced them, it was not the mean,
-and the `heightsNote` on all three served artefacts is inaccurate about its own
-provenance.
+The true statistic sits between `mean` and `p70` — the ratio crosses 1.0 in that gap —
+so the documented *"zonal-mean"* is close to right, understating by ~17 % rather than
+the 38 % round 1 claimed. But **no statistic exceeds 67 % of buildings within 2 m**
+against a 90 % threshold, so per-building parity is still not achieved. What is left
+is most plausibly footprint processing: the shipped Microsoft rings were simplified and
+rounded by the original pipeline, and a slightly different ring samples a slightly
+different pixel set.
 
-**2 · Registration is poor, independently of the statistic.** p85 nails the aggregate
-(ratio 1.010) while still placing only 27 % of individual buildings within 2 m — and
-no statistic in the sweep exceeds 29 %. Getting the distribution right while getting
-the buildings wrong is the signature of a coordinate mismatch: the local-metre → lon/lat
-inverse used here is a plain equirectangular approximation, and if the original pipeline
-projected differently, footprints land on their neighbours in a fabric this dense.
+**Status: the pipeline remains stopped at its gate.** No Overture heights generated,
+nothing under `public/` touched. The lasting lessons are recorded in the scripts
+themselves: `to_local`/`to_lonlat` now both use `_types.m_per_deg` with the sign
+documented and its evidence cited, so this class of bug cannot recur silently.
 
-**Consequence, and it invalidates an earlier hypothesis.** The 2026-08-04 note above
-suspected our heights ran ~25 % LOW because zonal-averaging drags means down. That
-mechanism is real but **it is not what shipped**: at p85 the heights are already near
-the top of each footprint's height distribution. If they still read low against OSM
-`building:levels`, the shortfall is in Google's 2.5D product itself, not in our choice
-of statistic — and switching mean → p75 (the fix the geometry spec was going to test)
-would have made the numbers *worse*, not better.
-
-**Status: the geometry pipeline is STOPPED at its own gate**, exactly as
-[`superpowers/plans/2026-08-04-geometry-pipeline.md`](superpowers/plans/2026-08-04-geometry-pipeline.md)
-requires. No Overture footprints were generated, nothing under `public/` was touched.
-Resuming needs the registration question settled first — establish the original
-projection, or re-derive heights against Overture's own lon/lat geometry where no
-inverse is needed at all.
+**One earlier hypothesis is now settled as unsupported.** The note above suspected our
+heights ran ~25 % low from zonal-averaging. At a true statistic near p65 the effect is
+real but small (~17 %), and it is dwarfed by the ±2 m per-building scatter. Switching
+mean → p75 would overshoot. No method change is warranted on this evidence.
 
 ## Phases
 1. **Skeleton + render** — route, canvas, Three scene, `DataTexture` static synthetic field, colormap shader.
