@@ -58,8 +58,13 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
          until now, fetched once per ward per session and never refreshed. A tab
          left open overnight showed a pulsing green "live" dot over yesterday's
          weather. Click to re-read. -->
-    <button class="clockw" id="clockw" type="button" hidden
-            aria-label="Live reading freshness. Activate to fetch current conditions.">
+    <!-- TWO CONTROLS, NOT ONE. The tile used to be a single button whose click
+         forced a live re-read — and that click is the ONLY re-read in the app
+         (fetchLive runs on ward load and from here; the 60s timer just
+         repaints). Handing the whole tile to a format toggle would leave a dial
+         that reports data is 14 hours stale and offers no way to fix it. So the
+         face toggles the format and the age line re-reads, each saying which. -->
+    <div class="clockw" id="clockw" hidden>
       <!-- Stacked state indicator, the Braun/Rams idiom: BOTH halves of the day
            are always present and only the emphasis moves, so you read "PM out of
            AM/PM" rather than trusting a single changing label.
@@ -69,18 +74,25 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
            and nothing said it was already tomorrow in Kolkata. This dial exists
            because a tab left open overnight showed a live dot over yesterday's
            weather; without the day it still could not name which day. -->
-      <span class="k-stack" aria-hidden="true">
-        <span class="k-day" id="clockDay">—</span>
-        <span class="k-mer" id="clockAm">AM</span>
-        <span class="k-mer" id="clockPm">PM</span>
-      </span>
-      <span class="k-time" id="clockTime">--:--</span>
-      <span class="k-sub"><span class="k-age-lab" id="clockAgeLab">—</span></span>
-      <!-- Freshness survives the move to digits as a draining rule along the
-           bottom edge: the digits say WHEN, the bar says HOW STALE, and the bar
-           is the only thing that animates (one transform, no layout). -->
-      <span class="k-bar" aria-hidden="true"><i id="clockBar"></i></span>
-    </button>
+      <button class="k-face" id="clockFace" type="button" aria-pressed="false">
+        <span class="k-stack" aria-hidden="true">
+          <span class="k-day" id="clockDay">—</span>
+          <!-- In 24-hour mode the meridiem is meaningless, so the pair is
+               replaced by the mode itself rather than left dimmed and lying. -->
+          <span class="k-mer" id="clockAm">AM</span>
+          <span class="k-mer" id="clockPm">PM</span>
+          <span class="k-mer k-h24" id="clock24">24H</span>
+        </span>
+        <span class="k-time" id="clockTime">--:--</span>
+      </button>
+      <button class="k-age" id="clockAge" type="button">
+        <span class="k-sub"><span class="k-age-lab" id="clockAgeLab">—</span></span>
+        <!-- Freshness survives the move to digits as a draining rule along the
+             bottom edge: the digits say WHEN, the bar says HOW STALE, and the bar
+             is the only thing that animates (one transform, no layout). -->
+        <span class="k-bar" aria-hidden="true"><i id="clockBar"></i></span>
+      </button>
+    </div>
 
     <!-- First-run affordance: the buildings became clickable and nothing said so. -->
     <div class="tiphint" id="tiphint" hidden>
@@ -302,11 +314,23 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
      colour OUT to grey instead: same reading in both themes, and it is the
      same metaphor the bar already uses. */
   .clockw{--c:var(--cyan);--on:#051416;
-    position:absolute;right:320px;top:76px;z-index:6;padding:9px 13px 10px;cursor:pointer;
-    display:grid;grid-template-columns:auto 1fr;gap:10px;align-items:center;text-align:left;
+    position:absolute;right:320px;top:76px;z-index:6;padding:9px 13px 10px;
+    display:flex;flex-direction:column;
     border-radius:12px;border:0;background:var(--c);
     box-shadow:0 7px 20px rgb(0 0 0 /.38);
-    transition:transform .2s,background-color .45s ease}
+    transition:background-color .45s ease}
+  /* Both children are real buttons; they inherit the block's ink and keep the
+     grid the face needs. Hover lifts the whole tile so it still reads as one
+     object rather than two stacked chips. */
+  .clockw button{appearance:none;background:none;border:0;padding:0;margin:0;
+    font:inherit;color:inherit;text-align:left;cursor:pointer;width:100%;display:block}
+  .clockw button:focus-visible{outline:2px solid var(--on);outline-offset:2px;border-radius:5px}
+  .clockw .k-face{display:grid;grid-template-columns:auto 1fr;gap:10px;align-items:center;
+    transition:transform .2s}
+  .clockw .k-face:hover{transform:translateY(-1px)}
+  .clockw .k-age{margin-top:3px;transition:opacity .2s}
+  .clockw .k-age:hover{opacity:.72}
+  .clockw .k-age[disabled]{cursor:progress;opacity:.6}
   body.studio .clockw{--c:var(--red);--on:#1b0405}
   /* Grey is a hue-free "not live" that reads identically on either basemap.
      BOTH SELECTORS ARE REQUIRED, AND THIS BLOCK MUST COME LAST. A lone
@@ -316,9 +340,6 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
      the one hue the legend already spends on "Extreme". */
   .clockw[data-age="stale"],
   body.studio .clockw[data-age="stale"]{--c:#8d9698;--on:#141a1b}
-  .clockw:hover{transform:translateY(-1px)}
-  .clockw:focus-visible{outline:2px solid var(--paper);outline-offset:3px}
-  .clockw[disabled]{cursor:progress;opacity:.7}
 
   /* the stacked indicator: day over an always-present AM/PM pair */
   .clockw .k-stack{display:flex;flex-direction:column;line-height:1.14}
@@ -329,14 +350,20 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
   .clockw .k-mer{font-family:var(--sans);font-weight:750;font-size:.47rem;
     letter-spacing:.03em;color:rgb(5 6 6 /.32);transition:color .2s}
   .clockw .k-mer.on{color:var(--on)}
+  /* The stack shows EITHER the meridiem pair or the mode, never both — a dimmed
+     AM/PM beside a 24-hour readout would be stating something untrue. */
+  .clockw .k-h24{display:none;color:var(--on)}
+  .clockw[data-h12="false"] #clockAm,
+  .clockw[data-h12="false"] #clockPm{display:none}
+  .clockw[data-h12="false"] .k-h24{display:block}
 
   /* tabular-nums so the digits do not reflow as minutes tick over */
   .clockw .k-time{font-family:var(--sans);font-weight:640;font-size:1.98rem;line-height:.9;
     letter-spacing:-.035em;color:var(--on);font-variant-numeric:tabular-nums;text-align:right}
-  .clockw .k-sub{grid-column:2;justify-self:end;
-    font-family:var(--sans);font-weight:600;font-size:.47rem;color:rgb(5 6 6 /.62);margin-top:3px}
+  .clockw .k-sub{display:block;text-align:right;
+    font-family:var(--sans);font-weight:600;font-size:.47rem;color:rgb(5 6 6 /.62)}
   .clockw[data-age="stale"] .k-sub{color:rgb(5 6 6 /.8)}
-  .clockw .k-bar{grid-column:1 / -1;display:block;width:100%;height:2px;margin-top:7px;
+  .clockw .k-bar{display:block;width:100%;height:2px;margin-top:7px;
     border-radius:1px;background:rgb(5 6 6 /.17);overflow:hidden}
   /* scaleX only — transform, never width, so ageing costs no layout */
   .clockw .k-bar i{display:block;height:100%;background:rgb(5 6 6 /.6);border-radius:1px;
