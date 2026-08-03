@@ -174,9 +174,18 @@ function depthTexture(data: WaterData): THREE.DataTexture {
   return texture;
 }
 
+/**
+ * @param groundAt Optional ground height, metres, at a point in the ward frame.
+ *   Each water body is seated at the ground beneath ITS OWN centroid — a single
+ *   flat sheet would bury half the ponds and float the rest once the ground has
+ *   relief. Seated per body rather than per vertex because a pond's surface is
+ *   level even when the land around it is not; per-vertex displacement would tilt
+ *   water downhill, which is the one thing water visibly never does.
+ */
 export function createWaterLayer(
   data: WaterData,
   growU: { value: number },
+  groundAt: ((x: number, y: number) => number) | null = null,
 ): WaterLayer | null {
   const geometries: THREE.BufferGeometry[] = [];
   for (const poly of data.polys) {
@@ -185,6 +194,12 @@ export function createWaterLayer(
     const count = geometry.attributes.position.count;
     const flow = new Float32Array(count).fill(poly.k === 'river' ? 1 : 0);
     geometry.setAttribute('aFlow', new THREE.BufferAttribute(flow, 1));
+    if (groundAt) {
+      let cx = 0, cy = 0;
+      for (let i = 0; i < poly.p.length; i += 2) { cx += poly.p[i]; cy += poly.p[i + 1]; }
+      const n = poly.p.length / 2;
+      geometry.translate(0, groundAt(cx / n, cy / n), 0);
+    }
     geometries.push(geometry);
   }
   if (!geometries.length) return null;

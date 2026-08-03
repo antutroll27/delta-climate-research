@@ -1,4 +1,4 @@
-"""Terrarium tiles -> one smoothed 128^2 heightfield per ward, for the terrain preview.
+"""Terrarium tiles -> one smoothed 128^2 heightfield per ward, for the 3D scene.
 
 WHY SMOOTHING IS THE WHOLE JOB. Every free DEM of this delta is a SURFACE model
 (terrarium is SRTM-derived here) -- rooftops and canopy ride in the "ground".
@@ -7,9 +7,15 @@ earth is ~3-5 m. A ~40 m median filter removes single buildings and keeps the
 Hooghly embankment and swales, and the artefact records BOTH spans so the
 smoothing is visible, not implied.
 
-PREVIEW-SIDE ONLY. Output lands in previews/terrain-3d/data/, never public/. This
-is the acquisition tier: it runs offline on a developer machine, writes a JSON
-artefact, and nothing it does ever executes in a browser.
+WHAT THIS IS AND IS NOT. Two independent DEMs -- terrarium (SRTM) and Copernicus
+GLO-30 (TanDEM-X) -- agree about this ground only to r ~ 0.5, with a per-cell RMSE
+of 1.5-2.1 m against a total relief of 4.9-7.7 m. So the artefact is INDICATIVE
+BROAD-SCALE FORM, not measured ground, and every consumer must label it as such.
+It is a visual layer. It never enters the simulation and never sits beside the
+measured LST figures as though it carried comparable confidence.
+
+This is the acquisition tier: it runs offline on a developer machine, writes a
+JSON artefact, and nothing it does ever executes in a browser.
 
     python3 scripts/fetch-terrain.py            # bake all three wards
     python3 scripts/fetch-terrain.py --check    # assert over the committed artefacts
@@ -29,7 +35,7 @@ from PIL import Image
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.join(HERE, "..")
-OUT_DIR = os.path.join(ROOT, "previews", "terrain-3d", "data")
+OUT_DIR = os.path.join(ROOT, "public", "heat-map", "data")
 
 TILE = "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"
 Z = 15                       # ~4.4 m/px at this latitude; the window spans ~317 px
@@ -144,7 +150,12 @@ def build_artefact(ward: str) -> dict:
         "clampM": CLAMP_M,
         "rawSpanM": round(raw_hi - raw_lo, 1),      # BEFORE smoothing -- the tripwire's subject
         "smoothSpanM": round(sm_hi - sm_lo, 1),     # AFTER -- what the eye will see
-        "note": "smoothed surface model, indicative -- not surveyed ground",
+        "confidence": "indicative",
+        "note": "smoothed surface model, indicative broad-scale form -- NOT surveyed "
+                "ground and NOT used by the simulation",
+        "crossCheck": "vs Copernicus GLO-30 over the same window: shape agreement "
+                      "r=0.49/0.48/0.67, per-cell RMSE 1.5-2.1 m against a 4.9-7.7 m "
+                      "relief. Two instruments disagree by ~a quarter of the signal.",
         "h": h,
     }
 

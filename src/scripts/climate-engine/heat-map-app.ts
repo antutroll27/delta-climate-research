@@ -26,6 +26,7 @@ import { loadWardSurface, type WardSurface } from './surface-raster';
 import { buildRegistry, pickBuilding, projectWard, type BuildingMeta } from './explore/building-pick';
 import { createWaterLayer, type WaterLayer } from './water-layer';
 import { selectPhase } from './phase-select';
+import { asTerrainField, terrainDrawAt, terrainLabel, TERRAIN_N, type TerrainField } from './terrain';
 import { findCoolingSurfaces, nearestCooling, type CoolingSurfaces } from './explore/cooling-surfaces';
 
 // Ward set lives in src/data/wards.ts so widening beyond three is a data change,
@@ -671,7 +672,11 @@ export function mountHeatMap(): () => void {
       threeCam = new THREE.Camera();
       threeRenderer = new THREE.WebGLRenderer({ canvas: m.getCanvas(), context: gl as WebGL2RenderingContext, antialias: true });
       threeRenderer.autoClear = false;
-      overlay = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.ShaderMaterial({
+      /* Segmented, so the ground can carry relief. A flat quad cannot bend, and
+         128² matches the terrain field exactly — one vertex per texel, no
+         resampling. The plane stays 1×1 in local space and is scaled to the ward
+         in metres, so displacement is applied in the same units as the field. */
+      overlay = new THREE.Mesh(new THREE.PlaneGeometry(1, 1, TERRAIN_N - 1, TERRAIN_N - 1), new THREE.ShaderMaterial({
         transparent: true, depthWrite: false,
         uniforms: { tT: { value: heatTex }, uMin: heatMinU, uMax: heatMaxU, uOp: { value: 0.5 }, uCool: coolU },
         vertexShader: 'varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
@@ -721,9 +726,34 @@ export function mountHeatMap(): () => void {
     },
   };
 
+  /**
+   * Bend the heat overlay onto the ward's ground.
+   *
+   * THE FRAME. The plane is rotated −90° about X, which sends local (x, y, z) to
+   * world (x, z, −y). So local Z displacement IS world height, and the terrain is
+   * sampled at world (x, z) = (localX·sizeM, −localY·sizeM). Local scale Z stays 1,
+   * so metres in the field are metres on screen — no unit conversion anywhere.
+   *
+   * A null field flattens the plane rather than leaving the previous ward's
+   * relief behind, which is what makes a failed fetch look like the old flat map
+   * instead of a wrong one.
+   */
+  function displaceGround(field: TerrainField | null, sizeM: number): void {
+    if (!overlay) return;
+    const pos = overlay.geometry.attributes.position as THREE.BufferAttribute;
+    for (let i = 0; i < pos.count; i++) {
+      pos.setZ(i, terrainDrawAt(field, pos.getX(i) * sizeM, -pos.getY(i) * sizeM));
+    }
+    pos.needsUpdate = true;
+    overlay.geometry.computeVertexNormals();
+  }
+
   /* ── heat ramp for building extrusion vertex jitter (grow) — via aCtr sample ── */
   const cache: Record<string, M.WardData> = {}, roadsCache: Record<string, M.RoadsData> = {};
   const waterCache: Record<string, M.WaterData> = {};
+  /* Render-only ground. `undefined` means unfetched, `null` means fetched-and-absent —
+     the distinction stops a failed fetch retrying on every ward switch. */
+  const terrainCache: Record<string, TerrainField | null> = {};
   let waterLayer: WaterLayer | null = null;
   /* Measured Sentinel-2 surface, one per ward, fetched once. A miss is non-fatal
      and falls back to a flat field at the measured ward mean — never to
@@ -769,6 +799,17 @@ export function mountHeatMap(): () => void {
     select(null);
     registry = buildRegistry(d.b);
 
+    /* Terrain must land BEFORE any geometry is built: the buildings, the ground
+       plane and the water bodies all seat themselves on it, so a late fetch would
+       leave three layers at three different vintages of the same ward. It is
+       RENDER-ONLY — never passed to rasterWardBase, never in SimLayers — and a
+       miss leaves the ward flat, which is exactly how the map looked before
+       terrain existed. */
+    if (terrainCache[name] === undefined) {
+      try { terrainCache[name] = asTerrainField(await (await fetch(`/heat-map/data/${name}-terrain.json`)).json()); }
+      catch { terrainCache[name] = null; }
+    }
+
     const geos: THREE.BufferGeometry[] = [], halfM = d.sizeM / 2;
     for (const b of d.b) {
       const shape = new THREE.Shape(); shape.moveTo(b[1], -b[2]);
@@ -780,6 +821,13 @@ export function mountHeatMap(): () => void {
       const delay = Math.min(1, Math.hypot(b[1], b[2]) / halfM) * 0.72 + noise01(b[2], b[1]) * 0.28;
       let cxm = 0, czm = 0; const np = (b.length - 1) / 2;
       for (let k = 1; k < b.length; k += 2) { cxm += b[k]; czm += b[k + 1]; } cxm /= np; czm /= np;
+      /* Seat the building on the ground at its own centroid. BASE ONLY — the
+         extrusion depth above is the measured height and is never exaggerated,
+         so the one quantity a reader might measure off the screen stays true
+         while the ground beneath it is admittedly stretched. Applied before the
+         merge, so the draw-call structure is unchanged. */
+      const ty = terrainDrawAt(terrainCache[name] ?? null, cxm, czm);
+      if (ty !== 0) g.translate(0, ty, 0);
       const nv = g.attributes.position.count, dls = new Float32Array(nv), hts = new Float32Array(nv), ctr = new Float32Array(nv * 2);
       dls.fill(delay); hts.fill(b[0]); for (let k = 0; k < nv; k++) { ctr[k * 2] = cxm; ctr[k * 2 + 1] = czm; }
       g.setAttribute('aDelay', new THREE.BufferAttribute(dls, 1));
@@ -793,6 +841,13 @@ export function mountHeatMap(): () => void {
       if (cityMesh) { threeScene.remove(cityMesh); cityMesh.geometry.dispose(); }
       cityMesh = new THREE.Mesh(merged, facade); threeScene.add(cityMesh);
       overlay.scale.set(d.sizeM, d.sizeM, 1);
+    displaceGround(terrainCache[name] ?? null, d.sizeM);
+    /* The exaggeration is stated wherever the ground is drawn. Two independent
+       DEMs disagree about this relief by roughly a quarter of it, so an
+       unlabelled ×4 would be a claim we cannot support — and a claim about slope
+       that nobody made out loud is the easiest kind to be caught by. */
+    const terrLab = el('terrLab');
+    if (terrLab) terrLab.textContent = terrainLabel(terrainCache[name] ?? null) || 'unavailable';
 
       /* OSM water for this ward — render only, absence is normal (the loader
          idiom roads already use). The layer shares uGrow, so water fades in
@@ -803,7 +858,8 @@ export function mountHeatMap(): () => void {
           .catch(() => ({ polys: [] }));
       }
       if (waterLayer) { threeScene.remove(waterLayer.mesh); waterLayer.dispose(); waterLayer = null; }
-      const wl = createWaterLayer(waterCache[name], growU);
+      const wl = createWaterLayer(waterCache[name], growU,
+        (x, y) => terrainDrawAt(terrainCache[name] ?? null, x, y));
       if (wl) { waterLayer = wl; threeScene.add(wl.mesh); }
     }
     const mc = maplibregl.MercatorCoordinate.fromLngLat([w.lon, w.lat], 0);
