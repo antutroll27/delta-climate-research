@@ -4,13 +4,31 @@
 
 **Goal:** Replace the unregenerable baked ward geometry with an Overture-footprint + Earth-Engine-height pipeline, measure every downstream delta, and stop for user review before anything ships.
 
-**Architecture:** Five offline scripts in sequence: acquire footprints (DuckDB + shapely) → EE heights with a parity oracle over the CURRENT geometry first → method decision from OSM evidence → bake to staging → one delta table. Nothing under `public/` changes in this plan; the ship step is a separate approval after the table is reviewed.
+**Architecture:** Five offline scripts in sequence: acquire footprints (DuckDB + shapely) → EE heights under three gates (distribution parity, OSM accuracy, fill discipline) → method decision from OSM evidence → bake to staging → one delta table. Nothing under `public/` changes in this plan; the ship step is a separate approval after the table is reviewed.
 
 **Contract:** [`../specs/2026-08-04-geometry-pipeline-design.md`](../specs/2026-08-04-geometry-pipeline-design.md)
 
 **Tech Stack:** Python 3.12 (duckdb 1.5.5, shapely 2.1.2, requests, earthengine-api — the one new install), Node 24 `--experimental-strip-types` for the sim delta runner (the `validate-model.mjs` pattern).
 
 **Security, restated because this task touches the key:** the EE key stays at `~/.config/delta-climate/ee-service-account.json` (0600), read only via `GOOGLE_APPLICATION_CREDENTIALS`. Never referenced by repo path, never printed, never committed. The machine needs `SSL_CERT_FILE=$(python3 -m certifi)` for anything urllib-based.
+
+---
+
+## EXECUTION STATE (updated 2026-08-04, mid-flight)
+
+| task | state |
+|---|---|
+| **0 · preconditions** | **DONE.** `earthengine-api 1.7.37` installed; EE initialises and reads the collection (5.64 m near Ballygunge centre) — **the feared IAM gap does not exist**. All three parquets in `data/geometry/raw/`. |
+| **1 · footprints** | **Script written and committed**, sign convention corrected (see below). Not yet run over all three wards. |
+| **2 · heights** | **Rewritten below.** The original per-building parity ran, caught a real bug, and proved unreachable; Gates A/B/C replace it. |
+| 3–6 | Unchanged in substance; Task 3 gains `p65` as a candidate. |
+
+**The one thing every remaining task depends on.** `to_local`/`to_lonlat` use
+`_types.m_per_deg` with **y NORTHWARD**. The first parity run used southward, mirrored
+every footprint about the ward centre line, and produced a confident, entirely false
+finding (that the shipped method was p85 and 38 % out). Both scripts now carry the
+convention and its evidence in their docstrings. **If a new script converts
+coordinates, it calls `_types.m_per_deg` — it does not open-code the constants.**
 
 ---
 
@@ -92,6 +110,9 @@ import duckdb
 from shapely import wkb as shapely_wkb
 from shapely.geometry import Polygon
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _types                                       # noqa: E402  (path set above)
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.join(HERE, "..")
 RAW = os.path.join(ROOT, "data", "geometry", "raw")
@@ -111,17 +132,23 @@ WARDS = {
 
 #: Counts measured at acquisition. ±10 % tripwire: a future re-run drifting past
 #: this means the raw parquet changed under the manifest.
-EXPECT_COUNT = {"ballygunge": 3530, "barrackpore": None, "baruipur": None}
-# barrackpore/baruipur: None until first run prints them; then pin the numbers
-# here and in the manifest before committing (the plan's step 3 does this).
+EXPECT_COUNT = {"ballygunge": 3390, "barrackpore": None, "baruipur": None}
+# 3390 not 3530: the centroid filter drops buildings whose bbox clipped the window
+# edge. barrackpore/baruipur stay None until the first run prints them; step 3
+# pins the numbers before committing.
 
 
 def to_local(lon: float, lat: float, ward: str) -> tuple[float, float]:
-    """Degrees -> metres in the ward frame. y grows SOUTHWARD (the house rule)."""
+    """Degrees -> metres in the ward frame.
+
+    y grows NORTHWARD, constants from scripts/_types.m_per_deg -- the same helper
+    fetch-water.py and the roads fetcher use. VERIFIED, not assumed: matching
+    Overture centroids to ours scores 8.1 m mean-nearest northward against 13.9 m
+    southward. Backwards, this mirrors every building about the ward centre line.
+    """
     clat, clon = WARDS[ward]
-    x = (lon - clon) * 111320.0 * math.cos(math.radians(clat))
-    y = (clat - lat) * 110574.0
-    return x, y
+    mx, my = _types.m_per_deg(clat)
+    return (lon - clon) * mx, (lat - clat) * my
 
 
 def ward_rows(ward: str) -> tuple[list[dict], dict]:
@@ -390,22 +417,87 @@ if __name__ == "__main__":
     sys.exit(main())
 ```
 
-- [ ] **Step 2: Parity run** — `python3 scripts/compute-heights.py --mode parity`
-Expected: three `PARITY median |d|=…` lines, all under thresholds. **If any ward fails: STOP the plan.** The discrepancy is the deliverable; report it. (~3 × 6 pages ≈ 15–25 min of EE calls.)
+- [ ] **Step 2: Run the retargeted gates** — `python3 scripts/compute-heights.py --mode overture`
 
-- [ ] **Step 3: Production run** — `python3 scripts/compute-heights.py --mode overture`
-Expected: `heights-overture.json` with mean/p75/px/fill per GERS id.
+The script's parity branch is replaced by the three gates from spec §3b. Rewrite
+`run()`'s parity block as `gates()`, called after the Overture pass:
 
-- [ ] **Step 4: Commit** (both artefacts + script; heights files are a few hundred KB)
+```python
+#: Gate A -- distribution parity. These are what FAR and the DC-URS exposure
+#: pillar consume; per-building continuity never protected them.
+DIST_TOL = 0.10
+#: Gate B -- the chosen statistic against OSM levels. Wider than Gate A because
+#: it crosses datasets, tight enough that a mirrored footprint set cannot pass.
+ACCURACY_RATIO = (0.75, 1.25)
+#: Gate C -- fill rate, per ward, measured on the shipped artefacts by
+#: compute-far.py. A jump means footprints and the height raster have stopped
+#: agreeing about WHERE buildings are: the mirroring bug's signature.
+SHIPPED_FILL = {"ballygunge": 0.040, "barrackpore": 0.065, "baruipur": 0.108}
+FILL_TOL = 0.03
+
+
+def gates(doc: dict, stat: str) -> int:
+    """Three checks replacing an unreachable one. Returns 0 only if all pass."""
+    failures: list[str] = []
+    for ward, rows in doc["wards"].items():
+        with open(os.path.join(PUBLIC, f"{ward}.json"), encoding="utf-8") as fh:
+            shipped = [b[0] for b in json.load(fh)["b"] if b[0] != FILL_M]
+        new = [r[stat] for r in rows if not r["fill"]]
+        if not new or not shipped:
+            failures.append(f"{ward}: nothing comparable")
+            continue
+
+        # A -- distribution parity
+        for label, fn in (("p50", lambda v: statistics.median(v)),
+                          ("p75", lambda v: statistics.quantiles(v, n=4)[2]),
+                          ("p90", lambda v: statistics.quantiles(v, n=10)[8]),
+                          ("mean", lambda v: statistics.fmean(v))):
+            was, now = fn(shipped), fn(new)
+            drift = abs(now - was) / was if was else 1.0
+            flag = "  <-- BREACH" if drift > DIST_TOL else ""
+            print(f"    {ward:<12} {label:<5} {was:6.2f} -> {now:6.2f} m  ({drift:+.1%}){flag}")
+            if drift > DIST_TOL:
+                failures.append(f"{ward} {label}: {drift:.1%} drift exceeds {DIST_TOL:.0%} "
+                                f"-- explain in the delta table before shipping")
+
+        # C -- fill discipline
+        fill = sum(r["fill"] for r in rows) / len(rows)
+        if abs(fill - SHIPPED_FILL[ward]) > FILL_TOL:
+            failures.append(f"{ward}: fill {fill:.1%} vs shipped {SHIPPED_FILL[ward]:.1%} "
+                            f"-- footprints and the height raster disagree about WHERE "
+                            f"buildings are (the mirroring signature)")
+        print(f"    {ward:<12} fill  {SHIPPED_FILL[ward]:.1%} -> {fill:.1%}")
+
+    # B -- independent accuracy, once the method decision exists (Task 3)
+    method_path = os.path.join(GEOM, "height-method.json")
+    if os.path.exists(method_path):
+        with open(method_path, encoding="utf-8") as fh:
+            verdict = json.load(fh)
+        ratio = verdict.get("shipped_ratio")
+        if ratio is not None and not (ACCURACY_RATIO[0] <= ratio <= ACCURACY_RATIO[1]):
+            failures.append(f"OSM accuracy ratio {ratio:.2f} outside {ACCURACY_RATIO}")
+    else:
+        print("    Gate B deferred -- run Task 3 (validate-heights.py --score) next")
+
+    for line in failures:
+        print(f"  FAIL {line}")
+    return 1 if failures else 0
+```
+
+Expected: a per-ward table of p50/p75/p90/mean before → after with drift percentages,
+plus fill rates. **A Gate A breach is not automatically fatal** — Overture adds ~1,480
+mostly-small buildings, so a downward median shift is expected; what matters is that it
+moves the direction the extra buildings predict and gets explained in the delta table.
+A **Gate C** breach is always fatal.
+
+- [ ] **Step 3: Commit**
 
 ```bash
-git add scripts/compute-heights.py data/geometry/heights-*.json
-git commit -m "feat(geometry): EE height pipeline -- parity against shipped heights proven, both statistics measured
+git add scripts/compute-heights.py data/geometry/heights-overture.json
+git commit -m "feat(geometry): Overture heights under distribution, accuracy and fill gates
 
 Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 ```
-
----
 
 ### Task 3: The method decision — extend `scripts/validate-heights.py`
 
@@ -446,7 +538,7 @@ def score() -> int:
     heights = json.load(open(os.path.join(os.path.dirname(CACHE), "heights-overture.json")))
     foot = {w: json.load(open(os.path.join(os.path.dirname(CACHE), f"{w}-footprints.json")))
             for w in WARDS}
-    pairs = []          # (levels, mean, p75)
+    pairs = []          # (levels, mean, p65, p75) -- p65 is where the shipped values sit
     for ward, els in levels_cached().items():
         by_gers = {r["id"]: r for r in heights["wards"][ward]}
         cents = []
