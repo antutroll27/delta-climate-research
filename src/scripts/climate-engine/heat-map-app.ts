@@ -24,6 +24,7 @@ import type { DcUrsInputs } from './dc-urs-inputs';
 import { rasterWardBase } from './ward-raster';
 import { loadWardSurface, type WardSurface } from './surface-raster';
 import { buildRegistry, pickBuilding, projectWard, type BuildingMeta } from './explore/building-pick';
+import { createWaterLayer, type WaterLayer } from './water-layer';
 import { findCoolingSurfaces, nearestCooling, type CoolingSurfaces } from './explore/cooling-surfaces';
 
 // Ward set lives in src/data/wards.ts so widening beyond three is a data change,
@@ -700,6 +701,10 @@ export function mountHeatMap(): () => void {
          was drawn — including mid-flyTo, where a matrix rebuilt from map state
          would be a frame out. */
       pickMatrix.copy(threeCam.projectionMatrix);
+      /* The water shimmer advances only here — it rides whatever repaints the
+         map already does (orbit, drags, the sim bridge). Reduced motion means
+         still water, by never advancing the clock. */
+      if (!reduceMotion) waterLayer?.setTime(performance.now() / 1000);
       threeRenderer.resetState();
       threeRenderer.render(threeScene, threeCam);
       if (growU.value < 1 || fieldDirty) { fieldDirty = false; map.triggerRepaint(); }
@@ -708,6 +713,8 @@ export function mountHeatMap(): () => void {
 
   /* ── heat ramp for building extrusion vertex jitter (grow) — via aCtr sample ── */
   const cache: Record<string, M.WardData> = {}, roadsCache: Record<string, M.RoadsData> = {};
+  const waterCache: Record<string, M.WaterData> = {};
+  let waterLayer: WaterLayer | null = null;
   /* Measured Sentinel-2 surface, one per ward, fetched once. A miss is non-fatal
      and falls back to a flat field at the measured ward mean — never to
      synthesised structure. */
@@ -762,6 +769,18 @@ export function mountHeatMap(): () => void {
       if (cityMesh) { threeScene.remove(cityMesh); cityMesh.geometry.dispose(); }
       cityMesh = new THREE.Mesh(merged, facade); threeScene.add(cityMesh);
       overlay.scale.set(d.sizeM, d.sizeM, 1);
+
+      /* OSM water for this ward — render only, absence is normal (the loader
+         idiom roads already use). The layer shares uGrow, so water fades in
+         with the same reconstruction the buildings play. */
+      if (!waterCache[name]) {
+        waterCache[name] = await fetch(`/heat-map/data/${name}-water.json`)
+          .then(r => (r.ok ? r.json() : { polys: [] }))
+          .catch(() => ({ polys: [] }));
+      }
+      if (waterLayer) { threeScene.remove(waterLayer.mesh); waterLayer.dispose(); waterLayer = null; }
+      const wl = createWaterLayer(waterCache[name], growU);
+      if (wl) { waterLayer = wl; threeScene.add(wl.mesh); }
     }
     const mc = maplibregl.MercatorCoordinate.fromLngLat([w.lon, w.lat], 0);
     modelTransform = { x: mc.x, y: mc.y, z: mc.z ?? 0, scale: mc.meterInMercatorCoordinateUnits() };
@@ -1297,6 +1316,7 @@ export function mountHeatMap(): () => void {
     document.removeEventListener('visibilitychange', onVis);
     cleanup.forEach(fn => fn());
     cityMesh?.geometry.dispose(); (overlay?.material as THREE.Material)?.dispose(); overlay?.geometry.dispose();
+    waterLayer?.dispose();
     facade.dispose(); heatTex.dispose(); sim?.dispose(); simRenderer.dispose();
     try { map.remove(); } catch { /* ignore */ }
     document.body.classList.remove('studio');

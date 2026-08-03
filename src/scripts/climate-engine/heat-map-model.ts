@@ -159,6 +159,9 @@ export const PARK_HA = 0.785;
 
 export interface WardData { center: [number, number]; sizeM: number; count: number; b: number[][]; [k: string]: unknown; }
 export interface RoadsData { ways: { w: number; p: number[] }[]; }
+/** {ward}-water.json — OSM polygons in the roads contract's frame. `k` is the
+ * broad class ('water' | 'river' | 'pool'); `p` is flat [x,y,…] ward metres. */
+export interface WaterData { polys: { k: string; p: number[] }[]; }
 export interface Interventions { trees: number; roof: number; parks: number; facades: number; }
 export interface Ambient {
   tAir: number; rh: number; wind: number; cloud: number; feels: number;
