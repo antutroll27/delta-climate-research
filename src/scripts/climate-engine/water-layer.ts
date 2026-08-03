@@ -78,8 +78,11 @@ const FRAG = /* glsl */ `
   const vec3 MID   = vec3(0.165, 0.655, 0.616);
   const vec3 DEEP  = vec3(0.024, 0.267, 0.310);
 
-  /* Contour bands, the cut-paper move. Few enough to read as deliberate steps
-     rather than as colour banding artefacts. */
+  /* Depth terraces. Not hard steps: floor() gives a cut-paper edge, which reads
+     as a rendering artefact on something that is supposed to be liquid. Instead
+     each band is crossed with a smoothstep, so the colour passes through every
+     intermediate shade and only LINGERS near the band centres. The result still
+     reads as layered depth, with nothing anywhere to catch the eye as a line. */
   const float BANDS = 5.0;
 
   float waves(vec2 p, float t, out vec2 slope) {
@@ -106,15 +109,23 @@ const FRAG = /* glsl */ `
     /* Deep water is calmer at the surface and the shallows chop — so ripple
        amplitude falls with depth, which also keeps the contour edges legible. */
     float chop = mix(1.0, 0.45, depth);
-    float banded = floor(depth * BANDS + swell * 0.06 * chop) / BANDS;
 
-    vec3 col = banded < 0.5
-      ? mix(SHORE, MID, banded * 2.0)
-      : mix(MID, DEEP, (banded - 0.5) * 2.0);
+    /* Terrace, then dissolve the terrace. smoothstep on the fraction is flat at
+       both ends of each band, so the shade eases out of one layer and into the
+       next with a continuous derivative — no seam exists to be seen, even where
+       the ripple pushes the boundary about. */
+    float t = depth * BANDS + swell * 0.06 * chop;
+    float shade = (floor(t) + smoothstep(0.0, 1.0, fract(t))) / BANDS;
 
-    /* A pale seam on each contour step: the cut edge of the paper. */
-    float step_ = fract(depth * BANDS + swell * 0.06 * chop);
-    col += SHORE * 0.16 * smoothstep(0.92, 1.0, step_);
+    vec3 col = shade < 0.5
+      ? mix(SHORE, MID, shade * 2.0)
+      : mix(MID, DEEP, (shade - 0.5) * 2.0);
+
+    /* Where the shade is changing fastest — the middle of a crossing — lift it a
+       little. That is the old contour seam, kept as a soft sheen rather than a
+       drawn line: it says "a layer passed here" without ever hardening. */
+    float crossing = 1.0 - abs(fract(t) * 2.0 - 1.0);
+    col += SHORE * 0.05 * crossing * crossing;
 
     /* Shore lightening — shallow margins catch the light everywhere. */
     col = mix(col, SHORE, 0.30 * (1.0 - smoothstep(0.0, 0.28, depth)));
