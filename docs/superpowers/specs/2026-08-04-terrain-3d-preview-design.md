@@ -68,12 +68,29 @@ constants, `--check`, byte-stable regeneration, provenance in band). One per war
 Processing, in order, each recorded by the fields above: crop z15 tiles to the window →
 median filter (~40 m radius — wide enough to remove a building, narrow enough to keep
 the Hooghly embankment and swales) → subtract window median → clamp to ±12 m.
-`--check` asserts: n = 128², |h| ≤ clampM, byte-identical regeneration, and that the
-three artefacts' p5–p95 spans land within ±30 % of the measured relief above (drift
-tripwire against a silently changed tile source).
+`--check` asserts: n = 128², |h| ≤ clampM, byte-identical regeneration, that smoothing
+never *increases* a span, and that each artefact's **raw pre-smoothing** p5–p95 span
+lands within ±30 % of the measured relief above (drift tripwire against a silently
+changed tile source). The artefact records `rawSpanM` and `smoothSpanM` so the
+smoothing is visible, not implied.
 
-Size: a few KB gzipped per ward. Artefacts live in `previews/terrain-3d/data/` — NOT
-`public/` — because this is a prototype.
+**Why the tripwire reads the raw span.** An earlier draft asserted the *smoothed*
+span against the constants above, which were measured before any filtering — the
+median filter exists precisely to shrink them, so that assertion fails on every
+run by construction. Caught while writing the implementation plan.
+
+**Measured on the first bake (2026-08-04):** raw → smoothed p5–p95 is 8.9 → 7.7
+(Ballygunge), 6.6 → 4.9 (Barrackpore), 7.4 → 6.7 m (Baruipur), around medians of
+10.6 / 11.6 / 10.3 m ASL. The raw figures reproduce the independent 2026-08-03
+measurement, which cross-checks the tile sampling. Note the filter removes less than
+the ~3–5 m bare-earth expectation implies: what survives is broad-scale variation,
+not individual rooftops. Whether that residual reads as honest ground or as
+contamination is one of the things the preview is for.
+
+Size: ~74 KB per ward raw (a few KB gzipped). Artefacts live in
+`previews/terrain-3d/data/` — NOT `public/` — because this is a prototype. That
+directory is gitignored by house convention, so the artefacts regenerate from the
+script rather than being versioned.
 
 ## 5 · Preview — `previews/terrain-3d/`
 
@@ -85,15 +102,19 @@ step). Clones the live stage: MapLibre map, custom layer, hand-assigned
 the 128² field, times the exaggeration uniform. Consumers:
 
 1. **Ground** — the existing flat overlay plane (live stage positions it at y 0.6)
-   becomes a 128×128 displaced plane; the heat colouring drapes it unchanged.
+   becomes a 128×128 displaced plane, coloured by a **labelled static stand-in**: the
+   ward's measured `-surface.png` vegetation channel through the house heat ramp. The
+   live colouring is the simulation's output and the preview has no simulation, so the
+   HUD says "static stand-in field" rather than letting it read as physics.
 2. **Buildings** — the live stage builds one merged `ExtrudeGeometry` per ward; the
    preview adds `terrainAt(centroid)` to each building's vertices **before the merge**,
    so the draw-call structure is untouched. Base offset only; extrusion depth (the
    measured height) untouched.
 3. **Roads** — polyline vertices sample the field directly.
-4. **Water** — the depth-banded water planes sit at `terrainAt` of their polygon
-   centroid, slightly inset, so ponds sit *in* hollows rather than floating. The
-   existing water shader is reused as-is.
+4. **Water** — polygon geometry rides the terrain at `terrainAt` of its centroid, so
+   ponds sit *in* hollows rather than floating, drawn as a plain translucent fill. The
+   shipped depth-band shader is TypeScript inside `src/` and cannot be imported by a
+   plain preview page; water is not what is on trial here, terrain is.
 
 **Controls:** ward switcher (all three) · exaggeration ×3/×4/×5 · **flat toggle** (the
 A/B against today's look) · the terrain label rendered exactly as it would ship
