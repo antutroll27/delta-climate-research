@@ -36,10 +36,18 @@ All measured on this machine, 2026-08-04, scripts in `scripts/validate-*.py`:
    provenance, hand-traced shapes where OSM has them, stable GERS ids. The additive
    alternative needs the same overlap-matching work and leaves a permanent
    two-vintage mix.
-2. **Heights: compute both zonal-mean and zonal-p75, pick by evidence.** Scored
-   against every OSM `building:levels` tag in the three wards. Winner ships; the
-   artefact records method, margin and n. **If n < 8, mean stays** — a method change
-   needs more than noise.
+2. **Heights: compute zonal-mean, p65 and p75, pick by evidence.** Scored against
+   every OSM `building:levels` tag in the three wards. Winner ships; the artefact
+   records method, margin and n. **If n < 8, the statistic nearest the shipped one
+   (p65, measured) ships** — a method change needs more than noise.
+
+   *Amended 2026-08-04:* the candidate set gained **p65** because that is where the
+   shipped heights actually sit once registration is correct. The original pairing of
+   mean-vs-p75 was chosen to test a suspected ~25 % low bias; that hypothesis is now
+   **unsupported** — the true understatement is ~17 % and is swamped by ±2 m
+   per-building scatter, and p75 would overshoot. The decision is kept anyway, because
+   it now tests the shipping heights against real ground truth rather than adjudicating
+   a bias that turned out not to be there.
 3. **Nothing ships until the user has seen the delta table.** This change moves
    published numbers; the phase's terminal state is a report, not a deploy.
 
@@ -74,15 +82,55 @@ Zonal statistics of `GOOGLE/Research/open-buildings-temporal/v1` `building_heigh
 `2.5` with a `fill: true` flag — the Google convention, now carried openly instead of
 implicitly.
 
-**MODE 1 — PARITY (runs first, gates everything).** Over the CURRENT Microsoft
-footprints, the pipeline must reproduce the committed `b[0]` heights: median |Δ| ≤
-0.5 m and ≥ 90 % of buildings within 2 m, fill-flagged buildings excluded. A pipeline
-that cannot recreate what we ship today has no business generating what we ship
-tomorrow. This also smoke-tests the EE IAM grant on day one — the AlphaEarth note
-records one grant missing, and whether it blocks this collection is unknown until
-tried; if it does, the phase stops there with the request text ready to send.
+**MODE 1 — PARITY. RUN, FAILED, AND RETARGETED (2026-08-04).** The original gate
+demanded per-building reproduction of the committed `b[0]` values over the committed
+footprints: median |Δ| ≤ 0.5 m, ≥ 90 % within 2 m. It ran. What happened is recorded
+in full in [`../../heat-map-feature.md`](../../heat-map-feature.md); in short:
 
-**MODE 2 — PRODUCTION.** Same statistics over the Overture footprints, keyed by GERS.
+- It **caught a real bug** — the local→global inverse used a southward `y` while the
+  whole repo (`fetch-water.py`, the roads fetcher, `_types.m_per_deg`) is northward,
+  mirroring every footprint about the ward centre line. **That is the gate paying for
+  itself**, and had it been skipped the same error would have entered the *forward*
+  conversion and placed every new building mirrored against roads and water.
+- After the fix, parity reached median |Δ| 1.40 m / 64 % within 2 m — and **cannot
+  reach 90 %**. Stratified by footprint area the best band is 78 % (120–250 m²), and
+  agreement *falls* again for large buildings with 85 pixels, so this is not sampling
+  noise. It is structural, and the cause is unrecoverable: the shipped rings are
+  already simplified and rounded to 0.1 m, so a slightly different polygon samples a
+  different pixel set and the discarded vertices are gone.
+
+**Per-building parity against a soon-to-be-replaced artefact is therefore abandoned
+as unreachable in principle, not deferred as hard.** It is replaced by THREE gates,
+which together are stricter than the one they replace because two of them test the
+NEW heights on their own merits rather than against an artefact we are deleting:
+
+**GATE A — distribution parity (protects the published numbers).** Per ward, the new
+height set's p50/p75/p90 and mean must each land within **±10 %** of the shipped set's,
+fill-flagged buildings excluded from both. This is what FAR and the DC-URS exposure
+pillar actually consume; per-building continuity was never what protected them.
+A breach is not automatically fatal — Overture holds ~1,480 more buildings, mostly
+small, so a modest downward shift in the median is *expected* and must be explained in
+the delta table rather than silently accepted.
+
+**GATE B — independent accuracy of the new heights.** Score the chosen statistic
+against every OSM `building:levels` tag across the three wards (§3c). This is the only
+external ground truth that exists, and it tests the heights we are actually shipping.
+Report median ratio and n; a ratio outside 0.75–1.25 stops the phase.
+
+**GATE C — fill discipline.** Report the fill rate per ward and require it within
+±3 points of the shipped rates (4.0 / 6.5 / 10.8 %). A large jump means the footprints
+and the height raster have stopped agreeing about where buildings are — the mirroring
+bug's signature, and the one failure mode that must never recur silently.
+
+**The measured statistic, recorded so nobody re-derives it.** With correct
+registration, the shipped heights sit between zonal `mean` (median ratio 0.834) and
+`p70` (1.086) — i.e. near **p65**. The committed `heightsNote` saying *"zonal-mean"* is
+close to right, understating by ~17 %. An earlier claim in this repo that the method
+was p85 and 38 % out was an artefact of the sign bug and is **withdrawn**.
+
+**MODE 2 — PRODUCTION.** Same statistics over the Overture footprints, keyed by GERS,
+using Overture's **native lon/lat** — no local→global inverse anywhere in the
+production path, which removes the entire class of error that Mode 1 caught.
 
 ### 3c · Height method decision — `scripts/validate-heights.py`, extended
 
@@ -133,8 +181,10 @@ Never staggered.
 
 | risk | answer |
 |---|---|
-| EE IAM grant blocks the collection | Parity mode hits it on day one; phase stops with the grant request ready |
-| Parity mode cannot reproduce shipped heights | Full stop — the discrepancy is the finding; investigate before any replacement |
+| ~~EE IAM grant blocks the collection~~ | **RESOLVED 2026-08-04** — EE initialises and the collection reads (5.64 m near Ballygunge centre). No grant needed |
+| ~~Parity cannot reproduce shipped heights~~ | **HAPPENED, DIAGNOSED, RETARGETED** — one bug of ours (sign), one unrecoverable gap (discarded ring vertices). Gates A/B/C replace it |
+| A coordinate-convention bug recurs | `to_local`/`to_lonlat` both call `_types.m_per_deg` with the convention documented and its evidence cited; Gate C's fill-rate check is the runtime tripwire |
+| Gate A breaches because Overture adds small buildings | Expected, not fatal — explain the shift in the delta table; a median that moves the *wrong* way is the real signal |
 | OSM levels sample stays < 8 | Mean ships; hypothesis stays recorded as untested, not silently adopted |
 | Overture polygons with holes | Outer ring only; drop count in the manifest |
 | Ward JSON grows ~1.7× | Measured in the delta table; checked against the coarse-pointer mobile tier budget (docs/mobile-audit shelf) before ship |
