@@ -397,6 +397,43 @@ Licence: Public Domain, recorded in `data/opencity/manifest.json`. Tests:
 `tests/unit/opencity-aqi.test.mjs` (the ward mapping, the sparse-flag contract, the
 seasonality claim above) and `tests/unit/opencity-manifest.test.mjs`.
 
+### Building geometry, first ever validation — one gap, one hypothesis (2026-08-04)
+
+The footprints and heights have shipped since the beginning without ever being checked
+against an independent source. They now have been. **Nothing was changed as a result;
+this is the measurement, recorded so the decision can be taken deliberately.** Rerun
+with `scripts/validate-geometry.py` and `scripts/validate-heights.py`.
+
+**Completeness: we are missing about an eighth of the buildings.** Against Overture
+2026-07-22.0 (which merges OSM + Google + Microsoft) over the identical Ballygunge
+window: ours **2,048**, theirs **3,530**. Of theirs, **426 (12.1 %) sit more than 20 m
+from anything we hold** — not matching artefacts, buildings we do not show. Where both
+sources see a building, position agrees well: 97.2 % within 20 m, median centroid
+offset 7.3 m (inflated by Overture splitting single Microsoft blobs into individually
+mapped terraces, so it is an upper bound on positional error, not an estimate of it).
+
+**Heights cannot be validated at all — there is no ground truth.** OSM carries
+`building:levels` on **6** buildings in Ballygunge and **zero** in Barrackpore
+(Baruipur hit an Overpass rate limit, unmeasured). Overture carries `height` on **0**
+and `num_floors` on **5**. No free dataset can score our heights.
+
+**The hypothesis that leaves, explicitly not a finding.** Across the eight comparisons
+those two sources between them allow, our heights ran **22–40 % low** — an 8-storey
+building (~25 m) where we say 14.8 m, a 3-storey (~9 m) where we say 7.0 m. n = 8 is
+not evidence. But the direction is consistent and there is a mechanism: our heights are
+Google 2.5D **zonal-averaged per footprint**, and averaging over a footprint pulls in
+courtyards, annexes and shadow, which biases the mean down. Until something can test
+it, heights are **unvalidated, with a suspected low bias** — not measured.
+
+**Why the completeness fix is not free.** Footprints feed the `built` raster, which
+feeds the DC-URS resilience score. Adding ~1,480 buildings moves published numbers, so
+it needs the `export-built-raster.mjs` byte-identity oracle and a recalibration check —
+the same gate the water activation carries. Not a quiet swap.
+
+**What would fix heights: the same LiDAR flight that would fix terrain.** One survey,
+two Tier-1 upgrades. That strengthens the procurement case recorded in
+[`superpowers/specs/2026-08-04-terrain-3d-preview-design.md`](superpowers/specs/2026-08-04-terrain-3d-preview-design.md).
+
 ## Phases
 1. **Skeleton + render** — route, canvas, Three scene, `DataTexture` static synthetic field, colormap shader.
 2. **Sim in worker** — `sim-ts.ts` + `sim.worker.ts` + transferables; play/pause; prove 60fps, no main-thread contention.
