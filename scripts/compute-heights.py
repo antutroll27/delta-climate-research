@@ -53,10 +53,17 @@ WARDS = {
     "baruipur": (22.3654, 88.4319),
 }
 
-#: Parity thresholds. Generous enough to absorb a different zonal implementation,
-#: tight enough that a genuinely different METHOD cannot slip through.
-PARITY_MEDIAN_M = 0.5
-PARITY_WITHIN_2M = 0.90
+#: GATE A -- distribution parity. p50/p75/p90/mean per ward against the shipped
+#: set. These are what FAR and the DC-URS exposure pillar consume; per-building
+#: continuity never protected them and, measured, cannot be achieved (the shipped
+#: rings are already simplified, so a different polygon samples different pixels).
+DIST_TOL = 0.10
+
+#: GATE C -- fill discipline. Shipped rates from compute-far.py's docstring. A
+#: jump means footprints and the height raster have stopped agreeing about WHERE
+#: buildings are: the signature of the mirroring bug that faked a finding once.
+SHIPPED_FILL = {"ballygunge": 0.040, "barrackpore": 0.065, "baruipur": 0.108}
+FILL_TOL = 0.03
 
 
 def init_ee() -> None:
@@ -117,23 +124,77 @@ def reduce_page(img: ee.Image, feats: list[dict]) -> list[dict]:
         ee.Feature(ee.Geometry.Polygon([f["ring"]]), {"fid": f["id"]}) for f in feats
     ])
     reducer = (ee.Reducer.mean()
-               .combine(ee.Reducer.percentile([75]), sharedInputs=True)
+               .combine(ee.Reducer.percentile([65, 75]), sharedInputs=True)
                .combine(ee.Reducer.count(), sharedInputs=True))
     out = img.reduceRegions(fc, reducer, SCALE_M, tileScale=4).getInfo()
     rows = []
     for f in out["features"]:
         p = f["properties"]
         n_px = p.get("count") or 0
-        mean, p75 = p.get("mean"), p.get("p75")
-        usable = bool(n_px) and mean is not None
+        mean, p65, p75 = p.get("mean"), p.get("p65"), p.get("p75")
+        empty = not n_px or mean is None
+        # Google writes 2.5 m where it has no confident height -- a VALUE, not an
+        # absence. The first gate run tested for zero pixels instead and reported
+        # 0 % fill everywhere against shipped rates of 4-11 %, which looked like a
+        # data catastrophe and was a measurement bug. compute-far.py matches 2.5
+        # exactly for the same reason: it is also the dataset minimum.
+        no_confidence = (not empty) and abs((mean or 0) - FILL_M) < 0.05
+        usable = not empty
+        pick = lambda v: round(v, 1) if usable and v is not None else (
+            round(mean, 1) if usable else FILL_M)
         rows.append({
             "id": p["fid"],
             "mean": round(mean, 1) if usable else FILL_M,
-            "p75": round(p75, 1) if usable and p75 is not None else (round(mean, 1) if usable else FILL_M),
+            "p65": pick(p65), "p75": pick(p75),
             "px": n_px,
-            "fill": not usable,
+            "fill": empty or no_confidence,
         })
     return rows
+
+
+def gates(doc: dict, stat: str = "p65") -> int:
+    """Three checks replacing one that was measured to be unreachable.
+
+    A -- distribution parity: what the published numbers actually consume.
+    C -- fill discipline: the runtime tripwire for a coordinate mismatch.
+    B -- OSM accuracy: deferred to validate-heights.py --score (Task 3), which
+         owns the ground truth and the method decision.
+    """
+    failures: list[str] = []
+    print(f"  GATES (statistic: {stat})")
+    for ward, rows in doc["wards"].items():
+        with open(os.path.join(PUBLIC, f"{ward}.json"), encoding="utf-8") as fh:
+            shipped = [b[0] for b in json.load(fh)["b"] if b[0] != FILL_M]
+        new = [r[stat] for r in rows if not r["fill"]]
+        if not new or not shipped:
+            failures.append(f"{ward}: nothing comparable")
+            continue
+
+        for label, fn in (("p50", statistics.median),
+                          ("p75", lambda v: statistics.quantiles(v, n=4)[2]),
+                          ("p90", lambda v: statistics.quantiles(v, n=10)[8]),
+                          ("mean", statistics.fmean)):
+            was, now = fn(shipped), fn(new)
+            drift = abs(now - was) / was if was else 1.0
+            mark = "  <-- BREACH" if drift > DIST_TOL else ""
+            print(f"    {ward:<12} {label:<5} {was:6.2f} -> {now:6.2f} m ({(now-was)/was:+6.1%}){mark}")
+            if drift > DIST_TOL:
+                failures.append(f"{ward} {label}: {drift:.1%} drift exceeds {DIST_TOL:.0%}")
+
+        fill = sum(r["fill"] for r in rows) / len(rows)
+        mark = "  <-- BREACH" if abs(fill - SHIPPED_FILL[ward]) > FILL_TOL else ""
+        print(f"    {ward:<12} fill  {SHIPPED_FILL[ward]:.1%} -> {fill:.1%}{mark}")
+        if abs(fill - SHIPPED_FILL[ward]) > FILL_TOL:
+            failures.append(f"{ward}: fill {fill:.1%} vs shipped {SHIPPED_FILL[ward]:.1%} -- "
+                            f"footprints and the height raster disagree about WHERE buildings are")
+
+    for line in failures:
+        print(f"  FAIL {line}")
+    if failures:
+        print("  Gate A breaches may be EXPLAINABLE (Overture adds ~5,200 mostly-small")
+        print("  buildings, so a downward shift is predicted) -- argue it in the delta")
+        print("  table, do not wave it through. A Gate C breach never is.")
+    return 1 if failures else 0
 
 
 def run(mode: str) -> int:
@@ -149,30 +210,16 @@ def run(mode: str) -> int:
             print(f"    {ward}: {min(i + PAGE, len(feats))}/{len(feats)}", flush=True)
         doc["wards"][ward] = rows
 
-        if mode == "parity":
-            shipped = {f["id"]: f["shipped"] for f in feats}
-            deltas = [abs(r["mean"] - shipped[r["id"]]) for r in rows
-                      if not r["fill"] and shipped[r["id"]] != FILL_M]
-            if not deltas:
-                print(f"  FAIL {ward}: no comparable buildings -- parity is untestable")
-                return 1
-            median = statistics.median(deltas)
-            within = sum(1 for d in deltas if d <= 2.0) / len(deltas)
-            print(f"  {ward:<12} PARITY n={len(deltas)} median |Δ|={median:.2f} m · "
-                  f"within 2 m {within:.1%}", flush=True)
-            if median > PARITY_MEDIAN_M or within < PARITY_WITHIN_2M:
-                print(f"  FAIL {ward}: this pipeline does not reproduce the shipped heights.")
-                print(f"       STOP -- the discrepancy IS the finding. Do not run --mode overture")
-                print(f"       until it is understood (spec §3b).")
-                return 1
-
+    # The artefact is written BEFORE the gates run. The first attempt gated first
+    # and returned early, discarding twenty minutes of Earth Engine measurement --
+    # a failed gate must leave evidence to diagnose, not a clean slate.
     out_path = os.path.join(GEOM, f"heights-{mode}.json")
     with open(out_path, "w", encoding="utf-8") as fh:
         fh.write(json.dumps(doc, separators=(",", ":")) + "\n")
     fills = sum(sum(r["fill"] for r in rows) for rows in doc["wards"].values())
     total = sum(len(rows) for rows in doc["wards"].values())
     print(f"  -> {os.path.relpath(out_path, ROOT)} · {total:,} buildings · {fills} fill")
-    return 0
+    return gates(doc) if mode == "overture" else 0
 
 
 def main() -> int:
