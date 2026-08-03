@@ -348,6 +348,55 @@ The accuracy story moved from "measured" to "measured, with known uncertainty":
     Evidence regenerates from `scripts/experiment-validation-uncertainty.py`, kept as
     an independent cross-check of the promoted machinery.
 
+### WBPCB air quality at Ballygunge — acquired, and what it can and cannot say (2026-08-03)
+
+Seven West Bengal Pollution Control Board station archives are now derived into
+`data/opencity/aqi-daily.json` (`scripts/build-aqi-daily.py`, pipeline-side, nothing
+served). One of the seven — **Ballygunge** — is a ward the model simulates, which is why
+this was worth acquiring at all: a measured multi-year record standing beside a
+simulated one. `--check` asserts that mapping stays unique, because the entire reason
+for holding this data rests on it.
+
+**What the Ballygunge record actually is.** 1,550 daily records, **2019-08-01 →
+2023-12-31**, 96 % of its own span, 83 days flagged sparse. Every day carries `hours`
+alongside `mean` and `max`; days under 18 readings are **flagged, never dropped**, so a
+thin day can never pass silently as a full one.
+
+**The catalogue's advertised span is not the coverage.** OpenCity lists these as
+2017–2023. Six of the seven stations do not reach 2017 — only rabindra-bharati does
+(2017-09-26). Scored against the advertised window Ballygunge reads "61 % complete",
+which would describe a reliable instrument as mostly broken; against its own span it is
+96 %. The artefact therefore publishes `first`/`last`/`coverage` per station and labels
+the 2017–2023 range a **filter window, not a coverage claim**.
+
+**The unit is not stated and has not been invented.** The publisher does not say whether
+these are AQI points or µg/m³. Values are plausible as either (Ballygunge p50 85,
+p95 289). It is carried as a relative index and is never given a unit downstream.
+
+**What it shows.** Strong, clean seasonality, in the direction one expects and the
+opposite of the heat signal — Ballygunge monthly medians run 252 in December and 240 in
+January against **37 in July**. The pre-monsoon heat season, when the thermal instrument
+matters most, is among the *cleanest* parts of the year (Apr–May median 66).
+
+**The honest limit, stated plainly: this is an air-quality series offered as evidence
+about a thermal model, and it validates nothing about temperature.** It supports
+co-exposure and seasonality claims only. And the seasonality above actively *weakens*
+the naive co-exposure story — worst heat and worst air do not coincide here, so the two
+are a sequence across the year, not a compounding pair.
+
+The one place it could later bear on accuracy is aerosol loading against the documented
+**+2.04 K daytime bias**: a heavy winter aerosol layer attenuates incoming shortwave,
+which a clear-sky forcing model does not see. That is a real hypothesis and not a
+finding — the daytime bias is measured on a Landsat morning stratum whose overpasses are
+not season-matched to the pollution peak, and testing it needs a season-stratified
+re-run plus an optical-depth source neither acquired nor specced. **It needs its own
+spec; do not fold it into the calibration work.** No `accuracy.ts` change follows from
+this note.
+
+Licence: Public Domain, recorded in `data/opencity/manifest.json`. Tests:
+`tests/unit/opencity-aqi.test.mjs` (the ward mapping, the sparse-flag contract, the
+seasonality claim above) and `tests/unit/opencity-manifest.test.mjs`.
+
 ## Phases
 1. **Skeleton + render** — route, canvas, Three scene, `DataTexture` static synthetic field, colormap shader.
 2. **Sim in worker** — `sim-ts.ts` + `sim.worker.ts` + transferables; play/pause; prove 60fps, no main-thread contention.
