@@ -836,6 +836,30 @@ export function mountHeatMap(): () => void {
   const wardClock = new Intl.DateTimeFormat('en-GB', {
     timeZone: WARD_TZ, hour: '2-digit', minute: '2-digit', hour12: false,
   });
+  /* TWELVE-HOUR FOR THE DIAL, TWENTY-FOUR EVERYWHERE ELSE.
+     The face carries a stacked AM/PM pair, which only means anything against a
+     12-hour reading — and for a heat instrument "is it the middle of the night
+     there" is the most load-bearing fact about a temperature, which 24-hour
+     buries in a leading digit. `wardClock` stays 24-hour because the tooltip and
+     the validity hour are records, not glanceable state.
+     `hourCycle: 'h12'` and not `hour12: true`: the latter emits "24" for
+     midnight under some ICU builds, which would render a 24:07 clock face. */
+  const wardFaceFmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: WARD_TZ, hour: 'numeric', minute: '2-digit', hourCycle: 'h12',
+  });
+  /* Digits only. A 12-hour format emits "1:39 PM", and the stacked pair beside
+     the digits already says PM — printing it twice is the one thing the stacked
+     indicator exists to avoid. formatToParts drops the dayPeriod without
+     string-slicing a locale-dependent suffix. */
+  const wardFace = (d: Date) => wardFaceFmt.formatToParts(d)
+    .filter(p => p.type === 'hour' || p.type === 'minute' || p.type === 'literal')
+    .map(p => p.value).join('').trim();
+  /* The ward's weekday, three letters, uppercased at the call site rather than
+     by CSS so screen readers get the real word and not a styled abbreviation. */
+  const wardDay = new Intl.DateTimeFormat('en-US', { timeZone: WARD_TZ, weekday: 'short' });
+  const wardHour24 = new Intl.DateTimeFormat('en-GB', {
+    timeZone: WARD_TZ, hour: '2-digit', hourCycle: 'h23',
+  });
 
   /* CLOCK SKEW, MEASURED FROM THE SAME REQUEST.
      The reading's age is (now - validAt), and `now` comes from the visitor's
@@ -870,14 +894,24 @@ export function mountHeatMap(): () => void {
        01:29, because a 19:00Z reading IS 00:30 IST. Nobody reads a large time
        as "the hour of the observation" — they read it as "the time". So the
        clock says the time, and the reading's age qualifies it underneath. */
-    setText('clockTime', wardClock.format(new Date(now())));
+    const at = new Date(now());
+    setText('clockTime', wardFace(at));
+    /* Uppercased here, not by CSS: text-transform styles the glyphs but leaves
+       the accessible name as "Mon", and this string also lands in the title. */
+    const dayLabel = wardDay.format(at).toUpperCase();
+    setText('clockDay', dayLabel);
+    /* Meridiem from an explicit h23 read rather than parsing the 12-hour string
+       — no locale surprises, and midnight is 00 rather than 12 or 24. */
+    const pm = Number(wardHour24.format(at)) >= 12;
+    el('clockAm')?.classList.toggle('on', !pm);
+    el('clockPm')?.classList.toggle('on', pm);
 
     if (mins === null) {
       /* Unknown age must not render as fresh: empty bar, nothing claimed. */
       btn.dataset.age = 'unknown';
       setText('clockAgeLab', 'age —');
       bar?.setAttribute('style', 'transform:scaleX(0)');
-      btn.title = `Ward clock, ${WARD_TZ}. Live reading age unknown. Activate to re-read.`;
+      btn.title = `Ward clock (${WARD_TZ}) — ${dayLabel} ${wardClock.format(at)}. Live reading age unknown. Activate to re-read.`;
       return;
     }
 
@@ -889,7 +923,11 @@ export function mountHeatMap(): () => void {
     const label = mins < 60 ? `${Math.round(mins)}m` : `${Math.floor(mins / 60)}h`;
     setText('clockAgeLab', `read ${label} ago`);
     const validLocal = wardClock.format(new Date(Date.parse(L.validAt!)));
-    btn.title = `Ward clock (${WARD_TZ}). The live reading driving this simulation `
+    /* The DAY is in the name because the digits are the ward's, not the
+       reader's: at 18:30 in London this face says 12:00 AM, and only the
+       weekday reveals that Kolkata is already on the next day. */
+    btn.title = `Ward clock (${WARD_TZ}) — ${dayLabel} ${wardClock.format(at)}. `
+      + `The live reading driving this simulation `
       + `is valid for ${validLocal} and is ${label} old. `
       + 'The map itself shows a modelled phase, not a time of day. Activate to re-read.';
   }

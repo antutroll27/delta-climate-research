@@ -60,6 +60,20 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
          weather. Click to re-read. -->
     <button class="clockw" id="clockw" type="button" hidden
             aria-label="Live reading freshness. Activate to fetch current conditions.">
+      <!-- Stacked state indicator, the Braun/Rams idiom: BOTH halves of the day
+           are always present and only the emphasis moves, so you read "PM out of
+           AM/PM" rather than trusting a single changing label.
+
+           The day above them is not decoration. These digits are the WARD's
+           clock, not the viewer's — from London at 18:30 GMT this reads 00:00,
+           and nothing said it was already tomorrow in Kolkata. This dial exists
+           because a tab left open overnight showed a live dot over yesterday's
+           weather; without the day it still could not name which day. -->
+      <span class="k-stack" aria-hidden="true">
+        <span class="k-day" id="clockDay">—</span>
+        <span class="k-mer" id="clockAm">AM</span>
+        <span class="k-mer" id="clockPm">PM</span>
+      </span>
       <span class="k-time" id="clockTime">--:--</span>
       <span class="k-sub"><span class="k-age-lab" id="clockAgeLab">—</span></span>
       <!-- Freshness survives the move to digits as a draining rule along the
@@ -278,35 +292,55 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
      they overlap horizontally and only the vertical gap keeps them apart. At
      top:52 that gap was 3px, which held on macOS and collided on CI's Linux
      font metrics. 76 puts a real ~27px between them on both. */
-  .clockw{position:absolute;right:320px;top:76px;z-index:6;padding:7px 11px 8px;cursor:pointer;
-    display:flex;flex-direction:column;align-items:flex-start;gap:1px;
-    border-radius:9px;border:1px solid var(--line);
-    background:rgb(9 20 22 /.72);backdrop-filter:blur(10px);
-    transition:border-color .2s,transform .2s}
-  .clockw:hover{border-color:var(--cyan);transform:translateY(-1px)}
-  .clockw:focus-visible{outline:2px solid var(--cyan);outline-offset:3px}
+  /* SOLID BLOCK, NOT A GLASS PANEL. The numerals sit straight on the colour —
+     the Braun/Rams digital-clock idiom — instead of on a translucent tile, so
+     the readout is the loudest thing in the component rather than its chrome.
+
+     COLOUR NOW CARRIES THE MAP THEME, SO STALENESS CANNOT. It used to turn the
+     digits red; with the block itself coloured per basemap that channel is
+     spent, and hue-shifting a red tile to red says nothing. Stale drains the
+     colour OUT to grey instead: same reading in both themes, and it is the
+     same metaphor the bar already uses. */
+  .clockw{--c:var(--cyan);--on:#051416;
+    position:absolute;right:320px;top:76px;z-index:6;padding:9px 13px 10px;cursor:pointer;
+    display:grid;grid-template-columns:auto 1fr;gap:10px;align-items:center;text-align:left;
+    border-radius:12px;border:0;background:var(--c);
+    box-shadow:0 7px 20px rgb(0 0 0 /.38);
+    transition:transform .2s,background-color .45s ease}
+  body.studio .clockw{--c:var(--red);--on:#1b0405}
+  /* Grey is a hue-free "not live" that reads identically on either basemap.
+     BOTH SELECTORS ARE REQUIRED, AND THIS BLOCK MUST COME LAST. A lone
+     `.clockw[data-age="stale"]` ties `body.studio .clockw` on specificity
+     (0,2,0 each), so source order decided it and Clay studio kept a stale dial
+     RED — the exact warning this component exists to give, lost, and lost in
+     the one hue the legend already spends on "Extreme". */
+  .clockw[data-age="stale"],
+  body.studio .clockw[data-age="stale"]{--c:#8d9698;--on:#141a1b}
+  .clockw:hover{transform:translateY(-1px)}
+  .clockw:focus-visible{outline:2px solid var(--paper);outline-offset:3px}
   .clockw[disabled]{cursor:progress;opacity:.7}
+
+  /* the stacked indicator: day over an always-present AM/PM pair */
+  .clockw .k-stack{display:flex;flex-direction:column;line-height:1.14}
+  /* A size step, not a divider: the day and the meridiem are different KINDS of
+     fact — which day, versus which half of it — so scale separates them. */
+  .clockw .k-day{font-family:var(--sans);font-weight:750;font-size:.66rem;
+    letter-spacing:.01em;color:var(--on);margin-bottom:4px}
+  .clockw .k-mer{font-family:var(--sans);font-weight:750;font-size:.47rem;
+    letter-spacing:.03em;color:rgb(5 6 6 /.32);transition:color .2s}
+  .clockw .k-mer.on{color:var(--on)}
+
   /* tabular-nums so the digits do not reflow as minutes tick over */
-  .clockw .k-time{font-family:var(--sans);font-weight:650;font-size:1.02rem;line-height:1;
-    letter-spacing:-.01em;color:var(--paper);font-variant-numeric:tabular-nums}
-  .clockw[data-age="stale"] .k-time{color:var(--red)}
-  .clockw .k-sub{display:flex;gap:.42rem;align-items:baseline;
-    font-family:var(--mono);font-size:.46rem;letter-spacing:.1em;color:var(--faint)}
-  .clockw .k-age-lab{color:var(--ink)}
-  .clockw[data-age="stale"] .k-age-lab{color:var(--red)}
-  .clockw .k-bar{display:block;width:100%;height:2px;margin-top:5px;border-radius:1px;
-    background:rgb(236 237 240 /.12);overflow:hidden}
+  .clockw .k-time{font-family:var(--sans);font-weight:640;font-size:1.98rem;line-height:.9;
+    letter-spacing:-.035em;color:var(--on);font-variant-numeric:tabular-nums;text-align:right}
+  .clockw .k-sub{grid-column:2;justify-self:end;
+    font-family:var(--sans);font-weight:600;font-size:.47rem;color:rgb(5 6 6 /.62);margin-top:3px}
+  .clockw[data-age="stale"] .k-sub{color:rgb(5 6 6 /.8)}
+  .clockw .k-bar{grid-column:1 / -1;display:block;width:100%;height:2px;margin-top:7px;
+    border-radius:1px;background:rgb(5 6 6 /.17);overflow:hidden}
   /* scaleX only — transform, never width, so ageing costs no layout */
-  .clockw .k-bar i{display:block;height:100%;background:var(--cyan);border-radius:1px;
-    transform-origin:left center;transform:scaleX(1);
-    transition:transform .5s ease,background-color .5s ease}
-  .clockw[data-age="aging"] .k-bar i{background:var(--bronze)}
-  .clockw[data-age="stale"] .k-bar i{background:var(--red)}
-  body.studio .clockw{background:rgb(245 244 241 /.86);border-color:rgb(20 40 42 /.2)}
-  body.studio .clockw .k-time{color:#14282a}
-  body.studio .clockw .k-sub{color:rgb(20 40 42 /.55)}
-  body.studio .clockw .k-age-lab{color:rgb(20 40 42 /.75)}
-  body.studio .clockw .k-bar{background:rgb(20 40 42 /.14)}
+  .clockw .k-bar i{display:block;height:100%;background:rgb(5 6 6 /.6);border-radius:1px;
+    transform-origin:left center;transform:scaleX(1);transition:transform .5s ease}
   @media (prefers-reduced-motion: reduce){ .clockw .k-bar i{transition:none} }
 
   body.studio .compass{background:rgb(245 244 241 /.86);border-color:rgb(20 40 42 /.2)}
