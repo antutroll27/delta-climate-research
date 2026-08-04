@@ -25,6 +25,7 @@ import { rasterWardBase } from './ward-raster';
 import { loadWardSurface, type WardSurface } from './surface-raster';
 import { buildRegistry, pickBuilding, projectWard, type BuildingMeta } from './explore/building-pick';
 import { createWaterLayer, type WaterLayer } from './water-layer';
+import { createRoadLayer, type RoadLayer } from './road-layer';
 import { selectPhase } from './phase-select';
 import { asTerrainField, terrainDrawAt, terrainLabel, TERRAIN_N, type TerrainField } from './terrain';
 import { findCoolingSurfaces, nearestCooling, type CoolingSurfaces } from './explore/cooling-surfaces';
@@ -755,6 +756,7 @@ export function mountHeatMap(): () => void {
      the distinction stops a failed fetch retrying on every ward switch. */
   const terrainCache: Record<string, TerrainField | null> = {};
   let waterLayer: WaterLayer | null = null;
+  let roadLayer: RoadLayer | null = null;
   /* Measured Sentinel-2 surface, one per ward, fetched once. A miss is non-fatal
      and falls back to a flat field at the measured ward mean — never to
      synthesised structure. */
@@ -874,6 +876,16 @@ export function mountHeatMap(): () => void {
     state.base = rasterWardBase(d, means, surface);
     if (!roadsCache[name]) { try { roadsCache[name] = await (await fetch(`/heat-map/data/${name}-roads.json`)).json(); } catch { roadsCache[name] = { ways: [] }; } }
     state.spatial = M.buildSpatial(d, state.base, roadsCache[name]);
+    /* The same artefact, drawn. RENDER ONLY: buildSpatial above owns the sim's
+       road corridor and keeps its own, much wider, tree-planting radius — see
+       road-ribbon.ts. Rebuilt per ward because the ribbons are draped on that
+       ward's ground. */
+    if (threeScene) {
+      if (roadLayer) { threeScene.remove(roadLayer.mesh); roadLayer.dispose(); roadLayer = null; }
+      const rl = createRoadLayer(roadsCache[name], growU,
+        (x, y) => terrainDrawAt(terrainCache[name] ?? null, x, y));
+      if (rl) { roadLayer = rl; threeScene.add(rl.mesh); }
+    }
     /* Cooling surfaces are a property of the MEASURED vegetation, so they are
        computed from the ward's base layers and never move when a scenario does —
        planting trees in the model must not invent a park that is not there. */
@@ -1407,6 +1419,7 @@ export function mountHeatMap(): () => void {
     cleanup.forEach(fn => fn());
     cityMesh?.geometry.dispose(); (overlay?.material as THREE.Material)?.dispose(); overlay?.geometry.dispose();
     waterLayer?.dispose();
+    roadLayer?.dispose();
     facade.dispose(); heatTex.dispose(); sim?.dispose(); simRenderer.dispose();
     try { map.remove(); } catch { /* ignore */ }
     document.body.classList.remove('studio');
