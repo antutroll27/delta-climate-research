@@ -1,7 +1,21 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { ROAD_WIDTH_M, roadHalfWidthM, buildRoadMesh } from
   '../../src/scripts/climate-engine/road-ribbon.ts';
+
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+const src = (p) => readFile(join(ROOT, 'src/scripts/climate-engine', p), 'utf8');
+
+/** Source with comments stripped. The render-only guards below must test what
+ *  the code REACHES, not what the documentation names — road-ribbon.ts's header
+ *  is required to say "SimLayers" out loud, and a guard that forbade the word
+ *  would forbid the explanation of why the word matters. */
+const code = async (p) => (await src(p))
+  .replace(/\/\*[\s\S]*?\*\//g, '')
+  .replace(/(^|[^:])\/\/.*$/gm, '$1');
 
 /** A single straight way, 100 m due north, on flat ground. */
 const STRAIGHT = { ways: [{ w: 1, p: [0, 0, 0, 100] }] };
@@ -68,4 +82,55 @@ test('degenerate ways are dropped, not drawn as slivers', () => {
 test('an unknown class falls back to the minor width rather than vanishing', () => {
   assert.equal(roadHalfWidthM(7), ROAD_WIDTH_M[1].widthM / 2);
   assert.equal(roadHalfWidthM(0), ROAD_WIDTH_M[1].widthM / 2);
+});
+
+test('the sim keeps its own road radius, and it is a corridor not a carriageway', async () => {
+  const model = await src('heat-map-model.ts');
+  assert.match(model, /rad = way\.w > 1 \? 2 : 1/,
+    'buildSpatial\'s corridor radius changed. At dx ≈ 7.29 m/cell this is a 36.5 m / '
+    + '21.9 m TREE-PLANTING band, not a road width — it feeds corridorSorted → '
+    + 'treeCorridorCells → published cost and cooling, and compare/paired-runner.ts '
+    + 'builds Spatial too. If you came here to match the drawn widths in '
+    + 'road-ribbon.ts, do not: they measure different things.');
+  assert.doesNotMatch(model, /ROAD_WIDTH_M/,
+    'the drawn width table must not leak into the model — one width, one purpose');
+});
+
+test('the road layer stays render-only', async () => {
+  for (const f of ['road-ribbon.ts', 'road-layer.ts']) {
+    const text = await code(f);
+    assert.doesNotMatch(text, /SimLayers/,
+      `${f} must not reach the simulation's layers`);
+    assert.doesNotMatch(text, /buildSpatial|Spatial\b/,
+      `${f} must not reach the intervention targeting`);
+  }
+});
+
+test('the width table says which number is measured and which is assumed', () => {
+  assert.equal(ROAD_WIDTH_M[2].widthM, 14,
+    'derived from OSM lanes on 24/31 primary ways (22 × 4 lanes) at 3.25 m/lane. '
+    + 'Changing it needs a new survey, not a new opinion.');
+  assert.equal(ROAD_WIDTH_M[2].source, 'osm-lanes');
+  assert.equal(ROAD_WIDTH_M[1].widthM, 4,
+    'assumed. OSM has zero width tags for Kolkata; 5 lane tags across 390 minor '
+    + 'ways is not a sample. Widening this manufactures building overlap that '
+    + 'the measurement says is not there.');
+  assert.equal(ROAD_WIDTH_M[1].source, 'assumed');
+  assert.notEqual(ROAD_WIDTH_M[1].source, ROAD_WIDTH_M[2].source,
+    'if both classes ever claim the same provenance, one of them is lying');
+});
+
+test('the basemap casing we replaced stays hidden, in both styles', async () => {
+  const app = await src('heat-map-app.ts');
+  for (const id of ['highway_minor', 'highway_major_casing',
+                    'highway_major_inner', 'highway_major_subtle']) {
+    assert.ok(app.includes(`'${id}'`),
+      `${id} is no longer hidden. The basemap paints it in SCREEN PIXELS, so `
+      + 'leaving it visible puts a road of no real width under every building '
+      + 'and makes the whole metre-true road layer decorative.');
+  }
+  /* It must live in the `on` handler: setEnv's setStyle rebuilds the style, and
+     a `once` would let the casing return the moment someone switches to studio. */
+  assert.match(app, /map\.on\('style\.load'/,
+    'the hide must ride the re-firing style.load handler, not a once');
 });
