@@ -1,0 +1,72 @@
+{
+  "note": "shipped vs staged geometry. Nothing ships until this is reviewed.",
+  "staged_from": "Overture 2026-07-22.0 footprints + Open Buildings 2.5D p65 heights",
+  "wards": {
+    "ballygunge": {
+      "buildings": [
+        2048,
+        3407
+      ],
+      "far": [
+        1.1609,
+        1.1522
+      ],
+      "built_fraction": [
+        0.3753,
+        0.3115
+      ],
+      "footprint_m2": [
+        735671,
+        610455
+      ],
+      "floor_m2": [
+        2275454,
+        2258338
+      ]
+    },
+    "barrackpore": {
+      "buildings": [
+        3003,
+        4604
+      ],
+      "far": [
+        0.6151,
+        0.4796
+      ],
+      "built_fraction": [
+        0.3606,
+        0.2572
+      ],
+      "footprint_m2": [
+        706760,
+        504126
+      ],
+      "floor_m2": [
+        1205659,
+        940039
+      ]
+    },
+    "baruipur": {
+      "buildings": [
+        3528,
+        4480
+      ],
+      "far": [
+        0.3416,
+        0.3453
+      ],
+      "built_fraction": [
+        0.2229,
+        0.2017
+      ],
+      "footprint_m2": [
+        436982,
+        395265
+      ],
+      "floor_m2": [
+        669474,
+        676769
+      ]
+    }
+  }
+}

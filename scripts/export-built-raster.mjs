@@ -35,7 +35,11 @@ const outDir = join(homedir(), '.cache', 'delta-climate', 'built');
 mkdirSync(outDir, { recursive: true });
 
 for (const ward of WARDS) {
-  const data = JSON.parse(readFileSync(`public/heat-map/data/${ward}.json`, 'utf8'));
+  /* GEOM_DIR lets the geometry gate raster a STAGED candidate set without
+     touching the shipped one. Defaults to today's path, so behaviour is
+     unchanged for every existing caller. */
+  const geomDir = process.env.GEOM_DIR ?? 'public/heat-map/data';
+  const data = JSON.parse(readFileSync(`${geomDir}/${ward}.json`, 'utf8'));
   const built = rasterizeWardBuilt(data, GRID);
   if (built.length !== GRID * GRID) throw new Error(`${ward}: expected ${GRID ** 2} cells, got ${built.length}`);
 

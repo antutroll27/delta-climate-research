@@ -36,11 +36,14 @@ import json, os, statistics, sys
 from typing import Sequence, TypedDict, cast
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _types
 from _types import FarFile, FarWard, WardId
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.join(HERE, "..")
-GEOM = os.path.join(ROOT, "public", "heat-map", "data")
+# GEOM_DIR lets the geometry gate compute FAR over a STAGED candidate set.
+# Defaults to the shipped path -- every existing caller is unaffected.
+GEOM = os.environ.get("GEOM_DIR") or os.path.join(ROOT, "public", "heat-map", "data")
 OUT = os.path.join(ROOT, "data", "dc-urs", "far.json")
 
 STOREY_M = 3.2          # assumption; see module docstring
@@ -147,12 +150,15 @@ def ward_far(path: str) -> FarWard:
 
 
 def main() -> None:
-    wards: list[WardId] = sorted(
-        f[:-5] for f in os.listdir(GEOM)
-        if f.endswith(".json") and not f.endswith("-roads.json")
-    )
-    if not wards:
-        raise SystemExit(f"no ward geometry in {GEOM}")
+    # The canonical list, NOT a directory glob. This used to enumerate every
+    # *.json that was not -roads.json, which silently treated each new sibling
+    # artefact -- water, terrain, dc-urs-inputs, surface-meta -- as a ward and
+    # crashed on the first one whose shape it did not expect. Adding an exclusion
+    # per artefact is a treadmill; naming the three wards is the answer.
+    wards: list[WardId] = sorted(_types.WARDS)
+    missing = [w for w in wards if not os.path.exists(os.path.join(GEOM, f"{w}.json"))]
+    if missing:
+        raise SystemExit(f"ward geometry missing in {GEOM}: {', '.join(missing)}")
 
     out: FarFile = {
         "source": "Microsoft ML Building Footprints (ODbL) + Google Open Buildings 2.5D heights (CC BY 4.0)",
