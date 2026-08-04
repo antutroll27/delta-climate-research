@@ -26,27 +26,36 @@ import { projects } from './src/data/projects.ts';
  * (req.query / res.status().json()) shape to Node's raw one. Dev only — `apply`
  * keeps it out of every build, so nothing here can reach production.
  */
+/** @returns {import('vite').Plugin} */
 function devApiLive() {
   return {
     name: 'delta-dev-api-live',
     apply: 'serve',
+    /** @param {import('vite').ViteDevServer} server */
     configureServer(server) {
-      server.middlewares.use('/api/live', async (req, res, next) => {
-        const handler = (await import('./api/live.js')).default;
-        const url = new URL(req.url ?? '', 'http://localhost');
-        const shim = {
-          query: Object.fromEntries(url.searchParams),
-        };
-        const out = {
-          setHeader: (k, v) => res.setHeader(k, v),
-          status(code) { res.statusCode = code; return out; },
-          json(body) {
-            res.setHeader('Content-Type', 'application/json');
-            res.end(JSON.stringify(body));
-          },
-        };
-        try { await handler(shim, out); } catch (err) { next(err); }
-      });
+      server.middlewares.use('/api/live',
+        /**
+         * @param {import('node:http').IncomingMessage} req
+         * @param {import('node:http').ServerResponse} res
+         * @param {(err?: unknown) => void} next
+         */
+        async (req, res, next) => {
+          const handler = (await import('./api/live.js')).default;
+          const url = new URL(req.url ?? '', 'http://localhost');
+          const shim = { query: Object.fromEntries(url.searchParams) };
+          const out = {
+            /** @param {string} k @param {string} v */
+            setHeader: (k, v) => res.setHeader(k, v),
+            /** @param {number} code */
+            status(code) { res.statusCode = code; return out; },
+            /** @param {unknown} body */
+            json(body) {
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify(body));
+            },
+          };
+          try { await handler(shim, out); } catch (err) { next(err); }
+        });
     },
   };
 }
