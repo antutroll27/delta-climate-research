@@ -1119,7 +1119,9 @@ export function mountHeatMap(): () => void {
     const w = WARDS[name];
     try {
       if (force || !liveCache[name]) {
-        const r = await fetch(`https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=${w.lat}&lon=${w.lon}`);
+        /* Through our own function, never api.met.no directly: their terms require
+           an identifying User-Agent, which a browser fetch cannot set. See api/live.js. */
+        const r = await fetch(`/api/live?lat=${w.lat}&lon=${w.lon}`);
         if (!r.ok) throw new Error('met.no ' + r.status);
         /* Trust the server's clock over the visitor's for the AGE arithmetic.
            Measured before the body is read so transfer time is not counted as
