@@ -25,6 +25,7 @@ import { rasterWardBase } from './ward-raster';
 import { loadWardSurface, type WardSurface } from './surface-raster';
 import { buildRegistry, pickBuilding, projectWard, type BuildingMeta } from './explore/building-pick';
 import { createWaterLayer, type WaterLayer } from './water-layer';
+import { createCloudLayer, type CloudLayer } from './cloud-layer';
 import { createRoadLayer, type RoadLayer } from './road-layer';
 import { selectPhase } from './phase-select';
 import { asTerrainField, terrainDrawAt, terrainLabel, TERRAIN_N, type TerrainField } from './terrain';
@@ -726,9 +727,24 @@ export function mountHeatMap(): () => void {
         waterLayer.setView(map.getBearing(), map.getPitch());
         if (!reduceMotion) waterLayer.setTime(performance.now() / 1000);
       }
+      /* The deck rides the same repaints the water does. Reduced motion holds it
+         at a still frame on the measured cover rather than animating slower.
+         A null reading draws nothing — an invented sky is the loader's deleted
+         land dust all over again. */
+      if (cloudLayer && state.live) {
+        cloudLayer.update(
+          reduceMotion ? 0 : performance.now() / 1000,
+          state.live.cloud / 100, state.live.wind, state.live.windFrom ?? 0,
+        );
+        keyL.intensity = 2.1 * cloudLayer.sunFactor(state.live.cloud / 100);
+      }
       threeRenderer.resetState();
       threeRenderer.render(threeScene, threeCam);
-      if (growU.value < 1 || fieldDirty) { fieldDirty = false; map.triggerRepaint(); }
+      /* The deck drifts when nothing else is changing, so it needs its own repaint
+         reason — but only when there is wind to drift on, and never under reduced
+         motion. This is the one new source of continuous repaint. */
+      const drifting = !reduceMotion && !!cloudLayer && (state.live?.wind ?? 0) > 0;
+      if (growU.value < 1 || fieldDirty || drifting) { fieldDirty = false; map.triggerRepaint(); }
     },
   };
 
@@ -761,6 +777,7 @@ export function mountHeatMap(): () => void {
      the distinction stops a failed fetch retrying on every ward switch. */
   const terrainCache: Record<string, TerrainField | null> = {};
   let waterLayer: WaterLayer | null = null;
+  let cloudLayer: CloudLayer | null = null;
   let roadLayer: RoadLayer | null = null;
   /* Measured Sentinel-2 surface, one per ward, fetched once. A miss is non-fatal
      and falls back to a flat field at the measured ward mean — never to
@@ -868,6 +885,13 @@ export function mountHeatMap(): () => void {
       const wl = createWaterLayer(waterCache[name], growU,
         (x, y) => terrainDrawAt(terrainCache[name] ?? null, x, y));
       if (wl) { waterLayer = wl; threeScene.add(wl.mesh); }
+      /* Baked once and kept across ward switches — cloud is weather, not geography.
+         Only the drape reference changes, and the deck is far enough above the
+         ground for that to be immaterial. */
+      if (!cloudLayer) {
+        cloudLayer = createCloudLayer((x, y) => terrainDrawAt(terrainCache[name] ?? null, x, y));
+        threeScene.add(cloudLayer.group);
+      }
     }
     const mc = maplibregl.MercatorCoordinate.fromLngLat([w.lon, w.lat], 0);
     modelTransform = { x: mc.x, y: mc.y, z: mc.z ?? 0, scale: mc.meterInMercatorCoordinateUnits() };
@@ -1148,7 +1172,7 @@ export function mountHeatMap(): () => void {
         /* `ts.time` is the hour this reading is VALID FOR, which is what the
            dial must show — not the moment we happened to fetch it. They differ
            by up to an hour and only the former is a property of the data. */
-        liveCache[name] = { tAir: dd.air_temperature, rh: dd.relative_humidity, wind: dd.wind_speed, cloud: dd.cloud_area_fraction ?? 0, feels: M.heatIndexC(dd.air_temperature, dd.relative_humidity), validAt: ts.time };
+        liveCache[name] = { tAir: dd.air_temperature, rh: dd.relative_humidity, wind: dd.wind_speed, cloud: dd.cloud_area_fraction ?? 0, windFrom: dd.wind_from_direction, feels: M.heatIndexC(dd.air_temperature, dd.relative_humidity), validAt: ts.time };
       }
       if (state.ward !== name) return;
       state.live = liveCache[name]; paintLive(); resetSim();
@@ -1452,6 +1476,7 @@ export function mountHeatMap(): () => void {
     cleanup.forEach(fn => fn());
     cityMesh?.geometry.dispose(); (overlay?.material as THREE.Material)?.dispose(); overlay?.geometry.dispose();
     waterLayer?.dispose();
+    cloudLayer?.dispose();
     roadLayer?.dispose();
     facade.dispose(); heatTex.dispose(); sim?.dispose(); simRenderer.dispose();
     try { map.remove(); } catch { /* ignore */ }

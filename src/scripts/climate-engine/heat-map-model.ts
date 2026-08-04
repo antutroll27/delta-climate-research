@@ -165,6 +165,10 @@ export interface WaterData { polys: { k: string; p: number[] }[]; }
 export interface Interventions { trees: number; roof: number; parks: number; facades: number; }
 export interface Ambient {
   tAir: number; rh: number; wind: number; cloud: number; feels: number;
+  /** met.no `wind_from_direction`, degrees. Cloud advection ONLY — the MODEL uses
+   *  wind as a scalar (`p.h * p.wind`) and has no direction term anywhere. Do not
+   *  wire this into the physics believing it already belongs there. */
+  windFrom?: number;
   /**
    * ISO instant the reading is valid for (met.no's `timeseries[0].time`).
    * Optional because the physics never needs it — but the UI does: this reading
