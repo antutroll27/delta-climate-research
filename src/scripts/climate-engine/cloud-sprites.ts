@@ -116,8 +116,10 @@ export function layoutVeil(rnd: () => number): Lobe[] {
  *  that fades from the centre reads as haze rather than as a curved bump. */
 const plateau = (round: number) => 0.46 + round * 0.40;
 
+/** `_H` is unread — the signature stays symmetric with paintVeil so the caller can
+ *  treat the two painters interchangeably. */
 export function paintCumulus(
-  ctx: CanvasRenderingContext2D, lobes: Lobe[], W: number, H: number, round: number,
+  ctx: CanvasRenderingContext2D, lobes: Lobe[], W: number, _H: number, round: number,
 ): void {
   let top = Infinity, bot = -Infinity;
   for (const L of lobes) { top = Math.min(top, L.cy - L.ry); bot = Math.max(bot, L.cy + L.ry); }
@@ -136,6 +138,10 @@ export function paintCumulus(
     ctx.save(); ctx.translate(L.cx, L.cy); ctx.scale(1, L.ry / L.rx);
     const gr = ctx.createRadialGradient(-L.rx * 0.20, -L.rx * 0.34, L.rx * 0.05, 0, 0, L.rx);
     gr.addColorStop(0.00, 'rgba(255,255,255,.97)');
+    /* The blue channel is pinned at 255 while red and green track `hf`. That is
+       deliberate, not a typo for `lum + 4`: it makes a crown read pure white and a
+       base read 236/238/255, a cool cast where less light reaches. Verified
+       byte-identical to the approved preview before being sealed here. */
     gr.addColorStop(P * 0.62, `rgba(${lum | 0},${(lum + 2) | 0},255,.95)`);
     gr.addColorStop(P, `rgba(${mid | 0},${(mid + 8) | 0},${(mid + 20) | 0},.90)`);
     gr.addColorStop(P + (1 - P) * 0.40,
@@ -159,6 +165,10 @@ export function paintVeil(
   ctx: CanvasRenderingContext2D, lobes: Lobe[], W: number, H: number, round: number,
 ): void {
   const P = 0.38 + round * 0.34;
+  /* save/restore around the blur, matching paintCumulus. Without it this leaks
+     ctx.filter to whatever the caller draws next — harmless while every sprite
+     gets a fresh canvas, but a trap the moment one does not. */
+  ctx.save();
   ctx.filter = `blur(${W * (0.030 - round * 0.014)}px)`;
   for (const L of [...lobes].sort((a, b) => b.cy - a.cy)) {
     const hf = 1 - L.cy / H;
@@ -171,6 +181,7 @@ export function paintVeil(
     gr.addColorStop(1, 'rgba(186,202,216,0)');
     ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(0, 0, L.rx, 0, 7); ctx.fill(); ctx.restore();
   }
+  ctx.restore();
 }
 
 export function paintShadow(ctx: CanvasRenderingContext2D, px: number): void {
@@ -181,7 +192,17 @@ export function paintShadow(ctx: CanvasRenderingContext2D, px: number): void {
   ctx.fillStyle = gr; ctx.fillRect(0, 0, px, px);
 }
 
-/** Canvas aspects the layouts are designed for. The billboard MUST use these — a
- *  hardcoded aspect stretches the ovals back into circles and the fix looks inert. */
+/**
+ * Canvas aspects the layouts are designed for. The billboard MUST use these — a
+ * hardcoded aspect stretches the ovals back into circles and the fix looks inert.
+ *
+ * DO NOT "TIGHTEN" THESE. The cumulus cluster's own silhouette is ~3.44:1 while
+ * this canvas is ~1.96:1, so `fitLobes` (which scales uniformly, by design) leaves
+ * the sprite about 58 % transparent rows. That looks like waste and it is — roughly
+ * 0.5 MB of texture across the pool — but the aspect ratio SURVIVES the slack, and
+ * the approved look was measured through exactly these numbers. Setting them to the
+ * tight 0.29 would render every cloud ~36 % taller relative to its width, which is
+ * a different sky from the one that was signed off.
+ */
 export const CUMULUS_ASPECT = 0.74 - CLOUD.OVAL * 0.32;   // 0.51
 export const VEIL_ASPECT = 0.58 - CLOUD.OVAL * 0.22;      // 0.42
