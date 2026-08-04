@@ -5,69 +5,69 @@
   "provenance": "measured",
   "wards": {
     "ballygunge": {
-      "far": 1.1609,
-      "built_fraction": 0.3753,
-      "buildings": 2048,
+      "far": 1.1595,
+      "built_fraction": 0.3188,
+      "buildings": 3527,
       "degenerate_polygons": 0,
       "land_m2": 1960000.0,
-      "footprint_m2": 735671,
-      "floor_m2": 2275454,
+      "footprint_m2": 624772,
+      "floor_m2": 2272640,
       "height_m": {
         "min": 2.6,
-        "median": 6.9,
-        "max": 54.4,
-        "n_measured": 1967,
+        "median": 7.6,
+        "max": 86.9,
+        "n_measured": 3062,
         "fill_value": 2.5,
-        "n_at_fill_value": 81,
+        "n_at_fill_value": 465,
+        "n_nonpositive": 0
+      },
+      "floors": {
+        "median": 2,
+        "max": 27
+      }
+    },
+    "barrackpore": {
+      "far": 0.4848,
+      "built_fraction": 0.2625,
+      "buildings": 4702,
+      "degenerate_polygons": 0,
+      "land_m2": 1960000.0,
+      "footprint_m2": 514439,
+      "floor_m2": 950158,
+      "height_m": {
+        "min": 2.6,
+        "median": 5.2,
+        "max": 30.5,
+        "n_measured": 4105,
+        "fill_value": 2.5,
+        "n_at_fill_value": 597,
         "n_nonpositive": 0
       },
       "floors": {
         "median": 2.0,
-        "max": 17
-      }
-    },
-    "barrackpore": {
-      "far": 0.6151,
-      "built_fraction": 0.3606,
-      "buildings": 3003,
-      "degenerate_polygons": 0,
-      "land_m2": 1960000.0,
-      "footprint_m2": 706760,
-      "floor_m2": 1205659,
-      "height_m": {
-        "min": 2.6,
-        "median": 4.7,
-        "max": 20.3,
-        "n_measured": 2808,
-        "fill_value": 2.5,
-        "n_at_fill_value": 195,
-        "n_nonpositive": 0
-      },
-      "floors": {
-        "median": 1,
-        "max": 6
+        "max": 10
       }
     },
     "baruipur": {
-      "far": 0.3416,
-      "built_fraction": 0.2229,
-      "buildings": 3528,
+      "far": 0.3464,
+      "built_fraction": 0.2028,
+      "buildings": 4538,
       "degenerate_polygons": 0,
       "land_m2": 1960000.0,
-      "footprint_m2": 436982,
-      "floor_m2": 669474,
+      "footprint_m2": 397439,
+      "floor_m2": 678943,
       "height_m": {
         "min": 2.6,
-        "median": 4.5,
-        "max": 15.4,
-        "n_measured": 3146,
+        "median": 4.8,
+        "max": 20.9,
+        "n_measured": 3909,
         "fill_value": 2.5,
-        "n_at_fill_value": 382,
+        "n_at_fill_value": 629,
         "n_nonpositive": 0
       },
       "floors": {
         "median": 1.0,
-        "max": 5
+        "max": 7
       }
     }
   }

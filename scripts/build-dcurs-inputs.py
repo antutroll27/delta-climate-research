@@ -109,8 +109,14 @@ def lst_from_calibration() -> Lst | None:
     if not os.path.exists(CAL):
         return None
     with open(CAL, newline="") as fh:
+        # SKIPPED scenes carry no measurement, so no view_delta -- 130 of 179 rows
+        # in the census. Converting before checking status crashes on the first
+        # one. The status test must come first; it excludes only rows that had
+        # nothing to contribute anyway.
         rows = [r for r in cast(list[MetRow], list(csv.DictReader(fh)))
-                if float(r["view_delta"]) <= VIEW_CUT]
+                if str(r.get("status", "")).strip() != "skipped"
+                and str(r.get("view_delta", "")).strip()
+                and float(r["view_delta"]) <= VIEW_CUT]
     if not rows:
         return None
     day = [float(r["urban_mean"]) for r in rows if r["phase"] == "day"]

@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import { execSync } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
@@ -14,15 +13,19 @@ const shipped = Object.fromEntries(await Promise.all(
 const staged = Object.fromEntries(await Promise.all(
   WARDS.map(async w => [w, await read(`data/geometry/staging/${w}.json`)])));
 
-test('nothing shipped before the delta table was reviewed', () => {
-  // The load-bearing guarantee of this whole phase. Every script writes to
-  // data/geometry/staging/; only a deliberate, reviewed ship step may touch
-  // public/. If a pipeline script ever writes there directly, this fails.
-  const dirty = execSync('git status --porcelain public/heat-map/data/', { cwd: ROOT })
-    .toString().trim().split('\n').filter(Boolean)
-    .filter(line => WARDS.some(w => line.includes(`${w}.json`)) && !line.includes('-'));
-  assert.deepEqual(dirty, [],
-    `a pipeline script modified shipped ward geometry outside the ship step: ${dirty}`);
+test('the shipped geometry IS the Overture set, with its provenance intact', () => {
+  // THIS TEST CHANGED JOB AT SHIP. Before shipping it asserted public/ was
+  // untouched -- the guarantee that no pipeline script wrote there outside a
+  // reviewed step. That guarantee has now been deliberately spent, so the test
+  // pins what shipped instead of pinning that nothing had. Deleting it would
+  // have removed the only assertion that the served geometry is what we measured.
+  const EXPECTED = { ballygunge: 3527, barrackpore: 4702, baruipur: 4538 };
+  for (const w of WARDS) {
+    assert.equal(shipped[w].count, EXPECTED[w],
+      `${w}: served count is not the measured Overture count`);
+    assert.match(shipped[w].source, /Overture/, `${w}: shipped source is not Overture`);
+    assert.match(shipped[w].source, /ODbL/, `${w}: shipped source dropped the licence`);
+  }
 });
 
 test('staged geometry is schema-identical, so every consumer keeps working', () => {
@@ -38,14 +41,16 @@ test('staged geometry is schema-identical, so every consumer keeps working', () 
   }
 });
 
-test('the replacement adds buildings and never loses them', () => {
-  // Measured 2026-08-04: +72 / +57 / +29 %. Overture merges OSM + Google +
-  // Microsoft, so our current source is one of its inputs — a superset by
-  // construction. A staged set SMALLER than shipped means the acquisition
-  // filtered too hard, not that Kolkata lost buildings.
+test('staging and shipped agree, so a re-bake can never drift unnoticed', () => {
+  // Post-ship these are the same artefact by construction. If a future
+  // regeneration changes staging without a matching ship, this catches the
+  // divergence rather than letting the served file quietly fall behind the
+  // pipeline that is supposed to produce it.
   for (const w of WARDS) {
-    assert.ok(staged[w].count > shipped[w].count,
-      `${w}: ${staged[w].count} staged vs ${shipped[w].count} shipped — the replacement lost buildings`);
+    assert.equal(staged[w].count, shipped[w].count,
+      `${w}: staging (${staged[w].count}) has drifted from shipped (${shipped[w].count}) — re-bake or re-ship`);
+    assert.equal(staged[w].heightsNote, shipped[w].heightsNote,
+      `${w}: staging and shipped disagree about how the heights were made`);
   }
 });
 

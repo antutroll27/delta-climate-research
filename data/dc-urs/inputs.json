@@ -8,7 +8,7 @@
   "wards": {
     "ballygunge": {
       "lstDayC": {
-        "value": 30.14,
+        "value": 30.72,
         "source": "measured",
         "vintage": "2024-2026",
         "cite": "NASA ECOSTRESS L2T LSTE v002"
@@ -20,7 +20,7 @@
         "cite": "NASA ECOSTRESS L2T LSTE v002"
       },
       "ruralBaseC": {
-        "value": 29.96,
+        "value": 30.96,
         "source": "measured",
         "vintage": "2024-2026",
         "cite": "ECOSTRESS urban-rural, GHS-SMOD masks"
@@ -32,7 +32,7 @@
         "cite": "WorldPop"
       },
       "far": {
-        "value": 1.1609,
+        "value": 1.1595,
         "source": "measured",
         "vintage": "2023-2025",
         "cite": "MS footprints + Google Open Buildings 2.5D"
@@ -81,7 +81,7 @@
     },
     "baruipur": {
       "lstDayC": {
-        "value": 30.14,
+        "value": 30.72,
         "source": "measured",
         "vintage": "2024-2026",
         "cite": "NASA ECOSTRESS L2T LSTE v002"
@@ -93,7 +93,7 @@
         "cite": "NASA ECOSTRESS L2T LSTE v002"
       },
       "ruralBaseC": {
-        "value": 29.96,
+        "value": 30.96,
         "source": "measured",
         "vintage": "2024-2026",
         "cite": "ECOSTRESS urban-rural, GHS-SMOD masks"
@@ -105,7 +105,7 @@
         "cite": "WorldPop"
       },
       "far": {
-        "value": 0.3416,
+        "value": 0.3464,
         "source": "measured",
         "vintage": "2023-2025",
         "cite": "MS footprints + Google Open Buildings 2.5D"
@@ -154,7 +154,7 @@
     },
     "barrackpore": {
       "lstDayC": {
-        "value": 30.14,
+        "value": 30.72,
         "source": "measured",
         "vintage": "2024-2026",
         "cite": "NASA ECOSTRESS L2T LSTE v002"
@@ -166,7 +166,7 @@
         "cite": "NASA ECOSTRESS L2T LSTE v002"
       },
       "ruralBaseC": {
-        "value": 29.96,
+        "value": 30.96,
         "source": "measured",
         "vintage": "2024-2026",
         "cite": "ECOSTRESS urban-rural, GHS-SMOD masks"
@@ -178,7 +178,7 @@
         "cite": "WorldPop"
       },
       "far": {
-        "value": 0.6151,
+        "value": 0.4848,
         "source": "measured",
         "vintage": "2023-2025",
         "cite": "MS footprints + Google Open Buildings 2.5D"
