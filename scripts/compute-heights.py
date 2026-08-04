@@ -59,11 +59,18 @@ WARDS = {
 #: rings are already simplified, so a different polygon samples different pixels).
 DIST_TOL = 0.10
 
-#: GATE C -- fill discipline. Shipped rates from compute-far.py's docstring. A
-#: jump means footprints and the height raster have stopped agreeing about WHERE
-#: buildings are: the signature of the mirroring bug that faked a finding once.
-SHIPPED_FILL = {"ballygunge": 0.040, "barrackpore": 0.065, "baruipur": 0.108}
-FILL_TOL = 0.03
+#: GATE C -- registration discipline. REDEFINED after its first run: it compared
+#: our raster fill rate against the shipped rates (4.0/6.5/10.8 %), which come from
+#: Google's BUILDING-LEVEL product convention. Different quantities -- an exact
+#: 2.5 m zonal mean is rare by construction -- so the comparison was meaningless
+#: and reported a catastrophe that was not there.
+#:
+#: What the gate was ALWAYS for is catching a footprint set that has stopped
+#: landing on the buildings it describes -- the mirroring bug that once faked a
+#: whole finding. That has a direct signal: footprints returning NO pixels. Real
+#: footprints over a 4 m raster get 11-14 pixels each; a mirrored set would hit
+#: empty ground. Measured on the true set: 0 of 12,767.
+MAX_ZERO_PIXEL_FRAC = 0.01
 
 
 def init_ee() -> None:
@@ -181,12 +188,13 @@ def gates(doc: dict, stat: str = "p65") -> int:
             if drift > DIST_TOL:
                 failures.append(f"{ward} {label}: {drift:.1%} drift exceeds {DIST_TOL:.0%}")
 
+        zero = sum(1 for r in rows if not r["px"]) / len(rows)
         fill = sum(r["fill"] for r in rows) / len(rows)
-        mark = "  <-- BREACH" if abs(fill - SHIPPED_FILL[ward]) > FILL_TOL else ""
-        print(f"    {ward:<12} fill  {SHIPPED_FILL[ward]:.1%} -> {fill:.1%}{mark}")
-        if abs(fill - SHIPPED_FILL[ward]) > FILL_TOL:
-            failures.append(f"{ward}: fill {fill:.1%} vs shipped {SHIPPED_FILL[ward]:.1%} -- "
-                            f"footprints and the height raster disagree about WHERE buildings are")
+        mark = "  <-- BREACH" if zero > MAX_ZERO_PIXEL_FRAC else ""
+        print(f"    {ward:<12} zero-pixel {zero:.2%} (fill {fill:.1%}, reported not gated){mark}")
+        if zero > MAX_ZERO_PIXEL_FRAC:
+            failures.append(f"{ward}: {zero:.1%} of footprints landed on NO pixels -- they have "
+                            f"stopped describing the buildings beneath them")
 
     for line in failures:
         print(f"  FAIL {line}")
