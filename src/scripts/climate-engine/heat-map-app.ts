@@ -668,6 +668,11 @@ export function mountHeatMap(): () => void {
   let cityMesh: THREE.Mesh | null = null, overlay: THREE.Mesh;
   let modelTransform: { x: number; y: number; z: number; scale: number } | null = null;
   let hemiL: THREE.HemisphereLight, keyL: THREE.DirectionalLight, rimL: THREE.DirectionalLight;
+  /* The ENVIRONMENT's own key intensity, kept separately because the cloud deck
+     scales it every frame. Writing `2.1 * sunFactor` directly would clobber the
+     studio environment's dimmer 1.7 on the very next repaint — the deck would
+     silently drag clay studio back to the dark map's lighting. */
+  let keyBase = 2.1;
   const customLayer: maplibregl.CustomLayerInterface = {
     id: 'delta-city', type: 'custom', renderingMode: '3d',
     onAdd(m, gl) {
@@ -735,8 +740,9 @@ export function mountHeatMap(): () => void {
         cloudLayer.update(
           reduceMotion ? 0 : performance.now() / 1000,
           state.live.cloud / 100, state.live.wind, state.live.windFrom ?? 0,
+          state.phase === 'night',
         );
-        keyL.intensity = 2.1 * cloudLayer.sunFactor(state.live.cloud / 100);
+        keyL.intensity = keyBase * cloudLayer.sunFactor(state.live.cloud / 100);
       }
       threeRenderer.resetState();
       threeRenderer.render(threeScene, threeCam);
@@ -1428,7 +1434,7 @@ export function mountHeatMap(): () => void {
   function setEnv(e: string) {
     if (e === env) return; env = e; const s = e === 'studio';
     document.body.classList.toggle('studio', s); studioU.value = s ? 1 : 0; opBase = s ? 0.42 : 0.5;
-    if (hemiL) { if (s) { hemiL.color.set(0xffffff); hemiL.groundColor.set(0xd8d2c8); hemiL.intensity = 1.45; keyL.intensity = 1.7; rimL.intensity = 0.12; } else { hemiL.color.set(0xbfe2e8); hemiL.groundColor.set(0x0a1518); hemiL.intensity = 1.05; keyL.intensity = 2.1; rimL.intensity = 0.5; } }
+    if (hemiL) { if (s) { hemiL.color.set(0xffffff); hemiL.groundColor.set(0xd8d2c8); hemiL.intensity = 1.45; keyBase = 1.7; keyL.intensity = keyBase; rimL.intensity = 0.12; } else { hemiL.color.set(0xbfe2e8); hemiL.groundColor.set(0x0a1518); hemiL.intensity = 1.05; keyBase = 2.1; keyL.intensity = keyBase; rimL.intensity = 0.5; } }
     document.querySelectorAll('#envchip button').forEach(x => x.classList.toggle('on', (x as HTMLElement).dataset.e === e));
     map.setStyle(STYLES[e as 'dark' | 'studio']); map.once('style.load', () => { map.addLayer(customLayer); map.triggerRepaint(); });
   }

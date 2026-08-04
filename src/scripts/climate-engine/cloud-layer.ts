@@ -22,10 +22,21 @@ import {
 
 export interface CloudLayer {
   readonly group: THREE.Group;
-  /** advance drift and cross-fade; seconds, cover 0..1, wind m/s, direction wind comes FROM */
-  update(seconds: number, cover: number, windMs: number, fromDeg: number): void;
-  /** key-light multiplier for this cover — the SAME scalar the physics reads, so
-   *  what the eye infers about sunlight cannot drift from what the model computes */
+  /**
+   * advance drift and cross-fade; seconds, cover 0..1, wind m/s, direction wind
+   * comes FROM, and whether the scene is on its night phase.
+   *
+   * `night` is not cosmetic. Without it the deck draws sunlit white cumulus and
+   * casts hard ground shadows at 22:00, which is a lie about where the light is
+   * coming from — and this page already distinguishes the two phases everywhere
+   * else it reports anything.
+   */
+  update(seconds: number, cover: number, windMs: number, fromDeg: number, night: boolean): void;
+  /** key-light multiplier for this cover. Returns the SAME 0.6 coefficient the
+   *  physics applies at heat-map-model.ts:371 and :394 (`sun: 1 * (1 - 0.6 * cloud)`),
+   *  so what the eye infers about sunlight cannot drift from what the model computes.
+   *  The caller multiplies its ENVIRONMENT's own key intensity by this — never a
+   *  literal, or the studio environment's dimmer key is silently overwritten. */
   sunFactor(cover: number): number;
   dispose(): void;
 }
@@ -94,9 +105,18 @@ export function createCloudLayer(
 
   return {
     group,
-    sunFactor: (cover) => 1 - cover * 0.62,
-    update(seconds, cover, windMs, fromDeg) {
+    /* 0.6, matching heat-map-model.ts exactly. It was 0.62 and nobody would have
+       seen the difference — but the docstring claims this tracks the physics, and a
+       claim that is 97 % true is the kind that rots. */
+    sunFactor: (cover) => 1 - cover * 0.6,
+    update(seconds, cover, windMs, fromDeg, night) {
       const fuse = cloudFuse(cover);
+      /* At night there is no sun to light a cloud top or cast its shadow. The deck
+         stays visible — overcast nights are a real and thermally important thing,
+         which is exactly why cloud raises T_sky — but it reads as dim mass, and the
+         ground shadow goes to zero rather than drawing a sunlit shape at 22:00. */
+      const lit = night ? 0.42 : 1;
+      const shadowLit = night ? 0 : 1;
       /* met.no reports the direction wind comes FROM; cloud travels the opposite way. */
       const bear = (fromDeg + 180) * Math.PI / 180;
       const vx = Math.sin(bear), vz = Math.cos(bear);
@@ -109,19 +129,21 @@ export function createCloudLayer(
         const base = on ? Math.min(1, cover * 1.5) * c.a : 0;
         c.cu.position.set(wx, c.y, wz);
         c.cu.scale.set(c.sc, c.sc * CUMULUS_ASPECT, 1);
-        c.cu.material.opacity = base * (1 - fuse) * 0.96;
+        c.cu.material.opacity = base * (1 - fuse) * 0.96 * lit;
         c.ve.position.set(wx, c.y - c.sc * 0.03, wz);
         const vw = c.sc * 1.7 * (0.9 + fuse * 0.4);
         c.ve.scale.set(vw, vw * VEIL_ASPECT, 1);
-        c.ve.material.opacity = base * fuse * 0.9;
+        c.ve.material.opacity = base * fuse * 0.9 * lit;
         const sr = c.sc * (1.1 + fuse * 0.8);
         /* Offset along the light, and seated on the drawn ground so it follows relief. */
         c.sh.position.set(wx - 130, groundAt(wx - 130, wz + 95) + 1.2, wz + 95);
         c.sh.scale.set(sr, sr, 1);
-        (c.sh.material as THREE.MeshBasicMaterial).opacity = base * (0.55 - fuse * 0.22);
+        (c.sh.material as THREE.MeshBasicMaterial).opacity =
+          base * (0.55 - fuse * 0.22) * shadowLit;
       }
     },
     dispose() {
+      group.removeFromParent();
       for (const c of clouds) {
         c.cu.material.dispose(); c.ve.material.dispose();
         (c.sh.material as THREE.MeshBasicMaterial).dispose(); c.sh.geometry.dispose();
