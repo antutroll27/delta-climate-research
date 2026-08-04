@@ -1,0 +1,12 @@
+{
+  "pairs": 6,
+  "min_pairs": 8,
+  "storey_tests": [
+    2.9,
+    3.1,
+    3.3
+  ],
+  "tests": {},
+  "method": "p65",
+  "reason": "underpowered: 6 matched pairs < 8. p65 ships because it sits where the shipped values were measured to sit; the heights remain independently unvalidated."
+}
