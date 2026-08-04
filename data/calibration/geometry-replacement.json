@@ -68,5 +68,24 @@
         676769
       ]
     }
+  },
+  "sim_delta_K": {
+    "note": "eqMean at canonical forcing, flat measured means, so the only difference is the built raster. Published bands: +/-4.5 K peak, +/-3.0 K night.",
+    "ballygunge": {
+      "peak": -0.37,
+      "night": -0.19
+    },
+    "barrackpore": {
+      "peak": -0.68,
+      "night": -0.34
+    },
+    "baruipur": {
+      "peak": -0.13,
+      "night": -0.06
+    }
+  },
+  "accuracy_rerun": {
+    "measure_accuracy": "model-accuracy.json byte-identical after re-run. The calibration's built fraction comes from ESA WorldCover (landcover-fractions.json), not building footprints, so the published RMSE bands are structurally geometry-independent -- proven by diff, not assumed.",
+    "direction_check": "All six ward x phase sim means moved TOWARD the observed LST (dc-urs-inputs lstDayC/lstNightC): day errors +9.50/+9.42/+7.52 -> +9.13/+8.74/+7.39 K, night +5.15/+5.12/+4.56 -> +4.96/+4.78/+4.49 K. Caveat: the observed values are ward-invariant regional figures, so this is movement toward the observed LEVEL, not per-ward pattern validation. The large absolute day offsets are the canonical-forcing vs mean-overpass condition mismatch, already documented -- the DELTA is the signal here, and it points the right way everywhere."
   }
 }
