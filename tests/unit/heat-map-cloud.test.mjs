@@ -1,7 +1,16 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { layoutCumulus, layoutVeil, fitLobes, cloudFuse, CLOUD }
   from '../../src/scripts/climate-engine/cloud-sprites.ts';
+
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+const src = (p) => readFile(join(ROOT, 'src/scripts/climate-engine', p), 'utf8');
+/** Comments must be stripped: these files are REQUIRED to name SimLayers in prose. */
+const code = async (p) => (await src(p))
+  .replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
 
 /** Deterministic source so a layout can be asserted at all. */
 function seeded(seed) {
@@ -79,4 +88,59 @@ test('the approved constants are pinned', () => {
   assert.equal(CLOUD.SIZE, 0.72);
   assert.equal(CLOUD.DECK_M, 320);
   assert.equal(CLOUD.COUNT, 26);
+});
+
+test('the cloud layer stays render-only', async () => {
+  for (const f of ['cloud-sprites.ts', 'cloud-layer.ts']) {
+    const t = await code(f);
+    assert.doesNotMatch(t, /SimLayers/, `${f} must not reach the simulation's layers`);
+    assert.doesNotMatch(t, /buildSpatial|Spatial\b/, `${f} must not reach intervention targeting`);
+  }
+});
+
+test('there is exactly one cloud source, and the model already reads it', async () => {
+  const model = await src('heat-map-model.ts');
+  assert.match(model, /skyTemperatureC\(baseTair, rh, cloud\)/,
+    'the model must still consume measured cover for T_sky — if this moved, the deck '
+    + 'is no longer drawing the input the simulation uses, which is its entire claim');
+  assert.match(model, /sun: 1 \* \(1 - 0\.6 \* cloud\)/,
+    'cover must still cut direct sun; the layer dims the key light to match');
+  for (const f of ['cloud-sprites.ts', 'cloud-layer.ts']) {
+    const t = await code(f);
+    assert.doesNotMatch(t, /gibs|earthdata|himawari|forecast/i,
+      `${f} introduces a SECOND cloud source. The deck must draw state.live.cloud and `
+      + 'nothing else, or the sky on screen is not the sky the model is using.');
+  }
+});
+
+test('the deck dims the ENVIRONMENT key light, never a literal', async () => {
+  const app = await code('heat-map-app.ts');
+  assert.match(app, /keyL\.intensity = keyBase \* cloudLayer\.sunFactor/,
+    'writing a literal here clobbers the clay-studio environment, whose key is 1.7 '
+    + 'not 2.1 — the deck would silently drag studio back to the dark map lighting');
+  assert.doesNotMatch(app, /keyL\.intensity = 2\.1 \*/,
+    'the literal form is the bug this guard exists for');
+});
+
+test('the deck dims at night rather than lighting cloud tops at 22:00', async () => {
+  const app = await code('heat-map-app.ts');
+  assert.match(app, /state\.phase === 'night'/,
+    'the phase must reach cloudLayer.update — without it the deck draws sunlit cumulus '
+    + 'casting hard ground shadows at night');
+  const layer = await code('cloud-layer.ts');
+  assert.match(layer, /shadowLit/, 'the shadow must go to zero at night: no sun, no shadow');
+});
+
+test('a null reading draws no sky', async () => {
+  const app = await code('heat-map-app.ts');
+  assert.match(app, /if \(cloudLayer && state\.live\)/,
+    'an invented deck with no measurement behind it is the loader land-dust mistake');
+});
+
+test('wind direction is documented as advection-only', async () => {
+  const model = await src('heat-map-model.ts');
+  assert.match(model, /windFrom\?: number/, 'Ambient must carry the direction');
+  assert.match(model, /wind as a scalar/,
+    'the comment must state the model has no direction term, so nobody wires windFrom '
+    + 'into the physics believing it already belongs there');
 });
