@@ -52,7 +52,7 @@ test('a hairpin is clamped rather than allowed to spike to infinity', () => {
 
 test('the ground is sampled per vertex, in the data frame', () => {
   // A ramp in y only: the near end sits at 0, the far end at 100 × 0.1.
-  const mesh = buildRoadMesh(STRAIGHT, (x, y) => y * 0.1);
+  const mesh = buildRoadMesh(STRAIGHT, (_x, y) => y * 0.1);
   assert.equal(mesh.positions[1], 0.75, 'near end = ground 0 + ROAD_Y');
   assert.equal(mesh.positions[7], 10.75, 'far end = ground 10 + ROAD_Y');
 });
