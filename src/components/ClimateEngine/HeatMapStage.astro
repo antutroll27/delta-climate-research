@@ -233,7 +233,7 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
            where a reader goes to interpret the colours, so it is where the limit
            of what the colours mean belongs. -->
       <p class="pattern-note" id="patternNote"></p>
-      <div class="attr">Basemap © OpenStreetMap · OpenFreeMap · Footprints © Overture Maps Foundation (ODbL) · Heights Google Open Buildings 2.5D (CC BY 4.0) · Water © OpenStreetMap (ODbL) · Ground SRTM via AWS terrain tiles, <span id="terrLab">indicative</span> · left-drag orbit · right-drag pan · scroll zoom</div>
+      <div class="attr">Basemap © OpenStreetMap · OpenFreeMap · Footprints © Overture Maps Foundation (ODbL) · Heights Google Open Buildings 2.5D (CC BY 4.0) · Water © OpenStreetMap (ODbL) · Ground SRTM via AWS terrain tiles, <span id="terrLab">indicative</span> · Live weather © Met Norway (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>) · Cloud deck drawn at 320 m, real base ~700 m · left-drag orbit · right-drag pan · scroll zoom</div>
     </div>
     </div>
   </div>
@@ -614,6 +614,12 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
 
   .metric{padding:11px 13px;border-bottom:1px solid var(--line)}
   .metric .k{font-family:var(--mono);font-size:.5rem;letter-spacing:.14em;color:var(--ink);text-transform:uppercase}
+  /* .attr had no anchor rule, so a link here would render as default browser
+     blue on a near-black panel. Inherit the credits colour and mark it with a
+     cyan underline instead — the same restraint .tool-modes a uses. */
+  .attr a{color:inherit;text-decoration:underline;text-decoration-color:rgb(111 202 214 /.45);text-underline-offset:2px}
+  .attr a:hover{color:var(--paper)}
+  .attr a:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
   .metric .lst{font-family:var(--mono);font-weight:400;font-size:2.1rem;line-height:1;margin-top:.35rem;letter-spacing:.01em;transition:color .4s}
   .metric .lst .u{font-size:.84rem;color:var(--ink);margin-left:.15rem}
   /* measured uncertainty, not decoration — the model's out-of-sample error

@@ -79,3 +79,4 @@ docs/*.pdf
 
 # overturemaps CLI resume scratch — not data, regenerated per download
 data/geometry/raw/*.state
+.superpowers/

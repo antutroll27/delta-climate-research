@@ -25,6 +25,7 @@ import { rasterWardBase } from './ward-raster';
 import { loadWardSurface, type WardSurface } from './surface-raster';
 import { buildRegistry, pickBuilding, projectWard, type BuildingMeta } from './explore/building-pick';
 import { createWaterLayer, type WaterLayer } from './water-layer';
+import { createCloudLayer, type CloudLayer } from './cloud-layer';
 import { createRoadLayer, type RoadLayer } from './road-layer';
 import { selectPhase } from './phase-select';
 import { asTerrainField, terrainDrawAt, terrainLabel, TERRAIN_N, type TerrainField } from './terrain';
@@ -667,6 +668,11 @@ export function mountHeatMap(): () => void {
   let cityMesh: THREE.Mesh | null = null, overlay: THREE.Mesh;
   let modelTransform: { x: number; y: number; z: number; scale: number } | null = null;
   let hemiL: THREE.HemisphereLight, keyL: THREE.DirectionalLight, rimL: THREE.DirectionalLight;
+  /* The ENVIRONMENT's own key intensity, kept separately because the cloud deck
+     scales it every frame. Writing `2.1 * sunFactor` directly would clobber the
+     studio environment's dimmer 1.7 on the very next repaint — the deck would
+     silently drag clay studio back to the dark map's lighting. */
+  let keyBase = 2.1;
   const customLayer: maplibregl.CustomLayerInterface = {
     id: 'delta-city', type: 'custom', renderingMode: '3d',
     onAdd(m, gl) {
@@ -726,9 +732,25 @@ export function mountHeatMap(): () => void {
         waterLayer.setView(map.getBearing(), map.getPitch());
         if (!reduceMotion) waterLayer.setTime(performance.now() / 1000);
       }
+      /* The deck rides the same repaints the water does. Reduced motion holds it
+         at a still frame on the measured cover rather than animating slower.
+         A null reading draws nothing — an invented sky is the loader's deleted
+         land dust all over again. */
+      if (cloudLayer && state.live) {
+        cloudLayer.update(
+          reduceMotion ? 0 : performance.now() / 1000,
+          state.live.cloud / 100, state.live.wind, state.live.windFrom ?? 0,
+          state.phase === 'night',
+        );
+        keyL.intensity = keyBase * cloudLayer.sunFactor(state.live.cloud / 100);
+      }
       threeRenderer.resetState();
       threeRenderer.render(threeScene, threeCam);
-      if (growU.value < 1 || fieldDirty) { fieldDirty = false; map.triggerRepaint(); }
+      /* The deck drifts when nothing else is changing, so it needs its own repaint
+         reason — but only when there is wind to drift on, and never under reduced
+         motion. This is the one new source of continuous repaint. */
+      const drifting = !reduceMotion && !!cloudLayer && (state.live?.wind ?? 0) > 0;
+      if (growU.value < 1 || fieldDirty || drifting) { fieldDirty = false; map.triggerRepaint(); }
     },
   };
 
@@ -761,6 +783,7 @@ export function mountHeatMap(): () => void {
      the distinction stops a failed fetch retrying on every ward switch. */
   const terrainCache: Record<string, TerrainField | null> = {};
   let waterLayer: WaterLayer | null = null;
+  let cloudLayer: CloudLayer | null = null;
   let roadLayer: RoadLayer | null = null;
   /* Measured Sentinel-2 surface, one per ward, fetched once. A miss is non-fatal
      and falls back to a flat field at the measured ward mean — never to
@@ -868,6 +891,13 @@ export function mountHeatMap(): () => void {
       const wl = createWaterLayer(waterCache[name], growU,
         (x, y) => terrainDrawAt(terrainCache[name] ?? null, x, y));
       if (wl) { waterLayer = wl; threeScene.add(wl.mesh); }
+      /* Baked once and kept across ward switches — cloud is weather, not geography.
+         Only the drape reference changes, and the deck is far enough above the
+         ground for that to be immaterial. */
+      if (!cloudLayer) {
+        cloudLayer = createCloudLayer((x, y) => terrainDrawAt(terrainCache[name] ?? null, x, y));
+        threeScene.add(cloudLayer.group);
+      }
     }
     const mc = maplibregl.MercatorCoordinate.fromLngLat([w.lon, w.lat], 0);
     modelTransform = { x: mc.x, y: mc.y, z: mc.z ?? 0, scale: mc.meterInMercatorCoordinateUnits() };
@@ -1119,13 +1149,26 @@ export function mountHeatMap(): () => void {
     const w = WARDS[name];
     try {
       if (force || !liveCache[name]) {
-        const r = await fetch(`https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=${w.lat}&lon=${w.lon}`);
+        /* Through our own function, never api.met.no directly: their terms require
+           an identifying User-Agent, which a browser fetch cannot set. See api/live.js. */
+        const r = await fetch(`/api/live?lat=${w.lat}&lon=${w.lon}`);
         if (!r.ok) throw new Error('met.no ' + r.status);
         /* Trust the server's clock over the visitor's for the AGE arithmetic.
            Measured before the body is read so transfer time is not counted as
            skew; a wrong device clock would otherwise silently mis-colour the
-           freshness bar. Ignored unless it is large enough to matter. */
-        const served = Date.parse(r.headers.get('date') ?? '');
+           freshness bar. Ignored unless it is large enough to matter.
+
+           `Age` IS NOT OPTIONAL HERE. Since the reading comes through our own
+           function (api/live.js) it is CDN-cached for s-maxage=600, and on a hit
+           the stored `Date` is whenever the ORIGIN generated it — up to ten
+           minutes old — while `Age` carries how long it has sat there. Reading
+           `Date` alone would charge that cache age to the visitor's clock and
+           mis-colour the very freshness bar this arithmetic exists to keep
+           honest. `Date + Age` reconstructs "now" at the edge. Same-origin, so
+           the header is readable without a CORS expose list. */
+        const dateHdr = Date.parse(r.headers.get('date') ?? '');
+        const ageSec = Number(r.headers.get('age')) || 0;
+        const served = dateHdr + ageSec * 1000;
         if (Number.isFinite(served)) {
           const skew = served - Date.now();
           clockSkewMs = Math.abs(skew) > 120_000 ? skew : 0;
@@ -1135,7 +1178,7 @@ export function mountHeatMap(): () => void {
         /* `ts.time` is the hour this reading is VALID FOR, which is what the
            dial must show — not the moment we happened to fetch it. They differ
            by up to an hour and only the former is a property of the data. */
-        liveCache[name] = { tAir: dd.air_temperature, rh: dd.relative_humidity, wind: dd.wind_speed, cloud: dd.cloud_area_fraction ?? 0, feels: M.heatIndexC(dd.air_temperature, dd.relative_humidity), validAt: ts.time };
+        liveCache[name] = { tAir: dd.air_temperature, rh: dd.relative_humidity, wind: dd.wind_speed, cloud: dd.cloud_area_fraction ?? 0, windFrom: dd.wind_from_direction, feels: M.heatIndexC(dd.air_temperature, dd.relative_humidity), validAt: ts.time };
       }
       if (state.ward !== name) return;
       state.live = liveCache[name]; paintLive(); resetSim();
@@ -1391,7 +1434,7 @@ export function mountHeatMap(): () => void {
   function setEnv(e: string) {
     if (e === env) return; env = e; const s = e === 'studio';
     document.body.classList.toggle('studio', s); studioU.value = s ? 1 : 0; opBase = s ? 0.42 : 0.5;
-    if (hemiL) { if (s) { hemiL.color.set(0xffffff); hemiL.groundColor.set(0xd8d2c8); hemiL.intensity = 1.45; keyL.intensity = 1.7; rimL.intensity = 0.12; } else { hemiL.color.set(0xbfe2e8); hemiL.groundColor.set(0x0a1518); hemiL.intensity = 1.05; keyL.intensity = 2.1; rimL.intensity = 0.5; } }
+    if (hemiL) { if (s) { hemiL.color.set(0xffffff); hemiL.groundColor.set(0xd8d2c8); hemiL.intensity = 1.45; keyBase = 1.7; keyL.intensity = keyBase; rimL.intensity = 0.12; } else { hemiL.color.set(0xbfe2e8); hemiL.groundColor.set(0x0a1518); hemiL.intensity = 1.05; keyBase = 2.1; keyL.intensity = keyBase; rimL.intensity = 0.5; } }
     document.querySelectorAll('#envchip button').forEach(x => x.classList.toggle('on', (x as HTMLElement).dataset.e === e));
     map.setStyle(STYLES[e as 'dark' | 'studio']); map.once('style.load', () => { map.addLayer(customLayer); map.triggerRepaint(); });
   }
@@ -1439,6 +1482,7 @@ export function mountHeatMap(): () => void {
     cleanup.forEach(fn => fn());
     cityMesh?.geometry.dispose(); (overlay?.material as THREE.Material)?.dispose(); overlay?.geometry.dispose();
     waterLayer?.dispose();
+    cloudLayer?.dispose();
     roadLayer?.dispose();
     facade.dispose(); heatTex.dispose(); sim?.dispose(); simRenderer.dispose();
     try { map.remove(); } catch { /* ignore */ }
