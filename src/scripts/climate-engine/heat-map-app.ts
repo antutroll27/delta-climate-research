@@ -1403,7 +1403,22 @@ export function mountHeatMap(): () => void {
   let simId = raf(simFrame);
 
   /* ── boot ── */
-  map.on('style.load', () => { map.addLayer(customLayer); loadWard('ballygunge'); });
+  /* This handler is `on`, not `once` — setEnv's setStyle re-fires it, which is
+     what keeps the basemap's road layers hidden across an environment switch. */
+  map.on('style.load', () => {
+    map.addLayer(customLayer);
+    /* The basemap paints these in SCREEN PIXELS — a cartographic stroke that
+       matches no width on the ground and does not narrow as you zoom in. We
+       redraw the same classes in metres (road-layer.ts), so leaving both would
+       show every building overlapping a road that is not the road we drew.
+       Deliberately NOT hidden: highway_path and highway_motorway_* — classes we
+       do not draw, and hiding an unreplaced road deletes it rather than redraws it. */
+    for (const id of ['highway_minor', 'highway_major_casing',
+                      'highway_major_inner', 'highway_major_subtle']) {
+      if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', 'none');
+    }
+    loadWard('ballygunge');
+  });
   const onVis = () => { /* browser pauses rAF when hidden; nothing extra needed */ };
   document.addEventListener('visibilitychange', onVis);
 
