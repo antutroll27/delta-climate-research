@@ -127,6 +127,18 @@ def check() -> int:
         ids = [r["gers"] for r in doc["b"]]
         if len(set(ids)) != len(ids):
             failures.append(f"{ward}: duplicate GERS ids -- the join to heights would be ambiguous")
+        raw = manifest["wards"][ward].get("raw")
+        if not raw:
+            failures.append(f"{ward}: manifest has no raw parquet record")
+        else:
+            raw_abs = os.path.join(ROOT, raw["path"])
+            if not os.path.exists(raw_abs):
+                failures.append(f"{ward}: raw parquet missing at {raw['path']}")
+            else:
+                with open(raw_abs, "rb") as fh:
+                    if hashlib.sha256(fh.read()).hexdigest() != raw["sha256"]:
+                        failures.append(f"{ward}: raw parquet sha256 drift -- the download "
+                                        f"changed under the manifest")
         expect = EXPECT_COUNT.get(ward)
         if expect and not (0.9 * expect <= doc["count"] <= 1.1 * expect):
             failures.append(f"{ward}: count {doc['count']} vs measured {expect} -- parquet changed")
@@ -168,7 +180,18 @@ def main() -> int:
             fh.write(json.dumps(doc, separators=(",", ":")) + "\n")
         with open(path, "rb") as fh:
             digest = hashlib.sha256(fh.read()).hexdigest()
-        manifest["wards"][ward] = {"count": len(rows), "sha256": digest, "skipped": skipped}
+        raw_path = os.path.join(RAW, f"{ward}.parquet")
+        with open(raw_path, "rb") as fh:
+            raw_digest = hashlib.sha256(fh.read()).hexdigest()
+        manifest["wards"][ward] = {
+            "count": len(rows), "sha256": digest, "skipped": skipped,
+            # The chain is only as good as its first link. Pinning the derived
+            # JSON while leaving the parquet unpinned means a changed download
+            # produces a changed artefact with nothing to say which moved.
+            "raw": {"path": os.path.relpath(raw_path, ROOT),
+                    "sha256": raw_digest,
+                    "bytes": os.path.getsize(raw_path)},
+        }
         print(f"  {ward:<12} {len(rows):>5} footprints · skipped {skipped}")
     with open(os.path.join(OUT, "manifest.json"), "w", encoding="utf-8") as fh:
         fh.write(json.dumps(manifest, indent=2) + "\n")

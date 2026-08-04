@@ -76,3 +76,6 @@ scripts/__pycache__/
 # from thermal-splatting-brief.md — neither belongs in version control.
 docs/dataset/*.jsonl
 docs/*.pdf
+
+# overturemaps CLI resume scratch — not data, regenerated per download
+data/geometry/raw/*.state

@@ -11,6 +11,11 @@
         "tiny": 0,
         "outside": 64,
         "holes_dropped": 17
+      },
+      "raw": {
+        "path": "data/geometry/raw/ballygunge.parquet",
+        "sha256": "f45191e59a3ef486ef7abf92acde1bc9f293ed6c58ba33c22161d9356db59762",
+        "bytes": 563840
       }
     },
     "barrackpore": {
@@ -21,6 +26,11 @@
         "tiny": 0,
         "outside": 57,
         "holes_dropped": 1
+      },
+      "raw": {
+        "path": "data/geometry/raw/barrackpore.parquet",
+        "sha256": "ebcf6f14fe16049c1a23a67959f846d0ac25cb913f39d6d161fee2b2e5f76bb6",
+        "bytes": 643814
       }
     },
     "baruipur": {
@@ -31,6 +41,11 @@
         "tiny": 1,
         "outside": 57,
         "holes_dropped": 0
+      },
+      "raw": {
+        "path": "data/geometry/raw/baruipur.parquet",
+        "sha256": "70dbe8f606a9cf586bb7e1ea9f201a32ba1e84329fd0859daf156f3a2c2eeee1",
+        "bytes": 625579
       }
     }
   }
