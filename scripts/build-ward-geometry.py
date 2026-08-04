@@ -20,6 +20,10 @@ PUBLIC = os.path.join(ROOT, "public", "heat-map", "data")
 
 WARDS = ("ballygunge", "barrackpore", "baruipur")
 
+#: Google Open Buildings' published minimum AND its no-confident-height value.
+#: compute-far.py matches it exactly for the same reason.
+FLOOR_M = 2.5
+
 
 def main() -> int:
     with open(os.path.join(GEOM, "height-method.json"), encoding="utf-8") as fh:
@@ -38,8 +42,20 @@ def main() -> int:
         rows, fills = [], 0
         for r in foot["b"]:
             h = by_id[r["gers"]]
-            fills += h["fill"]
-            rows.append([h[method]] + r["p"])
+            value = h[method]
+            # 2.5 m IS THE FLOOR, not just the no-confidence marker. Google
+            # publishes it as the dataset minimum, so a zonal statistic landing
+            # BELOW it means the raster found no building under that footprint --
+            # ~12 % of Overture rings, with plenty of pixels but near-zero values.
+            # Those are OSM features Google's ML did not detect, not 0.1 m
+            # buildings. Clamping to the floor and flagging them as fill is the
+            # same treatment the no-confidence case gets, and it brings the fill
+            # rate back in line with the shipped 4.0/6.5/10.8 %.
+            is_fill = h["fill"] or value < FLOOR_M
+            if is_fill:
+                value = FLOOR_M
+            fills += is_fill
+            rows.append([value] + r["p"])
         doc = {
             "name": shipped["name"], "type": shipped["type"],
             "center": shipped["center"], "sizeM": shipped["sizeM"],
@@ -53,7 +69,9 @@ def main() -> int:
                 f"-- verdict UNDERPOWERED at {verdict['pairs']} matched pairs, so {method} "
                 f"ships as the statistic measured to sit where the previous values sat; "
                 f"the set is not independently validated. 2.5 m is Google's "
-                f"no-confident-height fill ({fills} buildings here). CC BY 4.0 / ODbL."),
+                f"no-confident-height fill AND the raster floor; {fills} buildings "
+                f"sit on it, either unmeasured or reading below Google's "
+                f"published minimum. CC BY 4.0 / ODbL."),
             "b": rows,
         }
         path = os.path.join(STAGING, f"{ward}.json")

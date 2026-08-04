@@ -55,6 +55,28 @@ def main() -> int:
             "footprint_m2": [b["footprint_m2"], a["footprint_m2"]],
             "floor_m2": [b["floor_m2"], a["floor_m2"]],
         }
+    # The sim delta belongs IN this artefact, not bolted on afterwards. The first
+    # version wrote a partial table and the sim numbers were added by hand; the
+    # next run silently discarded them. A gate that loses its own evidence on
+    # re-run is not a gate.
+    sim = subprocess.run(["node", "--experimental-strip-types", "scripts/geometry-sim-delta.mjs"],
+                         cwd=ROOT, check=True, capture_output=True, text=True).stdout
+    payload = next((l[5:] for l in sim.splitlines() if l.startswith("JSON ")), None)
+    if payload is None:
+        raise SystemExit("geometry-sim-delta.mjs emitted no JSON line -- cannot gate blind")
+    table["sim_delta_K"] = json.loads(payload)
+    table["sim_delta_K"]["note"] = (
+        "eqMean at canonical forcing, flat measured means, so the only difference is the "
+        "built raster. Published bands: +/-4.5 K peak, +/-3.0 K night.")
+
+    # Carry forward any verdict a previous run recorded, so re-measuring the
+    # geometry never erases the accuracy evidence beside it.
+    if os.path.exists(OUT):
+        with open(OUT, encoding="utf-8") as fh:
+            prior = json.load(fh)
+        if "accuracy_rerun" in prior:
+            table["accuracy_rerun"] = prior["accuracy_rerun"]
+
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     with open(OUT, "w", encoding="utf-8") as fh:
         fh.write(json.dumps(table, indent=2) + "\n")

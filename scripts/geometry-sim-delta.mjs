@@ -53,9 +53,16 @@ for (const ward of WARDS) {
 console.log(`  ${'ward'.padEnd(13)}${'phase'.padEnd(7)}${'shipped'.padStart(9)}${'staged'.padStart(9)}${'delta'.padStart(9)}`);
 for (const r of rows) {
   const flag = Math.abs(r.delta) > 0.5 ? '  <-- exceeds 0.5 K' : '';
+  const d = (r.delta >= 0 ? '+' : '') + r.delta.toFixed(2);
   console.log(`  ${r.ward.padEnd(13)}${r.phase.padEnd(7)}${r.before.toFixed(2).padStart(9)}`
-    + `${r.after.toFixed(2).padStart(9)}${(r.delta >= 0 ? '+' : '') + r.delta.toFixed(2)}`.padStart(9) + flag);
+    + `${r.after.toFixed(2).padStart(9)}${d.padStart(9)}${flag}`);
 }
+/* Machine-readable, so the gate consumes a contract rather than parsing columns —
+   the first version mis-parsed its own output because two fields ran together. */
+const byWard = {};
+for (const r of rows) (byWard[r.ward] ??= {})[r.phase] = Number(r.delta.toFixed(2));
+console.log('\nJSON ' + JSON.stringify(byWard));
+
 const worst = rows.reduce((a, b) => Math.abs(b.delta) > Math.abs(a.delta) ? b : a);
 console.log(`\n  largest shift: ${worst.delta >= 0 ? '+' : ''}${worst.delta.toFixed(2)} K `
   + `(${worst.ward} ${worst.phase}), against published bands of +/-4.5 K peak, +/-3.0 K night`);
