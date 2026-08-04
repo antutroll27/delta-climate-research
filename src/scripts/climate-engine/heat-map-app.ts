@@ -1126,8 +1126,19 @@ export function mountHeatMap(): () => void {
         /* Trust the server's clock over the visitor's for the AGE arithmetic.
            Measured before the body is read so transfer time is not counted as
            skew; a wrong device clock would otherwise silently mis-colour the
-           freshness bar. Ignored unless it is large enough to matter. */
-        const served = Date.parse(r.headers.get('date') ?? '');
+           freshness bar. Ignored unless it is large enough to matter.
+
+           `Age` IS NOT OPTIONAL HERE. Since the reading comes through our own
+           function (api/live.js) it is CDN-cached for s-maxage=600, and on a hit
+           the stored `Date` is whenever the ORIGIN generated it — up to ten
+           minutes old — while `Age` carries how long it has sat there. Reading
+           `Date` alone would charge that cache age to the visitor's clock and
+           mis-colour the very freshness bar this arithmetic exists to keep
+           honest. `Date + Age` reconstructs "now" at the edge. Same-origin, so
+           the header is readable without a CORS expose list. */
+        const dateHdr = Date.parse(r.headers.get('date') ?? '');
+        const ageSec = Number(r.headers.get('age')) || 0;
+        const served = dateHdr + ageSec * 1000;
         if (Number.isFinite(served)) {
           const skew = served - Date.now();
           clockSkewMs = Math.abs(skew) > 120_000 ? skew : 0;
