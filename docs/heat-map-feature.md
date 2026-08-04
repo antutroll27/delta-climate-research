@@ -480,6 +480,35 @@ heights ran ~25 % low from zonal-averaging. At a true statistic near p65 the eff
 real but small (~17 %), and it is dwarfed by the ±2 m per-building scatter. Switching
 mean → p75 would overshoot. No method change is warranted on this evidence.
 
+### Why Overture's heights come out taller: Microsoft merges towers (2026-08-04)
+
+Task 2 produced heights for all 12,767 Overture footprints. Gate A (distribution
+parity) breached upward — p90 rose 12.5 / 14.1 / 8.7 % across the wards while p50 and
+mean barely moved, and Ballygunge's tallest building went 54.4 → 86.9 m. Predicted
+direction was **down** (5,200 extra small buildings); the prediction was wrong.
+
+The twelve tallest new buildings were checked against the Microsoft footprint covering
+the same ground:
+
+- **6 of 12 sat inside a MERGED Microsoft blob** — one shipped footprint containing 2–7
+  separate Overture buildings, and 1.9–4.7× its area. The dilution is severe: a tower
+  Overture puts at 58.8 m sits inside a Microsoft blob scored at **18.9 m**; another at
+  49.7 m inside a blob scored 20.6 m; one blob had swallowed **seven** buildings.
+  Averaging a tower together with its low neighbours is exactly the mechanism that
+  motivated this work, and it is now observed rather than suspected.
+- **3 of 12 had no Microsoft footprint at all** — buildings we have never drawn.
+- **3 of 12 were 1:1 and still rose sharply** (86.9 vs 54.4, 69.6 vs 44.0, 41.1 vs
+  17.0 m) and are **not explained by merging**. In the largest case the Microsoft
+  footprint is 143 m² against Overture's 1,397 m² — a tenfold area difference in the
+  other direction, suggesting Microsoft also FRAGMENTS large buildings into pieces.
+
+**Status: substantially explained, not fully.** Half the upper-tail rise is a
+demonstrable correction of merge-dilution, and a quarter is buildings we simply lacked.
+The remaining quarter — 1:1 matches rising 50–140 % — has no confirmed mechanism, so
+the Gate A breach must NOT be waved through as "expected" on the strength of the merge
+story alone. Resolving it is the precondition for shipping these heights.
+
+
 ## Phases
 1. **Skeleton + render** — route, canvas, Three scene, `DataTexture` static synthetic field, colormap shader.
 2. **Sim in worker** — `sim-ts.ts` + `sim.worker.ts` + transferables; play/pause; prove 60fps, no main-thread contention.
