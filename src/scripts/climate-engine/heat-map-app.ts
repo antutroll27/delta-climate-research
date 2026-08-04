@@ -9,7 +9,7 @@
  * `mountHeatMap()` returns a dispose fn (call it on astro:before-swap).
  */
 import maplibregl from 'maplibre-gl';
-import { WARD_MAP } from '../../data/wards.ts';
+import { WARD_MAP, wardLatLon, formatLatLon } from '../../data/wards.ts';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
@@ -190,6 +190,11 @@ export function mountHeatMap(): () => void {
     const wardMean = state.lastMean[state.ward];
 
     setText('bcId', `#${b.idx}`);
+    /* The building's own coordinate, recovered by inverting the transform that
+       created the local frame — so this IS the Overture centroid, not a value
+       re-derived from the drawn position. `cz` is the row's northward y. */
+    const ll = wardLatLon(WARDS[state.ward], b.cx, b.cz);
+    setHTML('bcLL', `${formatLatLon(ll.lat, ll.lon, '<br>')}<small>centroid · WGS-84</small>`);
     /* 2.5 m is Google's fill value where a real height was never derived. Saying
        "2.5 m" flat would present a placeholder as a measurement. */
     setHTML('bcH', b.fill
