@@ -126,7 +126,10 @@ export function createCloudLayer(
         /* Which clouds exist at all is set by cover — at 10 % the sky is nearly
            empty, not 26 faint ghosts. */
         const on = cover > 0.02 && c.rank < Math.min(1, 0.18 + cover * 0.95);
-        const base = on ? Math.min(1, cover * 1.5) * c.a : 0;
+        /* Clamped: without it OPACITY would push a fully-covered sky past opaque,
+           which draws no brighter but flattens the cumulus->veil cross-fade into a
+           plateau — the one transition the cover scalar is supposed to show. */
+        const base = on ? Math.min(1, Math.min(1, cover * 1.5) * c.a * CLOUD.OPACITY) : 0;
         c.cu.position.set(wx, c.y, wz);
         c.cu.scale.set(c.sc, c.sc * CUMULUS_ASPECT, 1);
         c.cu.material.opacity = base * (1 - fuse) * 0.96 * lit;

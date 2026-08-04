@@ -24,7 +24,15 @@
 export const CLOUD = Object.freeze({
   ROUND: 0.62,
   OVAL: 0.72,
-  SIZE: 0.72,
+  /** Sprite scale. Raised from 0.72 after the deck read too small over the ward. */
+  SIZE: 0.84,
+  /**
+   * Presence multiplier on the per-cloud alpha, raised from an implicit 1.0 after
+   * the deck read too faint. Applied CLAMPED — `base` can already reach 1.0 on a
+   * fully-covered sky, and pushing a sprite past opaque does nothing except make
+   * the cross-fade to veils land on a plateau instead of a ramp.
+   */
+  OPACITY: 1.22,
   /** metres. Real cloud base is nearer 700 m; compressed for legibility and labelled. */
   DECK_M: 320,
   COUNT: 26,

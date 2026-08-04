@@ -85,7 +85,8 @@ test('the veil layout also stays inside its border', () => {
 test('the approved constants are pinned', () => {
   assert.equal(CLOUD.ROUND, 0.62);
   assert.equal(CLOUD.OVAL, 0.72);
-  assert.equal(CLOUD.SIZE, 0.72);
+  assert.equal(CLOUD.SIZE, 0.84);
+  assert.equal(CLOUD.OPACITY, 1.22);
   assert.equal(CLOUD.DECK_M, 320);
   assert.equal(CLOUD.COUNT, 26);
 });
