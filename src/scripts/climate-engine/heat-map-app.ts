@@ -9,7 +9,7 @@
  * `mountHeatMap()` returns a dispose fn (call it on astro:before-swap).
  */
 import maplibregl from 'maplibre-gl';
-import { WARD_MAP } from '../../data/wards.ts';
+import { WARD_MAP, wardLatLon, formatLatLon } from '../../data/wards.ts';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
@@ -25,6 +25,7 @@ import { rasterWardBase } from './ward-raster';
 import { loadWardSurface, type WardSurface } from './surface-raster';
 import { buildRegistry, pickBuilding, projectWard, type BuildingMeta } from './explore/building-pick';
 import { createWaterLayer, type WaterLayer } from './water-layer';
+import { createRoadLayer, type RoadLayer } from './road-layer';
 import { selectPhase } from './phase-select';
 import { asTerrainField, terrainDrawAt, terrainLabel, TERRAIN_N, type TerrainField } from './terrain';
 import { findCoolingSurfaces, nearestCooling, type CoolingSurfaces } from './explore/cooling-surfaces';
@@ -189,6 +190,11 @@ export function mountHeatMap(): () => void {
     const wardMean = state.lastMean[state.ward];
 
     setText('bcId', `#${b.idx}`);
+    /* The building's own coordinate, recovered by inverting the transform that
+       created the local frame — so this IS the Overture centroid, not a value
+       re-derived from the drawn position. `cz` is the row's northward y. */
+    const ll = wardLatLon(WARDS[state.ward], b.cx, b.cz);
+    setHTML('bcLL', `${formatLatLon(ll.lat, ll.lon, '<br>')}<small>centroid · WGS-84</small>`);
     /* 2.5 m is Google's fill value where a real height was never derived. Saying
        "2.5 m" flat would present a placeholder as a measurement. */
     setHTML('bcH', b.fill
@@ -755,6 +761,7 @@ export function mountHeatMap(): () => void {
      the distinction stops a failed fetch retrying on every ward switch. */
   const terrainCache: Record<string, TerrainField | null> = {};
   let waterLayer: WaterLayer | null = null;
+  let roadLayer: RoadLayer | null = null;
   /* Measured Sentinel-2 surface, one per ward, fetched once. A miss is non-fatal
      and falls back to a flat field at the measured ward mean — never to
      synthesised structure. */
@@ -874,6 +881,16 @@ export function mountHeatMap(): () => void {
     state.base = rasterWardBase(d, means, surface);
     if (!roadsCache[name]) { try { roadsCache[name] = await (await fetch(`/heat-map/data/${name}-roads.json`)).json(); } catch { roadsCache[name] = { ways: [] }; } }
     state.spatial = M.buildSpatial(d, state.base, roadsCache[name]);
+    /* The same artefact, drawn. RENDER ONLY: buildSpatial above owns the sim's
+       road corridor and keeps its own, much wider, tree-planting radius — see
+       road-ribbon.ts. Rebuilt per ward because the ribbons are draped on that
+       ward's ground. */
+    if (threeScene) {
+      if (roadLayer) { threeScene.remove(roadLayer.mesh); roadLayer.dispose(); roadLayer = null; }
+      const rl = createRoadLayer(roadsCache[name], growU,
+        (x, y) => terrainDrawAt(terrainCache[name] ?? null, x, y));
+      if (rl) { roadLayer = rl; threeScene.add(rl.mesh); }
+    }
     /* Cooling surfaces are a property of the MEASURED vegetation, so they are
        computed from the ward's base layers and never move when a scenario does —
        planting trees in the model must not invent a park that is not there. */
@@ -1391,7 +1408,22 @@ export function mountHeatMap(): () => void {
   let simId = raf(simFrame);
 
   /* ── boot ── */
-  map.on('style.load', () => { map.addLayer(customLayer); loadWard('ballygunge'); });
+  /* This handler is `on`, not `once` — setEnv's setStyle re-fires it, which is
+     what keeps the basemap's road layers hidden across an environment switch. */
+  map.on('style.load', () => {
+    map.addLayer(customLayer);
+    /* The basemap paints these in SCREEN PIXELS — a cartographic stroke that
+       matches no width on the ground and does not narrow as you zoom in. We
+       redraw the same classes in metres (road-layer.ts), so leaving both would
+       show every building overlapping a road that is not the road we drew.
+       Deliberately NOT hidden: highway_path and highway_motorway_* — classes we
+       do not draw, and hiding an unreplaced road deletes it rather than redraws it. */
+    for (const id of ['highway_minor', 'highway_major_casing',
+                      'highway_major_inner', 'highway_major_subtle']) {
+      if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', 'none');
+    }
+    loadWard('ballygunge');
+  });
   const onVis = () => { /* browser pauses rAF when hidden; nothing extra needed */ };
   document.addEventListener('visibilitychange', onVis);
 
@@ -1407,6 +1439,7 @@ export function mountHeatMap(): () => void {
     cleanup.forEach(fn => fn());
     cityMesh?.geometry.dispose(); (overlay?.material as THREE.Material)?.dispose(); overlay?.geometry.dispose();
     waterLayer?.dispose();
+    roadLayer?.dispose();
     facade.dispose(); heatTex.dispose(); sim?.dispose(); simRenderer.dispose();
     try { map.remove(); } catch { /* ignore */ }
     document.body.classList.remove('studio');

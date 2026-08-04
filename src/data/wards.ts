@@ -64,3 +64,44 @@ export function wardById(id: string): Ward | undefined {
 /** Legacy shape for call sites that still index by id. */
 export const WARD_MAP: Readonly<Record<string, Ward>> =
   Object.fromEntries(WARDS.map(w => [w.id, w]));
+
+/**
+ * Ward metres → WGS-84. The exact inverse of `to_local` in
+ * scripts/fetch-buildings.py, which is where the local frame is created:
+ *
+ *     mx, my = 111_320 · cos(lat), 110_540          (scripts/_types.m_per_deg)
+ *     x, y   = (lon − clon) · mx, (lat − clat) · my
+ *
+ * so inverting it recovers the ORIGINAL Overture coordinate rather than
+ * re-deriving one. Checked against the raw parquet on 2026-08-04, comparing
+ * vertex means on both sides of the pipeline: median 0.016 m, p95 0.036 m,
+ * 98.4 % within 5 cm. The residue is the shipped JSON's coordinate rounding,
+ * not the transform.
+ *
+ * `y` is NORTHWARD, the house convention — the same `y` a building row carries
+ * and the same value the scene uses as world z (see climate-engine/terrain.ts).
+ *
+ * A caveat that belongs here and not on screen: the RENDER places these points
+ * in Web Mercator while this conversion is linear in latitude, so a drawn
+ * building can sit up to ~4 m from the coordinate reported here at the window's
+ * edge. The number is the more faithful of the two.
+ */
+export function wardLatLon(
+  origin: { readonly lat: number; readonly lon: number }, x: number, y: number,
+): { lat: number; lon: number } {
+  return {
+    lat: origin.lat + y / 110_540,
+    lon: origin.lon + x / (111_320 * Math.cos((origin.lat * Math.PI) / 180)),
+  };
+}
+
+/**
+ * The UI's rendering of the above. Five decimals ≈ 1.1 m — coarser than the
+ * transform, and deliberately so: this is the centroid of a footprint traced
+ * from imagery, and a sixth decimal would claim 11 cm of siting accuracy that
+ * the FOOTPRINT does not have, however exact the arithmetic is.
+ */
+export function formatLatLon(lat: number, lon: number, separator = ', '): string {
+  return `${Math.abs(lat).toFixed(5)}° ${lat >= 0 ? 'N' : 'S'}${separator}`
+       + `${Math.abs(lon).toFixed(5)}° ${lon >= 0 ? 'E' : 'W'}`;
+}
