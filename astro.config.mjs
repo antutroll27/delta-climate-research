@@ -13,6 +13,44 @@ import react from '@astrojs/react';
 import { papers } from './src/data/papers.ts';
 import { projects } from './src/data/projects.ts';
 
+/**
+ * `/api/live` in `npm run dev`.
+ *
+ * The live-weather call goes through a Vercel serverless function (`api/live.js`)
+ * because met.no's terms require an identifying User-Agent that a browser fetch
+ * cannot set. Vercel runs that in production — Astro's dev server does not, so
+ * without this plugin `npm run dev` serves a 404 and the heat map loses its live
+ * ambient reading locally while looking perfectly fine in production.
+ *
+ * This mounts the SAME handler on Vite's connect server, adapting Vercel's
+ * (req.query / res.status().json()) shape to Node's raw one. Dev only — `apply`
+ * keeps it out of every build, so nothing here can reach production.
+ */
+function devApiLive() {
+  return {
+    name: 'delta-dev-api-live',
+    apply: 'serve',
+    configureServer(server) {
+      server.middlewares.use('/api/live', async (req, res, next) => {
+        const handler = (await import('./api/live.js')).default;
+        const url = new URL(req.url ?? '', 'http://localhost');
+        const shim = {
+          query: Object.fromEntries(url.searchParams),
+        };
+        const out = {
+          setHeader: (k, v) => res.setHeader(k, v),
+          status(code) { res.statusCode = code; return out; },
+          json(body) {
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify(body));
+          },
+        };
+        try { await handler(shim, out); } catch (err) { next(err); }
+      });
+    },
+  };
+}
+
 /** @param {string} page */
 const sitemapFilter = (page) => {
   const path = new URL(page).pathname;
@@ -66,7 +104,7 @@ export default defineConfig({
     react(),
   ],
   vite: {
-    plugins: [tailwindcss()],
+    plugins: [tailwindcss(), devApiLive()],
     // KEEP VITE'S CACHE OFF THIS REPO'S VOLUME.
     //
     // The working copy lives on an exFAT external disk. Vite and esbuild MMAP
