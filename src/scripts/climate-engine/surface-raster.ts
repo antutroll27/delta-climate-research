@@ -80,9 +80,33 @@ export async function loadSurfaceRaster(ward: string, signal?: AbortSignal): Pro
 
     const veg = new Float32Array(n * n);
     const albedo = new Float32Array(n * n);
-    for (let i = 0; i < n * n; i++) {
-      veg[i] = (data[i * 4] / 255) * (VEG_HI - VEG_LO) + VEG_LO;
-      albedo[i] = (data[i * 4 + 1] / 255) * (ALB_HI - ALB_LO) + ALB_LO;
+    /* ROW ORDER IS FLIPPED HERE, and it is not cosmetic.
+
+       The PNG is north-up: scripts/export-surface-rasters.py reads a north-up COG
+       through rasterio and saves it unrotated, so its row 0 is the window's NORTH
+       edge. That is the right convention for a geospatial raster and should stay.
+
+       Every grid in the simulation is the opposite: `ward-raster.ts`'s `sampleY`
+       is `-half + gridY * cellM`, so row 0 is the SOUTH edge — and `toCell`,
+       `cellIndexAt`, `water-depth` and `cooling-surfaces` all agree with it.
+
+       Reading the PNG row-major into that grid put vegetation and albedo in the
+       MIRROR IMAGE of the cell they belong to. Every eqCell(albedo, veg, built)
+       was combining a cell's real built fraction with another cell's greenery.
+       Measured on the committed Ballygunge artefacts: corr(veg, built) is +0.071
+       as it was loaded and −0.398 once flipped. Dense building means low
+       vegetation, so only the negative one is physical.
+
+       Flip the READER, not the exporter: the reader is the side that knows the
+       simulation's row order, and flipping the PNG would make the artefact
+       disagree with every other geospatial tool that opens it. */
+    for (let row = 0; row < n; row++) {
+      const src = row * n, dst = (n - 1 - row) * n;
+      for (let col = 0; col < n; col++) {
+        const s = (src + col) * 4;
+        veg[dst + col] = (data[s] / 255) * (VEG_HI - VEG_LO) + VEG_LO;
+        albedo[dst + col] = (data[s + 1] / 255) * (ALB_HI - ALB_LO) + ALB_LO;
+      }
     }
     return { n, veg, albedo };
   } catch (error) {

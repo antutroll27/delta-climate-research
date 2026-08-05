@@ -509,6 +509,59 @@ the Gate A breach must NOT be waved through as "expected" on the strength of the
 story alone. Resolving it is the precondition for shipping these heights.
 
 
+## The ward was drawn MIRRORED, and it took four attempts to see (2026-08-05)
+
+**Every ward rendered reflected about its own east–west centre line.** MapLibre's
+mercator y grows southward; every producer here puts the data's northing into world
+`+z`. Composed, north drew south. Each building sat on the wrong side of its street.
+
+This is the true cause of the "buildings are on the road" report. It was diagnosed
+three times as something else — most recently as the basemap's painted road casing
+being wider than the real carriageway, supported by setback statistics (median 5.75 m,
+38.3 % within 4 m) that were **correct about the data and never described the screen**.
+The road layer built on that diagnosis draws in the same mirrored frame, so our roads
+and buildings agreed with each other while both disagreed with the basemap — and
+hiding the basemap's casings removed the last visual evidence.
+
+**How it was finally settled**, and the method is the point:
+
+1. **The data was never wrong.** `data/geometry/{ward}-footprints.json` carries both
+   `p` (ward metres) and `lonlat`. Buildings at local `y ≈ +500 m` measure latitude
+   **22.53253** against a predicted **22.53252** — one centimetre.
+2. **A numerical fit, not an eyeball.** Fitting the four ponds in a top-down capture
+   against `{ward}-water.json` over every assignment: mirrored **8.9 px RMS**,
+   north-up **479 px** — and the mirrored fit independently recovered the image
+   centre. After the fix the same test gives north-up 8.3 px, mirrored 239 px.
+3. **An independent landmark.** Garcha Road is really 249 m *south* of the ward
+   centre, where the basemap draws it. The basemap was right; we were not.
+
+**Why three earlier attempts failed:** each was a matrix reconstruction or a visual
+impression. Both are unreliable here. The rule this leaves behind — already written
+down once after the third failure and not then followed — is that a coordinate-frame
+claim is only settled by a **numerical fit against an independently-known feature**.
+Water is ideal: sparse, asymmetric, and present in the artefact.
+
+**Two other flips were found in the same audit**, and one is not a rendering matter:
+
+- `terrain.ts` read the heightfield rows inverted, which *cancelled* the render
+  mirror. The relief was the one layer landing correctly, for the wrong reason.
+  Both had to be fixed in the same commit — either alone mirrors the ground against
+  the buildings standing on it.
+- **The surface raster and the built raster disagreed about which row was north**,
+  so `eqCell` combined a cell's real built fraction with another cell's vegetation.
+  Measured: `corr(veg, built)` = **+0.071** as loaded, **−0.398** flipped. Dense
+  building means low vegetation, so only the negative one is physical. This was a
+  physics-input defect independent of the render, and it reached the corridor
+  ranking, the facade tint, the building card's local temperature and the cooling
+  distances. The published `SPATIAL` figures were re-measured because of it.
+
+**Why nothing caught any of it:** no test asserted anything about the composed model
+matrix, and the two self-checks that should have caught the row inversions were
+structurally blind — `assertTerrainLogic` varied a ramp by *column* only, and
+`assertWaterDepthLogic` probed a *centred* square. Both gaps are now closed, and the
+terrain probe was watched failing against the old mapping before it was committed.
+
+
 ## Phases
 1. **Skeleton + render** — route, canvas, Three scene, `DataTexture` static synthetic field, colormap shader.
 2. **Sim in worker** — `sim-ts.ts` + `sim.worker.ts` + transferables; play/pause; prove 60fps, no main-thread contention.

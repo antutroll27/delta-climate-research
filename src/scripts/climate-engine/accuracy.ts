@@ -146,21 +146,45 @@ export function unmeasuredNote(fields: readonly string[], points: number): strin
  *
  * Regenerate with: python3 scripts/measure-spatial-accuracy.py
  */
+/*
+ * RE-MEASURED 2026-08-05, after the surface raster and the built raster were put
+ * on the same ground. They had disagreed about which row was north, so the
+ * modelled field was assembled from layers describing mirror images of each other
+ * and then correlated against an observation that agreed with only some of them.
+ *
+ *            n    physics   built     veg    anomaly RMSE
+ *   before   81     0.162   0.037   0.229        1.36 K
+ *   after    87     0.216   0.179   0.238        1.82 K
+ *
+ * `built` nearly quintupled and `veg` barely moved — exactly the signature of the
+ * fix, since `built` was the mirrored layer and `veg` already agreed with
+ * ECOSTRESS. That was predicted before the run, which is the only reason to trust
+ * the attribution at all.
+ *
+ * NOT A CLEAN A/B, and the difference must not be oversold: the scene set also
+ * changed (81 → 87 ward-scenes from 34 near-nadir granules), so some of the
+ * movement is scenes rather than the fix. The anomaly RMSE went UP, 1.36 → 1.82 K,
+ * and that is not attributable either way on this evidence.
+ *
+ * THE HEADLINE CLAIM IS UNCHANGED. The physics still does not beat the best null
+ * — 0.216 against vegetation's 0.238. The map's within-ward pattern is still not
+ * measurably real, and the note below still has to say so.
+ */
 export const SPATIAL = {
   /** ward-scenes scored (3 wards x near-nadir scenes, after cloud/QC masking) */
-  n: 81,
+  n: 87,
   /** correlation of the shipping model's field with ECOSTRESS, ward mean removed */
-  rModel: 0.162,
+  rModel: 0.216,
   /** the same for vegetation fraction alone — the null that still beats the model */
-  rVegOnly: 0.229,
+  rVegOnly: 0.238,
   /** and for built fraction alone */
-  rBuiltOnly: 0.037,
+  rBuiltOnly: 0.179,
   /** RMSE that remains once ward-mean bias is removed, K */
-  anomalyRmseK: 1.36,
+  anomalyRmseK: 1.82,
   /** user-facing, shown wherever the field's detail could be over-read */
   note: 'Ward-level temperature is calibrated against ECOSTRESS. The pattern WITHIN a '
-      + 'ward is not: measured against the same scenes it scores r = 0.16, below the '
-      + 'r = 0.23 of a plain vegetation map. Read the ward figures as measured and '
+      + 'ward is not: measured against the same scenes it scores r = 0.22, below the '
+      + 'r = 0.24 of a plain vegetation map. Read the ward figures as measured and '
       + 'the block-by-block detail as illustrative.',
 } as const;
 

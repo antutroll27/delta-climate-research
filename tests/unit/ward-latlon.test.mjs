@@ -23,9 +23,12 @@ test('the ward origin maps to itself', () => {
 test('y is NORTHWARD, x is EASTWARD — the house convention', () => {
   const w = WARD_MAP.ballygunge;
   assert.ok(wardLatLon(w, 0, 500).lat > w.lat,
-    'a positive y must move NORTH. If this ever flips, every coordinate on the '
-    + 'card is mirrored about the ward centre and the buildings are drawn '
-    + 'mirrored too — see terrain.ts for the frame contract.');
+    'a positive y must move NORTH. This is the ward frame\'s ground truth and it has '
+    + 'always held — it is what PROVED the render was mirrored (2026-08-05), rather '
+    + 'than the data. The earlier wording here said a flip would mean "the buildings '
+    + 'are drawn mirrored too": right about the consequence, wrong about the '
+    + 'direction. The buildings WERE drawn mirrored, while this stayed correct. See '
+    + 'heat-map-frame.test.mjs, which pins the render side.');
   assert.ok(wardLatLon(w, 500, 0).lon > w.lon, 'a positive x must move EAST');
 });
 

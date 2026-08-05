@@ -1,5 +1,22 @@
 # Heat-map road layer Implementation Plan
 
+> **ANNOTATION, 2026-08-05 — the premise below is partly wrong, the work is not.**
+>
+> This plan was written to answer "buildings are on the road", and it attributes that
+> to the basemap painting a wider casing than the real carriageway. The setback
+> statistics it cites are correct, but they describe the DATA and never described the
+> screen. **The dominant cause was a north–south mirror in the render** — every
+> building was reflected about the ward's east–west centre line and so landed on the
+> wrong side of its street. Fixed 2026-08-05; see "The ward was drawn MIRRORED" in
+> `docs/heat-map-feature.md` for the evidence.
+>
+> The road layer itself stands: metre-true ribbons at 14 m (derived from OSM lane
+> counts) and 4 m (assumed) are a real improvement over a cartographic stroke measured
+> in screen pixels, and the corridor/carriageway tripwire it added is still load-bearing.
+> But **Task 3b — hiding the basemap's road casings — removed the last on-screen
+> evidence of the mirror**, which is why it survived another day. Retained as a record
+> of what was believed at the time; not to be read as a current explanation.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Draw the ward's OSM roads as draped three.js ribbons at honest widths, so the

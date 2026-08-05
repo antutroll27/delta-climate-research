@@ -57,8 +57,19 @@ export interface TerrainField {
  *
  * THE FRAME. Building rows are `[h, x0,y0, …]` and the scene builds
  * `Shape(x, −y)` then rotates −90° about X, which lands world `(x, z)` on data
- * `(x, y)`. So world x/z index the field directly. Field row 0 is the window's
- * NORTH edge, because tile y grows southward — which `(y + half)/size` gives.
+ * `(x, y)`. So world x/z index the field directly.
+ *
+ * Field row 0 is the window's NORTH edge, because `scripts/fetch-terrain.py`
+ * walks terrarium tiles and tile y grows southward. `(y + half)/size` does NOT
+ * give that — it puts row 0 at `y = −half`, the SOUTH edge. The docstring here
+ * used to assert the right premise and the opposite conclusion, and the code
+ * followed the conclusion: north-positive `y` read the mirrored elevation.
+ *
+ * That inversion CANCELLED a second bug — the render itself drew every ward
+ * mirrored (see heat-map-app.ts's NORTH_FLIP) — so the terrain was the one layer
+ * landing correctly on the basemap, for the wrong reason. Both were fixed in the
+ * same commit, because fixing either alone mirrors the ground against the
+ * buildings standing on it.
  *
  * Out-of-window samples clamp to the edge rather than throwing: the roads and
  * water artefacts are clipped to a slightly larger box than the field, and a
@@ -68,7 +79,9 @@ export function terrainAt(field: TerrainField, x: number, y: number): number {
   const n = field.n;
   const half = field.sizeM / 2;
   const fx = Math.min(n - 1.001, Math.max(0, ((x + half) / field.sizeM) * (n - 1)));
-  const fy = Math.min(n - 1.001, Math.max(0, ((y + half) / field.sizeM) * (n - 1)));
+  /* `half - y`, not `y + half`: row 0 is the NORTH edge, so a northward y must
+     map to a SMALLER row. See the frame note above. */
+  const fy = Math.min(n - 1.001, Math.max(0, ((half - y) / field.sizeM) * (n - 1)));
   const x0 = Math.floor(fx), y0 = Math.floor(fy);
   const ax = fx - x0, ay = fy - y0;
   const at = (r: number, c: number) => field.h[r * n + c];
@@ -129,6 +142,23 @@ export function assertTerrainLogic(): void {
   const mid = terrainAt(f, 0, 0);
   ok(mid > 1.4 && mid < 1.6, `centre of a 0..3 ramp should be ~1.5, got ${mid}`);
   ok(terrainAt(f, -100, 0) < terrainAt(f, 100, 0), 'the ramp must rise eastward');
+
+  /* THE NORTH–SOUTH AXIS. This check did not exist, and its absence is why an
+     inverted row order shipped: every probe above varies by COLUMN, so a
+     north–south flip was invisible to the whole self-check.
+
+     Row 0 is the window's NORTH edge (scripts/fetch-terrain.py walks terrarium
+     tiles, whose y grows southward). So a field that rises with row number rises
+     SOUTHWARD, and a northward sample must read a LOWER value. */
+  const hRow: number[] = [];
+  for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) { void c; hRow.push(r); }
+  const fRow: TerrainField = { ...f, h: hRow };
+  ok(Math.abs(terrainAt(fRow, 0, sizeM / 2) - 0) < 1e-9,
+    'the NORTH edge must read row 0 — if this reads 3, terrainAt is mirrored and the '
+    + 'ground will draw upside-down against the buildings standing on it');
+  ok(Math.abs(terrainAt(fRow, 0, -sizeM / 2) - 3) < 0.01, 'the SOUTH edge must read the last row');
+  ok(terrainAt(fRow, 0, 100) < terrainAt(fRow, 0, -100),
+    'this field rises southward, so a northward sample must be lower');
 
   // Out of window clamps rather than throwing or returning NaN.
   for (const x of [-9999, 9999]) {

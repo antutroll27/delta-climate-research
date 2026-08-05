@@ -29,6 +29,7 @@ import { createCloudLayer, type CloudLayer } from './cloud-layer';
 import { createRoadLayer, type RoadLayer } from './road-layer';
 import { selectPhase } from './phase-select';
 import { asTerrainField, terrainDrawAt, terrainLabel, TERRAIN_N, type TerrainField } from './terrain';
+import { wardMercatorScale, type WardFrame } from './ward-frame';
 import { findCoolingSurfaces, nearestCooling, type CoolingSurfaces } from './explore/cooling-surfaces';
 
 // Ward set lives in src/data/wards.ts so widening beyond three is a data change,
@@ -666,7 +667,16 @@ export function mountHeatMap(): () => void {
   /* ── three.js custom layer (shares MapLibre's GL context) ── */
   let threeScene: THREE.Scene | null = null, threeCam: THREE.Camera, threeRenderer: THREE.WebGLRenderer;
   let cityMesh: THREE.Mesh | null = null, overlay: THREE.Mesh;
-  let modelTransform: { x: number; y: number; z: number; scale: number } | null = null;
+  /* The scene's north flip, as a matrix, for pickMatrix. Kept as a constant rather
+     than read from `threeScene.matrixWorld` so it cannot be a frame stale — the
+     pick matrix is built inside render(), before three has necessarily refreshed
+     the scene graph. */
+  const NORTH_FLIP = new THREE.Matrix4().makeScale(1, 1, -1);
+  /* `frame` carries the ANISOTROPIC metre→mercator scale (ward-frame.ts): east and
+     north differ by 0.7 %, which is ~4 m at the rim of a 1,400 m window. It used to
+     be one `scale` for both axes. */
+  let modelTransform:
+    { x: number; y: number; z: number; frame: WardFrame } | null = null;
   let hemiL: THREE.HemisphereLight, keyL: THREE.DirectionalLight, rimL: THREE.DirectionalLight;
   /* The ENVIRONMENT's own key intensity, kept separately because the cloud deck
      scales it every frame. Writing `2.1 * sunFactor` directly would clobber the
@@ -678,6 +688,24 @@ export function mountHeatMap(): () => void {
     onAdd(m, gl) {
       if (threeRenderer) return;
       threeScene = new THREE.Scene();
+      /* THE MIRROR FIX. MapLibre's mercator y grows SOUTHWARD; every producer in
+         this engine puts the data's northing into world +z (buildings via
+         `Shape(x,−y)` + rotateX, roads directly). Composed, that drew each ward
+         reflected about its own east–west centre line — every building on the
+         wrong side of its street. It read as "buildings on roads" and was
+         misdiagnosed three times as basemap road-casing width.
+
+         The reflection lives HERE, on the scene node, and not in the projection
+         matrix, for one reason: WebGLRenderer picks `gl.frontFace` from
+         `matrixWorld.determinant()`. It never inspects `threeCam.projectionMatrix`.
+         Flip the sign in the matrix instead and the composite silently becomes
+         orientation-reversing, culling every FrontSide material in the scene — the
+         facades, the heat overlay, the water sheets and the cloud shadows. Only
+         the rings and roads are DoubleSide and would survive.
+         Put it here and three flips winding and the normal matrix for us.
+
+         `NORTH_FLIP` mirrors this for pickMatrix, which must agree exactly. */
+      threeScene.scale.set(1, 1, -1);
       hemiL = new THREE.HemisphereLight(0xbfe2e8, 0x0a1518, 1.05); threeScene.add(hemiL);
       keyL = new THREE.DirectionalLight(0xffffff, 2.1); keyL.position.set(0.4, 1, 0.35); threeScene.add(keyL);
       rimL = new THREE.DirectionalLight(0x6fcad6, 0.5); rimL.position.set(-0.5, 0.4, -0.5); threeScene.add(rimL);
@@ -711,17 +739,21 @@ export function mountHeatMap(): () => void {
     },
     render(_gl, matrix) {
       if (!modelTransform || !threeScene) return;
-      const s = modelTransform.scale;
+      const f = modelTransform.frame;
+      /* Sign structure UNCHANGED from the version that shipped mirrored — the fix
+         is NORTH_FLIP on the scene, not here. What changed is that the three axes
+         now carry three different scales (ward-frame.ts). */
       const l = new THREE.Matrix4()
         .makeTranslation(modelTransform.x, modelTransform.y, modelTransform.z)
-        .scale(new THREE.Vector3(s, -s, s))
+        .scale(new THREE.Vector3(f.east, -f.north, f.up))
         .multiply(new THREE.Matrix4().makeRotationX(Math.PI / 2));
       threeCam.projectionMatrix = new THREE.Matrix4().fromArray(matrix as unknown as number[]).multiply(l);
-      /* Keep the exact matrix the vertex shader is about to use. building-pick
-         projects footprints with THIS, so a hit test can never disagree with what
-         was drawn — including mid-flyTo, where a matrix rebuilt from map state
-         would be a frame out. */
-      pickMatrix.copy(threeCam.projectionMatrix);
+      /* Keep the exact matrix the vertex shader is about to use, INCLUDING the
+         scene's north flip — building-pick projects raw ward metres with this, and
+         without the flip a hit test would land on the mirror image of the building
+         under the cursor. Silent, and only visible as "clicking picks the wrong
+         building", which is how this class of bug hides. */
+      pickMatrix.copy(threeCam.projectionMatrix).multiply(NORTH_FLIP);
       /* The water shimmer advances only here — it rides whatever repaints the
          map already does (orbit, drags, the sim bridge). Reduced motion means
          still water, by never advancing the clock. */
@@ -900,7 +932,12 @@ export function mountHeatMap(): () => void {
       }
     }
     const mc = maplibregl.MercatorCoordinate.fromLngLat([w.lon, w.lat], 0);
-    modelTransform = { x: mc.x, y: mc.y, z: mc.z ?? 0, scale: mc.meterInMercatorCoordinateUnits() };
+    /* The scale comes from ward-frame.ts, not from mc.meterInMercatorCoordinateUnits()
+       alone: that number is MapLibre's sphere, and our data's metres are not its
+       metres. Using it for both axes stretched north by 0.593 % — ~4 m at the rim,
+       growing with |y|. Only the ALTITUDE term is still MapLibre's own, because
+       building heights never pass through the ward frame. */
+    modelTransform = { x: mc.x, y: mc.y, z: mc.z ?? 0, frame: wardMercatorScale(w.lat) };
 
     /* Vegetation and albedo are MEASURED per cell, from Sentinel-2, and pinned to
        the same ward means the resilience score reads. loadWardSurface verifies
