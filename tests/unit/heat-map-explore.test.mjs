@@ -72,8 +72,16 @@ test('cooling constants stay in their honest range', () => {
 /* ————— building pick ————— */
 
 // Orthographic top-down clip matrix over ±700 m, column-major:
-// clip.x = x/700, clip.y = z/700, w = 1. Screen y grows downward in projectWard,
-// so +z lands in the lower half — exactly the convention the renderer uses.
+// clip.x = x/700, clip.y = z/700, w = 1. This is a SYNTHETIC matrix defined here,
+// not the renderer's — projectWard is a pure matrix multiply and is agnostic to
+// which way the scene faces, which is why these assertions held while the renderer
+// was drawing everything mirrored.
+//
+// The wording that used to sit here ("+z lands in the lower half — exactly the
+// convention the renderer uses") described the MIRRORED renderer and was wrong even
+// about this file: under ORTHO, +z maps to clip.y +1 and therefore to the TOP of the
+// screen, as the assertion 15 lines below states. North-up, which is now also what
+// the renderer does.
 const ORTHO = { elements: [
   1 / 700, 0, 0, 0,
   0, 0, 0, 0,
