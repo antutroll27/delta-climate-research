@@ -121,14 +121,22 @@ test('the width table says which number is measured and which is assumed', () =>
 });
 
 test('the basemap casing we replaced stays hidden, in both styles', async () => {
-  const app = await src('heat-map-app.ts');
+  /* Asserted against the EXPORTED constant, not a string literal in the app.
+     This guard previously grepped heat-map-app.ts for `'highway_minor'` and broke
+     the moment those ids were lifted into road-labels.ts — firing on a refactor
+     rather than on the regression it exists for. Reading the constant means it
+     follows the ids wherever they live. */
+  const { REPLACED_ROAD_GEOMETRY } = await import('../../src/scripts/climate-engine/road-labels.ts');
   for (const id of ['highway_minor', 'highway_major_casing',
                     'highway_major_inner', 'highway_major_subtle']) {
-    assert.ok(app.includes(`'${id}'`),
+    assert.ok(REPLACED_ROAD_GEOMETRY.includes(id),
       `${id} is no longer hidden. The basemap paints it in SCREEN PIXELS, so `
       + 'leaving it visible puts a road of no real width under every building '
       + 'and makes the whole metre-true road layer decorative.');
   }
+  const app = await src('heat-map-app.ts');
+  assert.match(app, /for \(const id of REPLACED_ROAD_GEOMETRY\)/,
+    'the app must actually iterate the list — exporting it is not hiding anything');
   /* It must live in the `on` handler: setEnv's setStyle rebuilds the style, and
      a `once` would let the casing return the moment someone switches to studio. */
   assert.match(app, /map\.on\('style\.load'/,
