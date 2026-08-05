@@ -1,0 +1,17 @@
+{
+  "n_ward_scenes": 87,
+  "n_overpasses": 34,
+  "split": "leave-one-overpass-out",
+  "r_shipped": 0.1615,
+  "r_free_recombination": 0.1679,
+  "r_veg_only": 0.1717,
+  "r_partial_physics_given_veg": 0.0549,
+  "gain_over_best_null": -0.0037,
+  "coefficients_all_data": {
+    "solar_albedo": -0.1218,
+    "built": 0.0353,
+    "veg": 0.2124
+  },
+  "verdict": "INGREDIENTS: no recombination of these terms beats the vegetation null out-of-sample, so the shortfall is not a weighting problem. The physics is missing a driver, and reweighting would only refit vegetation under another name.",
+  "coefficient_caveat": "solar_albedo and veg terms correlate at +0.02/+0.32/+0.09 across the three wards, so individual coefficients can trade off and a surprising sign is a lead, not a finding. The out-of-sample r values are the result."
+}
