@@ -101,7 +101,27 @@ def surface_layers(ward_id: str) -> tuple[npt.NDArray[np.float32], npt.NDArray[n
 
 
 def built_layer(ward_id: str) -> npt.NDArray[np.float32]:
-    """Building coverage at the Sentinel grid, from the canonical TS rasteriser."""
+    """Building coverage at the Sentinel grid, from the canonical TS rasteriser.
+
+    ROW ORDER IS FLIPPED ON READ, and it is not cosmetic.
+
+    The TS rasteriser is south-up: ward-raster.ts's `sampleY` is
+    `-half + gridY * cellM`, so its row 0 is the window's SOUTH edge, matching the
+    simulation's own grid. Everything else in THIS script is north-up — the
+    surface PNG (rasterio reads a north-up COG, the exporter saves it unrotated)
+    and the ECOSTRESS target grid.
+
+    Read unflipped, `built` described the mirror image of the ground that `veg`,
+    `alb` and the observation described. The modelled field was assembled from
+    layers that disagreed about which end of the ward was which, and then
+    correlated against a truth that agreed with only some of them.
+
+    The browser fixes the same mismatch in the opposite direction — it flips the
+    PNG into the sim's south-up frame (see surface-raster.ts) — because that is
+    the native frame there. Here the native frame is the geospatial one, so the
+    odd layer out is `built`. Both put the layers on the same ground; they differ
+    only in which convention they adopt to do it.
+    """
     path = os.path.join(BUILT_CACHE, f"{ward_id}-built-{SURFACE_GRID}.f32")
     if not os.path.exists(path):
         sys.exit(f"{os.path.relpath(path, os.path.expanduser('~'))} is missing — run "
@@ -109,7 +129,7 @@ def built_layer(ward_id: str) -> npt.NDArray[np.float32]:
                  f"TypeScript rasteriser on purpose; a Python reimplementation would drift "
                  f"and the drift would look like the model failing validation.")
     a = np.fromfile(path, dtype=np.float32)
-    return a.reshape(SURFACE_GRID, SURFACE_GRID)
+    return np.flipud(a.reshape(SURFACE_GRID, SURFACE_GRID)).copy()
 
 
 def area_downsample(src: npt.NDArray[np.float32], out_h: int, out_w: int) -> npt.NDArray[np.float32]:
