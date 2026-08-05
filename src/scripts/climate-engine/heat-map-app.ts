@@ -30,6 +30,10 @@ import { createRoadLayer, type RoadLayer } from './road-layer';
 import { selectPhase } from './phase-select';
 import { asTerrainField, terrainDrawAt, terrainLabel, TERRAIN_N, type TerrainField } from './terrain';
 import { wardMercatorScale, type WardFrame } from './ward-frame';
+import {
+  LABEL_SOURCE, LABEL_LAYER, REPLACED_ROAD_GEOMETRY, isReplacedRoadLabel,
+  labelLayerSpec, EMPTY_LABELS,
+} from './road-labels';
 import { findCoolingSurfaces, nearestCooling, type CoolingSurfaces } from './explore/cooling-surfaces';
 
 // Ward set lives in src/data/wards.ts so widening beyond three is a data change,
@@ -816,6 +820,9 @@ export function mountHeatMap(): () => void {
   const terrainCache: Record<string, TerrainField | null> = {};
   let waterLayer: WaterLayer | null = null;
   let cloudLayer: CloudLayer | null = null;
+  /* Street names, in lon/lat. Cached per ward like the other artefacts; absence
+     is normal and draws nothing, the loader idiom water and roads already use. */
+  const labelCache: Record<string, unknown> = {};
   let roadLayer: RoadLayer | null = null;
   /* Measured Sentinel-2 surface, one per ward, fetched once. A miss is non-fatal
      and falls back to a flat field at the measured ward mean — never to
@@ -947,6 +954,16 @@ export function mountHeatMap(): () => void {
     const { means, surface } = surfaceCache[name];
     state.base = rasterWardBase(d, means, surface);
     if (!roadsCache[name]) { try { roadsCache[name] = await (await fetch(`/heat-map/data/${name}-roads.json`)).json(); } catch { roadsCache[name] = { ways: [] }; } }
+    /* Street names for this ward. Separate artefact, separate frame: these are
+       lon/lat and go to MapLibre directly, so they never pass through our metre
+       frame and act as a standing check on the geometry that does. */
+    if (!labelCache[name]) {
+      labelCache[name] = await fetch(`/heat-map/data/${name}-road-labels.geojson`)
+        .then(r => (r.ok ? r.json() : EMPTY_LABELS))
+        .catch(() => EMPTY_LABELS);
+    }
+    (map.getSource(LABEL_SOURCE) as maplibregl.GeoJSONSource | undefined)
+      ?.setData(labelCache[name] as never);
     state.spatial = M.buildSpatial(d, state.base, roadsCache[name]);
     /* The same artefact, drawn. RENDER ONLY: buildSpatial above owns the sim's
        road corridor and keeps its own, much wider, tree-planting radius — see
@@ -1492,15 +1509,33 @@ export function mountHeatMap(): () => void {
      what keeps the basemap's road layers hidden across an environment switch. */
   map.on('style.load', () => {
     map.addLayer(customLayer);
+    /* Our own street names, in the BASEMAP's frame. Added after customLayer so
+       symbols draw above the 3D scene and are never eaten by a tower. */
+    if (!map.getSource(LABEL_SOURCE)) {
+      map.addSource(LABEL_SOURCE, { type: 'geojson', data: EMPTY_LABELS as never });
+    }
+    if (!map.getLayer(LABEL_LAYER)) {
+      map.addLayer(labelLayerSpec(env === 'studio' ? 'studio' : 'dark') as never);
+    }
+    const cached = labelCache[state.ward];
+    if (cached) (map.getSource(LABEL_SOURCE) as maplibregl.GeoJSONSource)?.setData(cached as never);
     /* The basemap paints these in SCREEN PIXELS — a cartographic stroke that
        matches no width on the ground and does not narrow as you zoom in. We
        redraw the same classes in metres (road-layer.ts), so leaving both would
        show every building overlapping a road that is not the road we drew.
        Deliberately NOT hidden: highway_path and highway_motorway_* — classes we
        do not draw, and hiding an unreplaced road deletes it rather than redraws it. */
-    for (const id of ['highway_minor', 'highway_major_casing',
-                      'highway_major_inner', 'highway_major_subtle']) {
+    for (const id of REPLACED_ROAD_GEOMETRY) {
       if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', 'none');
+    }
+    /* And their LABELS. Hiding the asphalt but not the street names left text and
+       one-way arrows floating over roads the basemap no longer draws. Matched by
+       predicate rather than by id because the two styles we ship use DIFFERENT
+       label ids — an id list here is one already known to be incomplete. */
+    for (const l of map.getStyle().layers ?? []) {
+      if (isReplacedRoadLabel(l as never) && map.getLayer(l.id)) {
+        map.setLayoutProperty(l.id, 'visibility', 'none');
+      }
     }
     loadWard('ballygunge');
   });
