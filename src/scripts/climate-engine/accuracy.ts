@@ -123,22 +123,23 @@ export function unmeasuredNote(fields: readonly string[], points: number): strin
  * with the ward mean removed from both sides, and mirrored here from
  * `data/calibration/spatial-accuracy.json`.
  *
- * THE NULL MODELS ARE WHY THIS IS READABLE. r = 0.162 on its own sounds like
+ * THE NULL MODELS ARE WHY THIS IS READABLE. r = 0.216 on its own sounds like
  * "some skill". Scored against the same cells, vegetation fraction ALONE gets
- * 0.229 — so the full model is still worse at placing heat than one of the
+ * 0.238 — so the full model is still worse at placing heat than one of the
  * layers it is built from, and the within-ward pattern is not validated.
  *
- * IT IMPROVED WITH THE WARD-SCALE CALIBRATION and that is worth recording:
- * r went 0.113 -> 0.162 and the anomaly RMSE 1.79 -> 1.36 K, because halving
- * Q cut the built term's spatial dominance from 1.46 K to 0.82 K. It is now
- * comparable to vegetation's 0.62 K rather than three times it. Better, and
- * still not enough to claim the pattern.
+ * WHY IT FAILS: the built-fraction term carries the LARGEST spatial amplitude
+ * (1.21 K) while correlating with measured heat at only 0.179. Vegetation carries
+ * more skill (0.238) at half the amplitude (0.64 K). So the term that dominates
+ * what the map SHOWS is the weaker predictor, diluting the one that works. A
+ * ward-MEAN fit cannot fix that: `built` is one number per ward in such a fit, so
+ * nothing in it constrains how the field varies INSIDE the ward. That needs a
+ * per-cell fit, and a per-cell fit needs ground truth finer than 70 m.
  *
- * WHY IT STILL FAILS: the built-fraction term carries 0.82 K of spatial
- * variation but correlates with measured heat at only 0.037. Vegetation carries
- * the skill (0.229) at a comparable 0.62 K. A ward-MEAN fit cannot fix this:
- * `built` is one number per ward in that fit, so nothing in it constrains how
- * the field varies inside the ward. That needs a per-cell fit.
+ * (Two earlier notes here quoted r = 0.113 -> 0.162 and a built-term correlation
+ * of 0.037. Those described the measurement BEFORE the veg/built orientation fix
+ * of 2026-08-05 and are superseded; the improvement they celebrated was partly an
+ * artefact of layers that disagreed about which row was north.)
  *
  * This does NOT affect the ward-level figures, the resilience score, or any
  * DC-URS input — those are measured separately and are unchanged. It affects
@@ -170,6 +171,57 @@ export function unmeasuredNote(fields: readonly string[], points: number): strin
  * — 0.216 against vegetation's 0.238. The map's within-ward pattern is still not
  * measurably real, and the note below still has to say so.
  */
+/*
+ * AND THE OBVIOUS EXCUSE WAS TESTED, AND FAILED (2026-08-05).
+ *
+ * The natural defence of r = 0.216 is that ECOSTRESS is 70 m while the model
+ * resolves 7.29 m, so the test cannot see what the model does. That does not
+ * survive contact: blur and geolocation error attenuate the physics field and the
+ * vegetation field against the SAME observation. It is a shared penalty. It
+ * explains why r is 0.22 rather than 0.6; it does not explain why physics < veg.
+ *
+ * One mechanism could have broken the symmetry — the physics field is
+ * built-fraction-driven with structure at 7-30 m, while vegetation is park-driven
+ * at 50-300 m, and a coarse sensor punishes fine structure harder. So the
+ * vegetation null might have been winning only because its signal lives at scales
+ * the sensor can resolve.
+ *
+ * `scripts/measure-scale-skill.py` coarsened both fields AND the observation
+ * together and the hypothesis died:
+ *
+ *     scale   m/cell    n   physics     veg   built     gap
+ *     x1          67   87     0.216   0.238   0.179   -0.022
+ *     x2         133   85     0.311   0.329   0.276   -0.017
+ *     x3         200   85     0.376   0.396   0.334   -0.020
+ *     x5         333   84     0.468   0.463   0.446   +0.005
+ *     x7         467   81     0.534   0.539   0.519   -0.005
+ *
+ * Every r rises with coarsening — averaging suppresses noise, which confirms the
+ * 67 m comparison is noisy — but the GAP is flat throughout. The physics never
+ * pulls ahead. So "illustrative" is not modesty, it is the measurement.
+ *
+ * WHAT THE TABLE DOES SUPPORT, and this is new: at 300-470 m all three predictors
+ * converge near r = 0.5. There IS neighbourhood-scale skill. The claim we can make
+ * is scale-qualified rather than absent, which is more use to a reader than a bare
+ * warning — it says WHERE to trust the map instead of only where not to.
+ *
+ * Losing to a simple predictor is also the norm in this field, not our failure:
+ * Urban-PLUMBER (Lipson et al. 2024) put 30 urban land-surface models against an
+ * empirical benchmark and the benchmark beat all 30.
+ *
+ * Regenerate with: python3 scripts/measure-scale-skill.py
+ */
+export const SCALE_SKILL = Object.freeze({
+  /** the published comparison: one ECOSTRESS cell */
+  blockM: 67,
+  rModelBlock: 0.216,
+  /** coarsened to ~5x5 ECOSTRESS cells — neighbourhood scale */
+  neighbourhoodM: 333,
+  rModelNeighbourhood: 0.468,
+  /** the gap to the vegetation null, at the two ends of the sweep */
+  gapAtBlock: -0.022,
+  gapAtCoarsest: -0.005,
+});
 export const SPATIAL = {
   /** ward-scenes scored (3 wards x near-nadir scenes, after cloud/QC masking) */
   n: 87,
@@ -181,10 +233,18 @@ export const SPATIAL = {
   rBuiltOnly: 0.179,
   /** RMSE that remains once ward-mean bias is removed, K */
   anomalyRmseK: 1.82,
-  /** user-facing, shown wherever the field's detail could be over-read */
+  /**
+   * User-facing, shown wherever the field's detail could be over-read.
+   *
+   * Three tiers on purpose. The old wording gave the reader only "measured" and
+   * "illustrative", which told them where NOT to trust the map and nothing about
+   * where they could. The scale sweep earned the middle tier.
+   */
   note: 'Ward-level temperature is calibrated against ECOSTRESS. The pattern WITHIN a '
-      + 'ward is not: measured against the same scenes it scores r = 0.22, below the '
-      + 'r = 0.24 of a plain vegetation map. Read the ward figures as measured and '
+      + 'ward is not: block by block it scores r = 0.22, below the r = 0.24 of a plain '
+      + 'vegetation map, and coarsening the comparison does not close that gap at any '
+      + 'scale. At neighbourhood scale (~300-500 m) the same comparison reaches r = 0.5. '
+      + 'Read the ward figures as measured, neighbourhood contrast as indicative, and '
       + 'the block-by-block detail as illustrative.',
 } as const;
 
@@ -256,6 +316,16 @@ export function assertAccuracyLogic(): void {
   a(SPATIAL.rModel < SPATIAL.rVegOnly,
     'SPATIAL.note says a vegetation map beats the model — re-measure and rewrite it '
     + 'if that is no longer the case');
+  a(SCALE_SKILL.rModelNeighbourhood > SCALE_SKILL.rModelBlock,
+    'the scale sweep found skill RISES with coarsening — if that inverts, re-run '
+    + 'scripts/measure-scale-skill.py before touching the note');
+  a(SCALE_SKILL.gapAtCoarsest < 0.05 && SCALE_SKILL.gapAtBlock < 0.05,
+    'the physics-minus-vegetation gap closing would be a real result and would '
+    + 'change what the map may claim — re-measure, do not edit this by hand');
+  a(SPATIAL.note.includes('neighbourhood'),
+    'the note must carry the MIDDLE tier: block-scale detail is illustrative but '
+    + '~300-500 m contrast is indicative at r = 0.5. Dropping it leaves the reader '
+    + 'knowing only where not to trust the map, which the measurement does not require');
   a(SPATIAL.note.includes('not') && SPATIAL.note.includes('illustrative'),
     'the spatial note must state plainly that within-ward detail is not measured');
 }

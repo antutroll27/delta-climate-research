@@ -1317,7 +1317,8 @@ export function mountHeatMap(): () => void {
       // Both figures on one tooltip. The phase note covers ward-LEVEL error; the
       // spatial note covers whether the pattern inside the ward means anything.
       // A reader who sees only the first will read the hot blocks as measured —
-      // they are not (SPATIAL.rModel 0.11, below a plain vegetation map's 0.23).
+      // they are not (SPATIAL.rModel 0.22, below a plain vegetation map's 0.24,
+      // and coarsening the comparison does not close that gap at any scale).
       (tag as HTMLElement).title = `${a.note}\n\n${SPATIAL.note}`;
     }
     const lstEl = el('lst');
