@@ -1,0 +1,56 @@
+{
+  "factors": {
+    "1": {
+      "block": 1,
+      "approx_m": 66.7,
+      "n": 87,
+      "mean_cells": 382.9,
+      "r_physics": 0.2155,
+      "r_veg": 0.238,
+      "r_built": 0.1795,
+      "gap_physics_minus_veg": -0.0225
+    },
+    "2": {
+      "block": 2,
+      "approx_m": 133.3,
+      "n": 85,
+      "mean_cells": 96.1,
+      "r_physics": 0.3114,
+      "r_veg": 0.3288,
+      "r_built": 0.2763,
+      "gap_physics_minus_veg": -0.0174
+    },
+    "3": {
+      "block": 3,
+      "approx_m": 200.0,
+      "n": 85,
+      "mean_cells": 47.7,
+      "r_physics": 0.3758,
+      "r_veg": 0.3955,
+      "r_built": 0.3336,
+      "gap_physics_minus_veg": -0.0197
+    },
+    "5": {
+      "block": 5,
+      "approx_m": 333.3,
+      "n": 84,
+      "mean_cells": 15.8,
+      "r_physics": 0.468,
+      "r_veg": 0.4626,
+      "r_built": 0.4463,
+      "gap_physics_minus_veg": 0.0054
+    },
+    "7": {
+      "block": 7,
+      "approx_m": 466.7,
+      "n": 81,
+      "mean_cells": 9.0,
+      "r_physics": 0.5335,
+      "r_veg": 0.5386,
+      "r_built": 0.5193,
+      "gap_physics_minus_veg": -0.0051
+    }
+  },
+  "min_block_cells": 9,
+  "verdict": "the gap does NOT close with scale \u2014 the physics adds no spatial skill over vegetation at any scale the observation can see, and the support argument does not rescue it"
+}
