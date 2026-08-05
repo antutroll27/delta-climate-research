@@ -201,6 +201,27 @@ export function mountHeatMap(): () => void {
        re-derived from the drawn position. `cz` is the row's northward y. */
     const ll = wardLatLon(WARDS[state.ward], b.cx, b.cz);
     setHTML('bcLL', `${formatLatLon(ll.lat, ll.lon, '<br>')}<small>centroid · WGS-84</small>`);
+    /* WHO DREW THIS BUILDING. Overture conflates three sources and they are not
+       equally trustworthy: OSM footprints are traced by a person against imagery,
+       the other two are model output. Google publishes a confidence; the others do
+       not, and -1 means "none published", never "low". */
+    const prov = provCache[state.ward];
+    const pk = prov?.src?.[b.idx];
+    const pc = prov?.confidence?.[b.idx] ?? -1;
+    /* Confidence is read from the DATA, not assumed from the source. Google
+       publishes it on every row; Microsoft publishes it in Barrackpore and
+       Baruipur but not in Ballygunge; OSM never does, because a hand trace has no
+       model confidence to report. Hardcoding "no confidence published" against a
+       source would have told 1,378 buildings that, with the number sitting right
+       there in the artefact. */
+    const conf = pc >= 0 ? ` · confidence ${pc.toFixed(2)}` : ' · no confidence published';
+    setHTML('bcSrc', pk
+      ? (pk === 'osm'
+          ? 'OpenStreetMap<small>traced by hand</small>'
+          : pk === 'google'
+            ? `Google Open Buildings<small>model${conf}</small>`
+            : `Microsoft ML<small>model${conf}</small>`)
+      : '—');
     /* 2.5 m is Google's fill value where a real height was never derived. Saying
        "2.5 m" flat would present a placeholder as a measurement. */
     setHTML('bcH', b.fill
@@ -823,6 +844,10 @@ export function mountHeatMap(): () => void {
   /* Street names, in lon/lat. Cached per ward like the other artefacts; absence
      is normal and draws nothing, the loader idiom water and roads already use. */
   const labelCache: Record<string, unknown> = {};
+  /* Footprint provenance, row-indexed parallel to the ward's `b` array. Two thirds
+     of Ballygunge is hand-traced OSM and 99 % of Baruipur is model output — a
+     difference nothing on screen showed until this shipped. */
+  const provCache: Record<string, { src: string[]; confidence: number[] } | null> = {};
   let roadLayer: RoadLayer | null = null;
   /* Measured Sentinel-2 surface, one per ward, fetched once. A miss is non-fatal
      and falls back to a flat field at the measured ward mean — never to
@@ -964,6 +989,10 @@ export function mountHeatMap(): () => void {
     }
     (map.getSource(LABEL_SOURCE) as maplibregl.GeoJSONSource | undefined)
       ?.setData(labelCache[name] as never);
+    if (provCache[name] === undefined) {
+      provCache[name] = await fetch(`/heat-map/data/${name}-provenance.json`)
+        .then(r => (r.ok ? r.json() : null)).catch(() => null);
+    }
     state.spatial = M.buildSpatial(d, state.base, roadsCache[name]);
     /* The same artefact, drawn. RENDER ONLY: buildSpatial above owns the sim's
        road corridor and keeps its own, much wider, tree-planting radius — see
