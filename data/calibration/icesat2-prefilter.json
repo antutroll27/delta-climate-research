@@ -1,0 +1,319 @@
+{
+  "retrieved": "2026-08-06",
+  "blockBytes": 1048576,
+  "note": "Verdicts from `fetch-icesat2.py --prefilter`: `decide()` run over HTTP range requests instead of a downloaded granule, so the sweep can skip granules the subset writer would reject without moving 0.3-1.8 GB each. Same function, same rules \u2014 a prefilter with its own copy of the logic would drift, and the drift would read as a result. `usable` false means the writer rejects it for `reason`; `crossed` is how many buildings would clear MIN_ROOF_PH, reported, never used as a criterion. A record with `probeError` is an unknown, not a rejection, and the sweep still downloads it.",
+  "granules": {
+    "ballygunge/ATL03_20221017234743_04161707_007_01.h5": {
+      "ward": "ballygunge",
+      "granule": "ATL03_20221017234743_04161707_007_01.h5",
+      "probeBytes": 28311553,
+      "probeRequests": 25,
+      "usable": false,
+      "reason": "0 confident photons in the box (<100)",
+      "counts": {
+        "photons_read": 4460,
+        "conf_land": 0
+      },
+      "crossed": -1,
+      "probeSeconds": 53.9
+    },
+    "ballygunge/ATL03_20230417150714_04161907_007_01.h5": {
+      "ward": "ballygunge",
+      "granule": "ATL03_20230417150714_04161907_007_01.h5",
+      "probeBytes": 29360129,
+      "probeRequests": 27,
+      "usable": false,
+      "reason": "0 confident photons in the box (<100)",
+      "counts": {
+        "photons_read": 3762,
+        "conf_land": 0
+      },
+      "crossed": -1,
+      "probeSeconds": 55.7
+    },
+    "ballygunge/ATL03_20230509015409_07441901_007_01.h5": {
+      "ward": "ballygunge",
+      "granule": "ATL03_20230509015409_07441901_007_01.h5",
+      "probeBytes": 30408705,
+      "probeRequests": 26,
+      "usable": false,
+      "reason": "0 confident photons in the box (<100)",
+      "counts": {
+        "photons_read": 29927,
+        "conf_land": 0
+      },
+      "crossed": -1,
+      "probeSeconds": 61.3
+    },
+    "ballygunge/ATL03_20230717104626_04162007_007_01.h5": {
+      "ward": "ballygunge",
+      "granule": "ATL03_20230717104626_04162007_007_01.h5",
+      "probeBytes": 33554433,
+      "probeRequests": 27,
+      "usable": true,
+      "reason": "",
+      "counts": {
+        "photons_read": 28254,
+        "conf_land": 166,
+        "in_box": 166,
+        "ground_candidates": 166,
+        "ground_nan": 3
+      },
+      "crossed": 0,
+      "probeSeconds": 61.0,
+      "rgt": "0416",
+      "date": "20230717",
+      "trackMinDistM": 760.7,
+      "groundMedianM": 3.48,
+      "demOffsetM": 7.12
+    },
+    "ballygunge/ATL03_20231016062557_04162107_007_01.h5": {
+      "ward": "ballygunge",
+      "granule": "ATL03_20231016062557_04162107_007_01.h5",
+      "probeBytes": 32505857,
+      "probeRequests": 26,
+      "usable": false,
+      "reason": "0 confident photons in the box (<100)",
+      "counts": {
+        "photons_read": 39358,
+        "conf_land": 0
+      },
+      "crossed": -1,
+      "probeSeconds": 48.3
+    },
+    "ballygunge/ATL03_20240115020531_04162207_007_01.h5": {
+      "ward": "ballygunge",
+      "granule": "ATL03_20240115020531_04162207_007_01.h5",
+      "probeBytes": 32505857,
+      "probeRequests": 30,
+      "usable": false,
+      "reason": "0 confident photons in the box (<100)",
+      "counts": {
+        "photons_read": 30156,
+        "conf_land": 0
+      },
+      "crossed": -1,
+      "probeSeconds": 58.0
+    },
+    "ballygunge/ATL03_20240414214457_04162307_007_01.h5": {
+      "ward": "ballygunge",
+      "granule": "ATL03_20240414214457_04162307_007_01.h5",
+      "probeBytes": 31457281,
+      "probeRequests": 29,
+      "usable": true,
+      "reason": "",
+      "counts": {
+        "photons_read": 5251,
+        "conf_land": 1607,
+        "in_box": 1607,
+        "ground_candidates": 1166,
+        "ground_nan": 6
+      },
+      "crossed": 2,
+      "probeSeconds": 55.7,
+      "rgt": "0416",
+      "date": "20240414",
+      "trackMinDistM": 630.6,
+      "groundMedianM": 3.11,
+      "demOffsetM": 7.49
+    },
+    "ballygunge/ATL03_20240506083159_07442301_007_01.h5": {
+      "ward": "ballygunge",
+      "granule": "ATL03_20240506083159_07442301_007_01.h5",
+      "probeBytes": 30408705,
+      "probeRequests": 28,
+      "usable": false,
+      "reason": "96 confident photons in the box (<100)",
+      "counts": {
+        "photons_read": 36081,
+        "conf_land": 96
+      },
+      "crossed": -1,
+      "probeSeconds": 58.7
+    },
+    "ballygunge/ATL03_20240714172436_04162407_007_01.h5": {
+      "ward": "ballygunge",
+      "granule": "ATL03_20240714172436_04162407_007_01.h5",
+      "probeBytes": 29360129,
+      "probeRequests": 28,
+      "usable": true,
+      "reason": "",
+      "counts": {
+        "photons_read": 24187,
+        "conf_land": 12646,
+        "in_box": 12646,
+        "ground_candidates": 5078,
+        "ground_nan": 6
+      },
+      "crossed": 9,
+      "probeSeconds": 48.2,
+      "rgt": "0416",
+      "date": "20240714",
+      "trackMinDistM": 437.9,
+      "groundMedianM": 4.5,
+      "demOffsetM": 6.1
+    },
+    "ballygunge/ATL03_20240805041148_07442401_007_01.h5": {
+      "ward": "ballygunge",
+      "granule": "ATL03_20240805041148_07442401_007_01.h5",
+      "probeBytes": 34603009,
+      "probeRequests": 27,
+      "usable": false,
+      "reason": "0 confident photons in the box (<100)",
+      "counts": {
+        "photons_read": 79790,
+        "conf_land": 0
+      },
+      "crossed": -1,
+      "probeSeconds": 46.2
+    },
+    "ballygunge/ATL03_20250112084424_04162607_007_01.h5": {
+      "ward": "ballygunge",
+      "granule": "ATL03_20250112084424_04162607_007_01.h5",
+      "probeBytes": 33554433,
+      "probeRequests": 27,
+      "usable": false,
+      "reason": "0 confident photons in the box (<100)",
+      "counts": {
+        "photons_read": 19121,
+        "conf_land": 0
+      },
+      "crossed": -1,
+      "probeSeconds": 61.8
+    },
+    "ballygunge/ATL03_20250202193055_07442601_007_01.h5": {
+      "ward": "ballygunge",
+      "granule": "ATL03_20250202193055_07442601_007_01.h5",
+      "probeBytes": 29360129,
+      "probeRequests": 26,
+      "usable": false,
+      "reason": "0 confident photons in the box (<100)",
+      "counts": {
+        "photons_read": 104,
+        "conf_land": 0
+      },
+      "crossed": -1,
+      "probeSeconds": 48.1
+    },
+    "ballygunge/ATL03_20250413042333_04162707_007_01.h5": {
+      "ward": "ballygunge",
+      "granule": "ATL03_20250413042333_04162707_007_01.h5",
+      "probeBytes": 29360129,
+      "probeRequests": 26,
+      "usable": false,
+      "reason": "0 confident photons in the box (<100)",
+      "counts": {
+        "photons_read": 27887,
+        "conf_land": 0
+      },
+      "crossed": -1,
+      "probeSeconds": 58.4
+    },
+    "ballygunge/ATL03_20250504151035_07442701_007_01.h5": {
+      "ward": "ballygunge",
+      "granule": "ATL03_20250504151035_07442701_007_01.h5",
+      "probeBytes": 31457281,
+      "probeRequests": 28,
+      "usable": true,
+      "reason": "",
+      "counts": {
+        "photons_read": 9447,
+        "conf_land": 1187,
+        "in_box": 1187,
+        "ground_candidates": 687,
+        "ground_nan": 8
+      },
+      "crossed": 0,
+      "probeSeconds": 50.6,
+      "rgt": "0744",
+      "date": "20250504",
+      "trackMinDistM": 653.6,
+      "groundMedianM": 4.11,
+      "demOffsetM": 6.49
+    },
+    "ballygunge/ATL03_20250713000246_04162807_007_01.h5": {
+      "ward": "ballygunge",
+      "granule": "ATL03_20250713000246_04162807_007_01.h5",
+      "probeBytes": 30408705,
+      "probeRequests": 26,
+      "usable": false,
+      "reason": "0 confident photons in the box (<100)",
+      "counts": {
+        "photons_read": 7035,
+        "conf_land": 0
+      },
+      "crossed": -1,
+      "probeSeconds": 49.2
+    },
+    "ballygunge/ATL03_20250803104934_07442801_007_01.h5": {
+      "ward": "ballygunge",
+      "granule": "ATL03_20250803104934_07442801_007_01.h5",
+      "probeBytes": 28311553,
+      "probeRequests": 26,
+      "usable": false,
+      "reason": "0 confident photons in the box (<100)",
+      "counts": {
+        "photons_read": 33634,
+        "conf_land": 0
+      },
+      "crossed": -1,
+      "probeSeconds": 46.2
+    },
+    "ballygunge/ATL03_20251011194212_04162907_007_01.h5": {
+      "ward": "ballygunge",
+      "granule": "ATL03_20251011194212_04162907_007_01.h5",
+      "probeBytes": 28311553,
+      "probeRequests": 26,
+      "usable": false,
+      "reason": "0 confident photons in the box (<100)",
+      "counts": {
+        "photons_read": 9432,
+        "conf_land": 0
+      },
+      "crossed": -1,
+      "probeSeconds": 46.6
+    },
+    "ballygunge/ATL03_20251102062923_07442901_007_01.h5": {
+      "ward": "ballygunge",
+      "granule": "ATL03_20251102062923_07442901_007_01.h5",
+      "probeBytes": 31457281,
+      "probeRequests": 26,
+      "usable": false,
+      "reason": "0 confident photons in the box (<100)",
+      "counts": {
+        "photons_read": 97805,
+        "conf_land": 0
+      },
+      "crossed": -1,
+      "probeSeconds": 63.9
+    },
+    "ballygunge/ATL03_20260110152208_04163007_007_01.h5": {
+      "ward": "ballygunge",
+      "granule": "ATL03_20260110152208_04163007_007_01.h5",
+      "probeBytes": 30408705,
+      "probeRequests": 26,
+      "usable": false,
+      "reason": "0 confident photons in the box (<100)",
+      "counts": {
+        "photons_read": 309,
+        "conf_land": 0
+      },
+      "crossed": -1,
+      "probeSeconds": 53.9
+    },
+    "ballygunge/ATL03_20260502214851_07443101_007_01.h5": {
+      "ward": "ballygunge",
+      "granule": "ATL03_20260502214851_07443101_007_01.h5",
+      "probeBytes": 30408705,
+      "probeRequests": 26,
+      "usable": false,
+      "reason": "0 confident photons in the box (<100)",
+      "counts": {
+        "photons_read": 2625,
+        "conf_land": 0
+      },
+      "crossed": -1,
+      "probeSeconds": 53.4
+    }
+  }
+}

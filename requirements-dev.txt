@@ -16,6 +16,7 @@ types-affine==0.1.0
 # `import h5py`. It is NOT listed as a package above: this file is the
 # type-checking toolchain, and h5py is a runtime dependency of the ICESat-2
 # fetch — installed with `python3 -m pip install h5py`, like rasterio, shapely
-# and scipy. The blast radius is contained: the import is local to `subset()`,
-# and every value read out of the file is immediately converted to a numpy
-# array or an int, so no HDF5 `Any` escapes into the analysis.
+# and scipy. The blast radius is contained: the import is local to `subset()`
+# and `probe()`, the two functions that open a granule, and every value read out
+# of the file is immediately converted to a numpy array or an int, so no HDF5
+# `Any` escapes into the analysis.
