@@ -1,0 +1,67 @@
+{
+  "source": "data/calibration/icesat2-heights.json (ICESat-2 ATL03 fill cohort) against Google Open Buildings 2.5D heights on Microsoft ML footprints",
+  "method": "FAR recomputed with every height == 2.5 m replaced by a draw from the measured fill cohort; all other heights, the footprint areas, the land area and the storey rule are ward_far's, unchanged",
+  "verdict": "no_correction_computable",
+  "fill_value_m": 2.5,
+  "storey_m": 3.2,
+  "storey_bracket_m": [
+    2.9,
+    3.1,
+    3.3
+  ],
+  "seed": 7,
+  "fill_cohort": {
+    "verdict": "underpowered",
+    "n": 0,
+    "min_n": 10,
+    "median_icesat2_m": null,
+    "understatement_m": null,
+    "ci95_m": null
+  },
+  "baseline_check": {
+    "reference": "data/dc-urs/far.json",
+    "geom_dir": "public/heat-map/data",
+    "tolerance": 0.001,
+    "max_abs_diff": 0.0,
+    "pass": true
+  },
+  "wards": {
+    "ballygunge": {
+      "far_baseline": 1.1595,
+      "far_committed": 1.1595,
+      "baseline_abs_diff": 0.0,
+      "buildings": 3527,
+      "n_at_fill_value": 465,
+      "fill_fraction": 0.1318,
+      "far_corrected": null,
+      "delta_far": null,
+      "delta_pct": null,
+      "storey_bracket": {}
+    },
+    "barrackpore": {
+      "far_baseline": 0.4848,
+      "far_committed": 0.4848,
+      "baseline_abs_diff": 0.0,
+      "buildings": 4702,
+      "n_at_fill_value": 597,
+      "fill_fraction": 0.127,
+      "far_corrected": null,
+      "delta_far": null,
+      "delta_pct": null,
+      "storey_bracket": {}
+    },
+    "baruipur": {
+      "far_baseline": 0.3464,
+      "far_committed": 0.3464,
+      "baseline_abs_diff": 0.0,
+      "buildings": 4538,
+      "n_at_fill_value": 629,
+      "fill_fraction": 0.1386,
+      "far_corrected": null,
+      "delta_far": null,
+      "delta_pct": null,
+      "storey_bracket": {}
+    }
+  },
+  "note": "Cohort-level sensitivity measurement. It does NOT change any shipped FAR: data/dc-urs/far.json is untouched by this mode. No per-building attribution (spec \u00a71): each 2.5 m fill building draws from the measured cohort's empirical distribution, seeded rng(7), so the artefact is reproducible and no individual height is claimed. far_baseline is recomputed from public/heat-map/data through the same helpers as ward_far and checked against data/dc-urs/far.json at 0.001; that equality is what proves this mode did not drift. NO CORRECTION COMPUTABLE: the fill cohort in data/calibration/icesat2-heights.json is 'underpowered' at n=0 (bar: n >= 10), so far_corrected is null. A pool was NOT invented and the main cohort was NOT substituted \u2014 its buildings are the large ones that survived erosion, which is precisely the population the fill is not. The baseline and the fill counts below are still real measurements; when the transect sweep powers the cohort, this same code path produces the correction with no change."
+}
