@@ -279,10 +279,61 @@ artefact heights for the same crossed buildings. Compare:
 | `inconclusive` | n ≥ 30 but the CI is too wide to exclude ±2 storeys AND does not exclude zero — enough buildings, not enough signal. Published as such |
 | `underpowered` | < 30 crossed buildings pooled across tracks — the honest `score-heights.py` outcome, again |
 
-**Fill cohort (win 2):** the same comparison restricted to crossed buildings whose
-artefact height is exactly the 2.5 m fill. Its ICESat-2 median, minus 2.5 m, is the
-measured understatement. Its own n will be small; it gets its own underpowered threshold
-(n ≥ 10) and its own CI.
+**Fill cohort (win 2) — AMENDED 2026-08-07, because the original statistic could not
+return zero.**
+
+This spec first said: take crossed buildings whose artefact height is exactly the 2.5 m
+fill, and report their ICESat-2 median minus 2.5 m as the understatement. **That statistic
+is invalid, and it fails in the direction that flatters the finding.**
+
+The roof band's 2.0 m floor (§5.2) discards photons below 2 m as street furniture and
+misclassified ground. The fill cohort is, by definition, buildings Google could not
+measure — disproportionately *short* ones. So a fill building that is genuinely short has
+its low photons deleted before `MIN_ROOF_PH` is even applied: it is either dropped from
+the cohort entirely, or its p75 is taken over only the surviving upper tail. Either way
+**the cohort median cannot come out near 2.5 m**, and "understatement" is manufactured by
+the floor rather than measured.
+
+Measured on the one committed subset (2026-08-07), the defect is not theoretical:
+
+| building | shipped | roof photons | below 2.0 m | p75 with floor | p75 without |
+|---|---|---|---|---|---|
+| 2272 | **2.50 (fill)** | 4 | **4** | **excluded** | excluded |
+| 58 | 4.90 | 98 | 85 | 6.56 | **1.79** |
+| 3407 | 9.30 | 35 | 18 | 8.49 | 5.09 |
+
+The **only** 2.5 m fill building ever crossed has every photon below 2 m — ICESat-2's
+evidence is that the fill is approximately right — and it is silently removed from the
+statistic designed to test the fill. Overall, 215 of 1,640 in-footprint photons are
+discarded by the floor, concentrated on short buildings.
+
+**The amended test — a proportion, not a median.** The floor is not moved: 2 m is an
+honest statement that this instrument cannot resolve buildings shorter than about 2 m,
+and lowering it to rescue the cohort would be tuning a threshold to get an answer. Instead
+the question changes to one the instrument *can* answer without discarding evidence:
+
+> Of the crossed fill buildings, what fraction show roof evidence **above 2.5 m**?
+
+Every crossed fill building contributes, including those whose photons all sit low — they
+count as evidence *for* the fill. A high fraction means the fill understates and by how
+much is then quotable; a low fraction means the fill is broadly right. `n ≥ 10` crossed
+fill buildings remains the bar, and the count of fill buildings excluded by the floor is
+reported alongside, per §5.4.
+
+**Why amending after seeing data is legitimate here:** the change is forced by a
+structural defect that makes the original statistic uninterpretable, not by a disliked
+result — and the fill cohort currently holds **n = 0**, so there is no number to steer
+toward. Recorded rather than quietly substituted.
+
+**Consequence for win 3.** `compute-far.py --icesat2-correction` must not resample from a
+cohort whose distribution the floor has inflated. Until the amended test runs with n ≥ 10,
+FAR sensitivity stays `no_correction_computable`.
+
+**Main-cohort caveat from the same cause.** The floor inflates short buildings on both
+sides of the main comparison too, pushing the median bias positive ("our heights
+understate"). It is conservative for reaching `validated`, but under a `biased` verdict
+the published *magnitude* would be overstated. The below-floor photon count is therefore
+reported beside the bias so the two are read together.
 
 **FAR propagation (win 3):** `compute-far.py --icesat2-correction` substitutes the
 measured fill-cohort distribution for the 2.5 m constant (cohort-level resampling, not
