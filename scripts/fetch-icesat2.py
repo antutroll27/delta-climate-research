@@ -36,14 +36,24 @@ gate becomes a silent no-op. The median is therefore taken over the finite
 values only, an all-NaN line is rejected before the gate, and the NaN count is
 recorded in `counts.ground_nan` because spec §5.4 forbids silent exclusions.
 
-STRONG BEAMS ONLY. ATLAS fires 3 strong/weak pairs; which side is strong flips
-with spacecraft orientation (sc_orient 0=backward→gt*l strong, 1=forward→gt*r).
-That mapping is VERIFIED per granule, twice, not trusted: the beam group's own
-`atlas_beam_type` attribute must read "strong", and the chosen beam must carry
->= 2x the photons of its pair partner in our latitude band, else the granule is
-rejected with a message naming the count ratio. The attribute is deterministic
-and the ratio is statistical; the ratio alone can be fooled by a strong beam
-under cloud, so the pair is worth more than either.
+STRONG BEAMS ONLY, BY THE FILE'S OWN LABEL. ATLAS fires 3 strong/weak pairs;
+which side is strong flips with spacecraft orientation (sc_orient 0=backward→
+gt*l strong, 1=forward→gt*r). The sc_orient map is checked against each beam
+group's `atlas_beam_type` attribute, which is authoritative and must read
+"strong" — an absent or disagreeing label rejects the granule.
+
+WHY THERE IS NO PAIR-RATIO CHECK, AND WHY IT MUST NOT COME BACK. This script
+originally also demanded that a chosen beam carry >= 2x the photons of its pair
+partner in the latitude band. That heuristic was invented before we knew
+`atlas_beam_type` exists per beam group; it is redundant against an exact label,
+and it was measured falsely rejecting ~15 of 42 granules, including
+Barrackpore's richest pass. Two independent failure modes: (1) it vetoed the
+WHOLE granule on a strong beam kilometres from the ward that contributes zero
+photons to the subset — the ratio there is noise against noise; (2) on daytime
+passes the solar background is counted equally in both beams, which compresses
+the ratio toward 1 regardless of signal (Barrackpore's best pass died at 1.60x).
+The label is deterministic and the ratio is a proxy for it, so the proxy only
+ever added false negatives.
 
 THE PLACEHOLDER SEGMENT GEOLOCATION. ATL03's per-segment `reference_photon_lat`
 is only the beam's own position where the segment actually holds photons; empty
@@ -114,8 +124,6 @@ MIN_GROUND_PH = 50
 MIN_H5_BYTES = 1_000_000
 
 STRONG = {0: ("gt1l", "gt2l", "gt3l"), 1: ("gt1r", "gt2r", "gt3r")}
-PARTNER = {"gt1l": "gt1r", "gt1r": "gt1l", "gt2l": "gt2r",
-           "gt2r": "gt2l", "gt3l": "gt3r", "gt3r": "gt3l"}
 
 
 def cmr_atl03(ward: str) -> list[dict[str, object]]:
@@ -244,26 +252,21 @@ def subset(path: str, ward: str) -> dict[str, object] | None:
         for beam in STRONG[ori]:
             if beam not in f or "heights" not in f[beam] or "geolocation" not in f[beam]:
                 continue
-            # verification 1 — the file's own label, against the sc_orient map
+            # THE strong-beam check: the granule's own label, which is
+            # authoritative and exact. There is deliberately no second,
+            # pair-ratio check — see the module docstring for the two ways it
+            # produced false rejections (~15 of 42 granules), and do not
+            # reinstate it.
             label = beam_type(f, beam)
-            if label and label != "strong":
+            if label != "strong":
                 print(f"  {gname} {beam}: sc_orient={ori} maps this to a strong "
-                      f"beam but the granule labels it '{label}' — the "
+                      f"beam but the granule labels it "
+                      f"{('missing' if not label else repr(label))} — the "
                       "strong-beam mapping is wrong, rejected")
                 return None
             i0, i1 = beam_slice(f, beam, south, north)
             if i1 <= i0:
                 continue
-            # verification 2 — photon count against the pair partner. Statistical
-            # where the label is deterministic, so it also catches a beam that is
-            # labelled strong and behaving weak.
-            partner = PARTNER[beam]
-            p0, p1 = ((0, 0) if partner not in f or "geolocation" not in f[partner]
-                      else beam_slice(f, partner, south, north))
-            if (i1 - i0) < 2 * max(1, p1 - p0):
-                print(f"  {gname} {beam}: only {(i1-i0)}/{max(1,p1-p0)} photons vs "
-                      "its pair partner — strong-beam mapping suspect, rejected")
-                return None
             g = f[beam]["heights"]
             lat = g["lat_ph"][i0:i1]
             lon = g["lon_ph"][i0:i1]
