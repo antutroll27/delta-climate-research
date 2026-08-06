@@ -83,7 +83,9 @@ Two structural facts define the real ceiling:
 
 1. **118 granules over the three wards are only 3 distinct reference ground tracks**
    (0416, 0744, 0858). ICESat-2 repeats its ground tracks on a 91-day cycle, so extra
-   granules are repeat passes of the same line and can never add new geometry.
+   granules are repeat passes of the same reference line. (They are NOT the same *ground*
+   line — see the 2026-08-07 correction below; the beams wander hundreds of metres
+   across-track between cycles, which is what made n ≥ 30 reachable.)
 2. **Measured per-beam closest approach** (2026-08-06, via `fsspec`+`h5py` HTTP range reads
    of the `geolocation/` arrays only — a few MB per 168 MB granule). Empty segments must be
    dropped first: they carry placeholder coordinates on a shared line ~11 km away, which is
@@ -102,12 +104,34 @@ not a property of a beam name** — it follows spacecraft orientation, which rev
 periodically, so gt2r is strong on some passes of a track and gt2l on others. Both members
 of a crossing pair lie 90 m apart and both cross the ward, so each pass contributes a
 crossing strong beam either way; the pipeline reads `atlas_beam_type` per granule rather
-than assuming a mapping. But **the crossed-building
-set is capped by three beam lines** and no amount of additional data enlarges it. Repeat
-passes stack photons on the same buildings — which is what lets marginal buildings clear
-`MIN_ROOF_PH` — without sampling new ones. If pooling every pass still leaves n < 30, the
-pre-registered `underpowered` verdict is the honest answer, and the response is to publish
-it, never to relax the erosion, roof band, or photon minimum to manufacture a sample.
+than assuming a mapping.
+
+**CORRECTION 2026-08-07 — this spec's "capped by three beam lines" claim was WRONG.** It
+said the crossed-building set could not be enlarged by more data, because repeat passes
+stack photons on the same buildings without sampling new ones. The completed sweep refutes
+it. Measured closest-approach across repeat passes of a *single* track:
+
+| ward / track | passes | closest approach, min → max | spread |
+|---|---|---|---|
+| ballygunge / 0416 | 11 | 125.7 → 851.8 m | **726 m** |
+| baruipur / 0744 | 9 | 199.7 → 658.5 m | 459 m |
+| barrackpore / 0744 | 6 | 649.6 → 1004.9 m | 355 m |
+
+A 726 m spread across a 1,400 m ward is not pointing jitter — the beams genuinely wander
+across-track between cycles, partly because the yaw flip changes which beam of a pair, and
+which pair (~3.3 km apart), is nearest. Ballygunge's 12 passes therefore crossed **50
+distinct buildings** against the 4–13 a single fixed line predicts; passes landed 663 m and
+846 m from Baruipur centre on RGT 0416, a track the coverage table places 5 km away; and
+Barrackpore's richest pass was on 0416, not the 0744 the table names. **The n ≥ 30 bar was
+reached because of this effect** — under the original claim it would have been unreachable.
+
+**What this means:** `icesat2-coverage.json` describes ONE representative granule per
+track, not that track's envelope across cycles. It is a guide to which tracks are worth
+probing, never a ceiling on what they can sample, and it must not be read as one.
+
+What does NOT change: `underpowered` remains a legitimate pre-registered outcome, and the
+response to falling short is to publish it — never to relax the erosion, roof band, or
+photon minimum to manufacture a sample.
 
 **New dependency: `h5py` only** (verified not installed 2026-08-06; neither is pyproj —
 see §5 for why we don't need it). One boring, ubiquitous package. `fsspec` (already

@@ -1036,8 +1036,11 @@ Run `python3 scripts/measure-height-accuracy.py` after each ward. Stop as soon a
 n ≥ 30 AND the fill cohort n ≥ 10, or when all three wards are exhausted — whichever comes
 first. The verdict is whatever the pre-registered rules say at that point.
 
-**If n stalls below 30 with all three wards swept, that is the answer, not a failure.** The
-crossed set is capped by geometry, and `underpowered` is a pre-registered outcome. Do NOT
+**If n stalls below 30 with all three wards swept, that is the answer, not a failure.**
+(This plan originally said "the crossed set is capped by geometry". **That was wrong** —
+repeat passes of one track land up to 726 m apart across a 1,400 m ward, so they sample
+substantially different buildings, and that is precisely why the sweep reached n = 30. See
+the spec's 2026-08-07 correction.) `underpowered` is still a pre-registered outcome. Do NOT
 respond by relaxing `MIN_ROOF_PH`, the erosion, or the roof band to manufacture buildings —
 every one of those knobs was set by a measurement in Task 1, and turning it to reach a
 target n is exactly the move this project exists to avoid. Report and stop.
