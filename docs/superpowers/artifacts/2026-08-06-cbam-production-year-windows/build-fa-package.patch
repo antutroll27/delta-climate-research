@@ -1,0 +1,93 @@
+--- a/scripts/build-fa-package.py
++++ b/scripts/build-fa-package.py
+@@ -18,6 +18,7 @@
+ """
+ import hashlib
+ import json
++import re
+ import sys
+ from pathlib import Path
+ 
+@@ -29,6 +30,36 @@
+ VALID_FROM = "2026-01-01T00:00:00.000Z"
+ RETRIEVED_AT = "2026-07-14T00:00:00.000Z"
+ 
++# Annex §5.3 marks production-year variants of a benchmark: (1) is used for
++# production years 2026-27 and (2) for 2028-30. These are VALIDITY WINDOWS, not
++# production routes. Left in routeIndicator they are unreachable — the defaults
++# corpus never declares a route of "(1)", nor a compound "(F)(1)" — so the good
++# simply cannot be priced. 794 of 2465 rows are affected.
++YEAR_WINDOWS = {
++    "(1)": ("2026-01-01T00:00:00.000Z", "2027-12-31T23:59:59.999Z"),
++    "(2)": ("2028-01-01T00:00:00.000Z", "2030-12-31T23:59:59.999Z"),
++}
++YEAR_SLUG = {"(1)": "2026", "(2)": "2028"}
++_ROUTE_WITH_YEAR = re.compile(r"(\([A-Z]\))?(\([12]\))")
++
++
++def split_route(raw):
++    """Separate a production route from a production-year marker.
++
++        "(F)(1)" -> route "(F)", valid 2026-27
++        "(1)"    -> route-independent, valid 2026-27
++        "(C)"    -> route "(C)", open-ended
++        ""       -> route-independent, open-ended
++
++    Returns (routeIndicator, validFrom, validTo, period_slug).
++    """
++    match = _ROUTE_WITH_YEAR.fullmatch(raw or "")
++    if not match:
++        return raw or "", VALID_FROM, None, None
++    valid_from, valid_to = YEAR_WINDOWS[match.group(2)]
++    return (match.group(1) or ""), valid_from, valid_to, YEAR_SLUG[match.group(2)]
++
++
+ # The workbook as retrieved 2026-07-14. If the EC reissues it, this hash changes and the
+ # script stops: a new version is a new rule package, not an in-place edit.
+ WORKBOOK_SHA256 = "b79108b025e697822f0f59de477fa68066c1c05c228fae2270cd230af84e8a7b"
+@@ -155,21 +186,28 @@
+         for column, value, route in (("A", col_a, route_a), ("B", col_b, route_b)):
+             if value is None:
+                 continue
+-            slug = route.strip("()") or "base"
++            route_id, valid_from, valid_to, period = split_route(route)
++            # str.strip("()") only removes LEADING/TRAILING chars, so "(F)(1)"
++            # yielded "F)(1" and ids like bm-72052100-b-f)(1. Extract the letters.
++            slug = "-".join(re.findall(r"[A-Z]", route_id)).lower() or "base"
++            if period:
++                slug = f"{slug}-{period}"
+             benchmarks.append({
+-                "id": f"bm-{carried_cn}-{column.lower()}-{slug.lower()}",
++                "id": f"bm-{carried_cn}-{column.lower()}-{slug}",
+                 "rulePackageId": PACKAGE_ID,
+                 "scopeCode": carried_cn,
+                 "codeLevel": len(carried_cn),
+                 "benchmarkColumn": column,
+-                "routeIndicator": route,
++                "routeIndicator": route_id,
+                 "bmTco2ePerT": value,
+                 "sourceId": "ec-benchmarks-workbook-v1",
++                # The ORIGINAL marker, not the split route. The provenance string
++                # must still point at the workbook cell this row came from.
+                 "sourceLocator": f"IR (EU) 2025/2620 Annex, Column {column}"
+                                  f"{' route ' + route if route else ''}"
+                                  f" (via EC benchmarks workbook v1, sheet row {index})",
+-                "validFrom": VALID_FROM,
+-                "validTo": None,
++                "validFrom": valid_from,
++                "validTo": valid_to,
+             })
+ 
+     if sectors != EXPECTED_SECTORS:
+@@ -179,7 +217,10 @@
+ 
+     seen = {}
+     for row in benchmarks:
+-        key = (row["scopeCode"], row["benchmarkColumn"], row["routeIndicator"])
++        # validFrom is part of the key because (F)(1) and (F)(2) both resolve to
++        # route (F) and are separated only by their validity window.
++        key = (row["scopeCode"], row["benchmarkColumn"], row["routeIndicator"],
++               row["validFrom"])
+         if key in seen:
+             sys.exit(f"duplicate benchmark selector {key!r} — would resolve REGULATION_AMBIGUOUS")
+         seen[key] = row["id"]
