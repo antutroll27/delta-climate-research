@@ -67,12 +67,51 @@ terrain validation we have never had, at zero extra data cost.
 
 | Layer | What | Status |
 |---|---|---|
-| Discovery | CMR granule search | Proven: 107 granules intersect the ward boxes (ATL03 per ward: 37/38/32); 4 tracks within 500 m of Ballygunge centre, closest **79 m** (2022-05-10, `ATL03_20220510191458_07441501_007_01.h5`, 168 MB) |
+| Discovery | CMR granule search + per-beam geometry via ranged reads | See the coverage note below — the granule counts are real, the original "79 m" was not |
 | Access | HTTPS ranged/full GET with bearer token | Proven: HTTP 206 from NSIDC on 2026-08-06 |
 | Product | **ATL03** (per-photon lat/lon, ellipsoidal height, `signal_conf_ph`) | The only product used. ATL08's 100 m forest-tuned segments are noted as a possible classifier prior but are NOT in scope |
 
+### Coverage — measured, and it is finite
+
+This spec first said "4 tracks within 500 m of Ballygunge, closest 79 m". That was wrong,
+and the error matters enough to record. The distance came from each granule's CMR bounding
+**polygon**, which spans the whole six-beam swath; the beams themselves are elsewhere.
+The named granule's nearest strong beam is **6.27 km** from Ballygunge and returns zero
+photons in the box.
+
+Two structural facts define the real ceiling:
+
+1. **118 granules over the three wards are only 3 distinct reference ground tracks**
+   (0416, 0744, 0858). ICESat-2 repeats its ground tracks on a 91-day cycle, so extra
+   granules are repeat passes of the same line and can never add new geometry.
+2. **Measured per-beam closest approach** (2026-08-06, via `fsspec`+`h5py` HTTP range reads
+   of the `geolocation/` arrays only — a few MB per 168 MB granule). Empty segments must be
+   dropped first: they carry placeholder coordinates on a shared line ~11 km away, which is
+   what corrupts a naive distance.
+
+| ward | track | crossing beams | closest approach | photons in 900 m, one pass |
+|---|---|---|---|---|
+| ballygunge | 0416 | gt2r / gt2l | 208 m / 291 m | 1,911 / 718 |
+| barrackpore | 0744 | gt1l / gt1r | 650 m / 570 m | 5,548 / 3,607 |
+| baruipur | 0744 | gt2l | 658 m | 3,247 |
+
+Reproducible: `python3 scripts/icesat2-coverage.py` → `data/calibration/icesat2-coverage.json`.
+
+Every ward is crossed by a strong beam, so the work is viable. Note that **strong/weak is
+not a property of a beam name** — it follows spacecraft orientation, which reverses
+periodically, so gt2r is strong on some passes of a track and gt2l on others. Both members
+of a crossing pair lie 90 m apart and both cross the ward, so each pass contributes a
+crossing strong beam either way; the pipeline reads `atlas_beam_type` per granule rather
+than assuming a mapping. But **the crossed-building
+set is capped by three beam lines** and no amount of additional data enlarges it. Repeat
+passes stack photons on the same buildings — which is what lets marginal buildings clear
+`MIN_ROOF_PH` — without sampling new ones. If pooling every pass still leaves n < 30, the
+pre-registered `underpowered` verdict is the honest answer, and the response is to publish
+it, never to relax the erosion, roof band, or photon minimum to manufacture a sample.
+
 **New dependency: `h5py` only** (verified not installed 2026-08-06; neither is pyproj —
-see §5 for why we don't need it). One boring, ubiquitous package.
+see §5 for why we don't need it). One boring, ubiquitous package. `fsspec` (already
+present) enables the ranged reads used for coverage discovery.
 
 **Download / cache policy** (mirrors the ECOSTRESS cache pattern):
 - Full granules download to the scratch area, are subset, then **deleted**. 168 MB files

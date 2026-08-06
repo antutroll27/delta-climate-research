@@ -1,0 +1,535 @@
+{
+  "retrieved": "2026-08-06",
+  "insideM": 700.0,
+  "n_granules": {
+    "ballygunge": 41,
+    "baruipur": 35,
+    "barrackpore": 42
+  },
+  "tracks": {
+    "0416": [
+      "2018-10-25",
+      "2019-01-24",
+      "2019-04-25",
+      "2019-07-25",
+      "2019-10-24",
+      "2020-01-22",
+      "2020-04-22",
+      "2020-07-22",
+      "2020-10-21",
+      "2021-04-21",
+      "2021-07-20",
+      "2022-01-18",
+      "2022-04-19",
+      "2022-07-19",
+      "2022-10-17",
+      "2023-01-16",
+      "2023-04-17",
+      "2023-07-17",
+      "2023-10-16",
+      "2024-01-15",
+      "2024-04-14",
+      "2024-07-14",
+      "2024-10-13",
+      "2025-01-12",
+      "2025-04-13",
+      "2025-07-13",
+      "2025-10-11",
+      "2026-01-10",
+      "2026-04-11"
+    ],
+    "0744": [
+      "2018-11-16",
+      "2019-02-15",
+      "2019-05-16",
+      "2019-11-14",
+      "2020-05-14",
+      "2020-08-13",
+      "2020-11-11",
+      "2021-05-12",
+      "2021-08-11",
+      "2021-11-10",
+      "2022-02-08",
+      "2022-05-10",
+      "2022-08-09",
+      "2022-11-08",
+      "2023-05-09",
+      "2023-08-07",
+      "2023-11-06",
+      "2024-02-05",
+      "2024-05-06",
+      "2024-08-05",
+      "2025-02-02",
+      "2025-05-04",
+      "2025-08-03",
+      "2025-11-02",
+      "2026-02-01",
+      "2026-05-02"
+    ],
+    "0858": [
+      "2019-08-23",
+      "2021-02-18"
+    ]
+  },
+  "beams": [
+    {
+      "ward": "ballygunge",
+      "beam": "gt1l",
+      "type": "weak",
+      "closest_m": 3481.9,
+      "photons_in_900m": 0,
+      "rgt": "0416"
+    },
+    {
+      "ward": "baruipur",
+      "beam": "gt1l",
+      "type": "weak",
+      "closest_m": 5048.0,
+      "photons_in_900m": 0,
+      "rgt": "0416"
+    },
+    {
+      "ward": "barrackpore",
+      "beam": "gt1l",
+      "type": "weak",
+      "closest_m": 5472.5,
+      "photons_in_900m": 0,
+      "rgt": "0416"
+    },
+    {
+      "ward": "ballygunge",
+      "beam": "gt1r",
+      "type": "strong",
+      "closest_m": 3397.8,
+      "photons_in_900m": 0,
+      "rgt": "0416"
+    },
+    {
+      "ward": "baruipur",
+      "beam": "gt1r",
+      "type": "strong",
+      "closest_m": 5132.5,
+      "photons_in_900m": 0,
+      "rgt": "0416"
+    },
+    {
+      "ward": "barrackpore",
+      "beam": "gt1r",
+      "type": "strong",
+      "closest_m": 5388.7,
+      "photons_in_900m": 0,
+      "rgt": "0416"
+    },
+    {
+      "ward": "ballygunge",
+      "beam": "gt2l",
+      "type": "weak",
+      "closest_m": 290.7,
+      "photons_in_900m": 718,
+      "rgt": "0416"
+    },
+    {
+      "ward": "baruipur",
+      "beam": "gt2l",
+      "type": "weak",
+      "closest_m": 8239.5,
+      "photons_in_900m": 0,
+      "rgt": "0416"
+    },
+    {
+      "ward": "barrackpore",
+      "beam": "gt2l",
+      "type": "weak",
+      "closest_m": 2281.7,
+      "photons_in_900m": 0,
+      "rgt": "0416"
+    },
+    {
+      "ward": "ballygunge",
+      "beam": "gt2r",
+      "type": "strong",
+      "closest_m": 207.7,
+      "photons_in_900m": 1911,
+      "rgt": "0416"
+    },
+    {
+      "ward": "baruipur",
+      "beam": "gt2r",
+      "type": "strong",
+      "closest_m": 8322.4,
+      "photons_in_900m": 0,
+      "rgt": "0416"
+    },
+    {
+      "ward": "barrackpore",
+      "beam": "gt2r",
+      "type": "strong",
+      "closest_m": 2198.8,
+      "photons_in_900m": 0,
+      "rgt": "0416"
+    },
+    {
+      "ward": "ballygunge",
+      "beam": "gt3l",
+      "type": "weak",
+      "closest_m": 2899.4,
+      "photons_in_900m": 0,
+      "rgt": "0416"
+    },
+    {
+      "ward": "baruipur",
+      "beam": "gt3l",
+      "type": "weak",
+      "closest_m": 11429.7,
+      "photons_in_900m": 0,
+      "rgt": "0416"
+    },
+    {
+      "ward": "barrackpore",
+      "beam": "gt3l",
+      "type": "weak",
+      "closest_m": 908.4,
+      "photons_in_900m": 0,
+      "rgt": "0416"
+    },
+    {
+      "ward": "ballygunge",
+      "beam": "gt3r",
+      "type": "strong",
+      "closest_m": 2989.1,
+      "photons_in_900m": 0,
+      "rgt": "0416"
+    },
+    {
+      "ward": "baruipur",
+      "beam": "gt3r",
+      "type": "strong",
+      "closest_m": 11519.2,
+      "photons_in_900m": 0,
+      "rgt": "0416"
+    },
+    {
+      "ward": "barrackpore",
+      "beam": "gt3r",
+      "type": "strong",
+      "closest_m": 998.3,
+      "photons_in_900m": 0,
+      "rgt": "0416"
+    },
+    {
+      "ward": "ballygunge",
+      "beam": "gt1l",
+      "type": "strong",
+      "closest_m": 2451.7,
+      "photons_in_900m": 0,
+      "rgt": "0744"
+    },
+    {
+      "ward": "baruipur",
+      "beam": "gt1l",
+      "type": "strong",
+      "closest_m": 2534.2,
+      "photons_in_900m": 0,
+      "rgt": "0744"
+    },
+    {
+      "ward": "barrackpore",
+      "beam": "gt1l",
+      "type": "strong",
+      "closest_m": 649.6,
+      "photons_in_900m": 5548,
+      "rgt": "0744"
+    },
+    {
+      "ward": "ballygunge",
+      "beam": "gt1r",
+      "type": "weak",
+      "closest_m": 2532.9,
+      "photons_in_900m": 0,
+      "rgt": "0744"
+    },
+    {
+      "ward": "baruipur",
+      "beam": "gt1r",
+      "type": "weak",
+      "closest_m": 2453.0,
+      "photons_in_900m": 0,
+      "rgt": "0744"
+    },
+    {
+      "ward": "barrackpore",
+      "beam": "gt1r",
+      "type": "weak",
+      "closest_m": 569.7,
+      "photons_in_900m": 3607,
+      "rgt": "0744"
+    },
+    {
+      "ward": "ballygunge",
+      "beam": "gt2l",
+      "type": "strong",
+      "closest_m": 5644.4,
+      "photons_in_900m": 0,
+      "rgt": "0744"
+    },
+    {
+      "ward": "baruipur",
+      "beam": "gt2l",
+      "type": "strong",
+      "closest_m": 658.3,
+      "photons_in_900m": 3247,
+      "rgt": "0744"
+    },
+    {
+      "ward": "barrackpore",
+      "beam": "gt2l",
+      "type": "strong",
+      "closest_m": 2542.9,
+      "photons_in_900m": 0,
+      "rgt": "0744"
+    },
+    {
+      "ward": "ballygunge",
+      "beam": "gt2r",
+      "type": "weak",
+      "closest_m": 5723.3,
+      "photons_in_900m": 0,
+      "rgt": "0744"
+    },
+    {
+      "ward": "baruipur",
+      "beam": "gt2r",
+      "type": "weak",
+      "closest_m": 736.8,
+      "photons_in_900m": 3030,
+      "rgt": "0744"
+    },
+    {
+      "ward": "barrackpore",
+      "beam": "gt2r",
+      "type": "weak",
+      "closest_m": 2620.5,
+      "photons_in_900m": 0,
+      "rgt": "0744"
+    },
+    {
+      "ward": "ballygunge",
+      "beam": "gt3l",
+      "type": "strong",
+      "closest_m": 8834.6,
+      "photons_in_900m": 0,
+      "rgt": "0744"
+    },
+    {
+      "ward": "baruipur",
+      "beam": "gt3l",
+      "type": "strong",
+      "closest_m": 3848.4,
+      "photons_in_900m": 0,
+      "rgt": "0744"
+    },
+    {
+      "ward": "barrackpore",
+      "beam": "gt3l",
+      "type": "strong",
+      "closest_m": 5732.9,
+      "photons_in_900m": 0,
+      "rgt": "0744"
+    },
+    {
+      "ward": "ballygunge",
+      "beam": "gt3r",
+      "type": "weak",
+      "closest_m": 8915.0,
+      "photons_in_900m": 0,
+      "rgt": "0744"
+    },
+    {
+      "ward": "baruipur",
+      "beam": "gt3r",
+      "type": "weak",
+      "closest_m": 3928.4,
+      "photons_in_900m": 0,
+      "rgt": "0744"
+    },
+    {
+      "ward": "barrackpore",
+      "beam": "gt3r",
+      "type": "weak",
+      "closest_m": 5812.3,
+      "photons_in_900m": 0,
+      "rgt": "0744"
+    },
+    {
+      "ward": "ballygunge",
+      "beam": "gt1l",
+      "type": "strong",
+      "closest_m": 15915.9,
+      "photons_in_900m": 0,
+      "rgt": "0858"
+    },
+    {
+      "ward": "baruipur",
+      "beam": "gt1l",
+      "type": "strong",
+      "closest_m": 7413.7,
+      "photons_in_900m": 0,
+      "rgt": "0858"
+    },
+    {
+      "ward": "barrackpore",
+      "beam": "gt1l",
+      "type": "strong",
+      "closest_m": 17859.4,
+      "photons_in_900m": 0,
+      "rgt": "0858"
+    },
+    {
+      "ward": "ballygunge",
+      "beam": "gt1r",
+      "type": "weak",
+      "closest_m": 15929.7,
+      "photons_in_900m": 0,
+      "rgt": "0858"
+    },
+    {
+      "ward": "baruipur",
+      "beam": "gt1r",
+      "type": "weak",
+      "closest_m": 7328.0,
+      "photons_in_900m": 0,
+      "rgt": "0858"
+    },
+    {
+      "ward": "barrackpore",
+      "beam": "gt1r",
+      "type": "weak",
+      "closest_m": 17776.2,
+      "photons_in_900m": 0,
+      "rgt": "0858"
+    },
+    {
+      "ward": "ballygunge",
+      "beam": "gt2l",
+      "type": "strong",
+      "closest_m": 12721.2,
+      "photons_in_900m": 0,
+      "rgt": "0858"
+    },
+    {
+      "ward": "baruipur",
+      "beam": "gt2l",
+      "type": "strong",
+      "closest_m": 4220.1,
+      "photons_in_900m": 0,
+      "rgt": "0858"
+    },
+    {
+      "ward": "barrackpore",
+      "beam": "gt2l",
+      "type": "strong",
+      "closest_m": 14668.1,
+      "photons_in_900m": 0,
+      "rgt": "0858"
+    },
+    {
+      "ward": "ballygunge",
+      "beam": "gt2r",
+      "type": "weak",
+      "closest_m": 12667.2,
+      "photons_in_900m": 0,
+      "rgt": "0858"
+    },
+    {
+      "ward": "baruipur",
+      "beam": "gt2r",
+      "type": "weak",
+      "closest_m": 4134.6,
+      "photons_in_900m": 0,
+      "rgt": "0858"
+    },
+    {
+      "ward": "barrackpore",
+      "beam": "gt2r",
+      "type": "weak",
+      "closest_m": 14589.4,
+      "photons_in_900m": 0,
+      "rgt": "0858"
+    },
+    {
+      "ward": "ballygunge",
+      "beam": "gt3l",
+      "type": "strong",
+      "closest_m": 9523.9,
+      "photons_in_900m": 0,
+      "rgt": "0858"
+    },
+    {
+      "ward": "baruipur",
+      "beam": "gt3l",
+      "type": "strong",
+      "closest_m": 1013.5,
+      "photons_in_900m": 0,
+      "rgt": "0858"
+    },
+    {
+      "ward": "barrackpore",
+      "beam": "gt3l",
+      "type": "strong",
+      "closest_m": 11474.8,
+      "photons_in_900m": 0,
+      "rgt": "0858"
+    },
+    {
+      "ward": "ballygunge",
+      "beam": "gt3r",
+      "type": "weak",
+      "closest_m": 9465.3,
+      "photons_in_900m": 0,
+      "rgt": "0858"
+    },
+    {
+      "ward": "baruipur",
+      "beam": "gt3r",
+      "type": "weak",
+      "closest_m": 929.1,
+      "photons_in_900m": 0,
+      "rgt": "0858"
+    },
+    {
+      "ward": "barrackpore",
+      "beam": "gt3r",
+      "type": "weak",
+      "closest_m": 11375.5,
+      "photons_in_900m": 0,
+      "rgt": "0858"
+    }
+  ],
+  "best_per_ward": {
+    "ballygunge": {
+      "ward": "ballygunge",
+      "beam": "gt2r",
+      "type": "strong",
+      "closest_m": 207.7,
+      "photons_in_900m": 1911,
+      "rgt": "0416"
+    },
+    "barrackpore": {
+      "ward": "barrackpore",
+      "beam": "gt1l",
+      "type": "strong",
+      "closest_m": 649.6,
+      "photons_in_900m": 5548,
+      "rgt": "0744"
+    },
+    "baruipur": {
+      "ward": "baruipur",
+      "beam": "gt2l",
+      "type": "strong",
+      "closest_m": 658.3,
+      "photons_in_900m": 3247,
+      "rgt": "0744"
+    }
+  },
+  "note": "ICESat-2 repeats its reference ground tracks on a 91-day cycle, so these granules are a handful of fixed lines re-flown. Repeat passes stack photons on the SAME crossed buildings and cannot add new ones; the crossed-building set is capped by this table. Distances are from per-segment reference photon positions with empty segments dropped \u2014 NOT from CMR bounding polygons, which span the ~6.6 km six-beam swath and gave a 79 m answer for a beam that is really 6.27 km away."
+}

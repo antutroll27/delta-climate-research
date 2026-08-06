@@ -32,7 +32,57 @@
 - `public/heat-map/data/<ward>-terrain.json`: `medianM` (e.g. 10.6 for Ballygunge) is SRTM-derived orthometric elevation — the geoid check's reference.
 - `scripts/_types.py`: `WARDS`, `Ward(id, centre: LatLon, footprint_m)`, `m_per_deg(lat)`, `ward_bounds(w, pad_m)`.
 - `scripts/_ecostress.py`: `token()` exits with a message if the token file is missing.
-- Closest track: `ATL03_20220510191458_07441501_007_01.h5` — RGT **0744**, 2022-05-10, 79 m from Ballygunge centre, 168 MB, HTTP 206 auth already proven.
+**COVERAGE — measured 2026-08-06, and it corrects this plan's original premise.**
+
+The "closest track, 79 m from Ballygunge centre" written into the first draft was **wrong**.
+It came from the granule's CMR bounding polygon, which spans the whole six-beam swath, not
+from where the lasers actually landed. That granule's nearest strong beam is **6.27 km**
+from Ballygunge and it yields zero photons in the box — running the original Task 3 Step 1
+returns `0 confident photons in the box — rejected`, correctly.
+
+Two structural facts settle what coverage really exists, both cheap to check and neither
+requiring a download:
+
+1. **118 granules are only 3 distinct ground tracks** (0416, 0744, 0858). ICESat-2 repeats
+   its reference ground tracks every 91 days, so extra granules are repeat passes of the
+   SAME line, never new geometry. Track number is characters 22–25 of the granule name.
+2. **Beam positions per track**, read over HTTP range requests via
+   `fsspec` + `h5py` (a few MB of each 168 MB file — the `geolocation/` arrays only).
+   **Empty segments must be excluded first**: they carry placeholder
+   `reference_photon_lat/lon` on a shared line ~11 km away, which is what made the naive
+   distance wrong.
+
+Result — every ward has a strong-beam crossing. Reproduce with
+`python3 scripts/icesat2-coverage.py` → `data/calibration/icesat2-coverage.json`:
+
+| ward | track | beam | closest approach to centre | photons in 900 m, one pass |
+|---|---|---|---|---|
+| ballygunge | **0416** | gt2r | **208 m** | 1,911 |
+| ballygunge | 0416 | gt2l | 291 m | 718 |
+| barrackpore | **0744** | gt1l | **650 m** | 5,548 |
+| barrackpore | 0744 | gt1r | 570 m | 3,607 |
+| baruipur | **0744** | gt2l | **658 m** | 3,247 |
+
+Track 0858 reaches no ward (4.2 km at best) and can be ignored entirely.
+
+**Strong/weak is NOT fixed per beam — it flips between passes of the same track.** Which
+side of a pair is strong follows spacecraft orientation, which reverses periodically, so
+gt2r is strong on some RGT 0416 passes and gt2l on others. This is why
+`fetch-icesat2.py` reads `atlas_beam_type` per granule rather than assuming. It is good
+news: both members of a crossing pair are 90 m apart and **both cross the ward**, so every
+pass contributes a crossing STRONG beam whichever way it flipped, and the two lines sample
+slightly different buildings.
+
+**The consequence for the n ≥ 30 bar is favourable and changes the sweep's logic.** Because
+each track repeats, ~20 passes cross the SAME buildings. That does not add new buildings —
+the crossed set is fixed by three beam lines — but it stacks photons on each one, so
+buildings that fail `MIN_ROOF_PH = 5` on a single pass can clear it once passes are pooled.
+Task 5's sweep is therefore about **pooling passes on these three tracks**, not about
+finding more tracks. There are no more tracks.
+
+**Gate granule (Task 3):** `ATL03_20260110152208_04163007_007_01.h5` — RGT 0416 over
+Ballygunge, 2026-01-10, dry season (January avoids the monsoon cloud that starves the
+May granule). Auth proven; the download is ~168 MB.
 
 ---
 
@@ -639,11 +689,16 @@ mapping is verified per granule against the pair partner's photon count."
 - Create: `scripts/diagnose-icesat2-transect.py`
 - Create (by running, then committing): `data/calibration/icesat2/ballygunge-20220510-0744.json`
 
-- [ ] **Step 1: Fetch the closest track**
+- [ ] **Step 1: Fetch the crossing track** (see the corrected COVERAGE table above — the
+first draft named a granule whose beams miss Ballygunge by 6.27 km)
 
-Run: `python3 scripts/fetch-icesat2.py --ward ballygunge --granule ATL03_20220510191458_07441501_007_01.h5`
-Expected: one download (~168 MB, cached thereafter), then either
-`wrote data/calibration/icesat2/ballygunge-20220510-0744.json (… KB, … photons, closest ~79 m)` — or a rejection/assert whose message names the reason. **If the geoid gate throws here, debug the constant/ground extraction before anything else; do not loosen the gate.**
+Run: `python3 scripts/fetch-icesat2.py --ward ballygunge --granule ATL03_20260110152208_04163007_007_01.h5`
+Expected: one download (~168 MB, cached thereafter), then
+`wrote data/calibration/icesat2/ballygunge-20260110-0416.json (… KB, … photons, closest ~291 m)` — or a rejection whose message names the reason. **If the geoid gate throws here, debug the constant/ground extraction before anything else; do not loosen the gate.**
+
+Note the subset writer keeps **strong beams only**. Ballygunge's crossing strong beam is
+gt2l at 291 m; its weak gt2r passes closer (208 m) and is the documented fallback if the
+strong beam turns out to be photon-starved on this pass.
 
 - [ ] **Step 2: Write the diagnostic script**
 
@@ -729,10 +784,15 @@ if __name__ == "__main__":
 
 - [ ] **Step 3: Run the gate**
 
-Run: `python3 scripts/diagnose-icesat2-transect.py data/calibration/icesat2/ballygunge-20220510-0744.json`
+Run: `python3 scripts/diagnose-icesat2-transect.py data/calibration/icesat2/ballygunge-20260110-0416.json`
 Expected: `GATE PASS` with both criteria, and a plot at `previews/_icesat2-transect.png` showing a grey ground band near 0 and red roof photons standing above it. **Open the plot and look at it** — the gate numbers cannot see a ground line that is subtly wrong everywhere.
 
-- [ ] **Step 4 — IF THE GATE FAILS:** do not proceed to Task 4. Try the next-closest tracks (2 more within 200 m — run fetch without `--granule`, diagnose each subset). If none passes, write `data/calibration/icesat2-heights.json` by hand:
+- [ ] **Step 4 — IF THE GATE FAILS:** do not proceed to Task 4. Escalate in this order,
+all on the SAME three tracks (there are no others): another dry-season pass of RGT 0416
+over Ballygunge; then Barrackpore's RGT 0744 gt1l, which carries 7.7× the photons of
+Ballygunge's crossing beam and is the strongest crossing we have; then Baruipur's RGT 0744
+gt2l; then Ballygunge's weak gt2r at 208 m. If none passes, write
+`data/calibration/icesat2-heights.json` by hand:
 
 ```json
 {
@@ -955,16 +1015,32 @@ One track in, so the first artefact says what it should say: underpowered."
 **Files:**
 - Modify (by running): `data/calibration/icesat2/`, `data/calibration/icesat2-heights.json`
 
-- [ ] **Step 1: Fetch every usable Ballygunge track**
+**The sweep pools repeat passes of three fixed tracks.** It is not a search for more
+coverage — the COVERAGE table above is exhaustive, and no additional granule can add a
+building that those three beam lines do not cross. What repeat passes buy is photons per
+building, which is what lets a building clear `MIN_ROOF_PH = 5`.
 
-Run: `python3 scripts/fetch-icesat2.py --ward ballygunge`
-Expected: ~37 granules attempted; several rejected (clouds/photon count — each with a printed reason); subsets written for the rest. This downloads tens of GB **transiently** to the cache; disk is the constraint, so run `--purge` between wards if the volume is tight.
+- [ ] **Step 1: Fetch every pass on each ward's crossing track**
 
-- [ ] **Step 2: Re-run the measure after each ward; add wards until n ≥ 30**
+Run: `python3 scripts/fetch-icesat2.py --ward barrackpore` (start here — its gt1l carries
+5,548 photons per pass against Ballygunge's 718, so it is the most likely to reach the bar
+on its own), then `--ward baruipur`, then `--ward ballygunge`.
 
-Run after Ballygunge:
-`python3 scripts/measure-height-accuracy.py`
-If `n_buildings` < 30, continue: `python3 scripts/fetch-icesat2.py --ward barrackpore` (then baruipur), re-running measure each time. Stop as soon as n ≥ 30 AND the fill cohort n ≥ 10, or when all three wards are exhausted — whichever comes first. The verdict is whatever the pre-registered rules say at that point.
+Expected: ~21 granules attempted per ward; the monsoon ones rejected with a printed reason;
+subsets written for the rest. This moves tens of GB **transiently** through the cache — run
+`--purge` between wards if disk is tight.
+
+- [ ] **Step 2: Re-run the measure after each ward; stop when the bar is met**
+
+Run `python3 scripts/measure-height-accuracy.py` after each ward. Stop as soon as
+n ≥ 30 AND the fill cohort n ≥ 10, or when all three wards are exhausted — whichever comes
+first. The verdict is whatever the pre-registered rules say at that point.
+
+**If n stalls below 30 with all three wards swept, that is the answer, not a failure.** The
+crossed set is capped by geometry, and `underpowered` is a pre-registered outcome. Do NOT
+respond by relaxing `MIN_ROOF_PH`, the erosion, or the roof band to manufacture buildings —
+every one of those knobs was set by a measurement in Task 1, and turning it to reach a
+target n is exactly the move this project exists to avoid. Report and stop.
 
 - [ ] **Step 3: Purge the cache, commit the final state**
 
