@@ -16,7 +16,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { GpuHeatSim } from './sim-gpu';
 import { DEFAULT_PARAMS, type SimLayers, type SimParams } from './types';
 import * as M from './heat-map-model';
-import { ACCURACY, SPATIAL, bandLabel, unmeasuredNote, isTransitionHour, TRANSITION_RMSE_K } from './accuracy';
+import { ACCURACY, SPATIAL, HEIGHTS, bandLabel, unmeasuredNote, isTransitionHour, TRANSITION_RMSE_K } from './accuracy';
 import { solarElevationFactor } from './sky';
 import * as U from './dc-urs';
 import { applyScenario } from './dc-urs-scenario';
@@ -148,6 +148,11 @@ export function mountHeatMap(): () => void {
      barely moved. 6 px is the usual slop budget for "tap, not drag" and keeps a
      shaky trackpad from silently swallowing the click. */
   const bcard = el('bcard'), bsel = el('bsel');
+  /* The Height row shows a metre value per building; HEIGHTS.note is the only
+     place that says what was actually validated — a DISTRIBUTION along satellite
+     transects, never this building. Set once: setHTML rewrites the row's
+     innerHTML on every selection, which leaves the attribute intact. */
+  el('bcH')?.setAttribute('title', HEIGHTS.note);
   let downAt: { x: number; y: number; t: number } | null = null;
 
   /* ── first-run hint ──
