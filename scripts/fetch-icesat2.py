@@ -65,6 +65,14 @@ the ratio toward 1 regardless of signal (Barrackpore's best pass died at 1.60x).
 The label is deterministic and the ratio is a proxy for it, so the proxy only
 ever added false negatives.
 
+Corroborated independently on 2026-08-06 by replaying the old rule over ranged
+reads of the geolocation arrays: it vetoes 3 of 12 Barrackpore granules and 0 of
+3 Ballygunge ones. Every Barrackpore veto came from the gt2 pair, which
+`data/calibration/icesat2-coverage.json` puts 2.2-2.6 km from that ward centre
+with ZERO photons within 900 m of it — the beam decided the granule's fate
+without contributing a single photon to the subset. One of the three
+(2024-05-06, 14:01 local) is a daytime pass whose ratio is squashed to 1.22x.
+
 THE PLACEHOLDER SEGMENT GEOLOCATION. ATL03's per-segment `reference_photon_lat`
 is only the beam's own position where the segment actually holds photons; empty
 segments carry a placeholder on a different line entirely. See `beam_slice` —
