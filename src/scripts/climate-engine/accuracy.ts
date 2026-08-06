@@ -123,18 +123,17 @@ export function unmeasuredNote(fields: readonly string[], points: number): strin
  * with the ward mean removed from both sides, and mirrored here from
  * `data/calibration/spatial-accuracy.json`.
  *
- * THE NULL MODELS ARE WHY THIS IS READABLE. r = 0.216 on its own sounds like
- * "some skill". Scored against the same cells, vegetation fraction ALONE gets
- * 0.238 — so the full model is still worse at placing heat than one of the
+ * THE NULL MODEL IS WHY THIS IS READABLE. r = 0.303 on its own sounds like "some
+ * skill". Put vegetation through the SAME solver — the like-for-like null — and it
+ * gets 0.314. So the full model is still worse at placing heat than one of the
  * layers it is built from, and the within-ward pattern is not validated.
  *
  * WHY IT FAILS: the built-fraction term carries the LARGEST spatial amplitude
- * (1.21 K) while correlating with measured heat at only 0.179. Vegetation carries
- * more skill (0.238) at half the amplitude (0.64 K). So the term that dominates
- * what the map SHOWS is the weaker predictor, diluting the one that works. A
- * ward-MEAN fit cannot fix that: `built` is one number per ward in such a fit, so
- * nothing in it constrains how the field varies INSIDE the ward. That needs a
- * per-cell fit, and a per-cell fit needs ground truth finer than 70 m.
+ * while correlating with measured heat the worst. So the term that dominates what
+ * the map SHOWS is the weaker predictor, diluting the one that works. A ward-MEAN
+ * fit cannot fix that: `built` is one number per ward in such a fit, so nothing in
+ * it constrains how the field varies INSIDE the ward. That needs a per-cell fit,
+ * and a per-cell fit needs ground truth finer than 70 m.
  *
  * (Two earlier notes here quoted r = 0.113 -> 0.162 and a built-term correlation
  * of 0.037. Those described the measurement BEFORE the veg/built orientation fix
@@ -222,15 +221,49 @@ export const SCALE_SKILL = Object.freeze({
   gapAtBlock: -0.022,
   gapAtCoarsest: -0.005,
 });
+/*
+ * CORRECTED 2026-08-05: WE WERE SCORING A FIELD THE MAP NEVER DRAWS.
+ *
+ * measure-spatial-accuracy.py evaluates the per-cell EQUILIBRIUM — the closed-form
+ * steady state, one cell at a time. The browser runs TsHeatSim, which adds lateral
+ * diffusion and relaxes for RESET_BURST steps; its steady state is that same
+ * equilibrium SMOOTHED at ~sqrt(D/k) cells, near 47 m. Rougher field, higher
+ * amplitude, lower correlation — none of it what a reader sees.
+ *
+ * Re-measured by driving the REAL solver (scripts/measure-shipped-amplitude.py):
+ *
+ *   phase   n   SD ship  SD equil  SD obs |  r ship  r equil  r veg(diffused)
+ *   day    37     1.93K     2.37K   1.32K |   0.389    0.296            0.398
+ *   night  50     0.89K     1.14K   0.64K |   0.240    0.156            0.251
+ *   all    87     1.33K     1.67K   0.93K |   0.303    0.215            0.314
+ *
+ * So the shipped map scores 0.303, not 0.215 — we were understating our own
+ * product by about 40 % by validating the wrong field.
+ *
+ * THE CLAIM IS STILL UNCHANGED, and the control is why. 0.303 sits above the old
+ * published vegetation null of 0.238, which reads like the model finally winning.
+ * It is not: smoothing lifts correlation against a coarse, noisy target for ANY
+ * field. Re-running the null through the IDENTICAL solver, with albedo and built
+ * held flat so vegetation is the only thing varying, gives 0.314. The model is
+ * behind by 0.010 overall and in both phases separately. The gain was the
+ * smoothing, not the physics — and the null below is now that like-for-like one,
+ * not a raw layer.
+ */
 export const SPATIAL = {
   /** ward-scenes scored (3 wards x near-nadir scenes, after cloud/QC masking) */
   n: 87,
-  /** correlation of the shipping model's field with ECOSTRESS, ward mean removed */
-  rModel: 0.216,
-  /** the same for vegetation fraction alone — the null that still beats the model */
-  rVegOnly: 0.238,
-  /** and for built fraction alone */
+  /** correlation of the SHIPPED field — TsHeatSim, diffused — with ECOSTRESS */
+  rModel: 0.303,
+  /** vegetation through the SAME solver: the like-for-like null, which still wins */
+  rVegOnly: 0.314,
+  /** built fraction alone, raw */
   rBuiltOnly: 0.179,
+  /**
+   * The map's within-ward spread against the observation's. 1.44 means the colour
+   * range inside a ward is about half again as wide as ECOSTRESS measures — the
+   * one defect here a reader can actually SEE, which is why it is now stated.
+   */
+  amplitudeRatio: 1.44,
   /** RMSE that remains once ward-mean bias is removed, K */
   anomalyRmseK: 1.82,
   /**
@@ -241,11 +274,12 @@ export const SPATIAL = {
    * where they could. The scale sweep earned the middle tier.
    */
   note: 'Ward-level temperature is calibrated against ECOSTRESS. The pattern WITHIN a '
-      + 'ward is not: block by block it scores r = 0.22, below the r = 0.24 of a plain '
-      + 'vegetation map, and coarsening the comparison does not close that gap at any '
-      + 'scale. At neighbourhood scale (~300-500 m) the same comparison reaches r = 0.5. '
-      + 'Read the ward figures as measured, neighbourhood contrast as indicative, and '
-      + 'the block-by-block detail as illustrative.',
+      + 'ward is not: block by block it scores r = 0.30, still below the r = 0.31 of a '
+      + 'vegetation map given the same treatment, and coarsening the comparison does not '
+      + 'close that gap at any scale. At neighbourhood scale (~300-500 m) it reaches '
+      + 'r = 0.5. The colour range inside a ward is also about 1.4x wider than the '
+      + 'satellite measures, so read contrasts as exaggerated. Ward figures are measured, '
+      + 'neighbourhood contrast is indicative, block-by-block detail is illustrative.',
 } as const;
 
 /** Formats the band for display, e.g. "± 3.5". */
@@ -322,6 +356,13 @@ export function assertAccuracyLogic(): void {
   a(SCALE_SKILL.gapAtCoarsest < 0.05 && SCALE_SKILL.gapAtBlock < 0.05,
     'the physics-minus-vegetation gap closing would be a real result and would '
     + 'change what the map may claim — re-measure, do not edit this by hand');
+  a(SPATIAL.amplitudeRatio > 1.0,
+    'the map draws MORE within-ward contrast than the satellite measures; if this '
+    + 'ever drops to 1.0 the amplitude claim in the note is wrong — re-run '
+    + 'scripts/measure-shipped-amplitude.py rather than editing the number');
+  a(SPATIAL.note.includes('wider than the satellite'),
+    'the note must state the amplitude excess: it is the one defect here a reader '
+    + 'can SEE, and dropping it leaves the colour range reading as measured');
   a(SPATIAL.note.includes('neighbourhood'),
     'the note must carry the MIDDLE tier: block-scale detail is illustrative but '
     + '~300-500 m contrast is indicative at r = 0.5. Dropping it leaves the reader '
