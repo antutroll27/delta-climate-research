@@ -37,6 +37,13 @@ aggregation. A reimplementation would drift, and the drift would look like a res
 
     python3 scripts/measure-scale-skill.py
     python3 scripts/measure-scale-skill.py --ward ballygunge
+
+The fields coarsened here are the EQUILIBRIUM ones (see measure-spatial-accuracy.py's
+header). The conclusion -- the physics-minus-vegetation gap does not close with
+scale -- is very unlikely to flip under the diffused field, because diffusion lifts
+BOTH candidates: measure-shipped-amplitude.py found the shipped model at 0.303 and
+vegetation through the same solver at 0.314, the same ordering. But it has not been
+re-run on the shipped field, and that is worth stating rather than assuming.
 """
 from __future__ import annotations
 

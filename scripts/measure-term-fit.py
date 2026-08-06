@@ -37,6 +37,12 @@ so only the statistics differ. A reimplementation would drift and the drift woul
 look like a result.
 
     python3 scripts/measure-term-fit.py
+
+The terms fitted here are the EQUILIBRIUM ones (see measure-spatial-accuracy.py's
+header). Diffusion is a linear smoothing applied to the assembled field, so a free
+recombination of smoothed terms spans the same space as smoothing a free
+recombination -- the INGREDIENTS verdict should carry over. Not re-run on the
+shipped field; stated rather than assumed.
 """
 from __future__ import annotations
 

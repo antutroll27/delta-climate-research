@@ -1,4 +1,5 @@
 {
+  "_warning": "DIAGNOSTIC ONLY -- this scores the per-cell EQUILIBRIUM, not the diffused field the browser draws. Shipped r is 0.303, not the 0.215 here; accuracy.ts mirrors data/calibration/shipped-amplitude.json. Do not reconcile accuracy.ts to this file.",
   "method": "Pearson correlation between the modelled equilibrium field and ECOSTRESS L2T LSTE v002, per ward per scene, at the sensor's native 70 m. Both fields centred on their own ward mean first, so this measures PATTERN only \u2014 ward-mean error is reported separately by measure-accuracy.py.",
   "why_null_models": "r on its own is unreadable. `built` is the trivial predictor (buildings are hot); `veg` is vegetation, sign-flipped. If the physics does not beat both, it is adding nothing spatially that a footprint map does not already say.",
   "limits": "Equilibrium, no lateral diffusion, so real advection between adjacent cells counts against the model. Near-nadir scenes only. A ward is ~21x21 cells at 70 m, so per-scene r is noisy; the aggregate is the figure.",

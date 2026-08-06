@@ -1,5 +1,25 @@
 #!/usr/bin/env python3
 """
+!! THIS DOES NOT MEASURE THE FIELD THE MAP DRAWS. READ THIS BEFORE TRUSTING IT. !!
+
+This script evaluates the per-cell EQUILIBRIUM -- the closed-form steady state of
+the energy balance, one cell at a time. The browser runs TsHeatSim, which adds a
+lateral diffusion term and relaxes for RESET_BURST steps; its steady state is that
+same equilibrium SMOOTHED at about sqrt(D/k) cells, near 47 m. The two differ
+materially, measured over the same 87 ward-scenes on 2026-08-05:
+
+                     equilibrium (here)   shipped (real solver)
+    r vs ECOSTRESS         0.215                0.303
+    spatial SD             1.67 K               1.33 K
+
+So the numbers this script writes to data/calibration/spatial-accuracy.json are
+DIAGNOSTIC -- useful for isolating terms, because the equilibrium is where the
+physics is legible. They are NOT the published figures. accuracy.ts mirrors
+`scripts/measure-shipped-amplitude.py`, which drives the real solver.
+
+If you regenerate this file and its r disagrees with accuracy.ts, that is EXPECTED
+and accuracy.ts is the correct one. Do not "fix" accuracy.ts to match.
+
 Does the heat map put the hot spots in the RIGHT PLACES?
 
     python3 scripts/measure-spatial-accuracy.py [--limit N] [--ward NAME]
