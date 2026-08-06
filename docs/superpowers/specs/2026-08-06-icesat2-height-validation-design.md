@@ -28,9 +28,12 @@ looks like.
    n=6 OSM pairs (MIN_PAIRS=8). Transect photons give ~50–150 roof-bearing buildings per
    good track — a properly powered test of a statistic we already ship.
 2. **Audit the 2.5 m fill.** Google Open Buildings writes 2.5 m where it has no confident
-   height — simultaneously the minimum and modal height in all three wards (Ballygunge
-   4.0 %, Barrackpore 6.5 %, Baruipur 10.8 %). Compare the fill cohort's ICESat-2
-   distribution against 2.5 m and quantify the understatement, if any.
+   height — simultaneously the minimum and modal height in all three wards. Measured
+   against the CURRENT shipped artefacts (2026-08-06, post-2.5D-replacement): Ballygunge
+   465/3,527 (13.2 %), Barrackpore 597/4,702 (12.7 %), Baruipur 629/4,538 (13.9 %). The
+   4.0/6.5/10.8 % figures quoted in earlier notes predate the height replacement and are
+   stale. Compare the fill cohort's ICESat-2 distribution against 2.5 m and quantify the
+   understatement, if any.
 3. **Propagate to FAR.** FAR carries 0.30 of the DC-URS exposure pillar
    (`compute-far.py`). Recompute FAR under the measured fill-cohort correction and
    report the shift — even if the shift is negligible, that negative result is worth
@@ -155,6 +158,7 @@ artefact heights for the same crossed buildings. Compare:
 |---|---|
 | `validated` | \|median bias\| < 3.2 m (one storey, the same bracket `score-heights.py` uses) and the CI excludes ±2 storeys |
 | `biased` | CI excludes zero and \|median bias\| ≥ 3.2 m — direction and size published |
+| `inconclusive` | n ≥ 30 but the CI is too wide to exclude ±2 storeys AND does not exclude zero — enough buildings, not enough signal. Published as such |
 | `underpowered` | < 30 crossed buildings pooled across tracks — the honest `score-heights.py` outcome, again |
 
 **Fill cohort (win 2):** the same comparison restricted to crossed buildings whose
