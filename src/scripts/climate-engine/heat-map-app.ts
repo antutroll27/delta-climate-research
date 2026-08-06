@@ -793,7 +793,13 @@ export function mountHeatMap(): () => void {
          at a still frame on the measured cover rather than animating slower.
          A null reading draws nothing — an invented sky is the loader's deleted
          land dust all over again. */
-      if (cloudLayer && state.live) {
+      /* NOT IN 2D. Measured on an M4 at DPR 2: with the deck the isotherm view
+         renders continuously; without it draw calls fall from 47k/s to 14k/s,
+         because nothing else there asks for a repaint. Clouds seen straight down
+         over a flat isotherm add nothing — it is a 3D atmosphere and it belongs
+         to the 3D view. */
+      if (cloudLayer) cloudLayer.group.visible = mode !== 'iso';
+      if (cloudLayer && mode !== 'iso' && state.live) {
         cloudLayer.update(
           reduceMotion ? 0 : performance.now() / 1000,
           state.live.cloud / 100, state.live.wind, state.live.windFrom ?? 0,
@@ -806,7 +812,8 @@ export function mountHeatMap(): () => void {
       /* The deck drifts when nothing else is changing, so it needs its own repaint
          reason — but only when there is wind to drift on, and never under reduced
          motion. This is the one new source of continuous repaint. */
-      const drifting = !reduceMotion && !!cloudLayer && (state.live?.wind ?? 0) > 0;
+      const drifting = !reduceMotion && !!cloudLayer && mode !== 'iso'
+        && (state.live?.wind ?? 0) > 0;
       if (growU.value < 1 || fieldDirty || drifting) { fieldDirty = false; map.triggerRepaint(); }
     },
   };
