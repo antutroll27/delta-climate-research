@@ -289,6 +289,34 @@ measured fill-cohort distribution for the 2.5 m constant (cohort-level resamplin
 per-building edits) and reports ΔFAR per ward across the existing 2.9/3.1/3.3 m storey
 bracket. Published either way — "FAR insensitive to the fill" is a publishable sentence.
 
+### 5.3a How large the selection effect actually is — measured
+
+The 5 m erosion is not a minor filter. Measured against the committed footprints
+(2026-08-07), buildings whose eroded polygon survives at all:
+
+| ward | buildings | survive 5 m erosion | share | crossed by one beam line |
+|---|---|---|---|---|
+| ballygunge | 3,527 | 995 | **28.2 %** | 4–13 |
+| barrackpore | 4,702 | 719 | **15.3 %** | 3–12 |
+| baruipur | 4,538 | 326 | **7.2 %** | 0–8, usually 0–3 |
+
+So the population this method can see is **the largest 7–28 % of each ward**, before a
+beam is even considered — and in Baruipur it is the largest one building in fourteen.
+The published wording must therefore carry two qualifiers, not one: heights are validated
+in distribution **along satellite transects**, and **among buildings large enough to
+survive a 5 m erosion**. A reader who takes "validated" to mean "our heights are right"
+would be wrong in a way this table makes concrete.
+
+The erosion cannot simply be relaxed to widen the sample: 5 m is the ATL03 geolocation
+error, and shrinking it admits photons that may belong to the neighbouring building —
+trading a disclosed selection effect for an undisclosed attribution error, which is the
+worse of the two.
+
+**Consequence for the n ≥ 30 bar.** A single beam line yields roughly 5–13 buildings, and
+the distinct-line count per ward is small. Pooling all three wards plausibly lands near
+the bar rather than comfortably past it, so `underpowered` remains a live outcome and
+Baruipur should not be expected to contribute materially.
+
 ### 5.4 Honesty rules carried over from the rest of the project
 
 - The artefact records what was **excluded** and why: buildings too small to survive
