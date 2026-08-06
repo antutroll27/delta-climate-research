@@ -508,6 +508,41 @@ The remaining quarter — 1:1 matches rising 50–140 % — has no confirmed mec
 the Gate A breach must NOT be waved through as "expected" on the strength of the merge
 story alone. Resolving it is the precondition for shipping these heights.
 
+#### The precondition, discharged (2026-08-05)
+
+The heights shipped before this was resolved, which should not have happened. Settled
+now, with two things that did not exist when the anomaly was written down: per-building
+**provenance** and per-building **coordinates**.
+
+**The "1:1 matches" were never 1:1.** The paragraph above records its own answer and
+does not act on it: for the largest case, Microsoft's footprint is **143 m² against
+Overture's 1,397 m²**. A tenfold area difference is not a one-to-one correspondence —
+it is a fragment of a building matched to the whole of it. Whatever pairing rule
+produced that label was matching by proximity, not by extent. Sampling a 143 m² sliver
+of a tower returns the height of whichever part the sliver covers, typically a podium
+or a setback edge; sampling the whole 1,397 m² footprint returns the tower. So the
+remaining quarter is the SAME fragmentation mechanism already named one sentence
+earlier, not a separate unexplained one.
+
+**And the tall tail is our best geometry, not our worst** — which inverts the worry
+entirely. Of the 38 Ballygunge buildings over 30 m, **35 (92.1 %) are hand-traced
+OpenStreetMap footprints**, against 63.9 % ward-wide. All three of the "unexplained"
+cases are OSM polygons. Tall buildings are exactly what human mappers bother to draw,
+so the upper tail sits on the most reliable footprints in the set — the very opposite
+of the direction the Gate A breach was feared to indicate.
+
+**What this does NOT do is validate the heights.** Of the twelve tallest, exactly one
+carries an independent height: Orbit Sky Garden, OSM `building:levels` 18 ≈ 55.8 m
+against our 54.1 m — **agreement to 3 %**, and it is the same single corroboration
+recorded before. The other eleven have no ground truth of any kind. `height-method.json`
+still reads `underpowered: 6 matched pairs < 8`, and that is unchanged.
+
+So: **the Gate A breach is explained and the precondition is discharged. The heights
+remain unvalidated**, which is a different limitation, already stated, and one that
+only finer ground truth fixes — a night UAV flight or the 360 street survey. Do not
+read this section as evidence the numbers are right; read it as evidence the RISE was
+not evidence they are wrong.
+
 
 ## The ward was drawn MIRRORED, and it took four attempts to see (2026-08-05)
 
