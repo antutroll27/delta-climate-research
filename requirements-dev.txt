@@ -8,3 +8,14 @@ types-rasterio==1.5.0.20260724
 # them and every Affine — src.transform, target_grid()'s first element — decays
 # to Any. The stub package restores it; tf.a/tf.c/tf.e become checked floats.
 types-affine==0.1.0
+
+# h5py — NO STUBS EXIST, and that decision is recorded here rather than silenced
+# in mypy.ini, per the "NO ignore_missing_imports, anywhere" note there. h5py
+# 3.16 ships no py.typed marker and PyPI has no types-h5py, so
+# scripts/fetch-icesat2.py carries one unavoidable `import-untyped` error on its
+# `import h5py`. It is NOT listed as a package above: this file is the
+# type-checking toolchain, and h5py is a runtime dependency of the ICESat-2
+# fetch — installed with `python3 -m pip install h5py`, like rasterio, shapely
+# and scipy. The blast radius is contained: the import is local to `subset()`,
+# and every value read out of the file is immediately converted to a numpy
+# array or an int, so no HDF5 `Any` escapes into the analysis.
