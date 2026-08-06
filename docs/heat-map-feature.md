@@ -543,6 +543,181 @@ only finer ground truth fixes — a night UAV flight or the 360 street survey. D
 read this section as evidence the numbers are right; read it as evidence the RISE was
 not evidence they are wrong.
 
+### ICESat-2: the heights validate at the median and understate at the shipped percentile (2026-08-07)
+
+The heights above are no longer unvalidated. ICESat-2 ATL03 photon transects — a
+decimetre-class laser altimeter, free, already flown over Kolkata since 2018 — give the
+first independent height measurement this project has ever had. The verdicts and their
+thresholds were **pre-registered** in
+[`superpowers/specs/2026-08-06-icesat2-height-validation-design.md`](superpowers/specs/2026-08-06-icesat2-height-validation-design.md)
+§5.3 before a granule was downloaded. The pre-registered rule keys on the **median**, and
+on the median the answer is `validated`. Read the row below it before quoting that word.
+
+| statistic | ICESat-2 − ours | 95 % CI | what it says |
+|---|---|---|---|
+| **median** — the pre-registered rule | **+1.22 m** | −0.97 … +4.54 | inside one storey, CI inside ±2 storeys → `validated` |
+| **p65** — the statistic `compute-heights.py` actually ships | **+3.87 m** | **+0.53 … +5.30** | **excludes zero, and sits above one storey** |
+| p90 | +7.34 m | −12.66 … +7.94 | uninformative at this n |
+
+**The tension is real, not a rounding artefact.** The shipped heights track the laser
+through the middle of the distribution and fall behind it in the upper-middle. Since p65
+is the percentile the product publishes, **the shipped heights most likely understate by
+about a storey**. The omnibus paired permutation test returns `perm_p = 0.0627` (KS
+D = 0.2667) — recorded in the artefact, gating nothing, because it was not part of the
+pre-registered rule.
+
+**n = 30 buildings, exactly the pre-registered minimum and no more**, pooled from 31
+overpasses that re-fly **2** distinct reference ground tracks. **27 of the 30 are
+Ballygunge**; Barrackpore contributed 1 and Baruipur 2, as spec §5.3a predicted. Photons
+are pooled per building across passes, so `n` counts distinct buildings — a repeat pass
+adds photons, never a duplicate row.
+
+**What this does NOT claim, and no sample size would earn:**
+
+- **Not per building.** ATL03 horizontal geolocation is ~3–5 m against 10–20 m Kolkata
+  buildings, so any photon may have landed on the neighbour. Per-building estimates exist
+  only to build the distribution and none is published.
+- **Not an accuracy improvement for the heat field.** `heat-map-model.ts` has no
+  building-height term at all — `built` is an area fraction. This cannot move `r`, the
+  ±3.0 K band, or the amplitude ratio, and must never be quoted as if it had.
+- **Not a survey of the ward.** It is a survey of buildings a satellite ground track
+  happened to cross, among buildings large enough to survive a 5 m erosion.
+
+**How large that last qualifier is, measured.** The 5 m footprint erosion (5 m *is* the
+geolocation error) admits only:
+
+| ward | buildings | survive 5 m erosion | share |
+|---|---|---|---|
+| ballygunge | 3,527 | 995 | **28.2 %** |
+| barrackpore | 4,702 | 719 | **15.3 %** |
+| baruipur | 4,538 | 326 | **7.2 %** |
+
+So the visible population is **the largest 7–28 % of each ward**, before a beam is even
+considered. The erosion cannot be relaxed to widen it: shrinking it admits photons that
+may belong to the next building, which trades a **disclosed selection effect for an
+undisclosed attribution error** — the worse of the two.
+
+#### Four errors caught on the way, each of which would have published a wrong number
+
+**1 · The "closest track at 79 m" was a bounding box, not a laser.** The spec opened by
+naming one granule 79 m from Ballygunge centre and staging the whole workstream on it.
+That distance came from the granule's CMR bounding **polygon**, which spans the entire
+six-beam swath; the beams are elsewhere. That granule's nearest strong beam is **6.27 km**
+away and returns **zero** photons in the box. Compounding it: empty `geolocation` segments
+carry placeholder coordinates on a shared line **~11 km** off, so they must be dropped
+before any distance is computed or the minimum is meaningless.
+
+**2 · The geoid gate was asking a surface model to be a ground model.** The known-answer
+check originally required the photon ground line within ±5 m of `<ward>-terrain.json`'s
+median. It failed **15 of 15** usable passes, always the same direction — photon ground
+2.96–6.33 m against DEM medians 10.3–11.6 m — repeatable to ≤1.5 m across six years and
+all three wards. That is a systematic offset, and the artefact's own `note` says why:
+*"smoothed **surface** model … **NOT surveyed ground**"*. No tolerance makes that
+comparison meaningful, so the fix was a different test, not a wider one: our hardcoded
+EGM2008 constant is now checked against **ATL03's own `geophys_corr/geoid`** over the same
+photons (agreement ≤ **15 mm** across all 31 subsets, against a 0.5 m tolerance), plus a
+plausible-band check that the ground line lands in [−2, +25] m orthometric. A skipped
+conversion lands near −52 m, a sign error near +61 m; both are caught by a wide margin.
+
+**3 · The fill-cohort statistic could not return zero.** Win 2 was to audit Google's 2.5 m
+fill (13 % of buildings in every ward) by taking the crossed fill buildings' ICESat-2
+median minus 2.5 m. That statistic is invalid **in the direction that flatters the
+finding**: the roof band's 2.0 m floor deletes photons below 2 m, and the fill cohort is
+by definition made of buildings Google could not measure — disproportionately short ones.
+The one crossed fill building at the time had **all 4 of its roof photons below 2 m** —
+ICESat-2's evidence that the fill is approximately right — and was silently deleted
+from the statistic designed to test the fill. Amended to a **proportion**: of the crossed
+fill buildings, what fraction show roof evidence above 2.5 m, so a building whose photons
+all sit low counts as evidence *for* the fill instead of vanishing. The floor did **not**
+move; lowering it to rescue the cohort would be tuning a threshold to get an answer.
+Under the amended definition the cohort is **n = 5** — the old statistic had deleted 4 of
+those 5 — still **`underpowered`** against its bar of 10. **Wins 2 and 3 therefore did not
+land**, and `compute-far.py --icesat2-correction` reports `no_correction_computable` with
+no pool invented and the main cohort not substituted for it. The floor's effect on the
+main comparison was measured rather than argued: re-running at 1.0 / 0.5 / 0.0 m moves the
+median bias 1.22 → 1.17 m and p65 3.87 → 3.41 m, so the published bias is not an artefact
+of the floor.
+
+**4 · "Coverage is capped by three beam lines" was wrong, and I asserted it confidently.**
+The spec argued repeat passes re-fly one ground line, stacking photons on the same
+buildings without sampling new ones — and I used that to predict `underpowered` at better
+than even odds. The completed sweep refutes it. Closest approach across repeat passes of a
+**single** track:
+
+| ward / track | passes | closest approach, min → max | spread |
+|---|---|---|---|
+| ballygunge / 0416 | 11 | 125.7 → 851.8 m | **726 m** |
+| baruipur / 0744 | 9 | 199.7 → 658.5 m | 459 m |
+| barrackpore / 0744 | 6 | 649.6 → 1004.9 m | 355 m |
+
+A 726 m spread across a 1,400 m ward is not pointing jitter: the beams genuinely wander
+across-track between cycles, partly because the periodic yaw flip changes which beam of a
+pair — and which pair, ~3.3 km apart — is nearest. Ballygunge's 12 passes crossed **50
+distinct buildings** against the 4–13 a fixed line predicts, and passes turned up 663 m
+from Baruipur centre on RGT 0416, a track the coverage table places 5 km away. **This
+effect is the only reason n reached 30.** Consequence for anyone reading
+`icesat2-coverage.json`: it describes one representative granule per track, not that
+track's envelope across cycles. It is a guide to which tracks are worth probing, never a
+ceiling on what they can sample.
+
+#### A statistical trap worth recording on its own
+
+The omnibus check was originally scipy's two-sample KS test. Our two samples are the same
+buildings measured twice — **paired and strongly correlated** — which drags both ECDFs
+together and collapses the statistic. Measured under H₀ at n = 60, a nominal 5 % test
+rejected **0 times in 2,000 draws**, and its power against a half-storey bias was 0.06. It
+could not reject anything, so it would have returned a large comfortable p-value almost
+regardless of the truth, and that would have been published as *"the omnibus check found
+no significant difference"* — a broken null handing the model a free pass. Replaced with a
+**paired permutation test** that randomises each pair's assignment over 10,000 draws;
+`perm_p = 0.0627`, with the observed KS D kept as a descriptive number.
+
+The same class of defect sat in the ground line: a single-pass p10 quantile sits ~1.28× the
+local photon spread **below** true ground, measured at **−1.19 m** on a 1 m spread, which
+inflates every height-above-ground and cannot be seen by a bootstrap that resamples
+buildings. The shipped line is two-pass (p10, then the median of candidates within ±1.5 m,
+to convergence): **−1.19 → −0.49 → +0.05 m**. The residual error is *positive*, i.e.
+heights come out slightly short — the conservative direction for a validation claim.
+
+#### The free fourth win, arriving inverted
+
+ICESat-2 ground photons were expected to validate our ~30 m relief surface. They did, in
+the unflattering direction: **the shipped relief sits +6.55 m ABOVE decimetre-class laser
+ground**, consistent across both independent ground tracks (**6.65 m** on RGT 0416, **6.45
+m** on 0744, from 31 passes). It is a DSM by its own admission, and over the dense Ganges
+delta a smoothed SRTM-derived surface sits metres above true ground on vegetation and
+rooftops. This changes **nothing** in the model — `terrain.json` is explicitly "NOT used by
+the simulation" — and **nothing** in the height comparison, whose ground line comes from
+the photons themselves and never from the DEM. It is recorded because it is a real
+measurement about a shipped artefact, and because it is the number to hand the LiDAR
+procurement case.
+
+#### The pipeline, and where to look
+
+CMR granule search → **ranged-read prefilter** → subset → two-pass ground line →
+5 m-eroded roof assignment (roof band [2, 120] m, ≥ 5 roof photons per building) → p75 per
+crossed building → distributional comparison. The prefilter is the reason this was
+affordable: ATL03 granules here are **285 MB to 1.82 GB**, and the same `decide()` function
+run over HTTP range requests reaches the same verdict on **~30 MB and ~55 s** per granule.
+**118 ward-granule evaluations were probed; 31 survived and were downloaded**, subset to
+~200 KB each and committed. Nothing was relaxed to reach the bar — the granule that missed
+the 100-confident-photon minimum by four photons stayed rejected. The committed subsets
+make every rerun **fully offline**: no token, no network, no granule.
+
+- Spec, with its dated in-place corrections: [`superpowers/specs/2026-08-06-icesat2-height-validation-design.md`](superpowers/specs/2026-08-06-icesat2-height-validation-design.md)
+- Scripts: `scripts/_icesat2.py` (geometry + statistics, self-testing), `scripts/fetch-icesat2.py`
+  (the only network script; `--prefilter` for the ranged-read sweep),
+  `scripts/measure-height-accuracy.py` (offline, produces the verdict),
+  `scripts/icesat2-coverage.py`, `scripts/diagnose-icesat2-transect.py`
+- Artefacts: `data/calibration/icesat2-heights.json` (verdict, exclusions, terrain, floor
+  sensitivity), `data/calibration/icesat2-coverage.json`,
+  `data/calibration/icesat2-prefilter.json`, `data/calibration/far-icesat2-sensitivity.json`,
+  and the 31 committed subsets under `data/calibration/icesat2/`
+- Published wording and its guards: the `HEIGHTS` block in
+  `src/scripts/climate-engine/accuracy.ts` — each clause of the user-facing note has an
+  assertion behind it, including one that fires if the p65 interval excludes zero and the
+  note fails to say so.
+
 
 ## The ward was drawn MIRRORED, and it took four attempts to see (2026-08-05)
 
