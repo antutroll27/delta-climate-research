@@ -254,25 +254,39 @@ Compound-route case, CN 72052100 Column B — the four rows this fix rewrites:
 
 ## Re-sync path
 
+Two phases. Phase 1 happens now, in scratch, and commits nothing to either repo.
+Phase 2 happens when a human applies the patch.
+
 ```
+PHASE 1 — scratch tree (this work)
+──────────────────────────────────────────────────────────
+1. copy build-fa-package.py → scratch, apply the change
+2. fetch workbook → scratch  (sha verified 2026-08-06)
+3. python3 scratch/scripts/build-fa-package.py <xlsx>
+     → scratch/golden/rule-packages/eu-cbam-2026-free-allocation.json
+4. migration gate vs CBM's current golden — no value moved?
+5. re-measure coverage through the live engine
+6. deliver: edited script + diff + evidence
+
+PHASE 2 — CBM, then Angad (human applies)
+──────────────────────────────────────────────────────────
 CBM                                            Angad
-─────────────────────────────────────────      ──────────────────────────
 0. baseline: npm test, npm run typecheck
-1. edit scripts/build-fa-package.py
-2. fetch workbook → temp path
-3. python3 scripts/build-fa-package.py <xlsx>
+1. apply the patch to scripts/build-fa-package.py
+2. python3 scripts/build-fa-package.py <xlsx>
      → golden/rule-packages/eu-cbam-2026-free-allocation.json
-4. migration gate — no value moved? ──────────┐
-5. npx tsx scripts/build-estimator-pack.mts   │
-     → CBM/public/estimator-pack.json         │
-6. npm test + typecheck                       │
-7. commit                                     │
-                                              └─→ 8.  copy pack in
-                                                  9.  cbam-sync-check.mjs --update
-                                                  10. npm run verify + playwright
-                                                  11. re-measure coverage
-                                                  12. commit
+3. npx tsx scripts/build-estimator-pack.mts
+     → CBM/public/estimator-pack.json
+4. npm test + typecheck
+5. commit                                      │
+                                               └─→ 6. copy pack in
+                                                   7. cbam-sync-check.mjs --update
+                                                   8. npm run verify + playwright
+                                                   9. confirm coverage 385 → 547
+                                                  10. commit
 ```
+
+Step 9 is where the simulation becomes a measurement.
 
 ### The workbook
 
@@ -290,16 +304,55 @@ workbook is a new rule-package version, not an edit.
 `git revert` in either repo independently. The golden package and both copies of
 the browser pack are committed artefacts.
 
-## Open items for implementation
+## How the change reaches CBM
 
-Logistics, not design. To be settled before step 1.
+**Decided: patch-first. No file in either repo is edited during this work.**
 
-1. **Branch.** CBM currently sits on `docs/cbam-ui-astro` with a clean working
-   tree. Whether to branch from there, from CBM's main branch, or to let a human
-   handle branching, is unresolved.
-2. **Write access.** CBM is outside the agent's declared working directories, so
-   writes there will prompt for permission. The alternative is staging the change
-   as a patch file for a human to apply.
+All development happens in a scratch directory. `build-fa-package.py` is copied
+there, edited, and run there — `OUT` resolves relative to the script, so a
+regenerated free-allocation package lands in the scratch tree and neither repo is
+touched. The deliverable is the edited script plus the evidence below. A human
+drops it into CBM and runs the normal regeneration when ready.
+
+This was chosen over editing CBM directly, and over editing Angad's pack in place.
+The second option is specifically unsafe, for a reason worth recording:
+
+> `UPSTREAM.json` records only `packGeneratedAt` — a **timestamp**, not a content
+> hash. `cbam-sync-check` compares `pack.generatedAt` against it. The 11 engine
+> files each carry a real sha256; the 7.18 MB pack carries a date string. A content
+> edit to the pack that leaves `generatedAt` alone passes **both** the local and
+> the upstream check. The tripwire written to catch exactly this drift cannot see
+> it.
+
+See "Related finding" below.
+
+### What can and cannot be proven in the scratch tree
+
+| | |
+| --- | --- |
+| Can | Regenerate the free-allocation golden package from the pinned workbook |
+| Can | Migration gate: diff regenerated vs CBM's current golden, prove no value moved |
+| Can | Re-measure coverage through the live engine using the existing harness |
+| **Cannot** | Regenerate the **browser pack** — Angad has no `golden/` directory, and `build-estimator-pack.mts` needs both the free-allocation *and* default-values golden packages |
+
+So the final 385 → 547 figure remains a simulation until someone runs
+`build-estimator-pack.mts` inside CBM. The simulation drives the real engine over
+a pack rewritten by the real `split_route`, so it is a strong prediction — but it
+is a prediction, and the spec should not pretend otherwise.
+
+### Still open
+
+**Branch.** CBM sits on `docs/cbam-ui-astro` with a clean working tree. Which
+branch should receive a regulatory data change is a human decision, deferred to
+whoever applies the patch.
+
+## Related finding, out of scope
+
+The pack integrity guard is timestamp-based. `cbam-sync-check.mjs` should record a
+sha256 of `public/cbam/estimator-pack.json` in `UPSTREAM.json` alongside
+`packGeneratedAt`, and compare content rather than a date.
+
+Small fix, real hole, independent of this work. Logged so it is not lost.
 
 ## What is explicitly not changing
 
