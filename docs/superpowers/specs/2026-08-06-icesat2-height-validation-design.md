@@ -157,24 +157,44 @@ the co-founder's email about the basemap work.
   authoritative calculator, cited in the constant's comment). The geoid varies by
   millimetres across a 1.4 km ward; a grid library (pyproj + EGM2008 grid download) is a
   dependency buying nothing.
-- **Known-answer check, unbypassable:** the median of ground-photon orthometric heights
-  must land within **±5 m** of the ward DEM's median elevation, AND the same quantity
-  computed *without* the geoid constant must miss by **40–70 m**. A test that also fails
-  on the un-converted data cannot pass by accident.
+- **Known-answer check, unbypassable — two direct tests, no terrain involved:**
 
-  **Why ±5 m and not the ±3 m this spec first said.** The tolerance must exceed the
-  combined uncertainty of the *reference*, or the gate throws on good data. Measured
-  budget, from `public/heat-map/data/<ward>-terrain.json`: the DEM disagrees with
-  Copernicus GLO-30 by **1.5–2.1 m RMSE** (its own recorded `crossCheck`); a transect
-  samples one line across a ward whose smoothed relief spans **4.9–7.7 m**, so a track
-  crossing low ground sits legitimately ~1–2 m below the ward median; ground-line
-  extraction adds ~0.5 m. In quadrature that is ≈2.6 m, so a ±3 m gate is barely one
-  sigma and would reject sound tracks. ±5 m is ~1.9 sigma and still catches the failure
-  it exists for — a skipped geoid conversion — by a factor of eleven.
+  **G1a · the constant is right.** ATL03 carries its own EGM2008 undulation in
+  `geophys_corr/geoid`. Our `GEOID_N_M[ward]` must match the granule's own value over the
+  ward to **≤0.5 m**. This is exact, independent of any elevation model, and tests the
+  constant directly rather than through a proxy. Measured 2026-08-06: ATL03 reads
+  **−56.947** over Ballygunge against our hardcoded **−56.95**, and GeographicLib returns
+  −56.9503 — agreement to 1 cm.
 
-  The upper bound moves from 60 to 70 m for the same reason: N is near −55 m, and the
-  ±5 m ground tolerance puts a legitimate unconverted miss anywhere in 50–60 m, which
-  a 40–60 window clips.
+  **G1b · the conversion was actually applied.** The ground-line median must fall inside
+  **[−2 m, +25 m]** orthometric, the plausible band for deltaic Kolkata. A skipped
+  conversion lands near −52 m; a sign error near +61 m; a ground line that has climbed
+  onto rooftops exceeds +25 m. All three are caught by a wide margin.
+
+  **Why the ward DEM is NOT the reference, though this spec first made it one.** The
+  original gate required the ground line within ±5 m of `<ward>-terrain.json`'s median.
+  It failed on **15 of 15** usable passes, always in the same direction: photon ground at
+  2.96–6.33 m against DEM medians of 10.3–11.6 m, repeatable to ≤1.5 m across six years
+  of independent overpasses and all three wards. That is a systematic offset, not noise —
+  and the artefact itself says why, in its own `note` field:
+
+  > "smoothed **surface** model, indicative broad-scale form — **NOT surveyed ground**"
+
+  It is a DSM. Over the dense Ganges delta an SRTM-derived surface sits metres above true
+  ground on vegetation and rooftops, so requiring photon *ground* to match it at ±5 m was
+  asking a surface model to be a ground model. No tolerance makes that comparison
+  meaningful, which is why the fix is a different test rather than a wider one. (ATL03's
+  in-file `dem_h` agrees with our DEM at 9.72 m, but it is GMTED2010 — also SRTM-derived,
+  so it corroborates the DSM family, not the ground.)
+
+  **The 6 m offset is not discarded — it is the fourth win, arriving early and inverted.**
+  §1 anticipated ICESat-2 ground photons as a free terrain validation. They delivered one:
+  the shipped relief surface sits **~5–7 m above** decimetre-class laser ground across all
+  three wards. That is recorded as a measurement in the artefact, not swept up as gate
+  noise. It changes nothing in the heat model (`terrain.json` is explicitly "NOT used by
+  the simulation") and nothing in the height comparison (§5.2's ground line comes from the
+  photons themselves, never from the DEM) — but it is a real, publishable finding about
+  a shipped artefact's provenance.
 
 ### 5.2 Ground/roof separation — our classifier, kept simple and inspectable
 
