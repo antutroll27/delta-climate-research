@@ -1,0 +1,33 @@
+{
+  "n_ward_pairs": 1,
+  "min_shared_cells": 110,
+  "bins": [
+    {
+      "gap_lo_h": 0.0,
+      "gap_hi_h": 0.05,
+      "n": 1,
+      "reliability_r": 0.536,
+      "rmse_between_k": 0.549,
+      "obs_sd_k": 0.564
+    }
+  ],
+  "reliability_under_30min": 0.536,
+  "ceiling_r": 0.7321,
+  "note": "Reliability is corr(obs_A, obs_B) for two ECOSTRESS granules of the same ward within 30 minutes, ward mean removed over the cells BOTH see. It bounds any model's achievable r at sqrt(reliability). Pairs seconds apart measure instrument noise; wider gaps also contain real surface evolution and so under-state reliability.",
+  "pairs": [
+    {
+      "gap_h": 0.0144,
+      "ward": "barrackpore",
+      "tile": "45QXF",
+      "same_orbit": true,
+      "scenes": "004/005",
+      "utc": "2026-02-11T23:02:45",
+      "night": true,
+      "cells": 344,
+      "r": 0.5360397157348341,
+      "sd_a_k": 0.5177169240956975,
+      "sd_b_k": 0.610471476053901,
+      "rmse_k": 0.5494306284177882
+    }
+  ]
+}
