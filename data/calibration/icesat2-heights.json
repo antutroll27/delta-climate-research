@@ -1,0 +1,79 @@
+{
+  "summary": {
+    "n_buildings": 9,
+    "n_tracks": 1,
+    "min_buildings": 30,
+    "verdict": "underpowered"
+  },
+  "fill": {
+    "n": 0,
+    "min_n": 10,
+    "verdict": "underpowered"
+  },
+  "per_ward": {
+    "ballygunge": {
+      "n_passes": 1,
+      "n_crossed": 10,
+      "n_buildings": 9,
+      "n_below_min_roof_ph": 1,
+      "n_fill": 0
+    }
+  },
+  "per_track": [
+    {
+      "file": "ballygunge-20240714-0416.json",
+      "ward": "ballygunge",
+      "date": "20240714",
+      "rgt": "0416",
+      "beams": [
+        "gt3l"
+      ],
+      "closest_m": 437.9,
+      "dem_minus_laser_ground_m": 6.1,
+      "subset_counts": {
+        "photons_read": 24187,
+        "conf_land": 12646,
+        "in_box": 12646,
+        "ground_candidates": 5078,
+        "ground_nan": 6
+      },
+      "counts": {
+        "photons_in_subset": 12646,
+        "ground_candidates": 5078,
+        "photons_outside_ground_span": 6,
+        "photons_in_eroded_footprints": 1640,
+        "roof_photons_outside_ground_span": 0,
+        "photons_in_roof_band": 1425,
+        "buildings_in_ward": 3527,
+        "buildings_survived_erosion": 995,
+        "buildings_crossed": 10
+      }
+    }
+  ],
+  "excluded": {
+    "buildings_in_ward": {
+      "ballygunge": 3527
+    },
+    "buildings_survived_erosion": {
+      "ballygunge": 995
+    },
+    "buildings_crossed_pooled": 10,
+    "buildings_below_min_roof_ph": 1,
+    "min_roof_photons": 5,
+    "erosion_m": 5.0,
+    "roof_band_m": [
+      2.0,
+      120.0
+    ],
+    "photons_outside_ground_span": 6,
+    "roof_photons_outside_ground_span": 0,
+    "subsets_rejected": [],
+    "note": "Buildings smaller than the 5 m erosion never enter, nor do crossed buildings under 5 roof photons; photons outside the ground line's populated span are dropped rather than measured against a flat extrapolation. The crossed set therefore over-represents LARGE buildings \u2014 published wording must say 'along satellite transects', not 'all buildings'."
+  },
+  "terrain": {
+    "dem_minus_laser_ground_m": 6.1,
+    "n_tracks": 1,
+    "note": "Measured, not gated (spec \u00a75.1): the shipped relief surface sits this far ABOVE decimetre-class laser ground. It is a smoothed DSM by its own note, and it is used by nothing in the heat model; the height comparison takes its ground line from the photons, never from the DEM."
+  },
+  "note": "Distributional comparison only \u2014 ATL03 geolocation (~3-5 m) forbids per-building attribution, so the statistics compare the two distributions' quantiles and no per-building height is published. Verdicts and thresholds were pre-registered in docs/superpowers/specs/2026-08-06-icesat2-height-validation-design.md \u00a75.3 before any of this was run. Photons are pooled per building across repeat passes; n_buildings counts distinct buildings."
+}
