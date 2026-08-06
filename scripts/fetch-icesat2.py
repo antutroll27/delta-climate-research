@@ -15,26 +15,36 @@ Granules (~168 MB) cache at ~/.cache/delta-climate/icesat2/ and NEVER enter the
 repo. The committed artefact is the ~200 KB subset per (ward, granule):
 
     data/calibration/icesat2/<ward>-<yyyymmdd>-<rgt>.json
-      ward, granule, rgt, date, sc_orient, geoidNM, geoidSource, demMedianM,
+      ward, granule, rgt, date, sc_orient, geoidNM, granuleGeoidNM, geoidSource,
+      demMedianM, groundMedianM, demOffsetM,
       counts: {photons_read, conf_land, in_box, ground_candidates, ground_nan},
       trackMinDistM,                    # closest in-box photon to the ward centre
       beams: ["gt1r", ...],
       ph: [[lon, lat, h_ellip, h_ortho, conf, beam_i], ...]
 
 GEOID. ATL03 h_ph is ellipsoidal (WGS84). Everything downstream is orthometric.
-h_ortho = h_ellip - N with N below. The two-sided check_geoid() gate REFUSES to
-write a subset whose ground disagrees with the ward DEM — so a wrong constant, a
-skipped conversion, or broken ground extraction all fail loudly here, not
-quietly in the statistics. It raises, it is not caught, and it stops the run:
-spec §5.1 calls the gate unbypassable, and a sweep that skipped past it would
-publish exactly the ~50 m offset the gate exists to catch.
+h_ortho = h_ellip - N with N below. The check_geoid() gate REFUSES to write a
+subset unless BOTH of the spec's §5.1 tests hold: G1a, our hardcoded N matches
+the granule's OWN `geophys_corr/geoid` over the same photons to <=0.5 m; and
+G1b, the resulting ground line lands inside the plausible [-2, +25] m
+orthometric band. It raises, it is not caught, and it stops the run: spec §5.1
+calls the gate unbypassable, and a sweep that skipped past it would publish
+exactly the ~50 m offset the gate exists to catch.
+
+THE DEM IS A MEASUREMENT NOW, NOT THE REFERENCE. The gate used to require the
+ground line within ±5 m of `<ward>-terrain.json`'s median; that failed on 15 of
+15 usable passes because the artefact is a smoothed SURFACE model ("NOT surveyed
+ground", in its own note) sitting metres above true ground over this delta. The
+offset is real and is recorded per subset as `demOffsetM` (= demMedianM -
+groundMedianM), spec §5.1's terrain-validation win, instead of being spent as
+gate noise.
 
 THE GATE MUST NEVER SEE A NaN. `_icesat2.ground_line` returns NaN outside its
 populated span rather than extrapolating flat, and every comparison against NaN
-is False — so `check_geoid(nan, ...)` passes BOTH sides and the unbypassable
-gate becomes a silent no-op. The median is therefore taken over the finite
-values only, an all-NaN line is rejected before the gate, and the NaN count is
-recorded in `counts.ground_nan` because spec §5.4 forbids silent exclusions.
+is False. `check_geoid` is written to fail closed on NaN, but the median is
+still taken over the finite values only, an all-NaN line is rejected before the
+gate, and the NaN count is recorded in `counts.ground_nan` because spec §5.4
+forbids silent exclusions.
 
 STRONG BEAMS ONLY, BY THE FILE'S OWN LABEL. ATLAS fires 3 strong/weak pairs;
 which side is strong flips with spacecraft orientation (sc_orient 0=backward→
@@ -123,6 +133,11 @@ MIN_GROUND_PH = 50
 #: same trap `_ecostress.MIN_TIF_BYTES` exists for. ATL03 granules are ~168 MB.
 MIN_H5_BYTES = 1_000_000
 
+#: An EGM2008 undulation outside this range is a fill value, not a geoid — ATL03
+#: writes 3.4028235e+38 where the correction is undefined, and the real global
+#: range of the field is -107 to +86 m.
+GEOID_VALID_M = (-120.0, 100.0)
+
 STRONG = {0: ("gt1l", "gt2l", "gt3l"), 1: ("gt1r", "gt2r", "gt3r")}
 
 
@@ -177,9 +192,14 @@ def download(url: str, name: str, tok: str) -> str:
     return dest
 
 
-def beam_slice(f: Any, beam: str, south: float, north: float) -> tuple[int, int]:
-    """Photon index range for a latitude band, via the 20 m segment index —
-    reads two small per-segment arrays instead of hundreds of thousands of
+def beam_segments(f: Any, beam: str, south: float,
+                  north: float) -> tuple[Any, Any]:
+    """The 20 m segments that HOLD PHOTONS inside a latitude band, and the
+    per-segment photon counts. Returns (segment indices, segment_ph_cnt) — the
+    addressing every other per-segment read in this script goes through, so the
+    photon slice and the geoid correction always describe the same segments.
+
+    Reads two small per-segment arrays instead of hundreds of thousands of
     photons.
 
     ONLY SEGMENTS THAT HOLD PHOTONS ARE SELECTED, and that is a correctness fix,
@@ -195,14 +215,12 @@ def beam_slice(f: Any, beam: str, south: float, north: float) -> tuple[int, int]
     times. The failure is silent in both directions — a wider range (harmless,
     the lon/lat mask drops the extra) or a truncated one (real photons lost).
     Filtering on `segment_ph_cnt > 0` leaves a strictly monotonic sequence of
-    genuine photon latitudes; the returned range then held ONLY in-band photons
+    genuine photon latitudes; the resulting slice then held ONLY in-band photons
     on the same granule (in-band fraction 1.0000).
 
-    The arithmetic is `[0] + cumsum(segment_ph_cnt)`, confirmed exactly on that
-    granule: `sum(segment_ph_cnt)` equals the photon count on all six beams, and
-    `ph_index_beg` equals `cumsum + 1` on every non-empty segment. The equality
-    is re-asserted per beam rather than assumed, because an off-by-one here
-    pairs latitudes with the wrong heights and nothing downstream can see it.
+    `sum(segment_ph_cnt)` must equal the beam's photon count, and that is
+    re-asserted per beam rather than assumed: an off-by-one here pairs latitudes
+    with the wrong heights and nothing downstream can see it.
     """
     geo = f[beam]["geolocation"]
     cnt = geo["segment_ph_cnt"][:].astype(np.int64)
@@ -215,10 +233,41 @@ def beam_slice(f: Any, beam: str, south: float, north: float) -> tuple[int, int]
             "photons — the segment index no longer addresses the photon arrays, "
             "and every latitude would be paired with the wrong height")
     sel = np.where((cnt > 0) & (seg_lat >= south) & (seg_lat <= north))[0]
+    return sel, cnt
+
+
+def beam_slice(sel: Any, cnt: Any) -> tuple[int, int]:
+    """Photon index range spanned by the selected segments, empty as (0, 0).
+
+    The arithmetic is `[0] + cumsum(segment_ph_cnt)`, confirmed exactly on
+    ATL03_20220510191458_07441501_007_01: `ph_index_beg` equals `cumsum + 1` on
+    every non-empty segment of all six beams."""
     if sel.size == 0:
         return 0, 0
     starts = np.concatenate([[0], np.cumsum(cnt)])
     return int(starts[sel[0]]), int(starts[sel[-1] + 1])
+
+
+def beam_geoid(f: Any, beam: str, sel: Any) -> Any:
+    """The granule's OWN EGM2008 undulation over the selected segments, metres.
+
+    ATL03 carries `geophys_corr/geoid` per 20 m segment, on the same segment
+    index as `geolocation/` — asserted here, because an index mismatch would
+    compare our constant against a geoid from somewhere else on the orbit and
+    the G1a test would be meaningless. Fill values (3.4e+38 where the correction
+    is undefined) are dropped; the caller rejects a granule that has none left,
+    since the spec's G1a cannot run without them.
+    """
+    ds = f[beam]["geophys_corr/geoid"]
+    n_seg = int(f[beam]["geolocation/segment_ph_cnt"].shape[0])
+    if int(ds.shape[0]) != n_seg:
+        raise ValueError(
+            f"{beam}: geophys_corr/geoid holds {int(ds.shape[0])} values against "
+            f"{n_seg} geolocation segments — the two are not on the same index, "
+            "so the granule's geoid cannot be read over our photons")
+    v = np.asarray(ds[:], dtype=np.float64)[sel]
+    lo, hi = GEOID_VALID_M
+    return v[np.isfinite(v) & (v >= lo) & (v <= hi)]
 
 
 def beam_type(f: Any, beam: str) -> str:
@@ -243,6 +292,7 @@ def subset(path: str, ward: str) -> dict[str, object] | None:
 
     rows: list[list[float]] = []
     beams: list[str] = []
+    geoid_vals: list[Any] = []
     n_read = n_conf = 0
     with h5py.File(path, "r") as f:
         ori = int(f["orbit_info/sc_orient"][0])
@@ -264,7 +314,8 @@ def subset(path: str, ward: str) -> dict[str, object] | None:
                       f"{('missing' if not label else repr(label))} — the "
                       "strong-beam mapping is wrong, rejected")
                 return None
-            i0, i1 = beam_slice(f, beam, south, north)
+            sel, cnt = beam_segments(f, beam, south, north)
+            i0, i1 = beam_slice(sel, cnt)
             if i1 <= i0:
                 continue
             g = f[beam]["heights"]
@@ -280,6 +331,9 @@ def subset(path: str, ward: str) -> dict[str, object] | None:
                 continue
             bi = len(beams)
             beams.append(beam)
+            # G1a's reference: the granule's own EGM2008 undulation over exactly
+            # the segments these photons came from
+            geoid_vals.append(beam_geoid(f, beam, sel))
             h_o = h_e[keep] - GEOID_N_M[ward]
             for a, b_, c, d, e in zip(lon[keep], lat[keep], h_e[keep], h_o, conf[keep]):
                 rows.append([round(float(a), 6), round(float(b_), 6),
@@ -312,18 +366,32 @@ def subset(path: str, ward: str) -> dict[str, object] | None:
               "span — rejected")
         return None
 
-    # THE GATE: two-sided geoid known-answer check. Raises ValueError on failure
-    # and is deliberately not caught. The median is over the FINITE ground line
-    # only: np.median of an array holding one NaN is NaN, and check_geoid's
-    # `abs(nan - dem) > 5.0` is False, so a NaN would walk straight through the
-    # gate the spec calls unbypassable.
-    _icesat2.check_geoid(float(np.median(gline[fin])), float(dem_median), GEOID_N_M[ward])
+    pooled = np.concatenate(geoid_vals) if geoid_vals else np.empty(0)
+    if pooled.size == 0:
+        print(f"  {gname}: no usable geophys_corr/geoid values over the ward — "
+              "the spec's G1a cannot be run, rejected")
+        return None
+    granule_geoid = float(np.median(pooled))
+    ground_median = float(np.median(gline[fin]))
+
+    # THE GATE (spec §5.1). G1a: our constant against the granule's own geoid.
+    # G1b: the ground line inside the plausible orthometric band. Raises
+    # ValueError on failure and is deliberately not caught. The median is over
+    # the FINITE ground line only — np.median of an array holding one NaN is NaN,
+    # and although check_geoid fails closed on NaN, a NaN here would reject good
+    # data for the wrong reason.
+    _icesat2.check_geoid(ground_median, GEOID_N_M[ward], granule_geoid)
 
     return {
         "ward": ward, "granule": gname, "rgt": rgt, "date": date, "sc_orient": ori,
         "geoidNM": GEOID_N_M[ward],
+        "granuleGeoidNM": round(granule_geoid, 3),
         "geoidSource": "EGM2008 via GeographicLib GeoidEval, retrieved 2026-08-06",
         "demMedianM": dem_median,
+        "groundMedianM": round(ground_median, 2),
+        # MEASUREMENT, not a gate: the shipped relief surface is a DSM and sits
+        # above laser ground over this delta (spec §5.1's terrain-validation win)
+        "demOffsetM": round(float(dem_median) - ground_median, 2),
         "trackMinDistM": round(float(np.min(np.hypot(x, y))), 1),
         "counts": {"photons_read": n_read, "conf_land": n_conf,
                    "in_box": int(ph.shape[0]), "ground_candidates": int(gnd.sum()),
@@ -370,7 +438,9 @@ def main() -> None:
         kb = os.path.getsize(out) / 1024
         counts: dict[str, int] = sub["counts"]  # type: ignore[assignment]
         print(f"  wrote {os.path.relpath(out, ROOT)}  ({kb:.0f} KB, "
-              f"{counts['in_box']} photons, closest {sub['trackMinDistM']} m)")
+              f"{counts['in_box']} photons, closest {sub['trackMinDistM']} m, "
+              f"ground {sub['groundMedianM']} m, "
+              f"DEM sits {sub['demOffsetM']:+.2f} m above it)")
         written += 1
     print(f"\n  {written} subsets written")
 

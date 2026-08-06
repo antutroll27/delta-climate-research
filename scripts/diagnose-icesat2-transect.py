@@ -3,13 +3,26 @@
     python3 scripts/diagnose-icesat2-transect.py data/calibration/icesat2/ballygunge-20181025-0416.json
 
 Writes previews/_icesat2-transect.png (untracked, like the other _*.png scratch
-renders) and prints PASS/FAIL against the two pre-registered gate criteria:
+renders) and prints PASS/FAIL against the pre-registered gate criteria (spec
+§5.1, §6):
 
-  G1  median of the ground line within ±5 m of the ward DEM median (already
-      enforced by fetch-icesat2.py, repeated here so the verdict is
-      self-contained and so a hand-edited subset cannot dodge it)
+  G1a our hardcoded EGM2008 constant matches the granule's OWN
+      `geophys_corr/geoid` over the ward to ≤0.5 m
+  G1b the ground-line median lands inside the plausible [-2, +25] m orthometric
+      band for this delta
   G2  roof photons over 5 m-eroded footprints exist, and the per-building
       estimates have a median above 4 m
+
+G1a/G1b are already enforced by fetch-icesat2.py; they are re-run here from the
+subset's own recorded numbers so the verdict is self-contained and a hand-edited
+subset cannot dodge them. Their thresholds are imported from `_icesat2`, not
+re-typed, so there is one place to change them and it is the gate itself.
+
+THE DEM OFFSET IS REPORTED, NOT GATED. G1 used to demand the ground line within
+±5 m of `<ward>-terrain.json`'s median and failed on 15 of 15 usable passes:
+that artefact is a smoothed SURFACE model ("NOT surveyed ground", its own note),
+so over this delta it sits metres above true ground. The offset is printed and
+drawn as a measurement — spec §5.1's terrain-validation win — and gates nothing.
 
 FULLY OFFLINE. It reads one committed subset plus the ward's footprints; no
 credentials, no network, no granule.
@@ -47,10 +60,10 @@ import _icesat2  # noqa: E402
 from _types import WARDS  # noqa: E402
 
 ROOT = os.path.join(HERE, "..")
-#: Gate criteria, from the spec. Not knobs: G1's ±5 m is the DEM's own measured
-#: error budget (§5.1) and G2's 4 m is "taller than street furniture, shorter
-#: than one storey" — a bar a noise field cannot clear.
-G1_TOL_M = 5.0
+#: G2's bar, from the spec: "taller than street furniture, shorter than one
+#: storey" — a bar a noise field cannot clear. Not a knob. G1a's and G1b's
+#: thresholds live in `_icesat2` (GEOID_TOL_M, GROUND_BAND_M) beside the gate
+#: that enforces them.
 G2_MIN_MEDIAN_M = 4.0
 
 
@@ -83,10 +96,20 @@ def main() -> None:
     crossed = set(np.unique(ero[roof]).tolist())
 
     ground_med = float(np.median(g[fin]))
-    g1 = abs(ground_med - sub["demMedianM"]) <= G1_TOL_M
+    if "granuleGeoidNM" not in sub:
+        sys.exit("  this subset predates the spec's §5.1 rewrite and carries no "
+                 "granuleGeoidNM — re-run fetch-icesat2.py for it; G1a cannot be "
+                 "faked from what is here")
+    d_geoid = abs(float(sub["geoidNM"]) - float(sub["granuleGeoidNM"]))
+    g1a = d_geoid <= _icesat2.GEOID_TOL_M
+    band_lo, band_hi = _icesat2.GROUND_BAND_M
+    g1b = bool(band_lo <= ground_med <= band_hi)
+    # a measurement, not a criterion: the DSM's height above laser ground
+    dem_offset = float(sub["demMedianM"]) - ground_med
     heights = np.asarray(sorted(est.values()))
     med_est = float(np.median(heights)) if heights.size else float("nan")
     g2 = bool(heights.size) and med_est > G2_MIN_MEDIAN_M
+    gate = g1a and g1b and g2
 
     fig, (ax0, ax1) = plt.subplots(2, 1, figsize=(14, 9), dpi=150, sharex=True)
     order = np.argsort(s)
@@ -95,7 +118,8 @@ def main() -> None:
                 label="inside 5 m-eroded footprints")
     ax0.plot(s[order], g[order], lw=1.6, c="#1b6ca8", label="ground line (two-pass)")
     ax0.axhline(sub["demMedianM"], lw=1.2, ls="--", c="#111",
-                label=f"ward DEM median {sub['demMedianM']:.1f} m")
+                label=f"ward DEM (DSM) median {sub['demMedianM']:.1f} m "
+                      f"— {dem_offset:+.1f} m vs laser ground, measured not gated")
     ax0.set(ylabel="orthometric height  m (EGM2008)")
     ax0.legend(loc="upper right", markerscale=5, fontsize=8, framealpha=0.9)
     ax0.set_title(
@@ -103,7 +127,8 @@ def main() -> None:
         f"beams {','.join(sub['beams'])}   ·   closest {sub['trackMinDistM']:.0f} m\n"
         f"{len(est)} buildings with ≥{_icesat2.MIN_ROOF_PH} roof photons "
         f"(of {len(crossed)} crossed)   ·   "
-        f"G1 {'PASS' if g1 else 'FAIL'}   G2 {'PASS' if g2 else 'FAIL'}",
+        f"G1a {'PASS' if g1a else 'FAIL'}   G1b {'PASS' if g1b else 'FAIL'}   "
+        f"G2 {'PASS' if g2 else 'FAIL'}",
         fontsize=10)
 
     ax1.scatter(s[gnd], hag[gnd], s=2, c="#8a8a8a",
@@ -137,14 +162,21 @@ def main() -> None:
     print(f"  buildings: {len(kept)} survived 5 m erosion, {len(crossed)} crossed by "
           f"the beam, {len(est)} cleared MIN_ROOF_PH={_icesat2.MIN_ROOF_PH}")
     print(f"  plot: {os.path.relpath(out, ROOT)}")
-    print(f"  G1 ground vs DEM:    {'PASS' if g1 else 'FAIL'}  "
-          f"(ground {ground_med:.1f} m, DEM {sub['demMedianM']:.1f} m, "
-          f"|Δ| {abs(ground_med - sub['demMedianM']):.1f} m, tolerance {G1_TOL_M:.0f} m)")
-    print(f"  G2 roof separability: {'PASS' if g2 else 'FAIL'}  "
+    print(f"  G1a geoid constant:   {'PASS' if g1a else 'FAIL'}  "
+          f"(ours {float(sub['geoidNM']):.3f} m, granule "
+          f"{float(sub['granuleGeoidNM']):.3f} m, |Δ| {d_geoid:.3f} m, "
+          f"tolerance {_icesat2.GEOID_TOL_M} m)")
+    print(f"  G1b ground plausible: {'PASS' if g1b else 'FAIL'}  "
+          f"(ground-line median {ground_med:.2f} m, band "
+          f"[{band_lo:.0f}, {band_hi:.0f}] m)")
+    print(f"  G2  roof separability: {'PASS' if g2 else 'FAIL'}  "
           f"({len(est)} buildings, median estimate {med_est:.1f} m, "
           f"bar {G2_MIN_MEDIAN_M:.0f} m)")
-    print(f"\n  GATE {'PASS' if g1 and g2 else 'FAIL'}")
-    sys.exit(0 if g1 and g2 else 1)
+    print(f"  measured (not gated): ward DEM median {sub['demMedianM']:.1f} m sits "
+          f"{dem_offset:+.2f} m above the laser ground line — the shipped relief "
+          "surface is a DSM")
+    print(f"\n  GATE {'PASS' if gate else 'FAIL'}")
+    sys.exit(0 if gate else 1)
 
 
 if __name__ == "__main__":

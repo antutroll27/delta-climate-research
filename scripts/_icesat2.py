@@ -90,6 +90,18 @@ ROOF_BAND_M = (2.0, 120.0)
 MIN_ROOF_PH = 5
 #: One storey, metres — the same 3.2 m the FAR pipeline assumes.
 STOREY_M = 3.2
+#: G1a tolerance (spec §5.1): our hardcoded EGM2008 constant against the value
+#: the granule carries in its own `geophys_corr/geoid`, metres. Both are EGM2008
+#: over the same photons, so they agree to centimetres when the constant is
+#: right — measured 2026-08-06, ATL03 -56.947 vs our -56.95 over Ballygunge.
+#: 0.5 m is two orders of magnitude above that agreement and two orders below
+#: the ~55 m failure it guards, so it is a bound, not a tuned knob.
+GEOID_TOL_M = 0.5
+#: G1b band (spec §5.1): the plausible orthometric range for a ground line in
+#: deltaic Kolkata, metres. Ward DEM medians sit at 10.3-11.6 m and laser ground
+#: at 3-6 m, so the band is generous on both sides; what it excludes is the
+#: arithmetic going wrong — see `check_geoid`.
+GROUND_BAND_M = (-2.0, 25.0)
 
 
 def to_local(w: Ward, lon: F64, lat: F64) -> tuple[F64, F64]:
@@ -331,38 +343,69 @@ def quantile_bias(ours: F64, theirs: F64, rng: np.random.Generator,
     return d
 
 
-def check_geoid(ground_ortho_m: float, dem_median_m: float, geoid_n_m: float) -> None:
-    """Two-sided known-answer check on the geoid conversion (spec §5.1). Raises
-    ValueError unless BOTH hold.
+def check_geoid(ground_ortho_m: float, geoid_n_m: float,
+                granule_geoid_n_m: float) -> None:
+    """Known-answer check on the geoid conversion (spec §5.1) — two DIRECT
+    tests, no elevation model anywhere in them. Raises ValueError unless BOTH
+    hold.
 
-    Side 1 — the data check: converted ground within ±5 m of the DEM median.
-    This is the side that catches real failures, and it catches all of them on
-    its own: a skipped conversion (out by ~55 m), a wrong-SIGN N (out by ~110 m),
-    and a merely wrong N (out by whatever the error is).
+    G1a — THE CONSTANT IS RIGHT. `geoid_n_m`, our hardcoded EGM2008 undulation
+    for the ward, must match `granule_geoid_n_m`, the value ATL03 carries in its
+    own `geophys_corr/geoid` over the same photons, to within GEOID_TOL_M. Both
+    are EGM2008, so this is an exact, model-free comparison of the constant
+    against the instrument's own answer. It catches a wrong-MAGNITUDE constant
+    by construction: a typo, one ward's value pasted into another, an
+    EGM96/EGM2008 mix-up beyond 0.5 m, a decimal slip.
 
-    Side 2 — a range check on the constant: the reconstructed ellipsoidal value
-    must miss the DEM by 40-70 m. Note what this is NOT. The function never sees
-    unconverted data; it rebuilds it as `h_ortho + N`, so given side 1 holds,
-    side 2 reduces algebraically to "N is between roughly -40 and -70 m" — a
-    sanity bound on the hardcoded constant (Kolkata's EGM2008 undulation is near
-    -55 m), not independent evidence about the photons.
+    G1b — THE CONVERSION WAS ACTUALLY APPLIED. The ground-line median must land
+    inside GROUND_BAND_M, the plausible orthometric band for deltaic Kolkata.
+    Every way the arithmetic can go wrong lands far outside it:
+      - conversion skipped   → the height stays ellipsoidal, ~-52 m: 50 m below
+        the lower bound
+      - sign flipped         → `h_ellip + |N|`, ~+61 m: 36 m above the upper
+        bound
+      - ground line on roofs → these wards' roofs stand 11-36 m above ground, so
+        a line that has climbed onto them clears +25 m, which no Kolkata ward's
+        true ground approaches
+    G1a and G1b are complementary, not redundant: G1a checks the number we use,
+    G1b checks that we used it, in the right direction, on a ground line that is
+    still ground.
+
+    WHY THE WARD DEM IS NOT THE REFERENCE, though this check used it until
+    2026-08-06. It required photon GROUND within ±5 m of `<ward>-terrain.json`'s
+    median, and that artefact's own `note` field calls it a "smoothed surface
+    model ... NOT surveyed ground" — a DSM. Over the dense Ganges delta an
+    SRTM-derived surface sits metres above true ground, and the comparison failed
+    on 15 of 15 usable passes, always the same direction: photon ground
+    2.96-6.33 m against DEM medians 10.3-11.6 m, repeatable to <=1.5 m across six
+    years of independent overpasses and all three wards. That is the DEM's
+    provenance, not our conversion. The offset is kept as a MEASUREMENT
+    (`demOffsetM` in every subset — spec §5.1 publishes it as the terrain-
+    validation win), and the gate is replaced rather than widened. The
+    replacement is STRICTER: G1a pins the constant to a centimetre-class
+    reference instead of inferring it through a proxy carrying 1.5-2.1 m RMSE of
+    its own.
+
+    NaN FAILS CLOSED. Both tests are written as `if not (in range)`, so a NaN
+    ground line or a NaN granule geoid RAISES rather than sailing through —
+    every comparison against NaN being False is exactly how an unbypassable gate
+    becomes a silent no-op.
 
     `raise`, never `assert`: spec §5.1 calls this gate unbypassable, and
-    `python3 -O` deletes assert statements outright, which would turn the whole
-    check into a silent no-op.
-
-    Tolerances are the spec's measured error budget (±5 m / 40-70 m) and must not
-    be tightened — the reference DEM's own cross-check RMSE is 1.5-2.1 m."""
-    if abs(ground_ortho_m - dem_median_m) > 5.0:
+    `python3 -O` deletes assert statements outright."""
+    if not abs(geoid_n_m - granule_geoid_n_m) <= GEOID_TOL_M:
         raise ValueError(
-            f"converted ground {ground_ortho_m:.1f} m vs DEM {dem_median_m:.1f} m — "
-            "geoid conversion or ground extraction is wrong")
-    ellip = ground_ortho_m + geoid_n_m     # h_ellip = h_ortho + N
-    miss = abs(ellip - dem_median_m)
-    if not 40.0 <= miss <= 70.0:
+            f"G1a: our geoid constant N={geoid_n_m:.3f} m disagrees with the "
+            f"granule's own geophys_corr/geoid N={granule_geoid_n_m:.3f} m by "
+            f"{abs(geoid_n_m - granule_geoid_n_m):.3f} m (tolerance "
+            f"{GEOID_TOL_M} m) — the hardcoded constant is wrong for this ward")
+    lo, hi = GROUND_BAND_M
+    if not lo <= ground_ortho_m <= hi:
         raise ValueError(
-            f"reconstructed unconverted height misses DEM by {miss:.1f} m, not "
-            f"the ~55 m geoid — the constant N={geoid_n_m:.1f} m is out of range")
+            f"G1b: ground-line median {ground_ortho_m:.1f} m falls outside the "
+            f"plausible [{lo:.0f}, {hi:.0f}] m orthometric band for this delta — "
+            "the conversion was skipped (~-52 m), sign-flipped (~+61 m), or the "
+            "ground line has climbed onto rooftops (>+25 m)")
 
 
 # ── self-test ───────────────────────────────────────────────────────────────
@@ -526,20 +569,43 @@ def _self_test() -> None:
         else:
             raise AssertionError(f"quantile_bias accepted n={bad[0].size}/{bad[1].size}")
 
-    # geoid: passes only when BOTH sides hold, and raises ValueError — not
-    # AssertionError, which `python3 -O` would delete along with the whole gate
-    check_geoid(10.4, 10.6, -55.0)                     # converted ≈ DEM ✓
-    for bad_g, side in (((-44.4, 10.6, -55.0), "vs DEM"),      # forgot to convert: 10.6 + N
-                        ((65.4, 10.6, -55.0), "vs DEM"),       # wrong SIGN on N: 10.6 - N
-                        ((10.4, 10.6, -3.0), "out of range")):  # constant absurdly small
+    # geoid: two direct tests, and each raises ValueError — not AssertionError,
+    # which `python3 -O` would delete along with the whole gate. The numbers are
+    # the real ones: ATL03 reads -56.947 over Ballygunge, our constant is -56.95,
+    # and the measured laser ground line sits near 4.8 m.
+    check_geoid(4.8, -56.95, -56.947)                  # constant right, ground plausible
+    for bad_g, tag, mode in (
+            ((-52.1, -56.95, -56.947), "G1b", "conversion skipped — still ellipsoidal"),
+            ((61.6, -56.95, -56.947), "G1b", "sign flipped — h_ellip + |N|"),
+            ((4.8, -3.00, -56.947), "G1a", "wrong-magnitude constant"),
+            ((31.0, -56.95, -56.947), "G1b", "ground line climbed onto the roofs")):
         try:
             check_geoid(*bad_g)
         except ValueError as e:
-            # pins the rewritten docstring: side 1 alone catches every DATA
-            # failure; side 2 only ever fires on the constant's range
-            assert side in str(e), f"{bad_g} caught by the wrong side: {e}"
+            # pins the docstring's division of labour: G1a fires only on the
+            # constant, G1b only on the height
+            assert str(e).startswith(tag), f"{mode}: caught by the wrong test — {e}"
         else:
-            raise AssertionError(f"check_geoid accepted {bad_g}")
+            raise AssertionError(f"check_geoid accepted {bad_g} ({mode})")
+    # NaN fails CLOSED on both tests — the way an unbypassable gate quietly dies
+    for nan_g in ((float("nan"), -56.95, -56.947), (4.8, -56.95, float("nan"))):
+        try:
+            check_geoid(*nan_g)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"check_geoid accepted a NaN: {nan_g}")
+    # G1a's tolerance is a real bound: 0.40 m through, 0.60 m stopped
+    check_geoid(4.8, -56.55, -56.947)
+    for bound_g in ((4.8, -56.35, -56.947),            # constant 0.60 m off
+                    (-2.5, -56.95, -56.947),           # ground just under the band
+                    (25.5, -56.95, -56.947)):          # ground just over the band
+        try:
+            check_geoid(*bound_g)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"check_geoid accepted {bound_g} at the boundary")
 
     print("  _icesat2 self-test OK")
 
