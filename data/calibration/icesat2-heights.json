@@ -1,25 +1,347 @@
 {
   "summary": {
-    "n_buildings": 9,
-    "n_tracks": 1,
+    "n_buildings": 30,
+    "n_tracks": 31,
     "min_buildings": 30,
-    "verdict": "underpowered"
+    "n": 30,
+    "median_bias_m": 1.22,
+    "p65_bias_m": 3.87,
+    "p90_bias_m": 7.34,
+    "median_ci95_m": [
+      -0.97,
+      4.54
+    ],
+    "p65_ci95_m": [
+      0.53,
+      5.3
+    ],
+    "p90_ci95_m": [
+      -12.66,
+      7.94
+    ],
+    "ks_d": 0.2667,
+    "perm_p": 0.0627,
+    "verdict": "validated"
   },
   "fill": {
-    "n": 0,
+    "n": 1,
     "min_n": 10,
     "verdict": "underpowered"
   },
   "per_ward": {
     "ballygunge": {
-      "n_passes": 1,
-      "n_crossed": 10,
-      "n_buildings": 9,
+      "n_passes": 12,
+      "n_crossed": 50,
+      "n_buildings": 27,
+      "n_below_min_roof_ph": 23,
+      "n_fill": 1
+    },
+    "barrackpore": {
+      "n_passes": 7,
+      "n_crossed": 6,
+      "n_buildings": 1,
+      "n_below_min_roof_ph": 5,
+      "n_fill": 0
+    },
+    "baruipur": {
+      "n_passes": 12,
+      "n_crossed": 3,
+      "n_buildings": 2,
       "n_below_min_roof_ph": 1,
       "n_fill": 0
     }
   },
   "per_track": [
+    {
+      "file": "ballygunge-20181025-0416.json",
+      "ward": "ballygunge",
+      "date": "20181025",
+      "rgt": "0416",
+      "beams": [
+        "gt2r"
+      ],
+      "closest_m": 207.6,
+      "dem_minus_laser_ground_m": 6.25,
+      "subset_counts": {
+        "photons_read": 8774,
+        "conf_land": 1855,
+        "in_box": 1855,
+        "ground_candidates": 551,
+        "ground_nan": 2
+      },
+      "counts": {
+        "photons_in_subset": 1855,
+        "ground_candidates": 551,
+        "photons_outside_ground_span": 2,
+        "photons_in_eroded_footprints": 206,
+        "roof_photons_outside_ground_span": 0,
+        "photons_in_roof_band": 149,
+        "buildings_in_ward": 3527,
+        "buildings_survived_erosion": 995,
+        "buildings_crossed": 11
+      }
+    },
+    {
+      "file": "ballygunge-20190124-0416.json",
+      "ward": "ballygunge",
+      "date": "20190124",
+      "rgt": "0416",
+      "beams": [
+        "gt3l"
+      ],
+      "closest_m": 125.7,
+      "dem_minus_laser_ground_m": 6.14,
+      "subset_counts": {
+        "photons_read": 3889,
+        "conf_land": 1162,
+        "in_box": 1162,
+        "ground_candidates": 542,
+        "ground_nan": 13
+      },
+      "counts": {
+        "photons_in_subset": 1162,
+        "ground_candidates": 542,
+        "photons_outside_ground_span": 13,
+        "photons_in_eroded_footprints": 47,
+        "roof_photons_outside_ground_span": 0,
+        "photons_in_roof_band": 42,
+        "buildings_in_ward": 3527,
+        "buildings_survived_erosion": 995,
+        "buildings_crossed": 8
+      }
+    },
+    {
+      "file": "ballygunge-20190425-0416.json",
+      "ward": "ballygunge",
+      "date": "20190425",
+      "rgt": "0416",
+      "beams": [
+        "gt2l"
+      ],
+      "closest_m": 569.5,
+      "dem_minus_laser_ground_m": 7.04,
+      "subset_counts": {
+        "photons_read": 14032,
+        "conf_land": 3770,
+        "in_box": 3770,
+        "ground_candidates": 2557,
+        "ground_nan": 17
+      },
+      "counts": {
+        "photons_in_subset": 3770,
+        "ground_candidates": 2557,
+        "photons_outside_ground_span": 17,
+        "photons_in_eroded_footprints": 19,
+        "roof_photons_outside_ground_span": 0,
+        "photons_in_roof_band": 19,
+        "buildings_in_ward": 3527,
+        "buildings_survived_erosion": 995,
+        "buildings_crossed": 4
+      }
+    },
+    {
+      "file": "ballygunge-20200422-0416.json",
+      "ward": "ballygunge",
+      "date": "20200422",
+      "rgt": "0416",
+      "beams": [
+        "gt2r"
+      ],
+      "closest_m": 627.0,
+      "dem_minus_laser_ground_m": 6.42,
+      "subset_counts": {
+        "photons_read": 7537,
+        "conf_land": 1892,
+        "in_box": 1892,
+        "ground_candidates": 1078,
+        "ground_nan": 2
+      },
+      "counts": {
+        "photons_in_subset": 1892,
+        "ground_candidates": 1078,
+        "photons_outside_ground_span": 2,
+        "photons_in_eroded_footprints": 35,
+        "roof_photons_outside_ground_span": 0,
+        "photons_in_roof_band": 31,
+        "buildings_in_ward": 3527,
+        "buildings_survived_erosion": 995,
+        "buildings_crossed": 5
+      }
+    },
+    {
+      "file": "ballygunge-20200722-0416.json",
+      "ward": "ballygunge",
+      "date": "20200722",
+      "rgt": "0416",
+      "beams": [
+        "gt1l"
+      ],
+      "closest_m": 851.8,
+      "dem_minus_laser_ground_m": 6.13,
+      "subset_counts": {
+        "photons_read": 129,
+        "conf_land": 102,
+        "in_box": 102,
+        "ground_candidates": 102,
+        "ground_nan": 9
+      },
+      "counts": {
+        "photons_in_subset": 102,
+        "ground_candidates": 102,
+        "photons_outside_ground_span": 9,
+        "photons_in_eroded_footprints": 0,
+        "roof_photons_outside_ground_span": 0,
+        "photons_in_roof_band": 0,
+        "buildings_in_ward": 3527,
+        "buildings_survived_erosion": 995,
+        "buildings_crossed": 0
+      }
+    },
+    {
+      "file": "ballygunge-20201021-0416.json",
+      "ward": "ballygunge",
+      "date": "20201021",
+      "rgt": "0416",
+      "beams": [
+        "gt3l"
+      ],
+      "closest_m": 426.6,
+      "dem_minus_laser_ground_m": 7.08,
+      "subset_counts": {
+        "photons_read": 11024,
+        "conf_land": 448,
+        "in_box": 448,
+        "ground_candidates": 146,
+        "ground_nan": 36
+      },
+      "counts": {
+        "photons_in_subset": 448,
+        "ground_candidates": 146,
+        "photons_outside_ground_span": 36,
+        "photons_in_eroded_footprints": 42,
+        "roof_photons_outside_ground_span": 0,
+        "photons_in_roof_band": 26,
+        "buildings_in_ward": 3527,
+        "buildings_survived_erosion": 995,
+        "buildings_crossed": 1
+      }
+    },
+    {
+      "file": "ballygunge-20220118-0416.json",
+      "ward": "ballygunge",
+      "date": "20220118",
+      "rgt": "0416",
+      "beams": [
+        "gt2l"
+      ],
+      "closest_m": 559.7,
+      "dem_minus_laser_ground_m": 7.64,
+      "subset_counts": {
+        "photons_read": 4578,
+        "conf_land": 1983,
+        "in_box": 1983,
+        "ground_candidates": 1603,
+        "ground_nan": 4
+      },
+      "counts": {
+        "photons_in_subset": 1983,
+        "ground_candidates": 1603,
+        "photons_outside_ground_span": 4,
+        "photons_in_eroded_footprints": 59,
+        "roof_photons_outside_ground_span": 0,
+        "photons_in_roof_band": 50,
+        "buildings_in_ward": 3527,
+        "buildings_survived_erosion": 995,
+        "buildings_crossed": 6
+      }
+    },
+    {
+      "file": "ballygunge-20220419-0416.json",
+      "ward": "ballygunge",
+      "date": "20220419",
+      "rgt": "0416",
+      "beams": [
+        "gt2l"
+      ],
+      "closest_m": 547.6,
+      "dem_minus_laser_ground_m": 7.81,
+      "subset_counts": {
+        "photons_read": 25802,
+        "conf_land": 1577,
+        "in_box": 1577,
+        "ground_candidates": 1525,
+        "ground_nan": 66
+      },
+      "counts": {
+        "photons_in_subset": 1577,
+        "ground_candidates": 1525,
+        "photons_outside_ground_span": 66,
+        "photons_in_eroded_footprints": 0,
+        "roof_photons_outside_ground_span": 0,
+        "photons_in_roof_band": 0,
+        "buildings_in_ward": 3527,
+        "buildings_survived_erosion": 995,
+        "buildings_crossed": 0
+      }
+    },
+    {
+      "file": "ballygunge-20230717-0416.json",
+      "ward": "ballygunge",
+      "date": "20230717",
+      "rgt": "0416",
+      "beams": [
+        "gt1l"
+      ],
+      "closest_m": 760.7,
+      "dem_minus_laser_ground_m": 7.12,
+      "subset_counts": {
+        "photons_read": 28254,
+        "conf_land": 166,
+        "in_box": 166,
+        "ground_candidates": 166,
+        "ground_nan": 3
+      },
+      "counts": {
+        "photons_in_subset": 166,
+        "ground_candidates": 166,
+        "photons_outside_ground_span": 3,
+        "photons_in_eroded_footprints": 0,
+        "roof_photons_outside_ground_span": 0,
+        "photons_in_roof_band": 0,
+        "buildings_in_ward": 3527,
+        "buildings_survived_erosion": 995,
+        "buildings_crossed": 0
+      }
+    },
+    {
+      "file": "ballygunge-20240414-0416.json",
+      "ward": "ballygunge",
+      "date": "20240414",
+      "rgt": "0416",
+      "beams": [
+        "gt2r"
+      ],
+      "closest_m": 630.6,
+      "dem_minus_laser_ground_m": 7.49,
+      "subset_counts": {
+        "photons_read": 5251,
+        "conf_land": 1607,
+        "in_box": 1607,
+        "ground_candidates": 1166,
+        "ground_nan": 6
+      },
+      "counts": {
+        "photons_in_subset": 1607,
+        "ground_candidates": 1166,
+        "photons_outside_ground_span": 6,
+        "photons_in_eroded_footprints": 28,
+        "roof_photons_outside_ground_span": 0,
+        "photons_in_roof_band": 25,
+        "buildings_in_ward": 3527,
+        "buildings_survived_erosion": 995,
+        "buildings_crossed": 5
+      }
+    },
     {
       "file": "ballygunge-20240714-0416.json",
       "ward": "ballygunge",
@@ -48,31 +370,615 @@
         "buildings_survived_erosion": 995,
         "buildings_crossed": 10
       }
+    },
+    {
+      "file": "ballygunge-20250504-0744.json",
+      "ward": "ballygunge",
+      "date": "20250504",
+      "rgt": "0744",
+      "beams": [
+        "gt1r"
+      ],
+      "closest_m": 653.6,
+      "dem_minus_laser_ground_m": 6.49,
+      "subset_counts": {
+        "photons_read": 9447,
+        "conf_land": 1187,
+        "in_box": 1187,
+        "ground_candidates": 687,
+        "ground_nan": 8
+      },
+      "counts": {
+        "photons_in_subset": 1187,
+        "ground_candidates": 687,
+        "photons_outside_ground_span": 8,
+        "photons_in_eroded_footprints": 4,
+        "roof_photons_outside_ground_span": 0,
+        "photons_in_roof_band": 3,
+        "buildings_in_ward": 3527,
+        "buildings_survived_erosion": 995,
+        "buildings_crossed": 2
+      }
+    },
+    {
+      "file": "barrackpore-20190215-0744.json",
+      "ward": "barrackpore",
+      "date": "20190215",
+      "rgt": "0744",
+      "beams": [
+        "gt1l"
+      ],
+      "closest_m": 649.6,
+      "dem_minus_laser_ground_m": 5.02,
+      "subset_counts": {
+        "photons_read": 21384,
+        "conf_land": 2522,
+        "in_box": 2522,
+        "ground_candidates": 2199,
+        "ground_nan": 31
+      },
+      "counts": {
+        "photons_in_subset": 2522,
+        "ground_candidates": 2199,
+        "photons_outside_ground_span": 31,
+        "photons_in_eroded_footprints": 1,
+        "roof_photons_outside_ground_span": 0,
+        "photons_in_roof_band": 0,
+        "buildings_in_ward": 4702,
+        "buildings_survived_erosion": 719,
+        "buildings_crossed": 1
+      }
+    },
+    {
+      "file": "barrackpore-20190516-0744.json",
+      "ward": "barrackpore",
+      "date": "20190516",
+      "rgt": "0744",
+      "beams": [
+        "gt1l"
+      ],
+      "closest_m": 895.2,
+      "dem_minus_laser_ground_m": 5.7,
+      "subset_counts": {
+        "photons_read": 5364,
+        "conf_land": 2088,
+        "in_box": 2088,
+        "ground_candidates": 2088,
+        "ground_nan": 12
+      },
+      "counts": {
+        "photons_in_subset": 2088,
+        "ground_candidates": 2088,
+        "photons_outside_ground_span": 12,
+        "photons_in_eroded_footprints": 0,
+        "roof_photons_outside_ground_span": 0,
+        "photons_in_roof_band": 0,
+        "buildings_in_ward": 4702,
+        "buildings_survived_erosion": 719,
+        "buildings_crossed": 0
+      }
+    },
+    {
+      "file": "barrackpore-20211110-0744.json",
+      "ward": "barrackpore",
+      "date": "20211110",
+      "rgt": "0744",
+      "beams": [
+        "gt1l"
+      ],
+      "closest_m": 914.1,
+      "dem_minus_laser_ground_m": 5.45,
+      "subset_counts": {
+        "photons_read": 21362,
+        "conf_land": 1238,
+        "in_box": 1238,
+        "ground_candidates": 1238,
+        "ground_nan": 24
+      },
+      "counts": {
+        "photons_in_subset": 1238,
+        "ground_candidates": 1238,
+        "photons_outside_ground_span": 24,
+        "photons_in_eroded_footprints": 0,
+        "roof_photons_outside_ground_span": 0,
+        "photons_in_roof_band": 0,
+        "buildings_in_ward": 4702,
+        "buildings_survived_erosion": 719,
+        "buildings_crossed": 0
+      }
+    },
+    {
+      "file": "barrackpore-20220208-0744.json",
+      "ward": "barrackpore",
+      "date": "20220208",
+      "rgt": "0744",
+      "beams": [
+        "gt1l"
+      ],
+      "closest_m": 904.7,
+      "dem_minus_laser_ground_m": 5.28,
+      "subset_counts": {
+        "photons_read": 2190,
+        "conf_land": 260,
+        "in_box": 260,
+        "ground_candidates": 260,
+        "ground_nan": 7
+      },
+      "counts": {
+        "photons_in_subset": 260,
+        "ground_candidates": 260,
+        "photons_outside_ground_span": 7,
+        "photons_in_eroded_footprints": 0,
+        "roof_photons_outside_ground_span": 0,
+        "photons_in_roof_band": 0,
+        "buildings_in_ward": 4702,
+        "buildings_survived_erosion": 719,
+        "buildings_crossed": 0
+      }
+    },
+    {
+      "file": "barrackpore-20221017-0416.json",
+      "ward": "barrackpore",
+      "date": "20221017",
+      "rgt": "0416",
+      "beams": [
+        "gt1r"
+      ],
+      "closest_m": 431.1,
+      "dem_minus_laser_ground_m": 5.09,
+      "subset_counts": {
+        "photons_read": 17397,
+        "conf_land": 9333,
+        "in_box": 9333,
+        "ground_candidates": 7361,
+        "ground_nan": 2
+      },
+      "counts": {
+        "photons_in_subset": 9333,
+        "ground_candidates": 7361,
+        "photons_outside_ground_span": 2,
+        "photons_in_eroded_footprints": 28,
+        "roof_photons_outside_ground_span": 0,
+        "photons_in_roof_band": 23,
+        "buildings_in_ward": 4702,
+        "buildings_survived_erosion": 719,
+        "buildings_crossed": 5
+      }
+    },
+    {
+      "file": "barrackpore-20231106-0744.json",
+      "ward": "barrackpore",
+      "date": "20231106",
+      "rgt": "0744",
+      "beams": [
+        "gt1r"
+      ],
+      "closest_m": 1004.9,
+      "dem_minus_laser_ground_m": 5.56,
+      "subset_counts": {
+        "photons_read": 10524,
+        "conf_land": 496,
+        "in_box": 496,
+        "ground_candidates": 496,
+        "ground_nan": 6
+      },
+      "counts": {
+        "photons_in_subset": 496,
+        "ground_candidates": 496,
+        "photons_outside_ground_span": 6,
+        "photons_in_eroded_footprints": 0,
+        "roof_photons_outside_ground_span": 0,
+        "photons_in_roof_band": 0,
+        "buildings_in_ward": 4702,
+        "buildings_survived_erosion": 719,
+        "buildings_crossed": 0
+      }
+    },
+    {
+      "file": "barrackpore-20250504-0744.json",
+      "ward": "barrackpore",
+      "date": "20250504",
+      "rgt": "0744",
+      "beams": [
+        "gt2r"
+      ],
+      "closest_m": 738.6,
+      "dem_minus_laser_ground_m": 5.73,
+      "subset_counts": {
+        "photons_read": 1515,
+        "conf_land": 721,
+        "in_box": 721,
+        "ground_candidates": 680,
+        "ground_nan": 5
+      },
+      "counts": {
+        "photons_in_subset": 721,
+        "ground_candidates": 680,
+        "photons_outside_ground_span": 5,
+        "photons_in_eroded_footprints": 0,
+        "roof_photons_outside_ground_span": 0,
+        "photons_in_roof_band": 0,
+        "buildings_in_ward": 4702,
+        "buildings_survived_erosion": 719,
+        "buildings_crossed": 0
+      }
+    },
+    {
+      "file": "baruipur-20181116-0744.json",
+      "ward": "baruipur",
+      "date": "20181116",
+      "rgt": "0744",
+      "beams": [
+        "gt1r"
+      ],
+      "closest_m": 199.7,
+      "dem_minus_laser_ground_m": 6.78,
+      "subset_counts": {
+        "photons_read": 14007,
+        "conf_land": 501,
+        "in_box": 501,
+        "ground_candidates": 226,
+        "ground_nan": 2
+      },
+      "counts": {
+        "photons_in_subset": 501,
+        "ground_candidates": 226,
+        "photons_outside_ground_span": 2,
+        "photons_in_eroded_footprints": 17,
+        "roof_photons_outside_ground_span": 0,
+        "photons_in_roof_band": 17,
+        "buildings_in_ward": 4538,
+        "buildings_survived_erosion": 326,
+        "buildings_crossed": 1
+      }
+    },
+    {
+      "file": "baruipur-20190215-0744.json",
+      "ward": "baruipur",
+      "date": "20190215",
+      "rgt": "0744",
+      "beams": [
+        "gt2l"
+      ],
+      "closest_m": 658.5,
+      "dem_minus_laser_ground_m": 8.28,
+      "subset_counts": {
+        "photons_read": 16161,
+        "conf_land": 1286,
+        "in_box": 1286,
+        "ground_candidates": 977,
+        "ground_nan": 1
+      },
+      "counts": {
+        "photons_in_subset": 1286,
+        "ground_candidates": 977,
+        "photons_outside_ground_span": 1,
+        "photons_in_eroded_footprints": 0,
+        "roof_photons_outside_ground_span": 0,
+        "photons_in_roof_band": 0,
+        "buildings_in_ward": 4538,
+        "buildings_survived_erosion": 326,
+        "buildings_crossed": 0
+      }
+    },
+    {
+      "file": "baruipur-20190516-0744.json",
+      "ward": "baruipur",
+      "date": "20190516",
+      "rgt": "0744",
+      "beams": [
+        "gt2l"
+      ],
+      "closest_m": 399.3,
+      "dem_minus_laser_ground_m": 6.31,
+      "subset_counts": {
+        "photons_read": 4092,
+        "conf_land": 1020,
+        "in_box": 1020,
+        "ground_candidates": 535,
+        "ground_nan": 7
+      },
+      "counts": {
+        "photons_in_subset": 1020,
+        "ground_candidates": 535,
+        "photons_outside_ground_span": 7,
+        "photons_in_eroded_footprints": 0,
+        "roof_photons_outside_ground_span": 0,
+        "photons_in_roof_band": 0,
+        "buildings_in_ward": 4538,
+        "buildings_survived_erosion": 326,
+        "buildings_crossed": 0
+      }
+    },
+    {
+      "file": "baruipur-20200813-0744.json",
+      "ward": "baruipur",
+      "date": "20200813",
+      "rgt": "0744",
+      "beams": [
+        "gt1l"
+      ],
+      "closest_m": 609.6,
+      "dem_minus_laser_ground_m": 7.05,
+      "subset_counts": {
+        "photons_read": 27635,
+        "conf_land": 989,
+        "in_box": 989,
+        "ground_candidates": 790,
+        "ground_nan": 8
+      },
+      "counts": {
+        "photons_in_subset": 989,
+        "ground_candidates": 790,
+        "photons_outside_ground_span": 8,
+        "photons_in_eroded_footprints": 0,
+        "roof_photons_outside_ground_span": 0,
+        "photons_in_roof_band": 0,
+        "buildings_in_ward": 4538,
+        "buildings_survived_erosion": 326,
+        "buildings_crossed": 0
+      }
+    },
+    {
+      "file": "baruipur-20201111-0744.json",
+      "ward": "baruipur",
+      "date": "20201111",
+      "rgt": "0744",
+      "beams": [
+        "gt3l"
+      ],
+      "closest_m": 253.6,
+      "dem_minus_laser_ground_m": 6.4,
+      "subset_counts": {
+        "photons_read": 2326,
+        "conf_land": 1830,
+        "in_box": 1830,
+        "ground_candidates": 1081,
+        "ground_nan": 20
+      },
+      "counts": {
+        "photons_in_subset": 1830,
+        "ground_candidates": 1081,
+        "photons_outside_ground_span": 20,
+        "photons_in_eroded_footprints": 0,
+        "roof_photons_outside_ground_span": 0,
+        "photons_in_roof_band": 0,
+        "buildings_in_ward": 4538,
+        "buildings_survived_erosion": 326,
+        "buildings_crossed": 0
+      }
+    },
+    {
+      "file": "baruipur-20211110-0744.json",
+      "ward": "baruipur",
+      "date": "20211110",
+      "rgt": "0744",
+      "beams": [
+        "gt2l"
+      ],
+      "closest_m": 403.2,
+      "dem_minus_laser_ground_m": 6.98,
+      "subset_counts": {
+        "photons_read": 26719,
+        "conf_land": 3916,
+        "in_box": 3916,
+        "ground_candidates": 2216,
+        "ground_nan": 43
+      },
+      "counts": {
+        "photons_in_subset": 3916,
+        "ground_candidates": 2216,
+        "photons_outside_ground_span": 43,
+        "photons_in_eroded_footprints": 0,
+        "roof_photons_outside_ground_span": 0,
+        "photons_in_roof_band": 0,
+        "buildings_in_ward": 4538,
+        "buildings_survived_erosion": 326,
+        "buildings_crossed": 0
+      }
+    },
+    {
+      "file": "baruipur-20220208-0744.json",
+      "ward": "baruipur",
+      "date": "20220208",
+      "rgt": "0744",
+      "beams": [
+        "gt2l"
+      ],
+      "closest_m": 387.2,
+      "dem_minus_laser_ground_m": 7.12,
+      "subset_counts": {
+        "photons_read": 5106,
+        "conf_land": 1955,
+        "in_box": 1955,
+        "ground_candidates": 1118,
+        "ground_nan": 3
+      },
+      "counts": {
+        "photons_in_subset": 1955,
+        "ground_candidates": 1118,
+        "photons_outside_ground_span": 3,
+        "photons_in_eroded_footprints": 2,
+        "roof_photons_outside_ground_span": 0,
+        "photons_in_roof_band": 2,
+        "buildings_in_ward": 4538,
+        "buildings_survived_erosion": 326,
+        "buildings_crossed": 1
+      }
+    },
+    {
+      "file": "baruipur-20230116-0416.json",
+      "ward": "baruipur",
+      "date": "20230116",
+      "rgt": "0416",
+      "beams": [
+        "gt3r"
+      ],
+      "closest_m": 892.8,
+      "dem_minus_laser_ground_m": 6.65,
+      "subset_counts": {
+        "photons_read": 1056,
+        "conf_land": 179,
+        "in_box": 179,
+        "ground_candidates": 179,
+        "ground_nan": 5
+      },
+      "counts": {
+        "photons_in_subset": 179,
+        "ground_candidates": 179,
+        "photons_outside_ground_span": 5,
+        "photons_in_eroded_footprints": 0,
+        "roof_photons_outside_ground_span": 0,
+        "photons_in_roof_band": 0,
+        "buildings_in_ward": 4538,
+        "buildings_survived_erosion": 326,
+        "buildings_crossed": 0
+      }
+    },
+    {
+      "file": "baruipur-20230807-0744.json",
+      "ward": "baruipur",
+      "date": "20230807",
+      "rgt": "0744",
+      "beams": [
+        "gt1l"
+      ],
+      "closest_m": 485.5,
+      "dem_minus_laser_ground_m": 7.3,
+      "subset_counts": {
+        "photons_read": 5284,
+        "conf_land": 3903,
+        "in_box": 3903,
+        "ground_candidates": 2383,
+        "ground_nan": 14
+      },
+      "counts": {
+        "photons_in_subset": 3903,
+        "ground_candidates": 2383,
+        "photons_outside_ground_span": 14,
+        "photons_in_eroded_footprints": 21,
+        "roof_photons_outside_ground_span": 0,
+        "photons_in_roof_band": 20,
+        "buildings_in_ward": 4538,
+        "buildings_survived_erosion": 326,
+        "buildings_crossed": 1
+      }
+    },
+    {
+      "file": "baruipur-20251011-0416.json",
+      "ward": "baruipur",
+      "date": "20251011",
+      "rgt": "0416",
+      "beams": [
+        "gt2r"
+      ],
+      "closest_m": 846.3,
+      "dem_minus_laser_ground_m": 5.95,
+      "subset_counts": {
+        "photons_read": 5109,
+        "conf_land": 572,
+        "in_box": 572,
+        "ground_candidates": 572,
+        "ground_nan": 6
+      },
+      "counts": {
+        "photons_in_subset": 572,
+        "ground_candidates": 572,
+        "photons_outside_ground_span": 6,
+        "photons_in_eroded_footprints": 0,
+        "roof_photons_outside_ground_span": 0,
+        "photons_in_roof_band": 0,
+        "buildings_in_ward": 4538,
+        "buildings_survived_erosion": 326,
+        "buildings_crossed": 0
+      }
+    },
+    {
+      "file": "baruipur-20260201-0744.json",
+      "ward": "baruipur",
+      "date": "20260201",
+      "rgt": "0744",
+      "beams": [
+        "gt1l"
+      ],
+      "closest_m": 524.0,
+      "dem_minus_laser_ground_m": 7.28,
+      "subset_counts": {
+        "photons_read": 23727,
+        "conf_land": 1458,
+        "in_box": 1458,
+        "ground_candidates": 1131,
+        "ground_nan": 12
+      },
+      "counts": {
+        "photons_in_subset": 1458,
+        "ground_candidates": 1131,
+        "photons_outside_ground_span": 12,
+        "photons_in_eroded_footprints": 0,
+        "roof_photons_outside_ground_span": 0,
+        "photons_in_roof_band": 0,
+        "buildings_in_ward": 4538,
+        "buildings_survived_erosion": 326,
+        "buildings_crossed": 0
+      }
+    },
+    {
+      "file": "baruipur-20260411-0416.json",
+      "ward": "baruipur",
+      "date": "20260411",
+      "rgt": "0416",
+      "beams": [
+        "gt3l"
+      ],
+      "closest_m": 662.7,
+      "dem_minus_laser_ground_m": 6.75,
+      "subset_counts": {
+        "photons_read": 13458,
+        "conf_land": 1123,
+        "in_box": 1123,
+        "ground_candidates": 844,
+        "ground_nan": 5
+      },
+      "counts": {
+        "photons_in_subset": 1123,
+        "ground_candidates": 844,
+        "photons_outside_ground_span": 5,
+        "photons_in_eroded_footprints": 0,
+        "roof_photons_outside_ground_span": 0,
+        "photons_in_roof_band": 0,
+        "buildings_in_ward": 4538,
+        "buildings_survived_erosion": 326,
+        "buildings_crossed": 0
+      }
     }
   ],
   "excluded": {
     "buildings_in_ward": {
-      "ballygunge": 3527
+      "ballygunge": 3527,
+      "barrackpore": 4702,
+      "baruipur": 4538
     },
     "buildings_survived_erosion": {
-      "ballygunge": 995
+      "ballygunge": 995,
+      "barrackpore": 719,
+      "baruipur": 326
     },
-    "buildings_crossed_pooled": 10,
-    "buildings_below_min_roof_ph": 1,
+    "buildings_crossed_pooled": 59,
+    "buildings_below_min_roof_ph": 29,
     "min_roof_photons": 5,
     "erosion_m": 5.0,
     "roof_band_m": [
       2.0,
       120.0
     ],
-    "photons_outside_ground_span": 6,
+    "photons_outside_ground_span": 385,
     "roof_photons_outside_ground_span": 0,
     "subsets_rejected": [],
     "note": "Buildings smaller than the 5 m erosion never enter, nor do crossed buildings under 5 roof photons; photons outside the ground line's populated span are dropped rather than measured against a flat extrapolation. The crossed set therefore over-represents LARGE buildings \u2014 published wording must say 'along satellite transects', not 'all buildings'."
   },
   "terrain": {
-    "dem_minus_laser_ground_m": 6.1,
-    "n_tracks": 1,
+    "dem_minus_laser_ground_m": 6.49,
+    "n_tracks": 31,
     "note": "Measured, not gated (spec \u00a75.1): the shipped relief surface sits this far ABOVE decimetre-class laser ground. It is a smoothed DSM by its own note, and it is used by nothing in the heat model; the height comparison takes its ground line from the photons, never from the DEM."
   },
   "note": "Distributional comparison only \u2014 ATL03 geolocation (~3-5 m) forbids per-building attribution, so the statistics compare the two distributions' quantiles and no per-building height is published. Verdicts and thresholds were pre-registered in docs/superpowers/specs/2026-08-06-icesat2-height-validation-design.md \u00a75.3 before any of this was run. Photons are pooled per building across repeat passes; n_buildings counts distinct buildings."
