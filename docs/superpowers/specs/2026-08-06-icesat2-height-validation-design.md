@@ -118,24 +118,72 @@ the co-founder's email about the basemap work.
   authoritative calculator, cited in the constant's comment). The geoid varies by
   millimetres across a 1.4 km ward; a grid library (pyproj + EGM2008 grid download) is a
   dependency buying nothing.
-- **Known-answer check, unbypassable:** the mode of ground-photon orthometric heights
-  must land within ±3 m of the DEM's elevation along the track, AND the same quantity
-  computed *without* the geoid constant must miss by 40–60 m. A test that also fails on
-  the un-converted data cannot pass by accident.
+- **Known-answer check, unbypassable:** the median of ground-photon orthometric heights
+  must land within **±5 m** of the ward DEM's median elevation, AND the same quantity
+  computed *without* the geoid constant must miss by **40–70 m**. A test that also fails
+  on the un-converted data cannot pass by accident.
+
+  **Why ±5 m and not the ±3 m this spec first said.** The tolerance must exceed the
+  combined uncertainty of the *reference*, or the gate throws on good data. Measured
+  budget, from `public/heat-map/data/<ward>-terrain.json`: the DEM disagrees with
+  Copernicus GLO-30 by **1.5–2.1 m RMSE** (its own recorded `crossCheck`); a transect
+  samples one line across a ward whose smoothed relief spans **4.9–7.7 m**, so a track
+  crossing low ground sits legitimately ~1–2 m below the ward median; ground-line
+  extraction adds ~0.5 m. In quadrature that is ≈2.6 m, so a ±3 m gate is barely one
+  sigma and would reject sound tracks. ±5 m is ~1.9 sigma and still catches the failure
+  it exists for — a skipped geoid conversion — by a factor of eleven.
+
+  The upper bound moves from 60 to 70 m for the same reason: N is near −55 m, and the
+  ±5 m ground tolerance puts a legitimate unconverted miss anywhere in 50–60 m, which
+  a 40–60 window clips.
 
 ### 5.2 Ground/roof separation — our classifier, kept simple and inspectable
 
-1. **Ground surface:** along-track rolling lower-quantile (p10 in ~30 m windows) of
-   confident photons = the local ground line. Kolkata relief is gentle (measured in the
-   terrain work), which is what makes this robust.
+1. **Ground surface — two passes, because one is biased.** Pass 1 is an along-track
+   rolling lower quantile (p10 in ~30 m windows) over ground candidates. Pass 2 replaces
+   each window with the **median** of its candidates within ±1.5 m of the pass-1 line,
+   repeated until the line stops moving.
+
+   Pass 2 is not polish; without it the result is systematically wrong. A p10 line sits
+   ≈1.28× the local photon spread BELOW true ground, so every height-above-ground is
+   inflated by that amount — measured at −1.19 m for a 1 m ground spread. That is not
+   noise: it does not average out, and the bootstrap CI cannot see it because the
+   bootstrap resamples *buildings*, not photons. It is also density-correlated (E[p10]
+   depends on window population), which would put a systematic gradient between dense and
+   open stretches — across the very comparison being made. Pass 2's median of a symmetric
+   residual is unbiased; the ±1.5 m gate is what keeps trees, which motivated the low
+   quantile, out of that median.
+
+   Measured on the shipped implementation: −0.03 m on clean ground at σ=1 m, +0.12 m with
+   15 % low vegetation, +0.29 m at 30 %. The residual error is **positive**, i.e. the line
+   sits slightly high and heights come out slightly *short* — the conservative direction
+   for a validation claim, unlike the p10 line's −1.19 m, which flattered it.
+
+   Kolkata relief is gentle (measured in the terrain work), which is what makes the
+   windowing viable at all.
+
+   Windows with no candidates leave the line undefined, and the ground line returns NaN
+   outside its populated range rather than extrapolating flat: a track entering the box
+   over a large block would otherwise measure those buildings against a clamped constant
+   (measured +0.97 m error). Those photons are dropped and **counted**, per §5.4.
 2. **Height above ground** per photon = orthometric height − interpolated ground line.
 3. **Roof photons:** photons whose lat/lon falls inside a building footprint **eroded by
    5 m** (the geolocation error), with height-above-ground in [2 m, 120 m]. Erosion
    discards small buildings entirely — recorded as a selection effect in the artefact
    (§5.4), not hidden.
 4. **Per-building height estimate for crossed buildings:** the p75 of its roof photons
-   (roof photons include edge scatter downward; an upper quantile resists it). Used ONLY
-   to build the transect distribution, never published per building.
+   (roof photons include edge scatter downward; an upper quantile resists it), over a
+   minimum of **5** photons. Used ONLY to build the transect distribution, never published
+   per building.
+
+   5, not 3, and not a round number: at n=5 numpy's p75 index is exactly 3.0 — the
+   second-highest photon, zero weight on the maximum, which is what "resists edge scatter
+   without chasing the single highest photon" actually requires. At n=3 the index is 1.5,
+   putting **half** the estimator's weight on the single highest photon, so the claim
+   would have been false at the module's own threshold. The estimator is also
+   sample-size-dependent (E[p75] shifts 0.23σ between n=3 and n=60), so admitting
+   3-photon buildings would have biased them low relative to well-sampled ones inside the
+   same pooled distribution.
 
 Confounders recorded in the script header: street trees (mitigated by footprint erosion
 — trees overhang streets, not roof centres), monsoon cloud (granules with < 100 confident
@@ -148,9 +196,20 @@ For each track: the set of buildings crossed (footprint intersects the eroded be
 corridor) yields two paired distributions — ICESat-2 transect heights (§5.2.4) and our
 artefact heights for the same crossed buildings. Compare:
 
-- median / p65 / p90 differences with bootstrap 95 % CIs (p65 is the statistic
-  `compute-heights.py` ships)
-- a two-sample KS test as the omnibus check
+- median / p65 / p90 differences, **each with its own** bootstrap 95 % CI (p65 is the
+  statistic `compute-heights.py` ships, so it needs a CI of its own — a single unlabelled
+  CI beside three biases invites quoting a median interval against a p65 number)
+- a **paired permutation test** as the omnibus check: the KS statistic between the two
+  arrays, with its p-value from 10,000 draws that randomise each pair's assignment.
+
+  **Not scipy's two-sample KS test**, which this spec originally named. That test assumes
+  the two samples are independent; ours are paired per building and strongly correlated,
+  which drags both ECDFs together and collapses the statistic. Measured under H₀ at n=60:
+  a nominal 5 % test rejected **0 times in 2,000 draws**, and its power at a half-storey
+  bias was 0.06. It would have returned a large, comfortable p-value almost regardless of
+  the truth, and that would have been published as "the omnibus check found no
+  significant difference" — a null hypothesis handing the model a free pass, which is
+  precisely the failure this project has caught twice before.
 
 **Verdicts, fixed now so the data can't tempt us:**
 

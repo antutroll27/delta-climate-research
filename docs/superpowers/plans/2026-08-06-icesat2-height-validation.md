@@ -867,9 +867,18 @@ def main() -> None:
     if n < MIN_BUILDINGS:
         summary["verdict"] = "underpowered"
     else:
+        # KEYS COME FROM THE SHIPPED _icesat2.quantile_bias (commit 95a8c7d), not
+        # from this plan's first draft: n, median/p65/p90_bias_m,
+        # median/p65/p90_ci95_m, ks_d, perm_p. There is deliberately NO bare
+        # `ci95_m` — an unlabelled CI sitting beside three biases invited quoting
+        # a median CI against a p65 number. And the significance value is
+        # `perm_p`, a PAIRED permutation test: scipy's two-sample KS assumes
+        # independence, and on these correlated pairs it rejected 0 times in
+        # 2,000 draws under H0 — it would have published "no significant
+        # difference" as a free pass no matter what the data said.
         qb = _icesat2.quantile_bias(o, t, np.random.default_rng(7))
         summary.update(qb)
-        lo, hi = qb["ci95_m"]
+        lo, hi = qb["median_ci95_m"]
         bias = qb["median_bias_m"]
         if abs(bias) < VALID_BIAS_M and -WIDE_CI_M < lo and hi < WIDE_CI_M:
             summary["verdict"] = "validated"
@@ -910,8 +919,10 @@ def main() -> None:
     print(f"\n  n={n} crossed buildings over {len(per_track)} tracks")
     if "median_bias_m" in summary:
         print(f"  median bias {summary['median_bias_m']:+.2f} m "
-              f"(95% CI {summary['ci95_m']}), p65 {summary['p65_bias_m']:+.2f}, "
-              f"p90 {summary['p90_bias_m']:+.2f}, KS p={summary['ks_p']}")
+              f"(95% CI {summary['median_ci95_m']}), "
+              f"p65 {summary['p65_bias_m']:+.2f} (CI {summary['p65_ci95_m']}), "
+              f"p90 {summary['p90_bias_m']:+.2f} (CI {summary['p90_ci95_m']})")
+        print(f"  paired permutation p={summary['perm_p']}  (KS D={summary['ks_d']})")
     print(f"  fill cohort: n={fill['n']}"
           + (f", median {fill['median_icesat2_m']} m "
              f"(understates by {fill['understatement_m']} m)" if fill["verdict"] == "measured" else " — underpowered"))
@@ -1077,7 +1088,7 @@ test('HEIGHTS mirrors the ICESat-2 artefact it claims to summarise', async () =>
   assert.equal(HEIGHTS.nTracks, j.summary.n_tracks);
   if (j.summary.median_bias_m !== undefined) {
     assert.equal(HEIGHTS.medianBiasM, j.summary.median_bias_m);
-    assert.deepEqual([...HEIGHTS.ci95M], j.summary.ci95_m);
+    assert.deepEqual([...HEIGHTS.ci95M], j.summary.median_ci95_m);
   }
 });
 ```
@@ -1107,7 +1118,7 @@ export const HEIGHTS = {
   nBuildings: 0,          // ← artefact summary.n_buildings
   nTracks: 0,             // ← artefact summary.n_tracks
   medianBiasM: 0,         // ← artefact summary.median_bias_m (omit if underpowered)
-  ci95M: [0, 0] as const, // ← artefact summary.ci95_m
+  ci95M: [0, 0] as const, // ← artefact summary.median_ci95_m
   note: 'Building heights validated in distribution along ICESat-2 satellite '
     + 'transects — not individual buildings: laser geolocation (~3–5 m) makes '
     + 'per-building attribution unreliable, and transects over-sample larger '
