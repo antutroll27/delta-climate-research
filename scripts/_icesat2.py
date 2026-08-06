@@ -104,6 +104,17 @@ GEOID_TOL_M = 0.5
 GROUND_BAND_M = (-2.0, 25.0)
 
 
+class RingError(ValueError):
+    """A footprint ring is malformed — WARD GEOMETRY is corrupt, not this pass.
+
+    A subclass so callers can tell it apart from the data-sufficiency
+    ValueErrors (`ground_line`'s "too few populated windows"). Those are a
+    property of one granule and justify skipping that subset; this one is a
+    property of the ward's committed footprint file, so every subset of the ward
+    is equally affected and recording it as "this pass had too few ground
+    windows" would misattribute whole-ward corruption to one overpass."""
+
+
 def to_local(w: Ward, lon: F64, lat: F64) -> tuple[F64, F64]:
     """Degrees → ward metres, +x east +y north, the footprints' `p` frame."""
     m = m_per_deg(w.centre.lat)
@@ -205,15 +216,16 @@ def assign_footprints(px: F64, py: F64, rings: list[list[float]],
     beyond the building and silently deleting real ground candidates that far
     away. `.buffer(0)` resolves the self-intersection to a valid interior first.
 
-    Raises ValueError on an odd-length ring: `zip` would drop the trailing
-    coordinate and hand back a quietly different polygon."""
+    Raises RingError (a ValueError subclass, so callers that only distinguish
+    the whole-ward case need not) on an odd-length ring: `zip` would drop the
+    trailing coordinate and hand back a quietly different polygon."""
     from shapely import points as sh_points
     from shapely.geometry import Polygon
     from shapely.strtree import STRtree
     polys, kept = [], []
     for i, p in enumerate(rings):
         if len(p) % 2:
-            raise ValueError(
+            raise RingError(
                 f"ring {i} has {len(p)} coordinates, an odd count — flat "
                 "[x, y, x, y, ...] expected; zip would drop the trailing value")
         g = Polygon(list(zip(p[0::2], p[1::2]))).buffer(0).buffer(buffer_m)
@@ -230,12 +242,19 @@ def assign_footprints(px: F64, py: F64, rings: list[list[float]],
 
 
 def building_heights(bldg_idx: npt.NDArray[np.int64], hag: F64,
-                     min_ph: int = MIN_ROOF_PH) -> dict[int, float]:
+                     min_ph: int = MIN_ROOF_PH,
+                     band: tuple[float, float] = ROOF_BAND_M) -> dict[int, float]:
     """Per-building p75 of roof-band height-above-ground. Only buildings with
-    >= min_ph photons in ROOF_BAND_M. Used to build the transect distribution,
+    >= min_ph photons in `band`. Used to build the transect distribution,
     NEVER published per building (spec §5.2.4). NaN height-above-ground (the
-    ground line's out-of-span marker) drops out of the band mask by itself."""
-    lo, hi = ROOF_BAND_M
+    ground line's out-of-span marker) drops out of the band mask by itself.
+
+    `band` DEFAULTS TO THE SHIPPED ROOF_BAND_M AND THE SHIPPED PATH MUST NOT
+    PASS ANYTHING ELSE. It is a parameter for one purpose: measuring how much
+    the 2.0 m floor moves the published bias, offline, so the artefact can carry
+    that sensitivity as evidence. Choosing a floor by which answer it produces
+    is the exact move this workstream exists to avoid."""
+    lo, hi = band
     m = (bldg_idx >= 0) & (hag >= lo) & (hag <= hi)
     out: dict[int, float] = {}
     for b in np.unique(bldg_idx[m]):
@@ -299,6 +318,14 @@ def quantile_bias(ours: F64, theirs: F64, rng: np.random.Generator,
     `perm_p` is resolved to 1/perms — a reported 0.0000 means "below 1e-4", not
     "zero".
 
+    EVERY VALUE IS RETURNED UNROUNDED, and the caller rounds for display. This
+    function used to round to 2 dp in place, which meant the pre-registered
+    verdict table in `measure-height-accuracy.py` was evaluated on rounded
+    input: a true bias of 3.195 m reads as 3.20 and trips the `|bias| >= 3.2 m`
+    arm of `biased`, publishing a verdict the spec does not support at that
+    value. A threshold has to be tested against the measurement, not against its
+    presentation.
+
     Raises ValueError if the samples are misaligned, or shorter than 5 pairs
     (at n=1 the bootstrap CI is zero-width and "excludes zero", which would
     publish a `biased` verdict off a single building)."""
@@ -319,15 +346,15 @@ def quantile_bias(ours: F64, theirs: F64, rng: np.random.Generator,
     qv = np.array([0.50, 0.65, 0.90])
     obs = np.quantile(ours, qv) - np.quantile(theirs, qv)
     for j, name in enumerate(names):
-        d[f"{name}_bias_m"] = round(float(obs[j]), 2)
+        d[f"{name}_bias_m"] = float(obs[j])
 
     bs = np.empty((boots, qv.size))
     for k in range(boots):
         i = rng.integers(0, n, n)          # paired resample — same buildings both sides
         bs[k] = np.quantile(ours[i], qv) - np.quantile(theirs[i], qv)
     for j, name in enumerate(names):
-        d[f"{name}_ci95_m"] = [round(float(np.quantile(bs[:, j], 0.025)), 2),
-                               round(float(np.quantile(bs[:, j], 0.975)), 2)]
+        d[f"{name}_ci95_m"] = [float(np.quantile(bs[:, j], 0.025)),
+                               float(np.quantile(bs[:, j], 0.975))]
 
     d_obs = float(_ks_stat(ours[None, :], theirs[None, :])[0])
     hits, done = 0, 0
@@ -338,8 +365,8 @@ def quantile_bias(ours: F64, theirs: F64, rng: np.random.Generator,
         ge = _ks_stat(np.where(flip, theirs, ours), np.where(flip, ours, theirs))
         hits += int(np.count_nonzero(ge >= d_obs - 1e-12))
         done += m
-    d["ks_d"] = round(d_obs, 4)
-    d["perm_p"] = round(hits / perms, 4)
+    d["ks_d"] = d_obs
+    d["perm_p"] = hits / perms
     return d
 
 
@@ -500,14 +527,29 @@ def _self_test() -> None:
     assert s_kept == [0], "repaired ring vanished"
     assert s_idx[1] == 0, "repaired ring lost its real interior"
     assert s_idx[0] == -1, "unrepaired ring swallowed a photon 70 m outside it"
-    # an odd-length ring is refused, not silently truncated by zip
+    # an odd-length ring is refused, not silently truncated by zip — and it is
+    # refused as a RingError, so a caller can tell whole-ward geometry corruption
+    # apart from ground_line's per-pass "too few populated windows" ValueError
+    # instead of filing the first under the second
     try:
         assign_footprints(np.array([0.0]), np.array([0.0]),
                           [[0.0, 0.0, 10.0, 0.0, 10.0]], -1.0)
+    except RingError:
+        pass
+    except ValueError:
+        raise AssertionError("odd ring raised a bare ValueError, "
+                             "indistinguishable from a per-pass data shortfall")
+    else:
+        raise AssertionError("assign_footprints accepted an odd-length ring")
+    assert issubclass(RingError, ValueError), "RingError must stay a ValueError"
+    try:                                    # ... and ground_line's is NOT one
+        ground_line(np.array([0.0]), np.array([0.0]), np.array([0.0]))
+    except RingError:
+        raise AssertionError("ground_line's data shortfall raised RingError")
     except ValueError:
         pass
     else:
-        raise AssertionError("assign_footprints accepted an odd-length ring")
+        raise AssertionError("ground_line accepted a single candidate")
 
     est = building_heights(idx, hag)
     assert set(est) <= {0, 1}
@@ -519,6 +561,15 @@ def _self_test() -> None:
     assert building_heights(np.zeros(4, dtype=np.int64), np.full(4, 10.0)) == {}, \
         "a 4-photon building contributed a height"
     assert building_heights(np.zeros(5, dtype=np.int64), np.full(5, 10.0)) == {0: 10.0}
+    # `band` overrides the roof band without touching the shipped constant, so
+    # the floor-sensitivity measurement is possible and ROOF_BAND_M stays put
+    low = np.array([0.5, 0.7, 0.9, 1.1, 1.3])
+    assert building_heights(np.zeros(5, dtype=np.int64), low) == {}, \
+        "photons below the 2.0 m floor contributed at the default band"
+    assert building_heights(np.zeros(5, dtype=np.int64), low,
+                            band=(0.0, 120.0)).keys() == {0}, \
+        "band override did not admit the sub-floor photons"
+    assert ROOF_BAND_M == (2.0, 120.0), "the shipped roof band moved"
 
     # ground_line refuses misaligned candidate arrays
     try:
@@ -537,6 +588,15 @@ def _self_test() -> None:
     assert lo > 0.0, "CI fails to exclude zero on a real bias"
     # every published statistic carries its own labelled CI; no bare ci95_m
     assert "ci95_m" not in qb and "ks_p" not in qb, "unlabelled/invalid key survived"
+    # values come back UNROUNDED, so the caller's pre-registered thresholds are
+    # tested against the measurement rather than against its 2 dp presentation.
+    # Rounding here would put a true bias of 3.195 m on the wrong side of the
+    # spec's 3.2 m `biased` boundary.
+    exact = float(np.quantile(ours, 0.5) - np.quantile(theirs, 0.5))
+    assert qb["median_bias_m"] == exact, "median_bias_m was rounded in place"
+    assert abs(exact - round(exact, 2)) > 1e-9, \
+        "median_bias_m happens to be a 2 dp value here, so the test above " \
+        "cannot tell rounding from exactness — pick different fixture data"
     for name in ("median", "p65", "p90"):
         c_lo, c_hi = qb[f"{name}_ci95_m"]
         assert c_lo < qb[f"{name}_bias_m"] < c_hi, f"{name} CI does not bracket it"
@@ -545,7 +605,7 @@ def _self_test() -> None:
     # the vectorised D matches scipy's, so the permutation null is the real KS null
     from scipy.stats import ks_2samp
     ref = float(ks_2samp(ours, theirs).statistic)
-    assert abs(qb["ks_d"] - round(ref, 4)) < 1e-9, f"ks_d {qb['ks_d']} vs scipy {ref}"
+    assert abs(qb["ks_d"] - ref) < 1e-12, f"ks_d {qb['ks_d']} vs scipy {ref}"
     tied_a, tied_b = np.array([1.0, 2.0, 2.0, 3.0, 5.0]), np.array([2.0, 2.0, 4.0, 5.0, 6.0])
     assert abs(float(_ks_stat(tied_a[None, :], tied_b[None, :])[0])
                - float(ks_2samp(tied_a, tied_b).statistic)) < 1e-12, "_ks_stat wrong under ties"
