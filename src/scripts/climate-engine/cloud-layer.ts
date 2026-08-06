@@ -132,17 +132,24 @@ export function createCloudLayer(
         const base = on ? Math.min(1, Math.min(1, cover * 1.5) * c.a * CLOUD.OPACITY) : 0;
         c.cu.position.set(wx, c.y, wz);
         c.cu.scale.set(c.sc, c.sc * CUMULUS_ASPECT, 1);
+        /* A sprite at zero opacity still submits a draw call and still pays its
+           fill. The cost here is fill rate on 52 large alpha-blended billboards,
+           not geometry (the shadow planes measured at +0.03 ms), so skipping the
+           invisible ones is the cheapest real saving available. */
         c.cu.material.opacity = base * (1 - fuse) * 0.96 * lit;
+        c.cu.visible = c.cu.material.opacity > 0.004;
         c.ve.position.set(wx, c.y - c.sc * 0.03, wz);
         const vw = c.sc * 1.7 * (0.9 + fuse * 0.4);
         c.ve.scale.set(vw, vw * VEIL_ASPECT, 1);
         c.ve.material.opacity = base * fuse * 0.9 * lit;
+        c.ve.visible = c.ve.material.opacity > 0.004;
         const sr = c.sc * (1.1 + fuse * 0.8);
         /* Offset along the light, and seated on the drawn ground so it follows relief. */
         c.sh.position.set(wx - 130, groundAt(wx - 130, wz + 95) + 1.2, wz + 95);
         c.sh.scale.set(sr, sr, 1);
         (c.sh.material as THREE.MeshBasicMaterial).opacity =
           base * (0.55 - fuse * 0.22) * shadowLit;
+        c.sh.visible = (c.sh.material as THREE.MeshBasicMaterial).opacity > 0.004;
       }
     },
     dispose() {

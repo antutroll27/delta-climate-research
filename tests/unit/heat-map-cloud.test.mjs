@@ -134,8 +134,14 @@ test('the deck dims at night rather than lighting cloud tops at 22:00', async ()
 
 test('a null reading draws no sky', async () => {
   const app = await code('heat-map-app.ts');
-  assert.match(app, /if \(cloudLayer && state\.live\)/,
+  // Tolerant of extra conditions (the deck is also gated off in 2D), but BOTH
+  // cloudLayer and state.live must still be required — that is the guarantee.
+  assert.match(app, /if \(cloudLayer && [^)]*state\.live\)/,
     'an invented deck with no measurement behind it is the loader land-dust mistake');
+  assert.match(app, /cloudLayer\.group\.visible = mode !== 'iso'/,
+    'the deck must stay out of the 2D isotherm view: measured on an M4, it was the '
+    + 'only thing keeping that page rendering (4.31 ms/frame against 0.07 ms idle) '
+    + 'for clouds seen straight down over a flat isotherm');
 });
 
 test('wind direction is documented as advection-only', async () => {
