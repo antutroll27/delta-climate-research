@@ -43,9 +43,18 @@ test('§8 — priced line matches the SaaS exactly', () => {
 });
 
 test('§8 — the stranded steel line refuses, and names the missing rule', () => {
-  const e = run('72241010', 'IN', '(F)', '60');
+  // 72241010 used to be the example here. It is no longer stranded: its Column B rows
+  // were keyed (F)(1)/(F)(2), Annex §5.3 production-year markers that the generator was
+  // writing into routeIndicator, so nothing could ever match a declared route of (F).
+  // Moving the year into validFrom/validTo made 794 rows reachable and that good with
+  // them, so the refusal path needs a good that is genuinely still stranded.
+  //
+  // 72052100 is one: the defaults corpus declares route (C), while its Column B publishes
+  // only (F) and (G) variants. That is a real vocabulary gap between the two corpora —
+  // the thing this test was written to prove is reported honestly rather than guessed.
+  const e = run('72052100', 'IN', '(C)', '60');
   assert.equal(e.status, 'unavailable');
-  assert.equal(e.selector, 'benchmark/72241010/column-B/(F)/2026-03-15');
+  assert.equal(e.selector, 'benchmark/72052100/column-B/(C)/2026-03-15');
 });
 
 test('§8 — route lookup is unchanged', () => {
@@ -168,9 +177,9 @@ test('the real pack: 72083800/IN publishes one route, so it needs no pick', () =
 /* ── §7 non-negotiables, per branch ────────────────────────────────────────── */
 
 test('NON-NEGOTIABLE 2 — a refusal renders NO figure of any kind', () => {
-  const html = renderResult(run('72241010', 'IN', '(F)', '60'));
+  const html = renderResult(run('72052100', 'IN', '(C)', '60'));
   assert.match(html, /No estimate/i, 'the refusal must be stated, not implied');
-  assert.match(html, /benchmark\/72241010\/column-B\/\(F\)\/2026-03-15/,
+  assert.match(html, /benchmark\/72052100\/column-B\/\(C\)\/2026-03-15/,
     'the missing rule selector must be shown verbatim');
   // The failure that matters: a refusal that looks like a computed zero.
   assert.doesNotMatch(html, /class="cb-fig"/,
@@ -235,7 +244,9 @@ test('the renderer handles every status the engine can return', () => {
   // this checks the runtime side — that each reachable status produces real output.
   const seen = new Set();
   const probes = [
-    ['25231000', 'DZ', '(A)'], ['72241010', 'IN', '(F)'], ['72083800', 'IN', '(C)'],
+    // cscf_pending, unavailable, cscf_pending — 72052100/(C) is the refusal probe
+    // (72241010 no longer refuses; see the §8 stranded-line test above).
+    ['25231000', 'DZ', '(A)'], ['72052100', 'IN', '(C)'], ['72083800', 'IN', '(C)'],
   ];
   for (const [cn, country, route] of probes) {
     const e = run(cn, country, route, '10');
