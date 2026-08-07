@@ -14,35 +14,40 @@ import { papers } from './src/data/papers.ts';
 import { projects } from './src/data/projects.ts';
 
 /**
- * `/api/live` in `npm run dev`.
+ * Vercel functions in `npm run dev`.
  *
- * The live-weather call goes through a Vercel serverless function (`api/live.js`)
- * because met.no's terms require an identifying User-Agent that a browser fetch
- * cannot set. Vercel runs that in production — Astro's dev server does not, so
- * without this plugin `npm run dev` serves a 404 and the heat map loses its live
- * ambient reading locally while looking perfectly fine in production.
+ * The live-weather and Climate Clock calls go through Vercel serverless
+ * functions. Vercel runs those in production — Astro's dev server does not, so
+ * without this plugin `npm run dev` serves a 404 for both integrations.
  *
  * This mounts the SAME handler on Vite's connect server, adapting Vercel's
  * (req.query / res.status().json()) shape to Node's raw one. Dev only — `apply`
  * keeps it out of every build, so nothing here can reach production.
  */
 /** @returns {import('vite').Plugin} */
-function devApiLive() {
+function devApiProxies() {
   return {
-    name: 'delta-dev-api-live',
+    name: 'delta-dev-api-proxies',
     apply: 'serve',
     /** @param {import('vite').ViteDevServer} server */
     configureServer(server) {
-      server.middlewares.use('/api/live',
+      /**
+       * @param {string} path
+       * @param {() => Promise<{ default: (req: any, res: any) => Promise<void> }>} loadHandler
+       */
+      const mount = (path, loadHandler) => server.middlewares.use(path,
         /**
          * @param {import('node:http').IncomingMessage} req
          * @param {import('node:http').ServerResponse} res
          * @param {(err?: unknown) => void} next
          */
         async (req, res, next) => {
-          const handler = (await import('./api/live.js')).default;
+          const handler = (await loadHandler()).default;
           const url = new URL(req.url ?? '', 'http://localhost');
-          const shim = { query: Object.fromEntries(url.searchParams) };
+          const shim = {
+            method: req.method,
+            query: Object.fromEntries(url.searchParams),
+          };
           const out = {
             /** @param {string} k @param {string} v */
             setHeader: (k, v) => res.setHeader(k, v),
@@ -56,6 +61,9 @@ function devApiLive() {
           };
           try { await handler(shim, out); } catch (err) { next(err); }
         });
+
+      mount('/api/live', () => import('./api/live.js'));
+      mount('/api/climate-clock', () => import('./api/climate-clock.js'));
     },
   };
 }
@@ -113,7 +121,7 @@ export default defineConfig({
     react(),
   ],
   vite: {
-    plugins: [tailwindcss(), devApiLive()],
+    plugins: [tailwindcss(), devApiProxies()],
     // KEEP VITE'S CACHE OFF THIS REPO'S VOLUME.
     //
     // The working copy lives on an exFAT external disk. Vite and esbuild MMAP

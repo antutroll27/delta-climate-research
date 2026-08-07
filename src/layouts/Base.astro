@@ -219,12 +219,12 @@ const jsonLd = {
     <a class="skip-link" href="#main">Skip to content</a>
     <slot />
 
-    <!-- Vercel Web Analytics — cookieless page-view/visitor counts; only sends on
-         the production deployment (no-ops in dev). Astro-native component. -->
+    <!-- Cookieless, aggregated traffic reporting. Its processing and Vercel as a
+         recipient must be disclosed in the public privacy notice. -->
     <Analytics />
 
-    <!-- Vercel Speed Insights — measures web performance and Core Web Vitals;
-         only active on production deployment. Astro-native component. -->
+    <!-- Real-user Core Web Vitals. This sends performance data to Vercel and is
+         covered by the same privacy/vendor review as Web Analytics. -->
     <SpeedInsights />
 
     <script>

@@ -13,7 +13,7 @@
  *
  * met.no is keyless and CC BY 4.0. There is no secret here and there must not be.
  */
-const UA = 'delta-climate-research/1.0 (https://deltaclimate.earth; kumarantar98@gmail.com)';
+const UA = 'delta-climate-research/1.0 (https://deltaclimate.earth; angad@deltaclimate.earth)';
 const UPSTREAM = 'https://api.met.no/weatherapi/locationforecast/2.0/compact';
 
 /* met.no publishes hourly; 10 minutes is well inside that and keeps the freshness

@@ -43,7 +43,7 @@ async function fetchModules(): Promise<ClimateModules | undefined> {
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
-    const response = await fetch('https://api.climateclock.world/v2/clock.json', {
+    const response = await fetch('/api/climate-clock', {
       signal: controller.signal,
     });
     if (!response.ok) return;

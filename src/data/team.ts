@@ -52,7 +52,7 @@ export const team: Member[] = [
     focus: ['Quantitative risk', 'Resource optimisation', 'Low-carbon logistics'],
     background: ['Banking & quantitative finance', 'Regional logistics operations'],
     work: ['Low-carbon logistics modelling', 'Climate-infrastructure finance'],
-    email: '',
+    email: 'dhruv@deltaclimate.earth',
   },
   {
     id: '04', first: 'Antariksha', last: 'Kumar', tier: 'Lead', discipline: 'Technology Implementation', mono: 'AK', cover: 4,
@@ -64,7 +64,7 @@ export const team: Member[] = [
     focus: ['Platform engineering', 'Data visualisation', 'Agentic workflows'],
     background: ['MSc Human-Computer Interaction — Nottingham', 'BTech Computer Science'],
     work: ['Real-time data pipelines', 'Analytics dashboards'],
-    email: 'kumarantar98@gmail.com',
+    email: 'ant@deltaclimate.earth',
   },
   {
     id: '05', first: 'Roshni', last: 'Rakshit', tier: 'Lead', discipline: 'Communications', mono: 'RR', cover: 2,
@@ -76,6 +76,6 @@ export const team: Member[] = [
     focus: ['Science storytelling', 'Media & PR', 'Brand campaigns'],
     background: ['BA Communication — Simon Fraser University'],
     work: ['Cross-functional comms', 'Multi-channel campaigns'],
-    email: '',
+    email: 'roshni@deltaclimate.earth',
   },
 ];
