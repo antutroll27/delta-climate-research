@@ -107,6 +107,16 @@ test('unattested and under 50 t stays indeterminate', () => {
   assert.equal(cards[0].state, 'indeterminate');
 });
 
+test('exactly 50 t attested-complete is below threshold — the .gt boundary', () => {
+  // The highest-stakes single case this function handles. evaluateThreshold
+  // uses .gt(thresholdT), so a line sitting exactly ON the 50 t threshold is
+  // NOT above it. Every other test here uses 60 or 30 — neither would notice
+  // if .gt ever became .gte, which would start taxing an importer at exactly
+  // the line the regulation exempts.
+  const cards = thresholdByYear([line({ massT: '50' })], fp, new Set([2026]), pack);
+  assert.equal(cards[0].state, 'below_threshold', '50 t is AT the threshold, not above it');
+});
+
 test('a hydrogen line is excluded from the eligible mass', () => {
   // sectorForCn('28041000') is hydrogen, absent from the 2026 row's
   // includedSectors. aggregateThresholdBasis's own massSectors filter would also
@@ -116,6 +126,28 @@ test('a hydrogen line is excluded from the eligible mass', () => {
   assert.equal(card.state, 'below_threshold', '900 t of hydrogen must not count');
   assert.deepEqual(card.entryIds, ['L1']);
   assert.deepEqual(card.entryHashes, ['a'.repeat(64)]);
+});
+
+test('eligibleLineCount tracks what aggregateThresholdBasis actually kept, not our own pre-filter', () => {
+  // Regression for a review finding: entries.length (our filter, keyed on
+  // rule.includedSectors) and basis.entryIds.length (ALSO filtered by
+  // aggregateThresholdBasis's own hardcoded massSectors) agree today only
+  // because the shipped 2026 row's includedSectors happens to equal
+  // massSectors exactly. Simulate a future rule that widens includedSectors
+  // to hydrogen: our filter lets a hydrogen line through, but the vendored
+  // massSectors filter (cement/aluminium/fertilisers/iron_and_steel only)
+  // still drops it. eligibleLineCount must follow entryIds, not the count of
+  // what we handed to aggregateThresholdBasis.
+  const widerPack = {
+    ...pack,
+    thresholds: pack.thresholds.map((t) => (t.calendarYear === 2026
+      ? { ...t, includedSectors: [...t.includedSectors, 'hydrogen'] }
+      : t)),
+  };
+  const lines = [line({ id: 'L1', massT: '10' }), line({ id: 'L3', cn: '28041000', massT: '5' })];
+  const [card] = thresholdByYear(lines, fp, new Set([2026]), widerPack);
+  assert.deepEqual(card.entryIds, ['L1'], 'the vendored massSectors filter still drops hydrogen');
+  assert.equal(card.eligibleLineCount, 1, 'count must match entryIds.length, not our own pre-filter length');
 });
 
 test('a line with an unresolved date produces no phantom NaN-year card', () => {
@@ -136,11 +168,15 @@ test('a line with an unresolved date produces no phantom NaN-year card', () => {
   assert.equal(cards[0].state, 'below_threshold', 'the 999 t undated line must not be swept in');
 });
 
-test('calendar years sort numerically, not lexicographically', () => {
-  // Array.prototype.sort's default comparator is string-based: [2027, 2026, 10]
-  // would sort to [10, 2026, 2027]. Not reachable with real years today, but the
-  // fix is a one-token comparator and worth pinning so a future refactor can't
-  // silently drop it back to the default.
+test('calendar years sort numerically — pinned as intent, not as reachable behaviour', () => {
+  // Forward-guard, not a regression test: yearOf only ever returns a number
+  // sliced from a regex-validated YYYY-MM-DD, so a real year is always exactly
+  // 4 digits — lexicographic and numeric order can never disagree on input
+  // this function can actually receive. This test passes identically against
+  // a bare .sort() (verified: reverting the comparator keeps all tests green).
+  // What it pins is INTENT — the (a, b) => a - b comparator stays in place as
+  // defensive code, in case a future yearOf ever returns something other than
+  // a 4-digit year.
   const lines = [
     line({ id: 'L1', massT: '5', date: '2027-03-15' }),
     line({ id: 'L2', massT: '5', date: '2026-03-15' }),
