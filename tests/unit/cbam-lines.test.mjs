@@ -55,9 +55,13 @@ test('packSnapshotHash pins generatedAt and both workbook hashes', async () => {
   assert.notEqual(a, await packSnapshotHash(altered), 'generatedAt is part of the claim');
 });
 
-test('packSnapshotHash changes when a workbook hash changes', async () => {
-  // Guards against a regression that drops workbookSha256 from the digest
-  // inputs entirely — every other test in this file would still pass.
+test('packSnapshotHash treats each workbook hash as a real digest input, not just a presence check', async () => {
+  // Forward-guard, not a regression test: the pre-fix code already folded
+  // workbookSha256 into the digest, so this passes against both the old and
+  // new implementation — it is the missing-hash test below that pins the bug
+  // this commit fixed. What this one catches is a FUTURE refactor that keeps
+  // the field present but stops it from actually varying the hash (e.g.
+  // hashing only presence/absence, or only the first entry's hash).
   const a = await packSnapshotHash(pack);
   const altered = {
     ...pack,
