@@ -104,7 +104,16 @@ export interface YearThreshold {
   entryIds?: string[];
   entryHashes?: string[];
   attested: boolean;
-  /** Lines in this year that counted toward the eligible mass. */
+  /**
+   * Lines in this year that counted toward the eligible mass — always
+   * basis.entryIds.length, never our own pre-filter's entries.length. Two
+   * filters run in series (ours, on rule.includedSectors; aggregateThresholdBasis's
+   * own hardcoded massSectors) and today they agree only because the shipped
+   * 2026 row's includedSectors happens to equal massSectors. If a future
+   * threshold row ever includes electricity or hydrogen, a line could pass
+   * ours and still be dropped by the vendored one — counting it here would
+   * make eligibleLineCount claim a line that entryIds doesn't list.
+   */
   eligibleLineCount: number;
 }
 
@@ -129,6 +138,14 @@ export interface YearThreshold {
  * card and, worse, could mask a real card if the array order put it first. Those
  * lines simply don't resolve to a year yet; callers surface them separately
  * (e.g. "N lines need a date") rather than under a fake calendarYear.
+ *
+ * @throws {Error} if any in-scope line (classifiable, in-sector for its year's
+ * rule) has no entry in `fingerprints`. This fires inside the per-year map, so
+ * ONE bad line discards every year's card, not just its own year's — callers
+ * must wrap the call (see cbam-app.ts's run()) and must hash every line before
+ * calling. Deliberate: silently substituting '' for the missing hash would
+ * print as an ordinary, complete entryHashes value instead of surfacing that
+ * some line was never hashed.
  */
 export function thresholdByYear(
   lines: readonly Line[],
@@ -187,7 +204,7 @@ export function thresholdByYear(
       sourceLocator: rule.sourceLocator,
       entryIds: basis.entryIds,
       entryHashes: basis.entryHashes,
-      eligibleLineCount: entries.length,
+      eligibleLineCount: basis.entryIds.length,
     };
   });
 }
