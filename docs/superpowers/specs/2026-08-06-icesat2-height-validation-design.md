@@ -552,3 +552,190 @@ granule list is exhausted.
 SlideRule/YAPC cross-check of our classifier (optional later) · ATL08 priors · ATL13
 pond levels · per-building height edits · any change to the heat physics or the
 within-ward pattern claims · UAV/360-drive ground truth (separately deferred).
+
+## 9 · How this method compares to published practice (2026-08-07)
+
+A literature search on ICESat-2 building-height retrieval was run **after** the sweep
+completed and the verdict was published. Everything below is **disclosure and context
+only**. Nothing in this section moved a threshold, an estimator or the verdict, and the
+n ≥ 30 bar in §5.3 is unchanged — see §9.5 for why that is not a close call.
+
+The unflattering findings are §9.1, §9.2, §9.3 and §9.4; the favourable ones are §9.6 and
+§9.7. They are recorded together because recording only the second half would be worse
+than not running the search: it would convert a check into a defence.
+
+### 9.1 · The ~11 m footprint is a SECOND failure mode, and our 5 m erosion does not touch it
+
+§5.2.3 justifies the 5 m erosion as "the geolocation error". That justification is sound
+and now has a number behind it: ATL03's on-orbit horizontal geolocation accuracy is
+**3.5 ± 2.1 m against a 6.5 m mission requirement** (Magruder et al. 2021,
+doi:[10.1029/2020EA001414](https://doi.org/10.1029/2020EA001414); precision-orbit and
+pointing budget in Luthcke et al. 2021,
+doi:[10.1029/2020EA001494](https://doi.org/10.1029/2020EA001494)). A 5 m erosion is
+**well supported for the error it targets**.
+
+It is silent about a larger one. Each ATL03 photon is not a point: it is a return from a
+ground spot whose diameter was measured **on orbit at 10.9 ± 1.2 m** (Magruder 2021,
+same DOI). Perfect geolocation of an 11 m spot straddling a roof edge still returns a
+**blend of roof and street**, because the whole spot contributed. Wang et al. 2024
+(doi:[10.1109/TGRS.2024.3383600](https://doi.org/10.1109/TGRS.2024.3383600)) measure the
+resulting building-boundary blur at **≈6 m horizontal RMSE**, reducible to ≈1 m only by
+explicitly **deconvolving the footprint** — which we do not do, and which no erosion can
+substitute for.
+
+Consequence for the claim, not for the method: on a 10–20 m Kolkata building the mixing
+length is comparable to the building. This belongs in the user-facing note, because it
+is a limitation of what the measurement can mean, not a tuning detail. It is **not** a
+reason to widen the erosion — §5.3a already rules that direction out, and erosion is the
+wrong instrument for it in any case.
+
+### 9.2 · p75 has no published support — in either direction
+
+The two published percentile sweeps for roof height both test **{50, 60, 70, 80, 85, 90,
+95} and skip 75 entirely**. Published roof estimators are:
+
+| estimator | source |
+|---|---|
+| p90 | Wu, Huang & Zhao 2023, doi:[10.3390/rs15153786](https://doi.org/10.3390/rs15153786); Hu et al. 2026, doi:[10.3390/rs18040540](https://doi.org/10.3390/rs18040540) |
+| max after filtering | Cai et al. 2024, doi:[10.3390/rs16020263](https://doi.org/10.3390/rs16020263) |
+| mean | Dandabathula et al. 2021, doi:[10.1088/2634-4505/abf820](https://doi.org/10.1088/2634-4505/abf820) |
+| p50 | Wu, Z. 2022, TU Delft MSc thesis — **not peer reviewed** |
+
+So p75 is neither endorsed nor refuted; it was **not tested**. §5.2.4's justification —
+that at n = 5 numpy's p75 index lands exactly on the second-highest photon, putting zero
+weight on the maximum — remains internally coherent and is why the estimator and
+`MIN_ROOF_PH` were chosen as a pair. But it is **our argument, not the field's**, and
+must be presented that way wherever it is presented at all. The estimator does **not**
+move on the strength of this finding: switching to p90 after seeing `underpowered` would
+be a post-hoc estimator change, the same category of error as moving the bar.
+
+### 9.3 · Our 2 m roof-band floor is MORE PERMISSIVE than every published floor
+
+§5.2.3's band is [2.0, 120.0] m. Every published floor found is higher:
+
+- **2.5 m** — Hu et al. 2026 (doi:10.3390/rs18040540); Liu et al. 2024,
+  doi:[10.3390/s24186076](https://doi.org/10.3390/s24186076)
+- **2.8 m** — Cai et al. 2024 (doi:10.3390/rs16020263)
+
+We are the loosest of the four. That cuts against §5.3's framing of the floor as a
+conservative choice: the floor **is** conservative in the direction §5.3 describes (it
+deletes low returns and so pushes any measured difference positive), but it is
+**permissive** relative to the field in what it admits as roof at all.
+
+**Unverified, high-consequence, recorded because suppressing it would be selective:**
+Lao et al. 2021 (doi:[10.1016/j.jag.2021.102596](https://doi.org/10.1016/j.jag.2021.102596))
+is reported to state that **ATL03's own noise removal already discards building photons
+below ~3 m above ground**. The full text was **not accessible** and this has **not** been
+confirmed against the product ATBD or against our own subsets. If true, our 2–3 m band
+is partly **pre-emptied upstream**, which would mean the 313 photons counted below the
+floor understate what the instrument chain removed. Flagged as unverified; verifying it
+is a bounded, checkable task against the committed subsets and the ATL03 ATBD.
+
+### 9.4 · Our ground reference is the least-guarded component relative to best practice
+
+This is the identified gap, and it is the same component §5.1's correction already caught
+once. Best practice guards the ground line with **independent** evidence:
+
+- **ATL08** clamps its ground estimate to within **6 m of a reference DEM**.
+- **Cai et al. 2024** add independent Sentinel-2 land cover, a FABDEM stratifier, and a
+  relief filter.
+
+We use **one** guard (§5.2.1a) and it is derived from **the pass's own ground-line
+median** — the very line that may be corrupted. It is strictly better than nothing (it
+caught 27 windows across 11 of 31 passes, and it is what produced the honest n = 28),
+but it is internal: a pass whose ground line is uniformly wrong has no external witness.
+§5.1 already records the whole-line version of that failure as G1b's job, and G1b is
+itself a plausible-band check, not an independent surface.
+
+**Closing this is DEFERRED and pre-registered as separate work, and is deliberately NOT
+implemented here.** Adding an external DEM ground guard after seeing n = 28 — in the same
+change that records the literature — would be indistinguishable from tuning the ground
+line until the cohort clears the bar, whatever the intent. It gets its own change, its
+own pre-registration, and its own before/after n stated in advance.
+
+### 9.5 · n = 28 in field context — and the bar stays at 30
+
+Published ICESat-2 building-height studies fall into two clusters with essentially
+nothing between them:
+
+| cluster | validation | n | reported error |
+|---|---|---|---|
+| hand-curated | field survey / TLS, buildings picked by hand | **≈10–82** | sub-metre to ~2 m |
+| automated | municipal height attributes | **≈10³–10⁵** | **RMSE 4–8 m** |
+
+Lower cluster, by study: Dandabathula et al. 2021 **n = 10** (Jaipur,
+doi:10.1088/2634-4505/abf820); Wang et al. 2024 **n = 23** (doi:10.1109/TGRS.2024.3383600);
+Goud & Bhardwaj 2021 **n = 30** (Hyderabad / Paris / Vancouver); Lao et al. 2021
+**n = 82** (doi:10.1016/j.jag.2021.102596); Watson & Elliott 2025 (*Sci. Rep.*,
+doi:[10.1038/s41598-025-15929-2](https://doi.org/10.1038/s41598-025-15929-2)) validated
+Nairobi, Quito and Kathmandu at **n = 25 per city, manually**.
+
+**n = 28 sits near the median of the lower cluster.** Two caveats travel with that, and
+the first is the one that matters:
+
+1. **Those sub-metre RMSEs are a selection artefact.** They come from hand-picking
+   buildings with clean ground *and* clean roof. That accuracy is **not achievable at
+   scale**, and our pipeline is automated — it belongs nearer the **4–8 m** cluster. So
+   the right reading of "n = 28 is normal for this field" is *normal for the sample
+   size*, never *normal for the accuracy*.
+2. **No ICESat-2 building-height study exists for Kolkata, Dhaka or the Ganges delta**,
+   and Global South coverage is thin generally (Jaipur n = 10; Hyderabad inside a
+   three-city n = 30). Nothing in the literature tells us how this method behaves over
+   deltaic, dense, low-rise fabric — which is exactly what §5.1's unmapped-building
+   failure turned out to be about.
+
+**What this changes: the reading, not the bar.** `underpowered` reflects **the bar we
+chose**, not an unusually thin sample by this field's standards — a reader should not
+conclude the sweep failed badly. **The bar nevertheless stays at 30.** Lowering it now,
+having seen n = 28 fall two short, would be outcome-driven tuning: the bar's entire value
+is that it was fixed before the data existed, and a bar that moves once it binds is not a
+bar. This is the same reasoning §3 and §5.1 apply to the erosion, the roof band and
+`MIN_ROOF_PH`, and it applies here with more force, because here the literature would
+supply a respectable-sounding excuse.
+
+### 9.6 · One convergence worth recording
+
+`GROUND_RELIEF_M = 10 m` (§5.2.1a) was derived from **measured ward relief** — smoothed
+spans of 4.9/6.7/7.7 m against roofs standing 11–36 m up. Cai et al. 2024 independently
+tuned a relief threshold of **h = 10 m** (doi:10.3390/rs16020263). Two different
+derivations, the same number. That is corroboration, not proof, and the sensitivity sweep
+in `method_stability.relief_allowances` remains the reason the constant is not
+load-bearing.
+
+Our handling of a refused window is **stricter than theirs**: Cai et al. delete the
+offending stretch and continue; §5.2.1a refuses to bridge across it, returning NaN for
+every photon whose bracketing windows straddle a refusal. Bridging is the cheaper option
+and it is the one we rejected.
+
+### 9.7 · Two places we are more conservative than the field
+
+- **`MIN_ROOF_PH = 5` is stricter than nearly the whole literature.** Most published
+  methods state **no minimum photon count at all**; one states ≥ 10. Ours is one of the
+  few that states a minimum and enforces it — and it is the filter that removed 26 of the
+  59 crossed buildings, so it is not decorative.
+- **And the one empirical test of photon count supports it.** Kaya 2024
+  (doi:[10.3390/buildings14113571](https://doi.org/10.3390/buildings14113571)) is the
+  only study found that tests accuracy *against* photon count, and finds accuracy is
+  **best at 5–10 photons** and **degrades above 100**. Our threshold sits at the bottom
+  of that optimum. This is context, not licence: it is not a reason to lower the bar to
+  3 photons, which §5.2.4 rules out on estimator grounds anyway.
+
+### 9.8 · Summary table — our choice against the field's
+
+| component | ours | the literature's | reading |
+|---|---|---|---|
+| geolocation allowance | 5 m erosion | measured error 3.5 ± 2.1 m vs a 6.5 m requirement (Magruder 2021) | **well supported** |
+| footprint spot | not modelled | ~10.9 ± 1.2 m spot; ≈6 m boundary blur unless deconvolved (Wang 2024) | **gap — undisclosed until now (§9.1)** |
+| roof estimator | p75 | p90 / filtered max / mean / p50; sweeps test {50,60,70,80,85,90,95} | **untested either way — our argument, not the field's (§9.2)** |
+| roof-band floor | **2.0 m** | 2.5 m (Hu 2026; Liu 2024), 2.8 m (Cai 2024) | **more permissive than all of them (§9.3)** |
+| below-3 m photons | assumed present | possibly removed by ATL03 noise filtering (Lao 2021, **unverified**) | **unverified risk (§9.3)** |
+| ground reference guard | one internal guard, from the pass's own median | ATL08 ±6 m to a reference DEM; Cai 2024 adds land cover + FABDEM + relief | **least-guarded component — deferred (§9.4)** |
+| relief threshold | 10 m, from measured ward relief | 10 m, independently tuned (Cai 2024) | **convergent; ours stricter on bridging (§9.6)** |
+| min photons/roof | 5 | mostly none; one ≥ 10; optimum 5–10 (Kaya 2024) | **stricter than the field, and supported (§9.7)** |
+| cohort size | n = 28, automated | 10–82 hand-curated; 10³–10⁵ automated at RMSE 4–8 m | **typical n for the lower cluster; our error class is the upper (§9.5)** |
+| study region | Kolkata (Ganges delta) | none in the delta; Global South thin | **no precedent to lean on (§9.5)** |
+
+**Nothing in §9 is a result.** No number here entered the verdict, and the verdict
+(`underpowered`, n = 28, bar 30), `ERODE_M = 5.0`, `MIN_ROOF_PH = 5`,
+`ROOF_BAND_M = (2.0, 120.0)`, `GROUND_RELIEF_M = 10.0` and the p75 estimator are all
+**unchanged** by it.
