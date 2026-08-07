@@ -4,11 +4,15 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import {
-  yearOf, lineFingerprint, packSnapshotHash, thresholdByYear,
+  yearOf, lineFingerprint, packSnapshotHash, thresholdByYear, sumTotals,
 } from '../../src/scripts/cbam-lines.ts';
+import { estimateFromPack } from '../../src/scripts/cbam-algos/estimator/estimate-from-pack.ts';
 
 const pack = JSON.parse(readFileSync(
   fileURLToPath(new URL('../../public/cbam/estimator-pack.json', import.meta.url)), 'utf8'));
+
+const est = (cn, country, route, massT, date = '2026-03-15') =>
+  estimateFromPack(pack, { cn, country, route, massT, date });
 
 const line = (over = {}) => ({
   id: 'L1', cn: '25231000', country: 'DZ', route: '(A)',
@@ -193,4 +197,74 @@ test('a line missing from the fingerprint map is a loud bug, not a silent empty 
   // the bug.
   const lines = [line({ id: 'L9', massT: '30' })];
   assert.throws(() => thresholdByYear(lines, fp, new Set(), pack), /L9/);
+});
+
+test('sumTotals sums scenarios in Decimal and stays labelled a what-if', () => {
+  // Two known cscf_pending lines. 25231000/DZ/(A)/100 has certificates 71.465
+  // (§8-pinned); the same line at 200 t doubles it. 0.1-style float drift is
+  // what Decimal prevents; the assertion is exact string equality.
+  const a = est('25231000', 'DZ', '(A)', '100');
+  const b = est('25231000', 'DZ', '(A)', '200');
+  const t = sumTotals([a, b]);
+  assert.equal(t.certificates, '214.395');
+  assert.equal(t.costEur, '16156.80');       // (71.465 + 142.93) × 75.36
+  assert.equal(t.pricedLines, 2);
+  assert.equal(t.refusedLines, 0);
+  assert.equal(t.anyPending, true, 'a total containing what-ifs is a what-if');
+});
+
+test('a refused line is counted and does not poison the total', () => {
+  const good = est('25231000', 'DZ', '(A)', '100');
+  const bad = est('72052100', 'IN', '(C)', '60');   // stranded: unavailable
+  const t = sumTotals([good, bad]);
+  assert.equal(bad.status, 'unavailable');
+  assert.equal(t.certificates, '71.465');
+  assert.equal(t.pricedLines, 1);
+  assert.equal(t.refusedLines, 1);
+});
+
+test('a final zero_by_fiat line mixed with a pending line still taints the whole total', () => {
+  // Electricity (27160000) is zero_by_fiat — final on its own, CSCF or no CSCF
+  // (Art 2(2) sets it to nil by fiat). But the shipped pack does not offer
+  // electricity as a good at all (no classification, no default factor), so
+  // there is no real selector that reaches zero_by_fiat through estimateFromPack
+  // with the shipped pack. Extend a copy of the pack with one synthetic
+  // electricity row rather than hand-building a CertificateEstimate literal —
+  // running the real engine keeps this test honest about the shape zero_by_fiat
+  // actually returns.
+  const electricPack = {
+    ...pack,
+    classifications: [...pack.classifications, { code: '27160000', description: 'Electrical energy' }],
+    defaultFactors: [...pack.defaultFactors, {
+      scopeCode: '27160000', originCountry: 'DZ', emissionsType: 'direct',
+      productionRoute: 'default', reportingYear: 2026, baseIntensity: '0.5', markupPct: '0',
+    }],
+  };
+  const pending = est('25231000', 'DZ', '(A)', '100');
+  const zero = estimateFromPack(electricPack, {
+    cn: '27160000', country: 'DZ', route: 'default', massT: '10', date: '2026-03-15',
+  });
+  assert.equal(zero.status, 'zero_by_fiat');
+
+  const t = sumTotals([pending, zero]);
+  assert.equal(t.certificates, '76.465');   // 71.465 + 5
+  assert.equal(t.costEur, '5762.40');       // 5385.60 + 376.80
+  assert.equal(t.pricedLines, 2);
+  assert.equal(t.refusedLines, 0);
+  // The zero_by_fiat component is exact on its own; the total still cannot be
+  // shown as final, because the pending line inside it is a what-if.
+  assert.equal(t.anyPending, true, 'one pending line makes the whole sum a what-if, even mixed with a final one');
+});
+
+test('sumTotals([]) is the empty total, not a confirmed zero', () => {
+  // certificates: '0' here means "nothing was summed", not "we priced this at
+  // zero" — see the Totals.certificates doc comment. pricedLines: 0 is the
+  // signal a caller must check before rendering '0' as a real figure.
+  const t = sumTotals([]);
+  assert.equal(t.certificates, '0');
+  assert.equal(t.costEur, null, 'no priced line means no euro claim at all, not a 0.00');
+  assert.equal(t.chargeableTco2e, '0');
+  assert.equal(t.pricedLines, 0);
+  assert.equal(t.refusedLines, 0);
+  assert.equal(t.anyPending, false);
 });
