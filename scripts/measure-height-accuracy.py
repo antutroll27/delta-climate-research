@@ -26,7 +26,7 @@ PHOTONS ARE POOLED PER BUILDING, SO n COUNTS BUILDINGS AND NOT PASSES. A repeat
 pass may revisit a building already in the cohort or land on new ones — beams
 wander up to 726 m across-track between cycles, and Ballygunge's 12 passes
 crossed 50 distinct buildings (spec §3, CORRECTION 2026-08-07; that wander is
-the only reason the 30-building bar was reachable at all). Either way the
+why the 30-building bar was ever within reach). Either way the
 photons of every pass of a ward are pooled per building before MIN_ROOF_PH is
 applied — which is precisely the power repeat passes buy — and `n_buildings`
 counts DISTINCT buildings. Concatenating each pass's estimates instead would let
@@ -42,13 +42,26 @@ comfortable "no significant difference" no matter what the data said.
 EVERY EXCLUSION IS COUNTED, AND ATTRIBUTED TO ITS OWN CAUSE (spec §5.4).
 Buildings too small to survive the 5 m erosion, buildings crossed but under
 MIN_ROOF_PH, buildings crossed with photons enough but pushed under the bar by
-the roof band's 2.0 m FLOOR, roof photons dropped below and above that band,
-photons outside the ground line's populated span (where `ground_line` returns
-NaN rather than extrapolating flat), and any subset this script refused — all of
-them land in `excluded`. Silent truncation reads as coverage, and so does a
-truthful total filed under the wrong reason: a building with 40 roof photons all
-below 2 m is not "too few photons", it is a building the floor removed, and the
-two say opposite things about whether more passes would help.
+the roof band's 2.0 m FLOOR, buildings whose ground reference the POINTWISE
+RELIEF GATE refused, roof photons dropped below and above the band, photons
+outside the ground line's populated span (where `ground_line` returns NaN rather
+than extrapolating flat) or over a refused window, and any subset this script
+refused — all of them land in `excluded`. Silent truncation reads as coverage,
+and so does a truthful total filed under the wrong reason: a building with 40
+roof photons all below 2 m is not "too few photons", it is a building the floor
+removed, and the two say opposite things about whether more passes would help.
+
+THE GROUND REFERENCE ITSELF WAS THE DEFECT (spec §5.1, CORRECTION 2026-08-07).
+This script first ran on 2026-08-06 and reported n=30 and `validated`. Overture
+does not map every building, and where a 30 m ground window held nothing but
+roof photons from an unmapped one, the two-pass line settled on that roof and
+stayed there — 5 of 31 passes carried a ground line above +25 m, worst 84.68 m
+in a ward whose ground is 3-6 m. §5.1's G1b was written for exactly that and
+could not see it, because it tests the pass MEDIAN (4.46 m on the 84.68 m pass).
+`ground_line` now refuses such windows pointwise and will not bridge across
+them. n falls to 28, under the pre-registered bar, so the verdict is
+`underpowered` and NO bias, CI or omnibus statistic is published. That is the
+pre-registered outcome and it is not to be recovered by relaxing anything.
 
 THE 2.0 m FLOOR IS MEASURED, NOT ASSUMED HARMLESS. It is an honest statement of
 what this instrument resolves, so it does not move — but it deletes the low
@@ -110,6 +123,16 @@ SEED = 7
 #: whose floor is `SENS_FLOORS_M[0]`. The block exists so a reader can see what
 #: the floor is worth rather than take the note's word for it.
 SENS_FLOORS_M = (_icesat2.ROOF_BAND_M[0], 1.0, 0.5, 0.0)
+#: Pointwise relief allowances the method-stability sweep re-runs the cohort at,
+#: metres. MEASUREMENT ONLY — the shipped line always uses
+#: `_icesat2.GROUND_RELIEF_M`. The range brackets the wards' measured relief
+#: (4.9-8.9 m spans) at the bottom and the shortest roof the gate must catch
+#: (11 m) at the top, so a reader can see the choice is not load-bearing.
+RELIEF_SWEEP_M = (6.0, 8.0, _icesat2.GROUND_RELIEF_M, 12.0, 15.0, 20.0)
+#: Rolling ground-window widths the same sweep re-runs at, metres. MEASUREMENT
+#: ONLY; the shipped line always uses `_icesat2.GROUND_WIN_M`. Recorded because
+#: the answer is NOT stable to this one and a reader is owed that.
+WIN_SWEEP_M = (_icesat2.GROUND_WIN_M, 50.0, 80.0, 120.0, 200.0)
 #: How far the ground line recomputed here may sit from the `groundMedianM` the
 #: subset recorded when it passed the §5.1 gate, metres. Both are the median of
 #: the same two-pass line over the same photons and the same committed rings, so
@@ -160,18 +183,49 @@ def load_ward(ward: str) -> tuple[list[list[float]], list[float]]:
     return [f["p"] for f in fp], [float(p[0]) for p in pub]
 
 
-def transect(sub: dict[str, Any], rings: list[list[float]]) -> tuple[I64, F64, dict[str, float]]:
-    """One pass -> (per-photon eroded-footprint index, height above ground, ladder).
+def footprint_frame(sub: dict[str, Any], rings: list[list[float]]) -> dict[str, Any]:
+    """The half of `transect` that does not depend on the ground line: along-track
+    distance, ground candidates (outside every DILATED footprint), roof
+    assignment (inside every ERODED one).
+
+    Split out and cached because it is the expensive half — two shapely STRtree
+    builds over 3,500-4,700 polygons per pass — and because it is invariant under
+    the method-stability sweeps, which vary only the ground line. Re-running it
+    per sweep row would multiply the script's runtime by the number of rows and
+    return byte-identical answers."""
+    w = WARDS[sub["ward"]]
+    ph = np.asarray(sub["ph"], dtype=np.float64)
+    x, y = _icesat2.to_local(w, ph[:, 0], ph[:, 1])
+    dil, _ = _icesat2.assign_footprints(x, y, rings, +_icesat2.ERODE_M)
+    ero, kept = _icesat2.assign_footprints(x, y, rings, -_icesat2.ERODE_M)
+    return {
+        "ward": sub["ward"],
+        "s": _icesat2.along_track(x, y),
+        "h_ortho": ph[:, 3],               # column 3 is orthometric, 2 is ellipsoidal
+        "gnd": dil == -1,
+        "ero": ero,
+        "kept": kept,
+        "n_photons": int(ph.shape[0]),
+        "n_rings": len(rings),
+    }
+
+
+def transect(sub: dict[str, Any], fr: dict[str, Any],
+             ) -> tuple[I64, F64, dict[str, float], npt.NDArray[np.bool_]]:
+    """One pass -> (per-photon eroded-footprint index, height above ground, ladder,
+    per-photon "the relief gate refused this photon's ground" mask).
 
     Same three steps as the Task-3 diagnostic, in the same order: ground
     candidates are the photons OUTSIDE every footprint DILATED by the
     geolocation error, the two-pass ground line comes from those candidates
-    alone, and roof photons are those inside footprints ERODED by it.
+    alone, and roof photons are those inside footprints ERODED by it. The first
+    and third are `footprint_frame`'s job and arrive in `fr`.
 
-    The ground line is NaN outside its populated span, so `hag` is NaN there
-    too. Those photons are dropped — `building_heights` drops them by itself,
-    since every comparison against NaN is False — and the ladder COUNTS them,
-    per spec §5.4.
+    The ground line is NaN outside its populated span, and NaN over any window
+    the pointwise relief gate refused (spec §5.1, CORRECTION 2026-08-07), so
+    `hag` is NaN there too. Those photons are dropped — `building_heights` drops
+    them by itself, since every comparison against NaN is False — and the ladder
+    COUNTS them, per spec §5.4, under their two SEPARATE causes.
 
     THE §5.1 GATE IS RE-RUN HERE, against the line this function actually
     recomputes. It ran in `fetch-icesat2.py` when the subset was written, and
@@ -184,15 +238,9 @@ def transect(sub: dict[str, Any], rings: list[list[float]]) -> tuple[I64, F64, d
     one (GROUND_RECHECK_TOL_M), and `check_geoid` itself, so G1a and G1b hold for
     the line that produces the published heights and not merely for its
     ancestor."""
-    w = WARDS[sub["ward"]]
-    ph = np.asarray(sub["ph"], dtype=np.float64)
-    h_ortho = ph[:, 3]                     # column 3 is orthometric, 2 is ellipsoidal
-    x, y = _icesat2.to_local(w, ph[:, 0], ph[:, 1])
-    s = _icesat2.along_track(x, y)
-
-    dil, _ = _icesat2.assign_footprints(x, y, rings, +_icesat2.ERODE_M)
-    gnd = dil == -1
-    g = _icesat2.ground_line(s, s[gnd], h_ortho[gnd])
+    s, h_ortho, gnd = fr["s"], fr["h_ortho"], fr["gnd"]
+    gstats: dict[str, Any] = {}
+    g = _icesat2.ground_line(s, s[gnd], h_ortho[gnd], stats=gstats)
     fin = np.isfinite(g)
     hag = h_ortho - g
 
@@ -201,39 +249,62 @@ def transect(sub: dict[str, Any], rings: list[list[float]]) -> tuple[I64, F64, d
     # holding one NaN is NaN, and check_geoid fails closed on NaN, so a single
     # out-of-span photon would reject good data for the wrong reason.
     ground_median = float(np.median(g[fin]))
-    drift = ground_median - float(sub["groundMedianM"])
+    # THE DRIFT RECHECK COMPARES THE PRE-GATE MEDIAN, and must. The question it
+    # asks is whether the photons or the committed footprints have moved under a
+    # subset since it passed the §5.1 gate — a question about the DATA. Every
+    # committed subset recorded the pre-gate median (the pointwise relief gate
+    # did not exist on 2026-08-06), so comparing the post-gate line here would
+    # fire on 9 of 31 subsets purely because the algorithm was corrected, and a
+    # tolerance widened to absorb that would stop detecting the thing it exists
+    # for. `groundMedianUngatedM` is the field newer subsets carry for exactly
+    # this; older ones hold the same quantity in `groundMedianM`.
+    recorded = float(sub.get("groundMedianUngatedM", sub["groundMedianM"]))
+    drift = float(gstats["median_ungated_m"]) - recorded
     if not abs(drift) <= GROUND_RECHECK_TOL_M:
         raise GroundLineDrift(
-            f"recomputed ground median {ground_median:.3f} m differs from the "
-            f"{sub['groundMedianM']} m this subset recorded when it passed the "
-            f"§5.1 gate, by {drift:+.3f} m (tolerance {GROUND_RECHECK_TOL_M} m) "
+            f"recomputed pre-gate ground median {gstats['median_ungated_m']:.3f} m "
+            f"differs from the {recorded} m this subset recorded when it passed "
+            f"the §5.1 gate, by {drift:+.3f} m (tolerance {GROUND_RECHECK_TOL_M} m) "
             "— the photons or the committed footprints have moved under it, so "
             "the gate passed on a ground line this script no longer computes")
     _icesat2.check_geoid(ground_median, float(sub["geoidNM"]),
                          float(sub["granuleGeoidNM"]))
 
-    ero, kept = _icesat2.assign_footprints(x, y, rings, -_icesat2.ERODE_M)
+    ero, kept = fr["ero"], fr["kept"]
     roof = ero >= 0
     lo, hi = _icesat2.ROOF_BAND_M
+    # The two reasons a photon has no ground value, kept APART (spec §5.4). Both
+    # show up as NaN in `g`, and both delete the photon, but they mean opposite
+    # things: outside the span is a short track, over a gated window is an
+    # unmapped building the relief gate refused to measure heights against. A
+    # single total would have let this bug's own symptom read as coverage.
+    span_lo, span_hi = gstats["span_m"]
+    out_span = (s < span_lo) | (s > span_hi)
+    over_gated = ~fin & ~out_span
     ladder = {
-        "photons_in_subset": int(ph.shape[0]),
+        "photons_in_subset": int(fr["n_photons"]),
         "ground_candidates": int(gnd.sum()),
-        "photons_outside_ground_span": int((~fin).sum()),
+        "photons_outside_ground_span": int(out_span.sum()),
+        "ground_windows_populated": int(gstats["n_windows_populated"]),
+        "ground_windows_gated": int(gstats["n_windows_gated"]),
+        "photons_over_gated_ground_windows": int(over_gated.sum()),
         "photons_in_eroded_footprints": int(roof.sum()),
-        "roof_photons_outside_ground_span": int((roof & ~fin).sum()),
+        "roof_photons_outside_ground_span": int((roof & out_span).sum()),
+        "roof_photons_over_gated_ground_windows": int((roof & over_gated).sum()),
         "photons_in_roof_band": int((roof & (hag >= lo) & (hag <= hi)).sum()),
         # Both tails of the band, separately: the low one is the 2.0 m floor
         # deleting short buildings' evidence and it is the one that moves the
         # published bias, so recording only the in-band total hides it.
         "roof_photons_below_band": int((roof & fin & (hag < lo)).sum()),
         "roof_photons_above_band": int((roof & fin & (hag > hi)).sum()),
-        "buildings_in_ward": len(rings),
+        "buildings_in_ward": int(fr["n_rings"]),
         "buildings_survived_erosion": len(kept),
         "buildings_crossed": int(np.unique(ero[roof]).size),
         "ground_median_m": round(ground_median, 3),
+        "ground_median_ungated_m": round(float(gstats["median_ungated_m"]), 3),
         "ground_median_drift_m": round(drift, 3),
     }
-    return ero, hag, ladder
+    return ero, hag, ladder, over_gated
 
 
 def wilson_ci95(k: int, n: int) -> tuple[float, float]:
@@ -435,15 +506,138 @@ def floor_sensitivity(cat: dict[str, tuple[I64, F64]],
     }
 
 
+def cohort_at_ground_line(frames: list[dict[str, Any]],
+                          geom: dict[str, tuple[list[list[float]], list[float]]],
+                          relief_m: float, win_m: float) -> tuple[F64, F64, int, int]:
+    """The whole pooled cohort rebuilt with the ground line's own knobs moved:
+    the pointwise relief allowance and the rolling window width.
+
+    METHOD EVIDENCE ONLY. `main` never routes through here; it builds the shipped
+    cohort through `transect` at `_icesat2.GROUND_RELIEF_M` and
+    `_icesat2.GROUND_WIN_M`. The §5.1 rechecks are deliberately NOT re-run per
+    row: they are properties of the committed subsets, already enforced once by
+    `transect` on the shipped settings, and re-running them here would abort the
+    sweep on a row rather than record it."""
+    pooled: dict[str, tuple[list[I64], list[F64]]] = {}
+    gated_windows = gated_photons = 0
+    for fr in frames:
+        s, h_ortho, gnd = fr["s"], fr["h_ortho"], fr["gnd"]
+        gs: dict[str, Any] = {}
+        try:
+            g = _icesat2.ground_line(s, s[gnd], h_ortho[gnd],
+                                     win_m=win_m, relief_m=relief_m, stats=gs)
+        except ValueError:                       # too few windows at this width
+            continue
+        gated_windows += int(gs["n_windows_gated"])
+        gated_photons += int(gs["photons_over_gated_windows"])
+        pooled.setdefault(fr["ward"], ([], []))
+        pooled[fr["ward"]][0].append(fr["ero"])
+        pooled[fr["ward"]][1].append(h_ortho - g)
+    ours: list[float] = []
+    theirs: list[float] = []
+    for ward, (eros, hags) in sorted(pooled.items()):
+        est = _icesat2.building_heights(np.concatenate(eros), np.concatenate(hags))
+        for b, h in sorted(est.items()):
+            ours.append(h)
+            theirs.append(geom[ward][1][b])
+    return (np.asarray(ours, dtype=np.float64),
+            np.asarray(theirs, dtype=np.float64), gated_windows, gated_photons)
+
+
+def _sweep_row(o: F64, t: F64, extra: dict[str, Any]) -> dict[str, Any]:
+    """One method-stability row: n, the pre-registered outcome at that n, and the
+    point biases. No bootstrap and no CI — see `method_stability`."""
+    qv = np.array([0.50, 0.65, 0.90])
+    n = int(o.size)
+    row: dict[str, Any] = {**extra, "n_buildings": n,
+                           "meets_min_buildings": n >= MIN_BUILDINGS}
+    if n:
+        d = np.quantile(o, qv) - np.quantile(t, qv)
+        row.update({"median_bias_m": round(float(d[0]), 2),
+                    "p65_bias_m": round(float(d[1]), 2),
+                    "p90_bias_m": round(float(d[2]), 2)})
+    # The pre-registered table, unchanged, applied to each row. Below the bar it
+    # short-circuits to `underpowered` exactly as `main` does; above it the CI
+    # comes from the same BOOTS resamples and the same SEED, so a row's verdict
+    # is the one the shipped rule would give. `perms=1` because the permutation
+    # p-value never entered the verdict rule and 10,000 draws per row would be
+    # a minute of arithmetic nobody reads.
+    row["verdict"] = ("underpowered" if n < MIN_BUILDINGS else
+                      verdict(_icesat2.quantile_bias(
+                          o, t, np.random.default_rng(SEED),
+                          boots=BOOTS, perms=1)))
+    return row
+
+
+def method_stability(frames: list[dict[str, Any]],
+                     geom: dict[str, tuple[list[list[float]], list[float]]],
+                     ) -> dict[str, Any]:
+    """Whether the two ground-line choices DETERMINED the published outcome.
+
+    THIS IS NOT A RESULT AND MUST NOT BE QUOTED AS ONE. Every number in it is a
+    statistic of a cohort that does not reach MIN_BUILDINGS, and spec §5.3 says
+    nothing below the bar is a finding. It is recorded for the opposite purpose:
+    a reader auditing whether a constant was tuned until an answer appeared needs
+    to see what the other values would have given, and a claim of stability that
+    cannot be checked is worth nothing. `floor_sensitivity` is withheld under
+    `underpowered` because it qualifies the SHIPPED bias — it is that statistic
+    with a knob moved. These rows are about the CHOICES, not about the buildings.
+
+    `relief_allowances` — the pointwise relief gate's allowance (§5.1 CORRECTION
+    2026-08-07). The gate is what removed the contaminated ground reference, and
+    removing it is what took n under the bar, so "did 10 m cause the
+    `underpowered` verdict?" is the first question an auditor should ask. It did
+    not: the outcome is identical everywhere in 6-20 m, a range whose lower end
+    is below the wards' own measured relief spans and whose upper end is above
+    the shortest roof the gate must catch.
+
+    `ground_window_widths` — the rolling window (`GROUND_WIN_M`, 30 m). Recorded
+    because the answer is uncomfortable and would be worse to leave undiscovered:
+    the MEDIAN verdict is NOT stable to it, while the upper-distribution
+    divergence is. That is a fact about how much this method can carry, and a
+    reason the question is worth re-asking when more passes arrive — ICESat-2 is
+    still flying these tracks and the beams wander, so new passes bring new
+    buildings. It is not a reason to pick a width."""
+    rel, win = [], []
+    for r in RELIEF_SWEEP_M:
+        o, t, gw, gp = cohort_at_ground_line(frames, geom, r, _icesat2.GROUND_WIN_M)
+        rel.append(_sweep_row(o, t, {
+            "relief_m": r, "shipped": r == _icesat2.GROUND_RELIEF_M,
+            "windows_gated": gw, "photons_over_gated_windows": gp}))
+    for wm in WIN_SWEEP_M:
+        o, t, _gw, _gp = cohort_at_ground_line(
+            frames, geom, _icesat2.GROUND_RELIEF_M, wm)
+        win.append(_sweep_row(o, t, {
+            "win_m": wm, "shipped": wm == _icesat2.GROUND_WIN_M}))
+    return {
+        "published": False,
+        "relief_allowances": rel,
+        "ground_window_widths": win,
+        "note": ("METHOD EVIDENCE, NOT A RESULT — nothing in this block may be "
+                 "quoted as a measured bias. Every row is a cohort below the "
+                 "pre-registered MIN_BUILDINGS bar, and spec §5.3 admits no "
+                 "statistic below it. The rows exist so that the two ground-line "
+                 "constants can be audited rather than taken on trust. The relief "
+                 "allowance does not move the outcome anywhere in 6-20 m, which "
+                 "is the point: it was chosen from the wards' measured relief "
+                 "(4.9-8.9 m spans in <ward>-terrain.json) and not from the "
+                 "answer it gives. The window width DOES move the median verdict "
+                 "while leaving the upper-distribution divergence roughly where "
+                 "it is — recorded as a limit of the method and a reason to "
+                 "re-ask when more passes arrive, never as a width to select."),
+    }
+
+
 def main() -> None:
     subs = sorted(glob.glob(os.path.join(SUB_DIR, "*.json")))
     if not subs:
         sys.exit("  no subsets in data/calibration/icesat2/ — run fetch-icesat2.py first")
 
     geom: dict[str, tuple[list[list[float]], list[float]]] = {}
-    pooled: dict[str, tuple[list[I64], list[F64]]] = {}
+    pooled: dict[str, tuple[list[I64], list[F64], list[Any]]] = {}
     per_track: list[dict[str, Any]] = []
     rejected: list[dict[str, str]] = []
+    frames: list[dict[str, Any]] = []          # kept for `method_stability` only
 
     for p in subs:
         name = os.path.basename(p)
@@ -464,7 +658,8 @@ def main() -> None:
             geom[ward] = load_ward(ward)
         rings, _heights = geom[ward]
         try:
-            ero, hag, ladder = transect(sub, rings)
+            fr = footprint_frame(sub, rings)
+            ero, hag, ladder, gate_nan = transect(sub, fr)
         except _icesat2.RingError:
             # WHOLE-WARD GEOMETRY CORRUPTION, not a thin granule. A bare
             # `except ValueError` swallowed this and filed it under "too few
@@ -476,9 +671,11 @@ def main() -> None:
             rejected.append({"file": name, "reason": str(exc)})
             print(f"  {name}: REJECTED ({exc})")
             continue
-        pooled.setdefault(ward, ([], []))
+        pooled.setdefault(ward, ([], [], []))
         pooled[ward][0].append(ero)
         pooled[ward][1].append(hag)
+        pooled[ward][2].append(gate_nan)
+        frames.append(fr)
         per_track.append({
             "file": name, "ward": ward, "date": sub["date"], "rgt": sub["rgt"],
             "beams": sub["beams"], "closest_m": sub["trackMinDistM"],
@@ -487,7 +684,9 @@ def main() -> None:
         print(f"  {name}: {ladder['buildings_crossed']} buildings crossed, "
               f"{ladder['photons_in_eroded_footprints']} roof photons, "
               f"{ladder['photons_outside_ground_span']} photons outside the "
-              "ground line's span")
+              f"ground line's span, {ladder['ground_windows_gated']} ground "
+              f"window(s) refused by the {_icesat2.GROUND_RELIEF_M:g} m relief "
+              f"gate ({ladder['photons_over_gated_ground_windows']} photons)")
 
     ours: list[float] = []          # ICESat-2 p75 estimates, one per distinct building
     theirs: list[float] = []        # shipped artefact heights, the same buildings
@@ -496,13 +695,14 @@ def main() -> None:
     cat: dict[str, tuple[I64, F64]] = {}      # pooled per ward, for floor_sensitivity
     n_crossed_pooled = 0
     causes_total = {"n_too_few_roof_ph": 0, "n_below_roof_band_floor": 0,
-                    "n_outside_band_or_span": 0}
+                    "n_ground_refused": 0, "n_outside_band_or_span": 0}
     lo_band, hi_band = _icesat2.ROOF_BAND_M
-    for ward, (eros, hags) in sorted(pooled.items()):
+    for ward, (eros, hags, gnans) in sorted(pooled.items()):
         # Photons stacked across every pass of this ward BEFORE MIN_ROOF_PH, so a
         # building split 3/3 over two passes clears the bar as one building.
         ero = np.concatenate(eros)
         hag = np.concatenate(hags)
+        gate_nan = np.concatenate(gnans)
         cat[ward] = (ero, hag)
         est = _icesat2.building_heights(ero, hag)
         crossed_ids = np.unique(ero[ero >= 0])
@@ -516,11 +716,18 @@ def main() -> None:
         # would fix it, when in fact ICESat-2 measured it fine and the band
         # dropped it. The two exclusions mean opposite things and are counted
         # apart.
+        # `n_ground_refused` is the same principle applied to this run's own
+        # correction: a building whose roof photons lost their ground reference
+        # to the pointwise relief gate is not "out of band", it is a building
+        # standing where the ground could not be measured. More passes on the
+        # same track would not fix it; mapping the missing buildings would.
         causes = {"n_too_few_roof_ph": 0, "n_below_roof_band_floor": 0,
-                  "n_outside_band_or_span": 0}
+                  "n_ground_refused": 0, "n_outside_band_or_span": 0}
         for bi in crossed_ids:
             b = int(bi)
-            v = hag[ero == b]
+            sel = ero == b
+            v = hag[sel]
+            n_gate_nan = int(gate_nan[sel].sum())
             vf = v[np.isfinite(v)]                 # NaN = outside the ground span
             free = vf[vf <= hi_band]               # floor removed, noise ceiling kept
             n_roof = int(v.size)
@@ -545,6 +752,8 @@ def main() -> None:
                 causes["n_too_few_roof_ph"] += 1
             elif free.size >= _icesat2.MIN_ROOF_PH:
                 causes["n_below_roof_band_floor"] += 1   # the floor removed it
+            elif n_roof - n_gate_nan < _icesat2.MIN_ROOF_PH:
+                causes["n_ground_refused"] += 1          # the relief gate did
             else:
                 causes["n_outside_band_or_span"] += 1    # ceiling or NaN span
         for k, val in causes.items():
@@ -606,6 +815,26 @@ def main() -> None:
                                            for tr in per_track),
         "roof_photons_outside_ground_span": sum(
             int(tr["counts"]["roof_photons_outside_ground_span"]) for tr in per_track),
+        # THE POINTWISE RELIEF GATE'S OWN LEDGER (spec §5.1, CORRECTION
+        # 2026-08-07). These photons are dropped, so §5.4 requires them counted,
+        # and counted APART from the out-of-span ones above: those mean the track
+        # was short, these mean an unmapped building filled a ground window with
+        # roof photons and the line over it could not be trusted. Before the gate
+        # existed these same photons were measured against a ground reference
+        # standing on that roof — 5 of 31 passes carried a ground line above
+        # +25 m, worst 84.68 m — and nothing counted anything.
+        "ground_relief_m": _icesat2.GROUND_RELIEF_M,
+        "ground_windows_populated": sum(int(tr["counts"]["ground_windows_populated"])
+                                        for tr in per_track),
+        "ground_windows_gated": sum(int(tr["counts"]["ground_windows_gated"])
+                                    for tr in per_track),
+        "passes_with_gated_ground_windows": sum(
+            1 for tr in per_track if tr["counts"]["ground_windows_gated"]),
+        "photons_over_gated_ground_windows": sum(
+            int(tr["counts"]["photons_over_gated_ground_windows"]) for tr in per_track),
+        "roof_photons_over_gated_ground_windows": sum(
+            int(tr["counts"]["roof_photons_over_gated_ground_windows"])
+            for tr in per_track),
         "roof_photons_in_band": sum(int(tr["counts"]["photons_in_roof_band"])
                                     for tr in per_track),
         # The floor's cost in photons, which the in-band total alone concealed.
@@ -621,7 +850,12 @@ def main() -> None:
                  "(n_below_roof_band_floor), because more passes would fix the "
                  "first and would not touch the second. Photons outside the "
                  "ground line's populated span are dropped rather than measured "
-                 "against a flat extrapolation. The crossed set over-represents "
+                 "against a flat extrapolation, and so are photons over a ground "
+                 "window the pointwise relief gate refused — an unmapped building "
+                 "can fill a 30 m window with roof photons and pin the ground "
+                 "line tens of metres up (spec §5.1, CORRECTION 2026-08-07). The "
+                 "two are counted apart because they say different things. The "
+                 "crossed set over-represents "
                  "LARGE buildings — published wording must say 'along satellite "
                  "transects', not 'all buildings'."),
     }
@@ -656,6 +890,7 @@ def main() -> None:
         "summary": summary, "fill": fill, "per_ward": per_ward,
         "per_track": per_track, "excluded": excluded, "terrain": terrain,
         "floor_sensitivity": sens,
+        "method_stability": method_stability(frames, geom),
         "note": ("Distributional comparison only — ATL03 geolocation (~3-5 m) "
                  "forbids per-building attribution, so the statistics compare "
                  "the two distributions' quantiles and no per-building height "
@@ -673,8 +908,20 @@ def main() -> None:
                  "building's pool — but nor is it confined to buildings already "
                  "in the cohort: beams wander up to 726 m across-track between "
                  "cycles (spec §3, CORRECTION 2026-08-07), which is why "
-                 "Ballygunge's 12 passes crossed 50 distinct buildings and why "
-                 "n reached 30 at all."),
+                 "Ballygunge's 12 passes crossed 50 distinct buildings. THIS RUN "
+                 "SUPERSEDES THE 2026-08-06 ONE, which reported n=30 and a "
+                 "`validated` verdict. That run's ground line was contaminated: "
+                 "Overture does not map every building, and where a 30 m window "
+                 "held nothing but roof photons from an unmapped one the two-pass "
+                 "line settled on the roof — 5 of 31 passes carried a ground line "
+                 "above +25 m, worst 84.68 m in a ward whose ground is 3-6 m. "
+                 "Spec §5.1's G1b was written to catch that and could not, "
+                 "because it tests the pass MEDIAN (4.46 m on that pass). The "
+                 "gate is now applied pointwise (§5.1, CORRECTION 2026-08-07); "
+                 "the marginal buildings it removes are the ones that had carried "
+                 "n to the bar, so the honest n is below it and the pre-registered "
+                 "outcome is `underpowered`. No bias, CI or omnibus statistic is "
+                 "published at that verdict."),
     }
     with open(OUT, "w", encoding="utf-8") as fh:
         json.dump(out, fh, indent=2)
@@ -688,6 +935,7 @@ def main() -> None:
               f"({v['n_too_few_roof_ph']} under MIN_ROOF_PH="
               f"{_icesat2.MIN_ROOF_PH}, {v['n_below_roof_band_floor']} dropped by "
               f"the {_icesat2.ROOF_BAND_M[0]} m floor, "
+              f"{v['n_ground_refused']} whose ground the relief gate refused, "
               f"{v['n_outside_band_or_span']} out of band/span), "
               f"{v['n_fill_crossed']} at the 2.5 m fill")
     print(f"  n={n} distinct crossed buildings (bar {MIN_BUILDINGS})")
@@ -696,6 +944,13 @@ def main() -> None:
           f"{_icesat2.ROOF_BAND_M[0]} m floor, "
           f"{excluded['roof_photons_above_band']} above the ceiling, "
           f"{excluded['roof_photons_outside_ground_span']} outside the ground span")
+    print(f"  relief gate ({_icesat2.GROUND_RELIEF_M:g} m, spec §5.1 CORRECTION "
+          f"2026-08-07): {excluded['ground_windows_gated']} of "
+          f"{excluded['ground_windows_populated']} ground windows refused across "
+          f"{excluded['passes_with_gated_ground_windows']} of {len(per_track)} "
+          f"passes, dropping {excluded['photons_over_gated_ground_windows']} "
+          f"photons ({excluded['roof_photons_over_gated_ground_windows']} of them "
+          "roof photons)")
     if "median_bias_m" in summary:
         print(f"  median bias {summary['median_bias_m']:+.2f} m "
               f"(95% CI {summary['median_ci95_m']}), "
@@ -721,6 +976,14 @@ def main() -> None:
         print(f"  measured, not gated: ward DEM sits "
               f"{terrain['dem_minus_laser_ground_m']:+.2f} m above laser ground "
               f"(median over {n_rgts} distinct RGTs)")
+    ms = out["method_stability"]
+    print("  method stability (NOT results — every row is below the bar):")
+    for r in ms["relief_allowances"]:
+        print(f"    relief {r['relief_m']:>5.1f} m{'*' if r['shipped'] else ' '} "
+              f"n={r['n_buildings']:<3} {r['verdict']}")
+    for r in ms["ground_window_widths"]:
+        print(f"    window {r['win_m']:>5.1f} m{'*' if r['shipped'] else ' '} "
+              f"n={r['n_buildings']:<3} {r['verdict']}")
     print(f"\n  VERDICT: {summary['verdict']}")
     print(f"  written to {os.path.relpath(OUT, ROOT)}")
 

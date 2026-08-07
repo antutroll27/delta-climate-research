@@ -90,11 +90,14 @@ groundMedianM), spec §5.1's terrain-validation win, instead of being spent as
 gate noise.
 
 THE GATE MUST NEVER SEE A NaN. `_icesat2.ground_line` returns NaN outside its
-populated span rather than extrapolating flat, and every comparison against NaN
-is False. `check_geoid` is written to fail closed on NaN, but the median is
-still taken over the finite values only, an all-NaN line is rejected before the
-gate, and the NaN count is recorded in `counts.ground_nan` because spec §5.4
-forbids silent exclusions.
+populated span rather than extrapolating flat, and over windows its pointwise
+relief gate refused (spec §5.1, CORRECTION 2026-08-07 — an unmapped building can
+fill a whole window with roof photons and pin the line tens of metres up), and
+every comparison against NaN is False. `check_geoid` is written to fail closed on
+NaN, but the median is still taken over the finite values only, an all-NaN line
+is rejected before the gate, and the counts are recorded in `counts.ground_nan`,
+`counts.ground_windows_gated` and `counts.ground_photons_over_gated` because spec
+§5.4 forbids silent exclusions.
 
 STRONG BEAMS ONLY, BY THE FILE'S OWN LABEL. ATLAS fires 3 strong/weak pairs;
 which side is strong flips with spacecraft orientation (sc_orient 0=backward→
@@ -622,15 +625,22 @@ def decide(f: Any, gname: str, ward: str) -> Decision:
     counts["ground_candidates"] = int(gnd.sum())
     if int(gnd.sum()) < MIN_GROUND_PH:
         return Decision(None, f"only {int(gnd.sum())} ground candidates", counts, -1)
+    gstats: dict[str, object] = {}
     try:
-        gline = _icesat2.ground_line(s, s[gnd], ph[gnd, 3])
+        gline = _icesat2.ground_line(s, s[gnd], ph[gnd, 3], stats=gstats)
     except ValueError as exc:
-        # a data-sufficiency rejection (too few populated windows), NOT the geoid
-        # gate — which is called below, outside this try, and must stay fatal
+        # a data-sufficiency rejection (too few populated windows, before or
+        # after the pointwise relief gate), NOT the geoid gate — which is called
+        # below, outside this try, and must stay fatal
         return Decision(None, f"ground line unusable ({exc})", counts, -1)
     fin = np.isfinite(gline)
     n_nan = int((~fin).sum())
     counts["ground_nan"] = n_nan
+    # §5.4 again, split by cause: the relief gate's refusals are not the same
+    # exclusion as falling outside the line's populated span, and a single total
+    # would let an unmapped-building excursion read as a short track.
+    counts["ground_windows_gated"] = int(gstats["n_windows_gated"])
+    counts["ground_photons_over_gated"] = int(gstats["photons_over_gated_windows"])
     if not fin.any():
         return Decision(None, "every photon fell outside the ground line's "
                               "populated span", counts, -1)
@@ -663,6 +673,14 @@ def decide(f: Any, gname: str, ward: str) -> Decision:
         "geoidSource": "EGM2008 via GeographicLib GeoidEval, retrieved 2026-08-06",
         "demMedianM": dem_median,
         "groundMedianM": round(ground_median, 2),
+        # The same median taken BEFORE the pointwise relief gate — the quantity
+        # every subset written before that gate existed carries in
+        # `groundMedianM`. `measure-height-accuracy.py`'s drift recheck asks
+        # whether the photons or the committed footprints have moved under a
+        # subset, so it must compare like with like; without this field the
+        # recheck would fire on every existing subset because the ALGORITHM
+        # improved, which is the one thing it is not meant to detect.
+        "groundMedianUngatedM": round(float(gstats["median_ungated_m"]), 2),
         # MEASUREMENT, not a gate: the shipped relief surface is a DSM and sits
         # above laser ground over this delta (spec §5.1's terrain-validation win)
         "demOffsetM": round(float(dem_median) - ground_median, 2),

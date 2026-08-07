@@ -34,8 +34,12 @@ dropped for a NaN ground line, inside an eroded footprint, inside the roof band
 MIN_ROOF_PH". A building crossed but under the photon minimum is coverage we
 have and cannot use; hiding it would read as coverage we do not have.
 
-THE NaN IS NOT DECORATION. `_icesat2.ground_line` returns NaN outside its
-populated span rather than extrapolating flat, and an unmasked `np.median` over
+THE NaN IS NOT DECORATION, AND IT HAS TWO CAUSES. `_icesat2.ground_line` returns
+NaN outside its populated span rather than extrapolating flat, and over any
+window its pointwise relief gate refused (spec §5.1, CORRECTION 2026-08-07 — an
+unmapped building can fill a ground window with roof returns and pin the line
+tens of metres up). The ladder prints the two apart, because a short track and an
+unmapped building are different findings. An unmasked `np.median` over
 a line holding one NaN is NaN — which sails through `abs(nan - dem) <= 5.0` as
 False, i.e. a silent FAIL, or through the inverted form as a silent PASS. Both
 medians here are taken over finite values only, and the NaN count is printed.
@@ -84,7 +88,8 @@ def main() -> None:
 
     dil, _ = _icesat2.assign_footprints(x, y, rings, +_icesat2.ERODE_M)
     gnd = dil == -1
-    g = _icesat2.ground_line(s, s[gnd], h_ortho[gnd])
+    gstats: dict[str, object] = {}
+    g = _icesat2.ground_line(s, s[gnd], h_ortho[gnd], stats=gstats)
     fin = np.isfinite(g)
     hag = h_ortho - g
 
@@ -156,7 +161,10 @@ def main() -> None:
           f"{c['photons_read']} read → {c['conf_land']} conf≥3 land → "
           f"{c['in_box']} in the subset")
     print(f"           {int(gnd.sum())} ground candidates, "
-          f"{int((~fin).sum())} outside the ground line's span (dropped), "
+          f"{int(gstats['photons_outside_span'])} outside the ground line's span "
+          f"and {int(gstats['photons_over_gated_windows'])} over the "
+          f"{int(gstats['n_windows_gated'])} window(s) the relief gate refused "
+          "(both dropped), "
           f"{int(roof.sum())} inside eroded footprints, "
           f"{int(in_band.sum())} of those in the roof band")
     print(f"  buildings: {len(kept)} survived 5 m erosion, {len(crossed)} crossed by "

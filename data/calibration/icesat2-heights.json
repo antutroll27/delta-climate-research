@@ -1,28 +1,10 @@
 {
   "summary": {
-    "n_buildings": 30,
+    "n_buildings": 28,
     "n_passes": 31,
     "n_rgts": 2,
     "min_buildings": 30,
-    "verdict": "validated",
-    "n": 30,
-    "median_bias_m": 1.22,
-    "p65_bias_m": 3.87,
-    "p90_bias_m": 7.34,
-    "median_ci95_m": [
-      -0.97,
-      4.54
-    ],
-    "p65_ci95_m": [
-      0.53,
-      5.3
-    ],
-    "p90_ci95_m": [
-      -12.66,
-      7.94
-    ],
-    "ks_d": 0.2667,
-    "perm_p": 0.0627
+    "verdict": "underpowered"
   },
   "fill": {
     "n": 5,
@@ -38,11 +20,12 @@
     "ballygunge": {
       "n_passes": 12,
       "n_crossed": 50,
-      "n_buildings": 27,
+      "n_buildings": 25,
       "n_fill_crossed": 4,
       "n_fill_measured": 1,
       "n_too_few_roof_ph": 20,
       "n_below_roof_band_floor": 3,
+      "n_ground_refused": 2,
       "n_outside_band_or_span": 0
     },
     "barrackpore": {
@@ -53,6 +36,7 @@
       "n_fill_measured": 0,
       "n_too_few_roof_ph": 5,
       "n_below_roof_band_floor": 0,
+      "n_ground_refused": 0,
       "n_outside_band_or_span": 0
     },
     "baruipur": {
@@ -63,6 +47,7 @@
       "n_fill_measured": 0,
       "n_too_few_roof_ph": 1,
       "n_below_roof_band_floor": 0,
+      "n_ground_refused": 0,
       "n_outside_band_or_span": 0
     }
   },
@@ -88,8 +73,12 @@
         "photons_in_subset": 1855,
         "ground_candidates": 551,
         "photons_outside_ground_span": 2,
+        "ground_windows_populated": 59,
+        "ground_windows_gated": 0,
+        "photons_over_gated_ground_windows": 0,
         "photons_in_eroded_footprints": 206,
         "roof_photons_outside_ground_span": 0,
+        "roof_photons_over_gated_ground_windows": 0,
         "photons_in_roof_band": 149,
         "roof_photons_below_band": 57,
         "roof_photons_above_band": 0,
@@ -97,6 +86,7 @@
         "buildings_survived_erosion": 995,
         "buildings_crossed": 11,
         "ground_median_m": 4.345,
+        "ground_median_ungated_m": 4.345,
         "ground_median_drift_m": -0.005
       }
     },
@@ -121,15 +111,20 @@
         "photons_in_subset": 1162,
         "ground_candidates": 542,
         "photons_outside_ground_span": 13,
+        "ground_windows_populated": 70,
+        "ground_windows_gated": 5,
+        "photons_over_gated_ground_windows": 214,
         "photons_in_eroded_footprints": 47,
         "roof_photons_outside_ground_span": 0,
-        "photons_in_roof_band": 42,
-        "roof_photons_below_band": 5,
+        "roof_photons_over_gated_ground_windows": 28,
+        "photons_in_roof_band": 18,
+        "roof_photons_below_band": 1,
         "roof_photons_above_band": 0,
         "buildings_in_ward": 3527,
         "buildings_survived_erosion": 995,
         "buildings_crossed": 8,
-        "ground_median_m": 4.463,
+        "ground_median_m": 4.132,
+        "ground_median_ungated_m": 4.463,
         "ground_median_drift_m": 0.003
       }
     },
@@ -153,16 +148,21 @@
       "counts": {
         "photons_in_subset": 3770,
         "ground_candidates": 2557,
-        "photons_outside_ground_span": 17,
+        "photons_outside_ground_span": 68,
+        "ground_windows_populated": 73,
+        "ground_windows_gated": 2,
+        "photons_over_gated_ground_windows": 0,
         "photons_in_eroded_footprints": 19,
         "roof_photons_outside_ground_span": 0,
+        "roof_photons_over_gated_ground_windows": 0,
         "photons_in_roof_band": 19,
         "roof_photons_below_band": 0,
         "roof_photons_above_band": 0,
         "buildings_in_ward": 3527,
         "buildings_survived_erosion": 995,
         "buildings_crossed": 4,
-        "ground_median_m": 3.559,
+        "ground_median_m": 3.546,
+        "ground_median_ungated_m": 3.559,
         "ground_median_drift_m": -0.001
       }
     },
@@ -187,15 +187,20 @@
         "photons_in_subset": 1892,
         "ground_candidates": 1078,
         "photons_outside_ground_span": 2,
+        "ground_windows_populated": 75,
+        "ground_windows_gated": 1,
+        "photons_over_gated_ground_windows": 95,
         "photons_in_eroded_footprints": 35,
         "roof_photons_outside_ground_span": 0,
+        "roof_photons_over_gated_ground_windows": 0,
         "photons_in_roof_band": 31,
         "roof_photons_below_band": 4,
         "roof_photons_above_band": 0,
         "buildings_in_ward": 3527,
         "buildings_survived_erosion": 995,
         "buildings_crossed": 5,
-        "ground_median_m": 4.184,
+        "ground_median_m": 4.109,
+        "ground_median_ungated_m": 4.184,
         "ground_median_drift_m": 0.004
       }
     },
@@ -220,15 +225,20 @@
         "photons_in_subset": 102,
         "ground_candidates": 102,
         "photons_outside_ground_span": 9,
+        "ground_windows_populated": 16,
+        "ground_windows_gated": 1,
+        "photons_over_gated_ground_windows": 18,
         "photons_in_eroded_footprints": 0,
         "roof_photons_outside_ground_span": 0,
+        "roof_photons_over_gated_ground_windows": 0,
         "photons_in_roof_band": 0,
         "roof_photons_below_band": 0,
         "roof_photons_above_band": 0,
         "buildings_in_ward": 3527,
         "buildings_survived_erosion": 995,
         "buildings_crossed": 0,
-        "ground_median_m": 4.466,
+        "ground_median_m": 4.365,
+        "ground_median_ungated_m": 4.466,
         "ground_median_drift_m": -0.004
       }
     },
@@ -253,8 +263,12 @@
         "photons_in_subset": 448,
         "ground_candidates": 146,
         "photons_outside_ground_span": 36,
+        "ground_windows_populated": 19,
+        "ground_windows_gated": 0,
+        "photons_over_gated_ground_windows": 0,
         "photons_in_eroded_footprints": 42,
         "roof_photons_outside_ground_span": 0,
+        "roof_photons_over_gated_ground_windows": 0,
         "photons_in_roof_band": 26,
         "roof_photons_below_band": 16,
         "roof_photons_above_band": 0,
@@ -262,6 +276,7 @@
         "buildings_survived_erosion": 995,
         "buildings_crossed": 1,
         "ground_median_m": 3.52,
+        "ground_median_ungated_m": 3.52,
         "ground_median_drift_m": 0.0
       }
     },
@@ -285,9 +300,13 @@
       "counts": {
         "photons_in_subset": 1983,
         "ground_candidates": 1603,
-        "photons_outside_ground_span": 4,
+        "photons_outside_ground_span": 56,
+        "ground_windows_populated": 44,
+        "ground_windows_gated": 5,
+        "photons_over_gated_ground_windows": 0,
         "photons_in_eroded_footprints": 59,
         "roof_photons_outside_ground_span": 0,
+        "roof_photons_over_gated_ground_windows": 0,
         "photons_in_roof_band": 50,
         "roof_photons_below_band": 9,
         "roof_photons_above_band": 0,
@@ -295,6 +314,7 @@
         "buildings_survived_erosion": 995,
         "buildings_crossed": 6,
         "ground_median_m": 2.96,
+        "ground_median_ungated_m": 2.96,
         "ground_median_drift_m": 0.0
       }
     },
@@ -319,8 +339,12 @@
         "photons_in_subset": 1577,
         "ground_candidates": 1525,
         "photons_outside_ground_span": 66,
+        "ground_windows_populated": 12,
+        "ground_windows_gated": 0,
+        "photons_over_gated_ground_windows": 0,
         "photons_in_eroded_footprints": 0,
         "roof_photons_outside_ground_span": 0,
+        "roof_photons_over_gated_ground_windows": 0,
         "photons_in_roof_band": 0,
         "roof_photons_below_band": 0,
         "roof_photons_above_band": 0,
@@ -328,6 +352,7 @@
         "buildings_survived_erosion": 995,
         "buildings_crossed": 0,
         "ground_median_m": 2.79,
+        "ground_median_ungated_m": 2.79,
         "ground_median_drift_m": 0.0
       }
     },
@@ -352,8 +377,12 @@
         "photons_in_subset": 166,
         "ground_candidates": 166,
         "photons_outside_ground_span": 3,
+        "ground_windows_populated": 11,
+        "ground_windows_gated": 0,
+        "photons_over_gated_ground_windows": 0,
         "photons_in_eroded_footprints": 0,
         "roof_photons_outside_ground_span": 0,
+        "roof_photons_over_gated_ground_windows": 0,
         "photons_in_roof_band": 0,
         "roof_photons_below_band": 0,
         "roof_photons_above_band": 0,
@@ -361,6 +390,7 @@
         "buildings_survived_erosion": 995,
         "buildings_crossed": 0,
         "ground_median_m": 3.476,
+        "ground_median_ungated_m": 3.476,
         "ground_median_drift_m": -0.004
       }
     },
@@ -384,16 +414,21 @@
       "counts": {
         "photons_in_subset": 1607,
         "ground_candidates": 1166,
-        "photons_outside_ground_span": 6,
+        "photons_outside_ground_span": 50,
+        "ground_windows_populated": 62,
+        "ground_windows_gated": 3,
+        "photons_over_gated_ground_windows": 0,
         "photons_in_eroded_footprints": 28,
         "roof_photons_outside_ground_span": 0,
+        "roof_photons_over_gated_ground_windows": 0,
         "photons_in_roof_band": 25,
         "roof_photons_below_band": 3,
         "roof_photons_above_band": 0,
         "buildings_in_ward": 3527,
         "buildings_survived_erosion": 995,
         "buildings_crossed": 5,
-        "ground_median_m": 3.114,
+        "ground_median_m": 2.974,
+        "ground_median_ungated_m": 3.114,
         "ground_median_drift_m": 0.004
       }
     },
@@ -418,15 +453,20 @@
         "photons_in_subset": 12646,
         "ground_candidates": 5078,
         "photons_outside_ground_span": 6,
+        "ground_windows_populated": 87,
+        "ground_windows_gated": 1,
+        "photons_over_gated_ground_windows": 441,
         "photons_in_eroded_footprints": 1640,
         "roof_photons_outside_ground_span": 0,
+        "roof_photons_over_gated_ground_windows": 0,
         "photons_in_roof_band": 1425,
         "roof_photons_below_band": 215,
         "roof_photons_above_band": 0,
         "buildings_in_ward": 3527,
         "buildings_survived_erosion": 995,
         "buildings_crossed": 10,
-        "ground_median_m": 4.504,
+        "ground_median_m": 4.478,
+        "ground_median_ungated_m": 4.504,
         "ground_median_drift_m": 0.004
       }
     },
@@ -451,8 +491,12 @@
         "photons_in_subset": 1187,
         "ground_candidates": 687,
         "photons_outside_ground_span": 8,
+        "ground_windows_populated": 80,
+        "ground_windows_gated": 0,
+        "photons_over_gated_ground_windows": 0,
         "photons_in_eroded_footprints": 4,
         "roof_photons_outside_ground_span": 0,
+        "roof_photons_over_gated_ground_windows": 0,
         "photons_in_roof_band": 3,
         "roof_photons_below_band": 1,
         "roof_photons_above_band": 0,
@@ -460,6 +504,7 @@
         "buildings_survived_erosion": 995,
         "buildings_crossed": 2,
         "ground_median_m": 4.115,
+        "ground_median_ungated_m": 4.115,
         "ground_median_drift_m": 0.005
       }
     },
@@ -484,8 +529,12 @@
         "photons_in_subset": 2522,
         "ground_candidates": 2199,
         "photons_outside_ground_span": 31,
+        "ground_windows_populated": 70,
+        "ground_windows_gated": 0,
+        "photons_over_gated_ground_windows": 0,
         "photons_in_eroded_footprints": 1,
         "roof_photons_outside_ground_span": 0,
+        "roof_photons_over_gated_ground_windows": 0,
         "photons_in_roof_band": 0,
         "roof_photons_below_band": 1,
         "roof_photons_above_band": 0,
@@ -493,6 +542,7 @@
         "buildings_survived_erosion": 719,
         "buildings_crossed": 1,
         "ground_median_m": 6.58,
+        "ground_median_ungated_m": 6.58,
         "ground_median_drift_m": 0.0
       }
     },
@@ -517,8 +567,12 @@
         "photons_in_subset": 2088,
         "ground_candidates": 2088,
         "photons_outside_ground_span": 12,
+        "ground_windows_populated": 59,
+        "ground_windows_gated": 2,
+        "photons_over_gated_ground_windows": 25,
         "photons_in_eroded_footprints": 0,
         "roof_photons_outside_ground_span": 0,
+        "roof_photons_over_gated_ground_windows": 0,
         "photons_in_roof_band": 0,
         "roof_photons_below_band": 0,
         "roof_photons_above_band": 0,
@@ -526,6 +580,7 @@
         "buildings_survived_erosion": 719,
         "buildings_crossed": 0,
         "ground_median_m": 5.9,
+        "ground_median_ungated_m": 5.9,
         "ground_median_drift_m": 0.0
       }
     },
@@ -550,8 +605,12 @@
         "photons_in_subset": 1238,
         "ground_candidates": 1238,
         "photons_outside_ground_span": 24,
+        "ground_windows_populated": 36,
+        "ground_windows_gated": 0,
+        "photons_over_gated_ground_windows": 0,
         "photons_in_eroded_footprints": 0,
         "roof_photons_outside_ground_span": 0,
+        "roof_photons_over_gated_ground_windows": 0,
         "photons_in_roof_band": 0,
         "roof_photons_below_band": 0,
         "roof_photons_above_band": 0,
@@ -559,6 +618,7 @@
         "buildings_survived_erosion": 719,
         "buildings_crossed": 0,
         "ground_median_m": 6.152,
+        "ground_median_ungated_m": 6.152,
         "ground_median_drift_m": 0.002
       }
     },
@@ -583,8 +643,12 @@
         "photons_in_subset": 260,
         "ground_candidates": 260,
         "photons_outside_ground_span": 7,
+        "ground_windows_populated": 31,
+        "ground_windows_gated": 0,
+        "photons_over_gated_ground_windows": 0,
         "photons_in_eroded_footprints": 0,
         "roof_photons_outside_ground_span": 0,
+        "roof_photons_over_gated_ground_windows": 0,
         "photons_in_roof_band": 0,
         "roof_photons_below_band": 0,
         "roof_photons_above_band": 0,
@@ -592,6 +656,7 @@
         "buildings_survived_erosion": 719,
         "buildings_crossed": 0,
         "ground_median_m": 6.323,
+        "ground_median_ungated_m": 6.323,
         "ground_median_drift_m": 0.003
       }
     },
@@ -616,15 +681,20 @@
         "photons_in_subset": 9333,
         "ground_candidates": 7361,
         "photons_outside_ground_span": 2,
+        "ground_windows_populated": 87,
+        "ground_windows_gated": 3,
+        "photons_over_gated_ground_windows": 178,
         "photons_in_eroded_footprints": 28,
         "roof_photons_outside_ground_span": 0,
+        "roof_photons_over_gated_ground_windows": 0,
         "photons_in_roof_band": 23,
         "roof_photons_below_band": 5,
         "roof_photons_above_band": 0,
         "buildings_in_ward": 4702,
         "buildings_survived_erosion": 719,
         "buildings_crossed": 5,
-        "ground_median_m": 6.508,
+        "ground_median_m": 6.507,
+        "ground_median_ungated_m": 6.508,
         "ground_median_drift_m": -0.002
       }
     },
@@ -649,8 +719,12 @@
         "photons_in_subset": 496,
         "ground_candidates": 496,
         "photons_outside_ground_span": 6,
+        "ground_windows_populated": 28,
+        "ground_windows_gated": 0,
+        "photons_over_gated_ground_windows": 0,
         "photons_in_eroded_footprints": 0,
         "roof_photons_outside_ground_span": 0,
+        "roof_photons_over_gated_ground_windows": 0,
         "photons_in_roof_band": 0,
         "roof_photons_below_band": 0,
         "roof_photons_above_band": 0,
@@ -658,6 +732,7 @@
         "buildings_survived_erosion": 719,
         "buildings_crossed": 0,
         "ground_median_m": 6.039,
+        "ground_median_ungated_m": 6.039,
         "ground_median_drift_m": -0.001
       }
     },
@@ -682,15 +757,20 @@
         "photons_in_subset": 721,
         "ground_candidates": 680,
         "photons_outside_ground_span": 5,
+        "ground_windows_populated": 71,
+        "ground_windows_gated": 1,
+        "photons_over_gated_ground_windows": 15,
         "photons_in_eroded_footprints": 0,
         "roof_photons_outside_ground_span": 0,
+        "roof_photons_over_gated_ground_windows": 0,
         "photons_in_roof_band": 0,
         "roof_photons_below_band": 0,
         "roof_photons_above_band": 0,
         "buildings_in_ward": 4702,
         "buildings_survived_erosion": 719,
         "buildings_crossed": 0,
-        "ground_median_m": 5.874,
+        "ground_median_m": 5.871,
+        "ground_median_ungated_m": 5.874,
         "ground_median_drift_m": 0.004
       }
     },
@@ -715,8 +795,12 @@
         "photons_in_subset": 501,
         "ground_candidates": 226,
         "photons_outside_ground_span": 2,
+        "ground_windows_populated": 22,
+        "ground_windows_gated": 0,
+        "photons_over_gated_ground_windows": 0,
         "photons_in_eroded_footprints": 17,
         "roof_photons_outside_ground_span": 0,
+        "roof_photons_over_gated_ground_windows": 0,
         "photons_in_roof_band": 17,
         "roof_photons_below_band": 0,
         "roof_photons_above_band": 0,
@@ -724,6 +808,7 @@
         "buildings_survived_erosion": 326,
         "buildings_crossed": 1,
         "ground_median_m": 3.522,
+        "ground_median_ungated_m": 3.522,
         "ground_median_drift_m": 0.002
       }
     },
@@ -748,8 +833,12 @@
         "photons_in_subset": 1286,
         "ground_candidates": 977,
         "photons_outside_ground_span": 1,
+        "ground_windows_populated": 52,
+        "ground_windows_gated": 0,
+        "photons_over_gated_ground_windows": 0,
         "photons_in_eroded_footprints": 0,
         "roof_photons_outside_ground_span": 0,
+        "roof_photons_over_gated_ground_windows": 0,
         "photons_in_roof_band": 0,
         "roof_photons_below_band": 0,
         "roof_photons_above_band": 0,
@@ -757,6 +846,7 @@
         "buildings_survived_erosion": 326,
         "buildings_crossed": 0,
         "ground_median_m": 2.02,
+        "ground_median_ungated_m": 2.02,
         "ground_median_drift_m": 0.0
       }
     },
@@ -781,8 +871,12 @@
         "photons_in_subset": 1020,
         "ground_candidates": 535,
         "photons_outside_ground_span": 7,
+        "ground_windows_populated": 44,
+        "ground_windows_gated": 0,
+        "photons_over_gated_ground_windows": 0,
         "photons_in_eroded_footprints": 0,
         "roof_photons_outside_ground_span": 0,
+        "roof_photons_over_gated_ground_windows": 0,
         "photons_in_roof_band": 0,
         "roof_photons_below_band": 0,
         "roof_photons_above_band": 0,
@@ -790,6 +884,7 @@
         "buildings_survived_erosion": 326,
         "buildings_crossed": 0,
         "ground_median_m": 3.991,
+        "ground_median_ungated_m": 3.991,
         "ground_median_drift_m": 0.001
       }
     },
@@ -814,8 +909,12 @@
         "photons_in_subset": 989,
         "ground_candidates": 790,
         "photons_outside_ground_span": 8,
+        "ground_windows_populated": 12,
+        "ground_windows_gated": 0,
+        "photons_over_gated_ground_windows": 0,
         "photons_in_eroded_footprints": 0,
         "roof_photons_outside_ground_span": 0,
+        "roof_photons_over_gated_ground_windows": 0,
         "photons_in_roof_band": 0,
         "roof_photons_below_band": 0,
         "roof_photons_above_band": 0,
@@ -823,6 +922,7 @@
         "buildings_survived_erosion": 326,
         "buildings_crossed": 0,
         "ground_median_m": 3.253,
+        "ground_median_ungated_m": 3.253,
         "ground_median_drift_m": 0.003
       }
     },
@@ -847,8 +947,12 @@
         "photons_in_subset": 1830,
         "ground_candidates": 1081,
         "photons_outside_ground_span": 20,
+        "ground_windows_populated": 81,
+        "ground_windows_gated": 0,
+        "photons_over_gated_ground_windows": 0,
         "photons_in_eroded_footprints": 0,
         "roof_photons_outside_ground_span": 0,
+        "roof_photons_over_gated_ground_windows": 0,
         "photons_in_roof_band": 0,
         "roof_photons_below_band": 0,
         "roof_photons_above_band": 0,
@@ -856,6 +960,7 @@
         "buildings_survived_erosion": 326,
         "buildings_crossed": 0,
         "ground_median_m": 3.904,
+        "ground_median_ungated_m": 3.904,
         "ground_median_drift_m": 0.004
       }
     },
@@ -880,8 +985,12 @@
         "photons_in_subset": 3916,
         "ground_candidates": 2216,
         "photons_outside_ground_span": 43,
+        "ground_windows_populated": 74,
+        "ground_windows_gated": 0,
+        "photons_over_gated_ground_windows": 0,
         "photons_in_eroded_footprints": 0,
         "roof_photons_outside_ground_span": 0,
+        "roof_photons_over_gated_ground_windows": 0,
         "photons_in_roof_band": 0,
         "roof_photons_below_band": 0,
         "roof_photons_above_band": 0,
@@ -889,6 +998,7 @@
         "buildings_survived_erosion": 326,
         "buildings_crossed": 0,
         "ground_median_m": 3.317,
+        "ground_median_ungated_m": 3.317,
         "ground_median_drift_m": -0.003
       }
     },
@@ -913,8 +1023,12 @@
         "photons_in_subset": 1955,
         "ground_candidates": 1118,
         "photons_outside_ground_span": 3,
+        "ground_windows_populated": 52,
+        "ground_windows_gated": 0,
+        "photons_over_gated_ground_windows": 0,
         "photons_in_eroded_footprints": 2,
         "roof_photons_outside_ground_span": 0,
+        "roof_photons_over_gated_ground_windows": 0,
         "photons_in_roof_band": 2,
         "roof_photons_below_band": 0,
         "roof_photons_above_band": 0,
@@ -922,6 +1036,7 @@
         "buildings_survived_erosion": 326,
         "buildings_crossed": 1,
         "ground_median_m": 3.185,
+        "ground_median_ungated_m": 3.185,
         "ground_median_drift_m": 0.005
       }
     },
@@ -946,8 +1061,12 @@
         "photons_in_subset": 179,
         "ground_candidates": 179,
         "photons_outside_ground_span": 5,
+        "ground_windows_populated": 39,
+        "ground_windows_gated": 0,
+        "photons_over_gated_ground_windows": 0,
         "photons_in_eroded_footprints": 0,
         "roof_photons_outside_ground_span": 0,
+        "roof_photons_over_gated_ground_windows": 0,
         "photons_in_roof_band": 0,
         "roof_photons_below_band": 0,
         "roof_photons_above_band": 0,
@@ -955,6 +1074,7 @@
         "buildings_survived_erosion": 326,
         "buildings_crossed": 0,
         "ground_median_m": 3.655,
+        "ground_median_ungated_m": 3.655,
         "ground_median_drift_m": 0.005
       }
     },
@@ -979,8 +1099,12 @@
         "photons_in_subset": 3903,
         "ground_candidates": 2383,
         "photons_outside_ground_span": 14,
+        "ground_windows_populated": 84,
+        "ground_windows_gated": 0,
+        "photons_over_gated_ground_windows": 0,
         "photons_in_eroded_footprints": 21,
         "roof_photons_outside_ground_span": 0,
+        "roof_photons_over_gated_ground_windows": 0,
         "photons_in_roof_band": 20,
         "roof_photons_below_band": 1,
         "roof_photons_above_band": 0,
@@ -988,6 +1112,7 @@
         "buildings_survived_erosion": 326,
         "buildings_crossed": 1,
         "ground_median_m": 3.003,
+        "ground_median_ungated_m": 3.003,
         "ground_median_drift_m": 0.003
       }
     },
@@ -1012,8 +1137,12 @@
         "photons_in_subset": 572,
         "ground_candidates": 572,
         "photons_outside_ground_span": 6,
+        "ground_windows_populated": 93,
+        "ground_windows_gated": 0,
+        "photons_over_gated_ground_windows": 0,
         "photons_in_eroded_footprints": 0,
         "roof_photons_outside_ground_span": 0,
+        "roof_photons_over_gated_ground_windows": 0,
         "photons_in_roof_band": 0,
         "roof_photons_below_band": 0,
         "roof_photons_above_band": 0,
@@ -1021,6 +1150,7 @@
         "buildings_survived_erosion": 326,
         "buildings_crossed": 0,
         "ground_median_m": 4.354,
+        "ground_median_ungated_m": 4.354,
         "ground_median_drift_m": 0.004
       }
     },
@@ -1045,8 +1175,12 @@
         "photons_in_subset": 1458,
         "ground_candidates": 1131,
         "photons_outside_ground_span": 12,
+        "ground_windows_populated": 73,
+        "ground_windows_gated": 0,
+        "photons_over_gated_ground_windows": 0,
         "photons_in_eroded_footprints": 0,
         "roof_photons_outside_ground_span": 0,
+        "roof_photons_over_gated_ground_windows": 0,
         "photons_in_roof_band": 0,
         "roof_photons_below_band": 0,
         "roof_photons_above_band": 0,
@@ -1054,6 +1188,7 @@
         "buildings_survived_erosion": 326,
         "buildings_crossed": 0,
         "ground_median_m": 3.021,
+        "ground_median_ungated_m": 3.021,
         "ground_median_drift_m": 0.001
       }
     },
@@ -1078,15 +1213,20 @@
         "photons_in_subset": 1123,
         "ground_candidates": 844,
         "photons_outside_ground_span": 5,
+        "ground_windows_populated": 86,
+        "ground_windows_gated": 3,
+        "photons_over_gated_ground_windows": 148,
         "photons_in_eroded_footprints": 0,
         "roof_photons_outside_ground_span": 0,
+        "roof_photons_over_gated_ground_windows": 0,
         "photons_in_roof_band": 0,
         "roof_photons_below_band": 0,
         "roof_photons_above_band": 0,
         "buildings_in_ward": 4538,
         "buildings_survived_erosion": 326,
         "buildings_crossed": 0,
-        "ground_median_m": 3.554,
+        "ground_median_m": 3.239,
+        "ground_median_ungated_m": 3.554,
         "ground_median_drift_m": 0.004
       }
     }
@@ -1103,9 +1243,10 @@
       "baruipur": 326
     },
     "buildings_crossed_pooled": 59,
-    "buildings_not_measured": 29,
+    "buildings_not_measured": 31,
     "n_too_few_roof_ph": 26,
     "n_below_roof_band_floor": 3,
+    "n_ground_refused": 2,
     "n_outside_band_or_span": 0,
     "min_roof_photons": 5,
     "erosion_m": 5.0,
@@ -1113,13 +1254,19 @@
       2.0,
       120.0
     ],
-    "photons_outside_ground_span": 385,
+    "photons_outside_ground_span": 532,
     "roof_photons_outside_ground_span": 0,
-    "roof_photons_in_band": 1832,
-    "roof_photons_below_band": 317,
+    "ground_relief_m": 10.0,
+    "ground_windows_populated": 1702,
+    "ground_windows_gated": 27,
+    "passes_with_gated_ground_windows": 11,
+    "photons_over_gated_ground_windows": 1134,
+    "roof_photons_over_gated_ground_windows": 28,
+    "roof_photons_in_band": 1808,
+    "roof_photons_below_band": 313,
     "roof_photons_above_band": 0,
     "subsets_rejected": [],
-    "note": "Buildings smaller than the 5 m erosion never enter, nor do crossed buildings under 5 roof photons (n_too_few_roof_ph) \u2014 counted apart from those with photons enough that the roof band's 2.0 m floor pushed under the bar (n_below_roof_band_floor), because more passes would fix the first and would not touch the second. Photons outside the ground line's populated span are dropped rather than measured against a flat extrapolation. The crossed set over-represents LARGE buildings \u2014 published wording must say 'along satellite transects', not 'all buildings'."
+    "note": "Buildings smaller than the 5 m erosion never enter, nor do crossed buildings under 5 roof photons (n_too_few_roof_ph) \u2014 counted apart from those with photons enough that the roof band's 2.0 m floor pushed under the bar (n_below_roof_band_floor), because more passes would fix the first and would not touch the second. Photons outside the ground line's populated span are dropped rather than measured against a flat extrapolation, and so are photons over a ground window the pointwise relief gate refused \u2014 an unmapped building can fill a 30 m window with roof photons and pin the ground line tens of metres up (spec \u00a75.1, CORRECTION 2026-08-07). The two are counted apart because they say different things. The crossed set over-represents LARGE buildings \u2014 published wording must say 'along satellite transects', not 'all buildings'."
   },
   "terrain": {
     "dem_minus_laser_ground_m": 6.55,
@@ -1147,42 +1294,136 @@
     },
     "note": "Measured, not gated (spec \u00a75.1): the shipped relief surface sits this far ABOVE decimetre-class laser ground. The headline is the median over the 2 DISTINCT reference ground tracks, each of which is itself the median of that track's passes \u2014 the 31 passes re-fly the same few ground tracks (spec \u00a73), so pooling them would weight one geometry by how often it was re-flown. It is a smoothed DSM by its own note, and it is used by nothing in the heat model; the height comparison takes its ground line from the photons, never from the DEM."
   },
-  "floor_sensitivity": {
-    "floors": [
+  "floor_sensitivity": null,
+  "method_stability": {
+    "published": false,
+    "relief_allowances": [
       {
-        "floor_m": 2.0,
-        "n_buildings": 30,
+        "relief_m": 6.0,
+        "shipped": false,
+        "windows_gated": 67,
+        "photons_over_gated_windows": 3135,
+        "n_buildings": 26,
+        "meets_min_buildings": false,
+        "median_bias_m": 2.9,
+        "p65_bias_m": 4.16,
+        "p90_bias_m": 4.5,
+        "verdict": "underpowered"
+      },
+      {
+        "relief_m": 8.0,
+        "shipped": false,
+        "windows_gated": 42,
+        "photons_over_gated_windows": 1619,
+        "n_buildings": 28,
+        "meets_min_buildings": false,
+        "median_bias_m": 1.32,
+        "p65_bias_m": 3.48,
+        "p90_bias_m": 3.12,
+        "verdict": "underpowered"
+      },
+      {
+        "relief_m": 10.0,
         "shipped": true,
-        "median_bias_m": 1.22,
-        "p65_bias_m": 3.87,
-        "p90_bias_m": 7.34
+        "windows_gated": 27,
+        "photons_over_gated_windows": 1134,
+        "n_buildings": 28,
+        "meets_min_buildings": false,
+        "median_bias_m": 1.32,
+        "p65_bias_m": 3.48,
+        "p90_bias_m": 3.12,
+        "verdict": "underpowered"
       },
       {
-        "floor_m": 1.0,
-        "n_buildings": 30,
+        "relief_m": 12.0,
         "shipped": false,
-        "median_bias_m": 1.22,
-        "p65_bias_m": 3.87,
-        "p90_bias_m": 7.32
+        "windows_gated": 20,
+        "photons_over_gated_windows": 901,
+        "n_buildings": 28,
+        "meets_min_buildings": false,
+        "median_bias_m": 1.32,
+        "p65_bias_m": 3.48,
+        "p90_bias_m": 3.12,
+        "verdict": "underpowered"
       },
       {
-        "floor_m": 0.5,
-        "n_buildings": 31,
+        "relief_m": 15.0,
         "shipped": false,
+        "windows_gated": 16,
+        "photons_over_gated_windows": 833,
+        "n_buildings": 29,
+        "meets_min_buildings": false,
         "median_bias_m": 1.17,
-        "p65_bias_m": 3.41,
-        "p90_bias_m": 7.92
+        "p65_bias_m": 3.02,
+        "p90_bias_m": 2.43,
+        "verdict": "underpowered"
       },
       {
-        "floor_m": 0.0,
-        "n_buildings": 31,
+        "relief_m": 20.0,
         "shipped": false,
+        "windows_gated": 12,
+        "photons_over_gated_windows": 244,
+        "n_buildings": 29,
+        "meets_min_buildings": false,
         "median_bias_m": 1.17,
-        "p65_bias_m": 3.41,
-        "p90_bias_m": 7.9
+        "p65_bias_m": 3.02,
+        "p90_bias_m": 2.43,
+        "verdict": "underpowered"
       }
     ],
-    "note": "Measured, not shipped: the cohort re-run with the roof band's floor at 2, 1, 0.5, 0 m. The floor stays at 2.0 m \u2014 it is what this instrument resolves over a rooftop, and lowering it to move a result would be tuning a threshold for an answer. It is recorded because the floor deletes short buildings' low photons and so acts on the bias directionally; these rows show by how much."
+    "ground_window_widths": [
+      {
+        "win_m": 30.0,
+        "shipped": true,
+        "n_buildings": 28,
+        "meets_min_buildings": false,
+        "median_bias_m": 1.32,
+        "p65_bias_m": 3.48,
+        "p90_bias_m": 3.12,
+        "verdict": "underpowered"
+      },
+      {
+        "win_m": 50.0,
+        "shipped": false,
+        "n_buildings": 27,
+        "meets_min_buildings": false,
+        "median_bias_m": 1.27,
+        "p65_bias_m": 4.16,
+        "p90_bias_m": 3.93,
+        "verdict": "underpowered"
+      },
+      {
+        "win_m": 80.0,
+        "shipped": false,
+        "n_buildings": 29,
+        "meets_min_buildings": false,
+        "median_bias_m": 1.46,
+        "p65_bias_m": 3.05,
+        "p90_bias_m": 2.51,
+        "verdict": "underpowered"
+      },
+      {
+        "win_m": 120.0,
+        "shipped": false,
+        "n_buildings": 31,
+        "meets_min_buildings": true,
+        "median_bias_m": 2.89,
+        "p65_bias_m": 4.23,
+        "p90_bias_m": 8.09,
+        "verdict": "validated"
+      },
+      {
+        "win_m": 200.0,
+        "shipped": false,
+        "n_buildings": 31,
+        "meets_min_buildings": true,
+        "median_bias_m": 2.94,
+        "p65_bias_m": 4.73,
+        "p90_bias_m": 8.16,
+        "verdict": "validated"
+      }
+    ],
+    "note": "METHOD EVIDENCE, NOT A RESULT \u2014 nothing in this block may be quoted as a measured bias. Every row is a cohort below the pre-registered MIN_BUILDINGS bar, and spec \u00a75.3 admits no statistic below it. The rows exist so that the two ground-line constants can be audited rather than taken on trust. The relief allowance does not move the outcome anywhere in 6-20 m, which is the point: it was chosen from the wards' measured relief (4.9-8.9 m spans in <ward>-terrain.json) and not from the answer it gives. The window width DOES move the median verdict while leaving the upper-distribution divergence roughly where it is \u2014 recorded as a limit of the method and a reason to re-ask when more passes arrive, never as a width to select."
   },
-  "note": "Distributional comparison only \u2014 ATL03 geolocation (~3-5 m) forbids per-building attribution, so the statistics compare the two distributions' quantiles and no per-building height is published. Verdicts and thresholds were pre-registered in docs/superpowers/specs/2026-08-06-icesat2-height-validation-design.md \u00a75.3 before any of this was run \u2014 except the fill cohort's statistic, amended 2026-08-07 and recorded in \u00a75.3 because the original could not return zero: the 2.0 m roof-band floor deleted exactly the short buildings' evidence that would have vindicated the fill. Photons are pooled per building across repeat passes; n_buildings counts distinct buildings, n_passes counts overpasses and n_rgts the distinct reference ground tracks they re-fly. A repeat pass is not a second row for the same building \u2014 its photons join that building's pool \u2014 but nor is it confined to buildings already in the cohort: beams wander up to 726 m across-track between cycles (spec \u00a73, CORRECTION 2026-08-07), which is why Ballygunge's 12 passes crossed 50 distinct buildings and why n reached 30 at all."
+  "note": "Distributional comparison only \u2014 ATL03 geolocation (~3-5 m) forbids per-building attribution, so the statistics compare the two distributions' quantiles and no per-building height is published. Verdicts and thresholds were pre-registered in docs/superpowers/specs/2026-08-06-icesat2-height-validation-design.md \u00a75.3 before any of this was run \u2014 except the fill cohort's statistic, amended 2026-08-07 and recorded in \u00a75.3 because the original could not return zero: the 2.0 m roof-band floor deleted exactly the short buildings' evidence that would have vindicated the fill. Photons are pooled per building across repeat passes; n_buildings counts distinct buildings, n_passes counts overpasses and n_rgts the distinct reference ground tracks they re-fly. A repeat pass is not a second row for the same building \u2014 its photons join that building's pool \u2014 but nor is it confined to buildings already in the cohort: beams wander up to 726 m across-track between cycles (spec \u00a73, CORRECTION 2026-08-07), which is why Ballygunge's 12 passes crossed 50 distinct buildings. THIS RUN SUPERSEDES THE 2026-08-06 ONE, which reported n=30 and a `validated` verdict. That run's ground line was contaminated: Overture does not map every building, and where a 30 m window held nothing but roof photons from an unmapped one the two-pass line settled on the roof \u2014 5 of 31 passes carried a ground line above +25 m, worst 84.68 m in a ward whose ground is 3-6 m. Spec \u00a75.1's G1b was written to catch that and could not, because it tests the pass MEDIAN (4.46 m on that pass). The gate is now applied pointwise (\u00a75.1, CORRECTION 2026-08-07); the marginal buildings it removes are the ones that had carried n to the bar, so the honest n is below it and the pre-registered outcome is `underpowered`. No bias, CI or omnibus statistic is published at that verdict."
 }
