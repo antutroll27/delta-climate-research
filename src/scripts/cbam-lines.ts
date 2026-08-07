@@ -8,6 +8,11 @@
  * cbam-app.ts is upstream's, byte-for-byte" stays true.
  */
 import type { EstimatorPack } from './cbam-algos/estimator/estimate-from-pack.ts';
+import {
+  aggregateThresholdBasis, type ImportMassEntry,
+} from './cbam-algos/threshold/aggregate.ts';
+import { evaluateThreshold, type ThresholdState } from './cbam-algos/threshold/evaluate.ts';
+import { sectorForCn } from './cbam-algos/cbam/sector.ts';
 
 export interface Line {
   id: string;        // row key and ImportMassEntry.id — NOT part of the fingerprint
@@ -83,4 +88,106 @@ export async function packSnapshotHash(pack: EstimatorPack): Promise<string> {
     }),
   ];
   return sha256Hex(parts.join(''));
+}
+
+/** Every session entry shares one importer — the aggregation filters on it. */
+const IMPORTER = 'estimator-session';
+
+export interface YearThreshold {
+  calendarYear: number;
+  ruleFound: boolean;
+  /** Only when ruleFound. */
+  state?: ThresholdState;
+  knownEligibleMassT?: string;
+  thresholdT?: string;
+  sourceLocator?: string;
+  entryIds?: string[];
+  entryHashes?: string[];
+  attested: boolean;
+  /** Lines in this year that counted toward the eligible mass. */
+  eligibleLineCount: number;
+}
+
+/**
+ * One threshold verdict per calendar year present in the lines.
+ *
+ * PER YEAR, NEVER PER ESTIMATE. The de minimis threshold (Reg 2023/956 Art 2(3))
+ * is annual; summing across years would report a 30 t 2026 + 30 t 2027 estimate
+ * as 60 t "above" — a liability that does not exist.
+ *
+ * A year with no published threshold row returns ruleFound: false rather than a
+ * fabricated default. The Commission has published 2026 only, as of this pack.
+ *
+ * `completeness` comes from the caller's attestation set — 'complete' only when
+ * the user has explicitly ticked "these are all my {year} imports". The tool
+ * never asserts completeness; it conditions on the user's statement.
+ *
+ * Lines with an unresolved year (yearOf → NaN, see yearOf's doc) contribute to
+ * NO card. NaN can't be filtered from a Set by equality (SameValueZero collapses
+ * every NaN into one member), and a pack.thresholds lookup keyed on NaN always
+ * misses, so an unfiltered NaN year would render as a bogus "no rule published"
+ * card and, worse, could mask a real card if the array order put it first. Those
+ * lines simply don't resolve to a year yet; callers surface them separately
+ * (e.g. "N lines need a date") rather than under a fake calendarYear.
+ */
+export function thresholdByYear(
+  lines: readonly Line[],
+  fingerprints: ReadonlyMap<string, string>,
+  attestedYears: ReadonlySet<number>,
+  pack: EstimatorPack,
+): YearThreshold[] {
+  const years = [...new Set(lines.map(yearOf))]
+    .filter((year) => !Number.isNaN(year))
+    .sort((a, b) => a - b); // default sort() is lexicographic: [2027, 10] would beat [10, 2027]
+
+  return years.map((calendarYear) => {
+    const attested = attestedYears.has(calendarYear);
+    const rule = pack.thresholds.find((t) => t.calendarYear === calendarYear);
+    const inYear = lines.filter((l) => yearOf(l) === calendarYear);
+    if (!rule) return { calendarYear, ruleFound: false, attested, eligibleLineCount: 0 };
+
+    const entries: ImportMassEntry[] = inYear.flatMap((l) => {
+      const sector = sectorForCn(l.cn);
+      if (!sector || !rule.includedSectors.includes(sector)) return [];
+      const sourceSha256 = fingerprints.get(l.id);
+      if (!sourceSha256) {
+        // A missing fingerprint means some caller built cards before hashing
+        // every line. Folding in '' would print on the export as an ordinary,
+        // complete entryHashes value — the exact silent-degradation shape
+        // packSnapshotHash refuses above. Loud failure beats a quiet false claim.
+        throw new Error(
+          `thresholdByYear: line '${l.id}' has no fingerprint — every line must `
+          + 'be hashed (lineFingerprint) before it can be aggregated',
+        );
+      }
+      return [{
+        id: l.id, importerOrgId: IMPORTER, calendarYear, sector,
+        netMassT: l.massT, sourceSha256,
+      }];
+    });
+
+    const basis = aggregateThresholdBasis(
+      { importerOrgId: IMPORTER, calendarYear },
+      entries,
+      {
+        id: `session-${calendarYear}`, importerOrgId: IMPORTER, calendarYear,
+        completeness: attested ? 'complete' : 'partial',
+      },
+    );
+    const verdict = evaluateThreshold({
+      knownEligibleMassT: basis.knownEligibleMassT,
+      completeness: basis.completeness,
+      thresholdT: rule.thresholdT,
+    });
+    return {
+      calendarYear, ruleFound: true, attested,
+      state: verdict.state,
+      knownEligibleMassT: verdict.knownEligibleMassT,
+      thresholdT: verdict.thresholdT,
+      sourceLocator: rule.sourceLocator,
+      entryIds: basis.entryIds,
+      entryHashes: basis.entryHashes,
+      eligibleLineCount: entries.length,
+    };
+  });
 }
