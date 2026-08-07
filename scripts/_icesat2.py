@@ -102,6 +102,27 @@ GEOID_TOL_M = 0.5
 #: at 3-6 m, so the band is generous on both sides; what it excludes is the
 #: arithmetic going wrong — see `check_geoid`.
 GROUND_BAND_M = (-2.0, 25.0)
+#: How far ONE WINDOW of the ground line may depart from that pass's own
+#: ground-line median before the window is refused, metres. Spec §5.1,
+#: CORRECTION 2026-08-07 — see `ground_line`'s "THE POINTWISE RELIEF GATE".
+#:
+#: MEASURED, NOT PREFERRED. The ward terrain artefacts
+#: (`public/heat-map/data/<ward>-terrain.json`) record the relief these wards
+#: actually have across a 1.4 km box: smoothed spans of 4.9, 6.7 and 7.7 m, raw
+#: spans of 6.6, 7.4 and 8.9 m, and the same files put the DSM's own per-cell
+#: RMSE against Copernicus GLO-30 at 1.5-2.1 m. So real terrain cannot put a
+#: window more than about 8.9 + 2.1 = 11 m from its pass median, and the thing
+#: this gate must catch — a window sitting on an unmapped roof — starts at the
+#: 11-36 m these wards' buildings stand above ground (spec §5.1's G1b rationale).
+#: 10 m sits inside that bracket: above every measured relief span, below the
+#: shortest roof.
+#:
+#: AND THE VERDICT DOES NOT DEPEND ON IT. Measured over the committed subsets at
+#: 6, 8, 10, 12, 15 and 20 m the outcome is the same at every value (n=28-29,
+#: median bias +1.17 to +1.32 m, verdict `underpowered`). That sweep is written
+#: into the artefact as `relief_gate_sensitivity` so a reader can see the choice
+#: is not a dial that was turned until an answer appeared.
+GROUND_RELIEF_M = 10.0
 
 
 class RingError(ValueError):
@@ -133,7 +154,9 @@ def along_track(x: F64, y: F64) -> F64:
 
 def ground_line(s_all: F64, s_gnd: F64, h_gnd: F64,
                 win_m: float = GROUND_WIN_M, q: float = GROUND_Q,
-                gate_m: float = GROUND_GATE_M) -> F64:
+                gate_m: float = GROUND_GATE_M,
+                relief_m: float = GROUND_RELIEF_M,
+                stats: dict[str, object] | None = None) -> F64:
     """Orthometric ground surface evaluated at every photon's s, from
     ground-candidate photons only, in rolling half-overlapping windows.
 
@@ -153,6 +176,35 @@ def ground_line(s_all: F64, s_gnd: F64, h_gnd: F64,
       of that median. A window with fewer than GROUND_MIN_PH candidates surviving
       the gate keeps its pass-1 value.
 
+    THE POINTWISE RELIEF GATE (spec §5.1, CORRECTION 2026-08-07). Both passes
+    above assume the window HAS ground candidates in it. Overture does not map
+    every building, and where it misses one a 30 m window in dense Ballygunge can
+    be ~100 % roof photons from an unmapped structure: pass 1's p10 lands on that
+    roof, pass 2 medians the same roof photons, and the result is a STABLE FIXED
+    POINT tens of metres up. Measured on the committed subsets before this gate
+    existed, 5 of 31 passes carried a ground line above +25 m — worst 84.68 m in a
+    ward whose true ground is 3-6 m.
+
+    Spec §5.1's G1b was meant to catch exactly that ("above +25 m the line has
+    climbed onto rooftops"), but it is applied to the PASS MEDIAN, and the median
+    of the 84.68 m pass was 4.46 m: a handful of runaway windows cannot move it,
+    so the check could not see the excursion it was written for. The granularity
+    was wrong, not the idea. So the same idea is applied POINTWISE: any window
+    whose value departs from that pass's own ground-line median by more than
+    `relief_m` is refused, because the wards' measured relief cannot produce such
+    a departure (see GROUND_RELIEF_M). G1b stays as the whole-line check; this is
+    the per-window one, and they are complementary in the same way G1a and G1b
+    are.
+
+    Refused windows are dropped from the interpolation, AND the line is NOT
+    BRIDGED ACROSS THEM: every photon whose two bracketing surviving windows
+    straddle a refusal comes back NaN. Bridging would hand those photons a ground
+    value manufactured from two windows that never saw that ground — the same
+    objection this function already raises against flat extrapolation past the
+    track ends, and over the same kind of distance (one refusal on the 84.68 m
+    pass has no honest window within 165 m). `stats` counts the dropped photons —
+    see below.
+
     RETURNS NaN OUTSIDE THE MEASURED SPAN. `np.interp` clamps to its end values,
     so a photon beyond the outermost populated window would be measured against a
     flat extrapolation of the last window, and the error would be invisible:
@@ -163,8 +215,19 @@ def ground_line(s_all: F64, s_gnd: F64, h_gnd: F64,
     spec §5.4, which forbids silent exclusions. `building_heights` already
     excludes NaN height-above-ground, since every comparison against NaN is False.
 
+    `stats`, IF GIVEN, IS FILLED WITH THE EXCLUSION LEDGER — the point of it is
+    that §5.4 forbids a silent drop, and the gate drops photons. Keys:
+    `n_windows`, `n_windows_populated`, `n_windows_gated`,
+    `photons_over_gated_windows` and `photons_outside_span` (DISJOINT counts, so
+    they can be summed), and `median_ungated_m`. The last is the median of the
+    line as it stood BEFORE the relief gate: it exists because every committed
+    subset recorded that statistic as `groundMedianM` when it passed the §5.1
+    gate, and `measure-height-accuracy.py`'s drift recheck has to compare like
+    with like — a recheck that fired merely because the algorithm improved would
+    say nothing about whether the photons or footprints had moved.
+
     Raises ValueError if `s_gnd` and `h_gnd` are misaligned, or if fewer than two
-    windows are populated.
+    windows are populated — before or after the relief gate.
     """
     if s_gnd.shape != h_gnd.shape:
         raise ValueError(
@@ -198,9 +261,73 @@ def ground_line(s_all: F64, s_gnd: F64, h_gnd: F64,
     ok = np.isfinite(gv)
     if int(ok.sum()) < 2:
         raise ValueError("ground line needs at least two populated windows")
-    cs, vs = centres[ok], gv[ok]
-    g = np.interp(s_all, cs, vs)
-    return np.where((s_all < cs[0]) | (s_all > cs[-1]), np.nan, g)
+
+    def _line(mask: npt.NDArray[np.bool_]) -> tuple[F64, npt.NDArray[np.bool_]]:
+        cs, vs = centres[mask], gv[mask]
+        return np.interp(s_all, cs, vs), (s_all < cs[0]) | (s_all > cs[-1])
+
+    ungated, out_of_span = _line(ok)
+    ungated = np.where(out_of_span, np.nan, ungated)
+
+    # THE POINTWISE RELIEF GATE — see the docstring. Applied to the CONVERGED
+    # line, so it judges what the two passes actually produced, and centred on
+    # that pass's own median rather than on any absolute band: the wards differ
+    # in datum by metres and a fixed band would be either loose or ward-specific.
+    med = float(np.median(gv[ok]))
+    gated = ok & (np.abs(gv - med) > relief_m)
+    if gated.any():
+        gv = np.where(gated, np.nan, gv)
+        ok = np.isfinite(gv)
+        if int(ok.sum()) < 2:
+            raise ValueError(
+                f"ground line needs at least two populated windows, and the "
+                f"{relief_m:g} m pointwise relief gate left {int(ok.sum())} — "
+                "this pass's candidates are dominated by unmapped structures")
+
+    g, out_of_span = _line(ok)
+    # AND THE LINE IS NOT BRIDGED ACROSS A REFUSAL. Dropping the refused window
+    # from the interpolation nodes is not enough on its own: `np.interp` would
+    # then draw a straight line from the last honest window BEFORE the refusal to
+    # the first one AFTER it, and hand every photon in between a ground value
+    # manufactured from two measurements that never saw that ground. It is the
+    # same objection as the flat extrapolation this function already refuses at
+    # the track ends, and the spans involved are not small — measured on the
+    # committed subsets, one refusal on the 84.68 m pass sits 165 m from the
+    # nearest honest window on one side, and a Baruipur pass would have bridged
+    # 180 m. So every photon whose two bracketing SURVIVING windows straddle a
+    # refusal is NaN too, and a refusal with no honest window on one side
+    # invalidates the line out to the track end on that side.
+    #
+    # This is the whole difference between the corrected pipeline and the
+    # defective one. It is also where the marginal buildings go: bridging keeps
+    # n at 30, refusing to bridge takes it under the bar, and the bar is
+    # pre-registered.
+    over_gated = np.zeros(s_all.shape, dtype=bool)
+    cs_ok = centres[ok]
+    for c in centres[gated]:                # few per pass; a loop is clearer here
+        below = cs_ok[cs_ok < c]
+        above = cs_ok[cs_ok > c]
+        lo_s = below[-1] if below.size else -np.inf
+        hi_s = above[0] if above.size else np.inf
+        over_gated |= (s_all >= lo_s) & (s_all <= hi_s)
+
+    if stats is not None:
+        n_out = int(out_of_span.sum())
+        stats.update({
+            "n_windows": int(centres.size),
+            "n_windows_populated": int(np.isfinite(gv).sum() + gated.sum()),
+            "n_windows_gated": int(gated.sum()),
+            # disjoint, so a reader can add them up: out-of-span wins the overlap
+            "photons_over_gated_windows": int((over_gated & ~out_of_span).sum()),
+            "photons_outside_span": n_out,
+            # the surviving span, so a caller can rebuild the out-of-span mask
+            # and tell the two NaN causes apart without re-deriving the windows
+            "span_m": [float(centres[ok][0]), float(centres[ok][-1])],
+            "relief_m": float(relief_m),
+            "median_ungated_m": (float(np.median(ungated[np.isfinite(ungated)]))
+                                 if np.isfinite(ungated).any() else float("nan")),
+        })
+    return np.where(out_of_span | over_gated, np.nan, g)
 
 
 def assign_footprints(px: F64, py: F64, rings: list[list[float]],
@@ -403,6 +530,16 @@ def check_geoid(ground_ortho_m: float, geoid_n_m: float,
     G1b checks that we used it, in the right direction, on a ground line that is
     still ground.
 
+    G1b IS A WHOLE-LINE CHECK AND ONLY A WHOLE-LINE CHECK (CORRECTION 2026-08-07).
+    Its third bullet was written against a ground line that had climbed onto
+    rooftops, but it is evaluated on the pass MEDIAN, and a few runaway windows
+    cannot move a median: the worst measured pass carried a window at 84.68 m
+    behind a median of 4.46 m and sailed through. The per-window version of the
+    same idea lives in `ground_line`'s pointwise relief gate (GROUND_RELIEF_M),
+    which is where that failure is now caught. G1b keeps this bullet because the
+    whole-line failure — every window on roofs, the case a beam that only ever
+    crossed unmapped structures would produce — is still real and still its job.
+
     WHY THE WARD DEM IS NOT THE REFERENCE, though this check used it until
     2026-08-06. It required photon GROUND within ±5 m of `<ward>-terrain.json`'s
     median, and that artefact's own `note` field calls it a "smoothed surface
@@ -509,6 +646,88 @@ def _self_test() -> None:
     assert abs(bias) < 0.25, \
         f"ground line biased by {bias:+.2f} m at a 1.0 m spread — pass 2 is not working"
     assert float(np.max(np.abs((g2 - t2)[f2]))) < 1.0, "a window ran away"
+
+    # THE UNMAPPED-BUILDING CASE (spec §5.1, CORRECTION 2026-08-07). Overture
+    # misses buildings, and where it does, EVERY ground candidate in a window is
+    # a roof photon: pass 1's p10 lands on the roof, pass 2 medians the same roof
+    # photons, and the line sits on a stable fixed point tens of metres up. This
+    # is the 84.68 m excursion measured on the committed subsets, reproduced —
+    # note the structure is 200 m wide against a 30 m window, so interior windows
+    # have no ground in them at all, and it is NOT excluded from the candidates,
+    # which is exactly what "unmapped" means.
+    r3 = np.random.default_rng(31)
+    k = 9000
+    s3 = r3.uniform(-700.0, 700.0, k)
+    t3 = 6.0 + 0.002 * s3
+    h3 = t3 + r3.normal(0.0, 0.3, k)
+    unmapped = (s3 > 100.0) & (s3 < 300.0)          # 200 m >> the 30 m window
+    h3[unmapped] = t3[unmapped] + 34.0 + r3.normal(0.0, 0.4, int(unmapped.sum()))
+    st: dict[str, object] = {}
+    g3 = ground_line(s3, s3, h3, stats=st)
+    deep = (s3 > 140.0) & (s3 < 260.0)              # clear of the structure's edges
+    assert np.all(np.isnan(g3[deep])), \
+        "the pointwise relief gate let a ground line stand on an unmapped roof"
+    assert int(st["n_windows_gated"]) > 0, "the gate fired but recorded no windows"
+    assert int(st["photons_over_gated_windows"]) >= int(deep.sum()), \
+        "spec §5.4: the gate dropped photons without counting them"
+    # ... and the honest ground far from the structure is untouched, so the gate
+    # is not simply deleting the pass
+    open_gnd = (s3 < 0.0) & np.isfinite(g3)
+    assert float(open_gnd.mean()) > 0.3, "the gate deleted the open ground too"
+    assert float(np.median(np.abs((g3 - t3)[open_gnd]))) < 0.5, \
+        "the gate moved the ground line where there was nothing wrong with it"
+    # THE FIX IS WHAT DOES THIS. At an allowance wide enough to admit a 34 m
+    # departure the same call returns a ground line standing on the roof — i.e.
+    # the assertion above fails without the gate, not because of the fixture.
+    st_off: dict[str, object] = {}
+    g_off = ground_line(s3, s3, h3, relief_m=1.0e6, stats=st_off)
+    assert int(st_off["n_windows_gated"]) == 0, "the disabled gate still fired"
+    assert float(np.median((g_off - t3)[deep])) > 25.0, \
+        "the fixture does not actually reproduce the roof-fixed-point failure, so " \
+        "the assertion above would pass with or without the gate"
+    # and G1b, the whole-line check, CANNOT see it — this is the granularity bug
+    # the correction records, pinned so it cannot be quietly re-argued
+    fo = np.isfinite(g_off)
+    check_geoid(float(np.median(g_off[fo])), -56.95, -56.947)
+    assert float(np.nanmax(g_off[fo])) > GROUND_BAND_M[1], \
+        "the fixture's runaway window no longer clears G1b's +25 m bound"
+
+    # AND THE LINE IS NOT BRIDGED ACROSS THE REFUSAL. This is the half of the fix
+    # that decides the verdict, so it gets its own fixture: the same unmapped
+    # structure, but with NO ground candidates for 200 m beyond it, so the first
+    # honest window above the refusal sits far away. A photon in that stretch has
+    # a refused window between its bracketing honest windows, and interpolating
+    # it would manufacture a ground value from two windows that never saw that
+    # ground — measured on the committed subsets at 165 m and 180 m of bridge.
+    keep = ~((s3 > 300.0) & (s3 < 500.0))
+    probe = np.array([350.0, 450.0])
+    g_gap = ground_line(np.concatenate([s3[keep], probe]), s3[keep], h3[keep])
+    assert np.all(np.isnan(g_gap[-2:])), \
+        "the ground line bridged across a refused window — those photons are " \
+        "measured against ground that no surviving window ever saw"
+    # ... and it is the REFUSAL doing it, not merely a candidate gap: with the
+    # unmapped structure removed the same gap is bridged, as it always has been
+    h_flat = t3 + r3.normal(0.0, 0.3, k)
+    g_flat = ground_line(np.concatenate([s3[keep], probe]), s3[keep], h_flat[keep])
+    assert np.all(np.isfinite(g_flat[-2:])), \
+        "an ordinary unpopulated stretch stopped being interpolated — the gate " \
+        "has started refusing windows that measured perfectly good ground"
+
+    # the ledger's two photon counts are DISJOINT, so a reader may add them
+    st_edge: dict[str, object] = {}
+    ground_line(np.concatenate([s3, [-5.0e3, 5.0e3]]), s3, h3, stats=st_edge)
+    assert int(st_edge["photons_outside_span"]) >= 2
+    assert (int(st_edge["photons_over_gated_windows"])
+            + int(st_edge["photons_outside_span"]) <= k + 2), \
+        "the gated and out-of-span photon counts double-count their overlap"
+    # the pre-gate median is preserved for the drift recheck, and it is NOT the
+    # gated line's median — otherwise measure-height-accuracy.py's recheck would
+    # fire on every committed subset merely because this gate was added
+    assert float(st["median_ungated_m"]) > float(np.median(g3[np.isfinite(g3)])), \
+        "median_ungated_m is not the pre-gate median"
+    assert GROUND_RELIEF_M == 10.0, \
+        "the relief allowance moved — it is justified against the wards' measured " \
+        "4.9-8.9 m relief spans, not chosen for the verdict it produces"
 
     # assignment: square roofs matching the two buildings, plus an 8 m building
     # that MUST be dropped by 5 m erosion (8 - 2*5 < 0)
