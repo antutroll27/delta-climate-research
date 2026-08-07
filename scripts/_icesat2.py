@@ -301,8 +301,13 @@ def quantile_bias(ours: F64, theirs: F64, rng: np.random.Generator,
     (`median_ci95_m`, `p65_ci95_m`, `p90_ci95_m`) from the same paired resamples
     — the same buildings on both sides, which preserves the building-level
     correlation the two samples share. One CI reported next to three statistics
-    would be read as covering all three, and p65 is the statistic
-    `compute-heights.py` actually ships.
+    would be read as covering all three, and the p65 is where the two
+    distributions have been measured to part company, so it needs an interval of
+    its own. NOTE: this p65 is a quantile of the COHORT's height distribution. It
+    is NOT the per-roof p65 `compute-heights.py` reduces over the height-raster
+    pixels inside a single footprint — a different statistic that happens to
+    share the numeral, and nothing in the shipped pipeline would change had this
+    comparison been cut at p60 or p70.
 
     OMNIBUS TEST: a PAIRED PERMUTATION test, not `ks_2samp`. The two samples are
     the same buildings measured twice, so they are positively correlated and the

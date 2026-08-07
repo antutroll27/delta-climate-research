@@ -22,14 +22,16 @@ geolocation error against a 10-20 m Kolkata building means any single photon may
 have landed on the neighbour (spec §1), so per-building estimates exist only to
 build the distribution.
 
-REPEAT PASSES STACK PHOTONS, THEY DO NOT ADD BUILDINGS. Three reference ground
-tracks cross the three wards and no granule can add a fourth (spec §3), so extra
-passes revisit the SAME buildings. Photons are therefore pooled per building
-across every pass of a ward before MIN_ROOF_PH is applied — which is precisely
-the power repeat passes buy — and `n_buildings` counts DISTINCT buildings.
-Concatenating each pass's estimates instead would let one building appear three
-times and walk the pooled n toward the 30-building bar without a single new
-building being measured.
+PHOTONS ARE POOLED PER BUILDING, SO n COUNTS BUILDINGS AND NOT PASSES. A repeat
+pass may revisit a building already in the cohort or land on new ones — beams
+wander up to 726 m across-track between cycles, and Ballygunge's 12 passes
+crossed 50 distinct buildings (spec §3, CORRECTION 2026-08-07; that wander is
+the only reason the 30-building bar was reachable at all). Either way the
+photons of every pass of a ward are pooled per building before MIN_ROOF_PH is
+applied — which is precisely the power repeat passes buy — and `n_buildings`
+counts DISTINCT buildings. Concatenating each pass's estimates instead would let
+one building appear three times and walk the pooled n toward the bar without a
+single new building being measured.
 
 THE PAIRED PERMUTATION TEST, NOT ks_2samp. `_icesat2.quantile_bias` returns
 `perm_p`, not a KS p-value: the two samples are the same buildings measured
@@ -666,8 +668,13 @@ def main() -> None:
                  "would have vindicated the fill. Photons are pooled per "
                  "building across repeat passes; n_buildings counts distinct "
                  "buildings, n_passes counts overpasses and n_rgts the distinct "
-                 "reference ground tracks they re-fly — a repeat pass adds "
-                 "photons to the same buildings, never a new transect."),
+                 "reference ground tracks they re-fly. A repeat pass is not a "
+                 "second row for the same building — its photons join that "
+                 "building's pool — but nor is it confined to buildings already "
+                 "in the cohort: beams wander up to 726 m across-track between "
+                 "cycles (spec §3, CORRECTION 2026-08-07), which is why "
+                 "Ballygunge's 12 passes crossed 50 distinct buildings and why "
+                 "n reached 30 at all."),
     }
     with open(OUT, "w", encoding="utf-8") as fh:
         json.dump(out, fh, indent=2)

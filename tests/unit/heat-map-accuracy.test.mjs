@@ -119,6 +119,11 @@ test('HEIGHTS mirrors the ICESat-2 artefact it claims to summarise', async () =>
   assert.equal(HEIGHTS.fill.minN, j.fill.min_n);
   assert.equal(HEIGHTS.fill.verdict, j.fill.verdict);
 
+  // The floor caveat, which spec §5.3 requires to travel beside the bias: the
+  // 2 m roof-band floor deletes low returns and so pushes every bias positive.
+  assert.equal(HEIGHTS.roofFloorM, j.excluded.roof_band_m[0]);
+  assert.equal(HEIGHTS.roofPhotonsBelowFloor, j.excluded.roof_photons_below_band);
+
   // Terrain: measured, gates nothing, but still must not drift from its artefact.
   assert.equal(HEIGHTS.demMinusLaserGroundM, j.terrain.dem_minus_laser_ground_m);
 
@@ -134,6 +139,21 @@ test('HEIGHTS mirrors the ICESat-2 artefact it claims to summarise', async () =>
     'the note quotes the median bias — it must be the artefact\'s median');
   assert.ok(HEIGHTS.note.includes(`${HEIGHTS.erosionM} m erosion`),
     'the note quotes the erosion — it must be the artefact\'s erosion');
+
+  // THE INTERVALS, which were the one published pair left unpinned. Both biases
+  // were checked above, but a note may state a bias correctly and an interval
+  // that no longer matches — and the CI is what carries "excludes zero", the
+  // single most consequential word in the sentence. Demonstrated: moving
+  // p65_ci95_m to [-0.2, 5.0] silently turned `p65ExcludesZero` false, made the
+  // whole p65 guard vacuous, and left the note asserting an exclusion the
+  // artefact no longer showed. The converse guard now lives in
+  // assertAccuracyLogic(); this pins the digits themselves.
+  const sgn = (x) => `${x < 0 ? '−' : '+'}${Math.abs(x).toFixed(1)}`;
+  const interval = (ci) => `${sgn(ci[0])} to ${sgn(ci[1])} m`;
+  assert.ok(HEIGHTS.note.includes(interval(HEIGHTS.ci95M)),
+    `the note must quote the median CI as "${interval(HEIGHTS.ci95M)}"`);
+  assert.ok(HEIGHTS.note.includes(interval(HEIGHTS.p65Ci95M)),
+    `the note must quote the p65 CI as "${interval(HEIGHTS.p65Ci95M)}"`);
 });
 
 test('daytime is never presented as more certain than night', () => {

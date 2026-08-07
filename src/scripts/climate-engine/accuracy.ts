@@ -302,17 +302,28 @@ export const SPATIAL = {
  * trading a DISCLOSED selection effect for an UNDISCLOSED attribution error. So
  * the wording is "along satellite transects", never "all buildings" (spec §5.4).
  *
- * THE VERDICT IS THE MEDIAN'S — AND THE MEDIAN IS NOT THE STATISTIC WE SHIP.
+ * THE VERDICT IS THE MEDIAN'S — AND THE DISTRIBUTIONS DIVERGE ABOVE IT.
  * The pre-registered rule keys on |median bias| < 3.2 m (one storey) with the CI
  * excluding ±2 storeys, and by that rule this is `validated`: +1.22 m,
  * CI [−0.97, 4.54]. The rule stays exactly as written — rewriting a threshold
  * after seeing the data is the one thing pre-registration exists to prevent.
- * But `compute-heights.py` ships the p65, and at p65 the bias is +3.87 m with
- * CI [0.53, 5.30] — an interval that EXCLUDES ZERO and sits above one storey.
- * So both sentences are true at once and the note has to carry both: the two
- * distributions agree within a storey at the median, and at the percentile this
- * product actually publishes ICESat-2 reads higher, meaning our heights most
- * likely understate. A guard below fires if that second sentence ever leaves.
+ * But agreement at the median is not agreement everywhere: at the COHORT's 65th
+ * percentile the bias is +3.87 m with CI [0.53, 5.30] — an interval that
+ * EXCLUDES ZERO and sits above one storey. So both sentences are true at once
+ * and the note has to carry both: the two distributions agree within a storey in
+ * the middle, and higher up ICESat-2 reads systematically higher, meaning our
+ * taller buildings most likely understate. A guard below fires if that second
+ * sentence ever leaves.
+ *
+ * `p65BiasM` IS NOT THE PIPELINE'S p65. Two different statistics share the
+ * numeral 65 and must never be conflated. `compute-heights.py` reduces the
+ * height-raster PIXELS INSIDE ONE FOOTPRINT at p65 (`height-method.json`:
+ * `"method": "p65"`) — a property of a single roof. The figure below is
+ * `quantile(·, 0.65)` over the 30-element arrays of per-building heights — a
+ * point on the COHORT's distribution. Nothing in the shipped pipeline would
+ * differ had this comparison been run at p60 or p70; what is measured here is
+ * where along the height distribution the two datasets part company, and it is
+ * published as that and nothing more.
  *
  * NOT AN OMNIBUS PASS. `permP` (0.0627) and `ksD` are recorded, not gated — the
  * verdict rule never referenced either. `validated` here says NOTHING about
@@ -321,9 +332,14 @@ export const SPATIAL = {
  * be available even at permP ≈ 0.
  *
  * n = 30 is the pre-registered bar hit EXACTLY, not cleared, and 27 of the 30 sit
- * in one ward. The 31 overpasses re-fly only 2 distinct reference ground tracks —
- * a repeat pass adds photons to buildings already in the cohort, never a new
- * transect — so the passes are not 31 independent looks.
+ * in one ward. The 31 overpasses re-fly only 2 distinct reference ground tracks,
+ * so they are not 31 independent looks. But nor do they all land on the same
+ * buildings: beams wander up to 726 m across-track between cycles (spec §3,
+ * CORRECTION 2026-08-07), and Ballygunge's 12 passes crossed 50 distinct
+ * buildings — that wander is the only reason n reached 30. Photons are POOLED
+ * PER BUILDING across every pass before MIN_ROOF_PH is applied, so `nBuildings`
+ * counts distinct buildings, never passes: a building crossed three times
+ * contributes one row with three passes' photons behind it.
  *
  * Regenerate with: python3 scripts/measure-height-accuracy.py
  */
@@ -343,7 +359,10 @@ export const HEIGHTS = {
   /** ICESat-2 minus ours, m. POSITIVE means the laser reads HIGHER than we ship. */
   medianBiasM: 1.22,
   ci95M: [-0.97, 4.54],
-  /** the statistic compute-heights.py ships — and its CI excludes zero */
+  /**
+   * The COHORT distribution's 65th percentile — NOT the per-roof p65
+   * `compute-heights.py` reduces inside one footprint. Its CI excludes zero.
+   */
   p65BiasM: 3.87,
   p65Ci95M: [0.53, 5.3],
   p90BiasM: 7.34,
@@ -354,6 +373,17 @@ export const HEIGHTS = {
   /** footprint erosion, m, and the share of each ward that survives it */
   erosionM: 5,
   survivorPctRange: [7.2, 28.2],
+  /**
+   * The roof band's lower edge, m, and the photons it discarded across the whole
+   * sweep. Spec §5.3 requires these to travel BESIDE the bias, not in a footnote:
+   * the floor deletes low roof returns, which pushes every bias positive — i.e.
+   * toward "our heights understate". It is conservative for reaching `validated`,
+   * but it means the published MAGNITUDE is an upper bound, not a point estimate.
+   * The floor stays at 2.0 m; the sensitivity re-run lives in the artefact's
+   * `floor_sensitivity`.
+   */
+  roofFloorM: 2.0,
+  roofPhotonsBelowFloor: 317,
   /**
    * Win 2, the 2.5 m Google fill audit, did not reach its bar: 5 crossed fill
    * buildings against a required 10. No fill number is published, and the note
@@ -374,8 +404,9 @@ export const HEIGHTS = {
    * `assertAccuracyLogic()`: the distributional scoping, the transect frame, the
    * erosion that restricts the sample to the largest buildings, the n-at-the-bar
    * and one-ward concentration, and — the one this measurement specifically
-   * risks — that the SHIPPED statistic's interval excludes zero in the direction
-   * of understatement. "Validated" alone would read as "our heights are right".
+   * risks — that the divergence high in the distribution has an interval
+   * excluding zero, in the direction of understatement. "Validated" alone would
+   * read as "our heights are right".
    */
   note: 'Heights are validated in distribution, not individual buildings: ICESat-2 '
       + 'laser geolocation (~3-5 m) against 10-20 m buildings means no photon can be '
@@ -383,10 +414,11 @@ export const HEIGHTS = {
       + 'buildings large enough to survive a 5 m erosion — the largest 7-28 % of each '
       + 'ward. n = 30 buildings, exactly the pre-registered minimum and no more, 27 of '
       + 'them in one ward. The median difference is +1.2 m, inside one storey (95 % CI '
-      + '−1.0 to +4.5 m). At p65, the percentile this product publishes, ICESat-2 reads '
-      + '+3.9 m higher and that interval (+0.5 to +5.3 m) excludes zero — so our heights '
-      + 'most likely understate by about a storey there. Nothing here establishes that '
-      + 'any one building\'s height is right.',
+      + '−1.0 to +4.5 m). Higher up the distribution the gap widens: at the cohort\'s '
+      + '65th percentile (p65) ICESat-2 reads +3.9 m higher and that interval (+0.5 to '
+      + '+5.3 m) excludes zero — so our taller buildings most likely understate, by '
+      + 'rather more than a storey. Nothing here establishes that any one building\'s '
+      + 'height is right.',
 } as const;
 
 /** Formats the band for display, e.g. "± 3.5". */
@@ -504,25 +536,45 @@ export function assertAccuracyLogic(): void {
     'the note must state the 5 m erosion — it is what restricts the sample to the '
     + `largest ${HEIGHTS.survivorPctRange[0]}-${HEIGHTS.survivorPctRange[1]} % of each `
     + 'ward, and a reader who does not know it will generalise to small buildings');
-  // THE ONE THIS MEASUREMENT SPECIFICALLY RISKS. The verdict keys on the median;
-  // the product ships the p65, whose CI excludes zero at +3.87 m. Publishing
-  // "validated" without that sentence is true by the rule and false to the reader.
+  // THE ONE THIS MEASUREMENT SPECIFICALLY RISKS. The verdict keys on the median,
+  // and the two distributions diverge above it: at the cohort's 65th percentile
+  // the bias is +3.87 m with a CI excluding zero. Publishing "validated" without
+  // that sentence is true by the rule and false to the reader.
   const p65ExcludesZero = HEIGHTS.p65Ci95M[0] > 0 || HEIGHTS.p65Ci95M[1] < 0;
   a(!p65ExcludesZero
     || (HEIGHTS.note.includes('p65') && HEIGHTS.note.includes('excludes zero')
         && HEIGHTS.note.includes('understate')),
     'the p65 interval excludes zero, so the note must say so in those words and give '
-    + 'the direction: the verdict is the MEDIAN\'s, and the median is not the statistic '
-    + 'compute-heights.py publishes');
+    + 'the direction: the verdict is the MEDIAN\'s alone, and the distributions part '
+    + 'company above it');
+  // The converse. Without it, an artefact whose p65 interval straddles zero makes
+  // the guard above vacuous while the note goes on asserting "excludes zero".
+  a(p65ExcludesZero || !HEIGHTS.note.includes('excludes zero'),
+    'the p65 interval no longer excludes zero — the note must stop saying it does');
+  // Five of the guards here are implications on `verdict !== 'validated'`, so a
+  // changed verdict would disarm all five at once while the note still opens
+  // "Heights are validated in distribution".
+  a(!/\bvalidated\b/.test(HEIGHTS.note) || HEIGHTS.verdict === 'validated',
+    'the note claims the heights are validated but the recorded verdict is not — '
+    + 'rewrite the note to the verdict the artefact actually reports');
   a(HEIGHTS.topWardBuildings * 2 <= HEIGHTS.nBuildings || HEIGHTS.note.includes('one ward'),
     `${HEIGHTS.topWardBuildings} of ${HEIGHTS.nBuildings} buildings sit in a single ward `
     + '— the note must say so rather than let three ward names imply three samples');
   a(HEIGHTS.nBuildings > HEIGHTS.minBuildings || HEIGHTS.note.includes('exactly'),
     'n sits ON the pre-registered bar rather than past it, and the note must not let '
     + 'that read as a comfortable margin');
+  // and the converse, so "exactly the pre-registered minimum" cannot go stale the
+  // day a re-run adds a building.
+  a(HEIGHTS.nBuildings === HEIGHTS.minBuildings || !HEIGHTS.note.includes('exactly'),
+    `n is now ${HEIGHTS.nBuildings} against a bar of ${HEIGHTS.minBuildings}, so the `
+    + 'note may no longer say the bar was hit "exactly"');
   a(HEIGHTS.fill.n >= HEIGHTS.fill.minN || HEIGHTS.fill.verdict === 'underpowered',
     'the 2.5 m fill cohort is under its own bar and must publish as underpowered');
-  a(HEIGHTS.fill.verdict !== 'underpowered' || !/fill/i.test(HEIGHTS.note),
+  // Narrow to the CLAIM, not the word. A bare /fill/i trips on "landfill" and
+  // "infill", and — worse — it forbade the honest disclosure that fill-height
+  // buildings were excluded, which is a disclosure, not a result.
+  a(HEIGHTS.fill.verdict !== 'underpowered'
+    || !/2\.5 m fill|fill value (is|of|checks)/i.test(HEIGHTS.note),
     'the fill cohort is underpowered, so the note may make no claim about the 2.5 m '
     + 'fill value — an underpowered cohort has no result to quote');
   a(!/\b(all|every|each) buildings?\b/i.test(HEIGHTS.note),

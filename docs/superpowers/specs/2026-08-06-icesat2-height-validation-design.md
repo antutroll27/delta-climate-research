@@ -282,6 +282,25 @@ artefact heights for the same crossed buildings. Compare:
 - median / p65 / p90 differences, **each with its own** bootstrap 95 % CI (p65 is the
   statistic `compute-heights.py` ships, so it needs a CI of its own — a single unlabelled
   CI beside three biases invites quoting a median interval against a p65 number)
+
+  **CORRECTION 2026-08-07 — "p65 is the statistic `compute-heights.py` ships" is a
+  CATEGORY ERROR, and it must not be published.** Two different statistics share the
+  numeral 65. `compute-heights.py:133-136` puts `ee.Reducer.percentile([65,75])` inside
+  `reduceRegions`, which reduces the height-raster **pixels inside one footprint** — it
+  summarises ONE ROOF, and that is what `data/geometry/height-method.json` records as
+  `"method": "p65"`. The p65 in *this* section is `np.quantile(·, 0.65)` over the
+  30-element arrays of **per-building heights** (`_icesat2.py:346-347`) — a point on the
+  COHORT's distribution. They are not the same quantity and the second is not a
+  measurement of the first.
+
+  The requirement for a per-quantile CI **stands unchanged** and so does every measured
+  number: the median and p65 intervals are still reported separately, for the reason
+  given above. What is withdrawn is the *interpretation* — the claim that the divergence
+  at p65 is "the statistic the product publishes" being a storey low. Nothing in the
+  shipped pipeline would differ had this comparison been cut at p60 or p70. The
+  supportable finding is the one the data actually shows: **the two distributions agree
+  at the median and diverge above it, significantly at the cohort's 65th percentile**, so
+  the taller buildings most likely run short. Published wording carries that and no more.
 - a **paired permutation test** as the omnibus check: the KS statistic between the two
   arrays, with its p-value from 10,000 draws that randomise each pair's assignment.
 

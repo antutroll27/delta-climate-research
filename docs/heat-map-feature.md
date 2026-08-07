@@ -543,7 +543,7 @@ only finer ground truth fixes — a night UAV flight or the 360 street survey. D
 read this section as evidence the numbers are right; read it as evidence the RISE was
 not evidence they are wrong.
 
-### ICESat-2: the heights validate at the median and understate at the shipped percentile (2026-08-07)
+### ICESat-2: the heights validate at the median and diverge above it (2026-08-07)
 
 The heights above are no longer unvalidated. ICESat-2 ATL03 photon transects — a
 decimetre-class laser altimeter, free, already flown over Kolkata since 2018 — give the
@@ -556,21 +556,57 @@ on the median the answer is `validated`. Read the row below it before quoting th
 | statistic | ICESat-2 − ours | 95 % CI | what it says |
 |---|---|---|---|
 | **median** — the pre-registered rule | **+1.22 m** | −0.97 … +4.54 | inside one storey, CI inside ±2 storeys → `validated` |
-| **p65** — the statistic `compute-heights.py` actually ships | **+3.87 m** | **+0.53 … +5.30** | **excludes zero, and sits above one storey** |
+| **p65** — the cohort distribution's 65th percentile | **+3.87 m** | **+0.53 … +5.30** | **excludes zero, and sits above one storey** |
 | p90 | +7.34 m | −12.66 … +7.94 | uninformative at this n |
 
+**Read "p65" carefully — two different statistics share the numeral.** The p65 in that
+table is `np.quantile(·, 0.65)` over the 30-element arrays of per-building heights: a
+point on the **cohort's** distribution. It is **not** the p65 `compute-heights.py`
+reduces over the height-raster **pixels inside one footprint** (`height-method.json`:
+`"method": "p65"`), which summarises one roof. An earlier draft of this section, and of
+spec §5.3, conflated the two and said the divergence was "the statistic the product
+publishes" running a storey low. That was a category error — nothing in the shipped
+pipeline would differ had the comparison been cut at p60 or p70 — and it is corrected
+here and in [spec §5.3](superpowers/specs/2026-08-06-icesat2-height-validation-design.md).
+
 **The tension is real, not a rounding artefact.** The shipped heights track the laser
-through the middle of the distribution and fall behind it in the upper-middle. Since p65
-is the percentile the product publishes, **the shipped heights most likely understate by
-about a storey**. The omnibus paired permutation test returns `perm_p = 0.0627` (KS
-D = 0.2667) — recorded in the artefact, gating nothing, because it was not part of the
-pre-registered rule.
+through the middle of the distribution and fall behind it above the middle: at the
+cohort's 65th percentile the gap is +3.87 m with an interval excluding zero. Against this
+project's own 3.2 m storey that is 1.21 storeys, so **our taller buildings most likely run
+rather more than a storey short**. The omnibus paired permutation test returns
+`perm_p = 0.0627` (KS D = 0.2667) — recorded in the artefact, gating nothing, because it
+was not part of the pre-registered rule.
+
+**One caveat travels with that magnitude.** The roof band's 2.0 m floor discarded **317
+roof photons** across the sweep, and it discards them from the *low* side, which pushes
+every bias positive — toward "our heights understate". So the direction is measured but
+the size is an upper bound, not a point estimate; the floor sensitivity re-run in the
+artefact's `floor_sensitivity` is what bounds it (p65 3.87 → 3.41 m at a 0.5 m floor).
+
+**And the direction is a live concern for FAR, which is recorded here rather than
+propagated.** Heights feed `compute-far.py` → `far.json` → `build-dcurs-inputs.py`, which
+ships FAR labelled `"measured"` and carrying 0.35 × 0.30 = **0.105** of the DC-URS score,
+where a lower FAR reads as *lower* exposure — the flattering direction — so heights that
+run short high in the distribution would bias FAR the same way; but a cohort of 30
+buildings, 27 of them in one ward and all of them from the largest 7–28 %, licenses no
+magnitude whatever, and no correction is applied to `far.json` on the strength of it.
 
 **n = 30 buildings, exactly the pre-registered minimum and no more**, pooled from 31
 overpasses that re-fly **2** distinct reference ground tracks. **27 of the 30 are
-Ballygunge**; Barrackpore contributed 1 and Baruipur 2, as spec §5.3a predicted. Photons
-are pooled per building across passes, so `n` counts distinct buildings — a repeat pass
-adds photons, never a duplicate row.
+Ballygunge**; Barrackpore contributed 1 and Baruipur 2. Spec §5.3a predicted only that
+Baruipur would not contribute materially, and even that landed the wrong way round —
+Baruipur's 2 against Barrackpore's 1. Photons are pooled per building across passes, so
+`n` counts distinct buildings; a repeat pass adds photons to an existing building's pool
+rather than a duplicate row, and — because the beams wander (see error 4 below) — often
+crosses buildings the cohort has never seen.
+
+**A second selection sits behind the erosion, and it is a size filter too.** Of the **59**
+buildings the beams crossed, only **30** were measured. **26** were lost to
+`MIN_ROOF_PH = 5` — fewer than five roof photons pooled across every pass — and **3** more
+to the 2.0 m roof-band floor. Photon density over a roof scales with roof area, so
+`MIN_ROOF_PH` selects on size on top of the 5 m erosion below: the measured cohort is not
+the crossed cohort, it is the larger half of it. The two causes are counted apart in the
+artefact because only the first is fixable by more passes.
 
 **What this does NOT claim, and no sample size would earn:**
 
@@ -697,8 +733,11 @@ procurement case.
 CMR granule search → **ranged-read prefilter** → subset → two-pass ground line →
 5 m-eroded roof assignment (roof band [2, 120] m, ≥ 5 roof photons per building) → p75 per
 crossed building → distributional comparison. The prefilter is the reason this was
-affordable: ATL03 granules here are **285 MB to 1.82 GB**, and the same `decide()` function
-run over HTTP range requests reaches the same verdict on **~30 MB and ~55 s** per granule.
+affordable: ATL03 granules here run **285 MB to 1.82 GB** — a range recorded in
+`fetch-icesat2.py`'s header comment, not measured into any artefact — and the same
+`decide()` function run over HTTP range requests reaches the same verdict on a **median
+30.4 MB and 57 s** per granule, measured over the 118 probes in
+`icesat2-prefilter.json`.
 **118 ward-granule evaluations were probed; 31 survived and were downloaded**, subset to
 ~200 KB each and committed. Nothing was relaxed to reach the bar — the granule that missed
 the 100-confident-photon minimum by four photons stayed rejected. The committed subsets
@@ -716,7 +755,11 @@ make every rerun **fully offline**: no token, no network, no granule.
 - Published wording and its guards: the `HEIGHTS` block in
   `src/scripts/climate-engine/accuracy.ts` — each clause of the user-facing note has an
   assertion behind it, including one that fires if the p65 interval excludes zero and the
-  note fails to say so.
+  note fails to say so — and its converse, which fires if the interval stops excluding
+  zero while the note goes on claiming it does. The note's two confidence intervals are
+  pinned digit-for-digit against the artefact in
+  `tests/unit/heat-map-accuracy.test.mjs`, and the word "validated" in the note is tied
+  to `HEIGHTS.verdict`.
 
 
 ## The ward was drawn MIRRORED, and it took four attempts to see (2026-08-05)

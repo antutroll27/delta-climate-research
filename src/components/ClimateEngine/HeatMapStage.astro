@@ -504,6 +504,10 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
   .bcard dt{font:400 .5rem var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--ink);align-self:baseline}
   .bcard dd{margin:0;text-align:right;font-weight:550;letter-spacing:-.01em;color:var(--paper)}
   .bcard dd small{display:block;font:400 .46rem var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--bronze)}
+  /* The Height row carries HEIGHTS.note as its title (heat-map-app.ts). Without an
+     affordance nobody hovers a plain <dd>, so the whole ICESat-2 caveat goes unread
+     — same reasoning as .conf, which is the precedent. */
+  #bcH{cursor:help}
   .bc-ins{margin:.55rem 0 0;padding-top:.5rem;border-top:1px solid rgb(111 202 214 /.18);
     font:400 .5rem var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--ink);line-height:1.75}
   .bc-ins b{font-weight:400}
