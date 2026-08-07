@@ -194,6 +194,32 @@ test('HEIGHTS mirrors the ICESat-2 artefact it claims to summarise', async () =>
   // ... and NO other statistic may have crept into the sentence.
   assert.ok(!/\bbias(ed)?\b|\bCIs?\b|confidence interval|excludes zero/i.test(HEIGHTS.note),
     'the cohort is underpowered, so the note may not quote a difference or an interval');
+
+  // THE TWO LITERATURE CLAUSES (2026-08-07, spec §9). Neither comes from the
+  // artefact — they are properties of the instrument and of the published field,
+  // so nothing upstream would notice if they were dropped. They are pinned here
+  // as well as in assertAccuracyLogic() because this is the test that reads the
+  // note against what is actually known, and the failure mode is silent deletion
+  // during an unrelated rewrite.
+  assert.ok(/~?11 m (spot|footprint)/.test(HEIGHTS.note),
+    'the note must disclose the ~11 m ATL03 footprint spot (Magruder et al. 2021, '
+    + 'doi:10.1029/2020EA001414 — 10.9 ± 1.2 m measured on orbit). The 5 m erosion '
+    + 'answers geolocation error, NOT the ground area each photon integrates, and the '
+    + 'resulting boundary blur is ≈6 m (Wang et al. 2024, doi:10.1109/TGRS.2024.3383600)');
+  assert.ok(/ordinary for this field/.test(HEIGHTS.note) && /10-80/.test(HEIGHTS.note),
+    'the note must place n = 28 in its field context: published hand-checked ICESat-2 '
+    + 'building-height cohorts run n ≈ 10-82 (spec §9.5), so 28 is near that median and '
+    + '"underpowered" must not read as a badly failed sweep');
+  // The context may NOT be turned into an argument about the bar, and the bar
+  // itself is pinned to the artefact above (min_buildings), so both halves of
+  // "the bar did not move" are checked rather than asserted in prose.
+  assert.equal(s.min_buildings, 30,
+    'the pre-registered bar is 30. It was fixed before any data existed and the '
+    + '2026-08-07 literature search is explicitly not a reason to move it (spec §9.5)');
+  assert.ok(!/\b(bar|minimum|threshold)\b[^.]{0,40}\b(lower|lowered|lowering|relax|relaxed|reduce|reduced|too (high|strict))\b/i
+    .test(HEIGHTS.note),
+    'the note argues for lowering the pre-registered bar — the field context is context '
+    + 'for the reading, never a licence to move a bar that has started to bind');
 });
 
 test('daytime is never presented as more certain than night', () => {

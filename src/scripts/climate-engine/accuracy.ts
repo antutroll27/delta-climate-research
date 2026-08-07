@@ -349,6 +349,77 @@ export const SPATIAL = {
  * passes do bring new buildings; the question is worth re-running, not
  * re-answering by choosing a constant.
  *
+ * HOW THIS METHOD SITS AGAINST PUBLISHED PRACTICE (2026-08-07, spec §9). A
+ * literature search was run AFTER the verdict was published. It moved nothing —
+ * no threshold, no estimator, no verdict — and it is recorded here in full,
+ * including the half that does not flatter us, because a search whose
+ * unfavourable findings are dropped is not a check.
+ *
+ *   AGAINST US:
+ *   - THE ~11 m FOOTPRINT IS A SECOND FAILURE MODE THE 5 m EROSION DOES NOT
+ *     ADDRESS. The erosion targets geolocation error, and for that it is well
+ *     supported: ATL03's on-orbit horizontal accuracy is 3.5 ± 2.1 m against a
+ *     6.5 m requirement (Magruder et al. 2021, doi:10.1029/2020EA001414;
+ *     Luthcke et al. 2021, doi:10.1029/2020EA001494). But a photon is not a
+ *     point — the ground spot measures 10.9 ± 1.2 m on orbit (Magruder 2021),
+ *     so a perfectly geolocated spot straddling a roof edge still returns a
+ *     BLEND of roof and street. Wang et al. 2024 (doi:10.1109/TGRS.2024.3383600)
+ *     measure the boundary blur at ≈6 m horizontal RMSE, reducible to ≈1 m only
+ *     by deconvolving the spot, which we do not do. On a 10-20 m building the
+ *     mixing length is comparable to the building, so this is a limit on what
+ *     the claim can MEAN and it is in the note.
+ *   - p75 HAS NO PUBLISHED SUPPORT IN EITHER DIRECTION. The two published
+ *     percentile sweeps both test {50,60,70,80,85,90,95} and skip 75. Published
+ *     roof estimators are p90 (Wu, Huang & Zhao 2023, doi:10.3390/rs15153786;
+ *     Hu et al. 2026, doi:10.3390/rs18040540), filtered max (Cai et al. 2024,
+ *     doi:10.3390/rs16020263), mean (Dandabathula et al. 2021,
+ *     doi:10.1088/2634-4505/abf820) and p50 (Wu, Z. 2022 TU Delft MSc thesis,
+ *     not peer reviewed). Spec §5.2.4's argument — at n = 5 numpy's p75 index
+ *     lands on the second-highest photon — is coherent and is OURS, not the
+ *     field's. It stands; switching to p90 after seeing `underpowered` would be
+ *     a post-hoc estimator change, the same error as moving the bar.
+ *   - OUR 2.0 m ROOF-BAND FLOOR IS MORE PERMISSIVE THAN EVERY PUBLISHED FLOOR:
+ *     2.5 m (Hu 2026; Liu et al. 2024, doi:10.3390/s24186076) and 2.8 m (Cai
+ *     2024). And UNVERIFIED but high-consequence: Lao et al. 2021
+ *     (doi:10.1016/j.jag.2021.102596, full text inaccessible) is reported to say
+ *     ATL03's own noise removal already discards building photons below ~3 m,
+ *     which would mean our 2-3 m band is partly pre-emptied upstream and
+ *     `roofPhotonsBelowFloor` understates what the chain removed. Recorded as
+ *     unverified, not as a finding.
+ *   - THE GROUND REFERENCE IS OUR LEAST-GUARDED COMPONENT. ATL08 clamps ground
+ *     to within 6 m of a reference DEM; Cai 2024 adds independent Sentinel-2
+ *     land cover, a FABDEM stratifier and a relief filter. We have ONE guard and
+ *     it is derived from the pass's own median — the very line that may be
+ *     corrupted. Closing it with an external DEM guard is DEFERRED to separate,
+ *     pre-registered work and is deliberately NOT done here: adding it in the
+ *     same change that records the literature, having seen n = 28, would be
+ *     indistinguishable from tuning the ground line until the cohort clears.
+ *
+ *   FOR US, and it does not cancel the above:
+ *   - `GROUND_RELIEF_M` = 10 m, derived from measured ward relief, is the same
+ *     number Cai 2024 tuned independently — and our refusal to bridge across a
+ *     refused window is stricter than their delete-and-continue.
+ *   - MIN_ROOF_PH = 5 is stricter than nearly the whole literature (most papers
+ *     state no minimum at all; one states ≥ 10), and Kaya 2024
+ *     (doi:10.3390/buildings14113571), the only empirical test of photon count,
+ *     finds accuracy best at 5-10 photons and degrading above 100.
+ *
+ *   AND THE FIELD CONTEXT FOR n = 28, which is in the note because without it a
+ *   reader concludes the sweep failed badly. Published studies split into
+ *   hand-curated cohorts of n ≈ 10-82 (Dandabathula 2021 n=10 Jaipur; Wang 2024
+ *   n=23; Goud & Bhardwaj 2021 n=30; Lao 2021 n=82; Watson & Elliott 2025,
+ *   doi:10.1038/s41598-025-15929-2, n=25 per city across Nairobi, Quito and
+ *   Kathmandu) and automated ones of n ≈ 10³-10⁵ at RMSE 4-8 m. n = 28 sits near
+ *   the median of the lower cluster. TWO CAVEATS TRAVEL WITH THAT: the lower
+ *   cluster's sub-metre errors come from hand-picking buildings with clean
+ *   ground AND clean roof, so they are a selection artefact and are not
+ *   achievable at scale — our automated pipeline belongs nearer the 4-8 m
+ *   cluster — and no ICESat-2 building-height study exists for Kolkata, Dhaka or
+ *   the Ganges delta at all. THE BAR STAYS AT 30. It reflects what we chose in
+ *   advance; lowering it now that it binds, on the strength of a literature we
+ *   read afterwards, is precisely the outcome-driven tuning the pre-registration
+ *   exists to prevent.
+ *
  * Regenerate with: python3 scripts/measure-height-accuracy.py
  */
 export const HEIGHTS = {
@@ -410,22 +481,37 @@ export const HEIGHTS = {
    * User-facing, on the building card's Height row.
    *
    * Every clause is load-bearing and each has a guard in `assertAccuracyLogic()`:
-   * the distributional scoping, the transect frame, the 5 m erosion and the
-   * 5-photon bar that between them restrict the sample, the n-under-the-bar and
-   * the one-ward concentration, the reason n fell short, and the relief-surface
-   * offset that survives. The guards that used to hang off `verdict !== 'validated'`
+   * the distributional scoping, the transect frame, the ~11 m footprint spot, the
+   * 5 m erosion and the 5-photon bar that between them restrict the sample, the
+   * n-under-the-bar and the one-ward concentration, the field context for that n,
+   * the reason n fell short, and the relief-surface offset that survives. The
+   * guards that used to hang off `verdict !== 'validated'`
    * are unconditional now: a changed verdict must not be able to disarm the
    * disclosures, which was how five of them could have gone quiet at once.
+   *
+   * TWO CLAUSES ADDED 2026-08-07 FROM THE LITERATURE (spec §9), and only two:
+   * the ~11 m footprint spot, because it limits what the claim itself can mean
+   * and no erosion addresses it; and the field context for n = 28, because
+   * without it a reader takes a shortfall of two buildings for a failed sweep.
+   * Everything else the search turned up — the unsupported p75, the permissive
+   * floor, the least-guarded ground reference — is in the block comment above
+   * and in docs/heat-map-feature.md, where it does not cost a reader of a
+   * building card the clauses that actually change how they should read this.
    */
   note: 'ICESat-2 could not confirm our heights, and the honest answer is that there is '
       + 'not yet enough evidence to try. The check is scoped in distribution, '
       + 'not individual buildings — laser geolocation (~3-5 m) against 10-20 m buildings '
-      + 'means no photon can be pinned to one roof. It runs along satellite transects, '
+      + 'means no photon can be pinned to one roof, and each photon is a return from a '
+      + '~11 m spot on the ground, so a spot on a roof edge blends roof and street '
+      + 'however well it is aimed. It runs along satellite transects, '
       + 'over only those buildings large enough to survive a 5 m erosion (the largest '
       + '7-28 % of each ward) and hit by at least 5 roof photons. That leaves '
       + 'n = 28 buildings against a pre-registered minimum of 30, and 25 of the 28 sit '
       + 'in one ward, so the outcome is underpowered and no difference, interval or test '
-      + 'statistic is published from it. The shortfall is a correction, not bad luck: an '
+      + 'statistic is published from it. A cohort of 28 is ordinary for this field — '
+      + 'published studies that check buildings by hand mostly run 10-80 of them — so '
+      + 'what fell short is the bar we set ourselves in advance, and that bar stays where '
+      + 'it is. The shortfall is a correction, not bad luck: an '
       + 'earlier run reached 30, but measured against a ground reference that was wrong '
       + 'where our building map is incomplete — an unmapped building can fill a 30 m '
       + 'ground window with roof returns and pull the ground line tens of metres up — and '
@@ -642,4 +728,48 @@ export function assertAccuracyLogic(): void {
   a(!/heights are (right|correct|accurate)|confirms our heights|building heights are confirmed/i
     .test(HEIGHTS.note),
     'no wording may promote a distributional match to per-building correctness');
+
+  // 13-15. THE LITERATURE CLAUSES (2026-08-07, spec §9). Two sentences entered
+  // the note from the literature search and each is guarded, because the note is
+  // edited far more often than it is re-derived and an unguarded caveat is a
+  // caveat with a half-life.
+
+  // 13. THE ~11 m FOOTPRINT SPOT — unconditional, like the other disclosures: it
+  //     is a property of the instrument at every n and every verdict. It is NOT
+  //     the geolocation clause beside it and must not be allowed to collapse into
+  //     it. Geolocation is where the photon is (3.5 ± 2.1 m, Magruder 2021,
+  //     doi:10.1029/2020EA001414) and the 5 m erosion answers it; the spot is how
+  //     much ground the photon integrates (10.9 ± 1.2 m, same paper) and NOTHING
+  //     in this pipeline answers it — Wang 2024 (doi:10.1109/TGRS.2024.3383600)
+  //     measures ≈6 m of boundary blur, removable only by deconvolution we do not
+  //     do. Drop this clause and the note reads as though the erosion had covered
+  //     the whole geometry problem.
+  a(/~?11 m (spot|footprint)/.test(HEIGHTS.note),
+    'the note must disclose the ~11 m footprint spot: the 5 m erosion answers ATL03 '
+    + 'GEOLOCATION error, not the ~10.9 m ground spot each photon integrates, and a spot '
+    + 'straddling a roof edge blends roof and street however well it is geolocated '
+    + '(spec §9.1) — the erosion clause alone implies a coverage this method lacks');
+  a(!/~?11 m (spot|footprint)/.test(HEIGHTS.note)
+    || /blends?|mix(es|ed)?|straddl|blur/.test(HEIGHTS.note),
+    'the footprint clause must say what the spot DOES — blend roof and street — or it '
+    + 'reads as one more number rather than the limit on the claim that it is (spec §9.1)');
+
+  // 14. THE FIELD CONTEXT FOR n. Keyed on the verdict, because it only has a job
+  //     while the cohort is under the bar: 28 is near the MEDIAN of the
+  //     hand-checked ICESat-2 literature (n ≈ 10-82; spec §9.5), so a reader told
+  //     only "underpowered" concludes the sweep failed badly, which is false.
+  a(heightsVerdict !== 'underpowered'
+    || (/ordinary for this field/.test(HEIGHTS.note) && /10-80/.test(HEIGHTS.note)),
+    'the note must put n in its field context — published hand-checked ICESat-2 '
+    + 'building-height cohorts run 10-80 buildings (spec §9.5) — or "underpowered" reads '
+    + 'as a failed sweep rather than as a bar we set high on purpose');
+  // 15. ... and that context must never become the excuse. The bar is the one
+  //     thing §9.5 forbids the literature to touch: it was fixed before the data
+  //     existed, and a bar that moves once it binds is not a bar. So the note may
+  //     state that the bar HOLDS, never that it should give.
+  a(!/\b(bar|minimum|threshold)\b[^.]{0,40}\b(lower|lowered|lowering|relax|relaxed|reduce|reduced|too (high|strict))\b/i
+    .test(HEIGHTS.note),
+    'the note argues for moving the pre-registered bar. The field context in spec §9.5 is '
+    + 'context for the READING, never a reason to lower a bar that was fixed before the '
+    + 'data existed — that is the outcome-driven tuning the pre-registration prevents');
 }
