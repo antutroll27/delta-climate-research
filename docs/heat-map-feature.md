@@ -543,70 +543,151 @@ only finer ground truth fixes — a night UAV flight or the 360 street survey. D
 read this section as evidence the numbers are right; read it as evidence the RISE was
 not evidence they are wrong.
 
-### ICESat-2: the heights validate at the median and diverge above it (2026-08-07)
+### ICESat-2: the heights are UNDERPOWERED — a same-day correction (2026-08-07)
 
-The heights above are no longer unvalidated. ICESat-2 ATL03 photon transects — a
-decimetre-class laser altimeter, free, already flown over Kolkata since 2018 — give the
-first independent height measurement this project has ever had. The verdicts and their
-thresholds were **pre-registered** in
+> **CORRECTION 2026-08-07, replacing the `validated` verdict published earlier the same
+> day.** This section first reported **n = 30 buildings — the pre-registered bar hit
+> exactly — a median difference of +1.22 m, a p65 of +3.87 m with an interval excluding
+> zero, and the verdict `validated`.** All of it is **withdrawn**. The ground reference
+> those numbers were measured against was contaminated, the pre-registered gate that
+> should have caught it was applied at the wrong granularity, and on the corrected ground
+> line **n = 28, under the bar of 30, so the verdict is `underpowered` and no difference,
+> interval or test statistic may be quoted from this cohort at all.** The withdrawn
+> figures are left visible below rather than deleted: what they were is part of what went
+> wrong. The one measurement that survives untouched is the terrain offset (win 4), and it
+> survives because it never depended on the height comparison.
+
+ICESat-2 ATL03 photon transects — a decimetre-class laser altimeter, free, already flown
+over Kolkata since 2018 — are still the first independent height measurement this project
+has ever had, and the verdicts and their thresholds were **pre-registered** in
 [`superpowers/specs/2026-08-06-icesat2-height-validation-design.md`](superpowers/specs/2026-08-06-icesat2-height-validation-design.md)
-§5.3 before a granule was downloaded. The pre-registered rule keys on the **median**, and
-on the median the answer is `validated`. Read the row below it before quoting that word.
+§5.3 before a granule was downloaded. The pre-registered table has four outcomes and one
+of them is `underpowered` at fewer than 30 crossed buildings. That is the outcome, and it
+is being published exactly as written.
 
-| statistic | ICESat-2 − ours | 95 % CI | what it says |
-|---|---|---|---|
-| **median** — the pre-registered rule | **+1.22 m** | −0.97 … +4.54 | inside one storey, CI inside ±2 storeys → `validated` |
-| **p65** — the cohort distribution's 65th percentile | **+3.87 m** | **+0.53 … +5.30** | **excludes zero, and sits above one storey** |
-| p90 | +7.34 m | −12.66 … +7.94 | uninformative at this n |
+#### What went wrong: the ground line stood on rooftops nobody had mapped
 
-**Read "p65" carefully — two different statistics share the numeral.** The p65 in that
-table is `np.quantile(·, 0.65)` over the 30-element arrays of per-building heights: a
-point on the **cohort's** distribution. It is **not** the p65 `compute-heights.py`
-reduces over the height-raster **pixels inside one footprint** (`height-method.json`:
-`"method": "p65"`), which summarises one roof. An earlier draft of this section, and of
-spec §5.3, conflated the two and said the divergence was "the statistic the product
-publishes" running a storey low. That was a category error — nothing in the shipped
-pipeline would differ had the comparison been cut at p60 or p70 — and it is corrected
-here and in [spec §5.3](superpowers/specs/2026-08-06-icesat2-height-validation-design.md).
+The ground line is built from photons falling **outside every mapped footprint**, so it
+inherits whatever the building map missed. Overture misses buildings. Where it misses one
+in dense Ballygunge, a 30 m ground window can hold **~100 % roof returns** from that
+unmapped structure — and both passes of the estimator then agree with each other about
+the wrong surface: pass 1's rolling p10 lands on the roof, pass 2 medians the same roof
+photons and re-centres on them, and the line settles at a **stable fixed point tens of
+metres above true ground**. From inside the window there is no evidence anything is wrong.
 
-**The tension is real, not a rounding artefact.** The shipped heights track the laser
-through the middle of the distribution and fall behind it above the middle: at the
-cohort's 65th percentile the gap is +3.87 m with an interval excluding zero. Against this
-project's own 3.2 m storey that is 1.21 storeys, so **our taller buildings most likely run
-rather more than a storey short**. The omnibus paired permutation test returns
-`perm_p = 0.0627` (KS D = 0.2667) — recorded in the artefact, gating nothing, because it
-was not part of the pre-registered rule.
+Measured across the 31 committed subsets, **5 of 31 passes carried a ground line above
++25 m**, in wards whose true ground is 3–6 m:
 
-**One caveat travels with that magnitude.** The roof band's 2.0 m floor discarded **317
-roof photons** across the sweep, and it discards them from the *low* side, which pushes
-every bias positive — toward "our heights understate". So the direction is measured but
-the size is an upper bound, not a point estimate; the floor sensitivity re-run in the
-artefact's `floor_sensitivity` is what bounds it (p65 3.87 → 3.41 m at a 0.5 m floor).
+| pass | ground-line median | worst window |
+|---|---|---|
+| ballygunge 2019-01-24 | 4.46 m | **84.68 m** |
+| ballygunge 2022-01-18 | 2.96 m | 39.95 m |
+| ballygunge 2019-04-25 | 3.56 m | 39.20 m |
+| ballygunge 2020-04-22 | 4.18 m | 36.61 m |
+| ballygunge 2024-04-14 | 3.11 m | 33.68 m |
 
-**And the direction is a live concern for FAR, which is recorded here rather than
-propagated.** Heights feed `compute-far.py` → `far.json` → `build-dcurs-inputs.py`, which
-ships FAR labelled `"measured"` and carrying 0.35 × 0.30 = **0.105** of the DC-URS score,
-where a lower FAR reads as *lower* exposure — the flattering direction — so heights that
-run short high in the distribution would bias FAR the same way; but a cohort of 30
-buildings, 27 of them in one ward and all of them from the largest 7–28 %, licenses no
-magnitude whatever, and no correction is applied to `far.json` on the strength of it.
+**Spec §5.1's G1b gate was written for exactly this** — its third failure mode is "the
+ground line has climbed onto rooftops (> +25 m)" — **and it could not see it, because it
+tests the pass MEDIAN.** The pass carrying an 84.68 m window has a median of 4.46 m. A
+handful of runaway windows cannot move a median, so all 31 passes sailed through a gate
+aimed precisely at them. The idea was right; the granularity was wrong. That is recorded
+as a dated in-place correction in
+[spec §5.1 and §5.2.1a](superpowers/specs/2026-08-06-icesat2-height-validation-design.md).
 
-**n = 30 buildings, exactly the pre-registered minimum and no more**, pooled from 31
-overpasses that re-fly **2** distinct reference ground tracks. **27 of the 30 are
-Ballygunge**; Barrackpore contributed 1 and Baruipur 2. Spec §5.3a predicted only that
-Baruipur would not contribute materially, and even that landed the wrong way round —
-Baruipur's 2 against Barrackpore's 1. Photons are pooled per building across passes, so
-`n` counts distinct buildings; a repeat pass adds photons to an existing building's pool
-rather than a duplicate row, and — because the beams wander (see error 4 below) — often
-crosses buildings the cohort has never seen.
+#### The fix, and the allowance that is not a dial
+
+The same test now runs **per window**: any window whose value departs from that pass's own
+ground-line median by more than **10 m** is refused, and — this is the load-bearing half —
+**the line is not bridged across a refusal.** Every photon whose two bracketing surviving
+windows straddle a refused one comes back NaN, because interpolating over it would hand
+those photons a ground value manufactured from two windows that never saw that ground.
+The distances are not small: one refusal on the 84.68 m pass has **no honest window within
+165 m**, and a Baruipur pass would have bridged **180 m**. Across the sweep the gate
+refused **27 of 1,702 ground windows on 11 of 31 passes**, dropping 1,134 photons — all
+counted in the artefact's `excluded` block, apart from the out-of-span ones, because a
+short track and an unmapped building say different things.
+
+**10 m is measured, not chosen.** The ward terrain artefacts record what relief these
+wards actually have across a 1.4 km box — smoothed spans of 4.9, 6.7 and 7.7 m, raw spans
+of 6.6, 7.4 and 8.9 m — with the DSM's own per-cell RMSE against Copernicus GLO-30 at
+1.5–2.1 m. Real terrain therefore cannot put a window more than ~11 m from its pass
+median, while the failure being caught starts at the 11–36 m these wards' roofs stand
+above ground. 10 m sits above every measured relief span and below the shortest roof.
+
+**And the verdict does not depend on it**, which is recorded rather than asserted. The
+artefact's `method_stability.relief_allowances` re-runs the entire cohort at six
+allowances:
+
+| allowance | 6 m | 8 m | **10 m** | 12 m | 15 m | 20 m |
+|---|---|---|---|---|---|---|
+| windows refused | 67 | 42 | **27** | 20 | 16 | 12 |
+| n buildings | 26 | 28 | **28** | 28 | 29 | 29 |
+| verdict | `underpowered` | `underpowered` | **`underpowered`** | `underpowered` | `underpowered` | `underpowered` |
+
+Nowhere in that range does the outcome move. The block ships with `published: false` and
+none of its numbers may be quoted as a result — every row is a cohort below the bar — but
+it exists so that "the allowance was not tuned to get an answer" is a checkable claim
+rather than a promise.
+
+#### The consequence: n = 28, and why that is the honest number
+
+**n = 28 distinct buildings against a pre-registered minimum of 30**, pooled from 31
+overpasses that re-fly **2** distinct reference ground tracks. **25 of the 28 are
+Ballygunge**; Barrackpore contributed 1 and Baruipur 2. Two crossed buildings lost their
+ground reference to the relief gate outright — they are counted in the artefact as
+`n_ground_refused`, not bundled into "out of band", because more passes on the same track
+would not recover them and mapping the missing buildings would.
+
+**Those two are the whole story.** The earlier run reached exactly 30 — the bar, hit and
+not cleared. Removing a corrupted ground reference removed the marginal buildings, and the
+marginal buildings were the bar. **n = 30 was only ever reached because one or two
+buildings were measured against ground that was standing on a roof.** Nothing was relaxed
+to get it back: not the bar, not the 5 m erosion, not `MIN_ROOF_PH`, not the roof band,
+not the relief allowance. Recovering 30 by moving any of them would be the exact failure
+this workstream exists to avoid, and the pre-registration exists so that the temptation
+has no purchase.
+
+**Under `underpowered`, no statistic is published.** Not the median, not the intervals,
+not the permutation p-value, not the effect size — and not in prose either. The
+`floor_sensitivity` block is absent from the artefact for the same reason it always would
+be below the bar, and `assertAccuracyLogic()` now fails if any field matching
+`bias|ci95|permP|ksD` reappears in the `HEIGHTS` block, or if the user-facing note
+reintroduces one in words.
 
 **A second selection sits behind the erosion, and it is a size filter too.** Of the **59**
-buildings the beams crossed, only **30** were measured. **26** were lost to
-`MIN_ROOF_PH = 5` — fewer than five roof photons pooled across every pass — and **3** more
-to the 2.0 m roof-band floor. Photon density over a roof scales with roof area, so
-`MIN_ROOF_PH` selects on size on top of the 5 m erosion below: the measured cohort is not
-the crossed cohort, it is the larger half of it. The two causes are counted apart in the
-artefact because only the first is fixable by more passes.
+buildings the beams crossed, only **28** were measured. **26** were lost to
+`MIN_ROOF_PH = 5` — fewer than five roof photons pooled across every pass — **3** more to
+the 2.0 m roof-band floor, and **2** to the relief gate. Photon density over a roof scales
+with roof area, so `MIN_ROOF_PH` selects on size on top of the 5 m erosion below: the
+measured cohort is not the crossed cohort, it is the larger half of it. The causes are
+counted apart in the artefact because they have different remedies.
+
+#### Worth recording, and explicitly NOT a finding
+
+Sweeping the ground line's **30 m rolling window** out to 200 m — a methodological choice,
+not a physical one — moves n between 27 and 31 and **flips the pre-registered verdict**,
+while the divergence high in the distribution stays roughly where it is:
+
+| window | **30 m** | 50 m | 80 m | 120 m | 200 m |
+|---|---|---|---|---|---|
+| n buildings | **28** | 27 | 29 | 31 | 31 |
+| verdict | **`underpowered`** | `underpowered` | `underpowered` | `validated` | `validated` |
+
+**This is not publishable as a result and is not published as one.** Every row is either
+below the bar or a cohort built by a window width nobody pre-registered, and §5.3 admits
+no statistic below the bar. It is recorded in `method_stability.ground_window_widths`, and
+here, for one reason: it says how far this method reaches. The median verdict is not
+robust to a choice made for smoothing reasons; whatever is happening higher in the
+distribution is steadier than the verdict is. That is a reason to **re-ask the question
+when more passes arrive** — ICESat-2 is still flying these tracks and the beams wander
+across-track between cycles (see error 4 below), so new passes really do bring new
+buildings — and it is emphatically not a reason to pick a width.
+
+**FAR is untouched, and now for two reasons.** Heights feed `compute-far.py` →
+`far.json` → `build-dcurs-inputs.py`, which ships FAR labelled `"measured"` and carrying
+0.35 × 0.30 = **0.105** of the DC-URS score. No correction was applied to `far.json` on
+the strength of this cohort when it read `validated` at n = 30, and there is now no
+statistic to apply.
 
 **What this does NOT claim, and no sample size would earn:**
 
@@ -670,9 +751,11 @@ Under the amended definition the cohort is **n = 5** — the old statistic had d
 those 5 — still **`underpowered`** against its bar of 10. **Wins 2 and 3 therefore did not
 land**, and `compute-far.py --icesat2-correction` reports `no_correction_computable` with
 no pool invented and the main cohort not substituted for it. The floor's effect on the
-main comparison was measured rather than argued: re-running at 1.0 / 0.5 / 0.0 m moves the
-median bias 1.22 → 1.17 m and p65 3.87 → 3.41 m, so the published bias is not an artefact
-of the floor.
+MAIN comparison used to be quantified here, at 1.0 / 0.5 / 0.0 m; those figures are
+**withdrawn with the rest of the cohort's statistics** and the artefact's
+`floor_sensitivity` block is now `null`, because a sensitivity table beside
+`underpowered` publishes the number the verdict withheld. What survives is the count:
+**313 roof photons** sit below the floor across the sweep, and the floor does not move.
 
 **4 · "Coverage is capped by three beam lines" was wrong, and I asserted it confidently.**
 The spec argued repeat passes re-fly one ground line, stacking photons on the same
@@ -691,7 +774,9 @@ across-track between cycles, partly because the periodic yaw flip changes which 
 pair — and which pair, ~3.3 km apart — is nearest. Ballygunge's 12 passes crossed **50
 distinct buildings** against the 4–13 a fixed line predicts, and passes turned up 663 m
 from Baruipur centre on RGT 0416, a track the coverage table places 5 km away. **This
-effect is the only reason n reached 30.** Consequence for anyone reading
+effect is the only reason the 30-building bar was ever within reach** — and, now that the
+corrected cohort stands at 28, it is also the reason the question is worth re-running
+rather than closed: new passes genuinely bring new buildings. Consequence for anyone reading
 `icesat2-coverage.json`: it describes one representative granule per track, not that
 track's envelope across cycles. It is a guide to which tracks are worth probing, never a
 ceiling on what they can sample.
@@ -705,8 +790,11 @@ rejected **0 times in 2,000 draws**, and its power against a half-storey bias wa
 could not reject anything, so it would have returned a large comfortable p-value almost
 regardless of the truth, and that would have been published as *"the omnibus check found
 no significant difference"* — a broken null handing the model a free pass. Replaced with a
-**paired permutation test** that randomises each pair's assignment over 10,000 draws;
-`perm_p = 0.0627`, with the observed KS D kept as a descriptive number.
+**paired permutation test** that randomises each pair's assignment over 10,000 draws.
+(The p-value that test produced on the earlier, contaminated cohort is **withdrawn** along
+with every other statistic: below the bar the script does not compute one, and the
+artefact carries none.) The lesson stands on its own — it is about the null, not the
+number.
 
 The same class of defect sat in the ground line: a single-pass p10 quantile sits ~1.28× the
 local photon spread **below** true ground, measured at **−1.19 m** on a 1 m spread, which
@@ -720,7 +808,10 @@ heights come out slightly short — the conservative direction for a validation 
 ICESat-2 ground photons were expected to validate our ~30 m relief surface. They did, in
 the unflattering direction: **the shipped relief sits +6.55 m ABOVE decimetre-class laser
 ground**, consistent across both independent ground tracks (**6.65 m** on RGT 0416, **6.45
-m** on 0744, from 31 passes). It is a DSM by its own admission, and over the dense Ganges
+m** on 0744, from 31 passes). **This is the one number the correction above leaves
+standing**, and it stands because it never depended on the height comparison: it is the
+per-pass DEM-minus-laser offset recorded when each subset was written, medianed per
+distinct ground track, and it is unchanged to the last centimetre. It is a DSM by its own admission, and over the dense Ganges
 delta a smoothed SRTM-derived surface sits metres above true ground on vegetation and
 rooftops. This changes **nothing** in the model — `terrain.json` is explicitly "NOT used by
 the simulation" — and **nothing** in the height comparison, whose ground line comes from
@@ -731,7 +822,7 @@ procurement case.
 #### The pipeline, and where to look
 
 CMR granule search → **ranged-read prefilter** → subset → two-pass ground line →
-5 m-eroded roof assignment (roof band [2, 120] m, ≥ 5 roof photons per building) → p75 per
+**pointwise relief gate** → 5 m-eroded roof assignment (roof band [2, 120] m, ≥ 5 roof photons per building) → p75 per
 crossed building → distributional comparison. The prefilter is the reason this was
 affordable: ATL03 granules here run **285 MB to 1.82 GB** — a range recorded in
 `fetch-icesat2.py`'s header comment, not measured into any artefact — and the same
@@ -748,18 +839,23 @@ make every rerun **fully offline**: no token, no network, no granule.
   (the only network script; `--prefilter` for the ranged-read sweep),
   `scripts/measure-height-accuracy.py` (offline, produces the verdict),
   `scripts/icesat2-coverage.py`, `scripts/diagnose-icesat2-transect.py`
-- Artefacts: `data/calibration/icesat2-heights.json` (verdict, exclusions, terrain, floor
-  sensitivity), `data/calibration/icesat2-coverage.json`,
+- Artefacts: `data/calibration/icesat2-heights.json` (verdict, exclusions including the
+  relief gate's ledger, terrain, and `method_stability` — which is method evidence flagged
+  `published: false`, never a result), `data/calibration/icesat2-coverage.json`,
   `data/calibration/icesat2-prefilter.json`, `data/calibration/far-icesat2-sensitivity.json`,
   and the 31 committed subsets under `data/calibration/icesat2/`
 - Published wording and its guards: the `HEIGHTS` block in
-  `src/scripts/climate-engine/accuracy.ts` — each clause of the user-facing note has an
-  assertion behind it, including one that fires if the p65 interval excludes zero and the
-  note fails to say so — and its converse, which fires if the interval stops excluding
-  zero while the note goes on claiming it does. The note's two confidence intervals are
-  pinned digit-for-digit against the artefact in
-  `tests/unit/heat-map-accuracy.test.mjs`, and the word "validated" in the note is tied
-  to `HEIGHTS.verdict`.
+  `src/scripts/climate-engine/accuracy.ts`. Each clause of the user-facing note has an
+  assertion behind it, and the guards were rewritten with this correction. The old set
+  hung five of its checks off `verdict !== 'validated'`, so the moment the verdict moved
+  **all five went vacuous at once** while the note went on making the claims they
+  protected — the disclosures are unconditional now. Two new ones enforce the
+  pre-registration directly: no field matching `bias|ci95|permP|ksD` may exist while the
+  verdict is `underpowered`, and the note may not reintroduce a difference, an interval, a
+  percentile or a significance claim in words. Every guard was mutation-tested — each was
+  broken deliberately and confirmed to fire. `tests/unit/heat-map-accuracy.test.mjs` pins
+  every published field to the artefact, checks the artefact itself is silent below the
+  bar, and pins the one figure the verdict still permits: the terrain offset.
 
 
 ## The ward was drawn MIRRORED, and it took four attempts to see (2026-08-05)

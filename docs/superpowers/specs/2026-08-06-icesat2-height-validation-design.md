@@ -195,6 +195,44 @@ the co-founder's email about the basemap work.
   conversion lands near −52 m; a sign error near +61 m; a ground line that has climbed
   onto rooftops exceeds +25 m. All three are caught by a wide margin.
 
+  **CORRECTION 2026-08-07 — G1b's third failure mode was gated at the WRONG GRANULARITY,
+  and it let the defect it was written for straight through.** The first two modes are
+  properties of the whole line: a skipped or sign-flipped conversion moves every window
+  by ~50 m, so a median catches them. The third is not. A ground line climbs onto
+  rooftops *locally* — §5.2's window is 30 m and the rest of the pass is fine — so a
+  handful of runaway windows cannot move the median that G1b tests, and the test cannot
+  see them. Measured on the 31 committed subsets:
+
+  | | ground-line median (what G1b tests) | worst window (what it was written for) |
+  |---|---|---|
+  | ballygunge 2019-01-24 | **4.46 m — passes** | **84.68 m** |
+  | ballygunge 2022-01-18 | 2.96 m — passes | 39.95 m |
+  | ballygunge 2019-04-25 | 3.56 m — passes | 39.20 m |
+
+  **5 of 31 passes carried a ground line above +25 m somewhere, and all 31 passed G1b.**
+  The cause is §5.2's assumption that a window's ground candidates contain ground.
+  Overture does not map every building, and where it misses one, a 30 m window in dense
+  Ballygunge can be ~100 % roof returns from an unmapped structure: pass 1's p10 lands on
+  that roof, pass 2 medians the same roof photons, and the line reaches a **stable fixed
+  point** tens of metres above true ground, in a ward whose ground is 3–6 m. Nothing in
+  the two-pass design can escape it, because from inside the window there is no evidence
+  that anything is wrong.
+
+  **The fix is the same test at the right granularity, plus a refusal to interpolate over
+  it** — see §5.2.1a. G1b is **unchanged** and keeps its third bullet: the whole-line
+  version of that failure (a beam that only ever crossed unmapped structures) is still
+  real and still G1b's job. What changes is that it is no longer the *only* guard against
+  a roof-borne ground line. The two are complementary in exactly the way G1a and G1b are.
+
+  **Consequence, recorded because it is the point.** The 2026-08-06 run reported **n = 30
+  — the pre-registered bar hit exactly — and `validated`**. On the corrected ground line
+  n is **28**, so the pre-registered outcome is **`underpowered`** and no bias, interval
+  or omnibus statistic is published. The buildings that disappear are the marginal ones,
+  which is what "hit the bar exactly" always meant: n = 30 was only ever reached because
+  one or two buildings were measured against a corrupted ground reference. Nothing —
+  the bar, the erosion, `MIN_ROOF_PH`, the roof band, the relief allowance — was relaxed
+  to recover it, and nothing may be.
+
   **Why the ward DEM is NOT the reference, though this spec first made it one.** The
   original gate required the ground line within ±5 m of `<ward>-terrain.json`'s median.
   It failed on **15 of 15** usable passes, always in the same direction: photon ground at
@@ -249,6 +287,44 @@ the co-founder's email about the basemap work.
    outside its populated range rather than extrapolating flat: a track entering the box
    over a large block would otherwise measure those buildings against a clamped constant
    (measured +0.97 m error). Those photons are dropped and **counted**, per §5.4.
+
+   **CORRECTION 2026-08-07 — 1a. The pointwise relief gate, because both passes assume
+   the window contains ground.** Where Overture has missed a building, it does not: see
+   §5.1's correction for the failure and the 84.68 m measurement. So after pass 2
+   converges, **any window whose value departs from that pass's own ground-line median by
+   more than `GROUND_RELIEF_M` is refused**, and the line is **not bridged across a
+   refusal** — every photon whose two bracketing surviving windows straddle one comes back
+   NaN, and a refusal with no honest window on one side invalidates the line to the track
+   end on that side. Bridging would hand those photons a ground value manufactured from
+   two windows that never saw that ground, which is the same objection this section
+   already raises against flat extrapolation, over the same distances: measured on the
+   committed subsets, one refusal on the 84.68 m pass has no honest window within 165 m,
+   and a Baruipur pass would have bridged 180 m. Refused windows and the photons over them
+   are **counted apart** from the out-of-span ones, per §5.4 — the two say different
+   things (a short track versus an unmapped building), and 27 windows across 11 of 31
+   passes are involved.
+
+   **`GROUND_RELIEF_M` = 10 m is measured, not chosen.** The ward terrain artefacts
+   record what relief these wards actually have across a 1.4 km box — smoothed spans of
+   4.9, 6.7 and 7.7 m, raw spans of 6.6, 7.4 and 8.9 m — with the DSM's own per-cell RMSE
+   against Copernicus GLO-30 at 1.5–2.1 m. Real terrain therefore cannot put a window more
+   than ~11 m from its pass median, while the failure this catches starts at the 11–36 m
+   these wards' roofs stand above ground. 10 m sits inside that bracket: above every
+   measured relief span, below the shortest roof.
+
+   **And it is not load-bearing.** The artefact's `method_stability.relief_allowances`
+   re-runs the whole cohort at 6, 8, 10, 12, 15 and 20 m: n lands between 26 and 29 and
+   the verdict is **`underpowered` at every one of them**. The block is recorded precisely
+   so that claim can be checked rather than believed. It carries `published: false` and
+   nothing in it may be quoted as a result — every row is a cohort below §5.3's bar.
+
+   **A separate, uncomfortable observation is recorded there too**
+   (`method_stability.ground_window_widths`) and is likewise **not a finding**: sweeping
+   this section's 30 m window out to 200 m moves n between 27 and 31 and flips the
+   pre-registered verdict, while the upper-distribution divergence stays roughly put. That
+   is a statement about how far this method reaches, not about the city, and it is a
+   reason to re-ask the question when more passes arrive — ICESat-2 is still flying these
+   tracks and the beams wander (§3) — never a reason to select a width.
 2. **Height above ground** per photon = orthometric height − interpolated ground line.
 3. **Roof photons:** photons whose lat/lon falls inside a building footprint **eroded by
    5 m** (the geolocation error), with height-above-ground in [2 m, 120 m]. Erosion
