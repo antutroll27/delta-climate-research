@@ -256,6 +256,29 @@ test('a final zero_by_fiat line mixed with a pending line still taints the whole
   assert.equal(t.anyPending, true, 'one pending line makes the whole sum a what-if, even mixed with a final one');
 });
 
+test('one line with an unpublished quarter price nulls the whole euro total', () => {
+  // Both lines are cscf_pending and both PRICE (certificates exist for both),
+  // but 2026-Q3's certificate price is unpublished in the shipped pack (see
+  // public/cbam/estimator-pack.json's prices array: Q1 is 'published' at
+  // 75.36, Q3 is 'status: pending', priceEur: null) — reachable by any user
+  // who dates an import in September. costEur must go to null for the WHOLE
+  // total, not silently sum only the Q1 line's cost and drop the Q3 line's
+  // absence on the floor: a costEur that looked complete while quietly
+  // representing only one of two priced lines is exactly the partial-total
+  // failure this function exists to refuse.
+  const q1 = est('25231000', 'DZ', '(A)', '100', '2026-03-15');
+  const q3 = est('25231000', 'DZ', '(A)', '100', '2026-08-15');
+  assert.equal(q1.status, 'cscf_pending');
+  assert.equal(q3.status, 'cscf_pending');
+  assert.equal(q1.scenario.costEur, '5385.60', 'sanity: Q1 has a published price');
+  assert.equal(q3.scenario.costEur, null, 'sanity: Q3 has no published price yet');
+
+  const t = sumTotals([q1, q3]);
+  assert.equal(t.pricedLines, 2, 'both lines priced in certificates — neither is refused');
+  assert.equal(t.certificates, '142.93', 'certificates total is unaffected by the missing price');
+  assert.equal(t.costEur, null, 'one missing price nulls the total, not just that line');
+});
+
 test('sumTotals([]) is the empty total, not a confirmed zero', () => {
   // certificates: '0' here means "nothing was summed", not "we priced this at
   // zero" — see the Totals.certificates doc comment. pricedLines: 0 is the
