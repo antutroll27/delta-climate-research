@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import Decimal from 'decimal.js';
 
 import {
   yearOf, lineFingerprint, packSnapshotHash, thresholdByYear, sumTotals, csvRows, toCsv,
@@ -11,8 +12,15 @@ import { estimateFromPack } from '../../src/scripts/cbam-algos/estimator/estimat
 const pack = JSON.parse(readFileSync(
   fileURLToPath(new URL('../../public/cbam/estimator-pack.json', import.meta.url)), 'utf8'));
 
-const est = (cn, country, route, massT, date = '2026-03-15') =>
-  estimateFromPack(pack, { cn, country, route, massT, date });
+// emissionsScope defaults to 'direct' here, NOT 'direct_and_indirect' (cbam-app.ts's own
+// default, and line()'s below) — deliberately. Every existing call site in this file predates
+// scope threading and was written against direct-only numbers; defaulting this helper to
+// 'direct_and_indirect' would silently change every one of them (several goods this file
+// tests, e.g. 25231000/DZ, DO carry a published indirect default) rather than fail loud. Tests
+// that need to exercise the app's real default configuration pass 'direct_and_indirect'
+// explicitly (see the indirect-emissions tests below).
+const est = (cn, country, route, massT, date = '2026-03-15', emissionsScope = 'direct') =>
+  estimateFromPack(pack, { cn, country, route, massT, date, emissionsScope });
 
 const line = (over = {}) => ({
   id: 'L1', cn: '25231000', country: 'DZ', route: '(A)',
@@ -308,7 +316,10 @@ test('csvRows carries figures, locators and the §4 claims per row', () => {
   assert.match(r.cbam_factor_locator, /Art 10a\(1a\)/);
   assert.equal(r.line_fingerprint, 'a'.repeat(64));
   assert.equal(r.pack_snapshot, 'f'.repeat(64));
-  // the identity the spec pins: chargeable = embedded − free allocation
+  // NOT the general identity (see the design doc's 8 August 2026 correction and the dedicated
+  // indirect-emissions/floor-clamp tests below for the real one). It holds here only because
+  // this line's est() call defaults to 'direct' — indirect_tco2e is '0' and direct − faa is
+  // already ≥ 0, so embedded − free_allocation and max(0, direct − faa) + indirect coincide.
   assert.equal(
     Number(r.embedded_tco2e) - Number(r.free_allocation_tco2e),
     Number(r.chargeable_tco2e));
@@ -334,6 +345,8 @@ test('a refused line blanks embedded and free-allocation too, not just certifica
   const rows = csvRows(
     [line({ id: 'L1', cn: '72052100', country: 'IN', route: '(C)', massT: '60' })],
     [est('72052100', 'IN', '(C)', '60')], fp, 'f'.repeat(64), pack);
+  assert.equal(rows[0].direct_tco2e, '');
+  assert.equal(rows[0].indirect_tco2e, '');
   assert.equal(rows[0].embedded_tco2e, '');
   assert.equal(rows[0].free_allocation_tco2e, '');
   assert.equal(rows[0].chargeable_tco2e, '');
@@ -408,6 +421,92 @@ test('a line resolving more than one benchmark term fails loud instead of droppi
   assert.throws(
     () => csvRows([line({ id: 'L1', massT: '100' })], [twoTermEstimate], fp, 'f'.repeat(64), pack),
     /L1/);
+});
+
+test('est() threads emissionsScope through — the harness can express the app\'s default configuration', () => {
+  // The regression this fixes: est() used to silently drop the scope argument, so a test could
+  // build a line() with scope 'direct_and_indirect' (the fixture's own default, and
+  // cbam-app.ts's) and still be computing a direct-only estimate underneath it — which is
+  // exactly why the indirect-column defect below was invisible to Task 4's test suite.
+  const directOnly = est('25231000', 'DZ', '(A)', '100');
+  const withIndirect = est('25231000', 'DZ', '(A)', '100', '2026-03-15', 'direct_and_indirect');
+  assert.equal(directOnly.status, 'cscf_pending');
+  assert.equal(withIndirect.status, 'cscf_pending');
+  assert.equal(directOnly.scenario.indirectTco2e, '0', 'direct-only leaves indirect at 0');
+  assert.equal(withIndirect.scenario.indirectTco2e, '6.6', 'a scope-threaded call reaches DZ/2026\'s published indirect default');
+});
+
+test('the indirect case: free allocation deducts from the direct side only (the app\'s default scope)', () => {
+  // cbam-app.ts:353 defaults emissionsScope to 'direct_and_indirect' — this is what the
+  // calculator computes unless a user changes the select, not an edge case. Confirmed against
+  // d434711: that commit's `embedded_tco2e - free_allocation_tco2e` identity produced 34.065
+  // against a real chargeable_tco2e of 37.365 — off by exactly the indirect component (3.3),
+  // because embedded_tco2e was direct-only there and indirect never entered the subtraction.
+  const line1 = line({
+    id: 'L1', cn: '25232900', country: 'AL', route: 'default', massT: '100',
+    scope: 'direct_and_indirect',
+  });
+  const result = est('25232900', 'AL', 'default', '100', '2026-03-15', 'direct_and_indirect');
+  assert.equal(result.status, 'cscf_pending');
+  const rows = csvRows([line1], [result], fp, 'f'.repeat(64), pack);
+  const r = rows[0];
+  assert.equal(r.direct_tco2e, '99');
+  assert.equal(r.indirect_tco2e, '3.3');
+  assert.equal(r.embedded_tco2e, '102.3');
+  assert.equal(r.free_allocation_tco2e, '64.935');
+  assert.equal(r.chargeable_tco2e, '37.365');
+  // The engine's real identity, reproducible from the CSV columns alone. Decimal, not plain
+  // JS floats: 99 − 64.935 + 3.3 hits float drift (34.065 + 3.3 → 37.364999999999995 in IEEE
+  // 754 double), the exact class of error this codebase uses decimal.js to avoid everywhere
+  // else (see sumTotals's own doc comment above).
+  assert.equal(
+    Decimal.max(0, new Decimal(r.direct_tco2e).minus(r.free_allocation_tco2e))
+      .plus(r.indirect_tco2e).toFixed(),
+    r.chargeable_tco2e);
+  assert.equal(new Decimal(r.direct_tco2e).plus(r.indirect_tco2e).toFixed(), r.embedded_tco2e);
+});
+
+test('the floor clamp: free allocation exceeding direct emissions never drives chargeable negative', () => {
+  // No good in the shipped pack has a benchmark generous enough to exceed its own direct
+  // emissions (the defaults are calibrated close to their benchmarks), so this case is built by
+  // hand rather than reached through estimateFromPack — same approach as the two-benchmark-term
+  // test above. Shape matches exactly what figureFrom (certificate-estimate.ts) returns for
+  // direct=10, faa=25, indirect=4: net = max(0, 10 − 25) + 4 = 4, never −11. A naive
+  // `embedded − free_allocation` (14 − 25 = −11) would be wrong twice over here: once for
+  // signing negative, and once for omitting that the floor applies to the direct side alone.
+  const clamped = {
+    status: 'ok',
+    emissionsTco2e: '10',
+    quantityT: '1',
+    customsLineId: 'test-clamp',
+    stamp: {
+      tier: 'default+markup', originBasis: 'country', rulePackages: ['test-package'],
+      sources: [], snapshotHash: 'x', provisional: true, notes: [],
+    },
+    cscf: '1',
+    terms: {
+      cbamFactor: '0.975', cbamFactorYear: 2026, cbamFactorLocator: 'test cbam locator',
+      cscfLocator: 'test cscf locator',
+      benchmarks: [{
+        label: 'good (Column B, full product)', cnCode: '00000000', benchmarkColumn: 'B',
+        routeIndicator: '', benchmarkTco2ePerT: '25', quantityPerTonne: '1',
+        sourceLocator: 'test benchmark locator',
+      }],
+    },
+    priceQuarter: '2026-Q1', priceStatus: 'published', priceEur: '75.36',
+    figure: {
+      faaTco2e: '25', netTco2e: '4', certificates: '4', costEur: '301.44',
+      indirectTco2e: '4', totalEmbeddedTco2e: '14',
+    },
+  };
+  const rows = csvRows(
+    [line({ id: 'L1', cn: '00000000', massT: '1' })], [clamped], fp, 'f'.repeat(64), pack);
+  const r = rows[0];
+  assert.equal(r.direct_tco2e, '10');
+  assert.equal(r.indirect_tco2e, '4');
+  assert.equal(r.embedded_tco2e, '14');
+  assert.equal(r.free_allocation_tco2e, '25');
+  assert.equal(r.chargeable_tco2e, '4', 'floored at zero on the direct side, then indirect added back — never negative');
 });
 
 test('toCsv escapes commas and quotes and round-trips its own header', () => {
