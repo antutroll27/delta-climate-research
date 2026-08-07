@@ -20,6 +20,14 @@ test('yearOf reads the calendar year from the import date', () => {
   assert.equal(yearOf(line({ date: '2027-01-02' })), 2027);
 });
 
+test('yearOf returns NaN for a malformed date, never a fabricated year', () => {
+  // <input type="date"> yields '' when cleared. yearOf must not throw (it runs
+  // inside thresholdByYear's grouping loop, uncaught) and must not silently
+  // bucket the line into "year 0" via Number(''.slice(0, 4)).
+  assert.ok(Number.isNaN(yearOf(line({ date: '' }))));
+  assert.ok(Number.isNaN(yearOf(line({ date: '2026-3-15' }))), 'not zero-padded is not ISO');
+});
+
 test('lineFingerprint is deterministic and input-sensitive', async () => {
   const a = await lineFingerprint(line());
   const b = await lineFingerprint(line());
@@ -31,10 +39,37 @@ test('lineFingerprint is deterministic and input-sensitive', async () => {
   assert.equal(a, await lineFingerprint(line({ id: 'L2' })));
 });
 
+test('lineFingerprint does not collide across a shifted field boundary', async () => {
+  // #cbCn is free text, so a delimiter-free join would hash cn='2523100'+
+  // country='0DZ' the same as cn='25231000'+country='DZ'. These must differ.
+  const a = await lineFingerprint(line({ cn: '2523100', country: '0DZ' }));
+  const b = await lineFingerprint(line({ cn: '25231000', country: 'DZ' }));
+  assert.notEqual(a, b, 'a boundary shift between cn and country must change the fingerprint');
+});
+
 test('packSnapshotHash pins generatedAt and both workbook hashes', async () => {
   const a = await packSnapshotHash(pack);
   assert.match(a, /^[0-9a-f]{64}$/);
   assert.equal(a, await packSnapshotHash(pack), 'stable across calls');
   const altered = { ...pack, generatedAt: '1999-01-01T00:00:00.000Z' };
   assert.notEqual(a, await packSnapshotHash(altered), 'generatedAt is part of the claim');
+});
+
+test('packSnapshotHash changes when a workbook hash changes', async () => {
+  // Guards against a regression that drops workbookSha256 from the digest
+  // inputs entirely — every other test in this file would still pass.
+  const a = await packSnapshotHash(pack);
+  const altered = {
+    ...pack,
+    generatedFrom: pack.generatedFrom.map((s, i) => (i === 0 ? { ...s, workbookSha256: 'f'.repeat(64) } : s)),
+  };
+  assert.notEqual(a, await packSnapshotHash(altered), 'a workbook hash must be part of the claim');
+});
+
+test('packSnapshotHash throws rather than silently omit a missing workbook hash', async () => {
+  const altered = {
+    ...pack,
+    generatedFrom: pack.generatedFrom.map((s, i) => (i === 0 ? { ...s, workbookSha256: undefined } : s)),
+  };
+  await assert.rejects(packSnapshotHash(altered), new RegExp(pack.generatedFrom[0].id));
 });
