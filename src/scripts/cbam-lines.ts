@@ -325,7 +325,6 @@ export function csvRows(
 ): Record<string, string>[] {
   return lines.map((l, i) => {
     const e = results[i]!;
-    const f = figuresOf(e);
     const terms = 'terms' in e ? e.terms : null;
     // terms.benchmarks carries one entry per precursor (Column A / Eq 4 — see sefa.ts). The
     // public estimator only ever runs scope='full_product' with no precursors (hardcoded in
@@ -345,6 +344,16 @@ export function csvRows(
     }
     const bm = terms?.benchmarks[0] ?? null;
     const pending = e.status === 'cscf_pending';
+    // The EstimateFigure carrying every priced number, whichever branch holds it. Not
+    // figuresOf: that helper's DECLARED return type deliberately narrows away
+    // indirectTco2e/totalEmbeddedTco2e/faaTco2e (see its own comment — it exists for
+    // sumTotals, which only ever needed certificates/costEur/netTco2e), so reading those three
+    // extra fields off its result does not type-check. figuresOf is not touched or redefined —
+    // this narrows `e` directly, the same pattern the free_allocation_tco2e fix below already
+    // uses, just centralised once instead of repeated per field.
+    const figure = e.status === 'ok' || e.status === 'zero_by_fiat' ? e.figure
+      : e.status === 'cscf_pending' ? e.scenario
+      : null;
     return {
       line_id: l.id,
       cn_code: l.cn,
@@ -354,27 +363,43 @@ export function csvRows(
       emissions_scope: l.scope,
       mass_t: l.massT,
       import_date: l.date,
-      // emissionsTco2e is structurally present on EVERY branch, including 'unavailable'
-      // (EstimateBase carries it outside the Priced intersection — see certificate-estimate.ts)
-      // — so an `'emissionsTco2e' in e` guard is always true and would leak a number onto a
-      // refused row. Worse, estimateFromPack's `!factor` path ("no published default at all")
-      // seeds it with a literal '0' placeholder that was never computed — exporting that reads
-      // as a confirmed zero-emission line, the exact false claim Totals.certificates's own doc
-      // comment above already refuses. Gate on status explicitly instead of the 'in' check.
-      embedded_tco2e: e.status === 'unavailable' ? '' : e.emissionsTco2e,
-      // faaTco2e (free allocation) lives on `figure` (ok/zero_by_fiat) or `scenario`
-      // (cscf_pending) — figuresOf's declared return type narrows both down to
-      // {certificates, costEur, netTco2e}, so it cannot be read off `f`. Switch on e.status
-      // directly instead of `pending ? … : ''`, which exported an EMPTY free allocation for
-      // every 'ok'/'zero_by_fiat' line while still exporting a chargeable_tco2e for it —
-      // breaking the row's own pinned identity (chargeable = embedded − free_allocation) for
-      // every non-pending line.
-      free_allocation_tco2e: e.status === 'ok' || e.status === 'zero_by_fiat' ? e.figure.faaTco2e
-        : pending ? e.scenario.faaTco2e
-        : '',
-      chargeable_tco2e: f?.netTco2e ?? '',
-      certificates: f?.certificates ?? '',
-      cost_eur: f?.costEur ?? '',
+      // Direct-only — EstimateBase.emissionsTco2e, fed straight from
+      // CertificateEstimateInput.emissionsTco2e. Structurally present on EVERY branch,
+      // including 'unavailable' (EstimateBase sits outside the Priced intersection — see
+      // certificate-estimate.ts), and estimateFromPack's `!factor` path ("no published default
+      // at all") seeds it with a literal '0' placeholder that was never computed — exporting
+      // that unguarded reads as a confirmed zero-emission line, the exact false claim
+      // Totals.certificates's own doc comment above already refuses. Gate on `figure` (i.e.
+      // status !== 'unavailable') rather than an `'emissionsTco2e' in e` check, which is always
+      // true and therefore no guard at all.
+      direct_tco2e: figure ? e.emissionsTco2e : '',
+      // Free allocation (SEFA) is a DIRECT-emission benchmark (sefa.ts's own doc), so it is
+      // deducted from the direct side only; indirect is added back in AFTER that deduction and
+      // its floor (figureFrom, certificate-estimate.ts). One merged embedded_tco2e cannot show
+      // why the deduction did not reach part of the figure — hence the split column.
+      indirect_tco2e: figure?.indirectTco2e ?? '',
+      // The good's TOTAL embedded emissions (direct + indirect) — what this column name has
+      // always claimed, not the direct-only figure EstimateBase happens to carry. Read
+      // figureFrom's own totalEmbeddedTco2e rather than re-summing direct_tco2e +
+      // indirect_tco2e here: the engine already added those two once, and a second addition
+      // over the same two numbers in THIS file is a second chance to disagree with it.
+      embedded_tco2e: figure?.totalEmbeddedTco2e ?? '',
+      // Lives on `figure`/`scenario` (EstimateFigure), never on `f` — see the `figure` comment
+      // above. The prior fix here (switching off `pending ? … : ''`) got the BRANCH right but
+      // the spec's own identity was still wrong: chargeable is NOT embedded − free_allocation
+      // in general — see chargeable_tco2e below.
+      free_allocation_tco2e: figure?.faaTco2e ?? '',
+      // max(0, direct − free_allocation) + indirect, computed ONCE by figureFrom and read
+      // verbatim here, never recomputed: (1) free allocation is deducted from direct only, so
+      // indirect must be added back AFTER the subtraction, not before; (2) the deduction is
+      // floored at zero (the regulation surrenders certificates, never issues them), so a clean
+      // producer whose benchmark exceeds its own direct emissions has chargeable = indirect
+      // alone, not a negative number. `chargeable = embedded − free_allocation` (the identity
+      // this file originally shipped with) fails on both counts and was wrong in the spec, not
+      // just in this implementation — see the design doc's 8 August 2026 correction.
+      chargeable_tco2e: figure?.netTco2e ?? '',
+      certificates: figure?.certificates ?? '',
+      cost_eur: figure?.costEur ?? '',
       cbam_factor: terms?.cbamFactor ?? '',
       cbam_factor_locator: terms?.cbamFactorLocator ?? '',
       cscf_status: e.status === 'ok' ? 'published'
