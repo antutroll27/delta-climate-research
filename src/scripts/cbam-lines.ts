@@ -310,3 +310,112 @@ export function sumTotals(results: readonly CertificateEstimate[]): Totals {
     anyPending,
   };
 }
+
+/**
+ * One row per line, engine values VERBATIM — no locale formatting, no rounding. This is the
+ * working artefact an auditor loads into a model; presentation formatting (thousands
+ * separators, 3dp) belongs to the page, full precision belongs here.
+ */
+export function csvRows(
+  lines: readonly Line[],
+  results: readonly CertificateEstimate[],
+  fingerprints: ReadonlyMap<string, string>,
+  packSnapshot: string,
+  pack: EstimatorPack,
+): Record<string, string>[] {
+  return lines.map((l, i) => {
+    const e = results[i]!;
+    const f = figuresOf(e);
+    const terms = 'terms' in e ? e.terms : null;
+    // terms.benchmarks carries one entry per precursor (Column A / Eq 4 — see sefa.ts). The
+    // public estimator only ever runs scope='full_product' with no precursors (hardcoded in
+    // estimate-from-pack.ts's baseInput), so today this is always length 0 (electricity's
+    // zero_by_fiat short-circuit) or 1. The benchmark_* columns below are ONE value per row —
+    // multiplexing several benchmarks into a single delimited cell (the way rule_packages does
+    // for an informational list) would silently degrade a figure an auditor might sum or plug
+    // straight into a model. Fail loud instead, matching this file's own idiom elsewhere
+    // (packSnapshotHash's missing-workbook-hash throw, thresholdByYear's missing-fingerprint
+    // throw): if this exporter is ever reached from the precursor path, dropping a precursor's
+    // locator from an audit CSV would be exactly the silent degradation those refuse.
+    if (terms && terms.benchmarks.length > 1) {
+      throw new Error(
+        `csvRows: line '${l.id}' resolved ${terms.benchmarks.length} benchmark terms, but `
+        + 'this exporter has one benchmark_* column per row and would silently drop the rest',
+      );
+    }
+    const bm = terms?.benchmarks[0] ?? null;
+    const pending = e.status === 'cscf_pending';
+    return {
+      line_id: l.id,
+      cn_code: l.cn,
+      description: pack.classifications.find((c) => c.code === l.cn)?.description ?? '',
+      origin: l.country,
+      route: l.route,
+      emissions_scope: l.scope,
+      mass_t: l.massT,
+      import_date: l.date,
+      // emissionsTco2e is structurally present on EVERY branch, including 'unavailable'
+      // (EstimateBase carries it outside the Priced intersection — see certificate-estimate.ts)
+      // — so an `'emissionsTco2e' in e` guard is always true and would leak a number onto a
+      // refused row. Worse, estimateFromPack's `!factor` path ("no published default at all")
+      // seeds it with a literal '0' placeholder that was never computed — exporting that reads
+      // as a confirmed zero-emission line, the exact false claim Totals.certificates's own doc
+      // comment above already refuses. Gate on status explicitly instead of the 'in' check.
+      embedded_tco2e: e.status === 'unavailable' ? '' : e.emissionsTco2e,
+      // faaTco2e (free allocation) lives on `figure` (ok/zero_by_fiat) or `scenario`
+      // (cscf_pending) — figuresOf's declared return type narrows both down to
+      // {certificates, costEur, netTco2e}, so it cannot be read off `f`. Switch on e.status
+      // directly instead of `pending ? … : ''`, which exported an EMPTY free allocation for
+      // every 'ok'/'zero_by_fiat' line while still exporting a chargeable_tco2e for it —
+      // breaking the row's own pinned identity (chargeable = embedded − free_allocation) for
+      // every non-pending line.
+      free_allocation_tco2e: e.status === 'ok' || e.status === 'zero_by_fiat' ? e.figure.faaTco2e
+        : pending ? e.scenario.faaTco2e
+        : '',
+      chargeable_tco2e: f?.netTco2e ?? '',
+      certificates: f?.certificates ?? '',
+      cost_eur: f?.costEur ?? '',
+      cbam_factor: terms?.cbamFactor ?? '',
+      cbam_factor_locator: terms?.cbamFactorLocator ?? '',
+      cscf_status: e.status === 'ok' ? 'published'
+        : e.status === 'zero_by_fiat' ? 'not applicable (Art 1(2): nil by law)'
+        : pending ? 'pending (what-if)' : '',
+      cscf_locator: terms?.cscfLocator ?? '',
+      assumed_cscf: pending ? e.scenario.assumedCscf : '',
+      price_quarter: 'priceQuarter' in e ? e.priceQuarter : '',
+      price_eur: ('priceEur' in e ? e.priceEur : null) ?? '',
+      price_status: 'priceStatus' in e ? e.priceStatus : '',
+      benchmark_column: bm?.benchmarkColumn ?? '',
+      benchmark_value: bm?.benchmarkTco2ePerT ?? '',
+      benchmark_route: bm?.routeIndicator ?? '',
+      benchmark_locator: bm?.sourceLocator ?? '',
+      status: e.status,
+      rule_packages: e.stamp.rulePackages.join(' | '),
+      line_fingerprint: fingerprints.get(l.id) ?? '',
+      pack_snapshot: packSnapshot,
+    };
+  });
+}
+
+/**
+ * RFC 4180 quoting, plus a CSV-injection guard: a cell opening with = + - @ is executed as a
+ * formula by Excel/Sheets on open, and this artefact is explicitly built to be opened in a
+ * spreadsheet. `cn_code` is free-typed by the user and `description` comes from the pack — both
+ * would otherwise reach this function unescaped and a crafted CN like `=cmd|'/c calc'!A1` would
+ * execute on open. A leading `'` (the standard OWASP mitigation) neutralises the cell as literal
+ * text without changing what a human reads there.
+ *
+ * Row separator is '\n', not '\r\n'. RFC 4180 specifies CRLF, but every field this exporter
+ * produces is a computed figure, a legal locator, or a short status string — none can contain an
+ * embedded newline, so there is nothing for CRLF to disambiguate that plain LF does not already
+ * handle. Excel, Sheets, Numbers and LibreOffice all parse a bare-LF CSV correctly today.
+ */
+export function toCsv(rows: readonly Record<string, string>[]): string {
+  if (!rows.length) return '';
+  const cols = Object.keys(rows[0]!);
+  const cell = (v: string) => {
+    const safe = /^[=+\-@]/.test(v) ? `'${v}` : v;
+    return /[",\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
+  };
+  return [cols.join(','), ...rows.map((r) => cols.map((c) => cell(r[c] ?? '')).join(','))].join('\n');
+}
