@@ -1,5 +1,26 @@
 # Evidence — CBAM production-year validity windows (Phase 1)
 
+> **SUPERSEDED 7 August 2026. Do not apply `build-fa-package.patch`.**
+>
+> The change shipped as CBM `397457e` and `95224d0`, Angad `d529b1b` and
+> `bf211f1`. The patch beside this file carries **only** the year-window fix — not
+> the thresholds fix that the migration exposed, nor the OJ source hashes. Applying
+> it to CBM today fails outright (`patch does not apply`), which is the safe
+> outcome, but it is no longer the change. **The commits are the record.**
+>
+> Two claims below were true of the scratch tree and are false of the finished
+> work: that the browser pack "was not regenerated", and that the coverage figure
+> is "a strong prediction, not a measurement". Both were resolved inside CBM, where
+> the golden packages the scratch tree lacked are present. Production measures
+> 547 / 23.
+>
+> One thing this file does not mention at all, because Phase 1 never saw it: the
+> generator could not reproduce its own golden. The `thresholds` block — the 50 t
+> de minimis gate — was hand-added on 2026-07-29 and never taught to the
+> generator, so every regeneration silently deleted it. The fidelity check below
+> compared **benchmarks only** and passed. A full-package comparison found two
+> drifts, not one. See the spec's "What actually happened" section.
+
 Generated 6 August 2026.
 Spec: `docs/superpowers/specs/2026-08-06-cbam-production-year-windows-design.md`
 Plan: `docs/superpowers/plans/2026-08-06-cbam-production-year-windows.md`

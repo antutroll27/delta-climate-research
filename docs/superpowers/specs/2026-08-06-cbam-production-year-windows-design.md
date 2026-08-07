@@ -1,6 +1,9 @@
 # CBAM: production-year markers become validity windows
 
 Design spec · 6 August 2026
+**Status: SHIPPED 7 August 2026.** CBM `397457e`, Angad `d529b1b`, live and verified
+in production. Read the "What actually happened" section at the end before trusting
+any forward-looking statement in the body — two of them turned out to be wrong.
 
 ## Problem
 
@@ -363,3 +366,64 @@ The Column A / Column B selection logic is correct and audited
 (`docs/cbam-calculator-audit.pdf` §2.1) and is not in scope. The scope-driven rule
 — `full_product` → Column B, `process_only` → Column A plus Equation 4 — stands
 unchanged.
+
+---
+
+## What actually happened
+
+Written 7 August 2026, after shipping. The body above is the design as it stood
+before implementation; this section records where it was wrong.
+
+### The fix landed, and the prediction held exactly
+
+Live at `deltaclimate.earth`, verified against the pack fetched over the wire:
+priceable goods **385 → 547**, never-priceable **185 → 23**. The figure the design
+called "a strong prediction, not a measurement" turned out to be exactly right,
+but it was right by luck of a faithful simulation, not by proof.
+
+CBM `397457e` (the fix), `95224d0` (source hashes). Angad `d529b1b`, `bf211f1`.
+
+### Two statements in the body are now false
+
+1. **"Cannot regenerate the browser pack."** We did — inside CBM, where both
+   golden packages exist. The scratch tree could not; the SaaS always could.
+2. **"385 → 547 remains a simulation."** It is now a production measurement.
+
+### The design missed a second defect, and the migration exposed it
+
+`build-fa-package.py` could not reproduce its own golden file. The `thresholds`
+block — the 50 t de minimis gate — and its `reg-2023-956` source had been
+hand-added on 2026-07-29 and never taught to the generator. **Every regeneration
+silently deleted the rule that decides whether an importer owes anything at all.**
+
+This spec's verification section is the reason it was caught, and also the reason
+it was nearly missed. The Phase 1 fidelity baseline compared
+`a['benchmarks'] == b['benchmarks']` — benchmarks only. That passed. A
+full-package comparison would have caught it before a line of code was written,
+and when finally run it found **two** drifts, not one: `thresholds` *and* the
+`sources` array (6 committed vs 5 generated).
+
+**The lesson is narrow and worth keeping: a fidelity check must compare the whole
+artefact.** Comparing the part you are about to change proves nothing about the
+parts you are not.
+
+### Three tests pinned the old behaviour and had to move
+
+- CBM `differential.test.ts` pinned the gap at 382/183 for India and concluded it
+  "needs corpus research rather than a code change". It was a code change. Now
+  528/37; the remaining 37 are a genuine corpus question.
+- Angad `cbam-render.test.mjs` used CN 72241010 as its stranded example in three
+  places. That good is one of the 162 recovered, so the tests were repointed at
+  72052100/(C), which is still genuinely stranded.
+
+### Still open
+
+- The `Art 2(2)` citation is wrong in five places in the vendored engine
+  (`sefa.ts` ×3, `certificate-estimate.ts`, `cbam-app.ts`). Article 2 has no
+  numbered paragraphs; the provision is Art 1(2). The generator's locator was
+  fixed in `95224d0`; the engine's was not. Unreachable today — electricity is
+  absent from the CN picker — but it is a wrong legal citation in user-facing
+  provenance code.
+- Four sources still carry placeholder hashes: `dir-2003-87-art-10a-1a`,
+  `dr-2019-331-art-14-6`, `reg-2023-956`, `ec-certificate-price-page`.
+- The pack integrity guard is still timestamp-based. Unchanged, still worth fixing.
