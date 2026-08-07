@@ -467,46 +467,41 @@ test('the indirect case: free allocation deducts from the direct side only (the 
 });
 
 test('the floor clamp: free allocation exceeding direct emissions never drives chargeable negative', () => {
-  // No good in the shipped pack has a benchmark generous enough to exceed its own direct
-  // emissions (the defaults are calibrated close to their benchmarks), so this case is built by
-  // hand rather than reached through estimateFromPack — same approach as the two-benchmark-term
-  // test above. Shape matches exactly what figureFrom (certificate-estimate.ts) returns for
-  // direct=10, faa=25, indirect=4: net = max(0, 10 − 25) + 4 = 4, never −11. A naive
-  // `embedded − free_allocation` (14 − 25 = −11) would be wrong twice over here: once for
-  // signing negative, and once for omitting that the floor applies to the direct side alone.
-  const clamped = {
-    status: 'ok',
-    emissionsTco2e: '10',
-    quantityT: '1',
-    customsLineId: 'test-clamp',
-    stamp: {
-      tier: 'default+markup', originBasis: 'country', rulePackages: ['test-package'],
-      sources: [], snapshotHash: 'x', provisional: true, notes: [],
-    },
-    cscf: '1',
-    terms: {
-      cbamFactor: '0.975', cbamFactorYear: 2026, cbamFactorLocator: 'test cbam locator',
-      cscfLocator: 'test cscf locator',
-      benchmarks: [{
-        label: 'good (Column B, full product)', cnCode: '00000000', benchmarkColumn: 'B',
-        routeIndicator: '', benchmarkTco2ePerT: '25', quantityPerTonne: '1',
-        sourceLocator: 'test benchmark locator',
-      }],
-    },
-    priceQuarter: '2026-Q1', priceStatus: 'published', priceEur: '75.36',
-    figure: {
-      faaTco2e: '25', netTco2e: '4', certificates: '4', costEur: '301.44',
-      indirectTco2e: '4', totalEmbeddedTco2e: '14',
-    },
-  };
-  const rows = csvRows(
-    [line({ id: 'L1', cn: '00000000', massT: '1' })], [clamped], fp, 'f'.repeat(64), pack);
+  // NOT a hypothetical: dozens of real goods in the shipped 2026 direct-factor table clamp
+  // here. cn 25070080 (calcined clay) / AO / route (A) is one — direct emissions (24.2) sit
+  // below the good's own free-allocation benchmark (64.935 at CBAM factor 0.975, assumed CSCF
+  // 1), so the deduction floors at zero and the entire charge is the indirect component (4.4)
+  // alone: a clean producer paying only for the electricity it used, which is a normal live
+  // outcome of this calculator, not an edge case.
+  //
+  // A prior version of this test claimed "no good in the shipped pack has a benchmark generous
+  // enough to exceed its own direct emissions" and built a case by hand rather than reach for
+  // one. That claim was never checked against the pack and was wrong — a spec reviewer scanned
+  // all 10,930 direct-2026 factor rows and found dozens of goods that clamp, including this
+  // one, 26011200/AU/default, 72071190/CA/(C), and several 72xx/73xx steel codes at AZ/(E). No
+  // hand-built case is kept: real data exercises the same fields (direct_tco2e, indirect_tco2e,
+  // embedded_tco2e, free_allocation_tco2e, chargeable_tco2e) that the hand-built one did, and
+  // this line reaches status 'cscf_pending' (reading from e.scenario) the same way the
+  // hand-built one exercised e.figure's 'ok' shape — already covered separately by "free_
+  // allocation_tco2e is populated for a published ('ok') line too" above.
+  const line1 = line({
+    id: 'L1', cn: '25070080', country: 'AO', route: '(A)', massT: '100',
+    scope: 'direct_and_indirect',
+  });
+  const result = est('25070080', 'AO', '(A)', '100', '2026-03-15', 'direct_and_indirect');
+  assert.equal(result.status, 'cscf_pending');
+  const rows = csvRows([line1], [result], fp, 'f'.repeat(64), pack);
   const r = rows[0];
-  assert.equal(r.direct_tco2e, '10');
-  assert.equal(r.indirect_tco2e, '4');
-  assert.equal(r.embedded_tco2e, '14');
-  assert.equal(r.free_allocation_tco2e, '25');
-  assert.equal(r.chargeable_tco2e, '4', 'floored at zero on the direct side, then indirect added back — never negative');
+  assert.equal(r.direct_tco2e, '24.2');
+  assert.equal(r.indirect_tco2e, '4.4');
+  assert.equal(r.embedded_tco2e, '28.6');
+  assert.equal(r.free_allocation_tco2e, '64.935');
+  assert.equal(r.chargeable_tco2e, '4.4', 'floored at zero on the direct side, then indirect added back — never negative');
+  // the identity, in Decimal: max(0, direct − free_allocation) + indirect === chargeable
+  assert.equal(
+    Decimal.max(0, new Decimal(r.direct_tco2e).minus(r.free_allocation_tco2e))
+      .plus(r.indirect_tco2e).toFixed(),
+    r.chargeable_tco2e);
 });
 
 test('toCsv escapes commas and quotes and round-trips its own header', () => {
