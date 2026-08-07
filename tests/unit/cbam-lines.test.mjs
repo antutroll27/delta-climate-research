@@ -4,7 +4,7 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import {
-  yearOf, lineFingerprint, packSnapshotHash, thresholdByYear, sumTotals,
+  yearOf, lineFingerprint, packSnapshotHash, thresholdByYear, sumTotals, csvRows, toCsv,
 } from '../../src/scripts/cbam-lines.ts';
 import { estimateFromPack } from '../../src/scripts/cbam-algos/estimator/estimate-from-pack.ts';
 
@@ -290,4 +290,140 @@ test('sumTotals([]) is the empty total, not a confirmed zero', () => {
   assert.equal(t.pricedLines, 0);
   assert.equal(t.refusedLines, 0);
   assert.equal(t.anyPending, false);
+});
+
+test('csvRows carries figures, locators and the §4 claims per row', () => {
+  const lines2 = [line({ id: 'L1', massT: '100' })];
+  const results = [est('25231000', 'DZ', '(A)', '100')];
+  const rows = csvRows(lines2, results, fp, 'f'.repeat(64), pack);
+  assert.equal(rows.length, 1);
+  const r = rows[0];
+  assert.equal(r.cn_code, '25231000');
+  assert.equal(r.embedded_tco2e, '136.4');
+  assert.equal(r.free_allocation_tco2e, '64.935');
+  assert.equal(r.chargeable_tco2e, '71.465');
+  assert.equal(r.cost_eur, '5385.60');
+  assert.equal(r.cscf_status, 'pending (what-if)');
+  assert.match(r.benchmark_locator, /2025\/2620 Annex/);
+  assert.match(r.cbam_factor_locator, /Art 10a\(1a\)/);
+  assert.equal(r.line_fingerprint, 'a'.repeat(64));
+  assert.equal(r.pack_snapshot, 'f'.repeat(64));
+  // the identity the spec pins: chargeable = embedded − free allocation
+  assert.equal(
+    Number(r.embedded_tco2e) - Number(r.free_allocation_tco2e),
+    Number(r.chargeable_tco2e));
+});
+
+test('a refused line exports its refusal, not empty-looking zeros', () => {
+  const rows = csvRows(
+    [line({ id: 'L1', cn: '72052100', country: 'IN', route: '(C)', massT: '60' })],
+    [est('72052100', 'IN', '(C)', '60')], fp, 'f'.repeat(64), pack);
+  assert.equal(rows[0].status, 'unavailable');
+  assert.equal(rows[0].certificates, '');
+  assert.equal(rows[0].cost_eur, '');
+});
+
+test('a refused line blanks embedded and free-allocation too, not just certificates', () => {
+  // Regression for a review finding on Task 4's draft: EstimateBase carries emissionsTco2e on
+  // EVERY branch, including 'unavailable' (it sits outside the Priced intersection — see
+  // certificate-estimate.ts), so an `'emissionsTco2e' in e` guard is always true and would leak
+  // a number onto a refused row. Worse, estimateFromPack's `!factor` path seeds it with a '0'
+  // placeholder that was never computed — exporting that reads as a confirmed zero-emission
+  // line, the exact false claim this file's Totals.certificates doc already refuses. Gate on
+  // status explicitly instead.
+  const rows = csvRows(
+    [line({ id: 'L1', cn: '72052100', country: 'IN', route: '(C)', massT: '60' })],
+    [est('72052100', 'IN', '(C)', '60')], fp, 'f'.repeat(64), pack);
+  assert.equal(rows[0].embedded_tco2e, '');
+  assert.equal(rows[0].free_allocation_tco2e, '');
+  assert.equal(rows[0].chargeable_tco2e, '');
+});
+
+test('free_allocation_tco2e is populated for a zero_by_fiat line too, not just a pending one', () => {
+  // Regression for a review finding on Task 4's draft: the original code read
+  // `pending ? e.scenario.faaTco2e : ''`, which exported an EMPTY free allocation for every
+  // 'ok'/'zero_by_fiat' line while still exporting a chargeable_tco2e for it — silently
+  // breaking the row's own identity (chargeable = embedded − free_allocation) for every
+  // non-pending line. Electricity is zero_by_fiat with a real (zero) SEFA, reachable through
+  // the real engine by extending the pack with a synthetic electricity row (same pattern as
+  // the sumTotals mixed-total test above).
+  const electricPack = {
+    ...pack,
+    classifications: [...pack.classifications, { code: '27160000', description: 'Electrical energy' }],
+    defaultFactors: [...pack.defaultFactors, {
+      scopeCode: '27160000', originCountry: 'DZ', emissionsType: 'direct',
+      productionRoute: 'default', reportingYear: 2026, baseIntensity: '0.5', markupPct: '0',
+    }],
+  };
+  const zero = estimateFromPack(electricPack, {
+    cn: '27160000', country: 'DZ', route: 'default', massT: '10', date: '2026-03-15',
+  });
+  assert.equal(zero.status, 'zero_by_fiat');
+  const rows = csvRows(
+    [line({ id: 'L1', cn: '27160000', country: 'DZ', route: 'default', massT: '10' })],
+    [zero], fp, 'f'.repeat(64), electricPack);
+  const r = rows[0];
+  assert.equal(r.embedded_tco2e, '5');
+  assert.equal(r.free_allocation_tco2e, '0', 'Art 2(2): the deduction itself is nil, not the charge');
+  assert.equal(r.chargeable_tco2e, '5');
+  assert.equal(
+    Number(r.embedded_tco2e) - Number(r.free_allocation_tco2e),
+    Number(r.chargeable_tco2e));
+});
+
+test('free_allocation_tco2e is populated for a published (\'ok\') line too', () => {
+  // Same regression as above, proven against the 'ok' branch specifically: the shipped pack's
+  // CSCF is unpublished for every year it carries (2026-2030), so 'ok' is unreachable through
+  // estimateFromPack over the real pack — publish 2026 at CSCF 1 (the same value the
+  // cscf_pending scenario already assumes) to reach it honestly through the real engine.
+  const publishedPack = {
+    ...pack,
+    cscf: pack.cscf.map((c) => (c.year === 2026 ? { ...c, value: '1', status: 'published' } : c)),
+  };
+  const ok = estimateFromPack(
+    publishedPack, { cn: '25231000', country: 'DZ', route: '(A)', massT: '100', date: '2026-03-15' });
+  assert.equal(ok.status, 'ok');
+  const rows = csvRows(
+    [line({ id: 'L1', massT: '100' })], [ok], fp, 'f'.repeat(64), publishedPack);
+  const r = rows[0];
+  assert.equal(r.free_allocation_tco2e, '64.935', 'same SEFA math as the pending scenario, at CSCF 1');
+  assert.equal(r.chargeable_tco2e, '71.465');
+  assert.equal(r.cscf_status, 'published');
+});
+
+test('a line resolving more than one benchmark term fails loud instead of dropping one', () => {
+  // Regression for a review finding: terms.benchmarks carries one entry per precursor
+  // (Eq 4 / Column A). The public estimator only ever runs scope='full_product' with no
+  // precursors, so this is unreachable through estimateFromPack today — this test drives
+  // csvRows directly with a hand-built two-benchmark CertificateEstimate (the shape sefa.ts
+  // produces on the process_only/Eq 4 path) to prove the exporter refuses to silently
+  // truncate to benchmarks[0] rather than to prove the path is reachable.
+  const twoTermEstimate = {
+    ...est('25231000', 'DZ', '(A)', '100'),
+  };
+  twoTermEstimate.terms = {
+    ...twoTermEstimate.terms,
+    benchmarks: [...twoTermEstimate.terms.benchmarks, { ...twoTermEstimate.terms.benchmarks[0] }],
+  };
+  assert.throws(
+    () => csvRows([line({ id: 'L1', massT: '100' })], [twoTermEstimate], fp, 'f'.repeat(64), pack),
+    /L1/);
+});
+
+test('toCsv escapes commas and quotes and round-trips its own header', () => {
+  const csv = toCsv([{ a: 'plain', b: 'has,comma', c: 'has "quote"' }]);
+  assert.equal(csv.split('\n')[0], 'a,b,c');
+  assert.equal(csv.split('\n')[1], 'plain,"has,comma","has ""quote"""');
+});
+
+test('toCsv neutralises a formula-leading cell to block CSV injection', () => {
+  // A cell opening with = + - @ is executed as a formula by Excel/Sheets on open, and this
+  // artefact is explicitly designed to be opened in a spreadsheet. cn_code is free-typed by
+  // the user and description comes from the pack — both would reach toCsv unescaped otherwise.
+  const csv = toCsv([{
+    formula: '=1+2', plusLead: '+SUM(A1)', minusLead: '-2+3', atLead: '@SUM(1)', safe: 'plain',
+  }]);
+  const [header, row] = csv.split('\n');
+  assert.equal(header, 'formula,plusLead,minusLead,atLead,safe');
+  assert.equal(row, "'=1+2,'+SUM(A1),'-2+3,'@SUM(1),plain");
 });
