@@ -349,9 +349,27 @@ structural defect that makes the original statistic uninterpretable, not by a di
 result — and the fill cohort currently holds **n = 0**, so there is no number to steer
 toward. Recorded rather than quietly substituted.
 
-**Consequence for win 3.** `compute-far.py --icesat2-correction` must not resample from a
-cohort whose distribution the floor has inflated. Until the amended test runs with n ≥ 10,
-FAR sensitivity stays `no_correction_computable`.
+**Consequence for win 3 — it is STRUCTURALLY BLOCKED, not merely underpowered.** This was
+first written as "until the amended test runs with n ≥ 10, FAR sensitivity stays
+`no_correction_computable`", which implied more passes would unblock it. They will not.
+
+A proportion supplies no heights to resample. And the missing heights cannot simply be
+recovered by dropping the floor, because below about 2 m **the instrument does not resolve
+a roof at all**: for a fill building whose photons all sit low, the honest reading is "no
+evidence above 2.5 m", never "this building is 1.8 m". Manufacturing a pool from
+floor-free values would re-derive the very statistic this section rejected, using a
+threshold picked to get an answer.
+
+So `compute-far.py --icesat2-correction` reports `no_correction_computable` for a
+structural reason and will do so at any n. It now records a `blocked_reason` field saying
+exactly that, and its console line says "STRUCTURAL" rather than anything that reads as
+"one more sweep and we're there". Only a spec revision defining a height distribution the
+instrument can actually support would unblock win 3 — a UAV or LiDAR survey would; more
+ICESat-2 passes would not.
+
+**Win 2 survives in reduced form**: the proportion test is a real, answerable question
+about whether Google's 2.5 m fill understates, and it needs only n ≥ 10 crossed fill
+buildings (currently 5).
 
 **Main-cohort caveat from the same cause.** The floor inflates short buildings on both
 sides of the main comparison too, pushing the median bias positive ("our heights

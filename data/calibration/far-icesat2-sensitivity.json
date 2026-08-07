@@ -12,12 +12,12 @@
   "seed": 7,
   "fill_cohort": {
     "verdict": "underpowered",
-    "n": 0,
+    "n": 5,
     "min_n": 10,
-    "median_icesat2_m": null,
-    "understatement_m": null,
-    "ci95_m": null
+    "statistic": "fraction of crossed 2.5 m-fill buildings whose floor-free p75 roof height exceeds 2.5 m",
+    "n_excluded_by_roof_band_floor": 1
   },
+  "blocked_reason": "structural, not data volume: spec \u00a75.3's amended fill test is a PROPORTION (what fraction of crossed fill buildings show roof evidence above 2.5 m), and a proportion supplies no heights to resample. Below ~2 m the instrument cannot resolve a roof at all, so a fill building's photons sitting low means 'no evidence above 2.5 m', never a measured low height. Reaching n >= 10 will NOT unblock this; only a spec revision defining a height distribution the instrument can support would.",
   "baseline_check": {
     "reference": "data/dc-urs/far.json",
     "geom_dir": "public/heat-map/data",
@@ -63,5 +63,5 @@
       "storey_bracket": {}
     }
   },
-  "note": "Cohort-level sensitivity measurement. It does NOT change any shipped FAR: data/dc-urs/far.json is untouched by this mode. No per-building attribution (spec \u00a71): each 2.5 m fill building draws from the measured cohort's empirical distribution, seeded rng(7), so the artefact is reproducible and no individual height is claimed. far_baseline is recomputed from public/heat-map/data through the same helpers as ward_far and checked against data/dc-urs/far.json at 0.001; that equality is what proves this mode did not drift. NO CORRECTION COMPUTABLE: the fill cohort in data/calibration/icesat2-heights.json is 'underpowered' at n=0 (bar: n >= 10), so far_corrected is null. A pool was NOT invented and the main cohort was NOT substituted \u2014 its buildings are the large ones that survived erosion, which is precisely the population the fill is not. The baseline and the fill counts below are still real measurements; when the transect sweep powers the cohort, this same code path produces the correction with no change."
+  "note": "Cohort-level sensitivity measurement. It does NOT change any shipped FAR: data/dc-urs/far.json is untouched by this mode. No per-building attribution (spec \u00a71): each 2.5 m fill building draws from the measured cohort's empirical distribution, seeded rng(7), so the artefact is reproducible and no individual height is claimed. far_baseline is recomputed from public/heat-map/data through the same helpers as ward_far and checked against data/dc-urs/far.json at 0.001; that equality is what proves this mode did not drift. NO CORRECTION COMPUTABLE: the fill cohort in data/calibration/icesat2-heights.json is 'underpowered' at n=5 (bar: n >= 10), so far_corrected is null. A pool was NOT invented and the main cohort was NOT substituted \u2014 its buildings are the large ones that survived erosion, which is precisely the population the fill is not. The baseline and the fill counts below are still real measurements; when the transect sweep powers the cohort, this same code path produces the correction with no change."
 }

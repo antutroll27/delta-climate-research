@@ -258,6 +258,26 @@ def icesat2_sensitivity() -> None:
     fall back to the main cohort, whose buildings are the LARGE ones that
     survived 5 m erosion and are exactly the population the fill is not.
 
+    WIN 3 IS STRUCTURALLY BLOCKED, NOT MERELY UNDERPOWERED (2026-08-07).
+    Spec §5.3 was amended after the original fill statistic was found unable to
+    return zero: the 2.0 m roof-band floor deletes the low photons of exactly the
+    short buildings the 2.5 m fill cohort is made of, so its median could never
+    land near 2.5 m. The replacement is a PROPORTION — what fraction of crossed
+    fill buildings show roof evidence above 2.5 m — and a proportion cannot
+    supply heights to resample.
+
+    That is not a gap waiting on data. Below about 2 m the instrument cannot
+    resolve a roof at all: for a fill building whose photons all sit low, the
+    honest reading is "no evidence above 2.5 m", never "this building is 1.8 m".
+    Manufacturing a pool from floor-free values would be re-deriving the
+    statistic the amendment rejected, using a threshold chosen to get an answer.
+
+    So this function reports `no_correction_computable` for a STRUCTURAL reason
+    and will keep doing so at any n. `measured` remains reachable only if a
+    future spec revision defines a height distribution the instrument can
+    actually support; the `heights_m` path below is kept for that case and is
+    inert until then. Reaching n >= 10 alone will NOT unblock it.
+
     THE BASELINE IS THE SELF-CHECK. `far_baseline` is recomputed here from the
     same geometry through the same helpers, then compared against the committed
     far.json. The two must agree to BASELINE_TOL; disagreement is a drift bug in
@@ -399,14 +419,27 @@ def icesat2_sensitivity() -> None:
         "storey_m": STOREY_M,
         "storey_bracket_m": list(STOREY_TESTS),
         "seed": FAR_SEED,
+        # Echoed from the heights artefact's CURRENT schema. The superseded
+        # median_icesat2_m / understatement_m / ci95_m fields are deliberately
+        # NOT carried forward: they belonged to the statistic spec §5.3 amended
+        # away, and echoing them as nulls invited a reader to think they were
+        # merely awaiting data rather than withdrawn.
         "fill_cohort": {
             "verdict": fill_verdict,
             "n": fill.get("n", 0),
             "min_n": fill.get("min_n"),
-            "median_icesat2_m": fill.get("median_icesat2_m"),
-            "understatement_m": fill.get("understatement_m"),
-            "ci95_m": fill.get("ci95_m"),
+            "statistic": fill.get("statistic"),
+            "n_excluded_by_roof_band_floor": fill.get("n_excluded_by_roof_band_floor"),
         },
+        "blocked_reason": None if computable else (
+            "structural, not data volume: spec §5.3's amended fill test is a "
+            "PROPORTION (what fraction of crossed fill buildings show roof "
+            "evidence above 2.5 m), and a proportion supplies no heights to "
+            "resample. Below ~2 m the instrument cannot resolve a roof at all, "
+            "so a fill building's photons sitting low means 'no evidence above "
+            "2.5 m', never a measured low height. Reaching n >= 10 will NOT "
+            "unblock this; only a spec revision defining a height distribution "
+            "the instrument can support would."),
         "baseline_check": {
             "reference": os.path.relpath(OUT, ROOT),
             "geom_dir": os.path.relpath(GEOM, ROOT),
@@ -424,8 +457,16 @@ def icesat2_sensitivity() -> None:
         fh.write("\n")
 
     print(f"  fill cohort: {fill_verdict}, n={fill.get('n', 0)}"
-          + (f", median {fill.get('median_icesat2_m')} m" if computable else
-             " — no correction computable, artefact says so"))
+          f" (bar {fill.get('min_n')})")
+    if computable:
+        print(f"  correction pool: {len(pool)} measured heights")
+    else:
+        # NOT phrased as "n too small". Win 3 is blocked by the shape of the
+        # amended statistic, and saying otherwise would read as "one more sweep
+        # and we're there" — which is false at any n.
+        print("  no correction computable — STRUCTURAL: §5.3's amended fill test "
+              "is a proportion,\n  which supplies no heights to resample. More "
+              "passes will not unblock it.")
     print(f"  {'ward':<14}{'baseline':>10}{'shipped':>10}{'diff':>9}"
           f"{'corrected':>11}{'Δ%':>8}")
     for wname, v in out_wards.items():
