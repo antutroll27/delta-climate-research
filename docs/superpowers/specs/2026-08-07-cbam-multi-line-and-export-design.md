@@ -138,12 +138,22 @@ joinable, and it opens in Excel without an import wizard.
 
 ```
 line_id, cn_code, description, origin, route, emissions_scope, mass_t, import_date,
-embedded_tco2e, free_allocation_tco2e, chargeable_tco2e, certificates, cost_eur,
+direct_tco2e, indirect_tco2e, embedded_tco2e, free_allocation_tco2e,
+chargeable_tco2e, certificates, cost_eur,
 cbam_factor, cbam_factor_locator, cscf_status, cscf_locator, assumed_cscf,
 price_quarter, price_eur, price_status,
 benchmark_column, benchmark_value, benchmark_route, benchmark_locator,
-status, rule_packages, line_fingerprint
+status, rule_packages, line_fingerprint, pack_snapshot
 ```
+
+`direct_tco2e` and `indirect_tco2e` are separate columns because free
+allocation is deducted from the direct side alone; a single `embedded_tco2e`
+cannot show why the deduction did not apply to part of the figure.
+`embedded_tco2e` is the sum of the two — the good's total embedded emissions —
+not the direct-only figure the engine happens to carry on `EstimateBase`.
+
+`pack_snapshot` repeats per row for the same reason the other metadata does: a
+row lifted out of the file alone still says which corpus produced it. See §4.
 
 `Blob` → `URL.createObjectURL` → `<a download>`. No library.
 
@@ -225,8 +235,24 @@ already is — `ensurePack` is async today.
 - A line that fails closed leaves the other lines' totals unchanged.
 - The snapshot hash is stable across two runs over the same pack, and changes
   when `generatedAt` changes.
-- CSV round-trip: every numeric column parses, and `chargeable_tco2e` equals
-  `embedded_tco2e − free_allocation_tco2e` per row.
+- CSV round-trip: every numeric column parses, and each row reproduces the
+  engine's arithmetic:
+
+  ```
+  chargeable_tco2e = max(0, direct_tco2e − free_allocation_tco2e) + indirect_tco2e
+  ```
+
+  **Corrected 8 August 2026.** This bullet previously pinned
+  `chargeable = embedded − free_allocation`, which `figureFrom` does not
+  satisfy and never did, for two independent reasons: free allocation is
+  granted against direct emissions only, so indirect is added *after* the
+  deduction; and the deduction is floored at zero, because the regulation
+  surrenders certificates and never issues them. The identity therefore fails
+  for any `direct_and_indirect` line with a published indirect default — which
+  is the app's default scope — and again for any clean producer whose benchmark
+  exceeds its own direct emissions. The CSV carries `direct_tco2e` and
+  `indirect_tco2e` as separate columns so the arithmetic above is reproducible
+  from the file alone.
 
 **End-to-end, Playwright:** add three lines, remove one, tick the attestation,
 confirm the verdict changes from `indeterminate` to `below_threshold`, and that
