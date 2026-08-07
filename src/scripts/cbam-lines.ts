@@ -7,12 +7,14 @@
  * sits outside cbam-algos/ so the statement "everything under cbam-algos/ except
  * cbam-app.ts is upstream's, byte-for-byte" stays true.
  */
+import Decimal from 'decimal.js';
 import type { EstimatorPack } from './cbam-algos/estimator/estimate-from-pack.ts';
 import {
   aggregateThresholdBasis, type ImportMassEntry,
 } from './cbam-algos/threshold/aggregate.ts';
 import { evaluateThreshold, type ThresholdState } from './cbam-algos/threshold/evaluate.ts';
 import { sectorForCn } from './cbam-algos/cbam/sector.ts';
+import type { CertificateEstimate } from './cbam-algos/cbam/certificate-estimate.ts';
 
 export interface Line {
   id: string;        // row key and ImportMassEntry.id — NOT part of the fingerprint
@@ -207,4 +209,97 @@ export function thresholdByYear(
       eligibleLineCount: basis.entryIds.length,
     };
   });
+}
+
+export interface Totals {
+  /**
+   * '0' both for "every line summed to a real zero" and for "there were no
+   * priced lines at all" (sumTotals([]) also returns '0' here). Callers must
+   * gate on pricedLines/refusedLines before rendering this as a confirmed
+   * zero-emission total — the string alone cannot distinguish the two.
+   */
+  certificates: string;
+  /** null when any priced line lacks a published price — a partial € total lies. */
+  costEur: string | null;
+  chargeableTco2e: string;
+  pricedLines: number;
+  refusedLines: number;
+  /**
+   * True when any contributing line is a CSCF what-if; the total then is too.
+   * This also fires when a `zero_by_fiat` line (final in its own right) is
+   * mixed with a `cscf_pending` line: the zero_by_fiat component is exact, but
+   * it is added into a sum that ALSO carries a scenario figure, so the sum as
+   * a whole cannot be presented as final. Labelling the whole total, not just
+   * the pending lines within it, is the same instinct as the per-branch rule
+   * in certificate-estimate.ts — a mostly-true total that reads as fully true
+   * is the failure this project exists to avoid.
+   */
+  anyPending: boolean;
+}
+
+/** The figures of a priced branch, whichever branch carried them. */
+function figuresOf(e: CertificateEstimate):
+  { certificates: string; costEur: string | null; netTco2e: string } | null {
+  switch (e.status) {
+    case 'ok':
+    case 'zero_by_fiat': return e.figure;
+    case 'cscf_pending': return e.scenario;
+    case 'unavailable': return null;
+  }
+}
+
+/**
+ * Sums per-line CertificateEstimates into one Decimal-precise total.
+ *
+ * ROUNDING CHOICE: this sums each line's already-rounded (2dp) costEur, not
+ * price × the summed certificates. The two can disagree by a cent — e.g. two
+ * 25231000/DZ/(A) lines at 100t and 200t round individually to 5385.60 and
+ * 10771.20 (sum 16156.80), but 214.395 certificates × 75.36 recomputed from
+ * scratch is 16156.8072, which rounds to 16156.81. Summing the parts is kept
+ * DELIBERATELY: the total this function returns must always equal the sum of
+ * the line figures a person can see and audit on screen. Do NOT "fix" this by
+ * recomputing from the summed certificates — that would make the total
+ * disagree with its own visible line items by a cent, which is a worse and
+ * more confusing failure than the cent itself.
+ *
+ * A refused ('unavailable') line is counted (refusedLines) but contributes
+ * nothing to the sums — it must never poison a total that other, real lines
+ * produced. A missing price on any priced line nulls costEur for the whole
+ * total (rather than silently summing only the priced-price lines), because a
+ * partial € figure that LOOKS complete is the exact under-reporting this
+ * codebase refuses everywhere else.
+ */
+export function sumTotals(results: readonly CertificateEstimate[]): Totals {
+  let certificates = new Decimal(0);
+  let costEur = new Decimal(0);
+  let chargeableTco2e = new Decimal(0);
+  let pricedLines = 0;
+  let refusedLines = 0;
+  let anyPending = false;
+  let costKnown = true;
+
+  for (const e of results) {
+    const figures = figuresOf(e);
+    if (!figures) { refusedLines += 1; continue; }
+    pricedLines += 1;
+    if (e.status === 'cscf_pending') anyPending = true;
+    certificates = certificates.plus(figures.certificates);
+    chargeableTco2e = chargeableTco2e.plus(figures.netTco2e);
+    if (figures.costEur === null) costKnown = false;
+    else costEur = costEur.plus(figures.costEur);
+  }
+
+  return {
+    certificates: certificates.toString(),
+    // Explicit ROUND_HALF_UP (matching figureFrom's own per-line rounding in
+    // certificate-estimate.ts), not the ambient decimal.js config — the sum
+    // here is exact to 2dp by construction (see the rounding-choice note
+    // above), but pinning the mode keeps this correct even if that ever
+    // changes, without depending on sefa.ts having run first to set it.
+    costEur: pricedLines > 0 && costKnown ? costEur.toFixed(2, Decimal.ROUND_HALF_UP) : null,
+    chargeableTco2e: chargeableTco2e.toString(),
+    pricedLines,
+    refusedLines,
+    anyPending,
+  };
 }
