@@ -71,10 +71,11 @@ test('the UI figures match the ward-scale calibration that produced them', async
 test('HEIGHTS mirrors the ICESat-2 artefact it claims to summarise', async () => {
   // Same failure mode as the ward-scale test above, on a claim that is harder to
   // sanity-check by eye: accuracy.ts carries the ICESat-2 numbers by hand, so a
-  // re-run of measure-height-accuracy.py that moves the verdict or the bias would
-  // otherwise leave the site publishing a height claim its own evidence no longer
-  // makes. EVERY published field is pinned, not a representative few — the ones
-  // most likely to be quietly "tidied" are the caveat numbers, not the headline.
+  // re-run of measure-height-accuracy.py that moves the verdict or the counts
+  // would otherwise leave the site publishing a height claim its own evidence no
+  // longer makes. EVERY published field is pinned, not a representative few —
+  // the ones most likely to be quietly "tidied" are the caveat numbers, not the
+  // headline.
   const j = JSON.parse(
     await readFile(join(ROOT, 'data/calibration/icesat2-heights.json'), 'utf8'));
   const s = j.summary;
@@ -85,14 +86,22 @@ test('HEIGHTS mirrors the ICESat-2 artefact it claims to summarise', async () =>
   assert.equal(HEIGHTS.nPasses, s.n_passes);
   assert.equal(HEIGHTS.nRgts, s.n_rgts);
 
-  assert.equal(HEIGHTS.medianBiasM, s.median_bias_m);
-  assert.deepEqual([...HEIGHTS.ci95M], s.median_ci95_m);
-  assert.equal(HEIGHTS.p65BiasM, s.p65_bias_m);
-  assert.deepEqual([...HEIGHTS.p65Ci95M], s.p65_ci95_m);
-  assert.equal(HEIGHTS.p90BiasM, s.p90_bias_m);
-  assert.deepEqual([...HEIGHTS.p90Ci95M], s.p90_ci95_m);
-  assert.equal(HEIGHTS.permP, s.perm_p);
-  assert.equal(HEIGHTS.ksD, s.ks_d);
+  // THE ARTEFACT ITSELF MUST BE BELOW THE BAR AND SILENT. This is the pin that
+  // matters most in this state: spec §5.3 admits no statistic under n = 30, so
+  // if a future run publishes one, the mirror in accuracy.ts is not what should
+  // change first — the verdict is. Checking the artefact rather than only
+  // accuracy.ts means a bias reappearing upstream cannot slip past because
+  // nobody copied it down.
+  assert.equal(s.verdict === 'underpowered', s.n_buildings < s.min_buildings,
+    'the artefact\'s verdict and its n must be the same fact');
+  if (s.verdict === 'underpowered') {
+    for (const k of Object.keys(s)) {
+      assert.ok(!/bias|ci95|perm_p|ks_d/.test(k),
+        `the artefact is underpowered but summary.${k} publishes a statistic anyway`);
+    }
+    assert.equal(j.floor_sensitivity, null,
+      'floor_sensitivity is bias statistics — it must stay absent below the bar');
+  }
 
   // The concentration caveat: which ward holds most of the cohort, and how much.
   const wards = Object.entries(j.per_ward);
@@ -114,46 +123,77 @@ test('HEIGHTS mirrors the ICESat-2 artefact it claims to summarise', async () =>
     `${Math.round(HEIGHTS.survivorPctRange[0])}-${Math.round(HEIGHTS.survivorPctRange[1])} %`),
     'the note quotes the survivor share to whole percent — it must be the measured one');
 
+  // The SECOND selection, which the erosion figure alone hides: the roof-photon
+  // bar removed more crossed buildings than anything else did.
+  assert.equal(HEIGHTS.minRoofPhotons, j.excluded.min_roof_photons);
+  assert.equal(HEIGHTS.buildingsCrossed, j.excluded.buildings_crossed_pooled);
+  assert.equal(HEIGHTS.buildingsTooFewRoofPhotons, j.excluded.n_too_few_roof_ph);
+
+  // The §5.1 pointwise relief gate (CORRECTION 2026-08-07) — the correction that
+  // produced this verdict, so its counts are published and pinned like any other
+  // exclusion. spec §5.4: a drop that is not counted reads as coverage.
+  assert.equal(HEIGHTS.groundReliefM, j.excluded.ground_relief_m);
+  assert.equal(HEIGHTS.groundWindowsGated, j.excluded.ground_windows_gated);
+  assert.equal(HEIGHTS.buildingsGroundRefused, j.excluded.n_ground_refused);
+  assert.ok(j.excluded.photons_over_gated_ground_windows > 0,
+    'the gate refused windows but counted no photons over them — §5.4 forbids a '
+    + 'silent exclusion, and a zero here would mean the ledger is not wired up');
+
+  // The method-stability evidence: it exists, it is marked unpublished, and the
+  // shipped allowance is one of the rows rather than a value nobody swept.
+  const ms = j.method_stability;
+  assert.equal(ms.published, false,
+    'method_stability is method evidence below the bar — it must never be flagged as '
+    + 'a published result');
+  const shipped = ms.relief_allowances.filter((r) => r.shipped);
+  assert.equal(shipped.length, 1);
+  assert.equal(shipped[0].relief_m, HEIGHTS.groundReliefM);
+  assert.equal(new Set(ms.relief_allowances.map((r) => r.verdict)).size, 1,
+    'the note and the HEIGHTS comment both claim the relief allowance does not move '
+    + 'the verdict — if that stops being true, the claim must be rewritten, not the '
+    + 'allowance re-picked');
+  assert.equal(shipped[0].verdict, s.verdict,
+    'the shipped allowance\'s sweep row must reproduce the published verdict');
+
+  // The floor caveat, which spec §5.3 requires to travel beside the method: the
+  // 2 m roof-band floor deletes low returns and so acts on any bias positively.
+  assert.equal(HEIGHTS.roofFloorM, j.excluded.roof_band_m[0]);
+  assert.equal(HEIGHTS.roofPhotonsBelowFloor, j.excluded.roof_photons_below_band);
+
   // The fill cohort ships as a verdict and a count only — never as a number.
   assert.equal(HEIGHTS.fill.n, j.fill.n);
   assert.equal(HEIGHTS.fill.minN, j.fill.min_n);
   assert.equal(HEIGHTS.fill.verdict, j.fill.verdict);
 
-  // The floor caveat, which spec §5.3 requires to travel beside the bias: the
-  // 2 m roof-band floor deletes low returns and so pushes every bias positive.
-  assert.equal(HEIGHTS.roofFloorM, j.excluded.roof_band_m[0]);
-  assert.equal(HEIGHTS.roofPhotonsBelowFloor, j.excluded.roof_photons_below_band);
-
-  // Terrain: measured, gates nothing, but still must not drift from its artefact.
+  // Terrain: measured, gates nothing, unaffected by the ground-line correction,
+  // but still must not drift from its artefact.
   assert.equal(HEIGHTS.demMinusLaserGroundM, j.terrain.dem_minus_laser_ground_m);
 
   // Finally, the sentences the reader actually sees must match the numbers above:
   // a rounded figure in the note is the easiest thing to leave behind.
   assert.ok(HEIGHTS.note.includes(`n = ${HEIGHTS.nBuildings} buildings`),
     'the note states n — it must be the artefact\'s n');
+  assert.ok(HEIGHTS.note.includes(`minimum of ${HEIGHTS.minBuildings}`),
+    'the note states the pre-registered bar — it must be the artefact\'s bar');
   assert.ok(HEIGHTS.note.includes(`${HEIGHTS.topWardBuildings} of `),
     'the note states the one-ward concentration — it must be the artefact\'s count');
-  assert.ok(HEIGHTS.note.includes(`+${HEIGHTS.p65BiasM.toFixed(1)} m higher`),
-    'the note quotes the p65 bias — it must be the artefact\'s p65');
-  assert.ok(HEIGHTS.note.includes(`+${HEIGHTS.medianBiasM.toFixed(1)} m`),
-    'the note quotes the median bias — it must be the artefact\'s median');
   assert.ok(HEIGHTS.note.includes(`${HEIGHTS.erosionM} m erosion`),
     'the note quotes the erosion — it must be the artefact\'s erosion');
+  assert.ok(HEIGHTS.note.includes(`${HEIGHTS.minRoofPhotons} roof photons`),
+    'the note quotes the roof-photon bar — it must be the artefact\'s bar');
 
-  // THE INTERVALS, which were the one published pair left unpinned. Both biases
-  // were checked above, but a note may state a bias correctly and an interval
-  // that no longer matches — and the CI is what carries "excludes zero", the
-  // single most consequential word in the sentence. Demonstrated: moving
-  // p65_ci95_m to [-0.2, 5.0] silently turned `p65ExcludesZero` false, made the
-  // whole p65 guard vacuous, and left the note asserting an exclusion the
-  // artefact no longer showed. The converse guard now lives in
-  // assertAccuracyLogic(); this pins the digits themselves.
-  const sgn = (x) => `${x < 0 ? '−' : '+'}${Math.abs(x).toFixed(1)}`;
-  const interval = (ci) => `${sgn(ci[0])} to ${sgn(ci[1])} m`;
-  assert.ok(HEIGHTS.note.includes(interval(HEIGHTS.ci95M)),
-    `the note must quote the median CI as "${interval(HEIGHTS.ci95M)}"`);
-  assert.ok(HEIGHTS.note.includes(interval(HEIGHTS.p65Ci95M)),
-    `the note must quote the p65 CI as "${interval(HEIGHTS.p65Ci95M)}"`);
+  // THE ONE FIGURE AN UNDERPOWERED VERDICT STILL PERMITS. Everything else was
+  // withheld, so this is the only number in the sentence and a stale one would
+  // be both invisible and the whole of what the note asserts.
+  const dsm = HEIGHTS.note.match(/about ([\d.]+) m above laser ground/);
+  assert.ok(dsm, 'the note must quote the DEM-minus-laser offset in those words');
+  assert.ok(Math.abs(Number(dsm[1]) - j.terrain.dem_minus_laser_ground_m) < 0.05,
+    `the note says ${dsm?.[1]} m but the artefact measured `
+    + `${j.terrain.dem_minus_laser_ground_m} m`);
+
+  // ... and NO other statistic may have crept into the sentence.
+  assert.ok(!/\bbias(ed)?\b|\bCIs?\b|confidence interval|excludes zero/i.test(HEIGHTS.note),
+    'the cohort is underpowered, so the note may not quote a difference or an interval');
 });
 
 test('daytime is never presented as more certain than night', () => {
