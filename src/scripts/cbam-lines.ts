@@ -290,14 +290,21 @@ export function sumTotals(results: readonly CertificateEstimate[]): Totals {
   }
 
   return {
-    certificates: certificates.toString(),
+    // toFixed(), not toString(): certificate-estimate.ts's figureFrom already
+    // makes this call (see its comment at the certificates field) because
+    // Decimal#toString can emit exponential notation ('1e-7') for a small
+    // enough residual — verified: 0.00000005 + 0.00000005 .toString() is
+    // '1e-7'. Unlikely at real CBAM masses, but this total feeds the
+    // printable audit document (Task 6), and toString() would contradict the
+    // exact rule its own line-level figures follow just above it.
+    certificates: certificates.toFixed(),
     // Explicit ROUND_HALF_UP (matching figureFrom's own per-line rounding in
     // certificate-estimate.ts), not the ambient decimal.js config — the sum
     // here is exact to 2dp by construction (see the rounding-choice note
     // above), but pinning the mode keeps this correct even if that ever
     // changes, without depending on sefa.ts having run first to set it.
     costEur: pricedLines > 0 && costKnown ? costEur.toFixed(2, Decimal.ROUND_HALF_UP) : null,
-    chargeableTco2e: chargeableTco2e.toString(),
+    chargeableTco2e: chargeableTco2e.toFixed(),
     pricedLines,
     refusedLines,
     anyPending,
