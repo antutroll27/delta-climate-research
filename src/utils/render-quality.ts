@@ -59,8 +59,40 @@ const PROFILES: Record<RenderTier, Omit<RenderQualityProfile, 'gpuLabel'>> = {
   },
 };
 
-const LOW_GPU = /(swiftshader|software|llvmpipe|virtualbox|microsoft basic|intel\(r\)? (uhd|hd) graphics|iris|mali-[gt][0-7]|adreno [1-5]|powervr)/i;
-const MID_GPU = /(iris(?:\(r\))?\s+xe|mx[1-5][0-9]{2}|gtx 9|gtx 10[5-6]|radeon vega|adreno 6|apple gpu.*a1[0-3]\b)/i;
+/**
+ * ANGLE reports trademark noise inside the model name — "AMD Radeon(TM) Vega 8
+ * Graphics", "Intel(R) Arc(TM) Graphics". Stripping it first is not cosmetic:
+ * the old `radeon vega` rule could NEVER match a real Chrome label, because
+ * "(TM) " sits between the two words. Every AMD APU therefore scored tier 2 and
+ * ran the GPU solver on exactly the integrated hardware caps.ts says it must
+ * not. Normalise once, then write the patterns the way a person reads a GPU.
+ */
+function normaliseGpuLabel(label: string): string {
+  return label.toLowerCase().replace(/\((?:tm|r)\)|[™®]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+const LOW_GPU = /(swiftshader|software|llvmpipe|virtualbox|microsoft basic|intel (uhd|hd) graphics|iris|mali-[gt][0-7]|adreno [1-5]|powervr)/;
+/**
+ * Capable but INTEGRATED. Tier 1 keeps the 3D relief view while routing the
+ * solver to the CPU, which is the point: a shared-memory ping-pong plus readback
+ * on an igpu is routinely slower than the CPU loop it replaces (see caps.ts).
+ *
+ * The model-number rules are what separate integrated from discrete on shared
+ * brand names: `arc graphics` is Meteor Lake's igpu, `arc a770 graphics` is a
+ * card; Vega 3/8/11 are APUs, Vega 56/64 are cards.
+ */
+const MID_GPU = new RegExp([
+  'iris xe',                    // Tiger Lake and later Intel igpu
+  'intel xe graphics',          // same silicon, driver reports it without "iris"
+  'intel arc graphics',         // Meteor/Lunar/Arrow Lake igpu — NOT "arc a770"
+  'intel graphics(?! *[0-9])',  // generic modern Intel igpu label
+  'radeon (?:rx )?vega (?:[0-9]|1[01])\\b', // AMD APU; Vega 56/64 are discrete
+  'radeon graphics',            // generic Ryzen APU label, no model number
+  'mx[1-5][0-9]{2}',
+  'gtx 9', 'gtx 10[5-6]',
+  'adreno 6',
+  'apple gpu.*a1[0-3]\\b',
+].join('|'));
 
 interface NavigatorWithRenderHints extends Navigator {
   readonly deviceMemory?: number;
@@ -88,8 +120,11 @@ export function classifyHardware(hints: RenderHardwareHints): RenderTier {
 
 /** Conservative GPU classification for labels exposed by WebGL/ANGLE. */
 export function classifyGpu(label: string): RenderTier {
-  if (MID_GPU.test(label)) return 1;
-  if (label === 'no-webgl' || LOW_GPU.test(label)) return 0;
+  if (label === 'no-webgl') return 0;
+  const name = normaliseGpuLabel(label);
+  // MID is tested first on purpose: "iris xe" must beat the bare "iris" in LOW.
+  if (MID_GPU.test(name)) return 1;
+  if (LOW_GPU.test(name)) return 0;
   return 2;
 }
 
