@@ -12,13 +12,15 @@ import PairedBench from '../../components/ClimateEngine/compare/PairedBench.astr
 </Base>
 
 <script>
-  import { mountPairedBench } from '../../scripts/climate-engine/compare/paired-controller';
-
   let dispose: (() => void) | null = null;
-  const boot = () => {
-    if (document.querySelector('[data-compare-root]') && !dispose) dispose = mountPairedBench();
+  let bootGeneration = 0;
+  const boot = async () => {
+    const generation = ++bootGeneration;
+    if (!document.querySelector('[data-compare-root]') || dispose) return;
+    const { mountPairedBench } = await import('../../scripts/climate-engine/compare/paired-controller');
+    if (generation === bootGeneration && document.querySelector('[data-compare-root]') && !dispose) dispose = mountPairedBench();
   };
-  boot();
-  document.addEventListener('astro:page-load', boot);
+  void boot();
+  document.addEventListener('astro:page-load', () => { void boot(); });
   document.addEventListener('astro:before-swap', () => { dispose?.(); dispose = null; });
 </script>

@@ -1,7 +1,7 @@
 /**
  * Heat-sim engine ABI + pure physics helpers.
  *
- * Every backend (sim-gpu.ts today; sim-ts.ts / sim-wasm.ts later) implements
+ * Every backend (sim-gpu-webgl2.ts today; sim-ts.ts / sim-wasm.ts later) implements
  * HeatSim, so the worker/stage can swap engines without knowing which one it
  * holds (see caps.ts — `backend` is a preference, not a guarantee).
  *
@@ -137,6 +137,17 @@ export const DEFAULT_PARAMS: SimParams = {
  */
 export const STORE_NIGHT = 0.1052;
 
+/**
+ * Synthetic fully vegetated reference cell used by Explore and Compare.
+ *
+ * This is a land-cover counterfactual under the same forcing, not a measured
+ * rural station, an urban–rural pair, or the observed DC-URS rural baseline.
+ */
+export const ALL_GREEN_REFERENCE = { albedo: 0.25, vegetation: 1, built: 0 } as const;
+
+/** Version for derived heat metrics; the calibrated field remains heat-model-v1. */
+export const HEAT_METRICS_VERSION = 'heat-metrics-v2' as const;
+
 /** CFL bound for the 5-point explicit Laplacian (dx=1). The pure-diffusion 2D
  *  limit is D·dt ≤ 0.25, but the source/sink term (−k·T) tips the checkerboard
  *  mode past |g|=1 AT that edge (observed: field diverges to a spurious hot mean
@@ -166,6 +177,21 @@ export function equilibriumC(p: SimParams, albedo: number, veg: number, built: n
   return (gain + pull) / k;
 }
 
+/** Equilibrium temperature of the declared all-green synthetic reference cell. */
+export function allGreenReferenceC(params: SimParams): number {
+  return equilibriumC(
+    params,
+    ALL_GREEN_REFERENCE.albedo,
+    ALL_GREEN_REFERENCE.vegetation,
+    ALL_GREEN_REFERENCE.built,
+  );
+}
+
+/** Modelled ward mean minus the all-green synthetic reference under identical forcing. */
+export function greenReferenceContrastC(meanC: number, params: SimParams): number {
+  return meanC - allGreenReferenceC(params);
+}
+
 /**
  * Runnable check for the pure physics (no DOM/GPU). Node 24:
  *   node --experimental-strip-types -e "import('./types.ts').then(m => m.assertSimLogic())"
@@ -184,4 +210,11 @@ export function assertSimLogic(): void {
   a(hot > 40 && hot < 55, `built core equilibrium plausible (got ${hot.toFixed(1)}°C)`);
   a(cool < p.tAir, `vegetated cell cools below air temp (got ${cool.toFixed(1)}°C)`);
   a(hot - cool > 8, 'core vs veg contrast is legible');
+  a(allGreenReferenceC(p) === cool, 'all-green reference delegates to equilibriumC');
+  const night = { ...p, store: STORE_NIGHT };
+  const omittedStore = (night.S * 0.75 * night.sun - night.L + night.kRad * night.tSky
+    + night.h * night.wind * night.tAir) / (night.kRad + night.h * night.wind);
+  a(Math.abs(allGreenReferenceC(night) - omittedStore
+    - night.store / (night.kRad + night.h * night.wind)) < 1e-10,
+  'all-green reference includes nocturnal storage');
 }
