@@ -330,6 +330,32 @@ export function computeCost(iv: Interventions, sp: Spatial | null): number {
     + (iv.facades / 15) * sp.facadeM2 * 0.25 * COST.facadeM2;
 }
 
+/**
+ * Humidity gate on evapotranspiration, CAPPED AT 1.0 — 2026-08-09, see
+ * docs/green-score-methodology.md §4.2.2.
+ *
+ * Uncapped, this ramp kept RAISING evapotranspiration as the air dried, to 1.2x
+ * at rh 0, while the model's own 4 K vegetated-surface bar LOSES headroom as the
+ * sky dries. The two crossed near 22 % rh — and ward-observations.json records
+ * humidity down to 14.1 %, so the model broke its own physical bar on six of 298
+ * readings we actually measured.
+ *
+ * The cap is the anchor the linear form never had. Real stomata CLOSE under high
+ * vapour-pressure deficit and transpiration falls; a term rising without limit as
+ * air dries has the physics backwards at the dry end. A linear rise is a fair
+ * local approximation near ordinary humidity, and that is exactly where this
+ * leaves it alone: the cap binds only below rh 33.3 %, so 230 of those 298
+ * readings are bit-for-bit identical and the median-case Green Score is unmoved.
+ *
+ * ONE DEFINITION ON PURPOSE. This expression was copy-pasted across seven sites —
+ * two here, five in scripts/ — and capping some of them would have left the
+ * offline analyses modelling different physics from the page. Python's copy lives
+ * in scripts/_physics.py:evap_scale and must be changed with this one.
+ */
+export function evapScale(rh: number): number {
+  return Math.min(1, 0.6 + 0.6 * (1 - rh / 100));
+}
+
 /** Scenario forcing → SimParams (§2 D retune, §3.4 facade Q cut, §4 diurnal/pathway). */
 export function currentParams(s: ScenarioState): SimParams {
   const L = s.live, obsTair = L ? L.tAir : FALLBACK_TAIR, obsRh = L ? L.rh : 60;
@@ -348,7 +374,7 @@ export function currentParams(s: ScenarioState): SimParams {
      wet-bulb past human survivability (see shiftAirPreservingVapour). */
   const rh = s.heatTairC == null ? obsRh
     : shiftAirPreservingVapour(obsTair, obsRh, s.heatTairC);
-  const evap = 0.6 + 0.6 * (1 - rh / 100);
+  const evap = evapScale(rh);
   const Q = DEFAULT_PARAMS.Q * (1 - FACADE_Q * (s.iv.facades / 15));
   const b: SimParams = { ...DEFAULT_PARAMS, D: SIM_D, Q, wind, L: DEFAULT_PARAMS.L * evap };
 
@@ -387,7 +413,7 @@ export function currentParamsForReference(
 ): SimParams {
   const wind = Math.min(2.5, Math.max(0.3, ambient.wind / 3));
   const cloud = ambient.cloud / 100;
-  const evap = 0.6 + 0.6 * (1 - ambient.rh / 100);
+  const evap = evapScale(ambient.rh);
   const Q = DEFAULT_PARAMS.Q * (1 - FACADE_Q * (iv.facades / 15));
   const base: SimParams = { ...DEFAULT_PARAMS, D: SIM_D, Q, wind, L: DEFAULT_PARAMS.L * evap, tAir: ambient.tAir };
   const tSky = skyTemperatureC(ambient.tAir, ambient.rh, cloud);

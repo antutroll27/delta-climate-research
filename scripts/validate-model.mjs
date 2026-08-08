@@ -98,10 +98,11 @@ check(
 );
 /* ── 3c. the two ET bars, across the space the app can actually reach ───────── */
 // BOTH CHECKS ABOVE ARE SINGLE-POINT, AND THE THING THEY CONSTRAIN IS NOT.
-// currentParams scales L by evap = 0.6 + 0.6·(1 − rh/100), so the effective ET
-// coefficient spans 0.6× to 1.2× the constant — a factor of two — while the
-// checks only ever saw the rh = 60 fallback. A bar that is only evaluated at one
-// point of a moving parameter is not a bound, it is an anecdote.
+// currentParams scales L by evapScale(rh), so the effective ET coefficient moves
+// with humidity while these checks only ever saw the rh = 60 fallback. A bar
+// evaluated at one point of a moving parameter is not a bound, it is an anecdote.
+// (The ramp is capped at 1.0 since 2026-08-09, which narrowed that span from
+// 0.6–1.2× to 0.6–1.0× — see §4.2.2. It did not remove the need to sweep.)
 //
 // So: find the humidity at which each bar actually breaks, and report the margin
 // rather than asserting a Kolkata humidity floor nobody measured. The heatwave
@@ -137,11 +138,13 @@ const violatesPark = OBS_RH.filter((rh) => etBars(live(rh), null).park > 8.07).l
 
 check(
   'Vegetated-surface bar holds on observed weather', violatesVeg, 0, 0, ' readings',
-  'THE EVAP RAMP HAS NO UPPER ANCHOR. currentParams scales L by 0.6 + 0.6·(1 − rh/100), '
-  + 'so ET keeps RISING as air dries, while the 4 K headroom shrinks as the sky dries. They '
-  + `cross near 22 % rh, and this archive records humidity down to ${rhSorted[0].toFixed(1)} %. `
-  + 'Real stomata close under high vapour-pressure deficit and ET falls — the ramp models the '
-  + 'opposite. See docs/green-score-methodology.md §4.2.1; this is a MODEL DEFECT, not a bar to relax',
+  'RESIDUAL AFTER THE 2026-08-09 CAP, and reported rather than relaxed. The humidity ramp '
+  + 'is now min(1, 0.6 + 0.6·(1 − rh/100)); uncapped it kept RAISING ET as air dried while the '
+  + '4 K headroom shrinks with the drying sky, and the two crossed at 22 % rh. The cap moved '
+  + `that crossing to 16 % and cut violations from 6 to ${violatesVeg}, on an archive whose driest `
+  + `reading is ${rhSorted[0].toFixed(1)} %. It cannot reach zero without a lower cap that would `
+  + 'reshape ordinary Kolkata humidity — see docs/green-score-methodology.md §4.2.2, which tables '
+  + 'that trade and declines it',
 );
 check(
   'Park-cooling bar holds on observed weather', violatesPark, 0, 0, ' readings',

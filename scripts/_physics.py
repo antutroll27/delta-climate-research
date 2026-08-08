@@ -50,16 +50,33 @@ S_SOLAR = 0.6
 # NOT "the top of the [0.40, 0.46] band" — that band is a fossil of an earlier
 # model and cannot be reproduced from this one (green-score-methodology 4.2.1).
 # 0.46 is an admissible choice inside a ONE-SIDED feasible region whose ceiling is
-# 0.640 at rh 60 and 0.527 at rh 30. The ward-scale fit rails l_et to whatever
+# 0.640 at rh 60 (park bar) and 0.515 at rh 30 (vegetated-surface bar, which is
+# the tighter of the two below ~35% rh). The fit rails l_et to whatever
 # ceiling it is given, so this number is chosen, not fitted.
 L_ET = 0.46
+
+def evap_scale(rh: float) -> float:
+    """Humidity gate on evapotranspiration, CAPPED AT 1.0.
+
+    Mirrors evapScale() in src/scripts/climate-engine/heat-map-model.ts. See
+    docs/green-score-methodology.md 4.2.2: uncapped, this ramp raised ET without
+    limit as the air dried (1.2x at rh 0) while the 4 K vegetated-surface bar
+    LOSES headroom as the sky dries. They crossed near 22% rh, and this project's
+    own ward-observations archive records humidity down to 14.1%.
+
+    ONE DEFINITION ON PURPOSE. The expression was copy-pasted across seven sites;
+    capping only some would leave the offline analyses modelling different physics
+    from the page they are meant to validate.
+    """
+    return min(1.0, 0.6 + 0.6 * (1 - rh / 100))
+
 K_SUM = 0.01 + 0.05          # kRad + h at wind = 1; the RATIO is fitted, the sum is held
 
 #: Nocturnal heat release, night only — the storage flux (ΔQs) a steady-state
 #: balance omits. Mirrors STORE_NIGHT in types.ts. Without it the modelled night
 #: surface sits BELOW air while the measurement puts it 2.10 K above; that is a
 #: sign error and no constant fixes a sign.
-STORE_NIGHT = 0.1052
+STORE_NIGHT = 0.1081   # refitted 2026-08-09 under the capped evap ramp; see types.ts
 NIGHT_ET_FRACTION = 0.10
 Q_NIGHT_RATIO = 0.5
 DEWPOINT_TAPER_K = 1.0
@@ -217,7 +234,7 @@ def predict(sc: Scene, lc: LandCoverClasses,
     k = kRad + h * wind
     pull = kRad * tSky + h * wind * tAir
 
-    L = L_ET * (0.6 + 0.6 * (1 - rh / 100))
+    L = L_ET * evap_scale(rh)
     store = 0.0
     if night:
         # taper ET to zero as the surface approaches the dewpoint, matching

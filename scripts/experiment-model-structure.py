@@ -117,7 +117,7 @@ def _terms(sc: _physics.Scene, ratio: float, c: float, q_day: float
 def _et(sc: _physics.Scene, l_et: float, Q: float, k: float, pull: float,
         rural_built: float) -> float:
     """The ET coefficient for this scene, including the night taper."""
-    L = l_et * (0.6 + 0.6 * (1 - sc.rh / 100))
+    L = l_et * _physics.evap_scale(sc.rh)
     if sc.phase == "night":
         dry_veg = (Q * rural_built + pull) / k
         headroom = (dry_veg - _physics.dewpoint(sc.tAir, sc.rh)) / _physics.DEWPOINT_TAPER_K

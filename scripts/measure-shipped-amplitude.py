@@ -128,7 +128,7 @@ def main() -> None:
         night = sc.phase == "night"
         kRad = _physics.K_SUM * ratio / (1 + ratio)
         h = _physics.K_SUM - kRad
-        L = _physics.L_ET * (0.6 + 0.6 * (1 - sc.rh / 100))
+        L = _physics.L_ET * _physics.evap_scale(sc.rh)
         if night:
             L *= _physics.NIGHT_ET_FRACTION
         params = {

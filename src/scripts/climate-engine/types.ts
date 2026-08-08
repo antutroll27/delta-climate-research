@@ -133,8 +133,7 @@ export const DEFAULT_PARAMS: SimParams = {
   // WHAT ACTUALLY CONSTRAINS L, one-sided: park cooling ≤ 8.07 °C (Li et al.
   // 2022, Kolkata daytime max) and a vegetated surface within 4 K of air. Both
   // are ceilings. In constant-space they depend on humidity, because L below is
-  // scaled by evap = 0.6 + 0.6·(1 − rh/100) — a factor of two across the range —
-  // and WHICH BAR BINDS CHANGES WITH IT:
+  // scaled by evapScale(rh) — and WHICH BAR BINDS CHANGES WITH IT:
   //
   //      rh 60   park binds   L ≤ 0.640        rh 30   veg binds   L ≤ 0.515
   //
@@ -142,19 +141,20 @@ export const DEFAULT_PARAMS: SimParams = {
   //  and put rh 30 at 0.527. Wrong: below ~35 % rh the vegetated-surface bar is
   //  the tighter of the two.)
   //
-  // KNOWN DEFECT, FOUND WHILE VERIFYING THE ABOVE — the ramp has no upper anchor.
-  // It keeps RAISING evapotranspiration as air dries, while the 4 K headroom
-  // SHRINKS as the sky dries. The two cross near 22 % rh. Real stomata close
-  // under high vapour-pressure deficit and ET falls; the ramp models the
-  // opposite. This is reachable on observed weather, not a corner case:
-  // ward-observations.json records humidity down to 14.1 %, and 6 of its 298
-  // readings put a vegetated surface further than 4 K below air. The heatwave
-  // overlay widens the window but does not cause it.
+  // A DEFECT WAS FOUND WHILE VERIFYING THE ABOVE, AND IT WAS THE RAMP, NOT L.
+  // Uncapped, evap kept RAISING evapotranspiration as air dried while the 4 K
+  // headroom SHRINKS as the sky dries; the two crossed near 22 % rh. That is
+  // reachable on observed weather — ward-observations.json records humidity down
+  // to 14.1 %, and 6 of its 298 readings put a vegetated surface more than 4 K
+  // below air. Fixed 2026-08-09 by capping the ramp at 1.0 (see evapScale in
+  // heat-map-model.ts): crossing 22 % → 16 %, violations 6 → 3, and 230 of the
+  // 298 readings bit-for-bit unchanged.
   //
-  // So the defect is the RAMP, not L's magnitude, and the fix is a design
-  // decision — cap the multiplier, or lower L, or bound the validity envelope —
-  // that moves published output and is not being made silently here.
-  // validate-model.mjs now fails visibly on it rather than checking rh 60 alone.
+  // NOT fully closed, deliberately. Below the cap the ET term is frozen while
+  // the headroom keeps shrinking, so a crossing must still exist. Closing it
+  // needs a lower cap that reshapes ordinary Kolkata humidity —
+  // green-score-methodology §4.2.2 tables that trade and declines it.
+  // validate-model.mjs reports the residual rather than hiding it.
   //
   // WHY NOT MOVE IT TO THE CEILING. Because the ceiling is not evidence that the
   // value belongs there. Raising L to 0.527 would be adopting the largest number
@@ -169,12 +169,20 @@ export const DEFAULT_PARAMS: SimParams = {
   L: 0.46,
   h: 0.05,
   wind: 1,
-  // 0.4131, down from 0.55. The old value was inflated by a calibration that
+  // 0.3936, down from 0.55. The old value was inflated by a calibration that
   // asked one term to carry the entire urban–rural difference between two
   // GHS-SMOD masks that are, measured, the same landscape. Halving it is what
   // the ward-scale evidence says, and it directly reduces the built term's
   // over-dominance of the within-ward pattern.
-  Q: 0.4131,
+  //
+  // REFITTED 2026-08-09 from 0.4131. Capping the evapotranspiration humidity
+  // ramp (§4.2.2) changed the physics the calibration trains on, so candidate G
+  // was re-run against it: a model fitted to one shape and executed with another
+  // is not calibrated, and this constant came from that fit. Measured cost of
+  // adopting it: Green Scores move by ZERO on modest, moderate and full
+  // intervention; built-surface-above-air 13.34 → 13.02 K and land-cover
+  // contrast 9.62 → 9.46 °C, both well inside their published bars.
+  Q: 0.3936,
   tAir: 32,
   // Day. `currentParams` substitutes STORE_NIGHT for the retained phase.
   store: 0,
@@ -186,8 +194,11 @@ export const DEFAULT_PARAMS: SimParams = {
  * Ward-scale fit against 79 ECOSTRESS ward-scenes. With it the modelled night
  * surface sits above air as measured (bias +0.13 K, was −0.97 K); without it
  * the sign is wrong no matter how the constants are tuned.
+ *
+ * REFITTED 2026-08-09 from 0.1052, alongside Q — same reason, same run of
+ * candidate G under the capped humidity ramp. Mirrored in scripts/_physics.py.
  */
-export const STORE_NIGHT = 0.1052;
+export const STORE_NIGHT = 0.1081;
 
 /**
  * Synthetic fully vegetated reference cell used by Explore and Compare.
