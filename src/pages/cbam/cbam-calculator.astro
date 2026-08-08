@@ -112,6 +112,12 @@ import Footer from '../../components/layout/Footer.astro';
           </div>
 
           <p class="cb-note" id="cbStatus" role="status" aria-live="polite"></p>
+
+          <div class="cb-lineactions">
+            <button id="cbAdd" type="button" class="cb-btn">Add line to estimate</button>
+            <button id="cbCsv" type="button" class="cb-btn" disabled>Export CSV</button>
+            <button id="cbDoc" type="button" class="cb-btn" disabled>Export document</button>
+          </div>
         </section>
 
         <!-- aria-live: the figure AND the refusal both need announcing. A refusal only
@@ -137,6 +143,10 @@ import Footer from '../../components/layout/Footer.astro';
         and 181 of those are iron and steel.
       </p>
     </div>
+
+    <!-- Print-only. Filled at export time; offscreen otherwise. NOT [hidden] —
+         display:none would defeat the visibility trick in the print stylesheet below. -->
+    <section id="cbPrint" aria-hidden="true"></section>
   </main>
 
   <Footer />
@@ -224,6 +234,20 @@ import Footer from '../../components/layout/Footer.astro';
 
   .cb-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
   @media (max-width: 480px) { .cb-row2 { grid-template-columns: 1fr; } }
+
+  /* #cbAdd/#cbCsv/#cbDoc are static markup (present at build time), so a scoped rule
+     reaches them directly — unlike the runtime-injected nodes styled further below. */
+  .cb-btn {
+    border: 0; border-radius: 10px; padding: 0.62rem 1.05rem; cursor: pointer;
+    background: var(--color-well); color: var(--color-paper);
+    font-family: var(--font-mono); font-size: 0.68rem; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.1em;
+    transition: background-color 0.2s ease, opacity 0.2s ease;
+  }
+  .cb-btn:hover:not(:disabled) { background: color-mix(in srgb, var(--color-cyan) 18%, var(--color-well)); }
+  .cb-btn:focus-visible { outline: 2px solid var(--color-cyan); outline-offset: 2px; }
+  .cb-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+  #cbAdd { background: color-mix(in srgb, var(--color-cyan) 22%, var(--color-well)); }
 
   .cb-note {
     font-family: var(--font-mono); font-size: 0.66rem; letter-spacing: 0.1em;
@@ -360,5 +384,29 @@ import Footer from '../../components/layout/Footer.astro';
   .cb-out .cb-notes { margin: 0.7rem 0 0; padding-left: 1.1rem; }
   .cb-out .cb-notes li {
     margin-bottom: 0.4rem; font-size: 0.78rem; line-height: 1.65; color: var(--color-ink-muted);
+  }
+</style>
+
+<!-- Multi-line addition (Task 6). A SEPARATE is:global block, deliberately: the plain selectors
+     below apply to a mix of static markup (#cbAdd/#cbCsv/#cbDoc's layout row, though the buttons'
+     own look lives in the scoped block above) and runtime-injected nodes (.cb-attest, .cb-line-x,
+     .cb-line-head all come from renderYearThreshold/renderLineCard's innerHTML). :global() WRITTEN
+     INSIDE an is:global block is a silent no-op — Astro runs no scoping pass over an is:global
+     block at all, so a :global(...) wrapper ships to the browser as literal, invalid CSS syntax
+     and the whole rule is dropped. Every selector here is therefore a plain, unwrapped selector. -->
+<style is:global>
+  #cbPrint { position: absolute; left: -200vw; top: 0; width: 180mm; }
+  .cb-lineactions { display: flex; gap: 0.6rem; margin-top: 0.9rem; flex-wrap: wrap; }
+  .cb-attest { display: flex; gap: 0.5rem; align-items: baseline; margin-top: 0.6rem; font-size: 0.85rem; }
+  .cb-line-head { display: flex; gap: 0.75rem; align-items: baseline; margin: 1.1rem 0 0.35rem; }
+  .cb-line-x { margin-left: auto; }
+  #cbPrint table { border-collapse: collapse; width: 100%; font-size: 9pt; }
+  #cbPrint th, #cbPrint td { border: 1px solid #999; padding: 3pt 5pt; text-align: left; }
+  #cbPrint .cbp-loc { font-size: 7pt; }
+  #cbPrint code { word-break: break-all; }
+  @media print {
+    html.cb-printing body * { visibility: hidden; }
+    html.cb-printing #cbPrint, html.cb-printing #cbPrint * { visibility: visible; }
+    html.cb-printing #cbPrint { position: absolute; inset: 0; width: auto; }
   }
 </style>
