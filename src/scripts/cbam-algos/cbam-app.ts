@@ -648,6 +648,7 @@ export function initCbam(): void {
   const scope = $<HTMLSelectElement>('cbScope'), scopeRow = $('cbScopeRow');
   const add = $<HTMLButtonElement>('cbAdd'), csvBtn = $<HTMLButtonElement>('cbCsv');
   const docBtn = $<HTMLButtonElement>('cbDoc'), printEl = $('cbPrint');
+  const outWrap = $('cbOutWrap');
   if (!cn || !country || !route || !mass || !date || !out || !status) return;
 
   /**
@@ -863,8 +864,28 @@ export function initCbam(): void {
     });
   }
 
+  /**
+   * KNOWN, ACCEPTED, COSMETIC RACE (quality review item 7): if an onAdd() is still in flight
+   * (awaiting ensurePack/lineFingerprint) when the user removes their ONLY existing line, `lines`
+   * drops to 0 and this branch fires — the panel flashes to the single-line preview for the
+   * moment before the pending add resolves and flips it back to the multi-line view. Final state
+   * is correct either way; nothing here is stale or wrong, just briefly cosmetically wrong. Not
+   * fixed: avoiding it needs a new piece of shared "adds in flight" state and a decision about
+   * what the empty-but-pending panel should show meanwhile, for a rare interleaving (two
+   * deliberate, independent clicks landing within the same fingerprint-hashing window) whose
+   * worst outcome is a sub-second flicker. Documented per review guidance, not papered over.
+   */
   function renderAll(): void {
-    if (!lines.length) { lastPairs = []; run(); return; }   // single-line path, unchanged
+    if (!lines.length) {
+      lastPairs = [];
+      // Single-line mode keeps its ORIGINAL, tested contract: the whole panel is one aria-live
+      // region, because a refusal only sighted users learn about is not a refusal (the .astro
+      // file's own framing-banner comment). Restore "polite" in case a prior multi-line render
+      // (below) turned it off.
+      outWrap?.setAttribute('aria-live', 'polite');
+      run();
+      return;
+    }
     const pairs = safeEstimates(lines);
     lastPairs = pairs;
     const ok = pairs.filter((p) => p.e !== null);
@@ -885,6 +906,21 @@ export function initCbam(): void {
         <p class="cb-reason">${esc((err as Error).message)}</p></div>`;
     }
 
+    // MULTI-LINE MODE NARROWS THE LIVE REGION (quality review item 5). #cbOut's aria-live was
+    // written for the single-line preview, where one edit replaces one card. In multi-line mode
+    // the SAME region holds every year card, every line card, every waterfall and provenance
+    // stamp, and renderAll replaces all of it on every add, remove and attest toggle — so a
+    // screen-reader user ticking ONE checkbox got the ENTIRE, ever-growing panel read back. This
+    // file already fixed the identical shape of problem once (see the mass-input debounce below:
+    // a screen-reader user "heard the whole result... once per keystroke"); there is no debounce
+    // lever here — these are discrete clicks, not rapid typing — so instead the panel's live
+    // region is turned OFF for the duration of multi-line mode, and #cbStatus (its own, already
+    // separately-live region) carries a short, current summary instead: the line count, as
+    // before, plus the headline total when one exists. TRADE-OFF, taken deliberately: a
+    // screen-reader user no longer hears per-line detail automatically after each edit — they
+    // still can, by navigating into the (unchanged, still fully marked-up) panel — in exchange
+    // for not being read a wall of cards after every single click.
+    outWrap?.setAttribute('aria-live', 'off');
     out!.innerHTML = yearsHtml + renderTotals(totals) + pairs.map((p, i) => p.e
       ? renderLineCard(p.l, p.e, i)
       : `<article class="cb-line" data-line="${esc(p.l.id)}">
@@ -899,26 +935,54 @@ export function initCbam(): void {
          </article>`).join('');
     csvBtn && (csvBtn.disabled = false);
     docBtn && (docBtn.disabled = false);
-    status!.textContent = `${lines.length} line${lines.length === 1 ? '' : 's'} in this estimate.`;
+    const headline = totals.pricedLines > 0
+      ? ` ${num(totals.certificates)} certificates${totals.costEur ? `, ${eur(totals.costEur)}` : ''}.`
+      : '';
+    status!.textContent = `${lines.length} line${lines.length === 1 ? '' : 's'} in this estimate.${headline}`;
   }
 
   async function onAdd(): Promise<void> {
-    if (!await ensurePack()) return;
-    const l = draftLine();
-    if (!l) {
-      status!.textContent =
-        'Complete the line first: good, origin, route, a non-negative mass and a valid import date.';
-      return;
+    // Disabled for the FULL duration of this call (quality review item 6) — not a "no duplicate
+    // lines" rule. Two lines with identical fields can be a legitimate estimate (two separate
+    // shipments of the same good), so deliberate re-adding must stay possible; this only closes
+    // the double-click window: two rapid clicks on #cbAdd before the first click's async
+    // ensurePack/lineFingerprint settled used to add the same drafted line twice, under two
+    // different UUIDs. The outer try/finally guarantees re-enabling on every exit — the early
+    // "pack failed to load" return, the "form incomplete" return, the fingerprint failure below,
+    // and the success path alike.
+    if (add) add.disabled = true;
+    try {
+      if (!await ensurePack()) return;
+      const l = draftLine();
+      if (!l) {
+        status!.textContent =
+          'Complete the line first: good, origin, route, a non-negative mass and a valid import date.';
+        return;
+      }
+      try {
+        // Every other fallible async path in this file reports a failure to #cbStatus (ensurePack
+        // does; onDoc's thresholdByYear catch does). This one didn't (quality review item 1): with
+        // crypto.subtle.digest forced to reject, clicking Add did nothing visible at all — no
+        // line, no status change, the rejection reaching only devtools. lineFingerprint can
+        // genuinely fail (no secure context, a disabled Web Crypto API, the same class of failure
+        // any other await here already guards against), and the user needs to be told, not left
+        // clicking a button that appears to do nothing.
+        fingerprints.set(l.id, await lineFingerprint(l));
+      } catch (err) {
+        status!.textContent = `Could not add the line: ${(err as Error).message}`;
+        return;
+      }
+      lines.push(l);
+      // The set of lines for this line's year just changed, so any EXISTING attestation for that
+      // year was a claim about a list that no longer matches what's on screen — see the symmetric
+      // drop in onOutClick's remove branch for the full rule and why "drop only when the year
+      // empties" is not enough.
+      const year = yearOf(l);
+      if (!Number.isNaN(year)) attested.delete(year);
+      renderAll();
+    } finally {
+      if (add) add.disabled = false;
     }
-    fingerprints.set(l.id, await lineFingerprint(l));
-    lines.push(l);
-    // The set of lines for this line's year just changed, so any EXISTING attestation for that
-    // year was a claim about a list that no longer matches what's on screen — see the symmetric
-    // drop in onOutClick's remove branch for the full rule and why "drop only when the year
-    // empties" is not enough.
-    const year = yearOf(l);
-    if (!Number.isNaN(year)) attested.delete(year);
-    renderAll();
   }
 
   /**
@@ -939,9 +1003,16 @@ export function initCbam(): void {
    * engineer away.
    */
   function onOutClick(ev: Event): void {
+    // closest(), not a direct getAttribute() read off ev.target (quality review item 4): the
+    // Remove button is text-only today, so ev.target IS the button on every real click — but
+    // that is an accident of today's markup, not a guarantee. The moment anyone adds an icon or
+    // wraps the label in a <span>, a click lands on that CHILD, ev.target's own data-remove is
+    // absent, and the click silently does nothing. closest() walks up to the element that
+    // actually carries the attribute, on the button itself or any descendant of it.
     const t = ev.target as HTMLElement;
-    const rm = t.getAttribute('data-remove');
-    if (rm) {
+    const removeBtn = t?.closest?.<HTMLElement>('[data-remove]') ?? null;
+    if (removeBtn) {
+      const rm = removeBtn.getAttribute('data-remove')!;
       const i = lines.findIndex((l) => l.id === rm);
       if (i >= 0) {
         const [removed] = lines.splice(i, 1);
@@ -950,11 +1021,23 @@ export function initCbam(): void {
         if (!Number.isNaN(year)) attested.delete(year);
       }
       if (!lines.length) { csvBtn && (csvBtn.disabled = true); docBtn && (docBtn.disabled = true); }
-      renderAll(); return;
+      renderAll();
+      // renderAll rebuilds #cbOut via innerHTML, destroying the Remove button just clicked and
+      // dropping keyboard focus to <body> (quality review item 2 — the attest branch below got
+      // this fix; this branch didn't). Deterministic target: splice() shifts every later line
+      // down by one, so the button now sitting at the removed line's own index `i` is the line
+      // that visually took its place — focus that. If `i` ran past the end (the removed line was
+      // the last one and others remain), Math.min falls back to the new last Remove button. If no
+      // lines remain, both are absent and focus falls to the Add button, the only actionable
+      // control left once the panel returns to the single-line preview.
+      const remaining = out!.querySelectorAll<HTMLButtonElement>('[data-remove]');
+      (remaining[Math.min(i, remaining.length - 1)] ?? add)?.focus();
+      return;
     }
-    const at = (t as HTMLInputElement).getAttribute?.('data-attest');
-    if (at) {
-      (t as HTMLInputElement).checked ? attested.add(Number(at)) : attested.delete(Number(at));
+    const attestBox = t?.closest?.<HTMLInputElement>('[data-attest]') ?? null;
+    if (attestBox) {
+      const at = attestBox.getAttribute('data-attest')!;
+      attestBox.checked ? attested.add(Number(at)) : attested.delete(Number(at));
       renderAll();
       // renderAll rebuilds #cbOut via innerHTML, which destroys the checkbox the user just
       // clicked/toggled with the keyboard and drops focus to <body>. The checkbox's identity
@@ -1024,10 +1107,47 @@ export function initCbam(): void {
       rulePackages: priced[0]?.stamp.rulePackages ?? [],
       pack, generatedOn: new Date().toISOString().slice(0, 10),
     });
+
+    // `cb-printing` MUST NOT be able to outlive this call (quality review item 3). It used to
+    // depend solely on `afterprint` firing — but a feature policy denying window.print(), a
+    // browser extension no-op'ing it, or any flow that doesn't complete the print round trip
+    // leaves it on <html> forever. It is invisible on screen (the CSS that reacts to it is
+    // `@media print` only), so nothing SHOWS this happened — until the next time this page is
+    // printed by ANY means, Ctrl+P included, when the user gets this stale audit document (or a
+    // blank page) instead of whatever they actually asked to print. `cleanup` is idempotent and
+    // reachable from three independent paths, so no single missing event can strand the class:
+    //   1. `afterprint` — the normal, complete round trip.
+    //   2. `matchMedia('print')`'s `change` event — fires around the real print/preview lifecycle
+    //      in Chromium and Firefox even in some cases where `afterprint` is suppressed.
+    //   3. A hard timeout — the last-resort net under both, for the pathological case where
+    //      nothing above ever fires at all (e.g. printing is silently blocked outright).
+    let cleaned = false;
+    let fallbackTimer = 0;
+    const mql = window.matchMedia?.('print') ?? null;
+    const onMqlChange = (e: MediaQueryListEvent) => { if (!e.matches) cleanup(); };
+    const cleanup = () => {
+      if (cleaned) return;
+      cleaned = true;
+      document.documentElement.classList.remove('cb-printing');
+      window.removeEventListener('afterprint', cleanup);
+      mql?.removeEventListener('change', onMqlChange);
+      clearTimeout(fallbackTimer);
+    };
     document.documentElement.classList.add('cb-printing');
-    const done = () => document.documentElement.classList.remove('cb-printing');
-    window.addEventListener('afterprint', done, { once: true });
-    window.print();
+    window.addEventListener('afterprint', cleanup, { once: true });
+    mql?.addEventListener('change', onMqlChange);
+    // 30s: generous enough not to race a user genuinely still deciding in a real print dialog
+    // (matchMedia already covers that transition in the browsers that support it), short enough
+    // that a silently-blocked print does not leave the page in a printable-wrong state for long.
+    fallbackTimer = window.setTimeout(cleanup, 30_000);
+    try {
+      window.print();
+    } catch (err) {
+      // window.print() can throw synchronously (a feature policy denying it, for one) — clean up
+      // immediately rather than wait for any of the above to do it.
+      cleanup();
+      status!.textContent = `Could not open the print dialog: ${(err as Error).message}`;
+    }
   }
 
   // route/scope/mass/date/cn/country changes preview the draft line only while `lines` is empty
