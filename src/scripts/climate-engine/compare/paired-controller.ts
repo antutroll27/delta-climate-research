@@ -1,7 +1,7 @@
 import { fmtCr } from '../heat-map-model.ts';
 import { WARDS, WARD_IDS, nextDistinctWard, type WardId } from '../wards.ts';
 import { enablePairedMapInteraction, renderPairedMap, resetPairedMapView, thermalPatternSummary } from './paired-map-2d.ts';
-import { PairedScenarioClient } from './paired-client.ts';
+import { createPairedScenarioClient } from './paired-client.ts';
 import type { MetricValue, PairedResult, WardScenarioResult } from './paired-protocol.ts';
 import { parsePairedScenario, serializePairedScenario } from '../scenario/scenario-url.ts';
 import { coverageIsZero, normalizeCoverage, type CoverageScenario } from '../scenario/scenario-state.ts';
@@ -50,7 +50,7 @@ export function mountPairedBench(): () => void {
   let enhancementPromise: Promise<void> | null = null;
   let latestResult: PairedResult | null = null;
   let presentedResult: PairedResult | null = null;
-  const pairedClient = new PairedScenarioClient();
+  const pairedClient = createPairedScenarioClient();
   const cleanup: Array<() => void> = [];
   const mapCleanup = new Map<HTMLCanvasElement, () => void>();
 
