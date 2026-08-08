@@ -20,7 +20,8 @@ that were uncited, self-referential, or not scientifically supportable — all n
 sourced (§4). A validation harness scores model output against published measurements on every run,
 so the model can't drift quietly again. It passes **10 of 11** checks. The one failure is
 deliberate and live: §4.2.2 found that the evapotranspiration humidity ramp breaks the model's
-own physical bar on six of our 298 observed humidity readings, and the harness reports it
+own physical bar on six of our 298 observed humidity readings. Capping the ramp cut that to
+three and left 230 of the 298 readings bit-for-bit unchanged; the harness reports the residual
 rather than hiding it.
 
 **What changed since the first issue.** The previous version said plainly that nothing had been
@@ -284,7 +285,7 @@ anybody, us included.
 **What actually constrains `L`.** Two ceilings, both one-sided: park cooling **≤ 8.07 °C**
 (Li et al. 2022, Kolkata daytime maximum) and a vegetated surface within **4 K** of air.
 Translating them into constant-space depends on humidity, because `currentParams` scales `L`
-by `evap = 0.6 + 0.6·(1 − rh/100)` — a factor of two across the range:
+by `evapScale(rh)` (see §4.2.2) — which moves it substantially across the range:
 
 | requirement holds at | binding bar | ceiling on the constant `L` |
 |---|---|---|
@@ -331,11 +332,49 @@ unchanged, so median-case Green Scores do not move at all — but a cap tight en
 the worst corner (dry base plus extreme heatwave) bites below 44 % rh and touches a third of
 the archive. Lowering `L` moves every score instead.
 
-**No change has been made.** Choosing between these moves published output, and it is a
-decision to take deliberately rather than fold into a documentation commit.
-`scripts/validate-model.mjs` now **fails visibly** on this check instead of passing an rh-60
-single point, and `tests/unit/heat-map-validation.test.mjs` pins the 22 % crossing so it
-cannot widen unnoticed.
+**Decision: cap the ramp at 1.0.** It fixes the physics where it is wrong and leaves it alone
+where it is right — the cap binds only below rh 33.3 %, so **230 of the 298 readings are
+bit-for-bit unchanged** and the median-case Green Score does not move at all. Lowering `L`
+would instead move every score on every day, including the median case that was never wrong,
+and would treat a magnitude as the fault when the shape is.
+
+Measured outcome:
+
+| | before | after |
+|---|---|---|
+| crossing (bar breaks below) | 22 % rh | **16 % rh** |
+| violations on observed weather | 6 of 298 | **3 of 298** |
+| violations including the heatwave overlay | 134 of 1490 | **15 of 1490** |
+| readings changed at all | — | 68 of 298 |
+
+**Not fully closed, deliberately.** Below the cap the ET term is frozen while the 4 K headroom
+keeps shrinking with the drying sky, so a crossing must still exist somewhere. Closing it
+entirely needs a cap near 0.95, which bites below 44 % rh and reshapes a third of the archive
+— humidity that is entirely ordinary for Kolkata. Three residual readings out of 298 is the
+better trade, and `validate-model.mjs` **fails visibly** on them rather than hiding them.
+
+**One consequence worth stating plainly: this moved two shipped constants.** The ramp is not
+only in the renderer — `scripts/fit-ward-scale.py` trains on the same expression, and the
+shipped `Q` and `STORE_NIGHT` are candidate G's fitted values from that script. A model
+calibrated against one shape and executed with another is not calibrated, so the fit was
+re-run under the cap and its output adopted:
+
+| constant | was | now |
+|---|---|---|
+| `Q` (anthropogenic heat, day) | 0.4131 | **0.3936** |
+| `STORE_NIGHT` (nocturnal release) | 0.1052 | **0.1081** |
+
+Adopting them costs **zero** movement in the Green Score on modest, moderate and full
+intervention. Built-surface-above-air goes 13.34 → 13.02 K and land-cover contrast 9.62 →
+9.46 °C, both well inside their published bars. `data/calibration/model-accuracy.json` was
+re-measured against the new constants; every stratum moved by less than 0.13 K and the
+published bands (± 3.0 night, ± 4.5 day) remain conservative against the measured error.
+
+**The expression now has one definition per language.** It had been copy-pasted across seven
+sites — two in the renderer, five in `scripts/` — and capping only some would have left the
+offline analyses validating physics the page does not run. It is now `evapScale()` in
+`heat-map-model.ts` and `evap_scale()` in `scripts/_physics.py`, with every site calling one
+of those two.
 
 **Why it was not moved to the ceiling.** Because a ceiling is not evidence that the value
 belongs against it. Raising `L` to 0.527 would mean adopting the largest number the guardrail
@@ -350,7 +389,7 @@ less sensitive to this constant than the earlier warning suggested, and saying s
 the correction.
 
 **What changed in the code.** Only the validation harness, and only to make it honest: both
-ET bars were single-point checks at rh 60 on a coefficient that moves by a factor of two with
+ET bars were single-point checks at rh 60 on a coefficient that moves substantially with
 humidity. `validate-model.mjs` now sweeps the reachable space — every heatwave the instrument
 can produce, plus the humidity at which each bar first breaks — and reports that break point
 as a robustness margin rather than asserting a Kolkata humidity floor nobody measured.
@@ -423,23 +462,24 @@ rows stale against the shipped constants).
 
 | Check | Value | Expected | |
 |---|---|---|---|
-| Land-cover thermal contrast | 9.62 °C | 8–18 °C | ok |
-| Max ward cooling ≤ local park cooling | 4.55 °C | ≤ 5.80 °C | ok |
+| Land-cover thermal contrast | 9.46 °C | 8–18 °C | ok |
+| Max ward cooling ≤ local park cooling | 4.54 °C | ≤ 5.80 °C | ok |
 | Local park cooling | 5.80 °C | ≤ 8.07 °C (Kolkata daytime max) | ok — one-sided, see §4.2 |
 | Vegetated surface below air | 0.48 K | ≤ 4 K | ok |
-| Built surface above air | 13.34 K | 5–25 K | ok |
+| Built surface above air | 13.02 K | 5–25 K | ok |
 | Facade vs cool-roof cost per m² | 63× | 40–80× | ok |
 | Score at zero intervention | 2 | 0–10 | ok |
 | Score at full intervention | 67 | 0–100 | ok |
 | **Park-cooling bar on observed weather** | **0 readings** | **0** | **ok** |
 | **Heatwave overlay from the median day** | **2.54 K** | **0–4 K** | **ok** |
-| **Vegetated-surface bar on observed weather** | **6 readings** | **0** | **FAILS — §4.2.2** |
+| **Vegetated-surface bar on observed weather** | **3 readings** | **0** | **FAILS — §4.2.2** |
 
 **10 of 11**, from 4 of 10 before the audit. The single failure is deliberate and live: the
 three rows in bold were added in the 2026-08-09 re-derivation, and the last of them is the
 defect §4.2.2 describes — the evapotranspiration humidity ramp breaks the model's own 4 K
-physical bar on six of the 298 humidity readings in our own observation archive. It is
-reported rather than relaxed, which is what this harness is for.
+physical bar in dry air. Capping the ramp took it from six of 298 observed readings to three;
+the rest cannot be closed without reshaping ordinary Kolkata humidity, so it is reported rather
+than relaxed, which is what this harness is for.
 
 **One methodological note you should interrogate.** Three checks were demoted from pass/fail to
 informational. Before doing that I tested whether they were real defects, and all three borrowed

@@ -150,7 +150,12 @@ def predict(p: dict[str, float], r: Row, night_release: bool) -> float:
     k = kRad + h * r.wind
     pull = kRad * tSky + h * r.wind * r.tAir
 
-    L = p["l_et"] * (0.6 + 0.6 * (1 - r.rh / 100))
+    # CAPPED AT 1.0 — mirrors currentParams in heat-map-model.ts; see
+    # docs/green-score-methodology.md 4.2.2. Uncapped this ramp raised ET without
+    # limit as air dried, past the model's own 4 K vegetated-surface bar on six of
+    # the 298 readings in this very archive. Training on a different shape than
+    # the one that ships is not calibration, so the cap belongs in both places.
+    L = p["l_et"] * _physics.evap_scale(r.rh)
     if night:
         dry = (Q * r.built + pull) / k
         headroom = (dry - _physics.dewpoint(r.tAir, r.rh)) / _physics.DEWPOINT_TAPER_K

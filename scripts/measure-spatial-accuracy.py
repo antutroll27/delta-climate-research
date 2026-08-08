@@ -245,7 +245,7 @@ def modelled_field(sc: _physics.Scene, veg: npt.NDArray[np.float32],
     k = kRad + h * sc.wind
     pull = kRad * tSky + h * sc.wind * sc.tAir
 
-    L = _physics.L_ET * (0.6 + 0.6 * (1 - sc.rh / 100))
+    L = _physics.L_ET * _physics.evap_scale(sc.rh)
     if night:
         # The ET taper keys off the ward's mean built fraction, matching
         # nightLatent()'s use of a single rural reference rather than a per-cell
@@ -306,7 +306,7 @@ def model_terms(sc: _physics.Scene, veg: npt.NDArray[np.float32],
     sun = 0.0 if night else sc.sun * (1 - 0.6 * sc.cloud)
     Q = q_day * (_physics.Q_NIGHT_RATIO if night else 1.0)
     k = kRad + h * sc.wind
-    L = _physics.L_ET * (0.6 + 0.6 * (1 - sc.rh / 100))
+    L = _physics.L_ET * _physics.evap_scale(sc.rh)
     if night:
         L = L * _physics.NIGHT_ET_FRACTION
     return {

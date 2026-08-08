@@ -10,7 +10,7 @@
     "night": {
       "n": 20,
       "ceiling_rmse_K": 2.18,
-      "model_rmse_K": 3.04,
+      "model_rmse_K": 3.09,
       "reported_band_K": 3.5,
       "confidence": "quantitative",
       "why": "air temperature explains night surface temperature well (r ~ 0.9), so a calibrated model is meaningful here"
@@ -49,10 +49,10 @@
         11.5
       ],
       "offset_K": {
-        "ecostress": 2.23,
-        "landsat": -1.487
+        "ecostress": 2.11,
+        "landsat": -1.529
       },
-      "delta_K": -3.718,
+      "delta_K": -3.639,
       "n_overpasses": {
         "ecostress": 2,
         "landsat": 50
@@ -66,14 +66,14 @@
       "night": {
         "n_scenes": 50,
         "n_overpasses": 20,
-        "rmse_K": 2.807,
-        "bias_K": -0.926,
+        "rmse_K": 2.838,
+        "bias_K": -1.018,
         "loo_overpass_rmse_K": 2.791,
         "ci95_K": [
-          1.897,
-          3.644
+          1.938,
+          3.668
         ],
-        "ci95_halfwidth_K": 0.873,
+        "ci95_halfwidth_K": 0.865,
         "hour_range": [
           0.7,
           23.84
@@ -83,14 +83,14 @@
       "morning_ecostress": {
         "n_scenes": 11,
         "n_overpasses": 5,
-        "rmse_K": 6.326,
-        "bias_K": 1.6,
-        "loo_overpass_rmse_K": 7.544,
+        "rmse_K": 6.316,
+        "bias_K": 1.475,
+        "loo_overpass_rmse_K": 7.57,
         "ci95_K": [
-          3.648,
-          9.513
+          3.772,
+          9.473
         ],
-        "ci95_halfwidth_K": 2.933,
+        "ci95_halfwidth_K": 2.851,
         "hour_range": [
           7.09,
           11.06
@@ -100,14 +100,14 @@
       "morning_landsat": {
         "n_scenes": 213,
         "n_overpasses": 50,
-        "rmse_K": 2.664,
-        "bias_K": -1.487,
-        "loo_overpass_rmse_K": 2.255,
+        "rmse_K": 2.685,
+        "bias_K": -1.529,
+        "loo_overpass_rmse_K": 2.253,
         "ci95_K": [
-          2.168,
-          3.147
+          2.189,
+          3.17
         ],
-        "ci95_halfwidth_K": 0.489,
+        "ci95_halfwidth_K": 0.491,
         "hour_range": [
           10.39,
           10.41
@@ -117,14 +117,14 @@
       "peak_ecostress": {
         "n_scenes": 24,
         "n_overpasses": 9,
-        "rmse_K": 3.382,
-        "bias_K": 2.535,
-        "loo_overpass_rmse_K": 2.402,
+        "rmse_K": 3.3,
+        "bias_K": 2.418,
+        "loo_overpass_rmse_K": 2.413,
         "ci95_K": [
-          2.143,
-          4.642
+          2.051,
+          4.571
         ],
-        "ci95_halfwidth_K": 1.25,
+        "ci95_halfwidth_K": 1.26,
         "hour_range": [
           11.76,
           17.45

@@ -14,7 +14,7 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import * as M from '../../src/scripts/climate-engine/heat-map-model.ts';
-import { DEFAULT_PARAMS } from '../../src/scripts/climate-engine/types.ts';
+import { DEFAULT_PARAMS, STORE_NIGHT } from '../../src/scripts/climate-engine/types.ts';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const read = async (p) => JSON.parse(await readFile(join(ROOT, p), 'utf8'));
@@ -147,8 +147,15 @@ test('park cooling is exactly 15x the effective L — the identity every ceiling
   }
 });
 
-test('L is scaled by humidity across a factor of two, so single-point checks are not bounds', () => {
-  assert.ok(Math.abs(peakAt(0).L / peakAt(100).L - 2) < 1e-9, 'evap spans 1.2x to 0.6x of the constant');
+test('the humidity ramp is CAPPED at 1.0, and the cap binds only in dry air', () => {
+  /* The cap is the fix from §4.2.2. Below rh 33.3 the ramp would have kept
+     climbing to 1.2x; above it nothing changed, which is the whole point. */
+  assert.equal(M.evapScale(0), 1, 'the ramp must not exceed 1.0 however dry the air');
+  assert.equal(M.evapScale(20), 1, 'the cap binds in dry air');
+  assert.ok(Math.abs(M.evapScale(33.4) - 1) < 2e-3, 'the cap releases around rh 33.3');
+  assert.ok(Math.abs(M.evapScale(60) - 0.84) < 1e-9, 'ordinary humidity is untouched');
+  assert.ok(Math.abs(M.evapScale(100) - 0.6) < 1e-9, 'the wet end is untouched');
+  assert.ok(peakAt(0).L / peakAt(100).L < 1.7, 'the effective span must be narrower than the old 2x');
 });
 
 test('below ~35% rh the VEGETATED-SURFACE bar binds, not park cooling', () => {
@@ -166,23 +173,23 @@ test('below ~35% rh the VEGETATED-SURFACE bar binds, not park cooling', () => {
   }
 });
 
-test('KNOWN DEFECT: the evap ramp drives the ET term past its own physical bar in dry air', () => {
-  /* NOT a passing grade — a pinned defect, so it cannot widen unnoticed.
-     currentParams scales L by evap = 0.6 + 0.6*(1 - rh/100), which keeps RAISING
-     evapotranspiration as the air dries and has no upper anchor. Real plants do
-     the opposite: stomata close under high vapour-pressure deficit and ET falls.
-     Meanwhile the 4 K headroom SHRINKS as the sky dries. The two cross at about
-     22% rh — and our own ward-observations archive records humidity down to
-     14.1%, so this is reachable on observed weather, not only in a corner case.
+test('RESIDUAL DEFECT: the bar still breaks below ~16% rh, down from 22%', () => {
+  /* NOT a passing grade — a pinned residual, so it cannot widen unnoticed.
+     Capping the ramp at 1.0 (§4.2.2) moved the crossing from 22% rh to 16% and
+     cut observed-weather violations from 6 of 298 readings to 3. It did not
+     eliminate them: below the cap the ET term is frozen while the 4 K headroom
+     keeps shrinking with the drying sky, so a crossing must still exist
+     somewhere. Closing it entirely needs a lower cap, which would reshape
+     ordinary Kolkata humidity — the trade §4.2.2 tables and declines.
 
-     If this test fails, the crossing point has MOVED. Re-derive; do not retune
-     the expectation. */
+     If this test fails, the crossing has MOVED. Re-derive; do not retune the
+     expectation to match. */
   const crossing = (() => {
     for (let rh = 100; rh >= 1; rh--) if (vegBelowAirOf(peakAt(rh)) > 4) return rh + 1;
     return 0;
   })();
-  assert.ok(crossing >= 20 && crossing <= 24,
-    `the bar is expected to break just below ~22% rh; measured ${crossing}%`);
+  assert.ok(crossing >= 14 && crossing <= 18,
+    `the bar is expected to break just below ~16% rh after the cap; measured ${crossing}%`);
   // Above the crossing the model is sound, and that is the great majority of weather.
   for (const rh of [30, 40, 54, 60, 80]) {
     assert.ok(vegBelowAirOf(peakAt(rh)) <= 4, `the bar must hold at rh ${rh}, well inside ordinary humidity`);
@@ -198,7 +205,7 @@ test('the heatwave overlay widens that defect rather than causing it', () => {
     assert.ok(vegBelowAirOf(peakAt(60, { heatTairC })) <= 4, `from a 60% base, ${heatTairC} C must stay physical`);
     assert.ok(parkDropOf(peakAt(60, { heatTairC })) <= 8.07, `park cooling must hold at ${heatTairC} C`);
   }
-  assert.ok(vegBelowAirOf(peakAt(22, { heatTairC: 48 })) > 4,
+  assert.ok(vegBelowAirOf(peakAt(16, { heatTairC: 48 })) > 4,
     'the dry-base + extreme-heatwave corner is known to violate; if it stops, the model changed');
 });
 
@@ -209,4 +216,40 @@ test('night is not the binding phase — nightLatent cuts the ET term by an orde
     assert.ok(night.L < day.L / 5, `night ET must be far below day ET at rh ${rh}`);
     assert.ok(vegBelowAirOf(night) <= 4, `the bar must hold at night at rh ${rh}`);
   }
+});
+
+test('Explore and Compare gate evapotranspiration identically', () => {
+  /* These two forcings are separate functions with separate call sites, and this
+     codebase has already been bitten once by them drifting — currentParamsForReference
+     carries a comment about omitting the storage term making the views "disagree at
+     night by ~1.7 K, and only one of them would be right". The humidity ramp is the
+     same hazard: capping one copy and not the other would make Compare and Explore
+     model different physics in dry air, silently and only for dry days. */
+  for (const rh of [10, 22, 33, 45, 60, 85]) {
+    const explore = M.currentParams({
+      live: { tAir: 32, rh, wind: 3, cloud: 0 }, phase: 'peak', path: '2025', iv: ZERO_IV,
+    });
+    const compare = M.currentParamsForReference(
+      { tAir: 32, rh, wind: 3, cloud: 0 }, 'peak', ZERO_IV,
+    );
+    assert.ok(Math.abs(explore.L - compare.L) < 1e-12,
+      `at rh ${rh} Explore L=${explore.L} and Compare L=${compare.L} must be the same physics`);
+  }
+});
+
+test('the shipped constants match the calibration run they came from', async () => {
+  /* Q and STORE_NIGHT are candidate G's fitted values from fit-ward-scale.py.
+     Capping the humidity ramp changed what that script trains on, so both were
+     re-fitted and re-adopted — a model calibrated against one shape and executed
+     with another is not calibrated. Nothing checked that correspondence before,
+     which is exactly why it went unnoticed until a mutation test asked. */
+  const fit = await read('data/calibration/ward-scale-fit.json');
+  const g = fit.candidates.find((c) => c.key === 'G');
+  assert.ok(g, 'candidate G is the one the shipped constants come from');
+  assert.ok(Math.abs(g.fitted.q_day - DEFAULT_PARAMS.Q) < 5e-4,
+    `shipped Q ${DEFAULT_PARAMS.Q} has drifted from candidate G's ${g.fitted.q_day} — re-run fit-ward-scale.py or explain why`);
+  assert.ok(Math.abs(g.fitted.release_base - STORE_NIGHT) < 5e-4,
+    `shipped STORE_NIGHT ${STORE_NIGHT} has drifted from candidate G's ${g.fitted.release_base}`);
+  // l_et is bounded, not fitted — it must still be the constant §4.2.1 chose.
+  assert.equal(g.fitted.l_et, DEFAULT_PARAMS.L, 'the fit must be run with the shipped L');
 });

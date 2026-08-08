@@ -1,7 +1,7 @@
 {
   "note": "EXPERIMENT. Ward-scale calibration against ward-mean ECOSTRESS. Not shipped until a human has read the out-of-sample column.",
   "ship": false,
-  "ward_scenes": 79,
+  "ward_scenes": 85,
   "wards": [
     "ballygunge",
     "barrackpore",
@@ -13,7 +13,7 @@
       "key": "A",
       "label": "ward-scale baseline (shipping structure)",
       "fitted": {
-        "q_day": 0.4134,
+        "q_day": 0.3949,
         "ratio": 0.15,
         "c": 1.4
       },
@@ -21,44 +21,43 @@
         "ratio",
         "c"
       ],
-      "rmse_K": 3.605,
-      "bias_K": 0.164,
-      "day_bias_K": 2.044,
-      "night_bias_K": -0.926,
-      "oos_rmse_K": 3.605,
+      "rmse_K": 3.602,
+      "bias_K": 0.275,
+      "day_bias_K": 2.121,
+      "night_bias_K": -1.018,
+      "oos_rmse_K": 3.608,
       "oos_by_ward": {
-        "ballygunge": 3.036,
-        "barrackpore": 3.396,
-        "baruipur": 4.384
+        "ballygunge": 3.156,
+        "barrackpore": 3.331,
+        "baruipur": 4.336
       }
     },
     {
       "key": "A2",
       "label": "baseline, c held admissible at 1.24",
       "fitted": {
-        "q_day": 0.6,
+        "q_day": 0.597,
         "ratio": 0.15
       },
       "pinned": [
-        "q_day",
         "ratio"
       ],
-      "rmse_K": 3.951,
-      "bias_K": -0.038,
-      "day_bias_K": 2.55,
-      "night_bias_K": -1.539,
-      "oos_rmse_K": 3.953,
+      "rmse_K": 3.93,
+      "bias_K": 0.166,
+      "day_bias_K": 2.624,
+      "night_bias_K": -1.554,
+      "oos_rmse_K": 3.937,
       "oos_by_ward": {
-        "ballygunge": 3.423,
-        "barrackpore": 3.702,
-        "baruipur": 4.734
+        "ballygunge": 3.515,
+        "barrackpore": 3.644,
+        "baruipur": 4.652
       }
     },
     {
       "key": "B",
       "label": "+ ET coefficient free",
       "fitted": {
-        "q_day": 0.4892,
+        "q_day": 0.4712,
         "ratio": 0.15,
         "c": 1.4,
         "l_et": 0.6
@@ -68,26 +67,26 @@
         "c",
         "l_et"
       ],
-      "rmse_K": 3.466,
-      "bias_K": 0.202,
-      "day_bias_K": 1.667,
-      "night_bias_K": -0.648,
-      "oos_rmse_K": 3.472,
+      "rmse_K": 3.457,
+      "bias_K": 0.289,
+      "day_bias_K": 1.758,
+      "night_bias_K": -0.739,
+      "oos_rmse_K": 3.467,
       "oos_by_ward": {
-        "ballygunge": 2.923,
-        "barrackpore": 3.311,
-        "baruipur": 4.182
+        "ballygunge": 3.039,
+        "barrackpore": 3.24,
+        "baruipur": 4.123
       }
     },
     {
       "key": "C",
       "label": "+ nocturnal storage release",
       "fitted": {
-        "q_day": 0.348,
+        "q_day": 0.323,
         "ratio": 0.15,
         "c": 1.4,
         "l_et": 0.6,
-        "release_base": 0.0466,
+        "release_base": 0.0505,
         "release_built": 0.0
       },
       "pinned": [
@@ -96,101 +95,100 @@
         "l_et",
         "release_built"
       ],
-      "rmse_K": 3.319,
-      "bias_K": 0.326,
-      "day_bias_K": 0.687,
+      "rmse_K": 3.29,
+      "bias_K": 0.397,
+      "day_bias_K": 0.8,
       "night_bias_K": 0.116,
-      "oos_rmse_K": 3.355,
+      "oos_rmse_K": 3.339,
       "oos_by_ward": {
-        "ballygunge": 2.85,
-        "barrackpore": 3.155,
-        "baruipur": 4.059
+        "ballygunge": 2.965,
+        "barrackpore": 3.064,
+        "baruipur": 3.987
       }
     },
     {
       "key": "D",
       "label": "+ coupling-ratio bound opened",
       "fitted": {
-        "q_day": 0.4835,
-        "ratio": 0.3325,
-        "c": 1.5969,
+        "q_day": 0.4524,
+        "ratio": 0.1895,
+        "c": 1.5968,
         "l_et": 0.8,
-        "release_base": 0.0215,
+        "release_base": 0.0186,
         "release_built": 0.0
       },
       "pinned": [
         "l_et",
         "release_built"
       ],
-      "rmse_K": 3.147,
-      "bias_K": 0.332,
-      "day_bias_K": 0.686,
-      "night_bias_K": 0.126,
-      "oos_rmse_K": 3.224,
+      "rmse_K": 3.13,
+      "bias_K": 0.376,
+      "day_bias_K": 0.755,
+      "night_bias_K": 0.11,
+      "oos_rmse_K": 3.202,
       "oos_by_ward": {
-        "ballygunge": 2.615,
-        "barrackpore": 3.078,
-        "baruipur": 3.978
+        "ballygunge": 2.72,
+        "barrackpore": 2.992,
+        "baruipur": 3.895
       }
     },
     {
       "key": "E",
       "label": "+ ratio opened, NO storage term",
       "fitted": {
-        "q_day": 0.5069,
-        "ratio": 0.1419,
-        "c": 1.5726,
+        "q_day": 0.4782,
+        "ratio": 0.0734,
+        "c": 1.5971,
         "l_et": 0.8
       },
       "pinned": [
         "l_et"
       ],
-      "rmse_K": 3.176,
-      "bias_K": 0.252,
-      "day_bias_K": 0.892,
+      "rmse_K": 3.158,
+      "bias_K": 0.312,
+      "day_bias_K": 0.93,
       "night_bias_K": -0.12,
-      "oos_rmse_K": 3.195,
+      "oos_rmse_K": 3.189,
       "oos_by_ward": {
-        "ballygunge": 2.597,
-        "barrackpore": 3.104,
-        "baruipur": 3.884
+        "ballygunge": 2.701,
+        "barrackpore": 3.017,
+        "baruipur": 3.849
       }
     },
     {
       "key": "F",
-      "label": "storage + ratio open, ET held physical [0.40,0.46]",
+      "label": "storage + ratio open, ET held at the chosen conservative ceiling 0.46",
       "fitted": {
-        "q_day": 0.2157,
+        "q_day": 0.196,
         "ratio": 0.0286,
         "c": 1.2,
         "l_et": 0.46,
-        "release_base": 0.0531,
-        "release_built": 0.0001
+        "release_base": 0.0555,
+        "release_built": 0.0018
       },
       "pinned": [
         "c",
-        "l_et",
-        "release_built"
+        "l_et"
       ],
-      "rmse_K": 3.299,
-      "bias_K": 0.333,
-      "day_bias_K": 0.796,
+      "rmse_K": 3.267,
+      "bias_K": 0.406,
+      "day_bias_K": 0.893,
       "night_bias_K": 0.064,
-      "oos_rmse_K": 3.339,
+      "oos_rmse_K": 3.304,
       "oos_by_ward": {
-        "ballygunge": 2.825,
-        "barrackpore": 3.102,
-        "baruipur": 4.091
+        "ballygunge": 2.893,
+        "barrackpore": 2.997,
+        "baruipur": 4.022
       }
     },
     {
       "key": "G",
       "label": "storage free, ALL constants held physical",
       "fitted": {
-        "q_day": 0.4131,
+        "q_day": 0.3936,
         "ratio": 0.2,
         "l_et": 0.46,
-        "release_base": 0.1052,
+        "release_base": 0.1081,
         "release_built": 0.0
       },
       "pinned": [
@@ -198,15 +196,15 @@
         "l_et",
         "release_built"
       ],
-      "rmse_K": 3.551,
-      "bias_K": 0.448,
-      "day_bias_K": 0.905,
-      "night_bias_K": 0.182,
-      "oos_rmse_K": 3.619,
+      "rmse_K": 3.505,
+      "bias_K": 0.51,
+      "day_bias_K": 0.98,
+      "night_bias_K": 0.181,
+      "oos_rmse_K": 3.572,
       "oos_by_ward": {
-        "ballygunge": 3.115,
-        "barrackpore": 3.296,
-        "baruipur": 4.445
+        "ballygunge": 3.17,
+        "barrackpore": 3.199,
+        "baruipur": 4.347
       }
     }
   ]
