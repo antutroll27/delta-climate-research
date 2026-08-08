@@ -1,13 +1,13 @@
 /// <reference lib="webworker" />
 import { isAbortError, toPairedWireResult, type PairedWorkerRequest, type PairedWorkerResponse } from './paired-protocol.ts';
-import { PairedScenarioCache, runPairedScenarioCore } from './paired-core.ts';
+import { createPairedScenarioCache, runPairedScenarioCore } from './paired-core.ts';
 
 interface ActiveJob {
   request: Extract<PairedWorkerRequest, { type: 'run' }>;
   controller: AbortController;
 }
 
-const cache = new PairedScenarioCache();
+const cache = createPairedScenarioCache();
 let active: ActiveJob | null = null;
 let pending: Extract<PairedWorkerRequest, { type: 'run' }> | null = null;
 let pumping = false;

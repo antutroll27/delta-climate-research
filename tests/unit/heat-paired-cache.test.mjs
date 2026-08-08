@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-const { PairedScenarioCache } = await import('../../src/scripts/climate-engine/compare/paired-core.ts');
+const { createPairedScenarioCache } = await import('../../src/scripts/climate-engine/compare/paired-core.ts');
 
 const stats = (meanC) => ({ meanC, peakC: meanC + 4, fracAbove: 0, thresholdC: 40 });
 const result = (meanC) => ({ field: new Float32Array(4), stats: stats(meanC) });
@@ -22,7 +22,7 @@ const result = (meanC) => ({ field: new Float32Array(4), stats: stats(meanC) });
  * work, which is the whole defect.
  */
 test('a rejected baseline is evicted, and the next caller re-enters the solver', async () => {
-  const cache = new PairedScenarioCache();
+  const cache = createPairedScenarioCache();
   let calls = 0;
   const create = () => {
     calls += 1;
@@ -42,7 +42,7 @@ test('a rejected baseline is evicted, and the next caller re-enters the solver',
 });
 
 test('concurrent callers still share one in-flight baseline solve', async () => {
-  const cache = new PairedScenarioCache();
+  const cache = createPairedScenarioCache();
   let calls = 0;
   let settle;
   const create = () => { calls += 1; return new Promise((resolve) => { settle = resolve; }); };
@@ -63,7 +63,7 @@ test('concurrent callers still share one in-flight baseline solve', async () => 
  * for everyone already awaiting it.
  */
 test('a late rejection never evicts the entry that replaced it', async () => {
-  const cache = new PairedScenarioCache();
+  const cache = createPairedScenarioCache();
   let failOld;
   const oldAttempt = cache.baseline('key', () => new Promise((_, reject) => { failOld = reject; }));
   const rejected = assert.rejects(oldAttempt, /abandoned/);
