@@ -68,13 +68,61 @@ Because every term is provided, Landsat LST can be **inverted to surface radianc
 recomputed on any chosen emissivity** — removing the mechanism by construction rather than
 estimating it.
 
-**Two things to get right, and neither should be written from memory:**
+### 3.1 The formula — established empirically, 2026-08-09
 
-- **The inversion formula must be read from the USGS Landsat 8-9 C2 L2 Science Product Guide
-  (LSDS-1619)**, not reconstructed. The single-channel algorithm's exact arrangement of
-  transmittance, upwelled and downwelled terms is the whole point of the exercise.
-- **Scale factors and fill values must come from the Data Format Control Book (LSDS-1328)**,
-  not assumed. Each band carries its own scaling; a wrong factor produces a plausible number.
+LSDS-1619 documents the bands but **not** the equation; it defers to the Cal/Val ADD. That
+turns out not to matter, because **the formula does not need to be read — it can be
+verified.** USGS ships the answer (`ST_B10`) *and* every input, so a candidate arrangement
+either reproduces the shipped temperature from the shipped inputs or it does not.
+
+Tested over 67,600 usable pixels of `LC09_L2SP_138044_20260704_02_T1`, with `K1`/`K2` taken
+from the scene's own MTL rather than assumed:
+
+| candidate arrangement | median &#124;ΔT&#124; |
+|---|---|
+| **`(TRAD − URAD − ATRAN·(1−ε)·DRAD) / (ATRAN·ε)`** | **0.168 K** |
+| `(TRAD − URAD − (1−ε)·DRAD) / (ATRAN·ε)` | 1.171 K |
+| `(TRAD − (1−ε)·DRAD) / ε` | 16.901 K |
+
+**The first is the structure**, by a factor of seven over its nearest rival and a hundred over
+the naive form. Surface temperature then follows from the Planck inversion
+`T = K2 / ln(K1/B + 1)`.
+
+**Scale factors, from LSDS-1619 Table 6-1** — read, not recalled, and one of them is the kind
+of number memory gets wrong:
+
+| band | type | scale | offset | fill |
+|---|---|---|---|---|
+| `ST_B10` | UINT16 | **0.00341802** | **+149** | 0 |
+| `ST_TRAD`, `ST_URAD`, `ST_DRAD` | INT16 | 0.001 | — | −9999 |
+| `ST_ATRAN`, `ST_EMIS`, `ST_EMSD` | INT16 | 0.0001 | — | −9999 |
+| `ST_QA` | INT16 | 0.01 | — | −9999 |
+
+**An unexplained residual, recorded rather than smoothed over.** The winning structure sits
+**+0.168 K** from the shipped product, with a p5–p95 spread of only **0.048 K** — a tight
+systematic, not noise, and far above the 0.0034 K quantisation of `ST_B10`. Most likely a
+band-effective Planck inversion rather than the `K1`/`K2` approximation, or a post-processing
+step in `st_1.3.0`. **It is not yet explained, and this spec does not pretend otherwise.**
+
+**It also does not matter for what we need.** We never require USGS's absolute temperature —
+we require the *change* under a substituted emissivity, and a constant offset cancels in a
+difference. Verified, not assumed: bias-correcting before differencing changes the result by
+**0.0 × 10⁰ K** at every emissivity perturbation tested. Absolute recomputation would need the
+residual explained first; differential recomputation does not.
+
+### 3.2 The sensitivity, measured
+
+**0.585 K per 0.01 of emissivity** (≈ 58 K per unit).
+
+That reframes the whole offset question. Emissivity differences between TES and ASTER-GED
+retrievals over urban surfaces are of order 0.01–0.02 — so **emissivity alone could plausibly
+account for 0.6–1.2 K** of the apparent ECOSTRESS↔Landsat disagreement. And within this single
+urban window emissivity spans 0.9346 to 0.9915, which at this sensitivity is **3.3 K of LST
+spread from emissivity alone** — the same magnitude as the disagreement we are chasing.
+
+**Caveat on scope:** one scene, one window. The sensitivity depends on atmospheric
+transmittance and will vary with conditions; it must be repeated across the archive before
+being quoted as a general figure.
 
 **An honest asymmetry.** Landsat can be recomputed exactly. ECOSTRESS's tiled L2T product ships
 `EmisWB` but not the radiance terms, so it can only be **first-order corrected** using the
