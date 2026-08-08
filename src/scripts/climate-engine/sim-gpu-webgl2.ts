@@ -108,7 +108,7 @@ export class WebGl2HeatSim implements HeatSim {
    * generation check, and the instrument reports a confident "mean 0.0 °C /
    * peak 0.0 °C" under a badge still reading GPU SIM.
    *
-   * Throwing is what makes that survivable: GpuHeatSimHost.reset/.advance turn
+   * Throwing is what makes that survivable: the GPU host's reset/advance turn
    * a throw into demoteSimHost(), which rebuilds on the CPU worker and relabels
    * the badge CPU SIM. The reader keeps a working instrument and a true label.
    */

@@ -13,7 +13,7 @@ import { WARD_MAP, wardLatLon, formatLatLon } from '../../data/wards.ts';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { DEFAULT_PARAMS, greenReferenceContrastC, type SimLayers, type SimParams } from './types';
 import { detectHeatCaps } from './caps';
-import { GpuHeatSimHost, StaticTsHeatSimHost, WorkerHeatSimHost } from './sim-host';
+import { createGpuHost, createStaticHost, createWorkerHost } from './sim-host';
 import type { HeatSimHost, HeatSimRequest, HeatSimSnapshot } from './sim-protocol';
 import * as M from './heat-map-model';
 import { ACCURACY, SPATIAL, HEIGHTS, bandLabel, unmeasuredNote, isTransitionHour, TRANSITION_RMSE_K } from './accuracy';
@@ -532,8 +532,8 @@ export function mountHeatMap(): () => void {
   let latestSnapshot: HeatSimSnapshot | null = null;
   const setSimBackend = (label: string) => setText('simBackend', label);
   const makeCpuHost = (): HeatSimHost => {
-    try { return new WorkerHeatSimHost(); }
-    catch { return new StaticTsHeatSimHost(); }
+    try { return createWorkerHost(); }
+    catch { return createStaticHost(); }
   };
   function initSimHost(): Promise<void> {
     if (simReady) return simReady;
@@ -550,7 +550,7 @@ export function mountHeatMap(): () => void {
       syncRendererVisibility();
       if (caps.backend === 'gpu') {
         try {
-          simHost = new GpuHeatSimHost(document.createElement('canvas'));
+          simHost = createGpuHost(document.createElement('canvas'));
           setSimBackend('GPU SIM');
         } catch {
           simHost = makeCpuHost();
@@ -561,7 +561,7 @@ export function mountHeatMap(): () => void {
         setSimBackend(simHost.backend === 'ts-worker' ? 'CPU SIM' : 'CPU STATIC');
       }
     }).catch(() => {
-      simHost = new StaticTsHeatSimHost();
+      simHost = createStaticHost();
       simAnimate = false;
       setSimBackend('CPU STATIC');
     });
@@ -571,7 +571,7 @@ export function mountHeatMap(): () => void {
     if (!simHost || simHost.backend === 'ts-main') return false;
     const previous = simHost.backend;
     simHost.dispose();
-    simHost = previous === 'gpu-webgl2' ? makeCpuHost() : new StaticTsHeatSimHost();
+    simHost = previous === 'gpu-webgl2' ? makeCpuHost() : createStaticHost();
     if (simHost.backend === 'ts-main') simAnimate = false;
     setSimBackend(simHost.backend === 'ts-worker' ? 'CPU SIM' : 'CPU STATIC');
     return true;
