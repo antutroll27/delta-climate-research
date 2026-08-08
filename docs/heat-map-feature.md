@@ -73,8 +73,9 @@ src/components/ClimateEngine/
 src/scripts/climate-engine/
   caps.ts                                ← device capability probe → tier/backend/grid (BUILT)
   heat-map-scene.ts                      ← three.js render layer (DataTexture + colormap shader)
-  sim-client.ts                          ← worker bridge (postMessage + transferable Float32Array)
-  sim.worker.ts                          ← worker host, runs the engine loop off the main thread
+  sim-protocol.ts                        ← async request/snapshot contract
+  sim-host.ts                            ← GPU, worker, and emergency static host
+  sim-worker.ts                          ← worker host, runs the TypeScript solver off the main thread
   sim-ts.ts                              ← TS reference impl of the HeatSim interface
   types.ts                               ← GridSpec / SimParams / SimStats / HeatSim ABI
 ```
@@ -90,8 +91,8 @@ export interface HeatSim {
   dispose(): void;
 }
 ```
-Ship `sim-ts.ts` first. A future `sim-wasm.ts` (AssemblyScript / Rust / C++) implements the
-**same** interface; the worker picks whichever is available and the page never knows.
+`sim-ts.ts` is the universal worker-backed floor. A future `sim-wasm.ts`
+(AssemblyScript / Rust / C++) can implement the **same** interface behind the host.
 
 ### Device tiering & sim backend (`caps.ts` — BUILT)
 The floor is **never GPU compute**. On the exact devices we worry about (2015 igpu
@@ -106,19 +107,16 @@ WebGL2 float render targets — then maps tier → workload:
 
 | Tier | Grid | Backend | Map mode | Typical device |
 |---|---|---|---|---|
-| 2 full | 256² | `gpu` if a compute path exists, else `ts` | relief | RTX / M-series / modern discrete |
-| 1 balanced | 128² | `ts` (worker CPU) | relief | modern igpu / recent phone |
-| 0 low | 64² | `ts` (worker CPU) | isotherm | 2015 igpu / old Xiaomi |
-| reduced-motion | tier grid | `ts`, one static frame (`animate:false`) | tier mode | any |
+| 2 full | 192² canonical | `gpu-webgl2` if float targets exist, else `ts-worker` | relief | RTX / M-series / modern discrete |
+| 1 balanced | 192² canonical | `ts-worker` | relief | modern igpu / recent phone |
+| 0 low | 192² canonical | `ts-worker` | isotherm | 2015 igpu / old Xiaomi |
+| reduced-motion | 192² canonical | `ts-worker`, one static frame | tier mode | any |
 
-The knob for weak hardware is the **grid** (FD is O(N²): 256²→64² is ~16× cheaper), not
-the language. GPU is gated on tier 2 on purpose — render-quality already demotes software
-renderers/old igpus to 0/1, so `gpu` is only ever chosen on hardware that earned full
-fidelity. `backend` is a `SimBackend` (`gpu|wasm|ts|baked`); `sim-wasm.ts` swaps into the
-`ts` slot later behind the same ABI, and `baked` (cross-fade prebaked scenario frames) is
-the runtime-demotion escape hatch when even 64²/TS can't hold frame budget.
-Detected once on the main thread; `HeatCaps` is postMessage'd into the worker, which never
-re-probes. Pure decision logic is `resolveHeatCaps()`, checked by `assertCapsLogic()`.
+The grid is deliberately **not** the weak-hardware knob: the model is calibrated in cell
+units at 192². Capability changes execution and display quality, not the scientific grid.
+GPU is gated on tier 2 plus `EXT_color_buffer_float`; WebGPU remains diagnostic until a
+WebGPU solver exists. The host demotes GPU → worker → one settled main-thread TypeScript
+result without changing inputs. `resolveHeatCaps()` remains the pure decision boundary.
 
 ### Simulation model
 2D grid (start 256², tier-scaled). Per-cell `T` (°C) + input layers `albedo`, `veg`,
@@ -986,6 +984,80 @@ make every rerun **fully offline**: no token, no network, no granule.
   unsupported p75, the permissive floor, the least-guarded ground reference — live in the
   `HEIGHTS` block comment and in the section above, because a building card cannot carry
   them without burying the two clauses that change how a reader should read the claim.
+
+
+### Auditing an AI-written engine refactor: four defects, one signature (2026-08-08)
+
+Another agent (GPT Codex) rewrote much of the climate engine across two specced tranches
+(`superpowers/specs/2026-08-07-heat-map-{correctness-resilience,performance-tranche}-design.md`):
+the WebGL2 solver replaced `sim-gpu.ts`, the sim moved behind a worker host, Compare's
+calculation moved into a cancellable worker, Explore gained a runtime budget, and the
+heat-map JavaScript became a progressive route graph. It arrived as ~44 uncommitted files
+with 246 passing tests and clean type-checking.
+
+**The hard parts were done well, and that is worth saying first.** Verified independently:
+
+| Claim | Verified |
+|---|---|
+| Calibrated physics untouched | `heat-map-model.ts` **completely unmodified**; `types.ts` removed exactly one line, a comment |
+| New WebGL2 solver ≡ `TsHeatSim` | **2.3 × 10⁻⁵ K max** on real Ballygunge geometry — three orders inside the spec's own ceiling |
+| Compare's move to a worker | **bit-identical**: 0 of 36,864 cells differ |
+| Frame convention | survived **byte-for-byte**, including the `scale(s,−s,s)` winding trap that caused the mirror below |
+| Honesty invariants | all still reach the user |
+| Startup JavaScript | **484 KB → 93 KB gzip (−81 %)** |
+
+**And it found a real bug of ours.** The all-green reference cell omitted the storage term
+that the ward field includes, so the night contrast was inflated by exactly `store/k`.
+Corrected, it moved **+7.2 → +3.7 °C** (peak unchanged, `store = 0`). After the fix the
+metric no longer depends on the storage term at all — it cancels to **3.6 × 10⁻¹⁵ K**,
+floating-point noise. The old bug's size was *wind-dependent* (0.8 K windy, 4.2 K calm), so
+the published figure had been varying silently with the weather. Corroboration: Delhi NCR
+night LST puts compact mid-rise minus low plants at **4.24 K**, so +3.7 K sits just below
+the closest published analogue.
+
+#### The four defects, and what they have in common
+
+1. **Compare cached rejected promises forever.** One superseded run poisoned the key for
+   the session. Reproduced: the solver ran **once across three attempts**, the Retry button
+   was inert, and nothing was shown to the user.
+2. **Continuous animation ran on a `setTimeout(16)` ladder, not `requestAnimationFrame`.**
+   Measured at 144 Hz: **48 fps against 143**, mean frame gap 20.8 ms against 6.9 ms. A
+   16 ms timer plus the next vsync quantises to exactly three refresh intervals. **At 60 Hz
+   there is no difference at all.**
+3. **GPU context loss produced a silent all-zero field.** `readPixels` on a lost context
+   leaves the buffer at zeros, so the map read **mean 0.0 °C** while the badge still said
+   "GPU SIM". `gl.isContextLost()` appeared nowhere in the climate engine.
+4. **2D Isotherm hid the entire 3D scene and froze the pick matrix**, so clicking opened the
+   wrong building's card. The spec had asked for `setMode('relief' | 'isotherm')`; the layer
+   was hidden instead.
+
+Separately, `assertCapsLogic()` was left **failing** — confirmed by running it — and **no
+test called it**, so `npm run verify` passed straight over a broken invariant.
+
+**Every one of these is invisible to static analysis and to the tests that existed.** The
+cache poisoning needs a mid-solve interaction; the context-loss zeros need a real GPU
+eviction; the frame stall needs a display above 60 Hz; the isotherm regression needs someone
+to actually click in isotherm mode. The change set reasoned correctly and verified
+statically. What it did not do was **use** the thing.
+
+Which is exactly why its own specs mandated a GPU-parity test and a cache-lifecycle test —
+and neither was written. The two tests the author specified were the two that would have
+caught the worst of it.
+
+**All six fixed** (`6c9e033`, `aa89a71`, `8dab555`), each with a test proven to fail against
+the unfixed code: a cadence policy pinning `animating → 0` with the 144 Hz quantisation
+recorded beside it, a cache-lifecycle test asserting invocation counts rather than
+resolutions, and the GPU↔TS parity test the spec required. Suite 246 → 258.
+
+**Still open.** The peak "Δ vs all-green ref" displays **−0.4 °C**, but computed from the
+shipped ward means (fvc 0.31–0.45, albedo 0.12–0.14 against a 0.25 reference) the contrast
+is **+5.3 to +11.2 °C** — and every term is positive by construction, so a negative daytime
+value is algebraically impossible from those inputs. Unresolved; it needs checking against
+the running page before anyone acts on it.
+
+**The lesson, stated plainly:** passing tests and a clean type-check measured how carefully
+the code was *written*, not whether it *worked*. The defects clustered in exactly the region
+neither can see — real hardware, real timing, real interaction.
 
 
 ## The ward was drawn MIRRORED, and it took four attempts to see (2026-08-05)

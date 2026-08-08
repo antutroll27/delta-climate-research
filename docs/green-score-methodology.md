@@ -116,7 +116,7 @@ against our own output · **Placeholder** = explicitly temporary.
 |---|---|---|---|
 | Dark roof albedo | 0.15 | Cited — high | LBNL Heat Island Group |
 | Aged cool-roof albedo | 0.60 | Cited — high | LBNL *aged* value, not fresh-white 0.85 — deliberately conservative |
-| Pocket park radius | 50 m (0.785 ha) | Cited — **Kolkata-specific** | Mitra et al. 2022, threshold value of efficiency |
+| Pocket park radius | 50 m (0.785 ha) | Cited — **Kolkata-specific** | Li et al. 2022, threshold value of efficiency (TVoE 0.77 ha — genuinely Kolkata's; see §4.2 correction) |
 | **Evapotranspiration L** | **0.43** | **Derived — see §4.2; contested by satellite fit, see §5A** | Solved against two independent constraints |
 | **Facade heat reduction** | **0.03** | **Cited — corrected from 0.30** | Gunawardena & Steemers 2023 |
 | Influence kernel λ | ≈47 m | Empirical, honestly labelled | See §4.4 |
@@ -188,6 +188,12 @@ no claim to.
 **Fixed:** renamed to **"Δ vs all-green ref"**, with the reference stated in the tooltip and an
 explicit note that measured Kolkata SUHII is a different quantity.
 
+**2026-08-07 implementation correction:** the shared `equilibriumC()` reference now includes
+night storage (`store`). The duplicated old formulas omitted it, overstating retained/night
+contrast but not the heat field. Explore and Compare now share `greenReferenceContrastC()` and
+record `heat-metrics-v2`; this is not a recalibration of `heat-model-v1` or the observed rural
+validation baseline.
+
 I'm flagging this prominently because it is the error I would most want caught in my own work:
 I compared two numbers that shared a name and not a definition.
 
@@ -203,6 +209,39 @@ constraints at once**:
 - vegetated surface no more than **4 K below air** (physical ceiling on ET)
 
 They intersect at **0.40–0.46**. The value is now **0.43**, the midpoint. Both constraints now pass.
+
+> **CORRECTION 2026-08-08 — the first constraint above is misread, and §4.1's own warning
+> is what it violates.**
+>
+> Two errors, found when the citation was checked against the source:
+>
+> 1. **The paper is not by Mitra.** DOI `10.3389/fenvs.2022.1073914` is **Li, Lu, Fu, Sun,
+>    Pan, Han, Guo & Li (2022)**, *Diverse cooling effects of green space on urban heat
+>    island in tropical megacities*. There is no Mitra on the author list.
+> 2. **4.83–8.07 °C is not a Kolkata band.** **8.07 °C is Kolkata's *maximum* UCI; 4.83 °C
+>    is *Bangkok's* maximum.** It is a cross-city range of daytime, winter maxima from fused
+>    Landsat/MODIS — not a range of park cooling measured within Kolkata.
+>
+> What from that paper *is* genuinely Kolkata's, and stands: **TVoE 0.77 ha** and **reach
+> 420 m**.
+>
+> **This is precisely the error §4.1 flags as "the one I would most want caught in my own
+> work" — two numbers that share a name and not a definition.** There it was a validation
+> baseline; here it is a cross-city range of *maxima* compared against a *within-ward*
+> cooling value. Recording it in the same terms rather than quietly repairing the citation.
+>
+> **What it does to `L`.** The real constraint from that paper is one-sided — Kolkata's
+> daytime maximum is 8.07 °C — so the model's 5.42 °C local park cooling does not *violate*
+> it. But the **lower bound was never a constraint**, and it was half of what pinned the
+> intersection. `L = 0.43` therefore rests on one valid constraint (≤ 4 K below air) plus
+> one that does not exist as stated, and **is no longer uniquely determined by the evidence
+> as written**.
+>
+> **`L` has NOT been changed.** Re-deriving it means re-running the calibration and
+> re-validating everything downstream — a code change, not a documentation one, and one
+> that must not be made casually: **cooling is ⅓ of the Green Score**, so if `L` moves, the
+> scores move with it. The honest state today is a shipped constant with a partly-withdrawn
+> derivation, recorded here rather than hidden.
 
 ### 4.3 Green facades were overstated roughly tenfold
 
@@ -265,7 +304,7 @@ composite-indicator practice (OECD/JRC 2008) and the convention in urban-resilie
 |---|---|---|---|
 | Land-cover thermal contrast | 10.35 °C | 8–18 °C | ok |
 | Max ward cooling ≤ local park cooling | 4.45 °C | ≤ 5.42 °C | ok |
-| Local park cooling | 5.42 °C | 4.83–8.07 °C | ok |
+| Local park cooling | 5.42 °C | ≤ 8.07 °C (Kolkata daytime max) | ok — but see below |
 | Vegetated surface below air | 1.61 K | ≤ 4 K | ok |
 | Built surface above air | 14.08 K | 5–25 K | ok |
 | Facade vs cool-roof cost per m² | 63× | 40–80× | ok |
@@ -607,7 +646,7 @@ Verification status is marked per item: **[V]** full text or primary document co
 | Source | Used for | Link |
 |---|---|---|
 | Voogt & Oke (2003), *Thermal remote sensing of urban climates*, **RSE** 86(3):370–384 **[V]** | **§4.1** — daytime *surface* UHI 10–15 °C vs canopy *air* UHI 2–5 °C | [doi:10.1016/S0034-4257(03)00079-8](https://doi.org/10.1016/S0034-4257(03)00079-8) |
-| Mitra et al. (2022), **Frontiers in Environmental Science** — tropical megacities incl. Kolkata **[V]** | **§4.2** — park cool-island 4.83–8.07 °C; TVoE 0.77 ha; reach 420 m | [doi:10.3389/fenvs.2022.1073914](https://doi.org/10.3389/fenvs.2022.1073914) |
+| **Li, Lu, Fu, Sun, Pan, Han, Guo & Li (2022)**, *Diverse cooling effects of green space on urban heat island in tropical megacities*, **Frontiers in Environmental Science** **[V]** — *previously miscited here as "Mitra et al."* | **§4.2** — TVoE **0.77 ha** and reach **420 m** are Kolkata's and stand. **Kolkata's daytime maximum UCI is 8.07 °C; 4.83 °C is Bangkok's** — the "4.83–8.07 °C Kolkata band" this register formerly claimed does not exist. See the §4.2 correction. | [doi:10.3389/fenvs.2022.1073914](https://doi.org/10.3389/fenvs.2022.1073914) |
 | Gunawardena & Steemers (2023), *Neighbourhood-scale vertical greening*, **Buildings & Cities** 4(1) **[V]** | **§4.3** — heat-island intensity 1.86→1.81 K (~3%); energy 2.1–5.2% | [doi:10.5334/bc.282](https://doi.org/10.5334/bc.282) |
 | **LBNL Heat Island Group** — cool roof materials **[V]** | Albedo 0.15 dark / 0.60 aged-cool | [heatisland.lbl.gov/coolscience/cool-roofs](https://heatisland.lbl.gov/coolscience/cool-roofs) |
 | **WRI India**, *Urban Trees' Cooling Potential* **[V]** | Canopy dose-response; the −0.3 °C air vs −27.5 °C surface contrast in §5 | [wri.org/insights/urban-trees-cooling-potential](https://www.wri.org/insights/urban-trees-cooling-potential) |
@@ -673,9 +712,3 @@ and rendered on the tool itself.
 
 Full formulas and every constant: `docs/heat-map-intervention-model.md`
 Validation harness: `scripts/validate-model.mjs`
-
----
-
-*This document leads with limitations rather than capabilities by design. Anything that reads as
-understated should be queried — better to over-disclose internally than to have a municipal client
-discover it first.*
