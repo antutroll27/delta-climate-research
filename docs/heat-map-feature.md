@@ -1049,11 +1049,28 @@ the unfixed code: a cadence policy pinning `animating → 0` with the 144 Hz qua
 recorded beside it, a cache-lifecycle test asserting invocation counts rather than
 resolutions, and the GPU↔TS parity test the spec required. Suite 246 → 258.
 
-**Still open.** The peak "Δ vs all-green ref" displays **−0.4 °C**, but computed from the
-shipped ward means (fvc 0.31–0.45, albedo 0.12–0.14 against a 0.25 reference) the contrast
-is **+5.3 to +11.2 °C** — and every term is positive by construction, so a negative daytime
-value is algebraically impossible from those inputs. Unresolved; it needs checking against
-the running page before anyone acts on it.
+**A reported defect that turned out not to be one — and how it was closed.** The audit
+recorded the peak "Δ vs all-green ref" as **−0.4 °C**. That could not be right: against a
+reference cell of albedo 0.25, vegetation 1, built 0, the daytime contrast is
+
+```
+gain_ward − gain_ref = S(a_ref − a_ward)·sun + Q·built + L(1 − veg)
+```
+
+and for a ward **darker, less green and more built** than the reference every term is
+positive. With the shipped means (fvc 0.31–0.45, albedo 0.12–0.14) that gives **+5.3 to
++11.2 °C**, and no ambient forcing can flip it — running the real `currentParamsForReference`
+across clear, part-cloud, overcast and heatwave conditions returns **+6.5 to +22.3 °C**,
+because higher evapotranspiration makes the contrast *more* positive, not less.
+
+Checked against the running page, the evidence cells read **+10.0 °C and +7.6 °C** — inside
+the predicted range. **The −0.4 °C was a misreading in the audit, not a defect.** No code
+was changed.
+
+Recorded because the process is the point: the algebra said a value was impossible, the
+arithmetic said what it should be instead, and the page settled it. A number that cannot
+exist is worth ten minutes of checking before it becomes a bug report — and equally, worth
+correcting in the record once it turns out to be nothing.
 
 **The lesson, stated plainly:** passing tests and a clean type-check measured how carefully
 the code was *written*, not whether it *worked*. The defects clustered in exactly the region
