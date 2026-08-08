@@ -237,11 +237,133 @@ block.
 
 ## 9 · Non-goals
 
-- **MODIS/VIIRS arbitration.** 1 km pixels against 1.4 km wards is a scale mismatch worth
-  several K — it would import a larger error than the one it resolves.
+- **MODIS/VIIRS arbitration.** Rejected, but the original reason was partly wrong and the
+  correction is recorded in §10.4: for a *differencing* design the scale mismatch largely
+  cancels. MODIS is set aside for temporal density, not resolution — INSAT-3D does the same job
+  with sub-hourly sampling.
 - **Widening the pairing window past 9.5–11.5 h.** At three hours' separation that measures the
   diurnal cycle, which `measure-accuracy.py:264` already warns about.
 - **Advection.** The right next major piece of work, and deserving of its own pre-registered
   spec rather than being smuggled in here.
 - **Ground truth.** Even a perfect adjudication tells us which instrument to believe, not what
   the surface temperature *is*. That needs in-situ sensors we do not have.
+
+---
+
+## 10 · Additional data sources — verified specs and licence status
+
+Three sources would move the specific numbers in this spec. **Specifications below were
+checked against the providers on 2026-08-09**, not recalled — the class of error this whole
+document exists to clean up. Where a provider does not state something, it is marked
+unresolved rather than assumed.
+
+### 10.1 Licence is the first task, not the last
+
+Standing project rule, learned the hard way: **Open-Meteo and WAQI were both rejected on
+licence grounds** after evaluation, for non-commercial clauses. No ingest code is written for
+any source below until its terms are read and recorded here.
+
+| source | commercial use | status |
+|---|---|---|
+| ERA5-Land (Copernicus CDS) | **permitted** | ✅ resolved, terms below |
+| Sentinel-3 SLSTR (Copernicus Sentinel) | free, full and open; reproduction/distribution/adaptation granted | ⚠️ **verified but commercial use not stated explicitly** — see §10.3 |
+| INSAT-3D/3DR (ISRO MOSDAC) | **not stated in the public policy page** | ❌ **UNRESOLVED — blocking** |
+
+### 10.2 ERA5-Land — attacks the daytime ceiling
+
+**Verified:** `0.1° × 0.1°, native resolution 9 km`, **hourly**, via the Copernicus Climate
+Data Store. DOI `10.24381/cds.e2161bac`.
+
+**Licence — resolved.** *Licence to use Copernicus Products*: "free of charge, worldwide,
+non-exclusive, royalty free and perpetual", access "for any purpose in so far as it is
+lawful", explicitly including reproduction, distribution, adaptation, modification and
+combination with other data. Attribution is mandatory and specific — *"Generated using
+Copernicus Climate Change Service information [Year]"*, or *"Contains modified Copernicus
+Climate Change Service information [Year]"* where adapted — together with a statement that
+neither the European Commission nor ECMWF is responsible for any use made of the data. Both
+must appear wherever we publish derived figures.
+
+**Why it matters here.** Our own methodology states the daytime limit is *"the resolution of
+the weather data driving the model, not the physics inside it"*. We drive on 50 km NASA POWER;
+this is 9 km hourly. That is the 1.08 K of headroom between our 4.42 K daytime error and the
+3.338 K forcing-imposed ceiling — the single largest addressable component of our weakest
+published figure.
+
+### 10.3 Sentinel-3 SLSTR — measures the view-angle hypothesis directly
+
+**Verified:** dual-view by design — "two conical scans, at nadir and oblique, performed by two
+independent scan mirrors rotating in opposite directions". Thermal channels (S7–S9, F1, F2) at
+**1 km at nadir**; VIS/SWIR at 0.5 km. Revisit **0.9 days mean with two satellites** (1.9 days
+with one) in dual-view mode.
+
+**Not verified:** the exact oblique view angle in degrees. Must be read from the product
+documentation before any anisotropy correction is derived from it.
+
+**Licence — verified, with one gap I am not going to paper over.** This is the *Copernicus
+Sentinel data licence*, a DIFFERENT document from the CDS licence covering ERA5-Land, and I
+checked it separately rather than assuming the family matched. It grants "free, full and open
+access", and expressly permits "reproduction; distribution; communication to the public;
+adaptation, modification and combination with other data", with attribution *"Copernicus
+Sentinel data [Year]"* or *"Contains modified Copernicus Sentinel data [Year]"*, and requires
+acknowledging the data comes without warranty. **It does not state the word "commercial"
+either way** — it permits use "in so far as it is lawful". That is almost certainly permissive
+enough, and near-universal industry practice treats it so, but "almost certainly" is not the
+standard this project holds itself to on licences. Confirm in writing before shipping anything
+derived from it.
+
+**Why it matters here.** §4.1 names view geometry as a leading candidate for the offset —
+ECOSTRESS views off-nadir, Landsat near-nadir, and thermal anisotropy over a city of walls,
+canopy and street canyons is worth several K. SLSTR observes the *same target at two angles
+near-simultaneously*, so it **measures** the angular effect rather than requiring us to infer
+it. Nothing else available does that.
+
+### 10.4 INSAT-3D/3DR — structurally solves the coincidence problem
+
+**Verified:** imager thermal channels TIR1 10.3–11.3 µm and TIR2 11.5–12.5 µm at **4 km × 4 km
+at the sub-satellite point**, full-disk imaging every **30 minutes**. A published split-window
+LST retrieval exists — Singh et al. 2016, *J. Geophys. Res. Atmospheres*,
+`10.1002/2016JD024752`.
+
+**Licence — UNRESOLVED and blocking.** The MOSDAC Data Access Policy page defines three tiers
+(Anonymous: metadata/imagery/Open Data at near-real-time; Registered General: limited data at
+3-day latency; Registered Privileged: all data, near-real-time) but **says nothing about
+commercial use or redistribution**. Those terms live in a separate *Data Access Guidelines*
+PDF. **Task one is to read that document and record its terms here.** If it carries a
+non-commercial clause, this source is out on the same grounds as Open-Meteo, whatever its
+scientific merit.
+
+**Why it matters here — and it corrects an argument made earlier.** §2.2 shows ECOSTRESS and
+Landsat essentially never coincide over Kolkata. A geostationary sensor sees the same place at
+**both** polar orbiters' overpass times **on the same day**, which dissolves the problem rather
+than working around it: compare each instrument to INSAT at its own hour, and INSAT's own bias
+largely cancels in the difference.
+
+That differencing argument also **weakens the objection I originally raised against MODIS**.
+I rejected it on scale mismatch — but when both instruments are compared to the *same* coarse
+footprint, the scale error is common to both and cancels; what survives is only the
+spatial-heterogeneity × time interaction. INSAT remains the better choice, and the reason is
+**temporal density, not resolution**: 30-minute sampling also lets us correct the residual
+time offset between passes, which a twice-daily sensor cannot. The correction is recorded here
+rather than quietly dropped.
+
+Second benefit, independent of the offset: 30-minute LST **constrains the diurnal shape**,
+which is precisely the confounder the §3.2 A-vs-B test exists to detect.
+
+**Caveat to carry.** 4 km pixels are coarser than our 1.4 km wards. That is tolerable for a
+*differencing* transfer standard, per the argument above, but INSAT must never be used as a
+direct validation reference for ward-mean LST — a different job with a different error budget.
+
+### 10.5 Also worth having, lower priority
+
+**CPCB / IMD station air temperature.** Already vetted as free and usable in prior work. It
+gives no LST, but it is ground truth for the *forcing* — the thing §10.2 identifies as our
+daytime limiter. Worth ingesting alongside ERA5-Land so the reanalysis can be checked against
+stations rather than trusted.
+
+### 10.6 Sequencing
+
+1. **Read the MOSDAC Data Access Guidelines.** Binary gate on §10.4. Record the outcome here.
+2. **ERA5-Land.** Highest certain value, licence already clear, attacks the named limiter.
+3. **SLSTR**, if §3.2 or the harvest implicates view geometry — it is the instrument that
+   settles that question, and pointless before there is a question to settle.
+4. **INSAT**, if and only if step 1 clears it.
