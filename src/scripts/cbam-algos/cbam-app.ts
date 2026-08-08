@@ -28,6 +28,7 @@ import {
   type EstimatorPack, type ThresholdView,
 } from './estimator/estimate-from-pack.ts';
 import type { CertificateEstimate } from './cbam/certificate-estimate.ts';
+import type { Line, Totals, YearThreshold } from '../cbam-lines.ts';
 
 const PACK_URL = '/cbam/estimator-pack.json';
 
@@ -124,11 +125,14 @@ function renderStamp(e: CertificateEstimate): string {
  */
 export function renderThreshold(t: ThresholdView): string {
   const above = t.state === 'above_threshold';
+  // 'pending' (amber), not 'ok' (green): an unresolved verdict is not good news. This line can
+  // only ever land here or on 'above_threshold' (see the doc above), so there is no 'ok' tone to
+  // reach from this function at all — reserved for renderYearThreshold's genuine below_threshold.
   return `
     <section class="cb-card cb-thresh">
       <div class="cb-card-head">
         <h3 class="cb-card-label">Annual de minimis</h3>
-        <span class="cb-tag ${above ? 'unavail' : 'ok'}">${above ? 'Above threshold' : 'Indeterminate'}</span>
+        <span class="cb-tag ${above ? 'unavail' : 'pending'}">${above ? 'Above threshold' : 'Indeterminate'}</span>
       </div>
       <div class="cb-water">
         <div class="cb-row"><span>This line</span><b>${num(t.knownEligibleMassT)} t</b></div>
@@ -143,6 +147,100 @@ export function renderThreshold(t: ThresholdView): string {
            line by itself does not cross it. Add your other ${esc(t.sector.replace(/_/g, ' '))}
            imports for ${esc(String(t.calendarYear))} before relying on the exemption.`}</p>
       <p class="cb-prov">${esc(t.sourceLocator)} · as amended by Reg (EU) 2025/2083</p>
+    </section>`;
+}
+
+/**
+ * YearThreshold marks state/knownEligibleMassT/thresholdT/sourceLocator/entryIds/entryHashes
+ * optional because thresholdByYear only populates them when ruleFound is true (see its doc in
+ * cbam-lines.ts). A `y.state!` at every use site records no reason a reader can check; this type
+ * guard narrows once, so a future field the resolver forgets to populate is a compile error at
+ * the call site that reads it, not an `undefined` reaching num().
+ */
+type FoundYearThreshold = YearThreshold & Required<Pick<YearThreshold,
+  'state' | 'knownEligibleMassT' | 'thresholdT' | 'sourceLocator' | 'entryIds' | 'entryHashes'>>;
+function hasPublishedRule(y: YearThreshold): y is FoundYearThreshold {
+  return y.ruleFound;
+}
+
+/**
+ * One card per calendar year present in the line list. This is the multi-line counterpart of
+ * renderThreshold above: a single line can only ever be "indeterminate", because one line is not
+ * a year. Here the user can attest the list IS the year, which is what unlocks below_threshold —
+ * the verdict then says on every surface that it rests on their statement, not on ours.
+ */
+export function renderYearThreshold(y: YearThreshold): string {
+  if (!hasPublishedRule(y)) return `
+    <section class="cb-card cb-thresh">
+      <div class="cb-card-head">
+        <h3 class="cb-card-label">Annual de minimis · ${esc(String(y.calendarYear))}</h3>
+        <span class="cb-tag pending">No published rule</span>
+      </div>
+      <p class="cb-sub">No de minimis threshold has been published for ${esc(String(y.calendarYear))}. We show no verdict rather than assume one.</p>
+    </section>`;
+
+  const above = y.state === 'above_threshold';
+  const below = y.state === 'below_threshold';
+  // 'pending' for indeterminate, not 'ok': an unresolved verdict must not wear the same green
+  // as a genuine below-threshold answer — see renderThreshold's identical fix just above.
+  const tone = above ? 'unavail' : below ? 'ok' : 'pending';
+  const tag = above ? 'Above threshold' : below ? 'Below threshold' : 'Indeterminate';
+  const attest = above ? '' : `
+    <label class="cb-attest">
+      <input type="checkbox" data-attest="${esc(String(y.calendarYear))}" ${y.attested ? 'checked' : ''} />
+      These are all my ${esc(String(y.calendarYear))} imports of CBAM goods
+    </label>`;
+  const sub = above
+    ? `The listed ${esc(String(y.calendarYear))} imports exceed the threshold; the exemption does not apply.`
+    : below
+      ? `Below the threshold an importer owes nothing for ${esc(String(y.calendarYear))}. This verdict rests on your attested statement that the list is complete — it is your completeness claim, verified by no one.`
+      : `Under the threshold so far, but unattested. Tick the box only if this list is genuinely every ${esc(String(y.calendarYear))} CBAM import; the verdict is only as good as that statement.`;
+  return `
+    <section class="cb-card cb-thresh">
+      <div class="cb-card-head">
+        <h3 class="cb-card-label">Annual de minimis · ${esc(String(y.calendarYear))}</h3>
+        <span class="cb-tag ${tone}">${esc(tag)}</span>
+      </div>
+      <div class="cb-water">
+        <div class="cb-row"><span>Eligible mass · ${y.eligibleLineCount} line${y.eligibleLineCount === 1 ? '' : 's'}</span><b>${num(y.knownEligibleMassT)} t</b></div>
+        <div class="cb-row"><span>Threshold</span><b>${num(y.thresholdT)} t</b></div>
+      </div>
+      <p class="cb-sub">${sub}</p>
+      ${attest}
+      <p class="cb-prov">${esc(y.sourceLocator)} · as amended by Reg (EU) 2025/2083</p>
+    </section>`;
+}
+
+/**
+ * The summed exposure. A total containing any what-if is itself a what-if, and a total with no
+ * priced lines at all (Totals.certificates === '0' both for "genuinely zero" and "nothing was
+ * summed", per that field's own doc in cbam-lines.ts) must never render as a confirmed zero —
+ * hence its own state below, distinct from a real "Priced" verdict at 0.
+ */
+export function renderTotals(t: Totals): string {
+  if (t.pricedLines === 0) return `
+    <section class="cb-card cb-res cb-total">
+      <div class="cb-card-head">
+        <h3 class="cb-card-label">Total exposure</h3>
+        <span class="cb-tag unavail">Nothing priced</span>
+      </div>
+      <p class="cb-sub">No line has a priced estimate, so there is no total to show — not even a zero.${
+        t.refusedLines ? ` ${t.refusedLines} line${t.refusedLines === 1 ? ' has' : 's have'} no estimate and ${t.refusedLines === 1 ? 'is' : 'are'} excluded.` : ''}</p>
+    </section>`;
+
+  const tone = t.anyPending ? 'pending' : 'ok';
+  const tag = t.anyPending ? 'What-if · CSCF unpublished' : 'Priced';
+  return `
+    <section class="cb-card cb-res cb-total">
+      <div class="cb-card-head">
+        <h3 class="cb-card-label">Total exposure · ${t.pricedLines} line${t.pricedLines === 1 ? '' : 's'}</h3>
+        <span class="cb-tag ${tone}">${esc(tag)}</span>
+      </div>
+      <div class="cb-fig"><span class="cb-n">${num(t.certificates)}</span></div>
+      <div class="cb-u">certificates</div>
+      ${t.costEur ? `<div class="cb-cost">${eur(t.costEur)}</div>`
+        : '<div class="cb-sub">No € total — at least one line has no published certificate price.</div>'}
+      ${t.refusedLines ? `<p class="cb-sub cb-warn">${t.refusedLines} line${t.refusedLines === 1 ? ' has' : 's have'} no estimate and ${t.refusedLines === 1 ? 'is' : 'are'} excluded from this total.</p>` : ''}
     </section>`;
 }
 
@@ -203,7 +301,9 @@ export function renderResult(e: CertificateEstimate): string {
         <p class="cb-sub cb-warn">
           Not a final figure. The Commission has not published the cross-sectoral correction
           factor for ${esc(String(e.cscfYear))}; this assumes CSCF&nbsp;=&nbsp;${esc(e.scenario.assumedCscf)},
-          the last value actually set (2021–25). The real figure cannot be higher, and may be lower.
+          the largest the factor can legally be (the last value actually set, 2021–25). CSCF only
+          ever reduces the free allocation that offsets a bill, so this is a floor: the real
+          figure cannot be lower, and may be higher.
         </p>
         ${renderWaterfall(e, e.scenario)}${renderStamp(e)}`);
 
@@ -226,6 +326,139 @@ export function renderResult(e: CertificateEstimate): string {
       return _exhaustive;
     }
   }
+}
+
+/** A line's header plus the ordinary result card, with a remove control. */
+export function renderLineCard(line: Line, e: CertificateEstimate, index: number): string {
+  return `
+    <article class="cb-line" data-line="${esc(line.id)}">
+      <div class="cb-line-head">
+        <span class="cb-line-n">Line ${index + 1}</span>
+        <span class="cb-line-sum">${esc(line.cn)} · ${esc(line.country)} · ${esc(line.route)} · ${num(line.massT)} t · ${esc(line.date)}</span>
+        <button type="button" class="cb-line-x" data-remove="${esc(line.id)}" aria-label="Remove line ${index + 1}">Remove</button>
+      </div>
+      ${renderResult(e)}
+    </article>`;
+}
+
+/**
+ * Pulls the certificates/cost pair the print table needs out of whichever branch carried them —
+ * the table's own small mirror of csvRows's figuresOf (cbam-lines.ts), which this file cannot
+ * import since it is not exported there. `never` in the default arm keeps this exhaustive against
+ * CertificateEstimate the same way renderResult's own switch is, just above.
+ */
+function tableFigures(e: CertificateEstimate): { certs: string | null; costEur: string | null } {
+  switch (e.status) {
+    case 'ok':
+    case 'zero_by_fiat': return { certs: e.figure.certificates, costEur: e.figure.costEur };
+    case 'cscf_pending': return { certs: e.scenario.certificates, costEur: e.scenario.costEur };
+    case 'unavailable': return { certs: null, costEur: null };
+    default: {
+      const _exhaustive: never = e;
+      return _exhaustive;
+    }
+  }
+}
+
+/**
+ * A regulation's workbook sha256, read from the pack's own generatedFrom list rather than
+ * hardcoded — a hardcoded value would silently go stale (or be wrong from the start; two
+ * candidate hashes drafted for this function did not match the shipped pack at all) and the
+ * document would then print a false provenance claim on the one surface whose entire purpose is
+ * provenance. Falls back to a stated absence, never to a fabricated-looking value.
+ */
+function ojWorkbookHash(pack: Pick<EstimatorPack, 'generatedFrom'>, sourceId: string): string {
+  return pack.generatedFrom.find((s) => s.id === sourceId)?.workbookSha256 ?? 'not present in this pack';
+}
+
+/**
+ * The printable audit document — §4 is the point of the whole file: what the figures above
+ * CANNOT tell you, stated plainly rather than left for a reader to infer from a methodology PDF.
+ *
+ * `generatedOn` is passed in rather than read from `new Date()` inside this function, so the
+ * document stays a pure function of its inputs — reproducible in a test, and the caller's clock
+ * read once for the whole session rather than once per render.
+ */
+export function buildPrintDocument(input: {
+  lines: readonly Line[];
+  results: readonly CertificateEstimate[];
+  yearCards: readonly YearThreshold[];
+  totals: Totals;
+  packSnapshot: string;
+  rulePackages: readonly string[];
+  pack: Pick<EstimatorPack, 'generatedFrom'>;
+  generatedOn: string;
+}): string {
+  const { lines, results, yearCards, totals, packSnapshot, rulePackages, pack, generatedOn } = input;
+  if (lines.length !== results.length) {
+    // Matches csvRows's own idiom in cbam-lines.ts: name the mismatch loudly rather than let
+    // `results[i]!` below hand back a bare `undefined` with nothing to debug from.
+    throw new Error(
+      `buildPrintDocument: ${lines.length} line(s) but ${results.length} result(s) — every line `
+      + 'must have exactly one CertificateEstimate, in the same order, before it can be printed',
+    );
+  }
+
+  const lineRows = lines.map((l, i) => {
+    const e = results[i]!;
+    const pending = e.status === 'cscf_pending';
+    const { certs, costEur } = tableFigures(e);
+    const bm = 'terms' in e ? e.terms.benchmarks[0] : null;
+    return `<tr>
+      <td>${esc(l.cn)}</td><td>${esc(l.country)}</td><td>${esc(l.route)}</td>
+      <td>${num(l.massT)}</td><td>${esc(l.date)}</td>
+      <td>${certs === null ? 'no estimate' : `${num(certs)}${pending ? ' (what-if)' : ''}`}</td>
+      <td>${costEur ? eur(costEur) : '—'}</td>
+      <td class="cbp-loc">${bm ? esc(bm.sourceLocator) : ('selector' in e && e.selector ? `missing: ${esc(e.selector)}` : '—')}</td>
+    </tr>`;
+  }).join('');
+
+  const verdicts = yearCards.map((y) => hasPublishedRule(y)
+    ? `<li>${esc(String(y.calendarYear))}: <b>${esc(y.state.replace(/_/g, ' '))}</b> at ${num(y.knownEligibleMassT)} t of ${num(y.thresholdT)} t — completeness box ${y.attested ? 'TICKED by the user' : 'not ticked'}.</li>`
+    : `<li>${esc(String(y.calendarYear))}: no de minimis threshold published; no verdict.</li>`).join('');
+
+  return `
+    <h1>CBAM certificate exposure — provisional estimate</h1>
+    <p class="cbp-sub">Generated ${esc(generatedOn)} · deltaclimate.earth/cbam/cbam-calculator · not a filing, not verified data</p>
+
+    <h2>1 · What you asked</h2>
+    <table><thead><tr><th>CN</th><th>Origin</th><th>Route</th><th>Mass t</th><th>Import date</th>
+      <th>Certificates</th><th>Cost</th><th>Benchmark authority</th></tr></thead>
+      <tbody>${lineRows}</tbody></table>
+
+    <h2>2 · What we computed</h2>
+    <p>Total: <b>${num(totals.certificates)} certificates</b>${
+      totals.costEur ? ` · <b>${eur(totals.costEur)}</b>` : ' · no € total (a certificate price is unpublished)'}${
+      totals.anyPending ? ' — a <b>what-if</b>, because the CSCF is unpublished (see §4)' : ''}. ${
+      totals.refusedLines ? `${totals.refusedLines} line(s) refused and excluded.` : ''}</p>
+    <ul>${verdicts || '<li>No de minimis verdict — no eligible lines.</li>'}</ul>
+
+    <h2>3 · On what authority</h2>
+    <ul>
+      <li>Rule packages: ${rulePackages.map((r) => `<code>${esc(r)}</code>`).join(' · ')}</li>
+      <li>Data snapshot: <code>${esc(packSnapshot)}</code> — SHA-256 over the pack's
+        generation timestamp and both Commission source-workbook hashes.</li>
+      <li>IR (EU) 2025/2620 (free allocation): <code>${esc(ojWorkbookHash(pack, 'eu-cbam-2026-free-allocation'))}</code></li>
+      <li>IR (EU) 2025/2621 (default values): <code>${esc(ojWorkbookHash(pack, 'eu-cbam-2026-defaults-v2'))}</code></li>
+      <li>Per-line benchmark authority is printed in the table above; the CBAM factor is
+        Dir 2003/87/EC Art 10a(1a) (free allocation retained).</li>
+    </ul>
+
+    <h2>4 · What this does not tell you</h2>
+    <ul>
+      <li>The cross-sectoral correction factor (CSCF) for 2026–2030 is unpublished. CSCF only
+        ever reduces the free allocation that offsets a bill — it can subtract, never add — so
+        every figure above assumes the largest free allocation legally possible (CSCF&nbsp;=&nbsp;1,
+        the last value the Commission actually set). Each figure above is therefore a floor: the
+        real bill cannot be lower than what is shown, and may be higher once the true factor is
+        published.</li>
+      <li>Article 9 deductions for a carbon price paid in the country of origin are not modelled
+        (the implementing act is still a draft), so figures do not credit any such payment.</li>
+      <li>Any below-threshold verdict rests on the user's own statement of completeness, ticked
+        in the tool. No one has verified that list.</li>
+      <li>Line fingerprints cover inputs as entered; no source document exists behind them. They
+        are not customs provenance.</li>
+    </ul>`;
 }
 
 /**
