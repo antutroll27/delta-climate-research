@@ -1432,7 +1432,14 @@ export function mountHeatMap(): () => void {
     const delay = nextFrameDelayMs({
       animating: dragging || orbiting || growing,
       cloudMotion,
-      simEligible,
+      /* `&& !simulationInFlight` matters on slow hardware. Once an advance
+         outlives its own interval, msUntilNextSim goes negative, clamps to 0,
+         and a RESTING page asks for an immediate frame every frame — measured
+         at 27/s against 1.4/s when a 900 ms advance meets a 720 ms interval,
+         and pinned at the refresh rate if one never settles. No visual artefact,
+         because an idle frame triggers no repaint; it is pure battery. The
+         advance's own `.finally` re-arms the cadence, so nothing is lost. */
+      simEligible: simEligible && !simulationInFlight,
       msUntilNextSim: budget.simulationIntervalMs - (time - lastSimulationAt),
     });
     if (delay !== null) requestRuntimeFrame('render', delay);
