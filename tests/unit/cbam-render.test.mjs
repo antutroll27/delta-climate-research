@@ -278,8 +278,18 @@ test('renderYearThreshold: below-attested says so and names its basis', () => {
     entryIds: ['L1'], entryHashes: ['a'.repeat(64)], attested: true, eligibleLineCount: 1,
   });
   assert.match(html, /Below threshold/);
-  assert.match(html, /attested/i, 'the verdict must say what it rests on');
+  // Pin MEANING, not just the word "attested" appearing anywhere — a keyword-only assertion
+  // (assert.match(html, /attested/i)) still passes if the sentence is inverted to say the
+  // verdict does NOT rest on any attestation. Match the actual claim, and assert its precise
+  // negation is absent, the same shape the CSCF floor test already uses.
+  assert.match(html, /rests on your attested statement/i, 'the verdict must say what it rests on');
+  assert.match(html, /verified by no one/i, 'and must say the claim is unverified');
+  assert.doesNotMatch(html, /does not rest on/i, 'must not carry the inverted claim');
+  assert.doesNotMatch(html, /independently (confirmed|verified)/i,
+    'must not claim the Commission verified completeness — no one did');
+  assert.doesNotMatch(html, /verified by the commission/i);
   assert.match(html, /data-attest="2026"[^>]*checked/, 'checkbox reflects the attestation');
+  assert.match(html, /2025\/2083/, 'the amending act must be cited on the per-year card too');
 });
 
 test('renderYearThreshold: above hides the checkbox — a fact needs no attestation', () => {
@@ -331,6 +341,19 @@ test('renderTotals: a final priced total shows the euro figure and no what-if la
   assert.doesNotMatch(html, /What-if/);
 });
 
+test('renderTotals: a non-numeric costEur never prints as "€NaN" or the literal text "null"', () => {
+  // Every current call site only calls eur() after checking its input is truthy — costEur here
+  // is a non-empty but non-numeric string, so it still passes that guard and reaches eur().
+  // Nothing in Totals' TYPE stops a future caller from constructing this; eur() must make it
+  // safe to print rather than trust that every future call site re-derives the same guard.
+  const html = renderTotals({
+    certificates: '71.465', costEur: 'not-a-number', chargeableTco2e: '71.465',
+    pricedLines: 1, refusedLines: 0, anyPending: false,
+  });
+  assert.doesNotMatch(html, /€NaN/i);
+  assert.doesNotMatch(html, />null</, 'eur() must never leave a bare "null" for a template to print');
+});
+
 test('renderTotals: every entered line refused reads as a warning, never a claimed zero', () => {
   // Totals.certificates is '0' both for "genuinely zero" and "nothing was summed" — the card
   // must not let the second case read as a confirmed zero-liability result.
@@ -373,6 +396,18 @@ test('renderLineCard: 1-based numbering, the remove control carries the id, and 
   assert.match(html, /cb-res/, 'the ordinary result card renders inside the line card');
 });
 
+test('renderLineCard: a cleared mass field reads as missing, never a false zero', () => {
+  // Number('') is 0 in JS — a real quirk, not a missing-value signal. Line.massT is free-typed
+  // by the user with no format guarantee (unlike every earlier num() caller, which only ever
+  // fed engine output), so a cleared field must not silently render as a confirmed "0 t".
+  const e = run('25231000', 'DZ', '(A)', '100');
+  const html = renderLineCard({
+    id: 'L1', cn: '25231000', country: 'DZ', route: '(A)', scope: 'direct', massT: '', date: '2026-03-15',
+  }, e, 0);
+  assert.doesNotMatch(html, /\b0 t\b/, 'an empty mass must not render as a confirmed zero');
+  assert.match(html, /· — t ·/, 'an empty mass renders as a visible placeholder instead');
+});
+
 /* ── the printable document ────────────────────────────────────────────────── */
 
 test('buildPrintDocument carries all four §4 caveats, the real OJ hashes, and the injected date', () => {
@@ -386,16 +421,36 @@ test('buildPrintDocument carries all four §4 caveats, the real OJ hashes, and t
     pack, generatedOn: '2026-08-08',
   });
   assert.match(html, /cross-sectoral correction factor/i);
-  assert.match(html, /Art(icle)? 9/i, 'the carbon-price-abroad gap must be stated');
-  assert.match(html, /inputs as entered/i, 'the fingerprint must be labelled honestly');
-  assert.match(html, /completeness/i, 'the attestation basis must be stated');
   assert.match(html, new RegExp('f'.repeat(16)), 'the pack snapshot appears');
   assert.match(html, /What this does not tell you/i);
   assert.match(html, /2026-08-08/, 'the generation date is the one the caller supplied, not the clock');
+  // Every §4 caveat below is asserted as a MATCH-the-claim + ASSERT-the-negation-is-absent
+  // pair. A reviewer proved that keyword-only assertions (e.g. assert.match(html, /Art.*9/i))
+  // still pass when the sentence is inverted to its precise opposite — three of four caveats
+  // were flipped this way and all 33 tests stayed green. Only the CSCF pair below (already
+  // shaped this way) caught its own inversion.
+  //
   // The direction that matters most: CSCF=1 is the MAXIMUM legally possible correction, so every
   // shown figure is a FLOOR — the true bill cannot be lower, only possibly higher.
   assert.match(html, /cannot be lower.*may be higher/is, 'the CSCF direction must not be stated backwards');
   assert.doesNotMatch(html, /cannot be higher/i, 'must not carry the reversed claim');
+  assert.doesNotMatch(html, /may be lower/i, 'must not carry the reversed claim');
+  // Article 9 (carbon price paid in the country of origin): NOT modelled.
+  assert.match(html, /are not modelled/i, 'the Art 9 gap must be stated as a gap');
+  assert.match(html, /do not credit any such payment/i);
+  assert.doesNotMatch(html, /are modelled/i, 'must not claim Art 9 is modelled — mutation: "are modelled and applied automatically"');
+  assert.doesNotMatch(html, /already credit/i, 'must not claim a payment is already credited');
+  // Completeness: rests on the USER's statement, verified by no one.
+  assert.match(html, /rests on the user's own statement of completeness/i);
+  assert.match(html, /no one has verified that list/i);
+  assert.doesNotMatch(html, /independently verified/i, 'mutation: "independently verified… by the Commission"');
+  assert.doesNotMatch(html, /verified.{0,20}by the commission/is);
+  // Fingerprint: inputs as entered, NOT customs provenance, no source document.
+  assert.match(html, /inputs as entered/i, 'the fingerprint must be labelled honestly');
+  assert.match(html, /no source document exists/i);
+  assert.match(html, /not customs provenance/i);
+  assert.doesNotMatch(html, /checked against a source document/i, 'mutation: fingerprints ARE checked against a document');
+  assert.doesNotMatch(html, /\bconstitute customs provenance\b/i, 'mutation: fingerprints DO constitute customs provenance');
   // Sourced from pack.sources IN THE TEST, not retyped — a hardcoded expected hash here would
   // keep passing even if the document started printing the wrong field of the pack again (the
   // earlier bug this replaced: printing the WORKBOOK digest under the REGULATION's label).

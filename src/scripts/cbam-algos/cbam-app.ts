@@ -54,15 +54,44 @@ const countryName = (code: string) => {
   try { return regionNames?.of(code) ?? code; } catch { return code; }
 };
 
-/** tCO2e and certificate counts carry long decimal tails; 3 dp is plenty to read. */
+/**
+ * tCO2e and certificate counts carry long decimal tails; 3 dp is plenty to read.
+ *
+ * `''` is special-cased AHEAD of `Number()`: `Number('')` is `0` — a genuine JS quirk, not a
+ * missing-value signal — so an empty string used to sail through `Number.isFinite` and render as
+ * a confirmed "0", indistinguishable from a real zero the engine computed. Every caller before
+ * Task 5 fed this engine output (always a real numeric string); `Line.massT` is free-typed by the
+ * user with no format guarantee and can be cleared to `''`, and a cleared mass field must read as
+ * missing input, not as a claimed zero — the same rule `Totals.certificates`'s own doc already
+ * states for "nothing was summed." Other non-numeric input (never reachable from the engine, only
+ * from a user's stray keystrokes in `Line`) still falls through to the `esc(s)` branch below,
+ * unchanged: showing exactly what was typed beats hiding it behind a fabricated number.
+ */
 const num = (s: string, dp = 3) => {
+  if (s === '') return '—';
   const n = Number(s);
   // esc() on the fallback: every other path into innerHTML in this file is escaped,
   // and this is the only one that returns its argument verbatim.
   return Number.isFinite(n) ? n.toLocaleString('en-GB', { maximumFractionDigits: dp }) : esc(s);
 };
-const eur = (s: string | null) =>
-  s === null ? null : `€${Number(s).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+/**
+ * ALWAYS returns a printable string, never `null` — every call site embeds the return directly
+ * in a template (`${eur(x)}`), and `null` interpolated into a template literal prints the
+ * literal three characters "null" onto the page, which is a worse failure than what this
+ * function exists to prevent. Every call site today decides whether to call `eur` at all by
+ * checking the ORIGINAL input first (`t.costEur ? eur(t.costEur) : fallback`) — this function's
+ * job is only to make whatever value reaches it safe to print. `''` and non-finite input (never
+ * reachable from the engine, which only ever produces `null` or a real Decimal string; only a
+ * future caller that skips that guard could reach this) render as the same '—' placeholder
+ * `num` uses, not as `Number('garbage')` → `NaN` → the literal string `'€NaN'` printed as though
+ * it were money.
+ */
+const eur = (s: string | null): string => {
+  if (s === null || s === '') return '—';
+  const n = Number(s);
+  return Number.isFinite(n)
+    ? `€${n.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—';
+};
 
 /**
  * The card shell. Every branch renders one, so the status tag is the ONLY thing
@@ -107,6 +136,13 @@ function renderStamp(e: CertificateEstimate): string {
 }
 
 /**
+ * The 50 t de minimis figure itself lives in the consolidated Art 2(3); this is the amending act
+ * that put it there. Both threshold cards cite it (single-line and per-year) — one constant so
+ * the citation can't drift between them.
+ */
+const AMENDED_BY_2025_2083 = 'as amended by Reg (EU) 2025/2083';
+
+/**
  * Where this ONE line sits against the annual de minimis threshold — Reg (EU)
  * 2023/956 Art 2(3) as amended by Reg (EU) 2025/2083, 50 t per importer per
  * calendar year across cement, iron & steel, aluminium and fertilisers.
@@ -146,21 +182,8 @@ export function renderThreshold(t: ThresholdView): string {
            not your annual total, so it cannot show you are under the threshold — only that this
            line by itself does not cross it. Add your other ${esc(t.sector.replace(/_/g, ' '))}
            imports for ${esc(String(t.calendarYear))} before relying on the exemption.`}</p>
-      <p class="cb-prov">${esc(t.sourceLocator)} · as amended by Reg (EU) 2025/2083</p>
+      <p class="cb-prov">${esc(t.sourceLocator)} · ${AMENDED_BY_2025_2083}</p>
     </section>`;
-}
-
-/**
- * YearThreshold marks state/knownEligibleMassT/thresholdT/sourceLocator/entryIds/entryHashes
- * optional because thresholdByYear only populates them when ruleFound is true (see its doc in
- * cbam-lines.ts). A `y.state!` at every use site records no reason a reader can check; this type
- * guard narrows once, so a future field the resolver forgets to populate is a compile error at
- * the call site that reads it, not an `undefined` reaching num().
- */
-type FoundYearThreshold = YearThreshold & Required<Pick<YearThreshold,
-  'state' | 'knownEligibleMassT' | 'thresholdT' | 'sourceLocator' | 'entryIds' | 'entryHashes'>>;
-function hasPublishedRule(y: YearThreshold): y is FoundYearThreshold {
-  return y.ruleFound;
 }
 
 /**
@@ -168,9 +191,17 @@ function hasPublishedRule(y: YearThreshold): y is FoundYearThreshold {
  * renderThreshold above: a single line can only ever be "indeterminate", because one line is not
  * a year. Here the user can attest the list IS the year, which is what unlocks below_threshold —
  * the verdict then says on every surface that it rests on their statement, not on ours.
+ *
+ * `YearThreshold` is a real discriminated union on `ruleFound` (cbam-lines.ts) — checking
+ * `y.ruleFound` below narrows every field this function reads for the rest of its body, with no
+ * hand-rolled type guard needed. There used to be one here (`hasPublishedRule`/
+ * `FoundYearThreshold`); it type-checked, but it narrowed against a FLAT interface whose optional
+ * fields didn't actually correlate with `ruleFound`, so `{ ruleFound: true, ... }` with every
+ * other field omitted passed the compiler and crashed at `y.state.replace` in production. The
+ * union now makes that object impossible to construct in the first place.
  */
 export function renderYearThreshold(y: YearThreshold): string {
-  if (!hasPublishedRule(y)) return `
+  if (!y.ruleFound) return `
     <section class="cb-card cb-thresh">
       <div class="cb-card-head">
         <h3 class="cb-card-label">Annual de minimis · ${esc(String(y.calendarYear))}</h3>
@@ -193,7 +224,7 @@ export function renderYearThreshold(y: YearThreshold): string {
   const sub = above
     ? `The listed ${esc(String(y.calendarYear))} imports exceed the threshold; the exemption does not apply.`
     : below
-      ? `Below the threshold an importer owes nothing for ${esc(String(y.calendarYear))}. This verdict rests on your attested statement that the list is complete — it is your completeness claim, verified by no one.`
+      ? `Below the threshold an importer owes nothing for ${esc(String(y.calendarYear))}. This verdict rests on your attested statement that the list is complete — it is your completeness claim, verified by no one, not by the Commission or by us.`
       : `Under the threshold so far, but unattested. Tick the box only if this list is genuinely every ${esc(String(y.calendarYear))} CBAM import; the verdict is only as good as that statement.`;
   return `
     <section class="cb-card cb-thresh">
@@ -207,9 +238,18 @@ export function renderYearThreshold(y: YearThreshold): string {
       </div>
       <p class="cb-sub">${sub}</p>
       ${attest}
-      <p class="cb-prov">${esc(y.sourceLocator)} · as amended by Reg (EU) 2025/2083</p>
+      <p class="cb-prov">${esc(y.sourceLocator)} · ${AMENDED_BY_2025_2083}</p>
     </section>`;
 }
+
+/**
+ * "N line(s) has/have no estimate and is/are excluded…" — the pluralisation was duplicated
+ * verbatim at both renderTotals call sites below; one helper means it can only disagree with
+ * itself if this function's own logic is wrong, not by the two copies drifting apart.
+ */
+const refusedLineNote = (refusedLines: number) =>
+  `${refusedLines} line${refusedLines === 1 ? ' has' : 's have'} no estimate and ${
+    refusedLines === 1 ? 'is' : 'are'} excluded from this total.`;
 
 /**
  * The summed exposure. A total containing any what-if is itself a what-if, and a total with no
@@ -240,7 +280,7 @@ export function renderTotals(t: Totals): string {
         <span class="cb-tag unavail">Nothing priced</span>
       </div>
       <p class="cb-sub">No line has a priced estimate, so there is no total to show — not even a zero. ${
-        t.refusedLines} line${t.refusedLines === 1 ? ' has' : 's have'} no estimate and ${t.refusedLines === 1 ? 'is' : 'are'} excluded.</p>
+        refusedLineNote(t.refusedLines)}</p>
     </section>`;
 
   const tone = t.anyPending ? 'pending' : 'ok';
@@ -255,7 +295,7 @@ export function renderTotals(t: Totals): string {
       <div class="cb-u">certificates</div>
       ${t.costEur ? `<div class="cb-cost">${eur(t.costEur)}</div>`
         : '<div class="cb-sub">No € total — at least one line has no published certificate price.</div>'}
-      ${t.refusedLines ? `<p class="cb-sub cb-warn">${t.refusedLines} line${t.refusedLines === 1 ? ' has' : 's have'} no estimate and ${t.refusedLines === 1 ? 'is' : 'are'} excluded from this total.</p>` : ''}
+      ${t.refusedLines ? `<p class="cb-sub cb-warn">${refusedLineNote(t.refusedLines)}</p>` : ''}
     </section>`;
 }
 
@@ -438,7 +478,7 @@ export function buildPrintDocument(input: {
     </tr>`;
   }).join('');
 
-  const verdicts = yearCards.map((y) => hasPublishedRule(y)
+  const verdicts = yearCards.map((y) => y.ruleFound
     ? `<li>${esc(String(y.calendarYear))}: <b>${esc(y.state.replace(/_/g, ' '))}</b> at ${num(y.knownEligibleMassT)} t of ${num(y.thresholdT)} t — completeness box ${y.attested ? 'TICKED by the user' : 'not ticked'}.</li>`
     : `<li>${esc(String(y.calendarYear))}: no de minimis threshold published; no verdict.</li>`).join('');
 

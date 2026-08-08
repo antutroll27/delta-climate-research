@@ -95,29 +95,47 @@ export async function packSnapshotHash(pack: EstimatorPack): Promise<string> {
 /** Every session entry shares one importer — the aggregation filters on it. */
 const IMPORTER = 'estimator-session';
 
-export interface YearThreshold {
-  calendarYear: number;
-  ruleFound: boolean;
-  /** Only when ruleFound. */
-  state?: ThresholdState;
-  knownEligibleMassT?: string;
-  thresholdT?: string;
-  sourceLocator?: string;
-  entryIds?: string[];
-  entryHashes?: string[];
-  attested: boolean;
-  /**
-   * Lines in this year that counted toward the eligible mass — always
-   * basis.entryIds.length, never our own pre-filter's entries.length. Two
-   * filters run in series (ours, on rule.includedSectors; aggregateThresholdBasis's
-   * own hardcoded massSectors) and today they agree only because the shipped
-   * 2026 row's includedSectors happens to equal massSectors. If a future
-   * threshold row ever includes electricity or hydrogen, a line could pass
-   * ours and still be dropped by the vendored one — counting it here would
-   * make eligibleLineCount claim a line that entryIds doesn't list.
-   */
-  eligibleLineCount: number;
-}
+/**
+ * A REAL discriminated union on `ruleFound`, not a flat interface with fields marked
+ * "optional, only when ruleFound" in a comment. The earlier flat shape let
+ * `{ calendarYear, ruleFound: true, attested, eligibleLineCount }` — every field of the
+ * "found" branch omitted — type-check clean under this project's strict config, because
+ * `ruleFound: boolean` never actually correlated with which optional fields were present.
+ * A caller that built one by hand (nothing stopped a future one from doing so, once Task 6
+ * adds more call sites than `thresholdByYear`) would compile, then crash at
+ * `y.state.replace(...)` in cbam-app.ts. Making `ruleFound` a literal `true`/`false`
+ * discriminant means the compiler enforces the shape at EVERY construction site and every
+ * read, not just the one inside `thresholdByYear` below.
+ */
+export type YearThreshold =
+  | {
+      calendarYear: number;
+      ruleFound: true;
+      state: ThresholdState;
+      knownEligibleMassT: string;
+      thresholdT: string;
+      sourceLocator: string;
+      entryIds: string[];
+      entryHashes: string[];
+      attested: boolean;
+      /**
+       * Lines in this year that counted toward the eligible mass — always
+       * basis.entryIds.length, never our own pre-filter's entries.length. Two
+       * filters run in series (ours, on rule.includedSectors; aggregateThresholdBasis's
+       * own hardcoded massSectors) and today they agree only because the shipped
+       * 2026 row's includedSectors happens to equal massSectors. If a future
+       * threshold row ever includes electricity or hydrogen, a line could pass
+       * ours and still be dropped by the vendored one — counting it here would
+       * make eligibleLineCount claim a line that entryIds doesn't list.
+       */
+      eligibleLineCount: number;
+    }
+  | {
+      calendarYear: number;
+      ruleFound: false;
+      attested: boolean;
+      eligibleLineCount: number;
+    };
 
 /**
  * One threshold verdict per calendar year present in the lines.
