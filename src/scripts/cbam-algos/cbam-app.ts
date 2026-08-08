@@ -57,18 +57,22 @@ const countryName = (code: string) => {
 /**
  * tCO2e and certificate counts carry long decimal tails; 3 dp is plenty to read.
  *
- * `''` is special-cased AHEAD of `Number()`: `Number('')` is `0` — a genuine JS quirk, not a
- * missing-value signal — so an empty string used to sail through `Number.isFinite` and render as
- * a confirmed "0", indistinguishable from a real zero the engine computed. Every caller before
- * Task 5 fed this engine output (always a real numeric string); `Line.massT` is free-typed by the
- * user with no format guarantee and can be cleared to `''`, and a cleared mass field must read as
- * missing input, not as a claimed zero — the same rule `Totals.certificates`'s own doc already
- * states for "nothing was summed." Other non-numeric input (never reachable from the engine, only
- * from a user's stray keystrokes in `Line`) still falls through to the `esc(s)` branch below,
- * unchanged: showing exactly what was typed beats hiding it behind a fabricated number.
+ * Blank input is special-cased AHEAD of `Number()`: `Number('')` is `0`, and — the gap the first
+ * fix here missed — so is `Number('   ')`. Both are a genuine JS quirk (`Number()` trims the
+ * string before parsing, same as `parseFloat`), not a missing-value signal, so blank input used
+ * to sail through `Number.isFinite` and render as a confirmed "0", indistinguishable from a real
+ * zero the engine computed. `s.trim() === ''` catches both; it does NOT catch a real number with
+ * incidental whitespace around it (`' 100 '` still parses to 100 and renders normally — only
+ * whitespace with no digits in it counts as blank). Every caller before Task 5 fed this engine
+ * output (always a real numeric string); `Line.massT` is free-typed by the user with no format
+ * guarantee and can be left blank or cleared to spaces, and that must read as missing input, not
+ * as a claimed zero — the same rule `Totals.certificates`'s own doc already states for "nothing
+ * was summed." Other non-numeric input (never reachable from the engine, only from a user's
+ * stray keystrokes in `Line`) still falls through to the `esc(s)` branch below, unchanged:
+ * showing exactly what was typed beats hiding it behind a fabricated number.
  */
 const num = (s: string, dp = 3) => {
-  if (s === '') return '—';
+  if (s.trim() === '') return '—';
   const n = Number(s);
   // esc() on the fallback: every other path into innerHTML in this file is escaped,
   // and this is the only one that returns its argument verbatim.
@@ -80,14 +84,17 @@ const num = (s: string, dp = 3) => {
  * literal three characters "null" onto the page, which is a worse failure than what this
  * function exists to prevent. Every call site today decides whether to call `eur` at all by
  * checking the ORIGINAL input first (`t.costEur ? eur(t.costEur) : fallback`) — this function's
- * job is only to make whatever value reaches it safe to print. `''` and non-finite input (never
- * reachable from the engine, which only ever produces `null` or a real Decimal string; only a
- * future caller that skips that guard could reach this) render as the same '—' placeholder
- * `num` uses, not as `Number('garbage')` → `NaN` → the literal string `'€NaN'` printed as though
- * it were money.
+ * job is only to make whatever value reaches it safe to print. Blank input — `''`, and (the gap
+ * the first fix here missed) whitespace-only strings like `'   '`, which are TRUTHY in JS and so
+ * pass every call site's `t.costEur ? eur(t.costEur) : fallback` guard exactly like a real value
+ * would — and other non-finite input (never reachable from the engine, which only ever produces
+ * `null` or a real Decimal string; only a future caller that skips that guard could reach this)
+ * render as the same '—' placeholder `num` uses, not as `Number('garbage')` → `NaN` → the
+ * literal string `'€NaN'`, or `Number('   ')` → `0` → an invented `'€0.00'`, either printed as
+ * though it were money.
  */
 const eur = (s: string | null): string => {
-  if (s === null || s === '') return '—';
+  if (s === null || s.trim() === '') return '—';
   const n = Number(s);
   return Number.isFinite(n)
     ? `€${n.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—';

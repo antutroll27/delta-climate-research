@@ -34,6 +34,51 @@ const pack = JSON.parse(readFileSync(
 const run = (cn, country, route, massT, date = '2026-03-15') =>
   estimateFromPack(pack, { cn, country, route, massT, date });
 
+/**
+ * EXACT-PINNED legal prose — the four §4 caveats plus the below-threshold attestation
+ * sentence. Normally pinning exact text is a brittle test worth avoiding; here brittleness is
+ * the point. A reviewer proved that keyword-based assertions (match/doesNotMatch on a phrase)
+ * can be defeated by a PARAPHRASE ATTACK: keep every phrase the assertions look for, then
+ * append a contradicting reassurance to the same sentence — e.g. keeping "are not modelled" and
+ * "do not credit any such payment" verbatim on the Art 9 caveat, then appending "— but rest
+ * assured, the certificate price shown already reflects any such payment in practice, so your
+ * bill is effectively reduced for it regardless." All five caveats (including the CSCF pair,
+ * which was the one example that caught its own INVERSION) fell to this: every phrase a regex
+ * looked for was still present, so every assertion passed, on a caveat that had just been
+ * quietly undone.
+ *
+ * These constants are a manually maintained, independent transcript of the CURRENT production
+ * text — not imported from cbam-app.ts. If they were shared with production (e.g. exported
+ * constants both sides import), editing the prose would edit the test's expectation in lock
+ * step and the test could never catch anything. Being a separate, hand-typed copy is what makes
+ * `assert.ok(html.includes(...))` below refuse ANY edit — a real fix, an inversion, or an
+ * appended qualifying clause — and force whoever changed the wording to update this file too,
+ * deliberately, rather than let a paraphrase attack (or an honest rewrite that quietly drops a
+ * caveat) slip through unreviewed. When §4's wording changes on purpose, update these constants
+ * in the SAME commit as the production change — do not loosen this file's assertions to make a
+ * red test green.
+ */
+const CAVEAT_CSCF =
+  '<li>The cross-sectoral correction factor (CSCF) for 2026–2030 is unpublished. CSCF only\n'
+  + '        ever reduces the free allocation that offsets a bill — it can subtract, never add — so\n'
+  + '        every figure above assumes the largest free allocation legally possible (CSCF&nbsp;=&nbsp;1,\n'
+  + '        the last value the Commission actually set). Each figure above is therefore a floor: the\n'
+  + '        real bill cannot be lower than what is shown, and may be higher once the true factor is\n'
+  + '        published.</li>';
+const CAVEAT_ARTICLE_9 =
+  '<li>Article 9 deductions for a carbon price paid in the country of origin are not modelled\n'
+  + '        (the implementing act is still a draft), so figures do not credit any such payment.</li>';
+const CAVEAT_COMPLETENESS =
+  '<li>Any below-threshold verdict rests on the user\'s own statement of completeness, ticked\n'
+  + '        in the tool. No one has verified that list.</li>';
+const CAVEAT_FINGERPRINT =
+  '<li>Line fingerprints cover inputs as entered; no source document exists behind them. They\n'
+  + '        are not customs provenance.</li>';
+const ATTESTATION_SENTENCE =
+  '<p class="cb-sub">Below the threshold an importer owes nothing for 2026. This verdict rests '
+  + 'on your attested statement that the list is complete — it is your completeness claim, '
+  + 'verified by no one, not by the Commission or by us.</p>';
+
 /* ── §8 checklist: the engine still produces the SaaS's figures ─────────────── */
 
 test('§8 — priced line matches the SaaS exactly', () => {
@@ -288,6 +333,11 @@ test('renderYearThreshold: below-attested says so and names its basis', () => {
   assert.doesNotMatch(html, /independently (confirmed|verified)/i,
     'must not claim the Commission verified completeness — no one did');
   assert.doesNotMatch(html, /verified by the commission/i);
+  // EXACT pin (see the constant's own doc comment above the §8 checklist) — catches a
+  // paraphrase that keeps "rests on your attested statement" and "verified by no one" both
+  // verbatim, then appends a clause that quietly reassures the reader out of the caveat.
+  assert.ok(html.includes(ATTESTATION_SENTENCE),
+    'the attestation sentence must match the pinned text exactly — word for word, punctuation for punctuation');
   assert.match(html, /data-attest="2026"[^>]*checked/, 'checkbox reflects the attestation');
   assert.match(html, /2025\/2083/, 'the amending act must be cited on the per-year card too');
 });
@@ -354,6 +404,18 @@ test('renderTotals: a non-numeric costEur never prints as "€NaN" or the litera
   assert.doesNotMatch(html, />null</, 'eur() must never leave a bare "null" for a template to print');
 });
 
+test('renderTotals: a whitespace-only costEur never prints as an invented "€0.00"', () => {
+  // Number('   ') is 0 in JS, same quirk as Number('') — the first fix only special-cased the
+  // exact empty string and missed this. A whitespace-only string is TRUTHY, so it passes the
+  // `t.costEur ? eur(t.costEur) : fallback` guard at every call site exactly like a real value.
+  const html = renderTotals({
+    certificates: '71.465', costEur: '   ', chargeableTco2e: '71.465',
+    pricedLines: 1, refusedLines: 0, anyPending: false,
+  });
+  assert.doesNotMatch(html, /€0\.00/, 'blank input must not render as an invented zero cost');
+  assert.match(html, /cb-cost">—<\/div>/, 'blank input renders the same placeholder as null');
+});
+
 test('renderTotals: every entered line refused reads as a warning, never a claimed zero', () => {
   // Totals.certificates is '0' both for "genuinely zero" and "nothing was summed" — the card
   // must not let the second case read as a confirmed zero-liability result.
@@ -408,6 +470,18 @@ test('renderLineCard: a cleared mass field reads as missing, never a false zero'
   assert.match(html, /· — t ·/, 'an empty mass renders as a visible placeholder instead');
 });
 
+test('renderLineCard: a whitespace-only mass field reads as missing, never a false zero', () => {
+  // Number('   ') is 0 in JS, the same quirk as Number('') — the first fix only special-cased
+  // the exact empty string and missed this. A cleared <input> can leave stray whitespace behind
+  // depending on how it was cleared, and that must be treated as missing input too.
+  const e = run('25231000', 'DZ', '(A)', '100');
+  const html = renderLineCard({
+    id: 'L1', cn: '25231000', country: 'DZ', route: '(A)', scope: 'direct', massT: '   ', date: '2026-03-15',
+  }, e, 0);
+  assert.doesNotMatch(html, /\b0 t\b/, 'a whitespace-only mass must not render as a confirmed zero');
+  assert.match(html, /· — t ·/, 'a whitespace-only mass renders as a visible placeholder instead');
+});
+
 /* ── the printable document ────────────────────────────────────────────────── */
 
 test('buildPrintDocument carries all four §4 caveats, the real OJ hashes, and the injected date', () => {
@@ -451,6 +525,15 @@ test('buildPrintDocument carries all four §4 caveats, the real OJ hashes, and t
   assert.match(html, /not customs provenance/i);
   assert.doesNotMatch(html, /checked against a source document/i, 'mutation: fingerprints ARE checked against a document');
   assert.doesNotMatch(html, /\bconstitute customs provenance\b/i, 'mutation: fingerprints DO constitute customs provenance');
+  // EXACT pins (see the constants' own doc comment above): the match/doesNotMatch pairs above
+  // give a readable failure naming which claim broke; these catch what regex CANNOT — a
+  // paraphrase that keeps every phrase a regex looks for and appends a contradicting
+  // reassurance to the same sentence ("...so your bill is effectively reduced for it
+  // regardless"). Regex still passes that; an exact substring match cannot.
+  assert.ok(html.includes(CAVEAT_CSCF), 'the CSCF caveat must match the pinned text exactly — word for word, punctuation for punctuation');
+  assert.ok(html.includes(CAVEAT_ARTICLE_9), 'the Article 9 caveat must match the pinned text exactly');
+  assert.ok(html.includes(CAVEAT_COMPLETENESS), 'the completeness caveat must match the pinned text exactly');
+  assert.ok(html.includes(CAVEAT_FINGERPRINT), 'the fingerprint caveat must match the pinned text exactly');
   // Sourced from pack.sources IN THE TEST, not retyped — a hardcoded expected hash here would
   // keep passing even if the document started printing the wrong field of the pack again (the
   // earlier bug this replaced: printing the WORKBOOK digest under the REGULATION's label).
