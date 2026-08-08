@@ -239,10 +239,15 @@ CANDIDATES = [
          (0.02, 0.01, 1.20, 0.05),
          (0.60, 1.50, 1.60, 0.80), False),
     # THE SHIPPABLE ONE. D and E both drive L_ET to 0.8, which is not a free
-    # choice: types.ts records [0.40, 0.46] as the range satisfying BOTH the
-    # Kolkata park cool-island measurements (Mitra et al. 2022) and the physical
+    # choice: types.ts records [0.40, 0.46] as the range that was believed to
+    # satisfy BOTH the Kolkata park cool-island measurements and the physical
     # ceiling on what evapotranspiration can deliver, and validate-model.mjs
-    # asserts a consequence of it. A fit that wants 0.8 is asking for roughly
+    # asserts a consequence of it. CAVEAT 2026-08-08: the park-cooling half of
+    # that pair is WITHDRAWN — the paper is Li et al. 2022, not Mitra, and its
+    # "4.83-8.07 C" is a cross-city range of maxima (8.07 Kolkata, 4.83 Bangkok),
+    # not a Kolkata band, so the 0.40 lower end is unsupported. See
+    # docs/green-score-methodology.md 4.2. The argument BELOW still holds on the
+    # physical ceiling alone, which is what rejects 0.8. A fit that wants 0.8 is asking for roughly
     # twice the cooling ET can produce; adopting it would trade a calibration
     # failure for an unphysical constant, which is the same mistake in a nicer
     # suit. Held inside the defensible range, the rest is free to move.

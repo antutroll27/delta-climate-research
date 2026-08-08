@@ -68,8 +68,11 @@ REFUGE_CLASSES = {10, 20, 30, 80, 90, 95}
 # 250 m (Baruipur), which can only mean substantial refuges, not stray pixels.
 #
 # The threshold is Kolkata-specific and already cited elsewhere in this project:
-# Mitra et al. (2022) put the Threshold Value of Efficiency — the minimum park
-# area that delivers measurable cooling in Kolkata — at 0.77 ha.
+# Li et al. (2022), doi:10.3389/fenvs.2022.1073914, put the Threshold Value of
+# Efficiency — the minimum park area that delivers measurable cooling in Kolkata
+# — at 0.77 ha. (Cited here as "Mitra et al." until 2026-08-08; that attribution
+# was wrong, but the 0.77 ha figure IS Kolkata's and is unaffected. See
+# docs/green-score-methodology.md 4.2.)
 MIN_REFUGE_HA = 0.77
 CLASS_NAME = {10: "tree cover", 20: "shrubland", 30: "grassland",
               80: "permanent water", 90: "wetland", 95: "mangroves"}
@@ -91,7 +94,7 @@ def ward_tra(src: DatasetReader, w: Ward) -> TraWard:
         sys.exit(f"{ward}: no refuge class present within {PAD_M} m. That is a data "
                  f"failure, not a measurement — refusing to write TRA=0.")
 
-    # keep only contiguous patches at or above the Mitra threshold
+    # keep only contiguous patches at or above the TVoE threshold
     cell_area_m2 = cell_x * cell_y
     min_cells = int(round(MIN_REFUGE_HA * 10_000 / cell_area_m2))
     if min_cells <= 1:
@@ -170,7 +173,7 @@ def main() -> None:
                              "grassland, permanent water, wetland, mangroves. Maps the source "
                              "document's 'shaded parks and urban water bodies (Hooghly River, "
                              f"wetlands)'. Only contiguous patches >= {MIN_REFUGE_HA} ha count — "
-                             "the Threshold Value of Efficiency for Kolkata parks (Mitra et al. "
+                             "the Threshold Value of Efficiency for Kolkata parks (Li et al. "
                              "2022). Without it a single 10 m grass pixel counted as a refuge and "
                              "every ward scored 0.94-0.97, so the index stopped discriminating.",
         "why_not_osm": "Overpass rate-limited two of three wards, and one mirror returned "
