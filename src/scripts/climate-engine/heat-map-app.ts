@@ -35,7 +35,7 @@ import { findCoolingSurfaces, nearestCooling, type CoolingSurfaces } from './exp
 import { createWardSession } from './ward-session';
 import { ExploreFrameScheduler } from './explore/frame-scheduler';
 import { exploreRuntimeBudget, nextFrameDelayMs, type ExploreDeviceTier } from './explore/runtime-budget';
-import { CoreFieldLayer } from './explore/core-field-layer';
+import { createCoreFieldLayer } from './explore/core-field-layer';
 import type { ReliefRenderer, ReliefWardBundle, ReliefVisualState } from './explore/relief-contract';
 import {
   attachReliefCustomLayer, isReliefLayerAttached, shouldShowRelief,
@@ -87,7 +87,7 @@ export function mountHeatMap(): () => void {
   /* The analytical core is intentionally Three-free. Its canvas raster remains
      available while the optional relief chunk is downloading and is the whole
      renderer on capability tier 0. */
-  const coreField = new CoreFieldLayer(map, SIM_N);
+  const coreField = createCoreFieldLayer(map, SIM_N);
   const capsReady = detectHeatCaps();
   let relief: ReliefRenderer | null = null;
   let reliefReady: Promise<void> | null = null;
