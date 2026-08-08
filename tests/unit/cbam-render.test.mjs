@@ -331,7 +331,7 @@ test('renderTotals: a final priced total shows the euro figure and no what-if la
   assert.doesNotMatch(html, /What-if/);
 });
 
-test('renderTotals: zero priced lines is its own state, never a claimed zero', () => {
+test('renderTotals: every entered line refused reads as a warning, never a claimed zero', () => {
   // Totals.certificates is '0' both for "genuinely zero" and "nothing was summed" — the card
   // must not let the second case read as a confirmed zero-liability result.
   const html = renderTotals({
@@ -341,6 +341,20 @@ test('renderTotals: zero priced lines is its own state, never a claimed zero', (
   assert.doesNotMatch(html, /Priced/, 'zero priced lines must not be tagged as a priced result');
   assert.doesNotMatch(html, /class="cb-fig"/, 'no figure block when nothing was summed');
   assert.match(html, /2 line.*no estimate/i, 'the refused lines must still be named');
+  assert.match(html, /cb-tag unavail/, 'every-line-refused is a real warning, the red tone');
+});
+
+test('renderTotals: no lines entered yet is a neutral empty state, not the same red as a refusal', () => {
+  // pricedLines === 0 with refusedLines === 0 is derivable from Totals as it stands — no line
+  // was ever entered — and must not wear the same "unavail" tone as every-line-refused: an
+  // empty form is not a form full of failures.
+  const html = renderTotals({
+    certificates: '0', costEur: null, chargeableTco2e: '0',
+    pricedLines: 0, refusedLines: 0, anyPending: false,
+  });
+  assert.doesNotMatch(html, /Nothing priced/i, 'must not read as "every line failed" when none were entered');
+  assert.doesNotMatch(html, /class="cb-fig"/);
+  assert.match(html, /cb-tag pending/, 'an empty state is neutral, not the red unavail tone');
 });
 
 /* ── per-line card ──────────────────────────────────────────────────────────── */
@@ -382,12 +396,43 @@ test('buildPrintDocument carries all four §4 caveats, the real OJ hashes, and t
   // shown figure is a FLOOR — the true bill cannot be lower, only possibly higher.
   assert.match(html, /cannot be lower.*may be higher/is, 'the CSCF direction must not be stated backwards');
   assert.doesNotMatch(html, /cannot be higher/i, 'must not carry the reversed claim');
-  // The two hardcoded hashes in the plan this shipped from did not match the shipped pack at
-  // all — read them from the pack itself instead, and prove it here against the real values.
-  assert.match(html, /b79108b025e697822f0f59de477fa68066c1c05c228fae2270cd230af84e8a7b/,
-    'IR 2025/2620 (free allocation) hash must be the pack\'s real workbook hash');
-  assert.match(html, /865372ed23649b7b02c9124f207fc0b0875fd244c45c19e9fb8cdb1e503a5003/,
-    'IR 2025/2621 (default values) hash must be the pack\'s real workbook hash');
+  // Sourced from pack.sources IN THE TEST, not retyped — a hardcoded expected hash here would
+  // keep passing even if the document started printing the wrong field of the pack again (the
+  // earlier bug this replaced: printing the WORKBOOK digest under the REGULATION's label).
+  const regHash = (id) => pack.sources.find((s) => s.id === id).sha256;
+  assert.match(html, new RegExp(regHash('ir-2025-2620')),
+    'the IR (EU) 2025/2620 REGULATION hash — not the Benchmarks workbook\'s — must appear');
+  assert.match(html, new RegExp(regHash('ir-2025-2621')),
+    'the IR (EU) 2025/2621 REGULATION hash — not the Default Values workbook\'s — must appear');
+  // The underlying Commission workbooks are a different, also-true claim — printed too, but
+  // distinctly labelled so a reader cannot mistake one digest for the other.
+  assert.match(html, new RegExp(regHash('ec-benchmarks-workbook-v1')),
+    'the Benchmarks workbook hash must also appear, labelled as a workbook');
+  assert.match(html, new RegExp(regHash('ec-default-values-workbook-v1')),
+    'the Default Values workbook hash must also appear, labelled as a workbook');
+  assert.notEqual(regHash('ir-2025-2620'), regHash('ec-benchmarks-workbook-v1'),
+    'sanity: the regulation and its workbook must be genuinely different digests in the pack');
+  assert.match(html, /workbook/i, 'the workbook hashes must be labelled distinctly from the regulations');
+});
+
+test('buildPrintDocument never prints the pack\'s all-zero placeholder as though it were a real digest', () => {
+  // Four real sources in the shipped pack (dir-2003-87-art-10a-1a, dr-2019-331-art-14-6,
+  // reg-2023-956, ec-certificate-price-page) still carry 64 zeros because no hash has been
+  // pinned for them. A future §3 line reaching one of those must say so, not print the zeros.
+  const zeroPack = {
+    sources: [
+      { id: 'ir-2025-2620', sha256: '0'.repeat(64) },
+      { id: 'ir-2025-2621', sha256: pack.sources.find((s) => s.id === 'ir-2025-2621').sha256 },
+      { id: 'ec-benchmarks-workbook-v1', sha256: pack.sources.find((s) => s.id === 'ec-benchmarks-workbook-v1').sha256 },
+      { id: 'ec-default-values-workbook-v1', sha256: pack.sources.find((s) => s.id === 'ec-default-values-workbook-v1').sha256 },
+    ],
+  };
+  const html = buildPrintDocument({
+    lines: [], results: [], yearCards: [], totals: sumTotals([]),
+    packSnapshot: 'f'.repeat(64), rulePackages: [], pack: zeroPack, generatedOn: '2026-08-08',
+  });
+  assert.doesNotMatch(html, /0{64}/, 'a placeholder digest must never render as 64 zeros');
+  assert.match(html, /not yet pinned/i, 'a missing digest must be named as unpinned, not silently zero');
 });
 
 test('buildPrintDocument throws a named error on a lines/results length mismatch, rather than crash blind', () => {
