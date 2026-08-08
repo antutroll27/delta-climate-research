@@ -125,6 +125,52 @@ test.describe('multi-line CBAM estimate — add, remove, attest, totals', () => 
     await expect(attest).toBeFocused();
   });
 
+  test('attesting a year, then adding another line to that year, drops the attestation', async ({ page }) => {
+    // ATTESTATION-INVALIDATION RULE (cbam-app.ts's own doc comment above onOutClick): a calendar
+    // year's "these are all my imports" tick is a claim about ONE specific list of lines. onAdd
+    // drops any existing attestation for the year the new line joins (`attested.delete(year)`) —
+    // this is the tool's core honesty mechanism, and nothing before this test caught it
+    // regressing: a reviewer deleted that one call and all 77 unit and 17 e2e tests stayed green.
+    await page.goto('/cbam/cbam-calculator/');
+    await addLine(page, { mass: '20', date: '2026-03-15' });
+    await expect(page.locator('.cb-thresh')).toContainText('Indeterminate');
+
+    const attest = page.locator('[data-attest="2026"]');
+    await attest.check();
+    await expect(page.locator('.cb-thresh')).toContainText('Below threshold');
+    await expect(attest).toBeChecked();
+
+    // A second 2026 line — still under the 50 t threshold on its own, but the LIST the user
+    // attested to a moment ago no longer exists; a second line joined it without any fresh
+    // statement of completeness.
+    await addLine(page, { mass: '10', date: '2026-03-15' });
+    await expect(page.locator('.cb-line')).toHaveCount(2);
+    await expect(page.locator('.cb-thresh')).toContainText('Indeterminate');
+    await expect(page.locator('[data-attest="2026"]')).not.toBeChecked();
+  });
+
+  test('attesting a year, then removing a line from that year, drops the attestation', async ({ page }) => {
+    // The symmetric half of the rule above, on onOutClick's remove branch: removing a line from
+    // an attested year is just as much a change to the list the user swore was complete as adding
+    // one is. Two lines both in 2026 so the year still has content (and still shows a threshold
+    // card with a checkbox) after one is removed — this is not the "the year emptied out"
+    // case, it is "the list changed while other lines from it remain".
+    await page.goto('/cbam/cbam-calculator/');
+    await addLine(page, { mass: '20', date: '2026-03-15' });
+    await addLine(page, { mass: '10', date: '2026-03-15' });
+    await expect(page.locator('.cb-line')).toHaveCount(2);
+
+    const attest = page.locator('[data-attest="2026"]');
+    await attest.check();
+    await expect(page.locator('.cb-thresh')).toContainText('Below threshold');
+    await expect(attest).toBeChecked();
+
+    await page.locator('[data-remove]').first().click();
+    await expect(page.locator('.cb-line')).toHaveCount(1);
+    await expect(page.locator('.cb-thresh')).toContainText('Indeterminate');
+    await expect(page.locator('[data-attest="2026"]')).not.toBeChecked();
+  });
+
   test('a 60 t line reports above threshold, with no checkbox to gate a fact', async ({ page }) => {
     await page.goto('/cbam/cbam-calculator/');
     await addLine(page, { mass: '60' });
