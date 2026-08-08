@@ -169,9 +169,25 @@ single item in this spec.
 `fetch-landsat-lst.py --probe` reports **90 dates covering all three wards**. The committed
 archive holds **50**. The `ST_QA_MAX_K = 3.0` ceiling is discarding 40 dates.
 
-That threshold was chosen deliberately, with a tabulated trade at `fetch-landsat-lst.py:174`.
-It should be revisited now that coincidence count is the binding constraint — or at minimum,
-what it costs should be recorded alongside what it buys.
+**CORRECTION, 2026-08-09 — having read the reasoning, the shipped threshold is right and I
+withdraw the suggestion to loosen it.** `fetch-landsat-lst.py:174` already tabulates the trade
+over 72 windows, and the choice is deliberate and correct:
+
+|  ST_QA ceiling | ward-scenes kept | overpasses | mean ST_QA of kept pixels |
+|---|---|---|---|
+| ≤ 3.0 K | 31.9 % | 6 | **2.01 K** ← shipped |
+| ≤ 5.0 K | 56.9 % | 11 | 3.04 K |
+
+Loosening to 5 K buys ~1.8× the scenes at a reference uncertainty of 3.04 K — which is most of
+the 4.42 K daytime error the campaign exists to resolve. *"Yield bought with the instrument's
+credibility is the wrong trade for a validation campaign"*, and that is exactly right.
+
+**But one real point survives: the threshold should be per-purpose, not global.** 3.0 K is
+correct for *validation*, where Landsat must stay an independent check. The regional harvest
+of §3.1 is a different job — differencing two instruments across many pairs, where random
+reference noise averages down while a systematic offset does not. A separate, looser,
+separately-justified ceiling may be defensible **there and only there**, and it must be
+pre-registered with its own reasoning rather than inherited.
 
 ## 5 · Runs in parallel, depends on nothing here
 
