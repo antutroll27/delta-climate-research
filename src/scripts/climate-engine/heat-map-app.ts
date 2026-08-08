@@ -33,7 +33,7 @@ import {
 } from './road-labels';
 import { findCoolingSurfaces, nearestCooling, type CoolingSurfaces } from './explore/cooling-surfaces';
 import { createWardSession } from './ward-session';
-import { ExploreFrameScheduler } from './explore/frame-scheduler';
+import { createExploreFrameScheduler } from './explore/frame-scheduler';
 import { exploreRuntimeBudget, nextFrameDelayMs, type ExploreDeviceTier } from './explore/runtime-budget';
 import { createCoreFieldLayer } from './explore/core-field-layer';
 import type { ReliefRenderer, ReliefWardBundle, ReliefVisualState } from './explore/relief-contract';
@@ -104,7 +104,7 @@ export function mountHeatMap(): () => void {
      useful, keeping hidden tabs and active gestures out of the simulation loop. */
   let runtimeVisible = !document.hidden;
   let runtimeTier: ExploreDeviceTier = 'balanced';
-  const frameScheduler = new ExploreFrameScheduler((time) => runRuntimeFrame(time));
+  const frameScheduler = createExploreFrameScheduler((time) => runRuntimeFrame(time));
   function requestRuntimeFrame(reason: 'drag' | 'orbit' | 'grow' | 'render', delay = 0): void {
     if (appDisposed || !runtimeVisible) return;
     frameScheduler.requestAfter(reason, delay);

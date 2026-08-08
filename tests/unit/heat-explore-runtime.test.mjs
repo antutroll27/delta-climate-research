@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 const { exploreRuntimeBudget, nextFrameDelayMs } = await import('../../src/scripts/climate-engine/explore/runtime-budget.ts');
-const { ExploreFrameScheduler } = await import('../../src/scripts/climate-engine/explore/frame-scheduler.ts');
+const { createExploreFrameScheduler } = await import('../../src/scripts/climate-engine/explore/frame-scheduler.ts');
 
 test('Explore runtime suspends simulation while hidden or interacting', () => {
   assert.equal(exploreRuntimeBudget({ visible: false, interacting: false, reducedMotion: false, deviceTier: 'full' }).simulate, false);
@@ -53,7 +53,7 @@ test('Explore frame scheduler coalesces visual reasons into one requested frame'
   let callback;
   let requests = 0;
   const seen = [];
-  const scheduler = new ExploreFrameScheduler((time, reasons) => seen.push([time, [...reasons].sort()]), {
+  const scheduler = createExploreFrameScheduler((time, reasons) => seen.push([time, [...reasons].sort()]), {
     requestFrame(fn) { requests++; callback = fn; return 17; },
     cancelFrame() {},
   });
@@ -72,7 +72,7 @@ test('Explore frame scheduler keeps the earliest requested deadline', () => {
   const timers = new Map();
   const cleared = [];
   const frames = [];
-  const scheduler = new ExploreFrameScheduler((time, reasons) => frames.push([time, [...reasons]]), {
+  const scheduler = createExploreFrameScheduler((time, reasons) => frames.push([time, [...reasons]]), {
     now: () => now,
     requestFrame(fn) { frameCallback = fn; return 30; },
     cancelFrame() {},
