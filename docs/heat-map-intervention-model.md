@@ -100,8 +100,16 @@ the literature is largely an **air-temperature** phenomenon; our field is labell
 real imagery shows as *sharp*. So we prioritise contrast.
 
 **Chosen constant:** `D = 2.5` cell²·u⁻¹ (was 0.15; briefly 9.0). `k ∈ [0.032, 0.12]` →
-**λ = √(D/k)·dx ≈ 33–65 m** — a park still gets a near-field cooling halo (within Mitra's
-67–81 m *mean* cooling distance [5]) while the dense core keeps its red hotspots. Verified:
+**λ = √(D/k)·dx ≈ 33–65 m** — a park still gets a near-field cooling halo while the dense core
+keeps its red hotspots. *(**Corrected 2026-08-08.** This line formerly read "within Mitra's
+67–81 m mean cooling distance [5]". Two errors: **[5] is not Mitra and not Kolkata** — it is the
+**Zhengzhou** park-spillover study, `10.3389/feart.2023.1133901` — and **67–81 m is not a figure
+[5] reports**; [5]'s recorded mean cooling distance, in this document's own reference list, is
+**179 m**. The 67–81 m number is untraceable to any cited source and has been dropped rather
+than replaced with a guess. Against [5]'s actual 179 m mean, our halo — max reach 2–3λ ≈
+66–195 m — is comparable only at the top of the λ range; as with the 420 m reach in §3.3, we do
+**not** claim to reproduce a published cooling distance. See `green-score-methodology.md` §4.2.)*
+Verified:
 at live ambient ≈ 30 °C, base mean ≈ 39 °C, **~49 % of the core > 40 °C**, UHI +14° — a
 legible heat map. We do **not** claim the full 420 m LST reach (that needs advection we omit).
 
@@ -146,9 +154,17 @@ Maps 1:1 onto the real Microsoft-footprint raster (`rasterBase` built mask). The
 from (1) (albedo term only acts where sun hits built cells).
 
 ### 3.3 Pocket parks / wetlands (0–10) → `veg`/`water` patches on real open land
+
+> **CORRECTION 2026-08-08 — the "4.83–8.07 °C Kolkata band" does not exist.** Reference [4] is
+> **Li et al. 2022**, not Mitra, and 4.83–8.07 °C is a *cross-city* range of daytime winter
+> maxima: **8.07 °C is Kolkata's maximum, 4.83 °C is Bangkok's**. The lower bound was never a
+> Kolkata constraint, so everywhere this document used the pair as a *band* it is now stated
+> **one-sided (≤ 8.07 °C)**. **TVoE 0.77 ha and reach 420 m are genuinely Kolkata's and stand.**
+> Full record: `green-score-methodology.md` §4.2.
+
 Kolkata evidence [4]: cool-island intensity `UCI = a·ln(Area) + b`, efficiency threshold
-**TVoE ≈ 0.77 ha**, max intensity 4.83–8.07 °C, reach ≤ 420 m. Several medium patches beat
-one big one [5].
+**TVoE ≈ 0.77 ha**, reach ≤ 420 m, daytime **maximum** intensity **8.07 °C** (one-sided — see
+the correction above). Several medium patches beat one big one [5].
 
 ```
 blob radius r = 50 m (≈ 0.77 ha — Kolkata's TVoE = the efficient park size)
@@ -159,8 +175,14 @@ placement: rank coarse cells by open-land fraction (1 − built density), enforc
 ```
 
 **Consistency check (make it an assert):** local equilibrium drop inside a park
-`= L·0.9/k = 0.5·0.9/0.06 = 7.5 °C` — inside Mitra's measured 4.83–8.07 °C band [4]
-with default params. The model reproduces the Kolkata literature *before* calibration.
+`= L·0.9/k`. With the **shipped** `L = 0.46` and `k = kRad + h·wind = 0.06` this is
+**6.90 °C**; the harness reports **5.80 °C**, because `currentParams()` applies its humidity
+gate (×0.84 at rh = 60) before the drop is evaluated. (The `0.5·0.9/0.06 = 7.5 °C` this line
+formerly showed used neither the shipped 0.46 nor this document's own 0.43 — it was the
+pre-calibration 0.5.) Both figures sit **below Kolkata's 8.07 °C daytime maximum [4]**, which
+is the only bound that survives the 2026-08-08 correction above. This is a one-sided check:
+there is **no lower bound to reproduce**, and no claim is made here that the model reproduces
+the Kolkata literature before calibration.
 Spread beyond the blob comes from λ (§2), max reach 2–3λ ≈ 190–370 m ≈ the 420 m cap [4].
 
 ### 3.4 Vertical green facades (0–15) → effects on built cells (facades ≠ ground veg)
@@ -393,8 +415,9 @@ canonical 192×192 grid did not.
 | §6 all-green reference | `allGreenReferenceC`, `greenReferenceContrastC` | `types.ts` + instrument |
 | runtime backend | `detectHeatCaps`, `HeatSimHost`, worker fallback | `caps.ts`, `sim-host.ts`, `sim-worker.ts` |
 
-**New asserts when implemented:** λ(D=2.5, k=0.06) ≈ 47 m; park local drop ∈ [4.8, 8.1] °C
-(Mitra band [4]); eqMean vs converged diffused mean drift < 0.3 °C; corridor Δveg ≤ CAP.
+**New asserts when implemented:** λ(D=2.5, k=0.06) ≈ 47 m; park local drop **≤ 8.07 °C**
+(one-sided — Kolkata's daytime maximum [4]; the former `[4.8, 8.1]` band was withdrawn
+2026-08-08, see §3.3); eqMean vs converged diffused mean drift < 0.3 °C; corridor Δveg ≤ CAP.
 
 **Self-checks now in place** (all runnable with `node --experimental-strip-types`):
 
@@ -430,7 +453,7 @@ readouts/stats: raw sim field directly (never the blurred copy)
 1. Berlin Biotope Area Factor — formula + weights. ugl.sg/wp-content/uploads/2021/01/20191002_biotope_area_factor.pdf
 2. Seattle Green Factor score sheet. app.dcoz.dc.gov/Exhibits/2010/ZC/08-06-9/Exhibit14.pdf
 3. URA Singapore — Green Plot Ratio / LUSH. ura.gov.sg/guidelines/development-control/…/greenery/
-4. Mitra et al. 2022 (Frontiers Env. Sci.) — tropical megacities incl. **Kolkata**: UCI = a·ln A + b, TVoE 0.77 ha, reach 420 m, 4.83–8.07 °C. frontiersin.org/articles/10.3389/fenvs.2022.1073914/full
+4. **Li, Lu, Fu, Sun, Pan, Han, Guo & Li 2022** (Frontiers Env. Sci.), *Diverse cooling effects of green space on urban heat island in tropical megacities* — tropical megacities incl. **Kolkata**: UCI = a·ln A + b, TVoE **0.77 ha** and reach **420 m** (both Kolkata's). Daytime maximum UCI **8.07 °C is Kolkata's**; **4.83 °C is Bangkok's** — the two are a cross-city range of maxima, **not** a Kolkata band. *Previously miscited here as "Mitra et al. 2022" with a "4.83–8.07 °C" Kolkata band; corrected 2026-08-08, see §3.3.* frontiersin.org/articles/10.3389/fenvs.2022.1073914/full
 5. Zhengzhou park spillover 2023 (Frontiers Earth Sci.) — cooling distance mean 179 m, ~1 °C/100 m, patch-splitting result. frontiersin.org/articles/10.3389/feart.2023.1133901/full
 6. LBNL Heat Island Group — roof albedo values. heatisland.lbl.gov/coolscience/cool-roofs
 7. UMEP docs (SOLWEIG/SUEWS) — model-class positioning. umep-docs.readthedocs.io
