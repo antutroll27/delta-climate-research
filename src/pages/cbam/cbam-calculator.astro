@@ -121,8 +121,13 @@ import Footer from '../../components/layout/Footer.astro';
         </section>
 
         <!-- aria-live: the figure AND the refusal both need announcing. A refusal only
-             sighted users learn about is not a refusal. -->
-        <section class="cb-out" aria-labelledby="cb-res-h" aria-live="polite">
+             sighted users learn about is not a refusal. This starts "polite" for the
+             single-line preview and stays that way with lines empty — cbam-app.ts turns
+             it "off" only in multi-line mode, where the SAME region would otherwise
+             re-announce every year card, line card, waterfall and stamp on every single
+             add/remove/attest click; #cbStatus (already its own live region) carries a
+             short summary instead. See renderAll's own comment for the full rationale. -->
+        <section id="cbOutWrap" class="cb-out" aria-labelledby="cb-res-h" aria-live="polite">
           <h2 id="cb-res-h" class="cb-sr">Provisional exposure</h2>
           <!-- The empty state is a CARD, not bare text. Without the shell the right
                column reads as a rendering failure rather than a waiting instrument —
