@@ -45,7 +45,7 @@ interface enforces this rather than relying on the reader.
 
 ---
 
-## 1 · Core field equation (implemented — `types.ts`, `sim-gpu.ts`)
+## 1 · Core field equation (implemented - `types.ts`, `sim-gpu.ts`, `sim-ts.ts`)
 
 Per-cell temperature `T` on an N×N grid (N=192, ward 1400 m → **dx = 7.29 m/cell**), with
 input layers `albedo, veg, built, water ∈ [0,1]`:
@@ -353,15 +353,22 @@ accelerates only above ~40 % cover and saturates near 0.8 [18].
 
 ---
 
-## 6 · Derived readouts (implemented — definitions of record)
+## 6 · Derived readouts (implemented - definitions of record)
 
 ```
-UHI Δ        = mean(T) − T_rural_ref
-T_rural_ref  = (S·(1−0.25)·sun − L·1 + kRad·Tsky + h·wind·Tair) / k     (veg=1, built=0 cell
-               under the SAME live forcing — never a stale constant)
+Δ vs all-green ref = mean(T) − T_green_ref
+T_green_ref         = equilibriumC(params, albedo=0.25, veg=1, built=0)  (synthetic fully vegetated cell
+                      under the SAME live forcing, including nocturnal storage)
 Area > 40 °C = fracAbove(40) from sim.stats()
 Histogram    = 12 bins over T ∈ [26, 48] °C
 ```
+
+`T_green_ref` is a modelled land-cover counterfactual, not a measured rural station or a
+surface/air urban heat-island observation. Both Explore and Compare call the same
+`allGreenReferenceC()` / `greenReferenceContrastC()` helpers in `types.ts`; derived evidence is
+labelled `heat-metrics-v2`. The corrected reference includes `store`, so only retained/night
+contrast changed in this update. The simulated field, model version, forcing records, and
+canonical 192×192 grid did not.
 
 ---
 
@@ -370,7 +377,7 @@ Histogram    = 12 bins over T ∈ [26, 48] °C
 | Formula | Code | File |
 |---|---|---|
 | (1)(2) dt clamps | `SimParams`, `stableDt`, `cflDt`, `decayDt` | `climate-engine/types.ts` |
-| (1) GPU step | `STEP_FRAG` | `climate-engine/sim-gpu.ts` |
+| (1) solver step | `STEP_FRAG`, `TsHeatSim` | `climate-engine/sim-gpu.ts`, `sim-ts.ts` |
 | λ retune | `currentParams D: 0.15 → 2.5` + reset burst | `types.ts` + instrument `resetSim()` |
 | (4) corridors | `applyInterventions` + new `roadMask` | instrument (pending build) |
 | (5) cool roofs | `applyInterventions` albedo term (retune 0.0032 → eq. 5) | instrument |
@@ -383,7 +390,8 @@ Histogram    = 12 bins over T ∈ [26, 48] °C
 | §4.3 night Q | `Q_NIGHT_RATIO` | `heat-map-model.ts` |
 | (13) solar geometry | `solarElevationFactor` | `climate-engine/sky.ts` (calibration only) |
 | §0.1 accuracy bands | `ACCURACY`, `bandLabel` | `climate-engine/accuracy.ts` |
-| §6 UHI | `refreshStats()` rural ref | instrument |
+| §6 all-green reference | `allGreenReferenceC`, `greenReferenceContrastC` | `types.ts` + instrument |
+| runtime backend | `detectHeatCaps`, `HeatSimHost`, worker fallback | `caps.ts`, `sim-host.ts`, `sim-worker.ts` |
 
 **New asserts when implemented:** λ(D=2.5, k=0.06) ≈ 47 m; park local drop ∈ [4.8, 8.1] °C
 (Mitra band [4]); eqMean vs converged diffused mean drift < 0.3 °C; corridor Δveg ≤ CAP.

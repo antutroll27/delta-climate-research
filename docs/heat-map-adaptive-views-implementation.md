@@ -251,6 +251,7 @@ interface ReleaseEvidence<TForcing extends ForcingEvidence> {
   dataVersion: string;
   stockBasis: StockBasisVersions;
   backendVersion: string;
+  metricsVersion: 'heat-metrics-v2';
   screening: true;
 }
 
@@ -262,7 +263,7 @@ interface WardScenarioResult<TForcing extends ForcingEvidence> {
   baselineHotAreaPct: MetricValue<number>;
   scenarioHotAreaPct: MetricValue<number>;
   hotAreaChangePp: MetricValue<number>;
-  ruralContrastC: number;
+  greenReferenceContrastC: number;
   capitalCost: CapitalCostEvidence;
   delivered: DeliveredQuantities;
   scenarioField: Float32Array;
