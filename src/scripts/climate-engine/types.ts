@@ -113,18 +113,59 @@ export const DEFAULT_PARAMS: SimParams = {
   //     never a Kolkata constraint. Withdrawn 2026-08-08 — see
   //     docs/green-score-methodology.md §4.2.
   //
-  // Consequence: the [0.40, 0.46] intersection band was pinned at its lower end
-  // by 4.83 °C, so that end — and "0.46 is the top of the band" as a rationale —
-  // rest on a constraint that does not exist. L is NOT uniquely determined by
-  // the evidence as written. What survives is one-sided: park cooling must stay
-  // ≤ 8.07 °C, and a vegetated surface must stay within 4 K of air. 0.46 passes
-  // both (see scripts/validate-model.mjs). The unconstrained ward-scale fit
-  // wanted 0.8 — roughly twice what ET can deliver — and was refused.
+  // RE-DERIVED 2026-08-09. The value stands; the reasoning behind it did not.
   //
-  // L IS DELIBERATELY NOT CHANGED HERE. Re-deriving it means re-running the
-  // calibration and re-validating everything downstream; cooling is 1/3 of the
-  // Green Score, so if L moves, every score moves with it. This comment records
-  // a shipped constant with a partly-withdrawn derivation rather than hiding it.
+  //   1. NOTHING FITS L. fit-physics.py fits Q_day, kRad:h and Brutsaert c —
+  //      L is not among them. In fit-ward-scale.py `l_et` is a BOUNDED
+  //      parameter, and ward-scale-fit.json records it as `pinned` in every
+  //      candidate: it lands on 0.6, 0.8 or 0.46, always the ceiling it was
+  //      given. The fit wants ~0.8, roughly twice what ET can deliver.
+  //   2. SO THE WITHDRAWN LOWER BOUND NEVER BOUND ANYTHING. A parameter that
+  //      rails upward is decided by its ceiling alone. Losing 4.83 °C destroys
+  //      the RATIONALE ("the midpoint", later "the top of the band") without
+  //      making 0.46 inadmissible.
+  //   3. AND [0.40, 0.46] CANNOT BE REPRODUCED FROM THIS MODEL AT ALL. Park
+  //      cooling is exactly 15·L_eff, so even the OLD two-sided band maps to
+  //      L ∈ [0.383, 0.640] at rh 60 — not [0.40, 0.46]. That band is a fossil
+  //      of an earlier model, predating the Q retune and the evap scaling. It
+  //      should not be cited as this model's constraint by anyone, including us.
+  //
+  // WHAT ACTUALLY CONSTRAINS L, one-sided: park cooling ≤ 8.07 °C (Li et al.
+  // 2022, Kolkata daytime max) and a vegetated surface within 4 K of air. Both
+  // are ceilings. In constant-space they depend on humidity, because L below is
+  // scaled by evap = 0.6 + 0.6·(1 − rh/100) — a factor of two across the range —
+  // and WHICH BAR BINDS CHANGES WITH IT:
+  //
+  //      rh 60   park binds   L ≤ 0.640        rh 30   veg binds   L ≤ 0.515
+  //
+  // (The first draft of this note derived every ceiling from park cooling alone
+  //  and put rh 30 at 0.527. Wrong: below ~35 % rh the vegetated-surface bar is
+  //  the tighter of the two.)
+  //
+  // KNOWN DEFECT, FOUND WHILE VERIFYING THE ABOVE — the ramp has no upper anchor.
+  // It keeps RAISING evapotranspiration as air dries, while the 4 K headroom
+  // SHRINKS as the sky dries. The two cross near 22 % rh. Real stomata close
+  // under high vapour-pressure deficit and ET falls; the ramp models the
+  // opposite. This is reachable on observed weather, not a corner case:
+  // ward-observations.json records humidity down to 14.1 %, and 6 of its 298
+  // readings put a vegetated surface further than 4 K below air. The heatwave
+  // overlay widens the window but does not cause it.
+  //
+  // So the defect is the RAMP, not L's magnitude, and the fix is a design
+  // decision — cap the multiplier, or lower L, or bound the validity envelope —
+  // that moves published output and is not being made silently here.
+  // validate-model.mjs now fails visibly on it rather than checking rh 60 alone.
+  //
+  // WHY NOT MOVE IT TO THE CEILING. Because the ceiling is not evidence that the
+  // value belongs there. Raising L to 0.527 would be adopting the largest number
+  // the guardrail permits, on the say-so of a ward-scale fit that wants 0.8 —
+  // fit-ward-scale.py's own verdict on that is "the same mistake in a nicer
+  // suit". Measured cost of being wrong either way: +1 to +2 points of 100 on
+  // modest and moderate scenarios, and exactly zero at full intervention.
+  //
+  // So L is an admissible choice inside a one-sided feasible region, not a
+  // uniquely determined constant, and this comment says so rather than implying
+  // a precision the evidence does not carry.
   L: 0.46,
   h: 0.05,
   wind: 1,

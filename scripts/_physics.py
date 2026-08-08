@@ -47,7 +47,12 @@ LC = os.path.join(ROOT, "data", "calibration", "landcover-fractions.json")
 
 # Fixed model constants, mirrored from src/scripts/climate-engine/types.ts.
 S_SOLAR = 0.6
-L_ET = 0.46                  # ward-scale fit, top of the defensible [0.40, 0.46] band
+# NOT "the top of the [0.40, 0.46] band" — that band is a fossil of an earlier
+# model and cannot be reproduced from this one (green-score-methodology 4.2.1).
+# 0.46 is an admissible choice inside a ONE-SIDED feasible region whose ceiling is
+# 0.640 at rh 60 and 0.527 at rh 30. The ward-scale fit rails l_et to whatever
+# ceiling it is given, so this number is chosen, not fitted.
+L_ET = 0.46
 K_SUM = 0.01 + 0.05          # kRad + h at wind = 1; the RATIO is fitted, the sum is held
 
 #: Nocturnal heat release, night only — the storage flux (ΔQs) a steady-state

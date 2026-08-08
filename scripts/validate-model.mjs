@@ -96,6 +96,63 @@ check(
   'Vegetated surface below air temp', p0.tAir - vegCell, 0, 4, 'K',
   'ET can hold a vegetated surface a few K below air; >4 K below is not physical',
 );
+/* ── 3c. the two ET bars, across the space the app can actually reach ───────── */
+// BOTH CHECKS ABOVE ARE SINGLE-POINT, AND THE THING THEY CONSTRAIN IS NOT.
+// currentParams scales L by evap = 0.6 + 0.6·(1 − rh/100), so the effective ET
+// coefficient spans 0.6× to 1.2× the constant — a factor of two — while the
+// checks only ever saw the rh = 60 fallback. A bar that is only evaluated at one
+// point of a moving parameter is not a bound, it is an anecdote.
+//
+// So: find the humidity at which each bar actually breaks, and report the margin
+// rather than asserting a Kolkata humidity floor nobody measured. The heatwave
+// path is swept too, because it derives its own rh by preserving vapour as the
+// air warms — the one route in the app that reaches genuinely dry air.
+const etBars = (live, heatTairC) => {
+  const p = M.currentParams({ live, phase: 'peak', path: '2025', iv: ZERO, ...(heatTairC == null ? {} : { heatTairC }) });
+  return {
+    park: M.eqCell(p, 0.20, 0, 0) - M.eqCell(p, 0.20, 0.9, 0),
+    veg: p.tAir - M.eqCell(p, 0.25, 1.0, 0),
+    Leff: p.L,
+  };
+};
+// Drive the sweep with the humidity WE ACTUALLY OBSERVED, not a round number.
+// The first draft of this section asserted a 30 % floor as "well below anything
+// Kolkata records". ward-observations.json records 14.1 %. Assuming a floor is
+// how the L citation went wrong in the first place; read the archive instead.
+const OBS_RH = [];
+(function collect(node) {
+  if (Array.isArray(node)) node.forEach(collect);
+  else if (node && typeof node === 'object') {
+    for (const [k, v] of Object.entries(node)) {
+      if (k === 'rh' && typeof v === 'number') OBS_RH.push(v);
+      else collect(v);
+    }
+  }
+})(JSON.parse(await (await import('node:fs/promises')).readFile(
+  new URL('../data/calibration/ward-observations.json', import.meta.url), 'utf8')));
+const rhSorted = [...OBS_RH].sort((a, b) => a - b);
+const live = (rh) => ({ tAir: 32, rh, wind: 3, cloud: 0 });
+const violatesVeg = OBS_RH.filter((rh) => etBars(live(rh), null).veg > 4).length;
+const violatesPark = OBS_RH.filter((rh) => etBars(live(rh), null).park > 8.07).length;
+
+check(
+  'Vegetated-surface bar holds on observed weather', violatesVeg, 0, 0, ' readings',
+  'THE EVAP RAMP HAS NO UPPER ANCHOR. currentParams scales L by 0.6 + 0.6·(1 − rh/100), '
+  + 'so ET keeps RISING as air dries, while the 4 K headroom shrinks as the sky dries. They '
+  + `cross near 22 % rh, and this archive records humidity down to ${rhSorted[0].toFixed(1)} %. `
+  + 'Real stomata close under high vapour-pressure deficit and ET falls — the ramp models the '
+  + 'opposite. See docs/green-score-methodology.md §4.2.1; this is a MODEL DEFECT, not a bar to relax',
+);
+check(
+  'Park-cooling bar holds on observed weather', violatesPark, 0, 0, ' readings',
+  'the same sweep against the Li et al. 2022 Kolkata daytime maximum',
+);
+check(
+  'Heatwave overlay stays physical from the median day', etBars(live(54.3), 48).veg, 0, 4, 'K',
+  'imposing 48 °C on the archive MEDIAN humidity must stay inside the bar — it does. The '
+  + 'overlay widens the dry-air defect above rather than causing it, and the two must not be conflated',
+);
+
 check(
   'Built surface above air temp', builtCell - p0.tAir, 5, 25, 'K',
   'clear-sky afternoon roof/asphalt runs 15-25 K above air (LST vs 2 m air)',
