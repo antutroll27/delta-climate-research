@@ -49,38 +49,49 @@ function evictOnRejection<K, V>(cache: Map<K, Promise<V>>, key: K, pending: Prom
 }
 
 /** Worker-lifetime caches. Scenario fields intentionally never enter this cache. */
-export class PairedScenarioCache {
-  private prepared = new Map<WardId, Promise<PreparedWard>>();
-  private baselines = new Map<string, Promise<BaselineResult>>();
+export interface PairedScenarioCache {
+  /** Ward geometry, raster and spatial index, de-duplicated per ward. */
+  ward(id: WardId): Promise<PreparedWard>;
+  /** The reference solve for a ward/forcing/phase key, de-duplicated while in flight
+   *  and evicted if it rejects — see evictOnRejection. */
+  baseline(key: string, create: () => Promise<FieldResult>): Promise<BaselineResult>;
+  clear(): void;
+}
 
-  async ward(id: WardId): Promise<PreparedWard> {
-    const cached = this.prepared.get(id);
-    if (cached) return cached;
-    const pending = (async () => {
-      const [loaded, surface] = await Promise.all([loadWard(id), loadWardSurface(id)]);
-      const base = rasterWardBase(loaded.ward, surface.means, surface.surface);
-      return { wardData: loaded.ward, roads: loaded.roads, base, spatial: buildSpatial(loaded.ward, base, loaded.roads) };
-    })();
-    this.prepared.set(id, pending);
-    evictOnRejection(this.prepared, id, pending);
-    return pending;
-  }
+export function createPairedScenarioCache(): PairedScenarioCache {
+  const prepared = new Map<WardId, Promise<PreparedWard>>();
+  const baselines = new Map<string, Promise<BaselineResult>>();
 
-  baseline(key: string, create: () => Promise<FieldResult>): Promise<BaselineResult> {
-    const cached = this.baselines.get(key);
-    if (cached) return cached;
-    // Baseline fields are not rendered. Retaining only statistics keeps the
-    // worker cache bounded while preserving the exact comparison evidence.
-    const pending = create().then(({ stats }) => ({ stats }));
-    this.baselines.set(key, pending);
-    evictOnRejection(this.baselines, key, pending);
-    return pending;
-  }
+  return {
+    async ward(id) {
+      const cached = prepared.get(id);
+      if (cached) return cached;
+      const pending = (async () => {
+        const [loaded, surface] = await Promise.all([loadWard(id), loadWardSurface(id)]);
+        const base = rasterWardBase(loaded.ward, surface.means, surface.surface);
+        return { wardData: loaded.ward, roads: loaded.roads, base, spatial: buildSpatial(loaded.ward, base, loaded.roads) };
+      })();
+      prepared.set(id, pending);
+      evictOnRejection(prepared, id, pending);
+      return pending;
+    },
 
-  clear(): void {
-    this.prepared.clear();
-    this.baselines.clear();
-  }
+    baseline(key, create) {
+      const cached = baselines.get(key);
+      if (cached) return cached;
+      // Baseline fields are not rendered. Retaining only statistics keeps the
+      // worker cache bounded while preserving the exact comparison evidence.
+      const pending = create().then(({ stats }) => ({ stats }));
+      baselines.set(key, pending);
+      evictOnRejection(baselines, key, pending);
+      return pending;
+    },
+
+    clear() {
+      prepared.clear();
+      baselines.clear();
+    },
+  };
 }
 
 function assertNotCancelled(options: PairedRunOptions): void {
