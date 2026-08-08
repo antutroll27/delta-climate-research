@@ -265,7 +265,7 @@ Calibration is not contained to the physics module.
 
 | Affected | Effect |
 |---|---|
-| Park-cooling check | Currently passing inside Mitra's Kolkata band; `L` changes will move it |
+| Park-cooling check | Passes as a one-sided check (5.42 °C below Kolkata's 8.07 °C daytime max, Li et al. 2022). **Not a band** — the "4.83–8.07 °C Kolkata band" was a misreading, 4.83 °C being Bangkok's maximum; see the 2026-08-08 correction in `green-score-methodology.md` §4.2. `L` changes will move it |
 | Display ramp 26–48 °C | Absolute temperatures shift with the sky correction |
 | **Green Score** | Cooling is ⅓ of the score and efficiency is cooling ÷ cost — **scores will change** |
 | `Δ vs all-green ref` | Relabelled previously but never recalibrated; this fixes it |
