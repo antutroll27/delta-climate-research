@@ -4,8 +4,8 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import {
-  buildPrintDocument, nextRoute, renderLineCard, renderResult, renderThreshold, renderTotals,
-  renderYearThreshold,
+  buildPrintDocument, decorateSnapshot, nextRoute, renderLineCard, renderResult, renderThreshold,
+  renderTotals, renderYearThreshold,
 } from '../../src/scripts/cbam-algos/cbam-app.ts';
 import {
   estimateFromPack, resolveThreshold, routesFor,
@@ -636,4 +636,61 @@ test('buildPrintDocument: a mix of ok, unavailable and thrown lines all print di
   assert.match(html, /no estimate<\/td>/, 'the ordinary refusal reads as a plain "no estimate"');
   assert.match(html, /no estimate \(error\)/, 'the thrown line reads distinctly, as an error');
   assert.match(html, />boom</, 'the thrown line\'s own message is printed');
+});
+
+/* ── the shared snapshot-decoration point (spec-review fix) ───────────────────
+ *
+ * initCbam's single-line preview (run()) and its multi-line path (estimateLine()) both render a
+ * CertificateEstimate, and BOTH must stamp the real pack snapshot in place of the vendored
+ * engine's literal 'browser-prototype' placeholder — that is the whole point of §4's snapshot
+ * claim. They used to do this with two separate `e.stamp.snapshotHash = snapshot` assignments;
+ * run() never got one, so the view every first-time visitor sees (and the one shown again
+ * whenever the last line is removed) rendered the raw placeholder. decorateSnapshot() is now the
+ * ONE place either path can reach for this, and it is exported specifically so this — the fact
+ * that no rendered estimate on EITHER path can carry the placeholder — is checkable without
+ * driving the DOM. */
+
+test('decorateSnapshot replaces the vendored placeholder — the one decoration point both run() and estimateLine() share', () => {
+  const e = run('25231000', 'DZ', '(A)', '100');
+  assert.equal(e.stamp.snapshotHash, 'browser-prototype',
+    'sanity: the vendored engine ships this literal placeholder before decoration');
+  const decorated = decorateSnapshot(e, 'f'.repeat(64));
+  assert.equal(decorated.stamp.snapshotHash, 'f'.repeat(64));
+  assert.notEqual(decorated.stamp.snapshotHash, 'browser-prototype',
+    'no path may render the raw vendored placeholder — the exact regression this fixes');
+});
+
+test('decorateSnapshot never falls through to an empty claim, or silently keeps the placeholder, before the pack snapshot is known', () => {
+  // initCbam's `snapshot` variable is only ever set atomically alongside `pack` itself, inside
+  // ensurePack, once BOTH loadPack() and packSnapshotHash() have succeeded — so by construction
+  // every call site reachable today already has a real hash by the time it calls this function.
+  // This exercises the branch defensively anyway: '' must not print as though the stamp made no
+  // claim at all (worse than the placeholder it replaces), and must not silently fall back to the
+  // vendored text either.
+  const e = run('25231000', 'DZ', '(A)', '100');
+  const decorated = decorateSnapshot(e, '');
+  assert.notEqual(decorated.stamp.snapshotHash, '',
+    'a blank snapshot reads as though no claim were made at all — worse than an unmet one');
+  assert.notEqual(decorated.stamp.snapshotHash, 'browser-prototype',
+    'must not silently keep the vendored placeholder either');
+  assert.match(decorated.stamp.snapshotHash, /pending|not yet/i,
+    'the pre-pack state must say, honestly, that the snapshot is not yet available');
+});
+
+test('the pre-pack fallback text renders in full, never truncated as though it were a hash', () => {
+  // renderStamp (cbam-app.ts) truncates any snapshotHash LONGER than 24 chars to its first 16
+  // plus an ellipsis, on the assumption that anything that long is a hash worth shortening — the
+  // same assumption that used to mangle the vendored 'browser-prototype' placeholder into
+  // "browser-prototyp" before that function's own length check was added. decorateSnapshot's
+  // fallback text is deliberately kept at or under that 24-char threshold for exactly this
+  // reason; this pins BOTH halves of that fix — that the fallback is short enough today, and
+  // that renderStamp still shows it in full rather than a garbled, ellipsis-truncated fragment.
+  const e = decorateSnapshot(run('25231000', 'DZ', '(A)', '100'), '');
+  assert.ok(e.stamp.snapshotHash.length <= 24,
+    `the fallback text must stay at or under renderStamp's 24-char truncation threshold, got ${e.stamp.snapshotHash.length}`);
+  const html = renderResult(e);
+  assert.match(html, /not yet computed/,
+    'the fallback text must appear in full, not truncated as though it were a hash');
+  assert.doesNotMatch(html, /not yet comput(?!ed)/, 'must not be cut off mid-word by the hash-truncation path');
+  assert.doesNotMatch(html, /browser-prototype/);
 });

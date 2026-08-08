@@ -595,6 +595,50 @@ export function nextRoute(published: readonly string[], previous: string): strin
   return published.includes(previous) ? previous : '';
 }
 
+/**
+ * THE ONE place that stamps the real pack snapshot onto an estimate, replacing the vendored
+ * engine's literal `'browser-prototype'` placeholder. Every result `initCbam` renders — the
+ * single-line preview (`run()`) AND every multi-line estimate (`estimateLine()`) — must pass
+ * through here, and both do.
+ *
+ * WHY THIS IS ITS OWN FUNCTION, NOT TWO IDENTICAL LINES. It used to be two: `estimateLine()` set
+ * `e.stamp.snapshotHash = snapshot` for every line added in multi-line mode, but `run()` — the
+ * path taken on first page load and again whenever `lines` empties back out, i.e. what a
+ * first-time visitor and anyone who removes their last line actually sees — called
+ * `estimateFromPack` directly and never decorated its result at all. Two call sites doing the
+ * same one-line assignment is exactly the shape that drifts: one of them gets the decoration
+ * added, the other doesn't, and nothing enforces they move together. Mutating `e.stamp` in place
+ * (matching `estimateLine`'s original approach) rather than spreading a new object: `stamp` is a
+ * nested object the vendored engine allocates fresh per call, so this never reaches into a shared
+ * or cached instance.
+ *
+ * `snapshotHash` is passed in, not read from a closure, so this is a pure function callable (and
+ * tested) with no DOM and no `initCbam` state at all.
+ *
+ * BEFORE THE PACK RESOLVES: `initCbam`'s `snapshot` variable starts at `''` and is only ever set
+ * — atomically, in the same synchronous continuation as `pack` itself — once `loadPack()` and
+ * `packSnapshotHash()` have BOTH succeeded inside `ensurePack`. Every call site that can reach
+ * this function today only does so after its own `pack` truthiness check, so by construction
+ * `snapshotHash` is always a real 64-hex-char digest by the time either caller gets here. The
+ * fallback below is insurance for this function outliving that guarantee, not evidence it is
+ * reachable today: printing `''` in its place would read as though the stamp made NO claim at
+ * all, which is a worse failure than the placeholder it replaces — §4 exists to make an honest
+ * claim, not a blank one — so an unresolved snapshot gets its own honest, visibly-unfinished
+ * label instead of silently falling through to '' or quietly keeping 'browser-prototype'.
+ *
+ * THE FALLBACK TEXT IS DELIBERATELY ≤ 24 CHARACTERS. `renderStamp` (above) truncates any
+ * `snapshotHash` longer than 24 chars to its first 16 with an ellipsis, on the assumption that
+ * anything that long is a hash worth shortening — the same assumption that used to mangle the
+ * vendored `'browser-prototype'` placeholder into "browser-prototyp" before that function's own
+ * length check was added. A longer, more explanatory fallback sentence here would walk straight
+ * back into that bug, truncated mid-word into something that reads as a garbled hash rather than
+ * a sentence. Keeping this short is not a style choice; it is the second half of the same fix.
+ */
+export function decorateSnapshot(e: CertificateEstimate, snapshotHash: string): CertificateEstimate {
+  e.stamp.snapshotHash = snapshotHash || 'not yet computed';
+  return e;
+}
+
 /* ── wiring ────────────────────────────────────────────────────────────────── */
 export function initCbam(): void {
   const cn = $<HTMLInputElement>('cbCn'), country = $<HTMLSelectElement>('cbCountry');
@@ -746,11 +790,11 @@ export function initCbam(): void {
       return;
     }
     try {
-      const e = estimateFromPack(pack, {
+      const e = decorateSnapshot(estimateFromPack(pack, {
         cn: cn!.value, country: country!.value, route: route!.value,
         massT: mass!.value, date: date!.value,
         emissionsScope: (scope?.value as 'direct' | 'direct_and_indirect') ?? 'direct_and_indirect',
-      });
+      }), snapshot);
       // The threshold statement needs only the good and the mass, so it survives a
       // selector the estimate itself cannot price — a refused line still gets told
       // whether it is even in scope for CBAM this year. It renders ABOVE the
@@ -767,18 +811,14 @@ export function initCbam(): void {
     }
   }
 
-  /** One line's estimate, decorated with the real pack snapshot in place of the
-   * vendored engine's 'browser-prototype' placeholder. */
+  /** One line's estimate, decorated with the real pack snapshot via the single shared
+   * decoration point (decorateSnapshot, above) that run() also calls. */
   function estimateLine(l: Line): CertificateEstimate {
     const e = estimateFromPack(pack!, {
       cn: l.cn, country: l.country, route: l.route,
       massT: l.massT, date: l.date, emissionsScope: l.scope,
     });
-    // Decorate OUR copy of the result. The vendored engine still writes
-    // 'browser-prototype'; replacing it here, after the fact, keeps the claim
-    // real without touching upstream code.
-    e.stamp.snapshotHash = snapshot;
-    return e;
+    return decorateSnapshot(e, snapshot);
   }
 
   /**
