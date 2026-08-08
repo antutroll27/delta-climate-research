@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { WardSession } from '../../src/scripts/climate-engine/ward-session.ts';
+import { createWardSession } from '../../src/scripts/climate-engine/ward-session.ts';
 
 test('ward session is last-request-wins and preserves a committed ward on failure', () => {
-  const session = new WardSession();
+  const session = createWardSession();
   const a = session.begin('ballygunge');
   assert.ok(a && session.isCurrent(a));
   assert.equal(session.commit(a), true);
@@ -18,7 +18,7 @@ test('ward session is last-request-wins and preserves a committed ward on failur
 });
 
 test('ward session ignores duplicate work and invalidates callbacks on disposal', () => {
-  const session = new WardSession();
+  const session = createWardSession();
   const a = session.begin('ballygunge');
   assert.equal(session.begin('ballygunge'), null);
   session.dispose();

@@ -32,7 +32,7 @@ import {
   labelLayerSpec, EMPTY_LABELS,
 } from './road-labels';
 import { findCoolingSurfaces, nearestCooling, type CoolingSurfaces } from './explore/cooling-surfaces';
-import { WardSession } from './ward-session';
+import { createWardSession } from './ward-session';
 import { ExploreFrameScheduler } from './explore/frame-scheduler';
 import { exploreRuntimeBudget, nextFrameDelayMs, type ExploreDeviceTier } from './explore/runtime-budget';
 import { CoreFieldLayer } from './explore/core-field-layer';
@@ -69,7 +69,7 @@ export function mountHeatMap(): () => void {
   }
   
   const state: State = { ward: 'ballygunge', phase: 'peak', path: '2025', iv: { trees: 0, roof: 0, parks: 0, facades: 0 }, sunNow: 0, heatTairC: null, base: null, baselineMean: 0, live: null, spatial: null, greenG: 0, lastMean: {}, dcurs: null };
-  const wardSession = new WardSession<string>();
+  const wardSession = createWardSession();
   let appDisposed = false;
   let mode: 'relief' | 'iso' = 'relief', env: 'dark' | 'studio' = 'dark';
 
