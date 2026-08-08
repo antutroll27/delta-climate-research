@@ -115,17 +115,17 @@ test('there is exactly one cloud source, and the model already reads it', async 
 });
 
 test('the deck dims the ENVIRONMENT key light, never a literal', async () => {
-  const app = await code('heat-map-app.ts');
-  assert.match(app, /keyL\.intensity = keyBase \* cloudLayer\.sunFactor/,
+  const relief = await code('explore/relief-renderer.ts');
+  assert.match(relief, /this\.key\.intensity = this\.keyBase \* this\.clouds\.sunFactor/,
     'writing a literal here clobbers the clay-studio environment, whose key is 1.7 '
     + 'not 2.1 — the deck would silently drag studio back to the dark map lighting');
-  assert.doesNotMatch(app, /keyL\.intensity = 2\.1 \*/,
+  assert.doesNotMatch(relief, /this\.key\.intensity = 2\.1 \*/,
     'the literal form is the bug this guard exists for');
 });
 
 test('the deck dims at night rather than lighting cloud tops at 22:00', async () => {
-  const app = await code('heat-map-app.ts');
-  assert.match(app, /state\.phase === 'night'/,
+  const relief = await code('explore/relief-renderer.ts');
+  assert.match(relief, /this\.visual\.phase === 'night'/,
     'the phase must reach cloudLayer.update — without it the deck draws sunlit cumulus '
     + 'casting hard ground shadows at night');
   const layer = await code('cloud-layer.ts');
@@ -133,12 +133,12 @@ test('the deck dims at night rather than lighting cloud tops at 22:00', async ()
 });
 
 test('a null reading draws no sky', async () => {
-  const app = await code('heat-map-app.ts');
+  const relief = await code('explore/relief-renderer.ts');
   // Tolerant of extra conditions (the deck is also gated off in 2D), but BOTH
   // cloudLayer and state.live must still be required — that is the guarantee.
-  assert.match(app, /if \(cloudLayer && [^)]*state\.live\)/,
+  assert.match(relief, /if \(this\.clouds && [^)]*this\.visual\.live\)/,
     'an invented deck with no measurement behind it is the loader land-dust mistake');
-  assert.match(app, /cloudLayer\.group\.visible = mode !== 'iso'/,
+  assert.match(relief, /this\.clouds\.group\.visible = this\.visual\.mode !== 'iso'/,
     'the deck must stay out of the 2D isotherm view: measured on an M4, it was the '
     + 'only thing keeping that page rendering (4.31 ms/frame against 0.07 ms idle) '
     + 'for clouds seen straight down over a flat isotherm');
