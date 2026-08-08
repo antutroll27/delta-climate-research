@@ -126,8 +126,15 @@ identical to Column B**, when done properly.
 
 Get it wrong and you deduct zero where 0.666 was owed. On 100 t of CN 25232900 that
 is roughly 64.9 tCO₂e, about **€4,890**, silently removed from the importer's favour.
-Across our shipped pack, 102 of 141 goods that publish both columns disagree — 72%.
-This is not an edge case.
+Across our shipped pack, of the 269 (CN code, production route) pairs that publish
+both columns, 240 disagree — 89%. This is not an edge case.
+
+*Figure recounted 8 August 2026. The original read "102 of 141 — 72%", measured
+against the pack as it stood on 3 August; the re-vendor in `d529b1b` changed the
+benchmark table underneath it and it could not be reproduced. Counted here by
+(CN, route), which is the unit a benchmark is actually selected by — counting by
+CN code alone gives 549 of 570, 96%. The direction of the argument is unchanged
+and slightly stronger than when first written.*
 
 **Our position:** the full Column A path is implemented and audited, and deliberately
 unreachable from the public tool, because it is only correct against a verified
