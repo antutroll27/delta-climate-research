@@ -197,6 +197,17 @@ export function renderThreshold(t: ThresholdView): string {
 }
 
 /**
+ * The per-year card's own tag text. Reused by #cbStatus's multi-line announcement (renderAll,
+ * initCbam) for the same reason totalsTag is: with the results panel's aria-live turned off in
+ * multi-line mode, the announcement is the only thing a screen-reader user hears — and a year's
+ * verdict can flip from "indeterminate" to "below threshold" as a DIRECT result of the user
+ * ticking their own attestation checkbox. Reusing this function, rather than a second phrasing in
+ * the announcement, is what keeps the spoken verdict from ever disagreeing with the card's own.
+ */
+const yearVerdictTag = (y: Extract<YearThreshold, { ruleFound: true }>): string =>
+  (y.state === 'above_threshold' ? 'Above threshold' : y.state === 'below_threshold' ? 'Below threshold' : 'Indeterminate');
+
+/**
  * One card per calendar year present in the line list. This is the multi-line counterpart of
  * renderThreshold above: a single line can only ever be "indeterminate", because one line is not
  * a year. Here the user can attest the list IS the year, which is what unlocks below_threshold —
@@ -225,7 +236,7 @@ export function renderYearThreshold(y: YearThreshold): string {
   // 'pending' for indeterminate, not 'ok': an unresolved verdict must not wear the same green
   // as a genuine below-threshold answer — see renderThreshold's identical fix just above.
   const tone = above ? 'unavail' : below ? 'ok' : 'pending';
-  const tag = above ? 'Above threshold' : below ? 'Below threshold' : 'Indeterminate';
+  const tag = yearVerdictTag(y);
   const attest = above ? '' : `
     <label class="cb-attest">
       <input type="checkbox" data-attest="${esc(String(y.calendarYear))}" ${y.attested ? 'checked' : ''} />
@@ -256,10 +267,27 @@ export function renderYearThreshold(y: YearThreshold): string {
  * "N line(s) has/have no estimate and is/are excluded…" — the pluralisation was duplicated
  * verbatim at both renderTotals call sites below; one helper means it can only disagree with
  * itself if this function's own logic is wrong, not by the two copies drifting apart.
+ *
+ * Also reused by initCbam's #cbStatus announcement (renderAll) — the multi-line panel's
+ * aria-live region is turned off (see renderAll's own doc), so this note is the ONLY way a
+ * screen-reader user learns a line was refused; a refusal only sighted users learn about is not
+ * a refusal. Reusing this exact function, rather than writing the announcement's own phrasing,
+ * is what keeps the spoken text from ever disagreeing with the visible card about which lines
+ * were excluded or how many.
  */
 const refusedLineNote = (refusedLines: number) =>
   `${refusedLines} line${refusedLines === 1 ? ' has' : 's have'} no estimate and ${
     refusedLines === 1 ? 'is' : 'are'} excluded from this total.`;
+
+/**
+ * The totals card's own tag text — "What-if · CSCF unpublished" vs "Priced". Also reused by the
+ * #cbStatus announcement (renderAll), for the same reason refusedLineNote is: with the panel's
+ * aria-live off in multi-line mode, the announcement is the only thing a screen-reader user
+ * hears, and it must not state a pending, assumed-CSCF scenario as a settled euro figure when
+ * the visible card right next to it says otherwise — the exact false-certainty failure the §4
+ * caveats and the cscf_pending status exist to prevent everywhere else in this file.
+ */
+const totalsTag = (anyPending: boolean) => (anyPending ? 'What-if · CSCF unpublished' : 'Priced');
 
 /**
  * The summed exposure. A total containing any what-if is itself a what-if, and a total with no
@@ -294,7 +322,7 @@ export function renderTotals(t: Totals): string {
     </section>`;
 
   const tone = t.anyPending ? 'pending' : 'ok';
-  const tag = t.anyPending ? 'What-if · CSCF unpublished' : 'Priced';
+  const tag = totalsTag(t.anyPending);
   return `
     <section class="cb-card cb-res cb-total">
       <div class="cb-card-head">
@@ -897,13 +925,22 @@ export function initCbam(): void {
     // — and, unlike leaving out!.innerHTML untouched on a caught error (which would silently
     // leave whatever was on screen from the PREVIOUS render looking current), replace the
     // year-card region with a visible error so a stale render is never mistaken for a fresh one.
+    // Captured outside the try (rather than only building yearsHtml inline) so the SAME verdicts
+    // that produced the visible year cards are also available below for the #cbStatus
+    // announcement — one computation, read twice, rather than a second thresholdByYear call that
+    // could disagree with the first if `attested`/`fingerprints` changed between them (they can't,
+    // synchronously, but a second call would still be two chances to drift instead of one).
+    let years: YearThreshold[] = [];
     let yearsHtml: string;
     try {
-      yearsHtml = thresholdByYear(lines, fingerprints, attested, pack!).map(renderYearThreshold).join('');
+      years = thresholdByYear(lines, fingerprints, attested, pack!);
+      yearsHtml = years.map(renderYearThreshold).join('');
     } catch (err) {
       yearsHtml = `<div class="cb-res cb-unavail">
         <div class="cb-tag unavail">Threshold error</div>
         <p class="cb-reason">${esc((err as Error).message)}</p></div>`;
+      // years stays [] — the announcement below must not claim a verdict computed from data that
+      // just failed to compute.
     }
 
     // MULTI-LINE MODE NARROWS THE LIVE REGION (quality review item 5). #cbOut's aria-live was
@@ -935,10 +972,40 @@ export function initCbam(): void {
          </article>`).join('');
     csvBtn && (csvBtn.disabled = false);
     docBtn && (docBtn.disabled = false);
-    const headline = totals.pricedLines > 0
-      ? ` ${num(totals.certificates)} certificates${totals.costEur ? `, ${eur(totals.costEur)}` : ''}.`
+
+    // With the panel's aria-live off, this sentence is the ONLY thing a screen-reader user hears
+    // after an add/remove/attest action — so it must carry every fact that changes what the
+    // visible panel is telling the user to do or believe, not just the line count. Two omissions
+    // found on review, both fixed by reusing the SAME functions the visible cards use (so the
+    // spoken text cannot drift from what a sighted user sees):
+    //   - totalsTag(): ~94% of real answers are cscf_pending. Stating the euro figure with no
+    //     qualifier tells a screen-reader user it is a settled bill when the card right next to
+    //     it says "What-if · CSCF unpublished" — the exact false-certainty failure the §4
+    //     caveats, the cscf_pending status and the zero_by_fiat/ok split all exist to prevent
+    //     everywhere else in this file, reintroduced here for one group of users only.
+    //   - refusedLineNote(): a refusal only sighted users learn about is not a refusal. A line
+    //     that produced no estimate was previously silent-absent from everything a screen-reader
+    //     user perceives once the panel itself went aria-live="off".
+    // A third fact is included for the same reason: a year's threshold verdict can flip from
+    // "indeterminate" to "below threshold" as a DIRECT result of the very checkbox the user just
+    // ticked (see onOutClick's focus-restore, which returns focus to that same checkbox) — the
+    // checkbox's own checked/unchecked state is announced by the screen reader natively, but that
+    // announcement does not say what the tick actually DID to the year's verdict, and nothing
+    // else in aria-live="off" mode would. yearVerdictTag() reuses the exact tag text the card
+    // itself shows, for the same anti-drift reason as the other two.
+    const yearVerdicts = years
+      .filter((y): y is Extract<YearThreshold, { ruleFound: true }> => y.ruleFound)
+      .map((y) => `${y.calendarYear} ${yearVerdictTag(y).toLowerCase()}`)
+      .join('; ');
+    const totalsHeadline = totals.pricedLines > 0
+      ? ` ${totalsTag(totals.anyPending)}: ${num(totals.certificates)} certificates${
+          totals.costEur ? `, ${eur(totals.costEur)}` : ''}.`
       : '';
-    status!.textContent = `${lines.length} line${lines.length === 1 ? '' : 's'} in this estimate.${headline}`;
+    const refusedNote = totals.refusedLines ? ` ${refusedLineNote(totals.refusedLines)}` : '';
+    status!.textContent = `${lines.length} line${lines.length === 1 ? '' : 's'} in this estimate.`
+      + (yearVerdicts ? ` Threshold ${yearVerdicts}.` : '')
+      + totalsHeadline
+      + refusedNote;
   }
 
   async function onAdd(): Promise<void> {
