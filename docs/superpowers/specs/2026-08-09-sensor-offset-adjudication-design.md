@@ -93,6 +93,64 @@ satisfy both instruments, and when forced it goes to the edges.
 unmeasured instrument disagreement inside two physical constants — the `L` failure mode with
 more data behind it.
 
+### 2.5 Most of the "instrument disagreement" is two unphysical scenes
+
+Found 2026-08-09, after the emissivity hypothesis came back null. **This is the most
+consequential result in either spec, and it is a correction to something I told the CEO early
+on.**
+
+I cited `morning_ecostress` RMSE 6.32 K against `morning_landsat` 2.69 K as *"a factor of 2.3
+in measured error, purely from which satellite you believe."* That framing was wrong.
+
+**A residual-free test.** A daytime land surface does not sit far below the air warming it —
+`validate-model.mjs` already publishes 4 K as the bar, and only for full vegetation. Applied
+with the sun up (`sun > 0.5`), so genuinely-cooling evening scenes are not caught, and using no
+model output whatsoever:
+
+| | n | scenes failing the physical bar | worst `LST − tAir` |
+|---|---|---|---|
+| **Landsat** | 213 | **0 (0 %)** | −3.11 K |
+| **ECOSTRESS day** | 35 | **4 (11 %)** | **−11.98 K** |
+
+Landsat's entire archive is physical. ECOSTRESS's is not — and the worst is a surface reading
+**12 K below air at 09:29 in June**, with `cloud = 0.96` and only 27 % of ward cells usable.
+That is a cloud top being recorded as a surface temperature.
+
+**What it does to the published strata:**
+
+| | as published | after the physical bar |
+|---|---|---|
+| `morning_ecostress` | 6.276 K (n=11) | **4.281 K** (n=9) |
+| `morning_landsat` | 3.069 K (n=213) | 3.069 K (n=213) |
+| **ratio** | **2.04×** | **1.39×** |
+
+**Roughly two-thirds of the apparent morning instrument disagreement is two bad scenes in an
+n = 11 stratum.** The remaining 1.39× is real but far less dramatic, and at n = 9 it is not
+well determined.
+
+**Why this is not circular.** The rule looks only at observed LST and observed air temperature.
+It never sees a residual, and it is the project's own already-published physical bar. The two
+scenes it flags most severely happen to be the two the residuals flagged, which is
+corroboration rather than construction. And the decisive control: **Landsat passes it 213 out
+of 213**, so it is not a bar that merely happens to be too tight.
+
+**The cause is an acceptance-rule asymmetry, not an instrument.** Landsat ward-scenes must
+clear `ST_QA ≤ 3.0 K` plus CFMask; ECOSTRESS ward-scenes clear a per-pixel cloud mask and
+`MIN_CELLS = 40`. Neither instrument's acceptance consults the scene-scale cloud fraction, and
+Landsat's per-pixel uncertainty ceiling is doing work that ECOSTRESS's has no equivalent of.
+
+**One hypothesis tested and rejected along the way.** I proposed that the model's
+`(1 − 0.6·cloud)` attenuation — which still leaves 40 % of clear-sky solar at full overcast —
+was over-predicting LST on cloudy scenes. It is not supported as a general effect:
+correlation(cloud, residual) = −0.167 with permutation *p* = 0.343, and the bias by cloud band
+is not monotonic (−0.61, −1.05, **+0.70**, −11.48). It is a step at the extreme, not a
+gradient — consistent with contaminated observations rather than mis-specified forcing.
+
+**Recommended action, ahead of the regional harvest:** add the sun-up physical bar to
+`build-ward-observations.py` as a pre-registered acceptance rule, and re-measure. It costs 4 of
+35 ECOSTRESS ward-scenes and closes most of a gap we were preparing to explain with an
+instrument offset.
+
 ## 3 · Design
 
 ### 3.1 Regional coincidence harvest — the unblocker
