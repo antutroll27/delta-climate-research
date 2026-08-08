@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { resolveHeatCaps } from '../../src/scripts/climate-engine/caps.ts';
+import { assertCapsLogic, resolveHeatCaps } from '../../src/scripts/climate-engine/caps.ts';
 import { applyInterventions, SIM_N } from '../../src/scripts/climate-engine/heat-map-model.ts';
 import { coverageToInterventions, deliveredQuantities } from '../../src/scripts/climate-engine/scenario/coverage.ts';
 import { parsePairedScenario, serializePairedScenario } from '../../src/scripts/climate-engine/scenario/scenario-url.ts';
@@ -68,6 +68,21 @@ test('all device tiers retain the canonical analytical grid', () => {
   assert.equal(resolveHeatCaps(2, true, unavailable, '').grid, 192);
   assert.equal(resolveHeatCaps(1, true, unavailable, '').grid, 192);
   assert.equal(resolveHeatCaps(0, true, unavailable, '').grid, 192);
+});
+
+test('WebGPU alone does not select the WebGL2-only GPU solver', () => {
+  const webGpuOnly = { webgpu: true, floatRenderTargets: false };
+  assert.equal(resolveHeatCaps(2, true, webGpuOnly, '').backend, 'ts');
+  assert.equal(resolveHeatCaps(2, true, { webgpu: true, floatRenderTargets: true }, '').backend, 'gpu');
+});
+
+/* caps.ts carries its own runnable self-check. Nothing executed it, so when the
+   backend rule was narrowed to WebGL2 float render targets the check kept
+   asserting the old rule and failed against the module it lives in — silently,
+   because `npm run verify` never ran it. Executing it here is what makes the
+   invariant a gate rather than a comment. */
+test('the capability module satisfies its own backend invariants', () => {
+  assert.doesNotThrow(() => assertCapsLogic());
 });
 
 test('footprint rasterisation is deterministic and unions subcell coverage', () => {
