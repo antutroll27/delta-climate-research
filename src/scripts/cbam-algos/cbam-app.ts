@@ -197,15 +197,24 @@ export function renderThreshold(t: ThresholdView): string {
 }
 
 /**
- * The per-year card's own tag text. Reused by #cbStatus's multi-line announcement (renderAll,
- * initCbam) for the same reason totalsTag is: with the results panel's aria-live turned off in
- * multi-line mode, the announcement is the only thing a screen-reader user hears — and a year's
- * verdict can flip from "indeterminate" to "below threshold" as a DIRECT result of the user
- * ticking their own attestation checkbox. Reusing this function, rather than a second phrasing in
- * the announcement, is what keeps the spoken verdict from ever disagreeing with the card's own.
+ * The per-year card's own tag text — for BOTH branches of the union, including the year that has
+ * no published rule at all. Reused by #cbStatus's multi-line announcement (renderAll, initCbam)
+ * for the same reason totalsTag is: with the results panel's aria-live turned off in multi-line
+ * mode, the announcement is the only thing a screen-reader user hears — and a year's verdict can
+ * flip from "indeterminate" to "below threshold" as a DIRECT result of the user ticking their own
+ * attestation checkbox. Reusing this function, rather than a second phrasing in the announcement,
+ * is what keeps the spoken verdict from ever disagreeing with the card's own.
+ *
+ * Takes the FULL `YearThreshold` union, not just its `ruleFound: true` member: the announcement
+ * must say something for a year with no published rule too — a sighted user gets an explicit "No
+ * published rule" card for it, and silently skipping that year in the announcement would be the
+ * same "sighted users only" gap this whole reuse pattern exists to close, just a milder one
+ * (omission, not misstatement).
  */
-const yearVerdictTag = (y: Extract<YearThreshold, { ruleFound: true }>): string =>
-  (y.state === 'above_threshold' ? 'Above threshold' : y.state === 'below_threshold' ? 'Below threshold' : 'Indeterminate');
+const yearVerdictTag = (y: YearThreshold): string => {
+  if (!y.ruleFound) return 'No published rule';
+  return y.state === 'above_threshold' ? 'Above threshold' : y.state === 'below_threshold' ? 'Below threshold' : 'Indeterminate';
+};
 
 /**
  * One card per calendar year present in the line list. This is the multi-line counterpart of
@@ -226,7 +235,7 @@ export function renderYearThreshold(y: YearThreshold): string {
     <section class="cb-card cb-thresh">
       <div class="cb-card-head">
         <h3 class="cb-card-label">Annual de minimis · ${esc(String(y.calendarYear))}</h3>
-        <span class="cb-tag pending">No published rule</span>
+        <span class="cb-tag pending">${esc(yearVerdictTag(y))}</span>
       </div>
       <p class="cb-sub">No de minimis threshold has been published for ${esc(String(y.calendarYear))}. We show no verdict rather than assume one.</p>
     </section>`;
@@ -911,6 +920,16 @@ export function initCbam(): void {
       // file's own framing-banner comment). Restore "polite" in case a prior multi-line render
       // (below) turned it off.
       outWrap?.setAttribute('aria-live', 'polite');
+      // MUST clear #cbStatus here too — found on review of f04b95b. Once that commit made
+      // #cbStatus the authoritative channel for screen-reader users in multi-line mode (the panel
+      // itself goes aria-live="off" while lines exist), a stale summary left here after the list
+      // empties back out is no longer a cosmetic stale line-count next to a live panel — it is a
+      // stale euro figure ("1 line in this estimate... €5,882.98.") announced as current to
+      // exactly the users who have no other way to learn it is gone, sitting right next to a
+      // panel whose OWN aria-live is restored to "polite" and will correctly (re)announce
+      // whatever run() puts there. Clearing avoids double-announcing on top of that restored
+      // region rather than composing a redundant second summary here.
+      status!.textContent = '';
       run();
       return;
     }
@@ -992,9 +1011,11 @@ export function initCbam(): void {
     // checkbox's own checked/unchecked state is announced by the screen reader natively, but that
     // announcement does not say what the tick actually DID to the year's verdict, and nothing
     // else in aria-live="off" mode would. yearVerdictTag() reuses the exact tag text the card
-    // itself shows, for the same anti-drift reason as the other two.
+    // itself shows, for the same anti-drift reason as the other two — every year, NOT filtered to
+    // `ruleFound`: a year with no published rule gets an explicit "No published rule" card for
+    // sighted users, and silently dropping it here would be the same gap, just a milder one
+    // (omission rather than misstatement).
     const yearVerdicts = years
-      .filter((y): y is Extract<YearThreshold, { ruleFound: true }> => y.ruleFound)
       .map((y) => `${y.calendarYear} ${yearVerdictTag(y).toLowerCase()}`)
       .join('; ');
     const totalsHeadline = totals.pricedLines > 0
