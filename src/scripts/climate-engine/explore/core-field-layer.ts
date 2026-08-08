@@ -42,68 +42,76 @@ export function wardFieldCoordinates(ward: Ward, sizeM: number): [[number, numbe
   ];
 }
 
-export class CoreFieldLayer {
-  private canvas: HTMLCanvasElement;
-  private context: CanvasRenderingContext2D;
-  private attached = false;
-  private map: maplibregl.Map;
-  private gridSize: number;
+/** The analytical field as a MapLibre canvas raster — the Three-free renderer that
+ *  is the whole picture on tier 0 and stays valid while relief downloads. */
+export interface CoreFieldLayer {
+  /** Idempotent: adds the source/layer once, then only moves the corner coordinates. */
+  attach(ward: Ward, sizeM: number, beforeId?: string): void;
+  /** Repaints the canvas from a south-row-major field. Row order is FLIPPED here —
+   *  the grid's first row is the south edge, the canvas's first row is the north. */
+  update(field: Float32Array, min: number, max: number): void;
+  setVisible(visible: boolean): void;
+  /** Re-adds source and layer after a basemap style swap discards them. */
+  rehydrate(ward: Ward, sizeM: number, beforeId?: string): void;
+  dispose(): void;
+}
 
-  constructor(map: maplibregl.Map, gridSize: number) {
-    this.map = map;
-    this.gridSize = gridSize;
-    this.canvas = document.createElement('canvas');
-    this.canvas.width = this.canvas.height = gridSize;
-    const context = this.canvas.getContext('2d', { alpha: true });
-    if (!context) throw new Error('The analytical field canvas is unavailable.');
-    this.context = context;
-  }
+export function createCoreFieldLayer(map: maplibregl.Map, gridSize: number): CoreFieldLayer {
+  let attached = false;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = gridSize;
+  const context = canvas.getContext('2d', { alpha: true });
+  if (!context) throw new Error('The analytical field canvas is unavailable.');
 
-  attach(ward: Ward, sizeM: number, beforeId?: string): void {
+  function attach(ward: Ward, sizeM: number, beforeId?: string): void {
     const coordinates = wardFieldCoordinates(ward, sizeM);
-    if (!this.map.getSource(CORE_FIELD_SOURCE)) {
-      this.map.addSource(CORE_FIELD_SOURCE, {
-        type: 'canvas', canvas: this.canvas, coordinates, animate: false,
+    if (!map.getSource(CORE_FIELD_SOURCE)) {
+      map.addSource(CORE_FIELD_SOURCE, {
+        type: 'canvas', canvas, coordinates, animate: false,
       });
     } else {
-      (this.map.getSource(CORE_FIELD_SOURCE) as maplibregl.CanvasSource).setCoordinates(coordinates);
+      (map.getSource(CORE_FIELD_SOURCE) as maplibregl.CanvasSource).setCoordinates(coordinates);
     }
-    if (!this.map.getLayer(CORE_FIELD_LAYER)) {
-      this.map.addLayer({
+    if (!map.getLayer(CORE_FIELD_LAYER)) {
+      map.addLayer({
         id: CORE_FIELD_LAYER,
         type: 'raster',
         source: CORE_FIELD_SOURCE,
         paint: { 'raster-opacity': 0.5, 'raster-fade-duration': 0 },
       }, beforeId);
     }
-    this.attached = true;
+    attached = true;
   }
 
-  update(field: Float32Array, min: number, max: number): void {
-    if (field.length !== this.gridSize * this.gridSize) throw new RangeError('Core field dimensions do not match the canonical grid.');
-    const image = this.context.createImageData(this.gridSize, this.gridSize);
-    for (let southRow = 0; southRow < this.gridSize; southRow++) {
-      const canvasRow = this.gridSize - 1 - southRow;
-      for (let x = 0; x < this.gridSize; x++) {
-        const source = southRow * this.gridSize + x;
-        const target = (canvasRow * this.gridSize + x) * 4;
-        const [r, g, b] = heatRampRgb(field[source], min, max);
-        image.data[target] = r; image.data[target + 1] = g; image.data[target + 2] = b; image.data[target + 3] = 210;
+  return {
+    attach,
+
+    update(field, min, max) {
+      if (field.length !== gridSize * gridSize) throw new RangeError('Core field dimensions do not match the canonical grid.');
+      const image = context.createImageData(gridSize, gridSize);
+      for (let southRow = 0; southRow < gridSize; southRow++) {
+        const canvasRow = gridSize - 1 - southRow;
+        for (let x = 0; x < gridSize; x++) {
+          const source = southRow * gridSize + x;
+          const target = (canvasRow * gridSize + x) * 4;
+          const [r, g, b] = heatRampRgb(field[source], min, max);
+          image.data[target] = r; image.data[target + 1] = g; image.data[target + 2] = b; image.data[target + 3] = 210;
+        }
       }
-    }
-    this.context.putImageData(image, 0, 0);
-    if (this.attached) this.map.triggerRepaint();
-  }
+      context.putImageData(image, 0, 0);
+      if (attached) map.triggerRepaint();
+    },
 
-  setVisible(visible: boolean): void {
-    if (this.map.getLayer(CORE_FIELD_LAYER)) this.map.setLayoutProperty(CORE_FIELD_LAYER, 'visibility', visible ? 'visible' : 'none');
-  }
+    setVisible(visible) {
+      if (map.getLayer(CORE_FIELD_LAYER)) map.setLayoutProperty(CORE_FIELD_LAYER, 'visibility', visible ? 'visible' : 'none');
+    },
 
-  rehydrate(ward: Ward, sizeM: number, beforeId?: string): void { this.attach(ward, sizeM, beforeId); }
+    rehydrate(ward, sizeM, beforeId) { attach(ward, sizeM, beforeId); },
 
-  dispose(): void {
-    if (this.map.getLayer(CORE_FIELD_LAYER)) this.map.removeLayer(CORE_FIELD_LAYER);
-    if (this.map.getSource(CORE_FIELD_SOURCE)) this.map.removeSource(CORE_FIELD_SOURCE);
-    this.attached = false;
-  }
+    dispose() {
+      if (map.getLayer(CORE_FIELD_LAYER)) map.removeLayer(CORE_FIELD_LAYER);
+      if (map.getSource(CORE_FIELD_SOURCE)) map.removeSource(CORE_FIELD_SOURCE);
+      attached = false;
+    },
+  };
 }
