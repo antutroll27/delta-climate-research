@@ -251,7 +251,13 @@ CANDIDATES = [
     # twice the cooling ET can produce; adopting it would trade a calibration
     # failure for an unphysical constant, which is the same mistake in a nicer
     # suit. Held inside the defensible range, the rest is free to move.
-    Cand("F", "storage + ratio open, ET held physical [0.40,0.46]",
+    # RE-DERIVED 2026-08-09 (green-score-methodology 4.2.1). The [0.40, 0.46]
+    # band cannot be reproduced from this model — park cooling is exactly
+    # 15*L_eff, so even the old two-sided band maps to [0.383, 0.640] at rh 60.
+    # The bounds below are therefore a DELIBERATE CONSERVATIVE CHOICE inside a
+    # one-sided feasible region, not a derived interval. l_et rails to the upper
+    # bound whatever it is set to, so this bound alone decides the shipped value.
+    Cand("F", "storage + ratio open, ET held at the chosen conservative ceiling 0.46",
          ("q_day", "ratio", "c", "l_et", "release_base", "release_built"),
          (0.30, 0.30, 1.24, 0.43, 0.05, 0.05),
          (0.02, 0.01, 1.20, 0.40, 0.00, 0.00),

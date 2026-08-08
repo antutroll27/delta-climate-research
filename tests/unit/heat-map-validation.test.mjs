@@ -13,6 +13,9 @@ import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
+import * as M from '../../src/scripts/climate-engine/heat-map-model.ts';
+import { DEFAULT_PARAMS } from '../../src/scripts/climate-engine/types.ts';
+
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const read = async (p) => JSON.parse(await readFile(join(ROOT, p), 'utf8'));
 
@@ -112,4 +115,98 @@ test('more overpasses bought a tighter interval than the 12-scene baseline', (t)
   // loses scenes badly enough to give it back, this should fail loudly.
   assert.ok(s.ci95_halfwidth_K < 1.87,
     `half-width ${s.ci95_halfwidth_K} K did not improve on the 12-overpass baseline`);
+});
+
+/* ————— the ET coefficient L, and the region it actually sits in —————
+   docs/green-score-methodology.md §4.2.1. These pin the re-derivation so it is
+   reproducible, AND they pin a defect found while verifying it: at the dry tail
+   of our own observed humidity the ET term exceeds the model's own physical bar.
+   The published [0.40, 0.46] band is a FOSSIL — it cannot be reproduced from
+   this model, and nothing here should be read as reinstating it. */
+
+const ZERO_IV = { trees: 0, roof: 0, parks: 0, facades: 0 };
+const peakAt = (rh, over = {}) => M.currentParams({
+  live: { tAir: 32, rh, wind: 3, cloud: 0 }, phase: 'peak', path: '2025', iv: ZERO_IV, ...over,
+});
+const parkDropOf = (p) => M.eqCell(p, 0.20, 0, 0) - M.eqCell(p, 0.20, 0.9, 0);
+const vegBelowAirOf = (p) => p.tAir - M.eqCell(p, 0.25, 1.0, 0);
+/** Largest effective L for which the 4 K bar still holds under this forcing. */
+const maxLeffFor = (p) => {
+  let lo = 0, hi = 3;
+  for (let i = 0; i < 120; i++) {
+    const m = (lo + hi) / 2;
+    (p.tAir - M.eqCell({ ...p, L: m }, 0.25, 1.0, 0) <= 4) ? lo = m : hi = m;
+  }
+  return lo;
+};
+
+test('park cooling is exactly 15x the effective L — the identity every ceiling is inverted from', () => {
+  for (const rh of [20, 40, 60, 80, 95]) {
+    const p = peakAt(rh);
+    assert.ok(Math.abs(parkDropOf(p) / p.L - 15) < 1e-9, `park cooling / L_eff must be 15 at rh ${rh}`);
+  }
+});
+
+test('L is scaled by humidity across a factor of two, so single-point checks are not bounds', () => {
+  assert.ok(Math.abs(peakAt(0).L / peakAt(100).L - 2) < 1e-9, 'evap spans 1.2x to 0.6x of the constant');
+});
+
+test('below ~35% rh the VEGETATED-SURFACE bar binds, not park cooling', () => {
+  /* The first draft of §4.2.1 derived every ceiling from park cooling alone and
+     was wrong for exactly this reason. Which bar binds is not a constant. */
+  const parkCeil = (p) => (8.07 / 15) / (p.L / DEFAULT_PARAMS.L);
+  const vegCeil = (p) => maxLeffFor(p) / (p.L / DEFAULT_PARAMS.L);
+  for (const rh of [25, 30]) {
+    const p = peakAt(rh);
+    assert.ok(vegCeil(p) < parkCeil(p), `at rh ${rh} the vegetated-surface bar must be the binding one`);
+  }
+  for (const rh of [50, 60, 80]) {
+    const p = peakAt(rh);
+    assert.ok(parkCeil(p) < vegCeil(p), `at rh ${rh} park cooling must be the binding one`);
+  }
+});
+
+test('KNOWN DEFECT: the evap ramp drives the ET term past its own physical bar in dry air', () => {
+  /* NOT a passing grade — a pinned defect, so it cannot widen unnoticed.
+     currentParams scales L by evap = 0.6 + 0.6*(1 - rh/100), which keeps RAISING
+     evapotranspiration as the air dries and has no upper anchor. Real plants do
+     the opposite: stomata close under high vapour-pressure deficit and ET falls.
+     Meanwhile the 4 K headroom SHRINKS as the sky dries. The two cross at about
+     22% rh — and our own ward-observations archive records humidity down to
+     14.1%, so this is reachable on observed weather, not only in a corner case.
+
+     If this test fails, the crossing point has MOVED. Re-derive; do not retune
+     the expectation. */
+  const crossing = (() => {
+    for (let rh = 100; rh >= 1; rh--) if (vegBelowAirOf(peakAt(rh)) > 4) return rh + 1;
+    return 0;
+  })();
+  assert.ok(crossing >= 20 && crossing <= 24,
+    `the bar is expected to break just below ~22% rh; measured ${crossing}%`);
+  // Above the crossing the model is sound, and that is the great majority of weather.
+  for (const rh of [30, 40, 54, 60, 80]) {
+    assert.ok(vegBelowAirOf(peakAt(rh)) <= 4, `the bar must hold at rh ${rh}, well inside ordinary humidity`);
+    assert.ok(parkDropOf(peakAt(rh)) <= 8.07, `park cooling must hold at rh ${rh}`);
+  }
+});
+
+test('the heatwave overlay widens that defect rather than causing it', () => {
+  /* From the rh-60 fallback every heatwave is fine, which is what the first
+     draft measured and over-claimed from. Compounding an extreme overlay onto
+     an already-dry reading is what breaks it. */
+  for (const heatTairC of [38, 42, 45, 48]) {
+    assert.ok(vegBelowAirOf(peakAt(60, { heatTairC })) <= 4, `from a 60% base, ${heatTairC} C must stay physical`);
+    assert.ok(parkDropOf(peakAt(60, { heatTairC })) <= 8.07, `park cooling must hold at ${heatTairC} C`);
+  }
+  assert.ok(vegBelowAirOf(peakAt(22, { heatTairC: 48 })) > 4,
+    'the dry-base + extreme-heatwave corner is known to violate; if it stops, the model changed');
+});
+
+test('night is not the binding phase — nightLatent cuts the ET term by an order of magnitude', () => {
+  for (const rh of [20, 30, 60]) {
+    const day = peakAt(rh);
+    const night = M.currentParams({ live: { tAir: 32, rh, wind: 3, cloud: 0 }, phase: 'night', path: '2025', iv: ZERO_IV });
+    assert.ok(night.L < day.L / 5, `night ET must be far below day ET at rh ${rh}`);
+    assert.ok(vegBelowAirOf(night) <= 4, `the bar must hold at night at rh ${rh}`);
+  }
 });
