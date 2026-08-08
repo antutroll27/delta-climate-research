@@ -47,7 +47,18 @@ export function handleHeatWorkerMessage(message: HeatWorkerRequest): void {
       respond({ type: 'snapshot', requestId: message.requestId, snapshot: snapshot(current) });
       return;
     }
-    if (!current || message.generation !== current.generation || !sim) return;
+    /* ANSWER, NEVER GO QUIET. A bare `return` here leaves the host's pending
+       promise unsettled forever: `advancing` never clears, so every later
+       advance returns that same dead promise and `simulationInFlight` stays
+       true for the session — a frozen field with no error and no demotion.
+       No reachable path produces this today (messages are FIFO, so the
+       worker's `current` cannot lag the host's `active`), but the failure mode
+       is silent, and one message type away from being reachable. */
+    if (!current || message.generation !== current.generation || !sim) {
+      respond({ type: 'failure', requestId: message.requestId, generation: message.generation,
+        message: 'advance arrived for a generation this worker no longer holds' });
+      return;
+    }
     sim.step(1, message.steps);
     respond({ type: 'snapshot', requestId: message.requestId, snapshot: snapshot(current) });
   } catch (error) {
