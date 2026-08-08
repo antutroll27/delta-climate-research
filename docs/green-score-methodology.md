@@ -117,7 +117,7 @@ against our own output · **Placeholder** = explicitly temporary.
 | Dark roof albedo | 0.15 | Cited — high | LBNL Heat Island Group |
 | Aged cool-roof albedo | 0.60 | Cited — high | LBNL *aged* value, not fresh-white 0.85 — deliberately conservative |
 | Pocket park radius | 50 m (0.785 ha) | Cited — **Kolkata-specific** | Li et al. 2022, threshold value of efficiency (TVoE 0.77 ha — genuinely Kolkata's; see §4.2 correction) |
-| **Evapotranspiration L** | **0.43** | **Derived — see §4.2; contested by satellite fit, see §5A** | Solved against two independent constraints |
+| **Evapotranspiration L** | **0.46** (shipped) | **Derivation partly withdrawn — see §4.2; contested by satellite fit, see §5A** | Solved against two constraints, one of which is withdrawn |
 | **Facade heat reduction** | **0.03** | **Cited — corrected from 0.30** | Gunawardena & Steemers 2023 |
 | Influence kernel λ | ≈47 m | Empirical, honestly labelled | See §4.4 |
 | **Sky temperature** | **computed, not fixed** | **Cited** | Brutsaert (1975) clear-sky emissivity, cloud-screened; replaced two hard-coded values |
@@ -208,7 +208,8 @@ constraints at once**:
 - park cool-island intensity of **4.83–8.07 °C** (Mitra et al. 2022, measured in Kolkata)
 - vegetated surface no more than **4 K below air** (physical ceiling on ET)
 
-They intersect at **0.40–0.46**. The value is now **0.43**, the midpoint. Both constraints now pass.
+They intersect at **0.40–0.46**. This derivation picked **0.43**, the midpoint. Both constraints
+passed. *The shipped constant is **0.46**, not 0.43 — see the correction below.*
 
 > **CORRECTION 2026-08-08 — the first constraint above is misread, and §4.1's own warning
 > is what it violates.**
@@ -231,11 +232,20 @@ They intersect at **0.40–0.46**. The value is now **0.43**, the midpoint. Both
 > cooling value. Recording it in the same terms rather than quietly repairing the citation.
 >
 > **What it does to `L`.** The real constraint from that paper is one-sided — Kolkata's
-> daytime maximum is 8.07 °C — so the model's 5.42 °C local park cooling does not *violate*
-> it. But the **lower bound was never a constraint**, and it was half of what pinned the
-> intersection. `L = 0.43` therefore rests on one valid constraint (≤ 4 K below air) plus
-> one that does not exist as stated, and **is no longer uniquely determined by the evidence
-> as written**.
+> daytime maximum is 8.07 °C — so the model's **5.80 °C** local park cooling does not
+> *violate* it. But the **lower bound was never a constraint**, and it was half of what
+> pinned the intersection. `L` therefore rests on one valid constraint (≤ 4 K below air)
+> plus one that does not exist as stated, and **is no longer uniquely determined by the
+> evidence as written**.
+>
+> **And the published `L` was not the shipped `L`.** The derivation above produced **0.43**,
+> the midpoint of `[0.40, 0.46]`, and this document stated 0.43 in two places — including in
+> the first draft of this very correction. The constant in `src/scripts/climate-engine/types.ts`
+> is **`L: 0.46`**, moved later to the *top* of that band. Both numbers are now recorded here:
+> **0.46 is what ships and what every figure in §5 is computed from**; 0.43 is what §4.2's
+> derivation concluded. The two disagree, and *both* depend on the band whose lower bound is
+> withdrawn — "the midpoint of [0.40, 0.46]" and "the top of [0.40, 0.46]" are equally
+> unsupported once 4.83 °C is gone. The constants table now states the shipped value.
 >
 > **`L` has NOT been changed.** Re-deriving it means re-running the calibration and
 > re-validating everything downstream — a code change, not a documentation one, and one
@@ -300,16 +310,19 @@ composite-indicator practice (OECD/JRC 2008) and the convention in urban-resilie
 
 `scripts/validate-model.mjs` scores model output against cited benchmarks on every run.
 
+Values below are the harness's own output, re-read on **2026-08-08** (the table had drifted six
+rows stale against the shipped constants).
+
 | Check | Value | Expected | |
 |---|---|---|---|
-| Land-cover thermal contrast | 10.35 °C | 8–18 °C | ok |
-| Max ward cooling ≤ local park cooling | 4.45 °C | ≤ 5.42 °C | ok |
-| Local park cooling | 5.42 °C | ≤ 8.07 °C (Kolkata daytime max) | ok — but see below |
-| Vegetated surface below air | 1.61 K | ≤ 4 K | ok |
-| Built surface above air | 14.08 K | 5–25 K | ok |
+| Land-cover thermal contrast | 9.62 °C | 8–18 °C | ok |
+| Max ward cooling ≤ local park cooling | 4.55 °C | ≤ 5.80 °C | ok |
+| Local park cooling | 5.80 °C | ≤ 8.07 °C (Kolkata daytime max) | ok — one-sided, see §4.2 |
+| Vegetated surface below air | 0.48 K | ≤ 4 K | ok |
+| Built surface above air | 13.34 K | 5–25 K | ok |
 | Facade vs cool-roof cost per m² | 63× | 40–80× | ok |
 | Score at zero intervention | 2 | 0–10 | ok |
-| Score at full intervention | 66 | 0–100 | ok |
+| Score at full intervention | 67 | 0–100 | ok |
 
 **8 of 8**, from 4 of 10 before the audit.
 
@@ -573,8 +586,8 @@ observations now make possible.
   conclusion the failed fit reached independently.
 
 - **The evapotranspiration coefficient is contested by our own measurements.** §4.2 derives L = 0.43
-  from local park-cooling studies and it satisfies those constraints. The satellite fit says it is
-  too strong. These measure different things — a park interior versus a ward-wide average — so this
+  from local park-cooling studies (the shipped constant is **0.46**, and half of that derivation is
+  withdrawn — see the §4.2 correction). The satellite fit says it is too strong. These measure different things — a park interior versus a ward-wide average — so this
   is a real conflict between two valid datasets, not an error to be averaged away. It needs a
   deliberate decision.
 
