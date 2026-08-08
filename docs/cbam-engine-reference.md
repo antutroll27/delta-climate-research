@@ -1,6 +1,6 @@
 # CBAM engine: formulas, routes, tooling and what changed
 
-Technical reference · 7 August 2026 · Delta Climate Research
+Technical reference · 8 August 2026 · Delta Climate Research
 
 Every figure below was read from the pack live at `deltaclimate.earth` on the date
 of writing, not from a local build. Where something is unverified it says so.
@@ -30,6 +30,25 @@ origins, import date in 2026:
 `(CN code, column, benchmark value)` identical before and after. The recovered
 goods were previously returning `status: 'unavailable'` — the engine refused
 rather than mispriced. This is coverage, not accuracy.
+
+### Also this branch: multi-line, a real threshold verdict, and export
+
+Six more changes, one repository (Angad only — no vendored file touched, and
+`cbam-sync-check.mjs` still reports the vendored engine intact).
+
+| Commits | Repo | What |
+| --- | --- | --- |
+| `31c4ba4`–`8936429` | Angad | Line model, plus two SHA-256 digests: a per-line fingerprint of inputs as entered, and a pack-snapshot hash replacing the `"browser-prototype"` placeholder |
+| `5a98e98`–`fc7cf86` | Angad | Per-year threshold: lines grouped by calendar year and handed to `aggregateThresholdBasis`/`evaluateThreshold`; `below_threshold` reachable only when the user ticks a per-year completeness attestation |
+| `d434711`–`9b2120c` | Angad | CSV export: one row per line, engine values verbatim, each figure beside its legal locator |
+| `800df31`, `9e8f641` | Angad | Renderers for the year-threshold card, running totals, per-line card and the printable audit document; the second commit fixed a defect that had printed a Commission workbook's hash under a regulation's label |
+| `516fb3a`–`bdb8162` | Angad | Wired `lines[]` into the page: add/remove lines, export buttons, print stylesheet |
+| `a700e22`, `f04b95b` | Angad | Post-ship fixes: Add-line failures now reported, focus restored on Remove, a stuck print class fixed, and an aria-live summary that had reintroduced the exact false certainty this branch exists to remove |
+
+The calculator went from pricing one line to pricing as many as the user adds,
+from a threshold verdict that could only ever say `indeterminate` to one that
+can say `below_threshold` on the user's own attestation, and from no export at
+all to a CSV and a printable audit document. Full detail in §4.3 and §4.4.
 
 ---
 
@@ -230,7 +249,17 @@ fertilisers, sintered iron ore); elsewhere it cannot change the answer.
 **94.3% of all resolvable answers are `cscf_pending`.** Zero are settled figures.
 The cross-sectoral correction factor is unpublished for 2026-2030 and is **not
 1.0 by default**; the engine refuses to assume one and shows a labelled scenario
-at the last value the Commission actually set.
+at the last value the Commission actually set — `CSCF_2021_25 = 1` (`sefa.ts`).
+
+**That scenario is a floor, not a midpoint.** The CSCF only ever scales the free
+allocation deduction (SEFA) down from its benchmark ceiling — it is bounded
+above by 1, never above it — so pinning it at 1 computes the *largest* deduction
+the law can produce and therefore the *smallest* certificate figure the good can
+owe. The real CSCF for 2026-2030, once published, can only be equal to or lower
+than 1. **A displayed figure cannot fall; it can only rise or hold.** Since
+94.3% of answers are what-ifs, this governs almost every number the tool
+produces — an importer who reads a `cscf_pending` figure as a ceiling, rather
+than a floor, will under-provision.
 
 ### 4.3 The de minimis threshold
 
@@ -243,10 +272,47 @@ at or below + completeness=complete → below_threshold
 at or below + partial/unknown       → indeterminate
 ```
 
-**"Above" can be proven from one line. "Below" cannot** — it requires knowing the
-importer's whole year. The calculator submits a single line, so it can only ever
-return `indeterminate`. `threshold/aggregate.ts` carries a full annual-ledger
-model and is currently referenced zero times by the calculator.
+**"Above" can be proven from one line. "Below" cannot** — it requires the whole
+year. The calculator now takes multiple lines and evaluates the threshold **per
+calendar year** through `aggregateThresholdBasis`; `below_threshold` is reachable
+only when the user explicitly attests the list is their complete year, and every
+surface that shows the verdict names that attestation as its basis. Estimates
+export as a CSV (engine values verbatim, one row per line, each beside its legal
+locator) and as a printable document whose final section states what the figures
+cannot tell you.
+
+### 4.4 Export: CSV and the printable document
+
+**CSV.** One row per line, engine values verbatim — no locale formatting, no
+rounding. The identity that reconciles a row is not "chargeable equals embedded
+minus free allocation" — that fails on two counts the regulation itself
+requires:
+
+```
+chargeable_tco2e = max(0, direct_tco2e − free_allocation_tco2e) + indirect_tco2e
+```
+
+Free allocation is a direct-emission benchmark (SEFA, §2.2), so it is deducted
+from the direct side only — indirect is added back **after** the deduction, not
+folded into what gets deducted from. And the deduction floors at zero: the
+regulation surrenders certificates, it never issues them, so a clean producer
+whose free allocation exceeds its own direct emissions cannot generate a
+negative charge.
+
+Both halves are reachable with ordinary catalogue goods, checked against the
+live pack:
+
+| CN / origin / route | direct | free allocation | indirect | chargeable | What it shows |
+| --- | --- | --- | --- | --- | --- |
+| `25232900` / AL / default, 100 t | 99.0 | 64.935 | 3.3 | 37.365 | Deduction clamps nothing; indirect still adds on top |
+| `25070080` / AO / (A), 100 t | 24.2 | 64.935 | 4.4 | 4.4 | Free allocation exceeds direct emissions; the deduction floors at 0 and the whole bill is the indirect component |
+
+**Printable document.** Four sections — what you asked, what we computed, on
+what authority, and what this does not tell you. The last section is the
+differentiator: it states the CSCF is unpublished and every figure a floor
+(§4.2), that Art 9 carbon-price deductions are not modelled, that any
+below-threshold verdict rests on the user's own completeness statement, and
+that the line fingerprint covers inputs as typed, never a source document.
 
 ---
 
@@ -300,6 +366,33 @@ The near-miss is worth recording: the first fidelity check compared
 artefact; comparing the part you are about to change proves nothing about the
 parts you are not.**
 
+### 5.3 Three digests, three different claims
+
+The export (§4.4) and this document both now carry real hashes where the tool
+used to carry a placeholder — but they are not one claim wearing three names,
+and conflating them was a real defect caught in review before this branch
+shipped:
+
+| Digest | Over | Says |
+| --- | --- | --- |
+| IR 2025/2620, IR 2025/2621 (§5.1) | the enacted regulation PDFs themselves | this is the binding legal text we read |
+| Commission benchmarks / default-values workbooks | the Commission's own Excel workbooks | this is the informational transcription the defaults corpus was built from — not the binding text |
+| `pack_snapshot` (CSV column) / `stamp.snapshotHash` | `generatedAt` plus both workbook hashes, SHA-256'd together | this is the exact corpus a given figure was computed from |
+
+```
+Benchmarks workbook        b79108b025e697822f0f59de477fa68066c1c05c228fae2270cd230af84e8a7b
+Default-values workbook    865372ed23649b7b02c9124f207fc0b0875fd244c45c19e9fb8cdb1e503a5003
+```
+
+An earlier build of the printable document read the workbook hashes but
+labelled them "IR (EU) 2025/2620" and "IR (EU) 2025/2621" — every character of
+each hash was real, but printed under the wrong artefact's name, which is a
+false provenance claim regardless. Fixed before ship (`9e8f641`): the document
+now prints the regulations' own hashes under those labels and the two workbook
+hashes separately, labelled as transcriptions. `stamp.snapshotHash` no longer
+reads `"browser-prototype"`; every estimate is decorated with the real
+pack-snapshot hash before it renders.
+
 ---
 
 ## 6. How it is verified
@@ -330,9 +423,8 @@ are a genuine corpus question.
 | CSCF unpublished | 94.3% of answers are what-ifs. Nothing we can do; a one-line data change when Brussels publishes. |
 | 2027+ import dates | Certificate prices exist only for 2026 quarters, so any later date fails closed with no explanation. The most visible remaining flaw. |
 | Combined `(C)/(F)` routes | 19 goods, resolution backed by both regulations. Not implemented. |
-| Multi-line and the annual threshold | `threshold/aggregate.ts` vendored and unused. Blocks any `below_threshold` verdict. |
 | Art 9 carbon price paid abroad | Not modelled; disclosed in output as making the figure conservative. Implementing act still a draft. |
-| `Art 2(2)` citation | Wrong in five places in the vendored engine — Article 2 has no numbered paragraphs; the provision is Art 1(2). Unreachable today. |
+| `Art 2(2)` citation | Wrong in five places in the vendored engine — Article 2 has no numbered paragraphs; the provision is Art 1(2). Unreachable today. Our own new `cscf_status` CSV column, which prints this same fact for electricity's `zero_by_fiat` rows, cites it correctly as Art 1(2) — the two do not contradict each other; one is our export, the other is the still-unfixed vendored `sefa.ts`. |
 | 41,100 default factors | Never reconciled against IR 2025/2621's 2,400-page Annex I. The largest unaudited surface. |
 
 ---

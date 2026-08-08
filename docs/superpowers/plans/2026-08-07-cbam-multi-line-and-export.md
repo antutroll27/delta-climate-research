@@ -1251,5 +1251,12 @@ git commit -m "docs(cbam): the reference catches up — multi-line and the thres
 - [ ] `npm run verify` — publication contract green
 - [ ] `node scripts/cbam-sync-check.mjs` — "vendored engine intact"; `git status` shows **no vendored file modified**
 - [ ] Single-line behaviour with an empty list is unchanged (§8 pins still green)
-- [ ] The CSV opens in a spreadsheet and `chargeable = embedded − free_allocation` holds per row
+- [ ] The CSV opens in a spreadsheet and `chargeable = max(0, direct − free_allocation) + indirect`
+      holds per row. **Corrected 8 August 2026:** this line originally pinned
+      `chargeable = embedded − free_allocation`, the same false identity the spec's own
+      Verification section pinned and later corrected (see that file's "Corrected 8 August
+      2026" note) — it fails whenever indirect emissions are present (added back after the
+      deduction, not before it) and whenever free allocation exceeds direct emissions (the
+      deduction floors at zero rather than going negative). `csvRows` in `cbam-lines.ts` was
+      never wrong; only this checklist line was.
 - [ ] The printed document shows all four §4 caveats
