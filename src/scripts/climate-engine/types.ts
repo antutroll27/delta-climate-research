@@ -175,14 +175,17 @@ export const DEFAULT_PARAMS: SimParams = {
   // the ward-scale evidence says, and it directly reduces the built term's
   // over-dominance of the within-ward pattern.
   //
-  // REFITTED 2026-08-09 from 0.4131. Capping the evapotranspiration humidity
-  // ramp (§4.2.2) changed the physics the calibration trains on, so candidate G
-  // was re-run against it: a model fitted to one shape and executed with another
-  // is not calibrated, and this constant came from that fit. Measured cost of
-  // adopting it: Green Scores move by ZERO on modest, moderate and full
-  // intervention; built-surface-above-air 13.34 → 13.02 K and land-cover
-  // contrast 9.62 → 9.46 °C, both well inside their published bars.
-  Q: 0.3936,
+  // REFITTED TWICE ON 2026-08-09, from 0.4131 → 0.3936 → 0.419.
+  //   · first when the evapotranspiration humidity ramp was capped (§4.2.2),
+  //     which changed the physics the calibration trains on;
+  //   · then when the sun-up physical bar was added to build-ward-observations.py
+  //     and three ECOSTRESS ward-scenes were rejected as unphysical — a surface
+  //     cannot sit 12 K below the air warming it at 09:29 in June.
+  // Both times for the same reason: a model fitted to one archive and executed
+  // against another is not calibrated. Adopting this one improved out-of-sample
+  // error on EVERY ward — Baruipur 4.347 → 3.212 K, the mean 3.572 → 3.037 K —
+  // with no new parameter railing.
+  Q: 0.419,
   tAir: 32,
   // Day. `currentParams` substitutes STORE_NIGHT for the retained phase.
   store: 0,
@@ -198,7 +201,7 @@ export const DEFAULT_PARAMS: SimParams = {
  * REFITTED 2026-08-09 from 0.1052, alongside Q — same reason, same run of
  * candidate G under the capped humidity ramp. Mirrored in scripts/_physics.py.
  */
-export const STORE_NIGHT = 0.1081;
+export const STORE_NIGHT = 0.1043;
 
 /**
  * Synthetic fully vegetated reference cell used by Explore and Compare.

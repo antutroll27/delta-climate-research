@@ -146,10 +146,40 @@ correlation(cloud, residual) = −0.167 with permutation *p* = 0.343, and the bi
 is not monotonic (−0.61, −1.05, **+0.70**, −11.48). It is a step at the extreme, not a
 gradient — consistent with contaminated observations rather than mis-specified forcing.
 
-**Recommended action, ahead of the regional harvest:** add the sun-up physical bar to
-`build-ward-observations.py` as a pre-registered acceptance rule, and re-measure. It costs 4 of
-35 ECOSTRESS ward-scenes and closes most of a gap we were preparing to explain with an
-instrument offset.
+**DONE 2026-08-09.** The bar is in `build-ward-observations.py`, pre-registered above its own
+application, applied to **both** instruments, and recorded in the artefact it shapes.
+
+It rejected **3 ECOSTRESS ward-scenes and 0 Landsat** — the control held exactly. Three rather
+than four because the `sun > 0.5` gate correctly spared a genuine 17:27 evening scene, which is
+what that gate exists for.
+
+| | before | after |
+|---|---|---|
+| `morning_ecostress` | 6.316 K (n=11) | **4.221 K** (n=9) |
+| `morning_landsat` | 2.685 K (n=213) | 2.665 K (n=213) |
+| `peak_ecostress` | 3.300 K (n=24) | **2.903 K** (n=23) |
+| the morning gap | **2.35×** | **1.58×** |
+
+**And it improved out-of-sample generalisation on every ward**, which is the result that
+matters most, because ward-to-ward transfer is what a South Asia claim rests on:
+
+| ward | before | after |
+|---|---|---|
+| Ballygunge | 3.170 | 3.166 |
+| Barrackpore | 3.199 | **2.733** |
+| **Baruipur** | 4.347 | **3.212** |
+| mean | 3.572 | **3.037 K** (−15 %) |
+
+Baruipur — the ward that has been the persistent generalisation problem — gained the most, and
+two of the three rejected scenes were Baruipur's.
+
+Constants followed the archive, as the project's rule requires: `Q` 0.3936 → **0.419**,
+`STORE_NIGHT` 0.1081 → **0.1043**. Against the four acceptance criteria: out-of-sample improved
+on every ward, and **no new parameter railed** (`pinned` unchanged at `ratio`, `l_et`,
+`release_built`).
+
+Eight mutants killed 8/8, including a source-only version of this test that could not tell a
+working guard from a deleted one — the rule is now executed by the suite, not merely read.
 
 ## 3 · Design
 

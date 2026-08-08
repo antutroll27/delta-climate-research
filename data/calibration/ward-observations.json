@@ -1,12 +1,20 @@
 {
   "note": "Ward-scale calibration set. Replaces the GHS-SMOD mask pairs, which sample a landscape (FVC 0.678 urban vs 0.654 rural) rather than the 1400 m wards the product is about (FVC 0.31-0.45).",
   "scenes": 34,
-  "ward_scenes": 298,
+  "ward_scenes": 295,
   "grid_shape": [
     21,
     21
   ],
   "min_cells": 40,
+  "sun_up_physical_bar": {
+    "rule": "reject when sun > SUN_UP and (lst_mean_c - tAir) < -MAX_BELOW_AIR_K",
+    "sun_up": 0.5,
+    "max_below_air_K": 4.0,
+    "applies_to": "both instruments, identically",
+    "pre_registered": "2026-08-09, before application",
+    "rejected_ecostress": 3
+  },
   "rows": [
     {
       "date": "2024-01-05",
@@ -196,25 +204,6 @@
       "cloud": 0.015,
       "sun": 0.0,
       "hour": 23.84,
-      "sensor": "ecostress"
-    },
-    {
-      "date": "2024-05-18",
-      "phase": "day",
-      "ward": "baruipur",
-      "lst_mean_c": 30.391,
-      "lst_sd_c": 0.643,
-      "cells": 104,
-      "cell_frac": 0.236,
-      "fvc": 0.4469,
-      "albedo": 0.1436,
-      "built": 0.2208,
-      "tAir": 38.46,
-      "rh": 33.15,
-      "wind": 0.8233333333333334,
-      "cloud": 0.6,
-      "sun": 0.5114,
-      "hour": 16.26,
       "sensor": "ecostress"
     },
     {
@@ -709,44 +698,6 @@
       "cloud": 0.084,
       "sun": 0.247,
       "hour": 17.45,
-      "sensor": "ecostress"
-    },
-    {
-      "date": "2025-06-03",
-      "phase": "day",
-      "ward": "baruipur",
-      "lst_mean_c": 22.307,
-      "lst_sd_c": 1.753,
-      "cells": 118,
-      "cell_frac": 0.268,
-      "fvc": 0.4469,
-      "albedo": 0.1436,
-      "built": 0.2208,
-      "tAir": 34.29,
-      "rh": 52.39,
-      "wind": 1.1500000000000001,
-      "cloud": 0.958,
-      "sun": 0.8206,
-      "hour": 9.48,
-      "sensor": "ecostress"
-    },
-    {
-      "date": "2025-06-03",
-      "phase": "day",
-      "ward": "barrackpore",
-      "lst_mean_c": 27.09,
-      "lst_sd_c": 4.531,
-      "cells": 222,
-      "cell_frac": 0.503,
-      "fvc": 0.3089,
-      "albedo": 0.1373,
-      "built": 0.3572,
-      "tAir": 34.29,
-      "rh": 52.39,
-      "wind": 1.1500000000000001,
-      "cloud": 0.958,
-      "sun": 0.8206,
-      "hour": 9.48,
       "sensor": "ecostress"
     },
     {

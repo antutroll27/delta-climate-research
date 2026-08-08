@@ -34,7 +34,7 @@
       },
       "ecostress_rows_now": {
         "night": 50,
-        "day": 35
+        "day": 32
       },
       "action": "recalibrate and update accuracy.ts in a reviewed change; this campaign deliberately does not move published constants"
     },
@@ -49,10 +49,10 @@
         11.5
       ],
       "offset_K": {
-        "ecostress": 2.11,
-        "landsat": -1.529
+        "ecostress": 2.219,
+        "landsat": -1.479
       },
-      "delta_K": -3.639,
+      "delta_K": -3.698,
       "n_overpasses": {
         "ecostress": 2,
         "landsat": 50
@@ -66,14 +66,14 @@
       "night": {
         "n_scenes": 50,
         "n_overpasses": 20,
-        "rmse_K": 2.838,
-        "bias_K": -1.018,
+        "rmse_K": 2.81,
+        "bias_K": -0.934,
         "loo_overpass_rmse_K": 2.791,
         "ci95_K": [
-          1.938,
-          3.668
+          1.901,
+          3.646
         ],
-        "ci95_halfwidth_K": 0.865,
+        "ci95_halfwidth_K": 0.872,
         "hour_range": [
           0.7,
           23.84
@@ -81,16 +81,16 @@
         "reference_uncertainty_K": null
       },
       "morning_ecostress": {
-        "n_scenes": 11,
-        "n_overpasses": 5,
-        "rmse_K": 6.316,
-        "bias_K": 1.475,
-        "loo_overpass_rmse_K": 7.57,
+        "n_scenes": 9,
+        "n_overpasses": 4,
+        "rmse_K": 4.221,
+        "bias_K": -0.663,
+        "loo_overpass_rmse_K": 5.568,
         "ci95_K": [
-          3.772,
-          9.473
+          3.403,
+          5.06
         ],
-        "ci95_halfwidth_K": 2.851,
+        "ci95_halfwidth_K": 0.829,
         "hour_range": [
           7.09,
           11.06
@@ -100,12 +100,12 @@
       "morning_landsat": {
         "n_scenes": 213,
         "n_overpasses": 50,
-        "rmse_K": 2.685,
-        "bias_K": -1.529,
-        "loo_overpass_rmse_K": 2.253,
+        "rmse_K": 2.665,
+        "bias_K": -1.479,
+        "loo_overpass_rmse_K": 2.262,
         "ci95_K": [
-          2.189,
-          3.17
+          2.167,
+          3.149
         ],
         "ci95_halfwidth_K": 0.491,
         "hour_range": [
@@ -115,16 +115,16 @@
         "reference_uncertainty_K": 2.161
       },
       "peak_ecostress": {
-        "n_scenes": 24,
-        "n_overpasses": 9,
-        "rmse_K": 3.3,
-        "bias_K": 2.418,
-        "loo_overpass_rmse_K": 2.413,
+        "n_scenes": 23,
+        "n_overpasses": 8,
+        "rmse_K": 2.903,
+        "bias_K": 2.247,
+        "loo_overpass_rmse_K": 2.009,
         "ci95_K": [
-          2.051,
-          4.571
+          1.748,
+          3.806
         ],
-        "ci95_halfwidth_K": 1.26,
+        "ci95_halfwidth_K": 1.029,
         "hour_range": [
           11.76,
           17.45
