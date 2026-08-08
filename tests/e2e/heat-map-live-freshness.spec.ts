@@ -17,12 +17,29 @@ const CANNED = {
   wind_speed: 2.4, cloud_area_fraction: 38,
 };
 
-/** Serve a reading valid `hoursAgo` hours ago, on the hour as met.no does. */
+/**
+ * Intercept OUR proxy, not met.no.
+ *
+ * The page has not called api.met.no from the browser since api/live.js landed —
+ * met.no's terms require an identifying User-Agent, which a browser fetch cannot
+ * set. This stub kept pointing at the old upstream, so it matched nothing, the
+ * real request fell through to /api/live, and `astro preview` serves a static
+ * build with no serverless functions: 404, no reading, seven tests red with a
+ * cause nowhere near the thing they test.
+ *
+ * /api/live is a transparent proxy — it returns met.no's body verbatim — so the
+ * canned payload below is unchanged. `date` is served too, because the age
+ * arithmetic reads `Date + Age` to reconstruct "now" at the edge and would
+ * otherwise be skipped entirely.
+ */
+const LIVE_ROUTE = /\/api\/live\?/;
+
 async function stubMet(page: import('@playwright/test').Page, hoursAgo: number, temp = CANNED.air_temperature) {
   const time = `${new Date(Date.now() - hoursAgo * 3600_000).toISOString().slice(0, 14)}00:00Z`;
-  await page.route('**/api.met.no/**', (route) => route.fulfill({
+  await page.route(LIVE_ROUTE, (route) => route.fulfill({
     status: 200,
     contentType: 'application/json',
+    headers: { date: new Date().toUTCString(), age: '0' },
     body: JSON.stringify({
       properties: { timeseries: [{ time, data: { instant: { details: { ...CANNED, air_temperature: temp } } } }] },
     }),
@@ -116,14 +133,22 @@ test.describe('live reading freshness', () => {
     // there was one button and the re-read was the only way to refresh a stale
     // reading — so a toggle that quietly ate that click would leave a dial
     // reporting 14-hour-old data with no way to fix it.
-    let met = 0;
-    await page.route('**/api.met.no/**', (r) => { met += 1; r.continue(); });
+    /* The counter must sit IN FRONT of the stub, not behind it. Playwright runs
+       the most recently registered matching handler first, so this goes second
+       and hands on with fallback(); registered the other way round the stub
+       fulfils first and the counter never sees a thing — which is precisely how
+       this assertion used to compare 0 to 0 while watching a URL the page
+       stopped calling when api/live.js landed. */
     await stubMet(page, 0, 33.7);
+    let met = 0;
+    await page.route(LIVE_ROUTE, (r) => { met += 1; r.fallback(); });
     await page.goto('/heat-map/');
     await expect(page.locator(dial)).toHaveAttribute('data-h12', 'true', { timeout: 60_000 });
     await expect(page.locator('#clockFace')).toHaveAttribute('aria-pressed', 'false');
 
     const afterLoad = met;
+    // Without this the comparison below can pass by seeing nothing at all.
+    expect(afterLoad, 'the counter must actually observe the page reading').toBeGreaterThan(0);
     await page.locator('#clockFace').click();
     await expect(page.locator(dial)).toHaveAttribute('data-h12', 'false');
     await expect(page.locator('#clockFace')).toHaveAttribute('aria-pressed', 'true');
