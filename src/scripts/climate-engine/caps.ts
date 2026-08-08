@@ -85,7 +85,9 @@ export function resolveHeatCaps(
 ): HeatCaps {
   const backend: SimBackend = !animate
     ? 'ts' // one static frame — no point spinning up a GPU context
-    : tier === 2 && (caps.webgpu || caps.floatRenderTargets)
+    // The shipped GPU solver is WebGL2 ping-pong. WebGPU is useful diagnostic
+    // evidence, but cannot select an implementation that does not exist yet.
+    : tier === 2 && caps.floatRenderTargets
       ? 'gpu'
       : 'ts'; // universal CPU floor; sim-wasm.ts swaps in here later, same ABI
   return {
@@ -118,14 +120,23 @@ export async function detectHeatCaps(): Promise<HeatCaps> {
 }
 
 /**
- * Runnable check for the pure decision logic. The repo has no unit runner, so run
- * this directly (Node 24 strips the types):
+ * Runnable check for the pure decision logic. Called from tests/unit — a
+ * self-check nothing executes is a self-check that rots, and this one did:
+ * the shipped solver was narrowed to WebGL2 float render targets while the
+ * fixture below still called a WebGPU-only device a GPU device, so the module
+ * asserted its own opposite (`assertCapsLogic FAIL: caps: tier 2 + gpu path ->
+ * gpu`) and no gate noticed.
+ *
+ * Also runnable directly (Node 24 strips the types):
  *   node --experimental-strip-types -e "import('./caps.ts').then(m => m.assertCapsLogic())"
  * Unused in the browser, so it tree-shakes out of the production bundle.
  */
 export function assertCapsLogic(): void {
   const none: SimCapabilities = { webgpu: false, floatRenderTargets: false };
-  const gpu: SimCapabilities = { webgpu: true, floatRenderTargets: false };
+  /** The one executable GPU path: WebGL2 render-to-float. */
+  const gpu: SimCapabilities = { webgpu: false, floatRenderTargets: true };
+  /** An adapter with no shipped solver behind it — evidence, not a backend. */
+  const webgpuOnly: SimCapabilities = { webgpu: true, floatRenderTargets: false };
   const assert = (ok: boolean, msg: string) => {
     if (!ok) throw new Error(`caps: ${msg}`);
   };
@@ -138,6 +149,9 @@ export function assertCapsLogic(): void {
   assert(resolveHeatCaps(2, true, gpu, '').backend === 'gpu', 'tier 2 + gpu path -> gpu');
   assert(resolveHeatCaps(2, true, none, '').backend === 'ts', 'tier 2 no path -> ts');
   assert(resolveHeatCaps(1, true, gpu, '').backend === 'ts', 'tier 1 never gpu');
+  // WebGPU alone cannot select an implementation that does not exist yet
+  assert(resolveHeatCaps(2, true, webgpuOnly, '').backend === 'ts', 'webgpu without float RTs -> ts');
+  assert(resolveHeatCaps(2, true, webgpuOnly, '').webgpu, 'webgpu is still reported as evidence');
   // reduced motion never animates and never spins up the GPU
   const rm = resolveHeatCaps(2, false, gpu, '');
   assert(!rm.animate && rm.backend === 'ts', 'reduced-motion -> static ts');
