@@ -42,7 +42,7 @@ Related references:
 | Interpretation | Results describe each ward's response from its own baseline. They do not rank wards. |
 | Desktop | Settings, paired maps, evidence, delivered quantities, and integrity notes remain visible together. |
 | Mobile | Maps stack vertically and a collapsed, half, or full workspace exposes Settings, Evidence, and Wards. |
-| Evidence | Baseline, scenario, cooling, hot area, hot-area change, rural contrast, and capital works are paired explicitly. |
+| Evidence | Baseline, scenario, cooling, hot area, hot-area change, Δ vs all-green reference, and capital works are paired explicitly. |
 | Controls | Ward selection, swap, shared controls, reset, one-level undo, share, and brief actions are functional. |
 | Accessibility | Essential tasks work without the map, at 200% text, by keyboard, and with reduced motion. |
 | Honesty | Prototype values and maps remain labelled synthetic. Production must expose forcing and version state. |
@@ -314,7 +314,7 @@ The Evidence view includes:
 3. Cooling from baseline.
 4. Grid area over 40°C.
 5. Hot-area change in percentage points.
-6. Modelled rural contrast.
+6. Modelled Δ vs all-green reference (not a measured urban–rural value).
 7. Capital works estimate or range.
 
 Every metric is labelled modelled, derived, observed, or benchmarked as appropriate.
