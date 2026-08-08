@@ -124,6 +124,16 @@ This is what turns the harvest into a decision rather than a number, and it is p
 
 Both outcomes are informative. That is what makes it an experiment rather than a hope.
 
+**AMENDED 2026-08-09 — the offset may not be a constant, and the harvest must say so.**
+Measured since this section was written: ECOSTRESS's ward-mean emissivity varies **10–124×**
+more between overpasses than Landsat's, because Landsat's is an ASTER GED climatology and
+ECOSTRESS retrieves its own per scene. At the measured sensitivity of 0.598 K per 0.01, that is
+**sd ≈ 1.5 K of LST, scene to scene** — the same magnitude as the disagreement itself.
+
+A single scalar offset cannot reconcile a difference that varies that much. **The harvest must
+therefore report the offset *and* its dispersion**, and the dispersion is probably the more
+important number. See §3.3 of the forcing-and-emissivity spec for the measurement.
+
 ### 3.3 Fallback if the offset proves unmeasurable
 
 If the harvest's 95 % interval exceeds ±1.5 K, we do **not** ship a number. Instead:

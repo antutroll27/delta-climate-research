@@ -120,9 +120,61 @@ account for 0.6–1.2 K** of the apparent ECOSTRESS↔Landsat disagreement. And 
 urban window emissivity spans 0.9346 to 0.9915, which at this sensitivity is **3.3 K of LST
 spread from emissivity alone** — the same magnitude as the disagreement we are chasing.
 
-**Caveat on scope:** one scene, one window. The sensitivity depends on atmospheric
-transmittance and will vary with conditions; it must be repeated across the archive before
-being quoted as a general figure.
+**Repeated across the archive, 2026-08-09** — 47 ward-scenes over the three real ward
+footprints, not an arbitrary window:
+
+| | median | p5 | p95 | range |
+|---|---|---|---|---|
+| sensitivity, K per 0.01 emissivity | **0.598** | 0.277 | 0.650 | 0.247–0.654 |
+
+The one-window figure of 0.585 holds at the median. **But the caveat was right**: sensitivity
+correlates with atmospheric transmittance at **r = +0.754**, and transmittance over these wards
+runs 0.248–0.649 — low, consistent with a humid, hazy airshed. In the haziest conditions the
+sensitivity halves. Quote the median; never quote it as a constant.
+
+The unexplained residual also holds across the archive: **+0.126 K, sd 0.022 K** over 47
+ward-scenes. Tight enough to confirm it is a fixed artefact of the Planck step, which is why it
+cancels in differences.
+
+### 3.3 The finding that changes the design
+
+**ECOSTRESS's emissivity varies 10–124× more between overpasses than Landsat's.**
+
+| ward | Landsat sd | ECOSTRESS sd | ratio |
+|---|---|---|---|
+| Ballygunge | 0.00062 | 0.02433 | **39×** |
+| Baruipur | 0.00263 | 0.02564 | 10× |
+| Barrackpore | 0.00021 | 0.02656 | **124×** |
+
+*(Landsat: 47 ward-scenes. ECOSTRESS: 26 ward-scenes over 14 dates — and only 4 for Baruipur,
+so that row is the weakest.)*
+
+This is the structural difference the two retrievals imply, now measured. Landsat's `ST_EMIS`
+is the ASTER GED **climatology** adjusted by NDVI — Barrackpore's ward mean moves by 0.0005
+across ten overpasses, which is a fixed map. ECOSTRESS runs **Temperature-Emissivity Separation
+per scene**, and its ward mean moves by ~0.025.
+
+**At 0.598 K per 0.01, an emissivity spread of sd ≈ 0.025 is sd ≈ 1.5 K of LST, scene to
+scene.** That is the same magnitude as the disagreement we set out to explain.
+
+**The consequence for the companion spec: the disagreement may not be a constant offset at
+all.** A design built to measure and apply a single sensor offset cannot reconcile a difference
+that varies by ~1.5 K between overpasses. This does not invalidate the regional harvest — it
+sharpens what the harvest must report: **an offset *and* its scene-to-scene dispersion**, with
+the dispersion probably mattering more. And it strengthens Phase A considerably, because
+harmonising emissivity per-pixel per-scene addresses a varying difference in a way no scalar
+offset can.
+
+**Two caveats that must travel with these numbers.**
+
+*The absolute levels are not comparable.* ECOSTRESS ships **wideband** emissivity; Landsat ships
+**band-10** (~10.9 µm). The measured level difference (−0.025 to −0.031, ECOSTRESS lower) is
+substantially what the spectral definitions predict and **is not evidence of error**. Only the
+variability is comparable, because each product is compared to itself over time.
+
+*The variability has two sources we cannot separate here* — genuine surface change (vegetation
+phenology) and retrieval noise. A 124× ratio is far too large to be phenology, but the split is
+not established and should not be asserted.
 
 **An honest asymmetry.** Landsat can be recomputed exactly. ECOSTRESS's tiled L2T product ships
 `EmisWB` but not the radiance terms, so it can only be **first-order corrected** using the
