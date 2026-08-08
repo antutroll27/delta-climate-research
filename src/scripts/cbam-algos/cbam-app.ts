@@ -215,17 +215,32 @@ export function renderYearThreshold(y: YearThreshold): string {
  * The summed exposure. A total containing any what-if is itself a what-if, and a total with no
  * priced lines at all (Totals.certificates === '0' both for "genuinely zero" and "nothing was
  * summed", per that field's own doc in cbam-lines.ts) must never render as a confirmed zero —
- * hence its own state below, distinct from a real "Priced" verdict at 0.
+ * hence its own states below, distinct from a real "Priced" verdict at 0.
+ *
+ * pricedLines === 0 is itself two different situations, distinguishable from Totals' EXISTING
+ * fields with no new signal needed: refusedLines === 0 means no line was even entered yet (a
+ * neutral empty state — nobody has done anything wrong); refusedLines > 0 means every entered
+ * line failed closed (a real "nothing here priced" warning). Showing the same red tag for both
+ * would make an empty form look like a form full of refusals.
  */
 export function renderTotals(t: Totals): string {
+  if (t.pricedLines === 0 && t.refusedLines === 0) return `
+    <section class="cb-card cb-res cb-total">
+      <div class="cb-card-head">
+        <h3 class="cb-card-label">Total exposure</h3>
+        <span class="cb-tag pending">No lines yet</span>
+      </div>
+      <p class="cb-sub">Add at least one line to see a total.</p>
+    </section>`;
+
   if (t.pricedLines === 0) return `
     <section class="cb-card cb-res cb-total">
       <div class="cb-card-head">
         <h3 class="cb-card-label">Total exposure</h3>
         <span class="cb-tag unavail">Nothing priced</span>
       </div>
-      <p class="cb-sub">No line has a priced estimate, so there is no total to show — not even a zero.${
-        t.refusedLines ? ` ${t.refusedLines} line${t.refusedLines === 1 ? ' has' : 's have'} no estimate and ${t.refusedLines === 1 ? 'is' : 'are'} excluded.` : ''}</p>
+      <p class="cb-sub">No line has a priced estimate, so there is no total to show — not even a zero. ${
+        t.refusedLines} line${t.refusedLines === 1 ? ' has' : 's have'} no estimate and ${t.refusedLines === 1 ? 'is' : 'are'} excluded.</p>
     </section>`;
 
   const tone = t.anyPending ? 'pending' : 'ok';
@@ -361,14 +376,24 @@ function tableFigures(e: CertificateEstimate): { certs: string | null; costEur: 
 }
 
 /**
- * A regulation's workbook sha256, read from the pack's own generatedFrom list rather than
- * hardcoded — a hardcoded value would silently go stale (or be wrong from the start; two
- * candidate hashes drafted for this function did not match the shipped pack at all) and the
- * document would then print a false provenance claim on the one surface whose entire purpose is
- * provenance. Falls back to a stated absence, never to a fabricated-looking value.
+ * A source's own sha256, read from the pack's `sources` list by id rather than hardcoded — a
+ * hardcoded value would silently go stale, and reading the WRONG field of the pack is just as
+ * dangerous as hardcoding: `generatedFrom[].workbookSha256` and `sources[].sha256` are both real
+ * digests of real artefacts, but a regulation id (`ir-2025-2620`) and a Commission WORKBOOK id
+ * (`ec-benchmarks-workbook-v1`) name different documents, and printing one under the other's
+ * label is a false provenance claim even though every character of the hash is correct.
+ *
+ * Four `sources` entries (`dir-2003-87-art-10a-1a`, `dr-2019-331-art-14-6`, `reg-2023-956`,
+ * `ec-certificate-price-page`) still carry the pack's "not yet retrieved" placeholder — 64
+ * zeros — because no digest has been pinned for them yet. Printing that string verbatim would
+ * read as a real hash computed over a real download; it is not one, so it is called out by name
+ * instead of allowed through as though it were.
  */
-function ojWorkbookHash(pack: Pick<EstimatorPack, 'generatedFrom'>, sourceId: string): string {
-  return pack.generatedFrom.find((s) => s.id === sourceId)?.workbookSha256 ?? 'not present in this pack';
+function sourceHash(pack: Pick<EstimatorPack, 'sources'>, sourceId: string): string {
+  const found = pack.sources.find((s) => s.id === sourceId);
+  if (!found) return 'not present in this pack';
+  if (/^0+$/.test(found.sha256)) return 'not yet pinned — no digest recorded for this source';
+  return found.sha256;
 }
 
 /**
@@ -386,7 +411,7 @@ export function buildPrintDocument(input: {
   totals: Totals;
   packSnapshot: string;
   rulePackages: readonly string[];
-  pack: Pick<EstimatorPack, 'generatedFrom'>;
+  pack: Pick<EstimatorPack, 'sources'>;
   generatedOn: string;
 }): string {
   const { lines, results, yearCards, totals, packSnapshot, rulePackages, pack, generatedOn } = input;
@@ -437,9 +462,15 @@ export function buildPrintDocument(input: {
     <ul>
       <li>Rule packages: ${rulePackages.map((r) => `<code>${esc(r)}</code>`).join(' · ')}</li>
       <li>Data snapshot: <code>${esc(packSnapshot)}</code> — SHA-256 over the pack's
-        generation timestamp and both Commission source-workbook hashes.</li>
-      <li>IR (EU) 2025/2620 (free allocation): <code>${esc(ojWorkbookHash(pack, 'eu-cbam-2026-free-allocation'))}</code></li>
-      <li>IR (EU) 2025/2621 (default values): <code>${esc(ojWorkbookHash(pack, 'eu-cbam-2026-defaults-v2'))}</code></li>
+        generation timestamp and both Commission source-workbook hashes (below).</li>
+      <li>IR (EU) 2025/2620 (free allocation), the enacted regulation itself:
+        <code>${esc(sourceHash(pack, 'ir-2025-2620'))}</code></li>
+      <li>IR (EU) 2025/2621 (default values), the enacted regulation itself:
+        <code>${esc(sourceHash(pack, 'ir-2025-2621'))}</code></li>
+      <li>Commission Benchmarks workbook — an informational transcription of the 2025/2620 Annex,
+        not the binding text: <code>${esc(sourceHash(pack, 'ec-benchmarks-workbook-v1'))}</code></li>
+      <li>Commission Default Values workbook — an informational transcription of 2025/2621's
+        Annex I, not the binding text: <code>${esc(sourceHash(pack, 'ec-default-values-workbook-v1'))}</code></li>
       <li>Per-line benchmark authority is printed in the table above; the CBAM factor is
         Dir 2003/87/EC Art 10a(1a) (free allocation retained).</li>
     </ul>
