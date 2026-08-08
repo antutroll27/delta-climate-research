@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
-  StaticTsHeatSimHost, WorkerHeatSimHost,
+  createStaticHost, createWorkerHost,
 } from '../../src/scripts/climate-engine/sim-host.ts';
 import { CANONICAL_GRID_N, CANONICAL_GRID_VERSION, DEFAULT_PARAMS } from '../../src/scripts/climate-engine/types.ts';
 
@@ -10,7 +10,7 @@ import { CANONICAL_GRID_N, CANONICAL_GRID_VERSION, DEFAULT_PARAMS } from '../../
    that looks alive while showing a frozen field. Every guard below was written
    by inspection and defended by nothing until this file existed.
 
-   GpuHeatSimHost is absent on purpose: it constructs a WebGl2HeatSim in its
+   createGpuHost is absent on purpose: it constructs a WebGl2HeatSim in its
    constructor, so it cannot exist without a real WebGL2 context. Its context-loss
    latch is covered by the e2e run, not here. */
 
@@ -69,7 +69,7 @@ function fakeWorker() {
 /** Host plus its worker, always disposed by the test that made it. */
 function hosted() {
   const worker = fakeWorker();
-  return { worker, host: new WorkerHeatSimHost(() => worker) };
+  return { worker, host: createWorkerHost(() => worker) };
 }
 
 /* ————— the worker protocol ————— */
@@ -272,7 +272,7 @@ test('a disposed host rejects reset and quietly refuses advance', async () => {
 /* ————— the last rung of the ladder ————— */
 
 test('the static host settles a real field and reports ts-main', async () => {
-  const host = new StaticTsHeatSimHost();
+  const host = createStaticHost();
   const snapshot = await host.reset(request(1, { settleSteps: 48 }));
   assert.equal(snapshot.backend, 'ts-main');
   assert.equal(snapshot.generation, 1);
@@ -284,14 +284,14 @@ test('the static host settles a real field and reports ts-main', async () => {
 });
 
 test('the static host never advances — it is the frozen fallback', async () => {
-  const host = new StaticTsHeatSimHost();
+  const host = createStaticHost();
   await host.reset(request(1));
   assert.equal(await host.advance(1, 8), null);
   host.dispose();
 });
 
 test('a static reset superseded mid-settle gives up instead of finishing', async () => {
-  const host = new StaticTsHeatSimHost();
+  const host = createStaticHost();
   const abandoned = host.reset(request(1, { settleSteps: 240 }));
   const winner = host.reset(request(2, { settleSteps: 24 }));
   await assert.rejects(() => abandoned, /superseded/, 'the old settle must not overwrite the new one');
@@ -300,7 +300,7 @@ test('a static reset superseded mid-settle gives up instead of finishing', async
 });
 
 test('a disposed static host refuses to reset', async () => {
-  const host = new StaticTsHeatSimHost();
+  const host = createStaticHost();
   host.dispose();
   await assert.rejects(() => host.reset(request(1)), /disposed/);
 });
