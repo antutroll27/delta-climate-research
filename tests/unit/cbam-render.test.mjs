@@ -3,10 +3,14 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import { nextRoute, renderResult, renderThreshold } from '../../src/scripts/cbam-algos/cbam-app.ts';
+import {
+  buildPrintDocument, nextRoute, renderLineCard, renderResult, renderThreshold, renderTotals,
+  renderYearThreshold,
+} from '../../src/scripts/cbam-algos/cbam-app.ts';
 import {
   estimateFromPack, resolveThreshold, routesFor,
 } from '../../src/scripts/cbam-algos/estimator/estimate-from-pack.ts';
+import { sumTotals } from '../../src/scripts/cbam-lines.ts';
 
 /**
  * The CBAM engine is the GeoCBAM SaaS's, copied byte-for-byte. Its UI is not — the
@@ -256,4 +260,142 @@ test('the renderer handles every status the engine can return', () => {
     assert.ok(html.length > 200, `${e.status}: output looks empty`);
   }
   assert.ok(seen.size >= 2, `expected several statuses across probes, saw ${[...seen]}`);
+});
+
+/* ── per-year threshold cards (multi-line) ─────────────────────────────────── */
+
+test('renderYearThreshold: a year without a rule refuses to invent one', () => {
+  const html = renderYearThreshold({ calendarYear: 2027, ruleFound: false, attested: false, eligibleLineCount: 0 });
+  assert.match(html, /no.*threshold.*published.*2027/i);
+  assert.doesNotMatch(html, /50/, 'must not show the 2026 figure for 2027');
+});
+
+test('renderYearThreshold: below-attested says so and names its basis', () => {
+  const html = renderYearThreshold({
+    calendarYear: 2026, ruleFound: true, state: 'below_threshold',
+    knownEligibleMassT: '30', thresholdT: '50',
+    sourceLocator: 'Regulation (EU) 2023/956 Article 2(3)',
+    entryIds: ['L1'], entryHashes: ['a'.repeat(64)], attested: true, eligibleLineCount: 1,
+  });
+  assert.match(html, /Below threshold/);
+  assert.match(html, /attested/i, 'the verdict must say what it rests on');
+  assert.match(html, /data-attest="2026"[^>]*checked/, 'checkbox reflects the attestation');
+});
+
+test('renderYearThreshold: above hides the checkbox — a fact needs no attestation', () => {
+  const html = renderYearThreshold({
+    calendarYear: 2026, ruleFound: true, state: 'above_threshold',
+    knownEligibleMassT: '60', thresholdT: '50',
+    sourceLocator: 'Regulation (EU) 2023/956 Article 2(3)',
+    entryIds: ['L1'], entryHashes: [], attested: false, eligibleLineCount: 1,
+  });
+  assert.match(html, /Above threshold/);
+  assert.doesNotMatch(html, /data-attest/, 'no checkbox when it cannot change the answer');
+});
+
+test('renderYearThreshold: indeterminate is tagged pending, not the green of a real below-threshold verdict', () => {
+  // The plan this shipped from gave indeterminate the SAME 'ok' tone as below_threshold — an
+  // unresolved "we cannot tell you yet" must not wear the colour of a resolved "you owe nothing".
+  const html = renderYearThreshold({
+    calendarYear: 2026, ruleFound: true, state: 'indeterminate',
+    knownEligibleMassT: '30', thresholdT: '50',
+    sourceLocator: 'Regulation (EU) 2023/956 Article 2(3)',
+    entryIds: ['L1'], entryHashes: ['a'.repeat(64)], attested: false, eligibleLineCount: 1,
+  });
+  assert.match(html, /Indeterminate/);
+  assert.match(html, /cb-tag pending/, 'indeterminate must use the pending tone, not ok');
+  assert.doesNotMatch(html, /cb-tag ok/, 'indeterminate must not be tagged with the same class as below_threshold');
+});
+
+/* ── the totals card ────────────────────────────────────────────────────────── */
+
+test('renderTotals: a pending total is tagged a what-if and shows no false euro', () => {
+  const html = renderTotals({
+    certificates: '214.395', costEur: null, chargeableTco2e: '214.395',
+    pricedLines: 2, refusedLines: 1, anyPending: true,
+  });
+  assert.match(html, /What-if/);
+  assert.match(html, /1 line.*no estimate/i, 'refusals are counted, not hidden');
+  // The intent is "no euro FIGURE", not "no euro character at all" — the honest fallback
+  // sentence names the euro ("No € total — …") without a number attached to it.
+  assert.doesNotMatch(html, /€[\d,]/, 'no euro figure when any price is missing');
+});
+
+test('renderTotals: a final priced total shows the euro figure and no what-if language', () => {
+  const html = renderTotals({
+    certificates: '71.465', costEur: '5385.60', chargeableTco2e: '71.465',
+    pricedLines: 1, refusedLines: 0, anyPending: false,
+  });
+  assert.match(html, /Priced/);
+  assert.match(html, /€5,385\.60/);
+  assert.doesNotMatch(html, /What-if/);
+});
+
+test('renderTotals: zero priced lines is its own state, never a claimed zero', () => {
+  // Totals.certificates is '0' both for "genuinely zero" and "nothing was summed" — the card
+  // must not let the second case read as a confirmed zero-liability result.
+  const html = renderTotals({
+    certificates: '0', costEur: null, chargeableTco2e: '0',
+    pricedLines: 0, refusedLines: 2, anyPending: false,
+  });
+  assert.doesNotMatch(html, /Priced/, 'zero priced lines must not be tagged as a priced result');
+  assert.doesNotMatch(html, /class="cb-fig"/, 'no figure block when nothing was summed');
+  assert.match(html, /2 line.*no estimate/i, 'the refused lines must still be named');
+});
+
+/* ── per-line card ──────────────────────────────────────────────────────────── */
+
+test('renderLineCard: 1-based numbering, the remove control carries the id, and user text is escaped', () => {
+  const e = run('25231000', 'DZ', '(A)', '100');
+  const html = renderLineCard({
+    id: 'L1"><script>alert(1)</script>', cn: '25231000<b>', country: 'DZ',
+    route: '(A)', scope: 'direct', massT: '100', date: '2026-03-15',
+  }, e, 2);
+  assert.match(html, /Line 3/, 'the index shown to the user is 1-based');
+  assert.doesNotMatch(html, /<script>/, 'a raw line id must never reach the DOM unescaped');
+  assert.match(html, /data-remove="L1&quot;&gt;&lt;script&gt;alert\(1\)&lt;\/script&gt;"/,
+    'the remove control must carry the escaped line id, matching what render put in data-line');
+  assert.match(html, /25231000&lt;b&gt;/, 'CN text must be escaped, not injected as markup');
+  assert.match(html, /cb-res/, 'the ordinary result card renders inside the line card');
+});
+
+/* ── the printable document ────────────────────────────────────────────────── */
+
+test('buildPrintDocument carries all four §4 caveats, the real OJ hashes, and the injected date', () => {
+  const html = buildPrintDocument({
+    lines: [{ id: 'L1', cn: '25231000', country: 'DZ', route: '(A)',
+              scope: 'direct_and_indirect', massT: '100', date: '2026-03-15' }],
+    results: [run('25231000', 'DZ', '(A)', '100')],
+    yearCards: [], totals: sumTotals([run('25231000', 'DZ', '(A)', '100')]),
+    packSnapshot: 'f'.repeat(64),
+    rulePackages: ['eu-cbam-2026-defaults-v2@v1', 'eu-cbam-2026-free-allocation@v1'],
+    pack, generatedOn: '2026-08-08',
+  });
+  assert.match(html, /cross-sectoral correction factor/i);
+  assert.match(html, /Art(icle)? 9/i, 'the carbon-price-abroad gap must be stated');
+  assert.match(html, /inputs as entered/i, 'the fingerprint must be labelled honestly');
+  assert.match(html, /completeness/i, 'the attestation basis must be stated');
+  assert.match(html, new RegExp('f'.repeat(16)), 'the pack snapshot appears');
+  assert.match(html, /What this does not tell you/i);
+  assert.match(html, /2026-08-08/, 'the generation date is the one the caller supplied, not the clock');
+  // The direction that matters most: CSCF=1 is the MAXIMUM legally possible correction, so every
+  // shown figure is a FLOOR — the true bill cannot be lower, only possibly higher.
+  assert.match(html, /cannot be lower.*may be higher/is, 'the CSCF direction must not be stated backwards');
+  assert.doesNotMatch(html, /cannot be higher/i, 'must not carry the reversed claim');
+  // The two hardcoded hashes in the plan this shipped from did not match the shipped pack at
+  // all — read them from the pack itself instead, and prove it here against the real values.
+  assert.match(html, /b79108b025e697822f0f59de477fa68066c1c05c228fae2270cd230af84e8a7b/,
+    'IR 2025/2620 (free allocation) hash must be the pack\'s real workbook hash');
+  assert.match(html, /865372ed23649b7b02c9124f207fc0b0875fd244c45c19e9fb8cdb1e503a5003/,
+    'IR 2025/2621 (default values) hash must be the pack\'s real workbook hash');
+});
+
+test('buildPrintDocument throws a named error on a lines/results length mismatch, rather than crash blind', () => {
+  assert.throws(() => buildPrintDocument({
+    lines: [{ id: 'L1', cn: '25231000', country: 'DZ', route: '(A)',
+              scope: 'direct_and_indirect', massT: '100', date: '2026-03-15' }],
+    results: [],
+    yearCards: [], totals: sumTotals([]),
+    packSnapshot: 'f'.repeat(64), rulePackages: [], pack, generatedOn: '2026-08-08',
+  }), /1 line\(s\) but 0 result\(s\)/);
 });
