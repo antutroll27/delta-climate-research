@@ -1,8 +1,8 @@
 /**
  * Heat-map instrument — the integrated stage + instrument + lifecycle.
  * Ports previews/heat-map/index.html faithfully into the repo. Owns: MapLibre
- * basemap, the three.js custom layer (buildings + draped heat field) sharing
- * MapLibre's GL context, the GPU sim on its OWN offscreen context (bridged via a
+ * basemap and analytical field. The optional relief renderer owns Three.js and
+ * shares MapLibre's GL context; the GPU sim uses its OWN offscreen context (bridged via a
  * throttled readback), the DOM instrument, and disposal.
  *
  * Pure physics/economics live in ./heat-map-model. Sim engine in ./sim-gpu.
@@ -11,10 +11,10 @@
 import maplibregl from 'maplibre-gl';
 import { WARD_MAP, wardLatLon, formatLatLon } from '../../data/wards.ts';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import * as THREE from 'three';
-import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { GpuHeatSim } from './sim-gpu';
-import { DEFAULT_PARAMS, type SimLayers, type SimParams } from './types';
+import { DEFAULT_PARAMS, greenReferenceContrastC, type SimLayers, type SimParams } from './types';
+import { detectHeatCaps } from './caps';
+import { GpuHeatSimHost, StaticTsHeatSimHost, WorkerHeatSimHost } from './sim-host';
+import type { HeatSimHost, HeatSimRequest, HeatSimSnapshot } from './sim-protocol';
 import * as M from './heat-map-model';
 import { ACCURACY, SPATIAL, HEIGHTS, bandLabel, unmeasuredNote, isTransitionHour, TRANSITION_RMSE_K } from './accuracy';
 import { solarElevationFactor } from './sky';
@@ -23,18 +23,23 @@ import { applyScenario } from './dc-urs-scenario';
 import type { DcUrsInputs } from './dc-urs-inputs';
 import { rasterWardBase } from './ward-raster';
 import { loadWardSurface, type WardSurface } from './surface-raster';
-import { buildRegistry, pickBuilding, projectWard, type BuildingMeta } from './explore/building-pick';
-import { createWaterLayer, type WaterLayer } from './water-layer';
-import { createCloudLayer, type CloudLayer } from './cloud-layer';
-import { createRoadLayer, type RoadLayer } from './road-layer';
+import { buildRegistry, type BuildingMeta } from './explore/building-pick';
 import { selectPhase } from './phase-select';
-import { asTerrainField, terrainDrawAt, terrainLabel, TERRAIN_N, type TerrainField } from './terrain';
-import { wardMercatorScale, type WardFrame } from './ward-frame';
+import { asTerrainField, terrainLabel, TERRAIN_N, type TerrainField } from './terrain';
+import { wardMercatorScale } from './ward-frame';
 import {
   LABEL_SOURCE, LABEL_LAYER, REPLACED_ROAD_GEOMETRY, isReplacedRoadLabel,
   labelLayerSpec, EMPTY_LABELS,
 } from './road-labels';
 import { findCoolingSurfaces, nearestCooling, type CoolingSurfaces } from './explore/cooling-surfaces';
+import { WardSession } from './ward-session';
+import { ExploreFrameScheduler } from './explore/frame-scheduler';
+import { exploreRuntimeBudget, nextFrameDelayMs, type ExploreDeviceTier } from './explore/runtime-budget';
+import { CoreFieldLayer } from './explore/core-field-layer';
+import type { ReliefRenderer, ReliefWardBundle, ReliefVisualState } from './explore/relief-contract';
+import {
+  attachReliefCustomLayer, isReliefLayerAttached, shouldShowRelief,
+} from './explore/relief-lifecycle';
 
 // Ward set lives in src/data/wards.ts so widening beyond three is a data change,
 // not a code change (dc-urs-spec.md §1).
@@ -48,7 +53,6 @@ export function mountHeatMap(): () => void {
   if (!mapContainer) return () => {};
   const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const cleanup: Array<() => void> = [];
-  const raf = (fn: FrameRequestCallback) => { const id = requestAnimationFrame(fn); return id; };
 
   /* ── state ── */
   interface State {
@@ -65,7 +69,9 @@ export function mountHeatMap(): () => void {
   }
   
   const state: State = { ward: 'ballygunge', phase: 'peak', path: '2025', iv: { trees: 0, roof: 0, parks: 0, facades: 0 }, sunNow: 0, heatTairC: null, base: null, baselineMean: 0, live: null, spatial: null, greenG: 0, lastMean: {}, dcurs: null };
-  let mode: 'relief' | 'iso' = 'relief', env = 'dark';
+  const wardSession = new WardSession<string>();
+  let appDisposed = false;
+  let mode: 'relief' | 'iso' = 'relief', env: 'dark' | 'studio' = 'dark';
 
   /* ── MapLibre basemap ── */
   const map = new maplibregl.Map({
@@ -78,16 +84,42 @@ export function mountHeatMap(): () => void {
      foreshortens it, and until now nothing on screen said how big anything was. */
   map.addControl(new maplibregl.ScaleControl({ maxWidth: 104, unit: 'metric' }), 'bottom-left');
 
+  /* The analytical core is intentionally Three-free. Its canvas raster remains
+     available while the optional relief chunk is downloading and is the whole
+     renderer on capability tier 0. */
+  const coreField = new CoreFieldLayer(map, SIM_N);
+  const capsReady = detectHeatCaps();
+  let relief: ReliefRenderer | null = null;
+  let reliefReady: Promise<void> | null = null;
+  let reliefWard: ReliefWardBundle | null = null;
+  let currentField: Float32Array | null = null;
+  let currentWardSizeM = WARDS.ballygunge.footprintM;
+  let tintMode = 1;
+  let growProgress = 1;
+  let registry: BuildingMeta[] = [];
+  let selected: BuildingMeta | null = null;
+
+  /* One runtime admission point owns recurring visual work. MapLibre retains
+     responsibility for actual draws; this only decides when a new frame is
+     useful, keeping hidden tabs and active gestures out of the simulation loop. */
+  let runtimeVisible = !document.hidden;
+  let runtimeTier: ExploreDeviceTier = 'balanced';
+  const frameScheduler = new ExploreFrameScheduler((time) => runRuntimeFrame(time));
+  function requestRuntimeFrame(reason: 'drag' | 'orbit' | 'grow' | 'render', delay = 0): void {
+    if (appDisposed || !runtimeVisible) return;
+    frameScheduler.requestAfter(reason, delay);
+  }
+
   /* ── idle auto-orbit (pauses on any interaction, resumes after 2.5 s) ── */
   let orbit = !reduceMotion, orbitResume = 0, lastT = 0;
   const ORBIT_DEG_PER_SEC = -1.4;
-  function orbitFrame(t: number) {
+  function advanceOrbit(t: number): boolean {
     const dt = lastT ? Math.min(0.05, (t - lastT) / 1000) : 0; lastT = t;
-    if (orbit && mode === 'relief' && map.isStyleLoaded()) map.setBearing(map.getBearing() + ORBIT_DEG_PER_SEC * dt);
-    orbitId = raf(orbitFrame);
+    const active = Boolean(orbit && mode === 'relief' && map.isStyleLoaded());
+    if (active) map.setBearing(map.getBearing() + ORBIT_DEG_PER_SEC * dt);
+    return active;
   }
-  let orbitId = raf(orbitFrame);
-  function nudgeOrbit() { orbit = false; clearTimeout(orbitResume); orbitResume = window.setTimeout(() => { if (!reduceMotion && mode === 'relief') orbit = true; }, 2500); }
+  function nudgeOrbit() { orbit = false; clearTimeout(orbitResume); orbitResume = window.setTimeout(() => { if (!reduceMotion && mode === 'relief') { orbit = true; requestRuntimeFrame('orbit'); } }, 2500); }
 
   /* ── north compass ──
      The idle orbit turns the map forever, which is pleasant to watch and
@@ -127,20 +159,19 @@ export function mountHeatMap(): () => void {
   let dragAcc: { dx: number; dy: number; pan: boolean } | null = null;
   const vel = { b: 0, p: 0 };
   const onDown = (e: PointerEvent) => { if (e.button !== 0 && e.button !== 2) return; drag = { b: e.button, x: e.clientX, y: e.clientY }; vel.b = vel.p = 0; try { cv.setPointerCapture(e.pointerId); } catch { /* ignore */ } nudgeOrbit(); };
-  const onMove = (e: PointerEvent) => { if (!drag) return; const dx = e.clientX - drag.x, dy = e.clientY - drag.y; drag.x = e.clientX; drag.y = e.clientY; if (!dragAcc) dragAcc = { dx: 0, dy: 0, pan: drag.b === 2 }; dragAcc.dx += dx; dragAcc.dy += dy; };
-  const onUp = () => { drag = null; };
+  const onMove = (e: PointerEvent) => { if (!drag) return; const dx = e.clientX - drag.x, dy = e.clientY - drag.y; drag.x = e.clientX; drag.y = e.clientY; if (!dragAcc) dragAcc = { dx: 0, dy: 0, pan: drag.b === 2 }; dragAcc.dx += dx; dragAcc.dy += dy; requestRuntimeFrame('drag'); };
+  const onUp = () => { drag = null; requestRuntimeFrame('drag'); };
   cv.addEventListener('pointerdown', onDown); cv.addEventListener('pointermove', onMove);
   cv.addEventListener('pointerup', onUp); cv.addEventListener('pointercancel', onUp);
-  function dragFrame() {
+  function advanceDrag(): boolean {
     if (dragAcc) {
       if (dragAcc.pan) map.panBy([-dragAcc.dx, -dragAcc.dy], { duration: 0 });
       else { vel.b = -dragAcc.dx * 0.4; vel.p = -dragAcc.dy * 0.35; map.jumpTo({ bearing: map.getBearing() + vel.b, pitch: Math.min(78, Math.max(0, map.getPitch() + vel.p)) }); }
       dragAcc = null;
     } else if (drag) { vel.b *= 0.5; vel.p *= 0.5; }
     else if (Math.abs(vel.b) > 0.02 || Math.abs(vel.p) > 0.02) { vel.b *= 0.88; vel.p *= 0.88; map.jumpTo({ bearing: map.getBearing() + vel.b, pitch: Math.min(78, Math.max(0, map.getPitch() + vel.p)) }); }
-    dragId = raf(dragFrame);
+    return !!drag || Math.abs(vel.b) > 0.02 || Math.abs(vel.p) > 0.02;
   }
-  let dragId = raf(dragFrame);
 
   /* ── click-to-inspect: select a building, read what is measured about it ──
      A tap and a drag start identically on this canvas (the orbit gesture owns
@@ -175,19 +206,19 @@ export function mountHeatMap(): () => void {
      and skipped entirely mid-drag so orbiting never pays for it. */
   let hoverAt = 0;
   const onHover = (e: PointerEvent) => {
-    if (drag || !registry.length || e.pointerType !== 'mouse') return;
+    if (drag || !relief || !registry.length || e.pointerType !== 'mouse') return;
     const now = performance.now();
     if (now - hoverAt < 90) return;
     hoverAt = now;
     const r = cv.getBoundingClientRect();
-    const hit = pickBuilding(pickMatrix, registry, e.clientX - r.left, e.clientY - r.top, cv.clientWidth, cv.clientHeight, 34);
+    const hit = relief.pick(e.clientX - r.left, e.clientY - r.top, cv.clientWidth, cv.clientHeight, 34);
     cv.style.cursor = hit >= 0 ? 'pointer' : '';
   };
   cv.addEventListener('pointermove', onHover, { passive: true });
   cleanup.push(() => { cv.removeEventListener('pointermove', onHover); cv.style.cursor = ''; });
 
   function cellIndexAt(cx: number, cz: number): number {
-    const size = sizeU.value;
+    const size = currentWardSizeM;
     const gx = Math.min(SIM_N - 1, Math.max(0, Math.floor((cx / size + 0.5) * SIM_N)));
     const gy = Math.min(SIM_N - 1, Math.max(0, Math.floor((cz / size + 0.5) * SIM_N)));
     return gy * SIM_N + gx;
@@ -195,7 +226,7 @@ export function mountHeatMap(): () => void {
 
   function paintCard(b: BuildingMeta) {
     const i = cellIndexAt(b.cx, b.cz);
-    const localC = heatData[i * 4 + 1];            // G = raw field, the same sample the facade tints from
+    const localC = currentField?.[i] ?? NaN;
     const veg = state.base ? state.base.veg[i] : NaN;
     const alb = state.base ? state.base.albedo[i] : NaN;
     const wardMean = state.lastMean[state.ward];
@@ -320,7 +351,7 @@ export function mountHeatMap(): () => void {
     if (nearestCool) {
       const tag = el('coolTag');
       if (tag) {
-        const q = projectWard(pickMatrix, nearestCool.x, 1.2, nearestCool.z, w, h);
+        const q = relief?.project(nearestCool.x, 1.2, nearestCool.z, w, h) ?? { x: 0, y: 0, w: -1 };
         if (q.w <= 0) tag.style.visibility = 'hidden';
         else {
           const cvB = cv.getBoundingClientRect();
@@ -364,7 +395,7 @@ export function mountHeatMap(): () => void {
          beat one clever one nobody can read six months from now. */
       const cands: { x: number; y: number; free: boolean }[] = [];
       for (const [dx, dz] of [[0, r], [0, -r], [r, 0], [-r, 0]] as const) {
-        const q = projectWard(pickMatrix, selected.cx + dx, 1, selected.cz + dz, w, h);
+        const q = relief?.project(selected.cx + dx, 1, selected.cz + dz, w, h) ?? { x: 0, y: 0, w: -1 };
         /* The chip is taller now, so it needs more headroom before it would be
            clipped by the top edge or buried under the footer strip. */
         if (q.w <= 0 || q.y > h - 46 || q.y < 44) continue;
@@ -380,7 +411,7 @@ export function mountHeatMap(): () => void {
          string on every repaint was work with no output. */
       lab.style.transform = `translate3d(${Math.round(bx)}px, ${Math.round(by)}px, 0)`;
     }
-    const p = projectWard(pickMatrix, selected.cx, selected.h, selected.cz, w, h);
+    const p = relief?.project(selected.cx, selected.h, selected.cz, w, h) ?? { x: 0, y: 0, w: -1 };
     if (p.w <= 0) { bcard.style.opacity = '0'; bsel.style.opacity = '0'; return; }
     bcard.style.opacity = '1'; bsel.style.opacity = '1';
     bsel.style.transform = `translate3d(${Math.round(p.x)}px, ${Math.round(p.y)}px, 0)`;
@@ -435,12 +466,11 @@ export function mountHeatMap(): () => void {
   function select(b: BuildingMeta | null) {
     selected = b;
     if (b) {
-      selCtrU.value.set(b.cx, b.cz);
       /* b.ring so the walk is measured from the building's nearest corner, not
          from a point inside it — nobody sets off from the middle of a block. */
-      nearestCool = cooling ? nearestCooling(cooling, b.cx, b.cz, SIM_N, sizeU.value, b.ring) : null;
-      const lo = coolingLo ? nearestCooling(coolingLo, b.cx, b.cz, SIM_N, sizeU.value, b.ring) : null;
-      const hi = coolingHi ? nearestCooling(coolingHi, b.cx, b.cz, SIM_N, sizeU.value, b.ring) : null;
+      nearestCool = cooling ? nearestCooling(cooling, b.cx, b.cz, SIM_N, currentWardSizeM, b.ring) : null;
+      const lo = coolingLo ? nearestCooling(coolingLo, b.cx, b.cz, SIM_N, currentWardSizeM, b.ring) : null;
+      const hi = coolingHi ? nearestCooling(coolingHi, b.cx, b.cz, SIM_N, currentWardSizeM, b.ring) : null;
       coolRangeM = lo && hi ? [Math.min(lo.distM, hi.distM), Math.max(lo.distM, hi.distM)] : null;
       /* The tag's value is written HERE, once per selection — placeCard only
          moves it. Rounded to 10 m because the grid cell is 7.3 m. */
@@ -450,29 +480,14 @@ export function mountHeatMap(): () => void {
       } else {
         el('coolTag')?.setAttribute('hidden', '');
       }
-      if (coolLine && nearestCool) {
-        const pos = coolLine.geometry.getAttribute('position') as THREE.BufferAttribute;
-        pos.setXYZ(0, b.cx, 1.2, b.cz);
-        pos.setXYZ(1, nearestCool.x, 1.2, nearestCool.z);
-        pos.needsUpdate = true;
-        coolLine.computeLineDistances();
-        coolLine.visible = true;
-      } else if (coolLine) coolLine.visible = false;
-      if (ringGroup) {
-        ringGroup.visible = true;
-        for (const m of ringGroup.children) m.position.set(b.cx, 0.75, b.cz);
-      }
-      coolU.value = 1;
+      relief?.setSelection({ building: b, nearestCooling: nearestCool });
       paintCard(b);
       bcard?.removeAttribute('hidden'); bsel?.removeAttribute('hidden');
       placeCard();
     } else {
-      selCtrU.value.set(1e9, 1e9);
       nearestCool = null; coolRangeM = null;
       el('coolTag')?.setAttribute('hidden', '');
-      if (coolLine) coolLine.visible = false;
-      if (ringGroup) ringGroup.visible = false;
-      coolU.value = 0;
+      relief?.setSelection({ building: null, nearestCooling: null });
       bcard?.setAttribute('hidden', ''); bsel?.setAttribute('hidden', '');
       for (const { el: id } of RINGS) el(id)?.setAttribute('hidden', '');
     }
@@ -484,9 +499,9 @@ export function mountHeatMap(): () => void {
     if (!downAt || e.button !== 0) { downAt = null; return; }
     const moved = Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y);
     downAt = null;
-    if (moved > 6 || !registry.length) return;
+    if (moved > 6 || !relief || !registry.length) return;
     const r = cv.getBoundingClientRect();
-    const hit = pickBuilding(pickMatrix, registry, e.clientX - r.left, e.clientY - r.top, cv.clientWidth, cv.clientHeight);
+    const hit = relief.pick(e.clientX - r.left, e.clientY - r.top, cv.clientWidth, cv.clientHeight);
     if (hit >= 0) dismissTip();
     select(hit >= 0 ? registry.find(b => b.idx === hit) ?? null : null);
   };
@@ -505,111 +520,70 @@ export function mountHeatMap(): () => void {
     map.off('render', placeCard);
   });
 
-  /* ── offscreen GPU heat sim + field bridge (R=blur ground · G=raw buildings) ── */
-  const simRenderer = new THREE.WebGLRenderer({ canvas: document.createElement('canvas'), antialias: false });
-  let sim: GpuHeatSim | null = null;
-  try { sim = new GpuHeatSim(simRenderer); } catch (e) { console.warn('GPU sim unavailable:', (e as Error).message); }
-  const heatData = new Float32Array(SIM_N * SIM_N * 4);
+  /* ── capability-selected heat sim + field bridge (R=blur ground · G=raw buildings) ── */
+  let simHost: HeatSimHost | null = null;
+  let simReady: Promise<void> | null = null;
+  let simGeneration = 0;
+  let simAnimate = !reduceMotion;
+  let latestSimRequest: HeatSimRequest | null = null;
+  let latestSnapshot: HeatSimSnapshot | null = null;
+  const setSimBackend = (label: string) => setText('simBackend', label);
+  const makeCpuHost = (): HeatSimHost => {
+    try { return new WorkerHeatSimHost(); }
+    catch { return new StaticTsHeatSimHost(); }
+  };
+  function initSimHost(): Promise<void> {
+    if (simReady) return simReady;
+    simReady = capsReady.then((caps) => {
+      simAnimate = caps.animate;
+      runtimeTier = caps.tier === 2 ? 'full' : caps.tier === 1 ? 'balanced' : 'low';
+      map.setPixelRatio(Math.min(devicePixelRatio, exploreRuntimeBudget({ visible: runtimeVisible, interacting: false, reducedMotion: reduceMotion, deviceTier: runtimeTier }).pixelRatioCap));
+      mode = caps.mode === 'isotherm' ? 'iso' : mode;
+      document.querySelectorAll('#modechip button').forEach((button) => {
+        const buttonMode = (button as HTMLElement).dataset.m === 'iso' ? 'iso' : 'relief';
+        button.classList.toggle('on', buttonMode === mode);
+      });
+      if (caps.tier > 0 && mode === 'relief') void ensureRelief();
+      syncRendererVisibility();
+      if (caps.backend === 'gpu') {
+        try {
+          simHost = new GpuHeatSimHost(document.createElement('canvas'));
+          setSimBackend('GPU SIM');
+        } catch {
+          simHost = makeCpuHost();
+          setSimBackend(simHost.backend === 'ts-worker' ? 'CPU SIM' : 'CPU STATIC');
+        }
+      } else {
+        simHost = makeCpuHost();
+        setSimBackend(simHost.backend === 'ts-worker' ? 'CPU SIM' : 'CPU STATIC');
+      }
+    }).catch(() => {
+      simHost = new StaticTsHeatSimHost();
+      simAnimate = false;
+      setSimBackend('CPU STATIC');
+    });
+    return simReady;
+  }
+  function demoteSimHost(): boolean {
+    if (!simHost || simHost.backend === 'ts-main') return false;
+    const previous = simHost.backend;
+    simHost.dispose();
+    simHost = previous === 'gpu-webgl2' ? makeCpuHost() : new StaticTsHeatSimHost();
+    if (simHost.backend === 'ts-main') simAnimate = false;
+    setSimBackend(simHost.backend === 'ts-worker' ? 'CPU SIM' : 'CPU STATIC');
+    return true;
+  }
   /* Colour-ramp bounds for the CURRENT forcing. Recomputed whenever the phase,
      pathway or live ambient changes, and shared by the ground overlay, the
      facades and the histogram so all three always speak the same scale.
      Ward-independent by construction — see rampBounds() in heat-map-model. */
   let ramp: [number, number] = [M.RAMP_MIN, M.RAMP_MAX];
-  const heatTex = new THREE.DataTexture(heatData, SIM_N, SIM_N, THREE.RGBAFormat, THREE.FloatType);
-  heatTex.minFilter = heatTex.magFilter = THREE.LinearFilter; heatTex.needsUpdate = true;
-  const blurTmp = new Float32Array(SIM_N * SIM_N);
-  let fieldDirty = false;
-  function bridgeField() {
-    if (!sim || !sim.gridN) return;
-    const t = sim.temperature(), n = SIM_N;
-    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) { let s = 0, c = 0; for (let dy = -1; dy <= 1; dy++) { const yy = y + dy; if (yy < 0 || yy >= n) continue; for (let dx = -1; dx <= 1; dx++) { const xx = x + dx; if (xx < 0 || xx >= n) continue; s += t[yy * n + xx]; c++; } } blurTmp[y * n + x] = s / c; }
-    for (let i = 0; i < blurTmp.length; i++) { heatData[i * 4] = blurTmp[i]; heatData[i * 4 + 1] = t[i]; }
-    heatTex.needsUpdate = true; fieldDirty = true; map.triggerRepaint();
+  function bridgeField(t: Float32Array) {
+    currentField = t;
+    coreField.update(t, ramp[0], ramp[1]);
+    relief?.updateField({ field: t, coolingMask: cooling?.mask ?? null, ramp });
+    syncReliefVisual();
   }
-
-  /* ── shared shader uniforms ── */
-  const growU = { value: 1 }, studioU = { value: 0 }, sizeU = { value: 1400 }, tintU = { value: 1 };
-  const noise01 = M.noise01;
-
-  /* Shared uniform objects so the facade shader tracks the ramp without being
-     recompiled — assigning a new {value:…} each frame would not reach the GPU. */
-  const heatMinU = { value: M.RAMP_MIN }, heatMaxU = { value: M.RAMP_MAX };
-
-  /* Selected-building highlight. Keyed on the CENTROID, not a new id attribute:
-     every vertex already carries `aCtr`, so one vec2 uniform lights exactly one
-     building with no extra buffer and no geometry rebuild. Parked far outside any
-     ward (half-extent is 700 m) so nothing matches while nothing is selected. */
-  const selCtrU = { value: new THREE.Vector2(1e9, 1e9) };
-
-  /* ── facade material (grow-in · live tint · line-art · tint modes) ── */
-  function makeFacade() {
-    const m = new THREE.MeshStandardMaterial({ roughness: .84, metalness: .05 });
-    m.onBeforeCompile = (sh) => {
-      sh.uniforms.uGrow = growU; sh.uniforms.uStudio = studioU; sh.uniforms.uSize = sizeU; sh.uniforms.uTintMode = tintU;
-      sh.uniforms.tField = { value: heatTex };
-      sh.uniforms.uHeatMin = heatMinU; sh.uniforms.uHeatMax = heatMaxU;
-      sh.uniforms.uSelCtr = selCtrU;
-      sh.vertexShader = 'attribute float aDelay; attribute float aH; attribute vec2 aCtr;\n'
-        + 'varying vec3 vFp; varying vec3 vFn; varying float vTop; varying float vT; varying float vSel;\n'
-        + 'uniform float uGrow; uniform float uSize; uniform sampler2D tField; uniform vec2 uSelCtr;\n'
-        + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
-          float gT = clamp((uGrow - aDelay*0.55)/0.45, 0.0, 1.0);
-          float gE = 1.0 + 2.70158*pow(gT-1.0,3.0) + 1.70158*pow(gT-1.0,2.0);
-          transformed.y *= gE; vFp = transformed; vFn = normal;
-          vTop = position.y / max(aH, 0.001);
-          vT = texture2D(tField, clamp(aCtr/uSize + 0.5, 0.0, 1.0)).g;
-          vSel = 1.0 - step(0.5, distance(aCtr, uSelCtr));`);
-      sh.fragmentShader = 'varying vec3 vFp; varying vec3 vFn; varying float vTop; varying float vT; varying float vSel;\n'
-        + 'uniform float uStudio, uSize, uHeatMin, uHeatMax, uTintMode; uniform sampler2D tField;\n'
-        + 'float dh(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}\n'
-        + 'vec3 rampc(float t){ vec3 c0=vec3(.435,.792,.839),c1=vec3(.624,.725,.541),c2=vec3(.690,.553,.341),c3=vec3(.831,.420,.290),c4=vec3(.898,.282,.302);\n'
-        + '  return t<.35?mix(c0,c1,t/.35):t<.6?mix(c1,c2,(t-.35)/.25):t<.8?mix(c2,c3,(t-.6)/.2):mix(c3,c4,min((t-.8)/.2,1.)); }\n'
-        + sh.fragmentShader.replace('#include <color_fragment>', `
-          #include <color_fragment>
-          vec3 fn=normalize(vFn); bool wall=abs(fn.y)<0.5; bool studio = uStudio > 0.5;
-          vec2 fuv = clamp(vFp.xz/uSize + 0.5, 0.0, 1.0);
-          float T = uTintMode < 0.5 ? texture2D(tField, fuv).r : vT;
-          float t = clamp((T-uHeatMin)/(uHeatMax-uHeatMin), 0.0, 1.0);
-          if (uTintMode > 1.5) t = t<.35 ? 0.17 : t<.6 ? 0.48 : t<.8 ? 0.70 : t<.9 ? 0.85 : 0.97;
-          float heatW = smoothstep(0.10, 0.52, t);
-          vec3 clay = studio ? vec3(0.925,0.916,0.902) : vec3(0.30,0.325,0.335);
-          vec3 body = mix(clay, rampc(t), heatW * (studio ? 0.92 : 1.0));
-          body *= mix(0.95, 1.05, dh(floor(vFp.xz*0.05)));
-          if (wall){
-            float fy = fract(vFp.y/3.3);
-            float floorLine = 1.0 - smoothstep(0.05, 0.11, min(fy, 1.0-fy));
-            float colAxis = abs(fn.x)>abs(fn.z)? vFp.z : vFp.x;
-            float fx = fract(colAxis/3.4);
-            float mull = 1.0 - smoothstep(0.035, 0.075, min(fx, 1.0-fx));
-            float stroke = max(floorLine, mull*0.55);
-            vec3 lineCol = studio ? body*0.70 : body*1.7 + vec3(0.015);
-            body = mix(body, lineCol, stroke*0.8);
-            body = mix(body, studio ? clay*1.05 : body*1.55, smoothstep(0.945, 0.985, vTop));
-          } else {
-            body *= studio ? 0.97 : 0.90;
-            float spk = uTintMode < 0.5 ? 1.0 : 0.35;
-            body *= mix(1.0, mix(0.93, 1.05, dh(floor(vFp.xz*0.7))), spk);
-          }
-          float ao = mix(studio ? 0.76 : 0.58, 1.0, smoothstep(0.0, 14.0, vFp.y));
-          body *= ao;
-          /* Selected building: lift toward the brand cyan and brighten its top
-             edge, so it reads as picked without hiding the heat tint that is the
-             whole point of the surface. Everything else is untouched — no clay
-             recede, no dimming pass. */
-          if (vSel > 0.5) {
-            body = mix(body, vec3(0.027, 0.788, 0.992), 0.42);
-            body += vec3(0.10, 0.16, 0.18) * smoothstep(0.90, 0.99, vTop);
-          }
-          diffuseColor.rgb = body;`);
-    };
-    return m;
-  }
-  const facade = makeFacade();
-
-  /* ── click-to-inspect state (see explore/building-pick.ts for why it is not a raycast) ── */
-  const pickMatrix = new THREE.Matrix4();
-  let registry: BuildingMeta[] = [];
-  let selected: BuildingMeta | null = null;
 
   /* ── walk-time rings + cooling surfaces ──
      Both are SELECTION-SCOPED: they appear when a building is picked and vanish
@@ -641,218 +615,18 @@ export function mountHeatMap(): () => void {
   /* Thresholds bracketing VEG_THRESHOLD, so the reported distance can carry the
      uncertainty from the one constant that dominates it instead of hiding it. */
   const VEG_BRACKET = [0.45, 0.55] as const;
-  const coolU = { value: 0 };
-  let ringGroup: THREE.Group | null = null;
   let cooling: CoolingSurfaces | null = null;
   let coolingLo: CoolingSurfaces | null = null;   // veg >= 0.45, the generous reading
   let coolingHi: CoolingSurfaces | null = null;   // veg >= 0.55, the strict one
   let nearestCool: { x: number; z: number; distM: number } | null = null;
   let coolRangeM: [number, number] | null = null;
 
-  /* Dashed line from the selected building to its nearest cooling cell — shows
-     WHICH patch won, and the dashes say "straight line, not a route" without a
-     word of copy. Two vertices, repositioned per selection, transparent-pass so
-     buildings occlude it correctly. */
-  let coolLine: THREE.Line | null = null;
-  function buildCoolLine() {
-    if (coolLine || !threeScene) return;
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
-    coolLine = new THREE.Line(g, new THREE.LineDashedMaterial({
-      color: 0x59b489, transparent: true, opacity: 0.85, dashSize: 7, gapSize: 6, depthWrite: false,
-    }));
-    coolLine.visible = false;
-    coolLine.renderOrder = -1;
-    threeScene.add(coolLine);
-  }
-
-  function buildRings() {
-    if (ringGroup || !threeScene) return;
-    ringGroup = new THREE.Group();
-    ringGroup.visible = false;
-    for (const { r } of RINGS) {
-      const mat = new THREE.ShaderMaterial({
-        transparent: true, depthWrite: false, side: THREE.DoubleSide,
-        uniforms: { uCol: { value: new THREE.Color(0x6fcad6) }, uOp: { value: 0.85 }, uDash: { value: r > 500 ? 1 : 0 } },
-        vertexShader: `varying vec3 vW; varying float vA;
-          void main(){ vW=(modelMatrix*vec4(position,1.0)).xyz; vA=atan(position.y, position.x);
-            gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
-        /* The 10-minute ring is 800 m from a point inside a 1,400 m window, so it
-           necessarily leaves the study area. Rather than draw a confident circle
-           over ground we have no data for, it fades out at the boundary — and
-           its label says so in words. */
-        fragmentShader: `varying vec3 vW; varying float vA; uniform vec3 uCol; uniform float uOp,uDash;
-          void main(){ float edge = 1.0 - smoothstep(600.0, 700.0, max(abs(vW.x), abs(vW.z)));
-            float dash = uDash > 0.5 ? step(0.42, fract(vA*7.0)) : 1.0;
-            float a = uOp*edge*dash; if(a < 0.01) discard; gl_FragColor=vec4(uCol, a); }`,
-      });
-      const m = new THREE.Mesh(new THREE.RingGeometry(r - 2.4, r + 2.4, 128), mat);
-      m.rotation.x = -Math.PI / 2;
-      m.renderOrder = -1;                          // with the ground overlay, under the city
-      ringGroup.add(m);
-    }
-    threeScene.add(ringGroup);
-  }
-
-  /* ── three.js custom layer (shares MapLibre's GL context) ── */
-  let threeScene: THREE.Scene | null = null, threeCam: THREE.Camera, threeRenderer: THREE.WebGLRenderer;
-  let cityMesh: THREE.Mesh | null = null, overlay: THREE.Mesh;
-  /* The scene's north flip, as a matrix, for pickMatrix. Kept as a constant rather
-     than read from `threeScene.matrixWorld` so it cannot be a frame stale — the
-     pick matrix is built inside render(), before three has necessarily refreshed
-     the scene graph. */
-  const NORTH_FLIP = new THREE.Matrix4().makeScale(1, 1, -1);
-  /* `frame` carries the ANISOTROPIC metre→mercator scale (ward-frame.ts): east and
-     north differ by 0.7 %, which is ~4 m at the rim of a 1,400 m window. It used to
-     be one `scale` for both axes. */
-  let modelTransform:
-    { x: number; y: number; z: number; frame: WardFrame } | null = null;
-  let hemiL: THREE.HemisphereLight, keyL: THREE.DirectionalLight, rimL: THREE.DirectionalLight;
-  /* The ENVIRONMENT's own key intensity, kept separately because the cloud deck
-     scales it every frame. Writing `2.1 * sunFactor` directly would clobber the
-     studio environment's dimmer 1.7 on the very next repaint — the deck would
-     silently drag clay studio back to the dark map's lighting. */
-  let keyBase = 2.1;
-  const customLayer: maplibregl.CustomLayerInterface = {
-    id: 'delta-city', type: 'custom', renderingMode: '3d',
-    onAdd(m, gl) {
-      if (threeRenderer) return;
-      threeScene = new THREE.Scene();
-      /* THE MIRROR FIX. MapLibre's mercator y grows SOUTHWARD; every producer in
-         this engine puts the data's northing into world +z (buildings via
-         `Shape(x,−y)` + rotateX, roads directly). Composed, that drew each ward
-         reflected about its own east–west centre line — every building on the
-         wrong side of its street. It read as "buildings on roads" and was
-         misdiagnosed three times as basemap road-casing width.
-
-         The reflection lives HERE, on the scene node, and not in the projection
-         matrix, for one reason: WebGLRenderer picks `gl.frontFace` from
-         `matrixWorld.determinant()`. It never inspects `threeCam.projectionMatrix`.
-         Flip the sign in the matrix instead and the composite silently becomes
-         orientation-reversing, culling every FrontSide material in the scene — the
-         facades, the heat overlay, the water sheets and the cloud shadows. Only
-         the rings and roads are DoubleSide and would survive.
-         Put it here and three flips winding and the normal matrix for us.
-
-         `NORTH_FLIP` mirrors this for pickMatrix, which must agree exactly. */
-      threeScene.scale.set(1, 1, -1);
-      hemiL = new THREE.HemisphereLight(0xbfe2e8, 0x0a1518, 1.05); threeScene.add(hemiL);
-      keyL = new THREE.DirectionalLight(0xffffff, 2.1); keyL.position.set(0.4, 1, 0.35); threeScene.add(keyL);
-      rimL = new THREE.DirectionalLight(0x6fcad6, 0.5); rimL.position.set(-0.5, 0.4, -0.5); threeScene.add(rimL);
-      threeCam = new THREE.Camera();
-      threeRenderer = new THREE.WebGLRenderer({ canvas: m.getCanvas(), context: gl as WebGL2RenderingContext, antialias: true });
-      threeRenderer.autoClear = false;
-      /* Segmented, so the ground can carry relief. A flat quad cannot bend, and
-         128² matches the terrain field exactly — one vertex per texel, no
-         resampling. The plane stays 1×1 in local space and is scaled to the ward
-         in metres, so displacement is applied in the same units as the field. */
-      overlay = new THREE.Mesh(new THREE.PlaneGeometry(1, 1, TERRAIN_N - 1, TERRAIN_N - 1), new THREE.ShaderMaterial({
-        transparent: true, depthWrite: false,
-        uniforms: { tT: { value: heatTex }, uMin: heatMinU, uMax: heatMaxU, uOp: { value: 0.5 }, uCool: coolU },
-        vertexShader: 'varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
-        fragmentShader: `varying vec2 vUv; uniform sampler2D tT; uniform float uMin,uMax,uOp,uCool;
-          vec3 ramp(float t){ vec3 cA=vec3(.204,.412,.529),cB=vec3(.318,.635,.729),c0=vec3(.435,.792,.839),c1=vec3(.624,.725,.541),c2=vec3(.690,.553,.341),c3=vec3(.831,.420,.290),c4=vec3(.898,.282,.302);
-            if(t<0.0) return t<-.20 ? mix(cB,cA,clamp((-t-.20)/.30,0.,1.)) : mix(c0,cB,-t/.20);
-            return t<.35?mix(c0,c1,t/.35):t<.6?mix(c1,c2,(t-.35)/.25):t<.8?mix(c2,c3,(t-.6)/.2):mix(c3,c4,min((t-.8)/.2,1.)); }
-          void main(){ vec4 F=texture2D(tT, vec2(vUv.x, 1.0-vUv.y)); float t=clamp((F.r-uMin)/(uMax-uMin),-0.5,1.);
-            float edge=smoothstep(0.0,0.16, min(min(vUv.x,1.0-vUv.x), min(vUv.y,1.0-vUv.y)));
-            /* B carries the cooling-surface mask (see explore/cooling-surfaces.ts).
-               It rides the field texture's spare channel, so showing it costs no
-               second plane, no second texture and no extra overdraw. */
-            float cool = F.b * uCool;
-            vec3 col = mix(ramp(t), vec3(.353,.722,.541), cool*0.62);
-            gl_FragColor=vec4(col, (uOp + cool*0.16)*edge); }`,
-      }));
-      overlay.rotation.x = -Math.PI / 2; overlay.position.y = 0.6; overlay.renderOrder = -1; threeScene.add(overlay);
-      buildRings();
-      buildCoolLine();
-    },
-    render(_gl, matrix) {
-      if (!modelTransform || !threeScene) return;
-      const f = modelTransform.frame;
-      /* Sign structure UNCHANGED from the version that shipped mirrored — the fix
-         is NORTH_FLIP on the scene, not here. What changed is that the three axes
-         now carry three different scales (ward-frame.ts). */
-      const l = new THREE.Matrix4()
-        .makeTranslation(modelTransform.x, modelTransform.y, modelTransform.z)
-        .scale(new THREE.Vector3(f.east, -f.north, f.up))
-        .multiply(new THREE.Matrix4().makeRotationX(Math.PI / 2));
-      threeCam.projectionMatrix = new THREE.Matrix4().fromArray(matrix as unknown as number[]).multiply(l);
-      /* Keep the exact matrix the vertex shader is about to use, INCLUDING the
-         scene's north flip — building-pick projects raw ward metres with this, and
-         without the flip a hit test would land on the mirror image of the building
-         under the cursor. Silent, and only visible as "clicking picks the wrong
-         building", which is how this class of bug hides. */
-      pickMatrix.copy(threeCam.projectionMatrix).multiply(NORTH_FLIP);
-      /* The water shimmer advances only here — it rides whatever repaints the
-         map already does (orbit, drags, the sim bridge). Reduced motion means
-         still water, by never advancing the clock. */
-      if (waterLayer) {
-        /* The specular streak needs the map's own view direction — the three
-           camera here carries a hand-assigned projection matrix and no usable
-           world transform, so it is taken from MapLibre each frame. */
-        waterLayer.setView(map.getBearing(), map.getPitch());
-        if (!reduceMotion) waterLayer.setTime(performance.now() / 1000);
-      }
-      /* The deck rides the same repaints the water does. Reduced motion holds it
-         at a still frame on the measured cover rather than animating slower.
-         A null reading draws nothing — an invented sky is the loader's deleted
-         land dust all over again. */
-      /* NOT IN 2D. Measured on an M4 at DPR 2: with the deck the isotherm view
-         renders continuously; without it draw calls fall from 47k/s to 14k/s,
-         because nothing else there asks for a repaint. Clouds seen straight down
-         over a flat isotherm add nothing — it is a 3D atmosphere and it belongs
-         to the 3D view. */
-      if (cloudLayer) cloudLayer.group.visible = mode !== 'iso';
-      if (cloudLayer && mode !== 'iso' && state.live) {
-        cloudLayer.update(
-          reduceMotion ? 0 : performance.now() / 1000,
-          state.live.cloud / 100, state.live.wind, state.live.windFrom ?? 0,
-          state.phase === 'night',
-        );
-        keyL.intensity = keyBase * cloudLayer.sunFactor(state.live.cloud / 100);
-      }
-      threeRenderer.resetState();
-      threeRenderer.render(threeScene, threeCam);
-      /* The deck drifts when nothing else is changing, so it needs its own repaint
-         reason — but only when there is wind to drift on, and never under reduced
-         motion. This is the one new source of continuous repaint. */
-      const drifting = !reduceMotion && !!cloudLayer && mode !== 'iso'
-        && (state.live?.wind ?? 0) > 0;
-      if (growU.value < 1 || fieldDirty || drifting) { fieldDirty = false; map.triggerRepaint(); }
-    },
-  };
-
-  /**
-   * Bend the heat overlay onto the ward's ground.
-   *
-   * THE FRAME. The plane is rotated −90° about X, which sends local (x, y, z) to
-   * world (x, z, −y). So local Z displacement IS world height, and the terrain is
-   * sampled at world (x, z) = (localX·sizeM, −localY·sizeM). Local scale Z stays 1,
-   * so metres in the field are metres on screen — no unit conversion anywhere.
-   *
-   * A null field flattens the plane rather than leaving the previous ward's
-   * relief behind, which is what makes a failed fetch look like the old flat map
-   * instead of a wrong one.
-   */
-  function displaceGround(field: TerrainField | null, sizeM: number): void {
-    if (!overlay) return;
-    const pos = overlay.geometry.attributes.position as THREE.BufferAttribute;
-    for (let i = 0; i < pos.count; i++) {
-      pos.setZ(i, terrainDrawAt(field, pos.getX(i) * sizeM, -pos.getY(i) * sizeM));
-    }
-    pos.needsUpdate = true;
-    overlay.geometry.computeVertexNormals();
-  }
-
-  /* ── heat ramp for building extrusion vertex jitter (grow) — via aCtr sample ── */
+  /* ── ward artefact caches shared by the analytical core and relief renderer ── */
   const cache: Record<string, M.WardData> = {}, roadsCache: Record<string, M.RoadsData> = {};
   const waterCache: Record<string, M.WaterData> = {};
   /* Render-only ground. `undefined` means unfetched, `null` means fetched-and-absent —
      the distinction stops a failed fetch retrying on every ward switch. */
   const terrainCache: Record<string, TerrainField | null> = {};
-  let waterLayer: WaterLayer | null = null;
-  let cloudLayer: CloudLayer | null = null;
   /* Street names, in lon/lat. Cached per ward like the other artefacts; absence
      is normal and draws nothing, the loader idiom water and roads already use. */
   const labelCache: Record<string, unknown> = {};
@@ -860,12 +634,74 @@ export function mountHeatMap(): () => void {
      of Ballygunge is hand-traced OSM and 99 % of Baruipur is model output — a
      difference nothing on screen showed until this shipped. */
   const provCache: Record<string, { src: string[]; confidence: number[] } | null> = {};
-  let roadLayer: RoadLayer | null = null;
   /* Measured Sentinel-2 surface, one per ward, fetched once. A miss is non-fatal
      and falls back to a flat field at the measured ward mean — never to
      synthesised structure. */
   const surfaceCache: Record<string, WardSurface> = {};
   let growStart = 0; const GROW_MS = 1900; let opBase = 0.5;
+
+  function reliefVisualState(): ReliefVisualState {
+    return {
+      mode, environment: env, tintMode, grow: growProgress,
+      overlayOpacity: opBase * Math.min(1, growProgress * 1.6),
+      live: state.live, phase: state.phase,
+    };
+  }
+
+  function syncReliefVisual(): void {
+    relief?.setVisualState(reliefVisualState());
+  }
+
+  function reliefIsAttached(): boolean {
+    return !!(relief && isReliefLayerAttached(map, relief.layer.id));
+  }
+
+  function attachReliefLayer(): boolean {
+    return relief ? attachReliefCustomLayer(map, relief.layer) : false;
+  }
+
+  function syncRendererVisibility(): void {
+    const showRelief = shouldShowRelief(reliefIsAttached());
+    coreField.setVisible(!showRelief);
+    if (relief && map.getLayer(relief.layer.id)) {
+      map.setLayoutProperty(relief.layer.id, 'visibility', showRelief ? 'visible' : 'none');
+    }
+    const basemapVisibility = showRelief ? 'none' : 'visible';
+    for (const id of REPLACED_ROAD_GEOMETRY) {
+      if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', basemapVisibility);
+    }
+    for (const layer of map.getStyle().layers ?? []) {
+      if (isReplacedRoadLabel(layer as never) && map.getLayer(layer.id)) {
+        map.setLayoutProperty(layer.id, 'visibility', basemapVisibility);
+      }
+    }
+  }
+
+  /** Load the entire Three.js renderer at the single optional boundary. Neither
+      the route bootstrap nor this core module statically references Three. */
+  async function ensureRelief(): Promise<void> {
+    if (relief || appDisposed) return;
+    if (reliefReady) return reliefReady;
+    reliefReady = import('./explore/relief-renderer').then(({ createReliefRenderer }) => {
+      if (appDisposed) return;
+      const instance = createReliefRenderer({
+        map, reducedMotion: reduceMotion,
+        simulationGridSize: SIM_N, terrainGridSize: TERRAIN_N,
+      });
+      relief = instance;
+      attachReliefLayer();
+      if (reliefWard) instance.setWard(reliefWard);
+      if (currentField) instance.updateField({ field: currentField, coolingMask: cooling?.mask ?? null, ramp });
+      instance.setVisualState(reliefVisualState());
+      instance.setSelection({ building: selected, nearestCooling: nearestCool });
+      syncRendererVisibility();
+      map.triggerRepaint();
+    }).catch((error) => {
+      reliefReady = null;
+      console.warn('Optional relief renderer unavailable:', error);
+    });
+    return reliefReady;
+  }
 
   /* DC-URS baseline inputs — observed, loaded once and shared by every ward.
      Failure is non-fatal: the heat field still works, the score reports itself
@@ -892,12 +728,60 @@ export function mountHeatMap(): () => void {
   }
 
   async function loadWard(name: string) {
-    const load = el('loadchip'); load?.classList.add('on');
+    if (!WARDS[name]) return;
+    const token = wardSession.begin(name);
+    if (!token) return;
+    const load = el('loadchip');
+    if (load) { load.textContent = `Loading ${WARDS[name].name}…`; load.classList.add('on'); }
     await new Promise(r => setTimeout(r, 30));
-    await loadDcUrs();
-    await loadHeatwave();
-    if (!cache[name]) cache[name] = await (await fetch(`/heat-map/data/${name}.json`)).json();
-    const d = cache[name], w = WARDS[name]; state.ward = name; updateCompareHref();
+    if (!wardSession.isCurrent(token)) return;
+    const optional = async <T>(task: Promise<T>, fallback: T): Promise<T> => {
+      try { return await task; }
+      catch (error) {
+        if (token.signal.aborted || (error instanceof DOMException && error.name === 'AbortError')) throw error;
+        return fallback;
+      }
+    };
+    try {
+      /* Fetch the complete immutable ward bundle before changing shared state. A
+         superseded request therefore cannot replace geometry, labels, or metrics
+         part way through a newer ward selection. */
+      const [d, terrain, water, wardSurface, roads, labels, provenance] = await Promise.all([
+        cache[name]
+          ? Promise.resolve(cache[name])
+          : fetch(`/heat-map/data/${name}.json`, { signal: token.signal }).then(async (r) => {
+            if (!r.ok) throw new Error(`Ward data unavailable (${r.status}).`);
+            return r.json() as Promise<M.WardData>;
+          }),
+        terrainCache[name] !== undefined
+          ? Promise.resolve(terrainCache[name])
+          : optional(fetch(`/heat-map/data/${name}-terrain.json`, { signal: token.signal })
+            .then(async (r) => r.ok ? asTerrainField(await r.json()) : null), null),
+        waterCache[name]
+          ? Promise.resolve(waterCache[name])
+          : optional(fetch(`/heat-map/data/${name}-water.json`, { signal: token.signal })
+            .then(async (r) => r.ok ? await r.json() as M.WaterData : { polys: [] }), { polys: [] }),
+        surfaceCache[name]
+          ? Promise.resolve(surfaceCache[name])
+          : loadWardSurface(name, token.signal),
+        roadsCache[name]
+          ? Promise.resolve(roadsCache[name])
+          : optional(fetch(`/heat-map/data/${name}-roads.json`, { signal: token.signal })
+            .then(async (r) => r.ok ? await r.json() as M.RoadsData : { ways: [] }), { ways: [] }),
+        labelCache[name]
+          ? Promise.resolve(labelCache[name])
+          : optional(fetch(`/heat-map/data/${name}-road-labels.geojson`, { signal: token.signal })
+            .then(async (r) => r.ok ? await r.json() : EMPTY_LABELS), EMPTY_LABELS),
+        provCache[name] !== undefined
+          ? Promise.resolve(provCache[name])
+          : optional(fetch(`/heat-map/data/${name}-provenance.json`, { signal: token.signal })
+            .then(async (r) => r.ok ? await r.json() as { src: string[]; confidence: number[] } : null), null),
+      ]);
+      if (!wardSession.isCurrent(token)) return;
+      cache[name] = d; terrainCache[name] = terrain; waterCache[name] = water;
+      surfaceCache[name] = wardSurface; roadsCache[name] = roads; labelCache[name] = labels; provCache[name] = provenance;
+      void loadDcUrs(); void loadHeatwave();
+      const w = WARDS[name]; state.ward = name; updateCompareHref();
 
     /* Rebuild the pick registry from the SAME rows the extrusions come from, and
        drop any selection: building #1759 in Ballygunge is a different building in
@@ -905,83 +789,24 @@ export function mountHeatMap(): () => void {
     select(null);
     registry = buildRegistry(d.b);
 
-    /* Terrain must land BEFORE any geometry is built: the buildings, the ground
-       plane and the water bodies all seat themselves on it, so a late fetch would
-       leave three layers at three different vintages of the same ward. It is
-       RENDER-ONLY — never passed to rasterWardBase, never in SimLayers — and a
-       miss leaves the ward flat, which is exactly how the map looked before
-       terrain existed. */
-    if (terrainCache[name] === undefined) {
-      try { terrainCache[name] = asTerrainField(await (await fetch(`/heat-map/data/${name}-terrain.json`)).json()); }
-      catch { terrainCache[name] = null; }
-    }
-
-    const geos: THREE.BufferGeometry[] = [], halfM = d.sizeM / 2;
-    for (const b of d.b) {
-      const shape = new THREE.Shape(); shape.moveTo(b[1], -b[2]);
-      for (let i = 3; i < b.length; i += 2) shape.lineTo(b[i], -b[i + 1]);
-      let g: THREE.ExtrudeGeometry;
-      try { g = new THREE.ExtrudeGeometry(shape, { depth: Math.max(0.6, b[0] - 1.4), bevelEnabled: true, bevelThickness: 0.7, bevelSize: 0.55, bevelSegments: 1 }); }
-      catch { try { g = new THREE.ExtrudeGeometry(shape, { depth: b[0], bevelEnabled: false }); } catch { continue; } }
-      g.rotateX(-Math.PI / 2);
-      const delay = Math.min(1, Math.hypot(b[1], b[2]) / halfM) * 0.72 + noise01(b[2], b[1]) * 0.28;
-      let cxm = 0, czm = 0; const np = (b.length - 1) / 2;
-      for (let k = 1; k < b.length; k += 2) { cxm += b[k]; czm += b[k + 1]; } cxm /= np; czm /= np;
-      /* Seat the building on the ground at its own centroid. BASE ONLY — the
-         extrusion depth above is the measured height and is never exaggerated,
-         so the one quantity a reader might measure off the screen stays true
-         while the ground beneath it is admittedly stretched. Applied before the
-         merge, so the draw-call structure is unchanged. */
-      const ty = terrainDrawAt(terrainCache[name] ?? null, cxm, czm);
-      if (ty !== 0) g.translate(0, ty, 0);
-      const nv = g.attributes.position.count, dls = new Float32Array(nv), hts = new Float32Array(nv), ctr = new Float32Array(nv * 2);
-      dls.fill(delay); hts.fill(b[0]); for (let k = 0; k < nv; k++) { ctr[k * 2] = cxm; ctr[k * 2 + 1] = czm; }
-      g.setAttribute('aDelay', new THREE.BufferAttribute(dls, 1));
-      g.setAttribute('aH', new THREE.BufferAttribute(hts, 1));
-      g.setAttribute('aCtr', new THREE.BufferAttribute(ctr, 2));
-      geos.push(g);
-    }
-    sizeU.value = d.sizeM;
-    const merged = mergeGeometries(geos, false); geos.forEach(g => g.dispose());
-    if (threeScene) {
-      if (cityMesh) { threeScene.remove(cityMesh); cityMesh.geometry.dispose(); }
-      cityMesh = new THREE.Mesh(merged, facade); threeScene.add(cityMesh);
-      overlay.scale.set(d.sizeM, d.sizeM, 1);
-    displaceGround(terrainCache[name] ?? null, d.sizeM);
-    /* The exaggeration is stated wherever the ground is drawn. Two independent
-       DEMs disagree about this relief by roughly a quarter of it, so an
-       unlabelled ×4 would be a claim we cannot support — and a claim about slope
-       that nobody made out loud is the easiest kind to be caught by. */
-    const terrLab = el('terrLab');
-    if (terrLab) terrLab.textContent = terrainLabel(terrainCache[name] ?? null) || 'unavailable';
-
-      /* OSM water for this ward — render only, absence is normal (the loader
-         idiom roads already use). The layer shares uGrow, so water fades in
-         with the same reconstruction the buildings play. */
-      if (!waterCache[name]) {
-        waterCache[name] = await fetch(`/heat-map/data/${name}-water.json`)
-          .then(r => (r.ok ? r.json() : { polys: [] }))
-          .catch(() => ({ polys: [] }));
-      }
-      if (waterLayer) { threeScene.remove(waterLayer.mesh); waterLayer.dispose(); waterLayer = null; }
-      const wl = createWaterLayer(waterCache[name], growU,
-        (x, y) => terrainDrawAt(terrainCache[name] ?? null, x, y));
-      if (wl) { waterLayer = wl; threeScene.add(wl.mesh); }
-      /* Baked once and kept across ward switches — cloud is weather, not geography.
-         Only the drape reference changes, and the deck is far enough above the
-         ground for that to be immaterial. */
-      if (!cloudLayer) {
-        cloudLayer = createCloudLayer((x, y) => terrainDrawAt(terrainCache[name] ?? null, x, y));
-        threeScene.add(cloudLayer.group);
-      }
-    }
+    currentWardSizeM = d.sizeM;
     const mc = maplibregl.MercatorCoordinate.fromLngLat([w.lon, w.lat], 0);
     /* The scale comes from ward-frame.ts, not from mc.meterInMercatorCoordinateUnits()
        alone: that number is MapLibre's sphere, and our data's metres are not its
        metres. Using it for both axes stretched north by 0.593 % — ~4 m at the rim,
        growing with |y|. Only the ALTITUDE term is still MapLibre's own, because
        building heights never pass through the ward frame. */
-    modelTransform = { x: mc.x, y: mc.y, z: mc.z ?? 0, frame: wardMercatorScale(w.lat) };
+    reliefWard = {
+      wardData: d, roads, water, terrain,
+      mercatorOrigin: { x: mc.x, y: mc.y, z: mc.z ?? 0 },
+      frame: wardMercatorScale(w.lat),
+    };
+    coreField.attach(w, d.sizeM, relief && map.getLayer(relief.layer.id) ? relief.layer.id : undefined);
+    relief?.setWard(reliefWard);
+    syncRendererVisibility();
+    /* The exaggeration is stated wherever the optional ground relief is drawn. */
+    const terrLab = el('terrLab');
+    if (terrLab) terrLab.textContent = terrainLabel(terrain) || 'unavailable';
 
     /* Vegetation and albedo are MEASURED per cell, from Sentinel-2, and pinned to
        the same ward means the resilience score reads. loadWardSurface verifies
@@ -1006,16 +831,6 @@ export function mountHeatMap(): () => void {
         .then(r => (r.ok ? r.json() : null)).catch(() => null);
     }
     state.spatial = M.buildSpatial(d, state.base, roadsCache[name]);
-    /* The same artefact, drawn. RENDER ONLY: buildSpatial above owns the sim's
-       road corridor and keeps its own, much wider, tree-planting radius — see
-       road-ribbon.ts. Rebuilt per ward because the ribbons are draped on that
-       ward's ground. */
-    if (threeScene) {
-      if (roadLayer) { threeScene.remove(roadLayer.mesh); roadLayer.dispose(); roadLayer = null; }
-      const rl = createRoadLayer(roadsCache[name], growU,
-        (x, y) => terrainDrawAt(terrainCache[name] ?? null, x, y));
-      if (rl) { roadLayer = rl; threeScene.add(rl.mesh); }
-    }
     /* Cooling surfaces are a property of the MEASURED vegetation, so they are
        computed from the ward's base layers and never move when a scenario does —
        planting trees in the model must not invent a park that is not there. */
@@ -1026,8 +841,7 @@ export function mountHeatMap(): () => void {
        way to show a figure this parameter-sensitive: as a range. */
     coolingLo = findCoolingSurfaces(state.base.veg, SIM_N, cellM2, VEG_BRACKET[0]);
     coolingHi = findCoolingSurfaces(state.base.veg, SIM_N, cellM2, VEG_BRACKET[1]);
-    for (let i = 0; i < SIM_N * SIM_N; i++) heatData[i * 4 + 2] = cooling.mask[i];
-    heatTex.needsUpdate = true;
+    if (currentField) relief?.updateField({ field: currentField, coolingMask: cooling.mask, ramp });
     state.live = liveCache[name] ?? null; paintLive();
     resetSim();
 
@@ -1035,18 +849,33 @@ export function mountHeatMap(): () => void {
     setText('bcount', `${d.count.toLocaleString()} real buildings`);
     document.querySelectorAll('#tabs .tab').forEach(t => t.classList.toggle('on', (t as HTMLElement).dataset.w === name));
     document.querySelectorAll('#strip .ward').forEach(t => t.classList.toggle('on', (t as HTMLElement).dataset.w === name));
-    load?.classList.remove('on');
+    if (load) { load.textContent = 'Building ward…'; load.classList.remove('on'); }
 
-    const dur = cityMesh ? 1400 : 0;
+    const dur = relief ? 1400 : 0;
     orbit = false; clearTimeout(orbitResume);
     map.flyTo({ center: [w.lon, w.lat], zoom: 15.3, pitch: mode === 'iso' ? 0 : 60, bearing: mode === 'iso' ? 0 : -18, duration: dur });
-    orbitResume = window.setTimeout(() => { if (!reduceMotion && mode === 'relief') orbit = true; }, dur + 600);
-    if (reduceMotion) growU.value = 1; else { growU.value = 0; growStart = performance.now() + dur * 0.45; }
-    fetchLive(name);
+    orbitResume = window.setTimeout(() => { if (!reduceMotion && mode === 'relief') { orbit = true; requestRuntimeFrame('orbit'); } }, dur + 600);
+    if (reduceMotion) { growProgress = 1; syncReliefVisual(); }
+    else {
+      growProgress = 0;
+      growStart = performance.now() + dur * 0.45;
+      syncReliefVisual();
+      requestRuntimeFrame('grow', dur * 0.45);
+    }
+      wardSession.commit(token);
+      fetchLive(name);
+    } catch (error) {
+      if (!wardSession.isCurrent(token)) return;
+      wardSession.fail(token);
+      console.warn(`Ward ${name} could not load:`, error);
+      if (load) load.textContent = `${WARDS[name].name} could not load.`;
+    }
   }
 
-  function resetSim() {
-    if (!sim || !state.base) return;
+  async function resetSim() {
+    if (appDisposed || !state.base) return;
+    await initSimHost();
+    if (appDisposed || !simHost || !state.base) return;
     /* Re-read the sun before every reset, so the FIRST simulation of the session
        is already at the right elevation. `sunNow` starts at 0 purely as a "live
        mode is on" sentinel; without this the opening frame would run night
@@ -1056,8 +885,24 @@ export function mountHeatMap(): () => void {
     state.baselineMean = M.eqMean(state.base, { ...p, Q: DEFAULT_PARAMS.Q });
     const layers = M.applyInterventions(state.base, state.iv, state.spatial);
     state.greenG = M.computeGreenG(layers);
-    sim.reset({ n: SIM_N, cellMeters: cache[state.ward].sizeM / SIM_N }, layers, p);
-    sim.step(1, RESET_BURST); bridgeField(); refreshStats();
+    const request: HeatSimRequest = {
+      generation: ++simGeneration,
+      grid: { n: SIM_N, cellMeters: cache[state.ward].sizeM / SIM_N },
+      layers, params: p, settleSteps: RESET_BURST, thresholdC: 40,
+    };
+    latestSimRequest = request;
+    try {
+      const snapshot = await simHost.reset(request);
+      if (appDisposed || latestSimRequest?.generation !== snapshot.generation) return;
+      latestSnapshot = snapshot;
+      refreshStats(snapshot); bridgeField(snapshot.field);
+      lastSimulationAt = performance.now();
+      requestRuntimeFrame('render');
+    } catch (error) {
+      if (latestSimRequest?.generation !== request.generation) return;
+      if (demoteSimHost()) void resetSim();
+      else console.warn('Heat simulation unavailable:', error);
+    }
   }
 
   /* ── live ambient (Met Norway direct; production proxies via /api/ambient) ── */
@@ -1275,7 +1120,7 @@ export function mountHeatMap(): () => void {
            by up to an hour and only the former is a property of the data. */
         liveCache[name] = { tAir: dd.air_temperature, rh: dd.relative_humidity, wind: dd.wind_speed, cloud: dd.cloud_area_fraction ?? 0, windFrom: dd.wind_from_direction, feels: M.heatIndexC(dd.air_temperature, dd.relative_humidity), validAt: ts.time };
       }
-      if (state.ward !== name) return;
+      if (appDisposed || state.ward !== name) return;
       state.live = liveCache[name]; paintLive(); resetSim();
     } catch (e) { console.warn('live ambient unavailable, using fallback:', (e as Error).message); }
   }
@@ -1352,7 +1197,6 @@ export function mountHeatMap(): () => void {
      can never disagree with the colours above them. */
   function syncRamp(p: SimParams) {
     ramp = M.rampBounds(p);
-    heatMinU.value = ramp[0]; heatMaxU.value = ramp[1];
     const sc = el('rampSc');
     // A narrow span needs a decimal: the retained phase can be 3 K wide, where
     // whole degrees print "24 · 24 · 25 · 26 · 27" — a repeated label reads as a
@@ -1363,9 +1207,9 @@ export function mountHeatMap(): () => void {
   }
 
   const histo = el('histo'); if (histo) for (let i = 0; i < 12; i++) histo.appendChild(document.createElement('i'));
-  function refreshStats() {
-    if (!sim || !sim.gridN) return;
-    const st = sim.stats(40), t = sim.temperature();
+  function refreshStats(snapshot: HeatSimSnapshot | null = latestSnapshot) {
+    if (!snapshot) return;
+    const st = snapshot.stats, t = snapshot.field;
     const lst = el('lst');
     if (lst) {
       // The band is measured, not decorative: it is this model's out-of-sample
@@ -1375,9 +1219,9 @@ export function mountHeatMap(): () => void {
       (lst as HTMLElement).style.color = lstColor(st.meanC);
     }
     applyConfidence();
-    const p = M.currentParams(state), kk = p.kRad + p.h * p.wind;
+    const p = M.currentParams(state);
     syncRamp(p);
-    const ruralRef = (p.S * 0.75 * p.sun - p.L + p.kRad * p.tSky + p.h * p.wind * p.tAir) / kk, uhi = st.meanC - ruralRef;
+    const uhi = greenReferenceContrastC(st.meanC, p);
     setText('uhi', `${uhi >= 0 ? '+' : ''}${uhi.toFixed(1)}°`);
     setText('area', `${(st.fracAbove * 100).toFixed(0)}%`);
     const bins = new Array(12).fill(0);
@@ -1520,38 +1364,88 @@ export function mountHeatMap(): () => void {
     updateCompareHref(); resetSim();
   }));
   document.querySelectorAll('#segPath button').forEach(b => onEl(b, 'click', () => { state.path = (b as HTMLElement).dataset.p!; document.querySelectorAll('#segPath button').forEach(x => x.classList.toggle('on', x === b)); resetSim(); }));
+  /* 2D Isotherm is a CAMERA state over the same 3D scene, not a different scene:
+     it flattens pitch and bearing and lets the ground overlay read as a plan.
+     The relief layer keeps rendering (see shouldShowRelief), which is what keeps
+     the city visible from above AND keeps the renderer's pick matrix — written
+     once per rendered frame — in step with the camera, so a click in isotherm
+     still selects the building under the cursor and the card stays glued to it. */
   document.querySelectorAll('#modechip button').forEach(b => onEl(b, 'click', () => {
     mode = (b as HTMLElement).dataset.m === 'iso' ? 'iso' : 'relief';
     document.querySelectorAll('#modechip button').forEach(x => x.classList.toggle('on', x === b));
+    if (mode === 'relief') void ensureRelief();
+    syncReliefVisual(); syncRendererVisibility();
     if (mode === 'iso') { orbit = false; map.easeTo({ pitch: 0, bearing: 0, duration: 900 }); }
-    else { map.easeTo({ pitch: 60, duration: 900 }); if (!reduceMotion) orbitResume = window.setTimeout(() => { orbit = true; }, 1100); }
+    else { map.easeTo({ pitch: 60, duration: 900 }); if (!reduceMotion) orbitResume = window.setTimeout(() => { orbit = true; requestRuntimeFrame('orbit'); }, 1100); }
   }));
-  document.querySelectorAll('#tintchip button').forEach(b => onEl(b, 'click', () => { tintU.value = +((b as HTMLElement).dataset.t!); document.querySelectorAll('#tintchip button').forEach(x => x.classList.toggle('on', x === b)); map.triggerRepaint(); }));
+  document.querySelectorAll('#tintchip button').forEach(b => onEl(b, 'click', () => { tintMode = +((b as HTMLElement).dataset.t!); document.querySelectorAll('#tintchip button').forEach(x => x.classList.toggle('on', x === b)); syncReliefVisual(); map.triggerRepaint(); }));
   function setEnv(e: string) {
-    if (e === env) return; env = e; const s = e === 'studio';
-    document.body.classList.toggle('studio', s); studioU.value = s ? 1 : 0; opBase = s ? 0.42 : 0.5;
-    if (hemiL) { if (s) { hemiL.color.set(0xffffff); hemiL.groundColor.set(0xd8d2c8); hemiL.intensity = 1.45; keyBase = 1.7; keyL.intensity = keyBase; rimL.intensity = 0.12; } else { hemiL.color.set(0xbfe2e8); hemiL.groundColor.set(0x0a1518); hemiL.intensity = 1.05; keyBase = 2.1; keyL.intensity = keyBase; rimL.intensity = 0.5; } }
+    if ((e !== 'dark' && e !== 'studio') || e === env) return; env = e; const s = e === 'studio';
+    document.body.classList.toggle('studio', s); opBase = s ? 0.42 : 0.5;
+    syncReliefVisual();
     document.querySelectorAll('#envchip button').forEach(x => x.classList.toggle('on', (x as HTMLElement).dataset.e === e));
-    map.setStyle(STYLES[e as 'dark' | 'studio']); map.once('style.load', () => { map.addLayer(customLayer); map.triggerRepaint(); });
+    map.setStyle(STYLES[e as 'dark' | 'studio']);
   }
   document.querySelectorAll('#envchip button').forEach(b => onEl(b, 'click', () => setEnv((b as HTMLElement).dataset.e!)));
 
-  /* ── sim loop (offscreen) + grow timeline ── */
-  let frame = 0;
-  function simFrame() {
-    if (!reduceMotion && growU.value < 1 && growStart) { growU.value = Math.min(1, Math.max(0, (performance.now() - growStart) / GROW_MS)); map.triggerRepaint(); }
-    if (overlay) (overlay.material as THREE.ShaderMaterial).uniforms.uOp.value = opBase * Math.min(1, growU.value * 1.6);
-    if (sim && sim.gridN && !reduceMotion && !drag) { sim.step(1, 2); if (++frame % 40 === 0) { bridgeField(); refreshStats(); } }
-    simId = raf(simFrame);
+  /* ── budgeted simulation + grow timeline ── */
+  let lastSimulationAt = 0;
+  let simulationInFlight = false;
+  function runRuntimeFrame(time: number): void {
+    if (appDisposed || !runtimeVisible) return;
+    const budget = exploreRuntimeBudget({
+      visible: runtimeVisible,
+      interacting: !!drag,
+      reducedMotion: reduceMotion,
+      deviceTier: runtimeTier,
+    });
+    const dragging = advanceDrag();
+    const orbiting = advanceOrbit(time);
+    let growing = false;
+    if (!reduceMotion && growProgress < 1 && growStart) {
+      growProgress = Math.min(1, Math.max(0, (time - growStart) / GROW_MS));
+      growing = growProgress < 1;
+      syncReliefVisual();
+    }
+    const cloudMotion = budget.allowCloudMotion && !!relief && mode !== 'iso' && (state.live?.wind ?? 0) > 0;
+    const simEligible = budget.simulate && !!simHost && !!latestSimRequest && simAnimate;
+    if (simEligible && !simulationInFlight && time - lastSimulationAt >= budget.simulationIntervalMs) {
+      simulationInFlight = true;
+      lastSimulationAt = time;
+      const request = latestSimRequest!;
+      void simHost!.advance(request.generation, 80).then((snapshot) => {
+        if (!snapshot || latestSimRequest?.generation !== snapshot.generation) return;
+        latestSnapshot = snapshot;
+        refreshStats(snapshot);
+        bridgeField(snapshot.field);
+      }).catch(() => { if (demoteSimHost()) void resetSim(); }).finally(() => {
+        simulationInFlight = false;
+        requestRuntimeFrame('render', budget.simulationIntervalMs);
+      });
+    }
+    if (dragging || orbiting || growing || cloudMotion) map.triggerRepaint();
+    /* One policy call decides the cadence — see nextFrameDelayMs for why an
+       animating frame must ask for 0 and not a nominal "60 fps" 16 ms. */
+    const delay = nextFrameDelayMs({
+      animating: dragging || orbiting || growing,
+      cloudMotion,
+      simEligible,
+      msUntilNextSim: budget.simulationIntervalMs - (time - lastSimulationAt),
+    });
+    if (delay !== null) requestRuntimeFrame('render', delay);
   }
-  let simId = raf(simFrame);
 
-  /* ── boot ── */
+  /* ── style rehydration + boot ── */
   /* This handler is `on`, not `once` — setEnv's setStyle re-fires it, which is
-     what keeps the basemap's road layers hidden across an environment switch. */
-  map.on('style.load', () => {
-    map.addLayer(customLayer);
-    /* Our own street names, in the BASEMAP's frame. Added after customLayer so
+     what keeps the basemap's road layers hidden across an environment switch.
+     It deliberately restores render state only: a style change must never fetch
+     or replace the selected ward. */
+  const onStyleLoad = () => {
+    const wardData = cache[state.ward];
+    if (wardData) coreField.rehydrate(WARDS[state.ward], wardData.sizeM);
+    attachReliefLayer();
+    syncRendererVisibility();
+    /* Our own street names, in the BASEMAP's frame. Added after relief so
        symbols draw above the 3D scene and are never eaten by a tower. */
     if (!map.getSource(LABEL_SOURCE)) {
       map.addSource(LABEL_SOURCE, { type: 'geojson', data: EMPTY_LABELS as never });
@@ -1561,44 +1455,40 @@ export function mountHeatMap(): () => void {
     }
     const cached = labelCache[state.ward];
     if (cached) (map.getSource(LABEL_SOURCE) as maplibregl.GeoJSONSource)?.setData(cached as never);
-    /* The basemap paints these in SCREEN PIXELS — a cartographic stroke that
-       matches no width on the ground and does not narrow as you zoom in. We
-       redraw the same classes in metres (road-layer.ts), so leaving both would
-       show every building overlapping a road that is not the road we drew.
-       Deliberately NOT hidden: highway_path and highway_motorway_* — classes we
-       do not draw, and hiding an unreplaced road deletes it rather than redraws it. */
-    for (const id of REPLACED_ROAD_GEOMETRY) {
-      if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', 'none');
-    }
-    /* And their LABELS. Hiding the asphalt but not the street names left text and
-       one-way arrows floating over roads the basemap no longer draws. Matched by
-       predicate rather than by id because the two styles we ship use DIFFERENT
-       label ids — an id list here is one already known to be incomplete. */
-    for (const l of map.getStyle().layers ?? []) {
-      if (isReplacedRoadLabel(l as never) && map.getLayer(l.id)) {
-        map.setLayoutProperty(l.id, 'visibility', 'none');
-      }
-    }
-    loadWard('ballygunge');
-  });
-  const onVis = () => { /* browser pauses rAF when hidden; nothing extra needed */ };
+    /* Relief supplies metre-scaled roads, so its mode hides the corresponding
+       pixel-scaled basemap geometry. Core mode restores the basemap roads. */
+    syncRendererVisibility();
+    map.triggerRepaint();
+  };
+  map.on('style.load', onStyleLoad);
+  const onMapLoad = () => { void loadWard('ballygunge'); };
+  map.once('load', onMapLoad);
+  void capsReady.then((caps) => {
+    if (!appDisposed && caps.tier > 0 && caps.mode !== 'isotherm') void ensureRelief();
+  }).catch(() => { /* initSimHost owns the documented CPU fallback */ });
+  const onVis = () => {
+    runtimeVisible = !document.hidden;
+    if (runtimeVisible) requestRuntimeFrame('render');
+    else frameScheduler.cancelPending();
+  };
   document.addEventListener('visibilitychange', onVis);
 
   /* ── dispose ── */
   return function dispose() {
-    cancelAnimationFrame(orbitId); cancelAnimationFrame(dragId); cancelAnimationFrame(simId);
+    appDisposed = true;
+    wardSession.dispose();
+    frameScheduler.dispose();
     clearTimeout(orbitResume);
     nudgeEvents.forEach(ev => cv.removeEventListener(ev, nudgeOrbit));
     cv.removeEventListener('contextmenu', noCtx);
     cv.removeEventListener('pointerdown', onDown as EventListener); cv.removeEventListener('pointermove', onMove as EventListener);
     cv.removeEventListener('pointerup', onUp); cv.removeEventListener('pointercancel', onUp);
     document.removeEventListener('visibilitychange', onVis);
+    map.off('style.load', onStyleLoad); map.off('load', onMapLoad);
     cleanup.forEach(fn => fn());
-    cityMesh?.geometry.dispose(); (overlay?.material as THREE.Material)?.dispose(); overlay?.geometry.dispose();
-    waterLayer?.dispose();
-    cloudLayer?.dispose();
-    roadLayer?.dispose();
-    facade.dispose(); heatTex.dispose(); sim?.dispose(); simRenderer.dispose();
+    relief?.dispose();
+    coreField.dispose();
+    simHost?.dispose();
     try { map.remove(); } catch { /* ignore */ }
     document.body.classList.remove('studio');
   };
