@@ -582,3 +582,58 @@ test('buildPrintDocument throws a named error on a lines/results length mismatch
     packSnapshot: 'f'.repeat(64), rulePackages: [], pack, generatedOn: '2026-08-08',
   }), /1 line\(s\) but 0 result\(s\)/);
 });
+
+/* ── the LineEstimateFailure arm (Task 6) ──────────────────────────────────── */
+
+test('buildPrintDocument shows a THROWN line in §1 rather than dropping it silently', () => {
+  // §3 of the design doc defines §1 of the document as "every line as entered". A line whose
+  // estimateFromPack call threw (see safeEstimates in cbam-app.ts's initCbam — rare, but the
+  // old single-line run() caught exactly this) has no CertificateEstimate to put in its
+  // results[i] slot. Dropping it from `lines`/`results` entirely would violate "every line as
+  // entered" while it is STILL counted in the year cards (computed from the raw Line list, not
+  // from priced results) — the exact silent-vanishing failure Task 6 was reviewed for. The fix:
+  // a LineEstimateFailure marker keeps `lines` and `results` parallel and the row still prints,
+  // carrying the failure reason instead of a figure.
+  const okLine = { id: 'L1', cn: '25231000', country: 'DZ', route: '(A)',
+    scope: 'direct_and_indirect', massT: '100', date: '2026-03-15' };
+  const failedLine = { id: 'L2', cn: '99999999', country: 'ZZ', route: 'default',
+    scope: 'direct', massT: '10', date: '2026-06-01' };
+  const okResult = run('25231000', 'DZ', '(A)', '100');
+  const html = buildPrintDocument({
+    lines: [okLine, failedLine],
+    results: [okResult, { failed: true, message: 'engine exploded: no benchmark table for 99999999' }],
+    yearCards: [], totals: sumTotals([okResult]),
+    packSnapshot: 'f'.repeat(64),
+    rulePackages: ['eu-cbam-2026-defaults-v2@v1'],
+    pack, generatedOn: '2026-08-08',
+  });
+  assert.match(html, /99999999/, 'the failed line must still be listed in §1, not dropped');
+  assert.match(html, /engine exploded: no benchmark table for 99999999/,
+    'the failure reason must be printed in place of a figure');
+  assert.match(html, /no estimate \(error\)/, 'a thrown line reads distinctly from an ordinary refusal');
+  // The table must stay well-formed: same row shape (one <tr> per line), not a colspan hack that
+  // could silently misalign columns for every row after it.
+  assert.equal((html.match(/<tr>/g) ?? []).length, 3, 'one header row plus one row per line, including the failed one');
+});
+
+test('buildPrintDocument: a mix of ok, unavailable and thrown lines all print distinctly', () => {
+  const okLine = { id: 'L1', cn: '25231000', country: 'DZ', route: '(A)',
+    scope: 'direct_and_indirect', massT: '100', date: '2026-03-15' };
+  const refusedLine = { id: 'L2', cn: '72052100', country: 'IN', route: '(C)',
+    scope: 'direct', massT: '60', date: '2026-03-15' };
+  const failedLine = { id: 'L3', cn: '00000000', country: 'ZZ', route: 'default',
+    scope: 'direct', massT: '5', date: '2026-06-01' };
+  const okResult = run('25231000', 'DZ', '(A)', '100');
+  const refusedResult = run('72052100', 'IN', '(C)', '60');
+  assert.equal(refusedResult.status, 'unavailable', 'sanity: this is an ordinary engine refusal, not a throw');
+  const html = buildPrintDocument({
+    lines: [okLine, refusedLine, failedLine],
+    results: [okResult, refusedResult, { failed: true, message: 'boom' }],
+    yearCards: [], totals: sumTotals([okResult, refusedResult]),
+    packSnapshot: 'f'.repeat(64), rulePackages: [], pack, generatedOn: '2026-08-08',
+  });
+  assert.equal((html.match(/<tr>/g) ?? []).length, 4, 'the header row plus all three lines appear, none silently dropped');
+  assert.match(html, /no estimate<\/td>/, 'the ordinary refusal reads as a plain "no estimate"');
+  assert.match(html, /no estimate \(error\)/, 'the thrown line reads distinctly, as an error');
+  assert.match(html, />boom</, 'the thrown line\'s own message is printed');
+});

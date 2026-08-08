@@ -28,7 +28,10 @@ import {
   type EstimatorPack, type ThresholdView,
 } from './estimator/estimate-from-pack.ts';
 import type { CertificateEstimate } from './cbam/certificate-estimate.ts';
-import type { Line, Totals, YearThreshold } from '../cbam-lines.ts';
+import {
+  csvRows, lineFingerprint, packSnapshotHash, sumTotals, thresholdByYear, toCsv, yearOf,
+  type Line, type Totals, type YearThreshold,
+} from '../cbam-lines.ts';
 
 const PACK_URL = '/cbam/estimator-pack.json';
 
@@ -444,6 +447,22 @@ function sourceHash(pack: Pick<EstimatorPack, 'sources'>, sourceId: string): str
 }
 
 /**
+ * A line that entered the estimate but whose `estimateFromPack` call THREW rather than returning
+ * a discriminated `CertificateEstimate` (see `safeEstimates` in `initCbam` — rare, but the old
+ * single-line `run()` caught exactly this for a reason). Not folded into `CertificateEstimate`'s
+ * own union, which this file does not own — that type is vendored. This lets `buildPrintDocument`
+ * keep `lines` and `results` PARALLEL even for a line the engine refused to evaluate at all,
+ * matching `csvRows`'s and `thresholdByYear`'s own throw-named idiom in cbam-lines.ts. Without
+ * this arm, a thrown line had exactly two bad options: drop it from the document silently (§3
+ * requires "every line as entered" — see the design doc) or let one bad line crash the whole
+ * export for every other line on the sheet.
+ */
+export interface LineEstimateFailure {
+  failed: true;
+  message: string;
+}
+
+/**
  * The printable audit document — §4 is the point of the whole file: what the figures above
  * CANNOT tell you, stated plainly rather than left for a reader to infer from a methodology PDF.
  *
@@ -453,7 +472,7 @@ function sourceHash(pack: Pick<EstimatorPack, 'sources'>, sourceId: string): str
  */
 export function buildPrintDocument(input: {
   lines: readonly Line[];
-  results: readonly CertificateEstimate[];
+  results: readonly (CertificateEstimate | LineEstimateFailure)[];
   yearCards: readonly YearThreshold[];
   totals: Totals;
   packSnapshot: string;
@@ -467,12 +486,25 @@ export function buildPrintDocument(input: {
     // `results[i]!` below hand back a bare `undefined` with nothing to debug from.
     throw new Error(
       `buildPrintDocument: ${lines.length} line(s) but ${results.length} result(s) — every line `
-      + 'must have exactly one CertificateEstimate, in the same order, before it can be printed',
+      + 'must have exactly one CertificateEstimate (or LineEstimateFailure), in the same order, '
+      + 'before it can be printed',
     );
   }
 
   const lineRows = lines.map((l, i) => {
-    const e = results[i]!;
+    const r = results[i]!;
+    if ('failed' in r) {
+      // Same eight columns as the ordinary row below, so the table stays rectangular — only the
+      // certificates/cost/authority cells differ, carrying the reason instead of a figure.
+      return `<tr>
+        <td>${esc(l.cn)}</td><td>${esc(l.country)}</td><td>${esc(l.route)}</td>
+        <td>${num(l.massT)}</td><td>${esc(l.date)}</td>
+        <td>no estimate (error)</td>
+        <td>—</td>
+        <td class="cbp-loc">${esc(r.message)}</td>
+      </tr>`;
+    }
+    const e = r;
     const pending = e.status === 'cscf_pending';
     const { certs, costEur } = tableFigures(e);
     const bm = 'terms' in e ? e.terms.benchmarks[0] : null;
@@ -570,19 +602,75 @@ export function initCbam(): void {
   const date = $<HTMLInputElement>('cbDate'), out = $('cbOut'), status = $('cbStatus');
   const list = $<HTMLDataListElement>('cbCnList'), prov = $('cbProv');
   const scope = $<HTMLSelectElement>('cbScope'), scopeRow = $('cbScopeRow');
+  const add = $<HTMLButtonElement>('cbAdd'), csvBtn = $<HTMLButtonElement>('cbCsv');
+  const docBtn = $<HTMLButtonElement>('cbDoc'), printEl = $('cbPrint');
   if (!cn || !country || !route || !mass || !date || !out || !status) return;
 
+  /**
+   * GUARD AGAINST DOUBLE INIT. The page's <script> calls `boot()` directly AND listens for
+   * `astro:page-load` — and that event fires on the INITIAL load too, not only on a soft
+   * navigation (Astro's ClientRouter dispatches it every time, first paint included). So on a
+   * plain first visit, `initCbam()` used to run TWICE against the same DOM.
+   *
+   * That was harmless through Task 5: `run()` just re-read six `.value`s off the DOM on every
+   * call, so two redundant listeners produced the same idempotent output. It stopped being
+   * harmless the moment `lines`/`attested`/`fingerprints`/`lastPairs` became real state living
+   * IN THIS CLOSURE (Task 6) — two closures wired to the same buttons each hold their OWN copy
+   * of that state, mint different `crypto.randomUUID()` ids for what the user sees as "the same"
+   * line, and both attach a `click` listener to #cbAdd/#cbOut/#cbCsv/#cbDoc. One add click adds a
+   * line to BOTH closures' arrays; whichever renders last is the only one visible; a Remove click
+   * only ever matches the id in the closure that rendered it, so the OTHER closure silently keeps
+   * a line the screen no longer shows — and an export reads whichever closure's listener happens
+   * to fire, which can (and, verified while exercising this page, did) export a line the user had
+   * already removed. The fix is a guard on the form root itself, not a module-level flag: a
+   * module-level flag would wrongly survive a REAL soft navigation that swaps in a fresh DOM
+   * subtree and genuinely needs its own initCbam() call. Astro's default swap does not preserve
+   * this page's nodes (no `transition:persist` here), so a genuine re-navigation always presents
+   * a `cn` with no `data-cbam-wired` and re-inits correctly.
+   */
+  if (cn.dataset.cbamWired) return;
+  cn.dataset.cbamWired = 'true';
+
   let pack: EstimatorPack | null = null;
+
+  // The first state this controller has held. lines[] is the source of truth in
+  // multi-line mode; the six form fields become the editor for the NEXT line.
+  // With lines empty the app behaves exactly as it always has (single draft line,
+  // vendored single-line threshold card) — that path is pinned by the existing
+  // unit tests and stays byte-compatible.
+  const lines: Line[] = [];
+  const attested = new Set<number>();
+  const fingerprints = new Map<string, string>();
+  let snapshot = '';
+  // The last thing renderAll actually put on screen, kept so onCsv/onDoc export EXACTLY that —
+  // not a fresh recomputation that could, in principle, disagree with it. estimateFromPack is a
+  // pure function of (pack, line) with nothing engine-side touching the clock or randomness (see
+  // estimate-from-pack.ts), so a fresh recompute is byte-identical today; this cache makes that an
+  // invariant of the code rather than a fact someone has to keep re-verifying by reading the
+  // engine. `lines` only ever changes inside onAdd/onOutClick, and both call renderAll
+  // synchronously right after mutating it — so by the time a user can click Export, lastPairs is
+  // always in sync with `lines`.
+  let lastPairs: ReturnType<typeof safeEstimates> = [];
 
   async function ensurePack(): Promise<EstimatorPack | null> {
     if (pack) return pack;
     status!.textContent = 'Loading published rule values…';
+    // Both awaits land in local variables first, and `pack`/`snapshot` are only assigned once
+    // BOTH succeed. If packSnapshotHash threw after `pack` had already been set directly, the
+    // top-of-function `if (pack) return pack;` short-circuit on the NEXT call would hand back a
+    // pack whose snapshot never got computed, with no retry — silently pinning every future
+    // estimate's provenance stamp to the empty string this closure starts with.
+    let loaded: EstimatorPack;
+    let hash: string;
     try {
-      pack = await loadPack();
+      loaded = await loadPack();
+      hash = await packSnapshotHash(loaded);
     } catch (err) {
       status!.textContent = `Could not load the rule pack: ${(err as Error).message}`;
       return null;
     }
+    pack = loaded;
+    snapshot = hash;
     // 574 goods; the datalist is the whole corpus, filtered natively by the browser.
     if (list) list.innerHTML = pack.classifications
       .map((c) => `<option value="${esc(c.code)}">${esc(c.description)}</option>`).join('');
@@ -679,9 +767,237 @@ export function initCbam(): void {
     }
   }
 
-  const onPick = async () => { if (await ensurePack()) { syncRoutes(); syncScope(); run(); } };
-  route.addEventListener('change', () => { syncScope(); run(); });
-  scope?.addEventListener('change', run);
+  /** One line's estimate, decorated with the real pack snapshot in place of the
+   * vendored engine's 'browser-prototype' placeholder. */
+  function estimateLine(l: Line): CertificateEstimate {
+    const e = estimateFromPack(pack!, {
+      cn: l.cn, country: l.country, route: l.route,
+      massT: l.massT, date: l.date, emissionsScope: l.scope,
+    });
+    // Decorate OUR copy of the result. The vendored engine still writes
+    // 'browser-prototype'; replacing it here, after the fact, keeps the claim
+    // real without touching upstream code.
+    e.stamp.snapshotHash = snapshot;
+    return e;
+  }
+
+  /**
+   * Builds the next line from the form's current values, or null if the line is not ready to
+   * add. Mirrors run()'s own "impossible mass" refusal (checked here, not left to the markup's
+   * inert `min="0"`, for the same reason run() gives).
+   *
+   * ALSO REFUSES AN UNRESOLVED DATE. yearOf(l) is NaN for an empty or malformed
+   * <input type="date"> value, and a NaN-year line joins NO year's threshold card
+   * (yearOf's own doc: NaN can't be filtered from a Set by equality, and a lookup keyed on
+   * NaN always misses) while still appearing in the line list and the CSV — silently absent
+   * from the one card whose job is telling the user whether they owe anything, with nothing
+   * on screen explaining why. The date field ships with a real default (2026-03-15, see the
+   * .astro markup), so this only refuses a line whose date the user has actively cleared.
+   */
+  function draftLine(): Line | null {
+    if (!pack || !cn!.value || !country!.value || !route!.value || !mass!.value) return null;
+    const massT = Number(mass!.value);
+    if (!Number.isFinite(massT) || massT < 0) return null;
+    const l: Line = {
+      id: crypto.randomUUID(), cn: cn!.value, country: country!.value, route: route!.value,
+      scope: (scope?.value as Line['scope']) ?? 'direct_and_indirect',
+      massT: mass!.value, date: date!.value,
+    };
+    if (Number.isNaN(yearOf(l))) return null;
+    return l;
+  }
+
+  /**
+   * A refused line comes back as status 'unavailable' and renders its own card.
+   * A THROWN DomainError is rarer (the coverage sweep saw zero across 2,870
+   * pairs) but the old run() caught it for a reason — one bad line must not
+   * blank the other nine. Thrown lines render the same fallback the single-line
+   * path used, and are excluded from totals (see renderAll) but still appear in
+   * the printable document, marked, per §3 ("every line as entered" — see
+   * buildPrintDocument's LineEstimateFailure arm).
+   */
+  function safeEstimates(ls: readonly Line[]) {
+    return ls.map((l) => {
+      try { return { l, e: estimateLine(l), err: null as string | null }; }
+      catch (err) { return { l, e: null, err: (err as Error).message }; }
+    });
+  }
+
+  function renderAll(): void {
+    if (!lines.length) { lastPairs = []; run(); return; }   // single-line path, unchanged
+    const pairs = safeEstimates(lines);
+    lastPairs = pairs;
+    const ok = pairs.filter((p) => p.e !== null);
+    const totals = sumTotals(ok.map((p) => p.e!));
+
+    // thresholdByYear THROWS on any in-scope line missing a fingerprint (its own doc: this
+    // fires inside the per-year map, so one bad line discards EVERY year's card, not just its
+    // own). run() already has a try/catch for exactly this shape of failure; match it here too
+    // — and, unlike leaving out!.innerHTML untouched on a caught error (which would silently
+    // leave whatever was on screen from the PREVIOUS render looking current), replace the
+    // year-card region with a visible error so a stale render is never mistaken for a fresh one.
+    let yearsHtml: string;
+    try {
+      yearsHtml = thresholdByYear(lines, fingerprints, attested, pack!).map(renderYearThreshold).join('');
+    } catch (err) {
+      yearsHtml = `<div class="cb-res cb-unavail">
+        <div class="cb-tag unavail">Threshold error</div>
+        <p class="cb-reason">${esc((err as Error).message)}</p></div>`;
+    }
+
+    out!.innerHTML = yearsHtml + renderTotals(totals) + pairs.map((p, i) => p.e
+      ? renderLineCard(p.l, p.e, i)
+      : `<article class="cb-line" data-line="${esc(p.l.id)}">
+           <div class="cb-line-head">
+             <span class="cb-line-n">Line ${i + 1}</span>
+             <span class="cb-line-sum">${esc(p.l.cn)} · ${esc(p.l.country)} · ${num(p.l.massT)} t</span>
+             <button type="button" class="cb-line-x" data-remove="${esc(p.l.id)}"
+               aria-label="Remove line ${i + 1}">Remove</button>
+           </div>
+           <div class="cb-res cb-unavail"><div class="cb-tag unavail">No estimate</div>
+           <p class="cb-reason">${esc(p.err!)}</p></div>
+         </article>`).join('');
+    csvBtn && (csvBtn.disabled = false);
+    docBtn && (docBtn.disabled = false);
+    status!.textContent = `${lines.length} line${lines.length === 1 ? '' : 's'} in this estimate.`;
+  }
+
+  async function onAdd(): Promise<void> {
+    if (!await ensurePack()) return;
+    const l = draftLine();
+    if (!l) {
+      status!.textContent =
+        'Complete the line first: good, origin, route, a non-negative mass and a valid import date.';
+      return;
+    }
+    fingerprints.set(l.id, await lineFingerprint(l));
+    lines.push(l);
+    // The set of lines for this line's year just changed, so any EXISTING attestation for that
+    // year was a claim about a list that no longer matches what's on screen — see the symmetric
+    // drop in onOutClick's remove branch for the full rule and why "drop only when the year
+    // empties" is not enough.
+    const year = yearOf(l);
+    if (!Number.isNaN(year)) attested.delete(year);
+    renderAll();
+  }
+
+  /**
+   * ATTESTATION-INVALIDATION RULE: a calendar year's "these are all my imports" tick is dropped
+   * the moment the set of LINES belonging to that year changes at all — on every add into that
+   * year and on every remove out of it — not merely when the year's line count reaches zero.
+   *
+   * Why the stronger rule: `attested` is a bare `Set<number>` keyed by calendar year, with no
+   * memory of WHICH lines were on screen when it was ticked. Consider: add a 2026 line, tick "all
+   * my 2026 imports", remove that line, add a DIFFERENT 2026 line. A "drop only when empty" rule
+   * clears the attestation at step 3 (the year *did* empty) — but nothing stops the sequence "tick
+   * → remove line A → add line B → add line C" from leaving the tick set the whole time, and the
+   * final list (B, C) was never the list the user attested to. The set changing at all, in either
+   * direction, invalidates the claim: it was a statement about ONE specific list, and any edit
+   * produces a different list the user has not confirmed is complete. Ticking is cheap (one
+   * click) and the spec is explicit that this tool must never assert completeness on the user's
+   * behalf — re-attesting after every edit is the honest cost of that rule, not friction to
+   * engineer away.
+   */
+  function onOutClick(ev: Event): void {
+    const t = ev.target as HTMLElement;
+    const rm = t.getAttribute('data-remove');
+    if (rm) {
+      const i = lines.findIndex((l) => l.id === rm);
+      if (i >= 0) {
+        const [removed] = lines.splice(i, 1);
+        fingerprints.delete(rm);
+        const year = yearOf(removed!);
+        if (!Number.isNaN(year)) attested.delete(year);
+      }
+      if (!lines.length) { csvBtn && (csvBtn.disabled = true); docBtn && (docBtn.disabled = true); }
+      renderAll(); return;
+    }
+    const at = (t as HTMLInputElement).getAttribute?.('data-attest');
+    if (at) {
+      (t as HTMLInputElement).checked ? attested.add(Number(at)) : attested.delete(Number(at));
+      renderAll();
+      // renderAll rebuilds #cbOut via innerHTML, which destroys the checkbox the user just
+      // clicked/toggled with the keyboard and drops focus to <body>. The checkbox's identity
+      // survives the rebuild as its data-attest value (derived from the year, not the DOM node
+      // itself), so re-find it by that and restore focus — otherwise a keyboard user loses their
+      // place on every single tick.
+      out!.querySelector<HTMLInputElement>(`[data-attest="${CSS.escape(at)}"]`)?.focus();
+    }
+  }
+
+  function onCsv(): void {
+    if (!lines.length || !pack) return;
+    // Exports exactly what renderAll last put on screen (see lastPairs's own doc above) — not a
+    // fresh recomputation. Thrown lines are excluded: csvRows requires `lines` and `results` to
+    // stay parallel, and there is no CertificateEstimate to put in a thrown line's slot (contrast
+    // buildPrintDocument below, which — because §3 requires "every line as entered" — gained a
+    // LineEstimateFailure arm precisely so it does NOT have to drop those lines the way the CSV
+    // does; the CSV is the working artefact, not the record of everything the user typed).
+    const ok = lastPairs.filter((p) => p.e !== null);
+    if (!ok.length) {
+      status!.textContent = 'No line has a priced estimate; nothing to export.';
+      return;
+    }
+    const csv = toCsv(csvRows(ok.map((p) => p.l), ok.map((p) => p.e!), fingerprints, snapshot, pack));
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+    const a = document.createElement('a');
+    a.href = url; a.download = `cbam-estimate-${new Date().toISOString().slice(0, 10)}.csv`;
+    // Appended before the click (Firefox requires the anchor be connected to the document for a
+    // synthetic click to trigger the download), removed right after (the click's default action
+    // is already queued by then, so removal does not cancel it).
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    // Revoking the object URL immediately after click() cancels the download in several
+    // browsers — the click schedules an async save/navigation that has not necessarily read the
+    // blob yet, and revoking pulls the data out from under it. Deferred well past any plausible
+    // read, rather than on the same tick.
+    setTimeout(() => URL.revokeObjectURL(url), 30_000);
+  }
+
+  function onDoc(): void {
+    if (!lines.length || !pack || !printEl) return;
+    // Same export-what-was-shown discipline as onCsv (see lastPairs's doc above), but §3 requires
+    // "every line as entered" in §1 of the document — so, unlike the CSV, a thrown line is NOT
+    // dropped; it is carried through as a LineEstimateFailure so `lines`/`results` stay parallel
+    // and the line still appears, marked, rather than vanishing with no trace while still being
+    // counted in the year cards below (which are computed from ALL lines, not just priced ones).
+    const results: (CertificateEstimate | LineEstimateFailure)[] = lastPairs.map((p) =>
+      p.e ?? { failed: true, message: p.err ?? 'unknown error' });
+    const priced = lastPairs.filter((p) => p.e !== null).map((p) => p.e!);
+    if (!priced.length) {
+      status!.textContent = 'No line has a priced estimate; nothing to export.';
+      return;
+    }
+    let years: YearThreshold[];
+    try {
+      years = thresholdByYear(lines, fingerprints, attested, pack);
+    } catch (err) {
+      status!.textContent = `Could not build the document: ${(err as Error).message}`;
+      return;
+    }
+    printEl.innerHTML = buildPrintDocument({
+      lines, results,
+      yearCards: years,
+      totals: sumTotals(priced),
+      packSnapshot: snapshot,
+      rulePackages: priced[0]?.stamp.rulePackages ?? [],
+      pack, generatedOn: new Date().toISOString().slice(0, 10),
+    });
+    document.documentElement.classList.add('cb-printing');
+    const done = () => document.documentElement.classList.remove('cb-printing');
+    window.addEventListener('afterprint', done, { once: true });
+    window.print();
+  }
+
+  // route/scope/mass/date/cn/country changes preview the draft line only while `lines` is empty
+  // (the single-line path, byte-compatible with the pre-Task-6 behaviour); once lines exist, the
+  // form is purely the editor for the NEXT prospective line and must not touch the multi-line
+  // render underneath it.
+  const refresh = () => { if (!lines.length) run(); };
+  const onPick = async () => { if (await ensurePack()) { syncRoutes(); syncScope(); refresh(); } };
+  route.addEventListener('change', () => { syncScope(); refresh(); });
+  scope?.addEventListener('change', refresh);
   cn.addEventListener('change', onPick);
   cn.addEventListener('focus', () => { void ensurePack(); }, { once: true });
   country.addEventListener('change', onPick);
@@ -694,6 +1010,11 @@ export function initCbam(): void {
   let massTimer: number | undefined;
   mass.addEventListener('input', () => {
     clearTimeout(massTimer);
-    massTimer = window.setTimeout(run, 250);
+    massTimer = window.setTimeout(refresh, 250);
   });
+  add?.addEventListener('click', () => { void onAdd(); });
+  csvBtn?.addEventListener('click', onCsv);
+  docBtn?.addEventListener('click', onDoc);
+  out.addEventListener('click', onOutClick);
+  out.addEventListener('change', onOutClick);
 }
