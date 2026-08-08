@@ -1,6 +1,6 @@
 import { fmtCr } from '../heat-map-model.ts';
 import { WARDS } from '../wards.ts';
-import { PairedScenarioClient } from './paired-client.ts';
+import { createPairedScenarioClient } from './paired-client.ts';
 import type { PairedResult, WardScenarioResult } from './paired-protocol.ts';
 import { parsePairedScenario, serializePairedScenario } from '../scenario/scenario-url.ts';
 
@@ -20,7 +20,7 @@ export function mountPairedBrief(): () => void {
   const print = root.querySelector<HTMLButtonElement>('[data-action="print"]');
   const onPrint = () => window.print();
   print?.addEventListener('click', onPrint);
-  const client = new PairedScenarioClient();
+  const client = createPairedScenarioClient();
 
   const writeWard = (slot: 'a' | 'b', result: WardScenarioResult) => {
     set(`[data-value="${slot}-name"]`, WARDS[result.ward].name);

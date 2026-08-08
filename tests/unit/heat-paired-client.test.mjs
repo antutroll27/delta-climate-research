@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-const { PairedScenarioClient } = await import('../../src/scripts/climate-engine/compare/paired-client.ts');
+const { createPairedScenarioClient } = await import('../../src/scripts/climate-engine/compare/paired-client.ts');
 
 class FakeWorker {
   messages = [];
@@ -20,7 +20,7 @@ const state = {
 
 test('paired client sends cancellation for an aborted worker request', async () => {
   const worker = new FakeWorker();
-  const client = new PairedScenarioClient({ workerFactory: () => worker });
+  const client = createPairedScenarioClient({ workerFactory: () => worker });
   const controller = new AbortController();
   const pending = client.run(state, { signal: controller.signal });
   controller.abort();
