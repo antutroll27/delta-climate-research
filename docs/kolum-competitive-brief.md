@@ -4,6 +4,34 @@ Internal brief · 3 August 2026 · prepared for the founding team
 
 ---
 
+## Update — 8 August 2026
+
+Two of the four recommendations below are now done or substantially done, on a branch
+that shipped multi-line estimates, a real annual threshold verdict, and export. Full
+detail: `docs/cbam-release-2026-08.md`. The analysis beneath this section is otherwise
+untouched from 3 August and still holds — including the Column A/B worked example
+below, checked again today against the live pack.
+
+- **Recommendation 1, multi-line input — done.** The calculator now takes a whole bill
+  of materials: add a line, remove a line, attest a calendar year, export the set. The
+  "Where they are ahead" entry for this is corrected below, in place and dated, rather
+  than removed.
+- **Recommendation 4, CSCF legibility — substantially done, not fully.** The printed
+  export's fourth section and a corrected floor-not-ceiling statement on the
+  calculator's own results card now explain the limit as a designed feature rather
+  than a bare refusal. What has not moved: the on-screen tag is still the same amber
+  "pending" it always was, and none of this language has reached outward-facing copy —
+  marketing, sales conversations — where "the reason to trust us" actually has to land
+  on a prospect.
+- **Recommendation 2, sourcing comparison — not built.** It was already the highest
+  commercial-value item on this list on 3 August. With recommendation 1 done and
+  recommendation 4 substantially done, it is now the largest gap remaining and should
+  be read as the top recommendation.
+- **Recommendation 3, Column A unreachable — unchanged.** Still a hold; the reasoning
+  was not revisited and does not need to be.
+
+---
+
 ## Why this document
 
 We are about to spend effort improving the CBAM calculator. Before doing that, it is
@@ -131,9 +159,11 @@ design problem in front of us.
 
 ## Where they are ahead
 
-**Multi-line input.** Their `+ Add product` lets an importer estimate a whole bill of
-materials. Ours handles one line. This is the single largest usability gap and it is
-not a hard problem.
+**Multi-line input — closed 8 August 2026.** Their `+ Add product` lets an importer
+estimate a whole bill of materials. Ours handled one line when this was written on 3
+August, and that was the single largest usability gap on this page. It is now closed —
+see `docs/cbam-release-2026-08.md` for what shipped. Kept here rather than deleted, as
+the dated record of what this brief found at the time.
 
 **Sourcing comparison.** Their platform ranks every non-UK origin for a given CN code
 by CBAM-liable tonnage and surfaces the cheapest compliant option — they advertise
@@ -186,15 +216,23 @@ the product. The calculator is the top of a funnel that ends there.
 ## Recommendation
 
 1. **Add multi-line input.** Cheapest meaningful win, closes the most visible gap.
+   **Done, 8 August 2026** — `docs/cbam-release-2026-08.md`.
 2. **Build the sourcing comparison.** Highest commercial value, and the data is already
    in our pack. This is the feature that makes a calculator a tool people return to.
+   **Not built. Now the top recommendation** — the only one of the four still fully
+   open, and it was already the highest commercial-value item here on 3 August.
 3. **Keep Column A unreachable.** Our audit's reasoning holds. Do not be tempted by
    feature parity into exposing a control that moves the bill against the user when
-   entered wrongly.
+   entered wrongly. **Unchanged.** Still a hold.
 4. **Make the CSCF stance legible, not just correct.** Right now our honesty reads as
    a refusal. It should read as the reason to trust us. This is a copy and interface
    problem, not an engineering one, and it is the only thing on this list that
-   competitors cannot copy by shipping a feature.
+   competitors cannot copy by shipping a feature. **Substantially done, 8 August
+   2026** — the printed export's fourth section and a corrected floor-not-ceiling
+   statement on the results card explain the limit as a designed feature now, not a
+   bare refusal. Not fully closed: the card's own tag is still the same amber
+   "pending," and the framing has not yet reached outward-facing copy, where it would
+   have to persuade a prospect rather than a user already on the results page.
 
 ---
 
