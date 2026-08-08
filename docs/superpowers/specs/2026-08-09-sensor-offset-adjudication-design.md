@@ -267,7 +267,7 @@ any source below until its terms are read and recorded here.
 |---|---|---|
 | ERA5-Land (Copernicus CDS) | **permitted** | ✅ resolved, terms below |
 | Sentinel-3 SLSTR (Copernicus Sentinel) | free, full and open; reproduction/distribution/adaptation granted | ⚠️ **verified but commercial use not stated explicitly** — see §10.3 |
-| INSAT-3D/3DR (ISRO MOSDAC) | **not stated in the public policy page** | ❌ **UNRESOLVED — blocking** |
+| INSAT-3D/3DR (ISRO MOSDAC) | national policy says **'free and open' to all** at our resolution; one MOSDAC page says non-commercial | ⚠️ **conflicting sources — see §10.4, confirm in writing** |
 
 ### 10.2 ERA5-Land — attacks the daytime ceiling
 
@@ -324,13 +324,67 @@ at the sub-satellite point**, full-disk imaging every **30 minutes**. A publishe
 LST retrieval exists — Singh et al. 2016, *J. Geophys. Res. Atmospheres*,
 `10.1002/2016JD024752`.
 
-**Licence — UNRESOLVED and blocking.** The MOSDAC Data Access Policy page defines three tiers
-(Anonymous: metadata/imagery/Open Data at near-real-time; Registered General: limited data at
-3-day latency; Registered Privileged: all data, near-real-time) but **says nothing about
-commercial use or redistribution**. Those terms live in a separate *Data Access Guidelines*
-PDF. **Task one is to read that document and record its terms here.** If it carries a
-non-commercial clause, this source is out on the same grounds as Open-Meteo, whatever its
-scientific merit.
+**Licence — checked 2026-08-09. Three sources, and they do not agree.**
+
+*(a) Indian Space Policy 2023* — the governing national policy, named by re3data as MOSDAC's
+policy document. ISRO's mandate, clause 3, verbatim:
+
+> "enable open data access from remote sensing satellites of ISRO. In this regard, remote
+> sensing data of **GSD of 5 meters and higher shall be made easily accessible in a timely
+> manner on 'free and open' basis to all** while remote sensing data of GSD of less than 5
+> meter, shall be made available free of any charges to Government entities but at fair and
+> transparent pricing to NGEs."
+
+**INSAT-3D LST is 4 km GSD — coarser than the 5 m threshold by a factor of 800**, so it sits
+squarely in the "'free and open' basis to **all**" category. "All" includes Non-Government
+Entities, which is what we are. Clause 4 adds that archived and *satellite-derived thematic*
+data are free and open "for further value addition and for research and development purposes
+on 'as is where is' condition" — and "further value addition" is commercial-friendly language.
+
+Clause 20 sets the only gate: IN-SPACe **authorisation** is required to *disseminate* data of
+GSD ≤ 30 cm; data above 30 cm needs only *intimation*. At 4 km we are three orders of
+magnitude clear of it.
+
+*(b) MOSDAC copyright policy*, verbatim: "Material featured on this site may be reproduced free
+of charge in any format or media without requiring specific permission", subject to accuracy,
+context, and "where the material is being published or issued to others, the source must be
+prominently acknowledged." Permissive.
+
+*(c) MOSDAC `/open-data` page* — reported by two independent search indices as: "users are free
+to download and use them for **non-commercial** purpose". **I could not read this page
+first-hand — it returns HTTP 403 to automated fetches**, as do `/open-data-access` and the FTP
+mirror. Second-hand and flagged as such.
+
+**Assessment.** The weight of evidence is permissive: the national policy that governs MOSDAC
+says data at our resolution is free and open to all, and the site's own copyright policy
+agrees. One page appears narrower than the policy above it, and I could not verify its wording
+directly.
+
+**And the risk is smaller than the conflict suggests, because we would not redistribute
+anything.** INSAT would be used once, offline, to measure a sensor offset — the published
+artefact is *a number in Kelvin*, not INSAT pixels. Every restrictive reading above governs
+*dissemination* of the data. Publishing "the ECOSTRESS↔Landsat offset is X K" is not
+disseminating INSAT data, and neither is a heat map whose constants were informed by it.
+
+**Still: get it in writing.** Open `/open-data` in a browser and read the actual sentence, and
+if it does say non-commercial, email MOSDAC citing Indian Space Policy 2023 clause 3 and ask
+them to confirm the position for 4 km INSAT products used by an NGE for value addition. That
+is a short email and it converts a judgement call into a record. Do not skip it on the strength
+of the analysis above — [[kolkata-realtime-apis]] exists because two sources looked fine until
+someone read the actual clause.
+
+**API mechanics, already documented** (`/downloadapi-manual`), and they suit the regional
+harvest well:
+
+- a Python client, `mdapi.py`, driven by a `config.json` — no REST endpoint to reverse-engineer
+- auth is MOSDAC account username/password; **three wrong attempts locks the account for 1 hour**
+- search parameters are `datasetId`, `startTime`/`endTime` (`YYYY-MM-DD`), **`boundingBox`
+  ("minLon,minLat,maxLon,maxLat")**, `gId`, and `count` (max 100 per request)
+- **quota: 5000 files per user per day** — ample; the whole harvest is far below this
+- registration required at `mosdac.gov.in/signup/`
+
+The `boundingBox` parameter is exactly what §3.1 needs — the regional harvest is a loop over
+site boxes, and the daily quota does not constrain it.
 
 **Why it matters here — and it corrects an argument made earlier.** §2.2 shows ECOSTRESS and
 Landsat essentially never coincide over Kolkata. A geostationary sensor sees the same place at
@@ -362,7 +416,9 @@ stations rather than trusted.
 
 ### 10.6 Sequencing
 
-1. **Read the MOSDAC Data Access Guidelines.** Binary gate on §10.4. Record the outcome here.
+1. **Close the MOSDAC licence question in writing** (§10.4). No longer a blind gate — the
+   national policy reads permissive at our resolution — but the one conflicting page must be
+   read first-hand and, if it says non-commercial, confirmed by email. Record the outcome here.
 2. **ERA5-Land.** Highest certain value, licence already clear, attacks the named limiter.
 3. **SLSTR**, if §3.2 or the harvest implicates view geometry — it is the instrument that
    settles that question, and pointless before there is a question to settle.
