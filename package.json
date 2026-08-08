@@ -11,7 +11,7 @@
     "test:unit": "node scripts/cbam-sync-check.mjs && node --import tsx --test tests/unit/*.test.mjs",
     "report:build": "node scripts/report-build.mjs",
     "check:publication": "node scripts/check-publication-contract.mjs",
-    "verify": "npm run check && npm run test:unit && npm run build && npm run report:build && npm run check:publication",
+    "verify": "npm run check && npm run test:unit && npm run build && npm run report:build && npm run check:publication && npm run test:e2e:built",
     "test:e2e": "npm run build && npm run test:e2e:built",
     "test:e2e:built": "playwright test",
     "cbam:sync-check": "node scripts/cbam-sync-check.mjs"
