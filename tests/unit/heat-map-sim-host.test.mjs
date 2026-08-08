@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
-  createStaticHost, createWorkerHost,
+  createGpuHost, createStaticHost, createWorkerHost,
 } from '../../src/scripts/climate-engine/sim-host.ts';
 import { CANONICAL_GRID_N, CANONICAL_GRID_VERSION, DEFAULT_PARAMS } from '../../src/scripts/climate-engine/types.ts';
 
@@ -10,9 +10,9 @@ import { CANONICAL_GRID_N, CANONICAL_GRID_VERSION, DEFAULT_PARAMS } from '../../
    that looks alive while showing a frozen field. Every guard below was written
    by inspection and defended by nothing until this file existed.
 
-   createGpuHost is absent on purpose: it constructs a WebGl2HeatSim in its
-   constructor, so it cannot exist without a real WebGL2 context. Its context-loss
-   latch is covered by the e2e run, not here. */
+   The GPU host's guards run here through its solver seam; the real WebGL2
+   integration behind that seam is covered headed, in
+   tests/e2e/heat-map-sim-backend.spec.ts. */
 
 const CELLS = CANONICAL_GRID_N * CANONICAL_GRID_N;
 
@@ -303,4 +303,107 @@ test('a disposed static host refuses to reset', async () => {
   const host = createStaticHost();
   host.dispose();
   await assert.rejects(() => host.reset(request(1)), /disposed/);
+});
+
+/* ————— the GPU host's guards, through its solver seam ————— */
+
+/** A canvas that records its listeners; no DOM, no GL. */
+function fakeCanvas() {
+  const listeners = new Map();
+  return {
+    addEventListener(type, fn) { if (!listeners.has(type)) listeners.set(type, new Set()); listeners.get(type).add(fn); },
+    removeEventListener(type, fn) { listeners.get(type)?.delete(fn); },
+    emit(type, event) { for (const fn of [...(listeners.get(type) ?? [])]) fn(event); },
+    listenerCount(type) { return listeners.get(type)?.size ?? 0; },
+  };
+}
+
+/** A solver that counts what the host asked of it. */
+function fakeSim() {
+  const sim = {
+    resets: 0, steps: [], disposed: false,
+    reset() { sim.resets++; },
+    step(_dt, n) { sim.steps.push(n); },
+    temperature: () => new Float32Array(CELLS).fill(31),
+    stats: (thresholdC) => ({ meanC: 31, peakC: 33, fracAbove: 0.2, thresholdC }),
+    dispose() { sim.disposed = true; },
+  };
+  return sim;
+}
+
+const gpuHosted = () => {
+  const canvas = fakeCanvas(), sim = fakeSim();
+  return { canvas, sim, host: createGpuHost(canvas, () => sim) };
+};
+
+test('the GPU host settles on reset and reports gpu-webgl2', async () => {
+  const { sim, host } = gpuHosted();
+  const snapshot = await host.reset(request(2, { settleSteps: 40 }));
+  assert.equal(sim.resets, 1);
+  assert.deepEqual(sim.steps, [40], 'settleSteps must reach the solver verbatim');
+  assert.equal(snapshot.backend, 'gpu-webgl2');
+  assert.equal(snapshot.generation, 2);
+  assert.equal(snapshot.gridVersion, CANONICAL_GRID_VERSION);
+  assert.equal(snapshot.stats.thresholdC, 35);
+  host.dispose();
+});
+
+test('the GPU host refuses a non-canonical grid', async () => {
+  const { sim, host } = gpuHosted();
+  await assert.rejects(() => host.reset(request(1, { grid: { n: 64, cellMeters: 7.29 } })), /canonical grid/);
+  assert.equal(sim.resets, 0, 'an invalid request must never reach the solver');
+  host.dispose();
+});
+
+test('the GPU host skips a stale generation without stepping', async () => {
+  const { sim, host } = gpuHosted();
+  await host.reset(request(5));
+  const before = sim.steps.length;
+  assert.equal(await host.advance(4, 8), null);
+  assert.equal(sim.steps.length, before, 'a stale advance must not touch the solver');
+  assert.equal((await host.advance(5, 8)).generation, 5);
+  host.dispose();
+});
+
+test('a lost context THROWS on advance, because that is what triggers demotion', async () => {
+  /* Returning null here would read as an ordinary stale frame and strand the
+     page on a dead backend forever. The throw is the demotion signal. */
+  const { canvas, host } = gpuHosted();
+  await host.reset(request(1));
+  let defaultPrevented = false;
+  canvas.emit('webglcontextlost', { preventDefault: () => { defaultPrevented = true; } });
+  assert.equal(defaultPrevented, true, 'the event must be cancelled or the context never returns');
+  await assert.rejects(() => host.advance(1, 8), /context lost/);
+  await assert.rejects(() => host.reset(request(2)), /unavailable/);
+  host.dispose();
+});
+
+test('the GPU host disposes its solver, unhooks the canvas, and stays idempotent', async () => {
+  const { canvas, sim, host } = gpuHosted();
+  await host.reset(request(1));
+  assert.equal(canvas.listenerCount('webglcontextlost'), 1);
+
+  host.dispose();
+  assert.equal(sim.disposed, true);
+  assert.equal(canvas.listenerCount('webglcontextlost'), 0, 'a disposed host must not keep the canvas alive');
+
+  sim.disposed = false;
+  host.dispose();
+  assert.equal(sim.disposed, false, 'dispose must not run twice');
+
+  await assert.rejects(() => host.reset(request(2)), /unavailable/);
+  assert.equal(await host.advance(1, 8), null, 'advance after dispose is a no-op, not a throw');
+});
+
+test('a context lost BEFORE disposal still reports as lost, not as a quiet no-op', async () => {
+  /* This pins the ORDER of the two guards in advance(). The live-context case
+     is what drives demotion; this disposed case is that order's consequence,
+     and it is the only observation that can tell the two orderings apart. A
+     lost context is a diagnosable fault and must never be flattened into the
+     same silent null a stale frame produces. */
+  const { canvas, host } = gpuHosted();
+  await host.reset(request(1));
+  canvas.emit('webglcontextlost', { preventDefault: () => {} });
+  host.dispose();
+  await assert.rejects(() => host.advance(1, 8), /context lost/);
 });

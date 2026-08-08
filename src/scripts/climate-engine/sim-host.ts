@@ -120,17 +120,26 @@ export function createWorkerHost(factory: WorkerFactory = defaultWorker): HeatSi
   };
 }
 
+/** What the GPU host needs of a solver — the seam that makes its guards testable. */
+export type GpuSimFactory = (canvas: HTMLCanvasElement) => Pick<WebGl2HeatSim, 'reset' | 'step' | 'temperature' | 'stats' | 'dispose'>;
+
 /**
  * Solves on the GPU. Context loss is latched rather than thrown at, so the app
  * can demote on the next call instead of dying inside an event handler.
+ *
+ * `makeSim` exists because a real WebGL2 context cannot be had in node, and the
+ * guards below — the latch, the generation check, the disposal order — are
+ * ordinary logic that should not need a GPU to test. Production passes nothing.
+ * The real WebGl2HeatSim integration is covered headed, in
+ * tests/e2e/heat-map-sim-backend.spec.ts.
  */
-export function createGpuHost(canvas: HTMLCanvasElement): HeatSimHost {
+export function createGpuHost(canvas: HTMLCanvasElement, makeSim: GpuSimFactory = (c) => new WebGl2HeatSim(c)): HeatSimHost {
   let active: HeatSimRequest | null = null;
   let disposed = false;
   let contextLost = false;
 
   const onContextLost = (event: Event) => { event.preventDefault(); contextLost = true; };
-  const sim = new WebGl2HeatSim(canvas);
+  const sim = makeSim(canvas);
   canvas.addEventListener('webglcontextlost', onContextLost);
 
   return {
