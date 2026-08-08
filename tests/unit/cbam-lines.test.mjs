@@ -412,6 +412,61 @@ test('free_allocation_tco2e is populated for a published (\'ok\') line too', () 
   assert.equal(r.cscf_status, 'published');
 });
 
+test('assumed_cscf pins the CSCF a cscf_pending line assumed, and blanks it everywhere else', () => {
+  // Legally load-bearing (review finding): this column is the ONLY place a cscf_pending row's
+  // assumed factor is written down. Eq 6 (§2.2 of the reference doc) feeds CSCF into the free
+  // allocation calculation directly — without this column recorded, the certificate figure on
+  // that row cannot be reconstructed from the CSV alone, since the CSCF value it assumed is
+  // nowhere else in the exported artefact. Blanking the column unconditionally left the whole
+  // suite green until this test existed.
+  const pending = est('25231000', 'DZ', '(A)', '100');
+  assert.equal(pending.status, 'cscf_pending', 'sanity: the shipped pack has no published CSCF');
+  const pendingRow = csvRows(
+    [line({ id: 'L1', massT: '100' })], [pending], fp, 'f'.repeat(64), pack)[0];
+  assert.equal(pendingRow.assumed_cscf, '1',
+    'a cscf_pending line must record the exact CSCF it assumed — the last value the Commission '
+    + 'actually set (CSCF_2021_25, sefa.ts)');
+
+  // 'ok': a published CSCF is a fact read off the pack, not an assumption — nothing to record.
+  const publishedPack = {
+    ...pack,
+    cscf: pack.cscf.map((c) => (c.year === 2026 ? { ...c, value: '1', status: 'published' } : c)),
+  };
+  const ok = estimateFromPack(
+    publishedPack, { cn: '25231000', country: 'DZ', route: '(A)', massT: '100', date: '2026-03-15' });
+  assert.equal(ok.status, 'ok');
+  const okRow = csvRows(
+    [line({ id: 'L1', massT: '100' })], [ok], fp, 'f'.repeat(64), publishedPack)[0];
+  assert.equal(okRow.assumed_cscf, '', 'a published CSCF is a fact, not an assumption');
+
+  // 'zero_by_fiat': electricity's nil allocation is by Art 1(2), not a CSCF-scaled calculation —
+  // no CSCF was assumed because none was ever applied.
+  const electricPack = {
+    ...pack,
+    classifications: [...pack.classifications, { code: '27160000', description: 'Electrical energy' }],
+    defaultFactors: [...pack.defaultFactors, {
+      scopeCode: '27160000', originCountry: 'DZ', emissionsType: 'direct',
+      productionRoute: 'default', reportingYear: 2026, baseIntensity: '0.5', markupPct: '0',
+    }],
+  };
+  const zero = estimateFromPack(electricPack, {
+    cn: '27160000', country: 'DZ', route: 'default', massT: '10', date: '2026-03-15',
+  });
+  assert.equal(zero.status, 'zero_by_fiat');
+  const zeroRow = csvRows(
+    [line({ id: 'L1', cn: '27160000', country: 'DZ', route: 'default', massT: '10' })],
+    [zero], fp, 'f'.repeat(64), electricPack)[0];
+  assert.equal(zeroRow.assumed_cscf, '', 'nil-by-law free allocation assumes no CSCF at all');
+
+  // 'unavailable': a refused line has no scenario, so no CSCF was assumed for one.
+  const refused = est('72052100', 'IN', '(C)', '60');
+  assert.equal(refused.status, 'unavailable');
+  const refusedRow = csvRows(
+    [line({ id: 'L1', cn: '72052100', country: 'IN', route: '(C)', massT: '60' })],
+    [refused], fp, 'f'.repeat(64), pack)[0];
+  assert.equal(refusedRow.assumed_cscf, '', 'a refused line has no scenario to have assumed a CSCF for');
+});
+
 test('a line resolving more than one benchmark term fails loud instead of dropping one', () => {
   // Regression for a review finding: terms.benchmarks carries one entry per precursor
   // (Eq 4 / Column A). The public estimator only ever runs scope='full_product' with no

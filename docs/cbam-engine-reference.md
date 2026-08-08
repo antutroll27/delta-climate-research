@@ -406,8 +406,16 @@ pack-snapshot hash before it renders.
 - `cbam-sync-check.mjs` hashes the eleven vendored engine files against a
   committed manifest. The engine in the website is a copy of the SaaS's, and this
   is the tripwire against drift.
-- CBM: 379/379 tests, typecheck clean. Angad: 171/171 unit, 16/16 Playwright,
-  publication contract 80 checks / 0 violations.
+- CBM: 379/379 tests, typecheck clean. Angad (whole repo, `npm run verify`):
+  `astro check` 0 errors, **261/261 unit** (`npm run test:unit`, all suites —
+  CBAM's own share is 80/80, in `cbam-render.test.mjs` and
+  `cbam-lines.test.mjs`), publication contract 80 checks / 0 violations. The
+  CBAM Playwright suite (`tests/e2e/cbam-lines.spec.ts`, the only e2e file this
+  branch touches) is **19/19** — up from 16 at the last count of this line,
+  which predated both the 77-test unit file this branch grew to 80 and the
+  17-test e2e file this branch grew to 19. This line is now the number `npm
+  run verify` and `npx playwright test tests/e2e/cbam-lines.spec.ts` print
+  today, not a carried-forward figure from before either grew.
 
 CBM's own `differential.test.ts` had pinned this gap at 382 priceable / 183
 stranded for India and concluded it *"needs corpus research rather than a code

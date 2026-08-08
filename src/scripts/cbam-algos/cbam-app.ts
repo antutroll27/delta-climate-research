@@ -555,8 +555,8 @@ export function buildPrintDocument(input: {
   }).join('');
 
   const verdicts = yearCards.map((y) => y.ruleFound
-    ? `<li>${esc(String(y.calendarYear))}: <b>${esc(y.state.replace(/_/g, ' '))}</b> at ${num(y.knownEligibleMassT)} t of ${num(y.thresholdT)} t — completeness box ${y.attested ? 'TICKED by the user' : 'not ticked'}.</li>`
-    : `<li>${esc(String(y.calendarYear))}: no de minimis threshold published; no verdict.</li>`).join('');
+    ? `<li>${esc(String(y.calendarYear))}: <b>${esc(yearVerdictTag(y))}</b> at ${num(y.knownEligibleMassT)} t of ${num(y.thresholdT)} t — completeness box ${y.attested ? 'TICKED by the user' : 'not ticked'}.</li>`
+    : `<li>${esc(String(y.calendarYear))}: <b>${esc(yearVerdictTag(y))}</b> — no de minimis threshold published; no verdict.</li>`).join('');
 
   return `
     <h1>CBAM certificate exposure — provisional estimate</h1>

@@ -583,6 +583,44 @@ test('buildPrintDocument throws a named error on a lines/results length mismatch
   }), /1 line\(s\) but 0 result\(s\)/);
 });
 
+test('buildPrintDocument\'s §2 verdict matches what renderYearThreshold\'s own card shows, for both branches of the union', () => {
+  // Review finding: §2 used to re-derive the verdict word inline (`y.state.replace(/_/g, ' ')`)
+  // instead of routing through yearVerdictTag(y) — the helper renderYearThreshold and the
+  // #cbStatus announcement both already call for exactly this reason (see yearVerdictTag's own
+  // doc comment). The two agreed only by casing today ("below threshold" here vs "Below
+  // threshold" on the card) — a coincidence, not a guarantee, and the exact failure mode this
+  // branch spent twenty commits eliminating elsewhere. Every buildPrintDocument test above this
+  // one passes `yearCards: []`, so this path had never actually been exercised.
+  const below = {
+    calendarYear: 2026, ruleFound: true, state: 'below_threshold',
+    knownEligibleMassT: '30', thresholdT: '50',
+    sourceLocator: 'Regulation (EU) 2023/956 Article 2(3)',
+    entryIds: ['L1'], entryHashes: ['a'.repeat(64)], attested: true, eligibleLineCount: 1,
+  };
+  // The ruleFound: false branch too — a year with no published rule at all, which the document
+  // must still say SOMETHING about rather than silently omit (renderYearThreshold's own doc names
+  // this the "sighted users only" gap when it is skipped).
+  const noRule = { calendarYear: 2027, ruleFound: false, attested: false, eligibleLineCount: 0 };
+
+  const okLine = { id: 'L1', cn: '25231000', country: 'DZ', route: '(A)',
+    scope: 'direct_and_indirect', massT: '30', date: '2026-03-15' };
+  const okResult = run('25231000', 'DZ', '(A)', '30');
+  const html = buildPrintDocument({
+    lines: [okLine], results: [okResult],
+    yearCards: [below, noRule], totals: sumTotals([okResult]),
+    packSnapshot: 'f'.repeat(64), rulePackages: [], pack, generatedOn: '2026-08-08',
+  });
+
+  for (const y of [below, noRule]) {
+    const cardMatch = renderYearThreshold(y).match(/<span class="cb-tag [^"]+">([^<]+)<\/span>/);
+    assert.ok(cardMatch, `sanity: renderYearThreshold(${y.calendarYear}) must render a tag span`);
+    const cardTag = cardMatch[1];
+    assert.ok(html.includes(`<b>${cardTag}</b>`),
+      `§2 for ${y.calendarYear} must show the card's own tag verbatim ("${cardTag}"), not a `
+      + 're-derived paraphrase that can drift from it');
+  }
+});
+
 /* ── the LineEstimateFailure arm (Task 6) ──────────────────────────────────── */
 
 test('buildPrintDocument shows a THROWN line in §1 rather than dropping it silently', () => {
@@ -693,4 +731,23 @@ test('the pre-pack fallback text renders in full, never truncated as though it w
     'the fallback text must appear in full, not truncated as though it were a hash');
   assert.doesNotMatch(html, /not yet comput(?!ed)/, 'must not be cut off mid-word by the hash-truncation path');
   assert.doesNotMatch(html, /browser-prototype/);
+});
+
+test('renderStamp truncates a genuine 64-hex-char snapshotHash to its first 16 chars plus an ellipsis', () => {
+  // Every test above this one exercises renderStamp only with the SHORT pre-pack fallback
+  // ('not yet computed', 22 chars) — none of them ever cross the `s.snapshotHash.length > 24`
+  // branch renderStamp's own doc comment describes. A real digest is exactly what that branch
+  // exists for (`decorateSnapshot` stamps a 64-hex-char sha256 onto every estimate once the pack
+  // has resolved — see its own doc comment), and removing the truncation entirely left the whole
+  // suite green until this test existed.
+  const realHash = '8bbba79e7f33f0e4943140c28e91a8810612f2fa770bd6dcad33fdb7045e4c05';
+  assert.equal(realHash.length, 64, 'sanity: this is a genuine sha256 hex digest length');
+  const e = decorateSnapshot(run('25231000', 'DZ', '(A)', '100'), realHash);
+  assert.equal(e.stamp.snapshotHash, realHash, 'sanity: decorateSnapshot stamped the real hash unmodified');
+  const html = renderResult(e);
+  assert.match(html, new RegExp(`${realHash.slice(0, 16)}…`),
+    'a real hash must render shortened to its first 16 characters plus an ellipsis');
+  assert.doesNotMatch(html, new RegExp(realHash),
+    'the full 64-char digest must not be printed verbatim in the stamp — that is what the '
+    + 'truncation exists to avoid');
 });
