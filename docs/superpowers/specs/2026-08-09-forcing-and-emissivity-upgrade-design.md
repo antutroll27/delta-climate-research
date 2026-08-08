@@ -176,6 +176,63 @@ variability is comparable, because each product is compared to itself over time.
 phenology) and retrieval noise. A 124× ratio is far too large to be phenology, but the split is
 not established and should not be asserted.
 
+### 3.4 The harmonisation was tested, and it does not work — a negative result
+
+§3.3 argued that ECOSTRESS's emissivity variability (sd ≈ 0.025) should inject ≈ 1.5 K of
+scene-to-scene LST error. **That was a propagation argument, not a measurement.** It has now
+been tested, and it is not supported.
+
+17 ECOSTRESS day ward-scenes over 10 dates, matched between the extracted `EmisWB` and the
+calibration archive, scored against the shipped candidate-G constants:
+
+**Mechanism test** — a scene whose emissivity is anomalous should carry a larger residual, with
+the sign the physics demands (negative: a lower assumed emissivity inflates retrieved
+temperature). This test needs no sensitivity value at all.
+
+| | measured | required |
+|---|---|---|
+| correlation(emissivity, residual) | **+0.126** | negative |
+| slope | **+25.0 K/unit** | ≈ −58.5 K/unit |
+| permutation *p*, 20k, two-sided | **0.624** | — |
+
+**Correction test** — removing the emissivity term should shrink the scatter. It does the
+opposite:
+
+| sensitivity applied | RMSE |
+|---|---|
+| Landsat band-10, −58.5 K/unit | 4.141 → **4.626 K** (+11.7 %) |
+| half that, −29 K/unit | 4.141 → 4.340 K (+4.8 %) |
+
+Bootstrap over 4000 resamples: the correction **improves the RMSE in only 22 % of them**, 95 %
+CI [−0.587, +1.354] K.
+
+**Robust to subsetting, and that is what makes it informative.** Dropping the low-emissivity
+tail, or the large residuals, or both, leaves harmonisation making things worse every time —
+while the correlation *flips sign* between subsets (+0.325, −0.162, +0.325). Sign instability
+under subsetting at n = 13–17 is the signature of noise, not of a weak signal.
+
+**Two honest readings, and I cannot separate them at this n.** Either emissivity is not a
+material driver of ECOSTRESS's LST error, or the effect exists and 17 ward-scenes cannot see
+it. This is a *null*, not a *disproof*.
+
+### 3.5 The reading of §3.3 that this forces
+
+I framed the 10–124× variability ratio as ECOSTRESS being noisy. **That framing was an
+assumption, and this result undercuts it.**
+
+ECOSTRESS's TES retrieves emissivity and temperature **jointly**. If the surface genuinely
+changes — wet after rain, vegetation greening, a different mix within the pixel — then a
+varying emissivity is *correct*, and the temperature derived with it is *better*, not worse.
+Under that reading the 124× ratio says **Landsat's static ASTER-GED climatology is blind to
+real surface change**, not that ECOSTRESS is unstable. It is at least as plausible as my
+original reading, and the harmonisation result is what one would expect if it were true.
+
+**Consequence for the plan.** Emissivity harmonisation is no longer the promising short cut it
+looked like at the end of §3.2. It stays worth doing for Landsat — the recomputation is exact
+and nearly free — but it should not be expected to collapse the ECOSTRESS↔Landsat difference,
+and the regional harvest is back to being the load-bearing piece of work rather than something
+this might have made unnecessary.
+
 **An honest asymmetry.** Landsat can be recomputed exactly. ECOSTRESS's tiled L2T product ships
 `EmisWB` but not the radiance terms, so it can only be **first-order corrected** using the
 standard LST sensitivity to emissivity. That difference must be stated wherever a

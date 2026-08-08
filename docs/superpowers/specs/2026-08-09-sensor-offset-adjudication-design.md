@@ -131,8 +131,15 @@ ECOSTRESS retrieves its own per scene. At the measured sensitivity of 0.598 K pe
 **sd ≈ 1.5 K of LST, scene to scene** — the same magnitude as the disagreement itself.
 
 A single scalar offset cannot reconcile a difference that varies that much. **The harvest must
-therefore report the offset *and* its dispersion**, and the dispersion is probably the more
-important number. See §3.3 of the forcing-and-emissivity spec for the measurement.
+therefore report the offset *and* its dispersion.** See §3.3 of the forcing-and-emissivity spec.
+
+**QUALIFIED, same day.** The 1.5 K figure above is a *propagation* argument — it assumes the
+emissivity variation is error. §3.4 of that spec then tested the assumption on 17 matched
+ward-scenes and **found no support**: the mechanism correlation came out at +0.126 with the
+wrong sign (p = 0.62), and harmonising made the residual *worse* in 78 % of bootstrap
+resamples. The dispersion requirement stands — a scalar offset is still the wrong shape of
+answer — but the 1.5 K magnitude should not be quoted, and emissivity is no longer the leading
+explanation.
 
 ### 3.3 Fallback if the offset proves unmeasurable
 
