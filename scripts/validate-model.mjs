@@ -74,15 +74,17 @@ const maxCool = baseMean - M.eqMean(M.applyInterventions(base, MAXED, spatial), 
 // cannot shift further than its largest validated local change.
 check(
   'Max ward cooling ≤ validated local park cooling', maxCool, 0, parkDropForBound(), '°C',
-  'self-consistency: ward-mean ΔT cannot exceed the local park cooling validated against Mitra et al. 2022',
+  'self-consistency: ward-mean ΔT cannot exceed the local park cooling checked against Li et al. 2022',
 );
 
 /* ── 3. local park cooling — the one Kolkata-specific validation ────────────── */
 const pPark = M.currentParams(scen(ZERO));
 const parkDrop = M.eqCell(pPark, 0.20, 0, 0) - M.eqCell(pPark, 0.20, 0.9, 0);
 check(
-  'Local cooling inside a park', parkDrop, 4.83, 8.07, '°C',
-  'Mitra et al. 2022, Frontiers Env. Sci. — measured Kolkata park cool-island intensity',
+  'Local cooling inside a park', parkDrop, 0, 8.07, '°C',
+  'Li et al. 2022 (10.3389/fenvs.2022.1073914) — Kolkata daytime maximum UCI. ONE-SIDED: '
+  + "the former 4.83 lower bound was Bangkok's maximum, not a Kolkata floor — withdrawn "
+  + '2026-08-08, see docs/green-score-methodology.md §4.2',
 );
 
 /* ── 3b. absolute surface temps vs air — where the contrast comes from ─────── */
