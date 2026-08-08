@@ -70,6 +70,44 @@ ALBEDO_RANGE = (0.0, 0.5)
 #: happened to be clear rather than by the ward.
 MIN_CELLS = 40
 
+#: THE SUN-UP PHYSICAL BAR — pre-registered 2026-08-09, before it was applied.
+#:
+#: While the sun is up, a land surface does not sit far BELOW the air that is
+#: warming it. scripts/validate-model.mjs already publishes 4 K as that bound,
+#: and only for a FULLY VEGETATED surface running at maximum evapotranspiration;
+#: a real ward, part built, cannot beat it.
+#:
+#: WHY IT EXISTS. Measured over the committed archive: Landsat fails this bar on
+#: 0 of 213 ward-scenes (worst -3.11 K), ECOSTRESS on 4 of 35 (worst -11.98 K).
+#: The worst is a surface reading 12 K below air at 09:29 in June with a scene
+#: cloud fraction of 0.96 and 27 % of ward cells usable — a cloud top recorded as
+#: a surface temperature. Those scenes carried roughly two-thirds of the apparent
+#: ECOSTRESS-vs-Landsat disagreement: the published morning strata run 6.28 K
+#: against 3.07 K (2.04x), and 4.28 K against 3.07 K (1.39x) once they are gone.
+#:
+#: WHY IT IS NOT CIRCULAR, which matters because dropping scenes to improve a
+#: statistic is exactly the move that deserves suspicion:
+#:   * it reads ONLY observed LST and observed air temperature — never a model
+#:     residual, never a fitted constant;
+#:   * it is the project's own already-published bound, not a new threshold
+#:     chosen to make something pass;
+#:   * it is applied to BOTH instruments identically. Landsat loses nothing,
+#:     which is the control: this is not a bar that merely happens to be tight.
+#:
+#: The `sun` gate is load-bearing. After sunset a surface legitimately falls
+#: below air, so an unconditional version would reject real evening scenes.
+SUN_UP = 0.5
+MAX_BELOW_AIR_K = 4.0
+
+
+def physical_daytime(lst_mean_c: float, t_air_c: float, sun: float) -> bool:
+    """False for a sun-up scene whose surface sits implausibly far below air.
+
+    Pure function of two observations and the solar geometry. Deliberately blind
+    to the model, so it cannot launder a fitted result into an acceptance rule.
+    """
+    return not (sun > SUN_UP and (lst_mean_c - t_air_c) < -MAX_BELOW_AIR_K)
+
 
 def ward_surface(ward_id: str) -> tuple[float, float, float]:
     """(fvc, albedo, built) for one ward — the same values the browser runs on."""
@@ -168,6 +206,7 @@ def landsat_rows(surf: dict[str, tuple[float, float, float]]) -> list[dict[str, 
 
     out: list[dict[str, Any]] = []
     missing = 0
+    unphysical_l = 0
     for r in lrows:
         f = forcing.get(r["date"])
         if f is None:
@@ -178,6 +217,11 @@ def landsat_rows(surf: dict[str, tuple[float, float, float]]) -> list[dict[str, 
         # function, so the two sensors' `sun` means one thing.
         doy = _dt.date.fromisoformat(r["date"]).timetuple().tm_yday
         sun = _physics.solar_factor(f["hour"], doy)
+        # The SAME bar as the ECOSTRESS path. Landsat is expected to lose nothing;
+        # that it does not is the control that keeps the rule honest.
+        if not physical_daytime(r["lst_mean_c"], f["tAir"], sun):
+            unphysical_l += 1
+            continue
         out.append({
             "date": r["date"], "phase": "day", "ward": r["ward"],
             "lst_mean_c": r["lst_mean_c"], "lst_sd_c": r["lst_sd_c"],
@@ -195,6 +239,10 @@ def landsat_rows(surf: dict[str, tuple[float, float, float]]) -> list[dict[str, 
         })
     if missing:
         print(f"  {missing} Landsat ward-scenes dropped: no POWER forcing at their hour")
+    # Expected to be zero. If it is not, say so loudly — a Landsat rejection means
+    # either the bar or the Landsat QA chain has changed, and both are load-bearing.
+    print(f"  {unphysical_l} Landsat ward-scenes rejected by the sun-up physical bar"
+          + ("" if unphysical_l == 0 else "   <-- INVESTIGATE: Landsat has always been 0/213"))
     return out
 
 
@@ -216,6 +264,7 @@ def main() -> None:
 
     rows: list[dict[str, Any]] = []
     grids: list[npt.NDArray[np.float32]] = []
+    unphysical = 0
     for n, sc in enumerate(scenes, 1):
         for wid, ward in _types.WARDS.items():
             g = ward_lst(ward, sc.date, sc.phase, tok)
@@ -224,10 +273,14 @@ def main() -> None:
             m = np.isfinite(g)
             if int(m.sum()) < MIN_CELLS:
                 continue
+            lst_mean = float(np.nanmean(g))
+            if not physical_daytime(lst_mean, sc.tAir, sc.sun):
+                unphysical += 1
+                continue
             fvc, alb, built = surf[wid]
             rows.append({
                 "date": sc.date, "phase": sc.phase, "ward": wid,
-                "lst_mean_c": round(float(np.nanmean(g)), 3),
+                "lst_mean_c": round(lst_mean, 3),
                 "lst_sd_c": round(float(np.nanstd(g)), 3),
                 "cells": int(m.sum()), "cell_frac": round(float(m.mean()), 3),
                 # the ward's own measured surface — what the browser draws with
@@ -247,6 +300,8 @@ def main() -> None:
             grids.append(g)
         if n % 5 == 0 or n == len(scenes):
             print(f"  [{n:>3}/{len(scenes)}] {len(rows)} ward-scenes")
+    print(f"\n  {unphysical} ECOSTRESS ward-scenes rejected by the sun-up physical bar "
+          f"(sun > {SUN_UP}, surface more than {MAX_BELOW_AIR_K:.0f} K below air)")
 
     if not rows:
         sys.exit("no ward-scenes survived masking — nothing to calibrate against")
@@ -269,6 +324,13 @@ def main() -> None:
         "scenes": len(scenes), "ward_scenes": len(rows),
         "grid_shape": list(stack.shape[1:]),
         "min_cells": MIN_CELLS,
+        "sun_up_physical_bar": {
+            "rule": "reject when sun > SUN_UP and (lst_mean_c - tAir) < -MAX_BELOW_AIR_K",
+            "sun_up": SUN_UP, "max_below_air_K": MAX_BELOW_AIR_K,
+            "applies_to": "both instruments, identically",
+            "pre_registered": "2026-08-09, before application",
+            "rejected_ecostress": unphysical,
+        },
         "rows": rows,
     }
     with open(OUT_JSON, "w") as fh:

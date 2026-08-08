@@ -76,7 +76,7 @@ K_SUM = 0.01 + 0.05          # kRad + h at wind = 1; the RATIO is fitted, the su
 #: balance omits. Mirrors STORE_NIGHT in types.ts. Without it the modelled night
 #: surface sits BELOW air while the measurement puts it 2.10 K above; that is a
 #: sign error and no constant fixes a sign.
-STORE_NIGHT = 0.1081   # refitted 2026-08-09 under the capped evap ramp; see types.ts
+STORE_NIGHT = 0.1043   # refitted 2026-08-09 after the sun-up bar; see types.ts
 NIGHT_ET_FRACTION = 0.10
 Q_NIGHT_RATIO = 0.5
 DEWPOINT_TAPER_K = 1.0

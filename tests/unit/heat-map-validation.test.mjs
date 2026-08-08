@@ -9,6 +9,8 @@
  */
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -252,4 +254,93 @@ test('the shipped constants match the calibration run they came from', async () 
     `shipped STORE_NIGHT ${STORE_NIGHT} has drifted from candidate G's ${g.fitted.release_base}`);
   // l_et is bounded, not fitted — it must still be the constant §4.2.1 chose.
   assert.equal(g.fitted.l_et, DEFAULT_PARAMS.L, 'the fit must be run with the shipped L');
+});
+
+/* ————— the sun-up physical bar —————
+   Pre-registered 2026-08-09 and applied to BOTH instruments. Two-thirds of the
+   apparent ECOSTRESS-vs-Landsat disagreement was three ward-scenes where the
+   observed surface sat further below the air than evapotranspiration can take it.
+   These pin the rule, its control, and the fact that it never sees a residual. */
+
+const SUN_UP = 0.5, MAX_BELOW_AIR_K = 4;
+const dayRows = OBS.rows.filter((r) => r.phase === 'day');
+
+test('no committed ward-scene has a sun-up surface implausibly far below air', () => {
+  const bad = dayRows.filter((r) => r.sun > SUN_UP && (r.lst_mean_c - r.tAir) < -MAX_BELOW_AIR_K);
+  assert.deepEqual(bad.map((r) => `${r.date}/${r.ward}`), [],
+    'validate-model publishes 4 K as the bound for a FULLY vegetated surface at maximum ET; '
+    + 'a part-built ward cannot beat it, so a sun-up row below it is a contaminated observation');
+});
+
+test('the bar is recorded in the artefact, with what it rejected', () => {
+  const bar = OBS.sun_up_physical_bar;
+  assert.ok(bar, 'the acceptance rule must travel with the data it shaped');
+  assert.equal(bar.sun_up, SUN_UP);
+  assert.equal(bar.max_below_air_K, MAX_BELOW_AIR_K);
+  assert.match(bar.applies_to, /both instruments/i);
+  assert.ok(bar.rejected_ecostress > 0, 'a rule that rejected nothing would not have been worth adding');
+});
+
+test('LANDSAT IS THE CONTROL — it must lose nothing to this bar', () => {
+  /* This is what keeps the rule from being outlier-dropping. Landsat's stricter
+     QA chain (ST_QA <= 3.0 K plus CFMask) already yields 0 unphysical scenes, so
+     the bar is not merely a threshold tight enough to remove awkward data. If
+     Landsat ever starts failing it, either the bar or that QA chain has moved and
+     both are load-bearing. */
+  const lan = dayRows.filter((r) => r.sensor === 'landsat');
+  assert.ok(lan.length > 150, 'the control needs the full Landsat archive to mean anything');
+  const worst = Math.min(...lan.map((r) => r.lst_mean_c - r.tAir));
+  assert.ok(worst > -MAX_BELOW_AIR_K,
+    `worst Landsat surface-minus-air is ${worst.toFixed(2)} K; Landsat has always cleared this bar`);
+});
+
+test('the rule BEHAVES as specified — run the Python, do not read it', () => {
+  /* Source-scanning could not tell a working guard from a deleted one, and could
+     not see the sun gate at all. Execute the function instead. */
+  const cases = [
+    // [lst, tAir, sun, accepted?, why]
+    [22.3, 34.3, 0.82, false, 'sun up and 12 K below air is a cloud top, not a surface'],
+    [27.1, 34.3, 0.82, false, 'sun up and 7 K below air is still past the bar'],
+    [32.3, 34.3, 0.82, true, 'sun up and 2 K below air is ordinary evapotranspiration'],
+    [22.3, 34.3, 0.10, true, 'THE SUN GATE: after sunset a surface legitimately falls below air'],
+    [40.0, 34.3, 0.82, true, 'a surface above air is the normal daytime case'],
+  ];
+  const py = [
+    'import importlib.util, sys, json',
+    "sys.path.insert(0, 'scripts')",
+    "spec = importlib.util.spec_from_file_location('bwo', 'scripts/build-ward-observations.py')",
+    'm = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)',
+    `print(json.dumps([m.physical_daytime(a, b, c) for a, b, c in ${JSON.stringify(cases.map((c) => c.slice(0, 3)))}]))`,
+  ].join('\n');
+  const out = execFileSync('python3', ['-c', py], { cwd: ROOT, encoding: 'utf8' });
+  const got = JSON.parse(out.trim().split('\n').pop());
+  cases.forEach(([, , , want, why], i) => assert.equal(got[i], want, why));
+});
+
+test('both ingest paths actually call the rule', () => {
+  /* A guard that exists but is never invoked is decoration. */
+  const src = readFileSync(join(ROOT, 'scripts/build-ward-observations.py'), 'utf8');
+  const calls = src.match(/if not physical_daytime\(/g) ?? [];
+  assert.equal(calls.length, 2,
+    'the bar must be applied on the ECOSTRESS path AND the Landsat path — the second is the control');
+});
+
+test('the rule reads only observations, never the model', () => {
+  /* Non-circularity, pinned as source. A rule that consulted a residual or a
+     fitted constant could launder a fitted result into an acceptance criterion. */
+  const src = readFileSync(join(ROOT, 'scripts/build-ward-observations.py'), 'utf8');
+  const start = src.indexOf('def physical_daytime');
+  assert.ok(start > 0, 'physical_daytime must exist in the builder');
+  // stop at the next top-level definition, so the assertion sees the function
+  // and nothing after it
+  const rest = src.slice(start + 1);
+  const end = rest.search(/\n(?:def |[A-Z_]+ *=|#: )/);
+  const fn = rest.slice(0, end > 0 ? end : 700);
+  assert.match(fn, /lst_mean_c/);
+  assert.match(fn, /t_air_c/);
+  // Strip the docstring before scanning. The prose explains WHY the rule ignores
+  // fitted values, so scanning it would match the very words it exists to disclaim.
+  const code = fn.split('"""').filter((_, i) => i % 2 === 0).join('');
+  assert.doesNotMatch(code, /predict|resid|rmse|fitted|_physics/,
+    'physical_daytime must not reach for the model — that is what makes it non-circular');
 });
