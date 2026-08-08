@@ -314,6 +314,9 @@ test('csvRows carries figures, locators and the §4 claims per row', () => {
   assert.equal(r.cscf_status, 'pending (what-if)');
   assert.match(r.benchmark_locator, /2025\/2620 Annex/);
   assert.match(r.cbam_factor_locator, /Art 10a\(1a\)/);
+  // cscf_locator was reachable but unasserted anywhere in this file until a mutation-testing
+  // review found it — a legal citation surviving in an audit CSV with no test protecting it.
+  assert.match(r.cscf_locator, /DR \(EU\) 2019\/331 Art 14\(6\)/);
   assert.equal(r.line_fingerprint, 'a'.repeat(64));
   assert.equal(r.pack_snapshot, 'f'.repeat(64));
   // NOT the general identity (see the design doc's 8 August 2026 correction and the dedicated
@@ -379,6 +382,11 @@ test('free_allocation_tco2e is populated for a zero_by_fiat line too, not just a
   assert.equal(r.embedded_tco2e, '5');
   assert.equal(r.free_allocation_tco2e, '0', 'Art 2(2): the deduction itself is nil, not the charge');
   assert.equal(r.chargeable_tco2e, '5');
+  // The zero_by_fiat legal claim itself: a spec review mutated this exact string to garbage and
+  // all 32 tests still passed. Pinned here, next to its two siblings ('published' above,
+  // 'pending (what-if)' on the main csvRows test) — an unpinned legal claim on an audit
+  // artefact is not acceptable in this file of all files.
+  assert.equal(r.cscf_status, 'not applicable (Art 1(2): nil by law)');
   assert.equal(
     Number(r.embedded_tco2e) - Number(r.free_allocation_tco2e),
     Number(r.chargeable_tco2e));
@@ -510,6 +518,18 @@ test('toCsv escapes commas and quotes and round-trips its own header', () => {
   assert.equal(csv.split('\n')[1], 'plain,"has,comma","has ""quote"""');
 });
 
+test('toCsv quotes a bare CR the same as LF, not just commas and double quotes', () => {
+  // Regression for a review finding: the quoting class was /[",\n]/ — no \r. cn_code is
+  // free-typed, so a stray carriage return from a paste would reach the output unquoted. An
+  // unquoted CR inside a field is itself malformed RFC 4180: Python's csv module rejects it
+  // outright ('new-line character seen in unquoted field'), which is a worse failure than a
+  // slightly-off cell — it makes the whole file unreadable by a common consumer.
+  const csv = toCsv([{ cn_code: 'a\rb', safe: 'plain' }]);
+  const [header, row] = csv.split('\n');
+  assert.equal(header, 'cn_code,safe');
+  assert.equal(row, '"a\rb",plain');
+});
+
 test('toCsv neutralises a formula-leading cell to block CSV injection', () => {
   // A cell opening with = + - @ is executed as a formula by Excel/Sheets on open, and this
   // artefact is explicitly designed to be opened in a spreadsheet. cn_code is free-typed by
@@ -520,4 +540,26 @@ test('toCsv neutralises a formula-leading cell to block CSV injection', () => {
   const [header, row] = csv.split('\n');
   assert.equal(header, 'formula,plusLead,minusLead,atLead,safe');
   assert.equal(row, "'=1+2,'+SUM(A1),'-2+3,'@SUM(1),plain");
+});
+
+test('toCsv throws on a row whose keys do not match row 0, rather than silently reshaping it', () => {
+  // Regression for a review finding: the header is taken from row 0 alone. A later row with an
+  // extra key would have that key silently dropped (never appears in any column); a row missing
+  // a key would silently read as '' — both indistinguishable from a genuinely blank field, and
+  // toCsv is general-purpose and exported, so it cannot assume every caller shapes rows the way
+  // csvRows does.
+  assert.throws(
+    () => toCsv([{ a: '1', b: '2' }, { a: '3', c: '4' }]),
+    /row 1/);
+});
+
+test('csvRows throws naming the mismatch when lines and results are different lengths', () => {
+  // Regression for a review finding: results[i]! on a mismatch previously surfaced as a bare
+  // TypeError with no line id and no counts — nothing a new caller (Tasks 5-8) could use to
+  // find their bug. This file's own idiom is to name what's missing (packSnapshotHash's
+  // missing-workbook-hash throw, thresholdByYear's missing-fingerprint throw); this matches it.
+  assert.throws(
+    () => csvRows([line({ id: 'L1' }), line({ id: 'L2' })], [est('25231000', 'DZ', '(A)', '100')],
+      fp, 'f'.repeat(64), pack),
+    /2 line\(s\) but 1 result\(s\)/);
 });

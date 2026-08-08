@@ -14,7 +14,7 @@ import {
 } from './cbam-algos/threshold/aggregate.ts';
 import { evaluateThreshold, type ThresholdState } from './cbam-algos/threshold/evaluate.ts';
 import { sectorForCn } from './cbam-algos/cbam/sector.ts';
-import type { CertificateEstimate } from './cbam-algos/cbam/certificate-estimate.ts';
+import type { CertificateEstimate, EstimateFigure } from './cbam-algos/cbam/certificate-estimate.ts';
 
 export interface Line {
   id: string;        // row key and ImportMassEntry.id — NOT part of the fingerprint
@@ -237,9 +237,17 @@ export interface Totals {
   anyPending: boolean;
 }
 
-/** The figures of a priced branch, whichever branch carried them. */
-function figuresOf(e: CertificateEstimate):
-  { certificates: string; costEur: string | null; netTco2e: string } | null {
+/**
+ * The figures of a priced branch, whichever branch carried them — the full EstimateFigure,
+ * not a hand-picked subset. sumTotals below only ever reads certificates/costEur/netTco2e off
+ * the result, but csvRows needs indirectTco2e/totalEmbeddedTco2e/faaTco2e too; narrowing the
+ * return type to what sumTotals happens to use would force csvRows to re-derive this same
+ * ok/zero_by_fiat/cscf_pending/unavailable split itself — a second switch that TypeScript
+ * cannot exhaustiveness-check against CertificateEstimate's union the way this one is (a fifth
+ * status would fail to compile HERE; a duplicated ternary elsewhere would just silently return
+ * null for it). One split, reused everywhere a priced figure is needed.
+ */
+function figuresOf(e: CertificateEstimate): EstimateFigure | null {
   switch (e.status) {
     case 'ok':
     case 'zero_by_fiat': return e.figure;
@@ -315,6 +323,13 @@ export function sumTotals(results: readonly CertificateEstimate[]): Totals {
  * One row per line, engine values VERBATIM — no locale formatting, no rounding. This is the
  * working artefact an auditor loads into a model; presentation formatting (thousands
  * separators, 3dp) belongs to the page, full precision belongs here.
+ *
+ * @throws {Error} if `lines` and `results` are not the same length (see below), or if any
+ * line's estimate resolves more than one benchmark term (see the in-loop check). EITHER throw
+ * discards the WHOLE export, not just the offending row — there is no partial-CSV mode, unlike
+ * thresholdByYear's equivalent per-year throw (which similarly discards every year's card, not
+ * just one). A caller wanting a partial export on a bad line must catch here and decide what
+ * "partial" means for a file with one row per line; this function does not offer that choice.
  */
 export function csvRows(
   lines: readonly Line[],
@@ -323,6 +338,17 @@ export function csvRows(
   packSnapshot: string,
   pack: EstimatorPack,
 ): Record<string, string>[] {
+  if (lines.length !== results.length) {
+    // Without this, a mismatch surfaces as `results[i]!`'s bare `undefined` flowing into every
+    // field read below — a TypeError with no line id, no expected/actual counts, nothing an
+    // author of a new caller (Tasks 5-8) could use to find their bug. Name the mismatch instead,
+    // matching this file's own idiom (packSnapshotHash's missing-workbook-hash throw,
+    // thresholdByYear's missing-fingerprint throw): a loud, specific failure over a bare crash.
+    throw new Error(
+      `csvRows: ${lines.length} line(s) but ${results.length} result(s) — every line must have `
+      + 'exactly one CertificateEstimate, in the same order, before it can be exported',
+    );
+  }
   return lines.map((l, i) => {
     const e = results[i]!;
     const terms = 'terms' in e ? e.terms : null;
@@ -344,16 +370,11 @@ export function csvRows(
     }
     const bm = terms?.benchmarks[0] ?? null;
     const pending = e.status === 'cscf_pending';
-    // The EstimateFigure carrying every priced number, whichever branch holds it. Not
-    // figuresOf: that helper's DECLARED return type deliberately narrows away
-    // indirectTco2e/totalEmbeddedTco2e/faaTco2e (see its own comment — it exists for
-    // sumTotals, which only ever needed certificates/costEur/netTco2e), so reading those three
-    // extra fields off its result does not type-check. figuresOf is not touched or redefined —
-    // this narrows `e` directly, the same pattern the free_allocation_tco2e fix below already
-    // uses, just centralised once instead of repeated per field.
-    const figure = e.status === 'ok' || e.status === 'zero_by_fiat' ? e.figure
-      : e.status === 'cscf_pending' ? e.scenario
-      : null;
+    // Reuses figuresOf as-is (see its own comment on why its return type now carries the full
+    // EstimateFigure): csvRows needs indirectTco2e/totalEmbeddedTco2e/faaTco2e, which a
+    // narrower return type would have hidden and forced this function to re-derive the same
+    // ok/zero_by_fiat/cscf_pending/unavailable split by hand.
+    const figure = figuresOf(e);
     return {
       line_id: l.id,
       cn_code: l.cn,
@@ -384,10 +405,10 @@ export function csvRows(
       // indirect_tco2e here: the engine already added those two once, and a second addition
       // over the same two numbers in THIS file is a second chance to disagree with it.
       embedded_tco2e: figure?.totalEmbeddedTco2e ?? '',
-      // Lives on `figure`/`scenario` (EstimateFigure), never on `f` — see the `figure` comment
-      // above. The prior fix here (switching off `pending ? … : ''`) got the BRANCH right but
-      // the spec's own identity was still wrong: chargeable is NOT embedded − free_allocation
-      // in general — see chargeable_tco2e below.
+      // Lives on `figure` (EstimateFigure) — see the `figure` comment above. The prior fix here
+      // (switching off `pending ? … : ''`) got the BRANCH right but the spec's own identity was
+      // still wrong: chargeable is NOT embedded − free_allocation in general — see
+      // chargeable_tco2e below.
       free_allocation_tco2e: figure?.faaTco2e ?? '',
       // max(0, direct − free_allocation) + indirect, computed ONCE by figureFrom and read
       // verbatim here, never recomputed: (1) free allocation is deducted from direct only, so
@@ -430,17 +451,51 @@ export function csvRows(
  * execute on open. A leading `'` (the standard OWASP mitigation) neutralises the cell as literal
  * text without changing what a human reads there.
  *
- * Row separator is '\n', not '\r\n'. RFC 4180 specifies CRLF, but every field this exporter
- * produces is a computed figure, a legal locator, or a short status string — none can contain an
- * embedded newline, so there is nothing for CRLF to disambiguate that plain LF does not already
- * handle. Excel, Sheets, Numbers and LibreOffice all parse a bare-LF CSV correctly today.
+ * INVARIANT the injection guard depends on: every numeric column csvRows produces is
+ * non-negative by construction (figureFrom never returns a negative certificate/cost/emissions
+ * figure, and cbam-app.ts refuses a negative mass at the input), so the guard never has to tell
+ * "a real minus sign" apart from "an injected formula" — it can treat every leading `-` as the
+ * latter. If a future column can legitimately start with `-` (e.g. a signed adjustment),
+ * loosening this guard to let `-` through unescaped REOPENS the injection hole this function
+ * exists to close. Fix that by quoting a genuine negative differently (e.g. a leading space,
+ * another OWASP-documented mitigation), not by narrowing this character class.
+ *
+ * `cn_code` is also the reason the quoting class below includes `\r`, not just `\n` and `,`: a
+ * pasted CN can carry a stray carriage return, and a bare CR left unquoted inside a field is
+ * itself malformed RFC 4180 — Python's `csv` module, among others, rejects it outright
+ * ('new-line character seen in unquoted field'). Every OTHER column here is a computed figure,
+ * a legal locator, or a short status string this file constructs itself and cannot carry a
+ * newline — but `cell()` quotes by CONTENT, not by column, so `cn_code` and `description` (also
+ * free-typed on the page, though not by this function's caller) are covered the same way as
+ * every other cell without this function needing to know which columns are user input.
+ *
+ * Row separator stays '\n', not '\r\n': RFC 4180's CRLF requirement exists to disambiguate a
+ * newline that ENDS a row from one embedded WITHIN a field, and the quoting above already
+ * handles every embedded CR/LF by wrapping the field in quotes — there is nothing left for a
+ * CRLF row separator to add. Excel, Sheets, Numbers and LibreOffice all parse a bare-LF CSV
+ * correctly today.
  */
 export function toCsv(rows: readonly Record<string, string>[]): string {
   if (!rows.length) return '';
   const cols = Object.keys(rows[0]!);
+  const colSet = new Set(cols);
+  // A row with a different key set than row 0 would otherwise fail SILENTLY: extra keys are
+  // dropped (never appear in any column), missing keys read as '' via `r[c] ?? ''` below — both
+  // indistinguishable from a genuinely blank or absent field. toCsv is general-purpose and
+  // exported, so it cannot assume every caller builds rows the way csvRows does; check once,
+  // up front, rather than let a malformed row silently reshape itself to fit row 0's header.
+  rows.forEach((r, i) => {
+    const keys = Object.keys(r);
+    if (keys.length !== cols.length || keys.some((k) => !colSet.has(k))) {
+      throw new Error(
+        `toCsv: row ${i} has a different set of keys than row 0 — every row must share exactly `
+        + 'the same columns, since the header is taken from row 0 alone',
+      );
+    }
+  });
   const cell = (v: string) => {
     const safe = /^[=+\-@]/.test(v) ? `'${v}` : v;
-    return /[",\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
+    return /["\r\n,]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
   };
   return [cols.join(','), ...rows.map((r) => cols.map((c) => cell(r[c] ?? '')).join(','))].join('\n');
 }
