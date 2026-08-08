@@ -102,18 +102,29 @@ export const DEFAULT_PARAMS: SimParams = {
   // 0.2–0.6; this is 0.2).
   kRad: 0.01,
   tSky: 17,
-  // Evapotranspiration cooling. Was 0.5, which put a fully-vegetated surface
-  // 5.8 K below air temperature — more cooling than ET can physically deliver.
-  // 0.36 is the midpoint of the range satisfying TWO independent constraints:
-  //   · park cool-island 4.83–8.07 °C  (Mitra et al. 2022, measured in Kolkata)
-  //   · vegetated surface <4 K below air (physical ceiling on ET)
-  // Valid range is [0.40, 0.46] once currentParams' humidity gate (×0.84 at
-  // rh=60) is accounted for; see scripts/validate-model.mjs.
-  // 0.46 — the top of the [0.40, 0.46] band that satisfies BOTH the Kolkata
-  // park cool-island measurements and the physical ceiling on ET. The
-  // unconstrained ward-scale fit wanted 0.8, which is roughly twice what
-  // evapotranspiration can deliver; it was refused. Fitting better with a
-  // constant nobody can defend is not an improvement.
+  // Evapotranspiration cooling. Shipped value is 0.46. Was 0.5, which put a
+  // fully-vegetated surface 5.8 K below air — more than ET can deliver.
+  //
+  // It was derived from TWO constraints, and ONE OF THEM IS WITHDRAWN:
+  //   · vegetated surface <4 K below air — valid, physical ceiling on ET
+  //   · park cool-island "4.83–8.07 °C, Kolkata" — NOT a Kolkata band. The paper
+  //     is Li et al. 2022 (10.3389/fenvs.2022.1073914), not Mitra; 8.07 °C is
+  //     Kolkata's daytime MAXIMUM and 4.83 °C is BANGKOK's. The lower bound was
+  //     never a Kolkata constraint. Withdrawn 2026-08-08 — see
+  //     docs/green-score-methodology.md §4.2.
+  //
+  // Consequence: the [0.40, 0.46] intersection band was pinned at its lower end
+  // by 4.83 °C, so that end — and "0.46 is the top of the band" as a rationale —
+  // rest on a constraint that does not exist. L is NOT uniquely determined by
+  // the evidence as written. What survives is one-sided: park cooling must stay
+  // ≤ 8.07 °C, and a vegetated surface must stay within 4 K of air. 0.46 passes
+  // both (see scripts/validate-model.mjs). The unconstrained ward-scale fit
+  // wanted 0.8 — roughly twice what ET can deliver — and was refused.
+  //
+  // L IS DELIBERATELY NOT CHANGED HERE. Re-deriving it means re-running the
+  // calibration and re-validating everything downstream; cooling is 1/3 of the
+  // Green Score, so if L moves, every score moves with it. This comment records
+  // a shipped constant with a partly-withdrawn derivation rather than hiding it.
   L: 0.46,
   h: 0.05,
   wind: 1,
