@@ -1,7 +1,8 @@
 import { fmtCr } from '../heat-map-model.ts';
 import { WARDS, WARD_IDS, nextDistinctWard, type WardId } from '../wards.ts';
 import { enablePairedMapInteraction, renderPairedMap, resetPairedMapView, thermalPatternSummary } from './paired-map-2d.ts';
-import { runPairedScenario, type MetricValue, type PairedResult, type WardScenarioResult } from './paired-runner.ts';
+import { PairedScenarioClient } from './paired-client.ts';
+import type { MetricValue, PairedResult, WardScenarioResult } from './paired-protocol.ts';
 import { parsePairedScenario, serializePairedScenario } from '../scenario/scenario-url.ts';
 import { coverageIsZero, normalizeCoverage, type CoverageScenario } from '../scenario/scenario-state.ts';
 import type {
@@ -49,6 +50,7 @@ export function mountPairedBench(): () => void {
   let enhancementPromise: Promise<void> | null = null;
   let latestResult: PairedResult | null = null;
   let presentedResult: PairedResult | null = null;
+  const pairedClient = new PairedScenarioClient();
   const cleanup: Array<() => void> = [];
   const mapCleanup = new Map<HTMLCanvasElement, () => void>();
 
@@ -227,7 +229,7 @@ export function mountPairedBench(): () => void {
       setText(`[data-value="${slot}-cooling"]`, `−${ward.coolingC.toFixed(1)}°C`);
       setText(`[data-value="${slot}-hot-area"]`, formatMetric(ward.scenarioHotAreaPct));
       setText(`[data-value="${slot}-hot-change"]`, formatMetric(ward.hotAreaChangePp));
-      setText(`[data-value="${slot}-rural"]`, `${ward.ruralContrastC >= 0 ? '+' : ''}${ward.ruralContrastC.toFixed(1)}°C`);
+      setText(`[data-value="${slot}-green-reference"]`, `${ward.greenReferenceContrastC >= 0 ? '+' : ''}${ward.greenReferenceContrastC.toFixed(1)}°C`);
       setText(`[data-value="${slot}-cost"]`, `₹${fmtCr(ward.capitalCost)}`);
       setText(`[data-value="${slot}-delivered"]`, formatDelivered(ward));
       setText(`[data-value="${slot}-pattern"]`, thermalPatternSummary(ward.field));
@@ -242,6 +244,8 @@ export function mountPairedBench(): () => void {
     writeWard('b', result.b);
     const forcingLabel = `${result.forcing.label} · ${result.forcing.status.replace('-', ' ')}`;
     setText('[data-role="forcing-label"]', forcingLabel);
+    setText('[data-role="backend-label"]', result.a.evidence.backendVersion);
+    one<HTMLButtonElement>('[data-action="retry"]')?.setAttribute('hidden', '');
     setStatus(`Comparison settled. ${WARDS[result.a.ward].name} and ${WARDS[result.b.ward].name} use the same ${result.forcing.label.toLowerCase()}.`);
     void enhanceWithThree(result);
   }
@@ -252,18 +256,23 @@ export function mountPairedBench(): () => void {
     const controller = new AbortController();
     runController = controller;
     const generation = ++runGeneration;
-    setStatus('Running the paired model on the canonical grid.');
+    setStatus(latestResult ? 'Updating comparison…' : 'Running the canonical paired model…');
     root!.setAttribute('data-pending', 'true');
+    root!.setAttribute('aria-busy', 'true');
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     try {
-      const result = await runPairedScenario(state, controller.signal);
+      const result = await pairedClient.run(state, { signal: controller.signal });
       if (generation !== runGeneration || controller.signal.aborted) return;
       applyResult(result);
     } catch (error) {
       if ((error as DOMException)?.name === 'AbortError') return;
       setStatus(`Comparison unavailable: ${(error as Error).message}`);
+      one<HTMLButtonElement>('[data-action="retry"]')?.removeAttribute('hidden');
     } finally {
-      if (generation === runGeneration) root!.removeAttribute('data-pending');
+      if (generation === runGeneration) {
+        root!.removeAttribute('data-pending');
+        root!.setAttribute('aria-busy', 'false');
+      }
     }
   }
 
@@ -339,6 +348,11 @@ export function mountPairedBench(): () => void {
   };
   undo?.addEventListener('click', onUndo);
   if (undo) cleanup.push(() => undo.removeEventListener('click', onUndo));
+
+  const retry = one<HTMLButtonElement>('[data-action="retry"]');
+  const onRetry = () => { void run(); };
+  retry?.addEventListener('click', onRetry);
+  if (retry) cleanup.push(() => retry.removeEventListener('click', onRetry));
 
   const swap = one<HTMLButtonElement>('[data-action="swap"]');
   const onSwap = () => {
@@ -432,6 +446,7 @@ export function mountPairedBench(): () => void {
   return () => {
     window.clearTimeout(pendingTimer);
     runController?.abort();
+    pairedClient.dispose();
     observatory?.dispose();
     observatory = null;
     mapCleanup.forEach((dispose) => dispose());

@@ -251,13 +251,16 @@ export function mountHeatMap(): () => void {
        source would have told 1,378 buildings that, with the number sitting right
        there in the artefact. */
     const conf = pc >= 0 ? ` · confidence ${pc.toFixed(2)}` : ' · no confidence published';
-    setHTML('bcSrc', pk
-      ? (pk === 'osm'
-          ? 'OpenStreetMap<small>traced by hand</small>'
-          : pk === 'google'
-            ? `Google Open Buildings<small>model${conf}</small>`
-            : `Microsoft ML<small>model${conf}</small>`)
-      : '—');
+    /* PROVENANCE IS A FOOTNOTE, NOT A MEASUREMENT. Who drew the footprint and how
+       well sits at the foot of the card with the other caveats, not among the
+       measured rows — it describes the record, it is not a property of the
+       building. One line, so the source and its confidence are never read apart. */
+    const src = pk === 'osm' ? 'OpenStreetMap'
+      : pk === 'google' ? 'Google Open Buildings'
+      : 'Microsoft ML';
+    setText('bcSrc', pk
+      ? `Footprint by ${src}${pk === 'osm' ? ' · traced by hand' : ` · model${conf}`}`
+      : '');
     /* 2.5 m is Google's fill value where a real height was never derived. Saying
        "2.5 m" flat would present a placeholder as a measurement. */
     setHTML('bcH', b.fill

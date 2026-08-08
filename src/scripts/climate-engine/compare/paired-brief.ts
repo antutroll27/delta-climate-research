@@ -1,6 +1,7 @@
 import { fmtCr } from '../heat-map-model.ts';
 import { WARDS } from '../wards.ts';
-import { runPairedScenario, type PairedResult, type WardScenarioResult } from './paired-runner.ts';
+import { PairedScenarioClient } from './paired-client.ts';
+import type { PairedResult, WardScenarioResult } from './paired-protocol.ts';
 import { parsePairedScenario, serializePairedScenario } from '../scenario/scenario-url.ts';
 
 export function mountPairedBrief(): () => void {
@@ -19,6 +20,7 @@ export function mountPairedBrief(): () => void {
   const print = root.querySelector<HTMLButtonElement>('[data-action="print"]');
   const onPrint = () => window.print();
   print?.addEventListener('click', onPrint);
+  const client = new PairedScenarioClient();
 
   const writeWard = (slot: 'a' | 'b', result: WardScenarioResult) => {
     set(`[data-value="${slot}-name"]`, WARDS[result.ward].name);
@@ -27,13 +29,18 @@ export function mountPairedBrief(): () => void {
     set(`[data-value="${slot}-cooling"]`, `−${result.coolingC.toFixed(1)}°C`);
     set(`[data-value="${slot}-cost"]`, `₹${fmtCr(result.capitalCost)}`);
   };
-  void runPairedScenario(state).then((result: PairedResult) => {
+  root.setAttribute('aria-busy', 'true');
+  void client.run(state).then((result: PairedResult) => {
     writeWard('a', result.a);
     writeWard('b', result.b);
     set('[data-value="forcing"]', `${result.forcing.label}; ${result.forcing.source}`);
+    set('[data-value="backend"]', result.a.evidence.backendVersion);
     status('Record reproduced in the client with the pinned scenario and version contract.');
+    client.dispose();
   }).catch((error: Error) => {
     status(`This scenario cannot be reproduced: ${error.message}`);
+  }).finally(() => {
+    root.setAttribute('aria-busy', 'false');
   });
-  return () => print?.removeEventListener('click', onPrint);
+  return () => { client.dispose(); print?.removeEventListener('click', onPrint); };
 }
