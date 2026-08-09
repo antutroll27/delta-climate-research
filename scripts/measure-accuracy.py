@@ -174,20 +174,91 @@ def _ward_scale_validation() -> dict[str, Any] | None:
         return None
     with open(obs_path) as fh:
         raw = json.load(fh)["rows"]
+    # SCORE THE MODEL THAT SHIPS, AND PROVE IT IS THAT MODEL.
+    #
+    # This read `candidates[0]` — candidate A, labelled "shipping structure" when
+    # A *was* the shipping structure, before the nocturnal storage term existed.
+    # types.ts has shipped candidate G's constants since that term landed, and G
+    # requires night_release=True. Scored the old way the archive reported 2.769 K
+    # overall; the model actually on screen scores 2.999 K. The published band was
+    # describing a model nobody runs, and understating the real one by 0.23 K.
+    #
+    # So the candidate is now SELECTED BY MATCHING THE SHIPPED CONSTANTS rather
+    # than by position, and a mismatch is fatal instead of silent.
     with open(fit_path) as fh:
-        fitted = json.load(fh)["candidates"][0]["fitted"]   # A: shipping structure
+        candidates = json.load(fh)["candidates"]
+    shipped = [c for c in candidates
+               if abs(c["fitted"].get("release_base", 0.0) - _physics.STORE_NIGHT) < 5e-4
+               and abs(c["fitted"].get("l_et", 0.0) - _physics.L_ET) < 5e-4]
+    if len(shipped) != 1:
+        raise SystemExit(
+            f"  no single ward-scale candidate matches the shipped constants "
+            f"(STORE_NIGHT={_physics.STORE_NIGHT}, L_ET={_physics.L_ET}); "
+            f"matched {[c['key'] for c in shipped]}. Re-run fit-ward-scale.py, or "
+            f"say in writing why the published accuracy should describe a model "
+            f"the product does not run.")
+    cand = shipped[0]
+    # A candidate carrying a storage term must be scored WITH it, or the night
+    # figure is the sign error the term exists to fix.
+    night_release = cand["fitted"].get("release_base", 0.0) > 0
     params = dict(fws.SHIP)
-    params.update(fitted)
+    params.update(cand["fitted"])
 
     rows = fws.load_rows(sensors=None)      # validation spans BOTH instruments
     if len(rows) != len(raw):
         return None                       # loader and file disagree; say nothing
-    err = np.array([fws.predict(params, r, False) - r.lst for r in rows])
+    err = np.array([fws.predict(params, r, night_release) - r.lst for r in rows])
     sensor = np.array([r.get("sensor", "ecostress") for r in raw])
     hour = np.array([float(r.get("hour", 0.0)) for r in raw])
     date = np.array([r["date"] for r in raw])
     phase = np.array([r["phase"] for r in raw])
     stqa = [r.get("st_qa_mean_k") for r in raw]
+
+    def ward_ceiling(mask: "np.ndarray[Any, Any]") -> float | None:
+        """Best empirical predictor of ward LST on these inputs, LOO-OVERPASS.
+
+        The ward-scale twin of ceiling_rmse(). That one regresses the urban/rural
+        mask pair and cannot be applied to ward rows, which is why accuracy.ts's
+        published ceiling had no live source and could not be regenerated.
+
+        Predictor sets mirror the mask-scale ones and add the ward's own measured
+        surface, because that is what accuracy.ts's own note claims the ceiling is
+        built from: "the same forcing AND the ward's own measured surface".
+
+        LEAVE-ONE-OVERPASS-OUT, not leave-one-row-out. One satellite pass covers
+        all three wards, so a held-out row still sees its own weather through its
+        siblings — the leak this file already refuses to publish elsewhere.
+        """
+        idx = np.flatnonzero(mask)
+        if idx.size < 12:
+            return None
+        y = np.array([raw[i]["lst_mean_c"] for i in idx], dtype=np.float64)
+        d = date[mask]
+        passes = sorted(set(d))
+        if len(passes) < 4:
+            return None
+        col = lambda k: np.array([float(raw[i][k]) for i in idx], dtype=np.float64)
+        SETS = (("tAir",),
+                ("tAir", "rh", "wind", "cloud", "sun"),
+                ("tAir", "rh", "wind", "cloud", "sun", "fvc", "albedo", "built"))
+        best: float | None = None
+        for names in SETS:
+            X = np.column_stack([col(n) for n in names] + [np.ones(idx.size)])
+            if X.shape[0] <= X.shape[1] + 2:
+                continue                      # not enough rows to fit and still test
+            loo: list[float] = []
+            for p_ in passes:
+                te = d == p_
+                tr = ~te
+                if tr.sum() < X.shape[1] + 2:
+                    continue
+                coef = np.linalg.lstsq(X[tr], y[tr], rcond=None)[0]
+                loo.extend(list(y[te] - X[te] @ coef))
+            if len(loo) < 8:
+                continue
+            r = rmse(loo)
+            best = r if best is None else min(best, r)
+        return None if best is None else round(best, 3)
 
     def stats(mask: "np.ndarray[Any, Any]") -> dict[str, Any] | None:
         """RMSE, bias, LOO-overpass RMSE and a bootstrap CI over overpasses."""
@@ -226,6 +297,10 @@ def _ward_scale_validation() -> dict[str, Any] | None:
             # What the REFERENCE itself claims, so the model's error bar is never
             # read as if the ruler were exact.
             "reference_uncertainty_K": round(float(np.mean(q)), 3) if q else None,
+            # The data's own limit at THIS scale — what the best empirical
+            # predictor on the same inputs achieves out of sample. A model at its
+            # ceiling cannot be improved by tuning; only by better inputs.
+            "ceiling_rmse_K": ward_ceiling(mask),
         }
 
     is_day = phase == "day"

@@ -10,7 +10,7 @@
     "night": {
       "n": 20,
       "ceiling_rmse_K": 2.18,
-      "model_rmse_K": 3.09,
+      "model_rmse_K": 3.02,
       "reported_band_K": 3.5,
       "confidence": "quantitative",
       "why": "air temperature explains night surface temperature well (r ~ 0.9), so a calibrated model is meaningful here"
@@ -49,10 +49,10 @@
         11.5
       ],
       "offset_K": {
-        "ecostress": 2.219,
-        "landsat": -1.479
+        "ecostress": 1.285,
+        "landsat": -2.206
       },
-      "delta_K": -3.698,
+      "delta_K": -3.492,
       "n_overpasses": {
         "ecostress": 2,
         "landsat": 50
@@ -66,70 +66,74 @@
       "night": {
         "n_scenes": 50,
         "n_overpasses": 20,
-        "rmse_K": 2.81,
-        "bias_K": -0.934,
-        "loo_overpass_rmse_K": 2.791,
+        "rmse_K": 2.93,
+        "bias_K": 0.184,
+        "loo_overpass_rmse_K": 3.088,
         "ci95_K": [
-          1.901,
-          3.646
+          1.754,
+          3.934
         ],
-        "ci95_halfwidth_K": 0.872,
+        "ci95_halfwidth_K": 1.09,
         "hour_range": [
           0.7,
           23.84
         ],
-        "reference_uncertainty_K": null
+        "reference_uncertainty_K": null,
+        "ceiling_rmse_K": 2.336
       },
       "morning_ecostress": {
         "n_scenes": 9,
         "n_overpasses": 4,
-        "rmse_K": 4.221,
-        "bias_K": -0.663,
-        "loo_overpass_rmse_K": 5.568,
+        "rmse_K": 4.214,
+        "bias_K": -1.313,
+        "loo_overpass_rmse_K": 5.827,
         "ci95_K": [
-          3.403,
-          5.06
+          3.714,
+          5.362
         ],
-        "ci95_halfwidth_K": 0.829,
+        "ci95_halfwidth_K": 0.824,
         "hour_range": [
           7.09,
           11.06
         ],
-        "reference_uncertainty_K": null
+        "reference_uncertainty_K": null,
+        "ceiling_rmse_K": null
       },
       "morning_landsat": {
         "n_scenes": 213,
         "n_overpasses": 50,
-        "rmse_K": 2.665,
-        "bias_K": -1.479,
-        "loo_overpass_rmse_K": 2.262,
+        "rmse_K": 3.019,
+        "bias_K": -2.206,
+        "loo_overpass_rmse_K": 2.103,
         "ci95_K": [
-          2.167,
-          3.149
+          2.509,
+          3.513
         ],
-        "ci95_halfwidth_K": 0.491,
+        "ci95_halfwidth_K": 0.502,
         "hour_range": [
           10.39,
           10.41
         ],
-        "reference_uncertainty_K": 2.161
+        "reference_uncertainty_K": 2.161,
+        "ceiling_rmse_K": 1.578
       },
       "peak_ecostress": {
         "n_scenes": 23,
         "n_overpasses": 8,
-        "rmse_K": 2.903,
-        "bias_K": 2.247,
-        "loo_overpass_rmse_K": 2.009,
+        "rmse_K": 2.31,
+        "bias_K": 0.892,
+        "loo_overpass_rmse_K": 2.361,
         "ci95_K": [
-          1.748,
-          3.806
+          1.31,
+          3.085
         ],
-        "ci95_halfwidth_K": 1.029,
+        "ci95_halfwidth_K": 0.887,
         "hour_range": [
           11.76,
           17.45
         ],
-        "reference_uncertainty_K": null
+        "reference_uncertainty_K": null,
+        "ceiling_rmse_K": 2.027
       }
     }
   }
