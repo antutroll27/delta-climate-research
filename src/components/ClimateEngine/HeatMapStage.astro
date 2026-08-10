@@ -94,6 +94,16 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
       </button>
     </div>
 
+    <!-- Vegetation toggle: distinct widget directly below the clock. Shown when the
+         clock unhides (ward loaded). Binary on/off in the .modechip idiom. -->
+    <div class="vegw" id="vegw" hidden>
+      <span class="veg-lab">Trees</span>
+      <div class="modechip" id="vegchip" title="Show or hide the modelled tree canopy">
+        <button class="on" data-v="1" type="button">On</button>
+        <button data-v="0" type="button">Off</button>
+      </div>
+    </div>
+
     <!-- First-run affordance: the buildings became clickable and nothing said so. -->
     <div class="tiphint" id="tiphint" hidden>
       <span>Click any building for its data</span>
@@ -373,6 +383,11 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
   .clockw .k-bar i{display:block;height:100%;background:rgb(5 6 6 /.6);border-radius:1px;
     transform-origin:left center;transform:scaleX(1);transition:transform .5s ease}
   @media (prefers-reduced-motion: reduce){ .clockw .k-bar i{transition:none} }
+
+  .vegw{position:absolute;right:320px;top:150px;z-index:6;display:flex;align-items:center;gap:8px;
+    padding:6px 8px;border-radius:10px;background:rgb(5 6 6 /.7);border:1px solid var(--line);
+    backdrop-filter:blur(8px);box-shadow:0 7px 20px rgb(0 0 0 /.30)}
+  .vegw .veg-lab{font-family:var(--mono);font-size:.56rem;letter-spacing:.14em;color:var(--ink);text-transform:uppercase}
 
   body.studio .compass{background:rgb(245 244 241 /.86);border-color:rgb(20 40 42 /.2)}
   body.studio .compass .c-s{fill:rgb(20 40 42 /.34)}
