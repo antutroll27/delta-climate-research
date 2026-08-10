@@ -12,6 +12,7 @@ exit, so a measurement run leaves no trace in the working tree.
 from __future__ import annotations
 
 import json
+from typing import Any, cast
 import os
 import subprocess
 import sys
@@ -24,7 +25,7 @@ OUT = os.path.join(ROOT, "data", "calibration", "geometry-replacement.json")
 WARDS = ("ballygunge", "barrackpore", "baruipur")
 
 
-def far_for(geom_dir: str | None) -> dict:
+def far_for(geom_dir: str | None) -> dict[str, Any]:
     env = dict(os.environ)
     if geom_dir:
         env["GEOM_DIR"] = geom_dir
@@ -33,7 +34,7 @@ def far_for(geom_dir: str | None) -> dict:
     subprocess.run([sys.executable, "scripts/compute-far.py"], cwd=ROOT, env=env,
                    check=True, capture_output=True, text=True)
     with open(FAR_JSON, encoding="utf-8") as fh:
-        return json.load(fh)["wards"]
+        return cast(dict[str, Any], json.load(fh)["wards"])
 
 
 def main() -> int:
@@ -41,7 +42,7 @@ def main() -> int:
     after = far_for(STAGING)
     far_for(None)                      # restore: the gate measures, it does not mutate
 
-    table = {
+    table: dict[str, Any] = {
         "note": "shipped vs staged geometry. Nothing ships until this is reviewed.",
         "staged_from": "Overture 2026-07-22.0 footprints + Open Buildings 2.5D p65 heights",
         "wards": {},

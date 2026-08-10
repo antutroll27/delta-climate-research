@@ -21,6 +21,7 @@ The browser never sees the archive: 26,806 rows stay in data/opencity/ and a
 from __future__ import annotations
 
 import argparse
+from typing import Any
 import csv
 import datetime as dt
 import json
@@ -107,7 +108,7 @@ def percentile(sorted_values: list[float], q: float) -> float:
 
 # ── reading ─────────────────────────────────────────────────────────────────
 
-class Reading(dict):
+class Reading(dict[str, Any]):
     """A parsed row: {'date': date, 'tmax': float}."""
 
 
@@ -164,7 +165,7 @@ def _assert_serials_continue_the_calendar(calendar: list[tuple[dt.date, bool]]) 
 
 # ── artefact ────────────────────────────────────────────────────────────────
 
-def build_artefact(rows: list[Reading], excluded: dict[str, int]) -> dict:
+def build_artefact(rows: list[Reading], excluded: dict[str, int]) -> dict[str, Any]:
     values = sorted(row["tmax"] for row in rows)
     days = [row["date"] for row in rows]
     return {
@@ -184,7 +185,7 @@ def build_artefact(rows: list[Reading], excluded: dict[str, int]) -> dict:
     }
 
 
-def serialise(doc: dict) -> str:
+def serialise(doc: dict[str, Any]) -> str:
     """Stable bytes: fixed key order from the dict, 2-space indent, trailing NL."""
     return json.dumps(doc, indent=2) + "\n"
 
@@ -200,7 +201,7 @@ def download_if_missing(path: str) -> None:
     print(f"  downloaded {os.path.getsize(path):,} B -> {os.path.relpath(path, ROOT)}")
 
 
-def derive() -> tuple[dict, dict[str, int]]:
+def derive() -> tuple[dict[str, Any], dict[str, int]]:
     rows, excluded = read_temp_rows(CSV_PATH)
     assert excluded["total_rows"] == EXPECT_TOTAL, (
         f"expected {EXPECT_TOTAL:,} rows, read {excluded['total_rows']:,} — the source "

@@ -39,6 +39,8 @@ import math
 import os
 import sys
 
+from typing import TypedDict
+
 import numpy as np
 import numpy.typing as npt
 
@@ -149,14 +151,42 @@ def along_track(x: F64, y: F64) -> F64:
     cov = np.cov(np.vstack([xc, yc]))
     _evals, evecs = np.linalg.eigh(cov)
     u = evecs[:, -1]                       # principal axis
-    return xc * u[0] + yc * u[1]
+    return np.asarray(xc * u[0] + yc * u[1], dtype=np.float64)
+
+
+class GroundLineStats(TypedDict, total=False):
+    """`ground_line`'s optional out-parameter. `total=False` because callers pass
+    an empty dict in and the function fills it — the keys are a contract on what
+    comes OUT, not a requirement on what goes in."""
+    n_windows: int
+    n_windows_populated: int
+    n_windows_gated: int
+    photons_over_gated_windows: int
+    photons_outside_span: int
+    span_m: list[float]
+    relief_m: float
+    median_ungated_m: float
+
+
+class QuantileBias(TypedDict):
+    """`quantile_bias`'s result. Every published statistic carries its own
+    labelled CI — the self-test pins that there is no bare `ci95_m`."""
+    n: int
+    median_bias_m: float
+    p65_bias_m: float
+    p90_bias_m: float
+    median_ci95_m: list[float]
+    p65_ci95_m: list[float]
+    p90_ci95_m: list[float]
+    ks_d: float
+    perm_p: float
 
 
 def ground_line(s_all: F64, s_gnd: F64, h_gnd: F64,
                 win_m: float = GROUND_WIN_M, q: float = GROUND_Q,
                 gate_m: float = GROUND_GATE_M,
                 relief_m: float = GROUND_RELIEF_M,
-                stats: dict[str, object] | None = None) -> F64:
+                stats: GroundLineStats | None = None) -> F64:
     """Orthometric ground surface evaluated at every photon's s, from
     ground-candidate photons only, in rolling half-overlapping windows.
 
@@ -408,11 +438,12 @@ def _ks_stat(a: F64, b: F64) -> F64:
     cum = np.cumsum(np.take_along_axis(lab, order, axis=1), axis=1)
     last = np.ones(cum.shape, dtype=bool)
     last[:, :-1] = sv[:, 1:] != sv[:, :-1]
-    return np.max(np.abs(np.where(last, cum, 0.0)), axis=1) / n
+    return np.asarray(np.max(np.abs(np.where(last, cum, 0.0)), axis=1) / n,
+                      dtype=np.float64)
 
 
 def quantile_bias(ours: F64, theirs: F64, rng: np.random.Generator,
-                  boots: int = 10_000, perms: int = 10_000) -> dict[str, object]:
+                  boots: int = 10_000, perms: int = 10_000) -> QuantileBias:
     """Distributional comparison of two paired height samples (spec §5.3).
 
     WHAT `*_bias_m` IS: the difference between the two distributions' MARGINAL
@@ -473,20 +504,17 @@ def quantile_bias(ours: F64, theirs: F64, rng: np.random.Generator,
             "that the bootstrap CI is degenerate (zero-width at n=1) and would "
             "read as a significant bias")
 
-    d: dict[str, object] = {"n": n}
-    names = ("median", "p65", "p90")
     qv = np.array([0.50, 0.65, 0.90])
     obs = np.quantile(ours, qv) - np.quantile(theirs, qv)
-    for j, name in enumerate(names):
-        d[f"{name}_bias_m"] = float(obs[j])
 
     bs = np.empty((boots, qv.size))
     for k in range(boots):
         i = rng.integers(0, n, n)          # paired resample — same buildings both sides
         bs[k] = np.quantile(ours[i], qv) - np.quantile(theirs[i], qv)
-    for j, name in enumerate(names):
-        d[f"{name}_ci95_m"] = [float(np.quantile(bs[:, j], 0.025)),
-                               float(np.quantile(bs[:, j], 0.975))]
+    # Literal keys, not f-strings: a TypedDict is what documents the three
+    # labelled CIs, and it can only be built from literals.
+    ci = [[float(np.quantile(bs[:, j], 0.025)), float(np.quantile(bs[:, j], 0.975))]
+          for j in range(qv.size)]
 
     d_obs = float(_ks_stat(ours[None, :], theirs[None, :])[0])
     hits, done = 0, 0
@@ -497,9 +525,12 @@ def quantile_bias(ours: F64, theirs: F64, rng: np.random.Generator,
         ge = _ks_stat(np.where(flip, theirs, ours), np.where(flip, ours, theirs))
         hits += int(np.count_nonzero(ge >= d_obs - 1e-12))
         done += m
-    d["ks_d"] = d_obs
-    d["perm_p"] = hits / perms
-    return d
+    return QuantileBias(
+        n=n,
+        median_bias_m=float(obs[0]), p65_bias_m=float(obs[1]), p90_bias_m=float(obs[2]),
+        median_ci95_m=ci[0], p65_ci95_m=ci[1], p90_ci95_m=ci[2],
+        ks_d=d_obs, perm_p=hits / perms,
+    )
 
 
 def check_geoid(ground_ortho_m: float, geoid_n_m: float,
@@ -662,7 +693,7 @@ def _self_test() -> None:
     h3 = t3 + r3.normal(0.0, 0.3, k)
     unmapped = (s3 > 100.0) & (s3 < 300.0)          # 200 m >> the 30 m window
     h3[unmapped] = t3[unmapped] + 34.0 + r3.normal(0.0, 0.4, int(unmapped.sum()))
-    st: dict[str, object] = {}
+    st: GroundLineStats = {}
     g3 = ground_line(s3, s3, h3, stats=st)
     deep = (s3 > 140.0) & (s3 < 260.0)              # clear of the structure's edges
     assert np.all(np.isnan(g3[deep])), \
@@ -679,7 +710,7 @@ def _self_test() -> None:
     # THE FIX IS WHAT DOES THIS. At an allowance wide enough to admit a 34 m
     # departure the same call returns a ground line standing on the roof — i.e.
     # the assertion above fails without the gate, not because of the fixture.
-    st_off: dict[str, object] = {}
+    st_off: GroundLineStats = {}
     g_off = ground_line(s3, s3, h3, relief_m=1.0e6, stats=st_off)
     assert int(st_off["n_windows_gated"]) == 0, "the disabled gate still fired"
     assert float(np.median((g_off - t3)[deep])) > 25.0, \
@@ -714,7 +745,7 @@ def _self_test() -> None:
         "has started refusing windows that measured perfectly good ground"
 
     # the ledger's two photon counts are DISJOINT, so a reader may add them
-    st_edge: dict[str, object] = {}
+    st_edge: GroundLineStats = {}
     ground_line(np.concatenate([s3, [-5.0e3, 5.0e3]]), s3, h3, stats=st_edge)
     assert int(st_edge["photons_outside_span"]) >= 2
     assert (int(st_edge["photons_over_gated_windows"])
@@ -731,7 +762,8 @@ def _self_test() -> None:
 
     # assignment: square roofs matching the two buildings, plus an 8 m building
     # that MUST be dropped by 5 m erosion (8 - 2*5 < 0)
-    ring = lambda x0, x1, y0, y1: [x0, y0, x1, y0, x1, y1, x0, y1]
+    def ring(x0: float, x1: float, y0: float, y1: float) -> list[float]:
+        return [x0, y0, x1, y0, x1, y1, x0, y1]
     rings = [ring(100, 140, -20, 20), ring(300, 330, -20, 20), ring(0, 8, 0, 8)]
     # photons in the rings' frame: s directly as x, 0 as y (the track centreline)
     idx, kept = assign_footprints(s_true, np.zeros(n), rings, -ERODE_M)
@@ -821,9 +853,10 @@ def _self_test() -> None:
     assert abs(exact - round(exact, 2)) > 1e-9, \
         "median_bias_m happens to be a 2 dp value here, so the test above " \
         "cannot tell rounding from exactness — pick different fixture data"
-    for name in ("median", "p65", "p90"):
-        c_lo, c_hi = qb[f"{name}_ci95_m"]
-        assert c_lo < qb[f"{name}_bias_m"] < c_hi, f"{name} CI does not bracket it"
+    for name, bias, (c_lo, c_hi) in (("median", qb["median_bias_m"], qb["median_ci95_m"]),
+                                     ("p65", qb["p65_bias_m"], qb["p65_ci95_m"]),
+                                     ("p90", qb["p90_bias_m"], qb["p90_ci95_m"])):
+        assert c_lo < bias < c_hi, f"{name} CI does not bracket it"
         assert c_lo > 0.0, f"{name} CI fails to exclude zero on a real bias"
 
     # the vectorised D matches scipy's, so the permutation null is the real KS null

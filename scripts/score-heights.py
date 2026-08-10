@@ -25,6 +25,7 @@ justified by four buildings.
 from __future__ import annotations
 
 import json
+from typing import Any, cast
 import math
 import os
 import statistics
@@ -59,19 +60,19 @@ CANDIDATES = ("mean", "p65", "p75")
 DEFAULT_STAT = "p65"                                 # measured to sit where the shipped values do
 
 
-def fetch_levels(ward: str, lat: float, lon: float) -> list[dict]:
+def fetch_levels(ward: str, lat: float, lon: float) -> list[dict[str, Any]]:
     d_lat = (SIZE_M / 2) / 110540.0
     d_lon = (SIZE_M / 2) / (111320.0 * math.cos(math.radians(lat)))
     query = (f'[out:json][timeout:90];way["building"]["building:levels"]'
              f'({lat-d_lat},{lon-d_lon},{lat+d_lat},{lon+d_lon});out center tags;')
     response = requests.post(OVERPASS, data={"data": query}, timeout=120, headers=UA)
     response.raise_for_status()
-    return response.json().get("elements", [])
+    return cast(list[dict[str, Any]], response.json().get("elements", []))
 
 
-def levels_cached() -> dict[str, list[dict]]:
+def levels_cached() -> dict[str, list[dict[str, Any]]]:
     """Cached per ward: a rerun must never refetch what already arrived."""
-    cache: dict[str, list[dict]] = {}
+    cache: dict[str, list[dict[str, Any]]] = {}
     if os.path.exists(CACHE):
         with open(CACHE, encoding="utf-8") as fh:
             cache = json.load(fh)
@@ -86,11 +87,11 @@ def levels_cached() -> dict[str, list[dict]]:
     return cache
 
 
-def collect_pairs() -> list[dict]:
+def collect_pairs() -> list[dict[str, Any]]:
     """(levels, our heights) for every OSM-tagged building we can match."""
     with open(os.path.join(GEOM, "heights-overture.json"), encoding="utf-8") as fh:
         heights = json.load(fh)["wards"]
-    pairs: list[dict] = []
+    pairs: list[dict[str, Any]] = []
     for ward, elements in levels_cached().items():
         with open(os.path.join(GEOM, f"{ward}-footprints.json"), encoding="utf-8") as fh:
             footprints = json.load(fh)["b"]
@@ -124,8 +125,8 @@ def collect_pairs() -> list[dict]:
     return pairs
 
 
-def decide(pairs: list[dict]) -> dict:
-    verdict: dict = {"pairs": len(pairs), "min_pairs": MIN_PAIRS,
+def decide(pairs: list[dict[str, Any]]) -> dict[str, Any]:
+    verdict: dict[str, Any] = {"pairs": len(pairs), "min_pairs": MIN_PAIRS,
                      "storey_tests": list(STOREY_TESTS), "tests": {}}
     if len(pairs) < MIN_PAIRS:
         verdict["method"] = DEFAULT_STAT

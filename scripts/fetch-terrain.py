@@ -23,6 +23,7 @@ JSON artefact, and nothing it does ever executes in a browser.
 from __future__ import annotations
 
 import argparse
+from typing import Any
 import io
 import json
 import math
@@ -116,7 +117,9 @@ def fetch_window(lat: float, lon: float) -> list[float]:
             r = requests.get(TILE.format(z=Z, x=tx, y=ty), timeout=60)
             r.raise_for_status()
             tiles[(tx, ty)] = Image.open(io.BytesIO(r.content)).convert("RGB")
-        return decode(tiles[(tx, ty)].getpixel((int(gx) % 256, int(gy) % 256)))
+        px = tiles[(tx, ty)].getpixel((int(gx) % 256, int(gy) % 256))
+        assert isinstance(px, tuple), "tile was converted to RGB, so this is a triple"
+        return decode(px)
 
     field = []
     for row in range(N):
@@ -127,7 +130,7 @@ def fetch_window(lat: float, lon: float) -> list[float]:
     return field
 
 
-def build_artefact(ward: str) -> dict:
+def build_artefact(ward: str) -> dict[str, Any]:
     lat, lon = WARDS[ward]
     raw = fetch_window(lat, lon)
     raw_lo, raw_hi = p5_p95(raw)
@@ -160,7 +163,7 @@ def build_artefact(ward: str) -> dict:
     }
 
 
-def serialise(doc: dict) -> str:
+def serialise(doc: dict[str, Any]) -> str:
     return json.dumps(doc, separators=(",", ":")) + "\n"
 
 

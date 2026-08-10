@@ -340,7 +340,7 @@ def sweep(limit: int | None, qa_curve: bool) -> int:
 
     # Yield accounting. Every drop is counted and reported; a scene that vanishes
     # without appearing in this table is a bug, not a quiet exclusion.
-    tally = collections.Counter()
+    tally: collections.Counter[str] = collections.Counter()
     curve: dict[float, int] = collections.Counter()
     scanned = 0
 

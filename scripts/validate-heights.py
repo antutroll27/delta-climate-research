@@ -12,12 +12,13 @@ is ~3.0-3.2 m floor-to-floor; 3.1 is used, and the conclusion is checked against
 """
 import json, math, statistics as st
 import requests
+from typing import Any, cast
 
 WARDS = {'ballygunge': (22.528, 88.3659), 'barrackpore': (22.7621, 88.3713), 'baruipur': (22.3654, 88.4319)}
 SIZE_M = 1400.0
 OVERPASS = "https://overpass-api.de/api/interpreter"
 
-def fetch_levels(lat, lon):
+def fetch_levels(lat: float, lon: float) -> list[dict[str, Any]]:
     d_lat = (SIZE_M/2)/110574
     d_lon = (SIZE_M/2)/(111320*math.cos(math.radians(lat)))
     q = f"""[out:json][timeout:90];
@@ -26,7 +27,7 @@ def fetch_levels(lat, lon):
     r = requests.post(OVERPASS, data={'data': q}, timeout=120,
                       headers={'User-Agent': 'delta-climate-research height validation'})
     r.raise_for_status()
-    return r.json().get('elements', [])
+    return cast(list[dict[str, Any]], r.json().get('elements', []))
 
 for ward, (lat, lon) in WARDS.items():
     els = fetch_levels(lat, lon)
@@ -50,7 +51,7 @@ for ward, (lat, lon) in WARDS.items():
         for ox, oy, oh in ours:
             dd = (ox-x)**2 + (oy-y)**2
             if dd < bd: bd, best = dd, oh
-        if math.sqrt(bd) <= 12.0:                 # same building, not a neighbour
+        if best is not None and math.sqrt(bd) <= 12.0:   # same building, not a neighbour
             pairs.append((lv, best))
 
     print(f"\n  {ward.upper()}  OSM tagged {len(els)} · matched within 12 m: {len(pairs)}")
