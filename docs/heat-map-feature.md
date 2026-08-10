@@ -1153,3 +1153,11 @@ terrain probe was watched failing against the old mapping before it was committe
 - Worker-leak check: navigate away → worker terminates, no orphaned rAF.
 - Mobile emulation (390×844 DPR3): tier drop, reduced grid, no jank.
 - Confirm the synthetic-data banner is visible and `/heat-map` is `noindex` until data is real.
+
+## Street-view layer (Mapillary)
+
+The `/heat-map` street-view toggle needs `PUBLIC_MAPILLARY_TOKEN` (a public Mapillary
+client token, `MLY|APP_ID|SECRET`). It is client-exposed via `import.meta.env` (the repo's
+first `PUBLIC_*` var) and is NOT a secret — it is read-only and rate-limited, and Mapillary
+offers no domain-restriction for it. Set it in Vercel project env (Production + Preview) and
+in a local `.env`. Absent → the feature no-ops (toggle hidden).
