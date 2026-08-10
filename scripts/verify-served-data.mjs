@@ -59,3 +59,27 @@ const scoring = [...ph].filter((k) => !inert.has(k));
 console.log(`  ✓ served DC-URS inputs match ${SOURCE}`
   + (scoring.length ? `\n  ! still placeholder and score-bearing: ${scoring.join(', ')}`
                     : `\n  ✓ every score-bearing indicator is measured`));
+
+// Per-layer provenance manifests — the "receipts" spine. Every served ward must
+// carry a complete {ward}-layers.json, or the receipts panel silently falls back
+// to the hand-typed credit line. Ward list derives from the inputs above, never
+// hardcoded (src/data/wards.ts's rule).
+const EXPECTED_LAYERS = ['basemap', 'footprints', 'heights', 'surface', 'canopy', 'terrain', 'water', 'roads', 'lst', 'ambient'];
+const provProblems = [];
+for (const ward of Object.keys(wards)) {
+  const p = `public/heat-map/data/${ward}-layers.json`;
+  if (!existsSync(p)) { provProblems.push(`      ${ward}: missing ${p}`); continue; }
+  let m;
+  try { m = JSON.parse(readFileSync(p, 'utf8')); } catch { provProblems.push(`      ${ward}: ${p} is not valid JSON`); continue; }
+  const ids = new Set((m.layers ?? []).map((l) => l.id));
+  const missing = EXPECTED_LAYERS.filter((id) => !ids.has(id));
+  if (missing.length) provProblems.push(`      ${ward}: manifest missing layers ${missing.join(', ')}`);
+  for (const l of m.layers ?? [])
+    if (!l.source || !l.licence?.name || !(l.lineage?.length))
+      provProblems.push(`      ${ward}/${l.id}: a receipt needs source + licence + lineage`);
+}
+if (provProblems.length)
+  die(`per-layer provenance manifests are incomplete — the receipts panel would\n`
+    + `    silently degrade to the static credit line.\n\n${provProblems.slice(0, 12).join('\n')}\n\n`
+    + `    Fix: python3 scripts/build-provenance-manifest.py`);
+console.log(`  ✓ per-layer provenance manifests complete (${Object.keys(wards).length} wards × ${EXPECTED_LAYERS.length} layers)`);

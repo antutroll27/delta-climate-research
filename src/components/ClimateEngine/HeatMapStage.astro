@@ -94,6 +94,16 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
       </button>
     </div>
 
+    <!-- Vegetation toggle: distinct widget directly below the clock. Shown when the
+         clock unhides (ward loaded). Binary on/off in the .modechip idiom. -->
+    <div class="vegw" id="vegw" hidden>
+      <span class="veg-lab">Trees</span>
+      <div class="modechip" id="vegchip" title="Show or hide the modelled tree canopy">
+        <button class="on" data-v="1" type="button">On</button>
+        <button data-v="0" type="button">Off</button>
+      </div>
+    </div>
+
     <!-- First-run affordance: the buildings became clickable and nothing said so. -->
     <div class="tiphint" id="tiphint" hidden>
       <span>Click any building for its data</span>
@@ -235,6 +245,8 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
            of what the colours mean belongs. -->
       <p class="pattern-note" id="patternNote"></p>
       <div class="attr">Basemap © OpenStreetMap · OpenFreeMap · Footprints © Overture Maps Foundation (ODbL) · Heights Google Open Buildings 2.5D (CC BY 4.0) · Water © OpenStreetMap (ODbL) · Ground SRTM via AWS terrain tiles, <span id="terrLab">indicative</span> · Live weather © Met Norway (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>) · Cloud deck drawn at 320 m, real base ~700 m · left-drag orbit · right-drag pan · scroll zoom</div>
+      <button class="srcbtn" id="srcBtn" type="button" aria-expanded="false" aria-controls="srcPanel">Data receipts ↗</button>
+      <div class="srcpanel" id="srcPanel" role="dialog" aria-label="Per-layer data provenance" hidden></div>
     </div>
     </div>
   </div>
@@ -371,6 +383,13 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
   .clockw .k-bar i{display:block;height:100%;background:rgb(5 6 6 /.6);border-radius:1px;
     transform-origin:left center;transform:scaleX(1);transition:transform .5s ease}
   @media (prefers-reduced-motion: reduce){ .clockw .k-bar i{transition:none} }
+
+  .vegw{position:absolute;right:320px;top:186px;z-index:6;display:flex;align-items:center;gap:6px;
+    padding:4px 7px;border-radius:9px;background:rgb(5 6 6 /.7);border:1px solid var(--line);
+    backdrop-filter:blur(8px);box-shadow:0 6px 18px rgb(0 0 0 /.30)}
+  .vegw .veg-lab{font-family:var(--mono);font-size:.52rem;letter-spacing:.13em;color:var(--ink);text-transform:uppercase}
+  .vegw .modechip{padding:2px;gap:2px}
+  .vegw .modechip button{font-size:.52rem;padding:.3rem .62rem;letter-spacing:.12em}
 
   body.studio .compass{background:rgb(245 244 241 /.86);border-color:rgb(20 40 42 /.2)}
   body.studio .compass .c-s{fill:rgb(20 40 42 /.34)}
@@ -519,6 +538,26 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
   .bc-prov{margin:.4rem 0 0;font:400 .46rem var(--mono);letter-spacing:.08em;
     text-transform:uppercase;color:var(--bronze);line-height:1.6}
   .bc-prov:empty{display:none}
+  /* Per-layer "data receipts" panel — populated from {ward}-layers.json (provenance.ts). */
+  .srcbtn{margin:.4rem 0 0;cursor:pointer;font:400 .48rem var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--cyan);background:none;border:0;padding:.15rem 0}
+  .srcbtn:hover{color:var(--paper)}
+  .srcbtn:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+  .srcpanel{position:absolute;right:18px;bottom:66px;width:326px;max-height:54vh;overflow:auto;z-index:6;background:rgb(5 6 6 /.9);backdrop-filter:blur(11px);border:1px solid var(--line);border-radius:12px;padding:13px 15px;box-shadow:0 18px 50px rgb(0 0 0 /.5)}
+  .srcpanel[hidden]{display:none}
+  .srcpanel h4{margin:0 0 9px;font:400 .55rem var(--mono);letter-spacing:.18em;text-transform:uppercase;color:var(--ink)}
+  .src-row{padding:8px 0;border-top:1px solid var(--line)}
+  .src-row:first-of-type{border-top:0}
+  .src-row .l{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+  .src-row .nm{font-weight:600;font-size:.74rem;letter-spacing:-.01em;color:var(--paper)}
+  .src-row .k{flex:none;font:400 .44rem var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--base);background:var(--cyan);border-radius:4px;padding:1px 5px}
+  .src-row .k.modelled,.src-row .k.reference{background:var(--bronze)}
+  .src-row .s{margin-top:2px;font-size:.62rem;line-height:1.45;color:var(--ink)}
+  .src-row .s a{color:var(--cyan)}
+  .src-row .meta{margin-top:3px;font:400 .46rem var(--mono);letter-spacing:.06em;color:var(--faint);line-height:1.5}
+  body.studio .srcpanel{background:rgb(244 246 246 /.95);border-color:rgb(20 48 54 /.16)}
+  body.studio .src-row .nm{color:#13232a}
+  body.studio .src-row .s,body.studio .srcpanel h4{color:#4a5c5e}
+  body.studio .src-row .meta{color:#7f9296}
   .bc-x{margin-top:.55rem;width:100%;cursor:pointer;font:400 .48rem var(--mono);letter-spacing:.12em;
     text-transform:uppercase;color:var(--ink);background:rgb(9 58 62 /.4);border:1px solid var(--line);
     border-radius:6px;padding:.4rem 0}

@@ -18,11 +18,13 @@ import type { HeatSimHost, HeatSimRequest, HeatSimSnapshot } from './sim-protoco
 import * as M from './heat-map-model';
 import { ACCURACY, SPATIAL, HEIGHTS, bandLabel, unmeasuredNote, isTransitionHour, TRANSITION_RMSE_K } from './accuracy';
 import { solarElevationFactor } from './sky';
+import { loadLayerManifest } from './provenance';
 import * as U from './dc-urs';
 import { applyScenario } from './dc-urs-scenario';
 import type { DcUrsInputs } from './dc-urs-inputs';
 import { rasterWardBase } from './ward-raster';
-import { loadWardSurface, type WardSurface } from './surface-raster';
+import { loadWardSurface, loadCanopyRaster, type WardSurface, type CanopyRaster } from './surface-raster';
+import { asTreesFile } from './vegetation-layer';
 import { buildRegistry, type BuildingMeta } from './explore/building-pick';
 import { selectPhase } from './phase-select';
 import { asTerrainField, terrainLabel, TERRAIN_N, type TerrainField } from './terrain';
@@ -49,6 +51,32 @@ const STYLES = { dark: 'https://tiles.openfreemap.org/styles/dark', studio: 'htt
 
 export function mountHeatMap(): () => void {
   const el = (id: string) => document.getElementById(id);
+  // Per-layer provenance ("data receipts") panel, fetched on-demand per ward
+  // (loadLayerManifest caches). null → degrade to the static credit line.
+  const escHtml = (s: string) => s.replace(/[&<>"]/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] ?? c);
+  const renderSources = async () => {
+    const panel = el('srcPanel');
+    if (!panel) return;
+    const manifest = await loadLayerManifest(state.ward);
+    if (!manifest) {
+      panel.innerHTML = '<h4>Data receipts</h4><div class="src-row"><div class="s">Provenance manifest unavailable.</div></div>';
+      return;
+    }
+    const rows = manifest.layers.map((layer) => {
+      const meta = [layer.vintage, layer.resolution, layer.instrument].filter(Boolean).join(' · ');
+      const lic = layer.licence.url
+        ? `<a href="${escHtml(layer.licence.url)}" target="_blank" rel="noopener noreferrer">${escHtml(layer.licence.name)}</a>`
+        : escHtml(layer.licence.name);
+      return `<div class="src-row"><div class="l"><span class="nm">${escHtml(layer.label)}</span>`
+        + `<span class="k ${layer.kind}">${layer.kind}</span></div>`
+        + `<div class="s">${escHtml(layer.source)} · ${lic}</div>`
+        + (meta ? `<div class="meta">${escHtml(meta)}</div>` : '')
+        + (layer.confidence ? `<div class="meta">${escHtml(layer.confidence)}</div>` : '')
+        + '</div>';
+    }).join('');
+    panel.innerHTML = `<h4>Data receipts · ${escHtml(manifest.ward)}</h4>${rows}`;
+  };
   const mapContainer = el('mlmap');
   if (!mapContainer) return () => {};
   const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -72,6 +100,7 @@ export function mountHeatMap(): () => void {
   const wardSession = createWardSession();
   let appDisposed = false;
   let mode: 'relief' | 'iso' = 'relief', env: 'dark' | 'studio' = 'dark';
+  let vegOn = true;
 
   /* ── MapLibre basemap ── */
   const map = new maplibregl.Map({
@@ -630,6 +659,10 @@ export function mountHeatMap(): () => void {
   /* Render-only ground. `undefined` means unfetched, `null` means fetched-and-absent —
      the distinction stops a failed fetch retrying on every ward switch. */
   const terrainCache: Record<string, TerrainField | null> = {};
+  /* Measured canopy-height texture, one per ward. Same absence idiom as terrain:
+     a miss (or the not-yet-baked GLBs the trees depend on) degrades to no
+     vegetation layer rather than retrying every ward switch. */
+  const canopyCache: Record<string, CanopyRaster | null> = {};
   /* Street names, in lon/lat. Cached per ward like the other artefacts; absence
      is normal and draws nothing, the loader idiom water and roads already use. */
   const labelCache: Record<string, unknown> = {};
@@ -673,7 +706,7 @@ export function mountHeatMap(): () => void {
     for (const id of REPLACED_ROAD_GEOMETRY) {
       if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', basemapVisibility);
     }
-    for (const layer of map.getStyle().layers ?? []) {
+    for (const layer of map.getStyle()?.layers ?? []) {
       if (isReplacedRoadLabel(layer as never) && map.getLayer(layer.id)) {
         map.setLayoutProperty(layer.id, 'visibility', basemapVisibility);
       }
@@ -749,7 +782,7 @@ export function mountHeatMap(): () => void {
       /* Fetch the complete immutable ward bundle before changing shared state. A
          superseded request therefore cannot replace geometry, labels, or metrics
          part way through a newer ward selection. */
-      const [d, terrain, water, wardSurface, roads, labels, provenance] = await Promise.all([
+      const [d, terrain, water, wardSurface, roads, labels, provenance, canopy, trees] = await Promise.all([
         cache[name]
           ? Promise.resolve(cache[name])
           : fetch(`/heat-map/data/${name}.json`, { signal: token.signal }).then(async (r) => {
@@ -779,10 +812,16 @@ export function mountHeatMap(): () => void {
           ? Promise.resolve(provCache[name])
           : optional(fetch(`/heat-map/data/${name}-provenance.json`, { signal: token.signal })
             .then(async (r) => r.ok ? await r.json() as { src: string[]; confidence: number[] } : null), null),
+        canopyCache[name] !== undefined
+          ? Promise.resolve(canopyCache[name])
+          : optional(loadCanopyRaster(name, token.signal).then((c) => { canopyCache[name] = c; return c; }), null),
+        optional(fetch(`/heat-map/data/${name}-trees.json`, { signal: token.signal })
+          .then(async (r) => (r.ok ? asTreesFile(await r.json()) : null)), null),
       ]);
       if (!wardSession.isCurrent(token)) return;
       cache[name] = d; terrainCache[name] = terrain; waterCache[name] = water;
       surfaceCache[name] = wardSurface; roadsCache[name] = roads; labelCache[name] = labels; provCache[name] = provenance;
+      canopyCache[name] = canopy;
       void loadDcUrs(); void loadHeatwave();
       const w = WARDS[name]; state.ward = name; updateCompareHref();
 
@@ -803,9 +842,11 @@ export function mountHeatMap(): () => void {
       wardData: d, roads, water, terrain,
       mercatorOrigin: { x: mc.x, y: mc.y, z: mc.z ?? 0 },
       frame: wardMercatorScale(w.lat),
+      veg: trees,
     };
     coreField.attach(w, d.sizeM, relief && map.getLayer(relief.layer.id) ? relief.layer.id : undefined);
     relief?.setWard(reliefWard);
+    relief?.setVegetationVisible(vegOn);
     syncRendererVisibility();
     /* The exaggeration is stated wherever the optional ground relief is drawn. */
     const terrLab = el('terrLab');
@@ -817,7 +858,7 @@ export function mountHeatMap(): () => void {
        cannot end up drawn from different vintages of the same measurement. */
     surfaceCache[name] ??= await loadWardSurface(name);
     const { means, surface } = surfaceCache[name];
-    state.base = rasterWardBase(d, means, surface);
+    state.base = rasterWardBase(d, means, surface, canopy);
     if (!roadsCache[name]) { try { roadsCache[name] = await (await fetch(`/heat-map/data/${name}-roads.json`)).json(); } catch { roadsCache[name] = { ways: [] }; } }
     /* Street names for this ward. Separate artefact, separate frame: these are
        lon/lat and go to MapLibre directly, so they never pass through our metre
@@ -987,6 +1028,10 @@ export function mountHeatMap(): () => void {
     if (!btn) return;
     const L = state.live;
     btn.hidden = !L;
+    /* The vegetation widget rides the same reveal gate as the clock: both are
+       meaningless until a ward has actually loaded. */
+    const vegw = el('vegw');
+    if (vegw) vegw.hidden = !L;
     if (!L) return;
 
     const mins = ageMinutes(L.validAt);
@@ -1325,6 +1370,12 @@ export function mountHeatMap(): () => void {
   /* ── instrument wiring ── */
   const onEl = (node: Element | null, ev: string, fn: EventListenerOrEventListenerObject) => { if (node) { node.addEventListener(ev, fn); cleanup.push(() => node.removeEventListener(ev, fn)); } };
   document.querySelectorAll('#tabs .tab, #strip .ward').forEach(t => onEl(t, 'click', () => { nudgeOrbit(); loadWard((t as HTMLElement).dataset.w!); }));
+  onEl(el('srcBtn'), 'click', () => {
+    const panel = el('srcPanel'); const btn = el('srcBtn'); if (!panel || !btn) return;
+    const opening = panel.hasAttribute('hidden');
+    if (opening) { renderSources(); panel.removeAttribute('hidden'); } else panel.setAttribute('hidden', '');
+    btn.setAttribute('aria-expanded', String(opening));
+  });
   const bindSlider = (id: string, label: string, kk: keyof M.Interventions, fmt: (v: string) => string) => {
     const s = el(id) as HTMLInputElement | null; if (!s) return;
     onEl(s, 'input', () => { setText(label, fmt(s.value)); nudgeOrbit(); });
@@ -1390,6 +1441,12 @@ export function mountHeatMap(): () => void {
     map.setStyle(STYLES[e as 'dark' | 'studio']);
   }
   document.querySelectorAll('#envchip button').forEach(b => onEl(b, 'click', () => setEnv((b as HTMLElement).dataset.e!)));
+  document.querySelectorAll('#vegchip button').forEach(b => onEl(b, 'click', () => {
+    vegOn = (b as HTMLElement).dataset.v === '1';
+    document.querySelectorAll('#vegchip button').forEach((x) => x.classList.toggle('on', x === b));
+    relief?.setVegetationVisible(vegOn);
+    map.triggerRepaint();
+  }));
 
   /* ── budgeted simulation + grow timeline ── */
   let lastSimulationAt = 0;

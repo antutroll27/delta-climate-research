@@ -234,6 +234,99 @@ export async function loadWardSurface(ward: string, signal?: AbortSignal): Promi
   }
 }
 
+/**
+ * Canopy height per source cell, loaded from a `{ward}-canopy.png` texture.
+ *
+ * R channel carries height quantised over 0..CANOPY_HI metres, the same
+ * north-up-PNG / south-up-grid mismatch as the surface texture applies here
+ * too, so `loadCanopyRaster` applies the identical row flip.
+ */
+export interface CanopyRaster {
+  readonly ward: string;
+  /** side length of the square source grid */
+  readonly n: number;
+  /** quantisation ceiling in metres for this raster */
+  readonly hi: number;
+  /** canopy height in metres per source cell, row-major, n*n */
+  readonly height: Float32Array;
+}
+
+/**
+ * Quantisation ceiling for canopy height, in metres.
+ *
+ * CROSS-FILE CONSTANT: must match `CANOPY_HI` in `scripts/fetch-canopy.py`
+ * (not yet written). If either side changes this value without the other,
+ * every dequantised height silently rescales.
+ */
+const CANOPY_HI = 30;
+
+/** Runtime-validate an untyped object as a CanopyRaster before it reaches the sim. */
+export function asCanopyRaster(raw: unknown, ward: string): CanopyRaster | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const d = raw as Record<string, unknown>;
+  const n = d.n, hi = d.hi, height = d.height;
+  if (typeof n !== 'number' || typeof hi !== 'number') return null;
+  if (!(height instanceof Float32Array) || height.length !== n * n) return null;
+  return { ward, n, hi, height };
+}
+
+/** Decode a canopy PNG's pixel buffer to per-cell heights (metres). Applies the
+ *  mandatory PNG-north-up -> sim-grid-south-up row flip and dequantises the R
+ *  channel over [0, hi]. Pure + testable (no canvas). */
+export function canopyHeightsFromPixels(data: Uint8ClampedArray, n: number, hi: number): Float32Array {
+  const height = new Float32Array(n * n);
+  for (let row = 0; row < n; row++) {
+    for (let col = 0; col < n; col++) {
+      const src = (row * n + col) * 4;        // PNG row 0 = NORTH
+      const dst = (n - 1 - row) * n + col;    // sim grid row 0 = SOUTH
+      height[dst] = (data[src] / 255) * hi;
+    }
+  }
+  return height;
+}
+
+/**
+ * Decode the exported canopy PNG into a float height layer.
+ *
+ * Mirrors `loadSurfaceRaster`'s decode path and its mandatory north→south row
+ * flip: the PNG is north-up on disk, the sim grid is south-up, so row 0 of
+ * the source is written to row (n-1) of the output.
+ */
+export async function loadCanopyRaster(ward: string, signal?: AbortSignal): Promise<CanopyRaster | null> {
+  try {
+    const response = await fetch(`/heat-map/data/${ward}-canopy.png`, { signal });
+    if (!response.ok) return null;
+    const bitmap = await createImageBitmap(await response.blob());
+    const n = bitmap.width;
+    if (n !== bitmap.height) {
+      bitmap.close();
+      throw new Error(`canopy texture for ${ward} is ${bitmap.width}×${bitmap.height}, not square`);
+    }
+    const canvas = new OffscreenCanvas(n, n);
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    if (!context) { bitmap.close(); return null; }
+    context.drawImage(bitmap, 0, 0);
+    bitmap.close();
+    const { data } = context.getImageData(0, 0, n, n);
+
+    const height = canopyHeightsFromPixels(data, n, CANOPY_HI);
+    return asCanopyRaster({ ward, n, hi: CANOPY_HI, height }, ward);
+  } catch (error) {
+    if ((error as Error)?.name === 'AbortError') return null;
+    return null;
+  }
+}
+
+/** ponytail: one runnable check */
+export function assertCanopyLogic(): void {
+  const ok = (c: boolean, m: string) => { if (!c) throw new Error(`canopy: ${m}`); };
+  ok(asCanopyRaster(null, 'x') === null, 'null rejected');
+  ok(asCanopyRaster({ n: 4 }, 'x') === null, 'missing height rejected');
+  ok(asCanopyRaster({ ward: 'x', n: 2, hi: 30, height: new Float32Array(3) }, 'x') === null, 'wrong length rejected');
+  const good = asCanopyRaster({ ward: 'x', n: 2, hi: 30, height: new Float32Array(4).fill(5) }, 'x');
+  ok(good !== null && good.height[0] === 5, 'valid accepted');
+}
+
 /** ponytail: one runnable check */
 export function assertSurfaceLogic(): void {
   const a = (ok: boolean, m: string) => { if (!ok) throw new Error(`surface-raster: ${m}`); };

@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"/>
+<title>The green layer · Delta Climate Research vegetation-data briefing</title>
+<style>
+  @page { size: A4; margin: 0; }
+  @font-face{font-family:'Mona Sans';src:url('file:///Volumes/VSTSAMPLES/Projects/Angad/public/fonts/MonaSans-Variable.woff2') format('woff2');font-weight:200 900;font-style:normal;}
+  @font-face{font-family:'Mona Sans';src:url('file:///Volumes/VSTSAMPLES/Projects/Angad/public/fonts/MonaSans-VariableItalic.woff2') format('woff2');font-weight:200 900;font-style:italic;}
+  @font-face{font-family:'Noplato Mono';src:url('file:///Volumes/VSTSAMPLES/Projects/Angad/public/fonts/noplato-mono-condensed.woff2') format('woff2');font-weight:400;}
+
+  :root{
+    --base:#070f11; --panel:#0b1416; --panel2:#0e1b1e; --line:rgba(111,202,214,.16);
+    --paper:#eef1f2; --body:#c9d4d5; --strong:#ffffff; --ink:#93a7a9; --faint:#5f7377;
+    --cyan:#6fcad6; --bronze:#c39a5f; --red:#e5686d; --green:#5db98a; --edge:#02090a;
+    --cover:radial-gradient(120% 80% at 70% 10%, #0e2024 0%, #070f11 55%, #02090a 100%);
+    --sans:'Mona Sans',system-ui,sans-serif; --mono:'Noplato Mono',ui-monospace,monospace;
+  }
+  /* Ink-friendly print theme. Append ?light=1 to the URL. Single source: only tokens flip. */
+  html.light{
+    --base:#ffffff; --panel:#f3f6f6; --panel2:#eaefef; --line:rgba(20,48,54,.18);
+    --paper:#13232a; --body:#33474c; --strong:#0c1a20; --ink:#54696d; --faint:#7f9296;
+    --cyan:#16808f; --bronze:#8a6a2f; --red:#c23c41; --green:#2f8f63; --edge:#e9edec;
+    --cover:radial-gradient(120% 80% at 70% 10%, #eef4f4 0%, #f7faf9 55%, #ffffff 100%);
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:var(--sans);color:var(--paper);background:var(--edge);-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+  .page{position:relative;width:210mm;min-height:297mm;background:var(--base);padding:22mm 20mm 24mm;overflow:hidden;page-break-after:always}
+  .page:last-child{page-break-after:auto}
+  .mono{font-family:var(--mono);text-transform:uppercase;letter-spacing:.16em}
+  .cyan{color:var(--cyan)} .bronze{color:var(--bronze)} .ink{color:var(--ink)} .green{color:var(--green)} .red{color:var(--red)} em{font-style:normal;color:var(--cyan)}
+  sup{font-family:var(--mono);font-size:.62em;color:var(--cyan);letter-spacing:.02em;padding-left:1px}
+  a{color:var(--cyan);text-decoration:none;word-break:break-all}
+
+  .rh{position:absolute;top:12mm;left:20mm;right:20mm;display:flex;justify-content:space-between;align-items:center;font-family:var(--mono);font-size:8px;letter-spacing:.16em;color:var(--faint)}
+  .rh .m{display:flex;align-items:center;gap:6px}
+  .rh .m img{width:13px;height:13px;opacity:.9}
+  .rf{position:absolute;bottom:12mm;left:20mm;right:20mm;display:flex;justify-content:space-between;font-family:var(--mono);font-size:8px;letter-spacing:.16em;color:var(--faint);border-top:1px solid var(--line);padding-top:6px}
+
+  h2{font-size:23px;font-weight:800;letter-spacing:-.02em;margin-bottom:3px;line-height:1.1}
+  .kicker{font-family:var(--mono);font-size:9px;letter-spacing:.22em;color:var(--cyan);margin-bottom:14px}
+  h3{font-size:13px;font-weight:700;letter-spacing:-.01em;margin:16px 0 5px}
+  p{font-size:10.5px;line-height:1.62;color:var(--body);margin-bottom:8px;max-width:66ch}
+  p.lead{font-size:12px;color:var(--paper)}
+  strong{color:var(--strong);font-weight:650}
+  ul{margin:6px 0 10px 0;list-style:none}
+  li{font-size:10.5px;line-height:1.55;color:var(--body);margin-bottom:6px;padding-left:16px;position:relative}
+  li::before{content:'';position:absolute;left:2px;top:7px;width:4px;height:4px;border-radius:50%;background:var(--cyan)}
+  li.dash::before{border-radius:0;width:6px;height:1.5px;top:9px;background:var(--bronze)}
+
+  .quote{border-left:2px solid var(--cyan);padding:6px 0 6px 16px;margin:14px 0;font-size:14px;line-height:1.4;font-weight:600;color:var(--strong);letter-spacing:-.01em}
+  .quote span{color:var(--cyan)}
+  .quote cite{display:block;font-family:var(--mono);font-size:8px;letter-spacing:.16em;color:var(--faint);font-style:normal;margin-top:8px;font-weight:400}
+
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:12px 14px;margin-bottom:9px}
+  .card.kill{border-color:rgba(229,104,109,.32)}
+  .card .h{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:5px}
+  .card .nm{font-size:12px;font-weight:700;color:var(--strong)}
+  .card .tag{font-family:var(--mono);font-size:7.5px;letter-spacing:.14em;color:var(--base);background:var(--cyan);border-radius:4px;padding:2px 6px;white-space:nowrap}
+  .card .tag.open{background:var(--green)} .card .tag.heat{background:var(--bronze)} .card .tag.dead{background:var(--red)}
+  .card p{font-size:9.8px;margin-bottom:5px;color:var(--body)}
+  .card .steal{font-size:9.8px;color:var(--paper)}
+  .card .steal b{color:var(--cyan);font-family:var(--mono);font-size:8px;letter-spacing:.12em;text-transform:uppercase}
+  .card .steal.no b{color:var(--red)}
+
+  table{width:100%;border-collapse:collapse;margin:8px 0 10px}
+  th,td{text-align:left;padding:6px 8px;font-size:9.5px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{font-family:var(--mono);font-size:8px;letter-spacing:.14em;color:var(--ink);font-weight:400}
+  td .m{font-family:var(--mono);color:var(--cyan);font-size:9px}
+  .ok{color:var(--green);font-weight:700} .nope{color:var(--red);font-weight:700}
+
+  .flow{display:flex;gap:8px;margin:10px 0}
+  .flow .step{flex:1;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px}
+  .flow .step .n{font-family:var(--mono);font-size:8px;letter-spacing:.14em;color:var(--cyan)}
+  .flow .step .t{font-size:11px;font-weight:700;margin:4px 0 3px;color:var(--strong)}
+  .flow .step p{font-size:9px;margin:0;color:var(--body)}
+
+  .callout{background:linear-gradient(180deg,rgba(111,202,214,.06),rgba(111,202,214,.02));border:1px solid var(--line);border-radius:9px;padding:12px 14px;margin:10px 0}
+  .callout .k{font-family:var(--mono);font-size:8px;letter-spacing:.16em;color:var(--cyan);margin-bottom:5px}
+
+  .cover{background:var(--cover);display:flex;flex-direction:column;justify-content:space-between}
+  .cover .top{display:flex;justify-content:space-between;align-items:flex-start}
+  .cover .top img{width:40px;height:40px}
+  .cover .ey{font-family:var(--mono);font-size:9px;letter-spacing:.24em;color:var(--faint);text-align:right;line-height:1.9}
+  .cover h1{font-size:66px;font-weight:800;letter-spacing:-.035em;line-height:.94;margin:0}
+  .cover h1 em{color:var(--green)}
+  .cover .sub{font-size:15px;color:var(--body);max-width:44ch;margin-top:16px;line-height:1.5}
+  .cover .thesis{border-left:2px solid var(--bronze);padding-left:14px;margin-top:22px;font-size:13px;font-style:italic;color:var(--strong);max-width:46ch;line-height:1.45}
+  .cover .meta{display:flex;gap:26px;margin-top:2px}
+  .cover .meta div{border-top:1px solid var(--line);padding-top:8px}
+  .cover .meta .l{font-family:var(--mono);font-size:8px;letter-spacing:.16em;color:var(--faint)}
+  .cover .meta .v{font-size:11px;color:var(--paper);margin-top:2px}
+</style>
+<script>if(location.search.includes('light'))document.documentElement.classList.add('light');</script>
+</head>
+<body>
+
+<!-- ══ COVER ══ -->
+<section class="page cover">
+  <div class="top">
+    <img src="file:///Volumes/VSTSAMPLES/Projects/Angad/public/logo-mark-96.png" alt="Delta"/>
+    <div class="ey">Delta · Climate · Research<br>Vegetation-data briefing<br><span class="cyan">Confidential</span></div>
+  </div>
+  <div>
+    <div class="mono" style="font-size:9px;letter-spacing:.24em;color:var(--green);margin-bottom:18px">Adding the green layer to the heat twin</div>
+    <h1>The <em>green</em><br>layer.</h1>
+    <div class="sub">Which vegetation datasets we're using for the twin, and which of the sources in your email have <strong style="color:var(--strong)">ended</strong> or turned out to be <strong style="color:var(--strong)">non-commercial</strong>.</div>
+    <div class="thesis">"Your three-tier plan was right. Three of the named sources won't survive contact with our licence. Here's what does."</div>
+  </div>
+  <div class="meta">
+    <div><div class="l">Date</div><div class="v">10 August 2026</div></div>
+    <div><div class="l">Prepared for</div><div class="v">The co-founders</div></div>
+    <div><div class="l">Focus</div><div class="v">Vegetation sourcing</div></div>
+    <div><div class="l">Sources</div><div class="v">Primary-verified</div></div>
+  </div>
+</section>
+
+<!-- ══ EXECUTIVE SUMMARY ══ -->
+<section class="page">
+  <div class="rh"><div class="m"><img src="file:///Volumes/VSTSAMPLES/Projects/Angad/public/logo-mark-96.png"/>DELTA CLIMATE RESEARCH</div><div>THE GREEN LAYER</div></div>
+  <div class="kicker">01 · Executive summary</div>
+  <h2>The plan is right. Some of the <em>sources</em> aren't.</h2>
+  <p class="lead">Vegetation is the biggest physical term the twin is still missing. Shade and evapotranspiration are how a hot city actually cools itself. Your three-tier email (a raster for correlation, canopy height for shade, individual trees for realism) is the correct way to model it, and we're keeping that structure exactly.</p>
+  <p><strong>The catch is licensing and end-of-life.</strong> We're a commercial company, so "free to download" isn't the test. "Free to use in a product we sell and pitch" is. When we verified each named source against its primary licence and status, three of them failed that test, and one needs imagery we can't legally get over an Indian city.</p>
+  <p><strong>What we're using</strong> (all commercial-clean): <strong>Sentinel-2</strong> for the NDVI raster (already ours), the <strong>Meta / WRI 1 m Canopy Height model</strong> for the shade term (the one genuinely new ingest, CC BY 4.0, anonymous AWS, no Google Earth Engine), <strong>ESA WorldCover</strong> as a land-cover mask (already ours), and <strong>procedurally-generated trees</strong> for the 3D layer.</p>
+  <p><strong>What we can't use</strong>, with the reason each was cut: <strong class="red">NICFI</strong> (programme ended Jan 2025, and was non-commercial anyway), <strong class="red">Google Earth Engine free tier</strong> and the <strong class="red">Dynamic World / EIE</strong> workflows that ride on it (non-commercial; commercial needs paid EE), <strong class="red">FABDEM</strong> (the free tier is non-commercial), and <strong class="red">DeepForest</strong> (a fine tool, but it needs sub-metre imagery we don't have).</p>
+  <div class="callout"><div class="k">The ask</div><p style="margin:0">Sign off on ingesting the <strong>Meta/WRI 1 m Canopy Height</strong> model as Tier&nbsp;2 and generating trees <strong>procedurally</strong> for Tier&nbsp;3. Everything else in the green layer is already commercial-clean and shipping. No source in this plan depends on a dead or non-commercial dataset.</p></div>
+  <div class="rf"><div>VEGETATION-DATA BRIEFING · CONFIDENTIAL</div><div>01</div></div>
+</section>
+
+<!-- ══ THE STACK WE'RE USING ══ -->
+<section class="page">
+  <div class="rh"><div class="m"><img src="file:///Volumes/VSTSAMPLES/Projects/Angad/public/logo-mark-96.png"/>DELTA CLIMATE RESEARCH</div><div>THE GREEN LAYER</div></div>
+  <div class="kicker">02 · The vegetation stack we're using</div>
+  <h2>Three tiers, all <em>commercial-clean</em>.</h2>
+  <p>Your tiering, kept intact. The only changes are which dataset fills each tier, chosen so every one is licensed for a product we sell. Each is primary-verified (see Sources).</p>
+
+  <div class="card">
+    <div class="h"><div class="nm">Tier 1 · NDVI raster · <span class="cyan">Sentinel-2 L2A</span> <span class="ink" style="font-weight:400;font-size:9px">· already ours</span></div><div class="tag open">Commercial ✓</div></div>
+    <p>Copernicus Sentinel-2 surface reflectance via the earth-search STAC API, the same pipeline already in the twin. NDVI at 10&nbsp;m, ~5-day revisit, used as the thermal correlator. Copernicus is <strong>free, full &amp; open, with commercial use explicitly permitted</strong>. That's the best licence available to us.</p>
+    <div class="steal"><b>Status →</b> Shipped. No change. This tier is done.</div>
+  </div>
+
+  <div class="card">
+    <div class="h"><div class="nm">Tier 2 · Canopy height · <span class="cyan">Meta / WRI 1 m Canopy Height (v2)</span> <span class="ink" style="font-weight:400;font-size:9px">· the one new ingest</span></div><div class="tag open">Commercial ✓</div></div>
+    <p>Per-pixel canopy height at <strong>1 m</strong>, the actual shade term rather than just greenness. On <strong>AWS Open Data</strong>, anonymous, no credentials, <strong>no Google Earth Engine</strong>. Licence: <strong>CC BY 4.0</strong> (commercial with attribution). Honest limits we'll receipt: single-epoch (~2018–2020), MAE of a few metres, cloud gaps, occasional ~150&nbsp;m tiling artefacts. Good as a shade/cooling input, not a survey.</p>
+    <div class="steal"><b>Action →</b> Ingest as the Tier-2 canopy layer. This is the sign-off ask.</div>
+  </div>
+
+  <div class="card">
+    <div class="h"><div class="nm">Tier 2 · Land-cover mask · <span class="cyan">ESA WorldCover 10 m</span> <span class="ink" style="font-weight:400;font-size:9px">· already ours</span></div><div class="tag open">Commercial ✓</div></div>
+    <p>Tree / grass / built classes at 10&nbsp;m (CC BY 4.0). Cross-checks and gap-fills the canopy model where it has cloud holes.</p>
+    <div class="steal"><b>Status →</b> Already in the pipeline. Reused, not re-fetched.</div>
+  </div>
+
+  <div class="card">
+    <div class="h"><div class="nm">Tier 3 · Individual trees · <span class="cyan">procedurally generated</span> <span class="ink" style="font-weight:400;font-size:9px">· CHM-driven</span></div><div class="tag heat">Modelled · receipted</div></div>
+    <p>Reference-shaped broadleaf + palm, instanced in three.js, <strong>placed and scaled from the Tier-2 canopy heights</strong>. Rendered as clearly-illustrative geometry and labelled <strong>modelled, not measured</strong>, in keeping with the twin's receipts posture. Why not buy 3D tree models: the marketplaces (RenderHub, Sketchfab) return almost only North-American / East-Asian species, with no clean commercially-licensed South-Asian street trees (neem, gulmohar, krishnachura, palms). A wrong-species model would be <em>less</em> honest than an obviously-schematic one.</p>
+    <div class="steal"><b>Action →</b> Generate procedurally. Fallback if ever needed: Kenney/Quaternius <strong>CC0</strong> models (clean but generic).</div>
+  </div>
+  <div class="rf"><div>VEGETATION-DATA BRIEFING · CONFIDENTIAL</div><div>02</div></div>
+</section>
+
+<!-- ══ WHAT DIDN'T SURVIVE ══ -->
+<section class="page">
+  <div class="rh"><div class="m"><img src="file:///Volumes/VSTSAMPLES/Projects/Angad/public/logo-mark-96.png"/>DELTA CLIMATE RESEARCH</div><div>THE GREEN LAYER</div></div>
+  <div class="kicker">03 · The sources that didn't survive verification</div>
+  <h2>Great leads, stopped by <em>licence</em> or <em>end-of-life</em>.</h2>
+  <p>These were all reasonable to try; the option-space in your email was the right one. Each rejection below is an <strong>existence or licence fact</strong> checked against the primary source, not a quality judgement.</p>
+
+  <div class="card kill">
+    <div class="h"><div class="nm">Planet NICFI basemaps</div><div class="tag dead">Ended + non-commercial</div></div>
+    <p>The NICFI Satellite Data Program <strong>wound down in Jan 2025</strong>; the replacement tender was <strong>cancelled in Sept 2025</strong>, so there is no live successor. And even when live, NICFI access was <strong>non-commercial / restricted</strong>, never valid for a for-profit product.<sup>[4]</sup></p>
+    <div class="steal no"><b>Correction on the record →</b> I'd earlier said NICFI "didn't cover India." That was wrong: its 30°N–30°S band <em>did</em> include Kolkata. The verdict is unchanged (dead + non-commercial), but for the right reason.</div>
+  </div>
+
+  <div class="card kill">
+    <div class="h"><div class="nm">Google Earth Engine (free tier), and Dynamic World / EIE on top of it</div><div class="tag dead">Non-commercial</div></div>
+    <p>The email's NDVI, Dynamic World and Environmental-Insights workflows all route through GEE. <strong>Free GEE is non-commercial only</strong>; a for-profit needs a <strong>paid Earth Engine</strong> licence.<sup>[5]</sup> The underlying data (Dynamic World, EIE canopy) is open, but there's <strong>no clean bulk access outside GEE</strong>, so using it means the paid licence.<sup>[6]</sup></p>
+    <div class="steal no"><b>How we dodge it →</b> We pull EO through open STAC + AWS Open Data (earth-search, Planetary Computer, dataforgood): same data, commercial-clean, no EE bill.</div>
+  </div>
+
+  <div class="card kill">
+    <div class="h"><div class="nm">FABDEM (free tier)</div><div class="tag dead">Non-commercial</div></div>
+    <p>Suggested as the surface to drape canopy onto. The <strong>free FABDEM is CC BY-NC-SA 4.0, which is non-commercial.</strong> A paid commercial licence exists (via Fathom) but isn't free.<sup>[7]</sup> For terrain we already use commercial-clean sources (terrarium / Copernicus GLO-30).</p>
+    <div class="steal no"><b>Not needed →</b> Our terrain path is already licensed correctly; no FABDEM required.</div>
+  </div>
+
+  <div class="card kill">
+    <div class="h"><div class="nm">DeepForest (individual-tree detection)</div><div class="tag heat">Blocked upstream</div></div>
+    <p>DeepForest is <strong>MIT-licensed and perfectly good</strong>. The blocker is the input it needs: <strong>sub-metre RGB (~10 cm)</strong> to find tree crowns. We have <strong>no legal sub-metre imagery over Kolkata</strong> (no drones over Indian cities; no licensed aerial tiles). The email's "as you did with SAM for buildings" doesn't apply, because our footprints came from <strong>Overture</strong>, not our own high-res imagery.<sup>[8]</sup></p>
+    <div class="steal no"><b>Why procedural wins →</b> With no imagery to run detection on, CHM-driven procedural trees are the honest Tier-3.</div>
+  </div>
+  <div class="rf"><div>VEGETATION-DATA BRIEFING · CONFIDENTIAL</div><div>03</div></div>
+</section>
+
+<!-- ══ HONORABLE MENTIONS + HONESTY LINE ══ -->
+<section class="page">
+  <div class="rh"><div class="m"><img src="file:///Volumes/VSTSAMPLES/Projects/Angad/public/logo-mark-96.png"/>DELTA CLIMATE RESEARCH</div><div>THE GREEN LAYER</div></div>
+  <div class="kicker">04 · The near-misses, and one line we won't cross</div>
+  <h2>Usable licence, wrong fit, and the claim we <em>refuse</em>.</h2>
+  <p>A few more sources are commercially clean but don't earn a tier on the merits. Recording them so we don't re-litigate later.</p>
+
+  <table>
+    <tr><th>Source</th><th>Licence</th><th>Why it's not a tier</th></tr>
+    <tr><td><strong>WRI GFW Tropical Tree Cover</strong></td><td class="ok">CC BY 4.0 ✓</td><td>Kolkata sits at the northern edge of its tropical extent, and it's coarser than the Meta CHM. <strong>Cross-check only.</strong></td></tr>
+    <tr><td><strong>OSM <span class="mono" style="font-size:8px">natural=tree</span></strong></td><td class="ok">ODbL ✓</td><td>Only <strong>~464 tree nodes</strong> across our wards, far too sparse to drive canopy density.</td></tr>
+    <tr><td><strong>Mapillary</strong></td><td class="nope">CC-BY-SA</td><td>Street-level imagery, but the API exposes <strong>no tree/vegetation class</strong>, plus share-alike + anti-scrape terms.<sup>[9]</sup></td></tr>
+    <tr><td><strong>KMC tree census</strong></td><td class="nope">n/a</td><td>No open, machine-readable municipal tree inventory for Kolkata exists.</td></tr>
+  </table>
+
+  <h3>The one claim we won't make</h3>
+  <p><strong>No AQI / pollution-dispersion layer, no wind-CFD.</strong> The twin's physics is <strong>2-D</strong>: <span class="mono" style="font-size:8px">sun</span> and <span class="mono" style="font-size:8px">kRad</span> are scalars, and there's no advection or 3-D wind field. Bolting an air-quality or dispersion story onto a model that can't represent it is exactly the "impressive but hollow" failure we're differentiating against.</p>
+  <div class="quote">Vegetation enters the model as <span>shade and a cooling offset</span>, terms the 2-D physics can honestly carry. Anything that needs a wind field, we don't claim.<cite>The honesty line for the green layer</cite></div>
+  <p>This keeps the green layer on the right side of our whole thesis: we surface what we can defend, and we say plainly what we can't.</p>
+  <div class="rf"><div>VEGETATION-DATA BRIEFING · CONFIDENTIAL</div><div>04</div></div>
+</section>
+
+<!-- ══ NET RESULT + SOURCES ══ -->
+<section class="page">
+  <div class="rh"><div class="m"><img src="file:///Volumes/VSTSAMPLES/Projects/Angad/public/logo-mark-96.png"/>DELTA CLIMATE RESEARCH</div><div>THE GREEN LAYER</div></div>
+  <div class="kicker">05 · Net result &amp; sources</div>
+  <h2>One new ingest. Zero licence traps.</h2>
+
+  <table>
+    <tr><th>Tier</th><th>Suggested in the email</th><th>What we ship</th><th>Licence</th></tr>
+    <tr><td class="m">1 · NDVI</td><td>GEE Sentinel-2 / NICFI</td><td>Sentinel-2 L2A (earth-search STAC)</td><td class="ok">Copernicus ✓</td></tr>
+    <tr><td class="m">2 · canopy</td><td>Google EIE / Dynamic World / FABDEM drape</td><td><strong>Meta/WRI 1 m CHM</strong> + ESA WorldCover</td><td class="ok">CC BY 4.0 ✓</td></tr>
+    <tr><td class="m">3 · trees</td><td>DeepForest + CesiumJS</td><td><strong>Procedural</strong>, CHM-driven, receipted</td><td class="ok">Own geometry ✓</td></tr>
+  </table>
+  <p>Two of three tiers are already shipping and commercial-clean. The single new ingest is the <strong>Meta/WRI 1 m canopy-height model</strong>. Trees are ours. Nothing depends on a dead or non-commercial source.</p>
+
+  <div class="kicker" style="margin-top:20px">Sources · primary-verified, 10 August 2026</div>
+  <table>
+    <tr><td class="m">1</td><td>Sentinel-2 / Copernicus open licence (commercial permitted) · <a href="https://sentinels.copernicus.eu/web/sentinel/terms-conditions">sentinels.copernicus.eu</a> · earth-search STAC · <a href="https://earth-search.aws.element84.com/v1">earth-search.aws.element84.com</a></td><td><span class="cyan mono" style="font-size:8px">✓ USING</span></td></tr>
+    <tr><td class="m">2</td><td>Meta / WRI 1 m Canopy Height (v2), AWS Open Data (CC BY 4.0) · <a href="https://registry.opendata.aws/dataforgood-fb-forests/">registry.opendata.aws/dataforgood-fb-forests</a> · <a href="https://sustainability.atmeta.com/blog/2024/04/22/using-artificial-intelligence-to-map-the-earths-forests/">Meta announcement</a></td><td><span class="cyan mono" style="font-size:8px">✓ USING</span></td></tr>
+    <tr><td class="m">3</td><td>ESA WorldCover (CC BY 4.0) · <a href="https://esa-worldcover.org/en">esa-worldcover.org</a> · AWS · <a href="https://registry.opendata.aws/esa-worldcover/">registry.opendata.aws/esa-worldcover</a></td><td><span class="cyan mono" style="font-size:8px">✓ USING</span></td></tr>
+    <tr><td class="m">4</td><td>Planet NICFI, wind-down Jan 2025; programme page · <a href="https://www.planet.com/nicfi/">planet.com/nicfi</a> · <a href="https://www.nicfi.no/">nicfi.no</a></td><td><span class="red mono" style="font-size:8px">✗ ENDED · NC</span></td></tr>
+    <tr><td class="m">5</td><td>Google Earth Engine terms, free tier non-commercial; commercial needs paid EE · <a href="https://earthengine.google.com/commercial/">earthengine.google.com/commercial</a></td><td><span class="red mono" style="font-size:8px">✗ NON-COMM</span></td></tr>
+    <tr><td class="m">6</td><td>Google Environmental Insights Explorer · <a href="https://insights.sustainability.google/">insights.sustainability.google</a> · Dynamic World · <a href="https://dynamicworld.app/">dynamicworld.app</a> (no clean non-GEE bulk access)</td><td><span class="red mono" style="font-size:8px">✗ GEE-BOUND</span></td></tr>
+    <tr><td class="m">7</td><td>FABDEM, free tier CC BY-NC-SA 4.0 · <a href="https://data.bris.ac.uk/data/dataset/25wfy0f9ukoge2gs7a5mqpq2j7">data.bris.ac.uk</a> · commercial via Fathom · <a href="https://www.fathom.global/product/fabdem/">fathom.global</a></td><td><span class="red mono" style="font-size:8px">✗ NON-COMM</span></td></tr>
+    <tr><td class="m">8</td><td>DeepForest (MIT; needs sub-metre RGB) · <a href="https://deepforest.readthedocs.io/">deepforest.readthedocs.io</a></td><td><span class="bronze mono" style="font-size:8px">⚠ NO IMAGERY</span></td></tr>
+    <tr><td class="m">9</td><td>Mapillary API / terms (no tree class; CC-BY-SA) · <a href="https://www.mapillary.com/developer">mapillary.com/developer</a></td><td><span class="red mono" style="font-size:8px">✗ NO CLASS</span></td></tr>
+    <tr><td class="m">10</td><td>WRI GFW Tropical Tree Cover (CC BY 4.0) · <a href="https://data.globalforestwatch.org/documents/tropical-tree-cover/">data.globalforestwatch.org</a> · OSM ODbL · <a href="https://www.openstreetmap.org/copyright">openstreetmap.org/copyright</a> · Kenney CC0 · <a href="https://kenney.nl/assets">kenney.nl/assets</a></td><td><span class="bronze mono" style="font-size:8px">↺ CROSS-CHECK</span></td></tr>
+  </table>
+  <div class="rf"><div>VEGETATION-DATA BRIEFING · CONFIDENTIAL</div><div>05</div></div>
+</section>
+
+</body></html>

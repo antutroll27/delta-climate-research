@@ -1,6 +1,7 @@
 import type maplibregl from 'maplibre-gl';
 import type { Ambient, RoadsData, WaterData, WardData } from '../heat-map-model.ts';
 import type { TerrainField } from '../terrain.ts';
+import type { TreesFile } from '../vegetation-layer.ts';
 import type { WardFrame } from '../ward-frame.ts';
 import type { BuildingMeta } from './building-pick.ts';
 
@@ -11,6 +12,7 @@ export interface ReliefWardBundle {
   terrain: TerrainField | null;
   mercatorOrigin: { x: number; y: number; z: number };
   frame: WardFrame;
+  veg: TreesFile | null;
 }
 
 export interface ReliefFieldUpdate {
@@ -40,6 +42,7 @@ export interface ReliefRenderer {
   updateField(update: ReliefFieldUpdate): void;
   setVisualState(state: ReliefVisualState): void;
   setSelection(selection: ReliefSelection): void;
+  setVegetationVisible(visible: boolean): void;
   pick(x: number, y: number, width: number, height: number, radiusPx?: number): number;
   project(x: number, y: number, z: number, width: number, height: number): { x: number; y: number; w: number };
   dispose(): void;

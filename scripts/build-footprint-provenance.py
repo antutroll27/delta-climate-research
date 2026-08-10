@@ -41,6 +41,7 @@ import glob
 import json
 import os
 import sys
+from typing import Any
 
 import pyarrow.parquet as pq
 
@@ -65,7 +66,7 @@ DATASETS = {
 }
 
 
-def build(ward_id: str) -> dict:
+def build(ward_id: str) -> dict[str, Any]:
     fp_path = os.path.join(FOOTPRINTS, f"{ward_id}-footprints.json")
     fp = json.load(open(fp_path, encoding="utf-8"))
 
@@ -80,7 +81,7 @@ def build(ward_id: str) -> dict:
     for row in fp["b"]:
         entry = lut.get(row["gers"])
         first = entry[0] if entry else None
-        dataset = first.get("dataset") if first else None
+        dataset = str(first.get("dataset", "")) if first else ""
         key, _traced = DATASETS.get(dataset, ("unknown", False))
         if key == "unknown":
             unknown += 1
