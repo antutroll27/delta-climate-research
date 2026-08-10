@@ -27,3 +27,20 @@ test('canopyHeightsFromPixels applies the N->S row flip and dequantises the R ch
   assert.ok(Math.abs(h[2] - 30) < 1e-4, 'out[2] = north-west = PNG row0 col0 = 255->30m');
   assert.ok(Math.abs(h[3] - 0) < 1e-6, 'out[3] = north-east = PNG row0 col1 = 0m');
 });
+
+import { blendCanopyIntoVeg } from '../../src/scripts/climate-engine/ward-raster.ts';
+
+test('canopy blend preserves the ward-mean vegetation but redistributes it', () => {
+  const n = 4, count = n * n;
+  const veg = new Float32Array(count).fill(0.3);
+  const canopy = new Float32Array(count);            // tall canopy only in the top half
+  for (let i = 0; i < count; i++) canopy[i] = i < count / 2 ? 10 : 0;
+  const before = veg.reduce((a, b) => a + b, 0) / count;
+  const out = blendCanopyIntoVeg(veg, canopy, 0.5);
+  const after = out.reduce((a, b) => a + b, 0) / count;
+  assert.ok(Math.abs(before - after) < 1e-6, 'ward mean is preserved (CEO scalar must not move)');
+  const hi = out.slice(0, count / 2).reduce((a, b) => a + b, 0);
+  const lo = out.slice(count / 2).reduce((a, b) => a + b, 0);
+  assert.ok(hi > lo, 'vegetation shifts toward tall canopy');
+  for (const v of out) assert.ok(v >= 0 && v <= 1, 'stays in [0,1]');
+});

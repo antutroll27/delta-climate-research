@@ -8,7 +8,7 @@
  */
 import { CANONICAL_GRID_N, type SimLayers } from './types.ts';
 import type { WardData } from './heat-map-model.ts';
-import { resample, type SurfaceMeans, type SurfaceRaster } from './surface-raster.ts';
+import { resample, type CanopyRaster, type SurfaceMeans, type SurfaceRaster } from './surface-raster.ts';
 
 const SAMPLE_OFFSETS = [0.25, 0.75] as const;
 const COVERAGE_BY_BITS = [0, 0.25, 0.25, 0.5, 0.25, 0.5, 0.5, 0.75, 0.25, 0.5, 0.5, 0.75, 0.5, 0.75, 0.75, 1] as const;
@@ -117,18 +117,46 @@ export function rasterWardBase(
   ward: WardData,
   means: SurfaceMeans,
   surface: SurfaceRaster | null = null,
+  canopy: CanopyRaster | null = null,
 ): SimLayers {
   const n = CANONICAL_GRID_N;
   const count = n * n;
   const built = rasterizeWardBuilt(ward, n);
   const water = new Float32Array(count);
 
-  const veg = surface
+  let veg = surface
     ? resample(surface.veg, surface.n, n)
     : new Float32Array(count).fill(means.fvc);
+  if (canopy) veg = blendCanopyIntoVeg(veg, resample(canopy.height, canopy.n, n), 0.5);
   const albedo = surface
     ? resample(surface.albedo, surface.n, n)
     : new Float32Array(count).fill(means.albedo);
 
   return { albedo, veg, built, water };
+}
+
+/**
+ * Redistribute the vegetation field toward measured canopy height WITHOUT moving
+ * the ward mean. NDVI-derived veg conflates grass/crops/canopy; the CHM adds the
+ * vertical dimension. We nudge each cell toward a canopy-weighted target, then
+ * re-centre so the sum (hence ward-mean FVC, a CEO-governed scalar) is unchanged.
+ * `strength` in [0,1] controls how far the pattern moves. Mean-neutral by
+ * construction, so `assertSurfaceMatches` and the DC-URS scalar stay valid.
+ */
+export function blendCanopyIntoVeg(veg: Float32Array, canopy: Float32Array, strength = 0.5): Float32Array {
+  const count = veg.length;
+  if (canopy.length !== count) return veg;
+  let vSum = 0, cSum = 0;
+  for (let i = 0; i < count; i++) { vSum += veg[i]; cSum += canopy[i]; }
+  if (cSum <= 0) return veg;
+  const vMean = vSum / count, cMean = cSum / count;
+  const out = new Float32Array(count);
+  for (let i = 0; i < count; i++) {
+    const target = vMean * (canopy[i] / cMean);
+    out[i] = Math.min(1, Math.max(0, veg[i] + strength * (target - veg[i])));
+  }
+  let oSum = 0; for (let i = 0; i < count; i++) oSum += out[i];
+  const delta = (vSum - oSum) / count;
+  for (let i = 0; i < count; i++) out[i] = Math.min(1, Math.max(0, out[i] + delta));
+  return out;
 }

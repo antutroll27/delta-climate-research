@@ -844,7 +844,7 @@ export function mountHeatMap(): () => void {
        cannot end up drawn from different vintages of the same measurement. */
     surfaceCache[name] ??= await loadWardSurface(name);
     const { means, surface } = surfaceCache[name];
-    state.base = rasterWardBase(d, means, surface);
+    state.base = rasterWardBase(d, means, surface, null);
     if (!roadsCache[name]) { try { roadsCache[name] = await (await fetch(`/heat-map/data/${name}-roads.json`)).json(); } catch { roadsCache[name] = { ways: [] }; } }
     /* Street names for this ward. Separate artefact, separate frame: these are
        lon/lat and go to MapLibre directly, so they never pass through our metre
