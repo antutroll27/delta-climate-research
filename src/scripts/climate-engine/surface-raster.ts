@@ -270,6 +270,21 @@ export function asCanopyRaster(raw: unknown, ward: string): CanopyRaster | null 
   return { ward, n, hi, height };
 }
 
+/** Decode a canopy PNG's pixel buffer to per-cell heights (metres). Applies the
+ *  mandatory PNG-north-up -> sim-grid-south-up row flip and dequantises the R
+ *  channel over [0, hi]. Pure + testable (no canvas). */
+export function canopyHeightsFromPixels(data: Uint8ClampedArray, n: number, hi: number): Float32Array {
+  const height = new Float32Array(n * n);
+  for (let row = 0; row < n; row++) {
+    for (let col = 0; col < n; col++) {
+      const src = (row * n + col) * 4;        // PNG row 0 = NORTH
+      const dst = (n - 1 - row) * n + col;    // sim grid row 0 = SOUTH
+      height[dst] = (data[src] / 255) * hi;
+    }
+  }
+  return height;
+}
+
 /**
  * Decode the exported canopy PNG into a float height layer.
  *
@@ -294,16 +309,8 @@ export async function loadCanopyRaster(ward: string, signal?: AbortSignal): Prom
     bitmap.close();
     const { data } = context.getImageData(0, 0, n, n);
 
-    const height = new Float32Array(n * n);
-    // Same flip as loadSurfaceRaster: PNG row 0 = NORTH, sim grid row 0 = SOUTH.
-    for (let row = 0; row < n; row++) {
-      const src = row * n, dst = (n - 1 - row) * n;
-      for (let col = 0; col < n; col++) {
-        const s = (src + col) * 4;
-        height[dst + col] = (data[s] / 255) * CANOPY_HI; // R channel, dequantised to metres
-      }
-    }
-    return { ward, n, hi: CANOPY_HI, height };
+    const height = canopyHeightsFromPixels(data, n, CANOPY_HI);
+    return asCanopyRaster({ ward, n, hi: CANOPY_HI, height }, ward);
   } catch (error) {
     if ((error as Error)?.name === 'AbortError') return null;
     return null;
