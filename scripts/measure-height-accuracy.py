@@ -239,7 +239,7 @@ def transect(sub: dict[str, Any], fr: dict[str, Any],
     the line that produces the published heights and not merely for its
     ancestor."""
     s, h_ortho, gnd = fr["s"], fr["h_ortho"], fr["gnd"]
-    gstats: dict[str, Any] = {}
+    gstats: _icesat2.GroundLineStats = {}
     g = _icesat2.ground_line(s, s[gnd], h_ortho[gnd], stats=gstats)
     fin = np.isfinite(g)
     hag = h_ortho - g
@@ -400,7 +400,7 @@ def fill_cohort(rows: list[dict[str, Any]]) -> dict[str, Any]:
     return d
 
 
-def verdict(qb: dict[str, Any]) -> str:
+def verdict(qb: _icesat2.QuantileBias) -> str:
     """Spec §5.3's pre-registered table, and nothing else.
 
     `validated` needs BOTH a sub-storey median bias and a CI inside ±2 storeys;
@@ -424,22 +424,26 @@ def verdict(qb: dict[str, Any]) -> str:
     return "inconclusive"
 
 
-def for_display(qb: dict[str, Any]) -> dict[str, Any]:
+def for_display(qb: _icesat2.QuantileBias) -> dict[str, Any]:
     """`quantile_bias`'s exact output, rounded for the artefact and the console.
 
     The ONLY place rounding happens. `verdict()` sees the exact values; this
     result is what gets written, so nothing downstream can read a threshold
     decision off a rounded number."""
-    out: dict[str, Any] = {}
-    for k, v in qb.items():
-        if k.endswith("_bias_m"):
-            out[k] = round(float(v), 2)
-        elif k.endswith("_ci95_m"):
-            out[k] = [round(float(x), 2) for x in v]
-        elif k in ("ks_d", "perm_p"):
-            out[k] = round(float(v), 4)
-        else:
-            out[k] = v
+    # Explicit keys rather than a suffix-matching loop over .items(): the input
+    # is a TypedDict now, so each field's type is known and the rounding rules
+    # are visible instead of inferred from the key's spelling. Same output.
+    out: dict[str, Any] = {
+        "n": qb["n"],
+        "median_bias_m": round(qb["median_bias_m"], 2),
+        "p65_bias_m": round(qb["p65_bias_m"], 2),
+        "p90_bias_m": round(qb["p90_bias_m"], 2),
+        "median_ci95_m": [round(x, 2) for x in qb["median_ci95_m"]],
+        "p65_ci95_m": [round(x, 2) for x in qb["p65_ci95_m"]],
+        "p90_ci95_m": [round(x, 2) for x in qb["p90_ci95_m"]],
+        "ks_d": round(qb["ks_d"], 4),
+        "perm_p": round(qb["perm_p"], 4),
+    }
     return out
 
 
@@ -522,7 +526,7 @@ def cohort_at_ground_line(frames: list[dict[str, Any]],
     gated_windows = gated_photons = 0
     for fr in frames:
         s, h_ortho, gnd = fr["s"], fr["h_ortho"], fr["gnd"]
-        gs: dict[str, Any] = {}
+        gs: _icesat2.GroundLineStats = {}
         try:
             g = _icesat2.ground_line(s, s[gnd], h_ortho[gnd],
                                      win_m=win_m, relief_m=relief_m, stats=gs)
@@ -886,7 +890,7 @@ def main() -> None:
                  "the DEM."),
     }
 
-    out = {
+    out: dict[str, Any] = {
         "summary": summary, "fill": fill, "per_ward": per_ward,
         "per_track": per_track, "excluded": excluded, "terrain": terrain,
         "floor_sensitivity": sens,

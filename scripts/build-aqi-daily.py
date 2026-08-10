@@ -32,6 +32,7 @@ import datetime as dt
 import glob
 import json
 import os
+from typing import TypedDict
 import re
 import sys
 
@@ -89,7 +90,39 @@ def parse_value(cell: str) -> float | None:
     return value if 0 <= value <= 2000 else None
 
 
-def summarise_day(day: dt.date, readings: list[float]) -> dict:
+class DayRecord(TypedDict):
+    d: str
+    mean: float
+    max: float
+    hours: int
+    sparse: bool
+
+
+class StationRecord(TypedDict):
+    station: str
+    ward: str | None
+    first: str | None
+    last: str | None
+    days: int
+    span_days: int
+    coverage: float
+    sparse_days: int
+    skipped: dict[str, int]
+    daily: list[DayRecord]
+
+
+class AqiDocument(TypedDict):
+    generated_by: str
+    source: str
+    licence: str
+    window: dict[str, str]
+    min_hours_per_day: int
+    unit: str
+    note: str
+    stations: list[StationRecord]
+
+
+def summarise_day(day: dt.date, readings: list[float]) -> DayRecord:
     """One day's record. `hours` travels with the mean, always."""
     return {
         "d": day.isoformat(),
@@ -102,9 +135,9 @@ def summarise_day(day: dt.date, readings: list[float]) -> dict:
 
 # ── reading ─────────────────────────────────────────────────────────────────
 
-def read_station(path: str) -> tuple[list[dict], dict[str, int]]:
+def read_station(path: str) -> tuple[list[DayRecord], dict[str, int]]:
     """Unpivot one station file into daily records, plus counted exclusions."""
-    days: list[dict] = []
+    days: list[DayRecord] = []
     skipped = {"no_month_context": 0, "bad_day_number": 0, "empty_day": 0, "out_of_span": 0}
     year = month = None
 
@@ -146,7 +179,7 @@ def read_station(path: str) -> tuple[list[dict], dict[str, int]]:
     return days, skipped
 
 
-def build_station(path: str) -> dict:
+def build_station(path: str) -> StationRecord:
     """One station's record, reporting coverage against ITS OWN span.
 
     NOT against the catalogue's advertised 2017-2023. Six of the seven stations
@@ -174,7 +207,7 @@ def build_station(path: str) -> dict:
     }
 
 
-def build_document() -> dict:
+def build_document() -> AqiDocument:
     paths = sorted(glob.glob(os.path.join(AQI_DIR, "*.csv")))
     stations = [build_station(p) for p in paths]
     return {
@@ -197,7 +230,7 @@ def build_document() -> dict:
     }
 
 
-def serialise(doc: dict) -> str:
+def serialise(doc: AqiDocument) -> str:
     """Compact, like the other data artefacts.
 
     Indented, this file came out LARGER than the seven archives it derives from —

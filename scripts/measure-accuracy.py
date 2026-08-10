@@ -34,6 +34,7 @@ from collections.abc import Sequence
 from typing import Any, Literal, TypedDict
 
 import numpy as np
+import numpy.typing as npt
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 if HERE not in sys.path:
@@ -237,7 +238,8 @@ def _ward_scale_validation() -> dict[str, Any] | None:
         passes = sorted(set(d))
         if len(passes) < 4:
             return None
-        col = lambda k: np.array([float(raw[i][k]) for i in idx], dtype=np.float64)
+        def col(k: str) -> npt.NDArray[np.float64]:
+            return np.array([float(raw[i][k]) for i in idx], dtype=np.float64)
         SETS = (("tAir",),
                 ("tAir", "rh", "wind", "cloud", "sun"),
                 ("tAir", "rh", "wind", "cloud", "sun", "fvc", "albedo", "built"))

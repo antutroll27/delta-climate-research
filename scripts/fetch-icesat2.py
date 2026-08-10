@@ -625,7 +625,7 @@ def decide(f: Any, gname: str, ward: str) -> Decision:
     counts["ground_candidates"] = int(gnd.sum())
     if int(gnd.sum()) < MIN_GROUND_PH:
         return Decision(None, f"only {int(gnd.sum())} ground candidates", counts, -1)
-    gstats: dict[str, object] = {}
+    gstats: _icesat2.GroundLineStats = {}
     try:
         gline = _icesat2.ground_line(s, s[gnd], ph[gnd, 3], stats=gstats)
     except ValueError as exc:

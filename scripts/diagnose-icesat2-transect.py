@@ -88,7 +88,7 @@ def main() -> None:
 
     dil, _ = _icesat2.assign_footprints(x, y, rings, +_icesat2.ERODE_M)
     gnd = dil == -1
-    gstats: dict[str, object] = {}
+    gstats: _icesat2.GroundLineStats = {}
     g = _icesat2.ground_line(s, s[gnd], h_ortho[gnd], stats=gstats)
     fin = np.isfinite(g)
     hag = h_ortho - g

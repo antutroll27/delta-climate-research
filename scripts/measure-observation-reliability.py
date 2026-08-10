@@ -85,9 +85,9 @@ BINS = ((0.0, 0.05), (0.05, 0.5), (0.5, 1.0), (1.0, 4.0), (4.0, 24.0))
 STAMP = re.compile(r"_(\d{5})_(\d{3})_(\w{5})_(\d{8}T\d{6})_")
 
 
-def granules() -> list[tuple[datetime.datetime, str, str, str]]:
-    """(time, tile, orbit, path) for every cached LST band."""
-    out = []
+def granules() -> list[tuple[datetime.datetime, str, str, str, str]]:
+    """(time, tile, orbit, scene, path) for every cached LST band."""
+    out: list[tuple[datetime.datetime, str, str, str, str]] = []
     for f in sorted(glob.glob(os.path.join(CACHE, "*_LST.tif"))):
         m = STAMP.search(os.path.basename(f))
         if not m:

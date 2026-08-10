@@ -17,9 +17,27 @@ import ssl
 import sys
 import urllib.request
 from pathlib import Path
+from typing import TypedDict
 
 import cv2
 import numpy as np
+import numpy.typing as npt
+
+F64 = npt.NDArray[np.float64]
+F32 = npt.NDArray[np.float32]
+Shape = tuple[int, ...]
+Xform = tuple[float, float, float]
+
+
+class Style(TypedDict):
+    """One row of INTENSITY. A TypedDict, not dict[str, float | str]: `dash` is
+    the only string and every use of it is a format placeholder, so a mixed-value
+    dict would type every lookup as `float | str` and infect the arithmetic."""
+    op: float
+    wide: float
+    dot: float
+    dot_r: float
+    dash: str
 
 ROOT = Path(__file__).resolve().parent.parent
 BG = ROOT / "previews" / "poster" / "bg"
@@ -60,15 +78,15 @@ LEVELS = [round(v, 2) for v in np.arange(-0.75, 3.75, 0.25) if abs(v) > 1e-9]
 MISSING = -9e36  # ERSST land fill is about -9.969e+36
 
 
-def lat_idx(lat):
+def lat_idx(lat: float) -> int:
     return int(round((lat - LAT0) / DLAT))
 
 
-def lon_idx(lon):
+def lon_idx(lon: float) -> int:
     return int(round((lon - LON0) / DLON))
 
 
-def fetch(url, params, cache_name):
+def fetch(url: str, params: str, cache_name: str) -> str:
     """GET an OPeNDAP ascii slice, cached on disk."""
     CACHE.mkdir(parents=True, exist_ok=True)
     path = CACHE / cache_name
@@ -85,7 +103,7 @@ def fetch(url, params, cache_name):
     return path.read_text()
 
 
-def parse_grid(text, rows, cols):
+def parse_grid(text: str, rows: int, cols: int) -> F64:
     """Pull the value block out of an OPeNDAP ascii grid response.
 
     Data lines look like:  [0][12], 29.44, 29.39, ...
@@ -108,13 +126,13 @@ def parse_grid(text, rows, cols):
     return out
 
 
-def slab(a, b):
+def slab(a: int, b: int) -> str:
     """Inclusive index range string for OPeNDAP."""
     lo, hi = sorted((a, b))
     return f"[{lo}:1:{hi}]"
 
 
-def load_anomaly():
+def load_anomaly() -> F64:
     """SST anomaly for the target month over the crop box, land as NaN."""
     r0, r1 = sorted((lat_idx(LAT_N), lat_idx(LAT_S)))
     c0, c1 = sorted((lon_idx(LON_W), lon_idx(LON_E)))
@@ -131,7 +149,7 @@ def load_anomaly():
     return sst - clim
 
 
-def nino34(anom):
+def nino34(anom: F64) -> float:
     """Area of the Nino 3.4 box inside the cropped field. Used to sanity-check."""
     r0 = lat_idx(N34["lat"][0]) - lat_idx(LAT_N)
     r1 = lat_idx(N34["lat"][1]) - lat_idx(LAT_N)
@@ -148,7 +166,7 @@ def nino34(anom):
 UP = 8  # upsample factor; the source grid is a coarse 2 degrees
 
 
-def field_for_contour(anom):
+def field_for_contour(anom: F64) -> F32:
     """Smooth, upsampled field with land neutralised.
 
     Land goes to 0.0 rather than NaN so contour lines follow the anomaly and
@@ -156,10 +174,10 @@ def field_for_contour(anom):
     """
     f = np.nan_to_num(anom, nan=0.0).astype(np.float32)
     big = cv2.resize(f, (f.shape[1] * UP, f.shape[0] * UP), interpolation=cv2.INTER_CUBIC)
-    return cv2.GaussianBlur(big, (0, 0), UP * 0.6)
+    return np.asarray(cv2.GaussianBlur(big, (0, 0), UP * 0.6), dtype=np.float32)
 
 
-def smooth_closed(pts, window):
+def smooth_closed(pts: F64, window: int) -> F64:
     """Moving average around a closed polyline.
 
     cv2.findContours walks the pixel grid, so a nearly-horizontal isotherm comes
@@ -177,7 +195,7 @@ def smooth_closed(pts, window):
     return np.stack([sx, sy], 1)
 
 
-def contours_at(field, level):
+def contours_at(field: F32, level: float) -> list[F64]:
     """Iso-lines at `level`, as pixel-space polylines."""
     mask = (field >= level if level > 0 else field <= level).astype(np.uint8)
     if mask.sum() == 0:
@@ -205,7 +223,7 @@ def contours_at(field, level):
 CORE_TARGET = (0.66, 0.70)
 
 
-def frame_transform(shape, anchor=None):
+def frame_transform(shape: Shape, anchor: tuple[float, float] | None = None) -> Xform:
     """Cover-fit scale and offset, optionally anchoring a point in the field.
 
     Cover leaves the field overflowing the frame, so there is slack to slide it.
@@ -223,18 +241,18 @@ def frame_transform(shape, anchor=None):
     return s, ox, oy
 
 
-def warm_core(field):
+def warm_core(field: F32) -> tuple[float, float]:
     """Pixel coord of the strongest anomaly - the composition's anchor."""
     idx = int(np.argmax(field))
     return float(idx % field.shape[1]), float(idx // field.shape[1])
 
 
-def to_frame(pts, shape, xform=None):
+def to_frame(pts: F64, shape: Shape, xform: Xform | None = None) -> F64:
     s, ox, oy = xform if xform else frame_transform(shape)
-    return pts * s + np.array([ox, oy])
+    return pts * s + np.array([ox, oy], dtype=np.float64)
 
 
-def path_d(pts):
+def path_d(pts: F64) -> str:
     d = [f"M{pts[0][0]:.1f} {pts[0][1]:.1f}"]
     d += [f"L{x:.1f} {y:.1f}" for x, y in pts[1:]]
     return " ".join(d) + " Z"
@@ -244,7 +262,8 @@ def path_d(pts):
 # generative arcs + scatter, driven by the same field
 # --------------------------------------------------------------------------
 
-def arc_layer(field, xform, seed=20260805):
+def arc_layer(field: F32, xform: Xform, seed: int = 20260805
+              ) -> tuple[list[tuple[float, float]], list[F64]]:
     """Concentric arcs plus a point field whose density follows the anomaly.
 
     The scatter is not decoration: points are rejection-sampled against the warm
@@ -256,7 +275,8 @@ def arc_layer(field, xform, seed=20260805):
     warm = np.clip(field / max(float(np.max(field)), 1e-6), 0, 1)
     hh, ww = warm.shape
 
-    pts, tries = [], 0
+    pts: list[tuple[float, float]] = []
+    tries = 0
     while len(pts) < 900 and tries < 200000:
         tries += 1
         px, py = rng.random() * ww, rng.random() * hh
@@ -279,7 +299,7 @@ def arc_layer(field, xform, seed=20260805):
 # svg
 # --------------------------------------------------------------------------
 
-INTENSITY = {
+INTENSITY: dict[str, Style] = {
     # Calibrated on the dark preview page, not guessed. Cream on near-black needs
     # noticeably more opacity than dark-on-cream to register at all.
     "ghost": dict(op=0.40, wide=1.3, dot=0.34, dot_r=1.5, dash="2 6"),
@@ -287,12 +307,12 @@ INTENSITY = {
 }
 
 
-def svg_open():
+def svg_open() -> list[str]:
     return [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" '
             f'width="{W}" height="{H}" fill="none">']
 
 
-def enso_groups(anom, k):
+def enso_groups(anom: F64, k: Style) -> list[str]:
     field = field_for_contour(anom)
     xform = frame_transform(field.shape, anchor=warm_core(field))
     parts = []
@@ -314,7 +334,7 @@ def enso_groups(anom, k):
     return parts
 
 
-def arc_groups(anom, k):
+def arc_groups(anom: F64, k: Style) -> list[str]:
     field = field_for_contour(anom)
     pts, arcs = arc_layer(field, frame_transform(field.shape, anchor=warm_core(field)))
     parts = [f'<g id="arcs" stroke="{CREAM}" stroke-width="{k["wide"]:.2f}" '
@@ -329,13 +349,13 @@ def arc_groups(anom, k):
     return parts
 
 
-def write(name, body):
+def write(name: str, body: list[str]) -> Path:
     out = BG / name
     out.write_text("\n".join(svg_open() + body + ["</svg>"]) + "\n")
     return out
 
 
-def main():
+def main() -> int:
     BG.mkdir(parents=True, exist_ok=True)
     anom = load_anomaly()
 
@@ -355,7 +375,7 @@ def main():
     return 0
 
 
-def demo():
+def demo() -> int:
     """Self-check on the parsing, contouring and sampling logic."""
     # axis maths
     assert lat_idx(88.0) == 0 and lat_idx(-88.0) == NLAT - 1, "lat index maps end to end"
@@ -374,8 +394,8 @@ def demo():
         pass
 
     # contouring: a warm blob yields one closed ring at +1.0 and none at +3.0
-    f = np.zeros((40, 60), np.float32)
-    cv2.circle(f, (30, 20), 12, 2.0, -1)
+    f = np.zeros((40, 60), np.float64)
+    cv2.circle(f, (30, 20), 12, (2.0,), -1)
     big = field_for_contour(f)
     assert len(contours_at(big, 1.0)) == 1, "one blob -> one contour"
     assert contours_at(big, 3.0) == [], "no contour above the blob's peak"
@@ -407,9 +427,9 @@ def demo():
     assert edge[1] <= 0, "clamped rather than leaving a gap"
 
     # peak finder
-    f = np.zeros((20, 30), np.float32)
-    f[7, 22] = 5.0
-    assert warm_core(f) == (22.0, 7.0), "warm core is the argmax pixel"
+    peak = np.zeros((20, 30), np.float32)
+    peak[7, 22] = 5.0
+    assert warm_core(peak) == (22.0, 7.0), "warm core is the argmax pixel"
 
     # scatter tracks the warm half of the field, and is reproducible
     fld = np.zeros((200, 664), np.float32)
@@ -422,6 +442,7 @@ def demo():
     cold = to_frame(np.array([[100.0, 100.0]]), fld.shape, xf2)[0][0]
     assert all(x > cold for x, _ in p1), "no scatter in the cold half"
     print("demo ok")
+    return 0
 
 
 if __name__ == "__main__":

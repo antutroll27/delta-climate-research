@@ -42,6 +42,7 @@ a published number.
 from __future__ import annotations
 
 import argparse
+from typing import Any, cast
 import json
 import os
 import sys
@@ -81,7 +82,7 @@ MAJOR = ("primary", "primary_link", "secondary", "secondary_link",
 MIN_LENGTH_M = 40.0
 
 
-def query(ward: _types.Ward) -> dict:
+def query(ward: _types.Ward) -> dict[str, Any]:
     w, s, e, n = _types.ward_bounds(ward, pad_m=CLIP_M - ward.footprint_m / 2)
     bbox = f"{s},{w},{n},{e}"
     classes = "|".join(MAJOR)
@@ -99,13 +100,13 @@ out tags geom;"""
                 last = f"{url}: {type(exc).__name__}"
                 continue
             if r.status_code == 200 and r.text.lstrip().startswith("{"):
-                return r.json()
+                return cast(dict[str, Any], r.json())
             last = f"{url}: HTTP {r.status_code}"
         time.sleep(15 * (attempt + 1))
     sys.exit(f"  every Overpass mirror failed for {ward.id} — last: {last}")
 
 
-def length_m(ward: _types.Ward, geom: list[dict]) -> float:
+def length_m(ward: _types.Ward, geom: list[dict[str, Any]]) -> float:
     """Great-circle-free length in local metres — the window is 1.4 km."""
     mx, my = _types.m_per_deg(ward.centre.lat)
     total = 0.0
@@ -114,7 +115,7 @@ def length_m(ward: _types.Ward, geom: list[dict]) -> float:
     return total
 
 
-def in_window(ward: _types.Ward, geom: list[dict]) -> bool:
+def in_window(ward: _types.Ward, geom: list[dict[str, Any]]) -> bool:
     """Keep a way if ANY vertex is inside the clip box — a road that merely
     passes through still deserves its name where it crosses."""
     mx, my = _types.m_per_deg(ward.centre.lat)
@@ -126,7 +127,7 @@ def in_window(ward: _types.Ward, geom: list[dict]) -> bool:
     return False
 
 
-def build(ward: _types.Ward) -> dict:
+def build(ward: _types.Ward) -> dict[str, Any]:
     data = query(ward)
     features = []
     for el in data.get("elements", []):
@@ -139,7 +140,7 @@ def build(ward: _types.Ward) -> dict:
             continue
         if length_m(ward, geom) < MIN_LENGTH_M:
             continue
-        features.append({
+        feature: dict[str, Any] = {
             "type": "Feature",
             "properties": {"name": name, "cls": tags["highway"]},
             "geometry": {
@@ -148,7 +149,8 @@ def build(ward: _types.Ward) -> dict:
                 # it keeps the artefact small enough to ship uncompressed.
                 "coordinates": [[round(p["lon"], 6), round(p["lat"], 6)] for p in geom],
             },
-        })
+        }
+        features.append(feature)
     features.sort(key=lambda f: (f["properties"]["name"], f["geometry"]["coordinates"][0]))
     return {
         "type": "FeatureCollection",
@@ -167,7 +169,7 @@ def out_path(ward_id: str) -> str:
     return os.path.join(OUT_DIR, f"{ward_id}-road-labels.geojson")
 
 
-def write(doc: dict) -> None:
+def write(doc: dict[str, Any]) -> None:
     path = out_path(doc["ward"])
     with open(path, "w", encoding="utf-8") as fh:
         json.dump(doc, fh, ensure_ascii=False, separators=(",", ":"), sort_keys=False)

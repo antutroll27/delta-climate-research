@@ -9,6 +9,7 @@ Two questions this answers, neither ever asked before:
 """
 import json, math, statistics as st
 import duckdb
+from collections.abc import Sequence
 
 LAT, LON = 22.528, 88.3659
 SIZE_M = 1400.0
@@ -41,8 +42,12 @@ for lon, lat, h, nf, dx, dy in rows:
 print(f"  theirs (Overture): {len(theirs)} footprints inside the same window")
 
 # --- nearest-neighbour matching, ours -> theirs ---
-def nearest(px, py, pool):
-    best, bd = None, 1e18
+def nearest(px: float, py: float,
+            pool: Sequence[tuple[float, ...]]
+            ) -> tuple[tuple[float, ...], float]:
+    if not pool:
+        raise ValueError("nearest() on an empty pool")
+    best, bd = pool[0], 1e18
     for t in pool:
         dd = (t[0]-px)**2 + (t[1]-py)**2
         if dd < bd: bd, best = dd, t

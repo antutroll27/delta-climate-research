@@ -178,6 +178,37 @@ class FarFile(TypedDict):
     wards: dict[WardId, FarWard]
 
 
+class Building(TypedDict):
+    """One Overture footprint in `data/geometry/<ward>-footprints.json`.
+
+    `p` is a FLAT ring in ward-local metres — [x0, y0, x1, y1, …], +y = north —
+    so it is reshaped (-1, 2), never zipped. `lonlat` is the same ring as
+    [lon, lat] PAIRS. Two representations of one polygon, and the pair that let
+    the north-south mirror be settled numerically: `p` is what the renderer
+    draws, `lonlat` is the independent ground truth it is checked against.
+    """
+    gers: str
+    p: list[float]
+    lonlat: list[list[float]]
+
+
+class FootprintsSkipped(TypedDict):
+    not_polygon: int
+    tiny: int
+    outside: int
+    holes_dropped: int
+
+
+class FootprintsFile(TypedDict):
+    """Verified identical across all three ward files, 2026-08-09."""
+    ward: WardId
+    release: str
+    count: int
+    source: str
+    skipped: FootprintsSkipped
+    b: list[Building]
+
+
 class TraWard(TypedDict):
     tra: float
     median_dist_m: float

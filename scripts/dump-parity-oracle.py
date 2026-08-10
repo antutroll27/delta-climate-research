@@ -41,6 +41,7 @@ Reads only cached granules — no network, no token, nothing printed from ~/.con
 from __future__ import annotations
 
 import argparse
+from typing import NotRequired, TypedDict
 import glob
 import json
 import os
@@ -69,6 +70,18 @@ OUT = os.path.join(ROOT, "tests", "fixtures", "geo-oracle")
 #: table and _types' own comment records that private copies had already diverged
 #: once — sub-pixel at ECOSTRESS's 70 m but four pixels at Sentinel's 10 m.
 WARD_BOXES = {w.id: _types.ward_bounds(w) for w in _types.WARDS.values()}
+
+
+class BoundsCase(TypedDict):
+    """One transformBounds oracle row. `densifyDeltaM` is derived after the row
+    is built, hence NotRequired — the CRS strings and the coordinate lists must
+    stay separately typed or the delta arithmetic sees `str | list[float]`."""
+    src: str
+    dst: str
+    bounds4326: list[float]
+    densify21: list[float]
+    naive4corner: list[float]
+    densifyDeltaM: NotRequired[list[float]]
 
 
 def _jsonable(v: Any) -> Any:
@@ -127,7 +140,7 @@ def dump_transform_bounds(cases: dict[str, Any]) -> None:
         # the study area ever widens, the test catches it instead of the science.
         "guard-zonewide-6deg": (84.00, 20.00, 90.00, 28.00),
     }
-    out = {}
+    out: dict[str, BoundsCase] = {}
     for name, box in boxes.items():
         # densify_pts must match _ecostress.target_grid exactly. Both the densified
         # and the naive four-corner result are recorded so the Go test can assert it

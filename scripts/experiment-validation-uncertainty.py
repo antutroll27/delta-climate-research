@@ -39,6 +39,8 @@ import os
 import sys
 
 import numpy as np
+import numpy.typing as npt
+from collections.abc import Sequence
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OBS = os.path.join(ROOT, "data", "calibration", "ward-observations.json")
@@ -52,7 +54,7 @@ fws = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(fws)
 
 
-def rmse(errs) -> float:
+def rmse(errs: Sequence[float] | npt.NDArray[np.float64]) -> float:
     a = np.asarray(list(errs), dtype=float)
     return math.sqrt(float(np.mean(a * a)))
 
@@ -115,4 +117,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()

@@ -18,7 +18,14 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import numpy.typing as npt
 from PIL import Image, ImageDraw
+
+U8 = npt.NDArray[np.uint8]
+F32 = npt.NDArray[np.float32]
+#: (source filename, was a real photo supplied?) — main() prints this as the
+#: "which assets are still placeholders" report.
+Report = list[tuple[str, bool]]
 
 ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "previews" / "poster" / "src"
@@ -40,7 +47,7 @@ RAMP = [GROUND, SMOKE, BLUE_GY, BEIGE]
 SHAFT_CUT = 0.93
 
 
-def build_lut(stops, levels=6):
+def build_lut(stops: list[tuple[int, int, int]], levels: int = 6) -> U8:
     """Posterised colour LUT indexed by 0-255 luminance.
 
     `levels` is what makes this read as data rather than a photo filter: the
@@ -61,16 +68,16 @@ def build_lut(stops, levels=6):
 LUT = build_lut(RAMP)
 
 
-def luminance(arr):
+def luminance(arr: U8 | F32) -> F32:
     return arr[..., :3].astype(np.float32) @ np.array([0.2126, 0.7152, 0.0722], np.float32)
 
 
-def duotone(img, use_mint=True):
+def duotone(img: Image.Image, use_mint: bool = True) -> Image.Image:
     """Map a photo onto the poster palette by luminance."""
     arr = np.asarray(img.convert("RGB"), np.uint8)
     lum = luminance(arr)
     # normalise so every photo uses the full ramp regardless of exposure
-    lo, hi = np.percentile(lum, 1), np.percentile(lum, 99)
+    lo, hi = float(np.percentile(lum, 1)), float(np.percentile(lum, 99))
     norm = np.clip((lum - lo) / max(hi - lo, 1e-6), 0, 1)
     out = LUT[(norm * 255).astype(np.uint8)]
     if use_mint:
@@ -78,16 +85,16 @@ def duotone(img, use_mint=True):
     return Image.fromarray(out, "RGB")
 
 
-def pixelate(img, block):
+def pixelate(img: Image.Image, block: int) -> Image.Image:
     """Hard nearest-neighbour blocks. No smoothing anywhere."""
     if block <= 1:
         return img.copy()
     w, h = img.size
-    small = img.resize((max(w // block, 1), max(h // block, 1)), Image.BOX)
-    return small.resize((w, h), Image.NEAREST)
+    small = img.resize((max(w // block, 1), max(h // block, 1)), Image.Resampling.BOX)
+    return small.resize((w, h), Image.Resampling.NEAREST)
 
 
-def bayer(shape, block):
+def bayer(shape: tuple[int, int], block: int) -> F32:
     """8x8 ordered dither threshold field, scaled to the block grid.
 
     Used at dissolve boundaries so the edge breaks up into pixels rather
@@ -106,7 +113,8 @@ def bayer(shape, block):
     return np.tile(cells, reps)[:h, :w]
 
 
-def block_ramp(img, mask, blocks=(3, 6, 10, 16, 24)):
+def block_ramp(img: Image.Image, mask: F32,
+               blocks: tuple[int, ...] = (3, 6, 10, 16, 24)) -> Image.Image:
     """Variable pixelation: mask 0 = sharpest block, 1 = coarsest.
 
     Built by compositing a handful of fully-pixelated copies rather than
@@ -124,24 +132,25 @@ def block_ramp(img, mask, blocks=(3, 6, 10, 16, 24)):
     return Image.fromarray(out, "RGB")
 
 
-def radial(w, h, cx, cy, r_in, r_out):
+def radial(w: int, h: int, cx: float, cy: float, r_in: float, r_out: float) -> F32:
     """0 inside r_in, ramping to 1 at r_out. Normalised to the short edge."""
     ys, xs = np.mgrid[0:h, 0:w].astype(np.float32)
     s = min(w, h)
     d = np.sqrt(((xs - cx * w) / s) ** 2 + ((ys - cy * h) / s) ** 2)
-    return np.clip((d - r_in) / max(r_out - r_in, 1e-6), 0, 1)
+    return np.asarray(np.clip((d - r_in) / max(r_out - r_in, 1e-6), 0, 1),
+                      dtype=np.float32)
 
 
-def cover(img, w, h):
+def cover(img: Image.Image, w: int, h: int) -> Image.Image:
     """Crop to fill w*h without distortion."""
     sw, sh = img.size
     scale = max(w / sw, h / sh)
-    img = img.resize((round(sw * scale), round(sh * scale)), Image.LANCZOS)
+    img = img.resize((round(sw * scale), round(sh * scale)), Image.Resampling.LANCZOS)
     sw, sh = img.size
     return img.crop(((sw - w) // 2, (sh - h) // 2, (sw - w) // 2 + w, (sh - h) // 2 + h))
 
 
-def placeholder(w, h, label):
+def placeholder(w: int, h: int, label: str) -> Image.Image:
     """Obvious stand-in. Must never be mistaken for a finished layer."""
     img = Image.new("RGB", (w, h), SMOKE)
     d = ImageDraw.Draw(img)
@@ -152,7 +161,7 @@ def placeholder(w, h, label):
     return img
 
 
-def load(name, w, h, label):
+def load(name: str, w: int, h: int, label: str) -> tuple[Image.Image, bool]:
     """Load a source photo, or a placeholder if it hasn't been supplied yet."""
     for ext in (".jpg", ".jpeg", ".png", ".webp", ".JPG", ".JPEG", ".PNG"):
         p = SRC / f"{name}{ext}"
@@ -169,7 +178,7 @@ HERO_W, HERO_H = 1080, 470
 FACE = 172
 
 
-def make_hero(report):
+def make_hero(report: Report) -> None:
     wood, real = load("woodland", HERO_W, HERO_H, "WOODLAND")
     report.append(("woodland.jpg", real))
     hero = duotone(wood, use_mint=real)  # no fake mint shaft on a placeholder
@@ -199,7 +208,7 @@ def make_hero(report):
     hero.save(OUT / "hero.png")
 
 
-def make_faces(report):
+def make_faces(report: Report) -> None:
     for i in range(1, 6):
         img, real = load(f"face{i}", FACE, FACE, f"FACE {i}")
         report.append((f"face{i}.jpg", real))
@@ -215,7 +224,7 @@ def make_faces(report):
         img.save(OUT / f"face{i}.png")
 
 
-def make_mark():
+def make_mark() -> None:
     """Lift the triangle off its glow background and recolour it mint.
 
     A plain colour key also catches the cyan glow bleeding off the artwork, so
@@ -233,7 +242,7 @@ def make_mark():
     S, V = hsv[..., 1], hsv[..., 2]
 
     solid = ((S > 200) & (V > 200)).astype(np.uint8)
-    n, labels, stats, _ = cv2.connectedComponentsWithStats(solid, 8)
+    n, labels, stats, _ = cv2.connectedComponentsWithStats(solid, connectivity=8)
     if n < 2:
         return
     biggest = 1 + int(np.argmax(stats[1:, cv2.CC_STAT_AREA]))
@@ -241,7 +250,7 @@ def make_mark():
     # close the gaps the wave strokes cut into the silhouette
     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((9, 9), np.uint8))
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    cv2.drawContours(mask, contours, -1, 1, cv2.FILLED)
+    cv2.drawContours(mask, contours, -1, (1,), cv2.FILLED)
 
     out = np.zeros(mask.shape + (4,), np.uint8)
     out[..., :3] = MINT
@@ -253,7 +262,7 @@ def make_mark():
     mark.crop(mark.getbbox()).save(OUT / "mark-mint.png")
 
 
-def make_venue():
+def make_venue() -> None:
     """Knock the venue's black badge out, keep the white script.
 
     Their logo is white lettering on a black hexagon. Dropped straight onto the
@@ -276,14 +285,14 @@ def make_venue():
     img.save(OUT / "venue-mark.png")
 
 
-def make_stripes(report):
+def make_stripes(report: Report) -> None:
     """Use the supplied stripes bar. Never recolour it - it is data."""
     for ext in (".png", ".jpg", ".jpeg", ".webp"):
         p = SRC / f"stripes{ext}"
         if p.exists():
             img = Image.open(p).convert("RGB")
             w, h = img.size
-            img.resize((1080, round(h * 1080 / w)), Image.LANCZOS).save(OUT / "stripes.png")
+            img.resize((1080, round(h * 1080 / w)), Image.Resampling.LANCZOS).save(OUT / "stripes.png")
             report.append(("stripes.png", True))
             return
     report.append(("stripes.png", False))
@@ -291,9 +300,9 @@ def make_stripes(report):
     img.save(OUT / "stripes.png")
 
 
-def main():
+def main() -> int:
     OUT.mkdir(parents=True, exist_ok=True)
-    report = []
+    report: Report = []
     make_hero(report)
     make_faces(report)
     make_stripes(report)
@@ -310,7 +319,7 @@ def main():
     return 0
 
 
-def demo():
+def demo() -> int:
     """Self-check: the treatment must posterise, block up, and stay in palette."""
     photo = Image.fromarray(
         (np.mgrid[0:64, 0:64][1] * 4).astype(np.uint8)[..., None].repeat(3, 2), "RGB"
@@ -333,6 +342,8 @@ def demo():
     b = bayer((16, 16), 1)
     assert 0 <= b.min() and b.max() < 1 and b.std() > 0, "dither field must vary in [0,1)"
     print("demo ok")
+
+    return 0
 
 
 if __name__ == "__main__":

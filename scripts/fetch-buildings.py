@@ -17,6 +17,7 @@ not assumed). Heights come from scripts/compute-heights.py and join on the GERS 
 from __future__ import annotations
 
 import argparse
+from typing import Any
 import hashlib
 import json
 import math
@@ -28,7 +29,7 @@ from shapely import wkb as shapely_wkb
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _types                                       # noqa: E402  (path set above)
-from shapely.geometry import Polygon
+from shapely.geometry import MultiPolygon, Polygon
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.join(HERE, "..")
@@ -70,19 +71,20 @@ def to_local(lon: float, lat: float, ward: str) -> tuple[float, float]:
     return (lon - clon) * mx, (lat - clat) * my
 
 
-def ward_rows(ward: str) -> tuple[list[dict], dict[str, int]]:
+def ward_rows(ward: str) -> tuple[list[dict[str, Any]], dict[str, int]]:
     """One ward's footprints: local-frame rings, GERS id, and lon/lat for Earth Engine."""
     con = duckdb.connect()
-    rows: list[dict] = []
+    rows: list[dict[str, Any]] = []
     skipped = {"not_polygon": 0, "tiny": 0, "outside": 0, "holes_dropped": 0}
     query = f"SELECT id, geometry FROM read_parquet('{RAW}/{ward}.parquet')"
     for gers, blob in con.execute(query).fetchall():
-        geom = shapely_wkb.loads(bytes(blob))
-        if geom.geom_type == "MultiPolygon":                 # keep the largest part
-            geom = max(geom.geoms, key=lambda g: g.area)
-        if geom.geom_type != "Polygon":
+        raw_geom = shapely_wkb.loads(bytes(blob))
+        if isinstance(raw_geom, MultiPolygon):               # keep the largest part
+            raw_geom = max(raw_geom.geoms, key=lambda g: g.area)
+        if not isinstance(raw_geom, Polygon):
             skipped["not_polygon"] += 1
             continue
+        geom: Polygon = raw_geom
         if len(geom.interiors) > 0:
             skipped["holes_dropped"] += 1                    # counted, never silent
         lonlat = list(geom.exterior.coords)
@@ -90,7 +92,9 @@ def ward_rows(ward: str) -> tuple[list[dict], dict[str, int]]:
         if abs(local.centroid.x) > SIZE_M / 2 or abs(local.centroid.y) > SIZE_M / 2:
             skipped["outside"] += 1                          # bbox caught a neighbour's edge
             continue
-        local = local.simplify(SIMPLIFY_M, preserve_topology=True)
+        simplified = local.simplify(SIMPLIFY_M, preserve_topology=True)
+        assert isinstance(simplified, Polygon), "simplify of a Polygon is a Polygon"
+        local = simplified
         if local.area < MIN_RING_M2:
             skipped["tiny"] += 1
             continue
@@ -165,12 +169,12 @@ def main() -> int:
         return check()
 
     os.makedirs(OUT, exist_ok=True)
-    manifest = {"release": RELEASE, "retrieved": RETRIEVED,
+    manifest: dict[str, Any] = {"release": RELEASE, "retrieved": RETRIEVED,
                 "source": "Overture Maps Foundation (ODbL)", "wards": {}}
     for ward in WARDS:
         rows, skipped = ward_rows(ward)
         path = os.path.join(OUT, f"{ward}-footprints.json")
-        doc = {
+        doc: dict[str, Any] = {
             "ward": ward, "release": RELEASE, "count": len(rows),
             "source": ("Overture Maps Foundation (ODbL) -- OSM + Google + Microsoft, "
                        "GERS-deduplicated"),

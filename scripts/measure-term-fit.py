@@ -84,7 +84,7 @@ def _load_sibling() -> Any:
 def centred(a: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
     """Remove the mean. Every comparison here is about PATTERN; ward-mean bias is
     measure-accuracy.py's job and is already reported there."""
-    return a - a.mean()
+    return np.asarray(a - a.mean(), dtype=np.float64)
 
 
 def main() -> None:
@@ -142,7 +142,7 @@ def main() -> None:
         X = np.vstack([r["X"] for r in rows])
         y = np.concatenate([r["y"] for r in rows])
         beta, *_ = np.linalg.lstsq(X, y, rcond=None)
-        return beta
+        return np.asarray(beta, dtype=np.float64)
 
     # LEAVE-ONE-OVERPASS-OUT: fit without an overpass, predict its cells.
     pred_free: list[npt.NDArray[np.float64]] = []

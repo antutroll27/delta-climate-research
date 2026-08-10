@@ -27,7 +27,7 @@ import json
 import os
 import sys
 import time
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 import requests
 
@@ -197,7 +197,7 @@ def count_records(path: str) -> int | None:
     return None
 
 
-def describe(resource: Resource) -> dict:
+def describe(resource: Resource) -> dict[str, Any]:
     """One manifest row, from the file on disk plus what we know about its use."""
     absolute = os.path.join(ROOT, resource.path)
     return {
@@ -214,7 +214,7 @@ def describe(resource: Resource) -> dict:
     }
 
 
-def serialise(doc: dict) -> str:
+def serialise(doc: dict[str, Any]) -> str:
     return json.dumps(doc, indent=2) + "\n"
 
 
@@ -235,7 +235,7 @@ def download(resource: Resource) -> None:
 
 # ── commands ────────────────────────────────────────────────────────────────
 
-def build_manifest() -> dict:
+def build_manifest() -> dict[str, Any]:
     return {
         "generated_by": "scripts/fetch-opencity.py",
         "catalogue": "https://data.opencity.in",

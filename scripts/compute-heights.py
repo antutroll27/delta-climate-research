@@ -25,6 +25,7 @@ its height statistics for exactly this reason.
 from __future__ import annotations
 
 import argparse
+from typing import Any, cast
 import json
 import math
 import os
@@ -84,7 +85,7 @@ def init_ee() -> None:
 
 
 def height_image() -> ee.Image:
-    return (ee.ImageCollection(COLLECTION)
+    return cast(ee.Image, ee.ImageCollection(COLLECTION)
             .filterDate(*EPOCH).mosaic().select("building_height"))
 
 
@@ -100,7 +101,7 @@ def to_lonlat(x: float, y: float, ward: str) -> list[float]:
     return [clon + x / mx, clat + y / my]
 
 
-def parity_features(ward: str) -> list[dict]:
+def parity_features(ward: str) -> list[dict[str, Any]]:
     """Features from the CURRENTLY SHIPPED geometry; id is the row index."""
     with open(os.path.join(PUBLIC, f"{ward}.json"), encoding="utf-8") as fh:
         d = json.load(fh)
@@ -114,7 +115,7 @@ def parity_features(ward: str) -> list[dict]:
     return feats
 
 
-def overture_features(ward: str) -> list[dict]:
+def overture_features(ward: str) -> list[dict[str, Any]]:
     with open(os.path.join(GEOM, f"{ward}-footprints.json"), encoding="utf-8") as fh:
         d = json.load(fh)
     feats = []
@@ -126,15 +127,16 @@ def overture_features(ward: str) -> list[dict]:
     return feats
 
 
-def reduce_page(img: ee.Image, feats: list[dict]) -> list[dict]:
+def reduce_page(img: ee.Image, feats: list[dict[str, Any]]) -> list[dict[str, Any]]:
     fc = ee.FeatureCollection([
         ee.Feature(ee.Geometry.Polygon([f["ring"]]), {"fid": f["id"]}) for f in feats
     ])
     reducer = (ee.Reducer.mean()
                .combine(ee.Reducer.percentile([65, 75]), sharedInputs=True)
                .combine(ee.Reducer.count(), sharedInputs=True))
-    out = img.reduceRegions(fc, reducer, SCALE_M, tileScale=4).getInfo()
-    rows = []
+    out = cast(dict[str, Any],
+               img.reduceRegions(fc, reducer, SCALE_M, tileScale=4).getInfo())
+    rows: list[dict[str, Any]] = []
     for f in out["features"]:
         p = f["properties"]
         n_px = p.get("count") or 0
@@ -147,8 +149,16 @@ def reduce_page(img: ee.Image, feats: list[dict]) -> list[dict]:
         # exactly for the same reason: it is also the dataset minimum.
         no_confidence = (not empty) and abs((mean or 0) - FILL_M) < 0.05
         usable = not empty
-        pick = lambda v: round(v, 1) if usable and v is not None else (
-            round(mean, 1) if usable else FILL_M)
+        def pick(v: float | None, usable: bool = usable,
+                 mean: float | None = mean) -> float:
+            # `empty` is true whenever mean is None and `usable` is `not empty`,
+            # so inside this branch mean is never None. Asserted rather than
+            # re-tested: a second `mean is not None` check here would be dead
+            # code implying a state the two lines above already exclude.
+            if not usable:
+                return FILL_M
+            assert mean is not None, "usable is defined as n_px and mean present"
+            return round(v, 1) if v is not None else round(mean, 1)
         rows.append({
             "id": p["fid"],
             "mean": round(mean, 1) if usable else FILL_M,
@@ -159,7 +169,7 @@ def reduce_page(img: ee.Image, feats: list[dict]) -> list[dict]:
     return rows
 
 
-def gates(doc: dict, stat: str = "p65") -> int:
+def gates(doc: dict[str, Any], stat: str = "p65") -> int:
     """Three checks replacing one that was measured to be unreachable.
 
     A -- distribution parity: what the published numbers actually consume.
@@ -208,11 +218,11 @@ def gates(doc: dict, stat: str = "p65") -> int:
 def run(mode: str) -> int:
     init_ee()
     img = height_image()
-    doc = {"mode": mode, "collection": COLLECTION, "epoch": EPOCH[0][:4],
-           "scale_m": SCALE_M, "wards": {}}
+    doc: dict[str, Any] = {"mode": mode, "collection": COLLECTION,
+                           "epoch": EPOCH[0][:4], "scale_m": SCALE_M, "wards": {}}
     for ward in WARDS:
         feats = parity_features(ward) if mode == "parity" else overture_features(ward)
-        rows: list[dict] = []
+        rows: list[dict[str, Any]] = []
         for i in range(0, len(feats), PAGE):
             rows += reduce_page(img, feats[i:i + PAGE])
             print(f"    {ward}: {min(i + PAGE, len(feats))}/{len(feats)}", flush=True)
@@ -224,8 +234,9 @@ def run(mode: str) -> int:
     out_path = os.path.join(GEOM, f"heights-{mode}.json")
     with open(out_path, "w", encoding="utf-8") as fh:
         fh.write(json.dumps(doc, separators=(",", ":")) + "\n")
-    fills = sum(sum(r["fill"] for r in rows) for rows in doc["wards"].values())
-    total = sum(len(rows) for rows in doc["wards"].values())
+    wards_out: dict[str, list[dict[str, Any]]] = doc["wards"]
+    fills = sum(1 for rows in wards_out.values() for r in rows if r["fill"])
+    total = sum(len(rows) for rows in wards_out.values())
     print(f"  -> {os.path.relpath(out_path, ROOT)} · {total:,} buildings · {fills} fill")
     return gates(doc) if mode == "overture" else 0
 

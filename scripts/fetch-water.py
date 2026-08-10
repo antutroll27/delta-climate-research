@@ -22,6 +22,8 @@ clip box deliberately sits past the 700 m half-width rather than at it.
 from __future__ import annotations
 
 import argparse
+from collections.abc import Callable
+from typing import Any, cast
 import json
 import math
 import os
@@ -60,7 +62,7 @@ def classify(tags: dict[str, str]) -> str:
     return "water"
 
 
-def query(ward: _types.Ward) -> dict:
+def query(ward: _types.Ward) -> dict[str, Any]:
     w, s, e, n = _types.ward_bounds(ward, pad_m=CLIP_M - ward.footprint_m / 2)
     bbox = f"{s},{w},{n},{e}"
     q = f"""[out:json][timeout:90];
@@ -77,7 +79,7 @@ out tags geom;"""
                       headers={"User-Agent": "delta-climate-research water fetch"},
                       timeout=120)
     r.raise_for_status()
-    return r.json()
+    return cast(dict[str, Any], r.json())
 
 
 def to_metres(ward: _types.Ward, lon: float, lat: float) -> tuple[float, float]:
@@ -96,7 +98,8 @@ def ring_area(ring: list[tuple[float, float]]) -> float:
 
 def clip_box(ring: list[tuple[float, float]], half: float) -> list[tuple[float, float]]:
     """Sutherland–Hodgman against the square [-half, half]^2."""
-    def clip_edge(pts, inside, intersect):
+    def clip_edge(pts: list[tuple[float, float]], inside: Callable[[tuple[float, float]], bool],
+                  intersect: Callable[[tuple[float, float], tuple[float, float]], tuple[float, float]]) -> list[tuple[float, float]]:
         out: list[tuple[float, float]] = []
         for i in range(len(pts)):
             cur, prev = pts[i], pts[i - 1]
@@ -113,10 +116,11 @@ def clip_box(ring: list[tuple[float, float]], half: float) -> list[tuple[float, 
             return []
 
         # For sign=+1: keep p[axis] <= half. For sign=-1: keep p[axis] >= -half.
-        def inside2(p, a=axis, sg=sign, h=half):
+        def inside2(p: tuple[float, float], a: int = axis, sg: int = sign, h: float = half) -> bool:
             return p[a] <= h if sg > 0 else p[a] >= -h
 
-        def intersect(p, q, a=axis, sg=sign, h=half):
+        def intersect(p: tuple[float, float], q: tuple[float, float], a: int = axis, sg: int = sign,
+                      h: float = half) -> tuple[float, float]:
             b = h if sg > 0 else -h
             t = (b - p[a]) / (q[a] - p[a])
             return (p[0] + t * (q[0] - p[0]), p[1] + t * (q[1] - p[1]))
@@ -125,7 +129,7 @@ def clip_box(ring: list[tuple[float, float]], half: float) -> list[tuple[float, 
     return ring
 
 
-def stitch_outers(members: list[dict]) -> list[list[tuple[float, float]]]:
+def stitch_outers(members: list[dict[str, Any]]) -> list[list[tuple[float, float]]]:
     """Join a relation's outer ways into closed rings by endpoint matching.
 
     Multipolygon outers arrive as arbitrary fragments. Greedy endpoint chaining
@@ -159,7 +163,7 @@ def stitch_outers(members: list[dict]) -> list[list[tuple[float, float]]]:
     return rings
 
 
-def fetch_ward(ward: _types.Ward) -> dict:
+def fetch_ward(ward: _types.Ward) -> dict[str, Any]:
     doc = query(ward)
     polys = []
     for el in doc.get("elements", []):

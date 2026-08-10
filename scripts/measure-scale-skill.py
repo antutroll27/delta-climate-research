@@ -107,7 +107,7 @@ def block_mean(a: npt.NDArray[np.float64], k: int) -> npt.NDArray[np.float64]:
     # comes back NaN and is dropped by the common mask. numpy warns anyway.
     with np.errstate(invalid="ignore"), warnings.catch_warnings():
         warnings.filterwarnings("ignore", message="Mean of empty slice")
-        return np.nanmean(v, axis=(1, 3))
+        return np.asarray(np.nanmean(v, axis=(1, 3)), dtype=np.float64)
 
 
 def main() -> None:

@@ -111,6 +111,7 @@ def main() -> None:
 
     full: dict[str, dict[str, npt.NDArray[np.float32]]] = {}
     coarse: dict[str, dict[str, npt.NDArray[np.float32]]] = {}
+    grid_wh: tuple[int, int] | None = None
     for wid, w in _types.WARDS.items():
         veg, alb = msa.surface_layers(wid)
         built = msa.built_layer(wid)
@@ -118,10 +119,16 @@ def main() -> None:
                      "built": upsample(built, SIM_N),
                      "water": np.zeros((SIM_N, SIM_N), dtype=np.float32)}
         _tf, W, H = target_grid(_types.ward_bounds(w))
+        grid_wh = (W, H)
         coarse[wid] = {"veg": msa.area_downsample(veg, H, W),
                        "alb": msa.area_downsample(alb, H, W),
                        "built": msa.area_downsample(built, H, W)}
-    print(f"  layers at {SIM_N}x{SIM_N} for the sim, {W}x{H} for the comparison\n")
+    # W/H were read out of the loop variable, which is only defined if WARDS is
+    # non-empty. It always is, so this was never a live failure — but the empty
+    # case is now stated rather than left to a NameError.
+    assert grid_wh is not None, "no wards configured"
+    print(f"  layers at {SIM_N}x{SIM_N} for the sim, "
+          f"{grid_wh[0]}x{grid_wh[1]} for the comparison\n")
 
     rows: list[dict[str, Any]] = []
     for i, sc in enumerate(scenes, 1):
