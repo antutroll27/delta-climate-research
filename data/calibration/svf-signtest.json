@@ -1,0 +1,906 @@
+{
+  "_what": "Pre-registered sign test: corr(SVF, model-obs). Direction fixed before measurement \u2014 positive at night means the missing sky-view term is real.",
+  "method": {
+    "dsm_m": 5.0,
+    "azimuths": 16,
+    "search_m": 150.0,
+    "svf_formula": "mean_phi(1 - sin^2(beta))",
+    "residual": "(model - model.mean()) - (obs - obs.mean())"
+  },
+  "summary": {
+    "night": {
+      "scenes": 50,
+      "mean_r": -0.5143288355453333,
+      "median_r": -0.46934048073862966,
+      "pct_positive": 0.0,
+      "sign_test_p": 1.7763568394002505e-15,
+      "verdict": "*** REJECTED: significant, WRONG SIGN ***",
+      "posthoc_partial_mean_r": 0.04799147505674974,
+      "posthoc_partial_pct_positive": 68.0,
+      "posthoc_partial_p": 0.015346677832630107
+    },
+    "day": {
+      "scenes": 37,
+      "mean_r": -0.5048870492571098,
+      "median_r": -0.5117421216031443,
+      "pct_positive": 2.7027027027027026,
+      "sign_test_p": 5.529727786779404e-10,
+      "verdict": "*** REJECTED: significant, WRONG SIGN ***",
+      "posthoc_partial_mean_r": -0.05040717970409318,
+      "posthoc_partial_pct_positive": 40.54054054054054,
+      "posthoc_partial_p": 0.3240086000878364
+    }
+  },
+  "rows": [
+    {
+      "date": "2024-01-05",
+      "phase": "night",
+      "ward": "ballygunge",
+      "cells": 441,
+      "r_svf_resid": -0.3213911650830719,
+      "r_svf_resid_partial": 0.3167003391325383,
+      "r_svf_obs": -0.3773475392155729,
+      "svf_sd": 0.07195277022470117
+    },
+    {
+      "date": "2024-01-05",
+      "phase": "night",
+      "ward": "baruipur",
+      "cells": 441,
+      "r_svf_resid": -0.39203601396343485,
+      "r_svf_resid_partial": 0.0037991927697742555,
+      "r_svf_obs": -0.38990827754947094,
+      "svf_sd": 0.041826685281207386
+    },
+    {
+      "date": "2024-01-05",
+      "phase": "night",
+      "ward": "barrackpore",
+      "cells": 347,
+      "r_svf_resid": -0.7472192762296391,
+      "r_svf_resid_partial": 0.1030477472821236,
+      "r_svf_obs": -0.41202908008745703,
+      "svf_sd": 0.05018303951448563
+    },
+    {
+      "date": "2024-01-17",
+      "phase": "day",
+      "ward": "ballygunge",
+      "cells": 441,
+      "r_svf_resid": -0.45398665732624605,
+      "r_svf_resid_partial": -0.14386395479727426,
+      "r_svf_obs": -0.03487320255611507,
+      "svf_sd": 0.07195277022470117
+    },
+    {
+      "date": "2024-01-17",
+      "phase": "day",
+      "ward": "baruipur",
+      "cells": 101,
+      "r_svf_resid": -0.6781108306170789,
+      "r_svf_resid_partial": -0.09334444176176203,
+      "r_svf_obs": 0.022771069759235558,
+      "svf_sd": 0.039514818021960184
+    },
+    {
+      "date": "2024-01-17",
+      "phase": "day",
+      "ward": "barrackpore",
+      "cells": 310,
+      "r_svf_resid": -0.7757650641395016,
+      "r_svf_resid_partial": -0.009483260350058703,
+      "r_svf_obs": -0.02685754725184564,
+      "svf_sd": 0.046232099228938735
+    },
+    {
+      "date": "2024-04-25",
+      "phase": "night",
+      "ward": "barrackpore",
+      "cells": 441,
+      "r_svf_resid": -0.7686638555415527,
+      "r_svf_resid_partial": 0.029201166021878302,
+      "r_svf_obs": -0.2641438006423402,
+      "svf_sd": 0.0499431660408942
+    },
+    {
+      "date": "2024-04-29",
+      "phase": "night",
+      "ward": "ballygunge",
+      "cells": 441,
+      "r_svf_resid": -0.22937214379084825,
+      "r_svf_resid_partial": 0.18083472126953348,
+      "r_svf_obs": -0.23129144185830547,
+      "svf_sd": 0.07195277022470117
+    },
+    {
+      "date": "2024-04-29",
+      "phase": "night",
+      "ward": "baruipur",
+      "cells": 441,
+      "r_svf_resid": -0.2736924051852742,
+      "r_svf_resid_partial": -0.010046151680542358,
+      "r_svf_obs": -0.33169895566038543,
+      "svf_sd": 0.041826685281207386
+    },
+    {
+      "date": "2024-04-29",
+      "phase": "night",
+      "ward": "barrackpore",
+      "cells": 339,
+      "r_svf_resid": -0.5493174741712072,
+      "r_svf_resid_partial": 0.017523404176064242,
+      "r_svf_obs": -0.4082243138322423,
+      "svf_sd": 0.0490027137028369
+    },
+    {
+      "date": "2024-05-18",
+      "phase": "day",
+      "ward": "ballygunge",
+      "cells": 12,
+      "r_svf_resid": 0.48399746750616424,
+      "r_svf_resid_partial": -0.6864317500496804,
+      "r_svf_obs": 0.8386759920496493,
+      "svf_sd": 0.08711910111097923
+    },
+    {
+      "date": "2024-05-18",
+      "phase": "day",
+      "ward": "baruipur",
+      "cells": 104,
+      "r_svf_resid": -0.6792590830522071,
+      "r_svf_resid_partial": -0.3155911326615528,
+      "r_svf_obs": 0.361913107323119,
+      "svf_sd": 0.036870499083811105
+    },
+    {
+      "date": "2024-10-10",
+      "phase": "day",
+      "ward": "ballygunge",
+      "cells": 441,
+      "r_svf_resid": -0.34408811340039164,
+      "r_svf_resid_partial": -0.01690119866975349,
+      "r_svf_obs": -0.028848716058148673,
+      "svf_sd": 0.07195277022470117
+    },
+    {
+      "date": "2024-10-10",
+      "phase": "day",
+      "ward": "baruipur",
+      "cells": 441,
+      "r_svf_resid": -0.4954971496558478,
+      "r_svf_resid_partial": 0.09066716527681822,
+      "r_svf_obs": -0.0370120022913941,
+      "svf_sd": 0.041826685281207386
+    },
+    {
+      "date": "2024-10-10",
+      "phase": "day",
+      "ward": "barrackpore",
+      "cells": 441,
+      "r_svf_resid": -0.7157434871418284,
+      "r_svf_resid_partial": 0.03327512596876463,
+      "r_svf_obs": 0.04265435899665578,
+      "svf_sd": 0.0499431660408942
+    },
+    {
+      "date": "2024-10-13",
+      "phase": "night",
+      "ward": "ballygunge",
+      "cells": 441,
+      "r_svf_resid": -0.32196261566366685,
+      "r_svf_resid_partial": 0.18986754773925998,
+      "r_svf_obs": -0.14350923482497727,
+      "svf_sd": 0.07195277022470117
+    },
+    {
+      "date": "2024-10-13",
+      "phase": "night",
+      "ward": "baruipur",
+      "cells": 441,
+      "r_svf_resid": -0.48512645984955366,
+      "r_svf_resid_partial": 0.01287098381101175,
+      "r_svf_obs": -0.0561105392714437,
+      "svf_sd": 0.041826685281207386
+    },
+    {
+      "date": "2024-10-13",
+      "phase": "night",
+      "ward": "barrackpore",
+      "cells": 388,
+      "r_svf_resid": -0.7962529756763648,
+      "r_svf_resid_partial": -0.0022570584094003306,
+      "r_svf_obs": -0.09559943338088542,
+      "svf_sd": 0.0485583533426817
+    },
+    {
+      "date": "2024-11-05",
+      "phase": "night",
+      "ward": "barrackpore",
+      "cells": 435,
+      "r_svf_resid": -0.7765045409635135,
+      "r_svf_resid_partial": 0.04203403725407052,
+      "r_svf_obs": 0.22194142927446314,
+      "svf_sd": 0.04974825480490735
+    },
+    {
+      "date": "2024-11-20",
+      "phase": "day",
+      "ward": "ballygunge",
+      "cells": 441,
+      "r_svf_resid": -0.47798241714557743,
+      "r_svf_resid_partial": -0.18527419552788493,
+      "r_svf_obs": -0.05828778857728691,
+      "svf_sd": 0.07195277022470117
+    },
+    {
+      "date": "2024-11-20",
+      "phase": "day",
+      "ward": "baruipur",
+      "cells": 441,
+      "r_svf_resid": -0.6719397691817551,
+      "r_svf_resid_partial": 0.15002742936336613,
+      "r_svf_obs": -0.44843907107768793,
+      "svf_sd": 0.041826685281207386
+    },
+    {
+      "date": "2024-11-20",
+      "phase": "day",
+      "ward": "barrackpore",
+      "cells": 441,
+      "r_svf_resid": -0.7876299982592334,
+      "r_svf_resid_partial": 0.0878055137983586,
+      "r_svf_obs": -0.35263258614123977,
+      "svf_sd": 0.0499431660408942
+    },
+    {
+      "date": "2024-12-16",
+      "phase": "night",
+      "ward": "ballygunge",
+      "cells": 441,
+      "r_svf_resid": -0.3085520709419543,
+      "r_svf_resid_partial": 0.25016213710800184,
+      "r_svf_obs": -0.28313368114794113,
+      "svf_sd": 0.07195277022470117
+    },
+    {
+      "date": "2024-12-16",
+      "phase": "night",
+      "ward": "baruipur",
+      "cells": 441,
+      "r_svf_resid": -0.46839981818937276,
+      "r_svf_resid_partial": -0.0704128298496423,
+      "r_svf_obs": -0.25939128842806386,
+      "svf_sd": 0.041826685281207386
+    },
+    {
+      "date": "2024-12-16",
+      "phase": "night",
+      "ward": "barrackpore",
+      "cells": 432,
+      "r_svf_resid": -0.767096581555362,
+      "r_svf_resid_partial": 0.0022387134816797896,
+      "r_svf_obs": -0.16714401531240705,
+      "svf_sd": 0.049414092279502796
+    },
+    {
+      "date": "2025-01-04",
+      "phase": "night",
+      "ward": "ballygunge",
+      "cells": 311,
+      "r_svf_resid": -0.3762902718227327,
+      "r_svf_resid_partial": 0.1905487469910494,
+      "r_svf_obs": -0.26029149680511104,
+      "svf_sd": 0.07144291202715998
+    },
+    {
+      "date": "2025-01-04",
+      "phase": "night",
+      "ward": "baruipur",
+      "cells": 441,
+      "r_svf_resid": -0.4888565085007164,
+      "r_svf_resid_partial": 0.12351998076124043,
+      "r_svf_obs": -0.29538024754172326,
+      "svf_sd": 0.041826685281207386
+    },
+    {
+      "date": "2025-01-04",
+      "phase": "night",
+      "ward": "barrackpore",
+      "cells": 441,
+      "r_svf_resid": -0.774531513854165,
+      "r_svf_resid_partial": 0.0982166630169952,
+      "r_svf_obs": -0.44388175196461255,
+      "svf_sd": 0.0499431660408942
+    },
+    {
+      "date": "2025-03-19",
+      "phase": "night",
+      "ward": "barrackpore",
+      "cells": 368,
+      "r_svf_resid": -0.8292939457626984,
+      "r_svf_resid_partial": 0.05350535523786862,
+      "r_svf_obs": -0.1218173563717906,
+      "svf_sd": 0.05121074803848036
+    },
+    {
+      "date": "2025-04-02",
+      "phase": "day",
+      "ward": "ballygunge",
+      "cells": 441,
+      "r_svf_resid": -0.49517022157461216,
+      "r_svf_resid_partial": -0.23537438006761907,
+      "r_svf_obs": -0.04880780043009974,
+      "svf_sd": 0.07195277022470117
+    },
+    {
+      "date": "2025-04-02",
+      "phase": "day",
+      "ward": "baruipur",
+      "cells": 441,
+      "r_svf_resid": -0.6428863110269873,
+      "r_svf_resid_partial": 0.13635836769016543,
+      "r_svf_obs": -0.5364688735016907,
+      "svf_sd": 0.041826685281207386
+    },
+    {
+      "date": "2025-04-02",
+      "phase": "day",
+      "ward": "barrackpore",
+      "cells": 441,
+      "r_svf_resid": -0.8007854202611944,
+      "r_svf_resid_partial": -0.07532066726167483,
+      "r_svf_obs": -0.3262113443412305,
+      "svf_sd": 0.0499431660408942
+    },
+    {
+      "date": "2025-04-24",
+      "phase": "night",
+      "ward": "ballygunge",
+      "cells": 441,
+      "r_svf_resid": -0.3694837856643269,
+      "r_svf_resid_partial": -0.06483209203590022,
+      "r_svf_obs": 0.0727638197216676,
+      "svf_sd": 0.07195277022470117
+    },
+    {
+      "date": "2025-04-24",
+      "phase": "night",
+      "ward": "baruipur",
+      "cells": 339,
+      "r_svf_resid": -0.28845572879911907,
+      "r_svf_resid_partial": -0.15895812935857198,
+      "r_svf_obs": -0.025156084538357625,
+      "svf_sd": 0.04136659941856276
+    },
+    {
+      "date": "2025-04-24",
+      "phase": "night",
+      "ward": "barrackpore",
+      "cells": 441,
+      "r_svf_resid": -0.5607632381214506,
+      "r_svf_resid_partial": 0.051121715718782074,
+      "r_svf_obs": -0.25696157459442814,
+      "svf_sd": 0.0499431660408942
+    },
+    {
+      "date": "2025-05-14",
+      "phase": "day",
+      "ward": "ballygunge",
+      "cells": 372,
+      "r_svf_resid": -0.3761765522630545,
+      "r_svf_resid_partial": -0.015501340662928907,
+      "r_svf_obs": -0.14275842085433363,
+      "svf_sd": 0.07306666482644004
+    },
+    {
+      "date": "2025-05-14",
+      "phase": "day",
+      "ward": "baruipur",
+      "cells": 441,
+      "r_svf_resid": -0.5902892287049082,
+      "r_svf_resid_partial": 0.085799035587566,
+      "r_svf_obs": -0.5040918480533821,
+      "svf_sd": 0.041826685281207386
+    },
+    {
+      "date": "2025-05-14",
+      "phase": "day",
+      "ward": "barrackpore",
+      "cells": 441,
+      "r_svf_resid": -0.6778577312084626,
+      "r_svf_resid_partial": -0.028260717366040942,
+      "r_svf_obs": -0.14463912340326784,
+      "svf_sd": 0.0499431660408942
+    },
+    {
+      "date": "2025-06-03",
+      "phase": "day",
+      "ward": "baruipur",
+      "cells": 118,
+      "r_svf_resid": -0.34794108662032547,
+      "r_svf_resid_partial": 0.0042970876995913065,
+      "r_svf_obs": -0.042314578195417146,
+      "svf_sd": 0.04353412390776279
+    },
+    {
+      "date": "2025-06-03",
+      "phase": "day",
+      "ward": "barrackpore",
+      "cells": 222,
+      "r_svf_resid": -0.033735229149542606,
+      "r_svf_resid_partial": 0.14300827571960595,
+      "r_svf_obs": -0.37620132024639164,
+      "svf_sd": 0.04637652840405464
+    },
+    {
+      "date": "2025-09-05",
+      "phase": "night",
+      "ward": "ballygunge",
+      "cells": 382,
+      "r_svf_resid": -0.4229993636692445,
+      "r_svf_resid_partial": -0.049252295433871635,
+      "r_svf_obs": 0.15345624651002102,
+      "svf_sd": 0.07364356910929151
+    },
+    {
+      "date": "2025-09-05",
+      "phase": "night",
+      "ward": "barrackpore",
+      "cells": 441,
+      "r_svf_resid": -0.4699459698917532,
+      "r_svf_resid_partial": -0.057065037154046476,
+      "r_svf_obs": -0.03963012173761541,
+      "svf_sd": 0.0499431660408942
+    },
+    {
+      "date": "2025-09-28",
+      "phase": "day",
+      "ward": "ballygunge",
+      "cells": 32,
+      "r_svf_resid": -0.11240152276661108,
+      "r_svf_resid_partial": -0.24293062509970476,
+      "r_svf_obs": 0.25398093519709464,
+      "svf_sd": 0.049424518104516243
+    },
+    {
+      "date": "2025-09-28",
+      "phase": "day",
+      "ward": "barrackpore",
+      "cells": 437,
+      "r_svf_resid": -0.39611141647461634,
+      "r_svf_resid_partial": -0.053295848723307844,
+      "r_svf_obs": 0.062131659570600274,
+      "svf_sd": 0.05001182866531787
+    },
+    {
+      "date": "2025-09-29",
+      "phase": "night",
+      "ward": "ballygunge",
+      "cells": 259,
+      "r_svf_resid": -0.3591319328685918,
+      "r_svf_resid_partial": -0.18783879150947821,
+      "r_svf_obs": 0.009761340720751443,
+      "svf_sd": 0.07575176265422955
+    },
+    {
+      "date": "2025-09-29",
+      "phase": "night",
+      "ward": "baruipur",
+      "cells": 430,
+      "r_svf_resid": -0.4668139415847777,
+      "r_svf_resid_partial": 0.14805237814852198,
+      "r_svf_obs": -0.40306954277681545,
+      "svf_sd": 0.04222775326428931
+    },
+    {
+      "date": "2025-09-29",
+      "phase": "night",
+      "ward": "barrackpore",
+      "cells": 441,
+      "r_svf_resid": -0.6600429961841757,
+      "r_svf_resid_partial": -0.054151750167666775,
+      "r_svf_obs": -0.1486572368687408,
+      "svf_sd": 0.0499431660408942
+    },
+    {
+      "date": "2025-10-09",
+      "phase": "day",
+      "ward": "ballygunge",
+      "cells": 420,
+      "r_svf_resid": -0.4132943175966433,
+      "r_svf_resid_partial": -0.020254696909812818,
+      "r_svf_obs": -0.0029723903676096342,
+      "svf_sd": 0.07179945389283628
+    },
+    {
+      "date": "2025-10-09",
+      "phase": "day",
+      "ward": "barrackpore",
+      "cells": 441,
+      "r_svf_resid": -0.7557191717451623,
+      "r_svf_resid_partial": -0.03398080952150677,
+      "r_svf_obs": -0.033974845637322094,
+      "svf_sd": 0.0499431660408942
+    },
+    {
+      "date": "2025-10-12",
+      "phase": "night",
+      "ward": "ballygunge",
+      "cells": 441,
+      "r_svf_resid": -0.33204668283468164,
+      "r_svf_resid_partial": 0.3021594170886787,
+      "r_svf_obs": -0.30591727332106083,
+      "svf_sd": 0.07195277022470117
+    },
+    {
+      "date": "2025-10-12",
+      "phase": "night",
+      "ward": "baruipur",
+      "cells": 441,
+      "r_svf_resid": -0.5224072013301748,
+      "r_svf_resid_partial": -0.11730453186585925,
+      "r_svf_obs": -0.07219218192187875,
+      "svf_sd": 0.041826685281207386
+    },
+    {
+      "date": "2025-10-12",
+      "phase": "night",
+      "ward": "barrackpore",
+      "cells": 439,
+      "r_svf_resid": -0.7544654943436482,
+      "r_svf_resid_partial": 0.11922889333481325,
+      "r_svf_obs": -0.3240812290980486,
+      "svf_sd": 0.049783153283124236
+    },
+    {
+      "date": "2025-10-16",
+      "phase": "night",
+      "ward": "ballygunge",
+      "cells": 336,
+      "r_svf_resid": -0.2990966688034285,
+      "r_svf_resid_partial": 0.12216562919965135,
+      "r_svf_obs": -0.06605574978384647,
+      "svf_sd": 0.06819716471440736
+    },
+    {
+      "date": "2025-10-16",
+      "phase": "night",
+      "ward": "baruipur",
+      "cells": 441,
+      "r_svf_resid": -0.46873499158550613,
+      "r_svf_resid_partial": 0.2175562767001556,
+      "r_svf_obs": -0.04132571740275611,
+      "svf_sd": 0.041826685281207386
+    },
+    {
+      "date": "2025-10-16",
+      "phase": "night",
+      "ward": "barrackpore",
+      "cells": 441,
+      "r_svf_resid": -0.7879824068861304,
+      "r_svf_resid_partial": 0.08499783205554069,
+      "r_svf_obs": -0.16116929690124718,
+      "svf_sd": 0.0499431660408942
+    },
+    {
+      "date": "2025-10-24",
+      "phase": "night",
+      "ward": "ballygunge",
+      "cells": 441,
+      "r_svf_resid": -0.3817965628212458,
+      "r_svf_resid_partial": 0.08609182224895495,
+      "r_svf_obs": -0.20360573644825367,
+      "svf_sd": 0.07195277022470117
+    },
+    {
+      "date": "2025-10-24",
+      "phase": "night",
+      "ward": "baruipur",
+      "cells": 441,
+      "r_svf_resid": -0.5035295360557761,
+      "r_svf_resid_partial": 0.15686679008139126,
+      "r_svf_obs": -0.37062676051928456,
+      "svf_sd": 0.041826685281207386
+    },
+    {
+      "date": "2025-10-24",
+      "phase": "night",
+      "ward": "barrackpore",
+      "cells": 317,
+      "r_svf_resid": -0.779898233885673,
+      "r_svf_resid_partial": 0.10059724713391784,
+      "r_svf_obs": -0.19156199391155684,
+      "svf_sd": 0.05074618104719842
+    },
+    {
+      "date": "2025-11-21",
+      "phase": "day",
+      "ward": "ballygunge",
+      "cells": 441,
+      "r_svf_resid": -0.4881838607063754,
+      "r_svf_resid_partial": -0.2175847968231894,
+      "r_svf_obs": -0.04997502158712301,
+      "svf_sd": 0.07195277022470117
+    },
+    {
+      "date": "2025-11-21",
+      "phase": "day",
+      "ward": "barrackpore",
+      "cells": 441,
+      "r_svf_resid": -0.7882841490495094,
+      "r_svf_resid_partial": -0.0701158161125423,
+      "r_svf_obs": -0.26253995747515524,
+      "svf_sd": 0.0499431660408942
+    },
+    {
+      "date": "2025-12-21",
+      "phase": "night",
+      "ward": "ballygunge",
+      "cells": 441,
+      "r_svf_resid": -0.3749132059043724,
+      "r_svf_resid_partial": 0.18631141535186965,
+      "r_svf_obs": -0.20726778987558056,
+      "svf_sd": 0.07195277022470117
+    },
+    {
+      "date": "2025-12-21",
+      "phase": "night",
+      "ward": "barrackpore",
+      "cells": 441,
+      "r_svf_resid": -0.8060574454565188,
+      "r_svf_resid_partial": 0.07695975720090191,
+      "r_svf_obs": -0.0038277072506437268,
+      "svf_sd": 0.0499431660408942
+    },
+    {
+      "date": "2026-01-22",
+      "phase": "day",
+      "ward": "ballygunge",
+      "cells": 441,
+      "r_svf_resid": -0.5166552166116355,
+      "r_svf_resid_partial": -0.2867250117138738,
+      "r_svf_obs": -0.005254938563300179,
+      "svf_sd": 0.07195277022470117
+    },
+    {
+      "date": "2026-01-22",
+      "phase": "day",
+      "ward": "baruipur",
+      "cells": 441,
+      "r_svf_resid": -0.6443336988789286,
+      "r_svf_resid_partial": 0.14517574474939718,
+      "r_svf_obs": -0.4772797590462611,
+      "svf_sd": 0.041826685281207386
+    },
+    {
+      "date": "2026-01-22",
+      "phase": "day",
+      "ward": "barrackpore",
+      "cells": 436,
+      "r_svf_resid": -0.7918960208614371,
+      "r_svf_resid_partial": -0.04008850661842508,
+      "r_svf_obs": -0.23020214547799187,
+      "svf_sd": 0.04942266007588522
+    },
+    {
+      "date": "2026-01-23",
+      "phase": "night",
+      "ward": "ballygunge",
+      "cells": 441,
+      "r_svf_resid": -0.4163269031105914,
+      "r_svf_resid_partial": -0.06884309746690304,
+      "r_svf_obs": -0.12575100165462488,
+      "svf_sd": 0.07195277022470117
+    },
+    {
+      "date": "2026-01-23",
+      "phase": "night",
+      "ward": "baruipur",
+      "cells": 434,
+      "r_svf_resid": -0.49297498318032223,
+      "r_svf_resid_partial": -0.10082545781672413,
+      "r_svf_obs": -0.29110070873774746,
+      "svf_sd": 0.04179498087541149
+    },
+    {
+      "date": "2026-01-23",
+      "phase": "night",
+      "ward": "barrackpore",
+      "cells": 403,
+      "r_svf_resid": -0.6941154566734452,
+      "r_svf_resid_partial": 0.05224668833150805,
+      "r_svf_obs": -0.3273569578936147,
+      "svf_sd": 0.04999580190731176
+    },
+    {
+      "date": "2026-01-26",
+      "phase": "day",
+      "ward": "ballygunge",
+      "cells": 441,
+      "r_svf_resid": -0.5049572900659595,
+      "r_svf_resid_partial": -0.2630459014046763,
+      "r_svf_obs": -0.01618648271532002,
+      "svf_sd": 0.07195277022470117
+    },
+    {
+      "date": "2026-01-26",
+      "phase": "day",
+      "ward": "baruipur",
+      "cells": 441,
+      "r_svf_resid": -0.6209833604989026,
+      "r_svf_resid_partial": 0.27237048387929497,
+      "r_svf_obs": -0.5138756834983873,
+      "svf_sd": 0.041826685281207386
+    },
+    {
+      "date": "2026-01-26",
+      "phase": "day",
+      "ward": "barrackpore",
+      "cells": 441,
+      "r_svf_resid": -0.7995934368120086,
+      "r_svf_resid_partial": 0.000539732913476464,
+      "r_svf_obs": -0.12807486862602135,
+      "svf_sd": 0.0499431660408942
+    },
+    {
+      "date": "2026-03-05",
+      "phase": "night",
+      "ward": "barrackpore",
+      "cells": 352,
+      "r_svf_resid": -0.8412758140892833,
+      "r_svf_resid_partial": -0.033625607664701636,
+      "r_svf_obs": 0.06909945810002964,
+      "svf_sd": 0.0507297940381906
+    },
+    {
+      "date": "2026-04-12",
+      "phase": "night",
+      "ward": "ballygunge",
+      "cells": 395,
+      "r_svf_resid": -0.26051842323989804,
+      "r_svf_resid_partial": 0.26353400834018087,
+      "r_svf_obs": -0.254993195734207,
+      "svf_sd": 0.07267510621440185
+    },
+    {
+      "date": "2026-04-12",
+      "phase": "night",
+      "ward": "baruipur",
+      "cells": 418,
+      "r_svf_resid": -0.3979053044323239,
+      "r_svf_resid_partial": 0.007820054510330755,
+      "r_svf_obs": -0.15087737019604308,
+      "svf_sd": 0.04121307411317489
+    },
+    {
+      "date": "2026-04-12",
+      "phase": "night",
+      "ward": "barrackpore",
+      "cells": 382,
+      "r_svf_resid": -0.6940206400358039,
+      "r_svf_resid_partial": 0.04553310775736863,
+      "r_svf_obs": -0.15830511350165694,
+      "svf_sd": 0.0497160141277597
+    },
+    {
+      "date": "2026-04-20",
+      "phase": "night",
+      "ward": "ballygunge",
+      "cells": 338,
+      "r_svf_resid": -0.2710000569716654,
+      "r_svf_resid_partial": -0.032228881355025746,
+      "r_svf_obs": -0.07572024567227544,
+      "svf_sd": 0.0728300409396874
+    },
+    {
+      "date": "2026-04-20",
+      "phase": "night",
+      "ward": "baruipur",
+      "cells": 223,
+      "r_svf_resid": -0.4178233898946227,
+      "r_svf_resid_partial": -0.17785362552281586,
+      "r_svf_obs": -0.0682076085491403,
+      "svf_sd": 0.04181181656631506
+    },
+    {
+      "date": "2026-04-20",
+      "phase": "night",
+      "ward": "barrackpore",
+      "cells": 248,
+      "r_svf_resid": -0.5375326160047356,
+      "r_svf_resid_partial": 0.07003297272020784,
+      "r_svf_obs": -0.23074086564013085,
+      "svf_sd": 0.0501616622082483
+    },
+    {
+      "date": "2026-04-24",
+      "phase": "night",
+      "ward": "ballygunge",
+      "cells": 340,
+      "r_svf_resid": -0.43396871703377193,
+      "r_svf_resid_partial": -0.1505520953631679,
+      "r_svf_obs": 0.19494205450534505,
+      "svf_sd": 0.06891614427852187
+    },
+    {
+      "date": "2026-04-24",
+      "phase": "night",
+      "ward": "baruipur",
+      "cells": 441,
+      "r_svf_resid": -0.4663027677097192,
+      "r_svf_resid_partial": 0.009702074886221018,
+      "r_svf_obs": -0.05670716599397333,
+      "svf_sd": 0.041826685281207386
+    },
+    {
+      "date": "2026-04-24",
+      "phase": "night",
+      "ward": "barrackpore",
+      "cells": 441,
+      "r_svf_resid": -0.5095516814547564,
+      "r_svf_resid_partial": 0.020572368629719173,
+      "r_svf_obs": -0.13212698611706916,
+      "svf_sd": 0.0499431660408942
+    },
+    {
+      "date": "2026-05-14",
+      "phase": "day",
+      "ward": "ballygunge",
+      "cells": 313,
+      "r_svf_resid": -0.5117421216031443,
+      "r_svf_resid_partial": -0.20215824863701226,
+      "r_svf_obs": 0.11828656134237472,
+      "svf_sd": 0.0751679946966675
+    },
+    {
+      "date": "2026-05-14",
+      "phase": "day",
+      "ward": "baruipur",
+      "cells": 217,
+      "r_svf_resid": -0.47106383396119705,
+      "r_svf_resid_partial": 0.044976437719309155,
+      "r_svf_obs": -0.35617339258566527,
+      "svf_sd": 0.03944749554639489
+    },
+    {
+      "date": "2026-05-14",
+      "phase": "day",
+      "ward": "barrackpore",
+      "cells": 346,
+      "r_svf_resid": -0.6577701245890556,
+      "r_svf_resid_partial": 0.02918941638448467,
+      "r_svf_obs": -0.23742024417345442,
+      "svf_sd": 0.050771890394631265
+    },
+    {
+      "date": "2026-05-26",
+      "phase": "day",
+      "ward": "ballygunge",
+      "cells": 306,
+      "r_svf_resid": -0.40627153612965855,
+      "r_svf_resid_partial": -0.11889281449323409,
+      "r_svf_obs": -0.12765692541220716,
+      "svf_sd": 0.07495822495553625
+    },
+    {
+      "date": "2026-05-26",
+      "phase": "day",
+      "ward": "baruipur",
+      "cells": 389,
+      "r_svf_resid": -0.15514988972071397,
+      "r_svf_resid_partial": 0.10860578969517036,
+      "r_svf_obs": -0.510575878218274,
+      "svf_sd": 0.04129072523763322
+    },
+    {
+      "date": "2026-05-26",
+      "phase": "day",
+      "ward": "barrackpore",
+      "cells": 232,
+      "r_svf_resid": -0.08556297121891429,
+      "r_svf_resid_partial": 0.15725885973669823,
+      "r_svf_obs": -0.31163311687117196,
+      "svf_sd": 0.04763067719019003
+    }
+  ]
+}
