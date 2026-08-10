@@ -41,6 +41,9 @@ export function nearestImage(lon: number, lat: number, token: string, fetchImpl:
     const d = 0.0006; // ~65 m half-box fallback
     const bboxUrl = `${GRAPH}?access_token=${token}&fields=${FIELDS}&bbox=${lon - d},${lat - d},${lon + d},${lat + d}&limit=1`;
     return query(bboxUrl, fetchImpl);
+  }).then((final) => {
+    if (!final) cache.delete(key); // don't memoize misses/transient failures — allow retry
+    return final;
   });
   cache.set(key, p);
   return p;

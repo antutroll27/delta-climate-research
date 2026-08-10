@@ -1,4 +1,4 @@
-import type { Map as MlMap, PointLike } from 'maplibre-gl';
+import type { Map as MlMap } from 'maplibre-gl';
 
 // Mapillary coverage vector tiles (map-matched geometries). Token goes in the URL.
 const TILE_URL = (token: string) =>
@@ -51,13 +51,6 @@ export function removeCoverage(map: MlMap): void {
 }
 
 export const IMAGE_LAYER_ID = IMG_LAYER;
-
-/** Resolve a screen point to the nearest rendered image feature's id (string-cast for precision). */
-export function queryImageIdAt(map: MlMap, point: PointLike): string | null {
-  const feats = map.queryRenderedFeatures(point, { layers: [IMG_LAYER] });
-  const id = feats[0]?.properties?.id;
-  return id == null ? null : String(id);
-}
 
 export function assertCoverageLogic(): void {
   const ok = (c: boolean, m: string) => { if (!c) throw new Error(`coverage: ${m}`); };

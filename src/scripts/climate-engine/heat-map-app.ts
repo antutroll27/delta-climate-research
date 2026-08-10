@@ -876,6 +876,7 @@ export function mountHeatMap(): () => void {
        drop any selection: building #1759 in Ballygunge is a different building in
        Baruipur, so carrying the index across a ward switch would lie. */
     select(null);
+    closeStreetView();
     registry = buildRegistry(d.b);
 
     currentWardSizeM = d.sizeM;
@@ -1619,6 +1620,7 @@ export function mountHeatMap(): () => void {
     document.removeEventListener('visibilitychange', onVis);
     map.off('style.load', onStyleLoad); map.off('load', onMapLoad);
     cleanup.forEach(fn => fn());
+    closeStreetView();
     relief?.dispose();
     coreField.dispose();
     simHost?.dispose();
