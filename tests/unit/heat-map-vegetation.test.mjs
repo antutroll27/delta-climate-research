@@ -44,3 +44,15 @@ test('canopy blend preserves the ward-mean vegetation but redistributes it', () 
   assert.ok(hi > lo, 'vegetation shifts toward tall canopy');
   for (const v of out) assert.ok(v >= 0 && v <= 1, 'stays in [0,1]');
 });
+
+import { asTreesFile, assertVegetationLogic, createVegetationLayer } from '../../src/scripts/climate-engine/vegetation-layer.ts';
+
+test('asTreesFile validates the instance list', () => {
+  assert.equal(asTreesFile(null), null, 'null rejected');
+  assert.equal(asTreesFile({ ward: 'x', grid: 140, sizeM: 1400, trees: 'no' }), null, 'trees must be array');
+  const f = asTreesFile({ ward: 'x', grid: 140, sizeM: 1400, retrieved: '2026-08-10',
+    trees: [{ x: 1, y: 2, h: 6, species: 'neem', r: 2 }] });
+  assert.ok(f && f.trees.length === 1 && f.trees[0].species === 'neem', 'valid trees accepted');
+});
+
+test('vegetation self-check passes', () => { assertVegetationLogic(); });
