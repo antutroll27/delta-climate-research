@@ -748,7 +748,7 @@ export function mountHeatMap(): () => void {
     for (const id of REPLACED_ROAD_GEOMETRY) {
       if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', basemapVisibility);
     }
-    for (const layer of map.getStyle().layers ?? []) {
+    for (const layer of map.getStyle()?.layers ?? []) {
       if (isReplacedRoadLabel(layer as never) && map.getLayer(layer.id)) {
         map.setLayoutProperty(layer.id, 'visibility', basemapVisibility);
       }
