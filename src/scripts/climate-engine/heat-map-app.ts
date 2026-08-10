@@ -23,7 +23,8 @@ import * as U from './dc-urs';
 import { applyScenario } from './dc-urs-scenario';
 import type { DcUrsInputs } from './dc-urs-inputs';
 import { rasterWardBase } from './ward-raster';
-import { loadWardSurface, type WardSurface } from './surface-raster';
+import { loadWardSurface, loadCanopyRaster, type WardSurface, type CanopyRaster } from './surface-raster';
+import { asTreesFile, type SpeciesAssets, type Species } from './vegetation-layer';
 import { buildRegistry, type BuildingMeta } from './explore/building-pick';
 import { selectPhase } from './phase-select';
 import { asTerrainField, terrainLabel, TERRAIN_N, type TerrainField } from './terrain';
@@ -47,6 +48,48 @@ import {
 const WARDS = WARD_MAP;
 const { SIM_N, RESET_BURST } = M;
 const STYLES = { dark: 'https://tiles.openfreemap.org/styles/dark', studio: 'https://tiles.openfreemap.org/styles/positron' };
+
+/* Species meshes are ward-independent, so they load once for the module's
+   lifetime rather than per ward. `undefined` means unfetched, `null` means
+   fetched-and-failed — the same idiom the ward artefact caches use, so a
+   missing GLB set doesn't retry on every ward switch. Loaded dynamically,
+   like the relief renderer itself, so Three.js never reaches the route
+   bootstrap when the optional relief layer is never engaged. */
+let vegSpeciesCache: SpeciesAssets | null | undefined;
+async function loadVegSpecies(): Promise<SpeciesAssets | null> {
+  if (vegSpeciesCache !== undefined) return vegSpeciesCache;
+  try {
+    const T3 = await import('three');
+    const { GLTFLoader } = await import('three/examples/jsm/loaders/GLTFLoader.js');
+    const { mergeGeometries } = await import('three/examples/jsm/utils/BufferGeometryUtils.js');
+    const loader = new GLTFLoader();
+    const names: Species[] = ['neem', 'gulmohar', 'palm'];
+    const assets = {} as SpeciesAssets;
+    for (const sp of names) {
+      const gltf = await loader.loadAsync(`/heat-map/models/${sp}.glb`);
+      const geos: import('three').BufferGeometry[] = [];
+      let material: import('three').Material | null = null;
+      gltf.scene.updateMatrixWorld(true);
+      gltf.scene.traverse((o) => {
+        const m = o as import('three').Mesh;
+        if (m.isMesh) {
+          const g = m.geometry.clone();
+          g.applyMatrix4(m.matrixWorld);
+          geos.push(g);
+          material ??= m.material as import('three').Material;
+        }
+      });
+      const geometry = geos.length > 1 ? (mergeGeometries(geos, false) ?? geos[0]) : geos[0];
+      const box = new T3.Box3().setFromBufferAttribute(geometry.getAttribute('position') as import('three').BufferAttribute);
+      assets[sp] = {
+        geometry, material: material ?? new T3.MeshStandardMaterial({ color: 0x4f9550 }),
+        baseHeight: box.max.y - box.min.y,
+      };
+    }
+    vegSpeciesCache = assets;
+  } catch { vegSpeciesCache = null; }
+  return vegSpeciesCache;
+}
 
 export function mountHeatMap(): () => void {
   const el = (id: string) => document.getElementById(id);
@@ -657,6 +700,10 @@ export function mountHeatMap(): () => void {
   /* Render-only ground. `undefined` means unfetched, `null` means fetched-and-absent —
      the distinction stops a failed fetch retrying on every ward switch. */
   const terrainCache: Record<string, TerrainField | null> = {};
+  /* Measured canopy-height texture, one per ward. Same absence idiom as terrain:
+     a miss (or the not-yet-baked GLBs the trees depend on) degrades to no
+     vegetation layer rather than retrying every ward switch. */
+  const canopyCache: Record<string, CanopyRaster | null> = {};
   /* Street names, in lon/lat. Cached per ward like the other artefacts; absence
      is normal and draws nothing, the loader idiom water and roads already use. */
   const labelCache: Record<string, unknown> = {};
@@ -776,7 +823,7 @@ export function mountHeatMap(): () => void {
       /* Fetch the complete immutable ward bundle before changing shared state. A
          superseded request therefore cannot replace geometry, labels, or metrics
          part way through a newer ward selection. */
-      const [d, terrain, water, wardSurface, roads, labels, provenance] = await Promise.all([
+      const [d, terrain, water, wardSurface, roads, labels, provenance, canopy, trees, vegSpecies] = await Promise.all([
         cache[name]
           ? Promise.resolve(cache[name])
           : fetch(`/heat-map/data/${name}.json`, { signal: token.signal }).then(async (r) => {
@@ -806,10 +853,17 @@ export function mountHeatMap(): () => void {
           ? Promise.resolve(provCache[name])
           : optional(fetch(`/heat-map/data/${name}-provenance.json`, { signal: token.signal })
             .then(async (r) => r.ok ? await r.json() as { src: string[]; confidence: number[] } : null), null),
+        canopyCache[name] !== undefined
+          ? Promise.resolve(canopyCache[name])
+          : optional(loadCanopyRaster(name, token.signal).then((c) => { canopyCache[name] = c; return c; }), null),
+        optional(fetch(`/heat-map/data/${name}-trees.json`, { signal: token.signal })
+          .then(async (r) => (r.ok ? asTreesFile(await r.json()) : null)), null),
+        loadVegSpecies(),
       ]);
       if (!wardSession.isCurrent(token)) return;
       cache[name] = d; terrainCache[name] = terrain; waterCache[name] = water;
       surfaceCache[name] = wardSurface; roadsCache[name] = roads; labelCache[name] = labels; provCache[name] = provenance;
+      canopyCache[name] = canopy;
       void loadDcUrs(); void loadHeatwave();
       const w = WARDS[name]; state.ward = name; updateCompareHref();
 
@@ -830,8 +884,7 @@ export function mountHeatMap(): () => void {
       wardData: d, roads, water, terrain,
       mercatorOrigin: { x: mc.x, y: mc.y, z: mc.z ?? 0 },
       frame: wardMercatorScale(w.lat),
-      // TODO(task 10): wire real per-ward vegetation data + species assets.
-      veg: null, vegSpecies: null,
+      veg: trees, vegSpecies,
     };
     coreField.attach(w, d.sizeM, relief && map.getLayer(relief.layer.id) ? relief.layer.id : undefined);
     relief?.setWard(reliefWard);
@@ -846,7 +899,7 @@ export function mountHeatMap(): () => void {
        cannot end up drawn from different vintages of the same measurement. */
     surfaceCache[name] ??= await loadWardSurface(name);
     const { means, surface } = surfaceCache[name];
-    state.base = rasterWardBase(d, means, surface, null);
+    state.base = rasterWardBase(d, means, surface, canopy);
     if (!roadsCache[name]) { try { roadsCache[name] = await (await fetch(`/heat-map/data/${name}-roads.json`)).json(); } catch { roadsCache[name] = { ways: [] }; } }
     /* Street names for this ward. Separate artefact, separate frame: these are
        lon/lat and go to MapLibre directly, so they never pass through our metre
