@@ -11,10 +11,11 @@
     "test:unit": "node scripts/cbam-sync-check.mjs && node --import tsx --test tests/unit/*.test.mjs",
     "report:build": "node scripts/report-build.mjs",
     "check:publication": "node scripts/check-publication-contract.mjs",
-    "verify": "npm run check && npm run test:unit && npm run build && npm run report:build && npm run check:publication && npm run test:e2e:built",
+    "verify": "npm run check && npm run typecheck && npm run test:unit && npm run build && npm run report:build && npm run check:publication && npm run test:e2e:built",
     "test:e2e": "npm run build && npm run test:e2e:built",
     "test:e2e:built": "playwright test",
-    "cbam:sync-check": "node scripts/cbam-sync-check.mjs"
+    "cbam:sync-check": "node scripts/cbam-sync-check.mjs",
+    "typecheck": "python3 -m mypy"
   },
   "engines": {
     "node": ">=22.12.0",
@@ -39,6 +40,7 @@
   "devDependencies": {
     "@astrojs/check": "^0.9.9",
     "@axe-core/playwright": "^4.12.1",
+    "@dgreenheck/ez-tree": "^1.1.0",
     "@playwright/test": "^1.61.1",
     "@tailwindcss/vite": "^4.3.3",
     "@types/react": "^19.2.16",
