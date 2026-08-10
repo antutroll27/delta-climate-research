@@ -153,6 +153,7 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
           <dt>Albedo</dt><dd id="bcAl">—</dd>
           <dt>Surface</dt><dd id="bcT">—</dd>
         </dl>
+        <div class="sv-thumb" id="svThumb" hidden></div>
         <p class="bc-rings" id="bcRings"></p>
         <p class="bc-ins" id="bcIns"></p>
         <p class="bc-prov" id="bcSrc"></p>
@@ -168,6 +169,7 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
       <div class="modechip" id="modechip"><button class="on" data-m="relief">3D Relief</button><button data-m="iso">2D Isotherm</button></div>
       <div class="modechip" id="envchip"><button class="on" data-e="dark">Dark map</button><button data-e="studio">Clay studio</button></div>
       <div class="modechip" id="tintchip" title="Building colour: continuous ramp, or snapped to the 5 legend classes"><button class="on" data-t="1">Gradient</button><button data-t="2">5-Class</button></div>
+      <div class="modechip" id="streetchip" hidden title="Show Mapillary street-level coverage; click a point for the real photo"><button class="on" data-s="0">Street off</button><button data-s="1">Street view</button></div>
     </div>
 
     <aside class="panel left">
@@ -248,6 +250,15 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
       <button class="srcbtn" id="srcBtn" type="button" aria-expanded="false" aria-controls="srcPanel">Data receipts ↗</button>
       <div class="srcpanel" id="srcPanel" role="dialog" aria-label="Per-layer data provenance" hidden></div>
     </div>
+    </div>
+  </div>
+
+  <!-- Street-view viewer: top-level (outside backdrop-filtered panels) so position:fixed resolves to the viewport. mapillary-js mounts into #svViewer. -->
+  <div class="svmodal" id="svModal" hidden>
+    <div class="svmodal-card">
+      <button class="svmodal-x" id="svClose" type="button" aria-label="Close street view">✕</button>
+      <div id="svViewer" class="svmodal-viewer"></div>
+      <div class="svmodal-credit">Street imagery · <a href="https://www.mapillary.com" target="_blank" rel="noopener">Mapillary</a> · community-captured (CC BY-SA)</div>
     </div>
   </div>
 
@@ -558,6 +569,16 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
   body.studio .src-row .nm{color:#13232a}
   body.studio .src-row .s,body.studio .srcpanel h4{color:#4a5c5e}
   body.studio .src-row .meta{color:#7f9296}
+  .svmodal{position:fixed;inset:0;z-index:40;display:none;place-items:center;background:rgb(2 9 10 /.72);backdrop-filter:blur(3px)}
+  .svmodal:not([hidden]){display:grid}
+  .svmodal-card{position:relative;width:min(1100px,92vw);height:min(680px,80vh);background:#02090a;border:1px solid var(--line);border-radius:12px;overflow:hidden;box-shadow:0 20px 60px rgb(0 0 0 /.5)}
+  .svmodal-viewer{width:100%;height:100%}
+  .svmodal-x{position:absolute;top:10px;right:10px;z-index:2;width:32px;height:32px;border-radius:50%;border:0;background:rgb(2 9 10 /.8);color:#eef1f2;cursor:pointer;font-size:15px}
+  .svmodal-credit{position:absolute;left:10px;bottom:8px;z-index:2;font-family:var(--mono);font-size:9px;letter-spacing:.08em;color:#c9d4d5;background:rgb(2 9 10 /.6);padding:3px 7px;border-radius:5px}
+  .svmodal-credit a{color:var(--cyan)}
+  .sv-thumb{margin-top:.5rem}
+  .sv-thumb img{width:100%;border-radius:8px;display:block;cursor:pointer;border:1px solid var(--line)}
+  .sv-thumb .sv-none{font-family:var(--mono);font-size:9px;letter-spacing:.1em;color:var(--faint);text-transform:uppercase}
   .bc-x{margin-top:.55rem;width:100%;cursor:pointer;font:400 .48rem var(--mono);letter-spacing:.12em;
     text-transform:uppercase;color:var(--ink);background:rgb(9 58 62 /.4);border:1px solid var(--line);
     border-radius:6px;padding:.4rem 0}
