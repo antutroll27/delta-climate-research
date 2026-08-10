@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { recencyBucket, coverageColorExpression, assertCoverageLogic } from '../../src/scripts/climate-engine/streetview/coverage-layer.ts';
+import { nearestImage, asNearest } from '../../src/scripts/climate-engine/streetview/nearest-image.ts';
 
 test('recencyBucket maps captured_at (epoch-ms) to old/mid/fresh at the 2018/2023 boundaries', () => {
   assert.equal(recencyBucket(Date.UTC(2016, 0, 1)), 'old');
@@ -19,3 +20,22 @@ test('coverageColorExpression is a MapLibre step expression over captured_at', (
 });
 
 test('coverage self-check passes', () => { assertCoverageLogic(); });
+
+test('asNearest parses a Graph image row and string-casts the id', () => {
+  assert.equal(asNearest({}), null);
+  const n = asNearest({ id: 12345678901234567, thumb_1024_url: 'https://x/t.jpg', captured_at: 1700000000000 });
+  assert.ok(n && typeof n.id === 'string' && n.thumbUrl === 'https://x/t.jpg' && n.capturedAt === 1700000000000);
+});
+
+test('nearestImage hits the radius search and returns the first result', async () => {
+  const calls = [];
+  const fakeFetch = async (url) => { calls.push(url); return { ok: true, json: async () => ({ data: [{ id: '99', thumb_1024_url: 'https://x/9.jpg', captured_at: 1710000000000 }] }) }; };
+  const n = await nearestImage(88.371, 22.762, 'MLY|tok', fakeFetch);
+  assert.ok(n && n.id === '99');
+  assert.match(calls[0], /lat=22\.762/); assert.match(calls[0], /lng=88\.371/); assert.match(calls[0], /radius=50/);
+});
+
+test('nearestImage returns null on empty coverage', async () => {
+  const fakeFetch = async () => ({ ok: true, json: async () => ({ data: [] }) });
+  assert.equal(await nearestImage(88.43, 22.36, 'MLY|tok', fakeFetch), null);
+});
