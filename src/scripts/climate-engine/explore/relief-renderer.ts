@@ -276,7 +276,7 @@ export class ThreeReliefRenderer implements ReliefRenderer {
     const roads = createRoadLayer(bundle.roads, this.grow, (x, y) => terrainDrawAt(bundle.terrain, x, y));
     if (roads) { this.roads = roads; this.scene.add(roads.mesh); }
     if (this.veg) { this.scene.remove(this.veg.group); this.veg.dispose(); this.veg = null; }
-    const veg = createVegetationLayer(bundle.veg, bundle.vegSpecies, this.grow, (x, y) => terrainDrawAt(bundle.terrain, x, y));
+    const veg = createVegetationLayer(bundle.veg, this.grow, (x, y) => terrainDrawAt(bundle.terrain, x, y));
     if (veg) { this.veg = veg; this.scene.add(veg.group); }
   }
 

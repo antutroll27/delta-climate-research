@@ -3,8 +3,6 @@ import * as THREE from 'three';
 export type Species = 'neem' | 'gulmohar' | 'palm';
 export interface TreeInstance { x: number; y: number; h: number; species: Species; r: number; }
 export interface TreesFile { ward: string; grid: number; sizeM: number; retrieved: string; trees: TreeInstance[]; }
-export interface SpeciesAsset { geometry: THREE.BufferGeometry; material: THREE.Material; baseHeight: number; }
-export type SpeciesAssets = Record<Species, SpeciesAsset>;
 
 export interface VegetationLayer {
   readonly group: THREE.Group;
@@ -12,8 +10,6 @@ export interface VegetationLayer {
   setTime(seconds: number, wind: number, windFrom: number): void;
   dispose(): void;
 }
-
-const SPECIES: Species[] = ['neem', 'gulmohar', 'palm'];
 
 export function asTreesFile(raw: unknown): TreesFile | null {
   if (!raw || typeof raw !== 'object') return null;
@@ -44,7 +40,8 @@ function addWind(material: THREE.Material): { uTime: { value: number }; uWind: {
     shader.vertexShader = `uniform float uTime;\nuniform vec2 uWind;\n` + shader.vertexShader.replace(
       '#include <begin_vertex>',
       `#include <begin_vertex>
-       float swayMask = clamp((position.y - 1.0) * 0.25, 0.0, 1.0);
+       // Unit cone spans y in [-0.5, 0.5], apex at +0.5: bite toward the top.
+       float swayMask = clamp(position.y + 0.5, 0.0, 1.0);
        float phase = uTime + transformed.x * 0.15 + transformed.z * 0.15;
        transformed.x += sin(phase) * uWind.x * swayMask;
        transformed.z += cos(phase * 0.9) * uWind.y * swayMask;`,
@@ -63,62 +60,90 @@ function blobShadowTexture(): THREE.Texture {
 
 export function createVegetationLayer(
   data: TreesFile | null,
-  species: SpeciesAssets | null,
-  _growU: { value: number },
+  growU: { value: number },
   groundAt: ((x: number, y: number) => number) | null = null,
 ): VegetationLayer | null {
-  if (!data || !species || data.trees.length === 0) return null;
+  void growU;
+  if (!data || data.trees.length === 0) return null;
   const group = new THREE.Group();
-  const winds: Array<{ uTime: { value: number }; uWind: { value: THREE.Vector2 } }> = [];
-  const owned: Array<{ dispose(): void }> = [];
-  const dummy = new THREE.Object3D();
   const ground = groundAt ?? (() => 0);
+  const dummy = new THREE.Object3D();
+  const trees = data.trees;
+  const n = trees.length;
 
-  for (const sp of SPECIES) {
-    const list = data.trees.filter((t) => t.species === sp);
-    if (list.length === 0) continue;
-    const asset = species[sp];
-    const mat = asset.material.clone();
-    winds.push(addWind(mat));
-    const inst = new THREE.InstancedMesh(asset.geometry, mat, list.length);
-    list.forEach((t, i) => {
-      const s = t.h / asset.baseHeight;
-      dummy.position.set(t.x, ground(t.x, t.y), t.y);
-      dummy.scale.setScalar(s);
-      dummy.rotation.set(0, (t.x * 13.1 + t.y * 7.7) % 6.283, 0);
-      dummy.updateMatrix();
-      inst.setMatrixAt(i, dummy.matrix);
-    });
-    inst.instanceMatrix.needsUpdate = true;
-    group.add(inst);
-    owned.push({ dispose: () => { mat.dispose(); inst.dispose(); } });
-  }
+  // Discrete-minimal render: every tree is a flat-shaded cone crown on a short
+  // trunk, instanced. The individual tree is illustrative (not surveyed), so a
+  // moderate exaggeration keeps them legible at the twin's overhead camera —
+  // the earlier per-species GLB render was invisible (tiny dark specks).
+  const crownGeo = new THREE.ConeGeometry(1, 1, 7);
+  const trunkGeo = new THREE.CylinderGeometry(0.7, 1.0, 1, 5);
+  const crownMat = new THREE.MeshStandardMaterial({ color: 0x5db98a, roughness: 0.85, flatShading: true });
+  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5a4632, roughness: 0.9, flatShading: true });
+  const wind = addWind(crownMat);
+
+  const crowns = new THREE.InstancedMesh(crownGeo, crownMat, n);
+  const trunks = new THREE.InstancedMesh(trunkGeo, trunkMat, n);
+  const color = new THREE.Color();
+
+  trees.forEach((t, i) => {
+    const g = ground(t.x, t.y);
+    const treeH = Math.max(4, t.h) * 1.4;
+    const crownH = treeH * 0.72;
+    const crownR = Math.max(t.r, treeH * 0.32);
+    const trunkH = treeH * 0.28;
+    const trunkR = crownR * 0.14;
+
+    dummy.position.set(t.x, g + trunkH + crownH / 2, t.y);
+    dummy.scale.set(crownR, crownH, crownR);
+    dummy.rotation.set(0, (t.x * 13.1 + t.y * 7.7) % 6.283, 0);
+    dummy.updateMatrix();
+    crowns.setMatrixAt(i, dummy.matrix);
+
+    const jitter = ((t.x * 12.9898 + t.y * 78.233) * 43758.5453) % 1;
+    color.setHSL(0.34 + (jitter - 0.5) * 0.03, 0.5 + (jitter - 0.5) * 0.1, 0.42 + (jitter - 0.5) * 0.08);
+    crowns.setColorAt(i, color);
+
+    dummy.position.set(t.x, g + trunkH / 2, t.y);
+    dummy.scale.set(trunkR, trunkH, trunkR);
+    dummy.rotation.set(0, 0, 0);
+    dummy.updateMatrix();
+    trunks.setMatrixAt(i, dummy.matrix);
+  });
+  crowns.instanceMatrix.needsUpdate = true;
+  if (crowns.instanceColor) crowns.instanceColor.needsUpdate = true;
+  trunks.instanceMatrix.needsUpdate = true;
+  group.add(crowns, trunks);
 
   const shadowTex = blobShadowTexture();
   const quad = new THREE.PlaneGeometry(1, 1); quad.rotateX(-Math.PI / 2);
   const shadowMat = new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false, opacity: 0.55 });
-  const shadows = new THREE.InstancedMesh(quad, shadowMat, data.trees.length);
+  const shadows = new THREE.InstancedMesh(quad, shadowMat, n);
   shadows.renderOrder = -1;
-  data.trees.forEach((t, i) => {
+  trees.forEach((t, i) => {
+    const treeH = Math.max(4, t.h) * 1.4;
+    const crownR = Math.max(t.r, treeH * 0.32);
     dummy.position.set(t.x, ground(t.x, t.y) + 0.05, t.y);
-    dummy.scale.set(t.r * 2.2, 1, t.r * 2.2);
+    dummy.scale.set(crownR * 2.0, 1, crownR * 2.0);
     dummy.rotation.set(0, 0, 0);
     dummy.updateMatrix();
     shadows.setMatrixAt(i, dummy.matrix);
   });
   shadows.instanceMatrix.needsUpdate = true;
   group.add(shadows);
-  owned.push({ dispose: () => { shadowTex.dispose(); quad.dispose(); shadowMat.dispose(); shadows.dispose(); } });
 
   return {
     group,
     setVisible(v) { group.visible = v; },
-    setTime(seconds, wind, windFrom) {
+    setTime(seconds, wind_, windFrom) {
       const rad = (windFrom * Math.PI) / 180;
-      const mag = Math.min(0.5, wind / 30) * 0.4;
-      for (const w of winds) { w.uTime.value = seconds; w.uWind.value.set(Math.sin(rad) * mag, Math.cos(rad) * mag); }
+      const mag = Math.min(0.5, wind_ / 30) * 0.4;
+      wind.uTime.value = seconds;
+      wind.uWind.value.set(Math.sin(rad) * mag, Math.cos(rad) * mag);
     },
-    dispose() { for (const o of owned) o.dispose(); },
+    dispose() {
+      crownGeo.dispose(); trunkGeo.dispose(); crownMat.dispose(); trunkMat.dispose(); crowns.dispose(); trunks.dispose();
+      shadowTex.dispose(); quad.dispose(); shadowMat.dispose(); shadows.dispose();
+    },
   };
 }
 
@@ -128,6 +153,8 @@ export function assertVegetationLogic(): void {
   ok(asTreesFile({ trees: [{ x: 0, y: 0, h: 5, species: 'oak', r: 1 }] }) === null, 'bad species rejected');
   const f = asTreesFile({ ward: 'x', grid: 140, sizeM: 1400, retrieved: 'd', trees: [{ x: 1, y: 2, h: 6, species: 'palm', r: 2 }] });
   ok(f !== null && f.trees[0].species === 'palm', 'valid accepted');
-  ok(createVegetationLayer(f, null, { value: 1 }) === null, 'no species assets -> null layer');
-  ok(createVegetationLayer(null, null, { value: 1 }) === null, 'no data -> null layer');
+  // No-data path only: constructing InstancedMeshes requires a WebGL-capable
+  // renderer context that node does not provide, so real-data construction is
+  // NOT exercised here (it is covered by the headless-browser screenshot check).
+  ok(createVegetationLayer(null, { value: 1 }) === null, 'no data -> null layer');
 }
