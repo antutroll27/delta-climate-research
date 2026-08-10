@@ -14,6 +14,13 @@ test('Explore analytical core has no static Three.js dependency', async () => {
     assert.doesNotMatch(source, /from\s+['"]three(?:\/|['"])/);
     assert.doesNotMatch(source, /import\s+\*\s+as\s+THREE/);
   }
+
+  const [heatMapAppSource] = sources;
+  // mapillary-js is ~290 KB; it and the viewer panel MUST be dynamically imported so they
+  // never enter the static bundle. A static import here would defeat the lazy boundary.
+  assert.doesNotMatch(heatMapAppSource, /import\s+[^\n]*from\s+['"]mapillary-js['"]/, 'mapillary-js must be dynamically imported, never static, in heat-map-app.ts');
+  assert.doesNotMatch(heatMapAppSource, /import\s+[^\n]*from\s+['"]\.\/streetview\/street-view-panel['"]/, 'street-view-panel must be dynamically imported in heat-map-app.ts');
+  assert.match(heatMapAppSource, /import\(['"]\.\/streetview\/street-view-panel['"]\)/, 'street-view-panel is loaded via dynamic import()');
 });
 
 test('Explore loads relief through one explicit dynamic boundary', async () => {
