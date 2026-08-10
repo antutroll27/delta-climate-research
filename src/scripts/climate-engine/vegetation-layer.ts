@@ -41,7 +41,7 @@ function addWind(material: THREE.Material): { uTime: { value: number }; uWind: {
       '#include <begin_vertex>',
       `#include <begin_vertex>
        // Unit cone spans y in [-0.5, 0.5], apex at +0.5: bite toward the top.
-       float swayMask = clamp(position.y + 0.5, 0.0, 1.0);
+       float swayMask = clamp((position.y + 1.0) * 0.5, 0.0, 1.0);
        float phase = uTime + transformed.x * 0.15 + transformed.z * 0.15;
        transformed.x += sin(phase) * uWind.x * swayMask;
        transformed.z += cos(phase * 0.9) * uWind.y * swayMask;`,
@@ -71,11 +71,11 @@ export function createVegetationLayer(
   const trees = data.trees;
   const n = trees.length;
 
-  // Discrete-minimal render: every tree is a flat-shaded cone crown on a short
-  // trunk, instanced. The individual tree is illustrative (not surveyed), so a
-  // moderate exaggeration keeps them legible at the twin's overhead camera —
-  // the earlier per-species GLB render was invisible (tiny dark specks).
-  const crownGeo = new THREE.ConeGeometry(1, 1, 7);
+  // Discrete-minimal render: every tree is a flat-shaded ROUNDED crown (faceted
+  // icosphere) on a short trunk, instanced. The individual tree is illustrative
+  // (not surveyed), so a moderate exaggeration keeps them legible at the twin's
+  // overhead camera — the earlier per-species GLB render was invisible specks.
+  const crownGeo = new THREE.IcosahedronGeometry(1, 1);
   const trunkGeo = new THREE.CylinderGeometry(0.7, 1.0, 1, 5);
   const crownMat = new THREE.MeshStandardMaterial({ color: 0x5db98a, roughness: 0.85, flatShading: true });
   const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5a4632, roughness: 0.9, flatShading: true });
@@ -88,13 +88,13 @@ export function createVegetationLayer(
   trees.forEach((t, i) => {
     const g = ground(t.x, t.y);
     const treeH = Math.max(4, t.h) * 1.4;
-    const crownH = treeH * 0.72;
-    const crownR = Math.max(t.r, treeH * 0.32);
-    const trunkH = treeH * 0.28;
-    const trunkR = crownR * 0.14;
+    const crownR = Math.max(t.r, treeH * 0.34);
+    const trunkH = treeH * 0.30;
+    const trunkR = crownR * 0.16;
 
-    dummy.position.set(t.x, g + trunkH + crownH / 2, t.y);
-    dummy.scale.set(crownR, crownH, crownR);
+    // rounded crown: a ball of radius crownR sitting atop the trunk (slightly overlapping)
+    dummy.position.set(t.x, g + trunkH + crownR * 0.85, t.y);
+    dummy.scale.set(crownR, crownR * 1.05, crownR);
     dummy.rotation.set(0, (t.x * 13.1 + t.y * 7.7) % 6.283, 0);
     dummy.updateMatrix();
     crowns.setMatrixAt(i, dummy.matrix);
@@ -121,9 +121,9 @@ export function createVegetationLayer(
   shadows.renderOrder = -1;
   trees.forEach((t, i) => {
     const treeH = Math.max(4, t.h) * 1.4;
-    const crownR = Math.max(t.r, treeH * 0.32);
+    const crownR = Math.max(t.r, treeH * 0.34);
     dummy.position.set(t.x, ground(t.x, t.y) + 0.05, t.y);
-    dummy.scale.set(crownR * 2.0, 1, crownR * 2.0);
+    dummy.scale.set(crownR * 2.1, 1, crownR * 2.1);
     dummy.rotation.set(0, 0, 0);
     dummy.updateMatrix();
     shadows.setMatrixAt(i, dummy.matrix);
