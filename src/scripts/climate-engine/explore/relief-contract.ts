@@ -43,6 +43,7 @@ export interface ReliefRenderer {
   updateField(update: ReliefFieldUpdate): void;
   setVisualState(state: ReliefVisualState): void;
   setSelection(selection: ReliefSelection): void;
+  setVegetationVisible(visible: boolean): void;
   pick(x: number, y: number, width: number, height: number, radiusPx?: number): number;
   project(x: number, y: number, z: number, width: number, height: number): { x: number; y: number; w: number };
   dispose(): void;

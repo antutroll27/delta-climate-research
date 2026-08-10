@@ -142,6 +142,7 @@ export function mountHeatMap(): () => void {
   const wardSession = createWardSession();
   let appDisposed = false;
   let mode: 'relief' | 'iso' = 'relief', env: 'dark' | 'studio' = 'dark';
+  let vegOn = true;
 
   /* ── MapLibre basemap ── */
   const map = new maplibregl.Map({
@@ -888,6 +889,7 @@ export function mountHeatMap(): () => void {
     };
     coreField.attach(w, d.sizeM, relief && map.getLayer(relief.layer.id) ? relief.layer.id : undefined);
     relief?.setWard(reliefWard);
+    relief?.setVegetationVisible(vegOn);
     syncRendererVisibility();
     /* The exaggeration is stated wherever the optional ground relief is drawn. */
     const terrLab = el('terrLab');
@@ -1069,6 +1071,10 @@ export function mountHeatMap(): () => void {
     if (!btn) return;
     const L = state.live;
     btn.hidden = !L;
+    /* The vegetation widget rides the same reveal gate as the clock: both are
+       meaningless until a ward has actually loaded. */
+    const vegw = el('vegw');
+    if (vegw) vegw.hidden = !L;
     if (!L) return;
 
     const mins = ageMinutes(L.validAt);
@@ -1478,6 +1484,12 @@ export function mountHeatMap(): () => void {
     map.setStyle(STYLES[e as 'dark' | 'studio']);
   }
   document.querySelectorAll('#envchip button').forEach(b => onEl(b, 'click', () => setEnv((b as HTMLElement).dataset.e!)));
+  document.querySelectorAll('#vegchip button').forEach(b => onEl(b, 'click', () => {
+    vegOn = (b as HTMLElement).dataset.v === '1';
+    document.querySelectorAll('#vegchip button').forEach((x) => x.classList.toggle('on', x === b));
+    relief?.setVegetationVisible(vegOn);
+    map.triggerRepaint();
+  }));
 
   /* ── budgeted simulation + grow timeline ── */
   let lastSimulationAt = 0;
