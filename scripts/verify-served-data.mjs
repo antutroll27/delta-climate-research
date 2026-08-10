@@ -64,7 +64,7 @@ console.log(`  ✓ served DC-URS inputs match ${SOURCE}`
 // carry a complete {ward}-layers.json, or the receipts panel silently falls back
 // to the hand-typed credit line. Ward list derives from the inputs above, never
 // hardcoded (src/data/wards.ts's rule).
-const EXPECTED_LAYERS = ['basemap', 'footprints', 'heights', 'surface', 'terrain', 'water', 'roads', 'lst', 'ambient'];
+const EXPECTED_LAYERS = ['basemap', 'footprints', 'heights', 'surface', 'canopy', 'terrain', 'water', 'roads', 'lst', 'ambient'];
 const provProblems = [];
 for (const ward of Object.keys(wards)) {
   const p = `public/heat-map/data/${ward}-layers.json`;

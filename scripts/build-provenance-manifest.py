@@ -44,7 +44,9 @@ COPERNICUS: Licence = {"name": "Copernicus Sentinel data (free, full & open)",
                        "url": "https://sentinels.copernicus.eu/web/sentinel/terms-conditions"}
 
 #: The layer ids every ward manifest must carry — the drift guard checks this set.
-EXPECTED = ("basemap", "footprints", "heights", "surface", "terrain", "water", "roads", "lst", "ambient")
+EXPECTED = (
+    "basemap", "footprints", "heights", "surface", "canopy", "terrain", "water", "roads", "lst", "ambient",
+)
 
 
 def _read(path: str) -> dict[str, object]:
@@ -133,6 +135,16 @@ def build(ward_id: str, sentinel: dict[str, object]) -> prov.LayerManifest:
              "the PATTERN is measured, the LEVEL is the approved input"],
             collection="sentinel-2-l2a", instrument="Sentinel-2 MSI", resolution="10 m",
             vintage=year_span, confidence="measured spatial pattern at the DC-URS-approved level",
+        ),
+        layer(
+            "canopy", "Tree canopy height", "derived",
+            "Meta / World Resources Institute 1 m Global Canopy Height Model", CCBY4,
+            ["Meta+WRI 1 m canopy-height model (neural height regression on Maxar imagery, ~2018-2020 epoch)",
+             "clipped to the 1400 m ward window and resampled (area-average) to the 140x140 served grid",
+             "tree instances derived from the canopy field; heights measured, positions/species modelled"],
+            collection="meta-wri:canopy-height", instrument="Maxar / CHM model",
+            resolution="1 m", vintage="2018-2020 epoch",
+            confidence="canopy extent/height indicative (MAE ~ few m); individual trees are modelled, not surveyed",
         ),
         layer(
             "terrain", "Terrain relief", "reference",
