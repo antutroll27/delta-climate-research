@@ -42,6 +42,8 @@ import type { ReliefRenderer, ReliefWardBundle, ReliefVisualState } from './expl
 import {
   attachReliefCustomLayer, isReliefLayerAttached, shouldShowRelief,
 } from './explore/relief-lifecycle';
+import { addCoverage, removeCoverage, IMAGE_LAYER_ID } from './streetview/coverage-layer';
+import { nearestImage } from './streetview/nearest-image';
 
 // Ward set lives in src/data/wards.ts so widening beyond three is a data change,
 // not a code change (dc-urs-spec.md §1).
@@ -101,6 +103,8 @@ export function mountHeatMap(): () => void {
   let appDisposed = false;
   let mode: 'relief' | 'iso' = 'relief', env: 'dark' | 'studio' = 'dark';
   let vegOn = true;
+  let streetOn = false;
+  const MLY_TOKEN = (import.meta.env.PUBLIC_MAPILLARY_TOKEN as string | undefined) ?? '';
 
   /* ── MapLibre basemap ── */
   const map = new maplibregl.Map({
@@ -127,6 +131,12 @@ export function mountHeatMap(): () => void {
   let growProgress = 1;
   let registry: BuildingMeta[] = [];
   let selected: BuildingMeta | null = null;
+  /* Guards the street-view thumbnail fetch in paintCard: #svThumb is a fixed
+     DOM node reused across selections, so a stale nearestImage() response
+     from a PREVIOUS building could otherwise overwrite the thumbnail for the
+     one the visitor just picked. Each paintCard call claims the next tick;
+     only the still-current tick is allowed to paint. */
+  let svThumbGen = 0;
 
   /* One runtime admission point owns recurring visual work. MapLibre retains
      responsibility for actual draws; this only decides when a new frame is
@@ -265,6 +275,23 @@ export function mountHeatMap(): () => void {
        created the local frame — so this IS the Overture centroid, not a value
        re-derived from the drawn position. `cz` is the row's northward y. */
     const ll = wardLatLon(WARDS[state.ward], b.cx, b.cz);
+    const svThumb = el('svThumb');
+    if (svThumb && MLY_TOKEN) {
+      const gen = ++svThumbGen;
+      svThumb.removeAttribute('hidden');
+      svThumb.innerHTML = '<span class="sv-none">Looking for a street photo…</span>';
+      void nearestImage(ll.lon, ll.lat, MLY_TOKEN).then((img) => {
+        if (gen !== svThumbGen) return; // a different building was selected meanwhile
+        if (!img) { svThumb.innerHTML = '<span class="sv-none">No nearby street photo</span>'; return; }
+        svThumb.innerHTML = '';
+        const im = document.createElement('img');
+        im.src = img.thumbUrl; im.alt = 'Real street view of this block (Mapillary)'; im.loading = 'lazy';
+        im.addEventListener('click', () => { void openStreetView(img.id); });
+        svThumb.appendChild(im);
+      });
+    } else if (svThumb) {
+      svThumb.setAttribute('hidden', '');
+    }
     setHTML('bcLL', `${formatLatLon(ll.lat, ll.lon, '<br>')}<small>centroid · WGS-84</small>`);
     /* WHO DREW THIS BUILDING. Overture conflates three sources and they are not
        equally trustworthy: OSM footprints are traced by a person against imagery,
@@ -539,7 +566,11 @@ export function mountHeatMap(): () => void {
   };
   cv.addEventListener('pointerdown', onPickDown);
   cv.addEventListener('pointerup', onPickUp);
-  const onPickKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && selected) select(null); };
+  const onPickKey = (e: KeyboardEvent) => {
+    if (e.key !== 'Escape') return;
+    if (selected) select(null);
+    closeStreetView();
+  };
   window.addEventListener('keydown', onPickKey);
   el('bcX')?.addEventListener('click', () => select(null));
   /* MapLibre fires `render` only when a repaint actually happened, so this is the
@@ -737,6 +768,22 @@ export function mountHeatMap(): () => void {
       console.warn('Optional relief renderer unavailable:', error);
     });
     return reliefReady;
+  }
+
+  /** Street-view viewer — mapillary-js is heavy (its own WebGL context), so it
+      loads only at this one dynamic boundary, mirroring ensureRelief's Three.js
+      boundary above. Never imported statically. */
+  async function openStreetView(imageId: string): Promise<void> {
+    if (!MLY_TOKEN || !imageId) return;
+    const panel = el('svViewer'); const modal = el('svModal');
+    if (!panel || !modal) return;
+    modal.removeAttribute('hidden');
+    const { openViewer } = await import('./streetview/street-view-panel');
+    await openViewer(panel, imageId, MLY_TOKEN);
+  }
+  function closeStreetView(): void {
+    el('svModal')?.setAttribute('hidden', '');
+    void import('./streetview/street-view-panel').then(({ closeViewer }) => closeViewer());
   }
 
   /* DC-URS baseline inputs — observed, loaded once and shared by every ward.
@@ -1447,6 +1494,25 @@ export function mountHeatMap(): () => void {
     relief?.setVegetationVisible(vegOn);
     map.triggerRepaint();
   }));
+
+  /* ── street-view: coverage overlay + click-to-view ──
+     The chip stays hidden (see HeatMapStage.astro) unless a Mapillary token is
+     actually configured — no point offering a toggle that can never do anything. */
+  if (MLY_TOKEN) el('streetchip')?.removeAttribute('hidden');
+  document.querySelectorAll('#streetchip button').forEach((b) => onEl(b, 'click', () => {
+    streetOn = (b as HTMLElement).dataset.s === '1';
+    document.querySelectorAll('#streetchip button').forEach((x) => x.classList.toggle('on', x === b));
+    if (streetOn && MLY_TOKEN) addCoverage(map, MLY_TOKEN); else removeCoverage(map);
+    map.triggerRepaint();
+  }));
+  map.on('click', IMAGE_LAYER_ID, (e) => {
+    const id = e.features?.[0]?.properties?.id;
+    if (id != null) void openStreetView(String(id));
+  });
+  map.on('mouseenter', IMAGE_LAYER_ID, () => { map.getCanvas().style.cursor = 'pointer'; });
+  map.on('mouseleave', IMAGE_LAYER_ID, () => { map.getCanvas().style.cursor = ''; });
+  onEl(el('svClose'), 'click', closeStreetView);
+  onEl(el('svModal'), 'click', (e) => { if (e.target === el('svModal')) closeStreetView(); });
 
   /* ── budgeted simulation + grow timeline ── */
   let lastSimulationAt = 0;
