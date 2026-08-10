@@ -39,3 +39,12 @@ test('nearestImage returns null on empty coverage', async () => {
   const fakeFetch = async () => ({ ok: true, json: async () => ({ data: [] }) });
   assert.equal(await nearestImage(88.43, 22.36, 'MLY|tok', fakeFetch), null);
 });
+
+import { shouldOpen, assertStreetViewLogic } from '../../src/scripts/climate-engine/streetview/street-view-panel.ts';
+
+test('shouldOpen guards missing token / imageId (no viewer construction)', () => {
+  assert.equal(shouldOpen('', 'img1'), false);
+  assert.equal(shouldOpen('MLY|t', ''), false);
+  assert.equal(shouldOpen('MLY|t', 'img1'), true);
+});
+test('street-view self-check passes', () => { assertStreetViewLogic(); });
