@@ -5,6 +5,7 @@ import { createCloudLayer, type CloudLayer } from '../cloud-layer.ts';
 import * as M from '../heat-map-model.ts';
 import { createRoadLayer, type RoadLayer } from '../road-layer.ts';
 import { terrainDrawAt } from '../terrain.ts';
+import { createVegetationLayer, type VegetationLayer } from '../vegetation-layer.ts';
 import { createWaterLayer, type WaterLayer } from '../water-layer.ts';
 import { buildRegistry, pickBuilding, projectWard, type BuildingMeta } from './building-pick.ts';
 import type {
@@ -29,6 +30,7 @@ export class ThreeReliefRenderer implements ReliefRenderer {
   private water: WaterLayer | null = null;
   private clouds: CloudLayer | null = null;
   private roads: RoadLayer | null = null;
+  private veg: VegetationLayer | null = null;
   private rings: THREE.Group | null = null;
   private coolingLine: THREE.Line | null = null;
   private ward: ReliefWardBundle | null = null;
@@ -118,6 +120,8 @@ export class ThreeReliefRenderer implements ReliefRenderer {
     if (environmentChanged || this.studio.value !== (state.environment === 'studio' ? 1 : 0)) this.applyEnvironment(state.environment);
   }
 
+  setVegetationVisible(v: boolean): void { this.veg?.setVisible(v); this.options.map.triggerRepaint(); }
+
   setSelection(selection: ReliefSelection): void {
     const building = selection.building;
     this.selected.value.set(building?.cx ?? 1e9, building?.cz ?? 1e9);
@@ -151,7 +155,7 @@ export class ThreeReliefRenderer implements ReliefRenderer {
     this.city?.geometry.dispose();
     this.overlay?.geometry.dispose();
     (this.overlay?.material as THREE.Material | undefined)?.dispose();
-    this.water?.dispose(); this.clouds?.dispose(); this.roads?.dispose();
+    this.water?.dispose(); this.clouds?.dispose(); this.roads?.dispose(); this.veg?.dispose();
     this.rings?.traverse((object) => {
       const mesh = object as THREE.Mesh;
       mesh.geometry?.dispose?.();
@@ -211,6 +215,10 @@ export class ThreeReliefRenderer implements ReliefRenderer {
       this.water.setView(this.options.map.getBearing(), this.options.map.getPitch());
       if (!this.options.reducedMotion) this.water.setTime(performance.now() / 1000);
     }
+    if (this.veg && !this.options.reducedMotion) {
+      const w = this.visual.live;
+      this.veg.setTime(performance.now() / 1000, w ? w.wind : 0, w ? (w.windFrom ?? 0) : 0);
+    }
     if (this.clouds) this.clouds.group.visible = this.visual.mode !== 'iso';
     if (this.clouds && this.visual.mode !== 'iso' && this.visual.live) {
       this.clouds.update(
@@ -267,6 +275,9 @@ export class ThreeReliefRenderer implements ReliefRenderer {
     if (this.roads) { this.scene.remove(this.roads.mesh); this.roads.dispose(); this.roads = null; }
     const roads = createRoadLayer(bundle.roads, this.grow, (x, y) => terrainDrawAt(bundle.terrain, x, y));
     if (roads) { this.roads = roads; this.scene.add(roads.mesh); }
+    if (this.veg) { this.scene.remove(this.veg.group); this.veg.dispose(); this.veg = null; }
+    const veg = createVegetationLayer(bundle.veg, bundle.vegSpecies, this.grow, (x, y) => terrainDrawAt(bundle.terrain, x, y));
+    if (veg) { this.veg = veg; this.scene.add(veg.group); }
   }
 
   private displaceGround(field: ReliefWardBundle['terrain'], sizeM: number): void {

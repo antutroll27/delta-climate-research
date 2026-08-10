@@ -830,6 +830,8 @@ export function mountHeatMap(): () => void {
       wardData: d, roads, water, terrain,
       mercatorOrigin: { x: mc.x, y: mc.y, z: mc.z ?? 0 },
       frame: wardMercatorScale(w.lat),
+      // TODO(task 10): wire real per-ward vegetation data + species assets.
+      veg: null, vegSpecies: null,
     };
     coreField.attach(w, d.sizeM, relief && map.getLayer(relief.layer.id) ? relief.layer.id : undefined);
     relief?.setWard(reliefWard);
