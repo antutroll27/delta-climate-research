@@ -209,6 +209,22 @@ class FootprintsFile(TypedDict):
     b: list[Building]
 
 
+class TreeInstanceJSON(TypedDict):
+    x: float      # ward-local metres, +x = east
+    y: float      # ward-local metres, +y = north
+    h: float      # tree height, metres (from CHM)
+    species: str  # "neem" | "gulmohar" | "palm"
+    r: float      # crown radius, metres
+
+
+class TreesFileJSON(TypedDict):
+    ward: str
+    grid: int
+    sizeM: float
+    retrieved: str
+    trees: list[TreeInstanceJSON]
+
+
 class TraWard(TypedDict):
     tra: float
     median_dist_m: float
