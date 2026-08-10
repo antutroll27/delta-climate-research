@@ -1,6 +1,7 @@
 import type maplibregl from 'maplibre-gl';
 import type { Ambient, RoadsData, WaterData, WardData } from '../heat-map-model.ts';
 import type { TerrainField } from '../terrain.ts';
+import type { TreesFile, SpeciesAssets } from '../vegetation-layer.ts';
 import type { WardFrame } from '../ward-frame.ts';
 import type { BuildingMeta } from './building-pick.ts';
 
@@ -11,6 +12,8 @@ export interface ReliefWardBundle {
   terrain: TerrainField | null;
   mercatorOrigin: { x: number; y: number; z: number };
   frame: WardFrame;
+  veg: TreesFile | null;
+  vegSpecies: SpeciesAssets | null;
 }
 
 export interface ReliefFieldUpdate {
