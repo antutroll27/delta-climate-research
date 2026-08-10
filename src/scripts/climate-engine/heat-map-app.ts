@@ -18,6 +18,7 @@ import type { HeatSimHost, HeatSimRequest, HeatSimSnapshot } from './sim-protoco
 import * as M from './heat-map-model';
 import { ACCURACY, SPATIAL, HEIGHTS, bandLabel, unmeasuredNote, isTransitionHour, TRANSITION_RMSE_K } from './accuracy';
 import { solarElevationFactor } from './sky';
+import { loadLayerManifest } from './provenance';
 import * as U from './dc-urs';
 import { applyScenario } from './dc-urs-scenario';
 import type { DcUrsInputs } from './dc-urs-inputs';
@@ -49,6 +50,32 @@ const STYLES = { dark: 'https://tiles.openfreemap.org/styles/dark', studio: 'htt
 
 export function mountHeatMap(): () => void {
   const el = (id: string) => document.getElementById(id);
+  // Per-layer provenance ("data receipts") panel, fetched on-demand per ward
+  // (loadLayerManifest caches). null → degrade to the static credit line.
+  const escHtml = (s: string) => s.replace(/[&<>"]/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] ?? c);
+  const renderSources = async () => {
+    const panel = el('srcPanel');
+    if (!panel) return;
+    const manifest = await loadLayerManifest(state.ward);
+    if (!manifest) {
+      panel.innerHTML = '<h4>Data receipts</h4><div class="src-row"><div class="s">Provenance manifest unavailable.</div></div>';
+      return;
+    }
+    const rows = manifest.layers.map((layer) => {
+      const meta = [layer.vintage, layer.resolution, layer.instrument].filter(Boolean).join(' · ');
+      const lic = layer.licence.url
+        ? `<a href="${escHtml(layer.licence.url)}" target="_blank" rel="noopener noreferrer">${escHtml(layer.licence.name)}</a>`
+        : escHtml(layer.licence.name);
+      return `<div class="src-row"><div class="l"><span class="nm">${escHtml(layer.label)}</span>`
+        + `<span class="k ${layer.kind}">${layer.kind}</span></div>`
+        + `<div class="s">${escHtml(layer.source)} · ${lic}</div>`
+        + (meta ? `<div class="meta">${escHtml(meta)}</div>` : '')
+        + (layer.confidence ? `<div class="meta">${escHtml(layer.confidence)}</div>` : '')
+        + '</div>';
+    }).join('');
+    panel.innerHTML = `<h4>Data receipts · ${escHtml(manifest.ward)}</h4>${rows}`;
+  };
   const mapContainer = el('mlmap');
   if (!mapContainer) return () => {};
   const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -1325,6 +1352,12 @@ export function mountHeatMap(): () => void {
   /* ── instrument wiring ── */
   const onEl = (node: Element | null, ev: string, fn: EventListenerOrEventListenerObject) => { if (node) { node.addEventListener(ev, fn); cleanup.push(() => node.removeEventListener(ev, fn)); } };
   document.querySelectorAll('#tabs .tab, #strip .ward').forEach(t => onEl(t, 'click', () => { nudgeOrbit(); loadWard((t as HTMLElement).dataset.w!); }));
+  onEl(el('srcBtn'), 'click', () => {
+    const panel = el('srcPanel'); const btn = el('srcBtn'); if (!panel || !btn) return;
+    const opening = panel.hasAttribute('hidden');
+    if (opening) { renderSources(); panel.removeAttribute('hidden'); } else panel.setAttribute('hidden', '');
+    btn.setAttribute('aria-expanded', String(opening));
+  });
   const bindSlider = (id: string, label: string, kk: keyof M.Interventions, fmt: (v: string) => string) => {
     const s = el(id) as HTMLInputElement | null; if (!s) return;
     onEl(s, 'input', () => { setText(label, fmt(s.value)); nudgeOrbit(); });
