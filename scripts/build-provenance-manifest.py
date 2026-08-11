@@ -141,7 +141,9 @@ def build(ward_id: str, sentinel: dict[str, object]) -> prov.LayerManifest:
             "Meta / World Resources Institute 1 m Global Canopy Height Model", CCBY4,
             ["Meta+WRI 1 m canopy-height model (neural height regression on Maxar imagery, ~2018-2020 epoch)",
              "clipped to the 1400 m ward window and resampled (area-average) to the 140x140 served grid",
-             "tree instances derived from the canopy field; heights measured, positions/species modelled"],
+             "tree instances scattered from the canopy field (density-weighted by height against a fixed "
+             "22 m reference so density is comparable BETWEEN wards, deterministic jitter; thin canopy "
+             "left empty); heights measured, positions/species modelled"],
             collection="meta-wri:canopy-height", instrument="Maxar / CHM model",
             resolution="1 m", vintage="2018-2020 epoch",
             confidence="canopy extent/height indicative (MAE ~ few m); individual trees are modelled, not surveyed",
