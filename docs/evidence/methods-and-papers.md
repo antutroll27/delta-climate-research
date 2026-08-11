@@ -1,0 +1,294 @@
+# Methods & papers
+
+Academic and methodological citations behind the engine, grouped by what they inform. Each carries how
+the engine actually *uses* it — and, where relevant, the correction on record. Items whose full
+citation isn't in the repo docs are marked **(verify)**.
+
+> Harvested from `docs/research/`, `docs/superpowers/specs/`, calibration + methodology docs, and code
+> comments. DOIs/links are as-found; **(verify)** flags where a detail was not independently confirmed.
+
+---
+
+## Credibility, uncertainty & digital-twin critique
+
+- **Trust & uncertainty-visualisation study (N=161), 2026** · authors not named in docs ·
+  [arxiv.org/abs/2602.00248](https://arxiv.org/abs/2602.00248) — visualising uncertainty on thematic maps
+  generally *reduces* trust in the data's accuracy but barely touches trust in the mapmaker's integrity;
+  low-uncertainty displays show no penalty vs showing nothing. **Engine use:** governs the honesty-UX rule
+  — confidence surface shown by default, CIs/QC one click away, never the loud default
+  (`2026-08-09-city-twin-credibility-research.md` §0, §1.3).
+- **Digital-twin critique — Frontiers in Big Data**, 10.3389/fdata.2023.1236397 (2023) ·
+  [frontiersin.org](https://www.frontiersin.org/journals/big-data/articles/10.3389/fdata.2023.1236397/full)
+  — many city twins are "dashboards that look impressive but lack depth"; "digital twin" implies real-time
+  bidirectional coupling that scientists discount when claimed by static visualisations. **Engine use:**
+  validates the no-photoreal constraint and the self-description as an "observatory/model," not a "digital
+  twin."
+- **UK Gemini Principles** (CDBB, Dec 2018) ·
+  [cdbb.cam.ac.uk](https://www.cdbb.cam.ac.uk/DFTG/GeminiPrinciples) — canonical values framework for
+  trustworthy twins. **Engine use:** template for a planned "About this instrument" values statement.
+- **Google Earth Engine Data Catalog — dataset-description schema** ·
+  [developers.google.com](https://developers.google.com/earth-engine/help_dataset_description) — the
+  per-dataset "receipt" field set (provider, coverage, resolution, bands, licence, citation, DOI).
+  **Engine use:** template copied verbatim for the per-layer provenance card.
+- **Our World in Data — FAQ/methodology** · [ourworldindata.org/faqs](https://ourworldindata.org/faqs) —
+  measured-vs-derived labelling convention. **Engine use:** template for distinguishing measured satellite
+  inputs from the modelled heat surface.
+- **NYC Heat Vulnerability Index** ·
+  [a816-dohbesp.nyc.gov](https://a816-dohbesp.nyc.gov/IndicatorPublic/data-features/hvi/) — operational
+  public-health index with an explicit trigger definition + cited peer-reviewed method. **Engine use:**
+  exemplar for publishing exact operational definitions.
+- **Destination Earth — UHI/UrbClim** (ECMWF, ESA, EUMETSAT; VITO) ·
+  [destination-earth.eu](https://destination-earth.eu/use-cases/addressing-urban-heat-island-effect/) —
+  UrbClim validated vs 67 pan-European met stations (Copernicus C3S); a separate DestinE Prague/Lisbon
+  demo (Summer 2022) noted most stations were non-optimally sited. **Engine use:** validation-transparency
+  benchmark — surface the LOO-overpass validation with the same candour.
+- **Data Nutrition Project** + **ISO 19115** (lineage) / **ISO 19157** (quality) ·
+  [datanutrition.org](https://datanutrition.org/) · [framework paper](https://arxiv.org/pdf/1805.03677) ·
+  [ISO 19115](https://www.iso.org/standard/32575.html) — standardised provenance/quality label. **Engine
+  use:** unifying packaging for the per-layer receipt.
+- **Maplibrary.org — attribution layering guidance** ·
+  [maplibrary.org](https://www.maplibrary.org/9939/how-to-effectively-layer-attribution-information-in-maps/)
+  — four required attribution elements (source, acquisition date, licence, provider). **Engine use:**
+  persistent "data as of" chrome.
+- **CAPA Strategies — Heat Watch methodology** ·
+  [capastrategies.com](https://www.capastrategies.com/heat-watch-data) — anti-pattern exemplar: rigorous
+  mapping that delegates methodology to a separate linked report. **Engine use:** the rule that receipts
+  must be one click from the number.
+
+*(City-twin precedents — Virtual Singapore, Helsinki 3D+, Digital Twin Victoria, 3D Tiles/glTF standards —
+are catalogued in [digital-twin-references.md](digital-twin-references.md).)*
+
+---
+
+## Landsat / ECOSTRESS thermal validation, emissivity, forcing
+
+- **Landsat Collection 2 Level-2 ST algorithm docs (LSDS-1619)** — documents bands, defers formula to a
+  Cal/Val ADD. **Engine use:** the LST-from-radiance formula was independently re-derived and verified
+  against 67,600 pixels of `LC09_L2SP_138044_20260704_02_T1` rather than taken on faith
+  (`2026-08-09-forcing-and-emissivity-upgrade-design.md` §3.1). Winning arrangement:
+  `(TRAD − URAD − ATRAN·(1−ε)·DRAD) / (ATRAN·ε)`, median |ΔT| 0.168 K vs shipped `ST_B10`, Planck-inverted
+  via `T = K2 / ln(K1/B + 1)`.
+- **ECMWF ERA5-Land** (Copernicus CDS), DOI `10.24381/cds.e2161bac` — 0.1°/~9 km, hourly
+  `surface_solar_radiation_downwards` (169), `surface_thermal_radiation_downwards` (175). **Engine use:**
+  proposed to fit the missing shortwave-atmosphere term and move the Brutsaert `c` constant off surface-LST
+  fitting onto atmospheric data (§4.3–4.4); **not yet adopted** — gated on a pre-registered
+  leave-one-overpass-out bar.
+- **Brutsaert (1975)**, *Water Resources Research* 11(5):742–744, DOI
+  [10.1029/WR011i005p00742](https://doi.org/10.1029/WR011i005p00742) — clear-sky emissivity formula.
+  **Engine use:** replaces two hard-coded sky temperatures in `_physics.sky_temp()`; its coefficient `c` is
+  currently fitted against LST (flagged as a structural defect the ERA5-Land spec proposes to fix).
+- **Spencer (1971)**, *Search* 2(5):172 — solar-declination series. **Engine use:** per-scene sun-angle
+  geometry in `_physics.solar_factor()`.
+- **Voogt & Oke (2003)**, *Remote Sensing of Environment* 86(3):370–384, DOI
+  [10.1016/S0034-4257(03)00079-8](https://doi.org/10.1016/S0034-4257(03)00079-8) — daytime *surface* UHI
+  (10–15 °C) vs canopy *air* UHI (2–5 °C) are different quantities; view-angle sensitivity of thermal
+  remote sensing. **Engine use:** underlies the surface-vs-air honesty distinction; candidate explanation
+  for the ECOSTRESS/Landsat view-geometry offset.
+- **Sentinel-3 SLSTR** (Copernicus) — dual-view thermal (1 km nadir, S7–S9/F1/F2), 0.9-day mean revisit.
+  **Engine use:** proposed to directly measure the view-angle-anisotropy hypothesis for the
+  ECOSTRESS↔Landsat offset (spec §10.3); licence permissive but "commercial" not explicitly stated —
+  flagged before use.
+- **INSAT-3D/3DR split-window LST — Singh et al. 2016**, *JGR Atmospheres*, DOI `10.1002/2016JD024752` —
+  geostationary retrieval method. **Engine use:** proposed as a geostationary transfer standard to solve
+  the ECOSTRESS/Landsat near-zero-coincidence problem (spec §10.4); gated on a written MOSDAC licence
+  confirmation.
+- **Mumbai anthropogenic-heat inventory — Sailor et al. 2016** (venue not in docs) — ~16 W/m² total,
+  metabolism (6.5) > building energy (5.8), flatter diurnal than Western cities. **Engine use:** basis for
+  the 0.4–0.6 anthropogenic-heat band in `heat-map-calibration-spec.md`.
+- **ECOSTRESS L2T LSTE v002 quality flags** ·
+  [lpdaac.usgs.gov](https://lpdaac.usgs.gov/products/eco_l2t_lstev002/) — per-pixel QC bitmask + LST-error
+  band; v002 moved cloud out of QC into a separate `cloud_mask`. **Engine use:** the satellite's own
+  confidence, shown rather than invented.
+
+---
+
+## ICESat-2 building-height validation — comparison literature
+
+*(from `2026-08-06-icesat2-height-validation-design.md` §9, mirrored in `docs/heat-map-feature.md`; none
+of these changed the shipped p75 method — they are context/benchmarking)*
+
+- **Magruder et al. 2021**, DOI [10.1029/2020EA001414](https://doi.org/10.1029/2020EA001414) — ATL03
+  horizontal geolocation 3.5±2.1 m (vs 6.5 m requirement); footprint spot 10.9±1.2 m. **Engine use:**
+  justifies the 5 m footprint erosion; the spot-size figure exposed an undisclosed "boundary blur" gap.
+- **Luthcke et al. 2021**, DOI [10.1029/2020EA001494](https://doi.org/10.1029/2020EA001494) —
+  precision-orbit and pointing budget underlying the above.
+- **Wang et al. 2024**, DOI [10.1109/TGRS.2024.3383600](https://doi.org/10.1109/TGRS.2024.3383600) —
+  ≈6 m horizontal RMSE building-boundary blur from the ATL03 footprint, reducible to ≈1 m only by
+  deconvolution (not done here).
+- **Wu, Huang & Zhao 2023**, DOI [10.3390/rs15153786](https://doi.org/10.3390/rs15153786) and **Hu et al.
+  2026**, DOI [10.3390/rs18040540](https://doi.org/10.3390/rs18040540) — roof-height estimator: p90.
+- **Cai et al. 2024**, DOI [10.3390/rs16020263](https://doi.org/10.3390/rs16020263) — roof estimator:
+  max-after-filtering; roof-band floor 2.8 m; independently tuned a 10 m relief threshold (converges with
+  this project's independently-measured 10 m `GROUND_RELIEF_M`); adds Sentinel-2 land cover + FABDEM +
+  relief filter as ground-line guards (this project uses only one internal guard, flagged as the
+  least-guarded component).
+- **Dandabathula et al. 2021**, DOI [10.1088/2634-4505/abf820](https://doi.org/10.1088/2634-4505/abf820) —
+  Jaipur, n=10; roof estimator: mean.
+- **Wu, Z. 2022** — TU Delft MSc thesis (not peer reviewed) — roof estimator: p50.
+- **Liu et al. 2024**, DOI [10.3390/s24186076](https://doi.org/10.3390/s24186076) — roof-band floor 2.5 m.
+- **Lao et al. 2021**, DOI [10.1016/j.jag.2021.102596](https://doi.org/10.1016/j.jag.2021.102596) — n=82;
+  reported (unverified against full text) that ATL03's own noise removal discards building photons below
+  ~3 m — flagged as an unverified, high-consequence claim.
+- **Kaya 2024**, DOI [10.3390/buildings14113571](https://doi.org/10.3390/buildings14113571) — the only
+  study found testing accuracy vs photon count; best at 5–10 photons, degrading above 100 — corroborates
+  this project's `MIN_ROOF_PH = 5`.
+- **Goud & Bhardwaj 2021** — Hyderabad/Paris/Vancouver, n=30 (venue not in docs).
+- **Watson & Elliott 2025**, *Scientific Reports*, DOI
+  [10.1038/s41598-025-15929-2](https://doi.org/10.1038/s41598-025-15929-2) — Nairobi, Quito, Kathmandu,
+  n=25/city, manual.
+- **Comparison finding:** no ICESat-2 building-height study exists for Kolkata, Dhaka, or the Ganges
+  delta; Global-South coverage is thin (Jaipur n=10; Hyderabad in a 3-city n=30).
+
+---
+
+## Vegetation, NDVI → FVC
+
+- **Carlson & Ripley 1997** (NDVI→FVC endmember method) — in the repo only as code comments
+  (`scripts/_sentinel.py:55`, `scripts/fetch-sentinel-composites.py:131`); full author list/venue/DOI
+  **not in docs — verify**. **Engine use:** underlies `FVC = (NDVI − NDVI_bare)/(NDVI_veg − NDVI_bare)` in
+  `dc-urs-source-of-truth.md` §3; flagged by internal review as redundant with NDVI in the current UGS
+  weighting.
+- **Czekajlo, Coops, Wulder et al. (2020)**, *Int. J. Applied Earth Obs. & Geoinformation* 93:102210 —
+  Urban Greenness Score via spectral unmixing of annual Landsat composites, 18 Canadian cities 1984–2016.
+  **Engine use / correction on record:** cited as inspiration for the UGS pillar, but internal review
+  (`dc-urs-engineering-review.md` §4) found the shipped `φ₁·NDVI + φ₂·FVC + φ₃·VSI` formula is **not**
+  Czekajlo's method and should not be attributed as such; the Canadian calibration doesn't transfer; its
+  33-year composites (vs single-scene NDVI) are why Kolkata inputs need seasonal composites.
+- **Meta AI / WRI 1 m Canopy Height Model (v2)** — dataset detail in
+  [data-sources.md](data-sources.md); cited as a dataset/provider, **not** as a formal paper (Tolan et al.
+  **not in docs — verify**).
+- **ESA WorldCover** (2020/2021), CC BY 4.0, DOI `10.5281/zenodo.7254221` — coarse land-cover mask;
+  cross-checks/gap-fills the CHM.
+- **Mapillary Vistas / Neuhold et al. ICCV 2017** — **not in the repo at all.** Mapillary appears only as a
+  *rejected* vegetation source (no tree class exposed by its API); no academic paper is cited for it
+  anywhere. Recorded here so the absence is explicit, not an oversight.
+
+---
+
+## Cooling evidence, green infrastructure, UHI benchmarks
+
+- **Dhara, Deshpande, Roxy, Dalpadado & Shrestha (2025)**, *PLOS Climate* 4(11):e0000724, DOI
+  [10.1371/journal.pclm.0000724](https://doi.org/10.1371/journal.pclm.0000724) — India warming deltas
+  under SSP2-4.5 (+1.25 °C, 2041–60) and SSP5-8.5 (+4.1 °C). **Engine use:** the two warming-pathway deltas
+  in the green-score climate-projection scaling (`green-score-methodology.md` §4.5); a previously-included
+  third "negative" pathway was deleted as unsupported by the citation.
+- **Li, Lu, Fu, Sun, Pan, Han, Guo & Li (2022)**, *Frontiers in Environmental Science*, DOI
+  [10.3389/fenvs.2022.1073914](https://doi.org/10.3389/fenvs.2022.1073914) — tropical-megacity park cooling
+  incl. Kolkata: threshold-value-of-effect 0.77 ha, cooling reach 420 m, daytime max UCI 8.07 °C (Kolkata)
+  vs 4.83 °C (Bangkok — a *different* city). **Correction on record:** previously miscited as "Mitra et al.
+  2022" with a false "4.83–8.07 °C Kolkata band"; corrected 2026-08-08.
+- **Gunawardena & Steemers (2023)**, *Buildings & Cities* 4(1), DOI
+  [10.5334/bc.282](https://doi.org/10.5334/bc.282) — neighbourhood vertical greening: heat-island intensity
+  1.86→1.81 K (~3%); energy 2.1–5.2%.
+- **LBNL Heat Island Group** — cool-roof albedo (0.15 dark / 0.60 aged-cool).
+  [heatisland.lbl.gov](https://heatisland.lbl.gov/coolscience/cool-roofs).
+- **WRI India — "Urban Trees' Cooling Potential"** — Bangalore −5.6 °C air / −27.5 °C surface; +10% canopy
+  ≈ −0.3 °C air. [wri.org/insights](https://www.wri.org/insights/urban-trees-cooling-potential).
+- **arXiv 2512.11753 (2025)** — targeted street greening beats uniform (1.5% area → −19% effect); authors
+  not in docs.
+- **Zhengzhou park spillover, 2023**, *Frontiers in Earth Science* — cooling distance mean 179 m, ~1
+  °C/100 m; author not in docs.
+- **Blue-green corridors, PMC8622358** — corridor cooling to 600–750 m, optimal width 20–35 m; author not
+  in docs.
+- **Yang et al. 2026**, *Sustainable Cities and Society* — 68% of parks show exponential cooling decay
+  (abstract-verified only).
+- **Nguyen et al. 2025** — Hanoi exponential cooling decline (abstract-verified only).
+- **Nature Communications 2021** — 40% canopy-cover saturation threshold; author not in docs.
+- **Arboriculture & Urban Forestry (2021)** — street-tree spacing/crown data; author not in docs.
+
+### UHI benchmarks (used to sanity-check, not calibrate)
+
+- **Nayak, Vinod & Prasad (2023)**, *Applied Sciences* 13(24):13323, DOI
+  [10.3390/app132413323](https://doi.org/10.3390/app132413323) — Kolkata night SUHII 0.85 °C annual.
+- **Jain (2023)**, *Frontiers in Sustainable Cities* 5:1084573, DOI
+  [10.3389/frsc.2023.1084573](https://doi.org/10.3389/frsc.2023.1084573) — Kolkata night 1.3–1.5 °C (DJF).
+- **Siddiqui et al. (2021)**, *Sustainable Cities and Society* 75:103374, DOI
+  [10.1016/j.scs.2021.103374](https://doi.org/10.1016/j.scs.2021.103374) — Indian metros night
+  1.34–2.07 °C.
+- **Peng et al. (2012)**, *Environmental Science & Technology* 46(2):696–703, DOI
+  [10.1021/es2030438](https://doi.org/10.1021/es2030438) — global 1.5 °C day / 1.1 °C night; equal-area
+  rural-reference method. **Engine use:** method for the model's heat-island difference calculation.
+- **Chakraborty & Lee (2019)**, *Int. J. Applied Earth Obs. & Geoinformation* 74:269–280, DOI
+  [10.1016/j.jag.2018.09.015](https://doi.org/10.1016/j.jag.2018.09.015) — global 0.85 °C day / 0.55 °C
+  night; water-masking rationale.
+- **Shastri et al. (2017)**, *Scientific Reports* 7:40178, DOI
+  [10.1038/srep40178](https://doi.org/10.1038/srep40178) — Indian daytime *cool*-island in the
+  pre-monsoon.
+- **Kumar et al. (2017)**, *Scientific Reports* 7:14054, DOI
+  [10.1038/s41598-017-14213-2](https://doi.org/10.1038/s41598-017-14213-2) — 60% of 89 Indian urban areas
+  show a daytime cool island.
+
+---
+
+## Composite-index & standards methodology
+
+- **OECD/JRC (2008)**, *Handbook on Constructing Composite Indicators*, DOI
+  [10.1787/9789264043466-en](https://doi.org/10.1787/9789264043466-en) — equal-weighting practice + the
+  requirement for sensitivity analysis.
+- **Berlin Biotope Area Factor** (Senate Dept. for Urban Development) — greening weights, 0.30–0.60 target
+  band. [berlin.de](https://www.berlin.de/sen/uvk/en/nature-and-green/landscape-planning/baf-biotope-area-factor/).
+- **Seattle Green Factor** (SDCI) — cross-check on surface weights.
+  [seattle.gov](https://www.seattle.gov/sdci/codes/codes-we-enforce-(a-z)/seattle-green-factor).
+- **Singapore Green Plot Ratio** (URA LUSH) — third comparator on the weighted-area form
+  (abstract/catalogue-verified only).
+  [ura.gov.sg](https://www.ura.gov.sg/Corporate/Guidelines/Development-Control/Non-Residential/EI/Greenery).
+
+---
+
+## Urban microclimate modelling (SOLWEIG/UMEP) — mined for methods, model not adopted
+
+- **Lindberg, F. & Grimmond, C.S.B. (2011)**, *Theoretical and Applied Climatology* 105:311–323, DOI
+  [10.1007/s00704-010-0382-8](https://doi.org/10.1007/s00704-010-0382-8) — developed/validated SOLWEIG;
+  Tmrt validation R²=0.91, RMSE=3.1 K over five days in Göteborg. **Engine use:** cited as a field
+  calibration reference ("our 2.31 K peak / 2.93 K night LST error is not the embarrassment it feels like at
+  2 a.m."); its shadow/SVF *intermediates* (not the Tmrt model) are the candidate methods, since SOLWEIG
+  computes a person-level comfort variable while this engine predicts satellite-view LST.
+- **Ratti, C. & Richens, P. (1990/1999)** — originated the shear-and-running-max shadow-volume algorithm
+  later re-described in Lindberg & Grimmond 2011; MIT Senseable City Lab affiliation is **inferred, not
+  stated — verify**. **Engine use:** candidate cheap shadow-raster method (superseded by the observation
+  that a three.js shadow-map render pass may already compute the same thing).
+- **Konarska et al. (2013)** — vegetation transmissivity default (3% canopy penetration; trunk zone at 25%
+  of canopy height), via UMEP docs. Full citation not in docs.
+- **Wallenberg et al. (2026)**, *Geoscientific Model Development* 19:1321 — step-heating solution for
+  SOLWEIG wall-surface temperature. [gmd.copernicus.org](https://gmd.copernicus.org/articles/19/1321/2026/).
+  **Engine use:** candidate thermal-admittance method — "our third named ingredient" (with shadowing,
+  moisture, 3-D geometry) still missing from the 2-D physics.
+- **Jiao et al. (2019)**, *Earth and Space Science*, "Evaluation of Four Sky View Factor Algorithms" ·
+  [agupubs](https://agupubs.onlinelibrary.wiley.com/doi/full/10.1029/2018EA000475).
+- Additional shadow/SVF literature cited by title only (no named authors in docs): *SVF Calculation in
+  Urban Context* (*Climate* 6(3):60); *Seasonal Effect of Building Shadows on Urban LST* (*Remote Sensing*
+  11(5):497, [doi](https://doi.org/10.3390/rs11050497)); *Effect of extremely low SVF on LST*; *3D urban
+  morphology on surface temperature*; *Satellite-derived LST strongly mischaracterise urban heat hazard*
+  ([arxiv 2509.16568](https://arxiv.org/pdf/2509.16568)).
+
+> **Note on SVF for this engine:** measured and **rejected** — wrong sign, our wards have no canyons; the
+> physics is 2-D (`sun`/`kRad` are scalars). See project memory `heat-map-physics-is-2d.md`. The SVF
+> literature above is retained as *why we checked*, not as an adopted method.
+
+---
+
+## 3D Gaussian splatting, neural rendering, neural microclimate surrogates (survey only — not adopted)
+
+A ~30-item corpus cited by **title + arXiv/DOI only — no author names in the docs**, so none appear in the
+scientist roster. Background survey for a possible future rendering/simulation upgrade
+(`docs/learning-sunday-01-3d-twins-simulation-splatting.md`,
+`2026-08-09-gaussian-splatting-and-3d-twins.md`,
+`2026-08-09-real-time-simulation-webgpu-and-neural-surrogates.md`,
+`2026-08-09-3d-simulation-rendering-library-survey.md`). Grouped:
+
+- **Standards/tooling:** Khronos/OGC geospatial 3D-Gaussian-splat glTF extension; Cesium 3D Tiles LOD
+  splat announcements.
+- **City-scale splatting:** Gaussian Building Mesh (GBM, [arxiv](https://arxiv.org/html/2501.00625)),
+  CityGaussian, Octree-GS, BlitzGS, MetroGS, TraGraph-GS, Momentum-GS.
+- **Thermal-aware splatting:** MrGS (RGB+thermal, Fourier conduction + Stefan–Boltzmann,
+  [arxiv](https://arxiv.org/abs/2511.22997)), Thermal3D-GS, Unpaired RGB-Thermal splatting
+  ([arxiv](https://arxiv.org/pdf/2606.05491)).
+- **Physics/inverse rendering:** PhysGaussian (CVPR 2024), i-PhysGaussian, SuGaR (CVPR 2024), SSD-GS,
+  BRDFusion, MaterialClusterGS, RTR-GS (ACM MM), GI-GS, Phys3DGS, TRON, Differentiable Inverse Rendering
+  with Interpretable Basis BRDFs.
+- **Neural microclimate surrogates:** Localized Fourier Neural Operator for 3D urban microclimate
+  ([arxiv](https://arxiv.org/abs/2411.11348)); FLUME-FNO ([arxiv](https://arxiv.org/abs/2503.19708));
+  Generative Urban Flow Modeling (graph diffusion, [arxiv](https://arxiv.org/html/2512.14725)); FNO for
+  real-time 3D urban microclimate (ScienceDirect); Surrogate modeling of urban boundary layer flows
+  (*Physics of Fluids* 36(7)); Urban microclimate in Omniverse-class twins (*Smart Cities* 9(2):39, DOI
+  [10.3390/smartcities9020039](https://doi.org/10.3390/smartcities9020039)).
