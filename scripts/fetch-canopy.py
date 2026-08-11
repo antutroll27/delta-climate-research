@@ -37,6 +37,7 @@ import json
 import math
 import os
 import sys
+from collections.abc import Callable
 from typing import Any, cast
 
 import numpy as np
@@ -55,9 +56,8 @@ RETRIEVED = "2026-08-10"          # constant, not date.today() -- byte-stable re
 GRID = 140                        # served canopy grid (matches surface: FOOTPRINT_M // 10)
 CANOPY_HI = 30.0                  # metres; quantisation ceiling for the PNG
 MIN_TREE_H = 2.0                  # metres; below this a cell is not "canopy"
-TARGET_SPACING_M = 12.0           # one tree per ~12 m cell of canopy (density cap)
-JITTER = 0.80                     # cell-size fraction for position jitter -- Task 2; tuned live 2026-08-11, spec sec.2
-DENSITY_MAX = 4                   # trees at a ward-max-height cell, scaling to 0 (gaps) -- Task 2; tuned live 2026-08-11
+JITTER = 0.80                     # cell-size fraction for position jitter -- tuned live 2026-08-11, spec sec.2
+DENSITY_MAX = 4                   # trees at a ward-max-height cell, scaling to 0 (gaps) -- tuned live 2026-08-11
 DATA = os.path.join(HERE, "..", "public", "heat-map", "data")
 
 #: CHMv1 bucket, verified 2026-08-10 against the registry's own tiles.geojson
@@ -171,25 +171,53 @@ def write_canopy_png(ward_id: str, grid_north_up: npt.NDArray[np.float32]) -> st
     return path
 
 
-def derive_trees(ward: Ward, grid_north_up: npt.NDArray[np.float32]) -> list[_types.TreeInstanceJSON]:
-    """One tree per canopy cell, downsampled to ~TARGET_SPACING_M, ward-local metres (+y north)."""
+#: Phase-B seam (docs/superpowers/specs/2026-08-11-vegetation-placement-v2-design.md).
+#: Exclusion mask (B1), parks prior (B2) and ETH gate (B3) slot in here as filter
+#: callables, in that order; crown-detection (B4) swaps _generate(). Empty in Phase A.
+FILTERS: tuple[Callable[[list[_types.TreeInstanceJSON]], list[_types.TreeInstanceJSON]], ...] = ()
+
+SPECIES = ("neem", "neem", "gulmohar", "palm")   # deterministic broadleaf-dominant mix
+
+
+def _generate(ward: Ward, grid_north_up: npt.NDArray[np.float32]) -> list[_types.TreeInstanceJSON]:
+    """Redistributive jitter+density scatter (spec: model b, jitter 0.80, max 4).
+
+    Per canopy cell: 0..DENSITY_MAX instances scaling with height relative to the
+    ward's max cell (thin canopy -> honest gaps), each jittered off the cell
+    centre by a deterministic hash. int(v+0.5) not round(): half-up matches the
+    JS Math.round the parameters were visually tuned against.
+    """
     n = grid_north_up.shape[0]
     cell_m = ward.footprint_m / n
-    step = max(1, int(round(TARGET_SPACING_M / cell_m)))
     half = ward.footprint_m / 2.0
-    species_cycle = ("neem", "neem", "gulmohar", "palm")   # deterministic broadleaf-dominant mix
+    h_max = float(grid_north_up.max())
     trees: list[_types.TreeInstanceJSON] = []
-    for row in range(0, n, step):
-        for col in range(0, n, step):
+    if h_max < MIN_TREE_H:
+        return trees
+    for row in range(n):
+        for col in range(n):
             h = float(grid_north_up[row, col])
             if h < MIN_TREE_H:
                 continue
-            # cell centre -> ward-local metres; row 0 = north so +y decreases with row
-            x = round((col + 0.5) * cell_m - half, 2)
-            y = round(half - (row + 0.5) * cell_m, 2)
-            sp = species_cycle[(row * 7 + col * 13) % len(species_cycle)]
-            trees.append({"x": x, "y": y, "h": round(h, 1), "species": sp, "r": round(h * 0.35, 2)})
+            count = int(DENSITY_MAX * h / h_max + 0.5)
+            for k in range(count):
+                jx = (_hash01(col, row, k, 0) - 0.5) * JITTER * cell_m
+                jy = (_hash01(col, row, k, 1) - 0.5) * JITTER * cell_m
+                # cell centre -> ward-local metres; row 0 = north so +y decreases with row
+                x = round((col + 0.5) * cell_m - half + jx, 2)
+                y = round(half - (row + 0.5) * cell_m + jy, 2)
+                r = round(h * 0.35 * (0.9 + 0.2 * _hash01(col, row, k, 2)), 2)
+                sp = SPECIES[int(_hash01(col, row, k, 3) * len(SPECIES))]
+                trees.append({"x": x, "y": y, "h": round(h, 1), "species": sp, "r": r})
     return trees
+
+
+def derive_trees(ward: Ward, grid_north_up: npt.NDArray[np.float32]) -> list[_types.TreeInstanceJSON]:
+    """Tree instances for the render layer: candidates -> Phase-B filters (none yet)."""
+    candidates = _generate(ward, grid_north_up)
+    for f in FILTERS:
+        candidates = f(candidates)
+    return candidates
 
 
 def serialise(doc: dict[str, Any]) -> str:
@@ -231,6 +259,14 @@ def check() -> None:
             assert MIN_TREE_H - 0.05 <= t["h"] <= CANOPY_HI + 5, f"{wid}: tree height out of range {t['h']}"
             assert abs(t["x"]) <= doc["sizeM"] / 2 + 1 and abs(t["y"]) <= doc["sizeM"] / 2 + 1, f"{wid}: tree outside ward"
             assert t["species"] in ("neem", "gulmohar", "palm"), f"{wid}: bad species {t['species']}"
+        # v2 tripwires: the 10 m lattice must be dead, and counts must stay sane
+        cell_m = doc["sizeM"] / doc["grid"]
+        off_lattice = sum(
+            1 for t in doc["trees"]
+            if abs((t["x"] + doc["sizeM"] / 2 - cell_m / 2) % cell_m) > 0.05
+        )
+        assert off_lattice > len(doc["trees"]) / 2, f"{wid}: trees still sit on the cell-centre lattice"
+        assert 0 < len(doc["trees"]) <= 30_000, f"{wid}: implausible tree count {len(doc['trees'])}"
     print("canopy artefacts OK")
 
 
@@ -252,6 +288,44 @@ def _self_test() -> None:
     draws = [_hash01(i, i * 31 + 1, 0, 0) for i in range(1000)]
     mean = sum(draws) / len(draws)
     assert 0.45 < mean < 0.55, f"hash draws should average ~0.5, got {mean:.3f}"
+    # placement invariants on a synthetic ward-sized grid
+    ward = WARDS["ballygunge"]
+    n = GRID
+    cell_m = ward.footprint_m / n
+    grid = np.zeros((n, n), dtype=np.float32)
+    grid[0, 0] = 30.0          # ward-max cell -> DENSITY_MAX trees
+    grid[0, 1] = 2.0           # barely canopy -> 0 trees (the honest gap)
+    grid[10, 10] = 15.0        # mid canopy -> ~DENSITY_MAX/2
+    grid[20, 20] = 1.0         # below MIN_TREE_H -> skipped entirely
+    trees = derive_trees(ward, grid)
+    assert trees == derive_trees(ward, grid), "derive_trees must be deterministic"
+    def cell_of(t: _types.TreeInstanceJSON) -> tuple[int, int]:
+        col = int((t["x"] + ward.footprint_m / 2) / cell_m)
+        row = int((ward.footprint_m / 2 - t["y"]) / cell_m)
+        return (min(col, n - 1), min(row, n - 1))
+    by_cell: dict[tuple[int, int], int] = {}
+    for t in trees:
+        by_cell[cell_of(t)] = by_cell.get(cell_of(t), 0) + 1
+    assert by_cell.get((0, 0)) == DENSITY_MAX, f"max-height cell must hold {DENSITY_MAX}, got {by_cell.get((0, 0))}"
+    assert (1, 0) not in by_cell, "h=2.0 cell must be a gap (redistributive count 0)"
+    assert (20, 20) not in by_cell, "below MIN_TREE_H must stay empty"
+    assert by_cell.get((10, 10)) == 2, "15 m of 30 m at DENSITY_MAX=4 -> 2 trees"
+    # jitter bounds: every instance stays within +-JITTER/2 of its cell centre
+    half = ward.footprint_m / 2.0
+    for t in trees:
+        col, row = cell_of(t)
+        cx = (col + 0.5) * cell_m - half
+        cy = half - (row + 0.5) * cell_m
+        assert abs(t["x"] - cx) <= JITTER * cell_m / 2 + 0.011, f"x jitter out of bounds at {t}"
+        assert abs(t["y"] - cy) <= JITTER * cell_m / 2 + 0.011, f"y jitter out of bounds at {t}"
+    # the lattice is dead: with >1 instance somewhere, positions inside one cell differ
+    xs = sorted(t["x"] for t in trees if cell_of(t) == (0, 0))
+    assert len(set(xs)) > 1, "instances within a cell must not stack on one point"
+    # species valid + per-instance (a 4-tree cell should not be monoculture-by-position rule)
+    assert all(t["species"] in ("neem", "gulmohar", "palm") for t in trees)
+    # radius jitter stays within +-10% of h*0.35
+    for t in trees:
+        assert 0.9 * t["h"] * 0.35 - 0.01 <= t["r"] <= 1.1 * t["h"] * 0.35 + 0.01, f"radius out of band at {t}"
     print("  fetch-canopy self-test OK")
 
 
