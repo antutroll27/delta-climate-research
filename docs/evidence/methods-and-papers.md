@@ -261,9 +261,33 @@ of these changed the shipped p75 method — they are context/benchmarking)*
   morphology on surface temperature*; *Satellite-derived LST strongly mischaracterise urban heat hazard*
   ([arxiv 2509.16568](https://arxiv.org/pdf/2509.16568)).
 
-> **Note on SVF for this engine:** measured and **rejected** — wrong sign, our wards have no canyons; the
-> physics is 2-D (`sun`/`kRad` are scalars). See project memory `heat-map-physics-is-2d.md`. The SVF
-> literature above is retained as *why we checked*, not as an adopted method.
+> **Note on SVF for this engine — measured and REJECTED, with the receipt in-repo.**
+> The claim under test was specific: `types.ts` governs the model with a **scalar** `kRad`, so every cell
+> radiates to a full hemisphere. A real canyon at SVF 0.4 loses far less longwave than open ground at 1.0,
+> so if that omission mattered it had to show as structure in residuals we already had. The **direction was
+> pre-registered** — positive correlation at night would mean the missing sky-view term is real.
+>
+> It came back **significant and the wrong way round**, on both phases:
+>
+> | phase | scenes | mean r | median r | % positive | sign-test p | verdict |
+> |---|---|---|---|---|---|---|
+> | night | 50 | **−0.514** | −0.469 | **0.0%** | 1.8 × 10⁻¹⁵ | rejected, wrong sign |
+> | day | 37 | **−0.505** | −0.512 | 2.7% | 5.5 × 10⁻¹⁰ | rejected, wrong sign |
+>
+> Method: 5 m DSM, 16 azimuths, 150 m search radius, SVF = mean_φ(1 − sin²β), residual taken as
+> (model − model.mean()) − (obs − obs.mean()). The physical reading is that our wards have no canyons —
+> measured SVF spans only ~0.82–0.92 — so the term has almost no range to act over, and the correlation is
+> picking up whatever else co-varies with built density.
+>
+> **Honest caveat:** a *post-hoc* partial correlation at night flips weakly positive (mean r = +0.048, 68%
+> of scenes positive, p = 0.015). It is post-hoc, the effect is tiny, and the day partial shows nothing
+> (r = −0.050, p = 0.32) — so it does not rescue the hypothesis. It is recorded because suppressing an
+> inconvenient-but-weak signal is exactly the failure mode this library exists to prevent.
+>
+> **Receipt:** [`scripts/measure-svf-signtest.py`](../../scripts/measure-svf-signtest.py) ·
+> [`data/calibration/svf-signtest.json`](../../data/calibration/svf-signtest.json) (87 scene rows).
+> The SVF literature above is retained as *why we checked*, not as an adopted method. The companion
+> shadow half of this test is a separate, later measurement.
 
 ---
 
