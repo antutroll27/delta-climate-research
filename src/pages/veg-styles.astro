@@ -1,0 +1,156 @@
+---
+// DEV-ONLY visual mockup for the vegetation-layer brainstorm. Not a real nav route.
+// Realism pass: how world-class twins render foliage at scale (volumetric crowns,
+// alpha-textured billboard impostors, contact shadows, species/scale variation, wind).
+// Open: http://localhost:4321/veg-styles
+---
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Vegetation render styles — realism pass</title>
+<style>
+  :root{ --base:#070f11; --panel:#0b1416; --line:rgba(111,202,214,.16); --cyan:#6fcad6; --green:#5db98a; --paper:#eef1f2; --ink:#93a7a9; --faint:#5f7377; }
+  *{margin:0;box-sizing:border-box}
+  body{background:var(--base);color:var(--paper);font-family:system-ui,sans-serif;padding:22px}
+  h1{font-size:17px;font-weight:800;letter-spacing:-.02em}
+  .sub{color:var(--ink);font-size:12px;margin:4px 0 18px;max-width:80ch;line-height:1.5}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+  .cell{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  .cell canvas{display:block;width:100%;height:380px}
+  .cap{padding:11px 13px}
+  .cap .n{font-size:8px;letter-spacing:.16em;text-transform:uppercase;color:var(--cyan);font-family:ui-monospace,monospace}
+  .cap .t{font-size:13px;font-weight:700;margin:3px 0 4px}
+  .cap p{font-size:10.5px;color:var(--ink);line-height:1.5}
+  .cap .meta{font-size:9px;color:var(--faint);margin-top:6px;font-family:ui-monospace,monospace}
+  @media (max-width:1100px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+  <h1>Vegetation · realism pass · pick a direction</h1>
+  <div class="sub">Believable, not photoreal (photogrammetry is off-limits in India). These use the techniques city twins use at scale: volumetric crowns, alpha-textured foliage impostors, contact shadows, species + scale variation, and gentle wind. All procedural — foliage texture is drawn at runtime, no external assets. Auto-rotating.</div>
+  <div class="grid">
+    <div class="cell"><canvas id="c1"></canvas><div class="cap"><div class="n">1 · volumetric crowns</div><div class="t">Clustered soft foliage</div><p>Each crown is a cluster of overlapping blobs with colour + normal variation, on a tapered trunk. Full 3D, casts real shadows. Holds up close and at tilt.</p><div class="meta" id="m1">—</div></div></div>
+    <div class="cell"><canvas id="c2"></canvas><div class="cap"><div class="n">2 · billboard impostors</div><div class="t">Alpha-textured foliage (game/Cesium standard)</div><p>Crossed quads with a procedural leaf-cluster texture, alpha-cut so the silhouette is fuzzy like real foliage. Leaf-shaped shadows. The cheapest way to look real at city scale.</p><div class="meta" id="m2">—</div></div></div>
+    <div class="cell"><canvas id="c3"></canvas><div class="cap"><div class="n">3 · hybrid + species</div><div class="t">Textured crowns + palms (Kolkata mix)</div><p>Volumetric crowns broken up by the foliage texture, plus palms for local character and scale variation. The most place-specific and believable of the three.</p><div class="meta" id="m3">—</div></div></div>
+  </div>
+
+<script>
+import * as THREE from 'three';
+
+const GREY = 0x33454a, GROUND = 0x14201d;
+
+// ── procedural foliage alpha texture: a fuzzy leaf-cluster patch (transparent bg) ──
+function foliageTexture(){
+  const s = 256, cv = document.createElement('canvas'); cv.width = cv.height = s;
+  const g = cv.getContext('2d'); if (!g) throw new Error('2d context unavailable'); g.clearRect(0,0,s,s);
+  const cx = s/2, cy = s/2;
+  for (let i=0;i<800;i++){
+    const ang = Math.random()*Math.PI*2, rad = Math.pow(Math.random(),0.62)*s*0.47;
+    const x = cx+Math.cos(ang)*rad, y = cy+Math.sin(ang)*rad*0.92;
+    const r = 5+Math.random()*15;
+    const hue = 92+Math.random()*40, sat = 38+Math.random()*32, lum = 16+Math.random()*40;
+    g.fillStyle = `hsla(${hue},${sat}%,${lum}%,${0.45+Math.random()*0.5})`;
+    g.beginPath(); g.arc(x,y,r,0,7); g.fill();
+  }
+  const t = new THREE.CanvasTexture(cv); t.anisotropy = 4; return t;
+}
+const FOLIAGE = foliageTexture();
+
+function makeScene(canvas: HTMLCanvasElement){
+  const r = new THREE.WebGLRenderer({ canvas, antialias:true, alpha:false });
+  r.setPixelRatio(Math.min(2, devicePixelRatio));
+  r.shadowMap.enabled = true; r.shadowMap.type = THREE.PCFSoftShadowMap;
+  r.toneMapping = THREE.ACESFilmicToneMapping; r.toneMappingExposure = 1.05;
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x0b1618);
+  scene.fog = new THREE.Fog(0x0b1618, 42, 95);
+  const cam = new THREE.PerspectiveCamera(40, 1, 0.1, 200);
+  scene.add(new THREE.HemisphereLight(0xbfe0e6, 0x131d16, 0.85));
+  const sun = new THREE.DirectionalLight(0xfff0d6, 2.1);
+  sun.position.set(14, 22, 8); sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -0.0004;
+  const sc = sun.shadow.camera; sc.near = 1; sc.far = 70; sc.left = sc.bottom = -26; sc.right = sc.top = 26; sc.updateProjectionMatrix();
+  scene.add(sun);
+  const g = new THREE.Mesh(new THREE.CircleGeometry(30, 48), new THREE.MeshStandardMaterial({color:GROUND, roughness:1}));
+  g.rotation.x = -Math.PI/2; g.receiveShadow = true; scene.add(g);
+  const bgeo = new THREE.BoxGeometry(1,1,1), bmat = new THREE.MeshStandardMaterial({color:GREY, roughness:.85});
+  for (const [bx,bz,bh] of [[-8,-7,4],[3,-9,5.5],[9,3,3],[-9,4,3.6],[5,9,4.2]]){ const m=new THREE.Mesh(bgeo,bmat); m.scale.set(3,bh,3); m.position.set(bx,bh/2,bz); m.castShadow=m.receiveShadow=true; scene.add(m); }
+  function resize(){ const w=canvas.clientWidth,h=canvas.clientHeight; r.setSize(w,h,false); cam.aspect=w/h; cam.updateProjectionMatrix(); }
+  return { r, scene, cam, resize };
+}
+
+const SPAN = 26, GRIDN = 9;
+function sites(){ const out=[]; for(let i=0;i<GRIDN;i++) for(let j=0;j<GRIDN;j++){ const x=(i/(GRIDN-1)-.5)*SPAN, z=(j/(GRIDN-1)-.5)*SPAN; if(Math.hypot(x,z)>13) continue; if((i*7+j*13)%3===0) continue; out.push([x+(Math.random()-.5)*1.4, z+(Math.random()-.5)*1.4, 0.85+Math.random()*0.6]); } return out; }
+const trunkMat = new THREE.MeshStandardMaterial({color:0x5a4632, roughness:1});
+const swayers: { crown: THREE.Group; ph: number; amp: number }[] = [];
+
+function volumetricTree(scale: number){
+  const grp = new THREE.Group();
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.12*scale,0.2*scale,1.4*scale,6), trunkMat);
+  trunk.position.y = 0.7*scale; trunk.castShadow = true; grp.add(trunk);
+  const crown = new THREE.Group(); crown.position.y = 1.9*scale;
+  for (let b=0;b<5;b++){
+    const rr = (0.7+Math.random()*0.5)*scale;
+    const col = new THREE.Color().setHSL(0.30+Math.random()*0.06, 0.42+Math.random()*0.12, 0.30+Math.random()*0.12);
+    const m = new THREE.Mesh(new THREE.IcosahedronGeometry(rr,1), new THREE.MeshStandardMaterial({color:col, roughness:.92, flatShading:true}));
+    m.position.set((Math.random()-.5)*1.1*scale,(Math.random()-.2)*0.9*scale,(Math.random()-.5)*1.1*scale);
+    m.castShadow = true; crown.add(m);
+  }
+  grp.add(crown); grp.userData.crown = crown; return grp;
+}
+function billboardTree(scale: number){
+  const grp = new THREE.Group();
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.1*scale,0.16*scale,1.2*scale,5), trunkMat);
+  trunk.position.y = 0.6*scale; trunk.castShadow = true; grp.add(trunk);
+  const crown = new THREE.Group(); crown.position.y = 2.0*scale;
+  const mat = new THREE.MeshStandardMaterial({map:FOLIAGE, alphaTest:0.42, side:THREE.DoubleSide, roughness:.9});
+  const depth = new THREE.MeshDepthMaterial({depthPacking:THREE.RGBADepthPacking, map:FOLIAGE, alphaTest:0.42});
+  const S = 2.6*scale;
+  for (let k=0;k<3;k++){ const q=new THREE.Mesh(new THREE.PlaneGeometry(S,S), mat); q.rotation.y=k*Math.PI/3; q.castShadow=true; q.customDepthMaterial=depth; crown.add(q); }
+  grp.add(crown); grp.userData.crown = crown; return grp;
+}
+function texturedCrownTree(scale: number){
+  const grp = new THREE.Group();
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.12*scale,0.2*scale,1.5*scale,6), trunkMat);
+  trunk.position.y=0.75*scale; trunk.castShadow=true; grp.add(trunk);
+  const crown = new THREE.Group(); crown.position.y=2.0*scale;
+  for (let b=0;b<4;b++){ const rr=(0.75+Math.random()*0.5)*scale;
+    const m=new THREE.Mesh(new THREE.IcosahedronGeometry(rr,2), new THREE.MeshStandardMaterial({color:0x3f6d43, roughness:.95, alphaMap:FOLIAGE, alphaTest:0.28}));
+    m.position.set((Math.random()-.5)*1.0*scale,(Math.random()-.2)*0.8*scale,(Math.random()-.5)*1.0*scale); m.castShadow=true; crown.add(m); }
+  grp.add(crown); grp.userData.crown=crown; return grp;
+}
+function palm(scale: number){
+  const grp=new THREE.Group(); const h=3.2*scale;
+  const trunk=new THREE.Mesh(new THREE.CylinderGeometry(0.1*scale,0.16*scale,h,6), new THREE.MeshStandardMaterial({color:0x6b5636,roughness:1}));
+  trunk.position.y=h/2; trunk.castShadow=true; grp.add(trunk);
+  const fronds=new THREE.Group(); fronds.position.y=h;
+  const fmat=new THREE.MeshStandardMaterial({color:0x4f8a4a, roughness:.85, side:THREE.DoubleSide, flatShading:true});
+  for(let f=0;f<7;f++){ const fg=new THREE.PlaneGeometry(0.5*scale,2.2*scale,1,3); fg.translate(0,1.0*scale,0); const fr=new THREE.Mesh(fg,fmat); fr.rotation.y=f*(Math.PI*2/7); fr.rotation.x=-0.9; fr.castShadow=true; fronds.add(fr); }
+  grp.add(fronds); grp.userData.crown=fronds; return grp;
+}
+
+function populate(scene: THREE.Scene, factory: (scale: number) => THREE.Group, opts: { species?: boolean } = {}){
+  let count=0;
+  for (const [x,z,s] of sites()){
+    const t = (opts.species && Math.random()<0.22) ? palm(s*0.95) : factory(s);
+    t.position.set(x,0,z); t.rotation.y=Math.random()*6; scene.add(t);
+    swayers.push({crown:t.userData.crown, ph:Math.random()*6, amp:0.02+Math.random()*0.03});
+    count++;
+  }
+  return count;
+}
+
+const S1 = makeScene(document.getElementById('c1') as HTMLCanvasElement); const m1 = document.getElementById('m1'); if (m1) m1.textContent = populate(S1.scene, volumetricTree)+' trees · full 3D crowns · shadows';
+const S2 = makeScene(document.getElementById('c2') as HTMLCanvasElement); const m2 = document.getElementById('m2'); if (m2) m2.textContent = populate(S2.scene, billboardTree)+' trees · 3 quads each · alpha-cut shadows';
+const S3 = makeScene(document.getElementById('c3') as HTMLCanvasElement); const m3 = document.getElementById('m3'); if (m3) m3.textContent = populate(S3.scene, texturedCrownTree, {species:true})+' trees · textured crowns + palms';
+
+let t=0;
+(function frame(){
+  t += 0.006;
+  for (const s of swayers){ if(s.crown) s.crown.rotation.z = Math.sin(t*1.4 + s.ph)*s.amp; }
+  for (const S of [S1,S2,S3]){ const R=30; S.cam.position.set(Math.cos(t*0.5)*R, 13, Math.sin(t*0.5)*R); S.cam.lookAt(0,3,0); S.resize(); S.r.render(S.scene,S.cam); }
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

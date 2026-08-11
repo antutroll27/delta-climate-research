@@ -87,6 +87,11 @@ const sitemapFilter = (page) => {
   // this change exists to include.
   if (path !== '/heat-map/' && path.startsWith('/heat-map/')) return false;
   if (path === '/HeatMapVisualizer/') return false;               // legacy stub route, removed
+  // Dev-only vegetation look mockup. Astro routes every file under src/pages/,
+  // so its "not a real nav route" comment does not stop it building or being
+  // indexed -- the publication contract catches it in the sitemap. Kept as a
+  // local reference at /veg-styles, kept out of search results.
+  if (path === '/veg-styles/') return false;
   if (path === '/white-papers/') return papers.some((p) => p.published);
   if (path === '/projects/') return projects.some((p) => p.published);
   const wp = path.match(/^\/white-papers\/([^/]+)\/$/);
