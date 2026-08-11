@@ -33,6 +33,13 @@ jobs:
       # requirements-dev.txt for mypy itself plus the stub packages. Installing
       # only the latter makes every `import numpy` unresolvable and the gate
       # passes without checking anything.
+      #
+      # They live in scripts/, NOT the repo root, and that location is load-
+      # bearing: Vercel autodetects a root requirements.txt and starts a Python
+      # build, which fails on a cmake dependency and breaks the preview deploy
+      # (the site build is Node-only). Deleting them fixed Vercel but silently
+      # broke this job, since it installs files that no longer existed. Keeping
+      # them one directory down satisfies both -- do not move them back up.
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -40,7 +47,7 @@ jobs:
           cache: pip
 
       - name: Install Python dependencies
-        run: pip install -r requirements.txt -r requirements-dev.txt
+        run: pip install -r scripts/requirements.txt -r scripts/requirements-dev.txt
 
       - name: Verify build and publication contracts
         run: npm run verify

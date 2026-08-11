@@ -1,0 +1,36 @@
+# Runtime dependencies of the scripts/ data pipeline.
+#
+# WHY THIS FILE EXISTS (added 2026-08-10). It did not, and its absence was
+# invisible until mypy was wired into CI: the type checker has to IMPORT these to
+# read their inline hints, so `pip install -r requirements-dev.txt` alone leaves
+# every `import numpy` unresolved and the gate passes vacuously.
+#
+# Versions are pinned to exactly what the tree was type-checked against on
+# 2026-08-10 — a floating pin would let CI and a developer's machine disagree
+# about the same source, which is the same failure mode requirements-dev.txt
+# already argues about for stubs.
+#
+# NOT a distribution manifest. This is a pipeline, and these are the versions
+# whose type information the `python3 -m mypy` gate was verified green against.
+
+# numpy is CAPPED BY SCIPY, not chosen: scipy 1.15.1 declares `numpy<2.5,>=1.23.5`.
+# tests/fixtures/geo-oracle/oracle.json records numpy 2.5.1 because it was stamped
+# (2026-08-02) before scipy was pinned here, and 2.5.x cannot coexist with this
+# scipy. The oracle's VALUES are identical under both — only the provenance
+# string differs — so this is not a reproducibility problem, and bumping numpy
+# means bumping scipy first and re-verifying the calibration numbers.
+numpy==2.4.6
+scipy==1.15.1
+shapely==2.1.2
+rasterio==1.5.0
+affine==2.4.0
+Pillow==12.3.0
+opencv-python==4.11.0.86
+requests==2.32.3
+h5py==3.16.0
+fsspec==2024.9.0
+pyarrow==19.0.0
+duckdb==1.5.5
+earthengine-api==1.7.37
+matplotlib==3.11.1
+pvlib==0.15.2
