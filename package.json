@@ -11,7 +11,7 @@
     "test:unit": "node scripts/cbam-sync-check.mjs && node --import tsx --test tests/unit/*.test.mjs",
     "report:build": "node scripts/report-build.mjs",
     "check:publication": "node scripts/check-publication-contract.mjs",
-    "test:py": "python3 scripts/fetch-canopy.py --self-test && python3 scripts/fetch-canopy.py --check",
+    "test:py": "python3 scripts/fetch-canopy.py --self-test && python3 scripts/fetch-canopy.py --check && python3 scripts/_ecostress.py && python3 scripts/check-geo-oracle.py",
     "verify": "npm run check && npm run typecheck && npm run test:py && npm run test:unit && npm run build && npm run report:build && npm run check:publication && npm run test:e2e:built",
     "test:e2e": "npm run build && npm run test:e2e:built",
     "test:e2e:built": "playwright test",
