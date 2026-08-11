@@ -57,7 +57,17 @@ GRID = 140                        # served canopy grid (matches surface: FOOTPRI
 CANOPY_HI = 30.0                  # metres; quantisation ceiling for the PNG
 MIN_TREE_H = 2.0                  # metres; below this a cell is not "canopy"
 JITTER = 0.80                     # cell-size fraction for position jitter -- tuned live 2026-08-11, spec sec.2
-DENSITY_MAX = 4                   # trees at a ward-max-height cell, scaling to 0 (gaps) -- tuned live 2026-08-11
+DENSITY_MAX = 4                   # trees at a DENSITY_REF_H cell, scaling to 0 (gaps) -- tuned live 2026-08-11
+#: Metres; the FIXED reference height the density scale is pinned to. Deliberately NOT
+#: the ward's own tallest cell: normalising per ward makes "dense" mean a different
+#: thing in every ward, and cross-ward comparison IS this twin's product. Measured
+#: maxima are ballygunge 22 m, barrackpore 25 m, baruipur 20 m -- ward-relative scaling
+#: therefore put barrackpore at 0.50 trees per canopy cell against ballygunge's 0.93,
+#: not because it has less canopy but because TWO of its 6,069 cells clear 22 m and
+#: dragged the whole ward's scale down. 22.0 is ballygunge's own measured max, chosen
+#: so the CEO-tuned ballygunge artifact stays byte-identical while the other wards are
+#: lifted onto its scale (0.93 / 0.73 / 0.85 measured after the change).
+DENSITY_REF_H = 22.0
 DATA = os.path.join(HERE, "..", "public", "heat-map", "data")
 
 #: CHMv1 bucket, verified 2026-08-10 against the registry's own tiles.geojson
@@ -192,24 +202,24 @@ SPECIES = ("neem", "neem", "gulmohar", "palm")   # deterministic broadleaf-domin
 def _generate(ward: Ward, grid_north_up: npt.NDArray[np.float32]) -> list[_types.TreeInstanceJSON]:
     """Redistributive jitter+density scatter (spec: model b, jitter 0.80, max 4).
 
-    Per canopy cell: 0..DENSITY_MAX instances scaling with height relative to the
-    ward's max cell (thin canopy -> honest gaps), each jittered off the cell
-    centre by a deterministic hash. int(v+0.5) not round(): half-up matches the
-    JS Math.round the parameters were visually tuned against.
+    Per canopy cell: 0..DENSITY_MAX instances scaling with height against the FIXED
+    DENSITY_REF_H reference, not the ward's own tallest cell -- a per-ward normaliser
+    makes a given density mean a different thing in each ward, which corrupts the
+    cross-ward comparison (thin canopy still -> honest gaps). The min() is load-bearing,
+    not defensive: cells taller than the reference exist (barrackpore tops 25 m) and
+    would otherwise break the count <= DENSITY_MAX invariant. int(v+0.5) not round():
+    half-up matches the JS Math.round the parameters were visually tuned against.
     """
     n = grid_north_up.shape[0]
     cell_m = ward.footprint_m / n
     half = ward.footprint_m / 2.0
-    h_max = float(grid_north_up.max())
     trees: list[_types.TreeInstanceJSON] = []
-    if h_max < MIN_TREE_H:
-        return trees
     for row in range(n):
         for col in range(n):
             h = float(grid_north_up[row, col])
             if h < MIN_TREE_H:
                 continue
-            count = int(DENSITY_MAX * h / h_max + 0.5)
+            count = min(DENSITY_MAX, int(DENSITY_MAX * h / DENSITY_REF_H + 0.5))
             for k in range(count):
                 jx = (_hash01(col, row, k, 0) - 0.5) * JITTER * cell_m
                 jy = (_hash01(col, row, k, 1) - 0.5) * JITTER * cell_m
@@ -311,12 +321,14 @@ def _self_test() -> None:
     n = GRID
     cell_m = ward.footprint_m / n
     grid = np.zeros((n, n), dtype=np.float32)
-    grid[0, 0] = 30.0          # ward-max cell -> DENSITY_MAX trees
+    grid[0, 0] = 30.0          # far over DENSITY_REF_H -> min() caps it at DENSITY_MAX
     grid[0, 1] = 2.0           # barely canopy -> 0 trees (the honest gap)
-    grid[10, 10] = 15.0        # mid canopy -> ~DENSITY_MAX/2
+    grid[10, 10] = 15.0        # mid canopy -> 4*15/22 = 2.73 -> 3
     grid[20, 20] = 1.0         # below MIN_TREE_H -> skipped entirely
-    grid[3, 40] = 25.0         # OFF-DIAGONAL: the only cell a row/col transposition moves
-    grid[30, 30] = 3.75        # exact tie: 4*3.75/30 = 0.5, where int(v+0.5)=1 but round(v)=0
+    grid[3, 40] = 25.0         # OFF-DIAGONAL: the only cell a row/col transposition moves.
+                               # Also just over the 22 m reference, so it pins the cap at
+                               # the boundary: 4*25/22 = 4.55 -> 5 uncapped, 4 capped.
+    grid[30, 30] = 2.75        # exact tie: 4*2.75/22 = 0.5, where int(v+0.5)=1 but round(v)=0
     trees = derive_trees(ward, grid)
     assert trees == derive_trees(ward, grid), "derive_trees must be deterministic"
     def cell_of(t: _types.TreeInstanceJSON) -> tuple[int, int]:
@@ -326,11 +338,12 @@ def _self_test() -> None:
     by_cell: dict[tuple[int, int], int] = {}
     for t in trees:
         by_cell[cell_of(t)] = by_cell.get(cell_of(t), 0) + 1
-    assert by_cell.get((0, 0)) == DENSITY_MAX, f"max-height cell must hold {DENSITY_MAX}, got {by_cell.get((0, 0))}"
+    assert by_cell.get((0, 0)) == DENSITY_MAX, f"30 m cell must cap at {DENSITY_MAX}, got {by_cell.get((0, 0))}"
     assert (1, 0) not in by_cell, "h=2.0 cell must be a gap (redistributive count 0)"
     assert (20, 20) not in by_cell, "below MIN_TREE_H must stay empty"
-    assert by_cell.get((10, 10)) == 2, "15 m of 30 m at DENSITY_MAX=4 -> 2 trees"
-    assert by_cell.get((40, 3)) == 3, "25 m of 30 m -> 3 trees, at (col=40,row=3) not its transpose"
+    assert by_cell.get((10, 10)) == 3, "15 m against the 22 m reference at DENSITY_MAX=4 -> 3 trees"
+    assert by_cell.get((40, 3)) == DENSITY_MAX, \
+        "25 m tops the 22 m reference, so min() must cap it at 4 -- at (col=40,row=3), not its transpose"
     assert by_cell.get((30, 30)) == 1, "count rounds HALF-UP: int(0.5+0.5)=1, but round(0.5)=0"
     # jitter bounds: every instance stays within +-JITTER/2 of its cell centre
     half = ward.footprint_m / 2.0
@@ -368,13 +381,23 @@ def _self_test() -> None:
     # radius jitter stays within +-10% of h*0.35
     for t in trees:
         assert 0.9 * t["h"] * 0.35 - 0.01 <= t["r"] <= 1.1 * t["h"] * 0.35 + 0.01, f"radius out of band at {t}"
-    # the MIN_TREE_H gate needs its OWN grid: at h_max=30 the density math already
-    # yields 0 for sub-2 m cells, so grid[20,20] above passes with the gate deleted.
-    # It only bites in a low-canopy ward, where scrub would otherwise become trees.
+    # A low-canopy ward is no longer a special case: with a FIXED reference the counts do
+    # not rescale, so a 4 m cell is 1 tree here exactly as it would be beside a 30 m one.
+    #
+    # And note MIN_TREE_H is now SEMANTIC ONLY, untestable by construction: count > 0
+    # needs 4*h/22 >= 0.5, i.e. h >= 2.75 m, which is strictly ABOVE MIN_TREE_H = 2.0.
+    # The density formula is uniformly the tighter of the two, so deleting the gate could
+    # not change a single tree. It stays as the declaration of what counts as "canopy"
+    # (and as the real guard if DENSITY_MAX or DENSITY_REF_H is ever retuned), not as
+    # observable behaviour -- so there is nothing here to assert about it. Under the old
+    # ward-relative divisor it WAS observable, which is what this probe used to test.
     low = np.zeros((n, n), dtype=np.float32)
-    low[5, 5] = 4.0            # ward max -> DENSITY_MAX trees
-    low[6, 6] = 1.5            # scrub; ungated this would be int(4*1.5/4 + 0.5) = 2 trees
-    assert len(derive_trees(ward, low)) == DENSITY_MAX, "sub-MIN_TREE_H scrub must not become trees"
+    low[5, 5] = 4.0            # 4*4/22 = 0.73 -> 1 tree; being the ward max buys it nothing
+    low[6, 6] = 1.5            # scrub: under MIN_TREE_H and under the 2.75 m density floor
+    assert len(derive_trees(ward, low)) == 1, "a fixed reference must not rescale a low-canopy ward"
+    # also the standing proof that dropping the old `if h_max < MIN_TREE_H` guard was
+    # safe: with no division by data there is no zero to divide by, and an all-zero grid
+    # still empties out because every cell simply fails the per-cell MIN_TREE_H test.
     assert derive_trees(ward, np.zeros((n, n), dtype=np.float32)) == [], "a bare grid must yield no trees"
     # the seam itself: derive_trees must RUN the filters, hand them the geometry, and
     # return what they hand back. Deleting the `for f in FILTERS` loop must fail here.
