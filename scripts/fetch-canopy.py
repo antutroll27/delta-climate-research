@@ -56,8 +56,8 @@ GRID = 140                        # served canopy grid (matches surface: FOOTPRI
 CANOPY_HI = 30.0                  # metres; quantisation ceiling for the PNG
 MIN_TREE_H = 2.0                  # metres; below this a cell is not "canopy"
 TARGET_SPACING_M = 12.0           # one tree per ~12 m cell of canopy (density cap)
-JITTER = 0.80                     # fraction of cell size for deterministic position jitter
-DENSITY_MAX = 4                   # trees at a ward-max-height cell; scales down to 0 (gaps)
+JITTER = 0.80                     # cell-size fraction for position jitter -- Task 2; tuned live 2026-08-11, spec sec.2
+DENSITY_MAX = 4                   # trees at a ward-max-height cell, scaling to 0 (gaps) -- Task 2; tuned live 2026-08-11
 DATA = os.path.join(HERE, "..", "public", "heat-map", "data")
 
 #: CHMv1 bucket, verified 2026-08-10 against the registry's own tiles.geojson
@@ -112,13 +112,22 @@ def _hash01(col: int, row: int, k: int, axis: int) -> float:
     NOT `random`/`Date` (repo rule: byte-stable artifacts). Keyed on the cell
     (col,row), the instance index within the cell (k), and which quantity is
     being drawn (axis: 0=x-jitter, 1=y-jitter, 2=radius, 3=species).
+
+    The `(z >> 11) / 2**53` tail is the canonical splitmix64-to-double step, and
+    it is deliberate: it keeps the top 53 bits (a double's whole mantissa) and
+    divides by a power of two, so the division is EXACT -- no rounding, which is
+    what makes the [0,1) upper bound provable and the result bit-identical on
+    every platform and in any future Go/TS port. The tempting `z / 2**64` is
+    wrong: its top 1024 inputs round UP to exactly 1.0 (witness col=
+    8454462832853231296), and a 1.0 would make a `SPECIES[int(h * len(SPECIES))]`
+    draw raise IndexError.
     """
     z = (col * 0x9E3779B97F4A7C15 + row * 0xBF58476D1CE4E5B9
          + k * 0x94D049BB133111EB + axis * 0xD6E8FEB86659FD93) & 0xFFFFFFFFFFFFFFFF
     z = ((z ^ (z >> 30)) * 0xBF58476D1CE4E5B9) & 0xFFFFFFFFFFFFFFFF
     z = ((z ^ (z >> 27)) * 0x94D049BB133111EB) & 0xFFFFFFFFFFFFFFFF
     z ^= z >> 31
-    return z / 2**64
+    return (z >> 11) / 2**53
 
 
 def read_chm_grid(ward: Ward, n: int) -> npt.NDArray[np.float32] | None:
@@ -232,6 +241,8 @@ def _self_test() -> None:
     """
     # hash01: deterministic, in [0,1), sensitive to every key component
     a = _hash01(3, 7, 0, 0)
+    # golden value: the hash IS the artifact contract -- if this moves, every tree moves
+    assert a == 0.8508871035309332, "hash changed -- every tree in trees.json moves"
     assert a == _hash01(3, 7, 0, 0), "hash must be deterministic"
     assert 0.0 <= a < 1.0, "hash must be in [0,1)"
     keys = {(3, 7, 0, 0), (4, 7, 0, 0), (3, 8, 0, 0), (3, 7, 1, 0), (3, 7, 0, 1)}
