@@ -76,6 +76,29 @@ CMR = "https://cmr.earthdata.nasa.gov/search/granules.umm_json"
 TARGET_CRS = "EPSG:32645"          # UTM 45N — Kolkata
 TARGET_RES = 70.0                  # native ECOSTRESS L2T resolution
 
+#: How far the study area may sit from TARGET_CRS's central meridian, degrees.
+#: A UTM zone is 6 deg wide, so this permits a study area straddling its own zone
+#: plus a full neighbouring zone — generous, and still catches a different city.
+#:
+#: WHY THIS EXISTS. `target_grid` happily projects ANY bbox into TARGET_CRS and
+#: returns a plausible-looking grid. Measured 2026-08-12: the Dubai urban core
+#: (54.90, 24.85, 55.60, 25.45) is 70.5 x 66.7 km on the ground but comes back as
+#: 1385 x 1337 cells = 97.0 x 93.6 km — inflated 37 % in x and 40 % in y, because
+#: Dubai is five zones from zone 45. No exception, no warning; every downstream
+#: mean, area and per-cell rate silently wrong. Kolkata sits ~1.4 deg off zone
+#: 45's central meridian and is unaffected.
+MAX_CENTRAL_MERIDIAN_OFFSET_DEG = 6.0
+
+
+def utm_zone(lon: float) -> int:
+    """UTM zone number containing a longitude. Zones are 6 deg wide from 180W."""
+    return int((lon + 180.0) // 6.0) % 60 + 1
+
+
+def utm_central_meridian(zone: int) -> float:
+    """Central meridian of a UTM zone, degrees east."""
+    return zone * 6.0 - 183.0
+
 #: A granule is a real file, not a stub. LP DAAC serves an HTML error page on a
 #: bad token, which is a few hundred bytes and would otherwise cache as success.
 MIN_TIF_BYTES = 2000
@@ -183,8 +206,31 @@ __all__ = ["BBOX", "CACHE", "CMR", "TARGET_CRS", "TARGET_RES", "TOKEN_PATH",
 
 
 def target_grid(bbox: Bbox | None = None) -> tuple[Affine, int, int]:
-    """(affine transform, width, height) of the shared UTM 45N grid."""
-    l, b, r, t = transform_bounds("EPSG:4326", TARGET_CRS, *(bbox or BBOX), densify_pts=21)
+    """(affine transform, width, height) of the shared UTM 45N grid.
+
+    Raises ValueError if `bbox` is too far from TARGET_CRS's central meridian to
+    be projected honestly — see MAX_CENTRAL_MERIDIAN_OFFSET_DEG. The failure this
+    prevents is silent, not loud: the wrong grid is well-formed and looks right.
+    """
+    box = bbox or BBOX
+    lon_c = (box[0] + box[2]) / 2.0
+    # The last two digits of an EPSG:326xx / 327xx code ARE the zone number. Do
+    # not route this through utm_zone(), which takes a LONGITUDE — that read 45 as
+    # 45 deg E and returned zone 38, whose central meridian is 45.0E, so the guard
+    # measured Kolkata as 43 deg out of place and fired on the ward it protects.
+    home = int(TARGET_CRS.rsplit(":", 1)[1]) % 100
+    offset = abs(lon_c - utm_central_meridian(home))
+    if offset > MAX_CENTRAL_MERIDIAN_OFFSET_DEG:
+        want = utm_zone(lon_c)
+        raise ValueError(
+            f"target_grid: bbox centre {lon_c:.3f}E is {offset:.1f} deg from "
+            f"{TARGET_CRS}'s central meridian ({utm_central_meridian(home):.1f}E) — "
+            f"{abs(want - home)} UTM zones away. The projection would return a "
+            f"well-formed but badly distorted grid. This area belongs in UTM zone "
+            f"{want}N (EPSG:326{want:02d}). TARGET_CRS is hardcoded for Kolkata; "
+            f"deriving it per city is Track A and is gated on the geo-oracle "
+            f"parity fixtures in tests/fixtures/geo-oracle/.")
+    l, b, r, t = transform_bounds("EPSG:4326", TARGET_CRS, *box, densify_pts=21)
     w = int(np.ceil((r - l) / TARGET_RES))
     h = int(np.ceil((t - b) / TARGET_RES))
     return from_origin(l, t, TARGET_RES, TARGET_RES), w, h
@@ -232,6 +278,18 @@ def _self_check() -> None:
     l, b, r, t = BBOX
     _tf2, w2, _h2 = target_grid((l, b, (l + r) / 2, t))
     assert w2 < w, f"half-width bbox gave {w2} columns against {w} for the full bbox"
+
+    # The zone guard. Kolkata must pass untouched (checked implicitly above) and a
+    # far-away city must RAISE rather than return a plausible wrong grid.
+    assert utm_zone(88.36) == 45, "Kolkata must derive to zone 45 — the hardcoded one"
+    assert utm_zone(55.25) == 40, "Dubai must derive to zone 40"
+    assert abs(utm_central_meridian(45) - 87.0) < 1e-9, "zone 45 central meridian is 87E"
+    try:
+        target_grid((54.90, 24.85, 55.60, 25.45))       # Dubai urban core
+    except ValueError as e:
+        assert "EPSG:32640" in str(e), f"guard must name the right zone, said: {e}"
+    else:
+        raise AssertionError("Dubai bbox must not silently produce a zone-45 grid")
     assert band_url({"RelatedUrls": [{"URL": "https://x/y_LST.tif"}]}, "_LST.tif")
     assert band_url({}, "_LST.tif") is None, "a granule with no bands must yield None"
     assert fetch(None, "tok") is None, "a missing band URL must not be fetched"
