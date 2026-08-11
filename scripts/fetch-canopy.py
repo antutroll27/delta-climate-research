@@ -355,6 +355,13 @@ def _self_test() -> None:
     # counts and bounds survive one, because both hashes are equally valid draws.
     gold = [t for t in trees if cell_of(t) == (40, 3)][0]
     assert (gold["x"], gold["y"]) == (-293.04, 661.5), f"golden placement moved: {gold}"
+    # SPECIES is a CROSS-LANGUAGE contract. vegetation-layer.ts:3 declares
+    # `type Species = 'neem' | 'gulmohar' | 'palm'`, and asTreesFile returns null on
+    # anything else -- one unknown species rejects the WHOLE file, so the layer
+    # silently vanishes rather than losing a tree. check() deliberately validates
+    # artifacts against set(SPECIES), which leaves this the only site pinning the TS.
+    assert set(SPECIES) == {"neem", "gulmohar", "palm"}, \
+        "SPECIES changed -- update Species and asTreesFile in vegetation-layer.ts first"
     # species valid, and genuinely mixed rather than always SPECIES[0]
     assert all(t["species"] in set(SPECIES) for t in trees)
     assert len({t["species"] for t in trees}) > 1, "the species draw must vary per instance"
