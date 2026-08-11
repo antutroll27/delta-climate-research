@@ -104,6 +104,12 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
       </div>
     </div>
 
+    <!-- Street-view toggle: same widget idiom as Trees, stacked directly below it. -->
+    <div class="vegw" id="svw" hidden>
+      <span class="veg-lab">Street</span>
+      <div class="modechip" id="streetchip" title="Show Mapillary street-level coverage; click a point for the real photo"><button class="on" data-s="0">Off</button><button data-s="1">On</button></div>
+    </div>
+
     <!-- First-run affordance: the buildings became clickable and nothing said so. -->
     <div class="tiphint" id="tiphint" hidden>
       <span>Click any building for its data</span>
@@ -169,7 +175,6 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
       <div class="modechip" id="modechip"><button class="on" data-m="relief">3D Relief</button><button data-m="iso">2D Isotherm</button></div>
       <div class="modechip" id="envchip"><button class="on" data-e="dark">Dark map</button><button data-e="studio">Clay studio</button></div>
       <div class="modechip" id="tintchip" title="Building colour: continuous ramp, or snapped to the 5 legend classes"><button class="on" data-t="1">Gradient</button><button data-t="2">5-Class</button></div>
-      <div class="modechip" id="streetchip" hidden title="Show Mapillary street-level coverage; click a point for the real photo"><button class="on" data-s="0">Street off</button><button data-s="1">Street view</button></div>
     </div>
 
     <aside class="panel left">
@@ -401,6 +406,7 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
   .vegw .veg-lab{font-family:var(--mono);font-size:.52rem;letter-spacing:.13em;color:var(--ink);text-transform:uppercase}
   .vegw .modechip{padding:2px;gap:2px}
   .vegw .modechip button{font-size:.52rem;padding:.3rem .62rem;letter-spacing:.12em}
+  #svw{top:222px}
 
   body.studio .compass{background:rgb(245 244 241 /.86);border-color:rgb(20 40 42 /.2)}
   body.studio .compass .c-s{fill:rgb(20 40 42 /.34)}

@@ -1080,6 +1080,11 @@ export function mountHeatMap(): () => void {
        meaningless until a ward has actually loaded. */
     const vegw = el('vegw');
     if (vegw) vegw.hidden = !L;
+    /* Street-view toggle sits directly below Trees; it rides the same reveal
+       gate, ANDed with the Mapillary token so it never appears when the
+       feature has tree-shaken out. */
+    const svw = el('svw');
+    if (svw) svw.hidden = !(L && MLY_TOKEN);
     if (!L) return;
 
     const mins = ageMinutes(L.validAt);
@@ -1497,9 +1502,8 @@ export function mountHeatMap(): () => void {
   }));
 
   /* ── street-view: coverage overlay + click-to-view ──
-     The chip stays hidden (see HeatMapStage.astro) unless a Mapillary token is
+     The #svw wrapper stays hidden (see paintClock) unless a Mapillary token is
      actually configured — no point offering a toggle that can never do anything. */
-  if (MLY_TOKEN) el('streetchip')?.removeAttribute('hidden');
   document.querySelectorAll('#streetchip button').forEach((b) => onEl(b, 'click', () => {
     streetOn = (b as HTMLElement).dataset.s === '1';
     document.querySelectorAll('#streetchip button').forEach((x) => x.classList.toggle('on', x === b));
