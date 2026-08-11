@@ -48,16 +48,19 @@ jobs:
       - name: Install Python dependencies
         run: pip install -r scripts/requirements.txt -r scripts/requirements-dev.txt
 
-      - name: Verify build and publication contracts
-        run: npm run verify
-
+      # Chromium BEFORE verify, not after: `verify` ends with test:e2e:built, so
+      # installing the browser afterwards meant the gate could never pass. It went
+      # unnoticed because verify always died earlier, on a Python import, until the
+      # step above started installing numpy.
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
 
-      - name: Run browser contracts
-        # `verify` built and audited dist above. Exercise that exact artifact
-        # instead of silently replacing it with a second production build.
-        run: npm run test:e2e:built
+      # Runs the browser contracts too, as its last stage, against the dist it
+      # just built and audited -- which is what the removed "Run browser
+      # contracts" step existed to do. Keeping both ran the whole e2e suite twice
+      # per CI run for no added coverage.
+      - name: Verify build, publication and browser contracts
+        run: npm run verify
 
       - name: Upload browser failure artifacts
         if: failure()
