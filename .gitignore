@@ -80,3 +80,14 @@ docs/*.pdf
 # overturemaps CLI resume scratch — not data, regenerated per download
 data/geometry/raw/*.state
 .superpowers/
+
+# Screen recordings used as research input, and root-level scratch screenshots.
+# Two competitor-teardown captures were 15.3 MB between them and the stray PNGs
+# another 6.3 MB — 21.6 MB of binaries that git cannot delta-compress and that
+# nothing rebuilds from. The findings live in the specs; the video is the
+# working material, not the artefact. Keep them locally.
+docs/research/*.webm
+docs/research/*.mp4
+docs/research/*.mov
+/shot.png
+/_*.png
