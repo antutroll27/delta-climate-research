@@ -160,8 +160,9 @@ outside it. This is the Track B blocker and it is now answered:
   EE: `JRC/GHSL/P2023A/GHS_BUILT_H`, band `built_height`.
 - **Per-building alternative: 3D-GloBFP** — `CC-BY-4.0`, 2020, built on Microsoft footprints
   with **no OSM**, so the licence chain is clean and it joins to the same geometry. RMSE
-  1.9–14.6 m. Has "tiled spatial gaps"; **spot-check the Gulf and India before relying on it.**
-- **WSF3D (DLR)** 90 m, `CC-BY-4.0` — independent cross-check.
+  1.9–14.6 m. ~~Has "tiled spatial gaps"; spot-check the Gulf and India before relying on it.~~
+  **✅ GULF SPOT-CHECKED 2026-08-11 — see §8i. Dubai IS covered.**
+- **WSF3D (DLR)** 90 m, `CC-BY-4.0` — independent cross-check. **✅ verified §8i.**
 
 **⚠️ TRAP — GlobalBuildingAtlas is CC-BY-NC-4.0** on every height component. Technically the
 best global product (2.68 B per-building heights, 97 % complete, 3 m maps) and **unusable in
@@ -303,7 +304,322 @@ knowing before anyone waves a low RMSE at us.
 for Dubai, Riyadh, Kuwait City or Doha.** The nearest work (UAE, Oman) is monthly and
 non-urban. We would be filling a genuine gap, not entering a crowded field.
 
-## 9 · First move
+## 8d · THE DEMO SLATE — CEO decision 2026-08-11
 
-**Verify Dubai Pulse actually has usable footprints and heights over the urban core.**
-One day. It gates Track B, and if the data is thin the whole shape changes.
+Not all ~226 Dubai communities. Not one city-wide map either. **A curated slate of three
+categories, because each is a different argument to a different person at the stand:**
+
+| category | candidates (hypothesis, not finding) | the argument |
+|---|---|---|
+| **Financial** | DIFC, Business Bay, Downtown, Marina/JLT | cooling load, grid peak, DEWA's P&L. Already on district cooling, so ΔT→MW is checkable against their own load data |
+| **New / in progress** | Dubai South & Expo City, Creek Harbour, MBR City, Dubai Hills | the only places the intervention is still free — design-stage, not retrofit |
+| **At-risk (heat)** | Al Quoz, Jebel Ali Industrial, Deira/Naif, Al Qusais–Muhaisnah | equity and health; industrial and dense-old-fabric, low albedo, near-zero canopy, outdoor workforce |
+
+**⭐ THE UPGRADE THAT MAKES THIS DEFENSIBLE: do not hand-pick the at-risk list — derive it.**
+Run the city-wide grid first, rank every community by measured SUHII from the ECOSTRESS
+stack, and show the top N. The stand line becomes *"we didn't choose these, we ran all of
+Dubai and the data chose them."* That converts a curation decision (which any consultancy can
+assert) into a **result** (which requires the instrument). Costs nothing — the city-wide run
+is happening anyway. The ranked list may well disagree with the table above, **which is the
+point.**
+
+**Sizing:** 1 city-wide grid + ~9 drill-downs ≈ **10-12 MB shipped**, vs **~226 MB** for full
+per-community coverage (measured: a Kolkata ward ships ~1.0 MB; `public/heat-map/data/` is
+9.5 MB for three wards). Full coverage is also 226 separate EE and ECOSTRESS runs.
+
+**⚠️ DO NOT CLAIM CLIMATE RISK WE CANNOT MODEL.** For several of these communities the
+headline risk is **coastal inundation** — Palm Jumeirah, Marina, Jumeirah 1-3. **We have no
+flood model.** Keep every claim to heat, or the first informed question at the stand lands
+somewhere the engine cannot follow.
+
+## 8e · DUBAI DATA — VERIFIED BY DIRECT PROBE, 2026-08-11
+
+Measured, not assumed. Several intuitions about "it's Dubai, the data must be there" did not
+survive contact.
+
+| source | verdict |
+|---|---|
+| **Dubai Pulse** | 🔴 **`ECONNREFUSED` from here** — same wall the earlier agent hit; looks geo-blocked. Datasets are listed (`dm_building_summary_information`) but **contents and licence cannot be verified remotely.** |
+| **ArcGIS "Dubai Communities"** | ⚠️ Exists — **2017 upload, personal account (`ralouta_smartdubai`), licence field literally `none`.** Every other Dubai community layer found is an Esri **DEMO** or personal account, "not specified". **No authoritative DM feature service surfaced.** **⚠️ CORRECTED by §8h — DM *does* catalogue `Community` and `Sectors` as open data; they are unreachable, not absent.** |
+| **geoBoundaries** | ❌ UAE stops at **ADM1** (emirates). No community level, and ODbL anyway (sourced from OSM). |
+| **OSM / Overpass** | ✅ **132 `admin_level=10` relations** in the Dubai bbox with correct community names (Al Rigga, Al Ras, Port Saeed, Corniche Deira). The only complete set retrievable. ODbL. |
+| **OpenAQ** | ⚠️ v2 retired; **v3 needs a free API key**. Viable, needs registration. |
+| **WAQI / aqicn** | ❌ Non-commercial licence — already ruled out for Kolkata. |
+
+**RECOMMENDATION: drop Dubai Pulse from the critical path.** It may be excellent, but we
+cannot reach or test it, and 70 days is not the moment to depend on that. GHS-BUILT-H +
+Microsoft footprints are verified and sufficient. Treat a later in-region Dubai Pulse pull as
+an **upgrade, not a dependency.** This retires the §9 "first move" as written.
+
+**✅ THE POLLUTION AXIS IS SOLVED, AND FOR FREE.** Dubai's pollution story is largely **dust**,
+which is well observed from orbit — and both products are reachable with the **Earth Engine
+credentials we already hold**, no new account:
+- **`MODIS/061/MCD19A2_GRANULES`** — MAIAC aerosol optical depth, **1 km, daily.** At 208 m
+  city cells this is a genuine community-level signal, and it captures dust.
+- **`COPERNICUS/S5P/OFFL/L3_NO2` / `L3_AER_AI`** — TROPOMI, ~5.5 km, for the traffic/industry
+  axis.
+Label tier 3 — we would have zero validation for either.
+
+**Boundaries — the ODbL angle that works here.** Using OSM boundaries to *decide which areas
+to model* is internal use, not public use of a Derivative Database. If the shipped artefact
+carries a **name and a centroid** rather than the polygon, that is very likely a Produced
+Work. **Use OSM to pick and label communities; do not ship the boundary geometry.** This
+sidesteps the trap for this axis only — it does not resolve the building-geometry question
+in §8a.
+
+## 8f · "BUILDERS OPEN-SOURCE THEIR 3D MODELS" — investigated, and the real answer is better
+
+Co-founder's claim, 2026-08-11: all major Dubai districts have builders that open-source
+their buildings' 3-D models. **As stated this is false — but it points at something real.**
+
+**Builders do not release geometry.** Emaar and DAMAC have BIM built by consultants (BIMES
+did as-built models for Emaar Malls and DAMAC); Nakheel did photogrammetric 3-D of Palm
+Jumeirah with Zero Technologies. **All proprietary.** What developers publish is 3-D *sales
+tools and marketing renders*, which is where the impression comes from — those are not data.
+**⚠️ CGTrader / Sketchfab / TurboSquid "Emaar models" are third-party hobbyist uploads** —
+mixed licences, no provenance, trademarked landmarks. Worse exposure than Overture and not
+survey-grade. Do not touch.
+
+**⭐ THE KERNEL, AND IT IS BIG: Dubai Municipality has already built the thing.** Their
+**Digital Twin Platform** on the **"Dubai Here"** portal carries **195,000 buildings modelled
+in 3-D**, 280,000 infrastructure assets, 330,000 public facilities, 1,500+ geospatial layers —
+and is explicitly available to *"government entities, partners, **private companies**, and
+students"*, **no fee stated**, via GeoDubai / the GIS Centre.
+
+So the claim is right that comprehensive Dubai 3-D building data exists and a private company
+can reach it. The correction is **who**: it is **the municipality, not the builders**, and it
+is **a request through a relationship, not a download.** With a warm DEWA contact and a stand
+at their own event, that ask is plausible — and the ask itself is a decent opener.
+
+**Measured fallback:** OSM buildings across the Downtown/Marina strip (20,000 sampled, query
+cap — a sample not a census): **`height` 3.3 %, `building:levels` 6.5 %, either 7.2 %,
+`building:part` 13 buildings.** **OSM 3-D is not a geometry source for Dubai.** Confirms
+GHS-BUILT-H was the right call.
+
+**⚠️ AND THE REASON NOT TO CHASE IT: our thermal physics is 2-D.** A per-building BIM model
+would make the scene look far better and would not change a single number the solver
+produces. **Worth asking Dubai Municipality for; not worth blocking 70 days on.** It is a
+rendering upgrade, and Track D is the cuttable track. (3-D geometry *does* now enter the
+physics via wind — see the wind spec — but through massing, which GHS-BUILT-H already gives
+us.)
+
+## 8g · COMPETITIVE / UX TEARDOWN — Spatialbound, from two screen captures
+
+Source: `docs/research/screen-capture (1).webm` (32 s, marketing site) and
+`docs/research/digital_twin_spatialbound.webm` (24 s, the 4D Spatial Engine — **including a
+live Dubai session**). Read by frame extraction. **Their site blocks ClaudeBot with
+`Disallow: /` and `ai-train=no`; it was not crawled.** These are the CEO's own recordings.
+
+**They are not a competitor.** Design/CAD/simulation for architecture and autonomy — the car
+sim exposes `Sensor View: Camera (RGB)`, `Ego Bounding Box`, `Drivable Area`, i.e. synthetic
+AV training data. Environmental analysis is **one of four pillars** (AI native CAD engine ·
+4D spatial engine · Spatial and environmental analytics · Fred the agentic AI), not the
+product. Backed by SFC Capital, plus Google/Microsoft for Startups and AWS Activate.
+
+### ⭐ Finding 1 — their Dubai is MASSING, not photoreal. Our approach is vindicated.
+
+`Hi fred, go to Dubai` → Palm Jumeirah and the Marina render as **grey/tan extruded massing
+on a satellite base.** No Google photorealistic façades anywhere in the Dubai or Zurich
+views. Their own header: **"4D Vector Representation of the World"** — *"visualise real
+terrain, buildings, and street data."* Photoreal is the *other* mode; **the simulation engine
+runs on vector massing.**
+
+That is exactly GHS-BUILT-H + Microsoft footprints + our existing procedural facade shader —
+**licence-clean, and it looks like this.** The CEO's "doesn't need to be photoreal" call is
+confirmed by the competitor's own product.
+
+### Finding 2 — their sidebar is a free feature roadmap
+
+`Search · Scene · **Air Flow** · Play Mode · **Time** · Weather · Buildings · Trees ·
+Emergency Sim · Analytics · Mobility · Navigation`
+
+We hold Buildings, Trees, Weather, Water, Roads and a time dimension. **Missing: Air Flow,
+Analytics-as-a-panel, Mobility, Emergency Sim.** Note **Air Flow and Time are adjacent** —
+sun and wind as sibling top-level modes, not buried settings. Adopt that hierarchy.
+
+### ⭐ Finding 3 — the Time panel is the most borrowable thing in either video
+
+> *"accurate sun position and lighting. **Study shadows, daylighting**, and visual impact at
+> any hour."*
+
+- presets `Dynamic / Morning / Noon / Evening`
+- continuous slider (`09:30`, `15:15`)
+- **speed multipliers `x1 · x10 · x100 · x1000 · x10000`**
+- absolute date field + **"Reset to current date and time"**
+
+**We have a time dimension in the solver and no control surface for it at all.** This is the
+exact UX a `pybdshadow` + `pvlib` build needs, and it is now the **third independent signal
+pointing at solar-and-shadow before wind** (the others: cost analysis, and their own
+"Sun and shadow, flow, exposure and performance" ordering).
+
+Also seen: **Real-time Data Modalities** — `Realistic / Edge / Depth / Normal / Semantics /
+Heatmap` rendered in parallel. Mostly AV ground truth, but the parallel-modality idea suits a
+compare view.
+
+### Finding 4 — 24 seconds of Dubai contains no numbers
+
+No temperature, no wind speed, no units, **no error bar**. `Analytics` is a sidebar icon that
+never gets clicked. Not a criticism — numbers aren't their sale. But **on the same city, at
+the same event, we would be the only stand with quantities on screen.** §1 holds.
+
+### ⚠️ Finding 5 — the sobering one
+
+They type *"go to Dubai"* and they are there. **We have three hardcoded wards and 56 files
+naming one literally.** Track A is not housekeeping — it is the difference between a product
+and a demo, and this is the argument for doing it first.
+
+### Carry-overs, logged
+
+1. **Massing-not-photoreal is confirmed viable** — no licence exposure, matches our shader.
+2. **Build the Time panel** to the spec above.
+3. **Air Flow and Time as sibling top-level modes.**
+4. **Apply to AWS Activate / Microsoft for Startups / Google for Startups** — credits
+   programmes, not equity. Directly addresses the precompute-budget question.
+
+## 8h · DUBAI MUNICIPALITY, READ DIRECTLY — corrections to §8e and §8f
+
+Source: `dm.gov.ae` open-data catalogue, GIS Services page and the geospatial article, fetched
+and text-extracted 2026-08-11. The article page returns HTTP 200; `geodubai.dm.gov.ae` and
+`dubaihere.dm.gov.ae` both return **000 (no connection)**, same as Dubai Pulse.
+
+**⚠️ The "digital twin" page is a PRESS RELEASE dated 12 January 2024**, filed under "Making
+Dubai More Pioneering" — not a data product page. The 195,000-buildings figure circulating in
+§8f traces to journalism about this article.
+
+**⚠️ CORRECTION TO §8f — the access tiers are narrower than reported.** §8f said the platform
+is open to *"private companies"* with no fee. That is the news copy. **The actual GIS Services
+catalogue reads:**
+
+| service | eligibility, verbatim |
+|---|---|
+| Apply for Geospatial Maps and Data | *"governmental departments, authorities, institutions, building consultants, contractors, and citizens … according to the powers vested in each entity"* |
+| Request Online Access to Geographical Databases | *"governmental departments and authorities"* **only** |
+| Request Access to Amakin Browser | *"governmental institutions, authorities and departments connected to the Government Information Network (GIN)"* **only** |
+
+**"Private companies" is not a listed category**, and a foreign climate-tech firm fits none of
+these cleanly. **This is a relationship ask via DEWA or an in-region partner, not a web form.**
+
+**⭐ CORRECTION TO §8e — authoritative boundaries DO exist.** The DM open-data catalogue lists,
+under *Geographic & Location Services* (audience: *"App Developers, GIS Analysts"*):
+**`Community` · `List of Community Entrances` · `Sectors`**. §8e concluded no authoritative set
+existed; it exists and is catalogued as open. **We cannot reach the host — a different problem
+with a different fix.** Also listed: **`Makani Open Data`** (the geo-tagging system).
+
+**⭐ AND THE BUILDING DATASETS FEED THE PHYSICS, not just the render.** Under *Construction &
+Development*:
+- **`Building Floor Level Information`** — *"Detailed information on each floor"*. **Floor
+  counts are a PER-BUILDING height proxy**, unlike GHS-BUILT-H's 100 m cell average.
+- **`Building Usages`** + `Building Usages Lookup` — **this feeds `Q·built` directly.**
+  Anthropogenic heat depends on what a building does; that term is currently uniform.
+- `Building Summary Information`, `Building Permits`, `Building Demolition Permits`.
+
+**⚠️ THIS REVISES §8f's CONCLUSION.** §8f said municipal data would improve the render but not
+a single solver number — true of **BIM geometry**, **false of this catalogue.** If the DEWA
+conversation goes well, **ask for `Building Usages` and `Building Floor Level Information`**,
+not the 3-D models. Everything still routes through Dubai Pulse, so the critical path is
+unchanged: **GHS-BUILT-H + Microsoft footprints, with this as an upgrade if the relationship
+opens it.**
+
+## 8i · DUBAI HEIGHTS — SOLVED, and better than a single source (verified 2026-08-11)
+
+Probed directly: Figshare API for licence and file manifests, DLR's download directory for
+WSF3D, Overpass `out count` for OSM.
+
+### The measured baseline — footprints are solved, heights are not
+
+| | Dubai urban core (24.85–25.45 N, 54.85–55.65 E) |
+|---|---|
+| OSM buildings | **361,446** |
+| …with `height` | 4,321 — **1.2 %** |
+| …with `building:levels` | 28,690 — **7.9 %** |
+| Microsoft footprints | **25 UAE tiles, ~97 MB GeoJSONL, uploaded 2026-02-23** |
+
+**Footprints are solved three times over (OSM, Microsoft, Overture-as-union). Heights are
+solved zero times by the mappers.** Note also that **AWS and Microsoft are not mappers** —
+the Registry of Open Data and Planetary Computer *host* other people's data.
+
+### ✅ 3D-GloBFP COVERS DUBAI — tested, not assumed
+
+Scanned **2,554 tiles across all 10 Figshare parts**. Dubai (55.30 E, 25.20 N) falls in:
+
+```
+PART V   1638_55.0_25.0_60.0_30.0_AE_IR_MU.zip   67.4 MB
+         https://ndownloader.figshare.com/files/54052133
+```
+
+Four UAE tiles exist; the urban core is mostly **1638**, the southern extension (Dubai South,
+Expo City) in **1640** — **~100 MB total**. Shapefiles, per-building height in metres.
+**Licence confirmed `CC BY 4.0` via the Figshare API.** Published 2025-12-11, 1.66 B buildings.
+
+**⚠️ Two caveats that matter under Track F.**
+- **RMSE 1.9–14.6 m.** Shadow length is `h/tan(altitude)`, so at a 30° sun a **14.6 m height
+  error becomes a ~25 m shadow error** — sub-cell at 208 m city scale, **three cells at 7.4 m
+  ward scale.** Fine for city-wide Dubai; marginal for drill-downs.
+- **2020 vintage.** Dubai builds fast; six years of construction is missing.
+
+### ✅ WSF3D — a single global raster, simpler than expected
+
+`download.geoservice.dlr.de/WSF3D/files/global/` serves **four global GeoTIFFs**, not tiles:
+`WSF3D_V02_BuildingHeight.tif` (**2.14 GB**, modified 2024-11-04), plus `BuildingArea`,
+`BuildingFraction`, `BuildingVolume`. **CC BY 4.0**, 90 m, from **TanDEM-X interferometry** +
+Sentinel-1/2. Global single file → Dubai coverage automatic.
+
+### ⭐ THE REAL WIN IS THREE INDEPENDENT ESTIMATES, NOT ONE SOURCE
+
+| product | type | lineage |
+|---|---|---|
+| **3D-GloBFP** | **per-building** | multi-source EO + XGBoost |
+| **WSF3D** | 90 m grid | **TanDEM-X radar interferometry** |
+| **GHS-BUILT-H** | 100 m grid | GHSL |
+
+Three genuinely independent instruments, plus **ICESat-2's 3 cloud-free transects** for sparse
+absolute truth. **That is how a height uncertainty gets published for a city with no ground
+survey** — and Track F needs precisely that, because shadow makes heights load-bearing and
+ours are currently flagged `"underpowered: 6 matched pairs < 8"`.
+
+**DECISION: 3D-GloBFP is the primary Dubai height source. WSF3D and GHS-BUILT-H are the
+cross-check.** Reporting the spread between three products turns "we used a dataset" into a
+measurement — the same move as the rest of the engine.
+
+### ⚠️ ICESat-2 is a VALIDATOR, not a height source
+Cloud-free desert makes the returns cleaner; **it does not add tracks.** It is a profiling
+lidar flying 3 fixed repeat ground tracks — a hard geometric ceiling, not a weather one. No
+DSM can be built from three lines. **Its job in Dubai is to validate the three products
+above along transects.** (Landsat, by contrast, *is* a genuine Dubai win — 8-day effective
+revisit and near-cloudless skies, against the monsoon losses that left Kolkata's day CI at
+±1.87 K on n=12.)
+
+## 9 · First move — SUPERSEDED 2026-08-11
+
+~~Verify Dubai Pulse actually has usable footprints and heights over the urban core.~~
+**Retired by §8e: Dubai Pulse refuses connections from here and cannot be tested.** The data
+question it was meant to answer is already settled — GHS-BUILT-H + Microsoft footprints,
+both verified and licence-clean.
+
+**The new first move is a code fix, not a data probe:**
+
+1. **Assert on `target_grid`.** Given a Dubai bbox under Kolkata's hardcoded
+   `TARGET_CRS = "EPSG:32645"` it silently returns a wrong 1385×1337 grid instead of
+   erroring. Everything downstream inherits that. Fix before anything else runs.
+   *(Good news from the same audit: Dubai at 55.3°E derives to UTM 40N / EPSG:32640 while
+   Kolkata derives to 45N — which **is** the hardcoded value. So the geo-oracle parity
+   fixtures stay byte-identical and Track A is smaller than feared.)*
+2. **Decide the ODbL question** (§8a) — it affects Kolkata today, not just Dubai.
+3. **Port URock on one Kolkata ward** before touching Dubai — see the wind spec.
+
+## 10 · Related specs
+
+- [2026-08-11-solar-shadow-track-f-design.md](2026-08-11-solar-shadow-track-f-design.md) —
+  **Track F. CEO decision 2026-08-11: "Solar first, Wind second."** No new solver — `pvlib`
+  (already pinned *and installed*) + a ~60-line shapely shadow projection + `pythermalcomfort`.
+  Produces three outputs from one geometry pass: the **untested `sun·(1−shade)` heat term**,
+  rooftop PV yield, and UTCI/PET. Carries the Time panel. **⚠️ `pybdshadow` is the validation
+  oracle, NOT a dependency** — it needs geopandas (no type stubs, breaks the mypy gate),
+  suncalc-py (a second solar-position implementation), and recommends Python 3.7–3.9 against
+  our 3.12.
+- [2026-08-11-urban-wind-3d-physics-design.md](2026-08-11-urban-wind-3d-physics-design.md) —
+  **Track E**, added 2026-08-11, **now second.** Röckle diagnostic wind, precomputed offline, coupled into
+  the existing 2-D solver by replacing the scalar `wind` with a per-cell field. Carries the
+  VDI 3783-9 hit-rate ≥ 66 % accuracy bar the CEO's "70 %" turned out to match. Cut order if
+  time runs short: Track D landmark GLBs → attract loop → district count. **Wind on 4
+  districts beats no wind on 9.**
