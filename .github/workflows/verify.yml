@@ -27,6 +27,27 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # The scripts/ pipeline is type-checked under strict mypy, and `npm run
+      # verify` now runs it. BOTH requirement files are needed: requirements.txt
+      # so mypy can import the libraries and read their inline hints, and
+      # requirements-dev.txt for mypy itself plus the stub packages. Installing
+      # only the latter makes every `import numpy` unresolvable and the gate
+      # passes without checking anything.
+      #
+      # They live in scripts/, NOT the repo root, and that location is load-
+      # bearing: Vercel autodetects a root requirements.txt and starts a Python
+      # build, which fails on a cmake dependency and breaks the preview deploy
+      # (the site build is Node-only). Keeping them one directory down satisfies
+      # both -- do not move them back up.
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install Python dependencies
+        run: pip install -r scripts/requirements.txt -r scripts/requirements-dev.txt
+
       - name: Verify build and publication contracts
         run: npm run verify
 

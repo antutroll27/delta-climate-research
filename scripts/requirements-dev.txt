@@ -1,0 +1,40 @@
+# Type-checking toolchain for the data-pipeline scripts.
+# Pinned: warn_unused_ignores makes the check depend on which stubs are present,
+# so a floating version would make CI and local disagree.
+mypy==2.3.0
+scipy-stubs==1.18.0.1
+types-rasterio==1.5.0.20260724
+# affine 2.4.0 has inline hints but ships no py.typed marker, so mypy discards
+# them and every Affine — src.transform, target_grid()'s first element — decays
+# to Any. The stub package restores it; tf.a/tf.c/tf.e become checked floats.
+types-affine==0.1.0
+# shapely 2.1.2 ships no py.typed marker, so mypy discards its inline hints and
+# every geometry decays to Any — which under this config's "no
+# ignore_missing_imports" rule is not something to silence. Added 2026-08-10
+# while type-cleaning _icesat2.py's footprint assignment.
+types-shapely==2.1.0.20260728
+
+# requests ships no py.typed either, and nine scripts import it. This pin was
+# MISSING until 2026-08-10: it happened to be installed on the developer machine
+# as somebody's transitive dependency, so `python3 -m mypy` was green locally
+# while a clean environment reported 11 errors. Caught by building a venv from
+# these two files alone and re-running the gate — the only way to check that
+# "green" is not an accident of one machine.
+types-requests==2.33.0.20260712
+
+# h5py, pyarrow, fsspec — NO STUB PACKAGES EXIST on PyPI, and none of the three
+# ships a py.typed marker. They are NOT listed here as packages: this file is the
+# type-checking toolchain, and all three are runtime dependencies installed
+# alongside rasterio/shapely/scipy.
+#
+# SUPERSEDED 2026-08-10. This note used to say fetch-icesat2.py carried "one
+# unavoidable import-untyped error". That is no longer true, and the claim was
+# load-bearing — it made a zero-error gate impossible by construction, which is
+# how 292 errors accumulated behind a config nobody ran.
+#
+# The fix is hand-written local stubs under stubs/, wired in via mypy.ini's
+# `mypy_path`, covering ONLY the surface these scripts call and recording which
+# call sites each was verified against. Nothing decays to Any: a typo'd
+# `h5py.Fiel` or `.attrz` is still an error, which was the whole objection to
+# `ignore_missing_imports` in the first place. Extend the stubs when a caller
+# needs more; do not reach for the config switch.
