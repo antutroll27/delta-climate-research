@@ -112,3 +112,15 @@ export function labelLayerSpec(env: 'dark' | 'studio'): Record<string, unknown> 
 
 /** Empty collection — what a failed fetch yields. Absence draws nothing. */
 export const EMPTY_LABELS = { type: 'FeatureCollection', features: [] } as const;
+
+/**
+ * Re-assert the road-label symbol layer as the topmost layer. Labels must paint
+ * ABOVE the three.js `delta-city` 3D scene, but on first load the custom 3D layer
+ * is added AFTER the label layer (its module imports async), so without this the
+ * 3D roads/buildings paint over the street names. MapLibre disables depth-testing
+ * for symbols, so paint-order alone decides it — call this whenever the 3D layer
+ * attaches. No-op until the label layer exists. `moveLayer` with no beforeId → top.
+ */
+export function ensureLabelsOnTop(map: { getLayer(id: string): unknown; moveLayer(id: string, beforeId?: string): void }): void {
+  if (map.getLayer(LABEL_LAYER)) map.moveLayer(LABEL_LAYER);
+}

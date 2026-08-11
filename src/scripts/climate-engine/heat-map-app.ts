@@ -31,7 +31,7 @@ import { asTerrainField, terrainLabel, TERRAIN_N, type TerrainField } from './te
 import { wardMercatorScale } from './ward-frame';
 import {
   LABEL_SOURCE, LABEL_LAYER, REPLACED_ROAD_GEOMETRY, isReplacedRoadLabel,
-  labelLayerSpec, EMPTY_LABELS,
+  labelLayerSpec, EMPTY_LABELS, ensureLabelsOnTop,
 } from './road-labels';
 import { findCoolingSurfaces, nearestCooling, type CoolingSurfaces } from './explore/cooling-surfaces';
 import { createWardSession } from './ward-session';
@@ -724,7 +724,15 @@ export function mountHeatMap(): () => void {
   }
 
   function attachReliefLayer(): boolean {
-    return relief ? attachReliefCustomLayer(map, relief.layer) : false;
+    if (!relief) return false;
+    const attached = attachReliefCustomLayer(map, relief.layer);
+    /* The 3D layer paints above whatever was already in the layer stack, so
+       every time it attaches the road-name labels must be re-lifted back to
+       the top — otherwise the first-load race (labels added during
+       style.load, relief added later once the async three.js import
+       resolves) leaves street names painted UNDER the 3D roads/buildings. */
+    if (attached) ensureLabelsOnTop(map);
+    return attached;
   }
 
   function syncRendererVisibility(): void {

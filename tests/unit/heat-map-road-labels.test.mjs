@@ -5,7 +5,7 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
   LABEL_FONT, LABEL_SOURCE, LABEL_LAYER, REPLACED_ROAD_GEOMETRY,
-  isReplacedRoadLabel, labelLayerSpec,
+  isReplacedRoadLabel, labelLayerSpec, ensureLabelsOnTop,
 } from '../../src/scripts/climate-engine/road-labels.ts';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -124,4 +124,18 @@ test('the app wires the source, the layer and the hide', async () => {
   assert.match(app, /labelLayerSpec\(env === 'studio'/,
     'the layer must be built for the CURRENT environment, or studio gets the dark palette');
   assert.ok(LABEL_SOURCE && LABEL_LAYER, 'both ids are exported for the app to use');
+});
+
+test('ensureLabelsOnTop lifts the label layer to the top when present', () => {
+  const moved = [];
+  const map = { getLayer: (id) => (id === LABEL_LAYER ? { id } : undefined), moveLayer: (id) => moved.push(id) };
+  ensureLabelsOnTop(map);
+  assert.deepEqual(moved, [LABEL_LAYER], 'moveLayer(LABEL_LAYER) called to re-assert labels on top');
+});
+
+test('ensureLabelsOnTop is a no-op when the label layer is absent', () => {
+  const moved = [];
+  const map = { getLayer: () => undefined, moveLayer: (id) => moved.push(id) };
+  ensureLabelsOnTop(map);
+  assert.deepEqual(moved, [], 'no move when the label layer does not exist yet');
 });
