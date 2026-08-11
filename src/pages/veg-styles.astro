@@ -42,7 +42,7 @@ const GREY = 0x33454a, GROUND = 0x14201d;
 // ── procedural foliage alpha texture: a fuzzy leaf-cluster patch (transparent bg) ──
 function foliageTexture(){
   const s = 256, cv = document.createElement('canvas'); cv.width = cv.height = s;
-  const g = cv.getContext('2d'); g.clearRect(0,0,s,s);
+  const g = cv.getContext('2d'); if (!g) throw new Error('2d context unavailable'); g.clearRect(0,0,s,s);
   const cx = s/2, cy = s/2;
   for (let i=0;i<800;i++){
     const ang = Math.random()*Math.PI*2, rad = Math.pow(Math.random(),0.62)*s*0.47;
@@ -56,7 +56,7 @@ function foliageTexture(){
 }
 const FOLIAGE = foliageTexture();
 
-function makeScene(canvas){
+function makeScene(canvas: HTMLCanvasElement){
   const r = new THREE.WebGLRenderer({ canvas, antialias:true, alpha:false });
   r.setPixelRatio(Math.min(2, devicePixelRatio));
   r.shadowMap.enabled = true; r.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -82,9 +82,9 @@ function makeScene(canvas){
 const SPAN = 26, GRIDN = 9;
 function sites(){ const out=[]; for(let i=0;i<GRIDN;i++) for(let j=0;j<GRIDN;j++){ const x=(i/(GRIDN-1)-.5)*SPAN, z=(j/(GRIDN-1)-.5)*SPAN; if(Math.hypot(x,z)>13) continue; if((i*7+j*13)%3===0) continue; out.push([x+(Math.random()-.5)*1.4, z+(Math.random()-.5)*1.4, 0.85+Math.random()*0.6]); } return out; }
 const trunkMat = new THREE.MeshStandardMaterial({color:0x5a4632, roughness:1});
-const swayers = [];
+const swayers: { crown: THREE.Group; ph: number; amp: number }[] = [];
 
-function volumetricTree(scale){
+function volumetricTree(scale: number){
   const grp = new THREE.Group();
   const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.12*scale,0.2*scale,1.4*scale,6), trunkMat);
   trunk.position.y = 0.7*scale; trunk.castShadow = true; grp.add(trunk);
@@ -98,7 +98,7 @@ function volumetricTree(scale){
   }
   grp.add(crown); grp.userData.crown = crown; return grp;
 }
-function billboardTree(scale){
+function billboardTree(scale: number){
   const grp = new THREE.Group();
   const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.1*scale,0.16*scale,1.2*scale,5), trunkMat);
   trunk.position.y = 0.6*scale; trunk.castShadow = true; grp.add(trunk);
@@ -109,7 +109,7 @@ function billboardTree(scale){
   for (let k=0;k<3;k++){ const q=new THREE.Mesh(new THREE.PlaneGeometry(S,S), mat); q.rotation.y=k*Math.PI/3; q.castShadow=true; q.customDepthMaterial=depth; crown.add(q); }
   grp.add(crown); grp.userData.crown = crown; return grp;
 }
-function texturedCrownTree(scale){
+function texturedCrownTree(scale: number){
   const grp = new THREE.Group();
   const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.12*scale,0.2*scale,1.5*scale,6), trunkMat);
   trunk.position.y=0.75*scale; trunk.castShadow=true; grp.add(trunk);
@@ -119,7 +119,7 @@ function texturedCrownTree(scale){
     m.position.set((Math.random()-.5)*1.0*scale,(Math.random()-.2)*0.8*scale,(Math.random()-.5)*1.0*scale); m.castShadow=true; crown.add(m); }
   grp.add(crown); grp.userData.crown=crown; return grp;
 }
-function palm(scale){
+function palm(scale: number){
   const grp=new THREE.Group(); const h=3.2*scale;
   const trunk=new THREE.Mesh(new THREE.CylinderGeometry(0.1*scale,0.16*scale,h,6), new THREE.MeshStandardMaterial({color:0x6b5636,roughness:1}));
   trunk.position.y=h/2; trunk.castShadow=true; grp.add(trunk);
@@ -129,7 +129,7 @@ function palm(scale){
   grp.add(fronds); grp.userData.crown=fronds; return grp;
 }
 
-function populate(scene, factory, opts={}){
+function populate(scene: THREE.Scene, factory: (scale: number) => THREE.Group, opts: { species?: boolean } = {}){
   let count=0;
   for (const [x,z,s] of sites()){
     const t = (opts.species && Math.random()<0.22) ? palm(s*0.95) : factory(s);
@@ -140,9 +140,9 @@ function populate(scene, factory, opts={}){
   return count;
 }
 
-const S1 = makeScene(document.getElementById('c1')); document.getElementById('m1').textContent = populate(S1.scene, volumetricTree)+' trees · full 3D crowns · shadows';
-const S2 = makeScene(document.getElementById('c2')); document.getElementById('m2').textContent = populate(S2.scene, billboardTree)+' trees · 3 quads each · alpha-cut shadows';
-const S3 = makeScene(document.getElementById('c3')); document.getElementById('m3').textContent = populate(S3.scene, texturedCrownTree, {species:true})+' trees · textured crowns + palms';
+const S1 = makeScene(document.getElementById('c1') as HTMLCanvasElement); const m1 = document.getElementById('m1'); if (m1) m1.textContent = populate(S1.scene, volumetricTree)+' trees · full 3D crowns · shadows';
+const S2 = makeScene(document.getElementById('c2') as HTMLCanvasElement); const m2 = document.getElementById('m2'); if (m2) m2.textContent = populate(S2.scene, billboardTree)+' trees · 3 quads each · alpha-cut shadows';
+const S3 = makeScene(document.getElementById('c3') as HTMLCanvasElement); const m3 = document.getElementById('m3'); if (m3) m3.textContent = populate(S3.scene, texturedCrownTree, {species:true})+' trees · textured crowns + palms';
 
 let t=0;
 (function frame(){

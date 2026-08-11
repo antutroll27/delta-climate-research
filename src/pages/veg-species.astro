@@ -36,7 +36,7 @@
 import * as THREE from 'three';
 import { Tree } from '@dgreenheck/ez-tree';
 
-function baseScene(canvas){
+function baseScene(canvas: HTMLCanvasElement){
   const r = new THREE.WebGLRenderer({ canvas, antialias:true });
   r.setPixelRatio(Math.min(2, devicePixelRatio));
   r.shadowMap.enabled = true; r.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -54,17 +54,17 @@ function baseScene(canvas){
   function resize(){ const w=canvas.clientWidth,h=canvas.clientHeight; r.setSize(w,h,false); cam.aspect=w/h; cam.updateProjectionMatrix(); }
   return { r, scene, cam, resize };
 }
-function shadowize(obj){ obj.traverse(o=>{ if(o.isMesh){ o.castShadow=true; o.receiveShadow=true; if(o.material){ o.material.side=THREE.DoubleSide; } } }); }
+function shadowize(obj: THREE.Object3D){ obj.traverse(o=>{ if(o instanceof THREE.Mesh){ o.castShadow=true; o.receiveShadow=true; if(o.material && !Array.isArray(o.material)){ o.material.side=THREE.DoubleSide; } } }); }
 
 // ── species via ez-tree option tuning ──
 // ez-tree default trees are ~40 units tall; scale to ~5-6u to sit among 4-6u buildings.
 const SPECIES_SCALE = 0.14;
-function makeSpecies(kind){
+function makeSpecies(kind: 'neem' | 'gulmohar' | 'palm'){
   const t = new Tree();
   const o = t.options;
   // compact, denser trees regardless of species
   o.branch.length[0] = 13; o.branch.length[1] = 11; o.branch.length[2] = 7;
-  for (const k in o.branch.gnarliness) o.branch.gnarliness[k] *= 0.5;
+  for (const k of [0,1,2,3] as const) o.branch.gnarliness[k] *= 0.5;
   o.branch.radius[0] = 1.2;
   if (kind==='neem'){                    // large dense rounded broadleaf
     o.seed = 101; o.branch.levels = 3;
@@ -72,7 +72,7 @@ function makeSpecies(kind){
     o.leaves.count = 8; o.leaves.size = 1.9; o.leaves.sizeVariance = 0.4; o.leaves.tint = 0x4f9550;
   } else if (kind==='gulmohar'){         // wide, flatter umbrella crown
     o.seed = 202; o.branch.levels = 3;
-    for (const k in o.branch.angle) o.branch.angle[k] = Math.min(88, o.branch.angle[k] + 18);
+    for (const k of [1,2,3] as const) o.branch.angle[k] = Math.min(88, o.branch.angle[k] + 18);
     o.branch.children[0] = 9;
     o.leaves.count = 7; o.leaves.size = 1.5; o.leaves.sizeVariance = 0.5; o.leaves.tint = 0x77b552;
   } else {                               // palm: tall bare trunk, few big fronds
@@ -89,22 +89,23 @@ function makeSpecies(kind){
 // dump the real options schema so we can refine params accurately
 try {
   const probe = new Tree();
-  document.getElementById('schema').textContent = 'options: '+Object.keys(probe.options).join(', ')
+  const schemaEl = document.getElementById('schema');
+  if (schemaEl) schemaEl.textContent = 'options: '+Object.keys(probe.options).join(', ')
     + '\nbranch: '+JSON.stringify(probe.options.branch).slice(0,260)
     + '\nleaves: '+JSON.stringify(probe.options.leaves).slice(0,260);
-} catch(e){ document.getElementById('schema').textContent = 'schema probe failed: '+e.message; }
+} catch(e){ const schemaEl = document.getElementById('schema'); if (schemaEl) schemaEl.textContent = 'schema probe failed: '+(e instanceof Error ? e.message : String(e)); }
 
 const species = { neem: makeSpecies('neem'), gulmohar: makeSpecies('gulmohar'), palm: makeSpecies('palm') };
-document.getElementById('note').textContent = 'Neem · Gulmohar · Palm — ez-tree generated';
+const noteEl = document.getElementById('note'); if (noteEl) noteEl.textContent = 'Neem · Gulmohar · Palm — ez-tree generated';
 
 // SOLO
-const SOLO = baseScene(document.getElementById('solo'));
-[['neem',-9],['gulmohar',0],['palm',9]].forEach(([k,x])=>{ const m=species[k].clone(); m.position.set(x,0,0); SOLO.scene.add(m); });
+const SOLO = baseScene(document.getElementById('solo') as HTMLCanvasElement);
+([['neem',-9],['gulmohar',0],['palm',9]] as [keyof typeof species, number][]).forEach(([k,x])=>{ const m=species[k].clone(); m.position.set(x,0,0); SOLO.scene.add(m); });
 
 // GROVE — clone species, scatter, vary
-const GROVE = baseScene(document.getElementById('grove'));
+const GROVE = baseScene(document.getElementById('grove') as HTMLCanvasElement);
 for (const [bx,bz,bh] of [[-14,-12,5],[8,-15,6],[15,6,4],[-15,7,4.5]]){ const b=new THREE.Mesh(new THREE.BoxGeometry(4,bh,4), new THREE.MeshStandardMaterial({color:0x33454a,roughness:.85})); b.position.set(bx,bh/2,bz); b.castShadow=b.receiveShadow=true; GROVE.scene.add(b); }
-const swayers=[];
+const swayers: { o: THREE.Object3D; ph: number }[] = [];
 let n=0;
 for (let i=0;i<11;i++) for (let j=0;j<11;j++){
   const x=(i/10-.5)*44, z=(j/10-.5)*44; if(Math.hypot(x,z)>22) continue; if((i*5+j*7)%3===0) continue;
