@@ -28,7 +28,8 @@ environment (see `main`'s docstring / the module run instructions) lets GDAL's
 transparently.
 
     AWS_NO_SIGN_REQUEST=YES python3 scripts/fetch-canopy.py ballygunge
-    python3 scripts/fetch-canopy.py --check     # local artefacts only, no network
+    python3 scripts/fetch-canopy.py --check       # local artefacts only, no network
+    python3 scripts/fetch-canopy.py --self-test   # pure placement logic, offline
 """
 from __future__ import annotations
 
@@ -55,6 +56,8 @@ GRID = 140                        # served canopy grid (matches surface: FOOTPRI
 CANOPY_HI = 30.0                  # metres; quantisation ceiling for the PNG
 MIN_TREE_H = 2.0                  # metres; below this a cell is not "canopy"
 TARGET_SPACING_M = 12.0           # one tree per ~12 m cell of canopy (density cap)
+JITTER = 0.80                     # fraction of cell size for deterministic position jitter
+DENSITY_MAX = 4                   # trees at a ward-max-height cell; scales down to 0 (gaps)
 DATA = os.path.join(HERE, "..", "public", "heat-map", "data")
 
 #: CHMv1 bucket, verified 2026-08-10 against the registry's own tiles.geojson
@@ -101,6 +104,21 @@ def chm_href(ward: Ward) -> str:
     """
     qk = _quadkey(ward.centre.lat, ward.centre.lon, CHM_ZOOM)
     return f"/vsis3/{CHM_BUCKET}/{CHM_PREFIX}/chm/{qk}.tif"
+
+
+def _hash01(col: int, row: int, k: int, axis: int) -> float:
+    """Deterministic [0,1) from instance identity -- splitmix64-style finalizer.
+
+    NOT `random`/`Date` (repo rule: byte-stable artifacts). Keyed on the cell
+    (col,row), the instance index within the cell (k), and which quantity is
+    being drawn (axis: 0=x-jitter, 1=y-jitter, 2=radius, 3=species).
+    """
+    z = (col * 0x9E3779B97F4A7C15 + row * 0xBF58476D1CE4E5B9
+         + k * 0x94D049BB133111EB + axis * 0xD6E8FEB86659FD93) & 0xFFFFFFFFFFFFFFFF
+    z = ((z ^ (z >> 30)) * 0xBF58476D1CE4E5B9) & 0xFFFFFFFFFFFFFFFF
+    z = ((z ^ (z >> 27)) * 0x94D049BB133111EB) & 0xFFFFFFFFFFFFFFFF
+    z ^= z >> 31
+    return z / 2**64
 
 
 def read_chm_grid(ward: Ward, n: int) -> npt.NDArray[np.float32] | None:
@@ -207,8 +225,30 @@ def check() -> None:
     print("canopy artefacts OK")
 
 
+def _self_test() -> None:
+    """Pure-logic invariants, offline (no artifacts, no network).
+
+    Run: python3 scripts/fetch-canopy.py --self-test
+    """
+    # hash01: deterministic, in [0,1), sensitive to every key component
+    a = _hash01(3, 7, 0, 0)
+    assert a == _hash01(3, 7, 0, 0), "hash must be deterministic"
+    assert 0.0 <= a < 1.0, "hash must be in [0,1)"
+    keys = {(3, 7, 0, 0), (4, 7, 0, 0), (3, 8, 0, 0), (3, 7, 1, 0), (3, 7, 0, 1)}
+    vals = {_hash01(*k) for k in keys}
+    assert len(vals) == len(keys), "hash must differ across col/row/k/axis"
+    # spread sanity: 1000 draws roughly uniform (no catastrophic clustering)
+    draws = [_hash01(i, i * 31 + 1, 0, 0) for i in range(1000)]
+    mean = sum(draws) / len(draws)
+    assert 0.45 < mean < 0.55, f"hash draws should average ~0.5, got {mean:.3f}"
+    print("  fetch-canopy self-test OK")
+
+
 def main() -> None:
     args = sys.argv[1:]
+    if args and args[0] == "--self-test":
+        _self_test()
+        return
     if args and args[0] == "--check":
         check()
         return
