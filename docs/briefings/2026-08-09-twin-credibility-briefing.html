@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"/>
+<title>Receipts, not Renders — Delta Climate Research founding-team briefing</title>
+<style>
+  @page { size: A4; margin: 0; }
+  @font-face{font-family:'Mona Sans';src:url('file:///Volumes/VSTSAMPLES/Projects/Angad/public/fonts/MonaSans-Variable.woff2') format('woff2');font-weight:200 900;font-style:normal;}
+  @font-face{font-family:'Mona Sans';src:url('file:///Volumes/VSTSAMPLES/Projects/Angad/public/fonts/MonaSans-VariableItalic.woff2') format('woff2');font-weight:200 900;font-style:italic;}
+  @font-face{font-family:'Noplato Mono';src:url('file:///Volumes/VSTSAMPLES/Projects/Angad/public/fonts/noplato-mono-condensed.woff2') format('woff2');font-weight:400;}
+
+  :root{
+    --base:#070f11; --panel:#0b1416; --panel2:#0e1b1e; --line:rgba(111,202,214,.16);
+    --paper:#eef1f2; --body:#c9d4d5; --strong:#ffffff; --ink:#93a7a9; --faint:#5f7377;
+    --cyan:#6fcad6; --bronze:#c39a5f; --red:#e5686d; --green:#5db98a; --edge:#02090a;
+    --cover:radial-gradient(120% 80% at 70% 10%, #0e2024 0%, #070f11 55%, #02090a 100%);
+    --sans:'Mona Sans',system-ui,sans-serif; --mono:'Noplato Mono',ui-monospace,monospace;
+  }
+  /* Ink-friendly print theme — append ?light=1 to the URL. Single source: only tokens flip. */
+  html.light{
+    --base:#ffffff; --panel:#f3f6f6; --panel2:#eaefef; --line:rgba(20,48,54,.18);
+    --paper:#13232a; --body:#33474c; --strong:#0c1a20; --ink:#54696d; --faint:#7f9296;
+    --cyan:#16808f; --bronze:#8a6a2f; --red:#c23c41; --green:#2f8f63; --edge:#e9edec;
+    --cover:radial-gradient(120% 80% at 70% 10%, #eef4f4 0%, #f7faf9 55%, #ffffff 100%);
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:var(--sans);color:var(--paper);background:var(--edge);-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+  .page{position:relative;width:210mm;min-height:297mm;background:var(--base);padding:22mm 20mm 24mm;overflow:hidden;page-break-after:always}
+  .page:last-child{page-break-after:auto}
+  .mono{font-family:var(--mono);text-transform:uppercase;letter-spacing:.16em}
+  .cyan{color:var(--cyan)} .bronze{color:var(--bronze)} .ink{color:var(--ink)} em{font-style:normal;color:var(--cyan)}
+  sup{font-family:var(--mono);font-size:.62em;color:var(--cyan);letter-spacing:.02em;padding-left:1px}
+  a{color:var(--cyan);text-decoration:none;word-break:break-all}
+
+  /* running header/footer */
+  .rh{position:absolute;top:12mm;left:20mm;right:20mm;display:flex;justify-content:space-between;align-items:center;font-family:var(--mono);font-size:8px;letter-spacing:.16em;color:var(--faint)}
+  .rh .m{display:flex;align-items:center;gap:6px}
+  .rh .m img{width:13px;height:13px;opacity:.9}
+  .rf{position:absolute;bottom:12mm;left:20mm;right:20mm;display:flex;justify-content:space-between;font-family:var(--mono);font-size:8px;letter-spacing:.16em;color:var(--faint);border-top:1px solid var(--line);padding-top:6px}
+
+  h2{font-size:23px;font-weight:800;letter-spacing:-.02em;margin-bottom:3px;line-height:1.1}
+  .kicker{font-family:var(--mono);font-size:9px;letter-spacing:.22em;color:var(--cyan);margin-bottom:14px}
+  .sec-no{color:var(--faint)}
+  h3{font-size:13px;font-weight:700;letter-spacing:-.01em;margin:16px 0 5px}
+  p{font-size:10.5px;line-height:1.62;color:var(--body);margin-bottom:8px;max-width:66ch}
+  p.lead{font-size:12px;color:var(--paper)}
+  strong{color:var(--strong);font-weight:650}
+  ul{margin:6px 0 10px 0;list-style:none}
+  li{font-size:10.5px;line-height:1.55;color:var(--body);margin-bottom:6px;padding-left:16px;position:relative}
+  li::before{content:'';position:absolute;left:2px;top:7px;width:4px;height:4px;border-radius:50%;background:var(--cyan)}
+  li.dash::before{border-radius:0;width:6px;height:1.5px;top:9px;background:var(--bronze)}
+
+  .quote{border-left:2px solid var(--cyan);padding:6px 0 6px 16px;margin:14px 0;font-size:14px;line-height:1.4;font-weight:600;color:var(--strong);letter-spacing:-.01em}
+  .quote span{color:var(--cyan)}
+  .quote cite{display:block;font-family:var(--mono);font-size:8px;letter-spacing:.16em;color:var(--faint);font-style:normal;margin-top:8px;font-weight:400}
+
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:12px 14px;margin-bottom:9px}
+  .card .h{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:5px}
+  .card .nm{font-size:12px;font-weight:700;color:var(--strong)}
+  .card .tag{font-family:var(--mono);font-size:7.5px;letter-spacing:.14em;color:var(--base);background:var(--cyan);border-radius:4px;padding:2px 6px;white-space:nowrap}
+  .card .tag.open{background:var(--green)} .card .tag.heat{background:var(--bronze)}
+  .card p{font-size:9.8px;margin-bottom:5px;color:var(--body)}
+  .card .steal{font-size:9.8px;color:var(--paper)}
+  .card .steal b{color:var(--cyan);font-family:var(--mono);font-size:8px;letter-spacing:.12em;text-transform:uppercase}
+
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+
+  table{width:100%;border-collapse:collapse;margin:8px 0 10px}
+  th,td{text-align:left;padding:6px 8px;font-size:9.5px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{font-family:var(--mono);font-size:8px;letter-spacing:.14em;color:var(--ink);font-weight:400}
+  td .m{font-family:var(--mono);color:var(--cyan);font-size:9px}
+
+  .flow{display:flex;gap:8px;margin:10px 0}
+  .flow .step{flex:1;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px}
+  .flow .step .n{font-family:var(--mono);font-size:8px;letter-spacing:.14em;color:var(--cyan)}
+  .flow .step .t{font-size:11px;font-weight:700;margin:4px 0 3px;color:var(--strong)}
+  .flow .step p{font-size:9px;margin:0;color:var(--body)}
+
+  .callout{background:linear-gradient(180deg,rgba(111,202,214,.06),rgba(111,202,214,.02));border:1px solid var(--line);border-radius:9px;padding:12px 14px;margin:10px 0}
+  .callout .k{font-family:var(--mono);font-size:8px;letter-spacing:.16em;color:var(--cyan);margin-bottom:5px}
+
+  /* cover */
+  .cover{background:var(--cover);display:flex;flex-direction:column;justify-content:space-between}
+  .cover .top{display:flex;justify-content:space-between;align-items:flex-start}
+  .cover .top img{width:40px;height:40px}
+  .cover .ey{font-family:var(--mono);font-size:9px;letter-spacing:.24em;color:var(--faint);text-align:right;line-height:1.9}
+  .cover h1{font-size:66px;font-weight:800;letter-spacing:-.035em;line-height:.94;margin:0}
+  .cover h1 em{color:var(--cyan)}
+  .cover .sub{font-size:15px;color:var(--body);max-width:44ch;margin-top:16px;line-height:1.5}
+  .cover .thesis{border-left:2px solid var(--bronze);padding-left:14px;margin-top:22px;font-size:13px;font-style:italic;color:var(--strong);max-width:46ch;line-height:1.45}
+  .cover .meta{display:flex;gap:26px;margin-top:2px}
+  .cover .meta div{border-top:1px solid var(--line);padding-top:8px}
+  .cover .meta .l{font-family:var(--mono);font-size:8px;letter-spacing:.16em;color:var(--faint)}
+  .cover .meta .v{font-size:11px;color:var(--paper);margin-top:2px}
+</style>
+<script>if(location.search.includes('light'))document.documentElement.classList.add('light');</script>
+</head>
+<body>
+
+<!-- ══ COVER ══ -->
+<section class="page cover">
+  <div class="top">
+    <img src="file:///Volumes/VSTSAMPLES/Projects/Angad/public/logo-mark-96.png" alt="Delta"/>
+    <div class="ey">Delta · Climate · Research<br>Founding-team briefing<br><span class="cyan">Confidential</span></div>
+  </div>
+  <div>
+    <div class="mono" style="font-size:9px;letter-spacing:.24em;color:var(--cyan);margin-bottom:18px">The next evolution of our geospatial 3D twin</div>
+    <h1>Receipts,<br>not <em>Renders</em>.</h1>
+    <div class="sub">Making our climate digital twin <strong style="color:var(--strong)">believable</strong> — grounded in how the world's most-trusted city twins actually earn belief.</div>
+    <div class="thesis">"Our unfair advantage isn't fidelity — we're barred from it. It's honesty made visible."</div>
+  </div>
+  <div class="meta">
+    <div><div class="l">Date</div><div class="v">9 August 2026</div></div>
+    <div><div class="l">Prepared for</div><div class="v">The co-founders</div></div>
+    <div><div class="l">Focus</div><div class="v">Credibility &amp; the raise</div></div>
+    <div><div class="l">Sources</div><div class="v">Primary-verified</div></div>
+  </div>
+</section>
+
+<!-- ══ EXECUTIVE SUMMARY ══ -->
+<section class="page">
+  <div class="rh"><div class="m"><img src="file:///Volumes/VSTSAMPLES/Projects/Angad/public/logo-mark-96.png"/>DELTA CLIMATE RESEARCH</div><div>RECEIPTS, NOT RENDERS</div></div>
+  <div class="kicker">01 · Executive summary</div>
+  <h2>The twin is good. Now we make it <em>believable</em>.</h2>
+  <p class="lead">We have built a working urban-heat digital twin of three Kolkata wards from nothing but free, open, legally-clean data — under constraints that would stop most teams (no drone capture over Indian cities, no photorealistic tiles, no field sensors, no first-world budget). It looks great. That is exactly the problem.</p>
+  <p><strong>The belief gap.</strong> "Looks great" is what a demo looks like. Climate scientists trust <em>rigor</em>; investors trust <em>defensibility</em>. We already have the rigor — leave-one-overpass-out validation, bootstrap confidence intervals, 50 Landsat overpasses, a daytime correction we <em>rejected</em> because it was worth 0.003 K, a height check we published as "underpowered" rather than overclaim. But almost none of it is visible in the product. A visitor sees a beautiful surface and one caveat chip. The moat is real and invisible.</p>
+  <p><strong>The plan.</strong> Make the rigor <em>legible</em> — turn every number in the twin into something you can interrogate. Click a reading, get its "receipt": source, acquisition date, method, and validated accuracy. This is precisely what the world's most-trusted city and geospatial platforms do, and what most impressive-looking twins skip.</p>
+  <p><strong>Why it wins.</strong> It is cheap (it surfaces work already done — no new science, no chasing precision), it is uniquely ours (honest measured-vs-modelled disclosure is a differentiator, not a liability), and it converts our biggest constraint into our brand: <strong>we can't fake it, so we prove it.</strong></p>
+  <p><strong>Why it funds us.</strong> It is also the fastest route to a raise. Climate-adaptation funders and grant panels back <em>defensibility, not demos</em> — the "is this real?" test is what kills most applicants, and our receipts moat answers it on sight. That positions us for a founder-friendly, blended path: non-dilutive grants + a climate accelerator to prove it, then a climate-VC seed (§07–08).</p>
+  <div class="callout"><div class="k">The ask</div><p style="margin:0">Endorse a two-phase build of a "provenance / receipts" layer on the twin — Phase&nbsp;1 (shippable now) surfaces per-layer and per-reading receipts; Phase&nbsp;2 adds the measured-vs-modelled distinction and an in-product validation dossier. No changes to the model itself.</p></div>
+  <div class="rf"><div>FOUNDING-TEAM BRIEFING · CONFIDENTIAL</div><div>01</div></div>
+</section>
+
+<!-- ══ WHERE WE STAND ══ -->
+<section class="page">
+  <div class="rh"><div class="m"><img src="file:///Volumes/VSTSAMPLES/Projects/Angad/public/logo-mark-96.png"/>DELTA CLIMATE RESEARCH</div><div>RECEIPTS, NOT RENDERS</div></div>
+  <div class="kicker">02 · Where we stand — and the constraint that defines us</div>
+  <h2>The constraint isn't a weakness. It's the strategy.</h2>
+  <p><strong>What we've built.</strong> A browser-based 3D urban-heat instrument on a live map: ~3,500 real building footprints per ward, extruded with measured heights, a live physics heat simulation forced by live weather, an intervention model priced in real ₹, and a resilience score — running at 60&nbsp;fps, degrading gracefully down to a budget phone. Every layer comes from open data: Microsoft &amp; Google Open Buildings (footprints + heights), ECOSTRESS and Landsat (land-surface temperature), Sentinel-2 (vegetation), OpenStreetMap (roads), on an open MapLibre basemap.</p>
+  <p><strong>What we cannot do.</strong> We cannot fly drones over Indian cities, and photogrammetric/photoreal 3D tiles don't cover our scattered wards uniformly (and carry runtime-only licensing + per-session billing we won't put on a public page). So we build <em>procedurally</em>, from satellites and open footprints — a modelled twin, not a captured one.</p>
+  <div class="quote">Peer-reviewed critique of the field warns that many city twins are "dashboards that look impressive but lack depth."<sup>[9]</sup> <span>Fidelity is not credibility.</span> Being barred from fidelity forced us toward the thing that actually earns trust.</div>
+  <p><strong>The honest read.</strong> Our model's accuracy is already close enough for the decisions the tool supports — the structural gap is not precision, it is <em>provenance</em>. The right move is not to chase a tenth of a degree; it is to make what we already know defensible, visible, and interrogable. This briefing is how.</p>
+  <div class="rf"><div>FOUNDING-TEAM BRIEFING · CONFIDENTIAL</div><div>02</div></div>
+</section>
+
+<!-- ══ CORE INSIGHT ══ -->
+<section class="page">
+  <div class="rh"><div class="m"><img src="file:///Volumes/VSTSAMPLES/Projects/Angad/public/logo-mark-96.png"/>DELTA CLIMATE RESEARCH</div><div>RECEIPTS, NOT RENDERS</div></div>
+  <div class="kicker">03 · The core insight</div>
+  <h2>Honesty, shown correctly, buys <em>integrity</em>.</h2>
+  <p class="lead">There is a counter-intuitive trap in showing uncertainty, and getting it right is the whole game.</p>
+  <p>A 2026 controlled study (N = 161) found that visualising uncertainty on maps <em>generally reduces</em> viewers' trust — but the reduction hits their confidence in the <strong>data's accuracy</strong>, while barely touching their perception of the <strong>mapmaker's integrity</strong>. Critically, low-uncertainty displays carried <em>no</em> trust penalty versus showing nothing at all.<sup>[1]</sup></p>
+  <div class="quote">Shout your error bars and people trust the data less. <span>Make uncertainty quiet, optional, and always paired with the source that explains it — and you are read as rigorous, not unreliable.</span><cite>Design consequence adopted throughout this plan</cite></div>
+  <p>This single finding shapes the entire design:</p>
+  <ul>
+    <li><strong>Lead with the confident surface.</strong> The best-estimate heat map is the default view.</li>
+    <li><strong>Uncertainty is one click away, never in your face.</strong> Confidence intervals and quality flags live inside the receipt, next to the provenance that justifies them.</li>
+    <li><strong>Candour is the feature.</strong> Stating a limit plainly — as the EU's own flagship heat service does<sup>[2]</sup> — reads as science. Hiding it reads as marketing.</li>
+  </ul>
+  <p>Our competitors in "impressive demos" won't do this, because it takes real work and real data. That is precisely why it is defensible.</p>
+  <div class="rf"><div>FOUNDING-TEAM BRIEFING · CONFIDENTIAL</div><div>03</div></div>
+</section>
+
+<!-- ══ WHAT THE BEST DO (1) ══ -->
+<section class="page">
+  <div class="rh"><div class="m"><img src="file:///Volumes/VSTSAMPLES/Projects/Angad/public/logo-mark-96.png"/>DELTA CLIMATE RESEARCH</div><div>RECEIPTS, NOT RENDERS</div></div>
+  <div class="kicker">04 · Other digital twins — and the philosophy that earns trust</div>
+  <h2>Read for their <em>philosophy</em>, not their graphics.</h2>
+  <p>The world's most-trusted city and geospatial twins are each built on an explicit philosophy about <em>why</em> they exist and <em>how</em> they earn belief — and it is almost never "make it look real." We read them for that philosophy, and for what we can adopt. Every claim below is primary-verified (see Sources).</p>
+
+  <div class="card">
+    <div class="h"><div class="nm">Destination Earth — Urban Heat Island service <span class="ink" style="font-weight:400;font-size:9px">· EU (ECMWF · ESA · EUMETSAT)</span></div><div class="tag heat">Heat · benchmark</div></div>
+    <p>The EU's flagship Earth twin runs VITO's physics-based <em>UrbClim</em> model at 100&nbsp;m. Its credibility comes from validation-in-the-open: UrbClim's pan-European track record was validated against <strong>67 meteorological stations</strong>, and the DestinE demonstration separately reports that its results held up <em>"certainly given the fact that most of these stations were in non-optimal measurement locations."</em><sup>[2]</sup></p>
+    <div class="steal"><b>Steal →</b> Surface our validation the same way: report the error, name the limits out loud. Candour about non-ideal conditions is what reads as science.</div>
+  </div>
+
+  <div class="card">
+    <div class="h"><div class="nm">Google Earth Engine — Data Catalog <span class="ink" style="font-weight:400;font-size:9px">· the receipts gold standard</span></div><div class="tag">Receipts</div></div>
+    <p>Every dataset carries a structured card: provider, temporal coverage, spatial resolution, bands/variables, linked license, a suggested citation, and a DOI.<sup>[3]</sup> It is the reason scientists trust it as a working instrument.</p>
+    <div class="steal"><b>Steal →</b> Copy this field set verbatim for every one of our layers (Open Buildings, ECOSTRESS, Landsat, Sentinel-2, OSM).</div>
+  </div>
+
+  <div class="card">
+    <div class="h"><div class="nm">Our World in Data <span class="ink" style="font-weight:400;font-size:9px">· measured vs. derived, made explicit</span></div><div class="tag">Honesty</div></div>
+    <p>Every series is labelled by its measured source versus <em>"Our World in Data based on…"</em>, and any transformation is flagged; the tooling is open-sourced for scrutiny.<sup>[4]</sup></p>
+    <div class="steal"><b>Steal →</b> Draw our biggest honest line — which pixels are satellite-<em>measured</em> vs. model-<em>interpolated</em>. This is our largest exposure and our strongest signal.</div>
+  </div>
+
+  <div class="card">
+    <div class="h"><div class="nm">NYC Heat Vulnerability Index <span class="ink" style="font-weight:400;font-size:9px">· operational definitions</span></div><div class="tag">Public-health authority</div></div>
+    <p>States its exact trigger ("2 or more days with a heat index of 95&nbsp;°F, or 1 or more days reaching 100&nbsp;°F"), a clear 1–5 scale, and links the peer-reviewed method.<sup>[5]</sup></p>
+    <div class="steal"><b>Steal →</b> Publish our exact heat metrics + method as an "About this instrument" page — no hand-waving.</div>
+  </div>
+  <div class="rf"><div>FOUNDING-TEAM BRIEFING · CONFIDENTIAL</div><div>04</div></div>
+</section>
+
+<!-- ══ WHAT THE BEST DO (2) ══ -->
+<section class="page">
+  <div class="rh"><div class="m"><img src="file:///Volumes/VSTSAMPLES/Projects/Angad/public/logo-mark-96.png"/>DELTA CLIMATE RESEARCH</div><div>RECEIPTS, NOT RENDERS</div></div>
+  <div class="kicker">04 · … continued — the national twins &amp; the standards</div>
+  <h2>What the flagships teach about trust and scale.</h2>
+
+  <div class="card">
+    <div class="h"><div class="nm">Virtual Singapore <span class="ink" style="font-weight:400;font-size:9px">· NRF + Dassault Systèmes (3DEXPERIENCity)</span></div><div class="tag">National · semantic</div></div>
+    <p>Singapore's national twin is <em>semantic and analytical</em>, not merely visual — "a realistic and integrated 3D model with semantics and attributes,"<sup>[6]</sup> built on the Land Authority's aerial-photo + airborne-LiDAR national mapping. A ~S$73&nbsp;million, five-year national R&amp;D programme (NRF-attributed).</p>
+    <div class="steal"><b>Steal →</b> Semantics = credibility. Our buildings already carry attributes; expose them. (Their proprietary platform + authoritative LiDAR is the part we <em>can't</em> match — we cite the posture, not the stack.)</div>
+  </div>
+
+  <div class="card">
+    <div class="h"><div class="nm">Helsinki 3D+ / Kalasatama <span class="ink" style="font-weight:400;font-size:9px">· City of Helsinki</span></div><div class="tag open">Open data</div></div>
+    <p>Best-in-class <em>open</em> municipal twin: the city publishes both a semantic CityGML model and a photogrammetric reality mesh as open data under <strong>CC BY 4.0</strong><sup>[7]</sup> (the Kalasatama pilot mesh was built from over 42,000 aerial photos at ~7.5&nbsp;cm). Proof that open data can be authoritative.</p>
+    <div class="steal"><b>Steal →</b> Our whole stack is open by necessity — make that a virtue: publish per-layer data + the derivation method. Reproducibility is free credibility.</div>
+  </div>
+
+  <div class="card">
+    <div class="h"><div class="nm">Digital Twin Victoria <span class="ink" style="font-weight:400;font-size:9px">· Victorian Government + CSIRO, Australia</span></div><div class="tag">Provenance-as-product</div></div>
+    <p>Backed by a record <strong>AUD&nbsp;$37.4M / 4-year</strong> investment, its public value <em>is</em> a shared catalogue of <strong>4,000+ datasets</strong> — each carrying metadata, licensing (<strong>CC&nbsp;BY&nbsp;4.0</strong>) and attribution, served through OGC-standard web services. Provenance treated as the product, at state scale.<sup>[8]</sup></p>
+    <div class="steal"><b>Steal →</b> Our provenance manifest is a small version of exactly this — one structured source of truth for "where did this come from," per layer, per city.</div>
+  </div>
+
+  <div class="cols">
+    <div class="card" style="margin-bottom:0">
+      <div class="h"><div class="nm">UK Gemini Principles <span class="ink" style="font-weight:400;font-size:8px">· CDBB, 2018</span></div></div>
+      <p>The canonical values framework for trustworthy twins — nine principles in three groups: <em>Purpose</em> (public good, value creation, insight), <em>Trust</em> (security, <strong>openness</strong>, quality), <em>Function</em> (federation, curation, evolution).<sup>[10]</sup></p>
+      <div class="steal"><b>Steal →</b> Adopt "openness" + "quality" as stated values on our About page.</div>
+    </div>
+    <div class="card" style="margin-bottom:0">
+      <div class="h"><div class="nm">Cesium / OGC 3D Tiles <span class="ink" style="font-weight:400;font-size:8px">· open standards</span></div></div>
+      <p>3D Tiles — introduced by Cesium in 2015, an OGC Community Standard since 2019 — plus Khronos's glTF (now ISO/IEC&nbsp;12113) let one pipeline serve many cities.<sup>[11]</sup></p>
+      <div class="steal"><b>Steal →</b> Keep the procedural build standards-clean so a ward pipeline drops onto any city.</div>
+    </div>
+  </div>
+  <div class="callout"><div class="k">The shared philosophy</div><p style="margin:0">Across every one of them the through-line is identical: <strong>a twin earns trust by being open, traceable, and honest about its limits</strong> — provenance treated as a public good, not polish mistaken for proof. That philosophy is ours to adopt in full, and it is exactly the one most "impressive" twins never commit to.</p></div>
+  <div class="rf"><div>FOUNDING-TEAM BRIEFING · CONFIDENTIAL</div><div>05</div></div>
+</section>
+
+<!-- ══ WHAT WE'RE ABOUT TO DO ══ -->
+<section class="page">
+  <div class="rh"><div class="m"><img src="file:///Volumes/VSTSAMPLES/Projects/Angad/public/logo-mark-96.png"/>DELTA CLIMATE RESEARCH</div><div>RECEIPTS, NOT RENDERS</div></div>
+  <div class="kicker">05 · What we need to do</div>
+  <h2>A "receipts" layer: every number, interrogable.</h2>
+  <p><strong>The spine.</strong> A single provenance manifest — one structured source of truth for every layer and for the modelled surface: provider, dates, resolution, license, citation, method, and validated accuracy. The validation figures are <em>read from our accuracy engine, not copy-pasted</em>, so a receipt can never disagree with our published numbers. New cities get their own manifest — it is portable by design.</p>
+  <p><strong>Progressive disclosure — one system, three depths</strong>, so the same artifact serves a live demo, a self-serve skeptic, and an investor data-room:</p>
+  <div class="flow">
+    <div class="step"><div class="n">GLANCE</div><div class="t">Authority at rest</div><p>Persistent "data as of" readout, live-forcing time, satellite epoch, and a measured/modelled key — traceable without a click.</p></div>
+    <div class="step"><div class="n">SUMMARY</div><div class="t">The receipt</div><p>Click a layer or reading → source · acquisition date · method · validated accuracy, in the Earth-Engine card shape.</p></div>
+    <div class="step"><div class="n">DOSSIER</div><div class="t">Survive scrutiny</div><p>Drill in → the validation campaign, the confidence intervals, the honest limits. The full defensibility trail, in-product.</p></div>
+  </div>
+  <h3>Phase 1 — shippable now</h3>
+  <ul>
+    <li>Per-layer provenance cards (Earth-Engine field set) + the persistent "data as of" furniture.</li>
+    <li>Per-reading receipts on the building card and the ward mean, with the phase-specific confidence band shown <em>quiet and on-demand</em>.</li>
+    <li>No model changes — this surfaces work already done.</li>
+  </ul>
+  <h3>Phase 2 — the depth that makes a scientist nod</h3>
+  <ul>
+    <li>The measured-vs-modelled distinction drawn across the surface (inputs measured; surface modelled + validated).</li>
+    <li>Source-native quality flags (e.g. ECOSTRESS's own best/good/suspect/poor grade<sup>[12]</sup>) — the satellite's confidence, not one we invent.</li>
+    <li>A quiet "how we know" dossier: leave-one-overpass-out, the confidence intervals, and the corrections we honestly ruled out.</li>
+  </ul>
+  <div class="rf"><div>FOUNDING-TEAM BRIEFING · CONFIDENTIAL</div><div>06</div></div>
+</section>
+
+<!-- ══ WHY IT WINS / WON'T DO ══ -->
+<section class="page">
+  <div class="rh"><div class="m"><img src="file:///Volumes/VSTSAMPLES/Projects/Angad/public/logo-mark-96.png"/>DELTA CLIMATE RESEARCH</div><div>RECEIPTS, NOT RENDERS</div></div>
+  <div class="kicker">06 · Why this beats the alternatives — and what we deliberately won't do</div>
+  <h2>The cheapest, highest-belief move on the board.</h2>
+  <table>
+    <tr><th style="width:34%">The tempting alternative</th><th>Why we're not doing it</th></tr>
+    <tr><td><strong>Chase photoreal fidelity</strong></td><td>Barred by regulation/budget — and fidelity ≠ credibility; the literature is explicit that impressive-looking twins are routinely discounted for lacking depth.<sup>[9]</sup></td></tr>
+    <tr><td><strong>Chase more model precision</strong></td><td>Accuracy is already close enough for the decisions supported; another tenth of a degree changes no one's mind. The gap is legibility, not precision.</td></tr>
+    <tr><td><strong>Ship louder dashboards</strong></td><td>More gauges ≠ more trust. Interrogability does.</td></tr>
+  </table>
+  <h3>Anti-patterns we will avoid (each observed in the field)</h3>
+  <ul>
+    <li class="dash"><strong>Loud, always-on uncertainty</strong> — reduces trust in the data itself.<sup>[1]</sup> Ours is quiet and on-demand.</li>
+    <li class="dash"><strong>Provenance buried in a PDF</strong> — even rigorous heat-mappers hide methodology in separate linked reports.<sup>[13]</sup> Ours is one click from the number.</li>
+    <li class="dash"><strong>Over-claiming "digital twin"</strong> — the term implies live, bidirectional physical coupling; scientists discount static visualisations that claim it.<sup>[9]</sup> In-product we are precise: a <em>modelled urban-heat observatory, calibrated to satellite</em>. ("Digital twin" stays for the deck, not the methods page.)</li>
+  </ul>
+  <div class="callout"><div class="k">The through-line</div><p style="margin:0">Every credible benchmark we studied wins on <strong>traceability and candour</strong>, not graphics. We are constitutionally suited to that game — we were never allowed to play the other one.</p></div>
+  <div class="rf"><div>FOUNDING-TEAM BRIEFING · CONFIDENTIAL</div><div>07</div></div>
+</section>
+
+<!-- ══ FUNDING LANDSCAPE ══ -->
+<section class="page">
+  <div class="rh"><div class="m"><img src="file:///Volumes/VSTSAMPLES/Projects/Angad/public/logo-mark-96.png"/>DELTA CLIMATE RESEARCH</div><div>RECEIPTS, NOT RENDERS</div></div>
+  <div class="kicker">07 · How we seriously secure funding</div>
+  <h2>The credibility moat <em>is</em> the fundraising strategy.</h2>
+  <p class="lead">We are in the funded lane at the funded moment: <strong>~71% of climate-adaptation capital flows to software/data</strong>, and risk-monitoring platforms were the fastest-growing adaptation category in H1 2025.<sup>[15]</sup> And the #1 diligence risk is "<em>is this real?</em>" — <strong>74% of climate-AI claims are unproven</strong>.<sup>[16]</sup> Our honest, out-of-sample-validated twin answers that on sight. So we run a founder-friendly, blended path: non-dilutive money + an accelerator to prove it, then a climate-VC seed.</p>
+  <h3>The money map — ranked for a pre-seed Indian climate-software team</h3>
+  <table>
+    <tr><th style="width:20%">Track</th><th>Best-fit avenues (primary-verified)</th><th style="width:26%">What it gives</th></tr>
+    <tr><td><strong>Non-dilutive · India</strong></td><td>DPIIT → <strong>SISFS</strong> (₹20L grant + ₹50L conv.)<sup>[17]</sup> · <strong>Climate Pitch</strong> (equity-free ₹20L, explicit adaptation/urban-resilience theme)<sup>[18]</sup> · <strong>Social Alpha Techtonic</strong> (₹35L urban pilot)<sup>[19]</sup> · NIDHI-SSS (₹1cr)</td><td>Grant / soft capital, little-to-no equity</td></tr>
+    <tr><td><strong>Cloud + data credits</strong></td><td>MS Founders Hub ($150k, no equity) · NVIDIA Inception (equity-free) · AWS Activate ($100k) · Google for Startups ($200k)<sup>[20]</sup></td><td>12–18 mo runway; avoids the Earth Engine commercial-licence trap</td></tr>
+    <tr><td><strong>Accelerators</strong></td><td>Third Derivative (equity-free, India-heavy)<sup>[21]</sup> · Katapult Climate (~8%, adaptation in-scope) · T-Hub AIC (India, pilot access)</td><td>Network + a credibility stamp</td></tr>
+    <tr><td><strong>Climate / adaptation VC</strong></td><td>Avaana · Transition VC · Ankur · Speciale (India)<sup>[22]</sup>; Lightsmith (adaptation, growth-stage — later)</td><td>Pre-seed / seed equity, on traction + moat</td></tr>
+    <tr><td><strong>Dev-finance & philanthropy</strong></td><td><strong>ADB Challenges</strong> (≤ $450k, startups eligible)<sup>[23]</sup> · <strong>Grand Challenges India</strong> ($200k; funded a Karnataka heatwave project)<sup>[24]</sup></td><td>Non-dilutive; theme-gated, watch windows</td></tr>
+  </table>
+  <div class="callout"><div class="k">The one move that unlocks the most</div><p style="margin:0">Get <strong>DPIIT recognition</strong> (free, online) → join an incubator that is simultaneously a <strong>SISFS incubator + a DST-NIDHI TBI + an Atal Incubation Centre</strong>. One admission opens SISFS, NIDHI and AIC support at once — the grant engine for year one. <span class="ink">Known dead-ends (so we don't waste cycles): BIRAC = biotech-only; MeitY GENESIS excludes Tier-I cities (Kolkata); GCF / Adaptation Fund only via an accredited entity (NABARD); USAID defunct; ESA / NASA / EU grants are India-ineligible without an EU entity.</span></p></div>
+  <div class="rf"><div>FOUNDING-TEAM BRIEFING · CONFIDENTIAL</div><div>08</div></div>
+</section>
+
+<!-- ══ FUNDING PLAN / SEQUENCE ══ -->
+<section class="page">
+  <div class="rh"><div class="m"><img src="file:///Volumes/VSTSAMPLES/Projects/Angad/public/logo-mark-96.png"/>DELTA CLIMATE RESEARCH</div><div>RECEIPTS, NOT RENDERS</div></div>
+  <div class="kicker">08 · The plan — proof, then seed</div>
+  <h2>A 12–18 month path from proof to seed.</h2>
+  <ul>
+    <li><strong>Months 0–3 · Set the base (all non-dilutive).</strong> DPIIT recognition; ship Phase-1 receipts + publish the <em>validation dossier</em>; claim NVIDIA Inception + cloud credits ($150k+ runway) on Copernicus / Planetary Computer; apply to a multi-accredited incubator.</li>
+    <li><strong>Months 3–9 · Prove it.</strong> SISFS + NIDHI + Climate Pitch; a global accelerator for the stamp (Third Derivative / Katapult); land <strong>1–2 municipal or academic pilots</strong> as traction; Phase-2 receipts (measured-vs-modelled + validation) become the defensibility artifact.</li>
+    <li><strong>Months 9–18 · Raise the seed.</strong> Walk into climate-VC rooms (Avaana / Transition / Ankur / Speciale; ADB Ventures) with a validated product, real pilots and grant wins already on the board — the moat doing the de-risking.</li>
+  </ul>
+  <h3>What funders actually want — and why we clear the bar</h3>
+  <ul>
+    <li class="dash"><strong>The right municipal owner + a specific, priced pilot/LOI</strong> beats any waitlist — heat risk is owned by disaster/health/planning officers who never say "adaptation".<sup>[25]</sup></li>
+    <li class="dash"><strong>Validation is the moat, not the data</strong> — free EO is commodity; our calibration, ground-truth and published accuracy are not.<sup>[16]</sup> This is our whole thesis, and it is exactly what diligence now probes hardest.</li>
+    <li class="dash"><strong>Impact in beneficiary terms</strong> — people protected, heat-exposure reduced — reported per deployment, alongside revenue. Segment funders: catalytic/grant first, commercial VC second.</li>
+  </ul>
+  <div class="callout"><div class="k">B2G whitespace to exploit</div><p style="margin:0">There is <strong>no Chief Heat Officer in any Indian city</strong> — helping stand up the first is a ready-made champion.<sup>[26]</sup> Warmest doors: the <strong>Chennai Resilience Center</strong> (CRO at IIT-Madras) and <strong>NIUA's Climate Centre for Cities</strong>. And a sharp, sourced pitch: Kolkata is a C40 member but <strong>absent from C40's Cool Cities Network</strong> — "you're C40, but not in its heat network; here's your Heat Action Plan, operationalised."</p></div>
+  <p style="margin-top:2px"><strong>A commercial wedge worth naming:</strong> parametric heat-insurance is already live in our launch geography (SEWA · Swiss Re · ICICI Lombard, Gujarat), but it triggers on crude single-station / ERA5 data and its partners <em>openly admit the basis risk</em> — our validated, high-resolution, night-and-humidity-aware surface is the fix, making us a data-input vendor to underwriters, not only to cities.<sup>[26]</sup></p>
+  <div class="quote">Grants fund the proof · the proof wins the seed · the seed funds the scale — <span>and every city we add widens the story without widening the cost.</span></div>
+  <div class="callout"><div class="k">Decision requested</div><p style="margin:0">Green-light Phase&nbsp;1 (receipts) and the DPIIT + incubator move in parallel. Together they cost no model code, surface rigor we already have, and turn the twin into something a scientist can interrogate and a funder can bank.</p></div>
+  <div class="rf"><div>FOUNDING-TEAM BRIEFING · CONFIDENTIAL</div><div>09</div></div>
+</section>
+
+<!-- ══ SOURCES ══ -->
+<section class="page">
+  <div class="rh"><div class="m"><img src="file:///Volumes/VSTSAMPLES/Projects/Angad/public/logo-mark-96.png"/>DELTA CLIMATE RESEARCH</div><div>RECEIPTS, NOT RENDERS</div></div>
+  <div class="kicker">09 · Sources — digital twins &amp; method</div>
+  <h2>Every claim, traceable.</h2>
+  <p class="ink" style="font-size:9.5px">Consistent with the thesis, this document carries its own receipts. Every source below was <span class="cyan mono" style="font-size:8px">✓ PRIMARY-VERIFIED</span> — confirmed against its primary source on 9 Aug 2026, by three independent research passes.</p>
+  <table>
+    <tr><th style="width:26px">#</th><th>Source</th><th style="width:34%">Status</th></tr>
+    <tr><td class="m">1</td><td>Trust &amp; uncertainty-visualisation study (N=161) — <a href="https://arxiv.org/abs/2602.00248">arxiv.org/abs/2602.00248</a></td><td><span class="cyan mono" style="font-size:8px">✓ VERIFIED</span></td></tr>
+    <tr><td class="m">2</td><td>Destination Earth — Urban Heat Island / UrbClim — <a href="https://destination-earth.eu/use-cases/addressing-urban-heat-island-effect/">destination-earth.eu</a></td><td><span class="cyan mono" style="font-size:8px">✓ VERIFIED</span> · two validations distinguished</td></tr>
+    <tr><td class="m">3</td><td>Google Earth Engine — Data Catalog dataset description — <a href="https://developers.google.com/earth-engine/help_dataset_description">developers.google.com</a></td><td><span class="cyan mono" style="font-size:8px">✓ VERIFIED</span></td></tr>
+    <tr><td class="m">4</td><td>Our World in Data — FAQ / methodology &amp; labelling — <a href="https://ourworldindata.org/faqs">ourworldindata.org/faqs</a></td><td><span class="cyan mono" style="font-size:8px">✓ VERIFIED</span></td></tr>
+    <tr><td class="m">5</td><td>NYC Heat Vulnerability Index — <a href="https://a816-dohbesp.nyc.gov/IndicatorPublic/data-features/hvi/">a816-dohbesp.nyc.gov</a></td><td><span class="cyan mono" style="font-size:8px">✓ VERIFIED</span></td></tr>
+    <tr><td class="m">6</td><td>Virtual Singapore — Dassault Systèmes press release + <a href="https://www.sla.gov.sg/articles/press-releases/2014/virtual-singapore-a-3d-city-model-platform-for-knowledge-sharing-and-community-collaboration">SLA (2014)</a> + <a href="https://www.tech.gov.sg/technews/5-things-to-know-about-virtual-singapore/">GovTech</a></td><td><span class="cyan mono" style="font-size:8px">✓ VERIFIED</span> · S$73M NRF-attributed</td></tr>
+    <tr><td class="m">7</td><td>Helsinki 3D city model (CityGML + reality mesh, CC BY 4.0) — <a href="https://www.hel.fi/en/decision-making/information-on-helsinki/maps-and-geospatial-data/helsinki-3d">hel.fi</a> · <a href="https://hri.fi/data/en/dataset/helsingin-3d-kaupunkimalli">hri.fi</a></td><td><span class="cyan mono" style="font-size:8px">✓ VERIFIED</span></td></tr>
+    <tr><td class="m">8</td><td>Digital Twin Victoria (Vic. Gov + CSIRO; $37.4M/4yr; 4,000+ datasets; CC BY 4.0) — <a href="https://www.land.vic.gov.au/maps-and-spatial/digital-twin-victoria/about-the-program">land.vic.gov.au</a> · <a href="https://discover.data.vic.gov.au/dataset/digital-twin-victoria">data.vic.gov.au</a></td><td><span class="cyan mono" style="font-size:8px">✓ VERIFIED</span></td></tr>
+    <tr><td class="m">9</td><td>Digital-twin critique — Frontiers in Big Data, 10.3389/fdata.2023.1236397 — <a href="https://www.frontiersin.org/journals/big-data/articles/10.3389/fdata.2023.1236397/full">frontiersin.org</a></td><td><span class="cyan mono" style="font-size:8px">✓ VERIFIED</span></td></tr>
+    <tr><td class="m">10</td><td>UK Gemini Principles — CDBB (Dec 2018) — <a href="https://www.cdbb.cam.ac.uk/DFTG/GeminiPrinciples">cdbb.cam.ac.uk</a></td><td><span class="cyan mono" style="font-size:8px">✓ VERIFIED</span> · verbatim</td></tr>
+    <tr><td class="m">11</td><td>3D Tiles (Cesium 2015 → OGC Community Standard 2019) + glTF (Khronos, ISO/IEC 12113) — <a href="https://cesium.com/why-cesium/3d-tiles/">cesium.com</a> · <a href="https://www.ogc.org/standard/3dtiles/">ogc.org</a> · <a href="https://www.khronos.org/gltf/">khronos.org</a></td><td><span class="cyan mono" style="font-size:8px">✓ VERIFIED</span></td></tr>
+    <tr><td class="m">12</td><td>ECOSTRESS L2T LSTE v002 quality flags — <a href="https://lpdaac.usgs.gov/products/eco_l2t_lstev002/">lpdaac.usgs.gov</a></td><td><span class="cyan mono" style="font-size:8px">✓ VERIFIED</span></td></tr>
+    <tr><td class="m">13</td><td>CAPA Strategies — Heat Watch data/methodology — <a href="https://www.capastrategies.com/heat-watch-data">capastrategies.com</a></td><td><span class="cyan mono" style="font-size:8px">✓ VERIFIED</span></td></tr>
+    <tr><td class="m">14</td><td>Data provenance/quality standards — Data Nutrition Project (<a href="https://datanutrition.org/">datanutrition.org</a>); ISO 19115 lineage / ISO 19157 quality</td><td><span class="cyan mono" style="font-size:8px">✓ VERIFIED</span></td></tr>
+  </table>
+  <p class="ink" style="font-size:9px;margin-top:6px">Delta internal evidence referenced (leave-one-overpass-out validation, bootstrap CIs, 50-overpass Landsat campaign, ICESat-2 height check) is documented in the project's own accuracy engine and validation records. <strong>Funding sources overleaf.</strong></p>
+  <div class="rf"><div>DELTA CLIMATE RESEARCH · 9 AUG 2026</div><div>10</div></div>
+</section>
+
+<!-- ══ SOURCES — FUNDING ══ -->
+<section class="page">
+  <div class="rh"><div class="m"><img src="file:///Volumes/VSTSAMPLES/Projects/Angad/public/logo-mark-96.png"/>DELTA CLIMATE RESEARCH</div><div>RECEIPTS, NOT RENDERS</div></div>
+  <div class="kicker">10 · Sources — funding</div>
+  <h2>The funding map, sourced.</h2>
+  <p class="ink" style="font-size:9.5px">Compiled 9 Aug 2026 across nine independent research passes against primary/official pages. Programme <em>windows and cheque sizes rotate</em> — reconfirm the live application window on each portal before applying.</p>
+  <table>
+    <tr><th style="width:26px">#</th><th>Source</th></tr>
+    <tr><td class="m">15</td><td>Adaptation is the funded lane (~71% of adaptation capital to software/data; resilience fastest-growing H1-2025) — <a href="https://www.tailwindfutures.com/news/1-4-trillion-market-for-climate-adaptation-and-resilience-solutions/">tailwindfutures.com</a> · <a href="https://www.ctvc.co/h1-2025-climate-tech-investment-capital-stacking-up-for-energy-security-resilience/">ctvc.co</a></td></tr>
+    <tr><td class="m">16</td><td>The "is-this-real" bar — 74% of climate-AI claims unproven; moat = validation not data — <a href="https://www.thegreenwebfoundation.org/news/report-exposes-big-techs-ai-climate-hoax-74-of-industrys-claims-about-ais-climate-benefits-are-unproven/">greenwebfoundation.org</a> · <a href="https://www.latitudemedia.com/news/in-the-age-of-ai-can-startups-still-build-a-moat/">latitudemedia.com</a></td></tr>
+    <tr><td class="m">17</td><td>Startup India Seed Fund (SISFS) + DPIIT recognition (the gateway); DST NIDHI-SSS (₹1cr) / PRAYAS (₹10L) — <a href="https://seedfund.startupindia.gov.in/">seedfund.startupindia.gov.in</a> · <a href="https://www.startupindia.gov.in/">startupindia.gov.in</a> · <a href="https://nidhi.dst.gov.in/">nidhi.dst.gov.in</a></td></tr>
+    <tr><td class="m">18</td><td>Climate Collective — Climate Pitch (equity-free ₹20L, adaptation/urban-resilience) — <a href="https://climatepitch.org/">climatepitch.org</a> · <a href="https://climatecollective.net/">climatecollective.net</a></td></tr>
+    <tr><td class="m">19</td><td>Social Alpha — Techtonic: Sustainable Urban Transition (₹35L pilot) — <a href="https://www.socialalpha.org/">socialalpha.org</a></td></tr>
+    <tr><td class="m">20</td><td>Cloud credits — <a href="https://www.nvidia.com/en-us/startups/">NVIDIA Inception</a> · <a href="https://www.microsoft.com/en-us/startups">MS Founders Hub</a> · <a href="https://aws.amazon.com/startups/credits">AWS Activate</a> · <a href="https://cloud.google.com/startup">Google for Startups</a>. Open EO backbones (free, commercial): <a href="https://dataspace.copernicus.eu/">Copernicus</a> · <a href="https://planetarycomputer.microsoft.com/">MS Planetary Computer</a></td></tr>
+    <tr><td class="m">21</td><td>Accelerators — Third Derivative (equity-free) <a href="https://www.third-derivative.org/">third-derivative.org</a> · Katapult Climate <a href="https://katapult.vc/">katapult.vc</a></td></tr>
+    <tr><td class="m">22</td><td>India climate VC (seed leg) — Avaana · Transition VC · Ankur · Speciale Invest — <a href="https://avaana.capital/">avaana.capital</a>. Academic-grant route: Wellcome Climate Impacts (£2.5M, via an India academic host) — <a href="https://wellcome.org/">wellcome.org</a></td></tr>
+    <tr><td class="m">23</td><td>ADB Challenges (grants ≤ ~$450k, startups eligible) — <a href="https://challenges.adb.org/web/en/challenges">challenges.adb.org</a></td></tr>
+    <tr><td class="m">24</td><td>Grand Challenges India (BIRAC + Gates; funded a Karnataka heatwave-resilience project) — <a href="https://gcgh.grandchallenges.org/challenge/grand-challenges-india-accelerating-catalyzing-solutions-climate-changes-impact-health">gcgh.grandchallenges.org</a></td></tr>
+    <tr><td class="m">25</td><td>What funders actually want — LOIs / paid pilots beat waitlists; the adaptation impact-metric framework — <a href="https://www.tran.vc/how-to-use-lois-waitlists-and-pilots-in-pre-seed-fundraising/">tran.vc</a> · <a href="https://www.msci-institute.com/themes/climate/how-to-make-climate-adaptation-and-resilience-investable/">msci-institute.com</a></td></tr>
+    <tr><td class="m">26</td><td>Parametric heat-insurance wedge (basis-risk) — SEWA · Swiss Re · ICICI Lombard, Gujarat — <a href="https://www.inclusivecapitalism.com/news-insights/parametric-insurance-sewa/">inclusivecapitalism.com</a> · <a href="https://www.downtoearth.org.in/climate-change/can-parametric-insurance-really-put-a-price-on-extreme-heat-and-protect-indias-informal-workers-from-its-growing-economic-toll">downtoearth.org.in</a> · demand-side: <a href="https://www.worldbank.org/en/news/press-release/2025/07/22/india-has-a-critical-opportunity-to-drive-resilient-urban-development-says-new-world-bank-report">World Bank India cities (Kolkata, UHI, 2025)</a></td></tr>
+    <tr><td class="m">27</td><td>B2G doors — Arsht-Rock Heat Action Platform <a href="https://heatactionplatform.onebillionresilient.org/">onebillionresilient.org</a> · Resilient Cities Network (Chennai) <a href="https://resilientcitiesnetwork.org/chennai/">resilientcitiesnetwork.org</a> · NIUA Climate Centre for Cities <a href="https://niua.in/c-cube">niua.in/c-cube</a> · C40 Cool Cities <a href="https://www.c40.org/accelerators/cool-cities/">c40.org</a></td></tr>
+  </table>
+  <p class="ink" style="font-size:9px;margin-top:6px"><strong>Do-not-chase (verified dead-ends):</strong> USAID (defunct 2025) · BIRAC (biotech-only) · MeitY GENESIS (excludes Tier-I cities) · ESA / NASA / EU direct grants (India-ineligible without an EU entity) · GCF &amp; Adaptation Fund (only via an accredited entity such as NABARD) · carbon credits for cooling (no methodology exists).</p>
+  <div class="rf"><div>DELTA CLIMATE RESEARCH · 9 AUG 2026</div><div>11</div></div>
+</section>
+
+</body></html>
