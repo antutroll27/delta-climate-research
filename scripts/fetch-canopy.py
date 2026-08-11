@@ -172,9 +172,19 @@ def write_canopy_png(ward_id: str, grid_north_up: npt.NDArray[np.float32]) -> st
 
 
 #: Phase-B seam (docs/superpowers/specs/2026-08-11-vegetation-placement-v2-design.md).
-#: Exclusion mask (B1), parks prior (B2) and ETH gate (B3) slot in here as filter
-#: callables, in that order; crown-detection (B4) swaps _generate(). Empty in Phase A.
-FILTERS: tuple[Callable[[list[_types.TreeInstanceJSON]], list[_types.TreeInstanceJSON]], ...] = ()
+#: Exclusion mask (B1) and ETH gate (B3) slot in here as filter callables, in that
+#: order; crown-detection (B4) swaps _generate(). Empty in Phase A.
+#:
+#: A filter takes (ward, grid, candidates), not candidates alone: B1 must RELOCATE a
+#: candidate to the nearest free cell within ~1 cell radius, and B3 must thin n against
+#: the grid rather than hard-zero it. Both need geometry derive_trees already holds, so
+#: a list-only signature would force exactly the churn this seam exists to prevent.
+#:
+#: B2 (the parks density BOOST) cannot be a post-filter at ANY signature -- ADDING an
+#: instance needs the cell identity (col,row,k) to key _hash01, which no longer exists
+#: once candidates are a flat list. B2 must hook inside _generate().
+FILTERS: tuple[Callable[[Ward, npt.NDArray[np.float32], list[_types.TreeInstanceJSON]],
+                        list[_types.TreeInstanceJSON]], ...] = ()
 
 SPECIES = ("neem", "neem", "gulmohar", "palm")   # deterministic broadleaf-dominant mix
 
@@ -213,10 +223,13 @@ def _generate(ward: Ward, grid_north_up: npt.NDArray[np.float32]) -> list[_types
 
 
 def derive_trees(ward: Ward, grid_north_up: npt.NDArray[np.float32]) -> list[_types.TreeInstanceJSON]:
-    """Tree instances for the render layer: candidates -> Phase-B filters (none yet)."""
+    """Tree instances for the render layer, in ward-local metres (+x east, +y north).
+
+    Candidates from _generate(), then the Phase-B FILTERS (none in Phase A).
+    """
     candidates = _generate(ward, grid_north_up)
     for f in FILTERS:
-        candidates = f(candidates)
+        candidates = f(ward, grid_north_up, candidates)
     return candidates
 
 
@@ -258,15 +271,20 @@ def check() -> None:
         for t in doc["trees"]:
             assert MIN_TREE_H - 0.05 <= t["h"] <= CANOPY_HI + 5, f"{wid}: tree height out of range {t['h']}"
             assert abs(t["x"]) <= doc["sizeM"] / 2 + 1 and abs(t["y"]) <= doc["sizeM"] / 2 + 1, f"{wid}: tree outside ward"
-            assert t["species"] in ("neem", "gulmohar", "palm"), f"{wid}: bad species {t['species']}"
-        # v2 tripwires: the 10 m lattice must be dead, and counts must stay sane
-        cell_m = doc["sizeM"] / doc["grid"]
-        off_lattice = sum(
-            1 for t in doc["trees"]
-            if abs((t["x"] + doc["sizeM"] / 2 - cell_m / 2) % cell_m) > 0.05
-        )
-        assert off_lattice > len(doc["trees"]) / 2, f"{wid}: trees still sit on the cell-centre lattice"
+            assert t["species"] in set(SPECIES), f"{wid}: bad species {t['species']}"
+        # v2 tripwires. Count FIRST: an empty ward also makes `off_lattice > 0/2` false,
+        # so the lattice assert would fire first and misreport it as graph paper.
         assert 0 < len(doc["trees"]) <= 30_000, f"{wid}: implausible tree count {len(doc['trees'])}"
+        # The lattice must be dead. Distance to the NEARER lattice line, because
+        # `v % cell_m` alone is one-sided -- a tree 4 cm PAST a centre reads as 9.96 and
+        # counts as off-lattice, so a collapse to +-7.5 cm jitter would pass unnoticed.
+        cell_m = doc["sizeM"] / doc["grid"]
+        off_lattice = 0
+        for t in doc["trees"]:
+            d = (t["x"] + doc["sizeM"] / 2 - cell_m / 2) % cell_m
+            if min(d, cell_m - d) > 0.05:
+                off_lattice += 1
+        assert off_lattice > len(doc["trees"]) / 2, f"{wid}: trees still sit on the cell-centre lattice"
     print("canopy artefacts OK")
 
 
@@ -297,6 +315,8 @@ def _self_test() -> None:
     grid[0, 1] = 2.0           # barely canopy -> 0 trees (the honest gap)
     grid[10, 10] = 15.0        # mid canopy -> ~DENSITY_MAX/2
     grid[20, 20] = 1.0         # below MIN_TREE_H -> skipped entirely
+    grid[3, 40] = 25.0         # OFF-DIAGONAL: the only cell a row/col transposition moves
+    grid[30, 30] = 3.75        # exact tie: 4*3.75/30 = 0.5, where int(v+0.5)=1 but round(v)=0
     trees = derive_trees(ward, grid)
     assert trees == derive_trees(ward, grid), "derive_trees must be deterministic"
     def cell_of(t: _types.TreeInstanceJSON) -> tuple[int, int]:
@@ -310,6 +330,8 @@ def _self_test() -> None:
     assert (1, 0) not in by_cell, "h=2.0 cell must be a gap (redistributive count 0)"
     assert (20, 20) not in by_cell, "below MIN_TREE_H must stay empty"
     assert by_cell.get((10, 10)) == 2, "15 m of 30 m at DENSITY_MAX=4 -> 2 trees"
+    assert by_cell.get((40, 3)) == 3, "25 m of 30 m -> 3 trees, at (col=40,row=3) not its transpose"
+    assert by_cell.get((30, 30)) == 1, "count rounds HALF-UP: int(0.5+0.5)=1, but round(0.5)=0"
     # jitter bounds: every instance stays within +-JITTER/2 of its cell centre
     half = ward.footprint_m / 2.0
     for t in trees:
@@ -318,14 +340,54 @@ def _self_test() -> None:
         cy = half - (row + 0.5) * cell_m
         assert abs(t["x"] - cx) <= JITTER * cell_m / 2 + 0.011, f"x jitter out of bounds at {t}"
         assert abs(t["y"] - cy) <= JITTER * cell_m / 2 + 0.011, f"y jitter out of bounds at {t}"
-    # the lattice is dead: with >1 instance somewhere, positions inside one cell differ
-    xs = sorted(t["x"] for t in trees if cell_of(t) == (0, 0))
-    assert len(set(xs)) > 1, "instances within a cell must not stack on one point"
-    # species valid + per-instance (a 4-tree cell should not be monoculture-by-position rule)
-    assert all(t["species"] in ("neem", "gulmohar", "palm") for t in trees)
+    # the lattice is dead: every drawn quantity must actually vary within one cell
+    cell00 = [t for t in trees if cell_of(t) == (0, 0)]
+    assert len({t["x"] for t in cell00}) > 1, "instances within a cell must not stack on one point"
+    assert len({t["y"] for t in cell00}) > 1, "y must be jittered too, not just x"
+    assert len({t["r"] for t in cell00}) > 1, "crown radius must vary per instance"
+    # x and y must draw DIFFERENT hash axes: equal offsets would lay every cell's
+    # instances along a 45-degree diagonal, which is the artifact this feature kills
+    cx0, cy0 = 0.5 * cell_m - half, half - 0.5 * cell_m
+    assert any(abs((t["x"] - cx0) - (t["y"] - cy0)) > 0.01 for t in cell00), \
+        "x and y jitter must not share one hash axis"
+    # one golden instance. Position IS the artifact contract (same reason as the golden
+    # hash above), and only an asymmetric cell catches a (col,row) argument swap --
+    # counts and bounds survive one, because both hashes are equally valid draws.
+    gold = [t for t in trees if cell_of(t) == (40, 3)][0]
+    assert (gold["x"], gold["y"]) == (-293.04, 661.5), f"golden placement moved: {gold}"
+    # species valid, and genuinely mixed rather than always SPECIES[0]
+    assert all(t["species"] in set(SPECIES) for t in trees)
+    assert len({t["species"] for t in trees}) > 1, "the species draw must vary per instance"
     # radius jitter stays within +-10% of h*0.35
     for t in trees:
         assert 0.9 * t["h"] * 0.35 - 0.01 <= t["r"] <= 1.1 * t["h"] * 0.35 + 0.01, f"radius out of band at {t}"
+    # the MIN_TREE_H gate needs its OWN grid: at h_max=30 the density math already
+    # yields 0 for sub-2 m cells, so grid[20,20] above passes with the gate deleted.
+    # It only bites in a low-canopy ward, where scrub would otherwise become trees.
+    low = np.zeros((n, n), dtype=np.float32)
+    low[5, 5] = 4.0            # ward max -> DENSITY_MAX trees
+    low[6, 6] = 1.5            # scrub; ungated this would be int(4*1.5/4 + 0.5) = 2 trees
+    assert len(derive_trees(ward, low)) == DENSITY_MAX, "sub-MIN_TREE_H scrub must not become trees"
+    assert derive_trees(ward, np.zeros((n, n), dtype=np.float32)) == [], "a bare grid must yield no trees"
+    # the seam itself: derive_trees must RUN the filters, hand them the geometry, and
+    # return what they hand back. Deleting the `for f in FILTERS` loop must fail here.
+    global FILTERS
+    def _keep_one(w: Ward, g: npt.NDArray[np.float32],
+                  ts: list[_types.TreeInstanceJSON]) -> list[_types.TreeInstanceJSON]:
+        assert w is ward and g is grid, "a filter must receive the ward and the grid, not just the list"
+        return ts[:1]
+
+    def _drop_all(w: Ward, g: npt.NDArray[np.float32],
+                  ts: list[_types.TreeInstanceJSON]) -> list[_types.TreeInstanceJSON]:
+        return []
+    try:
+        FILTERS = (_keep_one,)
+        assert derive_trees(ward, grid) == trees[:1], "derive_trees must return the filters' output"
+        FILTERS = (_keep_one, _drop_all)
+        assert derive_trees(ward, grid) == [], "filters must chain, in order"
+    finally:
+        FILTERS = ()
+    assert not FILTERS, "the self-test must leave the Phase-A seam empty"
     print("  fetch-canopy self-test OK")
 
 
