@@ -683,6 +683,53 @@ interferometry — a physical measurement rather than a learned model — so it 
 regress to the mean, though its 90 m cell averages a tower with the ground around it. It is
 CC-BY-4.0 and already identified in §8i as one of the three cross-checks.
 
+## 8l · ⭐ CORRECTION TO §8k — WSF3D DOES capture the towers. Use it. (2026-08-12)
+
+§8k concluded that tower-district shadow "cannot be done honestly" on available permissive
+data. **That conclusion was about 3D-GloBFP and does not survive testing WSF3D.**
+
+Read remotely over Dubai via `/vsicurl` (no 2 GB download needed — it is a tiled GeoTIFF and
+rasterio range-reads it):
+
+| district | **WSF3D** | ratio to real | 3D-GloBFP | ratio | real tallest |
+|---|---|---|---|---|---|
+| Downtown | **667.2 m** | **0.81** | 144.0 m | 0.17 | Burj Khalifa 828 m |
+| Dubai Marina | **369.3 m** | **0.89** | 129.5 m | 0.31 | Princess Tower 414 m |
+| Business Bay | **233.1 m** | **0.78** | 124.1 m | 0.41 | 300 m+ |
+| Deira / Naif | **48.0 m** | **1.20** | 85.8 m | 2.15 | low-rise ~40 m |
+
+**WSF3D lands at 0.78–1.20× of the true tallest building in every district tested. 3D-GloBFP
+is 0.17–0.41× on towers and 2.15× on low-rise — wrong in both directions.** The residual
+under-estimate on towers is *expected and correct*: WSF3D is an ~87 m cell average, so a
+tower's peak is averaged with its podium and surrounds. It is a physical TanDEM-X radar
+measurement, which is exactly why it has no reason to regress to the mean the way an XGBoost
+model does.
+
+**⚠️ MY OWN ERROR, and it nearly discarded the best source we have.** The first read returned
+6672 m for Downtown and looked like garbage. **The GeoTIFF declares `scales: (0.1,)` and
+`unit: m`** — the values are decimetres and `rasterio.read()` does not apply the scale. I had
+the file's own declaration available and did not read it. Any future consumer must apply the
+scale; a raw read is 10× too large and physically absurd, which is at least a loud failure
+rather than a quiet one.
+
+**DECISION — the Dubai height stack changes:**
+- **WSF3D (CC-BY-4.0) is the HEIGHT source.** Its ~87 m cells sit almost exactly on our 70 m
+  analysis grid and well inside the 208 m city-wide cell, so it needs no downsampling
+  argument.
+- **3D-GloBFP (CC-BY-4.0) supplies per-building POLYGONS** for rendering and for the
+  per-cell shape statistics. Its heights are not used in tower districts.
+- Both are CC-BY-4.0, so the fusion stays licence-clean end to end. No ODbL anywhere.
+
+**⭐ TRACK F's DUBAI TEST IS BACK ON.** §8k said the "towers should show the shadow effect
+clearly" prediction could not be tested. With WSF3D heights it can — and the pre-registration
+requirement in the Track F spec stands unchanged.
+
+**Licence correction: GlobalBuildingAtlas is not what §8a says.** §8a records it as
+CC-BY-NC-4.0. The ESSD paper (essd-17-6647-2025) instead states its footprints come from OSM
+and Microsoft "both provided under the Open Database License (ODbL)". Either way it is not
+clean for us and **we no longer need it** — but the recorded reason was wrong. Its specs, for
+the record: 3 m resolution, 2.68 B LoD1 instances, RMSE 1.5–8.9 m by continent (Asia 5.9 m).
+
 ## 9 · First move — SUPERSEDED 2026-08-11
 
 ~~Verify Dubai Pulse actually has usable footprints and heights over the urban core.~~
