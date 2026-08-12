@@ -24,6 +24,40 @@
       "anomaly_rmse_k": 1.0415456205476215
     }
   },
+  "by_ward": {
+    "ballygunge": {
+      "ward_scenes": 29,
+      "open_water_fraction": 0.0070790816098451614,
+      "r_physics": 0.19873568961794794,
+      "r_built": 0.16120327565620693,
+      "r_veg": 0.22517786806354212,
+      "anomaly_rmse_k": 1.7282632599375365
+    },
+    "baruipur": {
+      "ward_scenes": 25,
+      "open_water_fraction": 0.013086734339594841,
+      "r_physics": 0.25434795029017165,
+      "r_built": 0.18783718386551856,
+      "r_veg": 0.3202424392868955,
+      "anomaly_rmse_k": 1.4346259874689267
+    },
+    "barrackpore": {
+      "ward_scenes": 33,
+      "open_water_fraction": 0.048852041363716125,
+      "r_physics": 0.20041886478833013,
+      "r_built": 0.18925027144287968,
+      "r_veg": 0.1869440992183779,
+      "anomaly_rmse_k": 2.2342635537680824
+    }
+  },
+  "water": {
+    "note": "Open-water fraction per ward, from the shipped OSM polygons ({ward}-water.json) through the same rasteriser the browser runs (scripts/_water.py, oracle-checked). REPORTED, NOT MODELLED: this script's predictor is the per-cell equilibrium, which mirrors equilibriumC(p, albedo, veg, built) and has no water term. Water enters the engine only in TsHeatSim.step, so the figures above do not respond to it. The measurement that does is data/calibration/shipped-amplitude.json.",
+    "fraction_by_ward": {
+      "ballygunge": 0.0070790816098451614,
+      "baruipur": 0.013086734339594841,
+      "barrackpore": 0.048852041363716125
+    }
+  },
   "terms": {
     "solar_albedo": {
       "r": 0.03710203292393178,

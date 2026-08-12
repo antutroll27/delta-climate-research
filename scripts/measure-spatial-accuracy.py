@@ -392,7 +392,7 @@ def modelled_field(sc: _physics.Scene, veg: npt.NDArray[np.float32],
     structurally blind to water, its figures do not move when the water layer is
     populated, and the water measurement is in `measure-shipped-amplitude.py`, which
     drives the real solver. See `water_layer` above for the full argument, and
-    docs/evidence/known-limitations.md §6.
+    docs/evidence/known-limitations.md §7.
     """
     kRad = _physics.K_SUM * ratio / (1 + ratio)
     h = _physics.K_SUM - kRad

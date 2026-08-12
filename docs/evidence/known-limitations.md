@@ -340,3 +340,51 @@ The interval is computed, not chosen; it narrows as the ECOSTRESS record grows, 
 sub-ward spatial structure (the built term varies within a ward where the ward mean cannot see it), or an
 external anthropogenic-heat estimate for Kolkata to use as a prior. More ECOSTRESS overpasses narrow the
 interval but cannot break the `Q·built` degeneracy on their own.
+## 7. The engine models open water as land — knowingly, because modelling it as water is worse
+
+**Status:** open, measured, gated off · **Measured:** 2026-08-13 · Full record:
+[`docs/heat-map-water-layer.md`](../heat-map-water-layer.md)
+
+**What is wrong.** Ballygunge, Baruipur and Barrackpore contain 0.72 %, 1.30 % and 4.88 % open water, and
+the temperature solve treats every square metre of it as warm ground. `SimLayers.water` is an all-zero
+array. `sim-ts.ts` reads it in two terms — a ventilation boost and a relaxation toward `tAir − 1.5` — and
+both collapse to the identity against zeros. `water-layer.ts` has drawn those same polygons, in blue, the
+whole time.
+
+**How we know, and why it is still open.** The layer was filled, ported to Python
+(`scripts/_water.py`, oracle-checked against the shipped rasteriser), and scored on the real solver over
+the same 34 near-nadir ECOSTRESS scenes / 87 ward-scenes / 3 wards the canopy sweep used. It made agreement
+**worse**:
+
+| | dry (shipped) | wet | Δ |
+|---|---|---|---|
+| r vs ECOSTRESS | **0.3031** | **0.2544** | −0.0487 |
+| day / night | 0.3883 / 0.2400 | 0.3593 / 0.1768 | −0.029 / −0.063 |
+| spatial SD (observed 0.925 K) | 1.345 K | 1.514 K | over-draw 1.45× → 1.64× |
+
+and it did so **in proportion to each ward's water** — ballygunge 0.72 % → −0.013 r, baruipur 1.30 % →
+−0.061, barrackpore 4.88 % → −0.071. That ordering is what makes it a finding about water rather than
+noise; it would have been the argument *for* shipping had the sign gone the other way.
+
+The cause is diagnosable rather than mysterious. At the shipped `D`, the relaxation is a **clamp**: a
+fully-wet cell converges on `tAir − 1.5` whatever the energy balance says (measured: +0.8 to +1.9 K by day,
+−1.1 to −2.0 K by night). And `tAir − 1.5` is a daytime assumption applied around the clock, which is why
+night degrades twice as hard — water is the *warmest* surface ECOSTRESS sees over these wards after
+sunset. `WATER_LAYER_ENABLED` (types.ts) is therefore `false`, pinned to `_water.LAYER_ENABLED` by the
+water parity oracle so the instrument and the laboratory cannot disagree about which arm is live.
+
+**What it does NOT invalidate.** Nothing published moves: the shipped figures are the dry arm, which is the
+arm they have always been. What it *does* mean is that the within-ward pattern over open water is known to
+be wrong, and should not be presented as a cooling estimate for a pond, a tank or a river edge.
+
+**What would close it.** Make the relaxation a rate rather than a clamp (scale by `dt`), and give water a
+diurnal target or an actual heat capacity instead of a fixed `tAir − 1.5`. Both are physics changes and
+need their own spec. The measurement to judge them by now exists, which it did not before —
+`measure-shipped-amplitude.py`, per ward, requiring the 0.72 / 1.30 / 4.88 % ordering to run the other way.
+
+**A second, quieter limitation this exposed.** `measure-spatial-accuracy.py` — the source of the published
+within-ward figures — **cannot see water at all**. Its predictor mirrors
+`equilibriumC(p, albedo, veg, built)`, which has no water term; the water terms exist only in the
+time-stepped solver, and the relaxation has no dt-free steady state. So that script is structurally blind
+to this whole layer, and its output is annotated to say so. Any future cover layer that enters only the
+time-stepped solve will be invisible to it in exactly the same way.

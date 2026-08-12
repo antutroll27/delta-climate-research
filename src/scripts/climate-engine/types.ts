@@ -71,6 +71,57 @@ export function isCanonicalGrid(grid: GridSpec): boolean {
  */
 export const CANOPY_BLEND_STRENGTH = 0;
 
+/**
+ * Whether `rasterWardBase` fills `SimLayers.water` from the ward's OSM polygons.
+ * FALSE — the water layer is built, ported, oracle-checked, and NOT in the temperature
+ * solve. This is the measured verdict on turning it on, taken the day it first became
+ * measurable.
+ *
+ * DO NOT "restore" it to true because the zero layer looks like an oversight. It looked
+ * like one for months and it was: `sim-ts.ts` has always READ this layer — a ventilation
+ * boost `1 - 0.55*built + 0.65*water`, and a relaxation `next*(1 - 0.35*water) + (tAir -
+ * 1.5)*0.35*water` — while `rasterWardBase` allocated it and never wrote it, so both terms
+ * collapsed to the identity and every pond in three wards was solved as warm land. Filling
+ * it is the obvious fix. It is also, measured, a worse model.
+ *
+ * The evidence, over the same 34 near-nadir ECOSTRESS scenes / 87 ward-scenes / 3 wards
+ * the canopy sweep used, driving the REAL solver through scripts/sim-field-dump.mjs
+ * (measure-shipped-amplitude.py — the equilibrium in measure-spatial-accuracy.py has no
+ * water term and cannot see this at all):
+ *
+ *   r_shipped     0.3031 -> 0.2544      spatial SD  1.345 K -> 1.514 K  (observed 0.925 K)
+ *   day           0.3883 -> 0.3593      amplitude over-draw  1.45x -> 1.64x
+ *   night         0.2400 -> 0.1768
+ *
+ * Four reasons, not one:
+ *
+ * 1. It degrades agreement, and it degrades it IN PROPORTION TO WATER. Ballygunge at
+ *    0.72 % open water loses 0.013 r; Baruipur at 1.30 % loses 0.061; Barrackpore at
+ *    4.88 % loses 0.071. That ordering is what makes this a result about water rather
+ *    than noise — the same contrast would have been the evidence FOR it.
+ * 2. It is not a compression artefact, which is the loophole the canopy sweep had to
+ *    close. Spatial SD RISES, from 1.45x the observed to 1.64x, so the model gets both
+ *    less skilful and more over-drawn. There is no reading in which this is error
+ *    traded for amplitude.
+ * 3. The relaxation is a CLAMP, not a nudge, and nobody wrote it intending one. At the
+ *    shipped D the stable dt is ~0.1 and `0.35*water` dominates `dt*k`, so a fully-wet
+ *    cell converges to within 0.05 K of `tAir - 1.5` whatever the energy balance says.
+ *    Measured: every wet cell lands on the target, +0.8 to +1.9 K by day and -1.1 to
+ *    -2.0 K by night. The layer does not cool water by ~4 K; it pins it.
+ * 4. `tAir - 1.5` is a DAYTIME assumption applied around the clock, and night is where
+ *    it hurts most (-0.063 r against day's -0.029). Water has the highest thermal
+ *    inertia in the scene: after sunset it is the WARMEST surface ECOSTRESS sees over
+ *    these wards, and this term puts it 1.5 K below air. That is a sign error, and no
+ *    coefficient fixes a sign — which is also why fixing it was out of scope here.
+ *
+ * Full record and the before/after: docs/heat-map-water-layer.md, and
+ * docs/evidence/known-limitations.md §7. `rasterizeWardWater` stays general and
+ * unit-tested, and the Python port (scripts/_water.py LAYER_ENABLED) is pinned to this
+ * constant through the water parity oracle, so re-enabling is one line here plus a
+ * re-run of that measurement — and the measurement now exists, which it did not before.
+ */
+export const WATER_LAYER_ENABLED = false;
+
 /** Per-cell input layers, each n*n in [0,1], row-major. */
 export interface SimLayers {
   albedo: Float32Array;
