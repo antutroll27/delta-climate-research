@@ -1,26 +1,52 @@
 """Meta/WRI 1 m Global Canopy Height Model -> {ward}-canopy.png + {ward}-trees.json.
 
-WHAT THIS IS. The CHMv1 ("alsgedi_global_v6_float") canopy height map, published
-by Meta Data for Good + World Resources Institute on AWS Open Data, gives the
-one fact the Sentinel-derived `veg[]` field cannot: a measured VERTICAL canopy
-height per metre, globally, at ~1 m resolution. NDVI-derived fractional
-vegetation cover conflates grass, crops and tree canopy; this model does not.
+WHAT THIS IS. The Meta Data for Good + World Resources Institute canopy height
+map, published on AWS Open Data, gives the one fact the Sentinel-derived `veg[]`
+field cannot: a measured VERTICAL canopy height per metre, globally, at ~1 m
+resolution. NDVI-derived fractional vegetation cover conflates grass, crops and
+tree canopy; this model does not.
 
-SOURCE AND ACCESS (verified 2026-08-10). Bucket `s3://dataforgood-fb-data/`,
-prefix `forests/v1/alsgedi_global_v6_float/`. Layout confirmed by fetching the
-bucket's own index and inspecting it directly (not by trusting an unverified
-blog write-up):
-  - `tiles.geojson` at the prefix root: 56,145 features, each a rectangular
-    polygon tagged `properties.tile` with a 9-digit string.
-  - `chm/<tile>.tif`: the height raster for that polygon, one continuous
-    GeoTIFF (EPSG:3857, ~1 m/px at 65536x65536 -- not internally tiled, so a
-    windowed rasterio read is the only affordable access pattern).
-The 9-digit `tile` values are standard Bing/Virtual-Earth QuadKeys at zoom 9 --
-confirmed by computing the QuadKey for the ballygunge centre with the textbook
-tile-XY + bit-interleave algorithm and matching it byte-for-byte against the
-`tiles.geojson` polygon that contains that point (both gave `123133323`). So
-`chm_href` computes the QuadKey from the ward centre rather than hardcoding a
-tile id -- it generalises to any WARDS entry without a lookup table.
+WHICH VERSION, AND WHY. We read CHM **v2** (`dinov3_global_chm_v2_ml3`, shipped
+March 2026), not the v1 `alsgedi_global_v6_float` this script started on. v2 is a
+DINOv3-backbone re-train of the same product: R^2 0.53 -> 0.86, MAE 4.3 -> 3.0 m,
+and the >=30 m saturation that flattened v1's tall canopy largely removed
+(Brandt et al., arXiv:2603.06382; CC BY 4.0). That is the paper's claim; the
+reason we ship it is measured in this repo against a product independent of both
+-- absolute disagreement with ETH Zurich's CHM falls 30-40% in every ward
+(ballygunge 5.59 -> 3.35 m, barrackpore 7.36 -> 5.30 m, baruipur 6.29 -> 4.44 m)
+while spatial correlation stays flat at ~0.5. So v2 is better at HOW TALL, not
+at WHERE, and that is the honest characterisation to carry into any receipt.
+
+v2 is NOT fresher data. Roughly 80% of its source imagery is the same 2018-2020
+epoch as v1's: this is a MODEL upgrade, and nothing derived from it may be
+described or published as newer observations.
+
+SOURCE AND ACCESS (v1 layout verified 2026-08-10 against the bucket's own
+`tiles.geojson` index of 56,145 features; v2 layout verified 2026-08-12). Bucket
+`s3://dataforgood-fb-data/`, prefix `forests/v2/global/dinov3_global_chm_v2_ml3/`,
+raster at `chm/<tile>.tif`. Two things moved from v1, and both help:
+  - The tile ids are Bing/Virtual-Earth QuadKeys at zoom 10, not zoom 9. Computing
+    the textbook tile-XY + bit-interleave QuadKey for the ballygunge centre at
+    zoom 10 gives `1231333231` -- v1's verified z9 answer `123133323` with one
+    further digit appended, i.e. the same point one zoom finer, which is exactly
+    what a QuadKey's prefix property requires. So `chm_href` still COMPUTES the
+    tile from the ward centre instead of hardcoding an id and still generalises to
+    any WARDS entry without a lookup table; only CHM_ZOOM changed.
+  - v1's raster was one non-tiled 65536x65536 monolith, which is why a windowed
+    rasterio read was the only affordable access pattern. v2 is a proper COG --
+    EPSG:3857, 32768x32768, 512x512 internal blocks with overviews -- so the same
+    windowed read now touches only the blocks it overlaps and gets FASTER. The
+    access pattern did not change; it stopped being a workaround.
+
+v2's tile is smaller but NOT finer: 32768 px across a zoom-10 tile is the same
+~1.19 m/px as v1's 65536 px across a zoom-9 one. Same physical resolution, half
+the span, differently tiled -- a smaller tile is not a sharper model.
+
+v2 is uint8, so heights arrive QUANTISED TO WHOLE METRES (v1 was float32). Stated
+here rather than left for a reader to spot `uint8` and wonder: it changes nothing
+material. v2's own MAE is 3.0 m, so a 1 m quantisation step is a third of the
+model's own error, and the density scale it feeds resolves canopy into only
+DENSITY_MAX + 1 = 5 levels across 30 m -- one 7.5 m step per level.
 
 Anonymous access: no AWS account needed. `AWS_NO_SIGN_REQUEST=YES` in the
 environment (see `main`'s docstring / the module run instructions) lets GDAL's
@@ -33,6 +59,8 @@ transparently.
 """
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import math
 import os
@@ -60,21 +88,27 @@ JITTER = 0.80                     # cell-size fraction for position jitter -- tu
 DENSITY_MAX = 4                   # trees at a DENSITY_REF_H cell, scaling to 0 (gaps) -- tuned live 2026-08-11
 #: Metres; the FIXED reference height the density scale is pinned to. Deliberately NOT
 #: the ward's own tallest cell: normalising per ward makes "dense" mean a different
-#: thing in every ward, and cross-ward comparison IS this twin's product. Measured
-#: maxima are ballygunge 22 m, barrackpore 25 m, baruipur 20 m -- ward-relative scaling
-#: therefore put barrackpore at 0.50 trees per canopy cell against ballygunge's 0.93,
-#: not because it has less canopy but because TWO of its 6,069 cells clear 22 m and
-#: dragged the whole ward's scale down. 22.0 is ballygunge's own measured max, chosen
-#: so the CEO-tuned ballygunge artifact stays byte-identical while the other wards are
-#: lifted onto its scale (0.93 / 0.73 / 0.85 measured after the change).
-DENSITY_REF_H = 22.0
+#: thing in every ward, and cross-ward comparison IS this twin's product. Measured under
+#: v1, ward-relative scaling put barrackpore at 0.50 trees per canopy cell against
+#: ballygunge's 0.93 -- not because it has less canopy, but because TWO of its 6,069
+#: cells cleared the divisor and dragged the whole ward's scale down. That argument is
+#: source-independent and still holds: this constant must stay FIXED.
+#:
+#: 30.0 is the tallest canopy measured ANYWHERE across the three wards under CHM v2 --
+#: the same rule that once made this 22.0 (v1's ballygunge maximum), re-applied to v2.
+#: The density scale therefore spans exactly the range we measured, which makes it a
+#: rule rather than a tuned knob. Measured consequence: the min(DENSITY_MAX, ...) cap
+#: clips 0 cells in all three wards, where 22.0 clipped 13 -- the scale no longer
+#: saturates before the data does. The cap stays load-bearing anyway (see _generate);
+#: the self-test pins it with a synthetic 40 m cell, since no real cell reaches it.
+DENSITY_REF_H = 30.0
 DATA = os.path.join(HERE, "..", "public", "heat-map", "data")
 
-#: CHMv1 bucket, verified 2026-08-10 against the registry's own tiles.geojson
-#: index (56,145 features) fetched and inspected directly -- see module docstring.
+#: CHM v2 (DINOv3) bucket and prefix -- see the module docstring for why v2 and for
+#: how the layout was verified. Same bucket as v1, different prefix and zoom.
 CHM_BUCKET = "dataforgood-fb-data"
-CHM_PREFIX = "forests/v1/alsgedi_global_v6_float"
-CHM_ZOOM = 9                      # QuadKey length observed in tiles.geojson (9 digits)
+CHM_PREFIX = "forests/v2/global/dinov3_global_chm_v2_ml3"
+CHM_ZOOM = 10                     # v2 tiles are zoom-10 QuadKeys (v1's were zoom 9)
 
 
 def _quadkey(lat: float, lon: float, zoom: int) -> str:
@@ -82,9 +116,11 @@ def _quadkey(lat: float, lon: float, zoom: int) -> str:
 
     Standard tile-XY + bit-interleave algorithm (Microsoft Bing Maps Tile
     System). Verified against the CHM index rather than assumed: computing this
-    for the ballygunge centre reproduces the exact tile id
-    (`123133323`) that `tiles.geojson` assigns to the polygon containing that
-    point, at the zoom level (9) its tile ids happen to use.
+    for the ballygunge centre at zoom 9 reproduces the exact tile id
+    (`123133323`) that v1's `tiles.geojson` assigns to the polygon containing
+    that point. v2 tiles the world one zoom finer, and the same call at zoom 10
+    gives `1231333231` -- the z9 id plus one digit, as a QuadKey's prefix
+    property requires, so the verification carries over to CHM_ZOOM = 10.
     """
     lat_rad = math.radians(lat)
     n = 2**zoom
@@ -106,11 +142,12 @@ def chm_href(ward: Ward) -> str:
     """/vsis3/ path of the Meta/WRI CHM COG tile covering this ward's centre.
 
     Computed, not hardcoded: the QuadKey for the ward centre at CHM_ZOOM. This
-    is safe for a 1400 m ward window because at zoom 9 each tile spans roughly
-    150 km on a side in this latitude band -- three orders of magnitude wider
-    than the ward, so a window near a tile boundary is the only case that could
-    straddle two tiles, and every current WARDS entry (verified for ballygunge)
-    sits well inside a single tile.
+    is safe for a 1400 m ward window because at zoom 10 each tile still spans
+    roughly 36 km on a side in this latitude band -- some 25x the ward, so a
+    window near a tile boundary is the only case that could straddle two tiles,
+    and every current WARDS entry (verified for ballygunge) sits well inside a
+    single tile. Note v2 halved that margin by moving from zoom 9: a future ward
+    placed near a tile edge is likelier to need a mosaic than it was under v1.
     """
     qk = _quadkey(ward.centre.lat, ward.centre.lon, CHM_ZOOM)
     return f"/vsis3/{CHM_BUCKET}/{CHM_PREFIX}/chm/{qk}.tif"
@@ -205,10 +242,13 @@ def _generate(ward: Ward, grid_north_up: npt.NDArray[np.float32]) -> list[_types
     Per canopy cell: 0..DENSITY_MAX instances scaling with height against the FIXED
     DENSITY_REF_H reference, not the ward's own tallest cell -- a per-ward normaliser
     makes a given density mean a different thing in each ward, which corrupts the
-    cross-ward comparison (thin canopy still -> honest gaps). The min() is load-bearing,
-    not defensive: cells taller than the reference exist (barrackpore tops 25 m) and
-    would otherwise break the count <= DENSITY_MAX invariant. int(v+0.5) not round():
-    half-up matches the JS Math.round the parameters were visually tuned against.
+    cross-ward comparison (thin canopy still -> honest gaps). The min() is the guard on
+    the count <= DENSITY_MAX invariant. Under CHM v2 at a 30 m reference it clips
+    nothing in the three shipped wards -- 30 m IS their measured maximum -- but that is
+    a property of today's data, not of the code: a taller cell in a new ward, or any
+    retune of DENSITY_REF_H downward, breaks the invariant without it, so the self-test
+    pins it with a synthetic 40 m cell. int(v+0.5) not round(): half-up matches the JS
+    Math.round the parameters were visually tuned against.
     """
     n = grid_north_up.shape[0]
     cell_m = ward.footprint_m / n
@@ -247,37 +287,89 @@ def serialise(doc: dict[str, Any]) -> str:
     return json.dumps(doc, separators=(",", ":")) + "\n"
 
 
+def document(ward: Ward, trees: list[_types.TreeInstanceJSON]) -> _types.TreesFileJSON:
+    """The trees.json document we emit, provenance stamp included.
+
+    Separated from build_ward (which needs the network) so the self-test can assert
+    offline that what we WRITE carries the stamp check() demands. Without that the
+    emitter and the checker are free to drift, and the first symptom would be every
+    freshly generated artefact failing its own --check.
+    """
+    return {
+        "ward": ward.id, "grid": GRID, "sizeM": float(ward.footprint_m),
+        "retrieved": RETRIEVED, "source": CHM_PREFIX, "densityRefM": DENSITY_REF_H,
+        "trees": trees,
+    }
+
+
 def build_ward(ward: Ward) -> None:
     grid = read_chm_grid(ward, GRID)
     if grid is None:
         raise SystemExit(f"CHM read failed for {ward.id}")
     write_canopy_png(ward.id, grid)
     trees = derive_trees(ward, grid)
-    doc: _types.TreesFileJSON = {
-        "ward": ward.id, "grid": GRID, "sizeM": float(ward.footprint_m),
-        "retrieved": RETRIEVED, "trees": trees,
-    }
+    doc = document(ward, trees)
     with open(os.path.join(DATA, f"{ward.id}-trees.json"), "w", encoding="utf-8") as fh:
         fh.write(serialise(cast("dict[str, Any]", doc)))
     print(f"{ward.id}: {len(trees)} trees, canopy grid {GRID}x{GRID}")
 
 
-def check() -> None:
+def check_provenance(wid: str, doc: _types.TreesFileJSON) -> None:
+    """Assert an artefact was generated by TODAY's source and density reference.
+
+    The gap this closes: every OTHER invariant in check() is structural -- ward id,
+    grid size, height range, in-bounds positions, species, off-lattice scatter -- and
+    a v1-derived artefact satisfies all of them under a v2 fetcher. So `--check` was
+    green on stale data, which is precisely the silent drift the tripwire exists to
+    catch, and the artefacts ARE the deliverable here.
+
+    Split out of check() rather than inlined so the self-test can reach it offline:
+    an assertion no test can exercise is one a refactor can quietly delete, which
+    would reopen the hole this stamp was added to close. `.get()` not `[...]` --
+    a pre-stamp artefact has no such key, and a KeyError traceback is a worse
+    answer to "why did check fail" than the message below.
+    """
+    # Read through an untyped mapping, not doc["source"]. TreesFileJSON is a `cast`
+    # over whatever json.load returned, so its promise that these keys exist is
+    # exactly the promise being tested -- and a pre-stamp artefact has neither. Under
+    # this repo's warn_unreachable/redundant-expr settings a None test on a field
+    # mypy believes is `str` is itself an error, so the cast is what makes the
+    # missing-key case expressible rather than a wish.
+    raw = cast("dict[str, object]", doc)
+    src, ref = raw.get("source"), raw.get("densityRefM")
+    origin = repr(src) if src is not None else "an unstamped (pre-provenance) build"
+    stamp = f"a {ref} m density reference" if ref is not None else "no recorded density reference"
+    assert src == CHM_PREFIX, (
+        f"{wid}: artefact came from {origin}, but the fetcher now reads "
+        f"{CHM_PREFIX!r} -- regenerate it (see the module docstring for the run line)")
+    assert ref == DENSITY_REF_H, (
+        f"{wid}: artefact has {stamp}, but the fetcher now uses "
+        f"{DENSITY_REF_H} m -- regenerate it")
+
+
+def check(data_dir: str = DATA) -> None:
     """Re-read committed artefacts and assert invariants (fetch-terrain tripwire idiom).
 
     No network: only wards whose artefacts already exist on disk are checked, so
     this passes in an environment with no CHM access as long as nothing
     committed is malformed.
+
+    `data_dir` defaults to the real DATA and exists so the self-test can point this
+    at a temp directory. That is not test scaffolding for its own sake: the
+    check_provenance CALL below is the load-bearing half of the provenance stamp, and
+    with a hardcoded path nothing offline could prove it is still wired in. Deleting
+    it would then silently disarm the stamp the moment the artefacts are regenerated.
     """
     for wid in WARDS:
-        tp = os.path.join(DATA, f"{wid}-trees.json")
-        pp = os.path.join(DATA, f"{wid}-canopy.png")
+        tp = os.path.join(data_dir, f"{wid}-trees.json")
+        pp = os.path.join(data_dir, f"{wid}-canopy.png")
         if not (os.path.exists(tp) and os.path.exists(pp)):
             continue  # only wards that have been built
         with open(tp, encoding="utf-8") as fh:
             doc = cast(_types.TreesFileJSON, json.load(fh))
         assert doc["ward"] == wid, f"{wid}: ward mismatch"
         assert doc["grid"] == GRID, f"{wid}: grid must be {GRID}"
+        check_provenance(wid, doc)
         for t in doc["trees"]:
             assert MIN_TREE_H - 0.05 <= t["h"] <= CANOPY_HI + 5, f"{wid}: tree height out of range {t['h']}"
             assert abs(t["x"]) <= doc["sizeM"] / 2 + 1 and abs(t["y"]) <= doc["sizeM"] / 2 + 1, f"{wid}: tree outside ward"
@@ -299,7 +391,11 @@ def check() -> None:
 
 
 def _self_test() -> None:
-    """Pure-logic invariants, offline (no artifacts, no network).
+    """Pure-logic invariants, offline (no network, and nothing written under public/).
+
+    The one exception to "no artifacts" is _self_test_check_wiring at the end, which
+    round-trips a synthetic artefact pair through a tempfile.TemporaryDirectory to
+    prove check() still enforces the provenance stamp. Shipped artefacts are untouched.
 
     Run: python3 scripts/fetch-canopy.py --self-test
     """
@@ -321,14 +417,16 @@ def _self_test() -> None:
     n = GRID
     cell_m = ward.footprint_m / n
     grid = np.zeros((n, n), dtype=np.float32)
-    grid[0, 0] = 30.0          # far over DENSITY_REF_H -> min() caps it at DENSITY_MAX
-    grid[0, 1] = 2.0           # barely canopy -> 0 trees (the honest gap)
-    grid[10, 10] = 15.0        # mid canopy -> 4*15/22 = 2.73 -> 3
+    grid[0, 0] = 30.0          # exactly DENSITY_REF_H -> 4*30/30 = 4.0 -> int(4.5) = 4
+    grid[0, 1] = 2.0           # barely canopy -> 4*2/30 = 0.27 -> 0 trees (the honest gap)
+    grid[10, 10] = 15.0        # mid canopy -> 4*15/30 = 2.0 -> int(2.5) = 2
     grid[20, 20] = 1.0         # below MIN_TREE_H -> skipped entirely
     grid[3, 40] = 25.0         # OFF-DIAGONAL: the only cell a row/col transposition moves.
-                               # Also just over the 22 m reference, so it pins the cap at
-                               # the boundary: 4*25/22 = 4.55 -> 5 uncapped, 4 capped.
-    grid[30, 30] = 2.75        # exact tie: 4*2.75/22 = 0.5, where int(v+0.5)=1 but round(v)=0
+                               # 4*25/30 = 3.33 -> int(3.83) = 3
+    grid[5, 60] = 40.0         # OVER the reference, which no real cell is at 30 m -- so this
+                               # is the only cell that exercises min(): 4*40/30 = 5.33 -> 5
+                               # uncapped, 4 capped. Without it, deleting the cap would pass.
+    grid[30, 30] = 3.75        # exact tie: 4*3.75/30 = 0.5, where int(v+0.5)=1 but round(v)=0
     trees = derive_trees(ward, grid)
     assert trees == derive_trees(ward, grid), "derive_trees must be deterministic"
     def cell_of(t: _types.TreeInstanceJSON) -> tuple[int, int]:
@@ -338,12 +436,16 @@ def _self_test() -> None:
     by_cell: dict[tuple[int, int], int] = {}
     for t in trees:
         by_cell[cell_of(t)] = by_cell.get(cell_of(t), 0) + 1
-    assert by_cell.get((0, 0)) == DENSITY_MAX, f"30 m cell must cap at {DENSITY_MAX}, got {by_cell.get((0, 0))}"
+    assert by_cell.get((0, 0)) == DENSITY_MAX, \
+        f"a cell AT the {DENSITY_REF_H} m reference must render {DENSITY_MAX}, got {by_cell.get((0, 0))}"
     assert (1, 0) not in by_cell, "h=2.0 cell must be a gap (redistributive count 0)"
     assert (20, 20) not in by_cell, "below MIN_TREE_H must stay empty"
-    assert by_cell.get((10, 10)) == 3, "15 m against the 22 m reference at DENSITY_MAX=4 -> 3 trees"
-    assert by_cell.get((40, 3)) == DENSITY_MAX, \
-        "25 m tops the 22 m reference, so min() must cap it at 4 -- at (col=40,row=3), not its transpose"
+    assert by_cell.get((10, 10)) == 2, "15 m against the 30 m reference at DENSITY_MAX=4 -> 2 trees"
+    assert by_cell.get((40, 3)) == 3, \
+        "25 m against the 30 m reference -> 3 trees -- at (col=40,row=3), not its transpose"
+    assert by_cell.get((60, 5)) == DENSITY_MAX, \
+        f"40 m tops the {DENSITY_REF_H} m reference, so min() must cap it at {DENSITY_MAX} " \
+        f"(uncapped it is 5), got {by_cell.get((60, 5))}"
     assert by_cell.get((30, 30)) == 1, "count rounds HALF-UP: int(0.5+0.5)=1, but round(0.5)=0"
     # jitter bounds: every instance stays within +-JITTER/2 of its cell centre
     half = ward.footprint_m / 2.0
@@ -385,15 +487,15 @@ def _self_test() -> None:
     # not rescale, so a 4 m cell is 1 tree here exactly as it would be beside a 30 m one.
     #
     # And note MIN_TREE_H is now SEMANTIC ONLY, untestable by construction: count > 0
-    # needs 4*h/22 >= 0.5, i.e. h >= 2.75 m, which is strictly ABOVE MIN_TREE_H = 2.0.
+    # needs 4*h/30 >= 0.5, i.e. h >= 3.75 m, which is strictly ABOVE MIN_TREE_H = 2.0.
     # The density formula is uniformly the tighter of the two, so deleting the gate could
     # not change a single tree. It stays as the declaration of what counts as "canopy"
     # (and as the real guard if DENSITY_MAX or DENSITY_REF_H is ever retuned), not as
     # observable behaviour -- so there is nothing here to assert about it. Under the old
     # ward-relative divisor it WAS observable, which is what this probe used to test.
     low = np.zeros((n, n), dtype=np.float32)
-    low[5, 5] = 4.0            # 4*4/22 = 0.73 -> 1 tree; being the ward max buys it nothing
-    low[6, 6] = 1.5            # scrub: under MIN_TREE_H and under the 2.75 m density floor
+    low[5, 5] = 4.0            # 4*4/30 = 0.53 -> 1 tree; being the ward max buys it nothing
+    low[6, 6] = 1.5            # scrub: under MIN_TREE_H and under the 3.75 m density floor
     assert len(derive_trees(ward, low)) == 1, "a fixed reference must not rescale a low-canopy ward"
     # also the standing proof that dropping the old `if h_max < MIN_TREE_H` guard was
     # safe: with no division by data there is no zero to divide by, and an all-zero grid
@@ -418,7 +520,92 @@ def _self_test() -> None:
     finally:
         FILTERS = ()
     assert not FILTERS, "the self-test must leave the Phase-A seam empty"
+    # the provenance stamp, offline. check() reads fixed paths under DATA, so the
+    # assertions are exercised through check_provenance directly rather than by
+    # planting a temp artefact. Note `stamped` comes from document() -- the REAL
+    # emitter -- so this first line is the round trip that proves what we write is
+    # what we demand. Asserting against a locally-built dict would prove nothing.
+    stamped = document(ward, [])
+    check_provenance(ward.id, stamped)                     # today's stamp passes
+    def _rejects(**overrides: Any) -> bool:
+        bad = cast("_types.TreesFileJSON", {**stamped, **overrides})
+        try:
+            check_provenance(ward.id, bad)
+        except AssertionError:
+            return True
+        return False
+    assert _rejects(source="forests/v1/alsgedi_global_v6_float"), \
+        "an artefact from the v1 prefix must be rejected -- the source stamp is not enforced"
+    assert _rejects(densityRefM=22.0), \
+        "an artefact built at the old 22 m reference must be rejected"
+    # Missing keys, not just wrong ones. A v1-era artefact carries NEITHER, so that path
+    # must fail as an assertion (with the regenerate message), never a KeyError. And each
+    # field must be independently load-bearing: a HALF-stamped artefact cannot pass on the
+    # strength of the field it does have, which is what a tolerant `src is None or ...`
+    # check would allow -- that exact weakening survived the suite until this loop existed.
+    def _without(*keys: str) -> str:
+        partial = cast("_types.TreesFileJSON",
+                       {k: v for k, v in stamped.items() if k not in keys})
+        try:
+            check_provenance(ward.id, partial)
+        except AssertionError as e:
+            return str(e)
+        raise SystemExit(f"an artefact missing {keys} must not pass check()")
+    for absent in (("source",), ("densityRefM",), ("source", "densityRefM")):
+        assert "regenerate" in _without(*absent), \
+            f"the failure for a missing {absent} must tell the reader to regenerate"
+    # and the stamp must survive serialisation, not just live in the dict: check()
+    # re-reads it through json.load, so a field the serialiser drops is a field the
+    # checker can never see.
+    reloaded = cast("_types.TreesFileJSON",
+                    json.loads(serialise(cast("dict[str, Any]", stamped))))
+    check_provenance(ward.id, reloaded)
+    # finally the WIRING: check() must actually call check_provenance. Everything
+    # above still passes if that one line is deleted, and the stamp would then be
+    # dead code that no green test could distinguish from a live one. Round-trips a
+    # real artefact pair through a temp DATA dir -- offline, and it touches nothing
+    # under public/.
+    _self_test_check_wiring(ward)
     print("  fetch-canopy self-test OK")
+
+
+def _self_test_check_wiring(ward: Ward) -> None:
+    """Prove check() enforces the provenance stamp, against a temp artefact pair."""
+    import tempfile
+    from PIL import Image
+    n = GRID
+    g = np.zeros((n, n), dtype=np.float32)
+    g[8:12, 8:12] = 20.0        # 4*20/30 = 2.67 -> 3 trees a cell; all well under CANOPY_HI
+    doc = document(ward, derive_trees(ward, g))
+    assert doc["trees"], "the wiring probe needs a non-empty ward to reach the assertions"
+    with tempfile.TemporaryDirectory() as d:
+        Image.fromarray(np.zeros((1, 1, 3), dtype=np.uint8), mode="RGB").save(
+            os.path.join(d, f"{ward.id}-canopy.png"))
+        tp = os.path.join(d, f"{ward.id}-trees.json")
+
+        def write(doc_out: dict[str, Any]) -> None:
+            with open(tp, "w", encoding="utf-8") as fh:
+                fh.write(serialise(doc_out))
+
+        def rejected() -> bool:
+            try:
+                with contextlib.redirect_stdout(io.StringIO()):
+                    check(d)
+            except AssertionError as e:
+                assert "regenerate" in str(e), f"check() must say regenerate, got: {e}"
+                return True
+            return False
+
+        good = cast("dict[str, Any]", doc)
+        write(good)
+        with contextlib.redirect_stdout(io.StringIO()):
+            check(d)                                   # a correctly stamped artefact passes
+        write({**good, "source": "forests/v1/alsgedi_global_v6_float"})
+        assert rejected(), "check() must reject an artefact from the v1 prefix"
+        write({**good, "densityRefM": 22.0})
+        assert rejected(), "check() must reject an artefact built at the old 22 m reference"
+        write({k: v for k, v in good.items() if k not in ("source", "densityRefM")})
+        assert rejected(), "check() must reject an unstamped (pre-provenance) artefact"
 
 
 def main() -> None:
