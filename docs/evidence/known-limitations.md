@@ -11,11 +11,20 @@ Each entry states **what is wrong**, **how we know**, **what it does and does no
 
 ## 1. The published accuracy figures never see the canopy blend
 
-**Status:** open · **Found:** 2026-08-12, during the CHM v2 upgrade · **Pre-existing**, not introduced by
-that work.
+**Status:** CLOSED 2026-08-12 for the model path · **Found:** 2026-08-12, during the CHM v2 upgrade ·
+**Pre-existing**, not introduced by that work · **One part deliberately left open** — see *What is still
+open* below.
 
-**What is wrong.** The engine's headline accuracy — **night ±3.5 K, day ±5.0 K** — is produced by the
-Python validation stack, which builds each ward's vegetation field from `{ward}-surface.png` alone:
+> **Closed by** `scripts/_canopy.py` (the port), `surface_layers()` in `measure-spatial-accuracy.py` (the
+> application), `tests/fixtures/canopy-oracle/` + `check-canopy-oracle.py` (the gate that keeps the two
+> implementations from drifting), and `measure-canopy-blend-residual.py` (the cost of the one
+> simplification taken). **The new spatial figures are below and they are slightly worse than the old
+> ones.** That is the point: the old ones described a model nobody ran.
+
+**What was wrong** *(everything from here to "What would close it" is the record as written at discovery,
+kept in the present tense it was found in)*. The engine's headline accuracy — **night ±3.5 K, day ±5.0 K**
+— is produced by the Python validation stack, which builds each ward's vegetation field from
+`{ward}-surface.png` alone:
 
 - `scripts/measure-spatial-accuracy.py` → `surface_layers()` reads only the surface PNG
 - `scripts/build-ward-observations.py` derives each ward's `fvc` from the same
@@ -36,7 +45,8 @@ not evidence. Tracing the inputs confirmed the regeneration commit touched only 
 rather than assumed:
 
 - the blend is **mean-neutral to ≤0.0012** in ward-mean `veg` against a canopy field that moved ×1.7-1.9
-  (run through the real shipped TS functions, v1 canopy vs v2);
+  (run through the real shipped TS functions, v1 canopy vs v2) — *later measured at up to 0.0030 against
+  the unblended field at the 140 grid; see "What is still open"*;
 - driving the **real solver** on the two canopy fields moves ward-mean temperature by **≤0.016 K** — 0.5%
   of the ±3.5 K band;
 - the mean-neutrality unit test passes.
@@ -49,13 +59,77 @@ nothing in the repo scores that. Suggestively, `measure-shipped-amplitude.py`'s 
 model already draws roughly **2× the observed spatial SD**, so a reduction plausibly moves *toward* reality
 — but that is inference, and inference is exactly what this project refuses to publish as measurement.
 
-**What would close it.** Teach `surface_layers()` to apply the canopy blend, so the Python validation scores
-the field the browser renders. That is a production change to the validation path and deserves its own task
-with its own review; it would also let the spatial-skill figures describe the real map for the first time.
+### What closing it actually changed (2026-08-12)
 
-**How to talk about it.** "Our ward-mean error bars are measured and hold. Our within-ward spatial skill is
-not yet measured, because the validation path and the render path diverge at one function. We know where,
-and we know what it would take." That is a stronger position than a spatial number nobody has checked.
+`surface_layers()` now applies the shipped blend. Same 34 near-nadir scenes, same 87 ward-scenes, same
+caches — the only thing that moved is `veg`. Both baselines were re-run on the day, because the
+`spatial-accuracy.json` committed in the repo turned out to have been produced against an older
+built-footprint cache and was not a valid comparison.
+
+| | before (model nobody ran) | after (model that ships) |
+|---|---|---|
+| r_physics, overall | 0.2154 | **0.2076** |
+| r_physics, day / night | 0.2961 / 0.1556 | **0.2809 / 0.1533** |
+| r_veg null, overall | 0.2380 | **0.1987** |
+| r_built null, overall | 0.1795 | 0.1795 *(unchanged, as it must be)* |
+| anomaly RMSE, overall | 1.836 K | **1.806 K** |
+| veg term spatial SD | 0.641 K | **0.613 K** |
+
+**Ward-mean figures did not move at all.** `measure-accuracy.py` re-ran byte-identical: ±3.5 K night /
+±5.0 K day stand, exactly as mean-neutrality predicted.
+
+**Read the spatial numbers honestly.** Correlation went *down*. The physics predictor lost 0.008 r and the
+day figure lost 0.015 r. Nothing was tuned to recover it; that is the number.
+
+**The uncomfortable finding, stated plainly.** The blend costs the **vegetation null** far more than it
+costs the physics: r_veg falls 0.238 → 0.199, a 17% relative loss, at both phases. The shipped canopy
+blend redistributes vegetation into a pattern that agrees with measured ECOSTRESS LST **less well** than
+raw NDVI-derived FVC does. Two readings are available and we cannot yet separate them: either the CHM adds
+vertical information that a 70 m thermal sensor genuinely cannot see, or the redistribution is putting
+vegetation in the wrong places. **This is the first evidence either way, and it points the wrong way.** It
+is the thing Phase B should test first, and it must not be reported as a win.
+
+One consequence looks like an improvement and is not: physics-minus-best-null flips from **−0.023 to
++0.009**, so the model now nominally beats both nulls. It beats them because the null got worse, not
+because the model got better, and +0.009 is far below the 0.05 the script requires before it will describe
+within-ward pattern as carrying information. **The verdict is unchanged: do not describe the within-ward
+detail as validated.**
+
+### The one simplification taken, and what it costs
+
+The blend is applied at the validation's own 140 grid, not by replaying the browser's 140 → 192 → blend
+path. Approved in the design **on condition the residual be measured rather than assumed** — since the
+defect being closed was precisely an unchecked assumption of negligibility.
+`scripts/measure-canopy-blend-residual.py`, output in `data/calibration/canopy-blend-residual.json`:
+
+| common grid | Δveg RMS | resample-only control | excess | share of the blend's own effect |
+|---|---|---|---|---|
+| 140 | 0.054 – 0.071 | 0.031 – 0.034 | 0.042 – 0.063 | 24 – 30 % |
+| ECOSTRESS 70 m | 0.006 – 0.010 | 0.004 – 0.004 | 0.004 – 0.009 | **6 – 9 %** |
+
+The control matters: most of a 140 → 192 → 140 difference is the bilinear round trip, not the blend, and
+that round trip is a gap which **pre-dates this change** — the browser has always solved on an upsampled
+veg field while the validation scores the 140 source. Only the excess is owned by this decision.
+
+The figures are computed at 70 m, where an ECOSTRESS cell is five source cells wide and the area
+downsample averages the resample-scale disagreement away. Worst case **0.072 K** equilibrium-equivalent,
+and that conversion carries no diffusion, so it is an upper bound. **9.2 % against a stated 20 % threshold:
+not material, decision stands.** Re-run the script if the grids, the blend strength, or the canopy rasters
+change.
+
+### What is still open
+
+`scripts/build-ward-observations.py` was **deliberately not changed**. It derives each ward's **observed**
+`fvc` from the surface PNG, and mixing a model input into an observation may be actively wrong rather than
+symmetric with the model path. Measured while doing this work, so the size is known: blending would move
+ward-mean `fvc` by **−0.00015 (ballygunge), −0.0030 (baruipur), −0.00051 (barrackpore)** — the clamp
+residual, not zero, and larger than the ≤0.0012 recorded above. Small either way, but the question is
+about correctness, not size, and it needs its own investigation.
+
+**How to talk about it.** "The validation now scores the field the browser renders, and it is gated by a
+parity oracle against the shipped TypeScript so the two cannot drift apart again. Measuring honestly cost
+us 0.008 r. The interesting part is that it cost the vegetation baseline more, which is the first real
+evidence about whether the canopy blend helps the spatial pattern — and so far it does not."
 
 ---
 
