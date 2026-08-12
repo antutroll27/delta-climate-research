@@ -12,8 +12,8 @@ oracle pins, and the failure mode there is silent: a shifted grid or a
 mis-scaled temperature does not crash, it lands in published science.
 
 WHAT IS AND IS NOT COVERED. `targetGrid` and `transformBounds` are checked, both
-EXACTLY -- these are pure coordinate maths and there is no tolerance to argue
-about. The `align` cases are NOT: they need the .bin rasters and a full rasterio
+to 1 nm -- see EPS_M for why that is not the same as bit-exact, and why
+bit-exact cannot pass on two different platforms. The `align` cases are NOT: they need the .bin rasters and a full rasterio
 reprojection, which is a heavier check belonging to the Go port itself. Stated
 here rather than left for someone to discover.
 
@@ -36,6 +36,23 @@ from _ecostress import Bbox, TARGET_CRS, TARGET_RES, target_grid, transform_boun
 ORACLE = os.path.join(ROOT, "tests", "fixtures", "geo-oracle", "oracle.json")
 
 
+#: Floats are compared to 1 nanometre, not bit-exactly. The maths has no tolerance
+#: to argue about, but its FLOATING-POINT REALISATION does: PROJ/libm round the
+#: last unit in the last place differently across platforms and library builds.
+#: Measured on this repo's own CI -- the identical call gave 2473252.5413628076 on
+#: macOS and 2473252.541362808 on the Linux runner, a 4e-10 m disagreement that
+#: failed the gate for a reason that had nothing to do with the geo pipeline.
+#: 1 nm sits ~11 orders of magnitude below the 70 m ECOSTRESS pixel this protects,
+#: so every shift the oracle exists to catch still fails loudly. Integer
+#: width/height stay EXACT -- those really do have no tolerance.
+EPS_M = 1e-9
+
+
+def _same(got: list[float], want: list[float]) -> bool:
+    """True when two coordinate sequences agree to EPS_M, elementwise."""
+    return len(got) == len(want) and all(abs(g - w) <= EPS_M for g, w in zip(got, want))
+
+
 def main() -> int:
     with open(ORACLE, encoding="utf-8") as fh:
         oracle = cast(dict[str, Any], json.load(fh))
@@ -54,23 +71,23 @@ def main() -> int:
 
     print(f"  oracle {os.path.relpath(ORACLE, ROOT)} · {TARGET_CRS} @ {TARGET_RES} m")
 
-    print(f"\n  targetGrid — width, height and all six affine terms, exactly")
+    print(f"\n  targetGrid — width, height and all six affine terms")
     for name, case in sorted(oracle["targetGrid"].items()):
         bbox = cast(Bbox, tuple(case["bbox4326"]))
         tf, w, h = target_grid(bbox)
         got = [tf.a, tf.b, tf.c, tf.d, tf.e, tf.f]
-        ok = w == case["width"] and h == case["height"] and got == case["transform"]
+        ok = w == case["width"] and h == case["height"] and _same(got, case["transform"])
         print(f"    {'ok  ' if ok else 'FAIL'} {name:<22} {w}x{h}")
         if not ok:
             failures.append(f"targetGrid[{name}]: {w}x{h} vs oracle "
                             f"{case['width']}x{case['height']}; transform {got} "
                             f"vs {case['transform']}")
 
-    print(f"\n  transformBounds — the densify_pts=21 curve, exactly")
+    print(f"\n  transformBounds — the densify_pts=21 curve")
     for name, case in sorted(oracle["transformBounds"].items()):
         bounds = cast(Bbox, tuple(case["bounds4326"]))
         got_b = list(transform_bounds(case["src"], case["dst"], *bounds, densify_pts=21))
-        ok = got_b == case["densify21"]
+        ok = _same(got_b, case["densify21"])
         # naive four-corner must still DIFFER where the oracle says it does, or the
         # densification has quietly stopped happening and nothing else would notice.
         delta = case.get("densifyDeltaM") or [0.0] * 4
@@ -88,7 +105,7 @@ def main() -> int:
               "scripts/dump-parity-oracle.py and review the diff.")
         return 1
     n = len(oracle["targetGrid"]) + len(oracle["transformBounds"])
-    print(f"\n  {n} cases byte-identical — geo pipeline unchanged")
+    print(f"\n  {n} cases match to 1 nm — geo pipeline unchanged")
     return 0
 
 
