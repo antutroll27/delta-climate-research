@@ -138,15 +138,23 @@ def build(ward_id: str, sentinel: dict[str, object]) -> prov.LayerManifest:
         ),
         layer(
             "canopy", "Tree canopy height", "derived",
-            "Meta / World Resources Institute 1 m Global Canopy Height Model", CCBY4,
-            ["Meta+WRI 1 m canopy-height model (neural height regression on Maxar imagery, ~2018-2020 epoch)",
+            "Meta / World Resources Institute Global Canopy Height Model v2 (DINOv3)", CCBY4,
+            ["Meta+WRI CHM v2, a DINOv3-backbone re-train of the same product (Brandt et al., Scientific "
+             "Data, arXiv:2603.06382): published R2 0.86, MAE 3.0 m, vs v1's R2 0.53, MAE 4.3 m, with the "
+             ">=30 m saturation that flattened v1's tall canopy largely removed",
+             "a MODEL upgrade, not fresher data: roughly 80% of v2's source imagery is the same "
+             "~2018-2020 epoch as v1's -- this is a better height regression on old-ish imagery, not a "
+             "newer observation, and must not be read as one",
              "clipped to the 1400 m ward window and resampled (area-average) to the 140x140 served grid",
              "tree instances scattered from the canopy field (density-weighted by height against a fixed "
-             "22 m reference so density is comparable BETWEEN wards, deterministic jitter; thin canopy "
-             "left empty); heights measured, positions/species modelled"],
-            collection="meta-wri:canopy-height", instrument="Maxar / CHM model",
-            resolution="1 m", vintage="2018-2020 epoch",
-            confidence="canopy extent/height indicative (MAE ~ few m); individual trees are modelled, not surveyed",
+             "30 m reference -- the tallest canopy measured anywhere across the three wards, so the scale "
+             "spans exactly the measured range; this is a DISPLAY SCALING for cross-ward comparability, "
+             "not a measured tree count, with deterministic jitter and thin canopy left empty); heights "
+             "measured, individual tree positions and species modelled"],
+            collection="meta-wri:canopy-height-v2", instrument="Maxar imagery / DINOv3 CHM model",
+            resolution="~1.19 m/px projected (unchanged from v1; v2 is differently tiled, not finer)",
+            vintage="~2018-2020 epoch (v2 model, not v2 imagery)",
+            confidence="canopy extent/height indicative (MAE 3.0 m); individual trees are modelled, not surveyed",
         ),
         layer(
             "terrain", "Terrain relief", "reference",
