@@ -6,8 +6,8 @@
  * by a hash function here, which meant two of `eqCell`'s three inputs were
  * invented and every within-ward pattern on the map was decoration.
  */
-import { CANONICAL_GRID_N, CANOPY_BLEND_STRENGTH, type SimLayers } from './types.ts';
-import type { WardData } from './heat-map-model.ts';
+import { CANONICAL_GRID_N, CANOPY_BLEND_STRENGTH, WATER_LAYER_ENABLED, type SimLayers } from './types.ts';
+import type { WardData, WaterData } from './heat-map-model.ts';
 import { resample, type CanopyRaster, type SurfaceMeans, type SurfaceRaster } from './surface-raster.ts';
 
 const SAMPLE_OFFSETS = [0.25, 0.75] as const;
@@ -41,6 +41,70 @@ function pointInPolygon(x: number, y: number, vertices: ReadonlyArray<readonly [
 }
 
 /**
+ * Stamp one closed ring's 2×2 subsamples into a shared coverage bitfield.
+ *
+ * `flat` is the ring's own storage and `start` names where its coordinate pairs
+ * begin — 1 for a building row, whose leading element is the height, and 0 for a
+ * water polygon's `p`. The two artefacts differ in that one number and in
+ * nothing else, so the rasterisation is written once: a second copy of this
+ * arithmetic is how the water layer and the built layer would come to disagree
+ * about where a cell boundary is, and the disagreement would be invisible.
+ *
+ * Bits are OR'd, never counted, so overlapping rings — two footprints sharing a
+ * wall, a pond digitised twice — cover a subsample once rather than twice.
+ */
+function stampRing(
+  sampleBits: Uint8Array,
+  flat: ArrayLike<number>,
+  start: number,
+  half: number,
+  cellM: number,
+  n: number,
+): void {
+  const vertices: Array<readonly [number, number]> = [];
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  for (let index = start; index + 1 < flat.length; index += 2) {
+    const x = flat[index];
+    const y = flat[index + 1];
+    if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+    vertices.push([x, y]);
+    minX = Math.min(minX, x);
+    maxX = Math.max(maxX, x);
+    minY = Math.min(minY, y);
+    maxY = Math.max(maxY, y);
+  }
+  if (vertices.length < 3) return;
+  const startX = Math.max(0, Math.floor((minX + half) / cellM) - 1);
+  const endX = Math.min(n - 1, Math.floor((maxX + half) / cellM) + 1);
+  const startY = Math.max(0, Math.floor((minY + half) / cellM) - 1);
+  const endY = Math.min(n - 1, Math.floor((maxY + half) / cellM) + 1);
+  for (let gridY = startY; gridY <= endY; gridY++) {
+    for (let gridX = startX; gridX <= endX; gridX++) {
+      const cellIndex = gridY * n + gridX;
+      let bit = 1;
+      for (const offsetY of SAMPLE_OFFSETS) {
+        const sampleY = -half + (gridY + offsetY) * cellM;
+        for (const offsetX of SAMPLE_OFFSETS) {
+          const sampleX = -half + (gridX + offsetX) * cellM;
+          if (pointInPolygon(sampleX, sampleY, vertices)) sampleBits[cellIndex] |= bit;
+          bit <<= 1;
+        }
+      }
+    }
+  }
+}
+
+/** Subsample bitfield → per-cell area fraction. Four samples, so quarters. */
+function coverageFromBits(sampleBits: Uint8Array): Float32Array {
+  const coverage = new Float32Array(sampleBits.length);
+  for (let index = 0; index < coverage.length; index++) coverage[index] = COVERAGE_BY_BITS[sampleBits[index]];
+  return coverage;
+}
+
+/**
  * Deterministic 2×2 supersampled footprint coverage.
  *
  * Native Canvas antialiasing differs between browser engines, which made the
@@ -53,45 +117,49 @@ export function rasterizeWardBuilt(ward: WardData, n = CANONICAL_GRID_N): Float3
   const half = ward.sizeM / 2;
   const cellM = ward.sizeM / n;
   const sampleBits = new Uint8Array(n * n);
-  for (const building of ward.b) {
-    const vertices: Array<readonly [number, number]> = [];
-    let minX = Infinity;
-    let maxX = -Infinity;
-    let minY = Infinity;
-    let maxY = -Infinity;
-    for (let index = 1; index + 1 < building.length; index += 2) {
-      const x = building[index];
-      const y = building[index + 1];
-      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
-      vertices.push([x, y]);
-      minX = Math.min(minX, x);
-      maxX = Math.max(maxX, x);
-      minY = Math.min(minY, y);
-      maxY = Math.max(maxY, y);
-    }
-    if (vertices.length < 3) continue;
-    const startX = Math.max(0, Math.floor((minX + half) / cellM) - 1);
-    const endX = Math.min(n - 1, Math.floor((maxX + half) / cellM) + 1);
-    const startY = Math.max(0, Math.floor((minY + half) / cellM) - 1);
-    const endY = Math.min(n - 1, Math.floor((maxY + half) / cellM) + 1);
-    for (let gridY = startY; gridY <= endY; gridY++) {
-      for (let gridX = startX; gridX <= endX; gridX++) {
-        const cellIndex = gridY * n + gridX;
-        let bit = 1;
-        for (const offsetY of SAMPLE_OFFSETS) {
-          const sampleY = -half + (gridY + offsetY) * cellM;
-          for (const offsetX of SAMPLE_OFFSETS) {
-            const sampleX = -half + (gridX + offsetX) * cellM;
-            if (pointInPolygon(sampleX, sampleY, vertices)) sampleBits[cellIndex] |= bit;
-            bit <<= 1;
-          }
-        }
-      }
-    }
-  }
-  const built = new Float32Array(n * n);
-  for (let index = 0; index < built.length; index++) built[index] = COVERAGE_BY_BITS[sampleBits[index]];
-  return built;
+  for (const building of ward.b) stampRing(sampleBits, building, 1, half, cellM, n);
+  return coverageFromBits(sampleBits);
+}
+
+/**
+ * Deterministic 2×2 supersampled OPEN-WATER coverage, from {ward}-water.json.
+ *
+ * A FRACTION OF CELL AREA, not a boolean, and that is the whole contract: the
+ * solver multiplies by this number twice (`sim-ts.ts`, `1 - 0.55*built +
+ * 0.65*water` on the ventilation and `water*0.35` on the relaxation toward
+ * `tAir - 1.5`), so a boolean would model a 12 m tank and a 200 m river reach as
+ * the same cell. Same convention as `built` for the same reason.
+ *
+ * UNTIL 2026-08-13 THIS DID NOT EXIST and `SimLayers.water` shipped as an
+ * all-zero array. The water terms above were written, plumbed to the GPU
+ * (`sim-gpu-webgl2.ts`) and dead, so every pond in three wards was solved as
+ * warm land. The polygons had been on disk since the render-only water layer
+ * shipped; nothing read them into the physics.
+ *
+ * IT STILL DOES NOT REACH THE SOLVER. `rasterWardBase` gates this call behind
+ * `WATER_LAYER_ENABLED`, which is false — feeding the layer was measured and made
+ * agreement with ECOSTRESS worse. This function is nonetheless real, exported,
+ * unit-tested and mirrored in scripts/_water.py under a parity oracle, because the
+ * measurement is what makes the decision reversible. docs/heat-map-water-layer.md
+ * is the before/after; types.ts is the argument.
+ *
+ * `sizeM` is passed rather than read off a ward, because the water artefact is a
+ * sibling file with its own loader and the caller already holds both. The
+ * polygons are clipped to ±760 m by scripts/fetch-water.py while the raster
+ * covers ±sizeM/2 (700 m), so the overhang simply falls outside the cell range —
+ * `stampRing` clamps, it does not wrap.
+ */
+export function rasterizeWardWater(
+  water: WaterData | null,
+  sizeM: number,
+  n = CANONICAL_GRID_N,
+): Float32Array {
+  if (!Number.isInteger(n) || n <= 0) throw new Error('Ward raster size must be a positive integer.');
+  const half = sizeM / 2;
+  const cellM = sizeM / n;
+  const sampleBits = new Uint8Array(n * n);
+  for (const poly of water?.polys ?? []) stampRing(sampleBits, poly.p, 0, half, cellM, n);
+  return coverageFromBits(sampleBits);
 }
 
 /**
@@ -118,17 +186,32 @@ export function rasterizeWardBuilt(ward: WardData, n = CANONICAL_GRID_N): Float3
  * tree layer and nothing in the temperature solve. The call is kept rather than
  * deleted so the decision lives in exactly one constant. Why 0: see
  * `blendCanopyIntoVeg`'s docblock below, and types.ts.
+ *
+ * `water` IS NOT IN THE TEMPERATURE SOLVE EITHER, and for the same shape of reason.
+ * `WATER_LAYER_ENABLED` is false, so the call below produces the all-zero layer this
+ * function shipped from the beginning — but it is now a MEASURED zero rather than an
+ * unwritten allocation. Turning it on degrades agreement with ECOSTRESS in proportion
+ * to each ward's open-water fraction, and raises an already over-drawn spatial
+ * amplitude; the sim's relaxation term turns out to pin wet cells to `tAir - 1.5`
+ * rather than nudge them, which is a daytime assumption applied at night. The numbers
+ * and the four arguments are on `WATER_LAYER_ENABLED` in types.ts.
+ *
+ * A null `water` — no artefact, a failed fetch — degrades to the same zero layer, so
+ * the ward solves as dry rather than refusing to solve.
  */
 export function rasterWardBase(
   ward: WardData,
   means: SurfaceMeans,
   surface: SurfaceRaster | null = null,
   canopy: CanopyRaster | null = null,
+  water: WaterData | null = null,
 ): SimLayers {
   const n = CANONICAL_GRID_N;
   const count = n * n;
   const built = rasterizeWardBuilt(ward, n);
-  const water = new Float32Array(count);
+  const waterFraction = WATER_LAYER_ENABLED
+    ? rasterizeWardWater(water, ward.sizeM, n)
+    : new Float32Array(count);
 
   let veg = surface
     ? resample(surface.veg, surface.n, n)
@@ -138,7 +221,7 @@ export function rasterWardBase(
     ? resample(surface.albedo, surface.n, n)
     : new Float32Array(count).fill(means.albedo);
 
-  return { albedo, veg, built, water };
+  return { albedo, veg, built, water: waterFraction };
 }
 
 /**

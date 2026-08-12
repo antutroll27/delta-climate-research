@@ -68,7 +68,7 @@ export function createPairedScenarioCache(): PairedScenarioCache {
       if (cached) return cached;
       const pending = (async () => {
         const [loaded, surface] = await Promise.all([loadWard(id), loadWardSurface(id)]);
-        const base = rasterWardBase(loaded.ward, surface.means, surface.surface, null);
+        const base = rasterWardBase(loaded.ward, surface.means, surface.surface, null, loaded.water);
         return { wardData: loaded.ward, roads: loaded.roads, base, spatial: buildSpatial(loaded.ward, base, loaded.roads) };
       })();
       prepared.set(id, pending);
