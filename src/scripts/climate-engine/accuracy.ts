@@ -123,9 +123,9 @@ export function unmeasuredNote(fields: readonly string[], points: number): strin
  * with the ward mean removed from both sides, and mirrored here from
  * `data/calibration/spatial-accuracy.json`.
  *
- * THE NULL MODEL IS WHY THIS IS READABLE. r = 0.303 on its own sounds like "some
+ * THE NULL MODEL IS WHY THIS IS READABLE. r = 0.297 on its own sounds like "some
  * skill". Put vegetation through the SAME solver — the like-for-like null — and it
- * gets 0.314. So the full model is still worse at placing heat than one of the
+ * gets 0.313. So the full model is still worse at placing heat than one of the
  * layers it is built from, and the within-ward pattern is not validated.
  *
  * WHY IT FAILS: the built-fraction term carries the LARGEST spatial amplitude
@@ -155,6 +155,19 @@ export function unmeasuredNote(fields: readonly string[], points: number): strin
  *            n    physics   built     veg    anomaly RMSE
  *   before   81     0.162   0.037   0.229        1.36 K
  *   after    87     0.216   0.179   0.238        1.82 K
+ *
+ * CORRECTED 2026-08-13 — both rows above were scored against a built raster that
+ * had been stale for nine days, so they are kept as the record of what was
+ * believed, not as current figures. Re-run on the shipped Overture geometry:
+ *
+ *   current  87     0.216   0.177   0.238        1.59 K
+ *
+ * THE CORRELATIONS BARELY MOVED AND THE AMPLITUDE DID, which is the expected
+ * signature rather than a lucky escape: correlation is invariant to a uniform
+ * change in spread, and the stale raster's surplus buildings inflated how much
+ * contrast the model drew without much changing WHERE it drew it. So the
+ * pattern-skill conclusions below survive the correction unchanged; the
+ * amplitude ones did not, and are restated in SPATIAL.
  *
  * `built` nearly quintupled and `veg` barely moved — exactly the signature of the
  * fix, since `built` was the mirrored layer and `veg` already agreed with
@@ -230,22 +243,29 @@ export const SCALE_SKILL = Object.freeze({
  * equilibrium SMOOTHED at ~sqrt(D/k) cells, near 47 m. Rougher field, higher
  * amplitude, lower correlation — none of it what a reader sees.
  *
- * Re-measured by driving the REAL solver (scripts/measure-shipped-amplitude.py):
+ * Re-measured by driving the REAL solver (scripts/measure-shipped-amplitude.py).
+ * RE-RUN 2026-08-13 on the CORRECTED building raster — the numbers below are not
+ * the 2026-08-05 ones. The built cache these figures were scored against had been
+ * stale for nine days (Microsoft footprints after the shipped set moved to
+ * Overture), so every SD here was measured against buildings we had stopped
+ * drawing. Correcting it lowered the model's own amplitude, which is why the
+ * over-draw improves and the correlations move slightly down:
  *
  *   phase   n   SD ship  SD equil  SD obs |  r ship  r equil  r veg(diffused)
- *   day    37     1.93K     2.37K   1.32K |   0.389    0.296            0.398
- *   night  50     0.89K     1.14K   0.64K |   0.240    0.156            0.251
- *   all    87     1.33K     1.67K   0.93K |   0.303    0.215            0.314
+ *   day    37     1.63K     2.07K   1.32K |   0.380    0.300            0.397
+ *   night  50     0.68K     0.88K   0.64K |   0.236    0.154            0.251
+ *   all    87     1.08K     1.39K   0.93K |   0.297    0.216            0.313
  *
- * So the shipped map scores 0.303, not 0.215 — we were understating our own
- * product by about 40 % by validating the wrong field.
+ * So the shipped map scores 0.297, not 0.216 — we were understating our own
+ * product by about 37 % by validating the wrong field.
  *
- * THE CLAIM IS STILL UNCHANGED, and the control is why. 0.303 sits above the old
+ * THE CLAIM IS STILL UNCHANGED, and the control is why. 0.297 sits above the old
  * published vegetation null of 0.238, which reads like the model finally winning.
  * It is not: smoothing lifts correlation against a coarse, noisy target for ANY
  * field. Re-running the null through the IDENTICAL solver, with albedo and built
- * held flat so vegetation is the only thing varying, gives 0.314. The model is
- * behind by 0.010 overall and in both phases separately. The gain was the
+ * held flat so vegetation is the only thing varying, gives 0.313. The model is
+ * behind by 0.016 overall and in both phases separately — a WIDER gap than the
+ * 0.010 measured on the stale raster, not a narrower one. The gain was the
  * smoothing, not the physics — and the null below is now that like-for-like one,
  * not a raw layer.
  */
@@ -253,19 +273,25 @@ export const SPATIAL = {
   /** ward-scenes scored (3 wards x near-nadir scenes, after cloud/QC masking) */
   n: 87,
   /** correlation of the SHIPPED field — TsHeatSim, diffused — with ECOSTRESS */
-  rModel: 0.303,
+  rModel: 0.297,
   /** vegetation through the SAME solver: the like-for-like null, which still wins */
-  rVegOnly: 0.314,
+  rVegOnly: 0.313,
   /** built fraction alone, raw */
-  rBuiltOnly: 0.179,
+  rBuiltOnly: 0.177,
   /**
-   * The map's within-ward spread against the observation's. 1.44 means the colour
-   * range inside a ward is about half again as wide as ECOSTRESS measures — the
-   * one defect here a reader can actually SEE, which is why it is now stated.
+   * The map's within-ward spread against the observation's. 1.17 means the colour
+   * range inside a ward is about a sixth wider than ECOSTRESS measures — the one
+   * defect here a reader can actually SEE, which is why it is now stated.
+   *
+   * Was 1.44 until 2026-08-13. That figure was not a physics change: the raster it
+   * was scored against still held Microsoft footprints nine days after the shipped
+   * geometry moved to Overture, and the denser stale set gave the model more
+   * contrast to draw. Do not read the drop as a model improvement — it is a
+   * measurement that had been wrong. See docs/evidence/known-limitations.md.
    */
-  amplitudeRatio: 1.44,
+  amplitudeRatio: 1.17,
   /** RMSE that remains once ward-mean bias is removed, K */
-  anomalyRmseK: 1.82,
+  anomalyRmseK: 1.59,
   /**
    * User-facing, shown wherever the field's detail could be over-read.
    *
@@ -277,7 +303,7 @@ export const SPATIAL = {
       + 'ward is not: block by block it scores r = 0.30, still below the r = 0.31 of a '
       + 'vegetation map given the same treatment, and coarsening the comparison does not '
       + 'close that gap at any scale. At neighbourhood scale (~300-500 m) it reaches '
-      + 'r = 0.5. The colour range inside a ward is also about 1.4x wider than the '
+      + 'r = 0.5. The colour range inside a ward is also about 1.2x wider than the '
       + 'satellite measures, so read contrasts as exaggerated. Ward figures are measured, '
       + 'neighbourhood contrast is indicative, block-by-block detail is illustrative.',
 } as const;
