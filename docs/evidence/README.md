@@ -21,6 +21,8 @@ shows the diligence.
 | [scientists-and-institutions.md](scientists-and-institutions.md) | Named researchers and teams, their contribution, and the engine component that relies on it. |
 | [digital-twin-references.md](digital-twin-references.md) | City-twin precedents and provenance/standards frameworks — what to steal from each, and the anti-patterns to avoid. |
 | [funding-landscape.md](funding-landscape.md) | Grants, credits, accelerators, climate/adaptation VC, dev-finance, commercial wedges — plus the verified dead-ends and the raise strategy. |
+| [regulatory-and-licensing.md](regulatory-and-licensing.md) | Why we use the data we use — India's 1 m/3 m geospatial threshold, the licence traps that caught us, and the licences we rely on. Most "why don't you just buy sharper data" questions have a legal answer, not a budget one. |
+| [known-limitations.md](known-limitations.md) | What is wrong with, or unproven about, this engine — written down by us before someone else finds it. Each entry states how we know, what it does and does not invalidate, and what would close it. |
 
 ## Rules for this library
 
@@ -30,6 +32,9 @@ shows the diligence.
   "Mitra et al." → Li et al. correction, the NICFI "no India coverage" retraction, the Czekajlo
   over-attribution), the correction is written down, not quietly erased.
 - **Ruled-out is first-class.** A rejected dataset with its reason is as valuable as an adopted one.
+- **Limitations are published, not buried.** `known-limitations.md` exists so a reviewer finds our problems
+  described in our words, with measurements, rather than discovering them unaided. An engine that lists what
+  it cannot yet prove is more trustworthy than one that lists only wins.
 
 ## Provenance of this compilation
 

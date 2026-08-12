@@ -220,6 +220,40 @@ of these changed the shipped p75 method — they are context/benchmarking)*
 
 ---
 
+## Urban canopy-height validation — what "good" actually looks like
+
+Gathered 2026-08-12 because our own cross-checks kept landing at **r ~ 0.4-0.5** and we needed to know
+whether that is a failure or the norm. It is the norm. This section exists so nobody — us included — reads
+our agreement statistics without the benchmark beside them.
+
+- **Published urban validations of global canopy products get R² 0.28-0.69 (r ~ 0.53-0.83), RMSE
+  4.4-18 m.** The best directly comparable case is a *tropical city*: Tolan et al.'s own São Paulo tile at
+  **R²-block 0.41, RMSE 7.3 m**. Our Kolkata figures sit inside that band.
+- **Moudrý et al. 2026**, DOI [10.1029/2025EA004544](https://doi.org/10.1029/2025EA004544) — against the
+  *same* Czech airborne lidar, Meta reads **ME −6.9 m** and ETH **+4.8 m**: an **~11.7 m divergence between
+  the two products**, larger than the Kolkata gap we were worried about.
+- **Moudrý et al. 2024**, *Ecosphere*, DOI [10.1002/ecs2.70026](https://doi.org/10.1002/ecs2.70026) — ETH
+  "overestimates the height of low canopies (up to 10 m high) **on average by 10 m**", and overestimates
+  above 30 m. This reproduces, almost exactly, the ~9-10 m gap our first (mis-specified) ETH comparison
+  produced — the behaviour is documented, not anomalous. Open-access summary in *Bosque* 46(2):129-140.
+- **Milan, against a municipal tree register:** only **25% (Meta) / 32% (ETH)** of heights land within
+  ±5 m. A sobering number for anyone expecting a global product to resolve individual street trees.
+- **Alonzo & Corton 2026**, *Urban Forestry & Urban Greening* — the Meta/WRI urban validation to cite:
+  7,500 points across **15 cities including Bangalore**, balanced accuracy **79.7%**, and the
+  recommendation that the product "can be used with caution at the point scale (1 m) and **confidently when
+  aggregated to coarser (30-180 m) resolution**." This independently justifies our fixed-reference,
+  ward-aggregated density approach rather than per-pixel tree claims. *(Per-city table unverified —
+  paywalled; figures via search extraction. Confirm against the PDF before publishing.)*
+- **Both products show the documented OLUH effect** — Overestimate Low, Underestimate High canopy — which
+  in a real 3-8 m canopy predicts precisely the direction of disagreement we measure.
+
+**How to state our own result honestly:** do not claim r ~ 0.4 is *good*. Claim it is **expected**, name the
+benchmark, and say why — 10 m products carry ~25 m effective resolution, and a ward of 3-8 m street trees is
+the hardest case for them. That framing survives a reviewer who knows the literature; "our data agrees" does
+not.
+
+---
+
 ## Composite-index & standards methodology
 
 - **OECD/JRC (2008)**, *Handbook on Constructing Composite Indicators*, DOI

@@ -303,6 +303,76 @@ flown-out regional camera view, which doesn't exist as a feature.
 
 ---
 
+## Canopy second opinions surveyed 2026-08-12 — and why none replaces the 1 m layer
+
+Prompted by the question "what independently corroborates our canopy?". The honest headline: **there is no
+free, commercially-licensed, urban-credible independent canopy *height* second opinion for Kolkata.** That
+is a finding, not a gap in the search.
+
+**GEDI L2A/L2B (NASA spaceborne lidar) — DEAD END, quantified.** Licence is clean (CC0/EOSDIS, commercial
+fine) and coverage is not the problem: GEDI's drifting ISS orbit accumulates ~67 vegetation-quality shots
+per km², so ~131 per ward — unlike ICESat-2's fixed ground tracks. It fails on *urban geometry*. GEDI's
+25 m footprint plus 10.3 m 1-sigma geolocation error needs ~22.5 m clearance from any building. Rasterising
+our Overture footprints and running a distance transform: the area far enough from a building **and**
+carrying canopy is **1.5 / 2.7 / 4.0%** of the three wards, giving an expected **~2 / ~3.5 / ~5 usable
+shots per ward across the entire mission**. That is the [[icesat2-height-validation]] "underpowered"
+verdict again, worse. GLAD's own documentation concedes the mechanism: "Tree height over cities and suburbs
+may be confounded with building height, as GEDI data do not discriminate between the height of vegetation
+and man-made objects."
+
+**GLAD / Potapov 30 m forest height — usable as a cheap third opinion, better than its reputation.**
+CC BY, commercial OK, and uniquely needs **no login**: plain HTTP at
+`https://gladxfer.umd.edu/Potapov/Forest_height_2019/Forest_height_2019_SASIA.tif`, range-readable.
+Measured against our v1: **r = 0.445 / 0.437 / 0.503**, bias −1.60 / −0.05 / +3.47 m, RMSE 3.21 / 2.71 /
+4.93 m. Its documented building-confusion caveat was tested and **does not bite here** — r(built fraction,
+height) = −0.23 / −0.35 / −0.28, and it reads *lower* over built pixels, so it errs toward omission rather
+than counting rooftops. Still 30 m over a 1400 m ward with a hard 3 m floor and a 2019-only epoch: a
+cross-check, never an ingest.
+
+**WRI Tropical Tree Cover — the best genuine independent option, and an earlier note here was wrong about
+it twice.** It is **ODC-BY** (commercial fine) not merely CC BY, and Kolkata at 22.53°N sits ~100 km inside
+its ±23.44° extent rather than at the edge. WRI state it is designed to "enable accurate monitoring of
+trees in urban areas", and its lineage — Sentinel-1+2 CNN with **no GEDI supervision** — is genuinely
+independent of Meta's Maxar/ALS lineage. Two real limits: it carries **no height** (probability of canopy
+intersecting the pixel), so it can only second-opinion our canopy *extent*; and bulk access needs a free
+GFW account and API key (`s3://gfw-data-lake` is not anonymously listable). **Verdict: usable, as an extent
+check.** Not yet fetched.
+
+**NRSC Bhoonidhi / Resourcesat LISS-IV 5.8 m — the one usable Indian route, with a publishing catch.**
+Under India's Space Policy 2023 everything at ≥5 m GSD is free and open; registration is self-service and
+accepts non-Indian "Private" users. Its EULA permits derivative works but **excludes internet hosting of
+the product** — so the rule is **publish statistics, not pixels**. Independent sensor, independent
+processing chain. Unverified: whether a LISS-IV scene actually covers Kolkata (login-gated).
+
+**ECHOSAT (Pauls et al., 10 m, 2018-2024 annual, CC BY 4.0)** — the only other credible height product, but
+the relevant tile is **114 GB with no windowed API**, and it is GEDI-supervised so not fully independent.
+Cross-check only, low priority.
+
+**Ruled out on licence:** EarthDaily 2023 10 m canopy (**CC BY-NC**), SERA-H (**CC BY-NC-SA**), Pauls 2024
+(GEE-only), DLR TanDEM-X 10 m (Germany only).
+
+**Ruled out as not-independent:** ESA WorldCover — CC BY 4.0 and anonymous, tree fraction agrees with our
+CHM within ±40%, **but we already ingest it** (`fit-physics.py`, `landcover-fractions.py`,
+`compute-tra.py`), so it cannot be a second opinion. Its real value is as the built-up mask CHM v2's own
+authors instruct users to apply. Same objection to NDVI: we ingest Sentinel-2 ourselves, and published work
+puts NDVI at as little as **R² = 0.09** against tree height in NYC.
+
+**Ruled out as circular — thermal.** Validating canopy by its cooling signature is tempting and wrong here:
+the twin already takes canopy as a thermal *input*, the published effect is canopy **cover** not **height**,
+cooling only becomes detectable above ~20-45% canopy, ECOSTRESS's 70 m pixel cannot resolve street trees,
+and one 2025 result finds tree height *raises* LST until it exceeds building height — which in our wards is
+likely the wrong side of the crossover.
+
+**Commercial VHR — cheap, and blocked by regulation rather than price.** Vantor Vivid 30 cm BGRN ≈ **$90**
+for our 6 km² (1 km² minimum, and the same Maxar lineage Meta's CHM was trained on); Airbus Pléiades Neo
+30 cm ≈ **$135**; Vantor Precision3D DSM+DTM ≈ $120-203. Nobody sells an off-the-shelf Kolkata canopy layer
+— Nearmap has no India coverage, Ecopia's off-the-shelf canopy is North America only, PlanIT Geo is US-only,
+Planet's Forest Carbon products are 30 m MMU with a ≥5 m height threshold. See
+[regulatory-and-licensing.md](regulatory-and-licensing.md) for why the sub-metre options are closed to us
+regardless of price.
+
+---
+
 ## Free EO backbones the open-data pitch rests on (commercial use OK)
 
 [Copernicus Data Space](https://dataspace.copernicus.eu/) · [MS Planetary
