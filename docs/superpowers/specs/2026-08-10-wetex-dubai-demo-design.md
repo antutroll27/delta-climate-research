@@ -730,6 +730,37 @@ and Microsoft "both provided under the Open Database License (ODbL)". Either way
 clean for us and **we no longer need it** — but the recorded reason was wrong. Its specs, for
 the record: 3 m resolution, 2.68 B LoD1 instances, RMSE 1.5–8.9 m by continent (Asia 5.9 m).
 
+## 8m · HEIGHT SOURCE LOCKED: WSF3D. Four candidates tested. (2026-08-12)
+
+`scripts/fetch-wsf3d.py`. Measured against known building heights, not read off
+datasheets:
+
+| candidate | Downtown (Burj 828 m) | Deira (~40 m) | verdict |
+|---|---|---|---|
+| **WSF3D** (TanDEM-X radar) | **667 m — 0.81×** | **48 m — 1.20×** | ✅ **LOCKED** |
+| 3D-GloBFP (XGBoost) | 144 m — 0.17× | 86 m — 2.15× | polygons only |
+| Copernicus GLO-30 DSM | **34 m — buildings absent** | 22 m | ❌ terrain, not surface |
+| GlobalBuildingAtlas | best specs of all (3 m, RMSE 5.9 m Asia) | — | ❌ ODbL-derived |
+
+**Copernicus GLO-30 is the instructive negative.** It is the obvious thing to reach for —
+30 m, free, TanDEM-X, and *described* as a DSM. Over Downtown it maxes at **34 m**, and open
+desert 40 km inland reads **97–124 m**, which are real dunes. It contains terrain and not
+towers. **Useful to us as the ground reference the engine needs anyway; useless for
+buildings.** Do not re-test it.
+
+**City-wide run:** 1029×900 cells at ~87 m, **137,658 built cells (14.9 %)**, median height
+3.5 m, p95 17.5 m, max 667.2 m.
+
+**⚠️ THE SCALE FACTOR IS PINNED IN A SELF-CHECK, because it nearly cost us the dataset.**
+The GeoTIFF declares `scales: (0.1,)` with `unit: m` — stored values are **decimetres**, and
+`rasterio.read()` does not apply band scales. A raw read gives 6672 m over Downtown, which
+looks like a broken product. `fetch-wsf3d.py` applies the scale, refuses anything above
+1000 m with an explicit message naming the cause, and asserts measured expectations for both
+Deira and Downtown so a regression fails loudly rather than shipping 10× heights.
+
+**Attribution obligation:** `World Settlement Footprint 3D (WSF3D) © DLR, CC BY 4.0`, carried
+in the artefact's provenance JSON. This must appear on any published figure.
+
 ## 9 · First move — SUPERSEDED 2026-08-11
 
 ~~Verify Dubai Pulse actually has usable footprints and heights over the urban core.~~
