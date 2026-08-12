@@ -1,26 +1,48 @@
 """Meta/WRI 1 m Global Canopy Height Model -> {ward}-canopy.png + {ward}-trees.json.
 
-WHAT THIS IS. The CHMv1 ("alsgedi_global_v6_float") canopy height map, published
-by Meta Data for Good + World Resources Institute on AWS Open Data, gives the
-one fact the Sentinel-derived `veg[]` field cannot: a measured VERTICAL canopy
-height per metre, globally, at ~1 m resolution. NDVI-derived fractional
-vegetation cover conflates grass, crops and tree canopy; this model does not.
+WHAT THIS IS. The Meta Data for Good + World Resources Institute canopy height
+map, published on AWS Open Data, gives the one fact the Sentinel-derived `veg[]`
+field cannot: a measured VERTICAL canopy height per metre, globally, at ~1 m
+resolution. NDVI-derived fractional vegetation cover conflates grass, crops and
+tree canopy; this model does not.
 
-SOURCE AND ACCESS (verified 2026-08-10). Bucket `s3://dataforgood-fb-data/`,
-prefix `forests/v1/alsgedi_global_v6_float/`. Layout confirmed by fetching the
-bucket's own index and inspecting it directly (not by trusting an unverified
-blog write-up):
-  - `tiles.geojson` at the prefix root: 56,145 features, each a rectangular
-    polygon tagged `properties.tile` with a 9-digit string.
-  - `chm/<tile>.tif`: the height raster for that polygon, one continuous
-    GeoTIFF (EPSG:3857, ~1 m/px at 65536x65536 -- not internally tiled, so a
-    windowed rasterio read is the only affordable access pattern).
-The 9-digit `tile` values are standard Bing/Virtual-Earth QuadKeys at zoom 9 --
-confirmed by computing the QuadKey for the ballygunge centre with the textbook
-tile-XY + bit-interleave algorithm and matching it byte-for-byte against the
-`tiles.geojson` polygon that contains that point (both gave `123133323`). So
-`chm_href` computes the QuadKey from the ward centre rather than hardcoding a
-tile id -- it generalises to any WARDS entry without a lookup table.
+WHICH VERSION, AND WHY. We read CHM **v2** (`dinov3_global_chm_v2_ml3`, shipped
+March 2026), not the v1 `alsgedi_global_v6_float` this script started on. v2 is a
+DINOv3-backbone re-train of the same product: R^2 0.53 -> 0.86, MAE 4.3 -> 3.0 m,
+and the >=30 m saturation that flattened v1's tall canopy largely removed
+(Brandt et al., arXiv:2603.06382; CC BY 4.0). That is the paper's claim; the
+reason we ship it is measured in this repo against a product independent of both
+-- absolute disagreement with ETH Zurich's CHM falls 30-40% in every ward
+(ballygunge 5.59 -> 3.35 m, barrackpore 7.36 -> 5.30 m, baruipur 6.29 -> 4.44 m)
+while spatial correlation stays flat at ~0.5. So v2 is better at HOW TALL, not
+at WHERE, and that is the honest characterisation to carry into any receipt.
+
+v2 is NOT fresher data. Roughly 80% of its source imagery is the same 2018-2020
+epoch as v1's: this is a MODEL upgrade, and nothing derived from it may be
+described or published as newer observations.
+
+SOURCE AND ACCESS (v1 layout verified 2026-08-10 against the bucket's own
+`tiles.geojson` index of 56,145 features; v2 layout verified 2026-08-12). Bucket
+`s3://dataforgood-fb-data/`, prefix `forests/v2/global/dinov3_global_chm_v2_ml3/`,
+raster at `chm/<tile>.tif`. Two things moved from v1, and both help:
+  - The tile ids are Bing/Virtual-Earth QuadKeys at zoom 10, not zoom 9. Computing
+    the textbook tile-XY + bit-interleave QuadKey for the ballygunge centre at
+    zoom 10 gives `1231333231` -- v1's verified z9 answer `123133323` with one
+    further digit appended, i.e. the same point one zoom finer, which is exactly
+    what a QuadKey's prefix property requires. So `chm_href` still COMPUTES the
+    tile from the ward centre instead of hardcoding an id and still generalises to
+    any WARDS entry without a lookup table; only CHM_ZOOM changed.
+  - v1's raster was one non-tiled 65536x65536 monolith, which is why a windowed
+    rasterio read was the only affordable access pattern. v2 is a proper COG --
+    EPSG:3857, 32768x32768, 512x512 internal blocks with overviews -- so the same
+    windowed read now touches only the blocks it overlaps and gets FASTER. The
+    access pattern did not change; it stopped being a workaround.
+
+v2 is uint8, so heights arrive QUANTISED TO WHOLE METRES (v1 was float32). Stated
+here rather than left for a reader to spot `uint8` and wonder: it changes nothing
+material. v2's own MAE is 3.0 m, so a 1 m quantisation step is a third of the
+model's own error, and the density scale it feeds resolves canopy into only
+DENSITY_MAX + 1 = 5 levels across 30 m -- one 7.5 m step per level.
 
 Anonymous access: no AWS account needed. `AWS_NO_SIGN_REQUEST=YES` in the
 environment (see `main`'s docstring / the module run instructions) lets GDAL's
@@ -60,21 +82,27 @@ JITTER = 0.80                     # cell-size fraction for position jitter -- tu
 DENSITY_MAX = 4                   # trees at a DENSITY_REF_H cell, scaling to 0 (gaps) -- tuned live 2026-08-11
 #: Metres; the FIXED reference height the density scale is pinned to. Deliberately NOT
 #: the ward's own tallest cell: normalising per ward makes "dense" mean a different
-#: thing in every ward, and cross-ward comparison IS this twin's product. Measured
-#: maxima are ballygunge 22 m, barrackpore 25 m, baruipur 20 m -- ward-relative scaling
-#: therefore put barrackpore at 0.50 trees per canopy cell against ballygunge's 0.93,
-#: not because it has less canopy but because TWO of its 6,069 cells clear 22 m and
-#: dragged the whole ward's scale down. 22.0 is ballygunge's own measured max, chosen
-#: so the CEO-tuned ballygunge artifact stays byte-identical while the other wards are
-#: lifted onto its scale (0.93 / 0.73 / 0.85 measured after the change).
-DENSITY_REF_H = 22.0
+#: thing in every ward, and cross-ward comparison IS this twin's product. Measured under
+#: v1, ward-relative scaling put barrackpore at 0.50 trees per canopy cell against
+#: ballygunge's 0.93 -- not because it has less canopy, but because TWO of its 6,069
+#: cells cleared the divisor and dragged the whole ward's scale down. That argument is
+#: source-independent and still holds: this constant must stay FIXED.
+#:
+#: 30.0 is the tallest canopy measured ANYWHERE across the three wards under CHM v2 --
+#: the same rule that once made this 22.0 (v1's ballygunge maximum), re-applied to v2.
+#: The density scale therefore spans exactly the range we measured, which makes it a
+#: rule rather than a tuned knob. Measured consequence: the min(DENSITY_MAX, ...) cap
+#: clips 0 cells in all three wards, where 22.0 clipped 13 -- the scale no longer
+#: saturates before the data does. The cap stays load-bearing anyway (see _generate);
+#: the self-test pins it with a synthetic 40 m cell, since no real cell reaches it.
+DENSITY_REF_H = 30.0
 DATA = os.path.join(HERE, "..", "public", "heat-map", "data")
 
-#: CHMv1 bucket, verified 2026-08-10 against the registry's own tiles.geojson
-#: index (56,145 features) fetched and inspected directly -- see module docstring.
+#: CHM v2 (DINOv3) bucket and prefix -- see the module docstring for why v2 and for
+#: how the layout was verified. Same bucket as v1, different prefix and zoom.
 CHM_BUCKET = "dataforgood-fb-data"
-CHM_PREFIX = "forests/v1/alsgedi_global_v6_float"
-CHM_ZOOM = 9                      # QuadKey length observed in tiles.geojson (9 digits)
+CHM_PREFIX = "forests/v2/global/dinov3_global_chm_v2_ml3"
+CHM_ZOOM = 10                     # v2 tiles are zoom-10 QuadKeys (v1's were zoom 9)
 
 
 def _quadkey(lat: float, lon: float, zoom: int) -> str:
@@ -82,9 +110,11 @@ def _quadkey(lat: float, lon: float, zoom: int) -> str:
 
     Standard tile-XY + bit-interleave algorithm (Microsoft Bing Maps Tile
     System). Verified against the CHM index rather than assumed: computing this
-    for the ballygunge centre reproduces the exact tile id
-    (`123133323`) that `tiles.geojson` assigns to the polygon containing that
-    point, at the zoom level (9) its tile ids happen to use.
+    for the ballygunge centre at zoom 9 reproduces the exact tile id
+    (`123133323`) that v1's `tiles.geojson` assigns to the polygon containing
+    that point. v2 tiles the world one zoom finer, and the same call at zoom 10
+    gives `1231333231` -- the z9 id plus one digit, as a QuadKey's prefix
+    property requires, so the verification carries over to CHM_ZOOM = 10.
     """
     lat_rad = math.radians(lat)
     n = 2**zoom
@@ -106,11 +136,12 @@ def chm_href(ward: Ward) -> str:
     """/vsis3/ path of the Meta/WRI CHM COG tile covering this ward's centre.
 
     Computed, not hardcoded: the QuadKey for the ward centre at CHM_ZOOM. This
-    is safe for a 1400 m ward window because at zoom 9 each tile spans roughly
-    150 km on a side in this latitude band -- three orders of magnitude wider
-    than the ward, so a window near a tile boundary is the only case that could
-    straddle two tiles, and every current WARDS entry (verified for ballygunge)
-    sits well inside a single tile.
+    is safe for a 1400 m ward window because at zoom 10 each tile still spans
+    roughly 36 km on a side in this latitude band -- some 25x the ward, so a
+    window near a tile boundary is the only case that could straddle two tiles,
+    and every current WARDS entry (verified for ballygunge) sits well inside a
+    single tile. Note v2 halved that margin by moving from zoom 9: a future ward
+    placed near a tile edge is likelier to need a mosaic than it was under v1.
     """
     qk = _quadkey(ward.centre.lat, ward.centre.lon, CHM_ZOOM)
     return f"/vsis3/{CHM_BUCKET}/{CHM_PREFIX}/chm/{qk}.tif"
@@ -205,10 +236,13 @@ def _generate(ward: Ward, grid_north_up: npt.NDArray[np.float32]) -> list[_types
     Per canopy cell: 0..DENSITY_MAX instances scaling with height against the FIXED
     DENSITY_REF_H reference, not the ward's own tallest cell -- a per-ward normaliser
     makes a given density mean a different thing in each ward, which corrupts the
-    cross-ward comparison (thin canopy still -> honest gaps). The min() is load-bearing,
-    not defensive: cells taller than the reference exist (barrackpore tops 25 m) and
-    would otherwise break the count <= DENSITY_MAX invariant. int(v+0.5) not round():
-    half-up matches the JS Math.round the parameters were visually tuned against.
+    cross-ward comparison (thin canopy still -> honest gaps). The min() is the guard on
+    the count <= DENSITY_MAX invariant. Under CHM v2 at a 30 m reference it clips
+    nothing in the three shipped wards -- 30 m IS their measured maximum -- but that is
+    a property of today's data, not of the code: a taller cell in a new ward, or any
+    retune of DENSITY_REF_H downward, breaks the invariant without it, so the self-test
+    pins it with a synthetic 40 m cell. int(v+0.5) not round(): half-up matches the JS
+    Math.round the parameters were visually tuned against.
     """
     n = grid_north_up.shape[0]
     cell_m = ward.footprint_m / n
@@ -321,14 +355,16 @@ def _self_test() -> None:
     n = GRID
     cell_m = ward.footprint_m / n
     grid = np.zeros((n, n), dtype=np.float32)
-    grid[0, 0] = 30.0          # far over DENSITY_REF_H -> min() caps it at DENSITY_MAX
-    grid[0, 1] = 2.0           # barely canopy -> 0 trees (the honest gap)
-    grid[10, 10] = 15.0        # mid canopy -> 4*15/22 = 2.73 -> 3
+    grid[0, 0] = 30.0          # exactly DENSITY_REF_H -> 4*30/30 = 4.0 -> int(4.5) = 4
+    grid[0, 1] = 2.0           # barely canopy -> 4*2/30 = 0.27 -> 0 trees (the honest gap)
+    grid[10, 10] = 15.0        # mid canopy -> 4*15/30 = 2.0 -> int(2.5) = 2
     grid[20, 20] = 1.0         # below MIN_TREE_H -> skipped entirely
     grid[3, 40] = 25.0         # OFF-DIAGONAL: the only cell a row/col transposition moves.
-                               # Also just over the 22 m reference, so it pins the cap at
-                               # the boundary: 4*25/22 = 4.55 -> 5 uncapped, 4 capped.
-    grid[30, 30] = 2.75        # exact tie: 4*2.75/22 = 0.5, where int(v+0.5)=1 but round(v)=0
+                               # 4*25/30 = 3.33 -> int(3.83) = 3
+    grid[5, 60] = 40.0         # OVER the reference, which no real cell is at 30 m -- so this
+                               # is the only cell that exercises min(): 4*40/30 = 5.33 -> 5
+                               # uncapped, 4 capped. Without it, deleting the cap would pass.
+    grid[30, 30] = 3.75        # exact tie: 4*3.75/30 = 0.5, where int(v+0.5)=1 but round(v)=0
     trees = derive_trees(ward, grid)
     assert trees == derive_trees(ward, grid), "derive_trees must be deterministic"
     def cell_of(t: _types.TreeInstanceJSON) -> tuple[int, int]:
@@ -338,12 +374,16 @@ def _self_test() -> None:
     by_cell: dict[tuple[int, int], int] = {}
     for t in trees:
         by_cell[cell_of(t)] = by_cell.get(cell_of(t), 0) + 1
-    assert by_cell.get((0, 0)) == DENSITY_MAX, f"30 m cell must cap at {DENSITY_MAX}, got {by_cell.get((0, 0))}"
+    assert by_cell.get((0, 0)) == DENSITY_MAX, \
+        f"a cell AT the {DENSITY_REF_H} m reference must render {DENSITY_MAX}, got {by_cell.get((0, 0))}"
     assert (1, 0) not in by_cell, "h=2.0 cell must be a gap (redistributive count 0)"
     assert (20, 20) not in by_cell, "below MIN_TREE_H must stay empty"
-    assert by_cell.get((10, 10)) == 3, "15 m against the 22 m reference at DENSITY_MAX=4 -> 3 trees"
-    assert by_cell.get((40, 3)) == DENSITY_MAX, \
-        "25 m tops the 22 m reference, so min() must cap it at 4 -- at (col=40,row=3), not its transpose"
+    assert by_cell.get((10, 10)) == 2, "15 m against the 30 m reference at DENSITY_MAX=4 -> 2 trees"
+    assert by_cell.get((40, 3)) == 3, \
+        "25 m against the 30 m reference -> 3 trees -- at (col=40,row=3), not its transpose"
+    assert by_cell.get((60, 5)) == DENSITY_MAX, \
+        f"40 m tops the {DENSITY_REF_H} m reference, so min() must cap it at {DENSITY_MAX} " \
+        f"(uncapped it is 5), got {by_cell.get((60, 5))}"
     assert by_cell.get((30, 30)) == 1, "count rounds HALF-UP: int(0.5+0.5)=1, but round(0.5)=0"
     # jitter bounds: every instance stays within +-JITTER/2 of its cell centre
     half = ward.footprint_m / 2.0
@@ -385,15 +425,15 @@ def _self_test() -> None:
     # not rescale, so a 4 m cell is 1 tree here exactly as it would be beside a 30 m one.
     #
     # And note MIN_TREE_H is now SEMANTIC ONLY, untestable by construction: count > 0
-    # needs 4*h/22 >= 0.5, i.e. h >= 2.75 m, which is strictly ABOVE MIN_TREE_H = 2.0.
+    # needs 4*h/30 >= 0.5, i.e. h >= 3.75 m, which is strictly ABOVE MIN_TREE_H = 2.0.
     # The density formula is uniformly the tighter of the two, so deleting the gate could
     # not change a single tree. It stays as the declaration of what counts as "canopy"
     # (and as the real guard if DENSITY_MAX or DENSITY_REF_H is ever retuned), not as
     # observable behaviour -- so there is nothing here to assert about it. Under the old
     # ward-relative divisor it WAS observable, which is what this probe used to test.
     low = np.zeros((n, n), dtype=np.float32)
-    low[5, 5] = 4.0            # 4*4/22 = 0.73 -> 1 tree; being the ward max buys it nothing
-    low[6, 6] = 1.5            # scrub: under MIN_TREE_H and under the 2.75 m density floor
+    low[5, 5] = 4.0            # 4*4/30 = 0.53 -> 1 tree; being the ward max buys it nothing
+    low[6, 6] = 1.5            # scrub: under MIN_TREE_H and under the 3.75 m density floor
     assert len(derive_trees(ward, low)) == 1, "a fixed reference must not rescale a low-canopy ward"
     # also the standing proof that dropping the old `if h_max < MIN_TREE_H` guard was
     # safe: with no division by data there is no zero to divide by, and an all-zero grid
