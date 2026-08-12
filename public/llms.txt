@@ -16,11 +16,11 @@ Delta sits between raw earth-science data and the institutions that must act on 
 - Climate-risk intelligence and geospatial analysis.
 
 ## Team
-- **Angad Burman** — Founder, Principal Consultant (Climate Analytics). Climate governance, Columbia University; earth systems, King's College London.
-- **Shirsha Sen** — Co-Founder, Principal Consultant (Climate Policy). MA Public Policy, OP Jindal Global University; EY India, GIZ.
-- **Dhruv Maniktala** — Lead, Operations Research. Banking and quantitative finance; regional logistics.
-- **Antariksha Kumar** — Lead, Technology Implementation. MSc Human-Computer Interaction, University of Nottingham; BTech Computer Science.
-- **Roshni Rakshit** — Lead, Communications. BA Communication, Simon Fraser University.
+- **Angad Burman** — Founder, Head of Climate Analytics. Climate governance, Columbia University; earth systems, King's College London.
+- **Shirsha Sen** — Co-Founder, Head of Climate Policy & Regulation. MA Public Policy, OP Jindal Global University; EY India, GIZ.
+- **Dhruv Maniktala** — Head of Operations. Banking and quantitative finance; regional logistics.
+- **Antariksha Kumar** — Head of Technology Innovation. MSc Human-Computer Interaction, University of Nottingham; BTech Computer Science.
+- **Roshni Rakshit** — Head of Communications. BA Communication, Simon Fraser University.
 
 ## Contact
 - Email: angad@deltaclimate.earth

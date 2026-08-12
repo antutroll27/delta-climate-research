@@ -222,6 +222,14 @@ class TreesFileJSON(TypedDict):
     grid: int
     sizeM: float
     retrieved: str
+    #: Provenance stamp -- the CHM prefix and density reference the artefact was
+    #: generated with. fetch-canopy.py's check() asserts both against its live
+    #: constants, so a stale artefact under a retuned fetcher fails loudly instead
+    #: of passing every structural invariant (which it does: none of them depend on
+    #: the source). asTreesFile in vegetation-layer.ts picks named fields and
+    #: ignores the rest, so adding these needed no TS change.
+    source: str
+    densityRefM: float
     trees: list[TreeInstanceJSON]
 
 
