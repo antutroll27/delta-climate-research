@@ -631,6 +631,58 @@ false headline:**
 `40RCP`** — UTM zone 40, exactly what `target_crs` derives. The CRS fix is right end to
 end, against NASA's own tiling.
 
+## 8k · THE DUBAI GEOMETRY IS DOWNLOADED — and 3D-GloBFP SATURATES ON TOWERS (2026-08-12)
+
+Downloaded to `~/.cache/delta-climate/dubai/` (never the repo, same rule as ECOSTRESS
+granules):
+
+| source | what | size |
+|---|---|---|
+| Microsoft GlobalMLBuildingFootprints | 4 quadkey tiles covering the city-wide bbox | 55 MB |
+| 3D-GloBFP tiles 1637/1638/1639/1640 | **1,402,446 buildings with per-building height** | 125 MB |
+
+Verified from the shapefile headers directly (no geopandas — it has no type stubs and would
+break the mypy gate): WGS84, polygon, fields `FID` + `Height`, zero null heights, median
+12.7–13.2 m across all four tiles.
+
+**⚠️ AND THE FINDING THAT CHANGES A PLAN ASSUMPTION — the heights saturate.** Measured by
+walking the .shp record bboxes and joining to the .dbf:
+
+| district | buildings | median h | **max h** | tallest real building | error |
+|---|---|---|---|---|---|
+| Downtown | 673 | 20.9 m | **144.0 m** | Burj Khalifa **828 m** | **5.8× under** |
+| Dubai Marina | 1,637 | 19.5 m | **129.5 m** | Princess Tower **414 m** | 3.2× under |
+| Business Bay | 548 | 23.6 m | **124.1 m** | several 300 m+ | ~2.5× under |
+| Deira / Naif | 412 | 22.1 m | 85.8 m | genuinely low-rise ~40 m | **over**-estimates |
+
+**The distribution is compressed toward the middle — towers under-predicted, low-rise
+over-predicted.** That is textbook regression-to-the-mean from the XGBoost model behind
+3D-GloBFP, and the published RMSE 1.9–14.6 m is an average over ordinary buildings that does
+not describe a supertall district at all.
+
+**CONSEQUENCES, and they are specific:**
+- **City-wide at 208 m cells: acceptable.** A tower's error is diluted across a cell that
+  averages many buildings.
+- **Tower-district drill-downs with shadow: NOT honest with this data.** Shadow length is
+  `h/tan(altitude)`, so DIFC and Marina shadows would be **3–6× too short**. The Track F
+  prediction that "Dubai's towers should show the shadow effect clearly" **cannot be tested
+  on 3D-GloBFP heights.**
+- **⚠️ OSM is not a clean patch.** OSM does carry the real values — 2,351 height-tagged
+  buildings in the tower belt, topping out at Ciel Tower 377 m, Princess Tower 357 m. But
+  those are ODbL, and §8a's warning applies exactly: conflating ODbL heights onto permissive
+  footprints contaminates the combined database. **Do not do it.**
+
+**⭐ THIS IS NOW A MEASURED REASON FOR THE DEWA ASK.** §8h identified `Building Floor Level
+Information` as the dataset to request. This is the evidence for why: **floors × storey
+height is the only permissive route to a real tower height**, and without it the tower
+districts get city-wide treatment or an explicit caveat. Worth raising with a number
+attached rather than as a preference.
+
+**Still to test:** whether **WSF3D** saturates the same way. It is TanDEM-X radar
+interferometry — a physical measurement rather than a learned model — so it has no reason to
+regress to the mean, though its 90 m cell averages a tower with the ground around it. It is
+CC-BY-4.0 and already identified in §8i as one of the three cross-checks.
+
 ## 9 · First move — SUPERSEDED 2026-08-11
 
 ~~Verify Dubai Pulse actually has usable footprints and heights over the urban core.~~
