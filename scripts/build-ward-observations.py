@@ -37,6 +37,7 @@ from __future__ import annotations
 import argparse
 import csv
 import datetime as _dt
+import hashlib
 import json
 import os
 import sys
@@ -109,6 +110,31 @@ def physical_daytime(lst_mean_c: float, t_air_c: float, sun: float) -> bool:
     return not (sun > SUN_UP and (lst_mean_c - t_air_c) < -MAX_BELOW_AIR_K)
 
 
+
+def _assert_built_cache_current(ward_id: str, path: str) -> None:
+    """Refuse a built cache rasterised from footprints we no longer ship.
+
+    The twin of the guard in measure-spatial-accuracy.py, and it is here because
+    THIS file feeds the published ward-mean figures. When 6151975 swapped the
+    footprints from Microsoft to Overture and nobody rebuilt the cache, the ward
+    built fractions frozen into ward-observations.json stayed on the old geometry
+    -- barrackpore by 0.357 against a true 0.261, overstated 27% relative -- and
+    `built` drives the anthropogenic term. Existence was checked; currency was not.
+    """
+    side = path.replace(".f32", ".json")
+    geom = os.path.join(SURFACE_DIR, f"{ward_id}.json")
+    with open(geom, "rb") as fh:            # RAW BYTES: the exporter hashes the
+        want = hashlib.sha256(fh.read()).hexdigest()[:16]   # same file's bytes
+    hint = "run `npx tsx scripts/export-built-raster.mjs`, then re-run this script"
+    if not os.path.exists(side):
+        sys.exit(f"{ward_id}: built cache has no provenance sidecar -- {hint}")
+    with open(side, encoding="utf-8") as fh:
+        stamp = json.load(fh)
+    if stamp.get("geometrySha256") != want:
+        sys.exit(f"{ward_id}: built cache came from DIFFERENT footprints than the ones "
+                 f"shipped ({stamp.get('geometrySha256')} vs {want}) -- {hint}")
+
+
 def ward_surface(ward_id: str) -> tuple[float, float, float]:
     """(fvc, albedo, built) for one ward — the same values the browser runs on."""
     png = os.path.join(SURFACE_DIR, f"{ward_id}-surface.png")
@@ -117,6 +143,7 @@ def ward_surface(ward_id: str) -> tuple[float, float, float]:
                    (built_f, "npx tsx scripts/export-built-raster.mjs")):
         if not os.path.exists(p):
             sys.exit(f"missing {p} — run `{how}` first.")
+    _assert_built_cache_current(ward_id, built_f)
     a = np.asarray(Image.open(png)).astype(np.float32)
     fvc = float((a[:, :, 0] / 255.0 * (VEG_RANGE[1] - VEG_RANGE[0]) + VEG_RANGE[0]).mean())
     alb = float((a[:, :, 1] / 255.0 * (ALBEDO_RANGE[1] - ALBEDO_RANGE[0]) + ALBEDO_RANGE[0]).mean())

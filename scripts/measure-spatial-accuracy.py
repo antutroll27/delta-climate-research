@@ -68,6 +68,7 @@ Output: data/calibration/spatial-accuracy.json
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import os
@@ -201,8 +202,44 @@ def built_layer(ward_id: str) -> npt.NDArray[np.float32]:
                  f"`npx tsx scripts/export-built-raster.mjs` first. It is written by the "
                  f"TypeScript rasteriser on purpose; a Python reimplementation would drift "
                  f"and the drift would look like the model failing validation.")
+    _assert_built_cache_current(ward_id, path)
     a = np.fromfile(path, dtype=np.float32)
     return np.flipud(a.reshape(SURFACE_GRID, SURFACE_GRID)).copy()
+
+
+def _assert_built_cache_current(ward_id: str, path: str) -> None:
+    """Refuse a cache built from footprints we no longer ship.
+
+    THIS EXISTS BECAUSE THE ABSENCE OF IT COST NINE DAYS OF FIGURES. The cache
+    filename is keyed only by ward and grid, so it does not change when the
+    geometry underneath does, and the check above only asks whether the file
+    EXISTS. Commit 6151975 swapped the shipped footprints from Microsoft to
+    Overture -- 8,579 buildings became 12,767, and because Microsoft merges
+    towers into fewer, larger polygons the coverage moved in the counter-intuitive
+    direction. 45-58% of cells differed. Nothing complained. Every spatial figure
+    published between then and 2026-08-13 scored a building layer that had been
+    replaced, and the error surfaced only when someone re-ran the exporter by hand
+    and noticed the mean had moved.
+
+    The exporter now writes a sidecar naming the geometry it rasterised. Compare
+    it against the geometry actually shipped, and exit rather than measure.
+    """
+    side = path.replace(".f32", ".json")
+    geom_path = os.path.join(SURFACE_DIR, f"{ward_id}.json")
+    with open(geom_path, "rb") as fh:                    # RAW BYTES -- see the
+        want = hashlib.sha256(fh.read()).hexdigest()[:16]  # exporter's note on why
+    with open(geom_path, encoding="utf-8") as fh:
+        live = json.load(fh)
+    hint = (f"run `npx tsx scripts/export-built-raster.mjs` to rebuild it from the "
+            f"footprints currently shipped")
+    if not os.path.exists(side):
+        sys.exit(f"{ward_id}: the built cache carries no provenance sidecar, so it "
+                 f"cannot be shown to match the shipped footprints -- {hint}")
+    stamp = json.load(open(side, encoding="utf-8"))
+    if stamp.get("geometrySha256") != want:
+        sys.exit(f"{ward_id}: the built cache was rasterised from DIFFERENT footprints "
+                 f"than the ones shipped (cache {stamp.get('count')} buildings / "
+                 f"{stamp.get('geometrySha256')}, shipped {len(live['b'])} / {want}) -- {hint}")
 
 
 def area_downsample(src: npt.NDArray[np.float32], out_h: int, out_w: int) -> npt.NDArray[np.float32]:
