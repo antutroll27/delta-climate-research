@@ -47,6 +47,7 @@ if HERE not in sys.path:
 
 import _types  # noqa: E402
 import _physics  # noqa: E402
+import _water  # noqa: E402
 from _ecostress import target_grid, token  # noqa: E402
 
 ROOT = os.path.join(HERE, "..")
@@ -115,9 +116,21 @@ def main() -> None:
     for wid, w in _types.WARDS.items():
         veg, alb = msa.surface_layers(wid)
         built = msa.built_layer(wid)
+        # WATER COMES THROUGH `msa.water_layer`, WHICH APPLIES THE SHIPPED GATE. This
+        # was a hardcoded `np.zeros` until 2026-08-13 — the same zeros the browser had,
+        # but for no reason and with no way to change them, so this script could not have
+        # scored the water terms even in principle. It is still zeros today, because
+        # WATER_LAYER_ENABLED is false; the difference is that flipping one constant in
+        # types.ts now moves BOTH the map and this measurement, and the parity oracle
+        # fails if the two ever disagree about which arm is live.
+        #
+        # When it IS on, water is rasterised at SIM_N rather than upsampled from 140 like
+        # the other three. They have no choice — a 140-grid PNG and a 140-grid cache.
+        # Polygons have no native resolution, so asking for the solver's grid gives the
+        # browser's answer exactly instead of a nearest-neighbour approximation to it.
         full[wid] = {"veg": upsample(veg, SIM_N), "albedo": upsample(alb, SIM_N),
                      "built": upsample(built, SIM_N),
-                     "water": np.zeros((SIM_N, SIM_N), dtype=np.float32)}
+                     "water": msa.water_layer(wid, SIM_N)}
         _tf, W, H = target_grid(_types.ward_bounds(w))
         grid_wh = (W, H)
         coarse[wid] = {"veg": msa.area_downsample(veg, H, W),
@@ -161,11 +174,15 @@ def main() -> None:
             # UN-diffused vegetation map would hand the model a free win. This
             # runs the identical solver with albedo and built held flat at the
             # ward mean, so vegetation is the only thing that varies.
+            # Water is flattened for the same reason albedo and built are. It was
+            # `full[wid]["water"]` when that layer was all zeros, where flat and varying
+            # are the same array; now that it is populated, passing it through would let
+            # the null vary in TWO covers and quietly stop being a vegetation null.
             flat = {
                 "veg": full[wid]["veg"],
                 "albedo": np.full_like(full[wid]["albedo"], float(full[wid]["albedo"].mean())),
                 "built": np.full_like(full[wid]["built"], float(full[wid]["built"].mean())),
-                "water": full[wid]["water"],
+                "water": np.full_like(full[wid]["water"], float(full[wid]["water"].mean())),
             }
             veg_shipped = run_shipped(flat, params, 600)
             vegs_c = msa.area_downsample(veg_shipped.astype(np.float32), obs.shape[0], obs.shape[1])
@@ -220,6 +237,33 @@ def main() -> None:
               f" {e['sd_observed_k']:>6.2f}K | {e['r_shipped']:>7.3f} {e['r_equilibrium']:>8.3f}"
               f" {e['r_veg_raw']:>11.3f} {e['r_veg_diffused']:>15.3f}")
 
+    # PER WARD, because the aggregate cannot tell a mechanism from a coincidence. The
+    # three wards carry 0.7 %, 1.3 % and 4.9 % open water, so a water change that is
+    # real must move them in that order; one that moves them alike is moving something
+    # else. Same argument for any future cover layer, which is why this is not
+    # water-specific: the split is the diagnostic, `open_water_fraction` is the label.
+    by_ward = {}
+    print(f"\n  ward          n   SD ship  SD obs |  r ship  r equil  r veg(diffused)   water")
+    for wid in sorted({str(r["ward"]) for r in rows}):
+        s = [r for r in rows if r["ward"] == wid]
+        e = {
+            "n": len(s),
+            # The ward's REAL open water, not the layer the solver was handed — those
+            # differ whenever WATER_LAYER_ENABLED is off, and the label has to say what
+            # the ward contains for the split to mean anything.
+            "open_water_fraction": round(float(msa.water_coverage(wid, SIM_N).mean()), 5),
+            "water_in_solve": bool(_water.LAYER_ENABLED),
+            "sd_shipped_at_obs_k": round(mean("sd_shipped_at_obs_k", s), 3),
+            "sd_observed_k": round(mean("sd_observed_k", s), 3),
+            "r_shipped": round(mean("r_shipped", s), 4),
+            "r_equilibrium": round(mean("r_equilibrium", s), 4),
+            "r_veg_diffused": round(mean("r_veg_diffused", s), 4),
+        }
+        by_ward[wid] = e
+        print(f"  {wid:<13}{e['n']:>3}  {e['sd_shipped_at_obs_k']:>7.2f}K {e['sd_observed_k']:>6.2f}K"
+              f" | {e['r_shipped']:>7.3f} {e['r_equilibrium']:>8.3f} {e['r_veg_diffused']:>15.3f}"
+              f"  {100 * e['open_water_fraction']:>6.2f}%")
+
     a = summary.get("all", {})
     print(f"\n  amplitude vs the observation:  shipped {a.get('amplitude_ratio_shipped')}x"
           f"   equilibrium {a.get('amplitude_ratio_equilibrium')}x")
@@ -235,10 +279,24 @@ def main() -> None:
 
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     with open(OUT, "w", encoding="utf-8") as fh:
-        json.dump({"summary": summary, "rows": rows,
+        json.dump({"summary": summary, "by_ward": by_ward, "rows": rows,
                    "note": ("The shipped map runs TsHeatSim (diffusion, RESET_BURST steps); "
                             "the published within-ward figures score the per-cell equilibrium. "
-                            "This measures both against the same observation.")}, fh, indent=2)
+                            "This measures both against the same observation."),
+                   "water_note": ("This file is the ONLY place the sim's water terms can be "
+                                  "scored: the equilibrium in spatial-accuracy.json mirrors "
+                                  "equilibriumC, which has no water term, so those figures "
+                                  "are blind to it by construction. The layer is currently "
+                                  "GATED OFF (WATER_LAYER_ENABLED false in types.ts, mirrored "
+                                  "by _water.LAYER_ENABLED and pinned by the water parity "
+                                  "oracle), so `water_in_solve` below is false and these "
+                                  "figures are the dry arm. Turning it on cost 0.0487 r "
+                                  "(0.3031 -> 0.2544) and raised spatial SD 1.345 -> 1.514 K "
+                                  "against an observed 0.925 K, in proportion to each ward's "
+                                  "open water. See docs/heat-map-water-layer.md and "
+                                  "docs/evidence/known-limitations.md sec.6."),
+                   "water_in_solve": bool(_water.LAYER_ENABLED)},
+                  fh, indent=2)
         fh.write("\n")
     print(f"\n  written to {os.path.relpath(OUT, ROOT)}")
 

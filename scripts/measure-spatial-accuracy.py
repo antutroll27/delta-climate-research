@@ -87,6 +87,7 @@ if HERE not in sys.path:
 import _canopy  # noqa: E402
 import _physics  # noqa: E402
 import _types  # noqa: E402
+import _water  # noqa: E402
 from _ecostress import align, band_url, cmr_search, fetch, target_grid, token  # noqa: E402
 from _sentinel import GRID as SURFACE_GRID  # noqa: E402
 
@@ -242,6 +243,64 @@ def _assert_built_cache_current(ward_id: str, path: str) -> None:
                  f"{stamp.get('geometrySha256')}, shipped {len(live['b'])} / {want}) -- {hint}")
 
 
+def water_coverage(ward_id: str, n: int = SURFACE_GRID) -> npt.NDArray[np.float32]:
+    """Open-water AREA FRACTION per cell, north-up, from the shipped OSM polygons.
+
+    THE GEOMETRY, UNGATED — what the ward actually contains, whether or not the solver is
+    given it. `water_layer` below is the gated version and is what any model must use;
+    this one exists so the gate can be REPORTED rather than becoming an absence nobody
+    notices. Keeping the two apart is the difference between "this ward has no water" and
+    "we decided not to model this ward's water", and only one of those is true.
+
+    THE EQUILIBRIUM THIS SCRIPT SCORES CANNOT USE EITHER OF THEM, and that is a finding
+    rather than an oversight. `modelled_field` mirrors `equilibriumC` (types.ts), whose
+    signature is `(p, albedo, veg, built)` — there is no water term in the closed-form
+    steady state at all. Water enters the engine in exactly one place, `TsHeatSim.step`
+    (src/scripts/climate-engine/sim-ts.ts): a ventilation boost inside the convective
+    term, and a post-step relaxation toward `tAir - 1.5`. Both are properties of the
+    TIME-STEPPED solver, and the second has no dt-free steady state — its fixed point is
+    a blend of the physics equilibrium and `tAir - 1.5` whose weights depend on the step
+    size. Writing one here would be inventing physics the browser does not run, which is
+    the failure mode the canopy sweep exists to prevent.
+
+    So the water layer is scored where the real solver runs: `measure-shipped-
+    amplitude.py`, which drives `TsHeatSim` through scripts/sim-field-dump.mjs and had
+    been passing `np.zeros` for this layer since it was written. What THIS script does
+    with water is report its coverage, so a reader of spatial-accuracy.json can see how
+    much of each ward the predictor is structurally blind to.
+
+    UNLIKE `built`, THIS IS RASTERISED ON DEMAND rather than read from a cache written by
+    the TypeScript. `built` can use a cache because one grid serves every consumer; water
+    is needed at 140 here and at 192 for the solver, and a cache would freeze one of
+    them. The cost of that is a second implementation of the rasteriser, in
+    scripts/_water.py, held to the shipped TypeScript by tests/fixtures/water-oracle
+    and scripts/check-water-oracle.py on every `npm run test:py`.
+    """
+    size_m = float(_types.WARDS[ward_id].footprint_m)
+    return _water.water_north_up(_water.load_ward_water(ward_id), size_m, n)
+
+
+def water_layer(ward_id: str, n: int = SURFACE_GRID) -> npt.NDArray[np.float32]:
+    """The water layer AS THE SOLVER RECEIVES IT — which is currently all zeros.
+
+    `WATER_LAYER_ENABLED` is false in types.ts, so `rasterWardBase` hands the solver a
+    zero array rather than the coverage above. This function applies the same gate,
+    through `_water.LAYER_ENABLED`, which the parity oracle pins to the TypeScript
+    constant. Any model in this stack must call THIS, not `water_coverage`: scoring the
+    ungated geometry while the browser runs the gated one is precisely the divergence
+    docs/evidence/known-limitations.md §1 is about, and the gate is the newest place it
+    could open.
+
+    Why the gate is off — the measurement is in `_water.LAYER_ENABLED` and in
+    docs/heat-map-water-layer.md. Short version: turning it on cost 0.049 r against
+    ECOSTRESS, in proportion to each ward's open water, and RAISED an already over-drawn
+    spatial amplitude.
+    """
+    if not _water.LAYER_ENABLED:
+        return np.zeros((n, n), dtype=np.float32)
+    return water_coverage(ward_id, n)
+
+
 def area_downsample(src: npt.NDArray[np.float32], out_h: int, out_w: int) -> npt.NDArray[np.float32]:
     """Area-weighted mean of `src` onto an out_h x out_w grid over the same extent.
 
@@ -324,6 +383,16 @@ def modelled_field(sc: _physics.Scene, veg: npt.NDArray[np.float32],
     replaced by arrays — same constants, same order of operations. The physics
     itself stays in `_physics._eq`, evaluated here on arrays via the identical
     expression, so this cannot drift into being a second model.
+
+    THERE IS NO WATER TERM HERE, AND THERE IS NONE IN THE MODEL THIS MIRRORS. That is
+    worth stating because `SimLayers` has carried a `water` layer all along and it
+    started being FILLED on 2026-08-13. `equilibriumC` (types.ts) takes
+    `(p, albedo, veg, built)`; the water terms live only in the time-stepped
+    `TsHeatSim.step`, and one of them has no dt-free steady state. So this predictor is
+    structurally blind to water, its figures do not move when the water layer is
+    populated, and the water measurement is in `measure-shipped-amplitude.py`, which
+    drives the real solver. See `water_layer` above for the full argument, and
+    docs/evidence/known-limitations.md §6.
     """
     kRad = _physics.K_SUM * ratio / (1 + ratio)
     h = _physics.K_SUM - kRad
@@ -439,6 +508,11 @@ def main() -> None:
 
     # Per-ward layers, downsampled once to the ECOSTRESS grid.
     layers: dict[str, dict[str, npt.NDArray[np.float32]]] = {}
+    # Ward-mean open-water fraction. REPORTED, NOT MODELLED — see `water_layer`: the
+    # equilibrium has no water term, so this predictor is blind to whatever share of
+    # each ward this is. Printing it is how that blindness stays visible instead of
+    # becoming an absence nobody notices.
+    water_cover: dict[str, float] = {}
     for wid, w in wards.items():
         _tf, W, H = target_grid(_types.ward_bounds(w))
         veg, alb = surface_layers(wid)
@@ -447,8 +521,12 @@ def main() -> None:
             "alb": area_downsample(alb, H, W),
             "built": area_downsample(built_layer(wid), H, W),
         }
+        water_cover[wid] = float(water_coverage(wid).mean())
         print(f"  {wid:<13} ECOSTRESS grid {W}x{H} · veg sd {layers[wid]['veg'].std():.3f}"
-              f" · built sd {layers[wid]['built'].std():.3f}")
+              f" · built sd {layers[wid]['built'].std():.3f}"
+              f" · water {100 * water_cover[wid]:.2f}%"
+              f" ({'gated off' if not _water.LAYER_ENABLED else 'in the solve'};"
+              f" never in this predictor)")
 
     rows: list[dict[str, Any]] = []
     for n, sc in enumerate(scenes, 1):
@@ -496,6 +574,10 @@ def main() -> None:
                 if (phase is None or r["phase"] == phase) and not math.isnan(r[key])]
         return float(np.mean(vals)) if vals else float("nan")
 
+    def agg_ward(wid: str, key: str) -> float:
+        vals = [r[key] for r in rows if r["ward"] == wid and not math.isnan(r[key])]
+        return float(np.mean(vals)) if vals else float("nan")
+
     out: dict[str, Any] = {
         "method": "Pearson correlation between the modelled equilibrium field and ECOSTRESS "
                   "L2T LSTE v002, per ward per scene, at the sensor's native 70 m. Both "
@@ -514,6 +596,23 @@ def main() -> None:
         "by_phase": {p: {k: agg(p, k) for k in
                          ("r_physics", "r_built", "r_veg", "anomaly_rmse_k")}
                      for p in ("day", "night")},
+        # Per ward, because the aggregate hides which ward a change came from. Three
+        # wards is few enough that a result driven entirely by one of them is a result
+        # about that ward, and the split is the only way to see it.
+        "by_ward": {wid: {"ward_scenes": len([r for r in rows if r["ward"] == wid]),
+                          "open_water_fraction": water_cover.get(wid, float("nan")),
+                          **{k: agg_ward(wid, k) for k in
+                             ("r_physics", "r_built", "r_veg", "anomaly_rmse_k")}}
+                    for wid in wards},
+        "water": {"note": "Open-water fraction per ward, from the shipped OSM polygons "
+                          "({ward}-water.json) through the same rasteriser the browser "
+                          "runs (scripts/_water.py, oracle-checked). REPORTED, NOT "
+                          "MODELLED: this script's predictor is the per-cell equilibrium, "
+                          "which mirrors equilibriumC(p, albedo, veg, built) and has no "
+                          "water term. Water enters the engine only in TsHeatSim.step, so "
+                          "the figures above do not respond to it. The measurement that "
+                          "does is data/calibration/shipped-amplitude.json.",
+                  "fraction_by_ward": water_cover},
         "terms": {t: {"r": agg(None, f"r_term_{t}"), "spatial_sd_k": agg(None, f"sd_term_{t}")}
                   for t in ("solar_albedo", "built", "veg")},
         "constants": {"note": "DEFAULT_PARAMS from types.ts + sky.ts — what ships, NOT "
@@ -531,6 +630,13 @@ def main() -> None:
         n = len([r for r in rows if ph is None or r["phase"] == ph])
         print(f"  {label:<14}{agg(ph,'r_physics'):>9.3f}{agg(ph,'r_built'):>9.3f}"
               f"{agg(ph,'r_veg'):>9.3f}{agg(ph,'anomaly_rmse_k'):>10.2f}K{n:>6}")
+    for wid in wards:
+        n = len([r for r in rows if r["ward"] == wid])
+        if not n:
+            continue
+        print(f"  {wid:<14}{agg_ward(wid,'r_physics'):>9.3f}{agg_ward(wid,'r_built'):>9.3f}"
+              f"{agg_ward(wid,'r_veg'):>9.3f}{agg_ward(wid,'anomaly_rmse_k'):>10.2f}K{n:>6}"
+              f"   water {100 * water_cover.get(wid, float('nan')):.2f}%")
     print(f"\n  written to {os.path.relpath(OUT, ROOT)}")
 
     print(f"\n  {'term':<16}{'r':>8}{'spatial SD (K)':>16}")
