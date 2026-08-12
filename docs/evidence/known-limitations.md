@@ -9,17 +9,22 @@ Each entry states **what is wrong**, **how we know**, **what it does and does no
 
 ---
 
-## 1. The published accuracy figures never see the canopy blend
+## 1. The published accuracy figures never see the canopy blend — and once they did, the blend lost
 
-**Status:** CLOSED 2026-08-12 for the model path · **Found:** 2026-08-12, during the CHM v2 upgrade ·
-**Pre-existing**, not introduced by that work · **One part deliberately left open** — see *What is still
-open* below.
+**Status:** CLOSED 2026-08-12 · **Found:** 2026-08-12, during the CHM v2 upgrade · **Pre-existing**, not
+introduced by that work.
 
 > **Closed by** `scripts/_canopy.py` (the port), `surface_layers()` in `measure-spatial-accuracy.py` (the
 > application), `tests/fixtures/canopy-oracle/` + `check-canopy-oracle.py` (the gate that keeps the two
 > implementations from drifting), and `measure-canopy-blend-residual.py` (the cost of the one
-> simplification taken). **The new spatial figures are below and they are slightly worse than the old
-> ones.** That is the point: the old ones described a model nobody ran.
+> simplification taken).
+>
+> **AND THEN THE MEASUREMENT KILLED THE OPERATOR IT WAS BUILT TO SCORE.** The same day, the first strength
+> sweep possible in this repo's history said the canopy→vegetation blend degrades agreement with
+> ECOSTRESS monotonically. `CANOPY_BLEND_STRENGTH` (`src/scripts/climate-engine/types.ts`) is now **0**:
+> the canopy raster is **render-only** and does not enter the temperature solve. See *The sweep, and the
+> decision to switch the blend off* below. The published spatial figures are the strength-0 column, which
+> is also the best column.
 
 **What was wrong** *(everything from here to "What would close it" is the record as written at discovery,
 kept in the present tense it was found in)*. The engine's headline accuracy — **night ±3.5 K, day ±5.0 K**
@@ -66,7 +71,7 @@ caches — the only thing that moved is `veg`. Both baselines were re-run on the
 `spatial-accuracy.json` committed in the repo turned out to have been produced against an older
 built-footprint cache and was not a valid comparison.
 
-| | before (model nobody ran) | after (model that ships) |
+| | strength 0 (blend absent) | strength 0.5 (as shipped that morning) |
 |---|---|---|
 | r_physics, overall | 0.2154 | **0.2076** |
 | r_physics, day / night | 0.2961 / 0.1556 | **0.2809 / 0.1533** |
@@ -95,7 +100,74 @@ because the model got better, and +0.009 is far below the 0.05 the script requir
 within-ward pattern as carrying information. **The verdict is unchanged: do not describe the within-ward
 detail as validated.**
 
+### The sweep, and the decision to switch the blend off (2026-08-12)
+
+The paragraph above says "Phase B should test this first." Phase B was the same afternoon, and the answer
+was decisive enough to act on immediately. The full sweep, same 34 scenes / 87 ward-scenes / three wards,
+only the strength varying:
+
+| strength | r_physics | r_veg | anomaly RMSE | veg term spatial SD |
+|---|---|---|---|---|
+| **0.00** | **0.2154** | **0.2380** | 1.8358 | 0.64 |
+| 0.15 | 0.2145 | 0.2321 | 1.8308 | 0.63 |
+| 0.25 | 0.2129 | 0.2245 | 1.8251 | 0.63 |
+| 0.50 *(was shipped)* | 0.2076 | 0.1987 | **1.8061** | 0.61 |
+
+**Four independent lines say the operator does not earn its place.**
+
+**1. It monotonically degrades spatial agreement.** Not a threshold effect, not noise at one strength —
+every step of the sweep costs correlation, in both predictors, at both phases.
+
+**2. Its only benefit is an artefact.** RMSE is the one column that improves with strength, and the veg
+term's spatial SD falls monotonically alongside it (0.64 → 0.61 K). `measure-shipped-amplitude.py` already
+records that **the model draws ~2× the observed spatial SD**. So the blend buys its RMSE by *compressing an
+amplitude we over-draw* — largely through its own `[0,1]` clamp, which bites **3–10 %** of cells. That is
+error reduced by damping, not by getting the pattern right. The correct fix for an over-drawn amplitude is
+the amplitude.
+
+**3. It implies a cooling ratio outside the published range.** Schwaab et al. 2021 (*Nat Commun* 12:6763,
+293 European cities) puts tree cooling at **2–4×** treeless green. At strength 0.5 our implied tree:grass
+veg ratio is **4.9–8.1×**. Raw NDVI FVC is already in band at **2.0–2.7×**. The operator pushed a
+physically-interpretable ratio out of the literature and nothing in the model noticed.
+
+**4. It cannot use the information it appears to use.** `blendCanopyIntoVeg` is **exactly scale-invariant
+in canopy height**: its target is `v̄ · hᵢ / h̄`, and the magnitude cancels, so `blend(2h) == blend(h)`
+bit-for-bit. It consumes only the *normalised* canopy pattern. Two consequences, both important:
+
+- the CHM v2 upgrade's accuracy gain (**MAE 4.3 → 3.0 m**) could never have reached the physics through
+  this path, whatever we did — v2 is a render-quality argument, not an accuracy one;
+- the single thing the operator *does* consume, the pattern, is the thing the sweep shows it makes worse.
+
+**Decision: `CANOPY_BLEND_STRENGTH = 0`** (`src/scripts/climate-engine/types.ts`). The canopy layer stays —
+it drives the rendered tree layer — but it **no longer enters the temperature solve at all**. The canopy
+raster is now render-only, in the same sense the relief field is, and the provenance receipt says so
+(`kind: "reference"`, `confidence: "… NOT used by the simulation"`).
+
+**What that costs, honestly.** Nothing measured. Every spatial figure improves back to the strength-0
+column, ward-mean accuracy is untouched (the blend was mean-neutral, so it never reached `measure-accuracy.py`
+in the first place), and `physics − best null` returns to **−0.023**: the model once again does *not* beat
+the vegetation null on within-ward pattern. That is a worse-looking number and the true one. The +0.009 we
+briefly had was purchased by degrading the baseline.
+
+**What it does not resolve.** We still cannot separate "the CHM adds vertical information a 70 m sensor
+cannot see" from "the redistribution puts vegetation in the wrong places". Turning the blend off is not a
+verdict on the CHM; it is a verdict on *this operator*, at the only scale we can score it. A canopy term
+that is not scale-invariant, or an observation that can resolve street trees, would both be new evidence.
+
+**Reversibility, and why it is one constant.** The strength used to be a bare `0.5` at the TypeScript call
+site plus a separate literal in `scripts/_canopy.py` — the same two-implementations-of-one-equation shape
+this whole entry is about. It is now `CANOPY_BLEND_STRENGTH` in `types.ts`, imported by
+`dump-canopy-oracle.mjs`, frozen into the fixture as `shippedStrength`, and asserted against the Python
+constant by `check-canopy-oracle.py` on every `npm run test:py`. `blendCanopyIntoVeg` itself is unchanged
+and still oracle-checked at strengths 0, 0.5 and 1. Re-enabling is a one-line change — and must be
+accompanied by a re-run of the sweep above, not an argument.
+
 ### The one simplification taken, and what it costs
+
+> **Now moot in production, kept as the record.** At `CANOPY_BLEND_STRENGTH = 0` the blend is an identity,
+> so applying it at 140 or at 192 makes no difference — the residual below is exactly zero for the shipped
+> configuration. It is preserved because it is the evidence that the *measurement* on which the strength-0
+> decision rests was itself sound, and because it becomes live again the moment anyone re-enables the blend.
 
 The blend is applied at the validation's own 140 grid, not by replaying the browser's 140 → 192 → blend
 path. Approved in the design **on condition the residual be measured rather than assumed** — since the
@@ -117,7 +189,7 @@ and that conversion carries no diffusion, so it is an upper bound. **9.2 % again
 not material, decision stands.** Re-run the script if the grids, the blend strength, or the canopy rasters
 change.
 
-### What is still open
+### What was still open, and how switching the blend off closed it
 
 `scripts/build-ward-observations.py` was **deliberately not changed**. It derives each ward's **observed**
 `fvc` from the surface PNG, and mixing a model input into an observation may be actively wrong rather than
@@ -126,10 +198,17 @@ ward-mean `fvc` by **−0.00015 (ballygunge), −0.0030 (baruipur), −0.00051 (
 residual, not zero, and larger than the ≤0.0012 recorded above. Small either way, but the question is
 about correctness, not size, and it needs its own investigation.
 
-**How to talk about it.** "The validation now scores the field the browser renders, and it is gated by a
-parity oracle against the shipped TypeScript so the two cannot drift apart again. Measuring honestly cost
-us 0.008 r. The interesting part is that it cost the vegetation baseline more, which is the first real
-evidence about whether the canopy blend helps the spatial pattern — and so far it does not."
+**Resolved by the strength-0 decision, for the right reason rather than by luck.** The question was whether
+an *observation* should have a *model input* mixed into it. There is now no model input to mix: the canopy
+does not enter the solve, so the observed `fvc` and the modelled `veg[]` come from the same measured
+Sentinel-2 surface and no asymmetry exists. The question would return, unchanged and still unanswered, if
+the blend were ever re-enabled — which is why the measurement above is recorded rather than deleted.
+
+**How to talk about it.** "The validation now scores the field the browser renders, gated by a parity
+oracle against the shipped TypeScript so the two cannot drift apart again. The first thing that honest
+measurement told us was that our own canopy operator was making the model worse — so we turned it off the
+same day. The canopy still draws the trees; it no longer touches the temperature. We lost a number we
+liked (the model briefly beat both nulls) because that number came from degrading the baseline."
 
 ---
 

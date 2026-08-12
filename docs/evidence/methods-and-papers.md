@@ -154,9 +154,11 @@ of these changed the shipped p75 method — they are context/benchmarking)*
   (`dc-urs-engineering-review.md` §4) found the shipped `φ₁·NDVI + φ₂·FVC + φ₃·VSI` formula is **not**
   Czekajlo's method and should not be attributed as such; the Canadian calibration doesn't transfer; its
   33-year composites (vs single-scene NDVI) are why Kolkata inputs need seasonal composites.
-- **Meta AI / WRI 1 m Canopy Height Model (v2)** — dataset detail in
+- **Meta AI / WRI 1 m Canopy Height Model — we ship v1** — dataset detail in
   [data-sources.md](data-sources.md); cited as a dataset/provider, **not** as a formal paper (Tolan et al.
-  **not in docs — verify**).
+  **not in docs — verify**). **RENDER-ONLY since 2026-08-12:** it places and scales the drawn trees and does
+  **not** enter the temperature solve. *(This line previously read "(v2)"; we ship v1 — the same correction
+  already recorded in data-sources.md.)*
 - **ESA WorldCover** (2020/2021), CC BY 4.0, DOI `10.5281/zenodo.7254221` — coarse land-cover mask;
   cross-checks/gap-fills the CHM.
 - **Mapillary Vistas / Neuhold et al. ICCV 2017** — **not in the repo at all.** Mapillary appears only as a
@@ -177,6 +179,16 @@ of these changed the shipped p75 method — they are context/benchmarking)*
   incl. Kolkata: threshold-value-of-effect 0.77 ha, cooling reach 420 m, daytime max UCI 8.07 °C (Kolkata)
   vs 4.83 °C (Bangkok — a *different* city). **Correction on record:** previously miscited as "Mitra et al.
   2022" with a false "4.83–8.07 °C Kolkata band"; corrected 2026-08-08.
+- **Schwaab, Meier, Mussetti, Seneviratne, Bürgi & Davin (2021)**, *Nature Communications* 12:6763 — LST
+  cooling by urban trees vs treeless green space across **293 European cities**; trees cool roughly **2–4×**
+  more than grass-only green, with a strong north–south gradient. **Engine use — this one changed the
+  physics.** It is the external yardstick that condemned the canopy→vegetation blend: at the shipped
+  strength of 0.5 our *implied* tree:grass vegetation ratio was **4.9–8.1×**, outside the published range,
+  while raw NDVI-derived FVC already sits in band at **2.0–2.7×**. Together with a monotonic loss of
+  ECOSTRESS agreement, that put `CANOPY_BLEND_STRENGTH` to 0 on 2026-08-12 — see
+  [known-limitations.md §1](known-limitations.md). **Caveat we state ourselves:** the sample is European and
+  Kolkata is not in it, so this is used as an order-of-magnitude plausibility bound, never as a calibration.
+  *(DOI not verified from the repo — confirm before citing externally.)*
 - **Gunawardena & Steemers (2023)**, *Buildings & Cities* 4(1), DOI
   [10.5334/bc.282](https://doi.org/10.5334/bc.282) — neighbourhood vertical greening: heat-island intensity
   1.86→1.81 K (~3%); energy 2.1–5.2%.

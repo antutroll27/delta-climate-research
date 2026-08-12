@@ -4,14 +4,21 @@ How far does blending the canopy at 140 land from the browser's 192-grid answer?
 
     python3 scripts/measure-canopy-blend-residual.py
 
-WHY THIS EXISTS. `surface_layers()` now applies the shipped canopy blend, but at the
+SUPERSEDED IN PRODUCTION, KEPT AS EVIDENCE. The shipped blend strength went to 0 on
+2026-08-12 (docs/evidence/known-limitations.md sec.1): the canopy raster no longer
+enters the temperature solve, so this residual is identically zero for the shipped
+configuration and `main()` refuses to overwrite the committed record with zeros. What
+is committed was measured at strength 0.5 -- the configuration the question was about --
+and it stays because it is the evidence that the sweep behind the strength-0 decision
+was taken on a sound validation path. It becomes live again the moment anyone re-enables
+the blend, which is exactly when to run this.
+
+WHY THIS EXISTS. `surface_layers()` applies the shipped canopy blend, but at the
 validation's own 140 grid rather than replaying the browser's 140 -> 192 -> blend
-path. That is a deliberate simplification
-(docs/superpowers/specs/2026-08-12-validation-sees-the-canopy-design.md) and it was
-approved WITH A CONDITION: the residual must be measured and published, not asserted
-to be small. The defect the whole change closes is precisely a difference somebody
-assumed was negligible without checking, so repeating that move here would be
-farcical.
+path. That was a deliberate simplification, and it was approved WITH A CONDITION: the
+residual must be measured and published, not asserted to be small. The defect the whole
+change closes is precisely a difference somebody assumed was negligible without
+checking, so repeating that move here would be farcical.
 
 WHAT IS COMPARED.
 
@@ -157,6 +164,29 @@ def veg_coefficients() -> dict[str, dict[str, float]]:
 
 
 def main() -> None:
+    # The committed record in data/calibration/canopy-blend-residual.json was measured at
+    # strength 0.5, which is what shipped when the question was live. Since 2026-08-12 the
+    # shipped strength is 0 (docs/evidence/known-limitations.md sec.1): the blend is an
+    # identity, so both paths reduce to the resample control, every residual is exactly
+    # zero, and the "excess over control" verdict is 0/0. Re-running would replace a real
+    # measurement with a file full of zeros that still LOOKS like a measurement -- the
+    # precise failure mode this script was written to prevent. So it refuses, loudly, and
+    # says what to do instead.
+    if _canopy.BLEND_STRENGTH == 0:
+        print("  The shipped canopy blend strength is 0 — the blend is off and the canopy "
+              "raster\n  is render-only, so there is no 140-vs-192 blend residual to measure: "
+              "both paths\n  collapse onto the resample control and every number would be "
+              "exactly zero.\n")
+        print(f"  {os.path.relpath(OUT, ROOT)} is LEFT AS IT IS. It records the residual as "
+              f"measured at\n  strength 0.5, which is the configuration the question was about, "
+              f"and it is the\n  evidence that the sweep behind the strength-0 decision was "
+              f"itself sound.\n")
+        print("  To re-measure: set CANOPY_BLEND_STRENGTH in src/scripts/climate-engine/types.ts "
+              "to the\n  strength you are proposing, regenerate the canopy oracle, and run this "
+              "again. Do not\n  edit _canopy.BLEND_STRENGTH to force it — the parity oracle will "
+              "fail, correctly.")
+        return
+
     msa = _load_msa()
     coeff = veg_coefficients()
     print(f"  veg term sensitivity L/k (K per unit vegetation fraction):")

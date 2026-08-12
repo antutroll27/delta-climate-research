@@ -58,7 +58,8 @@ pattern), per-session billing (uncapped on a public page), and absent building I
 | Heights | **LANDED: Google Open Buildings 2.5D Temporal** (2023 epoch, ~4 m, public GCS bucket — **no EE needed**); 98-99 % of buildings got a direct zonal-mean measurement | massing |
 | Semantic IDs | OSM / Overpass (Ballygunge only, ~9k buildings) | per-building analytics where available |
 | Land surface temp | ECOSTRESS (70 m), Landsat 8/9 TIRS | the °C field |
-| Canopy | Sentinel-2 NDVI (10 m) | the `veg` term |
+| Canopy | Sentinel-2 NDVI (10 m) | the `veg` term — and since 2026-08-12 it is the **only** thing that does |
+| Canopy height | Meta/WRI 1 m CHM (v1) | the **rendered** tree layer only. It briefly redistributed `veg[]` (2026-08-10 → 2026-08-12); `CANOPY_BLEND_STRENGTH` is now 0 because measuring it showed it made ECOSTRESS agreement worse — `docs/evidence/known-limitations.md` §1 |
 | Land cover | ESA WorldCover / Dynamic World | `albedo` / `built` |
 | Neighbourhood similarity | **AlphaEarth embeddings** (phase 2+, the novel differentiator) | "find wards like Ballygunge" |
 

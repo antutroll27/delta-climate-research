@@ -14,19 +14,37 @@ rejection; it is the diligence trail, not a scrap heap.
 **Sentinel-2 L2A (NDVI)** — Copernicus/ESA optical · 10 m, ~5-day revisit, current · **Copernicus open
 licence — commercial use explicitly permitted** · via Element84 earth-search STAC API (`sentinel-2-l2a`
 collection), `https://earth-search.aws.element84.com/v1`; terms
-`https://sentinels.copernicus.eu/web/sentinel/terms-conditions` · **role:** NDVI thermal correlator,
-feeds `veg[]` (Tier-1 vegetation input) · status: shipped, unchanged.
+`https://sentinels.copernicus.eu/web/sentinel/terms-conditions` · **role:** NDVI thermal correlator, and
+since 2026-08-12 the **sole** source of `veg[]` — the CHM used to redistribute it and no longer does (see
+the CHM entry below) · status: shipped, unchanged.
 
 **Meta / WRI 1 m Canopy Height Model (CHM) — we ship v1** — Meta AI + WRI, neural height regression on
 Maxar imagery · 1 m, single-epoch, MAE "a few metres," known ~150 m tiling artefacts · **CC BY 4.0 —
 commercial with attribution** · anonymous AWS Open Data, no credentials:
 `s3://dataforgood-fb-data/forests/v1/alsgedi_global_v6_float/chm/<quadkey>.tif`, zoom-9 Bing quadkey ·
 registry `https://registry.opendata.aws/dataforgood-fb-forests/` · **role:** Tier-2 canopy height —
-sharpens `veg[]` mean-neutrally and drives tree placement/height for the render layer · status: **shipped
-to production 2026-08-11** for all three wards (8,896 / 4,413 / 6,797 trees); accuracy re-validated
-unregressed (night ±3.5K, day ±5.0K).
+**RENDER-ONLY.** Drives tree placement/height for the render layer and **does not enter the temperature
+solve** · status: **shipped to production 2026-08-11** for all three wards (8,896 / 4,413 / 6,797 trees);
+ward-mean accuracy unchanged throughout (night ±3.5K, day ±5.0K — the CHM has never affected it).
 
-> **CORRECTION (2026-08-12).** This entry previously read "CHM **v2**" and cited a `forests/v2/…` path,
+> **CORRECTION (2026-08-12) — the role above used to read "sharpens `veg[]` mean-neutrally".** That was
+> true of the code from 2026-08-10 to 2026-08-12 and is now false: `CANOPY_BLEND_STRENGTH` is **0**.
+>
+> The blend was never measured while it shipped, because no Python applied it (see
+> [known-limitations.md §1](known-limitations.md)). The first sweep that could — 34 near-nadir ECOSTRESS
+> scenes, 87 ward-scenes, three wards — was monotonic against it: **r_veg 0.2380 → 0.1987, r_physics
+> 0.2154 → 0.2076** going from strength 0 to 0.5. Its only improving metric (anomaly RMSE 1.836 → 1.806)
+> improved by *compressing* an amplitude the model already over-draws ~2×, chiefly through the operator's
+> own [0,1] clamps. At 0.5 the implied tree:grass veg ratio was **4.9–8.1×** against the **2–4×** of
+> Schwaab et al. 2021 (Nat Commun 12:6763), while raw NDVI FVC sits in band at 2.0–2.7×.
+>
+> **The operator was also exactly scale-invariant in height** — its target `v̄·hᵢ/h̄` cancels magnitude, so
+> `blend(2h) == blend(h)` bit-for-bit. It consumed only the *normalised canopy pattern*, never the heights.
+> This has a direct consequence for the v2 question below: **a v2 upgrade could never have improved the
+> physics through this path**, no matter how much better its heights are. v2 is a render-quality and
+> tree-placement argument only.
+
+> **CORRECTION (2026-08-12) — which version we ship.** This entry previously read "CHM **v2**" and cited a `forests/v2/…` path,
 > while the same paragraph admitted the working recipe used `forests/v1/…`. The engine ships **v1**. The
 > error was mine and it flattered us, which is the worst direction for it to be wrong in.
 >
@@ -37,7 +55,10 @@ unregressed (night ±3.5K, day ±5.0K).
 >
 > Measured over our wards, v2 reads **1.7-1.9x higher** than v1 (ward means ballygunge 2.73 -> 4.85 m,
 > barrackpore 1.52 -> 2.86 m, baruipur 2.07 -> 3.47 m; p95 10 -> 16 m in ballygunge). So the "3-5 m ward
-> mean" this project has quoted is a **v1 artefact**. Upgrade decision pending.
+> mean" this project has quoted is a **v1 artefact**. Upgrade decision pending — but note it is now a
+> **render and tree-placement** decision only, not an accuracy one: since the blend went to 0 the CHM does
+> not reach the solver at all, and even when it did, the operator's scale-invariance meant better heights
+> could not have moved a single published figure.
 >
 > One thing v2 is NOT: fresher. Its paper puts ~80% of source imagery in 2018-2020, the same epoch as v1
 > — it is a **model** upgrade, not new observations. Do not sell it as newer data. *(The AWS registry
@@ -357,11 +378,15 @@ CHM within ±40%, **but we already ingest it** (`fit-physics.py`, `landcover-fra
 authors instruct users to apply. Same objection to NDVI: we ingest Sentinel-2 ourselves, and published work
 puts NDVI at as little as **R² = 0.09** against tree height in NYC.
 
-**Ruled out as circular — thermal.** Validating canopy by its cooling signature is tempting and wrong here:
-the twin already takes canopy as a thermal *input*, the published effect is canopy **cover** not **height**,
-cooling only becomes detectable above ~20-45% canopy, ECOSTRESS's 70 m pixel cannot resolve street trees,
-and one 2025 result finds tree height *raises* LST until it exceeds building height — which in our wards is
-likely the wrong side of the crossover.
+**Ruled out on physics, not only on circularity — thermal.** Validating canopy by its cooling signature is
+tempting and wrong here: the published effect is canopy **cover** not **height**, cooling only becomes
+detectable above ~20-45% canopy, ECOSTRESS's 70 m pixel cannot resolve street trees, and one 2025 result
+finds tree height *raises* LST until it exceeds building height — which in our wards is likely the wrong
+side of the crossover. *(Amended 2026-08-12: this entry also used to say "the twin already takes canopy as a
+thermal input", which was the circularity objection. That is no longer true — `CANOPY_BLEND_STRENGTH` is 0
+and canopy does not enter the solve — so the circularity is gone. It does not rehabilitate the idea: we
+**did** run the thermal comparison, over 87 ward-scenes, and canopy-informed vegetation agreed with
+ECOSTRESS **less** well than raw NDVI. The remaining reasons above are why, and they still stand.)*
 
 **Commercial VHR — cheap, and blocked by regulation rather than price.** Vantor Vivid 30 cm BGRN ≈ **$90**
 for our 6 km² (1 km² minimum, and the same Maxar lineage Meta's CHM was trained on); Airbus Pléiades Neo

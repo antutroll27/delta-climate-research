@@ -113,25 +113,32 @@ def surface_layers(ward_id: str) -> tuple[npt.NDArray[np.float32], npt.NDArray[n
 
     AND THEN THE CANOPY BLEND, for the same reason. Until 2026-08-12 this function
     stopped at the surface PNG and stated the principle above while breaking it:
-    `rasterWardBase` does not stop there. It mixes the measured canopy raster into
-    `veg[]` before the solver ever runs —
+    `rasterWardBase` does not stop there. It passes `veg[]` through
+    `blendCanopyIntoVeg` before the solver ever runs —
 
-        if (canopy) veg = blendCanopyIntoVeg(veg, resample(canopy.height, canopy.n, n), 0.5);
+        if (canopy) veg = blendCanopyIntoVeg(veg, resample(canopy.height, canopy.n, n),
+                                             CANOPY_BLEND_STRENGTH);
 
-    — and no Python applied it, so every spatial figure this file has ever written
-    scored a field that has never shipped. The tell was an accuracy output that came
-    back byte-identical across a canopy change that nearly doubled the height field:
-    a tautology, not evidence. See docs/evidence/known-limitations.md §1.
+    — and no Python applied it, so every spatial figure this file wrote before that
+    date scored a field that had never shipped. The tell was an accuracy output that
+    came back byte-identical across a canopy change that nearly doubled the height
+    field: a tautology, not evidence. See docs/evidence/known-limitations.md sec.1.
 
-    THE BLEND IS APPLIED AT THIS SCRIPT'S OWN 140 GRID, not by replaying the
-    browser's 140 → 192 → blend path. Deliberate, and recorded in
-    docs/superpowers/specs/2026-08-12-validation-sees-the-canopy-design.md: it is
-    one function rather than a second resample stage in the laboratory, and the
-    blend is mean-neutral at any grid, so ward means agree either way and only the
-    spatial pattern differs. That difference is MEASURED, not asserted — see
-    scripts/measure-canopy-blend-residual.py, which reports how far this lands from
-    the browser's 192-grid answer. If that residual ever grows material against the
-    spatial signal, this decision is the thing to revisit.
+    THE STRENGTH IS NOW ZERO, so the call below is an identity and the canopy raster
+    does not reach the physics at all. That is not a reason to delete this code. It is
+    the SAME call the browser makes, reading the SAME constant through the parity
+    oracle, so the laboratory tracks the instrument automatically if the strength ever
+    moves — which is the whole point of the defect this closed. Why zero: the sweep in
+    known-limitations.md sec.1, and the comment on `_canopy.BLEND_STRENGTH`.
+
+    THE BLEND IS APPLIED AT THIS SCRIPT'S OWN 140 GRID, not by replaying the browser's
+    140 -> 192 -> blend path: one function rather than a second resample stage in the
+    laboratory, and the blend is mean-neutral at any grid, so ward means agree either
+    way and only the spatial pattern differs. That difference was MEASURED, not
+    asserted -- scripts/measure-canopy-blend-residual.py reports how far this lands
+    from the browser's 192-grid answer (6-9% of the blend's own effect at 70 m). At
+    strength 0 the residual is identically zero; it becomes live again the moment
+    anyone re-enables the blend, which is when to re-read that script.
 
     A ward WITHOUT a canopy PNG behaves exactly as before — that is also what the
     browser does, since `loadCanopyRaster` returns null and `rasterWardBase` skips
