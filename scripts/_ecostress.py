@@ -70,24 +70,17 @@ CACHE = os.path.expanduser("~/.cache/delta-climate/ecostress")
 TOKEN_PATH = os.path.expanduser("~/.config/delta-climate/earthdata-token")
 CMR = "https://cmr.earthdata.nasa.gov/search/granules.umm_json"
 
-# Fixed target grid. The two MGRS tiles share a CRS but not an origin, so
-# window-reading each one gives different shapes and they cannot be combined.
-# Reprojecting both onto one grid fixes that and handles the ~9.8 km overlap.
-TARGET_CRS = "EPSG:32645"          # UTM 45N — Kolkata
+# Target grid. The two MGRS tiles share a CRS but not an origin, so window-reading
+# each one gives different shapes and they cannot be combined. Reprojecting both
+# onto one grid fixes that and handles the ~9.8 km overlap.
 TARGET_RES = 70.0                  # native ECOSTRESS L2T resolution
 
-#: How far the study area may sit from TARGET_CRS's central meridian, degrees.
-#: A UTM zone is 6 deg wide, so this permits a study area straddling its own zone
-#: plus a full neighbouring zone — generous, and still catches a different city.
-#:
-#: WHY THIS EXISTS. `target_grid` happily projects ANY bbox into TARGET_CRS and
-#: returns a plausible-looking grid. Measured 2026-08-12: the Dubai urban core
-#: (54.90, 24.85, 55.60, 25.45) is 70.5 x 66.7 km on the ground but comes back as
-#: 1385 x 1337 cells = 97.0 x 93.6 km — inflated 37 % in x and 40 % in y, because
-#: Dubai is five zones from zone 45. No exception, no warning; every downstream
-#: mean, area and per-cell rate silently wrong. Kolkata sits ~1.4 deg off zone
-#: 45's central meridian and is unaffected.
-MAX_CENTRAL_MERIDIAN_OFFSET_DEG = 6.0
+#: A study area wider than this is not a city and UTM is the wrong projection for
+#: it: a single zone's transverse Mercator is only honest a few degrees from its
+#: central meridian, and 12 deg already reaches ~1.5 % scale error at the edge.
+#: Both cities are far inside it — Kolkata's widest box is 0.85 deg, Dubai's urban
+#: core 0.70 deg — and the oracle's deliberate 6 deg regression fixture still fits.
+MAX_STUDY_WIDTH_DEG = 12.0
 
 
 def utm_zone(lon: float) -> int:
@@ -98,6 +91,44 @@ def utm_zone(lon: float) -> int:
 def utm_central_meridian(zone: int) -> float:
     """Central meridian of a UTM zone, degrees east."""
     return zone * 6.0 - 183.0
+
+
+def target_crs(bbox: Bbox | None = None) -> str:
+    """The UTM CRS a study area belongs in, DERIVED from its own centre.
+
+    TRACK A. This was `TARGET_CRS = "EPSG:32645"`, hardcoded for Kolkata, and
+    `target_grid` would happily project any bbox into it and return a plausible
+    grid. Measured 2026-08-12: the Dubai urban core came back as 97.0 x 93.6 km
+    against a true 70.5 x 66.7 km — inflated 37 % in x and 40 % in y, silently,
+    because Dubai is five zones away. Deriving the CRS makes that unrepresentable
+    rather than merely detected.
+
+    KOLKATA MUST NOT MOVE. BBOX's centre longitude is 88.375, which derives to
+    zone 45 — exactly the value that was hardcoded — so every existing grid,
+    artefact and oracle case is byte-identical. That is not a happy accident to
+    rely on quietly: `check-geo-oracle.py` compares the live CRS against the
+    frozen one and fails loudly if this ever stops being true.
+
+    Southern-hemisphere areas get the 327xx band. No city needs it today, but the
+    alternative is silently projecting a southern city into a northern zone, which
+    is the same class of bug this function exists to remove.
+    """
+    box = bbox or BBOX
+    width = abs(box[2] - box[0])
+    if width > MAX_STUDY_WIDTH_DEG:
+        raise ValueError(
+            f"target_crs: study area spans {width:.1f} deg of longitude, beyond the "
+            f"{MAX_STUDY_WIDTH_DEG:.0f} deg where a single UTM zone stays honest. "
+            f"A box this wide needs an equal-area or per-tile projection, not one "
+            f"transverse Mercator.")
+    band = 326 if (box[1] + box[3]) / 2.0 >= 0.0 else 327
+    return f"EPSG:{band}{utm_zone((box[0] + box[2]) / 2.0):02d}"
+
+
+#: Kolkata's CRS, kept as a module constant because the oracle, the census and the
+#: parity dump are all Kolkata-scoped and read it directly. It is now DERIVED
+#: rather than asserted, so it cannot drift from what target_grid actually uses.
+TARGET_CRS = target_crs(BBOX)      # EPSG:32645 — UTM 45N, Kolkata
 
 #: A granule is a real file, not a stub. LP DAAC serves an HTML error page on a
 #: bad token, which is a few hundred bytes and would otherwise cache as success.
@@ -202,35 +233,21 @@ def band_url(granule: Granule, suffix: str) -> str | None:
 
 __all__ = ["BBOX", "CACHE", "CMR", "TARGET_CRS", "TARGET_RES", "TOKEN_PATH",
            "Acquisition", "Bbox", "Granule", "align", "band_url", "cmr_search",
-           "fetch", "read_window", "target_grid", "token", "transform_bounds"]
+           "fetch", "read_window", "target_crs", "target_grid", "token",
+           "transform_bounds", "utm_zone"]
 
 
 def target_grid(bbox: Bbox | None = None) -> tuple[Affine, int, int]:
-    """(affine transform, width, height) of the shared UTM 45N grid.
+    """(affine transform, width, height) of the grid this study area belongs on.
 
-    Raises ValueError if `bbox` is too far from TARGET_CRS's central meridian to
-    be projected honestly — see MAX_CENTRAL_MERIDIAN_OFFSET_DEG. The failure this
-    prevents is silent, not loud: the wrong grid is well-formed and looks right.
+    The CRS comes from `target_crs(bbox)`, so a Dubai bbox gets UTM 40N and a
+    Kolkata one gets 45N. `align` and `read_window` derive it from the SAME bbox —
+    if any of the three used a different CRS the reprojection would still succeed
+    and the array would still have the right shape, which is exactly the kind of
+    failure that reaches published numbers.
     """
     box = bbox or BBOX
-    lon_c = (box[0] + box[2]) / 2.0
-    # The last two digits of an EPSG:326xx / 327xx code ARE the zone number. Do
-    # not route this through utm_zone(), which takes a LONGITUDE — that read 45 as
-    # 45 deg E and returned zone 38, whose central meridian is 45.0E, so the guard
-    # measured Kolkata as 43 deg out of place and fired on the ward it protects.
-    home = int(TARGET_CRS.rsplit(":", 1)[1]) % 100
-    offset = abs(lon_c - utm_central_meridian(home))
-    if offset > MAX_CENTRAL_MERIDIAN_OFFSET_DEG:
-        want = utm_zone(lon_c)
-        raise ValueError(
-            f"target_grid: bbox centre {lon_c:.3f}E is {offset:.1f} deg from "
-            f"{TARGET_CRS}'s central meridian ({utm_central_meridian(home):.1f}E) — "
-            f"{abs(want - home)} UTM zones away. The projection would return a "
-            f"well-formed but badly distorted grid. This area belongs in UTM zone "
-            f"{want}N (EPSG:326{want:02d}). TARGET_CRS is hardcoded for Kolkata; "
-            f"deriving it per city is Track A and is gated on the geo-oracle "
-            f"parity fixtures in tests/fixtures/geo-oracle/.")
-    l, b, r, t = transform_bounds("EPSG:4326", TARGET_CRS, *box, densify_pts=21)
+    l, b, r, t = transform_bounds("EPSG:4326", target_crs(box), *box, densify_pts=21)
     w = int(np.ceil((r - l) / TARGET_RES))
     h = int(np.ceil((t - b) / TARGET_RES))
     return from_origin(l, t, TARGET_RES, TARGET_RES), w, h
@@ -256,7 +273,7 @@ def align(path: str, nodata: float, dtype: str, bbox: Bbox | None = None,
     with rasterio.open(path) as src:
         reproject(source=rasterio.band(src, 1), destination=dst,
                   src_transform=src.transform, src_crs=src.crs,
-                  dst_transform=tf, dst_crs=TARGET_CRS,
+                  dst_transform=tf, dst_crs=target_crs(bbox),
                   resampling=resampling, src_nodata=src.nodata, dst_nodata=nodata)
     return dst
 
@@ -265,7 +282,8 @@ def read_window(path: str, nodata: float = np.nan, dtype: str = "float32",
                 bbox: Bbox | None = None) -> tuple[npt.NDArray[Any], Affine, rasterio.crs.CRS]:
     """align(), plus the grid it was aligned to. Returns (array, transform, crs)."""
     tf, _w, _h = target_grid(bbox)
-    return align(path, nodata, dtype, bbox), tf, rasterio.crs.CRS.from_string(TARGET_CRS)
+    return (align(path, nodata, dtype, bbox), tf,
+            rasterio.crs.CRS.from_string(target_crs(bbox)))
 
 
 def _self_check() -> None:
@@ -279,17 +297,32 @@ def _self_check() -> None:
     _tf2, w2, _h2 = target_grid((l, b, (l + r) / 2, t))
     assert w2 < w, f"half-width bbox gave {w2} columns against {w} for the full bbox"
 
-    # The zone guard. Kolkata must pass untouched (checked implicitly above) and a
-    # far-away city must RAISE rather than return a plausible wrong grid.
-    assert utm_zone(88.36) == 45, "Kolkata must derive to zone 45 — the hardcoded one"
-    assert utm_zone(55.25) == 40, "Dubai must derive to zone 40"
+    # TRACK A — the CRS is derived, not hardcoded.
+    assert utm_zone(88.36) == 45 and utm_zone(55.25) == 40, "UTM zone arithmetic"
     assert abs(utm_central_meridian(45) - 87.0) < 1e-9, "zone 45 central meridian is 87E"
+
+    # THE INVARIANT THE WHOLE CHANGE RESTS ON: Kolkata must not move.
+    assert target_crs() == "EPSG:32645", f"Kolkata moved to {target_crs()}"
+    assert TARGET_CRS == "EPSG:32645", "the module constant must still be Kolkata's"
+
+    # Dubai now gets its OWN zone instead of a distorted zone-45 grid.
+    dubai: Bbox = (54.90, 24.85, 55.60, 25.45)
+    assert target_crs(dubai) == "EPSG:32640", f"Dubai got {target_crs(dubai)}"
+    # ...and the grid it produces is the true size. Projected into zone 45 this
+    # returned 1385 x 1337 (97.0 x 93.6 km) against a true extent of ~70 x 67 km.
+    _tf3, w3, h3 = target_grid(dubai)
+    assert 990 < w3 < 1030 and 940 < h3 < 970, f"Dubai grid {w3}x{h3} is not ~70x67 km"
+
+    # Southern hemisphere takes the 327xx band rather than being silently flipped.
+    assert target_crs((-46.7, -23.6, -46.5, -23.4)) == "EPSG:32723", "Sao Paulo -> 23S"
+
+    # A box too wide for one transverse Mercator must refuse rather than distort.
     try:
-        target_grid((54.90, 24.85, 55.60, 25.45))       # Dubai urban core
+        target_crs((60.0, 20.0, 80.0, 30.0))            # 20 deg of longitude
     except ValueError as e:
-        assert "EPSG:32640" in str(e), f"guard must name the right zone, said: {e}"
+        assert "12" in str(e), f"width guard message lost its threshold: {e}"
     else:
-        raise AssertionError("Dubai bbox must not silently produce a zone-45 grid")
+        raise AssertionError("a 20 deg-wide study area must not get a UTM grid")
     assert band_url({"RelatedUrls": [{"URL": "https://x/y_LST.tif"}]}, "_LST.tif")
     assert band_url({}, "_LST.tif") is None, "a granule with no bands must yield None"
     assert fetch(None, "tok") is None, "a missing band URL must not be fetched"
