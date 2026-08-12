@@ -761,6 +761,67 @@ Deira and Downtown so a regression fails loudly rather than shipping 10× height
 **Attribution obligation:** `World Settlement Footprint 3D (WSF3D) © DLR, CC BY 4.0`, carried
 in the artefact's provenance JSON. This must appear on any published figure.
 
+## 8n · PAID AND FREE-BY-PROPOSAL ROUTES — priced, and mostly ruled out (2026-08-12)
+
+CEO asked what could be bought, then ruled the price out. Recorded so neither question gets
+re-researched.
+
+### Commercial, priced
+
+**Airbus WorldDEM Neo 5 m** — the paid version of the same TerraSAR-X/TanDEM-X data WSF3D
+gives us free at 87 m. `DSM $8.75/km² · DSM+DTM L1 $20/km²` (Apollo Mapping list, min order
+50 km²). Vertical accuracy < 4 m, horizontal < 6 m. **DSM − DTM is building height as a
+measurement, not a model** — exactly what 3D-GloBFP failed at.
+
+| scope | area | DSM | DSM+DTM |
+|---|---|---|---|
+| the 12-district demo slate | 236 km² | $2,063 | **$4,716** |
+| built-up Dubai only | 1,042 km² | $9,117 | $20,839 |
+| full urban-core bbox | 4,680 km² | $40,947 | $93,594 |
+
+**Over budget as of 2026-08-12.** Revisit if funding lands; buy the slate, never the bbox.
+
+**Maxar Precision3D Buildings** — per-building vectors with *both* roof and structure heights,
+50 cm posting, 3 m absolute, no ground control. Now paired with Ecopia as "Vivid Features"
+(Sept 2025, 1 B+ footprints). Quote-only, certainly above WorldDEM. Not pursued.
+
+**⚠️ SatVu HotSat-1 (3.5 m thermal) CANNOT BE BOUGHT AT ANY PRICE.** It failed in orbit
+**December 2023**, six months after launch — a power circuit in the camera; insured, not
+recoverable. HotSat-2/3 are contracted with SSTL on SpaceX launches. **There is currently no
+high-resolution commercial thermal imagery on the market.** This is the one dataset that
+would genuinely transform our product (20× finer than ECOSTRESS's 70 m) and it does not
+exist to purchase. Do not plan around it.
+
+### Free-by-proposal, ranked by whether we actually qualify
+
+**1. ⭐ MBRSC / KhalifaSat — the one to pursue, and it costs nothing.** 70 cm optical,
+UAE-operated, and **provided free to "local government entities and universities"**. We are
+neither — **but DEWA is**, and DEWA is already the warm contact. The natural ask is "can you
+pull KhalifaSat imagery over the districts we are modelling?". No licence gymnastics if the
+data sits with DEWA. Not a height source, but excellent for the render and for checking
+footprints.
+
+**2. DLR TanDEM-X Science Service System — 12 m DEM free, up to 100,000 km² by proposal.**
+Dubai's entire urban core is 4,680 km², i.e. **4.7 % of the quota**, and 12 m is **7× finer
+than WSF3D**. Same mission, so it is a continuity upgrade rather than a switch.
+**⚠️ NOT YET CLEARED FOR OUR USE.** Two unresolved items: a **User License Agreement is a
+separate PDF that has NOT been read**, and the site notes a **service fee on submitted
+proposals**. Whether a commercially-motivated trade-stand demo counts as "scientific use" is
+exactly the question that ULA answers. **Read it before relying on this.**
+
+**3. ESA Network of Resources (€5,000 voucher) — almost certainly INELIGIBLE.** Verbatim:
+*"Vouchers must not be used to support any commercial revenue flows"*, sponsoring *"cannot
+apply when the requesting entity profits from the service"*, and it is scoped to *"users
+involved in ESA projects"*. We are not an ESA project and the demo is commercially
+motivated. **Do not chase this.**
+
+### The thing to keep in view
+
+**WSF3D is free, already fetched, validated against the Burj at 0.81×, and matches our grid.**
+Every option above is an upgrade to the *render and the drill-downs*, not to the accuracy
+number — which is bounded by ECOSTRESS at 70 m, not by heights. None of this should delay
+building the Dubai grid.
+
 ## 9 · First move — SUPERSEDED 2026-08-11
 
 ~~Verify Dubai Pulse actually has usable footprints and heights over the urban core.~~
