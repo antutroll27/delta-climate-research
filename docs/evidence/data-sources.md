@@ -17,17 +17,31 @@ collection), `https://earth-search.aws.element84.com/v1`; terms
 `https://sentinels.copernicus.eu/web/sentinel/terms-conditions` · **role:** NDVI thermal correlator,
 feeds `veg[]` (Tier-1 vegetation input) · status: shipped, unchanged.
 
-**Meta / WRI 1 m Canopy Height Model (CHM) v2** — Meta AI + WRI, derived from ~2018–2020 Maxar imagery +
-neural height model · 1 m, single-epoch ~2018–2020, MAE "a few metres," known ~150 m tiling artefacts ·
-**CC BY 4.0 — commercial with attribution** · anonymous AWS Open Data, no credentials:
-`s3://dataforgood-fb-data/forests/v2/…` (research doc); working fetch recipe in memory used
-`s3://dataforgood-fb-data/forests/v1/alsgedi_global_v6_float/chm/<quadkey>.tif` tiled by zoom-9 Bing
-quadkey · registry `https://registry.opendata.aws/dataforgood-fb-forests/`, announcement
-`https://sustainability.atmeta.com/blog/2024/04/22/using-artificial-intelligence-to-map-the-earths-forests/`
-· **role:** Tier-2 canopy height — sharpens `veg[]` mean-neutrally and drives tree placement/height for
-the render layer · status: **shipped to production 2026-08-10** — Ballygunge, 9,542 trees; accuracy
-re-validated unregressed (night ±3.5K, day ±5.0K). *(No formal academic paper — Tolan et al. — appears
-in the repo docs; cited only as a dataset/provider. Verify if a citation is needed.)*
+**Meta / WRI 1 m Canopy Height Model (CHM) — we ship v1** — Meta AI + WRI, neural height regression on
+Maxar imagery · 1 m, single-epoch, MAE "a few metres," known ~150 m tiling artefacts · **CC BY 4.0 —
+commercial with attribution** · anonymous AWS Open Data, no credentials:
+`s3://dataforgood-fb-data/forests/v1/alsgedi_global_v6_float/chm/<quadkey>.tif`, zoom-9 Bing quadkey ·
+registry `https://registry.opendata.aws/dataforgood-fb-forests/` · **role:** Tier-2 canopy height —
+sharpens `veg[]` mean-neutrally and drives tree placement/height for the render layer · status: **shipped
+to production 2026-08-11** for all three wards (8,896 / 4,413 / 6,797 trees); accuracy re-validated
+unregressed (night ±3.5K, day ±5.0K).
+
+> **CORRECTION (2026-08-12).** This entry previously read "CHM **v2**" and cited a `forests/v2/…` path,
+> while the same paragraph admitted the working recipe used `forests/v1/…`. The engine ships **v1**. The
+> error was mine and it flattered us, which is the worst direction for it to be wrong in.
+>
+> **v2 genuinely exists and we are a generation behind.** `forests/v2/global/dinov3_global_chm_v2_ml3/chm/`
+> (zoom-10 quadkeys, proper 512x512 COGs with overviews, EPSG:3857, uint8 — vs v1's non-tiled 65536²
+> monolith, so reads get *faster*). Brandt et al., *Scientific Data*, arXiv:2603.06382 — DINOv3 backbone,
+> **R² 0.53 -> 0.86, MAE 4.3 -> 3.0 m**, the >=30 m saturation largely removed. CC BY 4.0.
+>
+> Measured over our wards, v2 reads **1.7-1.9x higher** than v1 (ward means ballygunge 2.73 -> 4.85 m,
+> barrackpore 1.52 -> 2.86 m, baruipur 2.07 -> 3.47 m; p95 10 -> 16 m in ballygunge). So the "3-5 m ward
+> mean" this project has quoted is a **v1 artefact**. Upgrade decision pending.
+>
+> One thing v2 is NOT: fresher. Its paper puts ~80% of source imagery in 2018-2020, the same epoch as v1
+> — it is a **model** upgrade, not new observations. Do not sell it as newer data. *(The AWS registry
+> gives v1 source imagery as 2016 against the ~2018-2020 stated here — unresolved, verify.)*
 
 **ESA WorldCover 10 m (2020/2021)** — ESA · 10 m, 2020/2021 · **CC BY 4.0 — commercial OK** · AWS Open
 Data + MS Planetary Computer, `https://esa-worldcover.org/en`,
@@ -158,15 +172,43 @@ fallback noted: Kenney/Quaternius CC0 low-poly trees (`https://kenney.nl/assets`
 
 ## Candidate — brainstormed, not yet in the pipeline
 
-**ETH Zurich Global Canopy Height (Lang et al.)** — ETH Zurich, Sentinel-2 + GEDI fusion, ~10 m · **CC BY
-4.0** · COG on `share.phys.ethz.ch` · **proposed role:** an *independent second opinion* on canopy for
-the vegetation-v2 work — cross-check the Meta/WRI CHM against it before placing trees, and flag
-disagreement rather than trusting one source. **Independence nuance (on record):** ETH shares its
-Sentinel-2 optical input with ESA WorldCover, so it is only *partially* independent of the WorldCover
-mask — but it **is** genuinely independent of the Meta/WRI CHM (different sensor fusion + GEDI lidar
-calibration). Therefore cross-check ETH **against Meta/WRI**, not against WorldCover. · status: brainstorm
-candidate from the parked vegetation-v2 discussion; not fetched or integrated. *(This entry is the one
-this-session finding not yet in a committed spec.)*
+**ETH Zurich Global Canopy Height (Lang et al. 2023)** — ETH Zurich, Sentinel-2 + GEDI fusion, 10 m ·
+**CC BY 4.0** (raster; repo code is MIT) · 3-deg COG tiles on `libdrive.ethz.ch`, range-readable via
+`/vsicurl/`; companion uncertainty layer is `*_Map_SD.tif` · cite the 2023 *Nature Ecology & Evolution*
+paper (doi:10.1038/s41559-023-02206-6) + dataset doi:10.3929/ethz-b-000609802 · **MEASURED against our
+wards 2026-08-12 — the results are below, and it is NOT adopted as a placement input.**
+
+**What it can and cannot say here (all measured, not assumed):**
+
+- **It is blind over ~72% of our wards, by design.** The 255 nodata is not missing data: Lang et al. "mask
+  out built-up areas, snow, ice and permanent water bodies **according to the ESA WorldCover
+  classification**." Verified two ways — per-pixel agreement with WorldCover v100 `isin([0,50,70,80])` is
+  **99.73%**, and predicted coverage from the WorldCover mask alone (28.5 / 28.1 / 46.5%) matches observed
+  (~29 / 29 / 48%) to under one percentage point. A street tree over a built-up cell is **erased, not
+  measured as zero** — so it is structurally silent on exactly the urban-canopy question we ask.
+- **The surviving ~28% is not a fair sample of the ward** — it is ~90% WorldCover "Tree cover" pixels, i.e.
+  parks and large stands. Any statistic over it describes those, not the ward.
+- **Compare it the way its authors prescribe, or the answer is wrong.** ETH predicts GEDI **RH98** — the
+  near-maximum within a ~25 m footprint — so the authors ship `CircularMaxPool2d(radius=12)`
+  (`gchm/preprocess/ALS_maxpool_GEDI_footprint.py`) to make 1 m data comparable. Our first pass compared a
+  25 m max against a 10 m mean and produced a spurious ~10 m gap. Done correctly: **MAD 3.62 / 5.42 /
+  4.14 m, r 0.529 / 0.485 / 0.433** — and that residual sits **inside ETH's own stated uncertainty**
+  (mean SD 6.96-7.49 m over these wards; not one pixel below 4 m SD).
+- **r ~ 0.4-0.5 is the normal result, not a bad one.** Published urban validations get R² 0.28-0.69; the
+  best *tropical city* case is Tolan's own Sao Paulo tile at R²-block 0.41. Meta and ETH against the same
+  Czech lidar diverge by ~11.7 m — larger than our Kolkata gap (Moudry et al. 2026,
+  doi:10.1029/2025EA004544).
+- **Kolkata is outside its validated domain.** The paper's independent-lidar validation covers 11 countries
+  in North/Central America and Europe, plus Gabon. There is no South Asian or tropical-urban validation,
+  and the authors excluded urban areas from their own headline statistics.
+- **Independence is weaker than first recorded.** An earlier note here said ETH "shares Sentinel-2 with
+  WorldCover." It is tighter than that: ETH's **mask IS WorldCover**. It remains genuinely independent of
+  Meta/WRI (different sensors, different supervision), which is the axis that matters for cross-checking.
+
+**Verdict:** a defensible *methodological* cross-check — "an independent 10 m product, restricted to
+WorldCover tree-cover pixels at ~25 m effective resolution, agrees within its own error bars" — but it
+cannot arbitrate 1 m heights in a dense city, and it must never be quoted as "two sensors agree" without
+the blind spot stated in the same breath.
 
 ---
 
