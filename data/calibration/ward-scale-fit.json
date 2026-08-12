@@ -7,13 +7,13 @@
     "barrackpore",
     "baruipur"
   ],
-  "meets_all_criteria": null,
+  "meets_all_criteria": "E",
   "candidates": [
     {
       "key": "A",
       "label": "ward-scale baseline (shipping structure)",
       "fitted": {
-        "q_day": 0.4117,
+        "q_day": 0.5085,
         "ratio": 0.15,
         "c": 1.4
       },
@@ -21,15 +21,15 @@
         "ratio",
         "c"
       ],
-      "rmse_K": 3.022,
-      "bias_K": -0.012,
-      "day_bias_K": 1.428,
-      "night_bias_K": -0.934,
-      "oos_rmse_K": 3.04,
+      "rmse_K": 3.019,
+      "bias_K": 0.001,
+      "day_bias_K": 1.453,
+      "night_bias_K": -0.928,
+      "oos_rmse_K": 3.042,
       "oos_by_ward": {
-        "ballygunge": 3.168,
-        "barrackpore": 2.874,
-        "baruipur": 3.077
+        "ballygunge": 3.216,
+        "barrackpore": 2.863,
+        "baruipur": 3.048
       }
     },
     {
@@ -43,22 +43,22 @@
         "q_day",
         "ratio"
       ],
-      "rmse_K": 3.35,
-      "bias_K": -0.223,
-      "day_bias_K": 1.833,
-      "night_bias_K": -1.539,
-      "oos_rmse_K": 3.366,
+      "rmse_K": 3.41,
+      "bias_K": -0.848,
+      "day_bias_K": 1.101,
+      "night_bias_K": -2.095,
+      "oos_rmse_K": 3.42,
       "oos_by_ward": {
-        "ballygunge": 3.515,
-        "barrackpore": 3.146,
-        "baruipur": 3.436
+        "ballygunge": 3.522,
+        "barrackpore": 3.261,
+        "baruipur": 3.478
       }
     },
     {
       "key": "B",
       "label": "+ ET coefficient free",
       "fitted": {
-        "q_day": 0.4892,
+        "q_day": 0.5959,
         "ratio": 0.15,
         "c": 1.4,
         "l_et": 0.6
@@ -68,26 +68,26 @@
         "c",
         "l_et"
       ],
-      "rmse_K": 2.91,
-      "bias_K": 0.03,
-      "day_bias_K": 1.09,
-      "night_bias_K": -0.648,
-      "oos_rmse_K": 2.936,
+      "rmse_K": 2.898,
+      "bias_K": 0.007,
+      "day_bias_K": 1.074,
+      "night_bias_K": -0.675,
+      "oos_rmse_K": 2.909,
       "oos_by_ward": {
-        "ballygunge": 3.049,
-        "barrackpore": 2.782,
-        "baruipur": 2.977
+        "ballygunge": 3.065,
+        "barrackpore": 2.747,
+        "baruipur": 2.914
       }
     },
     {
       "key": "C",
       "label": "+ nocturnal storage release",
       "fitted": {
-        "q_day": 0.3858,
+        "q_day": 0.4744,
         "ratio": 0.15,
-        "c": 1.3521,
+        "c": 1.3517,
         "l_et": 0.6,
-        "release_base": 0.0541,
+        "release_base": 0.0547,
         "release_built": 0.0
       },
       "pinned": [
@@ -95,98 +95,96 @@
         "l_et",
         "release_built"
       ],
-      "rmse_K": 2.794,
-      "bias_K": 0.145,
-      "day_bias_K": 0.16,
-      "night_bias_K": 0.135,
-      "oos_rmse_K": 2.854,
+      "rmse_K": 2.788,
+      "bias_K": 0.15,
+      "day_bias_K": 0.169,
+      "night_bias_K": 0.137,
+      "oos_rmse_K": 2.81,
       "oos_by_ward": {
-        "ballygunge": 2.96,
-        "barrackpore": 2.656,
-        "baruipur": 2.947
+        "ballygunge": 2.998,
+        "barrackpore": 2.613,
+        "baruipur": 2.82
       }
     },
     {
       "key": "D",
       "label": "+ coupling-ratio bound opened",
       "fitted": {
-        "q_day": 0.474,
-        "ratio": 0.1746,
-        "c": 1.5708,
-        "l_et": 0.7985,
-        "release_base": 0.0147,
+        "q_day": 0.5867,
+        "ratio": 0.01,
+        "c": 1.3106,
+        "l_et": 0.8,
+        "release_base": 0.0042,
         "release_built": 0.0
       },
       "pinned": [
+        "ratio",
+        "l_et",
         "release_built"
       ],
-      "rmse_K": 2.661,
-      "bias_K": 0.123,
-      "day_bias_K": 0.142,
-      "night_bias_K": 0.111,
-      "oos_rmse_K": 2.813,
+      "rmse_K": 2.681,
+      "bias_K": 0.085,
+      "day_bias_K": 0.122,
+      "night_bias_K": 0.062,
+      "oos_rmse_K": 2.727,
       "oos_by_ward": {
-        "ballygunge": 2.851,
-        "barrackpore": 2.583,
-        "baruipur": 3.006
+        "ballygunge": 2.796,
+        "barrackpore": 2.522,
+        "baruipur": 2.863
       }
     },
     {
       "key": "E",
       "label": "+ ratio opened, NO storage term",
       "fitted": {
-        "q_day": 0.5013,
-        "ratio": 0.114,
-        "c": 1.6,
-        "l_et": 0.8
+        "q_day": 0.588,
+        "ratio": 0.0488,
+        "c": 1.5708,
+        "l_et": 0.7961
       },
-      "pinned": [
-        "c",
-        "l_et"
-      ],
-      "rmse_K": 2.675,
-      "bias_K": 0.076,
-      "day_bias_K": 0.324,
-      "night_bias_K": -0.083,
-      "oos_rmse_K": 2.742,
+      "pinned": [],
+      "rmse_K": 2.658,
+      "bias_K": 0.042,
+      "day_bias_K": 0.216,
+      "night_bias_K": -0.069,
+      "oos_rmse_K": 2.695,
       "oos_by_ward": {
-        "ballygunge": 2.728,
-        "barrackpore": 2.595,
-        "baruipur": 2.903
+        "ballygunge": 2.751,
+        "barrackpore": 2.521,
+        "baruipur": 2.812
       }
     },
     {
       "key": "F",
       "label": "storage + ratio open, ET held at the chosen conservative ceiling 0.46",
       "fitted": {
-        "q_day": 0.2252,
-        "ratio": 0.0296,
-        "c": 1.2,
+        "q_day": 0.2798,
+        "ratio": 0.033,
+        "c": 1.2001,
         "l_et": 0.46,
-        "release_base": 0.0522,
-        "release_built": 0.0006
+        "release_base": 0.0485,
+        "release_built": 0.0229
       },
       "pinned": [
         "c",
-        "l_et",
-        "release_built"
+        "l_et"
       ],
-      "rmse_K": 2.716,
-      "bias_K": 0.139,
-      "day_bias_K": 0.251,
-      "night_bias_K": 0.067,
-      "oos_rmse_K": 2.767,
+      "rmse_K": 2.714,
+      "bias_K": 0.138,
+      "day_bias_K": 0.239,
+      "night_bias_K": 0.073,
+      "oos_rmse_K": 2.726,
       "oos_by_ward": {
-        "ballygunge": 2.88,
-        "barrackpore": 2.619,
-        "baruipur": 2.803
+        "ballygunge": 2.879,
+        "barrackpore": 2.58,
+        "baruipur": 2.72
       }
     },
     {
       "key": "G",
       "label": "storage free, ALL constants held physical",
       "fitted": {
-        "q_day": 0.419,
+        "q_day": 0.5175,
         "ratio": 0.2,
         "l_et": 0.46,
         "release_base": 0.1043,
@@ -197,16 +195,440 @@
         "l_et",
         "release_built"
       ],
-      "rmse_K": 2.947,
-      "bias_K": 0.217,
-      "day_bias_K": 0.271,
-      "night_bias_K": 0.183,
-      "oos_rmse_K": 3.037,
+      "rmse_K": 2.943,
+      "bias_K": 0.229,
+      "day_bias_K": 0.297,
+      "night_bias_K": 0.185,
+      "oos_rmse_K": 2.963,
       "oos_by_ward": {
-        "ballygunge": 3.166,
-        "barrackpore": 2.733,
-        "baruipur": 3.212
+        "ballygunge": 3.209,
+        "barrackpore": 2.704,
+        "baruipur": 2.977
       }
     }
-  ]
+  ],
+  "q_identifiability": {
+    "what": "q_day values the ward-mean observations cannot distinguish from the best fit: paired bootstrap of RMSE(q) - RMSE(q*), admissible when the 95% CI straddles zero. NOT a hand-chosen tolerance.",
+    "candidate": "G",
+    "q_star": 0.5175,
+    "bootstrap_B": 20000,
+    "seed": 20260813,
+    "lo": 0.14,
+    "hi": 0.6,
+    "profile": [
+      {
+        "q_day": 0.02,
+        "rmse_K": 3.3482,
+        "d_ci_lo_K": 0.0925,
+        "d_ci_hi_K": 0.7345,
+        "admissible": false
+      },
+      {
+        "q_day": 0.03,
+        "rmse_K": 3.3314,
+        "d_ci_lo_K": 0.0832,
+        "d_ci_hi_K": 0.7109,
+        "admissible": false
+      },
+      {
+        "q_day": 0.04,
+        "rmse_K": 3.3149,
+        "d_ci_lo_K": 0.0736,
+        "d_ci_hi_K": 0.6869,
+        "admissible": false
+      },
+      {
+        "q_day": 0.05,
+        "rmse_K": 3.2988,
+        "d_ci_lo_K": 0.0641,
+        "d_ci_hi_K": 0.6639,
+        "admissible": false
+      },
+      {
+        "q_day": 0.06,
+        "rmse_K": 3.283,
+        "d_ci_lo_K": 0.056,
+        "d_ci_hi_K": 0.6408,
+        "admissible": false
+      },
+      {
+        "q_day": 0.07,
+        "rmse_K": 3.2675,
+        "d_ci_lo_K": 0.0466,
+        "d_ci_hi_K": 0.6185,
+        "admissible": false
+      },
+      {
+        "q_day": 0.08,
+        "rmse_K": 3.2524,
+        "d_ci_lo_K": 0.0383,
+        "d_ci_hi_K": 0.5968,
+        "admissible": false
+      },
+      {
+        "q_day": 0.09,
+        "rmse_K": 3.2376,
+        "d_ci_lo_K": 0.0302,
+        "d_ci_hi_K": 0.5752,
+        "admissible": false
+      },
+      {
+        "q_day": 0.1,
+        "rmse_K": 3.2231,
+        "d_ci_lo_K": 0.0226,
+        "d_ci_hi_K": 0.5535,
+        "admissible": false
+      },
+      {
+        "q_day": 0.11,
+        "rmse_K": 3.2089,
+        "d_ci_lo_K": 0.0152,
+        "d_ci_hi_K": 0.532,
+        "admissible": false
+      },
+      {
+        "q_day": 0.12,
+        "rmse_K": 3.1952,
+        "d_ci_lo_K": 0.0085,
+        "d_ci_hi_K": 0.5114,
+        "admissible": false
+      },
+      {
+        "q_day": 0.13,
+        "rmse_K": 3.1818,
+        "d_ci_lo_K": 0.0026,
+        "d_ci_hi_K": 0.4909,
+        "admissible": false
+      },
+      {
+        "q_day": 0.14,
+        "rmse_K": 3.1689,
+        "d_ci_lo_K": -0.0033,
+        "d_ci_hi_K": 0.471,
+        "admissible": true
+      },
+      {
+        "q_day": 0.15,
+        "rmse_K": 3.1563,
+        "d_ci_lo_K": -0.0089,
+        "d_ci_hi_K": 0.4514,
+        "admissible": true
+      },
+      {
+        "q_day": 0.16,
+        "rmse_K": 3.144,
+        "d_ci_lo_K": -0.0142,
+        "d_ci_hi_K": 0.4318,
+        "admissible": true
+      },
+      {
+        "q_day": 0.17,
+        "rmse_K": 3.1321,
+        "d_ci_lo_K": -0.0192,
+        "d_ci_hi_K": 0.4121,
+        "admissible": true
+      },
+      {
+        "q_day": 0.18,
+        "rmse_K": 3.1206,
+        "d_ci_lo_K": -0.0244,
+        "d_ci_hi_K": 0.3933,
+        "admissible": true
+      },
+      {
+        "q_day": 0.19,
+        "rmse_K": 3.1094,
+        "d_ci_lo_K": -0.0294,
+        "d_ci_hi_K": 0.3749,
+        "admissible": true
+      },
+      {
+        "q_day": 0.2,
+        "rmse_K": 3.0987,
+        "d_ci_lo_K": -0.0336,
+        "d_ci_hi_K": 0.3567,
+        "admissible": true
+      },
+      {
+        "q_day": 0.21,
+        "rmse_K": 3.0882,
+        "d_ci_lo_K": -0.0374,
+        "d_ci_hi_K": 0.3388,
+        "admissible": true
+      },
+      {
+        "q_day": 0.22,
+        "rmse_K": 3.0782,
+        "d_ci_lo_K": -0.0403,
+        "d_ci_hi_K": 0.3214,
+        "admissible": true
+      },
+      {
+        "q_day": 0.23,
+        "rmse_K": 3.0685,
+        "d_ci_lo_K": -0.043,
+        "d_ci_hi_K": 0.3044,
+        "admissible": true
+      },
+      {
+        "q_day": 0.24,
+        "rmse_K": 3.0593,
+        "d_ci_lo_K": -0.0451,
+        "d_ci_hi_K": 0.2875,
+        "admissible": true
+      },
+      {
+        "q_day": 0.25,
+        "rmse_K": 3.0504,
+        "d_ci_lo_K": -0.0468,
+        "d_ci_hi_K": 0.2714,
+        "admissible": true
+      },
+      {
+        "q_day": 0.26,
+        "rmse_K": 3.0419,
+        "d_ci_lo_K": -0.0486,
+        "d_ci_hi_K": 0.2555,
+        "admissible": true
+      },
+      {
+        "q_day": 0.27,
+        "rmse_K": 3.0337,
+        "d_ci_lo_K": -0.05,
+        "d_ci_hi_K": 0.2398,
+        "admissible": true
+      },
+      {
+        "q_day": 0.28,
+        "rmse_K": 3.0258,
+        "d_ci_lo_K": -0.0513,
+        "d_ci_hi_K": 0.2246,
+        "admissible": true
+      },
+      {
+        "q_day": 0.29,
+        "rmse_K": 3.0185,
+        "d_ci_lo_K": -0.0515,
+        "d_ci_hi_K": 0.2097,
+        "admissible": true
+      },
+      {
+        "q_day": 0.3,
+        "rmse_K": 3.0117,
+        "d_ci_lo_K": -0.0515,
+        "d_ci_hi_K": 0.1955,
+        "admissible": true
+      },
+      {
+        "q_day": 0.31,
+        "rmse_K": 3.0053,
+        "d_ci_lo_K": -0.0505,
+        "d_ci_hi_K": 0.1819,
+        "admissible": true
+      },
+      {
+        "q_day": 0.32,
+        "rmse_K": 2.9995,
+        "d_ci_lo_K": -0.0491,
+        "d_ci_hi_K": 0.1684,
+        "admissible": true
+      },
+      {
+        "q_day": 0.33,
+        "rmse_K": 2.994,
+        "d_ci_lo_K": -0.0473,
+        "d_ci_hi_K": 0.1552,
+        "admissible": true
+      },
+      {
+        "q_day": 0.34,
+        "rmse_K": 2.989,
+        "d_ci_lo_K": -0.0454,
+        "d_ci_hi_K": 0.1427,
+        "admissible": true
+      },
+      {
+        "q_day": 0.35,
+        "rmse_K": 2.9844,
+        "d_ci_lo_K": -0.0428,
+        "d_ci_hi_K": 0.1307,
+        "admissible": true
+      },
+      {
+        "q_day": 0.36,
+        "rmse_K": 2.9803,
+        "d_ci_lo_K": -0.0394,
+        "d_ci_hi_K": 0.119,
+        "admissible": true
+      },
+      {
+        "q_day": 0.37,
+        "rmse_K": 2.9767,
+        "d_ci_lo_K": -0.036,
+        "d_ci_hi_K": 0.1078,
+        "admissible": true
+      },
+      {
+        "q_day": 0.38,
+        "rmse_K": 2.9731,
+        "d_ci_lo_K": -0.0351,
+        "d_ci_hi_K": 0.0992,
+        "admissible": true
+      },
+      {
+        "q_day": 0.39,
+        "rmse_K": 2.9695,
+        "d_ci_lo_K": -0.0373,
+        "d_ci_hi_K": 0.0939,
+        "admissible": true
+      },
+      {
+        "q_day": 0.4,
+        "rmse_K": 2.9658,
+        "d_ci_lo_K": -0.0395,
+        "d_ci_hi_K": 0.0888,
+        "admissible": true
+      },
+      {
+        "q_day": 0.41,
+        "rmse_K": 2.9622,
+        "d_ci_lo_K": -0.0416,
+        "d_ci_hi_K": 0.0835,
+        "admissible": true
+      },
+      {
+        "q_day": 0.42,
+        "rmse_K": 2.9587,
+        "d_ci_lo_K": -0.0441,
+        "d_ci_hi_K": 0.0784,
+        "admissible": true
+      },
+      {
+        "q_day": 0.43,
+        "rmse_K": 2.9552,
+        "d_ci_lo_K": -0.0467,
+        "d_ci_hi_K": 0.0732,
+        "admissible": true
+      },
+      {
+        "q_day": 0.44,
+        "rmse_K": 2.9517,
+        "d_ci_lo_K": -0.0491,
+        "d_ci_hi_K": 0.0682,
+        "admissible": true
+      },
+      {
+        "q_day": 0.45,
+        "rmse_K": 2.9486,
+        "d_ci_lo_K": -0.0456,
+        "d_ci_hi_K": 0.0583,
+        "admissible": true
+      },
+      {
+        "q_day": 0.46,
+        "rmse_K": 2.9463,
+        "d_ci_lo_K": -0.0405,
+        "d_ci_hi_K": 0.0484,
+        "admissible": true
+      },
+      {
+        "q_day": 0.47,
+        "rmse_K": 2.9444,
+        "d_ci_lo_K": -0.0349,
+        "d_ci_hi_K": 0.0388,
+        "admissible": true
+      },
+      {
+        "q_day": 0.48,
+        "rmse_K": 2.9431,
+        "d_ci_lo_K": -0.0286,
+        "d_ci_hi_K": 0.0297,
+        "admissible": true
+      },
+      {
+        "q_day": 0.49,
+        "rmse_K": 2.9424,
+        "d_ci_lo_K": -0.0217,
+        "d_ci_hi_K": 0.0212,
+        "admissible": true
+      },
+      {
+        "q_day": 0.5,
+        "rmse_K": 2.9421,
+        "d_ci_lo_K": -0.0143,
+        "d_ci_hi_K": 0.013,
+        "admissible": true
+      },
+      {
+        "q_day": 0.51,
+        "rmse_K": 2.9424,
+        "d_ci_lo_K": -0.0063,
+        "d_ci_hi_K": 0.0054,
+        "admissible": true
+      },
+      {
+        "q_day": 0.52,
+        "rmse_K": 2.9431,
+        "d_ci_lo_K": -0.0017,
+        "d_ci_hi_K": 0.0022,
+        "admissible": true
+      },
+      {
+        "q_day": 0.53,
+        "rmse_K": 2.9443,
+        "d_ci_lo_K": -0.0084,
+        "d_ci_hi_K": 0.0112,
+        "admissible": true
+      },
+      {
+        "q_day": 0.54,
+        "rmse_K": 2.946,
+        "d_ci_lo_K": -0.0146,
+        "d_ci_hi_K": 0.0207,
+        "admissible": true
+      },
+      {
+        "q_day": 0.55,
+        "rmse_K": 2.9481,
+        "d_ci_lo_K": -0.0203,
+        "d_ci_hi_K": 0.0307,
+        "admissible": true
+      },
+      {
+        "q_day": 0.56,
+        "rmse_K": 2.9508,
+        "d_ci_lo_K": -0.0254,
+        "d_ci_hi_K": 0.0414,
+        "admissible": true
+      },
+      {
+        "q_day": 0.57,
+        "rmse_K": 2.9541,
+        "d_ci_lo_K": -0.0302,
+        "d_ci_hi_K": 0.0526,
+        "admissible": true
+      },
+      {
+        "q_day": 0.58,
+        "rmse_K": 2.9579,
+        "d_ci_lo_K": -0.0343,
+        "d_ci_hi_K": 0.0644,
+        "admissible": true
+      },
+      {
+        "q_day": 0.59,
+        "rmse_K": 2.9622,
+        "d_ci_lo_K": -0.0377,
+        "d_ci_hi_K": 0.0769,
+        "admissible": true
+      },
+      {
+        "q_day": 0.6,
+        "rmse_K": 2.967,
+        "d_ci_lo_K": -0.0407,
+        "d_ci_hi_K": 0.0899,
+        "admissible": true
+      }
+    ]
+  }
 }

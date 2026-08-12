@@ -289,3 +289,54 @@ temperature result. It affects the massing you see.
 therefore not a measured quantity and must never be quoted as one — canopy **height** is measured, positions
 and species are modelled. The receipt says so. This is listed as a limitation because it is the single
 easiest thing for a viewer to misread.
+
+---
+
+## 6. The ward-mean observations do not identify `Q` — they only pin the product `Q·built`
+
+**Status:** open, quantified, gated · **Found:** 2026-08-13, while fixing the stale built-footprint cache
+
+**What is wrong.** `Q` (`types.ts`, currently 0.419) is the anthropogenic/built heating coefficient, and the
+calibration cannot measure it. It enters the ward-scale fit only as `Q·built`, so a change in the building
+raster is absorbed by a compensating change in `Q` with almost no effect on fit quality. The engine's
+rendered field, however, is *not* indifferent to which factor carries the magnitude.
+
+**How we know.** Correcting the stale built cache changed ward built fractions by −14% (ballygunge
+0.3691 → 0.3189, barrackpore 0.3572 → 0.2605, baruipur 0.2208 → 0.2013). Refitting candidate G on the
+corrected observations moved the free `q_day` **0.419 → 0.5175, a 23% swing**, and bought:
+
+| on the corrected observations (n = 82) | Q = 0.419 | Q = 0.5175 |
+|---|---|---|
+| in-sample RMSE | 2.966 K | 2.943 K |
+| \|bias\| | 0.201 K | 0.229 K |
+| leave-one-ward-out RMSE | 2.976 K | 2.963 K |
+
+A paired bootstrap (B = 20,000, seed pinned) of `RMSE(0.419) − RMSE(0.5175)` gives **+0.024 K, 95% CI
+[−0.076, +0.125] K** — straddling zero, a gap of **0.10 SE**. Profiling `q_day` across candidate G's whole
+admissible range while refitting every other constant, RMSE spans 2.943–2.984 K: **a 57% change in Q costs
+0.04 K.** The interval the data cannot reject is **[0.14, 0.60]**, and its upper edge is *censored* — 0.60
+is candidate G's fit bound, not a point the observations rule out.
+
+**What it does and does not invalidate.** It does not invalidate the headline ward-mean accuracy: that is
+the `Q·built` product, which is constrained. It does mean **`Q` must never be quoted as a measured
+anthropogenic heat flux**, and it means the rendered field carries uncertainty the accuracy figures do not
+express. Driving the real solver at both values over 24 ward-scenes, the map differs by **+0.57 K mean
+(+0.75 K day), worst cell +2.47 K, spatial SD +12% on every ward-scene** — and the published amplitude
+over-draw goes **1.170× → 1.333×** (measured by re-running `measure-shipped-amplitude.py`, not estimated).
+
+**Why `Q` was left at 0.419.** Adopting the argmin would spend 60% of the amplitude win just recovered from
+the stale-cache fix, worsen absolute bias, and slightly worsen skill (r 0.2974 → 0.2942), in exchange for
+an RMSE gain the data cannot resolve. Its provenance is nonetheless weaker than it looks: 0.419 was fitted
+against footprints we no longer ship, and it survives because the corrected data cannot refute it, not
+because it was re-derived.
+
+**How it is gated.** `fit-ward-scale.py` now emits `q_identifiability` into
+`data/calibration/ward-scale-fit.json`, and `tests/unit/heat-map-validation.test.mjs` asserts the shipped
+`Q` lies inside it. That replaced an equality-to-the-argmin assertion which was testing sampling noise.
+The interval is computed, not chosen; it narrows as the ECOSTRESS record grows, and when it narrows past
+0.419 the test fails and `Q` has to move.
+
+**What would close it.** An independent constraint on `Q` that does not come from ward means — either
+sub-ward spatial structure (the built term varies within a ward where the ward mean cannot see it), or an
+external anthropogenic-heat estimate for Kolkata to use as a prior. More ECOSTRESS overpasses narrow the
+interval but cannot break the `Q·built` degeneracy on their own.
