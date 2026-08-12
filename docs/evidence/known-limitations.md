@@ -115,6 +115,25 @@ only the strength varying:
 
 **Four independent lines say the operator does not earn its place.**
 
+**0. The sweep above was measured on CHM v1 — and re-measuring on the shipped v2 canopy makes the case
+STRONGER, not weaker.** This branch was cut before the v2 upgrade landed, so the table above describes the
+v1 field. Publishing figures measured on data we no longer serve is precisely the error this whole section
+exists to document, so the two decisive arms were re-run on the merged v2 tree:
+
+| canopy | r_veg @ strength 0 | r_veg @ strength 0.5 | degradation |
+|---|---|---|---|
+| v1 | 0.2380 | 0.1987 | −0.039 |
+| **v2 (shipped)** | **0.2380** | **0.1718** | **−0.066** |
+
+r_physics @ 0.5 also falls further, 0.2076 → 0.2028. **The blend hurts roughly 70% more with v2 than with
+v1.** Better canopy heights, redistributed by an operator that reads only pattern, push the vegetation field
+further from what ECOSTRESS sees.
+
+An internal check worth recording, because it is what makes the two runs comparable: the **strength-0 arm is
+identical to four decimal places across both** (0.2154 / 0.2380 / 1.8358). It has to be — at strength 0 the
+canopy is unused, so which version produced it cannot matter. That the harness reproduces it exactly means
+the difference at 0.5 is signal, not run-to-run noise.
+
 **1. It monotonically degrades spatial agreement.** Not a threshold effect, not noise at one strength —
 every step of the sweep costs correlation, in both predictors, at both phases.
 
