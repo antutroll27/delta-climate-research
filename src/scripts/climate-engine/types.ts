@@ -29,6 +29,48 @@ export function isCanonicalGrid(grid: GridSpec): boolean {
   return grid.n === CANONICAL_GRID_N;
 }
 
+/**
+ * How hard `blendCanopyIntoVeg` (ward-raster.ts) redistributes `veg[]` toward tall
+ * canopy. ZERO — the canopy raster is render-only and does NOT enter the temperature
+ * solve. It shipped at 0.5 from 2026-08-10; this is the measured verdict on that.
+ *
+ * DO NOT "restore" 0.5. It looks like a mistake and is not. Once
+ * `measure-spatial-accuracy.py` could finally apply the blend (2026-08-12; nothing in
+ * Python had ever applied it, so it had never been scored), a full strength sweep over
+ * 34 near-nadir ECOSTRESS scenes / 87 ward-scenes / 3 wards said this, monotonically:
+ *
+ *   strength      0.00     0.15     0.25     0.50 (was shipped)
+ *   r_physics   0.2154   0.2145   0.2129   0.2076
+ *   r_veg       0.2380   0.2321   0.2245   0.1987
+ *   anom RMSE   1.8358   1.8308   1.8251   1.8061
+ *
+ * Four reasons, not one:
+ *
+ * 1. It monotonically DEGRADES spatial agreement with the thermal observation. The
+ *    vegetation null loses 17% relative r; the physics predictor loses r too.
+ * 2. Its one improving metric is an artefact. RMSE falls because the veg term's spatial
+ *    SD falls with strength (0.64 -> 0.61) — largely via the operator's own [0,1] clamp,
+ *    which bites 3-10% of cells — and measure-shipped-amplitude.py already records that
+ *    the model draws ~2x the observed spatial SD. That is error reduced by COMPRESSING an
+ *    over-drawn amplitude, not by getting the pattern right. Over-drawn amplitude is
+ *    fixed at the amplitude, not by a canopy operator that happens to damp it.
+ * 3. At 0.5 the implied tree:grass veg ratio is 4.9-8.1x. Schwaab et al. 2021 (Nat Commun
+ *    12:6763, 293 European cities) puts tree cooling at 2-4x treeless green. Raw NDVI FVC
+ *    is already in band at 2.0-2.7x; the blend pushed us out of it.
+ * 4. It cannot use the information it appears to use. The operator is EXACTLY
+ *    scale-invariant in height — `blend(2h) === blend(h)` bit-for-bit, because the target
+ *    `vMean * h_i / hMean` cancels magnitude. It consumes only the normalised spatial
+ *    pattern, and the pattern is the thing it makes worse. (Corollary: the CHM v2 accuracy
+ *    gain, MAE 4.3 -> 3.0 m, could never have reached the physics through this path.)
+ *
+ * Full record: docs/evidence/known-limitations.md §1. The FUNCTION stays general and is
+ * unit-tested at explicit non-zero strengths — only the shipped value is 0, so reverting
+ * this decision is a one-constant change backed by a re-run of the sweep. The Python port
+ * (scripts/_canopy.py BLEND_STRENGTH) is pinned to this value through the canopy parity
+ * oracle, so the two cannot drift.
+ */
+export const CANOPY_BLEND_STRENGTH = 0;
+
 /** Per-cell input layers, each n*n in [0,1], row-major. */
 export interface SimLayers {
   albedo: Float32Array;

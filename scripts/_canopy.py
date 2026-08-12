@@ -51,10 +51,36 @@ F32 = npt.NDArray[np.float32]
 #: one of the three moves alone, every dequantised height silently rescales.
 CANOPY_HI = 30.0
 
-#: The strength `rasterWardBase` passes. Not a tunable here -- it is read off the
-#: single shipped call site, and changing it in this file would make the laboratory
-#: score a blend the instrument does not apply.
-BLEND_STRENGTH = 0.5
+#: The strength `rasterWardBase` passes. Not a tunable here -- it is read off the single
+#: shipped call site (CANOPY_BLEND_STRENGTH in src/scripts/climate-engine/types.ts), and
+#: changing it in this file would make the laboratory score a blend the instrument does not
+#: apply. THAT IS MACHINE-CHECKED, not a convention: the canopy parity oracle carries the
+#: TypeScript value as `shippedStrength` and scripts/check-canopy-oracle.py fails if this
+#: line disagrees with it. Fix the TypeScript first; this follows.
+#:
+#: IT IS ZERO, AND THAT IS NOT A MISTAKE -- do not "restore" 0.5. It shipped at 0.5 from
+#: 2026-08-10 until 2026-08-12, unmeasured the whole time because no Python applied it (see
+#: docs/evidence/known-limitations.md sec.1). The first sweep that could measure it -- 34
+#: near-nadir ECOSTRESS scenes, 87 ward-scenes, all three wards -- was monotonic against us:
+#:
+#:     strength      0.00     0.15     0.25     0.50 (was shipped)
+#:     r_physics   0.2154   0.2145   0.2129   0.2076
+#:     r_veg       0.2380   0.2321   0.2245   0.1987
+#:     anom RMSE   1.8358   1.8308   1.8251   1.8061
+#:
+#: The only metric it improved is an artefact: RMSE falls because the veg term's spatial SD
+#: falls (0.64 -> 0.61), largely through the operator's own [0,1] clamps, and the model
+#: already draws ~2x the observed spatial SD -- error reduced by compressing an over-drawn
+#: amplitude, not by getting the pattern right. At 0.5 the implied tree:grass veg ratio was
+#: 4.9-8.1x against the 2-4x of Schwaab et al. 2021 (Nat Commun 12:6763), while raw NDVI FVC
+#: is in band at 2.0-2.7x. And the operator is exactly scale-invariant in height -- the
+#: target `vMean * h_i / hMean` cancels magnitude -- so it never used canopy height, only the
+#: canopy pattern, which is the thing it degrades.
+#:
+#: The blend therefore no longer enters the temperature solve at all; the canopy raster is
+#: render-only. `blend_canopy_into_veg` stays general and is still oracle-checked at 0, 0.5
+#: and 1.0, so this is reversible by one constant on the TypeScript side.
+BLEND_STRENGTH = 0.0
 
 
 def canopy_heights_from_pixels(data: npt.NDArray[np.uint8], n: int,

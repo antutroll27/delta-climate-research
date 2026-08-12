@@ -31,10 +31,31 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { blendCanopyIntoVeg } from '../src/scripts/climate-engine/ward-raster.ts';
 import { canopyHeightsFromPixels, resample } from '../src/scripts/climate-engine/surface-raster.ts';
+import { CANOPY_BLEND_STRENGTH } from '../src/scripts/climate-engine/types.ts';
 
 const OUT_DIR = 'tests/fixtures/canopy-oracle';
 const CANOPY_HI = 30;          // mirrors surface-raster.ts's private CANOPY_HI
-const STRENGTH = 0.5;          // the strength rasterWardBase actually passes
+
+/**
+ * The strength `rasterWardBase` actually passes, IMPORTED from the shipped constant
+ * rather than retyped. It travels into the fixture as `shippedStrength`, and
+ * check-canopy-oracle.py fails if scripts/_canopy.py's BLEND_STRENGTH disagrees with
+ * it. That is the whole mechanism keeping the two implementations' shipped value in
+ * parity: one literal, in types.ts, machine-propagated to the laboratory.
+ */
+const SHIPPED_STRENGTH = CANOPY_BLEND_STRENGTH;
+
+/**
+ * The strength the BRANCH-COVERAGE cases below run at — deliberately NOT the shipped
+ * one. The shipped value is 0 (see types.ts for the measurement that put it there),
+ * and at 0 the blend is arithmetically an identity: no clamp fires, no redistribution
+ * happens, and every case would pass against a port that did nothing. The oracle's job
+ * is to pin the FUNCTION, which must stay correct at any strength so the decision
+ * remains one constant away from reversible. 0.5 is used because it is the value the
+ * measurement was taken at, and it is the value a future re-enable would start from.
+ * Cases 7 and 8 additionally pin strength 1 and strength 0 explicitly.
+ */
+const PROBE_STRENGTH = 0.5;
 
 /** Plain array of doubles, so JSON round-trips the float32 values exactly. */
 const nums = (a) => Array.from(a, (v) => v);
@@ -164,21 +185,21 @@ const field = (count, f) => { const a = new Float32Array(count); for (let i = 0;
 blendCase('normal-8x8',
   field(64, (i) => 0.15 + 0.5 * pattern(i, 101, 37)),
   field(64, (i) => 18 * pattern(i, 89, 23)),
-  STRENGTH,
+  PROBE_STRENGTH,
   'happy path: both fields structured, no clamp reached');
 
 // 2. Length mismatch -> the input comes back untouched.
 blendCase('length-mismatch',
   field(16, (i) => 0.2 + 0.01 * i),
   field(9, () => 5),
-  STRENGTH,
+  PROBE_STRENGTH,
   'canopy.length !== veg.length: early return, input unchanged');
 
 // 3. cSum <= 0 via an all-zero canopy: the ward has a canopy raster but no canopy.
 blendCase('zero-canopy',
   field(16, (i) => 0.2 + 0.01 * i),
   field(16, () => 0),
-  STRENGTH,
+  PROBE_STRENGTH,
   'cSum === 0: early return, input unchanged');
 
 // 4. cSum <= 0 via NEGATIVE values. Heights cannot be negative, but the guard is
@@ -187,7 +208,7 @@ blendCase('zero-canopy',
 blendCase('negative-sum-canopy',
   field(16, (i) => 0.2 + 0.01 * i),
   field(16, (i) => (i % 2 === 0 ? -3 : 1)),
-  STRENGTH,
+  PROBE_STRENGTH,
   'cSum < 0: early return, input unchanged (guard is <= 0, not === 0)');
 
 // 5. THE UPPER CLAMP, in BOTH passes. Two tall cells in sixteen make the pass-1
@@ -199,7 +220,7 @@ blendCase('negative-sum-canopy',
 blendCase('clamp-high-both-passes',
   field(16, () => 0.5),
   field(16, (i) => (i < 2 ? 40 : 0)),
-  STRENGTH,
+  PROBE_STRENGTH,
   'upper [0,1] clamp fires in both passes; mean-neutrality measurably broken');
 
 // 6. THE LOWER CLAMP, in BOTH passes. Unreachable from a real height raster (heights
@@ -211,7 +232,7 @@ blendCase('clamp-high-both-passes',
 blendCase('clamp-low-both-passes',
   field(16, () => 0.5),
   field(16, (i) => (i === 0 ? -30 : 10)),
-  STRENGTH,
+  PROBE_STRENGTH,
   'lower [0,1] clamp fires in both passes; delta goes negative');
 
 // 7. strength = 1: the nudge lands exactly on the canopy-weighted target.
@@ -234,7 +255,7 @@ blendCase('strength-0',
 blendCase('single-tall-cell',
   field(49, () => 0.22),
   field(49, (i) => (i === 30 ? 26 : 0)),
-  STRENGTH,
+  PROBE_STRENGTH,
   'one tall cell: largest target ratio the shipped rasters can produce');
 
 // -------------------------------------------------------------------- write out
@@ -252,7 +273,10 @@ const oracle = {
     'src/scripts/climate-engine/surface-raster.ts (canopyHeightsFromPixels, resample)',
   ],
   canopyHi: CANOPY_HI,
-  shippedStrength: STRENGTH,
+  // The PINNED shipped value, imported from types.ts. check-canopy-oracle.py asserts
+  // scripts/_canopy.py's BLEND_STRENGTH equals this, so the render path and the
+  // validation path cannot ship different strengths. Not the strength the cases run at.
+  shippedStrength: SHIPPED_STRENGTH,
   canopyHeightsFromPixels: decodeCases,
   resample: resampleCases,
   blendCanopyIntoVeg: blendCases,

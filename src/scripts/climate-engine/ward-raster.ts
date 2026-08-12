@@ -6,7 +6,7 @@
  * by a hash function here, which meant two of `eqCell`'s three inputs were
  * invented and every within-ward pattern on the map was decoration.
  */
-import { CANONICAL_GRID_N, type SimLayers } from './types.ts';
+import { CANONICAL_GRID_N, CANOPY_BLEND_STRENGTH, type SimLayers } from './types.ts';
 import type { WardData } from './heat-map-model.ts';
 import { resample, type CanopyRaster, type SurfaceMeans, type SurfaceRaster } from './surface-raster.ts';
 
@@ -112,6 +112,12 @@ export function rasterizeWardBuilt(ward: WardData, n = CANONICAL_GRID_N): Float3
  * roofs: a cell that is 90 % building measures low NDVI because it IS mostly
  * roof, so multiplying by `(1 - built)` would subtract the same buildings twice
  * and drive dense cells to a vegetation floor no city has.
+ *
+ * THE CANOPY RASTER NO LONGER TOUCHES `veg`. `CANOPY_BLEND_STRENGTH` is 0, so the
+ * call below is an identity: the canopy raster is RENDER-ONLY, driving the rendered
+ * tree layer and nothing in the temperature solve. The call is kept rather than
+ * deleted so the decision lives in exactly one constant. Why 0: see
+ * `blendCanopyIntoVeg`'s docblock below, and types.ts.
  */
 export function rasterWardBase(
   ward: WardData,
@@ -127,7 +133,7 @@ export function rasterWardBase(
   let veg = surface
     ? resample(surface.veg, surface.n, n)
     : new Float32Array(count).fill(means.fvc);
-  if (canopy) veg = blendCanopyIntoVeg(veg, resample(canopy.height, canopy.n, n), 0.5);
+  if (canopy) veg = blendCanopyIntoVeg(veg, resample(canopy.height, canopy.n, n), CANOPY_BLEND_STRENGTH);
   const albedo = surface
     ? resample(surface.albedo, surface.n, n)
     : new Float32Array(count).fill(means.albedo);
@@ -142,6 +148,27 @@ export function rasterWardBase(
  * re-centre so the sum (hence ward-mean FVC, a CEO-governed scalar) is unchanged.
  * `strength` in [0,1] controls how far the pattern moves. Mean-neutral by
  * construction, so `assertSurfaceMatches` and the DC-URS scalar stay valid.
+ *
+ * DISABLED IN PRODUCTION SINCE 2026-08-12: `CANOPY_BLEND_STRENGTH` is 0. The rationale
+ * above is the HYPOTHESIS this operator was built on, kept because it is the thing that
+ * was tested. It did not survive the test. Measured against ECOSTRESS over 34 near-nadir
+ * scenes / 87 ward-scenes / 3 wards, agreement degrades monotonically with strength:
+ * r_veg 0.2380 at 0 -> 0.1987 at 0.5, r_physics 0.2154 -> 0.2076. The one metric that
+ * improved (anomaly RMSE 1.8358 -> 1.8061) improved by COMPRESSING an amplitude the model
+ * already over-draws ~2x — chiefly through the [0,1] clamps below, which bite 3-10% of
+ * cells — so it is error reduction by damping, not by pattern skill. At 0.5 the implied
+ * tree:grass veg ratio was 4.9-8.1x against Schwaab et al. 2021's published 2-4x, while
+ * raw NDVI FVC sits in band at 2.0-2.7x. And the operator is EXACTLY scale-invariant in
+ * height — `blend(2h)` equals `blend(h)` bit-for-bit, since `vMean * canopy[i] / cMean`
+ * cancels magnitude — so it never consumed canopy height at all, only the normalised
+ * canopy pattern, which is precisely what it degrades.
+ *
+ * The function is DELIBERATELY LEFT INTACT, general, and unit-tested at explicit non-zero
+ * strengths: the decision is one constant in types.ts, so re-enabling it is a one-line
+ * change that must be justified by re-running the sweep. Do not change the `strength`
+ * default here to 0 — the default is the function's, the shipped value is the caller's,
+ * and collapsing them would hide which one the measurement was about.
+ * See docs/evidence/known-limitations.md §1.
  */
 export function blendCanopyIntoVeg(veg: Float32Array, canopy: Float32Array, strength = 0.5): Float32Array {
   const count = veg.length;

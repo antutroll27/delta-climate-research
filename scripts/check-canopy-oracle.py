@@ -23,6 +23,16 @@ mismatch, `cSum <= 0` reached two different ways, and both [0,1] clamps in both
 passes. The clamp cases additionally assert that they still BITE -- a clamp case
 that quietly stopped clamping would keep passing while testing nothing.
 
+AND THE SHIPPED STRENGTH ITSELF. The elementwise cases pin the FUNCTION; they say
+nothing about which strength production runs at, and that number lived as a bare
+literal in two files -- `0.5` at the TypeScript call site and `BLEND_STRENGTH` here --
+free to diverge silently in exactly the way sec.1 warns about. The dump now imports
+CANOPY_BLEND_STRENGTH from types.ts and writes it as the fixture's `shippedStrength`;
+`check_shipped_strength` below fails if scripts/_canopy.py disagrees. One literal, in
+types.ts, machine-propagated to the laboratory. It is currently 0 -- the canopy no
+longer enters the temperature solve; see _canopy.py's BLEND_STRENGTH for the
+measurement that decided it.
+
 Run:  python3 scripts/check-canopy-oracle.py
 """
 from __future__ import annotations
@@ -40,7 +50,7 @@ if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
 from _canopy import (  # noqa: E402
-    blend_canopy_into_veg, canopy_heights_from_pixels, resample_bilinear,
+    BLEND_STRENGTH, blend_canopy_into_veg, canopy_heights_from_pixels, resample_bilinear,
 )
 
 ORACLE = os.path.join(ROOT, "tests", "fixtures", "canopy-oracle", "oracle.json")
@@ -110,6 +120,29 @@ def check_resample(oracle: dict[str, Any], failures: list[str]) -> int:
     return len(cases)
 
 
+def check_shipped_strength(oracle: dict[str, Any], failures: list[str]) -> None:
+    """The one number the elementwise cases cannot check: which strength SHIPS.
+
+    `shippedStrength` is CANOPY_BLEND_STRENGTH imported straight from types.ts by
+    dump-canopy-oracle.mjs -- so this compares the laboratory's constant against the
+    instrument's, not against a second hand-copied literal. Exact equality, no
+    tolerance: these are two spellings of one decision, and 0.5 vs 0.5000001 would
+    mean someone typed rather than propagated.
+    """
+    shipped = float(cast(float, oracle["shippedStrength"]))
+    agrees = BLEND_STRENGTH == shipped
+    print("\n  shipped strength — types.ts CANOPY_BLEND_STRENGTH vs _canopy.BLEND_STRENGTH")
+    print(f"    {'ok  ' if agrees else 'FAIL'} {'parity':<22} TS {shipped}  ·  Python {BLEND_STRENGTH}"
+          f"{'   (blend OFF — canopy is render-only)' if agrees and shipped == 0 else ''}")
+    if not agrees:
+        failures.append(
+            f"shipped strength: types.ts ships {shipped} but scripts/_canopy.py's "
+            f"BLEND_STRENGTH is {BLEND_STRENGTH}. The validation would score a blend the "
+            f"browser does not apply — the exact defect known-limitations.md sec.1 records. "
+            f"TypeScript is the oracle: change CANOPY_BLEND_STRENGTH, re-run "
+            f"`node --import tsx scripts/dump-canopy-oracle.mjs`, then follow here.")
+
+
 def check_blend(oracle: dict[str, Any], failures: list[str]) -> int:
     """blendCanopyIntoVeg: every exit, both clamps, and the mean shift each produces."""
     cases = cast(dict[str, Any], oracle["blendCanopyIntoVeg"])
@@ -167,6 +200,7 @@ def main() -> int:
           f"· shipped strength {oracle['shippedStrength']}")
 
     failures: list[str] = []
+    check_shipped_strength(oracle, failures)
     n = (check_decode(oracle, failures)
          + check_resample(oracle, failures)
          + check_blend(oracle, failures))

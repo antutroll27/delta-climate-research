@@ -7,7 +7,7 @@
   "src/scripts/climate-engine/surface-raster.ts (canopyHeightsFromPixels, resample)"
  ],
  "canopyHi": 30,
- "shippedStrength": 0.5,
+ "shippedStrength": 0,
  "canopyHeightsFromPixels": {
   "flip-2x2": {
    "n": 2,
