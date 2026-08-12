@@ -589,6 +589,48 @@ above along transects.** (Landsat, by contrast, *is* a genuine Dubai win — 8-d
 revisit and near-cloudless skies, against the monsoon losses that left Kolkata's day CI at
 ±1.87 K on n=12.)
 
+## 8j · ECOSTRESS YIELD, MEASURED — Dubai loses NOTHING to cloud (2026-08-12)
+
+First real Dubai ingest, enabled by Track A. Tool: `scripts/ecostress-yield.py`,
+sampling every 13th acquisition across the whole archive (Jan 2024 – Aug 2026) so the
+sample spans seasons rather than the newest end. Both cities measured with the SAME
+0.15° x 0.15° box, because yield depends on box size and an unmatched comparison is
+meaningless.
+
+| | acquisitions | sampled | cleared 50 % coverage | cloud mean | usable | **lost to CLOUD** |
+|---|---|---|---|---|---|---|
+| **Dubai** day | 153 | 12 | 8 | **0.0 %** | 94 % | **0** |
+| **Dubai** night | 149 | 12 | 6 | 0.1 % | 95 % | **0** |
+| Kolkata day | 67 | 6 | 0 | — | — | **2** |
+| Kolkata night | 127 | 10 | 1 | 0.1 % | 96 % | **3** |
+
+**⭐ THE RESULT: Dubai lost ZERO of 24 sampled acquisitions to cloud. Kolkata lost 5 of
+16.** Months represented in Dubai's covered sample: 01, 02, 04, 05, 06, 07, 08, 10, 11 —
+so this is not a summer artefact. Projected usable in the archive at this box size:
+**~96 day + ~71 night.**
+
+**⚠️ AND THE HONEST CAVEAT, which matters more than the headline.** The dominant loss in
+BOTH cities is neither cloud nor tile geometry: it is **"no retrieval — cloud band
+present and reporting clear, LST entirely NaN"** (Dubai 10 of 24, Kolkata 10 of 16).
+**The cause is NOT established.** Most likely swath geometry, but that is a hypothesis,
+not a measurement, and it is the real limiter on Dubai's yield. Do not present the
+cloud number without it.
+
+**Two measurement traps caught while doing this, both of which would have produced a
+false headline:**
+1. **Newest-first sampling.** `cmr_search` sorts by date descending, so the first 14
+   Dubai acquisitions are all May–Aug. They report 0 % cloud, which is true and
+   worthless — Gulf cloud is a winter phenomenon. `--stride` samples across the archive.
+2. **`cloud & raw` hides cloud losses entirely.** When a retrieval fails under cloud the
+   LST is all-NaN, so `raw` is empty and `cloud & raw` is empty too — every cloud-killed
+   scene reports **0 % cloudy**, indistinguishable from clear sky. This mislabelled every
+   one of Kolkata's cloud losses as "no retrieval" until a direct probe of the bands
+   contradicted the tool. The cloud band is now carried unmasked.
+
+**Independent confirmation of Track A:** the Dubai granules are MGRS tiles **`40RCN` /
+`40RCP`** — UTM zone 40, exactly what `target_crs` derives. The CRS fix is right end to
+end, against NASA's own tiling.
+
 ## 9 · First move — SUPERSEDED 2026-08-11
 
 ~~Verify Dubai Pulse actually has usable footprints and heights over the urban core.~~
