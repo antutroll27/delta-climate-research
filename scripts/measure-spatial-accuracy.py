@@ -83,6 +83,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
+import _canopy  # noqa: E402
 import _physics  # noqa: E402
 import _types  # noqa: E402
 from _ecostress import align, band_url, cmr_search, fetch, target_grid, token  # noqa: E402
@@ -104,11 +105,39 @@ MIN_CELLS = 12
 
 
 def surface_layers(ward_id: str) -> tuple[npt.NDArray[np.float32], npt.NDArray[np.float32]]:
-    """Per-cell vegetation and albedo at the Sentinel grid, decoded from the PNG.
+    """Per-cell vegetation and albedo at the Sentinel grid, as the BROWSER runs them.
 
     Read back from the SHIPPED texture rather than recomputed from the composite
     cache: this is what the browser actually runs on, quantisation included, so
     validating anything else would validate a model nobody uses.
+
+    AND THEN THE CANOPY BLEND, for the same reason. Until 2026-08-12 this function
+    stopped at the surface PNG and stated the principle above while breaking it:
+    `rasterWardBase` does not stop there. It mixes the measured canopy raster into
+    `veg[]` before the solver ever runs —
+
+        if (canopy) veg = blendCanopyIntoVeg(veg, resample(canopy.height, canopy.n, n), 0.5);
+
+    — and no Python applied it, so every spatial figure this file has ever written
+    scored a field that has never shipped. The tell was an accuracy output that came
+    back byte-identical across a canopy change that nearly doubled the height field:
+    a tautology, not evidence. See docs/evidence/known-limitations.md §1.
+
+    THE BLEND IS APPLIED AT THIS SCRIPT'S OWN 140 GRID, not by replaying the
+    browser's 140 → 192 → blend path. Deliberate, and recorded in
+    docs/superpowers/specs/2026-08-12-validation-sees-the-canopy-design.md: it is
+    one function rather than a second resample stage in the laboratory, and the
+    blend is mean-neutral at any grid, so ward means agree either way and only the
+    spatial pattern differs. That difference is MEASURED, not asserted — see
+    scripts/measure-canopy-blend-residual.py, which reports how far this lands from
+    the browser's 192-grid answer. If that residual ever grows material against the
+    spatial signal, this decision is the thing to revisit.
+
+    A ward WITHOUT a canopy PNG behaves exactly as before — that is also what the
+    browser does, since `loadCanopyRaster` returns null and `rasterWardBase` skips
+    the blend. A canopy raster at the WRONG grid is a different matter: the TS
+    would resample it, and silently returning the unblended field here would
+    quietly restore the very bug this closes, so it exits loudly instead.
     """
     path = os.path.join(SURFACE_DIR, f"{ward_id}-surface.png")
     if not os.path.exists(path):
@@ -117,7 +146,24 @@ def surface_layers(ward_id: str) -> tuple[npt.NDArray[np.float32], npt.NDArray[n
     a = np.asarray(Image.open(path)).astype(np.float32)
     veg = a[:, :, 0] / 255.0 * (VEG_RANGE[1] - VEG_RANGE[0]) + VEG_RANGE[0]
     alb = a[:, :, 1] / 255.0 * (ALBEDO_RANGE[1] - ALBEDO_RANGE[0]) + ALBEDO_RANGE[0]
-    return veg.astype(np.float32), alb.astype(np.float32)
+    veg = veg.astype(np.float32)
+
+    canopy_path = os.path.join(SURFACE_DIR, f"{ward_id}-canopy.png")
+    if os.path.exists(canopy_path):
+        # north-up, because everything in THIS script is north-up: the surface PNG is
+        # read unflipped and the ECOSTRESS target grid is north-up too. `_canopy`
+        # decodes into the sim's south-up frame — the browser's frame, the one the
+        # parity oracle pins — and names the conversion back rather than keeping a
+        # second flip-free decoder around.
+        canopy = _canopy.load_canopy_north_up(canopy_path)
+        if canopy.shape != veg.shape:
+            sys.exit(f"{ward_id}: canopy raster is {canopy.shape} but the surface grid is "
+                     f"{veg.shape}. The browser resamples both onto its 192 display grid; "
+                     f"this script blends at the source grid and cannot while they differ. "
+                     f"Re-export one of them, or teach this function the resample.")
+        veg = _canopy.blend_canopy_into_veg(veg, canopy, _canopy.BLEND_STRENGTH)
+
+    return veg, alb.astype(np.float32)
 
 
 def built_layer(ward_id: str) -> npt.NDArray[np.float32]:
