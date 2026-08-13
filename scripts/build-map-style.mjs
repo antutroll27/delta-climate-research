@@ -60,7 +60,7 @@ const OUT = join(ROOT, 'public', 'heat-map', 'styles', 'cusp-dusk.json');
  *     where the heat drape reads differently. The climate-stripes red is sealed
  *     and appears nowhere in this file.
  */
-const T = {
+const DUSK = {
   ground:       '#191a24',
   groundLift:   '#1d1e2a',
   /* LIFTED AFTER A WIDE RENDER. At z13 the first values (#131a27 / #1b2a22) left
@@ -94,8 +94,74 @@ const T = {
   placeLabel:   '#d3d6ea',
 };
 
-/** id -> paint overrides. Anything absent keeps upstream's value untouched. */
-const PAINT = {
+
+/**
+ * VARIANTS — the point is to stop looking like the reference.
+ *
+ * DUSK above is a faithful adaptation of Mapbox Standard's dusk, and a faithful
+ * adaptation is still a recognisable one: indigo ground plus terracotta massing
+ * is THEIR signature, and anyone who has seen their default will read ours as a
+ * copy of it. These two move the identity somewhere they are not.
+ *
+ * PETROL rotates the ground off indigo into teal-slate and cools the massing to
+ * bronze-grey, then hands the accent to a teal arterial. Warm stops being a
+ * basemap colour at all, which is the functional argument as well as the visual
+ * one: the heat ramp then owns warm outright, with nothing beneath it competing.
+ *
+ * SLATE inverts the mass. Buildings go LIGHTER than the ground rather than
+ * darker, the way an architectural drawing renders footprints, and the whole
+ * frame collapses to one blue-grey family with a near-white arterial. It reads
+ * as an instrument rather than a night map — furthest from the reference, and
+ * the one that best matches how the rest of this project talks about itself.
+ */
+const PETROL = {
+  ...DUSK,
+  ground:       '#152029',
+  groundLift:   '#18242e',
+  water:        '#12293a',
+  waterEdge:    '#1b3a50',
+  park:         '#193026',
+  wood:         '#1c3629',
+  buildingFill: '#242621',
+  buildingEdge: '#2e3129',
+  buildingLit:  '#39392e',
+  roadMinor:    '#20313b',
+  roadCasing:   '#263a45',
+  roadInner:    '#365160',
+  roadSubtle:   '#2b414e',
+  arterial:     '#4e8496',
+  rail:         '#1f2c34',
+  label:        '#a8c2cc',
+  labelHalo:    '#0a1116',
+  placeLabel:   '#cfe2e9',
+};
+
+const SLATE = {
+  ...DUSK,
+  ground:       '#12151c',
+  groundLift:   '#161a22',
+  water:        '#152634',
+  waterEdge:    '#1d3448',
+  park:         '#1a2a24',
+  wood:         '#1d3128',
+  buildingFill: '#2b303c',
+  buildingEdge: '#39404f',
+  buildingLit:  '#4a5265',
+  roadMinor:    '#1d222c',
+  roadCasing:   '#232935',
+  roadInner:    '#3a4256',
+  roadSubtle:   '#2b3140',
+  arterial:     '#8e9ab8',
+  rail:         '#1f242e',
+  label:        '#aeb6cc',
+  labelHalo:    '#0a0c11',
+  placeLabel:   '#d8dced',
+};
+
+const VARIANTS = { dusk: DUSK, petrol: PETROL, slate: SLATE };
+
+/** id -> paint overrides, per token set. Absent ids keep upstream's value. */
+const paintFor = (T) => ({
   background:              { 'background-color': T.ground },
   water:                   { 'fill-color': T.water },
   waterway:                { 'line-color': T.waterEdge },
@@ -124,13 +190,13 @@ const PAINT = {
   place_town:              { 'text-color': T.placeLabel, 'text-halo-color': T.labelHalo },
   place_city:              { 'text-color': T.placeLabel, 'text-halo-color': T.labelHalo },
   place_city_large:        { 'text-color': T.placeLabel, 'text-halo-color': T.labelHalo },
-};
+});
 
 /* `highway_motorway_inner` ships a zoom interpolation upstream, so it is replaced
    wholesale rather than merged — the arterial tier is the ONE bright road class
    the Ballygunge reading left standing, and it must not inherit upstream's
    fade-to-black stop. */
-const MOTORWAY_INNER = { 'line-color': T.arterial };
+const motorwayInnerFor = (T) => ({ 'line-color': T.arterial });
 
 /**
  * 3D massing, added rather than recoloured.
@@ -144,7 +210,7 @@ const MOTORWAY_INNER = { 'line-color': T.arterial };
  * z15 floor: below that the extrusions are noise at Kolkata parcel size, and the
  * flat `building` fill already carries the mass.
  */
-const BUILDING_3D = {
+const building3dFor = (T) => ({
   id: 'building_3d',
   type: 'fill-extrusion',
   source: 'openmaptiles',
@@ -160,13 +226,19 @@ const BUILDING_3D = {
     'fill-extrusion-opacity': 0.86,
     'fill-extrusion-vertical-gradient': true,
   },
-};
+});
 
 /** Sun-ish key from the north-west, low. Mirrors the relief renderer's key light
  *  direction so the two modes agree about where the light comes from. */
-const LIGHT = { anchor: 'viewport', position: [1.4, 320, 62], color: '#ffeedd', intensity: 0.28 };
+/* Petrol and Slate remove warmth from the basemap entirely, so their key light
+   loses its amber cast too — a warm light over cool massing just reads dirty. */
+const lightFor = (name) => (name === 'dusk'
+  ? { anchor: 'viewport', position: [1.4, 320, 62], color: '#ffeedd', intensity: 0.28 }
+  : { anchor: 'viewport', position: [1.4, 320, 62], color: '#eaf2ff', intensity: 0.34 });
 
-function build(upstream) {
+function build(upstream, name, T) {
+  const PAINT = paintFor(T);
+  const MOTORWAY_INNER = motorwayInnerFor(T);
   const style = structuredClone(upstream);
   const seen = new Set();
 
@@ -191,10 +263,10 @@ function build(upstream) {
      every road and label rather than over them. */
   const at = style.layers.findIndex((l) => l.id === 'building');
   if (at < 0) throw new Error('no `building` layer upstream — cannot place building_3d');
-  style.layers.splice(at + 1, 0, structuredClone(BUILDING_3D));
+  style.layers.splice(at + 1, 0, building3dFor(T));
 
-  style.light = LIGHT;
-  style.name = 'CUSP Dusk';
+  style.light = lightFor(name);
+  style.name = `CUSP ${name[0].toUpperCase()}${name.slice(1)}`;
   style.metadata = {
     'cusp:derived-from': UPSTREAM_URL,
     'cusp:generated-by': 'scripts/build-map-style.mjs',
@@ -214,9 +286,10 @@ if (wantsFetch || !existsSync(VENDORED)) {
 }
 
 const upstream = JSON.parse(readFileSync(VENDORED, 'utf8'));
-const style = build(upstream);
 mkdirSync(dirname(OUT), { recursive: true });
-writeFileSync(OUT, `${JSON.stringify(style, null, 2)}\n`);
-
-console.log(`  ${style.layers.length} layers  (${Object.keys(PAINT).length + 1} recoloured, 1 added)`);
-console.log(`  written to ${OUT.replace(ROOT, '.')}`);
+for (const [name, tokens] of Object.entries(VARIANTS)) {
+  const style = build(upstream, name, tokens);
+  const path = join(dirname(OUT), `cusp-${name}.json`);
+  writeFileSync(path, `${JSON.stringify(style, null, 2)}\n`);
+  console.log(`  ${style.name.padEnd(12)} ${style.layers.length} layers  ->  ${path.replace(ROOT, '.')}`);
+}
