@@ -173,8 +173,14 @@ In `lib/estimator/estimate-from-pack.ts`, extend the interface (after `emissions
    * The figure must be the WHOLE good's embedded emissions (precursors included): that scope
    * is what keeps the line on Column B. Process-only figures are Column A territory — the
    * workspace's job, never this estimator's.
-   * Values are trusted as UI-validated, exactly like massT: the engine's floor clamp already
-   * fails closed on nonsense.
+   * CORRECTED AFTER REVIEW — the draft said these values were "trusted as UI-validated, exactly
+   * like massT: the engine's floor clamp already fails closed on nonsense." Both halves were
+   * false. massT really is UI-guarded; nothing passes `verified` yet, so there was no guard to
+   * inherit. And the floor clamp covers the DIRECT side only (certificate-estimate.ts applies
+   * Decimal.max(0, ...) then ADDS indirect), so a negative indirect figure produced a confident
+   * NEGATIVE bill — measured at -394.58 certificates / -EUR 29,735.55. The estimator must
+   * validate these figures itself and refuse via unavailableEstimate: empty, unparseable,
+   * non-finite, negative, or a non-decimal radix literal like '0x10'.
    */
   verified?: {
     directTco2ePerT: string
@@ -198,9 +204,13 @@ In `estimateFromPack` (body starts ~line 255), insert the verified branch after 
       quantityT: input.massT,
       scope: 'full_product',
       tier: 'actual-verified',
-      // The residual-bucket note describes DEFAULTS provenance; the tier stamp is this
-      // path's provenance label, so the basis stays 'country' and no residual note prints.
-      originBasis: 'country',
+      // CORRECTED AFTER REVIEW — the draft of this plan said `originBasis: 'country'`, which is
+      // WRONG. certificate-estimate.ts documents `null` as "not a default-derived figure
+      // (verified actual)", production's originBasisOf() returns null for any method that is not
+      // official_default, and DisclosureCard.vue renders "the origin's own published default"
+      // on any truthy value — i.e. it would have told a user their own audited figure rested on
+      // a Commission default. Pass null.
+      originBasis: null,
       emissionsType: 'direct',
       cnCode: input.cn,
       routeIndicator: benchmarkRoute(input.route),
@@ -222,6 +232,26 @@ Also update the file-header comment line that reads "Defaults path only (scope f
 cd /Volumes/VSTSAMPLES/Projects/CBM && npx vitest run lib/estimator/estimate-from-pack.verified.test.ts && npm test
 ```
 Expected: new file 6/6 PASS, full suite green.
+
+> **What actually happened (recorded 2026-08-13).** Task 1 landed as `a524fef` + `8b8694c` on
+> CBM branch `feat/verified-emissions`, and review changed it materially:
+> - `originBasis` corrected from `'country'` to `null` (see the annotation above) — my error.
+> - The estimator now VALIDATES both verified figures and refuses via `unavailableEstimate` with
+>   a `BAD_VERIFIED_REASON` constant and a `verified/<cn>/<field>` selector. Before this,
+>   `''` and `'abc'` threw `DecimalError` *outside* the fail-closed boundary, `'NaN'`/`'Infinity'`
+>   propagated into output strings, `'-1'` direct gave a confident EUR 0.00, and `'-5'` indirect
+>   gave a confident negative bill.
+> - `baseInput` and `tables` were hoisted above the branch and spread, with `baseInput` typed
+>   `Omit<CertificateEstimateInput, 'originBasis'>` so each path must state its own provenance
+>   claim. This killed a surviving mutation where a fabricated `snapshotHash` went unnoticed.
+> - The test reads the live `public/estimator-pack.json` like its four siblings, NOT a pasted
+>   fixture — a 380-line copy would have stayed green against a corpus the app no longer ships,
+>   which matters because IR 2026/1740 is about to supersede these defaults.
+> - Tests grew 6 → 23; CBM suite 385 → 402.
+> - Declined, with evidence: pinning `benchmarkRoute()`'s `'default' → ''` translation by figure
+>   or status. `resolveBenchmark` falls back to route-independent rows anyway, so removing the
+>   translation leaves all 402 green. Only the user-facing refusal SELECTOR differs, and that is
+>   what the added test pins instead.
 
 - [ ] **Step 6: Commit (CBM repo)**
 
