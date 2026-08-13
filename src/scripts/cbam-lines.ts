@@ -24,6 +24,24 @@ export interface Line {
   scope: 'direct' | 'direct_and_indirect';
   massT: string;
   date: string;      // ISO date; calendar year is date.slice(0, 4)
+  /**
+   * The engine's DataTier strings VERBATIM (cbam-algos/cbam/certificate-estimate.ts), not a
+   * friendlier local enum mapped at the boundary: the same two strings then reach the
+   * ProvenanceStamp the engine returns and the CSV column the export writes, so the stamp and
+   * the line can never disagree about which tier was used. A local 'verified' | 'default' would
+   * need a translation table, and a translation table is a place for the two to drift.
+   *
+   * REQUIRED, not optional-with-a-default. A line that omits it would have to mean one tier or
+   * the other, and the wrong guess is the punitive mark-up either applied to an importer who
+   * had audited data, or dropped from one who did not — a wrong tax liability in both
+   * directions. The compiler asking every construction site to say which is the point.
+   */
+  tier: 'default+markup' | 'actual-verified';
+  /** attested tCO2e per tonne; present iff tier is 'actual-verified' */
+  seeDirect?: string;
+  seeIndirect?: string;
+  /** optional verifier/report reference — transcribed, never checked */
+  verifiedRef?: string;
 }
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -57,9 +75,26 @@ export async function sha256Hex(text: string): Promise<string> {
  * JSON.stringify keeps each field individually quoted (and escapes any stray
  * quote/backslash inside a field), so a boundary shift changes the serialised
  * array and therefore the digest.
+ *
+ * THE TIER AND THE ATTESTED FIGURES ARE PART OF THE INPUTS. A verified line's per-tonne
+ * figures are the importer's own claim — the one number on the row that no published corpus
+ * backs — so they must be pinned exactly as entered, alongside the reference the importer
+ * cites for them. Two submissions that differ only in an attested figure, or only in the
+ * verifier reference attached to it, are different claims and must digest differently.
+ *
+ * NEW FIELDS ARE APPENDED AT THE END, and every future one must be too. Positions 0-5 keep the
+ * meaning they had before this feature, so a fingerprint printed on a pre-feature export can
+ * still be reproduced from a post-feature line by hashing the first six elements — a property
+ * a mid-array insertion would destroy for no gain. The array is also FIXED-LENGTH across both
+ * tiers (`?? ''` fills an absent optional rather than omitting the element), so a default line
+ * and a verified line hash the same 10-element shape and "field absent" can never be confused
+ * with "array truncated".
  */
 export function lineFingerprint(line: Line): Promise<string> {
-  return sha256Hex(JSON.stringify([line.cn, line.country, line.route, line.scope, line.massT, line.date]));
+  return sha256Hex(JSON.stringify([
+    line.cn, line.country, line.route, line.scope, line.massT, line.date,
+    line.tier, line.seeDirect ?? '', line.seeIndirect ?? '', line.verifiedRef ?? '',
+  ]));
 }
 
 /**

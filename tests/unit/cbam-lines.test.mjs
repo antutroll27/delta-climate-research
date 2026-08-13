@@ -22,9 +22,15 @@ const pack = JSON.parse(readFileSync(
 const est = (cn, country, route, massT, date = '2026-03-15', emissionsScope = 'direct') =>
   estimateFromPack(pack, { cn, country, route, massT, date, emissionsScope });
 
+// tier defaults to 'default+markup' — the tier every call site in this file was written
+// against, back when it was the only tier the calculator had. Defaulting to it (rather than
+// making each existing call pass one) keeps every pre-existing test's meaning EXACTLY as it
+// was; the verified-tier tests below opt in explicitly, the same way the scope-threading tests
+// opt into 'direct_and_indirect' on est().
 const line = (over = {}) => ({
   id: 'L1', cn: '25231000', country: 'DZ', route: '(A)',
-  scope: 'direct_and_indirect', massT: '30', date: '2026-03-15', ...over,
+  scope: 'direct_and_indirect', massT: '30', date: '2026-03-15',
+  tier: 'default+markup', ...over,
 });
 
 test('yearOf reads the calendar year from the import date', () => {
@@ -606,6 +612,49 @@ test('toCsv throws on a row whose keys do not match row 0, rather than silently 
   assert.throws(
     () => toCsv([{ a: '1', b: '2' }, { a: '3', c: '4' }]),
     /row 1/);
+});
+
+test('a line carries its tier, and the fingerprint pins attested figures as entered', async () => {
+  const base = line({ id: 'L1' });
+  const dflt = { ...base, tier: 'default+markup' };
+  const ver  = { ...base, tier: 'actual-verified', seeDirect: '2.31', verifiedRef: 'BV-2026-0142' };
+  const [a, b] = await Promise.all([lineFingerprint(dflt), lineFingerprint(ver)]);
+  assert.notEqual(a, b, 'tier and figures must change the digest');
+  // the reference alone must also change it — an attested claim is pinned as entered
+  const c = await lineFingerprint({ ...ver, verifiedRef: 'BV-2026-0143' });
+  assert.notEqual(b, c);
+  // and a default line's digest is stable against the new optional fields being absent
+  const d = await lineFingerprint({ ...base, tier: 'default+markup' });
+  assert.equal(a, d);
+});
+
+test('two verified lines differing only in seeIndirect fingerprint differently', async () => {
+  // seeDirect and verifiedRef are pinned by the test above; seeIndirect is the third attested
+  // input and the easiest one to leave out of the hashed array by hand — it is optional, it is
+  // only READ when emissionsScope is 'direct_and_indirect' (estimate-from-pack.ts's verified
+  // branch gates on exactly that), and every fixture in this file that exercises the verified
+  // path could omit it and still pass. But it multiplies straight into the charge: for a
+  // cement or fertiliser line it IS a chunk of the certificate count, and free allocation
+  // never deducts from it (it is added back after the direct-side floor — see the indirect
+  // tests above). An importer who corrects 0.4 to 0.6 tCO2e/t and gets the same fingerprint
+  // back has an audit trail that cannot tell the two submissions apart.
+  const base = { ...line({ id: 'L1' }), tier: 'actual-verified', seeDirect: '2.31' };
+  const a = await lineFingerprint({ ...base, seeIndirect: '0.4' });
+  const b = await lineFingerprint({ ...base, seeIndirect: '0.6' });
+  assert.notEqual(a, b, 'the attested indirect figure must be part of the digest');
+  // and absent is not the same claim as zero: "no indirect figure supplied" and "attested at
+  // nil" are different statements about what the importer had data for.
+  assert.notEqual(a, await lineFingerprint(base), 'absent must differ from a supplied figure');
+});
+
+test('threshold maths ignores the tier — 50 t is 50 t', () => {
+  const dflt = { ...line({ id: 'L1', massT: '60' }), tier: 'default+markup' };
+  const ver  = { ...line({ id: 'L2', massT: '60' }), tier: 'actual-verified', seeDirect: '2.31' };
+  const fps = new Map([['L1', 'a'.repeat(64)], ['L2', 'b'.repeat(64)]]);
+  const [ya] = thresholdByYear([dflt], fps, new Set(), pack);
+  const [yb] = thresholdByYear([ver],  fps, new Set(), pack);
+  assert.equal(ya.state, yb.state);
+  assert.equal(ya.knownEligibleMassT, yb.knownEligibleMassT);
 });
 
 test('csvRows throws naming the mismatch when lines and results are different lengths', () => {

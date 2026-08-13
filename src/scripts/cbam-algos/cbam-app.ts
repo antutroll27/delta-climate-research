@@ -880,6 +880,14 @@ export function initCbam(): void {
       id: crypto.randomUUID(), cn: cn!.value, country: country!.value, route: route!.value,
       scope: (scope?.value as Line['scope']) ?? 'direct_and_indirect',
       massT: mass!.value, date: date!.value,
+      // `Line.tier` is required (see its doc in cbam-lines.ts), and this page has no tier
+      // control yet — the form work is a later task. Hardcoding the defaults tier states
+      // exactly what this page does TODAY: every line it builds is priced from the
+      // Commission's published defaults, mark-up included. It is not a fallback for a
+      // control that exists; when the control lands it reads from the DOM here, and this
+      // literal goes away rather than becoming a silent default for a user who chose
+      // otherwise.
+      tier: 'default+markup',
     };
     if (Number.isNaN(yearOf(l))) return null;
     return l;
