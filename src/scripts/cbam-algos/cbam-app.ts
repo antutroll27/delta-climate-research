@@ -973,7 +973,20 @@ export function initCbam(): void {
     const indirectOn = on && !!scopeRow && !scopeRow.hidden
       && scope?.value === 'direct_and_indirect';
     if (seeIndirectRow) seeIndirectRow.hidden = !indirectOn;
-    if (!indirectOn && seeIndirect) seeIndirect.value = '';
+    // DESTROY THE INDIRECT FIGURE ONLY WHEN IT COULD STILL PRICE WHILE INVISIBLE — that is
+    // `on && !indirectOn`, not merely `!indirectOn`. On the verified path the engine adds this
+    // number on emissionsScope alone, with no pack lookup to fall back on (estimate-from-pack's
+    // gate is `emissionsScope === 'direct_and_indirect' && indirectTco2ePerT !== undefined`), so
+    // a value stranded behind a row hidden by a good- or scope-change would keep inflating every
+    // later estimate with a figure the user can no longer see or correct. That is the whole
+    // hazard, and it needs the verified tier to be ACTIVE.
+    //
+    // With the tier switched back to defaults, verifiedInputOf returns undefined, `input.verified`
+    // is undefined, and that gate short-circuits before this field is ever read — nothing stale
+    // can price. Wiping it there would buy nothing and cost real work: #cbTier has two options, so
+    // in Firefox a closed <select> fires `change` on each arrow step, and ↓ then ↑ would land a
+    // keyboard user back where they started with their typed figure silently gone.
+    if (on && !indirectOn && seeIndirect) seeIndirect.value = '';
   }
 
   /**
