@@ -23,6 +23,32 @@ citation isn't in the repo docs are marked **(verify)**.
   bidirectional coupling that scientists discount when claimed by static visualisations. **Engine use:**
   validates the no-photoreal constraint and the self-description as an "observatory/model," not a "digital
   twin."
+- **Naveed et al. 2025 — ML-assisted predictive urban digital twin for AQI** · Environmental Modelling &
+  Software **192:106559**, CC-BY 4.0 ·
+  [doi.org/10.1016/j.envsoft.2025.106559](https://doi.org/10.1016/j.envsoft.2025.106559) — Delhi 2015–2024,
+  87,633 hourly rows; six deep models benchmarked, CNN-1D-2 reported best at **R² 0.99951 / RMSE 3.009 /
+  MAPE 0.01231**; stack Blender → Azure Digital Twins (DTDL) → InfluxDB → Grafana, with city geometry
+  skinned by AQI category colour (Figs 18–21). The closest published analogue to what we are building, and
+  useful in three separate ways.
+  **(a) Display precedent** — threshold-coloured 3D geometry driven from a live time-series store is the
+  shape of our Phase-2 AQI overlay. Note what it does *not* do: the whole city takes ONE colour from ONE
+  scalar, so there is no within-city field at any point.
+  **(b) Anti-pattern — RECORDED AS A CAUTION, NOT A MEASUREMENT.** We did not run the counter-test and are
+  not claiming a measured refutation. On reading: AQI is a deterministic piecewise-linear function of the
+  pollutants (the paper's own Eq. 1 and Table 1 breakpoints) and those same pollutants are the model's
+  inputs, so the headline R² may be recovering an identity rather than forecasting; **no persistence or
+  closed-form baseline is reported anywhere**; the 70/30 split is given by sample count (26,290) rather
+  than by date, which leaks adjacent hours on an hourly series; and "model accuracy 97.950647" applies a
+  classification metric to a regression at seven significant figures. Settling it needs the paper's Kaggle
+  source (`rohanrao/air-quality-data-in-india`) — **deliberately not done**, because we do not model AQI
+  (CEO, 2026-08-13: it comes from an API).
+  **(c) A standards mismatch not to inherit** — Fig. 1 defines AQI the **CPCB (India)** way (NH₃ included,
+  "at least three pollutants, at least one PM"), while Table 1 and Fig. 2 give **US EPA** breakpoints and
+  categories. Do not lift breakpoints from this paper.
+  **Engine use:** the threshold-colour precedent for the Phase-2 overlay; the reason that overlay must ship
+  a station-coverage statement instead of a painted ward; and the reason its breakpoints get transcribed
+  from the official CPCB document rather than a secondary source. See
+  `docs/superpowers/specs/2026-08-13-aqi-overlay-design.md`.
 - **UK Gemini Principles** (CDBB, Dec 2018) ·
   [cdbb.cam.ac.uk](https://www.cdbb.cam.ac.uk/DFTG/GeminiPrinciples) — canonical values framework for
   trustworthy twins. **Engine use:** template for a planned "About this instrument" values statement.
