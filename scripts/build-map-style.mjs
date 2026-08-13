@@ -136,26 +136,34 @@ const PETROL = {
   placeLabel:   '#cfe2e9',
 };
 
+/* Violet, not neutral. The first Slate sat at ~215 deg — a cold blue-grey that
+   read clinical next to Dusk's indigo. Rotated to ~258 deg so the family keeps
+   the violet cast of the reference while the STRUCTURE stays Slate's: mass
+   inverted, one hue family, nothing warm. Water and parks are the two deliberate
+   exceptions and hold their own hues, because they are the only places on this
+   map where colour carries meaning rather than mood — a violet river would be a
+   decorative lie, and the green has to survive contact with the vegetation layer
+   that will later sit on top of it. */
 const SLATE = {
   ...DUSK,
-  ground:       '#12151c',
-  groundLift:   '#161a22',
-  water:        '#152634',
-  waterEdge:    '#1d3448',
-  park:         '#1a2a24',
-  wood:         '#1d3128',
-  buildingFill: '#2b303c',
-  buildingEdge: '#39404f',
-  buildingLit:  '#4a5265',
-  roadMinor:    '#1d222c',
-  roadCasing:   '#232935',
-  roadInner:    '#3a4256',
-  roadSubtle:   '#2b3140',
-  arterial:     '#8e9ab8',
-  rail:         '#1f242e',
-  label:        '#aeb6cc',
-  labelHalo:    '#0a0c11',
-  placeLabel:   '#d8dced',
+  ground:       '#14131f',
+  groundLift:   '#191826',
+  water:        '#1a2338',
+  waterEdge:    '#243050',
+  park:         '#1b2b25',
+  wood:         '#1e3129',
+  buildingFill: '#2f2c43',
+  buildingEdge: '#3d3956',
+  buildingLit:  '#514c6e',
+  roadMinor:    '#201f2f',
+  roadCasing:   '#282639',
+  roadInner:    '#403c5c',
+  roadSubtle:   '#2f2c43',
+  arterial:     '#9a92c4',
+  rail:         '#221f30',
+  label:        '#b8b3d2',
+  labelHalo:    '#0b0a11',
+  placeLabel:   '#ddd9f0',
 };
 
 const VARIANTS = { dusk: DUSK, petrol: PETROL, slate: SLATE };
