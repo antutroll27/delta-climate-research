@@ -720,8 +720,19 @@ test('the hashed field ORDER is pinned to a golden digest — a transposition ca
     'the hashed array\'s field order/encoding changed — see this test\'s comment before updating');
 
   // The default tier's shape, pinned the same way: same six leading facts, tier flipped, all
-  // three optionals absent (the `?? null` fillers). Without this second constant a transposition
-  // confined to the optional tail could still hide on a default-tier line.
+  // three optionals absent (the `?? null` fillers).
+  //
+  // WHAT THIS SECOND CONSTANT IS ACTUALLY FOR — corrected after review, because the first
+  // version of this comment had it backwards and would have sent a reader chasing the wrong
+  // failure. It is NOT a second guard against transposition: every optional here is `null`, so
+  // swapping two of them is a no-op and this digest cannot move. The constant above is the one
+  // that catches a transposed pair.
+  //
+  // This one is the ONLY assertion that pins the fixed-LENGTH shape. Drop the `?? null` fillers
+  // so absent fields vanish instead of serialising, and the array truncates from ten elements to
+  // seven — every relational test still passes, the constant above still passes (its optionals
+  // are all present), and only this one fails. That is the property `lineFingerprint`'s own
+  // doc comment promises: "field absent" must never be confusable with "array truncated".
   const dflt = line({ id: 'L1', tier: 'default+markup' });
   assert.equal(
     await lineFingerprint(dflt),
