@@ -4,9 +4,17 @@ import type { WardId } from './wards.ts';
 export interface LoadedWard {
   ward: WardData;
   roads: RoadsData;
-  /** OSM open water. In the SOLVE since 2026-08-13 (rasterizeWardWater), not just
-   *  the scene — so Compare must load it or it would score a different ward from
-   *  the one the map draws. Absent degrades to no water, never to a rejection. */
+  /** OSM open water, loaded so Compare scores the same ward the map draws.
+   *
+   *  NOT IN THE SOLVE. `WATER_LAYER_ENABLED` is false, so `rasterWardBase` discards
+   *  this and hands the solver zeros — feeding it was measured and made agreement
+   *  with ECOSTRESS worse (known-limitations.md §7). It is still fetched, and
+   *  deliberately not gated here: the flag is the ONE place that decision lives, and
+   *  a second copy in the loader is how the two drift apart the day someone flips it.
+   *  The cost of being wrong in this direction is 1.5–9 KB of cached JSON per ward;
+   *  the cost of the other is Compare silently scoring a ward with no water in it.
+   *
+   *  Absent degrades to no water, never to a rejection. */
   water: WaterData;
 }
 

@@ -28,26 +28,26 @@
     "ballygunge": {
       "ward_scenes": 29,
       "open_water_fraction": 0.0070790816098451614,
-      "r_physics": 0.19873568961794794,
-      "r_built": 0.16120327565620693,
+      "r_physics": 0.19594894128674856,
+      "r_built": 0.15042487817521544,
       "r_veg": 0.22517786806354212,
-      "anomaly_rmse_k": 1.7282632599375365
+      "anomaly_rmse_k": 1.4730657718085847
     },
     "baruipur": {
       "ward_scenes": 25,
       "open_water_fraction": 0.013086734339594841,
-      "r_physics": 0.25434795029017165,
-      "r_built": 0.18783718386551856,
+      "r_physics": 0.27405769499678784,
+      "r_built": 0.22003118390588372,
       "r_veg": 0.3202424392868955,
-      "anomaly_rmse_k": 1.4346259874689267
+      "anomaly_rmse_k": 1.291561979487083
     },
     "barrackpore": {
       "ward_scenes": 33,
       "open_water_fraction": 0.048852041363716125,
-      "r_physics": 0.20041886478833013,
-      "r_built": 0.18925027144287968,
+      "r_physics": 0.19031599758577322,
+      "r_built": 0.16783645331915648,
       "r_veg": 0.1869440992183779,
-      "anomaly_rmse_k": 2.2342635537680824
+      "anomaly_rmse_k": 1.9172367868542848
     }
   },
   "water": {

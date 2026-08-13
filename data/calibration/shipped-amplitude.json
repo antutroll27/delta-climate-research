@@ -40,6 +40,38 @@
       "amplitude_ratio_equilibrium": 1.498
     }
   },
+  "by_ward": {
+    "ballygunge": {
+      "n": 29,
+      "open_water_fraction": 0.00718,
+      "water_in_solve": false,
+      "sd_shipped_at_obs_k": 1.063,
+      "sd_observed_k": 0.86,
+      "r_shipped": 0.263,
+      "r_equilibrium": 0.1959,
+      "r_veg_diffused": 0.2829
+    },
+    "barrackpore": {
+      "n": 33,
+      "open_water_fraction": 0.04877,
+      "water_in_solve": false,
+      "sd_shipped_at_obs_k": 1.217,
+      "sd_observed_k": 1.09,
+      "r_shipped": 0.2791,
+      "r_equilibrium": 0.1903,
+      "r_veg_diffused": 0.2699
+    },
+    "baruipur": {
+      "n": 25,
+      "open_water_fraction": 0.01298,
+      "water_in_solve": false,
+      "sd_shipped_at_obs_k": 0.926,
+      "sd_observed_k": 0.782,
+      "r_shipped": 0.3615,
+      "r_equilibrium": 0.2741,
+      "r_veg_diffused": 0.405
+    }
+  },
   "rows": [
     {
       "date": "2024-01-05",
@@ -1260,5 +1292,7 @@
       "sd_veg_diffused_k": 0.7040892839431763
     }
   ],
-  "note": "The shipped map runs TsHeatSim (diffusion, RESET_BURST steps); the published within-ward figures score the per-cell equilibrium. This measures both against the same observation."
+  "note": "The shipped map runs TsHeatSim (diffusion, RESET_BURST steps); the published within-ward figures score the per-cell equilibrium. This measures both against the same observation.",
+  "water_note": "This file is the ONLY place the sim's water terms can be scored: the equilibrium in spatial-accuracy.json mirrors equilibriumC, which has no water term, so those figures are blind to it by construction. The layer is currently GATED OFF (WATER_LAYER_ENABLED false in types.ts, mirrored by _water.LAYER_ENABLED and pinned by the water parity oracle), so `water_in_solve` below is false and these figures are the dry arm. Turning it on cost 0.0487 r (0.3031 -> 0.2544) and raised spatial SD 1.345 -> 1.514 K against an observed 0.925 K, in proportion to each ward's open water. See docs/heat-map-water-layer.md and docs/evidence/known-limitations.md sec.6.",
+  "water_in_solve": false
 }
