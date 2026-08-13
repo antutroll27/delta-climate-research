@@ -520,10 +520,15 @@ export function csvRows(
       // importer's own verified figures (no mark-up). Read off `l`, not `e.stamp` — the guard
       // at the top of this loop makes the two identical, so the choice is about which is the
       // more honest SOURCE for a column that says what the importer claimed. `l.tier` is the
-      // claim as submitted, and the digest an auditor can re-derive (lineFingerprint hashes
-      // l.tier) pins the same value; sourcing the column from the stamp instead would let the
-      // exported column and the fingerprint that is supposed to certify it come from different
-      // places. See the guard for what makes that safe.
+      // claim as submitted, and it is the value lineFingerprint hashes (position 6), so the
+      // column and the digest printed beside it come from one place rather than two.
+      //
+      // NOT claimed, because review disproved it: that an auditor re-derives the fingerprint
+      // FROM THIS FILE. They cannot. The row is not sufficient input — the attested per-tonne
+      // figures have no column at all, and `?? ''` below collapses an absent reference and an
+      // empty one, which the digest deliberately distinguishes. Two such lines export
+      // byte-identical rows with different fingerprints. Re-derivation needs the line as
+      // entered; this column only shares its origin with the digest.
       data_tier: l.tier,
       // Transcribed verbatim, never checked — this tool has no way to verify a verifier. Empty
       // string, not `l.verifiedRef` bare: an optional field left undefined here reaches the file
