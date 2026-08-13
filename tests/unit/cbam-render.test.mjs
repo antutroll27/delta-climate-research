@@ -4,13 +4,13 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import {
-  buildPrintDocument, decorateSnapshot, nextRoute, renderLineCard, renderResult, renderThreshold,
-  renderTotals, renderYearThreshold,
+  buildPrintDocument, decorateSnapshot, nextRoute, parseVerifiedFields, renderLineCard,
+  renderResult, renderThreshold, renderTotals, renderYearThreshold, verifiedInputOf,
 } from '../../src/scripts/cbam-algos/cbam-app.ts';
 import {
   estimateFromPack, resolveThreshold, routesFor,
 } from '../../src/scripts/cbam-algos/estimator/estimate-from-pack.ts';
-import { sumTotals } from '../../src/scripts/cbam-lines.ts';
+import { csvRows, sumTotals } from '../../src/scripts/cbam-lines.ts';
 
 /**
  * The CBAM engine is the GeoCBAM SaaS's, copied byte-for-byte. Its UI is not — the
@@ -807,4 +807,145 @@ test('a negative verified figure is refused, not priced', () => {
   assert.equal(e.figure, undefined, 'a refusal must carry no figure at all');
   assert.match(e.selector, /directTco2ePerT/,
     'the refusal must name which input it could not read');
+});
+
+/* ── the verified panel's pure validator ───────────────────────────────────────
+ * parseVerifiedFields is the only place the verified form fields become line data, and it is
+ * pure precisely so the tests can reach it — the DOM handler around it is a two-line read of
+ * five `.value`s, checked by Task 8's e2e. Everything worth getting wrong is in here.
+ */
+
+/** The all-default input; each test overrides only the field it is about. */
+const vf = (over = {}) => ({
+  tier: 'actual-verified', direct: '', indirect: '', attested: true, ref: '', ...over,
+});
+
+test('the defaults tier passes straight through, ignoring every other field', () => {
+  // Not merely "returns ok": a user who filled the panel in, then changed their mind back to the
+  // Commission defaults, must not have their abandoned figures ride along into the line. The
+  // tier is the only thing the defaults branch may contribute.
+  const r = parseVerifiedFields(vf({
+    tier: 'default+markup', direct: '9.9', indirect: '1.1', attested: false, ref: 'DNV-123',
+  }));
+  assert.deepEqual(r.ok, { tier: 'default+markup' },
+    'the defaults branch must contribute the tier and NOTHING else');
+});
+
+test('a blank direct figure is refused, and the refusal names the field', () => {
+  const r = parseVerifiedFields(vf({ direct: '' }));
+  assert.equal(r.ok, undefined, 'a verified line with no figure must not become a line');
+  assert.match(r.error, /direct/i, 'the refusal must name which field is missing');
+});
+
+test('a non-numeric direct figure is refused rather than coerced', () => {
+  const r = parseVerifiedFields(vf({ direct: 'about two' }));
+  assert.equal(r.ok, undefined);
+  assert.match(r.error, /direct/i);
+});
+
+test('a negative direct figure is refused — the engine floor would hide it', () => {
+  // certificate-estimate.ts clamps the DIRECT side and then adds indirect on top, so a negative
+  // figure that got past this function can price a negative bill. Refuse at the form too.
+  const r = parseVerifiedFields(vf({ direct: '-1' }));
+  assert.equal(r.ok, undefined);
+  assert.match(r.error, /negative/i);
+});
+
+test('zero is a legal verified direct figure', () => {
+  // A 100%-scrap EAF producer genuinely attests a near-zero figure. Treating 0 as "empty" (the
+  // falsy trap) would refuse the one importer with the best data in the room.
+  const r = parseVerifiedFields(vf({ direct: '0' }));
+  assert.equal(r.error, undefined, `0 must be accepted, got: ${r.error}`);
+  assert.equal(r.ok.seeDirect, '0');
+  assert.equal(r.ok.tier, 'actual-verified');
+});
+
+test('an unticked attestation refuses the line and says what the tick does', () => {
+  const r = parseVerifiedFields(vf({ direct: '1.5', attested: false }));
+  assert.equal(r.ok, undefined, 'an unattested claim must never reach the export');
+  assert.match(r.error, /attest/i);
+});
+
+test('whitespace is trimmed off all three text values', () => {
+  const r = parseVerifiedFields(vf({ direct: '  1.5 ', indirect: ' 0.4\t', ref: '  DNV-123  ' }));
+  assert.equal(r.error, undefined, `expected ok, got: ${r.error}`);
+  assert.equal(r.ok.seeDirect, '1.5');
+  assert.equal(r.ok.seeIndirect, '0.4');
+  assert.equal(r.ok.verifiedRef, 'DNV-123');
+});
+
+test('a whitespace-only direct figure is refused, not read as a number', () => {
+  const r = parseVerifiedFields(vf({ direct: '   ' }));
+  assert.equal(r.ok, undefined, "Number('   ') is 0 — trimming must run before the number check");
+  assert.match(r.error, /direct/i);
+});
+
+test('a blank indirect field yields an object with NO seeIndirect key at all', () => {
+  // THE ONE THAT MATTERS. estimate-from-pack.ts tests `indirectTco2ePerT !== undefined` BEFORE
+  // verifiedPerT's shape gate, so an ABSENT indirect prices the line normally while an EMPTY
+  // STRING fails the gate and refuses the WHOLE line. lineFingerprint distinguishes the two
+  // deliberately (`?? null`). `seeIndirect: el.value` written unconditionally turns every blank
+  // optional field into a refused line — so `in`, not `=== undefined`: the two differ here.
+  const r = parseVerifiedFields(vf({ direct: '1.5', indirect: '' }));
+  assert.equal(r.error, undefined, `expected ok, got: ${r.error}`);
+  assert.equal('seeIndirect' in r.ok, false, 'a blank indirect must be ABSENT, not empty-string');
+  assert.equal('verifiedRef' in r.ok, false, 'a blank reference must be ABSENT, not empty-string');
+});
+
+test('a whitespace-only indirect field is absent too, not an empty string', () => {
+  const r = parseVerifiedFields(vf({ direct: '1.5', indirect: '   ' }));
+  assert.equal(r.error, undefined, `expected ok, got: ${r.error}`);
+  assert.equal('seeIndirect' in r.ok, false);
+});
+
+test('a non-numeric or negative indirect figure is refused', () => {
+  const bad = parseVerifiedFields(vf({ direct: '1.5', indirect: 'lots' }));
+  assert.equal(bad.ok, undefined);
+  assert.match(bad.error, /indirect/i);
+  const neg = parseVerifiedFields(vf({ direct: '1.5', indirect: '-0.4' }));
+  assert.equal(neg.ok, undefined);
+  assert.match(neg.error, /negative/i);
+  const zero = parseVerifiedFields(vf({ direct: '1.5', indirect: '0' }));
+  assert.equal(zero.error, undefined, 'zero indirect is as legal as zero direct');
+  assert.equal(zero.ok.seeIndirect, '0');
+});
+
+/* ── tier → engine input ─────────────────────────────────────────────────────── */
+
+test('verifiedInputOf derives from the TIER, never from whether the figures look truthy', () => {
+  // If the tier says verified and no `verified` object reaches the engine, the engine stamps
+  // 'default+markup' — and csvRows' tier guard then THROWS at export time, killing the whole
+  // file, instead of the user seeing a refusal on the card. So a verified tier ALWAYS produces
+  // an object, even a hopeless one; the engine's own verifiedPerT produces the refusal.
+  assert.equal(verifiedInputOf({ tier: 'default+markup', seeDirect: '1.5' }), undefined,
+    'the defaults tier must never smuggle a stray figure into the engine');
+  assert.deepEqual(verifiedInputOf({ tier: 'actual-verified', seeDirect: '1.5' }),
+    { directTco2ePerT: '1.5' }, 'an absent seeIndirect must omit indirectTco2ePerT entirely');
+  assert.deepEqual(
+    verifiedInputOf({ tier: 'actual-verified', seeDirect: '1.5', seeIndirect: '0.4' }),
+    { directTco2ePerT: '1.5', indirectTco2ePerT: '0.4' });
+  assert.deepEqual(verifiedInputOf({ tier: 'actual-verified' }), { directTco2ePerT: '' },
+    'a verified line with no figure must still reach the engine, to be refused BY it');
+});
+
+test('a verified line with no usable figure renders a refusal — it never throws at export', () => {
+  // End-to-end proof of the rule above, through the two functions that would otherwise disagree:
+  // the engine stamps the tier it actually priced at, and csvRows throws when that disagrees
+  // with the line. Both halves are exercised here so a future edit to either side cannot quietly
+  // reintroduce a thrown export in place of a rendered refusal.
+  const line = {
+    id: 'l1', cn: '72061000', country: 'IN', route: '(C)', scope: 'direct',
+    massT: '100', date: '2026-03-15', tier: 'actual-verified', seeDirect: 'nonsense',
+  };
+  const e = estimateFromPack(pack, {
+    cn: line.cn, country: line.country, route: line.route, massT: line.massT, date: line.date,
+    emissionsScope: line.scope, verified: verifiedInputOf(line),
+  });
+  assert.equal(e.status, 'unavailable', 'the engine refuses the figure it cannot read');
+  assert.equal(e.stamp.tier, 'actual-verified',
+    'the refusal is still stamped at the tier the line claims — this is what stops the throw');
+  assert.doesNotThrow(
+    () => csvRows([line], [e], new Map([['l1', 'deadbeef']]), 'snap', pack),
+    'a refused verified line must export as a row, not blow the whole file up',
+  );
 });

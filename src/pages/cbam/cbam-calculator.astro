@@ -100,6 +100,37 @@ import Footer from '../../components/layout/Footer.astro';
             </p>
           </div>
 
+          <!-- Emissions source. A dropdown, not a toggle, by design review: it sits in the
+               form like every other field. "My verified figures" reveals the panel; the
+               attestation is the gate — we transcribe a claim, we never bless it. -->
+          <div>
+            <label class="cb-label" for="cbTier">Emissions data</label>
+            <select id="cbTier" class="cb-field cb-select">
+              <option value="default+markup" selected>Commission default + mark-up</option>
+              <option value="actual-verified">My verified figures</option>
+            </select>
+          </div>
+          <div id="cbVerifiedRow" hidden>
+            <label class="cb-label" for="cbSeeDirect">Verified direct emissions (tCO₂e / tonne)</label>
+            <input id="cbSeeDirect" class="cb-field" type="number" min="0" step="any" />
+            <!-- Shown only when the indirect side is actually charged for this good AND the
+                 scope includes it — the same rule the defaults path uses. cbam-app.ts CLEARS
+                 this input whenever the row is hidden: on the verified path the figure is the
+                 importer's own number, applied by the engine on scope alone, so a stale value
+                 left behind an invisible row would silently inflate the next line. -->
+            <div id="cbSeeIndirectRow" hidden>
+              <label class="cb-label" for="cbSeeIndirect">Verified indirect emissions (tCO₂e / tonne)</label>
+              <input id="cbSeeIndirect" class="cb-field" type="number" min="0" step="any" />
+            </div>
+            <label class="cb-check"><input id="cbAttest" type="checkbox" />
+              I attest these figures come from an accredited verification (ISO 14064-3 / CBAM
+              Art. 8) — my claim, not checked by this tool.</label>
+            <label class="cb-label" for="cbRef">Verification reference (optional)</label>
+            <input id="cbRef" class="cb-field" type="text" placeholder="verifier / report ID" />
+            <p class="cb-hint">Whole-good figures, precursors included — that scope is what a
+              verifier's CBAM report states, and what keeps this estimate on Column B.</p>
+          </div>
+
           <div class="cb-row2">
             <div>
               <label class="cb-label" for="cbMass">Net mass (tonnes)</label>
@@ -262,6 +293,21 @@ import Footer from '../../components/layout/Footer.astro';
     margin-top: 0.45rem; font-family: var(--font-data); font-size: 0.68rem;
     line-height: 1.65; color: var(--color-ink-faint); max-width: 46ch;
   }
+  /* The attestation tick. Static markup, so a SCOPED rule reaches it — unlike .cb-attest (the
+     year-card's tick, rendered at runtime into #cbOut via innerHTML), which has to live in the
+     is:global block below. Same idiom and same measurements as that one, deliberately: they are
+     the same control doing the same job in two places. Brighter than .cb-hint because this is a
+     legal statement the user is agreeing to, not an aside. */
+  .cb-check {
+    display: flex; gap: 0.5rem; align-items: baseline; margin-top: 0.9rem;
+    font-family: var(--font-data); font-size: 0.72rem; line-height: 1.6;
+    color: var(--color-ink-muted); max-width: 46ch;
+  }
+  .cb-check input { accent-color: var(--color-cyan); flex: none; }
+  /* .cb-form's `gap` only separates its DIRECT children, and #cbVerifiedRow stacks four
+     controls inside one of them — so the fields within it need their own rhythm. The first
+     label already sits against the panel's top edge, hence :not(:first-child). */
+  #cbVerifiedRow > .cb-label:not(:first-child), #cbSeeIndirectRow { margin-top: 0.9rem; }
   /* `hidden` must win over the flex/grid display the container would otherwise take. */
   [hidden] { display: none !important; }
   /* .cb-idle is styled in the is:global block below — cbam-app.ts re-renders it

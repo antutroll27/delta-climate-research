@@ -25,7 +25,7 @@
  */
 import {
   estimateFromPack, resolveThreshold, routesFor, selectIndirectFactorFromPack,
-  type EstimatorPack, type ThresholdView,
+  type EstimatorInput, type EstimatorPack, type ThresholdView,
 } from './estimator/estimate-from-pack.ts';
 import type { CertificateEstimate } from './cbam/certificate-estimate.ts';
 import {
@@ -676,6 +676,127 @@ export function decorateSnapshot(e: CertificateEstimate, snapshotHash: string): 
   return e;
 }
 
+/**
+ * One verified per-tonne figure as the FORM should judge it, or null.
+ *
+ * DELIBERATELY LOOSER THAN THE ENGINE'S OWN GATE, and the looseness is the design. The
+ * authority on what may be priced is `verifiedPerT` in estimate-from-pack.ts — a vendored
+ * function this file cannot import (it is not exported) and must not copy, because a copied
+ * regex is a second rule that drifts from the first. That gate is stricter than this one: it
+ * refuses '0x10', '1_000', '5.' and '+5', all of which `Number()` happily reads. Those reach
+ * the engine and come back as a REFUSAL CARD naming the input — fail-closed, just one step
+ * later and in a different place on screen. What this catches is the ordinary case — prose, an
+ * empty field, Infinity — where an inline message beside the field beats a refused card.
+ *
+ * SIGNS PASS THROUGH ON PURPOSE. `Number('-1')` is perfectly finite, so a negative figure is
+ * NOT this function's refusal to make: it must reach the caller's own `< 0` test, which is what
+ * gives a negative its own specific message ("enter zero if the verified figure really is nil")
+ * rather than the generic "not a number".
+ *
+ * ZERO IS LEGAL. A 100%-scrap EAF producer genuinely attests a near-zero figure, and this is
+ * exactly the importer the verified tier exists to reward — a falsy check here would refuse the
+ * best-documented line on the form.
+ */
+function verifiedFigure(value: string): number | null {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** What the verified panel contributes to a draft Line, or the reason it cannot.
+ *  Pure on purpose: the form handler stays thin and THIS carries the tests.
+ *
+ *  OMITS, NEVER EMITS AN EMPTY STRING, for the two optional fields. estimate-from-pack.ts's
+ *  verified path tests `indirectTco2ePerT !== undefined` BEFORE it calls verifiedPerT, so an
+ *  ABSENT indirect figure skips the branch and the line prices normally, while `''` reaches the
+ *  shape gate, fails it, and refuses the WHOLE line as unavailable. lineFingerprint splits the
+ *  same two apart on purpose (`?? null`). A handler that wrote `seeIndirect: el.value`
+ *  unconditionally would turn every blank optional field into a refused line. */
+export function parseVerifiedFields(v: {
+  tier: string; direct: string; indirect: string; attested: boolean; ref: string;
+}): { ok: Partial<Line> & { tier: Line['tier'] } } | { error: string } {
+  // Every other field is ignored on this branch, not merely unused: a user who filled the panel
+  // in and then changed their mind back to the Commission defaults must not have the abandoned
+  // figures ride along into the line. (The form ALSO clears the inputs — see syncVerifiedRows —
+  // but this function must be safe to call on a form that has not been cleared yet.)
+  if (v.tier !== 'actual-verified') return { ok: { tier: 'default+markup' } };
+
+  // Trim before every test below. `Number('   ')` is 0, so an untrimmed whitespace-only field
+  // would pass the "is it a number" check as a confident, attested zero nobody typed.
+  const direct = v.direct.trim();
+  const indirect = v.indirect.trim();
+  const ref = v.ref.trim();
+
+  if (!direct) {
+    return { error: 'Enter your verified direct emissions in tCO₂e per tonne of good, '
+      + 'or switch this line back to the Commission defaults.' };
+  }
+  const d = verifiedFigure(direct);
+  if (d === null) {
+    return { error: `Verified direct emissions must be a number of tCO₂e per tonne — `
+      + `“${direct}” is not one.` };
+  }
+  if (d < 0) {
+    return { error: 'Verified direct emissions cannot be negative — enter zero if the '
+      + 'verified figure really is nil.' };
+  }
+
+  if (indirect) {
+    const i = verifiedFigure(indirect);
+    if (i === null) {
+      return { error: `Verified indirect emissions must be a number of tCO₂e per tonne — `
+        + `“${indirect}” is not one. Leave the field empty if you are not claiming one.` };
+    }
+    if (i < 0) {
+      return { error: 'Verified indirect emissions cannot be negative — enter zero, or leave '
+        + 'the field empty if you are not claiming one.' };
+    }
+  }
+
+  // Checked LAST, after the figures, so the message a user sees is about the field they are
+  // still filling in rather than a tick they have not reached yet.
+  if (!v.attested) {
+    return { error: 'Tick the attestation — it is what puts this claim, and any reference you '
+      + 'cite for it, into the export. This tool transcribes the claim; it cannot check it.' };
+  }
+
+  const ok: Partial<Line> & { tier: Line['tier'] } = {
+    tier: 'actual-verified',
+    // The string AS ENTERED (trimmed), never the parsed number re-stringified: `Number('2.50')`
+    // round-trips to '2.5', and lineFingerprint hashes this value — an audit trail must pin what
+    // the importer typed, not this file's idea of the same quantity.
+    seeDirect: direct,
+  };
+  if (indirect) ok.seeIndirect = indirect;
+  if (ref) ok.verifiedRef = ref;
+  return { ok };
+}
+
+/**
+ * The `verified` input a line's TIER implies — derived from `l.tier`, never from whether the
+ * figures happen to look truthy.
+ *
+ * WHY THAT DISTINCTION IS LOAD-BEARING: if a line says 'actual-verified' but no `verified`
+ * object reaches estimateFromPack, the engine takes the defaults path and stamps
+ * `tier: 'default+markup'`. csvRows' guard then THROWS at export time — killing the entire
+ * file over one line — instead of the user seeing a refusal on that line's card. So a verified
+ * tier ALWAYS produces an object, even a hopeless one (`directTco2ePerT: ''`, which the engine's
+ * own verifiedPerT refuses by name). The refusal belongs to the engine; this function's only
+ * job is making sure the engine is the one asked.
+ */
+export function verifiedInputOf(
+  l: Pick<Line, 'tier' | 'seeDirect' | 'seeIndirect'>,
+): EstimatorInput['verified'] {
+  if (l.tier !== 'actual-verified') return undefined;
+  return {
+    directTco2ePerT: l.seeDirect ?? '',
+    // Spread, not `indirectTco2ePerT: l.seeIndirect` — see parseVerifiedFields' own note: the
+    // engine branches on `!== undefined`, so a present-but-undefined key is NOT the same as an
+    // absent one to a reader, and writing it explicitly invites someone to "simplify" it into
+    // an empty string later.
+    ...(l.seeIndirect !== undefined ? { indirectTco2ePerT: l.seeIndirect } : {}),
+  };
+}
+
 /* ── wiring ────────────────────────────────────────────────────────────────── */
 export function initCbam(): void {
   const cn = $<HTMLInputElement>('cbCn'), country = $<HTMLSelectElement>('cbCountry');
@@ -683,6 +804,10 @@ export function initCbam(): void {
   const date = $<HTMLInputElement>('cbDate'), out = $('cbOut'), status = $('cbStatus');
   const list = $<HTMLDataListElement>('cbCnList'), prov = $('cbProv');
   const scope = $<HTMLSelectElement>('cbScope'), scopeRow = $('cbScopeRow');
+  const tier = $<HTMLSelectElement>('cbTier'), verifiedRow = $('cbVerifiedRow');
+  const seeDirect = $<HTMLInputElement>('cbSeeDirect'), seeIndirectRow = $('cbSeeIndirectRow');
+  const seeIndirect = $<HTMLInputElement>('cbSeeIndirect'), attest = $<HTMLInputElement>('cbAttest');
+  const ref = $<HTMLInputElement>('cbRef');
   const add = $<HTMLButtonElement>('cbAdd'), csvBtn = $<HTMLButtonElement>('cbCsv');
   const docBtn = $<HTMLButtonElement>('cbDoc'), printEl = $('cbPrint');
   const outWrap = $('cbOutWrap');
@@ -810,6 +935,59 @@ export function initCbam(): void {
     scopeRow.hidden = !has;
   }
 
+  /**
+   * Shows the verified panel on tier, and the verified INDIRECT field only when the indirect
+   * side is actually in play — the verified panel open, AND #cbScopeRow visible (i.e. the
+   * Commission publishes an indirect default for this good at all), AND the scope select set to
+   * direct_and_indirect. Same rule the defaults path uses, so the two tiers ask for the same
+   * scope of figure for the same good.
+   *
+   * IT CLEARS WHAT IT HIDES, and that is the fail-closed half of this function, not tidiness:
+   *
+   *   - Switching back to the Commission defaults clears all four inputs, so a figure typed for
+   *     one line can never leak into the next one under a tier the user has since abandoned.
+   *     (parseVerifiedFields also ignores every field on the defaults branch, so this is belt
+   *     and braces — but the belt is what a user can SEE.)
+   *   - Hiding the indirect row clears it too. On the DEFAULTS path a hidden scope control is
+   *     harmless: the engine finds no published indirect factor and returns 0 either way. On the
+   *     VERIFIED path the indirect figure is the importer's OWN number, and the engine adds it
+   *     on `emissionsScope` alone — nothing else gates it. So an indirect figure left behind an
+   *     invisible row (type 0.4 for cement, then switch the good to steel) would silently inflate
+   *     every later estimate with a number the user can no longer see, let alone correct.
+   *
+   * CALL ORDER MATTERS: it reads `scopeRow.hidden`, which syncScope() computes, so every call
+   * site runs it AFTER syncScope() rather than before.
+   */
+  function syncVerifiedRows(): void {
+    if (!tier || !verifiedRow) return;
+    const on = tier.value === 'actual-verified';
+    verifiedRow.hidden = !on;
+    if (!on) {
+      if (seeDirect) seeDirect.value = '';
+      if (attest) attest.checked = false;
+      if (ref) ref.value = '';
+    }
+    const indirectOn = on && !!scopeRow && !scopeRow.hidden
+      && scope?.value === 'direct_and_indirect';
+    if (seeIndirectRow) seeIndirectRow.hidden = !indirectOn;
+    if (!indirectOn && seeIndirect) seeIndirect.value = '';
+  }
+
+  /**
+   * The five verified fields, parsed. THE SINGLE READ POINT — run() (the live preview) and
+   * draftLine() (the line that gets added) both go through this exact call, so the preview can
+   * never show one number while the added line carries another. They already differed on the
+   * date (run() previews without one; draftLine() refuses a NaN year) and that difference is
+   * deliberate and visible; a difference in the attested FIGURES would not be either.
+   */
+  const readVerified = () => parseVerifiedFields({
+    tier: tier?.value ?? 'default+markup',
+    direct: seeDirect?.value ?? '',
+    indirect: seeIndirect?.value ?? '',
+    attested: !!attest?.checked,
+    ref: ref?.value ?? '',
+  });
+
   function run(): void {
     if (!pack || !cn!.value || !country!.value || !route!.value || !mass!.value) {
       out!.innerHTML = '<p class="cb-idle">Choose a good, origin, route and mass to see the provisional exposure.</p>';
@@ -827,11 +1005,23 @@ export function initCbam(): void {
       out!.innerHTML = '<p class="cb-idle">Net mass must be a number of tonnes, zero or greater.</p>';
       return;
     }
+    // The verified panel is read through the SAME parse the added line uses (readVerified's own
+    // doc), and its refusals render in the SAME idle-prompt shape as the mass refusal above —
+    // an instruction about the field to fix, never a figure computed around the problem. Placed
+    // before the estimate rather than beside it so an unattested or unreadable claim can never
+    // reach the engine at all: half a verified panel is not a cheaper estimate, it is no
+    // estimate.
+    const v = readVerified();
+    if ('error' in v) {
+      out!.innerHTML = `<p class="cb-idle">${esc(v.error)}</p>`;
+      return;
+    }
     try {
       const e = decorateSnapshot(estimateFromPack(pack, {
         cn: cn!.value, country: country!.value, route: route!.value,
         massT: mass!.value, date: date!.value,
         emissionsScope: (scope?.value as 'direct' | 'direct_and_indirect') ?? 'direct_and_indirect',
+        verified: verifiedInputOf(v.ok),
       }), snapshot);
       // The threshold statement needs only the good and the mass, so it survives a
       // selector the estimate itself cannot price — a refused line still gets told
@@ -855,9 +1045,24 @@ export function initCbam(): void {
     const e = estimateFromPack(pack!, {
       cn: l.cn, country: l.country, route: l.route,
       massT: l.massT, date: l.date, emissionsScope: l.scope,
+      // From the line's TIER, not from the form and not from whether its figures look truthy —
+      // see verifiedInputOf's doc for why the alternative ends in a thrown export instead of a
+      // rendered refusal. `lines` outlives the form values that produced them, so this must
+      // read the line, and only the line.
+      verified: verifiedInputOf(l),
     });
     return decorateSnapshot(e, snapshot);
   }
+
+  /**
+   * Why draftLine() reports its reason through a variable instead of writing #cbStatus itself:
+   * onAdd() writes that element unconditionally when the draft comes back null, so a specific
+   * message written here would be overwritten by the generic one a line later — visible for no
+   * frames at all. This keeps ONE writer of #cbStatus on the add path (onAdd), which simply
+   * prefers the specific reason when there is one. Reset at the top of every draftLine() call so
+   * a stale reason from a previous click can never be reported against this one.
+   */
+  let draftReason: string | null = null;
 
   /**
    * Builds the next line from the form's current values, or null if the line is not ready to
@@ -873,21 +1078,27 @@ export function initCbam(): void {
    * .astro markup), so this only refuses a line whose date the user has actively cleared.
    */
   function draftLine(): Line | null {
+    draftReason = null;
     if (!pack || !cn!.value || !country!.value || !route!.value || !mass!.value) return null;
     const massT = Number(mass!.value);
     if (!Number.isFinite(massT) || massT < 0) return null;
+    // The verified panel's contribution — the tier, and on the verified branch the attested
+    // figures and any reference — or the reason it cannot contribute one. Its refusals are
+    // SPECIFIC ("tick the attestation", "that is not a number"), unlike the four checks above,
+    // whose shared "complete the line first" message names every field at once because none of
+    // them can say which one the user meant to fill.
+    const v = readVerified();
+    if ('error' in v) { draftReason = v.error; return null; }
     const l: Line = {
       id: crypto.randomUUID(), cn: cn!.value, country: country!.value, route: route!.value,
       scope: (scope?.value as Line['scope']) ?? 'direct_and_indirect',
       massT: mass!.value, date: date!.value,
-      // `Line.tier` is required (see its doc in cbam-lines.ts), and this page has no tier
-      // control yet — the form work is a later task. Hardcoding the defaults tier states
-      // exactly what this page does TODAY: every line it builds is priced from the
-      // Commission's published defaults, mark-up included. It is not a fallback for a
-      // control that exists; when the control lands it reads from the DOM here, and this
-      // literal goes away rather than becoming a silent default for a user who chose
-      // otherwise.
-      tier: 'default+markup',
+      // Spread LAST and unconditionally: `tier` is required on Line (see its doc in
+      // cbam-lines.ts) and v.ok is typed to always carry one, so the compiler — not a default
+      // written here — is what guarantees every line states which tier priced it. The optional
+      // seeIndirect/verifiedRef keys are ABSENT rather than empty when unused; that distinction
+      // is load-bearing all the way down (parseVerifiedFields' doc, lineFingerprint's `?? null`).
+      ...v.ok,
     };
     if (Number.isNaN(yearOf(l))) return null;
     return l;
@@ -1051,8 +1262,8 @@ export function initCbam(): void {
       if (!await ensurePack()) return;
       const l = draftLine();
       if (!l) {
-        status!.textContent =
-          'Complete the line first: good, origin, route, a non-negative mass and a valid import date.';
+        status!.textContent = draftReason
+          ?? 'Complete the line first: good, origin, route, a non-negative mass and a valid import date.';
         return;
       }
       try {
@@ -1157,7 +1368,20 @@ export function initCbam(): void {
       status!.textContent = 'No line has a priced estimate; nothing to export.';
       return;
     }
-    const csv = toCsv(csvRows(ok.map((p) => p.l), ok.map((p) => p.e!), fingerprints, snapshot, pack));
+    // csvRows and toCsv BOTH throw by design — on a lines/results length mismatch, on a line
+    // whose tier disagrees with the tier that priced it, on a multi-benchmark line, on a ragged
+    // row (their own docs). Uncaught, every one of those left the Export button silently dead:
+    // no file, no message, the reason reaching devtools alone. Report it the way every other
+    // fallible path in this file already does (ensurePack, onAdd's fingerprint catch, onDoc's
+    // thresholdByYear catch) — through #cbStatus, naming what refused. The message is the
+    // engine's own; a generic "export failed" would tell the user nothing they could act on.
+    let csv: string;
+    try {
+      csv = toCsv(csvRows(ok.map((p) => p.l), ok.map((p) => p.e!), fingerprints, snapshot, pack));
+    } catch (err) {
+      status!.textContent = `Could not export the CSV: ${(err as Error).message}`;
+      return;
+    }
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
     const a = document.createElement('a');
     a.href = url; a.download = `cbam-estimate-${new Date().toISOString().slice(0, 10)}.csv`;
@@ -1195,14 +1419,27 @@ export function initCbam(): void {
       status!.textContent = `Could not build the document: ${(err as Error).message}`;
       return;
     }
-    printEl.innerHTML = buildPrintDocument({
-      lines, results,
-      yearCards: years,
-      totals: sumTotals(priced),
-      packSnapshot: snapshot,
-      rulePackages: priced[0]?.stamp.rulePackages ?? [],
-      pack, generatedOn: new Date().toISOString().slice(0, 10),
-    });
+    // Same exposure as onCsv's, found the same way: buildPrintDocument throws on a
+    // lines/results length mismatch (its own guard), and an uncaught throw here would leave
+    // #cbPrint holding the PREVIOUS export's markup while the print dialog never opens — a
+    // silently dead button, and a stale document waiting for the next Ctrl+P. Caught before the
+    // `cb-printing` class is added, so a failure cannot strand the page in a printable-wrong
+    // state either.
+    let html: string;
+    try {
+      html = buildPrintDocument({
+        lines, results,
+        yearCards: years,
+        totals: sumTotals(priced),
+        packSnapshot: snapshot,
+        rulePackages: priced[0]?.stamp.rulePackages ?? [],
+        pack, generatedOn: new Date().toISOString().slice(0, 10),
+      });
+    } catch (err) {
+      status!.textContent = `Could not build the document: ${(err as Error).message}`;
+      return;
+    }
+    printEl.innerHTML = html;
 
     // `cb-printing` MUST NOT be able to outlive this call (quality review item 3). It used to
     // depend solely on `afterprint` firing — but a feature policy denying window.print(), a
@@ -1251,9 +1488,16 @@ export function initCbam(): void {
   // form is purely the editor for the NEXT prospective line and must not touch the multi-line
   // render underneath it.
   const refresh = () => { if (!lines.length) run(); };
-  const onPick = async () => { if (await ensurePack()) { syncRoutes(); syncScope(); refresh(); } };
-  route.addEventListener('change', () => { syncScope(); refresh(); });
-  scope?.addEventListener('change', refresh);
+  // syncVerifiedRows() ALWAYS runs after syncScope(), never before: it reads the `scopeRow.hidden`
+  // that syncScope() has just computed, and running it first would judge the indirect field
+  // against the PREVIOUS good's scope row for one turn — showing an indirect input for a good
+  // with no indirect side, or hiding (and therefore clearing) one the user is entitled to.
+  const onPick = async () => {
+    if (await ensurePack()) { syncRoutes(); syncScope(); syncVerifiedRows(); refresh(); }
+  };
+  route.addEventListener('change', () => { syncScope(); syncVerifiedRows(); refresh(); });
+  scope?.addEventListener('change', () => { syncVerifiedRows(); refresh(); });
+  tier?.addEventListener('change', () => { syncVerifiedRows(); refresh(); });
   cn.addEventListener('change', onPick);
   cn.addEventListener('focus', () => { void ensurePack(); }, { once: true });
   country.addEventListener('change', onPick);
@@ -1264,10 +1508,30 @@ export function initCbam(): void {
   // once per keystroke. Switching to `change` would cost nothing but stops the
   // figure tracking as you type, which is worse on a calculator.
   let massTimer: number | undefined;
-  mass.addEventListener('input', () => {
+  const bounce = () => {
     clearTimeout(massTimer);
     massTimer = window.setTimeout(refresh, 250);
-  });
+  };
+  mass.addEventListener('input', bounce);
+  // The verified figures are typed the same way a mass is, into the same aria-live panel, so
+  // they share the same debounce — and the same single timer, so typing in one field cancels a
+  // pending render from another rather than queueing a second one.
+  seeDirect?.addEventListener('input', bounce);
+  seeIndirect?.addEventListener('input', bounce);
+  // #cbRef is DELIBERATELY NOT WIRED. The reference is transcribed, never validated and never
+  // priced — it cannot move the preview by a cent or flip a refusal to a figure. Re-rendering on
+  // it would re-announce the entire estimate into the aria-live panel once per 250 ms of typing
+  // a verifier's report ID, which is the exact failure the mass debounce above exists to stop.
+  // It is read, with the rest of the panel, when the line is actually added.
+  // A tick is one discrete action, not typing — announce it immediately, as the year-card
+  // attestation checkbox already does.
+  attest?.addEventListener('change', refresh);
+  // ONCE, AT WIRING TIME, and not only on the first user interaction: Firefox (and bfcache
+  // restores generally) repopulate <select> and <input> values across a reload, so #cbTier can
+  // come back reading 'actual-verified' while #cbVerifiedRow is still `hidden` from the markup —
+  // invisible fields feeding a verified line. This reconciles the panel with whatever the browser
+  // restored before any of it can reach an estimate.
+  syncVerifiedRows();
   add?.addEventListener('click', () => { void onAdd(); });
   csvBtn?.addEventListener('click', onCsv);
   docBtn?.addEventListener('click', onDoc);
