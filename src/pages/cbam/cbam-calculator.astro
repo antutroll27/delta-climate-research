@@ -451,6 +451,19 @@ import Footer from '../../components/layout/Footer.astro';
   .cb-attest { display: flex; gap: 0.5rem; align-items: baseline; margin-top: 0.6rem; font-size: 0.85rem; }
   .cb-line-head { display: flex; gap: 0.75rem; align-items: baseline; margin: 1.1rem 0 0.35rem; }
   .cb-line-x { margin-left: auto; }
+  /* The verified line's two footers (renderLineCard) sit BELOW the result card, not inside it —
+     renderResult is shared with the single-line preview, which has no comparison to show. Both
+     reuse .cb-sub for their typography, so these rules carry the `.cb-out` prefix the scoped
+     `.cb-out .cb-sub` rule uses: at equal specificity the later block wins, and this is it. */
+  .cb-out .cb-attested { margin-top: 0.75rem; padding-left: 0.85rem;
+    border-left: 2px solid color-mix(in srgb, var(--color-bronze) 30%, transparent); }
+  .cb-out .cb-delta { margin-top: 0.9rem; padding-top: 0.75rem;
+    border-top: 1px solid color-mix(in srgb, var(--color-bronze) 18%, transparent); }
+  .cb-out .cb-delta-h {
+    display: block; font-family: var(--font-mono); font-size: 0.6rem; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.16em; color: var(--color-bronze);
+  }
+  .cb-out .cb-delta .cb-sub { margin-top: 0.4rem; }
   #cbPrint table { border-collapse: collapse; width: 100%; font-size: 9pt; }
   #cbPrint th, #cbPrint td { border: 1px solid #999; padding: 3pt 5pt; text-align: left; }
   #cbPrint .cbp-loc { font-size: 7pt; }

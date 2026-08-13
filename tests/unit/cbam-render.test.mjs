@@ -951,6 +951,214 @@ test('verifiedInputOf derives from the TIER, never from whether the figures look
     'a verified line with no figure must still reach the engine, to be refused BY it');
 });
 
+/* ── the verified line card: attestation and the default-path delta ──────────
+ *
+ * Two things the card owes a verified line, and neither is arithmetic:
+ *
+ *   1. THE STAMP. The figures are the importer's own claim and this tool has not checked them.
+ *      renderStamp's "Data tier: Verified actual" row states WHICH corpus priced the line; it
+ *      does not tell a reader that the number came from them and was never confirmed by us.
+ *   2. THE DELTA. The mark-up prices not-having-data, so verified figures usually cost less —
+ *      but a genuinely dirty producer can exceed the marked-up default, and a card that only
+ *      ever says "saves" would be an advertisement, not an estimate. Both directions are
+ *      exercised below against the REAL pack, with the crossover point computed rather than
+ *      guessed (see the "worse" test's own arithmetic).
+ *
+ * The prose below is EXACT-PINNED, for the reason the §4 caveat constants give at the top of
+ * this file: a keyword assertion survives a paraphrase that keeps every phrase it looks for and
+ * appends a reassurance undoing them ("...though in practice verified data always comes out
+ * cheaper"). These constants are a hand-typed, independent transcript of the production text —
+ * never imported from cbam-app.ts — so changing the wording forces a deliberate edit here too.
+ */
+const ATTESTED_NOTE =
+  'These emissions figures are your own attested claim, transcribed exactly as entered. '
+  + 'This tool has not confirmed them — it has no way to check the verification behind them, '
+  + 'and nothing on this card has been checked against your verification report.';
+const DELTA_SAVES =
+  'The Commission default would give €12,420.84 — your verified data saves €4,476.39. '
+  + 'Both figures are what-ifs at the assumed CSCF, so the difference between them is one too.';
+const DELTA_ADDS =
+  'The Commission default would give €12,420.84 — your verified data adds €15,795.45 to what '
+  + 'the default would cost. Both figures are what-ifs at the assumed CSCF, so the difference '
+  + 'between them is one too.';
+const DELTA_IDENTICAL =
+  'The Commission default would give €12,420.84 — the same figure your verified data gives, '
+  + 'so this claim changes nothing on this line. Both figures are what-ifs at the assumed CSCF, '
+  + 'so the difference between them is one too.';
+const DELTA_NO_DEFAULT =
+  'The Commission publishes no default value for this good, origin and route, so there is '
+  + 'nothing to compare your verified figures against.';
+const DELTA_NOT_COMPUTED =
+  'No Commission-default comparison was computed for this line, so none is shown. That is not '
+  + 'a statement about what the Commission publishes.';
+const DELTA_NOT_PRICED =
+  'This line has no priced figure of its own, so there is nothing to compare a Commission '
+  + 'default against.';
+
+/** The spec §6 worked line, verified. Each test overrides only the field it is about. */
+const vline = (over = {}) => ({
+  id: 'L1', cn: '72061000', country: 'IN', route: '(C)', scope: 'direct',
+  massT: '100', date: '2026-03-15', tier: 'actual-verified', seeDirect: '2.31', ...over,
+});
+/** The line through its OWN tier, exactly as estimateLine does it in cbam-app.ts. */
+const estOf = (l) => estimateFromPack(pack, {
+  cn: l.cn, country: l.country, route: l.route, massT: l.massT, date: l.date,
+  emissionsScope: l.scope, verified: verifiedInputOf(l),
+});
+/** The same line through the Commission-default path — `verified` simply omitted. */
+const defaultOf = (l) => estimateFromPack(pack, {
+  cn: l.cn, country: l.country, route: l.route, massT: l.massT, date: l.date,
+  emissionsScope: l.scope,
+});
+/** What safeEstimates threads to the card: an unavailable default path is no comparison at all. */
+const comparisonOf = (l) => {
+  const d = defaultOf(l);
+  return d.status === 'unavailable' ? null : d;
+};
+
+test('renderLineCard: a verified line says the figures are the user\'s own claim, unconfirmed here, and cites the reference', () => {
+  const l = vline({ verifiedRef: 'DNV-2026-0042' });
+  const html = renderLineCard(l, estOf(l), 0, comparisonOf(l));
+  assert.ok(html.includes(`<p class="cb-sub cb-attested">${ATTESTED_NOTE} Ref: DNV-2026-0042</p>`),
+    'the attestation paragraph must match the pinned text exactly — word for word, punctuation '
+    + 'for punctuation — and carry the reference the importer cited');
+  // The claim and its precise negation, the same shape the §4 caveats use: a paraphrase that
+  // keeps "attested claim" but flips the confirmation clause would pass a keyword-only assertion.
+  assert.match(html, /has not confirmed them/i, 'the card must say this tool did not confirm them');
+  assert.doesNotMatch(html, /we have (confirmed|verified|checked) (them|these)/i,
+    'must never claim this tool confirmed an attested figure');
+  assert.doesNotMatch(html, /independently (confirmed|verified)/i);
+  // Complementary to renderStamp's own row, not a duplicate of it: the row says WHICH tier
+  // priced the line, the paragraph says whose claim the number is.
+  assert.match(html, /Verified actual/, 'the provenance row still states the tier');
+});
+
+test('renderLineCard: a verifier reference is free text, and is escaped like every other user string', () => {
+  const l = vline({ verifiedRef: 'DNV"><script>alert(1)</script>' });
+  const html = renderLineCard(l, estOf(l), 0, comparisonOf(l));
+  assert.doesNotMatch(html, /<script>/, 'a raw reference must never reach the DOM unescaped');
+  assert.match(html, /Ref: DNV&quot;&gt;&lt;script&gt;/, 'it renders escaped, and still readable');
+});
+
+test('renderLineCard: a verified line with no reference cites none, rather than an empty "Ref:"', () => {
+  const l = vline();
+  const html = renderLineCard(l, estOf(l), 0, comparisonOf(l));
+  assert.ok(html.includes(`<p class="cb-sub cb-attested">${ATTESTED_NOTE}</p>`),
+    'with no reference the paragraph ends at the pinned sentence');
+  assert.doesNotMatch(html, /Ref:/, 'no dangling label for a reference that was never given');
+});
+
+test('renderLineCard: the delta names BOTH the Commission default and the difference the data is worth', () => {
+  // The spec §6 worked pair, pinned end-to-end above: €12,420.84 default vs €7,944.45 verified.
+  const l = vline();
+  const e = estOf(l);
+  const cmp = comparisonOf(l);
+  assert.equal(e.scenario.costEur, '7944.45', 'sanity: the verified figure the delta is computed from');
+  assert.equal(cmp.scenario.costEur, '12420.84', 'sanity: the default figure it is compared against');
+  const html = renderLineCard(l, e, 0, cmp);
+  assert.ok(html.includes(`<p class="cb-sub">${DELTA_SAVES}</p>`),
+    'the delta must match the pinned text exactly — both figures named, and labelled a what-if '
+    + 'because the figures it subtracts are what-ifs');
+  assert.match(html, /€12,420\.84/, 'the default figure is shown, not just the difference');
+  assert.match(html, /€4,476\.39/, 'and the difference itself');
+});
+
+test('renderLineCard: the delta reverses honestly when the verified figure is WORSE than the marked-up default', () => {
+  // THE ARITHMETIC, computed rather than guessed. For 72061000/IN/(C) at 100 t:
+  //   free allocation  = 125.58 tCO2e (a benchmark of the GOOD, identical on both paths)
+  //   default path     = 2.904 tCO2e/t (published base + mark-up) x 100 t = 290.4 embedded
+  //                    -> 290.4 - 125.58 = 164.82 certificates x €75.36 = €12,420.84
+  // So the verified figure breaks even at exactly 2.904 tCO2e/t and is WORSE above it. 5 t/t:
+  //   500 - 125.58 = 374.42 certificates x €75.36 = €28,216.29, i.e. €15,795.45 MORE.
+  // A dirty producer with audited data really does owe more than the mark-up would have charged,
+  // and a card that only ever said "saves" would be an advertisement.
+  const l = vline({ seeDirect: '5' });
+  const e = estOf(l);
+  assert.equal(e.scenario.costEur, '28216.29', 'sanity: the worse verified figure');
+  const html = renderLineCard(l, e, 0, comparisonOf(l));
+  assert.ok(html.includes(`<p class="cb-sub">${DELTA_ADDS}</p>`),
+    'the delta must state the increase in the pinned words, not soften it');
+  assert.doesNotMatch(html, /\bsaves?\b/i, 'a worse verified figure must never read as a saving');
+  assert.match(html, /€15,795\.45/, 'the difference is named, in the direction it actually runs');
+});
+
+test('renderLineCard: verified figures that land exactly on the default claim no difference at all', () => {
+  // 2.904 tCO2e/t is the break-even computed above — the one input where the two paths agree to
+  // the cent. Rendering "saves €0.00" here would be a saving that does not exist.
+  const l = vline({ seeDirect: '2.904' });
+  const e = estOf(l);
+  assert.equal(e.scenario.costEur, '12420.84', 'sanity: this is exactly the default-path figure');
+  const html = renderLineCard(l, e, 0, comparisonOf(l));
+  assert.ok(html.includes(`<p class="cb-sub">${DELTA_IDENTICAL}</p>`),
+    'an identical pair must say so in the pinned words');
+  assert.doesNotMatch(html, /€0\.00/, 'a zero difference must not be printed as a figure');
+  assert.doesNotMatch(html, /\bsaves?\b|\badds?\b/i, 'neither direction applies');
+});
+
+test('renderLineCard: no published default means no comparison — and the card says so instead of inventing one', () => {
+  // ZZ is a real-shaped but unpublished origin: the Commission publishes no default factor for
+  // it, so the default path refuses while the verified path prices normally off the benchmark.
+  // Fail closed — there is genuinely nothing to compare, and saying nothing at all would leave
+  // the reader assuming the comparison was simply zero.
+  const l = vline({ country: 'ZZ' });
+  const e = estOf(l);
+  assert.equal(e.status, 'cscf_pending', 'sanity: the verified side still prices');
+  const cmp = comparisonOf(l);
+  assert.equal(cmp, null, 'sanity: the default side is unavailable, so there is no comparison');
+  const html = renderLineCard(l, e, 0, cmp);
+  assert.ok(html.includes(`<p class="cb-sub">${DELTA_NO_DEFAULT}</p>`),
+    'the missing comparison must be stated in the pinned words');
+  assert.doesNotMatch(html, /\bsaves?\b/i, 'no comparison can claim a saving');
+  assert.doesNotMatch(html, /\badds?\b/i, 'nor an increase');
+});
+
+test('renderLineCard: an uncomputed comparison never claims the Commission publishes no default', () => {
+  // `undefined` (the 4th argument simply not threaded) and `null` (computed, and there is no
+  // published default) are DIFFERENT facts. A future caller that forgets to pass the comparison
+  // must not thereby publish a false claim about the Commission's own corpus.
+  const l = vline();
+  const html = renderLineCard(l, estOf(l), 0);
+  assert.ok(html.includes(`<p class="cb-sub">${DELTA_NOT_COMPUTED}</p>`),
+    'an absent comparison says only that none was computed');
+  assert.doesNotMatch(html, /publishes no default/i,
+    'must not assert a gap in the Commission corpus it never looked at');
+  assert.doesNotMatch(html, /\bsaves?\b|\badds?\b/i);
+});
+
+test('renderLineCard: a REFUSED verified line shows no comparison figure — NON-NEGOTIABLE 2 outranks the delta', () => {
+  // The attested figure was unreadable, so the engine refused the line. The default path still
+  // prices perfectly well (€12,420.84) — and printing it here would put a confident euro figure
+  // on a card whose whole point is that it has none.
+  const l = vline({ seeDirect: 'nonsense' });
+  const e = estOf(l);
+  assert.equal(e.status, 'unavailable', 'sanity: the engine refused the attested figure');
+  const cmp = comparisonOf(l);
+  assert.equal(cmp.scenario.costEur, '12420.84', 'sanity: the default path priced fine');
+  const html = renderLineCard(l, e, 0, cmp);
+  assert.ok(html.includes(`<p class="cb-sub">${DELTA_NOT_PRICED}</p>`),
+    'a refused line says there is nothing to compare, in the pinned words');
+  assert.doesNotMatch(html, /€12,420\.84/,
+    'a refusal must carry no euro figure at all — not even the comparison it would have had');
+  assert.doesNotMatch(html, /class="cb-fig"/, 'and still no figure block');
+  // The attestation still belongs: the user made a claim, and the card is refusing THAT claim.
+  assert.ok(html.includes(`<p class="cb-sub cb-attested">${ATTESTED_NOTE}</p>`),
+    'a refused claim is still the user\'s claim, and still unconfirmed by this tool');
+});
+
+test('renderLineCard: a default-tier line renders NO delta and NO attestation, even if a comparison is handed to it', () => {
+  // The tier is the gate, not the argument. A default-tier line has nothing to attest and
+  // nothing to compare itself against — it IS the Commission default.
+  const l = vline({ tier: 'default+markup', seeDirect: undefined });
+  const e = defaultOf(l);
+  assert.equal(e.stamp.tier, 'default+markup', 'sanity: this line priced at the defaults tier');
+  const html = renderLineCard(l, e, 0, e);
+  assert.doesNotMatch(html, /cb-delta/, 'no delta block on a line that owes no comparison');
+  assert.doesNotMatch(html, /cb-attested/, 'no attestation paragraph where nothing was attested');
+  assert.doesNotMatch(html, /attested claim/i);
+  assert.doesNotMatch(html, /Commission default would give/i);
+  assert.match(html, /cb-res/, 'the ordinary result card is unchanged');
+});
+
 test('a verified line with no usable figure renders a refusal — it never throws at export', () => {
   // End-to-end proof of the rule above, through the two functions that would otherwise disagree:
   // the engine stamps the tier it actually priced at, and csvRows throws when that disagrees

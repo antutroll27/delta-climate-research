@@ -23,6 +23,7 @@
  *   4. no filing/validation claim .... nothing here says "declaration" or "filed"
  *   5. residual-basis note travels ... stamp.notes rendered verbatim, every branch
  */
+import Decimal from 'decimal.js';
 import {
   estimateFromPack, resolveThreshold, routesFor, selectIndirectFactorFromPack,
   type EstimatorInput, type EstimatorPack, type ThresholdView,
@@ -430,8 +431,139 @@ export function renderResult(e: CertificateEstimate): string {
   }
 }
 
+/**
+ * THE ATTESTATION STAMP — the human-facing sentence renderStamp's "Data tier" row is not.
+ *
+ * That row says WHICH corpus priced the line ("Verified actual"); it does not say that the
+ * number is the importer's own claim and that nothing here checked it. The two are
+ * complementary, not duplicates: a reader who sees only the row can reasonably assume the tool
+ * validated something before accepting a figure that skips the Commission's mark-up. It did not,
+ * and cannot — this tool has no way to reach a verifier's report, and the mark-up it drops is
+ * real money. Saying so on the card is the honest price of the exemption.
+ *
+ * Kept as a module constant rather than inlined so the paragraph is one string with one place to
+ * change; the test file holds a hand-typed, independent transcript of it (see its own doc) so
+ * that changing this wording forces a deliberate edit there too.
+ */
+const ATTESTED_NOTE =
+  'These emissions figures are your own attested claim, transcribed exactly as entered. '
+  + 'This tool has not confirmed them — it has no way to check the verification behind them, '
+  + 'and nothing on this card has been checked against your verification report.';
+
+/**
+ * The reference is TRANSCRIBED, NEVER CHECKED — the same contract csvRows' verified_reference
+ * column states, and it is free text the user typed, so it is escaped like every other user
+ * string that reaches innerHTML in this file. Rendered only when one was actually cited: an
+ * empty `Ref:` label reads as a reference that failed to load rather than one never given.
+ */
+function renderAttestation(line: Line): string {
+  const ref = line.verifiedRef ? ` Ref: ${esc(line.verifiedRef)}` : '';
+  return `
+    <p class="cb-sub cb-attested">${ATTESTED_NOTE}${ref}</p>`;
+}
+
+/**
+ * What the verified choice was worth, in euros, against the same line priced from the
+ * Commission's published defaults — and, when there is no honest comparison to draw, the reason
+ * there isn't one instead of a silence a reader would fill in as "zero".
+ *
+ * NEVER ONE-DIRECTIONAL. The mark-up is 10–30%, so verified figures usually cost less; a
+ * genuinely dirty producer with audited data can and does exceed the marked-up default (the
+ * break-even for the spec's worked line is exactly 2.904 tCO2e/t). A card that only ever said
+ * "saves" would be an advertisement for the verified tier, not an estimate of a tax.
+ *
+ * THE STATES, and why each is its own sentence rather than one collapsed "no comparison":
+ *   - the LINE ITSELF carries no cost (a refusal, or a good with no published certificate
+ *     price). NON-NEGOTIABLE 2 outranks the delta here: the default path may well have priced
+ *     fine, and printing its euro figure beside a refusal would put a confident number on the
+ *     one card whose entire point is that it has none. Nothing to subtract from, so nothing is
+ *     shown but the reason.
+ *   - `undefined` — no comparison was COMPUTED (a default-tier line owes none; a caller that
+ *     forgot to thread one is the other way to get here). Deliberately NOT folded into the
+ *     `null` sentence below: "the Commission publishes no default" is a claim about the
+ *     Commission's corpus, and a caller's omission is no evidence for it. A future call site
+ *     that forgets the argument must degrade to "we did not look", never to a fabricated gap.
+ *   - `null`, or a comparison carrying no cost — the default path could not price this line.
+ *     Since the line itself DID price (checked first, above), the free-allocation benchmark
+ *     resolved, so the only thing the default path can be missing is the published default
+ *     value: the sentence names exactly that. The one imprecision, named rather than papered
+ *     over: safeEstimates also folds a THROWN default-path call into `null`, and a throw is not
+ *     a publication gap. It is treated as one here because a thrown estimate has never been
+ *     observed (zero across the 2,870-pair coverage sweep) and a third sentence for it would
+ *     add a branch no user has reached to a card that is already four states deep.
+ *
+ * BOTH SIDES ARE CSCF WHAT-IFS in every year the Commission has not published the factor for —
+ * which is ~94% of real answers. A difference between two what-ifs is a what-if, exactly as
+ * Totals.anyPending labels a sum containing one (cbam-lines.ts), so the qualifier travels with
+ * the sentence rather than being left to the card above it.
+ */
+function deltaSentence(e: CertificateEstimate, comparison: CertificateEstimate | null | undefined): string {
+  const mine = tableFigures(e).costEur;
+  if (mine === null || mine.trim() === '') {
+    return 'This line has no priced figure of its own, so there is nothing to compare a '
+      + 'Commission default against.';
+  }
+  if (comparison === undefined) {
+    return 'No Commission-default comparison was computed for this line, so none is shown. '
+      + 'That is not a statement about what the Commission publishes.';
+  }
+  const theirs = comparison === null ? null : tableFigures(comparison).costEur;
+  if (theirs === null || theirs.trim() === '') {
+    return 'The Commission publishes no default value for this good, origin and route, so there '
+      + 'is nothing to compare your verified figures against.';
+  }
+  // Decimal, not Number: these are money strings the engine already rounded to 2dp, and a
+  // float subtraction of two such values reintroduces the cent-level noise (12420.84 - 7944.45
+  // is 4476.390000000001 in binary floating point) that every other figure on this page is
+  // Decimal-precise specifically to avoid. ROUND_HALF_UP is pinned for the same reason
+  // sumTotals pins it: exact at 2dp by construction today, and not dependent on which module
+  // last configured decimal.js globally.
+  const diff = new Decimal(theirs).minus(mine);
+  const pending = e.status === 'cscf_pending'
+    || (comparison !== null && comparison.status === 'cscf_pending');
+  const whatIf = pending
+    ? ' Both figures are what-ifs at the assumed CSCF, so the difference between them is one too.'
+    : '';
+  const head = `The Commission default would give ${eur(theirs)}`;
+  if (diff.isZero()) {
+    // "saves €0.00" would be a saving that does not exist; the honest reading of an identical
+    // pair is that the attested data changed nothing about this line's liability.
+    return `${head} — the same figure your verified data gives, so this claim changes nothing `
+      + `on this line.${whatIf}`;
+  }
+  const amount = eur(diff.abs().toFixed(2, Decimal.ROUND_HALF_UP));
+  return diff.gt(0)
+    ? `${head} — your verified data saves ${amount}.${whatIf}`
+    : `${head} — your verified data adds ${amount} to what the default would cost.${whatIf}`;
+}
+
+/** The delta block. Heading is deliberately NEUTRAL ("against", not "your saving"): the block
+ *  renders in both directions and must not promise one before the arithmetic has run. */
+function renderVerifiedDelta(
+  e: CertificateEstimate, comparison: CertificateEstimate | null | undefined,
+): string {
+  return `
+    <div class="cb-delta">
+      <span class="cb-delta-h">Against the Commission default</span>
+      <p class="cb-sub">${deltaSentence(e, comparison)}</p>
+    </div>`;
+}
+
 /** A line's header plus the ordinary result card, with a remove control. */
-export function renderLineCard(line: Line, e: CertificateEstimate, index: number): string {
+export function renderLineCard(
+  line: Line, e: CertificateEstimate, index: number,
+  /**
+   * The SAME line through the Commission-default path — the comparison a verified line earns by
+   * having data. `null` means a comparison was computed and there is none to show (no published
+   * default); `undefined` means none was owed or none was computed. The two render DIFFERENT
+   * sentences (see deltaSentence): only one of them is a claim about the Commission's corpus.
+   */
+  comparison?: CertificateEstimate | null,
+): string {
+  // GATED ON THE LINE'S TIER, NOT ON THE ARGUMENT. A default-tier line IS the Commission
+  // default: it has nothing to attest and nothing to compare itself against, and would render a
+  // self-referential "saves €0.00" if a caller handed it its own estimate as the comparison.
+  const verified = line.tier === 'actual-verified';
   return `
     <article class="cb-line" data-line="${esc(line.id)}">
       <div class="cb-line-head">
@@ -440,6 +572,7 @@ export function renderLineCard(line: Line, e: CertificateEstimate, index: number
         <button type="button" class="cb-line-x" data-remove="${esc(line.id)}" aria-label="Remove line ${index + 1}">Remove</button>
       </div>
       ${renderResult(e)}
+      ${verified ? renderAttestation(line) + renderVerifiedDelta(e, comparison) : ''}
     </article>`;
 }
 
@@ -1121,6 +1254,46 @@ export function initCbam(): void {
   }
 
   /**
+   * The SAME line through the Commission-default path — `verified` simply omitted — so the card
+   * can show what the importer's data was worth. `estimateFromPack` is pure (no clock, no
+   * randomness, no I/O: it reads the already-loaded pack), so a second call for the same line is
+   * safe and repeatable; measured at 0.32 ms on the default path, and this runs once per
+   * renderAll (a discrete add/remove/attest click), not per keystroke — ~6 ms at 20 verified
+   * lines, against a render that already rebuilds every card's innerHTML.
+   *
+   * Returns `undefined` for a default-tier line — that line owes no comparison, it IS the
+   * comparison — and `null` when the default path cannot price this good/origin at all. The
+   * renderer says something different for each; see deltaSentence.
+   *
+   * DECORATED WITH THE SAME SNAPSHOT as the primary, through the same single decoration point
+   * (decorateSnapshot), even though only the cost is read today. The alternative — leaving the
+   * vendored 'browser-prototype' placeholder on an estimate that is already in a render path —
+   * is a placeholder waiting for the first future caller who prints its stamp, which is exactly
+   * the regression decorateSnapshot exists to have fixed once.
+   */
+  function defaultPathComparison(l: Line): CertificateEstimate | null | undefined {
+    if (l.tier !== 'actual-verified') return undefined;
+    try {
+      const d = estimateFromPack(pack!, {
+        cn: l.cn, country: l.country, route: l.route,
+        massT: l.massT, date: l.date, emissionsScope: l.scope,
+        // `verified` OMITTED, deliberately and not merely absent: that omission IS the
+        // comparison. Anything else here would price something other than "the same line, at
+        // the Commission's published defaults".
+      });
+      // A refusal is not a comparison. Folding it to null here rather than passing the
+      // unavailable estimate on keeps the "is there anything to compare" decision in ONE place
+      // instead of splitting it between this function and the renderer.
+      return d.status === 'unavailable' ? null : decorateSnapshot(d, snapshot);
+    } catch {
+      // A thrown default path must never take down a line whose OWN estimate priced fine — the
+      // same rule safeEstimates applies to the primary, one level down. The card degrades to
+      // "no comparison" rather than the whole line degrading to an error.
+      return null;
+    }
+  }
+
+  /**
    * A refused line comes back as status 'unavailable' and renders its own card.
    * A THROWN DomainError is rarer (the coverage sweep saw zero across 2,870
    * pairs) but the old run() caught it for a reason — one bad line must not
@@ -1131,8 +1304,16 @@ export function initCbam(): void {
    */
   function safeEstimates(ls: readonly Line[]) {
     return ls.map((l) => {
-      try { return { l, e: estimateLine(l), err: null as string | null }; }
-      catch (err) { return { l, e: null, err: (err as Error).message }; }
+      try {
+        // The comparison is computed for a line whose OWN estimate succeeded, and its own
+        // failures are handled inside defaultPathComparison — so a broken default path can
+        // never demote a priced line to the thrown-line fallback card.
+        return { l, e: estimateLine(l), cmp: defaultPathComparison(l), err: null as string | null };
+      } catch (err) {
+        // No primary estimate means no card to hang a comparison on: the thrown-line fallback
+        // below renders no figures at all, so there is nothing to compare against.
+        return { l, e: null, cmp: undefined, err: (err as Error).message };
+      }
     });
   }
 
@@ -1213,7 +1394,7 @@ export function initCbam(): void {
     // for not being read a wall of cards after every single click.
     outWrap?.setAttribute('aria-live', 'off');
     out!.innerHTML = yearsHtml + renderTotals(totals) + pairs.map((p, i) => p.e
-      ? renderLineCard(p.l, p.e, i)
+      ? renderLineCard(p.l, p.e, i, p.cmp)
       : `<article class="cb-line" data-line="${esc(p.l.id)}">
            <div class="cb-line-head">
              <span class="cb-line-n">Line ${i + 1}</span>
