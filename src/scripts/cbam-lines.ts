@@ -86,14 +86,26 @@ export async function sha256Hex(text: string): Promise<string> {
  * meaning they had before this feature, so a fingerprint printed on a pre-feature export can
  * still be reproduced from a post-feature line by hashing the first six elements — a property
  * a mid-array insertion would destroy for no gain. The array is also FIXED-LENGTH across both
- * tiers (`?? ''` fills an absent optional rather than omitting the element), so a default line
- * and a verified line hash the same 10-element shape and "field absent" can never be confused
- * with "array truncated".
+ * tiers (an absent optional fills an element rather than omitting it), so a default line and a
+ * verified line hash the same 10-element shape and "field absent" can never be confused with
+ * "array truncated".
+ *
+ * THE FILLER IS `?? null`, NOT `?? ''` — ABSENT AND EMPTY ARE DIFFERENT CLAIMS. Not a style
+ * preference: the engine takes opposite branches on the two. estimate-from-pack.ts's verified
+ * path tests `input.verified.indirectTco2ePerT !== undefined` BEFORE it calls verifiedPerT, so
+ * an ABSENT seeIndirect skips the branch entirely and the line prices normally (indirectTco2e
+ * '0'), while `seeIndirect: ''` reaches verifiedPerT, fails its shape gate, and refuses the
+ * WHOLE line as unavailable. Measured on 25231000/DZ/(A)/100 t at direct_and_indirect: absent
+ * priced 166.065 certificates / EUR 12,514.66, empty refused outright. A priced bill and a
+ * refusal are not the same submission, and an audit trail that hands both the same digest
+ * cannot tell an importer which one produced the figure on their export. JSON.stringify renders
+ * an absent field as bare `null` and an empty one as `""`, so the two serialise apart; a string
+ * field can never itself produce bare `null`, so the split adds no new collision.
  */
 export function lineFingerprint(line: Line): Promise<string> {
   return sha256Hex(JSON.stringify([
     line.cn, line.country, line.route, line.scope, line.massT, line.date,
-    line.tier, line.seeDirect ?? '', line.seeIndirect ?? '', line.verifiedRef ?? '',
+    line.tier, line.seeDirect ?? null, line.seeIndirect ?? null, line.verifiedRef ?? null,
   ]));
 }
 

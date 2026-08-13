@@ -647,6 +647,88 @@ test('two verified lines differing only in seeIndirect fingerprint differently',
   assert.notEqual(a, await lineFingerprint(base), 'absent must differ from a supplied figure');
 });
 
+test('tier ALONE changes the fingerprint — the marked-up and the attested bill are distinguishable', async () => {
+  // The test above varies tier, seeDirect and verifiedRef TOGETHER, so it cannot attribute the
+  // difference to any one of them: deleting `line.tier` from the hashed array left all 39 tests
+  // green (verified by mutation). tier is the single field that says whether the punitive
+  // mark-up was applied at all — the mark-up prices NOT HAVING DATA, so a 'default+markup' line
+  // and an 'actual-verified' line are opposite claims about what the importer could evidence.
+  // Two lines carrying identical figures under different tiers must never share a digest, or
+  // the audit trail can no longer say which bill it stamped.
+  const a = await lineFingerprint(line({ tier: 'default+markup' }));
+  const b = await lineFingerprint(line({ tier: 'actual-verified' }));
+  assert.notEqual(a, b, 'the tier alone must change the digest — nothing else differs here');
+});
+
+test('an ABSENT attested figure is a different digest from an EMPTY one — different engine outcomes', async () => {
+  // The previous implementer filled absent optionals with `?? ''` and argued the collision was
+  // benign because "the engine's shape gate refuses '' anyway, so both mean no attested figure".
+  // That is wrong: the shape gate NEVER SEES the absent case. estimate-from-pack.ts's verified
+  // branch tests `input.verified.indirectTco2ePerT !== undefined` BEFORE calling verifiedPerT,
+  // so absent skips the branch and the line PRICES (indirectTco2e '0'), while '' reaches
+  // verifiedPerT, fails the shape gate and REFUSES the whole line. Probed against the real
+  // engine on 25231000/DZ/(A)/100 t at direct_and_indirect: absent → cscf_pending, 166.065
+  // certificates, EUR 12,514.66; '' → unavailable, no figure at all. A priced certificate count
+  // and a refusal are not the same submission and must not carry the same fingerprint.
+  const base = { ...line({ id: 'L1' }), tier: 'actual-verified', seeDirect: '2.31' };
+  const { seeDirect: _drop, ...noDirect } = base;
+  const pairs = [
+    ['seeIndirect', base, { ...base, seeIndirect: '' }],
+    ['seeDirect', noDirect, { ...noDirect, seeDirect: '' }],
+    ['verifiedRef', base, { ...base, verifiedRef: '' }],
+  ];
+  for (const [field, absent, empty] of pairs) {
+    assert.notEqual(
+      await lineFingerprint(absent), await lineFingerprint(empty),
+      `${field}: absent and empty-string are different claims and must digest differently`);
+  }
+});
+
+test('the hashed field ORDER is pinned to a golden digest — a transposition cannot hide', async () => {
+  // A GOLDEN LITERAL, and it has to be one. The obvious test — fingerprint {seeDirect:'X',
+  // seeIndirect:'Y'} and {seeDirect:'Y', seeIndirect:'X'} and assert they differ — provably
+  // CANNOT catch a transposition of those two elements, and asserting it would have been
+  // security theatre. Transposing two positions in the hashed array is a BIJECTION on the input
+  // space: it does not collapse any two lines together, it merely relabels which line gets
+  // which digest. Measured on the real function: shipped, fp(X,Y)=9daaa162… and fp(Y,X)=
+  // 3e8eb482…; transposed, fp(X,Y)=3e8eb482… and fp(Y,X)=9daaa162… — the same two digests,
+  // swapped. `notEqual` holds identically before and after, and running the transposition
+  // mutation against that assertion left the whole suite green.
+  //
+  // Every pair-comparison in this file has the same blind spot, because each one compares
+  // fingerprints only to EACH OTHER. Detecting a reordering needs an anchor OUTSIDE the
+  // function — a value computed once, from a known input, and written down. That is this
+  // constant. It pins all ten positions at once, plus the JSON encoding and the null filler.
+  //
+  // The stakes are real: 2.31 direct / 0.4 indirect and 0.4 direct / 2.31 indirect are wildly
+  // different bills, and free allocation deducts from the DIRECT side only (indirect is added
+  // back after the floor — see the indirect tests above), so a swap does not cancel out.
+  //
+  // IF THIS TEST FAILS, the serialised form of the audit trail changed. That is not
+  // automatically a bug — appending a new field at the end (the documented way to extend this)
+  // will fail it too. But it must never change by ACCIDENT: every fingerprint already printed
+  // on an exported CSV or a printable document was produced by the old form, so re-deriving it
+  // from a line stops working the moment this value moves. Update the constant only alongside a
+  // deliberate, documented change to the hashed array — never to make a red test go green.
+  const fixture = line({
+    id: 'L1', tier: 'actual-verified',
+    seeDirect: '2.31', seeIndirect: '0.4', verifiedRef: 'BV-2026-0142',
+  });
+  assert.equal(
+    await lineFingerprint(fixture),
+    '2807c1968d0719c2b465cac434b938c0dd66eca54c475b383e7d87b5d04b0cab',
+    'the hashed array\'s field order/encoding changed — see this test\'s comment before updating');
+
+  // The default tier's shape, pinned the same way: same six leading facts, tier flipped, all
+  // three optionals absent (the `?? null` fillers). Without this second constant a transposition
+  // confined to the optional tail could still hide on a default-tier line.
+  const dflt = line({ id: 'L1', tier: 'default+markup' });
+  assert.equal(
+    await lineFingerprint(dflt),
+    '6e0def457815078246b0dc3a8e39bf7fb06434d5b39db0e25e368d2f2267b5cb',
+    'the default-tier digest shape changed — see this test\'s comment before updating');
+});
+
 test('threshold maths ignores the tier — 50 t is 50 t', () => {
   const dflt = { ...line({ id: 'L1', massT: '60' }), tier: 'default+markup' };
   const ver  = { ...line({ id: 'L2', massT: '60' }), tier: 'actual-verified', seeDirect: '2.31' };
