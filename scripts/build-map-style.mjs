@@ -1,5 +1,5 @@
 /**
- * Derive the CUSP Dusk basemap style from OpenFreeMap's dark style.
+ * Derive the OBOS Dusk basemap style from OpenFreeMap's dark style.
  *
  *     node scripts/build-map-style.mjs            # rebuild from the vendored upstream
  *     node scripts/build-map-style.mjs --fetch    # re-fetch upstream first, then rebuild
@@ -24,7 +24,7 @@
  * is unchanged. We ship a recoloured derivative of a style meant to be forked —
  * no Mapbox asset, style, token or service is involved anywhere in this pipeline.
  *
- * Output: public/heat-map/styles/cusp-dusk.json
+ * Output: public/heat-map/styles/obos-dusk.json
  */
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -34,13 +34,13 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, '..');
 const UPSTREAM_URL = 'https://tiles.openfreemap.org/styles/dark';
 const VENDORED = join(ROOT, 'data', 'basemap', 'openfreemap-dark.json');
-const OUT = join(ROOT, 'public', 'heat-map', 'styles', 'cusp-dusk.json');
+const OUT = join(ROOT, 'public', 'heat-map', 'styles', 'obos-dusk.json');
 
 /**
- * CUSP DUSK — the palette, as tokens rather than 47 scattered hex literals.
+ * OBOS DUSK — the palette, as tokens rather than 47 scattered hex literals.
  *
  * The reference is Mapbox Standard's dusk preset over Paris (moodboard only —
- * nothing was ported, see docs/superpowers/specs/2026-08-13-cusp-dusk-basemap-design.md).
+ * nothing was ported, see docs/superpowers/specs/2026-08-13-obos-basemap-design.md).
  * Its one real idea is a WARM/COOL INVERSION: the ground goes cool indigo and
  * buildings become the only warm mass in the scene, so the city reads without a
  * single outline. Upstream dark is pure greyscale — `rgb(12,12,12)` ground, grey
@@ -274,11 +274,11 @@ function build(upstream, name, T) {
   style.layers.splice(at + 1, 0, building3dFor(T));
 
   style.light = lightFor(name);
-  style.name = `CUSP ${name[0].toUpperCase()}${name.slice(1)}`;
+  style.name = `OBOS ${name[0].toUpperCase()}${name.slice(1)}`;
   style.metadata = {
-    'cusp:derived-from': UPSTREAM_URL,
-    'cusp:generated-by': 'scripts/build-map-style.mjs',
-    'cusp:note': 'Recoloured derivative of the OpenFreeMap dark style. Tiles, glyphs and sprites are '
+    'obos:derived-from': UPSTREAM_URL,
+    'obos:generated-by': 'scripts/build-map-style.mjs',
+    'obos:note': 'Recoloured derivative of the OpenFreeMap dark style. Tiles, glyphs and sprites are '
       + 'still served by OpenFreeMap; OSM/ODbL attribution unchanged. No Mapbox asset or service is used.',
   };
   return style;
@@ -297,7 +297,7 @@ const upstream = JSON.parse(readFileSync(VENDORED, 'utf8'));
 mkdirSync(dirname(OUT), { recursive: true });
 for (const [name, tokens] of Object.entries(VARIANTS)) {
   const style = build(upstream, name, tokens);
-  const path = join(dirname(OUT), `cusp-${name}.json`);
+  const path = join(dirname(OUT), `obos-${name}.json`);
   writeFileSync(path, `${JSON.stringify(style, null, 2)}\n`);
   console.log(`  ${style.name.padEnd(12)} ${style.layers.length} layers  ->  ${path.replace(ROOT, '.')}`);
 }

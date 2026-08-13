@@ -49,7 +49,38 @@ import { nearestImage } from './streetview/nearest-image';
 // not a code change (dc-urs-spec.md §1).
 const WARDS = WARD_MAP;
 const { SIM_N, RESET_BURST } = M;
-const STYLES = { dark: 'https://tiles.openfreemap.org/styles/dark', studio: 'https://tiles.openfreemap.org/styles/positron' };
+/**
+ * `dark` is OUR style now — OBOS Slate, built by scripts/build-map-style.mjs from
+ * the OpenFreeMap dark style it replaces. Derived rather than authored on purpose:
+ * `REPLACED_ROAD_GEOMETRY` hides basemap roads BY ID, and those ids are upstream
+ * dark's. Recolouring a fork keeps every one of them, so the relief handoff keeps
+ * working; a style written from scratch would have renamed them and silently
+ * painted basemap streets underneath the 3D city.
+ *
+ * `studio` stays on upstream positron. Its layer ids differ from dark's — which is
+ * exactly why the label side is matched by predicate rather than by id — and
+ * giving the light environment its own derived style is separate work.
+ *
+ * Tiles, glyphs and sprites are still served by OpenFreeMap; the OSM/ODbL
+ * attribution is unchanged and no Mapbox asset or service is involved.
+ */
+const STYLES = { dark: '/heat-map/styles/obos-slate.json', studio: 'https://tiles.openfreemap.org/styles/positron' };
+
+/**
+ * Basemap building layers the Three.js city REPLACES — hidden whenever relief is on.
+ *
+ * Roads were already handled here; buildings were not, and until now they did not
+ * have to be. Upstream dark draws buildings as a flat near-black fill that simply
+ * disappeared under the massing. OBOS Slate adds `building_3d`, a fill-extrusion,
+ * and two 3D cities in one scene is not a subtle artefact: the basemap extrudes
+ * OSM `render_height` while the relief renderer extrudes our measured heights, and
+ * the two disagree, so every building would z-fight against its own twin.
+ *
+ * The flat `building` fill is hidden alongside it. It is invisible in practice,
+ * but leaving one of the pair behind is how the next reader concludes the rule is
+ * arbitrary and deletes the wrong half.
+ */
+const REPLACED_BUILDING_GEOMETRY = ['building', 'building_3d'] as const;
 
 export function mountHeatMap(): () => void {
   const el = (id: string) => document.getElementById(id);
@@ -742,7 +773,7 @@ export function mountHeatMap(): () => void {
       map.setLayoutProperty(relief.layer.id, 'visibility', showRelief ? 'visible' : 'none');
     }
     const basemapVisibility = showRelief ? 'none' : 'visible';
-    for (const id of REPLACED_ROAD_GEOMETRY) {
+    for (const id of [...REPLACED_ROAD_GEOMETRY, ...REPLACED_BUILDING_GEOMETRY]) {
       if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', basemapVisibility);
     }
     for (const layer of map.getStyle()?.layers ?? []) {

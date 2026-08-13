@@ -135,8 +135,28 @@ test('the basemap casing we replaced stays hidden, in both styles', async () => 
       + 'and makes the whole metre-true road layer decorative.');
   }
   const app = await src('heat-map-app.ts');
-  assert.match(app, /for \(const id of REPLACED_ROAD_GEOMETRY\)/,
+  /* Matched loosely on purpose, and for the SECOND time. The comment at the top of
+     this test records the guard once firing on a refactor rather than a regression;
+     pinning the exact loop text `for (const id of REPLACED_ROAD_GEOMETRY)` did it
+     again the moment the building ids were spread into the same loop (2026-08-13,
+     OBOS Slate). What matters is that the list reaches setLayoutProperty, not how
+     the iteration is spelled. */
+  assert.match(app, /for \(const id of [^)]*REPLACED_ROAD_GEOMETRY/,
     'the app must actually iterate the list — exporting it is not hiding anything');
+
+  /* Buildings joined the same rule when the basemap gained real massing. Upstream
+     drew a flat near-black fill that vanished under the 3D city, so leaving it
+     visible cost nothing. OBOS Slate's `building_3d` is a fill-extrusion, and the
+     basemap extrudes OSM `render_height` while the relief renderer extrudes our
+     MEASURED heights — two disagreeing 3D cities in one scene z-fight per building.
+     `building` rides along because hiding one of a pair reads as arbitrary. */
+  for (const id of ['building', 'building_3d']) {
+    assert.match(app, new RegExp(`REPLACED_BUILDING_GEOMETRY[\\s\\S]{0,120}'${id}'`),
+      `${id} must be listed in REPLACED_BUILDING_GEOMETRY, or relief mode draws the `
+      + "basemap's buildings on top of the Three.js city that replaced them");
+  }
+  assert.match(app, /for \(const id of [^)]*REPLACED_BUILDING_GEOMETRY/,
+    'REPLACED_BUILDING_GEOMETRY must be iterated in the visibility loop too');
   /* It must live in the `on` handler: setEnv's setStyle rebuilds the style, and
      a `once` would let the casing return the moment someone switches to studio. */
   assert.match(app, /map\.on\('style\.load'/,
