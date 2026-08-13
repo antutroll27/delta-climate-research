@@ -751,3 +751,60 @@ test('renderStamp truncates a genuine 64-hex-char snapshotHash to its first 16 c
     'the full 64-char digest must not be printed verbatim in the stamp — that is what the '
     + 'truncation exists to avoid');
 });
+
+/* ── verified emissions: the spec §6 worked line, pinned end-to-end ─────────── */
+
+test('verified figures price with no mark-up — the spec worked example', () => {
+  const e = estimateFromPack(pack, {
+    cn: '72061000', country: 'IN', route: '(C)', massT: '100', date: '2026-03-15',
+    verified: { directTco2ePerT: '2.31' },
+  });
+  assert.equal(e.status, 'cscf_pending');
+  assert.equal(e.emissionsTco2e, '231');
+  assert.equal(e.scenario.certificates, '105.42');
+  assert.equal(e.scenario.costEur, '7944.45');
+  assert.equal(e.stamp.tier, 'actual-verified');
+  // and the SAME line through the default path still gives the marked-up figure —
+  // this pair IS the delta the card will show (€12,420.84 − €7,944.45)
+  const d = estimateFromPack(pack, {
+    cn: '72061000', country: 'IN', route: '(C)', massT: '100', date: '2026-03-15',
+  });
+  assert.equal(d.status, 'cscf_pending');
+  assert.equal(d.scenario.costEur, '12420.84');
+});
+
+test('a verified figure rests on no Commission default, so it reports no origin basis', () => {
+  // originBasis is a provenance CLAIM about where the number came from. The defaults path
+  // stamps 'country' because the figure IS the origin's published default; an importer's own
+  // audited figure is backed by their verifier, not by the Commission. The UI renders this row
+  // on truthiness, so any truthy value here would print "the origin's own published default"
+  // over someone's attested number — a false provenance claim, not merely a redundant one.
+  const e = estimateFromPack(pack, {
+    cn: '72061000', country: 'IN', route: '(C)', massT: '100', date: '2026-03-15',
+    verified: { directTco2ePerT: '2.31' },
+  });
+  assert.equal(e.stamp.originBasis, null,
+    'a verified figure must report NO origin basis — not "country"');
+  // the contrast that gives the assertion its teeth: the same line through the defaults path
+  // genuinely does rest on a published country default, and still says so.
+  const d = estimateFromPack(pack, {
+    cn: '72061000', country: 'IN', route: '(C)', massT: '100', date: '2026-03-15',
+  });
+  assert.equal(d.stamp.originBasis, 'country',
+    'sanity: the defaults path still reports the basis it really has');
+});
+
+test('a negative verified figure is refused, not priced', () => {
+  // Fail-closed: the engine's floor clamp is not a guard here (it clamps the direct side and
+  // then ADDS indirect), so a nonsense figure that got through would print a confident bill —
+  // a negative one priced a negative liability. Refusing names the gap instead.
+  const e = estimateFromPack(pack, {
+    cn: '72061000', country: 'IN', route: '(C)', massT: '100', date: '2026-03-15',
+    verified: { directTco2ePerT: '-1' },
+  });
+  assert.equal(e.status, 'unavailable');
+  assert.equal(e.scenario, undefined, 'a refusal must carry no what-if figure');
+  assert.equal(e.figure, undefined, 'a refusal must carry no figure at all');
+  assert.match(e.selector, /directTco2ePerT/,
+    'the refusal must name which input it could not read');
+});
