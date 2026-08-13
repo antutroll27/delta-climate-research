@@ -750,6 +750,111 @@ test('threshold maths ignores the tier — 50 t is 50 t', () => {
   assert.equal(ya.knownEligibleMassT, yb.knownEligibleMassT);
 });
 
+// A real verified-tier estimate through the real engine — never a hand-built literal. The
+// attested path is reached by passing `verified` to estimateFromPack, which overrides the
+// defaults-path tier on the stamp ('actual-verified') and skips the mark-up entirely. Defaults
+// to direct_and_indirect because line()'s own fixture scope is that, and a row whose scope
+// column says one thing while its figures were computed at another is the very confusion the
+// est() harness comment above already warns about.
+const verEst = (over = {}) => estimateFromPack(pack, {
+  cn: '25231000', country: 'DZ', route: '(A)', massT: '100', date: '2026-03-15',
+  emissionsScope: 'direct_and_indirect', verified: { directTco2ePerT: '2.31' }, ...over,
+});
+
+test('CSV rows carry the data tier and the attested reference', () => {
+  const l = line({
+    id: 'L1', massT: '100', tier: 'actual-verified', seeDirect: '2.31',
+    verifiedRef: 'BV-2026-0142',
+  });
+  const e = verEst();
+  assert.equal(e.stamp.tier, 'actual-verified', 'sanity: the engine stamped the attested tier');
+  const rows = csvRows([l], [e], fp, 'f'.repeat(64), pack);
+  assert.equal(rows[0].data_tier, 'actual-verified');
+  assert.equal(rows[0].verified_reference, 'BV-2026-0142');
+  // Column ORDER is part of the CSV's contract: toCsv derives the header from row 0 alone, and
+  // a consumer's column mapping (an auditor's model, an importer's importer) is positional the
+  // moment anyone writes one. Pinned by position, not just by presence — the two new columns
+  // belong beside the other provenance/status columns, not appended after pack_snapshot.
+  const keys = Object.keys(rows[0]);
+  const i = keys.indexOf('cscf_status');
+  assert.ok(i >= 0, 'sanity: cscf_status is still a column');
+  assert.deepEqual(keys.slice(i + 1, i + 3), ['data_tier', 'verified_reference']);
+});
+
+test('a default-tier line writes its tier and an EMPTY reference, never the text "undefined"', () => {
+  // Line.verifiedRef is optional, so `l.verifiedRef` alone is `undefined` on every default line —
+  // and Record<string, string> does not stop it: `String(undefined)` is 'undefined', and toCsv's
+  // own `r[c] ?? ''` only covers a MISSING key, not a present-but-undefined one. An auditor
+  // opening the file would read the literal word "undefined" in a column that is meant to say
+  // "no verifier reference was cited". The `?? ''` in csvRows is what keeps it blank.
+  const rows = csvRows([line({ id: 'L1', massT: '100' })], [est('25231000', 'DZ', '(A)', '100')],
+    fp, 'f'.repeat(64), pack);
+  assert.equal(rows[0].data_tier, 'default+markup');
+  assert.equal(rows[0].verified_reference, '');
+  assert.equal(typeof rows[0].verified_reference, 'string', 'not undefined, not null — a string');
+  const csv = toCsv(rows);
+  assert.ok(!csv.includes('undefined'), 'the literal text "undefined" must never reach the file');
+});
+
+test('a hostile reference cannot become a spreadsheet formula', () => {
+  // verifiedRef is free-typed by the importer, exactly like cn_code, and this artefact is
+  // explicitly built to be opened in a spreadsheet. This must pass because toCsv's cell()
+  // neutralises by CONTENT, not by column — a new free-text column inherits the guard without
+  // toCsv being told about it. If this ever fails, the guard has been narrowed to a column list
+  // and every future free-text column is unprotected.
+  const l = line({
+    id: 'L1', massT: '100', tier: 'actual-verified', seeDirect: '2.31', verifiedRef: '=cmd()',
+  });
+  const csv = toCsv(csvRows([l], [verEst()], fp, 'f'.repeat(64), pack));
+  assert.ok(!csv.includes(',=cmd()'), 'a formula-leading reference must not reach a cell raw');
+  assert.ok(csv.includes(",'=cmd()"), 'and it must still be READABLE, neutralised by a leading quote');
+});
+
+test('csvRows refuses a line paired with an estimate computed at a different tier', () => {
+  // The load-bearing half of this task. csvRows takes two parallel arrays and validated only
+  // their LENGTH — nothing checked that results[i] was computed FROM lines[i]. The row it builds
+  // is already a blend of line-sourced columns (cn_code, origin, mass_t, line_fingerprint) and
+  // result-sourced figures, so a mispaired call exports the importer's attested inputs and their
+  // verifier's reference NEXT TO a marked-up figure, labelled as the importer's own.
+  const verifiedLine = line({
+    id: 'L1', massT: '100', tier: 'actual-verified', seeDirect: '2.31',
+    verifiedRef: 'BV-2026-0142',
+  });
+  const defaultEstimate = est('25231000', 'DZ', '(A)', '100');
+  assert.equal(defaultEstimate.stamp.tier, 'default+markup', 'sanity: this one carries the mark-up');
+  assert.throws(
+    () => csvRows([verifiedLine], [defaultEstimate], fp, 'f'.repeat(64), pack),
+    /L1/);
+  assert.throws(
+    () => csvRows([verifiedLine], [defaultEstimate], fp, 'f'.repeat(64), pack),
+    /actual-verified/);
+  // and the other direction: a default line handed a verified figure would DROP the mark-up
+  // from an importer who had no data to justify dropping it.
+  assert.throws(
+    () => csvRows([line({ id: 'L2', massT: '100' })], [verEst()], fp, 'f'.repeat(64), pack),
+    /L2/);
+});
+
+test('the tier guard does not fire on a legitimate refusal', () => {
+  // 'unavailable' is a first-class answer here, not an error (certificate-estimate.ts's own
+  // doc), and ProvenanceStamp.tier is set in baseOf — OUTSIDE the priced branches — so a refused
+  // estimate carries a real tier like every other. A guard that read the tier off a priced-only
+  // field would throw on every honest refusal and turn "we cannot price this" into a crashed
+  // export. An unreadable attested figure is exactly how a user reaches this.
+  const refused = verEst({ verified: { directTco2ePerT: 'abc' } });
+  assert.equal(refused.status, 'unavailable');
+  assert.equal(refused.stamp.tier, 'actual-verified', 'a refusal still knows which tier asked');
+  const l = line({
+    id: 'L1', massT: '100', tier: 'actual-verified', seeDirect: 'abc', verifiedRef: 'BV-2026-0142',
+  });
+  const rows = csvRows([l], [refused], fp, 'f'.repeat(64), pack);
+  assert.equal(rows[0].status, 'unavailable');
+  assert.equal(rows[0].certificates, '', 'still a refusal, not a number');
+  assert.equal(rows[0].data_tier, 'actual-verified');
+  assert.equal(rows[0].verified_reference, 'BV-2026-0142',
+    'the reference stands even when the figure it cites was refused');
+});
+
 test('csvRows throws naming the mismatch when lines and results are different lengths', () => {
   // Regression for a review finding: results[i]! on a mismatch previously surfaced as a bare
   // TypeError with no line id and no counts — nothing a new caller (Tasks 5-8) could use to

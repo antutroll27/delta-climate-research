@@ -389,8 +389,9 @@ export function sumTotals(results: readonly CertificateEstimate[]): Totals {
  * working artefact an auditor loads into a model; presentation formatting (thousands
  * separators, 3dp) belongs to the page, full precision belongs here.
  *
- * @throws {Error} if `lines` and `results` are not the same length (see below), or if any
- * line's estimate resolves more than one benchmark term (see the in-loop check). EITHER throw
+ * @throws {Error} if `lines` and `results` are not the same length (see below), if any line's
+ * tier disagrees with its own estimate's stamp (see the in-loop guard), or if any line's
+ * estimate resolves more than one benchmark term (see the in-loop check). ANY of these throws
  * discards the WHOLE export, not just the offending row — there is no partial-CSV mode, unlike
  * thresholdByYear's equivalent per-year throw (which similarly discards every year's card, not
  * just one). A caller wanting a partial export on a bad line must catch here and decide what
@@ -416,6 +417,30 @@ export function csvRows(
   }
   return lines.map((l, i) => {
     const e = results[i]!;
+    // WHY: the length check above is the only thing that ever related these two arrays, and
+    // "same length" is not "same lines". Every row this function builds is a BLEND — cn_code,
+    // origin, route, mass_t, import_date and line_fingerprint come off `l`; every figure and
+    // locator comes off `e` — so a caller that pairs the wrong estimate with a line produces a
+    // row that looks entirely ordinary and is internally false.
+    //
+    // The tier is the pairing whose corruption is worst, and it only became reachable with the
+    // data_tier/verified_reference columns below. A verified line paired with a
+    // default-computed estimate exports the importer's attested inputs and their VERIFIER'S
+    // REFERENCE beside a figure that still carries the punitive mark-up — a mark-up that prices
+    // not having data, attached to a row that names the person who certified the data. That is
+    // over-collection with an attestation stapled to it. The opposite pairing drops the mark-up
+    // from an importer who never earned the exemption. Both are wrong tax liabilities someone
+    // may act on, which is the one failure this whole file is shaped to refuse.
+    //
+    // Only the tier is checked, not the whole line: `stamp` is the only thing the estimate
+    // carries that can be compared back to a Line at all (the engine keeps no cn/origin on its
+    // result). This catches the mispairing that matters and does not pretend to catch all of them.
+    if (e.stamp.tier !== l.tier) {
+      throw new Error(
+        `csvRows: line '${l.id}' is tier '${l.tier}' but its estimate was computed at `
+        + `'${e.stamp.tier}' — the line and its figure disagree about which data tier priced it`,
+      );
+    }
     const terms = 'terms' in e ? e.terms : null;
     // terms.benchmarks carries one entry per precursor (Column A / Eq 4 — see sefa.ts). The
     // public estimator only ever runs scope='full_product' with no precursors (hardcoded in
@@ -491,6 +516,23 @@ export function csvRows(
       cscf_status: e.status === 'ok' ? 'published'
         : e.status === 'zero_by_fiat' ? 'not applicable (Art 1(2): nil by law)'
         : pending ? 'pending (what-if)' : '',
+      // Which corpus priced this row: the Commission's defaults (mark-up applied) or the
+      // importer's own verified figures (no mark-up). Read off `l`, not `e.stamp` — the guard
+      // at the top of this loop makes the two identical, so the choice is about which is the
+      // more honest SOURCE for a column that says what the importer claimed. `l.tier` is the
+      // claim as submitted, and the digest an auditor can re-derive (lineFingerprint hashes
+      // l.tier) pins the same value; sourcing the column from the stamp instead would let the
+      // exported column and the fingerprint that is supposed to certify it come from different
+      // places. See the guard for what makes that safe.
+      data_tier: l.tier,
+      // Transcribed verbatim, never checked — this tool has no way to verify a verifier. Empty
+      // string, not `l.verifiedRef` bare: an optional field left undefined here reaches the file
+      // as the literal text 'undefined' (toCsv's own `r[c] ?? ''` only covers a MISSING key, not
+      // a present-but-undefined one), which reads as data in a column meant to say "none cited".
+      // Free text, and therefore a CSV-injection surface — covered by toCsv's cell(), which
+      // neutralises by content rather than by column, so this column inherits the guard without
+      // toCsv knowing it exists.
+      verified_reference: l.verifiedRef ?? '',
       cscf_locator: terms?.cscfLocator ?? '',
       assumed_cscf: pending ? e.scenario.assumedCscf : '',
       price_quarter: 'priceQuarter' in e ? e.priceQuarter : '',
