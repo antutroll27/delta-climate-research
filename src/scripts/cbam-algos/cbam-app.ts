@@ -716,8 +716,10 @@ export function parseVerifiedFields(v: {
 }): { ok: Partial<Line> & { tier: Line['tier'] } } | { error: string } {
   // Every other field is ignored on this branch, not merely unused: a user who filled the panel
   // in and then changed their mind back to the Commission defaults must not have the abandoned
-  // figures ride along into the line. (The form ALSO clears the inputs — see syncVerifiedRows —
-  // but this function must be safe to call on a form that has not been cleared yet.)
+  // figures ride along into the line. This branch is the ONLY thing keeping them out: the form
+  // deliberately does NOT clear the panel on a switch back to defaults (see syncVerifiedRows —
+  // clearing it would let one stray arrow-key `change` destroy the user's typing), so the inputs
+  // are still full of the abandoned claim every time this runs.
   if (v.tier !== 'actual-verified') return { ok: { tier: 'default+markup' } };
 
   // Trim before every test below. `Number('   ')` is 0, so an untrimmed whitespace-only field
@@ -942,18 +944,24 @@ export function initCbam(): void {
    * direct_and_indirect. Same rule the defaults path uses, so the two tiers ask for the same
    * scope of figure for the same good.
    *
-   * IT CLEARS WHAT IT HIDES, and that is the fail-closed half of this function, not tidiness:
+   * IT CLEARS EXACTLY ONE FIELD, AND THE ASYMMETRY IS THE POINT: one hidden value can still
+   * price, the other three cannot, so only the dangerous one is destroyed.
    *
-   *   - Switching back to the Commission defaults clears all four inputs, so a figure typed for
-   *     one line can never leak into the next one under a tier the user has since abandoned.
-   *     (parseVerifiedFields also ignores every field on the defaults branch, so this is belt
-   *     and braces — but the belt is what a user can SEE.)
-   *   - Hiding the indirect row clears it too. On the DEFAULTS path a hidden scope control is
-   *     harmless: the engine finds no published indirect factor and returns 0 either way. On the
-   *     VERIFIED path the indirect figure is the importer's OWN number, and the engine adds it
-   *     on `emissionsScope` alone — nothing else gates it. So an indirect figure left behind an
-   *     invisible row (type 0.4 for cement, then switch the good to steel) would silently inflate
-   *     every later estimate with a number the user can no longer see, let alone correct.
+   *   - #cbSeeIndirect IS cleared whenever the indirect ROW hides. On the VERIFIED path that
+   *     figure is the importer's OWN number and the engine adds it on `emissionsScope` alone —
+   *     no pack lookup, nothing else gates it. So a value left behind an invisible row (type 0.4
+   *     for cement, then switch the good to steel) would silently inflate every later estimate
+   *     with a number the user can no longer see, let alone correct. Fail closed. (On the
+   *     DEFAULTS path a hidden scope control is harmless by contrast: the engine finds no
+   *     published indirect factor and returns 0 either way.)
+   *   - #cbSeeDirect, #cbAttest and #cbRef are NOT cleared when the tier switches back to the
+   *     defaults. Nothing stale can price through them: parseVerifiedFields returns on the tier
+   *     alone and reads no other field on that branch, and verifiedInputOf returns undefined, so
+   *     the whole panel is inert while it is hidden. Clearing them would buy nothing and cost the
+   *     user their work — #cbTier has only two options, and in Firefox a CLOSED <select> fires
+   *     `change` on every arrow step, so a keyboard user pressing ↓ then ↑ lands back exactly
+   *     where they started having silently destroyed a typed figure, a ticked attestation and a
+   *     verifier reference, with no undo.
    *
    * CALL ORDER MATTERS: it reads `scopeRow.hidden`, which syncScope() computes, so every call
    * site runs it AFTER syncScope() rather than before.
@@ -962,11 +970,6 @@ export function initCbam(): void {
     if (!tier || !verifiedRow) return;
     const on = tier.value === 'actual-verified';
     verifiedRow.hidden = !on;
-    if (!on) {
-      if (seeDirect) seeDirect.value = '';
-      if (attest) attest.checked = false;
-      if (ref) ref.value = '';
-    }
     const indirectOn = on && !!scopeRow && !scopeRow.hidden
       && scope?.value === 'direct_and_indirect';
     if (seeIndirectRow) seeIndirectRow.hidden = !indirectOn;

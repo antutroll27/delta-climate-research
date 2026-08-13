@@ -823,7 +823,9 @@ const vf = (over = {}) => ({
 test('the defaults tier passes straight through, ignoring every other field', () => {
   // Not merely "returns ok": a user who filled the panel in, then changed their mind back to the
   // Commission defaults, must not have their abandoned figures ride along into the line. The
-  // tier is the only thing the defaults branch may contribute.
+  // tier is the only thing the defaults branch may contribute — and this branch is the ONLY
+  // thing enforcing that, because syncVerifiedRows deliberately leaves those inputs FULL when it
+  // hides the panel (clearing them would let one stray arrow-key `change` destroy the typing).
   const r = parseVerifiedFields(vf({
     tier: 'default+markup', direct: '9.9', indirect: '1.1', attested: false, ref: 'DNV-123',
   }));
@@ -843,6 +845,16 @@ test('a non-numeric direct figure is refused rather than coerced', () => {
   assert.match(r.error, /direct/i);
 });
 
+test('Infinity is refused — the check is finiteness, not merely not-NaN', () => {
+  // `Number('Infinity')` is a number and passes `!Number.isNaN`, so only the FINITE test catches
+  // it; verifiedFigure's own doc names this case. `<input type="number">` sanitises the string
+  // away in a browser, so this is a guard on the pure function's contract rather than a reachable
+  // UI path — asserted here because that contract is the only thing holding it.
+  const r = parseVerifiedFields(vf({ direct: 'Infinity' }));
+  assert.equal(r.ok, undefined, 'an infinite figure must never become a priceable line');
+  assert.match(r.error, /direct/i);
+});
+
 test('a negative direct figure is refused — the engine floor would hide it', () => {
   // certificate-estimate.ts clamps the DIRECT side and then adds indirect on top, so a negative
   // figure that got past this function can price a negative bill. Refuse at the form too.
@@ -858,6 +870,17 @@ test('zero is a legal verified direct figure', () => {
   assert.equal(r.error, undefined, `0 must be accepted, got: ${r.error}`);
   assert.equal(r.ok.seeDirect, '0');
   assert.equal(r.ok.tier, 'actual-verified');
+});
+
+test('the figures are stored AS ENTERED, never re-stringified through Number()', () => {
+  // THE AUDIT TRAIL. lineFingerprint hashes these exact strings, so the digest is the record of
+  // what the importer actually typed. `String(Number('2.50'))` is '2.5' — a round-trip through
+  // the parsed number would leave the fingerprint pinning a figure nobody entered, and a verifier
+  // reconciling the export against the attestation would find the trailing digit gone.
+  const r = parseVerifiedFields(vf({ direct: '2.50', indirect: '0.40' }));
+  assert.equal(r.error, undefined, `expected ok, got: ${r.error}`);
+  assert.equal(r.ok.seeDirect, '2.50', 'the trailing zero the importer typed must survive');
+  assert.equal(r.ok.seeIndirect, '0.40', 'and on the indirect figure too');
 });
 
 test('an unticked attestation refuses the line and says what the tick does', () => {
