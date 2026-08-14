@@ -65,12 +65,23 @@ permits two shapes; the comparison assumes one.
 **There are two copies of `active()`**, byte-identical:
 - `lib/cbam/resolve-fa.ts:19` — benchmark resolution. **Confirmed live**: measured above.
 - `lib/regulatory/resolve.ts:10` — `resolveClassification` and rule-package validity.
-  **Exposure unverified.** Whether it misfires depends on the shape of the SaaS's stored rule
-  packages, which I could not determine from the test tree — the fixtures there declare
-  `validFrom: string` rather than carrying representative data. It is fixed regardless, because
-  the same latent hazard should not be left behind in a copy of the same function; but this
-  spec does not claim a live defect there, and no test in this change asserts one beyond the
-  boundary behaviour itself.
+  **CORRECTED 2026-08-14, after this spec was first approved: confirmed live, and worse.**
+
+  The first draft said "exposure unverified", because the test fixtures declare
+  `validFrom: string` without representative data. That was too cautious — the answer was in
+  the golden packages, not the fixtures. `golden/rule-packages/eu-cbam-2026-defaults-v2.json`
+  carries `validFrom: '2026-01-01T00:00:00.000Z'` at the **package** level, and
+  `requireActiveEnactedPackage` compares it to the import date through the same `active()`:
+
+  ```
+  resolveClassification(defaultsPackage, '25231000', '2026-01-01') → THROWS REGULATION_NOT_FOUND
+  resolveClassification(defaultsPackage, '25231000', '2026-01-02') → OK
+  ```
+
+  So on 1 January 2026 the *entire rule package* is judged inactive and **every** classification
+  lookup fails, not merely benchmark lookups. This is a broader failure than the one that
+  prompted the spec: it is the gate deciding whether a good is a CBAM good at all. It affects
+  the SaaS's server path, which is why the browser never showed it.
 
 ## Decision: compare calendar days
 
@@ -137,8 +148,13 @@ same-shape and are unaffected.
    (`2026-06-15T12:00:00.000Z`) returns the same benchmark as the plain calendar day.
 5. **Fail-closed is unchanged.** `date: ''` still refuses (slicing `''` yields `''`, which
    fails both edges); `2025-12-31` still refuses as before the regime.
-6. **The second copy.** An equivalent boundary test against `regulatory/resolve.ts`'s
-   `resolveClassification`, so the fix is pinned in both places rather than one.
+6. **The second copy — now a live defect, not a precaution.** `resolveClassification` against
+   the real golden defaults package must resolve on `2026-01-01`, where it currently throws
+   `REGULATION_NOT_FOUND`. Note the existing fixtures cannot catch this: `sefa.test.ts`'s `bm()`
+   helper emits `validFrom: '2026-01-01'` as a plain date, and `resolve.test.ts` does the same,
+   so every upstream fixture compares same-shape and is blind to the bug by construction. **The
+   new tests must use the timestamp shape the real corpus carries**, or they will pass against
+   the unfixed code.
 
 ## Out of scope, by decision
 
