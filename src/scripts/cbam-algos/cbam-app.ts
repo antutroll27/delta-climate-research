@@ -497,7 +497,10 @@ function renderAttestation(line: Line): string {
  * Commission's published defaults — and, when there is no honest comparison to draw, the reason
  * there isn't one instead of a silence a reader would fill in as "zero".
  *
- * NEVER ONE-DIRECTIONAL. The mark-up is 10–30%, so verified figures usually cost less; a
+ * NEVER ONE-DIRECTIONAL. The mark-up carries FOUR bands, not the 10–30% this comment used to
+ * claim: counted over the shipped pack's 41,100 default factors, 1% applies to 14,496 rows and
+ * 10/20/30% to 8,868 each. So a marked-up default is usually — but not always, and on the 1%
+ * band barely — the dearer of the two; a
  * genuinely dirty producer with audited data can and does exceed the marked-up default (the
  * break-even for the spec's worked line is exactly 2.904 tCO2e/t). A card that only ever said
  * "saves" would be an advertisement for the verified tier, not an estimate of a tax.
