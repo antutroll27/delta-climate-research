@@ -10,6 +10,34 @@
 
 ---
 
+## STATUS — all 8 tasks executed (2026-08-14)
+
+Every step below is ticked, but the boxes were ticked *after the fact*, in one pass, once the work
+was already done — they were not a live progress tracker, so do not read them as a record that each
+step ran exactly as written. Several did not. Where review changed the design, the task text is
+annotated in place; the authoritative record is the commits.
+
+| Task | Commits | Where the shipped work differs from the text below |
+| --- | --- | --- |
+| 1 · upstream engine | `a524fef` `8b8694c` `4aa4e9e` **(CBM repo, branch `feat/verified-emissions`)** | `originBasis` corrected to `null`; the estimator now VALIDATES the attested figures and refuses fail-closed; the test reads the live pack instead of a pasted fixture. See the annotations in Task 1. |
+| 2 · re-vendor + pin | `2983f34` | as written |
+| 3 · line model | `0961a5f` `cfe01cd` `9b42b69` | filler is `?? null`, not `?? ''` — absent and empty are different engine outcomes and must digest differently; order pinned by golden digests, because a pair-comparison provably cannot detect a transposition |
+| 4 · CSV | `32ce3d1` `c2c1b73` | gained a tier-agreement throw (line vs the estimate that priced it) |
+| 5 · form | `f4eae2a` `ff7cb92` `3439540` | `parseVerifiedFields` OMITS blank optional keys rather than emitting `''`; the indirect figure is wiped only when it could still price unseen; `onCsv`/`onDoc` gained try/catch |
+| 6 · card | `cbdfad4` | the "no comparison" state is three sentences, not one — the single wording was false when the refusal is on the verified side |
+| 7 · print document | `aa2ce51` | §1 gained a **Data tier** column (9 columns now); `inputFor` extracted so the two estimate paths cannot drift |
+| 8 · e2e + docs | `a93f81f` `809907e` `29187b1` `593c74d` | four review follow-ups landed first; the mark-up is FOUR bands (1/10/20/30%), not the 10–30% asserted throughout |
+
+**Gates at completion:** 376 unit tests passing · 21 e2e passing · `cbam-sync-check` intact ·
+`astro check` 0 errors. (The 2 `mapillary-js` errors carried as "pre-existing" through most of the
+build were an incomplete `node_modules` in the worktree, repaired by `npm ci` in Task 8.)
+
+**Precondition never met, deliberately:** the IR 2026/1740 pack rebuild has still not landed. The
+worked example survives either corpus — 72061000/IN is unchanged in v2 — so nothing here rests on
+it, but the estimator will be edited a second time when that rebuild happens.
+
+---
+
 ## Preconditions — check before Task 1
 
 The spec sequences the **IR (EU) 2026/1740 pack rebuild first**. Verify:
@@ -67,7 +95,7 @@ Both paths return `status: 'cscf_pending'` (CSCF 2026–2030 unpublished) with a
 - Modify: `/Volumes/VSTSAMPLES/Projects/CBM/lib/estimator/estimate-from-pack.ts` (interface at lines ~55–68, function body at ~255)
 - Test: `/Volumes/VSTSAMPLES/Projects/CBM/lib/estimator/estimate-from-pack.verified.test.ts` (NEW)
 
-- [ ] **Step 1: Build the test fixture from the real pack**
+- [x] **Step 1: Build the test fixture from the real pack**
 
 The test needs real rows, not invented ones. Extract them:
 
@@ -84,7 +112,7 @@ console.log(JSON.stringify(pick,null,1))" > /tmp/verified-fixture.json
 wc -l /tmp/verified-fixture.json
 ```
 
-- [ ] **Step 2: Write the failing test**
+- [x] **Step 2: Write the failing test**
 
 Create `lib/estimator/estimate-from-pack.verified.test.ts`. Paste the fixture JSON from Step 1 as the `PACK` literal (it is small — one CN's rows plus the shared series):
 
@@ -154,14 +182,14 @@ describe('verified emissions path', () => {
 })
 ```
 
-- [ ] **Step 3: Run, expect failure**
+- [x] **Step 3: Run, expect failure**
 
 ```bash
 cd /Volumes/VSTSAMPLES/Projects/CBM && npx vitest run lib/estimator/estimate-from-pack.verified.test.ts
 ```
 Expected: FAIL — `verified` does not exist on `EstimatorInput`.
 
-- [ ] **Step 4: Implement**
+- [x] **Step 4: Implement**
 
 In `lib/estimator/estimate-from-pack.ts`, extend the interface (after `emissionsScope`, line ~67):
 
@@ -226,7 +254,7 @@ In `estimateFromPack` (body starts ~line 255), insert the verified branch after 
 
 Also update the file-header comment line that reads "Defaults path only (scope full_product → Column B); actual/verified data is the workspace's job" to: "Defaults path, plus attested verified figures (both scope full_product → Column B); Column A / process-level data stays the workspace's job."
 
-- [ ] **Step 5: Run the new test, expect pass; run the whole CBM suite**
+- [x] **Step 5: Run the new test, expect pass; run the whole CBM suite**
 
 ```bash
 cd /Volumes/VSTSAMPLES/Projects/CBM && npx vitest run lib/estimator/estimate-from-pack.verified.test.ts && npm test
@@ -253,7 +281,7 @@ Expected: new file 6/6 PASS, full suite green.
 >   translation leaves all 402 green. Only the user-facing refusal SELECTOR differs, and that is
 >   what the added test pins instead.
 
-- [ ] **Step 6: Commit (CBM repo)**
+- [x] **Step 6: Commit (CBM repo)**
 
 ```bash
 cd /Volumes/VSTSAMPLES/Projects/CBM
@@ -273,7 +301,7 @@ cannot invent the other."
 - Modify: `src/scripts/cbam-algos/UPSTREAM.json` (via `--update`, never by hand)
 - Test: `tests/unit/cbam-render.test.mjs` (append)
 
-- [ ] **Step 1: Copy and re-record**
+- [x] **Step 1: Copy and re-record**
 
 ```bash
 cd /Volumes/VSTSAMPLES/Projects/Angad
@@ -283,7 +311,7 @@ node scripts/cbam-sync-check.mjs   # must report intact + in sync
 git diff --stat                     # exactly 2 files: the estimator + UPSTREAM.json
 ```
 
-- [ ] **Step 2: Write the failing worked-example test**
+- [x] **Step 2: Write the failing worked-example test**
 
 Append to `tests/unit/cbam-render.test.mjs` (it already imports `estimateFromPack` and loads the real `pack`):
 
@@ -310,20 +338,20 @@ test('verified figures price with no mark-up — the spec worked example', () =>
 });
 ```
 
-- [ ] **Step 3: Run before the copy is committed — with the OLD vendored file it must fail**
+- [x] **Step 3: Run before the copy is committed — with the OLD vendored file it must fail**
 
 ```bash
 node --test tests/unit/cbam-render.test.mjs 2>&1 | tail -5
 ```
 Expected: PASS (the copy in Step 1 already landed the capability). To honour TDD's spirit here, verify the test WOULD fail against the old engine: `git stash push src/scripts/cbam-algos/estimator/estimate-from-pack.ts && node --test tests/unit/cbam-render.test.mjs 2>&1 | tail -3 && git stash pop` — expect the stashed run to FAIL, the restored run to PASS.
 
-- [ ] **Step 4: Full gates**
+- [x] **Step 4: Full gates**
 
 ```bash
 npm run test:unit && node scripts/cbam-sync-check.mjs && npx astro check 2>&1 | tail -3
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/scripts/cbam-algos/estimator/estimate-from-pack.ts src/scripts/cbam-algos/UPSTREAM.json tests/unit/cbam-render.test.mjs
@@ -341,7 +369,7 @@ fails loudly."
 - Modify: `src/scripts/cbam-lines.ts` (the `Line` interface and `lineFingerprint`)
 - Test: `tests/unit/cbam-lines.test.mjs` (append)
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```js
 test('a line carries its tier, and the fingerprint pins attested figures as entered', async () => {
@@ -369,13 +397,13 @@ test('threshold maths ignores the tier — 50 t is 50 t', () => {
 });
 ```
 
-- [ ] **Step 2: Run, expect failure** (`tier` not on `Line`; fingerprint unchanged by the new fields)
+- [x] **Step 2: Run, expect failure** (`tier` not on `Line`; fingerprint unchanged by the new fields)
 
 ```bash
 node --test tests/unit/cbam-lines.test.mjs 2>&1 | tail -5
 ```
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `src/scripts/cbam-lines.ts`, extend the interface:
 
@@ -409,13 +437,13 @@ export function lineFingerprint(line: Line): Promise<string> {
 
 Existing tests that construct `Line` literals will now fail typecheck until they carry `tier` — update the file's `line()` helper to default `tier: 'default+markup'` so every existing test keeps its meaning unchanged.
 
-- [ ] **Step 4: Run, expect all passing**
+- [x] **Step 4: Run, expect all passing**
 
 ```bash
 node --test tests/unit/cbam-lines.test.mjs 2>&1 | tail -3 && npx astro check 2>&1 | tail -3
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/scripts/cbam-lines.ts tests/unit/cbam-lines.test.mjs
@@ -432,7 +460,7 @@ the 50 t gate counts mass, whatever the tier."
 - Modify: `src/scripts/cbam-lines.ts` (`csvRows`)
 - Test: `tests/unit/cbam-lines.test.mjs` (append)
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```js
 test('CSV rows carry the data tier and the attested reference', () => {
@@ -454,9 +482,9 @@ test('a hostile reference cannot become a spreadsheet formula', () => {
 });
 ```
 
-- [ ] **Step 2: Run, expect failure** (`data_tier` undefined)
+- [x] **Step 2: Run, expect failure** (`data_tier` undefined)
 
-- [ ] **Step 3: Implement** — in `csvRows`'s row literal, insert directly after the `cscf_status` property:
+- [x] **Step 3: Implement** — in `csvRows`'s row literal, insert directly after the `cscf_status` property:
 
 ```ts
       data_tier: l.tier,
@@ -465,9 +493,9 @@ test('a hostile reference cannot become a spreadsheet formula', () => {
 
 No `toCsv` change: its `cell()` already prefixes leading `= + - @` (verify the second test passes because of that existing guard, not a new one).
 
-- [ ] **Step 4: Run, expect all passing** (`node --test tests/unit/cbam-lines.test.mjs`)
+- [x] **Step 4: Run, expect all passing** (`node --test tests/unit/cbam-lines.test.mjs`)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/scripts/cbam-lines.ts tests/unit/cbam-lines.test.mjs
@@ -485,7 +513,7 @@ guard covers the free-text reference; a test now proves it."
 - Modify: `src/scripts/cbam-algos/cbam-app.ts` (`draftLine` ~line 880, `estimateLine` ~855, `run` ~831, element lookups ~685, plus a new exported `parseVerifiedFields`)
 - Test: `tests/unit/cbam-render.test.mjs` (append)
 
-- [ ] **Step 1: Write the failing tests for the pure validator**
+- [x] **Step 1: Write the failing tests for the pure validator**
 
 ```js
 /* ── verified-entry form validation (pure function; DOM wiring is e2e's job) ── */
@@ -518,9 +546,9 @@ test('parseVerifiedFields: zero direct is legal (100% scrap EAF is a real produc
 });
 ```
 
-- [ ] **Step 2: Run, expect failure** (no such export)
+- [x] **Step 2: Run, expect failure** (no such export)
 
-- [ ] **Step 3: Implement `parseVerifiedFields` in `cbam-app.ts`** (near the other small helpers, before `renderLineCard`):
+- [x] **Step 3: Implement `parseVerifiedFields` in `cbam-app.ts`** (near the other small helpers, before `renderLineCard`):
 
 ```ts
 /** What the verified panel contributes to a draft Line, or the reason it cannot.
@@ -546,7 +574,7 @@ export function parseVerifiedFields(v: {
 }
 ```
 
-- [ ] **Step 4: Add the form markup** in `cbam-calculator.astro`, after the `#cbScopeRow` closing `</div>` and before the mass/date row:
+- [x] **Step 4: Add the form markup** in `cbam-calculator.astro`, after the `#cbScopeRow` closing `</div>` and before the mass/date row:
 
 ```astro
           <!-- Emissions source. A dropdown, not a toggle, by design review: it sits in the
@@ -576,7 +604,7 @@ export function parseVerifiedFields(v: {
           </div>
 ```
 
-- [ ] **Step 5: Wire it in `cbam-app.ts`**
+- [x] **Step 5: Wire it in `cbam-app.ts`**
 
 Element lookups (next to the existing `scope`/`scopeRow` lookups at ~685):
 
@@ -634,13 +662,13 @@ Also call `syncVerifiedRows()` wherever `scopeRow.hidden` is recomputed (the goo
 
 (for `run()`, build the draft via `draftLine()` when lines are empty rather than re-reading raw fields — it already mirrors that path; keep the two consistent).
 
-- [ ] **Step 6: Run everything**
+- [x] **Step 6: Run everything**
 
 ```bash
 node --test tests/unit/cbam-render.test.mjs 2>&1 | tail -3 && npm run test:unit && npx astro check 2>&1 | tail -3
 ```
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/pages/cbam/cbam-calculator.astro src/scripts/cbam-algos/cbam-app.ts tests/unit/cbam-render.test.mjs
@@ -658,7 +686,7 @@ never leak into the next line."
 - Modify: `src/scripts/cbam-algos/cbam-app.ts` (`renderLineCard` ~434, `safeEstimates` ~898)
 - Test: `tests/unit/cbam-render.test.mjs` (append)
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```js
 /* ── the delta: what the verified choice is worth, both directions, never invented ── */
@@ -705,9 +733,9 @@ test('a default-tier line renders NO delta block at all', () => {
 });
 ```
 
-- [ ] **Step 2: Run, expect failure** (renderLineCard takes 3 args; no delta markup)
+- [x] **Step 2: Run, expect failure** (renderLineCard takes 3 args; no delta markup)
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `renderLineCard` gains a 4th parameter and two blocks. Import `Decimal from 'decimal.js'` at the top of `cbam-app.ts` (the global rounding config from `sefa.ts` is already loaded via the engine import chain; a 2-dp money subtraction is exact regardless).
 
@@ -779,9 +807,9 @@ function renderDelta(e: CertificateEstimate, comparison: CertificateEstimate | n
 
 …and the call site becomes `renderLineCard(p.l, p.e, i, p.cmp)`.
 
-- [ ] **Step 4: Run** — `node --test tests/unit/cbam-render.test.mjs && npm run test:unit && npx astro check`. Add minimal `.cb-attested` / `.cb-delta*` styles to the page's existing `<style>` (muted mono, green save / amber add, matching the card idiom).
+- [x] **Step 4: Run** — `node --test tests/unit/cbam-render.test.mjs && npm run test:unit && npx astro check`. Add minimal `.cb-attested` / `.cb-delta*` styles to the page's existing `<style>` (muted mono, green save / amber add, matching the card idiom).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/scripts/cbam-algos/cbam-app.ts src/pages/cbam/cbam-calculator.astro tests/unit/cbam-render.test.mjs
@@ -798,7 +826,7 @@ published default → the card says so instead of inventing a comparison."
 - Modify: `src/scripts/cbam-algos/cbam-app.ts` (`buildPrintDocument` — line rows ~531, §4 list ~594)
 - Test: `tests/unit/cbam-render.test.mjs` (the pinned-constant block at lines ~61–80, plus new tests)
 
-- [ ] **Step 1: Write the failing tests — pin BOTH states, hand-typed**
+- [x] **Step 1: Write the failing tests — pin BOTH states, hand-typed**
 
 Add to the constants block (do NOT import these from cbam-app.ts — being a separate hand-typed copy is the whole defence, per that block's own doc):
 
@@ -833,9 +861,9 @@ test('a verified line\'s print row is marked, with its reference', () => {
 });
 ```
 
-- [ ] **Step 2: Run, expect failure**
+- [x] **Step 2: Run, expect failure**
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In the ordinary line row (~544), extend the CN cell:
 
@@ -852,9 +880,9 @@ In the §4 list (~594), after the fingerprint `<li>` — conditional, matching t
         seen or confirmed. The optional reference is transcribed, not checked.</li>` : ''}
 ```
 
-- [ ] **Step 4: Run** — the §4 test is byte-sensitive; if it fails on whitespace, fix the PRODUCTION string to match the pinned constant, never the reverse.
+- [x] **Step 4: Run** — the §4 test is byte-sensitive; if it fails on whitespace, fix the PRODUCTION string to match the pinned constant, never the reverse.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/scripts/cbam-algos/cbam-app.ts tests/unit/cbam-render.test.mjs
@@ -871,7 +899,7 @@ the paraphrase-attack rule the test file documents."
 - Modify: `tests/e2e/cbam-lines.spec.ts` (append one scenario, reusing the file's existing helpers/selectors)
 - Modify: `docs/cbam-engine-reference.md` (new subsection under the estimator section)
 
-- [ ] **Step 1: Write the e2e scenario** (follow the file's existing setup — same `page.goto`, same add-line helpers):
+- [x] **Step 1: Write the e2e scenario** (follow the file's existing setup — same `page.goto`, same add-line helpers):
 
 ```ts
 test('verified figures: enter, attest, add, export — and the panel clears on switch-back', async ({ page }) => {
@@ -906,9 +934,9 @@ test('verified figures: enter, attest, add, export — and the panel clears on s
 });
 ```
 
-- [ ] **Step 2: Run** — `npx playwright test tests/e2e/cbam-lines.spec.ts` (Chromium installed per CI's order-of-operations fix). Adjust selectors ONLY to match the file's established helpers; the assertions stand.
+- [x] **Step 2: Run** — `npx playwright test tests/e2e/cbam-lines.spec.ts` (Chromium installed per CI's order-of-operations fix). Adjust selectors ONLY to match the file's established helpers; the assertions stand.
 
-- [ ] **Step 3: Update `docs/cbam-engine-reference.md`** — add under the estimator section:
+- [x] **Step 3: Update `docs/cbam-engine-reference.md`** — add under the estimator section:
 
 ```markdown
 ### Verified emissions entry
@@ -927,13 +955,13 @@ line is present. The card shows the same line through the default path — savin
 excess, both directions — whenever a default is published to compare against.
 ```
 
-- [ ] **Step 4: Full gates one last time**
+- [x] **Step 4: Full gates one last time**
 
 ```bash
 npm run test:unit && node scripts/cbam-sync-check.mjs && npx astro check 2>&1 | tail -3 && npx playwright test tests/e2e/cbam-lines.spec.ts
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tests/e2e/cbam-lines.spec.ts docs/cbam-engine-reference.md
