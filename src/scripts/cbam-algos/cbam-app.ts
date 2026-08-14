@@ -28,7 +28,7 @@ import {
   estimateFromPack, resolveThreshold, routesFor, selectIndirectFactorFromPack,
   type EstimatorInput, type EstimatorPack, type ThresholdView,
 } from './estimator/estimate-from-pack.ts';
-import type { CertificateEstimate } from './cbam/certificate-estimate.ts';
+import type { CertificateEstimate, DataTier } from './cbam/certificate-estimate.ts';
 import {
   csvRows, lineFingerprint, packSnapshotHash, sumTotals, thresholdByYear, toCsv, yearOf,
   type Line, type Totals, type YearThreshold,
@@ -130,12 +130,28 @@ const figure = (certs: string, costEur: string | null) => `
  * paper artefact and the card a user saw name the same tier differently ("Verified" vs "Verified
  * actual"), which is the kind of drift an auditor reads as two different claims.
  *
- * Takes the tier string rather than a stamp or a Line: the stamp says which tier actually PRICED
- * the figure, the Line says which tier was CLAIMED, and the two callers legitimately want
- * different ones (see buildPrintDocument's row for why the document reads the line).
+ * Takes the tier rather than a stamp or a Line: the stamp says which tier actually PRICED the
+ * figure, the Line says which tier was CLAIMED, and the two callers legitimately want different
+ * ones (see buildPrintDocument's row for why the document reads the line). `Line['tier']` is
+ * declared as the same two literals for the reason cbam-lines.ts gives, so both callers pass.
+ *
+ * SWITCHED ON EVERY MEMBER, WITH `never` IN THE DEFAULT ARM — this file's own exhaustiveness idiom
+ * (renderResult, tableFigures). It was written as a `string` parameter with a ternary, which was a
+ * silent widening of the engine's `DataTier` union: a third tier added upstream would have compiled
+ * here and confidently printed "Commission default + mark-up" for it, on BOTH the on-screen
+ * provenance stamp and the audit document, with nothing type-checking against it. Naming a tier
+ * wrongly on a document handed to an auditor is exactly the class of failure the `never` assertions
+ * elsewhere in this file exist to make a build error instead.
  */
-function tierLabel(tier: string): string {
-  return tier === 'actual-verified' ? 'Verified actual' : 'Commission default + mark-up';
+function tierLabel(tier: DataTier): string {
+  switch (tier) {
+    case 'actual-verified': return 'Verified actual';
+    case 'default+markup': return 'Commission default + mark-up';
+    default: {
+      const _exhaustive: never = tier;
+      return _exhaustive;
+    }
+  }
 }
 
 /* ── the provenance stamp — rendered on EVERY branch, refusals included ─────── */
@@ -657,10 +673,29 @@ export interface LineEstimateFailure {
  * this states the claim AS SUBMITTED, which is also what lineFingerprint hashes (position 6), so
  * the column and any digest printed beside it come from one place. It is also the only source that
  * exists on the LineEstimateFailure branch, which has no estimate to read a stamp from — so both
- * row branches can say the same thing in the same way. csvRows THROWS when a line's tier disagrees
- * with the tier that priced it; this document deliberately does not add that throw, because a
- * document that refuses to print is worse than the CSV refusing to export — and both artefacts are
- * built from the same `lastPairs`, so the CSV is where that mispairing is already caught loudly.
+ * row branches can say the same thing in the same way.
+ *
+ * csvRows THROWS when a line's tier disagrees with the tier that priced it; this document
+ * deliberately does not add that throw, because a document that refuses to print is worse than the
+ * CSV refusing to export. AN EARLIER VERSION OF THIS COMMENT DEFENDED THAT DECISION BY CLAIMING THE
+ * CSV ALREADY CATCHES THE MISPAIRING FOR BOTH ARTEFACTS. IT DOES NOT, AND THE TWO EXPORTS ARE NOT
+ * BUILT ALIKE — review disproved both halves:
+ *
+ *   - onCsv calls `csvRows(ok.map((p) => p.l), ok.map((p) => p.e!), …)`. Both arrays are projected
+ *     from the SAME pair objects in the same order, so the CSV's pairing is self-consistent by
+ *     construction; its tier guard can never see a line paired with another line's estimate. That
+ *     guard still earns its place (it catches a line whose OWN estimate was computed at the other
+ *     tier), but it is not a net that spans the two exports.
+ *   - onDoc passes the live `lines` array as one half and `lastPairs.map(…)` as the other. THIS
+ *     DOCUMENT IS THE ONLY ARTEFACT THAT PAIRS ACROSS TWO ARRAYS, so it is the only place a
+ *     cross-array mispairing could arise, and nothing upstream would have caught it first.
+ *
+ * The decision stands anyway, because the mispairing is not reachable: `lines` is mutated in
+ * exactly two places (onAdd's push, onOutClick's remove splice), and each is followed synchronously
+ * by renderAll() — which reassigns `lastPairs` — with no `await` between the mutation and the
+ * render. So `lines` and `lastPairs` cannot be observed out of step by the time a user can click
+ * Export. What guards this document is that invariant plus buildPrintDocument's own LENGTH check
+ * below, not a throw living in the CSV.
  *
  * The reference is gated on the tier, not on its own truthiness — the same gate renderLineCard
  * uses. parseVerifiedFields cannot attach a reference to a defaults-tier line, so this is

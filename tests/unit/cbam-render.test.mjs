@@ -1265,10 +1265,16 @@ test('the document carries NO verified caveat when no line claims the verified t
     'nothing in a defaults-only document may speak of attested figures');
   assert.doesNotMatch(html, /Verified actual/,
     'and no row may be marked as priced from verified data');
-  // The four unconditional ones are unaffected by the gate.
-  for (const c of [CAVEAT_CSCF, CAVEAT_ARTICLE_9, CAVEAT_COMPLETENESS, CAVEAT_FINGERPRINT]) {
-    assert.ok(html.includes(c), 'the four unconditional caveats print regardless of tier');
-  }
+  // The four unconditional ones are unaffected by the gate — present, AND IN ORDER. The order
+  // assertion lived only in the verified-present test above, which meant a reorder that landed in
+  // a defaults-only document (the overwhelmingly common one) had nothing asserting against it:
+  // swapping, say, the Art 9 and completeness caveats here left every test green. Both branches of
+  // the gate now pin the sequence, not just the membership.
+  const order = [CAVEAT_CSCF, CAVEAT_ARTICLE_9, CAVEAT_COMPLETENESS, CAVEAT_FINGERPRINT]
+    .map((c) => html.indexOf(c));
+  assert.ok(order.every((i) => i >= 0), 'the four unconditional caveats print regardless of tier');
+  assert.deepEqual(order, [...order].sort((a, b) => a - b),
+    'and they keep their order in a defaults-only document too');
 });
 
 test('the §4 caveat stands even when the verified line was REFUSED', () => {
@@ -1311,6 +1317,26 @@ test('§1 shows no reference label for a verified line that cited none', () => {
   assert.match(html, /<td[^>]*>Verified actual<\/td>/, 'the row is still marked verified');
   assert.doesNotMatch(html, /ref\s*<\/td>/i, 'no dangling label for a reference never given');
   assert.doesNotMatch(html, /— ref\b/, 'and no empty separator either');
+});
+
+test('§1 prints NO reference beside a defaults-tier row, even one carrying a stray reference', () => {
+  // tierCell gates the reference on the TIER, not on the reference's own truthiness, and nothing
+  // pinned that: deleting `l.tier === 'actual-verified' &&` from the gate left all 375 tests green.
+  // What it prevents is a row reading "Commission default + mark-up — ref DNV-2026-0042", which an
+  // auditor reads as a named verifier having certified the Commission's own MARKED-UP value — the
+  // one number in this document nobody verified and nobody could.
+  //
+  // parseVerifiedFields cannot build this line today (its defaults branch returns the tier alone
+  // and reads no other field), so the gate is belt-and-braces — but buildPrintDocument is exported
+  // and takes whatever Line it is handed, and a future construction site that carries the panel's
+  // fields through unconditionally is exactly the drift the gate exists for.
+  const d = dline({ verifiedRef: 'DNV-2026-0042' });
+  const html = docOf([d], [defaultOf(d)]);
+  assert.match(html, /<td[^>]*>Commission default \+ mark-up<\/td>/,
+    'the tier cell states the defaults corpus and STOPS THERE — the cell closes on the label');
+  assert.doesNotMatch(html, /DNV-2026-0042/,
+    'the reference must appear nowhere in a document whose only line was priced from defaults');
+  assert.doesNotMatch(html, /— ref\b/, 'and no separator survives without it');
 });
 
 test('§1 escapes the verifier reference — it is free text the user typed', () => {
