@@ -486,7 +486,20 @@ const ATTESTED_NOTE =
  * string that reaches innerHTML in this file. Rendered only when one was actually cited: an
  * empty `Ref:` label reads as a reference that failed to load rather than one never given.
  */
-function renderAttestation(line: Line): string {
+/**
+ * SELF-GATING, and takes the narrowest shape it needs rather than a whole `Line` — because it has
+ * TWO callers with different data. The line card has a `Line`; the live preview (run()) has only
+ * parseVerifiedFields' `{ tier, seeDirect?, … }`, which is not yet a line and never will be if the
+ * visitor does not click Add.
+ *
+ * The gate lives IN here for the same reason: the preview was shipped without this sentence, and a
+ * verified figure with no attestation beside it is the one state ATTESTED_NOTE exists to prevent —
+ * a mark-up-free, materially LOWER liability whose only provenance is a stamp row reading "Verified
+ * actual", which reads as though the tool validated something. A caller that forgets an external
+ * `if` reintroduces exactly that. Now it cannot: pass anything, and the tier decides.
+ */
+export function renderAttestation(line: { tier: Line['tier']; verifiedRef?: string }): string {
+  if (line.tier !== 'actual-verified') return '';
   const ref = line.verifiedRef ? ` Ref: ${esc(line.verifiedRef)}` : '';
   return `
     <p class="cb-sub cb-attested">${ATTESTED_NOTE}${ref}</p>`;
@@ -605,7 +618,8 @@ export function renderLineCard(
         <button type="button" class="cb-line-x" data-remove="${esc(line.id)}" aria-label="Remove line ${index + 1}">Remove</button>
       </div>
       ${renderResult(e)}
-      ${verified ? renderAttestation(line) + renderVerifiedDelta(e, comparison) : ''}
+      ${renderAttestation(line)}
+      ${verified ? renderVerifiedDelta(e, comparison) : ''}
     </article>`;
 }
 
@@ -1311,7 +1325,14 @@ export function initCbam(): void {
       // exposure because "you may owe nothing at all" outranks "here is what you
       // would owe".
       const t = resolveThreshold(pack, { cn: cn!.value, massT: mass!.value, date: date!.value });
-      out!.innerHTML = (t ? renderThreshold(t) : '') + renderResult(e);
+      // The attestation travels with the PREVIEW too, not just the added line's card. This is the
+      // surface with the largest audience — it is what the page shows before anyone clicks Add, so
+      // a visitor who never adds a line sees only this — and on the verified tier it shows the
+      // materially lower of the two liabilities. Shipping that figure with no statement of whose
+      // claim it is was the one gap the final review would not sign off. The DELTA stays off the
+      // preview deliberately (it would cost a second engine call per keystroke through the debounce,
+      // and the comparison is a card-level affordance); the caveat does not get that latitude.
+      out!.innerHTML = (t ? renderThreshold(t) : '') + renderResult(e) + renderAttestation(v.ok);
     } catch (err) {
       // A DomainError is the engine refusing, and it names what is missing. Show it
       // rather than a generic failure — the reason is the useful part.

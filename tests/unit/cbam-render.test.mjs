@@ -4,8 +4,8 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import {
-  buildPrintDocument, decorateSnapshot, inputFor, nextRoute, parseVerifiedFields, renderLineCard,
-  renderResult, renderThreshold, renderTotals, renderYearThreshold, verifiedInputOf,
+  buildPrintDocument, decorateSnapshot, inputFor, nextRoute, parseVerifiedFields, renderAttestation,
+  renderLineCard, renderResult, renderThreshold, renderTotals, renderYearThreshold, verifiedInputOf,
 } from '../../src/scripts/cbam-algos/cbam-app.ts';
 import {
   estimateFromPack, resolveThreshold, routesFor,
@@ -1028,6 +1028,29 @@ const comparisonOf = (l) => {
   const d = defaultOf(l);
   return d.status === 'unavailable' ? null : d;
 };
+
+/* ── the attestation gates itself, so no surface can price a verified figure bare ──────────── */
+
+test('renderAttestation gates on the TIER, not on an external if — the preview shipped without one', () => {
+  // The live preview (run()) renders before any line is added: it is what the page shows on load,
+  // and it is all a visitor who never clicks Add ever sees. It priced a verified line — the
+  // materially LOWER of the two liabilities, since verified skips the mark-up — with no statement
+  // of whose claim the figure was. The gate moved inside this function so a caller CANNOT omit it.
+  //
+  // Asserted on the parseVerifiedFields shape, not a Line: that is precisely what the preview
+  // holds, and a signature that demanded a whole Line is what forced the gate outside in the
+  // first place.
+  const previewShape = { tier: 'actual-verified', verifiedRef: 'DNV-2026-0042' };
+  assert.ok(renderAttestation(previewShape).includes(ATTESTED_NOTE),
+    'a verified figure must carry its attestation on every surface that prices it, card or preview');
+  assert.equal(renderAttestation({ tier: 'default+markup' }), '',
+    'a Commission-default figure makes no attested claim, so it must say nothing');
+  // Absent reference must not print a bare "Ref:" label with nothing after it.
+  assert.equal(renderAttestation({ tier: 'actual-verified' }),
+    renderAttestation({ tier: 'actual-verified', verifiedRef: '' }),
+    'no reference and an empty reference read identically here');
+  assert.doesNotMatch(renderAttestation({ tier: 'actual-verified' }), /Ref:/);
+});
 
 test('renderLineCard: a verified line says the figures are the user\'s own claim, unconfirmed here, and cites the reference', () => {
   const l = vline({ verifiedRef: 'DNV-2026-0042' });
