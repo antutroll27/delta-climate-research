@@ -50,6 +50,16 @@ from a threshold verdict that could only ever say `indeterminate` to one that
 can say `below_threshold` on the user's own attestation, and from no export at
 all to a CSV and a printable audit document. Full detail in §4.3 and §4.4.
 
+### Not yet live: verified emissions entry (14 August 2026)
+
+On the `worktree-cbam-verified-emissions` branch, not on `deltaclimate.earth` at
+the time of writing — flagged as such rather than folded into the table above,
+which is a record of what shipped. Each line now chooses whether it is priced
+from the Commission's defaults or from the importer's own verified figures,
+which skip the mark-up. It touches the line model, the CSV, the line card, the
+printable document and the form; no vendored engine file changed, and
+`cbam-sync-check.mjs` still reports the engine intact. Full detail in §4.5.
+
 ---
 
 ## 2. The formulas
@@ -231,12 +241,14 @@ recover 19 of the remaining 23. **Not yet implemented.**
 ### 4.1 Inputs
 
 Good (CN code) · Country of origin · Production route · Emissions scope ·
-Net mass (tonnes) · Import date.
+Net mass (tonnes) · Import date · Emissions data source.
 
 The route list is never free-typed — it is derived from the routes the defaults
 corpus actually publishes for that CN and origin. The emissions-scope control
 appears only for goods the Commission publishes an indirect default for (cement,
-fertilisers, sintered iron ore); elsewhere it cannot change the answer.
+fertilisers, sintered iron ore); elsewhere it cannot change the answer. The
+emissions data source chooses between the Commission's published defaults and
+the importer's own verified figures — §4.5.
 
 ### 4.2 What it returns
 
@@ -308,11 +320,126 @@ live pack:
 | `25070080` / AO / (A), 100 t | 24.2 | 64.935 | 4.4 | 4.4 | Free allocation exceeds direct emissions; the deduction floors at 0 and the whole bill is the indirect component |
 
 **Printable document.** Four sections — what you asked, what we computed, on
-what authority, and what this does not tell you. The last section is the
-differentiator: it states the CSCF is unpublished and every figure a floor
-(§4.2), that Art 9 carbon-price deductions are not modelled, that any
+what authority, and what this does not tell you.
+
+§1 is a **9-column** table, one row per line as entered (a line the engine threw
+on is carried through marked, never dropped):
+
+```
+CN · Origin · Route · Mass t · Import date · Data tier · Certificates · Cost · Benchmark authority
+```
+
+`Data tier` sits between `Import date` and `Certificates` and is read off the
+**line**, not off the estimate's provenance stamp: it states the claim as
+submitted, which is also what the line fingerprint hashes, and it is the only
+source that exists at all for a thrown line. See §4.5.
+
+§4 is the differentiator: it states the CSCF is unpublished and every figure a
+floor (§4.2), that Art 9 carbon-price deductions are not modelled, that any
 below-threshold verdict rests on the user's own completeness statement, and
 that the line fingerprint covers inputs as typed, never a source document.
+A **fifth caveat is conditional** and appears only when at least one line was
+entered at the verified tier (§4.5) — an unconditional one would be a claim
+about attested data on a document that contains none.
+
+### 4.5 Verified emissions entry
+
+Every line now chooses its emissions source: the Commission's published default
+values, or the importer's own verified figures. What the second choice buys is
+one specific thing — **the escape from the mark-up.**
+
+The defaults corpus does not publish a bare intensity; it publishes an intensity
+plus a mark-up, and the shipped pack carries four bands (**1, 10, 20 and 30%**,
+across 41,100 factor rows). The mark-up prices *not having data*. It is not a
+property of the good, and an operator who holds an accredited verifier's figures
+is not the importer it was written for. Verified figures reach `SEE` unmarked.
+
+Worked on the design doc's own example line — CN 72061000, India, route (C),
+100 t, import date 2026-03-15, read from the live pack:
+
+| Path | Intensity applied | Embedded, 100 t | Certificate cost |
+| --- | --- | --- | --- |
+| Commission default | 2.64 × 1.10 = **2.904** | 290.4 tCO₂e | €12,420.84 |
+| Verified | **2.31**, as attested | 231 tCO₂e | €7,944.45 |
+
+The €4,476.39 gap on this one line is the mark-up, and nothing else — both paths
+are priced through a single input builder that differs in exactly one field, so
+the difference cannot be an artefact of two hand-written constructions drifting.
+
+**The figures are whole-good, precursors included.** That is the scope a
+verifier's CBAM report states, and it is what keeps the line on **Column B**
+(§2.3). The column follows the SCOPE of the figure, never whether it was
+verified — so a verified whole-good figure is deducted against the same Column B
+benchmark a defaults line is. Process-only figures, with a precursor list
+declared separately, are Column A and remain out of scope for exactly the reason
+§2.3 gives: a screening tool can obtain neither an audited process-only figure
+nor the precursor list it is meaningless without.
+
+**The tool transcribes an attested claim. It never confirms one.** The
+attestation tick is the gate — a figure without it is a half-made claim and Add
+refuses it by name. There is no path by which this tool sees a verification
+report, and three surfaces say so rather than leaving it to be inferred: the
+line card carries an attestation paragraph in the user's own voice, §4 of the
+printable document gains its conditional fifth caveat, and the reference is
+carried as free text, transcribed, never checked. The reference is gated on the
+tier, not on its own presence — a reference must never print beside "Commission
+default + mark-up", where it would read as a named verifier having certified the
+Commission's own marked-up value.
+
+**Fail closed on the figure itself.** Nothing about a verified line is allowed
+to produce a confident number from an input the tool did not understand:
+
+| Entered | Outcome |
+| --- | --- |
+| empty | inline refusal naming the field, and offering the defaults tier back |
+| prose, `Infinity`, whitespace only | inline refusal, quoting what was typed |
+| negative | its own inline refusal — *enter zero if the verified figure really is nil* |
+| `0x10`, `1_000`, `5.`, `+5` | reaches the engine and returns an `unavailable` refusal card naming the input |
+| `0` | **accepted** — a 100%-scrap EAF producer genuinely attests near-zero, and that is the importer this tier exists to reward |
+| attestation not ticked | Add refuses; nothing is committed at either tier |
+
+Two layers, deliberately. The form's own parse catches the ordinary cases inline,
+beside the field the user is still filling. The stricter rule — the one that
+refuses non-decimal radix literals and the trailing-point/leading-sign forms
+`Number()` happily reads — lives in the vendored `verifiedPerT` and is **never
+copied into the UI**: a copied regex is a second rule that drifts from the first.
+Its refusals fail closed one step later, as a refusal card rather than an inline
+message.
+
+**Export.** The CSV gains two columns:
+
+| Column | Contents |
+| --- | --- |
+| `data_tier` | `default+markup` or `actual-verified` — the line's own claim, as submitted |
+| `verified_reference` | the reference as transcribed; empty string on a defaults row |
+
+`data_tier` is read off the line rather than off the estimate's stamp, so it
+agrees with what the line fingerprint hashes. The two are still cross-checked:
+`csvRows` **throws** if a line's stated tier disagrees with the tier that
+actually priced it, and the export surfaces that refusal rather than writing a
+file whose provenance column is a guess.
+
+**The delta, in both directions.** The card prints what the verified choice was
+worth against the same line priced from the defaults — *saves* when the verified
+figure is the cheaper one, *adds* when it is not. A genuinely dirty producer can
+exceed even the marked-up default, and a card that only ever said "saves" would
+be an advertisement rather than an estimate. Where no honest comparison exists —
+the Commission publishes no default for that good, origin and route, or the
+default path was not priced — the card says which of those is the case instead of
+leaving a silence a reader would fill in as zero. The delta is presentation, not
+record: it appears on the card alone, and deliberately in neither export.
+
+**What verified entry does not change.** Worth stating plainly, because the
+mark-up escape is easy to over-read:
+
+- **The free-allocation benchmark.** SEFA is a property of the good, so the same
+  Column B benchmark, CBAM factor and free allocation apply on both paths.
+- **The CSCF.** Both figures are what-ifs at the assumed CSCF (§4.2), so the
+  difference between them is one too — the card says so in the same sentence.
+- **The certificate price.** Unchanged; it is a quarterly published figure.
+- **The refusal when a benchmark is missing.** A verified figure cannot rescue a
+  good the pack has no benchmark for. The line still fails closed, still names
+  the missing selector, and still shows no number.
 
 ---
 
@@ -407,15 +534,20 @@ pack-snapshot hash before it renders.
   committed manifest. The engine in the website is a copy of the SaaS's, and this
   is the tripwire against drift.
 - CBM: 379/379 tests, typecheck clean. Angad (whole repo, `npm run verify`):
-  `astro check` 0 errors, **261/261 unit** (`npm run test:unit`, all suites —
-  CBAM's own share is 80/80, in `cbam-render.test.mjs` and
+  `astro check` 0 errors, **376/376 unit** (`npm run test:unit`, all suites —
+  CBAM's own share is 131, being 84 in `cbam-render.test.mjs` and 47 in
   `cbam-lines.test.mjs`), publication contract 80 checks / 0 violations. The
-  CBAM Playwright suite (`tests/e2e/cbam-lines.spec.ts`, the only e2e file this
-  branch touches) is **19/19** — up from 16 at the last count of this line,
-  which predated both the 77-test unit file this branch grew to 80 and the
-  17-test e2e file this branch grew to 19. This line is now the number `npm
-  run verify` and `npx playwright test tests/e2e/cbam-lines.spec.ts` print
-  today, not a carried-forward figure from before either grew.
+  CBAM Playwright suite (`tests/e2e/cbam-lines.spec.ts`, the only e2e file the
+  CBAM work touches) is **21/21**. This line is the number those commands print
+  today, not a carried-forward figure — the 261/80/19 it previously read
+  predated the verified-emissions work entirely, and the whole-repo unit figure
+  had also drifted with suites outside CBAM.
+- The verified tier's own coverage is split on purpose. `parseVerifiedFields`,
+  `inputFor`, `renderLineCard` and `buildPrintDocument` are pure and unit-tested
+  directly; the form wiring is not reachable that way — `syncVerifiedRows` is a
+  closure over the page's own elements — so the tier control, the attestation
+  gate, the panel-clearing asymmetry and the tier's survival into the exported
+  CSV are pinned as browser tests instead.
 
 CBM's own `differential.test.ts` had pinned this gap at 382 priceable / 183
 stranded for India and concluded it *"needs corpus research rather than a code
