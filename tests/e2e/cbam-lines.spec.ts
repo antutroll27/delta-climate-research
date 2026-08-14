@@ -45,6 +45,15 @@ const GOOD_LINE: LineInput = { cn: '25231000', country: 'DZ', route: '(A)', mass
 // iron_and_steel-sector line that counts toward its year's threshold mass.
 const REFUSED_LINE: LineInput = { cn: '72052100', country: 'IN', route: '(C)', mass: '60', date: '2026-03-15' };
 
+// The design doc's §6 worked example: semi-finished iron/steel from India on route
+// (C). Priced on BOTH tiers against the shipped pack, which is what makes it the one
+// line that can demonstrate the delta — a good the Commission publishes no default
+// for would show the "nothing to compare against" branch instead. The Commission
+// default path gives €12,420.84; 2.31 tCO₂e/t verified gives €7,944.45.
+const VERIFIED_LINE: LineInput = { cn: '72061000', country: 'IN', route: '(C)', mass: '100', date: '2026-03-15' };
+const VERIFIED_DIRECT = '2.31';
+const VERIFIED_REF = 'DNV-2026-0042';
+
 async function setLine(page: Page, line: LineInput): Promise<void> {
   await page.fill('#cbCn', line.cn);
   // fill() only ever dispatches `input`; #cbCn's route/country sync listens on `change`.
@@ -304,6 +313,122 @@ test.describe('multi-line CBAM estimate — exports', () => {
     const print = page.locator('#cbPrint');
     await expect(print).toContainText('What this does not tell you');
     await expect(print).toContainText('inputs as entered');
+  });
+});
+
+test.describe('multi-line CBAM estimate — the verified tier', () => {
+  test('the whole verified flow: reveal the panel, refuse a half-made claim, attest, and carry the claim into the CSV', async ({ page }) => {
+    // Every unit test around this feature calls parseVerifiedFields / renderLineCard / csvRows
+    // DIRECTLY. Nothing until now proved the form actually reaches them: that #cbTier reveals the
+    // panel, that a missing tick stops the Add rather than quietly pricing at the wrong tier, and
+    // that the tier and reference survive all the way out to the exported file. This is the one
+    // test that walks the path an importer actually walks.
+    await page.goto('/cbam/cbam-calculator/');
+    await setLine(page, VERIFIED_LINE);
+
+    // 1. The panel is revealed by the tier control, not present from the start — the defaults
+    //    path must not ask an importer for figures they are not claiming.
+    const panel = page.locator('#cbVerifiedRow');
+    await expect(panel).toBeHidden();
+    await page.selectOption('#cbTier', 'actual-verified');
+    await expect(panel).toBeVisible();
+
+    // 2. A figure without the attestation is a half-made claim, and Add must REFUSE it. This is
+    //    the tool's central rule: it transcribes an attested claim, so an unattested figure has
+    //    nothing to transcribe. The refusal must also SAY which field is missing — #cbStatus is
+    //    the only channel a screen-reader user has here.
+    await page.fill('#cbSeeDirect', VERIFIED_DIRECT);
+    await expect(page.locator('#cbAttest')).not.toBeChecked();
+    await page.click('#cbAdd');
+    await expect(page.locator('.cb-line')).toHaveCount(0);
+    await expect(page.locator('#cbStatus')).toContainText('Tick the attestation');
+    // ...and the button is released again, so the refusal is recoverable rather than terminal.
+    await expect(page.locator('#cbAdd')).toBeEnabled();
+
+    // 3. Tick it, cite a reference, and the same click now commits the line.
+    await page.check('#cbAttest');
+    await page.fill('#cbRef', VERIFIED_REF);
+    await page.click('#cbAdd');
+    await expect(page.locator('.cb-line')).toHaveCount(1);
+
+    const card = page.locator('.cb-line');
+    // The provenance row states WHICH corpus priced the line...
+    await expect(card).toContainText('Verified actual');
+    // ...and the attestation paragraph states WHOSE claim the number is, plus the reference as
+    // transcribed. The two are complementary, not duplicates (renderLineCard's own doc).
+    await expect(card).toContainText('your own attested claim');
+    await expect(card).toContainText('This tool has not confirmed them');
+    await expect(card).toContainText(`Ref: ${VERIFIED_REF}`);
+    // The pinned arithmetic, both figures on screen: the verified estimate, and the Commission
+    // default it is measured against. "saves" — this line's verified figure really is the
+    // cheaper one, and the card must say so in that direction (the "adds" direction is covered
+    // by the unit tests, which can reach a producer dirtier than the marked-up default).
+    await expect(card).toContainText('€7,944.45');
+    await expect(card).toContainText('The Commission default would give €12,420.84');
+    await expect(card).toContainText('your verified data saves €4,476.39');
+
+    // 4. The claim reaches the exported file — the artefact that leaves the browser. A tier that
+    //    were lost here would export a verified line indistinguishable from a Commission-priced
+    //    one, which is precisely the mark-up-skipping row an auditor needs to be able to find.
+    const [download] = await Promise.all([
+      page.waitForEvent('download'),
+      page.click('#cbCsv'),
+    ]);
+    const filePath = await download.path();
+    if (!filePath) throw new Error('download produced no local file path');
+    const [headerLine, ...rowLines] = readFileSync(filePath, 'utf8').trim().split('\n');
+    const header = parseCsvRow(headerLine!);
+    expect(header).toContain('data_tier');
+    expect(header).toContain('verified_reference');
+    const row = parseCsvRow(rowLines[0]!);
+    expect(row[header.indexOf('data_tier')]).toBe('actual-verified');
+    expect(row[header.indexOf('verified_reference')]).toBe(VERIFIED_REF);
+  });
+
+  test('switching tier away and back keeps the typed claim, but never keeps an indirect figure behind a hidden row', async ({ page }) => {
+    // THE PANEL-CLEARING ASYMMETRY, which has no unit coverage at all: syncVerifiedRows is a
+    // closure over the form's own elements, so it cannot be imported and called — only driven.
+    //
+    // #cbTier has exactly two options, and a CLOSED <select> fires `change` on every arrow step,
+    // so ↓ then ↑ is one keystroke pair a keyboard user performs by accident. Destroying the
+    // panel on that round trip would silently delete a typed figure, a ticked attestation and a
+    // verifier reference, with no undo — and buy nothing, since parseVerifiedFields returns on
+    // the tier alone and reads no other field on the defaults branch.
+    await page.goto('/cbam/cbam-calculator/');
+    await setLine(page, VERIFIED_LINE);
+    await page.selectOption('#cbTier', 'actual-verified');
+    await expect(page.locator('#cbVerifiedRow')).toBeVisible();
+
+    await page.fill('#cbSeeDirect', VERIFIED_DIRECT);
+    await page.check('#cbAttest');
+    await page.fill('#cbRef', VERIFIED_REF);
+
+    // The one field that IS destroyed, seeded through the DOM rather than typed: #cbSeeIndirect
+    // sits behind #cbSeeIndirectRow, which this good never shows (the Commission publishes no
+    // indirect default for 72061000), so no click can fill it here. That is exactly the state
+    // the guard exists for — a figure typed for a good that HAD an indirect side, stranded when
+    // the good changed. On the verified path the engine adds that number on scope alone, with no
+    // pack lookup to fall back on, so a value the user can no longer see would keep inflating
+    // every later estimate. Fail closed: it must not survive.
+    await page.evaluate(() => {
+      (document.getElementById('cbSeeIndirect') as HTMLInputElement).value = '0.4';
+    });
+
+    // The arrow-step round trip, through the real control both ways.
+    await page.selectOption('#cbTier', 'default+markup');
+    await expect(page.locator('#cbVerifiedRow')).toBeHidden();
+    await page.selectOption('#cbTier', 'actual-verified');
+    await expect(page.locator('#cbVerifiedRow')).toBeVisible();
+
+    // Three survive — the user's work is still there, exactly as typed.
+    await expect(page.locator('#cbSeeDirect')).toHaveValue(VERIFIED_DIRECT);
+    await expect(page.locator('#cbAttest')).toBeChecked();
+    await expect(page.locator('#cbRef')).toHaveValue(VERIFIED_REF);
+    // One does not — and the line still prices, from the direct figure alone.
+    await expect(page.locator('#cbSeeIndirect')).toHaveValue('');
+    await page.click('#cbAdd');
+    await expect(page.locator('.cb-line')).toHaveCount(1);
+    await expect(page.locator('.cb-line')).toContainText('€7,944.45');
   });
 });
 
