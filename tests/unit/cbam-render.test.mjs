@@ -4,7 +4,7 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import {
-  buildPrintDocument, decorateSnapshot, nextRoute, parseVerifiedFields, renderLineCard,
+  buildPrintDocument, decorateSnapshot, inputFor, nextRoute, parseVerifiedFields, renderLineCard,
   renderResult, renderThreshold, renderTotals, renderYearThreshold, verifiedInputOf,
 } from '../../src/scripts/cbam-algos/cbam-app.ts';
 import {
@@ -74,6 +74,19 @@ const CAVEAT_COMPLETENESS =
 const CAVEAT_FINGERPRINT =
   '<li>Line fingerprints cover inputs as entered; no source document exists behind them. They\n'
   + '        are not customs provenance.</li>';
+/**
+ * The fifth caveat, and the only CONDITIONAL one: it appears iff at least one line was entered at
+ * the verified tier. Both states are pinned below (present when one is, absent when none is) —
+ * an unconditional caveat would be a claim about attested data on a document that contains none,
+ * and a missing one would leave the mark-up-skipping figures looking as Commission-backed as
+ * every other row. Hand-typed here for exactly the reason the four above are; see the doc comment
+ * on this block.
+ */
+const CAVEAT_VERIFIED =
+  '<li>Lines marked verified in §1 were priced from the user\'s own attested figures, which skip\n'
+  + '        the mark-up the Commission\'s default values carry. Those figures are a claim, from a\n'
+  + '        verification this tool has not seen and cannot confirm; any reference cited beside them\n'
+  + '        is transcribed as entered, never checked.</li>';
 const ATTESTATION_SENTENCE =
   '<p class="cb-sub">Below the threshold an importer owes nothing for 2026. This verdict rests '
   + 'on your attested statement that the list is complete — it is your completeness claim, '
@@ -1000,16 +1013,16 @@ const vline = (over = {}) => ({
   id: 'L1', cn: '72061000', country: 'IN', route: '(C)', scope: 'direct',
   massT: '100', date: '2026-03-15', tier: 'actual-verified', seeDirect: '2.31', ...over,
 });
-/** The line through its OWN tier, exactly as estimateLine does it in cbam-app.ts. */
-const estOf = (l) => estimateFromPack(pack, {
-  cn: l.cn, country: l.country, route: l.route, massT: l.massT, date: l.date,
-  emissionsScope: l.scope, verified: verifiedInputOf(l),
-});
-/** The same line through the Commission-default path — `verified` simply omitted. */
-const defaultOf = (l) => estimateFromPack(pack, {
-  cn: l.cn, country: l.country, route: l.route, massT: l.massT, date: l.date,
-  emissionsScope: l.scope,
-});
+/**
+ * The line through its OWN tier, exactly as estimateLine does it in cbam-app.ts — through the
+ * SAME builder production uses, not a hand-typed copy of it. These two helpers used to build the
+ * EstimatorInput by hand, which is precisely why the delta tests below could not have noticed
+ * estimateLine and defaultPathComparison drifting apart: every test held its own third copy of
+ * the construction. See inputFor's own doc, and the drift test at the foot of this file.
+ */
+const estOf = (l) => estimateFromPack(pack, inputFor(l, verifiedInputOf(l)));
+/** The same line through the Commission-default path — `verified` omitted, nothing else changed. */
+const defaultOf = (l) => estimateFromPack(pack, inputFor(l, undefined));
 /** What safeEstimates threads to the card: an unavailable default path is no comparison at all. */
 const comparisonOf = (l) => {
   const d = defaultOf(l);
@@ -1179,4 +1192,220 @@ test('a verified line with no usable figure renders a refusal — it never throw
     () => csvRows([line], [e], new Map([['l1', 'deadbeef']]), 'snap', pack),
     'a refused verified line must export as a row, not blow the whole file up',
   );
+});
+
+/* ── the printable document's verified surfaces (Task 7) ─────────────────────
+ *
+ * The document is the artefact an importer hands to an auditor, so the two things a verified
+ * line changes about it are both honesty surfaces, not decoration:
+ *
+ *   §1 must SAY which rows were priced from attested figures — otherwise a mark-up-skipping row
+ *      sits in the same table as the Commission-priced ones with nothing distinguishing it, and
+ *      the reference the importer cited never appears in the document at all.
+ *   §4 must carry the matching caveat — CONDITIONALLY, because a document with no verified line
+ *      making a claim about attested data would be describing a document other than itself.
+ *
+ * Both states of §4 are pinned. The absence case is not hypothetical bookkeeping: every
+ * buildPrintDocument test above this section passes lines with no `tier` field at all (they
+ * predate the field), and those must keep reading as default-tier — asserted directly below.
+ */
+
+/** A plain Commission-defaults line, tier stated. */
+const dline = (over = {}) => ({
+  id: 'D1', cn: '25231000', country: 'DZ', route: '(A)', scope: 'direct_and_indirect',
+  massT: '100', date: '2026-03-15', tier: 'default+markup', ...over,
+});
+/** The document, built over whatever lines/results a test hands it. */
+const docOf = (lines, results) => buildPrintDocument({
+  lines, results,
+  yearCards: [], totals: sumTotals(results.filter((r) => !('failed' in r))),
+  packSnapshot: 'f'.repeat(64), rulePackages: ['eu-cbam-2026-defaults-v2@v1'],
+  pack, generatedOn: '2026-08-08',
+});
+/** How many cells each <tr> carries — the table's rectangularity, measured rather than assumed. */
+const rowWidths = (html) => [...html.matchAll(/<tr>([\s\S]*?)<\/tr>/g)]
+  .map((m) => (m[1].match(/<t[dh]\b/g) ?? []).length);
+
+test('the document gains a fifth §4 caveat when a line was priced from attested figures', () => {
+  const v = vline({ verifiedRef: 'DNV-2026-0042' });
+  const html = docOf([v], [estOf(v)]);
+  assert.ok(html.includes(CAVEAT_VERIFIED),
+    'the verified caveat must match the pinned text exactly — word for word, punctuation for '
+    + 'punctuation (see the constants block at the top of this file for why)');
+  // The four it joins must survive untouched and in order — a fifth caveat that displaced or
+  // reworded one of them would be a net loss of honesty dressed as an addition.
+  const order = [CAVEAT_CSCF, CAVEAT_ARTICLE_9, CAVEAT_COMPLETENESS, CAVEAT_FINGERPRINT,
+    CAVEAT_VERIFIED].map((c) => html.indexOf(c));
+  assert.ok(order.every((i) => i >= 0), 'all five caveats must be present, each exactly as pinned');
+  assert.deepEqual(order, [...order].sort((a, b) => a - b),
+    'the four original caveats keep their order, and the new one joins at the end');
+  // The claim and its negation, the shape every other caveat assertion uses: a paraphrase that
+  // kept "attested" and appended a reassurance would pass a keyword-only test.
+  assert.match(html, /has not seen and cannot confirm/i, 'the gap must be stated as a gap');
+  assert.doesNotMatch(html, /(we|this tool) (have|has) (confirmed|verified|checked)/i,
+    'the document must never claim it confirmed an attested figure');
+  assert.doesNotMatch(html, /independently (verified|confirmed)/i);
+  assert.doesNotMatch(html, /reference .{0,30}(has been|was) checked/i,
+    'the reference is transcribed, never checked');
+});
+
+test('the document carries NO verified caveat when no line claims the verified tier', () => {
+  // Two shapes of "not verified" in one document: a line that states the defaults tier, and a
+  // line with no `tier` field at all — the shape every buildPrintDocument test written before
+  // this feature uses. Both must read as default-tier, or those tests are silently asserting
+  // against a document that has grown a caveat about data it does not contain.
+  const legacy = { id: 'L0', cn: '25231000', country: 'DZ', route: '(A)',
+    scope: 'direct_and_indirect', massT: '100', date: '2026-03-15' };
+  const d = dline();
+  const results = [run('25231000', 'DZ', '(A)', '100'), run('25231000', 'DZ', '(A)', '100')];
+  const html = docOf([legacy, d], results);
+  assert.ok(!html.includes(CAVEAT_VERIFIED),
+    'the verified caveat must be absent from a document with no verified line');
+  assert.doesNotMatch(html, /attested/i,
+    'nothing in a defaults-only document may speak of attested figures');
+  assert.doesNotMatch(html, /Verified actual/,
+    'and no row may be marked as priced from verified data');
+  // The four unconditional ones are unaffected by the gate.
+  for (const c of [CAVEAT_CSCF, CAVEAT_ARTICLE_9, CAVEAT_COMPLETENESS, CAVEAT_FINGERPRINT]) {
+    assert.ok(html.includes(c), 'the four unconditional caveats print regardless of tier');
+  }
+});
+
+test('the §4 caveat stands even when the verified line was REFUSED', () => {
+  // ARGUED BOTH WAYS, and settled fail-closed. Against: the refused line contributed no figure,
+  // so no number in the document rests on the attestation. For, and decisive: §1 still prints the
+  // row, still marks it verified and still transcribes the reference the importer cited — so the
+  // document still CONTAINS an unchecked claim, and the caveat is the only thing that says so.
+  // Gating on "was it priced" would also make the caveat blink in and out with the engine's
+  // verdict rather than with what the user actually entered.
+  const v = vline({ seeDirect: 'nonsense', verifiedRef: 'DNV-2026-0042' });
+  const e = estOf(v);
+  assert.equal(e.status, 'unavailable', 'sanity: the engine refused the attested figure');
+  const html = docOf([v], [e]);
+  assert.ok(html.includes(CAVEAT_VERIFIED),
+    'a refused verified line is still a verified claim, and the caveat still applies');
+  assert.match(html, /no estimate/, 'sanity: the row itself carries no figure');
+});
+
+test('§1 marks a verified row and transcribes the reference the importer cited', () => {
+  const v = vline({ verifiedRef: 'DNV-2026-0042' });
+  const d = dline({ id: 'D2' });
+  const html = docOf([v, d], [estOf(v), defaultOf(d)]);
+  assert.match(html, /<td[^>]*>Verified actual — ref DNV-2026-0042<\/td>/,
+    'the verified row states the tier that priced it and the reference cited for it');
+  assert.match(html, /<td[^>]*>Commission default \+ mark-up<\/td>/,
+    'and the defaults row says which corpus priced IT — the contrast is what makes the mark being '
+    + 'absent meaningful');
+  assert.match(html, /<th>Data tier<\/th>/, 'the column is labelled');
+  // Exactly the two strings the on-screen provenance stamp uses (renderStamp's "Data tier" row),
+  // so the printed document and the card a user saw cannot name the same tier differently.
+  const stampRow = renderResult(estOf(v)).match(/<span>Data tier<\/span><b>([^<]+)<\/b>/);
+  assert.ok(stampRow, 'sanity: the card renders a Data tier row');
+  assert.match(html, new RegExp(`<td[^>]*>${stampRow[1]} —`),
+    'the document uses the card\'s own tier label verbatim, not a second wording of it');
+});
+
+test('§1 shows no reference label for a verified line that cited none', () => {
+  const v = vline();
+  const html = docOf([v], [estOf(v)]);
+  assert.match(html, /<td[^>]*>Verified actual<\/td>/, 'the row is still marked verified');
+  assert.doesNotMatch(html, /ref\s*<\/td>/i, 'no dangling label for a reference never given');
+  assert.doesNotMatch(html, /— ref\b/, 'and no empty separator either');
+});
+
+test('§1 escapes the verifier reference — it is free text the user typed', () => {
+  const v = vline({ verifiedRef: 'DNV"><script>alert(1)</script>' });
+  const html = docOf([v], [estOf(v)]);
+  assert.doesNotMatch(html, /<script>/, 'a raw reference must never reach the document unescaped');
+  assert.match(html, /ref DNV&quot;&gt;&lt;script&gt;/, 'it prints escaped, and still readable');
+});
+
+test('§1 stays rectangular across ordinary, refused, thrown and verified rows', () => {
+  // The failure branch builds its own <tr> by hand, in parallel with the ordinary one, so a
+  // column added to one and not the other misaligns every cell after it for that row — a table
+  // where a euro figure sits under "Benchmark authority" and nothing says so.
+  const v = vline({ verifiedRef: 'DNV-2026-0042' });
+  const d = dline({ id: 'D3' });
+  const refused = { id: 'R1', cn: '72052100', country: 'IN', route: '(C)', scope: 'direct',
+    massT: '60', date: '2026-03-15', tier: 'default+markup' };
+  const refusedResult = run('72052100', 'IN', '(C)', '60');
+  assert.equal(refusedResult.status, 'unavailable', 'sanity: an ordinary engine refusal');
+  const html = docOf(
+    [v, d, refused, vline({ id: 'V2' })],
+    [estOf(v), defaultOf(d), refusedResult, { failed: true, message: 'boom' }],
+  );
+  const widths = rowWidths(html);
+  assert.equal(widths.length, 5, 'the header row plus one row per line, none dropped');
+  assert.equal(new Set(widths).size, 1,
+    `every row must carry the same number of cells — got ${widths.join(', ')}`);
+  assert.match(html, />boom</, 'the thrown line still prints its reason');
+});
+
+test('the document never leaks the per-line delta — that figure is presentation, not record', () => {
+  // The card shows what the verified choice was worth; the CSV deliberately omits it, and so must
+  // this. A delta is a difference between two estimates, only one of which the importer is
+  // claiming — printing it in an audit artefact would put a Commission-default euro figure on a
+  // line the Commission never priced.
+  const v = vline();
+  const html = docOf([v], [estOf(v)]);
+  assert.doesNotMatch(html, /would give/i, 'no counterfactual sentence belongs in the record');
+  assert.doesNotMatch(html, /\bsaves?\b/i, 'no saving is claimed');
+  assert.doesNotMatch(html, /€12,420\.84/,
+    'the default-path figure for this exact line must not appear anywhere in the document');
+});
+
+/* ── one input builder, two paths (Task 6 review carry-forward) ───────────────
+ *
+ * estimateLine and defaultPathComparison must price THE SAME LINE, differing only in whether
+ * `verified` is supplied — that identity is the entire meaning of the delta the card prints. They
+ * used to hold two hand-written copies of the EstimatorInput construction, with nothing enforcing
+ * that they stayed identical: a future engine field wired into estimateLine alone would have made
+ * the comparison price a different line, while the card confidently stated "your verified data
+ * saves €X" for the gap between two non-comparable estimates. No test could have failed, because
+ * the tests built their inputs by hand too. inputFor is now the single construction site, and the
+ * test below compares its two outputs GENERICALLY (over Object.keys, not a hard-coded field list)
+ * so a field added there is covered without anyone remembering to extend this test.
+ */
+
+test('inputFor: the verified and default paths differ in `verified` and in NOTHING else', () => {
+  const l = vline({ verifiedRef: 'DNV-2026-0042', seeIndirect: '0.4' });
+  const withVerified = inputFor(l, verifiedInputOf(l));
+  const asDefault = inputFor(l, undefined);
+  assert.deepEqual(Object.keys(withVerified).sort(), Object.keys(asDefault).sort(),
+    'both paths must present the engine with the same shape of input');
+  for (const k of Object.keys(withVerified)) {
+    if (k === 'verified') continue;
+    assert.deepEqual(withVerified[k], asDefault[k],
+      `inputFor must build '${k}' identically on both paths — a field that differs here prices a `
+      + 'different line, and the card would report the difference as the value of verified data');
+  }
+  assert.deepEqual(withVerified.verified, { directTco2ePerT: '2.31', indirectTco2ePerT: '0.4' },
+    'the verified path carries the attested figures, as entered');
+  assert.equal(asDefault.verified, undefined,
+    'and the default path carries none — that omission IS the comparison');
+});
+
+test('inputFor carries every field the engine prices on, read off the line and nothing else', () => {
+  const l = vline({ scope: 'direct_and_indirect', massT: '7.5', date: '2026-11-02' });
+  assert.deepEqual(inputFor(l, undefined), {
+    cn: '72061000', country: 'IN', route: '(C)', massT: '7.5', date: '2026-11-02',
+    emissionsScope: 'direct_and_indirect', verified: undefined,
+  }, 'every value comes off the line as entered — no defaulting, no coercion');
+});
+
+test('inputFor: the two paths really do produce comparable estimates against the real pack', () => {
+  // The end of the chain the two tests above hold: same line, both paths, and the ONLY thing that
+  // may differ between the two results is the emissions basis. The free-allocation benchmark is a
+  // property of the good, so it must be identical — if a future field made the comparison price a
+  // different good, mass or date, this is where it shows up as a moved benchmark.
+  const l = vline();
+  const mine = estimateFromPack(pack, inputFor(l, verifiedInputOf(l)));
+  const theirs = estimateFromPack(pack, inputFor(l, undefined));
+  assert.equal(mine.stamp.tier, 'actual-verified');
+  assert.equal(theirs.stamp.tier, 'default+markup');
+  assert.equal(mine.scenario.faaTco2e, theirs.scenario.faaTco2e,
+    'the same good at the same mass gets the same free allocation on both paths — the delta is '
+    + 'the emissions basis alone');
+  assert.notEqual(mine.emissionsTco2e, theirs.emissionsTco2e,
+    'sanity: the two paths genuinely priced different emissions, so the check above has teeth');
 });

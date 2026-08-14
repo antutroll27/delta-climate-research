@@ -453,8 +453,9 @@ import Footer from '../../components/layout/Footer.astro';
   .cb-line-x { margin-left: auto; }
   /* The verified line's two footers (renderLineCard) sit BELOW the result card, not inside it —
      renderResult is shared with the single-line preview, which has no comparison to show. Both
-     reuse .cb-sub for their typography, so these rules carry the `.cb-out` prefix the scoped
-     `.cb-out .cb-sub` rule uses: at equal specificity the later block wins, and this is it. */
+     reuse .cb-sub for their typography, so these rules carry the `.cb-out` prefix the
+     `.cb-out .cb-sub` rule uses — that rule lives in the FIRST is:global block above, not in the
+     scoped block; look for it there: at equal specificity the later block wins, and this is it. */
   .cb-out .cb-attested { margin-top: 0.75rem; padding-left: 0.85rem;
     border-left: 2px solid color-mix(in srgb, var(--color-bronze) 30%, transparent); }
   .cb-out .cb-delta { margin-top: 0.9rem; padding-top: 0.75rem;

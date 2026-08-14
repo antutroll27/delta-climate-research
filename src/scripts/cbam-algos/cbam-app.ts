@@ -124,11 +124,25 @@ const figure = (certs: string, costEur: string | null) => `
   <div class="cb-u">certificates</div>
   ${costEur ? `<div class="cb-cost">${eur(costEur)}</div>` : ''}`;
 
+/**
+ * Which corpus priced a line, in words — ONE wording, used by the on-screen provenance stamp and
+ * by the printable document's §1 column alike. A second literal in the document would let the
+ * paper artefact and the card a user saw name the same tier differently ("Verified" vs "Verified
+ * actual"), which is the kind of drift an auditor reads as two different claims.
+ *
+ * Takes the tier string rather than a stamp or a Line: the stamp says which tier actually PRICED
+ * the figure, the Line says which tier was CLAIMED, and the two callers legitimately want
+ * different ones (see buildPrintDocument's row for why the document reads the line).
+ */
+function tierLabel(tier: string): string {
+  return tier === 'actual-verified' ? 'Verified actual' : 'Commission default + mark-up';
+}
+
 /* ── the provenance stamp — rendered on EVERY branch, refusals included ─────── */
 function renderStamp(e: CertificateEstimate): string {
   const s = e.stamp;
   const rows: [string, string][] = [
-    ['Data tier', s.tier === 'actual-verified' ? 'Verified actual' : 'Commission default + mark-up'],
+    ['Data tier', tierLabel(s.tier)],
     ['Origin basis', s.originBasis === 'residual' ? 'Residual bucket' :
                      s.originBasis === 'country' ? "Origin's own published value" : '—'],
     ['Rule packages', s.rulePackages.join(' · ') || '—'],
@@ -633,6 +647,36 @@ export interface LineEstimateFailure {
 }
 
 /**
+ * The §1 "Data tier" cell: which corpus priced this row, and — when the importer cited one — the
+ * verifier reference they gave for it. Without this, a row whose figures skip the mark-up sits in
+ * the same table as the Commission-priced rows with nothing distinguishing it, and the reference
+ * appears nowhere in the document at all (the CSV has a column for it; the paper artefact had
+ * none).
+ *
+ * READ OFF THE LINE, NOT THE ESTIMATE'S STAMP, for the reason csvRows' own data_tier column gives:
+ * this states the claim AS SUBMITTED, which is also what lineFingerprint hashes (position 6), so
+ * the column and any digest printed beside it come from one place. It is also the only source that
+ * exists on the LineEstimateFailure branch, which has no estimate to read a stamp from — so both
+ * row branches can say the same thing in the same way. csvRows THROWS when a line's tier disagrees
+ * with the tier that priced it; this document deliberately does not add that throw, because a
+ * document that refuses to print is worse than the CSV refusing to export — and both artefacts are
+ * built from the same `lastPairs`, so the CSV is where that mispairing is already caught loudly.
+ *
+ * The reference is gated on the tier, not on its own truthiness — the same gate renderLineCard
+ * uses. parseVerifiedFields cannot attach a reference to a defaults-tier line, so this is
+ * belt-and-braces: a stray reference must never print beside "Commission default + mark-up", where
+ * it would read as a verifier having signed off the Commission's own value.
+ *
+ * TRANSCRIBED, NEVER CHECKED (§4 says so once, for the document as a whole, rather than repeating
+ * it on every row) — and free text the user typed, so escaped like every other such string here.
+ */
+function tierCell(l: Line): string {
+  const label = tierLabel(l.tier);
+  const ref = l.tier === 'actual-verified' && l.verifiedRef ? ` — ref ${esc(l.verifiedRef)}` : '';
+  return `${label}${ref}`;
+}
+
+/**
  * The printable audit document — §4 is the point of the whole file: what the figures above
  * CANNOT tell you, stated plainly rather than left for a reader to infer from a methodology PDF.
  *
@@ -661,14 +705,29 @@ export function buildPrintDocument(input: {
     );
   }
 
+  /**
+   * Gates §4's fifth caveat. ON THE LINES AS ENTERED, not on which lines produced a figure: a
+   * verified line the engine REFUSED still prints its row, still carries the "Verified actual"
+   * mark and still transcribes the reference the importer cited, so the document still contains an
+   * unchecked claim and still owes the reader the caveat that says so. Gating on "was it priced"
+   * would make the caveat appear and disappear with the engine's verdict rather than with what the
+   * user actually submitted. The other direction is equally deliberate: a document with no
+   * verified line prints no such caveat, because a warning about attested data on a document
+   * containing none describes some other document.
+   */
+  const anyVerified = lines.some((l) => l.tier === 'actual-verified');
+
   const lineRows = lines.map((l, i) => {
     const r = results[i]!;
     if ('failed' in r) {
-      // Same eight columns as the ordinary row below, so the table stays rectangular — only the
-      // certificates/cost/authority cells differ, carrying the reason instead of a figure.
+      // Same NINE columns as the ordinary row below, so the table stays rectangular — only the
+      // certificates/cost/authority cells differ, carrying the reason instead of a figure. The
+      // data tier is still printed here: it is read off the LINE (see tierCell), so it survives an
+      // estimate that never came back, and a verified line that threw is still a verified claim.
       return `<tr>
         <td>${esc(l.cn)}</td><td>${esc(l.country)}</td><td>${esc(l.route)}</td>
         <td>${num(l.massT)}</td><td>${esc(l.date)}</td>
+        <td class="cbp-loc">${tierCell(l)}</td>
         <td>no estimate (error)</td>
         <td>—</td>
         <td class="cbp-loc">${esc(r.message)}</td>
@@ -681,6 +740,7 @@ export function buildPrintDocument(input: {
     return `<tr>
       <td>${esc(l.cn)}</td><td>${esc(l.country)}</td><td>${esc(l.route)}</td>
       <td>${num(l.massT)}</td><td>${esc(l.date)}</td>
+      <td class="cbp-loc">${tierCell(l)}</td>
       <td>${certs === null ? 'no estimate' : `${num(certs)}${pending ? ' (what-if)' : ''}`}</td>
       <td>${costEur ? eur(costEur) : '—'}</td>
       <td class="cbp-loc">${bm ? esc(bm.sourceLocator) : ('selector' in e && e.selector ? `missing: ${esc(e.selector)}` : '—')}</td>
@@ -697,7 +757,7 @@ export function buildPrintDocument(input: {
 
     <h2>1 · What you asked</h2>
     <table><thead><tr><th>CN</th><th>Origin</th><th>Route</th><th>Mass t</th><th>Import date</th>
-      <th>Certificates</th><th>Cost</th><th>Benchmark authority</th></tr></thead>
+      <th>Data tier</th><th>Certificates</th><th>Cost</th><th>Benchmark authority</th></tr></thead>
       <tbody>${lineRows}</tbody></table>
 
     <h2>2 · What we computed</h2>
@@ -737,7 +797,11 @@ export function buildPrintDocument(input: {
       <li>Any below-threshold verdict rests on the user's own statement of completeness, ticked
         in the tool. No one has verified that list.</li>
       <li>Line fingerprints cover inputs as entered; no source document exists behind them. They
-        are not customs provenance.</li>
+        are not customs provenance.</li>${anyVerified ? `
+      <li>Lines marked verified in §1 were priced from the user's own attested figures, which skip
+        the mark-up the Commission's default values carry. Those figures are a claim, from a
+        verification this tool has not seen and cannot confirm; any reference cited beside them
+        is transcribed as entered, never checked.</li>` : ''}
     </ul>`;
 }
 
@@ -929,6 +993,37 @@ export function verifiedInputOf(
     // absent one to a reader, and writing it explicitly invites someone to "simplify" it into
     // an empty string later.
     ...(l.seeIndirect !== undefined ? { indirectTco2ePerT: l.seeIndirect } : {}),
+  };
+}
+
+/**
+ * THE ONE construction of an `EstimatorInput` from a `Line` — the input half of what
+ * `decorateSnapshot` is for the output half, and for the same reason.
+ *
+ * WHY THIS IS NOT TWO LITERALS. `estimateLine` prices the line at its own tier; the delta on a
+ * verified card is that figure subtracted from `defaultPathComparison`'s, which prices THE SAME
+ * LINE with `verified` omitted. "The same line" is the entire meaning of that subtraction, and
+ * two hand-written object literals had nothing enforcing it: wire a future engine field (a
+ * precursor list, a carbon-price credit, a route qualifier) into `estimateLine` alone and the
+ * comparison quietly prices a DIFFERENT line, while the card states "your verified data saves €X"
+ * for the gap between two figures that are not comparable. Nothing would have gone red — the
+ * tests built their inputs by hand too, so they held a third copy of the same construction. One
+ * builder, two callers, and every future field lands on both paths by construction.
+ *
+ * `verified` IS THE PARAMETER, and the only one: it is the single thing the two paths are allowed
+ * to differ in. Passing it explicitly as `undefined` on the default path is equivalent to leaving
+ * the key out — estimate-from-pack.ts branches on `if (input.verified)`, a truthiness test — so
+ * this keeps one object shape without changing which path the engine takes.
+ *
+ * Exported for the drift test in tests/unit/cbam-render: `estimateLine` and
+ * `defaultPathComparison` are closures inside `initCbam` and cannot be reached without a DOM, so
+ * the builder they share is where that property is checkable at all.
+ */
+export function inputFor(l: Line, verified: EstimatorInput['verified']): EstimatorInput {
+  return {
+    cn: l.cn, country: l.country, route: l.route,
+    massT: l.massT, date: l.date, emissionsScope: l.scope,
+    verified,
   };
 }
 
@@ -1191,15 +1286,13 @@ export function initCbam(): void {
   /** One line's estimate, decorated with the real pack snapshot via the single shared
    * decoration point (decorateSnapshot, above) that run() also calls. */
   function estimateLine(l: Line): CertificateEstimate {
-    const e = estimateFromPack(pack!, {
-      cn: l.cn, country: l.country, route: l.route,
-      massT: l.massT, date: l.date, emissionsScope: l.scope,
-      // From the line's TIER, not from the form and not from whether its figures look truthy —
-      // see verifiedInputOf's doc for why the alternative ends in a thrown export instead of a
-      // rendered refusal. `lines` outlives the form values that produced them, so this must
-      // read the line, and only the line.
-      verified: verifiedInputOf(l),
-    });
+    // Built by inputFor — the ONE place a Line becomes an EstimatorInput, shared with
+    // defaultPathComparison below so the two can never price different lines (see its doc). The
+    // `verified` argument comes from the line's TIER, not from the form and not from whether its
+    // figures look truthy — see verifiedInputOf's doc for why the alternative ends in a thrown
+    // export instead of a rendered refusal. `lines` outlives the form values that produced them,
+    // so this must read the line, and only the line.
+    const e = estimateFromPack(pack!, inputFor(l, verifiedInputOf(l)));
     return decorateSnapshot(e, snapshot);
   }
 
@@ -1274,13 +1367,13 @@ export function initCbam(): void {
   function defaultPathComparison(l: Line): CertificateEstimate | null | undefined {
     if (l.tier !== 'actual-verified') return undefined;
     try {
-      const d = estimateFromPack(pack!, {
-        cn: l.cn, country: l.country, route: l.route,
-        massT: l.massT, date: l.date, emissionsScope: l.scope,
-        // `verified` OMITTED, deliberately and not merely absent: that omission IS the
-        // comparison. Anything else here would price something other than "the same line, at
-        // the Commission's published defaults".
-      });
+      // The SAME builder estimateLine uses (inputFor), with `verified` passed as undefined —
+      // deliberately, and not merely absent: that omission IS the comparison, and the engine
+      // branches on truthiness so an explicit undefined takes the defaults path exactly as an
+      // omitted key would. Anything else differing here would price something other than "the
+      // same line, at the Commission's published defaults"; sharing the builder is what stops a
+      // future field from making that happen silently.
+      const d = estimateFromPack(pack!, inputFor(l, undefined));
       // A refusal is not a comparison. Folding it to null here rather than passing the
       // unavailable estimate on keeps the "is there anything to compare" decision in ONE place
       // instead of splitting it between this function and the renderer.
