@@ -100,7 +100,13 @@ export function createVegetationLayer(
     crowns.setMatrixAt(i, dummy.matrix);
 
     const jitter = ((t.x * 12.9898 + t.y * 78.233) * 43758.5453) % 1;
-    color.setHSL(0.34 + (jitter - 0.5) * 0.03, 0.5 + (jitter - 0.5) * 0.1, 0.42 + (jitter - 0.5) * 0.08);
+    /* Lightness centre 0.42 -> 0.36 (2026-08-13). The canopy read too bright once
+       the basemap became OBOS Slate: these crowns were tuned over the old
+       near-neutral rgb(12,12,12) dark style, and the same green sits several stops
+       hotter against a violet-black ground. Only the CENTRE moves — the ±0.08
+       spread stays, because that per-tree variation is what keeps 9,542 instanced
+       crowns from reading as one flat carpet. */
+    color.setHSL(0.34 + (jitter - 0.5) * 0.03, 0.5 + (jitter - 0.5) * 0.1, 0.36 + (jitter - 0.5) * 0.08);
     crowns.setColorAt(i, color);
 
     dummy.position.set(t.x, g + trunkH / 2, t.y);
