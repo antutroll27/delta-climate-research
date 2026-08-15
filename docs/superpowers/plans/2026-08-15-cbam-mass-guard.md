@@ -647,6 +647,70 @@ Stage by name. `cbam-app.ts` is the hand-editable vendoring exception; nothing e
 
 ---
 
+## Task 4c: Gate the multi-line de-minimis total, and close the override
+
+**Files:**
+- Modify: `/private/tmp/cbam-mass/src/scripts/cbam-lines.ts` (`thresholdByYear`, ~line 233)
+- Modify: `/private/tmp/cbam-mass/src/scripts/cbam-algos/cbam-app.ts` (`parseVerifiedFields` return type)
+- Modify: `/private/tmp/cbam-mass/tests/unit/cbam-lines.test.mjs`
+
+**Task 4b's audit overturned this plan's own scoping call.** Task 4b left `thresholdByYear` ungated on the reasoning that the sink, `threshold/aggregate.ts`, is vendored — so gating it would need an upstream change and a re-vendor, across a different trust boundary. That reasoning was wrong: `src/scripts/cbam-lines.ts` is **ours**, absent from `UPSTREAM.json` and from `cbam-sync-check.mjs`'s file list. The gate belongs at the `flatMap` in `thresholdByYear` where `Line.massT` becomes `ImportMassEntry.netMassT` — no upstream change, no re-vendor.
+
+Measured behaviour, still live after Task 4b:
+
+```
+"0x10"     -> knownEligibleMassT "16"    state=indeterminate
+"+100"     -> "100"                      state=above_threshold
+"Infinity" -> "Infinity"                 state=above_threshold
+"-100"     -> "-100"; with a real 30 t line -> "-70"   <- SUBTRACTS
+"abc" / "" / "  100  "  -> THROWS [DecimalError], killing the whole card render
+```
+
+The `-100` row is the serious one and is **worse than the failure mode this plan pre-registered**. The concern was a bad line being silently skipped and under-counting. It does not skip — a negative mass *subtracts*, taking a genuine 30 t consignment to −70 t, below the 50 t threshold, and wrongly exempt. Fail-open on whether CBAM applies at all.
+
+Unreachable from today's markup. That is the excuse this entire spec exists to reject, and the entry-point gate is now the only thing holding it.
+
+- [ ] **Step 1: Gate the total**
+
+In `thresholdByYear`, gate each line's `massT` with `nonNegativeDecimal` as it is mapped into `ImportMassEntry`. If **any** line in the year carries a mass the predicate refuses, the whole call returns `null` — no card.
+
+Not skip-the-bad-line: you cannot answer "is the total above 50 t" when one of the addends is unreadable, and answering anyway is how a liable consignment gets exempted. This mirrors the choice `resolveThreshold` already makes for the single-line path, and for the same reason.
+
+Verify `thresholdByYear`'s return type already admits `null` before assuming it — if it does not, widening it is part of this step, and every call site must be checked.
+
+- [ ] **Step 2: Close the `Partial<Line>` override**
+
+`draftLine()`'s object literal spreads `...v.ok` **last** (`cbam-app.ts:1443`), and `v.ok` is typed `Partial<Line> & { tier }` — so `massT` is type-legal there and would silently override the gated `massT: mass!.value` two lines above. `parseVerifiedFields` provably never sets it today, so this is latent, not live.
+
+Tighten the return type to name exactly the fields it produces — `Pick<Line, 'tier' | 'seeDirect' | 'seeIndirect' | 'verifiedRef'>` — so the compiler rejects a future `ok.massT`. Confirm the precise field set from the function itself rather than trusting this plan.
+
+- [ ] **Step 3: Pin both**
+
+`thresholdByYear` is exported and unit-reachable. Add a test proving:
+- a year containing **one** unreadable-mass line yields no card at all, rather than a total computed around it
+- specifically that a `-100` line beside a real 30 t line does **not** produce a below-threshold verdict
+- an all-good year is untouched, and still totals exactly what the gate parsed
+
+Task 4b's existing totality/transparency test must keep passing; if it does not, say why rather than editing it.
+
+The `Partial<Line>` fix is a compile-time guarantee, so its proof is a type error, not a test: show that adding `massT` to `parseVerifiedFields`' return now fails `astro check`, then remove it.
+
+- [ ] **Step 4: Gates**
+
+```bash
+cd /private/tmp/cbam-mass
+npm run test:unit
+node scripts/cbam-sync-check.mjs
+npx astro check 2>&1 | tail -4
+```
+Expect 382 + your new tests, sync-check green (the vendored tree must not move), `astro check` still exactly 2 pre-existing `mapillary-js` errors — measure the baseline yourself.
+
+- [ ] **Step 5: Commit**
+
+Stage by name. Write the message yourself, in the style of this branch.
+
+---
+
 ## Task 5: Pin the DOM-layer mutation with an e2e assertion
 
 **Files:**
