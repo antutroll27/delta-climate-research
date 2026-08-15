@@ -1809,3 +1809,72 @@ test('…and a good whose benchmark really is missing still says BENCHMARK', () 
   assert.match(e.reason, /free-allocation benchmark/i);
   assert.doesNotMatch(e.reason, /certificate price/i);
 });
+
+/* ── an unreadable import date says so, instead of blaming a benchmark ──────── */
+
+test('an out-of-range month refuses on the DATE, not the benchmark', () => {
+  // quarterOf throws when the year is not four digits or the month is outside 1-12, and what
+  // reaches that throw is an unreadable import date — not a missing rule. <input type="date">
+  // cannot emit month 13, so no user of THIS form meets it; the engine is vendored byte-for-byte
+  // from a SaaS whose form is not this one, and the refusal is reachable through estimateFromPack
+  // regardless. Measured on this pack before the re-vendor: this input answered "The published
+  // rules do not give a free-allocation benchmark…" beside a selector reading
+  // quarter/2027-13-15, sending the reader to hunt an Annex row that had resolved a moment
+  // earlier. The selector was right all along; only the sentence beside it was wrong.
+  const e = estimateFromPack(pack, {
+    cn: '25231000', country: 'DZ', route: '(A)', massT: '100', date: '2027-13-15',
+    emissionsScope: 'direct_and_indirect',
+  });
+  assert.equal(e.status, 'unavailable');
+  assert.match(e.selector, /^quarter\//);
+  assert.match(e.reason, /not a readable calendar date/i);
+  assert.doesNotMatch(e.reason, /free-allocation benchmark/i);
+});
+
+test('a single-digit month refuses on the DATE too, where the guard used to miss', () => {
+  // A DIFFERENT DEFECT WITH THE SAME SYMPTOM, which is why it is pinned separately rather than
+  // folded into the case above as one more date. '2027-1-15'.slice(5, 7) is '1-', Number('1-')
+  // is NaN, and NaN < 1 || NaN > 12 is false || false — so the month guard did not fire at all.
+  // quarterOf returned the STRING '2027-QNaN', no price row matched it, and the refusal surfaced
+  // two layers down as certificate-price/2027-QNaN, answered "the good and its benchmark are
+  // present, only the price is missing". Every clause of that is false for a date nobody can
+  // read, and it read MORE confidently wrong once month 13 above started reporting correctly.
+  //
+  // A selector/reason agreement sweep cannot catch this one: the two agreed perfectly, both
+  // consistently wrong. The selector itself was the lie, so only an assertion about which table
+  // is blamed — this test — can see it. Measured here before the re-vendor, the hole was never
+  // confined to years that have no price row: '2026-1-15' refused as certificate-price/
+  // 2026-QNaN in exactly the same way, inside the year the site actually prices.
+  const e = estimateFromPack(pack, {
+    cn: '25231000', country: 'DZ', route: '(A)', massT: '100', date: '2027-1-15',
+    emissionsScope: 'direct_and_indirect',
+  });
+  assert.equal(e.status, 'unavailable');
+  assert.match(e.selector, /^quarter\//);
+  assert.match(e.reason, /not a readable calendar date/i);
+});
+
+test('…and a UTC timestamp still prices, which is why that guard is isInteger and not a regex', () => {
+  // THE OVER-CATCHING WITNESS, and it is deliberately not a plain well-formed date. Tightening a
+  // guard can refuse inputs that used to work, but an ordinary day needs no new test here: two
+  // dozen cases in this file pass '2026-03-15' explicitly and the run() helper defaults to it,
+  // several of them pinning its exact figures — so a guard that over-caught ordinary days would
+  // already be red long before reaching this line.
+  //
+  // The timestamp form is the one shape nothing in this repo covers, and it is precisely the
+  // shape the upstream fix had to preserve: quarterOf's callers may pass a UTC timestamp as well
+  // as a plain day (active() in resolve-fa.ts was built to take either), and
+  // '2026-01-01T00:00:00.000Z'.slice(5, 7) is '01'. The obvious tightening — a whole-date regex
+  // like /^\d{4}-\d{2}-\d{2}$/ — would refuse it and silently stop pricing every timestamp
+  // caller. That reasoning currently lives only in a comment upstream; a later re-tightening
+  // would arrive here by cp, and cbam-sync-check records whatever hash arrives without an
+  // opinion. This test is the thing that would refuse it.
+  const line = { cn: '25231000', country: 'DZ', route: '(A)', massT: '100',
+    emissionsScope: 'direct_and_indirect' };
+  const stamped = estimateFromPack(pack, { ...line, date: '2026-01-01T00:00:00.000Z' });
+  assert.equal(stamped.status, 'cscf_pending');
+  assert.equal(stamped.priceQuarter, '2026-Q1', 'the timestamp must still resolve to a quarter');
+  assert.equal(stamped.scenario.costEur, '5717.19');
+  // Same day in two encodings: the timestamp must not merely price, it must price IDENTICALLY.
+  assert.deepEqual(stamped, estimateFromPack(pack, { ...line, date: '2026-01-01' }));
+});

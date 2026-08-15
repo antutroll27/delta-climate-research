@@ -196,7 +196,7 @@ export const RESIDUAL_BASIS_NOTE =
 
 export const NO_BENCHMARK_REASON =
   'The published rules do not give a free-allocation benchmark for this good, production ' +
-  'route, year or quarter, so no figure is shown.'
+  'route or year, so no figure is shown.'
 /**
  * Names the BENCHMARK as present deliberately — that is the sentence that stops a reader hunting
  * a table that was never empty, which is the whole defect this constant exists to fix.
@@ -213,6 +213,72 @@ export const NO_PRICE_REASON =
   'The Commission has not published the CBAM certificate price for the quarter this import ' +
   'falls in, so no figure is shown. The good and its benchmark are present — only the price ' +
   'is missing, and prices are published quarterly in arrears.'
+
+/**
+ * Blames the SNAPSHOT, not the regulation — the distinction is the whole point.
+ *
+ * `benchmarkScopeOf` fails closed only for a verified-actual snapshot carrying no
+ * `intensityScope`. Migration 0007 added `operator_report_good.intensity_scope` as NOT NULL
+ * DEFAULT 'all_in', and the engine's basis type requires the field, so every snapshot frozen
+ * since then has one of the two values: a snapshot that predates 0007 is the only thing that
+ * reaches this. The published rules are not missing anything here, and saying they were would
+ * send a reader to the corpus for a gap that is in our own stored data.
+ *
+ * The remedy is named for the same reason NO_PRICE_REASON names the publication cadence: this
+ * is a SaaS surface whose user can act on it, and recalculating the case re-reads the scope
+ * from the source good (immutable, so it cannot drift) and repopulates the basis.
+ */
+export const NO_SNAPSHOT_SCOPE_REASON =
+  'This case\'s frozen snapshot predates the intensity-scope field, so it does not record ' +
+  'whether its emissions figure covers the whole product or this installation\'s process ' +
+  'alone, and no figure is shown. The two are priced against different benchmark columns, so ' +
+  'guessing the scope would deduct a benchmark the importer never declared. Recalculating ' +
+  'the case repopulates the scope.'
+
+/**
+ * Names the ROUTE as the gap, and OVER-charging as the harm. Both corrections matter.
+ *
+ * A combined-method precursor always carries a `defaultFactorVersionId` by construction, so
+ * its default value is present — it is what produced the emissions figure in the first place.
+ * What fails is resolving that id and the precursor's `cnCodeVersionId` back to a CN code and
+ * a production route inside the case's pinned rule package, which is exactly what the selector
+ * (`precursor/<cnCodeVersionId>/<defaultFactorVersionId>`) reports.
+ *
+ * And the harm runs the other way from the obvious guess. Precursors never touch the emissions
+ * figure at this site — that is read from the frozen snapshot and never recomputed. They enter
+ * only the SEFA deduction (Eq 4), each at its own Column B benchmark, which the route selects.
+ * Dropping one therefore shrinks the deduction and RAISES the bill; sefa() refuses for the same
+ * reason, because "a smaller deduction is a bigger bill charged to the importer on our
+ * authority". Claiming this understates emissions would invert the direction of the harm.
+ */
+export const NO_PRECURSOR_REASON =
+  'One of this good\'s precursors cannot be resolved back to its own CN code and production ' +
+  'route in the rule package this case was calculated against, so no figure is shown. The ' +
+  'route selects the precursor\'s benchmark, so carrying on without it would drop that ' +
+  'precursor\'s free allocation and overcharge the importer.'
+
+/**
+ * Blames the DATE, not a table — nothing here is empty.
+ *
+ * `quarterOf` refuses a year that is not four digits or a month outside 1-12, so what reaches
+ * this constant is an unreadable import date. Reported as a missing benchmark it sent the reader
+ * to hunt an Annex row that had resolved perfectly a moment earlier.
+ *
+ * Scoped to the PRICE deliberately. An earlier draft added "the benchmark in force depends on
+ * it", which is false: `quarterOf` has exactly one caller (the price lookup below), while
+ * `resolveBenchmark` matches on active(validFrom, validTo, date) — the day, not the quarter. The
+ * quarter is the price's key and nothing else's, and the price table is keyed by quarter
+ * ('2026-Q1'), one row per quarter.
+ *
+ * No remedy is named, unlike NO_PRICE_REASON and NO_SNAPSHOT_SCOPE_REASON. <input type="date">
+ * cannot emit month 13, so whoever reads this did not type the date — a caller passed it — and
+ * telling them to correct what they entered would address the wrong person.
+ */
+export const BAD_DATE_REASON =
+  'The import date is not a readable calendar date, so the quarter it falls in cannot be ' +
+  'determined and no figure is shown. The CBAM certificate price is published per quarter, ' +
+  'so without a readable date there is no price to apply.'
+
 const AMBIGUOUS_REASON =
   'The published rules give more than one value for this good, so no figure is shown until ' +
   'the conflict is resolved.'
@@ -332,7 +398,8 @@ export function estimateCertificates(
       // reach here (benchmark/, sefa/, cbam-factor/, cscf/, quarter/, certificate-price/), and
       // for a 2027 import the answer was "no free-allocation benchmark" beside a selector
       // reading `certificate-price/2027-Q1` — sending the reader to hunt a benchmark that is
-      // present. Only the price is split out here, because that is the one a user meets.
+      // present. Two are split out here: the price, which is the one a user meets, and the
+      // quarter, whose gap is not a table at all but the import date itself.
       //
       // Measured over the shipped pack through estimateFromPack — every (CN, route) the form
       // offers, one origin each (the origin moves the emissions figure, never which table is
@@ -343,14 +410,19 @@ export function estimateCertificates(
       // cscf/ both cover 2026-2028, and a date outside those years has no default factor
       // either, so estimateFromPack refuses with its own default/ before this engine is
       // entered. sefa/ needs precursors, which estimateFromPack never passes. quarter/ needs a
-      // month outside 1-12, which <input type="date"> cannot emit — it does fire on a
-      // hand-built date, and is mis-named exactly the same way, but no user can reach it.
+      // month outside 1-12, which <input type="date"> cannot emit, so no user meets it — but a
+      // hand-built date does, and it is not rare there: over 576 (CN, route) pairs, one origin
+      // each, at six out-of-range-month dates, 2,401 of 3,456 estimates refused on quarter/ and
+      // the other 1,055 refused on benchmark/ before quarterOf was ever reached. Every one of
+      // the 2,401 was named as a missing benchmark until BAD_DATE_REASON below.
       return {
         ...base,
         status: 'unavailable',
         reason: error.code === 'REGULATION_AMBIGUOUS'
           ? AMBIGUOUS_REASON
-          : selector?.startsWith('certificate-price/') ? NO_PRICE_REASON : NO_BENCHMARK_REASON,
+          : selector?.startsWith('certificate-price/') ? NO_PRICE_REASON
+          : selector?.startsWith('quarter/') ? BAD_DATE_REASON
+          : NO_BENCHMARK_REASON,
         selector,
       }
     }

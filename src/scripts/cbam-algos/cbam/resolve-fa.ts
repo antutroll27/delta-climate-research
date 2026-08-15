@@ -162,7 +162,18 @@ export function resolveCscf(tables: FreeAllocationTables, year: number): CscfRes
 export function quarterOf(date: string): string {
   const year = date.slice(0, 4)
   const month = Number(date.slice(5, 7))
-  if (!/^\d{4}$/.test(year) || month < 1 || month > 12) {
+  // isInteger BEFORE the range check, and it is not redundant with it. A single-digit month
+  // makes slice(5, 7) read '1-' rather than '01', Number('1-') is NaN, and NaN < 1 || NaN > 12
+  // is false || false — so '2027-1-15' cleared this guard and returned the STRING '2027-QNaN'.
+  // No price row matches that, so the refusal surfaced two layers down as
+  // certificate-price/2027-QNaN and was answered "the good and its benchmark are present, only
+  // the price is missing" — every clause false for a date nobody can read.
+  //
+  // Deliberately NOT a whole-date regex like /^\d{4}-\d{2}-\d{2}$/. Callers may pass a UTC
+  // timestamp as well as a plain day — active() above was built to take either — and
+  // '2026-01-01T00:00:00.000Z'.slice(5, 7) is '01', which must keep resolving. Verified: it
+  // still returns 2026-Q1 and prices normally.
+  if (!/^\d{4}$/.test(year) || !Number.isInteger(month) || month < 1 || month > 12) {
     throw new DomainError('REGULATION_NOT_FOUND', { selector: `quarter/${date}` })
   }
   return `${year}-Q${Math.ceil(month / 3)}`
