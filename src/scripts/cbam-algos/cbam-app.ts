@@ -25,7 +25,7 @@
  */
 import Decimal from 'decimal.js';
 import {
-  estimateFromPack, resolveThreshold, routesFor, selectIndirectFactorFromPack,
+  estimateFromPack, nonNegativeDecimal, resolveThreshold, routesFor, selectIndirectFactorFromPack,
   type EstimatorInput, type EstimatorPack, type ThresholdView,
 } from './estimator/estimate-from-pack.ts';
 import type { CertificateEstimate, DataTier } from './cbam/certificate-estimate.ts';
@@ -1312,10 +1312,16 @@ export function initCbam(): void {
     // runs and the `input` event fires anyway. A mass of -500 t used to render
     // "-682 tCO₂e embedded" and a confident "0 certificates · €0.00": nonsense
     // input wearing the shape of a computed answer, which is exactly what the
-    // fail-closed rule exists to stop. Checked here, not against the markup's
+    // fail-closed rule exists to stop.
+    //
+    // IT DECIDES WITH THE SAME PREDICATE THE ENGINE CONSUMES WITH, not a second opinion.
+    // Number() and Decimal() read different languages: Number('') is 0 and Number('  100  ')
+    // is 100, so both cleared this gate and then threw at the consumer; Number('1_000') is NaN
+    // while Decimal reads 1000; and BOTH read '0x10' as 16, so a hex string bought a confident
+    // bill for 16 t. Deciding with the function that does the parsing is what makes that class
+    // of drift impossible rather than merely fixed today. Checked here, not against the markup's
     // `min`, so that editing the .astro cannot silently disarm it.
-    const massT = Number(mass!.value);
-    if (!Number.isFinite(massT) || massT < 0) {
+    if (!nonNegativeDecimal(mass!.value)) {
       out!.innerHTML = '<p class="cb-idle">Net mass must be a number of tonnes, zero or greater.</p>';
       return;
     }

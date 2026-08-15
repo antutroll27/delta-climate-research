@@ -24,6 +24,12 @@ const BAD_VERIFIED_REASON =
   'be negative, so no estimate is shown. Reading a missing, unreadable, infinite or negative ' +
   'figure as anything at all would put a number on a liability the figure does not support.'
 
+const BAD_MASS_REASON =
+  'Net mass must be a readable number of tonnes and cannot be negative, so no estimate is ' +
+  'shown. Reading a missing, unreadable, infinite or negative mass as anything at all would ' +
+  'scale a real tariff by a quantity nobody entered, and would decide the de minimis ' +
+  'threshold the same way.'
+
 /**
  * The estimator prototype's compute path: a default-values estimate, in the browser, over the
  * shipped pack, through the SAME engine prod runs (`estimateCertificates`). "Prototype" is about
@@ -83,9 +89,9 @@ export interface EstimatorInput {
    * is what keeps the line on Column B. Process-only figures are Column A territory — the
    * workspace's job, never this estimator's.
    * Both figures are validated HERE, by this estimator, and a bad one is REFUSED — see
-   * verifiedPerT. Nothing upstream guards them: no caller passes `verified` yet, so there is no
-   * UI validation to inherit, and the engine's floor clamp is not that guard either (it clamps
-   * the direct side alone, then adds indirect on top).
+   * nonNegativeDecimal. Nothing upstream guards them: no caller passes `verified` yet, so there
+   * is no UI validation to inherit, and the engine's floor clamp is not that guard either (it
+   * clamps the direct side alone, then adds indirect on top).
    */
   verified?: {
     directTco2ePerT: string
@@ -238,7 +244,8 @@ export interface ThresholdView {
  *
  * Returns null when the good's sector is unknown or the sector is not one the threshold covers
  * (hydrogen and electricity are absent from the 2026 row), because there is then no threshold
- * statement to make rather than a favourable one to assume.
+ * statement to make rather than a favourable one to assume — and, for the same reason, when the
+ * net mass is not one this estimator can read (see the gate below).
  */
 export function resolveThreshold(
   pack: EstimatorPack,
@@ -249,6 +256,14 @@ export function resolveThreshold(
   if (!rule) return null
   const sector = sectorForCn(input.cn)
   if (!sector || !rule.includedSectors.includes(sector)) return null
+  // `null`, not `state: 'indeterminate'`. An indeterminate view still renders a card carrying the
+  // sector, the threshold value and a source locator — a partial legal claim assembled around a
+  // mass nobody can read, and ThresholdRulerCard.vue prints knownEligibleMassT raw at 52px, which
+  // is how 'Infinity' reached a user as their eligible mass. This overloads null, which already
+  // means "no threshold rule this year" (and, at the store, "the pack has not loaded"), and that
+  // is fine: the sole caller renders the card under `v-if="threshold"` (EstimateView), so every
+  // meaning renders nothing, and the estimate's own refusal is what names the mass as the problem.
+  if (!nonNegativeDecimal(input.massT)) return null
   const evaluated = evaluateThreshold({
     knownEligibleMassT: input.massT,
     completeness: 'partial',
@@ -328,23 +343,27 @@ export function selectIndirectFactorFromPack(
 }
 
 /**
- * A verified per-tonne figure this estimator may price, or null when it may not.
+ * A non-negative decimal this estimator may price, or null when it may not. Used for the
+ * verified per-tonne figures AND for net mass — one predicate, because they want exactly the
+ * same rule and two similar ones is how they drift apart.
  *
- * There is no guard upstream and none downstream, so this is the only one. `new Decimal('')` and
- * `new Decimal('abc')` THROW, and they throw here in estimateFromPack — before estimateCertificates
- * is entered — so they escape that function's fail-closed boundary entirely and reach the browser
- * as an unhandled exception rather than a refusal that names the gap. 'NaN' and 'Infinity' do not
- * throw; they propagate through the arithmetic and print as certificates and a euro cost. And the
- * engine's floor clamp catches none of it: figureFrom clamps the DIRECT side alone and then ADDS
- * the indirect figure (certificate-estimate.ts:154), so a negative indirect value priced a
- * NEGATIVE bill (-394.58 certificates, -EUR 29,735.55 on a real line). Nor is Decimal itself the
- * guard: it reads '0x10' as 16 and '1_000' as 1000, which is why the shape gate below runs before
- * it rather than after.
+ * There is no guard upstream and none downstream that speaks this language, so this is the one
+ * that counts. `new Decimal('')` and `new Decimal('abc')` THROW, and they throw inside
+ * estimateFromPack — before estimateCertificates is entered — so they escape that function's
+ * fail-closed boundary entirely and reach the browser as an unhandled exception rather than a
+ * refusal that names the gap. 'NaN' and 'Infinity' do not throw; they propagate through the
+ * arithmetic and print as certificates and a euro cost. And the engine's floor clamp catches
+ * none of it: figureFrom clamps the DIRECT side alone and then ADDS the indirect figure
+ * (certificate-estimate.ts:154), so a negative value priced a NEGATIVE bill (-394.58
+ * certificates, -EUR 29,735.55 on a real line; -EUR 331.58 via a -100 t mass). Nor is Decimal
+ * itself the guard: it reads '0x10' as 16 and '1_000' as 1000, which is why the shape gate
+ * below runs before it rather than after.
  *
- * Refusing, not clamping: a nonsense input silently turned into a priceable number is how a wrong
- * tax liability gets acted on. Zero is legal — a genuinely clean producer attests it.
+ * Refusing, not clamping: a nonsense input silently turned into a priceable number is how a
+ * wrong tax liability gets acted on. Zero is legal for both callers — a genuinely clean producer
+ * attests it, and a 0 t line costs EUR 0.00, which is arithmetic rather than fabrication.
  */
-function verifiedPerT(value: string): Decimal | null {
+export function nonNegativeDecimal(value: string): Decimal | null {
   // The SHAPE gate runs FIRST, because Decimal reads far more than a tonnage field ever emits:
   // it honours JS radix prefixes and numeric separators, so '0x10' parsed as 16 and priced
   // 1,474.42 certificates / EUR 111,112.29 — a confident bill off a string this function's own
@@ -396,6 +415,17 @@ export function estimateFromPack(pack: EstimatorPack, input: EstimatorInput): Ce
     customsLineId: 'estimator-prototype',
   }
 
+  // ABOVE the branch, deliberately: both paths multiply by mass, so gating inside either would
+  // leave the other open. `tier` reports what the CALLER asked for — the refusal produces no
+  // figure, so there is nothing to attribute and `originBasis` is null on either path.
+  if (!nonNegativeDecimal(input.massT)) {
+    const tier = input.verified ? 'actual-verified' as const : 'default+markup' as const
+    return unavailableEstimate(
+      { ...baseInput, tier, originBasis: null }, tables, BAD_MASS_REASON,
+      `mass/${input.cn}/${input.date}`,
+    )
+  }
+
   // An attested figure replaces the DEFAULT, not the benchmark. It is resolved before the
   // corpus is consulted, and deliberately does not depend on `factor`: on this path a missing
   // published default is not a refusal, it is the ordinary case an importer collects data for.
@@ -409,7 +439,7 @@ export function estimateFromPack(pack: EstimatorPack, input: EstimatorInput): Ce
     const verifiedStamp = { ...baseInput, tier: 'actual-verified' as const, originBasis: null }
     const mass = new Decimal(input.massT)
 
-    const direct = verifiedPerT(input.verified.directTco2ePerT)
+    const direct = nonNegativeDecimal(input.verified.directTco2ePerT)
     if (!direct) {
       return unavailableEstimate(verifiedStamp, tables, BAD_VERIFIED_REASON, `verified/${input.cn}/directTco2ePerT`)
     }
@@ -419,7 +449,7 @@ export function estimateFromPack(pack: EstimatorPack, input: EstimatorInput): Ce
     // would name a gap the user cannot close.
     let indirectTco2e = '0'
     if (input.emissionsScope === 'direct_and_indirect' && input.verified.indirectTco2ePerT !== undefined) {
-      const indirect = verifiedPerT(input.verified.indirectTco2ePerT)
+      const indirect = nonNegativeDecimal(input.verified.indirectTco2ePerT)
       if (!indirect) {
         return unavailableEstimate(verifiedStamp, tables, BAD_VERIFIED_REASON, `verified/${input.cn}/indirectTco2ePerT`)
       }

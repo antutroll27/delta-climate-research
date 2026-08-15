@@ -1551,3 +1551,21 @@ test('the indirect lookup separates "publishes none" from "publishes one" — th
   // (see syncScope's note — 0 of 66,675 reachable selectors), so there is no input that would
   // exercise it and a test claiming to would be fiction.
 });
+
+/* ── a mass that cannot become a figure is refused, not priced ──────────────── */
+
+test('net mass is gated: no negative bill, no NaN euros, no hex tonnage', () => {
+  // -100 t priced -4.4 certificates / -EUR 331.58; 0x10 priced 16 t / EUR 914.75 because
+  // Decimal honours JS radix prefixes; NaN and Infinity rendered AS figures rather than throwing.
+  // '1e9999999999999999' is all digits so it clears the shape gate, then saturates to Infinity
+  // past Decimal.maxE — the only path by which the engine's isFinite() check is load-bearing.
+  const line = { cn: '25231000', country: 'DZ', route: '(A)', date: '2026-03-15',
+    emissionsScope: 'direct_and_indirect' };
+  for (const massT of ['-100', '', 'abc', 'NaN', 'Infinity', '0x10', '1_000', '1e9999999999999999']) {
+    const e = estimateFromPack(pack, { ...line, massT });
+    assert.equal(e.status, 'unavailable', `massT=${JSON.stringify(massT)} must refuse`);
+  }
+  // and an ordinary mass is untouched, including zero
+  assert.equal(estimateFromPack(pack, { ...line, massT: '100' }).status, 'cscf_pending');
+  assert.equal(estimateFromPack(pack, { ...line, massT: '0' }).status, 'cscf_pending');
+});
