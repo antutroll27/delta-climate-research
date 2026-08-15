@@ -367,6 +367,63 @@ test.describe('multi-line CBAM estimate — the emissions-scope control', () => 
   });
 });
 
+test.describe('multi-line CBAM estimate — the net-mass gate', () => {
+  test('a negative net mass prompts rather than pricing — and a blank one never reaches that gate', async ({ page }) => {
+    // THE ONE GATE ON run()'s MASS CHECK. Like syncScope's operator above it, the check is a closure
+    // inside initCbam() reached only through document.getElementById, and the unit suite is
+    // node:test + tsx with no DOM in the dependency tree. cbam-lines.test.mjs pins the PREDICATE
+    // exhaustively — nonNegativeDecimal is total over '0x10', '+100', '  100  ', '-100', '1_000',
+    // '5.' — but nothing in that suite can see whether cbam-app.ts still CALLS it before pricing.
+    // Delete the check and lean on the markup's `min="0"`, the exact move run()'s own comment warns
+    // against, and all 386 unit tests stay green. Only an assertion on what the user actually
+    // perceives fails. That is this test.
+    //
+    // WHAT IT CANNOT DO, stated so nobody assumes otherwise: it cannot tell
+    // `nonNegativeDecimal(mass.value)` from the `Number(mass.value)` check that preceded it. Measured
+    // in Chrome, not reasoned from the spec: #cbMass is <input type="number">, so value sanitisation
+    // collapses EVERY string the two predicates disagree about — '0x10', '+100', '5.', '  100  ',
+    // '1e400' and a 400-digit integer all become '' — and '' is then absorbed by run()'s completeness
+    // guard one line ABOVE the mass gate. Over everything that survives the control the two
+    // predicates are behaviourally identical; their difference is only reachable by constructing a
+    // `Line` in code, which is exactly where cbam-lines.test.mjs pins it.
+    //
+    // METHODOLOGY TRAP, in the spirit of the header's: do NOT try to prove the hex case with
+    // `page.fill('#cbMass', '0x10')`. fill() does not throw on a malformed number — it falls back to
+    // typing, the UA drops the characters it will not take, and the field silently ends up holding
+    // '010'. '+100' lands as '100', '5.' as '5'. A test written that way asserts a refusal the page
+    // was never asked to make, and would keep passing with the gate deleted.
+    await page.goto('/cbam/cbam-calculator/');
+
+    // -500 t: the figure run()'s own comment records, reachable exactly as it describes. `min="0"` on
+    // #cbMass is INERT here — there is no <form> and no submit, so constraint validation never runs,
+    // while the `input` event fires anyway. Historically this rendered "-682 tCO₂e embedded" and a
+    // confident "0 certificates · €0.00": nonsense wearing the shape of a computed answer.
+    //
+    // IT PINS THE UI LAYER OF A TWO-LAYER REFUSAL, and the distinction is worth stating because the
+    // failure mode has moved. The same commit that put nonNegativeDecimal on this line re-vendored
+    // the engine's own guard, so deleting the check here no longer prices a negative bill — measured
+    // with it deleted, estimateFromPack refuses instead and the panel fills with the card-shaped "No
+    // estimate / Missing rule mass/…" state. The two layers are independent: the engine's lives under
+    // src/scripts/cbam-algos/ and is hash-guarded by scripts/cbam-sync-check.mjs, this one is not.
+    // Asserting the terse field-level instruction, not merely the absence of a price, is what keeps
+    // this test sensitive to the layer it is actually here to protect.
+    await setLine(page, { ...GOOD_LINE, mass: '-500' });
+    await expect(page.locator('#cbOut')).toContainText('Net mass must be a number of tonnes, zero or greater.');
+    // The instruction has to REPLACE the figure, not sit above one. A card still on screen is a
+    // priced answer to the user however the text over it reads, so the absence of money is the
+    // second, independent witness — the one that would still fail if BOTH layers came out.
+    await expect(page.locator('#cbOut')).not.toContainText('€');
+
+    // THE BOUNDARY, asserted because the obvious version of this test gets it wrong. A blank mass
+    // never reaches the gate above: `!mass!.value` in run()'s completeness guard catches it first and
+    // names every unfilled field rather than singling out the mass. Pinning which prompt each path
+    // renders is what stops the two guards being reordered, merged or deduplicated unnoticed.
+    await page.fill('#cbMass', '');
+    await expect(page.locator('#cbOut')).toContainText('Choose a good, origin, route and mass');
+    await expect(page.locator('#cbOut')).not.toContainText('Net mass must be a number of tonnes');
+  });
+});
+
 test.describe('multi-line CBAM estimate — the verified tier', () => {
   test('the whole verified flow: reveal the panel, refuse a half-made claim, attest, and carry the claim into the CSV', async ({ page }) => {
     // Every unit test around this feature calls parseVerifiedFields / renderLineCard / csvRows
