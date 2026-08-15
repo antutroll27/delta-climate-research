@@ -7,7 +7,9 @@ import Decimal from 'decimal.js';
 import {
   yearOf, lineFingerprint, packSnapshotHash, thresholdByYear, sumTotals, csvRows, toCsv,
 } from '../../src/scripts/cbam-lines.ts';
-import { estimateFromPack } from '../../src/scripts/cbam-algos/estimator/estimate-from-pack.ts';
+import {
+  estimateFromPack, nonNegativeDecimal,
+} from '../../src/scripts/cbam-algos/estimator/estimate-from-pack.ts';
 
 const pack = JSON.parse(readFileSync(
   fileURLToPath(new URL('../../public/cbam/estimator-pack.json', import.meta.url)), 'utf8'));
@@ -211,6 +213,41 @@ test('a line missing from the fingerprint map is a loud bug, not a silent empty 
   // the bug.
   const lines = [line({ id: 'L9', massT: '30' })];
   assert.throws(() => thresholdByYear(lines, fp, new Set(), pack), /L9/);
+});
+
+test('the entry-point mass gate is the ONLY thing between an unreadable mass and Art 2(3)', () => {
+  // THE THRESHOLD PATH HAS NO MASS GATE OF ITS OWN. thresholdByYear copies `l.massT` verbatim
+  // into ImportMassEntry.netMassT and aggregateThresholdBasis (vendored) sums it with a bare
+  // `.plus(entry.netMassT)` — it never calls resolveThreshold, so the engine's own
+  // nonNegativeDecimal check is not on this path at all. Whatever cbam-app.ts's draftLine()
+  // admits decides the de minimis verdict unread.
+  //
+  // MEASURED on this pack, feeding thresholdByYear a Line the gate refuses (evidence for why
+  // draftLine() had to stop using Number() and start using this predicate — it is NOT a claim
+  // about what thresholdByYear should do, and nothing below asserts these figures):
+  //   '0x10'    -> knownEligibleMassT '16'   — Art 2(3) decided off a hex string
+  //   '+100'    -> knownEligibleMassT '100', state above_threshold
+  //   '-100'    -> knownEligibleMassT '-100'; mixed with a real 30 t line, '-70' — a negative
+  //                mass SUBTRACTS, so it can drag a genuinely liable importer under 50 t
+  //   '  100  ' -> raw [DecimalError], thrown out of the whole card render, not one line
+  // So the gate must be TOTAL over everything the aggregate would misread:
+  for (const massT of ['0x10', '+100', '  100  ', 'abc', '', '-100', '1_000', '5.', '0b101',
+    'NaN', 'Infinity']) {
+    assert.equal(nonNegativeDecimal(massT), null,
+      `massT=${JSON.stringify(massT)} must never reach the threshold card`);
+  }
+  // ...and TRANSPARENT over everything it does admit: the card must sum exactly the number the
+  // gate parsed, never a second reading of the same string. This is the half that makes gating
+  // at the entry point sufficient — if the two ever disagreed, a mass could clear the gate as
+  // one quantity and be counted toward de minimis as another. '1e3' is the case that would
+  // catch it: legal to both, and the only accepted form whose text and value differ.
+  for (const massT of ['0', '-0', '0.5', '49.999', '50', '100', '1e3']) {
+    const parsed = nonNegativeDecimal(massT);
+    assert.notEqual(parsed, null, `sanity: ${JSON.stringify(massT)} is a mass the gate admits`);
+    const [card] = thresholdByYear([line({ id: 'L1', massT })], fp, new Set(), pack);
+    assert.equal(card.knownEligibleMassT, parsed.toString(),
+      `the card must count ${JSON.stringify(massT)} as the gate read it`);
+  }
 });
 
 test('sumTotals sums scenarios in Decimal and stays labelled a what-if', () => {

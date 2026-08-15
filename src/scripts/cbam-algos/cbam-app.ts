@@ -1391,8 +1391,10 @@ export function initCbam(): void {
 
   /**
    * Builds the next line from the form's current values, or null if the line is not ready to
-   * add. Mirrors run()'s own "impossible mass" refusal (checked here, not left to the markup's
-   * inert `min="0"`, for the same reason run() gives).
+   * add. Refuses an impossible mass with the SAME predicate run() previews with —
+   * nonNegativeDecimal, the function the engine itself parses with — never a second opinion that
+   * merely looks equivalent (checked here, not left to the markup's inert `min="0"`, for the
+   * same reason run() gives; see the call site for what the two gates disagreed about).
    *
    * ALSO REFUSES AN UNRESOLVED DATE. yearOf(l) is NaN for an empty or malformed
    * <input type="date"> value, and a NaN-year line joins NO year's threshold card
@@ -1405,8 +1407,22 @@ export function initCbam(): void {
   function draftLine(): Line | null {
     draftReason = null;
     if (!pack || !cn!.value || !country!.value || !route!.value || !mass!.value) return null;
-    const massT = Number(mass!.value);
-    if (!Number.isFinite(massT) || massT < 0) return null;
+    // THE SAME PREDICATE run() DECIDES WITH — deliberately the identical call, not an
+    // equivalent-looking one. This is the ADD path to run()'s PREVIEW path, and the two gates
+    // must agree or the panel and the line list state different facts about the same field:
+    // until this line, run() refused '+100', '5.', '0x10' and '  100  ' while this function
+    // accepted all four and built a Line from them. Number() and nonNegativeDecimal read
+    // different languages (Number('  100  ') is 100, Number('1_000') is NaN, and BOTH Number
+    // and Decimal read '0x10' as 16), which is the same two-parsers-one-field drift run()'s own
+    // comment describes — here it merely pointed the other way.
+    //
+    // It matters more on THIS path than on the preview, because a Line outlives the form: the
+    // multi-line year-threshold card sums `massT` through aggregateThresholdBasis, which never
+    // consults the engine's gate at all. A mass this function admits is a mass that reaches the
+    // de minimis verdict unread — measured, before this change: '0x10' decided Art 2(3) off a
+    // hex string (knownEligibleMassT 16), '+100' reported above_threshold, and '  100  ' threw
+    // a raw [DecimalError] that took down the whole card render rather than one line.
+    if (!nonNegativeDecimal(mass!.value)) return null;
     // The verified panel's contribution — the tier, and on the verified branch the attested
     // figures and any reference — or the reason it cannot contribute one. Its refusals are
     // SPECIFIC ("tick the attestation", "that is not a number"), unlike the four checks above,
