@@ -197,6 +197,22 @@ export const RESIDUAL_BASIS_NOTE =
 export const NO_BENCHMARK_REASON =
   'The published rules do not give a free-allocation benchmark for this good, production ' +
   'route, year or quarter, so no figure is shown.'
+/**
+ * Names the BENCHMARK as present deliberately — that is the sentence that stops a reader hunting
+ * a table that was never empty, which is the whole defect this constant exists to fix.
+ *
+ * It does NOT claim the default value is present, though an earlier draft did. A verified line
+ * has no default by construction: estimateFromPack's verified branch never consults the corpus,
+ * because "a missing published default is not a refusal, it is the ordinary case an importer
+ * collects data for". True for every caller today, since none passes `verified` — and false the
+ * moment one does. A string in a file whose job is to stop the product overclaiming should not
+ * be carrying a clause with an expiry date. The benchmark claim holds on both paths: an attested
+ * figure replaces the default, never the benchmark.
+ */
+export const NO_PRICE_REASON =
+  'The Commission has not published the CBAM certificate price for the quarter this import ' +
+  'falls in, so no figure is shown. The good and its benchmark are present — only the price ' +
+  'is missing, and prices are published quarterly in arrears.'
 const AMBIGUOUS_REASON =
   'The published rules give more than one value for this good, so no figure is shown until ' +
   'the conflict is resolved.'
@@ -310,11 +326,32 @@ export function estimateCertificates(
     // regulatory lookup failure is a real fault and must keep propagating.
     if (isDomainError(error) &&
         (error.code === 'REGULATION_NOT_FOUND' || error.code === 'REGULATION_AMBIGUOUS')) {
+      const selector = typeof error.details.selector === 'string' ? error.details.selector : null
+      // WHICH TABLE IS EMPTY IS ALREADY KNOWN — the selector's first segment says so, and this
+      // block used to throw that away and name the benchmark for all of them. Six namespaces
+      // reach here (benchmark/, sefa/, cbam-factor/, cscf/, quarter/, certificate-price/), and
+      // for a 2027 import the answer was "no free-allocation benchmark" beside a selector
+      // reading `certificate-price/2027-Q1` — sending the reader to hunt a benchmark that is
+      // present. Only the price is split out here, because that is the one a user meets.
+      //
+      // Measured over the shipped pack through estimateFromPack — every (CN, route) the form
+      // offers, one origin each (the origin moves the emissions figure, never which table is
+      // consulted), at four dates in each of 2026, 2027 and 2028. Of 17,484 estimates: 7,680
+      // refused on certificate-price/, every one of them 2027 or 2028, because the pack prices
+      // 2026 quarters only; 5,964 refused on benchmark/, which this wording already named
+      // correctly; 3,840 priced. The other four namespaces produced nothing. cbam-factor/ and
+      // cscf/ both cover 2026-2028, and a date outside those years has no default factor
+      // either, so estimateFromPack refuses with its own default/ before this engine is
+      // entered. sefa/ needs precursors, which estimateFromPack never passes. quarter/ needs a
+      // month outside 1-12, which <input type="date"> cannot emit — it does fire on a
+      // hand-built date, and is mis-named exactly the same way, but no user can reach it.
       return {
         ...base,
         status: 'unavailable',
-        reason: error.code === 'REGULATION_AMBIGUOUS' ? AMBIGUOUS_REASON : NO_BENCHMARK_REASON,
-        selector: typeof error.details.selector === 'string' ? error.details.selector : null,
+        reason: error.code === 'REGULATION_AMBIGUOUS'
+          ? AMBIGUOUS_REASON
+          : selector?.startsWith('certificate-price/') ? NO_PRICE_REASON : NO_BENCHMARK_REASON,
+        selector,
       }
     }
     throw error

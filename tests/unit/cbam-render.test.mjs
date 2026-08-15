@@ -1569,3 +1569,44 @@ test('net mass is gated: no negative bill, no NaN euros, no hex tonnage', () => 
   assert.equal(estimateFromPack(pack, { ...line, massT: '100' }).status, 'cscf_pending');
   assert.equal(estimateFromPack(pack, { ...line, massT: '0' }).status, 'cscf_pending');
 });
+
+/* ── a refusal names the table that is actually empty ───────────────────────── */
+
+test('a 2027 date refuses on the PRICE, and says so', () => {
+  // pack.prices holds four rows, all 2026, while defaultFactors runs through 2028 and cscf to
+  // 2030 — so every 2027 and 2028 date refuses, and refuses on the PRICE. It used to answer
+  // "The published rules do not give a free-allocation benchmark…" beside a selector reading
+  // certificate-price/2027-Q1, sending the reader to hunt a benchmark that is present.
+  //
+  // Only 2027 onward reaches this. A 2026 quarter with no price published yet (Q3 and Q4 are
+  // status 'pending', priceEur null) is NOT a refusal — the engine prices the emissions, notes
+  // the missing price and carries costEur as null. The 2027 quarters have no row at all, so
+  // the lookup fails closed instead. That is why the defect was invisible across 2026.
+  const e = estimateFromPack(pack, {
+    cn: '25231000', country: 'DZ', route: '(A)', massT: '100', date: '2027-03-15',
+    emissionsScope: 'direct_and_indirect',
+  });
+  assert.equal(e.status, 'unavailable');
+  assert.match(e.selector, /^certificate-price\//);
+  assert.match(e.reason, /certificate price/i);
+  assert.doesNotMatch(e.reason, /free-allocation benchmark/i);
+});
+
+test('…and a good whose benchmark really is missing still says BENCHMARK', () => {
+  // The other arm, and the reason this pair exists rather than the test above alone: a dispatch
+  // hard-wired to return the price reason for every refusal passes that test perfectly, and
+  // nothing else in this repo would notice — the existing refusal tests (72052100 above) pin
+  // status and selector, never the wording. Upstream hit exactly that trap.
+  //
+  // Same good and same year as the price case, so the only thing that differs is which table is
+  // empty: route 'default' sends 25231000 to Column B route-independent, which it does not
+  // publish, and that refuses on benchmark/ at every date in 2026-2028.
+  const e = estimateFromPack(pack, {
+    cn: '25231000', country: 'KR', route: 'default', massT: '100', date: '2027-03-15',
+    emissionsScope: 'direct_and_indirect',
+  });
+  assert.equal(e.status, 'unavailable');
+  assert.match(e.selector, /^benchmark\//);
+  assert.match(e.reason, /free-allocation benchmark/i);
+  assert.doesNotMatch(e.reason, /certificate price/i);
+});
