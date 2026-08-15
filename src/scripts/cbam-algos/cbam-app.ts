@@ -1203,16 +1203,30 @@ export function initCbam(): void {
    *
    * IT DEFAULTS TO INCLUDING INDIRECT. The definitive regime covers indirect
    * emissions for those sectors, so direct-only is an understatement there, not a
-   * simpler view — for cement it drops 6.6 tCO₂e and €497 on a 100 t line. The
-   * control exists so someone with verified direct-only data can say so, not so
-   * the tool can quietly answer low by default.
+   * simpler view — on 100 t of Algerian cement clinker declared on ROUTE (B) it
+   * drops 6.6 tCO₂e and €497. That figure is per route, not per good: the same
+   * 100 t on route (A) drops 4.4 tCO₂e and €332, because the Commission publishes
+   * a separate electricity default for each route. The control exists so someone
+   * with verified direct-only data can say so, not so the tool can quietly answer
+   * low by default.
    */
   function syncScope(): void {
     if (!scope || !scopeRow) return;
-    // `kind !== 'none'`, NOT `=== 'found'`: a route MISMATCH must keep the control visible, or
-    // the user can never reach the refusal that warns them. And not the old `!== null` — the
-    // lookup now returns an object in every case, so that test was silently always true and
-    // showed this control on steel and aluminium, which publish no indirect default at all.
+    // Not the old `!== null`: the lookup now returns an object in EVERY case, so that test was
+    // silently always true — TypeScript could not see it, no test covered it, and it showed this
+    // control on steel and aluminium, which publish no indirect default at all. That is the live
+    // defect. cbam-render.test.mjs pins the LOOKUP's side of it — steel and aluminium answer
+    // `none`, cement answers `found` — but the operator on this line needs a document to run, and
+    // the unit suite has none. Reverting it to `!== null` still leaves that suite green; only an
+    // e2e assertion on #cbScopeRow's hidden state would catch it.
+    //
+    // `kind !== 'none'` rather than `=== 'found'` is FUTUREPROOFING, not a second live fix. It
+    // exists so a route MISMATCH keeps the control visible and the user can reach the refusal
+    // that warns them — but no such selector exists today. Sweeping every good × origin ×
+    // published-route the form can offer, across the pack's 2026–2028 years, gives 66,675
+    // reachable selectors: 8,310 `found`, 58,365 `none`, and ZERO `route-mismatch`. The arm is
+    // written for the IR 2026/1740 route re-key, which can leave a good's indirect rows covering
+    // fewer routes than its direct rows. Do not read it as exercised behaviour; it is not.
     const has = !!pack && !!cn!.value && !!country!.value && !!route!.value
       && selectIndirectFactorFromPack(pack, {
         cn: cn!.value, country: country!.value, route: route!.value,

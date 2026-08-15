@@ -8,7 +8,7 @@ import {
   renderLineCard, renderResult, renderThreshold, renderTotals, renderYearThreshold, verifiedInputOf,
 } from '../../src/scripts/cbam-algos/cbam-app.ts';
 import {
-  estimateFromPack, resolveThreshold, routesFor,
+  estimateFromPack, resolveThreshold, routesFor, selectIndirectFactorFromPack,
 } from '../../src/scripts/cbam-algos/estimator/estimate-from-pack.ts';
 import { csvRows, sumTotals } from '../../src/scripts/cbam-lines.ts';
 
@@ -1488,7 +1488,13 @@ test('1 January 2026 prices, instead of claiming the rule does not exist', () =>
 test('route (A) is priced with route (A) electricity, not route (B)\'s', () => {
   // Algerian cement clinker publishes indirect (A): 0.04 and (B): 0.06. The lookup used to match
   // on good/origin/year only and take whichever sorted first — the dearer one — so route (A) was
-  // over-charged EUR 165.79 per 100 t, and changing the route on the form moved nothing.
+  // over-charged EUR 165.79 per 100 t.
+  //
+  // Changing the route on the form DID move the total even then — the DIRECT factors are route-
+  // keyed too (1.24 against 1.29), so the old engine already answered 5882.98 against 4879.37.
+  // What never moved was the ELECTRICITY: 6.6 for both routes, route (B)'s figure charged to
+  // route (A). That is why the closing assertion reads indirectTco2e and not costEur. A costEur
+  // comparison passes with the defect fully present and pins nothing.
   const line = { cn: '25231000', country: 'DZ', massT: '100', date: '2026-03-15',
     emissionsScope: 'direct_and_indirect' };
   const a = estimateFromPack(pack, { ...line, route: '(A)' });
@@ -1499,6 +1505,49 @@ test('route (A) is priced with route (A) electricity, not route (B)\'s', () => {
   assert.equal(a.scenario.costEur, '5717.19');
   assert.equal(b.scenario.certificates, '64.7475');
   assert.equal(b.scenario.costEur, '4879.37');
-  assert.notEqual(a.scenario.costEur, b.scenario.costEur,
-    'the two routes must price differently — before the fix they did not');
+  assert.notEqual(a.scenario.indirectTco2e, b.scenario.indirectTco2e,
+    'the electricity component must follow the declared route — the old engine returned 6.6 for both');
+});
+
+test('the indirect lookup separates "publishes none" from "publishes one" — the fact syncScope reads', () => {
+  // THIS PINS THE LOOKUP'S CONTRACT, NOT THE CONTROL'S VISIBILITY, AND THE LIMIT IS WORTH STATING
+  // PLAINLY. cbam-app.ts syncScope() hides the emissions-scope row unless
+  // `selectIndirectFactorFromPack(...).kind !== 'none'`. That expression sits in a closure inside
+  // initCbam() and needs a `document`, which this suite has not got (node:test + tsx, no DOM
+  // library in devDependencies). So reverting syncScope to the old `!== null` does NOT fail this
+  // test, and nothing else in this suite catches it either — policing that operator needs an e2e
+  // assertion on #cbScopeRow's hidden state. Do not read this test as covering it.
+  //
+  // What it DOES pin is the half syncScope rests on, and the half the type checker is blind to.
+  // The lookup returns an OBJECT in every case now, so `!= null` against it is always true and
+  // TypeScript accepts it without a murmur — that blindness is the whole reason the operator had
+  // to change. Asserting the union's TAGS turns the return shape into a contract: put the pre-fix
+  // `Factor | null` lookup back and this test dies on the first assertion, because `null` has no
+  // `.kind`. A silent re-tagging, or a lookup that started answering `found` for a direct-only
+  // sector, fails it the same way.
+  const sel = (over) => ({ massT: '1', date: '2026-03-15', ...over });
+
+  // Iron & steel and aluminium are charged direct-only in the definitive period — the Commission
+  // publishes no indirect row for them at all. `none` is what keeps the control off those goods.
+  //
+  // EVERY SELECTOR HERE IS ONE THE FORM CAN ACTUALLY PRODUCE: each good is listed in
+  // pack.classifications and the route is one routesFor() publishes for that pairing, so these
+  // are states a user can reach. That is deliberate. A CN the pack does not classify (e.g. the
+  // heading-level '76011000', which is absent — the pack lists '76011010' and its siblings)
+  // also answers `none`, but from isOfferedGood's unknown-good guard, and routesFor gives it no
+  // route at all, so syncScope's own `!!route.value` has already failed. It would look like an
+  // assertion about aluminium while testing something else entirely.
+  assert.equal(selectIndirectFactorFromPack(pack, sel({
+    cn: '72083800', country: 'IN', route: '(C)' })).kind, 'none', 'iron & steel publishes none');
+  assert.equal(selectIndirectFactorFromPack(pack, sel({
+    cn: '76011010', country: 'MZ', route: '(K)' })).kind, 'none', 'aluminium publishes none');
+
+  // Cement does publish one, so the good half of the predicate has to answer too — asserting only
+  // the `none` arm would be satisfied by a lookup that returned `none` for everything.
+  assert.equal(selectIndirectFactorFromPack(pack, sel({
+    cn: '25231000', country: 'DZ', route: '(A)' })).kind, 'found', 'DZ cement clinker publishes one');
+
+  // The third arm, `route-mismatch`, is deliberately absent: it is unreachable in the shipped pack
+  // (see syncScope's note — 0 of 66,675 reachable selectors), so there is no input that would
+  // exercise it and a test claiming to would be fiction.
 });
