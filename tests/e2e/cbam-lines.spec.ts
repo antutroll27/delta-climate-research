@@ -45,6 +45,20 @@ const GOOD_LINE: LineInput = { cn: '25231000', country: 'DZ', route: '(A)', mass
 // iron_and_steel-sector line that counts toward its year's threshold mass.
 const REFUSED_LINE: LineInput = { cn: '72052100', country: 'IN', route: '(C)', mass: '60', date: '2026-03-15' };
 
+// Iron & steel from India on its one published route — an ORDINARY, priceable line
+// that simply has no indirect side: the Commission charges this sector direct-only in
+// the definitive period and publishes no electricity default for it. Deliberately not
+// REFUSED_LINE above, which is also iron & steel but ALSO unpriceable, and would
+// therefore confound "no indirect default" with "no benchmark at all".
+//
+// NOT '76011000'. That heading is not an offered good — the pack classifies
+// '76011010', '76011090' and '76012030/40/80', never the heading itself, and
+// isOfferedGood only falls back on 4- and 6-digit prefixes. It would answer `none`
+// from the unknown-good guard while appearing to prove something about aluminium,
+// and routesFor gives it no route at all, so syncScope's own `!!route.value` would
+// have already failed before the lookup was ever consulted.
+const NO_INDIRECT_LINE: LineInput = { cn: '72083800', country: 'IN', route: '(C)', mass: '30', date: '2026-03-15' };
+
 // The design doc's §6 worked example: semi-finished iron/steel from India on route
 // (C). Priced on BOTH tiers against the shipped pack, which is what makes it the one
 // line that can demonstrate the delta — a good the Commission publishes no default
@@ -313,6 +327,43 @@ test.describe('multi-line CBAM estimate — exports', () => {
     const print = page.locator('#cbPrint');
     await expect(print).toContainText('What this does not tell you');
     await expect(print).toContainText('inputs as entered');
+  });
+});
+
+test.describe('multi-line CBAM estimate — the emissions-scope control', () => {
+  test('#cbScopeRow follows the good: shown for a good with a published indirect default, hidden for one without', async ({ page }) => {
+    // THE ONE GATE ON syncScope's OPERATOR. `selectIndirectFactorFromPack` returns a TAGGED UNION
+    // now — `{kind:'found'|'none'|'route-mismatch'}` — never null, so the `!== null` this line used
+    // to carry is silently ALWAYS TRUE, and TypeScript accepts it without a murmur because
+    // comparing a non-nullable against null is legal. `astro check` stays at its 2 pre-existing
+    // errors with the defect fully present.
+    //
+    // Nothing else in the repo can catch it. The expression is a closure inside initCbam() reached
+    // only through document.getElementById, and the unit suite is node:test + tsx with no DOM —
+    // cbam-render.test.mjs pins the LOOKUP's tags (steel/aluminium answer `none`, cement answers
+    // `found`) and says so in its own comment, but reverting this operator leaves all 380 unit
+    // tests green. Only an assertion on what the user actually perceives — whether the control is
+    // on screen — fails. That is this test.
+    //
+    // THE ORDER IS THE POINT, not incidental. #cbScopeRow ships `hidden` in the markup, so a bare
+    // "steel hides it" assertion would pass against a page that never showed the control at all,
+    // and would keep passing if syncScope stopped running entirely. Priced cement FIRST proves the
+    // row genuinely toggles; the steel line then has to drive it back off. Under the reverted
+    // operator the cement half still passes and the steel half fails — the defect is precisely
+    // "shows it everywhere", never "hides it everywhere".
+    await page.goto('/cbam/cbam-calculator/');
+
+    // Algerian cement clinker on route (A): the Commission publishes a per-route electricity
+    // default for it, so the scope control can genuinely change the answer (6.6 tCO₂e / €497 on
+    // route (B), 4.4 / €332 on route (A)) and must be offered.
+    await setLine(page, GOOD_LINE);
+    await expect(page.locator('#cbScopeRow')).toBeVisible();
+
+    // Indian iron & steel: charged direct-only, no indirect default published at any route. The
+    // engine returns 0 either way here, so a control that cannot change the answer is noise on a
+    // form this dense — syncScope's own doc comment forbids exactly that.
+    await setLine(page, NO_INDIRECT_LINE);
+    await expect(page.locator('#cbScopeRow')).toBeHidden();
   });
 });
 
