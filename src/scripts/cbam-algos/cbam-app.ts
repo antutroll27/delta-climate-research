@@ -296,10 +296,20 @@ export function renderYearThreshold(y: YearThreshold): string {
       <input type="checkbox" data-attest="${esc(String(y.calendarYear))}" ${y.attested ? 'checked' : ''} />
       These are all my ${esc(String(y.calendarYear))} imports of CBAM goods
     </label>`;
+  // Art 2(3) is a MASS test over four sectors, so a hydrogen or electricity line is rightly
+  // outside the basis — and the verdict used to generalise that into "an importer owes nothing
+  // for the year". MEASURED: 40 t cement + 1000 t hydrogen rendered "owes nothing for 2026"
+  // beside EUR 525,302.23 (the hydrogen line alone was EUR 523,015.36) on the same page.
+  // COUNTED, NEVER EXPLAINED PER LINE: two filters run in series (ours on rule.includedSectors,
+  // aggregateThresholdBasis's own massSectors) and eligibleLineCount's own doc warns they agree
+  // today only by coincidence of the shipped 2026 row, so naming a cause for a specific line
+  // would be a claim this card cannot support. It says how many, and what the test measures.
+  const excluded = y.linesInYear - y.eligibleLineCount;
+  const outside = excluded === 0 ? '' : ` ${excluded} of your ${y.linesInYear} lines for ${esc(String(y.calendarYear))} ${excluded === 1 ? 'is' : 'are'} outside that test — goods not measured by mass for de minimis, such as hydrogen and electricity, are chargeable regardless. This verdict does not mean you owe nothing.`;
   const sub = above
     ? `The listed ${esc(String(y.calendarYear))} imports exceed the threshold; the exemption does not apply.`
     : below
-      ? `Below the threshold an importer owes nothing for ${esc(String(y.calendarYear))}. This verdict rests on your attested statement that the list is complete — it is your completeness claim, verified by no one, not by the Commission or by us.`
+      ? `Your cement, iron &amp; steel, aluminium and fertiliser imports for ${esc(String(y.calendarYear))} total ${num(y.knownEligibleMassT)}&nbsp;t, below the ${num(y.thresholdT)}&nbsp;t threshold for those sectors.${outside} This verdict rests on your attested statement that the list is complete — it is your completeness claim, verified by no one, not by the Commission or by us.`
       : `Under the threshold so far, but unattested. Tick the box only if this list is genuinely every ${esc(String(y.calendarYear))} CBAM import; the verdict is only as good as that statement.`;
   return `
     <section class="cb-card cb-thresh">

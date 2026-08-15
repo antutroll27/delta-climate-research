@@ -170,6 +170,60 @@ test('eligibleLineCount tracks what aggregateThresholdBasis actually kept, not o
   assert.equal(card.eligibleLineCount, 1, 'count must match entryIds.length, not our own pre-filter length');
 });
 
+test('a below-threshold year names the lines its test did not cover', () => {
+  // Art 2(3) is a MASS test over four sectors, so hydrogen is RIGHTLY outside the basis — the
+  // exclusion above is correct and this test does not touch it. What was wrong is that the card
+  // then generalised "your cement is under 50 t" into "an importer owes nothing for the year".
+  //
+  // MEASURED on the shipped pack, 40 t cement + 1000 t hydrogen, both 2026, attested complete
+  // (per-line euro is scenario.costEur — both lines are cscf_pending, so costEur itself is
+  // undefined and the figure lives in the scenario):
+  //   THRESHOLD CARD → state below_threshold, knownEligibleMassT '40', eligibleLineCount 1
+  //   PER-LINE         cement   40 t → EUR      2,286.87
+  //                    hydrogen 1000 t → EUR  523,015.36
+  //   sumTotals        costEur '525302.23'
+  // The card rendered "an importer owes nothing for 2026" beside that total.
+  //
+  // eligibleLineCount ALONE cannot fix the wording: it says 1, never 1-of-what. The denominator
+  // has to be carried separately — hence linesInYear, asserted here as the field that makes
+  // "1 of your 2 lines" derivable at all.
+  const lines = [
+    line({ id: 'L1', cn: '25231000', country: 'DZ', route: '(A)', massT: '40' }),      // cement: counts
+    line({ id: 'L2', cn: '28041000', country: 'DZ', route: 'default', massT: '1000' }), // hydrogen: does not
+  ];
+  const [card] = thresholdByYear(lines, fp, new Set([2026]), pack);
+  assert.equal(card.ruleFound, true);
+  assert.equal(card.state, 'below_threshold', '40 t of cement is under 50 t — the exclusion is right');
+  assert.equal(card.eligibleLineCount, 1, 'only the cement line entered the mass test');
+  assert.equal(card.linesInYear, 2, 'the new field — "1 of 2" is not derivable without it');
+});
+
+test('a year with nothing excluded reports no exclusion', () => {
+  // The other half: linesInYear must be a real count of THIS year's lines, not a constant that
+  // makes the card's exclusion sentence boilerplate which always prints. A cement-only year has
+  // nothing outside the basis, so the two counts must be equal and the sentence must stay silent.
+  const lines = [line({ id: 'L1', cn: '25231000', country: 'DZ', route: '(A)', massT: '40' })];
+  const [card] = thresholdByYear(lines, fp, new Set([2026]), pack);
+  assert.equal(card.linesInYear, card.eligibleLineCount);
+  assert.equal(card.linesInYear, 1, '...and both are the real count, not a coincidence of zeroes');
+});
+
+test('linesInYear counts the year it belongs to, never the whole line list', () => {
+  // linesInYear is the denominator of a sentence printed on ONE year's card, so counting across
+  // years would make 2026's card claim lines that are not its own — the same per-year/per-estimate
+  // confusion the first test in this block exists to prevent, one field further down. Two lines in
+  // 2026 (one of them hydrogen, so the counts differ) and one in 2027.
+  const lines = [
+    line({ id: 'L1', cn: '25231000', massT: '40', date: '2026-03-15' }),
+    line({ id: 'L2', cn: '28041000', massT: '1000', date: '2026-06-01' }),
+    line({ id: 'L3', cn: '25231000', massT: '10', date: '2027-03-15' }),
+  ];
+  const cards = thresholdByYear(lines, fp, new Set([2026]), pack);
+  const y26 = cards.find((c) => c.calendarYear === 2026);
+  assert.equal(y26.linesInYear, 2, "2026's own lines only — the 2027 line is not 2026's denominator");
+  assert.equal(y26.eligibleLineCount, 1);
+});
+
 test('a line with an unresolved date produces no phantom NaN-year card', () => {
   // yearOf(line({date: ''})) is NaN (Task 1). [...new Set(...)] collapses every
   // NaN into one Set member (SameValueZero), so an unfiltered years list would

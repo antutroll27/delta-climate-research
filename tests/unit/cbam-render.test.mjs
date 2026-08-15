@@ -35,8 +35,8 @@ const run = (cn, country, route, massT, date = '2026-03-15') =>
   estimateFromPack(pack, { cn, country, route, massT, date });
 
 /**
- * EXACT-PINNED legal prose — the four §4 caveats plus the below-threshold attestation
- * sentence. Normally pinning exact text is a brittle test worth avoiding; here brittleness is
+ * EXACT-PINNED legal prose — the four §4 caveats plus the below-threshold verdict, in both the
+ * forms it can now take (see its own doc below). Normally pinning exact text is a brittle test worth avoiding; here brittleness is
  * the point. A reviewer proved that keyword-based assertions (match/doesNotMatch on a phrase)
  * can be defeated by a PARAPHRASE ATTACK: keep every phrase the assertions look for, then
  * append a contradicting reassurance to the same sentence — e.g. keeping "are not modelled" and
@@ -87,10 +87,32 @@ const CAVEAT_VERIFIED =
   + '        the mark-up the Commission\'s default values carry. Those figures are a claim, from a\n'
   + '        verification this tool has not seen and cannot confirm; any reference cited beside them\n'
   + '        is transcribed as entered, never checked.</li>';
+/**
+ * The below-threshold verdict, pinned in BOTH its forms — the whole `<p class="cb-sub">`, closed
+ * at both ends by its own tags, for the reason the banner constant below spells out: a constant
+ * that stopped at the last full stop would be open at the right-hand end, and the paraphrase
+ * attack appends its reassurance there.
+ *
+ * Two constants because the sentence is now CONDITIONAL. It used to read "Below the threshold an
+ * importer owes nothing for 2026…", which was a claim about the year rather than about the mass
+ * test that actually ran — MEASURED: 40 t of cement plus 1000 t of hydrogen rendered exactly that
+ * beside a page total of EUR 525,302.23, because Art 2(3) is a mass test over four sectors and
+ * hydrogen is (rightly) not in the basis. Pinning only the no-exclusion form would let the
+ * exclusion clause be deleted without a red test; pinning only the excluded form would let it
+ * become boilerplate that prints on every card. Both states, or neither is guarded.
+ */
 const ATTESTATION_SENTENCE =
-  '<p class="cb-sub">Below the threshold an importer owes nothing for 2026. This verdict rests '
+  '<p class="cb-sub">Your cement, iron &amp; steel, aluminium and fertiliser imports for 2026 '
+  + 'total 30&nbsp;t, below the 50&nbsp;t threshold for those sectors. This verdict rests '
   + 'on your attested statement that the list is complete — it is your completeness claim, '
   + 'verified by no one, not by the Commission or by us.</p>';
+const ATTESTATION_SENTENCE_WITH_EXCLUSION =
+  '<p class="cb-sub">Your cement, iron &amp; steel, aluminium and fertiliser imports for 2026 '
+  + 'total 40&nbsp;t, below the 50&nbsp;t threshold for those sectors. 1 of your 2 lines for '
+  + '2026 is outside that test — goods not measured by mass for de minimis, such as hydrogen '
+  + 'and electricity, are chargeable regardless. This verdict does not mean you owe nothing. '
+  + 'This verdict rests on your attested statement that the list is complete — it is your '
+  + 'completeness claim, verified by no one, not by the Commission or by us.</p>';
 
 /**
  * NON-NEGOTIABLE 1 (dossier §7.1) — the framing banner, and the eyebrow above it. Unlike the
@@ -422,7 +444,8 @@ test('renderYearThreshold: below-attested says so and names its basis', () => {
     calendarYear: 2026, ruleFound: true, state: 'below_threshold',
     knownEligibleMassT: '30', thresholdT: '50',
     sourceLocator: 'Regulation (EU) 2023/956 Article 2(3)',
-    entryIds: ['L1'], entryHashes: ['a'.repeat(64)], attested: true, eligibleLineCount: 1,
+    entryIds: ['L1'], entryHashes: ['a'.repeat(64)], attested: true,
+    eligibleLineCount: 1, linesInYear: 1,
   });
   assert.match(html, /Below threshold/);
   // Pin MEANING, not just the word "attested" appearing anywhere — a keyword-only assertion
@@ -444,12 +467,100 @@ test('renderYearThreshold: below-attested says so and names its basis', () => {
   assert.match(html, /2025\/2083/, 'the amending act must be cited on the per-year card too');
 });
 
+test('renderYearThreshold: a below-threshold verdict says which lines its test did not cover', () => {
+  // THE regression this task exists for. Art 2(3)'s de minimis is a MASS test over four sectors,
+  // so a hydrogen line is RIGHTLY outside the basis — the exclusion is correct and untouched.
+  // The wording then generalised it. MEASURED on the shipped pack: 40 t of cement plus 1000 t of
+  // hydrogen, both dated 2026, attested complete —
+  //   THRESHOLD CARD → state below_threshold, knownEligibleMassT '40', eligibleLineCount 1
+  //   PER-LINE         cement    40 t → EUR      2,286.87   (scenario.costEur; both cscf_pending)
+  //                    hydrogen 1000 t → EUR    523,015.36
+  //   sumTotals        costEur '525302.23'
+  // — and the card said "Below the threshold an importer owes nothing for 2026" beside it.
+  //
+  // The card ALREADY knew: eligibleLineCount was 1 while the user had entered 2. It just had no
+  // denominator to say so with, which is what linesInYear (cbam-lines.ts) now supplies.
+  const html = renderYearThreshold({
+    calendarYear: 2026, ruleFound: true, state: 'below_threshold',
+    knownEligibleMassT: '40', thresholdT: '50',
+    sourceLocator: 'Regulation (EU) 2023/956 Article 2(3)',
+    entryIds: ['L1'], entryHashes: ['a'.repeat(64)], attested: true,
+    eligibleLineCount: 1, linesInYear: 2,
+  });
+  assert.match(html, /1 of your 2 lines/, 'the card must count what its test did not cover');
+  assert.match(html, /does not mean you owe nothing/i,
+    'and must refuse the generalisation the old sentence made');
+  // The verdict must no longer make the unqualified claim ANYWHERE in the card — a card that
+  // added the caveat while keeping the original sentence would pass both matches above.
+  assert.doesNotMatch(html, /an importer owes nothing/i,
+    'the unqualified year-wide claim must be gone, not merely qualified further down');
+  // EXACT pin, closed at both ends by its own <p> tags (see the constant's doc): catches the
+  // paraphrase attack that keeps every phrase above and appends a reassurance after the last
+  // full stop, and catches a reworded exclusion clause that still contains "1 of your 2 lines".
+  assert.ok(html.includes(ATTESTATION_SENTENCE_WITH_EXCLUSION),
+    'the excluded-line verdict must match the pinned text exactly — word for word');
+});
+
+test('renderYearThreshold: a year with nothing excluded carries no exclusion sentence', () => {
+  // The other half, and the one that keeps the sentence from becoming boilerplate. A caveat that
+  // prints on EVERY below-threshold card is not a caveat, it is furniture — a reader who sees it
+  // beside a cement-only year learns nothing from seeing it beside a hydrogen one.
+  const html = renderYearThreshold({
+    calendarYear: 2026, ruleFound: true, state: 'below_threshold',
+    knownEligibleMassT: '40', thresholdT: '50',
+    sourceLocator: 'Regulation (EU) 2023/956 Article 2(3)',
+    entryIds: ['L1'], entryHashes: ['a'.repeat(64)], attested: true,
+    eligibleLineCount: 1, linesInYear: 1,
+  });
+  assert.doesNotMatch(html, /of your \d+ lines/, 'nothing was excluded, so nothing is named');
+  assert.doesNotMatch(html, /does not mean you owe nothing/i);
+  assert.doesNotMatch(html, /outside that test/i);
+  // ...and the verdict it DOES carry still states its own basis: the four mass sectors, not
+  // "the year". Dropping the exclusion clause must not drop the scoping with it.
+  assert.match(html, /threshold for those sectors/,
+    'the surviving sentence must still scope itself to the sectors the test measures');
+});
+
+test('renderYearThreshold: the exclusion sentence agrees with itself in number', () => {
+  // Two excluded lines, so the verb must be "are". Cheap to get wrong, and a card whose grammar
+  // visibly breaks is a card a reader trusts less on the arithmetic too.
+  const html = renderYearThreshold({
+    calendarYear: 2026, ruleFound: true, state: 'below_threshold',
+    knownEligibleMassT: '40', thresholdT: '50',
+    sourceLocator: 'Regulation (EU) 2023/956 Article 2(3)',
+    entryIds: ['L1'], entryHashes: ['a'.repeat(64)], attested: true,
+    eligibleLineCount: 1, linesInYear: 3,
+  });
+  assert.match(html, /2 of your 3 lines for 2026 are outside that test/);
+});
+
+test('renderYearThreshold: only the below-threshold verdict carries the exclusion note', () => {
+  // The note exists to stop ONE claim — "you owe nothing for the year". The other two states
+  // never make it: 'above' says the exemption does not apply and the exposure stands, and
+  // 'indeterminate' says the year is unresolved and asks the user to attest. Printing the note
+  // on those would attach a rebuttal to a claim that was never made, and would train the reader
+  // to skim past it on the one card where it matters. Both fixtures carry an excluded line
+  // (eligibleLineCount 1 of linesInYear 2), so the note is available to print and withheld.
+  for (const state of ['above_threshold', 'indeterminate']) {
+    const html = renderYearThreshold({
+      calendarYear: 2026, ruleFound: true, state,
+      knownEligibleMassT: state === 'above_threshold' ? '60' : '40', thresholdT: '50',
+      sourceLocator: 'Regulation (EU) 2023/956 Article 2(3)',
+      entryIds: ['L1'], entryHashes: ['a'.repeat(64)], attested: state !== 'above_threshold',
+      eligibleLineCount: 1, linesInYear: 2,
+    });
+    assert.doesNotMatch(html, /of your 2 lines/, `${state} makes no owe-nothing claim to qualify`);
+    assert.doesNotMatch(html, /does not mean you owe nothing/i, state);
+  }
+});
+
 test('renderYearThreshold: above hides the checkbox — a fact needs no attestation', () => {
   const html = renderYearThreshold({
     calendarYear: 2026, ruleFound: true, state: 'above_threshold',
     knownEligibleMassT: '60', thresholdT: '50',
     sourceLocator: 'Regulation (EU) 2023/956 Article 2(3)',
-    entryIds: ['L1'], entryHashes: [], attested: false, eligibleLineCount: 1,
+    entryIds: ['L1'], entryHashes: [], attested: false,
+    eligibleLineCount: 1, linesInYear: 2,
   });
   assert.match(html, /Above threshold/);
   assert.doesNotMatch(html, /data-attest/, 'no checkbox when it cannot change the answer');
@@ -462,7 +573,8 @@ test('renderYearThreshold: indeterminate is tagged pending, not the green of a r
     calendarYear: 2026, ruleFound: true, state: 'indeterminate',
     knownEligibleMassT: '30', thresholdT: '50',
     sourceLocator: 'Regulation (EU) 2023/956 Article 2(3)',
-    entryIds: ['L1'], entryHashes: ['a'.repeat(64)], attested: false, eligibleLineCount: 1,
+    entryIds: ['L1'], entryHashes: ['a'.repeat(64)], attested: false,
+    eligibleLineCount: 1, linesInYear: 2,
   });
   assert.match(html, /Indeterminate/);
   assert.match(html, /cb-tag pending/, 'indeterminate must use the pending tone, not ok');
@@ -697,7 +809,8 @@ test('buildPrintDocument\'s §2 verdict matches what renderYearThreshold\'s own 
     calendarYear: 2026, ruleFound: true, state: 'below_threshold',
     knownEligibleMassT: '30', thresholdT: '50',
     sourceLocator: 'Regulation (EU) 2023/956 Article 2(3)',
-    entryIds: ['L1'], entryHashes: ['a'.repeat(64)], attested: true, eligibleLineCount: 1,
+    entryIds: ['L1'], entryHashes: ['a'.repeat(64)], attested: true,
+    eligibleLineCount: 1, linesInYear: 1,
   };
   // The ruleFound: false branch too — a year with no published rule at all, which the document
   // must still say SOMETHING about rather than silently omit (renderYearThreshold's own doc names

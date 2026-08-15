@@ -178,12 +178,29 @@ export type YearThreshold =
        * make eligibleLineCount claim a line that entryIds doesn't list.
        */
       eligibleLineCount: number;
+      /**
+       * Every line dated in this calendar year, before any filter — the denominator
+       * `eligibleLineCount` cannot supply. That one is deliberately basis.entryIds.length
+       * rather than our pre-filter's count (see its doc directly above), so "N of M" is
+       * underivable from it alone: it says 1, never 1-of-what.
+       *
+       * The RAW TOTAL, not the difference. The difference depends on the two filters above
+       * running in series, so storing it would invite a reader to take it as "lines excluded
+       * by sector" — only one of the reasons it can be non-zero.
+       *
+       * PER YEAR, like every other field on this card: the threshold is annual, so a 2027
+       * line is not part of 2026's denominator.
+       */
+      linesInYear: number;
     }
   | {
       calendarYear: number;
       ruleFound: false;
       attested: boolean;
       eligibleLineCount: number;
+      // No linesInYear on this arm, deliberately. It reports that the Commission has published
+      // no row for the year, so it makes no de minimis claim at all — there is nothing for a
+      // denominator to qualify, and carrying one would imply a test that never ran.
     };
 
 /**
@@ -306,6 +323,7 @@ export function thresholdByYear(
     });
     return {
       calendarYear, ruleFound: true, attested,
+      linesInYear: inYear.length,
       state: verdict.state,
       knownEligibleMassT: verdict.knownEligibleMassT,
       thresholdT: verdict.thresholdT,
