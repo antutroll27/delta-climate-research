@@ -1502,6 +1502,92 @@ test('the document carries NO verified caveat when no line claims the verified t
     'and they keep their order in a defaults-only document too');
 });
 
+/**
+ * §4's list, cut out of the rendered document by ITS OWN boundaries: the heading that opens the
+ * section, that section's `<ul>`, and that block's `</ul>`.
+ *
+ * THE BOUNDARIES WERE MEASURED off a rendered document, not assumed. It contains exactly three
+ * `<ul>` blocks — §2's verdicts, §3's authorities, §4's caveats — no nested list anywhere, and
+ * §4's `</ul>` is the last thing buildPrintDocument returns. So the first `</ul>` after §4's
+ * `<ul>` is its matching close. Anchoring on the §4 HEADING rather than on "the document's last
+ * `</ul>`" is what keeps that reading correct if a §5 is ever added below it.
+ *
+ * Nothing user-entered reaches §4 — it is static prose plus the `anyVerified` gate — and `esc`
+ * turns `<`/`>` into entities everywhere a value IS interpolated, so no entered value can forge
+ * a `</ul>` and move where this block appears to end.
+ *
+ * THE ONE THING THIS CANNOT SEE is a nested list: `[\s\S]*?` would stop at an inner `</ul>` and
+ * report a truncated §4. That is not airtight so much as loudly fenced — the assertion below
+ * refuses a nested list outright, so the day §4 grows one the failure says so instead of
+ * pretending a caveat went missing.
+ */
+const caveatItems = (html) => {
+  const block = html.match(/<h2>4 · What this does not tell you<\/h2>\s*<ul>([\s\S]*?)<\/ul>/);
+  assert.ok(block,
+    '§4 must render as its heading followed by a <ul>: the caveats are what this file exists to '
+    + 'guard, so failing to FIND them is itself the failure, not a reason to skip the check');
+  assert.doesNotMatch(block[1], /<(ul|ol)\b/,
+    'a nested list inside §4 would put the matching </ul> past the first one, so this extraction '
+    + 'would silently guard a truncated section — re-cut the boundaries before §4 grows one');
+  return [...block[1].matchAll(/<li>[\s\S]*?<\/li>/g)].map((m) => m[0]);
+};
+
+/**
+ * §4 carries the pinned caveats and NOTHING ELSE — same set, same order, no sixth item.
+ *
+ * Surplus and shortfall are asserted separately BEFORE the whole-list comparison purely so the
+ * failure names the offending text: a bare deepEqual over five ~400-character strings reports
+ * that two arrays differ, which is true and useless to the person who has to decide whether the
+ * new item was an honest addition or a reassurance that undoes the section.
+ */
+const assertCaveatsExactly = (html, expected, shape) => {
+  const actual = caveatItems(html);
+  const surplus = actual.filter((li) => !expected.includes(li));
+  assert.deepEqual(surplus, [],
+    `§4 (${shape}) carries ${surplus.length} list item(s) that no pinned caveat accounts for. `
+    + 'An ADDED item is the one mutation every assertion above survives — each includes() is '
+    + 'still true and the indexOf order is still ascending — while the document has grown a '
+    + `sentence the caveats never agreed to. Unpinned:\n${surplus.join('\n')}`);
+  const missing = expected.filter((li) => !actual.includes(li));
+  assert.deepEqual(missing, [],
+    `§4 (${shape}) is missing ${missing.length} pinned caveat(s), or their text was edited. `
+    + `Expected but not found:\n${missing.join('\n')}`);
+  assert.deepEqual(actual, expected,
+    `§4 (${shape}) must be exactly the pinned caveats, in the pinned order, and nothing else`);
+};
+
+test('§4 is exactly the pinned caveats — no sixth item — in both shapes it can take', () => {
+  // WHY THIS EXISTS ALONGSIDE the per-caveat pins. Those constants refuse any EDIT to a caveat,
+  // and the order checks above refuse any REORDER of them. Both are satisfied by ADDING. MEASURED
+  // before this test was written: appending
+  //     <li>In practice the Registry accepts these figures as filed, so the caveats above rarely
+  //     bite.</li>
+  // to §4 in cbam-app.ts left all 399 unit tests green — every includes() still true, the indexOf
+  // order still ascending, and the document now talking the reader out of the caveats it prints.
+  // Set-and-order containment is the half that was missing.
+  //
+  // BOTH SHAPES, because §4 legitimately has two: the fifth caveat joins iff a line was entered at
+  // the verified tier (the pair of tests above pin that gate in each direction). An assertion that
+  // fitted only one shape would go red on the next HONEST change rather than on a dishonest one,
+  // and would teach whoever met it to loosen this file.
+
+  // Four-caveat shape — no line claims the verified tier.
+  const d = dline();
+  assertCaveatsExactly(
+    docOf([d], [run('25231000', 'DZ', '(A)', '100')]),
+    [CAVEAT_CSCF, CAVEAT_ARTICLE_9, CAVEAT_COMPLETENESS, CAVEAT_FINGERPRINT],
+    'defaults only',
+  );
+
+  // Five-caveat shape — one verified line, so the conditional caveat joins at the end.
+  const v = vline({ verifiedRef: 'DNV-2026-0042' });
+  assertCaveatsExactly(
+    docOf([v], [estOf(v)]),
+    [CAVEAT_CSCF, CAVEAT_ARTICLE_9, CAVEAT_COMPLETENESS, CAVEAT_FINGERPRINT, CAVEAT_VERIFIED],
+    'one verified line',
+  );
+});
+
 test('the §4 caveat stands even when the verified line was REFUSED', () => {
   // ARGUED BOTH WAYS, and settled fail-closed. Against: the refused line contributed no figure,
   // so no number in the document rests on the attestation. For, and decisive: §1 still prints the
