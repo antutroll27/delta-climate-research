@@ -105,6 +105,20 @@ const eur = (s: string | null): string => {
 };
 
 /**
+ * Does this refusal blame the user's input, or the Commission's corpus?
+ *
+ * Every refusal carries a `selector` locating the problem, and its first segment is the
+ * namespace: `default/`, `indirect/`, `benchmark/` and `certificate-price/` name a rule nobody
+ * has published, while `mass/` and `verified/` name a value the user typed. Only the second kind
+ * is fixable by the person reading the card, and telling someone a rule is "missing" when they
+ * have in fact mistyped a tonnage sends them to look for a gap in the regulation.
+ *
+ * Matched on the namespace rather than the whole string so a selector gaining or losing a
+ * trailing segment cannot silently flip the caption — that shape has already changed twice.
+ */
+const inputRefusal = (selector: string): boolean => /^(mass|verified)\//.test(selector);
+
+/**
  * The card shell. Every branch renders one, so the status tag is the ONLY thing
  * distinguishing a priced line from a refusal at a glance — which is why the tag
  * text is passed in per branch rather than derived.
@@ -444,11 +458,16 @@ export function renderResult(e: CertificateEstimate): string {
       // NON-NEGOTIABLE 2. No number. Not zero, not a placeholder, not a range — the
       // rules do not price this line and the honest output is to say which rule is
       // missing. 183 of 574 offered goods land here, 181 of them iron and steel.
+      //
+      // ...except when nothing is missing. The mass and verified gates refuse the USER'S
+      // OWN INPUT, and captioning `mass/25231000/2026-03-15` with "Missing rule" tells
+      // someone the Commission has failed to publish something when in fact they mistyped
+      // a tonnage. Two different problems, two different things to do about them.
       // Note this branch calls neither figure() nor renderWaterfall(): the card is
       // styled as an answer because it IS one, but it carries no number anywhere.
       return card('unavail', 'No estimate', `
         <p class="cb-reason">${esc(e.reason)}</p>
-        ${e.selector ? `<div class="cb-sel"><span>Missing rule</span><code>${esc(e.selector)}</code></div>` : ''}
+        ${e.selector ? `<div class="cb-sel"><span>${inputRefusal(e.selector) ? 'Refused input' : 'Missing rule'}</span><code>${esc(e.selector)}</code></div>` : ''}
         <p class="cb-sub">We show no deduction rather than guess one. Picking a nearby benchmark
            would produce a number that looks authoritative and is not.</p>
         ${renderStamp(e)}`);
@@ -1336,10 +1355,19 @@ export function initCbam(): void {
     // throws, Number('1_000') is NaN where Decimal reads 1000, and BOTH read '0x10' as 16.
     //
     // BE PRECISE ABOUT THE BENEFIT: none of that divergence is reachable through THIS control
-    // today. The full set the two predicates disagree on is '', '  100  ', '0x10', '+100', '5.',
-    // '1e400' and integers long enough to overflow a double — and <input type="number"> sanitises
-    // every one of them to '', which the completeness guard above already absorbs. Measured in
-    // Chrome, not reasoned: reverting this line to Number() passes the whole e2e file.
+    // today — but NOT for the reason it is tempting to write down. `type="number"` does not
+    // blank everything odd. It blanks a string ASSIGNED to .value, and it CHARACTER-FILTERS a
+    // string typed or pasted, which are different outcomes: typing 0x10 leaves "010", i.e. TEN,
+    // and +100 / 5. / '  100  ' / 1_000 / 0b101 / 0o17 land as 100 / 5 / 100 / 1000 / 0101 / 017.
+    // Those are valid numbers both predicates read identically, so the gate cannot tell — which
+    // is why this is unreachable, not because the completeness guard above absorbs them. It
+    // never sees them. (Measured in Chrome across typing, paste and assignment; an earlier note
+    // here generalised from Playwright's fill(), which only exercises the assignment path.)
+    //
+    // The one direction where the NEW predicate is looser is magnitude overflow — '1e309' and up,
+    // or ≥310 digits — where Number() gives Infinity and refuses while Decimal parses. Chrome
+    // rejects those too (validity.badInput), so it is closed. Note PRECISION overflow does not
+    // diverge at all: 9007199254740993 is admitted by both, so testing that case proves nothing.
     //
     // It is still the right predicate, for two reasons that do not depend on the markup. The
     // guard must not lean on `type="number"` any more than on `min="0"` — the sentence below is
