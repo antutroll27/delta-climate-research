@@ -10,6 +10,12 @@ import {
 import {
   estimateFromPack, nonNegativeDecimal,
 } from '../../src/scripts/cbam-algos/estimator/estimate-from-pack.ts';
+// The de minimis verdict's PROSE is the only place a reader learns which sectors the card's
+// test actually covered, so the sector-naming tests below have to cross the render seam: an
+// assertion that stops at the card's fields would pass while the sentence beside them named a
+// different set. cbam-render.test.mjs owns this function's other branches; these two own the
+// pack → card → sentence path, which is the one that can disagree with itself.
+import { renderYearThreshold } from '../../src/scripts/cbam-algos/cbam-app.ts';
 
 const pack = JSON.parse(readFileSync(
   fileURLToPath(new URL('../../public/cbam/estimator-pack.json', import.meta.url)), 'utf8'));
@@ -148,26 +154,115 @@ test('a hydrogen line is excluded from the eligible mass', () => {
   assert.deepEqual(card.entryHashes, ['a'.repeat(64)]);
 });
 
+/**
+ * The future the shipped pack does not contain: a 2026 threshold row whose includedSectors has
+ * been WIDENED past the four the Commission published. Hoisted to module scope because two tests
+ * below need the same one — the eligibleLineCount test (which uses it to drive our filter and the
+ * vendored massSectors filter apart) and the sector-naming test (which uses it to prove the
+ * verdict's prose follows the row rather than a hardcoded list). A second, locally-built copy
+ * would let the two drift into simulating different futures.
+ *
+ * 'hydrogen' specifically because it is a real ImportSector that sectorForCn already classifies,
+ * so a hydrogen LINE genuinely reaches our filter — an invented sector key would be dropped
+ * before either filter ran and would simulate nothing.
+ */
+const widerPack = {
+  ...pack,
+  thresholds: pack.thresholds.map((t) => (t.calendarYear === 2026
+    ? { ...t, includedSectors: [...t.includedSectors, 'hydrogen'] }
+    : t)),
+};
+
 test('eligibleLineCount tracks what aggregateThresholdBasis actually kept, not our own pre-filter', () => {
   // Regression for a review finding: entries.length (our filter, keyed on
   // rule.includedSectors) and basis.entryIds.length (ALSO filtered by
   // aggregateThresholdBasis's own hardcoded massSectors) agree today only
   // because the shipped 2026 row's includedSectors happens to equal
   // massSectors exactly. Simulate a future rule that widens includedSectors
-  // to hydrogen: our filter lets a hydrogen line through, but the vendored
-  // massSectors filter (cement/aluminium/fertilisers/iron_and_steel only)
-  // still drops it. eligibleLineCount must follow entryIds, not the count of
+  // to hydrogen (widerPack, above): our filter lets a hydrogen line through, but
+  // the vendored massSectors filter (cement/aluminium/fertilisers/iron_and_steel
+  // only) still drops it. eligibleLineCount must follow entryIds, not the count of
   // what we handed to aggregateThresholdBasis.
-  const widerPack = {
-    ...pack,
-    thresholds: pack.thresholds.map((t) => (t.calendarYear === 2026
-      ? { ...t, includedSectors: [...t.includedSectors, 'hydrogen'] }
-      : t)),
-  };
   const lines = [line({ id: 'L1', massT: '10' }), line({ id: 'L3', cn: '28041000', massT: '5' })];
   const [card] = thresholdByYear(lines, fp, new Set([2026]), widerPack);
   assert.deepEqual(card.entryIds, ['L1'], 'the vendored massSectors filter still drops hydrogen');
   assert.equal(card.eligibleLineCount, 1, 'count must match entryIds.length, not our own pre-filter length');
+});
+
+/** The `<p class="cb-sub">` verdict, closed at both ends by its own tags. */
+const subOf = (html) => html.match(/<p class="cb-sub">[\s\S]*?<\/p>/)[0];
+
+/**
+ * TODAY's verdict, byte for byte, for the shipped pack's four sectors. Duplicated deliberately
+ * from cbam-render.test.mjs's ATTESTATION_SENTENCE (which pins the same prose against a
+ * HAND-BUILT card): that one proves the renderer's copy has not been reworded, this one proves
+ * the copy survives being DERIVED from pack data instead of typed into the template. A single
+ * shared constant could not distinguish those two failures — the derivation could silently
+ * reorder or re-word the list and, if the pin moved with it, nothing would go red.
+ */
+const SHIPPED_SECTOR_PHRASE = 'Your cement, iron &amp; steel, aluminium and fertiliser imports for 2026';
+
+test('the de minimis verdict names the sectors its own rule lists, not four hardcoded ones', () => {
+  // eligibleLineCount's doc already anticipates a threshold row that includes hydrogen or
+  // electricity, and widerPack above already simulates one. What nothing covered is that the
+  // VERDICT hardcoded the four sectors into its sentence, so the day the Commission widens the
+  // row the card would keep naming the old four beside a mass computed from the new set — a
+  // wrong statement of what the test measured, with nothing to catch it.
+  //
+  // One cement line, so nothing is excluded and the exclusion clause (which mentions hydrogen
+  // for its own unrelated reason) stays out of the way of the assertions below.
+  const [shipped] = thresholdByYear([line({ massT: '10' })], fp, new Set([2026]), pack);
+  const [wider] = thresholdByYear([line({ massT: '10' })], fp, new Set([2026]), widerPack);
+
+  // 1. The card carries the rule's sectors — the same array the sector filter above ran on, so
+  //    the basis a reader is shown cannot disagree with the basis the verdict was computed from.
+  const rule = pack.thresholds.find((t) => t.calendarYear === 2026);
+  assert.deepEqual([...shipped.includedSectors], rule.includedSectors,
+    'the card must carry its rule\'s own sectors, verbatim');
+  assert.deepEqual([...wider.includedSectors], [...rule.includedSectors, 'hydrogen'],
+    'a widened row must reach the card, not be normalised back to the shipped four');
+
+  // 2. ...and the sentence follows it. Not merely "contains hydrogen somewhere" — the whole
+  //    verdict differs, which is what a hardcoded list can never do.
+  const shippedSub = subOf(renderYearThreshold(shipped));
+  const widerSub = subOf(renderYearThreshold(wider));
+  assert.notEqual(widerSub, shippedSub,
+    'a rule over five sectors must not render the same verdict as a rule over four');
+  assert.ok(widerSub.includes('Your cement, iron &amp; steel, aluminium, fertiliser and hydrogen imports for 2026'),
+    `the widened row's sentence must name all five in order, got: ${widerSub}`);
+
+  // 3. THE HARD REQUIREMENT. Deriving the list must not reword the live sentence by one byte.
+  //    Two traps sit here, and only a byte-level assertion sees either: the keys are
+  //    'iron_and_steel' and 'fertilisers', while the prose is 'iron & steel' and 'fertiliser';
+  //    and the pack's own order (cement, aluminium, fertilisers, iron_and_steel) is NOT the
+  //    order the verdict has always read in.
+  assert.ok(shippedSub.includes(SHIPPED_SECTOR_PHRASE),
+    `the shipped pack's verdict must read exactly as it always has, got: ${shippedSub}`);
+});
+
+test('an unknown sector key renders as itself — the card never guesses a name it was not given', () => {
+  // A future row can name a sector this file has no prose for. The tempting fix is
+  // key.replace(/_/g, ' '), which would print confident, unreviewed copy — and the SHIPPED pack
+  // already proves that guess wrong twice over: 'iron_and_steel' would become 'iron and steel'
+  // (the verdict says 'iron & steel') and 'fertilisers' would stay plural (it says 'fertiliser').
+  // A prettifier that is wrong on two of the four keys we can check is not evidence about the
+  // ones we cannot.
+  //
+  // So the key is shown verbatim. The surviving underscore is the point: it reads as a datum
+  // rather than as prose, which tells a maintainer the label table needs an entry. Awkward and
+  // honest beats fluent and possibly wrong, on a card whose whole claim is what it measured.
+  const oddPack = {
+    ...pack,
+    thresholds: pack.thresholds.map((t) => (t.calendarYear === 2026
+      ? { ...t, includedSectors: [...t.includedSectors, 'organic_chemicals'] }
+      : t)),
+  };
+  const [card] = thresholdByYear([line({ massT: '10' })], fp, new Set([2026]), oddPack);
+  const sub = subOf(renderYearThreshold(card));
+  assert.ok(sub.includes('fertiliser and organic_chemicals imports for 2026'),
+    `an unknown key must render verbatim, got: ${sub}`);
+  assert.ok(!sub.includes('organic chemicals'),
+    'the underscore must survive — a prettified key reads as reviewed copy nobody wrote');
 });
 
 test('a below-threshold year names the lines its test did not cover', () => {

@@ -242,6 +242,58 @@ export function renderThreshold(t: ThresholdView): string {
 }
 
 /**
+ * How a threshold row's sector KEYS are said in the verdict — and in the order the verdict says
+ * them. An ordered list rather than a map, because it settles both questions at once and they are
+ * both load-bearing.
+ *
+ * THE PROSE IS NOT THE KEY, and no transformation gets from one to the other. `iron_and_steel` is
+ * said "iron & steel" (an ampersand, not "and"), and `fertilisers` is said "fertiliser" (singular,
+ * from a plural key). A `.replace(/_/g, ' ')` — the obvious shortcut — is wrong on two of the four
+ * keys the shipped pack contains, which is why unknown keys below are not passed through one.
+ *
+ * THE ORDER IS NOT THE PACK'S. The shipped 2026 row lists cement, aluminium, fertilisers,
+ * iron_and_steel; the verdict has always read cement, iron & steel, aluminium and fertiliser.
+ * Rendering in pack order would have silently re-ordered live legal copy. So known sectors are
+ * named in THIS list's order, whatever order the row happens to store them in.
+ */
+const SECTOR_PROSE: ReadonlyArray<readonly [key: string, prose: string]> = [
+  ['cement', 'cement'],
+  ['iron_and_steel', 'iron & steel'],
+  ['aluminium', 'aluminium'],
+  ['fertilisers', 'fertiliser'],
+];
+
+/**
+ * "cement, iron & steel, aluminium and fertiliser" — a threshold row's sectors, said the way the
+ * verdict says them. PLAIN TEXT, escaped by the caller: the ampersand in 'iron & steel' has to
+ * reach esc() as a bare '&' to come out as '&amp;', and a key arriving from pack JSON is
+ * untrusted input that must be escaped like any other.
+ *
+ * AN UNKNOWN KEY IS PRINTED VERBATIM, underscores and all. Not prettified: this file cannot know
+ * what the Commission calls a sector it has never seen, and the two counter-examples above prove
+ * a mechanical guess gets it wrong more often than not. A key rendered raw reads as a datum and
+ * tells a maintainer to add a line to SECTOR_PROSE; a key rendered as "organic chemicals" reads
+ * as reviewed copy and would ship a name nobody chose, on the one sentence in this card that
+ * states what was actually measured. Awkward and honest over fluent and possibly wrong.
+ *
+ * Unknowns are named LAST, in the row's own order — they cannot be placed in a prose order that
+ * does not yet include them, and appending keeps the four known sectors reading exactly as they
+ * always have when a fifth is added.
+ *
+ * An empty row yields '' and the sentence reads "Your imports for…". Deliberately unguarded: HTML
+ * collapses the doubled space, and there is no honest word to substitute for a list of sectors a
+ * rule declined to name. A row that measures nothing is a pack defect, and the card would already
+ * be reporting 0 t beside it.
+ */
+const sectorList = (sectors: readonly string[]): string => {
+  const known = SECTOR_PROSE.filter(([key]) => sectors.includes(key)).map(([, prose]) => prose);
+  const unknown = sectors.filter((s) => !SECTOR_PROSE.some(([key]) => key === s));
+  const names = [...known, ...unknown];
+  if (names.length < 2) return names.join('');
+  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+};
+
+/**
  * The per-year card's own tag text — for BOTH branches of the union, including the year that has
  * no published rule at all. Reused by #cbStatus's multi-line announcement (renderAll, initCbam)
  * for the same reason totalsTag is: with the results panel's aria-live turned off in multi-line
@@ -309,7 +361,13 @@ export function renderYearThreshold(y: YearThreshold): string {
   const sub = above
     ? `The listed ${esc(String(y.calendarYear))} imports exceed the threshold; the exemption does not apply.`
     : below
-      ? `Your cement, iron &amp; steel, aluminium and fertiliser imports for ${esc(String(y.calendarYear))} total ${num(y.knownEligibleMassT)}&nbsp;t, below the ${num(y.thresholdT)}&nbsp;t threshold for those sectors.${outside} This verdict rests on your attested statement that the list is complete — it is your completeness claim, verified by no one, not by the Commission or by us.`
+      // The sectors come from the CARD (y.includedSectors, straight off the year's own threshold
+      // row) — they used to be four words typed into this string. The row is data: the day the
+      // Commission widens it, this sentence would have gone on naming the old four beside a mass
+      // computed from the new set, stating the wrong basis with nothing to catch it. See
+      // sectorList for why the prose is a table rather than a transformation of the keys, and why
+      // its order is not the row's.
+      ? `Your ${esc(sectorList(y.includedSectors))} imports for ${esc(String(y.calendarYear))} total ${num(y.knownEligibleMassT)}&nbsp;t, below the ${num(y.thresholdT)}&nbsp;t threshold for those sectors.${outside} This verdict rests on your attested statement that the list is complete — it is your completeness claim, verified by no one, not by the Commission or by us.`
       : `Under the threshold so far, but unattested. Tick the box only if this list is genuinely every ${esc(String(y.calendarYear))} CBAM import; the verdict is only as good as that statement.`;
   return `
     <section class="cb-card cb-thresh">

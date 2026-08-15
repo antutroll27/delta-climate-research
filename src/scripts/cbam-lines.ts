@@ -192,15 +192,38 @@ export type YearThreshold =
        * line is not part of 2026's denominator.
        */
       linesInYear: number;
+      /**
+       * The sectors THIS year's threshold row measures — `rule.includedSectors` verbatim, the
+       * very array the sector filter below ran on. Today it is cement, aluminium, fertilisers
+       * and iron & steel; eligibleLineCount's doc directly above already anticipates a future
+       * row that includes hydrogen or electricity.
+       *
+       * STORED, NOT RE-DERIVED, and that is the whole point of the field. The card is rendered
+       * far from the pack (renderYearThreshold takes a YearThreshold and nothing else), so a
+       * renderer that looked the rule up again would be making a SECOND lookup, at a later
+       * moment, against whatever pack it happened to hold — and could name a basis the verdict
+       * beside it was never computed from. Every other figure on this arm is likewise the value
+       * as computed, not a recipe for recomputing it. The sentence that says which sectors were
+       * tested must come from the same read as the test.
+       *
+       * READONLY because this ALIASES the pack's own array rather than copying it: an in-place
+       * `.sort()` or `.push()` in a renderer would silently rewrite the rule for every card
+       * built afterwards. The compiler refuses that here rather than leaving it to review.
+       *
+       * PER YEAR, like everything else on this card — a 2027 row may well list a different set,
+       * and each card names its own.
+       */
+      includedSectors: readonly string[];
     }
   | {
       calendarYear: number;
       ruleFound: false;
       attested: boolean;
       eligibleLineCount: number;
-      // No linesInYear on this arm, deliberately. It reports that the Commission has published
-      // no row for the year, so it makes no de minimis claim at all — there is nothing for a
-      // denominator to qualify, and carrying one would imply a test that never ran.
+      // No linesInYear and no includedSectors on this arm, deliberately. It reports that the
+      // Commission has published no row for the year, so it makes no de minimis claim at all —
+      // there is nothing for a denominator or a list of tested sectors to qualify, and carrying
+      // either would imply a test that never ran. There is also no rule to read them FROM.
     };
 
 /**
@@ -324,6 +347,7 @@ export function thresholdByYear(
     return {
       calendarYear, ruleFound: true, attested,
       linesInYear: inYear.length,
+      includedSectors: rule.includedSectors,
       state: verdict.state,
       knownEligibleMassT: verdict.knownEligibleMassT,
       thresholdT: verdict.thresholdT,

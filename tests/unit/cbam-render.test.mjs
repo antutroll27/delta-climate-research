@@ -433,6 +433,19 @@ test('the renderer handles every status the engine can return', () => {
 
 /* ── per-year threshold cards (multi-line) ─────────────────────────────────── */
 
+/**
+ * The 2026 threshold row's own sectors, on every hand-built `ruleFound: true` card below. The
+ * verdict's sentence is now DERIVED from this field rather than typed into the template, so a
+ * card without it is not a card thresholdByYear could ever produce — and renderYearThreshold
+ * throws on one rather than falling back to a hardcoded four, which is why omitting it here
+ * fails loudly instead of quietly re-pinning prose nothing computed.
+ *
+ * READ FROM THE REAL PACK, not typed, for the reason this file's header gives for every other
+ * figure in it: if the Commission widens the row, ATTESTATION_SENTENCE below goes red and a human
+ * has to look at the prose — exactly the alarm a hardcoded list could never raise.
+ */
+const SECTORS_2026 = pack.thresholds.find((t) => t.calendarYear === 2026).includedSectors;
+
 test('renderYearThreshold: a year without a rule refuses to invent one', () => {
   const html = renderYearThreshold({ calendarYear: 2027, ruleFound: false, attested: false, eligibleLineCount: 0 });
   assert.match(html, /no.*threshold.*published.*2027/i);
@@ -446,6 +459,7 @@ test('renderYearThreshold: below-attested says so and names its basis', () => {
     sourceLocator: 'Regulation (EU) 2023/956 Article 2(3)',
     entryIds: ['L1'], entryHashes: ['a'.repeat(64)], attested: true,
     eligibleLineCount: 1, linesInYear: 1,
+    includedSectors: SECTORS_2026,
   });
   assert.match(html, /Below threshold/);
   // Pin MEANING, not just the word "attested" appearing anywhere — a keyword-only assertion
@@ -486,6 +500,7 @@ test('renderYearThreshold: a below-threshold verdict says which lines its test d
     sourceLocator: 'Regulation (EU) 2023/956 Article 2(3)',
     entryIds: ['L1'], entryHashes: ['a'.repeat(64)], attested: true,
     eligibleLineCount: 1, linesInYear: 2,
+    includedSectors: SECTORS_2026,
   });
   assert.match(html, /1 of your 2 lines/, 'the card must count what its test did not cover');
   assert.match(html, /does not mean you owe nothing/i,
@@ -511,6 +526,7 @@ test('renderYearThreshold: a year with nothing excluded carries no exclusion sen
     sourceLocator: 'Regulation (EU) 2023/956 Article 2(3)',
     entryIds: ['L1'], entryHashes: ['a'.repeat(64)], attested: true,
     eligibleLineCount: 1, linesInYear: 1,
+    includedSectors: SECTORS_2026,
   });
   assert.doesNotMatch(html, /of your \d+ lines/, 'nothing was excluded, so nothing is named');
   assert.doesNotMatch(html, /does not mean you owe nothing/i);
@@ -530,6 +546,7 @@ test('renderYearThreshold: the exclusion sentence agrees with itself in number',
     sourceLocator: 'Regulation (EU) 2023/956 Article 2(3)',
     entryIds: ['L1'], entryHashes: ['a'.repeat(64)], attested: true,
     eligibleLineCount: 1, linesInYear: 3,
+    includedSectors: SECTORS_2026,
   });
   assert.match(html, /2 of your 3 lines for 2026 are outside that test/);
 });
@@ -548,6 +565,7 @@ test('renderYearThreshold: only the below-threshold verdict carries the exclusio
       sourceLocator: 'Regulation (EU) 2023/956 Article 2(3)',
       entryIds: ['L1'], entryHashes: ['a'.repeat(64)], attested: state !== 'above_threshold',
       eligibleLineCount: 1, linesInYear: 2,
+      includedSectors: SECTORS_2026,
     });
     assert.doesNotMatch(html, /of your 2 lines/, `${state} makes no owe-nothing claim to qualify`);
     assert.doesNotMatch(html, /does not mean you owe nothing/i, state);
@@ -561,6 +579,7 @@ test('renderYearThreshold: above hides the checkbox — a fact needs no attestat
     sourceLocator: 'Regulation (EU) 2023/956 Article 2(3)',
     entryIds: ['L1'], entryHashes: [], attested: false,
     eligibleLineCount: 1, linesInYear: 2,
+    includedSectors: SECTORS_2026,
   });
   assert.match(html, /Above threshold/);
   assert.doesNotMatch(html, /data-attest/, 'no checkbox when it cannot change the answer');
@@ -575,6 +594,7 @@ test('renderYearThreshold: indeterminate is tagged pending, not the green of a r
     sourceLocator: 'Regulation (EU) 2023/956 Article 2(3)',
     entryIds: ['L1'], entryHashes: ['a'.repeat(64)], attested: false,
     eligibleLineCount: 1, linesInYear: 2,
+    includedSectors: SECTORS_2026,
   });
   assert.match(html, /Indeterminate/);
   assert.match(html, /cb-tag pending/, 'indeterminate must use the pending tone, not ok');
@@ -811,6 +831,7 @@ test('buildPrintDocument\'s §2 verdict matches what renderYearThreshold\'s own 
     sourceLocator: 'Regulation (EU) 2023/956 Article 2(3)',
     entryIds: ['L1'], entryHashes: ['a'.repeat(64)], attested: true,
     eligibleLineCount: 1, linesInYear: 1,
+    includedSectors: SECTORS_2026,
   };
   // The ruleFound: false branch too — a year with no published rule at all, which the document
   // must still say SOMETHING about rather than silently omit (renderYearThreshold's own doc names
