@@ -92,6 +92,45 @@ const ATTESTATION_SENTENCE =
   + 'on your attested statement that the list is complete — it is your completeness claim, '
   + 'verified by no one, not by the Commission or by us.</p>';
 
+/**
+ * NON-NEGOTIABLE 1 (dossier §7.1) — the framing banner, and the eyebrow above it. Unlike the
+ * four caveats above, this prose is not emitted by cbam-app.ts: it is markup in
+ * src/pages/cbam/cbam-calculator.astro, precisely so it survives the script failing to run or
+ * the pack failing to load. So it is pinned by reading the page source, not a render.
+ *
+ * WHITESPACE IS NORMALISED before matching, which is the one deliberate difference from the
+ * CAVEAT_* constants above. There the embedded '\n        ' is real: it is emitted into the
+ * print document verbatim. Here the line breaks are hard-wrapping in a .astro file — arbitrary
+ * formatting the browser collapses anyway — so pinning them would turn a harmless re-wrap into
+ * a red test and teach the next reader to loosen this file. Normalising costs nothing that
+ * matters: an exact match on the collapsed text still refuses ANY inserted, deleted, reworded
+ * or appended clause, which is the paraphrase attack the block comment above describes.
+ *
+ * THE ENCLOSING TAGS ARE PART OF THE PIN, and are not decoration. A substring match only
+ * constrains what it spans, so a constant ending at the last full stop is silently open at the
+ * right-hand end: the paraphrase attack appends its contradicting reassurance AFTER 'liability.'
+ * ('...In practice the Registry accepts these figures as filed.'), leaving every phrase
+ * assertion below true and the pin still matching. Drafting this test hit exactly that — it
+ * passed the attack until the constant was anchored to '<div class="cb-banner" role="note">'
+ * and its closing '</div>'. The four CAVEAT_* constants above are closed the same way, by their
+ * own '</li>'. Any replacement for these constants must stay closed at BOTH ends.
+ *
+ * Same rule as the caveats: hand-typed here, never imported from the page. When §7.1's wording
+ * changes on purpose, update these in the SAME commit — do not loosen the assertions to make a
+ * red test green.
+ */
+const EYEBROW_71 =
+  '<p class="cb-eyebrow">Provisional · defaults or your verified figures · in-browser</p>';
+const BANNER_71 =
+  '<div class="cb-banner" role="note"> '
+  + 'Prototype estimator · Commission default values or your own verified figures · '
+  + 'decision-support, not a declaration. Computed in your browser from the published rules, '
+  + 'and never sent anywhere. For a 2026 import no final figure exists — the cross-sectoral '
+  + 'correction factor is unpublished — so any number below is a labelled what-if. This is not '
+  + 'a filing, not validated by the EU CBAM Registry, and not a statement of monetary '
+  + 'liability. '
+  + '</div>';
+
 /* ── §8 checklist: the engine still produces the SaaS's figures ─────────────── */
 
 test('§8 — priced line matches the SaaS exactly', () => {
@@ -240,6 +279,53 @@ test('the real pack: 72083800/IN publishes one route, so it needs no pick', () =
 });
 
 /* ── §7 non-negotiables, per branch ────────────────────────────────────────── */
+
+/**
+ * The one non-negotiable that is not a render branch, and the reason this section used to start
+ * at 2: §7.1 lives in markup so that it holds when nothing else does. Asserted against the page
+ * source for that same reason — routing it through a render would test the opposite of the
+ * property (that the banner survives the script never running).
+ */
+test('NON-NEGOTIABLE 1 — the banner names both tiers, and concedes everything it conceded before', () => {
+  const page = readFileSync(fileURLToPath(
+    new URL('../../src/pages/cbam/cbam-calculator.astro', import.meta.url)), 'utf8');
+  // Hard-wrapped markup: every guarantee below straddles a source line break, so a raw substring
+  // search reports them all missing while they are all present.
+  const prose = page.replace(/\s+/g, ' ');
+
+  // The claim that went stale. The form has offered the verified tier since it shipped and the
+  // engine prices an attested figure with NO mark-up — the mark-up exists to price not having
+  // data — so "default values only" was false in the one place a visitor cannot miss.
+  assert.ok(!prose.includes('default values only'),
+    'the banner must not claim Commission defaults are the only input — the verified tier exists');
+  assert.ok(!prose.includes('defaults only'),
+    'the eyebrow carries the same claim in short form; correcting one line and not the other '
+    + 'leaves the page contradicting itself');
+  assert.ok(prose.includes('Commission default values or your own verified figures'),
+    'the banner must name both tiers the engine actually prices');
+  // The corrected sentence is only true while the tier it now advertises is really on offer:
+  // remove the option and this fix silently becomes a different false claim.
+  assert.match(page, /<option value="actual-verified">/,
+    'the banner promises a verified tier, so the form must still offer one');
+
+  // The concessions that must survive that correction. §7.1 is a single block, and a commit
+  // licensed to fix the tier claim is not licensed to soften the rest of it. Named one by one
+  // so a failure says WHICH promise was dropped.
+  assert.ok(prose.includes('not a filing'),
+    'the banner must still disclaim being a filing');
+  assert.ok(prose.includes('never sent anywhere'),
+    'the banner must still promise the entered line leaves nobody\'s browser');
+  assert.ok(prose.includes('cross-sectoral correction factor is unpublished'),
+    'the banner must still say the CSCF is unpublished — that is what makes every figure a what-if');
+
+  // EXACT pins, for the reason the constants' doc comment gives: every phrase assertion above
+  // survives a paraphrase that keeps the phrase and appends a contradicting reassurance to the
+  // same sentence. A whole-block substring match does not.
+  assert.ok(prose.includes(EYEBROW_71),
+    'the eyebrow must match the pinned text exactly');
+  assert.ok(prose.includes(BANNER_71),
+    'the §7.1 banner must match the pinned text exactly — word for word, punctuation for punctuation');
+});
 
 test('NON-NEGOTIABLE 2 — a refusal renders NO figure of any kind', () => {
   const html = renderResult(run('72052100', 'IN', '(C)', '60'));
