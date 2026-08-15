@@ -1,11 +1,11 @@
 {
  "note": "GENERATED from the audited TypeScript engine — the parity contract for the Go port. Regenerate with `node --import tsx scripts/gen-cbam-fixtures.mjs` ONLY when a rule package legitimately changes, and review the diff as a regulatory change.",
- "packGeneratedAt": "2026-07-29T11:01:09.056Z",
+ "packGeneratedAt": "2026-08-07T16:59:36.563Z",
  "packRules": [
   "eu-cbam-2026-defaults-v2@v1",
   "eu-cbam-2026-free-allocation@v1"
  ],
- "caseCount": 175,
+ "caseCount": 151,
  "cases": [
   {
    "input": {
@@ -790,11 +790,11 @@
     "scenario": {
      "assumedCscf": "1",
      "faaTco2e": "64.935",
-     "netTco2e": "78.065",
-     "indirectTco2e": "6.6",
-     "totalEmbeddedTco2e": "143",
-     "certificates": "78.065",
-     "costEur": "5882.98"
+     "netTco2e": "75.865",
+     "indirectTco2e": "4.4",
+     "totalEmbeddedTco2e": "140.8",
+     "certificates": "75.865",
+     "costEur": "5717.19"
     }
    },
    "threshold": {
@@ -1108,11 +1108,11 @@
     "scenario": {
      "assumedCscf": "1",
      "faaTco2e": "64.935",
-     "netTco2e": "95.665",
-     "indirectTco2e": "7.7",
-     "totalEmbeddedTco2e": "160.6",
-     "certificates": "95.665",
-     "costEur": "7209.31"
+     "netTco2e": "93.465",
+     "indirectTco2e": "5.5",
+     "totalEmbeddedTco2e": "158.4",
+     "certificates": "93.465",
+     "costEur": "7043.52"
     }
    },
    "threshold": {
@@ -1426,11 +1426,11 @@
     "scenario": {
      "assumedCscf": "1",
      "faaTco2e": "64.935",
-     "netTco2e": "90.165",
-     "indirectTco2e": "6.6",
-     "totalEmbeddedTco2e": "155.1",
-     "certificates": "90.165",
-     "costEur": "6794.83"
+     "netTco2e": "87.965",
+     "indirectTco2e": "4.4",
+     "totalEmbeddedTco2e": "152.9",
+     "certificates": "87.965",
+     "costEur": "6629.04"
     }
    },
    "threshold": {
@@ -1921,954 +1921,6 @@
   },
   {
    "input": {
-    "cn": "25233000",
-    "country": "IN",
-    "route": "default",
-    "massT": "100",
-    "date": "2026-03-15",
-    "emissionsScope": "direct"
-   },
-   "estimate": {
-    "emissionsTco2e": "225.5",
-    "quantityT": "100",
-    "customsLineId": "estimator-prototype",
-    "stamp": {
-     "tier": "default+markup",
-     "originBasis": "country",
-     "rulePackages": [
-      "eu-cbam-2026-defaults-v2@v1",
-      "eu-cbam-2026-free-allocation@v1"
-     ],
-     "sources": [
-      "dir-2003-87-art-10a-1a",
-      "dr-2019-331-art-14-6",
-      "ec-benchmarks-workbook-v1",
-      "ec-certificate-price-page",
-      "ec-default-values-workbook-v1",
-      "ir-2025-2620",
-      "ir-2025-2621",
-      "reg-2023-956"
-     ],
-     "snapshotHash": "browser-prototype",
-     "provisional": true,
-     "notes": []
-    },
-    "status": "unavailable",
-    "reason": "The published rules do not give a free-allocation benchmark for this good, production route, year or quarter, so no figure is shown.",
-    "selector": "benchmark/25233000/column-B/route-independent/2026-03-15"
-   },
-   "threshold": {
-    "state": "above_threshold",
-    "knownEligibleMassT": "100",
-    "thresholdT": "50",
-    "calendarYear": 2026,
-    "sector": "cement",
-    "sourceLocator": "Regulation (EU) 2023/956 Article 2(3)"
-   }
-  },
-  {
-   "input": {
-    "cn": "25233000",
-    "country": "IN",
-    "route": "default",
-    "massT": "100",
-    "date": "2026-03-15",
-    "emissionsScope": "direct_and_indirect"
-   },
-   "estimate": {
-    "emissionsTco2e": "225.5",
-    "quantityT": "100",
-    "customsLineId": "estimator-prototype",
-    "stamp": {
-     "tier": "default+markup",
-     "originBasis": "country",
-     "rulePackages": [
-      "eu-cbam-2026-defaults-v2@v1",
-      "eu-cbam-2026-free-allocation@v1"
-     ],
-     "sources": [
-      "dir-2003-87-art-10a-1a",
-      "dr-2019-331-art-14-6",
-      "ec-benchmarks-workbook-v1",
-      "ec-certificate-price-page",
-      "ec-default-values-workbook-v1",
-      "ir-2025-2620",
-      "ir-2025-2621",
-      "reg-2023-956"
-     ],
-     "snapshotHash": "browser-prototype",
-     "provisional": true,
-     "notes": []
-    },
-    "status": "unavailable",
-    "reason": "The published rules do not give a free-allocation benchmark for this good, production route, year or quarter, so no figure is shown.",
-    "selector": "benchmark/25233000/column-B/route-independent/2026-03-15"
-   },
-   "threshold": {
-    "state": "above_threshold",
-    "knownEligibleMassT": "100",
-    "thresholdT": "50",
-    "calendarYear": 2026,
-    "sector": "cement",
-    "sourceLocator": "Regulation (EU) 2023/956 Article 2(3)"
-   }
-  },
-  {
-   "input": {
-    "cn": "25233000",
-    "country": "IN",
-    "route": "default",
-    "massT": "100",
-    "date": "2026-03-15",
-    "emissionsScope": "direct"
-   },
-   "estimate": {
-    "emissionsTco2e": "225.5",
-    "quantityT": "100",
-    "customsLineId": "estimator-prototype",
-    "stamp": {
-     "tier": "default+markup",
-     "originBasis": "country",
-     "rulePackages": [
-      "eu-cbam-2026-defaults-v2@v1",
-      "eu-cbam-2026-free-allocation@v1"
-     ],
-     "sources": [
-      "dir-2003-87-art-10a-1a",
-      "dr-2019-331-art-14-6",
-      "ec-benchmarks-workbook-v1",
-      "ec-certificate-price-page",
-      "ec-default-values-workbook-v1",
-      "ir-2025-2620",
-      "ir-2025-2621",
-      "reg-2023-956"
-     ],
-     "snapshotHash": "browser-prototype",
-     "provisional": true,
-     "notes": []
-    },
-    "status": "unavailable",
-    "reason": "The published rules do not give a free-allocation benchmark for this good, production route, year or quarter, so no figure is shown.",
-    "selector": "benchmark/25233000/column-B/route-independent/2026-03-15"
-   },
-   "threshold": {
-    "state": "above_threshold",
-    "knownEligibleMassT": "100",
-    "thresholdT": "50",
-    "calendarYear": 2026,
-    "sector": "cement",
-    "sourceLocator": "Regulation (EU) 2023/956 Article 2(3)"
-   }
-  },
-  {
-   "input": {
-    "cn": "25233000",
-    "country": "IN",
-    "route": "default",
-    "massT": "100",
-    "date": "2026-03-15",
-    "emissionsScope": "direct_and_indirect"
-   },
-   "estimate": {
-    "emissionsTco2e": "225.5",
-    "quantityT": "100",
-    "customsLineId": "estimator-prototype",
-    "stamp": {
-     "tier": "default+markup",
-     "originBasis": "country",
-     "rulePackages": [
-      "eu-cbam-2026-defaults-v2@v1",
-      "eu-cbam-2026-free-allocation@v1"
-     ],
-     "sources": [
-      "dir-2003-87-art-10a-1a",
-      "dr-2019-331-art-14-6",
-      "ec-benchmarks-workbook-v1",
-      "ec-certificate-price-page",
-      "ec-default-values-workbook-v1",
-      "ir-2025-2620",
-      "ir-2025-2621",
-      "reg-2023-956"
-     ],
-     "snapshotHash": "browser-prototype",
-     "provisional": true,
-     "notes": []
-    },
-    "status": "unavailable",
-    "reason": "The published rules do not give a free-allocation benchmark for this good, production route, year or quarter, so no figure is shown.",
-    "selector": "benchmark/25233000/column-B/route-independent/2026-03-15"
-   },
-   "threshold": {
-    "state": "above_threshold",
-    "knownEligibleMassT": "100",
-    "thresholdT": "50",
-    "calendarYear": 2026,
-    "sector": "cement",
-    "sourceLocator": "Regulation (EU) 2023/956 Article 2(3)"
-   }
-  },
-  {
-   "input": {
-    "cn": "25233000",
-    "country": "TR",
-    "route": "default",
-    "massT": "100",
-    "date": "2026-03-15",
-    "emissionsScope": "direct"
-   },
-   "estimate": {
-    "emissionsTco2e": "200.2",
-    "quantityT": "100",
-    "customsLineId": "estimator-prototype",
-    "stamp": {
-     "tier": "default+markup",
-     "originBasis": "country",
-     "rulePackages": [
-      "eu-cbam-2026-defaults-v2@v1",
-      "eu-cbam-2026-free-allocation@v1"
-     ],
-     "sources": [
-      "dir-2003-87-art-10a-1a",
-      "dr-2019-331-art-14-6",
-      "ec-benchmarks-workbook-v1",
-      "ec-certificate-price-page",
-      "ec-default-values-workbook-v1",
-      "ir-2025-2620",
-      "ir-2025-2621",
-      "reg-2023-956"
-     ],
-     "snapshotHash": "browser-prototype",
-     "provisional": true,
-     "notes": []
-    },
-    "status": "unavailable",
-    "reason": "The published rules do not give a free-allocation benchmark for this good, production route, year or quarter, so no figure is shown.",
-    "selector": "benchmark/25233000/column-B/route-independent/2026-03-15"
-   },
-   "threshold": {
-    "state": "above_threshold",
-    "knownEligibleMassT": "100",
-    "thresholdT": "50",
-    "calendarYear": 2026,
-    "sector": "cement",
-    "sourceLocator": "Regulation (EU) 2023/956 Article 2(3)"
-   }
-  },
-  {
-   "input": {
-    "cn": "25233000",
-    "country": "TR",
-    "route": "default",
-    "massT": "100",
-    "date": "2026-03-15",
-    "emissionsScope": "direct_and_indirect"
-   },
-   "estimate": {
-    "emissionsTco2e": "200.2",
-    "quantityT": "100",
-    "customsLineId": "estimator-prototype",
-    "stamp": {
-     "tier": "default+markup",
-     "originBasis": "country",
-     "rulePackages": [
-      "eu-cbam-2026-defaults-v2@v1",
-      "eu-cbam-2026-free-allocation@v1"
-     ],
-     "sources": [
-      "dir-2003-87-art-10a-1a",
-      "dr-2019-331-art-14-6",
-      "ec-benchmarks-workbook-v1",
-      "ec-certificate-price-page",
-      "ec-default-values-workbook-v1",
-      "ir-2025-2620",
-      "ir-2025-2621",
-      "reg-2023-956"
-     ],
-     "snapshotHash": "browser-prototype",
-     "provisional": true,
-     "notes": []
-    },
-    "status": "unavailable",
-    "reason": "The published rules do not give a free-allocation benchmark for this good, production route, year or quarter, so no figure is shown.",
-    "selector": "benchmark/25233000/column-B/route-independent/2026-03-15"
-   },
-   "threshold": {
-    "state": "above_threshold",
-    "knownEligibleMassT": "100",
-    "thresholdT": "50",
-    "calendarYear": 2026,
-    "sector": "cement",
-    "sourceLocator": "Regulation (EU) 2023/956 Article 2(3)"
-   }
-  },
-  {
-   "input": {
-    "cn": "25233000",
-    "country": "TR",
-    "route": "default",
-    "massT": "100",
-    "date": "2026-03-15",
-    "emissionsScope": "direct"
-   },
-   "estimate": {
-    "emissionsTco2e": "200.2",
-    "quantityT": "100",
-    "customsLineId": "estimator-prototype",
-    "stamp": {
-     "tier": "default+markup",
-     "originBasis": "country",
-     "rulePackages": [
-      "eu-cbam-2026-defaults-v2@v1",
-      "eu-cbam-2026-free-allocation@v1"
-     ],
-     "sources": [
-      "dir-2003-87-art-10a-1a",
-      "dr-2019-331-art-14-6",
-      "ec-benchmarks-workbook-v1",
-      "ec-certificate-price-page",
-      "ec-default-values-workbook-v1",
-      "ir-2025-2620",
-      "ir-2025-2621",
-      "reg-2023-956"
-     ],
-     "snapshotHash": "browser-prototype",
-     "provisional": true,
-     "notes": []
-    },
-    "status": "unavailable",
-    "reason": "The published rules do not give a free-allocation benchmark for this good, production route, year or quarter, so no figure is shown.",
-    "selector": "benchmark/25233000/column-B/route-independent/2026-03-15"
-   },
-   "threshold": {
-    "state": "above_threshold",
-    "knownEligibleMassT": "100",
-    "thresholdT": "50",
-    "calendarYear": 2026,
-    "sector": "cement",
-    "sourceLocator": "Regulation (EU) 2023/956 Article 2(3)"
-   }
-  },
-  {
-   "input": {
-    "cn": "25233000",
-    "country": "TR",
-    "route": "default",
-    "massT": "100",
-    "date": "2026-03-15",
-    "emissionsScope": "direct_and_indirect"
-   },
-   "estimate": {
-    "emissionsTco2e": "200.2",
-    "quantityT": "100",
-    "customsLineId": "estimator-prototype",
-    "stamp": {
-     "tier": "default+markup",
-     "originBasis": "country",
-     "rulePackages": [
-      "eu-cbam-2026-defaults-v2@v1",
-      "eu-cbam-2026-free-allocation@v1"
-     ],
-     "sources": [
-      "dir-2003-87-art-10a-1a",
-      "dr-2019-331-art-14-6",
-      "ec-benchmarks-workbook-v1",
-      "ec-certificate-price-page",
-      "ec-default-values-workbook-v1",
-      "ir-2025-2620",
-      "ir-2025-2621",
-      "reg-2023-956"
-     ],
-     "snapshotHash": "browser-prototype",
-     "provisional": true,
-     "notes": []
-    },
-    "status": "unavailable",
-    "reason": "The published rules do not give a free-allocation benchmark for this good, production route, year or quarter, so no figure is shown.",
-    "selector": "benchmark/25233000/column-B/route-independent/2026-03-15"
-   },
-   "threshold": {
-    "state": "above_threshold",
-    "knownEligibleMassT": "100",
-    "thresholdT": "50",
-    "calendarYear": 2026,
-    "sector": "cement",
-    "sourceLocator": "Regulation (EU) 2023/956 Article 2(3)"
-   }
-  },
-  {
-   "input": {
-    "cn": "25233000",
-    "country": "CN",
-    "route": "default",
-    "massT": "100",
-    "date": "2026-03-15",
-    "emissionsScope": "direct"
-   },
-   "estimate": {
-    "emissionsTco2e": "217.8",
-    "quantityT": "100",
-    "customsLineId": "estimator-prototype",
-    "stamp": {
-     "tier": "default+markup",
-     "originBasis": "country",
-     "rulePackages": [
-      "eu-cbam-2026-defaults-v2@v1",
-      "eu-cbam-2026-free-allocation@v1"
-     ],
-     "sources": [
-      "dir-2003-87-art-10a-1a",
-      "dr-2019-331-art-14-6",
-      "ec-benchmarks-workbook-v1",
-      "ec-certificate-price-page",
-      "ec-default-values-workbook-v1",
-      "ir-2025-2620",
-      "ir-2025-2621",
-      "reg-2023-956"
-     ],
-     "snapshotHash": "browser-prototype",
-     "provisional": true,
-     "notes": []
-    },
-    "status": "unavailable",
-    "reason": "The published rules do not give a free-allocation benchmark for this good, production route, year or quarter, so no figure is shown.",
-    "selector": "benchmark/25233000/column-B/route-independent/2026-03-15"
-   },
-   "threshold": {
-    "state": "above_threshold",
-    "knownEligibleMassT": "100",
-    "thresholdT": "50",
-    "calendarYear": 2026,
-    "sector": "cement",
-    "sourceLocator": "Regulation (EU) 2023/956 Article 2(3)"
-   }
-  },
-  {
-   "input": {
-    "cn": "25233000",
-    "country": "CN",
-    "route": "default",
-    "massT": "100",
-    "date": "2026-03-15",
-    "emissionsScope": "direct_and_indirect"
-   },
-   "estimate": {
-    "emissionsTco2e": "217.8",
-    "quantityT": "100",
-    "customsLineId": "estimator-prototype",
-    "stamp": {
-     "tier": "default+markup",
-     "originBasis": "country",
-     "rulePackages": [
-      "eu-cbam-2026-defaults-v2@v1",
-      "eu-cbam-2026-free-allocation@v1"
-     ],
-     "sources": [
-      "dir-2003-87-art-10a-1a",
-      "dr-2019-331-art-14-6",
-      "ec-benchmarks-workbook-v1",
-      "ec-certificate-price-page",
-      "ec-default-values-workbook-v1",
-      "ir-2025-2620",
-      "ir-2025-2621",
-      "reg-2023-956"
-     ],
-     "snapshotHash": "browser-prototype",
-     "provisional": true,
-     "notes": []
-    },
-    "status": "unavailable",
-    "reason": "The published rules do not give a free-allocation benchmark for this good, production route, year or quarter, so no figure is shown.",
-    "selector": "benchmark/25233000/column-B/route-independent/2026-03-15"
-   },
-   "threshold": {
-    "state": "above_threshold",
-    "knownEligibleMassT": "100",
-    "thresholdT": "50",
-    "calendarYear": 2026,
-    "sector": "cement",
-    "sourceLocator": "Regulation (EU) 2023/956 Article 2(3)"
-   }
-  },
-  {
-   "input": {
-    "cn": "25233000",
-    "country": "CN",
-    "route": "default",
-    "massT": "100",
-    "date": "2026-03-15",
-    "emissionsScope": "direct"
-   },
-   "estimate": {
-    "emissionsTco2e": "217.8",
-    "quantityT": "100",
-    "customsLineId": "estimator-prototype",
-    "stamp": {
-     "tier": "default+markup",
-     "originBasis": "country",
-     "rulePackages": [
-      "eu-cbam-2026-defaults-v2@v1",
-      "eu-cbam-2026-free-allocation@v1"
-     ],
-     "sources": [
-      "dir-2003-87-art-10a-1a",
-      "dr-2019-331-art-14-6",
-      "ec-benchmarks-workbook-v1",
-      "ec-certificate-price-page",
-      "ec-default-values-workbook-v1",
-      "ir-2025-2620",
-      "ir-2025-2621",
-      "reg-2023-956"
-     ],
-     "snapshotHash": "browser-prototype",
-     "provisional": true,
-     "notes": []
-    },
-    "status": "unavailable",
-    "reason": "The published rules do not give a free-allocation benchmark for this good, production route, year or quarter, so no figure is shown.",
-    "selector": "benchmark/25233000/column-B/route-independent/2026-03-15"
-   },
-   "threshold": {
-    "state": "above_threshold",
-    "knownEligibleMassT": "100",
-    "thresholdT": "50",
-    "calendarYear": 2026,
-    "sector": "cement",
-    "sourceLocator": "Regulation (EU) 2023/956 Article 2(3)"
-   }
-  },
-  {
-   "input": {
-    "cn": "25233000",
-    "country": "CN",
-    "route": "default",
-    "massT": "100",
-    "date": "2026-03-15",
-    "emissionsScope": "direct_and_indirect"
-   },
-   "estimate": {
-    "emissionsTco2e": "217.8",
-    "quantityT": "100",
-    "customsLineId": "estimator-prototype",
-    "stamp": {
-     "tier": "default+markup",
-     "originBasis": "country",
-     "rulePackages": [
-      "eu-cbam-2026-defaults-v2@v1",
-      "eu-cbam-2026-free-allocation@v1"
-     ],
-     "sources": [
-      "dir-2003-87-art-10a-1a",
-      "dr-2019-331-art-14-6",
-      "ec-benchmarks-workbook-v1",
-      "ec-certificate-price-page",
-      "ec-default-values-workbook-v1",
-      "ir-2025-2620",
-      "ir-2025-2621",
-      "reg-2023-956"
-     ],
-     "snapshotHash": "browser-prototype",
-     "provisional": true,
-     "notes": []
-    },
-    "status": "unavailable",
-    "reason": "The published rules do not give a free-allocation benchmark for this good, production route, year or quarter, so no figure is shown.",
-    "selector": "benchmark/25233000/column-B/route-independent/2026-03-15"
-   },
-   "threshold": {
-    "state": "above_threshold",
-    "knownEligibleMassT": "100",
-    "thresholdT": "50",
-    "calendarYear": 2026,
-    "sector": "cement",
-    "sourceLocator": "Regulation (EU) 2023/956 Article 2(3)"
-   }
-  },
-  {
-   "input": {
-    "cn": "25233000",
-    "country": "BR",
-    "route": "default",
-    "massT": "100",
-    "date": "2026-03-15",
-    "emissionsScope": "direct"
-   },
-   "estimate": {
-    "emissionsTco2e": "210.1",
-    "quantityT": "100",
-    "customsLineId": "estimator-prototype",
-    "stamp": {
-     "tier": "default+markup",
-     "originBasis": "country",
-     "rulePackages": [
-      "eu-cbam-2026-defaults-v2@v1",
-      "eu-cbam-2026-free-allocation@v1"
-     ],
-     "sources": [
-      "dir-2003-87-art-10a-1a",
-      "dr-2019-331-art-14-6",
-      "ec-benchmarks-workbook-v1",
-      "ec-certificate-price-page",
-      "ec-default-values-workbook-v1",
-      "ir-2025-2620",
-      "ir-2025-2621",
-      "reg-2023-956"
-     ],
-     "snapshotHash": "browser-prototype",
-     "provisional": true,
-     "notes": []
-    },
-    "status": "unavailable",
-    "reason": "The published rules do not give a free-allocation benchmark for this good, production route, year or quarter, so no figure is shown.",
-    "selector": "benchmark/25233000/column-B/route-independent/2026-03-15"
-   },
-   "threshold": {
-    "state": "above_threshold",
-    "knownEligibleMassT": "100",
-    "thresholdT": "50",
-    "calendarYear": 2026,
-    "sector": "cement",
-    "sourceLocator": "Regulation (EU) 2023/956 Article 2(3)"
-   }
-  },
-  {
-   "input": {
-    "cn": "25233000",
-    "country": "BR",
-    "route": "default",
-    "massT": "100",
-    "date": "2026-03-15",
-    "emissionsScope": "direct_and_indirect"
-   },
-   "estimate": {
-    "emissionsTco2e": "210.1",
-    "quantityT": "100",
-    "customsLineId": "estimator-prototype",
-    "stamp": {
-     "tier": "default+markup",
-     "originBasis": "country",
-     "rulePackages": [
-      "eu-cbam-2026-defaults-v2@v1",
-      "eu-cbam-2026-free-allocation@v1"
-     ],
-     "sources": [
-      "dir-2003-87-art-10a-1a",
-      "dr-2019-331-art-14-6",
-      "ec-benchmarks-workbook-v1",
-      "ec-certificate-price-page",
-      "ec-default-values-workbook-v1",
-      "ir-2025-2620",
-      "ir-2025-2621",
-      "reg-2023-956"
-     ],
-     "snapshotHash": "browser-prototype",
-     "provisional": true,
-     "notes": []
-    },
-    "status": "unavailable",
-    "reason": "The published rules do not give a free-allocation benchmark for this good, production route, year or quarter, so no figure is shown.",
-    "selector": "benchmark/25233000/column-B/route-independent/2026-03-15"
-   },
-   "threshold": {
-    "state": "above_threshold",
-    "knownEligibleMassT": "100",
-    "thresholdT": "50",
-    "calendarYear": 2026,
-    "sector": "cement",
-    "sourceLocator": "Regulation (EU) 2023/956 Article 2(3)"
-   }
-  },
-  {
-   "input": {
-    "cn": "25233000",
-    "country": "BR",
-    "route": "default",
-    "massT": "100",
-    "date": "2026-03-15",
-    "emissionsScope": "direct"
-   },
-   "estimate": {
-    "emissionsTco2e": "210.1",
-    "quantityT": "100",
-    "customsLineId": "estimator-prototype",
-    "stamp": {
-     "tier": "default+markup",
-     "originBasis": "country",
-     "rulePackages": [
-      "eu-cbam-2026-defaults-v2@v1",
-      "eu-cbam-2026-free-allocation@v1"
-     ],
-     "sources": [
-      "dir-2003-87-art-10a-1a",
-      "dr-2019-331-art-14-6",
-      "ec-benchmarks-workbook-v1",
-      "ec-certificate-price-page",
-      "ec-default-values-workbook-v1",
-      "ir-2025-2620",
-      "ir-2025-2621",
-      "reg-2023-956"
-     ],
-     "snapshotHash": "browser-prototype",
-     "provisional": true,
-     "notes": []
-    },
-    "status": "unavailable",
-    "reason": "The published rules do not give a free-allocation benchmark for this good, production route, year or quarter, so no figure is shown.",
-    "selector": "benchmark/25233000/column-B/route-independent/2026-03-15"
-   },
-   "threshold": {
-    "state": "above_threshold",
-    "knownEligibleMassT": "100",
-    "thresholdT": "50",
-    "calendarYear": 2026,
-    "sector": "cement",
-    "sourceLocator": "Regulation (EU) 2023/956 Article 2(3)"
-   }
-  },
-  {
-   "input": {
-    "cn": "25233000",
-    "country": "BR",
-    "route": "default",
-    "massT": "100",
-    "date": "2026-03-15",
-    "emissionsScope": "direct_and_indirect"
-   },
-   "estimate": {
-    "emissionsTco2e": "210.1",
-    "quantityT": "100",
-    "customsLineId": "estimator-prototype",
-    "stamp": {
-     "tier": "default+markup",
-     "originBasis": "country",
-     "rulePackages": [
-      "eu-cbam-2026-defaults-v2@v1",
-      "eu-cbam-2026-free-allocation@v1"
-     ],
-     "sources": [
-      "dir-2003-87-art-10a-1a",
-      "dr-2019-331-art-14-6",
-      "ec-benchmarks-workbook-v1",
-      "ec-certificate-price-page",
-      "ec-default-values-workbook-v1",
-      "ir-2025-2620",
-      "ir-2025-2621",
-      "reg-2023-956"
-     ],
-     "snapshotHash": "browser-prototype",
-     "provisional": true,
-     "notes": []
-    },
-    "status": "unavailable",
-    "reason": "The published rules do not give a free-allocation benchmark for this good, production route, year or quarter, so no figure is shown.",
-    "selector": "benchmark/25233000/column-B/route-independent/2026-03-15"
-   },
-   "threshold": {
-    "state": "above_threshold",
-    "knownEligibleMassT": "100",
-    "thresholdT": "50",
-    "calendarYear": 2026,
-    "sector": "cement",
-    "sourceLocator": "Regulation (EU) 2023/956 Article 2(3)"
-   }
-  },
-  {
-   "input": {
-    "cn": "25233000",
-    "country": "OTHER",
-    "route": "default",
-    "massT": "100",
-    "date": "2026-03-15",
-    "emissionsScope": "direct"
-   },
-   "estimate": {
-    "emissionsTco2e": "207.9",
-    "quantityT": "100",
-    "customsLineId": "estimator-prototype",
-    "stamp": {
-     "tier": "default+markup",
-     "originBasis": "residual",
-     "rulePackages": [
-      "eu-cbam-2026-defaults-v2@v1",
-      "eu-cbam-2026-free-allocation@v1"
-     ],
-     "sources": [
-      "dir-2003-87-art-10a-1a",
-      "dr-2019-331-art-14-6",
-      "ec-benchmarks-workbook-v1",
-      "ec-certificate-price-page",
-      "ec-default-values-workbook-v1",
-      "ir-2025-2620",
-      "ir-2025-2621",
-      "reg-2023-956"
-     ],
-     "snapshotHash": "browser-prototype",
-     "provisional": true,
-     "notes": [
-      "The Commission does not publish a default for this good from this country of origin, so this figure uses its \"Other Countries and Territories\" residual default — a world-average value, not your country's own."
-     ]
-    },
-    "status": "unavailable",
-    "reason": "The published rules do not give a free-allocation benchmark for this good, production route, year or quarter, so no figure is shown.",
-    "selector": "benchmark/25233000/column-B/route-independent/2026-03-15"
-   },
-   "threshold": {
-    "state": "above_threshold",
-    "knownEligibleMassT": "100",
-    "thresholdT": "50",
-    "calendarYear": 2026,
-    "sector": "cement",
-    "sourceLocator": "Regulation (EU) 2023/956 Article 2(3)"
-   }
-  },
-  {
-   "input": {
-    "cn": "25233000",
-    "country": "OTHER",
-    "route": "default",
-    "massT": "100",
-    "date": "2026-03-15",
-    "emissionsScope": "direct_and_indirect"
-   },
-   "estimate": {
-    "emissionsTco2e": "207.9",
-    "quantityT": "100",
-    "customsLineId": "estimator-prototype",
-    "stamp": {
-     "tier": "default+markup",
-     "originBasis": "residual",
-     "rulePackages": [
-      "eu-cbam-2026-defaults-v2@v1",
-      "eu-cbam-2026-free-allocation@v1"
-     ],
-     "sources": [
-      "dir-2003-87-art-10a-1a",
-      "dr-2019-331-art-14-6",
-      "ec-benchmarks-workbook-v1",
-      "ec-certificate-price-page",
-      "ec-default-values-workbook-v1",
-      "ir-2025-2620",
-      "ir-2025-2621",
-      "reg-2023-956"
-     ],
-     "snapshotHash": "browser-prototype",
-     "provisional": true,
-     "notes": [
-      "The Commission does not publish a default for this good from this country of origin, so this figure uses its \"Other Countries and Territories\" residual default — a world-average value, not your country's own."
-     ]
-    },
-    "status": "unavailable",
-    "reason": "The published rules do not give a free-allocation benchmark for this good, production route, year or quarter, so no figure is shown.",
-    "selector": "benchmark/25233000/column-B/route-independent/2026-03-15"
-   },
-   "threshold": {
-    "state": "above_threshold",
-    "knownEligibleMassT": "100",
-    "thresholdT": "50",
-    "calendarYear": 2026,
-    "sector": "cement",
-    "sourceLocator": "Regulation (EU) 2023/956 Article 2(3)"
-   }
-  },
-  {
-   "input": {
-    "cn": "25233000",
-    "country": "OTHER",
-    "route": "default",
-    "massT": "100",
-    "date": "2026-03-15",
-    "emissionsScope": "direct"
-   },
-   "estimate": {
-    "emissionsTco2e": "207.9",
-    "quantityT": "100",
-    "customsLineId": "estimator-prototype",
-    "stamp": {
-     "tier": "default+markup",
-     "originBasis": "residual",
-     "rulePackages": [
-      "eu-cbam-2026-defaults-v2@v1",
-      "eu-cbam-2026-free-allocation@v1"
-     ],
-     "sources": [
-      "dir-2003-87-art-10a-1a",
-      "dr-2019-331-art-14-6",
-      "ec-benchmarks-workbook-v1",
-      "ec-certificate-price-page",
-      "ec-default-values-workbook-v1",
-      "ir-2025-2620",
-      "ir-2025-2621",
-      "reg-2023-956"
-     ],
-     "snapshotHash": "browser-prototype",
-     "provisional": true,
-     "notes": [
-      "The Commission does not publish a default for this good from this country of origin, so this figure uses its \"Other Countries and Territories\" residual default — a world-average value, not your country's own."
-     ]
-    },
-    "status": "unavailable",
-    "reason": "The published rules do not give a free-allocation benchmark for this good, production route, year or quarter, so no figure is shown.",
-    "selector": "benchmark/25233000/column-B/route-independent/2026-03-15"
-   },
-   "threshold": {
-    "state": "above_threshold",
-    "knownEligibleMassT": "100",
-    "thresholdT": "50",
-    "calendarYear": 2026,
-    "sector": "cement",
-    "sourceLocator": "Regulation (EU) 2023/956 Article 2(3)"
-   }
-  },
-  {
-   "input": {
-    "cn": "25233000",
-    "country": "OTHER",
-    "route": "default",
-    "massT": "100",
-    "date": "2026-03-15",
-    "emissionsScope": "direct_and_indirect"
-   },
-   "estimate": {
-    "emissionsTco2e": "207.9",
-    "quantityT": "100",
-    "customsLineId": "estimator-prototype",
-    "stamp": {
-     "tier": "default+markup",
-     "originBasis": "residual",
-     "rulePackages": [
-      "eu-cbam-2026-defaults-v2@v1",
-      "eu-cbam-2026-free-allocation@v1"
-     ],
-     "sources": [
-      "dir-2003-87-art-10a-1a",
-      "dr-2019-331-art-14-6",
-      "ec-benchmarks-workbook-v1",
-      "ec-certificate-price-page",
-      "ec-default-values-workbook-v1",
-      "ir-2025-2620",
-      "ir-2025-2621",
-      "reg-2023-956"
-     ],
-     "snapshotHash": "browser-prototype",
-     "provisional": true,
-     "notes": [
-      "The Commission does not publish a default for this good from this country of origin, so this figure uses its \"Other Countries and Territories\" residual default — a world-average value, not your country's own."
-     ]
-    },
-    "status": "unavailable",
-    "reason": "The published rules do not give a free-allocation benchmark for this good, production route, year or quarter, so no figure is shown.",
-    "selector": "benchmark/25233000/column-B/route-independent/2026-03-15"
-   },
-   "threshold": {
-    "state": "above_threshold",
-    "knownEligibleMassT": "100",
-    "thresholdT": "50",
-    "calendarYear": 2026,
-    "sector": "cement",
-    "sourceLocator": "Regulation (EU) 2023/956 Article 2(3)"
-   }
-  },
-  {
-   "input": {
     "cn": "28041000",
     "country": "DZ",
     "route": "default",
@@ -4597,15 +3649,15 @@
   },
   {
    "input": {
-    "cn": "31025000",
+    "cn": "72052100",
     "country": "DZ",
-    "route": "default",
+    "route": "(C)",
     "massT": "100",
     "date": "2026-03-15",
     "emissionsScope": "direct"
    },
    "estimate": {
-    "emissionsTco2e": "391.88",
+    "emissionsTco2e": "317.9",
     "quantityT": "100",
     "customsLineId": "estimator-prototype",
     "stamp": {
@@ -4630,29 +3682,29 @@
      "notes": []
     },
     "status": "unavailable",
-    "reason": "The published rules do not give a free-allocation benchmark for this good, production route, year or quarter, so no figure is shown.",
-    "selector": "benchmark/31025000/column-B/route-independent/2026-03-15"
+    "reason": "The published rules do not give a free-allocation benchmark for this good, production route or year, so no figure is shown.",
+    "selector": "benchmark/72052100/column-B/(C)/2026-03-15"
    },
    "threshold": {
     "state": "above_threshold",
     "knownEligibleMassT": "100",
     "thresholdT": "50",
     "calendarYear": 2026,
-    "sector": "fertilisers",
+    "sector": "iron_and_steel",
     "sourceLocator": "Regulation (EU) 2023/956 Article 2(3)"
    }
   },
   {
    "input": {
-    "cn": "31025000",
+    "cn": "72052100",
     "country": "DZ",
-    "route": "default",
+    "route": "(C)",
     "massT": "100",
     "date": "2026-03-15",
     "emissionsScope": "direct_and_indirect"
    },
    "estimate": {
-    "emissionsTco2e": "391.88",
+    "emissionsTco2e": "317.9",
     "quantityT": "100",
     "customsLineId": "estimator-prototype",
     "stamp": {
@@ -4677,29 +3729,29 @@
      "notes": []
     },
     "status": "unavailable",
-    "reason": "The published rules do not give a free-allocation benchmark for this good, production route, year or quarter, so no figure is shown.",
-    "selector": "benchmark/31025000/column-B/route-independent/2026-03-15"
+    "reason": "The published rules do not give a free-allocation benchmark for this good, production route or year, so no figure is shown.",
+    "selector": "benchmark/72052100/column-B/(C)/2026-03-15"
    },
    "threshold": {
     "state": "above_threshold",
     "knownEligibleMassT": "100",
     "thresholdT": "50",
     "calendarYear": 2026,
-    "sector": "fertilisers",
+    "sector": "iron_and_steel",
     "sourceLocator": "Regulation (EU) 2023/956 Article 2(3)"
    }
   },
   {
    "input": {
-    "cn": "31025000",
+    "cn": "72052100",
     "country": "DZ",
-    "route": "default",
+    "route": "(C)",
     "massT": "100",
     "date": "2026-03-15",
     "emissionsScope": "direct"
    },
    "estimate": {
-    "emissionsTco2e": "391.88",
+    "emissionsTco2e": "317.9",
     "quantityT": "100",
     "customsLineId": "estimator-prototype",
     "stamp": {
@@ -4724,29 +3776,29 @@
      "notes": []
     },
     "status": "unavailable",
-    "reason": "The published rules do not give a free-allocation benchmark for this good, production route, year or quarter, so no figure is shown.",
-    "selector": "benchmark/31025000/column-B/route-independent/2026-03-15"
+    "reason": "The published rules do not give a free-allocation benchmark for this good, production route or year, so no figure is shown.",
+    "selector": "benchmark/72052100/column-B/(C)/2026-03-15"
    },
    "threshold": {
     "state": "above_threshold",
     "knownEligibleMassT": "100",
     "thresholdT": "50",
     "calendarYear": 2026,
-    "sector": "fertilisers",
+    "sector": "iron_and_steel",
     "sourceLocator": "Regulation (EU) 2023/956 Article 2(3)"
    }
   },
   {
    "input": {
-    "cn": "31025000",
+    "cn": "72052100",
     "country": "DZ",
-    "route": "default",
+    "route": "(C)",
     "massT": "100",
     "date": "2026-03-15",
     "emissionsScope": "direct_and_indirect"
    },
    "estimate": {
-    "emissionsTco2e": "391.88",
+    "emissionsTco2e": "317.9",
     "quantityT": "100",
     "customsLineId": "estimator-prototype",
     "stamp": {
@@ -4771,29 +3823,29 @@
      "notes": []
     },
     "status": "unavailable",
-    "reason": "The published rules do not give a free-allocation benchmark for this good, production route, year or quarter, so no figure is shown.",
-    "selector": "benchmark/31025000/column-B/route-independent/2026-03-15"
+    "reason": "The published rules do not give a free-allocation benchmark for this good, production route or year, so no figure is shown.",
+    "selector": "benchmark/72052100/column-B/(C)/2026-03-15"
    },
    "threshold": {
     "state": "above_threshold",
     "knownEligibleMassT": "100",
     "thresholdT": "50",
     "calendarYear": 2026,
-    "sector": "fertilisers",
+    "sector": "iron_and_steel",
     "sourceLocator": "Regulation (EU) 2023/956 Article 2(3)"
    }
   },
   {
    "input": {
-    "cn": "72021120",
+    "cn": "72052100",
     "country": "IN",
-    "route": "default",
+    "route": "(C)",
     "massT": "100",
     "date": "2026-03-15",
     "emissionsScope": "direct"
    },
    "estimate": {
-    "emissionsTco2e": "185.9",
+    "emissionsTco2e": "279.4",
     "quantityT": "100",
     "customsLineId": "estimator-prototype",
     "stamp": {
@@ -4818,8 +3870,8 @@
      "notes": []
     },
     "status": "unavailable",
-    "reason": "The published rules do not give a free-allocation benchmark for this good, production route, year or quarter, so no figure is shown.",
-    "selector": "benchmark/72021120/column-B/route-independent/2026-03-15"
+    "reason": "The published rules do not give a free-allocation benchmark for this good, production route or year, so no figure is shown.",
+    "selector": "benchmark/72052100/column-B/(C)/2026-03-15"
    },
    "threshold": {
     "state": "above_threshold",
@@ -4832,15 +3884,15 @@
   },
   {
    "input": {
-    "cn": "72021120",
+    "cn": "72052100",
     "country": "IN",
-    "route": "default",
+    "route": "(C)",
     "massT": "100",
     "date": "2026-03-15",
     "emissionsScope": "direct_and_indirect"
    },
    "estimate": {
-    "emissionsTco2e": "185.9",
+    "emissionsTco2e": "279.4",
     "quantityT": "100",
     "customsLineId": "estimator-prototype",
     "stamp": {
@@ -4865,8 +3917,8 @@
      "notes": []
     },
     "status": "unavailable",
-    "reason": "The published rules do not give a free-allocation benchmark for this good, production route, year or quarter, so no figure is shown.",
-    "selector": "benchmark/72021120/column-B/route-independent/2026-03-15"
+    "reason": "The published rules do not give a free-allocation benchmark for this good, production route or year, so no figure is shown.",
+    "selector": "benchmark/72052100/column-B/(C)/2026-03-15"
    },
    "threshold": {
     "state": "above_threshold",
@@ -4879,15 +3931,15 @@
   },
   {
    "input": {
-    "cn": "72021120",
+    "cn": "72052100",
     "country": "IN",
-    "route": "default",
+    "route": "(C)",
     "massT": "100",
     "date": "2026-03-15",
     "emissionsScope": "direct"
    },
    "estimate": {
-    "emissionsTco2e": "185.9",
+    "emissionsTco2e": "279.4",
     "quantityT": "100",
     "customsLineId": "estimator-prototype",
     "stamp": {
@@ -4912,8 +3964,8 @@
      "notes": []
     },
     "status": "unavailable",
-    "reason": "The published rules do not give a free-allocation benchmark for this good, production route, year or quarter, so no figure is shown.",
-    "selector": "benchmark/72021120/column-B/route-independent/2026-03-15"
+    "reason": "The published rules do not give a free-allocation benchmark for this good, production route or year, so no figure is shown.",
+    "selector": "benchmark/72052100/column-B/(C)/2026-03-15"
    },
    "threshold": {
     "state": "above_threshold",
@@ -4926,15 +3978,15 @@
   },
   {
    "input": {
-    "cn": "72021120",
+    "cn": "72052100",
     "country": "IN",
-    "route": "default",
+    "route": "(C)",
     "massT": "100",
     "date": "2026-03-15",
     "emissionsScope": "direct_and_indirect"
    },
    "estimate": {
-    "emissionsTco2e": "185.9",
+    "emissionsTco2e": "279.4",
     "quantityT": "100",
     "customsLineId": "estimator-prototype",
     "stamp": {
@@ -4959,8 +4011,8 @@
      "notes": []
     },
     "status": "unavailable",
-    "reason": "The published rules do not give a free-allocation benchmark for this good, production route, year or quarter, so no figure is shown.",
-    "selector": "benchmark/72021120/column-B/route-independent/2026-03-15"
+    "reason": "The published rules do not give a free-allocation benchmark for this good, production route or year, so no figure is shown.",
+    "selector": "benchmark/72052100/column-B/(C)/2026-03-15"
    },
    "threshold": {
     "state": "above_threshold",
@@ -4973,15 +4025,15 @@
   },
   {
    "input": {
-    "cn": "72021120",
+    "cn": "72052100",
     "country": "TR",
-    "route": "default",
+    "route": "(C)",
     "massT": "100",
     "date": "2026-03-15",
     "emissionsScope": "direct"
    },
    "estimate": {
-    "emissionsTco2e": "185.9",
+    "emissionsTco2e": "207.9",
     "quantityT": "100",
     "customsLineId": "estimator-prototype",
     "stamp": {
@@ -5006,8 +4058,8 @@
      "notes": []
     },
     "status": "unavailable",
-    "reason": "The published rules do not give a free-allocation benchmark for this good, production route, year or quarter, so no figure is shown.",
-    "selector": "benchmark/72021120/column-B/route-independent/2026-03-15"
+    "reason": "The published rules do not give a free-allocation benchmark for this good, production route or year, so no figure is shown.",
+    "selector": "benchmark/72052100/column-B/(C)/2026-03-15"
    },
    "threshold": {
     "state": "above_threshold",
@@ -5020,15 +4072,15 @@
   },
   {
    "input": {
-    "cn": "72021120",
+    "cn": "72052100",
     "country": "TR",
-    "route": "default",
+    "route": "(C)",
     "massT": "100",
     "date": "2026-03-15",
     "emissionsScope": "direct_and_indirect"
    },
    "estimate": {
-    "emissionsTco2e": "185.9",
+    "emissionsTco2e": "207.9",
     "quantityT": "100",
     "customsLineId": "estimator-prototype",
     "stamp": {
@@ -5053,8 +4105,8 @@
      "notes": []
     },
     "status": "unavailable",
-    "reason": "The published rules do not give a free-allocation benchmark for this good, production route, year or quarter, so no figure is shown.",
-    "selector": "benchmark/72021120/column-B/route-independent/2026-03-15"
+    "reason": "The published rules do not give a free-allocation benchmark for this good, production route or year, so no figure is shown.",
+    "selector": "benchmark/72052100/column-B/(C)/2026-03-15"
    },
    "threshold": {
     "state": "above_threshold",
@@ -5067,15 +4119,15 @@
   },
   {
    "input": {
-    "cn": "72021120",
+    "cn": "72052100",
     "country": "TR",
-    "route": "default",
+    "route": "(C)",
     "massT": "100",
     "date": "2026-03-15",
     "emissionsScope": "direct"
    },
    "estimate": {
-    "emissionsTco2e": "185.9",
+    "emissionsTco2e": "207.9",
     "quantityT": "100",
     "customsLineId": "estimator-prototype",
     "stamp": {
@@ -5100,8 +4152,8 @@
      "notes": []
     },
     "status": "unavailable",
-    "reason": "The published rules do not give a free-allocation benchmark for this good, production route, year or quarter, so no figure is shown.",
-    "selector": "benchmark/72021120/column-B/route-independent/2026-03-15"
+    "reason": "The published rules do not give a free-allocation benchmark for this good, production route or year, so no figure is shown.",
+    "selector": "benchmark/72052100/column-B/(C)/2026-03-15"
    },
    "threshold": {
     "state": "above_threshold",
@@ -5114,15 +4166,15 @@
   },
   {
    "input": {
-    "cn": "72021120",
+    "cn": "72052100",
     "country": "TR",
-    "route": "default",
+    "route": "(C)",
     "massT": "100",
     "date": "2026-03-15",
     "emissionsScope": "direct_and_indirect"
    },
    "estimate": {
-    "emissionsTco2e": "185.9",
+    "emissionsTco2e": "207.9",
     "quantityT": "100",
     "customsLineId": "estimator-prototype",
     "stamp": {
@@ -5147,8 +4199,8 @@
      "notes": []
     },
     "status": "unavailable",
-    "reason": "The published rules do not give a free-allocation benchmark for this good, production route, year or quarter, so no figure is shown.",
-    "selector": "benchmark/72021120/column-B/route-independent/2026-03-15"
+    "reason": "The published rules do not give a free-allocation benchmark for this good, production route or year, so no figure is shown.",
+    "selector": "benchmark/72052100/column-B/(C)/2026-03-15"
    },
    "threshold": {
     "state": "above_threshold",
@@ -5161,15 +4213,15 @@
   },
   {
    "input": {
-    "cn": "72021120",
+    "cn": "72052100",
     "country": "CN",
-    "route": "default",
+    "route": "(C)",
     "massT": "100",
     "date": "2026-03-15",
     "emissionsScope": "direct"
    },
    "estimate": {
-    "emissionsTco2e": "185.9",
+    "emissionsTco2e": "308.22",
     "quantityT": "100",
     "customsLineId": "estimator-prototype",
     "stamp": {
@@ -5194,8 +4246,8 @@
      "notes": []
     },
     "status": "unavailable",
-    "reason": "The published rules do not give a free-allocation benchmark for this good, production route, year or quarter, so no figure is shown.",
-    "selector": "benchmark/72021120/column-B/route-independent/2026-03-15"
+    "reason": "The published rules do not give a free-allocation benchmark for this good, production route or year, so no figure is shown.",
+    "selector": "benchmark/72052100/column-B/(C)/2026-03-15"
    },
    "threshold": {
     "state": "above_threshold",
@@ -5208,15 +4260,15 @@
   },
   {
    "input": {
-    "cn": "72021120",
+    "cn": "72052100",
     "country": "CN",
-    "route": "default",
+    "route": "(C)",
     "massT": "100",
     "date": "2026-03-15",
     "emissionsScope": "direct_and_indirect"
    },
    "estimate": {
-    "emissionsTco2e": "185.9",
+    "emissionsTco2e": "308.22",
     "quantityT": "100",
     "customsLineId": "estimator-prototype",
     "stamp": {
@@ -5241,8 +4293,8 @@
      "notes": []
     },
     "status": "unavailable",
-    "reason": "The published rules do not give a free-allocation benchmark for this good, production route, year or quarter, so no figure is shown.",
-    "selector": "benchmark/72021120/column-B/route-independent/2026-03-15"
+    "reason": "The published rules do not give a free-allocation benchmark for this good, production route or year, so no figure is shown.",
+    "selector": "benchmark/72052100/column-B/(C)/2026-03-15"
    },
    "threshold": {
     "state": "above_threshold",
@@ -5255,15 +4307,15 @@
   },
   {
    "input": {
-    "cn": "72021120",
+    "cn": "72052100",
     "country": "CN",
-    "route": "default",
+    "route": "(C)",
     "massT": "100",
     "date": "2026-03-15",
     "emissionsScope": "direct"
    },
    "estimate": {
-    "emissionsTco2e": "185.9",
+    "emissionsTco2e": "308.22",
     "quantityT": "100",
     "customsLineId": "estimator-prototype",
     "stamp": {
@@ -5288,8 +4340,8 @@
      "notes": []
     },
     "status": "unavailable",
-    "reason": "The published rules do not give a free-allocation benchmark for this good, production route, year or quarter, so no figure is shown.",
-    "selector": "benchmark/72021120/column-B/route-independent/2026-03-15"
+    "reason": "The published rules do not give a free-allocation benchmark for this good, production route or year, so no figure is shown.",
+    "selector": "benchmark/72052100/column-B/(C)/2026-03-15"
    },
    "threshold": {
     "state": "above_threshold",
@@ -5302,15 +4354,15 @@
   },
   {
    "input": {
-    "cn": "72021120",
+    "cn": "72052100",
     "country": "CN",
-    "route": "default",
+    "route": "(C)",
     "massT": "100",
     "date": "2026-03-15",
     "emissionsScope": "direct_and_indirect"
    },
    "estimate": {
-    "emissionsTco2e": "185.9",
+    "emissionsTco2e": "308.22",
     "quantityT": "100",
     "customsLineId": "estimator-prototype",
     "stamp": {
@@ -5335,8 +4387,8 @@
      "notes": []
     },
     "status": "unavailable",
-    "reason": "The published rules do not give a free-allocation benchmark for this good, production route, year or quarter, so no figure is shown.",
-    "selector": "benchmark/72021120/column-B/route-independent/2026-03-15"
+    "reason": "The published rules do not give a free-allocation benchmark for this good, production route or year, so no figure is shown.",
+    "selector": "benchmark/72052100/column-B/(C)/2026-03-15"
    },
    "threshold": {
     "state": "above_threshold",
@@ -5349,15 +4401,15 @@
   },
   {
    "input": {
-    "cn": "72021120",
+    "cn": "72052100",
     "country": "BR",
-    "route": "default",
+    "route": "(C)",
     "massT": "100",
     "date": "2026-03-15",
     "emissionsScope": "direct"
    },
    "estimate": {
-    "emissionsTco2e": "185.9",
+    "emissionsTco2e": "157.3",
     "quantityT": "100",
     "customsLineId": "estimator-prototype",
     "stamp": {
@@ -5382,8 +4434,8 @@
      "notes": []
     },
     "status": "unavailable",
-    "reason": "The published rules do not give a free-allocation benchmark for this good, production route, year or quarter, so no figure is shown.",
-    "selector": "benchmark/72021120/column-B/route-independent/2026-03-15"
+    "reason": "The published rules do not give a free-allocation benchmark for this good, production route or year, so no figure is shown.",
+    "selector": "benchmark/72052100/column-B/(C)/2026-03-15"
    },
    "threshold": {
     "state": "above_threshold",
@@ -5396,15 +4448,15 @@
   },
   {
    "input": {
-    "cn": "72021120",
+    "cn": "72052100",
     "country": "BR",
-    "route": "default",
+    "route": "(C)",
     "massT": "100",
     "date": "2026-03-15",
     "emissionsScope": "direct_and_indirect"
    },
    "estimate": {
-    "emissionsTco2e": "185.9",
+    "emissionsTco2e": "157.3",
     "quantityT": "100",
     "customsLineId": "estimator-prototype",
     "stamp": {
@@ -5429,8 +4481,8 @@
      "notes": []
     },
     "status": "unavailable",
-    "reason": "The published rules do not give a free-allocation benchmark for this good, production route, year or quarter, so no figure is shown.",
-    "selector": "benchmark/72021120/column-B/route-independent/2026-03-15"
+    "reason": "The published rules do not give a free-allocation benchmark for this good, production route or year, so no figure is shown.",
+    "selector": "benchmark/72052100/column-B/(C)/2026-03-15"
    },
    "threshold": {
     "state": "above_threshold",
@@ -5443,15 +4495,15 @@
   },
   {
    "input": {
-    "cn": "72021120",
+    "cn": "72052100",
     "country": "BR",
-    "route": "default",
+    "route": "(C)",
     "massT": "100",
     "date": "2026-03-15",
     "emissionsScope": "direct"
    },
    "estimate": {
-    "emissionsTco2e": "185.9",
+    "emissionsTco2e": "157.3",
     "quantityT": "100",
     "customsLineId": "estimator-prototype",
     "stamp": {
@@ -5476,8 +4528,8 @@
      "notes": []
     },
     "status": "unavailable",
-    "reason": "The published rules do not give a free-allocation benchmark for this good, production route, year or quarter, so no figure is shown.",
-    "selector": "benchmark/72021120/column-B/route-independent/2026-03-15"
+    "reason": "The published rules do not give a free-allocation benchmark for this good, production route or year, so no figure is shown.",
+    "selector": "benchmark/72052100/column-B/(C)/2026-03-15"
    },
    "threshold": {
     "state": "above_threshold",
@@ -5490,15 +4542,15 @@
   },
   {
    "input": {
-    "cn": "72021120",
+    "cn": "72052100",
     "country": "BR",
-    "route": "default",
+    "route": "(C)",
     "massT": "100",
     "date": "2026-03-15",
     "emissionsScope": "direct_and_indirect"
    },
    "estimate": {
-    "emissionsTco2e": "185.9",
+    "emissionsTco2e": "157.3",
     "quantityT": "100",
     "customsLineId": "estimator-prototype",
     "stamp": {
@@ -5523,8 +4575,8 @@
      "notes": []
     },
     "status": "unavailable",
-    "reason": "The published rules do not give a free-allocation benchmark for this good, production route, year or quarter, so no figure is shown.",
-    "selector": "benchmark/72021120/column-B/route-independent/2026-03-15"
+    "reason": "The published rules do not give a free-allocation benchmark for this good, production route or year, so no figure is shown.",
+    "selector": "benchmark/72052100/column-B/(C)/2026-03-15"
    },
    "threshold": {
     "state": "above_threshold",
@@ -5537,15 +4589,15 @@
   },
   {
    "input": {
-    "cn": "72021120",
+    "cn": "72052100",
     "country": "UA",
-    "route": "default",
+    "route": "(C)",
     "massT": "100",
     "date": "2026-03-15",
     "emissionsScope": "direct"
    },
    "estimate": {
-    "emissionsTco2e": "185.9",
+    "emissionsTco2e": "210.1",
     "quantityT": "100",
     "customsLineId": "estimator-prototype",
     "stamp": {
@@ -5570,8 +4622,8 @@
      "notes": []
     },
     "status": "unavailable",
-    "reason": "The published rules do not give a free-allocation benchmark for this good, production route, year or quarter, so no figure is shown.",
-    "selector": "benchmark/72021120/column-B/route-independent/2026-03-15"
+    "reason": "The published rules do not give a free-allocation benchmark for this good, production route or year, so no figure is shown.",
+    "selector": "benchmark/72052100/column-B/(C)/2026-03-15"
    },
    "threshold": {
     "state": "above_threshold",
@@ -5584,15 +4636,15 @@
   },
   {
    "input": {
-    "cn": "72021120",
+    "cn": "72052100",
     "country": "UA",
-    "route": "default",
+    "route": "(C)",
     "massT": "100",
     "date": "2026-03-15",
     "emissionsScope": "direct_and_indirect"
    },
    "estimate": {
-    "emissionsTco2e": "185.9",
+    "emissionsTco2e": "210.1",
     "quantityT": "100",
     "customsLineId": "estimator-prototype",
     "stamp": {
@@ -5617,8 +4669,8 @@
      "notes": []
     },
     "status": "unavailable",
-    "reason": "The published rules do not give a free-allocation benchmark for this good, production route, year or quarter, so no figure is shown.",
-    "selector": "benchmark/72021120/column-B/route-independent/2026-03-15"
+    "reason": "The published rules do not give a free-allocation benchmark for this good, production route or year, so no figure is shown.",
+    "selector": "benchmark/72052100/column-B/(C)/2026-03-15"
    },
    "threshold": {
     "state": "above_threshold",
@@ -5631,15 +4683,15 @@
   },
   {
    "input": {
-    "cn": "72021120",
+    "cn": "72052100",
     "country": "UA",
-    "route": "default",
+    "route": "(C)",
     "massT": "100",
     "date": "2026-03-15",
     "emissionsScope": "direct"
    },
    "estimate": {
-    "emissionsTco2e": "185.9",
+    "emissionsTco2e": "210.1",
     "quantityT": "100",
     "customsLineId": "estimator-prototype",
     "stamp": {
@@ -5664,8 +4716,8 @@
      "notes": []
     },
     "status": "unavailable",
-    "reason": "The published rules do not give a free-allocation benchmark for this good, production route, year or quarter, so no figure is shown.",
-    "selector": "benchmark/72021120/column-B/route-independent/2026-03-15"
+    "reason": "The published rules do not give a free-allocation benchmark for this good, production route or year, so no figure is shown.",
+    "selector": "benchmark/72052100/column-B/(C)/2026-03-15"
    },
    "threshold": {
     "state": "above_threshold",
@@ -5678,15 +4730,15 @@
   },
   {
    "input": {
-    "cn": "72021120",
+    "cn": "72052100",
     "country": "UA",
-    "route": "default",
+    "route": "(C)",
     "massT": "100",
     "date": "2026-03-15",
     "emissionsScope": "direct_and_indirect"
    },
    "estimate": {
-    "emissionsTco2e": "185.9",
+    "emissionsTco2e": "210.1",
     "quantityT": "100",
     "customsLineId": "estimator-prototype",
     "stamp": {
@@ -5711,196 +4763,8 @@
      "notes": []
     },
     "status": "unavailable",
-    "reason": "The published rules do not give a free-allocation benchmark for this good, production route, year or quarter, so no figure is shown.",
-    "selector": "benchmark/72021120/column-B/route-independent/2026-03-15"
-   },
-   "threshold": {
-    "state": "above_threshold",
-    "knownEligibleMassT": "100",
-    "thresholdT": "50",
-    "calendarYear": 2026,
-    "sector": "iron_and_steel",
-    "sourceLocator": "Regulation (EU) 2023/956 Article 2(3)"
-   }
-  },
-  {
-   "input": {
-    "cn": "72021120",
-    "country": "EG",
-    "route": "default",
-    "massT": "100",
-    "date": "2026-03-15",
-    "emissionsScope": "direct"
-   },
-   "estimate": {
-    "emissionsTco2e": "185.9",
-    "quantityT": "100",
-    "customsLineId": "estimator-prototype",
-    "stamp": {
-     "tier": "default+markup",
-     "originBasis": "country",
-     "rulePackages": [
-      "eu-cbam-2026-defaults-v2@v1",
-      "eu-cbam-2026-free-allocation@v1"
-     ],
-     "sources": [
-      "dir-2003-87-art-10a-1a",
-      "dr-2019-331-art-14-6",
-      "ec-benchmarks-workbook-v1",
-      "ec-certificate-price-page",
-      "ec-default-values-workbook-v1",
-      "ir-2025-2620",
-      "ir-2025-2621",
-      "reg-2023-956"
-     ],
-     "snapshotHash": "browser-prototype",
-     "provisional": true,
-     "notes": []
-    },
-    "status": "unavailable",
-    "reason": "The published rules do not give a free-allocation benchmark for this good, production route, year or quarter, so no figure is shown.",
-    "selector": "benchmark/72021120/column-B/route-independent/2026-03-15"
-   },
-   "threshold": {
-    "state": "above_threshold",
-    "knownEligibleMassT": "100",
-    "thresholdT": "50",
-    "calendarYear": 2026,
-    "sector": "iron_and_steel",
-    "sourceLocator": "Regulation (EU) 2023/956 Article 2(3)"
-   }
-  },
-  {
-   "input": {
-    "cn": "72021120",
-    "country": "EG",
-    "route": "default",
-    "massT": "100",
-    "date": "2026-03-15",
-    "emissionsScope": "direct_and_indirect"
-   },
-   "estimate": {
-    "emissionsTco2e": "185.9",
-    "quantityT": "100",
-    "customsLineId": "estimator-prototype",
-    "stamp": {
-     "tier": "default+markup",
-     "originBasis": "country",
-     "rulePackages": [
-      "eu-cbam-2026-defaults-v2@v1",
-      "eu-cbam-2026-free-allocation@v1"
-     ],
-     "sources": [
-      "dir-2003-87-art-10a-1a",
-      "dr-2019-331-art-14-6",
-      "ec-benchmarks-workbook-v1",
-      "ec-certificate-price-page",
-      "ec-default-values-workbook-v1",
-      "ir-2025-2620",
-      "ir-2025-2621",
-      "reg-2023-956"
-     ],
-     "snapshotHash": "browser-prototype",
-     "provisional": true,
-     "notes": []
-    },
-    "status": "unavailable",
-    "reason": "The published rules do not give a free-allocation benchmark for this good, production route, year or quarter, so no figure is shown.",
-    "selector": "benchmark/72021120/column-B/route-independent/2026-03-15"
-   },
-   "threshold": {
-    "state": "above_threshold",
-    "knownEligibleMassT": "100",
-    "thresholdT": "50",
-    "calendarYear": 2026,
-    "sector": "iron_and_steel",
-    "sourceLocator": "Regulation (EU) 2023/956 Article 2(3)"
-   }
-  },
-  {
-   "input": {
-    "cn": "72021120",
-    "country": "EG",
-    "route": "default",
-    "massT": "100",
-    "date": "2026-03-15",
-    "emissionsScope": "direct"
-   },
-   "estimate": {
-    "emissionsTco2e": "185.9",
-    "quantityT": "100",
-    "customsLineId": "estimator-prototype",
-    "stamp": {
-     "tier": "default+markup",
-     "originBasis": "country",
-     "rulePackages": [
-      "eu-cbam-2026-defaults-v2@v1",
-      "eu-cbam-2026-free-allocation@v1"
-     ],
-     "sources": [
-      "dir-2003-87-art-10a-1a",
-      "dr-2019-331-art-14-6",
-      "ec-benchmarks-workbook-v1",
-      "ec-certificate-price-page",
-      "ec-default-values-workbook-v1",
-      "ir-2025-2620",
-      "ir-2025-2621",
-      "reg-2023-956"
-     ],
-     "snapshotHash": "browser-prototype",
-     "provisional": true,
-     "notes": []
-    },
-    "status": "unavailable",
-    "reason": "The published rules do not give a free-allocation benchmark for this good, production route, year or quarter, so no figure is shown.",
-    "selector": "benchmark/72021120/column-B/route-independent/2026-03-15"
-   },
-   "threshold": {
-    "state": "above_threshold",
-    "knownEligibleMassT": "100",
-    "thresholdT": "50",
-    "calendarYear": 2026,
-    "sector": "iron_and_steel",
-    "sourceLocator": "Regulation (EU) 2023/956 Article 2(3)"
-   }
-  },
-  {
-   "input": {
-    "cn": "72021120",
-    "country": "EG",
-    "route": "default",
-    "massT": "100",
-    "date": "2026-03-15",
-    "emissionsScope": "direct_and_indirect"
-   },
-   "estimate": {
-    "emissionsTco2e": "185.9",
-    "quantityT": "100",
-    "customsLineId": "estimator-prototype",
-    "stamp": {
-     "tier": "default+markup",
-     "originBasis": "country",
-     "rulePackages": [
-      "eu-cbam-2026-defaults-v2@v1",
-      "eu-cbam-2026-free-allocation@v1"
-     ],
-     "sources": [
-      "dir-2003-87-art-10a-1a",
-      "dr-2019-331-art-14-6",
-      "ec-benchmarks-workbook-v1",
-      "ec-certificate-price-page",
-      "ec-default-values-workbook-v1",
-      "ir-2025-2620",
-      "ir-2025-2621",
-      "reg-2023-956"
-     ],
-     "snapshotHash": "browser-prototype",
-     "provisional": true,
-     "notes": []
-    },
-    "status": "unavailable",
-    "reason": "The published rules do not give a free-allocation benchmark for this good, production route, year or quarter, so no figure is shown.",
-    "selector": "benchmark/72021120/column-B/route-independent/2026-03-15"
+    "reason": "The published rules do not give a free-allocation benchmark for this good, production route or year, so no figure is shown.",
+    "selector": "benchmark/72052100/column-B/(C)/2026-03-15"
    },
    "threshold": {
     "state": "above_threshold",
@@ -6119,11 +4983,11 @@
     "scenario": {
      "assumedCscf": "1",
      "faaTco2e": "64.935",
-     "netTco2e": "95.665",
-     "indirectTco2e": "7.7",
-     "totalEmbeddedTco2e": "160.6",
-     "certificates": "95.665",
-     "costEur": "7209.31"
+     "netTco2e": "93.465",
+     "indirectTco2e": "5.5",
+     "totalEmbeddedTco2e": "158.4",
+     "certificates": "93.465",
+     "costEur": "7043.52"
     }
    },
    "threshold": {
@@ -6199,11 +5063,11 @@
     "scenario": {
      "assumedCscf": "1",
      "faaTco2e": "64.935",
-     "netTco2e": "95.665",
-     "indirectTco2e": "7.7",
-     "totalEmbeddedTco2e": "160.6",
-     "certificates": "95.665",
-     "costEur": "7209.31"
+     "netTco2e": "93.465",
+     "indirectTco2e": "5.5",
+     "totalEmbeddedTco2e": "158.4",
+     "certificates": "93.465",
+     "costEur": "7043.52"
     }
    },
    "threshold": {
@@ -6280,10 +5144,10 @@
     "scenario": {
      "assumedCscf": "1",
      "faaTco2e": "64.935",
-     "netTco2e": "95.665",
-     "indirectTco2e": "7.7",
-     "totalEmbeddedTco2e": "160.6",
-     "certificates": "95.665",
+     "netTco2e": "93.465",
+     "indirectTco2e": "5.5",
+     "totalEmbeddedTco2e": "158.4",
+     "certificates": "93.465",
      "costEur": null
     }
    },
@@ -6331,7 +5195,7 @@
      "notes": []
     },
     "status": "unavailable",
-    "reason": "The published rules do not give a free-allocation benchmark for this good, production route, year or quarter, so no figure is shown.",
+    "reason": "The Commission has not published the CBAM certificate price for the quarter this import falls in, so no figure is shown. The good and its benchmark are present — only the price is missing, and prices are published quarterly in arrears.",
     "selector": "certificate-price/2027-Q2"
    },
    "threshold": null
@@ -6512,11 +5376,43 @@
      ],
      "snapshotHash": "browser-prototype",
      "provisional": true,
-     "notes": []
+     "notes": [
+      "Art 9 deduction for a carbon price paid in the country of origin is not modelled (the implementing act is still a draft), so this figure is conservative.",
+      "Certificate rounding is not settled in law; decimal certificate-equivalents are shown.",
+      "The cross-sectoral correction factor for 2026 is unpublished, so no final figure exists for this import."
+     ]
     },
-    "status": "unavailable",
-    "reason": "The published rules do not give a free-allocation benchmark for this good, production route, year or quarter, so no figure is shown.",
-    "selector": "benchmark/72241010/column-B/(F)/2026-01-15"
+    "terms": {
+     "cbamFactor": "0.975",
+     "cbamFactorYear": 2026,
+     "cbamFactorLocator": "Dir 2003/87/EC Art 10a(1a): free allocation retained in 2026",
+     "cscfLocator": "DR (EU) 2019/331 Art 14(6): no CSCF published for 2026 as at 2026-07-14",
+     "benchmarks": [
+      {
+       "label": "good (Column B, full product)",
+       "cnCode": "72241010",
+       "benchmarkColumn": "B",
+       "routeIndicator": "(F)",
+       "benchmarkTco2ePerT": "1.807",
+       "quantityPerTonne": "1",
+       "sourceLocator": "IR (EU) 2025/2620 Annex, Column B route (F)(1) (via EC benchmarks workbook v1, sheet row 697)"
+      }
+     ]
+    },
+    "priceQuarter": "2026-Q1",
+    "priceStatus": "published",
+    "priceEur": "75.36",
+    "status": "cscf_pending",
+    "cscfYear": 2026,
+    "scenario": {
+     "assumedCscf": "1",
+     "faaTco2e": "176.1825",
+     "netTco2e": "632.3175",
+     "indirectTco2e": "0",
+     "totalEmbeddedTco2e": "808.5",
+     "certificates": "632.3175",
+     "costEur": "47651.45"
+    }
    },
    "threshold": {
     "state": "above_threshold",
@@ -6559,11 +5455,43 @@
      ],
      "snapshotHash": "browser-prototype",
      "provisional": true,
-     "notes": []
+     "notes": [
+      "Art 9 deduction for a carbon price paid in the country of origin is not modelled (the implementing act is still a draft), so this figure is conservative.",
+      "Certificate rounding is not settled in law; decimal certificate-equivalents are shown.",
+      "The cross-sectoral correction factor for 2026 is unpublished, so no final figure exists for this import."
+     ]
     },
-    "status": "unavailable",
-    "reason": "The published rules do not give a free-allocation benchmark for this good, production route, year or quarter, so no figure is shown.",
-    "selector": "benchmark/72241010/column-B/(F)/2026-03-15"
+    "terms": {
+     "cbamFactor": "0.975",
+     "cbamFactorYear": 2026,
+     "cbamFactorLocator": "Dir 2003/87/EC Art 10a(1a): free allocation retained in 2026",
+     "cscfLocator": "DR (EU) 2019/331 Art 14(6): no CSCF published for 2026 as at 2026-07-14",
+     "benchmarks": [
+      {
+       "label": "good (Column B, full product)",
+       "cnCode": "72241010",
+       "benchmarkColumn": "B",
+       "routeIndicator": "(F)",
+       "benchmarkTco2ePerT": "1.807",
+       "quantityPerTonne": "1",
+       "sourceLocator": "IR (EU) 2025/2620 Annex, Column B route (F)(1) (via EC benchmarks workbook v1, sheet row 697)"
+      }
+     ]
+    },
+    "priceQuarter": "2026-Q1",
+    "priceStatus": "published",
+    "priceEur": "75.36",
+    "status": "cscf_pending",
+    "cscfYear": 2026,
+    "scenario": {
+     "assumedCscf": "1",
+     "faaTco2e": "176.1825",
+     "netTco2e": "632.3175",
+     "indirectTco2e": "0",
+     "totalEmbeddedTco2e": "808.5",
+     "certificates": "632.3175",
+     "costEur": "47651.45"
+    }
    },
    "threshold": {
     "state": "above_threshold",
@@ -6606,11 +5534,44 @@
      ],
      "snapshotHash": "browser-prototype",
      "provisional": true,
-     "notes": []
+     "notes": [
+      "Art 9 deduction for a carbon price paid in the country of origin is not modelled (the implementing act is still a draft), so this figure is conservative.",
+      "Certificate rounding is not settled in law; decimal certificate-equivalents are shown.",
+      "The Commission has not published the 2026-Q3 certificate price, so no cost is shown.",
+      "The cross-sectoral correction factor for 2026 is unpublished, so no final figure exists for this import."
+     ]
     },
-    "status": "unavailable",
-    "reason": "The published rules do not give a free-allocation benchmark for this good, production route, year or quarter, so no figure is shown.",
-    "selector": "benchmark/72241010/column-B/(F)/2026-09-01"
+    "terms": {
+     "cbamFactor": "0.975",
+     "cbamFactorYear": 2026,
+     "cbamFactorLocator": "Dir 2003/87/EC Art 10a(1a): free allocation retained in 2026",
+     "cscfLocator": "DR (EU) 2019/331 Art 14(6): no CSCF published for 2026 as at 2026-07-14",
+     "benchmarks": [
+      {
+       "label": "good (Column B, full product)",
+       "cnCode": "72241010",
+       "benchmarkColumn": "B",
+       "routeIndicator": "(F)",
+       "benchmarkTco2ePerT": "1.807",
+       "quantityPerTonne": "1",
+       "sourceLocator": "IR (EU) 2025/2620 Annex, Column B route (F)(1) (via EC benchmarks workbook v1, sheet row 697)"
+      }
+     ]
+    },
+    "priceQuarter": "2026-Q3",
+    "priceStatus": "pending",
+    "priceEur": null,
+    "status": "cscf_pending",
+    "cscfYear": 2026,
+    "scenario": {
+     "assumedCscf": "1",
+     "faaTco2e": "176.1825",
+     "netTco2e": "632.3175",
+     "indirectTco2e": "0",
+     "totalEmbeddedTco2e": "808.5",
+     "certificates": "632.3175",
+     "costEur": null
+    }
    },
    "threshold": {
     "state": "above_threshold",
@@ -6656,8 +5617,8 @@
      "notes": []
     },
     "status": "unavailable",
-    "reason": "The published rules do not give a free-allocation benchmark for this good, production route, year or quarter, so no figure is shown.",
-    "selector": "benchmark/72241010/column-B/(F)/2027-06-01"
+    "reason": "The Commission has not published the CBAM certificate price for the quarter this import falls in, so no figure is shown. The good and its benchmark are present — only the price is missing, and prices are published quarterly in arrears.",
+    "selector": "certificate-price/2027-Q2"
    },
    "threshold": null
   },
@@ -7078,7 +6039,7 @@
      "notes": []
     },
     "status": "unavailable",
-    "reason": "The published rules do not give a free-allocation benchmark for this good, production route, year or quarter, so no figure is shown.",
+    "reason": "The Commission has not published the CBAM certificate price for the quarter this import falls in, so no figure is shown. The good and its benchmark are present — only the price is missing, and prices are published quarterly in arrears.",
     "selector": "certificate-price/2027-Q2"
    },
    "threshold": null
@@ -7704,7 +6665,7 @@
      "notes": []
     },
     "status": "unavailable",
-    "reason": "The published rules do not give a free-allocation benchmark for this good, production route, year or quarter, so no figure is shown.",
+    "reason": "The Commission has not published the CBAM certificate price for the quarter this import falls in, so no figure is shown. The good and its benchmark are present — only the price is missing, and prices are published quarterly in arrears.",
     "selector": "certificate-price/2027-Q2"
    },
    "threshold": null
