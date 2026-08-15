@@ -203,9 +203,13 @@ Extend the existing `describe` in `lib/estimator/refusal-reason.test.ts` — rea
 ```ts
 export const BAD_DATE_REASON =
   'The import date is not a readable calendar date, so the quarter it falls in cannot be ' +
-  'determined and no figure is shown. Every figure here is quarter-specific — the certificate ' +
-  'price and the benchmark in force both depend on it.'
+  'determined and no figure is shown. The CBAM certificate price is published per quarter, ' +
+  'so without a readable date there is no price to apply.'
 ```
+
+**This text was corrected before you received it, and you should still verify it.** The first draft said *"Every figure here is quarter-specific — the certificate price and the benchmark in force both depend on it."* That is false about the benchmark: `quarterOf` is called in exactly one place (`lib/cbam/certificate-estimate.ts:299`, the price lookup), while `resolveBenchmark` matches on `active(row.validFrom, row.validTo, selector.date)` — the **day**, not the quarter.
+
+Task 1 found that **both** of the reason texts drafted for it were false, one with the direction of harm inverted. Treat every drafted sentence in this plan as a claim to check against the code, not as copy to paste. If this one is still wrong, say so with evidence and propose better wording.
 
 and extend the dispatch added in the previous batch:
 
