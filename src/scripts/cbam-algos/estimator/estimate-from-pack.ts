@@ -277,18 +277,30 @@ export type IndirectLookup =
  *
  * THE ROUTE IS PART OF THE MATCH. An earlier version left it out, on the stated grounds that
  * "indirect rows are published per good, not per production route". The shipped corpus disagrees:
- * 597 of its 8,310 indirect rows carry a real route indicator, 510 (good, origin, year) groups are
- * route-keyed, and in 90 of those the value differs by route. Without the route, `.find()` returned
- * whichever row sorted first — the dearer one, in every affected case — so a route-(A) line was
- * priced with route (B)'s electricity and over-charged. On Algerian cement clinker that was
- * EUR 165.79 per 100 t, with the downstream line-export CSV (its `benchmark_route` column) naming
- * route (A) beside route (B)'s figure — an audit artefact naming one route and pricing another.
+ * 597 of its 8,310 indirect rows carry a real route indicator ((A) 495, (B) 102). Those rows fall
+ * in 510 of the 8,217 (good, origin, year) groups — but only 93 groups hold more than ONE row, and
+ * the route can only decide anything there. In 90 of the 93 the value differs by route; in the
+ * other 3 both rows carry the same figure, so the route corrects the provenance rather than the
+ * price. Saying "510 groups are route-keyed" overstates the exposure: the other 417 hold a single
+ * row and could never have differed.
  *
- * Matching strictly loses nothing: where the direct corpus is route-keyed the indirect rows carry
- * the same routes (510 of 510 groups), and where direct is route-independent both carry 'default'.
- * All 8,310 selectors that resolve today still resolve. It also makes the lookup deterministic —
- * with the route included no candidate set can hold more than one row, so this file's own rule
- * ("a tie is REGULATION_AMBIGUOUS, never a first-match") stops being violated rather than narrowed.
+ * Without the route, `.find()` returned whichever row sorted first — the dearer one, in every
+ * affected case — so a route-(A) line was priced with route (B)'s electricity and over-charged.
+ * On Algerian cement clinker that was EUR 165.79 per 100 t, with the downstream line-export CSV
+ * (its `benchmark_route` column) naming route (A) beside route (B)'s figure — an audit artefact
+ * naming one route and pricing another. Six of the 93 are a second shape, absent from that
+ * telling: a route-INDEPENDENT 'default' row charged to a line that declared a route.
+ *
+ * Matching strictly loses nothing, and the guarantee is wider than the affected groups. All 8,217
+ * indirect groups carry exactly the route set their direct counterpart carries, so every one of
+ * the 8,310 selectors that resolved before still resolves — measured as a SET, not a count, over
+ * the whole pack. It also makes the lookup deterministic: with the route included no candidate set
+ * can hold more than one row, so this file's own rule ("a tie is REGULATION_AMBIGUOUS, never a
+ * first-match") stops being violated rather than narrowed.
+ *
+ * Fewer than 90 estimates move, though. The pack prices 2026 quarters only, so 2027 and 2028
+ * import dates refuse on the missing certificate price before the indirect factor is ever read:
+ * 30 estimates change end-to-end, all in 2026, and the other 60 corrections are real but latent.
  */
 export function selectIndirectFactorFromPack(
   pack: EstimatorPack,

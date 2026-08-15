@@ -7,7 +7,7 @@
     "cbam/sefa.ts": "74aaf68237b02440",
     "cbam/types.ts": "735a8e85c04ed493",
     "errors/domain-error.ts": "6b97e210e5698b23",
-    "estimator/estimate-from-pack.ts": "17702662a3124abe",
+    "estimator/estimate-from-pack.ts": "9a1fbfeeb44686f4",
     "regulatory/iso-3166.ts": "9bc99ad69798d216",
     "regulatory/types.ts": "dbbf958a874ddce7",
     "threshold/aggregate.ts": "e2cd1e0be6ca53ae",
