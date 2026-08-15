@@ -240,6 +240,55 @@ date input."
 
 ---
 
+## Task 2b: The month guard has a NaN hole
+
+**Files:**
+- Modify: `/Volumes/VSTSAMPLES/Projects/CBM/lib/cbam/resolve-fa.ts` (`quarterOf`)
+- Modify: `/Volumes/VSTSAMPLES/Projects/CBM/lib/estimator/refusal-reason.test.ts`
+
+**Found by Task 2, and Task 2 makes it worse.** `quarterOf`'s guard misses a single-digit month:
+
+```
+"2027-1-15"   slice(5,7)="1-"   Number=NaN   guard fires: FALSE
+"2027-13-15"  slice(5,7)="13"   Number=13    guard fires: true
+```
+
+`NaN < 1 || NaN > 12` is `false || false`. So the function returns the string `2027-QNaN`, `resolveCertificatePrice` finds no such row, and the refusal surfaces as selector `certificate-price/2027-QNaN` — which after Task 2 reports `NO_PRICE_REASON`:
+
+> The good and its benchmark are present — only the price is missing, and prices are published quarterly in arrears.
+
+Every clause of that is false for an unreadable date. And because Task 2 just made the `quarter/` sibling correct, this one now reads **more** authoritatively wrong by contrast — a confidently-worded message sitting beside a correct one.
+
+This is a behaviour change, not words only: an input moves from the `certificate-price/` namespace to `quarter/`. That is why it is its own task.
+
+- [ ] **Step 1: Write the failing test**
+
+In `lib/estimator/refusal-reason.test.ts`, assert `2027-1-15` refuses with a selector matching `^quarter/` and reports `BAD_DATE_REASON` — the same treatment `2027-13-15` already gets. Add it to the agreement sweep too.
+
+- [ ] **Step 2: Run to verify failure** — expect the selector assertion to fail with `certificate-price/2027-QNaN`. Report verbatim.
+
+- [ ] **Step 3: Close the hole — narrowly**
+
+```ts
+  if (!/^\d{4}$/.test(year) || !Number.isInteger(month) || month < 1 || month > 12) {
+```
+
+**`Number.isInteger`, not a stricter whole-date regex.** A regex like `/^\d{4}-\d{2}-\d{2}$/` would also reject an ISO timestamp (`2026-01-01T00:00:00.000Z`), and the validity-boundary work established that callers may pass either shape — `active()` was deliberately made to accept both. `'2026-01-01T00:00:00.000Z'.slice(5,7)` is `'01'`, which must keep working.
+
+**Verify that claim before relying on it**: confirm a timestamp-shaped date still resolves after your change, and say how you checked.
+
+- [ ] **Step 4: Measure what moved**
+
+This changes which namespace an input lands in. Sweep and report: which inputs move from `certificate-price/` to `quarter/`, and confirm **nothing legitimate moves** — only dates with a malformed month component. In particular confirm no well-formed date, plain or timestamp, changes its outcome.
+
+- [ ] **Step 5: Mutation-test**
+
+Revert `Number.isInteger(month) ||` alone and confirm the new test fails. Diff against a pristine copy to prove the mutation landed.
+
+- [ ] **Step 6: Gates + commit** — `npm test`, `npm run typecheck`, stage by name.
+
+---
+
 ## Task 3: Re-vendor
 
 **Files:**
