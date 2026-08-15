@@ -502,7 +502,10 @@ test('est() threads emissionsScope through — the harness can express the app\'
   assert.equal(directOnly.status, 'cscf_pending');
   assert.equal(withIndirect.status, 'cscf_pending');
   assert.equal(directOnly.scenario.indirectTco2e, '0', 'direct-only leaves indirect at 0');
-  assert.equal(withIndirect.scenario.indirectTco2e, '6.6', 'a scope-threaded call reaches DZ/2026\'s published indirect default');
+  // DZ/2026 publishes an indirect default per ROUTE, not one per good: (A) 0.04 and (B) 0.06.
+  // This asked for route (A) but pinned 6.6 — route (B)'s 0.06 x 1.10 x 100 — because the
+  // lookup ignored the route. Route (A)'s own electricity is 0.04 x 1.10 x 100 = 4.4.
+  assert.equal(withIndirect.scenario.indirectTco2e, '4.4', 'a scope-threaded call reaches DZ/2026\'s published indirect default for the declared route');
 });
 
 test('the indirect case: free allocation deducts from the direct side only (the app\'s default scope)', () => {

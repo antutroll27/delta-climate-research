@@ -38,7 +38,9 @@ for (const c of pack.classifications) {
         let out;
         try { out = estimateFromPack(pack, input); }
         catch (err) { out = { threw: String(err instanceof Error ? err.message : err) }; }
-        const key = `${out.status ?? 'threw'}|${scope}|${!!selectIndirectFactorFromPack(pack, input)}`;
+        // .kind, not !! — the lookup returns an object in every case now, so a truthiness test
+        // is always true and would collapse this dimension of the key, thinning the corpus.
+        const key = `${out.status ?? 'threw'}|${scope}|${selectIndirectFactorFromPack(pack, input).kind}`;
         const n = seenStatus.get(key) ?? 0;
         // cap per shape so the corpus stays a fixture file, not a database
         if (n >= 12) continue;

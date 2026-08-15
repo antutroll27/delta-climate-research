@@ -14,6 +14,11 @@ const NO_DEFAULT_REASON =
   'The Commission publishes no default value for this good, origin, production route or year, ' +
   'so no estimate is shown. Actual verified data would be entered in a case, not here.'
 
+const NO_INDIRECT_ROUTE_REASON =
+  'The Commission publishes indirect (electricity) default values for this good and origin, but ' +
+  'none for the production route declared, so no estimate is shown. Pricing the electricity ' +
+  'component at zero would understate the bill without saying so.'
+
 const BAD_VERIFIED_REASON =
   'A verified emissions figure must be a readable number of tCO2e per tonne of good, and cannot ' +
   'be negative, so no estimate is shown. Reading a missing, unreadable, infinite or negative ' +
@@ -253,28 +258,61 @@ export function resolveThreshold(
 }
 
 /**
- * The indirect (electricity) default for this selector, or null when the Commission publishes
- * none. Same origin fallback and same deepest-scope rule as the direct lookup, so an indirect
- * figure can never rest on a broader scope than the direct one it accompanies.
+ * Three outcomes, not two, and the distinction is load-bearing.
+ *
+ * `none` means the Commission publishes no indirect default for this good at all — true of iron
+ * & steel and aluminium, which must keep pricing with indirect 0. `route-mismatch` means rows DO
+ * exist for this good, origin and year but none is published for the route the importer declared.
+ * Those are different facts and they need different answers: the first is silence, the second is
+ * a refusal. Collapsing them into `null` is exactly how the over-charge this replaces stayed
+ * invisible — the lookup could not tell "nothing published" from "I picked the wrong row".
+ */
+export type IndirectLookup =
+  | { kind: 'found'; factor: EstimatorPack['defaultFactors'][number] }
+  | { kind: 'none' }
+  | { kind: 'route-mismatch' }
+
+/**
+ * The indirect (electricity) default for this selector.
+ *
+ * THE ROUTE IS PART OF THE MATCH. An earlier version left it out, on the stated grounds that
+ * "indirect rows are published per good, not per production route". The shipped corpus disagrees:
+ * 597 of its 8,310 indirect rows carry a real route indicator, 510 (good, origin, year) groups are
+ * route-keyed, and in 90 of those the value differs by route. Without the route, `.find()` returned
+ * whichever row sorted first — the dearer one, in every affected case — so a route-(A) line was
+ * priced with route (B)'s electricity and over-charged. On Algerian cement clinker that was
+ * EUR 165.79 per 100 t, with the downstream line-export CSV (its `benchmark_route` column) naming
+ * route (A) beside route (B)'s figure — an audit artefact naming one route and pricing another.
+ *
+ * Matching strictly loses nothing: where the direct corpus is route-keyed the indirect rows carry
+ * the same routes (510 of 510 groups), and where direct is route-independent both carry 'default'.
+ * All 8,310 selectors that resolve today still resolve. It also makes the lookup deterministic —
+ * with the route included no candidate set can hold more than one row, so this file's own rule
+ * ("a tie is REGULATION_AMBIGUOUS, never a first-match") stops being violated rather than narrowed.
  */
 export function selectIndirectFactorFromPack(
   pack: EstimatorPack,
   input: EstimatorInput,
-): EstimatorPack['defaultFactors'][number] | null {
+): IndirectLookup {
   const year = Number(input.date.slice(0, 4))
   for (const origin of originsFor(pack, input.country)) {
-    if (!isOfferedGood(pack, input.cn)) return null
+    if (!isOfferedGood(pack, input.cn)) return { kind: 'none' }
     const covering = pack.defaultFactors.filter(f =>
       f.originCountry === origin && f.emissionsType === 'indirect' &&
       f.reportingYear === year && input.cn.startsWith(f.scopeCode))
     if (covering.length === 0) continue
+    // Deepest published scope first, matching the direct lookup, so an indirect figure can never
+    // rest on a broader scope than the direct one it accompanies.
     const deepest = Math.max(...covering.map(f => f.scopeCode.length))
-    // Indirect rows are published per good, not per production route, so the route is not part
-    // of the match; taking the deepest scope keeps it consistent with the direct lookup.
-    const found = covering.find(f => f.scopeCode.length === deepest)
-    if (found) return found
+    const atDepth = covering.filter(f => f.scopeCode.length === deepest)
+    const found = atDepth.find(f => f.productionRoute === input.route)
+    if (found) return { kind: 'found', factor: found }
+    // Rows exist for this good but not for this route. Returning `none` here would price the
+    // whole electricity component at zero with no signal — an under-charge, and the third silent
+    // fail-open on a page whose governing rule is fail-closed. Refuse instead.
+    return { kind: 'route-mismatch' }
   }
-  return null
+  return { kind: 'none' }
 }
 
 /**
@@ -403,12 +441,19 @@ export function estimateFromPack(pack: EstimatorPack, input: EstimatorInput): Ce
 
   // Indirect is opt-in and silent when the Commission publishes nothing for the good: asking for
   // it must never fabricate a component, and must never fail a good that has only a direct row.
+  // A route MISMATCH is not that case — see IndirectLookup — and refuses.
   let indirectTco2e = '0'
   if (input.emissionsScope === 'direct_and_indirect') {
     const indirect = selectIndirectFactorFromPack(pack, input)
-    if (indirect) {
-      indirectTco2e = new Decimal(indirect.baseIntensity)
-        .mul(new Decimal(1).plus(new Decimal(indirect.markupPct).div(100)))
+    if (indirect.kind === 'route-mismatch') {
+      return unavailableEstimate(
+        { ...baseInput, originBasis }, tables, NO_INDIRECT_ROUTE_REASON,
+        `indirect/${input.cn}/${input.country}/${input.route}/${year}`,
+      )
+    }
+    if (indirect.kind === 'found') {
+      indirectTco2e = new Decimal(indirect.factor.baseIntensity)
+        .mul(new Decimal(1).plus(new Decimal(indirect.factor.markupPct).div(100)))
         .mul(input.massT).toFixed()
     }
   }

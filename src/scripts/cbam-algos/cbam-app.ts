@@ -1209,11 +1209,15 @@ export function initCbam(): void {
    */
   function syncScope(): void {
     if (!scope || !scopeRow) return;
+    // `kind !== 'none'`, NOT `=== 'found'`: a route MISMATCH must keep the control visible, or
+    // the user can never reach the refusal that warns them. And not the old `!== null` — the
+    // lookup now returns an object in every case, so that test was silently always true and
+    // showed this control on steel and aluminium, which publish no indirect default at all.
     const has = !!pack && !!cn!.value && !!country!.value && !!route!.value
       && selectIndirectFactorFromPack(pack, {
         cn: cn!.value, country: country!.value, route: route!.value,
         massT: mass!.value || '1', date: date!.value,
-      }) !== null;
+      }).kind !== 'none';
     scopeRow.hidden = !has;
   }
 

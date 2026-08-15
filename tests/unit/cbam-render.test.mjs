@@ -171,12 +171,15 @@ const withScope = (emissionsScope) => estimateFromPack(pack, {
 test('indirect emissions are charged for cement and receive NO free allocation', () => {
   const direct = withScope('direct'), both = withScope('direct_and_indirect');
   assert.equal(direct.scenario.indirectTco2e, '0');
-  assert.equal(both.scenario.indirectTco2e, '6.6');
+  // 0.04 (DZ/2026 indirect, ROUTE (A) — the route withScope declares) x 1.10 markup x 100 t.
+  // This read 6.6 until the route joined the indirect match: that is route (B)'s 0.06, and the
+  // assertion had pinned the over-charge itself.
+  assert.equal(both.scenario.indirectTco2e, '4.4');
   // Free allocation is a DIRECT-emission benchmark, so the deduction must not grow
   // when indirect is added — the indirect tonnes pass into the charge in full.
   assert.equal(direct.scenario.faaTco2e, both.scenario.faaTco2e,
     'free allocation must be unchanged by indirect emissions');
-  assert.equal(both.scenario.netTco2e, '78.065');
+  assert.equal(both.scenario.netTco2e, '75.865');
   assert.equal(direct.scenario.netTco2e, '71.465');
 });
 
@@ -1478,4 +1481,24 @@ test('1 January 2026 prices, instead of claiming the rule does not exist', () =>
     cn: '25231000', country: 'DZ', route: '(A)', massT: '100', date: '2025-12-31',
   });
   assert.equal(before.status, 'unavailable');
+});
+
+/* ── the electricity default follows the route you declared ─────────────────── */
+
+test('route (A) is priced with route (A) electricity, not route (B)\'s', () => {
+  // Algerian cement clinker publishes indirect (A): 0.04 and (B): 0.06. The lookup used to match
+  // on good/origin/year only and take whichever sorted first — the dearer one — so route (A) was
+  // over-charged EUR 165.79 per 100 t, and changing the route on the form moved nothing.
+  const line = { cn: '25231000', country: 'DZ', massT: '100', date: '2026-03-15',
+    emissionsScope: 'direct_and_indirect' };
+  const a = estimateFromPack(pack, { ...line, route: '(A)' });
+  const b = estimateFromPack(pack, { ...line, route: '(B)' });
+  assert.equal(a.status, 'cscf_pending');
+  assert.equal(b.status, 'cscf_pending');
+  assert.equal(a.scenario.certificates, '75.865');
+  assert.equal(a.scenario.costEur, '5717.19');
+  assert.equal(b.scenario.certificates, '64.7475');
+  assert.equal(b.scenario.costEur, '4879.37');
+  assert.notEqual(a.scenario.costEur, b.scenario.costEur,
+    'the two routes must price differently — before the fix they did not');
 });
