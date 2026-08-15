@@ -16,8 +16,36 @@ import type {
  * must handle, and the type system will not let it be ignored.
  */
 
+/**
+ * A calendar day, not an instant. The corpus stores validity bounds as UTC timestamps
+ * ('2026-01-01T00:00:00.000Z') while an import date is a plain day ('2026-01-01'), and the
+ * package contract's isoDate regex is unanchored so BOTH shapes are legal. Comparing them as
+ * raw strings is only sound when the shapes match: with the same prefix the shorter string
+ * sorts first, which silently saved the validTo edge and silently broke the validFrom edge —
+ * a window's opening day sorted AFTER its own bound and dropped out, so 1 January 2026 refused
+ * every good with a message asserting the rule did not exist.
+ *
+ * Reducing both sides to the day is not a workaround for awkward data: the definitive regime
+ * "shall apply from 1 January 2026" (Reg (EU) 2023/956 Art 36(3)) — a day, not an instant.
+ * It also makes this immune to whichever shape the data carries, which is the protection that
+ * matters while both shapes remain legal.
+ *
+ * TWIN: lib/regulatory/resolve.ts has its own active() for the classification gate. The two are
+ * not deduplicated, and nothing in this repo records a plan to; treat this comment as the record
+ * and change both together, whichever one you touch.
+ *
+ * Neither copy leans on its callers for the shape. The twin's one caller,
+ * api/services/regulatory-repository.ts's dateOnly(), puts every bound AND the import date through
+ * toISOString().slice(0, 10), so on that path the shapes agree before the resolver sees them —
+ * but that is a property of that caller, not a contract the resolver states or the types enforce.
+ * The twin is the wider blast radius if it is ever wrong: requireActiveEnactedPackage gates the
+ * whole rule package, so 1 January 2026 refuses EVERY good rather than merely every benchmark.
+ */
+const day = (s: string) => s.slice(0, 10)
+
 function active(from: string, to: string | null, date: string): boolean {
-  return from <= date && (to === null || date <= to)
+  const d = day(date)
+  return day(from) <= d && (to === null || d <= day(to))
 }
 
 export interface BenchmarkSelector {

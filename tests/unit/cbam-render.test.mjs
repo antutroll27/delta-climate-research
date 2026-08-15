@@ -1458,3 +1458,24 @@ test('inputFor: the two paths really do produce comparable estimates against the
   assert.notEqual(mine.emissionsTco2e, theirs.emissionsTco2e,
     'sanity: the two paths genuinely priced different emissions, so the check above has teeth');
 });
+
+/* ── the definitive regime's first day is inside it ─────────────────────────── */
+
+test('1 January 2026 prices, instead of claiming the rule does not exist', () => {
+  // The likeliest date an importer types when sizing a year's exposure. It used to refuse
+  // every good with "The published rules do not give a free-allocation benchmark…", naming a
+  // rule that was in force that day — active() sorted the timestamp bound after the plain date.
+  const e = estimateFromPack(pack, {
+    cn: '25231000', country: 'DZ', route: '(A)', massT: '100', date: '2026-01-01',
+  });
+  assert.notEqual(e.status, 'unavailable',
+    'the first day of the definitive regime must resolve');
+  assert.equal(e.status, 'cscf_pending');
+  assert.equal(e.scenario.certificates, '71.465');
+  assert.equal(e.scenario.costEur, '5385.60');
+  // …and the day before is still outside the regime.
+  const before = estimateFromPack(pack, {
+    cn: '25231000', country: 'DZ', route: '(A)', massT: '100', date: '2025-12-31',
+  });
+  assert.equal(before.status, 'unavailable');
+});
