@@ -392,7 +392,16 @@ describe('the de-minimis threshold is not decided on an unreadable mass', () => 
   })
 
   it('returns null rather than throwing on an unreadable mass', () => {
-    for (const massT of ['', 'abc', '  100  ', 'NaN', 'Infinity']) {
+    // 'Infinity' is the sharpest of these: it did not throw, it returned
+    // state='above_threshold' with knownEligibleMassT='Infinity' — and
+    // ThresholdRulerCard.vue:9 renders that value RAW at 52px. A user was shown
+    // "Infinity" as their eligible mass, above the de-minimis threshold.
+    //
+    // '1e9999999999999999' is all digits, so it clears the shape gate, and decimal.js
+    // SATURATES it to Infinity past Decimal.maxE (9e15). It is the only path by which
+    // isFinite() is load-bearing — 'NaN' and 'Infinity' never reach it, the shape gate
+    // having refused them for carrying no digits.
+    for (const massT of ['', 'abc', '  100  ', 'NaN', 'Infinity', '1e9999999999999999']) {
       expect(() => t(massT), `massT=${JSON.stringify(massT)}`).not.toThrow()
       expect(t(massT), `massT=${JSON.stringify(massT)}`).toBeNull()
     }
