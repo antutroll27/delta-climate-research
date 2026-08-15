@@ -586,6 +586,67 @@ that does the parsing."
 
 ---
 
+## Task 4b: Close the twin gate and the de-minimis aggregate
+
+**Files:**
+- Modify: `/private/tmp/cbam-mass/src/scripts/cbam-algos/cbam-app.ts` (`draftLine()`, ~line 1408)
+- Modify: `/private/tmp/cbam-mass/tests/unit/cbam-lines.test.mjs`
+
+**Found by Task 4, absent from the spec.** The spec named three sites that consume mass. There are five. `cbam-app.ts` has a **second** `Number()` gate, in `draftLine()`:
+
+```ts
+const massT = Number(mass!.value);
+if (!Number.isFinite(massT) || massT < 0) return null;
+```
+
+So after Task 4 the preview path and the add path disagree: `run()` refuses `'+100'`, `'5.'`, `'0x10'`, `'  100  '`; `draftLine()` accepts all four and builds a `Line` from them.
+
+That matters because the multi-line year-threshold card **bypasses the gate Task 3 added**. `thresholdByYear` (`src/scripts/cbam-lines.ts:217`) calls `aggregateThresholdBasis` directly, never `resolveThreshold`, and `src/scripts/cbam-algos/threshold/aggregate.ts` sums with a bare `.plus(entry.netMassT)`. Measured after Task 4:
+
+```
+"0x10"       knownEligibleMassT=16    <- Art 2(3) decided off a hex string, still
+"+100"       knownEligibleMassT=100   state=above_threshold
+"  100  "    THREW [DecimalError] -> breaks the WHOLE card render, not one line
+```
+
+Not reachable from the shipped markup today (`<input type="number">` sanitises all four to `""`). That is exactly the excuse the guard's own comment forbids: *"Checked here, not against the markup's `min`, so that editing the .astro cannot silently disarm it."* `run()` honours that rule; `draftLine()` does not.
+
+**Scope decision — fix the source, not the sink.** `threshold/aggregate.ts` is **vendored** (hashed at `UPSTREAM.json:13`), so gating it means an upstream CBM change plus a re-vendor. It also operates on `LedgerEntry[]` from a *server* ledger, a different trust boundary from a browser form field. The website's exposure closes entirely if no bad mass ever enters `Line[]`. So: gate the entry points, pin the behaviour, and leave the vendored aggregate alone — **unless the audit in Step 2 finds a path that reaches it ungated**, which would change the answer.
+
+- [ ] **Step 1: Make `draftLine()` use the same predicate**
+
+Replace the `Number()` check with `nonNegativeDecimal(mass!.value)`, matching `run()`. `nonNegativeDecimal` is already imported by Task 4. Keep `draftLine()`'s `return null` contract — it signals "no line to add", and the caller already handles it.
+
+Add a comment saying why the two gates must agree, and that this is the *add* path to `run()`'s *preview* path.
+
+- [ ] **Step 2: Audit every other way a `Line` is constructed**
+
+`draftLine()` is one entry point. Find them all — session restore, URL parameters, CSV import, tests, anything that pushes onto the lines array — and for each, either gate it or **prove** it cannot carry an unreadable mass. Report the complete list with evidence.
+
+If any path reaches `thresholdByYear` with an ungated mass, say so and stop: the scope decision above depends on this audit, and it would need re-taking.
+
+- [ ] **Step 3: Pin it where the unit suite can reach**
+
+`thresholdByYear` is exported from `src/scripts/cbam-lines.ts:217` and already has 14 references in `tests/unit/cbam-lines.test.mjs`, so unlike `draftLine()` it **is** reachable. Follow that file's existing conventions and add a test proving an unreadable mass cannot be counted toward de minimis, and that it does not throw out of the card render.
+
+Derive the expected behaviour from what the code does after Step 1 — but if that behaviour is *itself* wrong (e.g. a bad line silently under-counts the total, which would wrongly exempt a consignment), **report it rather than pinning it**. An under-count here is fail-open on the question of whether CBAM applies at all.
+
+- [ ] **Step 4: Gates**
+
+```bash
+cd /private/tmp/cbam-mass
+npm run test:unit
+node scripts/cbam-sync-check.mjs
+npx astro check 2>&1 | tail -4
+```
+Expect 381 + your new tests, sync-check green, `astro check` still exactly 2 pre-existing `mapillary-js` errors.
+
+- [ ] **Step 5: Commit**
+
+Stage by name. `cbam-app.ts` is the hand-editable vendoring exception; nothing else under `src/scripts/cbam-algos/` may be touched.
+
+---
+
 ## Task 5: Pin the DOM-layer mutation with an e2e assertion
 
 **Files:**
