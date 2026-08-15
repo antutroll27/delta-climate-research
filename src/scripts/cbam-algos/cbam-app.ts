@@ -1332,12 +1332,21 @@ export function initCbam(): void {
     // fail-closed rule exists to stop.
     //
     // IT DECIDES WITH THE SAME PREDICATE THE ENGINE CONSUMES WITH, not a second opinion.
-    // Number() and Decimal() read different languages: Number('') is 0 and Number('  100  ')
-    // is 100, so both cleared this gate and then threw at the consumer; Number('1_000') is NaN
-    // while Decimal reads 1000; and BOTH read '0x10' as 16, so a hex string bought a confident
-    // bill for 16 t. Deciding with the function that does the parsing is what makes that class
-    // of drift impossible rather than merely fixed today. Checked here, not against the markup's
-    // `min`, so that editing the .astro cannot silently disarm it.
+    // Number() and Decimal() read different languages — Number('  100  ') is 100 where Decimal
+    // throws, Number('1_000') is NaN where Decimal reads 1000, and BOTH read '0x10' as 16.
+    //
+    // BE PRECISE ABOUT THE BENEFIT: none of that divergence is reachable through THIS control
+    // today. The full set the two predicates disagree on is '', '  100  ', '0x10', '+100', '5.',
+    // '1e400' and integers long enough to overflow a double — and <input type="number"> sanitises
+    // every one of them to '', which the completeness guard above already absorbs. Measured in
+    // Chrome, not reasoned: reverting this line to Number() passes the whole e2e file.
+    //
+    // It is still the right predicate, for two reasons that do not depend on the markup. The
+    // guard must not lean on `type="number"` any more than on `min="0"` — the sentence below is
+    // the same rule — and the engine this defers to is shared with a SaaS whose own form is not
+    // this one. Deciding with the function that does the parsing makes the drift structurally
+    // impossible rather than merely unreachable. Checked here, not against the markup's `min`,
+    // so that editing the .astro cannot silently disarm it.
     if (!nonNegativeDecimal(mass!.value)) {
       out!.innerHTML = '<p class="cb-idle">Net mass must be a number of tonnes, zero or greater.</p>';
       return;
@@ -1436,9 +1445,15 @@ export function initCbam(): void {
     // It matters more on THIS path than on the preview, because a Line outlives the form: the
     // multi-line year-threshold card sums `massT` through aggregateThresholdBasis, which never
     // consults the engine's gate at all. A mass this function admits is a mass that reaches the
-    // de minimis verdict unread — measured, before this change: '0x10' decided Art 2(3) off a
-    // hex string (knownEligibleMassT 16), '+100' reported above_threshold, and '  100  ' threw
-    // a raw [DecimalError] that took down the whole card render rather than one line.
+    // de minimis verdict unread — measured by feeding thresholdByYear a hand-built Line, before
+    // this change: '0x10' decided Art 2(3) off a hex string (knownEligibleMassT 16), '+100'
+    // reported above_threshold, and '  100  ' threw a raw [DecimalError] that took down the
+    // whole card render rather than one line. Worst was '-100', which SUBTRACTS: beside a real
+    // 30 t line it totalled -70 t and read as exempt.
+    //
+    // Those were measured on the FUNCTION, not through the form — <input type="number"> admits
+    // none of those strings, so none was user-reachable. thresholdByYear now carries its own
+    // gate, so this one is the outer of two rather than the only one.
     if (!nonNegativeDecimal(mass!.value)) return null;
     // The verified panel's contribution — the tier, and on the verified branch the attested
     // figures and any reference — or the reason it cannot contribute one. Its refusals are
