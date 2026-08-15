@@ -155,7 +155,16 @@ const pack = JSON.parse(readFileSync('public/estimator-pack.json', 'utf8')) as E
 
 // Cement clinker from Algeria, route (A), 2026-Q1. At 100 t this prices 75.865 certificates /
 // EUR 5,717.19, so any figure below is a real number the guard has to be able to refuse.
-const base = { cn: '25231000', country: 'DZ', route: '(A)', massT: '100', date: '2026-03-15' }
+//
+// emissionsScope is EXPLICIT and load-bearing. EstimatorInput defaults it to 'direct', and on a
+// direct-only line a -100 t mass prices EUR 0.00 rather than a negative — the floor clamp
+// (Decimal.max(0, …), certificate-estimate.ts:154) catches the direct side on its own. The
+// negative bill only exists because indirect is ADDED after that clamp. So a negative-mass test
+// written against the default scope would assert against a zero and prove nothing.
+const base = {
+  cn: '25231000', country: 'DZ', route: '(A)', massT: '100', date: '2026-03-15',
+  emissionsScope: 'direct_and_indirect' as const,
+}
 
 // Hand-typed, deliberately NOT imported from production. Importing would pin only WHICH constant
 // is referenced, never what it says — and swapping one reason constant for another survived
@@ -228,6 +237,15 @@ describe('net mass is gated before it can become a figure', () => {
       const e = estimateFromPack(pack, { ...base, massT })
       expect(e.status, `massT=${JSON.stringify(massT)}`).toBe('cscf_pending')
     }
+  })
+
+  it('refuses a negative mass on a DIRECT-only line too, where it used to price EUR 0.00', () => {
+    // The gate must not depend on scope. Before it, this line returned a confident EUR 0.00 —
+    // the floor clamp swallowing a negative into a zero, which reads as "you owe nothing" rather
+    // than "that mass is not a mass". Different symptom from the direct_and_indirect case above,
+    // same cause, and only this arm catches a gate placed inside the indirect branch.
+    const e = estimateFromPack(pack, { ...base, emissionsScope: 'direct' as const, massT: '-100' })
+    expect(e.status).toBe('unavailable')
   })
 
   it('gates the VERIFIED path too — the guard sits above the branch', () => {
