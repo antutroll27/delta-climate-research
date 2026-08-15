@@ -289,6 +289,48 @@ Revert `Number.isInteger(month) ||` alone and confirm the new test fails. Diff a
 
 ---
 
+## Task 2c: Drop a word our own fix made stale
+
+**Files:**
+- Modify: `/Volumes/VSTSAMPLES/Projects/CBM/lib/cbam/certificate-estimate.ts`
+- Modify: `/Volumes/VSTSAMPLES/Projects/CBM/lib/estimator/refusal-reason.test.ts`
+- Modify: `/Volumes/VSTSAMPLES/Projects/CBM/api/services/certificate-estimate.refusal-reason.test.ts`
+
+`NO_BENCHMARK_REASON` reads:
+
+> The published rules do not give a free-allocation benchmark for this good, production route, **year or quarter**, so no figure is shown.
+
+**"Quarter" was accurate until Task 2.** While a missing certificate price fell through to this constant, naming the quarter was right. Task 2 gave the price its own reason, so nothing quarter-scoped reaches here any more — benchmarks match on `active(row.validFrom, row.validTo, selector.date)`, a **day**-level window.
+
+- [ ] **Step 1: Confirm nothing quarter-scoped still falls through**
+
+After Tasks 1, 2 and 2b this constant is the fallback for `benchmark/`, `sefa/`, `cbam-factor/${year}` and `cscf/${year}`. Verify that list from the code rather than trusting it, and confirm none is quarter-keyed. If one is, stop — the word is not stale and this task is wrong.
+
+- [ ] **Step 2: Update the constant and every hand-typed copy**
+
+Remove `or quarter`, leaving `for this good, production route or year`. The hand-typed transcripts in both test files must move **in the same commit** — that is the convention, and loosening a test to make it green is explicitly forbidden by `cbam-render.test.mjs`'s own doctrine.
+
+Find every copy first (`grep -rl "free-allocation benchmark for this good"`) and update all of them. The website's golden fixture also carries it; leave that alone — Task 6 regenerates it, and this change is one of the things that diff is meant to show.
+
+- [ ] **Step 3: Gates**
+
+```bash
+cd /Volumes/VSTSAMPLES/Projects/CBM
+npm test 2>&1 | tail -3
+npm run typecheck 2>&1 | tail -2
+```
+No test count change is expected — the same tests assert new text.
+
+- [ ] **Step 4: Commit** — stage by name; write the message yourself.
+
+### Deliberately NOT in this task
+
+The constant still names a *"free-allocation benchmark"* as the missing thing while serving as the fallback for `cbam-factor/` and `cscf/`, where the missing thing is a CBAM factor or a cross-sectoral correction factor. That is the same misattribution this batch has been fixing, and it wants two more reasons plus two dispatch arms — another Task 2, not a word.
+
+**It is latent rather than live:** an earlier sweep measured **0 reachable** for both namespaces on today's pack (`cbam-factor` covers 2026–2034, `cscf` 2026–2030). Tracked as a follow-up; do not widen this task to cover it.
+
+---
+
 ## Task 3: Re-vendor
 
 **Files:**
