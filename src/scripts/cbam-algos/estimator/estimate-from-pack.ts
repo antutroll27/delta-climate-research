@@ -156,7 +156,10 @@ function isOfferedGood(pack: EstimatorPack, cn: string): boolean {
 
 /**
  * The factor rows whose scope covers this CN, deepest published scope only — the server's rule
- * (lib/regulatory/resolve.ts:124-128): a CN is covered by its own code or any prefix the
+ * (the candidates filter inside resolveDefaultFactor, lib/regulatory/resolve.ts — cited by
+ * FUNCTION, not by line, because this reference has already rotted twice: a line range points
+ * at whatever happens to sit there after the next unrelated edit above it): a CN is covered by
+ * its own code or any prefix the
  * Commission published at, and the most specific scope governs.
  *
  * The pack estimator used to require scopeCode === cn. That agreed with the server only while
