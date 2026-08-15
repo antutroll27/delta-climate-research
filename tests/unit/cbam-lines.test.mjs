@@ -216,11 +216,17 @@ test('a line missing from the fingerprint map is a loud bug, not a silent empty 
 });
 
 test('the entry-point mass gate is the ONLY thing between an unreadable mass and Art 2(3)', () => {
-  // THE THRESHOLD PATH HAS NO MASS GATE OF ITS OWN. thresholdByYear copies `l.massT` verbatim
+  // NAME AND PREMISE SUPERSEDED IN PART, kept verbatim as the record of why the entry-point gate
+  // was built: thresholdByYear now runs this same predicate itself (see the three tests below),
+  // so the entry point is no longer the ONLY thing standing here. Every assertion in this test
+  // holds unchanged — the gate must still be total over what the aggregate misreads and
+  // transparent over what it admits, and that is now checked at both ends rather than one.
+  //
+  // THE THRESHOLD PATH HAD NO MASS GATE OF ITS OWN. thresholdByYear copied `l.massT` verbatim
   // into ImportMassEntry.netMassT and aggregateThresholdBasis (vendored) sums it with a bare
   // `.plus(entry.netMassT)` — it never calls resolveThreshold, so the engine's own
-  // nonNegativeDecimal check is not on this path at all. Whatever cbam-app.ts's draftLine()
-  // admits decides the de minimis verdict unread.
+  // nonNegativeDecimal check was not on this path at all, and whatever cbam-app.ts's draftLine()
+  // admitted decided the de minimis verdict unread.
   //
   // MEASURED on this pack, feeding thresholdByYear a Line the gate refuses (evidence for why
   // draftLine() had to stop using Number() and start using this predicate — it is NOT a claim
@@ -248,6 +254,102 @@ test('the entry-point mass gate is the ONLY thing between an unreadable mass and
     assert.equal(card.knownEligibleMassT, parsed.toString(),
       `the card must count ${JSON.stringify(massT)} as the gate read it`);
   }
+});
+
+test('one unreadable mass discards the whole year card, not just its own line', () => {
+  // The entry-point gate above is no longer the ONLY thing between an unreadable mass and
+  // Art 2(3): thresholdByYear now runs the same predicate at the seam where Line.massT becomes
+  // ImportMassEntry.netMassT. Measured on this pack before it did — every row live, not
+  // hypothetical:
+  //   '0x10'    -> knownEligibleMassT '16', state indeterminate — Art 2(3) off a hex string
+  //   '+100'    -> '100',      state above_threshold
+  //   'Infinity'-> 'Infinity', state above_threshold
+  //   'abc' / '' / '  100  ' -> raw [DecimalError] thrown out of the WHOLE card render
+  // NOT skip-the-bad-line: the year's card is the answer to "is the total above 50 t", and a
+  // sum with an unreadable addend has no answer. Each bad mass is tested ALONE and beside a
+  // genuine 30 t line — the second half is what distinguishes "the year refuses" from "the bad
+  // line is quietly dropped and the rest still totals".
+  for (const massT of ['0x10', '+100', '  100  ', 'abc', '', '-100', '1_000', '5.', '0b101',
+    'NaN', 'Infinity']) {
+    const alone = thresholdByYear([line({ id: 'L1', massT })], fp, new Set([2026]), pack);
+    assert.deepEqual(alone, [], `massT=${JSON.stringify(massT)} must produce no card at all`);
+    const beside = thresholdByYear(
+      [line({ id: 'L1', massT: '30' }), line({ id: 'L2', massT })], fp, new Set([2026]), pack);
+    assert.deepEqual(beside, [],
+      `massT=${JSON.stringify(massT)} must take the year's card with it, not be skipped`);
+  }
+});
+
+test('a negative mass cannot report a liable year as exempt', () => {
+  // THE regression this task exists for, and it is worse than a bad line being skipped: a
+  // negative mass SUBTRACTS. Measured before the gate — 30 t of real cement beside a '-100' t
+  // line gave knownEligibleMassT '-70' and state 'below_threshold' on an attested-complete
+  // year: a consignment that is liable reported as exempt, fail-open on whether CBAM applies
+  // at all. Asserted as "no verdict", then again as "specifically not that verdict", because
+  // the second is the one that would have reached a user.
+  const lines = [line({ id: 'L1', massT: '30' }), line({ id: 'L2', massT: '-100' })];
+  const cards = thresholdByYear(lines, fp, new Set([2026]), pack);
+  assert.deepEqual(cards, [], 'no card can be built from a sum containing -100 t');
+  assert.equal(cards.find((c) => c.calendarYear === 2026), undefined);
+  assert.ok(!cards.some((c) => c.ruleFound && c.state === 'below_threshold'),
+    'a -100 t line must never drag a genuine 30 t consignment under the 50 t threshold');
+});
+
+test('a year of readable masses is untouched — it still totals exactly what the gate parsed', () => {
+  // The other half of the gate: it must be transparent to everything it admits, in the
+  // multi-line sum as well as the single-line case pinned above. '1e-1' is the discriminating
+  // form — legal to the gate, and its text differs from its value, so a card that echoed
+  // strings rather than summing quantities would show it.
+  const lines = [
+    line({ id: 'L1', massT: '30' }), line({ id: 'L2', massT: '19.999' }),
+    line({ id: 'L3', massT: '1e-1' }),
+  ];
+  const expected = lines
+    .reduce((sum, l) => sum.plus(nonNegativeDecimal(l.massT)), new Decimal(0)).toString();
+  const [card] = thresholdByYear(lines, fp, new Set([2026]), pack);
+  assert.equal(card.knownEligibleMassT, expected, 'the sum of what the gate parsed');
+  assert.equal(card.knownEligibleMassT, '50.099', '...and that sum, pinned literally');
+  assert.equal(card.state, 'above_threshold', '50.099 t attested-complete is over 50 t');
+  assert.deepEqual(card.entryIds, ['L1', 'L2', 'L3'], 'every readable line still counts');
+  assert.equal(card.eligibleLineCount, 3);
+});
+
+test('the refusal is scoped to the verdict it can actually corrupt', () => {
+  // TWO scoping decisions, both deliberate, both invisible without a test.
+  //
+  // ACROSS YEARS: the threshold is annual (see this function's doc), so a 2027 mass nobody can
+  // read says nothing about 2026 — 2026's card must still render. Deliberately NARROWER than
+  // the missing-fingerprint throw, which discards every year: that one is a caller bug worth
+  // stopping the whole render for, this is line data. The shipped pack publishes a 2026 row
+  // only, so a 2027 row is simulated (the widerPack idiom above) to put a rule-bearing year on
+  // BOTH sides of the refusal — otherwise 2027 would return before ever reaching the gate.
+  const spanningLines = [
+    line({ id: 'L1', massT: '60', date: '2026-03-15' }),
+    line({ id: 'L2', massT: '-100', date: '2027-03-15' }),
+  ];
+  const twoYearPack = { ...pack, thresholds: [...pack.thresholds,
+    { ...pack.thresholds.find((t) => t.calendarYear === 2026), id: 'threshold-2027', calendarYear: 2027 }] };
+  const spanning = thresholdByYear(spanningLines, fp, new Set([2026, 2027]), twoYearPack);
+  assert.deepEqual(spanning.map((c) => c.calendarYear), [2026], '2027 refuses; 2026 is unharmed');
+  assert.equal(spanning[0].state, 'above_threshold');
+
+  // On the SHIPPED pack, 2027 has no rule at all and returns before the gate — pinned because
+  // that ordering is load-bearing, not incidental. A ruleFound: false card states no mass and
+  // no verdict ("the Commission has published no 2027 row"), so there is nothing in it for an
+  // unreadable mass to corrupt; withholding it would refuse a true statement.
+  const shipped = thresholdByYear(spanningLines, fp, new Set([2026, 2027]), pack);
+  assert.deepEqual(shipped.map((c) => c.calendarYear), [2026, 2027]);
+  assert.equal(shipped[1].ruleFound, false, 'a no-rule card carries no mass claim to corrupt');
+
+  // ACROSS SECTORS: the gate runs AFTER the includedSectors filter, so a mass that could never
+  // enter the sum cannot refuse the year either. sectorForCn('28041000') is hydrogen, absent
+  // from the 2026 row — its mass is dropped before aggregation whatever it says, so refusing
+  // the card over it would withhold a verdict the readable lines fully support.
+  const [card] = thresholdByYear([
+    line({ id: 'L1', massT: '60' }), line({ id: 'L3', cn: '28041000', massT: 'abc' }),
+  ], fp, new Set([2026]), pack);
+  assert.equal(card.state, 'above_threshold', 'an out-of-scope line cannot veto the card');
+  assert.deepEqual(card.entryIds, ['L1']);
 });
 
 test('sumTotals sums scenarios in Decimal and stays labelled a what-if', () => {

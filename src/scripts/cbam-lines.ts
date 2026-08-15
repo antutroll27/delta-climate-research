@@ -8,7 +8,9 @@
  * cbam-app.ts is upstream's, byte-for-byte" stays true.
  */
 import Decimal from 'decimal.js';
-import type { EstimatorPack } from './cbam-algos/estimator/estimate-from-pack.ts';
+import {
+  nonNegativeDecimal, type EstimatorPack,
+} from './cbam-algos/estimator/estimate-from-pack.ts';
 import {
   aggregateThresholdBasis, type ImportMassEntry,
 } from './cbam-algos/threshold/aggregate.ts';
@@ -206,6 +208,10 @@ export type YearThreshold =
  * lines simply don't resolve to a year yet; callers surface them separately
  * (e.g. "N lines need a date") rather than under a fake calendarYear.
  *
+ * A year holding ANY in-scope line whose `massT` the engine's own gate refuses
+ * produces NO card at all — the whole year's, not just that line's. See the gate
+ * inside the map for why one unreadable addend has to take the year with it.
+ *
  * @throws {Error} if any in-scope line (classifiable, in-sector for its year's
  * rule) has no entry in `fingerprints`. This fires inside the per-year map, so
  * ONE bad line discards every year's card, not just its own year's — callers
@@ -224,12 +230,13 @@ export function thresholdByYear(
     .filter((year) => !Number.isNaN(year))
     .sort((a, b) => a - b); // default sort() is lexicographic: [2027, 10] would beat [10, 2027]
 
-  return years.map((calendarYear) => {
+  return years.map((calendarYear): YearThreshold | null => {
     const attested = attestedYears.has(calendarYear);
     const rule = pack.thresholds.find((t) => t.calendarYear === calendarYear);
     const inYear = lines.filter((l) => yearOf(l) === calendarYear);
     if (!rule) return { calendarYear, ruleFound: false, attested, eligibleLineCount: 0 };
 
+    let unreadableMass = false;
     const entries: ImportMassEntry[] = inYear.flatMap((l) => {
       const sector = sectorForCn(l.cn);
       if (!sector || !rule.includedSectors.includes(sector)) return [];
@@ -244,11 +251,45 @@ export function thresholdByYear(
           + 'be hashed (lineFingerprint) before it can be aggregated',
         );
       }
+      // THE PREDICATE THE ENGINE ITSELF PARSES WITH, at the seam where our `Line` becomes the
+      // vendored aggregate's entry — the last point this file controls. aggregateThresholdBasis
+      // sums `netMassT` with a bare `.plus()` and holds no gate of its own, and it is upstream's:
+      // gating it there would be a change across another trust boundary and a re-vendor. This
+      // file is ours, so the gate goes here. Measured on this pack with the line absent: '0x10'
+      // decided Art 2(3) off a hex string (knownEligibleMassT '16'), '+100' and 'Infinity' both
+      // reported above_threshold, and 'abc' / '' / '  100  ' threw a raw [DecimalError] out of
+      // the whole card render rather than one line.
+      //
+      // `netMassT` still carries the string AS ENTERED, not the gate's parsed value
+      // re-stringified: the gate's shape regex is a strict subset of Decimal's grammar, so
+      // everything it admits reads back as the same quantity — which is exactly what the
+      // entry-point test pins ('1e3' is its discriminating case), and re-encoding here would
+      // retire that check instead of satisfying it.
+      if (!nonNegativeDecimal(l.massT)) { unreadableMass = true; return []; }
       return [{
         id: l.id, importerOrgId: IMPORTER, calendarYear, sector,
         netMassT: l.massT, sourceSha256,
       }];
     });
+    // ONE unreadable mass discards the WHOLE YEAR's card — never merely its own line. This card
+    // answers "is the year's total above 50 t", and a sum with an unreadable addend has no
+    // answer; computing one around the gap is how a liable importer is told they are exempt.
+    // MEASURED: a '-100' line beside a genuine 30 t consignment did not skip — it SUBTRACTED,
+    // giving knownEligibleMassT '-70' and state below_threshold on an attested-complete year.
+    // Fail-open on whether CBAM applies at all, which is the one verdict that must never be
+    // guessed in the importer's favour. Same call resolveThreshold makes on the single-line path
+    // (null, rather than a card assembled around a mass nobody can read) for the same reason.
+    //
+    // PER YEAR, like everything else here: the threshold is annual, so a 2027 line nobody can
+    // read says nothing about 2026 and 2026's card still renders. That is deliberately narrower
+    // than the missing-fingerprint throw above, which discards every year — that one is a caller
+    // bug worth stopping the whole render for; this is line data, scoped to the verdict it can
+    // actually corrupt.
+    //
+    // The cost is a silence: the year simply has no card and nothing on screen says why — the
+    // same shape as an undated line (yearOf's doc), and callers should surface both the same way.
+    // An omitted card is still a smaller failure than a stated wrong one.
+    if (unreadableMass) return null;
 
     const basis = aggregateThresholdBasis(
       { importerOrgId: IMPORTER, calendarYear },
@@ -273,7 +314,11 @@ export function thresholdByYear(
       entryHashes: basis.entryHashes,
       eligibleLineCount: basis.entryIds.length,
     };
-  });
+  // The nulls above are dropped rather than returned to the caller: the signature stays
+  // YearThreshold[], so every existing call site (two in cbam-app.ts, both mapping straight into
+  // markup) keeps its exhaustive `ruleFound` switch and cannot forget a null element. A refused
+  // year is ABSENT from this array, exactly like a year no line resolves to.
+  }).filter((card): card is YearThreshold => card !== null);
 }
 
 export interface Totals {

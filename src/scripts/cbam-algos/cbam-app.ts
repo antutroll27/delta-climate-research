@@ -959,10 +959,21 @@ function verifiedFigure(value: string): number | null {
  *  ABSENT indirect figure skips the branch and the line prices normally, while `''` reaches the
  *  shape gate, fails it, and refuses the WHOLE line as unavailable. lineFingerprint splits the
  *  same two apart on purpose (`?? null`). A handler that wrote `seeIndirect: el.value`
- *  unconditionally would turn every blank optional field into a refused line. */
+ *  unconditionally would turn every blank optional field into a refused line.
+ *
+ *  `ok` NAMES ITS FOUR FIELDS instead of being `Partial<Line> & { tier }`. Partial<Line> made
+ *  every other field of a Line type-legal here — `massT` included — and draftLine() spreads this
+ *  object LAST, after its own gated `massT: mass!.value`. A future line in this function setting
+ *  `ok.massT` would therefore have compiled and silently overridden the one field the whole mass
+ *  guard exists to control, on the path that then decides Art 2(3). Nothing sets it today, so
+ *  this makes it un-writable rather than merely unwritten. The four are exactly what the two
+ *  `return { ok }` statements below produce: `tier` on both branches, `seeDirect` on the verified
+ *  one, `seeIndirect`/`verifiedRef` when non-empty — and Pick keeps the last three optional,
+ *  as Line declares them. It does not encode "seeDirect is present iff tier is 'actual-verified'";
+ *  that correlation remains a Line-level invariant, exactly as it was. */
 export function parseVerifiedFields(v: {
   tier: string; direct: string; indirect: string; attested: boolean; ref: string;
-}): { ok: Partial<Line> & { tier: Line['tier'] } } | { error: string } {
+}): { ok: Pick<Line, 'tier' | 'seeDirect' | 'seeIndirect' | 'verifiedRef'> } | { error: string } {
   // Every other field is ignored on this branch, not merely unused: a user who filled the panel
   // in and then changed their mind back to the Commission defaults must not have the abandoned
   // figures ride along into the line. This branch is the ONLY thing keeping them out: the form
@@ -1010,7 +1021,13 @@ export function parseVerifiedFields(v: {
       + 'cite for it, into the export. This tool transcribes the claim; it cannot check it.' };
   }
 
-  const ok: Partial<Line> & { tier: Line['tier'] } = {
+  // ANNOTATED WITH THE SAME NARROW TYPE the signature returns, not merely assigned to it.
+  // Measured while proving this change: with the return type already narrowed but this local
+  // left as `Partial<Line> & { tier }`, a `massT: '999'` added here compiled with NO error at
+  // all — TypeScript's excess-property check fires on the fresh literal, and a wider local's
+  // extra property is then structurally assignable to the narrower return type. Both sites
+  // carry the narrow type or neither guarantee holds.
+  const ok: Pick<Line, 'tier' | 'seeDirect' | 'seeIndirect' | 'verifiedRef'> = {
     tier: 'actual-verified',
     // The string AS ENTERED (trimmed), never the parsed number re-stringified: `Number('2.50')`
     // round-trips to '2.5', and lineFingerprint hashes this value — an audit trail must pin what
@@ -1439,6 +1456,11 @@ export function initCbam(): void {
       // written here — is what guarantees every line states which tier priced it. The optional
       // seeIndirect/verifiedRef keys are ABSENT rather than empty when unused; that distinction
       // is load-bearing all the way down (parseVerifiedFields' doc, lineFingerprint's `?? null`).
+      //
+      // Spreading last is only safe because v.ok now NAMES its four fields. While it was typed
+      // `Partial<Line>`, `massT` was type-legal in it and this spread sat two lines below the
+      // gate — a future `ok.massT` would have compiled and overwritten the gated mass with an
+      // unchecked one, on its way to the de minimis card. See parseVerifiedFields' doc.
       ...v.ok,
     };
     if (Number.isNaN(yearOf(l))) return null;
