@@ -85,8 +85,10 @@ export interface CertificateEstimateInput {
    * unattested and whose origin the Commission does not list.
    *
    * A second field rather than a second value of `originBasis`, because a mixed line has TWO
-   * bases and that field names one. It fires MIXED_RESIDUAL_INDIRECT_NOTE, which is scoped to the
-   * electricity half and says the direct half is unaffected.
+   * bases and that field names one. It fires MIXED_RESIDUAL_INDIRECT_NOTE — scoped to the
+   * electricity half, saying the direct half is unaffected — on a line that was PRICED. A refused
+   * line gets no note however this field is set, because the sentence describes a figure that
+   * line does not have.
    *
    * Absent on the defaults path, whose whole figure rests on one basis and which discloses it
    * through `originBasis` exactly as before. The two can therefore never both be set today.
@@ -212,18 +214,27 @@ function baseOf(
       sources: [...new Set(tables.sources.map(source => source.id))].sort(),
       snapshotHash: input.snapshotHash,
       provisional: true,
-      // Unconditional, and set HERE rather than in the priced branch so both survive on every
-      // arm — including 'unavailable'. A residual-sourced number is indistinguishable from a
-      // country-specific one unless we say so, on the same surface as the number.
+      // Set HERE rather than in the priced branch, so it survives on every arm — including
+      // 'unavailable'. A residual-sourced number is indistinguishable from a country-specific
+      // one unless we say so, on the same surface as the number.
       //
-      // Two independent conditions, not a chain: they answer different questions (which basis the
-      // WHOLE figure rests on; whether a substituted ELECTRICITY default was residual). No line
-      // can satisfy both today — the defaults path never sets the second, the verified path
-      // always leaves originBasis null — but nothing here depends on that staying true.
-      notes: [
-        ...(input.originBasis === 'residual' ? [RESIDUAL_BASIS_NOTE] : []),
-        ...(input.residualIndirectDefault ? [MIXED_RESIDUAL_INDIRECT_NOTE] : []),
-      ],
+      // MIXED_RESIDUAL_INDIRECT_NOTE used to sit beside it and no longer does: it is attached in
+      // the priced branch below, because it describes a figure and a refused line has none.
+      //
+      // THIS NOTE HAS THE SAME DEFECT AND IS KNOWINGLY LEFT WITH IT. "this figure uses its
+      // residual default" is equally a claim about an output, and a refused card has none —
+      // measured over 703,208 defaults-path estimates, 519 refuse while carrying this sentence
+      // (501 on certificate-price/, 18 on benchmark/). It is older than the note below, it has
+      // its own wording to settle, and it is not what that change is about, so it gets its own
+      // commit rather than being swept along with one that can be reviewed on its merits.
+      //
+      // What it does NOT have is a different mechanism, and an earlier draft of this comment
+      // claimed it did. Both are reached the same way: the catch below, which keeps the stamp
+      // built here. All 686,990 refusals raised OUTSIDE this module (unavailableEstimate, the
+      // default/ namespace) compute originBasis as 'country' — `factor` is null there, so
+      // `factor?.originCountry` cannot equal OTHER_ORIGIN — and none carries this note at all.
+      // Whoever fixes it can use exactly the gate below.
+      notes: input.originBasis === 'residual' ? [RESIDUAL_BASIS_NOTE] : [],
     },
   }
 }
@@ -382,6 +393,25 @@ export function estimateCertificates(
 
     const notes = [
       ...base.stamp.notes,
+      // HERE, NOT IN baseOf, and the position inside this array is chosen so that a priced line's
+      // notes are byte-identical to what they were when it was attached there.
+      //
+      // The note is a claim about the OUTPUT — "the electricity default substituted on this line
+      // IS the residual" describes the provenance of the indirect figure. Everything after this
+      // point produces a figure; the catch below produces none. The substitution genuinely did
+      // happen on a refused line (the indirect figure is computed before the price lookup fails),
+      // so "was substituted" is literally accurate — but the card shows no figure, so a sentence
+      // about that figure's provenance has no referent, and reads as a disclosure about a number
+      // the reader is left hunting for.
+      //
+      // The tier survives such a refusal (it is decided before estimateCertificates is entered),
+      // which is exactly why this was reachable: FJ/FR cement at a 2027 date substitutes the
+      // residual electricity default, stamps the mixed tier, then refuses on certificate-price/.
+      //
+      // ATTESTED_NOTE, over in the renderer, correctly survives the same refusal because it
+      // describes the INPUT the importer typed — true whether or not anything could be priced.
+      // That is the line between the two, not squeamishness about saying too much.
+      ...(input.residualIndirectDefault ? [MIXED_RESIDUAL_INDIRECT_NOTE] : []),
       'Art 9 deduction for a carbon price paid in the country of origin is not modelled (the implementing act is still a draft), so this figure is conservative.',
       'Certificate rounding is not settled in law; decimal certificate-equivalents are shown.',
     ]

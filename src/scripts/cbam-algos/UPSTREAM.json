@@ -1,7 +1,7 @@
 {
   "packGeneratedAt": "2026-08-07T16:59:36.563Z",
   "files": {
-    "cbam/certificate-estimate.ts": "3a0d053412d4057f",
+    "cbam/certificate-estimate.ts": "6b549a8193619157",
     "cbam/resolve-fa.ts": "43207febb875332e",
     "cbam/sector.ts": "8955b7caa1baace7",
     "cbam/sefa.ts": "74aaf68237b02440",

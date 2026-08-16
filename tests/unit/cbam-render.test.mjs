@@ -1989,6 +1989,55 @@ test('the residual-indirect note reaches the card, and only where the fallback w
     'and the stamp row stays neutral, because the verified path rests on no default basis');
 });
 
+test('a REFUSED mixed line drops the residual-indirect note — no figure, no provenance claim', () => {
+  // The half of the previous commit that it named as still open. renderAttestation stopped
+  // asserting a mark-up on a refused mixed card; one line lower, the engine's own note went on
+  // saying where the substituted electricity default came from, over a card with no figure at
+  // all. FJ cement at a 2027 date rendered it as the SOLE <li>.
+  //
+  // Fixed in the ENGINE, not here: renderStamp emits stamp.notes verbatim (non-negotiable #5 in
+  // cbam-app.ts's header), so filtering at this sink would break that contract and leave the
+  // vendored engine's own output still making the claim. This test therefore pins the vendored
+  // engine's behaviour as it reaches the DOM — the surface a user meets.
+  const refused = rline({ date: '2027-03-15' });
+  const e = estOf(refused);
+
+  // Three guards against a vacuous pass, each of which would make "no note" true for the wrong
+  // reason. Without them a corpus that started pricing 2027, or a tier that stopped surviving the
+  // refusal, would turn this green while the defect was untouched.
+  assert.equal(e.status, 'unavailable', 'the fixture must actually refuse');
+  assert.equal(e.stamp.tier, 'verified-direct+default-indirect',
+    'and must still be MIXED — the refusal is raised after the substitution, which is exactly '
+    + 'why the note survived it');
+  assert.equal(estOf(rline()).status, 'cscf_pending',
+    'and the SAME line at a priced date must still price, or the pair below proves nothing');
+
+  assert.ok(!e.stamp.notes.includes(RESIDUAL_INDIRECT_NOTE),
+    'the engine must not claim the provenance of an electricity figure this card does not show');
+  const html = renderLineCard(refused, e, 0, comparisonOf(refused));
+  const escaped = RESIDUAL_INDIRECT_NOTE
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  assert.ok(!html.includes(escaped), 'nor may it reach the card');
+  // Not merely reworded into a survivor: nothing on this card may call anything a world average,
+  // since there is no figure for such a claim to attach to. Catches both residual sentences.
+  assert.doesNotMatch(html, /world-average/,
+    'no note on a card showing no figure may describe that figure as a world average');
+
+  // The card is genuinely a refusal — no waterfall, no certificates row — which is the whole
+  // premise. If a figure appeared here the note would be owed, not suppressed.
+  assert.match(html, /cb-tag unavail">No estimate/, 'sanity: the card really shows no estimate');
+  assert.doesNotMatch(html, /cb-water/, 'and carries no waterfall for a note to be about');
+
+  // THE OTHER ARM, in the same test so the pair cannot drift apart: suppressing everywhere would
+  // delete a disclosure the priced card owes, and every assertion above would still pass.
+  const p = rline();
+  const pricedHtml = renderLineCard(p, estOf(p), 0, comparisonOf(p));
+  assert.ok(pricedHtml.includes(`<li>${escaped}</li>`),
+    'the PRICED line still discloses that its substituted electricity default is the residual '
+    + 'bucket — the suppression is about the missing figure, not about the disclosure');
+});
+
 /**
  * THE ONE PIN defaultPathComparison CAN HAVE, and the reason it is a source-text assertion rather
  * than a behavioural one.
