@@ -71,14 +71,27 @@ export interface CertificateEstimateInput {
    *  - null       — the figure this field describes rests on no default. Every 'actual-verified'
    *                 line, and also 'verified-direct+default-indirect', whose DIRECT figure is the
    *                 importer's own. That third tier's INDIRECT half does rest on a default, and
-   *                 that default can come from the residual bucket, so such a line carries no
-   *                 residual note today and the tier is the only thing disclosing the
-   *                 substitution. Narrower disclosure than the note gives, and named here rather
-   *                 than left to be discovered.
+   *                 that default can come from the residual bucket — reported by
+   *                 `residualIndirectDefault` below, NOT by this field. Setting 'residual' here
+   *                 would claim the audited direct figure rests on a world average, and would
+   *                 fire a note that says exactly that.
    * A residual-derived number LOOKS exactly like a country-specific one; if we do not say which,
    * we let a user believe the Commission priced their country's good when it did not.
    */
   originBasis: 'country' | 'residual' | null
+  /**
+   * True only where a substituted INDIRECT (electricity) default was drawn from the residual
+   * bucket — i.e. on a 'verified-direct+default-indirect' line whose importer left electricity
+   * unattested and whose origin the Commission does not list.
+   *
+   * A second field rather than a second value of `originBasis`, because a mixed line has TWO
+   * bases and that field names one. It fires MIXED_RESIDUAL_INDIRECT_NOTE, which is scoped to the
+   * electricity half and says the direct half is unaffected.
+   *
+   * Absent on the defaults path, whose whole figure rests on one basis and which discloses it
+   * through `originBasis` exactly as before. The two can therefore never both be set today.
+   */
+  residualIndirectDefault?: boolean
   /** Provenance, carried through to the stamp. */
   snapshotHash: string
   linePackage: string
@@ -199,10 +212,18 @@ function baseOf(
       sources: [...new Set(tables.sources.map(source => source.id))].sort(),
       snapshotHash: input.snapshotHash,
       provisional: true,
-      // Unconditional, and set HERE rather than in the priced branch so it survives on every
+      // Unconditional, and set HERE rather than in the priced branch so both survive on every
       // arm — including 'unavailable'. A residual-sourced number is indistinguishable from a
       // country-specific one unless we say so, on the same surface as the number.
-      notes: input.originBasis === 'residual' ? [RESIDUAL_BASIS_NOTE] : [],
+      //
+      // Two independent conditions, not a chain: they answer different questions (which basis the
+      // WHOLE figure rests on; whether a substituted ELECTRICITY default was residual). No line
+      // can satisfy both today — the defaults path never sets the second, the verified path
+      // always leaves originBasis null — but nothing here depends on that staying true.
+      notes: [
+        ...(input.originBasis === 'residual' ? [RESIDUAL_BASIS_NOTE] : []),
+        ...(input.residualIndirectDefault ? [MIXED_RESIDUAL_INDIRECT_NOTE] : []),
+      ],
     },
   }
 }
@@ -211,6 +232,24 @@ export const RESIDUAL_BASIS_NOTE =
   'The Commission does not publish a default for this good from this country of origin, so ' +
   'this figure uses its "Other Countries and Territories" residual default — a world-average ' +
   'value, not your country\'s own.'
+
+/**
+ * The residual disclosure for a MIXED line, where RESIDUAL_BASIS_NOTE would be a false statement.
+ *
+ * That note says "this figure" rests on the world-average bucket. On a
+ * 'verified-direct+default-indirect' line only the electricity half does; the direct half is the
+ * importer's own attested number, which the verified path never derives from a default (see
+ * estimateFromPack — the corpus is not consulted for it at all, so no residual value can reach
+ * it, and free allocation is keyed on CN, route and date rather than origin). Firing the other
+ * note here would tell an importer their audited figure is a world average.
+ *
+ * Deliberately says the same two things about the BUCKET in the same words as its neighbour — it
+ * is the same bucket — while scoping the claim to electricity and naming what is untouched.
+ */
+export const MIXED_RESIDUAL_INDIRECT_NOTE =
+  'The electricity default substituted on this line is the Commission\'s "Other Countries and ' +
+  'Territories" residual — a world-average value, not your country\'s own. Your direct figure ' +
+  'is unaffected: it is your own attested claim.'
 
 export const NO_BENCHMARK_REASON =
   'The published rules do not give a free-allocation benchmark for this good, production ' +

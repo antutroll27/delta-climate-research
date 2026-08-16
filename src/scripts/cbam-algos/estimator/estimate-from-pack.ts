@@ -365,7 +365,21 @@ export function selectIndirectFactorFromPack(
  * stamp separately drifted silently, down to a fabricated snapshotHash on one of them.
  */
 type IndirectDefaultFigure =
-  | { kind: 'priced'; indirectTco2e: string }
+  | {
+      kind: 'priced'
+      indirectTco2e: string
+      /**
+       * Whether the row this figure came from is the Commission's residual bucket rather than the
+       * declared origin's own sheet. Reported ALONGSIDE the figure, not derived by the callers:
+       * `originsFor` decides which sheet answers, and re-deriving that from the selector is how
+       * two answers to one question come to disagree.
+       *
+       * Additive on purpose. The defaults path reads `kind` and `indirectTco2e` only, so it
+       * cannot see this field and its behaviour is unchanged — it already discloses its own basis
+       * through `originBasis`, which it computes from the DIRECT factor.
+       */
+      residualOrigin: boolean
+    }
   | { kind: 'none' }
   | { kind: 'route-mismatch' }
 
@@ -379,6 +393,7 @@ function indirectDefaultFigure(
     indirectTco2e: new Decimal(indirect.factor.baseIntensity)
       .mul(new Decimal(1).plus(new Decimal(indirect.factor.markupPct).div(100)))
       .mul(input.massT).toFixed(),
+    residualOrigin: indirect.factor.originCountry === OTHER_ORIGIN,
   }
 }
 
@@ -480,10 +495,10 @@ export function estimateFromPack(pack: EstimatorPack, input: EstimatorInput): Ce
     //
     // It stays null on a 'verified-direct+default-indirect' line too, whose indirect half DOES
     // rest on a default and can draw it from the residual bucket. The field describes one basis
-    // and that line has two, so the honest options were both imperfect: 'residual' would fire
-    // RESIDUAL_BASIS_NOTE over an estimate whose direct figure is the importer's own audited
-    // number. The tier carries the disclosure instead. Narrower than the note, and named as a
-    // known gap rather than left to be found.
+    // and that line has two, so 'residual' would fire RESIDUAL_BASIS_NOTE over an estimate whose
+    // direct figure is the importer's own audited number. The substitution is disclosed by
+    // `residualIndirectDefault` instead — a separate field firing a note scoped to the electricity
+    // half — so the two bases are reported separately rather than one standing in for both.
     const verifiedStamp = { ...baseInput, tier: 'actual-verified' as const, originBasis: null }
     const mass = new Decimal(input.massT)
 
@@ -498,6 +513,10 @@ export function estimateFromPack(pack: EstimatorPack, input: EstimatorInput): Ce
     // stands in for anything, and the tier stays what the attestation makes it.
     let indirectTco2e = '0'
     let tier: DataTier = 'actual-verified'
+    // Set ONLY where a default actually stood in AND that default was the residual bucket's, so
+    // it stays false on every arm where nothing was substituted — an attested electricity figure,
+    // a 'direct' scope, a good with no published indirect default at all.
+    let residualIndirectDefault = false
     if (input.emissionsScope === 'direct_and_indirect') {
       const attested = input.verified.indirectTco2ePerT
       // ABSENCE, spelled two ways, and they used to disagree. An omitted key priced electricity
@@ -532,6 +551,10 @@ export function estimateFromPack(pack: EstimatorPack, input: EstimatorInput): Ce
           // published answer rather than a substitution — claiming a default was applied there
           // would tell an auditor to go looking for one that does not exist.
           tier = 'verified-direct+default-indirect'
+          // Same gate, one question further: WHOSE default stood in. The tier says a substitution
+          // happened; this says the substituted value is a world average rather than the origin's
+          // own, which is the part an importer cannot see in the number.
+          residualIndirectDefault = fallback.residualOrigin
         }
       }
     }
@@ -539,6 +562,7 @@ export function estimateFromPack(pack: EstimatorPack, input: EstimatorInput): Ce
     return estimateCertificates({
       ...verifiedStamp,
       tier,
+      residualIndirectDefault,
       // toFixed(), never toString(): a small attested figure must render as 0.0000000001, not
       // as the exponential '1e-10' certificate-estimate.ts:162 warns about.
       emissionsTco2e: direct.mul(mass).toFixed(),
