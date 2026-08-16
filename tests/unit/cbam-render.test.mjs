@@ -1597,14 +1597,82 @@ test('stampedTierOf leaves the claimed tier alone when the estimate THROWS', () 
     'actual-verified',
     'a thrown pricer must fall back to the claimed tier rather than crashing the add');
   // And a refusal is NOT a throw: it comes back as a real estimate carrying a real stamp, so the
-  // tier is read off it like any other. The engine stamps every verified-path refusal
-  // 'actual-verified' (nothing was priced, so no default stood in for anything), which is exactly
-  // what keeps the §4 caveat and the attestation printing on a refused verified line.
+  // tier is read off it like any other. THIS refusal is 'actual-verified', and the reason is
+  // narrow: an unreadable direct figure is refused inside estimateFromPack's own code, before the
+  // electricity fallback can run, so nothing ever stood in for anything on this line.
+  //
+  // THAT REASONING DOES NOT GENERALISE, and this file used to claim here that it did — that the
+  // engine stamps EVERY verified-path refusal 'actual-verified'. It does not, and the test
+  // directly below pins the path this one cannot see: a refusal raised AFTER the fallback fired.
   const refused = mline({ tier: 'actual-verified', seeDirect: 'nonsense' });
   const e = estOf(refused);
   assert.equal(e.status, 'unavailable', 'sanity: the engine refused the attested figure');
+  assert.equal(e.selector, 'verified/25231000/directTco2ePerT',
+    'sanity: refused on the FIGURE, which is a site inside estimateFromPack itself — the tier '
+    + 'below is a fact about that site, not about refusals in general');
   assert.equal(stampedTierOf(refused, estOf), 'actual-verified',
     'a refused estimate still carries a stamp, and its tier is the one to read');
+});
+
+test('a verified-path refusal carries the tier the engine ATTEMPTED to price at — often the MIXED one', () => {
+  // THE PATH THE TEST ABOVE CANNOT SEE. Its refusal is raised in estimateFromPack's own code
+  // before the electricity fallback runs, so 'actual-verified' is right for it. A refusal raised
+  // AFTER the fallback fired is a different fact: the Commission's marked-up electricity default
+  // really was looked up and applied, and it is a LATER lookup that failed. The tier records what
+  // the engine attempted to price the line at, so it stays mixed — the substitution did happen.
+  //
+  // Swept over every (good, origin, route, year) the form can offer — 66,675 selectors, one date
+  // per year — 5,542 verified-path refusals come back mixed. The old comment claimed none did.
+
+  // A. THE CERTIFICATE PRICE. The pack prices 2026 quarters only and <input type="date"> takes
+  //    2027, so this is the refusal an ordinary user meets first.
+  assert.equal(estOf(mline()).status, 'cscf_pending',
+    'sanity: the same line prices at a 2026 date, so the date is the only thing that moved');
+  const noPrice = mline({ date: '2027-03-15' });
+  const ePrice = estOf(noPrice);
+  assert.equal(ePrice.status, 'unavailable', 'sanity: no published price for a 2027 quarter');
+  assert.equal(ePrice.selector, 'certificate-price/2027-Q1',
+    'and the PRICE is what is missing — the good, its default and its benchmark all resolved, '
+    + 'which is exactly why the electricity substitution had already happened');
+  assert.equal(stampedTierOf(noPrice, estOf), 'verified-direct+default-indirect',
+    'the line must record the tier it was priced AT, not a tier that describes the refusal');
+
+  // B. THE BENCHMARK, AT AN ORDINARY 2026 DATE — so this is not a 2027-only curiosity, and a
+  //    reader must not learn "mixed refusal ⇒ missing price". KR is the only origin publishing
+  //    grey clinker route-independently; the Commission publishes a route-independent electricity
+  //    default for it (the fallback fires) but the Annex publishes column-B cement benchmarks
+  //    for routes (A) and (B) only (the benchmark lookup then finds nothing).
+  const kr = {
+    id: 'K1', cn: '25231000', country: 'KR', route: 'default', scope: 'direct_and_indirect',
+    massT: '100', date: '2026-03-15', tier: 'verified-direct+default-indirect', seeDirect: '2.31',
+  };
+  assert.ok(routesFor(pack, kr.cn, kr.country, 2026).includes('default'),
+    'sanity: the form really offers this pairing — syncRoutes renders it as "single route"');
+  const eBench = estOf(kr);
+  assert.equal(eBench.status, 'unavailable', 'sanity: the engine refuses this line');
+  assert.equal(eBench.selector, 'benchmark/25231000/column-B/route-independent/2026-03-15',
+    'and it refuses on the BENCHMARK, in 2026, with the price table fully populated');
+  assert.equal(stampedTierOf(kr, estOf), 'verified-direct+default-indirect',
+    'a second refusal namespace reaches the mixed tier, so the split is about WHERE the refusal '
+    + 'is raised — not about which table the selector names');
+
+  // C. THE CONTROL THAT ISOLATES THE MECHANISM. Same good, same origin, same route, same date,
+  //    same selector as A — only the fallback does not run, because this line's scope never asks
+  //    for electricity. If the namespace decided the tier, this would come back mixed too.
+  const directOnly = mline({ date: '2027-03-15', scope: 'direct' });
+  const eDirect = estOf(directOnly);
+  assert.equal(eDirect.selector, ePrice.selector,
+    'sanity: byte-identical refusal to A — the only difference is whether electricity was priced');
+  assert.equal(stampedTierOf(directOnly, estOf), 'actual-verified',
+    'no substitution, no mixed tier: the tier tracks the fallback, never the refusal');
+
+  // D. AND THE EXPORT STILL SURVIVES. csvRows throws when a line's tier disagrees with its
+  //    estimate's stamp, which is the failure a wrong tier here would cause — one bad line
+  //    killing the whole file, one render after the line was added.
+  const drafted = { ...noPrice, tier: stampedTierOf(noPrice, estOf) };
+  assert.doesNotThrow(
+    () => csvRows([drafted], [estOf(drafted)], new Map([['M1', 'deadbeef']]), 'snap', pack),
+    'a refused MIXED line must export as a row, not blow the whole file up');
 });
 
 test('renderAttestation on a MIXED line names both halves — attested direct, Commission electricity', () => {

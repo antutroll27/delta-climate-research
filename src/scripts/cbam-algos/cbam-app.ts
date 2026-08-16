@@ -630,6 +630,30 @@ const MIXED_NOTE =
  * risky. Now a tier this function has no wording for is a build error instead. The two
  * verified-bearing tiers get DIFFERENT paragraphs, not one paragraph and a footnote — see
  * MIXED_NOTE for why neither ATTESTED_NOTE nor silence is honest on a half-attested line.
+ *
+ * KNOWN GAP, LEFT OPEN DELIBERATELY: A REFUSED MIXED LINE OVER-CLAIMS. This function is handed a
+ * tier and nothing else, so it cannot tell a priced line from a refused one, and a refusal keeps
+ * its mixed stamp (see stampedTierOf, which measures how often). Rendered, that card carries the
+ * "Verified direct + Commission indirect" stamp row and MIXED_NOTE — which states outright that
+ * the electricity component IS the Commission's published default and carries the mark-up — above
+ * a refusal card that shows no electricity component, and in fact no figure of any kind. It is
+ * reachable: a 2027 import date refuses on the unpublished certificate price, and KR grey clinker
+ * on the "single route" option refuses on the benchmark at an ordinary 2026 date.
+ *
+ * This is NOT the same as the refused 'actual-verified' card, which cbam-render.test.mjs pins as
+ * wanted ("a refused claim is still the user's claim"). ATTESTED_NOTE only claims provenance for
+ * figures the user typed, and those were typed whether or not the engine could price them.
+ * MIXED_NOTE additionally asserts that a substitution was made from the Commission's corpus — a
+ * statement about THIS card's contents, and the card has no such component on it to point at.
+ *
+ * NOT CLOSED HERE because the fix is a design change, not a wording one: this function would have
+ * to learn that the estimate refused, which means widening its parameter (or adding one) and
+ * moving both call sites — renderLineCard, which has the estimate in hand, and run()'s live
+ * preview, which reads the tier off `e.stamp` precisely so the preview and the card cannot
+ * disagree. It also needs a decision this task had no mandate to take: what a refused mixed line
+ * SHOULD say, given that the attestation must not vanish (the paragraphs above say why silence on
+ * an attested figure is the state this function exists to prevent) and §4's caveat and tierCell's
+ * reference still print off the LINE either way.
  */
 export function renderAttestation(line: { tier: Line['tier']; verifiedRef?: string }): string {
   let note: string;
@@ -1333,9 +1357,43 @@ export function inputFor(l: Line, verified: EstimatorInput['verified']): Estimat
  * there would leave the click doing nothing visible at all.
  *
  * A REFUSAL IS NOT A THROW and is deliberately not special-cased: it comes back as a real estimate
- * carrying a real stamp, so its tier is read like any other. The engine stamps every verified-path
- * refusal 'actual-verified' — nothing was priced, so no default stood in for anything — which is
- * exactly what keeps §4's caveat and the card's attestation printing on a refused verified line.
+ * carrying a real stamp, so its tier is read like any other. This comment used to add that the
+ * engine stamps EVERY verified-path refusal 'actual-verified', reasoning that nothing was priced
+ * so no default stood in for anything. That is false. Swept over every (good, origin, route, year)
+ * the form can offer — 66,675 selectors, one date per year, direct figure attested and electricity
+ * left blank — 5,542 verified-path refusals come back stamped 'verified-direct+default-indirect'.
+ *
+ * THE TIER RECORDS WHAT THE ENGINE ATTEMPTED TO PRICE THE LINE AT, not whether it succeeded. On
+ * those 5,542 the substitution really did happen: the Commission's marked-up electricity default
+ * was looked up and applied, and it is the LATER lookup that failed. So the tier is decided by
+ * WHERE the refusal is raised, and not by which table the selector names:
+ *
+ *   - Raised in estimateFromPack's own code → always 'actual-verified', because each of those
+ *     four sites passes a stamp whose tier is fixed ahead of the electricity fallback:
+ *     `verifiedStamp` for the unreadable direct figure (`verified/…/directTco2ePerT`), the
+ *     unreadable attested indirect one (`verified/…/indirectTco2ePerT`) and the indirect
+ *     route-mismatch (`indirect/`); the mass gate's own ternary for `mass/`. Three of the four
+ *     cannot coexist with a substitution at all — mass and direct refuse before the fallback, and
+ *     the attested-indirect gate only runs when the importer DID supply a figure, which is the
+ *     branch the fallback is the `else` of. The fourth, the route-mismatch, IS the fallback
+ *     declining to substitute.
+ *   - Raised inside estimateCertificates' own catch → carries whatever `tier` estimateFromPack
+ *     had already computed, so it is the mixed value whenever the fallback priced. Measured over
+ *     the same sweep: 5,536 on `certificate-price/` and 6 on `benchmark/`. `quarter/` stamps it
+ *     too, though only a hand-built date reaches that one — <input type="date"> cannot emit
+ *     month 13.
+ *
+ * SO IT IS NOT A 2027-ONLY CURIOSITY, and a reader who assumes "mixed refusal ⇒ missing price"
+ * will be wrong on the shipped pack. The six `benchmark/` cases are grey clinker and grey
+ * hydraulic cements (25231000, 25239000) from KR — the only origin publishing either on the
+ * route-independent route, which the form offers as "single route". The Commission publishes a route-independent
+ * electricity default there, so the fallback fires; the Annex publishes column-B cement benchmarks
+ * for routes (A) and (B) only, so the benchmark lookup then finds nothing. An ordinary 2026 date
+ * reaches it.
+ *
+ * The old sentence's CONCLUSION survives, for a different reason than it gave: §4's caveat
+ * (`anyVerified` in buildPrintDocument) and the card's attestation (renderAttestation) both gate
+ * on BOTH verified-bearing tiers, so a refused verified line keeps them either way.
  */
 export function stampedTierOf(l: Line, price: (line: Line) => CertificateEstimate): Line['tier'] {
   try {
