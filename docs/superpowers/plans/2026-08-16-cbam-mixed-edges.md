@@ -260,6 +260,31 @@ Diff to prove each landed; restore; confirm green.
 
 ---
 
+## Task 4b: The note WE added has the same defect
+
+**Files:**
+- Modify: `/Volumes/VSTSAMPLES/Projects/CBM/lib/estimator/estimate-from-pack.ts` (+ re-vendor)
+
+**Found by Task 4, and introduced by Task 1.** `MIXED_RESIDUAL_INDIRECT_NOTE` says *"The electricity default substituted on this line is the Commission's … residual"*. `baseOf` attaches notes on **every** arm including `'unavailable'`, so a refused mixed line from an unlisted origin renders it over a card with **no figure at all**. Measured: FJ cement `25232900` at a 2027 date, where it is the sole `<li>`.
+
+Task 4 just removed exactly this over-claim from `MIXED_NOTE` one line above. Leaving it here ships half a fix, and the half that remains is a note this batch introduced.
+
+**The argument for leaving it, and why it loses.** The substitution genuinely did happen — the indirect figure is computed before the price lookup fails — so "was substituted" is literally accurate. That is the same argument that was available for `MIXED_NOTE`, and it was rejected for the same reason: the card shows no figure, so a note describing *the figure's provenance* has no referent. `ATTESTED_NOTE` survives a refusal because it describes the **input**; both of these describe the **output**.
+
+- [ ] **Step 1: Reproduce it** — render the FJ card at a 2027 date and confirm the note appears with no figure. Report it.
+
+- [ ] **Step 2: Suppress at the source, not the sink.** The note must not be attached when nothing was priced. `renderStamp` emitting `stamp.notes` verbatim is non-negotiable #5 in `cbam-app.ts`'s own header — filtering at the renderer would break that contract and would leave the engine's own output still claiming it. Find where the note is attached and gate it on a figure having been produced.
+
+**Check whether `RESIDUAL_BASIS_NOTE` has the same problem** on a refused *defaults* line. If it does, that is a pre-existing defect of the same shape — report it, and say whether it should move in this task or its own. Do not widen silently.
+
+- [ ] **Step 3: Pin it** — a refused mixed line from an unlisted origin carries no residual-indirect note; a **priced** one still does. Both arms, or the fix can go vacuous.
+
+- [ ] **Step 4: Mutation-test** — remove the gate, confirm the refused test fails. Diff to prove it landed.
+
+- [ ] **Step 5: Re-vendor + gates.** Engine change, so `cp` down and `--update`. Confirm no figure moved; say what that rests on.
+
+---
+
 ## Task 5: Measure
 
 **Files:** none. Change no source file; commit nothing.
