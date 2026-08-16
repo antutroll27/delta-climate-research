@@ -1739,6 +1739,61 @@ test('renderLineCard: a MIXED line gets its attestation AND its delta, and the d
     'and the provenance row states the compound tier, so the card names both corpora');
 });
 
+/**
+ * THE ONE PIN defaultPathComparison CAN HAVE, and the reason it is a source-text assertion rather
+ * than a behavioural one.
+ *
+ * "Does this line carry a figure the importer attested?" is asked at FIVE places in cbam-app.ts.
+ * Four are reachable from this suite through an exported function, and each is pinned by a named
+ * test above — measured, not assumed: narrowing one site alone to 'actual-verified' kills exactly
+ * one of them (renderLineCard → the MIXED delta test; tierCell → §1's reference; §4's caveat →
+ * the mixed-only document; verifiedInputOf → the MIXED round trip, plus four downstream).
+ *
+ * The fifth, defaultPathComparison, is reachable from NEITHER suite. It is a closure inside
+ * initCbam(), gettable only through document.getElementById, and these tests have no DOM (no
+ * jsdom in devDependencies — the same reason two e2e tests exist for closures in this file).
+ * The e2e suite does assert a delta, but on 72061000/IN, iron & steel, for which the Commission
+ * publishes no indirect default at all — so that line can never reach the mixed tier, and
+ * narrowing defaultPathComparison leaves e2e green too. Measured: that narrowing kills ZERO of
+ * the 410 tests, and moves ZERO bytes of rendered output.
+ *
+ * So the fifth site's only guarantee is that it SHARES the predicate. That is what this test
+ * pins, and it is not bookkeeping: the inventory of sites needing the pair has been wrong four
+ * times — two, then six, then seven (run()'s preview), then four when this predicate was
+ * extracted and defaultPathComparison was missed. Re-spelling a site inline drops the call count
+ * and fails here; hand-writing the pair at a NEW site raises the comparison count and fails here.
+ *
+ * WHEN YOU LEGITIMATELY ADD OR REMOVE A CALL SITE, change the number — and read the list while
+ * you are here. That five-second stop is the review moment absent every time this went wrong.
+ */
+test('the attestation question has ONE spelling and five call sites — the only pin defaultPathComparison can have', () => {
+  const src = readFileSync(fileURLToPath(
+    new URL('../../src/scripts/cbam-algos/cbam-app.ts', import.meta.url)), 'utf8');
+  // Comments are prose ABOUT the predicate — several docblocks quote the tiers deliberately, and
+  // must stay free to. Only executable lines are counted.
+  const code = src.split('\n').filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n');
+
+  const spellings = code.match(/[!=]==\s*'verified-direct\+default-indirect'/g) ?? [];
+  assert.equal(spellings.length, 1,
+    'the mixed tier must be COMPARED against in exactly one place — isAttested. A second '
+    + 'comparison means the pair has been hand-written somewhere again, which is the bug that '
+    + 'has recurred at every tier change. Found: ' + JSON.stringify(spellings));
+
+  const calls = code.match(/\bisAttested\(/g) ?? [];
+  assert.equal(calls.length, 5,
+    'isAttested must be called at all five sites — renderLineCard\'s delta gate, tierCell\'s '
+    + 'verifier reference, buildPrintDocument\'s §4 caveat, verifiedInputOf\'s engine hand-off '
+    + 'and defaultPathComparison. Four of five would be worse than none: two spellings, neither '
+    + 'authoritative, and the one that drops out may well be the site no test can reach.');
+
+  // The switch it must NOT be folded into. renderAttestation answers the same question with a
+  // `never` default — a COMPILE-TIME guarantee that a fourth tier gets handled, and the site that
+  // already caught exactly that bug by construction. A boolean there would be a downgrade.
+  assert.match(code, /const _exhaustive: never = line\.tier;/,
+    'renderAttestation must keep its exhaustive switch — see isAttested\'s docblock for why it '
+    + 'is deliberately excluded from the predicate');
+});
+
 /* ── the printable document's verified surfaces (Task 7) ─────────────────────
  *
  * The document is the artefact an importer hands to an auditor, so the two things a verified

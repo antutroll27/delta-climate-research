@@ -675,6 +675,34 @@ export function renderAttestation(line: { tier: Line['tier']; verifiedRef?: stri
 }
 
 /**
+ * Does this line carry a figure the importer attested?
+ *
+ * ONE spelling, FIVE call sites — renderLineCard's delta gate, tierCell's verifier reference,
+ * buildPrintDocument's §4 caveat, verifiedInputOf's engine hand-off, and defaultPathComparison.
+ * Written out by hand at each of them, the pair was missed three times while the third tier
+ * landed — two sites, then six, then seven, the last being run()'s live preview. It was missed a
+ * FOURTH time by the brief that ordered this extraction, which inventoried four sites and did not
+ * see defaultPathComparison. A predicate makes the next tier addition structural instead of a
+ * sweep, which is the only thing that has ever stopped this miscount.
+ *
+ * defaultPathComparison is also the one site NO test covers: it is a closure inside initCbam(),
+ * reachable only through document.getElementById, and the unit suite has no DOM. Narrowing it
+ * alone was measured to kill zero of the 410 tests. Sharing this predicate is therefore the only
+ * guarantee that site has, and the reason it must never be re-spelled by hand.
+ *
+ * NOT used by renderAttestation, deliberately: its `switch` with a `never` default is a
+ * COMPILE-TIME guarantee that a fourth tier must be handled, and it is the site that already
+ * caught exactly that bug by construction. Trading it for a boolean would be a downgrade.
+ *
+ * NOT used by parseVerifiedFields or syncVerifiedRows either, and they are not candidates: both
+ * read the <select>'s value — a string, never a Line. Neither holds a pack, so neither can know
+ * whether the indirect fallback fired, and the fallback firing is precisely what the third tier
+ * MEANS. Guessing there would label a steel line mixed and make csvRows throw.
+ */
+const isAttested = (tier: Line['tier']): boolean =>
+  tier === 'actual-verified' || tier === 'verified-direct+default-indirect';
+
+/**
  * What the verified choice was worth, in euros, against the same line priced from the
  * Commission's published defaults — and, when there is no honest comparison to draw, the reason
  * there isn't one instead of a silence a reader would fill in as "zero".
@@ -786,9 +814,9 @@ export function renderLineCard(
   // leaving exactly what the DIRECT attestation changed. MOVES WITH renderAttestation ABOVE, never
   // before it: widening this gate alone would print "your verified data saves €X" beside no
   // attestation at all, which is the delta advertising an unchecked figure with nothing saying it
-  // is unchecked. defaultPathComparison carries the matching pair of this condition.
-  const verified = line.tier === 'actual-verified'
-    || line.tier === 'verified-direct+default-indirect';
+  // is unchecked. defaultPathComparison decides with the SAME predicate — no longer a matching
+  // pair two readers must keep in step, but one spelling both read; see isAttested.
+  const verified = isAttested(line.tier);
   return `
     <article class="cb-line" data-line="${esc(line.id)}">
       <div class="cb-line-head">
@@ -910,7 +938,7 @@ function tierCell(l: Line): string {
   // verified. That is a document asserting a verification and withholding its reference, which
   // reads as no reference having been cited at all. The tier that scopes it is printed right
   // beside it, and §4 states what the reference does and does not cover.
-  const attested = l.tier === 'actual-verified' || l.tier === 'verified-direct+default-indirect';
+  const attested = isAttested(l.tier);
   const ref = attested && l.verifiedRef ? ` — ref ${esc(l.verifiedRef)}` : '';
   return `${label}${ref}`;
 }
@@ -961,8 +989,7 @@ export function buildPrintDocument(input: {
    * had to move with this gate rather than after it: see §4 below for what it used to claim about
    * the mark-up, and why that was only half true once this predicate admits a second tier.
    */
-  const anyVerified = lines.some((l) =>
-    l.tier === 'actual-verified' || l.tier === 'verified-direct+default-indirect');
+  const anyVerified = lines.some((l) => isAttested(l.tier));
 
   const lineRows = lines.map((l, i) => {
     const r = results[i]!;
@@ -1276,14 +1303,15 @@ export function parseVerifiedFields(v: {
  * like is the exact mistake that ends in the throw, because a verified line whose figure is
  * missing or unreadable would then quietly become a defaults line instead of a refusal the user
  * can see on the card. The predicate has to be the tier, and now the tier has two admissible
- * values. DO NOT "simplify" this back to a single `!==`: the compiler cannot help you here — a
- * narrower comparison against a wider union type checks perfectly clean, and the only thing that
- * fails is the export, at the moment a user clicks it. cbam-render.test.mjs pins both values.
+ * values — which is why the two live in isAttested rather than here. DO NOT "simplify" that back
+ * to a single comparison, there or here: the compiler cannot help you — a narrower comparison
+ * against a wider union type checks perfectly clean, and the only thing that fails is the export,
+ * at the moment a user clicks it. cbam-render.test.mjs pins both values through this function.
  */
 export function verifiedInputOf(
   l: Pick<Line, 'tier' | 'seeDirect' | 'seeIndirect'>,
 ): EstimatorInput['verified'] {
-  if (l.tier !== 'actual-verified' && l.tier !== 'verified-direct+default-indirect') {
+  if (!isAttested(l.tier)) {
     return undefined;
   }
   return {
@@ -1842,7 +1870,10 @@ export function initCbam(): void {
     // THE MATCHING HALF OF renderLineCard's `verified` GATE — the two decide the same question
     // (does this line have attested data worth measuring) and must name the same tiers, or the
     // card renders a delta block whose comparison was never computed and reads "No
-    // Commission-default comparison was computed for this line".
+    // Commission-default comparison was computed for this line". They now share ONE predicate
+    // (isAttested) rather than two hand-spellings, so they cannot disagree — which matters most
+    // here, because this is the only one of its five call sites no test can reach: it is a
+    // closure inside initCbam(), and the unit suite has no DOM. Do not re-spell it inline.
     //
     // THE ARITHMETIC IS ALREADY RIGHT FOR A MIXED LINE, which is why this is a gate change and not
     // a calculation change. Both sides go through inputFor with the same line and differ only in
@@ -1851,7 +1882,7 @@ export function initCbam(): void {
     // then ADDS indirect, so that term survives the clamp unchanged on each side and subtracts out
     // exactly. What the delta reports is therefore what the direct attestation was worth — which
     // is the only thing on a mixed line that the attestation actually bought.
-    if (l.tier !== 'actual-verified' && l.tier !== 'verified-direct+default-indirect') {
+    if (!isAttested(l.tier)) {
       return undefined;
     }
     try {
