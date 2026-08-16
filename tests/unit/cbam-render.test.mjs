@@ -5,7 +5,8 @@ import { fileURLToPath } from 'node:url';
 
 import {
   buildPrintDocument, decorateSnapshot, inputFor, nextRoute, parseVerifiedFields, renderAttestation,
-  renderLineCard, renderResult, renderThreshold, renderTotals, renderYearThreshold, verifiedInputOf,
+  renderLineCard, renderResult, renderThreshold, renderTotals, renderYearThreshold, stampedTierOf,
+  verifiedInputOf,
 } from '../../src/scripts/cbam-algos/cbam-app.ts';
 import {
   estimateFromPack, resolveThreshold, routesFor, selectIndirectFactorFromPack,
@@ -76,17 +77,28 @@ const CAVEAT_FINGERPRINT =
   + '        are not customs provenance.</li>';
 /**
  * The fifth caveat, and the only CONDITIONAL one: it appears iff at least one line was entered at
- * the verified tier. Both states are pinned below (present when one is, absent when none is) —
- * an unconditional caveat would be a claim about attested data on a document that contains none,
+ * a verified-bearing tier. Both states are pinned below (present when one is, absent when none is)
+ * — an unconditional caveat would be a claim about attested data on a document that contains none,
  * and a missing one would leave the mark-up-skipping figures looking as Commission-backed as
  * every other row. Hand-typed here for exactly the reason the four above are; see the doc comment
  * on this block.
+ *
+ * IT NOW COVERS TWO MARKS, and the second sentence is why it was reworded rather than merely
+ * re-gated. It used to say, flatly, that lines marked verified "were priced from the user's own
+ * attested figures, which skip the mark-up" — half-false the moment §1 can carry a
+ * 'verified-direct+default-indirect' row, whose electricity component is the Commission's own
+ * default and DOES carry the mark-up. Widening `anyVerified` without touching this text would have
+ * printed a caveat that under-states the very thing it exists to disclose, on the document handed
+ * to an auditor.
  */
 const CAVEAT_VERIFIED =
-  '<li>Lines marked verified in §1 were priced from the user\'s own attested figures, which skip\n'
-  + '        the mark-up the Commission\'s default values carry. Those figures are a claim, from a\n'
-  + '        verification this tool has not seen and cannot confirm; any reference cited beside them\n'
-  + '        is transcribed as entered, never checked.</li>';
+  '<li>Lines marked verified in §1 carry the user\'s own attested figures, which skip the\n'
+  + '        mark-up the Commission\'s default values carry. A line marked “Verified direct +\n'
+  + '        Commission indirect” is attested for its direct figure only: its electricity component is\n'
+  + '        the Commission\'s published default value, and that half does carry the mark-up. Those\n'
+  + '        attested figures are a claim, from a verification this tool has not seen and cannot confirm;\n'
+  + '        any reference cited beside them covers the attested figures alone and is transcribed as\n'
+  + '        entered, never checked.</li>';
 /**
  * The below-threshold verdict, pinned in BOTH its forms — the whole `<p class="cb-sub">`, closed
  * at both ends by its own tags, for the reason the banner constant below spells out: a constant
@@ -1284,6 +1296,65 @@ const comparisonOf = (l) => {
   return d.status === 'unavailable' ? null : d;
 };
 
+/**
+ * The MIXED tier's worked line — the one vline cannot be.
+ *
+ * Cement from DZ at `direct_and_indirect` scope, attesting a direct figure and no indirect one.
+ * 25231000/DZ/(A) HAS a published indirect default (baseIntensity 0.04, mark-up 10%), so the
+ * engine stands it in — 0.04 × 1.10 × 100 t = 4.4 tCO2e — and stamps
+ * 'verified-direct+default-indirect'. vline's 72061000 could never reach this tier from any input:
+ * the Commission publishes no indirect default for iron & steel at all, so the lookup returns
+ * `none` and zero is the published ANSWER rather than a substitution — which is why vline stays
+ * 'actual-verified' and every test above it is untouched by this feature.
+ *
+ * `tier` states the tier the ENGINE stamps for these fields, because that is what draftLine puts
+ * on the line. A test that wants the pre-stamp shape (what parseVerifiedFields emits) overrides it
+ * to 'actual-verified' explicitly — see the mechanism test, which is about exactly that step.
+ */
+const mline = (over = {}) => ({
+  id: 'M1', cn: '25231000', country: 'DZ', route: '(A)', scope: 'direct_and_indirect',
+  massT: '100', date: '2026-03-15', tier: 'verified-direct+default-indirect', seeDirect: '2.31',
+  ...over,
+});
+
+/**
+ * The mixed line's attestation, hand-typed for the reason the constants block at the top of this
+ * file gives. It is a DIFFERENT paragraph from ATTESTED_NOTE, not a qualified version of it:
+ * ATTESTED_NOTE says "These emissions figures are your own attested claim", which on a mixed line
+ * is half-false — the electricity half is the Commission's own default value, marked up. Rendering
+ * ATTESTED_NOTE there would over-claim provenance; rendering nothing would leave a mark-up-free
+ * direct figure with no attestation beside it, the single state renderAttestation's docblock
+ * exists to prevent. So the wording states which half is which, and both directions of it.
+ */
+const MIXED_NOTE =
+  'Only the direct emissions figure on this line is your own attested claim, transcribed exactly '
+  + 'as entered — this tool has not confirmed it, and has no way to check the verification behind '
+  + 'it. The electricity component is not attested at all: it is the Commission\'s published '
+  + 'default value, it carries the mark-up, and any verifier\'s reference cited here covers the '
+  + 'direct figure alone.';
+
+/**
+ * The mixed line's delta, computed rather than guessed, and pinned because it is the arithmetic
+ * the "treat mixed as verified in defaultPathComparison" decision rests on. For 25231000/DZ/(A)
+ * at 100 t, both sides resolve the SAME free-allocation benchmark and the SAME indirect default:
+ *
+ *   free allocation   = 64.935 tCO2e            (identical on both paths)
+ *   indirect          = 0.04 × 1.10 × 100 = 4.4 (identical on both paths — the lookup does not
+ *                                                read `verified`, so it cancels in the subtraction)
+ *   default   direct  = 1.24 × 1.10 × 100 = 136.4 → net 71.465 + 4.4 = 75.865 → €5,717.19
+ *   attested  direct  = 2.31 × 100        = 231   → net 166.065 + 4.4 = 170.465 → €12,846.24
+ *   delta             = 5717.19 − 12846.24 = −7129.05, i.e. the attestation ADDS €7,129.05
+ *
+ * The "adds" direction is not a quirk of the fixture: 2.31 tCO2e/t is a genuinely dirtier producer
+ * than the marked-up Algerian cement default, and the card must say so in that direction. The
+ * seeDirect figure is the one the rest of this file already uses, kept rather than tuned to
+ * produce a flattering number.
+ */
+const DELTA_MIXED_ADDS =
+  'The Commission default would give €5,717.19 — your verified data adds €7,129.05 to what the '
+  + 'default would cost. Both figures are what-ifs at the assumed CSCF, so the difference between '
+  + 'them is one too.';
+
 /* ── the attestation gates itself, so no surface can price a verified figure bare ──────────── */
 
 test('renderAttestation gates on the TIER, not on an external if — the preview shipped without one', () => {
@@ -1470,6 +1541,134 @@ test('a verified line with no usable figure renders a refusal — it never throw
     () => csvRows([line], [e], new Map([['l1', 'deadbeef']]), 'snap', pack),
     'a refused verified line must export as a row, not blow the whole file up',
   );
+});
+
+/* ── the mixed tier: the line records what the ENGINE computed ────────────────
+ *
+ * Until this point the third tier existed in the type, in tierLabel and in verifiedInputOf, and
+ * NOTHING constructed a line carrying it: parseVerifiedFields emits the user's two-option
+ * selection and nothing overwrote it. So the engine computed a mixed stamp, the line still said
+ * 'actual-verified', and csvRows' equality guard would have thrown at export. These tests pin the
+ * step that closes it — draftLine reading the tier back off the stamp — and the four rendering
+ * surfaces that must move with it or ship a document that under-states its own provenance.
+ */
+
+test('the mechanism: a drafted line takes the tier the ENGINE stamped, not the one the form selected', () => {
+  // WHY THE READ-BACK, rather than deriving the tier where the line is built. Whether a line is
+  // mixed depends on the emissions scope, on whether the Commission publishes an indirect default
+  // for that exact good/origin/route/year, and on the importer leaving the field blank —
+  // parseVerifiedFields holds no pack and cannot know any of it (see its own doc). Two copies of
+  // that rule would drift, and the drift surfaces as a thrown export, not a wrong pixel.
+  const selected = mline({ tier: 'actual-verified', verifiedRef: 'BV-2026-0142' });
+  const priced = estOf(selected);
+  assert.equal(priced.stamp.tier, 'verified-direct+default-indirect',
+    'sanity: the engine stands the Commission default in for the electricity half nobody attested');
+
+  const drafted = { ...selected, tier: stampedTierOf(selected, estOf) };
+  assert.equal(drafted.tier, 'verified-direct+default-indirect',
+    'the line must carry the tier its own estimate was actually computed at');
+
+  // THE ROUND TRIP, and it is not decoration: `lines` outlives the form, so every later
+  // re-estimate reads the LINE (estimateLine's doc). verifiedInputOf keys on the tier and returns
+  // the same object for both verified-bearing tiers, so the second pricing must stamp the same
+  // value — otherwise the guard throws one render after the line was added, not at draft time.
+  const repriced = estOf(drafted);
+  assert.equal(repriced.stamp.tier, drafted.tier,
+    're-pricing the drafted line must stamp the same tier, or the guard fires a render later');
+
+  // The whole point of the equality: the export survives.
+  const rows = csvRows([drafted], [repriced], new Map([['M1', 'deadbeef']]), 'snap', pack);
+  assert.equal(rows[0].data_tier, 'verified-direct+default-indirect',
+    'the CSV carries the compound value VERBATIM — it is the column that tells an auditor which '
+    + 'half of this figure came from where');
+  assert.equal(rows[0].verified_reference, 'BV-2026-0142',
+    'and the reference travels with it: it certifies the direct half, which is a real half');
+});
+
+test('stampedTierOf leaves the claimed tier alone when the estimate THROWS', () => {
+  // A thrown estimate is not a verdict about the tier. safeEstimates renders that line's fallback
+  // card with no figures at all, and buildPrintDocument still prints its row off the LINE — so the
+  // only honest tier for a line nothing could price is the one the user claimed. It also must not
+  // take the Add down: draftLine runs inside onAdd's try/finally, whose only job is re-enabling
+  // the button, so an escaping throw would leave the click silently doing nothing.
+  const selected = mline({ tier: 'actual-verified' });
+  assert.equal(
+    stampedTierOf(selected, () => { throw new Error('engine exploded'); }),
+    'actual-verified',
+    'a thrown pricer must fall back to the claimed tier rather than crashing the add');
+  // And a refusal is NOT a throw: it comes back as a real estimate carrying a real stamp, so the
+  // tier is read off it like any other. The engine stamps every verified-path refusal
+  // 'actual-verified' (nothing was priced, so no default stood in for anything), which is exactly
+  // what keeps the §4 caveat and the attestation printing on a refused verified line.
+  const refused = mline({ tier: 'actual-verified', seeDirect: 'nonsense' });
+  const e = estOf(refused);
+  assert.equal(e.status, 'unavailable', 'sanity: the engine refused the attested figure');
+  assert.equal(stampedTierOf(refused, estOf), 'actual-verified',
+    'a refused estimate still carries a stamp, and its tier is the one to read');
+});
+
+test('renderAttestation on a MIXED line names both halves — attested direct, Commission electricity', () => {
+  const withRef = renderAttestation({
+    tier: 'verified-direct+default-indirect', verifiedRef: 'BV-2026-0142',
+  });
+  assert.ok(withRef.includes(`<p class="cb-sub cb-attested">${MIXED_NOTE} Ref: BV-2026-0142</p>`),
+    'the mixed attestation must match the pinned text exactly — word for word, punctuation for '
+    + 'punctuation — and still transcribe the reference the importer cited');
+  // NOT the whole-line note. This is the assertion that would have caught "just widen the gate":
+  // ATTESTED_NOTE beside a figure half-priced from the Commission's marked-up corpus claims
+  // provenance for a number the importer never saw.
+  assert.ok(!withRef.includes(ATTESTED_NOTE),
+    'the fully-verified paragraph must not print on a half-attested line');
+  assert.doesNotMatch(withRef, /These emissions figures are your own attested claim/,
+    'and not in any form: "these figures" is a claim about the whole line');
+  // The claim and its precise negation, the shape every other honesty pin in this file uses.
+  assert.match(withRef, /carries the mark-up/,
+    'the electricity half must be stated as carrying the mark-up, since it does');
+  assert.match(withRef, /has not confirmed it/, 'the attested half is still unchecked, and says so');
+  assert.doesNotMatch(withRef, /(we|this tool) (have|has) (confirmed|verified|checked)/i);
+  assert.doesNotMatch(withRef, /independently (confirmed|verified)/i);
+  // Absent reference must not leave a dangling label, exactly as on the fully-verified arm.
+  assert.equal(renderAttestation({ tier: 'verified-direct+default-indirect' }),
+    renderAttestation({ tier: 'verified-direct+default-indirect', verifiedRef: '' }));
+  assert.doesNotMatch(renderAttestation({ tier: 'verified-direct+default-indirect' }), /Ref:/);
+  // THE THIRD ARM MUST NOT HAVE SWALLOWED THE SECOND. A three-way decision written as
+  // `if (tier === 'default+markup') ... else mixed` would print the mixed paragraph on a fully
+  // verified line, and one written as `if (tier !== 'actual-verified') return MIXED` would print
+  // it on a Commission-default line that attests nothing at all.
+  assert.equal(renderAttestation({ tier: 'default+markup' }), '',
+    'a Commission-default figure makes no attested claim, so it must still say nothing');
+  assert.equal(renderAttestation({ tier: 'default+markup', verifiedRef: 'BV-2026-0142' }), '',
+    'not even with a stray reference on it');
+  assert.ok(renderAttestation({ tier: 'actual-verified' }).includes(ATTESTED_NOTE),
+    'and a fully verified line keeps the paragraph that is true of IT');
+});
+
+test('renderLineCard: a MIXED line gets its attestation AND its delta, and the delta isolates the direct half', () => {
+  const l = mline({ verifiedRef: 'BV-2026-0142' });
+  const mine = estOf(l);
+  const theirs = comparisonOf(l);
+  // THE CANCELLATION, MEASURED — the claim the defaultPathComparison decision rests on. Both
+  // sides reach the same indirect lookup with the same mark-up over the same mass (the lookup
+  // reads cn/country/route/date and never `verified`), so the electricity term is byte-identical
+  // on both and subtracts out. What is left is exactly what the DIRECT attestation was worth,
+  // which is the only thing the sentence claims to measure.
+  assert.equal(mine.scenario.indirectTco2e, '4.4',
+    'sanity: the Commission default stood in for electricity — 0.04 × 1.10 × 100 t');
+  assert.equal(theirs.scenario.indirectTco2e, mine.scenario.indirectTco2e,
+    'the indirect component must be IDENTICAL on both sides, or the delta is not a like-for-like '
+    + 'subtraction and the sentence beside it is measuring two different things');
+  assert.equal(mine.scenario.faaTco2e, theirs.scenario.faaTco2e,
+    'and so must the free allocation — it is a benchmark of the GOOD, not of the data tier');
+
+  const html = renderLineCard(l, mine, 0, theirs);
+  assert.ok(html.includes(`<p class="cb-sub cb-attested">${MIXED_NOTE} Ref: BV-2026-0142</p>`),
+    'the card carries the mixed attestation, not the fully-verified one');
+  assert.match(html, /cb-delta/,
+    'a mixed line HAS attested data, so it earns the comparison that data is worth');
+  assert.ok(html.includes(`<p class="cb-sub">${DELTA_MIXED_ADDS}</p>`),
+    'the delta must match the pinned text exactly — see the constant for the arithmetic');
+  assert.match(html, /Verified direct \+ Commission indirect/,
+    'and the provenance row states the compound tier, so the card names both corpora');
 });
 
 /* ── the printable document's verified surfaces (Task 7) ─────────────────────
@@ -1708,6 +1907,52 @@ test('§1 escapes the verifier reference — it is free text the user typed', ()
   const html = docOf([v], [estOf(v)]);
   assert.doesNotMatch(html, /<script>/, 'a raw reference must never reach the document unescaped');
   assert.match(html, /ref DNV&quot;&gt;&lt;script&gt;/, 'it prints escaped, and still readable');
+});
+
+test('§1 transcribes the verifier reference on a MIXED row — it certifies the half that is real', () => {
+  // WHAT LEAVING tierCell BEHIND WOULD HAVE COST. Its reference is gated on the tier, not on the
+  // reference's own truthiness (see the defaults-row test above for why that gate is right), and a
+  // gate naming only 'actual-verified' silently deletes the importer's cited evidence from the ONE
+  // artefact built to be handed to an auditor — while the label beside it still says the direct
+  // figure was verified. The document would then assert a verified figure and withhold the
+  // reference for it, which reads as no reference having been cited at all.
+  const m = mline({ verifiedRef: 'BV-2026-0142' });
+  const html = docOf([m], [estOf(m)]);
+  assert.match(html, /<td[^>]*>Verified direct \+ Commission indirect — ref BV-2026-0142<\/td>/,
+    'the mixed row states the compound tier that priced it and the reference cited for it');
+  // Exactly the string the on-screen provenance stamp uses, the same cross-check the fully
+  // verified row carries: the paper artefact and the card a user saw must not name one tier twice.
+  const stampRow = renderResult(estOf(m)).match(/<span>Data tier<\/span><b>([^<]+)<\/b>/);
+  assert.ok(stampRow, 'sanity: the card renders a Data tier row');
+  assert.equal(stampRow[1], 'Verified direct + Commission indirect');
+  assert.ok(html.includes(`<td class="cbp-loc">${stampRow[1]} — ref BV-2026-0142</td>`),
+    'the document uses the card\'s own tier label verbatim, not a second wording of it');
+});
+
+test('§4 carries the verified caveat for a document of ONLY mixed lines, and says which half is which', () => {
+  // TWO FAILURES IN ONE, and they had to be fixed together. A document whose only lines are mixed
+  // contains attested figures priced without the mark-up and a transcribed verifier reference —
+  // and, with `anyVerified` naming one tier, printed NO caveat saying any of it was unchecked. But
+  // widening that gate alone would have printed the OLD wording, which says such lines "were
+  // priced from the user's own attested figures, which skip the mark-up": false of the electricity
+  // half, which is the Commission's own value with the mark-up on it. A caveat that under-states
+  // the substitution is worse than a missing one, because it reads as having disclosed it.
+  const m = mline({ verifiedRef: 'BV-2026-0142' });
+  const html = docOf([m], [estOf(m)]);
+  assert.ok(html.includes(CAVEAT_VERIFIED),
+    'the verified caveat must appear, and match the pinned text exactly — word for word');
+  assertCaveatsExactly(html,
+    [CAVEAT_CSCF, CAVEAT_ARTICLE_9, CAVEAT_COMPLETENESS, CAVEAT_FINGERPRINT, CAVEAT_VERIFIED],
+    'one mixed line');
+  // The claim and its negation. A rewording that dropped the second sentence would keep every
+  // phrase the assertions below look for while going back to describing the whole line as attested.
+  assert.match(html, /that half does carry the mark-up/,
+    'the caveat must say the electricity half carries the mark-up, because it does');
+  assert.match(html, /attested for its direct figure only/,
+    'and must scope the attestation to the direct half by name');
+  assert.match(html, /has not seen and cannot confirm/, 'the gap is still stated as a gap');
+  assert.doesNotMatch(html, /(we|this tool) (have|has) (confirmed|verified|checked)/i);
+  assert.doesNotMatch(html, /reference .{0,30}(has been|was) checked/i);
 });
 
 test('§1 stays rectangular across ordinary, refused, thrown and verified rows', () => {

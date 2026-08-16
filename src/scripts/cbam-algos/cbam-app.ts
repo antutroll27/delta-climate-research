@@ -575,6 +575,37 @@ const ATTESTED_NOTE =
   + 'and nothing on this card has been checked against your verification report.';
 
 /**
+ * The same sentence for a line only HALF of which is the importer's claim — a separate paragraph,
+ * not ATTESTED_NOTE with a qualifier bolted on.
+ *
+ * WHY NOT ATTESTED_NOTE. It opens "These emissions figures are your own attested claim", and on a
+ * 'verified-direct+default-indirect' line that is half false in the expensive direction: the
+ * electricity component is the Commission's own published default value with the punitive mark-up
+ * on it, a figure the importer never saw and no verifier ever signed. Printing ATTESTED_NOTE there
+ * claims provenance for a number that has none of it, on the card whose entire job is saying whose
+ * claim the figures are.
+ *
+ * WHY NOT SILENCE EITHER, which is what a narrower gate would have produced. The direct half IS
+ * attested, and it is priced without the mark-up — the materially lower, unchecked figure that
+ * ATTESTED_NOTE's own docblock exists to keep from appearing bare. Suppressing the paragraph would
+ * discard true provenance to avoid over-stating it, and leave the mark-up-free half looking as
+ * Commission-backed as every other row.
+ *
+ * So it states both halves and both directions, and it scopes the reference: the reference line
+ * that follows covers the direct figure, and saying so is the difference between transcribing a
+ * verifier's certificate and appearing to extend it over the Commission's value. Written to be
+ * true whether or not a reference was actually cited — "any verifier's reference cited here" makes
+ * no claim that one exists. Hand-typed independently in cbam-render.test.mjs, per the
+ * anti-paraphrase convention that file's constants block documents.
+ */
+const MIXED_NOTE =
+  'Only the direct emissions figure on this line is your own attested claim, transcribed exactly '
+  + 'as entered — this tool has not confirmed it, and has no way to check the verification behind '
+  + 'it. The electricity component is not attested at all: it is the Commission\'s published '
+  + 'default value, it carries the mark-up, and any verifier\'s reference cited here covers the '
+  + 'direct figure alone.';
+
+/**
  * The reference is TRANSCRIBED, NEVER CHECKED — the same contract csvRows' verified_reference
  * column states, and it is free text the user typed, so it is escaped like every other user
  * string that reaches innerHTML in this file. Rendered only when one was actually cited: an
@@ -591,12 +622,32 @@ const ATTESTED_NOTE =
  * a mark-up-free, materially LOWER liability whose only provenance is a stamp row reading "Verified
  * actual", which reads as though the tool validated something. A caller that forgets an external
  * `if` reintroduces exactly that. Now it cannot: pass anything, and the tier decides.
+ *
+ * THREE-WAY, AND SWITCHED WITH A `never` DEFAULT — tierLabel's idiom, adopted here for tierLabel's
+ * reason. Written as `if (tier !== 'actual-verified') return ''` this function answered a FOURTH
+ * tier by rendering nothing, silently: an attested figure with no attestation beside it, which is
+ * precisely the state described above, arriving through the one edit nobody would review as
+ * risky. Now a tier this function has no wording for is a build error instead. The two
+ * verified-bearing tiers get DIFFERENT paragraphs, not one paragraph and a footnote — see
+ * MIXED_NOTE for why neither ATTESTED_NOTE nor silence is honest on a half-attested line.
  */
 export function renderAttestation(line: { tier: Line['tier']; verifiedRef?: string }): string {
-  if (line.tier !== 'actual-verified') return '';
+  let note: string;
+  switch (line.tier) {
+    // Nothing was attested, so there is no claim to disclose and no reference that could belong
+    // beside one. Returns before the reference is even read, which is what stops a stray
+    // verifiedRef printing under a Commission-priced figure.
+    case 'default+markup': return '';
+    case 'actual-verified': note = ATTESTED_NOTE; break;
+    case 'verified-direct+default-indirect': note = MIXED_NOTE; break;
+    default: {
+      const _exhaustive: never = line.tier;
+      return _exhaustive;
+    }
+  }
   const ref = line.verifiedRef ? ` Ref: ${esc(line.verifiedRef)}` : '';
   return `
-    <p class="cb-sub cb-attested">${ATTESTED_NOTE}${ref}</p>`;
+    <p class="cb-sub cb-attested">${note}${ref}</p>`;
 }
 
 /**
@@ -703,7 +754,17 @@ export function renderLineCard(
   // GATED ON THE LINE'S TIER, NOT ON THE ARGUMENT. A default-tier line IS the Commission
   // default: it has nothing to attest and nothing to compare itself against, and would render a
   // self-referential "saves €0.00" if a caller handed it its own estimate as the comparison.
-  const verified = line.tier === 'actual-verified';
+  //
+  // BOTH VERIFIED-BEARING TIERS EARN THE DELTA, and a mixed line earns it for the same reason a
+  // fully verified one does: it has attested data, and the block measures what that data was
+  // worth. The subtraction stays like-for-like — both sides take the same indirect lookup, the
+  // same mark-up and the same mass, so the electricity term is identical on each and cancels,
+  // leaving exactly what the DIRECT attestation changed. MOVES WITH renderAttestation ABOVE, never
+  // before it: widening this gate alone would print "your verified data saves €X" beside no
+  // attestation at all, which is the delta advertising an unchecked figure with nothing saying it
+  // is unchecked. defaultPathComparison carries the matching pair of this condition.
+  const verified = line.tier === 'actual-verified'
+    || line.tier === 'verified-direct+default-indirect';
   return `
     <article class="cb-line" data-line="${esc(line.id)}">
       <div class="cb-line-head">
@@ -818,7 +879,15 @@ export interface LineEstimateFailure {
  */
 function tierCell(l: Line): string {
   const label = tierLabel(l.tier);
-  const ref = l.tier === 'actual-verified' && l.verifiedRef ? ` — ref ${esc(l.verifiedRef)}` : '';
+  // BOTH VERIFIED-BEARING TIERS TRANSCRIBE THE REFERENCE. A mixed line's reference certifies its
+  // DIRECT figure, which is a real, mark-up-free half of the bill — so a gate naming only
+  // 'actual-verified' would delete the importer's own cited evidence from the one artefact built
+  // to be handed to an auditor, while the label in the same cell still says the direct figure was
+  // verified. That is a document asserting a verification and withholding its reference, which
+  // reads as no reference having been cited at all. The tier that scopes it is printed right
+  // beside it, and §4 states what the reference does and does not cover.
+  const attested = l.tier === 'actual-verified' || l.tier === 'verified-direct+default-indirect';
+  const ref = attested && l.verifiedRef ? ` — ref ${esc(l.verifiedRef)}` : '';
   return `${label}${ref}`;
 }
 
@@ -860,8 +929,16 @@ export function buildPrintDocument(input: {
    * user actually submitted. The other direction is equally deliberate: a document with no
    * verified line prints no such caveat, because a warning about attested data on a document
    * containing none describes some other document.
+   *
+   * BOTH VERIFIED-BEARING TIERS TRIP IT. A document of only mixed lines contains attested figures
+   * priced without the mark-up and, via tierCell above, a transcribed verifier reference — every
+   * ingredient the caveat exists to disclose. Naming one tier here left such a document with an
+   * unchecked attested figure and nothing whatever saying it was unchecked. The caveat's WORDING
+   * had to move with this gate rather than after it: see §4 below for what it used to claim about
+   * the mark-up, and why that was only half true once this predicate admits a second tier.
    */
-  const anyVerified = lines.some((l) => l.tier === 'actual-verified');
+  const anyVerified = lines.some((l) =>
+    l.tier === 'actual-verified' || l.tier === 'verified-direct+default-indirect');
 
   const lineRows = lines.map((l, i) => {
     const r = results[i]!;
@@ -944,10 +1021,13 @@ export function buildPrintDocument(input: {
         in the tool. No one has verified that list.</li>
       <li>Line fingerprints cover inputs as entered; no source document exists behind them. They
         are not customs provenance.</li>${anyVerified ? `
-      <li>Lines marked verified in §1 were priced from the user's own attested figures, which skip
-        the mark-up the Commission's default values carry. Those figures are a claim, from a
-        verification this tool has not seen and cannot confirm; any reference cited beside them
-        is transcribed as entered, never checked.</li>` : ''}
+      <li>Lines marked verified in §1 carry the user's own attested figures, which skip the
+        mark-up the Commission's default values carry. A line marked “Verified direct +
+        Commission indirect” is attested for its direct figure only: its electricity component is
+        the Commission's published default value, and that half does carry the mark-up. Those
+        attested figures are a claim, from a verification this tool has not seen and cannot confirm;
+        any reference cited beside them covers the attested figures alone and is transcribed as
+        entered, never checked.</li>` : ''}
     </ul>`;
 }
 
@@ -1221,6 +1301,48 @@ export function inputFor(l: Line, verified: EstimatorInput['verified']): Estimat
     massT: l.massT, date: l.date, emissionsScope: l.scope,
     verified,
   };
+}
+
+/**
+ * The tier a drafted line actually carries: the one the ENGINE stamped, never the one the form
+ * selected. THE mechanism of the mixed tier, and the reason `Line.tier` is derived rather than
+ * chosen (see its doc in cbam-lines.ts).
+ *
+ * WHY IT IS READ BACK RATHER THAN DERIVED HERE. #cbTier offers two options and
+ * parseVerifiedFields emits two values, so a line whose importer attests their direct figure and
+ * leaves electricity alone is SELECTED as 'actual-verified' and PRICED as
+ * 'verified-direct+default-indirect'. Whether that substitution happened depends on the emissions
+ * scope, on whether the Commission publishes an indirect default for that exact
+ * good/origin/route/year, and on the field having been left blank. parseVerifiedFields holds no
+ * pack and can know none of it (see its own doc), and a second copy of the rule written here would
+ * be a second thing to drift: guess "mixed" for an iron & steel line — where the Commission
+ * publishes no indirect default at all, so the engine correctly stamps 'actual-verified' — and
+ * csvRows' equality guard throws at export, killing the whole file over one line. One copy of the
+ * rule, and it lives in the engine that applies it.
+ *
+ * TAKES THE PRICER AS AN ARGUMENT rather than reading `pack` from a closure, for the same reason
+ * inputFor is exported: draftLine and estimateLine are closures inside initCbam and cannot be
+ * reached without a DOM, so this is the only place the rule is checkable at all — including its
+ * throw arm, which a test can reach only by supplying a pricer that throws.
+ *
+ * A THROW IS NOT A VERDICT ABOUT THE TIER. estimateFromPack can throw a DomainError (safeEstimates
+ * catches it one level up and renders that line's figure-less fallback card), and a line nothing
+ * could price says nothing about which corpus would have priced it — so the claimed tier stands,
+ * which is also what buildPrintDocument prints for such a row off the LINE. Catching here keeps
+ * the throw out of onAdd, whose try/finally exists only to re-enable the button: an error escaping
+ * there would leave the click doing nothing visible at all.
+ *
+ * A REFUSAL IS NOT A THROW and is deliberately not special-cased: it comes back as a real estimate
+ * carrying a real stamp, so its tier is read like any other. The engine stamps every verified-path
+ * refusal 'actual-verified' — nothing was priced, so no default stood in for anything — which is
+ * exactly what keeps §4's caveat and the card's attestation printing on a refused verified line.
+ */
+export function stampedTierOf(l: Line, price: (line: Line) => CertificateEstimate): Line['tier'] {
+  try {
+    return price(l).stamp.tier;
+  } catch {
+    return l.tier;
+  }
 }
 
 /* ── wiring ────────────────────────────────────────────────────────────────── */
@@ -1518,7 +1640,17 @@ export function initCbam(): void {
       // claim it is was the one gap the final review would not sign off. The DELTA stays off the
       // preview deliberately (it would cost a second engine call per keystroke through the debounce,
       // and the comparison is a card-level affordance); the caveat does not get that latitude.
-      out!.innerHTML = (t ? renderThreshold(t) : '') + renderResult(e) + renderAttestation(v.ok);
+      //
+      // READ OFF THE STAMP, NOT OFF THE SELECTION — the same read-back draftLine does, for the same
+      // reason and with no second engine call, because `e` is already in hand. `v.ok.tier` is what
+      // the <select> says, and the <select> has two options: previewing a line whose electricity
+      // half the engine has just filled in from the Commission's marked-up default, it says
+      // 'actual-verified' and renders "These emissions figures are your own attested claim" over a
+      // figure that is half the Commission's. The card would then say one thing and the preview of
+      // the SAME fields another. `verifiedRef` still comes from the form: the estimate carries no
+      // reference, and the reference is what the user typed either way.
+      out!.innerHTML = (t ? renderThreshold(t) : '') + renderResult(e)
+        + renderAttestation({ tier: e.stamp.tier, verifiedRef: v.ok.verifiedRef });
     } catch (err) {
       // A DomainError is the engine refusing, and it names what is missing. Show it
       // rather than a generic failure — the reason is the useful part.
@@ -1615,7 +1747,19 @@ export function initCbam(): void {
       ...v.ok,
     };
     if (Number.isNaN(yearOf(l))) return null;
-    return l;
+    // THE TIER IS READ BACK FROM THE STAMP — the last step, and the one that makes the mixed tier
+    // exist at all. Everything above builds the line from the user's SELECTION, which is the right
+    // input to the engine and the wrong thing to record: the engine may have stood the Commission's
+    // published indirect default in for an electricity half nobody attested, and a line still
+    // claiming 'actual-verified' beside that figure is the mispairing csvRows' guard throws on.
+    //
+    // Ordered AFTER the year check on purpose — a line about to be refused is not worth pricing,
+    // and estimateFromPack reads the date. One extra engine call per Add click (measured at
+    // 0.32 ms on the default path; this runs on a discrete click, never per keystroke), and it is
+    // the same call estimateLine makes for the render a moment later, through the same builder, so
+    // the tier recorded here is the tier that render will compute. See stampedTierOf for why the
+    // rule is READ rather than re-derived, and for the throw arm.
+    return { ...l, tier: stampedTierOf(l, estimateLine) };
   }
 
   /**
@@ -1637,7 +1781,21 @@ export function initCbam(): void {
    * the regression decorateSnapshot exists to have fixed once.
    */
   function defaultPathComparison(l: Line): CertificateEstimate | null | undefined {
-    if (l.tier !== 'actual-verified') return undefined;
+    // THE MATCHING HALF OF renderLineCard's `verified` GATE — the two decide the same question
+    // (does this line have attested data worth measuring) and must name the same tiers, or the
+    // card renders a delta block whose comparison was never computed and reads "No
+    // Commission-default comparison was computed for this line".
+    //
+    // THE ARITHMETIC IS ALREADY RIGHT FOR A MIXED LINE, which is why this is a gate change and not
+    // a calculation change. Both sides go through inputFor with the same line and differ only in
+    // `verified`; the indirect lookup reads cn/country/route/date and never `verified`, so it
+    // returns the identical marked-up figure on both. figureFrom clamps the DIRECT side alone and
+    // then ADDS indirect, so that term survives the clamp unchanged on each side and subtracts out
+    // exactly. What the delta reports is therefore what the direct attestation was worth — which
+    // is the only thing on a mixed line that the attestation actually bought.
+    if (l.tier !== 'actual-verified' && l.tier !== 'verified-direct+default-indirect') {
+      return undefined;
+    }
     try {
       // The SAME builder estimateLine uses (inputFor), with `verified` passed as undefined —
       // deliberately, and not merely absent: that omission IS the comparison, and the engine
