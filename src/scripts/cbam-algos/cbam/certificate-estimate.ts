@@ -214,27 +214,31 @@ function baseOf(
       sources: [...new Set(tables.sources.map(source => source.id))].sort(),
       snapshotHash: input.snapshotHash,
       provisional: true,
-      // Set HERE rather than in the priced branch, so it survives on every arm — including
-      // 'unavailable'. A residual-sourced number is indistinguishable from a country-specific
-      // one unless we say so, on the same surface as the number.
+      // EMPTY ON EVERY ARM, and that is the point: this function runs for refusals too, so a note
+      // attached here is printed over a card that may carry no figure at all. Both residual
+      // disclosures are claims ABOUT A FIGURE — RESIDUAL_BASIS_NOTE says "this figure uses its
+      // residual default", MIXED_RESIDUAL_INDIRECT_NOTE describes where an indirect figure came
+      // from — so both are attached in the priced branch below, the only region that produces one.
+      // Nothing replaces RESIDUAL_BASIS_NOTE on a refusal: it sits on the DEFAULTS path, where the
+      // importer attested nothing, so there is no true input-claim left to make. (The renderer's
+      // ATTESTED_NOTE survives the same refusal for exactly that reason — it describes an input.)
       //
-      // MIXED_RESIDUAL_INDIRECT_NOTE used to sit beside it and no longer does: it is attached in
-      // the priced branch below, because it describes a figure and a refused line has none.
+      // The basis still travels on every arm, one field up: `originBasis` names the ATTEMPT rather
+      // than an output, so it stays true on a refusal and the UI can still say which sheet was
+      // being read. Dropping the sentence drops no fact the stamp does not still carry.
       //
-      // THIS NOTE HAS THE SAME DEFECT AND IS KNOWINGLY LEFT WITH IT. "this figure uses its
-      // residual default" is equally a claim about an output, and a refused card has none —
-      // measured over 703,208 defaults-path estimates, 519 refuse while carrying this sentence
-      // (501 on certificate-price/, 18 on benchmark/). It is older than the note below, it has
-      // its own wording to settle, and it is not what that change is about, so it gets its own
-      // commit rather than being swept along with one that can be reviewed on its merits.
-      //
-      // What it does NOT have is a different mechanism, and an earlier draft of this comment
-      // claimed it did. Both are reached the same way: the catch below, which keeps the stamp
-      // built here. All 686,990 refusals raised OUTSIDE this module (unavailableEstimate, the
-      // default/ namespace) compute originBasis as 'country' — `factor` is null there, so
-      // `factor?.originCountry` cannot equal OTHER_ORIGIN — and none carries this note at all.
-      // Whoever fixes it can use exactly the gate below.
-      notes: input.originBasis === 'residual' ? [RESIDUAL_BASIS_NOTE] : [],
+      // Gating in the priced branch rather than filtering at the sink also covers refusals raised
+      // OUTSIDE this module: `unavailableEstimate` builds its stamp here and returns without ever
+      // entering that branch, so no caller can reintroduce the note by passing
+      // originBasis: 'residual' — and two of them can. estimate-from-pack's `indirect/` arm raises
+      // its refusal AFTER a non-null residual direct factor has been selected, and the API service
+      // reads the basis from the frozen snapshot, so neither is covered by the "`factor` is null
+      // there" argument an earlier draft of this comment gave for all outside refusals. The first
+      // is unreachable on today's browser pack: of the residual bucket's 780 direct rows, 672 have
+      // no indirect coverage at all (so nothing can mismatch) and the remaining 108 each find
+      // their own route in that coverage, leaving the route-mismatch arm 0 hits over its entire
+      // 17,028-estimate space. The gate does not rest on that holding.
+      notes: [],
     },
   }
 }
@@ -348,6 +352,55 @@ export const BAD_DATE_REASON =
   'determined and no figure is shown. The CBAM certificate price is published per quarter, ' +
   'so without a readable date there is no price to apply.'
 
+/**
+ * Names the PHASE-OUT SCHEDULE as the gap, and UNDER-charging as the harm.
+ *
+ * `resolveCbamFactor` misses only when the year has no row, and the rows are the Art 10a(1a)
+ * schedule of how much free allocation each year still retains: 0.975 in 2026 falling to 0 in
+ * 2034, and then nothing, because "beyond 2034 the schedule simply ends. We do not extrapolate a
+ * tail." Nothing here is a benchmark — this lookup runs BEFORE any benchmark is resolved — so
+ * reporting it as a missing benchmark sent a reader to hunt a table that had not been read yet.
+ *
+ * The harm direction is checked against the numbers rather than guessed. The factor enters as a
+ * multiplier on the deduction (`weighted.mul(cbam.factor)` in sefa), so carrying on without it is
+ * arithmetically identical to a factor of 1 — and 1 exceeds every value the schedule ever takes,
+ * the largest being 2026's 0.975. Guessing therefore deducts more free allocation than any
+ * scheduled year grants, which shrinks the bill rather than inflating it.
+ */
+export const NO_CBAM_FACTOR_REASON =
+  'The free-allocation factor schedule does not reach the year this import falls in, so no ' +
+  'figure is shown. That factor is the share of the benchmark deduction a year still grants, ' +
+  'and it runs down to a final year and stops rather than levelling off, so carrying on ' +
+  'without it would apply the deduction at full strength — more free allocation than any ' +
+  'scheduled year grants — and undercharge the importer.'
+
+/**
+ * Names the CROSS-SECTORAL CORRECTION as the gap, and separates it from the state it is most
+ * likely to be confused with.
+ *
+ * "The Commission has not published the CSCF for this year" is NOT this refusal. That is the
+ * `pending` resolution, and it does not refuse at all — it returns 'cscf_pending', a labelled
+ * what-if at the 2021-25 factor with no final figure. Writing the unpublished case into this
+ * sentence would have described a different answer entirely, on the one surface where the two
+ * must not blur.
+ *
+ * What DOES reach here is a year the tables do not model at all (`cscf/<year>`) and a row
+ * claiming 'published' while carrying no value (`cscf/<year>/published-no-value`). Both prefixes
+ * are caught by the one arm, so the wording says no USABLE factor rather than none published.
+ *
+ * Same harm direction as its neighbour above, by the same arithmetic — the CSCF is the other
+ * multiplier on the deduction — and here the tempting guess has a name: it was 1.0 for 2021-25.
+ * That is exactly why CscfResolution's `pending` arm carries no `value` field, so the compiler
+ * rather than a convention stops us assuming it, and why resolveCscf's own rule is that "silence
+ * is never 1.0".
+ */
+export const NO_CSCF_REASON =
+  'The rules this case was calculated against hold no usable cross-sectoral correction factor ' +
+  'for the year this import falls in, so no figure is shown. A year the Commission has not ' +
+  'corrected yet is a different answer and is reported as one, a labelled what-if with no ' +
+  'final figure, so an absent factor must not be read as the 1.0 that applied to 2021-25: ' +
+  'that would deduct free allocation uncorrected and undercharge the importer.'
+
 const AMBIGUOUS_REASON =
   'The published rules give more than one value for this good, so no figure is shown until ' +
   'the conflict is resolved.'
@@ -392,7 +445,29 @@ export function estimateCertificates(
     const priceEur = price.status === 'published' ? price.priceEur : null
 
     const notes = [
+      // Always empty today — baseOf attaches nothing on any arm — and kept so that anything ever
+      // added there still leads, which is the order the two gates below are positioned against.
       ...base.stamp.notes,
+      // HERE, NOT IN baseOf, for the same reason as its neighbour below, and FIRST for the same
+      // reason: this is where `...base.stamp.notes` used to splice it in, so a priced line's notes
+      // stay byte-identical in order and content to what they were when baseOf attached it.
+      //
+      // "…so THIS FIGURE uses its 'Other Countries and Territories' residual default" is a claim
+      // about an OUTPUT. baseOf runs on every arm, so a refused defaults-path line from an origin
+      // the Commission does not list printed that sentence over a card showing no figure — and as
+      // its SOLE note, the two standing disclosures further down being priced-only already.
+      // Reproduced on MO (Macao, unlisted) clinker 25231000 route (B) at 2027-03-15, which refuses
+      // on certificate-price/2027-Q1 because the pack prices 2026 quarters only. Swept over the
+      // shipped pack — every (CN, route) pair it prices, two residual origins against two listed
+      // controls, three dates, both emission scopes, all three of the defaults, mixed and verified
+      // paths — 704 of 44,136 estimates carried it into a refusal (668 on certificate-price/, 36
+      // on benchmark/), and moving it here is the whole of what those 704 lose.
+      //
+      // Unlike the mixed case there is no replacement to make. That line's ATTESTED_NOTE survives
+      // a refusal because it describes what the importer TYPED; on the defaults path the importer
+      // typed nothing, so the residual sentence is the only claim available and it is a claim
+      // about the missing number.
+      ...(input.originBasis === 'residual' ? [RESIDUAL_BASIS_NOTE] : []),
       // HERE, NOT IN baseOf, and the position inside this array is chosen so that a priced line's
       // notes are byte-identical to what they were when it was attached there.
       //
@@ -486,8 +561,20 @@ export function estimateCertificates(
       // reach here (benchmark/, sefa/, cbam-factor/, cscf/, quarter/, certificate-price/), and
       // for a 2027 import the answer was "no free-allocation benchmark" beside a selector
       // reading `certificate-price/2027-Q1` — sending the reader to hunt a benchmark that is
-      // present. Two are split out here: the price, which is the one a user meets, and the
-      // quarter, whose gap is not a table at all but the import date itself.
+      // present. Four are split out here: the price, which is the one a user meets; the quarter,
+      // whose gap is not a table at all but the import date itself; and the two year-keyed
+      // factors, whose gap is a schedule rather than a benchmark table.
+      //
+      // ONLY benchmark/ AND sefa/ NOW FALL THROUGH, and they are not the same case. benchmark/ is
+      // what the fallback was written for. sefa/ is not: its single selector
+      // (`sefa/<cn>/full-product-scope-with-precursors`) fires when a caller passes precursors
+      // alongside a full-product scope, where Column B already covers them and adding them would
+      // double-count the deduction — the benchmark resolved perfectly, so "the rules do not give
+      // a benchmark" is the wrong sentence for it, not a defensible one. It is left on the
+      // fallback anyway because NO PRODUCTION CALLER CAN REACH IT: estimateCertificates has three
+      // call sites, estimate-from-pack passes `precursors: []` at both of its, and the API
+      // service loads precursors only when the scope is 'process_only'. Splitting it would add a
+      // string nothing can print. Whoever makes it reachable owes it its own reason.
       //
       // Measured over the shipped pack through estimateFromPack — every (CN, route) the form
       // offers, one origin each (the origin moves the emissions figure, never which table is
@@ -506,10 +593,15 @@ export function estimateCertificates(
       return {
         ...base,
         status: 'unavailable',
+        // Every arm below tests a DISTINCT prefix, so this chain's order carries no meaning and
+        // no arm can shadow another. Keep it that way: an exact-match arm added above a prefix
+        // arm that subsumes it would make the lower one unreachable without failing a test.
         reason: error.code === 'REGULATION_AMBIGUOUS'
           ? AMBIGUOUS_REASON
           : selector?.startsWith('certificate-price/') ? NO_PRICE_REASON
           : selector?.startsWith('quarter/') ? BAD_DATE_REASON
+          : selector?.startsWith('cbam-factor/') ? NO_CBAM_FACTOR_REASON
+          : selector?.startsWith('cscf/') ? NO_CSCF_REASON
           : NO_BENCHMARK_REASON,
         selector,
       }
