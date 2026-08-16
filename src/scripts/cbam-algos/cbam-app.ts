@@ -606,6 +606,68 @@ const MIXED_NOTE =
   + 'direct figure alone.';
 
 /**
+ * The same line when the engine produced NO figure for it — a third paragraph, because the one
+ * above is a claim about the OUTPUT and this card has none.
+ *
+ * WHY NOT MIXED_NOTE. Its second sentence states that "the electricity component ... is the
+ * Commission's published default value, it carries the mark-up". That is an assertion about a
+ * number ON THIS CARD, and a refused card has no electricity component, no figure of any kind —
+ * renderResult's 'unavailable' branch calls neither figure() nor renderWaterfall(). The sentence
+ * points at nothing and charges a mark-up on it. Reachable at an ordinary 2026 date, not only in
+ * an out-of-range year: KR grey clinker on the "single route" option finds a route-independent
+ * electricity default (so the substitution fires and the tier is stamped mixed) and then finds no
+ * column-B benchmark for that route, refusing INSIDE estimateCertificates — after the tier was
+ * decided. Measured at 5,542 selectors.
+ *
+ * WHY NOT ATTESTED_NOTE, which is the tempting swap since the refused FULLY-VERIFIED card keeps
+ * it. That note is a claim about the INPUT — "These emissions figures are your own attested
+ * claim" — and its truth genuinely does not depend on whether the line priced, which is why that
+ * card is pinned as wanted. But on a MIXED line it is still half false in the expensive
+ * direction, priced or not: the importer attested the direct figure and left electricity
+ * unattested, so "these figures" claims provenance over a half they never supplied.
+ *
+ * WHY NOT SILENCE, for the third time in this file: an attested claim with no attestation beside
+ * it is the one state renderAttestation exists to prevent, and a refusal does not un-make the
+ * claim the importer made.
+ *
+ * SO IT SAYS ONLY WHAT IS TRUE OF A CARD WITH NO FIGURE. It claims the direct figure as the
+ * importer's own and stops; it names no electricity component, because none is shown; and its
+ * closing clause is the precise negation of what MIXED_NOTE would have asserted — nothing here
+ * rests on the attested claim OR on a Commission value, because nothing here was priced at all.
+ * It also drops MIXED_NOTE's "transcribed exactly as entered": on a card that prints no figure
+ * there is no transcription to point at. The reference clause goes too — "covers the direct
+ * figure alone" would gesture at a second half this card does not show. The `Ref:` still prints,
+ * and with only the direct figure named there is nothing else it could be read as covering.
+ *
+ * Hand-typed independently in cbam-render.test.mjs, per the same anti-paraphrase convention.
+ */
+const REFUSED_MIXED_NOTE =
+  'Only the direct emissions figure on this line is your own attested claim, and this tool has '
+  + 'not confirmed it — it has no way to check the verification behind it. No figure was produced '
+  + 'for this line, so nothing shown here rests on that claim, or on any Commission value.';
+
+/**
+ * Did the engine produce a figure for this line?
+ *
+ * ONE spelling, TWO call sites, for isAttested's reason and not merely to save a comparison: the
+ * question is asked at renderLineCard and at run()'s live preview, and the live preview is the
+ * surface that shipped without an attestation when the verified tier landed and without the mixed
+ * paragraph when the mixed tier did. Two hand-written comparisons is how that happens a third
+ * time. cbam-render.test.mjs pins BOTH call sites by source text, which is the only pin the
+ * preview can have (it is a closure inside initCbam(), reachable only through
+ * document.getElementById, and the unit suite has no DOM).
+ *
+ * 'unavailable' IS THE WHOLE TEST, and the two adjacent spellings in this file are deliberately
+ * different questions. deltaSentence asks whether a COST exists (`tableFigures(e).costEur`),
+ * which is stricter: a line whose quarter has no published certificate price still shows
+ * certificates and its electricity term, and MIXED_NOTE is true of it. safeEstimates asks the
+ * same question as this one but about the COMPARISON rather than the line. Only 'unavailable'
+ * renders no figure at all — NON-NEGOTIABLE 2, and the reason this predicate is the right gate
+ * for a sentence that describes what is on the card.
+ */
+const hasFigure = (e: CertificateEstimate): boolean => e.status !== 'unavailable';
+
+/**
  * The reference is TRANSCRIBED, NEVER CHECKED — the same contract csvRows' verified_reference
  * column states, and it is free text the user typed, so it is escaped like every other user
  * string that reaches innerHTML in this file. Rendered only when one was actually cited: an
@@ -631,31 +693,35 @@ const MIXED_NOTE =
  * verified-bearing tiers get DIFFERENT paragraphs, not one paragraph and a footnote — see
  * MIXED_NOTE for why neither ATTESTED_NOTE nor silence is honest on a half-attested line.
  *
- * KNOWN GAP, LEFT OPEN DELIBERATELY: A REFUSED MIXED LINE OVER-CLAIMS. This function is handed a
- * tier and nothing else, so it cannot tell a priced line from a refused one, and a refusal keeps
- * its mixed stamp (see stampedTierOf, which measures how often). Rendered, that card carries the
- * "Verified direct + Commission indirect" stamp row and MIXED_NOTE — which states outright that
- * the electricity component IS the Commission's published default and carries the mark-up — above
- * a refusal card that shows no electricity component, and in fact no figure of any kind. It is
- * reachable: a 2027 import date refuses on the unpublished certificate price, and KR grey clinker
- * on the "single route" option refuses on the benchmark at an ordinary 2026 date.
+ * PICKED BY (TIER, PRICED), because ONE OF THE TWO NOTES IS ABOUT THE OUTPUT. The tier alone
+ * cannot tell a priced mixed card from a refused one, and a refusal keeps its mixed stamp (see
+ * stampedTierOf, which measures how often: 5,542 selectors). Handed only a tier, this function
+ * printed MIXED_NOTE — "the electricity component ... carries the mark-up" — over a card showing
+ * no electricity component and no figure of any kind. `priced` closes that, and it is the whole
+ * of the second parameter: which paragraph, never whether one prints.
  *
- * This is NOT the same as the refused 'actual-verified' card, which cbam-render.test.mjs pins as
- * wanted ("a refused claim is still the user's claim"). ATTESTED_NOTE only claims provenance for
- * figures the user typed, and those were typed whether or not the engine could price them.
- * MIXED_NOTE additionally asserts that a substitution was made from the Commission's corpus — a
- * statement about THIS card's contents, and the card has no such component on it to point at.
+ * IT IS A SEPARATE ARGUMENT, not a field of the first, because the two are facts about different
+ * things. The object is the LINE as claimed — the tier the importer selected and the reference
+ * they typed, which the card reads off `line` and the preview off `e.stamp` and the form. Whether
+ * a figure came out is a fact about the ESTIMATE. Folding them into one bag would invite a caller
+ * to compute the boolean from the line, which is exactly the mistake: the line cannot know.
  *
- * NOT CLOSED HERE because the fix is a design change, not a wording one: this function would have
- * to learn that the estimate refused, which means widening its parameter (or adding one) and
- * moving both call sites — renderLineCard, which has the estimate in hand, and run()'s live
- * preview, which reads the tier off `e.stamp` precisely so the preview and the card cannot
- * disagree. It also needs a decision this task had no mandate to take: what a refused mixed line
- * SHOULD say, given that the attestation must not vanish (the paragraphs above say why silence on
- * an attested figure is the state this function exists to prevent) and §4's caveat and tierCell's
- * reference still print off the LINE either way.
+ * BOTH CALLERS PASS hasFigure(e), and both genuinely hold `e` — renderLineCard takes it as its
+ * second parameter, and run() has it in hand from the call whose result it is about to render.
+ * Neither passes a literal. The tier arms differ on `priced` only where the wording does: the
+ * 'actual-verified' arm ignores it deliberately, since ATTESTED_NOTE is a claim about the INPUT
+ * (see REFUSED_MIXED_NOTE for the distinction that decides this whole function), and the refused
+ * fully-verified card keeps it verbatim — pinned as wanted in cbam-render.test.mjs.
  */
-export function renderAttestation(line: { tier: Line['tier']; verifiedRef?: string }): string {
+export function renderAttestation(
+  line: { tier: Line['tier']; verifiedRef?: string },
+  /**
+   * Did the engine produce a figure for this line? Pass `hasFigure(e)`, never a literal — see
+   * that predicate for why 'unavailable' is the test and why deltaSentence's adjacent
+   * `costEur` check is a different question.
+   */
+  priced: boolean,
+): string {
   let note: string;
   switch (line.tier) {
     // Nothing was attested, so there is no claim to disclose and no reference that could belong
@@ -663,7 +729,8 @@ export function renderAttestation(line: { tier: Line['tier']; verifiedRef?: stri
     // verifiedRef printing under a Commission-priced figure.
     case 'default+markup': return '';
     case 'actual-verified': note = ATTESTED_NOTE; break;
-    case 'verified-direct+default-indirect': note = MIXED_NOTE; break;
+    case 'verified-direct+default-indirect':
+      note = priced ? MIXED_NOTE : REFUSED_MIXED_NOTE; break;
     default: {
       const _exhaustive: never = line.tier;
       return _exhaustive;
@@ -827,7 +894,7 @@ export function renderLineCard(
         <button type="button" class="cb-line-x" data-remove="${esc(line.id)}" aria-label="Remove line ${index + 1}">Remove</button>
       </div>
       ${renderResult(e)}
-      ${renderAttestation(line)}
+      ${renderAttestation(line, hasFigure(e))}
       ${verified ? renderVerifiedDelta(e, comparison) : ''}
     </article>`;
 }
@@ -1737,8 +1804,15 @@ export function initCbam(): void {
       // figure that is half the Commission's. The card would then say one thing and the preview of
       // the SAME fields another. `verifiedRef` still comes from the form: the estimate carries no
       // reference, and the reference is what the user typed either way.
+      //
+      // `hasFigure(e)` travels for the same reason and off the same object: a refused preview of a
+      // mixed line must not carry the sentence that says its electricity component is a
+      // marked-up Commission default, because the refusal above it prints no such component. The
+      // preview is where that matters MOST — it renders before anyone clicks Add, so it is all a
+      // visitor who never adds a line ever sees, and it is the surface this pair was missed on
+      // both previous times. The card passes the same predicate over its own estimate.
       out!.innerHTML = (t ? renderThreshold(t) : '') + renderResult(e)
-        + renderAttestation({ tier: e.stamp.tier, verifiedRef: v.ok.verifiedRef });
+        + renderAttestation({ tier: e.stamp.tier, verifiedRef: v.ok.verifiedRef }, hasFigure(e));
     } catch (err) {
       // A DomainError is the engine refusing, and it names what is missing. Show it
       // rather than a generic failure — the reason is the useful part.

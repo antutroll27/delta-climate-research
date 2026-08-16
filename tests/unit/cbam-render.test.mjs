@@ -1318,6 +1318,39 @@ const mline = (over = {}) => ({
 });
 
 /**
+ * The MIXED tier's REFUSED worked line, and the reason it is KR rather than a 2027 date.
+ *
+ * A refused mixed line is not a curiosity of an out-of-range year: KR is the only origin
+ * publishing grey clinker route-independently, so the Commission's route-independent electricity
+ * default is found and stands in (the line is stamped mixed), and the Annex then publishes
+ * column-B cement benchmarks for routes (A) and (B) only — so the benchmark lookup fails at an
+ * ordinary 2026 date with the price table fully populated. The refusal is raised INSIDE
+ * estimateCertificates, after the substitution, which is exactly why the tier survives it.
+ *
+ * Shared by the tier test and the attestation tests below rather than copied into each: this file
+ * has already paid for holding three copies of one construction (see estOf's own note).
+ */
+const krline = (over = {}) => ({
+  id: 'K1', cn: '25231000', country: 'KR', route: 'default', scope: 'direct_and_indirect',
+  massT: '100', date: '2026-03-15', tier: 'verified-direct+default-indirect', seeDirect: '2.31',
+  ...over,
+});
+
+/**
+ * A PRICED mixed line whose substituted electricity default came from the residual bucket — the
+ * one shape that fires MIXED_RESIDUAL_INDIRECT_NOTE. mline cannot be it: DZ is listed for cement
+ * (its own indirect row, base 0.04), so its substitution is the origin's own published value and
+ * the note correctly stays silent. FJ is not listed at all, so the fallback resolves selOrigin
+ * OTHER and the note fires. The pair is used together below, because the failure worth testing is
+ * one note bleeding into the other's population.
+ */
+const rline = (over = {}) => ({
+  id: 'R1', cn: '25232900', country: 'FJ', route: 'default', scope: 'direct_and_indirect',
+  massT: '100', date: '2026-03-15', tier: 'verified-direct+default-indirect', seeDirect: '2.31',
+  ...over,
+});
+
+/**
  * The mixed line's attestation, hand-typed for the reason the constants block at the top of this
  * file gives. It is a DIFFERENT paragraph from ATTESTED_NOTE, not a qualified version of it:
  * ATTESTED_NOTE says "These emissions figures are your own attested claim", which on a mixed line
@@ -1332,6 +1365,45 @@ const MIXED_NOTE =
   + 'it. The electricity component is not attested at all: it is the Commission\'s published '
   + 'default value, it carries the mark-up, and any verifier\'s reference cited here covers the '
   + 'direct figure alone.';
+
+/**
+ * The SAME line when the engine produced no figure for it, and why it is a third paragraph rather
+ * than either of the two above.
+ *
+ * MIXED_NOTE is a claim about the OUTPUT: "the electricity component ... is the Commission's
+ * published default value, it carries the mark-up". On a refused card there is no electricity
+ * component, no figure of any kind (renderResult's 'unavailable' branch calls neither figure()
+ * nor renderWaterfall()), and so nothing for that sentence to be about — it points at a number
+ * the card does not have, and tells the reader a mark-up was charged on it.
+ *
+ * ATTESTED_NOTE is not the substitute, and this is the distinction the whole change turns on: it
+ * is a claim about the INPUT ("These emissions figures are your own attested claim"), which is why
+ * the refused FULLY-VERIFIED card keeps it verbatim and a test above pins that as wanted. On a
+ * mixed line that sentence is still half false in the expensive direction whether or not a figure
+ * was produced — the importer attested the direct figure and nothing else, so "these figures"
+ * claims provenance for a half they never saw.
+ *
+ * Silence is not the substitute either, for the reason renderAttestation's own docblock gives: an
+ * attested claim with no attestation beside it is the single state that function exists to
+ * prevent, and a refusal does not un-make the claim.
+ *
+ * Hand-typed here, never imported, per the anti-paraphrase convention this file's constants block
+ * documents.
+ */
+const REFUSED_MIXED_NOTE =
+  'Only the direct emissions figure on this line is your own attested claim, and this tool has '
+  + 'not confirmed it — it has no way to check the verification behind it. No figure was produced '
+  + 'for this line, so nothing shown here rests on that claim, or on any Commission value.';
+
+/**
+ * The engine's residual-indirect disclosure, hand-typed for the same reason. It reaches the card
+ * through stamp.notes, which renderStamp emits verbatim and ESCAPED — so the card is asserted
+ * against the escaped form below, and the raw form against the stamp the engine produced.
+ */
+const RESIDUAL_INDIRECT_NOTE =
+  'The electricity default substituted on this line is the Commission\'s "Other Countries and '
+  + 'Territories" residual — a world-average value, not your country\'s own. Your direct figure '
+  + 'is unaffected: it is your own attested claim.';
 
 /**
  * The mixed line's delta, computed rather than guessed, and pinned because it is the arithmetic
@@ -1642,10 +1714,7 @@ test('a verified-path refusal carries the tier the engine ATTEMPTED to price at 
   //    grey clinker route-independently; the Commission publishes a route-independent electricity
   //    default for it (the fallback fires) but the Annex publishes column-B cement benchmarks
   //    for routes (A) and (B) only (the benchmark lookup then finds nothing).
-  const kr = {
-    id: 'K1', cn: '25231000', country: 'KR', route: 'default', scope: 'direct_and_indirect',
-    massT: '100', date: '2026-03-15', tier: 'verified-direct+default-indirect', seeDirect: '2.31',
-  };
+  const kr = krline();
   assert.ok(routesFor(pack, kr.cn, kr.country, 2026).includes('default'),
     'sanity: the form really offers this pairing — syncRoutes renders it as "single route"');
   const eBench = estOf(kr);
@@ -1676,9 +1745,12 @@ test('a verified-path refusal carries the tier the engine ATTEMPTED to price at 
 });
 
 test('renderAttestation on a MIXED line names both halves — attested direct, Commission electricity', () => {
+  // PRICED, explicitly: this paragraph is a claim about an electricity component that exists, so
+  // it belongs to the arm where a figure was produced. The refused arm is a different paragraph,
+  // pinned by its own test below.
   const withRef = renderAttestation({
     tier: 'verified-direct+default-indirect', verifiedRef: 'BV-2026-0142',
-  });
+  }, true);
   assert.ok(withRef.includes(`<p class="cb-sub cb-attested">${MIXED_NOTE} Ref: BV-2026-0142</p>`),
     'the mixed attestation must match the pinned text exactly — word for word, punctuation for '
     + 'punctuation — and still transcribe the reference the importer cited');
@@ -1696,9 +1768,9 @@ test('renderAttestation on a MIXED line names both halves — attested direct, C
   assert.doesNotMatch(withRef, /(we|this tool) (have|has) (confirmed|verified|checked)/i);
   assert.doesNotMatch(withRef, /independently (confirmed|verified)/i);
   // Absent reference must not leave a dangling label, exactly as on the fully-verified arm.
-  assert.equal(renderAttestation({ tier: 'verified-direct+default-indirect' }),
-    renderAttestation({ tier: 'verified-direct+default-indirect', verifiedRef: '' }));
-  assert.doesNotMatch(renderAttestation({ tier: 'verified-direct+default-indirect' }), /Ref:/);
+  assert.equal(renderAttestation({ tier: 'verified-direct+default-indirect' }, true),
+    renderAttestation({ tier: 'verified-direct+default-indirect', verifiedRef: '' }, true));
+  assert.doesNotMatch(renderAttestation({ tier: 'verified-direct+default-indirect' }, true), /Ref:/);
   // THE THIRD ARM MUST NOT HAVE SWALLOWED THE SECOND. A three-way decision written as
   // `if (tier === 'default+markup') ... else mixed` would print the mixed paragraph on a fully
   // verified line, and one written as `if (tier !== 'actual-verified') return MIXED` would print
@@ -1737,6 +1809,184 @@ test('renderLineCard: a MIXED line gets its attestation AND its delta, and the d
     'the delta must match the pinned text exactly — see the constant for the arithmetic');
   assert.match(html, /Verified direct \+ Commission indirect/,
     'and the provenance row states the compound tier, so the card names both corpora');
+});
+
+/* ── the attestation is picked by (tier, priced), because one of the two notes is about the
+ *    OUTPUT ────────────────────────────────────────────────────────────────────────────────
+ *
+ * Measured at 5,542 selectors: a verified line whose refusal is raised INSIDE
+ * estimateCertificates keeps the mixed tier, because the tier is decided before that call (see
+ * the tier test above, which pins the mechanism). The card that results shows no figure at all
+ * and used to print MIXED_NOTE over it — a sentence asserting that its electricity component is
+ * the Commission's published default and carries the mark-up, on a card with no electricity
+ * component to point at. The tier alone cannot tell those two cards apart, which is why the
+ * function now takes a second fact.
+ */
+
+test('renderAttestation: a REFUSED mixed line drops the electricity clause — the card has no such component', () => {
+  const l = krline({ verifiedRef: 'BV-2026-0142' });
+  const e = estOf(l);
+  // Sanity, and it is the whole premise: an ordinary 2026 date, a refusal raised after the
+  // substitution, and therefore the MIXED tier on a card carrying no figure whatsoever.
+  assert.equal(e.status, 'unavailable', 'sanity: the engine refuses this line');
+  assert.equal(e.selector, 'benchmark/25231000/column-B/route-independent/2026-03-15',
+    'sanity: refused on the benchmark, in 2026, with the price table fully populated');
+  assert.equal(e.stamp.tier, 'verified-direct+default-indirect',
+    'sanity: the refusal still carries the mixed tier — that is the defect this test is about');
+
+  const html = renderLineCard(l, e, 0, comparisonOf(l));
+  assert.doesNotMatch(html, /class="cb-fig"/, 'sanity: no figure block, so nothing to substitute into');
+
+  assert.ok(html.includes(`<p class="cb-sub cb-attested">${REFUSED_MIXED_NOTE} Ref: BV-2026-0142</p>`),
+    'the refused mixed attestation must match the pinned text exactly — word for word, '
+    + 'punctuation for punctuation — and still transcribe the reference the importer cited');
+
+  // THE CLAUSE THAT MUST NOT SURVIVE. Not a keyword check on the whole note: the exact sentences
+  // that assert a substitution nothing on this card shows.
+  assert.ok(!html.includes(MIXED_NOTE),
+    'the priced mixed paragraph asserts an electricity component this card does not have');
+  assert.doesNotMatch(html, /carries the mark-up/,
+    'a card with no figure must not tell an importer a mark-up was charged on one');
+  assert.doesNotMatch(html, /The electricity component is not attested at all/,
+    'nor describe a component that is not on it');
+  assert.doesNotMatch(html, /Commission's published\s+default value/,
+    'and must not attribute a value to the Commission that this card never printed');
+
+  // AND IT MUST NOT VANISH. Silence over an attested claim is the state renderAttestation exists
+  // to prevent; a refusal does not un-make the claim (the same rule the refused fully-verified
+  // card is pinned on).
+  assert.match(html, /class="cb-sub cb-attested"/, 'the attestation paragraph still renders');
+  assert.match(html, /your own attested claim/, 'and still says whose claim the figure was');
+  assert.ok(!html.includes(ATTESTED_NOTE),
+    'but not the WHOLE-line claim: the importer attested the direct figure and nothing else');
+
+  // The unit boundary, both ways round, so the decision is pinned as (tier, priced) rather than
+  // as something a caller happened to hand in.
+  const shape = { tier: 'verified-direct+default-indirect', verifiedRef: 'BV-2026-0142' };
+  assert.ok(renderAttestation(shape, false).includes(REFUSED_MIXED_NOTE),
+    'unpriced mixed → the refused paragraph');
+  assert.ok(renderAttestation(shape, true).includes(MIXED_NOTE),
+    'priced mixed → the full paragraph');
+
+  /*
+   * THE HALF-FIX GUARD, and why it is a source-text assertion.
+   *
+   * renderAttestation has TWO callers: renderLineCard, which this suite renders directly, and
+   * run()'s live preview — a closure inside initCbam(), reachable only through
+   * document.getElementById, and this suite has no DOM (no jsdom in devDependencies). The preview
+   * is not a lesser surface: it is what the page shows before anyone clicks Add, so a visitor who
+   * never adds a line sees ONLY it, and it is the exact surface that shipped without an
+   * attestation when the verified tier landed, and again without the mixed paragraph when the
+   * mixed tier did. A fix applied to the card alone would leave it printing the mark-up sentence
+   * over a refusal, and every behavioural assertion above would stay green.
+   *
+   * So the pin is the one the file already uses for a site no test can reach (see
+   * defaultPathComparison's, below): both call sites must pass the SAME spelling of the question,
+   * and there must be no third caller that answers it some other way.
+   */
+  const src = readFileSync(fileURLToPath(
+    new URL('../../src/scripts/cbam-algos/cbam-app.ts', import.meta.url)), 'utf8');
+  const code = src.split('\n').filter((line) => !/^\s*(\/\/|\*|\/\*)/.test(line)).join('\n');
+  // One definition plus exactly two calls. A third caller raises this and must be read, not
+  // silenced — it is a new surface that has to answer the priced question too.
+  assert.equal((code.match(/renderAttestation\(/g) ?? []).length, 3,
+    'renderAttestation has one definition and two call sites — the line card and the live '
+    + 'preview. Found a different number, so a surface was added or removed.');
+  // ...and BOTH calls pass the estimate's own answer, not a literal and not a second spelling.
+  // `[^()]*` cannot cross the definition's own `): string {`, so the definition never matches.
+  assert.equal((code.match(/renderAttestation\([^()]*hasFigure\(e\)\)/g) ?? []).length, 2,
+    'both call sites must pass hasFigure(e) — the card AND the live preview. One of two is the '
+    + 'half-fix that leaves the preview asserting a mark-up over a refusal, which is precisely '
+    + 'how the preview was missed the last two times this function changed.');
+  assert.equal((code.match(/\bhasFigure\(/g) ?? []).length, 2,
+    'and nowhere else spells the question — one predicate, two callers');
+});
+
+test('renderAttestation: a PRICED mixed line still says both halves, mark-up included', () => {
+  // The guard against overshooting: the substitution really did happen here, the electricity
+  // component really is on the card, and withholding that sentence would leave a marked-up
+  // Commission figure looking as attested as the direct one.
+  const l = mline({ verifiedRef: 'BV-2026-0142' });
+  const e = estOf(l);
+  assert.equal(e.status, 'cscf_pending', 'sanity: this line prices');
+  assert.equal(e.scenario.indirectTco2e, '4.4',
+    'sanity: the Commission default really did stand in for electricity — 0.04 × 1.10 × 100 t');
+
+  const html = renderLineCard(l, e, 0, comparisonOf(l));
+  assert.ok(html.includes(`<p class="cb-sub cb-attested">${MIXED_NOTE} Ref: BV-2026-0142</p>`),
+    'a priced mixed line keeps the full paragraph, word for word');
+  assert.ok(!html.includes(REFUSED_MIXED_NOTE),
+    'and not the refused wording, which would drop the one disclosure this card owes');
+  assert.match(html, /carries the mark-up/, 'the mark-up on the electricity half is disclosed');
+});
+
+test('renderAttestation: a REFUSED fully-verified line keeps ATTESTED_NOTE unchanged', () => {
+  // EXISTING WANTED BEHAVIOUR, pinned again from the other side now that a second fact reaches
+  // this function: `priced` must not leak into the 'actual-verified' arm. ATTESTED_NOTE is a claim
+  // about the INPUT — the figures the importer typed, which they typed whether or not the engine
+  // could price them — so a refusal changes nothing about its truth.
+  const l = vline({ seeDirect: 'nonsense' });
+  const e = estOf(l);
+  assert.equal(e.status, 'unavailable', 'sanity: the engine refused the attested figure');
+  assert.ok(renderLineCard(l, e, 0, comparisonOf(l))
+    .includes(`<p class="cb-sub cb-attested">${ATTESTED_NOTE}</p>`),
+    'a refused claim is still the user\'s claim, in the same words as a priced one');
+  // Both arms of the new boolean, on the tier that must ignore it.
+  assert.equal(renderAttestation({ tier: 'actual-verified' }, false),
+    renderAttestation({ tier: 'actual-verified' }, true),
+    'priced or refused, a fully attested line says the same thing');
+  assert.ok(!renderAttestation({ tier: 'actual-verified' }, false).includes(REFUSED_MIXED_NOTE),
+    'and never the mixed refusal wording, which would deny provenance the importer does have');
+});
+
+test('renderAttestation: a default-tier line still says nothing, priced or refused', () => {
+  // Nothing was attested, so there is no claim to disclose in either state — and no reference
+  // that could belong beside one.
+  for (const priced of [true, false]) {
+    assert.equal(renderAttestation({ tier: 'default+markup' }, priced), '',
+      `a Commission-default figure makes no attested claim (priced=${priced})`);
+    assert.equal(renderAttestation({ tier: 'default+markup', verifiedRef: 'BV-2026-0142' }, priced), '',
+      `not even with a stray reference on it (priced=${priced})`);
+  }
+});
+
+test('the residual-indirect note reaches the card, and only where the fallback was residual', () => {
+  // The engine gained this note two commits ago and nothing in either suite asserted on a notes
+  // array, so its only user-visible path — stamp.notes, which renderStamp emits verbatim — was
+  // unpinned. It is pinned here because this task changes the paragraph directly above it.
+  const l = rline();
+  const e = estOf(l);
+  assert.equal(e.status, 'cscf_pending', 'sanity: a PRICED mixed line — the note is about a figure');
+  assert.equal(e.stamp.tier, 'verified-direct+default-indirect', 'sanity: and it is mixed');
+  assert.ok(e.stamp.notes.includes(RESIDUAL_INDIRECT_NOTE),
+    'the engine states, in the pinned words, that the substituted electricity default is the '
+    + 'world-average bucket rather than the origin\'s own');
+
+  // ESCAPED, because renderStamp escapes every note — the apostrophes and quotes in this
+  // sentence are exactly the characters that would prove it reached the DOM raw.
+  const html = renderLineCard(l, e, 0, comparisonOf(l));
+  const escaped = RESIDUAL_INDIRECT_NOTE
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  assert.match(html, /<ul class="cb-notes">/, 'the notes list renders on the card');
+  assert.ok(html.includes(`<li>${escaped}</li>`),
+    'and carries the residual-indirect note as its own item, escaped');
+
+  // NO BLEED, in both directions. A listed origin's substitution is the origin's own published
+  // value, so this note must stay silent...
+  const listed = mline();
+  const listedHtml = renderLineCard(listed, estOf(listed), 0, comparisonOf(listed));
+  assert.ok(!estOf(listed).stamp.notes.includes(RESIDUAL_INDIRECT_NOTE),
+    'DZ is listed for cement, so nothing residual was substituted and the note must not fire');
+  assert.ok(!listedHtml.includes(escaped), 'nor reach the card');
+  // ...and the DEFAULTS-path note must never appear on a mixed line, which is the failure this
+  // note exists to avoid: it says "this figure" rests on a world average, and on a mixed line the
+  // direct figure is the importer's own audited number.
+  assert.doesNotMatch(html, /this figure uses its/,
+    'RESIDUAL_BASIS_NOTE must not fire on a mixed line — it would call an audited figure a '
+    + 'world average');
+  assert.match(html, /Origin basis<\/span><b>—<\/b>/,
+    'and the stamp row stays neutral, because the verified path rests on no default basis');
 });
 
 /**
