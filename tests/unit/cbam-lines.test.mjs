@@ -1042,25 +1042,51 @@ test('threshold maths ignores the tier — 50 t is 50 t', () => {
 });
 
 // A real verified-tier estimate through the real engine — never a hand-built literal. The
-// attested path is reached by passing `verified` to estimateFromPack, which overrides the
-// defaults-path tier on the stamp ('actual-verified') and skips the mark-up entirely. Defaults
-// to direct_and_indirect because line()'s own fixture scope is that, and a row whose scope
-// column says one thing while its figures were computed at another is the very confusion the
-// est() harness comment above already warns about.
+// attested path is reached by passing `verified` to estimateFromPack. Defaults to
+// direct_and_indirect because line()'s own fixture scope is that, and a row whose scope column
+// says one thing while its figures were computed at another is the very confusion the est()
+// harness comment above already warns about.
+//
+// WHAT THIS HELPER PRODUCES IS NOW THE **MIXED** TIER, AND THAT IS THE HONEST FIXTURE, NOT A
+// DEFECT TO PATCH OUT. Its own docstring used to claim this input "overrides the defaults-path
+// tier on the stamp ('actual-verified') and skips the mark-up entirely". Both halves of that
+// sentence are now false, and the second was always the dangerous one: 25231000/DZ HAS a
+// published indirect default, the scope here charges for indirect, and only the DIRECT figure is
+// attested — so electricity used to be priced at zero and the line still stamped fully verified.
+// The engine now stands the Commission's default in for the unattested half, WITH its mark-up,
+// and stamps 'verified-direct+default-indirect'. The mark-up is skipped on the direct half only.
+//
+// It was deliberately NOT "fixed" by adding an indirectTco2ePerT here to restore the old stamp.
+// The Lines these estimates are paired with below carry `seeDirect` and no `seeIndirect`, so
+// this input is `verifiedInputOf(l)` — the estimate for THAT line. Supplying an indirect figure
+// the line does not carry would have made every pair below silently mispaired, in the one file
+// whose subject is csvRows' mispairing guard.
 const verEst = (over = {}) => estimateFromPack(pack, {
   cn: '25231000', country: 'DZ', route: '(A)', massT: '100', date: '2026-03-15',
   emissionsScope: 'direct_and_indirect', verified: { directTco2ePerT: '2.31' }, ...over,
 });
 
 test('CSV rows carry the data tier and the attested reference', () => {
+  // THE TIER ON THIS FIXTURE MOVED BECAUSE THE WORLD DID, NOT TO SILENCE A FAILURE. The line is
+  // cement from DZ at direct_and_indirect scope, attesting a direct figure and no indirect one —
+  // and 25231000/DZ has a published indirect default. That is, exactly, the mixed tier: the
+  // importer audited their process emissions and left electricity to the Commission. It used to
+  // stamp 'actual-verified' only because the engine priced the unattested electricity at zero
+  // and said nothing; now it stands the Commission's default in with its mark-up and names what
+  // it did. Asserting 'actual-verified' here would be asserting that a line half-priced from the
+  // Commission's corpus is fully the importer's own claim — a false statement about the figure
+  // in the very column that tells an auditor where the figure came from.
   const l = line({
-    id: 'L1', massT: '100', tier: 'actual-verified', seeDirect: '2.31',
+    id: 'L1', massT: '100', tier: 'verified-direct+default-indirect', seeDirect: '2.31',
     verifiedRef: 'BV-2026-0142',
   });
   const e = verEst();
-  assert.equal(e.stamp.tier, 'actual-verified', 'sanity: the engine stamped the attested tier');
+  assert.equal(e.stamp.tier, 'verified-direct+default-indirect',
+    'sanity: the engine stamped the mixed tier — direct attested, indirect from the defaults');
   const rows = csvRows([l], [e], fp, 'f'.repeat(64), pack);
-  assert.equal(rows[0].data_tier, 'actual-verified');
+  assert.equal(rows[0].data_tier, 'verified-direct+default-indirect');
+  // The reference travels on the mixed tier too: it certifies the direct half, which is a real
+  // half, and dropping it would delete the importer's cited evidence from the audit artefact.
   assert.equal(rows[0].verified_reference, 'BV-2026-0142');
   // Column ORDER is part of the CSV's contract: toCsv derives the header from row 0 alone, and
   // a consumer's column mapping (an auditor's model, an importer's importer) is positional the
@@ -1093,8 +1119,15 @@ test('a hostile reference cannot become a spreadsheet formula', () => {
   // neutralises by CONTENT, not by column — a new free-text column inherits the guard without
   // toCsv being told about it. If this ever fails, the guard has been narrowed to a column list
   // and every future free-text column is unprotected.
+  //
+  // The tier here is SCAFFOLDING, not the subject — this test is about cell() neutralising a
+  // formula. It moved for one reason only: csvRows' guard refuses a line whose tier disagrees
+  // with its estimate's stamp, and verEst() now stamps the mixed tier (see its note above), so
+  // the fixture had to say what its own estimate says or the export throws before cell() is ever
+  // reached. Same fixture, same claim, correctly labelled: direct attested, indirect defaulted.
   const l = line({
-    id: 'L1', massT: '100', tier: 'actual-verified', seeDirect: '2.31', verifiedRef: '=cmd()',
+    id: 'L1', massT: '100', tier: 'verified-direct+default-indirect', seeDirect: '2.31',
+    verifiedRef: '=cmd()',
   });
   const csv = toCsv(csvRows([l], [verEst()], fp, 'f'.repeat(64), pack));
   assert.ok(!csv.includes(',=cmd()'), 'a formula-leading reference must not reach a cell raw');

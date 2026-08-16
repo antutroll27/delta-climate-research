@@ -28,18 +28,45 @@ export interface Line {
   date: string;      // ISO date; calendar year is date.slice(0, 4)
   /**
    * The engine's DataTier strings VERBATIM (cbam-algos/cbam/certificate-estimate.ts), not a
-   * friendlier local enum mapped at the boundary: the same two strings then reach the
+   * friendlier local enum mapped at the boundary: the same three strings then reach the
    * ProvenanceStamp the engine returns and the CSV column the export writes, so the stamp and
    * the line can never disagree about which tier was used. A local 'verified' | 'default' would
    * need a translation table, and a translation table is a place for the two to drift.
    *
+   * WHAT THIS FIELD MEANS CHANGED WHEN THE THIRD VALUE ARRIVED, and a reader must not infer the
+   * old meaning from the old sentences above. It used to be THE TIER THE USER SELECTED — the
+   * #cbTier <select> has two options and parseVerifiedFields mapped them one-for-one, so
+   * selection and pricing were the same fact wearing one name. They are no longer.
+   * 'verified-direct+default-indirect' is NOT selectable and never will be: whether it applies
+   * depends on the scope, on whether the Commission publishes an indirect default for that
+   * particular good/origin/route, and on the importer leaving the indirect field blank — three
+   * things only the engine, holding the pack, can decide. So this field now means THE TIER THIS
+   * LINE WAS PRICED AT, read back from its own estimate's stamp (cbam-app.ts's draftLine), and
+   * the user's selection lives on separately as the engine INPUT that produced it
+   * (parseVerifiedFields → verifiedInputOf).
+   *
+   * That re-reading is what keeps csvRows' equality guard below meaningful rather than
+   * tautological. The guard cross-checks two INDEPENDENTLY DERIVED facts — what the line says
+   * and what the estimate computed — so it can still catch a mispaired line/estimate array.
+   * Deriving the exported tier from the estimate alone would delete the second witness and the
+   * guard would have nothing left to disagree with.
+   *
    * REQUIRED, not optional-with-a-default. A line that omits it would have to mean one tier or
-   * the other, and the wrong guess is the punitive mark-up either applied to an importer who
+   * another, and the wrong guess is the punitive mark-up either applied to an importer who
    * had audited data, or dropped from one who did not — a wrong tax liability in both
    * directions. The compiler asking every construction site to say which is the point.
    */
-  tier: 'default+markup' | 'actual-verified';
-  /** attested tCO2e per tonne; present iff tier is 'actual-verified' */
+  tier: 'default+markup' | 'actual-verified' | 'verified-direct+default-indirect';
+  /**
+   * Attested tCO2e per tonne. `seeDirect` is present on BOTH verified-bearing tiers — it is the
+   * half the importer audited either way — and absent on 'default+markup'.
+   *
+   * `seeIndirect` is the field whose ABSENCE now carries meaning: on a `direct_and_indirect`
+   * line for a good the Commission publishes an indirect default for, leaving it out is exactly
+   * what makes the line 'verified-direct+default-indirect' rather than 'actual-verified'. So an
+   * absent seeIndirect is not "the same claim with a blank" — it is a different tier, a
+   * different figure and a different fingerprint (see `?? null` below).
+   */
   seeDirect?: string;
   seeIndirect?: string;
   /** optional verifier/report reference — transcribed, never checked */

@@ -161,6 +161,13 @@ function tierLabel(tier: DataTier): string {
   switch (tier) {
     case 'actual-verified': return 'Verified actual';
     case 'default+markup': return 'Commission default + mark-up';
+    // NAMES BOTH HALVES, because both are true of the figure and neither alone is. "Verified"
+    // on its own would read as the mark-up having been dropped from the whole line, when it was
+    // only dropped from the direct half; "Commission default" on its own would bury the one
+    // number the importer had audited and paid a verifier for. This label is what an auditor
+    // reads in §1 of the printable document beside the row's figures, so it has to say which
+    // corpus priced which half in the space of a table cell.
+    case 'verified-direct+default-indirect': return 'Verified direct + Commission indirect';
     default: {
       const _exhaustive: never = tier;
       return _exhaustive;
@@ -1067,6 +1074,21 @@ export function parseVerifiedFields(v: {
   // deliberately does NOT clear the panel on a switch back to defaults (see syncVerifiedRows —
   // clearing it would let one stray arrow-key `change` destroy the user's typing), so the inputs
   // are still full of the abandoned claim every time this runs.
+  //
+  // TWO VALUES HERE, PERMANENTLY, EVEN THOUGH `Line['tier']` NOW HAS THREE. This function reads
+  // the user's SELECTION — `v.tier` is the raw #cbTier <select> value, a plain `string`, and the
+  // markup offers exactly two options. 'verified-direct+default-indirect' is not one of them and
+  // must never become one: whether it applies depends on the emissions scope, on whether the
+  // Commission publishes an indirect default for that specific good/origin/route/year, and on
+  // the importer leaving the indirect field blank. This function holds no pack and no good, so
+  // it cannot know. If it guessed, a steel line — where the Commission publishes no indirect
+  // default at all, so the engine correctly stamps 'actual-verified' — would be labelled mixed,
+  // and csvRows' guard would throw at export. That is the second copy of one rule the whole
+  // read-back-from-the-stamp design exists to avoid: the tier this produces is INPUT, and
+  // draftLine overwrites it with what the engine actually stamped.
+  //
+  // The return type cannot enforce that (Pick<Line, 'tier'> is now the full three-value union),
+  // so this comment is the guard. Do not add a third branch here.
   if (v.tier !== 'actual-verified') return { ok: { tier: 'default+markup' } };
 
   // Trim before every test below. `Number('   ')` is 0, so an untrimmed whitespace-only field
@@ -1137,11 +1159,29 @@ export function parseVerifiedFields(v: {
  * tier ALWAYS produces an object, even a hopeless one (`directTco2ePerT: ''`, which the engine's
  * own verifiedPerT refuses by name). The refusal belongs to the engine; this function's only
  * job is making sure the engine is the one asked.
+ *
+ * TWO VERIFIED-BEARING TIERS NOW, AND THE TEST MUST NAME BOTH. 'verified-direct+default-indirect'
+ * is a line whose importer attested their direct figure and left electricity to the Commission's
+ * published default — so it HAS an attested figure, and the engine must be handed it. Omit the
+ * second value and that line takes the defaults path, gets stamped 'default+markup', and hits
+ * the export-time throw described in the paragraph above — the whole CSV lost over one line,
+ * and its direct half silently re-priced with a mark-up its importer had earned the removal of.
+ *
+ * WHY THIS IS STILL AN `if` ON THE TIER, and not `if (l.seeDirect !== undefined)` or a truthiness
+ * test on the figures: see the paragraph above — deriving the input from what the figures LOOK
+ * like is the exact mistake that ends in the throw, because a verified line whose figure is
+ * missing or unreadable would then quietly become a defaults line instead of a refusal the user
+ * can see on the card. The predicate has to be the tier, and now the tier has two admissible
+ * values. DO NOT "simplify" this back to a single `!==`: the compiler cannot help you here — a
+ * narrower comparison against a wider union type checks perfectly clean, and the only thing that
+ * fails is the export, at the moment a user clicks it. cbam-render.test.mjs pins both values.
  */
 export function verifiedInputOf(
   l: Pick<Line, 'tier' | 'seeDirect' | 'seeIndirect'>,
 ): EstimatorInput['verified'] {
-  if (l.tier !== 'actual-verified') return undefined;
+  if (l.tier !== 'actual-verified' && l.tier !== 'verified-direct+default-indirect') {
+    return undefined;
+  }
   return {
     directTco2ePerT: l.seeDirect ?? '',
     // Spread, not `indirectTco2ePerT: l.seeIndirect` — see parseVerifiedFields' own note: the

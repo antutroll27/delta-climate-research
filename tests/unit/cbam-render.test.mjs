@@ -1187,6 +1187,38 @@ test('verifiedInputOf derives from the TIER, never from whether the figures look
     'a verified line with no figure must still reach the engine, to be refused BY it');
 });
 
+test('verifiedInputOf still asks the engine on a MIXED line — the round trip that keeps export alive', () => {
+  // THE ROUND TRIP THIS PINS. A mixed line is one the engine STAMPED
+  // 'verified-direct+default-indirect' — the user never selects it (#cbTier has two options and
+  // parseVerifiedFields emits two values); it is what the engine computes when an importer
+  // attests their direct figure and leaves electricity to the Commission's published default.
+  // The line then carries that stamped tier back, and every later re-estimate of the line reads
+  // it HERE, through this function.
+  //
+  // So this arm is what makes the tier stable across the round trip. Narrow the check back to
+  // 'actual-verified' alone and a mixed line returns `undefined`, the engine takes the DEFAULTS
+  // path, stamps 'default+markup', and csvRows' guard throws at export — killing the entire CSV
+  // over one line, which is exactly the failure verifiedInputOf's own docblock exists to
+  // describe. It is invisible to the compiler: a narrower `!==` against a wider union type
+  // checks clean, so this test is the only thing standing where the type cannot.
+  const mixed = verifiedInputOf({ tier: 'verified-direct+default-indirect', seeDirect: '2.31' });
+  assert.deepEqual(mixed, { directTco2ePerT: '2.31' },
+    'a mixed line must still produce a verified input, carrying the attested DIRECT figure');
+  // NOT merely `=== undefined`: the engine branches on `indirectTco2ePerT !== undefined` and a
+  // present-but-undefined key reads to a human as "supplied, empty" while behaving as absent.
+  // The key must not exist at all — that ABSENCE is what tells the engine to stand the
+  // Commission's default in, which is the whole reason this tier exists.
+  assert.ok(!('indirectTco2ePerT' in mixed),
+    'the indirect key must be ABSENT — its absence is what invites the Commission default in');
+  // And the attested figure still travels on the mixed tier, exactly as on the fully-verified
+  // one: it is the half the importer DID audit, and dropping it would re-price the direct side
+  // from defaults while the tier still claimed it was verified.
+  assert.deepEqual(
+    verifiedInputOf({ tier: 'verified-direct+default-indirect', seeDirect: '0' }),
+    { directTco2ePerT: '0' },
+    'zero is a legal attested figure on the mixed tier too (a 100%-scrap EAF producer)');
+});
+
 /* ── the verified line card: attestation and the default-path delta ──────────
  *
  * Two things the card owes a verified line, and neither is arithmetic:
