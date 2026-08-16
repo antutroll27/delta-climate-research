@@ -220,6 +220,13 @@ const AMENDED_BY_2025_2083 = 'as amended by Reg (EU) 2025/2083';
  * the rest of the year's imports. So the states are "above" and "indeterminate",
  * and indeterminate is reported as what it is — a question we cannot close —
  * rather than dressed up as good news.
+ *
+ * ITS SECTOR NAME COMES OFF THE SAME TABLE THE PER-YEAR CARD USES — sectorList below, handed a
+ * one-element list. Both cards ship, and both can be on screen for the same sector; this one
+ * spelled it with a `.replace(/_/g, ' ')` and printed "iron and steel" while renderYearThreshold
+ * printed "iron & steel", the exact shortcut SECTOR_PROSE's docblock already records as wrong on
+ * two of the four shipped keys. Sharing the table is also what carries the unknown-key convention
+ * here: a sector this file has no prose for prints raw, rather than as a name nobody chose.
  */
 export function renderThreshold(t: ThresholdView): string {
   const above = t.state === 'above_threshold';
@@ -235,23 +242,23 @@ export function renderThreshold(t: ThresholdView): string {
       <div class="cb-water">
         <div class="cb-row"><span>This line</span><b>${num(t.knownEligibleMassT)} t</b></div>
         <div class="cb-row"><span>Threshold · ${esc(String(t.calendarYear))}</span><b>${num(t.thresholdT)} t</b></div>
-        <div class="cb-row"><span>Sector</span><b>${esc(t.sector.replace(/_/g, ' '))}</b></div>
+        <div class="cb-row"><span>Sector</span><b>${esc(sectorList([t.sector]))}</b></div>
       </div>
       <p class="cb-sub">${above
         ? `This line alone exceeds the ${num(t.thresholdT)}&nbsp;t annual threshold, so the exemption
            does not apply and the exposure below stands.`
         : `Below ${num(t.thresholdT)}&nbsp;t an importer owes nothing for the year. This is ONE line,
            not your annual total, so it cannot show you are under the threshold — only that this
-           line by itself does not cross it. Add your other ${esc(t.sector.replace(/_/g, ' '))}
+           line by itself does not cross it. Add your other ${esc(sectorList([t.sector]))}
            imports for ${esc(String(t.calendarYear))} before relying on the exemption.`}</p>
       <p class="cb-prov">${esc(t.sourceLocator)} · ${AMENDED_BY_2025_2083}</p>
     </section>`;
 }
 
 /**
- * How a threshold row's sector KEYS are said in the verdict — and in the order the verdict says
- * them. An ordered list rather than a map, because it settles both questions at once and they are
- * both load-bearing.
+ * How a threshold sector KEY is said on either threshold card — and, where a card names several,
+ * in the order it says them. An ordered list rather than a map, because it settles both questions
+ * at once and they are both load-bearing.
  *
  * THE PROSE IS NOT THE KEY, and no transformation gets from one to the other. `iron_and_steel` is
  * said "iron & steel" (an ampersand, not "and"), and `fertilisers` is said "fertiliser" (singular,
@@ -259,9 +266,10 @@ export function renderThreshold(t: ThresholdView): string {
  * keys the shipped pack contains, which is why unknown keys below are not passed through one.
  *
  * THE ORDER IS NOT THE PACK'S. The shipped 2026 row lists cement, aluminium, fertilisers,
- * iron_and_steel; the verdict has always read cement, iron & steel, aluminium and fertiliser.
- * Rendering in pack order would have silently re-ordered live legal copy. So known sectors are
- * named in THIS list's order, whatever order the row happens to store them in.
+ * iron_and_steel; the per-year verdict has always read cement, iron & steel, aluminium and
+ * fertiliser. Rendering in pack order would have silently re-ordered live legal copy. So known
+ * sectors are named in THIS list's order, whatever order the row happens to store them in. The
+ * single-line card names one sector and so has no order to get wrong — it needs only the prose.
  */
 const SECTOR_PROSE: ReadonlyArray<readonly [key: string, prose: string]> = [
   ['cement', 'cement'],
@@ -272,9 +280,14 @@ const SECTOR_PROSE: ReadonlyArray<readonly [key: string, prose: string]> = [
 
 /**
  * "cement, iron & steel, aluminium and fertiliser" — a threshold row's sectors, said the way the
- * verdict says them. PLAIN TEXT, escaped by the caller: the ampersand in 'iron & steel' has to
+ * cards say them. PLAIN TEXT, escaped by the caller: the ampersand in 'iron & steel' has to
  * reach esc() as a bare '&' to come out as '&amp;', and a key arriving from pack JSON is
  * untrusted input that must be escaped like any other.
+ *
+ * TWO CALLERS, AND ONE OF THEM HANDS IT A SINGLE SECTOR. renderYearThreshold passes a whole row's
+ * `includedSectors`; renderThreshold passes `[t.sector]`, the one sector its line belongs to. The
+ * `< 2` branch below is what serves that call — it returns the bare prose with no "and" — so it
+ * is not dead code guarding only the empty row, and must not be narrowed to a length-0 test.
  *
  * AN UNKNOWN KEY IS PRINTED VERBATIM, underscores and all. Not prettified: this file cannot know
  * what the Commission calls a sector it has never seen, and the two counter-examples above prove

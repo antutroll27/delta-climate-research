@@ -228,6 +228,58 @@ test('the threshold card always cites the amending regulation', () => {
   }
 });
 
+/**
+ * A one-sector per-year card, so the sector name it prints can be compared 1:1 with the
+ * single-line card's. Shaped exactly like the `ruleFound: true` fixtures further down, and
+ * `below_threshold` + attested because that is the only branch whose sentence names the sectors.
+ */
+const yearCardFor = (sector) => renderYearThreshold({
+  calendarYear: 2026, ruleFound: true, state: 'below_threshold',
+  knownEligibleMassT: '30', thresholdT: '50',
+  sourceLocator: 'Regulation (EU) 2023/956 Article 2(3)',
+  entryIds: ['L1'], entryHashes: ['a'.repeat(64)], attested: true,
+  eligibleLineCount: 1, linesInYear: 1,
+  includedSectors: [sector],
+});
+
+test('the two threshold cards name a sector identically — "iron & steel", never "iron and steel"', () => {
+  // BOTH CARDS SHIP, and they contradicted each other about the same sector. The per-year card
+  // reads its names off SECTOR_PROSE ("iron & steel", and "fertiliser" from a plural key); the
+  // single-line card ran `.replace(/_/g, ' ')` and printed "iron and steel" — the shortcut the
+  // table's own docblock, twelve lines above, already records as wrong on two of the four keys.
+  //
+  // ASSERTED BOTH ABSOLUTELY AND RELATIVELY. The absolute arm hand-types the wanted prose, so
+  // the two cards agreeing on a name nobody chose still fails. The relative arm reads the name
+  // straight out of the OTHER card, so the two can never drift apart again whatever the table
+  // is later edited to say — the defect was disagreement, and that is the thing to pin.
+  const line = renderThreshold(thresh('72083800', '10'));
+  assert.ok(line.includes('iron &amp; steel'),
+    'the single-line card must say "iron & steel" — the ampersand escaped, as the per-year card escapes it');
+  assert.doesNotMatch(line, /iron and steel/,
+    'the mechanical underscore swap must be gone from BOTH of the card\'s two sector sites');
+
+  // The must-not-regress guard: a lookup that silently reworded every sector would pass the
+  // arm above. Two of the four keys are said exactly as they are spelled, and must stay so.
+  assert.match(renderThreshold(thresh('25231000', '10')), /<b>cement<\/b>/,
+    'cement is said "cement" — the fix must move only the keys whose prose differs from the key');
+  assert.match(renderThreshold(thresh('76011010', '10')), /<b>aluminium<\/b>/,
+    'aluminium likewise — unchanged by the table');
+
+  // ...and the two cards, compared directly. `sub` is whatever the per-year card calls the
+  // sector, extracted from its own verdict rather than re-typed here.
+  for (const [sector, cn] of [
+    ['cement', '25231000'], ['iron_and_steel', '72083800'],
+    ['aluminium', '76011010'], ['fertilisers', '28080000'],
+  ]) {
+    const said = /Your (.+?) imports for 2026 total/.exec(yearCardFor(sector));
+    assert.ok(said, `the per-year card must name ${sector} in its verdict`);
+    for (const massT of ['10', '100']) {
+      assert.ok(renderThreshold(thresh(cn, massT)).includes(`<b>${said[1]}</b>`),
+        `the single-line card must call ${sector} what the per-year card calls it: "${said[1]}"`);
+    }
+  }
+});
+
 test('hydrogen and electricity are outside the exemption, so no card is shown', () => {
   // Reg (EU) 2025/2083 excludes them from the 50 t exemption. Rendering an
   // "indeterminate" card for hydrogen would imply an exemption it cannot have.
