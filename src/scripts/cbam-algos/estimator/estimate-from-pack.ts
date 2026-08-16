@@ -7,6 +7,7 @@ import {
   unavailableEstimate,
   type CertificateEstimate,
   type CertificateEstimateInput,
+  type DataTier,
 } from '../cbam/certificate-estimate'
 import type { FreeAllocationTables } from '../cbam/types'
 
@@ -82,9 +83,11 @@ export interface EstimatorInput {
    */
   emissionsScope?: 'direct' | 'direct_and_indirect'
   /**
-   * The importer's own VERIFIED specific embedded emissions, per tonne of good. When present
-   * the default-values corpus is not consulted and NO mark-up is applied — the mark-up exists
-   * to price not-having-data, and this is the regulation's designed reward for having it.
+   * The importer's own VERIFIED specific embedded emissions, per tonne of good. A figure supplied
+   * here carries NO mark-up — the mark-up exists to price not-having-data, and this is the
+   * regulation's designed reward for having it. That reward is per FIGURE, not per line: the
+   * default-values corpus is still consulted for any half the importer did not attest, and what
+   * it returns keeps its mark-up (see indirectTco2ePerT).
    * The figure must be the WHOLE good's embedded emissions (precursors included): that scope
    * is what keeps the line on Column B. Process-only figures are Column A territory — the
    * workspace's job, never this estimator's.
@@ -95,7 +98,15 @@ export interface EstimatorInput {
    */
   verified?: {
     directTco2ePerT: string
-    /** read only when emissionsScope includes indirect — same gate as the defaults path */
+    /**
+     * Read only when emissionsScope includes indirect — same gate as the defaults path.
+     *
+     * OPTIONAL, and its absence is a real answer rather than a hole: omitted and '' both mean "I
+     * did not attest this", and both fall back to the published indirect default with its
+     * mark-up, stamping the line 'verified-direct+default-indirect'. Only a value that is present
+     * and unreadable refuses. They used to disagree — '' refused while an omitted key priced
+     * electricity at zero on a line still stamped fully verified.
+     */
     indirectTco2ePerT?: string
   }
 }
@@ -343,6 +354,35 @@ export function selectIndirectFactorFromPack(
 }
 
 /**
+ * The Commission's published indirect (electricity) default for this line, already priced:
+ * base intensity, its mark-up, times the net mass. `none` and `route-mismatch` pass straight
+ * through from the lookup, because the two paths differ only in which stamp the refusal carries.
+ *
+ * ONE copy of the mark-up arithmetic, called from BOTH paths. The defaults path always needed it;
+ * the verified path needs the identical figure whenever an importer attested their process
+ * emissions and left electricity alone. Two copies of a tax calculation is how two copies come to
+ * disagree, and this file has already paid for that once — the line facts the two paths used to
+ * stamp separately drifted silently, down to a fabricated snapshotHash on one of them.
+ */
+type IndirectDefaultFigure =
+  | { kind: 'priced'; indirectTco2e: string }
+  | { kind: 'none' }
+  | { kind: 'route-mismatch' }
+
+function indirectDefaultFigure(
+  pack: EstimatorPack, input: EstimatorInput,
+): IndirectDefaultFigure {
+  const indirect = selectIndirectFactorFromPack(pack, input)
+  if (indirect.kind !== 'found') return indirect
+  return {
+    kind: 'priced',
+    indirectTco2e: new Decimal(indirect.factor.baseIntensity)
+      .mul(new Decimal(1).plus(new Decimal(indirect.factor.markupPct).div(100)))
+      .mul(input.massT).toFixed(),
+  }
+}
+
+/**
  * A non-negative decimal this estimator may price, or null when it may not. Used for the
  * verified per-tonne figures AND for net mass — one predicate, because they want exactly the
  * same rule and two similar ones is how they drift apart.
@@ -426,16 +466,24 @@ export function estimateFromPack(pack: EstimatorPack, input: EstimatorInput): Ce
     )
   }
 
-  // An attested figure replaces the DEFAULT, not the benchmark. It is resolved before the
-  // corpus is consulted, and deliberately does not depend on `factor`: on this path a missing
-  // published default is not a refusal, it is the ordinary case an importer collects data for.
-  // A missing BENCHMARK still refuses, from inside estimateCertificates, exactly as before.
+  // An attested figure replaces the DEFAULT, not the benchmark. The DIRECT figure deliberately
+  // does not depend on `factor`: on this path a missing published default is not a refusal, it is
+  // the ordinary case an importer collects data for. (The corpus IS consulted here, for an
+  // indirect half the importer did not attest — but never for the direct one.) A missing
+  // BENCHMARK still refuses, from inside estimateCertificates, exactly as before.
   if (input.verified) {
-    // No published default backs this figure, so there is no default basis to report: null is
-    // what CertificateEstimateInput.originBasis names "not a default-derived figure (verified
-    // actual)", and what prod's originBasisOf() returns for every method but official_default.
+    // No published default backs the DIRECT figure, so there is no default basis to report on it:
+    // null is what CertificateEstimateInput.originBasis names for a figure resting on no default,
+    // and what prod's originBasisOf() returns for every method but official_default.
     // 'country' was not merely redundant — DisclosureCard.vue renders the row on truthiness and
     // would tell the importer their own audited figure is "the origin's own published default".
+    //
+    // It stays null on a 'verified-direct+default-indirect' line too, whose indirect half DOES
+    // rest on a default and can draw it from the residual bucket. The field describes one basis
+    // and that line has two, so the honest options were both imperfect: 'residual' would fire
+    // RESIDUAL_BASIS_NOTE over an estimate whose direct figure is the importer's own audited
+    // number. The tier carries the disclosure instead. Narrower than the note, and named as a
+    // known gap rather than left to be found.
     const verifiedStamp = { ...baseInput, tier: 'actual-verified' as const, originBasis: null }
     const mass = new Decimal(input.massT)
 
@@ -446,18 +494,51 @@ export function estimateFromPack(pack: EstimatorPack, input: EstimatorInput): Ce
 
     // Same gate as the defaults path: the indirect figure is only READ when the scope charges
     // for it, so it is only judged then — refusing over a value that never enters the estimate
-    // would name a gap the user cannot close.
+    // would name a gap the user cannot close. On a 'direct' line nothing below runs, nothing
+    // stands in for anything, and the tier stays what the attestation makes it.
     let indirectTco2e = '0'
-    if (input.emissionsScope === 'direct_and_indirect' && input.verified.indirectTco2ePerT !== undefined) {
-      const indirect = nonNegativeDecimal(input.verified.indirectTco2ePerT)
-      if (!indirect) {
-        return unavailableEstimate(verifiedStamp, tables, BAD_VERIFIED_REASON, `verified/${input.cn}/indirectTco2ePerT`)
+    let tier: DataTier = 'actual-verified'
+    if (input.emissionsScope === 'direct_and_indirect') {
+      const attested = input.verified.indirectTco2ePerT
+      // ABSENCE, spelled two ways, and they used to disagree. An omitted key priced electricity
+      // at zero and still stamped the line fully verified; '' refused. Both mean "I did not
+      // supply this", and omitting the key is the one a caller reaches by doing nothing — so the
+      // lax reading was the reachable one. A value that is PRESENT and unreadable is a different
+      // fact and still refuses below: a typo must not be quietly promoted into a default.
+      if (attested !== undefined && attested !== '') {
+        const indirect = nonNegativeDecimal(attested)
+        if (!indirect) {
+          return unavailableEstimate(verifiedStamp, tables, BAD_VERIFIED_REASON, `verified/${input.cn}/indirectTco2ePerT`)
+        }
+        indirectTco2e = indirect.mul(mass).toFixed()
+      } else {
+        // Nothing attested for electricity, so the Commission's published default stands in —
+        // WITH its mark-up, priced by the same expression the defaults path uses. The mark-up
+        // belongs here: it prices not-having-data, and on this half the importer does not have
+        // data. Attesting the process figure earns the mark-up's removal from the process figure,
+        // and nowhere else. Pricing this component at zero, which is what happened before, is a
+        // silent under-charge on a page whose governing rule is fail-closed.
+        const fallback = indirectDefaultFigure(pack, input)
+        if (fallback.kind === 'route-mismatch') {
+          return unavailableEstimate(
+            verifiedStamp, tables, NO_INDIRECT_ROUTE_REASON,
+            `indirect/${input.cn}/${input.country}/${input.route}/${year}`,
+          )
+        }
+        if (fallback.kind === 'priced') {
+          indirectTco2e = fallback.indirectTco2e
+          // Stamped ONLY where a default actually stood in. `none` means the Commission publishes
+          // no indirect default for this good at all (iron & steel, aluminium), so zero is the
+          // published answer rather than a substitution — claiming a default was applied there
+          // would tell an auditor to go looking for one that does not exist.
+          tier = 'verified-direct+default-indirect'
+        }
       }
-      indirectTco2e = indirect.mul(mass).toFixed()
     }
 
     return estimateCertificates({
       ...verifiedStamp,
+      tier,
       // toFixed(), never toString(): a small attested figure must render as 0.0000000001, not
       // as the exponential '1e-10' certificate-estimate.ts:162 warns about.
       emissionsTco2e: direct.mul(mass).toFixed(),
@@ -486,18 +567,14 @@ export function estimateFromPack(pack: EstimatorPack, input: EstimatorInput): Ce
   // A route MISMATCH is not that case — see IndirectLookup — and refuses.
   let indirectTco2e = '0'
   if (input.emissionsScope === 'direct_and_indirect') {
-    const indirect = selectIndirectFactorFromPack(pack, input)
+    const indirect = indirectDefaultFigure(pack, input)
     if (indirect.kind === 'route-mismatch') {
       return unavailableEstimate(
         { ...baseInput, originBasis }, tables, NO_INDIRECT_ROUTE_REASON,
         `indirect/${input.cn}/${input.country}/${input.route}/${year}`,
       )
     }
-    if (indirect.kind === 'found') {
-      indirectTco2e = new Decimal(indirect.factor.baseIntensity)
-        .mul(new Decimal(1).plus(new Decimal(indirect.factor.markupPct).div(100)))
-        .mul(input.massT).toFixed()
-    }
+    if (indirect.kind === 'priced') indirectTco2e = indirect.indirectTco2e
   }
 
   return estimateCertificates({ ...baseInput, originBasis, emissionsTco2e: emissions, indirectTco2e }, tables)

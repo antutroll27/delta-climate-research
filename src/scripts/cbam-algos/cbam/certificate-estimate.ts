@@ -29,7 +29,19 @@ import type { FreeAllocationTables } from './types'
  * and says so on every figure.
  */
 
-export type DataTier = 'actual-verified' | 'default+markup'
+/**
+ * Which data a figure rests on. A legal claim, not a label: the mark-up exists to price
+ * not-having-data, so the tier is the field that says whether it was applied and to what.
+ *
+ * 'verified-direct+default-indirect' is a line whose importer attested their PROCESS emissions and
+ * supplied no electricity figure, so the Commission's published indirect default — mark-up
+ * included — stood in for the half they did not attest. Spelled out rather than 'mixed' because
+ * the tier lands verbatim in the export an auditor reads, where which half came from where is the
+ * whole question. Stamped only when a default actually stood in: a good for which the Commission
+ * publishes no indirect default at all (iron & steel, aluminium) prices that component at zero
+ * because zero is the published answer, and stays 'actual-verified'.
+ */
+export type DataTier = 'actual-verified' | 'default+markup' | 'verified-direct+default-indirect'
 
 export interface CertificateEstimateInput {
   /** From the frozen snapshot. */
@@ -56,7 +68,13 @@ export interface CertificateEstimateInput {
    *  - 'country'  — the origin's own published values
    *  - 'residual' — the Commission's "Other Countries and Territories" sheet, i.e. a
    *                 world-average bucket, because the origin has no published value for this good
-   *  - null       — not a default-derived figure (verified actual)
+   *  - null       — the figure this field describes rests on no default. Every 'actual-verified'
+   *                 line, and also 'verified-direct+default-indirect', whose DIRECT figure is the
+   *                 importer's own. That third tier's INDIRECT half does rest on a default, and
+   *                 that default can come from the residual bucket, so such a line carries no
+   *                 residual note today and the tier is the only thing disclosing the
+   *                 substitution. Narrower disclosure than the note gives, and named here rather
+   *                 than left to be discovered.
    * A residual-derived number LOOKS exactly like a country-specific one; if we do not say which,
    * we let a user believe the Commission priced their country's good when it did not.
    */
@@ -201,13 +219,14 @@ export const NO_BENCHMARK_REASON =
  * Names the BENCHMARK as present deliberately — that is the sentence that stops a reader hunting
  * a table that was never empty, which is the whole defect this constant exists to fix.
  *
- * It does NOT claim the default value is present, though an earlier draft did. A verified line
- * has no default by construction: estimateFromPack's verified branch never consults the corpus,
- * because "a missing published default is not a refusal, it is the ordinary case an importer
- * collects data for". True for every caller today, since none passes `verified` — and false the
- * moment one does. A string in a file whose job is to stop the product overclaiming should not
- * be carrying a clause with an expiry date. The benchmark claim holds on both paths: an attested
- * figure replaces the default, never the benchmark.
+ * It does NOT claim the default value is present, though an earlier draft did. A verified line's
+ * DIRECT figure has no default behind it by construction: estimateFromPack's verified branch
+ * never consults the corpus for it, because "a missing published default is not a refusal, it is
+ * the ordinary case an importer collects data for". (Its INDIRECT half does consult the corpus,
+ * when the importer attested process emissions alone — see DataTier's third tier — so the claim
+ * would not even be uniformly false, which is worse.) A string in a file whose job is to stop the
+ * product overclaiming should not be carrying a clause with an expiry date. The benchmark claim
+ * holds on both paths: an attested figure replaces a default, never the benchmark.
  */
 export const NO_PRICE_REASON =
   'The Commission has not published the CBAM certificate price for the quarter this import ' +

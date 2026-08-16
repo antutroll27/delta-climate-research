@@ -1,13 +1,13 @@
 {
   "packGeneratedAt": "2026-08-07T16:59:36.563Z",
   "files": {
-    "cbam/certificate-estimate.ts": "7bdef94d338342d6",
+    "cbam/certificate-estimate.ts": "2c5fbbbcb43e256b",
     "cbam/resolve-fa.ts": "43207febb875332e",
     "cbam/sector.ts": "8955b7caa1baace7",
     "cbam/sefa.ts": "74aaf68237b02440",
     "cbam/types.ts": "735a8e85c04ed493",
     "errors/domain-error.ts": "6b97e210e5698b23",
-    "estimator/estimate-from-pack.ts": "24cf652ea0a233e2",
+    "estimator/estimate-from-pack.ts": "313ad8025bad5ed3",
     "regulatory/iso-3166.ts": "9bc99ad69798d216",
     "regulatory/types.ts": "dbbf958a874ddce7",
     "threshold/aggregate.ts": "e2cd1e0be6ca53ae",
