@@ -1490,16 +1490,20 @@ test('renderAttestation gates on the TIER, not on an external if — the preview
   // Asserted on the parseVerifiedFields shape, not a Line: that is precisely what the preview
   // holds, and a signature that demanded a whole Line is what forced the gate outside in the
   // first place.
+  // `priced` is passed on every call here even though NEITHER tier below reads it — the two arms
+  // that ignore it are pinned as ignoring it further down. It is passed because the function now
+  // refuses a call that omits it (see the footgun test at the end of this block): the answer to
+  // "did this line price?" has no safe default, so there is no tier on which it may be left out.
   const previewShape = { tier: 'actual-verified', verifiedRef: 'DNV-2026-0042' };
-  assert.ok(renderAttestation(previewShape).includes(ATTESTED_NOTE),
+  assert.ok(renderAttestation(previewShape, true).includes(ATTESTED_NOTE),
     'a verified figure must carry its attestation on every surface that prices it, card or preview');
-  assert.equal(renderAttestation({ tier: 'default+markup' }), '',
+  assert.equal(renderAttestation({ tier: 'default+markup' }, true), '',
     'a Commission-default figure makes no attested claim, so it must say nothing');
   // Absent reference must not print a bare "Ref:" label with nothing after it.
-  assert.equal(renderAttestation({ tier: 'actual-verified' }),
-    renderAttestation({ tier: 'actual-verified', verifiedRef: '' }),
+  assert.equal(renderAttestation({ tier: 'actual-verified' }, true),
+    renderAttestation({ tier: 'actual-verified', verifiedRef: '' }, true),
     'no reference and an empty reference read identically here');
-  assert.doesNotMatch(renderAttestation({ tier: 'actual-verified' }), /Ref:/);
+  assert.doesNotMatch(renderAttestation({ tier: 'actual-verified' }, true), /Ref:/);
 });
 
 test('renderLineCard: a verified line says the figures are the user\'s own claim, unconfirmed here, and cites the reference', () => {
@@ -1827,11 +1831,11 @@ test('renderAttestation on a MIXED line names both halves — attested direct, C
   // `if (tier === 'default+markup') ... else mixed` would print the mixed paragraph on a fully
   // verified line, and one written as `if (tier !== 'actual-verified') return MIXED` would print
   // it on a Commission-default line that attests nothing at all.
-  assert.equal(renderAttestation({ tier: 'default+markup' }), '',
+  assert.equal(renderAttestation({ tier: 'default+markup' }, true), '',
     'a Commission-default figure makes no attested claim, so it must still say nothing');
-  assert.equal(renderAttestation({ tier: 'default+markup', verifiedRef: 'BV-2026-0142' }), '',
+  assert.equal(renderAttestation({ tier: 'default+markup', verifiedRef: 'BV-2026-0142' }, true), '',
     'not even with a stray reference on it');
-  assert.ok(renderAttestation({ tier: 'actual-verified' }).includes(ATTESTED_NOTE),
+  assert.ok(renderAttestation({ tier: 'actual-verified' }, true).includes(ATTESTED_NOTE),
     'and a fully verified line keeps the paragraph that is true of IT');
 });
 
@@ -2000,6 +2004,59 @@ test('renderAttestation: a default-tier line still says nothing, priced or refus
     assert.equal(renderAttestation({ tier: 'default+markup', verifiedRef: 'BV-2026-0142' }, priced), '',
       `not even with a stray reference on it (priced=${priced})`);
   }
+});
+
+test('renderAttestation: a call that cannot answer "priced?" must not answer it by default', () => {
+  /*
+   * THE FOOTGUN, AND WHY IT IS PINNED HERE RATHER THAN AT THE CALL SITES.
+   *
+   * `priced` is required in TypeScript, but this function is EXPORTED, so a JavaScript caller —
+   * this file is one — reaches it with no compiler in the way. Called with one argument, `priced`
+   * is `undefined`, which is falsy, which selects REFUSED_MIXED_NOTE: "No figure was produced for
+   * this line". On a mixed line that DID price, that sentence is simply false, and false in the
+   * UNDER-claiming direction — the tool disclaiming a figure it actually produced, which nobody
+   * reports because it reads as caution rather than as a bug.
+   *
+   * Both real call sites are pinned by SOURCE TEXT (see the half-fix guard above), because one of
+   * them — run()'s live preview — is a closure inside initCbam() reachable only through
+   * document.getElementById, and this suite has no DOM. A source pin cannot see this defect at
+   * all: both call sites are spelled correctly today and the footgun is still there, in the
+   * function, waiting for a third caller or a hand-edit that drops an argument.
+   *
+   * So this asserts the PROPERTY, not the mechanism: whatever happens on a one-argument call, it
+   * must not be the quiet production of the refused wording. Refusing loudly satisfies it; so
+   * would a signature that takes the estimate and computes the answer itself. Both call sites are
+   * covered by it, the DOM-locked one included, because the guarantee lives in the function
+   * rather than in what any caller happens to pass.
+   */
+  const attempt = (...args) => {
+    try { return { html: renderAttestation(...args) }; } catch (err) { return { err }; }
+  };
+  const shape = { tier: 'verified-direct+default-indirect', verifiedRef: 'BV-2026-0142' };
+
+  const oneArg = attempt(shape);
+  assert.ok(oneArg.err || !oneArg.html.includes(REFUSED_MIXED_NOTE),
+    'a caller that never said whether the line priced must not be answered "it did not" — that '
+    + 'renders "No figure was produced for this line" over a line that produced one');
+
+  // The same defect one step along: a stale or hand-written caller passing something that is not
+  // the answer at all. Truthy junk took the PRICED arm, asserting a mark-up on an electricity
+  // component a refused card does not show — the over-claiming half of the same hole.
+  for (const junk of ['yes', 1, {}, null]) {
+    const r = attempt(shape, junk);
+    assert.ok(r.err, `renderAttestation must refuse a non-boolean \`priced\` (${JSON.stringify(junk)}), `
+      + 'rather than coerce it into one of the two wordings');
+  }
+
+  // If it refuses, it must say what to pass — a bare TypeError leaves the next caller guessing at
+  // a contract this function is the only place that states.
+  assert.match(String(oneArg.err), /renderAttestation/, 'the refusal names itself');
+  assert.match(String(oneArg.err), /hasFigure/, 'and names the answer the caller was meant to hand it');
+
+  // ...and the real, two-argument contract is untouched by the guard.
+  assert.ok(renderAttestation(shape, true).includes(MIXED_NOTE), 'priced mixed → the full paragraph');
+  assert.ok(renderAttestation(shape, false).includes(REFUSED_MIXED_NOTE),
+    'unpriced mixed → the refused paragraph');
 });
 
 test('the residual-indirect note reaches the card, and only where the fallback was residual', () => {

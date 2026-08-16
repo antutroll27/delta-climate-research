@@ -719,6 +719,12 @@ const hasFigure = (e: CertificateEstimate): boolean => e.status !== 'unavailable
  * a figure came out is a fact about the ESTIMATE. Folding them into one bag would invite a caller
  * to compute the boolean from the line, which is exactly the mistake: the line cannot know.
  *
+ * AND IT IS CHECKED AT RUNTIME, because `priced: boolean` is a promise only the compiler keeps and
+ * this function is exported. A JS caller with one argument got `undefined` — falsy — and therefore
+ * the refused wording over a priced line: a silent, UNDER-claiming failure, which is the direction
+ * that reads as caution and so never gets reported. See the guard's own comment below for why it
+ * sits ahead of the switch rather than inside the single arm that reads the flag.
+ *
  * BOTH CALLERS PASS hasFigure(e), and both genuinely hold `e` — renderLineCard takes it as its
  * second parameter, and run() has it in hand from the call whose result it is about to render.
  * Neither passes a literal. The tier arms differ on `priced` only where the wording does: the
@@ -731,10 +737,36 @@ export function renderAttestation(
   /**
    * Did the engine produce a figure for this line? Pass `hasFigure(e)`, never a literal — see
    * that predicate for why 'unavailable' is the test and why deltaSentence's adjacent
-   * `costEur` check is a different question.
+   * `costEur` check is a different question. Not optional, and the guard below enforces that at
+   * runtime as well as in the type: there is no safe default for this question.
    */
   priced: boolean,
 ): string {
+  // REQUIRED IN TYPESCRIPT IS NOT REQUIRED — this function is exported, and a JavaScript caller
+  // (the unit suite is one) reaches it with no compiler in the way. Omit the argument and `priced`
+  // is `undefined`, which is falsy, which picked REFUSED_MIXED_NOTE: "No figure was produced for
+  // this line", printed over a line that produced one. Silent, and UNDER-claiming — the direction
+  // that reads as caution rather than as a bug, so nobody reports it. Truthy junk ('yes', 1, {})
+  // took the other arm and asserted a mark-up on an electricity component a refused card has none
+  // of, which is the over-claiming half of the same hole.
+  //
+  // TESTED BEFORE THE SWITCH, not inside the one arm that reads it. 'default+markup' returns ''
+  // and 'actual-verified' ignores `priced` deliberately, so a lazier check would let a broken
+  // caller work on two tiers out of three and fail only when a mixed line reached it — in
+  // production, on the surface with the largest audience. The contract is the same on every tier:
+  // a caller that cannot say whether the line priced is a caller that must not be rendering this
+  // paragraph at all. Matches buildPrintDocument's idiom below — name the violation loudly rather
+  // than let a falsy default answer a question nobody asked.
+  if (typeof priced !== 'boolean') {
+    throw new Error(
+      `renderAttestation: \`priced\` must be a boolean, got ${typeof priced} — pass the estimate `
+      + 'through the hasFigure predicate, the one spelling both call sites use. (Written without '
+      + 'its parentheses on purpose: cbam-render.test.mjs counts that call to prove there are '
+      + 'exactly two callers, and a mention in a string would read as a third.) Omitted, `priced` '
+      + 'is undefined, which is falsy, which renders "No figure was produced for this line" over '
+      + 'a line that has one.',
+    );
+  }
   let note: string;
   switch (line.tier) {
     // Nothing was attested, so there is no claim to disclose and no reference that could belong
