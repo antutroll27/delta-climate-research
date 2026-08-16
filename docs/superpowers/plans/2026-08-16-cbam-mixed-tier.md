@@ -188,6 +188,16 @@ The count must equal the files you copied plus `UPSTREAM.json`. More means somet
 - Modify: `/private/tmp/cbam-mixed/src/scripts/cbam-algos/cbam-app.ts` (`tierLabel`, `verifiedInputOf`)
 - Modify: `/private/tmp/cbam-mixed/tests/unit/cbam-lines.test.mjs`
 
+### Why widening is right, and why it looks wrong from inside this task
+
+Task 2 raised a real objection worth answering before you start: widening `Line.tier` creates a variant **nothing inhabits**. `parseVerifiedFields` emits only two values, the form `<select>` offers only two options, and `csvRows` writes `data_tier: l.tier` — so at the end of *this* task a mixed line still exports `actual-verified`.
+
+That is true, and **Task 4 is what inhabits it**: `draftLine` sets `line.tier = estimate.stamp.tier`. Do not try to close that gap here.
+
+The alternative Task 2 proposed — source `data_tier` from `e.stamp.tier` and relax the `csvRows` guard to a compatible-pairing predicate — was considered and **rejected**. That guard works by cross-checking two *independently derived* facts: what the line says and what the estimate computed. Source both from the estimate and a mispaired line/estimate array exports the wrong tier with nothing left to disagree — the guard's own comment calls that "the mispairing that matters". Keeping `Line.tier` authoritative and set once, from that line's own estimate, preserves the cross-check.
+
+What does change is the field's *meaning*: from "the tier the user selected" to "the tier this line was priced at". Say so in its docblock.
+
 - [ ] **Step 1: Widen `Line.tier`**
 
 `src/scripts/cbam-lines.ts:41` is `tier: 'default+markup' | 'actual-verified';`. Add the third value. Its docblock explains the field exists so "the line can never disagree about which tier was used" — extend that reasoning rather than replacing it.
