@@ -227,8 +227,27 @@ Add a test that a mixed-tier `Line` produces a `verified` object from `verifiedI
 ## Task 4: The line records what was computed, and the attestation says what it covers
 
 **Files:**
-- Modify: `/private/tmp/cbam-mixed/src/scripts/cbam-algos/cbam-app.ts` (`draftLine`, `renderAttestation`)
+- Modify: `/private/tmp/cbam-mixed/src/scripts/cbam-algos/cbam-app.ts` — **six sites, not two**
 - Modify: `/private/tmp/cbam-mixed/tests/unit/cbam-render.test.mjs`
+
+### The six sites, and why leaving any out ships a regression
+
+An earlier draft of this task named only `draftLine` and `renderAttestation`. Task 3 measured the rest and found that **landing `draftLine` alone silently degrades the printable audit document** — the one artefact handed to an auditor. All six move together:
+
+| site | what it must do | what happens if forgotten |
+|---|---|---|
+| `draftLine` | set `line.tier = estimate.stamp.tier` | nothing is mixed; the whole feature is inert |
+| `renderAttestation` (`~:589`) | new wording naming both halves | `ATTESTED_NOTE` says "these figures are your own attested claim" — half-false; rendering nothing leaves an attested figure with no attestation, the state its own docblock exists to prevent |
+| `renderLineCard` (`~:699`) | treat mixed as verified for the delta block | pairs with the next row |
+| `defaultPathComparison` (`~:1600`) | treat mixed as verified | **the arithmetic is already correct** — both sides take the same pack lookup, mark-up and mass, so the indirect terms cancel and the delta isolates what the direct attestation was worth |
+| `tierCell` (`~:814`) | treat mixed as verified | the importer's **verifier reference vanishes from the audit document** |
+| `anyVerified` (`~:857`) | treat mixed as verified, and reword | the **§4 caveat disappears** for a document of only mixed lines — an unchecked attested figure with nothing saying it is unchecked |
+
+**Ordering hazard, measured by Task 3:** `renderLineCard`/`defaultPathComparison` must not move *before* `renderAttestation`. Widening them first ships "your verified data saves €X" beside **no attestation note at all**. Likewise `tierCell` and `anyVerified` move together — a verifier reference printed without the caveat is worse than today's consistent silence.
+
+**`anyVerified`'s caveat text needs rewording, not just a wider gate.** It currently says lines are "priced from the user's own attested figures, **which skip the mark-up**" — half-false for a mixed line, whose electricity half carries the mark-up.
+
+Two sites are deliberately **not** here: `parseVerifiedFields` must never emit the third value (it holds no pack, so it cannot know whether the fallback fired — guessing would label a steel line mixed and make `csvRows` throw), and `syncVerifiedRows` reads the `<select>`, not a Line.
 
 - [ ] **Step 1: Write the failing tests**
 
