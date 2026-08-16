@@ -112,7 +112,9 @@ In `lib/cbam/certificate-estimate.ts`:
 export type DataTier = 'actual-verified' | 'default+markup' | 'verified-direct+default-indirect'
 ```
 
-Run `npm run typecheck` **immediately** and report what it flags. `tierLabel` in the website's `cbam-app.ts` carries an exhaustive `never` check and its comment says such checks exist "to make a build error instead" — the compiler is meant to enumerate this work. Note it will only flag `switch` sites; `if (x !== 'actual-verified')` comparisons compile silently and must be found by grep.
+Run `npm run typecheck` **immediately** and report what it flags. **MEASURED: it flags nothing — exit 0.** An earlier draft of this plan claimed the compiler would enumerate the work here; it does not. `DataTier` has three references in the whole CBM tree (its definition and two field declarations), the codebase's single `switch` is on `estimate().status` and carries a `default:` arm, and there are no `never` exhaustiveness checks over `DataTier` at all. The `never` check I was thinking of is `tierLabel` in the WEBSITE's `cbam-app.ts` — it belongs to Tasks 2–3, not here.
+
+Also measured: **vitest's `toBe` is loosely typed**, so a test asserting the new tier literal typechecks clean *before* the union is widened. The compiler is not a guard on tier literals in tests — the suite is.
 
 - [ ] **Step 5: Implement the fallback**
 
