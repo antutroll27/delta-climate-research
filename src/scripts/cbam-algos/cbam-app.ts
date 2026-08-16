@@ -699,7 +699,9 @@ export function renderAttestation(line: { tier: Line['tier']; verifiedRef?: stri
  * whether the indirect fallback fired, and the fallback firing is precisely what the third tier
  * MEANS. Guessing there would label a steel line mixed and make csvRows throw.
  */
-const isAttested = (tier: Line['tier']): boolean =>
+const isAttested = (
+  tier: Line['tier'],
+): tier is 'actual-verified' | 'verified-direct+default-indirect' =>
   tier === 'actual-verified' || tier === 'verified-direct+default-indirect';
 
 /**
