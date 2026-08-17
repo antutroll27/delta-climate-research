@@ -190,8 +190,8 @@ CBAM factor and the 2026-Q1 certificate price that is a deduction of roughly 64.
   I  = 1.24 x 1.10                                = 1.364    tCO2e/t
   E  = 1.364 x 100                                = 136.4    tCO2e
 
-indirect factor     baseIntensity 0.06    markupPct 10
-  G  = 0.06 x 1.10 x 100                          = 6.6      tCO2e
+indirect factor     baseIntensity 0.04    markupPct 10    route (A)
+  G  = 0.04 x 1.10 x 100                          = 4.4      tCO2e
 
 benchmark, Column B, route (A), scope 25231000    = 0.666    tCO2e/t
   IR (EU) 2025/2620 Annex, Column B route (A)
@@ -204,12 +204,25 @@ CSCF 2026                                         = null, status PENDING
 
   S  = 0.975 x 1 x 0.666                          = 0.64935  tCO2e/t   [CSCF assumed 1]
   F  = 0.64935 x 100                              = 64.935   tCO2e
-  N  = max(0, 136.4 - 64.935) + 6.6               = 78.065   tCO2e
-  C  = 78.065 certificates
-  EUR = 78.065 x 75.36                            = 5,882.98</code></pre>
+  N  = max(0, 136.4 - 64.935) + 4.4               = 75.865   tCO2e
+  C  = 75.865 certificates
+  EUR = 75.865 x 75.36                            = 5,717.19</code></pre>
 
-<p>Independently checkable by hand: 136.4 &minus; 64.935 = 71.465; 71.465 + 6.6 = 78.065;
-78.065 &times; 75.36 = 5,882.98.</p>
+<p>Independently checkable by hand: 136.4 &minus; 64.935 = 71.465; 71.465 + 4.4 = 75.865;
+75.865 &times; 75.36 = 5,717.19.</p>
+
+<p class="note"><strong>Corrected 2026-08-17, and the correction is the point.</strong> This
+trace previously read <code>indirect baseIntensity 0.06</code>, giving G = 6.6, N = 78.065 and
+&euro;5,882.98. For CN&nbsp;25231000 from Algeria the Commission publishes <em>two</em> indirect
+defaults &mdash; 0.04 for route&nbsp;(A) and 0.06 for route&nbsp;(B) &mdash; and the engine was
+taking one of them without regard to the declared route. The example is a route&nbsp;(A) line, so
+it was carrying route&nbsp;(B)&rsquo;s indirect factor and over-charging by &euro;165.79.</p>
+
+<p class="note">The defect was fixed in the engine (90 corrected selectors, every one downward),
+and this document went on stating the old figure &mdash; a worked example published as evidence
+of correctness, quietly asserting a number the calculator no longer produces. It is restated here
+from a direct run of the shipped engine rather than recomputed by hand, and the two now agree to
+the cent.</p>
 
 <h2>4. Three rules to test hardest</h2>
 
