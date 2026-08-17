@@ -4,9 +4,9 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import {
-  buildPrintDocument, decorateSnapshot, inputFor, nextRoute, parseVerifiedFields, renderAttestation,
-  renderDraftThreshold, renderLineCard, renderResult, renderThreshold, renderTotals,
-  renderYearThreshold, stampedTierOf, verifiedInputOf,
+  buildPrintDocument, decorateSnapshot, inputFor, nextRoute, noRouteReason, parseVerifiedFields,
+  renderAttestation, renderDraftThreshold, renderLineCard, renderResult, renderThreshold,
+  renderTotals, renderYearThreshold, stampedTierOf, verifiedInputOf,
 } from '../../src/scripts/cbam-algos/cbam-app.ts';
 import {
   estimateFromPack, resolveThreshold, routesFor, selectIndirectFactorFromPack,
@@ -419,6 +419,40 @@ test('the real pack: 72083800/IN publishes one route, so it needs no pick', () =
   const many = routesFor(pack, '25231000', 'DZ', 2026);
   assert.ok(many.length > 1, `expected several routes, got ${many}`);
   assert.equal(nextRoute(many, ''), '');
+});
+
+test('an empty route list blames the year when the year is the reason, not the pairing', () => {
+  // THE PAIRING BRANCH IS REAL AND STAYS. Within a year the corpus covers, most selectors the
+  // form can build genuinely publish no route — 46,686 of 68,880 (574 goods x 120 origins),
+  // measured over the shipped pack — so this sentence is right, and right often.
+  for (const year of [2026, 2027, 2028]) {
+    assert.equal(noRouteReason(pack, year), 'no route published for this pairing',
+      `${year} is a covered year: an empty list there really is about the good and origin`);
+  }
+
+  // OUTSIDE THOSE YEARS IT IS WRONG FOR EVERY PAIRING, including all 22,194 that DO publish
+  // routes: routesFor filters on the reporting year, so it returns [] for 68,880 of 68,880. An
+  // importer who typed 2029 was told their GOOD AND ORIGIN publish no route and went to change
+  // the two controls that were not the problem.
+  assert.equal(noRouteReason(pack, 2029), 'no rules published for 2029');
+  assert.equal(noRouteReason(pack, 2025), 'no rules published for 2025');
+
+  // FOUR DIGITS, because the year is being echoed back at a user looking at a date field that
+  // reads 0001. Number('0001') is 1, and "no rules published for 1" names nothing they typed.
+  // This is the case reached by retyping the year segment of an <input type="date">: measured in
+  // Chrome, "2026" typed into a cleared year commits 0002, 0020, 0202 and then 2026, firing
+  // `change` at every step.
+  assert.equal(noRouteReason(pack, 1), 'no rules published for 0001');
+  assert.equal(noRouteReason(pack, 202), 'no rules published for 0202');
+
+  // AND IT IS DERIVED FROM THE PACK, not from a hardcoded year window: the branch has to follow
+  // the corpus, or the day 2029 is published this sentence starts lying in the other direction.
+  const covered = [...new Set(pack.defaultFactors.map((f) => f.reportingYear))].sort();
+  assert.deepEqual(covered, [2026, 2027, 2028], 'the shipped pack covers exactly these years');
+  for (const year of covered) {
+    assert.doesNotMatch(noRouteReason(pack, year), /no rules published/,
+      'a year the pack covers must never be reported as having no rules');
+  }
 });
 
 /* ── §7 non-negotiables, per branch ────────────────────────────────────────── */

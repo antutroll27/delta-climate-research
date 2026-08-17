@@ -1274,6 +1274,44 @@ export function nextRoute(published: readonly string[], previous: string): strin
 }
 
 /**
+ * What the route <select> says when it has nothing to offer — and the point is that there are
+ * TWO reasons for that, which it used to state as one.
+ *
+ * It said "no route published for this pairing" every time, and "this pairing" means the good and
+ * the origin: the branch directly above it says "Choose a good and origin first". The DATE is not
+ * part of any pairing, and it is the reason far more often than the sentence admitted. `routesFor`
+ * filters on the reporting year, so a year the corpus does not cover empties the list for EVERY
+ * selector — measured over the shipped pack's 574 goods x 120 origins:
+ *
+ *   2026, 2027, 2028 ... 22,194 of 68,880 pairings publish routes, 46,686 do not
+ *   any other year ..... 0 of 68,880, including all 22,194 that DO publish routes
+ *
+ * So inside a covered year the old sentence is right, and it is right often. Outside one it is
+ * wrong for every pairing the form can build, and wrong in the direction that costs the user
+ * their time: an importer who typed 2029 (or 2025, or — mid-keystroke, while retyping the year
+ * segment of an <input type="date"> — 0002) is told their GOOD AND ORIGIN have no published
+ * route, so they go and change the good and the origin, and nothing improves. The date is never
+ * mentioned.
+ *
+ * WHY THE CONTROL AND NOT THE PANEL. This is where the false statement is. #cbOut shows run()'s
+ * completeness prompt in this state — the route is '' — which names every field at once and
+ * asserts nothing untrue; it is unhelpful, not misleading. The route box is the thing making a
+ * claim about the user's good and origin that is false.
+ *
+ * THE YEAR IS PADDED BACK TO FOUR DIGITS because it is echoed at the user: `Number('0001')` is 1,
+ * and "no rules published for 1" does not match the 0001 their date field is showing them.
+ */
+export function noRouteReason(pack: EstimatorPack, year: number): string {
+  // ANY row for the year, not a row for this selector: the question is whether the corpus covers
+  // the year at all. Every year-keyed series in the pack (thresholds, prices) falls inside
+  // defaultFactors' own set of reporting years, so this is the widest year test available and no
+  // narrower one would answer differently.
+  return pack.defaultFactors.some((f) => f.reportingYear === year)
+    ? 'no route published for this pairing'
+    : `no rules published for ${String(year).padStart(4, '0')}`;
+}
+
+/**
  * THE ONE place that stamps the real pack snapshot onto an estimate, replacing the vendored
  * engine's literal `'browser-prototype'` placeholder. Every result `initCbam` renders — the
  * single-line preview (`run()`) AND every multi-line estimate (`estimateLine()`) — must pass
@@ -1716,7 +1754,13 @@ export function initCbam(): void {
     const year = Number(date!.value.slice(0, 4)) || 2026;
     const rs = routesFor(pack, cn!.value, country!.value, year);
     route!.disabled = rs.length === 0;
-    if (!rs.length) { route!.innerHTML = '<option value="">no route published for this pairing</option>'; return; }
+    // WHICH of the two reasons the list is empty for — see noRouteReason. Blaming the good and
+    // origin for a year the corpus does not cover sends the user to change the two controls that
+    // are not the problem.
+    if (!rs.length) {
+      route!.innerHTML = `<option value="">${esc(noRouteReason(pack, year))}</option>`;
+      return;
+    }
     const opts = rs.map((r) => `<option value="${esc(r)}">${r === 'default' ? 'single route' : esc(r)}</option>`).join('');
     const want = nextRoute(rs, prev);
     // want === '' means the pairing publishes several routes and the user has not

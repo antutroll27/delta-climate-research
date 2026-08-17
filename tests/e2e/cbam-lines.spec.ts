@@ -469,6 +469,61 @@ test.describe('multi-line CBAM estimate — the single-line threshold statement'
   });
 });
 
+test.describe('multi-line CBAM estimate — an import year the corpus does not cover', () => {
+  test('the route control names the year, not the good and origin', async ({ page }) => {
+    // WHAT ACTUALLY HAPPENS ON THIS PAGE FOR AN OUT-OF-CORPUS YEAR, measured rather than
+    // reasoned: the engine's `default/<cn>/<origin>/<route>/<year>` refusal is NOT reachable
+    // through the date field at all. #cbDate fires `change`, onPick runs syncRoutes, routesFor
+    // filters on the reporting year and returns [], and the <select> is emptied and disabled — so
+    // run()'s completeness guard sees route.value === '' and renders the idle prompt. The panel
+    // never reaches estimateFromPack, and no misleading RULES sentence is shown there.
+    //
+    // The misleading sentence is on the ROUTE CONTROL instead. "no route published for this
+    // pairing" is about the good and the origin (the branch above it says "Choose a good and
+    // origin first"); the date is in no pairing. Within a covered year it is true, and true for
+    // 46,686 of the pack's 68,880 selectors. Outside one it is false for all 68,880 — including
+    // the 22,194 that publish routes perfectly well — and it sends the user to change the two
+    // controls that are not the problem.
+    //
+    // syncRoutes is a closure inside initCbam(), so this is the only place its use of
+    // noRouteReason can be observed; cbam-render.test.mjs pins the function itself.
+    await page.goto('/cbam/cbam-calculator/');
+    await setLine(page, GOOD_LINE);
+    await expect(page.locator('#cbRoute')).toBeEnabled();
+
+    // 2027 and 2028 ARE covered — the route list must survive, and the panel must still reach the
+    // engine's own honest refusal about the certificate price. Asserted first so a fix that
+    // simply refused every year but 2026 would fail here rather than look like a pass.
+    await page.fill('#cbDate', '2027-06-15');
+    await expect(page.locator('#cbRoute')).toBeEnabled();
+    await expect(page.locator('#cbOut')).toContainText('only the price is missing');
+
+    // 2029: outside the corpus. The old copy blamed the pairing.
+    await page.fill('#cbDate', '2029-06-15');
+    await expect(page.locator('#cbRoute')).toBeDisabled();
+    await expect(page.locator('#cbRoute')).toContainText('no rules published for 2029');
+    await expect(page.locator('#cbRoute')).not.toContainText('this pairing');
+
+    // 0001, the year the brief chased — and the one a user reaches WITHOUT meaning to. Measured
+    // in Chrome: retyping the year segment of an <input type="date"> commits 0002, 0020, 0202 and
+    // then 2026, firing `change` at each step, so a user simply typing their year passes through
+    // three out-of-corpus years on the way to a good one. The year is echoed back padded to four
+    // digits, because that is what their date field is showing them.
+    await page.fill('#cbDate', '0001-01-01');
+    await expect(page.locator('#cbRoute')).toContainText('no rules published for 0001');
+
+    // ...and a covered year still gets the PAIRING sentence, which is the branch that must not be
+    // lost in the fix. 25070080 (calcined clay) from Algeria publishes no route in 2026 — one of
+    // 15 of the pack's 574 goods with none for that origin — so there the good and the origin
+    // really are the reason, and only the good has changed from GOOD_LINE.
+    await page.fill('#cbDate', '2026-03-15');
+    await page.fill('#cbCn', '25070080');
+    await page.dispatchEvent('#cbCn', 'change');
+    await expect(page.locator('#cbRoute')).toContainText('no route published for this pairing');
+    await expect(page.locator('#cbRoute')).not.toContainText('no rules published');
+  });
+});
+
 test.describe('multi-line CBAM estimate — the verified tier', () => {
   test('the whole verified flow: reveal the panel, refuse a half-made claim, attest, and carry the claim into the CSV', async ({ page }) => {
     // Every unit test around this feature calls parseVerifiedFields / renderLineCard / csvRows
