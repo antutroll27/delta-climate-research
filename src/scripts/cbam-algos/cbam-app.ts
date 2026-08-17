@@ -406,6 +406,59 @@ export function renderYearThreshold(y: YearThreshold): string {
 }
 
 /**
+ * The threshold statement for the ONE line the form currently describes: the verdict card, the
+ * "no published rule" card, or deliberate silence.
+ *
+ * `resolveThreshold` answers `null` for FOUR different reasons and says which for none of them,
+ * so the preview rendered `t ? renderThreshold(t) : ''` and dropped the card with nothing at all
+ * in its place. Enumerated against the shipped pack, as the form can actually reach them:
+ *
+ *   1. NO THRESHOLD ROW FOR THE YEAR. The pack publishes exactly one row (2026), so EVERY other
+ *      year lands here, and 2027/2028 are ordinary dates a user types. Worse, the estimate that
+ *      renders beside it refuses on the certificate PRICE and reassures in so many words that
+ *      "the good and its benchmark are present" — so the only thing on screen that could have
+ *      explained the missing de minimis verdict says instead that nothing is wrong with the
+ *      good. THIS is the case the user is owed an explanation for, and it gets the SAME card the
+ *      multi-line panel already shows for such a year (renderYearThreshold's `ruleFound: false`
+ *      arm) rather than a second phrasing here that could drift away from it.
+ *   2. THE SECTOR IS OUTSIDE THE YEAR'S ROW — hydrogen (28041000, priceable from 93 origins in
+ *      this pack), and electricity, which this pack does not classify at all. Reg (EU) 2025/2083
+ *      leaves both out of the 50 t exemption, so an "indeterminate" card would imply an
+ *      exemption they cannot have. SILENCE IS CORRECT HERE and stays: pinned by
+ *      cbam-render.test.mjs's "hydrogen and electricity are outside the exemption".
+ *   3. THE CN HAS NO SECTOR AT ALL. Every one of the pack's 574 offered goods maps to a sector
+ *      (measured), and isOfferedGood only falls back on 4- and 6-digit listings while every
+ *      classification is 8 digits — so an unclassifiable CN is a CN the pack does not price, and
+ *      the refusal beside it already names the good as the problem. Silence.
+ *   4. AN UNREADABLE NET MASS. Not reachable from here at all: run() refuses with the same
+ *      predicate (nonNegativeDecimal) well above this call and never reaches the threshold.
+ *
+ * THE YEAR IS TESTED FIRST, exactly as resolveThreshold tests it first, so a hydrogen line dated
+ * 2027 says "no rule published for 2027" on this surface and on the multi-line one alike — the
+ * two cards agree about the year rather than each answering a different question about it.
+ */
+export function renderDraftThreshold(
+  pack: EstimatorPack,
+  input: { cn: string; massT: string; date: string },
+): string {
+  const t = resolveThreshold(pack, input);
+  if (t) return renderThreshold(t);
+  // The SAME year resolveThreshold derives, off the same string and by the same expression, so
+  // the two can never disagree about which year has no published row. run()'s completeness gate
+  // has already refused an empty date by the time this runs; the guard is what keeps the
+  // function total for any other caller, rather than naming a year nobody imported in.
+  const year = Number(input.date.slice(0, 4));
+  if (!input.date || !Number.isInteger(year)) return '';
+  if (pack.thresholds.some((r) => r.calendarYear === year)) return '';
+  // `attested`/`eligibleLineCount` are required by the union and read by neither this arm nor
+  // its renderer — the same two values thresholdByYear hands its own no-rule card, with
+  // `attested` false because a draft that has not been added is in no year's attestation set.
+  return renderYearThreshold({
+    calendarYear: year, ruleFound: false, attested: false, eligibleLineCount: 0,
+  });
+}
+
+/**
  * "N line(s) has/have no estimate and is/are excluded…" — the pluralisation was duplicated
  * verbatim at both renderTotals call sites below; one helper means it can only disagree with
  * itself if this function's own logic is wrong, not by the two copies drifting apart.
@@ -1844,7 +1897,14 @@ export function initCbam(): void {
       // whether it is even in scope for CBAM this year. It renders ABOVE the
       // exposure because "you may owe nothing at all" outranks "here is what you
       // would owe".
-      const t = resolveThreshold(pack, { cn: cn!.value, massT: mass!.value, date: date!.value });
+      //
+      // THROUGH renderDraftThreshold, NOT resolveThreshold DIRECTLY. That function returns null
+      // for four unrelated reasons and this line used to render every one of them as the empty
+      // string, so a year with no published threshold row lost its card silently — while the
+      // multi-line panel showed an explicit "No published rule" card for the same year. See
+      // renderDraftThreshold for the enumeration and for which of the four are still, correctly,
+      // silent.
+      const t = renderDraftThreshold(pack, { cn: cn!.value, massT: mass!.value, date: date!.value });
       // The attestation travels with the PREVIEW too, not just the added line's card. This is the
       // surface with the largest audience — it is what the page shows before anyone clicks Add, so
       // a visitor who never adds a line sees only this — and on the verified tier it shows the
@@ -1868,7 +1928,7 @@ export function initCbam(): void {
       // preview is where that matters MOST — it renders before anyone clicks Add, so it is all a
       // visitor who never adds a line ever sees, and it is the surface this pair was missed on
       // both previous times. The card passes the same predicate over its own estimate.
-      out!.innerHTML = (t ? renderThreshold(t) : '') + renderResult(e)
+      out!.innerHTML = t + renderResult(e)
         + renderAttestation({ tier: e.stamp.tier, verifiedRef: v.ok.verifiedRef }, hasFigure(e));
     } catch (err) {
       // A DomainError is the engine refusing, and it names what is missing. Show it

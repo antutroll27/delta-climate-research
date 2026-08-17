@@ -427,6 +427,48 @@ test.describe('multi-line CBAM estimate — the net-mass gate', () => {
   });
 });
 
+test.describe('multi-line CBAM estimate — the single-line threshold statement', () => {
+  test('the PREVIEW names a year with no published threshold rule, and still says nothing for hydrogen', async ({ page }) => {
+    // THE ONE GATE ON run()'s THRESHOLD SLOT. renderDraftThreshold is a pure function and
+    // cbam-render.test.mjs enumerates all four of resolveThreshold's nulls against it directly —
+    // but nothing in that suite can see whether run() still CALLS it. Revert this line to the
+    // `t ? renderThreshold(t) : ''` it replaced and every unit test stays green; only an
+    // assertion on what the user actually sees fails. That is this test.
+    //
+    // NO LINE IS ADDED anywhere below, deliberately. renderAll() only calls run() while
+    // `lines.length === 0` — the moment a line exists it replaces #cbOut wholesale with the
+    // per-year cards — so the preview is the ONLY surface these assertions can be reading, and
+    // the per-year card (already pinned above, at '…named in the announcement, not just the
+    // card') cannot stand in for it.
+    await page.goto('/cbam/cbam-calculator/');
+
+    // 2026: unchanged. The ordinary verdict card, pinned first so the assertions below are known
+    // to be reading a preview that renders threshold cards at all.
+    await setLine(page, GOOD_LINE);
+    await expect(page.locator('.cb-thresh')).toContainText('Indeterminate');
+
+    // 2027: the pack publishes one threshold row (2026), so this year resolves to null and the
+    // card used to vanish with nothing in its place.
+    await page.fill('#cbDate', '2027-03-15');
+    await expect(page.locator('.cb-thresh')).toContainText('No published rule');
+    await expect(page.locator('.cb-thresh')).toContainText('2027');
+    // ADDED TO the refusal, never instead of it — and the refusal is exactly why the silence
+    // mattered: it volunteers that the good and its benchmark are fine, so the only sentence on
+    // screen that could have explained the missing de minimis verdict said nothing was wrong.
+    await expect(page.locator('#cbOut')).toContainText('only the price is missing');
+
+    // THE BOUNDARY, and the reason this fix is not simply "always show a card". Hydrogen is
+    // outside the 50 t exemption (Reg (EU) 2025/2083), so an "indeterminate" card would imply an
+    // exemption it cannot have — and it is not a hypothetical state: 28041000 from Algeria on
+    // the single published route prices cleanly, so the user sees a real euro figure with no
+    // threshold card beside it, which is correct. A fix that regressed this would show a card
+    // here too, and this assertion is what refuses it.
+    await setLine(page, { cn: '28041000', country: 'DZ', route: 'default', mass: '30', date: '2026-03-15' });
+    await expect(page.locator('#cbOut')).toContainText('€');
+    await expect(page.locator('.cb-thresh')).toHaveCount(0);
+  });
+});
+
 test.describe('multi-line CBAM estimate — the verified tier', () => {
   test('the whole verified flow: reveal the panel, refuse a half-made claim, attest, and carry the claim into the CSV', async ({ page }) => {
     // Every unit test around this feature calls parseVerifiedFields / renderLineCard / csvRows

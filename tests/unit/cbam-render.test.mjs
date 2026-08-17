@@ -5,8 +5,8 @@ import { fileURLToPath } from 'node:url';
 
 import {
   buildPrintDocument, decorateSnapshot, inputFor, nextRoute, parseVerifiedFields, renderAttestation,
-  renderLineCard, renderResult, renderThreshold, renderTotals, renderYearThreshold, stampedTierOf,
-  verifiedInputOf,
+  renderDraftThreshold, renderLineCard, renderResult, renderThreshold, renderTotals,
+  renderYearThreshold, stampedTierOf, verifiedInputOf,
 } from '../../src/scripts/cbam-algos/cbam-app.ts';
 import {
   estimateFromPack, resolveThreshold, routesFor, selectIndirectFactorFromPack,
@@ -284,6 +284,63 @@ test('hydrogen and electricity are outside the exemption, so no card is shown', 
   // Reg (EU) 2025/2083 excludes them from the 50 t exemption. Rendering an
   // "indeterminate" card for hydrogen would imply an exemption it cannot have.
   assert.equal(thresh('28041000', '10'), null, 'hydrogen must resolve to no threshold rule');
+});
+
+/**
+ * WHICH of resolveThreshold's four nulls the preview owes the user a card for.
+ *
+ * That function returns null for four unrelated reasons and distinguishes none of them, so the
+ * preview rendered all four as the empty string. renderDraftThreshold is the decision, split out
+ * of run() precisely so it can be enumerated here rather than only through a browser — run()
+ * itself is a closure inside initCbam() and lives in tests/e2e/cbam-lines.spec.ts.
+ *
+ * `draft` mirrors `thresh` above: same pack, same three-field input, so the two can be compared
+ * case for case.
+ */
+const draft = (cn, massT, date = '2026-03-15') =>
+  renderDraftThreshold(pack, { cn, massT, date });
+
+test('a year with no published threshold row gets a card on the PREVIEW too, not silence', () => {
+  // The defect. The pack publishes one threshold row (2026), so 2027 — an ordinary date to type
+  // — resolves to null, and the preview dropped the card with nothing in its place. The estimate
+  // beside it refuses on the certificate price and volunteers that "the good and its benchmark
+  // are present", so the one sentence on screen that could have explained the missing de minimis
+  // verdict instead says nothing is wrong with the good.
+  const html = draft('25231000', '30', '2027-03-15');
+  assert.match(html, /No published rule/, 'the year must be reported, not dropped');
+  assert.match(html, /2027/, 'and the card must name WHICH year has no rule');
+
+  // SAID BY THE MULTI-LINE CARD'S OWN RENDERER, not by a second phrasing that could drift from
+  // it: both panels can describe the same year, and they used to disagree by one showing a card
+  // and the other showing nothing at all.
+  assert.equal(html, renderYearThreshold({
+    calendarYear: 2027, ruleFound: false, attested: false, eligibleLineCount: 0,
+  }), 'the preview must render the same no-rule card the per-year panel renders');
+});
+
+test('the other three nulls stay silent — an absent card is the right answer for them', () => {
+  // 1. HYDROGEN. Outside the 50 t exemption (the test directly above), so an "indeterminate"
+  //    card would imply an exemption it cannot have. Priceable from 93 origins in this pack, so
+  //    this is a state a user reaches with a working estimate on screen beside it.
+  assert.equal(draft('28041000', '10'), '', 'hydrogen must stay silent, exactly as before');
+
+  // 2. A CN WITH NO SECTOR. Not one of the 574 goods the pack offers, so the estimate beside it
+  //    already refuses by name; a second card saying we cannot classify it adds nothing.
+  assert.equal(draft('99999999', '10'), '', 'an unclassifiable good must stay silent');
+
+  // 3. AN UNREADABLE MASS. run() refuses this with nonNegativeDecimal long before the threshold,
+  //    so it is unreachable through the form — pinned here as silence so that a future caller
+  //    without run()'s gate cannot get a de minimis card built around a mass nobody can read.
+  assert.equal(draft('25231000', 'abc'), '', 'an unreadable mass must never reach a card');
+});
+
+test('a year that HAS a published row is untouched — the same card, byte for byte', () => {
+  // The must-not-regress arm. The fix is about which null gets a card; it must not restate,
+  // re-tone or re-order the verdict card for the ordinary 2026 case.
+  for (const massT of ['10', '100']) {
+    assert.equal(draft('25231000', massT), renderThreshold(thresh('25231000', massT)),
+      'a resolvable threshold must still render exactly renderThreshold\'s card');
+  }
 });
 
 /* ── indirect (electricity) emissions ──────────────────────────────────────── */
