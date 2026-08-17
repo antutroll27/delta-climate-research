@@ -1,0 +1,707 @@
+<title>CBAM Policy-Assumption Register</title>
+<style>
+:root{
+  --paper:#FCFBF8; --raised:#F6F4EE; --ink:#1B1B17; --muted:#6D6B61; --rule:#E4E1D7;
+  --accent:#9B3222; --quoted:#2F5D3A; --inherited:#48587A; --inferred:#8A6D2F; --assumed:#9B3222;
+  --measure:68ch;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --paper:#151513; --raised:#1E1E1A; --ink:#EEECE4; --muted:#9A978B; --rule:#2F2F28;
+  --accent:#D4634C; --quoted:#7FB08C; --inherited:#93A6CC; --inferred:#C9A45A; --assumed:#D4634C;
+}}
+:root[data-theme="dark"]{
+  --paper:#151513; --raised:#1E1E1A; --ink:#EEECE4; --muted:#9A978B; --rule:#2F2F28;
+  --accent:#D4634C; --quoted:#7FB08C; --inherited:#93A6CC; --inferred:#C9A45A; --assumed:#D4634C;
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--paper); color:var(--ink);
+  font:400 17px/1.62 Georgia,'Iowan Old Style',ui-serif,serif;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:var(--measure); margin:0 auto; padding:clamp(2rem,5vw,4.5rem) clamp(1.1rem,4vw,2rem) 6rem;}
+code,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.86em}
+code{background:var(--raised);padding:.1em .35em;border-radius:2px;word-break:break-word}
+a{color:var(--accent)} a:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+
+.mast{border-bottom:2px solid var(--ink);padding-bottom:1.4rem;margin-bottom:2rem}
+.eyebrow{font:600 11px/1.4 ui-monospace,monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);margin:0 0 .7rem}
+h1{font:400 clamp(1.9rem,5vw,2.7rem)/1.14 Georgia,ui-serif,serif;margin:0 0 .6rem;text-wrap:balance;letter-spacing:-.012em}
+.dek{color:var(--muted);margin:0;font-size:1.02rem}
+
+.tally{display:grid;grid-template-columns:repeat(auto-fit,minmax(122px,1fr));gap:1px;background:var(--rule);
+  border:1px solid var(--rule);margin:2rem 0 2.4rem}
+.tally div{background:var(--paper);padding:.85rem .9rem}
+.tally b{display:block;font:400 1.65rem/1 Georgia,ui-serif,serif;font-variant-numeric:tabular-nums}
+.tally span{display:block;font:600 10px/1.3 ui-monospace,monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-top:.35rem}
+.tally .q b{color:var(--quoted)} .tally .h b{color:var(--inherited)}
+.tally .i b{color:var(--inferred)} .tally .a b{color:var(--assumed)}
+
+.note{border-left:3px solid var(--accent);background:var(--raised);padding:1rem 1.1rem;margin:0 0 2.6rem}
+.note p{margin:0 0 .6rem} .note p:last-child{margin:0}
+.note strong{font-weight:700}
+
+h2.grp{font:400 1.42rem/1.25 Georgia,ui-serif,serif;margin:3.4rem 0 1.4rem;padding-top:1.1rem;
+  border-top:1px solid var(--rule);text-wrap:balance;display:flex;gap:.7rem;align-items:baseline}
+h2.grp.solo{display:block}
+.gl{font:600 .72rem/1 ui-monospace,monospace;color:var(--accent);border:1px solid var(--accent);
+  border-radius:2px;padding:.28em .45em;flex:none;letter-spacing:.06em}
+h3.sub,h4.sub{font:600 .95rem/1.35 Georgia,ui-serif,serif;margin:1.8rem 0 .6rem;color:var(--muted)}
+
+.entry{border-left:3px solid var(--rule);padding:.1rem 0 .1rem 1.15rem;margin:0 0 2.1rem}
+.entry[data-grade=quoted]{border-left-color:var(--quoted)}
+.entry[data-grade=inherited]{border-left-color:var(--inherited)}
+.entry[data-grade=inferred]{border-left-color:var(--inferred)}
+.entry[data-grade=assumed]{border-left-color:var(--assumed)}
+.entry h3{font:600 1.06rem/1.4 Georgia,ui-serif,serif;margin:0 0 .8rem;text-wrap:balance}
+.eid{font:600 .74rem/1 ui-monospace,monospace;color:var(--muted);letter-spacing:.06em;margin-right:.55rem;
+  vertical-align:.12em}
+.grade{font:600 9.5px/1 ui-monospace,monospace;letter-spacing:.1em;text-transform:uppercase;
+  margin-left:.5rem;padding:.3em .45em;border-radius:2px;vertical-align:.18em;white-space:nowrap}
+.g-quoted{color:var(--quoted);border:1px solid var(--quoted)}
+.g-inherited{color:var(--inherited);border:1px solid var(--inherited)}
+.g-inferred{color:var(--inferred);border:1px solid var(--inferred)}
+.g-assumed{color:var(--assumed);border:1px solid var(--assumed);font-weight:700}
+
+p{margin:0 0 .85rem}
+.f{margin:0 0 .7rem}
+.fl{font:600 10px/1 ui-monospace,monospace;letter-spacing:.11em;text-transform:uppercase;
+  color:var(--muted);margin-right:.55rem}
+.f-alternative .fl,.f-ifwrong .fl{color:var(--accent)}
+.f-where{color:var(--muted);font-size:.92rem}
+ul{margin:0 0 .9rem;padding-left:1.15rem} li{margin:0 0 .35rem}
+
+.tw{overflow-x:auto;margin:0 0 1.2rem}
+table{border-collapse:collapse;width:100%;font-size:.93rem}
+th,td{text-align:left;padding:.5rem .7rem;border-bottom:1px solid var(--rule);vertical-align:top}
+th{font:600 10px/1.3 ui-monospace,monospace;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+td{font-variant-numeric:tabular-nums}
+
+@media (prefers-reduced-motion:no-preference){.entry{transition:border-color .2s}}
+</style>
+
+<div class="wrap">
+<header class="mast">
+  <p class="eyebrow">For review · not legal advice</p>
+  <h1>CBAM calculator — policy-assumption register</h1>
+  <p class="dek">Every regulatory interpretation the calculator makes, written to be reviewed
+  by someone who does not read code.</p>
+</header>
+
+<div class="tally">
+  <div class="q"><b>8</b><span>Quoted</span></div>
+  <div class="h"><b>7</b><span>Inherited</span></div>
+  <div class="i"><b>26</b><span>Inferred</span></div>
+  <div class="a"><b>13</b><span>Assumed</span></div>
+  <div><b>54</b><span>Assumptions</span></div>
+</div>
+
+<div class="note">
+<p><strong>What this is.</strong> A week of auditing verified that the calculator is internally
+honest — every figure on screen is what the engine computed, every refusal names a real reason,
+every citation points at an article that exists. <strong>None of that checks whether the
+interpretations are right.</strong> A calculator can be perfectly self-consistent and confidently
+apply the wrong article.</p>
+<p><strong>How to use it.</strong> The coloured rail down the left of each entry is its evidence
+grade. Scan for <strong>oxide red</strong> — those are the interpretations with no source cited.
+The <em>Alternative</em> and <em>If wrong</em> fields carry the cost of getting each one
+backwards.</p>
+<p><strong>Nothing here has been adjudicated.</strong> Where the code took a reading, the reading
+and its alternative are recorded; which is correct is the reviewer's call, not the author's.</p>
+</div>
+
+<p><strong>What this is.</strong> Every point at which the CBAM calculator had to decide what the regulation <em>means</em>, written out so it can be reviewed by someone who does not read code.</p>
+<p><strong>Who it is for.</strong> A CBAM consultant, a customs or trade lawyer, or the founder. Nothing here requires opening a file. The file references at the end of each entry are for the engineer who would change the behaviour once you have ruled on it.</p>
+<p><strong>Why it exists.</strong> A week of auditing has established the calculator's <em>internal honesty</em> — that every figure on screen is what the engine computed, that every refusal names its real cause, that every citation points at an article that exists. <strong>None of that tests whether the interpretations below are correct.</strong> A calculator can be perfectly self-consistent and confidently apply the wrong article. These <strong>54 entries</strong> are the interpretations. Nobody outside the engineering work has ever reviewed them.</p>
+<p><strong>How the evidence falls.</strong> Of the 54: <strong>8</strong> are quoted from the regulation, <strong>8</strong> are inherited from a Commission workbook, <strong>29</strong> are inferred from the regulation's structure with no text quoted, and <strong>13</strong> touch an assumption with no source at all — <strong>9 of those wholly</strong>. The single largest group is <em>inferred</em>: over half the register rests on reading the structure of an instrument rather than its words.</p>
+<p><strong>What I have not done.</strong> I have not adjudicated any of these questions. Where the code took a reading, I have recorded the reading and — where one is documented — the alternative it rejected and what that alternative would have cost. Deciding which reading is right is your job, not mine.</p>
+<h3 class="sub">How to read an entry</h3>
+<p>Each entry carries seven fields.</p>
+<div class="tw"><table><thead><tr><th>Field</th><th>What it tells you</th></tr></thead><tbody><tr><td><strong>Claim</strong></td><td>The interpretation, in one plain sentence</td></tr><tr><td><strong>Citation</strong></td><td>The instrument and article, exactly as the code cites it</td></tr><tr><td><strong>Behaviour</strong></td><td>What the calculator concretely does, with the number where there is one</td></tr><tr><td><strong>Alternative</strong></td><td>The other reading, and what it would cost in figures. <em>The most valuable field.</em></td></tr><tr><td><strong>If wrong</strong></td><td>Direction (over- or under-charge) and rough magnitude</td></tr><tr><td><strong>Evidence</strong></td><td>See the four grades below</td></tr><tr><td><strong>Where</strong></td><td>file:line</td></tr></tbody></table></div>
+<h4 class="sub">Evidence grades</h4>
+<div class="tw"><table><thead><tr><th>Grade</th><th>Meaning</th></tr></thead><tbody><tr><td><strong>Quoted</strong></td><td>Stated in the regulation and quoted in the code</td></tr><tr><td><strong>Inferred</strong></td><td>Inferred from the regulation's structure; no text quoted</td></tr><tr><td><strong>Inherited</strong></td><td>Taken from the Commission's own workbook rather than the binding text</td></tr><tr><td><strong>Assumed</strong></td><td>No source cited anywhere. <em>A finding, not a failure — but it is a finding.</em></td></tr></tbody></table></div>
+<h4 class="sub">Where the code lives</h4>
+<p>The calculation engine exists in two places, and they are <strong>byte-identical</strong> (verified by diff across all eleven shared files):</p>
+<ul><li><code>/Volumes/VSTSAMPLES/Projects/CBM/lib/…</code> — the authority. Cited below.</li><li><code>/private/tmp/cbam-gates/src/scripts/cbam-algos/…</code> — a vendored copy shipped to the browser.</li></ul>
+<p>Two files exist <strong>only</strong> in the website copy and are cited under that path: <code>cbam-app.ts</code> (the on-screen and printed wording) and <code>cbam-lines.ts</code> (the multi-line threshold logic).</p>
+<h4 class="sub">A note on the worked example used throughout</h4>
+<p>Where a worked figure helps, I use one real line drawn from the shipped data pack:</p>
+<p>&gt; <strong>1,000 tonnes of Indian grey clinker (CN 2523 10 00), production route (A), imported in &gt; Q1 2026, priced from the Commission's published default values.</strong> &gt; &gt; Published default intensity <strong>1.39 tCO₂e/t</strong>, cement mark-up <strong>10%</strong> → marked-up <strong>1.529</strong>. &gt; Embedded emissions <strong>1,529 tCO₂e</strong>. Column B benchmark for route (A) <strong>0.666 tCO₂e/t</strong>. &gt; CBAM factor 2026 <strong>0.975</strong>. CSCF assumed <strong>1.0</strong>. Free allocation <strong>649.35 tCO₂e</strong>. &gt; Chargeable <strong>879.65 tCO₂e</strong>. At the published Q1 2026 certificate price of <strong>€75.36</strong>, &gt; the bill is <strong>€66,290.42</strong>.</p>
+<h2 class="grp" id="grp-A"><span class="gl">A</span>IR (EU) 2025/2620 — the free-allocation adjustment</h2>
+<p><em>Eleven citations in non-test code. This is the instrument that decides how much of the bill is cancelled by the free allocation an EU producer would still have received.</em></p>
+<article class="entry" data-grade="quoted">
+<h3 id="A1"><span class="eid">A1</span>Free allocation is subtracted from embedded emissions, and certificates are counted on what is left<span class="grade g-quoted">quoted</span></h3>
+<p class="f f-claim"><span class="fl">Claim</span>The tool treats free allocation as a deduction from the tonnes of CO₂ a shipment carries, not as a discount on the price of a certificate. Certificates = emissions − free allocation; the bill = certificates × the quarter's price.</p>
+<p class="f f-citation"><span class="fl">Citation</span>IR (EU) 2025/2620, Arts 1–3 and Annex §5.3.</p>
+<p class="f f-behaviour"><span class="fl">Behaviour</span>In the worked example: 1,529 − 649.35 = 879.65 tCO₂e chargeable; 879.65 × €75.36 = €66,290.42. The subtraction happens in tonnes, before any price is applied.</p>
+<p class="f f-alternative"><span class="fl">Alternative</span>Not documented. The code states the formula as settled and does not record a rejected shape. If the adjustment were instead a reduction in the <em>number of certificates surrenderable</em> or a price discount, the arithmetic would differ wherever the deduction exceeds emissions (see A5).</p>
+<p class="f f-ifwrong"><span class="fl">If wrong</span>Would misstate every priced line. Magnitude depends on the alternative; for the worked line the free allocation is 42% of embedded emissions, so the whole 42% is at stake.</p>
+<p class="f f-evidence"><span class="fl">Evidence</span>Inferred — the formula is written out in the code's own notation (Eq 2 / Eq 4 / Eq 6) with the instrument named, but no text of the article is quoted.</p>
+<p class="f f-where"><span class="fl">Where</span><code>lib/cbam/sefa.ts:6–21</code>, <code>lib/cbam/certificate-estimate.ts:174–200</code>.</p>
+</article>
+<article class="entry" data-grade="quoted">
+<h3 id="A2"><span class="eid">A2</span>Which benchmark column applies is decided by the <em>scope of the emissions figure</em>, not by whether the figure was verified<span class="grade g-quoted">quoted</span></h3>
+<p class="f f-claim"><span class="fl">Claim</span>If the emissions figure already covers the whole product (including the emissions of everything that went into it), the deduction uses the <em>full-product</em> benchmark. If the figure covers only one installation's own process, the deduction uses the <em>process</em> benchmark plus a separate benchmark for each input. Whether the number was audited is irrelevant to this choice.</p>
+<p class="f f-citation"><span class="fl">Citation</span>IR (EU) 2025/2620 Annex — Column A (process) and Column B (full product).</p>
+<p class="f f-behaviour"><span class="fl">Behaviour</span>A default-values line always carries a whole-product figure, so it always takes Column B. An importer's own verified figure takes Column B too <em>provided</em> it is a whole-product figure — which the tool requires, and says so. Process-level (Column A) data is out of scope for this calculator entirely.</p>
+<p class="f f-alternative"><span class="fl">Alternative</span>Documented and rejected. The code calls this "the most expensive bug available here". Deducting a process benchmark from a whole-product figure leaves the input emissions in the chargeable total with no matching allocation. <strong>Worked:</strong> grey Portland cement, CN 2523 29 00, has a published Column A of <strong>0</strong> and a Column B of <strong>0.666</strong>. On 1,000 t from India at 2026 defaults, Column B gives €66,290.42 and Column A gives <strong>€115,225.44</strong> — an over-charge of <strong>€48,935</strong>, a factor of <strong>1.74</strong>, and for that good the deduction vanishes completely.</p>
+<p class="f f-ifwrong"><span class="fl">If wrong</span>Over-charge, severalfold on complex goods; total loss of the deduction for grinders and other goods whose Column A is zero.</p>
+<p class="f f-evidence"><span class="fl">Evidence</span>Inferred — the column semantics are asserted from the Annex's structure; no article text is quoted.</p>
+<p class="f f-where"><span class="fl">Where</span><code>lib/cbam/sefa.ts:42–61</code> (the rationale), <code>lib/cbam/sefa.ts:165</code> (the choice).</p>
+</article>
+<article class="entry" data-grade="inferred">
+<h3 id="A3"><span class="eid">A3</span>Each input (precursor) is valued at its <em>own</em> full-product benchmark, and the calculation stops after one level<span class="grade g-inferred">inferred</span></h3>
+<p class="f f-claim"><span class="fl">Claim</span>When a good is priced from process-level data, each material that went into it gets its own full-product benchmark — and the tool does not then go on to look up <em>that</em> material's own inputs, because the full-product benchmark already includes them.</p>
+<p class="f f-citation"><span class="fl">Citation</span>IR (EU) 2025/2620 — the code's "Eq 4".</p>
+<p class="f f-behaviour"><span class="fl">Behaviour</span>Each precursor contributes <code>its Column B benchmark × tonnes of it per tonne of good</code>. One level only.</p>
+<p class="f f-alternative"><span class="fl">Alternative</span>Documented: recursing further "would double-count".</p>
+<p class="f f-ifwrong"><span class="fl">If wrong</span>Recursing would under-charge (deduction too large). Not recursing when the regulation intends recursion would over-charge. Magnitude depends entirely on the supply chain. <em>Note:</em> this path is <strong>unreachable in the shipped calculator</strong> — the browser estimator passes an empty precursor list at both call sites, so this rule governs the workspace product only.</p>
+<p class="f f-evidence"><span class="fl">Evidence</span>Inferred.</p>
+<p class="f f-where"><span class="fl">Where</span><code>lib/cbam/sefa.ts:175–191</code>.</p>
+</article>
+<article class="entry" data-grade="inferred">
+<h3 id="A4"><span class="eid">A4</span>A whole-product figure supplied <em>together with</em> a list of inputs is refused rather than priced<span class="grade g-inferred">inferred</span></h3>
+<p class="f f-claim"><span class="fl">Claim</span>If someone gives the tool a whole-product emissions figure and <em>also</em> itemises the inputs, the tool refuses to price the line, because deducting a whole-product benchmark and then deducting each input's benchmark on top would grant the allowance twice.</p>
+<p class="f f-citation"><span class="fl">Citation</span>IR (EU) 2025/2620 — Column B "already covers the whole product".</p>
+<p class="f f-behaviour"><span class="fl">Behaviour</span>Returns a refusal, not a figure.</p>
+<p class="f f-alternative"><span class="fl">Alternative</span>Documented: adding them "would double-count the deduction and under-charge".</p>
+<p class="f f-ifwrong"><span class="fl">If wrong</span>As coded, no harm — it refuses. If the regulation actually <em>does</em> intend both, the tool refuses lines it should price. <strong>Unreachable in production:</strong> no shipped call site can supply both, and the code says so explicitly.</p>
+<p class="f f-evidence"><span class="fl">Evidence</span>Inferred.</p>
+<p class="f f-where"><span class="fl">Where</span><code>lib/cbam/sefa.ts:192–199</code>.</p>
+</article>
+<article class="entry" data-grade="assumed">
+<h3 id="A5"><span class="eid">A5</span>Free allocation can never produce a negative bill — the floor is zero, and the floor applies to the direct emissions only<span class="grade g-assumed">assumed</span></h3>
+<p class="f f-claim"><span class="fl">Claim</span>If a producer is cleaner than the benchmark, the surplus allocation is discarded rather than credited: the tool never issues certificates, only surrenders them. And the zero floor is applied to the process-emissions side alone — a generous process benchmark cannot be used to wipe out electricity emissions it was never granted against.</p>
+<p class="f f-citation"><span class="fl">Citation</span>None cited.</p>
+<p class="f f-behaviour"><span class="fl">Behaviour</span><code>chargeable = max(0, direct emissions − free allocation) + indirect emissions</code>.</p>
+<p class="f f-alternative"><span class="fl">Alternative</span>Not documented. The code asserts "the regulation surrenders certificates, never issues them" without naming an article.</p>
+<p class="f f-ifwrong"><span class="fl">If wrong</span>If surplus allocation were creditable, clean producers are over-charged. The split-floor decision is the sharper one: a clean-process, electricity-intensive line that would otherwise net out to zero is charged its full electricity component here.</p>
+<p class="f f-evidence"><span class="fl">Evidence</span><strong>Assumed</strong> — no source cited for the zero floor, and none for applying it to the direct side alone.</p>
+<p class="f f-where"><span class="fl">Where</span><code>lib/cbam/certificate-estimate.ts:183–187</code>.</p>
+</article>
+<article class="entry" data-grade="inferred">
+<h3 id="A6"><span class="eid">A6</span>Electricity (indirect) emissions receive no free allocation at all and pass into the charge in full<span class="grade g-inferred">inferred</span></h3>
+<p class="f f-claim"><span class="fl">Claim</span>The free-allocation benchmarks are benchmarks for <em>process</em> emissions. So the electricity emissions embedded in a good get no deduction whatsoever and are charged in full.</p>
+<p class="f f-citation"><span class="fl">Citation</span>IR (EU) 2025/2620 Annex — asserted as a property of the benchmark tables.</p>
+<p class="f f-behaviour"><span class="fl">Behaviour</span>The indirect component is held separately from the direct one, never summed before the deduction, and added back after it. Every priced line carrying a non-zero indirect component prints a note saying so.</p>
+<p class="f f-alternative"><span class="fl">Alternative</span>Not documented as a rejected reading. The code explains the <em>mechanism</em> — summing them first "would silently deduct a direct benchmark from electricity" — but does not record anyone arguing the other way.</p>
+<p class="f f-ifwrong"><span class="fl">If wrong</span>Over-charge, confined to the three sectors where indirect emissions are charged at all (cement, fertilisers, hydrogen). Magnitude is the whole indirect component: on Indian grey clinker route (A) the indirect default is 0.05 tCO₂e/t against a direct 1.39, so roughly 3.5% of the line.</p>
+<p class="f f-evidence"><span class="fl">Evidence</span>Inferred.</p>
+<p class="f f-where"><span class="fl">Where</span><code>lib/cbam/certificate-estimate.ts:59–65</code>, <code>108–115</code>, <code>493–498</code>; <code>/private/tmp/cbam-gates/src/scripts/cbam-algos/cbam-app.ts:540–548</code>.</p>
+</article>
+<article class="entry" data-grade="quoted">
+<h3 id="A7"><span class="eid">A7</span>For electricity itself, free allocation is nil because the article says so — and that zero is final even though the correction factor is unpublished<span class="grade g-quoted">quoted</span></h3>
+<p class="f f-claim"><span class="fl">Claim</span>Imported electricity gets no free allocation, by direct operation of the article rather than by any calculation. Because the zero is set by law and not computed, it is a <em>final</em> figure even in years where the cross-sectoral correction factor has not been published — the missing factor cannot change a zero the law fixes outright.</p>
+<p class="f f-citation"><span class="fl">Citation</span>IR (EU) 2025/2620 <strong>Art 1(2)</strong>. The pack generator adds: "Art 1(2), not Art 2(2): Article 2 has no numbered paragraphs."</p>
+<p class="f f-behaviour"><span class="fl">Behaviour</span>CN 2716 0000 returns a dedicated status (<code>zero_by_fiat</code>) carrying the article as its locator. It is deliberately <em>not</em> reported as an ordinary priced figure, and reports no correction factor at all.</p>
+<p class="f f-alternative"><span class="fl">Alternative</span>Documented and rejected. An earlier version returned it as an ordinary figure with a fabricated correction factor of 0, and the interface printed "CSCF published · CSCF 0" — "a false statement about a regulation whose CSCF is unpublished".</p>
+<p class="f f-ifwrong"><span class="fl">If wrong</span>If electricity does attract allocation, over-charge on 100% of the allocation it should have had. <strong>Note:</strong> the shipped browser pack does not classify electricity at all, so this path is currently unreachable from the public calculator.</p>
+<p class="f f-evidence"><span class="fl">Evidence</span><strong>Quoted</strong> — the article is named, the paragraph is defended against a specific mis-citation, and the locator string is carried onto the figure.</p>
+<p class="f f-where"><span class="fl">Where</span><code>lib/cbam/sefa.ts:28–33</code>, <code>143–163</code>; <code>scripts/build-fa-package.py:88–90</code>.</p>
+</article>
+<article class="entry" data-grade="inferred">
+<h3 id="A8"><span class="eid">A8</span>A benchmark row with a blank route indicator means "applies however the good was produced"<span class="grade g-inferred">inferred</span></h3>
+<p class="f f-claim"><span class="fl">Claim</span>Where the Annex lists a single benchmark for a good with no production route beside it, the tool reads that as covering every route. An exact route match wins if there is one; otherwise the unqualified row applies.</p>
+<p class="f f-citation"><span class="fl">Citation</span>IR (EU) 2025/2620 Annex.</p>
+<p class="f f-behaviour"><span class="fl">Behaviour</span>Two-step: exact route match, then blank-route row. Where the Annex <em>does</em> enumerate routes and none matches (Column B for CN 7208 38 00 lists only (C)/(D)/(E)), there is no blank row to fall back on and the line is refused.</p>
+<p class="f f-alternative"><span class="fl">Alternative</span>Documented as <em>not</em> a guess: "it is what an unqualified Annex row means."</p>
+<p class="f f-ifwrong"><span class="fl">If wrong</span>If a blank row were meant to apply only to some default route, using it for all routes would over- or under-charge unpredictably per good.</p>
+<p class="f f-evidence"><span class="fl">Evidence</span>Inferred.</p>
+<p class="f f-where"><span class="fl">Where</span><code>lib/cbam/resolve-fa.ts:58–89</code>.</p>
+</article>
+<article class="entry" data-grade="inferred">
+<h3 id="A9"><span class="eid">A9</span>Where the Annex lists a good at heading level, that heading governs every code beneath it — and the most specific listing wins<span class="grade g-inferred">inferred</span></h3>
+<p class="f f-claim"><span class="fl">Claim</span>Some goods are listed at 4- or 6-digit level rather than at full 8-digit CN. The tool reads such a listing as covering everything under it, and where several listings could apply, the most specific one governs. Two listings of equal specificity are treated as a conflict and the line is refused.</p>
+<p class="f f-citation"><span class="fl">Citation</span>IR (EU) 2025/2620 Annex (benchmarks); Reg (EU) 2023/956 Annex I (classification).</p>
+<p class="f f-behaviour"><span class="fl">Behaviour</span>Longest matching prefix wins. A tie throws "ambiguous" and shows no figure.</p>
+<p class="f f-alternative"><span class="fl">Alternative</span>Documented on the classification side: matching only on 8 digits "misses goods the regulation plainly covers — an under-coverage bug, and the expensive direction to be wrong in."</p>
+<p class="f f-ifwrong"><span class="fl">If wrong</span>Over-broad matching over-charges goods outside scope; under-broad matching refuses goods that are in scope. The code judges under-coverage the worse error and biased toward inclusion.</p>
+<p class="f f-evidence"><span class="fl">Evidence</span>Inferred.</p>
+<p class="f f-where"><span class="fl">Where</span><code>lib/cbam/resolve-fa.ts:74–104</code>; <code>lib/regulatory/resolve.ts:59–97</code>.</p>
+</article>
+<article class="entry" data-grade="quoted">
+<h3 id="A10"><span class="eid">A10</span>The Annex's "(1)" and "(2)" markers are validity periods, not production routes<span class="grade g-quoted">quoted</span></h3>
+<p class="f f-claim"><span class="fl">Claim</span>Where a benchmark row is marked (1) or (2), the tool reads those as meaning "this value applies to production years 2026–27" and "…2028–30" respectively — <em>not</em> as naming a way of making the good.</p>
+<p class="f f-citation"><span class="fl">Citation</span>IR (EU) 2025/2620 Annex <strong>§5.3</strong>.</p>
+<p class="f f-behaviour"><span class="fl">Behaviour</span>"(F)(1)" becomes route (F) valid 2026-01-01 to 2027-12-31; "(1)" alone becomes a route-independent row with that window. <strong>794 of 2,465 benchmark rows are affected.</strong></p>
+<p class="f f-alternative"><span class="fl">Alternative</span>Documented and rejected. Left in the route field, those markers are unreachable — the default-values corpus never declares a route of "(1)" or a compound "(F)(1)" — "so the good simply cannot be priced". The failure mode of the rejected reading is a refusal, not a wrong number.</p>
+<p class="f f-ifwrong"><span class="fl">If wrong</span>If (1)/(2) mean something else, up to 794 rows apply in the wrong years. Direction depends on which value is dearer; for a good whose 2028 benchmark is lower than its 2026 one, using the wrong window under-charges.</p>
+<p class="f f-evidence"><span class="fl">Evidence</span><strong>Quoted</strong> — Annex §5.3 is named as the source of the reading.</p>
+<p class="f f-where"><span class="fl">Where</span><code>scripts/build-fa-package.py:34–60</code>.</p>
+</article>
+<article class="entry" data-grade="inferred">
+<h3 id="A11"><span class="eid">A11</span>A good with no published benchmark is refused, not priced with a zero deduction<span class="grade g-inferred">inferred</span></h3>
+<p class="f f-claim"><span class="fl">Claim</span>Where the Annex publishes no benchmark for the good, route or year, the tool shows no figure at all rather than pricing the line with no deduction.</p>
+<p class="f f-citation"><span class="fl">Citation</span>IR (EU) 2025/2620 Annex.</p>
+<p class="f f-behaviour"><span class="fl">Behaviour</span>Refusal with the wording: "The published rules do not give a free-allocation benchmark for this good, production route or year, so no figure is shown." The code's own sweep over the shipped pack: <strong>5,964 of 17,484 estimates</strong> refuse for a missing benchmark, and <strong>183 of 574 offered goods</strong>, 181 of them iron and steel.</p>
+<p class="f f-alternative"><span class="fl">Alternative</span>Documented as the whole design stance ("NON-NEGOTIABLE 2"). Pricing with a zero deduction would over-charge by the full benchmark.</p>
+<p class="f f-ifwrong"><span class="fl">If wrong</span>No financial error — but a third of the offered catalogue returns no answer. That is a commercial cost, not a compliance one.</p>
+<p class="f f-evidence"><span class="fl">Evidence</span>Inferred.</p>
+<p class="f f-where"><span class="fl">Where</span><code>lib/cbam/certificate-estimate.ts:269–271</code>, <code>593–607</code>; <code>/private/tmp/cbam-gates/src/scripts/cbam-algos/cbam-app.ts:598–614</code>.</p>
+</article>
+<article class="entry" data-grade="inferred">
+<h3 id="A12"><span class="eid">A12</span>If one input's benchmark cannot be found, the whole line is refused rather than priced with a smaller deduction<span class="grade g-inferred">inferred</span></h3>
+<p class="f f-claim"><span class="fl">Claim</span>On a process-data line, a missing benchmark for any single input kills the entire estimate. The tool will not quietly carry on with a smaller deduction.</p>
+<p class="f f-citation"><span class="fl">Citation</span>IR (EU) 2025/2620 — the code's "Eq 4".</p>
+<p class="f f-behaviour"><span class="fl">Behaviour</span>All benchmarks are collected before any multiplication; one miss refuses the line.</p>
+<p class="f f-alternative"><span class="fl">Alternative</span>Documented, with the direction of harm spelled out: "a smaller deduction is a bigger bill charged to the importer <strong>on our authority</strong>."</p>
+<p class="f f-ifwrong"><span class="fl">If wrong</span>As coded, no financial error. The rejected alternative would have over-charged.</p>
+<p class="f f-evidence"><span class="fl">Evidence</span>Inferred.</p>
+<p class="f f-where"><span class="fl">Where</span><code>lib/cbam/sefa.ts:131–138</code>; <code>lib/cbam/certificate-estimate.ts:311–331</code>.</p>
+</article>
+<article class="entry" data-grade="inherited">
+<h3 id="A13"><span class="eid">A13</span>The benchmark numbers come from the Commission's spreadsheet, and the tool says on every printed document that the spreadsheet is not the binding text<span class="grade g-inherited">inherited</span></h3>
+<p class="f f-claim"><span class="fl">Claim</span>The benchmark values are transcribed from the Commission's published "CBAM Benchmarks" workbook, which the Commission itself marks as informational. The legally valid values are those in IR (EU) 2025/2620. The tool records both and labels the workbook as guidance.</p>
+<p class="f f-citation"><span class="fl">Citation</span>IR (EU) 2025/2620 Annex, via the EC benchmarks workbook v1 (2025-02-06).</p>
+<p class="f f-behaviour"><span class="fl">Behaviour</span>Every one of the 2,465 benchmark rows carries a locator naming both the regulation and the workbook cell it came from. The workbook is pinned by SHA-256; a reissue aborts the build rather than silently changing values. The printed document lists the workbook as "an informational transcription of the 2025/2620 Annex, <strong>not the binding text</strong>".</p>
+<p class="f f-alternative"><span class="fl">Alternative</span>Not documented — no alternative source is discussed.</p>
+<p class="f f-ifwrong"><span class="fl">If wrong</span>Any divergence between the workbook and the Annex propagates directly into every figure. <strong>Unquantified: nobody has diffed the workbook against the OJ text.</strong> The regulation's own PDF is pinned by hash, but only as a record of which text was read — not as a machine-checked source of the numbers.</p>
+<p class="f f-evidence"><span class="fl">Evidence</span><strong>Inherited</strong> — from the Commission's workbook, with the gap explicitly labelled.</p>
+<p class="f f-where"><span class="fl">Where</span><code>scripts/build-fa-package.py:67–92</code>, <code>236–245</code>; <code>/private/tmp/cbam-gates/src/scripts/cbam-algos/cbam-app.ts:1216–1223</code>.</p>
+</article>
+<article class="entry" data-grade="inferred">
+<h3 id="A14"><span class="eid">A14</span>A benchmark of exactly zero is a real published value, not a missing one<span class="grade g-inferred">inferred</span></h3>
+<p class="f f-claim"><span class="fl">Claim</span>Where the Annex publishes 0 as a benchmark, the tool stores and applies the zero. It does not treat it as a gap.</p>
+<p class="f f-citation"><span class="fl">Citation</span>IR (EU) 2025/2620 Annex. The code's example: "a cement grinder's Column A process benchmark is 0, because the carbon sits upstream in the clinker."</p>
+<p class="f f-behaviour"><span class="fl">Behaviour</span>Benchmarks may be zero; default <em>values</em> may not (see D6 — a deliberate asymmetry).</p>
+<p class="f f-alternative"><span class="fl">Alternative</span>Not documented.</p>
+<p class="f f-ifwrong"><span class="fl">If wrong</span>Would over-charge grinders and similar operations, whose entire deduction is that zero — though in the direction of correctness, since the zero <em>is</em> the deduction.</p>
+<p class="f f-evidence"><span class="fl">Evidence</span>Inferred.</p>
+<p class="f f-where"><span class="fl">Where</span><code>lib/regulatory/rule-package-contract.ts:108–110</code>.</p>
+</article>
+<article class="entry" data-grade="inferred">
+<h3 id="A15"><span class="eid">A15</span>A line whose declared emissions are electricity emissions gets no certificate estimate at all<span class="grade g-inferred">inferred</span></h3>
+<p class="f f-claim"><span class="fl">Claim</span>If the emissions figure being priced is an <em>indirect</em> (electricity) figure rather than a process figure, the tool refuses to produce an estimate rather than deducting a process benchmark from it.</p>
+<p class="f f-citation"><span class="fl">Citation</span>IR (EU) 2025/2620 Annex — benchmarks are direct-emission benchmarks.</p>
+<p class="f f-behaviour"><span class="fl">Behaviour</span>Immediate refusal, with wording naming the reason.</p>
+<p class="f f-alternative"><span class="fl">Alternative</span>Not documented as a rejected reading.</p>
+<p class="f f-ifwrong"><span class="fl">If wrong</span>No financial error — a refusal. But if such lines should be priceable, they are not being priced.</p>
+<p class="f f-evidence"><span class="fl">Evidence</span>Inferred.</p>
+<p class="f f-where"><span class="fl">Where</span><code>lib/cbam/certificate-estimate.ts:168–172</code>, <code>428–430</code>.</p>
+</article>
+<h2 class="grp" id="grp-B"><span class="gl">B</span>Directive 2003/87/EC Art 10a(1a) — the CBAM factor</h2>
+<p><em>Six citations in non-test code. <strong>This is the single highest-leverage assumption in the tool.</strong></em></p>
+<article class="entry" data-grade="quoted">
+<h3 id="B1"><span class="eid">B1</span>The CBAM factor is the share of free allocation <em>retained</em> — 97.5% in 2026 — not the share phased out<span class="grade g-quoted">quoted</span></h3>
+<p class="f f-claim"><span class="fl">Claim</span>The percentage that Art 10a(1a) attaches to each year is read as <em>how much free allocation still applies</em>. In 2026 that is <strong>0.975</strong>. It is not read as the complement — the 2.5% that has been withdrawn.</p>
+<p class="f f-citation"><span class="fl">Citation</span>Dir 2003/87/EC <strong>Art 10a(1a), third subparagraph</strong> ("97.5% in 2026 falling to 0% in 2034").</p>
+<p class="f f-behaviour"><span class="fl">Behaviour</span>The deduction is multiplied by 0.975 for a 2026 import. Worked line: free allocation = 0.975 × 0.666 × 1,000 = <strong>649.35 tCO₂e</strong>, chargeable 879.65, bill <strong>€66,290.42</strong>.</p>
+<p class="f f-alternative"><span class="fl">Alternative</span><strong>Documented, quantified, and attributed.</strong> "Trade press and at least one competitor publish the complement (2.5% in 2026) under the same name; coding that inversion deducts 0.025×BM instead of 0.975×BM and over-charges an importer by <strong>~39×</strong>." Worked on the same line: the deduction falls from 649.35 to <strong>16.65 tCO₂e</strong> — exactly 39× smaller — chargeable rises to 1,512.35, and the bill rises to <strong>€113,970.70</strong>, an over-charge of <strong>€47,680</strong> on a single 1,000 t consignment, +71.9%.</p>
+<p>The code additionally hard-blocks the inversion at the data-contract layer: a factor above 1 is rejected on load, with the comment naming "the ~39× inversion the trade press prints".</p>
+<p class="f f-ifwrong"><span class="fl">If wrong</span><strong>Over-charge by roughly 39× the deduction in 2026</strong>, tapering as the schedule runs down. This is the largest single error available in the tool.</p>
+<p class="f f-evidence"><span class="fl">Evidence</span><strong>Quoted</strong>, and independently corroborated: "Corroborated 2026-07-13 against two national authorities (climat.be, DEHSt)."</p>
+<p class="f f-where"><span class="fl">Where</span><code>scripts/build-fa-package.py:151–158</code>; <code>lib/cbam/types.ts:31</code>; <code>lib/regulatory/rule-package-contract.ts:121–134</code>.</p>
+</article>
+<article class="entry" data-grade="assumed">
+<h3 id="B2"><span class="eid">B2</span>The nine scheduled values are pinned constants, hand-authored, not read from any machine source<span class="grade g-assumed">assumed</span></h3>
+<p class="f f-claim"><span class="fl">Claim</span>The year-by-year schedule (2026: 0.975 · 2027: 0.95 · 2028: 0.90 · 2029: 0.775 · 2030: 0.515 · 2031: 0.39 · 2032: 0.265 · 2033: 0.14 · 2034: 0) is typed into the build script by hand. Nothing parses them out of the Directive.</p>
+<p class="f f-citation"><span class="fl">Citation</span>Dir 2003/87/EC Art 10a(1a).</p>
+<p class="f f-behaviour"><span class="fl">Behaviour</span>Nine rows, each carrying a locator reading "Dir 2003/87/EC Art 10a(1a): free allocation retained in {year}". The source entry for the Directive carries a <strong>SHA-256 of all zeros</strong> — no document artefact is pinned.</p>
+<p class="f f-alternative"><span class="fl">Alternative</span>Not documented.</p>
+<p class="f f-ifwrong"><span class="fl">If wrong</span>A transcription error in any single year misprices every import in that year, in proportion. A 0.90 typed as 0.09 in 2028 would over-charge tenfold on the deduction.</p>
+<p class="f f-evidence"><span class="fl">Evidence</span><strong>Quoted</strong> for the reading, <strong>Assumed</strong> for the artefact — the values are corroborated against two national authorities but no primary document is hashed.</p>
+<p class="f f-where"><span class="fl">Where</span><code>scripts/build-fa-package.py:94–101</code> (source, zero hash), <code>155–158</code> (values).</p>
+</article>
+<article class="entry" data-grade="inferred">
+<h3 id="B3"><span class="eid">B3</span>The schedule ends at 2034 and the tool does not extrapolate past it<span class="grade g-inferred">inferred</span></h3>
+<p class="f f-claim"><span class="fl">Claim</span>After 2034 the free allocation is zero and the schedule simply stops. The tool refuses a year it has no row for rather than continuing the trend or holding the last value.</p>
+<p class="f f-citation"><span class="fl">Citation</span>Dir 2003/87/EC Art 10a(1a).</p>
+<p class="f f-behaviour"><span class="fl">Behaviour</span>A 2035 import refuses with wording naming the schedule as the gap.</p>
+<p class="f f-alternative"><span class="fl">Alternative</span>Documented, with the direction worked out arithmetically rather than guessed: carrying on without a factor "is arithmetically identical to a factor of 1 — and 1 exceeds every value the schedule ever takes", so guessing would deduct more free allocation than any scheduled year grants and <strong>undercharge</strong>.</p>
+<p class="f f-ifwrong"><span class="fl">If wrong</span>No financial error — a refusal. Post-2034 imports are simply not priced.</p>
+<p class="f f-evidence"><span class="fl">Evidence</span>Inferred.</p>
+<p class="f f-where"><span class="fl">Where</span><code>lib/cbam/resolve-fa.ts:107–123</code>; <code>lib/cbam/certificate-estimate.ts:355–375</code>.</p>
+</article>
+<h2 class="grp" id="grp-C"><span class="gl">C</span>Delegated Regulation (EU) 2019/331 Art 14(6) — the cross-sectoral correction factor</h2>
+<p><em>Four citations in non-test code. This factor is <strong>unpublished for 2026–2030</strong>, which means roughly 94% of real answers the tool gives are labelled what-ifs.</em></p>
+<article class="entry" data-grade="quoted">
+<h3 id="C1"><span class="eid">C1</span>An unpublished correction factor means no final figure exists — the tool shows a labelled what-if, never a number presented as settled<span class="grade g-quoted">quoted</span></h3>
+<p class="f f-claim"><span class="fl">Claim</span>Because the Commission has not published the cross-sectoral correction factor for 2026–2030, no final CBAM figure can exist for those years. The tool says so on the figure itself rather than quietly producing a number.</p>
+<p class="f f-citation"><span class="fl">Citation</span>DR (EU) 2019/331 <strong>Art 14(6)</strong>. Locator: "no CSCF published for 2026-2030 as at 2026-07-14".</p>
+<p class="f f-behaviour"><span class="fl">Behaviour</span>A distinct status (<code>cscf_pending</code>) with no final value anywhere in it; the interface tags the card "What-if · CSCF for {year} unpublished" and the summed total inherits the label. All five years 2026–2030 are seeded pending with a null value.</p>
+<p class="f f-alternative"><span class="fl">Alternative</span>Not documented as a rejected legal reading — but see C2, which <em>is</em> the rejected alternative in practice.</p>
+<p class="f f-ifwrong"><span class="fl">If wrong</span>If a factor has in fact been published, every figure the tool shows is unnecessarily hedged. No arithmetic error.</p>
+<p class="f f-evidence"><span class="fl">Evidence</span><strong>Quoted</strong> — the article is cited and the publication state is dated.</p>
+<p class="f f-where"><span class="fl">Where</span><code>lib/cbam/resolve-fa.ts:125–159</code>; <code>lib/cbam/types.ts:69–79</code>; <code>scripts/build-fa-package.py:160–163</code>.</p>
+</article>
+<article class="entry" data-grade="inferred">
+<h3 id="C2"><span class="eid">C2</span>Silence about the correction factor is never read as 1.0<span class="grade g-inferred">inferred</span></h3>
+<p class="f f-claim"><span class="fl">Claim</span>An absent correction factor is not treated as "no correction". The tool distinguishes three states: <em>published</em> (use the value), <em>pending</em> (labelled what-if), and <em>not modelled at all</em> (refuse). It never substitutes 1.0 for silence.</p>
+<p class="f f-citation"><span class="fl">Citation</span>DR (EU) 2019/331 Art 14(6).</p>
+<p class="f f-behaviour"><span class="fl">Behaviour</span>Enforced structurally rather than by convention: the "pending" result carries no value field at all, so the compiler refuses any code that reads one without first handling the pending case. A row claiming "published" but carrying no value is also refused.</p>
+<p class="f f-alternative"><span class="fl">Alternative</span>Documented and named as the tempting error: "it was 1.0 for 2021-25, which is exactly what makes 'just assume 1.0' the seductive wrong default."</p>
+<p class="f f-ifwrong"><span class="fl">If wrong</span>As coded, refusals rather than errors. The rejected alternative would deduct free allocation uncorrected and <strong>undercharge</strong> — the code's own wording.</p>
+<p class="f f-evidence"><span class="fl">Evidence</span>Inferred.</p>
+<p class="f f-where"><span class="fl">Where</span><code>lib/cbam/resolve-fa.ts:125–159</code>; <code>lib/cbam/types.ts:69–79</code>; <code>lib/cbam/certificate-estimate.ts:377–402</code>.</p>
+</article>
+<article class="entry" data-grade="inferred">
+<h3 id="C3"><span class="eid">C3</span>The what-if is run at a correction factor of 1.0, the last value the Commission actually set<span class="grade g-inferred">inferred</span></h3>
+<p class="f f-claim"><span class="fl">Claim</span>Where no factor is published, the tool shows what the figure <em>would</em> be at the factor that applied to 2021–25, namely 1.0, and labels it as an assumption on the face of the figure.</p>
+<p class="f f-citation"><span class="fl">Citation</span>DR (EU) 2019/331 Art 14(6); the 2021–25 value.</p>
+<p class="f f-behaviour"><span class="fl">Behaviour</span>The assumed factor is carried in the result and printed in the card text and in the printed document's §4, not hidden in a tooltip.</p>
+<p class="f f-alternative"><span class="fl">Alternative</span>Not documented — no other reference value is discussed.</p>
+<p class="f f-ifwrong"><span class="fl">If wrong</span>Every 2026–2030 figure moves in proportion to the true factor. If the real factor is 0.90, every deduction is 10% smaller than shown and every bill is correspondingly larger.</p>
+<p class="f f-evidence"><span class="fl">Evidence</span>Inferred.</p>
+<p class="f f-where"><span class="fl">Where</span><code>lib/cbam/sefa.ts:32–33</code>, <code>215–226</code>.</p>
+</article>
+<article class="entry" data-grade="assumed">
+<h3 id="C4"><span class="eid">C4</span>The tool tells users that 1.0 is <em>the largest the factor can legally be</em>, so every figure it shows is a floor<span class="grade g-assumed">assumed</span></h3>
+<p class="f f-claim"><span class="fl">Claim</span>Both on screen and in the printed document, the tool states that the correction factor "only ever reduces the free allocation that offsets a bill — it can subtract, never add", that 1.0 is "the largest the factor can legally be", and therefore that <strong>the real bill cannot be lower than the figure shown, and may be higher.</strong></p>
+<p class="f f-citation"><span class="fl">Citation</span>None. No article is cited for the proposition that the factor cannot exceed 1.</p>
+<p class="f f-behaviour"><span class="fl">Behaviour</span>Printed verbatim in the card body and in §4 of the audit document handed to auditors and counterparties.</p>
+<p class="f f-alternative"><span class="fl">Alternative</span>Not documented.</p>
+<p class="f f-ifwrong"><span class="fl">If wrong</span><strong>This is a legal claim made to users with no cited basis.</strong> If the factor can exceed 1, the "floor" statement is false in the direction that matters: figures shown could be <em>higher</em> than the real bill, and a user has been told the opposite. No arithmetic changes — the reputational and reliance exposure is the whole of it.</p>
+<p class="f f-evidence"><span class="fl">Evidence</span><strong>Assumed — no source cited.</strong> This is the most consequential undocumented claim in the register.</p>
+<p class="f f-where"><span class="fl">Where</span><code>/private/tmp/cbam-gates/src/scripts/cbam-algos/cbam-app.ts:589–595</code> (card), <code>1230–1235</code> (printed document).</p>
+</article>
+<h2 class="grp" id="grp-D"><span class="gl">D</span>IR (EU) 2025/2621 — the default values</h2>
+<p><em>Seven citations in non-test code. This is where the emissions number comes from when the importer has no verified data — 41,100 published values across 574 goods and 120 origins.</em></p>
+<article class="entry" data-grade="inherited">
+<h3 id="D1"><span class="eid">D1</span>The mark-up applies to the <em>total</em> emissions figure, not to the direct component alone<span class="grade g-inherited">inherited</span></h3>
+<p class="f f-claim"><span class="fl">Claim</span>The percentage the Commission adds to a default value is applied to the good's total (direct + indirect) emissions, not to its process emissions alone.</p>
+<p class="f f-citation"><span class="fl">Citation</span>IR (EU) 2025/2621 Annex I; verified against the Commission workbook's own marked-up columns.</p>
+<p class="f f-behaviour"><span class="fl">Behaviour</span><strong>This is proven, not assumed.</strong> Every one of the workbook's 32,793 marked-up cells is recomputed as <code>total × (1 + markup/100)</code> and compared to the Commission's own stated value to within 1e-9. A mismatch aborts the build naming the row. The code calls this "THE PROOF".</p>
+<p class="f f-alternative"><span class="fl">Alternative</span>Documented as the thing being disproven: the build fails with "The mark-up does not apply to the total as assumed" if the check ever breaks, and explicitly forbids widening the tolerance to make it pass.</p>
+<p class="f f-ifwrong"><span class="fl">If wrong</span>The check would have caught it. This is the best-evidenced assumption in the register.</p>
+<p class="f f-evidence"><span class="fl">Evidence</span><strong>Inherited</strong>, and machine-verified against the Commission's own arithmetic on every cell.</p>
+<p class="f f-where"><span class="fl">Where</span><code>scripts/build-dv-package.py:32–40</code>, <code>367–401</code>.</p>
+</article>
+<article class="entry" data-grade="inherited">
+<h3 id="D2"><span class="eid">D2</span>Fertilisers carry a 1% mark-up in all three years, not the 10/20/30% every other sector steps through<span class="grade g-inherited">inherited</span></h3>
+<p class="f f-claim"><span class="fl">Claim</span>Cement, hydrogen, aluminium and iron &amp; steel step 10% → 20% → 30% across 2026/2027/2028. Fertilisers stay at <strong>1% in all three years</strong>. The tool treats this asymmetry as real regulation, not as a typo to be tidied.</p>
+<p class="f f-citation"><span class="fl">Citation</span>IR (EU) 2025/2621 Annex I, mark-up by sector and year.</p>
+<p class="f f-behaviour"><span class="fl">Behaviour</span>Pinned per sector as a constant. Every non-blank mark-up header cell in the workbook is checked against the pinned table, and a disagreement aborts the build with: "Either the regulation changed or EXPECTED_SECTOR_MARKUPS is wrong — <strong>do not 'fix' this by trusting the cell</strong>." Verified across the shipped pack: of 41,100 default factors, <strong>14,496 carry the 1% band</strong> and 8,868 each carry 10%, 20% and 30%.</p>
+<p class="f f-alternative"><span class="fl">Alternative</span><strong>Documented and attributed:</strong> "This is a real regulatory asymmetry that is easy to 'tidy' into 10/20/30; <strong>a competitor did exactly that</strong>."</p>
+<p class="f f-ifwrong"><span class="fl">If wrong</span>Tidying fertilisers to 10/20/30 would <strong>over-charge fertiliser importers by up to 29 percentage points of intensity</strong> in 2028 (1.30× instead of 1.01×, a 28.7% over-charge) across a third of the entire default-value corpus.</p>
+<p class="f f-evidence"><span class="fl">Evidence</span><strong>Inherited</strong>, cross-checked against every header cell in the workbook.</p>
+<p class="f f-where"><span class="fl">Where</span><code>scripts/build-dv-package.py:64–68</code>, <code>129–141</code>, <code>306–324</code>.</p>
+</article>
+<article class="entry" data-grade="inherited">
+<h3 id="D3"><span class="eid">D3</span>The mark-up steps linearly, and where the Commission's own spreadsheet compounds it, the tool publishes the linear value instead<span class="grade g-inherited">inherited</span></h3>
+<p class="f f-claim"><span class="fl">Claim</span>A "20% mark-up" means ×1.20, not ×1.10 twice. Five rows in the Commission's workbook (Angola and Argentina cement) carry a dragged formula that compounds — ×1.1, ×1.21, ×1.331. The tool publishes ×1.1, ×1.2, ×1.3 for those rows and records the divergence.</p>
+<p class="f f-citation"><span class="fl">Citation</span>IR (EU) 2025/2621 Annex I; the sector header cells reading "20% mark-up" / "30% mark-up".</p>
+<p class="f f-behaviour"><span class="fl">Behaviour</span>The five rows are pinned by (sheet, CN, description). A sixth such row aborts the run. Ten cells across the five rows are affected. Rationale: "the header cells say '20% mark-up' and '30% mark-up', so linear is what the regulation means; compounding would make 2028 a 33.1% mark-up."</p>
+<p class="f f-alternative"><span class="fl">Alternative</span>Documented — the alternative is to publish the workbook's own printed figure. The code's stance: "We publish the REGULATION's arithmetic, not the spreadsheet's."</p>
+<p class="f f-ifwrong"><span class="fl">If wrong</span>Under-charge of 3.1 percentage points of intensity in 2028 on five cement rows from two origins. Small in absolute exposure; significant as a stance — <strong>the tool is knowingly disagreeing with a published Commission number.</strong></p>
+<p class="f f-evidence"><span class="fl">Evidence</span><strong>Inherited</strong>, with the disagreement documented and printed on every build.</p>
+<p class="f f-where"><span class="fl">Where</span><code>scripts/build-dv-package.py:42–62</code>, <code>218–229</code>, <code>383–390</code>.</p>
+</article>
+<article class="entry" data-grade="inferred">
+<h3 id="D4"><span class="eid">D4</span>An importer's own verified figure carries no mark-up<span class="grade g-inferred">inferred</span></h3>
+<p class="f f-claim"><span class="fl">Claim</span>The mark-up exists to price <em>not having data</em>. An importer who supplies audited emissions gets that mark-up removed — the code calls it "the regulation's designed reward for having it".</p>
+<p class="f f-citation"><span class="fl">Citation</span>IR (EU) 2025/2621 — by implication of what the mark-up is for. No article quoted.</p>
+<p class="f f-behaviour"><span class="fl">Behaviour</span>A verified figure is multiplied by mass and used directly; the corpus is never consulted for it.</p>
+<p class="f f-alternative"><span class="fl">Alternative</span>Not documented.</p>
+<p class="f f-ifwrong"><span class="fl">If wrong</span><strong>Under-charge</strong> by the full mark-up on every verified line — 10% to 30% of the emissions figure depending on sector and year. The tool tells the user plainly that this figure is "your own attested claim … this tool has not confirmed it".</p>
+<p class="f f-evidence"><span class="fl">Evidence</span>Inferred.</p>
+<p class="f f-where"><span class="fl">Where</span><code>lib/estimator/estimate-from-pack.ts:86–98</code>, <code>484–508</code>.</p>
+</article>
+<article class="entry" data-grade="inferred">
+<h3 id="D5"><span class="eid">D5</span>The mark-up is removed per <em>figure</em>, not per line — an importer who attests only their process emissions still pays the marked-up default for electricity<span class="grade g-inferred">inferred</span></h3>
+<p class="f f-claim"><span class="fl">Claim</span>Attesting the process figure earns the mark-up's removal from the process figure "and nowhere else". If the importer leaves electricity unattested, the Commission's published electricity default stands in — <strong>with its mark-up intact</strong>.</p>
+<p class="f f-citation"><span class="fl">Citation</span>IR (EU) 2025/2621.</p>
+<p class="f f-behaviour"><span class="fl">Behaviour</span>Such a line gets its own data tier, spelled out rather than called "mixed": <em>Verified direct + Commission indirect</em>. It appears verbatim in the export an auditor reads, and the on-screen attestation paragraph is rewritten for it — the fully-attested wording "would tell an importer their audited figure is a world average" and is refused.</p>
+<p class="f f-alternative"><span class="fl">Alternative</span>Documented and rejected. The earlier behaviour priced the unattested electricity component <strong>at zero</strong>, which the code calls "a silent under-charge on a page whose governing rule is fail-closed."</p>
+<p class="f f-ifwrong"><span class="fl">If wrong</span>If a partial attestation should exempt the whole line, this over-charges by the electricity component plus its mark-up. If it should not, the earlier zero-pricing under-charged by the whole component.</p>
+<p class="f f-evidence"><span class="fl">Evidence</span>Inferred.</p>
+<p class="f f-where"><span class="fl">Where</span><code>lib/estimator/estimate-from-pack.ts:520–560</code>; <code>/private/tmp/cbam-gates/src/scripts/cbam-algos/cbam-app.ts:643–672</code>.</p>
+</article>
+<article class="entry" data-grade="inherited">
+<h3 id="D6"><span class="eid">D6</span>A default value the Commission published as <em>zero</em> is dropped, and where the direct value is zero the good gets no default at all<span class="grade g-inherited">inherited</span></h3>
+<p class="f f-claim"><span class="fl">Claim</span>A published zero is a real regulatory statement, but the tool's data contract requires a positive intensity. So zero-valued components are dropped and reported, never silently replaced — and a good whose <em>direct</em> value is zero (Mali hydrogen) yields no default factor at all and fails closed.</p>
+<p class="f f-citation"><span class="fl">Citation</span>IR (EU) 2025/2621 Annex I. <strong>36 cells affected: 33 indirect clinker, 3 Mali hydrogen direct.</strong></p>
+<p class="f f-behaviour"><span class="fl">Behaviour</span>Each dropped cell is printed by name on every build. The rationale: "a stored factor asserts a positive intensity; a zero would multiply out to a zero adjustment the engine should reach by the <strong>absence</strong> of a factor, not by a stored zero."</p>
+<p class="f f-alternative"><span class="fl">Alternative</span>Not documented as a regulatory alternative — the constraint is stated as one the build is "not permitted to relax". Note the deliberate asymmetry with A14: <strong>benchmarks may be zero, default values may not.</strong></p>
+<p class="f f-ifwrong"><span class="fl">If wrong</span>For the 33 indirect clinker cells: an importer who should be charged nothing for electricity instead gets no indirect component at all — which is the same answer. For Mali hydrogen: a good the Commission <em>did</em> price (at zero) is refused entirely rather than priced at zero. That is a refusal where the regulation gave an answer.</p>
+<p class="f f-evidence"><span class="fl">Evidence</span><strong>Inherited</strong> — the zeros are read from the workbook and reported, but the decision to drop them is a contract decision, not a regulatory one.</p>
+<p class="f f-where"><span class="fl">Where</span><code>scripts/build-dv-package.py:424–436</code>, <code>527–534</code>; <code>lib/regulatory/rule-package-contract.ts:63–65</code>.</p>
+</article>
+<article class="entry" data-grade="inherited">
+<h3 id="D7"><span class="eid">D7</span>A cell the Commission left blank, dashed or marked "N/A" means no published value — the tool never invents one<span class="grade g-inherited">inherited</span></h3>
+<p class="f f-claim"><span class="fl">Claim</span>Where the direct or total emissions cell is empty, a dash, an underscore, or "not applicable", the tool reads that as the Commission declining to publish and emits no factor. "Not applicable" is spelled four different ways in the workbook (<code>N/A</code> — 8,527 cells — plus the typos <code>N.A.</code>, <code>N/a</code> and <code>N/(A</code>); all four are folded together deliberately, "so a stray keystroke cannot smuggle a good's indirect emissions into the corpus as an unparsable value."</p>
+<p class="f f-citation"><span class="fl">Citation</span>IR (EU) 2025/2621 Annex I.</p>
+<p class="f f-behaviour"><span class="fl">Behaviour</span>Row skipped. Deliberately <strong>not</strong> treated as no-data: Excel's <code>#VALUE!</code> error (4 cells), so that if a reissue ever lands one on a live row the build aborts loudly "instead of quietly treating a broken formula as 'no data'".</p>
+<p class="f f-alternative"><span class="fl">Alternative</span>Not documented.</p>
+<p class="f f-ifwrong"><span class="fl">If wrong</span>Refusals where a value exists. The <code>#VALUE!</code> decision is the interesting one: it converts a silent gap into a loud build failure, which is a stance choice rather than a legal one.</p>
+<p class="f f-evidence"><span class="fl">Evidence</span><strong>Inherited</strong>.</p>
+<p class="f f-where"><span class="fl">Where</span><code>scripts/build-dv-package.py:143–164</code>, <code>332–339</code>.</p>
+</article>
+<article class="entry" data-grade="inferred">
+<h3 id="D8"><span class="eid">D8</span>A blank production-route column in the default-values workbook denotes the same concept as a blank route indicator in the benchmarks Annex<span class="grade g-inferred">inferred</span></h3>
+<p class="f f-claim"><span class="fl">Claim</span>The two Commission documents spell "this good is route-independent" differently — the default-values workbook leaves the column blank (or writes "N/A"), the benchmarks Annex uses an empty route indicator. The tool asserts these mean the same thing and joins on that basis.</p>
+<p class="f f-citation"><span class="fl">Citation</span>IR (EU) 2025/2621 (routes) joined to IR (EU) 2025/2620 (benchmarks).</p>
+<p class="f f-behaviour"><span class="fl">Behaviour</span>Workbook blank → stored as the literal <code>'default'</code> → mapped back to <code>''</code> at benchmark lookup. The code warns: "Both halves must agree; change neither without the other."</p>
+<p class="f f-alternative"><span class="fl">Alternative</span>Documented as the <em>reason for the mapping</em> (a data-contract rule forbids an empty string), not as a rejected regulatory reading. The prior corpus stored the literal <code>'default'</code> for <strong>every</strong> good including clinker, where the Commission actually publishes routes (A) for grey and (B) for white — "a wrong route silently fails the join and the estimate falls back or errors."</p>
+<p class="f f-ifwrong"><span class="fl">If wrong</span>A route-independent good would join to the wrong benchmark or to none. For grey Portland cement the difference between route-independent and a named route is the difference between 0.666 and no row at all.</p>
+<p class="f f-evidence"><span class="fl">Evidence</span>Inferred.</p>
+<p class="f f-where"><span class="fl">Where</span><code>scripts/build-dv-package.py:20–30</code>, <code>350–354</code>; <code>lib/estimator/estimate-from-pack.ts:114–117</code>.</p>
+</article>
+<article class="entry" data-grade="assumed">
+<h3 id="D9"><span class="eid">D9</span>The mark-up is <em>verified</em> against the total column but <em>applied</em> to each component separately — and the two do not always agree<span class="grade g-assumed">assumed</span></h3>
+<p class="f f-claim"><span class="fl">Claim</span>The mark-up percentage is proven correct against the Commission's marked-up <strong>total</strong> (see D1). The engine then applies that same percentage to the direct and indirect components individually. Because the Commission rounds the direct and indirect columns independently, their sum does not always equal the published total — so the sum of the marked-up components does not always equal the published marked-up total.</p>
+<p class="f f-citation"><span class="fl">Citation</span>IR (EU) 2025/2621 Annex I.</p>
+<p class="f f-behaviour"><span class="fl">Behaviour</span>The generator flags the rounding independence explicitly ("India 3102 10 90: 2 + 0.16 != 2.17") and states "the total column is authoritative for the mark-up check; <strong>we never reconstruct it by addition</strong>". But the <em>engine</em> then does exactly that: it prices direct and indirect separately and adds them.</p>
+<p><strong>Worked:</strong> India CN 3102 10 90, 2026, 1% mark-up. Direct 2, indirect 0.16, published total 2.17. Marked-up total = 2.17 × 1.01 = <strong>2.1917</strong>. The engine computes 2×1.01 + 0.16×1.01 = 2.02 + 0.1616 = <strong>2.1816</strong>. Gap: 0.0101 tCO₂e/t, a <strong>0.46% under-charge</strong> on that row. <strong>2,770 selectors in the 2026 pack carry both a direct and an indirect default</strong>, so the mismatch is systematic, not exceptional.</p>
+<p class="f f-alternative"><span class="fl">Alternative</span><strong>Not documented.</strong> The generator documents the rounding independence; nothing documents the engine's component-wise application or reconciles the two.</p>
+<p class="f f-ifwrong"><span class="fl">If wrong</span>Sub-1% under-charge on any line priced with both components. Small, but it is a divergence from the Commission's own published marked-up figure, and it is undocumented.</p>
+<p class="f f-evidence"><span class="fl">Evidence</span><strong>Assumed</strong> for the component-wise application. The underlying rounding fact is Inherited.</p>
+<p class="f f-where"><span class="fl">Where</span><code>scripts/build-dv-package.py:38–40</code>; engine: <code>lib/estimator/estimate-from-pack.ts:585–587</code> (direct), <code>386–398</code> (indirect).</p>
+</article>
+<article class="entry" data-grade="inferred">
+<h3 id="D10"><span class="eid">D10</span>A country that has its own sheet but no value for a particular good is refused — it does <strong>not</strong> fall back to the world-average bucket<span class="grade g-inferred">inferred</span></h3>
+<p class="f f-claim"><span class="fl">Claim</span>The Commission's "Other Countries and Territories" sheet prices <em>origins</em> it does not list individually. It does not backfill <em>goods</em> that a listed origin's sheet omits. Where a listed origin is silent about a good, that silence is deliberate and the tool refuses to price it.</p>
+<p class="f f-citation"><span class="fl">Citation</span>IR (EU) 2025/2621 Annex I; the workbook's residual sheet.</p>
+<p class="f f-behaviour"><span class="fl">Behaviour</span>Three-step precedence: (1) the declared country's own rows always win; (2) the residual bucket answers <strong>only</strong> when the origin is a real assigned ISO alpha-2 code <strong>and</strong> has no sheet of its own; (3) otherwise refuse.</p>
+<p class="f f-alternative"><span class="fl">Alternative</span><strong>Documented with two named consequences, both quantified:</strong></p>
+<ul><li>"Mali hydrogen (the Commission published 0) would resolve to the world average 17.74 — <strong>inventing 19,514 tCO₂e on a 1,000 t line</strong> out of a published zero."</li><li>"Albania white clinker route (B), which Albania's sheet simply does not carry, would borrow a value the Commission never stated for Albania."</li></ul>
+<p class="f f-ifwrong"><span class="fl">If wrong</span>Removing the gate <strong>over-charges</strong> — on Mali hydrogen, by 19,514 tCO₂e on a single 1,000 t line, which at €75.36 is roughly <strong>€1.47 million</strong>. Keeping the gate when the regulation intends a fallback means refusing lines that should be priceable.</p>
+<p class="f f-evidence"><span class="fl">Evidence</span>Inferred, with the mechanism traced to how the workbook is built (the parser drops any row the workbook marks N/A and any whose published value is zero).</p>
+<p class="f f-where"><span class="fl">Where</span><code>lib/regulatory/resolve.ts:99–176</code>; <code>lib/estimator/estimate-from-pack.ts:138–154</code>.</p>
+</article>
+<article class="entry" data-grade="assumed">
+<h3 id="D11"><span class="eid">D11</span>An origin code that is not a real ISO country code is refused, never given world-average values<span class="grade g-assumed">assumed</span></h3>
+<p class="f f-claim"><span class="fl">Claim</span>A typo like <code>XX</code>, a user-assigned range, or a truncated field is an input error to be surfaced — never an origin the Commission priced. Only genuinely assigned ISO 3166-1 alpha-2 codes may reach the residual bucket.</p>
+<p class="f f-citation"><span class="fl">Citation</span>ISO 3166-1 officially assigned alpha-2 codes. <strong>No CBAM instrument is cited for this step.</strong></p>
+<p class="f f-behaviour"><span class="fl">Behaviour</span>A hand-maintained set of <strong>249 codes</strong> (verified by count), including territories and dependencies (HK, MO, TW, PR) because "they are genuine trade origins with their own customs identity, and several are individually listed in the Commission's workbook". The rationale: "a misspelled origin that quietly produces a plausible number is the most expensive kind of wrong we can ship."</p>
+<p class="f f-alternative"><span class="fl">Alternative</span>Not documented.</p>
+<p class="f f-ifwrong"><span class="fl">If wrong</span>A code the tool refuses but the Commission recognises returns no estimate. A code the tool accepts but should not silently receives world-average values. The list carries <strong>no version or date</strong>, and ISO reassigns codes.</p>
+<p class="f f-evidence"><span class="fl">Evidence</span><strong>Assumed</strong> for currency — the standard is named, but no edition, date or machine source is pinned.</p>
+<p class="f f-where"><span class="fl">Where</span><code>lib/regulatory/iso-3166.ts:1–75</code>.</p>
+</article>
+<article class="entry" data-grade="inferred">
+<h3 id="D12"><span class="eid">D12</span>Where the Commission publishes a default at heading level and also at 8-digit level, the most specific one governs<span class="grade g-inferred">inferred</span></h3>
+<p class="f f-claim"><span class="fl">Claim</span>A CN code is covered by its own listing or by any shorter prefix the Commission published at, and where both exist the deeper one wins.</p>
+<p class="f f-citation"><span class="fl">Citation</span>IR (EU) 2025/2621 Annex I.</p>
+<p class="f f-behaviour"><span class="fl">Behaviour</span>Deepest published scope only. The browser estimator and the server engine are held to the same rule by a differential test — "a silent divergence would quote a user one figure in the form and another on the case."</p>
+<p class="f f-alternative"><span class="fl">Alternative</span>Documented: requiring an exact match "would report 'no published default' for goods the Commission does publish."</p>
+<p class="f f-ifwrong"><span class="fl">If wrong</span>Wrong-granularity matching would apply a heading-level average to a good with its own published value. Direction depends on the good.</p>
+<p class="f f-evidence"><span class="fl">Evidence</span>Inferred.</p>
+<p class="f f-where"><span class="fl">Where</span><code>lib/regulatory/resolve.ts:143–156</code>; <code>lib/estimator/estimate-from-pack.ts:179–201</code>.</p>
+</article>
+<article class="entry" data-grade="inferred">
+<h3 id="D13"><span class="eid">D13</span>The electricity default is looked up by production route as well as by good and origin<span class="grade g-inferred">inferred</span></h3>
+<p class="f f-claim"><span class="fl">Claim</span>Indirect (electricity) default values are route-specific where the Commission publishes them that way, and the tool matches on the route rather than taking whichever row it finds first.</p>
+<p class="f f-citation"><span class="fl">Citation</span>IR (EU) 2025/2621 Annex I.</p>
+<p class="f f-behaviour"><span class="fl">Behaviour</span><strong>The counts are measured, not asserted:</strong> 597 of the corpus's 8,310 indirect rows carry a real route indicator ((A) 495, (B) 102). Those fall in 510 of 8,217 (good, origin, year) groups, but <strong>only 93 groups hold more than one row</strong> and only there can the route decide anything. In 90 of the 93 the value differs by route; in 3 both rows carry the same figure, so the route corrects the provenance rather than the price. The code explicitly warns against the overstatement: "Saying '510 groups are route-keyed' overstates the exposure."</p>
+<p class="f f-alternative"><span class="fl">Alternative</span><strong>Documented as a shipped defect that this replaced.</strong> Without the route, the lookup "returned whichever row sorted first — the dearer one, in every affected case — so a route-(A) line was priced with route (B)'s electricity and over-charged. <strong>On Algerian cement clinker that was €165.79 per 100 t</strong>, with the exported CSV naming route (A) beside route (B)'s figure — an audit artefact naming one route and pricing another."</p>
+<p class="f f-ifwrong"><span class="fl">If wrong</span>Over-charge of up to €165.79 per 100 t on affected lines. Only 30 estimates change end-to-end today because the pack prices 2026 quarters only; 60 further corrections are real but latent.</p>
+<p class="f f-evidence"><span class="fl">Evidence</span>Inferred, with the corpus measured directly.</p>
+<p class="f f-where"><span class="fl">Where</span><code>lib/estimator/estimate-from-pack.ts:301–354</code>.</p>
+</article>
+<article class="entry" data-grade="inferred">
+<h3 id="D14"><span class="eid">D14</span>Where electricity defaults exist for a good but not for the declared route, the line is refused rather than priced with zero electricity<span class="grade g-inferred">inferred</span></h3>
+<p class="f f-claim"><span class="fl">Claim</span>"The Commission publishes no indirect default for this good at all" and "rows exist but not for your route" are different facts and get different answers. The first is silence; the second is a refusal.</p>
+<p class="f f-citation"><span class="fl">Citation</span>IR (EU) 2025/2621 Annex I.</p>
+<p class="f f-behaviour"><span class="fl">Behaviour</span>Three distinct outcomes rather than two. Refusal wording: "Pricing the electricity component at zero would understate the bill without saying so."</p>
+<p class="f f-alternative"><span class="fl">Alternative</span>Documented: collapsing the two "is exactly how the over-charge this replaces stayed invisible — the lookup could not tell 'nothing published' from 'I picked the wrong row'."</p>
+<p class="f f-ifwrong"><span class="fl">If wrong</span>As coded, a refusal. The rejected alternative <strong>under-charged</strong> by the whole electricity component.</p>
+<p class="f f-evidence"><span class="fl">Evidence</span>Inferred.</p>
+<p class="f f-where"><span class="fl">Where</span><code>lib/estimator/estimate-from-pack.ts:286–299</code>, <code>346–351</code>.</p>
+</article>
+<article class="entry" data-grade="inferred">
+<h3 id="D15"><span class="eid">D15</span>A good for which the Commission publishes no electricity default at all is priced with zero electricity, and stays fully verified<span class="grade g-inferred">inferred</span></h3>
+<p class="f f-claim"><span class="fl">Claim</span>Iron &amp; steel and aluminium have no published indirect defaults. For those, zero <em>is</em> the published answer — so the line is priced with no electricity component and is <strong>not</strong> stamped as partly Commission-priced.</p>
+<p class="f f-citation"><span class="fl">Citation</span>IR (EU) 2025/2621 Annex I.</p>
+<p class="f f-behaviour"><span class="fl">Behaviour</span>The mixed data tier is stamped <strong>only</strong> where a default actually stood in. "Claiming a default was applied there would tell an auditor to go looking for one that does not exist."</p>
+<p class="f f-alternative"><span class="fl">Alternative</span>Not documented.</p>
+<p class="f f-ifwrong"><span class="fl">If wrong</span>If those sectors do attract an electricity charge, this <strong>under-charges</strong> by the whole component on every iron &amp; steel and aluminium line.</p>
+<p class="f f-evidence"><span class="fl">Evidence</span>Inferred.</p>
+<p class="f f-where"><span class="fl">Where</span><code>lib/estimator/estimate-from-pack.ts:547–557</code>.</p>
+</article>
+<article class="entry" data-grade="assumed">
+<h3 id="D16"><span class="eid">D16</span>The set of goods the calculator prices comes from the Commission's default-values workbook, not from Annex I of the CBAM Regulation<span class="grade g-assumed">assumed</span></h3>
+<p class="f f-claim"><span class="fl">Claim</span>Which goods are in scope is inherited from the coverage of the default-values workbook, then expanded to the granularity at which benchmarks are published. It is not read from Annex I of Reg (EU) 2023/956.</p>
+<p class="f f-citation"><span class="fl">Citation</span>IR (EU) 2025/2621 Annex I (as the source of coverage); Reg (EU) 2023/956 Annex I is the instrument that actually defines scope.</p>
+<p class="f f-behaviour"><span class="fl">Behaviour</span><strong>574 classifications</strong> in the shipped browser pack, expanded from the workbook's CN codes to 8-digit benchmark granularity. A good with no finer benchmark passes through untouched — "four aluminium-tableware codes today" have no benchmark at all and report unavailable. Nomenclature year is pinned to <strong>2026</strong> with no source.</p>
+<p>A separate research corpus that <em>does</em> work from Annex I exists but is superseded and feeds nothing shipped. Its own notes record that Reg (EU) 2025/2083 (which amends Annex I) "was <strong>NOT</strong> fetched as a standalone document" and that "the precise, full scope of 2025/2083's Annex changes beyond those two visible edits was not independently verified."</p>
+<p class="f f-alternative"><span class="fl">Alternative</span>Not documented as a choice — the substitution is a consequence of how the corpus was built.</p>
+<p class="f f-ifwrong"><span class="fl">If wrong</span>A good in Annex I but absent from the workbook is silently not offered; a good in the workbook but out of Annex I scope would be priced. <strong>Nobody has diffed the two lists.</strong></p>
+<p class="f f-evidence"><span class="fl">Evidence</span><strong>Assumed</strong> for the equivalence of the two scopes; <strong>Inherited</strong> for the coverage itself. The pinned nomenclature year of 2026 has no source at all.</p>
+<p class="f f-where"><span class="fl">Where</span><code>scripts/build-dv-package.py:90</code>, <code>403–412</code>; <code>scripts/build-estimator-pack.mts:57–78</code>; <code>golden/research/cbam-cn-codes.json</code> (superseded).</p>
+</article>
+<article class="entry" data-grade="inferred">
+<h3 id="D17"><span class="eid">D17</span>An explicit exclusion beats a broader covered heading<span class="grade g-inferred">inferred</span></h3>
+<p class="f f-claim"><span class="fl">Claim</span>If the corpus excludes CN 7202 30 00 while covering heading 7202, the exclusion is the more specific statement about that good and it wins. An excluded good is refused, not calculated.</p>
+<p class="f f-citation"><span class="fl">Citation</span>Reg (EU) 2023/956 Annex I.</p>
+<p class="f f-behaviour"><span class="fl">Behaviour</span>Exclusions are kept in the candidate set through prefix matching and filtered only at the end, so an exclusion can shadow a heading above it.</p>
+<p class="f f-alternative"><span class="fl">Alternative</span><strong>Documented and rejected:</strong> filtering exclusions out before prefix matching (the earlier version) would have let "an out-of-scope good become calculable, approvable, and <strong>frozen into the ledger</strong>."</p>
+<p class="f f-ifwrong"><span class="fl">If wrong</span>Over-charge on goods outside scope, and — worse — a permanent record asserting a liability that does not exist.</p>
+<p class="f f-evidence"><span class="fl">Evidence</span>Inferred.</p>
+<p class="f f-where"><span class="fl">Where</span><code>lib/regulatory/resolve.ts:52–86</code>.</p>
+</article>
+<article class="entry" data-grade="assumed">
+<h3 id="D18"><span class="eid">D18</span>Country sheet names are mapped to ISO codes by hand, and an unrecognised sheet stops the build<span class="grade g-assumed">assumed</span></h3>
+<p class="f f-claim"><span class="fl">Claim</span>The workbook's 120 sheets are identified as countries by a hand-authored name→code map. Several names are truncated by Excel's 31-character limit or use non-standard spellings; each is called out. Any sheet not in the map aborts the build "rather than being guessed at".</p>
+<p class="f f-citation"><span class="fl">Citation</span>IR (EU) 2025/2621 Annex I, per-country sheets.</p>
+<p class="f f-behaviour"><span class="fl">Behaviour</span>120 sheets expected; a count change aborts. Judgement calls are annotated in place — <code>"Congo": "CG"</code> marked "Republic of the Congo (Brazzaville)"; <code>"Democratic Republic of the Cong"</code> marked as truncated, → <code>CD</code>.</p>
+<p class="f f-alternative"><span class="fl">Alternative</span>Not documented.</p>
+<p class="f f-ifwrong"><span class="fl">If wrong</span>A mis-mapped sheet applies one country's published values to another. On the Congo/DR-Congo pair this is a live risk and the code knows it. Direction and magnitude depend on the pair.</p>
+<p class="f f-evidence"><span class="fl">Evidence</span><strong>Assumed</strong> — the mapping is a hand judgement with no external source cited.</p>
+<p class="f f-where"><span class="fl">Where</span><code>scripts/build-dv-package.py:177–213</code>, <code>279–282</code>.</p>
+</article>
+<h2 class="grp" id="grp-E"><span class="gl">E</span>Regulation (EU) 2023/956 — the CBAM Regulation</h2>
+<p><em>Nine citations in non-test code.</em></p>
+<article class="entry" data-grade="assumed">
+<h3 id="E1"><span class="eid">E1</span>The de minimis threshold is 50 tonnes per importer per calendar year, and a consignment of <strong>exactly</strong> 50 t is below it<span class="grade g-assumed">assumed</span></h3>
+<p class="f f-claim"><span class="fl">Claim</span>Art 2(3) exempts imports "not exceeding" the threshold, so the comparison is strictly greater-than. 50.0 t is exempt; 50.01 t is not.</p>
+<p class="f f-citation"><span class="fl">Citation</span>Reg (EU) 2023/956 <strong>Art 2(3)</strong>. The site's on-screen copy adds "as amended by Reg (EU) 2025/2083".</p>
+<p class="f f-behaviour"><span class="fl">Behaviour</span>Strict <code>&gt;</code>. Threshold value <strong>50 t</strong>, sectors <strong>cement, aluminium, fertilisers, iron &amp; steel</strong>, one row, calendar year 2026 only.</p>
+<p class="f f-alternative"><span class="fl">Alternative</span>Documented in the data contract: the "not exceeding" wording is quoted as the reason the comparison is strict.</p>
+<p class="f f-ifwrong"><span class="fl">If wrong</span>A <code>&gt;=</code> comparison would declare a 50.0 t importer liable when they are exempt — a <strong>whole-liability switch</strong>, not a proportional error. That is the single largest binary outcome in the tool.</p>
+<p class="f f-evidence"><span class="fl">Evidence</span><strong>Quoted</strong> for the strictness. <strong>Assumed</strong> for the amending act: Reg (EU) 2025/2083 is named in the on-screen and printed wording but appears <strong>nowhere in the shipped rule data</strong>, whose locator reads only "Regulation (EU) 2023/956 Article 2(3)" — and the project's own research notes say 2025/2083 was never fetched as a standalone document.</p>
+<p class="f f-where"><span class="fl">Where</span><code>lib/threshold/evaluate.ts:11–12</code>; <code>lib/regulatory/rule-package-contract.ts:182–198</code>; <code>scripts/build-fa-package.py:132–149</code>; <code>/private/tmp/cbam-gates/src/scripts/cbam-algos/cbam-app.ts:200–209</code>.</p>
+</article>
+<article class="entry" data-grade="assumed">
+<h3 id="E2"><span class="eid">E2</span>Hydrogen and electricity are outside the 50 t exemption entirely<span class="grade g-assumed">assumed</span></h3>
+<p class="f f-claim"><span class="fl">Claim</span>The threshold's four sectors do not include hydrogen or electricity. A hydrogen line is therefore chargeable regardless of tonnage, and the tool shows <strong>no threshold verdict at all</strong> for it rather than an "indeterminate" one that would imply an exemption it cannot have.</p>
+<p class="f f-citation"><span class="fl">Citation</span>Reg (EU) 2023/956 Art 2(3); the on-screen copy attributes the exclusion to Reg (EU) 2025/2083.</p>
+<p class="f f-behaviour"><span class="fl">Behaviour</span>Deliberate silence — no card. Pinned by a test named "hydrogen and electricity are outside the exemption". Hydrogen (CN 2804 1000) is priceable from <strong>93 origins</strong> in the shipped pack; electricity is not classified at all.</p>
+<p>The multi-line verdict carries a specific correction: a below-threshold year now names how many lines were outside the test. <strong>Measured:</strong> "40 t cement + 1000 t hydrogen rendered 'owes nothing for 2026' beside <strong>€525,302.23</strong>" — the hydrogen line alone being €523,015.36 — "on the same page."</p>
+<p class="f f-alternative"><span class="fl">Alternative</span>Not documented as a regulatory alternative; the <em>presentation</em> alternative (a generalised "you owe nothing") is documented as the defect this fixed.</p>
+<p class="f f-ifwrong"><span class="fl">If wrong</span>If hydrogen is in fact within the exemption, hydrogen importers are told they owe money they may not.</p>
+<p class="f f-evidence"><span class="fl">Evidence</span>Inferred for the exclusion; <strong>Assumed</strong> for attributing it to 2025/2083 (see E1).</p>
+<p class="f f-where"><span class="fl">Where</span><code>/private/tmp/cbam-gates/src/scripts/cbam-algos/cbam-app.ts:371–380</code>, <code>424–428</code>; <code>lib/estimator/estimate-from-pack.ts:248–284</code>.</p>
+</article>
+<article class="entry" data-grade="inferred">
+<h3 id="E3"><span class="eid">E3</span>A single consignment can prove you are <em>above</em> the threshold but never that you are below it<span class="grade g-inferred">inferred</span></h3>
+<p class="f f-claim"><span class="fl">Claim</span>The threshold is annual and per importer. One line above 50 t settles the question. One line below it settles nothing, because the tool cannot see the rest of the year. The honest answer is "indeterminate", never "exempt".</p>
+<p class="f f-citation"><span class="fl">Citation</span>Reg (EU) 2023/956 Art 2(3).</p>
+<p class="f f-behaviour"><span class="fl">Behaviour</span>Single-line completeness is hard-coded to <em>partial</em>, which can only yield "above" or "indeterminate". "Below threshold" is reachable <strong>only</strong> when the user ticks a box attesting that the listed lines are all their imports for that year — and the verdict then says on every surface that it rests on their statement: "it is your completeness claim, verified by no one, not by the Commission or by us."</p>
+<p class="f f-alternative"><span class="fl">Alternative</span>Documented as the defect this exists to prevent: without the card at all, "the tool quoted a four-figure cost to someone who may be exempt — an error in the most expensive direction."</p>
+<p class="f f-ifwrong"><span class="fl">If wrong</span>No error in the tool's own arithmetic. The exposure is that a below-threshold verdict is only as good as the user's attestation, and the tool says so.</p>
+<p class="f f-evidence"><span class="fl">Evidence</span>Inferred.</p>
+<p class="f f-where"><span class="fl">Where</span><code>lib/estimator/estimate-from-pack.ts:248–284</code>; <code>lib/threshold/evaluate.ts:13–18</code>; <code>/private/tmp/cbam-gates/src/scripts/cbam-lines.ts:290–391</code>.</p>
+</article>
+<article class="entry" data-grade="inferred">
+<h3 id="E4"><span class="eid">E4</span>The threshold is tested per calendar year and never summed across years<span class="grade g-inferred">inferred</span></h3>
+<p class="f f-claim"><span class="fl">Claim</span>Each calendar year gets its own verdict. A 30 t 2026 import and a 30 t 2027 import are two separate below-threshold years, not a 60 t above-threshold total.</p>
+<p class="f f-citation"><span class="fl">Citation</span>Reg (EU) 2023/956 Art 2(3).</p>
+<p class="f f-behaviour"><span class="fl">Behaviour</span>One card per year present in the line list. Rationale: summing "would report … a liability that does not exist."</p>
+<p class="f f-alternative"><span class="fl">Alternative</span>Not documented.</p>
+<p class="f f-ifwrong"><span class="fl">If wrong</span>Summing would <strong>over-charge</strong> by declaring importers liable who are not.</p>
+<p class="f f-evidence"><span class="fl">Evidence</span>Inferred.</p>
+<p class="f f-where"><span class="fl">Where</span><code>/private/tmp/cbam-gates/src/scripts/cbam-lines.ts:256–304</code>.</p>
+</article>
+<article class="entry" data-grade="quoted">
+<h3 id="E5"><span class="eid">E5</span>"Shall apply from 1 January 2026" is a calendar day, not an instant<span class="grade g-quoted">quoted</span></h3>
+<p class="f f-claim"><span class="fl">Claim</span>Validity windows are compared at day granularity, not by timestamp, because the regulation sets a day.</p>
+<p class="f f-citation"><span class="fl">Citation</span>Reg (EU) 2023/956 <strong>Art 36(3)</strong>.</p>
+<p class="f f-behaviour"><span class="fl">Behaviour</span>Both sides of every validity comparison are truncated to <code>YYYY-MM-DD</code>. Two independent copies of this rule exist (one for classification, one for benchmarks) and are deliberately <strong>not</strong> deduplicated; each carries a note pointing at the other.</p>
+<p class="f f-alternative"><span class="fl">Alternative</span>Documented as a shipped bug this fixed: comparing raw strings "silently saved the validTo edge and silently broke the validFrom edge — a window's opening day sorted <strong>after</strong> its own bound and dropped out, <strong>so 1 January 2026 refused every good</strong> with a message asserting the rule did not exist."</p>
+<p class="f f-ifwrong"><span class="fl">If wrong</span>Total refusal on boundary days, across the whole catalogue — the classification copy gates the entire rule package. Not a mispricing; a total outage on the regime's first day.</p>
+<p class="f f-evidence"><span class="fl">Evidence</span><strong>Quoted</strong> — the article and its operative words are cited.</p>
+<p class="f f-where"><span class="fl">Where</span><code>lib/regulatory/resolve.ts:10–39</code>; <code>lib/cbam/resolve-fa.ts:19–49</code>.</p>
+</article>
+<article class="entry" data-grade="quoted">
+<h3 id="E6"><span class="eid">E6</span>No credit is given for a carbon price already paid in the country of origin<span class="grade g-quoted">quoted</span></h3>
+<p class="f f-claim"><span class="fl">Claim</span>Art 9 allows a deduction for carbon already paid at origin. The implementing act is still a draft, so the tool does not model it — and says so on <strong>every</strong> figure it produces.</p>
+<p class="f f-citation"><span class="fl">Citation</span>Reg (EU) 2023/956 Art 9.</p>
+<p class="f f-behaviour"><span class="fl">Behaviour</span>A note is attached to every priced estimate: "Art 9 deduction for a carbon price paid in the country of origin is not modelled (the implementing act is still a draft), so this figure is <strong>conservative</strong>." Repeated in §4 of the printed document. A test asserts the note is always present.</p>
+<p class="f f-alternative"><span class="fl">Alternative</span>Not documented — no attempt at modelling it is discussed.</p>
+<p class="f f-ifwrong"><span class="fl">If wrong</span><strong>Over-charge</strong>, by the whole of any carbon price paid at origin. For an importer from a jurisdiction with a meaningful carbon price this can be a large fraction of the bill. The tool is knowingly and openly high.</p>
+<p class="f f-evidence"><span class="fl">Evidence</span><strong>Quoted</strong> for the existence of the deduction; the omission is disclosed rather than hidden.</p>
+<p class="f f-where"><span class="fl">Where</span><code>lib/cbam/certificate-estimate.ts:27–29</code>, <code>490</code>; <code>/private/tmp/cbam-gates/src/scripts/cbam-algos/cbam-app.ts:1236–1237</code>.</p>
+</article>
+<article class="entry" data-grade="assumed">
+<h3 id="E7"><span class="eid">E7</span>A good's CBAM sector is decided by its 4-digit heading, with chapters 72/73 and 76 handled at chapter level<span class="grade g-assumed">assumed</span></h3>
+<p class="f f-claim"><span class="fl">Claim</span>The sector grouping the threshold is expressed in is derived from the CN heading, not the chapter — because chapter 28 alone spans two sectors (2804 10 is hydrogen; 2808/2814/2834 are fertilisers). Chapters 72, 73 and 76 are treated at chapter level because they are unambiguous.</p>
+<p class="f f-citation"><span class="fl">Citation</span>Reg (EU) 2023/956 Annex I sector headings. <strong>No article or annex row is cited for the mapping itself.</strong></p>
+<p class="f f-behaviour"><span class="fl">Behaviour</span>Ten headings mapped by hand (2507, 2523 → cement; 2601 → iron &amp; steel; 2804 → hydrogen; 2808, 2814, 2834, 3102, 3105 → fertilisers; 2716 → electricity), plus chapters 72/73 → iron &amp; steel and 76 → aluminium. Anything unlisted returns no sector, which makes the threshold <strong>indeterminate, never exempt</strong> — "being unable to classify a good is not evidence that it falls below a threshold."</p>
+<p class="f f-alternative"><span class="fl">Alternative</span>Documented for the granularity choice: "A chapter-level map would file ammonia under hydrogen and silently apply the wrong sector's threshold."</p>
+<p class="f f-ifwrong"><span class="fl">If wrong</span>A good in the wrong sector is tested against the wrong threshold, or excluded from a mass basis it belongs in. On the shipped pack every one of the 574 offered goods maps to a sector, so the "unlisted" path is currently unreachable.</p>
+<p class="f f-evidence"><span class="fl">Evidence</span><strong>Assumed</strong> — the reasoning for the granularity is documented; the mapping itself carries no source locator.</p>
+<p class="f f-where"><span class="fl">Where</span><code>lib/cbam/sector.ts:1–46</code>.</p>
+</article>
+<article class="entry" data-grade="assumed">
+<h3 id="E8"><span class="eid">E8</span>A second, independent list of "sectors measured by mass" exists inside the aggregation and carries no citation at all<span class="grade g-assumed">assumed</span></h3>
+<p class="f f-claim"><span class="fl">Claim</span>The mass aggregation filters entries against its own hard-coded set of four sectors (cement, aluminium, fertilisers, iron &amp; steel), separate from the sector list published in the threshold rule row.</p>
+<p class="f f-citation"><span class="fl">Citation</span><strong>None. No comment, no locator, nothing.</strong></p>
+<p class="f f-behaviour"><span class="fl">Behaviour</span>Two filters run in series: the caller's, on the threshold row's published <code>includedSectors</code>; and this one, hard-coded. The site's own code flags the risk: they "agree today only because the shipped 2026 row's includedSectors happens to equal massSectors. <strong>If a future threshold row ever includes electricity or hydrogen, a line could pass ours and still be dropped by the vendored one.</strong>"</p>
+<p class="f f-alternative"><span class="fl">Alternative</span>Not documented.</p>
+<p class="f f-ifwrong"><span class="fl">If wrong</span>The day the Commission widens the threshold's sector list, the published row will say one thing and the arithmetic will do another — silently. Direction: <strong>under-count of eligible mass</strong>, therefore a spurious below-threshold verdict, therefore an importer told they are exempt when they are not.</p>
+<p class="f f-evidence"><span class="fl">Evidence</span><strong>Assumed — no source cited, and no comment either.</strong> The only acknowledgement anywhere is a warning in a different repository's file.</p>
+<p class="f f-where"><span class="fl">Where</span><code>lib/threshold/aggregate.ts:41–46</code>; <code>/private/tmp/cbam-gates/src/scripts/cbam-lines.ts:197–206</code>.</p>
+</article>
+<h2 class="grp" id="grp-F"><span class="gl">F</span>Certificate price and the shape of the money</h2>
+<article class="entry" data-grade="inherited">
+<h3 id="F1"><span class="eid">F1</span>The certificate price is a quarterly figure, and an unpublished quarter yields no cost rather than a zero<span class="grade g-inherited">inherited</span></h3>
+<p class="f f-claim"><span class="fl">Claim</span>CBAM certificate prices are published per quarter, in arrears. Where the quarter an import falls in has no published price, the tool shows the certificate count but <strong>no euro figure at all</strong>.</p>
+<p class="f f-citation"><span class="fl">Citation</span>EC "Price of CBAM certificates" page. Legal status recorded as <strong>guidance</strong>, not enacted.</p>
+<p class="f f-behaviour"><span class="fl">Behaviour</span>Q1 2026 <strong>€75.36</strong> (published 7 Apr 2026) and Q2 2026 <strong>€75.28</strong> (published 6 Jul 2026) are published; Q3 and Q4 2026 are pending. <strong>The pack prices 2026 quarters only</strong> — every 2027 and 2028 import refuses on the price. The code's sweep: <strong>7,680 of 17,484 estimates</strong> refuse on the certificate price, every one of them 2027 or 2028.</p>
+<p class="f f-alternative"><span class="fl">Alternative</span>Not documented as a regulatory reading. The <em>presentation</em> alternative is documented at length — an earlier version reported a missing price as a missing benchmark, "sending the reader to hunt a benchmark that is present."</p>
+<p class="f f-ifwrong"><span class="fl">If wrong</span>No mispricing. But roughly 44% of the estimate space the calculator offers returns no euro figure, which is a product limitation rather than a compliance one.</p>
+<p class="f f-evidence"><span class="fl">Evidence</span><strong>Inherited</strong> — transcribed from an HTML page with <strong>no stable artefact and a SHA-256 of all zeros</strong>. The two published prices are hand-typed.</p>
+<p class="f f-where"><span class="fl">Where</span><code>scripts/build-fa-package.py:111–119</code>, <code>165–171</code>; <code>lib/cbam/resolve-fa.ts:182–203</code>.</p>
+</article>
+<article class="entry" data-grade="assumed">
+<h3 id="F2"><span class="eid">F2</span>The import date decides which quarter's price applies<span class="grade g-assumed">assumed</span></h3>
+<p class="f f-claim"><span class="fl">Claim</span>The quarter is derived from the import date's month. A date the tool cannot read is refused with a reason naming <strong>the date</strong>, not a missing table.</p>
+<p class="f f-citation"><span class="fl">Citation</span>Implicit in the quarterly publication cadence; no article cited.</p>
+<p class="f f-behaviour"><span class="fl">Behaviour</span>Month 1–3 → Q1, and so on. A month outside 1–12 or a non-four-digit year refuses. The refusal is deliberately scoped to the <em>price</em>: an earlier draft claimed the benchmark in force also depends on the quarter, which the code corrects — "the quarter is the price's key and nothing else's".</p>
+<p class="f f-alternative"><span class="fl">Alternative</span>Documented as a bug this fixed: <code>'2027-1-15'</code> produced the string <code>'2027-QNaN'</code>, which matched no price row and surfaced as "the good and its benchmark are present, only the price is missing — <strong>every clause false for a date nobody can read</strong>."</p>
+<p class="f f-ifwrong"><span class="fl">If wrong</span>Wrong-quarter pricing. Between Q1 and Q2 2026 that is 8 cents per certificate — a 0.1% error. Between distant quarters it could be material.</p>
+<p class="f f-evidence"><span class="fl">Evidence</span><strong>Assumed</strong> — no instrument is cited for the date→quarter rule.</p>
+<p class="f f-where"><span class="fl">Where</span><code>lib/cbam/resolve-fa.ts:161–180</code>; <code>lib/cbam/certificate-estimate.ts:333–353</code>.</p>
+</article>
+<article class="entry" data-grade="assumed">
+<h3 id="F3"><span class="eid">F3</span>Certificate rounding is not settled in law, so the tool shows decimal certificate-equivalents and invents no rounding rule<span class="grade g-assumed">assumed</span></h3>
+<p class="f f-claim"><span class="fl">Claim</span>How many certificates a fractional tonnage requires is an open question. Rather than round, the tool reports the exact decimal and says on every figure that it has done so.</p>
+<p class="f f-citation"><span class="fl">Citation</span>None — recorded as an open question.</p>
+<p class="f f-behaviour"><span class="fl">Behaviour</span>A note on every priced estimate: "Certificate rounding is not settled in law; decimal certificate-equivalents are shown." Formatting is chosen so a tiny residual prints as <code>0.0000001</code> rather than <code>1e-7</code>.</p>
+<p class="f f-alternative"><span class="fl">Alternative</span>Not documented — rounding up (the conservative reading) is not discussed.</p>
+<p class="f f-ifwrong"><span class="fl">If wrong</span>If certificates must be surrendered in whole units, every figure is understated by up to one certificate — <strong>€75.36 per line</strong>. Immaterial on a 1,000 t consignment; material on a portfolio of many small ones.</p>
+<p class="f f-evidence"><span class="fl">Evidence</span><strong>Assumed</strong> — explicitly and deliberately, as a disclosed open question.</p>
+<p class="f f-where"><span class="fl">Where</span><code>lib/cbam/certificate-estimate.ts:193–196</code>, <code>491</code>.</p>
+</article>
+<h2 class="grp" id="grp-G"><span class="gl">G</span>Cross-cutting stance</h2>
+<article class="entry" data-grade="inferred">
+<h3 id="G1"><span class="eid">G1</span>Two rules where there should be one is a refusal, never a first match<span class="grade g-inferred">inferred</span></h3>
+<p class="f f-claim"><span class="fl">Claim</span>Wherever the published data yields more than one candidate value for a lookup, the tool shows no figure and says the conflict must be resolved. It never picks one.</p>
+<p class="f f-citation"><span class="fl">Citation</span>None — a stance, applied across every lookup.</p>
+<p class="f f-behaviour"><span class="fl">Behaviour</span>Uniform across benchmarks, factors, correction factors, prices, classifications and default values. Wording: "The published rules give more than one value for this good, so no figure is shown until the conflict is resolved."</p>
+<p>The build scripts enforce the same rule upstream: a duplicate benchmark selector or a duplicate default-factor selector aborts the build rather than shipping data that would be ambiguous at lookup.</p>
+<p class="f f-alternative"><span class="fl">Alternative</span>Not documented — the alternative (first match wins) is treated as self-evidently wrong.</p>
+<p class="f f-ifwrong"><span class="fl">If wrong</span>Refusals rather than errors.</p>
+<p class="f f-evidence"><span class="fl">Evidence</span>Inferred.</p>
+<p class="f f-where"><span class="fl">Where</span><code>lib/cbam/resolve-fa.ts:99–103</code>, <code>116–120</code>, <code>136–138</code>, <code>190–192</code>; <code>lib/regulatory/resolve.ts:80–84</code>, <code>170–174</code>; <code>lib/cbam/certificate-estimate.ts:404–406</code>.</p>
+</article>
+<article class="entry" data-grade="inferred">
+<h3 id="G2"><span class="eid">G2</span>A rule package that is not enacted, or not in force on the import date, refuses <strong>every</strong> good<span class="grade g-inferred">inferred</span></h3>
+<p class="f f-claim"><span class="fl">Claim</span>Before any lookup runs, the tool checks that the rule package is legally enacted and in force on the import date. If not, nothing is priced at all.</p>
+<p class="f f-citation"><span class="fl">Citation</span>Reg (EU) 2023/956 Art 36(3) via the validity window.</p>
+<p class="f f-behaviour"><span class="fl">Behaviour</span>Gates the whole package, not a row. The shipped free-allocation package is <code>enacted</code>, valid from 2026-01-01 with no end date.</p>
+<p class="f f-alternative"><span class="fl">Alternative</span>Not documented.</p>
+<p class="f f-ifwrong"><span class="fl">If wrong</span>Total refusal rather than mispricing — but total.</p>
+<p class="f f-evidence"><span class="fl">Evidence</span>Inferred.</p>
+<p class="f f-where"><span class="fl">Where</span><code>lib/regulatory/resolve.ts:41–45</code>.</p>
+</article>
+<article class="entry" data-grade="inferred">
+<h3 id="G3"><span class="eid">G3</span>Every figure is stamped provisional, on every branch, including refusals<span class="grade g-inferred">inferred</span></h3>
+<p class="f f-claim"><span class="fl">Claim</span>No figure the calculator produces is ever presented as final. The provisional flag is set unconditionally.</p>
+<p class="f f-citation"><span class="fl">Citation</span>None — a stance.</p>
+<p class="f f-behaviour"><span class="fl">Behaviour</span><code>provisional: true</code> on every estimate. The interface renders "Provisional — at least one input is not final". Combined with C1 (correction factor unpublished for 2026–2030) and E6 (Art 9 not modelled), the tool never claims a settled number.</p>
+<p class="f f-alternative"><span class="fl">Alternative</span>Not documented.</p>
+<p class="f f-ifwrong"><span class="fl">If wrong</span>No error. If anything, over-cautious.</p>
+<p class="f f-evidence"><span class="fl">Evidence</span>Inferred.</p>
+<p class="f f-where"><span class="fl">Where</span><code>lib/cbam/certificate-estimate.ts:124</code>, <code>216</code>.</p>
+</article>
+<h2 class="grp solo">Ranked by leverage</h2>
+<p><em>Direction matters as much as magnitude. Over-charging creates a commercial and reputational problem — customers who overpay, or who catch the error and leave. Under-charging creates a compliance problem — customers who file short and face a penalty they will attribute to us.</em></p>
+<h3 class="sub">Tier 1 — get these wrong and the number is wrong by multiples</h3>
+<div class="tw"><table><thead><tr><th>#</th><th>Assumption</th><th>Direction if wrong</th><th>Magnitude</th><th>Evidence</th></tr></thead><tbody><tr><td><strong>1</strong></td><td><strong>B1</strong> · CBAM factor is allocation <em>retained</em> (0.975), not the phase-out complement (0.025)</td><td><strong>Over-charge</strong></td><td><strong>~39×</strong> the deduction. On one 1,000 t clinker line: €66,290 → €113,971</td><td>Quoted + corroborated ×2</td></tr><tr><td><strong>2</strong></td><td><strong>A2</strong> · Benchmark column decided by scope of the emissions figure</td><td><strong>Over-charge</strong></td><td>Severalfold; <strong>total loss of deduction</strong> where Column A is 0. Worked: €66,290 → €115,225</td><td>Inferred</td></tr><tr><td><strong>3</strong></td><td><strong>D2</strong> · Fertilisers carry 1% mark-up, not 10/20/30%</td><td><strong>Over-charge</strong></td><td>Up to <strong>+28.7%</strong> of intensity in 2028, across <strong>14,496 of 41,100</strong> published values. A competitor got this wrong</td><td>Inherited, machine-checked</td></tr><tr><td><strong>4</strong></td><td><strong>D10</strong> · A listed origin's silence about a good fails closed, no world-average fallback</td><td><strong>Over-charge</strong></td><td>Mali hydrogen: <strong>19,514 tCO₂e invented on a 1,000 t line</strong> ≈ <strong>€1.47 m</strong></td><td>Inferred</td></tr><tr><td><strong>5</strong></td><td><strong>E1</strong> · 50 t threshold, strict greater-than, four sectors</td><td><strong>Both — binary</strong></td><td><strong>Whole-liability switch.</strong> Exactly 50 t is exempt or is not</td><td>Quoted (strictness); <strong>Assumed</strong> (amending act)</td></tr></tbody></table></div>
+<h3 class="sub">Tier 2 — wrong by a component, not a multiple</h3>
+<div class="tw"><table><thead><tr><th>#</th><th>Assumption</th><th>Direction if wrong</th><th>Magnitude</th><th>Evidence</th></tr></thead><tbody><tr><td><strong>6</strong></td><td><strong>C4</strong> · CSCF = 1.0 is "the largest legally possible", so figures are a floor</td><td><strong>Over-charge, and a stated legal claim</strong></td><td>Unquantified. Printed to users and auditors <strong>with no source</strong></td><td><strong>Assumed</strong></td></tr><tr><td><strong>7</strong></td><td><strong>E6</strong> · No Art 9 credit for carbon paid at origin</td><td><strong>Over-charge</strong></td><td>Whole of any origin carbon price. Disclosed on every figure</td><td>Quoted, disclosed</td></tr><tr><td><strong>8</strong></td><td><strong>A6</strong> · Indirect emissions get no free allocation</td><td><strong>Over-charge</strong></td><td>Whole indirect component; ~3.5% on clinker, more on fertilisers</td><td>Inferred</td></tr><tr><td><strong>9</strong></td><td><strong>E2</strong> · Hydrogen and electricity outside the 50 t exemption</td><td><strong>Over-charge</strong></td><td>Measured: a €525,302 bill once rendered beside "owes nothing for 2026"</td><td>Inferred</td></tr><tr><td><strong>10</strong></td><td><strong>D4/D5</strong> · Verified figures drop the mark-up, per figure not per line</td><td><strong>Under-charge</strong></td><td>10–30% of the emissions figure per attested half</td><td>Inferred</td></tr><tr><td><strong>11</strong></td><td><strong>E8</strong> · A second, uncited sector list inside the mass aggregation</td><td><strong>Under-charge → false exemption</strong></td><td>Latent. Fires the day the Commission widens the sector list</td><td><strong>Assumed, no comment at all</strong></td></tr><tr><td><strong>12</strong></td><td><strong>A5</strong> · Zero floor, applied to direct emissions only</td><td><strong>Over-charge</strong></td><td>Whole electricity component on a clean-process line</td><td><strong>Assumed</strong></td></tr></tbody></table></div>
+<h3 class="sub">Tier 3 — real, bounded, mostly disclosed</h3>
+<div class="tw"><table><thead><tr><th>#</th><th>Assumption</th><th>Direction if wrong</th><th>Magnitude</th><th>Evidence</th></tr></thead><tbody><tr><td><strong>13</strong></td><td><strong>D13</strong> · Electricity default keyed on route</td><td>Over-charge</td><td>€165.79 per 100 t on Algerian clinker; 30 live + 60 latent</td><td>Inferred, measured</td></tr><tr><td><strong>14</strong></td><td><strong>A10</strong> · Annex (1)/(2) are validity windows</td><td>Either</td><td>794 of 2,465 benchmark rows</td><td>Quoted (§5.3)</td></tr><tr><td><strong>15</strong></td><td><strong>D16</strong> · Scope taken from the DV workbook, not Annex I</td><td>Either</td><td>Unmeasured — the two lists have <strong>never been diffed</strong></td><td><strong>Assumed</strong></td></tr><tr><td><strong>16</strong></td><td><strong>D3</strong> · Linear not compounding mark-up</td><td>Under-charge</td><td>3.1 pp on 5 rows. Knowingly disagrees with a published Commission figure</td><td>Inherited</td></tr><tr><td><strong>17</strong></td><td><strong>D9</strong> · Mark-up verified on the total, applied per component</td><td>Under-charge</td><td>~0.46% on 2,770 dual-component selectors</td><td><strong>Assumed</strong></td></tr><tr><td><strong>18</strong></td><td><strong>E7</strong> · Sector by 4-digit heading</td><td>Either</td><td>Currently unreachable — all 574 goods map</td><td><strong>Assumed</strong></td></tr><tr><td><strong>19</strong></td><td><strong>D18</strong> · Hand-mapped country sheet names</td><td>Either</td><td>Congo / DR Congo is the live risk</td><td><strong>Assumed</strong></td></tr><tr><td><strong>20</strong></td><td><strong>F3</strong> · Certificate rounding not settled</td><td>Under-charge</td><td>≤ 1 certificate (€75.36) per line</td><td><strong>Assumed, disclosed</strong></td></tr><tr><td><strong>21</strong></td><td><strong>D11</strong> · ISO 3166-1 list, 249 codes, no edition pinned</td><td>Either</td><td>Per-code</td><td><strong>Assumed</strong></td></tr><tr><td><strong>22</strong></td><td><strong>F2</strong> · Import date → quarter</td><td>Either</td><td>€0.08/certificate between adjacent 2026 quarters</td><td><strong>Assumed</strong></td></tr></tbody></table></div>
+<p><em>The refusal-shaped assumptions — A3, A4, A11, A12, A15, B3, C1, C2, D6, D7, D14, G1, G2 — carry no financial exposure if wrong. Their cost is coverage: <strong>183 of 574 offered goods</strong>, 181 of them iron and steel, currently return no figure at all, and <strong>7,680 of 17,484</strong> estimates refuse on a missing 2027/28 certificate price.</em></p>
+<h2 class="grp solo">Entries with no documented basis</h2>
+<p><em>These are the ones to look at first, because there is nothing behind them to check.</em></p>
+<p><strong>Nine entries rest wholly on an assumption with no source cited anywhere:</strong></p>
+<div class="tw"><table><thead><tr><th>Entry</th><th>What is unsupported</th><th>Why it matters</th></tr></thead><tbody><tr><td><strong>C4</strong></td><td>That the correction factor cannot exceed 1, therefore every figure is a floor</td><td><strong>A legal claim printed to users and auditors.</strong> No article cited</td></tr><tr><td><strong>E8</strong></td><td>The hard-coded four-sector mass filter</td><td><strong>No citation and no comment.</strong> Silently diverges from the published row the day it widens</td></tr><tr><td><strong>A5</strong></td><td>The zero floor, and applying it to the direct side alone</td><td>Governs every clean-producer line</td></tr><tr><td><strong>D9</strong></td><td>Applying a total-verified mark-up per component</td><td>~0.46% systematic under-charge on 2,770 selectors</td></tr><tr><td><strong>E7</strong></td><td>The heading→sector map itself (the <em>granularity</em> choice is documented; the mapping is not)</td><td>Decides which threshold a good is tested against</td></tr><tr><td><strong>D18</strong></td><td>Country sheet name → ISO code, by hand</td><td>Congo / DR Congo</td></tr><tr><td><strong>D11</strong></td><td>The 249-code ISO list — standard named, no edition or date</td><td>Decides which origins get world-average values</td></tr><tr><td><strong>F2</strong></td><td>The date→quarter rule</td><td>No instrument cited</td></tr><tr><td><strong>F3</strong></td><td>Certificate rounding</td><td>Disclosed as an open question — honest, but still unsupported</td></tr></tbody></table></div>
+<p><strong>Four further entries are sourced in part but carry an unsupported component:</strong></p>
+<div class="tw"><table><thead><tr><th>Entry</th><th>Sourced</th><th>Unsupported component</th></tr></thead><tbody><tr><td><strong>E1</strong></td><td>"Not exceeding" → strict greater-than, quoted</td><td>That Reg (EU) 2025/2083 is the amending act — named on screen, absent from the shipped data</td></tr><tr><td><strong>E2</strong></td><td>The hydrogen/electricity exclusion, inferred</td><td>Attributing it to 2025/2083</td></tr><tr><td><strong>B2</strong></td><td>The Art 10a(1a) reading, quoted and corroborated ×2</td><td>The nine values themselves — no document artefact pinned</td></tr><tr><td><strong>D16</strong></td><td>Workbook coverage, inherited</td><td>That workbook coverage equals Annex I scope; nomenclature year pinned to 2026</td></tr></tbody></table></div>
+<p><strong>Three further entries rest on documents that cannot be verified:</strong></p>
+<ul><li><strong>B2</strong> · The nine CBAM factor values — the Directive's source record carries a SHA-256 of <strong>all zeros</strong>. Values corroborated against climat.be and DEHSt, but no primary artefact is pinned.</li><li><strong>F1</strong> · The two published certificate prices — transcribed from an HTML page with no stable artefact, SHA-256 of all zeros.</li><li><strong>A13 / D1</strong> · Every benchmark and default value comes from a Commission workbook the Commission itself marks informational. Both regulations' OJ PDFs <em>are</em> hashed — but by hand, because EUR-Lex blocks automated fetching, so <strong>no machine ever compares the numbers to the binding text.</strong></li></ul>
+<p><strong>And one instrument named in the brief governs nothing:</strong></p>
+<ul><li><strong>IR (EU) 2026/1740</strong> appears <strong>7 times, all in test files</strong> — 6 in the engine repository's tests and 1 in the website's. <strong>Zero occurrences in non-test code</strong> (verified by grep). Every one anticipates a future rebuild of the corpus. No shipped code path cites it, and no figure the calculator produces today depends on it.</li></ul>
+</div>
