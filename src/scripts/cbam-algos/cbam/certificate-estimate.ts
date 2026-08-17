@@ -143,7 +143,7 @@ interface Priced {
 export type CertificateEstimate =
   | (EstimateBase & Priced & { status: 'ok'; cscf: string; figure: EstimateFigure })
   /**
-   * Electricity. Free allocation is nil by Art 2(2) fiat, so the figure IS final even in 2026
+   * Electricity. Free allocation is nil by Art 1(2) fiat, so the figure IS final even in 2026
    * — the unpublished CSCF cannot change a zero the law sets outright. Distinct from 'ok'
    * because there is no CSCF to report and claiming one would be a false statement.
    */

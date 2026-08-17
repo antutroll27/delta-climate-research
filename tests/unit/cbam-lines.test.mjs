@@ -527,7 +527,7 @@ test('a refused line is counted and does not poison the total', () => {
 
 test('a final zero_by_fiat line mixed with a pending line still taints the whole total', () => {
   // Electricity (27160000) is zero_by_fiat — final on its own, CSCF or no CSCF
-  // (Art 2(2) sets it to nil by fiat). But the shipped pack does not offer
+  // (Art 1(2) sets it to nil by fiat). But the shipped pack does not offer
   // electricity as a good at all (no classification, no default factor), so
   // there is no real selector that reaches zero_by_fiat through estimateFromPack
   // with the shipped pack. Extend a copy of the pack with one synthetic
@@ -674,7 +674,7 @@ test('free_allocation_tco2e is populated for a zero_by_fiat line too, not just a
     [zero], fp, 'f'.repeat(64), electricPack);
   const r = rows[0];
   assert.equal(r.embedded_tco2e, '5');
-  assert.equal(r.free_allocation_tco2e, '0', 'Art 2(2): the deduction itself is nil, not the charge');
+  assert.equal(r.free_allocation_tco2e, '0', 'Art 1(2): the deduction itself is nil, not the charge');
   assert.equal(r.chargeable_tco2e, '5');
   // The zero_by_fiat legal claim itself: a spec review mutated this exact string to garbage and
   // all 32 tests still passed. Pinned here, next to its two siblings ('published' above,

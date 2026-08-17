@@ -564,7 +564,7 @@ are a genuine corpus question.
 | 2027+ import dates | Certificate prices exist only for 2026 quarters, so any later date fails closed with no explanation. The most visible remaining flaw. |
 | Combined `(C)/(F)` routes | 19 goods, resolution backed by both regulations. Not implemented. |
 | Art 9 carbon price paid abroad | Not modelled; disclosed in output as making the figure conservative. Implementing act still a draft. |
-| `Art 2(2)` citation | Wrong in five places in the vendored engine — Article 2 has no numbered paragraphs; the provision is Art 1(2). Unreachable today. Our own new `cscf_status` CSV column, which prints this same fact for electricity's `zero_by_fiat` rows, cites it correctly as Art 1(2) — the two do not contradict each other; one is our export, the other is the still-unfixed vendored `sefa.ts`. |
+| `Art 1(2)` citation | FIXED 2026-08-17. The engine cited `Art 2(2)`, which does not exist — Article 2 of IR (EU) 2025/2620 has no numbered paragraphs. It was **eleven** sites across two repos, not the five recorded here: six literal references, two test pins written as `/Art 2\(2\)/` that a search for the literal string could not find, and three more on the website that a search of the engine repo never covered. `ELECTRICITY_LOCATOR` is a rendered string, not a comment, so this was a non-existent provision shown to users on the one path whose whole justification is "the law says zero". Both pins are now the whole string, hand-typed. |
 | 41,100 default factors | Never reconciled against IR 2025/2621's 2,400-page Annex I. The largest unaudited surface. |
 
 ---

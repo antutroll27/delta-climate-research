@@ -571,7 +571,7 @@ export function renderResult(e: CertificateEstimate): string {
         ${renderWaterfall(e, e.figure)}${renderStamp(e)}`);
 
     case 'zero_by_fiat':
-      // Electricity. Free allocation is nil because Art 2(2) says so, not because a
+      // Electricity. Free allocation is nil because Art 1(2) says so, not because a
       // calculation produced zero — so this figure IS final even in 2026, and saying
       // "CSCF pending" here would be wrong in the other direction.
       return card('ok', 'Priced · free allocation nil by law', `
