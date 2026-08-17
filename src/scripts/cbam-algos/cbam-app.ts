@@ -1697,6 +1697,30 @@ export function initCbam(): void {
   // synchronously right after mutating it — so by the time a user can click Export, lastPairs is
   // always in sync with `lines`.
   let lastPairs: ReturnType<typeof safeEstimates> = [];
+  /**
+   * The last route the user actually chose, kept across a rebuild that empties the <select>.
+   *
+   * syncRoutes reads the current pick out of `route.value` and hands it to nextRoute so a
+   * still-published route survives a rebuild. But when the list comes back EMPTY — an
+   * out-of-corpus year is the reachable case — it replaces innerHTML with a single explanatory
+   * option and returns, which sets `route.value` to ''. The pick is gone before the next call
+   * reads it, so coming back to a covered year restores nothing.
+   *
+   * Only multi-route goods lose anything: nextRoute auto-selects when a good publishes exactly
+   * one route, so those self-heal and hid this. On a multi-route good the panel sits on the idle
+   * prompt until the user notices the route control emptied itself.
+   *
+   * Reachable by typing rather than by pasting: committing a year digit-by-digit in an
+   * <input type="date"> fires change at 0002, 0020, 0202 on the way to 2026, and the first of
+   * those already wiped the pick.
+   *
+   * Safe to restore unconditionally, for two reasons that both have to hold. nextRoute returns
+   * `previous` only if the new list still publishes it, so a remembered route never survives into
+   * a pairing that does not offer it. And an empty `route.value` is never a user's choice — the
+   * "Select a production route…" placeholder is `disabled`, so the only way the value goes empty
+   * is a rebuild doing it.
+   */
+  let lastRoutePick = '';
 
   async function ensurePack(): Promise<EstimatorPack | null> {
     if (pack) return pack;
@@ -1731,8 +1755,11 @@ export function initCbam(): void {
   }
 
   function syncRoutes(): void {
-    // Read the user's pick BEFORE the rebuild wipes it.
-    const prev = route!.value;
+    // Read the user's pick BEFORE the rebuild wipes it — and remember it, because a rebuild that
+    // empties the list wipes it BEFORE the next call gets here (see lastRoutePick). Reading
+    // `route.value` alone is only enough while every rebuild leaves a real option selected.
+    if (route!.value) lastRoutePick = route!.value;
+    const prev = route!.value || lastRoutePick;
     // The select explains its own dependency rather than showing a bare dash — an
     // empty disabled box reads as broken, this reads as an instruction (doc §6).
     if (!pack || !cn!.value || !country!.value) {

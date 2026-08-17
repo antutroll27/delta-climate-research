@@ -522,6 +522,45 @@ test.describe('multi-line CBAM estimate — an import year the corpus does not c
     await expect(page.locator('#cbRoute')).toContainText('no route published for this pairing');
     await expect(page.locator('#cbRoute')).not.toContainText('no rules published');
   });
+
+  test('a route chosen on a multi-route good survives a trip through an uncovered year', async ({ page }) => {
+    // THE PICK USED TO BE DESTROYED ON THE WAY OUT, not on the way back. syncRoutes reads the
+    // current pick from `route.value` and hands it to nextRoute so a still-published route
+    // survives a rebuild — but when the list comes back EMPTY it replaces innerHTML with the one
+    // explanatory option and returns, which sets `route.value` to ''. By the time the user fixes
+    // the year, there is nothing left to restore, and nextRoute correctly declines to guess.
+    //
+    // Only MULTI-ROUTE goods lose anything, which is why this hid: nextRoute auto-selects when a
+    // good publishes exactly one route, so single-route lines self-heal and look fine. 25231000
+    // from Algeria publishes (A) and (B), so it does not.
+    //
+    // And it is reached by TYPING, not by pasting: committing a year digit-by-digit in an
+    // <input type="date"> fires `change` at 0002, 0020 and 0202 before 2026, so a user entering
+    // their own year passes through three uncovered years — the first of which already wiped it.
+    await page.goto('/cbam/cbam-calculator/');
+    await setLine(page, { ...GOOD_LINE, route: '(B)' });
+    await expect(page.locator('#cbRoute')).toHaveValue('(B)');
+    await expect(page.locator('#cbOut')).toContainText('tCO');
+
+    await page.fill('#cbDate', '0001-01-01');
+    await expect(page.locator('#cbRoute')).toBeDisabled();
+
+    await page.fill('#cbDate', '2026-03-15');
+    await expect(page.locator('#cbRoute')).toBeEnabled();
+    await expect(page.locator('#cbRoute')).toHaveValue('(B)');
+    // The panel prices again on its own — the user should not have to re-pick a route they never
+    // un-picked. Without the fix this sits on the idle prompt with the route control empty.
+    await expect(page.locator('#cbOut')).toContainText('tCO');
+
+    // The restore must not INVENT a pick. 25070080 from Algeria publishes no route at all in
+    // 2026, so a remembered '(B)' must not be resurrected onto a good that never offered it —
+    // nextRoute's `published.includes(previous)` is what holds this, and it has to keep holding
+    // now that `previous` can come from memory rather than from the live control.
+    await page.fill('#cbCn', '25070080');
+    await page.dispatchEvent('#cbCn', 'change');
+    await expect(page.locator('#cbRoute')).toContainText('no route published for this pairing');
+    await expect(page.locator('#cbRoute')).not.toHaveValue('(B)');
+  });
 });
 
 test.describe('multi-line CBAM estimate — the verified tier', () => {
