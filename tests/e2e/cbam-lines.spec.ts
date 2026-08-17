@@ -418,8 +418,11 @@ test.describe('multi-line CBAM estimate — the net-mass gate', () => {
     // never reaches the gate above: `!mass!.value` in run()'s completeness guard catches it first and
     // names every unfilled field rather than singling out the mass. Pinning which prompt each path
     // renders is what stops the two guards being reordered, merged or deduplicated unnoticed.
+    // The copy names the import date too, since the same guard now gates on it — hand-typed here
+    // rather than imported from production, per this file's anti-paraphrase convention, which is
+    // exactly why adding the date to run()'s gate had to update this line as well.
     await page.fill('#cbMass', '');
-    await expect(page.locator('#cbOut')).toContainText('Choose a good, origin, route and mass');
+    await expect(page.locator('#cbOut')).toContainText('Choose a good, origin, route, mass and import date');
     await expect(page.locator('#cbOut')).not.toContainText('Net mass must be a number of tonnes');
   });
 });
@@ -656,6 +659,56 @@ test.describe('multi-line CBAM estimate — the Add guard and failure surfacing'
     await expect(page.locator('#cbStatus')).toContainText('Could not add the line:');
     await expect(addBtn).toBeEnabled();
     await expect(page.locator('.cb-line')).toHaveCount(0);
+  });
+
+  test('a cleared import date refuses both surfaces rather than pricing year 0', async ({ page }) => {
+    // THE DEFECT: syncRoutes reads the year as `Number(date.value.slice(0, 4)) || 2026`. An empty
+    // field gives Number('') === 0 — falsy — so it falls back to 2026 and offers routes, and
+    // nextRoute auto-selects for a single-route good. run()'s gate never looked at the date, so
+    // estimateFromPack got `date: ''`, the engine's year was 0, no published row is keyed on 0,
+    // and the panel rendered a rule-refusal over a line whose only problem was a blank date.
+    //
+    // WHAT THIS TEST ACTUALLY PINS, stated precisely because the obvious reading overclaims.
+    // run()'s half is load-bearing: revert `!date!.value` there alone and the 'import date'
+    // assertion below goes red. draftLine()'s half is NOT — revert it alone and this test stays
+    // green, because `Number.isNaN(yearOf(l))` further down draftLine already refused every
+    // cleared date the form can produce. Only removing BOTH adds a blank-dated line (measured:
+    // it does, and the .cb-line assertion catches it). So the ADD path was never pricing year 0;
+    // it was refusing silently, with no draftReason, while the PREVIEW refused loudly and wrongly.
+    // The date in draftLine's gate is there to keep the two gates textually identical, which is
+    // that function's own stated rule — not because this test can hold it there.
+    //
+    // This is the only place either gate can be reached: both are closures inside initCbam(),
+    // reachable only through document.getElementById, so the unit suite cannot see them at all.
+    await page.goto('/cbam/cbam-calculator/');
+    await setLine(page, GOOD_LINE);
+    await expect(page.locator('#cbOut')).toContainText('tCO');
+
+    await page.fill('#cbDate', '');
+
+    // run(): the PREVIEW path must go idle, and must not name a rule the date is not the reason for.
+    await expect(page.locator('#cbOut')).toContainText('import date');
+    // WHICH refusal shipped depends on the TIER, measured through estimateFromPack rather than
+    // assumed: on THIS line (default+markup) a cleared date refused on `default/25231000/DZ/(A)/0`
+    // — "The Commission publishes no default value for this good, origin, production route or
+    // year" — because the defaults lookup is keyed on year and runs first. `cbam-factor/0` and its
+    // "free-allocation factor schedule" sentence are the VERIFIED tier's version of the same bug,
+    // where the defaults lookup is skipped. Both are asserted: the first is the one this line can
+    // actually produce, the second would fire if the line or the tier ever changed.
+    await expect(page.locator('#cbOut')).not.toContainText('The Commission publishes no default value');
+    await expect(page.locator('#cbOut')).not.toContainText('free-allocation factor schedule');
+    await expect(page.locator('#cbOut')).not.toContainText('tCO');
+
+    // draftLine(): the ADD path must refuse too, and the two must agree.
+    const before = await page.locator('.cb-line').count();
+    await page.click('#cbAdd');
+    await expect(page.locator('.cb-line')).toHaveCount(before);
+
+    // ...and restoring a date brings both back, so the gate is not simply always-closed.
+    await page.fill('#cbDate', '2026-03-15');
+    await expect(page.locator('#cbOut')).toContainText('tCO');
+    await page.click('#cbAdd');
+    await expect(page.locator('.cb-line')).toHaveCount(before + 1);
   });
 });
 

@@ -1648,6 +1648,18 @@ export function initCbam(): void {
       route!.innerHTML = '<option value="">Choose a good and origin first</option>';
       route!.disabled = true; return;
     }
+    // `|| 2026` IS DELIBERATE AND STAYS. The route dropdown has to populate before a date is
+    // chosen, and Number('') is 0 — falsy — so an empty field lands here. This fallback was
+    // once blamed for pricing a cleared date as year 0, and it was the wrong half: the bug was
+    // that run() and draftLine() then proceeded with `date: ''`, which the engine reads as year
+    // 0 (no cbamFactors row, so a cbam-factor/0 refusal). Both gates now require the date, so
+    // this year is only ever used to LIST routes, never to price. Do not "fix" it into a throw.
+    //
+    // WHICH refusal year 0 produced depends on the tier, measured rather than assumed: the
+    // VERIFIED tier skips the defaults lookup and refuses on cbam-factor/0 as described above,
+    // but the DEFAULT tier — the one most users are on — never got that far, because the
+    // defaults corpus is keyed on the reporting year too and refused first on
+    // `default/<cn>/<origin>/<route>/0`. Two different sentences, one blank field.
     const year = Number(date!.value.slice(0, 4)) || 2026;
     const rs = routesFor(pack, cn!.value, country!.value, year);
     route!.disabled = rs.length === 0;
@@ -1769,8 +1781,8 @@ export function initCbam(): void {
   });
 
   function run(): void {
-    if (!pack || !cn!.value || !country!.value || !route!.value || !mass!.value) {
-      out!.innerHTML = '<p class="cb-idle">Choose a good, origin, route and mass to see the provisional exposure.</p>';
+    if (!pack || !cn!.value || !country!.value || !route!.value || !mass!.value || !date!.value) {
+      out!.innerHTML = '<p class="cb-idle">Choose a good, origin, route, mass and import date to see the provisional exposure.</p>';
       return;
     }
     // REFUSE AN IMPOSSIBLE MASS RATHER THAN PRICING IT. `min="0"` on the input is
@@ -1907,7 +1919,19 @@ export function initCbam(): void {
    */
   function draftLine(): Line | null {
     draftReason = null;
-    if (!pack || !cn!.value || !country!.value || !route!.value || !mass!.value) return null;
+    if (!pack || !cn!.value || !country!.value || !route!.value || !mass!.value || !date!.value) return null;
+    // THE DATE HERE IS FOR AGREEMENT, NOT FOR DEFENCE — measured, because the obvious reading is
+    // wrong. Adding `!date!.value` to run()'s gate is load-bearing (revert it alone and the
+    // preview prices a blank date again); adding it HERE changes no observable behaviour at all.
+    // Reverted alone, the e2e pin stays green, because `Number.isNaN(yearOf(l))` below already
+    // refused every cleared date the form can produce — an <input type="date"> holds '' or a
+    // valid YYYY-MM-DD and nothing else, so the two conditions fire on exactly the same inputs.
+    // Only when BOTH are removed does a blank-dated line actually get added (verified: it does).
+    // So the NaN check was never the backstop it reads as; before this line it was the Add path's
+    // ONLY defence, and it is the reason the two surfaces diverged silently rather than loudly.
+    // It stays. This gate stays too, so the two gates read identically — which is the file's own
+    // rule, stated below — but do not mistake it for the thing holding the Add path closed.
+    //
     // THE SAME PREDICATE run() DECIDES WITH — deliberately the identical call, not an
     // equivalent-looking one. This is the ADD path to run()'s PREVIEW path, and the two gates
     // must agree or the panel and the line list state different facts about the same field:
