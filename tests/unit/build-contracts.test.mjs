@@ -264,3 +264,32 @@ test('publication checker trusts only same-origin sitemap-index references', asy
     violation.code === 'missing-sitemap-index'
   )));
 });
+
+test('the calculator states its idle prompt identically in the page and in the script', async () => {
+  // TWO COPIES OF ONE SENTENCE, and they are rendered by different machinery: the .astro ships
+  // it server-side as the pre-hydration card, and run() overwrites #cbOut with its own copy on
+  // the first input. A user sees the static one first, and keeps seeing it if ensurePack()
+  // never resolves — so a drift between them is a drift in what the product says, not a tidiness
+  // problem.
+  //
+  // They DID drift, in the commit that added the import date to run()'s completeness gate: the
+  // script's copy grew "and import date", the page's did not, and nothing caught it. Which is
+  // the same defect this calculator's engine work keeps closing one surface at a time — a fact
+  // spelled out in two places, where changing one is not changing the other.
+  //
+  // Extracted from the PAGE and required to appear in the SCRIPT, deliberately in that
+  // direction: cbam-app.ts holds several cb-idle strings (the mass refusal, the verified-panel
+  // refusal), so searching it for "some cb-idle sentence" would pass on the wrong one.
+  const page = await readFile(join(projectRoot, 'src/pages/cbam/cbam-calculator.astro'), 'utf8');
+  const script = await readFile(join(projectRoot, 'src/scripts/cbam-algos/cbam-app.ts'), 'utf8');
+
+  const idle = /<p class="cb-idle">([^<]+)<\/p>/.exec(page);
+  assert.ok(idle, 'the page must ship an idle prompt inside #cbOut before hydration');
+  assert.match(idle[1], /import date/,
+    'the idle prompt must name every field the gate requires — the import date included, since '
+    + 'a cleared date is exactly what run() now refuses to price');
+  assert.ok(script.includes(idle[1]),
+    `the script's idle copy must be byte-identical to the page's. Page says:\n  ${idle[1]}\n`
+    + 'but cbam-app.ts does not contain that string. Update run()\'s message and this one '
+    + 'together, or the product states two different sentences for one state.');
+});
