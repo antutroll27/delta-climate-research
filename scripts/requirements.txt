@@ -39,3 +39,7 @@ pvlib==0.15.2
 # other by bare filename.
 jsonschema==4.26.0
 referencing==0.37.0
+# NGSI-LD entity validation (scripts/check-ngsi-ld.py). JSON-LD fails SILENTLY --
+# an undefined term is dropped during expansion, not flagged -- so the check needs
+# a real processor, not a structural eyeball.
+pyld==3.2.0

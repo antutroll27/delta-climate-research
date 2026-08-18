@@ -30,8 +30,8 @@ export const MATRIX: readonly MatrixRow[] = [
   {
     standard: 'OGC API — Features (patterns)', region: 'Global', purpose: 'Geospatial collections and features',
     posture: 'aligned',
-    ships: 'Static GeoJSON at /api/collections/wards, /items and /items/{id}, served as application/geo+json.',
-    gap: 'No landing page, no conformance declaration, no paging or CRS negotiation. Static files at the standard paths, not a Features server.',
+    ships: 'The full discovery chain — landing page, conformance declaration, collections, items and individual features — navigable end to end by link relation alone, which is how QGIS and ogr2ogr traverse an API. Features are application/geo+json.',
+    gap: 'The conformance declaration lists NO classes, deliberately: limit, bbox and datetime are mandatory on the items endpoint (Reqs 21, 23, §7.15.4) and a static file cannot vary by query parameter. Every other Part 1 class depends on Core, so none can be claimed. Paths carry a .json extension, which costs a client nothing because navigation is by link relation.'
   },
   {
     standard: 'OGC 3D Tiles 1.1', region: 'Global', purpose: '3D streaming',
@@ -47,9 +47,9 @@ export const MATRIX: readonly MatrixRow[] = [
   },
   {
     standard: 'FIWARE NGSI-LD', region: 'EU / Global', purpose: 'Smart-city context data',
-    posture: 'roadmap',
-    ships: 'Nothing. A static file shaped like an entity is not an integration without a context broker.',
-    gap: 'A broker, subscriptions, temporal queries. Revisit if a municipal partner runs FIWARE.',
+    posture: 'aligned',
+    ships: 'The INFORMATION MODEL: one entity per ward at /api/ngsi-ld/entities/{id}.jsonld — URN id, typed attributes as Property and GeoProperty, UN/CEFACT unit codes, and a published @context. Every term is checked to expand to a fully-qualified IRI by scripts/check-ngsi-ld.py, because JSON-LD drops an undefined term silently rather than erroring.',
+    gap: 'The API half is absent: no context broker, so no subscriptions, no temporal queries, no federation. NGSI-LD defines both an information model and a broker API, and only the first is implemented. The Smart Data Models Building type was deliberately NOT adopted — its properties are occupancy and management fields we do not measure.',
   },
   {
     standard: 'ISO 37120 / 37122', region: 'Global', purpose: 'City sustainability indicators',
@@ -152,8 +152,9 @@ export const PHASES: readonly Phase[] = [
     objective: 'Schema validation against the specifications, access control, validation against local sensor data.',
     items: [
       { item: 'CityJSON validated against the OGC 2.0 schema', status: 'done', evidence: 'scripts/check-cityjson-schema.py, run in the build gate — brought forward from this phase and already passing' },
-      { item: 'OGC API Features conformance (landing page, conformance declaration, paging, CRS negotiation)', status: 'todo' },
-      { item: 'NGSI-LD entities resolving against a context broker', status: 'todo' },
+      { item: 'OGC API Features discovery documents (landing page, conformance declaration, collections)', status: 'done', evidence: '/api/index.json, /api/conformance.json, /api/collections.json — a unit test walks the chain by link relation alone. Paging and CRS negotiation remain out of reach without a server.' },
+      { item: 'NGSI-LD entities resolving against the declared @context', status: 'done', evidence: '/api/ngsi-ld/entities/{id}.jsonld — every term expands to a fully-qualified IRI, verified with a real JSON-LD processor by scripts/check-ngsi-ld.py. A context BROKER is a separate, unmet item.' },
+      { item: 'NGSI-LD context broker deployment', status: 'todo' },
       { item: 'Access control and API keys', status: 'todo', evidence: 'Not applicable while the surface is read-only static files; becomes real the moment anything is writable.' },
       { item: 'Validation against local sensor data', status: 'partial', evidence: 'Satellite validation is done (ECOSTRESS, leave-one-overpass-out). Ground sensors are not: only one of the three wards has an AQI station, and none has a thermal one.' },
     ],
