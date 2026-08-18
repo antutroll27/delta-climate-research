@@ -35,9 +35,35 @@ interface LineInput {
   date: string;
 }
 
-// A cement clinker import from Algeria on its one published route — priced,
-// with a real 2026 threshold row. The baseline "good" line most tests build on.
-const GOOD_LINE: LineInput = { cn: '25231000', country: 'DZ', route: '(A)', mass: '30', date: '2026-03-15' };
+// GREY cement clinker from Algeria on its one published route — priced, with a real
+// 2026 threshold row. The baseline "good" line most tests build on.
+//
+// WAS '25231000', AND THE CODE MOVED WITH THE CORPUS, NOT THE CLAIM. IR (EU) 2026/1740
+// re-keys the defaults onto 10-digit TARIC because white and grey clinker carry
+// different figures, so the 8-digit CN above them is no longer an offered good at all:
+// routesFor returns [], setLine's `#cbRoute option[value="(A)"]` never appears, and every
+// test built on this fixture times out there rather than at the thing it asserts. The
+// figure is preserved at the new key — 100 t on route (A) still prices at 75.865
+// certificates / €5,717.19 — only the key moved. cbam-render.test.mjs pins the 8-digit
+// stem's own refusal ("no value is published at 25231000 — the Commission publishes at
+// 2523100010 or 2523100090"), which is the sentence a user typing their customs code now
+// gets, so nothing about the old code is left unwitnessed.
+//
+// IT IS SINGLE-ROUTE NOW, and that is a real behavioural change, not bookkeeping: on v1,
+// 25231000/DZ published (A) AND (B). The split put those two routes on two DIFFERENT
+// goods — grey (2523100090) publishes only (A), white (2523100010) only (B) — so cement
+// can no longer witness anything about choosing among routes. MULTI_ROUTE_LINE below
+// exists for that.
+const GOOD_LINE: LineInput = { cn: '2523100090', country: 'DZ', route: '(A)', mass: '30', date: '2026-03-15' };
+
+// Unwrought aluminium from Algeria, which publishes (K) and (L) and prices on BOTH
+// (30 t: (K) 31.07625 certificates / €2,341.91, (L) 9.21825 / €694.69). The route-memory
+// test needs a good that genuinely offers a CHOICE — nextRoute short-circuits on
+// `published.length === 1` and selects the only route whatever the previous pick was, so
+// a single-route good cannot exercise the restore at all. Aluminium is where that lives
+// now that the TARIC split made cement single-route: measured over the shipped pack,
+// DZ's multi-route goods fall into exactly two route sets, (K)+(L) and (C)+(F).
+const MULTI_ROUTE_LINE: LineInput = { cn: '76011010', country: 'DZ', route: '(L)', mass: '30', date: '2026-03-15' };
 
 // Genuinely unpriceable in the shipped pack: the defaults corpus declares route
 // (C) for this CN, but no Column B benchmark resolves for it — an ordinary
@@ -354,8 +380,12 @@ test.describe('multi-line CBAM estimate — the emissions-scope control', () => 
     await page.goto('/cbam/cbam-calculator/');
 
     // Algerian cement clinker on route (A): the Commission publishes a per-route electricity
-    // default for it, so the scope control can genuinely change the answer (6.6 tCO₂e / €497 on
-    // route (B), 4.4 / €332 on route (A)) and must be offered.
+    // default for it, so the scope control can genuinely change the answer — on 100 t, including
+    // indirect adds 4.4 tCO₂e and €331.59 (71.465 certificates / €5,385.60 direct-only against
+    // 75.865 / €5,717.19) — and must be offered. The 6.6 tCO₂e / €497.37 this comment used to
+    // pair with it on "route (B)" is now a different GOOD, not a different route of this one:
+    // 2523100010 (white) publishes (B), 2523100090 (grey) publishes (A), and after the TARIC
+    // split no single cement code offers both. The per-route claim still holds across the pair.
     await setLine(page, GOOD_LINE);
     await expect(page.locator('#cbScopeRow')).toBeVisible();
 
@@ -480,10 +510,14 @@ test.describe('multi-line CBAM estimate — an import year the corpus does not c
     //
     // The misleading sentence is on the ROUTE CONTROL instead. "no route published for this
     // pairing" is about the good and the origin (the branch above it says "Choose a good and
-    // origin first"); the date is in no pairing. Within a covered year it is true, and true for
-    // 46,686 of the pack's 68,880 selectors. Outside one it is false for all 68,880 — including
-    // the 22,194 that publish routes perfectly well — and it sends the user to change the two
-    // controls that are not the problem.
+    // origin first"); the date is in no pairing. Outside a covered year it is false for every
+    // pairing the form can build — measured through routesFor on the shipped pack, all 69,784
+    // (572 goods x 122 origins) return [] at 2029, and every one of them publishes routes inside
+    // 2026-2028 — so it sends the user to change the two controls that are not the problem.
+    //
+    // (This comment used to add "within a covered year it is true, and true for 46,686 of the
+    // pack's 68,880 selectors". That was v1's corpus. Re-measured here: 0 of 69,784 at 2026 —
+    // see the last block of this test.)
     //
     // syncRoutes is a closure inside initCbam(), so this is the only place its use of
     // noRouteReason can be observed; cbam-render.test.mjs pins the function itself.
@@ -512,15 +546,34 @@ test.describe('multi-line CBAM estimate — an import year the corpus does not c
     await page.fill('#cbDate', '0001-01-01');
     await expect(page.locator('#cbRoute')).toContainText('no rules published for 0001');
 
-    // ...and a covered year still gets the PAIRING sentence, which is the branch that must not be
-    // lost in the fix. 25070080 (calcined clay) from Algeria publishes no route in 2026 — one of
-    // 15 of the pack's 574 goods with none for that origin — so there the good and the origin
-    // really are the reason, and only the good has changed from GOOD_LINE.
+    // ...and a covered year still gets a NON-year sentence, which is the branch that must not be
+    // lost in the fix: the year arm has to answer for the year and nothing else.
+    //
+    // THE WITNESS CHANGED BECAUSE THE CORPUS REMOVED THE OLD ONE, AND THE CLAIM CHANGED WITH IT.
+    // This block used to assert the PAIRING sentence, on 25070080 (calcined clay) from Algeria —
+    // "one of 15 of the pack's 574 goods with none for that origin". Re-measured through routesFor
+    // over the shipped v2 pack, that is now 0 of 69,784 pairings (572 goods x 122 origins) at
+    // 2026, 2027 and 2028: pack v2 ships a residual "OTHER third countries" row that every offered
+    // good resolves against, so an empty route list at a covered year is not a state a user can
+    // reach by choosing a good and an origin any more. The pairing arm is still the function's
+    // correct answer for the state it names and cbam-render.test.mjs still pins it directly
+    // ('an empty route list blames the year when the year is the reason, not the pairing', which
+    // records the same 0-of-69,784 measurement) — it simply has no live UI witness left, and an
+    // e2e assertion is the wrong place to keep pretending it has one.
+    //
+    // 25070080 STAYS, because the corpus gave it a better job. It is one of exactly three 8-digit
+    // stems the TARIC re-key stranded (25070080, 25231000, 25239000), so at a covered year it now
+    // reaches the code-too-short arm — the sentence that names the deeper codes instead of blaming
+    // the pairing. That is a live user path: it is what an importer typing the code off their own
+    // customs paperwork sees. The block still proves exactly what it was here to prove, that a
+    // covered year is not answered with "no rules published".
     await page.fill('#cbDate', '2026-03-15');
     await page.fill('#cbCn', '25070080');
     await page.dispatchEvent('#cbCn', 'change');
-    await expect(page.locator('#cbRoute')).toContainText('no route published for this pairing');
+    await expect(page.locator('#cbRoute')).toContainText(
+      'no value is published at 25070080 — the Commission publishes at 2507008080');
     await expect(page.locator('#cbRoute')).not.toContainText('no rules published');
+    await expect(page.locator('#cbRoute')).not.toContainText('this pairing');
   });
 
   test('a route chosen on a multi-route good survives a trip through an uncovered year', async ({ page }) => {
@@ -531,15 +584,21 @@ test.describe('multi-line CBAM estimate — an import year the corpus does not c
     // the year, there is nothing left to restore, and nextRoute correctly declines to guess.
     //
     // Only MULTI-ROUTE goods lose anything, which is why this hid: nextRoute auto-selects when a
-    // good publishes exactly one route, so single-route lines self-heal and look fine. 25231000
-    // from Algeria publishes (A) and (B), so it does not.
+    // good publishes exactly one route, so single-route lines self-heal and look fine.
+    //
+    // THE WITNESS MOVED FROM CEMENT TO ALUMINIUM, AND IT HAD TO. This test used to run on
+    // 25231000/DZ, which published (A) and (B). The TARIC re-key split that good in two and gave
+    // each half one route, so cement offers no choice to remember any more — run against
+    // GOOD_LINE now, `#cbRoute option[value="(B)"]` never appears and setLine times out.
+    // MULTI_ROUTE_LINE (76011010/DZ, routes (K) and (L)) is the same shape of case: several
+    // published routes, both priceable, so a pick is a real user decision the rebuild can lose.
     //
     // And it is reached by TYPING, not by pasting: committing a year digit-by-digit in an
     // <input type="date"> fires `change` at 0002, 0020 and 0202 before 2026, so a user entering
     // their own year passes through three uncovered years — the first of which already wiped it.
     await page.goto('/cbam/cbam-calculator/');
-    await setLine(page, { ...GOOD_LINE, route: '(B)' });
-    await expect(page.locator('#cbRoute')).toHaveValue('(B)');
+    await setLine(page, MULTI_ROUTE_LINE);
+    await expect(page.locator('#cbRoute')).toHaveValue('(L)');
     await expect(page.locator('#cbOut')).toContainText('tCO');
 
     await page.fill('#cbDate', '0001-01-01');
@@ -547,19 +606,30 @@ test.describe('multi-line CBAM estimate — an import year the corpus does not c
 
     await page.fill('#cbDate', '2026-03-15');
     await expect(page.locator('#cbRoute')).toBeEnabled();
-    await expect(page.locator('#cbRoute')).toHaveValue('(B)');
+    await expect(page.locator('#cbRoute')).toHaveValue('(L)');
     // The panel prices again on its own — the user should not have to re-pick a route they never
     // un-picked. Without the fix this sits on the idle prompt with the route control empty.
     await expect(page.locator('#cbOut')).toContainText('tCO');
 
-    // The restore must not INVENT a pick. 25070080 from Algeria publishes no route at all in
-    // 2026, so a remembered '(B)' must not be resurrected onto a good that never offered it —
-    // nextRoute's `published.includes(previous)` is what holds this, and it has to keep holding
-    // now that `previous` can come from memory rather than from the live control.
-    await page.fill('#cbCn', '25070080');
+    // The restore must not INVENT a pick: a remembered '(L)' must not be resurrected onto a good
+    // that never offered it. nextRoute's `published.includes(previous)` is what holds this, and it
+    // has to keep holding now that `previous` can come from memory rather than from the live
+    // control. 72051000/DZ publishes (C) and (F) — neither of them (L) — so nextRoute must return
+    // '' and syncRoutes must fall back to the disabled placeholder.
+    //
+    // THE TARGET MUST ITSELF BE MULTI-ROUTE, which the old version of this block got wrong even on
+    // the corpus it was written for. It switched to 25070080, a good with NO routes: that takes
+    // syncRoutes' `if (!rs.length)` early return, which replaces the whole <select> and never calls
+    // nextRoute at all. So the assertion could not have failed if `published.includes(previous)`
+    // were deleted — it was pinning the empty-list branch under that line's name. A multi-route
+    // target with the pick absent is the state that actually reaches the guard: measured, deleting
+    // the `includes` check leaves '(L)' selected here and this block goes red.
+    await page.fill('#cbCn', '72051000');
     await page.dispatchEvent('#cbCn', 'change');
-    await expect(page.locator('#cbRoute')).toContainText('no route published for this pairing');
-    await expect(page.locator('#cbRoute')).not.toHaveValue('(B)');
+    await expect(page.locator('#cbRoute')).toBeEnabled();
+    await expect(page.locator('#cbRoute')).toContainText('Select a production route…');
+    await expect(page.locator('#cbRoute')).not.toHaveValue('(L)');
+    await expect(page.locator('#cbRoute')).toHaveValue('');
   });
 });
 
@@ -825,7 +895,7 @@ test.describe('multi-line CBAM estimate — the Add guard and failure surfacing'
     // run(): the PREVIEW path must go idle, and must not name a rule the date is not the reason for.
     await expect(page.locator('#cbOut')).toContainText('import date');
     // WHICH refusal shipped depends on the TIER, measured through estimateFromPack rather than
-    // assumed: on THIS line (default+markup) a cleared date refused on `default/25231000/DZ/(A)/0`
+    // assumed: on THIS line (default+markup) a cleared date refused on `default/2523100090/DZ/(A)/0`
     // — "The Commission publishes no default value for this good, origin, production route or
     // year" — because the defaults lookup is keyed on year and runs first. `cbam-factor/0` and its
     // "free-allocation factor schedule" sentence are the VERIFIED tier's version of the same bug,
