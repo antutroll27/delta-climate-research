@@ -426,7 +426,7 @@ test('an empty route list blames the year when the year is the reason, not the p
   // form can build genuinely publish no route — 46,686 of 68,880 (574 goods x 120 origins),
   // measured over the shipped pack — so this sentence is right, and right often.
   for (const year of [2026, 2027, 2028]) {
-    assert.equal(noRouteReason(pack, year), 'no route published for this pairing',
+    assert.equal(noRouteReason(pack, year, '72083800'), 'no route published for this pairing',
       `${year} is a covered year: an empty list there really is about the good and origin`);
   }
 
@@ -434,24 +434,97 @@ test('an empty route list blames the year when the year is the reason, not the p
   // routes: routesFor filters on the reporting year, so it returns [] for 68,880 of 68,880. An
   // importer who typed 2029 was told their GOOD AND ORIGIN publish no route and went to change
   // the two controls that were not the problem.
-  assert.equal(noRouteReason(pack, 2029), 'no rules published for 2029');
-  assert.equal(noRouteReason(pack, 2025), 'no rules published for 2025');
+  assert.equal(noRouteReason(pack, 2029, '72083800'), 'no rules published for 2029');
+  assert.equal(noRouteReason(pack, 2025, '72083800'), 'no rules published for 2025');
 
   // FOUR DIGITS, because the year is being echoed back at a user looking at a date field that
   // reads 0001. Number('0001') is 1, and "no rules published for 1" names nothing they typed.
   // This is the case reached by retyping the year segment of an <input type="date">: measured in
   // Chrome, "2026" typed into a cleared year commits 0002, 0020, 0202 and then 2026, firing
   // `change` at every step.
-  assert.equal(noRouteReason(pack, 1), 'no rules published for 0001');
-  assert.equal(noRouteReason(pack, 202), 'no rules published for 0202');
+  assert.equal(noRouteReason(pack, 1, '72083800'), 'no rules published for 0001');
+  assert.equal(noRouteReason(pack, 202, '72083800'), 'no rules published for 0202');
 
   // AND IT IS DERIVED FROM THE PACK, not from a hardcoded year window: the branch has to follow
   // the corpus, or the day 2029 is published this sentence starts lying in the other direction.
   const covered = [...new Set(pack.defaultFactors.map((f) => f.reportingYear))].sort();
   assert.deepEqual(covered, [2026, 2027, 2028], 'the shipped pack covers exactly these years');
   for (const year of covered) {
-    assert.doesNotMatch(noRouteReason(pack, year), /no rules published/,
+    assert.doesNotMatch(noRouteReason(pack, year, '72083800'), /no rules published/,
       'a year the pack covers must never be reported as having no rules');
+  }
+});
+
+test('an empty route list names the code when the code is a shorter one than the corpus publishes at', () => {
+  // THE CASE. The corrected corpus keys cement clinker on 10-digit TARIC codes, because white
+  // (2523100010) and grey (2523100090) clinker carry different default values. The 8-digit CN
+  // 25231000 above them — the code on the importer's customs paperwork — is no longer an offered
+  // good, so routesFor returns [] and this sentence is what the route <select> shows.
+  //
+  // Both older sentences are FALSE here, which is why this branch exists: "no route published for
+  // this pairing" blames the good and the origin when the origin is fine and the good is
+  // published one digit-pair deeper, and the year branch would blame a year the corpus covers.
+  const reason = noRouteReason(pack, 2026, '25231000');
+  assert.equal(reason,
+    'no value is published at 25231000 — the Commission publishes at 2523100010 or 2523100090');
+  assert.doesNotMatch(reason, /pairing/,
+    'the good and the origin are not the problem and must not be blamed');
+
+  // It is derived from the corpus, not a hardcoded cement special case: all three 8-digit stems
+  // the migration left without a listing of their own answer this way, and they are exactly the
+  // three (measured over the shipped pack, so this fails if a fourth appears unhandled).
+  const listed = new Set(pack.classifications.map((c) => c.code));
+  const stranded = [...new Set(pack.classifications
+    .filter((c) => c.code.length === 10).map((c) => c.code.slice(0, 8)))]
+    .filter((stem) => !listed.has(stem)).sort();
+  assert.deepEqual(stranded, ['25070080', '25231000', '25239000']);
+  for (const stem of stranded) {
+    assert.match(noRouteReason(pack, 2026, stem), new RegExp(`^no value is published at ${stem} — `),
+      `${stem} is not offered as a good, so the reason must name the code, not the pairing`);
+  }
+
+  // AND IT MUST NOT FIRE FOR A CODE THE CORPUS DOES OFFER. 2523100090 IS offered; an empty route
+  // list there really is about the good and the origin. A branch that fired on every code with a
+  // longer relative would replace a true sentence with a misleading one in the common case.
+  assert.equal(noRouteReason(pack, 2026, '2523100090'), 'no route published for this pairing');
+  assert.equal(noRouteReason(pack, 2026, '72083800'), 'no route published for this pairing');
+
+  // THE SUGGESTED CODES MUST BE REAL. Offering a code the datalist does not carry would send the
+  // user to type something the form then rejects for a second, different wrong reason.
+  for (const code of ['2523100010', '2523100090', '2523900010', '2523900090', '2507008080']) {
+    assert.ok(listed.has(code), `${code} is offered by the pack, so it can be suggested`);
+  }
+});
+
+test('the CN placeholder teaches a code the corpus actually publishes', () => {
+  // The form's own example was `e.g. 25231000 — cement clinker`, which the corrected corpus
+  // retired in favour of the white/grey TARIC split. A placeholder is an instruction: leaving a
+  // retired code there invites the user into the refusal this task exists to explain, and the
+  // tool would be the thing that taught them the wrong code.
+  const page = readFileSync(fileURLToPath(
+    new URL('../../src/pages/cbam/cbam-calculator.astro', import.meta.url)), 'utf8');
+  const example = /placeholder="e\.g\. (\d+)/.exec(page)?.[1];
+  assert.ok(example, 'the CN field still carries an example code');
+  assert.ok(pack.classifications.some((c) => c.code === example),
+    `the example code ${example} must be one the pack offers as a good`);
+  assert.deepEqual(routesFor(pack, example, 'DZ', 2026), ['(A)'],
+    'and it must actually price: the example is the first thing a visitor tries');
+});
+
+test('the script pins the pack it will accept to the manifest that seals the pack bytes', () => {
+  // cbam-app.ts carries PACK_INTEGRITY as a literal — deliberately, because an integrity record
+  // fetched from the same origin as the pack proves nothing about the pack. The cost of that
+  // choice is that regenerating the pack without updating the literal would leave the browser
+  // refusing to load a pack that is perfectly good, with no test to catch it. This is that test.
+  const src = readFileSync(fileURLToPath(
+    new URL('../../src/scripts/cbam-algos/cbam-app.ts', import.meta.url)), 'utf8');
+  const manifest = JSON.parse(readFileSync(fileURLToPath(
+    new URL('../../public/cbam/estimator-pack.manifest.json', import.meta.url)), 'utf8'));
+  for (const [key, value] of Object.entries(manifest)) {
+    const literal = typeof value === 'number' ? String(value) : `'${value}'`;
+    assert.ok(src.includes(`${key}: ${literal}`),
+      `cbam-app.ts's PACK_INTEGRITY must carry ${key}: ${literal} — the pack manifest says so, `
+      + 'and the browser will refuse any pack the two disagree about');
   }
 });
 
