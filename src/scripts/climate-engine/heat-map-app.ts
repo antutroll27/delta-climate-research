@@ -909,7 +909,7 @@ export function mountHeatMap(): () => void {
       surfaceCache[name] = wardSurface; roadsCache[name] = roads; labelCache[name] = labels; provCache[name] = provenance;
       canopyCache[name] = canopy;
       void loadDcUrs(); void loadHeatwave();
-      const w = WARDS[name]; state.ward = name; updateCompareHref();
+      const w = WARDS[name]; state.ward = name; updateCompareHref(); updateReportHref();
 
     /* Rebuild the pick registry from the SAME rows the extrusions come from, and
        drop any selection: building #1759 in Ballygunge is a different building in
@@ -1454,6 +1454,16 @@ export function mountHeatMap(): () => void {
   /* ── DOM helpers ── */
   function setText(id: string, v: string) { const e = el(id); if (e) e.textContent = v; }
   function setHTML(id: string, v: string) { const e = el(id); if (e) e.innerHTML = v; }
+  /* The card's primary action used to be a <button> with no handler anywhere in
+     src/ — it had shipped to production doing nothing at all. It now points at
+     the ward's own record, which is the one per-ward artefact we can actually
+     hand someone today, and the label says exactly that rather than promising a
+     "report" we do not generate. */
+  function updateReportHref() {
+    const link = el('report-link') as HTMLAnchorElement | null;
+    if (link) link.href = `/api/wards/${state.ward}/metadata.json`;
+  }
+
   function updateCompareHref() {
     const link = el('compare-mode-link') as HTMLAnchorElement | null;
     if (!link) return;

@@ -230,7 +230,8 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
       </div>
       <div class="metric" style="border-top:1px solid var(--line);padding-bottom:0"><div class="k">Heat-stress distribution</div></div>
       <div class="histo" id="histo"></div>
-      <button class="cta">Generate ward report ↗</button>
+      <a class="cta" id="report-link" href="/api/wards/ballygunge/metadata.json" download
+         title="The ward's full data record: what is measured, the out-of-sample error and sample size, every source dataset with its licence, and the analysis CRS and bounding box.">Download ward record ↓</a>
     </aside>
 
     <div class="legend">
@@ -734,6 +735,7 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
      the rest of the card; the tint still carries it. Words in sans, FIGURES in
      mono via <b> (written by applyConfidence in heat-map-app.ts) — that is the
      type rule applied honestly rather than picking one face per element. */
+  .cta{display:block;text-align:center;text-decoration:none}
   .conf{font-family:var(--sans);font-size:.6rem;letter-spacing:.005em;margin-top:10px;padding:5px 9px;border-radius:8px;display:inline-block;cursor:help}
   .conf b{font-family:var(--mono);font-weight:400;letter-spacing:.02em}
   .conf.quantitative{color:var(--cyan);background:rgb(111 202 214 /.1)}

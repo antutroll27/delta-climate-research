@@ -98,3 +98,33 @@ test('a completed roadmap item must name the artefact that proves it', async () 
   const p1 = PHASES[0].items;
   assert.ok(p1.every((i) => i.status === 'done'), 'the page says Phase 1 is complete; the data must agree');
 });
+
+test('the heat-map card has no dead controls, and its record link is real', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const stage = await readFile('src/components/ClimateEngine/HeatMapStage.astro', 'utf8');
+  const app = await readFile('src/scripts/climate-engine/heat-map-app.ts', 'utf8');
+
+  // The primary action shipped to production as <button class="cta"> with no
+  // handler anywhere in src/. Any <button> carrying .cta must be wired.
+  const bareCta = stage.match(/<button[^>]*class="cta"[^>]*>/g) ?? [];
+  for (const b of bareCta) {
+    const id = /id="([^"]+)"/.exec(b)?.[1];
+    assert.ok(id && app.includes(id), `dead control: ${b} has no handler`);
+  }
+
+  // and the link that replaced it must point at an endpoint that exists
+  const href = /<a[^>]*id="report-link"[^>]*href="([^"]+)"/.exec(stage)?.[1];
+  assert.ok(href, 'report-link must be an anchor with an href');
+  assert.match(href, /^\/api\/wards\/[a-z]+\/metadata\.json$/);
+  const defaultWard = /^\/api\/wards\/([a-z]+)\//.exec(href)[1];
+
+  // the static href must match the ward the app boots with, or the first click
+  // downloads the wrong ward's record
+  const stateWard = /const state: State = \{ ward: '([a-z]+)'/.exec(app)?.[1];
+  assert.equal(defaultWard, stateWard, 'the markup default and the app default must agree');
+
+  // and it must follow the selection
+  assert.ok(app.includes('updateReportHref'), 'the href must be updated on ward change');
+  assert.match(app, /state\.ward = name; updateCompareHref\(\); updateReportHref\(\)/,
+    'updateReportHref must run wherever the ward changes');
+});
