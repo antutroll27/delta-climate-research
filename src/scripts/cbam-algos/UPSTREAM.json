@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
   "upstreamRepository": "GeoCBAM/CBM",
-  "upstreamCommit": "ed692c0f4a2eef6161d823ce224c4951380c07f5",
+  "upstreamCommit": "3e64b7365359c8f7c305604c933408604792e489",
   "packSha256": "fc56043b76d22dba984f55e783f8d9de6bc1df04a7f0513116898fda3646889d",
   "packManifestSha256": "f952b99e34da2e62ae0dfc506f8d396cbf8035d46f34f400b4a5111c7b2d77f8",
   "files": {
