@@ -43,3 +43,7 @@ referencing==0.37.0
 # an undefined term is dropped during expansion, not flagged -- so the check needs
 # a real processor, not a structural eyeball.
 pyld==3.2.0
+# STAC validation (scripts/check-stac.sh). Without this pin CI installs
+# everything else, finds stac-valid absent, prints "SKIPPED (not passed)" and
+# exits 0 — so the gate would have read as green while never once running.
+stac_valid==4.5.2
