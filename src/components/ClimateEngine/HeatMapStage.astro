@@ -659,13 +659,23 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
      The fill goes .82 -> .88 and the shadow deepens to compensate: over a dark
      3D scene an unbordered translucent panel loses its edge, and the fix for
      that is contrast + shadow, not a stroke by another name. */
-  .panel{position:absolute;background:rgb(9 20 22 /.88);border-radius:14px;backdrop-filter:blur(16px);box-shadow:0 24px 70px rgb(0 0 0 /.55);z-index:4}
+  /* Two shadows, not one big one: a tight contact shadow that DEFINES the edge,
+     and a soft ambient that lifts the card. The single 0 24px 70px pooled
+     across the rail gap and glued this to the legend below it. The ambient is
+     kept short (18px, not 70) for the same reason — it must not reach the next
+     card. */
+  .panel{position:absolute;background:rgb(9 20 22 /.88);border-radius:14px;backdrop-filter:blur(16px);box-shadow:0 1px 2px rgb(0 0 0 /.45),0 8px 18px rgb(0 0 0 /.35);z-index:4}
   .panel .h{font-family:var(--mono);font-size:.58rem;letter-spacing:.18em;color:var(--ink);padding:14px 18px 0;text-transform:uppercase}
   .left{left:26px;top:26px;bottom:26px;width:270px;padding-bottom:16px;overflow:auto}
   /* right rail: one bounded column (like .left) so the data card + legend can
      never overlap — the data card scrolls internally when the viewport is short,
      the legend stays pinned to the bottom via margin-top:auto. */
-  .rail-r{position:absolute;right:26px;top:26px;bottom:26px;width:242px;display:flex;flex-direction:column;gap:14px;overflow-y:auto;z-index:4}
+  /* gap 14 -> 22. When the panels lost their 1px border the border stopped
+     doing a job nobody had named: SEPARATING the readout card from the legend
+     directly beneath it. A 70px shadow then spilled across a 14px gap and the
+     two read as one slab. Space has to do that job now, and 14px is not enough
+     space to read as a break between two dark surfaces. */
+  .rail-r{position:absolute;right:26px;top:26px;bottom:26px;width:242px;display:flex;flex-direction:column;gap:22px;overflow-y:auto;z-index:4}
   .right{position:static;width:100%;flex:none}
 
   .ctl{padding:14px 18px;border-bottom:1px solid var(--line)}
@@ -750,7 +760,10 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
      pattern note made it obvious. */
   /* same rail, same family — it has to lose the stroke with .panel or it reads
      as the one thing on screen that is still outlined */
-  .legend{position:relative;z-index:5;width:100%;flex:none;margin-top:auto;background:rgb(9 20 22 /.88);border-radius:12px;backdrop-filter:blur(16px);box-shadow:0 24px 70px rgb(0 0 0 /.55);padding:12px 15px 7px}
+  /* Same shadow recipe as .panel. Fill nudged lighter (.88 -> .84) so the legend
+     is visibly a DIFFERENT surface from the readout above it — two identical
+     dark rectangles 22px apart still want to fuse; a tonal step stops that. */
+  .legend{position:relative;z-index:5;width:100%;flex:none;margin-top:auto;background:rgb(9 20 22 /.84);border-radius:12px;backdrop-filter:blur(16px);box-shadow:0 1px 2px rgb(0 0 0 /.45),0 8px 18px rgb(0 0 0 /.35);padding:12px 15px 7px}
   .legend .k{font-family:var(--mono);font-size:.54rem;letter-spacing:.16em;color:var(--ink);display:flex;justify-content:space-between;margin-bottom:.55rem;text-transform:uppercase}
   .ramp{height:9px;border-radius:4px;background:linear-gradient(90deg,#6fcad6,#9fb98a,#b08d57,#d46b4a,#e5484d)}
   .legend .sc{display:flex;justify-content:space-between;font-family:var(--mono);font-size:.52rem;color:var(--faint);margin-top:.4rem}
