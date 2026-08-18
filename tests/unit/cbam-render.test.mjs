@@ -1981,8 +1981,11 @@ test('a verified-path refusal carries the tier the engine ATTEMPTED to price at 
   // really was looked up and applied, and it is a LATER lookup that failed. The tier records what
   // the engine attempted to price the line at, so it stays mixed — the substitution did happen.
   //
-  // Swept over every (good, origin, route, year) the form can offer — 66,675 selectors, one date
-  // per year — 5,542 verified-path refusals come back mixed. The old comment claimed none did.
+  // Swept over every (good, origin, route, year) the form can offer on THIS tree — 233,112
+  // selectors, one date per year — 8,784 verified-path refusals come back mixed, every one of
+  // them on `certificate-price/`. The other refusals are 139,456 certificate-price and 10,752
+  // benchmark, all stamped 'actual-verified'. (The v1 figures were 66,675 selectors and 5,542
+  // mixed, across two namespaces. The old comment before that claimed none were mixed at all.)
 
   // A. THE CERTIFICATE PRICE. The pack prices 2026 quarters only and <input type="date"> takes
   //    2027, so this is the refusal an ordinary user meets first.
@@ -2883,7 +2886,23 @@ test('route (A) is priced with route (A) electricity, not route (B)\'s', () => {
   }
   assert.deepEqual(Object.entries(byRoute).filter(([, r]) => r.size > 1).map(([k]) => k), [],
     'no good/origin/year may publish an indirect default at more than one route — if one does, '
-    + 'the route term in the indirect lookup is reachable again and needs a live witness here');
+    + 'the two-values form of this defect is reachable again and needs a live witness here');
+
+  // THE ROUTE TERM IS STILL DIRECTLY WITNESSED, in the form the corpus now permits. Ask grey
+  // clinker for route (B)'s electricity and the lookup must REFUSE, naming the route it does
+  // publish — a lookup keyed on good/origin/year alone would hand back route (A)'s 0.04 and
+  // report `found`. That is the same defect, caught by the same assertion shape, without needing
+  // two published values to compare.
+  const wrongRoute = selectIndirectFactorFromPack(pack,
+    { cn: '2523100090', country: 'DZ', route: '(B)', massT: '1', date: '2026-03-15' });
+  assert.equal(wrongRoute.kind, 'route-mismatch',
+    'grey clinker publishes electricity at route (A) only — asking for (B) must refuse, not '
+    + 'silently return (A)\'s figure');
+  assert.deepEqual(wrongRoute.availableRoutes, ['(A)'], 'and it must name the route it does publish');
+  const rightRoute = selectIndirectFactorFromPack(pack,
+    { cn: '2523100010', country: 'DZ', route: '(B)', massT: '1', date: '2026-03-15' });
+  assert.equal(rightRoute.kind, 'found', 'sanity: white clinker really does publish route (B)');
+  assert.equal(rightRoute.factor.cell.baseIntensity, '0.060');
 
   const line = { country: 'DZ', massT: '100', date: '2026-03-15',
     emissionsScope: 'direct_and_indirect' };
@@ -2939,9 +2958,12 @@ test('the indirect lookup separates "publishes none" from "publishes one" — th
   assert.equal(selectIndirectFactorFromPack(pack, sel({
     cn: '2523100090', country: 'DZ', route: '(A)' })).kind, 'found', 'DZ cement clinker publishes one');
 
-  // The third arm, `route-mismatch`, is deliberately absent: it is unreachable in the shipped pack
-  // (see syncScope's note — 0 of 66,675 reachable selectors), so there is no input that would
-  // exercise it and a test claiming to would be fiction.
+  // The third arm, `route-mismatch`, is deliberately absent HERE: it is unreachable from the
+  // form on this pack — 0 of the 233,112 (good, origin, route, year) selectors routesFor can
+  // offer produce it, re-measured on this tree — so a syncScope-shaped test claiming to exercise
+  // it would be fiction. It is not untested: the route-electricity test below reaches it
+  // directly, by asking a good for a route the corpus does not publish electricity at, which is
+  // the only way in.
 });
 
 /* ── a mass that cannot become a figure is refused, not priced ──────────────── */

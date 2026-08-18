@@ -1711,11 +1711,12 @@ export function inputFor(l: Line, verified: EstimatorInput['verified']): Estimat
  * carrying a real stamp, so its tier is read like any other. This comment used to add that the
  * engine stamps EVERY verified-path refusal 'actual-verified', reasoning that nothing was priced
  * so no default stood in for anything. That is false. Swept over every (good, origin, route, year)
- * the form can offer — 66,675 selectors, one date per year, direct figure attested and electricity
- * left blank — 5,542 verified-path refusals come back stamped 'verified-direct+default-indirect'.
+ * the form can offer — 233,112 selectors on the pack v2 corpus, one date per year, direct figure
+ * attested and electricity left blank — 8,784 verified-path refusals come back stamped
+ * 'verified-direct+default-indirect'. (On v1 the same sweep was 66,675 selectors and 5,542.)
  *
  * THE TIER RECORDS WHAT THE ENGINE ATTEMPTED TO PRICE THE LINE AT, not whether it succeeded. On
- * those 5,542 the substitution really did happen: the Commission's marked-up electricity default
+ * those 8,784 the substitution really did happen: the Commission's marked-up electricity default
  * was looked up and applied, and it is the LATER lookup that failed. So the tier is decided by
  * WHERE the refusal is raised, and not by which table the selector names:
  *
@@ -1730,17 +1731,21 @@ export function inputFor(l: Line, verified: EstimatorInput['verified']): Estimat
  *     declining to substitute.
  *   - Raised inside estimateCertificates' own catch → carries whatever `tier` estimateFromPack
  *     had already computed, so it is the mixed value whenever the fallback priced. Measured over
- *     the same sweep: 5,536 on `certificate-price/` and 6 on `benchmark/`. `quarter/` stamps it
- *     too, though only a hand-built date reaches that one — <input type="date"> cannot emit
- *     month 13.
+ *     the same sweep: all 8,784 are on `certificate-price/`. The other refusals are 139,456 on
+ *     `certificate-price/` and 10,752 on `benchmark/`, every one of them 'actual-verified'.
+ *     A hand-built unreadable date refuses on `date/` before any of this is reached, and is
+ *     'actual-verified' too — <input type="date"> cannot emit month 13 in any case.
  *
- * SO IT IS NOT A 2027-ONLY CURIOSITY, and a reader who assumes "mixed refusal ⇒ missing price"
- * will be wrong on the shipped pack. The six `benchmark/` cases are grey clinker and grey
- * hydraulic cements (25231000, 25239000) from KR — the only origin publishing either on the
- * route-independent route, which the form offers as "single route". The Commission publishes a route-independent
- * electricity default there, so the fallback fires; the Annex publishes column-B cement benchmarks
- * for routes (A) and (B) only, so the benchmark lookup then finds nothing. An ordinary 2026 date
- * reaches it.
+ * IT IS NOW A 2027-ONLY FACT, AND THAT IS A CHANGE THIS COMMENT USED TO DENY. On the v1 corpus
+ * six `benchmark/` refusals reached the mixed tier — grey clinker and grey hydraulic cements
+ * (25231000, 25239000) from KR, the one origin publishing either route-independently, where a
+ * route-independent electricity default fired the fallback and the Annex published column-B
+ * cement benchmarks for routes (A) and (B) only. Pack v2 publishes no clinker row at the
+ * route-independent route for any origin, and — measured over the whole corpus — there is no
+ * (good, route, year) that both publishes an indirect default and lacks a column-B benchmark. So
+ * a mixed refusal at a 2026 date no longer exists: 0 of 233,112. The mechanism below is
+ * unchanged and is still what decides the tier; only its second witness has gone, and
+ * cbam-render.test.mjs asserts that precondition structurally so its return is not silent.
  *
  * The old sentence's CONCLUSION survives, for a different reason than it gave: §4's caveat
  * (`anyVerified` in buildPrintDocument) and the card's attestation (renderAttestation) both gate
@@ -1956,10 +1961,14 @@ export function initCbam(): void {
     // `kind !== 'none'` rather than `=== 'found'` is FUTUREPROOFING, not a second live fix. It
     // exists so a route MISMATCH keeps the control visible and the user can reach the refusal
     // that warns them — but no such selector exists today. Sweeping every good × origin ×
-    // published-route the form can offer, across the pack's 2026–2028 years, gives 66,675
-    // reachable selectors: 8,310 `found`, 58,365 `none`, and ZERO `route-mismatch`. The arm is
+    // published-route the form can offer, across the pack's 2026–2028 years, gives 233,112
+    // reachable selectors: 13,176 `found`, 219,936 `none`, and ZERO `route-mismatch`. The arm was
     // written for the IR 2026/1740 route re-key, which can leave a good's indirect rows covering
-    // fewer routes than its direct rows. Do not read it as exercised behaviour; it is not.
+    // fewer routes than its direct rows; that re-key has now LANDED — it is the corpus this
+    // build ships — and it still produces no reachable mismatch, because routesFor only offers a
+    // route the direct table publishes and the two tables move together. `route-mismatch` is
+    // reachable only by calling the engine with a route the form would not offer. Do not read
+    // this arm as exercised behaviour; re-measured on the v2 corpus, it is not.
     const has = !!pack && !!cn!.value && !!country!.value && !!route!.value
       && selectIndirectFactorFromPack(pack, {
         cn: cn!.value, country: country!.value, route: route!.value,
