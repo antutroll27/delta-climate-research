@@ -24,8 +24,8 @@ export const MATRIX: readonly MatrixRow[] = [
   {
     standard: 'OGC CityJSON 2.0', region: 'Global', purpose: 'Semantic 3D city models',
     posture: 'aligned',
-    ships: 'LoD1 Building objects per ward at /api/wards/{id}/cityjson.json — one Solid per shipped footprint, per-building height source and confidence attributes, and a lineage block under the +delta_lineage extension key. Validates against the official CityJSON 2.0 JSON Schema (scripts/check-cityjson-schema.py, run in the build gate).',
-    gap: 'Schema-valid, not geometry-audited by the reference validator (cjval): planarity and orientation of the extruded solids are checked by our own tests, not by an external tool. LoD2 and non-building city objects are not produced.',
+    ships: 'LoD1 Building objects per ward at /api/wards/{id}/cityjson.json — one Solid per shipped footprint, per-building height source and confidence attributes, and a lineage block under the +delta_lineage extension key. Validates against the official CityJSON 2.0 JSON Schema AND the reference validator cjval — 0 errors, 0 warnings, including the geometry checks (vertex indices, semantics, duplicate vertices). The +delta_lineage root property is a properly declared CityJSON Extension.',
+    gap: 'LoD2 and non-building city objects are not produced, and the export is a sample rather than a maintained product. Heights are a zonal statistic whose independent validation came back UNDERPOWERED.',
   },
   {
     standard: 'OGC API — Features (patterns)', region: 'Global', purpose: 'Geospatial collections and features',

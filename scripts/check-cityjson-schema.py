@@ -21,6 +21,7 @@ from __future__ import annotations
 import glob
 import json
 import os
+import shutil
 import subprocess
 import sys
 from typing import Any
@@ -66,6 +67,37 @@ def validator() -> jsonschema.protocols.Validator:
     return cls(main, registry=reg)
 
 
+def run_cjval(paths: list[str]) -> int:
+    """Run the REFERENCE validator too, when it is on PATH.
+
+    The JSON Schema and cjval do NOT check the same things, and neither is a
+    superset. The schema accepted an undeclared `+delta_lineage` root property
+    that cjval rejected outright -- and cjval aborts on that error, so every
+    geometry check after it was silently SKIPPED while we read "schema valid" as
+    though geometry had been audited. Going the other way, cjval accepted an
+    extension version of '1.0.0' that the schema rejects, because the schema pins
+    it to MAJOR.MINOR. Each caught a real defect the other missed.
+
+    cjval is a Rust binary (`cargo install cjval --features build-binary`), so it
+    cannot be assumed present in CI. When it is missing this reports that fact
+    rather than passing quietly -- an absent check must never read as a clean one.
+    """
+    exe = shutil.which("cjval") or os.path.expanduser("~/.cargo/bin/cjval")
+    if not os.path.exists(exe):
+        print("  cjval not installed — reference validation SKIPPED (not passed).")
+        print("  install: cargo install cjval --features build-binary")
+        return 0
+    ext = os.path.join(ROOT, "dist", "api", "cityjson", "delta-lineage.ext.json")
+    bad = 0
+    for p in paths:
+        cmd = [exe, "--summary"] + (["-e", ext] if os.path.exists(ext) else []) + [p]
+        out = subprocess.run(cmd, capture_output=True, text=True).stdout.strip()
+        ok = "valid" in out.lower() and "invalid" not in out.lower()
+        print(f"  {'ok  ' if ok else 'FAIL'} cjval {os.path.relpath(p, ROOT):<44} {out[:60]}")
+        bad += not ok
+    return bad
+
+
 def main(argv: list[str]) -> int:
     paths = argv[1:] or sorted(glob.glob(os.path.join(ROOT, "dist", "api", "wards", "*", "cityjson.json")))
     if not paths:
@@ -87,6 +119,7 @@ def main(argv: list[str]) -> int:
         bad += bool(errs)
     print()
     print("  ALL VALID against the CityJSON 2.0 schema" if not bad else f"  {bad} file(s) FAIL schema validation")
+    bad += run_cjval(paths)
     return 1 if bad else 0
 
 

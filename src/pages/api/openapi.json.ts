@@ -30,6 +30,7 @@ export const GET: APIRoute = () => new Response(JSON.stringify({
     '/api/collections/wards/items/{id}.json': { get: { summary: 'One ward as a GeoJSON Feature', parameters: [wardParam], responses: { '200': json('Feature', 'application/geo+json'), '404': { description: 'unknown ward' } } } },
     '/api/wards/{id}/metadata.json': { get: { summary: 'Ward record: measured confidence + full data lineage', parameters: [wardParam], responses: { '200': json('WardRecord') } } },
     '/api/wards/{id}/cityjson.json': { get: { summary: 'LoD1 CityJSON 2.0, one Building per shipped footprint', parameters: [wardParam], responses: { '200': json('CityJSON', 'application/city+json') } } },
+    '/api/cityjson/delta-lineage.ext.json': { get: { summary: 'CityJSON Extension declaring the +delta_lineage root property the ward exports carry', responses: { '200': json('CityJSON Extension') } } },
     '/api/indicators.json': { get: { summary: 'ISO 37123 city indicators computed for the study wards, plus the indicators deliberately not published and why', responses: { '200': json('indicator set') } } },
     '/api/ngsi-ld/context.jsonld': { get: { summary: 'JSON-LD @context defining the domain terms the entities use', responses: { '200': json('@context document', 'application/ld+json') } } },
     '/api/ngsi-ld/entities.jsonld': { get: { summary: 'All ward entities in NGSI-LD form (information model only; no context broker)', responses: { '200': json('array of NGSI-LD entities', 'application/ld+json') } } },

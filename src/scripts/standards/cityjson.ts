@@ -35,6 +35,54 @@ interface ProvFile      { readonly src: readonly string[]; readonly confidence: 
 
 const SCALE = [1e-7, 1e-7, 0.01] as const;   // ~1 cm horizontal, 1 cm vertical
 
+/**
+ * CityJSON Extension declaring our one extra root property.
+ *
+ * The JSON Schema alone accepted `+delta_lineage` — additionalProperties is open
+ * at the root — but the REFERENCE validator (cjval) rejected the file outright:
+ * "Extra root property '+delta_lineage' doesn't have a schema". A `+`-prefixed
+ * member is not a free-for-all; it is the Extension mechanism, and using one
+ * without declaring it is precisely the overclaim that publishing "schema-valid"
+ * would have hidden. Worse, cjval ABORTS at that error, so every geometry check
+ * downstream — vertex indices, semantics, duplicate vertices — was silently
+ * skipped, and we were reading "schema valid" as though geometry had been
+ * audited. It had not.
+ */
+export const EXTENSION_NAME = 'DeltaLineage';
+/** MAJOR.MINOR only. The 2.0 schema pins extension versions to `^(\d+\.)(\d+)$`,
+ *  so a semver '1.0.0' is REJECTED — by the JSON Schema, though cjval accepted
+ *  it. The two disagreed, and running both is the only reason we found out. */
+export const EXTENSION_VERSION = '1.0';
+export const EXTENSION_URI = 'https://deltaclimate.earth/api/cityjson/delta-lineage.ext.json';
+
+export const EXTENSION_DOCUMENT = {
+  type: 'CityJSONExtension',
+  name: EXTENSION_NAME,
+  uri: EXTENSION_URI,
+  version: EXTENSION_VERSION,
+  versionCityJSON: '2.0',
+  description: 'Adds a +delta_lineage root property carrying the provenance and measured confidence of a '
+    + 'Delta Climate Research ward export: which datasets the geometry came from, the licence each travels '
+    + 'under, and the out-of-sample error of the thermal model this geometry is used with. CityJSON 2.0 '
+    + 'closes `metadata` to six members, so lineage of this depth has nowhere else to live.',
+  extraRootProperties: {
+    '+delta_lineage': {
+      type: 'object',
+      required: ['status', 'analysisCrs', 'confidence', 'provenance'],
+      properties: {
+        status: { type: 'string' },
+        analysisCrs: { type: 'string' },
+        note: { type: 'string' },
+        confidence: { type: 'object' },
+        provenance: { type: 'object' },
+      },
+    },
+  },
+  extraAttributes: {},
+  extraCityObjects: {},
+  extraSemanticSurfaces: {},
+};
+
 /** Mirrors scripts/build-ward-geometry.py:FLOOR_M. Google Open Buildings' published
  *  minimum AND its no-confident-height value. A zonal statistic BELOW it means the
  *  raster found no building under that footprint (OSM features Google's ML did not
@@ -52,6 +100,7 @@ export interface CityJSON {
   readonly type: 'CityJSON';
   readonly version: '2.0';
   readonly transform: { readonly scale: readonly [number, number, number]; readonly translate: readonly [number, number, number] };
+  readonly extensions: Record<string, { readonly url: string; readonly version: string }>;
   readonly metadata: Record<string, unknown>;
   readonly CityObjects: Record<string, unknown>;
   readonly vertices: (readonly [number, number, number])[];
@@ -81,6 +130,23 @@ export function buildCityJSON(w: Ward): CityJSON {
 
   const q = (v: number, t: number, s: number) => Math.round((v - t) / s);
 
+  /* CityJSON's `vertices` is a SHARED POOL — that is the point of indexing into
+     it — so two buildings meeting at a corner should reference one vertex, not
+     two identical ones. Emitting per-building blocks left 165 duplicates in
+     Ballygunge, which cjval reports as a warning. Interning on the quantised
+     integer triple is exact: these are already integers, so there is no
+     floating-point near-miss to worry about. */
+  const pool = new Map<string, number>();
+  const vertex = (x: number, y: number, z: number): number => {
+    const key = `${x},${y},${z}`;
+    const hit = pool.get(key);
+    if (hit !== undefined) return hit;
+    const idx = vertices.length;
+    vertices.push([x, y, z]);
+    pool.set(key, idx);
+    return idx;
+  };
+
   fp.b.forEach((row, i) => {
     const h = hs[i]!;
     const ring = row.lonlat.slice(0, -1);        // drop the closing duplicate; CityJSON rings are implicit
@@ -88,15 +154,15 @@ export function buildCityJSON(w: Ward): CityJSON {
     const base = vertices.length;
     const isFill = h.fill || h.p65 < FLOOR_M;
     const height = isFill ? FLOOR_M : h.p65;
-    // bottom ring then top ring, same order
-    for (const [lon, lat] of ring) vertices.push([q(lon, translate[0], SCALE[0]), q(lat, translate[1], SCALE[1]), 0]);
-    for (const [lon, lat] of ring) vertices.push([q(lon, translate[0], SCALE[0]), q(lat, translate[1], SCALE[1]), q(height, 0, SCALE[2])]);
+    const zTop = q(height, 0, SCALE[2]);
+    const bot = ring.map(([lon, lat]) => vertex(q(lon, translate[0], SCALE[0]), q(lat, translate[1], SCALE[1]), 0));
+    const tp  = ring.map(([lon, lat]) => vertex(q(lon, translate[0], SCALE[0]), q(lat, translate[1], SCALE[1]), zTop));
     const n = ring.length;
-    const bottom = ring.map((_, k) => base + (n - 1 - k));            // reversed → outward normal (down)
-    const top    = ring.map((_, k) => base + n + k);
+    const bottom = bot.map((_, k) => bot[n - 1 - k]!);                // reversed → outward normal (down)
+    const top    = tp;
     const walls  = ring.map((_, k) => {
       const k2 = (k + 1) % n;
-      return [base + k, base + k2, base + n + k2, base + n + k];
+      return [bot[k]!, bot[k2]!, tp[k2]!, tp[k]!];
     });
     const srcKey = pv.src[i]!;
     CityObjects[row.gers] = {
@@ -117,6 +183,9 @@ export function buildCityJSON(w: Ward): CityJSON {
     type: 'CityJSON',
     version: '2.0',
     transform: { scale: [...SCALE], translate: [...translate] },
+    // declares +delta_lineage below; without this the reference validator rejects
+    // the file and skips every geometry check that follows
+    extensions: { [EXTENSION_NAME]: { url: EXTENSION_URI, version: EXTENSION_VERSION } },
     // metadata is CLOSED in the 2.0 schema: exactly these keys, and contactDetails
     // REQUIRES contactName + emailAddress. Both were caught by the official schema.
     metadata: {
