@@ -1,93 +1,117 @@
 #!/usr/bin/env node
 /**
- * Guard against the vendored CBAM engine drifting from the GeoCBAM SaaS.
+ * Verify the Astro CBAM engine is an exact copy of one reviewed upstream commit.
  *
- * WHY THIS EXISTS. src/scripts/cbam-algos/ is a COPY of the SaaS's regulatory
- * arithmetic. When it landed it was verified byte-identical and the commit said
- * so. Nine days later the SaaS gained indirect emissions and the de minimis
- * threshold, and this copy silently kept computing the old rules — understating
- * cement by 9.2% and quoting a four-figure cost to importers who may be exempt.
- * Nothing caught it; it was found by hand, by accident.
- *
- * Two checks, because they fail for different reasons:
- *   LOCAL EDIT  — a vendored file no longer matches its recorded hash. Someone
- *                 edited the copy, which is exactly what the copy must never be.
- *                 Runs everywhere, including CI, since the manifest is committed.
- *   UPSTREAM    — the SaaS has moved on. Only runs where the SaaS checkout is
- *                 reachable; skipped, not failed, on a build machine.
- *
- * The real fix is the portability dossier's §3 — extract the engine to a package
- * both consume. This is the tripwire until that happens.
- *
- *   node scripts/cbam-sync-check.mjs           check
- *   node scripts/cbam-sync-check.mjs --update  re-record hashes after a re-sync
+ * The immutable commit is the source of truth. We do not compare against a moving
+ * sibling checkout's HEAD: an unrelated upstream feature must not make this site
+ * silently adopt new regulatory behaviour or make CI depend on a developer path.
  */
 import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const VENDORED = 'src/scripts/cbam-algos';
 const MANIFEST = join(VENDORED, 'UPSTREAM.json');
 const PACK = 'public/cbam/estimator-pack.json';
-// Every file here is upstream's. cbam-app.ts is ours and is deliberately absent.
+const PACK_MANIFEST = 'public/cbam/estimator-pack.manifest.json';
 const FILES = [
-  'cbam/certificate-estimate.ts', 'cbam/resolve-fa.ts', 'cbam/sector.ts', 'cbam/sefa.ts',
-  'cbam/types.ts', 'errors/domain-error.ts', 'estimator/estimate-from-pack.ts',
-  'regulatory/iso-3166.ts', 'regulatory/types.ts', 'threshold/aggregate.ts', 'threshold/evaluate.ts',
+  'cbam/certificate-estimate.ts', 'cbam/input.ts', 'cbam/resolve-fa.ts', 'cbam/sector.ts',
+  'cbam/sefa.ts', 'cbam/types.ts', 'errors/domain-error.ts',
+  'estimator/estimate-from-pack.ts', 'estimator/load-pack.ts', 'estimator/pack-v2.ts',
+  'regulatory/iso-3166.ts', 'regulatory/types.ts',
+  'threshold/aggregate.ts', 'threshold/evaluate.ts',
 ];
-const UPSTREAM_LIB = process.env.CBAM_UPSTREAM_LIB ?? '/Volumes/VSTSAMPLES/Projects/CBM/lib';
-const UPSTREAM_PACK = process.env.CBAM_UPSTREAM_PACK
-  ?? '/Volumes/VSTSAMPLES/Projects/CBM/public/estimator-pack.json';
+const UPSTREAM_REPO = process.env.CBAM_UPSTREAM_REPO ?? '/Volumes/VSTSAMPLES/Projects/CBM';
 
-const sha = (p) => createHash('sha256').update(readFileSync(p)).digest('hex').slice(0, 16);
+const shaBytes = (bytes) => createHash('sha256').update(bytes).digest('hex');
+const shaFile = (path) => shaBytes(readFileSync(path));
 
 if (process.argv.includes('--update')) {
-  const files = Object.fromEntries(FILES.map((f) => [f, sha(join(VENDORED, f))]));
-  const packGeneratedAt = JSON.parse(readFileSync(PACK, 'utf8')).generatedAt;
-  writeFileSync(MANIFEST, `${JSON.stringify({ packGeneratedAt, files }, null, 2)}\n`);
-  console.log(`recorded ${FILES.length} files · pack ${packGeneratedAt}`);
+  const prior = existsSync(MANIFEST) ? JSON.parse(readFileSync(MANIFEST, 'utf8')) : {};
+  const upstreamCommit = process.env.CBAM_UPSTREAM_COMMIT ?? prior.upstreamCommit;
+  if (!/^[0-9a-f]{40}$/.test(upstreamCommit ?? '')) {
+    console.error('CBAM_UPSTREAM_COMMIT must be a full 40-character commit SHA');
+    process.exit(1);
+  }
+  const files = Object.fromEntries(FILES.map((file) => [file, shaFile(join(VENDORED, file))]));
+  const packManifest = JSON.parse(readFileSync(PACK_MANIFEST, 'utf8'));
+  const record = {
+    schemaVersion: 2,
+    upstreamRepository: 'GeoCBAM/CBM',
+    upstreamCommit,
+    packSha256: shaFile(PACK),
+    packManifestSha256: shaFile(PACK_MANIFEST),
+    files,
+  };
+  if (record.packSha256 !== packManifest.packSha256) {
+    console.error('refusing to record: estimator-pack.manifest.json does not seal the pack bytes');
+    process.exit(1);
+  }
+  writeFileSync(MANIFEST, `${JSON.stringify(record, null, 2)}\n`);
+  console.log(`recorded ${FILES.length} files · upstream ${upstreamCommit.slice(0, 12)} · pack ${record.packSha256.slice(0, 12)}`);
   process.exit(0);
 }
 
 let failed = false;
 const manifest = JSON.parse(readFileSync(MANIFEST, 'utf8'));
-
-for (const f of FILES) {
-  const got = sha(join(VENDORED, f));
-  if (got !== manifest.files[f]) {
-    console.error(`EDITED  ${f}  — vendored copies must never be edited in this repo`);
-    failed = true;
-  }
-}
-if (!failed) console.log(`vendored engine intact (${FILES.length} files match UPSTREAM.json)`);
-
-const packAt = JSON.parse(readFileSync(PACK, 'utf8')).generatedAt;
-if (packAt !== manifest.packGeneratedAt) {
-  console.error(`PACK    generatedAt ${packAt} != recorded ${manifest.packGeneratedAt}`);
+if (manifest.schemaVersion !== 2 || !/^[0-9a-f]{40}$/.test(manifest.upstreamCommit ?? '')) {
+  console.error('MANIFEST  UPSTREAM.json is not a supported immutable snapshot manifest');
   failed = true;
 }
 
-if (!existsSync(UPSTREAM_LIB)) {
-  console.log('upstream not reachable here — skipping the drift check (set CBAM_UPSTREAM_LIB)');
-} else {
-  const drifted = FILES.filter((f) =>
-    existsSync(join(UPSTREAM_LIB, f)) && sha(join(VENDORED, f)) !== sha(join(UPSTREAM_LIB, f)));
-  const missing = FILES.filter((f) => !existsSync(join(UPSTREAM_LIB, f)));
-  if (drifted.length) {
-    console.error(`\nDRIFT   ${drifted.length} file(s) differ from upstream:`);
-    for (const f of drifted) console.error(`          ${f}`);
-    console.error('        re-copy from the SaaS, run the tests, then --update');
+for (const file of FILES) {
+  const expected = manifest.files?.[file];
+  const got = shaFile(join(VENDORED, file));
+  if (!/^[0-9a-f]{64}$/.test(expected ?? '') || got !== expected) {
+    console.error(`EDITED  ${file} — expected ${expected ?? 'missing'}, got ${got}`);
     failed = true;
   }
-  if (missing.length) console.error(`WARN    not found upstream: ${missing.join(', ')}`);
-  if (existsSync(UPSTREAM_PACK)) {
-    const up = JSON.parse(readFileSync(UPSTREAM_PACK, 'utf8')).generatedAt;
-    if (up !== packAt) {
-      console.error(`STALE   rule pack: ours ${packAt}, upstream ${up}`);
+}
+if (!failed) console.log(`vendored engine intact (${FILES.length} files match the immutable manifest)`);
+
+const packSha256 = shaFile(PACK);
+const packManifestSha256 = shaFile(PACK_MANIFEST);
+const browserManifest = JSON.parse(readFileSync(PACK_MANIFEST, 'utf8'));
+if (packSha256 !== manifest.packSha256 || packSha256 !== browserManifest.packSha256) {
+  console.error(`PACK     byte SHA mismatch — recorded ${manifest.packSha256}, manifest ${browserManifest.packSha256}, got ${packSha256}`);
+  failed = true;
+}
+if (packManifestSha256 !== manifest.packManifestSha256) {
+  console.error(`MANIFEST pack manifest edited — expected ${manifest.packManifestSha256}, got ${packManifestSha256}`);
+  failed = true;
+}
+
+if (!existsSync(join(UPSTREAM_REPO, '.git'))) {
+  console.log(`upstream checkout unavailable — local bytes remain pinned to ${manifest.upstreamCommit?.slice(0, 12)}`);
+} else {
+  for (const file of FILES) {
+    try {
+      const upstream = execFileSync('git', [
+        '-C', UPSTREAM_REPO, 'show', `${manifest.upstreamCommit}:lib/${file}`,
+      ], { maxBuffer: 64 * 1024 * 1024 });
+      if (shaBytes(upstream) !== manifest.files[file]) {
+        console.error(`UPSTREAM ${file} does not match commit ${manifest.upstreamCommit}`);
+        failed = true;
+      }
+    } catch {
+      console.error(`UPSTREAM cannot read lib/${file} at ${manifest.upstreamCommit}`);
       failed = true;
     }
   }
-  if (!failed) console.log('in sync with upstream engine and rule pack');
+  try {
+    const upstreamPack = execFileSync('git', [
+      '-C', UPSTREAM_REPO, 'show', `${manifest.upstreamCommit}:public/estimator-pack.json`,
+    ], { maxBuffer: 64 * 1024 * 1024 });
+    if (shaBytes(upstreamPack) !== packSha256) {
+      console.error('UPSTREAM estimator pack differs from the pinned commit');
+      failed = true;
+    }
+  } catch {
+    console.error(`UPSTREAM cannot read estimator pack at ${manifest.upstreamCommit}`);
+    failed = true;
+  }
+  if (!failed) console.log(`in sync with reviewed upstream commit ${manifest.upstreamCommit.slice(0, 12)}`);
 }
 
 process.exit(failed ? 1 : 0);

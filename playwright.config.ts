@@ -1,4 +1,4 @@
-import { defineConfig } from '@playwright/test';
+import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: './tests/e2e',
@@ -16,6 +16,19 @@ export default defineConfig({
     baseURL: 'http://127.0.0.1:4322',
     trace: 'on-first-retry',
   },
+  projects: [
+    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+    {
+      name: 'firefox-cbam',
+      testMatch: '**/cbam-lines.spec.ts',
+      use: { ...devices['Desktop Firefox'] },
+    },
+    {
+      name: 'webkit-cbam',
+      testMatch: '**/cbam-lines.spec.ts',
+      use: { ...devices['Desktop Safari'] },
+    },
+  ],
   webServer: {
     // Browser contracts exercise the exact static output that will ship. A
     // dedicated port prevents an existing development server masking it.
