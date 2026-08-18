@@ -872,10 +872,15 @@ test('the indirect case: free allocation deducts from the direct side only (the 
 });
 
 test('the floor clamp: free allocation exceeding direct emissions never drives chargeable negative', () => {
-  // NOT a hypothetical: 190 of the 77,704 selectors the form can offer at a 2026 date clamp
+  // NOT a hypothetical: 169 of the 23,928 selectors the form can offer at a 2026 date clamp
   // here, measured over the shipped pack on this tree (every classification x every origin x
-  // every route routesFor publishes, 100 t, direct_and_indirect), 126 of them with a non-zero
-  // indirect component. cn 2507008080 (calcined clay) / AO / route 'default' is one — direct
+  // every route routesFor publishes, 100 t, direct_and_indirect), 105 of them with a non-zero
+  // indirect component. It read 190 of 77,704 (126 with indirect) while the engine let a listed
+  // origin's missing row fall through to the residual sheet — three quarters of that space was
+  // the world average answering under a country's name, and both the space and the clamping
+  // population shrank with it. THIS line is not one of them: Angola publishes its own figures for
+  // this good (direct 0.220, indirect 0.040), so the worked example below is untouched.
+  // cn 2507008080 (calcined clay) / AO / route 'default' is one — direct
   // emissions (24.2) sit below the good's own free-allocation benchmark (64.935 at CBAM factor
   // 0.975, assumed CSCF 1), so the deduction floors at zero and the entire charge is the indirect
   // component (4.4) alone: a clean producer paying only for the electricity it used, which is a
@@ -897,7 +902,7 @@ test('the floor clamp: free allocation exceeding direct emissions never drives c
   // one. That claim was never checked against the pack and was wrong — a spec reviewer scanned
   // all 10,930 direct-2026 factor rows and found dozens of goods that clamp, including this
   // one. (Those counts and the sibling codes it named were measured on the v1 corpus; the
-  // v2 figures above — 190 clamping selectors of 77,704, 126 with indirect — are the
+  // figures above — 169 clamping selectors of 23,928, 105 with indirect — are the
   // re-measurement, run through the engine on this tree.) No
   // hand-built case is kept: real data exercises the same fields (direct_tco2e, indirect_tco2e,
   // embedded_tco2e, free_allocation_tco2e, chargeable_tco2e) that the hand-built one did, and

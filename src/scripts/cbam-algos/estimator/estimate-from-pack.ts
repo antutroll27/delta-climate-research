@@ -155,7 +155,9 @@ function dvPackageId(pack: EstimatorPack): string {
  * v2 carries the cell STATE, so the two are now separate facts: a numeric value (INCLUDING a
  * literal zero) is the origin's own answer and stops the search, while an unpublished dash/blank/
  * N-A or a see-below pointer falls through to the residual row, which is what the corrected Annex
- * directs. `publishedOriginSheets` — not "has any row" — is what makes a country listed.
+ * directs. An ABSENT row keeps v1's reading and still fails closed — this order says WHICH sheets
+ * may answer, and `lookupValue` says when the second one is allowed to.
+ * `publishedOriginSheets` — not "has any row" — is what makes a country listed.
  */
 function originOrder(pack: EstimatorPack, country: string): string[] {
   if (country === OTHER_ORIGIN) return [OTHER_ORIGIN] // the explicit "not individually listed" choice
@@ -209,6 +211,23 @@ function rowsAt(
   return covering.filter(row => row.codeLevel === deepest)
 }
 
+/**
+ * The figure a candidate row set holds, or null when it holds none.
+ *
+ * Split out of `valueAt` because a caller sometimes has to ask the rows a SECOND question, and
+ * null cannot answer it: an unpublished dash and an absent row both produce null, and those are
+ * different regulatory facts (see `lookupValue`). Handing the same array to both questions is
+ * what stops the two answers drifting apart.
+ */
+function valueOf(rows: DefaultValueRecord[], selector: string): ValueRecord | null {
+  if (rows.length > 1) {
+    // This file's own rule: a tie is REGULATION_AMBIGUOUS, never a first-match.
+    throw new DomainError('REGULATION_AMBIGUOUS', { selector })
+  }
+  const row = rows[0]
+  return row?.cell.state === 'value' ? row as ValueRecord : null
+}
+
 function valueAt(
   prepared: PreparedEstimatorPack,
   emissionsType: 'direct' | 'indirect',
@@ -217,15 +236,10 @@ function valueAt(
   route: string,
   cn: string,
 ): ValueRecord | null {
-  const rows = rowsAt(prepared, emissionsType, origin, year, route, cn)
-  if (rows.length > 1) {
-    // This file's own rule: a tie is REGULATION_AMBIGUOUS, never a first-match.
-    throw new DomainError('REGULATION_AMBIGUOUS', {
-      selector: `${emissionsType}/${cn}/${origin}/${route}/${year}`,
-    })
-  }
-  const row = rows[0]
-  return row?.cell.state === 'value' ? row as ValueRecord : null
+  return valueOf(
+    rowsAt(prepared, emissionsType, origin, year, route, cn),
+    `${emissionsType}/${cn}/${origin}/${route}/${year}`,
+  )
 }
 
 function availableRoutesAt(
@@ -273,10 +287,35 @@ function lookupValue(
   const prepared = prepareEstimatorPack(pack)
   const origins = originOrder(pack, input.country)
   for (const origin of origins) {
-    const found = valueAt(prepared, emissionsType, origin, year, input.route, input.cn)
+    const rows = rowsAt(prepared, emissionsType, origin, year, input.route, input.cn)
+    const found = valueOf(rows, `${emissionsType}/${input.cn}/${origin}/${input.route}/${year}`)
     if (found) return { kind: 'found', factor: found }
-    // Unpublished, pointer and missing cells are not zero and do not stop residual fallback.
-    // A literal zero is a value and returned above, so it does stop fallback.
+    // TWO SILENCES, AND ONLY ONE OF THEM FALLS THROUGH.
+    //
+    // An unpublished dash/blank/N-A or a see-below pointer is a cell the Commission LOOKED AT and
+    // declined to fill; the corrected Annex directs those to the residual row, so the loop
+    // continues. A literal zero is a value and was returned above, so it stops the search — that
+    // is the Mali hydrogen trap, and it stays shut.
+    //
+    // NO ROW AT ALL is the other silence: this origin's sheet does not carry the good on this
+    // selector, and the residual sheet may not answer for it. The residual row prices ORIGINS the
+    // Commission does not list; it does not backfill GOODS a listed origin's sheet omits (the
+    // rule this file shares with resolveDefaultFactor in lib/regulatory/resolve.ts, whose
+    // `mayUseResidual = !originIsListed && ...` says the same thing on the server). Fail closed.
+    //
+    // Failing closed is a BREAK, not a return: it stops the residual sheet answering, and leaves
+    // WHICH refusal to the same code every other refusal goes through. Returning early here
+    // instead would have had to re-derive `availableRoutes` from this origin alone, which
+    // re-decides a second question — 'route-mismatch' vs 'none' — while fixing the first, and
+    // measurably moved 84 indirect selectors from refusing to pricing electricity at zero.
+    //
+    // The OTHER_ORIGIN clause is stated but not load-bearing TODAY, written down so a reader does
+    // not go hunting for behaviour it protects: `originOrder` always puts the residual sheet last,
+    // so breaking on it and running out of origins are the same thing, and dropping the clause
+    // leaves the whole suite green (measured — an equivalent mutant, not a coverage gap). It says
+    // the rule the loop obeys — the residual sheet is a sheet to fall through TO, never one to
+    // fail closed on — so a future reordering cannot make the sentinel refuse itself.
+    if (rows.length === 0 && origin !== OTHER_ORIGIN) break
   }
 
   const availableRoutes = [...new Set(origins.flatMap(origin =>

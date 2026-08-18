@@ -419,31 +419,37 @@ test('the real pack: 72083800/IN publishes one route, so it needs no pick', () =
   // read 25231000/DZ, which published (A) and (B). The TARIC split moved that pair onto two
   // DIFFERENT goods — 2523100090 (grey) publishes only (A), 2523100010 (white) only (B) — so
   // cement no longer offers a choice at all and the case had to move to a good that still does.
-  // 72052100/IN publishes (C) and (F); measured on this tree, 7,584 of the 69,784 pairings
-  // routesFor covers at 2026 publish more than one route, so this is an ordinary state.
+  // 72052100/IN publishes (C) and (F); RE-MEASURED on this tree, 924 of the 69,784 pairings
+  // routesFor covers at 2026 publish more than one route, so this is a live state a user reaches.
+  // It read 7,584 while the engine let a listed origin's missing row fall through to the residual
+  // sheet: most of that count was the world average's route list, offered under a country that
+  // publishes no such route. Those are gone; a multi-route pairing is now the origin's OWN sheet
+  // publishing two routes for a good.
   const many = routesFor(pack, '72052100', 'IN', 2026);
   assert.ok(many.length > 1, `expected several routes, got ${many}`);
   assert.equal(nextRoute(many, ''), '');
 });
 
 test('an empty route list blames the year when the year is the reason, not the pairing', () => {
-  // THE PAIRING BRANCH IS THE FUNCTION'S CONTRACT FOR A COVERED YEAR, AND IT STAYS — but its
-  // REACH has collapsed with the corpus and this comment used to overstate it. On the v1 pack,
-  // 46,686 of 68,880 pairings (574 goods x 120 origins) published no route at all. Re-measured
-  // through routesFor on THIS tree: 0 of 69,784 (572 goods x 122 origins) at 2026. Pack v2 ships
-  // a residual "OTHER third countries" row that every offered good resolves against, so an empty
-  // route list at a covered year is no longer something a user can reach by choosing a good and
-  // an origin. The branch is still the right answer for the state it describes, and it is still
-  // what the function must say when it is asked — which is what these assertions pin. It is no
-  // longer "right often", and nobody should read it as covering a live user path.
+  // THE PAIRING BRANCH IS THE FUNCTION'S CONTRACT FOR A COVERED YEAR, AND IT IS A LIVE USER PATH
+  // AGAIN. On the v1 pack, 46,686 of 68,880 pairings (574 goods x 120 origins) published no route
+  // at all. The v2 port took that to 0 of 69,784 (572 goods x 122 origins) at 2026 — and this
+  // comment then explained the zero as the residual "OTHER third countries" sheet answering for
+  // every offered good, which is exactly the thing it must not do for an origin the Commission
+  // gives a sheet of its own. RE-MEASURED once the fallthrough was closed: 46,780 of the 69,784
+  // pairings publish no route at 2026, close to where v1 stood, because a listed origin's silence
+  // about a good is silence again rather than a world average wearing the country's name.
+  //
+  // So this branch is the answer a user actually meets, not a formality: 67% of pairings.
   for (const year of [2026, 2027, 2028]) {
     assert.equal(noRouteReason(pack, year, '72083800'), 'no route published for this pairing',
       `${year} is a covered year: an empty list there really is about the good and origin`);
   }
 
-  // OUTSIDE THOSE YEARS IT IS WRONG FOR EVERY PAIRING, and that half has if anything grown:
-  // routesFor filters on the reporting year, so it returns [] for all 69,784 pairings at 2029 —
-  // measured, and now every one of them is a pairing that DOES publish routes inside 2026-2028.
+  // OUTSIDE THOSE YEARS IT IS WRONG FOR EVERY PAIRING: routesFor filters on the reporting year,
+  // so it returns [] for all 69,784 pairings at 2029 — measured. 23,004 of them DO publish routes
+  // inside 2026-2028 and are told the wrong thing outright; the other 46,780 publish nothing in
+  // any covered year either, so for those the sentence happens to be true of the pairing as well.
   // An importer who typed 2029 was told their GOOD AND ORIGIN publish no route and went to
   // change the two controls that were not the problem.
   assert.equal(noRouteReason(pack, 2029, '72083800'), 'no rules published for 2029');
@@ -685,6 +691,34 @@ test('NON-NEGOTIABLE 4 — nothing claims a filing or registry validation', () =
         `the readout must never claim "${forbidden}" — it is decision-support, not a declaration`);
     }
   }
+});
+
+test('the residual sheet answers for unlisted ORIGINS, never for a good a listed sheet omits', () => {
+  // THE OVER-CLAIM THIS SITE SHIPPED FOR A DAY. The vendored engine's origin loop could not tell
+  // a cell the Commission printed a dash in from a row that is not there at all, so both fell
+  // through to the "Other Countries and Territories" world average. Algeria publishes aluminium
+  // 76041010 on route (L) only; the residual sheet also prices (K), and the calculator offered
+  // (K) under Algeria's name and billed it — 210.8425 certificates, EUR 15,889.09 on a 100 t
+  // line, from a figure the Commission never stated for Algeria.
+  //
+  // Both halves are pinned, because fixing this by refusing everything would be just as wrong.
+  assert.deepEqual(routesFor(pack, '76041010', 'DZ', 2026), ['(L)'],
+    'a route only the residual sheet prices is not a route a listed origin may be offered');
+  const refused = run('76041010', 'DZ', '(K)', '100');
+  assert.equal(refused.status, 'unavailable');
+  assert.equal(refused.failure.code, 'NO_DIRECT_DEFAULT');
+
+  // And the fallthrough that IS correct still happens: Albania's sheet CARRIES 2507008080 and
+  // prints a dash in it — a cell the Commission looked at and declined to fill, which the
+  // corrected Annex sends to the residual row.
+  const dash = pack.defaultValues.find((r) => r.originCountry === 'AL'
+    && r.scopeCode === '2507008080' && r.emissionsType === 'direct'
+    && r.productionRoute === 'default' && r.reportingYear === 2026);
+  assert.deepEqual(dash.cell, { state: 'unpublished', marker: 'dash' },
+    'premise: this is a dash, not an absence — without it the test below pins nothing');
+  const fellThrough = run('2507008080', 'AL', 'default', '100');
+  assert.notEqual(fellThrough.status, 'unavailable');
+  assert.equal(fellThrough.stamp.originBasis, 'residual');
 });
 
 test('a residual-basis figure says so — it must not read as the origin\'s own value', () => {
@@ -1981,11 +2015,17 @@ test('a verified-path refusal carries the tier the engine ATTEMPTED to price at 
   // really was looked up and applied, and it is a LATER lookup that failed. The tier records what
   // the engine attempted to price the line at, so it stays mixed — the substitution did happen.
   //
-  // Swept over every (good, origin, route, year) the form can offer on THIS tree — 233,112
-  // selectors, one date per year — 8,784 verified-path refusals come back mixed, every one of
-  // them on `certificate-price/`. The other refusals are 139,456 certificate-price and 10,752
+  // Swept over every (good, origin, route, year) the form can offer on THIS tree — 71,784
+  // selectors, one date per year — 6,194 verified-path refusals come back mixed, every one of
+  // them on `certificate-price/`. The other refusals are 39,814 certificate-price and 2,772
   // benchmark, all stamped 'actual-verified'. (The v1 figures were 66,675 selectors and 5,542
   // mixed, across two namespaces. The old comment before that claimed none were mixed at all.)
+  //
+  // RE-MEASURED after the residual sheet stopped answering for goods a listed origin's own sheet
+  // omits: the offered space fell from 233,112 selectors to 71,784 and every count fell with it
+  // (8,784 / 139,456 / 10,752 before). The SHAPE is unchanged — mixed refusals still exist, still
+  // only on `certificate-price/` — which is the fact this test is about; the space simply stopped
+  // containing 161,328 selectors the form should never have offered.
 
   // A. THE CERTIFICATE PRICE. The pack prices 2026 quarters only and <input type="date"> takes
   //    2027, so this is the refusal an ordinary user meets first.
@@ -2959,8 +2999,10 @@ test('the indirect lookup separates "publishes none" from "publishes one" — th
     cn: '2523100090', country: 'DZ', route: '(A)' })).kind, 'found', 'DZ cement clinker publishes one');
 
   // The third arm, `route-mismatch`, is deliberately absent HERE: it is unreachable from the
-  // form on this pack — 0 of the 233,112 (good, origin, route, year) selectors routesFor can
-  // offer produce it, re-measured on this tree — so a syncScope-shaped test claiming to exercise
+  // form on this pack — 0 of the 71,784 (good, origin, route, year) selectors routesFor can
+  // offer produce it, re-measured on this tree (it was 0 of 233,112 before the residual
+  // fallthrough closed: the space shrank, the zero did not move) — so a syncScope-shaped test
+  // claiming to exercise
   // it would be fiction. It is not untested: the route-electricity test below reaches it
   // directly, by asking a good for a route the corpus does not publish electricity at, which is
   // the only way in.

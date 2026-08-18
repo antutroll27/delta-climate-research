@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
   "upstreamRepository": "GeoCBAM/CBM",
-  "upstreamCommit": "87d045c5eeff031030e5e6901c3859ac9274d3fe",
+  "upstreamCommit": "ed692c0f4a2eef6161d823ce224c4951380c07f5",
   "packSha256": "fc56043b76d22dba984f55e783f8d9de6bc1df04a7f0513116898fda3646889d",
   "packManifestSha256": "f952b99e34da2e62ae0dfc506f8d396cbf8035d46f34f400b4a5111c7b2d77f8",
   "files": {
@@ -12,7 +12,7 @@
     "cbam/sefa.ts": "f427aeacbde14245861fc3d64dfb5f355d857a87289b6ef9d05bdb1fd79af6d2",
     "cbam/types.ts": "735a8e85c04ed49302cc4a8651d3bbd54762df44765af63a3a971309ac03563f",
     "errors/domain-error.ts": "6b97e210e5698b238621069f85c9e79a4030d8cfc78024b34a5e941096e7555b",
-    "estimator/estimate-from-pack.ts": "a9b8fc4de347e9ad18d453ba81249944618eda393834c792066cbe54fb465ad9",
+    "estimator/estimate-from-pack.ts": "cb14668551abf72e3dde5e66d4c06fed14adbed6274978909b51b072a86ecfd3",
     "estimator/load-pack.ts": "da34cfcc0e600d9e7cf7c61f9cb1c4c6091eed75f44c71c2de389706a6e9cb3d",
     "estimator/pack-v2.ts": "08ca9ae1eec9bd7a2741f497ae37ab1636f4aea309d3ca4ee9aa1aaee6a6ee26",
     "regulatory/iso-3166.ts": "9bc99ad69798d216f5fa4bb1839e3146d2ea0e48224984a3d282095cb2c9036a",
