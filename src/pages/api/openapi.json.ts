@@ -18,6 +18,9 @@ export const GET: APIRoute = () => new Response(JSON.stringify({
   },
   servers: [{ url: 'https://deltaclimate.earth' }],
   paths: {
+    // self-describing: §13.2 requires openapi.json describe EVERY published endpoint,
+    // and openapi.json is itself one. Omitting it failed that check literally.
+    '/api/openapi.json': { get: { summary: 'This document', responses: { '200': json('OpenAPI 3.1 description of every published endpoint') } } },
     '/api/standards.json': { get: { summary: 'Standards alignment matrix', responses: { '200': json('matrix + approved statements') } } },
     '/api/collections/wards.json': { get: { summary: 'Ward collection metadata (OGC API Features-inspired)', responses: { '200': json('collection') } } },
     '/api/collections/wards/items.json': { get: { summary: 'All wards as a GeoJSON FeatureCollection', responses: { '200': json('FeatureCollection', 'application/geo+json') } } },

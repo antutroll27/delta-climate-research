@@ -148,6 +148,17 @@ export interface WardRecord {
   readonly bbox: Bbox;
   readonly crs: string;
   readonly analysisCrs: string;
+  /** What the numbers below are MEASUREMENTS OF. Without this, a consumer reading
+   *  `confidence.night.bandK = 3` has no way to know it is land surface temperature
+   *  and not air temperature or a comfort index — the exact conflation §13.1 of the
+   *  standards doc requires be ruled out "in all API field descriptions". It was
+   *  absent until an audit of that checklist item caught it. */
+  readonly quantity: {
+    readonly measured: string;
+    readonly units: string;
+    readonly isNot: readonly string[];
+    readonly note: string;
+  };
   readonly confidence: {
     readonly night: { readonly tier: 'quantitative' | 'indicative'; readonly bandK: number; readonly n: number; readonly modelRmseK: number; readonly ceilingRmseK: number };
     readonly peak:  { readonly tier: 'quantitative' | 'indicative'; readonly bandK: number; readonly n: number; readonly modelRmseK: number; readonly ceilingRmseK: number };
@@ -192,6 +203,16 @@ export function wardRecord(w: Ward): WardRecord {
     bbox,
     crs: 'EPSG:4326',
     analysisCrs: utmEpsg(w.lon, w.lat),
+    quantity: {
+      measured: 'land surface temperature (LST) — the radiometric temperature of the ground and roof surfaces, as an infrared satellite sees it',
+      units: 'K (error bands) / °C (displayed values)',
+      isNot: ['air temperature', 'human thermal comfort', 'UTCI or any comfort index', 'indoor temperature'],
+      // the nuance is real and measured, so it is stated rather than flattened:
+      // accuracy.ts records that NIGHT surface temperature tracks air temperature
+      // closely, while the daytime divergence is large. Saying only "not air
+      // temperature" would be as misleading as saying they are the same.
+      note: 'Surface temperature can diverge from air temperature by many degrees in daytime sun; at night the two track closely. Comfort additionally depends on humidity, wind and radiant exchange, none of which this model resolves. Do not read these values as what a person feels.',
+    },
     confidence: {
       night: { tier: ACCURACY.night.confidence, bandK: ACCURACY.night.bandK, n: ACCURACY.night.n, modelRmseK: ACCURACY.night.modelRmseK, ceilingRmseK: ACCURACY.night.ceilingRmseK },
       peak:  { tier: ACCURACY.peak.confidence,  bandK: ACCURACY.peak.bandK,  n: ACCURACY.peak.n,  modelRmseK: ACCURACY.peak.modelRmseK,  ceilingRmseK: ACCURACY.peak.ceilingRmseK },

@@ -95,3 +95,19 @@ test('nothing on the wire uses prohibited certification language', () => {
   // and the matrix never claims the two rungs we cannot stand on
   for (const row of MATRIX) assert.ok(!['compliant', 'certified'].includes(row.posture), row.standard);
 });
+
+test('openapi.json describes every endpoint the build actually emits (§13.2)', async () => {
+  const { readFile, readdir } = await import('node:fs/promises');
+  const { join, relative } = await import('node:path');
+  const root = new URL('../../dist/api', import.meta.url).pathname;
+  const walk = async (d) => (await Promise.all((await readdir(d, { withFileTypes: true })).map(
+    (e) => e.isDirectory() ? walk(join(d, e.name)) : [join(d, e.name)]))).flat();
+  let files;
+  try { files = await walk(root); } catch { return; }   // no dist/ yet — build-gated, not a failure here
+  const spec = JSON.parse(await readFile(join(root, 'openapi.json'), 'utf8'));
+  const templ = (p) => ['ballygunge', 'barrackpore', 'baruipur'].reduce(
+    (acc, w) => acc.replace(`/${w}.json`, '/{id}.json').replace(`/wards/${w}/`, '/wards/{id}/'), p);
+  const emitted = [...new Set(files.map((f) => templ('/api/' + relative(root, f))))].sort();
+  for (const p of emitted) assert.ok(spec.paths[p], `openapi.json does not describe ${p}`);
+  for (const p of Object.keys(spec.paths)) assert.ok(emitted.includes(p), `openapi.json describes ${p}, which is never emitted`);
+});

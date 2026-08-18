@@ -68,3 +68,18 @@ test('an unlicensed dataset is a build failure, not a silent omission', () => {
   const fake = { ...WARDS[0], id: '__nope__' };
   assert.throws(() => wardRecord(fake), /no such file|ENOENT/i, 'unknown ward has no provenance file');
 });
+
+test('every record says what it is measuring — LST, explicitly not comfort (§13.1)', () => {
+  for (const r of allWardRecords()) {
+    assert.match(r.quantity.measured, /land surface temperature/i);
+    // the conflations that must be ruled out by name, not merely left unstated
+    const ruledOut = r.quantity.isNot.join(' | ').toLowerCase();
+    for (const t of ['air temperature', 'comfort']) {
+      assert.ok(ruledOut.includes(t), `"${t}" must be named in quantity.isNot`);
+    }
+    // and the honest nuance: night tracks air temp, day does not — stating only
+    // "not air temperature" would mislead in the other direction
+    assert.match(r.quantity.note, /night/i);
+    assert.match(r.quantity.note, /diverge|divergence/i);
+  }
+});
