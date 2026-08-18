@@ -1265,11 +1265,17 @@ export function mountHeatMap(): () => void {
       : state.phase === 'night' ? 'modelled at 22:00' : 'modelled at 13:00');
     const tag = el('conf');
     if (tag) {
-      tag.textContent = transition
-        ? `outside validation · ~±${TRANSITION_RMSE_K.toFixed(1)} °C at this hour`
+      /* innerHTML, not textContent, so the FIGURES can be mono inside sans prose
+         — the card's type rule (labels sans, data mono) applied to a string that
+         is both. Safe by construction: every interpolated value is a number put
+         through toFixed, never user or network text.
+         Sentence case because .conf no longer uppercases in CSS. */
+      const fig = (t: string) => `<b>${t}</b>`;
+      tag.innerHTML = transition
+        ? `Outside validation · ${fig(`~±${TRANSITION_RMSE_K.toFixed(1)} °C`)} at this hour`
         : a.confidence === 'quantitative'
-          ? `calibrated · ±${a.bandK.toFixed(1)} °C (n=${a.n})`
-          : `indicative only · ±${a.bandK.toFixed(1)} °C (n=${a.n})`;
+          ? `Calibrated · ${fig(`±${a.bandK.toFixed(1)} °C`)} · ${fig(`n=${a.n}`)}`
+          : `Indicative only · ${fig(`±${a.bandK.toFixed(1)} °C`)} · ${fig(`n=${a.n}`)}`;
       tag.className = `conf ${transition ? 'indicative' : a.confidence}`;
       if (transition) {
         (tag as HTMLElement).title =
@@ -1374,7 +1380,10 @@ export function mountHeatMap(): () => void {
       const chip = el('scoreConf');
       if (chip) {
         chip.toggleAttribute('hidden', gap.points < 0.05);
-        chip.textContent = `best case · up to ${gap.points.toFixed(1)} pts lower`;
+        /* Shares the .conf pill with the confidence banner, so it follows the
+           same rule: sentence case (CSS no longer uppercases) and the figure in
+           mono. Leaving this one mono-caps beside a sans sibling looked broken. */
+        chip.innerHTML = `Best case · up to <b>${gap.points.toFixed(1)} pts</b> lower`;
         (chip as HTMLElement).title = unmeasuredNote(gap.fields, gap.points);
       }
       // The error sits entirely inside exposure. Mark where it lives, in the

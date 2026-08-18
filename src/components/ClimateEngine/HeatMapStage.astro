@@ -220,15 +220,15 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
         </div>
       </div>
       <div class="metric">
-        <div class="k">Mean Surface Temp · <span id="lstPhase">modelled now</span></div>
+        <div class="k">Mean surface temp · <span id="lstPhase">modelled now</span></div>
         <div class="lst" id="lst" style="color:var(--red)">—<span class="u">°C</span></div>
         <div class="conf" id="conf"></div>
       </div>
       <div class="mrow">
         <div><div class="k" title="Modelled land-cover thermal contrast: this ward's mean surface temperature minus a fully-vegetated reference cell under identical forcing. NOT a measured urban heat island — published Kolkata surface UHI is 0.85–1.5 °C from 1 km satellite data, a different quantity.">Δ vs all-green ref</div><div class="val" style="color:var(--cyan)" id="uhi">—</div></div>
-        <div><div class="k">Area &gt; 40°C</div><div class="val" style="color:var(--red)" id="area">—</div></div>
+        <div><div class="k">Area above 40 °C</div><div class="val" style="color:var(--red)" id="area">—</div></div>
       </div>
-      <div class="metric" style="border-top:1px solid var(--line);border-bottom:0"><div class="k">Heat-stress distribution</div></div>
+      <div class="metric" style="border-top:1px solid var(--line);padding-bottom:0"><div class="k">Heat-stress distribution</div></div>
       <div class="histo" id="histo"></div>
       <button class="cta">Generate ward report ↗</button>
     </aside>
@@ -652,7 +652,14 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
   .loadchip{position:absolute;top:118px;left:50%;transform:translateX(-50%);font-family:var(--mono);font-size:.52rem;letter-spacing:.26em;color:var(--cyan);z-index:3;text-transform:uppercase;opacity:0;transition:opacity .25s}
   .loadchip.on{opacity:1}
 
-  .panel{position:absolute;background:rgb(9 20 22 /.82);border:1px solid var(--line);border-radius:14px;backdrop-filter:blur(16px);box-shadow:0 20px 60px rgb(0 0 0 /.5);z-index:4}
+  /* Borderless glass. The 1px --line stroke was the last piece of the "grid of
+     boxes" read, and it also fought the legend directly beneath it in the same
+     rail. Separation is now DEPTH, not a line — which is how the reference UI
+     separates its cards too.
+     The fill goes .82 -> .88 and the shadow deepens to compensate: over a dark
+     3D scene an unbordered translucent panel loses its edge, and the fix for
+     that is contrast + shadow, not a stroke by another name. */
+  .panel{position:absolute;background:rgb(9 20 22 /.88);border-radius:14px;backdrop-filter:blur(16px);box-shadow:0 24px 70px rgb(0 0 0 /.55);z-index:4}
   .panel .h{font-family:var(--mono);font-size:.58rem;letter-spacing:.18em;color:var(--ink);padding:14px 18px 0;text-transform:uppercase}
   .left{left:26px;top:26px;bottom:26px;width:270px;padding-bottom:16px;overflow:auto}
   /* right rail: one bounded column (like .left) so the data card + legend can
@@ -690,43 +697,60 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
      already uses for "not decision-grade" */
   .subs b.soft{color:var(--bronze)}
 
-  .metric{padding:11px 13px;border-bottom:1px solid var(--line)}
-  .metric .k{font-family:var(--mono);font-size:.5rem;letter-spacing:.14em;color:var(--ink);text-transform:uppercase}
+  /* "01 quiet". The card was 100 % mono and 100 % uppercase, which in a 242 px
+     rail reads as shouting. Labels move to the sans that was ALREADY loaded and
+     ALREADY declared as --sans on .stage (line ~329) — it was simply never used
+     in here, so this costs no font, no bundle, no request. NUMBERS STAY MONO.
+     Sentence case, so text-transform goes with it. Padding lands on a 4 px
+     rhythm; the old 11/13/9/12/7/2 literals were the other half of the noise.
+     border-bottom is gone: separation is space now, not rules. */
+  .metric{padding:16px}
+  /* the live block already pays 16px at the bottom — don't pay it twice */
+  .metric + .metric{padding-top:0}
+  .metric .k{font-family:var(--sans);font-size:.68rem;font-weight:450;letter-spacing:.005em;color:var(--ink);line-height:1.35}
   /* .attr had no anchor rule, so a link here would render as default browser
      blue on a near-black panel. Inherit the credits colour and mark it with a
      cyan underline instead — the same restraint .tool-modes a uses. */
   .attr a{color:inherit;text-decoration:underline;text-decoration-color:rgb(111 202 214 /.45);text-underline-offset:2px}
   .attr a:hover{color:var(--paper)}
   .attr a:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
-  .metric .lst{font-family:var(--mono);font-weight:400;font-size:2.1rem;line-height:1;margin-top:.35rem;letter-spacing:.01em;transition:color .4s}
+  .metric .lst{font-family:var(--mono);font-weight:400;font-size:2.1rem;line-height:1;margin-top:8px;letter-spacing:.01em;transition:color .4s}
   .metric .lst .u{font-size:.84rem;color:var(--ink);margin-left:.15rem}
   /* measured uncertainty, not decoration — the model's out-of-sample error
      against ECOSTRESS for the phase on screen (see accuracy.ts) */
   .metric .lst .band{font-size:.74rem;color:var(--ink);margin-left:.5rem;letter-spacing:.02em}
-  .conf{font-family:var(--mono);font-size:.48rem;letter-spacing:.12em;text-transform:uppercase;margin-top:.42rem;padding:.24rem .44rem;border-radius:3px;display:inline-block;cursor:help}
-  .conf.quantitative{color:var(--cyan);background:rgb(111 202 214 /.1);border:1px solid rgb(111 202 214 /.28)}
-  .conf.indicative{color:var(--bronze);background:rgb(176 141 87 /.12);border:1px solid rgb(176 141 87 /.32)}
+  /* THE HONESTY BANNER. Restyled, deliberately NOT demoted — same colour, same
+     place, larger type than before (.48rem -> .6rem). Border removed to match
+     the rest of the card; the tint still carries it. Words in sans, FIGURES in
+     mono via <b> (written by applyConfidence in heat-map-app.ts) — that is the
+     type rule applied honestly rather than picking one face per element. */
+  .conf{font-family:var(--sans);font-size:.6rem;letter-spacing:.005em;margin-top:10px;padding:5px 9px;border-radius:8px;display:inline-block;cursor:help}
+  .conf b{font-family:var(--mono);font-weight:400;letter-spacing:.02em}
+  .conf.quantitative{color:var(--cyan);background:rgb(111 202 214 /.1)}
+  .conf.indicative{color:var(--bronze);background:rgb(176 141 87 /.14)}
   .livem .k{display:flex;align-items:center;gap:.5rem}
   .livedot{width:6px;height:6px;border-radius:50%;background:var(--bronze);display:inline-block;flex:none}
   .livedot.on{background:#3fb950;box-shadow:0 0 0 3px rgb(63 185 80 /.18);animation:hmPulse 2.4s infinite}
-  .liverow{display:flex;gap:1px;background:var(--line);margin-top:.6rem;border-radius:7px;overflow:hidden}
-  .liverow>div{flex:1;background:rgb(9 20 22 /.55);padding:7px 2px;text-align:center}
-  .liverow b{display:block;font-family:var(--mono);font-weight:400;font-size:.86rem;color:var(--cyan);letter-spacing:.02em}
-  .liverow span{font-family:var(--mono);font-size:.4rem;letter-spacing:.09em;color:var(--ink);text-transform:uppercase}
-  .mrow{display:flex;gap:1px;background:var(--line)}
-  .mrow>div{flex:1;background:rgb(9 20 22 /.4);padding:9px 12px}
-  .mrow .k{font-family:var(--mono);font-size:.46rem;letter-spacing:.14em;color:var(--ink);text-transform:uppercase}
-  .mrow .val{font-family:var(--mono);font-weight:400;font-size:.95rem;margin-top:.3rem}
-  .histo{display:flex;align-items:flex-end;gap:2px;height:29px;padding:9px 13px 4px}
-  .histo i{flex:1;background:linear-gradient(var(--cyan),var(--surface2));border-radius:1px;opacity:.8;min-height:2px;transition:height .4s}
-  .cta{margin:9px 13px 13px;display:block;width:calc(100% - 26px);background:var(--bronze);color:#0d0a05;border:0;border-radius:8px;padding:.58rem;font-family:var(--mono);font-size:.54rem;letter-spacing:.14em;text-transform:uppercase;font-weight:400;cursor:pointer}
+  /* was `gap:1px` over a --line background — a trick that fakes four 1 px rules.
+     That is what made this read as a grid of boxes. Real gaps, no cell fills. */
+  .liverow{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:12px}
+  .liverow b{display:block;font-family:var(--mono);font-weight:400;font-size:.9rem;color:var(--cyan);letter-spacing:.02em}
+  .liverow span{font-family:var(--sans);font-size:.56rem;color:var(--faint);line-height:1.3;display:block;margin-top:2px}
+  .mrow{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:0 16px 16px}
+  .mrow .k{font-family:var(--sans);font-size:.62rem;font-weight:450;letter-spacing:.005em;color:var(--ink);line-height:1.35}
+  .mrow .val{font-family:var(--mono);font-weight:400;font-size:1.05rem;margin-top:4px}
+  .histo{display:flex;align-items:flex-end;gap:3px;height:32px;padding:12px 16px 4px}
+  .histo i{flex:1;background:linear-gradient(var(--cyan),var(--surface2));border-radius:2px;opacity:.8;min-height:2px;transition:height .4s}
+  .cta{margin:12px 16px 16px;display:block;width:calc(100% - 32px);background:var(--bronze);color:#0d0a05;border:0;border-radius:8px;padding:9px;font-family:var(--sans);font-size:.7rem;font-weight:600;letter-spacing:.005em;cursor:pointer}
 
   /* position:relative + z-index so the panel sits ABOVE maplibre's attribution
      control, which is z-index 1 and anchored to the same corner. As `static` the
      z-index never applied, and the control has been covering the bottom of this
      panel — the source attribution line was already half-hidden before the
      pattern note made it obvious. */
-  .legend{position:relative;z-index:5;width:100%;flex:none;margin-top:auto;background:rgb(9 20 22 /.82);border:1px solid var(--line);border-radius:12px;backdrop-filter:blur(16px);padding:12px 15px 7px}
+  /* same rail, same family — it has to lose the stroke with .panel or it reads
+     as the one thing on screen that is still outlined */
+  .legend{position:relative;z-index:5;width:100%;flex:none;margin-top:auto;background:rgb(9 20 22 /.88);border-radius:12px;backdrop-filter:blur(16px);box-shadow:0 24px 70px rgb(0 0 0 /.55);padding:12px 15px 7px}
   .legend .k{font-family:var(--mono);font-size:.54rem;letter-spacing:.16em;color:var(--ink);display:flex;justify-content:space-between;margin-bottom:.55rem;text-transform:uppercase}
   .ramp{height:9px;border-radius:4px;background:linear-gradient(90deg,#6fcad6,#9fb98a,#b08d57,#d46b4a,#e5484d)}
   .legend .sc{display:flex;justify-content:space-between;font-family:var(--mono);font-size:.52rem;color:var(--faint);margin-top:.4rem}
