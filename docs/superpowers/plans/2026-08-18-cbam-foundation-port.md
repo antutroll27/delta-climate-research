@@ -58,6 +58,41 @@ Any task in this plan that finds itself editing a `cscf` record has gone wrong.
 
 ---
 
+## DECISION 2026-08-18: the corpus moves to TARIC — Codex's choice, taken
+
+Task 1 revealed the port is a **corpus migration**, not plumbing. `defaultFactors` (41,100) became
+`defaultValues` (**76,428**); 7 codes retired including `25231000`, `25239000`, `25070080` and all
+four `7615`; 28 added including the 10-digit splits `2523100090` (grey clinker) / `2523100010`
+(white). Measured through the real engine: `25231000` → **refused**; `2523100090` → `cscf_pending`,
+**75.865 certs**. The figure is preserved at the new key; only the key moved.
+
+**Codex chose to accept the 10-digit keys and moved the whole surface with them** — its placeholder
+reads `e.g. 2523100090 — cement clinker`, its e2e uses `cn: '2523100090'`, and its pack schema still
+permits 4/6/8/10 digits (`/^\d{4}(?:\d{2}){0,3}$/`); the corrected workbook simply supplies 10
+digits for those cement lines. **The founder has taken that choice.** Do not add a parallel 8-digit
+key: it would reintroduce the white-vs-grey ambiguity the TARIC split exists to resolve, which the
+old design papered over with the production route.
+
+Discovery is already handled: the CN datalist is the whole corpus with the option *value* set to the
+code, and an 8-digit CN is a **prefix** of its 10-digit TARIC — so typing `25231000` surfaces
+`2523100090` natively in the browser.
+
+**Two additions to this plan follow from the decision:**
+
+- **A1 — the code-too-short refusal (Task 5).** Type `25231000`, ignore the dropdown, and today you
+  get *"The Commission publishes no default value for this good, origin, production route or
+  year."* That is false — it publishes it at a more specific code. This is the same defect class the
+  rest of this work exists to remove: a refusal naming the wrong cause. It must name the real one
+  and offer the codes.
+- **A2 — `defaultFactors` → `defaultValues` in the UI (Task 5).** `cbam-app.ts:1747` builds the
+  ORIGINS dropdown from `pack.defaultFactors`, which v2 does not have. Unhandled, the origin list
+  renders empty and the form cannot be completed at all.
+
+**Task 7 is re-specced by this.** Its original expectation — "figures unchanged, the pack is the same
+corpus" — is **wrong and must not be used as an acceptance criterion**. Figures WILL move for any
+selector naming a retired code. Task 7's job becomes: prove every movement is explained by the
+corpus migration, and that no selector surviving under the same key changed value.
+
 ## Repos, branches, baselines
 
 | | path | branch to create | from | baseline |
