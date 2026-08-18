@@ -35,9 +35,9 @@ export const MATRIX: readonly MatrixRow[] = [
   },
   {
     standard: 'OGC 3D Tiles 1.1', region: 'Global', purpose: '3D streaming',
-    posture: 'roadmap',
-    ships: 'Nothing. The site does not publish a tileset.',
-    gap: 'A tiling pipeline with real geometric error and radian bounding volumes. The source spec\'s own note forbids presenting its sample as a tileset.',
+    posture: 'aligned',
+    ships: 'A tileset per ward at /3d-tiles/{id}/tileset.json — 12,767 LoD1 buildings as glTF 2.0, radian region bounding volumes, and a geometric error measured from the ward\'s median building footprint diagonal. Validated with the official Cesium 3d-tiles-validator: 0 errors, 0 warnings on all three.',
+    gap: 'Single-level tilesets: one root tile per ward, no hierarchy, so there is no progressive refinement to stream. Buildings sit at ellipsoid height 0 because no validated terrain model exists — viewers must clamp to terrain. LoD1 only; no roof shape.',
   },
   {
     standard: 'buildingSMART IFC / ISO 16739', region: 'Global', purpose: 'BIM exchange',
@@ -164,7 +164,7 @@ export const PHASES: readonly Phase[] = [
     items: [
       { item: 'Formal governance and legal review', status: 'todo' },
       { item: 'Official integration discussions (Dubai Pulse, Dubai Municipality)', status: 'todo', evidence: 'Blocked on access, not on engineering: as of 2026-08-11 the Dubai Pulse host refuses connections from outside the UAE.' },
-      { item: '3D Tiles tileset with real geometric error', status: 'todo' },
+      { item: '3D Tiles tileset with real geometric error and radian bounding volumes', status: 'done', evidence: '/3d-tiles/{ward}/tileset.json — built by scripts/build-3d-tiles.py, 0 errors and 0 warnings from the official Cesium validator, which does open and check the glTF content.' },
       { item: 'IFC / BIM pathway', status: 'todo' },
       { item: 'Audit logs and data residency controls', status: 'todo' },
     ],

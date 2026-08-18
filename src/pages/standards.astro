@@ -65,6 +65,7 @@ const counts = MATRIX.reduce((m, r) => (m[r.posture] = (m[r.posture] ?? 0) + 1, 
       <li><a href="/api/collections/wards.json"><code>/api/collections/wards.json</code></a> · <a href="/api/collections/wards/items.json"><code>…/items.json</code></a> · <code>…/items/&#123;id&#125;.json</code> — OGC API Features-inspired GeoJSON</li>
       <li><code>/api/wards/&#123;id&#125;/metadata.json</code> — a ward's measured confidence and full data lineage (<a href="/api/wards/ballygunge/metadata.json">ballygunge</a>)</li>
       <li><code>/api/wards/&#123;id&#125;/cityjson.json</code> — LoD1 CityJSON 2.0, one Building per shipped footprint, <strong>validated against the official 2.0 JSON Schema</strong> on every build (<a href="/api/wards/ballygunge/cityjson.json">ballygunge</a>, ~2.8 MB)</li>
+      <li><code>/3d-tiles/&#123;id&#125;/tileset.json</code> — OGC 3D Tiles 1.1, the same buildings as a streamable glTF tileset for Cesium and deck.gl, <strong>0 errors from the official Cesium validator</strong> (<a href="/3d-tiles/ballygunge/tileset.json">ballygunge</a>)</li>
     </ul>
     <p>Every payload carries <code>"status": "prototype"</code>, and every derived number in it traces to a line in <code>accuracy.ts</code> or a calibration artefact. The invented placeholder fields from the source specification (<code>population_exposed_high_heat</code>, <code>facade_glare_index</code>, <code>ac_energy_load_reduction_potential</code>) are pinned <em>out</em> by the unit tests.</p>
 

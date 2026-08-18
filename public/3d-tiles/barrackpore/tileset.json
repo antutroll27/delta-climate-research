@@ -1,0 +1,51 @@
+{
+  "asset": {
+    "version": "1.1",
+    "tilesetVersion": "delta-climate-prototype"
+  },
+  "geometricError": 16.15,
+  "root": {
+    "boundingVolume": {
+      "region": [
+        1.5422412916089903,
+        0.39716215039546143,
+        1.5424910831315357,
+        0.39738511620740374,
+        0.0,
+        30.5
+      ]
+    },
+    "geometricError": 16.15,
+    "refine": "REPLACE",
+    "transform": [
+      -0.9995958908064547,
+      0.02842630969454634,
+      0.0,
+      0.0,
+      -0.010998302618407103,
+      -0.3867493959412822,
+      0.9221192667321116,
+      0.0,
+      0.02621244785143499,
+      0.92174662985888,
+      0.38690574811112943,
+      0.0,
+      167270.41721715423,
+      5881974.252036904,
+      2452447.0264726784,
+      1.0
+    ],
+    "content": {
+      "uri": "content.glb"
+    }
+  },
+  "extras": {
+    "status": "prototype",
+    "lod": "LoD1 -- footprint extruded to one height; no roof shape is modelled",
+    "heightDatum": "WGS84 ellipsoid, h=0. No validated terrain model; clamp to terrain when draping.",
+    "heightSource": "p65 of Google Open Buildings 2.5D Temporal (2023), floored at 2.5 m",
+    "geometricErrorDerivation": "median building footprint bbox diagonal in this ward, metres",
+    "attribution": "Building footprints via Overture Maps Foundation (ODbL) -- OpenStreetMap contributors, Google, Microsoft. Heights (c) Google Open Buildings, CC BY 4.0.",
+    "buildings": 4702
+  }
+}
