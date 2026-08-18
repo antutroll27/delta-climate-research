@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { readFileSync } from 'node:fs';
+import { readDist } from './_dist.mjs';
 
 /* Walks the API the way QGIS or ogr2ogr would: start at the landing page, follow
    link relations only, never a hardcoded path. If this passes, the .json path
    deviation genuinely costs a client nothing — which is the entire claim being
    made on /standards. */
-const read = (url) => JSON.parse(readFileSync(`dist${url}`, 'utf8'));
+const read = readDist;
 const follow = (doc, rel) => {
   const l = (doc.links ?? []).find((x) => x.rel === rel);
   assert.ok(l, `no link with rel="${rel}"`);

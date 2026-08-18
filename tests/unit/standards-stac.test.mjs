@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readDist } from './_dist.mjs';
 import { existsSync, readFileSync } from 'node:fs';
 
 import { WARDS } from '../../src/data/wards.ts';
@@ -79,6 +80,6 @@ test('schema.org/Dataset distributions all resolve, and the licence is the GOVER
 });
 
 test('the built STAC files match what the module generates', () => {
-  const built = JSON.parse(readFileSync('dist/api/stac/items/ballygunge-canopy.json', 'utf8'));
+  const built = readDist('/api/stac/items/ballygunge-canopy.json');
   assert.deepEqual(built, JSON.parse(JSON.stringify(stacItem(WARDS[0], PRODUCTS.find((p) => p.id === 'canopy')))));
 });

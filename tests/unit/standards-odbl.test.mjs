@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readDist } from './_dist.mjs';
 import { readFileSync } from 'node:fs';
 
 import { WARDS } from '../../src/data/wards.ts';
@@ -52,7 +53,7 @@ test('EVERY export carrying building geometry ships the licence', () => {
 });
 
 test('the licence endpoint says what it does NOT cover, not just what it does', () => {
-  const doc = JSON.parse(readFileSync('dist/api/licence.json', 'utf8'));
+  const doc = readDist('/api/licence.json');
   assert.equal(doc.licence, ODBL_ID);
   assert.ok(doc.appliesTo.length >= 4);
   // over-claiming coverage would be its own kind of dishonesty: the indicators
