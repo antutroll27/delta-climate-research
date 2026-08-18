@@ -83,3 +83,18 @@ test('every record says what it is measuring — LST, explicitly not comfort (§
     assert.match(r.quantity.note, /diverge|divergence/i);
   }
 });
+
+test('a completed roadmap item must name the artefact that proves it', async () => {
+  const { PHASES } = await import('../../src/scripts/standards/matrix.ts');
+  assert.ok(PHASES.length >= 4);
+  for (const ph of PHASES) for (const i of ph.items) {
+    assert.ok(['done', 'partial', 'todo'].includes(i.status), `${i.item}: bad status`);
+    // the whole point: a tick with nothing behind it is marketing
+    if (i.status !== 'todo') {
+      assert.ok(i.evidence && i.evidence.length > 12, `"${i.item}" is ${i.status} but cites no evidence`);
+    }
+  }
+  // Phase 1 is claimed complete on the page — that claim must stay true in the data
+  const p1 = PHASES[0].items;
+  assert.ok(p1.every((i) => i.status === 'done'), 'the page says Phase 1 is complete; the data must agree');
+});

@@ -1,6 +1,6 @@
 /* Static, built at build time. Same URL the standards spec §8.1 names; no server. */
 import type { APIRoute } from 'astro';
-import { APPROVED_STATEMENT, MATRIX, UNCERTAINTY_STATEMENT } from '../../scripts/standards/matrix.ts';
+import { APPROVED_STATEMENT, MATRIX, PHASES, UNCERTAINTY_STATEMENT } from '../../scripts/standards/matrix.ts';
 
 export const GET: APIRoute = () => new Response(JSON.stringify({
   status: 'prototype',
@@ -13,4 +13,5 @@ export const GET: APIRoute = () => new Response(JSON.stringify({
     roadmap: 'planned; nothing ships',
   },
   matrix: MATRIX,
+  pathToCertification: PHASES,
 }, null, 2), { headers: { 'Content-Type': 'application/json; charset=utf-8' } });

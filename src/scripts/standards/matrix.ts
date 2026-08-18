@@ -105,3 +105,73 @@ export const PROHIBITED = Object.freeze([
   'certified', 'fully compliant', 'officially integrated', 'approved by dubai municipality',
   'iso certified', 'medically validated', 'engineering-grade', 'guaranteed heat reduction',
 ]);
+
+/**
+ * The path from aligned to certified — doc §14, made CHECKABLE.
+ *
+ * The matrix above already says what would move each individual standard up a
+ * rung. What it does not say is the ORDER, or where we currently stand. That
+ * sequencing is the whole "aligned for certification" claim: alignment only
+ * means something if the route onward exists and the current position on it is
+ * stated honestly.
+ *
+ * So every done item names the artefact that PROVES it. A roadmap whose
+ * completed items cannot be checked is marketing; one where each tick has a URL
+ * or a script behind it is evidence. `evidence` is required whenever
+ * status is 'done' — a unit test enforces exactly that.
+ */
+export type PhaseStatus = 'done' | 'partial' | 'todo';
+
+export interface PhaseItem {
+  readonly item: string;
+  readonly status: PhaseStatus;
+  /** required for 'done' and 'partial': what a reader can go and check */
+  readonly evidence?: string;
+}
+
+export interface Phase {
+  readonly phase: string;
+  readonly title: string;
+  readonly objective: string;
+  readonly items: readonly PhaseItem[];
+}
+
+export const PHASES: readonly Phase[] = [
+  {
+    phase: 'Phase 1', title: 'Prototype',
+    objective: 'Sample endpoints live, alignment matrix published, uncertainty and attribution in place.',
+    items: [
+      { item: 'Sample endpoints live', status: 'done', evidence: '/api/standards.json and 12 further static JSON routes' },
+      { item: 'Alignment matrix published', status: 'done', evidence: '/standards, and machine-readable at /api/standards.json' },
+      { item: 'Uncertainty page in place', status: 'done', evidence: '/uncertainty — every figure read at build time from accuracy.ts' },
+      { item: 'Attribution page in place', status: 'done', evidence: '/attribution — generated from the provenance files; an unlicensed dataset fails the build' },
+    ],
+  },
+  {
+    phase: 'Phase 2', title: 'Municipal pilot',
+    objective: 'Schema validation against the specifications, access control, validation against local sensor data.',
+    items: [
+      { item: 'CityJSON validated against the OGC 2.0 schema', status: 'done', evidence: 'scripts/check-cityjson-schema.py, run in the build gate — brought forward from this phase and already passing' },
+      { item: 'OGC API Features conformance (landing page, conformance declaration, paging, CRS negotiation)', status: 'todo' },
+      { item: 'NGSI-LD entities resolving against a context broker', status: 'todo' },
+      { item: 'Access control and API keys', status: 'todo', evidence: 'Not applicable while the surface is read-only static files; becomes real the moment anything is writable.' },
+      { item: 'Validation against local sensor data', status: 'partial', evidence: 'Satellite validation is done (ECOSTRESS, leave-one-overpass-out). Ground sensors are not: only one of the three wards has an AQI station, and none has a thermal one.' },
+    ],
+  },
+  {
+    phase: 'Phase 3', title: 'Production integration',
+    objective: 'Formal governance review, official integration discussions, 3D Tiles, IFC/BIM pathway, audit logs.',
+    items: [
+      { item: 'Formal governance and legal review', status: 'todo' },
+      { item: 'Official integration discussions (Dubai Pulse, Dubai Municipality)', status: 'todo', evidence: 'Blocked on access, not on engineering: as of 2026-08-11 the Dubai Pulse host refuses connections from outside the UAE.' },
+      { item: '3D Tiles tileset with real geometric error', status: 'todo' },
+      { item: 'IFC / BIM pathway', status: 'todo' },
+      { item: 'Audit logs and data residency controls', status: 'todo' },
+    ],
+  },
+  {
+    phase: 'Phase 4', title: 'East Asia expansion',
+    objective: 'Virtual Singapore alignment, Shenzhen CIM preparation, local cloud deployment.',
+    items: [{ item: 'Not started; sequenced after a first municipal deployment', status: 'todo' }],
+  },
+];
