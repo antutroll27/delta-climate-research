@@ -1069,11 +1069,18 @@ function tableFigures(e: CertificateEstimate): { certs: string | null; costEur: 
  * (`ec-benchmarks-workbook-v1`) name different documents, and printing one under the other's
  * label is a false provenance claim even though every character of the hash is correct.
  *
- * Four `sources` entries (`dir-2003-87-art-10a-1a`, `dr-2019-331-art-14-6`, `reg-2023-956`,
- * `ec-certificate-price-page`) still carry the pack's "not yet retrieved" placeholder — 64
- * zeros — because no digest has been pinned for them yet. Printing that string verbatim would
- * read as a real hash computed over a real download; it is not one, so it is called out by name
- * instead of allowed through as though it were.
+ * THE WORKBOOK ID CARRIES ITS OWN VERSION AND IT HAS MOVED ONCE. Pack v2 supersedes the Default
+ * Values workbook with `ec-default-values-workbook-v2` (IR (EU) 2025/2621 Annex I as corrected by
+ * IR (EU) 2026/1740); asking for the retired `-v1` id here returned "not present in this pack",
+ * so the printed §3 dropped the one digest it claims to publish while every other line looked
+ * fine. Grep `sources` in public/cbam/estimator-pack.json when the pack is regenerated — a
+ * version bump in an id is a silent break of this function, not a type error.
+ *
+ * No `sources` entry in the shipped pack carries the "not yet retrieved" placeholder — 64 zeros
+ * — today; earlier packs left four unpinned (`dir-2003-87-art-10a-1a`, `dr-2019-331-art-14-6`,
+ * `reg-2023-956`, `ec-certificate-price-page`) and the branch below stays for the next one.
+ * Printing that string verbatim would read as a real hash computed over a real download; it is
+ * not one, so it is called out by name instead of allowed through as though it were.
  */
 function sourceHash(pack: Pick<EstimatorPack, 'sources'>, sourceId: string): string {
   const found = pack.sources.find((s) => s.id === sourceId);
@@ -1284,7 +1291,8 @@ export function buildPrintDocument(input: {
     <ul>
       <li>Rule packages: ${rulePackages.map((r) => `<code>${esc(r)}</code>`).join(' · ')}</li>
       <li>Data snapshot: <code>${esc(packSnapshot)}</code> — SHA-256 over the pack's
-        generation timestamp and both Commission source-workbook hashes (below).</li>
+        generation timestamp, both Commission source-workbook hashes (below), and a digest of the
+        pack's own contents, so a changed default value changes this stamp.</li>
       <li>IR (EU) 2025/2620 (free allocation), the enacted regulation itself:
         <code>${esc(sourceHash(pack, 'ir-2025-2620'))}</code></li>
       <li>IR (EU) 2025/2621 (default values), the enacted regulation itself:
@@ -1292,7 +1300,7 @@ export function buildPrintDocument(input: {
       <li>Commission Benchmarks workbook — an informational transcription of the 2025/2620 Annex,
         not the binding text: <code>${esc(sourceHash(pack, 'ec-benchmarks-workbook-v1'))}</code></li>
       <li>Commission Default Values workbook — an informational transcription of 2025/2621's
-        Annex I, not the binding text: <code>${esc(sourceHash(pack, 'ec-default-values-workbook-v1'))}</code></li>
+        Annex I, not the binding text: <code>${esc(sourceHash(pack, 'ec-default-values-workbook-v2'))}</code></li>
       <li>Per-line benchmark authority is printed in the table above; the CBAM factor is
         Dir 2003/87/EC Art 10a(1a) (free allocation retained).</li>
     </ul>

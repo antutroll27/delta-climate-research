@@ -141,7 +141,7 @@ export function lineFingerprint(line: Line): Promise<string> {
 /**
  * Identifies the exact corpus a figure was computed from: the pack's generatedAt,
  * both source-workbook sha256s in generatedFrom order, AND a digest of the pack's
- * own contents. Replaces the placeholder 'browser-prototype' the vendored stamp
+ * own contents. Replaces the placeholder 'unsealed-pack' the vendored stamp
  * carries in this build — decorated onto the estimate AFTER the engine returns,
  * never inside it.
  *
@@ -350,18 +350,29 @@ export function thresholdByYear(
       // gating it there would be a change across another trust boundary and a re-vendor. This
       // file is ours, so the gate goes here. Measured on this pack with the line absent: '0x10'
       // decided Art 2(3) off a hex string (knownEligibleMassT '16'), '+100' and 'Infinity' both
-      // reported above_threshold, and 'abc' / '' / '  100  ' threw a raw [DecimalError] out of
-      // the whole card render rather than one line.
+      // reported above_threshold, and 'abc' / '' threw a raw [DecimalError] out of the whole
+      // card render rather than one line. ('  100  ' threw the same way and is now ADMITTED by
+      // the gate rather than refused — see the `.trim()` below, which is what stops it throwing.)
       //
-      // `netMassT` still carries the string AS ENTERED, not the gate's parsed value
-      // re-stringified: the gate's shape regex is a strict subset of Decimal's grammar, so
-      // everything it admits reads back as the same quantity — which is exactly what the
-      // entry-point test pins ('1e3' is its discriminating case), and re-encoding here would
-      // retire that check instead of satisfying it.
+      // `netMassT` carries the string AS ENTERED, TRIMMED — not the gate's parsed value
+      // re-stringified. The gate's own first act is `value.trim()` (cbam/input.ts,
+      // parseNonNegativeDecimal), and everything its shape regex then admits is a strict subset
+      // of Decimal's grammar, so the trimmed text reads back as exactly the quantity the gate
+      // parsed — which is what the entry-point test pins ('1e3' is its discriminating case), and
+      // re-encoding here would retire that check instead of satisfying it.
+      //
+      // THE `.trim()` IS THE FIX, NOT TIDINESS. This line read `netMassT: l.massT` while the
+      // gate above trimmed, and the two therefore parsed DIFFERENTLY: pack v2's input.ts admits
+      // '  100  ' (Decimal 100), the raw string went through to aggregateThresholdBasis's bare
+      // `.plus(entry.netMassT)`, and decimal.js threw `[DecimalError] Invalid argument:   100  `
+      // out of the WHOLE card render — the exact failure the gate exists to prevent, reopened by
+      // a widened upstream parser. A gate that parses differently from its consumer is worse
+      // than no gate: it fails open into a throw. Matching the gate's own normalisation, rather
+      // than second-guessing it here, is what keeps the two readings one reading.
       if (!nonNegativeDecimal(l.massT)) { unreadableMass = true; return []; }
       return [{
         id: l.id, importerOrgId: IMPORTER, calendarYear, sector,
-        netMassT: l.massT, sourceSha256,
+        netMassT: l.massT.trim(), sourceSha256,
       }];
     });
     // ONE unreadable mass discards the WHOLE YEAR's card — never merely its own line. This card
