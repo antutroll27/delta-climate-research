@@ -48,6 +48,7 @@ import sys
 from typing import TypedDict
 
 from _gltf import earclip, write_glb
+from _stamp import stamp
 
 
 class Footprint(TypedDict):
@@ -231,6 +232,16 @@ def build_ward(ward: str, write: bool = True) -> WardStats:
                 "disclaimer": "A compliance posture implemented in code, not legal advice.",
             },
             "buildings": len(rows),
+            # sha256 of every input plus the generators themselves. Freshness is
+            # checked against THIS, not by regenerating and diffing bytes: the
+            # .glb is float32 trigonometry and is not byte-reproducible across
+            # platforms (CI proved it — same length, different bytes on Linux).
+            "inputsHash": stamp([
+                os.path.join(GEOM, f"{ward}-footprints.json"),
+                os.path.join(GEOM, "heights-overture.json"),
+                os.path.join(os.path.dirname(os.path.abspath(__file__)), "build-3d-tiles.py"),
+                os.path.join(os.path.dirname(os.path.abspath(__file__)), "_gltf.py"),
+            ]),
         },
     }
 

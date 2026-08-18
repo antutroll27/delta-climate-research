@@ -21,7 +21,7 @@
     "check:3dtiles": "node scripts/check-3d-tiles.mjs",
     "check:ngsi": "python3 scripts/check-ngsi-ld.py",
     "check:stac": "sh scripts/check-stac.sh",
-    "check:fresh": "sh scripts/check-artefacts-fresh.sh"
+    "check:fresh": "python3 scripts/check-artefacts-fresh.py"
   },
   "engines": {
     "node": ">=22.12.0",

@@ -53,6 +53,8 @@ from typing import Any
 import numpy as np
 from PIL import Image
 
+from _stamp import stamp
+
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 DATA = os.path.join(ROOT, "public", "heat-map", "data")
 OUT = os.path.join(ROOT, "data", "indicators", "iso-city-indicators.json")
@@ -139,6 +141,12 @@ def main() -> int:
                           "This is alignment with a named indicator definition, not a verified conformant "
                           "measurement.",
         "published": [ward_indicators(w, (lo, hi)) for w in WARDS],
+        # see scripts/_stamp.py — inputs are fingerprinted, not re-diffed
+        "inputsHash": stamp(
+            [os.path.join(DATA, f"{w}-{k}.png") for w in WARDS for k in ("canopy", "surface")]
+            + [os.path.join(DATA, "surface-meta.json"),
+               os.path.join(os.path.dirname(os.path.abspath(__file__)), "build-city-indicators.py")]
+        ),
         "deliberatelyNotPublished": [
             {"standard": "ISO 37123:2019, 8.1",
              "indicator": "Magnitude of urban heat island effects (atmospheric)",

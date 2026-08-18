@@ -119,6 +119,16 @@
       }
     }
   ],
+  "inputsHash": {
+    "public/heat-map/data/ballygunge-canopy.png": "e07fbe46a3325576da20f880ef64aa1e15d356eb405b9308d15953726a4fc431",
+    "public/heat-map/data/ballygunge-surface.png": "340ce34d05c473db3042ed4836158e9d52234092eef6cdb448f626aa2b3c170c",
+    "public/heat-map/data/barrackpore-canopy.png": "6656ec071f716e058afdd54329426bd9568e9b53cbdf4e8afdf3aa590a636535",
+    "public/heat-map/data/barrackpore-surface.png": "77d07d636138a0c76c5631404765581635ee674fdcf4543b7ba7f08a86469bb1",
+    "public/heat-map/data/baruipur-canopy.png": "e1dea07d07c3fd52313acfe26897615eb99394dcfe4ce124528a3ee74c8a7ba7",
+    "public/heat-map/data/baruipur-surface.png": "a8af2a9f761fc6d3a92f940f9c3ee425f460226d867abba4080244346fc94c06",
+    "public/heat-map/data/surface-meta.json": "c38ce2fca3e2636aa4616a3ecaaaa06a32d5422d2a726948b591b5cc09db3022",
+    "scripts/build-city-indicators.py": "dbd03dec4eb29ad0a075dcb47108401f91e1884c446ba2393a542e87c0fb4e3a"
+  },
   "deliberatelyNotPublished": [
     {
       "standard": "ISO 37123:2019, 8.1",

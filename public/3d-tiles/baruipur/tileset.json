@@ -59,6 +59,12 @@
       "restrictions": "none -- static files, no authentication, no technological restriction (4.7).",
       "disclaimer": "A compliance posture implemented in code, not legal advice."
     },
-    "buildings": 4538
+    "buildings": 4538,
+    "inputsHash": {
+      "data/geometry/baruipur-footprints.json": "0f1f8da129dcd40441058ebc78b35fc365b79afbcdceb205171e679932a52ad2",
+      "data/geometry/heights-overture.json": "81e2750f86d750803704c0f188e41f877d9a90194ac40c9b5c68691fc37fa478",
+      "scripts/_gltf.py": "f149ab828640b9f3d7960c6932e91bbd109bc3d6b1f630ca06256173dfd78f97",
+      "scripts/build-3d-tiles.py": "918481443ee06a4e2118b7a196e583f0d5664ebaa59f55279205a8bf560fd383"
+    }
   }
 }
