@@ -1,0 +1,66 @@
+---
+/**
+ * The long-form shell shared by /standards, /uncertainty and /attribution.
+ * Same instrument language as the rest of the site — dark base, Mona Sans body,
+ * mono eyebrows — but readable prose width, because these are documents.
+ */
+import Nav from '../layout/Nav.astro';
+import Footer from '../layout/Footer.astro';
+
+interface Props {
+  kicker: string;
+  title: string;
+  lede: string;
+}
+const { kicker, title, lede } = Astro.props;
+---
+<Nav />
+<main id="main" class="std">
+  <header class="std__head wrap">
+    <p class="std__kicker">{kicker}</p>
+    <h1 class="std__title">{title}</h1>
+    <p class="std__lede">{lede}</p>
+  </header>
+  <div class="std__body wrap">
+    <slot />
+  </div>
+</main>
+<Footer />
+
+<style is:global>
+  .std{background:var(--color-base);color:var(--color-paper);padding-block:clamp(5rem,12vh,8rem) clamp(4rem,10vh,7rem)}
+  .std .wrap{max-width:74ch}
+  .std__kicker{font-family:var(--font-mono);font-size:.62rem;letter-spacing:.18em;text-transform:uppercase;color:var(--color-bronze);margin:0 0 .9rem}
+  .std__title{font-family:var(--font-sans);font-weight:600;font-size:clamp(1.9rem,3.6vw,2.6rem);letter-spacing:-.02em;line-height:1.08;margin:0 0 1rem;text-wrap:balance}
+  .std__lede{font-size:1.02rem;line-height:1.6;color:var(--color-ink-muted);margin:0 0 3rem;max-width:62ch}
+  .std__body{font-size:.94rem;line-height:1.7;color:var(--color-ink-muted)}
+  .std__body h2{font-family:var(--font-sans);font-weight:600;font-size:1.22rem;letter-spacing:-.01em;color:var(--color-paper);margin:3rem 0 .8rem;padding-top:1.6rem;border-top:1px solid var(--color-hairline)}
+  .std__body h2:first-child{margin-top:0;padding-top:0;border-top:0}
+  .std__body h3{font-family:var(--font-sans);font-weight:600;font-size:1rem;color:var(--color-paper);margin:1.8rem 0 .5rem}
+  .std__body p{margin:0 0 1rem}
+  .std__body a{color:var(--color-cyan);text-decoration:underline;text-decoration-color:rgb(111 202 214 /.4);text-underline-offset:2px}
+  .std__body a:hover{color:var(--color-paper-bright)}
+  .std__body code{font-family:var(--font-data);font-size:.86em;color:var(--color-paper);background:rgb(255 255 255 /.05);padding:.08em .38em;border-radius:4px}
+  .std__body pre{font-family:var(--font-data);font-size:.8rem;line-height:1.55;color:var(--color-paper);background:rgb(255 255 255 /.035);border-radius:10px;padding:1rem 1.1rem;overflow-x:auto;margin:1rem 0 1.4rem}
+  .std__body pre code{background:none;padding:0;font-size:inherit}
+  .std__body ul,.std__body ol{padding-left:1.3rem;margin:0 0 1rem}
+  .std__body li{margin:.3rem 0}
+  .std__body blockquote{margin:1.4rem 0;padding:.9rem 1.1rem;border-left:0;background:rgb(176 141 87 /.08);border-radius:10px;color:var(--color-paper);font-size:.96rem}
+  .std__body blockquote p:last-child{margin:0}
+  /* figures: mono, tabular, so numbers align in tables and prose */
+  .std__body .n{font-family:var(--font-data);font-variant-numeric:tabular-nums;color:var(--color-paper)}
+  .std__body table{width:100%;border-collapse:collapse;font-size:.86rem;margin:1rem 0 1.6rem}
+  .std__body th{text-align:left;font-family:var(--font-mono);font-weight:400;font-size:.58rem;letter-spacing:.14em;text-transform:uppercase;color:var(--color-ink-faint);padding:.55rem .6rem .55rem 0;border-bottom:1px solid var(--color-hairline)}
+  .std__body td{padding:.6rem .6rem .6rem 0;vertical-align:top;border-bottom:1px solid var(--color-hairline)}
+  .std__body td:first-child{color:var(--color-paper)}
+  .std__body .tag{display:inline-block;font-family:var(--font-mono);font-size:.56rem;letter-spacing:.12em;text-transform:uppercase;padding:.22rem .5rem;border-radius:6px;white-space:nowrap}
+  .std__body .tag--aligned{color:var(--color-cyan);background:rgb(111 202 214 /.12)}
+  .std__body .tag--compatible{color:var(--color-cyan-muted);background:rgb(146 194 203 /.1)}
+  .std__body .tag--roadmap{color:var(--color-ink-faint);background:rgb(255 255 255 /.05)}
+  .std__body .tag--not-applicable{color:var(--color-ink-faint);background:transparent;border:1px solid var(--color-hairline)}
+  .std__body .tblwrap{overflow-x:auto;margin:1rem 0 1.6rem}
+  .std__body .tblwrap table{margin:0}
+  .std__body .muted{color:var(--color-ink-faint)}
+  .std__body .verdict{font-family:var(--font-mono);font-size:.62rem;letter-spacing:.14em;text-transform:uppercase;color:var(--color-bronze)}
+  @media (max-width:640px){ .std__body{font-size:.9rem} .std__body table{font-size:.8rem} }
+</style>

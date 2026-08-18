@@ -1,0 +1,97 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+
+import { WARDS } from '../../src/data/wards.ts';
+import { buildCityJSON } from '../../src/scripts/standards/cityjson.ts';
+import { wardCollection, wardFeature } from '../../src/scripts/standards/geojson.ts';
+import { MATRIX, PROHIBITED } from '../../src/scripts/standards/matrix.ts';
+
+const cj = buildCityJSON(WARDS[0]);   // ballygunge — 3,527 buildings
+
+test('CityJSON envelope is 2.0 with a transform and one Building per shipped footprint', () => {
+  assert.equal(cj.type, 'CityJSON');
+  assert.equal(cj.version, '2.0');
+  assert.equal(cj.transform.scale.length, 3);
+  assert.equal(cj.transform.translate.length, 3);
+  assert.equal(Object.keys(cj.CityObjects).length, 3527, 'one CityObject per row of ballygunge.json');
+  for (const o of Object.values(cj.CityObjects)) assert.equal(o.type, 'Building');
+});
+
+test('every boundary index points at a real vertex, and every solid is closed', () => {
+  const nV = cj.vertices.length;
+  assert.ok(nV > 0);
+  for (const [id, o] of Object.entries(cj.CityObjects)) {
+    const g = o.geometry[0];
+    assert.equal(g.type, 'Solid'); assert.equal(g.lod, '1');
+    const shells = g.boundaries;           // Solid = array of shells; shell = array of surfaces; surface = array of rings
+    assert.equal(shells.length, 1, `${id}: LoD1 solid has one shell`);
+    const faces = shells[0];
+    assert.ok(faces.length >= 5, `${id}: needs bottom + top + >=3 walls, got ${faces.length}`);
+    for (const surface of faces) for (const ring of surface) {
+      assert.ok(ring.length >= 3, `${id}: degenerate ring`);
+      for (const idx of ring) {
+        assert.ok(Number.isInteger(idx) && idx >= 0 && idx < nV, `${id}: vertex index ${idx} out of range [0,${nV})`);
+      }
+    }
+    // top ring sits at the building's height, bottom at 0 — in scaled units
+    const [bottom] = faces[0][0], [top] = faces[1][0];
+    assert.equal(cj.vertices[bottom][2], 0);
+    assert.ok(cj.vertices[top][2] > 0, `${id}: top ring must be above ground`);
+  }
+});
+
+test('the extrusion height matches what the heat map ships (b[0] of {ward}.json)', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const shipped = JSON.parse(await readFile(new URL('../../public/heat-map/data/ballygunge.json', import.meta.url), 'utf8'));
+  const heights = Object.values(cj.CityObjects).map((o) => o.attributes.height_m);
+  shipped.b.forEach((row, i) => {
+    assert.ok(Math.abs(heights[i] - Math.max(row[0], 0)) < 1e-9, `row ${i}: export ${heights[i]} vs shipped ${row[0]}`);
+  });
+});
+
+test('CityJSON vertices decode back to inside the ward bbox in EPSG:4326', () => {
+  const [sx, sy] = cj.transform.scale, [tx, ty] = cj.transform.translate;
+  const f = wardFeature(WARDS[0]);
+  const [w, s, e, n] = f.bbox;
+  // allow the 64 "outside" footprints the geometry file records as skipped-margin
+  const pad = 0.002;
+  let outside = 0;
+  for (const [vx, vy] of cj.vertices) {
+    const lon = vx * sx + tx, lat = vy * sy + ty;
+    if (lon < w - pad || lon > e + pad || lat < s - pad || lat > n + pad) outside++;
+  }
+  assert.equal(outside, 0, `${outside} vertices decode outside the ward — a georeferencing bug`);
+});
+
+test('the lineage block carries the measured confidence and the prototype status', () => {
+  const l = cj['+delta_lineage'];
+  assert.equal(l.status, 'prototype');
+  assert.equal(l.analysisCrs, 'EPSG:32645');
+  assert.ok(l.confidence.night.bandK > 0 && l.confidence.peak.n > 0);
+  assert.equal(l.confidence.heights.verdict, 'underpowered');
+  assert.match(cj.metadata.referenceSystem, /EPSG\/0\/4326$/);
+  assert.equal(cj.metadata.pointOfContact.emailAddress, 'angad@deltaclimate.earth', 'contactDetails requires emailAddress');
+  assert.ok(!('lineage' in cj.metadata), 'metadata is closed in 2.0 — lineage must not be inside it');
+});
+
+test('GeoJSON features are RFC 7946: closed CCW rings, bbox = polygon envelope', () => {
+  const c = wardCollection(WARDS);
+  assert.equal(c.type, 'FeatureCollection'); assert.equal(c.features.length, WARDS.length);
+  for (const f of c.features) {
+    const ring = f.geometry.coordinates[0];
+    assert.deepEqual(ring[0], ring[ring.length - 1], 'ring must close');
+    // shoelace: positive area = counter-clockwise
+    let a = 0; for (let i = 0; i < ring.length - 1; i++) a += ring[i][0] * ring[i + 1][1] - ring[i + 1][0] * ring[i][1];
+    assert.ok(a > 0, `${f.id}: exterior ring must be CCW`);
+    const lons = ring.map((p) => p[0]), lats = ring.map((p) => p[1]);
+    assert.deepEqual(f.bbox, [Math.min(...lons), Math.min(...lats), Math.max(...lons), Math.max(...lats)]);
+    assert.equal(f.properties.status, 'prototype');
+  }
+});
+
+test('nothing on the wire uses prohibited certification language', () => {
+  const wire = JSON.stringify({ cj: cj.metadata, lin: cj['+delta_lineage'], matrix: MATRIX, geo: wardCollection(WARDS) }).toLowerCase();
+  for (const p of PROHIBITED) assert.ok(!wire.includes(p), `prohibited phrase on the wire: "${p}"`);
+  // and the matrix never claims the two rungs we cannot stand on
+  for (const row of MATRIX) assert.ok(!['compliant', 'certified'].includes(row.posture), row.standard);
+});

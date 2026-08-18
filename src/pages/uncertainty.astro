@@ -1,0 +1,107 @@
+---
+// /uncertainty — the receipts, in prose. Every number on this page is READ from
+// accuracy.ts or a calibration artefact at build time. Nothing is typed by hand,
+// so this page cannot drift from what the instrument actually measures — the
+// same reason measure-spatial-accuracy.py parses DEFAULT_PARAMS out of types.ts.
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import Base from '../layouts/Base.astro';
+import StandardsPage from '../components/standards/StandardsPage.astro';
+import { ACCURACY, HEIGHTS, SPATIAL } from '../scripts/climate-engine/accuracy.ts';
+import { UNCERTAINTY_STATEMENT } from '../scripts/standards/matrix.ts';
+
+interface SignTest { summary: Record<string, { scenes: number; mean_r: number; pct_positive: number; sign_test_p: number; verdict: string }> }
+// Resolved from process.cwd() (the project root at build time), NOT import.meta.url:
+// inside a prerendered Astro page that URL points at dist/.prerender/chunks/,
+// where data/ does not exist. The first build proved it.
+// Python's json.dump writes bare NaN for a per-scene correlation that could not be
+// computed (too few cells); strict JSON.parse refuses it. Only `summary` is read
+// here and it never carries NaN, so the per-row NaNs are made null before parsing.
+const readCal = (rel: string): SignTest =>
+  JSON.parse(readFileSync(resolve(rel), 'utf8').replace(/:\s*NaN\b/g, ': null')) as SignTest;
+const svf    = readCal('data/calibration/svf-signtest.json');
+const shadow = readCal('data/calibration/shadow-signtest.json');
+const p = (x: number) => x.toExponential(1).replace('e-', ' × 10⁻');
+const site = Astro.site!.href.replace(/\/$/, '');
+const jsonLd = { '@context': 'https://schema.org', '@type': 'WebPage', name: 'Uncertainty — Delta Climate Research', url: `${site}/uncertainty`, isPartOf: { '@type': 'WebSite', url: `${site}/` } };
+---
+<Base
+  title="Uncertainty — Delta Climate Research"
+  description="The measured error of the urban heat model, phase by phase, and the hypotheses it has tested and rejected — published because error bars are the product."
+>
+  <script type="application/ld+json" is:inline set:html={JSON.stringify(jsonLd)} />
+  <StandardsPage
+    kicker="Uncertainty · What the instrument knows about itself"
+    title="The error bars, and the ideas that did not survive"
+    lede="Every figure here is read at build time from the same file the map's readout uses. If the model is re-fitted, this page changes with it — it cannot be more flattering than the instrument."
+  >
+    <blockquote><p>{UNCERTAINTY_STATEMENT}</p></blockquote>
+
+    <h2>Ward-level surface temperature</h2>
+    <p>Scored out-of-sample against ECOSTRESS thermal overpasses, leave-one-overpass-out. The <em>ceiling</em> is what a perfect model of this kind could reach given the observation's own noise; the <em>band</em> is the model's error rounded up to the nearest 0.5 K and is what the map shows.</p>
+    <div class="tblwrap"><table>
+      <thead><tr><th>Phase</th><th>Scenes</th><th>Model RMSE</th><th>Ceiling</th><th>Band shown</th><th>Tier</th></tr></thead>
+      <tbody>
+        {(['night','peak'] as const).map((k) => (
+          <tr>
+            <td>{k === 'peak' ? 'Daytime peak (13:00)' : 'Night (22:00)'}</td>
+            <td><span class="n">{ACCURACY[k].n}</span></td>
+            <td><span class="n">{ACCURACY[k].modelRmseK.toFixed(2)} K</span></td>
+            <td><span class="n">{ACCURACY[k].ceilingRmseK.toFixed(3)} K</span></td>
+            <td><span class="n">±{ACCURACY[k].bandK.toFixed(1)} K</span></td>
+            <td><span class="verdict">{ACCURACY[k].confidence}</span></td>
+          </tr>
+        ))}
+      </tbody>
+    </table></div>
+    <p><strong>Night</strong> — {ACCURACY.night.note}</p>
+    <p><strong>Peak</strong> — {ACCURACY.peak.note}</p>
+    <p>For scale: published continental land-surface products sit at 2.3–2.7 K (Good 2015) and global 1 km daily products at 1.7–2.4 K by continent (Zhang et al. 2022). The honest ceiling for daily, station-independent surface temperature from satellite is roughly 2–3 K. These bands are at that level, achieved at ward scale.</p>
+
+    <h2>The pattern inside a ward</h2>
+    <p>{SPATIAL.note}</p>
+    <div class="tblwrap"><table>
+      <thead><tr><th>Measure</th><th>Value</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td>Ward-scenes scored</td><td><span class="n">{SPATIAL.n}</span></td><td>3 wards × near-nadir scenes after cloud and QC masking</td></tr>
+        <tr><td>r, shipped field vs ECOSTRESS</td><td><span class="n">{SPATIAL.rModel.toFixed(3)}</span></td><td>within-ward correlation of the modelled pattern</td></tr>
+        <tr><td>r, vegetation map alone</td><td><span class="n">{SPATIAL.rVegOnly.toFixed(3)}</span></td><td>the null — and it still wins</td></tr>
+        <tr><td>Amplitude ratio</td><td><span class="n">{SPATIAL.amplitudeRatio.toFixed(2)}</span></td><td>the map's within-ward colour range is this much wider than ECOSTRESS measures</td></tr>
+        <tr><td>Anomaly RMSE</td><td><span class="n">{SPATIAL.anomalyRmseK.toFixed(2)} K</span></td><td>error once ward-mean bias is removed</td></tr>
+      </tbody>
+    </table></div>
+    <p>So: the ward-level number is calibrated; the placement of heat <em>inside</em> a ward is not yet better than a vegetation map. That is stated on the map itself, and it is why the two hypotheses below were tested.</p>
+
+    <h2>Two hypotheses, pre-registered, both rejected</h2>
+    <p>The solver is two-dimensional — <code>sun</code> and <code>kRad</code> are scalars, so building geometry cannot enter it. Two ways of letting it in were tested with the direction of the expected effect written down before any number was computed. Both failed, and both are published here rather than buried.</p>
+
+    <h3>Sky-view factor</h3>
+    <p>Prediction: enclosed cells radiate less to the sky, so the model — which assumes an open sky everywhere — should over-cool them. Expected <code>corr(SVF, model − obs) &gt; 0</code> at night.</p>
+    <div class="tblwrap"><table>
+      <thead><tr><th>Phase</th><th>Scenes</th><th>Mean r</th><th>% positive</th><th>p</th><th>Verdict</th></tr></thead>
+      <tbody>
+        {Object.entries(svf.summary).map(([ph, s]) => (
+          <tr><td>{ph}</td><td><span class="n">{s.scenes}</span></td><td><span class="n">{s.mean_r >= 0 ? '+' : ''}{s.mean_r.toFixed(3)}</span></td><td><span class="n">{s.pct_positive.toFixed(0)}%</span></td><td><span class="n">{p(s.sign_test_p)}</span></td><td><span class="verdict">{s.verdict.replace(/\*/g, '').trim()}</span></td></tr>
+        ))}
+      </tbody>
+    </table></div>
+    <p>Rejected with the <em>wrong</em> sign, unanimously. The physical reason: these wards have no canyons — SVF sits at 0.82–0.92 — and SVF is collinear with built fraction, which the model already carries. Dead as a within-ward lever here.</p>
+
+    <h3>Building shadow</h3>
+    <p>Prediction: shaded cells receive less beam, so the model — which assumes full sun everywhere — should over-heat them. Expected <code>corr(shade, model − obs) &gt; 0</code> by day. A <em>placebo arm</em> was pre-registered alongside: night scenes scored against the same geometry lit at local noon, when no sun was shining. A real shadow effect must be ~0 there.</p>
+    <div class="tblwrap"><table>
+      <thead><tr><th>Arm</th><th>Scenes</th><th>Mean r</th><th>% positive</th><th>p</th><th>Verdict</th></tr></thead>
+      <tbody>
+        {Object.entries(shadow.summary).map(([ph, s]) => (
+          <tr><td>{ph === 'day' ? 'day (the test)' : 'night (placebo)'}</td><td><span class="n">{s.scenes}</span></td><td><span class="n">{s.mean_r >= 0 ? '+' : ''}{s.mean_r.toFixed(3)}</span></td><td><span class="n">{s.pct_positive.toFixed(0)}%</span></td><td><span class="n">{p(s.sign_test_p)}</span></td><td><span class="verdict">{s.verdict.replace(/\*/g, '').trim()}</span></td></tr>
+        ))}
+      </tbody>
+    </table></div>
+    <p>The pre-registered statistic passed — and the placebo fired, which voids it. A correlation with a shadow that was not there can only be building density. With built and vegetation regressed out, the day effect collapses to +0.070, p = 0.31. Shadow dies of the same collinearity as SVF. It is not the same kind of null, though: post-hoc, the partial correlation tracks building <em>height</em> across the three wards and strengthens at low sun, as real shadow would — underpowered with coherent structure, and a falsifiable prediction for a taller city.</p>
+
+    <h2>Building heights</h2>
+    <p>Heights ship from a zonal statistic over each footprint. Independent validation against ICESat-2 returned the pre-registered verdict <span class="verdict">{HEIGHTS.verdict}</span>: <span class="n">{HEIGHTS.nBuildings}</span> distinct buildings measured against a pre-registered minimum of <span class="n">{HEIGHTS.minBuildings}</span>, over <span class="n">{HEIGHTS.nPasses}</span> passes on <span class="n">{HEIGHTS.nRgts}</span> ground tracks. Below the bar, so nothing depending on validated heights ships as validated. Heights are not in the thermal physics today; they matter for the render and for the shadow work above.</p>
+
+    <p class="muted">Sources: <code>src/scripts/climate-engine/accuracy.ts</code>, <code>data/calibration/svf-signtest.json</code>, <code>data/calibration/shadow-signtest.json</code>. Machine-readable per ward at <code>/api/wards/&#123;id&#125;/metadata.json</code>.</p>
+  </StandardsPage>
+</Base>

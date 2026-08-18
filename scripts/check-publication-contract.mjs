@@ -300,6 +300,14 @@ const routeContracts = [
   routeContract('/heat-map/', 'heat-map-tool', true),
   routeContract('/heat-map/compare/', 'heat-map-tool', false),
   routeContract('/heat-map/brief/', 'heat-map-tool', false),
+  // The three standards documents. Indexable and permanent: they are the public
+  // record of alignment posture, measured error and data provenance — the pages
+  // a municipal or standards reader lands on FIRST. Their content is generated
+  // from the same modules the instrument reads (matrix.ts, accuracy.ts, the
+  // provenance JSONs), so they cannot say more than the map does.
+  routeContract('/standards/', 'core', true),
+  routeContract('/uncertainty/', 'core', true),
+  routeContract('/attribution/', 'core', true),
   routeContract('/white-papers/', 'paper-hub', anyPaperPublished, !anyPaperPublished),
   ...papers.map((paper) => routeContract(
     `/white-papers/${paper.slug}/`,

@@ -1,0 +1,75 @@
+---
+// /attribution — GENERATED from the provenance artefacts, never hand-written.
+// The list here is exactly the list in each ward's provenance JSON plus the
+// fixed non-footprint layers, each joined to a licence entry. A dataset with no
+// licence entry fails the build (ward-record.ts), so a new source cannot ship
+// un-attributed. This retires the hand-typed paragraph the source spec had,
+// which had already drifted (it named sources we do not use and omitted ones
+// we do).
+import Base from '../layouts/Base.astro';
+import StandardsPage from '../components/standards/StandardsPage.astro';
+import { LICENCES, allWardRecords } from '../scripts/standards/ward-record.ts';
+
+const records = allWardRecords();
+// every distinct dataset actually shipped, in a stable order, with its licence
+const shipped = new Map<string, { licence: string; holder: string; url: string; note?: string; layers: Set<string>; wards: Set<string> }>();
+for (const r of records) for (const l of r.provenance.layers) {
+  const e = shipped.get(l.dataset) ?? { ...LICENCES[l.dataset]!, layers: new Set(), wards: new Set() };
+  e.layers.add(l.layer); e.wards.add(r.name); shipped.set(l.dataset, e);
+}
+const site = Astro.site!.href.replace(/\/$/, '');
+const jsonLd = { '@context': 'https://schema.org', '@type': 'WebPage', name: 'Data attribution — Delta Climate Research', url: `${site}/attribution`, isPartOf: { '@type': 'WebSite', url: `${site}/` } };
+---
+<Base
+  title="Data attribution — Delta Climate Research"
+  description="Every dataset the urban climate digital twin is built from, its licence and its holder — generated from the provenance files the map itself ships."
+>
+  <script type="application/ld+json" is:inline set:html={JSON.stringify(jsonLd)} />
+  <StandardsPage
+    kicker="Attribution · Every source, its licence, its holder"
+    title="What this is built from"
+    lede="This page is generated at build time from the same provenance files the map serves. A dataset without a licence entry fails the build, so nothing can appear on the map that does not appear here."
+  >
+    <h2>Datasets in use</h2>
+    <div class="tblwrap"><table>
+      <thead><tr><th>Dataset</th><th>Used for</th><th>Licence</th><th>Holder</th></tr></thead>
+      <tbody>
+        {[...shipped.entries()].map(([name, e]) => (
+          <tr>
+            <td><a href={e.url} rel="noopener">{name}</a>{e.note && <><br /><span class="muted">{e.note}</span></>}</td>
+            <td>{[...e.layers].join(', ')}</td>
+            <td><code>{e.licence}</code></td>
+            <td>{e.holder}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table></div>
+
+    <h2>Footprints, per ward</h2>
+    <p>Building footprints for the Kolkata wards come via Overture Maps (ODbL), which merges OpenStreetMap, Google and Microsoft footprints and de-duplicates them by GERS id. <code>traced</code> means a human drew the outline against imagery; the rest are model output. Counts are read from each ward's provenance file.</p>
+    <div class="tblwrap"><table>
+      <thead><tr><th>Ward</th><th>Buildings</th><th>By source</th></tr></thead>
+      <tbody>
+        {records.map((r) => (
+          <tr>
+            <td>{r.name}<br /><span class="muted">{r.body}</span></td>
+            <td><span class="n">{r.provenance.footprints.count.toLocaleString('en-GB')}</span></td>
+            <td>{r.provenance.footprints.byDataset.map((d) => (
+              <span>{d.dataset} <span class="n">{d.count.toLocaleString('en-GB')}</span>{d.traced && <span class="muted"> · traced</span>}<br /></span>
+            ))}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table></div>
+
+    <h2>Attribution notice</h2>
+    <blockquote>
+      <p>Building footprints © OpenStreetMap contributors (ODbL), Google Open Buildings (CC BY 4.0) and Microsoft (CDLA-Permissive-2.0), via Overture Maps Foundation. Building heights from Google Open Buildings 2.5D Temporal (CC BY 4.0). Surface reflectance from Copernicus Sentinel-2. Canopy height © Meta / WRI (CC BY 4.0). Meteorological forcing from NASA POWER. Live ambient readings © Norwegian Meteorological Institute (NLOD / CC BY 4.0). Thermal validation from NASA ECOSTRESS via LP DAAC; height validation from NASA ICESat-2. Data are used as-is for planning and research; each source's licence travels with it.</p>
+    </blockquote>
+
+    <h2>What is deliberately not here</h2>
+    <p>Sources evaluated and ruled out for licence reasons, so nobody re-tests them: Open-Meteo and WAQI (non-commercial), GlobalBuildingAtlas (ODbL-derived), Google Photorealistic 3D Tiles (terms forbid analysis), Cityweft (EULA forbids product integration). For a Dubai deployment the height source is <a href={LICENCES['WSF3D']!.url} rel="noopener">WSF3D</a> (DLR, CC BY 4.0), which will appear in this table when a Dubai ward ships.</p>
+
+    <p class="muted">Machine-readable per ward: <code>/api/wards/&#123;id&#125;/metadata.json</code> → <code>provenance</code>.</p>
+  </StandardsPage>
+</Base>

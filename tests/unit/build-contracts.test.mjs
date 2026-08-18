@@ -124,6 +124,10 @@ function publicationContracts() {
     { route: '/heat-map/', indexable: true, placeholder: false },
     { route: '/heat-map/compare/', indexable: false, placeholder: false },
     { route: '/heat-map/brief/', indexable: false, placeholder: false },
+    // the three standards documents — core, indexable, permanent (see the checker)
+    { route: '/standards/', indexable: true, placeholder: false },
+    { route: '/uncertainty/', indexable: true, placeholder: false },
+    { route: '/attribution/', indexable: true, placeholder: false },
     { route: '/white-papers/', indexable: anyPaperPublished, placeholder: !anyPaperPublished },
     ...papers.map((paper) => ({
       route: `/white-papers/${paper.slug}/`,

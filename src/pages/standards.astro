@@ -1,0 +1,77 @@
+---
+// /standards — the alignment posture, in the four-rung vocabulary that keeps us
+// honest: aligned / compatible / compliant / certified. Nothing on this page may
+// claim the last two, and a unit test greps for it. Content is read from
+// scripts/standards/matrix.ts, the SAME object /api/standards.json serves, so
+// the page and the machine-readable copy cannot disagree.
+import Base from '../layouts/Base.astro';
+import StandardsPage from '../components/standards/StandardsPage.astro';
+import { APPROVED_STATEMENT, MATRIX, UNCERTAINTY_STATEMENT } from '../scripts/standards/matrix.ts';
+
+const site = Astro.site!.href.replace(/\/$/, '');
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'WebPage',
+  name: 'Standards alignment — Delta Climate Research',
+  url: `${site}/standards`,
+  isPartOf: { '@type': 'WebSite', url: `${site}/` },
+  about: 'Standards alignment of an urban climate digital twin: OGC CityJSON, OGC API Features, data governance.',
+};
+const counts = MATRIX.reduce((m, r) => (m[r.posture] = (m[r.posture] ?? 0) + 1, m), {} as Record<string, number>);
+---
+<Base
+  title="Standards alignment — Delta Climate Research"
+  description="How the urban climate digital twin aligns with OGC, smart-city and data-governance standards — stated as alignment, never certification, with a machine-readable copy at /api/standards.json."
+>
+  <script type="application/ld+json" is:inline set:html={JSON.stringify(jsonLd)} />
+  <StandardsPage
+    kicker="Standards · Alignment, not certification"
+    title="Where the digital twin stands against the standards it targets"
+    lede="Every row below says what a reader can go and fetch today, and what would be needed to move up. Four words carry the whole page, and only the first two apply to us."
+  >
+    <h2>The vocabulary</h2>
+    <div class="tblwrap"><table>
+      <thead><tr><th>Term</th><th>Meaning</th><th>Applies today</th></tr></thead>
+      <tbody>
+        <tr><td>Aligned</td><td>Implements the data model, schema or API pattern the standard defines</td><td>Yes — {counts.aligned ?? 0} standards</td></tr>
+        <tr><td>Compatible</td><td>Interoperates with a named ecosystem in testing</td><td>Not yet claimed for any</td></tr>
+        <tr><td>Compliant</td><td>Meets every normative requirement of the standard</td><td class="muted">No</td></tr>
+        <tr><td>Certified</td><td>Formally assessed and approved by the standards body or authority</td><td class="muted">No</td></tr>
+      </tbody>
+    </table></div>
+    <p>Every external statement Delta makes sits in the first two rows unless a certificate exists. The approved public statement:</p>
+    <blockquote><p>{APPROVED_STATEMENT}</p></blockquote>
+
+    <h2>The matrix</h2>
+    <p>Same data as <a href="/api/standards.json"><code>/api/standards.json</code></a>. {counts.aligned ?? 0} aligned, {counts.roadmap ?? 0} roadmap.</p>
+    <div class="tblwrap"><table>
+      <thead><tr><th>Standard</th><th>Posture</th><th>What ships</th><th>What would move it up</th></tr></thead>
+      <tbody>
+        {MATRIX.map((r) => (
+          <tr>
+            <td>{r.standard}<br /><span class="muted">{r.region} · {r.purpose}</span></td>
+            <td><span class={`tag tag--${r.posture}`}>{r.posture}</span></td>
+            <td>{r.ships}</td>
+            <td class="muted">{r.gap}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table></div>
+
+    <h2>What is actually served</h2>
+    <p>These are static files emitted at build time at the paths the OGC patterns use. There is no server behind them — which is stated rather than dressed up: read-only JSON has no rate limit or query validation because it has no query surface.</p>
+    <ul>
+      <li><a href="/api/standards.json"><code>/api/standards.json</code></a> — this matrix, machine-readable</li>
+      <li><a href="/api/collections/wards.json"><code>/api/collections/wards.json</code></a> · <a href="/api/collections/wards/items.json"><code>…/items.json</code></a> · <code>…/items/&#123;id&#125;.json</code> — OGC API Features-inspired GeoJSON</li>
+      <li><code>/api/wards/&#123;id&#125;/metadata.json</code> — a ward's measured confidence and full data lineage (<a href="/api/wards/ballygunge/metadata.json">ballygunge</a>)</li>
+      <li><code>/api/wards/&#123;id&#125;/cityjson.json</code> — LoD1 CityJSON 2.0, one Building per shipped footprint, <strong>validated against the official 2.0 JSON Schema</strong> on every build (<a href="/api/wards/ballygunge/cityjson.json">ballygunge</a>, ~2.8 MB)</li>
+    </ul>
+    <p>Every payload carries <code>"status": "prototype"</code>, and every derived number in it traces to a line in <code>accuracy.ts</code> or a calibration artefact. The invented placeholder fields from the source specification (<code>population_exposed_high_heat</code>, <code>facade_glare_index</code>, <code>ac_energy_load_reduction_potential</code>) are pinned <em>out</em> by the unit tests.</p>
+
+    <h2>Governance</h2>
+    <p>The posture is inspired by the Gemini Principles — open data, published error bars, published null results, no personal data — and it is a statement of principle, not an assessed conformance. The prototype processes no personal data: aggregated, ward-level, open geospatial inputs only. Formal legal review precedes any production deployment.</p>
+    <p>See <a href="/uncertainty">/uncertainty</a> for the measured error and <a href="/attribution">/attribution</a> for every source and its licence.</p>
+
+    <blockquote><p>{UNCERTAINTY_STATEMENT}</p></blockquote>
+  </StandardsPage>
+</Base>

@@ -21,6 +21,9 @@ types-shapely==2.1.0.20260728
 # these two files alone and re-running the gate — the only way to check that
 # "green" is not an accident of one machine.
 types-requests==2.33.0.20260712
+# check-cityjson-schema.py validates the CityJSON export against the official
+# 2.0 JSON Schema; jsonschema ships no py.typed, so its stubs come from here.
+types-jsonschema==4.26.0.20260518
 
 # h5py, pyarrow, fsspec — NO STUB PACKAGES EXIST on PyPI, and none of the three
 # ships a py.typed marker. They are NOT listed here as packages: this file is the
