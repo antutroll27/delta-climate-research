@@ -27,6 +27,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { Ward } from '../../data/wards.ts';
+import { LICENCE_BLOCK } from './odbl.ts';
 import { wardBbox, wardRecord } from './ward-record.ts';
 
 interface FootprintFile { readonly ward: string; readonly count: number; readonly b: readonly { readonly gers: string; readonly lonlat: readonly (readonly [number, number])[] }[] }
@@ -68,9 +69,10 @@ export const EXTENSION_DOCUMENT = {
   extraRootProperties: {
     '+delta_lineage': {
       type: 'object',
-      required: ['status', 'analysisCrs', 'confidence', 'provenance'],
+      required: ['status', 'analysisCrs', 'confidence', 'provenance', 'licence'],
       properties: {
         status: { type: 'string' },
+        licence: { type: 'object' },
         analysisCrs: { type: 'string' },
         note: { type: 'string' },
         confidence: { type: 'object' },
@@ -206,6 +208,7 @@ export function buildCityJSON(w: Ward): CityJSON {
     vertices,
     '+delta_lineage': {
       status: 'prototype',
+      licence: LICENCE_BLOCK,
       analysisCrs: record.analysisCrs,
       confidence: record.confidence,
       provenance: record.provenance,

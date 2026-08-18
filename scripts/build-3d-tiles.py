@@ -210,7 +210,26 @@ def build_ward(ward: str, write: bool = True) -> WardStats:
             "heightDatum": "WGS84 ellipsoid, h=0. No validated terrain model; clamp to terrain when draping.",
             "heightSource": "p65 of Google Open Buildings 2.5D Temporal (2023), floored at 2.5 m",
             "geometricErrorDerivation": "median building footprint bbox diagonal in this ward, metres",
-            "attribution": "Building footprints via Overture Maps Foundation (ODbL) -- OpenStreetMap contributors, Google, Microsoft. Heights (c) Google Open Buildings, CC BY 4.0.",
+            # ODbL: this tileset is treated as a Derivative Database, not a Produced
+            # Work, so share-alike is honoured rather than argued about. Mirrors
+            # LICENCE_BLOCK in src/scripts/standards/odbl.ts -- if that changes, this
+            # must too, and check-3d-tiles.mjs asserts the licence id matches.
+            "licence": {
+                "licence": "ODbL-1.0",
+                "licenceUri": "https://opendatacommons.org/licenses/odbl/1-0/",
+                "treatedAs": "Derivative Database (ODbL 4.4), the stricter of the two readings",
+                "notice": "Contains information from Overture Maps Foundation, which is made available "
+                          "here under the Open Database License (ODbL).",
+                "upstream": [
+                    "(c) OpenStreetMap contributors, available under the Open Database License (ODbL).",
+                    "Microsoft Global ML Building Footprints -- CDLA-Permissive-2.0 at source, "
+                    "redistributed under ODbL within the Overture buildings theme.",
+                    "Google Open Buildings -- CC BY 4.0.",
+                    "Building heights: Google Open Buildings 2.5D Temporal (2023) -- CC BY 4.0.",
+                ],
+                "restrictions": "none -- static files, no authentication, no technological restriction (4.7).",
+                "disclaimer": "A compliance posture implemented in code, not legal advice.",
+            },
             "buildings": len(rows),
         },
     }

@@ -1,5 +1,6 @@
 /** A ward as a GeoJSON Feature: the analysis footprint as a Polygon, the record as properties. */
 import type { Ward } from '../../data/wards.ts';
+import { LICENCE_BLOCK } from './odbl.ts';
 import { wardRecord, type WardRecord } from './ward-record.ts';
 
 export interface WardFeature {
@@ -29,5 +30,5 @@ export function wardCollection(wards: readonly Ward[]) {
     Math.min(...features.map((f) => f.bbox[0])), Math.min(...features.map((f) => f.bbox[1])),
     Math.max(...features.map((f) => f.bbox[2])), Math.max(...features.map((f) => f.bbox[3])),
   ];
-  return { type: 'FeatureCollection' as const, status: 'prototype' as const, numberReturned: features.length, bbox, features };
+  return { type: 'FeatureCollection' as const, status: 'prototype' as const, licence: LICENCE_BLOCK, numberReturned: features.length, bbox, features };
 }

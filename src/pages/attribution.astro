@@ -8,6 +8,7 @@
 // we do).
 import Base from '../layouts/Base.astro';
 import StandardsPage from '../components/standards/StandardsPage.astro';
+import { LICENCE_BLOCK, ODBL_NOTICE } from '../scripts/standards/odbl.ts';
 import { LICENCES, allWardRecords } from '../scripts/standards/ward-record.ts';
 
 const records = allWardRecords();
@@ -66,6 +67,23 @@ const jsonLd = { '@context': 'https://schema.org', '@type': 'WebPage', name: 'Da
     <blockquote>
       <p>Building footprints © OpenStreetMap contributors (ODbL), Google Open Buildings (CC BY 4.0) and Microsoft (CDLA-Permissive-2.0), via Overture Maps Foundation. Building heights from Google Open Buildings 2.5D Temporal (CC BY 4.0). Surface reflectance from Copernicus Sentinel-2. Canopy height © Meta / WRI (CC BY 4.0). Meteorological forcing from NASA POWER. Live ambient readings © Norwegian Meteorological Institute (NLOD / CC BY 4.0). Thermal validation from NASA ECOSTRESS via LP DAAC; height validation from NASA ICESat-2. Data are used as-is for planning and research; each source's licence travels with it.</p>
     </blockquote>
+
+    <h2>Share-alike: we take the stricter reading</h2>
+    <p>ODbL draws a line we sit close to. §4.5 exempts a <em>Produced Work</em> from share-alike; §4.4 binds a <em>Derivative Database</em> to it. A rendered map image is plainly the first. A downloadable CityJSON file or 3D Tiles tileset of building geometry looks a great deal like the second, and reasonable people read it both ways.</p>
+    <p><strong>So we do not argue it.</strong> Every geometry export is declared a Derivative Database and offered under the Open Database License. If the permissive reading is correct we have given away nothing we wanted to keep — the data is open by design. If the strict reading is correct we were compliant all along. An ambiguity you can engineer around is not worth carrying.</p>
+    <blockquote><p>{ODBL_NOTICE}</p></blockquote>
+    <div class="tblwrap"><table>
+      <thead><tr><th>ODbL clause</th><th>How it is discharged</th></tr></thead>
+      <tbody>
+        <tr><td>§4.2 Notices</td><td>Every export carries the licence identifier and URI, and preserves the upstream copyright notices.</td></tr>
+        <tr><td>§4.3 Notice for Produced Works</td><td>The sentence above, verbatim as the licence prescribes, on the pages and in every payload.</td></tr>
+        <tr><td>§4.4 Share Alike</td><td>Exports are offered under <code>ODbL-1.0</code>. This is the clause the ambiguity turns on, and declaring it settles it.</td></tr>
+        <tr><td>§4.6 Access</td><td>The entire database is downloadable, free, machine-readable, at a stable URL. No alteration file is needed because the whole thing is published.</td></tr>
+        <tr><td>§4.7 Technological measures</td><td>None. Static files, no authentication, no rate limiting, no DRM.</td></tr>
+      </tbody>
+    </table></div>
+    <p class="muted">{LICENCE_BLOCK.disclaimer} The machine-readable version, including exactly which endpoints this covers and which it does not, is at <a href="/api/licence.json"><code>/api/licence.json</code></a>.</p>
+    <p>One subtlety worth stating, because it changes the answer: Microsoft's Global ML Building Footprints are <code>CDLA-Permissive-2.0</code> taken direct from Microsoft, but the same footprints reaching us <em>inside</em> the Overture buildings theme are redistributed under ODbL. For the Kolkata wards, which come via Overture, ODbL is the licence that actually governs.</p>
 
     <h2>What is deliberately not here</h2>
     <p>Sources evaluated and ruled out for licence reasons, so nobody re-tests them: Open-Meteo and WAQI (non-commercial), GlobalBuildingAtlas (ODbL-derived), Google Photorealistic 3D Tiles (terms forbid analysis), Cityweft (EULA forbids product integration). For a Dubai deployment the height source is <a href={LICENCES['WSF3D']!.url} rel="noopener">WSF3D</a> (DLR, CC BY 4.0), which will appear in this table when a Dubai ward ships.</p>

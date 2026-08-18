@@ -23,6 +23,7 @@
  */
 import type { Ward } from '../../data/wards.ts';
 import { wardFeature } from './geojson.ts';
+import { LICENCE_BLOCK } from './odbl.ts';
 import { wardRecord } from './ward-record.ts';
 
 export const CORE_CONTEXT = 'https://uri.etsi.org/ngsi-ld/v1/ngsi-ld-core-context-v1.7.jsonld';
@@ -45,6 +46,7 @@ export const CONTEXT_DOCUMENT = {
       analysisCrs: `${VOCAB}analysisCrs`,
       dataStatus: `${VOCAB}dataStatus`,
       withinAreaOfInterest: `${VOCAB}withinAreaOfInterest`,
+      dataLicence: `${VOCAB}dataLicence`,
     },
     CORE_CONTEXT,
   ],
@@ -75,6 +77,8 @@ export function wardEntity(w: Ward, opts: { readonly inline?: boolean } = {}) {
     // bare temperature as air temperature.
     measuredQuantity: prop(r.quantity.measured),
     notMeasured: prop(r.quantity.isNot),
+    // the geometry in `location` is ODbL-derived, so the licence travels with it
+    dataLicence: prop(LICENCE_BLOCK.notice),
     surfaceTemperatureBand: prop(r.confidence.night.bandK, 'KEL'),
     surfaceTemperatureTier: prop(r.confidence.night.tier),
     validationSampleSize: prop(r.confidence.night.n),

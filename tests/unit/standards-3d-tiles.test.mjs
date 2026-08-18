@@ -33,7 +33,11 @@ test('geometric error is measured, not a placeholder', () => {
     assert.match(String(t.extras.geometricErrorDerivation), /median/i, 'the derivation must be stated');
     assert.equal(t.extras.status, 'prototype');
     assert.match(t.extras.heightDatum, /ellipsoid/i, 'the height datum limitation must ship with the data');
-    assert.match(t.extras.attribution, /Overture|OpenStreetMap/, 'ODbL attribution must travel with the geometry');
+    // attribution moved into a full licence block: the tileset is now declared a
+    // Derivative Database under ODbL rather than merely crediting the source
+    assert.equal(t.extras.licence.licence, 'ODbL-1.0', 'the geometry must carry its licence');
+    assert.ok(t.extras.licence.upstream.some((u) => /OpenStreetMap/.test(u)), 'upstream notices preserved');
+    assert.match(t.extras.licence.treatedAs, /Derivative Database/);
   }
 });
 
