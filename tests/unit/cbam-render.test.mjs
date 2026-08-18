@@ -168,7 +168,7 @@ const BANNER_71 =
 /* ── §8 checklist: the engine still produces the SaaS's figures ─────────────── */
 
 test('§8 — priced line matches the SaaS exactly', () => {
-  const e = run('25231000', 'DZ', '(A)', '100');
+  const e = run('2523100090', 'DZ', '(A)', '100');
   assert.equal(e.status, 'cscf_pending');
   assert.equal(e.emissionsTco2e, '136.4');
   assert.equal(e.scenario.faaTco2e, '64.935');
@@ -205,7 +205,7 @@ test('a line under 50 t is INDETERMINATE, never exempt', () => {
   // ABOVE the threshold and can never prove you are below it. Reporting a small line
   // as "exempt" would tell an importer they owe nothing on evidence that cannot
   // support it — the most expensive possible way for this tool to be wrong.
-  const t = thresh('25231000', '10');
+  const t = thresh('2523100090', '10');
   assert.equal(t.state, 'indeterminate');
   const html = renderThreshold(t);
   assert.doesNotMatch(html, /\bexempt\b(?!\.)/i,
@@ -214,7 +214,7 @@ test('a line under 50 t is INDETERMINATE, never exempt', () => {
 });
 
 test('a line over 50 t is ABOVE the threshold, and says the exposure stands', () => {
-  const t = thresh('25231000', '100');
+  const t = thresh('2523100090', '100');
   assert.equal(t.state, 'above_threshold');
   assert.match(renderThreshold(t), /exceeds/i);
 });
@@ -223,7 +223,7 @@ test('the threshold card always cites the amending regulation', () => {
   // The pack's own sourceLocator names only the consolidated article; the 50 t
   // figure was put there by Reg (EU) 2025/2083 and a provenance tool must say so.
   for (const m of ['10', '100']) {
-    assert.match(renderThreshold(thresh('25231000', m)), /2025\/2083/,
+    assert.match(renderThreshold(thresh('2523100090', m)), /2025\/2083/,
       'the amending act must be cited, not just the consolidated article');
   }
 });
@@ -260,7 +260,7 @@ test('the two threshold cards name a sector identically — "iron & steel", neve
 
   // The must-not-regress guard: a lookup that silently reworded every sector would pass the
   // arm above. Two of the four keys are said exactly as they are spelled, and must stay so.
-  assert.match(renderThreshold(thresh('25231000', '10')), /<b>cement<\/b>/,
+  assert.match(renderThreshold(thresh('2523100090', '10')), /<b>cement<\/b>/,
     'cement is said "cement" — the fix must move only the keys whose prose differs from the key');
   assert.match(renderThreshold(thresh('76011010', '10')), /<b>aluminium<\/b>/,
     'aluminium likewise — unchanged by the table');
@@ -268,7 +268,7 @@ test('the two threshold cards name a sector identically — "iron & steel", neve
   // ...and the two cards, compared directly. `sub` is whatever the per-year card calls the
   // sector, extracted from its own verdict rather than re-typed here.
   for (const [sector, cn] of [
-    ['cement', '25231000'], ['iron_and_steel', '72083800'],
+    ['cement', '2523100090'], ['iron_and_steel', '72083800'],
     ['aluminium', '76011010'], ['fertilisers', '28080000'],
   ]) {
     const said = /Your (.+?) imports for 2026 total/.exec(yearCardFor(sector));
@@ -306,7 +306,7 @@ test('a year with no published threshold row gets a card on the PREVIEW too, not
   // beside it refuses on the certificate price and volunteers that "the good and its benchmark
   // are present", so the one sentence on screen that could have explained the missing de minimis
   // verdict instead says nothing is wrong with the good.
-  const html = draft('25231000', '30', '2027-03-15');
+  const html = draft('2523100090', '30', '2027-03-15');
   assert.match(html, /No published rule/, 'the year must be reported, not dropped');
   assert.match(html, /2027/, 'and the card must name WHICH year has no rule');
 
@@ -331,14 +331,14 @@ test('the other three nulls stay silent — an absent card is the right answer f
   // 3. AN UNREADABLE MASS. run() refuses this with nonNegativeDecimal long before the threshold,
   //    so it is unreachable through the form — pinned here as silence so that a future caller
   //    without run()'s gate cannot get a de minimis card built around a mass nobody can read.
-  assert.equal(draft('25231000', 'abc'), '', 'an unreadable mass must never reach a card');
+  assert.equal(draft('2523100090', 'abc'), '', 'an unreadable mass must never reach a card');
 });
 
 test('a year that HAS a published row is untouched — the same card, byte for byte', () => {
   // The must-not-regress arm. The fix is about which null gets a card; it must not restate,
   // re-tone or re-order the verdict card for the ordinary 2026 case.
   for (const massT of ['10', '100']) {
-    assert.equal(draft('25231000', massT), renderThreshold(thresh('25231000', massT)),
+    assert.equal(draft('2523100090', massT), renderThreshold(thresh('2523100090', massT)),
       'a resolvable threshold must still render exactly renderThreshold\'s card');
   }
 });
@@ -346,7 +346,7 @@ test('a year that HAS a published row is untouched — the same card, byte for b
 /* ── indirect (electricity) emissions ──────────────────────────────────────── */
 
 const withScope = (emissionsScope) => estimateFromPack(pack, {
-  cn: '25231000', country: 'DZ', route: '(A)', massT: '100',
+  cn: '2523100090', country: 'DZ', route: '(A)', massT: '100',
   date: '2026-03-15', emissionsScope,
 });
 
@@ -415,25 +415,37 @@ test('the real pack: 72083800/IN publishes one route, so it needs no pick', () =
   const rs = routesFor(pack, '72083800', 'IN', 2026);
   assert.deepEqual(rs, ['(C)']);
   assert.equal(nextRoute(rs, ''), '(C)');
-  // ...whereas 25231000/DZ publishes two, and must not be resolved for the user.
-  const many = routesFor(pack, '25231000', 'DZ', 2026);
+  // ...whereas a pairing that publishes several must not be resolved for the user. This used to
+  // read 25231000/DZ, which published (A) and (B). The TARIC split moved that pair onto two
+  // DIFFERENT goods — 2523100090 (grey) publishes only (A), 2523100010 (white) only (B) — so
+  // cement no longer offers a choice at all and the case had to move to a good that still does.
+  // 72052100/IN publishes (C) and (F); measured on this tree, 7,584 of the 69,784 pairings
+  // routesFor covers at 2026 publish more than one route, so this is an ordinary state.
+  const many = routesFor(pack, '72052100', 'IN', 2026);
   assert.ok(many.length > 1, `expected several routes, got ${many}`);
   assert.equal(nextRoute(many, ''), '');
 });
 
 test('an empty route list blames the year when the year is the reason, not the pairing', () => {
-  // THE PAIRING BRANCH IS REAL AND STAYS. Within a year the corpus covers, most selectors the
-  // form can build genuinely publish no route — 46,686 of 68,880 (574 goods x 120 origins),
-  // measured over the shipped pack — so this sentence is right, and right often.
+  // THE PAIRING BRANCH IS THE FUNCTION'S CONTRACT FOR A COVERED YEAR, AND IT STAYS — but its
+  // REACH has collapsed with the corpus and this comment used to overstate it. On the v1 pack,
+  // 46,686 of 68,880 pairings (574 goods x 120 origins) published no route at all. Re-measured
+  // through routesFor on THIS tree: 0 of 69,784 (572 goods x 122 origins) at 2026. Pack v2 ships
+  // a residual "OTHER third countries" row that every offered good resolves against, so an empty
+  // route list at a covered year is no longer something a user can reach by choosing a good and
+  // an origin. The branch is still the right answer for the state it describes, and it is still
+  // what the function must say when it is asked — which is what these assertions pin. It is no
+  // longer "right often", and nobody should read it as covering a live user path.
   for (const year of [2026, 2027, 2028]) {
     assert.equal(noRouteReason(pack, year, '72083800'), 'no route published for this pairing',
       `${year} is a covered year: an empty list there really is about the good and origin`);
   }
 
-  // OUTSIDE THOSE YEARS IT IS WRONG FOR EVERY PAIRING, including all 22,194 that DO publish
-  // routes: routesFor filters on the reporting year, so it returns [] for 68,880 of 68,880. An
-  // importer who typed 2029 was told their GOOD AND ORIGIN publish no route and went to change
-  // the two controls that were not the problem.
+  // OUTSIDE THOSE YEARS IT IS WRONG FOR EVERY PAIRING, and that half has if anything grown:
+  // routesFor filters on the reporting year, so it returns [] for all 69,784 pairings at 2029 —
+  // measured, and now every one of them is a pairing that DOES publish routes inside 2026-2028.
+  // An importer who typed 2029 was told their GOOD AND ORIGIN publish no route and went to
+  // change the two controls that were not the problem.
   assert.equal(noRouteReason(pack, 2029, '72083800'), 'no rules published for 2029');
   assert.equal(noRouteReason(pack, 2025, '72083800'), 'no rules published for 2025');
 
@@ -447,7 +459,9 @@ test('an empty route list blames the year when the year is the reason, not the p
 
   // AND IT IS DERIVED FROM THE PACK, not from a hardcoded year window: the branch has to follow
   // the corpus, or the day 2029 is published this sentence starts lying in the other direction.
-  const covered = [...new Set(pack.defaultFactors.map((f) => f.reportingYear))].sort();
+  // `defaultValues` is pack v2's name for what v1 called `defaultFactors` — the rename is why
+  // this line moved, not the claim.
+  const covered = [...new Set(pack.defaultValues.map((f) => f.reportingYear))].sort();
   assert.deepEqual(covered, [2026, 2027, 2028], 'the shipped pack covers exactly these years');
   for (const year of covered) {
     assert.doesNotMatch(noRouteReason(pack, year, '72083800'), /no rules published/,
@@ -541,9 +555,16 @@ test('an all-refused print document states there is no total rather than a total
   // estimate threw. One refusing line is enough to print the manufactured zero.
   //
   // Asserted on the rendered document, not on the source.
-  const refusedLine = { id: 'R1', cn: '25231000', country: 'DZ', route: '(A)',
+  //
+  // THE FIXTURE HAD TO MOVE, and the reason is worth writing down: it originally used
+  // 25231000/DZ/(A), which refused only because that CN had just been retired by the TARIC
+  // migration — an accident of the corpus, not a chosen refusal. Restore the code and the test
+  // silently stops testing anything. 72052100/IN/(C) is a refusal the corpus MEANS: routesFor
+  // offers (C) for that pairing, so a user can reach it, and the Annex publishes no column-B
+  // benchmark for route (C) of that good, at any date in 2026-2028.
+  const refusedLine = { id: 'R1', cn: '72052100', country: 'IN', route: '(C)',
     scope: 'direct_and_indirect', massT: '100', date: '2026-03-15', tier: 'default+markup' };
-  const refused = run('25231000', 'DZ', '(A)', '100');
+  const refused = run('72052100', 'IN', '(C)', '100');
   assert.equal(refused.status, 'unavailable', 'this fixture must actually refuse');
   const totals = sumTotals([refused]);
   assert.equal(totals.pricedLines, 0);
@@ -634,7 +655,7 @@ test('NON-NEGOTIABLE 2 — a refusal renders NO figure of any kind', () => {
 });
 
 test('NON-NEGOTIABLE 3 — CSCF-pending is labelled a what-if, never a figure', () => {
-  const e = run('25231000', 'DZ', '(A)', '100');
+  const e = run('2523100090', 'DZ', '(A)', '100');
   const html = renderResult(e);
   assert.match(html, /What-if/i, 'the scenario must be labelled as one');
   assert.match(html, /unpublished/i, 'it must say the factor is unpublished');
@@ -646,7 +667,7 @@ test('NON-NEGOTIABLE 3 — CSCF-pending is labelled a what-if, never a figure', 
 
 test('NON-NEGOTIABLE 5 — the provenance stamp travels on EVERY branch', () => {
   for (const [label, e] of [
-    ['priced', run('25231000', 'DZ', '(A)', '100')],
+    ['priced', run('2523100090', 'DZ', '(A)', '100')],
     ['refused', run('72241010', 'IN', '(F)', '60')],
   ]) {
     const html = renderResult(e);
@@ -657,7 +678,7 @@ test('NON-NEGOTIABLE 5 — the provenance stamp travels on EVERY branch', () => 
 });
 
 test('NON-NEGOTIABLE 4 — nothing claims a filing or registry validation', () => {
-  for (const e of [run('25231000', 'DZ', '(A)', '100'), run('72241010', 'IN', '(F)', '60')]) {
+  for (const e of [run('2523100090', 'DZ', '(A)', '100'), run('72241010', 'IN', '(F)', '60')]) {
     const html = renderResult(e).toLowerCase();
     for (const forbidden of ['filed', 'submitted to the', 'validated by', 'registry-approved']) {
       assert.ok(!html.includes(forbidden),
@@ -691,7 +712,7 @@ test('the renderer handles every status the engine can return', () => {
   const probes = [
     // cscf_pending, unavailable, cscf_pending — 72052100/(C) is the refusal probe
     // (72241010 no longer refuses; see the §8 stranded-line test above).
-    ['25231000', 'DZ', '(A)'], ['72052100', 'IN', '(C)'], ['72083800', 'IN', '(C)'],
+    ['2523100090', 'DZ', '(A)'], ['72052100', 'IN', '(C)'], ['72083800', 'IN', '(C)'],
   ];
   for (const [cn, country, route] of probes) {
     const e = run(cn, country, route, '10');
@@ -951,7 +972,7 @@ test('renderTotals: no lines entered yet is a neutral empty state, not the same 
 /* ── per-line card ──────────────────────────────────────────────────────────── */
 
 test('renderLineCard: 1-based numbering, the remove control carries the id, and user text is escaped', () => {
-  const e = run('25231000', 'DZ', '(A)', '100');
+  const e = run('2523100090', 'DZ', '(A)', '100');
   const html = renderLineCard({
     id: 'L1"><script>alert(1)</script>', cn: '25231000<b>', country: 'DZ',
     route: '(A)', scope: 'direct', massT: '100', date: '2026-03-15',
@@ -968,9 +989,9 @@ test('renderLineCard: a cleared mass field reads as missing, never a false zero'
   // Number('') is 0 in JS — a real quirk, not a missing-value signal. Line.massT is free-typed
   // by the user with no format guarantee (unlike every earlier num() caller, which only ever
   // fed engine output), so a cleared field must not silently render as a confirmed "0 t".
-  const e = run('25231000', 'DZ', '(A)', '100');
+  const e = run('2523100090', 'DZ', '(A)', '100');
   const html = renderLineCard({
-    id: 'L1', cn: '25231000', country: 'DZ', route: '(A)', scope: 'direct', massT: '', date: '2026-03-15',
+    id: 'L1', cn: '2523100090', country: 'DZ', route: '(A)', scope: 'direct', massT: '', date: '2026-03-15',
   }, e, 0);
   assert.doesNotMatch(html, /\b0 t\b/, 'an empty mass must not render as a confirmed zero');
   assert.match(html, /· — t ·/, 'an empty mass renders as a visible placeholder instead');
@@ -980,9 +1001,9 @@ test('renderLineCard: a whitespace-only mass field reads as missing, never a fal
   // Number('   ') is 0 in JS, the same quirk as Number('') — the first fix only special-cased
   // the exact empty string and missed this. A cleared <input> can leave stray whitespace behind
   // depending on how it was cleared, and that must be treated as missing input too.
-  const e = run('25231000', 'DZ', '(A)', '100');
+  const e = run('2523100090', 'DZ', '(A)', '100');
   const html = renderLineCard({
-    id: 'L1', cn: '25231000', country: 'DZ', route: '(A)', scope: 'direct', massT: '   ', date: '2026-03-15',
+    id: 'L1', cn: '2523100090', country: 'DZ', route: '(A)', scope: 'direct', massT: '   ', date: '2026-03-15',
   }, e, 0);
   assert.doesNotMatch(html, /\b0 t\b/, 'a whitespace-only mass must not render as a confirmed zero');
   assert.match(html, /· — t ·/, 'a whitespace-only mass renders as a visible placeholder instead');
@@ -992,10 +1013,10 @@ test('renderLineCard: a whitespace-only mass field reads as missing, never a fal
 
 test('buildPrintDocument carries all four §4 caveats, the real OJ hashes, and the injected date', () => {
   const html = buildPrintDocument({
-    lines: [{ id: 'L1', cn: '25231000', country: 'DZ', route: '(A)',
+    lines: [{ id: 'L1', cn: '2523100090', country: 'DZ', route: '(A)',
               scope: 'direct_and_indirect', massT: '100', date: '2026-03-15' }],
-    results: [run('25231000', 'DZ', '(A)', '100')],
-    yearCards: [], totals: sumTotals([run('25231000', 'DZ', '(A)', '100')]),
+    results: [run('2523100090', 'DZ', '(A)', '100')],
+    yearCards: [], totals: sumTotals([run('2523100090', 'DZ', '(A)', '100')]),
     packSnapshot: 'f'.repeat(64),
     rulePackages: ['eu-cbam-2026-defaults-v2@v1', 'eu-cbam-2026-free-allocation@v1'],
     pack, generatedOn: '2026-08-08',
@@ -1052,7 +1073,7 @@ test('buildPrintDocument carries all four §4 caveats, the real OJ hashes, and t
   // distinctly labelled so a reader cannot mistake one digest for the other.
   assert.match(html, new RegExp(regHash('ec-benchmarks-workbook-v1')),
     'the Benchmarks workbook hash must also appear, labelled as a workbook');
-  assert.match(html, new RegExp(regHash('ec-default-values-workbook-v1')),
+  assert.match(html, new RegExp(regHash('ec-default-values-workbook-v2')),
     'the Default Values workbook hash must also appear, labelled as a workbook');
   assert.notEqual(regHash('ir-2025-2620'), regHash('ec-benchmarks-workbook-v1'),
     'sanity: the regulation and its workbook must be genuinely different digests in the pack');
@@ -1068,7 +1089,7 @@ test('buildPrintDocument never prints the pack\'s all-zero placeholder as though
       { id: 'ir-2025-2620', sha256: '0'.repeat(64) },
       { id: 'ir-2025-2621', sha256: pack.sources.find((s) => s.id === 'ir-2025-2621').sha256 },
       { id: 'ec-benchmarks-workbook-v1', sha256: pack.sources.find((s) => s.id === 'ec-benchmarks-workbook-v1').sha256 },
-      { id: 'ec-default-values-workbook-v1', sha256: pack.sources.find((s) => s.id === 'ec-default-values-workbook-v1').sha256 },
+      { id: 'ec-default-values-workbook-v2', sha256: pack.sources.find((s) => s.id === 'ec-default-values-workbook-v2').sha256 },
     ],
   };
   const html = buildPrintDocument({
@@ -1081,7 +1102,7 @@ test('buildPrintDocument never prints the pack\'s all-zero placeholder as though
 
 test('buildPrintDocument throws a named error on a lines/results length mismatch, rather than crash blind', () => {
   assert.throws(() => buildPrintDocument({
-    lines: [{ id: 'L1', cn: '25231000', country: 'DZ', route: '(A)',
+    lines: [{ id: 'L1', cn: '2523100090', country: 'DZ', route: '(A)',
               scope: 'direct_and_indirect', massT: '100', date: '2026-03-15' }],
     results: [],
     yearCards: [], totals: sumTotals([]),
@@ -1110,9 +1131,9 @@ test('buildPrintDocument\'s §2 verdict matches what renderYearThreshold\'s own 
   // this the "sighted users only" gap when it is skipped).
   const noRule = { calendarYear: 2027, ruleFound: false, attested: false, eligibleLineCount: 0 };
 
-  const okLine = { id: 'L1', cn: '25231000', country: 'DZ', route: '(A)',
+  const okLine = { id: 'L1', cn: '2523100090', country: 'DZ', route: '(A)',
     scope: 'direct_and_indirect', massT: '30', date: '2026-03-15' };
-  const okResult = run('25231000', 'DZ', '(A)', '30');
+  const okResult = run('2523100090', 'DZ', '(A)', '30');
   const html = buildPrintDocument({
     lines: [okLine], results: [okResult],
     yearCards: [below, noRule], totals: sumTotals([okResult]),
@@ -1140,11 +1161,11 @@ test('buildPrintDocument shows a THROWN line in §1 rather than dropping it sile
   // from priced results) — the exact silent-vanishing failure Task 6 was reviewed for. The fix:
   // a LineEstimateFailure marker keeps `lines` and `results` parallel and the row still prints,
   // carrying the failure reason instead of a figure.
-  const okLine = { id: 'L1', cn: '25231000', country: 'DZ', route: '(A)',
+  const okLine = { id: 'L1', cn: '2523100090', country: 'DZ', route: '(A)',
     scope: 'direct_and_indirect', massT: '100', date: '2026-03-15' };
   const failedLine = { id: 'L2', cn: '99999999', country: 'ZZ', route: 'default',
     scope: 'direct', massT: '10', date: '2026-06-01' };
-  const okResult = run('25231000', 'DZ', '(A)', '100');
+  const okResult = run('2523100090', 'DZ', '(A)', '100');
   const html = buildPrintDocument({
     lines: [okLine, failedLine],
     results: [okResult, { failed: true, message: 'engine exploded: no benchmark table for 99999999' }],
@@ -1163,13 +1184,13 @@ test('buildPrintDocument shows a THROWN line in §1 rather than dropping it sile
 });
 
 test('buildPrintDocument: a mix of ok, unavailable and thrown lines all print distinctly', () => {
-  const okLine = { id: 'L1', cn: '25231000', country: 'DZ', route: '(A)',
+  const okLine = { id: 'L1', cn: '2523100090', country: 'DZ', route: '(A)',
     scope: 'direct_and_indirect', massT: '100', date: '2026-03-15' };
   const refusedLine = { id: 'L2', cn: '72052100', country: 'IN', route: '(C)',
     scope: 'direct', massT: '60', date: '2026-03-15' };
   const failedLine = { id: 'L3', cn: '00000000', country: 'ZZ', route: 'default',
     scope: 'direct', massT: '5', date: '2026-06-01' };
-  const okResult = run('25231000', 'DZ', '(A)', '100');
+  const okResult = run('2523100090', 'DZ', '(A)', '100');
   const refusedResult = run('72052100', 'IN', '(C)', '60');
   assert.equal(refusedResult.status, 'unavailable', 'sanity: this is an ordinary engine refusal, not a throw');
   const html = buildPrintDocument({
@@ -1188,7 +1209,7 @@ test('buildPrintDocument: a mix of ok, unavailable and thrown lines all print di
  *
  * initCbam's single-line preview (run()) and its multi-line path (estimateLine()) both render a
  * CertificateEstimate, and BOTH must stamp the real pack snapshot in place of the vendored
- * engine's literal 'browser-prototype' placeholder — that is the whole point of §4's snapshot
+ * engine's literal 'unsealed-pack' placeholder (pack v2's name for it; 'browser-prototype' before) — that is the whole point of §4's snapshot
  * claim. They used to do this with two separate `e.stamp.snapshotHash = snapshot` assignments;
  * run() never got one, so the view every first-time visitor sees (and the one shown again
  * whenever the last line is removed) rendered the raw placeholder. decorateSnapshot() is now the
@@ -1197,12 +1218,12 @@ test('buildPrintDocument: a mix of ok, unavailable and thrown lines all print di
  * driving the DOM. */
 
 test('decorateSnapshot replaces the vendored placeholder — the one decoration point both run() and estimateLine() share', () => {
-  const e = run('25231000', 'DZ', '(A)', '100');
-  assert.equal(e.stamp.snapshotHash, 'browser-prototype',
+  const e = run('2523100090', 'DZ', '(A)', '100');
+  assert.equal(e.stamp.snapshotHash, 'unsealed-pack',
     'sanity: the vendored engine ships this literal placeholder before decoration');
   const decorated = decorateSnapshot(e, 'f'.repeat(64));
   assert.equal(decorated.stamp.snapshotHash, 'f'.repeat(64));
-  assert.notEqual(decorated.stamp.snapshotHash, 'browser-prototype',
+  assert.notEqual(decorated.stamp.snapshotHash, 'unsealed-pack',
     'no path may render the raw vendored placeholder — the exact regression this fixes');
 });
 
@@ -1213,11 +1234,11 @@ test('decorateSnapshot never falls through to an empty claim, or silently keeps 
   // This exercises the branch defensively anyway: '' must not print as though the stamp made no
   // claim at all (worse than the placeholder it replaces), and must not silently fall back to the
   // vendored text either.
-  const e = run('25231000', 'DZ', '(A)', '100');
+  const e = run('2523100090', 'DZ', '(A)', '100');
   const decorated = decorateSnapshot(e, '');
   assert.notEqual(decorated.stamp.snapshotHash, '',
     'a blank snapshot reads as though no claim were made at all — worse than an unmet one');
-  assert.notEqual(decorated.stamp.snapshotHash, 'browser-prototype',
+  assert.notEqual(decorated.stamp.snapshotHash, 'unsealed-pack',
     'must not silently keep the vendored placeholder either');
   assert.match(decorated.stamp.snapshotHash, /pending|not yet/i,
     'the pre-pack state must say, honestly, that the snapshot is not yet available');
@@ -1226,19 +1247,21 @@ test('decorateSnapshot never falls through to an empty claim, or silently keeps 
 test('the pre-pack fallback text renders in full, never truncated as though it were a hash', () => {
   // renderStamp (cbam-app.ts) truncates any snapshotHash LONGER than 24 chars to its first 16
   // plus an ellipsis, on the assumption that anything that long is a hash worth shortening — the
-  // same assumption that used to mangle the vendored 'browser-prototype' placeholder into
-  // "browser-prototyp" before that function's own length check was added. decorateSnapshot's
+  // same assumption that used to mangle the vendored placeholder — 'browser-prototype' at the
+  // time, 17 chars — into "browser-prototyp" before that function's own length check was added.
+  // Pack v2 renamed the placeholder to 'unsealed-pack' (13 chars), which is short enough that
+  // the truncation path can no longer reach it; the length check is what this still pins. decorateSnapshot's
   // fallback text is deliberately kept at or under that 24-char threshold for exactly this
   // reason; this pins BOTH halves of that fix — that the fallback is short enough today, and
   // that renderStamp still shows it in full rather than a garbled, ellipsis-truncated fragment.
-  const e = decorateSnapshot(run('25231000', 'DZ', '(A)', '100'), '');
+  const e = decorateSnapshot(run('2523100090', 'DZ', '(A)', '100'), '');
   assert.ok(e.stamp.snapshotHash.length <= 24,
     `the fallback text must stay at or under renderStamp's 24-char truncation threshold, got ${e.stamp.snapshotHash.length}`);
   const html = renderResult(e);
   assert.match(html, /not yet computed/,
     'the fallback text must appear in full, not truncated as though it were a hash');
   assert.doesNotMatch(html, /not yet comput(?!ed)/, 'must not be cut off mid-word by the hash-truncation path');
-  assert.doesNotMatch(html, /browser-prototype/);
+  assert.doesNotMatch(html, /unsealed-pack/);
 });
 
 test('renderStamp truncates a genuine 64-hex-char snapshotHash to its first 16 chars plus an ellipsis', () => {
@@ -1250,7 +1273,7 @@ test('renderStamp truncates a genuine 64-hex-char snapshotHash to its first 16 c
   // suite green until this test existed.
   const realHash = '8bbba79e7f33f0e4943140c28e91a8810612f2fa770bd6dcad33fdb7045e4c05';
   assert.equal(realHash.length, 64, 'sanity: this is a genuine sha256 hex digest length');
-  const e = decorateSnapshot(run('25231000', 'DZ', '(A)', '100'), realHash);
+  const e = decorateSnapshot(run('2523100090', 'DZ', '(A)', '100'), realHash);
   assert.equal(e.stamp.snapshotHash, realHash, 'sanity: decorateSnapshot stamped the real hash unmodified');
   const html = renderResult(e);
   assert.match(html, new RegExp(`${realHash.slice(0, 16)}…`),
@@ -1572,29 +1595,30 @@ const comparisonOf = (l) => {
  * to 'actual-verified' explicitly — see the mechanism test, which is about exactly that step.
  */
 const mline = (over = {}) => ({
-  id: 'M1', cn: '25231000', country: 'DZ', route: '(A)', scope: 'direct_and_indirect',
+  id: 'M1', cn: '2523100090', country: 'DZ', route: '(A)', scope: 'direct_and_indirect',
   massT: '100', date: '2026-03-15', tier: 'verified-direct+default-indirect', seeDirect: '2.31',
   ...over,
 });
 
 /**
- * The MIXED tier's REFUSED worked line, and the reason it is KR rather than a 2027 date.
+ * The MIXED tier's REFUSED worked line — mline at a 2027 date.
  *
- * A refused mixed line is not a curiosity of an out-of-range year: KR is the only origin
- * publishing grey clinker route-independently, so the Commission's route-independent electricity
- * default is found and stands in (the line is stamped mixed), and the Annex then publishes
- * column-B cement benchmarks for routes (A) and (B) only — so the benchmark lookup fails at an
- * ordinary 2026 date with the price table fully populated. The refusal is raised INSIDE
- * estimateCertificates, after the substitution, which is exactly why the tier survives it.
+ * IT USED TO BE KR AT AN ORDINARY 2026 DATE, and that is worth recording because the change is
+ * the corpus's, not this file's. On pack v1, KR was the only origin publishing grey clinker
+ * route-independently: the Commission's route-independent electricity default was found and
+ * stood in (so the line was stamped mixed), and the Annex published column-B cement benchmarks
+ * for routes (A) and (B) only — so the benchmark lookup failed at an ordinary 2026 date with the
+ * price table fully populated, and the refusal was raised INSIDE estimateCertificates, after the
+ * substitution. Pack v2 publishes no clinker row at the route-independent route for any origin,
+ * and — measured over the whole corpus — there is now NO (good, route, year) that both publishes
+ * an indirect default and lacks a column-B benchmark. So that shape no longer exists, and the
+ * only refusal that still reaches the mixed tier is the missing certificate price at 2027+.
+ * The tier test below asserts that unreachability structurally rather than leaving it implied.
  *
  * Shared by the tier test and the attestation tests below rather than copied into each: this file
  * has already paid for holding three copies of one construction (see estOf's own note).
  */
-const krline = (over = {}) => ({
-  id: 'K1', cn: '25231000', country: 'KR', route: 'default', scope: 'direct_and_indirect',
-  massT: '100', date: '2026-03-15', tier: 'verified-direct+default-indirect', seeDirect: '2.31',
-  ...over,
-});
+const refusedMline = (over = {}) => mline({ id: 'K1', date: '2027-03-15', ...over });
 
 /**
  * A PRICED mixed line whose substituted electricity default came from the residual bucket — the
@@ -1943,7 +1967,7 @@ test('stampedTierOf leaves the claimed tier alone when the estimate THROWS', () 
   const refused = mline({ tier: 'actual-verified', seeDirect: 'nonsense' });
   const e = estOf(refused);
   assert.equal(e.status, 'unavailable', 'sanity: the engine refused the attested figure');
-  assert.equal(e.selector, 'verified/25231000/directTco2ePerT',
+  assert.equal(e.selector, 'verified/2523100090/directTco2ePerT',
     'sanity: refused on the FIGURE, which is a site inside estimateFromPack itself — the tier '
     + 'below is a fact about that site, not about refusals in general');
   assert.equal(stampedTierOf(refused, estOf), 'actual-verified',
@@ -1973,21 +1997,39 @@ test('a verified-path refusal carries the tier the engine ATTEMPTED to price at 
   assert.equal(stampedTierOf(noPrice, estOf), 'verified-direct+default-indirect',
     'the line must record the tier it was priced AT, not a tier that describes the refusal');
 
-  // B. THE BENCHMARK, AT AN ORDINARY 2026 DATE — so this is not a 2027-only curiosity, and a
-  //    reader must not learn "mixed refusal ⇒ missing price". KR is the only origin publishing
-  //    grey clinker route-independently; the Commission publishes a route-independent electricity
-  //    default for it (the fallback fires) but the Annex publishes column-B cement benchmarks
-  //    for routes (A) and (B) only (the benchmark lookup then finds nothing).
-  const kr = krline();
-  assert.ok(routesFor(pack, kr.cn, kr.country, 2026).includes('default'),
-    'sanity: the form really offers this pairing — syncRoutes renders it as "single route"');
-  const eBench = estOf(kr);
-  assert.equal(eBench.status, 'unavailable', 'sanity: the engine refuses this line');
-  assert.equal(eBench.selector, 'benchmark/25231000/column-B/route-independent/2026-03-15',
-    'and it refuses on the BENCHMARK, in 2026, with the price table fully populated');
-  assert.equal(stampedTierOf(kr, estOf), 'verified-direct+default-indirect',
-    'a second refusal namespace reaches the mixed tier, so the split is about WHERE the refusal '
-    + 'is raised — not about which table the selector names');
+  // B. THE SECOND NAMESPACE HAS GONE, AND ITS ABSENCE IS ASSERTED RATHER THAN ASSUMED.
+  //
+  //    This used to be a live witness: 25231000/KR/'default' refused on the BENCHMARK at an
+  //    ordinary 2026 date while still carrying the mixed tier, which proved the split is about
+  //    WHERE a refusal is raised and not about which table the selector names. Pack v2 removed
+  //    the shape. A benchmark refusal can only carry the mixed tier if the electricity fallback
+  //    fired first, which needs a published indirect default for the same good, route and year;
+  //    measured over this pack, every (good, route, year) that publishes an indirect default
+  //    also has a column-B benchmark, so the two conditions cannot co-occur.
+  //
+  //    Rather than delete the case and leave a reader with "mixed refusal ⇒ missing price" as an
+  //    unexamined rule, the precondition is checked here. The day the Commission publishes an
+  //    indirect default for a good whose column-B benchmark is missing, this goes red and a live
+  //    witness belongs back in this test.
+  const active = (from, to, date) => (!from || from <= date) && (!to || date < to);
+  const colB = pack.benchmarks.filter((b) => b.benchmarkColumn === 'B'
+    && b.scopeCode.length === b.codeLevel);
+  const indirectTriples = [...new Set(pack.defaultValues
+    .filter((d) => d.emissionsType === 'indirect' && d.cell.state === 'value')
+    .map((d) => `${d.scopeCode}|${d.productionRoute}|${d.reportingYear}`))];
+  assert.ok(indirectTriples.length > 0, 'sanity: the corpus publishes indirect defaults at all');
+  const benchmarkless = indirectTriples.filter((triple) => {
+    const [cn, route, year] = triple.split('|');
+    const date = `${year}-03-15T00:00:00.000Z`;
+    const inScope = colB.filter((b) => cn.startsWith(b.scopeCode)
+      && active(b.validFrom, b.validTo, date));
+    const exact = inScope.filter((b) => b.routeIndicator === route);
+    return (exact.length > 0 ? exact : inScope.filter((b) => b.routeIndicator === '')).length === 0;
+  });
+  assert.deepEqual(benchmarkless, [],
+    'a good that publishes an indirect default but no column-B benchmark would refuse on '
+    + 'benchmark/ while stamped mixed — the second namespace this test used to witness. If this '
+    + 'fails, put the live case back rather than updating this assertion');
 
   // C. THE CONTROL THAT ISOLATES THE MECHANISM. Same good, same origin, same route, same date,
   //    same selector as A — only the fallback does not run, because this line's scope never asks
@@ -2088,13 +2130,16 @@ test('renderLineCard: a MIXED line gets its attestation AND its delta, and the d
  */
 
 test('renderAttestation: a REFUSED mixed line drops the electricity clause — the card has no such component', () => {
-  const l = krline({ verifiedRef: 'BV-2026-0142' });
+  const l = refusedMline({ verifiedRef: 'BV-2026-0142' });
   const e = estOf(l);
-  // Sanity, and it is the whole premise: an ordinary 2026 date, a refusal raised after the
-  // substitution, and therefore the MIXED tier on a card carrying no figure whatsoever.
+  // Sanity, and it is the whole premise: a refusal raised AFTER the electricity substitution, and
+  // therefore the MIXED tier on a card carrying no figure whatsoever. (This premise used to be
+  // reached at a 2026 date through a benchmark refusal; see refusedMline's note for why the only
+  // shape that still reaches it is the unpublished 2027 certificate price.)
   assert.equal(e.status, 'unavailable', 'sanity: the engine refuses this line');
-  assert.equal(e.selector, 'benchmark/25231000/column-B/route-independent/2026-03-15',
-    'sanity: refused on the benchmark, in 2026, with the price table fully populated');
+  assert.equal(e.selector, 'certificate-price/2027-Q1',
+    'sanity: refused on the PRICE, after the good, its default and its benchmark all resolved — '
+    + 'which is why the substitution had already happened');
   assert.equal(e.stamp.tier, 'verified-direct+default-indirect',
     'sanity: the refusal still carries the mixed tier — that is the defect this test is about');
 
@@ -2428,7 +2473,7 @@ test('the attestation question has ONE spelling and five call sites — the only
 
 /** A plain Commission-defaults line, tier stated. */
 const dline = (over = {}) => ({
-  id: 'D1', cn: '25231000', country: 'DZ', route: '(A)', scope: 'direct_and_indirect',
+  id: 'D1', cn: '2523100090', country: 'DZ', route: '(A)', scope: 'direct_and_indirect',
   massT: '100', date: '2026-03-15', tier: 'default+markup', ...over,
 });
 /** The document, built over whatever lines/results a test hands it. */
@@ -2470,10 +2515,10 @@ test('the document carries NO verified caveat when no line claims the verified t
   // line with no `tier` field at all — the shape every buildPrintDocument test written before
   // this feature uses. Both must read as default-tier, or those tests are silently asserting
   // against a document that has grown a caveat about data it does not contain.
-  const legacy = { id: 'L0', cn: '25231000', country: 'DZ', route: '(A)',
+  const legacy = { id: 'L0', cn: '2523100090', country: 'DZ', route: '(A)',
     scope: 'direct_and_indirect', massT: '100', date: '2026-03-15' };
   const d = dline();
-  const results = [run('25231000', 'DZ', '(A)', '100'), run('25231000', 'DZ', '(A)', '100')];
+  const results = [run('2523100090', 'DZ', '(A)', '100'), run('2523100090', 'DZ', '(A)', '100')];
   const html = docOf([legacy, d], results);
   assert.ok(!html.includes(CAVEAT_VERIFIED),
     'the verified caveat must be absent from a document with no verified line');
@@ -2565,7 +2610,7 @@ test('§4 is exactly the pinned caveats — no sixth item — in both shapes it 
   // Four-caveat shape — no line claims the verified tier.
   const d = dline();
   assertCaveatsExactly(
-    docOf([d], [run('25231000', 'DZ', '(A)', '100')]),
+    docOf([d], [run('2523100090', 'DZ', '(A)', '100')]),
     [CAVEAT_CSCF, CAVEAT_ARTICLE_9, CAVEAT_COMPLETENESS, CAVEAT_FINGERPRINT],
     'defaults only',
   );
@@ -2791,7 +2836,7 @@ test('1 January 2026 prices, instead of claiming the rule does not exist', () =>
   // every good with "The published rules do not give a free-allocation benchmark…", naming a
   // rule that was in force that day — active() sorted the timestamp bound after the plain date.
   const e = estimateFromPack(pack, {
-    cn: '25231000', country: 'DZ', route: '(A)', massT: '100', date: '2026-01-01',
+    cn: '2523100090', country: 'DZ', route: '(A)', massT: '100', date: '2026-01-01',
   });
   assert.notEqual(e.status, 'unavailable',
     'the first day of the definitive regime must resolve');
@@ -2800,7 +2845,7 @@ test('1 January 2026 prices, instead of claiming the rule does not exist', () =>
   assert.equal(e.scenario.costEur, '5385.60');
   // …and the day before is still outside the regime.
   const before = estimateFromPack(pack, {
-    cn: '25231000', country: 'DZ', route: '(A)', massT: '100', date: '2025-12-31',
+    cn: '2523100090', country: 'DZ', route: '(A)', massT: '100', date: '2025-12-31',
   });
   assert.equal(before.status, 'unavailable');
 });
@@ -2817,16 +2862,41 @@ test('route (A) is priced with route (A) electricity, not route (B)\'s', () => {
   // What never moved was the ELECTRICITY: 6.6 for both routes, route (B)'s figure charged to
   // route (A). That is why the closing assertion reads indirectTco2e and not costEur. A costEur
   // comparison passes with the defect fully present and pins nothing.
-  const line = { cn: '25231000', country: 'DZ', massT: '100', date: '2026-03-15',
+  //
+  // WHAT THE TARIC MIGRATION DID TO THIS TEST, stated plainly because it changes what the test
+  // can still prove. In pack v1 both routes hung off ONE code, 25231000, so a good/origin/year
+  // lookup really could hand route (A) route (B)'s electricity. Pack v2 splits the good instead:
+  // route (A) is grey clinker 2523100090 and route (B) is white clinker 2523100010, and the
+  // route indicator IS the grey/white distinction. Measured on this pack: 0 of the (good,
+  // origin, year) triples publish an indirect value at more than one route, against 90 on the v1
+  // corpus. So the original witness — one selector, two indirect values, wrong one chosen — no
+  // longer exists, and this test can no longer fail because the route term was dropped from the
+  // indirect match. It is kept because both FIGURES are unmoved by the migration and worth
+  // pinning, and because the corpus assertion below turns "unreachable" into something measured
+  // rather than assumed: the day the Commission publishes two indirect routes for one good
+  // again, that assertion goes red and the route term is load-bearing again.
+  const byRoute = {};
+  for (const d of pack.defaultValues) {
+    if (d.emissionsType !== 'indirect' || d.cell.state !== 'value') continue;
+    const k = `${d.scopeCode}|${d.originCountry}|${d.reportingYear}`;
+    (byRoute[k] ??= new Set()).add(d.productionRoute);
+  }
+  assert.deepEqual(Object.entries(byRoute).filter(([, r]) => r.size > 1).map(([k]) => k), [],
+    'no good/origin/year may publish an indirect default at more than one route — if one does, '
+    + 'the route term in the indirect lookup is reachable again and needs a live witness here');
+
+  const line = { country: 'DZ', massT: '100', date: '2026-03-15',
     emissionsScope: 'direct_and_indirect' };
-  const a = estimateFromPack(pack, { ...line, route: '(A)' });
-  const b = estimateFromPack(pack, { ...line, route: '(B)' });
+  const a = estimateFromPack(pack, { ...line, cn: '2523100090', route: '(A)' });
+  const b = estimateFromPack(pack, { ...line, cn: '2523100010', route: '(B)' });
   assert.equal(a.status, 'cscf_pending');
   assert.equal(b.status, 'cscf_pending');
   assert.equal(a.scenario.certificates, '75.865');
   assert.equal(a.scenario.costEur, '5717.19');
   assert.equal(b.scenario.certificates, '64.7475');
   assert.equal(b.scenario.costEur, '4879.37');
+  assert.equal(a.scenario.indirectTco2e, '4.4');
+  assert.equal(b.scenario.indirectTco2e, '6.6');
   assert.notEqual(a.scenario.indirectTco2e, b.scenario.indirectTco2e,
     'the electricity component must follow the declared route — the old engine returned 6.6 for both');
 });
@@ -2867,7 +2937,7 @@ test('the indirect lookup separates "publishes none" from "publishes one" — th
   // Cement does publish one, so the good half of the predicate has to answer too — asserting only
   // the `none` arm would be satisfied by a lookup that returned `none` for everything.
   assert.equal(selectIndirectFactorFromPack(pack, sel({
-    cn: '25231000', country: 'DZ', route: '(A)' })).kind, 'found', 'DZ cement clinker publishes one');
+    cn: '2523100090', country: 'DZ', route: '(A)' })).kind, 'found', 'DZ cement clinker publishes one');
 
   // The third arm, `route-mismatch`, is deliberately absent: it is unreachable in the shipped pack
   // (see syncScope's note — 0 of 66,675 reachable selectors), so there is no input that would
@@ -2881,7 +2951,7 @@ test('net mass is gated: no negative bill, no NaN euros, no hex tonnage', () => 
   // Decimal honours JS radix prefixes; NaN and Infinity rendered AS figures rather than throwing.
   // '1e9999999999999999' is all digits so it clears the shape gate, then saturates to Infinity
   // past Decimal.maxE — the only path by which the engine's isFinite() check is load-bearing.
-  const line = { cn: '25231000', country: 'DZ', route: '(A)', date: '2026-03-15',
+  const line = { cn: '2523100090', country: 'DZ', route: '(A)', date: '2026-03-15',
     emissionsScope: 'direct_and_indirect' };
   for (const massT of ['-100', '', 'abc', 'NaN', 'Infinity', '0x10', '1_000', '1e9999999999999999']) {
     const e = estimateFromPack(pack, { ...line, massT });
@@ -2905,7 +2975,7 @@ test('a 2027 date refuses on the PRICE, and says so', () => {
   // the missing price and carries costEur as null. The 2027 quarters have no row at all, so
   // the lookup fails closed instead. That is why the defect was invisible across 2026.
   const e = estimateFromPack(pack, {
-    cn: '25231000', country: 'DZ', route: '(A)', massT: '100', date: '2027-03-15',
+    cn: '2523100090', country: 'DZ', route: '(A)', massT: '100', date: '2027-03-15',
     emissionsScope: 'direct_and_indirect',
   });
   assert.equal(e.status, 'unavailable');
@@ -2920,11 +2990,18 @@ test('…and a good whose benchmark really is missing still says BENCHMARK', () 
   // nothing else in this repo would notice — the existing refusal tests (72052100 above) pin
   // status and selector, never the wording. Upstream hit exactly that trap.
   //
-  // Same good and same year as the price case, so the only thing that differs is which table is
-  // empty: route 'default' sends 25231000 to Column B route-independent, which it does not
-  // publish, and that refuses on benchmark/ at every date in 2026-2028.
+  // Same YEAR as the price case, so the year is not what differs — only which table is empty.
+  //
+  // THE GOOD MOVED, and it had to. This used to be 25231000/KR/'default': KR was the one origin
+  // publishing grey clinker route-independently, and the Annex publishes column-B cement
+  // benchmarks for routes (A) and (B) only, so the benchmark lookup found nothing. Pack v2
+  // publishes no clinker row at the route-independent route for ANY origin (measured: 0), so
+  // that selector now refuses one table earlier, on the default VALUE, and would have made this
+  // test assert the wrong refusal. 72052100/IN/(C) is the same shape in the corpus as it stands:
+  // routesFor offers (C) for that pairing so a user can reach it, the direct default resolves,
+  // and Column B publishes no benchmark for route (C) of that good — at any date in 2026-2028.
   const e = estimateFromPack(pack, {
-    cn: '25231000', country: 'KR', route: 'default', massT: '100', date: '2027-03-15',
+    cn: '72052100', country: 'IN', route: '(C)', massT: '100', date: '2027-03-15',
     emissionsScope: 'direct_and_indirect',
   });
   assert.equal(e.status, 'unavailable');
@@ -2944,12 +3021,18 @@ test('an out-of-range month refuses on the DATE, not the benchmark', () => {
   // rules do not give a free-allocation benchmark…" beside a selector reading
   // quarter/2027-13-15, sending the reader to hunt an Annex row that had resolved a moment
   // earlier. The selector was right all along; only the sentence beside it was wrong.
+  //
+  // THE SELECTOR PREFIX MOVED FROM `quarter/` TO `date/` WITH PACK V2, and the move is the gate
+  // getting earlier rather than the answer changing. parseRegulatoryDate (cbam/input.ts) now
+  // refuses the string before quarterOf is reached, so the refusal is raised at the date itself
+  // instead of at the quarter derived from it. The reason text is unchanged — asserted below,
+  // and it is the half a user reads.
   const e = estimateFromPack(pack, {
-    cn: '25231000', country: 'DZ', route: '(A)', massT: '100', date: '2027-13-15',
+    cn: '2523100090', country: 'DZ', route: '(A)', massT: '100', date: '2027-13-15',
     emissionsScope: 'direct_and_indirect',
   });
   assert.equal(e.status, 'unavailable');
-  assert.match(e.selector, /^quarter\//);
+  assert.match(e.selector, /^date\//);
   assert.match(e.reason, /not a readable calendar date/i);
   assert.doesNotMatch(e.reason, /free-allocation benchmark/i);
 });
@@ -2969,11 +3052,11 @@ test('a single-digit month refuses on the DATE too, where the guard used to miss
   // confined to years that have no price row: '2026-1-15' refused as certificate-price/
   // 2026-QNaN in exactly the same way, inside the year the site actually prices.
   const e = estimateFromPack(pack, {
-    cn: '25231000', country: 'DZ', route: '(A)', massT: '100', date: '2027-1-15',
+    cn: '2523100090', country: 'DZ', route: '(A)', massT: '100', date: '2027-1-15',
     emissionsScope: 'direct_and_indirect',
   });
   assert.equal(e.status, 'unavailable');
-  assert.match(e.selector, /^quarter\//);
+  assert.match(e.selector, /^date\//);
   assert.match(e.reason, /not a readable calendar date/i);
 });
 
@@ -2992,7 +3075,7 @@ test('…and a UTC timestamp still prices, which is why that guard is isInteger 
   // caller. That reasoning currently lives only in a comment upstream; a later re-tightening
   // would arrive here by cp, and cbam-sync-check records whatever hash arrives without an
   // opinion. This test is the thing that would refuse it.
-  const line = { cn: '25231000', country: 'DZ', route: '(A)', massT: '100',
+  const line = { cn: '2523100090', country: 'DZ', route: '(A)', massT: '100',
     emissionsScope: 'direct_and_indirect' };
   const stamped = estimateFromPack(pack, { ...line, date: '2026-01-01T00:00:00.000Z' });
   assert.equal(stamped.status, 'cscf_pending');

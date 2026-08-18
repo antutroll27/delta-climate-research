@@ -385,8 +385,18 @@ test('the entry-point mass gate is the ONLY thing between an unreadable mass and
   //   '-100'    -> knownEligibleMassT '-100'; mixed with a real 30 t line, '-70' — a negative
   //                mass SUBTRACTS, so it can drag a genuinely liable importer under 50 t
   //   '  100  ' -> raw [DecimalError], thrown out of the whole card render, not one line
+  //
+  // '  100  ' HAS SINCE CHANGED SIDES, and it moved because the GATE changed, not because this
+  // test was relaxed. Pack v2's parseNonNegativeDecimal begins `value.trim()`, so a padded mass
+  // is now a mass the gate READS rather than one it refuses — and thresholdByYear trims at the
+  // same seam (`netMassT: l.massT.trim()`), so gate and consumer read the identical string. It is
+  // therefore asserted in the second loop below, where the card must count exactly what the gate
+  // parsed. The DecimalError above is the measured pre-trim behaviour and is kept as the record
+  // of why the two must agree: during this port the gate learned to trim and the consumer did
+  // not, and that one-sided change reopened the throw verbatim.
+  //
   // So the gate must be TOTAL over everything the aggregate would misread:
-  for (const massT of ['0x10', '+100', '  100  ', 'abc', '', '-100', '1_000', '5.', '0b101',
+  for (const massT of ['0x10', '+100', 'abc', '', '-100', '1_000', '5.', '0b101',
     'NaN', 'Infinity']) {
     assert.equal(nonNegativeDecimal(massT), null,
       `massT=${JSON.stringify(massT)} must never reach the threshold card`);
@@ -396,7 +406,10 @@ test('the entry-point mass gate is the ONLY thing between an unreadable mass and
   // at the entry point sufficient — if the two ever disagreed, a mass could clear the gate as
   // one quantity and be counted toward de minimis as another. '1e3' is the case that would
   // catch it: legal to both, and the only accepted form whose text and value differ.
-  for (const massT of ['0', '-0', '0.5', '49.999', '50', '100', '1e3']) {
+  // '  100  ' is here for the second reason as well as the first: it is the one admitted form
+  // whose TEXT differs from the string the consumer would otherwise re-read, so it is the case
+  // that catches a consumer which stopped trimming.
+  for (const massT of ['0', '-0', '0.5', '49.999', '50', '100', '1e3', '  100  ']) {
     const parsed = nonNegativeDecimal(massT);
     assert.notEqual(parsed, null, `sanity: ${JSON.stringify(massT)} is a mass the gate admits`);
     const [card] = thresholdByYear([line({ id: 'L1', massT })], fp, new Set(), pack);
@@ -418,7 +431,12 @@ test('one unreadable mass discards the whole year card, not just its own line', 
   // sum with an unreadable addend has no answer. Each bad mass is tested ALONE and beside a
   // genuine 30 t line — the second half is what distinguishes "the year refuses" from "the bad
   // line is quietly dropped and the rest still totals".
-  for (const massT of ['0x10', '+100', '  100  ', 'abc', '', '-100', '1_000', '5.', '0b101',
+  //
+  // '  100  ' IS NO LONGER ONE OF THEM: pack v2's gate trims, so a padded mass is readable and
+  // the card is the right answer rather than a discarded year. It is asserted positively at the
+  // foot of this test instead of being dropped, because "the gate admits it" and "the card counts
+  // it as 100" are two different claims and only the second rules out the DecimalError returning.
+  for (const massT of ['0x10', '+100', 'abc', '', '-100', '1_000', '5.', '0b101',
     'NaN', 'Infinity']) {
     const alone = thresholdByYear([line({ id: 'L1', massT })], fp, new Set([2026]), pack);
     assert.deepEqual(alone, [], `massT=${JSON.stringify(massT)} must produce no card at all`);
@@ -427,6 +445,15 @@ test('one unreadable mass discards the whole year card, not just its own line', 
     assert.deepEqual(beside, [],
       `massT=${JSON.stringify(massT)} must take the year's card with it, not be skipped`);
   }
+  // The trimmed mass, the other way round: it must produce a card, and the card must total the
+  // number the gate read — not throw, and not vanish.
+  const [padded] = thresholdByYear([line({ id: 'L1', massT: '  100  ' })], fp, new Set([2026]), pack);
+  assert.equal(padded.knownEligibleMassT, '100',
+    'a padded mass the gate admits must be counted as the gate read it, not re-parsed raw');
+  assert.deepEqual(
+    thresholdByYear([line({ id: 'L1', massT: '  100  ' })], fp, new Set([2026]), pack),
+    thresholdByYear([line({ id: 'L1', massT: '100' })], fp, new Set([2026]), pack),
+    'and the padded and unpadded forms must produce the identical card');
 });
 
 test('a negative mass cannot report a liable year as exempt', () => {
@@ -845,28 +872,33 @@ test('the indirect case: free allocation deducts from the direct side only (the 
 });
 
 test('the floor clamp: free allocation exceeding direct emissions never drives chargeable negative', () => {
-  // NOT a hypothetical: 200 of the selectors the form can offer at a 2026 date clamp here,
-  // measured over the shipped pack (every classification x every origin x every route
-  // routesFor publishes, 100 t, direct_and_indirect), 136 of them with a non-zero indirect
-  // component. cn 2507008080 (calcined clay) / AO / route 'default' is one — direct emissions
-  // (19.8) sit below the good's own free-allocation benchmark (64.935 at CBAM factor 0.975,
-  // assumed CSCF 1), so the deduction floors at zero and the entire charge is the indirect
+  // NOT a hypothetical: 190 of the 77,704 selectors the form can offer at a 2026 date clamp
+  // here, measured over the shipped pack on this tree (every classification x every origin x
+  // every route routesFor publishes, 100 t, direct_and_indirect), 126 of them with a non-zero
+  // indirect component. cn 2507008080 (calcined clay) / AO / route 'default' is one — direct
+  // emissions (24.2) sit below the good's own free-allocation benchmark (64.935 at CBAM factor
+  // 0.975, assumed CSCF 1), so the deduction floors at zero and the entire charge is the indirect
   // component (4.4) alone: a clean producer paying only for the electricity it used, which is a
   // normal live outcome of this calculator, not an edge case.
   //
-  // THE SELECTOR MOVED WITH THE CORPUS, NOT WITH THE ASSERTION. Pack v2 keys this good at the
+  // THE SELECTOR MOVED WITH THE CORPUS; NO FIGURE MOVED WITH IT. Pack v2 keys this good at the
   // 10-digit TARIC 2507008080 and publishes it route-independently, so the old 25070080/(A)
   // pairing refuses outright (`default/25070080/AO/(A)/2026`) rather than clamping. The same
-  // good, the same origin and the same clamp; only the code and the route label follow the
-  // corpus. Direct moved 24.2 -> 19.8 because the corrected workbook publishes a different
-  // intensity for the route-independent row — the CLAMP is what this test pins, and it holds.
+  // good, the same origin, the same clamp and — measured through the engine on this tree — the
+  // same five figures as before the migration: 24.2 / 4.4 / 28.6 / 64.935 / 4.4. Only the code
+  // and the route label follow the corpus.
+  //
+  // AN EARLIER PASS OF THIS PORT RE-BASELINED direct_tco2e to 19.8 and embedded_tco2e to 24.2
+  // here, with a comment explaining a value drift that never happened. Both were wrong against
+  // this pack, and they are restored above from a live probe, not from the comment.
   //
   // A prior version of this test claimed "no good in the shipped pack has a benchmark generous
   // enough to exceed its own direct emissions" and built a case by hand rather than reach for
   // one. That claim was never checked against the pack and was wrong — a spec reviewer scanned
   // all 10,930 direct-2026 factor rows and found dozens of goods that clamp, including this
   // one. (Those counts and the sibling codes it named were measured on the v1 corpus; the
-  // v2 figure above — 200 clamping selectors, 136 with indirect — is the re-measurement.) No
+  // v2 figures above — 190 clamping selectors of 77,704, 126 with indirect — are the
+  // re-measurement, run through the engine on this tree.) No
   // hand-built case is kept: real data exercises the same fields (direct_tco2e, indirect_tco2e,
   // embedded_tco2e, free_allocation_tco2e, chargeable_tco2e) that the hand-built one did, and
   // this line reaches status 'cscf_pending' (reading from e.scenario) the same way the
@@ -880,9 +912,9 @@ test('the floor clamp: free allocation exceeding direct emissions never drives c
   assert.equal(result.status, 'cscf_pending');
   const rows = csvRows([line1], [result], fp, 'f'.repeat(64), pack);
   const r = rows[0];
-  assert.equal(r.direct_tco2e, '19.8');
+  assert.equal(r.direct_tco2e, '24.2');
   assert.equal(r.indirect_tco2e, '4.4');
-  assert.equal(r.embedded_tco2e, '24.2');
+  assert.equal(r.embedded_tco2e, '28.6');
   assert.equal(r.free_allocation_tco2e, '64.935');
   assert.equal(r.chargeable_tco2e, '4.4', 'floored at zero on the direct side, then indirect added back — never negative');
   // the identity, in Decimal: max(0, direct − free_allocation) + indirect === chargeable
@@ -1029,10 +1061,20 @@ test('the hashed field ORDER is pinned to a golden digest — a transposition ca
   // on an exported CSV or a printable document was produced by the old form, so re-deriving it
   // from a line stops working the moment this value moves. Update the constant only alongside a
   // deliberate, documented change to the hashed array — never to make a red test go green.
-  const fixture = line({
-    id: 'L1', tier: 'actual-verified',
+  //
+  // THE FIXTURE IS WRITTEN OUT IN FULL rather than built from line(), and that is the point of
+  // this edit. An anchor computed from a shared fixture is not an anchor: the TARIC migration
+  // moved line()'s default cn from '25231000' to '2523100090' and both constants below went red
+  // without one byte of the hashed array changing. Re-deriving the constants would have recorded
+  // a serialisation change that never happened. Every field lineFingerprint reads is stated here
+  // literally, at the values these digests were computed from, so the only thing that can move
+  // them again is the function itself. (Verified on this tree: with these ten fields the two
+  // constants below reproduce exactly; with line()'s new cn they become 8b260ba2… and fc2f4543….)
+  const fixture = {
+    id: 'L1', cn: '25231000', country: 'DZ', route: '(A)', scope: 'direct_and_indirect',
+    massT: '30', date: '2026-03-15', tier: 'actual-verified',
     seeDirect: '2.31', seeIndirect: '0.4', verifiedRef: 'BV-2026-0142',
-  });
+  };
   assert.equal(
     await lineFingerprint(fixture),
     '2807c1968d0719c2b465cac434b938c0dd66eca54c475b383e7d87b5d04b0cab',
@@ -1052,7 +1094,10 @@ test('the hashed field ORDER is pinned to a golden digest — a transposition ca
   // seven — every relational test still passes, the constant above still passes (its optionals
   // are all present), and only this one fails. That is the property `lineFingerprint`'s own
   // doc comment promises: "field absent" must never be confusable with "array truncated".
-  const dflt = line({ id: 'L1', tier: 'default+markup' });
+  const dflt = {
+    id: 'L1', cn: '25231000', country: 'DZ', route: '(A)', scope: 'direct_and_indirect',
+    massT: '30', date: '2026-03-15', tier: 'default+markup',
+  };
   assert.equal(
     await lineFingerprint(dflt),
     '6e0def457815078246b0dc3a8e39bf7fb06434d5b39db0e25e368d2f2267b5cb',
