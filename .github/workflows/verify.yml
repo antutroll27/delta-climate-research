@@ -84,6 +84,18 @@ jobs:
         timeout-minutes: 6
         run: npx playwright install chromium
 
+      # Firefox and WebKit for the CBAM calculator only (see playwright.config.ts) — it is the
+      # one surface here a customs consultant might open in Safari, and WebKit is the engine most
+      # likely to disagree about print CSS and date inputs, both of which that page leans on.
+      #
+      # No install-deps for these two: the binaries come from Playwright's CDN and the runner
+      # image already carries what they need. Keeping apt to Chromium alone is what the
+      # best-effort step above is for. If a future image really is missing a library, Playwright
+      # names it and the e2e fails in seconds rather than hanging.
+      - name: Install Firefox and WebKit
+        timeout-minutes: 6
+        run: npx playwright install firefox webkit
+
       # Runs the browser contracts too, as its last stage, against the dist it
       # just built and audited -- which is what the removed "Run browser
       # contracts" step existed to do. Keeping both ran the whole e2e suite twice
