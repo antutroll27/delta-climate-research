@@ -105,8 +105,15 @@ test('openapi.json describes every endpoint the build actually emits (§13.2)', 
   let files;
   try { files = await walk(root); } catch { return; }   // no dist/ yet — build-gated, not a failure here
   const spec = JSON.parse(await readFile(join(root, 'openapi.json'), 'utf8'));
-  const templ = (p) => ['ballygunge', 'barrackpore', 'baruipur'].reduce(
-    (acc, w) => acc.replace(`/${w}.json`, '/{id}.json').replace(`/wards/${w}/`, '/wards/{id}/'), p);
+  // Collapse concrete files onto their templated path. STAC ids are not ward ids
+  // (`ward-products`, `ballygunge-canopy`), so they need their own rule — the
+  // ward-only heuristic silently failed to match them.
+  const templ = (p) => {
+    const stac = p.replace(/\/stac\/(collections|items)\/[^/]+\.json$/, '/stac/$1/{id}.json');
+    if (stac !== p) return stac;
+    return ['ballygunge', 'barrackpore', 'baruipur'].reduce(
+      (acc, w) => acc.replace(`/${w}.json`, '/{id}.json').replace(`/wards/${w}/`, '/wards/{id}/'), p);
+  };
   const emitted = [...new Set(files.map((f) => templ('/api/' + relative(root, f))))].sort();
   for (const p of emitted) assert.ok(spec.paths[p], `openapi.json does not describe ${p}`);
   for (const p of Object.keys(spec.paths)) assert.ok(emitted.includes(p), `openapi.json describes ${p}, which is never emitted`);

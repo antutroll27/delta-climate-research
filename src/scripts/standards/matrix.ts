@@ -40,6 +40,18 @@ export const MATRIX: readonly MatrixRow[] = [
     gap: 'Single-level tilesets: one root tile per ward, no hierarchy, so there is no progressive refinement to stream. Buildings sit at ellipsoid height 0 because no validated terrain model exists — viewers must clamp to terrain. LoD1 only; no roof shape.',
   },
   {
+    standard: 'STAC 1.0.0 (SpatioTemporal Asset Catalog)', region: 'Global', purpose: 'Geospatial asset cataloguing',
+    posture: 'aligned',
+    ships: 'A static catalogue at /api/stac/catalog.json — one Collection and nine Items, one per ward x product, each with real temporal extents read from the artefacts. Validated with stac_valid: all 11 documents valid.',
+    gap: 'Static only: no STAC API, so no search endpoint and no queryables. Items describe the products we publish, not a growing archive — there is no ingestion pipeline behind it.',
+  },
+  {
+    standard: 'schema.org/Dataset', region: 'Global', purpose: 'Dataset discovery',
+    posture: 'aligned',
+    ships: 'Dataset JSON-LD on /attribution with licence, spatial and temporal coverage, six resolvable distributions and the measured variables — the vocabulary Google Dataset Search and open-data portals read.',
+    gap: 'Discovery metadata, not a data catalogue in its own right. Not yet registered with any portal, and no DCAT-AP profile.',
+  },
+  {
     standard: 'buildingSMART IFC / ISO 16739', region: 'Global', purpose: 'BIM exchange',
     posture: 'roadmap',
     ships: 'Nothing.',

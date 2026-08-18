@@ -8,6 +8,8 @@
 // we do).
 import Base from '../layouts/Base.astro';
 import StandardsPage from '../components/standards/StandardsPage.astro';
+import { WARDS } from '../data/wards.ts';
+import { datasetJsonLd } from '../scripts/standards/dataset-jsonld.ts';
 import { LICENCE_BLOCK, ODBL_NOTICE } from '../scripts/standards/odbl.ts';
 import { LICENCES, allWardRecords } from '../scripts/standards/ward-record.ts';
 
@@ -30,6 +32,7 @@ for (const r of records) for (const l of r.provenance.layers) {
 const rows = [...shipped.values()];
 const differs = rows.filter((r) => r.governingLicence !== r.sourceLicence);
 const site = Astro.site!.href.replace(/\/$/, '');
+const dataset = datasetJsonLd(WARDS);
 const jsonLd = { '@context': 'https://schema.org', '@type': 'WebPage', name: 'Data attribution — Delta Climate Research', url: `${site}/attribution`, isPartOf: { '@type': 'WebSite', url: `${site}/` } };
 ---
 <Base
@@ -37,6 +40,7 @@ const jsonLd = { '@context': 'https://schema.org', '@type': 'WebPage', name: 'Da
   description="Every dataset the urban climate digital twin is built from, its licence and its holder — generated from the provenance files the map itself ships."
 >
   <script type="application/ld+json" is:inline set:html={JSON.stringify(jsonLd)} />
+  <script type="application/ld+json" is:inline set:html={JSON.stringify(dataset)} />
   <StandardsPage
     kicker="Attribution · Every source, its licence, its holder"
     title="What this is built from"

@@ -13,13 +13,14 @@
     "check:publication": "node scripts/check-publication-contract.mjs",
     "typecheck": "python3 -m mypy",
     "test:py": "python3 scripts/fetch-canopy.py --self-test && python3 scripts/fetch-canopy.py --check && python3 scripts/_ecostress.py && python3 scripts/check-geo-oracle.py && python3 scripts/_canopy.py && python3 scripts/check-canopy-oracle.py && python3 scripts/_water.py && python3 scripts/check-water-oracle.py",
-    "verify": "npm run check && npm run typecheck && npm run test:py && npm run test:unit && npm run build && npm run check:cityjson && npm run check:3dtiles && npm run check:ngsi && npm run report:build && npm run check:publication && npm run test:e2e:built",
+    "verify": "npm run check && npm run typecheck && npm run test:py && npm run test:unit && npm run build && npm run check:cityjson && npm run check:3dtiles && npm run check:ngsi && npm run check:stac && npm run report:build && npm run check:publication && npm run test:e2e:built",
     "test:e2e": "npm run build && npm run test:e2e:built",
     "test:e2e:built": "playwright test",
     "cbam:sync-check": "node scripts/cbam-sync-check.mjs",
     "check:cityjson": "python3 scripts/check-cityjson-schema.py",
     "check:3dtiles": "node scripts/check-3d-tiles.mjs",
-    "check:ngsi": "python3 scripts/check-ngsi-ld.py"
+    "check:ngsi": "python3 scripts/check-ngsi-ld.py",
+    "check:stac": "sh scripts/check-stac.sh"
   },
   "engines": {
     "node": ">=22.12.0",
