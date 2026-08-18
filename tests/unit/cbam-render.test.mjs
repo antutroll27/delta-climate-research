@@ -528,6 +528,50 @@ test('the script pins the pack it will accept to the manifest that seals the pac
   }
 });
 
+/* ── the printable document, when nothing priced ───────────────────────────── */
+
+test('an all-refused print document states there is no total rather than a total of zero', () => {
+  // THE SCREEN renderer already distinguishes these — renderTotals branches on pricedLines === 0
+  // and says so in words. buildPrintDocument did not, and printed "Total: 0 certificates · no €
+  // total (a certificate price is unpublished)". Both halves are false: nothing was priced, so
+  // there is no total, and the certificate price is not the reason any line refused.
+  //
+  // REACHABLE, not theoretical: onDoc's export guard is `!priced.length` where "priced" means
+  // "came back with an estimate object", which a REFUSAL satisfies — it only stops lines whose
+  // estimate threw. One refusing line is enough to print the manufactured zero.
+  //
+  // Asserted on the rendered document, not on the source.
+  const refusedLine = { id: 'R1', cn: '25231000', country: 'DZ', route: '(A)',
+    scope: 'direct_and_indirect', massT: '100', date: '2026-03-15', tier: 'default+markup' };
+  const refused = run('25231000', 'DZ', '(A)', '100');
+  assert.equal(refused.status, 'unavailable', 'this fixture must actually refuse');
+  const totals = sumTotals([refused]);
+  assert.equal(totals.pricedLines, 0);
+  assert.equal(totals.certificates, '0', 'sumTotals is right to sum nothing to zero — §2 is what must not print it');
+
+  const doc = docOf([refusedLine], [refused]);
+  assert.doesNotMatch(doc, /Total: <b>0 certificates/,
+    'a document where nothing priced must not print a total of zero');
+  assert.match(doc, /No line could be priced, so there is <b>no total<\/b> — not a total of zero/,
+    'it must say there is no total, and that this is not a zero');
+  assert.doesNotMatch(doc, /certificate price is unpublished/,
+    'and must not blame the certificate price for a refusal that had another cause');
+  assert.match(doc, /1 line refused/, 'it still says how many lines refused');
+  assert.doesNotMatch(doc, /excluded from this total/,
+    'nothing can be excluded from a total that does not exist');
+
+  // THE PRICED PATH IS UNCHANGED. The guard must not swallow the ordinary total — the failure
+  // mode of a "branch on zero" fix is a document that stops totalling when the total is small.
+  const pricedLine = { id: 'P1', cn: '72061000', country: 'IN', route: '(C)',
+    scope: 'direct', massT: '100', date: '2026-03-15', tier: 'default+markup' };
+  const priced = run('72061000', 'IN', '(C)', '100');
+  assert.notEqual(priced.status, 'unavailable', 'this fixture must actually price');
+  const bothDoc = docOf([refusedLine, pricedLine], [refused, priced]);
+  assert.match(bothDoc, /Total: <b>/, 'a document with one priced line still prints its total');
+  assert.match(bothDoc, /1 line\(s\) refused and excluded/,
+    'and still discloses the refused line against that total');
+});
+
 /* ── §7 non-negotiables, per branch ────────────────────────────────────────── */
 
 /**

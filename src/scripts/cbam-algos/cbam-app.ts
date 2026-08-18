@@ -1237,6 +1237,28 @@ export function buildPrintDocument(input: {
     ? `<li>${esc(String(y.calendarYear))}: <b>${esc(yearVerdictTag(y))}</b> at ${num(y.knownEligibleMassT)} t of ${num(y.thresholdT)} t — completeness box ${y.attested ? 'TICKED by the user' : 'not ticked'}.</li>`
     : `<li>${esc(String(y.calendarYear))}: <b>${esc(yearVerdictTag(y))}</b> — no de minimis threshold published; no verdict.</li>`).join('');
 
+  /**
+   * §2 HAS TO BRANCH ON `pricedLines`, THE WAY THE SCREEN'S OWN TOTALS CARD ALREADY DOES.
+   * `sumTotals` returns certificates '0' and costEur null when every line refused — an honest
+   * pair of values for "nothing summed" — and this section used to render them literally, as
+   * "Total: 0 certificates · no € total (a certificate price is unpublished)". Both halves are
+   * false on a printed, dated, hash-stamped document that someone may hand to an auditor: there
+   * is no total, because nothing was priced; and the certificate price is not why — the lines
+   * refused for their own reasons, named per line in §1.
+   *
+   * REACHABLE, not theoretical. onDoc's `if (!priced.length)` guard reads "has an estimate
+   * object", which a REFUSAL satisfies — it only stops lines whose estimate THREW. One line
+   * whose selector the corpus does not publish is enough to print the manufactured zero.
+   *
+   * renderTotals (the screen) has had this branch since it was written; only the print document
+   * lacked it, which is the worse of the two places to lack it, because the print document is
+   * the artefact that leaves the browser.
+   *
+   * IT DOES NOT REUSE `refusedLineNote`, which says the refused lines are "excluded from this
+   * total" — a sentence that contradicts the one before it the moment there is no total to be
+   * excluded from. The note is right where it is used (a total that exists, minus some lines);
+   * here the whole point is that the subtraction never happened.
+   */
   return `
     <h1>CBAM certificate exposure — provisional estimate</h1>
     <p class="cbp-sub">Generated ${esc(generatedOn)} · deltaclimate.earth/cbam/cbam-calculator · not a filing, not verified data</p>
@@ -1247,10 +1269,15 @@ export function buildPrintDocument(input: {
       <tbody>${lineRows}</tbody></table>
 
     <h2>2 · What we computed</h2>
-    <p>Total: <b>${num(totals.certificates)} certificates</b>${
-      totals.costEur ? ` · <b>${eur(totals.costEur)}</b>` : ' · no € total (a certificate price is unpublished)'}${
-      totals.anyPending ? ' — a <b>what-if</b>, because the CSCF is unpublished (see §4)' : ''}. ${
-      totals.refusedLines ? `${totals.refusedLines} line(s) refused and excluded.` : ''}</p>
+    ${totals.pricedLines === 0
+      ? `<p>No line could be priced, so there is <b>no total</b> — not a total of zero. ${
+          totals.refusedLines} line${totals.refusedLines === 1 ? '' : 's'} refused; the last column
+          of §1 names what was missing for each. Nothing on this page states that the exposure is
+          nil — it states that this tool would not put a figure on it.</p>`
+      : `<p>Total: <b>${num(totals.certificates)} certificates</b>${
+          totals.costEur ? ` · <b>${eur(totals.costEur)}</b>` : ' · no € total (a certificate price is unpublished)'}${
+          totals.anyPending ? ' — a <b>what-if</b>, because the CSCF is unpublished (see §4)' : ''}. ${
+          totals.refusedLines ? `${totals.refusedLines} line(s) refused and excluded.` : ''}</p>`}
     <ul>${verdicts || '<li>No de minimis verdict — no eligible lines.</li>'}</ul>
 
     <h2>3 · On what authority</h2>
