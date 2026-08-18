@@ -64,6 +64,7 @@ const counts = MATRIX.reduce((m, r) => (m[r.posture] = (m[r.posture] ?? 0) + 1, 
       <li><a href="/api/standards.json"><code>/api/standards.json</code></a> — this matrix, machine-readable</li>
       <li><a href="/api/index.json"><code>/api/index.json</code></a> · <a href="/api/conformance.json"><code>/api/conformance.json</code></a> · <a href="/api/collections.json"><code>/api/collections.json</code></a> — OGC API Features discovery. Start at the landing page and follow link relations; the conformance declaration lists no classes, and says why.</li>
       <li><a href="/api/collections/wards.json"><code>/api/collections/wards.json</code></a> · <a href="/api/collections/wards/items.json"><code>…/items.json</code></a> · <code>…/items/&#123;id&#125;.json</code> — the features themselves, as GeoJSON</li>
+      <li><a href="/api/indicators.json"><code>/api/indicators.json</code></a> — ISO 37123 city indicators per ward, each with its threshold and sensitivity, plus six indicators we deliberately do <em>not</em> publish and the reason for each</li>
       <li><a href="/api/ngsi-ld/entities.jsonld"><code>/api/ngsi-ld/entities.jsonld</code></a> · <code>…/entities/&#123;id&#125;.jsonld</code> — NGSI-LD entities. Information model only; there is no context broker.</li>
       <li><code>/api/wards/&#123;id&#125;/metadata.json</code> — a ward's measured confidence and full data lineage (<a href="/api/wards/ballygunge/metadata.json">ballygunge</a>)</li>
       <li><code>/api/wards/&#123;id&#125;/cityjson.json</code> — LoD1 CityJSON 2.0, one Building per shipped footprint, <strong>validated against the official 2.0 JSON Schema</strong> on every build (<a href="/api/wards/ballygunge/cityjson.json">ballygunge</a>, ~2.8 MB)</li>
@@ -95,6 +96,12 @@ const counts = MATRIX.reduce((m, r) => (m[r.posture] = (m[r.posture] ?? 0) + 1, 
       );
     })}
     <p>Phase 1 is complete. One Phase 2 item — validating CityJSON against the OGC schema — was brought forward and already passes on every build. Nothing here is certified, and nothing claims to be.</p>
+
+    <h2>What we decline to measure</h2>
+    <p>An indicator set is only worth reading if its omissions are as explicit as its values. Six ISO 37123 indicators are listed on <a href="/api/indicators.json"><code>/api/indicators.json</code></a> as deliberately unpublished. Two are worth naming here.</p>
+    <p><strong>8.1, magnitude of urban heat island effects</strong>, specifies the <em>atmospheric</em> heat island. We model land <em>surface</em> temperature, and the two diverge by many degrees in daytime sun. It is the indicator that looks most like our product and the one we most clearly cannot claim.</p>
+    <p><strong>21.1, percentage of city area covered by publicly available hazard maps</strong>, we could report as 100% — our own heat map covers the whole study area. That is exactly why it is excluded: an indicator satisfied by pointing at yourself measures nothing.</p>
+    <p>And one result worth reading properly: <strong>high-albedo surface cover is close to zero in all three wards</strong>. That is a measurement, not a missing number. Ward-mean broadband albedo is 0.12–0.14 — dark roofs and asphalt — so almost nothing reaches a cool-surface threshold. It is best read as the size of the cool-roof opportunity.</p>
 
     <h2>Governance</h2>
     <p>The posture is inspired by the Gemini Principles — open data, published error bars, published null results, no personal data — and it is a statement of principle, not an assessed conformance. The prototype processes no personal data: aggregated, ward-level, open geospatial inputs only. Formal legal review precedes any production deployment.</p>

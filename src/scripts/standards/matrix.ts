@@ -52,10 +52,10 @@ export const MATRIX: readonly MatrixRow[] = [
     gap: 'The API half is absent: no context broker, so no subscriptions, no temporal queries, no federation. NGSI-LD defines both an information model and a broker API, and only the first is implemented. The Smart Data Models Building type was deliberately NOT adopted — its properties are occupancy and management fields we do not measure.',
   },
   {
-    standard: 'ISO 37120 / 37122', region: 'Global', purpose: 'City sustainability indicators',
-    posture: 'roadmap',
-    ships: 'Nothing machine-readable yet.',
-    gap: 'A KPI mapping page from the intervention outputs (cool-roof potential, canopy cover, ΔT). Planned.',
+    standard: 'ISO 37120 / 37122 / 37123', region: 'Global', purpose: 'City sustainability and resilience indicators',
+    posture: 'aligned',
+    ships: 'Two area-based ISO 37123:2019 indicators per ward at /api/indicators.json — 8.8 tree canopy cover and 8.9 high-albedo surface — each with its threshold, its sensitivity at alternative thresholds, and its source. Six further indicators are listed as deliberately NOT published, with the reason for each.',
+    gap: 'Two indicators of roughly 130 in the family, and ward-scale rather than the city scale the standard defines. The public ISO preview omits the measurement clauses, so thresholds are our stated interpretation rather than a verified protocol. Population-denominated indicators are out of reach and must stay so: no ward-level population figure exists and inventing one is the error this pass removed.',
   },
   {
     standard: 'ISO 19650', region: 'Global', purpose: 'BIM information management',

@@ -1,0 +1,154 @@
+{
+  "status": "prototype",
+  "standardFamily": "ISO 37120 / 37122 / 37123 city indicators",
+  "scope": "Study wards only. These are ward-scale values; ISO indicators are defined at CITY scale, so they are reported here as per-ward measurements using the standard's definitions, not as city-wide indicator values for Kolkata.",
+  "protocolCaveat": "The public ISO 37123:2019 preview carries the indicator titles and structure but not the measurement clauses, so exact protocols could not be read. Thresholds below are our stated interpretation and every value is reported at alternative thresholds. This is alignment with a named indicator definition, not a verified conformant measurement.",
+  "published": [
+    {
+      "ward": "ballygunge",
+      "gridCells": 19600,
+      "iso37123_8_8": {
+        "indicator": "Percentage of city land area covered by tree canopy",
+        "standard": "ISO 37123:2019, 8.8",
+        "value": 52.14,
+        "unit": "%",
+        "threshold": {
+          "canopyHeightM": 3.0
+        },
+        "sensitivity": {
+          ">=2.0 m": 59.81,
+          ">=5.0 m": 36.18
+        },
+        "method": "Fraction of grid cells whose canopy height model value meets the threshold.",
+        "source": "Meta / WRI Canopy Height Model (CC BY 4.0), resampled to the ward analysis grid."
+      },
+      "iso37123_8_9": {
+        "indicator": "Percentage of city surface area covered with high-albedo materials contributing to the mitigation of urban heat islands",
+        "standard": "ISO 37123:2019, 8.9",
+        "value": 0.02,
+        "unit": "%",
+        "threshold": {
+          "broadbandAlbedo": 0.3
+        },
+        "sensitivity": {
+          ">=0.25": 0.07,
+          ">=0.35": 0.0
+        },
+        "method": "Fraction of grid cells whose broadband albedo meets the threshold.",
+        "source": "Sentinel-2 L2A surface reflectance, Liang (2001) broadband conversion.",
+        "wardMeanAlbedo": 0.125,
+        "maxAlbedo": 0.324,
+        "caveat": "Measures reflectance actually observed, not materials installed for cooling. A bright bare roof and a deliberate cool roof are indistinguishable here.",
+        "interpretation": "A value at or near zero is a MEASUREMENT, not a missing number. Ward-mean broadband albedo here is 0.12-0.14 -- dark roofs and asphalt -- so almost no surface reaches a cool-surface threshold. Read as the size of the cool-roof opportunity rather than as an absent value."
+      }
+    },
+    {
+      "ward": "barrackpore",
+      "gridCells": 19600,
+      "iso37123_8_8": {
+        "indicator": "Percentage of city land area covered by tree canopy",
+        "standard": "ISO 37123:2019, 8.8",
+        "value": 36.65,
+        "unit": "%",
+        "threshold": {
+          "canopyHeightM": 3.0
+        },
+        "sensitivity": {
+          ">=2.0 m": 45.72,
+          ">=5.0 m": 20.03
+        },
+        "method": "Fraction of grid cells whose canopy height model value meets the threshold.",
+        "source": "Meta / WRI Canopy Height Model (CC BY 4.0), resampled to the ward analysis grid."
+      },
+      "iso37123_8_9": {
+        "indicator": "Percentage of city surface area covered with high-albedo materials contributing to the mitigation of urban heat islands",
+        "standard": "ISO 37123:2019, 8.9",
+        "value": 0.0,
+        "unit": "%",
+        "threshold": {
+          "broadbandAlbedo": 0.3
+        },
+        "sensitivity": {
+          ">=0.25": 0.01,
+          ">=0.35": 0.0
+        },
+        "method": "Fraction of grid cells whose broadband albedo meets the threshold.",
+        "source": "Sentinel-2 L2A surface reflectance, Liang (2001) broadband conversion.",
+        "wardMeanAlbedo": 0.137,
+        "maxAlbedo": 0.282,
+        "caveat": "Measures reflectance actually observed, not materials installed for cooling. A bright bare roof and a deliberate cool roof are indistinguishable here.",
+        "interpretation": "A value at or near zero is a MEASUREMENT, not a missing number. Ward-mean broadband albedo here is 0.12-0.14 -- dark roofs and asphalt -- so almost no surface reaches a cool-surface threshold. Read as the size of the cool-roof opportunity rather than as an absent value."
+      }
+    },
+    {
+      "ward": "baruipur",
+      "gridCells": 19600,
+      "iso37123_8_8": {
+        "indicator": "Percentage of city land area covered by tree canopy",
+        "standard": "ISO 37123:2019, 8.8",
+        "value": 44.45,
+        "unit": "%",
+        "threshold": {
+          "canopyHeightM": 3.0
+        },
+        "sensitivity": {
+          ">=2.0 m": 53.81,
+          ">=5.0 m": 25.22
+        },
+        "method": "Fraction of grid cells whose canopy height model value meets the threshold.",
+        "source": "Meta / WRI Canopy Height Model (CC BY 4.0), resampled to the ward analysis grid."
+      },
+      "iso37123_8_9": {
+        "indicator": "Percentage of city surface area covered with high-albedo materials contributing to the mitigation of urban heat islands",
+        "standard": "ISO 37123:2019, 8.9",
+        "value": 0.0,
+        "unit": "%",
+        "threshold": {
+          "broadbandAlbedo": 0.3
+        },
+        "sensitivity": {
+          ">=0.25": 0.0,
+          ">=0.35": 0.0
+        },
+        "method": "Fraction of grid cells whose broadband albedo meets the threshold.",
+        "source": "Sentinel-2 L2A surface reflectance, Liang (2001) broadband conversion.",
+        "wardMeanAlbedo": 0.144,
+        "maxAlbedo": 0.247,
+        "caveat": "Measures reflectance actually observed, not materials installed for cooling. A bright bare roof and a deliberate cool roof are indistinguishable here.",
+        "interpretation": "A value at or near zero is a MEASUREMENT, not a missing number. Ward-mean broadband albedo here is 0.12-0.14 -- dark roofs and asphalt -- so almost no surface reaches a cool-surface threshold. Read as the size of the cool-roof opportunity rather than as an absent value."
+      }
+    }
+  ],
+  "deliberatelyNotPublished": [
+    {
+      "standard": "ISO 37123:2019, 8.1",
+      "indicator": "Magnitude of urban heat island effects (atmospheric)",
+      "reason": "We model land SURFACE temperature. Surface and atmospheric urban heat island are different quantities and diverge by many degrees in daytime sun. This is the indicator closest to our product and the one we most clearly cannot claim."
+    },
+    {
+      "standard": "ISO 37123:2019, 8.2",
+      "indicator": "Percentage of natural areas that have undergone ecological evaluation",
+      "reason": "An ecological evaluation is fieldwork by qualified ecologists, not something derivable from satellite imagery. None has been carried out for these wards, and the canopy raster we do hold says nothing about ecological condition or species composition."
+    },
+    {
+      "standard": "ISO 37123:2019, 8.3",
+      "indicator": "Territory undergoing ecosystem restoration as a percentage of total city area",
+      "reason": "Restoration is an administrative fact -- which parcels are under an active programme -- held by the municipality, not observable in imagery. A greening trend in the canopy data would not distinguish a restoration scheme from ordinary growth."
+    },
+    {
+      "standard": "ISO 37123:2019, 21.1",
+      "indicator": "Percentage of city area covered by publicly available hazard maps",
+      "reason": "Arguably 100 % because our own heat map covers the study area, which is precisely why it is excluded. An indicator satisfied by pointing at oneself measures nothing."
+    },
+    {
+      "standard": "ISO 37123:2019, 21.2",
+      "indicator": "Pervious land and porous pavement as a percentage of city land area",
+      "reason": "Requires surface material. We hold vegetation fraction and albedo; neither says whether a pavement drains."
+    },
+    {
+      "standard": "ISO 37120:2018, population-denominated indicators",
+      "indicator": "Green area per 100 000 population, and similar",
+      "reason": "No ward-level population figure is held, and inventing one would repeat the fabricated-exposure error this standards pass exists to remove."
+    }
+  ]
+}
