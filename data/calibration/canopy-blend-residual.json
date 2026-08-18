@@ -1,0 +1,150 @@
+{
+  "question": "How far does blending the canopy into veg at the validation's 140 grid land from the browser's 140->192->blend result, once both are on a common grid?",
+  "why": "surface_layers() blends at 140 rather than replaying the browser's 192 path. The design approved that simplification on condition the residual be measured and published rather than assumed small.",
+  "method": "laboratory = blend(veg140, canopy140, 0.5); browser = blend(resample(veg140,192), resample(canopy140,192), 0.5). Both brought to a common grid with measure-spatial-accuracy.area_downsample (area-weighted, exact for non-integer ratios), then differenced. Kelvin conversion is the model's own veg term, L/k * dveg, with L and k from the shipping constants and the near-nadir scene forcing.",
+  "benchmark_K": {
+    "canopy_v1_to_v2_per_cell_rms": [
+      0.26,
+      0.36
+    ],
+    "note": "The effect the whole canopy blend has on the field, measured through the real solver. The 140-vs-192 residual is an approximation error INSIDE that effect and must be a small fraction of it."
+  },
+  "veg_term_sensitivity": {
+    "day": {
+      "n_scenes": 14,
+      "median_K_per_veg": 7.46351146560319,
+      "max_K_per_veg": 14.536368
+    },
+    "night": {
+      "n_scenes": 20,
+      "median_K_per_veg": 0.9345467382190172,
+      "max_K_per_veg": 1.6195680000000003
+    }
+  },
+  "worst_case_K": {
+    "at_140": 0.5270546351778418,
+    "at_ecostress_70m": 0.07161254037456398,
+    "excess_over_control_at_ecostress_70m": 0.06586751995303304
+  },
+  "verdict": {
+    "material_share_threshold": 0.2,
+    "worst_excess_over_blend_change_at_70m": 0.09230277649125648,
+    "material": false
+  },
+  "wards": {
+    "ballygunge": {
+      "canopy": true,
+      "ward_mean_veg_unblended": 0.3290908634662628,
+      "ward_mean_veg_blended_140": 0.3289438472766838,
+      "ward_mean_veg_blended_192": 0.32922047729402315,
+      "grids": {
+        "140": {
+          "cells": 19600,
+          "dveg_rms": 0.05353089718757966,
+          "dveg_max_abs": 0.29177170991897583,
+          "dveg_mean": 0.00027662992893186,
+          "control_resample_only_rms": 0.033635659539691325,
+          "excess_over_control_rms": 0.04164371934682583,
+          "blend_change_rms": 0.1599273877657306,
+          "residual_over_blend_change": 0.33472001222201114,
+          "excess_over_blend_change": 0.2603914184343933,
+          "day_K_median": 0.3995284649235264,
+          "day_K_max": 4.241300947371482,
+          "night_K_median": 0.05002712536059013,
+          "excess_day_K_median": 0.31080837681539597
+        },
+        "ecostress70m": {
+          "cells": 441,
+          "dveg_rms": 0.005606373880594891,
+          "dveg_max_abs": 0.027382194995880127,
+          "dveg_mean": 0.00027662966729832345,
+          "control_resample_only_rms": 0.003883986715730312,
+          "excess_over_control_rms": 0.004043027984202815,
+          "blend_change_rms": 0.06359383726294027,
+          "residual_over_blend_change": 0.08815907518545107,
+          "excess_over_blend_change": 0.06357578278357669,
+          "day_K_median": 0.041843235738278216,
+          "day_K_max": 0.398037663107872,
+          "night_K_median": 0.00523941842334625,
+          "excess_day_K_median": 0.030175185715852263
+        }
+      }
+    },
+    "baruipur": {
+      "canopy": true,
+      "ward_mean_veg_unblended": 0.44690340757369995,
+      "ward_mean_veg_blended_140": 0.4439289792973016,
+      "ward_mean_veg_blended_192": 0.44476205729946133,
+      "grids": {
+        "140": {
+          "cells": 19600,
+          "dveg_rms": 0.07061751530855939,
+          "dveg_max_abs": 0.36687034368515015,
+          "dveg_mean": 0.0008330780096656205,
+          "control_resample_only_rms": 0.031880594896035806,
+          "excess_over_control_rms": 0.06301159526174112,
+          "blend_change_rms": 0.20867804178658333,
+          "residual_over_blend_change": 0.33840414978007355,
+          "excess_over_blend_change": 0.30195604061774534,
+          "day_K_median": 0.5270546351778418,
+          "day_K_max": 5.332962324093819,
+          "night_K_median": 0.0659953685927457,
+          "excess_day_K_median": 0.47028776370195247
+        },
+        "ecostress70m": {
+          "cells": 441,
+          "dveg_rms": 0.00959501981133171,
+          "dveg_max_abs": 0.03601729869842529,
+          "dveg_mean": 0.0008330761440216549,
+          "control_resample_only_rms": 0.003765498171854486,
+          "excess_over_control_rms": 0.008825272159973793,
+          "blend_change_rms": 0.09561220686367738,
+          "residual_over_blend_change": 0.10035350219467438,
+          "excess_over_blend_change": 0.09230277649125648,
+          "day_K_median": 0.07161254037456398,
+          "day_K_max": 0.523560708246231,
+          "night_K_median": 0.0089669944678269,
+          "excess_day_K_median": 0.06586751995303304
+        }
+      }
+    },
+    "barrackpore": {
+      "canopy": true,
+      "ward_mean_veg_unblended": 0.3088933527469635,
+      "ward_mean_veg_blended_140": 0.30838074711222696,
+      "ward_mean_veg_blended_192": 0.3083815242415413,
+      "grids": {
+        "140": {
+          "cells": 19600,
+          "dveg_rms": 0.05587493719022621,
+          "dveg_max_abs": 0.3636358082294464,
+          "dveg_mean": 7.772007101804626e-07,
+          "control_resample_only_rms": 0.03143259868280289,
+          "excess_over_control_rms": 0.04619524159540224,
+          "blend_change_rms": 0.19506934377518498,
+          "residual_over_blend_change": 0.28643628008828176,
+          "excess_over_blend_change": 0.23681446146987448,
+          "day_K_median": 0.4170232343591114,
+          "day_K_max": 5.285943926400662,
+          "night_K_median": 0.05221774029931836,
+          "excess_day_K_median": 0.344778715303594
+        },
+        "ecostress70m": {
+          "cells": 441,
+          "dveg_rms": 0.007170611933582336,
+          "dveg_max_abs": 0.035173237323760986,
+          "dveg_mean": 7.769806720231937e-07,
+          "control_resample_only_rms": 0.004310665831111953,
+          "excess_over_control_rms": 0.005730256154354472,
+          "blend_change_rms": 0.10246590429799471,
+          "residual_over_blend_change": 0.06998046796843296,
+          "excess_over_blend_change": 0.05592354055344647,
+          "day_K_median": 0.05351794438168283,
+          "day_K_max": 0.5112911214895248,
+          "night_K_median": 0.006701271993563732,
+          "excess_day_K_median": 0.04276783250886785
+        }
+      }
+    }
+  }
+}

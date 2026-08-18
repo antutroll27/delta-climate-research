@@ -23,11 +23,12 @@
  *   4. no filing/validation claim .... nothing here says "declaration" or "filed"
  *   5. residual-basis note travels ... stamp.notes rendered verbatim, every branch
  */
+import Decimal from 'decimal.js';
 import {
-  estimateFromPack, resolveThreshold, routesFor, selectIndirectFactorFromPack,
-  type EstimatorPack, type ThresholdView,
+  estimateFromPack, nonNegativeDecimal, resolveThreshold, routesFor, selectIndirectFactorFromPack,
+  type EstimatorInput, type EstimatorPack, type ThresholdView,
 } from './estimator/estimate-from-pack.ts';
-import type { CertificateEstimate } from './cbam/certificate-estimate.ts';
+import type { CertificateEstimate, DataTier } from './cbam/certificate-estimate.ts';
 import {
   csvRows, lineFingerprint, packSnapshotHash, sumTotals, thresholdByYear, toCsv, yearOf,
   type Line, type Totals, type YearThreshold,
@@ -104,6 +105,20 @@ const eur = (s: string | null): string => {
 };
 
 /**
+ * Does this refusal blame the user's input, or the Commission's corpus?
+ *
+ * Every refusal carries a `selector` locating the problem, and its first segment is the
+ * namespace: `default/`, `indirect/`, `benchmark/` and `certificate-price/` name a rule nobody
+ * has published, while `mass/` and `verified/` name a value the user typed. Only the second kind
+ * is fixable by the person reading the card, and telling someone a rule is "missing" when they
+ * have in fact mistyped a tonnage sends them to look for a gap in the regulation.
+ *
+ * Matched on the namespace rather than the whole string so a selector gaining or losing a
+ * trailing segment cannot silently flip the caption — that shape has already changed twice.
+ */
+const inputRefusal = (selector: string): boolean => /^(mass|verified)\//.test(selector);
+
+/**
  * The card shell. Every branch renders one, so the status tag is the ONLY thing
  * distinguishing a priced line from a refusal at a glance — which is why the tag
  * text is passed in per branch rather than derived.
@@ -123,11 +138,48 @@ const figure = (certs: string, costEur: string | null) => `
   <div class="cb-u">certificates</div>
   ${costEur ? `<div class="cb-cost">${eur(costEur)}</div>` : ''}`;
 
+/**
+ * Which corpus priced a line, in words — ONE wording, used by the on-screen provenance stamp and
+ * by the printable document's §1 column alike. A second literal in the document would let the
+ * paper artefact and the card a user saw name the same tier differently ("Verified" vs "Verified
+ * actual"), which is the kind of drift an auditor reads as two different claims.
+ *
+ * Takes the tier rather than a stamp or a Line: the stamp says which tier actually PRICED the
+ * figure, the Line says which tier was CLAIMED, and the two callers legitimately want different
+ * ones (see buildPrintDocument's row for why the document reads the line). `Line['tier']` is
+ * declared as the same two literals for the reason cbam-lines.ts gives, so both callers pass.
+ *
+ * SWITCHED ON EVERY MEMBER, WITH `never` IN THE DEFAULT ARM — this file's own exhaustiveness idiom
+ * (renderResult, tableFigures). It was written as a `string` parameter with a ternary, which was a
+ * silent widening of the engine's `DataTier` union: a third tier added upstream would have compiled
+ * here and confidently printed "Commission default + mark-up" for it, on BOTH the on-screen
+ * provenance stamp and the audit document, with nothing type-checking against it. Naming a tier
+ * wrongly on a document handed to an auditor is exactly the class of failure the `never` assertions
+ * elsewhere in this file exist to make a build error instead.
+ */
+function tierLabel(tier: DataTier): string {
+  switch (tier) {
+    case 'actual-verified': return 'Verified actual';
+    case 'default+markup': return 'Commission default + mark-up';
+    // NAMES BOTH HALVES, because both are true of the figure and neither alone is. "Verified"
+    // on its own would read as the mark-up having been dropped from the whole line, when it was
+    // only dropped from the direct half; "Commission default" on its own would bury the one
+    // number the importer had audited and paid a verifier for. This label is what an auditor
+    // reads in §1 of the printable document beside the row's figures, so it has to say which
+    // corpus priced which half in the space of a table cell.
+    case 'verified-direct+default-indirect': return 'Verified direct + Commission indirect';
+    default: {
+      const _exhaustive: never = tier;
+      return _exhaustive;
+    }
+  }
+}
+
 /* ── the provenance stamp — rendered on EVERY branch, refusals included ─────── */
 function renderStamp(e: CertificateEstimate): string {
   const s = e.stamp;
   const rows: [string, string][] = [
-    ['Data tier', s.tier === 'actual-verified' ? 'Verified actual' : 'Commission default + mark-up'],
+    ['Data tier', tierLabel(s.tier)],
     ['Origin basis', s.originBasis === 'residual' ? 'Residual bucket' :
                      s.originBasis === 'country' ? "Origin's own published value" : '—'],
     ['Rule packages', s.rulePackages.join(' · ') || '—'],
@@ -168,6 +220,13 @@ const AMENDED_BY_2025_2083 = 'as amended by Reg (EU) 2025/2083';
  * the rest of the year's imports. So the states are "above" and "indeterminate",
  * and indeterminate is reported as what it is — a question we cannot close —
  * rather than dressed up as good news.
+ *
+ * ITS SECTOR NAME COMES OFF THE SAME TABLE THE PER-YEAR CARD USES — sectorList below, handed a
+ * one-element list. Both cards ship, and both can be on screen for the same sector; this one
+ * spelled it with a `.replace(/_/g, ' ')` and printed "iron and steel" while renderYearThreshold
+ * printed "iron & steel", the exact shortcut SECTOR_PROSE's docblock already records as wrong on
+ * two of the four shipped keys. Sharing the table is also what carries the unknown-key convention
+ * here: a sector this file has no prose for prints raw, rather than as a name nobody chose.
  */
 export function renderThreshold(t: ThresholdView): string {
   const above = t.state === 'above_threshold';
@@ -183,18 +242,76 @@ export function renderThreshold(t: ThresholdView): string {
       <div class="cb-water">
         <div class="cb-row"><span>This line</span><b>${num(t.knownEligibleMassT)} t</b></div>
         <div class="cb-row"><span>Threshold · ${esc(String(t.calendarYear))}</span><b>${num(t.thresholdT)} t</b></div>
-        <div class="cb-row"><span>Sector</span><b>${esc(t.sector.replace(/_/g, ' '))}</b></div>
+        <div class="cb-row"><span>Sector</span><b>${esc(sectorList([t.sector]))}</b></div>
       </div>
       <p class="cb-sub">${above
         ? `This line alone exceeds the ${num(t.thresholdT)}&nbsp;t annual threshold, so the exemption
            does not apply and the exposure below stands.`
         : `Below ${num(t.thresholdT)}&nbsp;t an importer owes nothing for the year. This is ONE line,
            not your annual total, so it cannot show you are under the threshold — only that this
-           line by itself does not cross it. Add your other ${esc(t.sector.replace(/_/g, ' '))}
+           line by itself does not cross it. Add your other ${esc(sectorList([t.sector]))}
            imports for ${esc(String(t.calendarYear))} before relying on the exemption.`}</p>
       <p class="cb-prov">${esc(t.sourceLocator)} · ${AMENDED_BY_2025_2083}</p>
     </section>`;
 }
+
+/**
+ * How a threshold sector KEY is said on either threshold card — and, where a card names several,
+ * in the order it says them. An ordered list rather than a map, because it settles both questions
+ * at once and they are both load-bearing.
+ *
+ * THE PROSE IS NOT THE KEY, and no transformation gets from one to the other. `iron_and_steel` is
+ * said "iron & steel" (an ampersand, not "and"), and `fertilisers` is said "fertiliser" (singular,
+ * from a plural key). A `.replace(/_/g, ' ')` — the obvious shortcut — is wrong on two of the four
+ * keys the shipped pack contains, which is why unknown keys below are not passed through one.
+ *
+ * THE ORDER IS NOT THE PACK'S. The shipped 2026 row lists cement, aluminium, fertilisers,
+ * iron_and_steel; the per-year verdict has always read cement, iron & steel, aluminium and
+ * fertiliser. Rendering in pack order would have silently re-ordered live legal copy. So known
+ * sectors are named in THIS list's order, whatever order the row happens to store them in. The
+ * single-line card names one sector and so has no order to get wrong — it needs only the prose.
+ */
+const SECTOR_PROSE: ReadonlyArray<readonly [key: string, prose: string]> = [
+  ['cement', 'cement'],
+  ['iron_and_steel', 'iron & steel'],
+  ['aluminium', 'aluminium'],
+  ['fertilisers', 'fertiliser'],
+];
+
+/**
+ * "cement, iron & steel, aluminium and fertiliser" — a threshold row's sectors, said the way the
+ * cards say them. PLAIN TEXT, escaped by the caller: the ampersand in 'iron & steel' has to
+ * reach esc() as a bare '&' to come out as '&amp;', and a key arriving from pack JSON is
+ * untrusted input that must be escaped like any other.
+ *
+ * TWO CALLERS, AND ONE OF THEM HANDS IT A SINGLE SECTOR. renderYearThreshold passes a whole row's
+ * `includedSectors`; renderThreshold passes `[t.sector]`, the one sector its line belongs to. The
+ * `< 2` branch below is what serves that call — it returns the bare prose with no "and" — so it
+ * is not dead code guarding only the empty row, and must not be narrowed to a length-0 test.
+ *
+ * AN UNKNOWN KEY IS PRINTED VERBATIM, underscores and all. Not prettified: this file cannot know
+ * what the Commission calls a sector it has never seen, and the two counter-examples above prove
+ * a mechanical guess gets it wrong more often than not. A key rendered raw reads as a datum and
+ * tells a maintainer to add a line to SECTOR_PROSE; a key rendered as "organic chemicals" reads
+ * as reviewed copy and would ship a name nobody chose, on the one sentence in this card that
+ * states what was actually measured. Awkward and honest over fluent and possibly wrong.
+ *
+ * Unknowns are named LAST, in the row's own order — they cannot be placed in a prose order that
+ * does not yet include them, and appending keeps the four known sectors reading exactly as they
+ * always have when a fifth is added.
+ *
+ * An empty row yields '' and the sentence reads "Your imports for…". Deliberately unguarded: HTML
+ * collapses the doubled space, and there is no honest word to substitute for a list of sectors a
+ * rule declined to name. A row that measures nothing is a pack defect, and the card would already
+ * be reporting 0 t beside it.
+ */
+const sectorList = (sectors: readonly string[]): string => {
+  const known = SECTOR_PROSE.filter(([key]) => sectors.includes(key)).map(([, prose]) => prose);
+  const unknown = sectors.filter((s) => !SECTOR_PROSE.some(([key]) => key === s));
+  const names = [...known, ...unknown];
+  if (names.length < 2) return names.join('');
+  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+};
 
 /**
  * The per-year card's own tag text — for BOTH branches of the union, including the year that has
@@ -251,10 +368,26 @@ export function renderYearThreshold(y: YearThreshold): string {
       <input type="checkbox" data-attest="${esc(String(y.calendarYear))}" ${y.attested ? 'checked' : ''} />
       These are all my ${esc(String(y.calendarYear))} imports of CBAM goods
     </label>`;
+  // Art 2(3) is a MASS test over four sectors, so a hydrogen or electricity line is rightly
+  // outside the basis — and the verdict used to generalise that into "an importer owes nothing
+  // for the year". MEASURED: 40 t cement + 1000 t hydrogen rendered "owes nothing for 2026"
+  // beside EUR 525,302.23 (the hydrogen line alone was EUR 523,015.36) on the same page.
+  // COUNTED, NEVER EXPLAINED PER LINE: two filters run in series (ours on rule.includedSectors,
+  // aggregateThresholdBasis's own massSectors) and eligibleLineCount's own doc warns they agree
+  // today only by coincidence of the shipped 2026 row, so naming a cause for a specific line
+  // would be a claim this card cannot support. It says how many, and what the test measures.
+  const excluded = y.linesInYear - y.eligibleLineCount;
+  const outside = excluded === 0 ? '' : ` ${excluded} of your ${y.linesInYear} lines for ${esc(String(y.calendarYear))} ${excluded === 1 ? 'is' : 'are'} outside that test — goods not measured by mass for de minimis, such as hydrogen and electricity, are chargeable regardless. This verdict does not mean you owe nothing.`;
   const sub = above
     ? `The listed ${esc(String(y.calendarYear))} imports exceed the threshold; the exemption does not apply.`
     : below
-      ? `Below the threshold an importer owes nothing for ${esc(String(y.calendarYear))}. This verdict rests on your attested statement that the list is complete — it is your completeness claim, verified by no one, not by the Commission or by us.`
+      // The sectors come from the CARD (y.includedSectors, straight off the year's own threshold
+      // row) — they used to be four words typed into this string. The row is data: the day the
+      // Commission widens it, this sentence would have gone on naming the old four beside a mass
+      // computed from the new set, stating the wrong basis with nothing to catch it. See
+      // sectorList for why the prose is a table rather than a transformation of the keys, and why
+      // its order is not the row's.
+      ? `Your ${esc(sectorList(y.includedSectors))} imports for ${esc(String(y.calendarYear))} total ${num(y.knownEligibleMassT)}&nbsp;t, below the ${num(y.thresholdT)}&nbsp;t threshold for those sectors.${outside} This verdict rests on your attested statement that the list is complete — it is your completeness claim, verified by no one, not by the Commission or by us.`
       : `Under the threshold so far, but unattested. Tick the box only if this list is genuinely every ${esc(String(y.calendarYear))} CBAM import; the verdict is only as good as that statement.`;
   return `
     <section class="cb-card cb-thresh">
@@ -270,6 +403,59 @@ export function renderYearThreshold(y: YearThreshold): string {
       ${attest}
       <p class="cb-prov">${esc(y.sourceLocator)} · ${AMENDED_BY_2025_2083}</p>
     </section>`;
+}
+
+/**
+ * The threshold statement for the ONE line the form currently describes: the verdict card, the
+ * "no published rule" card, or deliberate silence.
+ *
+ * `resolveThreshold` answers `null` for FOUR different reasons and says which for none of them,
+ * so the preview rendered `t ? renderThreshold(t) : ''` and dropped the card with nothing at all
+ * in its place. Enumerated against the shipped pack, as the form can actually reach them:
+ *
+ *   1. NO THRESHOLD ROW FOR THE YEAR. The pack publishes exactly one row (2026), so EVERY other
+ *      year lands here, and 2027/2028 are ordinary dates a user types. Worse, the estimate that
+ *      renders beside it refuses on the certificate PRICE and reassures in so many words that
+ *      "the good and its benchmark are present" — so the only thing on screen that could have
+ *      explained the missing de minimis verdict says instead that nothing is wrong with the
+ *      good. THIS is the case the user is owed an explanation for, and it gets the SAME card the
+ *      multi-line panel already shows for such a year (renderYearThreshold's `ruleFound: false`
+ *      arm) rather than a second phrasing here that could drift away from it.
+ *   2. THE SECTOR IS OUTSIDE THE YEAR'S ROW — hydrogen (28041000, priceable from 93 origins in
+ *      this pack), and electricity, which this pack does not classify at all. Reg (EU) 2025/2083
+ *      leaves both out of the 50 t exemption, so an "indeterminate" card would imply an
+ *      exemption they cannot have. SILENCE IS CORRECT HERE and stays: pinned by
+ *      cbam-render.test.mjs's "hydrogen and electricity are outside the exemption".
+ *   3. THE CN HAS NO SECTOR AT ALL. Every one of the pack's 574 offered goods maps to a sector
+ *      (measured), and isOfferedGood only falls back on 4- and 6-digit listings while every
+ *      classification is 8 digits — so an unclassifiable CN is a CN the pack does not price, and
+ *      the refusal beside it already names the good as the problem. Silence.
+ *   4. AN UNREADABLE NET MASS. Not reachable from here at all: run() refuses with the same
+ *      predicate (nonNegativeDecimal) well above this call and never reaches the threshold.
+ *
+ * THE YEAR IS TESTED FIRST, exactly as resolveThreshold tests it first, so a hydrogen line dated
+ * 2027 says "no rule published for 2027" on this surface and on the multi-line one alike — the
+ * two cards agree about the year rather than each answering a different question about it.
+ */
+export function renderDraftThreshold(
+  pack: EstimatorPack,
+  input: { cn: string; massT: string; date: string },
+): string {
+  const t = resolveThreshold(pack, input);
+  if (t) return renderThreshold(t);
+  // The SAME year resolveThreshold derives, off the same string and by the same expression, so
+  // the two can never disagree about which year has no published row. run()'s completeness gate
+  // has already refused an empty date by the time this runs; the guard is what keeps the
+  // function total for any other caller, rather than naming a year nobody imported in.
+  const year = Number(input.date.slice(0, 4));
+  if (!input.date || !Number.isInteger(year)) return '';
+  if (pack.thresholds.some((r) => r.calendarYear === year)) return '';
+  // `attested`/`eligibleLineCount` are required by the union and read by neither this arm nor
+  // its renderer — the same two values thresholdByYear hands its own no-rule card, with
+  // `attested` false because a draft that has not been added is in no year's attestation set.
+  return renderYearThreshold({
+    calendarYear: year, ruleFound: false, attested: false, eligibleLineCount: 0,
+  });
 }
 
 /**
@@ -385,7 +571,7 @@ export function renderResult(e: CertificateEstimate): string {
         ${renderWaterfall(e, e.figure)}${renderStamp(e)}`);
 
     case 'zero_by_fiat':
-      // Electricity. Free allocation is nil because Art 2(2) says so, not because a
+      // Electricity. Free allocation is nil because Art 1(2) says so, not because a
       // calculation produced zero — so this figure IS final even in 2026, and saying
       // "CSCF pending" here would be wrong in the other direction.
       return card('ok', 'Priced · free allocation nil by law', `
@@ -413,11 +599,16 @@ export function renderResult(e: CertificateEstimate): string {
       // NON-NEGOTIABLE 2. No number. Not zero, not a placeholder, not a range — the
       // rules do not price this line and the honest output is to say which rule is
       // missing. 183 of 574 offered goods land here, 181 of them iron and steel.
+      //
+      // ...except when nothing is missing. The mass and verified gates refuse the USER'S
+      // OWN INPUT, and captioning `mass/25231000/2026-03-15` with "Missing rule" tells
+      // someone the Commission has failed to publish something when in fact they mistyped
+      // a tonnage. Two different problems, two different things to do about them.
       // Note this branch calls neither figure() nor renderWaterfall(): the card is
       // styled as an answer because it IS one, but it carries no number anywhere.
       return card('unavail', 'No estimate', `
         <p class="cb-reason">${esc(e.reason)}</p>
-        ${e.selector ? `<div class="cb-sel"><span>Missing rule</span><code>${esc(e.selector)}</code></div>` : ''}
+        ${e.selector ? `<div class="cb-sel"><span>${inputRefusal(e.selector) ? 'Refused input' : 'Missing rule'}</span><code>${esc(e.selector)}</code></div>` : ''}
         <p class="cb-sub">We show no deduction rather than guess one. Picking a nearby benchmark
            would produce a number that looks authoritative and is not.</p>
         ${renderStamp(e)}`);
@@ -430,8 +621,369 @@ export function renderResult(e: CertificateEstimate): string {
   }
 }
 
+/**
+ * THE ATTESTATION STAMP — the human-facing sentence renderStamp's "Data tier" row is not.
+ *
+ * That row says WHICH corpus priced the line ("Verified actual"); it does not say that the
+ * number is the importer's own claim and that nothing here checked it. The two are
+ * complementary, not duplicates: a reader who sees only the row can reasonably assume the tool
+ * validated something before accepting a figure that skips the Commission's mark-up. It did not,
+ * and cannot — this tool has no way to reach a verifier's report, and the mark-up it drops is
+ * real money. Saying so on the card is the honest price of the exemption.
+ *
+ * Kept as a module constant rather than inlined so the paragraph is one string with one place to
+ * change; the test file holds a hand-typed, independent transcript of it (see its own doc) so
+ * that changing this wording forces a deliberate edit there too.
+ */
+const ATTESTED_NOTE =
+  'These emissions figures are your own attested claim, transcribed exactly as entered. '
+  + 'This tool has not confirmed them — it has no way to check the verification behind them, '
+  + 'and nothing on this card has been checked against your verification report.';
+
+/**
+ * The same sentence for a line only HALF of which is the importer's claim — a separate paragraph,
+ * not ATTESTED_NOTE with a qualifier bolted on.
+ *
+ * WHY NOT ATTESTED_NOTE. It opens "These emissions figures are your own attested claim", and on a
+ * 'verified-direct+default-indirect' line that is half false in the expensive direction: the
+ * electricity component is the Commission's own published default value with the punitive mark-up
+ * on it, a figure the importer never saw and no verifier ever signed. Printing ATTESTED_NOTE there
+ * claims provenance for a number that has none of it, on the card whose entire job is saying whose
+ * claim the figures are.
+ *
+ * WHY NOT SILENCE EITHER, which is what a narrower gate would have produced. The direct half IS
+ * attested, and it is priced without the mark-up — the materially lower, unchecked figure that
+ * ATTESTED_NOTE's own docblock exists to keep from appearing bare. Suppressing the paragraph would
+ * discard true provenance to avoid over-stating it, and leave the mark-up-free half looking as
+ * Commission-backed as every other row.
+ *
+ * So it states both halves and both directions, and it scopes the reference: the reference line
+ * that follows covers the direct figure, and saying so is the difference between transcribing a
+ * verifier's certificate and appearing to extend it over the Commission's value. Written to be
+ * true whether or not a reference was actually cited — "any verifier's reference cited here" makes
+ * no claim that one exists. Hand-typed independently in cbam-render.test.mjs, per the
+ * anti-paraphrase convention that file's constants block documents.
+ */
+const MIXED_NOTE =
+  'Only the direct emissions figure on this line is your own attested claim, transcribed exactly '
+  + 'as entered — this tool has not confirmed it, and has no way to check the verification behind '
+  + 'it. The electricity component is not attested at all: it is the Commission\'s published '
+  + 'default value, it carries the mark-up, and any verifier\'s reference cited here covers the '
+  + 'direct figure alone.';
+
+/**
+ * The same line when the engine produced NO figure for it — a third paragraph, because the one
+ * above is a claim about the OUTPUT and this card has none.
+ *
+ * WHY NOT MIXED_NOTE. Its second sentence states that "the electricity component ... is the
+ * Commission's published default value, it carries the mark-up". That is an assertion about a
+ * number ON THIS CARD, and a refused card has no electricity component, no figure of any kind —
+ * renderResult's 'unavailable' branch calls neither figure() nor renderWaterfall(). The sentence
+ * points at nothing and charges a mark-up on it. Reachable at an ordinary 2026 date, not only in
+ * an out-of-range year: KR grey clinker on the "single route" option finds a route-independent
+ * electricity default (so the substitution fires and the tier is stamped mixed) and then finds no
+ * column-B benchmark for that route, refusing INSIDE estimateCertificates — after the tier was
+ * decided. Measured at 5,542 selectors.
+ *
+ * WHY NOT ATTESTED_NOTE, which is the tempting swap since the refused FULLY-VERIFIED card keeps
+ * it. That note is a claim about the INPUT — "These emissions figures are your own attested
+ * claim" — and its truth genuinely does not depend on whether the line priced, which is why that
+ * card is pinned as wanted. But on a MIXED line it is still half false in the expensive
+ * direction, priced or not: the importer attested the direct figure and left electricity
+ * unattested, so "these figures" claims provenance over a half they never supplied.
+ *
+ * WHY NOT SILENCE, for the third time in this file: an attested claim with no attestation beside
+ * it is the one state renderAttestation exists to prevent, and a refusal does not un-make the
+ * claim the importer made.
+ *
+ * SO IT SAYS ONLY WHAT IS TRUE OF A CARD WITH NO FIGURE. It claims the direct figure as the
+ * importer's own and stops; it names no electricity component, because none is shown; and its
+ * closing clause is the precise negation of what MIXED_NOTE would have asserted — nothing here
+ * rests on the attested claim OR on a Commission value, because nothing here was priced at all.
+ * It also drops MIXED_NOTE's "transcribed exactly as entered": on a card that prints no figure
+ * there is no transcription to point at. The reference clause goes too — "covers the direct
+ * figure alone" would gesture at a second half this card does not show. The `Ref:` still prints,
+ * and with only the direct figure named there is nothing else it could be read as covering.
+ *
+ * Hand-typed independently in cbam-render.test.mjs, per the same anti-paraphrase convention.
+ */
+const REFUSED_MIXED_NOTE =
+  'Only the direct emissions figure on this line is your own attested claim, and this tool has '
+  + 'not confirmed it — it has no way to check the verification behind it. No figure was produced '
+  + 'for this line, so nothing shown here rests on that claim, or on any Commission value.';
+
+/**
+ * Did the engine produce a figure for this line?
+ *
+ * ONE spelling, TWO call sites, for isAttested's reason and not merely to save a comparison: the
+ * question is asked at renderLineCard and at run()'s live preview, and the live preview is the
+ * surface that shipped without an attestation when the verified tier landed and without the mixed
+ * paragraph when the mixed tier did. Two hand-written comparisons is how that happens a third
+ * time. cbam-render.test.mjs pins BOTH call sites by source text, which is the only pin the
+ * preview can have (it is a closure inside initCbam(), reachable only through
+ * document.getElementById, and the unit suite has no DOM).
+ *
+ * 'unavailable' IS THE WHOLE TEST, and the two adjacent spellings in this file are deliberately
+ * different questions. deltaSentence asks whether a COST exists (`tableFigures(e).costEur`),
+ * which is stricter: a line whose quarter has no published certificate price still shows
+ * certificates and its electricity term, and MIXED_NOTE is true of it. safeEstimates asks the
+ * same question as this one but about the COMPARISON rather than the line. Only 'unavailable'
+ * renders no figure at all — NON-NEGOTIABLE 2, and the reason this predicate is the right gate
+ * for a sentence that describes what is on the card.
+ */
+const hasFigure = (e: CertificateEstimate): boolean => e.status !== 'unavailable';
+
+/**
+ * The reference is TRANSCRIBED, NEVER CHECKED — the same contract csvRows' verified_reference
+ * column states, and it is free text the user typed, so it is escaped like every other user
+ * string that reaches innerHTML in this file. Rendered only when one was actually cited: an
+ * empty `Ref:` label reads as a reference that failed to load rather than one never given.
+ */
+/**
+ * SELF-GATING, and takes the narrowest shape it needs rather than a whole `Line` — because it has
+ * TWO callers with different data. The line card has a `Line`; the live preview (run()) has only
+ * parseVerifiedFields' `{ tier, seeDirect?, … }`, which is not yet a line and never will be if the
+ * visitor does not click Add.
+ *
+ * The gate lives IN here for the same reason: the preview was shipped without this sentence, and a
+ * verified figure with no attestation beside it is the one state ATTESTED_NOTE exists to prevent —
+ * a mark-up-free, materially LOWER liability whose only provenance is a stamp row reading "Verified
+ * actual", which reads as though the tool validated something. A caller that forgets an external
+ * `if` reintroduces exactly that. Now it cannot: pass anything, and the tier decides.
+ *
+ * THREE-WAY, AND SWITCHED WITH A `never` DEFAULT — tierLabel's idiom, adopted here for tierLabel's
+ * reason. Written as `if (tier !== 'actual-verified') return ''` this function answered a FOURTH
+ * tier by rendering nothing, silently: an attested figure with no attestation beside it, which is
+ * precisely the state described above, arriving through the one edit nobody would review as
+ * risky. Now a tier this function has no wording for is a build error instead. The two
+ * verified-bearing tiers get DIFFERENT paragraphs, not one paragraph and a footnote — see
+ * MIXED_NOTE for why neither ATTESTED_NOTE nor silence is honest on a half-attested line.
+ *
+ * PICKED BY (TIER, PRICED), because ONE OF THE TWO NOTES IS ABOUT THE OUTPUT. The tier alone
+ * cannot tell a priced mixed card from a refused one, and a refusal keeps its mixed stamp (see
+ * stampedTierOf, which measures how often: 5,542 selectors). Handed only a tier, this function
+ * printed MIXED_NOTE — "the electricity component ... carries the mark-up" — over a card showing
+ * no electricity component and no figure of any kind. `priced` closes that, and it is the whole
+ * of the second parameter: which paragraph, never whether one prints.
+ *
+ * IT IS A SEPARATE ARGUMENT, not a field of the first, because the two are facts about different
+ * things. The object is the LINE as claimed — the tier the importer selected and the reference
+ * they typed, which the card reads off `line` and the preview off `e.stamp` and the form. Whether
+ * a figure came out is a fact about the ESTIMATE. Folding them into one bag would invite a caller
+ * to compute the boolean from the line, which is exactly the mistake: the line cannot know.
+ *
+ * AND IT IS CHECKED AT RUNTIME, because `priced: boolean` is a promise only the compiler keeps and
+ * this function is exported. A JS caller with one argument got `undefined` — falsy — and therefore
+ * the refused wording over a priced line: a silent, UNDER-claiming failure, which is the direction
+ * that reads as caution and so never gets reported. See the guard's own comment below for why it
+ * sits ahead of the switch rather than inside the single arm that reads the flag.
+ *
+ * BOTH CALLERS PASS hasFigure(e), and both genuinely hold `e` — renderLineCard takes it as its
+ * second parameter, and run() has it in hand from the call whose result it is about to render.
+ * Neither passes a literal. The tier arms differ on `priced` only where the wording does: the
+ * 'actual-verified' arm ignores it deliberately, since ATTESTED_NOTE is a claim about the INPUT
+ * (see REFUSED_MIXED_NOTE for the distinction that decides this whole function), and the refused
+ * fully-verified card keeps it verbatim — pinned as wanted in cbam-render.test.mjs.
+ */
+export function renderAttestation(
+  line: { tier: Line['tier']; verifiedRef?: string },
+  /**
+   * Did the engine produce a figure for this line? Pass `hasFigure(e)`, never a literal — see
+   * that predicate for why 'unavailable' is the test and why deltaSentence's adjacent
+   * `costEur` check is a different question. Not optional, and the guard below enforces that at
+   * runtime as well as in the type: there is no safe default for this question.
+   */
+  priced: boolean,
+): string {
+  // REQUIRED IN TYPESCRIPT IS NOT REQUIRED — this function is exported, and a JavaScript caller
+  // (the unit suite is one) reaches it with no compiler in the way. Omit the argument and `priced`
+  // is `undefined`, which is falsy, which picked REFUSED_MIXED_NOTE: "No figure was produced for
+  // this line", printed over a line that produced one. Silent, and UNDER-claiming — the direction
+  // that reads as caution rather than as a bug, so nobody reports it. Truthy junk ('yes', 1, {})
+  // took the other arm and asserted a mark-up on an electricity component a refused card has none
+  // of, which is the over-claiming half of the same hole.
+  //
+  // TESTED BEFORE THE SWITCH, not inside the one arm that reads it. 'default+markup' returns ''
+  // and 'actual-verified' ignores `priced` deliberately, so a lazier check would let a broken
+  // caller work on two tiers out of three and fail only when a mixed line reached it — in
+  // production, on the surface with the largest audience. The contract is the same on every tier:
+  // a caller that cannot say whether the line priced is a caller that must not be rendering this
+  // paragraph at all. Matches buildPrintDocument's idiom below — name the violation loudly rather
+  // than let a falsy default answer a question nobody asked.
+  if (typeof priced !== 'boolean') {
+    throw new Error(
+      `renderAttestation: \`priced\` must be a boolean, got ${typeof priced} — pass the estimate `
+      + 'through the hasFigure predicate, the one spelling both call sites use. (Written without '
+      + 'its parentheses on purpose: cbam-render.test.mjs counts that call to prove there are '
+      + 'exactly two callers, and a mention in a string would read as a third.) Omitted, `priced` '
+      + 'is undefined, which is falsy, which renders "No figure was produced for this line" over '
+      + 'a line that has one.',
+    );
+  }
+  let note: string;
+  switch (line.tier) {
+    // Nothing was attested, so there is no claim to disclose and no reference that could belong
+    // beside one. Returns before the reference is even read, which is what stops a stray
+    // verifiedRef printing under a Commission-priced figure.
+    case 'default+markup': return '';
+    case 'actual-verified': note = ATTESTED_NOTE; break;
+    case 'verified-direct+default-indirect':
+      note = priced ? MIXED_NOTE : REFUSED_MIXED_NOTE; break;
+    default: {
+      const _exhaustive: never = line.tier;
+      return _exhaustive;
+    }
+  }
+  const ref = line.verifiedRef ? ` Ref: ${esc(line.verifiedRef)}` : '';
+  return `
+    <p class="cb-sub cb-attested">${note}${ref}</p>`;
+}
+
+/**
+ * Does this line carry a figure the importer attested?
+ *
+ * ONE spelling, FIVE call sites — renderLineCard's delta gate, tierCell's verifier reference,
+ * buildPrintDocument's §4 caveat, verifiedInputOf's engine hand-off, and defaultPathComparison.
+ * Written out by hand at each of them, the pair was missed three times while the third tier
+ * landed — two sites, then six, then seven, the last being run()'s live preview. It was missed a
+ * FOURTH time by the brief that ordered this extraction, which inventoried four sites and did not
+ * see defaultPathComparison. A predicate makes the next tier addition structural instead of a
+ * sweep, which is the only thing that has ever stopped this miscount.
+ *
+ * defaultPathComparison is also the one site NO test covers: it is a closure inside initCbam(),
+ * reachable only through document.getElementById, and the unit suite has no DOM. Narrowing it
+ * alone was measured to kill zero of the 410 tests. Sharing this predicate is therefore the only
+ * guarantee that site has, and the reason it must never be re-spelled by hand.
+ *
+ * NOT used by renderAttestation, deliberately: its `switch` with a `never` default is a
+ * COMPILE-TIME guarantee that a fourth tier must be handled, and it is the site that already
+ * caught exactly that bug by construction. Trading it for a boolean would be a downgrade.
+ *
+ * NOT used by parseVerifiedFields or syncVerifiedRows either, and they are not candidates: both
+ * read the <select>'s value — a string, never a Line. Neither holds a pack, so neither can know
+ * whether the indirect fallback fired, and the fallback firing is precisely what the third tier
+ * MEANS. Guessing there would label a steel line mixed and make csvRows throw.
+ */
+const isAttested = (
+  tier: Line['tier'],
+): tier is 'actual-verified' | 'verified-direct+default-indirect' =>
+  tier === 'actual-verified' || tier === 'verified-direct+default-indirect';
+
+/**
+ * What the verified choice was worth, in euros, against the same line priced from the
+ * Commission's published defaults — and, when there is no honest comparison to draw, the reason
+ * there isn't one instead of a silence a reader would fill in as "zero".
+ *
+ * NEVER ONE-DIRECTIONAL. The mark-up carries FOUR bands, not the 10–30% this comment used to
+ * claim: counted over the shipped pack's 41,100 default factors, 1% applies to 14,496 rows and
+ * 10/20/30% to 8,868 each. So a marked-up default is usually — but not always, and on the 1%
+ * band barely — the dearer of the two; a
+ * genuinely dirty producer with audited data can and does exceed the marked-up default (the
+ * break-even for the spec's worked line is exactly 2.904 tCO2e/t). A card that only ever said
+ * "saves" would be an advertisement for the verified tier, not an estimate of a tax.
+ *
+ * THE STATES, and why each is its own sentence rather than one collapsed "no comparison":
+ *   - the LINE ITSELF carries no cost (a refusal, or a good with no published certificate
+ *     price). NON-NEGOTIABLE 2 outranks the delta here: the default path may well have priced
+ *     fine, and printing its euro figure beside a refusal would put a confident number on the
+ *     one card whose entire point is that it has none. Nothing to subtract from, so nothing is
+ *     shown but the reason.
+ *   - `undefined` — no comparison was COMPUTED (a default-tier line owes none; a caller that
+ *     forgot to thread one is the other way to get here). Deliberately NOT folded into the
+ *     `null` sentence below: "the Commission publishes no default" is a claim about the
+ *     Commission's corpus, and a caller's omission is no evidence for it. A future call site
+ *     that forgets the argument must degrade to "we did not look", never to a fabricated gap.
+ *   - `null`, or a comparison carrying no cost — the default path could not price this line.
+ *     Since the line itself DID price (checked first, above), the free-allocation benchmark
+ *     resolved, so the only thing the default path can be missing is the published default
+ *     value: the sentence names exactly that. The one imprecision, named rather than papered
+ *     over: safeEstimates also folds a THROWN default-path call into `null`, and a throw is not
+ *     a publication gap. It is treated as one here because a thrown estimate has never been
+ *     observed (zero across the 2,870-pair coverage sweep) and a third sentence for it would
+ *     add a branch no user has reached to a card that is already four states deep.
+ *
+ * BOTH SIDES ARE CSCF WHAT-IFS in every year the Commission has not published the factor for —
+ * which is ~94% of real answers. A difference between two what-ifs is a what-if, exactly as
+ * Totals.anyPending labels a sum containing one (cbam-lines.ts), so the qualifier travels with
+ * the sentence rather than being left to the card above it.
+ */
+function deltaSentence(e: CertificateEstimate, comparison: CertificateEstimate | null | undefined): string {
+  const mine = tableFigures(e).costEur;
+  if (mine === null || mine.trim() === '') {
+    return 'This line has no priced figure of its own, so there is nothing to compare a '
+      + 'Commission default against.';
+  }
+  if (comparison === undefined) {
+    return 'No Commission-default comparison was computed for this line, so none is shown. '
+      + 'That is not a statement about what the Commission publishes.';
+  }
+  const theirs = comparison === null ? null : tableFigures(comparison).costEur;
+  if (theirs === null || theirs.trim() === '') {
+    return 'The Commission publishes no default value for this good, origin and route, so there '
+      + 'is nothing to compare your verified figures against.';
+  }
+  // Decimal, not Number: these are money strings the engine already rounded to 2dp, and a
+  // float subtraction of two such values reintroduces the cent-level noise (12420.84 - 7944.45
+  // is 4476.390000000001 in binary floating point) that every other figure on this page is
+  // Decimal-precise specifically to avoid. ROUND_HALF_UP is pinned for the same reason
+  // sumTotals pins it: exact at 2dp by construction today, and not dependent on which module
+  // last configured decimal.js globally.
+  const diff = new Decimal(theirs).minus(mine);
+  const pending = e.status === 'cscf_pending'
+    || (comparison !== null && comparison.status === 'cscf_pending');
+  const whatIf = pending
+    ? ' Both figures are what-ifs at the assumed CSCF, so the difference between them is one too.'
+    : '';
+  const head = `The Commission default would give ${eur(theirs)}`;
+  if (diff.isZero()) {
+    // "saves €0.00" would be a saving that does not exist; the honest reading of an identical
+    // pair is that the attested data changed nothing about this line's liability.
+    return `${head} — the same figure your verified data gives, so this claim changes nothing `
+      + `on this line.${whatIf}`;
+  }
+  const amount = eur(diff.abs().toFixed(2, Decimal.ROUND_HALF_UP));
+  return diff.gt(0)
+    ? `${head} — your verified data saves ${amount}.${whatIf}`
+    : `${head} — your verified data adds ${amount} to what the default would cost.${whatIf}`;
+}
+
+/** The delta block. Heading is deliberately NEUTRAL ("against", not "your saving"): the block
+ *  renders in both directions and must not promise one before the arithmetic has run. */
+function renderVerifiedDelta(
+  e: CertificateEstimate, comparison: CertificateEstimate | null | undefined,
+): string {
+  return `
+    <div class="cb-delta">
+      <span class="cb-delta-h">Against the Commission default</span>
+      <p class="cb-sub">${deltaSentence(e, comparison)}</p>
+    </div>`;
+}
+
 /** A line's header plus the ordinary result card, with a remove control. */
-export function renderLineCard(line: Line, e: CertificateEstimate, index: number): string {
+export function renderLineCard(
+  line: Line, e: CertificateEstimate, index: number,
+  /**
+   * The SAME line through the Commission-default path — the comparison a verified line earns by
+   * having data. `null` means a comparison was computed and there is none to show (no published
+   * default); `undefined` means none was owed or none was computed. The two render DIFFERENT
+   * sentences (see deltaSentence): only one of them is a claim about the Commission's corpus.
+   */
+  comparison?: CertificateEstimate | null,
+): string {
+  // GATED ON THE LINE'S TIER, NOT ON THE ARGUMENT. A default-tier line IS the Commission
+  // default: it has nothing to attest and nothing to compare itself against, and would render a
+  // self-referential "saves €0.00" if a caller handed it its own estimate as the comparison.
+  //
+  // BOTH VERIFIED-BEARING TIERS EARN THE DELTA, and a mixed line earns it for the same reason a
+  // fully verified one does: it has attested data, and the block measures what that data was
+  // worth. The subtraction stays like-for-like — both sides take the same indirect lookup, the
+  // same mark-up and the same mass, so the electricity term is identical on each and cancels,
+  // leaving exactly what the DIRECT attestation changed. MOVES WITH renderAttestation ABOVE, never
+  // before it: widening this gate alone would print "your verified data saves €X" beside no
+  // attestation at all, which is the delta advertising an unchecked figure with nothing saying it
+  // is unchecked. defaultPathComparison decides with the SAME predicate — no longer a matching
+  // pair two readers must keep in step, but one spelling both read; see isAttested.
+  const verified = isAttested(line.tier);
   return `
     <article class="cb-line" data-line="${esc(line.id)}">
       <div class="cb-line-head">
@@ -440,6 +992,8 @@ export function renderLineCard(line: Line, e: CertificateEstimate, index: number
         <button type="button" class="cb-line-x" data-remove="${esc(line.id)}" aria-label="Remove line ${index + 1}">Remove</button>
       </div>
       ${renderResult(e)}
+      ${renderAttestation(line, hasFigure(e))}
+      ${verified ? renderVerifiedDelta(e, comparison) : ''}
     </article>`;
 }
 
@@ -500,6 +1054,63 @@ export interface LineEstimateFailure {
 }
 
 /**
+ * The §1 "Data tier" cell: which corpus priced this row, and — when the importer cited one — the
+ * verifier reference they gave for it. Without this, a row whose figures skip the mark-up sits in
+ * the same table as the Commission-priced rows with nothing distinguishing it, and the reference
+ * appears nowhere in the document at all (the CSV has a column for it; the paper artefact had
+ * none).
+ *
+ * READ OFF THE LINE, NOT THE ESTIMATE'S STAMP, for the reason csvRows' own data_tier column gives:
+ * this states the claim AS SUBMITTED, which is also what lineFingerprint hashes (position 6), so
+ * the column and any digest printed beside it come from one place. It is also the only source that
+ * exists on the LineEstimateFailure branch, which has no estimate to read a stamp from — so both
+ * row branches can say the same thing in the same way.
+ *
+ * csvRows THROWS when a line's tier disagrees with the tier that priced it; this document
+ * deliberately does not add that throw, because a document that refuses to print is worse than the
+ * CSV refusing to export. AN EARLIER VERSION OF THIS COMMENT DEFENDED THAT DECISION BY CLAIMING THE
+ * CSV ALREADY CATCHES THE MISPAIRING FOR BOTH ARTEFACTS. IT DOES NOT, AND THE TWO EXPORTS ARE NOT
+ * BUILT ALIKE — review disproved both halves:
+ *
+ *   - onCsv calls `csvRows(ok.map((p) => p.l), ok.map((p) => p.e!), …)`. Both arrays are projected
+ *     from the SAME pair objects in the same order, so the CSV's pairing is self-consistent by
+ *     construction; its tier guard can never see a line paired with another line's estimate. That
+ *     guard still earns its place (it catches a line whose OWN estimate was computed at the other
+ *     tier), but it is not a net that spans the two exports.
+ *   - onDoc passes the live `lines` array as one half and `lastPairs.map(…)` as the other. THIS
+ *     DOCUMENT IS THE ONLY ARTEFACT THAT PAIRS ACROSS TWO ARRAYS, so it is the only place a
+ *     cross-array mispairing could arise, and nothing upstream would have caught it first.
+ *
+ * The decision stands anyway, because the mispairing is not reachable: `lines` is mutated in
+ * exactly two places (onAdd's push, onOutClick's remove splice), and each is followed synchronously
+ * by renderAll() — which reassigns `lastPairs` — with no `await` between the mutation and the
+ * render. So `lines` and `lastPairs` cannot be observed out of step by the time a user can click
+ * Export. What guards this document is that invariant plus buildPrintDocument's own LENGTH check
+ * below, not a throw living in the CSV.
+ *
+ * The reference is gated on the tier, not on its own truthiness — the same gate renderLineCard
+ * uses. parseVerifiedFields cannot attach a reference to a defaults-tier line, so this is
+ * belt-and-braces: a stray reference must never print beside "Commission default + mark-up", where
+ * it would read as a verifier having signed off the Commission's own value.
+ *
+ * TRANSCRIBED, NEVER CHECKED (§4 says so once, for the document as a whole, rather than repeating
+ * it on every row) — and free text the user typed, so escaped like every other such string here.
+ */
+function tierCell(l: Line): string {
+  const label = tierLabel(l.tier);
+  // BOTH VERIFIED-BEARING TIERS TRANSCRIBE THE REFERENCE. A mixed line's reference certifies its
+  // DIRECT figure, which is a real, mark-up-free half of the bill — so a gate naming only
+  // 'actual-verified' would delete the importer's own cited evidence from the one artefact built
+  // to be handed to an auditor, while the label in the same cell still says the direct figure was
+  // verified. That is a document asserting a verification and withholding its reference, which
+  // reads as no reference having been cited at all. The tier that scopes it is printed right
+  // beside it, and §4 states what the reference does and does not cover.
+  const attested = isAttested(l.tier);
+  const ref = attested && l.verifiedRef ? ` — ref ${esc(l.verifiedRef)}` : '';
+  return `${label}${ref}`;
+}
+
+/**
  * The printable audit document — §4 is the point of the whole file: what the figures above
  * CANNOT tell you, stated plainly rather than left for a reader to infer from a methodology PDF.
  *
@@ -528,14 +1139,36 @@ export function buildPrintDocument(input: {
     );
   }
 
+  /**
+   * Gates §4's fifth caveat. ON THE LINES AS ENTERED, not on which lines produced a figure: a
+   * verified line the engine REFUSED still prints its row, still carries the "Verified actual"
+   * mark and still transcribes the reference the importer cited, so the document still contains an
+   * unchecked claim and still owes the reader the caveat that says so. Gating on "was it priced"
+   * would make the caveat appear and disappear with the engine's verdict rather than with what the
+   * user actually submitted. The other direction is equally deliberate: a document with no
+   * verified line prints no such caveat, because a warning about attested data on a document
+   * containing none describes some other document.
+   *
+   * BOTH VERIFIED-BEARING TIERS TRIP IT. A document of only mixed lines contains attested figures
+   * priced without the mark-up and, via tierCell above, a transcribed verifier reference — every
+   * ingredient the caveat exists to disclose. Naming one tier here left such a document with an
+   * unchecked attested figure and nothing whatever saying it was unchecked. The caveat's WORDING
+   * had to move with this gate rather than after it: see §4 below for what it used to claim about
+   * the mark-up, and why that was only half true once this predicate admits a second tier.
+   */
+  const anyVerified = lines.some((l) => isAttested(l.tier));
+
   const lineRows = lines.map((l, i) => {
     const r = results[i]!;
     if ('failed' in r) {
-      // Same eight columns as the ordinary row below, so the table stays rectangular — only the
-      // certificates/cost/authority cells differ, carrying the reason instead of a figure.
+      // Same NINE columns as the ordinary row below, so the table stays rectangular — only the
+      // certificates/cost/authority cells differ, carrying the reason instead of a figure. The
+      // data tier is still printed here: it is read off the LINE (see tierCell), so it survives an
+      // estimate that never came back, and a verified line that threw is still a verified claim.
       return `<tr>
         <td>${esc(l.cn)}</td><td>${esc(l.country)}</td><td>${esc(l.route)}</td>
         <td>${num(l.massT)}</td><td>${esc(l.date)}</td>
+        <td class="cbp-loc">${tierCell(l)}</td>
         <td>no estimate (error)</td>
         <td>—</td>
         <td class="cbp-loc">${esc(r.message)}</td>
@@ -548,6 +1181,7 @@ export function buildPrintDocument(input: {
     return `<tr>
       <td>${esc(l.cn)}</td><td>${esc(l.country)}</td><td>${esc(l.route)}</td>
       <td>${num(l.massT)}</td><td>${esc(l.date)}</td>
+      <td class="cbp-loc">${tierCell(l)}</td>
       <td>${certs === null ? 'no estimate' : `${num(certs)}${pending ? ' (what-if)' : ''}`}</td>
       <td>${costEur ? eur(costEur) : '—'}</td>
       <td class="cbp-loc">${bm ? esc(bm.sourceLocator) : ('selector' in e && e.selector ? `missing: ${esc(e.selector)}` : '—')}</td>
@@ -564,7 +1198,7 @@ export function buildPrintDocument(input: {
 
     <h2>1 · What you asked</h2>
     <table><thead><tr><th>CN</th><th>Origin</th><th>Route</th><th>Mass t</th><th>Import date</th>
-      <th>Certificates</th><th>Cost</th><th>Benchmark authority</th></tr></thead>
+      <th>Data tier</th><th>Certificates</th><th>Cost</th><th>Benchmark authority</th></tr></thead>
       <tbody>${lineRows}</tbody></table>
 
     <h2>2 · What we computed</h2>
@@ -604,7 +1238,14 @@ export function buildPrintDocument(input: {
       <li>Any below-threshold verdict rests on the user's own statement of completeness, ticked
         in the tool. No one has verified that list.</li>
       <li>Line fingerprints cover inputs as entered; no source document exists behind them. They
-        are not customs provenance.</li>
+        are not customs provenance.</li>${anyVerified ? `
+      <li>Lines marked verified in §1 carry the user's own attested figures, which skip the
+        mark-up the Commission's default values carry. A line marked “Verified direct +
+        Commission indirect” is attested for its direct figure only: its electricity component is
+        the Commission's published default value, and that half does carry the mark-up. Those
+        attested figures are a claim, from a verification this tool has not seen and cannot confirm;
+        any reference cited beside them covers the attested figures alone and is transcribed as
+        entered, never checked.</li>` : ''}
     </ul>`;
 }
 
@@ -630,6 +1271,44 @@ export function buildPrintDocument(input: {
 export function nextRoute(published: readonly string[], previous: string): string {
   if (published.length === 1) return published[0]!;
   return published.includes(previous) ? previous : '';
+}
+
+/**
+ * What the route <select> says when it has nothing to offer — and the point is that there are
+ * TWO reasons for that, which it used to state as one.
+ *
+ * It said "no route published for this pairing" every time, and "this pairing" means the good and
+ * the origin: the branch directly above it says "Choose a good and origin first". The DATE is not
+ * part of any pairing, and it is the reason far more often than the sentence admitted. `routesFor`
+ * filters on the reporting year, so a year the corpus does not cover empties the list for EVERY
+ * selector — measured over the shipped pack's 574 goods x 120 origins:
+ *
+ *   2026, 2027, 2028 ... 22,194 of 68,880 pairings publish routes, 46,686 do not
+ *   any other year ..... 0 of 68,880, including all 22,194 that DO publish routes
+ *
+ * So inside a covered year the old sentence is right, and it is right often. Outside one it is
+ * wrong for every pairing the form can build, and wrong in the direction that costs the user
+ * their time: an importer who typed 2029 (or 2025, or — mid-keystroke, while retyping the year
+ * segment of an <input type="date"> — 0002) is told their GOOD AND ORIGIN have no published
+ * route, so they go and change the good and the origin, and nothing improves. The date is never
+ * mentioned.
+ *
+ * WHY THE CONTROL AND NOT THE PANEL. This is where the false statement is. #cbOut shows run()'s
+ * completeness prompt in this state — the route is '' — which names every field at once and
+ * asserts nothing untrue; it is unhelpful, not misleading. The route box is the thing making a
+ * claim about the user's good and origin that is false.
+ *
+ * THE YEAR IS PADDED BACK TO FOUR DIGITS because it is echoed at the user: `Number('0001')` is 1,
+ * and "no rules published for 1" does not match the 0001 their date field is showing them.
+ */
+export function noRouteReason(pack: EstimatorPack, year: number): string {
+  // ANY row for the year, not a row for this selector: the question is whether the corpus covers
+  // the year at all. Every year-keyed series in the pack (thresholds, prices) falls inside
+  // defaultFactors' own set of reporting years, so this is the widest year test available and no
+  // narrower one would answer differently.
+  return pack.defaultFactors.some((f) => f.reportingYear === year)
+    ? 'no route published for this pairing'
+    : `no rules published for ${String(year).padStart(4, '0')}`;
 }
 
 /**
@@ -676,6 +1355,287 @@ export function decorateSnapshot(e: CertificateEstimate, snapshotHash: string): 
   return e;
 }
 
+/**
+ * One verified per-tonne figure as the FORM should judge it, or null.
+ *
+ * DELIBERATELY LOOSER THAN THE ENGINE'S OWN GATE, and the looseness is the design. The
+ * authority on what may be priced is `verifiedPerT` in estimate-from-pack.ts — a vendored
+ * function this file cannot import (it is not exported) and must not copy, because a copied
+ * regex is a second rule that drifts from the first. That gate is stricter than this one: it
+ * refuses '0x10', '1_000', '5.' and '+5', all of which `Number()` happily reads. Those reach
+ * the engine and come back as a REFUSAL CARD naming the input — fail-closed, just one step
+ * later and in a different place on screen. What this catches is the ordinary case — prose, an
+ * empty field, Infinity — where an inline message beside the field beats a refused card.
+ *
+ * SIGNS PASS THROUGH ON PURPOSE. `Number('-1')` is perfectly finite, so a negative figure is
+ * NOT this function's refusal to make: it must reach the caller's own `< 0` test, which is what
+ * gives a negative its own specific message ("enter zero if the verified figure really is nil")
+ * rather than the generic "not a number".
+ *
+ * ZERO IS LEGAL. A 100%-scrap EAF producer genuinely attests a near-zero figure, and this is
+ * exactly the importer the verified tier exists to reward — a falsy check here would refuse the
+ * best-documented line on the form.
+ */
+function verifiedFigure(value: string): number | null {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** What the verified panel contributes to a draft Line, or the reason it cannot.
+ *  Pure on purpose: the form handler stays thin and THIS carries the tests.
+ *
+ *  OMITS, NEVER EMITS AN EMPTY STRING, for the two optional fields. estimate-from-pack.ts's
+ *  verified path tests `indirectTco2ePerT !== undefined` BEFORE it calls verifiedPerT, so an
+ *  ABSENT indirect figure skips the branch and the line prices normally, while `''` reaches the
+ *  shape gate, fails it, and refuses the WHOLE line as unavailable. lineFingerprint splits the
+ *  same two apart on purpose (`?? null`). A handler that wrote `seeIndirect: el.value`
+ *  unconditionally would turn every blank optional field into a refused line.
+ *
+ *  `ok` NAMES ITS FOUR FIELDS instead of being `Partial<Line> & { tier }`. Partial<Line> made
+ *  every other field of a Line type-legal here — `massT` included — and draftLine() spreads this
+ *  object LAST, after its own gated `massT: mass!.value`. A future line in this function setting
+ *  `ok.massT` would therefore have compiled and silently overridden the one field the whole mass
+ *  guard exists to control, on the path that then decides Art 2(3). Nothing sets it today, so
+ *  this makes it un-writable rather than merely unwritten. The four are exactly what the two
+ *  `return { ok }` statements below produce: `tier` on both branches, `seeDirect` on the verified
+ *  one, `seeIndirect`/`verifiedRef` when non-empty — and Pick keeps the last three optional,
+ *  as Line declares them. It does not encode "seeDirect is present iff tier is 'actual-verified'";
+ *  that correlation remains a Line-level invariant, exactly as it was. */
+export function parseVerifiedFields(v: {
+  tier: string; direct: string; indirect: string; attested: boolean; ref: string;
+}): { ok: Pick<Line, 'tier' | 'seeDirect' | 'seeIndirect' | 'verifiedRef'> } | { error: string } {
+  // Every other field is ignored on this branch, not merely unused: a user who filled the panel
+  // in and then changed their mind back to the Commission defaults must not have the abandoned
+  // figures ride along into the line. This branch is the ONLY thing keeping them out: the form
+  // deliberately does NOT clear the panel on a switch back to defaults (see syncVerifiedRows —
+  // clearing it would let one stray arrow-key `change` destroy the user's typing), so the inputs
+  // are still full of the abandoned claim every time this runs.
+  //
+  // TWO VALUES HERE, PERMANENTLY, EVEN THOUGH `Line['tier']` NOW HAS THREE. This function reads
+  // the user's SELECTION — `v.tier` is the raw #cbTier <select> value, a plain `string`, and the
+  // markup offers exactly two options. 'verified-direct+default-indirect' is not one of them and
+  // must never become one: whether it applies depends on the emissions scope, on whether the
+  // Commission publishes an indirect default for that specific good/origin/route/year, and on
+  // the importer leaving the indirect field blank. This function holds no pack and no good, so
+  // it cannot know. If it guessed, a steel line — where the Commission publishes no indirect
+  // default at all, so the engine correctly stamps 'actual-verified' — would be labelled mixed,
+  // and csvRows' guard would throw at export. That is the second copy of one rule the whole
+  // read-back-from-the-stamp design exists to avoid: the tier this produces is INPUT, and
+  // draftLine overwrites it with what the engine actually stamped.
+  //
+  // The return type cannot enforce that (Pick<Line, 'tier'> is now the full three-value union),
+  // so this comment is the guard. Do not add a third branch here.
+  if (v.tier !== 'actual-verified') return { ok: { tier: 'default+markup' } };
+
+  // Trim before every test below. `Number('   ')` is 0, so an untrimmed whitespace-only field
+  // would pass the "is it a number" check as a confident, attested zero nobody typed.
+  const direct = v.direct.trim();
+  const indirect = v.indirect.trim();
+  const ref = v.ref.trim();
+
+  if (!direct) {
+    return { error: 'Enter your verified direct emissions in tCO₂e per tonne of good, '
+      + 'or switch this line back to the Commission defaults.' };
+  }
+  const d = verifiedFigure(direct);
+  if (d === null) {
+    return { error: `Verified direct emissions must be a number of tCO₂e per tonne — `
+      + `“${direct}” is not one.` };
+  }
+  if (d < 0) {
+    return { error: 'Verified direct emissions cannot be negative — enter zero if the '
+      + 'verified figure really is nil.' };
+  }
+
+  if (indirect) {
+    const i = verifiedFigure(indirect);
+    if (i === null) {
+      return { error: `Verified indirect emissions must be a number of tCO₂e per tonne — `
+        + `“${indirect}” is not one. Leave the field empty if you are not claiming one.` };
+    }
+    if (i < 0) {
+      return { error: 'Verified indirect emissions cannot be negative — enter zero, or leave '
+        + 'the field empty if you are not claiming one.' };
+    }
+  }
+
+  // Checked LAST, after the figures, so the message a user sees is about the field they are
+  // still filling in rather than a tick they have not reached yet.
+  if (!v.attested) {
+    return { error: 'Tick the attestation — it is what puts this claim, and any reference you '
+      + 'cite for it, into the export. This tool transcribes the claim; it cannot check it.' };
+  }
+
+  // ANNOTATED WITH THE SAME NARROW TYPE the signature returns, not merely assigned to it.
+  // Measured while proving this change: with the return type already narrowed but this local
+  // left as `Partial<Line> & { tier }`, a `massT: '999'` added here compiled with NO error at
+  // all — TypeScript's excess-property check fires on the fresh literal, and a wider local's
+  // extra property is then structurally assignable to the narrower return type. Both sites
+  // carry the narrow type or neither guarantee holds.
+  const ok: Pick<Line, 'tier' | 'seeDirect' | 'seeIndirect' | 'verifiedRef'> = {
+    tier: 'actual-verified',
+    // The string AS ENTERED (trimmed), never the parsed number re-stringified: `Number('2.50')`
+    // round-trips to '2.5', and lineFingerprint hashes this value — an audit trail must pin what
+    // the importer typed, not this file's idea of the same quantity.
+    seeDirect: direct,
+  };
+  if (indirect) ok.seeIndirect = indirect;
+  if (ref) ok.verifiedRef = ref;
+  return { ok };
+}
+
+/**
+ * The `verified` input a line's TIER implies — derived from `l.tier`, never from whether the
+ * figures happen to look truthy.
+ *
+ * WHY THAT DISTINCTION IS LOAD-BEARING: if a line says 'actual-verified' but no `verified`
+ * object reaches estimateFromPack, the engine takes the defaults path and stamps
+ * `tier: 'default+markup'`. csvRows' guard then THROWS at export time — killing the entire
+ * file over one line — instead of the user seeing a refusal on that line's card. So a verified
+ * tier ALWAYS produces an object, even a hopeless one (`directTco2ePerT: ''`, which the engine's
+ * own verifiedPerT refuses by name). The refusal belongs to the engine; this function's only
+ * job is making sure the engine is the one asked.
+ *
+ * TWO VERIFIED-BEARING TIERS NOW, AND THE TEST MUST NAME BOTH. 'verified-direct+default-indirect'
+ * is a line whose importer attested their direct figure and left electricity to the Commission's
+ * published default — so it HAS an attested figure, and the engine must be handed it. Omit the
+ * second value and that line takes the defaults path, gets stamped 'default+markup', and hits
+ * the export-time throw described in the paragraph above — the whole CSV lost over one line,
+ * and its direct half silently re-priced with a mark-up its importer had earned the removal of.
+ *
+ * WHY THIS IS STILL AN `if` ON THE TIER, and not `if (l.seeDirect !== undefined)` or a truthiness
+ * test on the figures: see the paragraph above — deriving the input from what the figures LOOK
+ * like is the exact mistake that ends in the throw, because a verified line whose figure is
+ * missing or unreadable would then quietly become a defaults line instead of a refusal the user
+ * can see on the card. The predicate has to be the tier, and now the tier has two admissible
+ * values — which is why the two live in isAttested rather than here. DO NOT "simplify" that back
+ * to a single comparison, there or here: the compiler cannot help you — a narrower comparison
+ * against a wider union type checks perfectly clean, and the only thing that fails is the export,
+ * at the moment a user clicks it. cbam-render.test.mjs pins both values through this function.
+ */
+export function verifiedInputOf(
+  l: Pick<Line, 'tier' | 'seeDirect' | 'seeIndirect'>,
+): EstimatorInput['verified'] {
+  if (!isAttested(l.tier)) {
+    return undefined;
+  }
+  return {
+    directTco2ePerT: l.seeDirect ?? '',
+    // Spread, not `indirectTco2ePerT: l.seeIndirect` — see parseVerifiedFields' own note: the
+    // engine branches on `!== undefined`, so a present-but-undefined key is NOT the same as an
+    // absent one to a reader, and writing it explicitly invites someone to "simplify" it into
+    // an empty string later.
+    ...(l.seeIndirect !== undefined ? { indirectTco2ePerT: l.seeIndirect } : {}),
+  };
+}
+
+/**
+ * THE ONE construction of an `EstimatorInput` from a `Line` — the input half of what
+ * `decorateSnapshot` is for the output half, and for the same reason.
+ *
+ * WHY THIS IS NOT TWO LITERALS. `estimateLine` prices the line at its own tier; the delta on a
+ * verified card is that figure subtracted from `defaultPathComparison`'s, which prices THE SAME
+ * LINE with `verified` omitted. "The same line" is the entire meaning of that subtraction, and
+ * two hand-written object literals had nothing enforcing it: wire a future engine field (a
+ * precursor list, a carbon-price credit, a route qualifier) into `estimateLine` alone and the
+ * comparison quietly prices a DIFFERENT line, while the card states "your verified data saves €X"
+ * for the gap between two figures that are not comparable. Nothing would have gone red — the
+ * tests built their inputs by hand too, so they held a third copy of the same construction. One
+ * builder, two callers, and every future field lands on both paths by construction.
+ *
+ * `verified` IS THE PARAMETER, and the only one: it is the single thing the two paths are allowed
+ * to differ in. Passing it explicitly as `undefined` on the default path is equivalent to leaving
+ * the key out — estimate-from-pack.ts branches on `if (input.verified)`, a truthiness test — so
+ * this keeps one object shape without changing which path the engine takes.
+ *
+ * Exported for the drift test in tests/unit/cbam-render: `estimateLine` and
+ * `defaultPathComparison` are closures inside `initCbam` and cannot be reached without a DOM, so
+ * the builder they share is where that property is checkable at all.
+ */
+export function inputFor(l: Line, verified: EstimatorInput['verified']): EstimatorInput {
+  return {
+    cn: l.cn, country: l.country, route: l.route,
+    massT: l.massT, date: l.date, emissionsScope: l.scope,
+    verified,
+  };
+}
+
+/**
+ * The tier a drafted line actually carries: the one the ENGINE stamped, never the one the form
+ * selected. THE mechanism of the mixed tier, and the reason `Line.tier` is derived rather than
+ * chosen (see its doc in cbam-lines.ts).
+ *
+ * WHY IT IS READ BACK RATHER THAN DERIVED HERE. #cbTier offers two options and
+ * parseVerifiedFields emits two values, so a line whose importer attests their direct figure and
+ * leaves electricity alone is SELECTED as 'actual-verified' and PRICED as
+ * 'verified-direct+default-indirect'. Whether that substitution happened depends on the emissions
+ * scope, on whether the Commission publishes an indirect default for that exact
+ * good/origin/route/year, and on the field having been left blank. parseVerifiedFields holds no
+ * pack and can know none of it (see its own doc), and a second copy of the rule written here would
+ * be a second thing to drift: guess "mixed" for an iron & steel line — where the Commission
+ * publishes no indirect default at all, so the engine correctly stamps 'actual-verified' — and
+ * csvRows' equality guard throws at export, killing the whole file over one line. One copy of the
+ * rule, and it lives in the engine that applies it.
+ *
+ * TAKES THE PRICER AS AN ARGUMENT rather than reading `pack` from a closure, for the same reason
+ * inputFor is exported: draftLine and estimateLine are closures inside initCbam and cannot be
+ * reached without a DOM, so this is the only place the rule is checkable at all — including its
+ * throw arm, which a test can reach only by supplying a pricer that throws.
+ *
+ * A THROW IS NOT A VERDICT ABOUT THE TIER. estimateFromPack can throw a DomainError (safeEstimates
+ * catches it one level up and renders that line's figure-less fallback card), and a line nothing
+ * could price says nothing about which corpus would have priced it — so the claimed tier stands,
+ * which is also what buildPrintDocument prints for such a row off the LINE. Catching here keeps
+ * the throw out of onAdd, whose try/finally exists only to re-enable the button: an error escaping
+ * there would leave the click doing nothing visible at all.
+ *
+ * A REFUSAL IS NOT A THROW and is deliberately not special-cased: it comes back as a real estimate
+ * carrying a real stamp, so its tier is read like any other. This comment used to add that the
+ * engine stamps EVERY verified-path refusal 'actual-verified', reasoning that nothing was priced
+ * so no default stood in for anything. That is false. Swept over every (good, origin, route, year)
+ * the form can offer — 66,675 selectors, one date per year, direct figure attested and electricity
+ * left blank — 5,542 verified-path refusals come back stamped 'verified-direct+default-indirect'.
+ *
+ * THE TIER RECORDS WHAT THE ENGINE ATTEMPTED TO PRICE THE LINE AT, not whether it succeeded. On
+ * those 5,542 the substitution really did happen: the Commission's marked-up electricity default
+ * was looked up and applied, and it is the LATER lookup that failed. So the tier is decided by
+ * WHERE the refusal is raised, and not by which table the selector names:
+ *
+ *   - Raised in estimateFromPack's own code → always 'actual-verified', because each of those
+ *     four sites passes a stamp whose tier is fixed ahead of the electricity fallback:
+ *     `verifiedStamp` for the unreadable direct figure (`verified/…/directTco2ePerT`), the
+ *     unreadable attested indirect one (`verified/…/indirectTco2ePerT`) and the indirect
+ *     route-mismatch (`indirect/`); the mass gate's own ternary for `mass/`. Three of the four
+ *     cannot coexist with a substitution at all — mass and direct refuse before the fallback, and
+ *     the attested-indirect gate only runs when the importer DID supply a figure, which is the
+ *     branch the fallback is the `else` of. The fourth, the route-mismatch, IS the fallback
+ *     declining to substitute.
+ *   - Raised inside estimateCertificates' own catch → carries whatever `tier` estimateFromPack
+ *     had already computed, so it is the mixed value whenever the fallback priced. Measured over
+ *     the same sweep: 5,536 on `certificate-price/` and 6 on `benchmark/`. `quarter/` stamps it
+ *     too, though only a hand-built date reaches that one — <input type="date"> cannot emit
+ *     month 13.
+ *
+ * SO IT IS NOT A 2027-ONLY CURIOSITY, and a reader who assumes "mixed refusal ⇒ missing price"
+ * will be wrong on the shipped pack. The six `benchmark/` cases are grey clinker and grey
+ * hydraulic cements (25231000, 25239000) from KR — the only origin publishing either on the
+ * route-independent route, which the form offers as "single route". The Commission publishes a route-independent
+ * electricity default there, so the fallback fires; the Annex publishes column-B cement benchmarks
+ * for routes (A) and (B) only, so the benchmark lookup then finds nothing. An ordinary 2026 date
+ * reaches it.
+ *
+ * The old sentence's CONCLUSION survives, for a different reason than it gave: §4's caveat
+ * (`anyVerified` in buildPrintDocument) and the card's attestation (renderAttestation) both gate
+ * on BOTH verified-bearing tiers, so a refused verified line keeps them either way.
+ */
+export function stampedTierOf(l: Line, price: (line: Line) => CertificateEstimate): Line['tier'] {
+  try {
+    return price(l).stamp.tier;
+  } catch {
+    return l.tier;
+  }
+}
+
 /* ── wiring ────────────────────────────────────────────────────────────────── */
 export function initCbam(): void {
   const cn = $<HTMLInputElement>('cbCn'), country = $<HTMLSelectElement>('cbCountry');
@@ -683,6 +1643,10 @@ export function initCbam(): void {
   const date = $<HTMLInputElement>('cbDate'), out = $('cbOut'), status = $('cbStatus');
   const list = $<HTMLDataListElement>('cbCnList'), prov = $('cbProv');
   const scope = $<HTMLSelectElement>('cbScope'), scopeRow = $('cbScopeRow');
+  const tier = $<HTMLSelectElement>('cbTier'), verifiedRow = $('cbVerifiedRow');
+  const seeDirect = $<HTMLInputElement>('cbSeeDirect'), seeIndirectRow = $('cbSeeIndirectRow');
+  const seeIndirect = $<HTMLInputElement>('cbSeeIndirect'), attest = $<HTMLInputElement>('cbAttest');
+  const ref = $<HTMLInputElement>('cbRef');
   const add = $<HTMLButtonElement>('cbAdd'), csvBtn = $<HTMLButtonElement>('cbCsv');
   const docBtn = $<HTMLButtonElement>('cbDoc'), printEl = $('cbPrint');
   const outWrap = $('cbOutWrap');
@@ -733,6 +1697,30 @@ export function initCbam(): void {
   // synchronously right after mutating it — so by the time a user can click Export, lastPairs is
   // always in sync with `lines`.
   let lastPairs: ReturnType<typeof safeEstimates> = [];
+  /**
+   * The last route the user actually chose, kept across a rebuild that empties the <select>.
+   *
+   * syncRoutes reads the current pick out of `route.value` and hands it to nextRoute so a
+   * still-published route survives a rebuild. But when the list comes back EMPTY — an
+   * out-of-corpus year is the reachable case — it replaces innerHTML with a single explanatory
+   * option and returns, which sets `route.value` to ''. The pick is gone before the next call
+   * reads it, so coming back to a covered year restores nothing.
+   *
+   * Only multi-route goods lose anything: nextRoute auto-selects when a good publishes exactly
+   * one route, so those self-heal and hid this. On a multi-route good the panel sits on the idle
+   * prompt until the user notices the route control emptied itself.
+   *
+   * Reachable by typing rather than by pasting: committing a year digit-by-digit in an
+   * <input type="date"> fires change at 0002, 0020, 0202 on the way to 2026, and the first of
+   * those already wiped the pick.
+   *
+   * Safe to restore unconditionally, for two reasons that both have to hold. nextRoute returns
+   * `previous` only if the new list still publishes it, so a remembered route never survives into
+   * a pairing that does not offer it. And an empty `route.value` is never a user's choice — the
+   * "Select a production route…" placeholder is `disabled`, so the only way the value goes empty
+   * is a rebuild doing it.
+   */
+  let lastRoutePick = '';
 
   async function ensurePack(): Promise<EstimatorPack | null> {
     if (pack) return pack;
@@ -767,18 +1755,39 @@ export function initCbam(): void {
   }
 
   function syncRoutes(): void {
-    // Read the user's pick BEFORE the rebuild wipes it.
-    const prev = route!.value;
+    // Read the user's pick BEFORE the rebuild wipes it — and remember it, because a rebuild that
+    // empties the list wipes it BEFORE the next call gets here (see lastRoutePick). Reading
+    // `route.value` alone is only enough while every rebuild leaves a real option selected.
+    if (route!.value) lastRoutePick = route!.value;
+    const prev = route!.value || lastRoutePick;
     // The select explains its own dependency rather than showing a bare dash — an
     // empty disabled box reads as broken, this reads as an instruction (doc §6).
     if (!pack || !cn!.value || !country!.value) {
       route!.innerHTML = '<option value="">Choose a good and origin first</option>';
       route!.disabled = true; return;
     }
+    // `|| 2026` IS DELIBERATE AND STAYS. The route dropdown has to populate before a date is
+    // chosen, and Number('') is 0 — falsy — so an empty field lands here. This fallback was
+    // once blamed for pricing a cleared date as year 0, and it was the wrong half: the bug was
+    // that run() and draftLine() then proceeded with `date: ''`, which the engine reads as year
+    // 0 (no cbamFactors row, so a cbam-factor/0 refusal). Both gates now require the date, so
+    // this year is only ever used to LIST routes, never to price. Do not "fix" it into a throw.
+    //
+    // WHICH refusal year 0 produced depends on the tier, measured rather than assumed: the
+    // VERIFIED tier skips the defaults lookup and refuses on cbam-factor/0 as described above,
+    // but the DEFAULT tier — the one most users are on — never got that far, because the
+    // defaults corpus is keyed on the reporting year too and refused first on
+    // `default/<cn>/<origin>/<route>/0`. Two different sentences, one blank field.
     const year = Number(date!.value.slice(0, 4)) || 2026;
     const rs = routesFor(pack, cn!.value, country!.value, year);
     route!.disabled = rs.length === 0;
-    if (!rs.length) { route!.innerHTML = '<option value="">no route published for this pairing</option>'; return; }
+    // WHICH of the two reasons the list is empty for — see noRouteReason. Blaming the good and
+    // origin for a year the corpus does not cover sends the user to change the two controls that
+    // are not the problem.
+    if (!rs.length) {
+      route!.innerHTML = `<option value="">${esc(noRouteReason(pack, year))}</option>`;
+      return;
+    }
     const opts = rs.map((r) => `<option value="${esc(r)}">${r === 'default' ? 'single route' : esc(r)}</option>`).join('');
     const want = nextRoute(rs, prev);
     // want === '' means the pairing publishes several routes and the user has not
@@ -796,23 +1805,108 @@ export function initCbam(): void {
    *
    * IT DEFAULTS TO INCLUDING INDIRECT. The definitive regime covers indirect
    * emissions for those sectors, so direct-only is an understatement there, not a
-   * simpler view — for cement it drops 6.6 tCO₂e and €497 on a 100 t line. The
-   * control exists so someone with verified direct-only data can say so, not so
-   * the tool can quietly answer low by default.
+   * simpler view — on 100 t of Algerian cement clinker declared on ROUTE (B) it
+   * drops 6.6 tCO₂e and €497. That figure is per route, not per good: the same
+   * 100 t on route (A) drops 4.4 tCO₂e and €332, because the Commission publishes
+   * a separate electricity default for each route. The control exists so someone
+   * with verified direct-only data can say so, not so the tool can quietly answer
+   * low by default.
    */
   function syncScope(): void {
     if (!scope || !scopeRow) return;
+    // Not the old `!== null`: the lookup now returns an object in EVERY case, so that test was
+    // silently always true — TypeScript could not see it, no test covered it, and it showed this
+    // control on steel and aluminium, which publish no indirect default at all. That is the live
+    // defect. cbam-render.test.mjs pins the LOOKUP's side of it — steel and aluminium answer
+    // `none`, cement answers `found` — but the operator on this line needs a document to run, and
+    // the unit suite has none. Reverting it to `!== null` still leaves that suite green; only an
+    // e2e assertion on #cbScopeRow's hidden state would catch it.
+    //
+    // `kind !== 'none'` rather than `=== 'found'` is FUTUREPROOFING, not a second live fix. It
+    // exists so a route MISMATCH keeps the control visible and the user can reach the refusal
+    // that warns them — but no such selector exists today. Sweeping every good × origin ×
+    // published-route the form can offer, across the pack's 2026–2028 years, gives 66,675
+    // reachable selectors: 8,310 `found`, 58,365 `none`, and ZERO `route-mismatch`. The arm is
+    // written for the IR 2026/1740 route re-key, which can leave a good's indirect rows covering
+    // fewer routes than its direct rows. Do not read it as exercised behaviour; it is not.
     const has = !!pack && !!cn!.value && !!country!.value && !!route!.value
       && selectIndirectFactorFromPack(pack, {
         cn: cn!.value, country: country!.value, route: route!.value,
         massT: mass!.value || '1', date: date!.value,
-      }) !== null;
+      }).kind !== 'none';
     scopeRow.hidden = !has;
   }
 
+  /**
+   * Shows the verified panel on tier, and the verified INDIRECT field only when the indirect
+   * side is actually in play — the verified panel open, AND #cbScopeRow visible (i.e. the
+   * Commission publishes an indirect default for this good at all), AND the scope select set to
+   * direct_and_indirect. Same rule the defaults path uses, so the two tiers ask for the same
+   * scope of figure for the same good.
+   *
+   * IT CLEARS EXACTLY ONE FIELD, AND THE ASYMMETRY IS THE POINT: one hidden value can still
+   * price, the other three cannot, so only the dangerous one is destroyed.
+   *
+   *   - #cbSeeIndirect IS cleared whenever the indirect ROW hides. On the VERIFIED path that
+   *     figure is the importer's OWN number and the engine adds it on `emissionsScope` alone —
+   *     no pack lookup, nothing else gates it. So a value left behind an invisible row (type 0.4
+   *     for cement, then switch the good to steel) would silently inflate every later estimate
+   *     with a number the user can no longer see, let alone correct. Fail closed. (On the
+   *     DEFAULTS path a hidden scope control is harmless by contrast: the engine finds no
+   *     published indirect factor and returns 0 either way.)
+   *   - #cbSeeDirect, #cbAttest and #cbRef are NOT cleared when the tier switches back to the
+   *     defaults. Nothing stale can price through them: parseVerifiedFields returns on the tier
+   *     alone and reads no other field on that branch, and verifiedInputOf returns undefined, so
+   *     the whole panel is inert while it is hidden. Clearing them would buy nothing and cost the
+   *     user their work — #cbTier has only two options, and in Firefox a CLOSED <select> fires
+   *     `change` on every arrow step, so a keyboard user pressing ↓ then ↑ lands back exactly
+   *     where they started having silently destroyed a typed figure, a ticked attestation and a
+   *     verifier reference, with no undo.
+   *
+   * CALL ORDER MATTERS: it reads `scopeRow.hidden`, which syncScope() computes, so every call
+   * site runs it AFTER syncScope() rather than before.
+   */
+  function syncVerifiedRows(): void {
+    if (!tier || !verifiedRow) return;
+    const on = tier.value === 'actual-verified';
+    verifiedRow.hidden = !on;
+    const indirectOn = on && !!scopeRow && !scopeRow.hidden
+      && scope?.value === 'direct_and_indirect';
+    if (seeIndirectRow) seeIndirectRow.hidden = !indirectOn;
+    // DESTROY THE INDIRECT FIGURE ONLY WHEN IT COULD STILL PRICE WHILE INVISIBLE — that is
+    // `on && !indirectOn`, not merely `!indirectOn`. On the verified path the engine adds this
+    // number on emissionsScope alone, with no pack lookup to fall back on (estimate-from-pack's
+    // gate is `emissionsScope === 'direct_and_indirect' && indirectTco2ePerT !== undefined`), so
+    // a value stranded behind a row hidden by a good- or scope-change would keep inflating every
+    // later estimate with a figure the user can no longer see or correct. That is the whole
+    // hazard, and it needs the verified tier to be ACTIVE.
+    //
+    // With the tier switched back to defaults, verifiedInputOf returns undefined, `input.verified`
+    // is undefined, and that gate short-circuits before this field is ever read — nothing stale
+    // can price. Wiping it there would buy nothing and cost real work: #cbTier has two options, so
+    // in Firefox a closed <select> fires `change` on each arrow step, and ↓ then ↑ would land a
+    // keyboard user back where they started with their typed figure silently gone.
+    if (on && !indirectOn && seeIndirect) seeIndirect.value = '';
+  }
+
+  /**
+   * The five verified fields, parsed. THE SINGLE READ POINT — run() (the live preview) and
+   * draftLine() (the line that gets added) both go through this exact call, so the preview can
+   * never show one number while the added line carries another. They already differed on the
+   * date (run() previews without one; draftLine() refuses a NaN year) and that difference is
+   * deliberate and visible; a difference in the attested FIGURES would not be either.
+   */
+  const readVerified = () => parseVerifiedFields({
+    tier: tier?.value ?? 'default+markup',
+    direct: seeDirect?.value ?? '',
+    indirect: seeIndirect?.value ?? '',
+    attested: !!attest?.checked,
+    ref: ref?.value ?? '',
+  });
+
   function run(): void {
-    if (!pack || !cn!.value || !country!.value || !route!.value || !mass!.value) {
-      out!.innerHTML = '<p class="cb-idle">Choose a good, origin, route and mass to see the provisional exposure.</p>';
+    if (!pack || !cn!.value || !country!.value || !route!.value || !mass!.value || !date!.value) {
+      out!.innerHTML = '<p class="cb-idle">Choose a good, origin, route, mass and import date to see the provisional exposure.</p>';
       return;
     }
     // REFUSE AN IMPOSSIBLE MASS RATHER THAN PRICING IT. `min="0"` on the input is
@@ -820,11 +1914,46 @@ export function initCbam(): void {
     // runs and the `input` event fires anyway. A mass of -500 t used to render
     // "-682 tCO₂e embedded" and a confident "0 certificates · €0.00": nonsense
     // input wearing the shape of a computed answer, which is exactly what the
-    // fail-closed rule exists to stop. Checked here, not against the markup's
-    // `min`, so that editing the .astro cannot silently disarm it.
-    const massT = Number(mass!.value);
-    if (!Number.isFinite(massT) || massT < 0) {
+    // fail-closed rule exists to stop.
+    //
+    // IT DECIDES WITH THE SAME PREDICATE THE ENGINE CONSUMES WITH, not a second opinion.
+    // Number() and Decimal() read different languages — Number('  100  ') is 100 where Decimal
+    // throws, Number('1_000') is NaN where Decimal reads 1000, and BOTH read '0x10' as 16.
+    //
+    // BE PRECISE ABOUT THE BENEFIT: none of that divergence is reachable through THIS control
+    // today — but NOT for the reason it is tempting to write down. `type="number"` does not
+    // blank everything odd. It blanks a string ASSIGNED to .value, and it CHARACTER-FILTERS a
+    // string typed or pasted, which are different outcomes: typing 0x10 leaves "010", i.e. TEN,
+    // and +100 / 5. / '  100  ' / 1_000 / 0b101 / 0o17 land as 100 / 5 / 100 / 1000 / 0101 / 017.
+    // Those are valid numbers both predicates read identically, so the gate cannot tell — which
+    // is why this is unreachable, not because the completeness guard above absorbs them. It
+    // never sees them. (Measured in Chrome across typing, paste and assignment; an earlier note
+    // here generalised from Playwright's fill(), which only exercises the assignment path.)
+    //
+    // The one direction where the NEW predicate is looser is magnitude overflow — '1e309' and up,
+    // or ≥310 digits — where Number() gives Infinity and refuses while Decimal parses. Chrome
+    // rejects those too (validity.badInput), so it is closed. Note PRECISION overflow does not
+    // diverge at all: 9007199254740993 is admitted by both, so testing that case proves nothing.
+    //
+    // It is still the right predicate, for two reasons that do not depend on the markup. The
+    // guard must not lean on `type="number"` any more than on `min="0"` — the sentence below is
+    // the same rule — and the engine this defers to is shared with a SaaS whose own form is not
+    // this one. Deciding with the function that does the parsing makes the drift structurally
+    // impossible rather than merely unreachable. Checked here, not against the markup's `min`,
+    // so that editing the .astro cannot silently disarm it.
+    if (!nonNegativeDecimal(mass!.value)) {
       out!.innerHTML = '<p class="cb-idle">Net mass must be a number of tonnes, zero or greater.</p>';
+      return;
+    }
+    // The verified panel is read through the SAME parse the added line uses (readVerified's own
+    // doc), and its refusals render in the SAME idle-prompt shape as the mass refusal above —
+    // an instruction about the field to fix, never a figure computed around the problem. Placed
+    // before the estimate rather than beside it so an unattested or unreadable claim can never
+    // reach the engine at all: half a verified panel is not a cheaper estimate, it is no
+    // estimate.
+    const v = readVerified();
+    if ('error' in v) {
+      out!.innerHTML = `<p class="cb-idle">${esc(v.error)}</p>`;
       return;
     }
     try {
@@ -832,14 +1961,46 @@ export function initCbam(): void {
         cn: cn!.value, country: country!.value, route: route!.value,
         massT: mass!.value, date: date!.value,
         emissionsScope: (scope?.value as 'direct' | 'direct_and_indirect') ?? 'direct_and_indirect',
+        verified: verifiedInputOf(v.ok),
       }), snapshot);
       // The threshold statement needs only the good and the mass, so it survives a
       // selector the estimate itself cannot price — a refused line still gets told
       // whether it is even in scope for CBAM this year. It renders ABOVE the
       // exposure because "you may owe nothing at all" outranks "here is what you
       // would owe".
-      const t = resolveThreshold(pack, { cn: cn!.value, massT: mass!.value, date: date!.value });
-      out!.innerHTML = (t ? renderThreshold(t) : '') + renderResult(e);
+      //
+      // THROUGH renderDraftThreshold, NOT resolveThreshold DIRECTLY. That function returns null
+      // for four unrelated reasons and this line used to render every one of them as the empty
+      // string, so a year with no published threshold row lost its card silently — while the
+      // multi-line panel showed an explicit "No published rule" card for the same year. See
+      // renderDraftThreshold for the enumeration and for which of the four are still, correctly,
+      // silent.
+      const t = renderDraftThreshold(pack, { cn: cn!.value, massT: mass!.value, date: date!.value });
+      // The attestation travels with the PREVIEW too, not just the added line's card. This is the
+      // surface with the largest audience — it is what the page shows before anyone clicks Add, so
+      // a visitor who never adds a line sees only this — and on the verified tier it shows the
+      // materially lower of the two liabilities. Shipping that figure with no statement of whose
+      // claim it is was the one gap the final review would not sign off. The DELTA stays off the
+      // preview deliberately (it would cost a second engine call per keystroke through the debounce,
+      // and the comparison is a card-level affordance); the caveat does not get that latitude.
+      //
+      // READ OFF THE STAMP, NOT OFF THE SELECTION — the same read-back draftLine does, for the same
+      // reason and with no second engine call, because `e` is already in hand. `v.ok.tier` is what
+      // the <select> says, and the <select> has two options: previewing a line whose electricity
+      // half the engine has just filled in from the Commission's marked-up default, it says
+      // 'actual-verified' and renders "These emissions figures are your own attested claim" over a
+      // figure that is half the Commission's. The card would then say one thing and the preview of
+      // the SAME fields another. `verifiedRef` still comes from the form: the estimate carries no
+      // reference, and the reference is what the user typed either way.
+      //
+      // `hasFigure(e)` travels for the same reason and off the same object: a refused preview of a
+      // mixed line must not carry the sentence that says its electricity component is a
+      // marked-up Commission default, because the refusal above it prints no such component. The
+      // preview is where that matters MOST — it renders before anyone clicks Add, so it is all a
+      // visitor who never adds a line ever sees, and it is the surface this pair was missed on
+      // both previous times. The card passes the same predicate over its own estimate.
+      out!.innerHTML = t + renderResult(e)
+        + renderAttestation({ tier: e.stamp.tier, verifiedRef: v.ok.verifiedRef }, hasFigure(e));
     } catch (err) {
       // A DomainError is the engine refusing, and it names what is missing. Show it
       // rather than a generic failure — the reason is the useful part.
@@ -852,17 +2013,32 @@ export function initCbam(): void {
   /** One line's estimate, decorated with the real pack snapshot via the single shared
    * decoration point (decorateSnapshot, above) that run() also calls. */
   function estimateLine(l: Line): CertificateEstimate {
-    const e = estimateFromPack(pack!, {
-      cn: l.cn, country: l.country, route: l.route,
-      massT: l.massT, date: l.date, emissionsScope: l.scope,
-    });
+    // Built by inputFor — the ONE place a Line becomes an EstimatorInput, shared with
+    // defaultPathComparison below so the two can never price different lines (see its doc). The
+    // `verified` argument comes from the line's TIER, not from the form and not from whether its
+    // figures look truthy — see verifiedInputOf's doc for why the alternative ends in a thrown
+    // export instead of a rendered refusal. `lines` outlives the form values that produced them,
+    // so this must read the line, and only the line.
+    const e = estimateFromPack(pack!, inputFor(l, verifiedInputOf(l)));
     return decorateSnapshot(e, snapshot);
   }
 
   /**
+   * Why draftLine() reports its reason through a variable instead of writing #cbStatus itself:
+   * onAdd() writes that element unconditionally when the draft comes back null, so a specific
+   * message written here would be overwritten by the generic one a line later — visible for no
+   * frames at all. This keeps ONE writer of #cbStatus on the add path (onAdd), which simply
+   * prefers the specific reason when there is one. Reset at the top of every draftLine() call so
+   * a stale reason from a previous click can never be reported against this one.
+   */
+  let draftReason: string | null = null;
+
+  /**
    * Builds the next line from the form's current values, or null if the line is not ready to
-   * add. Mirrors run()'s own "impossible mass" refusal (checked here, not left to the markup's
-   * inert `min="0"`, for the same reason run() gives).
+   * add. Refuses an impossible mass with the SAME predicate run() previews with —
+   * nonNegativeDecimal, the function the engine itself parses with — never a second opinion that
+   * merely looks equivalent (checked here, not left to the markup's inert `min="0"`, for the
+   * same reason run() gives; see the call site for what the two gates disagreed about).
    *
    * ALSO REFUSES AN UNRESOLVED DATE. yearOf(l) is NaN for an empty or malformed
    * <input type="date"> value, and a NaN-year line joins NO year's threshold card
@@ -873,16 +2049,136 @@ export function initCbam(): void {
    * .astro markup), so this only refuses a line whose date the user has actively cleared.
    */
   function draftLine(): Line | null {
-    if (!pack || !cn!.value || !country!.value || !route!.value || !mass!.value) return null;
-    const massT = Number(mass!.value);
-    if (!Number.isFinite(massT) || massT < 0) return null;
+    draftReason = null;
+    if (!pack || !cn!.value || !country!.value || !route!.value || !mass!.value || !date!.value) return null;
+    // THE DATE HERE IS FOR AGREEMENT, NOT FOR DEFENCE — measured, because the obvious reading is
+    // wrong. Adding `!date!.value` to run()'s gate is load-bearing (revert it alone and the
+    // preview prices a blank date again); adding it HERE changes no observable behaviour at all.
+    // Reverted alone, the e2e pin stays green, because `Number.isNaN(yearOf(l))` below already
+    // refused every cleared date the form can produce — an <input type="date"> holds '' or a
+    // valid YYYY-MM-DD and nothing else, so the two conditions fire on exactly the same inputs.
+    // Only when BOTH are removed does a blank-dated line actually get added (verified: it does).
+    // So the NaN check was never the backstop it reads as; before this line it was the Add path's
+    // ONLY defence, and it is the reason the two surfaces diverged silently rather than loudly.
+    // It stays. This gate stays too, so the two gates read identically — which is the file's own
+    // rule, stated below — but do not mistake it for the thing holding the Add path closed.
+    //
+    // THE SAME PREDICATE run() DECIDES WITH — deliberately the identical call, not an
+    // equivalent-looking one. This is the ADD path to run()'s PREVIEW path, and the two gates
+    // must agree or the panel and the line list state different facts about the same field:
+    // until this line, run() refused '+100', '5.', '0x10' and '  100  ' while this function
+    // accepted all four and built a Line from them. Number() and nonNegativeDecimal read
+    // different languages (Number('  100  ') is 100, Number('1_000') is NaN, and BOTH Number
+    // and Decimal read '0x10' as 16), which is the same two-parsers-one-field drift run()'s own
+    // comment describes — here it merely pointed the other way.
+    //
+    // It matters more on THIS path than on the preview, because a Line outlives the form: the
+    // multi-line year-threshold card sums `massT` through aggregateThresholdBasis, which never
+    // consults the engine's gate at all. A mass this function admits is a mass that reaches the
+    // de minimis verdict unread — measured by feeding thresholdByYear a hand-built Line, before
+    // this change: '0x10' decided Art 2(3) off a hex string (knownEligibleMassT 16), '+100'
+    // reported above_threshold, and '  100  ' threw a raw [DecimalError] that took down the
+    // whole card render rather than one line. Worst was '-100', which SUBTRACTS: beside a real
+    // 30 t line it totalled -70 t and read as exempt.
+    //
+    // Those were measured on the FUNCTION, not through the form — <input type="number"> admits
+    // none of those strings, so none was user-reachable. thresholdByYear now carries its own
+    // gate, so this one is the outer of two rather than the only one.
+    if (!nonNegativeDecimal(mass!.value)) return null;
+    // The verified panel's contribution — the tier, and on the verified branch the attested
+    // figures and any reference — or the reason it cannot contribute one. Its refusals are
+    // SPECIFIC ("tick the attestation", "that is not a number"), unlike the four checks above,
+    // whose shared "complete the line first" message names every field at once because none of
+    // them can say which one the user meant to fill.
+    const v = readVerified();
+    if ('error' in v) { draftReason = v.error; return null; }
     const l: Line = {
       id: crypto.randomUUID(), cn: cn!.value, country: country!.value, route: route!.value,
       scope: (scope?.value as Line['scope']) ?? 'direct_and_indirect',
       massT: mass!.value, date: date!.value,
+      // Spread LAST and unconditionally: `tier` is required on Line (see its doc in
+      // cbam-lines.ts) and v.ok is typed to always carry one, so the compiler — not a default
+      // written here — is what guarantees every line states which tier priced it. The optional
+      // seeIndirect/verifiedRef keys are ABSENT rather than empty when unused; that distinction
+      // is load-bearing all the way down (parseVerifiedFields' doc, lineFingerprint's `?? null`).
+      //
+      // Spreading last is only safe because v.ok now NAMES its four fields. While it was typed
+      // `Partial<Line>`, `massT` was type-legal in it and this spread sat two lines below the
+      // gate — a future `ok.massT` would have compiled and overwritten the gated mass with an
+      // unchecked one, on its way to the de minimis card. See parseVerifiedFields' doc.
+      ...v.ok,
     };
     if (Number.isNaN(yearOf(l))) return null;
-    return l;
+    // THE TIER IS READ BACK FROM THE STAMP — the last step, and the one that makes the mixed tier
+    // exist at all. Everything above builds the line from the user's SELECTION, which is the right
+    // input to the engine and the wrong thing to record: the engine may have stood the Commission's
+    // published indirect default in for an electricity half nobody attested, and a line still
+    // claiming 'actual-verified' beside that figure is the mispairing csvRows' guard throws on.
+    //
+    // Ordered AFTER the year check on purpose — a line about to be refused is not worth pricing,
+    // and estimateFromPack reads the date. One extra engine call per Add click (measured at
+    // 0.32 ms on the default path; this runs on a discrete click, never per keystroke), and it is
+    // the same call estimateLine makes for the render a moment later, through the same builder, so
+    // the tier recorded here is the tier that render will compute. See stampedTierOf for why the
+    // rule is READ rather than re-derived, and for the throw arm.
+    return { ...l, tier: stampedTierOf(l, estimateLine) };
+  }
+
+  /**
+   * The SAME line through the Commission-default path — `verified` simply omitted — so the card
+   * can show what the importer's data was worth. `estimateFromPack` is pure (no clock, no
+   * randomness, no I/O: it reads the already-loaded pack), so a second call for the same line is
+   * safe and repeatable; measured at 0.32 ms on the default path, and this runs once per
+   * renderAll (a discrete add/remove/attest click), not per keystroke — ~6 ms at 20 verified
+   * lines, against a render that already rebuilds every card's innerHTML.
+   *
+   * Returns `undefined` for a default-tier line — that line owes no comparison, it IS the
+   * comparison — and `null` when the default path cannot price this good/origin at all. The
+   * renderer says something different for each; see deltaSentence.
+   *
+   * DECORATED WITH THE SAME SNAPSHOT as the primary, through the same single decoration point
+   * (decorateSnapshot), even though only the cost is read today. The alternative — leaving the
+   * vendored 'browser-prototype' placeholder on an estimate that is already in a render path —
+   * is a placeholder waiting for the first future caller who prints its stamp, which is exactly
+   * the regression decorateSnapshot exists to have fixed once.
+   */
+  function defaultPathComparison(l: Line): CertificateEstimate | null | undefined {
+    // THE MATCHING HALF OF renderLineCard's `verified` GATE — the two decide the same question
+    // (does this line have attested data worth measuring) and must name the same tiers, or the
+    // card renders a delta block whose comparison was never computed and reads "No
+    // Commission-default comparison was computed for this line". They now share ONE predicate
+    // (isAttested) rather than two hand-spellings, so they cannot disagree — which matters most
+    // here, because this is the only one of its five call sites no test can reach: it is a
+    // closure inside initCbam(), and the unit suite has no DOM. Do not re-spell it inline.
+    //
+    // THE ARITHMETIC IS ALREADY RIGHT FOR A MIXED LINE, which is why this is a gate change and not
+    // a calculation change. Both sides go through inputFor with the same line and differ only in
+    // `verified`; the indirect lookup reads cn/country/route/date and never `verified`, so it
+    // returns the identical marked-up figure on both. figureFrom clamps the DIRECT side alone and
+    // then ADDS indirect, so that term survives the clamp unchanged on each side and subtracts out
+    // exactly. What the delta reports is therefore what the direct attestation was worth — which
+    // is the only thing on a mixed line that the attestation actually bought.
+    if (!isAttested(l.tier)) {
+      return undefined;
+    }
+    try {
+      // The SAME builder estimateLine uses (inputFor), with `verified` passed as undefined —
+      // deliberately, and not merely absent: that omission IS the comparison, and the engine
+      // branches on truthiness so an explicit undefined takes the defaults path exactly as an
+      // omitted key would. Anything else differing here would price something other than "the
+      // same line, at the Commission's published defaults"; sharing the builder is what stops a
+      // future field from making that happen silently.
+      const d = estimateFromPack(pack!, inputFor(l, undefined));
+      // A refusal is not a comparison. Folding it to null here rather than passing the
+      // unavailable estimate on keeps the "is there anything to compare" decision in ONE place
+      // instead of splitting it between this function and the renderer.
+      return d.status === 'unavailable' ? null : decorateSnapshot(d, snapshot);
+    } catch {
+      // A thrown default path must never take down a line whose OWN estimate priced fine — the
+      // same rule safeEstimates applies to the primary, one level down. The card degrades to
+      // "no comparison" rather than the whole line degrading to an error.
+      return null;
+    }
   }
 
   /**
@@ -896,8 +2192,16 @@ export function initCbam(): void {
    */
   function safeEstimates(ls: readonly Line[]) {
     return ls.map((l) => {
-      try { return { l, e: estimateLine(l), err: null as string | null }; }
-      catch (err) { return { l, e: null, err: (err as Error).message }; }
+      try {
+        // The comparison is computed for a line whose OWN estimate succeeded, and its own
+        // failures are handled inside defaultPathComparison — so a broken default path can
+        // never demote a priced line to the thrown-line fallback card.
+        return { l, e: estimateLine(l), cmp: defaultPathComparison(l), err: null as string | null };
+      } catch (err) {
+        // No primary estimate means no card to hang a comparison on: the thrown-line fallback
+        // below renders no figures at all, so there is nothing to compare against.
+        return { l, e: null, cmp: undefined, err: (err as Error).message };
+      }
     });
   }
 
@@ -978,7 +2282,7 @@ export function initCbam(): void {
     // for not being read a wall of cards after every single click.
     outWrap?.setAttribute('aria-live', 'off');
     out!.innerHTML = yearsHtml + renderTotals(totals) + pairs.map((p, i) => p.e
-      ? renderLineCard(p.l, p.e, i)
+      ? renderLineCard(p.l, p.e, i, p.cmp)
       : `<article class="cb-line" data-line="${esc(p.l.id)}">
            <div class="cb-line-head">
              <span class="cb-line-n">Line ${i + 1}</span>
@@ -1043,8 +2347,8 @@ export function initCbam(): void {
       if (!await ensurePack()) return;
       const l = draftLine();
       if (!l) {
-        status!.textContent =
-          'Complete the line first: good, origin, route, a non-negative mass and a valid import date.';
+        status!.textContent = draftReason
+          ?? 'Complete the line first: good, origin, route, a non-negative mass and a valid import date.';
         return;
       }
       try {
@@ -1149,7 +2453,20 @@ export function initCbam(): void {
       status!.textContent = 'No line has a priced estimate; nothing to export.';
       return;
     }
-    const csv = toCsv(csvRows(ok.map((p) => p.l), ok.map((p) => p.e!), fingerprints, snapshot, pack));
+    // csvRows and toCsv BOTH throw by design — on a lines/results length mismatch, on a line
+    // whose tier disagrees with the tier that priced it, on a multi-benchmark line, on a ragged
+    // row (their own docs). Uncaught, every one of those left the Export button silently dead:
+    // no file, no message, the reason reaching devtools alone. Report it the way every other
+    // fallible path in this file already does (ensurePack, onAdd's fingerprint catch, onDoc's
+    // thresholdByYear catch) — through #cbStatus, naming what refused. The message is the
+    // engine's own; a generic "export failed" would tell the user nothing they could act on.
+    let csv: string;
+    try {
+      csv = toCsv(csvRows(ok.map((p) => p.l), ok.map((p) => p.e!), fingerprints, snapshot, pack));
+    } catch (err) {
+      status!.textContent = `Could not export the CSV: ${(err as Error).message}`;
+      return;
+    }
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
     const a = document.createElement('a');
     a.href = url; a.download = `cbam-estimate-${new Date().toISOString().slice(0, 10)}.csv`;
@@ -1187,14 +2504,27 @@ export function initCbam(): void {
       status!.textContent = `Could not build the document: ${(err as Error).message}`;
       return;
     }
-    printEl.innerHTML = buildPrintDocument({
-      lines, results,
-      yearCards: years,
-      totals: sumTotals(priced),
-      packSnapshot: snapshot,
-      rulePackages: priced[0]?.stamp.rulePackages ?? [],
-      pack, generatedOn: new Date().toISOString().slice(0, 10),
-    });
+    // Same exposure as onCsv's, found the same way: buildPrintDocument throws on a
+    // lines/results length mismatch (its own guard), and an uncaught throw here would leave
+    // #cbPrint holding the PREVIOUS export's markup while the print dialog never opens — a
+    // silently dead button, and a stale document waiting for the next Ctrl+P. Caught before the
+    // `cb-printing` class is added, so a failure cannot strand the page in a printable-wrong
+    // state either.
+    let html: string;
+    try {
+      html = buildPrintDocument({
+        lines, results,
+        yearCards: years,
+        totals: sumTotals(priced),
+        packSnapshot: snapshot,
+        rulePackages: priced[0]?.stamp.rulePackages ?? [],
+        pack, generatedOn: new Date().toISOString().slice(0, 10),
+      });
+    } catch (err) {
+      status!.textContent = `Could not build the document: ${(err as Error).message}`;
+      return;
+    }
+    printEl.innerHTML = html;
 
     // `cb-printing` MUST NOT be able to outlive this call (quality review item 3). It used to
     // depend solely on `afterprint` firing — but a feature policy denying window.print(), a
@@ -1243,9 +2573,16 @@ export function initCbam(): void {
   // form is purely the editor for the NEXT prospective line and must not touch the multi-line
   // render underneath it.
   const refresh = () => { if (!lines.length) run(); };
-  const onPick = async () => { if (await ensurePack()) { syncRoutes(); syncScope(); refresh(); } };
-  route.addEventListener('change', () => { syncScope(); refresh(); });
-  scope?.addEventListener('change', refresh);
+  // syncVerifiedRows() ALWAYS runs after syncScope(), never before: it reads the `scopeRow.hidden`
+  // that syncScope() has just computed, and running it first would judge the indirect field
+  // against the PREVIOUS good's scope row for one turn — showing an indirect input for a good
+  // with no indirect side, or hiding (and therefore clearing) one the user is entitled to.
+  const onPick = async () => {
+    if (await ensurePack()) { syncRoutes(); syncScope(); syncVerifiedRows(); refresh(); }
+  };
+  route.addEventListener('change', () => { syncScope(); syncVerifiedRows(); refresh(); });
+  scope?.addEventListener('change', () => { syncVerifiedRows(); refresh(); });
+  tier?.addEventListener('change', () => { syncVerifiedRows(); refresh(); });
   cn.addEventListener('change', onPick);
   cn.addEventListener('focus', () => { void ensurePack(); }, { once: true });
   country.addEventListener('change', onPick);
@@ -1256,10 +2593,30 @@ export function initCbam(): void {
   // once per keystroke. Switching to `change` would cost nothing but stops the
   // figure tracking as you type, which is worse on a calculator.
   let massTimer: number | undefined;
-  mass.addEventListener('input', () => {
+  const bounce = () => {
     clearTimeout(massTimer);
     massTimer = window.setTimeout(refresh, 250);
-  });
+  };
+  mass.addEventListener('input', bounce);
+  // The verified figures are typed the same way a mass is, into the same aria-live panel, so
+  // they share the same debounce — and the same single timer, so typing in one field cancels a
+  // pending render from another rather than queueing a second one.
+  seeDirect?.addEventListener('input', bounce);
+  seeIndirect?.addEventListener('input', bounce);
+  // #cbRef is DELIBERATELY NOT WIRED. The reference is transcribed, never validated and never
+  // priced — it cannot move the preview by a cent or flip a refusal to a figure. Re-rendering on
+  // it would re-announce the entire estimate into the aria-live panel once per 250 ms of typing
+  // a verifier's report ID, which is the exact failure the mass debounce above exists to stop.
+  // It is read, with the rest of the panel, when the line is actually added.
+  // A tick is one discrete action, not typing — announce it immediately, as the year-card
+  // attestation checkbox already does.
+  attest?.addEventListener('change', refresh);
+  // ONCE, AT WIRING TIME, and not only on the first user interaction: Firefox (and bfcache
+  // restores generally) repopulate <select> and <input> values across a reload, so #cbTier can
+  // come back reading 'actual-verified' while #cbVerifiedRow is still `hidden` from the markup —
+  // invisible fields feeding a verified line. This reconciles the panel with whatever the browser
+  // restored before any of it can reach an estimate.
+  syncVerifiedRows();
   add?.addEventListener('click', () => { void onAdd(); });
   csvBtn?.addEventListener('click', onCsv);
   docBtn?.addEventListener('click', onDoc);

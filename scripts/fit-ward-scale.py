@@ -297,6 +297,88 @@ CANDIDATES = [
 ]
 
 
+#: Paired-bootstrap resamples behind the q_day plateau, and its pinned seed.
+#: Unpinned randomness would make the artefact differ run to run; the repo
+#: requires byte-stable outputs.
+BOOT_B = 20000
+BOOT_SEED = 20260813
+
+
+def q_plateau(cand: Cand, rows: Sequence[Row]) -> dict[str, Any]:
+    """The interval of q_day these observations CANNOT REJECT.
+
+    WHY THIS EXISTS. tests/unit/heat-map-validation.test.mjs used to assert that
+    the shipped Q equals this script's fitted q_day to 5e-4. That assertion has
+    a premise — that the calibration identifies q_day to five-thousandths — and
+    the premise is false. Correcting the stale built-footprint cache on
+    2026-08-13 moved the free fit 0.419 -> 0.5175, a 23% swing, while in-sample
+    RMSE moved 0.023 K and leave-one-ward-out moved 0.013 K. `built` fell 14% at
+    the same time: ward means constrain the PRODUCT Q*built, not either factor.
+
+    So the honest gate is not equality with the argmin. It is membership of the
+    set the data cannot distinguish from the argmin — computed here by paired
+    bootstrap over the ward-scenes, the same resampling measure-accuracy.py uses
+    for its CIs. A q is admissible when the 95% CI of RMSE(q) - RMSE(q*)
+    straddles zero.
+
+    This is deliberately NOT a tolerance picked to admit the shipped value. It is
+    a property of the observations, and it narrows on its own as the ECOSTRESS
+    record grows. Once it narrows past the shipped Q, the test fails and the
+    constant genuinely has to move.
+    """
+    qi = cand.names.index("q_day")
+    names = tuple(n for n in cand.names if n != "q_day")
+    keep = [i for i, n in enumerate(cand.names) if n != "q_day"]
+    sub = Cand(cand.key, cand.label, names, tuple(cand.x0[i] for i in keep),
+               tuple(cand.lo[i] for i in keep), tuple(cand.hi[i] for i in keep),
+               cand.night_release)
+
+    def resid_at(q: float) -> npt.NDArray[np.float64]:
+        """Errors at q_day = q with every OTHER constant refitted — a profile,
+        not a slice. Slicing at one fixed vector would understate how well the
+        model can do at an off-optimum q, and so overstate identifiability."""
+        saved = SHIP.copy()
+        SHIP["q_day"] = q
+        try:
+            p = fit(sub, rows)
+        finally:
+            SHIP.clear()
+            SHIP.update(saved)
+        p["q_day"] = q
+        return np.asarray([predict(p, r, cand.night_release) - r.lst for r in rows],
+                          dtype=np.float64)
+
+    grid = [round(cand.lo[qi] + i / 100, 2)
+            for i in range(int(round((cand.hi[qi] - cand.lo[qi]) * 100)) + 1)]
+    q_star = round(float(fit(cand, rows)["q_day"]), 4)
+
+    rng = np.random.default_rng(BOOT_SEED)
+    idx = rng.integers(0, len(rows), size=(BOOT_B, len(rows)))
+    rmse_star = np.sqrt((resid_at(q_star)[idx] ** 2).mean(1))
+
+    profile: list[dict[str, Any]] = []
+    admissible: list[float] = []
+    for q in grid:
+        e = resid_at(q)
+        d = np.sqrt((e[idx] ** 2).mean(1)) - rmse_star
+        lo, hi = (float(v) for v in np.percentile(d, [2.5, 97.5]))
+        ok = lo < 0.0 < hi
+        profile.append({"q_day": q, "rmse_K": round(float(np.sqrt(np.mean(e ** 2))), 4),
+                        "d_ci_lo_K": round(lo, 4), "d_ci_hi_K": round(hi, 4),
+                        "admissible": ok})
+        if ok:
+            admissible.append(q)
+
+    return {"what": "q_day values the ward-mean observations cannot distinguish from the best "
+                    "fit: paired bootstrap of RMSE(q) - RMSE(q*), admissible when the 95% CI "
+                    "straddles zero. NOT a hand-chosen tolerance.",
+            "candidate": cand.key, "q_star": q_star,
+            "bootstrap_B": BOOT_B, "seed": BOOT_SEED,
+            "lo": min(admissible) if admissible else None,
+            "hi": max(admissible) if admissible else None,
+            "profile": profile}
+
+
 def main() -> None:
     rows = load_rows()
     wards = sorted({r.ward for r in rows})
@@ -355,11 +437,21 @@ def main() -> None:
         print("  NO candidate meets all four criteria.")
         verdict = None
 
+    # The shipped constants come from candidate G, so G is the one whose q_day
+    # identifiability the shipped Q has to be judged against.
+    ship_cand = next(c for c in CANDIDATES if c.key == "G")
+    plateau = q_plateau(ship_cand, rows)
+    print(f"\n  q_day the observations CANNOT REJECT (candidate {plateau['candidate']}, "
+          f"best fit {plateau['q_star']}): [{plateau['lo']}, {plateau['hi']}]")
+    print("  Ward means constrain the product Q*built, not Q. A shipped Q inside this "
+          "interval is not refuted by the data;\n  one outside it is.")
+
     with open(OUT, "w") as fh:
         json.dump({"note": "EXPERIMENT. Ward-scale calibration against ward-mean ECOSTRESS. "
                            "Not shipped until a human has read the out-of-sample column.",
                    "ship": False, "ward_scenes": len(rows), "wards": wards,
-                   "meets_all_criteria": verdict, "candidates": results}, fh, indent=2)
+                   "meets_all_criteria": verdict, "candidates": results,
+                   "q_identifiability": plateau}, fh, indent=2)
     print(f"\n  written to {os.path.relpath(OUT, ROOT)}")
 
 

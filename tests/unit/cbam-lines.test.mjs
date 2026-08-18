@@ -7,7 +7,15 @@ import Decimal from 'decimal.js';
 import {
   yearOf, lineFingerprint, packSnapshotHash, thresholdByYear, sumTotals, csvRows, toCsv,
 } from '../../src/scripts/cbam-lines.ts';
-import { estimateFromPack } from '../../src/scripts/cbam-algos/estimator/estimate-from-pack.ts';
+import {
+  estimateFromPack, nonNegativeDecimal,
+} from '../../src/scripts/cbam-algos/estimator/estimate-from-pack.ts';
+// The de minimis verdict's PROSE is the only place a reader learns which sectors the card's
+// test actually covered, so the sector-naming tests below have to cross the render seam: an
+// assertion that stops at the card's fields would pass while the sentence beside them named a
+// different set. cbam-render.test.mjs owns this function's other branches; these two own the
+// pack → card → sentence path, which is the one that can disagree with itself.
+import { renderYearThreshold } from '../../src/scripts/cbam-algos/cbam-app.ts';
 
 const pack = JSON.parse(readFileSync(
   fileURLToPath(new URL('../../public/cbam/estimator-pack.json', import.meta.url)), 'utf8'));
@@ -22,9 +30,15 @@ const pack = JSON.parse(readFileSync(
 const est = (cn, country, route, massT, date = '2026-03-15', emissionsScope = 'direct') =>
   estimateFromPack(pack, { cn, country, route, massT, date, emissionsScope });
 
+// tier defaults to 'default+markup' — the tier every call site in this file was written
+// against, back when it was the only tier the calculator had. Defaulting to it (rather than
+// making each existing call pass one) keeps every pre-existing test's meaning EXACTLY as it
+// was; the verified-tier tests below opt in explicitly, the same way the scope-threading tests
+// opt into 'direct_and_indirect' on est().
 const line = (over = {}) => ({
   id: 'L1', cn: '25231000', country: 'DZ', route: '(A)',
-  scope: 'direct_and_indirect', massT: '30', date: '2026-03-15', ...over,
+  scope: 'direct_and_indirect', massT: '30', date: '2026-03-15',
+  tier: 'default+markup', ...over,
 });
 
 test('yearOf reads the calendar year from the import date', () => {
@@ -140,26 +154,169 @@ test('a hydrogen line is excluded from the eligible mass', () => {
   assert.deepEqual(card.entryHashes, ['a'.repeat(64)]);
 });
 
+/**
+ * The future the shipped pack does not contain: a 2026 threshold row whose includedSectors has
+ * been WIDENED past the four the Commission published. Hoisted to module scope because two tests
+ * below need the same one — the eligibleLineCount test (which uses it to drive our filter and the
+ * vendored massSectors filter apart) and the sector-naming test (which uses it to prove the
+ * verdict's prose follows the row rather than a hardcoded list). A second, locally-built copy
+ * would let the two drift into simulating different futures.
+ *
+ * 'hydrogen' specifically because it is a real ImportSector that sectorForCn already classifies,
+ * so a hydrogen LINE genuinely reaches our filter — an invented sector key would be dropped
+ * before either filter ran and would simulate nothing.
+ */
+const widerPack = {
+  ...pack,
+  thresholds: pack.thresholds.map((t) => (t.calendarYear === 2026
+    ? { ...t, includedSectors: [...t.includedSectors, 'hydrogen'] }
+    : t)),
+};
+
 test('eligibleLineCount tracks what aggregateThresholdBasis actually kept, not our own pre-filter', () => {
   // Regression for a review finding: entries.length (our filter, keyed on
   // rule.includedSectors) and basis.entryIds.length (ALSO filtered by
   // aggregateThresholdBasis's own hardcoded massSectors) agree today only
   // because the shipped 2026 row's includedSectors happens to equal
   // massSectors exactly. Simulate a future rule that widens includedSectors
-  // to hydrogen: our filter lets a hydrogen line through, but the vendored
-  // massSectors filter (cement/aluminium/fertilisers/iron_and_steel only)
-  // still drops it. eligibleLineCount must follow entryIds, not the count of
+  // to hydrogen (widerPack, above): our filter lets a hydrogen line through, but
+  // the vendored massSectors filter (cement/aluminium/fertilisers/iron_and_steel
+  // only) still drops it. eligibleLineCount must follow entryIds, not the count of
   // what we handed to aggregateThresholdBasis.
-  const widerPack = {
-    ...pack,
-    thresholds: pack.thresholds.map((t) => (t.calendarYear === 2026
-      ? { ...t, includedSectors: [...t.includedSectors, 'hydrogen'] }
-      : t)),
-  };
   const lines = [line({ id: 'L1', massT: '10' }), line({ id: 'L3', cn: '28041000', massT: '5' })];
   const [card] = thresholdByYear(lines, fp, new Set([2026]), widerPack);
   assert.deepEqual(card.entryIds, ['L1'], 'the vendored massSectors filter still drops hydrogen');
   assert.equal(card.eligibleLineCount, 1, 'count must match entryIds.length, not our own pre-filter length');
+});
+
+/** The `<p class="cb-sub">` verdict, closed at both ends by its own tags. */
+const subOf = (html) => html.match(/<p class="cb-sub">[\s\S]*?<\/p>/)[0];
+
+/**
+ * TODAY's verdict, byte for byte, for the shipped pack's four sectors. Duplicated deliberately
+ * from cbam-render.test.mjs's ATTESTATION_SENTENCE (which pins the same prose against a
+ * HAND-BUILT card): that one proves the renderer's copy has not been reworded, this one proves
+ * the copy survives being DERIVED from pack data instead of typed into the template. A single
+ * shared constant could not distinguish those two failures — the derivation could silently
+ * reorder or re-word the list and, if the pin moved with it, nothing would go red.
+ */
+const SHIPPED_SECTOR_PHRASE = 'Your cement, iron &amp; steel, aluminium and fertiliser imports for 2026';
+
+test('the de minimis verdict names the sectors its own rule lists, not four hardcoded ones', () => {
+  // eligibleLineCount's doc already anticipates a threshold row that includes hydrogen or
+  // electricity, and widerPack above already simulates one. What nothing covered is that the
+  // VERDICT hardcoded the four sectors into its sentence, so the day the Commission widens the
+  // row the card would keep naming the old four beside a mass computed from the new set — a
+  // wrong statement of what the test measured, with nothing to catch it.
+  //
+  // One cement line, so nothing is excluded and the exclusion clause (which mentions hydrogen
+  // for its own unrelated reason) stays out of the way of the assertions below.
+  const [shipped] = thresholdByYear([line({ massT: '10' })], fp, new Set([2026]), pack);
+  const [wider] = thresholdByYear([line({ massT: '10' })], fp, new Set([2026]), widerPack);
+
+  // 1. The card carries the rule's sectors — the same array the sector filter above ran on, so
+  //    the basis a reader is shown cannot disagree with the basis the verdict was computed from.
+  const rule = pack.thresholds.find((t) => t.calendarYear === 2026);
+  assert.deepEqual([...shipped.includedSectors], rule.includedSectors,
+    'the card must carry its rule\'s own sectors, verbatim');
+  assert.deepEqual([...wider.includedSectors], [...rule.includedSectors, 'hydrogen'],
+    'a widened row must reach the card, not be normalised back to the shipped four');
+
+  // 2. ...and the sentence follows it. Not merely "contains hydrogen somewhere" — the whole
+  //    verdict differs, which is what a hardcoded list can never do.
+  const shippedSub = subOf(renderYearThreshold(shipped));
+  const widerSub = subOf(renderYearThreshold(wider));
+  assert.notEqual(widerSub, shippedSub,
+    'a rule over five sectors must not render the same verdict as a rule over four');
+  assert.ok(widerSub.includes('Your cement, iron &amp; steel, aluminium, fertiliser and hydrogen imports for 2026'),
+    `the widened row's sentence must name all five in order, got: ${widerSub}`);
+
+  // 3. THE HARD REQUIREMENT. Deriving the list must not reword the live sentence by one byte.
+  //    Two traps sit here, and only a byte-level assertion sees either: the keys are
+  //    'iron_and_steel' and 'fertilisers', while the prose is 'iron & steel' and 'fertiliser';
+  //    and the pack's own order (cement, aluminium, fertilisers, iron_and_steel) is NOT the
+  //    order the verdict has always read in.
+  assert.ok(shippedSub.includes(SHIPPED_SECTOR_PHRASE),
+    `the shipped pack's verdict must read exactly as it always has, got: ${shippedSub}`);
+});
+
+test('an unknown sector key renders as itself — the card never guesses a name it was not given', () => {
+  // A future row can name a sector this file has no prose for. The tempting fix is
+  // key.replace(/_/g, ' '), which would print confident, unreviewed copy — and the SHIPPED pack
+  // already proves that guess wrong twice over: 'iron_and_steel' would become 'iron and steel'
+  // (the verdict says 'iron & steel') and 'fertilisers' would stay plural (it says 'fertiliser').
+  // A prettifier that is wrong on two of the four keys we can check is not evidence about the
+  // ones we cannot.
+  //
+  // So the key is shown verbatim. The surviving underscore is the point: it reads as a datum
+  // rather than as prose, which tells a maintainer the label table needs an entry. Awkward and
+  // honest beats fluent and possibly wrong, on a card whose whole claim is what it measured.
+  const oddPack = {
+    ...pack,
+    thresholds: pack.thresholds.map((t) => (t.calendarYear === 2026
+      ? { ...t, includedSectors: [...t.includedSectors, 'organic_chemicals'] }
+      : t)),
+  };
+  const [card] = thresholdByYear([line({ massT: '10' })], fp, new Set([2026]), oddPack);
+  const sub = subOf(renderYearThreshold(card));
+  assert.ok(sub.includes('fertiliser and organic_chemicals imports for 2026'),
+    `an unknown key must render verbatim, got: ${sub}`);
+  assert.ok(!sub.includes('organic chemicals'),
+    'the underscore must survive — a prettified key reads as reviewed copy nobody wrote');
+});
+
+test('a below-threshold year names the lines its test did not cover', () => {
+  // Art 2(3) is a MASS test over four sectors, so hydrogen is RIGHTLY outside the basis — the
+  // exclusion above is correct and this test does not touch it. What was wrong is that the card
+  // then generalised "your cement is under 50 t" into "an importer owes nothing for the year".
+  //
+  // MEASURED on the shipped pack, 40 t cement + 1000 t hydrogen, both 2026, attested complete
+  // (per-line euro is scenario.costEur — both lines are cscf_pending, so costEur itself is
+  // undefined and the figure lives in the scenario):
+  //   THRESHOLD CARD → state below_threshold, knownEligibleMassT '40', eligibleLineCount 1
+  //   PER-LINE         cement   40 t → EUR      2,286.87
+  //                    hydrogen 1000 t → EUR  523,015.36
+  //   sumTotals        costEur '525302.23'
+  // The card rendered "an importer owes nothing for 2026" beside that total.
+  //
+  // eligibleLineCount ALONE cannot fix the wording: it says 1, never 1-of-what. The denominator
+  // has to be carried separately — hence linesInYear, asserted here as the field that makes
+  // "1 of your 2 lines" derivable at all.
+  const lines = [
+    line({ id: 'L1', cn: '25231000', country: 'DZ', route: '(A)', massT: '40' }),      // cement: counts
+    line({ id: 'L2', cn: '28041000', country: 'DZ', route: 'default', massT: '1000' }), // hydrogen: does not
+  ];
+  const [card] = thresholdByYear(lines, fp, new Set([2026]), pack);
+  assert.equal(card.ruleFound, true);
+  assert.equal(card.state, 'below_threshold', '40 t of cement is under 50 t — the exclusion is right');
+  assert.equal(card.eligibleLineCount, 1, 'only the cement line entered the mass test');
+  assert.equal(card.linesInYear, 2, 'the new field — "1 of 2" is not derivable without it');
+});
+
+test('a year with nothing excluded reports no exclusion', () => {
+  // The other half: linesInYear must be a real count of THIS year's lines, not a constant that
+  // makes the card's exclusion sentence boilerplate which always prints. A cement-only year has
+  // nothing outside the basis, so the two counts must be equal and the sentence must stay silent.
+  const lines = [line({ id: 'L1', cn: '25231000', country: 'DZ', route: '(A)', massT: '40' })];
+  const [card] = thresholdByYear(lines, fp, new Set([2026]), pack);
+  assert.equal(card.linesInYear, card.eligibleLineCount);
+  assert.equal(card.linesInYear, 1, '...and both are the real count, not a coincidence of zeroes');
+});
+
+test('linesInYear counts the year it belongs to, never the whole line list', () => {
+  // linesInYear is the denominator of a sentence printed on ONE year's card, so counting across
+  // years would make 2026's card claim lines that are not its own — the same per-year/per-estimate
+  // confusion the first test in this block exists to prevent, one field further down. Two lines in
+  // 2026 (one of them hydrogen, so the counts differ) and one in 2027.
+  const lines = [
+    line({ id: 'L1', cn: '25231000', massT: '40', date: '2026-03-15' }),
+    line({ id: 'L2', cn: '28041000', massT: '1000', date: '2026-06-01' }),
+    line({ id: 'L3', cn: '25231000', massT: '10', date: '2027-03-15' }),
+  ];
+  const cards = thresholdByYear(lines, fp, new Set([2026]), pack);
+  const y26 = cards.find((c) => c.calendarYear === 2026);
+  assert.equal(y26.linesInYear, 2, "2026's own lines only — the 2027 line is not 2026's denominator");
+  assert.equal(y26.eligibleLineCount, 1);
 });
 
 test('a line with an unresolved date produces no phantom NaN-year card', () => {
@@ -207,6 +364,143 @@ test('a line missing from the fingerprint map is a loud bug, not a silent empty 
   assert.throws(() => thresholdByYear(lines, fp, new Set(), pack), /L9/);
 });
 
+test('the entry-point mass gate is the ONLY thing between an unreadable mass and Art 2(3)', () => {
+  // NAME AND PREMISE SUPERSEDED IN PART, kept verbatim as the record of why the entry-point gate
+  // was built: thresholdByYear now runs this same predicate itself (see the three tests below),
+  // so the entry point is no longer the ONLY thing standing here. Every assertion in this test
+  // holds unchanged — the gate must still be total over what the aggregate misreads and
+  // transparent over what it admits, and that is now checked at both ends rather than one.
+  //
+  // THE THRESHOLD PATH HAD NO MASS GATE OF ITS OWN. thresholdByYear copied `l.massT` verbatim
+  // into ImportMassEntry.netMassT and aggregateThresholdBasis (vendored) sums it with a bare
+  // `.plus(entry.netMassT)` — it never calls resolveThreshold, so the engine's own
+  // nonNegativeDecimal check was not on this path at all, and whatever cbam-app.ts's draftLine()
+  // admitted decided the de minimis verdict unread.
+  //
+  // MEASURED on this pack, feeding thresholdByYear a Line the gate refuses (evidence for why
+  // draftLine() had to stop using Number() and start using this predicate — it is NOT a claim
+  // about what thresholdByYear should do, and nothing below asserts these figures):
+  //   '0x10'    -> knownEligibleMassT '16'   — Art 2(3) decided off a hex string
+  //   '+100'    -> knownEligibleMassT '100', state above_threshold
+  //   '-100'    -> knownEligibleMassT '-100'; mixed with a real 30 t line, '-70' — a negative
+  //                mass SUBTRACTS, so it can drag a genuinely liable importer under 50 t
+  //   '  100  ' -> raw [DecimalError], thrown out of the whole card render, not one line
+  // So the gate must be TOTAL over everything the aggregate would misread:
+  for (const massT of ['0x10', '+100', '  100  ', 'abc', '', '-100', '1_000', '5.', '0b101',
+    'NaN', 'Infinity']) {
+    assert.equal(nonNegativeDecimal(massT), null,
+      `massT=${JSON.stringify(massT)} must never reach the threshold card`);
+  }
+  // ...and TRANSPARENT over everything it does admit: the card must sum exactly the number the
+  // gate parsed, never a second reading of the same string. This is the half that makes gating
+  // at the entry point sufficient — if the two ever disagreed, a mass could clear the gate as
+  // one quantity and be counted toward de minimis as another. '1e3' is the case that would
+  // catch it: legal to both, and the only accepted form whose text and value differ.
+  for (const massT of ['0', '-0', '0.5', '49.999', '50', '100', '1e3']) {
+    const parsed = nonNegativeDecimal(massT);
+    assert.notEqual(parsed, null, `sanity: ${JSON.stringify(massT)} is a mass the gate admits`);
+    const [card] = thresholdByYear([line({ id: 'L1', massT })], fp, new Set(), pack);
+    assert.equal(card.knownEligibleMassT, parsed.toString(),
+      `the card must count ${JSON.stringify(massT)} as the gate read it`);
+  }
+});
+
+test('one unreadable mass discards the whole year card, not just its own line', () => {
+  // The entry-point gate above is no longer the ONLY thing between an unreadable mass and
+  // Art 2(3): thresholdByYear now runs the same predicate at the seam where Line.massT becomes
+  // ImportMassEntry.netMassT. Measured on this pack before it did — every row live, not
+  // hypothetical:
+  //   '0x10'    -> knownEligibleMassT '16', state indeterminate — Art 2(3) off a hex string
+  //   '+100'    -> '100',      state above_threshold
+  //   'Infinity'-> 'Infinity', state above_threshold
+  //   'abc' / '' / '  100  ' -> raw [DecimalError] thrown out of the WHOLE card render
+  // NOT skip-the-bad-line: the year's card is the answer to "is the total above 50 t", and a
+  // sum with an unreadable addend has no answer. Each bad mass is tested ALONE and beside a
+  // genuine 30 t line — the second half is what distinguishes "the year refuses" from "the bad
+  // line is quietly dropped and the rest still totals".
+  for (const massT of ['0x10', '+100', '  100  ', 'abc', '', '-100', '1_000', '5.', '0b101',
+    'NaN', 'Infinity']) {
+    const alone = thresholdByYear([line({ id: 'L1', massT })], fp, new Set([2026]), pack);
+    assert.deepEqual(alone, [], `massT=${JSON.stringify(massT)} must produce no card at all`);
+    const beside = thresholdByYear(
+      [line({ id: 'L1', massT: '30' }), line({ id: 'L2', massT })], fp, new Set([2026]), pack);
+    assert.deepEqual(beside, [],
+      `massT=${JSON.stringify(massT)} must take the year's card with it, not be skipped`);
+  }
+});
+
+test('a negative mass cannot report a liable year as exempt', () => {
+  // THE regression this task exists for, and it is worse than a bad line being skipped: a
+  // negative mass SUBTRACTS. Measured before the gate — 30 t of real cement beside a '-100' t
+  // line gave knownEligibleMassT '-70' and state 'below_threshold' on an attested-complete
+  // year: a consignment that is liable reported as exempt, fail-open on whether CBAM applies
+  // at all. Asserted as "no verdict", then again as "specifically not that verdict", because
+  // the second is the one that would have reached a user.
+  const lines = [line({ id: 'L1', massT: '30' }), line({ id: 'L2', massT: '-100' })];
+  const cards = thresholdByYear(lines, fp, new Set([2026]), pack);
+  assert.deepEqual(cards, [], 'no card can be built from a sum containing -100 t');
+  assert.equal(cards.find((c) => c.calendarYear === 2026), undefined);
+  assert.ok(!cards.some((c) => c.ruleFound && c.state === 'below_threshold'),
+    'a -100 t line must never drag a genuine 30 t consignment under the 50 t threshold');
+});
+
+test('a year of readable masses is untouched — it still totals exactly what the gate parsed', () => {
+  // The other half of the gate: it must be transparent to everything it admits, in the
+  // multi-line sum as well as the single-line case pinned above. '1e-1' is the discriminating
+  // form — legal to the gate, and its text differs from its value, so a card that echoed
+  // strings rather than summing quantities would show it.
+  const lines = [
+    line({ id: 'L1', massT: '30' }), line({ id: 'L2', massT: '19.999' }),
+    line({ id: 'L3', massT: '1e-1' }),
+  ];
+  const expected = lines
+    .reduce((sum, l) => sum.plus(nonNegativeDecimal(l.massT)), new Decimal(0)).toString();
+  const [card] = thresholdByYear(lines, fp, new Set([2026]), pack);
+  assert.equal(card.knownEligibleMassT, expected, 'the sum of what the gate parsed');
+  assert.equal(card.knownEligibleMassT, '50.099', '...and that sum, pinned literally');
+  assert.equal(card.state, 'above_threshold', '50.099 t attested-complete is over 50 t');
+  assert.deepEqual(card.entryIds, ['L1', 'L2', 'L3'], 'every readable line still counts');
+  assert.equal(card.eligibleLineCount, 3);
+});
+
+test('the refusal is scoped to the verdict it can actually corrupt', () => {
+  // TWO scoping decisions, both deliberate, both invisible without a test.
+  //
+  // ACROSS YEARS: the threshold is annual (see this function's doc), so a 2027 mass nobody can
+  // read says nothing about 2026 — 2026's card must still render. Deliberately NARROWER than
+  // the missing-fingerprint throw, which discards every year: that one is a caller bug worth
+  // stopping the whole render for, this is line data. The shipped pack publishes a 2026 row
+  // only, so a 2027 row is simulated (the widerPack idiom above) to put a rule-bearing year on
+  // BOTH sides of the refusal — otherwise 2027 would return before ever reaching the gate.
+  const spanningLines = [
+    line({ id: 'L1', massT: '60', date: '2026-03-15' }),
+    line({ id: 'L2', massT: '-100', date: '2027-03-15' }),
+  ];
+  const twoYearPack = { ...pack, thresholds: [...pack.thresholds,
+    { ...pack.thresholds.find((t) => t.calendarYear === 2026), id: 'threshold-2027', calendarYear: 2027 }] };
+  const spanning = thresholdByYear(spanningLines, fp, new Set([2026, 2027]), twoYearPack);
+  assert.deepEqual(spanning.map((c) => c.calendarYear), [2026], '2027 refuses; 2026 is unharmed');
+  assert.equal(spanning[0].state, 'above_threshold');
+
+  // On the SHIPPED pack, 2027 has no rule at all and returns before the gate — pinned because
+  // that ordering is load-bearing, not incidental. A ruleFound: false card states no mass and
+  // no verdict ("the Commission has published no 2027 row"), so there is nothing in it for an
+  // unreadable mass to corrupt; withholding it would refuse a true statement.
+  const shipped = thresholdByYear(spanningLines, fp, new Set([2026, 2027]), pack);
+  assert.deepEqual(shipped.map((c) => c.calendarYear), [2026, 2027]);
+  assert.equal(shipped[1].ruleFound, false, 'a no-rule card carries no mass claim to corrupt');
+
+  // ACROSS SECTORS: the gate runs AFTER the includedSectors filter, so a mass that could never
+  // enter the sum cannot refuse the year either. sectorForCn('28041000') is hydrogen, absent
+  // from the 2026 row — its mass is dropped before aggregation whatever it says, so refusing
+  // the card over it would withhold a verdict the readable lines fully support.
+  const [card] = thresholdByYear([
+    line({ id: 'L1', massT: '60' }), line({ id: 'L3', cn: '28041000', massT: 'abc' }),
+  ], fp, new Set([2026]), pack);
+  assert.equal(card.state, 'above_threshold', 'an out-of-scope line cannot veto the card');
+  assert.deepEqual(card.entryIds, ['L1']);
+});
+
 test('sumTotals sums scenarios in Decimal and stays labelled a what-if', () => {
   // Two known cscf_pending lines. 25231000/DZ/(A)/100 has certificates 71.465
   // (§8-pinned); the same line at 200 t doubles it. 0.1-style float drift is
@@ -233,7 +527,7 @@ test('a refused line is counted and does not poison the total', () => {
 
 test('a final zero_by_fiat line mixed with a pending line still taints the whole total', () => {
   // Electricity (27160000) is zero_by_fiat — final on its own, CSCF or no CSCF
-  // (Art 2(2) sets it to nil by fiat). But the shipped pack does not offer
+  // (Art 1(2) sets it to nil by fiat). But the shipped pack does not offer
   // electricity as a good at all (no classification, no default factor), so
   // there is no real selector that reaches zero_by_fiat through estimateFromPack
   // with the shipped pack. Extend a copy of the pack with one synthetic
@@ -380,7 +674,7 @@ test('free_allocation_tco2e is populated for a zero_by_fiat line too, not just a
     [zero], fp, 'f'.repeat(64), electricPack);
   const r = rows[0];
   assert.equal(r.embedded_tco2e, '5');
-  assert.equal(r.free_allocation_tco2e, '0', 'Art 2(2): the deduction itself is nil, not the charge');
+  assert.equal(r.free_allocation_tco2e, '0', 'Art 1(2): the deduction itself is nil, not the charge');
   assert.equal(r.chargeable_tco2e, '5');
   // The zero_by_fiat legal claim itself: a spec review mutated this exact string to garbage and
   // all 32 tests still passed. Pinned here, next to its two siblings ('published' above,
@@ -496,7 +790,10 @@ test('est() threads emissionsScope through — the harness can express the app\'
   assert.equal(directOnly.status, 'cscf_pending');
   assert.equal(withIndirect.status, 'cscf_pending');
   assert.equal(directOnly.scenario.indirectTco2e, '0', 'direct-only leaves indirect at 0');
-  assert.equal(withIndirect.scenario.indirectTco2e, '6.6', 'a scope-threaded call reaches DZ/2026\'s published indirect default');
+  // DZ/2026 publishes an indirect default per ROUTE, not one per good: (A) 0.04 and (B) 0.06.
+  // This asked for route (A) but pinned 6.6 — route (B)'s 0.06 x 1.10 x 100 — because the
+  // lookup ignored the route. Route (A)'s own electricity is 0.04 x 1.10 x 100 = 4.4.
+  assert.equal(withIndirect.scenario.indirectTco2e, '4.4', 'a scope-threaded call reaches DZ/2026\'s published indirect default for the declared route');
 });
 
 test('the indirect case: free allocation deducts from the direct side only (the app\'s default scope)', () => {
@@ -606,6 +903,280 @@ test('toCsv throws on a row whose keys do not match row 0, rather than silently 
   assert.throws(
     () => toCsv([{ a: '1', b: '2' }, { a: '3', c: '4' }]),
     /row 1/);
+});
+
+test('a line carries its tier, and the fingerprint pins attested figures as entered', async () => {
+  const base = line({ id: 'L1' });
+  const dflt = { ...base, tier: 'default+markup' };
+  const ver  = { ...base, tier: 'actual-verified', seeDirect: '2.31', verifiedRef: 'BV-2026-0142' };
+  const [a, b] = await Promise.all([lineFingerprint(dflt), lineFingerprint(ver)]);
+  assert.notEqual(a, b, 'tier and figures must change the digest');
+  // the reference alone must also change it — an attested claim is pinned as entered
+  const c = await lineFingerprint({ ...ver, verifiedRef: 'BV-2026-0143' });
+  assert.notEqual(b, c);
+  // and a default line's digest is stable against the new optional fields being absent
+  const d = await lineFingerprint({ ...base, tier: 'default+markup' });
+  assert.equal(a, d);
+});
+
+test('two verified lines differing only in seeIndirect fingerprint differently', async () => {
+  // seeDirect and verifiedRef are pinned by the test above; seeIndirect is the third attested
+  // input and the easiest one to leave out of the hashed array by hand — it is optional, it is
+  // only READ when emissionsScope is 'direct_and_indirect' (estimate-from-pack.ts's verified
+  // branch gates on exactly that), and every fixture in this file that exercises the verified
+  // path could omit it and still pass. But it multiplies straight into the charge: for a
+  // cement or fertiliser line it IS a chunk of the certificate count, and free allocation
+  // never deducts from it (it is added back after the direct-side floor — see the indirect
+  // tests above). An importer who corrects 0.4 to 0.6 tCO2e/t and gets the same fingerprint
+  // back has an audit trail that cannot tell the two submissions apart.
+  const base = { ...line({ id: 'L1' }), tier: 'actual-verified', seeDirect: '2.31' };
+  const a = await lineFingerprint({ ...base, seeIndirect: '0.4' });
+  const b = await lineFingerprint({ ...base, seeIndirect: '0.6' });
+  assert.notEqual(a, b, 'the attested indirect figure must be part of the digest');
+  // and absent is not the same claim as zero: "no indirect figure supplied" and "attested at
+  // nil" are different statements about what the importer had data for.
+  assert.notEqual(a, await lineFingerprint(base), 'absent must differ from a supplied figure');
+});
+
+test('tier ALONE changes the fingerprint — the marked-up and the attested bill are distinguishable', async () => {
+  // The test above varies tier, seeDirect and verifiedRef TOGETHER, so it cannot attribute the
+  // difference to any one of them: deleting `line.tier` from the hashed array left all 39 tests
+  // green (verified by mutation). tier is the single field that says whether the punitive
+  // mark-up was applied at all — the mark-up prices NOT HAVING DATA, so a 'default+markup' line
+  // and an 'actual-verified' line are opposite claims about what the importer could evidence.
+  // Two lines carrying identical figures under different tiers must never share a digest, or
+  // the audit trail can no longer say which bill it stamped.
+  const a = await lineFingerprint(line({ tier: 'default+markup' }));
+  const b = await lineFingerprint(line({ tier: 'actual-verified' }));
+  assert.notEqual(a, b, 'the tier alone must change the digest — nothing else differs here');
+});
+
+test('an ABSENT attested figure is a different digest from an EMPTY one — different engine outcomes', async () => {
+  // The previous implementer filled absent optionals with `?? ''` and argued the collision was
+  // benign because "the engine's shape gate refuses '' anyway, so both mean no attested figure".
+  // That is wrong: the shape gate NEVER SEES the absent case. estimate-from-pack.ts's verified
+  // branch tests `input.verified.indirectTco2ePerT !== undefined` BEFORE calling verifiedPerT,
+  // so absent skips the branch and the line PRICES (indirectTco2e '0'), while '' reaches
+  // verifiedPerT, fails the shape gate and REFUSES the whole line. Probed against the real
+  // engine on 25231000/DZ/(A)/100 t at direct_and_indirect: absent → cscf_pending, 166.065
+  // certificates, EUR 12,514.66; '' → unavailable, no figure at all. A priced certificate count
+  // and a refusal are not the same submission and must not carry the same fingerprint.
+  const base = { ...line({ id: 'L1' }), tier: 'actual-verified', seeDirect: '2.31' };
+  const { seeDirect: _drop, ...noDirect } = base;
+  const pairs = [
+    ['seeIndirect', base, { ...base, seeIndirect: '' }],
+    ['seeDirect', noDirect, { ...noDirect, seeDirect: '' }],
+    ['verifiedRef', base, { ...base, verifiedRef: '' }],
+  ];
+  for (const [field, absent, empty] of pairs) {
+    assert.notEqual(
+      await lineFingerprint(absent), await lineFingerprint(empty),
+      `${field}: absent and empty-string are different claims and must digest differently`);
+  }
+});
+
+test('the hashed field ORDER is pinned to a golden digest — a transposition cannot hide', async () => {
+  // A GOLDEN LITERAL, and it has to be one. The obvious test — fingerprint {seeDirect:'X',
+  // seeIndirect:'Y'} and {seeDirect:'Y', seeIndirect:'X'} and assert they differ — provably
+  // CANNOT catch a transposition of those two elements, and asserting it would have been
+  // security theatre. Transposing two positions in the hashed array is a BIJECTION on the input
+  // space: it does not collapse any two lines together, it merely relabels which line gets
+  // which digest. Measured on the real function: shipped, fp(X,Y)=9daaa162… and fp(Y,X)=
+  // 3e8eb482…; transposed, fp(X,Y)=3e8eb482… and fp(Y,X)=9daaa162… — the same two digests,
+  // swapped. `notEqual` holds identically before and after, and running the transposition
+  // mutation against that assertion left the whole suite green.
+  //
+  // Every pair-comparison in this file has the same blind spot, because each one compares
+  // fingerprints only to EACH OTHER. Detecting a reordering needs an anchor OUTSIDE the
+  // function — a value computed once, from a known input, and written down. That is this
+  // constant. It pins all ten positions at once, plus the JSON encoding and the null filler.
+  //
+  // The stakes are real: 2.31 direct / 0.4 indirect and 0.4 direct / 2.31 indirect are wildly
+  // different bills, and free allocation deducts from the DIRECT side only (indirect is added
+  // back after the floor — see the indirect tests above), so a swap does not cancel out.
+  //
+  // IF THIS TEST FAILS, the serialised form of the audit trail changed. That is not
+  // automatically a bug — appending a new field at the end (the documented way to extend this)
+  // will fail it too. But it must never change by ACCIDENT: every fingerprint already printed
+  // on an exported CSV or a printable document was produced by the old form, so re-deriving it
+  // from a line stops working the moment this value moves. Update the constant only alongside a
+  // deliberate, documented change to the hashed array — never to make a red test go green.
+  const fixture = line({
+    id: 'L1', tier: 'actual-verified',
+    seeDirect: '2.31', seeIndirect: '0.4', verifiedRef: 'BV-2026-0142',
+  });
+  assert.equal(
+    await lineFingerprint(fixture),
+    '2807c1968d0719c2b465cac434b938c0dd66eca54c475b383e7d87b5d04b0cab',
+    'the hashed array\'s field order/encoding changed — see this test\'s comment before updating');
+
+  // The default tier's shape, pinned the same way: same six leading facts, tier flipped, all
+  // three optionals absent (the `?? null` fillers).
+  //
+  // WHAT THIS SECOND CONSTANT IS ACTUALLY FOR — corrected after review, because the first
+  // version of this comment had it backwards and would have sent a reader chasing the wrong
+  // failure. It is NOT a second guard against transposition: every optional here is `null`, so
+  // swapping two of them is a no-op and this digest cannot move. The constant above is the one
+  // that catches a transposed pair.
+  //
+  // This one is the ONLY assertion that pins the fixed-LENGTH shape. Drop the `?? null` fillers
+  // so absent fields vanish instead of serialising, and the array truncates from ten elements to
+  // seven — every relational test still passes, the constant above still passes (its optionals
+  // are all present), and only this one fails. That is the property `lineFingerprint`'s own
+  // doc comment promises: "field absent" must never be confusable with "array truncated".
+  const dflt = line({ id: 'L1', tier: 'default+markup' });
+  assert.equal(
+    await lineFingerprint(dflt),
+    '6e0def457815078246b0dc3a8e39bf7fb06434d5b39db0e25e368d2f2267b5cb',
+    'the default-tier digest shape changed — see this test\'s comment before updating');
+});
+
+test('threshold maths ignores the tier — 50 t is 50 t', () => {
+  const dflt = { ...line({ id: 'L1', massT: '60' }), tier: 'default+markup' };
+  const ver  = { ...line({ id: 'L2', massT: '60' }), tier: 'actual-verified', seeDirect: '2.31' };
+  const fps = new Map([['L1', 'a'.repeat(64)], ['L2', 'b'.repeat(64)]]);
+  const [ya] = thresholdByYear([dflt], fps, new Set(), pack);
+  const [yb] = thresholdByYear([ver],  fps, new Set(), pack);
+  assert.equal(ya.state, yb.state);
+  assert.equal(ya.knownEligibleMassT, yb.knownEligibleMassT);
+});
+
+// A real verified-tier estimate through the real engine — never a hand-built literal. The
+// attested path is reached by passing `verified` to estimateFromPack. Defaults to
+// direct_and_indirect because line()'s own fixture scope is that, and a row whose scope column
+// says one thing while its figures were computed at another is the very confusion the est()
+// harness comment above already warns about.
+//
+// WHAT THIS HELPER PRODUCES IS NOW THE **MIXED** TIER, AND THAT IS THE HONEST FIXTURE, NOT A
+// DEFECT TO PATCH OUT. Its own docstring used to claim this input "overrides the defaults-path
+// tier on the stamp ('actual-verified') and skips the mark-up entirely". Both halves of that
+// sentence are now false, and the second was always the dangerous one: 25231000/DZ HAS a
+// published indirect default, the scope here charges for indirect, and only the DIRECT figure is
+// attested — so electricity used to be priced at zero and the line still stamped fully verified.
+// The engine now stands the Commission's default in for the unattested half, WITH its mark-up,
+// and stamps 'verified-direct+default-indirect'. The mark-up is skipped on the direct half only.
+//
+// It was deliberately NOT "fixed" by adding an indirectTco2ePerT here to restore the old stamp.
+// The Lines these estimates are paired with below carry `seeDirect` and no `seeIndirect`, so
+// this input is `verifiedInputOf(l)` — the estimate for THAT line. Supplying an indirect figure
+// the line does not carry would have made every pair below silently mispaired, in the one file
+// whose subject is csvRows' mispairing guard.
+const verEst = (over = {}) => estimateFromPack(pack, {
+  cn: '25231000', country: 'DZ', route: '(A)', massT: '100', date: '2026-03-15',
+  emissionsScope: 'direct_and_indirect', verified: { directTco2ePerT: '2.31' }, ...over,
+});
+
+test('CSV rows carry the data tier and the attested reference', () => {
+  // THE TIER ON THIS FIXTURE MOVED BECAUSE THE WORLD DID, NOT TO SILENCE A FAILURE. The line is
+  // cement from DZ at direct_and_indirect scope, attesting a direct figure and no indirect one —
+  // and 25231000/DZ has a published indirect default. That is, exactly, the mixed tier: the
+  // importer audited their process emissions and left electricity to the Commission. It used to
+  // stamp 'actual-verified' only because the engine priced the unattested electricity at zero
+  // and said nothing; now it stands the Commission's default in with its mark-up and names what
+  // it did. Asserting 'actual-verified' here would be asserting that a line half-priced from the
+  // Commission's corpus is fully the importer's own claim — a false statement about the figure
+  // in the very column that tells an auditor where the figure came from.
+  const l = line({
+    id: 'L1', massT: '100', tier: 'verified-direct+default-indirect', seeDirect: '2.31',
+    verifiedRef: 'BV-2026-0142',
+  });
+  const e = verEst();
+  assert.equal(e.stamp.tier, 'verified-direct+default-indirect',
+    'sanity: the engine stamped the mixed tier — direct attested, indirect from the defaults');
+  const rows = csvRows([l], [e], fp, 'f'.repeat(64), pack);
+  assert.equal(rows[0].data_tier, 'verified-direct+default-indirect');
+  // The reference travels on the mixed tier too: it certifies the direct half, which is a real
+  // half, and dropping it would delete the importer's cited evidence from the audit artefact.
+  assert.equal(rows[0].verified_reference, 'BV-2026-0142');
+  // Column ORDER is part of the CSV's contract: toCsv derives the header from row 0 alone, and
+  // a consumer's column mapping (an auditor's model, an importer's importer) is positional the
+  // moment anyone writes one. Pinned by position, not just by presence — the two new columns
+  // belong beside the other provenance/status columns, not appended after pack_snapshot.
+  const keys = Object.keys(rows[0]);
+  const i = keys.indexOf('cscf_status');
+  assert.ok(i >= 0, 'sanity: cscf_status is still a column');
+  assert.deepEqual(keys.slice(i + 1, i + 3), ['data_tier', 'verified_reference']);
+});
+
+test('a default-tier line writes its tier and an EMPTY reference, never the text "undefined"', () => {
+  // Line.verifiedRef is optional, so `l.verifiedRef` alone is `undefined` on every default line —
+  // and Record<string, string> does not stop it: `String(undefined)` is 'undefined', and toCsv's
+  // own `r[c] ?? ''` only covers a MISSING key, not a present-but-undefined one. An auditor
+  // opening the file would read the literal word "undefined" in a column that is meant to say
+  // "no verifier reference was cited". The `?? ''` in csvRows is what keeps it blank.
+  const rows = csvRows([line({ id: 'L1', massT: '100' })], [est('25231000', 'DZ', '(A)', '100')],
+    fp, 'f'.repeat(64), pack);
+  assert.equal(rows[0].data_tier, 'default+markup');
+  assert.equal(rows[0].verified_reference, '');
+  assert.equal(typeof rows[0].verified_reference, 'string', 'not undefined, not null — a string');
+  const csv = toCsv(rows);
+  assert.ok(!csv.includes('undefined'), 'the literal text "undefined" must never reach the file');
+});
+
+test('a hostile reference cannot become a spreadsheet formula', () => {
+  // verifiedRef is free-typed by the importer, exactly like cn_code, and this artefact is
+  // explicitly built to be opened in a spreadsheet. This must pass because toCsv's cell()
+  // neutralises by CONTENT, not by column — a new free-text column inherits the guard without
+  // toCsv being told about it. If this ever fails, the guard has been narrowed to a column list
+  // and every future free-text column is unprotected.
+  //
+  // The tier here is SCAFFOLDING, not the subject — this test is about cell() neutralising a
+  // formula. It moved for one reason only: csvRows' guard refuses a line whose tier disagrees
+  // with its estimate's stamp, and verEst() now stamps the mixed tier (see its note above), so
+  // the fixture had to say what its own estimate says or the export throws before cell() is ever
+  // reached. Same fixture, same claim, correctly labelled: direct attested, indirect defaulted.
+  const l = line({
+    id: 'L1', massT: '100', tier: 'verified-direct+default-indirect', seeDirect: '2.31',
+    verifiedRef: '=cmd()',
+  });
+  const csv = toCsv(csvRows([l], [verEst()], fp, 'f'.repeat(64), pack));
+  assert.ok(!csv.includes(',=cmd()'), 'a formula-leading reference must not reach a cell raw');
+  assert.ok(csv.includes(",'=cmd()"), 'and it must still be READABLE, neutralised by a leading quote');
+});
+
+test('csvRows refuses a line paired with an estimate computed at a different tier', () => {
+  // The load-bearing half of this task. csvRows takes two parallel arrays and validated only
+  // their LENGTH — nothing checked that results[i] was computed FROM lines[i]. The row it builds
+  // is already a blend of line-sourced columns (cn_code, origin, mass_t, line_fingerprint) and
+  // result-sourced figures, so a mispaired call exports the importer's attested inputs and their
+  // verifier's reference NEXT TO a marked-up figure, labelled as the importer's own.
+  const verifiedLine = line({
+    id: 'L1', massT: '100', tier: 'actual-verified', seeDirect: '2.31',
+    verifiedRef: 'BV-2026-0142',
+  });
+  const defaultEstimate = est('25231000', 'DZ', '(A)', '100');
+  assert.equal(defaultEstimate.stamp.tier, 'default+markup', 'sanity: this one carries the mark-up');
+  assert.throws(
+    () => csvRows([verifiedLine], [defaultEstimate], fp, 'f'.repeat(64), pack),
+    /L1/);
+  assert.throws(
+    () => csvRows([verifiedLine], [defaultEstimate], fp, 'f'.repeat(64), pack),
+    /actual-verified/);
+  // and the other direction: a default line handed a verified figure would DROP the mark-up
+  // from an importer who had no data to justify dropping it.
+  assert.throws(
+    () => csvRows([line({ id: 'L2', massT: '100' })], [verEst()], fp, 'f'.repeat(64), pack),
+    /L2/);
+});
+
+test('the tier guard does not fire on a legitimate refusal', () => {
+  // 'unavailable' is a first-class answer here, not an error (certificate-estimate.ts's own
+  // doc), and ProvenanceStamp.tier is set in baseOf — OUTSIDE the priced branches — so a refused
+  // estimate carries a real tier like every other. A guard that read the tier off a priced-only
+  // field would throw on every honest refusal and turn "we cannot price this" into a crashed
+  // export. An unreadable attested figure is exactly how a user reaches this.
+  const refused = verEst({ verified: { directTco2ePerT: 'abc' } });
+  assert.equal(refused.status, 'unavailable');
+  assert.equal(refused.stamp.tier, 'actual-verified', 'a refusal still knows which tier asked');
+  const l = line({
+    id: 'L1', massT: '100', tier: 'actual-verified', seeDirect: 'abc', verifiedRef: 'BV-2026-0142',
+  });
+  const rows = csvRows([l], [refused], fp, 'f'.repeat(64), pack);
+  assert.equal(rows[0].status, 'unavailable');
+  assert.equal(rows[0].certificates, '', 'still a refusal, not a number');
+  assert.equal(rows[0].data_tier, 'actual-verified');
+  assert.equal(rows[0].verified_reference, 'BV-2026-0142',
+    'the reference stands even when the figure it cites was refused');
 });
 
 test('csvRows throws naming the mismatch when lines and results are different lengths', () => {

@@ -264,3 +264,67 @@ test('publication checker trusts only same-origin sitemap-index references', asy
     violation.code === 'missing-sitemap-index'
   )));
 });
+
+test('the calculator states its idle prompt identically in the page and in the script', async () => {
+  // TWO COPIES OF ONE SENTENCE, and they are rendered by different machinery: the .astro ships
+  // it server-side as the pre-hydration card, and run() overwrites #cbOut with its own copy on
+  // the first input. A user sees the static one first, and keeps seeing it if ensurePack()
+  // never resolves — so a drift between them is a drift in what the product says, not a tidiness
+  // problem.
+  //
+  // They DID drift, in the commit that added the import date to run()'s completeness gate: the
+  // script's copy grew "and import date", the page's did not, and nothing caught it. Which is
+  // the same defect this calculator's engine work keeps closing one surface at a time — a fact
+  // spelled out in two places, where changing one is not changing the other.
+  //
+  // Extracted from the PAGE and required to appear in the SCRIPT, deliberately in that
+  // direction: cbam-app.ts holds several cb-idle strings (the mass refusal, the verified-panel
+  // refusal), so searching it for "some cb-idle sentence" would pass on the wrong one.
+  const page = await readFile(join(projectRoot, 'src/pages/cbam/cbam-calculator.astro'), 'utf8');
+  const script = await readFile(join(projectRoot, 'src/scripts/cbam-algos/cbam-app.ts'), 'utf8');
+
+  const idle = /<p class="cb-idle">([^<]+)<\/p>/.exec(page);
+  assert.ok(idle, 'the page must ship an idle prompt inside #cbOut before hydration');
+  assert.match(idle[1], /import date/,
+    'the idle prompt must name every field the gate requires — the import date included, since '
+    + 'a cleared date is exactly what run() now refuses to price');
+  assert.ok(script.includes(idle[1]),
+    `the script's idle copy must be byte-identical to the page's. Page says:\n  ${idle[1]}\n`
+    + 'but cbam-app.ts does not contain that string. Update run()\'s message and this one '
+    + 'together, or the product states two different sentences for one state.');
+});
+
+test('the portability dossier teaches the gate the calculator actually ships', async () => {
+  // A THIRD COPY, with a DIFFERENT failure mode from the two above. docs/cbam-calculator-
+  // portability.md is the port target's guidance — a reference implementation someone rebuilds
+  // this calculator from in another repo — so a stale snippet there does not merely say the wrong
+  // thing on a screen, it TEACHES a gate the shipped one no longer has.
+  //
+  // It shipped exactly that: the dossier's `estimate` computed gated on four fields (good,
+  // origin, route, mass) and its idle sentence named four, which is the state this calculator was
+  // in before a cleared <input type="date"> was found being priced as calendar year 0. Anyone
+  // porting from the document would have rebuilt that defect from scratch.
+  //
+  // Extracted from the PAGE and required in the DOSSIER, the same direction and for the same
+  // reason as the test above: the shipped copy is the authority, and searching the document for
+  // "some sentence about the exposure" would pass on whichever one happened to be there.
+  const page = await readFile(join(projectRoot, 'src/pages/cbam/cbam-calculator.astro'), 'utf8');
+  const dossier = await readFile(join(projectRoot, 'docs/cbam-calculator-portability.md'), 'utf8');
+
+  const idle = /<p class="cb-idle">([^<]+)<\/p>/.exec(page);
+  assert.ok(idle, 'the page must ship an idle prompt inside #cbOut before hydration');
+  assert.ok(dossier.includes(idle[1]),
+    `the dossier's idle copy must be byte-identical to the page's. Page says:\n  ${idle[1]}\n`
+    + 'but docs/cbam-calculator-portability.md does not contain that string.');
+
+  // AND THE GATE BEHIND IT, which is the half that costs a port real money. A document naming
+  // the date in its prompt while its `estimate` computed still gates on four fields would be
+  // worse than the drift it replaced: the sentence would promise a gate the snippet below it
+  // does not implement.
+  const gate = /const estimate = computed\(\(\) => \{[\s\S]*?\n\}\)/.exec(dossier);
+  assert.ok(gate, 'the dossier must still show the `estimate` computed that gates the panel');
+  assert.match(gate[0], /!date\.value/,
+    'the dossier\'s estimate gate must require the import date, as run() does — without it a '
+    + 'cleared date reaches the engine as calendar year 0 and the panel blames the published '
+    + 'rules for a blank field');
+});

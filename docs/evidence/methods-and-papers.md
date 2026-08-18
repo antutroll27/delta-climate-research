@@ -23,6 +23,32 @@ citation isn't in the repo docs are marked **(verify)**.
   bidirectional coupling that scientists discount when claimed by static visualisations. **Engine use:**
   validates the no-photoreal constraint and the self-description as an "observatory/model," not a "digital
   twin."
+- **Naveed et al. 2025 — ML-assisted predictive urban digital twin for AQI** · Environmental Modelling &
+  Software **192:106559**, CC-BY 4.0 ·
+  [doi.org/10.1016/j.envsoft.2025.106559](https://doi.org/10.1016/j.envsoft.2025.106559) — Delhi 2015–2024,
+  87,633 hourly rows; six deep models benchmarked, CNN-1D-2 reported best at **R² 0.99951 / RMSE 3.009 /
+  MAPE 0.01231**; stack Blender → Azure Digital Twins (DTDL) → InfluxDB → Grafana, with city geometry
+  skinned by AQI category colour (Figs 18–21). The closest published analogue to what we are building, and
+  useful in three separate ways.
+  **(a) Display precedent** — threshold-coloured 3D geometry driven from a live time-series store is the
+  shape of our Phase-2 AQI overlay. Note what it does *not* do: the whole city takes ONE colour from ONE
+  scalar, so there is no within-city field at any point.
+  **(b) Anti-pattern — RECORDED AS A CAUTION, NOT A MEASUREMENT.** We did not run the counter-test and are
+  not claiming a measured refutation. On reading: AQI is a deterministic piecewise-linear function of the
+  pollutants (the paper's own Eq. 1 and Table 1 breakpoints) and those same pollutants are the model's
+  inputs, so the headline R² may be recovering an identity rather than forecasting; **no persistence or
+  closed-form baseline is reported anywhere**; the 70/30 split is given by sample count (26,290) rather
+  than by date, which leaks adjacent hours on an hourly series; and "model accuracy 97.950647" applies a
+  classification metric to a regression at seven significant figures. Settling it needs the paper's Kaggle
+  source (`rohanrao/air-quality-data-in-india`) — **deliberately not done**, because we do not model AQI
+  (CEO, 2026-08-13: it comes from an API).
+  **(c) A standards mismatch not to inherit** — Fig. 1 defines AQI the **CPCB (India)** way (NH₃ included,
+  "at least three pollutants, at least one PM"), while Table 1 and Fig. 2 give **US EPA** breakpoints and
+  categories. Do not lift breakpoints from this paper.
+  **Engine use:** the threshold-colour precedent for the Phase-2 overlay; the reason that overlay must ship
+  a station-coverage statement instead of a painted ward; and the reason its breakpoints get transcribed
+  from the official CPCB document rather than a secondary source. See
+  `docs/superpowers/specs/2026-08-13-aqi-overlay-design.md`.
 - **UK Gemini Principles** (CDBB, Dec 2018) ·
   [cdbb.cam.ac.uk](https://www.cdbb.cam.ac.uk/DFTG/GeminiPrinciples) — canonical values framework for
   trustworthy twins. **Engine use:** template for a planned "About this instrument" values statement.
@@ -154,9 +180,11 @@ of these changed the shipped p75 method — they are context/benchmarking)*
   (`dc-urs-engineering-review.md` §4) found the shipped `φ₁·NDVI + φ₂·FVC + φ₃·VSI` formula is **not**
   Czekajlo's method and should not be attributed as such; the Canadian calibration doesn't transfer; its
   33-year composites (vs single-scene NDVI) are why Kolkata inputs need seasonal composites.
-- **Meta AI / WRI 1 m Canopy Height Model (v2)** — dataset detail in
+- **Meta AI / WRI 1 m Canopy Height Model — we ship v1** — dataset detail in
   [data-sources.md](data-sources.md); cited as a dataset/provider, **not** as a formal paper (Tolan et al.
-  **not in docs — verify**).
+  **not in docs — verify**). **RENDER-ONLY since 2026-08-12:** it places and scales the drawn trees and does
+  **not** enter the temperature solve. *(This line previously read "(v2)"; we ship v1 — the same correction
+  already recorded in data-sources.md.)*
 - **ESA WorldCover** (2020/2021), CC BY 4.0, DOI `10.5281/zenodo.7254221` — coarse land-cover mask;
   cross-checks/gap-fills the CHM.
 - **Mapillary Vistas / Neuhold et al. ICCV 2017** — **not in the repo at all.** Mapillary appears only as a
@@ -177,6 +205,16 @@ of these changed the shipped p75 method — they are context/benchmarking)*
   incl. Kolkata: threshold-value-of-effect 0.77 ha, cooling reach 420 m, daytime max UCI 8.07 °C (Kolkata)
   vs 4.83 °C (Bangkok — a *different* city). **Correction on record:** previously miscited as "Mitra et al.
   2022" with a false "4.83–8.07 °C Kolkata band"; corrected 2026-08-08.
+- **Schwaab, Meier, Mussetti, Seneviratne, Bürgi & Davin (2021)**, *Nature Communications* 12:6763 — LST
+  cooling by urban trees vs treeless green space across **293 European cities**; trees cool roughly **2–4×**
+  more than grass-only green, with a strong north–south gradient. **Engine use — this one changed the
+  physics.** It is the external yardstick that condemned the canopy→vegetation blend: at the shipped
+  strength of 0.5 our *implied* tree:grass vegetation ratio was **4.9–8.1×**, outside the published range,
+  while raw NDVI-derived FVC already sits in band at **2.0–2.7×**. Together with a monotonic loss of
+  ECOSTRESS agreement, that put `CANOPY_BLEND_STRENGTH` to 0 on 2026-08-12 — see
+  [known-limitations.md §1](known-limitations.md). **Caveat we state ourselves:** the sample is European and
+  Kolkata is not in it, so this is used as an order-of-magnitude plausibility bound, never as a calibration.
+  *(DOI not verified from the repo — confirm before citing externally.)*
 - **Gunawardena & Steemers (2023)**, *Buildings & Cities* 4(1), DOI
   [10.5334/bc.282](https://doi.org/10.5334/bc.282) — neighbourhood vertical greening: heat-island intensity
   1.86→1.81 K (~3%); energy 2.1–5.2%.
@@ -217,6 +255,40 @@ of these changed the shipped p75 method — they are context/benchmarking)*
 - **Kumar et al. (2017)**, *Scientific Reports* 7:14054, DOI
   [10.1038/s41598-017-14213-2](https://doi.org/10.1038/s41598-017-14213-2) — 60% of 89 Indian urban areas
   show a daytime cool island.
+
+---
+
+## Urban canopy-height validation — what "good" actually looks like
+
+Gathered 2026-08-12 because our own cross-checks kept landing at **r ~ 0.4-0.5** and we needed to know
+whether that is a failure or the norm. It is the norm. This section exists so nobody — us included — reads
+our agreement statistics without the benchmark beside them.
+
+- **Published urban validations of global canopy products get R² 0.28-0.69 (r ~ 0.53-0.83), RMSE
+  4.4-18 m.** The best directly comparable case is a *tropical city*: Tolan et al.'s own São Paulo tile at
+  **R²-block 0.41, RMSE 7.3 m**. Our Kolkata figures sit inside that band.
+- **Moudrý et al. 2026**, DOI [10.1029/2025EA004544](https://doi.org/10.1029/2025EA004544) — against the
+  *same* Czech airborne lidar, Meta reads **ME −6.9 m** and ETH **+4.8 m**: an **~11.7 m divergence between
+  the two products**, larger than the Kolkata gap we were worried about.
+- **Moudrý et al. 2024**, *Ecosphere*, DOI [10.1002/ecs2.70026](https://doi.org/10.1002/ecs2.70026) — ETH
+  "overestimates the height of low canopies (up to 10 m high) **on average by 10 m**", and overestimates
+  above 30 m. This reproduces, almost exactly, the ~9-10 m gap our first (mis-specified) ETH comparison
+  produced — the behaviour is documented, not anomalous. Open-access summary in *Bosque* 46(2):129-140.
+- **Milan, against a municipal tree register:** only **25% (Meta) / 32% (ETH)** of heights land within
+  ±5 m. A sobering number for anyone expecting a global product to resolve individual street trees.
+- **Alonzo & Corton 2026**, *Urban Forestry & Urban Greening* — the Meta/WRI urban validation to cite:
+  7,500 points across **15 cities including Bangalore**, balanced accuracy **79.7%**, and the
+  recommendation that the product "can be used with caution at the point scale (1 m) and **confidently when
+  aggregated to coarser (30-180 m) resolution**." This independently justifies our fixed-reference,
+  ward-aggregated density approach rather than per-pixel tree claims. *(Per-city table unverified —
+  paywalled; figures via search extraction. Confirm against the PDF before publishing.)*
+- **Both products show the documented OLUH effect** — Overestimate Low, Underestimate High canopy — which
+  in a real 3-8 m canopy predicts precisely the direction of disagreement we measure.
+
+**How to state our own result honestly:** do not claim r ~ 0.4 is *good*. Claim it is **expected**, name the
+benchmark, and say why — 10 m products carry ~25 m effective resolution, and a ward of 3-8 m street trees is
+the hardest case for them. That framing survives a reviewer who knows the literature; "our data agrees" does
+not.
 
 ---
 

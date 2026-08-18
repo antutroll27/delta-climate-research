@@ -98,6 +98,14 @@ argument for "receipts, not renders" is built from these.
   delegated to separate linked reports buries the provenance. Receipts must be **one click from the
   number**, not a PDF. · [capastrategies.com](https://www.capastrategies.com/heat-watch-data)
 
+- **Naveed et al. 2025 — AQI digital twin (Delhi)** · Environmental Modelling & Software 192:106559 ·
+  [doi](https://doi.org/10.1016/j.envsoft.2025.106559) · **both an exemplar and an anti-pattern.**
+  *Steal →* threshold-coloured 3D geometry fed from a live time-series store. *Avoid →* the entire city
+  takes one colour from one scalar (Figs 18–21), so a "digital twin" is claimed for what is a 3D skin over a
+  single number, with no within-city field and no null baseline behind the reported R² 0.99951. The full
+  appraisal, and the caveat that we did **not** measure the tautology we suspect, is in
+  [methods-and-papers.md](methods-and-papers.md) § Credibility, uncertainty & digital-twin critique.
+
 ---
 
 ## Two findings that reframe the differentiator

@@ -1,113 +1,146 @@
-# Heat-map boot loader — "ground rise" ward point-cloud
+# Heat-map boot loader — "ground rise" ward point cloud
 
 **Date:** 2026-08-04
-**Status:** design approved in preview; awaiting spec review
-**Prototype:** `previews/heat-loader/particles.html` (style: ground rise) — the reference
-for every visual constant; `previews/heat-loader/index.html` holds the three rejected
-directions for the record.
-**Lineage:** the hero hologram loader (`public/holo-engine.js`, Hero.astro) — Worker +
-OffscreenCanvas, no WebGL, real-progress stages, dissolve handoff. Shipped and loved;
-this is its sibling, not its copy.
+**Status:** **AMENDED after audit.** v1 (Worker + OffscreenCanvas) was built, audited,
+and rejected on the rendering. v2 moves the point cloud into the map's own three.js
+scene. The wiring, the progress module and the overlay DOM survive unchanged.
+**Prototype:** `previews/heat-loader/particles.html` (style: **ground rise**) — the
+reference for choreography and density only. Its projection is NOT the reference; that
+is the whole point of this amendment.
+**Lineage:** the hero hologram loader (`public/holo-engine.js`) — real-progress stages,
+honest telemetry, dissolve handoff. v2 keeps its grammar and drops its architecture.
 
-## 1 · What it is
+## 1 · Why this was amended
 
-A loading animation over the map area of `/heat-map`, covering the gap between HTML
-paint and the ward being ready — measured at ~1.5 s on broadband and 4–8 s on mobile
-data. Today that gap shows one 0.52 rem text chip.
+v1 rendered in a Worker on its own OffscreenCanvas, with a hand-rolled projection. An
+audit measured what that produced over the real map:
 
-The ward is drawn as a point cloud of its own real data. A radial wave travels outward
-from the ward centre and the city *prints upward* out of a breathing dust floor:
-buildings rise as height-coloured columns with wireframe massing, roads resolve as ink
-dots along the real ways, water fills turquoise, height callouts flicker onto the
-tallest towers as the wave reaches each one. When every stage is done the massing
-settles flat and the existing 2D→3D grow-in rises the real buildings out of it.
-
-The user judged four condense choreographies (vortex, overpass sweep, ground rise,
-orbital descent) at two durations; **ground rise** won. The settled final frame is
-approved as-is and is the fixed target every refinement must preserve.
-
-## 2 · Honesty rules, non-negotiable
-
-- **Every number shown is true.** The stage ticker lines (`basemap · footprints ×3,527
-  · google heights · roads ×500 · water ×7 · sim warm-up`) complete only when the real
-  await they name resolves. The telemetry block (ward, coordinates, particle count,
-  `overture 2026-07-22.0 · ee 2.5d 2023`) reads from the loaded artefacts, never from
-  copy. Counts are per-ward and come from the data, so they can never drift stale.
-- **No percentage, no fake progress.** The rail advances only on stage completion.
-  The wave's radius pursues real progress (below) and simply arrives when loading
-  arrives.
-- **Every particle is real data.** Buildings from the ward JSON (position, measured
-  height, heat-ramp colour by height), roads sampled along the real ways, water from
-  the real polygons, plus a bounded land-dust scatter that is presentation, not data,
-  and claims nothing.
-
-## 3 · Choreography (constants from the prototype)
-
-| phase | driver | what happens |
-|---|---|---|
-| dust | immediately, no data needed | dim cyan dust floor breathes; survey grid faintly present; ticker starts |
-| rise | progress-driven radial wave, centre → 990 m | particle wavefront band (130 twinkling dots, golden-angle spread) travels outward; particles behind it rise into place with cubic ease-out and ~10 % overshoot; callouts appear as the wave reaches each of the 5 tallest buildings |
-| settle | last ~18 % of progress | building particles sink flat (roads/water stay grounded), colours dim, grid fades |
-| handoff | ward ready | overlay fades 300 ms; the existing grow-in plays unchanged |
-
-**Progress, not clock.** The wave radius pursues a target derived from weighted real
-stages (weights fixed in the pure module): app bundle + style load ·25, ward JSON ·20,
-surface PNG ·20, roads + water ·15, sim warm-up ·20. Pursuit is the hologram's
-pShown→pTarget pattern: monotonic, eased, never backwards. On a warm cache the whole
-performance naturally compresses to under a second — which is why **there is no
-session guard**: the animation is the wait made visible, so a short wait is a short
-animation. If everything resolves in under 400 ms the overlay skips entirely.
-
-**Ward switches do not replay it.** The loader belongs to the cold boot of the map
-stack. Tab switches keep today's loadchip + grow-in; the overlay mounts once.
-
-## 4 · Architecture (the hologram's, adapted)
-
-```
-public/heat-loader-engine.js          NEW  self-contained worker; OffscreenCanvas 2D;
-                                           owns particles, wave, grid, callouts, telemetry text
-src/scripts/climate-engine/loader-progress.ts
-                                      NEW  pure: stage events → weighted monotonic progress;
-                                           node-testable, no DOM
-src/components/ClimateEngine/HeatMapStage.astro
-                                      EDIT overlay markup (canvas + ticker + rail + telemetry,
-                                           role="status" aria-live="polite"), above #mlmap,
-                                           below the HUD chrome
-src/scripts/climate-engine/heat-map-app.ts
-                                      EDIT ~15 lines: post stage events + parsed ward data to
-                                           the worker; remove overlay on ready; skip-fast rule
-tests/unit/loader-progress.test.mjs   NEW  weights sum to 1 · monotonicity · skip-fast threshold
-```
-
-- **Worker + OffscreenCanvas, 2D only.** The page's WebGL context belongs to MapLibre;
-  the hologram already proved the worker path and its main-thread fallback
-  (`transferControlToOffscreen` absent → same engine on the main thread).
-- **No double fetch.** The loader never fetches data itself. `loadWard` already
-  fetches everything; the app posts the parsed buildings/roads/water to the worker as
-  each arrives. The dust phase needs no data at all, which is what makes the first
-  frame instant.
-- **Particle budget by tier.** Desktop ~34k (measured 64 fps in the pessimistic CPU
-  rasteriser); coarse-pointer / tier-0 devices halve stacking density (~17k). Constant
-  cost: the wavefront band is a fixed 130 dots at any radius.
-- **Reduced motion:** static settled frame + live ticker and rail, no animation —
-  the same posture as the grow-in (`growU.value = 1`).
-- **Failure is graceful.** Worker creation failing, or any stage failing, never blocks
-  the map: the overlay just fades at ward-ready exactly as if loading were fast. The
-  loader observes the boot; it must never be able to break it.
-
-## 5 · What could go wrong
-
-| risk | answer |
+| finding | measured |
 |---|---|
-| loader delays the actual load | it renders on data the app already fetched; zero fetches, zero awaits of its own |
-| stage never completes (offline, EE artefact 404) | pursuit holds at the last true stage; ward-ready (or ward-failed) always dissolves the overlay |
-| astro view-transition remounts markup with no driver | the hologram's `data-astro-rerun` lesson — the boot script carries the same attribute |
-| worker leaks on ward switch or nav | terminate on handoff, the hologram's cleanup pattern |
-| jank on weak devices | tier-halved density; 2D canvas fillRect only; transform/opacity DOM |
-| callout labels overlap on rotation | labels are placed in screen space after projection with a fixed stagger; the prototype's layout is the reference |
+| **Perspective inverted** | far/near = 1.66 where the map is near/far = 2.24 — the ward drew as a trapezoid wide at the top |
+| **DPR counted twice** | ward 1,299 px wide on DPR-2 against the map's 1,023 px; on a Pixel 7, 846 CSS px on a 619 px stage |
+| **Camera unrelated to the map's** | bearing jump at handoff of 1.2° / 6.4° / 23.4° / **60°** across four boot speeds — a linear function of how slow the network was |
+| **Handoff overlapped the finished map** | map grow-in 96 % complete when the loader began fading; **3.4 s of two misaligned cities** at 4× CPU throttle |
 
-## 6 · Out of scope
+One mistake produced the first three: a second projection existed at all. A further fact
+the audit surfaced makes a constants-only fix impossible — **the map idle-orbits at
+−1.4°/s** (`ORBIT_DEG_PER_SEC`), so even a correctly-initialised fixed bearing separates
+from the map at ~4.9°/s.
 
-The 2D→3D building grow-in (kept exactly as shipped) · ward-switch UX · the hero
-hologram (untouched) · any change to what `loadWard` fetches or in what order · other
-pages' loaders.
+**So v2 removes the second projection rather than correcting it.** The camera cannot
+disagree with the map's camera when there is only one camera.
+
+## 2 · Architecture (v2)
+
+```
+public/heat-loader-engine.js            DELETE  the worker, and with it the second projection
+src/scripts/climate-engine/loader-points.ts
+                                        NEW     builds ONE THREE.Points mesh from the
+                                                already-parsed ward data; all motion in the
+                                                vertex shader; pure builder, node-testable
+src/scripts/climate-engine/loader-progress.ts
+                                        KEEP    unchanged; already audited sound
+src/components/ClimateEngine/HeatMapStage.astro
+                                        KEEP    overlay DOM (ticker/rail/telemetry) unchanged;
+                                                canvas element removed
+src/scripts/climate-engine/heat-map-app.ts
+                                        EDIT    mesh into the existing threeScene; uniforms
+                                                driven from the existing render loop
+```
+
+The points are added to the **same `threeScene`** the buildings live in, drawn by the
+**same custom layer**, through **MapLibre's own matrix**. When the idle orbit turns the
+map, the points turn with it — because they are in it.
+
+**All motion lives in the vertex shader.** Per-point attributes: target position, radial
+distance, seed, class, height, and for building points the **same `aDelay`** the facade
+shader already uses. Uniforms: `uProgress`, the shared `uSize`, and the shared **`growU`**.
+The rise wave is computed per-point on the GPU — zero per-frame CPU, one draw call. The
+130-point wavefront band rides in the same geometry, class-tagged.
+
+**Time-based, not frame-based.** v1 advanced `settleT += 0.02` and `pShown += Δ*0.06`
+per frame, on a thread whose frame rate the audit measured at **28.5 fps (DPR 1) /
+17.2 fps (DPR 2)** in situ against 60–75 fps in isolation — so every duration stretched
+2–3× exactly when the machine was busiest, and 1 run in 7 overran the 4 s backstop. v2
+pursues on elapsed time.
+
+## 3 · The handoff: per-building dissolve
+
+**There is no settle phase.** The point cloud holds the risen massing, and each building's
+points fade at the exact moment that building's real extrusion grows up through them —
+because both read the identical expression:
+
+```glsl
+float gT = clamp((uGrow - aDelay*0.55)/0.45, 0.0, 1.0);
+```
+
+The facade shader uses it to scale `transformed.y`; the points use it to fade alpha. Same
+uniform, same per-building stagger, same clock. A building and its own preview cannot
+desynchronise, and the "two cities" state is not merely avoided — it is unbuildable.
+
+## 4 · Honesty (the three fixes, and the one deletion)
+
+**Buildings are cyan → white by height.** v1 coloured height with `RAMP`, byte-identical
+to the map's temperature ramp, while the "Extreme / Severe / Hot / Warm / Comfortable"
+legend was on screen throughout — a red-and-blue city that read as a heat map and was a
+height map. Monochrome reads as *structure assembling*. Roads keep ink, water keeps
+turquoise; neither resembles the ramp.
+
+**Callouts read `~87 m`, not `86.9 M`.** The value is a zonal **p65** of Google Open
+Buildings 2.5D Temporal (2023 epoch, ~4 m raster) over an Overture footprint, computed by
+`scripts/compute-heights.py`. The ward artefact's own `heightsNote` records that the OSM
+validation was **underpowered** (6 matched pairs against a threshold of 8). A decimal
+place on that is a precision the measurement does not have.
+
+**Land dust is deleted.** 3,400 invented particles — ~10 % of the advertised `pts` count,
+and on a 400 kbit/s connection the audit measured **12 seconds in which they were the only
+thing drawn**, the building payload never having arrived. Every remaining particle is real
+data, so the count needs no asterisk. Before building data lands: ticker, rail and phase
+text only. The darkening basemap beneath is the ground.
+
+**Telemetry derives, never hardcodes.** Coordinates from `WARDS[state.ward]`, provenance
+from `d.source`, `pts` from the real particle count. v1 hardcoded `22.528°N 88.366°E` —
+true only because the cold boot happens to load Ballygunge.
+
+## 5 · Lifecycle
+
+No worker, no canvas transfer, no second rAF. The points ride the map's existing repaint
+loop; `growU < 1` already forces continuous repaint, and that same condition keeps the
+wave animating. Teardown: remove the mesh, dispose the geometry, clear the overlay DOM,
+and **clear the backstop timers** — v1 left `setTimeout(bootEnd, 4000)` and `12000`
+uncleared, so on an Astro soft nav they fired against a detached element and held the
+whole `mountHeatMap` closure alive for up to 12.3 s.
+
+**Reduced motion:** the grow-in is already instant (`growU = 1`), so the points never
+appear at all. Ticker and rail only — honestly static, rather than v1's four-distinct-
+frames-in-540 ms (the water shimmer was not gated on `reduce`).
+
+**`#loadchip` hides** while the loader owns the story; v1 ran both indicators at once.
+
+## 6 · What survives untouched
+
+`loader-progress.ts` and its 6 tests · the overlay's ticker, rail and telemetry DOM ·
+skip-fast at 400 ms · cold-boot-only (`firstBoot`) · fire-and-forget wiring. The audit
+called all of this good — it measured the worker at **0 ms** main-thread cost on desktop
+and found the teardown latched and leak-free. None of it changes.
+
+## 7 · Tests
+
+The wiring tripwires are rewritten for the new shape, and the audit's parting observation
+is answered directly — its complaint was that nine source-text guards could not have
+caught an inverted perspective, a doubled DPR or a 60° bearing jump. In v2 **there is no
+projection to test**, which is the structural point. What replaces them:
+
+- `loader-points.ts` builds no invented particles — a grep guard for the deleted dust
+- no `RAMP` / heat-ramp constant in `loader-points.ts` (the mono-colour guard)
+- the `(uGrow - aDelay*0.55)/0.45` expression appears in **both** the facade shader and
+  the points shader (the interlock guard — if they drift, the dissolve desynchronises)
+- callout text matches `/^~\d+ m$/` — no decimal place
+- backstop timers cleared on dispose
+- telemetry reads `WARDS[state.ward]`, never a coordinate literal
+
+## 8 · Out of scope
+
+The 2D→3D grow-in itself (unchanged) · ward-switch UX · the hero hologram · what
+`loadWard` fetches or in what order · other pages' loaders · `accuracy.ts`, the sim, and
+every published figure.

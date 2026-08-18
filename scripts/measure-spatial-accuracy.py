@@ -68,6 +68,7 @@ Output: data/calibration/spatial-accuracy.json
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import os
@@ -83,8 +84,10 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
+import _canopy  # noqa: E402
 import _physics  # noqa: E402
 import _types  # noqa: E402
+import _water  # noqa: E402
 from _ecostress import align, band_url, cmr_search, fetch, target_grid, token  # noqa: E402
 from _sentinel import GRID as SURFACE_GRID  # noqa: E402
 
@@ -104,11 +107,46 @@ MIN_CELLS = 12
 
 
 def surface_layers(ward_id: str) -> tuple[npt.NDArray[np.float32], npt.NDArray[np.float32]]:
-    """Per-cell vegetation and albedo at the Sentinel grid, decoded from the PNG.
+    """Per-cell vegetation and albedo at the Sentinel grid, as the BROWSER runs them.
 
     Read back from the SHIPPED texture rather than recomputed from the composite
     cache: this is what the browser actually runs on, quantisation included, so
     validating anything else would validate a model nobody uses.
+
+    AND THEN THE CANOPY BLEND, for the same reason. Until 2026-08-12 this function
+    stopped at the surface PNG and stated the principle above while breaking it:
+    `rasterWardBase` does not stop there. It passes `veg[]` through
+    `blendCanopyIntoVeg` before the solver ever runs —
+
+        if (canopy) veg = blendCanopyIntoVeg(veg, resample(canopy.height, canopy.n, n),
+                                             CANOPY_BLEND_STRENGTH);
+
+    — and no Python applied it, so every spatial figure this file wrote before that
+    date scored a field that had never shipped. The tell was an accuracy output that
+    came back byte-identical across a canopy change that nearly doubled the height
+    field: a tautology, not evidence. See docs/evidence/known-limitations.md sec.1.
+
+    THE STRENGTH IS NOW ZERO, so the call below is an identity and the canopy raster
+    does not reach the physics at all. That is not a reason to delete this code. It is
+    the SAME call the browser makes, reading the SAME constant through the parity
+    oracle, so the laboratory tracks the instrument automatically if the strength ever
+    moves — which is the whole point of the defect this closed. Why zero: the sweep in
+    known-limitations.md sec.1, and the comment on `_canopy.BLEND_STRENGTH`.
+
+    THE BLEND IS APPLIED AT THIS SCRIPT'S OWN 140 GRID, not by replaying the browser's
+    140 -> 192 -> blend path: one function rather than a second resample stage in the
+    laboratory, and the blend is mean-neutral at any grid, so ward means agree either
+    way and only the spatial pattern differs. That difference was MEASURED, not
+    asserted -- scripts/measure-canopy-blend-residual.py reports how far this lands
+    from the browser's 192-grid answer (6-9% of the blend's own effect at 70 m). At
+    strength 0 the residual is identically zero; it becomes live again the moment
+    anyone re-enables the blend, which is when to re-read that script.
+
+    A ward WITHOUT a canopy PNG behaves exactly as before — that is also what the
+    browser does, since `loadCanopyRaster` returns null and `rasterWardBase` skips
+    the blend. A canopy raster at the WRONG grid is a different matter: the TS
+    would resample it, and silently returning the unblended field here would
+    quietly restore the very bug this closes, so it exits loudly instead.
     """
     path = os.path.join(SURFACE_DIR, f"{ward_id}-surface.png")
     if not os.path.exists(path):
@@ -117,7 +155,24 @@ def surface_layers(ward_id: str) -> tuple[npt.NDArray[np.float32], npt.NDArray[n
     a = np.asarray(Image.open(path)).astype(np.float32)
     veg = a[:, :, 0] / 255.0 * (VEG_RANGE[1] - VEG_RANGE[0]) + VEG_RANGE[0]
     alb = a[:, :, 1] / 255.0 * (ALBEDO_RANGE[1] - ALBEDO_RANGE[0]) + ALBEDO_RANGE[0]
-    return veg.astype(np.float32), alb.astype(np.float32)
+    veg = veg.astype(np.float32)
+
+    canopy_path = os.path.join(SURFACE_DIR, f"{ward_id}-canopy.png")
+    if os.path.exists(canopy_path):
+        # north-up, because everything in THIS script is north-up: the surface PNG is
+        # read unflipped and the ECOSTRESS target grid is north-up too. `_canopy`
+        # decodes into the sim's south-up frame — the browser's frame, the one the
+        # parity oracle pins — and names the conversion back rather than keeping a
+        # second flip-free decoder around.
+        canopy = _canopy.load_canopy_north_up(canopy_path)
+        if canopy.shape != veg.shape:
+            sys.exit(f"{ward_id}: canopy raster is {canopy.shape} but the surface grid is "
+                     f"{veg.shape}. The browser resamples both onto its 192 display grid; "
+                     f"this script blends at the source grid and cannot while they differ. "
+                     f"Re-export one of them, or teach this function the resample.")
+        veg = _canopy.blend_canopy_into_veg(veg, canopy, _canopy.BLEND_STRENGTH)
+
+    return veg, alb.astype(np.float32)
 
 
 def built_layer(ward_id: str) -> npt.NDArray[np.float32]:
@@ -148,8 +203,102 @@ def built_layer(ward_id: str) -> npt.NDArray[np.float32]:
                  f"`npx tsx scripts/export-built-raster.mjs` first. It is written by the "
                  f"TypeScript rasteriser on purpose; a Python reimplementation would drift "
                  f"and the drift would look like the model failing validation.")
+    _assert_built_cache_current(ward_id, path)
     a = np.fromfile(path, dtype=np.float32)
     return np.flipud(a.reshape(SURFACE_GRID, SURFACE_GRID)).copy()
+
+
+def _assert_built_cache_current(ward_id: str, path: str) -> None:
+    """Refuse a cache built from footprints we no longer ship.
+
+    THIS EXISTS BECAUSE THE ABSENCE OF IT COST NINE DAYS OF FIGURES. The cache
+    filename is keyed only by ward and grid, so it does not change when the
+    geometry underneath does, and the check above only asks whether the file
+    EXISTS. Commit 6151975 swapped the shipped footprints from Microsoft to
+    Overture -- 8,579 buildings became 12,767, and because Microsoft merges
+    towers into fewer, larger polygons the coverage moved in the counter-intuitive
+    direction. 45-58% of cells differed. Nothing complained. Every spatial figure
+    published between then and 2026-08-13 scored a building layer that had been
+    replaced, and the error surfaced only when someone re-ran the exporter by hand
+    and noticed the mean had moved.
+
+    The exporter now writes a sidecar naming the geometry it rasterised. Compare
+    it against the geometry actually shipped, and exit rather than measure.
+    """
+    side = path.replace(".f32", ".json")
+    geom_path = os.path.join(SURFACE_DIR, f"{ward_id}.json")
+    with open(geom_path, "rb") as fh:                    # RAW BYTES -- see the
+        want = hashlib.sha256(fh.read()).hexdigest()[:16]  # exporter's note on why
+    with open(geom_path, encoding="utf-8") as fh:
+        live = json.load(fh)
+    hint = (f"run `npx tsx scripts/export-built-raster.mjs` to rebuild it from the "
+            f"footprints currently shipped")
+    if not os.path.exists(side):
+        sys.exit(f"{ward_id}: the built cache carries no provenance sidecar, so it "
+                 f"cannot be shown to match the shipped footprints -- {hint}")
+    stamp = json.load(open(side, encoding="utf-8"))
+    if stamp.get("geometrySha256") != want:
+        sys.exit(f"{ward_id}: the built cache was rasterised from DIFFERENT footprints "
+                 f"than the ones shipped (cache {stamp.get('count')} buildings / "
+                 f"{stamp.get('geometrySha256')}, shipped {len(live['b'])} / {want}) -- {hint}")
+
+
+def water_coverage(ward_id: str, n: int = SURFACE_GRID) -> npt.NDArray[np.float32]:
+    """Open-water AREA FRACTION per cell, north-up, from the shipped OSM polygons.
+
+    THE GEOMETRY, UNGATED — what the ward actually contains, whether or not the solver is
+    given it. `water_layer` below is the gated version and is what any model must use;
+    this one exists so the gate can be REPORTED rather than becoming an absence nobody
+    notices. Keeping the two apart is the difference between "this ward has no water" and
+    "we decided not to model this ward's water", and only one of those is true.
+
+    THE EQUILIBRIUM THIS SCRIPT SCORES CANNOT USE EITHER OF THEM, and that is a finding
+    rather than an oversight. `modelled_field` mirrors `equilibriumC` (types.ts), whose
+    signature is `(p, albedo, veg, built)` — there is no water term in the closed-form
+    steady state at all. Water enters the engine in exactly one place, `TsHeatSim.step`
+    (src/scripts/climate-engine/sim-ts.ts): a ventilation boost inside the convective
+    term, and a post-step relaxation toward `tAir - 1.5`. Both are properties of the
+    TIME-STEPPED solver, and the second has no dt-free steady state — its fixed point is
+    a blend of the physics equilibrium and `tAir - 1.5` whose weights depend on the step
+    size. Writing one here would be inventing physics the browser does not run, which is
+    the failure mode the canopy sweep exists to prevent.
+
+    So the water layer is scored where the real solver runs: `measure-shipped-
+    amplitude.py`, which drives `TsHeatSim` through scripts/sim-field-dump.mjs and had
+    been passing `np.zeros` for this layer since it was written. What THIS script does
+    with water is report its coverage, so a reader of spatial-accuracy.json can see how
+    much of each ward the predictor is structurally blind to.
+
+    UNLIKE `built`, THIS IS RASTERISED ON DEMAND rather than read from a cache written by
+    the TypeScript. `built` can use a cache because one grid serves every consumer; water
+    is needed at 140 here and at 192 for the solver, and a cache would freeze one of
+    them. The cost of that is a second implementation of the rasteriser, in
+    scripts/_water.py, held to the shipped TypeScript by tests/fixtures/water-oracle
+    and scripts/check-water-oracle.py on every `npm run test:py`.
+    """
+    size_m = float(_types.WARDS[ward_id].footprint_m)
+    return _water.water_north_up(_water.load_ward_water(ward_id), size_m, n)
+
+
+def water_layer(ward_id: str, n: int = SURFACE_GRID) -> npt.NDArray[np.float32]:
+    """The water layer AS THE SOLVER RECEIVES IT — which is currently all zeros.
+
+    `WATER_LAYER_ENABLED` is false in types.ts, so `rasterWardBase` hands the solver a
+    zero array rather than the coverage above. This function applies the same gate,
+    through `_water.LAYER_ENABLED`, which the parity oracle pins to the TypeScript
+    constant. Any model in this stack must call THIS, not `water_coverage`: scoring the
+    ungated geometry while the browser runs the gated one is precisely the divergence
+    docs/evidence/known-limitations.md §1 is about, and the gate is the newest place it
+    could open.
+
+    Why the gate is off — the measurement is in `_water.LAYER_ENABLED` and in
+    docs/heat-map-water-layer.md. Short version: turning it on cost 0.049 r against
+    ECOSTRESS, in proportion to each ward's open water, and RAISED an already over-drawn
+    spatial amplitude.
+    """
+    if not _water.LAYER_ENABLED:
+        return np.zeros((n, n), dtype=np.float32)
+    return water_coverage(ward_id, n)
 
 
 def area_downsample(src: npt.NDArray[np.float32], out_h: int, out_w: int) -> npt.NDArray[np.float32]:
@@ -234,6 +383,16 @@ def modelled_field(sc: _physics.Scene, veg: npt.NDArray[np.float32],
     replaced by arrays — same constants, same order of operations. The physics
     itself stays in `_physics._eq`, evaluated here on arrays via the identical
     expression, so this cannot drift into being a second model.
+
+    THERE IS NO WATER TERM HERE, AND THERE IS NONE IN THE MODEL THIS MIRRORS. That is
+    worth stating because `SimLayers` has carried a `water` layer all along and it
+    started being FILLED on 2026-08-13. `equilibriumC` (types.ts) takes
+    `(p, albedo, veg, built)`; the water terms live only in the time-stepped
+    `TsHeatSim.step`, and one of them has no dt-free steady state. So this predictor is
+    structurally blind to water, its figures do not move when the water layer is
+    populated, and the water measurement is in `measure-shipped-amplitude.py`, which
+    drives the real solver. See `water_layer` above for the full argument, and
+    docs/evidence/known-limitations.md §7.
     """
     kRad = _physics.K_SUM * ratio / (1 + ratio)
     h = _physics.K_SUM - kRad
@@ -349,6 +508,11 @@ def main() -> None:
 
     # Per-ward layers, downsampled once to the ECOSTRESS grid.
     layers: dict[str, dict[str, npt.NDArray[np.float32]]] = {}
+    # Ward-mean open-water fraction. REPORTED, NOT MODELLED — see `water_layer`: the
+    # equilibrium has no water term, so this predictor is blind to whatever share of
+    # each ward this is. Printing it is how that blindness stays visible instead of
+    # becoming an absence nobody notices.
+    water_cover: dict[str, float] = {}
     for wid, w in wards.items():
         _tf, W, H = target_grid(_types.ward_bounds(w))
         veg, alb = surface_layers(wid)
@@ -357,8 +521,12 @@ def main() -> None:
             "alb": area_downsample(alb, H, W),
             "built": area_downsample(built_layer(wid), H, W),
         }
+        water_cover[wid] = float(water_coverage(wid).mean())
         print(f"  {wid:<13} ECOSTRESS grid {W}x{H} · veg sd {layers[wid]['veg'].std():.3f}"
-              f" · built sd {layers[wid]['built'].std():.3f}")
+              f" · built sd {layers[wid]['built'].std():.3f}"
+              f" · water {100 * water_cover[wid]:.2f}%"
+              f" ({'gated off' if not _water.LAYER_ENABLED else 'in the solve'};"
+              f" never in this predictor)")
 
     rows: list[dict[str, Any]] = []
     for n, sc in enumerate(scenes, 1):
@@ -406,6 +574,10 @@ def main() -> None:
                 if (phase is None or r["phase"] == phase) and not math.isnan(r[key])]
         return float(np.mean(vals)) if vals else float("nan")
 
+    def agg_ward(wid: str, key: str) -> float:
+        vals = [r[key] for r in rows if r["ward"] == wid and not math.isnan(r[key])]
+        return float(np.mean(vals)) if vals else float("nan")
+
     out: dict[str, Any] = {
         "method": "Pearson correlation between the modelled equilibrium field and ECOSTRESS "
                   "L2T LSTE v002, per ward per scene, at the sensor's native 70 m. Both "
@@ -424,6 +596,23 @@ def main() -> None:
         "by_phase": {p: {k: agg(p, k) for k in
                          ("r_physics", "r_built", "r_veg", "anomaly_rmse_k")}
                      for p in ("day", "night")},
+        # Per ward, because the aggregate hides which ward a change came from. Three
+        # wards is few enough that a result driven entirely by one of them is a result
+        # about that ward, and the split is the only way to see it.
+        "by_ward": {wid: {"ward_scenes": len([r for r in rows if r["ward"] == wid]),
+                          "open_water_fraction": water_cover.get(wid, float("nan")),
+                          **{k: agg_ward(wid, k) for k in
+                             ("r_physics", "r_built", "r_veg", "anomaly_rmse_k")}}
+                    for wid in wards},
+        "water": {"note": "Open-water fraction per ward, from the shipped OSM polygons "
+                          "({ward}-water.json) through the same rasteriser the browser "
+                          "runs (scripts/_water.py, oracle-checked). REPORTED, NOT "
+                          "MODELLED: this script's predictor is the per-cell equilibrium, "
+                          "which mirrors equilibriumC(p, albedo, veg, built) and has no "
+                          "water term. Water enters the engine only in TsHeatSim.step, so "
+                          "the figures above do not respond to it. The measurement that "
+                          "does is data/calibration/shipped-amplitude.json.",
+                  "fraction_by_ward": water_cover},
         "terms": {t: {"r": agg(None, f"r_term_{t}"), "spatial_sd_k": agg(None, f"sd_term_{t}")}
                   for t in ("solar_albedo", "built", "veg")},
         "constants": {"note": "DEFAULT_PARAMS from types.ts + sky.ts — what ships, NOT "
@@ -441,6 +630,13 @@ def main() -> None:
         n = len([r for r in rows if ph is None or r["phase"] == ph])
         print(f"  {label:<14}{agg(ph,'r_physics'):>9.3f}{agg(ph,'r_built'):>9.3f}"
               f"{agg(ph,'r_veg'):>9.3f}{agg(ph,'anomaly_rmse_k'):>10.2f}K{n:>6}")
+    for wid in wards:
+        n = len([r for r in rows if r["ward"] == wid])
+        if not n:
+            continue
+        print(f"  {wid:<14}{agg_ward(wid,'r_physics'):>9.3f}{agg_ward(wid,'r_built'):>9.3f}"
+              f"{agg_ward(wid,'r_veg'):>9.3f}{agg_ward(wid,'anomaly_rmse_k'):>10.2f}K{n:>6}"
+              f"   water {100 * water_cover.get(wid, float('nan')):.2f}%")
     print(f"\n  written to {os.path.relpath(OUT, ROOT)}")
 
     print(f"\n  {'term':<16}{'r':>8}{'spatial SD (K)':>16}")

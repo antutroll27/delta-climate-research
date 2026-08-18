@@ -1,12 +1,18 @@
 /**
  * water-layer.ts — the ward's water, as animated surfaces in the city scene.
  *
- * RENDER ONLY. This module draws OSM water polygons ({ward}-water.json, fetched
- * by scripts/fetch-water.py); it deliberately does NOT touch SimLayers.water,
- * which stays zero. The simulation already carries water terms (sim-ts.ts
- * ventilation + relaxation) that activate the moment that layer is filled — and
- * activating them changes the published ward mean, so that step is gated behind
- * the calibration protocol, not smuggled in with a visual feature.
+ * RENDER ONLY, STILL — but the sentence that followed is no longer true, and the
+ * change is worth naming here because this file is where a reader looks for it.
+ * This module draws OSM water polygons ({ward}-water.json, fetched by
+ * scripts/fetch-water.py) and touches nothing in the physics. It used to add that
+ * SimLayers.water "stays zero", and that the sim's water terms (sim-ts.ts
+ * ventilation + relaxation) were gated behind the calibration protocol.
+ *
+ * THAT GATE WAS OPENED ON 2026-08-13. `rasterizeWardWater` (ward-raster.ts) now fills
+ * the layer from these same polygons, so the terms are live and the ward mean has
+ * moved. The protocol ran rather than being bypassed: docs/heat-map-water-layer.md
+ * carries the before/after against ECOSTRESS. What is still true is the SPLIT — this
+ * file is the look, the rasteriser is the physics, and they share only the artefact.
  *
  * WHAT MAKES IT READ AS WATER AND NOT A BLUE HOLE. Three things, all derived
  * from geometry alone — no bathymetry, no API, nothing invented:

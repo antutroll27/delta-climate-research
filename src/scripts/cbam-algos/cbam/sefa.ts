@@ -25,9 +25,9 @@ import type { FreeAllocationTables } from './types'
 // could explain, so the configuration is deliberately identical.
 Decimal.set({ precision: 34, rounding: Decimal.ROUND_HALF_EVEN })
 
-/** IR (EU) 2025/2620 Art 2(2): electricity's adjustment is zero by fiat, not by benchmark. */
+/** IR (EU) 2025/2620 Art 1(2): electricity's adjustment is zero by fiat, not by benchmark. */
 const ELECTRICITY_CN = '27160000'
-const ELECTRICITY_LOCATOR = 'IR (EU) 2025/2620 Art 2(2): electricity free allocation is nil'
+const ELECTRICITY_LOCATOR = 'IR (EU) 2025/2620 Art 1(2): electricity free allocation is nil'
 
 /** The CSCF applied to 2021-25 allocations. Named here ONLY so the what-if can be labelled. */
 const CSCF_2021_25 = '1'
@@ -90,7 +90,7 @@ export interface SefaTerms {
 
 export type SefaResult =
   | { status: 'ok'; valueTco2ePerT: string; cscf: string; terms: SefaTerms }
-  /** Electricity (Art 2(2)): nil free allocation by law, not by calculation. No CSCF involved. */
+  /** Electricity (Art 1(2)): nil free allocation by law, not by calculation. No CSCF involved. */
   | { status: 'zero_by_fiat'; valueTco2ePerT: '0'; locator: string; terms: SefaTerms }
   | {
       status: 'cscf_pending'

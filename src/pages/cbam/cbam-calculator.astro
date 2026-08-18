@@ -44,11 +44,11 @@ import Footer from '../../components/layout/Footer.astro';
   <main id="main" tabindex="-1" class="cb-page">
     <div class="cb-shell">
       <h1 class="cb-title">Estimator</h1>
-      <p class="cb-eyebrow">Provisional · defaults only · in-browser</p>
+      <p class="cb-eyebrow">Provisional · defaults or your verified figures · in-browser</p>
 
       <!-- NON-NEGOTIABLE §7.1 — ships with the calculator, always, in markup. -->
       <div class="cb-banner" role="note">
-        Prototype estimator · Commission default values only · decision-support, not a
+        Prototype estimator · Commission default values or your own verified figures · decision-support, not a
         declaration. Computed in your browser from the published rules, and never sent
         anywhere. For a 2026 import no final figure exists — the cross-sectoral correction
         factor is unpublished — so any number below is a labelled what-if. This is not a
@@ -100,6 +100,37 @@ import Footer from '../../components/layout/Footer.astro';
             </p>
           </div>
 
+          <!-- Emissions source. A dropdown, not a toggle, by design review: it sits in the
+               form like every other field. "My verified figures" reveals the panel; the
+               attestation is the gate — we transcribe a claim, we never bless it. -->
+          <div>
+            <label class="cb-label" for="cbTier">Emissions data</label>
+            <select id="cbTier" class="cb-field cb-select">
+              <option value="default+markup" selected>Commission default + mark-up</option>
+              <option value="actual-verified">My verified figures</option>
+            </select>
+          </div>
+          <div id="cbVerifiedRow" hidden>
+            <label class="cb-label" for="cbSeeDirect">Verified direct emissions (tCO₂e / tonne)</label>
+            <input id="cbSeeDirect" class="cb-field" type="number" min="0" step="any" />
+            <!-- Shown only when the indirect side is actually charged for this good AND the
+                 scope includes it — the same rule the defaults path uses. cbam-app.ts CLEARS
+                 this input whenever the row is hidden: on the verified path the figure is the
+                 importer's own number, applied by the engine on scope alone, so a stale value
+                 left behind an invisible row would silently inflate the next line. -->
+            <div id="cbSeeIndirectRow" hidden>
+              <label class="cb-label" for="cbSeeIndirect">Verified indirect emissions (tCO₂e / tonne)</label>
+              <input id="cbSeeIndirect" class="cb-field" type="number" min="0" step="any" />
+            </div>
+            <label class="cb-check"><input id="cbAttest" type="checkbox" />
+              I attest these figures come from an accredited verification (ISO 14064-3 / CBAM
+              Art. 8) — my claim, not checked by this tool.</label>
+            <label class="cb-label" for="cbRef">Verification reference (optional)</label>
+            <input id="cbRef" class="cb-field" type="text" placeholder="verifier / report ID" />
+            <p class="cb-hint">Whole-good figures, precursors included — that scope is what a
+              verifier's CBAM report states, and what keeps this estimate on Column B.</p>
+          </div>
+
           <div class="cb-row2">
             <div>
               <label class="cb-label" for="cbMass">Net mass (tonnes)</label>
@@ -134,7 +165,13 @@ import Footer from '../../components/layout/Footer.astro';
                there is nothing on that side of the grid until the first estimate
                resolves. Matches the source design, which does the same. -->
           <div id="cbOut">
-            <p class="cb-idle">Choose a good, origin, route and mass to see the provisional exposure.</p>
+            <!-- MUST MATCH run()'s idle copy in cbam-app.ts, byte for byte. This is the
+                 pre-hydration card the server ships; run() replaces it on the first input, and
+                 it is what stays on screen if ensurePack() never resolves. The two drifted the
+                 moment the script's copy grew "and import date" and this one did not — two
+                 spellings of one sentence, which is the defect class this page's own engine
+                 work exists to close. build-contracts.test.mjs now pins them together. -->
+            <p class="cb-idle">Choose a good, origin, route, mass and import date to see the provisional exposure.</p>
           </div>
           <p class="cb-source" id="cbProv"></p>
         </section>
@@ -262,6 +299,21 @@ import Footer from '../../components/layout/Footer.astro';
     margin-top: 0.45rem; font-family: var(--font-data); font-size: 0.68rem;
     line-height: 1.65; color: var(--color-ink-faint); max-width: 46ch;
   }
+  /* The attestation tick. Static markup, so a SCOPED rule reaches it — unlike .cb-attest (the
+     year-card's tick, rendered at runtime into #cbOut via innerHTML), which has to live in the
+     is:global block below. Same idiom and same measurements as that one, deliberately: they are
+     the same control doing the same job in two places. Brighter than .cb-hint because this is a
+     legal statement the user is agreeing to, not an aside. */
+  .cb-check {
+    display: flex; gap: 0.5rem; align-items: baseline; margin-top: 0.9rem;
+    font-family: var(--font-data); font-size: 0.72rem; line-height: 1.6;
+    color: var(--color-ink-muted); max-width: 46ch;
+  }
+  .cb-check input { accent-color: var(--color-cyan); flex: none; }
+  /* .cb-form's `gap` only separates its DIRECT children, and #cbVerifiedRow stacks four
+     controls inside one of them — so the fields within it need their own rhythm. The first
+     label already sits against the panel's top edge, hence :not(:first-child). */
+  #cbVerifiedRow > .cb-label:not(:first-child), #cbSeeIndirectRow { margin-top: 0.9rem; }
   /* `hidden` must win over the flex/grid display the container would otherwise take. */
   [hidden] { display: none !important; }
   /* .cb-idle is styled in the is:global block below — cbam-app.ts re-renders it
@@ -405,6 +457,20 @@ import Footer from '../../components/layout/Footer.astro';
   .cb-attest { display: flex; gap: 0.5rem; align-items: baseline; margin-top: 0.6rem; font-size: 0.85rem; }
   .cb-line-head { display: flex; gap: 0.75rem; align-items: baseline; margin: 1.1rem 0 0.35rem; }
   .cb-line-x { margin-left: auto; }
+  /* The verified line's two footers (renderLineCard) sit BELOW the result card, not inside it —
+     renderResult is shared with the single-line preview, which has no comparison to show. Both
+     reuse .cb-sub for their typography, so these rules carry the `.cb-out` prefix the
+     `.cb-out .cb-sub` rule uses — that rule lives in the FIRST is:global block above, not in the
+     scoped block; look for it there: at equal specificity the later block wins, and this is it. */
+  .cb-out .cb-attested { margin-top: 0.75rem; padding-left: 0.85rem;
+    border-left: 2px solid color-mix(in srgb, var(--color-bronze) 30%, transparent); }
+  .cb-out .cb-delta { margin-top: 0.9rem; padding-top: 0.75rem;
+    border-top: 1px solid color-mix(in srgb, var(--color-bronze) 18%, transparent); }
+  .cb-out .cb-delta-h {
+    display: block; font-family: var(--font-mono); font-size: 0.6rem; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.16em; color: var(--color-bronze);
+  }
+  .cb-out .cb-delta .cb-sub { margin-top: 0.4rem; }
   #cbPrint table { border-collapse: collapse; width: 100%; font-size: 9pt; }
   #cbPrint th, #cbPrint td { border: 1px solid #999; padding: 3pt 5pt; text-align: left; }
   #cbPrint .cbp-loc { font-size: 7pt; }

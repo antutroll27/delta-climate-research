@@ -43,7 +43,7 @@ are given only where the docs state them; otherwise **not stated in docs**.
 | Team / institution | Contribution | Component / use |
 |---|---|---|
 | **ECMWF, ESA, EUMETSAT; VITO** | Built + validated the Destination Earth UHI service (UrbClim model) | Heat-specific validation-transparency benchmark |
-| **Meta AI + WRI** | Produced the 1 m global Canopy Height Model (v2) on AWS Open Data | Tier-2 canopy-height source for the vegetation layer (no formal paper in docs — flagged) |
+| **Meta AI + WRI** | Produced the 1 m global Canopy Height Model on AWS Open Data (v1 + v2; **we ship v1**) | Canopy-height source for the **rendered** tree layer. Render-only since 2026-08-12: it does not enter the temperature solve (no formal paper in docs — flagged) |
 | **NRF (Singapore) + Dassault Systèmes; SLA; GovTech** | Built Virtual Singapore | Cited exemplar (proprietary platform + authoritative LiDAR — posture, not stack) |
 | **City of Helsinki (open-data programme)** | Helsinki 3D+ / Kalasatama as open CityGML + reality mesh | Exemplar for open-data-as-authoritative |
 | **Victorian Government + CSIRO** | Digital Twin Victoria's 4,000+ dataset catalogue | Exemplar for "provenance-as-product at scale" |

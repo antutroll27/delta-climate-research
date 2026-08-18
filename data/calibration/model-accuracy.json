@@ -49,10 +49,10 @@
         11.5
       ],
       "offset_K": {
-        "ecostress": 1.285,
-        "landsat": -2.206
+        "ecostress": 0.748,
+        "landsat": -2.407
       },
-      "delta_K": -3.492,
+      "delta_K": -3.155,
       "n_overpasses": {
         "ecostress": 2,
         "landsat": 50
@@ -66,14 +66,14 @@
       "night": {
         "n_scenes": 50,
         "n_overpasses": 20,
-        "rmse_K": 2.93,
-        "bias_K": 0.184,
-        "loo_overpass_rmse_K": 3.088,
+        "rmse_K": 2.943,
+        "bias_K": -0.182,
+        "loo_overpass_rmse_K": 3.102,
         "ci95_K": [
-          1.754,
-          3.934
+          1.817,
+          3.895
         ],
-        "ci95_halfwidth_K": 1.09,
+        "ci95_halfwidth_K": 1.039,
         "hour_range": [
           0.7,
           23.84
@@ -84,14 +84,14 @@
       "morning_ecostress": {
         "n_scenes": 9,
         "n_overpasses": 4,
-        "rmse_K": 4.214,
-        "bias_K": -1.313,
-        "loo_overpass_rmse_K": 5.827,
+        "rmse_K": 4.456,
+        "bias_K": -1.896,
+        "loo_overpass_rmse_K": 5.98,
         "ci95_K": [
-          3.714,
-          5.362
+          3.68,
+          5.805
         ],
-        "ci95_halfwidth_K": 0.824,
+        "ci95_halfwidth_K": 1.062,
         "hour_range": [
           7.09,
           11.06
@@ -102,14 +102,14 @@
       "morning_landsat": {
         "n_scenes": 213,
         "n_overpasses": 50,
-        "rmse_K": 3.019,
-        "bias_K": -2.206,
-        "loo_overpass_rmse_K": 2.103,
+        "rmse_K": 3.148,
+        "bias_K": -2.407,
+        "loo_overpass_rmse_K": 2.071,
         "ci95_K": [
-          2.509,
-          3.513
+          2.629,
+          3.648
         ],
-        "ci95_halfwidth_K": 0.502,
+        "ci95_halfwidth_K": 0.51,
         "hour_range": [
           10.39,
           10.41
@@ -120,14 +120,14 @@
       "peak_ecostress": {
         "n_scenes": 23,
         "n_overpasses": 8,
-        "rmse_K": 2.31,
-        "bias_K": 0.892,
-        "loo_overpass_rmse_K": 2.361,
+        "rmse_K": 2.183,
+        "bias_K": 0.421,
+        "loo_overpass_rmse_K": 2.389,
         "ci95_K": [
-          1.31,
-          3.085
+          1.32,
+          2.919
         ],
-        "ci95_halfwidth_K": 0.887,
+        "ci95_halfwidth_K": 0.8,
         "hour_range": [
           11.76,
           17.45

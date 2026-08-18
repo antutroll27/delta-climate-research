@@ -304,7 +304,7 @@ import type { CertificateEstimate } from '@lib/cbam/certificate-estimate'
       <!-- aria-live: the figure and the refusal both need announcing -->
       <aside aria-live="polite">
         <CertificateExposurePanel v-if="estimate" :estimate="estimate" />
-        <div v-else>Choose a good, origin, route and mass to see the provisional exposure.</div>
+        <div v-else>Choose a good, origin, route, mass and import date to see the provisional exposure.</div>
 
         <p v-if="store.generatedFrom.length">
           Rules: {{ store.generatedFrom.map(s => `${s.id}@${s.version}`).join(' · ') }}
@@ -344,7 +344,14 @@ const availableRoutes = computed(() =>
     : [])
 
 const estimate = computed(() => {
-  if (!chosenCn.value || !country.value || !route.value || !massT.value) return null
+  // The DATE belongs in this gate, and the idle copy above names it for the same reason.
+  // `year` above falls back to 2026 so the route list can populate before a date is chosen —
+  // that fallback is fine and stays — but the estimate must not inherit it: an <input type="date">
+  // the user clears holds '', the engine reads its first four characters as calendar year 0, no
+  // published row is keyed on 0, and the panel refuses by naming the RULES ("the Commission
+  // publishes no default value for this good, origin, production route or year") for a line whose
+  // only problem is a blank date. Gate on all five fields, not four.
+  if (!chosenCn.value || !country.value || !route.value || !massT.value || !date.value) return null
   if (!availableRoutes.value.includes(route.value)) return null
   return store.run({
     cn: chosenCn.value.code, country: country.value, route: route.value,

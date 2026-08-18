@@ -8,7 +8,9 @@
  * cbam-app.ts is upstream's, byte-for-byte" stays true.
  */
 import Decimal from 'decimal.js';
-import type { EstimatorPack } from './cbam-algos/estimator/estimate-from-pack.ts';
+import {
+  nonNegativeDecimal, type EstimatorPack,
+} from './cbam-algos/estimator/estimate-from-pack.ts';
 import {
   aggregateThresholdBasis, type ImportMassEntry,
 } from './cbam-algos/threshold/aggregate.ts';
@@ -24,6 +26,51 @@ export interface Line {
   scope: 'direct' | 'direct_and_indirect';
   massT: string;
   date: string;      // ISO date; calendar year is date.slice(0, 4)
+  /**
+   * The engine's DataTier strings VERBATIM (cbam-algos/cbam/certificate-estimate.ts), not a
+   * friendlier local enum mapped at the boundary: the same three strings then reach the
+   * ProvenanceStamp the engine returns and the CSV column the export writes, so the stamp and
+   * the line can never disagree about which tier was used. A local 'verified' | 'default' would
+   * need a translation table, and a translation table is a place for the two to drift.
+   *
+   * WHAT THIS FIELD MEANS CHANGED WHEN THE THIRD VALUE ARRIVED, and a reader must not infer the
+   * old meaning from the old sentences above. It used to be THE TIER THE USER SELECTED — the
+   * #cbTier <select> has two options and parseVerifiedFields mapped them one-for-one, so
+   * selection and pricing were the same fact wearing one name. They are no longer.
+   * 'verified-direct+default-indirect' is NOT selectable and never will be: whether it applies
+   * depends on the scope, on whether the Commission publishes an indirect default for that
+   * particular good/origin/route, and on the importer leaving the indirect field blank — three
+   * things only the engine, holding the pack, can decide. So this field now means THE TIER THIS
+   * LINE WAS PRICED AT, read back from its own estimate's stamp (cbam-app.ts's draftLine), and
+   * the user's selection lives on separately as the engine INPUT that produced it
+   * (parseVerifiedFields → verifiedInputOf).
+   *
+   * That re-reading is what keeps csvRows' equality guard below meaningful rather than
+   * tautological. The guard cross-checks two INDEPENDENTLY DERIVED facts — what the line says
+   * and what the estimate computed — so it can still catch a mispaired line/estimate array.
+   * Deriving the exported tier from the estimate alone would delete the second witness and the
+   * guard would have nothing left to disagree with.
+   *
+   * REQUIRED, not optional-with-a-default. A line that omits it would have to mean one tier or
+   * another, and the wrong guess is the punitive mark-up either applied to an importer who
+   * had audited data, or dropped from one who did not — a wrong tax liability in both
+   * directions. The compiler asking every construction site to say which is the point.
+   */
+  tier: 'default+markup' | 'actual-verified' | 'verified-direct+default-indirect';
+  /**
+   * Attested tCO2e per tonne. `seeDirect` is present on BOTH verified-bearing tiers — it is the
+   * half the importer audited either way — and absent on 'default+markup'.
+   *
+   * `seeIndirect` is the field whose ABSENCE now carries meaning: on a `direct_and_indirect`
+   * line for a good the Commission publishes an indirect default for, leaving it out is exactly
+   * what makes the line 'verified-direct+default-indirect' rather than 'actual-verified'. So an
+   * absent seeIndirect is not "the same claim with a blank" — it is a different tier, a
+   * different figure and a different fingerprint (see `?? null` below).
+   */
+  seeDirect?: string;
+  seeIndirect?: string;
+  /** optional verifier/report reference — transcribed, never checked */
+  verifiedRef?: string;
 }
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -57,9 +104,38 @@ export async function sha256Hex(text: string): Promise<string> {
  * JSON.stringify keeps each field individually quoted (and escapes any stray
  * quote/backslash inside a field), so a boundary shift changes the serialised
  * array and therefore the digest.
+ *
+ * THE TIER AND THE ATTESTED FIGURES ARE PART OF THE INPUTS. A verified line's per-tonne
+ * figures are the importer's own claim — the one number on the row that no published corpus
+ * backs — so they must be pinned exactly as entered, alongside the reference the importer
+ * cites for them. Two submissions that differ only in an attested figure, or only in the
+ * verifier reference attached to it, are different claims and must digest differently.
+ *
+ * NEW FIELDS ARE APPENDED AT THE END, and every future one must be too. Positions 0-5 keep the
+ * meaning they had before this feature, so a fingerprint printed on a pre-feature export can
+ * still be reproduced from a post-feature line by hashing the first six elements — a property
+ * a mid-array insertion would destroy for no gain. The array is also FIXED-LENGTH across both
+ * tiers (an absent optional fills an element rather than omitting it), so a default line and a
+ * verified line hash the same 10-element shape and "field absent" can never be confused with
+ * "array truncated".
+ *
+ * THE FILLER IS `?? null`, NOT `?? ''` — ABSENT AND EMPTY ARE DIFFERENT CLAIMS. Not a style
+ * preference: the engine takes opposite branches on the two. estimate-from-pack.ts's verified
+ * path tests `input.verified.indirectTco2ePerT !== undefined` BEFORE it calls verifiedPerT, so
+ * an ABSENT seeIndirect skips the branch entirely and the line prices normally (indirectTco2e
+ * '0'), while `seeIndirect: ''` reaches verifiedPerT, fails its shape gate, and refuses the
+ * WHOLE line as unavailable. Measured on 25231000/DZ/(A)/100 t at direct_and_indirect: absent
+ * priced 166.065 certificates / EUR 12,514.66, empty refused outright. A priced bill and a
+ * refusal are not the same submission, and an audit trail that hands both the same digest
+ * cannot tell an importer which one produced the figure on their export. JSON.stringify renders
+ * an absent field as bare `null` and an empty one as `""`, so the two serialise apart; a string
+ * field can never itself produce bare `null`, so the split adds no new collision.
  */
 export function lineFingerprint(line: Line): Promise<string> {
-  return sha256Hex(JSON.stringify([line.cn, line.country, line.route, line.scope, line.massT, line.date]));
+  return sha256Hex(JSON.stringify([
+    line.cn, line.country, line.route, line.scope, line.massT, line.date,
+    line.tier, line.seeDirect ?? null, line.seeIndirect ?? null, line.verifiedRef ?? null,
+  ]));
 }
 
 /**
@@ -129,12 +205,52 @@ export type YearThreshold =
        * make eligibleLineCount claim a line that entryIds doesn't list.
        */
       eligibleLineCount: number;
+      /**
+       * Every line dated in this calendar year, before any filter — the denominator
+       * `eligibleLineCount` cannot supply. That one is deliberately basis.entryIds.length
+       * rather than our pre-filter's count (see its doc directly above), so "N of M" is
+       * underivable from it alone: it says 1, never 1-of-what.
+       *
+       * The RAW TOTAL, not the difference. The difference depends on the two filters above
+       * running in series, so storing it would invite a reader to take it as "lines excluded
+       * by sector" — only one of the reasons it can be non-zero.
+       *
+       * PER YEAR, like every other field on this card: the threshold is annual, so a 2027
+       * line is not part of 2026's denominator.
+       */
+      linesInYear: number;
+      /**
+       * The sectors THIS year's threshold row measures — `rule.includedSectors` verbatim, the
+       * very array the sector filter below ran on. Today it is cement, aluminium, fertilisers
+       * and iron & steel; eligibleLineCount's doc directly above already anticipates a future
+       * row that includes hydrogen or electricity.
+       *
+       * STORED, NOT RE-DERIVED, and that is the whole point of the field. The card is rendered
+       * far from the pack (renderYearThreshold takes a YearThreshold and nothing else), so a
+       * renderer that looked the rule up again would be making a SECOND lookup, at a later
+       * moment, against whatever pack it happened to hold — and could name a basis the verdict
+       * beside it was never computed from. Every other figure on this arm is likewise the value
+       * as computed, not a recipe for recomputing it. The sentence that says which sectors were
+       * tested must come from the same read as the test.
+       *
+       * READONLY because this ALIASES the pack's own array rather than copying it: an in-place
+       * `.sort()` or `.push()` in a renderer would silently rewrite the rule for every card
+       * built afterwards. The compiler refuses that here rather than leaving it to review.
+       *
+       * PER YEAR, like everything else on this card — a 2027 row may well list a different set,
+       * and each card names its own.
+       */
+      includedSectors: readonly string[];
     }
   | {
       calendarYear: number;
       ruleFound: false;
       attested: boolean;
       eligibleLineCount: number;
+      // No linesInYear and no includedSectors on this arm, deliberately. It reports that the
+      // Commission has published no row for the year, so it makes no de minimis claim at all —
+      // there is nothing for a denominator or a list of tested sectors to qualify, and carrying
+      // either would imply a test that never ran. There is also no rule to read them FROM.
     };
 
 /**
@@ -159,6 +275,10 @@ export type YearThreshold =
  * lines simply don't resolve to a year yet; callers surface them separately
  * (e.g. "N lines need a date") rather than under a fake calendarYear.
  *
+ * A year holding ANY in-scope line whose `massT` the engine's own gate refuses
+ * produces NO card at all — the whole year's, not just that line's. See the gate
+ * inside the map for why one unreadable addend has to take the year with it.
+ *
  * @throws {Error} if any in-scope line (classifiable, in-sector for its year's
  * rule) has no entry in `fingerprints`. This fires inside the per-year map, so
  * ONE bad line discards every year's card, not just its own year's — callers
@@ -177,12 +297,13 @@ export function thresholdByYear(
     .filter((year) => !Number.isNaN(year))
     .sort((a, b) => a - b); // default sort() is lexicographic: [2027, 10] would beat [10, 2027]
 
-  return years.map((calendarYear) => {
+  return years.map((calendarYear): YearThreshold | null => {
     const attested = attestedYears.has(calendarYear);
     const rule = pack.thresholds.find((t) => t.calendarYear === calendarYear);
     const inYear = lines.filter((l) => yearOf(l) === calendarYear);
     if (!rule) return { calendarYear, ruleFound: false, attested, eligibleLineCount: 0 };
 
+    let unreadableMass = false;
     const entries: ImportMassEntry[] = inYear.flatMap((l) => {
       const sector = sectorForCn(l.cn);
       if (!sector || !rule.includedSectors.includes(sector)) return [];
@@ -197,11 +318,45 @@ export function thresholdByYear(
           + 'be hashed (lineFingerprint) before it can be aggregated',
         );
       }
+      // THE PREDICATE THE ENGINE ITSELF PARSES WITH, at the seam where our `Line` becomes the
+      // vendored aggregate's entry — the last point this file controls. aggregateThresholdBasis
+      // sums `netMassT` with a bare `.plus()` and holds no gate of its own, and it is upstream's:
+      // gating it there would be a change across another trust boundary and a re-vendor. This
+      // file is ours, so the gate goes here. Measured on this pack with the line absent: '0x10'
+      // decided Art 2(3) off a hex string (knownEligibleMassT '16'), '+100' and 'Infinity' both
+      // reported above_threshold, and 'abc' / '' / '  100  ' threw a raw [DecimalError] out of
+      // the whole card render rather than one line.
+      //
+      // `netMassT` still carries the string AS ENTERED, not the gate's parsed value
+      // re-stringified: the gate's shape regex is a strict subset of Decimal's grammar, so
+      // everything it admits reads back as the same quantity — which is exactly what the
+      // entry-point test pins ('1e3' is its discriminating case), and re-encoding here would
+      // retire that check instead of satisfying it.
+      if (!nonNegativeDecimal(l.massT)) { unreadableMass = true; return []; }
       return [{
         id: l.id, importerOrgId: IMPORTER, calendarYear, sector,
         netMassT: l.massT, sourceSha256,
       }];
     });
+    // ONE unreadable mass discards the WHOLE YEAR's card — never merely its own line. This card
+    // answers "is the year's total above 50 t", and a sum with an unreadable addend has no
+    // answer; computing one around the gap is how a liable importer is told they are exempt.
+    // MEASURED: a '-100' line beside a genuine 30 t consignment did not skip — it SUBTRACTED,
+    // giving knownEligibleMassT '-70' and state below_threshold on an attested-complete year.
+    // Fail-open on whether CBAM applies at all, which is the one verdict that must never be
+    // guessed in the importer's favour. Same call resolveThreshold makes on the single-line path
+    // (null, rather than a card assembled around a mass nobody can read) for the same reason.
+    //
+    // PER YEAR, like everything else here: the threshold is annual, so a 2027 line nobody can
+    // read says nothing about 2026 and 2026's card still renders. That is deliberately narrower
+    // than the missing-fingerprint throw above, which discards every year — that one is a caller
+    // bug worth stopping the whole render for; this is line data, scoped to the verdict it can
+    // actually corrupt.
+    //
+    // The cost is a silence: the year simply has no card and nothing on screen says why — the
+    // same shape as an undated line (yearOf's doc), and callers should surface both the same way.
+    // An omitted card is still a smaller failure than a stated wrong one.
+    if (unreadableMass) return null;
 
     const basis = aggregateThresholdBasis(
       { importerOrgId: IMPORTER, calendarYear },
@@ -218,6 +373,8 @@ export function thresholdByYear(
     });
     return {
       calendarYear, ruleFound: true, attested,
+      linesInYear: inYear.length,
+      includedSectors: rule.includedSectors,
       state: verdict.state,
       knownEligibleMassT: verdict.knownEligibleMassT,
       thresholdT: verdict.thresholdT,
@@ -226,7 +383,11 @@ export function thresholdByYear(
       entryHashes: basis.entryHashes,
       eligibleLineCount: basis.entryIds.length,
     };
-  });
+  // The nulls above are dropped rather than returned to the caller: the signature stays
+  // YearThreshold[], so every existing call site (two in cbam-app.ts, both mapping straight into
+  // markup) keeps its exhaustive `ruleFound` switch and cannot forget a null element. A refused
+  // year is ABSENT from this array, exactly like a year no line resolves to.
+  }).filter((card): card is YearThreshold => card !== null);
 }
 
 export interface Totals {
@@ -342,8 +503,9 @@ export function sumTotals(results: readonly CertificateEstimate[]): Totals {
  * working artefact an auditor loads into a model; presentation formatting (thousands
  * separators, 3dp) belongs to the page, full precision belongs here.
  *
- * @throws {Error} if `lines` and `results` are not the same length (see below), or if any
- * line's estimate resolves more than one benchmark term (see the in-loop check). EITHER throw
+ * @throws {Error} if `lines` and `results` are not the same length (see below), if any line's
+ * tier disagrees with its own estimate's stamp (see the in-loop guard), or if any line's
+ * estimate resolves more than one benchmark term (see the in-loop check). ANY of these throws
  * discards the WHOLE export, not just the offending row — there is no partial-CSV mode, unlike
  * thresholdByYear's equivalent per-year throw (which similarly discards every year's card, not
  * just one). A caller wanting a partial export on a bad line must catch here and decide what
@@ -369,6 +531,30 @@ export function csvRows(
   }
   return lines.map((l, i) => {
     const e = results[i]!;
+    // WHY: the length check above is the only thing that ever related these two arrays, and
+    // "same length" is not "same lines". Every row this function builds is a BLEND — cn_code,
+    // origin, route, mass_t, import_date and line_fingerprint come off `l`; every figure and
+    // locator comes off `e` — so a caller that pairs the wrong estimate with a line produces a
+    // row that looks entirely ordinary and is internally false.
+    //
+    // The tier is the pairing whose corruption is worst, and it only became reachable with the
+    // data_tier/verified_reference columns below. A verified line paired with a
+    // default-computed estimate exports the importer's attested inputs and their VERIFIER'S
+    // REFERENCE beside a figure that still carries the punitive mark-up — a mark-up that prices
+    // not having data, attached to a row that names the person who certified the data. That is
+    // over-collection with an attestation stapled to it. The opposite pairing drops the mark-up
+    // from an importer who never earned the exemption. Both are wrong tax liabilities someone
+    // may act on, which is the one failure this whole file is shaped to refuse.
+    //
+    // Only the tier is checked, not the whole line: `stamp` is the only thing the estimate
+    // carries that can be compared back to a Line at all (the engine keeps no cn/origin on its
+    // result). This catches the mispairing that matters and does not pretend to catch all of them.
+    if (e.stamp.tier !== l.tier) {
+      throw new Error(
+        `csvRows: line '${l.id}' is tier '${l.tier}' but its estimate was computed at `
+        + `'${e.stamp.tier}' — the line and its figure disagree about which data tier priced it`,
+      );
+    }
     const terms = 'terms' in e ? e.terms : null;
     // terms.benchmarks carries one entry per precursor (Column A / Eq 4 — see sefa.ts). The
     // public estimator only ever runs scope='full_product' with no precursors (hardcoded in
@@ -444,6 +630,28 @@ export function csvRows(
       cscf_status: e.status === 'ok' ? 'published'
         : e.status === 'zero_by_fiat' ? 'not applicable (Art 1(2): nil by law)'
         : pending ? 'pending (what-if)' : '',
+      // Which corpus priced this row: the Commission's defaults (mark-up applied) or the
+      // importer's own verified figures (no mark-up). Read off `l`, not `e.stamp` — the guard
+      // at the top of this loop makes the two identical, so the choice is about which is the
+      // more honest SOURCE for a column that says what the importer claimed. `l.tier` is the
+      // claim as submitted, and it is the value lineFingerprint hashes (position 6), so the
+      // column and the digest printed beside it come from one place rather than two.
+      //
+      // NOT claimed, because review disproved it: that an auditor re-derives the fingerprint
+      // FROM THIS FILE. They cannot. The row is not sufficient input — the attested per-tonne
+      // figures have no column at all, and `?? ''` below collapses an absent reference and an
+      // empty one, which the digest deliberately distinguishes. Two such lines export
+      // byte-identical rows with different fingerprints. Re-derivation needs the line as
+      // entered; this column only shares its origin with the digest.
+      data_tier: l.tier,
+      // Transcribed verbatim, never checked — this tool has no way to verify a verifier. Empty
+      // string, not `l.verifiedRef` bare: an optional field left undefined here reaches the file
+      // as the literal text 'undefined' (toCsv's own `r[c] ?? ''` only covers a MISSING key, not
+      // a present-but-undefined one), which reads as data in a column meant to say "none cited".
+      // Free text, and therefore a CSV-injection surface — covered by toCsv's cell(), which
+      // neutralises by content rather than by column, so this column inherits the guard without
+      // toCsv knowing it exists.
+      verified_reference: l.verifiedRef ?? '',
       cscf_locator: terms?.cscfLocator ?? '',
       assumed_cscf: pending ? e.scenario.assumedCscf : '',
       price_quarter: 'priceQuarter' in e ? e.priceQuarter : '',
