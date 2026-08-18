@@ -12,12 +12,23 @@ import { LICENCE_BLOCK, ODBL_NOTICE } from '../scripts/standards/odbl.ts';
 import { LICENCES, allWardRecords } from '../scripts/standards/ward-record.ts';
 
 const records = allWardRecords();
-// every distinct dataset actually shipped, in a stable order, with its licence
-const shipped = new Map<string, { licence: string; holder: string; url: string; note?: string; layers: Set<string>; wards: Set<string> }>();
+/* Keyed by LAYER + DATASET, not by dataset alone. A licence attaches to how the
+   data reaches us, not to the dataset in the abstract — Google Open Buildings
+   supplies both our footprints (via Overture, so ODbL governs) and our heights
+   (direct from Earth Engine, so CC BY 4.0 governs). Collapsing those into one
+   row per dataset forced a single licence onto two different answers, and the
+   published table was wrong because of it. */
+const shipped = new Map<string, {
+  layer: string; dataset: string; sourceLicence: string; governingLicence: string;
+  via?: string; holder: string; url: string; note?: string; wards: Set<string>;
+}>();
 for (const r of records) for (const l of r.provenance.layers) {
-  const e = shipped.get(l.dataset) ?? { ...LICENCES[l.dataset]!, layers: new Set(), wards: new Set() };
-  e.layers.add(l.layer); e.wards.add(r.name); shipped.set(l.dataset, e);
+  const key = `${l.layer}::${l.dataset}`;
+  const e = shipped.get(key) ?? { ...l, note: LICENCES[l.dataset]?.note, wards: new Set<string>() };
+  e.wards.add(r.name); shipped.set(key, e);
 }
+const rows = [...shipped.values()];
+const differs = rows.filter((r) => r.governingLicence !== r.sourceLicence);
 const site = Astro.site!.href.replace(/\/$/, '');
 const jsonLd = { '@context': 'https://schema.org', '@type': 'WebPage', name: 'Data attribution — Delta Climate Research', url: `${site}/attribution`, isPartOf: { '@type': 'WebSite', url: `${site}/` } };
 ---
@@ -31,20 +42,33 @@ const jsonLd = { '@context': 'https://schema.org', '@type': 'WebPage', name: 'Da
     title="What this is built from"
     lede="This page is generated at build time from the same provenance files the map serves. A dataset without a licence entry fails the build, so nothing can appear on the map that does not appear here."
   >
-    <h2>Datasets in use</h2>
+    <h2>What each layer is built from</h2>
+    <p>Two licence columns, because they are not always the same thing. <strong>Governing</strong> is what you must honour if you reuse our data — it follows how the data reaches us. <strong>At source</strong> is what the original publisher released it under. Where they differ, the delivery path is named.</p>
     <div class="tblwrap"><table>
-      <thead><tr><th>Dataset</th><th>Used for</th><th>Licence</th><th>Holder</th></tr></thead>
+      <thead><tr><th>Layer</th><th>Dataset</th><th>Governing licence</th><th>At source</th><th>Holder</th></tr></thead>
       <tbody>
-        {[...shipped.entries()].map(([name, e]) => (
+        {rows.map((e) => (
           <tr>
-            <td><a href={e.url} rel="noopener">{name}</a>{e.note && <><br /><span class="muted">{e.note}</span></>}</td>
-            <td>{[...e.layers].join(', ')}</td>
-            <td><code>{e.licence}</code></td>
+            <td>{e.layer}</td>
+            <td><a href={e.url} rel="noopener">{e.dataset}</a>{e.via && <><br /><span class="muted">via {e.via}</span></>}</td>
+            <td><code>{e.governingLicence}</code></td>
+            <td>{e.governingLicence === e.sourceLicence ? <span class="muted">same</span> : <code>{e.sourceLicence}</code>}</td>
             <td>{e.holder}</td>
           </tr>
         ))}
       </tbody>
     </table></div>
+    {differs.length > 0 && (
+      <>
+        <p><strong>Where the two differ, and why it matters.</strong> Overture publishes its buildings theme as ODbL <em>as a whole</em>, so every footprint reaching us through it is governed by ODbL no matter what its contributor released it under.</p>
+        <ul>
+          {differs.map((e) => (
+            <li><strong>{e.dataset}</strong> — <code>{e.sourceLicence}</code> at source, but <code>{e.governingLicence}</code> as we redistribute it, because the {e.layer} arrive via {e.via}.</li>
+          ))}
+        </ul>
+        <p>This table previously showed only the source column. For Microsoft's footprints that read as <code>CDLA-Permissive-2.0</code> — a permissive licence with <em>no</em> share-alike — which would have led a reuser to the wrong obligation entirely. The governing column is the one to act on.</p>
+      </>
+    )}
 
     <h2>Footprints, per ward</h2>
     <p>Building footprints for the Kolkata wards come via Overture Maps (ODbL), which merges OpenStreetMap, Google and Microsoft footprints and de-duplicates them by GERS id. <code>traced</code> means a human drew the outline against imagery; the rest are model output. Counts are read from each ward's provenance file.</p>

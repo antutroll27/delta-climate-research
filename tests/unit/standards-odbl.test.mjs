@@ -70,3 +70,55 @@ test('the Microsoft licence subtlety is stated, not flattened', () => {
   assert.match(ms, /CDLA-Permissive-2\.0/);
   assert.match(ms, /redistributed under ODbL/i);
 });
+
+test('every layer states BOTH the governing and the source licence', async () => {
+  const { allWardRecords } = await import('../../src/scripts/standards/ward-record.ts');
+  for (const r of allWardRecords()) {
+    for (const l of r.provenance.layers) {
+      assert.ok(l.sourceLicence, `${l.layer}/${l.dataset}: no source licence`);
+      assert.ok(l.governingLicence, `${l.layer}/${l.dataset}: no governing licence`);
+      // when they differ the delivery path MUST be named, or the difference is
+      // unexplained and reads as a contradiction
+      if (l.governingLicence !== l.sourceLicence) {
+        assert.ok(l.via, `${l.layer}/${l.dataset}: licences differ but no delivery path given`);
+      }
+    }
+  }
+});
+
+test('footprints are governed by ODbL whatever their source licence says', async () => {
+  const { allWardRecords } = await import('../../src/scripts/standards/ward-record.ts');
+  for (const r of allWardRecords()) {
+    const fp = r.provenance.layers.filter((l) => l.layer === 'building footprints');
+    assert.ok(fp.length >= 3, 'three footprint sources per ward');
+    for (const l of fp) {
+      // THE BUG THIS FIXES: the table showed Microsoft's CDLA-Permissive-2.0,
+      // which carries no share-alike, for footprints that arrive inside the
+      // Overture buildings theme and are therefore ODbL to anyone reusing them.
+      assert.equal(l.governingLicence, 'ODbL-1.0', `${l.dataset} footprints must be governed by ODbL`);
+      assert.match(l.via, /Overture/);
+    }
+    const ms = fp.find((l) => /Microsoft/.test(l.dataset));
+    assert.equal(ms.sourceLicence, 'CDLA-Permissive-2.0', 'the source licence is still reported accurately');
+  }
+});
+
+test('heights are taken direct, so CC BY 4.0 governs them — not ODbL', async () => {
+  const { allWardRecords } = await import('../../src/scripts/standards/ward-record.ts');
+  for (const r of allWardRecords()) {
+    const h = r.provenance.layers.find((l) => l.layer === 'building heights');
+    // the same publisher supplies our footprints AND our heights by different
+    // routes; keying licence by dataset alone forced one answer onto both
+    assert.equal(h.dataset, 'Google Open Buildings');
+    assert.equal(h.governingLicence, 'CC-BY-4.0');
+    assert.equal(h.sourceLicence, 'CC-BY-4.0');
+    assert.ok(!h.via, 'taken direct, so no delivery path to name');
+  }
+});
+
+test('the settled ODbL position replaced the stale "question is open" note', async () => {
+  const { LICENCES } = await import('../../src/scripts/standards/ward-record.ts');
+  const osm = LICENCES['OpenStreetMap'].note;
+  assert.ok(!/question for streamed geometry is open/i.test(osm), 'the note must not still call it open');
+  assert.match(osm, /SETTLED|stricter/i);
+});

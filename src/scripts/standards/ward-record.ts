@@ -58,15 +58,15 @@ export function utmEpsg(lon: number, lat: number): string {
 export const LICENCES: Readonly<Record<string, { readonly licence: string; readonly holder: string; readonly url: string; readonly note?: string }>> = {
   'OpenStreetMap': {
     licence: 'ODbL-1.0', holder: 'OpenStreetMap contributors', url: 'https://www.openstreetmap.org/copyright',
-    note: 'via Overture Maps. Attribution + share-alike; the Produced-Work vs Derivative-Database question for streamed geometry is open (WETEX spec §8a).',
+    note: 'via Overture Maps. Attribution + share-alike. The Produced-Work vs Derivative-Database question is SETTLED for our exports: we adopt the stricter reading and license them as Derivative Databases — see /api/licence.json.',
   },
   'Google Open Buildings': {
     licence: 'CC-BY-4.0', holder: 'Google Research', url: 'https://sites.research.google/gr/open-buildings/',
-    note: 'footprints via Overture; heights from the 2.5D Temporal product (zonal p65). No coverage of the Gulf.',
+    note: 'CC-BY-4.0 at source. Footprints reach us via Overture, so ODbL governs those as we redistribute them; heights are taken DIRECT from the 2.5D Temporal product (zonal p65) via Earth Engine and remain CC-BY-4.0. No coverage of the Gulf.',
   },
   'Microsoft ML Buildings': {
     licence: 'CDLA-Permissive-2.0', holder: 'Microsoft', url: 'https://github.com/microsoft/GlobalMLBuildingFootprints',
-    note: 'Kolkata: via Overture. Dubai: taken direct from Microsoft, never via Overture, so no share-alike is inherited.',
+    note: 'CDLA-Permissive-2.0 AT SOURCE. Kolkata footprints reach us inside the Overture buildings theme, which is ODbL as a whole, so ODbL governs what we redistribute. Dubai is taken direct from Microsoft, never via Overture, so CDLA governs there and no share-alike is inherited.',
   },
   'Overture Maps': {
     licence: 'ODbL-1.0', holder: 'Overture Maps Foundation', url: 'https://overturemaps.org/',
@@ -123,6 +123,21 @@ function readProvenance(id: string): ProvenanceFile {
   return JSON.parse(raw) as ProvenanceFile;
 }
 
+/**
+ * Building footprints for the Kolkata wards are delivered inside the OVERTURE
+ * BUILDINGS THEME, which Overture publishes as ODbL as a whole. That means the
+ * licence a downstream reuser must honour is ODbL — regardless of what any
+ * individual contributor's upstream licence says.
+ *
+ * The distinction is not academic and the table used to get it wrong. Microsoft's
+ * footprints are CDLA-Permissive-2.0 at source, which carries NO share-alike; a
+ * reader of the old table would reasonably have concluded they could reuse those
+ * buildings without share-alike obligations. Arriving via Overture, they cannot.
+ * Licence attaches to the DELIVERY PATH, not to the dataset in the abstract —
+ * which is why every layer below now carries both.
+ */
+const VIA_OVERTURE = { via: 'Overture Maps buildings theme', governing: 'ODbL-1.0' } as const;
+
 /** The non-footprint layers every Kolkata ward carries. Footprint datasets come
  *  from the provenance file; these are the same for all three and are stated once. */
 const KOLKATA_LAYERS: readonly { readonly layer: string; readonly dataset: string }[] = [
@@ -171,7 +186,18 @@ export interface WardRecord {
       readonly count: number;
       readonly byDataset: readonly { readonly dataset: string; readonly count: number; readonly traced: boolean }[];
     };
-    readonly layers: readonly { readonly layer: string; readonly dataset: string; readonly licence: string; readonly holder: string; readonly url: string }[];
+    readonly layers: readonly {
+      readonly layer: string;
+      readonly dataset: string;
+      /** the upstream licence the dataset is published under */
+      readonly sourceLicence: string;
+      /** the licence that governs OUR redistribution — what a reuser must honour */
+      readonly governingLicence: string;
+      /** set when the two differ because of how the data reaches us */
+      readonly via?: string;
+      readonly holder: string;
+      readonly url: string;
+    }[];
   };
 }
 
@@ -222,15 +248,25 @@ export function wardRecord(w: Ward): WardRecord {
     provenance: {
       footprints: { source: prov.source, count: prov.count, byDataset },
       layers: [
-        ...datasetNames.map((d) => ({ layer: 'building footprints', dataset: d, ...pick(licenceFor(d)) })),
-        ...KOLKATA_LAYERS.map((x) => ({ ...x, ...pick(licenceFor(x.dataset)) })),
+        // footprints arrive via Overture, so ODbL governs whatever the source says
+        ...datasetNames.map((d) => ({
+          layer: 'building footprints', dataset: d, ...pick(licenceFor(d)),
+          governingLicence: VIA_OVERTURE.governing, via: VIA_OVERTURE.via,
+        })),
+        // everything else is taken direct, so source and governing are the same
+        ...KOLKATA_LAYERS.map((x) => {
+          const l = pick(licenceFor(x.dataset));
+          return { ...x, ...l, governingLicence: l.sourceLicence };
+        }),
       ],
     },
   };
 }
 
 function pick(l: { licence: string; holder: string; url: string }) {
-  return { licence: l.licence, holder: l.holder, url: l.url };
+  // renamed on the way out: `licence` upstream is the SOURCE licence, never
+  // automatically the one governing our redistribution
+  return { sourceLicence: l.licence, holder: l.holder, url: l.url };
 }
 
 export function allWardRecords(): WardRecord[] {

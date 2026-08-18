@@ -53,7 +53,11 @@ test('every dataset in a provenance file has a licence entry, and every layer is
   for (const r of allWardRecords()) {
     for (const d of r.provenance.footprints.byDataset) assert.ok(LICENCES[d.dataset], `${r.id}: "${d.dataset}" unlicensed`);
     for (const l of r.provenance.layers) {
-      assert.ok(l.licence && l.holder && l.url, `${r.id}: layer "${l.layer}" missing licence fields`);
+      // `licence` was split into sourceLicence + governingLicence: one field could
+      // not express "CDLA at source, ODbL as we redistribute it", and collapsing
+      // them is what put a wrong licence on the published table.
+      assert.ok(l.sourceLicence && l.governingLicence && l.holder && l.url,
+        `${r.id}: layer "${l.layer}" missing licence fields`);
     }
     // per-dataset counts must sum to the file's count — the provenance is internally consistent
     const sum = r.provenance.footprints.byDataset.reduce((a, d) => a + d.count, 0);
