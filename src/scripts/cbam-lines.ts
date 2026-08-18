@@ -139,18 +139,43 @@ export function lineFingerprint(line: Line): Promise<string> {
 }
 
 /**
- * Identifies the exact corpus a figure was computed from: the pack's generatedAt
- * plus both source-workbook sha256s, in generatedFrom order. Replaces the
- * placeholder 'browser-prototype' the vendored stamp carries in this build —
- * decorated onto the estimate AFTER the engine returns, never inside it.
+ * Identifies the exact corpus a figure was computed from: the pack's generatedAt,
+ * both source-workbook sha256s in generatedFrom order, AND a digest of the pack's
+ * own contents. Replaces the placeholder 'browser-prototype' the vendored stamp
+ * carries in this build — decorated onto the estimate AFTER the engine returns,
+ * never inside it.
+ *
+ * THE CONTENT DIGEST IS THE POINT, and it was missing. Until pack v2 this hash
+ * covered metadata ONLY — generatedAt plus two workbook hashes — so every factor in
+ * the corpus could be edited and the stamp printed on the export stayed
+ * byte-identical. Measured on this pack: setting Algeria/2523100090/direct/2026 to
+ * 999999 left the metadata untouched, so the old three-part hash could not tell the
+ * tampered corpus from the published one. A provenance stamp that cannot distinguish
+ * two corpora is not provenance; it is a label. So the serialised pack goes in.
+ *
+ * WHAT IT DIGESTS IS THE CORPUS THE ENGINE PRICED FROM, deliberately: the object in
+ * memory, not the bytes that arrived. That is a different claim from
+ * `loadEstimatorPack`'s `packSha256`, which hashes the exact served response bytes
+ * before decoding and is checked against the committed manifest — and the two are
+ * complementary rather than redundant. `packSha256` answers "did the artefact we
+ * shipped arrive intact"; this answers "which corpus produced the number on this
+ * row". Only the second survives a value being changed after load, which is exactly
+ * the blindness above. Neither is a signature or a proof of authenticity.
  *
  * Throws if any generatedFrom entry lacks a workbookSha256, rather than folding
  * in '' for the missing one: this digest is printed in the export as evidence of
  * which corpus produced a figure, and a hash that silently omits a workbook
  * would look like a normal, complete pin while understating what it actually
  * covers — the class of silent degradation this codebase refuses everywhere
- * else. generatedAt is left as ?? '': freshness isn't part of the "both workbook
- * hashes" claim, and the type genuinely marks it optional.
+ * else. THE CONTENT DIGEST DOES NOT MAKE THAT THROW REDUNDANT: it would quietly
+ * cover the absence rather than report it, and the export's claim to name both
+ * workbooks would be false while the hash still looked complete.
+ *
+ * generatedAt keeps its `?? ''` even though pack v2 now types it as required
+ * (estimator/pack-v2.ts) and validation rejects a pack without a valid calendar
+ * day there — the fallback is unreachable today and stays only so this digest
+ * never depends on that typing holding. Freshness was never part of the "both
+ * workbook hashes" claim and still isn't.
  */
 export async function packSnapshotHash(pack: EstimatorPack): Promise<string> {
   const parts = [
@@ -164,6 +189,7 @@ export async function packSnapshotHash(pack: EstimatorPack): Promise<string> {
       }
       return `${s.id}@${s.version}:${s.workbookSha256}`;
     }),
+    await sha256Hex(JSON.stringify(pack)),
   ];
   return sha256Hex(parts.join(''));
 }
