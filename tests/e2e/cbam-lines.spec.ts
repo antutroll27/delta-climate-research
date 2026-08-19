@@ -820,12 +820,22 @@ test.describe('multi-line CBAM estimate — the Add guard and failure surfacing'
     // couple of milliseconds a real overlapping click needs — the reviewer's own technique,
     // named in the brief, for making the race genuinely observable rather than hoping two
     // Playwright actions land in the right order by luck.
+    //
+    // The delay is SWITCHABLE, and that matters. Slowing every digest for the whole test also
+    // slowed the final sequential add, which needs no widened window — it just has to add a
+    // line. That is the assertion that was timing out on CI (and only on CI: it passed locally,
+    // which is exactly the margin this comment warned about before). Raising its budget again
+    // would have bought silence, not correctness. The switch removes the cause instead: the
+    // race window is still genuinely widened where the race is, and nowhere else.
     await page.addInitScript(() => {
       const real = crypto.subtle.digest.bind(crypto.subtle);
+      (window as unknown as { __slowDigest: boolean }).__slowDigest = true;
       crypto.subtle.digest = (algorithm: AlgorithmIdentifier, data: BufferSource): Promise<ArrayBuffer> =>
-        new Promise((resolve, reject) => {
-          setTimeout(() => { real(algorithm, data).then(resolve, reject); }, 1000);
-        });
+        (window as unknown as { __slowDigest: boolean }).__slowDigest
+          ? new Promise((resolve, reject) => {
+              setTimeout(() => { real(algorithm, data).then(resolve, reject); }, 1000);
+            })
+          : real(algorithm, data);
     });
     await page.goto('/cbam/cbam-calculator/');
     await setLine(page, GOOD_LINE);
@@ -850,18 +860,17 @@ test.describe('multi-line CBAM estimate — the Add guard and failure surfacing'
     // Sequential, deliberate, AFTER settling: two shipments of the same good is a legitimate
     // second line, not a duplicate to be blocked.
     //
-    // TIMEOUT RAISED, and the claim is unchanged — this asserts exactly what it always did.
-    // The initScript above slows EVERY crypto.subtle.digest by a second so the in-flight window
-    // is genuinely observable, and the pack-v2 port put more digests on this path: loadPack now
-    // verifies the served bytes against the bundled manifest, and packSnapshotHash covers the
-    // pack's own contents rather than only its metadata. Both are the POINT of that work — a
-    // provenance stamp that cannot see the data it identifies is the defect it set out to close
-    // — but at 1000 ms a call the default 5 s stopped fitting on a CI runner. It passes at the
-    // default locally, which is precisely the margin that fails on someone else's machine.
-    // The two assertions above (the button disables; an overlapping click cannot activate it)
-    // are untouched at their original timeouts. Only this budget moved.
+    // The digest delay is switched off first. Every assertion that needed it has already run;
+    // this one only needs a real click to produce a real second line. The pack-v2 port put more
+    // digests on this path — loadPack verifies the served bytes against the bundled manifest,
+    // and packSnapshotHash covers the pack's contents rather than only its metadata — so at
+    // 1000 ms a call this step alone carried several seconds of injected latency for no
+    // assertional purpose. Off, it runs at native speed and needs no raised budget.
+    await page.evaluate(() => {
+      (window as unknown as { __slowDigest: boolean }).__slowDigest = false;
+    });
     await addBtn.click();
-    await expect(page.locator('.cb-line')).toHaveCount(2, { timeout: 15_000 });
+    await expect(page.locator('.cb-line')).toHaveCount(2);
   });
 
   test('a failure inside onAdd surfaces to #cbStatus and re-enables #cbAdd', async ({ page }) => {
