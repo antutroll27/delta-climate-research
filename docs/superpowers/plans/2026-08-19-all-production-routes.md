@@ -73,7 +73,7 @@ Append to `lib/estimator/estimate-from-pack.test.ts`, following the file's exist
 describe('routesFor offers every route the good has a benchmark for', () => {
   it('offers (D) and (E) on 72061000, not just the one route with a default value', () => {
     // The filter this replaces kept only routes with a published DEFAULT. Benchmarks exist for
-    // 11 routes and defaults for 8, so 419 of 572 goods could not select a route the engine can
+    // 11 routes and defaults for 8, so 421 of 572 goods (at IN) could not select a route the engine can
     // actually price. Measured on this good with identical verified emissions: 64.42 certificates
     // on (C), 148.66 on (D), 187.37 on (E) — and only (C) was reachable, which carries the
     // LARGEST free-allocation deduction of the three. The tool under-charged.
@@ -127,8 +127,8 @@ export function routesFor(
   //
   // This filtered on `lookupValue(...).kind === 'found'`, justified by a docblock asserting that
   // "a route the corpus does not list has no default AND no benchmark". That equivalence is
-  // false: the Commission publishes default values for 8 routes and benchmarks for 11, so 419
-  // of 572 goods could not select a route the engine prices perfectly well. On 72061000 the one
+  // false: the Commission publishes default values for 8 routes and benchmarks for 11, so 421
+  // of 572 goods (measured at IN) could not select a route the engine prices perfectly well. On 72061000 the one
   // offered route carried the LARGEST free-allocation deduction, so the omission under-charged.
   //
   // Widening needs no gate. A route prices only when the benchmark table yields a row for it —
@@ -292,7 +292,7 @@ cd /Volumes/VSTSAMPLES/Projects/CBM
 git push -u origin feat/all-routes
 gh pr create --base main --head feat/all-routes \
   --title "fix(cbam): offer every route the good has a benchmark for" \
-  --body "routesFor filtered to routes with a published default value, so 419 of 572 goods could not select a route the engine prices. Distinct routes visible go 5 -> 11. Safe without a gate: a route with neither a route-specific nor a route-independent benchmark row refuses at resolveBenchmark. Two refusals corrected — a missing default value was being reported as a missing benchmark."
+  --body "routesFor filtered to routes with a published default value, so 421 of 572 goods could not select a route the engine prices. Distinct routes visible go 5 -> 11. Safe without a gate: a route with neither a route-specific nor a route-independent benchmark row refuses at resolveBenchmark. Two refusals corrected — a missing default value was being reported as a missing benchmark."
 ```
 
 - [ ] **Step 2: Watch CI**

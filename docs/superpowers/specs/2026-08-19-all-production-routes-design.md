@@ -18,7 +18,7 @@ That keeps only routes with a published **default value**. Its docblock states t
 
 > *"a route the corpus does not list has no default **and no benchmark**"*
 
-**That equivalence is false.** The Commission publishes default values for 8 routes and benchmarks for 11. Measured across the shipped pack: **419 of 572 goods have a benchmark route the form cannot offer.**
+**That equivalence is false.** The Commission publishes default values for 8 routes and benchmarks for 11. Measured across the shipped pack at country IN: **421 of 572 goods have a benchmark route the form cannot offer.** (419 of those already offered at least one route and merely gain more; the remaining two, `2523900010` and `2523900090`, offered *nothing* before. Quote 421 for the sentence as written — the count is country-parameterised, so name the country whenever you cite it.)
 
 ## Why it matters, in figures
 
@@ -98,7 +98,7 @@ The refusal wording lives in `cbam/certificate-estimate.ts` — also vendored �
 
 ## Testing
 
-- **The 419 goods are the acceptance measure.** Before: 544 goods offer ≤1 route. After: 151. Assert the corpus-wide count, not one example — a fix that widened only cement would pass a single-good test.
+- **The 421 goods are the acceptance measure.** Before: 544 goods offer ≤1 route. After: 151. Assert the corpus-wide count, not one example — a fix that widened only cement would pass a single-good test.
 - **Every currently-offered route keeps its figure.** Sweep every (good, origin, route) selectable today and require byte-identical results. This is the regression that would matter most and the one a route change could plausibly cause.
 - **The three tiers each pinned:** a route that prices, a route that prices only with verified figures, and a fictional route that refuses on every tier. The third must assert the *refusal*, since it is the safety property the whole design rests on.
 - **The new refusals pinned by hand-typed constants**, never imported from production, per this codebase's anti-paraphrase convention.
