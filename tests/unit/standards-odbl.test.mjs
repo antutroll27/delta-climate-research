@@ -45,11 +45,18 @@ test('EVERY export carrying building geometry ships the licence', () => {
   assert.equal(e.dataLicence.value, ODBL_NOTICE, 'NGSI-LD entity');
 
   const tileset = JSON.parse(readFileSync(`public/3d-tiles/${w.id}/tileset.json`, 'utf8'));
-  assert.equal(tileset.extras.licence.licence, ODBL_ID, '3D Tiles');
-  // the Python builder mirrors the TS block — they must not drift apart
-  assert.equal(tileset.extras.licence.notice, ODBL_NOTICE, '3D Tiles notice must match odbl.ts verbatim');
-  assert.equal(tileset.extras.licence.licenceUri, ODBL_URI);
-  assert.deepEqual(tileset.extras.licence.upstream.length, LICENCE_BLOCK.upstream.length);
+  // WHOLE OBJECT, not three fields. Comparing notice + licenceUri +
+  // upstream.length let the tileset ship without `shareAlike` or `access` — the
+  // §4.4 and §4.6 statements — for as long as it did, because a hand-retyped
+  // Python copy silently dropped them and the test never looked.
+  assert.deepEqual(tileset.extras.licence, LICENCE_BLOCK, '3D Tiles licence must equal odbl.ts exactly');
+
+  // and the GLB must carry the same block, not a summary of it
+  const glb = readFileSync(`public/3d-tiles/${w.id}/content.glb`);
+  const jsonLen = glb.readUInt32LE(12);
+  const gltf = JSON.parse(glb.subarray(20, 20 + jsonLen).toString('utf8'));
+  assert.ok(gltf.asset.copyright?.includes('Open Database License'), 'GLB asset.copyright carries the notice');
+  assert.deepEqual(gltf.asset.extras.licence, LICENCE_BLOCK, 'GLB licence must equal odbl.ts exactly');
 });
 
 test('the licence endpoint says what it does NOT cover, not just what it does', () => {

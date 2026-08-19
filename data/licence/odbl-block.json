@@ -1,0 +1,16 @@
+{
+  "licence": "ODbL-1.0",
+  "licenceUri": "https://opendatacommons.org/licenses/odbl/1-0/",
+  "treatedAs": "Derivative Database (ODbL §4.4). Whether an export like this is a Derivative Database or a Produced Work under §4.5 is arguable; we adopt the stricter reading so the question does not need settling before the data can be used.",
+  "notice": "Contains information from Overture Maps Foundation, which is made available here under the Open Database License (ODbL).",
+  "upstream": [
+    "© OpenStreetMap contributors, available under the Open Database License (ODbL).",
+    "Microsoft Global ML Building Footprints — CDLA-Permissive-2.0 at source, redistributed under ODbL within the Overture buildings theme.",
+    "Google Open Buildings — DUAL-LICENSED CC BY 4.0 or ODbL v1.0, at the user's election; we elect ODbL.",
+    "Building heights: Google Open Buildings 2.5D Temporal (2023) — same dual licence; taken direct, and used under CC BY 4.0."
+  ],
+  "shareAlike": "This export and any Derivative Database made from it must be offered under ODbL-1.0, a later version, or a compatible licence (§4.4).",
+  "access": "The entire Derivative Database is available free, online, in machine-readable form at the URL it is served from — so §4.6 is satisfied by the export itself; no separate alteration file exists or is needed.",
+  "restrictions": "none — static files, no authentication, no rate limiting, no technological restriction (§4.7).",
+  "disclaimer": "A compliance posture implemented in code, not legal advice. Formal review precedes any production or commercial deployment."
+}

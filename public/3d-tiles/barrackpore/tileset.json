@@ -48,23 +48,25 @@
     "licence": {
       "licence": "ODbL-1.0",
       "licenceUri": "https://opendatacommons.org/licenses/odbl/1-0/",
-      "treatedAs": "Derivative Database (ODbL 4.4), the stricter of the two readings",
+      "treatedAs": "Derivative Database (ODbL \u00a74.4). Whether an export like this is a Derivative Database or a Produced Work under \u00a74.5 is arguable; we adopt the stricter reading so the question does not need settling before the data can be used.",
       "notice": "Contains information from Overture Maps Foundation, which is made available here under the Open Database License (ODbL).",
       "upstream": [
-        "(c) OpenStreetMap contributors, available under the Open Database License (ODbL).",
-        "Microsoft Global ML Building Footprints -- CDLA-Permissive-2.0 at source, redistributed under ODbL within the Overture buildings theme.",
-        "Google Open Buildings -- CC BY 4.0.",
-        "Building heights: Google Open Buildings 2.5D Temporal (2023) -- CC BY 4.0."
+        "\u00a9 OpenStreetMap contributors, available under the Open Database License (ODbL).",
+        "Microsoft Global ML Building Footprints \u2014 CDLA-Permissive-2.0 at source, redistributed under ODbL within the Overture buildings theme.",
+        "Google Open Buildings \u2014 DUAL-LICENSED CC BY 4.0 or ODbL v1.0, at the user's election; we elect ODbL.",
+        "Building heights: Google Open Buildings 2.5D Temporal (2023) \u2014 same dual licence; taken direct, and used under CC BY 4.0."
       ],
-      "restrictions": "none -- static files, no authentication, no technological restriction (4.7).",
-      "disclaimer": "A compliance posture implemented in code, not legal advice."
+      "shareAlike": "This export and any Derivative Database made from it must be offered under ODbL-1.0, a later version, or a compatible licence (\u00a74.4).",
+      "access": "The entire Derivative Database is available free, online, in machine-readable form at the URL it is served from \u2014 so \u00a74.6 is satisfied by the export itself; no separate alteration file exists or is needed.",
+      "restrictions": "none \u2014 static files, no authentication, no rate limiting, no technological restriction (\u00a74.7).",
+      "disclaimer": "A compliance posture implemented in code, not legal advice. Formal review precedes any production or commercial deployment."
     },
     "buildings": 4702,
     "inputsHash": {
       "data/geometry/barrackpore-footprints.json": "fa1366e22758d7e89187b6d8e120778a25f3f9c9f3fc1aa43935b7c62e841558",
       "data/geometry/heights-overture.json": "81e2750f86d750803704c0f188e41f877d9a90194ac40c9b5c68691fc37fa478",
       "scripts/_gltf.py": "764cce725db055542e6c608c864d4ad6a326df3b708015bfb0ae3b5568535cfd",
-      "scripts/build-3d-tiles.py": "8ea3a54339582bbb7284ae4a42f2d36a2a1dc7d96c6068f1d28bf88abc8a440a"
+      "scripts/build-3d-tiles.py": "0ea053b819abce13723d1a5dbdf8713ce67bfa8179fef8a5d5c1888256894835"
     }
   }
 }

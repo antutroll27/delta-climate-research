@@ -132,6 +132,15 @@ def to_enu(lon: float, lat: float, h: float, origin: Vec3, basis: tuple[Vec3, Ve
             d[0] * u[0] + d[1] * u[1] + d[2] * u[2])
 
 
+def _licence() -> dict[str, Any]:
+    """The ODbL block, read from the SAME artefact src/scripts/standards/odbl.ts
+    reads. Retyping it here is how the tileset lost its §4.4 and §4.6 statements
+    without any test noticing."""
+    with open(os.path.join(ROOT, "data", "licence", "odbl-block.json"), encoding="utf-8") as fh:
+        block: dict[str, Any] = json.load(fh)
+    return block
+
+
 def _load(ward: str) -> tuple[list[Footprint], list[HeightRow]]:
     with open(os.path.join(GEOM, f"{ward}-footprints.json"), encoding="utf-8") as fh:
         fp = json.load(fh)
@@ -215,22 +224,7 @@ def build_ward(ward: str, write: bool = True) -> WardStats:
             # Work, so share-alike is honoured rather than argued about. Mirrors
             # LICENCE_BLOCK in src/scripts/standards/odbl.ts -- if that changes, this
             # must too, and check-3d-tiles.mjs asserts the licence id matches.
-            "licence": {
-                "licence": "ODbL-1.0",
-                "licenceUri": "https://opendatacommons.org/licenses/odbl/1-0/",
-                "treatedAs": "Derivative Database (ODbL 4.4), the stricter of the two readings",
-                "notice": "Contains information from Overture Maps Foundation, which is made available "
-                          "here under the Open Database License (ODbL).",
-                "upstream": [
-                    "(c) OpenStreetMap contributors, available under the Open Database License (ODbL).",
-                    "Microsoft Global ML Building Footprints -- CDLA-Permissive-2.0 at source, "
-                    "redistributed under ODbL within the Overture buildings theme.",
-                    "Google Open Buildings -- CC BY 4.0.",
-                    "Building heights: Google Open Buildings 2.5D Temporal (2023) -- CC BY 4.0.",
-                ],
-                "restrictions": "none -- static files, no authentication, no technological restriction (4.7).",
-                "disclaimer": "A compliance posture implemented in code, not legal advice.",
-            },
+            "licence": _licence(),
             "buildings": len(rows),
             # sha256 of every input plus the generators themselves. Freshness is
             # checked against THIS, not by regenerating and diffing bytes: the

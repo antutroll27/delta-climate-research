@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
 /**
  * ODbL compliance for the geometry exports.
  *
@@ -110,20 +113,17 @@ export interface LicenceBlock {
  * Attached to every export that carries building geometry. One object, so a new
  * export format cannot ship with a subtly different licence statement.
  */
-export const LICENCE_BLOCK: LicenceBlock = {
-  licence: ODBL_ID,
-  licenceUri: ODBL_URI,
-  treatedAs: 'Derivative Database (ODbL §4.4). Whether an export like this is a Derivative Database or a '
-    + 'Produced Work under §4.5 is arguable; we adopt the stricter reading so the question does not need '
-    + 'settling before the data can be used.',
-  notice: ODBL_NOTICE,
-  upstream: UPSTREAM_NOTICES,
-  shareAlike: 'This export and any Derivative Database made from it must be offered under ODbL-1.0, a later '
-    + 'version, or a compatible licence (§4.4).',
-  access: 'The entire Derivative Database is available free, online, in machine-readable form at the URL it '
-    + 'is served from — so §4.6 is satisfied by the export itself; no separate alteration file exists or is '
-    + 'needed.',
-  restrictions: 'none — static files, no authentication, no rate limiting, no technological restriction (§4.7).',
-  disclaimer: 'A compliance posture implemented in code, not legal advice. Formal review precedes any '
-    + 'production or commercial deployment.',
-};
+/**
+ * THE licence block — read from data/licence/odbl-block.json so that TypeScript
+ * and Python cannot disagree.
+ *
+ * This used to be a TS literal that scripts/build-3d-tiles.py RETYPED by hand,
+ * under a comment claiming "one object, so a new export format cannot ship with a
+ * subtly different licence statement". They had already diverged: the tileset's
+ * copy was missing `shareAlike` and `access` entirely — the ODbL §4.4 and §4.6
+ * statements — and the anti-drift test compared only `notice`, `licenceUri` and
+ * `upstream.length`, so it passed on a block that had lost half its obligations.
+ * An audit found it. One file now, and the test compares the whole object.
+ */
+export const LICENCE_BLOCK: LicenceBlock =
+  JSON.parse(readFileSync(resolve('data/licence/odbl-block.json'), 'utf8')) as LicenceBlock;
