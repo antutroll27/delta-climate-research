@@ -83,6 +83,8 @@ def write_glb(
     indices: Sequence[int],
     *,
     name: str = "buildings",
+    copyright_: str | None = None,
+    extras: dict[str, object] | None = None,
 ) -> int:
     """Write one mesh as a binary glTF 2.0 file. Returns bytes written."""
     if not positions or not indices:
@@ -99,7 +101,16 @@ def write_glb(
 
     xs = [p[0] for p in positions]; ys = [p[1] for p in positions]; zs = [p[2] for p in positions]
     gltf = {
-        "asset": {"version": "2.0", "generator": "delta-climate-research"},
+        # glTF 2.0 defines asset.copyright, so ODbL 4.2(d)'s "not possible to put
+        # the notice in this file" escape hatch does NOT apply here -- it was
+        # possible and simply had not been done. The densest ODbL artefact we ship
+        # travelled with no notice at all until an audit said so.
+        "asset": {
+            "version": "2.0",
+            "generator": "delta-climate-research",
+            **({"copyright": copyright_} if copyright_ else {}),
+            **({"extras": extras} if extras else {}),
+        },
         "scene": 0,
         "scenes": [{"nodes": [0]}],
         # glTF is Y-up, 3D Tiles content is Z-up: this is the standard correction

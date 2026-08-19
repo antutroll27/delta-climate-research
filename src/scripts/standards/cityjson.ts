@@ -194,7 +194,12 @@ export function buildCityJSON(w: Ward): CityJSON {
       identifier: `delta-climate-${w.id}-lod1`,
       title: `${record.name} — LoD1 buildings`,
       referenceDate: new Date().toISOString().slice(0, 10),
-      referenceSystem: 'https://www.opengis.net/def/crs/EPSG/0/4326',
+      // EPSG:4979, NOT 4326. Both are WGS84 geographic, but 4326 is TWO-dimensional
+      // and our vertices carry a z in metres above the ellipsoid. CityJSON 2.0 §5.5
+      // requires a three-dimensional CRS for exactly this reason. Neither the JSON
+      // Schema nor cjval catches it — the schema only checks the URL prefix — so it
+      // survived both validators and an audit caught it instead.
+      referenceSystem: 'https://www.opengis.net/def/crs/EPSG/0/4979',
       geographicalExtent: [...wardBbox(w).slice(0, 2), 0, ...wardBbox(w).slice(2, 4), Math.max(...hs.map((x) => x.p65))],
       pointOfContact: {
         contactName: 'Delta Climate Research',

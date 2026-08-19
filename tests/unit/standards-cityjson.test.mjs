@@ -68,8 +68,11 @@ test('the lineage block carries the measured confidence and the prototype status
   assert.equal(l.status, 'prototype');
   assert.equal(l.analysisCrs, 'EPSG:32645');
   assert.ok(l.confidence.night.bandK > 0 && l.confidence.peak.n > 0);
+  // the band must cover the OUT-OF-SAMPLE error, not the in-sample fit — the
+  // audit found ±3.0 published against a 3.102 K leave-one-overpass-out error
+  assert.ok(l.confidence.night.bandK >= 3.5, `night band ${l.confidence.night.bandK} understates`);
   assert.equal(l.confidence.heights.verdict, 'underpowered');
-  assert.match(cj.metadata.referenceSystem, /EPSG\/0\/4326$/);
+  assert.match(cj.metadata.referenceSystem, /EPSG\/0\/4979$/)   // 3-D CRS; 4326 is 2-D;
   assert.equal(cj.metadata.pointOfContact.emailAddress, 'angad@deltaclimate.earth', 'contactDetails requires emailAddress');
   assert.ok(!('lineage' in cj.metadata), 'metadata is closed in 2.0 — lineage must not be inside it');
 });
@@ -89,11 +92,36 @@ test('GeoJSON features are RFC 7946: closed CCW rings, bbox = polygon envelope',
   }
 });
 
-test('nothing on the wire uses prohibited certification language', () => {
-  const wire = JSON.stringify({ cj: cj.metadata, lin: cj['+delta_lineage'], matrix: MATRIX, geo: wardCollection(WARDS) }).toLowerCase();
-  for (const p of PROHIBITED) assert.ok(!wire.includes(p), `prohibited phrase on the wire: "${p}"`);
-  // and the matrix never claims the two rungs we cannot stand on
+test('nothing on the wire uses prohibited certification language', async () => {
+  // Mutation-tested 2026-08-19: inserting "ISO certified, fully compliant" into
+  // APPROVED_STATEMENT passed this test, because it only ever scanned MATRIX rows.
+  // The statements are the MOST quotable text we publish — they are the first
+  // thing a journalist or investor lifts — so they are now the first thing checked.
+  const { APPROVED_STATEMENT, UNCERTAINTY_STATEMENT, PHASES } = await import('../../src/scripts/standards/matrix.ts');
+  const wire = JSON.stringify({
+    cj: cj.metadata, lin: cj['+delta_lineage'], matrix: MATRIX, geo: wardCollection(WARDS),
+    approved: APPROVED_STATEMENT, uncertainty: UNCERTAINTY_STATEMENT, phases: PHASES,
+  }).toLowerCase();
+  const { prohibitedHits } = await import('../../src/scripts/standards/matrix.ts');
+  assert.deepEqual(prohibitedHits(wire), [], 'prohibited claim on the wire');
   for (const row of MATRIX) assert.ok(!['compliant', 'certified'].includes(row.posture), row.standard);
+});
+
+test('no prohibited language survives into the RENDERED pages', async () => {
+  // The wire is not what a reader sees. Copy can enter through page markup that
+  // never passes through a module, so the built HTML is checked directly.
+  const { readFileSync, existsSync } = await import('node:fs');
+  const { prohibitedHits } = await import('../../src/scripts/standards/matrix.ts');
+  for (const page of ['standards', 'uncertainty', 'attribution']) {
+    const file = `dist/${page}/index.html`;
+    assert.ok(existsSync(file), `${file} missing — build first`);
+    const text = readFileSync(file, 'utf8')
+      .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+      .replace(/<[^>]+>/g, ' ')
+      .toLowerCase();
+    // denials are fine — "Nothing here is certified" must survive; claims must not
+    assert.deepEqual(prohibitedHits(text), [], `/${page} makes a prohibited claim`);
+  }
 });
 
 test('openapi.json describes every endpoint the build actually emits (§13.2)', async () => {
@@ -117,4 +145,14 @@ test('openapi.json describes every endpoint the build actually emits (§13.2)', 
   const emitted = [...new Set(files.map((f) => templ('/api/' + relative(root, f))))].sort();
   for (const p of emitted) assert.ok(spec.paths[p], `openapi.json does not describe ${p}`);
   for (const p of Object.keys(spec.paths)) assert.ok(emitted.includes(p), `openapi.json describes ${p}, which is never emitted`);
+});
+
+test('CityJSON declares a THREE-dimensional CRS, because the data has a z', () => {
+  // EPSG:4326 is 2-D. Our vertices carry metres above the ellipsoid, so 4326 is
+  // wrong and 4979 is right (CityJSON 2.0 §5.5). Neither the JSON Schema nor
+  // cjval catches this: the schema only checks the URL prefix. Pinned here.
+  assert.match(cj.metadata.referenceSystem, /EPSG\/0\/4979$/,
+    'a 2-D CRS cannot describe geometry with heights');
+  assert.equal(cj.transform.scale.length, 3);
+  assert.ok(cj.transform.scale[2] > 0, 'z is scaled in metres');
 });

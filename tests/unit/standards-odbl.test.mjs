@@ -80,8 +80,12 @@ test('every layer states BOTH the governing and the source licence', async () =>
       assert.ok(l.governingLicence, `${l.layer}/${l.dataset}: no governing licence`);
       // when they differ the delivery path MUST be named, or the difference is
       // unexplained and reads as a contradiction
+      // A divergence must be EXPLAINED — either by how the data reached us, or by
+      // an election where the source offered a choice. Unexplained, it reads as a
+      // contradiction rather than a decision.
       if (l.governingLicence !== l.sourceLicence) {
-        assert.ok(l.via, `${l.layer}/${l.dataset}: licences differ but no delivery path given`);
+        assert.ok(l.via || l.elected,
+          `${l.layer}/${l.dataset}: licences differ with neither a delivery path nor an election`);
       }
     }
   }
@@ -111,9 +115,11 @@ test('heights are taken direct, so CC BY 4.0 governs them — not ODbL', async (
     // the same publisher supplies our footprints AND our heights by different
     // routes; keying licence by dataset alone forced one answer onto both
     assert.equal(h.dataset, 'Google Open Buildings');
+    // Google is DUAL-licensed; heights are taken direct and used under CC BY 4.0
     assert.equal(h.governingLicence, 'CC-BY-4.0');
-    assert.equal(h.sourceLicence, 'CC-BY-4.0');
+    assert.match(h.sourceLicence, /CC-BY-4\.0 OR ODbL-1\.0/, 'the dual licence must be stated at source');
     assert.ok(!h.via, 'taken direct, so no delivery path to name');
+    assert.ok(h.elected, 'a choice was made from the dual licence — say so');
   }
 });
 

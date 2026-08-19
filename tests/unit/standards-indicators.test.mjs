@@ -59,3 +59,34 @@ test('the protocol caveat travels with the numbers', () => {
   assert.match(doc.protocolCaveat, /not a verified conformant measurement/i);
   assert.match(doc.scope, /ward/i, 'ward-vs-city scale must be stated');
 });
+
+test('the indicator THRESHOLDS are pinned, not free to drift', () => {
+  // Mutation-tested 2026-08-19: changing the albedo threshold from 0.30 to 0.03 —
+  // which turns "almost no cool surface" into "almost all of it" — passed every
+  // test here. The value was checked; the definition behind it was not.
+  for (const w of doc.published) {
+    assert.equal(w.iso37123_8_8.threshold.canopyHeightM, 3.0,
+      'tree-canopy threshold is 3 m — the convention separating crowns from shrubs');
+    assert.equal(w.iso37123_8_9.threshold.broadbandAlbedo, 0.30,
+      'high-albedo threshold is 0.30 — the usual cool-surface cut-off');
+  }
+});
+
+test('the high-albedo value is consistent with the albedo actually measured', () => {
+  for (const w of doc.published) {
+    const i = w.iso37123_8_9;
+    // A share of cells above 0.30 cannot exceed a trickle when the ward MEAN is
+    // 0.12-0.14 and the single brightest cell is ~0.32. This is the cross-check
+    // the bare 0-100 range assertion could never make.
+    assert.ok(i.maxAlbedo >= i.wardMeanAlbedo, `${w.ward}: max below mean is impossible`);
+    if (i.maxAlbedo < i.threshold.broadbandAlbedo) {
+      assert.equal(i.value, 0, `${w.ward}: max albedo ${i.maxAlbedo} is below the threshold, so the share must be 0`);
+    }
+    if (i.wardMeanAlbedo < i.threshold.broadbandAlbedo / 2) {
+      assert.ok(i.value < 10, `${w.ward}: mean ${i.wardMeanAlbedo} cannot support ${i.value}% above ${i.threshold.broadbandAlbedo}`);
+    }
+    // the sensitivity ladder must run the right way, as canopy's does
+    assert.ok(i.sensitivity['>=0.25'] >= i.value, `${w.ward}: a lower threshold must admit more`);
+    assert.ok(i.sensitivity['>=0.35'] <= i.value, `${w.ward}: a higher threshold must admit less`);
+  }
+});

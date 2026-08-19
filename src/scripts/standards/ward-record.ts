@@ -61,8 +61,8 @@ export const LICENCES: Readonly<Record<string, { readonly licence: string; reado
     note: 'via Overture Maps. Attribution + share-alike. The Produced-Work vs Derivative-Database question is SETTLED for our exports: we adopt the stricter reading and license them as Derivative Databases — see /api/licence.json.',
   },
   'Google Open Buildings': {
-    licence: 'CC-BY-4.0', holder: 'Google Research', url: 'https://sites.research.google/gr/open-buildings/',
-    note: 'CC-BY-4.0 at source. Footprints reach us via Overture, so ODbL governs those as we redistribute them; heights are taken DIRECT from the 2.5D Temporal product (zonal p65) via Earth Engine and remain CC-BY-4.0. No coverage of the Gulf.',
+    licence: 'CC-BY-4.0 OR ODbL-1.0', holder: 'Google Research', url: 'https://sites.research.google/gr/open-buildings/',
+    note: 'DUAL-LICENSED at source — Google offers CC BY 4.0 or ODbL v1.0 and lets the user elect. We elect ODbL for the footprints, which is what makes declaring the exports as ODbL Derivative Databases lawful rather than an unlawful downstream restriction on CC-BY material. Footprints reach us via Overture, so ODbL governs those as we redistribute them; heights are taken DIRECT from the 2.5D Temporal product (zonal p65) via Earth Engine and remain CC-BY-4.0. No coverage of the Gulf.',
   },
   'Microsoft ML Buildings': {
     licence: 'CDLA-Permissive-2.0', holder: 'Microsoft', url: 'https://github.com/microsoft/GlobalMLBuildingFootprints',
@@ -140,8 +140,9 @@ const VIA_OVERTURE = { via: 'Overture Maps buildings theme', governing: 'ODbL-1.
 
 /** The non-footprint layers every Kolkata ward carries. Footprint datasets come
  *  from the provenance file; these are the same for all three and are stated once. */
-const KOLKATA_LAYERS: readonly { readonly layer: string; readonly dataset: string }[] = [
-  { layer: 'building heights',            dataset: 'Google Open Buildings' },
+const KOLKATA_LAYERS: readonly { readonly layer: string; readonly dataset: string; readonly governing?: string }[] = [
+  // dual-licensed at source; taken DIRECT (not via Overture), and we elect CC BY 4.0
+  { layer: 'building heights',            dataset: 'Google Open Buildings', governing: 'CC-BY-4.0' },
   { layer: 'surface: vegetation + albedo', dataset: 'Sentinel-2 L2A' },
   { layer: 'canopy / trees',              dataset: 'Meta / WRI Canopy Height Map' },
   { layer: 'meteorological forcing',      dataset: 'NASA POWER' },
@@ -195,6 +196,14 @@ export interface WardRecord {
       readonly governingLicence: string;
       /** set when the two differ because of how the data reaches us */
       readonly via?: string;
+      /**
+       * Set when the two differ because the source offers a CHOICE and we made
+       * one. Google Open Buildings is dual-licensed CC BY 4.0 or ODbL v1.0; the
+       * footprints we take under ODbL (via Overture), the heights under CC BY 4.0
+       * (taken direct). A divergence with neither `via` nor `elected` is
+       * unexplained, and a test rejects it.
+       */
+      readonly elected?: string;
       readonly holder: string;
       readonly url: string;
     }[];
@@ -254,9 +263,16 @@ export function wardRecord(w: Ward): WardRecord {
           governingLicence: VIA_OVERTURE.governing, via: VIA_OVERTURE.via,
         })),
         // everything else is taken direct, so source and governing are the same
-        ...KOLKATA_LAYERS.map((x) => {
+        ...KOLKATA_LAYERS.map(({ governing, ...x }) => {
           const l = pick(licenceFor(x.dataset));
-          return { ...x, ...l, governingLicence: l.sourceLicence };
+          // where a source offers a choice, `governing` records the one we elect
+          return {
+            ...x, ...l,
+            governingLicence: governing ?? l.sourceLicence,
+            ...(governing && governing !== l.sourceLicence
+              ? { elected: `source offers a choice (${l.sourceLicence}); we use it under ${governing}` }
+              : {}),
+          };
         }),
       ],
     },

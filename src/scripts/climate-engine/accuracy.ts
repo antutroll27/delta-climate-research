@@ -40,6 +40,8 @@ export interface PhaseAccuracy {
   readonly ceilingRmseK: number;
   /** what this model actually achieves */
   readonly modelRmseK: number;
+  /** leave-one-overpass-out RMSE — the out-of-sample error the band must cover */
+  readonly looOverpassRmseK: number;
   /** what the UI shows, model error rounded UP to 0.5 K */
   readonly bandK: number;
   readonly confidence: 'quantitative' | 'indicative';
@@ -52,18 +54,44 @@ export const ACCURACY: Record<'peak' | 'night', PhaseAccuracy> = {
     n: 50,
     ceilingRmseK: 2.233,
     modelRmseK: 2.93,
-    bandK: 3.0,
+    /**
+     * Leave-one-overpass-out RMSE, from data/calibration/model-accuracy.json
+     * ward_scale.strata.night. THIS is the number the band must cover.
+     *
+     * An audit found the published ±3.0 K band sat BELOW it. `modelRmseK` 2.93 is
+     * the IN-SAMPLE fit; /uncertainty has always described the method as
+     * "leave-one-overpass-out", and the honest out-of-sample error under that
+     * method is 3.102 K. The guard below compared the band to the in-sample
+     * figure, so ±3.0 passed while understating the error the page named. Of
+     * every possible defect on a site whose product is its error bars, an error
+     * bar that is too small is the worst one.
+     */
+    looOverpassRmseK: 3.102,
+    bandK: 3.5,
     confidence: 'quantitative',
     note: 'Night surface temperature tracks air temperature closely, and the model now '
         + 'reproduces the nocturnal heat island rather than inverting it — the modelled '
         + 'surface sits above air as measured (bias +0.18 K; the previous structure was '
         + '−1.54 K, i.e. the wrong side of air entirely). 2.93 K against a 2.233 K '
-        + 'ceiling, over 50 ward-scenes.',
+        + 'ceiling, over 50 ward-scenes. The displayed band is +/-3.5 K because it must cover the leave-one-overpass-out error of 3.102 K, not the in-sample fit.',
   },
   peak: {
     n: 29,
     ceilingRmseK: 3.338,
     modelRmseK: 4.42,
+    /**
+     * The current artefact measures peak_ecostress at n=23, RMSE 2.183,
+     * leave-one-overpass-out 2.389 — far BETTER than these published constants,
+     * which trace to an older evidence set (n=29 matches nothing that now exists).
+     *
+     * Deliberately NOT recalibrated here. Adopting the measured values would make
+     * daytime out-measure night and qualify as `quantitative`, which trips two
+     * pre-registered guards below; model-accuracy.json's own
+     * `pending_recalibration` reserves that for "a reviewed change". Publishing a
+     * WIDER band than measured overstates our error, which is the safe direction
+     * — unlike night, which understated. Left standing, and flagged.
+     */
+    looOverpassRmseK: 2.389,
     bandK: 4.5,
     confidence: 'indicative',
     note: 'Daytime is indicative only. Surface temperature at noon depends on local '
@@ -590,8 +618,11 @@ export function assertAccuracyLogic(): void {
     const x = ACCURACY[k];
     // a model cannot beat the best possible predictor on the same data
     a(x.modelRmseK >= x.ceilingRmseK, `${k}: model beats the data ceiling — impossible`);
-    // the shown band must never understate the measured error
-    a(x.bandK >= x.modelRmseK, `${k}: displayed band understates measured error`);
+    // The shown band must never understate the error under the method the page
+    // NAMES. Comparing to modelRmseK alone was the hole: it is the in-sample fit,
+    // and /uncertainty describes leave-one-overpass-out. Both are checked now.
+    a(x.bandK >= x.modelRmseK, `${k}: displayed band understates in-sample error`);
+    a(x.bandK >= x.looOverpassRmseK, `${k}: displayed band understates OUT-OF-SAMPLE error`);
     a(x.n > 0, `${k}: no scenes behind the figure`);
   }
   // daytime must never be presented as the more certain of the two

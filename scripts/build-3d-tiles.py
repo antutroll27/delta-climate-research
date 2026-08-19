@@ -45,7 +45,7 @@ import math
 import os
 import statistics
 import sys
-from typing import TypedDict
+from typing import Any, TypedDict
 
 from _gltf import earclip, write_glb
 from _stamp import stamp
@@ -248,7 +248,15 @@ def build_ward(ward: str, write: bool = True) -> WardStats:
     if write:
         d = os.path.join(OUT, ward)
         os.makedirs(d, exist_ok=True)
-        nbytes = write_glb(os.path.join(d, "content.glb"), positions, indices, name=f"{ward}-lod1")
+        # narrow the JSON-ish types once, so the GLB and the tileset provably
+        # carry the SAME licence object rather than two hand-typed copies
+        extras: dict[str, Any] = tileset["extras"]  # type: ignore[assignment]
+        licence: dict[str, Any] = extras["licence"]
+        nbytes = write_glb(
+            os.path.join(d, "content.glb"), positions, indices, name=f"{ward}-lod1",
+            copyright_=f"{licence['notice']} {licence['licenceUri']}",
+            extras={"licence": licence},
+        )
         with open(os.path.join(d, "tileset.json"), "w", encoding="utf-8") as fh:
             json.dump(tileset, fh, indent=2)
     else:

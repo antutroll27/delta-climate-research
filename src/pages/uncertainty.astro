@@ -85,7 +85,7 @@ const jsonLd = { '@context': 'https://schema.org', '@type': 'WebPage', name: 'Un
         ))}
       </tbody>
     </table></div>
-    <p>Rejected with the <em>wrong</em> sign, unanimously. The physical reason: these wards have no canyons — SVF sits at 0.82–0.92 — and SVF is collinear with built fraction, which the model already carries. Dead as a within-ward lever here.</p>
+    <p>Rejected with the <em>wrong</em> sign, unanimously. The physical reason: SVF is collinear with built fraction, which the model already carries, so it has no independent variance left to explain. (An earlier draft quoted an SVF range for these wards here; the sign-test artefact records only the per-scene spread, not the level, so the figure had no source and has been removed rather than left standing.)</p>
 
     <h3>Building shadow</h3>
     <p>Prediction: shaded cells receive less beam, so the model — which assumes full sun everywhere — should over-heat them. Expected <code>corr(shade, model − obs) &gt; 0</code> by day. A <em>placebo arm</em> was pre-registered alongside: night scenes scored against the same geometry lit at local noon, when no sun was shining. A real shadow effect must be ~0 there.</p>
@@ -97,7 +97,7 @@ const jsonLd = { '@context': 'https://schema.org', '@type': 'WebPage', name: 'Un
         ))}
       </tbody>
     </table></div>
-    <p>The pre-registered statistic passed — and the placebo fired, which voids it. A correlation with a shadow that was not there can only be building density. With built and vegetation regressed out, the day effect collapses to +0.070, p = 0.31. Shadow dies of the same collinearity as SVF. It is not the same kind of null, though: post-hoc, the partial correlation tracks building <em>height</em> across the three wards and strengthens at low sun, as real shadow would — underpowered with coherent structure, and a falsifiable prediction for a taller city.</p>
+    <p>The pre-registered statistic passed — and the placebo fired, which voids it. A correlation with a shadow that was not there can only be building density. With built and vegetation regressed out, the day effect collapses to +0.070, p = 0.31. Shadow dies of the same collinearity as SVF. It is not the same kind of null, though: post-hoc, the partial correlation tracks building <em>height</em> across the three wards, as real shadow would — though on three points that is one-in-six by chance. The companion prediction, that the effect should strengthen at low sun, does <em>not</em> hold: across 35 day scenes spanning 9°–86° solar altitude the correlation between sun angle and the partial is +0.07, which is no relationship at all — underpowered, half-supported, and a falsifiable prediction for a taller city.</p>
 
     <h2>Building heights</h2>
     <p>Heights ship from a zonal statistic over each footprint. Independent validation against ICESat-2 returned the pre-registered verdict <span class="verdict">{HEIGHTS.verdict}</span>: <span class="n">{HEIGHTS.nBuildings}</span> distinct buildings measured against a pre-registered minimum of <span class="n">{HEIGHTS.minBuildings}</span>, over <span class="n">{HEIGHTS.nPasses}</span> passes on <span class="n">{HEIGHTS.nRgts}</span> ground tracks. Below the bar, so nothing depending on validated heights ships as validated. Heights are not in the thermal physics today; they matter for the render and for the shadow work above.</p>

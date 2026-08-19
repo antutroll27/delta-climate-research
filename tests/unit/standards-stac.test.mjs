@@ -83,3 +83,17 @@ test('the built STAC files match what the module generates', () => {
   const built = readDist('/api/stac/items/ballygunge-canopy.json');
   assert.deepEqual(built, JSON.parse(JSON.stringify(stacItem(WARDS[0], PRODUCTS.find((p) => p.id === 'canopy')))));
 });
+
+test('no display markup leaks into machine-readable titles', () => {
+  // Ward.name carries <em> for the wordmark. ward-record strips it; STAC did not,
+  // and shipped "Bally<em>gunge</em>" into ten documents. stac_valid cannot catch
+  // this — `title` is a free string — so an audit found it instead.
+  for (const w of WARDS) for (const p of PRODUCTS) {
+    const i = stacItem(w, p);
+    assert.ok(!/<\/?em>/.test(i.properties.title), `${i.id}: markup in title — ${i.properties.title}`);
+    assert.ok(!/[<>]/.test(i.properties.title), `${i.id}: angle brackets in a machine-readable title`);
+  }
+  for (const l of stacCatalog(WARDS).links) {
+    if (l.title) assert.ok(!/<\/?em>/.test(l.title), `catalogue link title carries markup: ${l.title}`);
+  }
+});

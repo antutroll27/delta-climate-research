@@ -112,11 +112,59 @@ export const UNCERTAINTY_STATEMENT =
   + 'Outputs are intended for scenario exploration and prioritisation, not certified engineering, legal, '
   + 'or medical decision-making.';
 
-/** §2.4 of the source spec. The unit test asserts none of these appear on the wire or the page. */
+/**
+ * §2.4 of the source spec: phrases that must never appear on the wire or on a page.
+ *
+ * These are affirmative CLAIMS, not words. The list originally held the bare word
+ * "certified", which was serviceable only because the test scanned nothing but
+ * the matrix rows. Widening the scan to the public statements and the rendered
+ * pages exposed the flaw immediately: the honest uses of the word are everywhere
+ * — the vocabulary table's own "Certified | formally assessed | No" row, the
+ * heading "The path from aligned to certified", the sentence "Nothing here is
+ * certified, and nothing claims to be", and the disclaimer "not certified
+ * engineering, legal, or medical decision-making". Banning the word would have
+ * forced the removal of the very sentences that keep us honest.
+ *
+ * So each entry is a construction that can only be an overclaim. "is certified"
+ * cannot appear in a denial; "not certified" is untouched.
+ */
 export const PROHIBITED = Object.freeze([
-  'certified', 'fully compliant', 'officially integrated', 'approved by dubai municipality',
-  'iso certified', 'medically validated', 'engineering-grade', 'guaranteed heat reduction',
+  'is certified', 'are certified', 'certified platform', 'certified by',
+  'certification achieved', 'iso certified',
+  'fully compliant', 'officially integrated', 'approved by dubai municipality',
+  'medically validated', 'engineering-grade', 'guaranteed heat reduction',
 ]);
+
+/** Words that turn a claim into its denial. */
+const NEGATORS = ['nothing', 'not ', "n't", 'never', 'no ', 'without', 'cannot', 'neither', 'unless'];
+
+/**
+ * Find prohibited CLAIMS in a body of text, ignoring denials of them.
+ *
+ * A phrase list alone cannot do this. "Nothing here is certified, and nothing
+ * claims to be" is the single most honest sentence on /standards and it contains
+ * "is certified" — banning the string would delete the disclaimer and keep the
+ * boast. So an occurrence only counts when no negator appears in the ~40
+ * characters before it.
+ *
+ * Deliberately crude, and biased the safe way: an unusual phrasing produces a
+ * FALSE POSITIVE that a human must look at, never a false negative that ships.
+ */
+export function prohibitedHits(text: string): string[] {
+  const hay = text.toLowerCase();
+  const hits: string[] = [];
+  for (const phrase of PROHIBITED) {
+    let from = 0;
+    for (;;) {
+      const at = hay.indexOf(phrase, from);
+      if (at < 0) break;
+      const before = hay.slice(Math.max(0, at - 40), at);
+      if (!NEGATORS.some((n) => before.includes(n))) hits.push(phrase);
+      from = at + phrase.length;
+    }
+  }
+  return [...new Set(hits)];
+}
 
 /**
  * The path from aligned to certified — doc §14, made CHECKABLE.

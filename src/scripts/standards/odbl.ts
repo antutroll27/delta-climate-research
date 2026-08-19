@@ -66,10 +66,34 @@ export const ODBL_NOTICE = odblNotice(SOURCE_DATABASE);
 export const UPSTREAM_NOTICES: readonly string[] = [
   '© OpenStreetMap contributors, available under the Open Database License (ODbL).',
   'Microsoft Global ML Building Footprints — CDLA-Permissive-2.0 at source, redistributed under ODbL within the Overture buildings theme.',
-  'Google Open Buildings — CC BY 4.0.',
-  'Building heights: Google Open Buildings 2.5D Temporal (2023) — CC BY 4.0.',
+  'Google Open Buildings — DUAL-LICENSED CC BY 4.0 or ODbL v1.0, at the user\'s election; we elect ODbL.',
+  'Building heights: Google Open Buildings 2.5D Temporal (2023) — same dual licence; taken direct, and used under CC BY 4.0.',
 ];
 
+/**
+ * WHY DECLARING THESE EXPORTS ODbL IS LAWFUL, which is the question an auditor
+ * asks second and we could not previously answer from anything in this repo.
+ *
+ * A CC BY 4.0 work cannot simply be swept into an ODbL database: §2(a)(5)(C)
+ * forbids imposing "additional or different terms" that restrict a downstream
+ * recipient, and ODbL share-alike is exactly such a restriction. That is why
+ * OpenStreetMap refuses CC-BY sources without a waiver, and it would have made
+ * our own posture incoherent — Google-derived geometry inside an export we
+ * declare ODbL.
+ *
+ * It is lawful because Google Open Buildings is DUAL-licensed. Verbatim from
+ * sites.research.google/gr/open-buildings/, verified 2026-08-19:
+ *
+ *   "The data is shared under the Creative Commons Attribution (CC BY-4.0)
+ *    license and the Open Data Commons Open Database License (ODbL) v1.0
+ *    license. As the user, you can pick which of the two licenses you prefer
+ *    and use the data under the terms of that license."
+ *
+ * So for the footprints we ELECT the ODbL option and there is no conflict. The
+ * repo stated CC-BY-4.0 alone in five places and this sentence nowhere, which
+ * left the whole compliance argument resting on a fact it never recorded.
+ * Heights are taken direct rather than through Overture, so they stay CC BY 4.0.
+ */
 export interface LicenceBlock {
   readonly licence: string;
   readonly licenceUri: string;

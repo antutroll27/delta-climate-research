@@ -6,6 +6,7 @@ import { wardRecord, type WardRecord } from './ward-record.ts';
 export interface WardFeature {
   readonly type: 'Feature';
   readonly id: string;
+  readonly licence: typeof LICENCE_BLOCK;
   readonly bbox: WardRecord['bbox'];
   readonly geometry: { readonly type: 'Polygon'; readonly coordinates: readonly (readonly (readonly [number, number])[])[] };
   readonly properties: Omit<WardRecord, 'bbox'>;
@@ -17,6 +18,10 @@ export function wardFeature(w: Ward): WardFeature {
   return {
     type: 'Feature',
     id: w.id,
+    // On the FEATURE, not only the collection. /api/licence.json names
+    // items/{id}.json in appliesTo, and it shipped without one — a single ward
+    // fetched on its own carried geometry and no licence at all.
+    licence: LICENCE_BLOCK,
     bbox,
     // closed ring, counter-clockwise (RFC 7946 §3.1.6)
     geometry: { type: 'Polygon', coordinates: [[[west, south], [east, south], [east, north], [west, north], [west, south]]] },

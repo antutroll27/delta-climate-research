@@ -74,6 +74,12 @@ export const PRODUCTS: readonly Product[] = [
   },
 ];
 
+/** `Ward.name` carries <em> to mark the wordmark's stressed syllable. ward-record
+ *  strips it; STAC imported Ward directly and shipped the raw markup into ten
+ *  machine-readable documents. stac_valid cannot catch it — `title` is a free
+ *  string. */
+const plain = (s: string) => s.replace(/<\/?em>/g, '');
+
 const link = (rel: string, href: string, type = STAC_TYPE, title?: string) =>
   ({ rel, href, type, ...(title ? { title } : {}) });
 
@@ -88,7 +94,7 @@ export function stacCatalog(wards: readonly Ward[]) {
       link('child', COLLECTION_URL, STAC_TYPE, 'Ward products'),
       { rel: 'license', href: '/api/licence.json', type: STAC_TYPE, title: 'Licence position' },
       ...wards.flatMap((w) => PRODUCTS.map((p) =>
-        link('item', itemUrl(`${w.id}-${p.id}`), 'application/geo+json', `${w.name} — ${p.title}`))),
+        link('item', itemUrl(`${w.id}-${p.id}`), 'application/geo+json', `${plain(w.name)} — ${p.title}`))),
     ],
   };
 }
@@ -162,7 +168,7 @@ export function stacItem(w: Ward, p: Product) {
     geometry: { type: 'Polygon', coordinates: [[[west, south], [east, south], [east, north], [west, north], [west, south]]] },
     bbox: [west, south, east, north],
     properties: {
-      title: `${w.name} — ${p.title}`,
+      title: `${plain(w.name)} — ${p.title}`,
       description: p.description,
       // null with start/end is the correct STAC form for a composite: there is no
       // single acquisition instant, and inventing one would be a fabricated date
