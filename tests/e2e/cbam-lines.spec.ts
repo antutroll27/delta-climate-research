@@ -65,17 +65,24 @@ const GOOD_LINE: LineInput = { cn: '2523100090', country: 'DZ', route: '(A)', ma
 // DZ's multi-route goods fall into exactly two route sets, (K)+(L) and (C)+(F).
 const MULTI_ROUTE_LINE: LineInput = { cn: '76011010', country: 'DZ', route: '(L)', mass: '30', date: '2026-03-15' };
 
-// Genuinely unpriceable in the shipped pack: the defaults corpus declares route
-// (C) for this CN, but no Column B benchmark resolves for it — an ordinary
+// Genuinely unpriceable in the shipped pack: route (G) is offered for this CN — the
+// free-allocation benchmark resolves for it — but the Commission publishes no direct
+// default value, so the defaults tier refuses with NO_DIRECT_DEFAULT. An ordinary
 // engine refusal (`status: 'unavailable'`), not a thrown error, and still an
 // iron_and_steel-sector line that counts toward its year's threshold mass.
-const REFUSED_LINE: LineInput = { cn: '72052100', country: 'IN', route: '(C)', mass: '60', date: '2026-03-15' };
+//
+// WAS route (C), whose refusal was "no Column B benchmark resolves for it". That is now
+// precisely the condition that stops a route being OFFERED at all: a route no one can
+// ever price — not even from their own verified figures — is withheld rather than shown
+// and refused. 72052100 lost (C) and (E) for exactly that reason and now offers
+// ['(F)','(G)','(H)','(J)']. The fixture had to move to a route that is still offered.
+const REFUSED_LINE: LineInput = { cn: '72052100', country: 'IN', route: '(G)', mass: '60', date: '2026-03-15' };
 
 // Iron & steel from India on its one published route — an ORDINARY, priceable line
 // that simply has no indirect side: the Commission charges this sector direct-only in
 // the definitive period and publishes no electricity default for it. Deliberately not
 // REFUSED_LINE above, which is also iron & steel but ALSO unpriceable, and would
-// therefore confound "no indirect default" with "no benchmark at all".
+// therefore confound "no indirect default" with "no direct default either".
 //
 // NOT '76011000'. That heading is not an offered good — the pack classifies
 // '76011010', '76011090' and '76012030/40/80', never the heading itself, and
@@ -960,6 +967,34 @@ test.describe('multi-line CBAM estimate — soft navigation', () => {
     // it is what the referenced defect actually broke (double lines from ONE click) if it recurs.
     await addLine(page, { mass: '30' });
     await expect(page.locator('.cb-line')).toHaveCount(1);
+  });
+});
+
+test.describe('multi-line CBAM estimate — the widened route list', () => {
+  test('a good with three published routes offers all three, and none it cannot price', async ({ page }) => {
+    // routesFor used to keep only routes with a published DEFAULT value, so this good offered
+    // (C) alone while the engine prices (D) and (E) perfectly well from the user's own verified
+    // figures. Worse, (C) carried the LARGEST free-allocation deduction of the three — 64.42
+    // certificates against 148.66 and 187.37 — so the one reachable route under-charged.
+    //
+    // Asserted through the real form because the dropdown is what a user meets; the engine-level
+    // list is pinned separately in the unit suite.
+    // Deliberately NOT setLine(): that helper selects a route, and this test is about what the
+    // control offers BEFORE one is chosen. Passing route: '' to it hangs on the disabled
+    // placeholder option.
+    await page.goto('/cbam/cbam-calculator/');
+    await page.fill('#cbCn', '72061000');
+    await page.dispatchEvent('#cbCn', 'change');
+    await page.fill('#cbDate', '2026-03-15');
+    await expect(page.locator('#cbCountry option[value="IN"]')).toBeAttached();
+    await page.selectOption('#cbCountry', 'IN');
+    await expect(page.locator('#cbRoute')).toBeEnabled();
+    for (const route of ['(C)', '(D)', '(E)']) {
+      await expect(page.locator(`#cbRoute option[value="${route}"]`)).toBeAttached();
+    }
+    // (K) is an aluminium route. No benchmark resolves for it on a steel good, so no figure
+    // could ever be produced — it is withheld rather than offered and refused.
+    await expect(page.locator('#cbRoute option[value="(K)"]')).toHaveCount(0);
   });
 });
 

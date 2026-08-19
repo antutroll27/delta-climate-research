@@ -339,6 +339,7 @@ export function routesFor(
 ): string[] {
   if (!isOfferedGood(pack, cn) || !Number.isInteger(year)) return []
   const prepared = prepareEstimatorPack(pack)
+  if (!packCoversYear(prepared, year)) return []
   const origins = originOrder(pack, country)
   const covering = coveringBenchmarks(prepared, cn)
 
@@ -378,6 +379,37 @@ export function routesFor(
 }
 
 /**
+ * Does the corpus cover this reporting year at all?
+ *
+ * THE INVARIANT THAT WENT MISSING. Before routesFor grew its benchmark limb it was purely
+ * defaults-driven, and the defaults limb year-gates because its rows are keyed by reportingYear.
+ * So "the pack publishes no defaults for this year" implicitly meant "no routes", and the offer
+ * list closed itself in an uncovered year without anyone writing the rule down. Widening to the
+ * benchmark limb silently dropped that, because benchmark rows are open-ended: 1,671 of the
+ * pack's 2,465 rows carry `validTo: null` and the rest run to 2030-12-31, so they name routes for
+ * years the Commission has published no default values, no certificate price and no CSCF for.
+ * Measured at 2029: 51,362 of 69,784 (good, origin) pairings were offered routes, and 0 of 12,710
+ * sampled offers could price. Stating the rule explicitly is the fix.
+ *
+ * `reportingYears` is the corpus's own statement of its coverage, not a policy written here — the
+ * same discipline as the rest of this file, where every gate is decided by the data.
+ *
+ * NOT the row-validity gate, and that is deliberate. Mirroring resolveBenchmark's `active()` onto
+ * the benchmark limb — intersecting each row's validFrom/validTo with the calendar year — was
+ * implemented and measured first, because the two limbs disagreeing about validity looks like the
+ * defect. On the shipped corpus it is unobservable: all 397 rows that expire on 2027-12-31 have an
+ * exact successor row for the same (scopeCode, codeLevel, column, routeIndicator) in the
+ * 2028-01-01→2030-12-31 window — 397 of 397, with 0 rows left without a successor — so the union
+ * of offered routes is bit-identical in every year from 2026 to 2030, and the years it does close
+ * (2024, 2025, 2031+) this gate closes anyway. It was dropped rather than kept as an equivalent
+ * mutant no test can exercise. If the corpus ever ships an expiring row with no successor, add it
+ * then, against a real input.
+ */
+function packCoversYear(prepared: PreparedEstimatorPack, year: number): boolean {
+  return prepared.reportingYears.has(year)
+}
+
+/**
  * Every benchmark row whose scope covers a good — the corpus's whole say about it, both columns
  * and both route-specific and route-independent rows, left for the caller to split.
  *
@@ -392,10 +424,12 @@ export function routesFor(
  * 4-digit heading row while another route had an 8-digit row, that route would still resolve, and
  * narrowing here would stop offering it.
  *
- * Validity dates are not filtered: this function has a year, not a date, and resolveBenchmark
- * applies `active()` itself at the moment it matters. No offered route depends on an expired row
- * today (measured 0), so the two agree; if that ever changes, the date-bearing resolver is the
- * one that must decide, not this one.
+ * Validity dates are not filtered HERE, and the reason the earlier note gave for that was the
+ * wrong one. It said resolveBenchmark "applies `active()` itself at the moment it matters" — true
+ * of the resolver, but it left the offer list with no year test on this limb at all, which is how
+ * routes came to be offered for years the corpus does not cover. The year test now lives in
+ * routesFor, on the corpus's own coverage (`packCoversYear`), not on these rows' windows; see that
+ * function for why the row-window gate was measured, found unobservable, and dropped.
  */
 function coveringBenchmarks(prepared: PreparedEstimatorPack, cn: string) {
   return prepared.source.benchmarks.filter(row => cn.startsWith(row.scopeCode)
