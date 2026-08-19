@@ -84,14 +84,25 @@ jobs:
         timeout-minutes: 6
         run: npx playwright install chromium
 
-      # Firefox and WebKit for the CBAM calculator only (see playwright.config.ts) — it is the
-      # one surface here a customs consultant might open in Safari, and WebKit is the engine most
-      # likely to disagree about print CSS and date inputs, both of which that page leans on.
+      # WebKit's OS libraries, best effort and time-boxed like Chromium's above. WebKit genuinely
+      # needs ~35 libraries this image does not ship — libgtk-4, libgraphene, the gstreamer suite,
+      # flite, libavif — and an earlier version of this step skipped apt on the assumption the
+      # runner carried them. It does not: every WebKit test failed at browserType.launch with
+      # the missing libraries listed by name.
       #
-      # No install-deps for these two: the binaries come from Playwright's CDN and the runner
-      # image already carries what they need. Keeping apt to Chromium alone is what the
-      # best-effort step above is for. If a future image really is missing a library, Playwright
-      # names it and the e2e fails in seconds rather than hanging.
+      # That failure mode is the reason this stays best-effort rather than becoming a hard gate.
+      # If the mirror is unreachable the step gives up after four minutes and the WebKit project
+      # fails fast, naming what is missing — a red gate with a cause, in seconds. The alternative
+      # we started with was an eighteen-minute silence that never reached a single test.
+      - name: Install WebKit system libraries (best effort)
+        timeout-minutes: 4
+        continue-on-error: true
+        run: npx playwright install-deps webkit
+
+      # Firefox and WebKit run the CBAM calculator only (see playwright.config.ts): it is the one
+      # surface here a customs consultant might open in Safari, and WebKit is the engine most
+      # likely to disagree about print CSS and date inputs, both of which that page leans on.
+      # It has already earned the slot — it caught a mega-menu bug Chromium could not see.
       - name: Install Firefox and WebKit
         timeout-minutes: 6
         run: npx playwright install firefox webkit
