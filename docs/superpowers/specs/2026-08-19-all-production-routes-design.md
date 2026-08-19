@@ -80,7 +80,15 @@ Those routes can never price **for anyone**, verified figures included. But the 
 
 **So the offered set carries an invariant: every offered route can reach a benchmark**, via its own route-specific row or a route-independent one. The predicate applies to the union, not to the benchmark limb alone — a route with a default but no reachable benchmark is equally a dead end. Tier 3 therefore never reaches the user as a choice.
 
+One correction to the population above: the 2,660 offers are the ones the *false message* would reach, since they lack a default and so refuse `NO_DIRECT_DEFAULT`. They are all new to this branch. The full unreachable set on the branch is **3,584** — those 2,660 plus 924 that carry a default and refuse `NO_BENCHMARK` instead.
+
 This tightens rather than contradicts "the boundary is enforced by absent data": the corpus still decides everything, now on both axes — what it *names*, and what it can *resolve*.
+
+**The invariant also removes 924 offers that `main` shows today** — 56 (good, route) pairs across 28 goods, all steel, routes `(C)/(E)/(F)/(H)`, including `72051000/(F)` and `72052100/(C)`. Measured on main, **all 56 already refuse `NO_BENCHMARK` on both the defaults and the verified tier**: they have a default value, which is why the old filter kept them, but no reachable Column-B benchmark, so they render no figure for anyone. They are pre-existing dead ends, not a capability being withdrawn.
+
+Keeping them would have meant grandfathering unreachable routes **by provenance** — permitted because they arrived via the defaults limb rather than the benchmark limb — a special case with no counterpart in the regulation and nothing a verifier could be told. One invariant that reads in a sentence is worth more than a narrower diff nobody can explain.
+
+Correctness is unaffected either way: a whole-payload sweep of every (good, origin, route) offered on main × 2 scopes × 2 tiers compared **95,712 payloads with 0 differing**, and the differ was proven sensitive by perturbing single payloads. The 924 appear as *removed offers*, never as changed figures.
 
 ## The two refusals to sharpen
 
