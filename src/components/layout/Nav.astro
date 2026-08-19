@@ -654,6 +654,19 @@ const socials = [
       trigger.addEventListener('focus', open, { signal });
       // close when focus leaves the whole menu (Tab past the last link)
       menu.addEventListener('focusout', (e) => {
+        // ...but NOT when the pointer is still inside it and focus went nowhere. macOS WebKit
+        // does not focus links or buttons on mousedown, so clicking an item in an open panel
+        // fires focusout with a NULL relatedTarget — and closing there sets the panel back to
+        // `pointer-events: none` between mousedown and mouseup, so the click lands on <body>
+        // and the navigation never happens. Measured in WebKit: the trusted click's target was
+        // BODY with the panel already closed, while the same anchor's JS .click() navigated
+        // fine. Chromium and Firefox focus the anchor, so relatedTarget is non-null there and
+        // this arm was never reached — which is why it survived a Chromium-only suite.
+        //
+        // Guarded on the POINTER, not on the browser: a real Tab past the last link carries a
+        // non-null relatedTarget and still closes, and a pointer that leaves has mouseleave's
+        // CLOSE_DELAY timer to close it. Escape still closes and restores focus to the trigger.
+        if (e.relatedTarget === null && menu.matches(':hover')) return;
         if (!menu.contains(e.relatedTarget as Node)) close();
       }, { signal });
       menu.addEventListener('keydown', (e) => {
