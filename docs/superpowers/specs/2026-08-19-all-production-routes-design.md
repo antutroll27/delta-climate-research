@@ -66,13 +66,25 @@ A route is priceable when the benchmark table yields a row for it — either its
 
 1. route has a benchmark **and** the defaults the scope needs → prices
 2. route has a benchmark but no default → prices on the user's own verified figures, refuses on the defaults tier
-3. route has no benchmark for that good → refuses on every tier
+3. route has no benchmark for that good → **is not offered at all**
 
 Only (2) needs the user told something they are not told today.
 
+### Tier 3 is not offered, it is withheld — added after implementation review
+
+An earlier draft of this section said tier 3 "refuses on every tier", and treated being offered-then-refused as sufficient. Implementation measurement showed that is not good enough, and the reason is tier 2's own message.
+
+Removing the filter frees the **defaults limb** as well as the benchmark limb. That limb contributed **2,660 offers across 28 goods** that are named by the corpus yet can reach no Column-B benchmark — for example `72051000`, which lists Column B for `(C)/(D)/(E)` and a route-independent Column A only, but was offered `(F)` because other origins publish a default for it. All 2,660 lack a default too, so the old filter dropped every one; they are new.
+
+Those routes can never price **for anyone**, verified figures included. But the corrected tier-2 refusal this spec installs tells the user *"entering your own verified figures will price this route"* — which for these 28 goods is false, and invites them to go and gather figures that cannot help. A false claim in a regulated filing tool is worse than the under-charge this work began with.
+
+**So the offered set carries an invariant: every offered route can reach a benchmark**, via its own route-specific row or a route-independent one. The predicate applies to the union, not to the benchmark limb alone — a route with a default but no reachable benchmark is equally a dead end. Tier 3 therefore never reaches the user as a choice.
+
+This tightens rather than contradicts "the boundary is enforced by absent data": the corpus still decides everything, now on both axes — what it *names*, and what it can *resolve*.
+
 ## The two refusals to sharpen
 
-Both currently surface as `NO_BENCHMARK_REASON`, which is accurate for case 3 and **wrong for case 2**.
+Both currently surface as `NO_BENCHMARK_REASON`, which was accurate for case 3 and **wrong for case 2**. With case 3 no longer offered, case 2 is the one the user actually meets.
 
 **(a) A benchmark exists but no default value.** Today: *"The published rules do not give a free-allocation benchmark for this good, production route or year."* That is false — the benchmark is exactly what does exist. It should name the real gap and the way out:
 
