@@ -58,7 +58,9 @@ The obvious worry is that a wider dropdown lets someone price a production path 
 72061000   / (K)   aluminium route on steel   ->  unavailable [benchmark/72061000/column-B/(K)/2026-03-15]
 ```
 
-A route with no benchmark for that good has **no free-allocation term**, so `resolveBenchmark` raises `REGULATION_NOT_FOUND` and the line refuses. There is no figure to mis-state.
+A route is priceable when the benchmark table yields a row for it — either its own route-specific row, or a **route-independent** row (empty `routeIndicator`) that applies whatever route is declared. A route with neither makes `resolveBenchmark` raise `REGULATION_NOT_FOUND`, and the line refuses. There is no figure to mis-state.
+
+*Corrected after review.* An earlier draft of this section said a route with no benchmark row **of its own** cannot price. That is false: `resolveBenchmark` falls back to route-independent rows, and six measured goods (`73181535`, `73181552`, `73181562`, `73181575`, `73181631`, `73181639`) offer `(C)` with no own Column-B row and price at 77.485 certificates on 1.9 t/t. This is pre-existing behaviour — those routes are offered identically today — so the safety property survives; only the mechanism was described wrongly.
 
 **So no gating, no opt-in toggle, and no "expert mode" is required.** The boundary is enforced by the absence of data rather than by a policy we impose — which is stronger, because it does not depend on anyone trusting our judgement about who should be allowed what. Three tiers of behaviour fall out automatically:
 

@@ -85,7 +85,8 @@ describe('routesFor offers every route the good has a benchmark for', () => {
 
   it('does NOT offer a route the good has no benchmark for', () => {
     // The safety property the whole design rests on. (K) is an aluminium route; on a steel good
-    // there is no benchmark row, so no free-allocation term exists and the line cannot be priced.
+    // it has neither a route-specific benchmark row nor a route-independent one, so
+    // resolveBenchmark raises REGULATION_NOT_FOUND and the line cannot be priced.
     // The widened list must not reach it.
     expect(routesFor(pack, '72061000', 'IN', 2026)).not.toContain('(K)')
   })
@@ -130,11 +131,12 @@ export function routesFor(
   // of 572 goods could not select a route the engine prices perfectly well. On 72061000 the one
   // offered route carried the LARGEST free-allocation deduction, so the omission under-charged.
   //
-  // Widening needs no gate. A route with no benchmark for this good has no free-allocation term
-  // at all, so resolveBenchmark refuses and the line renders no figure. The boundary is enforced
-  // by absent data, not by a policy this function imposes. A route offered here but lacking a
-  // default still refuses on the DEFAULTS tier — correctly, and with its own message — while
-  // pricing normally from the user's own verified figures.
+  // Widening needs no gate. A route prices only when the benchmark table yields a row for it —
+  // its own route-specific row, or a route-independent row that applies whatever route is
+  // declared. A route with neither makes resolveBenchmark raise REGULATION_NOT_FOUND and the
+  // line renders no figure. The boundary is enforced by absent data, not by a policy imposed
+  // here. A route offered but lacking a DEFAULT still refuses on the defaults tier — correctly,
+  // and with its own message — while pricing normally from the user's own verified figures.
   const fromBenchmarks = benchmarkRoutesFor(pack, cn)
   return [...new Set([...fromDefaults, ...fromBenchmarks])].sort()
 }
@@ -290,7 +292,7 @@ cd /Volumes/VSTSAMPLES/Projects/CBM
 git push -u origin feat/all-routes
 gh pr create --base main --head feat/all-routes \
   --title "fix(cbam): offer every route the good has a benchmark for" \
-  --body "routesFor filtered to routes with a published default value, so 419 of 572 goods could not select a route the engine prices. Distinct routes visible go 5 -> 11. Safe without a gate: a route with no benchmark has no free-allocation term and refuses at resolveBenchmark. Two refusals corrected — a missing default value was being reported as a missing benchmark."
+  --body "routesFor filtered to routes with a published default value, so 419 of 572 goods could not select a route the engine prices. Distinct routes visible go 5 -> 11. Safe without a gate: a route with neither a route-specific nor a route-independent benchmark row refuses at resolveBenchmark. Two refusals corrected — a missing default value was being reported as a missing benchmark."
 ```
 
 - [ ] **Step 2: Watch CI**
