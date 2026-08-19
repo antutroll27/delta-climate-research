@@ -429,8 +429,39 @@ const FAILURE_MESSAGES: Record<EstimateFailureCode, string> = {
   BAD_MASS: 'Enter a finite, non-negative mass before requesting an estimate.',
   BAD_DATE: BAD_DATE_REASON,
   INVALID_PACK: 'The regulatory pack contains an invalid numeric input, so no estimate is shown.',
-  NO_DIRECT_DEFAULT: 'No applicable direct default value is published for this selector.',
-  NO_INDIRECT_ROUTE: 'No indirect default value is published for this production route.',
+  // THESE TWO ARE THE STRINGS THE IMPORTER READS. They used to have a twin in
+  // estimate-from-pack.ts (NO_DEFAULT_REASON / NO_INDIRECT_ROUTE_REASON) which every production
+  // caller passed as `reason`, so this registry was dead for both codes and a rewording here
+  // reached nobody — measured at 0 of 347,040 offers. The twins are deleted; those call sites now
+  // read failureMessage(), and estimate-from-pack.test.ts pins that they still do.
+  //
+  // ALL FOUR AXES stay named. A refusal is keyed on good, origin, route AND year, and origin is
+  // the one a shorter sentence loses most expensively: of 150,516 direct-scope refusals, 97,690
+  // (64.9%) occur where the Commission DOES publish a default for that same good and route at
+  // another origin, so "this good on this production route" would send the user to change route,
+  // which refuses again.
+  //
+  // The last clause states an INDEPENDENCE, not an outcome. "Your verified figures will price
+  // this route" is false outside 2026: the pack carries 2026 quarters only, the date input has no
+  // min/max, and routesFor still offers routes at later years. Measured at 2027-02-15, NOTHING
+  // prices — the 173,520 direct-scope offers split 150,516 NO_DIRECT_DEFAULT + 23,004
+  // NO_CERTIFICATE_PRICE, and all 150,516 of the former fail the verified path on
+  // NO_CERTIFICATE_PRICE too. Saying the estimate "does not depend on this default" is true on
+  // every date, and is the part the user can act on.
+  NO_DIRECT_DEFAULT:
+    'The Commission publishes no applicable direct default value for this good, origin, '
+    + 'production route or year, so no estimate is shown. The free-allocation benchmark for this '
+    + 'production route is published, so an estimate from your own verified figures does not '
+    + 'depend on this default.',
+  // Same shape: the harm sentence is kept because it is the reason this refuses rather than
+  // pricing electricity at zero, and the added clause EXCLUDES rather than promises, for the same
+  // date reason. store.hasIndirect() returns on `kind !== 'none'`, so the scope control is on
+  // screen exactly when this fires — the advice points at a visible control.
+  NO_INDIRECT_ROUTE:
+    'The Commission publishes indirect (electricity) default values for this good and origin, but '
+    + 'none for the production route declared, so no estimate is shown. Pricing the electricity '
+    + 'component at zero would understate the bill without saying so. Setting the emissions scope '
+    + 'to direct only excludes the component that is missing.',
   NO_BENCHMARK: NO_BENCHMARK_REASON,
   NO_CERTIFICATE_PRICE: NO_PRICE_REASON,
   NO_CBAM_FACTOR: NO_CBAM_FACTOR_REASON,

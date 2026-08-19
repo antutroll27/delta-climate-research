@@ -7,6 +7,7 @@ import { evaluateThreshold, type ThresholdState } from '../threshold/evaluate'
 import {
   BAD_DATE_REASON,
   estimateCertificates,
+  failureMessage,
   unavailableEstimate,
   type CertificateEstimate,
   type CertificateEstimateInput,
@@ -98,15 +99,6 @@ export type IndirectLookup =
   | { kind: 'found'; factor: ValueRecord }
   | { kind: 'none' }
   | { kind: 'route-mismatch'; availableRoutes: string[] }
-
-const NO_DEFAULT_REASON =
-  'The Commission publishes no applicable direct default value for this good, origin, ' +
-  'production route or year, so no estimate is shown.'
-
-const NO_INDIRECT_ROUTE_REASON =
-  'The Commission publishes indirect (electricity) default values for this good and origin, but ' +
-  'none for the production route declared, so no estimate is shown. Pricing the electricity ' +
-  'component at zero would understate the bill without saying so.'
 
 const BAD_VERIFIED_REASON =
   'A verified emissions figure must be a readable number of tCO2e per tonne of good, and cannot ' +
@@ -330,8 +322,14 @@ function lookupValue(
 }
 
 /**
- * The direct-default routes available for a good and origin in a year — the ONLY routes the form
- * may offer. Never free-typed: a route the corpus does not list has no default and no benchmark.
+ * The production routes the form may offer for a good in a year — the ONLY routes it may offer.
+ *
+ * ONE INVARIANT, on two axes, and an offered route satisfies both: the corpus must NAME the route
+ * for this good (a benchmark row whose scope covers the CN, or a default-value row that does), and
+ * the corpus must be able to RESOLVE a Column-B benchmark for it. Naming without resolution is a
+ * dead end — a route that can only ever refuse — and this function does not offer dead ends.
+ *
+ * Both axes are decided by the corpus, which is why no gate, expert mode or policy lives here.
  */
 export function routesFor(
   pack: EstimatorPack,
@@ -341,10 +339,101 @@ export function routesFor(
 ): string[] {
   if (!isOfferedGood(pack, cn) || !Number.isInteger(year)) return []
   const prepared = prepareEstimatorPack(pack)
+  if (!packCoversYear(prepared, year)) return []
   const origins = originOrder(pack, country)
-  return [...new Set(origins.flatMap(origin =>
+  const covering = coveringBenchmarks(prepared, cn)
+
+  // AXIS 1 — NAMED. Every route the corpus mentions for this good, from either table.
+  //
+  // The default-value half of this used to be the whole answer, filtered down to routes whose
+  // `lookupValue(...).kind === 'found'`, justified by a docblock asserting that "a route the
+  // corpus does not list has no default AND no benchmark". That equivalence is false: the
+  // Commission publishes default values for 8 routes and benchmarks for 11, so 421 of 572 goods
+  // gained at least one route the engine prices perfectly well (measured for India; also 421 for
+  // DZ and CN, with a different split). On 72061000 the single offered route carried the LARGEST
+  // free-allocation deduction of the three available, so the omission under-charged by up to 2.9x.
+  const named = new Set(origins.flatMap(origin =>
     availableRoutesAt(prepared, 'direct', cn, origin, year),
-  ))].filter(route => lookupValue(pack, 'direct', { cn, country, route }, year).kind === 'found').sort()
+  ))
+  for (const row of covering) if (row.routeIndicator !== '') named.add(row.routeIndicator)
+
+  // AXIS 2 — RESOLVABLE. Mirrors resolveBenchmark (lib/cbam/resolve-fa.ts): an exact-route row
+  // resolves, and failing that a ROUTE-INDEPENDENT row (`routeIndicator === ''`) does, because an
+  // unqualified Annex row applies whatever route is declared. Column B because the estimator
+  // prices whole goods; Column A is process-level and cannot carry one of these lines.
+  //
+  // This axis is why offering needs no gate, and the reason is not the one an earlier draft of
+  // this comment gave. It claimed a route with no benchmark "has no free-allocation term at all,
+  // so resolveBenchmark refuses" — false, and misleading: the route-independent fallback means a
+  // good with no row for the declared route can still price, as 73181535 and five siblings do at
+  // 77.485 certificates on 1.9 t/t verified with no route-specific row anywhere. The true reason
+  // is that a route failing THIS test can never produce a figure for anyone, on either tier, so
+  // offering it could only ever waste the user's time — and, once the defaults-tier refusal
+  // starts telling them their verified figures would price the line, actively mislead them.
+  const columnB = new Set(covering
+    .filter(row => row.benchmarkColumn === 'B')
+    .map(row => row.routeIndicator))
+  return [...named]
+    .filter(route => columnB.has(route === 'default' ? '' : route) || columnB.has(''))
+    .sort()
+}
+
+/**
+ * Does the corpus cover this reporting year at all?
+ *
+ * THE INVARIANT THAT WENT MISSING. Before routesFor grew its benchmark limb it was purely
+ * defaults-driven, and the defaults limb year-gates because its rows are keyed by reportingYear.
+ * So "the pack publishes no defaults for this year" implicitly meant "no routes", and the offer
+ * list closed itself in an uncovered year without anyone writing the rule down. Widening to the
+ * benchmark limb silently dropped that, because benchmark rows are open-ended: 1,671 of the
+ * pack's 2,465 rows carry `validTo: null` and the rest run to 2030-12-31, so they name routes for
+ * years the Commission has published no default values, no certificate price and no CSCF for.
+ * Measured at 2029: 51,362 of 69,784 (good, origin) pairings were offered routes, and 0 of 12,710
+ * sampled offers could price. Stating the rule explicitly is the fix.
+ *
+ * `reportingYears` is the corpus's own statement of its coverage, not a policy written here — the
+ * same discipline as the rest of this file, where every gate is decided by the data.
+ *
+ * NOT the row-validity gate, and that is deliberate. Mirroring resolveBenchmark's `active()` onto
+ * the benchmark limb — intersecting each row's validFrom/validTo with the calendar year — was
+ * implemented and measured first, because the two limbs disagreeing about validity looks like the
+ * defect. On the shipped corpus it is unobservable: all 397 rows that expire on 2027-12-31 have an
+ * exact successor row for the same (scopeCode, codeLevel, column, routeIndicator) in the
+ * 2028-01-01→2030-12-31 window — 397 of 397, with 0 rows left without a successor — so the union
+ * of offered routes is bit-identical in every year from 2026 to 2030, and the years it does close
+ * (2024, 2025, 2031+) this gate closes anyway. It was dropped rather than kept as an equivalent
+ * mutant no test can exercise. If the corpus ever ships an expiring row with no successor, add it
+ * then, against a real input.
+ */
+function packCoversYear(prepared: PreparedEstimatorPack, year: number): boolean {
+  return prepared.reportingYears.has(year)
+}
+
+/**
+ * Every benchmark row whose scope covers a good — the corpus's whole say about it, both columns
+ * and both route-specific and route-independent rows, left for the caller to split.
+ *
+ * `scopeCode.length === codeLevel` is resolveBenchmark's own self-consistency guard on the row,
+ * repeated rather than assumed.
+ *
+ * Deliberately NOT reduced to the deepest scope — as a FORWARD GUARD, not a repair. Measured on
+ * the shipped corpus: 0 goods carry route-specific benchmark rows at mixed scope depths, so a
+ * deepest-scope reduction would drop 0 route offers today and nothing here is fixing an observed
+ * loss. The guard is kept because `resolveBenchmark` splits by route BEFORE taking its longest
+ * match, so each route resolves at its own depth: were the corpus ever to list a route only at a
+ * 4-digit heading row while another route had an 8-digit row, that route would still resolve, and
+ * narrowing here would stop offering it.
+ *
+ * Validity dates are not filtered HERE, and the reason the earlier note gave for that was the
+ * wrong one. It said resolveBenchmark "applies `active()` itself at the moment it matters" — true
+ * of the resolver, but it left the offer list with no year test on this limb at all, which is how
+ * routes came to be offered for years the corpus does not cover. The year test now lives in
+ * routesFor, on the corpus's own coverage (`packCoversYear`), not on these rows' windows; see that
+ * function for why the row-window gate was measured, found unobservable, and dropped.
+ */
+function coveringBenchmarks(prepared: PreparedEstimatorPack, cn: string) {
+  return prepared.source.benchmarks.filter(row => cn.startsWith(row.scopeCode)
+    && row.scopeCode.length === row.codeLevel)
 }
 
 /**
@@ -648,7 +737,7 @@ export function estimateFromPack(pack: EstimatorPack, input: EstimatorInput): Ce
         const fallback = indirectDefaultFigure(pack, { ...input, date: date.day }, mass)
         if (fallback.kind === 'route-mismatch') {
           return unavailableEstimate(
-            verifiedStamp, tables, NO_INDIRECT_ROUTE_REASON,
+            verifiedStamp, tables, failureMessage('NO_INDIRECT_ROUTE'),
             `indirect/${input.cn}/${input.country}/${input.route}/${date.year}`, 'NO_INDIRECT_ROUTE',
           )
         }
@@ -686,7 +775,7 @@ export function estimateFromPack(pack: EstimatorPack, input: EstimatorInput): Ce
     return unavailableEstimate(
       baseInput(pack, input, mass.toFixed(), date.day, null),
       tables,
-      NO_DEFAULT_REASON,
+      failureMessage('NO_DIRECT_DEFAULT'),
       `default/${input.cn}/${input.country}/${input.route}/${date.year}`,
       'NO_DIRECT_DEFAULT',
     )
@@ -708,7 +797,7 @@ export function estimateFromPack(pack: EstimatorPack, input: EstimatorInput): Ce
     const indirect = indirectDefaultFigure(pack, { ...input, date: date.day }, mass)
     if (indirect.kind === 'route-mismatch') {
       return unavailableEstimate(
-        safeBase, tables, NO_INDIRECT_ROUTE_REASON,
+        safeBase, tables, failureMessage('NO_INDIRECT_ROUTE'),
         `indirect/${input.cn}/${input.country}/${input.route}/${date.year}`, 'NO_INDIRECT_ROUTE',
       )
     }
