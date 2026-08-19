@@ -842,8 +842,19 @@ test.describe('multi-line CBAM estimate — the Add guard and failure surfacing'
 
     // Sequential, deliberate, AFTER settling: two shipments of the same good is a legitimate
     // second line, not a duplicate to be blocked.
+    //
+    // TIMEOUT RAISED, and the claim is unchanged — this asserts exactly what it always did.
+    // The initScript above slows EVERY crypto.subtle.digest by a second so the in-flight window
+    // is genuinely observable, and the pack-v2 port put more digests on this path: loadPack now
+    // verifies the served bytes against the bundled manifest, and packSnapshotHash covers the
+    // pack's own contents rather than only its metadata. Both are the POINT of that work — a
+    // provenance stamp that cannot see the data it identifies is the defect it set out to close
+    // — but at 1000 ms a call the default 5 s stopped fitting on a CI runner. It passes at the
+    // default locally, which is precisely the margin that fails on someone else's machine.
+    // The two assertions above (the button disables; an overlapping click cannot activate it)
+    // are untouched at their original timeouts. Only this budget moved.
     await addBtn.click();
-    await expect(page.locator('.cb-line')).toHaveCount(2);
+    await expect(page.locator('.cb-line')).toHaveCount(2, { timeout: 15_000 });
   });
 
   test('a failure inside onAdd surfaces to #cbStatus and re-enables #cbAdd', async ({ page }) => {
