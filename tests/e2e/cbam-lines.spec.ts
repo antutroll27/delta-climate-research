@@ -869,6 +869,21 @@ test.describe('multi-line CBAM estimate — the Add guard and failure surfacing'
     await page.evaluate(() => {
       (window as unknown as { __slowDigest: boolean }).__slowDigest = false;
     });
+
+    // REFILLED, not re-clicked bare. onAdd clears the form on success — the CI failure snapshot
+    // caught it mid-reset, with origin back to "Select origin…", #cbRoute disabled, and #cbStatus
+    // reading "Complete the line first: good, origin, route, a non-negative mass and a valid
+    // import date." A bare second click was therefore racing the reset: it won locally and lost
+    // on a slower runner, which is why this test failed on CI while passing on every developer
+    // machine. Refilling is also what the claim actually describes — a second shipment is a
+    // second line the user enters, not a button pressed twice.
+    //
+    // Refilling unconditionally rather than waiting for the reset to finish, because the reset is
+    // NOT observable the same way on both machines: locally #cbRoute stays enabled after a
+    // successful add, so a wait for it to disable hangs (measured — it failed 12/12). setLine
+    // re-establishes every field from scratch and waits on the country option being attached, so
+    // it is correct whether the reset has landed, is mid-flight, or never clears this control.
+    await setLine(page, GOOD_LINE);
     await addBtn.click();
     await expect(page.locator('.cb-line')).toHaveCount(2);
   });
