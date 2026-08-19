@@ -92,15 +92,31 @@ Correctness is unaffected either way: a whole-payload sweep of every (good, orig
 
 ## The two refusals to sharpen
 
-Both currently surface as `NO_BENCHMARK_REASON`, which was accurate for case 3 and **wrong for case 2**. With case 3 no longer offered, case 2 is the one the user actually meets.
+**Rewritten after implementation review — the original diagnosis here was wrong on three counts, all found by measurement.**
 
-**(a) A benchmark exists but no default value.** Today: *"The published rules do not give a free-allocation benchmark for this good, production route or year."* That is false — the benchmark is exactly what does exist. It should name the real gap and the way out:
+The section below originally claimed both refusals "currently surface as `NO_BENCHMARK_REASON`". They do not. The codes and the selector dispatch were already correct and distinct (`default/` → `NO_DIRECT_DEFAULT`, `indirect/` → `NO_INDIRECT_ROUTE`, `benchmark/` → `NO_BENCHMARK`). Three corrections:
 
-> The Commission publishes no default emission value for route (D) on this good. Its free-allocation benchmark **is** published, so switch to *My verified figures* and this route will price.
+**1. The strings this spec proposed editing are unreachable.** `unavailableEstimate` resolves `reason || failureMessage(code)`, and every production caller passes its own non-empty `reason` — `NO_DEFAULT_REASON` and `NO_INDIRECT_ROUTE_REASON`, both local constants in `estimate-from-pack.ts`. Measured: **0 of 347,040 offers produced a refusal carrying a `FAILURE_MESSAGES` string for either code.** A wording fix there has no reader. This is the third time this project has shipped against an unreachable consumer; reachability is measured, never reasoned.
 
-**(b) The scope needs an indirect default the route lacks.** Grey clinker route (B) prices on `direct` and refuses on `direct_and_indirect`, because no indirect default exists for (B). The refusal must say the **indirect** component is what is missing, not leave the user believing the route is invalid. It should point at the scope control, which is the thing they can change.
+**2. The reachable strings are already better than the replacements proposed.** `NO_DEFAULT_REASON` names all four axes — *"this good, origin, production route or year"* — where the proposed text named only good and route. Since **64.9%** of refusals (97,690 of 150,516 direct-scope) occur where the Commission *does* publish a default for that same good and route at a **different origin**, dropping the origin axis would have sent the user to change route, which still refuses. Had the replacement been reachable it would have been a regression.
 
-Both are the defect class this project has removed four times already: a refusal naming the wrong cause.
+**3. The promise cannot be unconditional.** The proposed wording guaranteed verified figures "will price this route". At `2027-02-15`, **8,131 of 8,131** such refusals fail the verified path with `NO_CERTIFICATE_PRICE`; the pack prices 2026 quarters only and the date input has no bound. A fail-closed tool must not guarantee an outcome it cannot deliver.
+
+### What the task actually is
+
+The real gap is narrow: **neither reachable string tells the user the verified tier exists.** That is all this adds — plus removing the duplicate registry that caused defect 1.
+
+- **(a) A benchmark exists but no default value.** Keep all four axes, add the way out, promise nothing about the outcome:
+  > The Commission publishes no applicable direct default value for this good, origin, production route or year, so no estimate is shown. The free-allocation benchmark for this production route is published, so an estimate from your own verified figures **does not depend on this default**.
+
+- **(b) The scope needs an indirect default the route lacks.** The existing string already names the electricity component and states the harm; it only lacks the actionable control:
+  > …Pricing the electricity component at zero would understate the bill without saying so. **Setting the emissions scope to direct only excludes the component that is missing.**
+
+Note both closing clauses describe what is *true* rather than what *will happen* — deliberately weakened from "will price this route" so they hold on every date.
+
+One measured correction to the worked example this spec used: grey clinker route (B) does **not** price on direct and refuse on direct+indirect. `2523100090` (B) refuses `NO_DIRECT_DEFAULT` on both scopes; `2523100010` (B) prices on both. That case does not exist on the shipped pack. Relatedly, `NO_INDIRECT_ROUTE` is unreachable on the defaults tier (0 of 347,040) — both halves come from the same origin sheet, so a missing indirect default implies a missing direct one and `NO_DIRECT_DEFAULT` wins. It requires a verified direct figure.
+
+**And the duplication itself is the finding.** Two constants meaning one thing, one edited and one read, is the same defect class this project has removed repeatedly. `FAILURE_MESSAGES` becomes the single registry.
 
 ## Deliberately not in scope
 
