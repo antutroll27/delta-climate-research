@@ -1,0 +1,107 @@
+# Every route the good actually has — design
+
+**Date:** 2026-08-19
+**Status:** approved, ready for planning
+**Scope:** one filter removed in the engine, two refusals sharpened. **No figure may change for any route a user can select today.**
+
+## The defect
+
+The route control offers **5 distinct routes across the whole corpus** — `(A) (B) (C) (F) (K)`. The regulation defines eleven, and our own benchmark table carries all eleven.
+
+`routesFor` ends with:
+
+```ts
+.filter(route => lookupValue(pack, 'direct', { cn, country, route }, year).kind === 'found')
+```
+
+That keeps only routes with a published **default value**. Its docblock states the justification:
+
+> *"a route the corpus does not list has no default **and no benchmark**"*
+
+**That equivalence is false.** The Commission publishes default values for 8 routes and benchmarks for 11. Measured across the shipped pack: **419 of 572 goods have a benchmark route the form cannot offer.**
+
+## Why it matters, in figures
+
+`72061000` / IN / 100 t, identical verified emissions of 1.9 tCO₂e per tonne:
+
+| route | offered today? | verified-tier result |
+|---|---|---|
+| **(C)** | yes | **64.42** certificates |
+| **(D)** | no | **148.66** |
+| **(E)** | no | **187.37** |
+
+The engine prices all three correctly. The form permits only the first — which carries the **largest** free-allocation deduction, so every verified importer of this good is pushed onto the answer most favourable to them. A **2.9× spread**, in the under-charging direction.
+
+The same holds within one good's own route pair. Grey clinker `2523100090` / IN / 100 t, direct-only scope: route (A) gives 125.065, route **(B) gives 106.2475** — and (B) is invisible today.
+
+## The fix
+
+**Remove the filter.** Offer every route the good has a benchmark for.
+
+That is the whole change. Everything else in this spec is about the two refusals it exposes.
+
+Measured consequence:
+
+| | today | after |
+|---|---|---|
+| distinct routes ever visible | 5 — `(A) (B) (C) (F) (K)` | **11** — `(A) (B) (C) (D) (E) (F) (G) (H) (J) (K) (L)` |
+| goods offering ≤1 route | 544 of 572 | **151** |
+| goods that gain routes | — | **421** |
+| routes per good after | — | 1:151 · 2:62 · 3:280 · 4:60 · 5:19 |
+
+## Why this is safe without a "dangerous mode"
+
+The obvious worry is that a wider dropdown lets someone price a production path their good cannot have. **The engine already refuses that, structurally**, and it was verified before this spec was written:
+
+```
+2523100090 / (K)   aluminium route on cement  ->  unavailable [indirect/2523100090/IN/(K)/2026]
+72061000   / (K)   aluminium route on steel   ->  unavailable [benchmark/72061000/column-B/(K)/2026-03-15]
+```
+
+A route with no benchmark for that good has **no free-allocation term**, so `resolveBenchmark` raises `REGULATION_NOT_FOUND` and the line refuses. There is no figure to mis-state.
+
+**So no gating, no opt-in toggle, and no "expert mode" is required.** The boundary is enforced by the absence of data rather than by a policy we impose — which is stronger, because it does not depend on anyone trusting our judgement about who should be allowed what. Three tiers of behaviour fall out automatically:
+
+1. route has a benchmark **and** the defaults the scope needs → prices
+2. route has a benchmark but no default → prices on the user's own verified figures, refuses on the defaults tier
+3. route has no benchmark for that good → refuses on every tier
+
+Only (2) needs the user told something they are not told today.
+
+## The two refusals to sharpen
+
+Both currently surface as `NO_BENCHMARK_REASON`, which is accurate for case 3 and **wrong for case 2**.
+
+**(a) A benchmark exists but no default value.** Today: *"The published rules do not give a free-allocation benchmark for this good, production route or year."* That is false — the benchmark is exactly what does exist. It should name the real gap and the way out:
+
+> The Commission publishes no default emission value for route (D) on this good. Its free-allocation benchmark **is** published, so switch to *My verified figures* and this route will price.
+
+**(b) The scope needs an indirect default the route lacks.** Grey clinker route (B) prices on `direct` and refuses on `direct_and_indirect`, because no indirect default exists for (B). The refusal must say the **indirect** component is what is missing, not leave the user believing the route is invalid. It should point at the scope control, which is the thing they can change.
+
+Both are the defect class this project has removed four times already: a refusal naming the wrong cause.
+
+## Deliberately not in scope
+
+**No 12th route.** The Annex skips `I` — it reads as a `1`. Our benchmark table has no `I`, and the Commission's corrected workbook never mentions one. The **one** disagreement between the founder's Production Routes Matrix and our pack is `72052100`: the matrix says `F G H I`, we say `F G H J`. **That is a data question for a human, not a code change**, and it must be settled before anyone cites the matrix as authority. Everything else agrees: of the matrix's 134 goods, 82 routed sets match ours exactly and 51 "No Route" goods hold route-independent benchmarks in our pack.
+
+**No route selector removal.** Kolum has no route field at all — country, year, CN code, quantity, optional emissions. They can do that because they do not split Column A from the precursor term; our own competitive brief measures 89% of (CN, route) pairs disagreeing between the two columns, worth roughly €4,890 on 100 t of one cement code. Dropping the route would forfeit that.
+
+**No change to any figure a user can reach today.** Every route currently offered keeps its exact result.
+
+## Where the change lives
+
+`estimate-from-pack.ts` is **vendored byte-for-byte** from CBM and hash-guarded by `cbam-sync-check.mjs`. The filter therefore changes in `/Volumes/VSTSAMPLES/Projects/CBM` first, lands there with CI green, and is re-vendored to the website with `UPSTREAM.json` re-recorded against the merge commit. Hand-editing the website copy would break the seal.
+
+The refusal wording lives in `cbam/certificate-estimate.ts` — also vendored — alongside the seven existing `*_REASON` constants it will join.
+
+## Testing
+
+- **The 419 goods are the acceptance measure.** Before: 544 goods offer ≤1 route. After: 151. Assert the corpus-wide count, not one example — a fix that widened only cement would pass a single-good test.
+- **Every currently-offered route keeps its figure.** Sweep every (good, origin, route) selectable today and require byte-identical results. This is the regression that would matter most and the one a route change could plausibly cause.
+- **The three tiers each pinned:** a route that prices, a route that prices only with verified figures, and a fictional route that refuses on every tier. The third must assert the *refusal*, since it is the safety property the whole design rests on.
+- **The new refusals pinned by hand-typed constants**, never imported from production, per this codebase's anti-paraphrase convention.
+- Each mutation-verified: break it, confirm a **named** test fails, restore, and confirm the mutation landed in the file before trusting the run.
+
+## Open question for the founder
+
+`72052100` — matrix says route **I**, our pack says **J**. One is wrong. If the Annex genuinely uses `I`, our benchmark table has a transcription error worth fixing before routes become more prominent in the UI.
