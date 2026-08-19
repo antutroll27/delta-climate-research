@@ -38,7 +38,7 @@ Six more changes, one repository (Angad only — no vendored file touched, and
 
 | Commits | Repo | What |
 | --- | --- | --- |
-| `31c4ba4`–`8936429` | Angad | Line model, plus two SHA-256 digests: a per-line fingerprint of inputs as entered, and a pack-snapshot hash replacing the `"browser-prototype"` placeholder |
+| `31c4ba4`–`8936429` | Angad | Line model, plus two SHA-256 digests: a per-line fingerprint of inputs as entered, and a pack-snapshot hash replacing the vendored placeholder |
 | `5a98e98`–`fc7cf86` | Angad | Per-year threshold: lines grouped by calendar year and handed to `aggregateThresholdBasis`/`evaluateThreshold`; `below_threshold` reachable only when the user ticks a per-year completeness attestation |
 | `d434711`–`9b2120c` | Angad | CSV export: one row per line, engine values verbatim, each figure beside its legal locator |
 | `800df31`, `9e8f641` | Angad | Renderers for the year-threshold card, running totals, per-line card and the printable audit document; the second commit fixed a defect that had printed a Commission workbook's hash under a regulation's label |
@@ -114,9 +114,19 @@ and therefore still takes Column B.
 
 Worked from our own rule pack — the cement chain:
 
+> **The corpus moved to TARIC (2026-08-18).** IR (EU) 2026/1740 publishes the cement lines at
+> 10-digit TARIC rather than 8-digit CN, and the pack now keys on them: `25231000`, `25239000`,
+> `25070080` and four `7615` codes are **retired**, replaced by `2523100090` (grey clinker),
+> `2523100010` (white), `2523900090`/`2523900010` and `2507008080`. The route indicator *is* the
+> grey/white distinction for clinker, which is why no single good publishes two routes any more.
+> The figure is unchanged at the new key: grey clinker from Algeria on route (A), 100 t, still
+> prices at **75.865 certificates / €5,717.19**. A user typing the 8-digit code gets a refusal that
+> names the deeper codes rather than blaming the good and origin. The four `7615` codes have **no
+> successor** and are genuinely unpriced by this package.
+
 | CN | Good | Column A | Column B |
 | --- | --- | --- | --- |
-| 25231000 | Cement clinker, route (A) | 0.666 | 0.666 |
+| 2523100090 | Cement clinker (grey), route (A) | 0.666 | 0.666 |
 | 25232900 | Portland cement | **0** | 0.666 |
 | 25232100 | White Portland cement | **0** | 0.859 |
 
@@ -445,13 +455,14 @@ mark-up escape is easy to over-read:
 
 ## 5. Data and provenance
 
-Live pack, `generatedAt 2026-08-07T16:59:36.563Z`:
+Live pack, `generatedAt 2026-08-18T00:00:00.000Z` — the v2 corpus, IR (EU) 2025/2621 Annex I
+as corrected by **IR (EU) 2026/1740**:
 
 | Table | Rows |
 | --- | --- |
-| `defaultFactors` | 41,100 |
+| `defaultValues` | 76,428 — renamed from `defaultFactors`; see the TARIC note below |
 | `benchmarks` | 2,465 (Column A 661, Column B 1,804) |
-| `classifications` | 574 |
+| `classifications` | 572 — 567 eight-digit CN, 5 ten-digit TARIC |
 | `cbamFactors` | 9 — 2026 is **0.975**, free allocation *retained* |
 | `cscf` | 5 — all `pending`, 2026-2030 |
 | `prices` | 4 — 2026-Q1 €75.36, Q2 €75.28, Q3/Q4 unpublished |
@@ -517,8 +528,12 @@ each hash was real, but printed under the wrong artefact's name, which is a
 false provenance claim regardless. Fixed before ship (`9e8f641`): the document
 now prints the regulations' own hashes under those labels and the two workbook
 hashes separately, labelled as transcriptions. `stamp.snapshotHash` no longer
-reads `"browser-prototype"`; every estimate is decorated with the real
-pack-snapshot hash before it renders.
+reads the vendored placeholder (now `"unsealed-pack"`, formerly
+`"browser-prototype"`); every estimate is decorated with the real pack-snapshot
+hash before it renders — and since the sealed-digest work that hash covers the
+pack's own contents, so a changed default value changes the stamp. It did not
+before: the digest was computed over `generatedAt` plus the two workbook hashes
+only, and a factor edited to 999999 produced an identical stamp.
 
 ---
 

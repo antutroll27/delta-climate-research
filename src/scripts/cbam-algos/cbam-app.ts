@@ -28,6 +28,8 @@ import {
   estimateFromPack, nonNegativeDecimal, resolveThreshold, routesFor, selectIndirectFactorFromPack,
   type EstimatorInput, type EstimatorPack, type ThresholdView,
 } from './estimator/estimate-from-pack.ts';
+import { loadEstimatorPack, type PackIntegrity } from './estimator/load-pack.ts';
+import type { LoadedEstimatorPack } from './estimator/pack-v2.ts';
 import type { CertificateEstimate, DataTier } from './cbam/certificate-estimate.ts';
 import {
   csvRows, lineFingerprint, packSnapshotHash, sumTotals, thresholdByYear, toCsv, yearOf,
@@ -36,13 +38,46 @@ import {
 
 const PACK_URL = '/cbam/estimator-pack.json';
 
-/** The pack is 7.2 MB raw. Fetched once, on first interaction, never at page load. */
-let packPromise: Promise<EstimatorPack> | null = null;
-function loadPack(): Promise<EstimatorPack> {
-  packPromise ??= fetch(PACK_URL).then((r) => {
-    if (!r.ok) throw new Error(`rule pack unavailable (HTTP ${r.status})`);
-    return r.json() as Promise<EstimatorPack>;
-  });
+/**
+ * The pack's sealed identity, and the reason it is a LITERAL here rather than a fetch of
+ * `/cbam/estimator-pack.manifest.json`. An integrity record served from the same origin as the
+ * artefact it vouches for proves nothing: whatever can serve a wrong pack can serve a matching
+ * manifest. Bundled into the script, it is a claim made when the pack was reviewed, checked
+ * against the bytes that actually arrive. `scripts/cbam-sync-check.mjs` already refuses a
+ * manifest that does not seal the pack bytes, and a unit test pins these four fields to that
+ * manifest — so regenerating the pack without updating this constant fails the suite rather
+ * than the browser.
+ */
+const PACK_INTEGRITY: PackIntegrity = {
+  schemaVersion: 1,
+  algorithm: 'sha256',
+  packSha256: 'fc56043b76d22dba984f55e783f8d9de6bc1df04a7f0513116898fda3646889d',
+  generatedAt: '2026-08-18T00:00:00.000Z',
+};
+
+/**
+ * The pack is 37 MB raw. Fetched once, on first interaction, never at page load — and now
+ * through the vendored loader, which hashes the exact response bytes, refuses a pack whose
+ * SHA-256 or `generatedAt` disagrees with PACK_INTEGRITY above, and runs the v2 schema
+ * validation before a single figure is computed. A rule pack that arrived truncated, stale or
+ * substituted used to be parsed and priced from in silence.
+ *
+ * A REJECTION IS NEVER MEMOIZED. `packPromise ??= fetch(...)` cached the failure too, so one
+ * flaky response left every later attempt — including the user retrying — resolving to the same
+ * rejected promise with no request ever made again. Only a SUCCESS is remembered, in
+ * `loadedPack`; the in-flight promise is cleared on settle either way.
+ *
+ * The loader's `prepared` indexes are deliberately dropped: `estimateFromPack` prepares from the
+ * pack object itself and caches on it (a WeakMap in pack-v2), so the same object handed to the
+ * engine reuses that work. Holding a second copy here would be two indexes over one corpus.
+ */
+let loadedPack: LoadedEstimatorPack | null = null;
+let packPromise: Promise<LoadedEstimatorPack> | null = null;
+function loadPack(): Promise<LoadedEstimatorPack> {
+  if (loadedPack) return Promise.resolve(loadedPack);
+  packPromise ??= loadEstimatorPack(PACK_URL, PACK_INTEGRITY)
+    .then((loaded) => { loadedPack = loaded; return loaded; })
+    .finally(() => { packPromise = null; });
   return packPromise;
 }
 
@@ -470,6 +505,16 @@ export function renderDraftThreshold(
  * is what keeps the spoken text from ever disagreeing with the visible card about which lines
  * were excluded or how many.
  */
+/**
+ * "A", "A or B", "A, B or C" — an English list, because these are read out of a <select> option
+ * by someone deciding what to type next, and a bare comma-joined run of ten-digit codes reads as
+ * one number. Kept tiny and local: Intl.ListFormat would do it, but it is not available in every
+ * runtime this file's tests run in and the fallback would be this function anyway.
+ */
+const orList = (items: readonly string[]): string => (items.length < 2
+  ? (items[0] ?? '')
+  : `${items.slice(0, -1).join(', ')} or ${items[items.length - 1]}`);
+
 const refusedLineNote = (refusedLines: number) =>
   `${refusedLines} line${refusedLines === 1 ? ' has' : 's have'} no estimate and ${
     refusedLines === 1 ? 'is' : 'are'} excluded from this total.`;
@@ -1024,11 +1069,18 @@ function tableFigures(e: CertificateEstimate): { certs: string | null; costEur: 
  * (`ec-benchmarks-workbook-v1`) name different documents, and printing one under the other's
  * label is a false provenance claim even though every character of the hash is correct.
  *
- * Four `sources` entries (`dir-2003-87-art-10a-1a`, `dr-2019-331-art-14-6`, `reg-2023-956`,
- * `ec-certificate-price-page`) still carry the pack's "not yet retrieved" placeholder — 64
- * zeros — because no digest has been pinned for them yet. Printing that string verbatim would
- * read as a real hash computed over a real download; it is not one, so it is called out by name
- * instead of allowed through as though it were.
+ * THE WORKBOOK ID CARRIES ITS OWN VERSION AND IT HAS MOVED ONCE. Pack v2 supersedes the Default
+ * Values workbook with `ec-default-values-workbook-v2` (IR (EU) 2025/2621 Annex I as corrected by
+ * IR (EU) 2026/1740); asking for the retired `-v1` id here returned "not present in this pack",
+ * so the printed §3 dropped the one digest it claims to publish while every other line looked
+ * fine. Grep `sources` in public/cbam/estimator-pack.json when the pack is regenerated — a
+ * version bump in an id is a silent break of this function, not a type error.
+ *
+ * No `sources` entry in the shipped pack carries the "not yet retrieved" placeholder — 64 zeros
+ * — today; earlier packs left four unpinned (`dir-2003-87-art-10a-1a`, `dr-2019-331-art-14-6`,
+ * `reg-2023-956`, `ec-certificate-price-page`) and the branch below stays for the next one.
+ * Printing that string verbatim would read as a real hash computed over a real download; it is
+ * not one, so it is called out by name instead of allowed through as though it were.
  */
 function sourceHash(pack: Pick<EstimatorPack, 'sources'>, sourceId: string): string {
   const found = pack.sources.find((s) => s.id === sourceId);
@@ -1192,6 +1244,28 @@ export function buildPrintDocument(input: {
     ? `<li>${esc(String(y.calendarYear))}: <b>${esc(yearVerdictTag(y))}</b> at ${num(y.knownEligibleMassT)} t of ${num(y.thresholdT)} t — completeness box ${y.attested ? 'TICKED by the user' : 'not ticked'}.</li>`
     : `<li>${esc(String(y.calendarYear))}: <b>${esc(yearVerdictTag(y))}</b> — no de minimis threshold published; no verdict.</li>`).join('');
 
+  /**
+   * §2 HAS TO BRANCH ON `pricedLines`, THE WAY THE SCREEN'S OWN TOTALS CARD ALREADY DOES.
+   * `sumTotals` returns certificates '0' and costEur null when every line refused — an honest
+   * pair of values for "nothing summed" — and this section used to render them literally, as
+   * "Total: 0 certificates · no € total (a certificate price is unpublished)". Both halves are
+   * false on a printed, dated, hash-stamped document that someone may hand to an auditor: there
+   * is no total, because nothing was priced; and the certificate price is not why — the lines
+   * refused for their own reasons, named per line in §1.
+   *
+   * REACHABLE, not theoretical. onDoc's `if (!priced.length)` guard reads "has an estimate
+   * object", which a REFUSAL satisfies — it only stops lines whose estimate THREW. One line
+   * whose selector the corpus does not publish is enough to print the manufactured zero.
+   *
+   * renderTotals (the screen) has had this branch since it was written; only the print document
+   * lacked it, which is the worse of the two places to lack it, because the print document is
+   * the artefact that leaves the browser.
+   *
+   * IT DOES NOT REUSE `refusedLineNote`, which says the refused lines are "excluded from this
+   * total" — a sentence that contradicts the one before it the moment there is no total to be
+   * excluded from. The note is right where it is used (a total that exists, minus some lines);
+   * here the whole point is that the subtraction never happened.
+   */
   return `
     <h1>CBAM certificate exposure — provisional estimate</h1>
     <p class="cbp-sub">Generated ${esc(generatedOn)} · deltaclimate.earth/cbam/cbam-calculator · not a filing, not verified data</p>
@@ -1202,17 +1276,23 @@ export function buildPrintDocument(input: {
       <tbody>${lineRows}</tbody></table>
 
     <h2>2 · What we computed</h2>
-    <p>Total: <b>${num(totals.certificates)} certificates</b>${
-      totals.costEur ? ` · <b>${eur(totals.costEur)}</b>` : ' · no € total (a certificate price is unpublished)'}${
-      totals.anyPending ? ' — a <b>what-if</b>, because the CSCF is unpublished (see §4)' : ''}. ${
-      totals.refusedLines ? `${totals.refusedLines} line(s) refused and excluded.` : ''}</p>
+    ${totals.pricedLines === 0
+      ? `<p>No line could be priced, so there is <b>no total</b> — not a total of zero. ${
+          totals.refusedLines} line${totals.refusedLines === 1 ? '' : 's'} refused; the last column
+          of §1 names what was missing for each. Nothing on this page states that the exposure is
+          nil — it states that this tool would not put a figure on it.</p>`
+      : `<p>Total: <b>${num(totals.certificates)} certificates</b>${
+          totals.costEur ? ` · <b>${eur(totals.costEur)}</b>` : ' · no € total (a certificate price is unpublished)'}${
+          totals.anyPending ? ' — a <b>what-if</b>, because the CSCF is unpublished (see §4)' : ''}. ${
+          totals.refusedLines ? `${totals.refusedLines} line(s) refused and excluded.` : ''}</p>`}
     <ul>${verdicts || '<li>No de minimis verdict — no eligible lines.</li>'}</ul>
 
     <h2>3 · On what authority</h2>
     <ul>
       <li>Rule packages: ${rulePackages.map((r) => `<code>${esc(r)}</code>`).join(' · ')}</li>
       <li>Data snapshot: <code>${esc(packSnapshot)}</code> — SHA-256 over the pack's
-        generation timestamp and both Commission source-workbook hashes (below).</li>
+        generation timestamp, both Commission source-workbook hashes (below), and a digest of the
+        pack's own contents, so a changed default value changes this stamp.</li>
       <li>IR (EU) 2025/2620 (free allocation), the enacted regulation itself:
         <code>${esc(sourceHash(pack, 'ir-2025-2620'))}</code></li>
       <li>IR (EU) 2025/2621 (default values), the enacted regulation itself:
@@ -1220,7 +1300,7 @@ export function buildPrintDocument(input: {
       <li>Commission Benchmarks workbook — an informational transcription of the 2025/2620 Annex,
         not the binding text: <code>${esc(sourceHash(pack, 'ec-benchmarks-workbook-v1'))}</code></li>
       <li>Commission Default Values workbook — an informational transcription of 2025/2621's
-        Annex I, not the binding text: <code>${esc(sourceHash(pack, 'ec-default-values-workbook-v1'))}</code></li>
+        Annex I, not the binding text: <code>${esc(sourceHash(pack, 'ec-default-values-workbook-v2'))}</code></li>
       <li>Per-line benchmark authority is printed in the table above; the CBAM factor is
         Dir 2003/87/EC Art 10a(1a) (free allocation retained).</li>
     </ul>
@@ -1300,15 +1380,53 @@ export function nextRoute(published: readonly string[], previous: string): strin
  *
  * THE YEAR IS PADDED BACK TO FOUR DIGITS because it is echoed at the user: `Number('0001')` is 1,
  * and "no rules published for 1" does not match the 0001 their date field is showing them.
+ *
+ * THE THIRD REASON — THE CODE IS SHORTER THAN THE ONE THE COMMISSION PUBLISHES AT. The corrected
+ * corpus keys cement clinker on 10-digit TARIC codes (2523100010 white, 2523100090 grey) because
+ * the two publish DIFFERENT default values, and the 8-digit CN 25231000 that sits above them —
+ * the code an importer reads off their own customs paperwork — is no longer offered as a good.
+ * Measured over the shipped pack, exactly three 8-digit stems are in that position: 25070080,
+ * 25231000 and 25239000; 567 of the 572 offered goods are still plain 8-digit codes.
+ *
+ * Typing one of the three empties the route list, and both older sentences are then false. "No
+ * route published for this pairing" blames the good and the origin, when the origin is fine and
+ * the good is published — one digit-pair deeper. "No rules published for <year>" would blame a
+ * year the corpus covers. So the reason names the code, and offers the codes that do publish:
+ * the user's next action is a two-character edit, and nothing else on the form is wrong.
+ *
+ * THE SUGGESTION IS ABOUT THE CODE, NOT THE PAIRING. It is not filtered by the chosen origin or
+ * year, because this function is not told them and does not need to be: the claim made is that
+ * the Commission publishes AT those codes, which is true of the corpus as a whole. If the deeper
+ * code then publishes nothing for this particular origin, the user lands on the pairing sentence
+ * above — which is, at that point, the accurate one.
+ *
+ * WHAT IT DELIBERATELY DOES NOT DO IS PRICE THE SHORT CODE. Falling back to a parent code would
+ * have to choose between white and grey clinker on the user's behalf, and those are different
+ * numbers. That ambiguity is exactly what the TARIC split exists to resolve; resolving it by
+ * guessing would undo it silently.
  */
-export function noRouteReason(pack: EstimatorPack, year: number): string {
+export function noRouteReason(pack: EstimatorPack, year: number, cn: string): string {
   // ANY row for the year, not a row for this selector: the question is whether the corpus covers
   // the year at all. Every year-keyed series in the pack (thresholds, prices) falls inside
-  // defaultFactors' own set of reporting years, so this is the widest year test available and no
-  // narrower one would answer differently.
-  return pack.defaultFactors.some((f) => f.reportingYear === year)
-    ? 'no route published for this pairing'
-    : `no rules published for ${String(year).padStart(4, '0')}`;
+  // defaultValues' own set of reporting years, so this is the widest year test available and no
+  // narrower one would answer differently. (v2's `defaultValues` — v1's `defaultFactors` does
+  // not exist on this pack, and read through the old name this test threw rather than answered.)
+  if (!pack.defaultValues.some((f) => f.reportingYear === year)) {
+    return `no rules published for ${String(year).padStart(4, '0')}`;
+  }
+  // The offered-good test is the pack's own listing, matched the way the engine matches it
+  // (isOfferedGood in estimate-from-pack.ts): a code is offered by an exact listing or by a
+  // SHORTER listing that prefixes it. Both halves matter here — a good that is offered has not
+  // hit this branch's problem however many deeper codes exist beneath it, and a good offered
+  // only through a shorter listing is priced by that listing, not stranded.
+  const offered = pack.classifications.some((c) =>
+    c.code === cn || (c.code.length < cn.length && cn.startsWith(c.code)));
+  const deeper = pack.classifications
+    .filter((c) => c.code.length > cn.length && c.code.startsWith(cn)).map((c) => c.code);
+  if (!offered && deeper.length) {
+    return `no value is published at ${cn} — the Commission publishes at ${orList(deeper)}`;
+  }
+  return 'no route published for this pairing';
 }
 
 /**
@@ -1593,11 +1711,12 @@ export function inputFor(l: Line, verified: EstimatorInput['verified']): Estimat
  * carrying a real stamp, so its tier is read like any other. This comment used to add that the
  * engine stamps EVERY verified-path refusal 'actual-verified', reasoning that nothing was priced
  * so no default stood in for anything. That is false. Swept over every (good, origin, route, year)
- * the form can offer — 66,675 selectors, one date per year, direct figure attested and electricity
- * left blank — 5,542 verified-path refusals come back stamped 'verified-direct+default-indirect'.
+ * the form can offer — 233,112 selectors on the pack v2 corpus, one date per year, direct figure
+ * attested and electricity left blank — 8,784 verified-path refusals come back stamped
+ * 'verified-direct+default-indirect'. (On v1 the same sweep was 66,675 selectors and 5,542.)
  *
  * THE TIER RECORDS WHAT THE ENGINE ATTEMPTED TO PRICE THE LINE AT, not whether it succeeded. On
- * those 5,542 the substitution really did happen: the Commission's marked-up electricity default
+ * those 8,784 the substitution really did happen: the Commission's marked-up electricity default
  * was looked up and applied, and it is the LATER lookup that failed. So the tier is decided by
  * WHERE the refusal is raised, and not by which table the selector names:
  *
@@ -1612,17 +1731,21 @@ export function inputFor(l: Line, verified: EstimatorInput['verified']): Estimat
  *     declining to substitute.
  *   - Raised inside estimateCertificates' own catch → carries whatever `tier` estimateFromPack
  *     had already computed, so it is the mixed value whenever the fallback priced. Measured over
- *     the same sweep: 5,536 on `certificate-price/` and 6 on `benchmark/`. `quarter/` stamps it
- *     too, though only a hand-built date reaches that one — <input type="date"> cannot emit
- *     month 13.
+ *     the same sweep: all 8,784 are on `certificate-price/`. The other refusals are 139,456 on
+ *     `certificate-price/` and 10,752 on `benchmark/`, every one of them 'actual-verified'.
+ *     A hand-built unreadable date refuses on `date/` before any of this is reached, and is
+ *     'actual-verified' too — <input type="date"> cannot emit month 13 in any case.
  *
- * SO IT IS NOT A 2027-ONLY CURIOSITY, and a reader who assumes "mixed refusal ⇒ missing price"
- * will be wrong on the shipped pack. The six `benchmark/` cases are grey clinker and grey
- * hydraulic cements (25231000, 25239000) from KR — the only origin publishing either on the
- * route-independent route, which the form offers as "single route". The Commission publishes a route-independent
- * electricity default there, so the fallback fires; the Annex publishes column-B cement benchmarks
- * for routes (A) and (B) only, so the benchmark lookup then finds nothing. An ordinary 2026 date
- * reaches it.
+ * IT IS NOW A 2027-ONLY FACT, AND THAT IS A CHANGE THIS COMMENT USED TO DENY. On the v1 corpus
+ * six `benchmark/` refusals reached the mixed tier — grey clinker and grey hydraulic cements
+ * (25231000, 25239000) from KR, the one origin publishing either route-independently, where a
+ * route-independent electricity default fired the fallback and the Annex published column-B
+ * cement benchmarks for routes (A) and (B) only. Pack v2 publishes no clinker row at the
+ * route-independent route for any origin, and — measured over the whole corpus — there is no
+ * (good, route, year) that both publishes an indirect default and lacks a column-B benchmark. So
+ * a mixed refusal at a 2026 date no longer exists: 0 of 233,112. The mechanism below is
+ * unchanged and is still what decides the tier; only its second witness has gone, and
+ * cbam-render.test.mjs asserts that precondition structurally so its return is not silent.
  *
  * The old sentence's CONCLUSION survives, for a different reason than it gave: §4's caveat
  * (`anyVerified` in buildPrintDocument) and the card's attestation (renderAttestation) both gate
@@ -1730,21 +1853,32 @@ export function initCbam(): void {
     // top-of-function `if (pack) return pack;` short-circuit on the NEXT call would hand back a
     // pack whose snapshot never got computed, with no retry — silently pinning every future
     // estimate's provenance stamp to the empty string this closure starts with.
-    let loaded: EstimatorPack;
+    let loaded: LoadedEstimatorPack;
     let hash: string;
     try {
       loaded = await loadPack();
-      hash = await packSnapshotHash(loaded);
+      hash = await packSnapshotHash(loaded.pack);
     } catch (err) {
       status!.textContent = `Could not load the rule pack: ${(err as Error).message}`;
       return null;
     }
-    pack = loaded;
+    pack = loaded.pack;
     snapshot = hash;
-    // 574 goods; the datalist is the whole corpus, filtered natively by the browser.
+    // 572 goods; the datalist is the whole corpus, filtered natively by the browser. Five of
+    // them are 10-digit TARIC codes, and an 8-digit CN is a PREFIX of its TARIC — so a user
+    // typing the code off their customs paperwork still surfaces the published one here.
     if (list) list.innerHTML = pack.classifications
       .map((c) => `<option value="${esc(c.code)}">${esc(c.description)}</option>`).join('');
-    const origins = [...new Set(pack.defaultFactors.map((f) => f.originCountry))]
+    // `defaultValues`, not v1's `defaultFactors`. The rename is not cosmetic — a v2 row carries
+    // a cell STATE (a published number, an unpublished dash, a see-below pointer) where v1
+    // carried a bare intensity. Read through the old name this expression was `undefined.map`:
+    // the origin <select> threw before it rendered, and the form could not be completed at all.
+    // DERIVED FROM THE ROWS, not from `publishedOriginSheets`, and the difference is exactly one
+    // entry: the 121 sheets plus the residual OTHER, measured over the shipped pack. OTHER is
+    // the explicit "not individually listed" choice — the only origin an importer from a country
+    // with no sheet of its own can honestly pick, and the row the engine prices them on — so the
+    // narrower list would leave those importers nothing to select.
+    const origins = [...new Set(pack.defaultValues.map((f) => f.originCountry))]
       .sort((a, b) => (a === 'OTHER' ? 1 : b === 'OTHER' ? -1 : countryName(a).localeCompare(countryName(b))));
     country!.innerHTML = '<option value="" disabled selected>Select origin…</option>'
       + origins.map((c) => `<option value="${esc(c)}">${esc(countryName(c))}</option>`).join('');
@@ -1781,11 +1915,13 @@ export function initCbam(): void {
     const year = Number(date!.value.slice(0, 4)) || 2026;
     const rs = routesFor(pack, cn!.value, country!.value, year);
     route!.disabled = rs.length === 0;
-    // WHICH of the two reasons the list is empty for — see noRouteReason. Blaming the good and
-    // origin for a year the corpus does not cover sends the user to change the two controls that
-    // are not the problem.
+    // WHICH of the three reasons the list is empty for — see noRouteReason. Blaming the good and
+    // origin for a year the corpus does not cover, or for a code the Commission publishes one
+    // level deeper, sends the user to change the controls that are not the problem. The CN is
+    // passed for the third of those: it is the only one of the three the pairing sentence hides
+    // completely, because nothing else on screen says the typed code is not an offered good.
     if (!rs.length) {
-      route!.innerHTML = `<option value="">${esc(noRouteReason(pack, year))}</option>`;
+      route!.innerHTML = `<option value="">${esc(noRouteReason(pack, year, cn!.value))}</option>`;
       return;
     }
     const opts = rs.map((r) => `<option value="${esc(r)}">${r === 'default' ? 'single route' : esc(r)}</option>`).join('');
@@ -1825,10 +1961,14 @@ export function initCbam(): void {
     // `kind !== 'none'` rather than `=== 'found'` is FUTUREPROOFING, not a second live fix. It
     // exists so a route MISMATCH keeps the control visible and the user can reach the refusal
     // that warns them — but no such selector exists today. Sweeping every good × origin ×
-    // published-route the form can offer, across the pack's 2026–2028 years, gives 66,675
-    // reachable selectors: 8,310 `found`, 58,365 `none`, and ZERO `route-mismatch`. The arm is
+    // published-route the form can offer, across the pack's 2026–2028 years, gives 233,112
+    // reachable selectors: 13,176 `found`, 219,936 `none`, and ZERO `route-mismatch`. The arm was
     // written for the IR 2026/1740 route re-key, which can leave a good's indirect rows covering
-    // fewer routes than its direct rows. Do not read it as exercised behaviour; it is not.
+    // fewer routes than its direct rows; that re-key has now LANDED — it is the corpus this
+    // build ships — and it still produces no reachable mismatch, because routesFor only offers a
+    // route the direct table publishes and the two tables move together. `route-mismatch` is
+    // reachable only by calling the engine with a route the form would not offer. Do not read
+    // this arm as exercised behaviour; re-measured on the v2 corpus, it is not.
     const has = !!pack && !!cn!.value && !!country!.value && !!route!.value
       && selectIndirectFactorFromPack(pack, {
         cn: cn!.value, country: country!.value, route: route!.value,

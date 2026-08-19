@@ -1,4 +1,5 @@
 import { DomainError } from '../errors/domain-error'
+import { parseRegulatoryDate } from './input'
 import type {
   BenchmarkVersion,
   CscfResolution,
@@ -40,12 +41,20 @@ import type {
  * but that is a property of that caller, not a contract the resolver states or the types enforce.
  * The twin is the wider blast radius if it is ever wrong: requireActiveEnactedPackage gates the
  * whole rule package, so 1 January 2026 refuses EVERY good rather than merely every benchmark.
+ *
+ * The truncation itself now lives in parseRegulatoryDate (./input) as `.day`, which applies the
+ * same slice(0, 10) AND validates the shape first — both the plain-day and the UTC-timestamp
+ * shapes stay legal, and anything else refuses rather than string-comparing its way to an
+ * answer. The reasoning above is why `.day`, not the raw string, is the thing compared.
  */
-const day = (s: string) => s.slice(0, 10)
-
 function active(from: string, to: string | null, date: string): boolean {
-  const d = day(date)
-  return day(from) <= d && (to === null || d <= day(to))
+  const selected = parseRegulatoryDate(date)
+  const starts = parseRegulatoryDate(from)
+  const ends = to === null ? null : parseRegulatoryDate(to)
+  if (!selected.ok || !starts.ok || (ends !== null && !ends.ok)) {
+    throw new DomainError('REGULATION_NOT_FOUND', { selector: `date/${date}` })
+  }
+  return starts.day <= selected.day && (ends === null || selected.day <= ends.day)
 }
 
 export interface BenchmarkSelector {
@@ -160,23 +169,20 @@ export function resolveCscf(tables: FreeAllocationTables, year: number): CscfRes
 
 /** '2026-03-14' → '2026-Q1'. */
 export function quarterOf(date: string): string {
-  const year = date.slice(0, 4)
-  const month = Number(date.slice(5, 7))
-  // isInteger BEFORE the range check, and it is not redundant with it. A single-digit month
-  // makes slice(5, 7) read '1-' rather than '01', Number('1-') is NaN, and NaN < 1 || NaN > 12
-  // is false || false — so '2027-1-15' cleared this guard and returned the STRING '2027-QNaN'.
-  // No price row matches that, so the refusal surfaced two layers down as
+  // A single-digit month once cleared this guard: slice(5, 7) read '1-' rather than '01',
+  // Number('1-') is NaN, and NaN < 1 || NaN > 12 is false || false — so '2027-1-15' returned the
+  // STRING '2027-QNaN'. No price row matches that, so the refusal surfaced two layers down as
   // certificate-price/2027-QNaN and was answered "the good and its benchmark are present, only
   // the price is missing" — every clause false for a date nobody can read.
   //
-  // Deliberately NOT a whole-date regex like /^\d{4}-\d{2}-\d{2}$/. Callers may pass a UTC
-  // timestamp as well as a plain day — active() above was built to take either — and
-  // '2026-01-01T00:00:00.000Z'.slice(5, 7) is '01', which must keep resolving. Verified: it
-  // still returns 2026-Q1 and prices normally.
-  if (!/^\d{4}$/.test(year) || !Number.isInteger(month) || month < 1 || month > 12) {
+  // parseRegulatoryDate now does the whole job, and it must keep accepting BOTH shapes: callers
+  // pass a UTC timestamp as well as a plain day, so '2026-01-01T00:00:00.000Z' must still resolve
+  // to 2026-Q1. It rejects '2027-1-15' on length, and rejects a malformed timestamp on shape.
+  const parsed = parseRegulatoryDate(date)
+  if (!parsed.ok) {
     throw new DomainError('REGULATION_NOT_FOUND', { selector: `quarter/${date}` })
   }
-  return `${year}-Q${Math.ceil(month / 3)}`
+  return parsed.quarter
 }
 
 export function resolveCertificatePrice(

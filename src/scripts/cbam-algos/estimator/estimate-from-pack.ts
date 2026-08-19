@@ -1,8 +1,11 @@
 import Decimal from 'decimal.js'
+import { DomainError } from '../errors/domain-error'
 import { isAssignedAlpha2, OTHER_ORIGIN } from '../regulatory/iso-3166'
 import { sectorForCn } from '../cbam/sector'
+import { parseNonNegativeDecimal, parseRegulatoryDate } from '../cbam/input'
 import { evaluateThreshold, type ThresholdState } from '../threshold/evaluate'
 import {
+  BAD_DATE_REASON,
   estimateCertificates,
   unavailableEstimate,
   type CertificateEstimate,
@@ -10,26 +13,13 @@ import {
   type DataTier,
 } from '../cbam/certificate-estimate'
 import type { FreeAllocationTables } from '../cbam/types'
-
-const NO_DEFAULT_REASON =
-  'The Commission publishes no default value for this good, origin, production route or year, ' +
-  'so no estimate is shown. Actual verified data would be entered in a case, not here.'
-
-const NO_INDIRECT_ROUTE_REASON =
-  'The Commission publishes indirect (electricity) default values for this good and origin, but ' +
-  'none for the production route declared, so no estimate is shown. Pricing the electricity ' +
-  'component at zero would understate the bill without saying so.'
-
-const BAD_VERIFIED_REASON =
-  'A verified emissions figure must be a readable number of tCO2e per tonne of good, and cannot ' +
-  'be negative, so no estimate is shown. Reading a missing, unreadable, infinite or negative ' +
-  'figure as anything at all would put a number on a liability the figure does not support.'
-
-const BAD_MASS_REASON =
-  'Net mass must be a readable number of tonnes and cannot be negative, so no estimate is ' +
-  'shown. Reading a missing, unreadable, infinite or negative mass as anything at all would ' +
-  'scale a real tariff by a quantity nobody entered, and would decide the de minimis ' +
-  'threshold the same way.'
+import {
+  prepareEstimatorPack,
+  valueIndexKey,
+  type DefaultValueRecord,
+  type EstimatorPackV2,
+  type PreparedEstimatorPack,
+} from './pack-v2'
 
 /**
  * The estimator prototype's compute path: a default-values estimate, in the browser, over the
@@ -38,35 +28,17 @@ const BAD_MASS_REASON =
  * behaviour. Defaults path, plus attested verified figures (both scope full_product → Column B);
  * Column A / process-level data stays the workspace's job.
  *
- * The pack is the browser-shipped shape (see scripts/build-estimator-pack.mts): full-shape
- * benchmarks + slimmed default factors + the factor/CSCF/price/source series.
+ * The pack is the browser-shipped schemaVersion-2 shape (see pack-v2.ts and
+ * scripts/build-dv-package-v3.py): validated on load, indexed once, and carrying each Annex cell's
+ * STATE rather than only its value — a published figure, an unpublished dash/blank/N-A, or a
+ * see-below pointer. That distinction is the whole reason for v2: v1 could only ship cells that
+ * held numbers, so a listed origin's silence and a listed origin's zero were the same absence.
  */
+export type EstimatorPack = EstimatorPackV2
 
-export interface EstimatorPack {
-  generatedFrom: Array<{ id: string; version: string; workbookSha256?: string }>
-  generatedAt?: string
-  classifications: Array<{ code: string; description: string }>
-  defaultFactors: Array<{
-    scopeCode: string
-    originCountry: string
-    emissionsType: 'direct' | 'indirect'
-    productionRoute: string
-    reportingYear: number
-    baseIntensity: string
-    markupPct: string
-  }>
-  benchmarks: FreeAllocationTables['benchmarks']
-  cbamFactors: FreeAllocationTables['cbamFactors']
-  cscf: FreeAllocationTables['cscf']
-  prices: FreeAllocationTables['prices']
-  sources: FreeAllocationTables['sources']
-  thresholds: Array<{
-    id: string
-    calendarYear: number
-    thresholdT: string
-    includedSectors: string[]
-    sourceLocator: string
-  }>
+/** A record whose Annex cell actually holds a figure — the only kind that may price anything. */
+type ValueRecord = DefaultValueRecord & {
+  cell: Extract<DefaultValueRecord['cell'], { state: 'value' }>
 }
 
 export interface EstimatorInput {
@@ -74,14 +46,10 @@ export interface EstimatorInput {
   country: string
   route: string
   massT: string
-  /** import date; the reporting year is its first four characters. */
   date: string
-  /**
-   * 'direct' (process only) or 'direct_and_indirect' (adds the electricity default the
-   * Commission publishes for cement, fertilisers and hydrogen). Defaults to 'direct', which is
-   * the only scope the definitive period charges for iron & steel and aluminium.
-   */
   emissionsScope?: 'direct' | 'direct_and_indirect'
+  /** Exact response-byte hash supplied by the validated browser loader. */
+  packSha256?: string
   /**
    * The importer's own VERIFIED specific embedded emissions, per tonne of good. A figure supplied
    * here carries NO mark-up — the mark-up exists to price not-having-data, and this is the
@@ -111,13 +79,53 @@ export interface EstimatorInput {
   }
 }
 
+/**
+ * Three outcomes, not two, and the distinction is load-bearing.
+ *
+ * `none` means the Commission publishes no default for this good at all — true of iron & steel
+ * and aluminium on the indirect side, which must keep pricing with indirect 0. `route-mismatch`
+ * means rows DO exist for this good, origin and year but none is published for the route the
+ * importer declared. Those are different facts and they need different answers: the first is
+ * silence, the second is a refusal. Collapsing them into `null` is exactly how the over-charge
+ * this replaces stayed invisible — the lookup could not tell "nothing published" from "I picked
+ * the wrong row".
+ *
+ * `availableRoutes` says WHICH routes the corpus does price, so a caller can name the choice
+ * rather than only the refusal. It is populated from cells in the `value` state only: an
+ * unpublished cell is not an alternative a user could pick.
+ */
+export type IndirectLookup =
+  | { kind: 'found'; factor: ValueRecord }
+  | { kind: 'none' }
+  | { kind: 'route-mismatch'; availableRoutes: string[] }
+
+const NO_DEFAULT_REASON =
+  'The Commission publishes no applicable direct default value for this good, origin, ' +
+  'production route or year, so no estimate is shown.'
+
+const NO_INDIRECT_ROUTE_REASON =
+  'The Commission publishes indirect (electricity) default values for this good and origin, but ' +
+  'none for the production route declared, so no estimate is shown. Pricing the electricity ' +
+  'component at zero would understate the bill without saying so.'
+
+const BAD_VERIFIED_REASON =
+  'A verified emissions figure must be a readable number of tCO2e per tonne of good, and cannot ' +
+  'be negative, so no estimate is shown. Reading a missing, unreadable, infinite or negative ' +
+  'figure as anything at all would put a number on a liability the figure does not support.'
+
+const BAD_MASS_REASON =
+  'Net mass must be a readable number of tonnes and cannot be negative, so no estimate is ' +
+  'shown. Reading a missing, unreadable, infinite or negative mass as anything at all would ' +
+  'scale a real tariff by a quantity nobody entered, and would decide the de minimis ' +
+  'threshold the same way.'
+
 /** The default-values corpus spells a route-independent good as 'default'; the Annex uses ''. */
 function benchmarkRoute(productionRoute: string): string {
   return productionRoute === 'default' ? '' : productionRoute
 }
 
 function faTablesOf(pack: EstimatorPack): FreeAllocationTables {
-  const fa = pack.generatedFrom.find(s => s.id.includes('free-allocation'))
+  const fa = pack.generatedFrom.find(source => source.id.includes('free-allocation'))
   return {
     packageId: fa?.id ?? 'eu-cbam-2026-free-allocation',
     packageVersion: fa?.version ?? 'v1',
@@ -130,37 +138,37 @@ function faTablesOf(pack: EstimatorPack): FreeAllocationTables {
 }
 
 function dvPackageId(pack: EstimatorPack): string {
-  const dv = pack.generatedFrom.find(s => s.id.includes('defaults'))
-  return `${dv?.id ?? 'eu-cbam-2026-defaults'}@${dv?.version ?? 'v1'}`
+  return `${pack.identity.id}@${pack.identity.version}`
 }
-
 
 /**
  * Which origins' rows may answer for a declared origin, in priority order.
  *
  * Mirrors `resolveDefaultFactor` in lib/regulatory: the declared country's own rows always win;
- * the Commission's residual bucket ('OTHER') answers only for a REAL but unlisted alpha-2 code;
- * a junk origin gets nothing and the caller fails closed. The workspace and this prototype must
- * never disagree about which rules apply.
+ * the Commission's residual bucket ('OTHER') answers for a REAL alpha-2 code the country's own
+ * sheet does not price; a junk origin gets nothing and the caller fails closed. The workspace and
+ * this prototype must never disagree about which rules apply.
+ *
+ * v2 CHANGED WHAT "the sheet is silent" MEANS, and this is the one place it shows. Under v1 a
+ * listed origin never fell through, because the pack could only carry cells that held numbers, so
+ * an absent row and an N/A row were indistinguishable and fail-closed was the only safe reading.
+ * v2 carries the cell STATE, so the two are now separate facts: a numeric value (INCLUDING a
+ * literal zero) is the origin's own answer and stops the search, while an unpublished dash/blank/
+ * N-A or a see-below pointer falls through to the residual row, which is what the corrected Annex
+ * directs. An ABSENT row keeps v1's reading and still fails closed — this order says WHICH sheets
+ * may answer, and `lookupValue` says when the second one is allowed to.
+ * `publishedOriginSheets` — not "has any row" — is what makes a country listed.
  */
-function originsFor(pack: EstimatorPack, country: string): string[] {
+function originOrder(pack: EstimatorPack, country: string): string[] {
   if (country === OTHER_ORIGIN) return [OTHER_ORIGIN] // the explicit "not individually listed" choice
   if (!isAssignedAlpha2(country)) return []
-  // The residual bucket prices origins the Commission does not list. If this origin has a sheet
-  // of its own, its silence about a particular good is deliberate — the workbook marked the value
-  // N/A, or published it as zero — and must fail closed, not borrow a world average.
-  const listed = pack.defaultFactors.some(f => f.originCountry === country)
-  return listed ? [country] : [country, OTHER_ORIGIN]
+  return pack.publishedOriginSheets.includes(country) ? [country, OTHER_ORIGIN] : [OTHER_ORIGIN]
 }
 
 /**
- * The direct-factor routes available for a good and origin in a year — the ONLY routes the form
- * may offer. Never free-typed: a route the corpus does not list has no default and no benchmark.
- */
-/**
  * Does the pack OFFER this CN as a good? Mirrors the server's classification gate
  * (resolveClassification in lib/regulatory/resolve.ts, which every server resolution runs
- * before touching a factor): an exact listing wins, else the longest 4- or 6-digit listing that
+ * before touching a factor): an exact listing wins, else the longest shorter listing that
  * prefixes it, else the good is not one this package prices.
  *
  * The estimator skipped this entirely and matched factors directly. That agreed with the server
@@ -171,50 +179,174 @@ function originsFor(pack: EstimatorPack, country: string): string[] {
  * typing a heading the server would refuse to classify would have priced here.
  */
 function isOfferedGood(pack: EstimatorPack, cn: string): boolean {
-  if (pack.classifications.some(c => c.code === cn)) return true
-  return pack.classifications.some(c =>
-    c.code.length < cn.length && [4, 6].includes(c.code.length) && cn.startsWith(c.code))
+  if (pack.classifications.some(row => row.code === cn)) return true
+  return pack.classifications.some(row => row.code.length < cn.length && cn.startsWith(row.code))
 }
 
 /**
- * The factor rows whose scope covers this CN, deepest published scope only — the server's rule
- * (the candidates filter inside resolveDefaultFactor, lib/regulatory/resolve.ts — cited by
- * FUNCTION, not by line, because this reference has already rotted twice: a line range points
- * at whatever happens to sit there after the next unrelated edit above it): a CN is covered by
- * its own code or any prefix the
- * Commission published at, and the most specific scope governs.
+ * The rows whose scope covers this CN, deepest published scope only — the server's rule (the
+ * candidates filter inside resolveDefaultFactor, lib/regulatory/resolve.ts — cited by FUNCTION,
+ * not by line, because this reference has already rotted twice): a CN is covered by its own code
+ * or any prefix the Commission published at, and the most specific scope governs.
  *
- * The pack estimator used to require scopeCode === cn. That agreed with the server only while
- * the pack offered goods at exactly its factors' granularity; the moment classifications moved
- * to benchmark (8-digit) granularity over heading-level factors, exact matching would report
- * "no published default" for goods the Commission does publish.
+ * The pack estimator used to require scopeCode === cn. That agreed with the server only while the
+ * pack offered goods at exactly its rows' granularity; the moment classifications moved to TARIC
+ * (10-digit) granularity over heading-level rows, exact matching would report "no published
+ * default" for goods the Commission does publish.
  */
-function factorsCovering(
-  pack: EstimatorPack, cn: string, origin: string, year: number,
-): EstimatorPack['defaultFactors'] {
-  if (!isOfferedGood(pack, cn)) return []
-  const covering = pack.defaultFactors.filter(f =>
-    f.originCountry === origin && f.emissionsType === 'direct' &&
-    f.reportingYear === year && cn.startsWith(f.scopeCode))
-  const deepest = Math.max(...covering.map(f => f.scopeCode.length), -1)
-  return covering.filter(f => f.scopeCode.length === deepest)
-}
-
-export function routesFor(pack: EstimatorPack, cn: string, country: string, year: number): string[] {
-  for (const origin of originsFor(pack, country)) {
-    const routes = new Set(factorsCovering(pack, cn, origin, year).map(f => f.productionRoute))
-    // Only fall through to the residual bucket when the declared origin lists nothing at all.
-    if (routes.size > 0) return [...routes].sort()
-  }
-  return []
+function rowsAt(
+  prepared: PreparedEstimatorPack,
+  emissionsType: 'direct' | 'indirect',
+  origin: string,
+  year: number,
+  route: string,
+  cn: string,
+): DefaultValueRecord[] {
+  const index = emissionsType === 'direct'
+    ? prepared.directBySelector
+    : prepared.indirectBySelector
+  const covering = (index.get(valueIndexKey(origin, year, route)) ?? [])
+    .filter(row => cn.startsWith(row.scopeCode))
+  const deepest = Math.max(...covering.map(row => row.codeLevel), -1)
+  return covering.filter(row => row.codeLevel === deepest)
 }
 
 /**
- * A provisional default-values estimate for one good. Emissions come from the direct default
- * (marked up), the free-allocation deduction from the same engine the workspace uses. A good with
- * no published direct default, or no benchmark for its route, returns the engine's `unavailable`
- * — the estimator never invents a number.
+ * The figure a candidate row set holds, or null when it holds none.
+ *
+ * Split out of `valueAt` because a caller sometimes has to ask the rows a SECOND question, and
+ * null cannot answer it: an unpublished dash and an absent row both produce null, and those are
+ * different regulatory facts (see `lookupValue`). Handing the same array to both questions is
+ * what stops the two answers drifting apart.
  */
+function valueOf(rows: DefaultValueRecord[], selector: string): ValueRecord | null {
+  if (rows.length > 1) {
+    // This file's own rule: a tie is REGULATION_AMBIGUOUS, never a first-match.
+    throw new DomainError('REGULATION_AMBIGUOUS', { selector })
+  }
+  const row = rows[0]
+  return row?.cell.state === 'value' ? row as ValueRecord : null
+}
+
+function valueAt(
+  prepared: PreparedEstimatorPack,
+  emissionsType: 'direct' | 'indirect',
+  origin: string,
+  year: number,
+  route: string,
+  cn: string,
+): ValueRecord | null {
+  return valueOf(
+    rowsAt(prepared, emissionsType, origin, year, route, cn),
+    `${emissionsType}/${cn}/${origin}/${route}/${year}`,
+  )
+}
+
+function availableRoutesAt(
+  prepared: PreparedEstimatorPack,
+  emissionsType: 'direct' | 'indirect',
+  cn: string,
+  origin: string,
+  year: number,
+): string[] {
+  const index = emissionsType === 'direct'
+    ? prepared.directBySelector
+    : prepared.indirectBySelector
+  // The empty route yields the key's stable prefix — built through valueIndexKey rather than
+  // re-spelling its separator here, because two spellings of one key format is how an index and
+  // its reader come to disagree silently.
+  const prefix = valueIndexKey(origin, year, '')
+  const routes = [...index.keys()]
+    .filter(key => key.startsWith(prefix))
+    .map(key => key.slice(prefix.length))
+  return [...new Set(routes)]
+    .filter(route => valueAt(prepared, emissionsType, origin, year, route, cn) !== null)
+    .sort()
+}
+
+/**
+ * The published default for this selector, or why there is none.
+ *
+ * THE ROUTE IS PART OF THE MATCH. An earlier version left it out of the INDIRECT lookup, on the
+ * stated grounds that "indirect rows are published per good, not per production route". The
+ * shipped corpus disagrees, and without the route `.find()` returned whichever row sorted first —
+ * the dearer one, in every affected case — so a route-(A) line was priced with route (B)'s
+ * electricity and over-charged, with the downstream line-export CSV (its `benchmark_route`
+ * column) naming route (A) beside route (B)'s figure: an audit artefact naming one route and
+ * pricing another. Matching strictly also makes the lookup deterministic, so the candidate set
+ * can never hold more than one row and the ambiguity rule stops being violated rather than
+ * narrowed.
+ */
+function lookupValue(
+  pack: EstimatorPack,
+  emissionsType: 'direct' | 'indirect',
+  input: Pick<EstimatorInput, 'cn' | 'country' | 'route'>,
+  year: number,
+): IndirectLookup {
+  if (!isOfferedGood(pack, input.cn)) return { kind: 'none' }
+  const prepared = prepareEstimatorPack(pack)
+  const origins = originOrder(pack, input.country)
+  for (const origin of origins) {
+    const rows = rowsAt(prepared, emissionsType, origin, year, input.route, input.cn)
+    const found = valueOf(rows, `${emissionsType}/${input.cn}/${origin}/${input.route}/${year}`)
+    if (found) return { kind: 'found', factor: found }
+    // TWO SILENCES, AND ONLY ONE OF THEM FALLS THROUGH.
+    //
+    // An unpublished dash/blank/N-A or a see-below pointer is a cell the Commission LOOKED AT and
+    // declined to fill; the corrected Annex directs those to the residual row, so the loop
+    // continues. A literal zero is a value and was returned above, so it stops the search — that
+    // is the Mali hydrogen trap, and it stays shut.
+    //
+    // NO ROW AT ALL is the other silence: this origin's sheet does not carry the good on this
+    // selector, and the residual sheet may not answer for it. The residual row prices ORIGINS the
+    // Commission does not list; it does not backfill GOODS a listed origin's sheet omits (the
+    // rule this file shares with resolveDefaultFactor in lib/regulatory/resolve.ts, whose
+    // `mayUseResidual = !originIsListed && ...` says the same thing on the server). Fail closed.
+    //
+    // Failing closed is a BREAK, not a return: it stops the residual sheet answering, and leaves
+    // WHICH refusal to the same code every other refusal goes through. Returning early here
+    // instead would have had to re-derive `availableRoutes` from this origin alone, which
+    // re-decides a second question — 'route-mismatch' vs 'none' — while fixing the first, and
+    // measurably moved 84 indirect selectors from refusing to pricing electricity at zero.
+    //
+    // The OTHER_ORIGIN clause is stated but not load-bearing TODAY, written down so a reader does
+    // not go hunting for behaviour it protects: `originOrder` always puts the residual sheet last,
+    // so breaking on it and running out of origins are the same thing, and dropping the clause
+    // leaves the whole suite green (measured — an equivalent mutant, not a coverage gap). It says
+    // the rule the loop obeys — the residual sheet is a sheet to fall through TO, never one to
+    // fail closed on — so a future reordering cannot make the sentinel refuse itself.
+    if (rows.length === 0 && origin !== OTHER_ORIGIN) break
+  }
+
+  const availableRoutes = [...new Set(origins.flatMap(origin =>
+    availableRoutesAt(prepared, emissionsType, input.cn, origin, year),
+  ))].sort()
+  // Rows exist for this good but not for this route. Returning `none` here would price the whole
+  // electricity component at zero with no signal — an under-charge, and a silent fail-open on a
+  // page whose governing rule is fail-closed. Refuse instead.
+  return availableRoutes.length > 0
+    ? { kind: 'route-mismatch', availableRoutes }
+    : { kind: 'none' }
+}
+
+/**
+ * The direct-default routes available for a good and origin in a year — the ONLY routes the form
+ * may offer. Never free-typed: a route the corpus does not list has no default and no benchmark.
+ */
+export function routesFor(
+  pack: EstimatorPack,
+  cn: string,
+  country: string,
+  year: number,
+): string[] {
+  if (!isOfferedGood(pack, cn) || !Number.isInteger(year)) return []
+  const prepared = prepareEstimatorPack(pack)
+  const origins = originOrder(pack, country)
+  return [...new Set(origins.flatMap(origin =>
+    availableRoutesAt(prepared, 'direct', cn, origin, year),
+  ))].filter(route => lookupValue(pack, 'direct', { cn, country, route }, year).kind === 'found').sort()
+}
+
 /**
  * Which published default the estimator would apply, or null if the corpus prices nothing for
  * this selector. Exported so it can be diffed against the server's resolveDefaultFactor
@@ -226,14 +358,35 @@ export function routesFor(pack: EstimatorPack, cn: string, country: string, year
 export function selectFactorFromPack(
   pack: EstimatorPack,
   input: EstimatorInput,
-): EstimatorPack['defaultFactors'][number] | null {
-  const year = Number(input.date.slice(0, 4))
-  for (const origin of originsFor(pack, input.country)) {
-    const factor = factorsCovering(pack, input.cn, origin, year)
-      .find(f => f.productionRoute === input.route)
-    if (factor) return factor
-  }
-  return null
+): ValueRecord | null {
+  const date = parseRegulatoryDate(input.date)
+  if (!date.ok) return null
+  const lookup = lookupValue(pack, 'direct', input, date.year)
+  return lookup.kind === 'found' ? lookup.factor : null
+}
+
+/** The indirect (electricity) default for this selector, or why there is none. */
+export function lookupIndirectFactorFromPack(
+  pack: EstimatorPack,
+  input: EstimatorInput,
+): IndirectLookup {
+  const date = parseRegulatoryDate(input.date)
+  if (!date.ok) return { kind: 'none' }
+  return lookupValue(pack, 'indirect', input, date.year)
+}
+
+/**
+ * The same lookup under its historical name. Kept returning the full IndirectLookup rather than a
+ * nullable record, because the distinction between `none` and `route-mismatch` is what the store's
+ * scope control reads (`kind !== 'none'` keeps the control visible so the user can reach the
+ * refusal that explains it). Narrowing it to a nullable record would collapse the two facts the
+ * type exists to separate.
+ */
+export function selectIndirectFactorFromPack(
+  pack: EstimatorPack,
+  input: EstimatorInput,
+): IndirectLookup {
+  return lookupIndirectFactorFromPack(pack, input)
 }
 
 export interface ThresholdView {
@@ -256,27 +409,37 @@ export interface ThresholdView {
  * Returns null when the good's sector is unknown or the sector is not one the threshold covers
  * (hydrogen and electricity are absent from the 2026 row), because there is then no threshold
  * statement to make rather than a favourable one to assume — and, for the same reason, when the
- * net mass is not one this estimator can read (see the gate below).
+ * import date or the net mass is not one this estimator can read.
+ *
+ * `null`, not `state: 'indeterminate'`, for the unreadable-mass case. An indeterminate view still
+ * renders a card carrying the sector, the threshold value and a source locator — a partial legal
+ * claim assembled around a mass nobody can read, and ThresholdRulerCard.vue prints
+ * knownEligibleMassT raw at 52px, which is how 'Infinity' reached a user as their eligible mass.
+ * This overloads null, which already means "no threshold rule this year" (and, at the store, "the
+ * pack has not loaded"), and that is fine: the sole caller renders the card under
+ * `v-if="threshold"` (EstimateView), so every meaning renders nothing, and the estimate's own
+ * refusal is what names the mass as the problem.
  */
 export function resolveThreshold(
   pack: EstimatorPack,
   input: { cn: string; massT: string; date: string },
 ): ThresholdView | null {
-  const year = Number(input.date.slice(0, 4))
-  const rule = pack.thresholds.find(t => t.calendarYear === year)
+  const date = parseRegulatoryDate(input.date)
+  const mass = parseNonNegativeDecimal(input.massT)
+  if (!date.ok || !mass.ok) return null
+  const rule = prepareEstimatorPack(pack).thresholdByYear.get(date.year)
   if (!rule) return null
   const sector = sectorForCn(input.cn)
   if (!sector || !rule.includedSectors.includes(sector)) return null
-  // `null`, not `state: 'indeterminate'`. An indeterminate view still renders a card carrying the
-  // sector, the threshold value and a source locator — a partial legal claim assembled around a
-  // mass nobody can read, and ThresholdRulerCard.vue prints knownEligibleMassT raw at 52px, which
-  // is how 'Infinity' reached a user as their eligible mass. This overloads null, which already
-  // means "no threshold rule this year" (and, at the store, "the pack has not loaded"), and that
-  // is fine: the sole caller renders the card under `v-if="threshold"` (EstimateView), so every
-  // meaning renders nothing, and the estimate's own refusal is what names the mass as the problem.
-  if (!nonNegativeDecimal(input.massT)) return null
+  // TRIMMED, but otherwise the user's own digits. evaluateThreshold hands whatever it gets
+  // straight to Decimal, which throws on '  100  ' — safe only while this file's own regex
+  // rejected surrounding whitespace outright, which the shared parser no longer does. Trimming is
+  // the whole of what has to change: `mass.value.toFixed()` would also work arithmetically but
+  // renormalises the number, so a user who typed 100.50 would be shown 100.5 as their eligible
+  // mass. ThresholdRulerCard.vue prints this value raw at 52px, so it must stay the figure the
+  // user actually entered.
   const evaluated = evaluateThreshold({
-    knownEligibleMassT: input.massT,
+    knownEligibleMassT: input.massT.trim(),
     completeness: 'partial',
     thresholdT: rule.thresholdT,
   })
@@ -284,73 +447,30 @@ export function resolveThreshold(
 }
 
 /**
- * Three outcomes, not two, and the distinction is load-bearing.
+ * A non-negative decimal this estimator may price, or null when it may not. Used for the
+ * verified per-tonne figures AND for net mass — one predicate, because they want exactly the
+ * same rule and two similar ones is how they drift apart.
  *
- * `none` means the Commission publishes no indirect default for this good at all — true of iron
- * & steel and aluminium, which must keep pricing with indirect 0. `route-mismatch` means rows DO
- * exist for this good, origin and year but none is published for the route the importer declared.
- * Those are different facts and they need different answers: the first is silence, the second is
- * a refusal. Collapsing them into `null` is exactly how the over-charge this replaces stayed
- * invisible — the lookup could not tell "nothing published" from "I picked the wrong row".
+ * A thin adapter over parseNonNegativeDecimal (lib/cbam/input.ts), which is now the single shape
+ * gate the whole engine shares. The reasoning it encodes: `new Decimal('')` and
+ * `new Decimal('abc')` THROW, and they throw inside estimateFromPack — before
+ * estimateCertificates is entered — so they escape that function's fail-closed boundary entirely
+ * and reach the browser as an unhandled exception rather than a refusal that names the gap. 'NaN'
+ * and 'Infinity' do not throw; they propagate through the arithmetic and print as certificates
+ * and a euro cost. And the engine's floor clamp catches none of it: figureFrom clamps the DIRECT
+ * side alone and then ADDS the indirect figure, so a negative value priced a NEGATIVE bill
+ * (-394.58 certificates, -EUR 29,735.55 on a real line; -EUR 331.58 via a -100 t mass). Nor is
+ * Decimal itself the guard: it reads '0x10' as 16 and '1_000' as 1000, which is why the SHAPE
+ * gate runs before it rather than after — '0x10' parsed as 16 once priced 1,474.42 certificates /
+ * EUR 111,112.29, a confident bill off a string this function's own refusal calls unreadable.
+ *
+ * Refusing, not clamping: a nonsense input silently turned into a priceable number is how a
+ * wrong tax liability gets acted on. Zero is legal for both callers — a genuinely clean producer
+ * attests it, and a 0 t line costs EUR 0.00, which is arithmetic rather than fabrication.
  */
-export type IndirectLookup =
-  | { kind: 'found'; factor: EstimatorPack['defaultFactors'][number] }
-  | { kind: 'none' }
-  | { kind: 'route-mismatch' }
-
-/**
- * The indirect (electricity) default for this selector.
- *
- * THE ROUTE IS PART OF THE MATCH. An earlier version left it out, on the stated grounds that
- * "indirect rows are published per good, not per production route". The shipped corpus disagrees:
- * 597 of its 8,310 indirect rows carry a real route indicator ((A) 495, (B) 102). Those rows fall
- * in 510 of the 8,217 (good, origin, year) groups — but only 93 groups hold more than ONE row, and
- * the route can only decide anything there. In 90 of the 93 the value differs by route; in the
- * other 3 both rows carry the same figure, so the route corrects the provenance rather than the
- * price. Saying "510 groups are route-keyed" overstates the exposure: the other 417 hold a single
- * row and could never have differed.
- *
- * Without the route, `.find()` returned whichever row sorted first — the dearer one, in every
- * affected case — so a route-(A) line was priced with route (B)'s electricity and over-charged.
- * On Algerian cement clinker that was EUR 165.79 per 100 t, with the downstream line-export CSV
- * (its `benchmark_route` column) naming route (A) beside route (B)'s figure — an audit artefact
- * naming one route and pricing another. Six of the 93 are a second shape, absent from that
- * telling: a route-INDEPENDENT 'default' row charged to a line that declared a route.
- *
- * Matching strictly loses nothing, and the guarantee is wider than the affected groups. All 8,217
- * indirect groups carry exactly the route set their direct counterpart carries, so every one of
- * the 8,310 selectors that resolved before still resolves — measured as a SET, not a count, over
- * the whole pack. It also makes the lookup deterministic: with the route included no candidate set
- * can hold more than one row, so this file's own rule ("a tie is REGULATION_AMBIGUOUS, never a
- * first-match") stops being violated rather than narrowed.
- *
- * Fewer than 90 estimates move, though. The pack prices 2026 quarters only, so 2027 and 2028
- * import dates refuse on the missing certificate price before the indirect factor is ever read:
- * 30 estimates change end-to-end, all in 2026, and the other 60 corrections are real but latent.
- */
-export function selectIndirectFactorFromPack(
-  pack: EstimatorPack,
-  input: EstimatorInput,
-): IndirectLookup {
-  const year = Number(input.date.slice(0, 4))
-  for (const origin of originsFor(pack, input.country)) {
-    if (!isOfferedGood(pack, input.cn)) return { kind: 'none' }
-    const covering = pack.defaultFactors.filter(f =>
-      f.originCountry === origin && f.emissionsType === 'indirect' &&
-      f.reportingYear === year && input.cn.startsWith(f.scopeCode))
-    if (covering.length === 0) continue
-    // Deepest published scope first, matching the direct lookup, so an indirect figure can never
-    // rest on a broader scope than the direct one it accompanies.
-    const deepest = Math.max(...covering.map(f => f.scopeCode.length))
-    const atDepth = covering.filter(f => f.scopeCode.length === deepest)
-    const found = atDepth.find(f => f.productionRoute === input.route)
-    if (found) return { kind: 'found', factor: found }
-    // Rows exist for this good but not for this route. Returning `none` here would price the
-    // whole electricity component at zero with no signal — an under-charge, and the third silent
-    // fail-open on a page whose governing rule is fail-closed. Refuse instead.
-    return { kind: 'route-mismatch' }
-  }
-  return { kind: 'none' }
+export function nonNegativeDecimal(value: string): Decimal | null {
+  const parsed = parseNonNegativeDecimal(value)
+  return parsed.ok ? parsed.value : null
 }
 
 /**
@@ -371,7 +491,7 @@ type IndirectDefaultFigure =
       /**
        * Whether the row this figure came from is the Commission's residual bucket rather than the
        * declared origin's own sheet. Reported ALONGSIDE the figure, not derived by the callers:
-       * `originsFor` decides which sheet answers, and re-deriving that from the selector is how
+       * `originOrder` decides which sheet answers, and re-deriving that from the selector is how
        * two answers to one question come to disagree.
        *
        * Additive on purpose. The defaults path reads `kind` and `indirectTco2e` only, so it
@@ -384,108 +504,88 @@ type IndirectDefaultFigure =
   | { kind: 'route-mismatch' }
 
 function indirectDefaultFigure(
-  pack: EstimatorPack, input: EstimatorInput,
+  pack: EstimatorPack, input: EstimatorInput, mass: Decimal,
 ): IndirectDefaultFigure {
-  const indirect = selectIndirectFactorFromPack(pack, input)
-  if (indirect.kind !== 'found') return indirect
+  const indirect = lookupIndirectFactorFromPack(pack, input)
+  if (indirect.kind === 'route-mismatch') return { kind: 'route-mismatch' }
+  if (indirect.kind !== 'found') return { kind: 'none' }
   return {
     kind: 'priced',
-    indirectTco2e: new Decimal(indirect.factor.baseIntensity)
+    indirectTco2e: new Decimal(indirect.factor.cell.baseIntensity)
       .mul(new Decimal(1).plus(new Decimal(indirect.factor.markupPct).div(100)))
-      .mul(input.massT).toFixed(),
+      .mul(mass).toFixed(),
     residualOrigin: indirect.factor.originCountry === OTHER_ORIGIN,
   }
 }
 
 /**
- * A non-negative decimal this estimator may price, or null when it may not. Used for the
- * verified per-tonne figures AND for net mass — one predicate, because they want exactly the
- * same rule and two similar ones is how they drift apart.
+ * The line facts every path stamps identically, built ONCE. They used to be written out twice,
+ * and the copies drifted silently: a fabricated snapshotHash on the verified path survived
+ * mutation testing while the defaults path pinned the real one.
  *
- * There is no guard upstream and none downstream that speaks this language, so this is the one
- * that counts. `new Decimal('')` and `new Decimal('abc')` THROW, and they throw inside
- * estimateFromPack — before estimateCertificates is entered — so they escape that function's
- * fail-closed boundary entirely and reach the browser as an unhandled exception rather than a
- * refusal that names the gap. 'NaN' and 'Infinity' do not throw; they propagate through the
- * arithmetic and print as certificates and a euro cost. And the engine's floor clamp catches
- * none of it: figureFrom clamps the DIRECT side alone and then ADDS the indirect figure
- * (certificate-estimate.ts:154), so a negative value priced a NEGATIVE bill (-394.58
- * certificates, -EUR 29,735.55 on a real line; -EUR 331.58 via a -100 t mass). Nor is Decimal
- * itself the guard: it reads '0x10' as 16 and '1_000' as 1000, which is why the shape gate
- * below runs before it rather than after.
- *
- * Refusing, not clamping: a nonsense input silently turned into a priceable number is how a
- * wrong tax liability gets acted on. Zero is legal for both callers — a genuinely clean producer
- * attests it, and a 0 t line costs EUR 0.00, which is arithmetic rather than fabrication.
+ * `tier` carries the defaults-path value and the verified path overrides it. `originBasis` is a
+ * provenance CLAIM about where a figure came from, so each path passes its own rather than
+ * inheriting one neither chose.
  */
-export function nonNegativeDecimal(value: string): Decimal | null {
-  // The SHAPE gate runs FIRST, because Decimal reads far more than a tonnage field ever emits:
-  // it honours JS radix prefixes and numeric separators, so '0x10' parsed as 16 and priced
-  // 1,474.42 certificates / EUR 111,112.29 — a confident bill off a string this function's own
-  // refusal calls unreadable. '0b101' → 5, '0o17' → 15, '1_000' → 1000, all the same way. Same
-  // bug class as '' and 'abc': a number nobody typed.
-  //
-  // Optional sign, digits with at most one point, optional decimal exponent. The sign branch is
-  // load-bearing in BOTH directions: '-1' must still reach the lt(0) check below so it keeps its
-  // negative-figure reason and selector, and '-0' must still pass through to price as zero. A
-  // leading '+' and a trailing bare '.' ('5.') are refused here, deliberately — no numeric field
-  // produces them, and under a fail-closed stance an odd shape is a question, not a value.
-  if (!/^-?\d*\.?\d+(e[+-]?\d+)?$/i.test(value)) return null
-  let parsed: Decimal
-  try {
-    parsed = new Decimal(value)
-  } catch {
-    return null
-  }
-  // Kept behind the shape gate as defence in depth, not because the gate is doubted:
-  // isFinite() rejects NaN and +/-Infinity; lt(0) rejects negatives while letting '0' and '-0' by.
-  if (!parsed.isFinite() || parsed.lt(0)) return null
-  return parsed
-}
-
-export function estimateFromPack(pack: EstimatorPack, input: EstimatorInput): CertificateEstimate {
-  const year = Number(input.date.slice(0, 4))
-  const tables = faTablesOf(pack)
-
-  // The line facts both paths stamp identically, built ONCE. They used to be written out twice,
-  // and the copies drifted silently: a fabricated snapshotHash on the verified path survived
-  // mutation testing while the defaults path pinned the real one.
-  //
-  // `tier` carries the defaults-path value and the verified path overrides it. `originBasis` is
-  // absent on purpose — it is a provenance CLAIM about where a figure came from, so each path
-  // must state its own rather than inherit one neither chose.
-  const baseInput: Omit<CertificateEstimateInput, 'originBasis'> = {
+function baseInput(
+  pack: EstimatorPack,
+  input: EstimatorInput,
+  quantityT: string,
+  importDate: string,
+  originBasis: 'country' | 'residual' | null,
+): CertificateEstimateInput {
+  return {
     emissionsTco2e: '0',
-    quantityT: input.massT,
+    quantityT,
     scope: 'full_product',
     tier: 'default+markup',
+    originBasis,
     emissionsType: 'direct',
     cnCode: input.cn,
     routeIndicator: benchmarkRoute(input.route),
-    importDate: input.date,
+    importDate,
     precursors: [],
     indirectTco2e: '0',
-    snapshotHash: 'browser-prototype',
+    snapshotHash: input.packSha256 ?? 'unsealed-pack',
     linePackage: dvPackageId(pack),
     customsLineId: 'estimator-prototype',
   }
+}
 
-  // ABOVE the branch, deliberately: both paths multiply by mass, so gating inside either would
-  // leave the other open. `tier` reports what the CALLER asked for — the refusal produces no
+export function estimateFromPack(pack: EstimatorPack, input: EstimatorInput): CertificateEstimate {
+  const tables = faTablesOf(pack)
+  const parsedMass = parseNonNegativeDecimal(input.massT)
+  const date = parseRegulatoryDate(input.date)
+
+  // ABOVE the branch, deliberately: every path multiplies by mass, so gating inside one would
+  // leave the others open. `tier` reports what the CALLER asked for — the refusal produces no
   // figure, so there is nothing to attribute and `originBasis` is null on either path.
-  if (!nonNegativeDecimal(input.massT)) {
-    const tier = input.verified ? 'actual-verified' as const : 'default+markup' as const
+  const refusalTier: DataTier = input.verified ? 'actual-verified' : 'default+markup'
+  const provisional: CertificateEstimateInput = {
+    ...baseInput(pack, input, input.massT, date.ok ? date.day : input.date, null),
+    tier: refusalTier,
+  }
+  if (!parsedMass.ok) {
     return unavailableEstimate(
-      { ...baseInput, tier, originBasis: null }, tables, BAD_MASS_REASON,
-      `mass/${input.cn}/${input.date}`,
+      provisional, tables, BAD_MASS_REASON, `mass/${input.cn}/${input.date}`, 'BAD_MASS',
     )
   }
+  if (!date.ok) {
+    // BAD_DATE_REASON, the SAME sentence certificate-estimate.ts gives a `quarter/` refusal, not
+    // a second one written for this gate. The fact is identical — the import date cannot be read
+    // — and the only thing this gate changes is that it is caught earlier, before the engine is
+    // entered. Two sentences for one fact is how a user comes to think there are two problems.
+    return unavailableEstimate(
+      provisional, tables, BAD_DATE_REASON, `date/${input.date}`, 'BAD_DATE',
+    )
+  }
+  const mass = parsedMass.value
 
   // An attested figure replaces the DEFAULT, not the benchmark. The DIRECT figure deliberately
-  // does not depend on `factor`: on this path a missing published default is not a refusal, it is
-  // the ordinary case an importer collects data for. (The corpus IS consulted here, for an
-  // indirect half the importer did not attest — but never for the direct one.) A missing
-  // BENCHMARK still refuses, from inside estimateCertificates, exactly as before.
+  // does not depend on the published default: on this path a missing published default is not a
+  // refusal, it is the ordinary case an importer collects data for. (The corpus IS consulted
+  // here, for an indirect half the importer did not attest — but never for the direct one.) A
+  // missing BENCHMARK still refuses, from inside estimateCertificates, exactly as before.
   if (input.verified) {
     // No published default backs the DIRECT figure, so there is no default basis to report on it:
     // null is what CertificateEstimateInput.originBasis names for a figure resting on no default,
@@ -499,12 +599,17 @@ export function estimateFromPack(pack: EstimatorPack, input: EstimatorInput): Ce
     // direct figure is the importer's own audited number. The substitution is disclosed by
     // `residualIndirectDefault` instead — a separate field firing a note scoped to the electricity
     // half — so the two bases are reported separately rather than one standing in for both.
-    const verifiedStamp = { ...baseInput, tier: 'actual-verified' as const, originBasis: null }
-    const mass = new Decimal(input.massT)
+    const verifiedStamp: CertificateEstimateInput = {
+      ...baseInput(pack, input, mass.toFixed(), date.day, null),
+      tier: 'actual-verified',
+    }
 
     const direct = nonNegativeDecimal(input.verified.directTco2ePerT)
     if (!direct) {
-      return unavailableEstimate(verifiedStamp, tables, BAD_VERIFIED_REASON, `verified/${input.cn}/directTco2ePerT`)
+      return unavailableEstimate(
+        verifiedStamp, tables, BAD_VERIFIED_REASON,
+        `verified/${input.cn}/directTco2ePerT`, 'BAD_MASS',
+      )
     }
 
     // Same gate as the defaults path: the indirect figure is only READ when the scope charges
@@ -527,7 +632,10 @@ export function estimateFromPack(pack: EstimatorPack, input: EstimatorInput): Ce
       if (attested !== undefined && attested !== '') {
         const indirect = nonNegativeDecimal(attested)
         if (!indirect) {
-          return unavailableEstimate(verifiedStamp, tables, BAD_VERIFIED_REASON, `verified/${input.cn}/indirectTco2ePerT`)
+          return unavailableEstimate(
+            verifiedStamp, tables, BAD_VERIFIED_REASON,
+            `verified/${input.cn}/indirectTco2ePerT`, 'BAD_MASS',
+          )
         }
         indirectTco2e = indirect.mul(mass).toFixed()
       } else {
@@ -537,11 +645,11 @@ export function estimateFromPack(pack: EstimatorPack, input: EstimatorInput): Ce
         // data. Attesting the process figure earns the mark-up's removal from the process figure,
         // and nowhere else. Pricing this component at zero, which is what happened before, is a
         // silent under-charge on a page whose governing rule is fail-closed.
-        const fallback = indirectDefaultFigure(pack, input)
+        const fallback = indirectDefaultFigure(pack, { ...input, date: date.day }, mass)
         if (fallback.kind === 'route-mismatch') {
           return unavailableEstimate(
             verifiedStamp, tables, NO_INDIRECT_ROUTE_REASON,
-            `indirect/${input.cn}/${input.country}/${input.route}/${year}`,
+            `indirect/${input.cn}/${input.country}/${input.route}/${date.year}`, 'NO_INDIRECT_ROUTE',
           )
         }
         if (fallback.kind === 'priced') {
@@ -564,42 +672,48 @@ export function estimateFromPack(pack: EstimatorPack, input: EstimatorInput): Ce
       tier,
       residualIndirectDefault,
       // toFixed(), never toString(): a small attested figure must render as 0.0000000001, not
-      // as the exponential '1e-10' certificate-estimate.ts:162 warns about.
+      // as the exponential '1e-10' certificate-estimate.ts warns about.
       emissionsTco2e: direct.mul(mass).toFixed(),
       indirectTco2e,
     }, tables)
   }
 
-  const factor = selectFactorFromPack(pack, input)
-  // Which basis the figure rests on — the origin's own published default, or the Commission's
-  // world-average residual bucket. The user is told either way (see RESIDUAL_BASIS_NOTE).
-  const originBasis = factor?.originCountry === OTHER_ORIGIN ? 'residual' as const : 'country' as const
-
-  if (!factor) {
+  const direct = lookupValue(pack, 'direct', input, date.year)
+  if (direct.kind !== 'found') {
     // No published direct default → 'unavailable' explicitly. The engine only reports
     // unavailable on a missing BENCHMARK; a missing default with emissions of 0 would look like
     // a real zero-cost figure, which it is not.
-    return unavailableEstimate({ ...baseInput, originBasis }, tables, NO_DEFAULT_REASON, `default/${input.cn}/${input.country}/${input.route}/${year}`)
+    return unavailableEstimate(
+      baseInput(pack, input, mass.toFixed(), date.day, null),
+      tables,
+      NO_DEFAULT_REASON,
+      `default/${input.cn}/${input.country}/${input.route}/${date.year}`,
+      'NO_DIRECT_DEFAULT',
+    )
   }
 
-  const markedUp = new Decimal(factor.baseIntensity)
-    .mul(new Decimal(1).plus(new Decimal(factor.markupPct).div(100)))
-  const emissions = markedUp.mul(input.massT).toFixed()
+  // Which basis the figure rests on — the origin's own published default, or the Commission's
+  // world-average residual bucket. The user is told either way (see RESIDUAL_BASIS_NOTE).
+  const originBasis = direct.factor.originCountry === OTHER_ORIGIN ? 'residual' as const : 'country' as const
+  const safeBase = baseInput(pack, input, mass.toFixed(), date.day, originBasis)
+  const markedUp = new Decimal(direct.factor.cell.baseIntensity)
+    .mul(new Decimal(1).plus(new Decimal(direct.factor.markupPct).div(100)))
+  const emissionsTco2e = markedUp.mul(mass).toFixed()
 
   // Indirect is opt-in and silent when the Commission publishes nothing for the good: asking for
   // it must never fabricate a component, and must never fail a good that has only a direct row.
   // A route MISMATCH is not that case — see IndirectLookup — and refuses.
   let indirectTco2e = '0'
   if (input.emissionsScope === 'direct_and_indirect') {
-    const indirect = indirectDefaultFigure(pack, input)
+    const indirect = indirectDefaultFigure(pack, { ...input, date: date.day }, mass)
     if (indirect.kind === 'route-mismatch') {
       return unavailableEstimate(
-        { ...baseInput, originBasis }, tables, NO_INDIRECT_ROUTE_REASON,
-        `indirect/${input.cn}/${input.country}/${input.route}/${year}`,
+        safeBase, tables, NO_INDIRECT_ROUTE_REASON,
+        `indirect/${input.cn}/${input.country}/${input.route}/${date.year}`, 'NO_INDIRECT_ROUTE',
       )
     }
     if (indirect.kind === 'priced') indirectTco2e = indirect.indirectTco2e
   }
 
-  return estimateCertificates({ ...baseInput, originBasis, emissionsTco2e: emissions, indirectTco2e }, tables)
+  return estimateCertificates({ ...safeBase, emissionsTco2e, indirectTco2e }, tables)
 }

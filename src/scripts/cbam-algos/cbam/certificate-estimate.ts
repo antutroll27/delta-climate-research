@@ -1,5 +1,6 @@
 import Decimal from 'decimal.js'
 import { isDomainError } from '../errors/domain-error'
+import { parseNonNegativeDecimal, parseRegulatoryDate } from './input'
 import { quarterOf, resolveCertificatePrice } from './resolve-fa'
 import { sefa, type BenchmarkScope, type SefaInput, type SefaTerms } from './sefa'
 import type { FreeAllocationTables } from './types'
@@ -126,6 +127,24 @@ export interface ProvenanceStamp {
   notes: string[]
 }
 
+export type EstimateFailureCode =
+  | 'BAD_MASS'
+  | 'BAD_DATE'
+  | 'INVALID_PACK'
+  | 'NO_DIRECT_DEFAULT'
+  | 'NO_INDIRECT_ROUTE'
+  | 'NO_BENCHMARK'
+  | 'NO_CERTIFICATE_PRICE'
+  | 'NO_CBAM_FACTOR'
+  | 'NO_CSCF'
+  | 'AMBIGUOUS_REGULATION'
+
+export interface EstimateFailure {
+  code: EstimateFailureCode
+  selector: string | null
+  message: string
+}
+
 interface EstimateBase {
   emissionsTco2e: string
   quantityT: string
@@ -160,6 +179,7 @@ export type CertificateEstimate =
     })
   | (EstimateBase & {
       status: 'unavailable'
+      failure: EstimateFailure
       /** Which input the regulation does not give us. Shown to the user verbatim. */
       reason: string
       selector: string | null
@@ -405,6 +425,23 @@ const AMBIGUOUS_REASON =
   'The published rules give more than one value for this good, so no figure is shown until ' +
   'the conflict is resolved.'
 
+const FAILURE_MESSAGES: Record<EstimateFailureCode, string> = {
+  BAD_MASS: 'Enter a finite, non-negative mass before requesting an estimate.',
+  BAD_DATE: BAD_DATE_REASON,
+  INVALID_PACK: 'The regulatory pack contains an invalid numeric input, so no estimate is shown.',
+  NO_DIRECT_DEFAULT: 'No applicable direct default value is published for this selector.',
+  NO_INDIRECT_ROUTE: 'No indirect default value is published for this production route.',
+  NO_BENCHMARK: NO_BENCHMARK_REASON,
+  NO_CERTIFICATE_PRICE: NO_PRICE_REASON,
+  NO_CBAM_FACTOR: NO_CBAM_FACTOR_REASON,
+  NO_CSCF: NO_CSCF_REASON,
+  AMBIGUOUS_REGULATION: AMBIGUOUS_REASON,
+}
+
+export function failureMessage(code: EstimateFailureCode): string {
+  return FAILURE_MESSAGES[code]
+}
+
 /**
  * Build the 'unavailable' answer for a lookup that failed closed OUTSIDE this module — the
  * caller resolving a precursor's route against the database, for instance. Same shape, same
@@ -415,8 +452,27 @@ export function unavailableEstimate(
   tables: FreeAllocationTables,
   reason: string,
   selector: string | null,
+  code: EstimateFailureCode = failureCodeForSelector(selector),
 ): CertificateEstimate {
-  return { ...baseOf(input, tables), status: 'unavailable', reason, selector }
+  return {
+    ...baseOf(input, tables),
+    status: 'unavailable',
+    failure: { code, selector, message: reason || failureMessage(code) },
+    reason: reason || failureMessage(code),
+    selector,
+  }
+}
+
+function failureCodeForSelector(selector: string | null): EstimateFailureCode {
+  if (selector?.startsWith('mass/')) return 'BAD_MASS'
+  if (selector?.startsWith('date/') || selector?.startsWith('quarter/')) return 'BAD_DATE'
+  if (selector?.startsWith('default/')) return 'NO_DIRECT_DEFAULT'
+  if (selector?.startsWith('indirect/')) return 'NO_INDIRECT_ROUTE'
+  if (selector?.startsWith('benchmark/')) return 'NO_BENCHMARK'
+  if (selector?.startsWith('certificate-price/')) return 'NO_CERTIFICATE_PRICE'
+  if (selector?.startsWith('cbam-factor/')) return 'NO_CBAM_FACTOR'
+  if (selector?.startsWith('cscf/')) return 'NO_CSCF'
+  return 'NO_BENCHMARK'
 }
 
 export function estimateCertificates(
@@ -425,22 +481,50 @@ export function estimateCertificates(
 ): CertificateEstimate {
   const base = baseOf(input, tables)
 
-  if (input.emissionsType === 'indirect') {
-    return { ...base, status: 'unavailable', reason: INDIRECT_UNSUPPORTED, selector: null }
+  const quantity = parseNonNegativeDecimal(input.quantityT)
+  if (!quantity.ok) {
+    return unavailableEstimate(
+      input, tables, failureMessage('BAD_MASS'), `mass/${input.customsLineId}`, 'BAD_MASS',
+    )
+  }
+  const emissions = parseNonNegativeDecimal(input.emissionsTco2e)
+  const indirect = parseNonNegativeDecimal(input.indirectTco2e ?? '0')
+  if (!emissions.ok || !indirect.ok) {
+    return unavailableEstimate(
+      input, tables, failureMessage('INVALID_PACK'), `emissions/${input.customsLineId}`, 'INVALID_PACK',
+    )
+  }
+  const importDate = parseRegulatoryDate(input.importDate)
+  if (!importDate.ok) {
+    return unavailableEstimate(
+      input, tables, failureMessage('BAD_DATE'), `date/${input.importDate}`, 'BAD_DATE',
+    )
   }
 
-  const year = Number(input.importDate.slice(0, 4))
+  const safeInput: CertificateEstimateInput = {
+    ...input,
+    quantityT: quantity.value.toString(),
+    emissionsTco2e: emissions.value.toString(),
+    indirectTco2e: indirect.value.toString(),
+    importDate: importDate.day,
+  }
+
+  if (safeInput.emissionsType === 'indirect') {
+    return unavailableEstimate(safeInput, tables, INDIRECT_UNSUPPORTED, null, 'NO_BENCHMARK')
+  }
+
+  const year = importDate.year
   try {
     const adjustment = sefa({
-      cnCode: input.cnCode,
-      scope: input.scope,
-      routeIndicator: input.routeIndicator,
+      cnCode: safeInput.cnCode,
+      scope: safeInput.scope,
+      routeIndicator: safeInput.routeIndicator,
       year,
-      date: input.importDate,
-      precursors: input.precursors,
+      date: safeInput.importDate,
+      precursors: safeInput.precursors,
     }, tables)
 
-    const quarter = quarterOf(input.importDate)
+    const quarter = quarterOf(safeInput.importDate)
     const price = resolveCertificatePrice(tables, quarter)
     const priceEur = price.status === 'published' ? price.priceEur : null
 
@@ -490,7 +574,7 @@ export function estimateCertificates(
       'Art 9 deduction for a carbon price paid in the country of origin is not modelled (the implementing act is still a draft), so this figure is conservative.',
       'Certificate rounding is not settled in law; decimal certificate-equivalents are shown.',
     ]
-    if (input.indirectTco2e && !new Decimal(input.indirectTco2e).isZero()) {
+    if (safeInput.indirectTco2e && !new Decimal(safeInput.indirectTco2e).isZero()) {
       notes.push(
         'Indirect (electricity) emissions are included in the charge and receive NO free ' +
         'allocation: the benchmarks are direct-emission benchmarks.',
@@ -521,8 +605,8 @@ export function estimateCertificates(
         scenario: {
           assumedCscf: adjustment.scenario.assumedCscf,
           ...figureFrom(
-            input.emissionsTco2e, input.quantityT,
-            adjustment.scenario.valueTco2ePerT, priceEur, input.indirectTco2e,
+            safeInput.emissionsTco2e, safeInput.quantityT,
+            adjustment.scenario.valueTco2ePerT, priceEur, safeInput.indirectTco2e,
           ),
         },
       }
@@ -534,7 +618,7 @@ export function estimateCertificates(
         ...priced,
         status: 'zero_by_fiat',
         locator: adjustment.locator,
-        figure: figureFrom(input.emissionsTco2e, input.quantityT, '0', priceEur, input.indirectTco2e),
+        figure: figureFrom(safeInput.emissionsTco2e, safeInput.quantityT, '0', priceEur, safeInput.indirectTco2e),
       }
     }
     return {
@@ -544,8 +628,8 @@ export function estimateCertificates(
       status: 'ok',
       cscf: adjustment.cscf,
       figure: figureFrom(
-        input.emissionsTco2e, input.quantityT, adjustment.valueTco2ePerT, priceEur,
-        input.indirectTco2e,
+        safeInput.emissionsTco2e, safeInput.quantityT, adjustment.valueTco2ePerT, priceEur,
+        safeInput.indirectTco2e,
       ),
     }
   } catch (error) {
@@ -561,12 +645,11 @@ export function estimateCertificates(
       // reach here (benchmark/, sefa/, cbam-factor/, cscf/, quarter/, certificate-price/), and
       // for a 2027 import the answer was "no free-allocation benchmark" beside a selector
       // reading `certificate-price/2027-Q1` — sending the reader to hunt a benchmark that is
-      // present. Four are split out here: the price, which is the one a user meets; the quarter,
-      // whose gap is not a table at all but the import date itself; and the two year-keyed
-      // factors, whose gap is a schedule rather than a benchmark table.
+      // present. Four are split out; the dispatch now lives in failureCodeForSelector, and
+      // FAILURE_MESSAGES maps each code back to the wording below.
       //
-      // ONLY benchmark/ AND sefa/ NOW FALL THROUGH, and they are not the same case. benchmark/ is
-      // what the fallback was written for. sefa/ is not: its single selector
+      // ONLY benchmark/ AND sefa/ FALL THROUGH to NO_BENCHMARK, and they are not the same case.
+      // benchmark/ is what the fallback was written for. sefa/ is not: its single selector
       // (`sefa/<cn>/full-product-scope-with-precursors`) fires when a caller passes precursors
       // alongside a full-product scope, where Column B already covers them and adding them would
       // double-count the deduction — the benchmark resolved perfectly, so "the rules do not give
@@ -589,22 +672,15 @@ export function estimateCertificates(
       // hand-built date does, and it is not rare there: over 576 (CN, route) pairs, one origin
       // each, at six out-of-range-month dates, 2,401 of 3,456 estimates refused on quarter/ and
       // the other 1,055 refused on benchmark/ before quarterOf was ever reached. Every one of
-      // the 2,401 was named as a missing benchmark until BAD_DATE_REASON below.
-      return {
-        ...base,
-        status: 'unavailable',
-        // Every arm below tests a DISTINCT prefix, so this chain's order carries no meaning and
-        // no arm can shadow another. Keep it that way: an exact-match arm added above a prefix
-        // arm that subsumes it would make the lower one unreachable without failing a test.
-        reason: error.code === 'REGULATION_AMBIGUOUS'
-          ? AMBIGUOUS_REASON
-          : selector?.startsWith('certificate-price/') ? NO_PRICE_REASON
-          : selector?.startsWith('quarter/') ? BAD_DATE_REASON
-          : selector?.startsWith('cbam-factor/') ? NO_CBAM_FACTOR_REASON
-          : selector?.startsWith('cscf/') ? NO_CSCF_REASON
-          : NO_BENCHMARK_REASON,
-        selector,
-      }
+      // the 2,401 was named as a missing benchmark until BAD_DATE_REASON.
+      //
+      // Every arm of failureCodeForSelector tests a DISTINCT prefix, so its order carries no
+      // meaning and no arm can shadow another. Keep it that way: an exact-match arm added above
+      // a prefix arm that subsumes it would make the lower one unreachable without failing a test.
+      const code = error.code === 'REGULATION_AMBIGUOUS'
+        ? 'AMBIGUOUS_REGULATION'
+        : failureCodeForSelector(selector)
+      return unavailableEstimate(safeInput, tables, failureMessage(code), selector, code)
     }
     throw error
   }

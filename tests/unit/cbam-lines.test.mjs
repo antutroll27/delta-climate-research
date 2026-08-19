@@ -24,7 +24,7 @@ const pack = JSON.parse(readFileSync(
 // default, and line()'s below) — deliberately. Every existing call site in this file predates
 // scope threading and was written against direct-only numbers; defaulting this helper to
 // 'direct_and_indirect' would silently change every one of them (several goods this file
-// tests, e.g. 25231000/DZ, DO carry a published indirect default) rather than fail loud. Tests
+// tests, e.g. 2523100090/DZ, DO carry a published indirect default) rather than fail loud. Tests
 // that need to exercise the app's real default configuration pass 'direct_and_indirect'
 // explicitly (see the indirect-emissions tests below).
 const est = (cn, country, route, massT, date = '2026-03-15', emissionsScope = 'direct') =>
@@ -36,7 +36,7 @@ const est = (cn, country, route, massT, date = '2026-03-15', emissionsScope = 'd
 // was; the verified-tier tests below opt in explicitly, the same way the scope-threading tests
 // opt into 'direct_and_indirect' on est().
 const line = (over = {}) => ({
-  id: 'L1', cn: '25231000', country: 'DZ', route: '(A)',
+  id: 'L1', cn: '2523100090', country: 'DZ', route: '(A)',
   scope: 'direct_and_indirect', massT: '30', date: '2026-03-15',
   tier: 'default+markup', ...over,
 });
@@ -66,10 +66,10 @@ test('lineFingerprint is deterministic and input-sensitive', async () => {
 });
 
 test('lineFingerprint does not collide across a shifted field boundary', async () => {
-  // #cbCn is free text, so a delimiter-free join would hash cn='2523100'+
-  // country='0DZ' the same as cn='25231000'+country='DZ'. These must differ.
-  const a = await lineFingerprint(line({ cn: '2523100', country: '0DZ' }));
-  const b = await lineFingerprint(line({ cn: '25231000', country: 'DZ' }));
+  // #cbCn is free text, so a delimiter-free join would hash cn='252310009'+
+  // country='0DZ' the same as cn='2523100090'+country='DZ'. These must differ.
+  const a = await lineFingerprint(line({ cn: '252310009', country: '0DZ' }));
+  const b = await lineFingerprint(line({ cn: '2523100090', country: 'DZ' }));
   assert.notEqual(a, b, 'a boundary shift between cn and country must change the fingerprint');
 });
 
@@ -283,7 +283,7 @@ test('a below-threshold year names the lines its test did not cover', () => {
   // has to be carried separately — hence linesInYear, asserted here as the field that makes
   // "1 of your 2 lines" derivable at all.
   const lines = [
-    line({ id: 'L1', cn: '25231000', country: 'DZ', route: '(A)', massT: '40' }),      // cement: counts
+    line({ id: 'L1', cn: '2523100090', country: 'DZ', route: '(A)', massT: '40' }),      // cement: counts
     line({ id: 'L2', cn: '28041000', country: 'DZ', route: 'default', massT: '1000' }), // hydrogen: does not
   ];
   const [card] = thresholdByYear(lines, fp, new Set([2026]), pack);
@@ -297,7 +297,7 @@ test('a year with nothing excluded reports no exclusion', () => {
   // The other half: linesInYear must be a real count of THIS year's lines, not a constant that
   // makes the card's exclusion sentence boilerplate which always prints. A cement-only year has
   // nothing outside the basis, so the two counts must be equal and the sentence must stay silent.
-  const lines = [line({ id: 'L1', cn: '25231000', country: 'DZ', route: '(A)', massT: '40' })];
+  const lines = [line({ id: 'L1', cn: '2523100090', country: 'DZ', route: '(A)', massT: '40' })];
   const [card] = thresholdByYear(lines, fp, new Set([2026]), pack);
   assert.equal(card.linesInYear, card.eligibleLineCount);
   assert.equal(card.linesInYear, 1, '...and both are the real count, not a coincidence of zeroes');
@@ -309,9 +309,9 @@ test('linesInYear counts the year it belongs to, never the whole line list', () 
   // confusion the first test in this block exists to prevent, one field further down. Two lines in
   // 2026 (one of them hydrogen, so the counts differ) and one in 2027.
   const lines = [
-    line({ id: 'L1', cn: '25231000', massT: '40', date: '2026-03-15' }),
+    line({ id: 'L1', cn: '2523100090', massT: '40', date: '2026-03-15' }),
     line({ id: 'L2', cn: '28041000', massT: '1000', date: '2026-06-01' }),
-    line({ id: 'L3', cn: '25231000', massT: '10', date: '2027-03-15' }),
+    line({ id: 'L3', cn: '2523100090', massT: '10', date: '2027-03-15' }),
   ];
   const cards = thresholdByYear(lines, fp, new Set([2026]), pack);
   const y26 = cards.find((c) => c.calendarYear === 2026);
@@ -385,8 +385,18 @@ test('the entry-point mass gate is the ONLY thing between an unreadable mass and
   //   '-100'    -> knownEligibleMassT '-100'; mixed with a real 30 t line, '-70' — a negative
   //                mass SUBTRACTS, so it can drag a genuinely liable importer under 50 t
   //   '  100  ' -> raw [DecimalError], thrown out of the whole card render, not one line
+  //
+  // '  100  ' HAS SINCE CHANGED SIDES, and it moved because the GATE changed, not because this
+  // test was relaxed. Pack v2's parseNonNegativeDecimal begins `value.trim()`, so a padded mass
+  // is now a mass the gate READS rather than one it refuses — and thresholdByYear trims at the
+  // same seam (`netMassT: l.massT.trim()`), so gate and consumer read the identical string. It is
+  // therefore asserted in the second loop below, where the card must count exactly what the gate
+  // parsed. The DecimalError above is the measured pre-trim behaviour and is kept as the record
+  // of why the two must agree: during this port the gate learned to trim and the consumer did
+  // not, and that one-sided change reopened the throw verbatim.
+  //
   // So the gate must be TOTAL over everything the aggregate would misread:
-  for (const massT of ['0x10', '+100', '  100  ', 'abc', '', '-100', '1_000', '5.', '0b101',
+  for (const massT of ['0x10', '+100', 'abc', '', '-100', '1_000', '5.', '0b101',
     'NaN', 'Infinity']) {
     assert.equal(nonNegativeDecimal(massT), null,
       `massT=${JSON.stringify(massT)} must never reach the threshold card`);
@@ -396,7 +406,10 @@ test('the entry-point mass gate is the ONLY thing between an unreadable mass and
   // at the entry point sufficient — if the two ever disagreed, a mass could clear the gate as
   // one quantity and be counted toward de minimis as another. '1e3' is the case that would
   // catch it: legal to both, and the only accepted form whose text and value differ.
-  for (const massT of ['0', '-0', '0.5', '49.999', '50', '100', '1e3']) {
+  // '  100  ' is here for the second reason as well as the first: it is the one admitted form
+  // whose TEXT differs from the string the consumer would otherwise re-read, so it is the case
+  // that catches a consumer which stopped trimming.
+  for (const massT of ['0', '-0', '0.5', '49.999', '50', '100', '1e3', '  100  ']) {
     const parsed = nonNegativeDecimal(massT);
     assert.notEqual(parsed, null, `sanity: ${JSON.stringify(massT)} is a mass the gate admits`);
     const [card] = thresholdByYear([line({ id: 'L1', massT })], fp, new Set(), pack);
@@ -418,7 +431,12 @@ test('one unreadable mass discards the whole year card, not just its own line', 
   // sum with an unreadable addend has no answer. Each bad mass is tested ALONE and beside a
   // genuine 30 t line — the second half is what distinguishes "the year refuses" from "the bad
   // line is quietly dropped and the rest still totals".
-  for (const massT of ['0x10', '+100', '  100  ', 'abc', '', '-100', '1_000', '5.', '0b101',
+  //
+  // '  100  ' IS NO LONGER ONE OF THEM: pack v2's gate trims, so a padded mass is readable and
+  // the card is the right answer rather than a discarded year. It is asserted positively at the
+  // foot of this test instead of being dropped, because "the gate admits it" and "the card counts
+  // it as 100" are two different claims and only the second rules out the DecimalError returning.
+  for (const massT of ['0x10', '+100', 'abc', '', '-100', '1_000', '5.', '0b101',
     'NaN', 'Infinity']) {
     const alone = thresholdByYear([line({ id: 'L1', massT })], fp, new Set([2026]), pack);
     assert.deepEqual(alone, [], `massT=${JSON.stringify(massT)} must produce no card at all`);
@@ -427,6 +445,15 @@ test('one unreadable mass discards the whole year card, not just its own line', 
     assert.deepEqual(beside, [],
       `massT=${JSON.stringify(massT)} must take the year's card with it, not be skipped`);
   }
+  // The trimmed mass, the other way round: it must produce a card, and the card must total the
+  // number the gate read — not throw, and not vanish.
+  const [padded] = thresholdByYear([line({ id: 'L1', massT: '  100  ' })], fp, new Set([2026]), pack);
+  assert.equal(padded.knownEligibleMassT, '100',
+    'a padded mass the gate admits must be counted as the gate read it, not re-parsed raw');
+  assert.deepEqual(
+    thresholdByYear([line({ id: 'L1', massT: '  100  ' })], fp, new Set([2026]), pack),
+    thresholdByYear([line({ id: 'L1', massT: '100' })], fp, new Set([2026]), pack),
+    'and the padded and unpadded forms must produce the identical card');
 });
 
 test('a negative mass cannot report a liable year as exempt', () => {
@@ -502,11 +529,11 @@ test('the refusal is scoped to the verdict it can actually corrupt', () => {
 });
 
 test('sumTotals sums scenarios in Decimal and stays labelled a what-if', () => {
-  // Two known cscf_pending lines. 25231000/DZ/(A)/100 has certificates 71.465
+  // Two known cscf_pending lines. 2523100090/DZ/(A)/100 has certificates 71.465
   // (§8-pinned); the same line at 200 t doubles it. 0.1-style float drift is
   // what Decimal prevents; the assertion is exact string equality.
-  const a = est('25231000', 'DZ', '(A)', '100');
-  const b = est('25231000', 'DZ', '(A)', '200');
+  const a = est('2523100090', 'DZ', '(A)', '100');
+  const b = est('2523100090', 'DZ', '(A)', '200');
   const t = sumTotals([a, b]);
   assert.equal(t.certificates, '214.395');
   assert.equal(t.costEur, '16156.80');       // (71.465 + 142.93) × 75.36
@@ -516,7 +543,7 @@ test('sumTotals sums scenarios in Decimal and stays labelled a what-if', () => {
 });
 
 test('a refused line is counted and does not poison the total', () => {
-  const good = est('25231000', 'DZ', '(A)', '100');
+  const good = est('2523100090', 'DZ', '(A)', '100');
   const bad = est('72052100', 'IN', '(C)', '60');   // stranded: unavailable
   const t = sumTotals([good, bad]);
   assert.equal(bad.status, 'unavailable');
@@ -537,12 +564,18 @@ test('a final zero_by_fiat line mixed with a pending line still taints the whole
   const electricPack = {
     ...pack,
     classifications: [...pack.classifications, { code: '27160000', description: 'Electrical energy' }],
-    defaultFactors: [...pack.defaultFactors, {
-      scopeCode: '27160000', originCountry: 'DZ', emissionsType: 'direct',
-      productionRoute: 'default', reportingYear: 2026, baseIntensity: '0.5', markupPct: '0',
+    // Pack v2 renamed `defaultFactors` to `defaultValues` and moved the figure into a tagged
+    // `cell` — a published number is { state: 'value', baseIntensity, sourceMarker }, distinct
+    // from the two ways a cell can be EMPTY. Same synthetic 0.5 t/t row as before, in the shape
+    // the corpus now uses; the intensity, origin, route and year are unchanged.
+    defaultValues: [...pack.defaultValues, {
+      scopeCode: '27160000', codeLevel: 8, originCountry: 'DZ', emissionsType: 'direct',
+      productionRoute: 'default', sourceProductionRoute: '', reportingYear: 2026, markupPct: '0',
+      sourceId: 'ec-default-values-workbook-v2', sourceLocator: 'synthetic test row — electricity',
+      cell: { state: 'value', baseIntensity: '0.5', sourceMarker: 'numeric' },
     }],
   };
-  const pending = est('25231000', 'DZ', '(A)', '100');
+  const pending = est('2523100090', 'DZ', '(A)', '100');
   const zero = estimateFromPack(electricPack, {
     cn: '27160000', country: 'DZ', route: 'default', massT: '10', date: '2026-03-15',
   });
@@ -568,8 +601,8 @@ test('one line with an unpublished quarter price nulls the whole euro total', ()
   // absence on the floor: a costEur that looked complete while quietly
   // representing only one of two priced lines is exactly the partial-total
   // failure this function exists to refuse.
-  const q1 = est('25231000', 'DZ', '(A)', '100', '2026-03-15');
-  const q3 = est('25231000', 'DZ', '(A)', '100', '2026-08-15');
+  const q1 = est('2523100090', 'DZ', '(A)', '100', '2026-03-15');
+  const q3 = est('2523100090', 'DZ', '(A)', '100', '2026-08-15');
   assert.equal(q1.status, 'cscf_pending');
   assert.equal(q3.status, 'cscf_pending');
   assert.equal(q1.scenario.costEur, '5385.60', 'sanity: Q1 has a published price');
@@ -596,11 +629,11 @@ test('sumTotals([]) is the empty total, not a confirmed zero', () => {
 
 test('csvRows carries figures, locators and the §4 claims per row', () => {
   const lines2 = [line({ id: 'L1', massT: '100' })];
-  const results = [est('25231000', 'DZ', '(A)', '100')];
+  const results = [est('2523100090', 'DZ', '(A)', '100')];
   const rows = csvRows(lines2, results, fp, 'f'.repeat(64), pack);
   assert.equal(rows.length, 1);
   const r = rows[0];
-  assert.equal(r.cn_code, '25231000');
+  assert.equal(r.cn_code, '2523100090');
   assert.equal(r.embedded_tco2e, '136.4');
   assert.equal(r.free_allocation_tco2e, '64.935');
   assert.equal(r.chargeable_tco2e, '71.465');
@@ -660,9 +693,15 @@ test('free_allocation_tco2e is populated for a zero_by_fiat line too, not just a
   const electricPack = {
     ...pack,
     classifications: [...pack.classifications, { code: '27160000', description: 'Electrical energy' }],
-    defaultFactors: [...pack.defaultFactors, {
-      scopeCode: '27160000', originCountry: 'DZ', emissionsType: 'direct',
-      productionRoute: 'default', reportingYear: 2026, baseIntensity: '0.5', markupPct: '0',
+    // Pack v2 renamed `defaultFactors` to `defaultValues` and moved the figure into a tagged
+    // `cell` — a published number is { state: 'value', baseIntensity, sourceMarker }, distinct
+    // from the two ways a cell can be EMPTY. Same synthetic 0.5 t/t row as before, in the shape
+    // the corpus now uses; the intensity, origin, route and year are unchanged.
+    defaultValues: [...pack.defaultValues, {
+      scopeCode: '27160000', codeLevel: 8, originCountry: 'DZ', emissionsType: 'direct',
+      productionRoute: 'default', sourceProductionRoute: '', reportingYear: 2026, markupPct: '0',
+      sourceId: 'ec-default-values-workbook-v2', sourceLocator: 'synthetic test row — electricity',
+      cell: { state: 'value', baseIntensity: '0.5', sourceMarker: 'numeric' },
     }],
   };
   const zero = estimateFromPack(electricPack, {
@@ -696,7 +735,7 @@ test('free_allocation_tco2e is populated for a published (\'ok\') line too', () 
     cscf: pack.cscf.map((c) => (c.year === 2026 ? { ...c, value: '1', status: 'published' } : c)),
   };
   const ok = estimateFromPack(
-    publishedPack, { cn: '25231000', country: 'DZ', route: '(A)', massT: '100', date: '2026-03-15' });
+    publishedPack, { cn: '2523100090', country: 'DZ', route: '(A)', massT: '100', date: '2026-03-15' });
   assert.equal(ok.status, 'ok');
   const rows = csvRows(
     [line({ id: 'L1', massT: '100' })], [ok], fp, 'f'.repeat(64), publishedPack);
@@ -713,7 +752,7 @@ test('assumed_cscf pins the CSCF a cscf_pending line assumed, and blanks it ever
   // that row cannot be reconstructed from the CSV alone, since the CSCF value it assumed is
   // nowhere else in the exported artefact. Blanking the column unconditionally left the whole
   // suite green until this test existed.
-  const pending = est('25231000', 'DZ', '(A)', '100');
+  const pending = est('2523100090', 'DZ', '(A)', '100');
   assert.equal(pending.status, 'cscf_pending', 'sanity: the shipped pack has no published CSCF');
   const pendingRow = csvRows(
     [line({ id: 'L1', massT: '100' })], [pending], fp, 'f'.repeat(64), pack)[0];
@@ -727,7 +766,7 @@ test('assumed_cscf pins the CSCF a cscf_pending line assumed, and blanks it ever
     cscf: pack.cscf.map((c) => (c.year === 2026 ? { ...c, value: '1', status: 'published' } : c)),
   };
   const ok = estimateFromPack(
-    publishedPack, { cn: '25231000', country: 'DZ', route: '(A)', massT: '100', date: '2026-03-15' });
+    publishedPack, { cn: '2523100090', country: 'DZ', route: '(A)', massT: '100', date: '2026-03-15' });
   assert.equal(ok.status, 'ok');
   const okRow = csvRows(
     [line({ id: 'L1', massT: '100' })], [ok], fp, 'f'.repeat(64), publishedPack)[0];
@@ -738,9 +777,15 @@ test('assumed_cscf pins the CSCF a cscf_pending line assumed, and blanks it ever
   const electricPack = {
     ...pack,
     classifications: [...pack.classifications, { code: '27160000', description: 'Electrical energy' }],
-    defaultFactors: [...pack.defaultFactors, {
-      scopeCode: '27160000', originCountry: 'DZ', emissionsType: 'direct',
-      productionRoute: 'default', reportingYear: 2026, baseIntensity: '0.5', markupPct: '0',
+    // Pack v2 renamed `defaultFactors` to `defaultValues` and moved the figure into a tagged
+    // `cell` — a published number is { state: 'value', baseIntensity, sourceMarker }, distinct
+    // from the two ways a cell can be EMPTY. Same synthetic 0.5 t/t row as before, in the shape
+    // the corpus now uses; the intensity, origin, route and year are unchanged.
+    defaultValues: [...pack.defaultValues, {
+      scopeCode: '27160000', codeLevel: 8, originCountry: 'DZ', emissionsType: 'direct',
+      productionRoute: 'default', sourceProductionRoute: '', reportingYear: 2026, markupPct: '0',
+      sourceId: 'ec-default-values-workbook-v2', sourceLocator: 'synthetic test row — electricity',
+      cell: { state: 'value', baseIntensity: '0.5', sourceMarker: 'numeric' },
     }],
   };
   const zero = estimateFromPack(electricPack, {
@@ -769,7 +814,7 @@ test('a line resolving more than one benchmark term fails loud instead of droppi
   // produces on the process_only/Eq 4 path) to prove the exporter refuses to silently
   // truncate to benchmarks[0] rather than to prove the path is reachable.
   const twoTermEstimate = {
-    ...est('25231000', 'DZ', '(A)', '100'),
+    ...est('2523100090', 'DZ', '(A)', '100'),
   };
   twoTermEstimate.terms = {
     ...twoTermEstimate.terms,
@@ -785,8 +830,8 @@ test('est() threads emissionsScope through — the harness can express the app\'
   // build a line() with scope 'direct_and_indirect' (the fixture's own default, and
   // cbam-app.ts's) and still be computing a direct-only estimate underneath it — which is
   // exactly why the indirect-column defect below was invisible to Task 4's test suite.
-  const directOnly = est('25231000', 'DZ', '(A)', '100');
-  const withIndirect = est('25231000', 'DZ', '(A)', '100', '2026-03-15', 'direct_and_indirect');
+  const directOnly = est('2523100090', 'DZ', '(A)', '100');
+  const withIndirect = est('2523100090', 'DZ', '(A)', '100', '2026-03-15', 'direct_and_indirect');
   assert.equal(directOnly.status, 'cscf_pending');
   assert.equal(withIndirect.status, 'cscf_pending');
   assert.equal(directOnly.scenario.indirectTco2e, '0', 'direct-only leaves indirect at 0');
@@ -827,28 +872,48 @@ test('the indirect case: free allocation deducts from the direct side only (the 
 });
 
 test('the floor clamp: free allocation exceeding direct emissions never drives chargeable negative', () => {
-  // NOT a hypothetical: dozens of real goods in the shipped 2026 direct-factor table clamp
-  // here. cn 25070080 (calcined clay) / AO / route (A) is one — direct emissions (24.2) sit
-  // below the good's own free-allocation benchmark (64.935 at CBAM factor 0.975, assumed CSCF
-  // 1), so the deduction floors at zero and the entire charge is the indirect component (4.4)
-  // alone: a clean producer paying only for the electricity it used, which is a normal live
-  // outcome of this calculator, not an edge case.
+  // NOT a hypothetical: 169 of the 23,928 selectors the form can offer at a 2026 date clamp
+  // here, measured over the shipped pack on this tree (every classification x every origin x
+  // every route routesFor publishes, 100 t, direct_and_indirect), 105 of them with a non-zero
+  // indirect component. It read 190 of 77,704 (126 with indirect) while the engine let a listed
+  // origin's missing row fall through to the residual sheet — three quarters of that space was
+  // the world average answering under a country's name, and both the space and the clamping
+  // population shrank with it. THIS line is not one of them: Angola publishes its own figures for
+  // this good (direct 0.220, indirect 0.040), so the worked example below is untouched.
+  // cn 2507008080 (calcined clay) / AO / route 'default' is one — direct
+  // emissions (24.2) sit below the good's own free-allocation benchmark (64.935 at CBAM factor
+  // 0.975, assumed CSCF 1), so the deduction floors at zero and the entire charge is the indirect
+  // component (4.4) alone: a clean producer paying only for the electricity it used, which is a
+  // normal live outcome of this calculator, not an edge case.
+  //
+  // THE SELECTOR MOVED WITH THE CORPUS; NO FIGURE MOVED WITH IT. Pack v2 keys this good at the
+  // 10-digit TARIC 2507008080 and publishes it route-independently, so the old 25070080/(A)
+  // pairing refuses outright (`default/25070080/AO/(A)/2026`) rather than clamping. The same
+  // good, the same origin, the same clamp and — measured through the engine on this tree — the
+  // same five figures as before the migration: 24.2 / 4.4 / 28.6 / 64.935 / 4.4. Only the code
+  // and the route label follow the corpus.
+  //
+  // AN EARLIER PASS OF THIS PORT RE-BASELINED direct_tco2e to 19.8 and embedded_tco2e to 24.2
+  // here, with a comment explaining a value drift that never happened. Both were wrong against
+  // this pack, and they are restored above from a live probe, not from the comment.
   //
   // A prior version of this test claimed "no good in the shipped pack has a benchmark generous
   // enough to exceed its own direct emissions" and built a case by hand rather than reach for
   // one. That claim was never checked against the pack and was wrong — a spec reviewer scanned
   // all 10,930 direct-2026 factor rows and found dozens of goods that clamp, including this
-  // one, 26011200/AU/default, 72071190/CA/(C), and several 72xx/73xx steel codes at AZ/(E). No
+  // one. (Those counts and the sibling codes it named were measured on the v1 corpus; the
+  // figures above — 169 clamping selectors of 23,928, 105 with indirect — are the
+  // re-measurement, run through the engine on this tree.) No
   // hand-built case is kept: real data exercises the same fields (direct_tco2e, indirect_tco2e,
   // embedded_tco2e, free_allocation_tco2e, chargeable_tco2e) that the hand-built one did, and
   // this line reaches status 'cscf_pending' (reading from e.scenario) the same way the
   // hand-built one exercised e.figure's 'ok' shape — already covered separately by "free_
   // allocation_tco2e is populated for a published ('ok') line too" above.
   const line1 = line({
-    id: 'L1', cn: '25070080', country: 'AO', route: '(A)', massT: '100',
+    id: 'L1', cn: '2507008080', country: 'AO', route: 'default', massT: '100',
     scope: 'direct_and_indirect',
   });
-  const result = est('25070080', 'AO', '(A)', '100', '2026-03-15', 'direct_and_indirect');
+  const result = est('2507008080', 'AO', 'default', '100', '2026-03-15', 'direct_and_indirect');
   assert.equal(result.status, 'cscf_pending');
   const rows = csvRows([line1], [result], fp, 'f'.repeat(64), pack);
   const r = rows[0];
@@ -958,7 +1023,7 @@ test('an ABSENT attested figure is a different digest from an EMPTY one — diff
   // branch tests `input.verified.indirectTco2ePerT !== undefined` BEFORE calling verifiedPerT,
   // so absent skips the branch and the line PRICES (indirectTco2e '0'), while '' reaches
   // verifiedPerT, fails the shape gate and REFUSES the whole line. Probed against the real
-  // engine on 25231000/DZ/(A)/100 t at direct_and_indirect: absent → cscf_pending, 166.065
+  // engine on 2523100090/DZ/(A)/100 t at direct_and_indirect: absent → cscf_pending, 166.065
   // certificates, EUR 12,514.66; '' → unavailable, no figure at all. A priced certificate count
   // and a refusal are not the same submission and must not carry the same fingerprint.
   const base = { ...line({ id: 'L1' }), tier: 'actual-verified', seeDirect: '2.31' };
@@ -1001,10 +1066,20 @@ test('the hashed field ORDER is pinned to a golden digest — a transposition ca
   // on an exported CSV or a printable document was produced by the old form, so re-deriving it
   // from a line stops working the moment this value moves. Update the constant only alongside a
   // deliberate, documented change to the hashed array — never to make a red test go green.
-  const fixture = line({
-    id: 'L1', tier: 'actual-verified',
+  //
+  // THE FIXTURE IS WRITTEN OUT IN FULL rather than built from line(), and that is the point of
+  // this edit. An anchor computed from a shared fixture is not an anchor: the TARIC migration
+  // moved line()'s default cn from '25231000' to '2523100090' and both constants below went red
+  // without one byte of the hashed array changing. Re-deriving the constants would have recorded
+  // a serialisation change that never happened. Every field lineFingerprint reads is stated here
+  // literally, at the values these digests were computed from, so the only thing that can move
+  // them again is the function itself. (Verified on this tree: with these ten fields the two
+  // constants below reproduce exactly; with line()'s new cn they become 8b260ba2… and fc2f4543….)
+  const fixture = {
+    id: 'L1', cn: '25231000', country: 'DZ', route: '(A)', scope: 'direct_and_indirect',
+    massT: '30', date: '2026-03-15', tier: 'actual-verified',
     seeDirect: '2.31', seeIndirect: '0.4', verifiedRef: 'BV-2026-0142',
-  });
+  };
   assert.equal(
     await lineFingerprint(fixture),
     '2807c1968d0719c2b465cac434b938c0dd66eca54c475b383e7d87b5d04b0cab',
@@ -1024,7 +1099,10 @@ test('the hashed field ORDER is pinned to a golden digest — a transposition ca
   // seven — every relational test still passes, the constant above still passes (its optionals
   // are all present), and only this one fails. That is the property `lineFingerprint`'s own
   // doc comment promises: "field absent" must never be confusable with "array truncated".
-  const dflt = line({ id: 'L1', tier: 'default+markup' });
+  const dflt = {
+    id: 'L1', cn: '25231000', country: 'DZ', route: '(A)', scope: 'direct_and_indirect',
+    massT: '30', date: '2026-03-15', tier: 'default+markup',
+  };
   assert.equal(
     await lineFingerprint(dflt),
     '6e0def457815078246b0dc3a8e39bf7fb06434d5b39db0e25e368d2f2267b5cb',
@@ -1050,7 +1128,7 @@ test('threshold maths ignores the tier — 50 t is 50 t', () => {
 // WHAT THIS HELPER PRODUCES IS NOW THE **MIXED** TIER, AND THAT IS THE HONEST FIXTURE, NOT A
 // DEFECT TO PATCH OUT. Its own docstring used to claim this input "overrides the defaults-path
 // tier on the stamp ('actual-verified') and skips the mark-up entirely". Both halves of that
-// sentence are now false, and the second was always the dangerous one: 25231000/DZ HAS a
+// sentence are now false, and the second was always the dangerous one: 2523100090/DZ HAS a
 // published indirect default, the scope here charges for indirect, and only the DIRECT figure is
 // attested — so electricity used to be priced at zero and the line still stamped fully verified.
 // The engine now stands the Commission's default in for the unattested half, WITH its mark-up,
@@ -1062,14 +1140,14 @@ test('threshold maths ignores the tier — 50 t is 50 t', () => {
 // the line does not carry would have made every pair below silently mispaired, in the one file
 // whose subject is csvRows' mispairing guard.
 const verEst = (over = {}) => estimateFromPack(pack, {
-  cn: '25231000', country: 'DZ', route: '(A)', massT: '100', date: '2026-03-15',
+  cn: '2523100090', country: 'DZ', route: '(A)', massT: '100', date: '2026-03-15',
   emissionsScope: 'direct_and_indirect', verified: { directTco2ePerT: '2.31' }, ...over,
 });
 
 test('CSV rows carry the data tier and the attested reference', () => {
   // THE TIER ON THIS FIXTURE MOVED BECAUSE THE WORLD DID, NOT TO SILENCE A FAILURE. The line is
   // cement from DZ at direct_and_indirect scope, attesting a direct figure and no indirect one —
-  // and 25231000/DZ has a published indirect default. That is, exactly, the mixed tier: the
+  // and 2523100090/DZ has a published indirect default. That is, exactly, the mixed tier: the
   // importer audited their process emissions and left electricity to the Commission. It used to
   // stamp 'actual-verified' only because the engine priced the unattested electricity at zero
   // and said nothing; now it stands the Commission's default in with its mark-up and names what
@@ -1104,7 +1182,7 @@ test('a default-tier line writes its tier and an EMPTY reference, never the text
   // own `r[c] ?? ''` only covers a MISSING key, not a present-but-undefined one. An auditor
   // opening the file would read the literal word "undefined" in a column that is meant to say
   // "no verifier reference was cited". The `?? ''` in csvRows is what keeps it blank.
-  const rows = csvRows([line({ id: 'L1', massT: '100' })], [est('25231000', 'DZ', '(A)', '100')],
+  const rows = csvRows([line({ id: 'L1', massT: '100' })], [est('2523100090', 'DZ', '(A)', '100')],
     fp, 'f'.repeat(64), pack);
   assert.equal(rows[0].data_tier, 'default+markup');
   assert.equal(rows[0].verified_reference, '');
@@ -1144,7 +1222,7 @@ test('csvRows refuses a line paired with an estimate computed at a different tie
     id: 'L1', massT: '100', tier: 'actual-verified', seeDirect: '2.31',
     verifiedRef: 'BV-2026-0142',
   });
-  const defaultEstimate = est('25231000', 'DZ', '(A)', '100');
+  const defaultEstimate = est('2523100090', 'DZ', '(A)', '100');
   assert.equal(defaultEstimate.stamp.tier, 'default+markup', 'sanity: this one carries the mark-up');
   assert.throws(
     () => csvRows([verifiedLine], [defaultEstimate], fp, 'f'.repeat(64), pack),
@@ -1185,7 +1263,7 @@ test('csvRows throws naming the mismatch when lines and results are different le
   // find their bug. This file's own idiom is to name what's missing (packSnapshotHash's
   // missing-workbook-hash throw, thresholdByYear's missing-fingerprint throw); this matches it.
   assert.throws(
-    () => csvRows([line({ id: 'L1' }), line({ id: 'L2' })], [est('25231000', 'DZ', '(A)', '100')],
+    () => csvRows([line({ id: 'L1' }), line({ id: 'L2' })], [est('2523100090', 'DZ', '(A)', '100')],
       fp, 'f'.repeat(64), pack),
     /2 line\(s\) but 1 result\(s\)/);
 });
