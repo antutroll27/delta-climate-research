@@ -75,29 +75,19 @@ jobs:
       # of the entire budget. Should a library genuinely be missing, Chromium
       # fails to launch and the e2e contracts say so loudly — a real failure being
       # far more useful than a timeout that never reaches the tests at all.
-      - name: Install Chromium system libraries (best effort)
+      # ONE apt invocation for both engines, deliberately. Two separate install-deps steps
+      # raced for the apt lock — the second died instantly with "Could not get lock
+      # /var/lib/apt/lists/lock, held by process 240", continue-on-error swallowed it, and every
+      # WebKit test then failed at browserType.launch. The libraries were never the problem the
+      # second time; the second apt call was.
+      - name: Install Chromium and WebKit system libraries (best effort)
         timeout-minutes: 4
         continue-on-error: true
-        run: npx playwright install-deps chromium
+        run: npx playwright install-deps chromium webkit
 
       - name: Install Chromium
         timeout-minutes: 6
         run: npx playwright install chromium
-
-      # WebKit's OS libraries, best effort and time-boxed like Chromium's above. WebKit genuinely
-      # needs ~35 libraries this image does not ship — libgtk-4, libgraphene, the gstreamer suite,
-      # flite, libavif — and an earlier version of this step skipped apt on the assumption the
-      # runner carried them. It does not: every WebKit test failed at browserType.launch with
-      # the missing libraries listed by name.
-      #
-      # That failure mode is the reason this stays best-effort rather than becoming a hard gate.
-      # If the mirror is unreachable the step gives up after four minutes and the WebKit project
-      # fails fast, naming what is missing — a red gate with a cause, in seconds. The alternative
-      # we started with was an eighteen-minute silence that never reached a single test.
-      - name: Install WebKit system libraries (best effort)
-        timeout-minutes: 4
-        continue-on-error: true
-        run: npx playwright install-deps webkit
 
       # Firefox and WebKit run the CBAM calculator only (see playwright.config.ts): it is the one
       # surface here a customs consultant might open in Safari, and WebKit is the engine most
