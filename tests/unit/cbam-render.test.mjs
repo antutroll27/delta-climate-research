@@ -192,8 +192,27 @@ test('§8 — the stranded steel line refuses, and names the missing rule', () =
   assert.equal(e.selector, 'benchmark/72052100/column-B/(C)/2026-03-15');
 });
 
-test('§8 — route lookup is unchanged', () => {
-  assert.deepEqual(routesFor(pack, '72083800', 'IN', 2026), ['(C)']);
+test('§8 — route lookup offers every route the corpus names AND can benchmark', () => {
+  // WAS `['(C)']`, under the name "route lookup is unchanged". Both the value and the name are
+  // now false, deliberately. routesFor used to offer only routes carrying a published DEFAULT
+  // value; it now offers every route the corpus NAMES for the good (in either table) and can
+  // RESOLVE a free-allocation benchmark for. The Commission publishes defaults for fewer routes
+  // than benchmarks, so the old list was a subset of the routes the engine prices perfectly well.
+  //
+  // THE OLD LIST WAS NOT MERELY NARROWER, IT WAS CHEAPER — which is why re-baselining this is a
+  // correction and not a rebase. Measured on 72061000/IN, 100 t at a verified 1.9 tCO2e/t: the
+  // one route the form used to offer, (C), carries the LARGEST free allocation of the three and
+  // so the SMALLEST bill, and the two it hid cost 2.3x and 2.9x more.
+  assert.deepEqual(routesFor(pack, '72083800', 'IN', 2026), ['(C)', '(D)', '(E)']);
+
+  const bill = (route) => estimateFromPack(pack, {
+    cn: '72061000', country: 'IN', route, massT: '100', date: '2026-03-15',
+    verified: { directTco2ePerT: '1.9' },
+  }).scenario;
+  assert.equal(bill('(C)').faaTco2e, '125.58');
+  assert.equal(bill('(C)').certificates, '64.42');
+  assert.equal(bill('(D)').certificates, '148.66');
+  assert.equal(bill('(E)').certificates, '187.3675');
 });
 
 /* ── the de minimis threshold ──────────────────────────────────────────────── */
@@ -411,47 +430,61 @@ test('no published routes yields no selection', () => {
   assert.equal(nextRoute([], '(A)'), '');
 });
 
-test('the real pack: 72083800/IN publishes one route, so it needs no pick', () => {
-  const rs = routesFor(pack, '72083800', 'IN', 2026);
-  assert.deepEqual(rs, ['(C)']);
-  assert.equal(nextRoute(rs, ''), '(C)');
+test('the real pack: one published route needs no pick, several are never picked for the user', () => {
+  // THE NAME USED TO SAY "72083800/IN publishes one route". It publishes three now — routesFor
+  // offers every route the corpus names for a good and can benchmark, not only the routes with a
+  // published default — so that good changed sides in this test and now stands for the half it
+  // used to be the counter-example to. A good that still publishes exactly one route takes its
+  // place: 25232100/IN (white portland cement), whose only route is the route-independent
+  // 'default'. RE-MEASURED on this tree over 572 goods x 122 origins at 2026: 18,386 pairings
+  // publish exactly one route and 51,398 publish more than one, so both halves are live states a
+  // user reaches.
+  const one = routesFor(pack, '25232100', 'IN', 2026);
+  assert.deepEqual(one, ['default']);
+  assert.equal(nextRoute(one, ''), 'default');
+
   // ...whereas a pairing that publishes several must not be resolved for the user. This used to
   // read 25231000/DZ, which published (A) and (B). The TARIC split moved that pair onto two
-  // DIFFERENT goods — 2523100090 (grey) publishes only (A), 2523100010 (white) only (B) — so
-  // cement no longer offers a choice at all and the case had to move to a good that still does.
-  // 72052100/IN publishes (C) and (F); RE-MEASURED on this tree, 924 of the 69,784 pairings
-  // routesFor covers at 2026 publish more than one route, so this is a live state a user reaches.
-  // It read 7,584 while the engine let a listed origin's missing row fall through to the residual
-  // sheet: most of that count was the world average's route list, offered under a country that
-  // publishes no such route. Those are gone; a multi-route pairing is now the origin's OWN sheet
-  // publishing two routes for a good.
-  const many = routesFor(pack, '72052100', 'IN', 2026);
-  assert.ok(many.length > 1, `expected several routes, got ${many}`);
+  // DIFFERENT goods — 2523100090 (grey) and 2523100010 (white) — so the case had to move once
+  // already; it moves again now, onto the good the widening itself made multi-route.
+  const many = routesFor(pack, '72083800', 'IN', 2026);
+  assert.deepEqual(many, ['(C)', '(D)', '(E)']);
   assert.equal(nextRoute(many, ''), '');
+  const also = routesFor(pack, '72052100', 'IN', 2026);
+  assert.ok(also.length > 1, `expected several routes, got ${also}`);
+  assert.equal(nextRoute(also, ''), '');
 });
 
 test('an empty route list blames the year when the year is the reason, not the pairing', () => {
-  // THE PAIRING BRANCH IS THE FUNCTION'S CONTRACT FOR A COVERED YEAR, AND IT IS A LIVE USER PATH
-  // AGAIN. On the v1 pack, 46,686 of 68,880 pairings (574 goods x 120 origins) published no route
-  // at all. The v2 port took that to 0 of 69,784 (572 goods x 122 origins) at 2026 — and this
-  // comment then explained the zero as the residual "OTHER third countries" sheet answering for
-  // every offered good, which is exactly the thing it must not do for an origin the Commission
-  // gives a sheet of its own. RE-MEASURED once the fallthrough was closed: 46,780 of the 69,784
-  // pairings publish no route at 2026, close to where v1 stood, because a listed origin's silence
-  // about a good is silence again rather than a world average wearing the country's name.
+  // THE PAIRING BRANCH IS THE FUNCTION'S CONTRACT FOR A COVERED YEAR, AND ITS REACHABILITY HAS
+  // MOVED TWICE. On the v1 pack, 46,686 of 68,880 pairings (574 goods x 120 origins) published no
+  // route at all. The v2 port took that to 0 of 69,784 (572 goods x 122 origins) at 2026 — a zero
+  // this comment once explained as the residual "OTHER third countries" sheet answering for every
+  // offered good, which is exactly what it must not do for an origin the Commission gives a sheet
+  // of its own; closing that fallthrough put it back to 46,780 of 69,784.
   //
-  // So this branch is the answer a user actually meets, not a formality: 67% of pairings.
+  // RE-MEASURED ON THIS TREE, it is 0 again — for an unrelated and legitimate reason. routesFor
+  // now offers every route the corpus NAMES for a good and can resolve a benchmark for, and every
+  // offered good carries at least one benchmark row, so every pairing publishes something at 2026:
+  // 18,386 publish exactly one route, 51,398 publish several, none publish nothing. The residual
+  // sheet is NOT answering under a listed country's name — that is swept separately, further down
+  // this file. So inside a covered year this sentence is a defensive branch rather than the common
+  // answer, and what these assertions pin is that noRouteReason stays a pure function of the year
+  // and the code whichever way that count moves next.
   for (const year of [2026, 2027, 2028]) {
     assert.equal(noRouteReason(pack, year, '72083800'), 'no route published for this pairing',
       `${year} is a covered year: an empty list there really is about the good and origin`);
   }
 
-  // OUTSIDE THOSE YEARS IT IS WRONG FOR EVERY PAIRING: routesFor filters on the reporting year,
-  // so it returns [] for all 69,784 pairings at 2029 — measured. 23,004 of them DO publish routes
-  // inside 2026-2028 and are told the wrong thing outright; the other 46,780 publish nothing in
-  // any covered year either, so for those the sentence happens to be true of the pairing as well.
-  // An importer who typed 2029 was told their GOOD AND ORIGIN publish no route and went to
-  // change the two controls that were not the problem.
+  // OUTSIDE THOSE YEARS THE YEAR REALLY IS THE REASON, wherever the sentence is shown — but it is
+  // shown for fewer pairings than it used to be. routesFor year-filters the DEFAULT-value table
+  // and not the benchmark table, so RE-MEASURED at 2029: 51,362 of the 69,784 pairings still come
+  // back with routes and never reach this branch at all, and 18,422 come back empty and do. What
+  // the populated ones get instead is a route list where nothing prices — 0 of 12,710 sampled 2029
+  // offers priced, all of them NO_DIRECT_DEFAULT — so the honest sentence has simply moved from
+  // the route <select> to the result card for those pairings. An importer who typed 2029 was
+  // otherwise told their GOOD AND ORIGIN publish no route and went to change the two controls
+  // that were not the problem.
   assert.equal(noRouteReason(pack, 2029, '72083800'), 'no rules published for 2029');
   assert.equal(noRouteReason(pack, 2025, '72083800'), 'no rules published for 2025');
 
@@ -527,8 +560,28 @@ test('the CN placeholder teaches a code the corpus actually publishes', () => {
   assert.ok(example, 'the CN field still carries an example code');
   assert.ok(pack.classifications.some((c) => c.code === example),
     `the example code ${example} must be one the pack offers as a good`);
-  assert.deepEqual(routesFor(pack, example, 'DZ', 2026), ['(A)'],
-    'and it must actually price: the example is the first thing a visitor tries');
+  // AND IT MUST ACTUALLY PRICE: the example is the first thing a visitor tries. That claim used
+  // to be carried by `deepEqual(routes, ['(A)'])` — a single published route, which nextRoute
+  // auto-selects, so the figure appeared unasked. The widened routesFor adds (B): the Commission's
+  // benchmark table publishes (A) and (B) at the 8-digit stem 25231000, which covers this 10-digit
+  // grey code, so (B) is NAMED for the good and resolves a benchmark — even though Algeria's
+  // default sheet publishes (B) only against the WHITE code, 2523100010. The example still
+  // prices, on the same route and to the same figure as before — what changed is that the visitor
+  // now chooses the route first, because nextRoute refuses to pick when several are published.
+  // That is this file's own rule three tests above ("none is chosen FOR the user"), not a
+  // regression: the alternative would be auto-pricing a route nobody asked for.
+  assert.deepEqual(routesFor(pack, example, 'DZ', 2026), ['(A)', '(B)']);
+  const priced = run(example, 'DZ', '(A)', '100');
+  assert.equal(priced.status, 'cscf_pending',
+    'the example must reach a figure: it is the first thing a visitor tries');
+  assert.equal(priced.scenario.certificates, '71.465');
+  assert.equal(priced.scenario.costEur, '5385.60');
+
+  // And the route the corpus does NOT price for this origin refuses rather than guessing, so no
+  // wrong figure is reachable from the example either.
+  const other = run(example, 'DZ', '(B)', '100');
+  assert.equal(other.status, 'unavailable');
+  assert.equal(other.failure.code, 'NO_DIRECT_DEFAULT');
 });
 
 test('the script pins the pack it will accept to the manifest that seals the pack bytes', () => {
@@ -701,12 +754,123 @@ test('the residual sheet answers for unlisted ORIGINS, never for a good a listed
   // (K) under Algeria's name and billed it — 210.8425 certificates, EUR 15,889.09 on a 100 t
   // line, from a figure the Commission never stated for Algeria.
   //
-  // Both halves are pinned, because fixing this by refusing everything would be just as wrong.
-  assert.deepEqual(routesFor(pack, '76041010', 'DZ', 2026), ['(L)'],
-    'a route only the residual sheet prices is not a route a listed origin may be offered');
+  // WHAT CHANGED HERE, AND WHY THE OLD PROXY STOPPED WORKING. This test asserted
+  // `routesFor('76041010', 'DZ') === ['(L)']` under the message "a route only the residual sheet
+  // prices is not a route a listed origin may be offered". That was a PROXY for the principle,
+  // and the proxy has gone stale: routesFor no longer decides what to offer from the
+  // default-value table at all. It offers every route the corpus names for the good and can
+  // resolve a free-allocation benchmark for — and a benchmark is keyed by GOOD AND ROUTE, not by
+  // origin, so (K) is offered to Algeria now, legitimately, because (K) really does price for
+  // Algeria from the importer's OWN verified figures. Being offered is no longer evidence of
+  // anything, so it can no longer stand in for the rule.
+  //
+  // THE PRINCIPLE IS UNTOUCHED, and it is what is asserted below: NO RESIDUAL-SHEET VALUE MAY
+  // REACH A LISTED ORIGIN'S FIGURE. Offered-and-refusing is now correct behaviour;
+  // offered-and-pricing-from-the-residual-sheet is the defect. Both halves are still pinned,
+  // because fixing this by refusing everything would be just as wrong as leaking.
+
+  // PREMISE, or this pins nothing. Algeria has a sheet of its own; that sheet carries exactly one
+  // direct 2026 row for this good and it is (L); and the residual bucket DOES publish (K) — so
+  // there is a world average sitting there for a fallthrough to find.
+  assert.ok(pack.publishedOriginSheets.includes('DZ'),
+    'premise: Algeria is an origin the Commission lists, not one the residual row answers for');
+  const dzRows = pack.defaultValues.filter((r) => r.originCountry === 'DZ'
+    && r.scopeCode === '76041010' && r.emissionsType === 'direct' && r.reportingYear === 2026);
+  assert.deepEqual(dzRows.map((r) => r.productionRoute), ['(L)']);
+  const worldK = pack.defaultValues.find((r) => r.originCountry === 'OTHER'
+    && r.scopeCode === '76041010' && r.emissionsType === 'direct'
+    && r.productionRoute === '(K)' && r.reportingYear === 2026);
+  assert.equal(worldK.cell.state, 'value',
+    'premise: the residual sheet prices (K), so the leak has somewhere to come from');
+
+  // AND THE LEAK IS LIVE, not hypothetical: for an origin the Commission gives NO sheet, the
+  // residual row answers — and the figure it answers with is exactly the one Algeria was billed.
+  assert.ok(!pack.publishedOriginSheets.includes('AF'), 'premise: AF has no sheet of its own');
+  const unlisted = run('76041010', 'AF', '(K)', '100');
+  assert.equal(unlisted.stamp.originBasis, 'residual');
+  assert.equal(unlisted.scenario.certificates, '210.8425');
+  assert.equal(unlisted.scenario.costEur, '15889.09');
+
+  // The world average AS THE CARD PRINTS IT — hand-transcribed from the rendered figures, not
+  // derived from the estimate, so the check below is looking for what a reader would actually see.
+  // Asserting they are all present HERE is what proves the detector can detect: a forbidden-string
+  // list that matched nothing anywhere would pass Algeria's card for the wrong reason.
+  const worldAverage = ['210.843', '15,889.09', '355.63', '144.788'];
+  const unlistedCard = renderResult(unlisted);
+  for (const figure of worldAverage) {
+    assert.ok(unlistedCard.includes(figure),
+      `premise: the residual card prints ${figure}, so looking for it means something`);
+  }
+
+  // THE OFFER IS WIDER NOW — and that is fine, because the refusal is what holds the line.
+  assert.deepEqual(routesFor(pack, '76041010', 'DZ', 2026), ['(K)', '(L)']);
+
+  // THE RULE, ON THE HISTORICAL CASE: no figure of any kind for Algeria on (K), and above all not
+  // that one. The last assertion is the one that fails if the leak ever returns — it looks for the
+  // world average's own numbers in the rendered card, whatever route the renderer took to get
+  // there, rather than trusting a status field to describe what the user is shown.
   const refused = run('76041010', 'DZ', '(K)', '100');
   assert.equal(refused.status, 'unavailable');
   assert.equal(refused.failure.code, 'NO_DIRECT_DEFAULT');
+  assert.equal(refused.failure.selector, 'default/76041010/DZ/(K)/2026');
+  assert.notEqual(refused.stamp.originBasis, 'residual');
+  const card = renderResult(refused);
+  assert.doesNotMatch(card, /class="cb-fig"/, 'a refusal must render no figure block');
+  for (const figure of worldAverage) {
+    assert.ok(!card.includes(figure),
+      `the residual world average must not reach a listed origin's card — found ${figure}`);
+  }
+
+  // THE OTHER HALF: Algeria's OWN route still prices, from Algeria's own sheet.
+  const own = run('76041010', 'DZ', '(L)', '100');
+  assert.equal(own.status, 'cscf_pending');
+  assert.equal(own.stamp.originBasis, 'country');
+  assert.equal(own.scenario.certificates, '110.97');
+
+  // ...and (K) prices for Algeria the moment the importer brings their own verified figure, which
+  // is why offering it is legitimate. It rests on no default at all, so it claims no origin basis.
+  const verified = estimateFromPack(pack, { cn: '76041010', country: 'DZ', route: '(K)',
+    massT: '100', date: '2026-03-15', verified: { directTco2ePerT: '2.31' } });
+  assert.equal(verified.status, 'cscf_pending');
+  assert.equal(verified.scenario.certificates, '86.2125');
+  assert.equal(verified.stamp.tier, 'actual-verified');
+  assert.equal(verified.stamp.originBasis, null,
+    'a verified figure rests on no sheet, so it must not report one — least of all the residual');
+
+  // THE PRINCIPLE, SWEPT — because one good is an anecdote. Take every (good, route) the residual
+  // sheet can actually answer, cross it with every listed origin whose OWN sheet has no row at all
+  // for that selector, and every one of those must refuse. Measured on this tree: 602
+  // residual-answerable pairs across 121 listed sheets leave 53,958 such selectors, and all
+  // 53,958 refuse. The floor assertion is there so a corpus change cannot quietly empty the sweep
+  // and leave this passing on nothing.
+  const direct2026 = pack.defaultValues.filter((r) => r.emissionsType === 'direct'
+    && r.reportingYear === 2026 && r.scopeCode.length === r.codeLevel);
+  const sheets = new Map();
+  for (const r of direct2026) {
+    const rows = sheets.get(r.originCountry);
+    if (rows) rows.push(r); else sheets.set(r.originCountry, [r]);
+  }
+  const speaks = (origin, cn, route) => (sheets.get(origin) ?? [])
+    .some((r) => r.productionRoute === route && cn.startsWith(r.scopeCode));
+  const answerable = [];
+  for (const c of pack.classifications) {
+    for (const r of sheets.get('OTHER') ?? []) {
+      if (r.cell.state === 'value' && c.code.startsWith(r.scopeCode)) {
+        answerable.push([c.code, r.productionRoute]);
+      }
+    }
+  }
+  let swept = 0;
+  for (const origin of pack.publishedOriginSheets) {
+    for (const [cn, route] of answerable) {
+      if (speaks(origin, cn, route)) continue; // the origin's own sheet answers; not this case
+      swept += 1;
+      assert.equal(run(cn, origin, route, '100').status, 'unavailable',
+        `${origin} publishes a sheet and that sheet has no row for ${cn}/${route}, `
+        + 'so the residual world average must not answer under its name');
+    }
+  }
+  assert.ok(swept > 50000, `the sweep must have something to sweep, got ${swept}`);
 
   // And the fallthrough that IS correct still happens: Albania's sheet CARRIES 2507008080 and
   // prints a dash in it — a cell the Commission looked at and declined to fill, which the
