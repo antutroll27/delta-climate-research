@@ -52,8 +52,37 @@ jobs:
       # installing the browser afterwards meant the gate could never pass. It went
       # unnoticed because verify always died earlier, on a Python import, until the
       # step above started installing numpy.
+      # Browser binary is cached; only the download is version-dependent, so key
+      # on the lockfile. A cache hit turns the step below into a no-op.
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
+          restore-keys: ${{ runner.os }}-playwright-
+
+      # SPLIT FROM THE BROWSER INSTALL, and best-effort, because `--with-deps`
+      # runs `apt-get update` and that is what actually broke CI. On 2026-08-19
+      # three consecutive runs died at exactly 20 minutes -- the job cap, which
+      # GitHub reports as "cancelled" rather than "failed", so it read as a fluke.
+      # The log ends mid-`apt-get update` at archive.ubuntu.com and resumes only
+      # at the kill 18.5 minutes later, with the azure.archive mirror already
+      # failing over (`Ign:` lines). The same step took 56s on the last green run.
+      # Nothing in this repo changed; an Ubuntu mirror stalled.
+      #
+      # So apt is now bounded and non-fatal: if the mirrors are healthy we get the
+      # system libraries as before, and if they hang we lose four minutes instead
+      # of the entire budget. Should a library genuinely be missing, Chromium
+      # fails to launch and the e2e contracts say so loudly — a real failure being
+      # far more useful than a timeout that never reaches the tests at all.
+      - name: Install Chromium system libraries (best effort)
+        timeout-minutes: 4
+        continue-on-error: true
+        run: npx playwright install-deps chromium
+
       - name: Install Chromium
-        run: npx playwright install --with-deps chromium
+        timeout-minutes: 6
+        run: npx playwright install chromium
 
       # Runs the browser contracts too, as its last stage, against the dist it
       # just built and audited -- which is what the removed "Run browser
