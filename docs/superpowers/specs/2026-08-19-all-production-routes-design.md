@@ -118,6 +118,18 @@ One measured correction to the worked example this spec used: grey clinker route
 
 **And the duplication itself is the finding.** Two constants meaning one thing, one edited and one read, is the same defect class this project has removed repeatedly. `FAILURE_MESSAGES` becomes the single registry.
 
+## The year gate — added after the website e2e suite caught it
+
+The design above says the benchmark limb should not filter on the row's validity window, reasoning that over-offering is safe because an unresolvable route refuses. **A shipped e2e test disproved the safety half.** At an import date of `2029-06-15` the route control had always been *disabled*, reading *"no rules published for 2029"*. After the widening it became enabled and offered routes, none of which can price — 51,362 of 69,784 (good, origin) pairings gained routes at 2029, and **0 of 12,710** sampled offers priced.
+
+Pre-change, `routesFor` was purely defaults-driven, so "no defaults published for this year" implicitly meant "no routes offered". Widening to the benchmark limb silently dropped that invariant, because benchmark rows are open-ended.
+
+**The obvious fix is the wrong one.** Gating the benchmark limb on each row's validity window — the exact mirror of `resolveBenchmark`'s `active()` — was implemented and measured: it changes **nothing** at 2029. The corpus carries only three windows, all six rows covering `72061000` are open-ended, and **0 of 397** expiring rows lack an exact successor, so across 2026–2030 the gate is an equivalent mutant by construction. It was deliberately not kept: an unobservable guard no test can exercise is the same dead-code class this work removed twice already, and it can be added against a real input if the corpus ever ships an expiring row without a successor.
+
+**What actually bounds the corpus is `defaultValues.reportingYear`, which spans 2026–2028 only.** The gate is therefore on corpus year coverage: no route is offered for a reporting year the pack publishes no default values for. 2026 stays bit-identical; 2027/2028 still offer routes and refuse later on the certificate-price wall, which is correct and a separate open defect; 2024/2025 and 2029+ close to nothing.
+
+The general lesson, which cost two wrong diagnoses: **"offered then refuses" is only acceptable when the refusal is the honest answer to a question the user actually asked.** For a year the Commission has published nothing for, the honest answer precedes the route question entirely.
+
 ## Deliberately not in scope
 
 **No 12th route.** The Annex skips `I` — it reads as a `1`. Our benchmark table has no `I`, and the Commission's corrected workbook never mentions one. The **one** disagreement between the founder's Production Routes Matrix and our pack is `72052100`: the matrix says `F G H I`, we say `F G H J`. **That is a data question for a human, not a code change**, and it must be settled before anyone cites the matrix as authority. Everything else agrees: of the matrix's 134 goods, 82 routed sets match ours exactly and 51 "No Route" goods hold route-independent benchmarks in our pack.
