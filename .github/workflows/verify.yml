@@ -80,10 +80,10 @@ jobs:
       # /var/lib/apt/lists/lock, held by process 240", continue-on-error swallowed it, and every
       # WebKit test then failed at browserType.launch. The libraries were never the problem the
       # second time; the second apt call was.
-      - name: Install Chromium and WebKit system libraries (best effort)
+      - name: Install Chromium system libraries (best effort)
         timeout-minutes: 4
         continue-on-error: true
-        run: npx playwright install-deps chromium webkit
+        run: npx playwright install-deps chromium
 
       - name: Install Chromium
         timeout-minutes: 6
@@ -93,9 +93,9 @@ jobs:
       # surface here a customs consultant might open in Safari, and WebKit is the engine most
       # likely to disagree about print CSS and date inputs, both of which that page leans on.
       # It has already earned the slot — it caught a mega-menu bug Chromium could not see.
-      - name: Install Firefox and WebKit
+      - name: Install Firefox
         timeout-minutes: 6
-        run: npx playwright install firefox webkit
+        run: npx playwright install firefox
 
       # Runs the browser contracts too, as its last stage, against the dist it
       # just built and audited -- which is what the removed "Run browser
