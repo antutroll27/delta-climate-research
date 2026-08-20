@@ -1053,7 +1053,7 @@
         "line-join": "round"
       },
       "paint": {
-        "line-color": "#9a92c4",
+        "line-color": "#726d99",
         "line-width": [
           "interpolate",
           [

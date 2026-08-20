@@ -159,7 +159,14 @@ const SLATE = {
   roadCasing:   '#282639',
   roadInner:    '#403c5c',
   roadSubtle:   '#2f2c43',
-  arterial:     '#9a92c4',
+  /* Dimmed from #9a92c4 (2026-08-13). In relief mode every replaced road is
+     hidden and the motorway layers are DELIBERATELY not — road-labels.ts:34
+     records why: we do not draw that class, so hiding it would delete the road
+     rather than redraw it. That left the flyover as the one bright line on an
+     otherwise empty ground. The answer is not to hide real geography, it is to
+     let it read as CONTEXT: still the top of the road hierarchy in basemap mode,
+     no longer a highlight against the 3D city. */
+  arterial:     '#726d99',
   rail:         '#221f30',
   label:        '#b8b3d2',
   labelHalo:    '#0b0a11',
