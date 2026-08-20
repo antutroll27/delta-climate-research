@@ -17,7 +17,7 @@ import { createGpuHost, createStaticHost, createWorkerHost } from './sim-host';
 import type { HeatSimHost, HeatSimRequest, HeatSimSnapshot } from './sim-protocol';
 import * as M from './heat-map-model';
 import { ACCURACY, SPATIAL, HEIGHTS, bandLabel, unmeasuredNote, isTransitionHour, TRANSITION_RMSE_K } from './accuracy';
-import { solarElevationFactor } from './sky';
+import { solarElevationFactor, solarAzimuthDeg, solarElevationDeg, solarDayHours } from './sky';
 import { loadLayerManifest } from './provenance';
 import * as U from './dc-urs';
 import { applyScenario } from './dc-urs-scenario';
@@ -200,6 +200,8 @@ export function mountHeatMap(): () => void {
      which is the point at which the reader has asked for motion again. */
   const compassEl = el('compass');
   const dialEl = el('compassDial'), nLabEl = el('compassN'), sLabEl = el('compassS');
+  const sunEl = el('compassSun');
+  const sunLineEl = el('sunLine'), sunTextEl = el('sunLineText'), sunNoteEl = el('sunLineNote');
   function syncCompass() {
     if (!dialEl) return;
     const b = map.getBearing();
@@ -211,6 +213,71 @@ export function mountHeatMap(): () => void {
     dialEl.setAttribute('transform', `rotate(${-b} 24 24)`);
     nLabEl?.setAttribute('transform', `rotate(${b} 24 6.4)`);
     sLabEl?.setAttribute('transform', `rotate(${b} 24 45.2)`);
+    syncSunBearing();
+  }
+
+  /**
+   * Put the sun on the dial, at its real bearing for the phase being shown.
+   *
+   * READ-ONLY, AND THAT IS THE DESIGN. The instrument is steady-state at a
+   * representative phase — the freshness dial's own note says it "has no 14:32" —
+   * so a draggable sun would imply a continuous time the physics does not model.
+   * This reports where the sun is; it does not pretend to move it.
+   *
+   * The marker lives inside the rotating dial group, so it is a WORLD bearing:
+   * turn the map and the sun stays over the ground it is shining on. Below the
+   * horizon it is removed rather than dimmed, because a bearing for a sun that
+   * has set is not a faint reading, it is a false one.
+   */
+  function syncSunBearing(): void {
+    if (!sunEl) return;
+    const lat = WARDS[state.ward]?.lat ?? 22.55;
+    /* Which hour the dial should describe. `sunNow` non-null means the live
+       clock drives the scene; otherwise the phase is one of the two fixed
+       representative hours the engine actually solves. */
+    const hour = state.sunNow !== null && state.sunNow !== undefined
+      ? wardSolarHour()
+      : (state.phase === 'night' ? 22 : 13);
+    const doy = Math.floor((now() - Date.UTC(new Date(now()).getUTCFullYear(), 0, 0)) / 86_400_000);
+    const up = solarElevationFactor(hour, doy, lat) > 0;
+    sunEl.classList.toggle('is-below', !up);
+    if (up) sunEl.setAttribute('transform', `rotate(${solarAzimuthDeg(hour, doy, lat)} 24 24)`);
+    writeSunLine(hour, doy, lat, up);
+  }
+
+  /** Local solar hours -> HH:MM, for a readout that is explicitly solar time. */
+  function hhmm(h: number): string {
+    const m = Math.round(((h % 24) + 24) % 24 * 60);
+    return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+  }
+
+  /**
+   * The line above the compass. Astronomy only, and it says so.
+   *
+   * WHY THE CAVEAT IS NOT OPTIONAL. A sun drawn on a heat map invites exactly one
+   * inference — that the model uses it. It does not: `sun` is a single ward-wide
+   * scalar (types.ts SimLayers has no shade term), and adding per-building shadow
+   * was TESTED here and failed its pre-registered night placebo, p = 5.4e-07.
+   * So the reading is real and the mechanism is not claimed, and both have to be
+   * on screen or the honest half is the one that goes missing.
+   *
+   * Times are LOCAL SOLAR, not IST — the whole sky module works in solar time, and
+   * relabelling them as clock time here would be a quiet 23-minute lie at Kolkata's
+   * longitude.
+   */
+  function writeSunLine(hour: number, doy: number, lat: number, up: boolean): void {
+    if (!sunLineEl || !sunTextEl) return;
+    const day = solarDayHours(doy, lat);
+    if (!day) { sunLineEl.setAttribute('hidden', ''); return; }   // polar; never here, but honest
+    sunLineEl.removeAttribute('hidden');
+    sunTextEl.textContent = up
+      ? `sun ${Math.round(solarAzimuthDeg(hour, doy, lat))}° · ${Math.round(solarElevationDeg(hour, doy, lat))}° up · sets ${hhmm(day.sunset)}`
+      : `sun below horizon · rises ${hhmm(day.sunrise)}`;
+    sunNoteEl?.setAttribute('title',
+      'Solar geometry only, in local solar time. The surface-temperature model uses a '
+      + 'single ward-wide sun term, not per-building shadow: adding shade was tested over '
+      + '87 ward-scenes and failed its pre-registered night placebo (p = 5.4e-07), so it is '
+      + 'not in the solve.');
   }
   const onCompass = () => {
     orbit = false; clearTimeout(orbitResume);

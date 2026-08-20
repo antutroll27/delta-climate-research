@@ -31,6 +31,14 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
 
     <!-- North reference. The idle orbit turns the map continuously, so without
          this there is no way to know which way you are facing, and no way back. -->
+    <!-- Sun reading. A SIBLING of the compass, never a child: the compass is a
+         button whose whole box resets the bearing, and text inside it would become
+         part of that click target. Always visible rather than a hover tooltip, so
+         it works on touch and so the caveat cannot hide. -->
+    <p class="sunline" id="sunLine" hidden>
+      <span id="sunLineText"></span>
+      <span class="sunline-note" id="sunLineNote" tabindex="0" role="note">geometry only</span>
+    </p>
     <button class="compass" id="compass" type="button" title="Face north" aria-label="Reset the map to face north">
       <svg viewBox="0 0 48 48" aria-hidden="true">
         <circle cx="24" cy="24" r="21.2" class="c-ring" />
@@ -46,6 +54,16 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
           <circle cx="9.6" cy="24" r="1.15" class="c-tick" />
           <text id="compassN" x="24" y="6.4" class="c-lab c-lab-n">N</text>
           <text id="compassS" x="24" y="45.2" class="c-lab">S</text>
+          <!-- Sun bearing. Rides INSIDE the rotating dial, like N and S, because
+               it is a world direction: turn the map and the sun must stay over
+               the ground it is actually shining on. Hidden outright when the sun
+               is below the horizon — a bearing at midnight is not a dim reading,
+               it is a meaningless one. -->
+          <g id="compassSun" class="c-sun is-below">
+            <circle cx="24" cy="24" r="1" class="c-sun-hub" />
+            <line x1="24" y1="24" x2="24" y2="13.2" class="c-sun-ray" />
+            <circle cx="24" cy="11.4" r="3.1" class="c-sun-disc" />
+          </g>
         </g>
       </svg>
     </button>
@@ -307,12 +325,12 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
   /* Sits clear of the toolbox, not under it: .left is 270 px wide at a 26 px
      offset, so its right edge is 296 px and anything below 312 px would be
      overlapped. The two follow the panel down at each breakpoint. */
-  .compass{position:absolute;left:312px;bottom:26px;z-index:6;width:54px;height:54px;padding:0;cursor:pointer;
+  .compass{position:absolute;left:312px;bottom:26px;z-index:6;width:62px;height:62px;padding:0;cursor:pointer;
     background:rgb(9 20 22 /.82);border:1px solid var(--line);border-radius:50%;backdrop-filter:blur(12px);
     display:grid;place-items:center;transition:border-color .2s,transform .2s}
   .compass:hover{border-color:var(--cyan);transform:scale(1.06)}
   .compass:focus-visible{outline:2px solid var(--cyan);outline-offset:3px}
-  .compass svg{width:48px;height:48px;display:block}
+  .compass svg{width:56px;height:56px;display:block}
   .compass .c-ring{fill:none;stroke:var(--line);stroke-width:1}
   .compass .c-n{fill:var(--red)}
   .compass .c-s{fill:rgb(236 237 240 /.34)}
@@ -320,6 +338,24 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
   .compass .c-lab{font-family:var(--sans);font-weight:700;font-size:8.4px;text-anchor:middle;
     fill:rgb(236 237 240 /.62)}
   .compass .c-lab-n{fill:var(--red)}
+  /* The sun is the one warm thing on a cool dial, so it reads at a glance
+     without competing with the red north needle for "most important mark". */
+  .compass .c-sun-disc{fill:#f2b544}
+  .compass .c-sun-ray{stroke:#f2b544;stroke-width:1;opacity:.5}
+  .compass .c-sun-hub{fill:#f2b544;opacity:.45}
+  /* `hidden` is not an SVG attribute — a class is, and it types cleanly. */
+  .compass .c-sun.is-below{display:none}
+  /* Sits directly above the compass, sharing its left edge so the two read as one
+     cluster. Kept narrow: `.tiphint` is centred at bottom:88px, so a long line here
+     would collide with it on a normal viewport. */
+  .sunline{position:absolute;left:312px;bottom:104px;z-index:6;margin:0;max-width:200px;
+    font-family:var(--mono);font-size:7.5px;letter-spacing:.09em;line-height:1.45;
+    color:rgb(236 237 240 /.52);text-transform:uppercase;pointer-events:none;white-space:nowrap}
+  .sunline[hidden]{display:none}
+  /* The caveat is dimmer than the numbers but never hidden — a reader who sees a sun
+     on a heat map will assume the model uses it, and it does not. */
+  .sunline-note{display:block;font-size:7px;color:rgb(242 181 68 /.5);letter-spacing:.07em;pointer-events:auto;cursor:help}
+  .sunline-note:focus-visible{outline:1px solid var(--cyan);outline-offset:2px}
   /* ── live-reading freshness dial ───────────────────────────────────────────
      Sits directly above the compass and borrows its whole visual language, so
      the two read as one instrument cluster: where you are facing, and when the

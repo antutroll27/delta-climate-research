@@ -129,6 +129,88 @@ export function solarElevationFactor(solarHour: number, doy: number, latDeg = 22
   return Math.max(0, cosZ);
 }
 
+
+/**
+ * Solar AZIMUTH — the compass bearing of the sun, degrees clockwise from true north.
+ *
+ * The companion to `solarElevationFactor` above, sharing its declination series and
+ * hour angle so the two can never disagree about where the sun is. Elevation says
+ * how high; this says which way. The heat instrument needs both to draw a sun on a
+ * compass: a marker at the wrong bearing is worse than no marker.
+ *
+ * KOLKATA IS INSIDE THE TROPICS, and the formula must survive that. At lat 22.55 N
+ * the declination exceeds the latitude for roughly six weeks around the June
+ * solstice, so the noon sun stands NORTH of overhead and the azimuth flips from 180
+ * to 0. A hemisphere-assuming shortcut ("noon means south") is wrong here for part
+ * of the year, in the season that matters most for heat. The acos form below has no
+ * such assumption built in.
+ *
+ * Returns 0-360. Meaningless when the sun is below the horizon — callers must gate
+ * on `solarElevationFactor(...) > 0` rather than trusting a bearing at midnight.
+ *
+ * @param solarHour local SOLAR hour, 0-24
+ * @param doy       day of year, 1-366
+ * @param latDeg    latitude, degrees north
+ */
+export function solarAzimuthDeg(solarHour: number, doy: number, latDeg = 22.55): number {
+  const rad = Math.PI / 180;
+  // Same Spencer (1971) series as solarElevationFactor — kept identical on purpose.
+  const g = (2 * Math.PI / 365) * (doy - 1);
+  const decl = 0.006918 - 0.399912 * Math.cos(g) + 0.070257 * Math.sin(g)
+    - 0.006758 * Math.cos(2 * g) + 0.000907 * Math.sin(2 * g)
+    - 0.002697 * Math.cos(3 * g) + 0.00148 * Math.sin(3 * g);
+  const ha = (solarHour - 12) * 15 * rad;
+  const lat = latDeg * rad;
+  const sinElev = Math.sin(lat) * Math.sin(decl) + Math.cos(lat) * Math.cos(decl) * Math.cos(ha);
+  const cosElev = Math.sqrt(Math.max(0, 1 - sinElev * sinElev));
+  // Degenerate only at the pole or exact zenith; both give an arbitrary bearing.
+  if (cosElev < 1e-9) return 180;
+  const cosAz = (Math.sin(decl) - sinElev * Math.sin(lat)) / (cosElev * Math.cos(lat));
+  const az = Math.acos(Math.min(1, Math.max(-1, cosAz))) / rad;
+  // acos loses the sign of the hour angle: before noon the sun is east, after west.
+  return ha > 0 ? 360 - az : az;
+}
+
+
+/** Solar elevation in DEGREES above the horizon. Negative below it. */
+export function solarElevationDeg(solarHour: number, doy: number, latDeg = 22.55): number {
+  const rad = Math.PI / 180;
+  const g = (2 * Math.PI / 365) * (doy - 1);
+  const decl = 0.006918 - 0.399912 * Math.cos(g) + 0.070257 * Math.sin(g)
+    - 0.006758 * Math.cos(2 * g) + 0.000907 * Math.sin(2 * g)
+    - 0.002697 * Math.cos(3 * g) + 0.00148 * Math.sin(3 * g);
+  const ha = (solarHour - 12) * 15 * rad;
+  const lat = latDeg * rad;
+  const sinElev = Math.sin(lat) * Math.sin(decl) + Math.cos(lat) * Math.cos(decl) * Math.cos(ha);
+  return Math.asin(Math.min(1, Math.max(-1, sinElev))) / rad;
+}
+
+/**
+ * Sunrise, solar noon and sunset, in LOCAL SOLAR hours.
+ *
+ * Geometric horizon only — no refraction, no solar-disc radius, no
+ * equation-of-time (local solar time is used throughout this module, so the
+ * hour angle is just (h-12)x15deg). That puts the times within a few minutes of
+ * an almanac, which is the right precision for a readout that exists to orient
+ * a reader rather than to time a prayer or a photograph.
+ *
+ * Returns null inside a polar day or night, where no crossing exists. Kolkata
+ * and Dubai never see that, but a function that silently returns 12:00 for
+ * Tromso is a trap for whoever ports this north.
+ */
+export function solarDayHours(doy: number, latDeg = 22.55):
+  { sunrise: number; noon: number; sunset: number } | null {
+  const rad = Math.PI / 180;
+  const g = (2 * Math.PI / 365) * (doy - 1);
+  const decl = 0.006918 - 0.399912 * Math.cos(g) + 0.070257 * Math.sin(g)
+    - 0.006758 * Math.cos(2 * g) + 0.000907 * Math.sin(2 * g)
+    - 0.002697 * Math.cos(3 * g) + 0.00148 * Math.sin(3 * g);
+  const cosHa0 = -Math.tan(latDeg * rad) * Math.tan(decl);
+  if (cosHa0 < -1 || cosHa0 > 1) return null;   // midnight sun / polar night
+  const ha0 = Math.acos(cosHa0) / rad / 15;      // half-day length, hours
+  return { sunrise: 12 - ha0, noon: 12, sunset: 12 + ha0 };
+}
+
 /** ponytail: one runnable check — `node --experimental-strip-types sky.ts` */
 export function assertSkyLogic(): void {
   const ok = (c: boolean, m: string) => { if (!c) throw new Error(`sky: ${m}`); };
@@ -165,6 +247,40 @@ export function assertSkyLogic(): void {
 
   // solar geometry: sun is down at night, near-overhead at Kolkata midsummer noon
   ok(solarElevationFactor(1, 180) === 0, 'sun should be below horizon at 01:00');
+  // --- solar azimuth -------------------------------------------------------
+  const near = (a: number, b: number, tol: number, m: string) =>
+    ok(Math.abs(((a - b + 540) % 360) - 180) <= tol, `${m} (got ${a.toFixed(1)}, want ~${b})`);
+  // Winter noon at Kolkata: declination is negative, well south of the latitude,
+  // so the sun is due south.
+  near(solarAzimuthDeg(12, 355), 180, 1.5, 'winter noon should be due south');
+  // June solstice noon: declination 23.4 N EXCEEDS lat 22.55, so the sun stands
+  // north of overhead. This is the case a hemisphere shortcut gets wrong.
+  near(solarAzimuthDeg(12, 172), 0, 3, 'tropical summer noon should be north of overhead');
+  // Morning is east of the meridian, afternoon west — the sign of the hour angle.
+  ok(solarAzimuthDeg(8, 80) < 180, 'morning sun should be in the eastern half');
+  ok(solarAzimuthDeg(16, 80) > 180, 'afternoon sun should be in the western half');
+  // Symmetry about solar noon: equal hours either side mirror across the meridian.
+  near(solarAzimuthDeg(9, 200) + solarAzimuthDeg(15, 200), 360, 0.5,
+    'azimuths either side of noon should mirror');
+  ok(solarAzimuthDeg(6, 80) >= 0 && solarAzimuthDeg(18, 80) <= 360, 'azimuth out of range');
+  // --- elevation in degrees, and the day's endpoints ------------------------
+  ok(Math.abs(solarElevationDeg(12, 355) - 44.0) < 2.0, 'Kolkata winter noon elevation ~44 deg');
+  ok(solarElevationDeg(2, 180) < 0, 'sun should be below the horizon at 02:00');
+  const jun = solarDayHours(172), dec = solarDayHours(355);
+  ok(jun !== null && dec !== null, 'Kolkata has no polar day or night');
+  if (jun && dec) {
+    const len = (d: { sunrise: number; sunset: number }) => d.sunset - d.sunrise;
+    ok(len(jun) > 13.0, `June day should exceed 13 h, got ${len(jun).toFixed(2)}`);
+    ok(len(dec) < 11.2, `December day should be under 11.2 h, got ${len(dec).toFixed(2)}`);
+    ok(len(jun) > len(dec), 'June day must be longer than December');
+    ok(Math.abs((jun.sunrise + jun.sunset) / 2 - 12) < 1e-9, 'noon must bisect the day');
+  }
+  const eq = solarDayHours(80);
+  ok(eq !== null && Math.abs((eq.sunset - eq.sunrise) - 12) < 0.15, 'equinox day should be ~12 h');
+  // A latitude that DOES go polar must say so rather than inventing a sunrise.
+  ok(solarDayHours(172, 80) === null, 'polar day must return null, not a fake crossing');
+
+
   ok(solarElevationFactor(23, 180) === 0, 'sun should be below horizon at 23:00');
   const noonJun = solarElevationFactor(12, 172);       // solstice; lat 22.55 ~= tropic
   ok(noonJun > 0.99, `midsummer noon factor ${noonJun.toFixed(3)}, expected ~1`);
