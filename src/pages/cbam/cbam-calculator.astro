@@ -139,6 +139,14 @@ import Footer from '../../components/layout/Footer.astro';
             <div>
               <label class="cb-label" for="cbDate">Import date</label>
               <input id="cbDate" class="cb-field" type="date" value="2026-03-15" />
+              <!-- ITS OWN LIVE REGION, DELIBERATELY NOT #cbStatus. cbam-app.ts keeps ONE writer of
+                   #cbStatus on the add path (see draftLine's doc: a specific reason written
+                   anywhere else is overwritten by onAdd's generic one a line later, visible for no
+                   frames at all). This warning fires on `date` change instead, so routing it
+                   through #cbStatus would break that rule and force a precedence decision between
+                   two unrelated messages. The two never fire on the same interaction, so two
+                   polite regions do not compete. -->
+              <p class="cb-datenote" id="cbDateNote" role="status" aria-live="polite"></p>
             </div>
           </div>
 
@@ -295,6 +303,19 @@ import Footer from '../../components/layout/Footer.astro';
     font-family: var(--font-mono); font-size: 0.66rem; letter-spacing: 0.1em;
     color: var(--color-cyan); min-height: 1em;
   }
+  /* BARE BRONZE, MEASURED NOT ASSUMED. This note sits on .cb-page (--color-base #050606) with no
+     card fill between it and the page, where bronze is 6.56:1 — AA at any size, and the same band
+     as --color-ink-faint's own documented 6.36:1 on base. The lighter
+     color-mix(... bronze 55%, --color-paper) that .cb-out .cb-warn uses is for the CARD fill
+     (--color-instrument), a lighter ground; it is not needed here. Bronze because this is the
+     site's colour for provenance and caution, which is exactly what this sentence is.
+     `min-height` is deliberately absent where .cb-note has it: :empty hides the element outright,
+     so the row does not reserve space for a sentence that usually is not there. */
+  .cb-datenote {
+    margin: 0.4rem 0 0; font-size: 0.72rem; line-height: 1.6;
+    color: var(--color-bronze); max-width: 46ch;
+  }
+  .cb-datenote:empty { display: none; }
   .cb-hint {
     margin-top: 0.45rem; font-family: var(--font-data); font-size: 0.68rem;
     line-height: 1.65; color: var(--color-ink-faint); max-width: 46ch;
