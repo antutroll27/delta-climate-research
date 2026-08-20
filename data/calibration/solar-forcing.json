@@ -1,0 +1,61 @@
+{
+  "source": "NASA POWER hourly, community=RE (CERES SYN1deg / GEWEX SRB)",
+  "point": {
+    "lat": 22.55,
+    "lon": 88.37
+  },
+  "note": "One ~0.5 deg POWER cell covers all three wards, so irradiance is IDENTICAL between them: every ward-to-ward difference in PV yield comes from geometry and shading. Screening only -- POWER publishes no per-site uncertainty, so no P90 can be constructed from it.",
+  "years": [
+    {
+      "year": 2020.0,
+      "ghi": 1604.9,
+      "dni": 933.9,
+      "dhi": 867.0,
+      "diffuse_fraction": 0.54
+    },
+    {
+      "year": 2021.0,
+      "ghi": 1566.9,
+      "dni": 849.6,
+      "dhi": 875.5,
+      "diffuse_fraction": 0.559
+    },
+    {
+      "year": 2022.0,
+      "ghi": 1654.5,
+      "dni": 937.0,
+      "dhi": 898.3,
+      "diffuse_fraction": 0.543
+    },
+    {
+      "year": 2023.0,
+      "ghi": 1568.3,
+      "dni": 820.0,
+      "dhi": 879.0,
+      "diffuse_fraction": 0.56
+    },
+    {
+      "year": 2024.0,
+      "ghi": 1535.1,
+      "dni": 792.5,
+      "dhi": 867.8,
+      "diffuse_fraction": 0.565
+    }
+  ],
+  "ghi_mean": 1585.9,
+  "ghi_spread_pct": 7.5,
+  "units": "POWER returns Wh/m^2 per hour; summed and /1000 for kWh/m^2/yr",
+  "time_standard": "LST (Local Solar Time), pinned in the request and asserted by --check",
+  "reference_solargis": {
+    "ghi": 1681.7,
+    "dni": 1002.6,
+    "dhi": 963.9,
+    "src": "Global Solar Atlas v2.2.68, queried 2026-08-20"
+  },
+  "known_bias": {
+    "measured_vs_solargis_pct": -5.7,
+    "power_published_bias_pct": -5.8,
+    "source": "POWER's own BSRN validation, GEWEX SRB 4-IP monthly all-sky",
+    "note": "The -5.7% gap to Solargis matches POWER's OWN documented -5.8% SRB bias to a tenth of a point, and sits 4.7 SE from the 5-year mean, so it is systematic rather than sampling noise. DIRECTION MATTERS: this biases yield LOW, while the unvalidated low building heights bias it HIGH by understating neighbour shading. Do NOT treat those as cancelling \u2014 they are independent errors that happen to point opposite ways, and either could dominate. Report both."
+  }
+}
