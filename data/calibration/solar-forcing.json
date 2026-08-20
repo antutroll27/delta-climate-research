@@ -52,6 +52,19 @@
     "dhi": 963.9,
     "src": "Global Solar Atlas v2.2.68, queried 2026-08-20"
   },
+  "components_do_not_close": {
+    "median_error_pct": -7.9,
+    "at_low_sun_pct": -6.0,
+    "at_high_sun_pct": -14.6,
+    "test": "GHI vs DNI*cos(zenith) + DHI, 4125 daylight hours of 2023",
+    "consequence": "DNI and DHI here are DIAGNOSTIC ONLY. Feeding them to a tilted-plane transposition costs 6.6% on annual yield (1225 vs 1312 kWh/kWp/yr at 22 deg tilt). The pipeline must use GHI and derive the split \u2014 pvlib Erbs or DIRINT, which agree here to 1 kWh/kWp/yr."
+  },
+  "chain_validation": {
+    "our_yield_on_power_2023": 1312,
+    "gsa_rooftop_target": 1346,
+    "our_yield_normalised_to_solargis_ghi": 1407,
+    "warning": "Landing inside the 1300-1350 target is PARTLY TWO ERRORS CANCELLING. Normalise irradiance and the conversion runs +4.5% optimistic against GSA's own loss model, while POWER's GHI runs -6.7% low. Do not read the agreement as proof the chain is right; ~5% is the honest accuracy claim for screening."
+  },
   "known_bias": {
     "measured_vs_solargis_pct": -5.7,
     "power_published_bias_pct": -5.8,

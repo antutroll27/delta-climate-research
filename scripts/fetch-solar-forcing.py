@@ -32,6 +32,24 @@ the failure mode reanalysis has in hazy tropical air -- and the split is what a 
 transposition depends on. POWER (CERES/SRB satellite retrievals) tracks Solargis on all three
 components. So POWER, on evidence.
 
+DNI AND DHI ARE FETCHED FOR DIAGNOSIS ONLY — DO NOT FEED THEM TO A TRANSPOSITION.
+POWER's three components DO NOT CLOSE. Testing GHI against DNI*cos(z) + DHI over 4,125
+daylight hours of 2023, the reconstruction falls short by a median 7.9%, and the deficit
+GROWS WITH SUN ELEVATION: -6% at 0-10 deg rising to -14.6% at 80-90 deg. At high sun
+cos(z) ~ 1, so this is simply DNI + DHI failing to sum to GHI. It is not a time-offset
+artefact (an offset scan is flat) and not the mid-hour approximation (integrating cos(z)
+across the hour changes it by 0.1 pt). POWER derives the three by different algorithms and
+never enforces closure.
+
+Measured cost of getting this wrong: a 1 kWp array at 22 deg tilt yields 1225 kWh/kWp/yr on
+the raw components against 1312 with the split derived from GHI — a 6.6% underestimate that
+looks perfectly plausible in the annual total.
+
+THE PIPELINE MUST THEREFORE USE GHI ONLY, and derive DNI/DHI with a decomposition model.
+pvlib's Erbs and DIRINT agree to 1 kWh/kWp/yr here, so the choice is not load-bearing; Erbs
+closes to +0.00% by construction and its DHI lands within 2% of Solargis against the raw
+component's -9%.
+
 NEITHER SUPPORTS A P90 CLAIM. POWER's own BSRN validation gives monthly bias -5.8% / RMSE 8.6%
 (GEWEX SRB) and 0.03% / 5.7% (CERES SYN1deg), against an IEA-PVPS total budget of +/-3.2-7.3%
 for a whole bankable assessment. Screening only. See the design note.
@@ -142,6 +160,27 @@ def summarise(data: dict[str, dict[str, dict[str, float]]]) -> dict[str, Any]:
         "time_standard": "LST (Local Solar Time), pinned in the request and asserted by --check",
         "reference_solargis": {"ghi": 1681.7, "dni": 1002.6, "dhi": 963.9,
                                "src": "Global Solar Atlas v2.2.68, queried 2026-08-20"},
+        "components_do_not_close": {
+            "median_error_pct": -7.9,
+            "at_low_sun_pct": -6.0,
+            "at_high_sun_pct": -14.6,
+            "test": "GHI vs DNI*cos(zenith) + DHI, 4125 daylight hours of 2023",
+            "consequence": ("DNI and DHI here are DIAGNOSTIC ONLY. Feeding them to a "
+                            "tilted-plane transposition costs 6.6% on annual yield "
+                            "(1225 vs 1312 kWh/kWp/yr at 22 deg tilt). The pipeline must "
+                            "use GHI and derive the split — pvlib Erbs or DIRINT, which "
+                            "agree here to 1 kWh/kWp/yr."),
+        },
+        "chain_validation": {
+            "our_yield_on_power_2023": 1312,
+            "gsa_rooftop_target": 1346,
+            "our_yield_normalised_to_solargis_ghi": 1407,
+            "warning": ("Landing inside the 1300-1350 target is PARTLY TWO ERRORS "
+                        "CANCELLING. Normalise irradiance and the conversion runs +4.5% "
+                        "optimistic against GSA's own loss model, while POWER's GHI runs "
+                        "-6.7% low. Do not read the agreement as proof the chain is right; "
+                        "~5% is the honest accuracy claim for screening."),
+        },
         "known_bias": {
             "measured_vs_solargis_pct": -5.7,
             "power_published_bias_pct": -5.8,
