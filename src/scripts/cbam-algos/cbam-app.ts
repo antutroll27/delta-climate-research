@@ -1690,10 +1690,13 @@ export function inputFor(l: Line, verified: EstimatorInput['verified']): Estimat
  * scope, on whether the Commission publishes an indirect default for that exact
  * good/origin/route/year, and on the field having been left blank. parseVerifiedFields holds no
  * pack and can know none of it (see its own doc), and a second copy of the rule written here would
- * be a second thing to drift: guess "mixed" for an iron & steel line — where the Commission
+ * be a second thing to drift: guess "mixed" for an ALUMINIUM line — where the Commission
  * publishes no indirect default at all, so the engine correctly stamps 'actual-verified' — and
  * csvRows' equality guard throws at export, killing the whole file over one line. One copy of the
- * rule, and it lives in the engine that applies it.
+ * rule, and it lives in the engine that applies it. (This example used to say "iron & steel",
+ * which is false per good even though it is nearly true per sector: 26011200 publishes 84
+ * indirect values across 28 origins and stamps the mixed tier like any cement line. Aluminium and
+ * hydrogen are the two sectors where zero really means zero — measured in syncScope's own note.)
  *
  * TAKES THE PRICER AS AN ARGUMENT rather than reading `pack` from a closure, for the same reason
  * inputFor is exported: draftLine and estimateLine are closures inside initCbam and cannot be
@@ -1951,24 +1954,63 @@ export function initCbam(): void {
   function syncScope(): void {
     if (!scope || !scopeRow) return;
     // Not the old `!== null`: the lookup now returns an object in EVERY case, so that test was
-    // silently always true — TypeScript could not see it, no test covered it, and it showed this
-    // control on steel and aluminium, which publish no indirect default at all. That is the live
-    // defect. cbam-render.test.mjs pins the LOOKUP's side of it — steel and aluminium answer
-    // `none`, cement answers `found` — but the operator on this line needs a document to run, and
-    // the unit suite has none. Reverting it to `!== null` still leaves that suite green; only an
-    // e2e assertion on #cbScopeRow's hidden state would catch it.
+    // silently always true — TypeScript could not see it, and no test covered it — and it showed
+    // this control on every good in the corpus, including the 536 that publish no indirect
+    // default of any kind. That is the live defect. cbam-render.test.mjs pins the LOOKUP's side
+    // of it — 72083800 and 76011010 answer `none`, cement answers `found` — but the operator on
+    // this line needs a document to run, and the unit suite has none. Reverting it to `!== null`
+    // still leaves that suite green; only an e2e assertion on #cbScopeRow's hidden state would
+    // catch it.
     //
-    // `kind !== 'none'` rather than `=== 'found'` is FUTUREPROOFING, not a second live fix. It
-    // exists so a route MISMATCH keeps the control visible and the user can reach the refusal
-    // that warns them — but no such selector exists today. Sweeping every good × origin ×
-    // published-route the form can offer, across the pack's 2026–2028 years, gives 233,112
-    // reachable selectors: 13,176 `found`, 219,936 `none`, and ZERO `route-mismatch`. The arm was
-    // written for the IR 2026/1740 route re-key, which can leave a good's indirect rows covering
-    // fewer routes than its direct rows; that re-key has now LANDED — it is the corpus this
-    // build ships — and it still produces no reachable mismatch, because routesFor only offers a
-    // route the direct table publishes and the two tables move together. `route-mismatch` is
-    // reachable only by calling the engine with a route the form would not offer. Do not read
-    // this arm as exercised behaviour; re-measured on the v2 corpus, it is not.
+    // THAT DEFECT USED TO BE DESCRIBED AS "it showed this control on steel and aluminium, which
+    // publish no indirect default at all". The defect is real; the SECTOR claim was not, and it
+    // was a per-good fact read as a sector one. Measured on the shipped pack, counting rows with
+    // `emissionsType: 'indirect'` whose `cell.state === 'value'` (a `pointer` or an `unpublished`
+    // dash is a cell the Commission declined to fill, not a published figure):
+    //
+    //   fertilisers     7,248 rows   all 27 goods       91 origins
+    //   cement          1,011 rows   all 8 goods       101 origins
+    //   iron & steel       84 rows   1 of 478 goods     28 origins
+    //   aluminium           0 rows   0 of 58 goods       0 origins
+    //   hydrogen            0 rows   0 of 1 good         0 origins
+    //
+    // The iron & steel good is 26011200, agglomerated iron ores — sintered iron ore, which
+    // sectorForCn files with steel rather than with minerals — and it PRICES: on AR at
+    // route `default`, 2026-03-15, the lookup returns `found` at 0.050 tCO₂e/t and 100 t of it
+    // estimates 15.4 tCO₂e, of which 5.5 is the electricity term. (Not every one of the 28
+    // origins prices: AE carries the good but leaves the cell unpublished, and fail-closed stops
+    // the residual sheet backfilling it, so AE lands on the mismatch arm below instead.)
+    //
+    // Aluminium is genuinely zero, and so is hydrogen — the sector none of these comments ever
+    // named. Iron & steel's other 477 goods ARE unpublished, so `none` really is the answer
+    // almost everywhere in that sector, which is why the wrong sentence read as right for so
+    // long. A sector is not a good, and this control is decided per good.
+    //
+    // `kind !== 'none'` rather than `=== 'found'` IS LIVE, EXERCISED BEHAVIOUR — it is what keeps
+    // the control visible on a route MISMATCH so the user can reach the refusal that explains it.
+    // Sweeping every good × origin × form-offered route (routesFor) across the pack's 2026–2028
+    // years, one date per year, gives 520,560 reachable selectors: 9,291 `found`, 505,920 `none`
+    // and 5,349 `route-mismatch` — 1,783 in each year. Witnesses at 2026-03-15: 2523100010/AE on
+    // route (A), which the form offers and whose indirect rows publish only (B); and its sibling
+    // 2523100090/AE on (B), whose indirect rows publish only (A).
+    //
+    // NARROWING THIS TO `=== 'found'` WOULD UNDER-CHARGE. It would hide the scope control on
+    // those 5,349 selectors, so the emissions-scope the line is priced at could no longer be
+    // seen or corrected, and the electricity component would go to the user as a silent zero on
+    // a regulated filing. The whole point of `route-mismatch` being a distinct kind is that it
+    // refuses out loud rather than pricing zero (see lookupValue, which raises it for exactly
+    // that reason).
+    //
+    // THIS ARM'S DOC USED TO SAY THE OPPOSITE, AND IT WAS TRUE WHEN WRITTEN — A RULE CHANGED, NOT
+    // A MISCOUNT. It measured 233,112 selectors with ZERO mismatches and reasoned that routesFor
+    // "only offers a route the direct table publishes, and the two tables move together". That
+    // held: while the offer list was purely defaults-driven, an offered route always had a direct
+    // row, and the indirect table tracked it closely enough that no mismatch was reachable. It
+    // was falsified by later work widening routesFor to ALSO offer routes named by the
+    // free-allocation BENCHMARK table (see its Axis 1 — the Commission publishes defaults for 8
+    // routes and benchmarks for 11). That is what more than doubled the offer surface, and the
+    // routes it added are precisely the ones the indirect table need not carry. Read the old
+    // count as evidence about the old offer rule, not as a number someone got wrong.
     const has = !!pack && !!cn!.value && !!country!.value && !!route!.value
       && selectIndirectFactorFromPack(pack, {
         cn: cn!.value, country: country!.value, route: route!.value,

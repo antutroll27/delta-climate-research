@@ -83,10 +83,16 @@ export interface EstimatorInput {
 /**
  * Three outcomes, not two, and the distinction is load-bearing.
  *
- * `none` means the Commission publishes no default for this good at all — true of iron & steel
- * and aluminium on the indirect side, which must keep pricing with indirect 0. `route-mismatch`
- * means rows DO exist for this good, origin and year but none is published for the route the
- * importer declared. Those are different facts and they need different answers: the first is
+ * `none` means the Commission publishes no default for THIS GOOD at all, which must keep pricing
+ * with indirect 0. It is a per-good fact and not a per-sector one — measured on the shipped pack,
+ * the sectors with no published indirect value anywhere are aluminium (0 rows across its 24 goods)
+ * and hydrogen (0 across its 1). Iron & steel is NOT one of them, though this comment said so for
+ * a while: 26011200, agglomerated iron ore, carries 84 published indirect values over 28 origin
+ * sheets and prices live (IN 5.5, CN 6.6, DZ 3.3 tCO2e on a 100 t line). It is one good in 221, so
+ * `none` is still the answer almost everywhere in that sector — but reading a sector off it is how
+ * the claim went wrong, and asking per good is what the type is for. `route-mismatch` means rows
+ * DO exist for this good, origin and year but none is published for the route the importer
+ * declared. Those are different facts and they need different answers: the first is
  * silence, the second is a refusal. Collapsing them into `null` is exactly how the over-charge
  * this replaces stayed invisible — the lookup could not tell "nothing published" from "I picked
  * the wrong row".
@@ -99,17 +105,6 @@ export type IndirectLookup =
   | { kind: 'found'; factor: ValueRecord }
   | { kind: 'none' }
   | { kind: 'route-mismatch'; availableRoutes: string[] }
-
-const BAD_VERIFIED_REASON =
-  'A verified emissions figure must be a readable number of tCO2e per tonne of good, and cannot ' +
-  'be negative, so no estimate is shown. Reading a missing, unreadable, infinite or negative ' +
-  'figure as anything at all would put a number on a liability the figure does not support.'
-
-const BAD_MASS_REASON =
-  'Net mass must be a readable number of tonnes and cannot be negative, so no estimate is ' +
-  'shown. Reading a missing, unreadable, infinite or negative mass as anything at all would ' +
-  'scale a real tariff by a quantity nobody entered, and would decide the de minimis ' +
-  'threshold the same way.'
 
 /** The default-values corpus spells a route-independent good as 'default'; the Annex uses ''. */
 function benchmarkRoute(productionRoute: string): string {
@@ -656,7 +651,7 @@ export function estimateFromPack(pack: EstimatorPack, input: EstimatorInput): Ce
   }
   if (!parsedMass.ok) {
     return unavailableEstimate(
-      provisional, tables, BAD_MASS_REASON, `mass/${input.cn}/${input.date}`, 'BAD_MASS',
+      provisional, tables, failureMessage('BAD_MASS'), `mass/${input.cn}/${input.date}`, 'BAD_MASS',
     )
   }
   if (!date.ok) {
@@ -669,6 +664,38 @@ export function estimateFromPack(pack: EstimatorPack, input: EstimatorInput): Ce
     )
   }
   const mass = parsedMass.value
+
+  // THE PACK DECIDES WHAT IS AN OFFERED GOOD, and it decides it ONCE, above the branch, for the
+  // same reason the mass and date gates sit here: a gate inside one path leaves the other open.
+  // The verified path never consulted isOfferedGood at all, so a CN the pack does not classify
+  // still priced whenever the BENCHMARK matched on prefix — the direct figure comes from the
+  // attestation, so no default lookup ever stood in its way. 25070080 returned 190 tCO2e with a
+  // full provenance stamp. Fail-open in a fail-closed engine. CBM's own form cannot reach it
+  // (chosenCn requires an exact classification AND routesFor returns []), but the engine is a
+  // vendored artefact whose other consumer takes the CN as free text, so the gate belongs here.
+  //
+  // NOT_A_COVERED_GOOD, not NO_DIRECT_DEFAULT. The defaults path reached this same verdict
+  // through lookupValue's own isOfferedGood check and reported it as a missing default, whose
+  // message ends by telling the importer that their own verified figures do not depend on that
+  // default. That was true while this path priced; closing the fail-open made it a lie for
+  // exactly the codes this gate catches, and a refusal that sends someone to commission an audit
+  // it will then also refuse costs more than the fail-open did. One fact, one code, ONE call
+  // site — the two paths cannot drift apart because there is only one of them here.
+  //
+  // `refusalTier`, so each path reports the tier the CALLER asked for: a verified-path refusal
+  // stamped 'default+markup' would tell an auditor a line resting on the importer's own attested
+  // figure was a defaults-path line. The selector names what was actually judged — the CN's
+  // classification — so origin, route and year are absent from it, never having been consulted.
+  //
+  // lookupValue's own isOfferedGood check STAYS. It is unreachable from here now, but it also
+  // guards selectFactorFromPack and lookupIndirectFactorFromPack, which callers reach directly.
+  if (!isOfferedGood(pack, input.cn)) {
+    return unavailableEstimate(
+      { ...baseInput(pack, input, mass.toFixed(), date.day, null), tier: refusalTier },
+      tables, failureMessage('NOT_A_COVERED_GOOD'),
+      `classification/${input.cn}`, 'NOT_A_COVERED_GOOD',
+    )
+  }
 
   // An attested figure replaces the DEFAULT, not the benchmark. The DIRECT figure deliberately
   // does not depend on the published default: on this path a missing published default is not a
@@ -696,8 +723,8 @@ export function estimateFromPack(pack: EstimatorPack, input: EstimatorInput): Ce
     const direct = nonNegativeDecimal(input.verified.directTco2ePerT)
     if (!direct) {
       return unavailableEstimate(
-        verifiedStamp, tables, BAD_VERIFIED_REASON,
-        `verified/${input.cn}/directTco2ePerT`, 'BAD_MASS',
+        verifiedStamp, tables, failureMessage('BAD_VERIFIED'),
+        `verified/${input.cn}/directTco2ePerT`, 'BAD_VERIFIED',
       )
     }
 
@@ -722,8 +749,8 @@ export function estimateFromPack(pack: EstimatorPack, input: EstimatorInput): Ce
         const indirect = nonNegativeDecimal(attested)
         if (!indirect) {
           return unavailableEstimate(
-            verifiedStamp, tables, BAD_VERIFIED_REASON,
-            `verified/${input.cn}/indirectTco2ePerT`, 'BAD_MASS',
+            verifiedStamp, tables, failureMessage('BAD_VERIFIED'),
+            `verified/${input.cn}/indirectTco2ePerT`, 'BAD_VERIFIED',
           )
         }
         indirectTco2e = indirect.mul(mass).toFixed()
@@ -744,9 +771,11 @@ export function estimateFromPack(pack: EstimatorPack, input: EstimatorInput): Ce
         if (fallback.kind === 'priced') {
           indirectTco2e = fallback.indirectTco2e
           // Stamped ONLY where a default actually stood in. `none` means the Commission publishes
-          // no indirect default for this good at all (iron & steel, aluminium), so zero is the
-          // published answer rather than a substitution — claiming a default was applied there
-          // would tell an auditor to go looking for one that does not exist.
+          // no indirect default for THIS GOOD at all, so zero is the published answer rather than
+          // a substitution — claiming a default was applied there would tell an auditor to go
+          // looking for one that does not exist. Measured on the shipped pack, the sectors with no
+          // published indirect value anywhere are aluminium and hydrogen; iron & steel is not one,
+          // because 26011200 carries 84 of them and reaches this branch priced.
           tier = 'verified-direct+default-indirect'
           // Same gate, one question further: WHOSE default stood in. The tier says a substitution
           // happened; this says the substituted value is a world average rather than the origin's
