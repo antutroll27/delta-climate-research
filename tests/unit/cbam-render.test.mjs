@@ -3142,8 +3142,10 @@ test('the indirect lookup separates "publishes none" from "publishes one" — th
   // sector, fails it the same way.
   const sel = (over) => ({ massT: '1', date: '2026-03-15', ...over });
 
-  // Iron & steel and aluminium are charged direct-only in the definitive period — the Commission
-  // publishes no indirect row for them at all. `none` is what keeps the control off those goods.
+  // These two goods publish no indirect row at all, and `none` is what keeps the control off
+  // them. Aluminium is direct-only as a SECTOR; iron & steel is not — 26011200 publishes 84
+  // indirect values across 28 origins — but 477 of its 478 goods are unpublished, 72083800
+  // among them. Read these as per-good facts, which is the only level the lookup works at.
   //
   // EVERY SELECTOR HERE IS ONE THE FORM CAN ACTUALLY PRODUCE: each good is listed in
   // pack.classifications and the route is one routesFor() publishes for that pairing, so these
@@ -3153,7 +3155,7 @@ test('the indirect lookup separates "publishes none" from "publishes one" — th
   // route at all, so syncScope's own `!!route.value` has already failed. It would look like an
   // assertion about aluminium while testing something else entirely.
   assert.equal(selectIndirectFactorFromPack(pack, sel({
-    cn: '72083800', country: 'IN', route: '(C)' })).kind, 'none', 'iron & steel publishes none');
+    cn: '72083800', country: 'IN', route: '(C)' })).kind, 'none', 'this steel good publishes none');
   assert.equal(selectIndirectFactorFromPack(pack, sel({
     cn: '76011010', country: 'MZ', route: '(K)' })).kind, 'none', 'aluminium publishes none');
 
@@ -3162,14 +3164,21 @@ test('the indirect lookup separates "publishes none" from "publishes one" — th
   assert.equal(selectIndirectFactorFromPack(pack, sel({
     cn: '2523100090', country: 'DZ', route: '(A)' })).kind, 'found', 'DZ cement clinker publishes one');
 
-  // The third arm, `route-mismatch`, is deliberately absent HERE: it is unreachable from the
-  // form on this pack — 0 of the 71,784 (good, origin, route, year) selectors routesFor can
-  // offer produce it, re-measured on this tree (it was 0 of 233,112 before the residual
-  // fallthrough closed: the space shrank, the zero did not move) — so a syncScope-shaped test
-  // claiming to exercise
-  // it would be fiction. It is not untested: the route-electricity test below reaches it
-  // directly, by asking a good for a route the corpus does not publish electricity at, which is
-  // the only way in.
+  // THE THIRD ARM IS REACHABLE FROM THE FORM, and this comment used to say it was not. It
+  // claimed 0 of 71,784 form-offered (good, origin, route, year) selectors produced
+  // `route-mismatch` (and 0 of 233,112 before that). Re-measured on this tree: 5,349 of 520,560
+  // do — 1,783 per year across 2026–2028. The old counts were true for the OFFER RULE OF THEIR
+  // DAY; routesFor was later widened to offer routes named by the free-allocation benchmark
+  // table as well as the defaults table, and those are exactly the routes the indirect table
+  // need not carry. So the selector below is one a user can reach by picking route (A) from the
+  // dropdown, and `kind !== 'none'` in syncScope is live behaviour, not futureproofing.
+  const mismatch = selectIndirectFactorFromPack(pack, sel({
+    cn: '2523100010', country: 'AE', route: '(A)' }));
+  assert.ok(routesFor(pack, '2523100010', 'AE', 2026).includes('(A)'),
+    'the form must actually offer route (A) here, or this is not a reachable state');
+  assert.equal(mismatch.kind, 'route-mismatch',
+    'AE white clinker publishes electricity at (B) only — (A) must refuse, not price zero');
+  assert.deepEqual(mismatch.availableRoutes, ['(B)'], 'and it must name the route it does publish');
 });
 
 /* ── a mass that cannot become a figure is refused, not priced ──────────────── */

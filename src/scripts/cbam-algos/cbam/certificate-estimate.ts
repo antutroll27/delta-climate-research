@@ -39,8 +39,11 @@ import type { FreeAllocationTables } from './types'
  * included — stood in for the half they did not attest. Spelled out rather than 'mixed' because
  * the tier lands verbatim in the export an auditor reads, where which half came from where is the
  * whole question. Stamped only when a default actually stood in: a good for which the Commission
- * publishes no indirect default at all (iron & steel, aluminium) prices that component at zero
- * because zero is the published answer, and stays 'actual-verified'.
+ * publishes no indirect default at all prices that component at zero because zero is the published
+ * answer, and stays 'actual-verified'. That is a fact about the GOOD, not its sector — measured on
+ * the shipped pack, aluminium and hydrogen publish no indirect value anywhere, while iron & steel
+ * does (26011200, 84 values over 28 origins), so a sintered-iron-ore line reaching here is stamped
+ * 'verified-direct+default-indirect' like any other.
  */
 export type DataTier = 'actual-verified' | 'default+markup' | 'verified-direct+default-indirect'
 
@@ -129,8 +132,10 @@ export interface ProvenanceStamp {
 
 export type EstimateFailureCode =
   | 'BAD_MASS'
+  | 'BAD_VERIFIED'
   | 'BAD_DATE'
   | 'INVALID_PACK'
+  | 'NOT_A_COVERED_GOOD'
   | 'NO_DIRECT_DEFAULT'
   | 'NO_INDIRECT_ROUTE'
   | 'NO_BENCHMARK'
@@ -425,10 +430,79 @@ const AMBIGUOUS_REASON =
   'The published rules give more than one value for this good, so no figure is shown until ' +
   'the conflict is resolved.'
 
+/**
+ * The importer's OWN attested figure is unreadable. Distinct from BAD_MASS: that names a tonnage
+ * nobody entered, this names an attestation that cannot be read, and the two were sharing a code.
+ *
+ * This sentence used to live in estimate-from-pack.ts as BAD_VERIFIED_REASON, which both call
+ * sites passed as `reason`. Now that the code exists, the constant moved here and the twin is
+ * deleted, so the registry is the single place the wording lives.
+ */
+const BAD_VERIFIED_MESSAGE =
+  'A verified emissions figure must be a readable number of tCO2e per tonne of good, and cannot '
+  + 'be negative, so no estimate is shown. Reading a missing, unreadable, infinite or negative '
+  + 'figure as anything at all would put a number on a liability the figure does not support.'
+
+/**
+ * The net mass is missing, unreadable, infinite or negative. The LONG wording, kept byte for byte.
+ *
+ * This sentence used to live in estimate-from-pack.ts as BAD_MASS_REASON, and the registry held a
+ * second, shorter one under the same code — the last of the twin-constant pairs, and the same
+ * defect BAD_VERIFIED_MESSAGE above was moved here to fix. The estimator's call site passed the
+ * long twin as `reason`, so the long one is what every importer actually read and the registry's
+ * 'Enter a finite, non-negative mass before requesting an estimate.' reached nobody: measured,
+ * that string occurred exactly once in the repo (its own definition), no test pinned it, and the
+ * one branch that would have served it — estimateCertificates' own quantity guard below — was
+ * never entered once across the 568-test suite, because estimateFromPack validates mass before
+ * calling in. Deleting the short string and keeping the long one is what makes this code
+ * genuinely reachable rather than permanently dead.
+ */
+const BAD_MASS_MESSAGE =
+  'Net mass must be a readable number of tonnes and cannot be negative, so no estimate is '
+  + 'shown. Reading a missing, unreadable, infinite or negative mass as anything at all would '
+  + 'scale a real tariff by a quantity nobody entered, and would decide the de minimis '
+  + 'threshold the same way.'
+
 const FAILURE_MESSAGES: Record<EstimateFailureCode, string> = {
-  BAD_MASS: 'Enter a finite, non-negative mass before requesting an estimate.',
+  BAD_MASS: BAD_MASS_MESSAGE,
+  // The importer's OWN attested figure is unreadable — a different problem from an unreadable
+  // tonnage, and the two were sharing a code. The selector always said `verified/`; only this
+  // machine-readable half disagreed with it.
+  BAD_VERIFIED: BAD_VERIFIED_MESSAGE,
   BAD_DATE: BAD_DATE_REASON,
   INVALID_PACK: 'The regulatory pack contains an invalid numeric input, so no estimate is shown.',
+  // NOT the same fact as NO_DIRECT_DEFAULT, and it used to borrow that code. NO_DIRECT_DEFAULT
+  // ends by telling the importer their own verified figures do not depend on the missing default
+  // — TRUE for a covered good the Commission simply publishes no value for (measured: 2507008080
+  // on route (A) refuses on defaults and PRICES on verified), and FALSE for a code this package
+  // does not carry at all, which now refuses on both paths. Sending someone to commission an
+  // audit that cannot be used is a worse failure than the fail-open this gate closed, so the two
+  // facts get two codes.
+  //
+  // SCOPED TO THE PACKAGE, NOT TO THE REGULATION, deliberately. "Not a good covered by the
+  // Commission's CBAM rules" would be FALSE for electricity: CN 27160000 IS an Annex I good (one
+  // of the 73 — see docs/superpowers/specs/2026-07-10-cbam-eudr-data-breadth-design.md, and
+  // sector.ts maps heading 2716 to a sector), it is simply absent from this pack's 572
+  // classifications because the Commission's default-values workbook publishes no value for it.
+  // This sentence therefore says what this package can price, which is true of every code that
+  // reaches it, rather than making a claim about CBAM scope that the pack cannot support.
+  //
+  // The last clause is the ACTIONABLE half, and it is CONDITIONAL ON THE GOOD, not on the code's
+  // shape. Measured over the shipped pack, exactly three of the 570 benchmark scope codes are not
+  // themselves classifications (25070080, 25231000, 25239000) — 8-digit stems whose real listing
+  // is 10-digit TARIC. Typing the stem is the reachable mistake this refusal has to undo.
+  //
+  // It fires for those three and stays silent for everything else it catches, because its
+  // antecedent is false there: electricity and a mistyped 99999999 alike have no 10-digit listing
+  // in this package, so the sentence asks nothing of them. Conditioning on the DECLARED CODE
+  // instead ("if you declared an 8-digit code...") would not do that — 27160000 is itself 8
+  // digits, so an electricity declarant whose code is already correct would be sent to re-check
+  // it and find nothing, which is the misdirect this whole code exists to remove.
+  NOT_A_COVERED_GOOD:
+    'This package does not list this code as a good it can price, so no estimate is shown — '
+    + 'neither from published default values nor from your own verified figures. If this package '
+    + 'lists the good you meant only at its full 10-digit TARIC code, declare that 10-digit code '
+    + 'instead.',
   // THESE TWO ARE THE STRINGS THE IMPORTER READS. They used to have a twin in
   // estimate-from-pack.ts (NO_DEFAULT_REASON / NO_INDIRECT_ROUTE_REASON) which every production
   // caller passed as `reason`, so this registry was dead for both codes and a rewording here
