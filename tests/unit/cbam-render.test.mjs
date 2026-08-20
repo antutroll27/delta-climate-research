@@ -5,8 +5,8 @@ import { fileURLToPath } from 'node:url';
 
 import {
   buildPrintDocument, decorateSnapshot, inputFor, nextRoute, noRouteReason, parseVerifiedFields,
-  renderAttestation, renderDraftThreshold, renderLineCard, renderResult, renderThreshold,
-  renderTotals, renderYearThreshold, stampedTierOf, verifiedInputOf,
+  priceNoteFor, renderAttestation, renderDraftThreshold, renderLineCard, renderResult,
+  renderThreshold, renderTotals, renderYearThreshold, stampedTierOf, verifiedInputOf,
 } from '../../src/scripts/cbam-algos/cbam-app.ts';
 import {
   estimateFromPack, resolveThreshold, routesFor, selectIndirectFactorFromPack,
@@ -3320,4 +3320,40 @@ test('…and a UTC timestamp still prices, which is why that guard is isInteger 
   assert.equal(stamped.scenario.costEur, '5717.19');
   // Same day in two encodings: the timestamp must not merely price, it must price IDENTICALLY.
   assert.deepEqual(stamped, estimateFromPack(pack, { ...line, date: '2026-01-01' }));
+});
+
+test('the date note fires only where the corpus carries no price row at all', () => {
+  // The predicate must ask what resolveCertificatePrice asks: is there a ROW for this quarter.
+  // Not "is it published" — 2026 Q3 and Q4 rows are status:'pending' and those dates still
+  // produce certificates, so a published-only test would warn on ordinary near-future dates.
+  // Not "is the year >= 2027" — that hardcodes today's corpus and would keep warning after the
+  // Commission publishes 2027 prices, becoming the false claim this exists to prevent.
+  assert.equal(priceNoteFor(pack, '2026-03-15'), null);
+  assert.equal(priceNoteFor(pack, '2026-08-15'), null);   // Q3: row is pending, still prices
+  assert.equal(priceNoteFor(pack, '2026-12-31'), null);   // Q4: same
+  assert.match(priceNoteFor(pack, '2027-01-01'), /2027 Q1/);
+  assert.match(priceNoteFor(pack, '2028-12-31'), /2028 Q4/);
+});
+
+test('the date note says what IS published, not that the year is unsupported', () => {
+  // The Commission HAS published the goods, routes and benchmarks for 2027/28. Saying "2027 is
+  // not covered" would be false, and false refusals are the defect class this calculator has
+  // spent weeks removing. Asserted as a property so a reword cannot quietly drop it.
+  const note = priceNoteFor(pack, '2027-03-15');
+  assert.match(note, /goods, routes and benchmarks are published/i);
+  assert.doesNotMatch(note, /not covered|unsupported|not supported/i);
+});
+
+test('an unreadable date produces no price note — that is a different problem', () => {
+  // quarterOf THROWS REGULATION_NOT_FOUND (selector quarter/<date>) for anything it cannot
+  // parse: '', 'not-a-date', and '2027-1-15' (rejected on length — a single-digit month once
+  // produced the string '2027-QNaN', a bug fixed and documented in resolve-fa.ts).
+  for (const bad of ['', 'not-a-date', '2027-1-15']) {
+    assert.equal(priceNoteFor(pack, bad), null);
+  }
+});
+
+test('a full UTC timestamp resolves to its day, not to nothing', () => {
+  // quarterOf accepts both shapes; callers pass '2026-03-15T00:00:00.000Z' as well as a bare day.
+  assert.equal(priceNoteFor(pack, '2026-03-15T00:00:00.000Z'), null);
 });

@@ -31,6 +31,7 @@ import {
 import { loadEstimatorPack, type PackIntegrity } from './estimator/load-pack.ts';
 import type { LoadedEstimatorPack } from './estimator/pack-v2.ts';
 import type { CertificateEstimate, DataTier } from './cbam/certificate-estimate.ts';
+import { quarterOf } from './cbam/resolve-fa.ts';
 import {
   csvRows, lineFingerprint, packSnapshotHash, sumTotals, thresholdByYear, toCsv, yearOf,
   type Line, type Totals, type YearThreshold,
@@ -1427,6 +1428,35 @@ export function noRouteReason(pack: EstimatorPack, year: number, cn: string): st
     return `no value is published at ${cn} — the Commission publishes at ${orList(deeper)}`;
   }
   return 'no route published for this pairing';
+}
+
+/**
+ * The sentence to show beside the import date, or null when there is nothing to say.
+ *
+ * ASKS THE ENGINE'S OWN QUESTION. resolveCertificatePrice (cbam/resolve-fa.ts) throws
+ * REGULATION_NOT_FOUND only when NO row matches the quarter; a row with status 'pending' returns
+ * { status: 'pending' } and pricing continues — which is why 2026 Q3 and Q4 still produce
+ * certificates, with the euro figure withheld and a note naming the quarter. So the test here is
+ * row EXISTENCE. Two other predicates were drafted and measurement killed both: 'is the price
+ * published' (would warn on 2026 Q3/Q4, which work) and 'is the year >= 2027' (hardcodes today's
+ * corpus and would keep warning after the Commission publishes 2027 prices — the exact class of
+ * false claim this warning exists to prevent).
+ *
+ * Silent on an unreadable date: quarterOf throws for '', 'not-a-date' and '2027-1-15', and
+ * asserting anything about a certificate price for a date nobody can read would state something
+ * we do not know. The date field has its own handling for that.
+ *
+ * Naming what IS published is not decoration. The Commission has published the goods, the
+ * production routes and the free-allocation benchmarks for 2027 and 2028; only the quarterly
+ * price is missing. "2027 is not covered" would be false.
+ */
+export function priceNoteFor(pack: EstimatorPack, date: string): string | null {
+  let quarter: string;
+  try { quarter = quarterOf(date); } catch { return null; }
+  if (pack.prices.some((row) => row.quarter === quarter)) return null;
+  const pretty = quarter.replace('-', ' ');
+  return `No certificate price is published for ${pretty}, so no figure can be produced for `
+    + 'this date. The goods, routes and benchmarks are published — only the price is missing.';
 }
 
 /**
