@@ -5,8 +5,8 @@ import { fileURLToPath } from 'node:url';
 
 import {
   buildPrintDocument, decorateSnapshot, inputFor, nextRoute, noRouteReason, parseVerifiedFields,
-  renderAttestation, renderDraftThreshold, renderLineCard, renderResult, renderThreshold,
-  renderTotals, renderYearThreshold, stampedTierOf, verifiedInputOf,
+  priceNoteFor, renderAttestation, renderDraftThreshold, renderLineCard, renderResult,
+  renderThreshold, renderTotals, renderYearThreshold, stampedTierOf, verifiedInputOf,
 } from '../../src/scripts/cbam-algos/cbam-app.ts';
 import {
   estimateFromPack, resolveThreshold, routesFor, selectIndirectFactorFromPack,
@@ -159,10 +159,13 @@ const BANNER_71 =
   '<div class="cb-banner" role="note"> '
   + 'Prototype estimator · Commission default values or your own verified figures · '
   + 'decision-support, not a declaration. Computed in your browser from the published rules, '
-  + 'and never sent anywhere. For a 2026 import no final figure exists — the cross-sectoral '
-  + 'correction factor is unpublished — so any number below is a labelled what-if. This is not '
-  + 'a filing, not validated by the EU CBAM Registry, and not a statement of monetary '
-  + 'liability. '
+  + 'and never sent anywhere. This tool prices 2026 imports, and shows a cost only for the '
+  + '2026 quarters the Commission has priced. No certificate price is published for any later '
+  + 'year, so a 2027 or 2028 import shows no figure even though its goods, routes and '
+  + 'benchmarks are published. For a 2026 import no final figure exists either — the '
+  + 'cross-sectoral correction factor is unpublished — so any number below is a labelled '
+  + 'what-if. This is not a filing, not validated by the EU CBAM Registry, and not a statement '
+  + 'of monetary liability. '
   + '</div>';
 
 /* ── §8 checklist: the engine still produces the SaaS's figures ─────────────── */
@@ -691,6 +694,15 @@ test('NON-NEGOTIABLE 1 — the banner names both tiers, and concedes everything 
     'the banner must still promise the entered line leaves nobody\'s browser');
   assert.ok(prose.includes('cross-sectoral correction factor is unpublished'),
     'the banner must still say the CSCF is unpublished — that is what makes every figure a what-if');
+
+  // The year ceiling, named on its own for the same reason the concessions above are. MEASURED
+  // against the shipped pack: `prices` carries 2026 Q1–Q4 and nothing else, so a 2027 or 2028
+  // line refuses with NO_CERTIFICATE_PRICE while its defaults (reportingYear 2027 and 2028) and
+  // benchmarks resolve fine. 'For a 2026 import' alone read as an EXAMPLE year, implying the
+  // others priced differently rather than not at all, and the page said this nowhere else.
+  assert.ok(prose.includes('No certificate price is published for any later year'),
+    'the banner must state the year ceiling — 2027 and 2028 do not price at all, and a visitor '
+    + 'can learn that nowhere else on the page');
 
   // EXACT pins, for the reason the constants' doc comment gives: every phrase assertion above
   // survives a paraphrase that keeps the phrase and appends a contradicting reassurance to the
@@ -3320,4 +3332,40 @@ test('…and a UTC timestamp still prices, which is why that guard is isInteger 
   assert.equal(stamped.scenario.costEur, '5717.19');
   // Same day in two encodings: the timestamp must not merely price, it must price IDENTICALLY.
   assert.deepEqual(stamped, estimateFromPack(pack, { ...line, date: '2026-01-01' }));
+});
+
+test('the date note fires only where the corpus carries no price row at all', () => {
+  // The predicate must ask what resolveCertificatePrice asks: is there a ROW for this quarter.
+  // Not "is it published" — 2026 Q3 and Q4 rows are status:'pending' and those dates still
+  // produce certificates, so a published-only test would warn on ordinary near-future dates.
+  // Not "is the year >= 2027" — that hardcodes today's corpus and would keep warning after the
+  // Commission publishes 2027 prices, becoming the false claim this exists to prevent.
+  assert.equal(priceNoteFor(pack, '2026-03-15'), null);
+  assert.equal(priceNoteFor(pack, '2026-08-15'), null);   // Q3: row is pending, still prices
+  assert.equal(priceNoteFor(pack, '2026-12-31'), null);   // Q4: same
+  assert.match(priceNoteFor(pack, '2027-01-01'), /2027 Q1/);
+  assert.match(priceNoteFor(pack, '2028-12-31'), /2028 Q4/);
+});
+
+test('the date note says what IS published, not that the year is unsupported', () => {
+  // The Commission HAS published the goods, routes and benchmarks for 2027/28. Saying "2027 is
+  // not covered" would be false, and false refusals are the defect class this calculator has
+  // spent weeks removing. Asserted as a property so a reword cannot quietly drop it.
+  const note = priceNoteFor(pack, '2027-03-15');
+  assert.match(note, /goods, routes and benchmarks are published/i);
+  assert.doesNotMatch(note, /not covered|unsupported|not supported/i);
+});
+
+test('an unreadable date produces no price note — that is a different problem', () => {
+  // quarterOf THROWS REGULATION_NOT_FOUND (selector quarter/<date>) for anything it cannot
+  // parse: '', 'not-a-date', and '2027-1-15' (rejected on length — a single-digit month once
+  // produced the string '2027-QNaN', a bug fixed and documented in resolve-fa.ts).
+  for (const bad of ['', 'not-a-date', '2027-1-15']) {
+    assert.equal(priceNoteFor(pack, bad), null);
+  }
+});
+
+test('a full UTC timestamp resolves to its day, not to nothing', () => {
+  // quarterOf accepts both shapes; callers pass '2026-03-15T00:00:00.000Z' as well as a bare day.
+  assert.equal(priceNoteFor(pack, '2026-03-15T00:00:00.000Z'), null);
 });

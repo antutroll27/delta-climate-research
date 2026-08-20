@@ -507,6 +507,55 @@ test.describe('multi-line CBAM estimate — the single-line threshold statement'
 });
 
 test.describe('multi-line CBAM estimate — an import year the corpus does not cover', () => {
+  test('a 2027 date warns at the field, before any other input, and blocks nothing', async ({ page }) => {
+    // The defect this closes was a FUNNEL, not a missing disclosure. At 2027 every control worked
+    // — the good was offered, routes populated, mass and date accepted input — so the user built
+    // the whole line, clicked Add, and only then learned the year can never be priced. The
+    // refusal was always accurate; it just arrived after all the work.
+    await page.goto('/cbam/cbam-calculator/');
+    await page.fill('#cbDate', '2027-03-15');
+    // fill() dispatches only `input`; #cbDate's handler listens on `change`, as this file's own
+    // setLine helper does for #cbCn for the same reason.
+    await page.dispatchEvent('#cbDate', 'change');
+    // No other field has been touched — that is the whole point.
+    await expect(page.locator('#cbDateNote')).toContainText('2027 Q1');
+    await expect(page.locator('#cbDateNote')).toContainText('goods, routes and benchmarks are published');
+
+    // And it clears when the date returns to a quarter the corpus can price.
+    await page.fill('#cbDate', '2026-03-15');
+    await page.dispatchEvent('#cbDate', 'change');
+    await expect(page.locator('#cbDateNote')).toHaveText('');
+  });
+
+  test('2027 warns but does not block — the route control stays usable', async ({ page }) => {
+    // Asserted with a good SELECTED, because #cbRoute is disabled on a bare page until a CN is
+    // chosen — that initial state has nothing to do with the year, and asserting it alongside
+    // "before any other input" tested the wrong thing at the wrong moment.
+    //
+    // 2029 disables this control because no rules exist at all. 2027 has published goods, routes
+    // and benchmarks and lacks only a price, so blocking it would assert something false.
+    await page.goto('/cbam/cbam-calculator/');
+    await page.fill('#cbCn', '2523100090');
+    await page.dispatchEvent('#cbCn', 'change');
+    await page.fill('#cbDate', '2027-03-15');
+    await page.dispatchEvent('#cbDate', 'change');
+    await expect(page.locator('#cbCountry option[value="DZ"]')).toBeAttached();
+    await page.selectOption('#cbCountry', 'DZ');
+    await expect(page.locator('#cbDateNote')).toContainText('2027 Q1');
+    await expect(page.locator('#cbRoute')).toBeEnabled();
+  });
+
+  test('a 2026 quarter with an unpublished price does NOT warn — it prices', async ({ page }) => {
+    // 2026 Q3's price row is status:'pending', and a pending row still prices: the line yields
+    // certificates with the euro figure withheld and a per-line note naming the quarter. Warning
+    // here would be a false claim on an ordinary near-future date, which is the exact failure
+    // the row-existence predicate was chosen to avoid.
+    await page.goto('/cbam/cbam-calculator/');
+    await page.fill('#cbDate', '2026-08-15');
+    await page.dispatchEvent('#cbDate', 'change');
+    await expect(page.locator('#cbDateNote')).toHaveText('');
+  });
+
   test('the route control names the year, not the good and origin', async ({ page }) => {
     // WHAT ACTUALLY HAPPENS ON THIS PAGE FOR AN OUT-OF-CORPUS YEAR, measured rather than
     // reasoned: the engine's `default/<cn>/<origin>/<route>/<year>` refusal is NOT reachable

@@ -31,6 +31,7 @@ import {
 import { loadEstimatorPack, type PackIntegrity } from './estimator/load-pack.ts';
 import type { LoadedEstimatorPack } from './estimator/pack-v2.ts';
 import type { CertificateEstimate, DataTier } from './cbam/certificate-estimate.ts';
+import { quarterOf } from './cbam/resolve-fa.ts';
 import {
   csvRows, lineFingerprint, packSnapshotHash, sumTotals, thresholdByYear, toCsv, yearOf,
   type Line, type Totals, type YearThreshold,
@@ -1430,6 +1431,35 @@ export function noRouteReason(pack: EstimatorPack, year: number, cn: string): st
 }
 
 /**
+ * The sentence to show beside the import date, or null when there is nothing to say.
+ *
+ * ASKS THE ENGINE'S OWN QUESTION. resolveCertificatePrice (cbam/resolve-fa.ts) throws
+ * REGULATION_NOT_FOUND only when NO row matches the quarter; a row with status 'pending' returns
+ * { status: 'pending' } and pricing continues — which is why 2026 Q3 and Q4 still produce
+ * certificates, with the euro figure withheld and a note naming the quarter. So the test here is
+ * row EXISTENCE. Two other predicates were drafted and measurement killed both: 'is the price
+ * published' (would warn on 2026 Q3/Q4, which work) and 'is the year >= 2027' (hardcodes today's
+ * corpus and would keep warning after the Commission publishes 2027 prices — the exact class of
+ * false claim this warning exists to prevent).
+ *
+ * Silent on an unreadable date: quarterOf throws for '', 'not-a-date' and '2027-1-15', and
+ * asserting anything about a certificate price for a date nobody can read would state something
+ * we do not know. The date field has its own handling for that.
+ *
+ * Naming what IS published is not decoration. The Commission has published the goods, the
+ * production routes and the free-allocation benchmarks for 2027 and 2028; only the quarterly
+ * price is missing. "2027 is not covered" would be false.
+ */
+export function priceNoteFor(pack: EstimatorPack, date: string): string | null {
+  let quarter: string;
+  try { quarter = quarterOf(date); } catch { return null; }
+  if (pack.prices.some((row) => row.quarter === quarter)) return null;
+  const pretty = quarter.replace('-', ' ');
+  return `No certificate price is published for ${pretty}, so no figure can be produced for `
+    + 'this date. The goods, routes and benchmarks are published — only the price is missing.';
+}
+
+/**
  * THE ONE place that stamps the real pack snapshot onto an estimate, replacing the vendored
  * engine's literal `'browser-prototype'` placeholder. Every result `initCbam` renders — the
  * single-line preview (`run()`) AND every multi-line estimate (`estimateLine()`) — must pass
@@ -1767,6 +1797,7 @@ export function initCbam(): void {
   const cn = $<HTMLInputElement>('cbCn'), country = $<HTMLSelectElement>('cbCountry');
   const route = $<HTMLSelectElement>('cbRoute'), mass = $<HTMLInputElement>('cbMass');
   const date = $<HTMLInputElement>('cbDate'), out = $('cbOut'), status = $('cbStatus');
+  const dateNote = $('cbDateNote');
   const list = $<HTMLDataListElement>('cbCnList'), prov = $('cbProv');
   const scope = $<HTMLSelectElement>('cbScope'), scopeRow = $('cbScopeRow');
   const tier = $<HTMLSelectElement>('cbTier'), verifiedRow = $('cbVerifiedRow');
@@ -2069,6 +2100,29 @@ export function initCbam(): void {
     // in Firefox a closed <select> fires `change` on each arrow step, and ↓ then ↑ would land a
     // keyboard user back where they started with their typed figure silently gone.
     if (on && !indirectOn && seeIndirect) seeIndirect.value = '';
+  }
+
+  /**
+   * Shows priceNoteFor's sentence beside the import date, or clears it.
+   *
+   * WHY THIS RUNS FROM onPick, ALONGSIDE THE OTHER sync* HELPERS, AND NOT FROM onAdd. The fact
+   * becomes knowable the moment the date changes, and that is the whole point: the good was
+   * offered, the routes populated, the mass and the date both accepted input, so the user built
+   * the entire line and only learned at the click that no figure can ever be produced for that
+   * year. The refusal onAdd renders is accurate; it arrives after the work. This is a funnel
+   * problem, not a missing disclosure, so the sentence has to land at the control that causes it.
+   *
+   * IT BLOCKS NOTHING. 2027 and 2028 publish goods, routes and benchmarks — only the quarterly
+   * certificate price is missing — so syncRoutes still populates and #cbAdd stays live. Disabling
+   * a control the corpus actually covers would state something false about the corpus.
+   *
+   * SILENT WITHOUT A PACK. `pack` is what holds the price rows, so before it resolves there is no
+   * question to ask; writing '' rather than returning early also clears a note left over from a
+   * date that DID warn, which a bare `if (!pack) return` would strand on screen.
+   */
+  function syncDateNote(): void {
+    if (!dateNote) return;
+    dateNote.textContent = pack ? (priceNoteFor(pack, date!.value) ?? '') : '';
   }
 
   /**
@@ -2760,7 +2814,7 @@ export function initCbam(): void {
   // against the PREVIOUS good's scope row for one turn — showing an indirect input for a good
   // with no indirect side, or hiding (and therefore clearing) one the user is entitled to.
   const onPick = async () => {
-    if (await ensurePack()) { syncRoutes(); syncScope(); syncVerifiedRows(); refresh(); }
+    if (await ensurePack()) { syncRoutes(); syncScope(); syncVerifiedRows(); syncDateNote(); refresh(); }
   };
   route.addEventListener('change', () => { syncScope(); syncVerifiedRows(); refresh(); });
   scope?.addEventListener('change', () => { syncVerifiedRows(); refresh(); });
@@ -2799,6 +2853,11 @@ export function initCbam(): void {
   // invisible fields feeding a verified line. This reconciles the panel with whatever the browser
   // restored before any of it can reach an estimate.
   syncVerifiedRows();
+  // Same restore case, same reason: a browser that repopulates #cbDate across a reload can bring
+  // back a date this closure has never seen a `change` for. It writes '' on a plain first load —
+  // `pack` is still null there, and the note asks a question only the pack can answer — so the
+  // sentence itself first appears on the next onPick, which is the first moment it is knowable.
+  syncDateNote();
   add?.addEventListener('click', () => { void onAdd(); });
   csvBtn?.addEventListener('click', onCsv);
   docBtn?.addEventListener('click', onDoc);
