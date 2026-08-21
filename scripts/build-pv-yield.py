@@ -262,6 +262,32 @@ def main() -> None:
         }, fh, indent=2)
     print(f"\n  written to {os.path.relpath(out, ROOT)}")
 
+    # A SECOND, SLIMMER COPY FOR THE BROWSER. data/calibration/ is not web-served, so
+    # the card cannot read the file above; and it should not, since that file carries
+    # provenance, assumptions and intervals the renderer has no use for. Three parallel
+    # arrays, index-aligned to the ward file exactly as load_ward() now enforces.
+    #
+    # Rounded at the point of writing rather than at the point of display: kWp to 2 dp
+    # and kWh to the nearest unit are already finer than a screening estimate can
+    # justify, and rounding here keeps the payload honest about its own resolution
+    # instead of shipping fifteen digits the method cannot support.
+    web = os.path.join(ROOT, "public", "heat-map", "data", f"pv-{args.ward}.json")
+    with open(web, "w") as fh:
+        json.dump({
+            "ward": args.ward,
+            "kwp": [round(float(v), 2) for v in kwp],
+            "kwh": [int(round(float(v))) for v in kwh],
+            "loss": [round(float(v), 3) for v in loss],
+            # Carried so the card can never present a screening number as a firm one,
+            # and so a stale artifact is visible rather than silently assumed current.
+            "specific_yield": round(y, 1),
+            "packing_factor": PACKING_FACTOR,
+            "basis": "screening estimate - NASA POWER irradiance, Mumbai packing factor, "
+                     "no site uncertainty model, not bankable",
+        }, fh, separators=(",", ":"))
+    kb = os.path.getsize(web) / 1024
+    print(f"  browser copy         : {os.path.relpath(web, ROOT)}  ({kb:.0f} KB)")
+
 
 if __name__ == "__main__":
     main()
