@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Per-building rooftop PV yield for a Kolkata ward -> data/calibration/pv-yield-<ward>.json
 
-    python3 scripts/build-pv-yield.py
+    python3 scripts/build-pv-yield.py --ward ballygunge
     python3 scripts/build-pv-yield.py --check    # re-derive and assert, no write
 
 SCREENING, NOT BANKABLE, AND THE DISTINCTION IS NOT COSMETIC. A bankable yield needs a
@@ -76,6 +76,18 @@ def out_path(ward: str) -> str:
 #:
 #: EVERY kWh BELOW SCALES LINEARLY WITH THIS. Treat it as the dominant uncertainty.
 PACKING_FACTOR = 0.28
+#: The SAME study's full range. Kept as a pair rather than a note, because the packing
+#: factor is the single largest uncertainty in every capacity figure we publish and it
+#: enters LINEARLY — so the honest output is an interval, not a point with a caveat
+#: attached in prose. Adopting 0.28 means our headline is the FLOOR of the published
+#: range, not its centre: quoting it to a DISCOM understates the opportunity by up to
+#: 43%, which is the safe direction to be wrong in, but only if we say so.
+#:
+#: NOTE what this interval is NOT. It is the spread of one Mumbai sample, so it carries
+#: no Kolkata evidence at all; a Kolkata terrace with its water tanks and stair-head
+#: rooms could fall outside it in either direction. It bounds our IMPORTED assumption,
+#: not the truth. Replacing it needs a Kolkata roof measurement, which we do not have.
+PACKING_RANGE = (0.28, 0.40)
 
 #: MNRE / PM Surya Ghar planning rule: 10 m2 of SHADOW-FREE area per kWp. Note the
 #: basis — it is defined on shadow-free area, so applying it to a gross footprint
@@ -216,6 +228,9 @@ def main() -> None:
           f"· usable {usable.sum()/1e4:.1f} ha at packing {PACKING_FACTOR}")
     print(f"  installable capacity : {kwp.sum()/1000:.2f} MWp")
     print(f"  annual generation    : {kwh.sum()/1e6:.2f} GWh/yr")
+    lo, hi = PACKING_RANGE
+    print(f"  ...at packing {lo}-{hi}  : {kwp.sum()/1000:.2f}-{kwp.sum()/1000/lo*hi:.2f} MWp, "
+          f"{kwh.sum()/1e6:.2f}-{kwh.sum()/1e6/lo*hi:.2f} GWh/yr  (we quote the floor)")
     print(f"  lost to shading      : {(kwp*y).sum()/1e6 - kwh.sum()/1e6:.2f} GWh/yr "
           f"({loss.mean()*100:.2f}% mean)")
 
