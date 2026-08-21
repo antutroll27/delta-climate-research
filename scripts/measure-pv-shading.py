@@ -239,6 +239,12 @@ def main() -> None:
             "clause_a_mean_ge_3pct": bool(clause_a),
             "clause_b_10pct_lose_5pct": bool(clause_b),
             "verdict": verdict,
+            # Per-building losses, so the yield chain can join on them. Rounded to
+            # 4 dp: the geometry does not justify more, and it keeps the artefact
+            # byte-stable across runs.
+            "per_building_loss": [round(float(x), 4) for x in loss],
+            "per_building_area_m2": [round(float(a), 1) for a in areas],
+            "per_building_height_m": [round(float(h), 1) for h in heights],
             "height_bias_note": "Heights are unvalidated with a suspected LOW bias, so shadows "
                                 "are too short and this figure UNDERSTATES shading. A PASS is "
                                 "therefore safe; a FAIL means 'not detected with heights that "
