@@ -102,6 +102,24 @@ def load_ward(ward: str) -> tuple[list[Polygon], np.ndarray]:
             continue
         polys.append(p)
         heights.append(h)
+
+    # POSITION IS THE ONLY JOIN KEY. The per-building arrays we emit are matched to
+    # buildings downstream by ARRAY INDEX — there is no id in the ward file to key on.
+    # So a single skipped footprint above would shift every later building by one and
+    # hand each of them its neighbour's solar figures: wrong numbers, on the right
+    # roofs, with nothing visibly broken to notice. That is the worst failure shape
+    # available to us, so it is refused rather than handled.
+    #
+    # Both filters are currently dead code on all three wards (3527/4702/4538 in,
+    # same out, zero dropped), which is exactly why this needs an assertion — a
+    # filter that never fires is a filter nobody will remember when Overture is
+    # refreshed. If one ever does fire, emit null for that building and carry the
+    # index; do NOT quietly compact the array.
+    if len(polys) != len(raw["b"]):
+        raise SystemExit(
+            f"{ward}: {len(raw['b']) - len(polys)} degenerate footprint(s) dropped, which would "
+            f"desync every per-building array from the ward file. Emit a null for the bad "
+            f"index instead of compacting.")
     return polys, np.asarray(heights, dtype=float)
 
 
