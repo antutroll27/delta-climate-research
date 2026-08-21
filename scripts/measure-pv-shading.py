@@ -77,11 +77,15 @@ def out_path(ward: str) -> str:
 #: Sample day per month. The 21st sits near each solstice/equinox and away from
 #: month boundaries, so twelve of them span the declination range evenly.
 SAMPLE_DAY = 21
+#: Below this sun altitude the shadow length explodes and POWER GHI is ~0 anyway.
 MIN_ALT_DEG = 5.0
 #: Above this share of the target's footprint, an "overlapping neighbour" is the same
 #: structure digitised twice, not a building next door. 10% is well clear of polygon
 #: precision noise (mean real overlap is ~0.1%) and well below a genuine annexe.
-OVERLAP_TOL = 0.10          #: below this the shadow length explodes and POWER GHI is ~0 anyway
+OVERLAP_TOL = 0.10
+#: Google writes 2.5 m where it has no confident height — a VALUE, not an absence, and
+#: also the raster minimum. Matches compute-heights.py, which is where these come from.
+FILL_M = 2.5
 
 
 def load_ward(ward: str) -> tuple[list[Polygon], np.ndarray]:
@@ -121,6 +125,30 @@ def load_ward(ward: str) -> tuple[list[Polygon], np.ndarray]:
             f"desync every per-building array from the ward file. Emit a null for the bad "
             f"index instead of compacting.")
     return polys, np.asarray(heights, dtype=float)
+
+
+def caster_heights(ward: str, stat: str, shipped: np.ndarray) -> np.ndarray:
+    """Heights used for CASTING shadows. Receivers keep the shipped ward height.
+
+    Joins the cached Earth Engine reduction by POSITION, which is safe only because
+    heights-overture.json, <ward>-footprints.json and the ward file are all written in
+    one order by the same pipeline. Verified rather than assumed: every shipped ward
+    height equals its floored cached p65 exactly, across all 12,767 buildings. That
+    equality is re-asserted below, so a reordering upstream fails loudly here instead
+    of silently pairing each building with a stranger's height.
+    """
+    if stat == "p65":
+        return shipped
+    with open(os.path.join(ROOT, "data", "geometry", "heights-overture.json")) as fh:
+        rows = json.load(fh)["wards"][ward]
+    if len(rows) != len(shipped):
+        raise SystemExit(f"{ward}: height cache has {len(rows)} rows, ward file has "
+                         f"{len(shipped)} — refusing to join by position.")
+    p65 = np.array([FILL_M if r["fill"] else max(float(r["p65"]), FILL_M) for r in rows])
+    if not np.allclose(p65, shipped, atol=1e-6):
+        raise SystemExit(f"{ward}: cached p65 does not reproduce the shipped ward "
+                         f"heights, so the cache is stale or reordered — refusing.")
+    return np.array([FILL_M if r["fill"] else max(float(r[stat]), FILL_M) for r in rows])
 
 
 def sun_positions(lat: float) -> list[tuple[float, float, float]]:
@@ -169,10 +197,39 @@ def swept(poly: Polygon, dx: float, dy: float) -> BaseGeometry:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--ward", default="ballygunge")
+    # WHICH PERCENTILE REPRESENTS A SHADOW CASTER. The shipped height is a zonal p65 of
+    # the Open Buildings raster, chosen to represent a building as ONE number. But a
+    # caster and a receiver want different numbers from the same distribution: what
+    # blocks the sun is the top of the massing, while what carries panels is the typical
+    # roof plane. Zonal statistics are known to understate towers, and understating a
+    # caster understates shading — the same direction our height bias already runs.
+    # p75 is what compute-heights.py already caches alongside p65, so this costs no
+    # Earth Engine call. Default reproduces the shipped run exactly.
+    #
+    # MEASURED, AND THE HYPOTHESIS WAS WRONG. Running p75 casters against all three
+    # wards moves mean shading by +0.01 / +0.01 / +0.04 pp and flips no verdict, on
+    # either the all-roofs or the >=3 kWp population:
+    #
+    #   ward         all footprints          >=3 kWp roofs
+    #   ballygunge   5.12 -> 5.13 % PASS     3.32 -> 3.33 % PASS
+    #   barrackpore  1.66 -> 1.67 % PASS     1.22 -> 1.23 % FAIL
+    #   baruipur     1.79 -> 1.83 % PASS     1.12 -> 1.15 % FAIL
+    #
+    # The reason is that shading is driven by the DIFFERENCE between caster and
+    # receiver, and p75 lifts casters by only 0.27-0.62 m on average (1.31 m for
+    # buildings over 15 m) against caster-receiver gaps of several metres. A third of
+    # buildings do not move at all. So the percentile choice is NOT a lever on shading,
+    # and the residual height bias — if it is real — lives in the raster, not in which
+    # quantile we take from it. Kept as an instrument so the null is re-runnable,
+    # not because it is expected to pay.
+    ap.add_argument("--caster", choices=("p65", "p75"), default="p65",
+                    help="percentile used for CASTER heights; receivers always use the "
+                         "shipped ward height (p65). p65 = no change.")
     args = ap.parse_args()
 
     lat = _types.WARDS[args.ward].centre.lat
     polys, heights = load_ward(args.ward)
+    h_cast = caster_heights(args.ward, args.caster, heights)
     n = len(polys)
     areas = np.asarray([p.area for p in polys])
     tree = STRtree(polys)
@@ -207,7 +264,7 @@ def main() -> None:
         ground: list[BaseGeometry] = []
         owner: list[int] = []
         for j in range(n):
-            L = heights[j] / t
+            L = h_cast[j] / t
             if L <= 0:
                 continue
             ground.append(swept(polys[j], ux * L, uy * L))
@@ -223,7 +280,7 @@ def main() -> None:
             shadows = []
             for gi in hits:
                 j = owner[int(gi)]
-                if j == i or heights[j] <= ht:
+                if j == i or h_cast[j] <= ht:
                     continue
                 # TWO REAL BUILDINGS CANNOT OCCUPY THE SAME GROUND, so a footprint
                 # substantially overlapping the target is a digitising artefact —
