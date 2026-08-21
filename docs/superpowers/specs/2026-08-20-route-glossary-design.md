@@ -1,6 +1,6 @@
 # Naming the production routes in the dropdown
 
-**Status:** design approved 2026-08-20.
+**Status:** design approved 2026-08-20. Revised the same day — the first version's transcription rule was too strict; see "Quote and gloss are separate layers".
 **Origin:** the co-founder found that the route control offers bare letters — `(A)`, `(C)`, `(K)` — with nothing telling the user which one is their plant.
 
 ## Why this matters more than it looks
@@ -21,31 +21,40 @@ So the definitions existed nowhere we could reach. EUR-Lex returns HTTP 202 with
 
 **IR (EU) 2025/2620, Annex, point 5.3** — *"Where more than one benchmark value is given for a specific CN code, the meaning of the indicators is as follows"*:
 
-| indicator | verbatim text |
-|---|---|
-| `(A)` | grey clinker / cement |
-| `(B)` | white clinker / cement |
-| `(C)` | Carbon Steel based on BF/BOF |
-| `(D)` | Carbon Steel based on DRI/EAF |
-| `(E)` | Carbon Steel based on Scrap/EAF |
-| `(F)` | Low alloy Steel based on BF/BOF |
-| `(G)` | Low alloy Steel based on DRI/EAF |
-| `(H)` | Low alloy Steel based on scrap/EAF |
-| `(J)` | High alloy Steel (based on EAF) |
-| `(K)` | primary Aluminium |
-| `(L)` | secondary Aluminium |
+| indicator | Commission's exact words | our label |
+|---|---|---|
+| `(A)` | grey clinker / cement | Grey cement clinker |
+| `(B)` | white clinker / cement | White cement clinker |
+| `(C)` | Carbon Steel based on BF/BOF | Carbon steel · blast furnace / basic oxygen furnace |
+| `(D)` | Carbon Steel based on DRI/EAF | Carbon steel · direct reduced iron / electric arc furnace |
+| `(E)` | Carbon Steel based on Scrap/EAF | Carbon steel · scrap / electric arc furnace |
+| `(F)` | Low alloy Steel based on BF/BOF | Low-alloy steel · blast furnace / basic oxygen furnace |
+| `(G)` | Low alloy Steel based on DRI/EAF | Low-alloy steel · direct reduced iron / electric arc furnace |
+| `(H)` | Low alloy Steel based on scrap/EAF | Low-alloy steel · scrap / electric arc furnace |
+| `(J)` | High alloy Steel (based on EAF) | High-alloy steel · electric arc furnace |
+| `(K)` | primary Aluminium | Primary aluminium |
+| `(L)` | secondary Aluminium | Secondary aluminium |
 
 **These 11 match our corpus exactly** — measured: the distinct `routeIndicator` set in the shipped pack is identical to the Annex's list, no gaps, no extras. The glossary is therefore complete and provably so, which is a stronger position than the usual "we cover most cases".
 
 The same point also defines `(1)` and `(2)` as production-year tranches — *"Value is to be used for production years 2026-27"* / *"2028-30"* — confirming that our pack's generator was right to read them as validity windows rather than routes. An earlier reading of mine called that a data defect; it is not.
 
-## Transcription rules
+## Quote and gloss are separate layers
 
-**Verbatim, including the regulation's own inconsistencies.** It writes "Carbon Steel" but "Low alloy Steel"; "Scrap/EAF" in `(E)` but "scrap/EAF" in `(H)`; "primary Aluminium" lowercase-then-capital. These are quotes, not our prose, so they are copied exactly. A test asserts the strings match the Annex character for character, hand-typed rather than imported.
+**This replaces the first version's rule, which was wrong.** That rule said: never write what the source did not write, so `BF/BOF` stays unexpanded and the Commission's inconsistent capitalisation ships as-is.
 
-**Abbreviations are expanded only where the regulation expands them.** Recitals (15) and (16) give *"blast furnace, direct reduced iron (DRI) and electric arc furnace (EAF) routes"* and *"electric arc furnace (EAF)"*. So BF, DRI and EAF are sourced.
+The principle this codebase actually needs is **never fabricate a source**. "Never write anything unsourced" is stricter, and it defeats the feature: a user who does not know what "BOF" means gets no more help from `(C) — Carbon Steel based on BF/BOF` than from `(C)`. We would have done the work and still left them guessing. Shipping *"Scrap/EAF"* beside *"scrap/EAF"* also just reads as carelessness on a customer-facing tool.
 
-**BOF is not expanded anywhere in the regulation.** The obvious expansion is well known in the industry, but writing it as though it came from the source would be exactly the fabrication this calculator refuses elsewhere. `(C)` and `(F)` therefore keep "BF/BOF" unexpanded, and if we ever gloss it, it is marked as ours.
+The risk that matters is a gloss that **misleads** someone into the wrong route — a 2.9× mistake. "Basic oxygen furnace" is not a contested reading or a judgement call; it is the expansion, and there is no plausible way to get it wrong. Normalising capitalisation misleads nobody.
+
+So the two layers stay distinct, which is what the tool already does everywhere else:
+
+- **Our label** — plain, readable, ours. Never presented as the Commission's wording.
+- **The Commission's exact words** — quoted verbatim beside it, with the citation, so the source is always one glance away.
+
+Where the regulation expands an abbreviation itself, we say so: recitals (15) and (16) give *"blast furnace, direct reduced iron (DRI) and electric arc furnace (EAF) routes"*. **BOF is not expanded anywhere in the regulation**, so its expansion is ours — correct, standard, and not attributed to the Commission.
+
+The verbatim quotes are still transcribed character for character, inconsistencies included, because they are quotes. They are pinned by test. What changed is that they are no longer forced to double as the user-facing label.
 
 ## Supporting definitions the Annex also gives
 
@@ -59,16 +68,18 @@ These matter because `(C)`/`(F)`/`(J)` turn on exactly that distinction, and a u
 
 ## The design
 
-**Data.** A new `src/scripts/cbam-route-glossary.ts`, deliberately **outside** `src/scripts/cbam-algos/`, which is vendored and hash-guarded. This is not engine logic and is not generated from a workbook, so it does not belong in the pack. A flat `Record<string, { short, full, cite }>` with 11 entries.
+**Data.** A new `src/scripts/cbam-route-glossary.ts`, deliberately **outside** `src/scripts/cbam-algos/`, which is vendored and hash-guarded. This is not engine logic and is not generated from a workbook, so it does not belong in the pack. A flat record of 11 entries, each carrying:
+
+- `label` — ours, for the option
+- `quote` — the Commission's exact words
+- `cite` — `IR (EU) 2025/2620, Annex point 5.3`
 
 Flat is safe, and measured to be: the letters are **disjoint across sectors** — cement `(A)(B)`, iron & steel `(C)`–`(H)`,`(J)`, aluminium `(K)(L)`. No letter means two things, so no sector keying is needed.
 
 **Rendering, two places doing different jobs:**
 
-- **In the option itself** — `(C) — Carbon Steel based on BF/BOF`. This is the one that matters, because it is what the user reads *while choosing*. The longest label is 30 characters, which fits an option comfortably.
-- **Below the select** — for the selected route only: the abbreviation expansions where sourced, the relevant 5.2.3 steel definition where one applies, and the citation.
-
-**Every entry carries its own source locator** in the pack's own style (`IR (EU) 2025/2620 Annex point 5.3`). A test asserts all 11 have one, so a future entry cannot be added without provenance.
+- **In the option itself** — `(C) Carbon steel · blast furnace / basic oxygen furnace`. This is the one that matters, because it is what the user reads *while choosing*. Longest label is 64 characters (`(G)`), and the control is full width in this layout, so it fits without truncation.
+- **Below the select** — for the selected route only: the verbatim quote, its citation, and the relevant 5.2.3 steel definition where one applies. This is where the provenance lives and where a user who needs to check our wording against the Commission's can do it.
 
 **A route with no entry renders bare, as today.** No placeholder, no guess. Since the 11 are measured to be exhaustive this should never fire — which is precisely why it must be tested rather than assumed.
 
@@ -76,12 +87,12 @@ Flat is safe, and measured to be: the letters are **disjoint across sectors** �
 
 - **Guessing which route the user's plant runs.** The tool names the options; it does not infer from the good or the origin.
 - **Showing each route's benchmark value beside it.** It would make the cost of the choice visible, but it invites picking the cheapest rather than the true one, and the honest input here is the plant's actual technology. Separate decision if wanted.
-- **Expanding BOF**, per the transcription rule above.
 - **The `(1)`/`(2)` tranche indicators.** They are not routes and never reach the route control.
 
 ## Testing
 
-- **All 11 strings match the Annex character for character**, hand-typed in the test, never imported from the module under test — a test that imports its expected value passes whatever that value becomes.
+- **All 11 verbatim quotes match the Annex character for character**, hand-typed in the test, never imported from the module under test — a test that imports its expected value passes whatever that value becomes.
+- **No label is presented as the Commission's wording.** Assert that the rendered option text and the quoted text are distinguishable in the markup, so a future edit cannot quietly merge the two layers.
 - **The glossary covers the corpus exactly:** every `routeIndicator` in the shipped pack has an entry, and every entry corresponds to a real indicator. Both directions, so the glossary cannot drift from the pack in either.
 - **Every entry has a non-empty citation.**
 - **The dropdown renders the label**, asserted through the real form, since the option text is what the user actually meets.
