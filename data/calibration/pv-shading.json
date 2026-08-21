@@ -1,0 +1,15 @@
+{
+  "prereg": "docs/superpowers/specs/2026-08-21-pv-shading-signtest-PREREG.md",
+  "ward": "ballygunge",
+  "buildings": 3527,
+  "sun_hours_sampled": 134,
+  "mean_loss_pct": 5.145,
+  "frac_losing_5pct": 0.283,
+  "median_loss_pct": 1.69,
+  "p90_loss_pct": 14.419,
+  "max_loss_pct": 66.605,
+  "clause_a_mean_ge_3pct": true,
+  "clause_b_10pct_lose_5pct": true,
+  "verdict": "PASS",
+  "height_bias_note": "Heights are unvalidated with a suspected LOW bias, so shadows are too short and this figure UNDERSTATES shading. A PASS is therefore safe; a FAIL means 'not detected with heights that are probably too low', not 'shading does not matter'."
+}

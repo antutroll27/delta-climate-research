@@ -1,0 +1,251 @@
+#!/usr/bin/env python3
+"""Does inter-building shading matter for Kolkata rooftop PV?
+
+    python3 scripts/measure-pv-shading.py            # ballygunge, the pre-registered ward
+    python3 scripts/measure-pv-shading.py --ward baruipur
+
+PRE-REGISTERED 2026-08-21 in docs/superpowers/specs/2026-08-21-pv-shading-signtest-PREREG.md,
+committed BEFORE this script produced a number. Do not read the decision rule from here —
+read it there, then run this.
+
+WHAT IT DECIDES. Rooftop PV without shading is area x irradiance x efficiency, which anyone
+can do in a spreadsheet. Shading-awareness is the only thing that would make ours ours, so
+if it is negligible here Path A is a commodity calculation on unvalidated heights and should
+stop. IEA-PVPS T13 reports most real projects assume 0% shading loss, so this is a genuine
+gap in practice rather than a solved problem.
+
+THE MODEL, and its two deliberate simplifications:
+  * Roofs are FLAT and at the building's stated height. We hold one height per footprint and
+    no pitch, so anything else would be invented. Defensible for Kolkata RCC terraces.
+  * A caster shades a target only where it is TALLER than the target's roof. Shadow length at
+    roof height h_t from a caster at h_c is (h_c - h_t)/tan(alt), and zero when h_c <= h_t —
+    a ten-storey tower does not shade its own twin's roof, only the bungalow beside it.
+
+THE SWEEP IS EXACT, NOT A HULL. The shadow of a translated polygon is its Minkowski sum with
+the travel segment. Taking the convex hull of {poly, translated poly} instead would fill in
+courtyards and L-shapes that are genuinely lit, inflating shading — the direction that would
+manufacture a PASS. So the swept region is built as poly u translate(poly) u one quad per
+exterior edge, which is the true swept area.
+
+WEIGHTED BY MEASURED SUN, NOT GEOMETRY. Each sampled hour carries its real NASA POWER GHI
+(local solar time, five-year mean). This matters because shading is worst at low sun and
+Kolkata's low-sun months are also its monsoon months — geometric weighting alone would
+overstate the annual loss by counting December mornings as if they were March.
+"""
+from __future__ import annotations
+
+import argparse
+import importlib.util
+import json
+import math
+import os
+import sys
+from typing import Any
+
+import numpy as np
+from shapely.geometry.base import BaseGeometry
+from shapely.geometry import Polygon
+from shapely.ops import unary_union
+from shapely.strtree import STRtree
+from shapely.affinity import translate
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.join(HERE, "..")
+sys.path.insert(0, HERE)
+import _types  # noqa: E402
+
+# THE SAME SUN THE REST OF THE LABORATORY USES. measure-shadow-signtest.solar_altaz
+# is Spencer (1971) on true solar time, matching _physics.solar_factor and sky.ts.
+# pvlib is deliberately not used here for the reason that script already records:
+# its NREL SPA wants a real timestamp and a timezone, we hold solar time, and
+# converting back would inject exactly the LST/UTC error this pipeline just spent a
+# commit eliminating. pvlib earns its place later, in the irradiance transposition.
+_spec = importlib.util.spec_from_file_location(
+    "_shadowsig", os.path.join(HERE, "measure-shadow-signtest.py"))
+assert _spec and _spec.loader
+_shadowsig = importlib.util.module_from_spec(_spec)
+sys.modules["_shadowsig"] = _shadowsig
+_spec.loader.exec_module(_shadowsig)
+solar_altaz = _shadowsig.solar_altaz
+
+SOLAR_CACHE = os.path.expanduser("~/.cache/delta-climate/power-solar-hourly.json")
+OUT = os.path.join(ROOT, "data", "calibration", "pv-shading.json")
+
+#: Sample day per month. The 21st sits near each solstice/equinox and away from
+#: month boundaries, so twelve of them span the declination range evenly.
+SAMPLE_DAY = 21
+MIN_ALT_DEG = 5.0          #: below this the shadow length explodes and POWER GHI is ~0 anyway
+
+
+def load_ward(ward: str) -> tuple[list[Polygon], np.ndarray]:
+    """Footprints in ward-local metres (x EAST, y NORTH) and their heights."""
+    with open(os.path.join(ROOT, "public", "heat-map", "data", f"{ward}.json")) as fh:
+        raw = json.load(fh)
+    polys: list[Polygon] = []
+    heights: list[float] = []
+    for rec in raw["b"]:
+        h = float(rec[0])
+        pts = [(float(rec[i]), float(rec[i + 1])) for i in range(1, len(rec) - 1, 2)]
+        if len(pts) < 3:
+            continue
+        p = Polygon(pts)
+        if not p.is_valid:
+            p = p.buffer(0)
+        if p.is_empty or p.area <= 0:
+            continue
+        polys.append(p)
+        heights.append(h)
+    return polys, np.asarray(heights, dtype=float)
+
+
+def sun_positions(lat: float) -> list[tuple[float, float, float]]:
+    """(altitude_deg, azimuth_deg, ghi_weight) for every sampled daylight hour."""
+    with open(SOLAR_CACHE) as fh:
+        cache = json.load(fh)
+    # Mean GHI per (month, day, hour) key across the five years, in LOCAL SOLAR TIME.
+    by_key: dict[str, list[float]] = {}
+    for year in cache.values():
+        for stamp, val in year["ALLSKY_SFC_SW_DWN"].items():
+            if float(val) < 0:            # POWER fill value
+                continue
+            by_key.setdefault(stamp[4:], []).append(float(val))
+
+    out: list[tuple[float, float, float]] = []
+    for month in range(1, 13):
+        doy = (__import__("datetime").date(2023, month, SAMPLE_DAY)
+               - __import__("datetime").date(2022, 12, 31)).days
+        for hour in range(24):
+            vals = by_key.get(f"{month:02d}{SAMPLE_DAY:02d}{hour:02d}")
+            if not vals:
+                continue
+            ghi = float(np.mean(vals))
+            if ghi <= 0:
+                continue
+            # POWER's hour IS local solar time — no conversion, which is the point.
+            alt, az = solar_altaz(hour + 0.5, doy, lat)
+            if alt < MIN_ALT_DEG:
+                continue
+            out.append((alt, az, ghi))
+    return out
+
+
+def swept(poly: Polygon, dx: float, dy: float) -> BaseGeometry:
+    """Exact swept region of `poly` translated by (dx, dy) — Minkowski sum with the segment."""
+    moved = translate(poly, dx, dy)
+    parts: list[Polygon] = [poly, moved]
+    ring = list(poly.exterior.coords)
+    for (ax, ay), (bx, by) in zip(ring[:-1], ring[1:]):
+        quad = Polygon([(ax, ay), (bx, by), (bx + dx, by + dy), (ax + dx, ay + dy)])
+        if quad.is_valid and quad.area > 0:
+            parts.append(quad)
+    return unary_union(parts)
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--ward", default="ballygunge")
+    args = ap.parse_args()
+
+    lat = _types.WARDS[args.ward].centre.lat
+    polys, heights = load_ward(args.ward)
+    n = len(polys)
+    areas = np.asarray([p.area for p in polys])
+    tree = STRtree(polys)
+    suns = sun_positions(lat)
+    total_w = sum(s[2] for s in suns)
+    hmax = float(heights.max())
+
+    print(f"  {args.ward}: {n} buildings · {len(suns)} sampled daylight hours "
+          f"· heights {heights.min():.0f}-{hmax:.0f} m (median {np.median(heights):.0f})", flush=True)
+
+    shaded_w = np.zeros(n)      # GHI-weighted shaded area, per building
+
+    # WHY A GROUND-SHADOW PREFILTER. The first version buffered each target by
+    # (hmax - h_t)/tan(alt) and queried the index — at 5 deg sun that radius is 914 m
+    # inside a 1400 m ward, so nearly every building became a candidate and the same
+    # spatial query ran 494,000 times. Killed after 7 minutes of full-CPU work with no
+    # end in sight.
+    #
+    # Instead: cast every building's shadow ONTO THE GROUND once per sun position and
+    # index those. A ground shadow is the LONGEST that building can throw, so anything
+    # it fails to touch cannot be shaded at any roof height — the filter is
+    # conservative and produces no false negatives. Only for the pairs it does return
+    # is the exact shadow recomputed at the target's real roof height. Same answer,
+    # O(n) sweeps per sun instead of O(n x candidates).
+    for si, (alt, az, ghi) in enumerate(suns, 1):
+        t = math.tan(math.radians(alt))
+        # Shadows run AWAY from the sun. az is clockwise from north, so the horizontal
+        # component TOWARD the sun is (sin az, cos az) in (east, north) and the shadow
+        # is its negation.
+        ux, uy = -math.sin(math.radians(az)), -math.cos(math.radians(az))
+
+        ground: list[BaseGeometry] = []
+        owner: list[int] = []
+        for j in range(n):
+            L = heights[j] / t
+            if L <= 0:
+                continue
+            ground.append(swept(polys[j], ux * L, uy * L))
+            owner.append(j)
+        if not ground:
+            continue
+        gtree = STRtree(ground)
+
+        for i in range(n):
+            ht = heights[i]
+            target = polys[i]
+            hits = gtree.query(target)
+            shadows = []
+            for gi in hits:
+                j = owner[int(gi)]
+                if j == i or heights[j] <= ht:
+                    continue
+                L = (heights[j] - ht) / t          # exact length at THIS roof height
+                sh = swept(polys[j], ux * L, uy * L)
+                if sh.intersects(target):
+                    shadows.append(sh)
+            if not shadows:
+                continue
+            inter = unary_union(shadows).intersection(target)
+            if not inter.is_empty:
+                shaded_w[i] += ghi * inter.area
+        print(f"    [{si}/{len(suns)}] alt {alt:4.1f} deg", flush=True)
+
+    loss = shaded_w / (areas * total_w)          # fraction of GHI-weighted roof-area shaded
+    mean_loss = float(loss.mean())
+    frac_over5 = float((loss >= 0.05).mean())
+
+    print(f"\n  mean annual shading loss : {mean_loss*100:.2f}%")
+    print(f"  buildings losing >= 5%   : {frac_over5*100:.1f}%")
+    print(f"  median / p90 / max loss  : {np.median(loss)*100:.2f}% / "
+          f"{np.percentile(loss,90)*100:.2f}% / {loss.max()*100:.2f}%")
+
+    clause_a = mean_loss >= 0.030
+    clause_b = frac_over5 >= 0.10
+    verdict = "PASS" if (clause_a or clause_b) else "FAIL"
+    print(f"\n  clause (a) mean >= 3.0%      : {clause_a}")
+    print(f"  clause (b) >=10% lose >=5%   : {clause_b}")
+    print(f"  PRE-REGISTERED VERDICT       : {verdict}")
+
+    with open(OUT, "w") as fh:
+        json.dump({
+            "prereg": "docs/superpowers/specs/2026-08-21-pv-shading-signtest-PREREG.md",
+            "ward": args.ward, "buildings": n, "sun_hours_sampled": len(suns),
+            "mean_loss_pct": round(mean_loss * 100, 3),
+            "frac_losing_5pct": round(frac_over5, 4),
+            "median_loss_pct": round(float(np.median(loss)) * 100, 3),
+            "p90_loss_pct": round(float(np.percentile(loss, 90)) * 100, 3),
+            "max_loss_pct": round(float(loss.max()) * 100, 3),
+            "clause_a_mean_ge_3pct": bool(clause_a),
+            "clause_b_10pct_lose_5pct": bool(clause_b),
+            "verdict": verdict,
+            "height_bias_note": "Heights are unvalidated with a suspected LOW bias, so shadows "
+                                "are too short and this figure UNDERSTATES shading. A PASS is "
+                                "therefore safe; a FAIL means 'not detected with heights that "
+                                "are probably too low', not 'shading does not matter'.",
+        }, fh, indent=2)
+    print(f"\n  written to {os.path.relpath(OUT, ROOT)}")
+
+
+if __name__ == "__main__":
+    main()
