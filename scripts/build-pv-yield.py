@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Per-building rooftop PV yield for a Kolkata ward -> data/calibration/pv-yield.json
+"""Per-building rooftop PV yield for a Kolkata ward -> data/calibration/pv-yield-<ward>.json
 
     python3 scripts/build-pv-yield.py
     python3 scripts/build-pv-yield.py --check    # re-derive and assert, no write
@@ -56,8 +56,12 @@ solar_altaz = _shadowsig.solar_altaz
 
 SOLAR_CACHE = os.path.expanduser("~/.cache/delta-climate/power-solar-hourly.json")
 MET_CACHE = os.path.expanduser("~/.cache/delta-climate/power-hourly.json")
-SHADING = os.path.join(ROOT, "data", "calibration", "pv-shading.json")
-OUT = os.path.join(ROOT, "data", "calibration", "pv-yield.json")
+def shading_path(ward: str) -> str:
+    return os.path.join(ROOT, "data", "calibration", f"pv-shading-{ward}.json")
+
+
+def out_path(ward: str) -> str:
+    return os.path.join(ROOT, "data", "calibration", f"pv-yield-{ward}.json")
 
 #: THE ASSUMED NUMBER. Fraction of gross footprint that ends up under module glass,
 #: after obstructions (overhead water tank, stairwell headroom, parapet shadow, AC
@@ -181,12 +185,12 @@ def main() -> None:
     ap.add_argument("--check", action="store_true")
     args = ap.parse_args()
 
-    with open(SHADING) as fh:
+    with open(shading_path(args.ward)) as fh:
         sh = json.load(fh)
     if sh["ward"] != args.ward:
-        sys.exit(f"  pv-shading.json is for {sh['ward']}, not {args.ward} — rerun measure-pv-shading.py")
+        sys.exit(f"  shading artefact is for {sh['ward']}, not {args.ward} — rerun measure-pv-shading.py")
     if "per_building_loss" not in sh:
-        sys.exit("  pv-shading.json has no per-building array — rerun measure-pv-shading.py")
+        sys.exit("  shading artefact has no per-building array — rerun measure-pv-shading.py")
 
     lat = _types.WARDS[args.ward].centre.lat
     y, meta = specific_yield(lat)
@@ -218,7 +222,8 @@ def main() -> None:
     if args.check:
         print("\n  --check: not written")
         return
-    with open(OUT, "w") as fh:
+    out = out_path(args.ward)
+    with open(out, "w") as fh:
         json.dump({
             "ward": args.ward, "buildings": int(len(area)),
             "basis": "SCREENING ONLY. NASA POWER publishes no per-site uncertainty, so no "
@@ -240,7 +245,7 @@ def main() -> None:
             "per_building_kwp": [round(float(v), 3) for v in kwp],
             "per_building_kwh_yr": [round(float(v), 0) for v in kwh],
         }, fh, indent=2)
-    print(f"\n  written to {os.path.relpath(OUT, ROOT)}")
+    print(f"\n  written to {os.path.relpath(out, ROOT)}")
 
 
 if __name__ == "__main__":

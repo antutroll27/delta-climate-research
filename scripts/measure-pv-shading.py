@@ -69,12 +69,19 @@ _spec.loader.exec_module(_shadowsig)
 solar_altaz = _shadowsig.solar_altaz
 
 SOLAR_CACHE = os.path.expanduser("~/.cache/delta-climate/power-solar-hourly.json")
-OUT = os.path.join(ROOT, "data", "calibration", "pv-shading.json")
+def out_path(ward: str) -> str:
+    """Per-ward, because a shared filename means the second run silently
+    overwrites the first and the yield chain then joins the wrong ward."""
+    return os.path.join(ROOT, "data", "calibration", f"pv-shading-{ward}.json")
 
 #: Sample day per month. The 21st sits near each solstice/equinox and away from
 #: month boundaries, so twelve of them span the declination range evenly.
 SAMPLE_DAY = 21
-MIN_ALT_DEG = 5.0          #: below this the shadow length explodes and POWER GHI is ~0 anyway
+MIN_ALT_DEG = 5.0
+#: Above this share of the target's footprint, an "overlapping neighbour" is the same
+#: structure digitised twice, not a building next door. 10% is well clear of polygon
+#: precision noise (mean real overlap is ~0.1%) and well below a genuine annexe.
+OVERLAP_TOL = 0.10          #: below this the shadow length explodes and POWER GHI is ~0 anyway
 
 
 def load_ward(ward: str) -> tuple[list[Polygon], np.ndarray]:
@@ -200,6 +207,21 @@ def main() -> None:
                 j = owner[int(gi)]
                 if j == i or heights[j] <= ht:
                     continue
+                # TWO REAL BUILDINGS CANNOT OCCUPY THE SAME GROUND, so a footprint
+                # substantially overlapping the target is a digitising artefact —
+                # Overture carrying one structure as two records, or a building and
+                # its annexe drawn on top of each other. Treating the taller copy as
+                # a caster shades the shorter one at every sun position: barrackpore
+                # idx 4259 (970 m2 at 7.5 m, overlapped by an 8.8 m twin) came back
+                # at exactly 100.0% loss, which is what exposed this.
+                #
+                # Measured prevalence before adding the guard: mean overlap 0.06-0.11%
+                # of area, 0.7-2.2% of buildings above 1%, and ONE building above 50%
+                # across all three wards. So this is a correctness fix for a handful of
+                # roofs, not a rescue of the headline — and it moves the number DOWN,
+                # away from flattering us.
+                if polys[j].intersection(target).area > OVERLAP_TOL * target.area:
+                    continue
                 L = (heights[j] - ht) / t          # exact length at THIS roof height
                 sh = swept(polys[j], ux * L, uy * L)
                 if sh.intersects(target):
@@ -227,7 +249,8 @@ def main() -> None:
     print(f"  clause (b) >=10% lose >=5%   : {clause_b}")
     print(f"  PRE-REGISTERED VERDICT       : {verdict}")
 
-    with open(OUT, "w") as fh:
+    out = out_path(args.ward)
+    with open(out, "w") as fh:
         json.dump({
             "prereg": "docs/superpowers/specs/2026-08-21-pv-shading-signtest-PREREG.md",
             "ward": args.ward, "buildings": n, "sun_hours_sampled": len(suns),
@@ -250,7 +273,7 @@ def main() -> None:
                                 "therefore safe; a FAIL means 'not detected with heights that "
                                 "are probably too low', not 'shading does not matter'.",
         }, fh, indent=2)
-    print(f"\n  written to {os.path.relpath(OUT, ROOT)}")
+    print(f"\n  written to {os.path.relpath(out, ROOT)}")
 
 
 if __name__ == "__main__":
