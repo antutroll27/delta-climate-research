@@ -27,6 +27,25 @@
   "system_loss": 0.129,
   "tilt_deg": 22.0,
   "azimuth_deg": 180.0,
+  "installable_ge_3kwp": {
+    "n": 1840,
+    "mean_shading_loss": 0.0332,
+    "share_losing_5pct": 0.2033
+  },
+  "totals_packing_range": {
+    "packing_factor_range": [
+      0.28,
+      0.4
+    ],
+    "capacity_mwp": [
+      17.494,
+      24.991
+    ],
+    "generation_gwh_yr": [
+      22.244,
+      31.777
+    ]
+  },
   "totals": {
     "gross_roof_ha": 62.48,
     "usable_roof_ha": 17.49,

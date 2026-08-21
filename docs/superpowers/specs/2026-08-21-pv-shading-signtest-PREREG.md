@@ -77,3 +77,53 @@ No swapping the statistic after seeing results. No dropping clause (a) to lean o
 reverse. No re-running on a different ward to find a pass — Ballygunge is chosen **in advance**
 as the densest and tallest of the three, i.e. the ward most likely to show an effect. If the
 most favourable ward fails, the others are not a rescue.
+
+---
+
+## Addendum, 2026-08-21 — post-hoc: the gate passes, but not on the roofs the scheme addresses
+
+**The pre-registered result stands as pre-registered.** Applied to all footprints, as
+written before the data was seen, all three wards pass. Nothing below changes that, and
+the rule is not being rewritten after the fact.
+
+What follows is explicitly **post-hoc** and is recorded because it is decision-relevant
+and because it weakens our claim rather than strengthening it.
+
+The pre-registration counted every footprint. Many footprints are not roofs anyone will
+put a PV system on: Ballygunge's worst-shaded building, at 66.6% loss, is **16 m² and
+2.5 m tall** — a shed supporting 0.43 kWp. Small, low buildings are systematically the
+most overshadowed, because being short and surrounded is the same condition. Counting
+them inflates every statistic we would quote.
+
+Restricting to roofs supporting **≥ 3 kWp**, roughly the smallest system PM Surya Ghar is
+promoted for:
+
+| ward | all roofs (pre-registered) | ≥3 kWp roofs (post-hoc) |
+|---|---|---|
+| ballygunge | mean 5.12% / 28.5% ≥5% — **PASS** | mean 3.32% / 20.3% ≥5% — **PASS** |
+| barrackpore | mean 1.66% / 10.4% ≥5% — **PASS** | mean 1.22% / 6.8% ≥5% — **FAIL** |
+| baruipur | mean 1.79% / 11.7% ≥5% — **PASS** | mean 1.12% / 7.1% ≥5% — **FAIL** |
+
+**Two of three wards would not have passed their own gate on the population that can
+actually host a system.** Barrackpore and Baruipur cleared the pre-registered rule on the
+second clause only (10.4% and 11.7%, against a 10% threshold), and that margin was
+carried by sheds.
+
+### What this means for the product
+
+The shading differentiator is **real in dense Ballygunge and marginal in the lower-density
+wards** — which is the correct and expected physics, not a defect: shading is a function
+of built density, and Barrackpore and Baruipur have median heights of 4.9 m and 4.5 m
+against Ballygunge's 7.0 m. A screening product that flagged the same fraction everywhere
+would be reporting noise.
+
+But it does constrain the pitch. "A quarter of roofs are materially shaded" is a
+**Ballygunge** claim, not a Kolkata one, and on installable roofs it is a fifth rather
+than a quarter. Extending it to peri-urban wards would be unsupported by our own numbers.
+
+### Not doing
+
+Re-running the gate with ≥3 kWp as the pre-registered population. Choosing a subset after
+seeing the outcome is the exact failure pre-registration exists to prevent, and the fact
+that this particular subset happens to be conservative does not make the move sound. The
+≥3 kWp figures are reported alongside the pre-registered ones, never instead of them.

@@ -252,6 +252,26 @@ def main() -> None:
                                           "EVERY yield scales linearly with this.",
                         "m2_per_kwp": M2_PER_KWP, "m2_per_kwp_source": "MNRE / PM Surya Ghar"},
             "specific_yield_kwh_kwp_yr": round(y, 1), **meta,
+            # Stratified by installable size, because the all-roofs statistics are
+            # carried by buildings nobody will ever fit a system to: the worst-shaded
+            # roof in Ballygunge is a 16 m2 shed. Short and surrounded is one condition,
+            # so small buildings are systematically the most overshadowed, and counting
+            # them inflates anything we quote. Reported ALONGSIDE the pre-registered
+            # all-roofs numbers, never instead of them — on this stratum barrackpore and
+            # baruipur do NOT clear their own gate. See the PREREG addendum.
+            "installable_ge_3kwp": {
+                "n": int((kwp >= 3.0).sum()),
+                "mean_shading_loss": round(float(loss[kwp >= 3.0].mean()), 4),
+                "share_losing_5pct": round(float((loss[kwp >= 3.0] >= 0.05).mean()), 4)},
+            # Linear in the packing factor, so the interval is exact rather than
+            # sampled — two endpoints, no bootstrap. Bounds our IMPORTED assumption,
+            # not the truth: it is one Mumbai sample's spread, with no Kolkata evidence.
+            "totals_packing_range": {
+                "packing_factor_range": list(PACKING_RANGE),
+                "capacity_mwp": [round(float(kwp.sum()) / PACKING_FACTOR * pf / 1000, 3)
+                                 for pf in PACKING_RANGE],
+                "generation_gwh_yr": [round(float(kwh.sum()) / PACKING_FACTOR * pf / 1e6, 3)
+                                      for pf in PACKING_RANGE]},
             "totals": {"gross_roof_ha": round(float(area.sum()) / 1e4, 2),
                        "usable_roof_ha": round(float(usable.sum()) / 1e4, 2),
                        "capacity_mwp": round(float(kwp.sum()) / 1000, 3),
