@@ -78,7 +78,7 @@ Flat is safe, and measured to be: the letters are **disjoint across sectors** �
 
 **Rendering, two places doing different jobs:**
 
-- **In the option itself** — `(C) Carbon steel · blast furnace / basic oxygen furnace`. This is the one that matters, because it is what the user reads *while choosing*. Longest label is 64 characters (`(G)`), and the control is full width in this layout, so it fits without truncation.
+- **In the option itself** — `(C) Carbon steel · blast furnace / basic oxygen furnace`. This is the one that matters, because it is what the user reads *while choosing*. Longest label is 60 characters (`(G)`), 64 with the indicator prefix, and the control is full width in this layout, so it fits without truncation.
 - **Below the select** — for the selected route only: the verbatim quote, its citation, and the relevant 5.2.3 steel definition where one applies. This is where the provenance lives and where a user who needs to check our wording against the Commission's can do it.
 
 **A route with no entry renders bare, as today.** No placeholder, no guess. Since the 11 are measured to be exhaustive this should never fire — which is precisely why it must be tested rather than assumed.
