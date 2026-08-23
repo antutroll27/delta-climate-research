@@ -36,6 +36,7 @@ import {
   csvRows, lineFingerprint, packSnapshotHash, sumTotals, thresholdByYear, toCsv, yearOf,
   type Line, type Totals, type YearThreshold,
 } from '../cbam-lines.ts';
+import { ROUTE_GLOSSARY } from '../cbam-route-glossary.ts';
 
 const PACK_URL = '/cbam/estimator-pack.json';
 
@@ -1796,6 +1797,7 @@ export function stampedTierOf(l: Line, price: (line: Line) => CertificateEstimat
 export function initCbam(): void {
   const cn = $<HTMLInputElement>('cbCn'), country = $<HTMLSelectElement>('cbCountry');
   const route = $<HTMLSelectElement>('cbRoute'), mass = $<HTMLInputElement>('cbMass');
+  const routeNote = $('cbRouteNote');
   const date = $<HTMLInputElement>('cbDate'), out = $('cbOut'), status = $('cbStatus');
   const dateNote = $('cbDateNote');
   const list = $<HTMLDataListElement>('cbCnList'), prov = $('cbProv');
@@ -1958,7 +1960,20 @@ export function initCbam(): void {
       route!.innerHTML = `<option value="">${esc(noRouteReason(pack, year, cn!.value))}</option>`;
       return;
     }
-    const opts = rs.map((r) => `<option value="${esc(r)}">${r === 'default' ? 'single route' : esc(r)}</option>`).join('');
+    // The indicator ALONE asks an importer to pick their plant's technology from a letter, and
+    // the choice is expensive: on 72061000, verified at 1.9 tCO2e/t, (C) and (E) differ by 2.9x
+    // the certificates — 64.42 against 187.3675 on the same 100 t line. (On the DEFAULTS tier
+    // that user sees no difference at all, because (D) and (E) are unavailable for that pairing
+    // and only (C) prices — so the ratio is quoted with its tier, not as a bare fact.)
+    //
+    // The letter stays in front, because it is what the corpus, the CSV export and the refusal
+    // selectors all speak. 'default' keeps its own label and is NOT in the glossary: it is not an
+    // Annex indicator, and it is always alone in its list (measured 53,070 of 53,070), which is
+    // what makes "single route" accurate.
+    const opts = rs.map((r) => {
+      const text = r === 'default' ? 'single route' : `${r} ${ROUTE_GLOSSARY[r]?.label ?? ''}`.trim();
+      return `<option value="${esc(r)}">${esc(text)}</option>`;
+    }).join('');
     const want = nextRoute(rs, prev);
     // want === '' means the pairing publishes several routes and the user has not
     // chosen among them. A disabled placeholder holds the selection empty, and
@@ -2123,6 +2138,16 @@ export function initCbam(): void {
   function syncDateNote(): void {
     if (!dateNote) return;
     dateNote.textContent = pack ? (priceNoteFor(pack, date!.value) ?? '') : '';
+  }
+
+  // The PROVENANCE half. The option carries our plain-English label; this carries the Commission's
+  // exact wording and where it comes from, so anyone can check one against the other. Keeping them
+  // visibly separate is the whole design: our gloss must never read as the regulation's text. BOF,
+  // in particular, is expanded nowhere in IR (EU) 2025/2620.
+  function syncRouteNote(): void {
+    if (!routeNote) return;
+    const g = ROUTE_GLOSSARY[route!.value];
+    routeNote.textContent = g ? `Commission wording: “${g.quote}” · ${g.cite}` : '';
   }
 
   /**
@@ -2813,10 +2838,17 @@ export function initCbam(): void {
   // that syncScope() has just computed, and running it first would judge the indirect field
   // against the PREVIOUS good's scope row for one turn — showing an indirect input for a good
   // with no indirect side, or hiding (and therefore clearing) one the user is entitled to.
+  // syncRouteNote() ALWAYS runs after syncRoutes(), never before, for the same class of reason:
+  // syncRoutes() WRITES `route.value` itself when a good publishes exactly one route (nextRoute
+  // auto-selects it), and a programmatic assignment fires NO `change` event — so onPick is the
+  // note's only chance to render for those goods, and only if it runs once the value is set.
+  // Ahead of syncRoutes() every single-route good would show a blank note, or the last good's.
   const onPick = async () => {
-    if (await ensurePack()) { syncRoutes(); syncScope(); syncVerifiedRows(); syncDateNote(); refresh(); }
+    if (await ensurePack()) { syncRoutes(); syncRouteNote(); syncScope(); syncVerifiedRows(); syncDateNote(); refresh(); }
   };
-  route.addEventListener('change', () => { syncScope(); syncVerifiedRows(); refresh(); });
+  // syncRoutes() is deliberately NOT on this listener — the list is already right, only the pick
+  // changed — so this is what updates the note when the user chooses among several routes.
+  route.addEventListener('change', () => { syncRouteNote(); syncScope(); syncVerifiedRows(); refresh(); });
   scope?.addEventListener('change', () => { syncVerifiedRows(); refresh(); });
   tier?.addEventListener('change', () => { syncVerifiedRows(); refresh(); });
   cn.addEventListener('change', onPick);

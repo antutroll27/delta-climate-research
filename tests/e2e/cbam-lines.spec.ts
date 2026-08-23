@@ -363,6 +363,59 @@ test.describe('multi-line CBAM estimate — exports', () => {
   });
 });
 
+test.describe('multi-line CBAM estimate — the production-route glossary', () => {
+  test('the route options name the route, not just its letter', async ({ page }) => {
+    // A letter alone asks an importer to pick their plant's technology blind, and the choice is
+    // expensive: on this good, verified at 1.9 tCO2e/t, (C) vs (E) is 2.9x the certificates —
+    // 64.42 against 187.3675 on the same 100 t line.
+    await page.goto('/cbam/cbam-calculator/');
+    await page.fill('#cbCn', '72061000');
+    await page.dispatchEvent('#cbCn', 'change');
+    await page.fill('#cbDate', '2026-03-15');
+    await expect(page.locator('#cbCountry option[value="IN"]')).toBeAttached();
+    await page.selectOption('#cbCountry', 'IN');
+    await expect(page.locator('#cbRoute option[value="(C)"]'))
+      .toHaveText('(C) Carbon steel · blast furnace / basic oxygen furnace');
+  });
+
+  test("the Commission's own wording appears beside the chosen route, and differs from our label", async ({ page }) => {
+    // THE TWO LAYERS MUST STAY VISIBLY SEPARATE. Our plain-English gloss must never read as the
+    // regulation's text — BOF is expanded nowhere in IR (EU) 2025/2620, so that expansion is ours.
+    // The final assertion is the load-bearing one: it fails the moment the note starts carrying
+    // our words instead of the Commission's.
+    await page.goto('/cbam/cbam-calculator/');
+    await page.fill('#cbCn', '72061000');
+    await page.dispatchEvent('#cbCn', 'change');
+    await page.fill('#cbDate', '2026-03-15');
+    await expect(page.locator('#cbCountry option[value="IN"]')).toBeAttached();
+    await page.selectOption('#cbCountry', 'IN');
+    // Waiting for the option before selecting is this file's own convention (see setLine): proof
+    // the pack has loaded, rather than trusting selectOption's retry to cover it.
+    await expect(page.locator('#cbRoute option[value="(C)"]')).toBeAttached();
+    await page.selectOption('#cbRoute', '(C)');
+    const note = page.locator('#cbRouteNote');
+    await expect(note).toContainText('Carbon Steel based on BF/BOF');   // the Commission's exact words
+    await expect(note).toContainText('2025/2620');
+    await expect(note).not.toContainText('basic oxygen furnace');        // ours, and it stays ours
+  });
+
+  test('a single-route good shows its provenance on the first pick', async ({ page }) => {
+    // THE ORDERING WITNESS. syncRoutes writes route.value itself when nextRoute auto-selects a
+    // good's only route, and a programmatic assignment fires NO change event — so syncRouteNote
+    // must run AFTER syncRoutes in onPick. Flipped, this good displayed the Commission's CEMENT
+    // wording beside a steel option; measured, not hypothesised.
+    await page.goto('/cbam/cbam-calculator/');
+    await page.fill('#cbCn', '73181535');
+    await page.dispatchEvent('#cbCn', 'change');
+    await page.fill('#cbDate', '2026-03-15');
+    await expect(page.locator('#cbCountry option[value="IN"]')).toBeAttached();
+    await page.selectOption('#cbCountry', 'IN');
+    await expect(page.locator('#cbRoute')).toHaveValue('(C)');
+    await expect(page.locator('#cbRouteNote')).toContainText('Carbon Steel based on BF/BOF');
+    await expect(page.locator('#cbRouteNote')).not.toContainText('clinker');
+  });
+});
+
 test.describe('multi-line CBAM estimate — the emissions-scope control', () => {
   test('#cbScopeRow follows the good: shown for a good with a published indirect default, hidden for one without', async ({ page }) => {
     // THE ONE GATE ON syncScope's OPERATOR. `selectIndirectFactorFromPack` returns a TAGGED UNION

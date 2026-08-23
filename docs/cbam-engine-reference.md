@@ -164,6 +164,11 @@ Both regulations publish the same closed legend. Anything outside it is a bug.
 | Steel — high alloy | (J) EAF | |
 | Aluminium | (K) primary | (L) secondary |
 
+This table is an abbreviated summary — it normalises the Commission's capitalisation and shortens
+the cement entries. The verbatim legend, transcribed character for character from IR (EU)
+2025/2620 Annex point 5.3, lives in `src/scripts/cbam-route-glossary.ts`; quote from there, not
+from here.
+
 ### 3.2 It is a matrix, not a list
 
 The steel letters encode two orthogonal dimensions:
