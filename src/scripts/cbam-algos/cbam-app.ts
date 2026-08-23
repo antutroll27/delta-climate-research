@@ -36,6 +36,7 @@ import {
   csvRows, lineFingerprint, packSnapshotHash, sumTotals, thresholdByYear, toCsv, yearOf,
   type Line, type Totals, type YearThreshold,
 } from '../cbam-lines.ts';
+import { ROUTE_GLOSSARY } from '../cbam-route-glossary.ts';
 
 const PACK_URL = '/cbam/estimator-pack.json';
 
@@ -1958,7 +1959,20 @@ export function initCbam(): void {
       route!.innerHTML = `<option value="">${esc(noRouteReason(pack, year, cn!.value))}</option>`;
       return;
     }
-    const opts = rs.map((r) => `<option value="${esc(r)}">${r === 'default' ? 'single route' : esc(r)}</option>`).join('');
+    // The indicator ALONE asks an importer to pick their plant's technology from a letter, and
+    // the choice is expensive: on 72061000, verified at 1.9 tCO2e/t, (C) and (E) differ by 2.9x
+    // the certificates — 64.42 against 187.3675 on the same 100 t line. (On the DEFAULTS tier
+    // that user sees no difference at all, because (D) and (E) are unavailable for that pairing
+    // and only (C) prices — so the ratio is quoted with its tier, not as a bare fact.)
+    //
+    // The letter stays in front, because it is what the corpus, the CSV export and the refusal
+    // selectors all speak. 'default' keeps its own label and is NOT in the glossary: it is not an
+    // Annex indicator, and it is always alone in its list (measured 53,070 of 53,070), which is
+    // what makes "single route" accurate.
+    const opts = rs.map((r) => {
+      const text = r === 'default' ? 'single route' : `${r} ${ROUTE_GLOSSARY[r]?.label ?? ''}`.trim();
+      return `<option value="${esc(r)}">${esc(text)}</option>`;
+    }).join('');
     const want = nextRoute(rs, prev);
     // want === '' means the pairing publishes several routes and the user has not
     // chosen among them. A disabled placeholder holds the selection empty, and

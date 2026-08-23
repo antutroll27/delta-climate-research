@@ -290,7 +290,7 @@ import type { CertificateEstimate } from '@lib/cbam/certificate-estimate'
               {{ availableRoutes.length ? 'Select route…' : 'Choose good and origin first' }}
             </option>
             <option v-for="r in availableRoutes" :key="r" :value="r">
-              {{ r === 'default' ? 'single route' : r }}
+              {{ routeText(r) }}
             </option>
           </select>
         </label>
@@ -318,8 +318,19 @@ import type { CertificateEstimate } from '@lib/cbam/certificate-estimate'
 import { computed, onMounted, ref, watch } from 'vue'
 import CertificateExposurePanel from './case/CertificateExposurePanel.vue'
 import { useEstimatorStore } from '../stores/estimator'
+import { ROUTE_GLOSSARY } from '../scripts/cbam-route-glossary'
 
 const store = useEstimatorStore()
+
+// The bare letter does not tell an importer which route is their plant's, and the choice is
+// expensive: on 72061000 at the VERIFIED tier, (C) and (E) differ by 2.9x the certificates.
+// The letter stays IN FRONT — it is what the corpus, the CSV export and the refusal selectors
+// all speak. `label` is OURS, plain English; the Commission's verbatim wording is the glossary's
+// `quote`, and the two are never presented as the same thing. 'default' is not an Annex
+// indicator, is not in the glossary, and is always alone in its list — which is what makes
+// "single route" accurate.
+const routeText = (r: string) =>
+  r === 'default' ? 'single route' : `${r} ${ROUTE_GLOSSARY[r]?.label ?? ''}`.trim()
 
 const cnQuery = ref('')
 const country = ref('')
