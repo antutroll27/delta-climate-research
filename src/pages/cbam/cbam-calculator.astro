@@ -84,6 +84,11 @@ import Footer from '../../components/layout/Footer.astro';
             <select id="cbRoute" class="cb-field cb-select" disabled>
               <option value="">Choose a good and origin first</option>
             </select>
+            <!-- THE PROVENANCE HALF, and DELIBERATELY NOT A LIVE REGION. #cbDateNote carries
+                 role="status" because it announces a fact the user could not otherwise learn;
+                 this one only restates the option that was just selected, so announcing it
+                 would read the same route back to a screen-reader user twice. -->
+            <p class="cb-hint" id="cbRouteNote"></p>
           </div>
 
           <!-- Only rendered for goods the Commission publishes an indirect default
@@ -323,6 +328,12 @@ import Footer from '../../components/layout/Footer.astro';
     margin-top: 0.45rem; font-family: var(--font-data); font-size: 0.68rem;
     line-height: 1.65; color: var(--color-ink-faint); max-width: 46ch;
   }
+  /* MANDATORY, NOT COSMETIC, AND MEASURED IN A BROWSER against the built page: an EMPTY
+     <p class="cb-hint"> still adds 7.19px to its field — the 0.45rem margin-top above, which
+     cannot self-collapse because .cb-form is display:flex and each field div is a flex item.
+     Without this rule #cbRouteNote leaves permanent dead space under the route select and the
+     field jumps 7px the first time a route is picked. Same idiom as .cb-datenote:empty. */
+  .cb-hint:empty { display: none; }
   /* The attestation tick. Static markup, so a SCOPED rule reaches it — unlike .cb-attest (the
      year-card's tick, rendered at runtime into #cbOut via innerHTML), which has to live in the
      is:global block below. Same idiom and same measurements as that one, deliberately: they are

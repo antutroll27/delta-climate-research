@@ -1797,6 +1797,7 @@ export function stampedTierOf(l: Line, price: (line: Line) => CertificateEstimat
 export function initCbam(): void {
   const cn = $<HTMLInputElement>('cbCn'), country = $<HTMLSelectElement>('cbCountry');
   const route = $<HTMLSelectElement>('cbRoute'), mass = $<HTMLInputElement>('cbMass');
+  const routeNote = $('cbRouteNote');
   const date = $<HTMLInputElement>('cbDate'), out = $('cbOut'), status = $('cbStatus');
   const dateNote = $('cbDateNote');
   const list = $<HTMLDataListElement>('cbCnList'), prov = $('cbProv');
@@ -2137,6 +2138,16 @@ export function initCbam(): void {
   function syncDateNote(): void {
     if (!dateNote) return;
     dateNote.textContent = pack ? (priceNoteFor(pack, date!.value) ?? '') : '';
+  }
+
+  // The PROVENANCE half. The option carries our plain-English label; this carries the Commission's
+  // exact wording and where it comes from, so anyone can check one against the other. Keeping them
+  // visibly separate is the whole design: our gloss must never read as the regulation's text. BOF,
+  // in particular, is expanded nowhere in IR (EU) 2025/2620.
+  function syncRouteNote(): void {
+    if (!routeNote) return;
+    const g = ROUTE_GLOSSARY[route!.value];
+    routeNote.textContent = g ? `Commission wording: “${g.quote}” · ${g.cite}` : '';
   }
 
   /**
@@ -2827,10 +2838,17 @@ export function initCbam(): void {
   // that syncScope() has just computed, and running it first would judge the indirect field
   // against the PREVIOUS good's scope row for one turn — showing an indirect input for a good
   // with no indirect side, or hiding (and therefore clearing) one the user is entitled to.
+  // syncRouteNote() ALWAYS runs after syncRoutes(), never before, for the same class of reason:
+  // syncRoutes() WRITES `route.value` itself when a good publishes exactly one route (nextRoute
+  // auto-selects it), and a programmatic assignment fires NO `change` event — so onPick is the
+  // note's only chance to render for those goods, and only if it runs once the value is set.
+  // Ahead of syncRoutes() every single-route good would show a blank note, or the last good's.
   const onPick = async () => {
-    if (await ensurePack()) { syncRoutes(); syncScope(); syncVerifiedRows(); syncDateNote(); refresh(); }
+    if (await ensurePack()) { syncRoutes(); syncRouteNote(); syncScope(); syncVerifiedRows(); syncDateNote(); refresh(); }
   };
-  route.addEventListener('change', () => { syncScope(); syncVerifiedRows(); refresh(); });
+  // syncRoutes() is deliberately NOT on this listener — the list is already right, only the pick
+  // changed — so this is what updates the note when the user chooses among several routes.
+  route.addEventListener('change', () => { syncRouteNote(); syncScope(); syncVerifiedRows(); refresh(); });
   scope?.addEventListener('change', () => { syncVerifiedRows(); refresh(); });
   tier?.addEventListener('change', () => { syncVerifiedRows(); refresh(); });
   cn.addEventListener('change', onPick);
