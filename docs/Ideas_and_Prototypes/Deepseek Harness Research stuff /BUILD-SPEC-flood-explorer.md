@@ -103,10 +103,101 @@ the terrain using independent footprints (see `scripts/fetch-dubai-terrain.py`),
 and doing so barely moves these numbers. Not a solver problem either — the
 Fill-Spill-Merge implementation closes its water budget to single precision.
 
-**Open — do not build past this without resolving it.** Either the vertical
-accuracy improves by roughly an order of magnitude, or the method stops depending
-on depression topology (RFSM-style volume spreading, or a CA/shallow-water router
-where water sheets seaward). Research on both is in flight.
+### 3a.1 RESOLVED 2026-08-25: better data does NOT fix it. The method must change.
+
+Three research lanes plus a direct test settled this.
+
+**Better bare-earth data was obtained and it did not help.** DeltaDTM v1.1 (Pronk
+et al. 2024, *Scientific Data*, doi:10.1038/s41597-024-03091-9) is a genuine 30 m
+DTM, **CC BY 4.0 — commercially clean**, MAE 0.43 m, tile N25E055 confirmed over
+Dubai. Pulled and tested. It reports the real bare-earth relief of this window as
+**2.83 m p5–p95**, against GLO-30's 11.52 m — i.e. almost all the DSM's "relief"
+was buildings, and our footprint mask had recovered only part of it. And yet:
+
+| σ | GLO-30 masked: overlap | DeltaDTM: overlap |
+|---|---|---|
+| 0.25 m | 0.618 | 0.542 |
+| 0.50 m | 0.541 | **0.459** |
+| 1.00 m | 0.453 | 0.400 |
+
+**The real DTM is WORSE**, because relief fell to 2.83 m while the vertical error
+did not, so the signal-to-noise ratio dropped. Storage improves (324 → 173 mm)
+but remains the same order as the design event's runoff.
+
+This was predicted. Guth et al. 2024 (*Remote Sensing* 16:3273,
+doi:10.3390/rs16173273): ML-edited bare-earth DTMs "improve on elevation values,
+but … they do not improve overall on the source Copernicus DSM" for **derived**
+grids — slope, curvature, stream networks. **A depression hierarchy consumes
+morphology, not elevations.** Confirmed here on our own data.
+
+**The ceiling is physical, not statistical.** Fewtrell et al. 2008 (*Hydrol.
+Process.* 22:5107, doi:10.1002/hyp.7148): building dimensions and separation
+distances "determine maximum possible grid resolutions". Jiang et al. 2022
+(doi:10.1016/j.ejrh.2022.101122): error is "magnified considerably when the DEM
+resolution was greater than the building width and gaps" — our median building is
+19 m and our cell is 30 m. Guo et al. 2021 (*HESS* 25:2843): 30 m "hardly meets
+accuracy requirements for urban flood models". And Safaei-Moghadam et al. 2023
+(*NHESS* 23:1) — the closest published architecture to ours, a hierarchical
+fill-spill depression analysis on roads — required a **1 m bare-earth DEM** and
+excluded depressions shallower than 15 cm. At 30 m that threshold is an order of
+magnitude below the noise floor.
+
+**Nothing open exists finer than 30 m over Dubai.** OpenTopography holds zero
+Arabian-Peninsula point clouds. FABDEM and FathomDEM are both CC BY-NC-SA
+(verified at source — the FathomDEM ruling in §2c extends to FABDEM). TanDEM-X
+12/30/90 m are all non-commercial; commercial rights sit with Airbus. The only
+finer route is paid: Airbus WorldDEM Neo DTM at 5 m, minimum AOI 100 km².
+
+### 3a.2 The decided path
+
+**Terrain:** adopt **DeltaDTM (CC BY 4.0)** as the elevation surface anyway — it
+is honest bare earth and its elevations are right, which matters for absolute
+water level, coastal interaction and rendering, even though it does not rescue
+routing. Keep GLO-30 as the DSM for building-blockage geometry. Fill DeltaDTM's
+~17 % above-10 m-MSL mask from GEDTM30 (CC BY 4.0).
+
+**Solver: stop routing on depression topology.** The precedent that works at this
+resolution is rain-on-grid 2D routing, not fill-spill: *Urban flood hazard mapping
+in Dubai's Hyper-Arid environment* (2025, doi:10.1016/j.teadva.2025.200141) ran
+2D HEC-RAS rain-on-grid on ALOS PALSAR (upsampled from 30 m — effectively our
+resolution) for this very event and validated at **IoU 0.86** against Landsat-9
+NDWI. Note honestly that a 30 m satellite benchmark cannot test street-level
+skill, so 0.86 measures agreement on large ponds — which is exactly the skill
+class the resolution analysis says is available. Preflight §4 ranked cellular
+automata (#3, CADDIES) and RFSM (#2) below fill-spill on build cost; that ranking
+was made without testing whether the data could support #1.
+
+**Two mass-balance corrections, both cheap and both cited.** Neither touches
+momentum, so both drop into a solver that has none:
+- **Storage porosity φ = 1 − BCR** per cell from the footprint raster. For
+  un-submerged prismatic obstacles φ collapses to the plan-area void fraction
+  (Dewals et al. 2021, *Water* 13:960) — parameter-free, no calibration, no mesh
+  sensitivity. Water cannot occupy the building plan area, so the same rainfall
+  gives deeper water. Yu & Lane 2006 (doi:10.1002/hyp.5936) show mass blockage
+  dominates momentum roughness; Bruwier et al. 2020 show building coverage
+  dominates flood severity across 2,000 synthetic urban forms.
+- **BCR-weighted roof runoff** — roofs do not infiltrate. Li et al. 2026 (*JFRM*
+  19, doi:10.1111/jfr3.70178) is the only found method doing building treatment
+  **at 30 m from open data**, reporting 33 % → 85 % accuracy.
+
+**Infiltration is the biggest single lever and ours is badly wrong.** Hussein et
+al. 2025 measured a **~7 % runoff ratio** for this event in this hyper-arid
+catchment. The shipped prototype produces 51–90 %. In a desert catchment
+infiltration dominates the water budget far more than building geometry does.
+
+**Do NOT** burn buildings into the DEM (sub-pixel: the burn amount is undefined,
+and GLO-30 was acquired 2011–2015 so post-2015 Dubai is absent while demolished
+stock remains — the double-count is spatially heterogeneous and correlated with
+construction date). **Do NOT** use Building Resistance — there is no momentum
+equation for roughness to act on. **Do NOT** implement integral or dual porosity;
+its own 2021 review says "none of the current models is complete".
+
+**Re-scope the claim.** At 30 m this tool can defensibly identify district-scale
+ponding hotspots — which areas flood, roughly how deep. It cannot resolve
+street-level extent, and that is a physical limit rather than an engineering one.
+Validate as the Dubai paper did, against Sentinel-1/Landsat-derived extent for
+April 2024, and publish the IoU with an explicit note that a satellite benchmark
+cannot test street-level skill.
 
 ---
 
