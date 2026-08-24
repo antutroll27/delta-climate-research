@@ -139,6 +139,11 @@ def build_buildings(terrain_doc: dict[str, Any], doc: dict[str, Any]) -> Any:
         area = ring_area(p)
         if area < 12.0:
             continue
+        # Footprints covered by OSM building:part slabs are drawn from those
+        # instead. Extruding them flat as WELL would drive a stub straight
+        # through the tower they belong to.
+        if b.get("parts"):
+            continue
         cx = sum(p[i * 2] for i in range(nv)) / nv
         cy = sum(p[i * 2 + 1] for i in range(nv)) / nv
         base = sample_ground(terrain_doc, cx, cy) - 0.4
@@ -157,6 +162,40 @@ def build_buildings(terrain_doc: dict[str, Any], doc: dict[str, Any]) -> Any:
             a0, a1 = start + i, start + (i + 1) % nv
             faces.append((a0, a1, a1 + nv, a0 + nv))
         faces.append(tuple(start + nv + i for i in range(nv)))
+    # ── OSM 3D massing parts ────────────────────────────────────────────────
+    # Each slab is its own prism from min_height to height. Stacked, they
+    # reproduce a tower's setbacks — which a single footprint plus one height
+    # can never do, and which is the whole difference between Burj Khalifa and
+    # a 522 m needle.
+    part_count = 0
+    for pt in doc.get("parts", []):
+        q = pt["p"]
+        nv = len(q) // 2
+        if nv >= 3 and abs(q[0] - q[-2]) < 1e-6 and abs(q[1] - q[-1]) < 1e-6:
+            nv -= 1
+        if nv < 3:
+            continue
+        cx = sum(q[i * 2] for i in range(nv)) / nv
+        cy = sum(q[i * 2 + 1] for i in range(nv)) / nv
+        ground = sample_ground(terrain_doc, cx, cy) - 0.4
+        base = ground + float(pt["min"])
+        top = ground + float(pt["h"])
+        if top <= base:
+            continue
+        start = len(verts)
+        for i in range(nv):
+            verts.append((q[i * 2], q[i * 2 + 1], base))
+        for i in range(nv):
+            verts.append((q[i * 2], q[i * 2 + 1], top))
+        for i in range(nv):
+            a0, a1 = start + i, start + (i + 1) % nv
+            faces.append((a0, a1, a1 + nv, a0 + nv))
+        faces.append(tuple(start + nv + i for i in range(nv)))
+        if float(pt["min"]) > 0.01:                      # floating slab needs a floor
+            faces.append(tuple(start + nv - 1 - i for i in range(nv)))
+        part_count += 1
+    print(f"  3D massing: {part_count:,} parts extruded from OSM building:part")
+
     mesh = bpy.data.meshes.new("buildings")
     mesh.from_pydata(verts, [], faces)
     mesh.update()
