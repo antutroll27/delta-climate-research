@@ -84,6 +84,52 @@ def fetch_osm(site: Site) -> list[dict[str, Any]]:
     return elements
 
 
+def fetch_osm_buildings(site: Site) -> list[dict[str, Any]]:
+    """OSM building outlines WITH geometry, cached.
+
+    Why not just heights any more: joining an OSM height onto a GlobalML
+    footprint keeps GlobalML's SHAPE, and for anything complex that shape is
+    wrong. Burj Khalifa measured 743 m2 in GlobalML against 7,572 m2 in OSM —
+    the detector found roughly a tenth of the building. Taking OSM's outline as
+    well fixes height and shape together, and GlobalML stays as the systematic
+    base layer for the ~24,000 ordinary buildings OSM has not drawn.
+    """
+    w, s_, e, n = site_bounds(site)
+    os.makedirs(CACHE, exist_ok=True)
+    path = os.path.join(CACHE, f"{site.id}-osm-buildings.json")
+    if not os.path.exists(path):
+        query = (
+            f"[out:json][timeout:600];("
+            f'way["building"]({s_},{w},{n},{e});'
+            f'relation["building"]({s_},{w},{n},{e}););'
+            f"out tags geom;"
+        )
+        resp = requests.post(
+            OVERPASS, data={"data": query}, timeout=900,
+            headers={"User-Agent": "delta-climate-flood-sim/0.1 (build-time pipeline)"},
+        )
+        resp.raise_for_status()
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(resp.text)
+    with open(path, encoding="utf-8") as fh:
+        elements: list[dict[str, Any]] = list(json.load(fh).get("elements", []))
+    return elements
+
+
+def point_in_ring(x: float, y: float, ring: list[float]) -> bool:
+    """Even-odd test on a flat [x,y,...] ring."""
+    inside = False
+    n = len(ring) // 2
+    j = n - 1
+    for i in range(n):
+        xi, yi = ring[i * 2], ring[i * 2 + 1]
+        xj, yj = ring[j * 2], ring[j * 2 + 1]
+        if (yi > y) != (yj > y) and x < (xj - xi) * (y - yi) / ((yj - yi) or 1e-12) + xi:
+            inside = not inside
+        j = i
+    return inside
+
+
 def fetch_parts(site: Site) -> list[dict[str, Any]]:
     """OSM `building:part` elements with full geometry, cached."""
     w, s_, e, n = site_bounds(site)
@@ -129,6 +175,18 @@ def build(site: Site) -> dict[str, Any]:
     with open(path, encoding="utf-8") as fh:
         doc: dict[str, Any] = json.load(fh)
     mx, my = m_per_deg(site.lat)
+
+    # IDEMPOTENCY. This script reads the artefact it writes, so a second run was
+    # seeing its own previous marks and counting zero new coverage — the numbers
+    # changed depending on how many times it had been run, which is the worst
+    # kind of wrong because the first run looks right. Strip every derived field
+    # before recomputing.
+    for stale in ("osmB", "parts", "partsCovered", "supersededByOsm",
+                  "heightSources", "osmNote", "partsNote"):
+        doc.pop(stale, None)
+    for b in doc["b"]:
+        for stale in ("h", "hs", "name", "parts", "sup"):
+            b.pop(stale, None)
 
     # Bucket footprints by a coarse grid so the join is not 2,680 x 26,206.
     CELL = 200.0
@@ -177,6 +235,46 @@ def build(site: Site) -> dict[str, Any]:
                 b["name"] = names[i]
         else:
             b["hs"] = "prior"
+    # ── OSM outlines: better geometry where it exists ────────────────────────
+    osm_b: list[dict[str, Any]] = []
+    for el in fetch_osm_buildings(site):
+        geom = el.get("geometry") or []
+        if len(geom) < 4:
+            continue
+        tags = el.get("tags", {})
+        flat: list[float] = []
+        for pt in geom:
+            flat.append(round((pt["lon"] - site.lon) * mx, 2))
+            flat.append(round((pt["lat"] - site.lat) * my, 2))
+        rec: dict[str, Any] = {"p": flat, "roof": tags.get("roof:shape", "flat")}
+        top = osm_height(tags)
+        if top and top > 0:
+            rec["h"] = round(top, 1)
+        if tags.get("name"):
+            rec["name"] = tags["name"]
+        osm_b.append(rec)
+    doc["osmB"] = osm_b
+
+    # GlobalML footprints whose centroid sits inside an OSM outline are the SAME
+    # building drawn twice. Drop ours, keep theirs — otherwise every landmark
+    # gets a crude duplicate wedged inside the good geometry.
+    osm_index: dict[tuple[int, int], list[int]] = {}
+    for i, rec in enumerate(osm_b):
+        xs, ys = rec["p"][0::2], rec["p"][1::2]
+        for gx in range(int(min(xs) // CELL), int(max(xs) // CELL) + 1):
+            for gy in range(int(min(ys) // CELL), int(max(ys) // CELL) + 1):
+                osm_index.setdefault((gx, gy), []).append(i)
+    superseded = 0
+    for b in doc["b"]:
+        xs, ys = b["p"][0::2], b["p"][1::2]
+        cx, cy = sum(xs) / len(xs), sum(ys) / len(ys)
+        for cand in osm_index.get((int(cx // CELL), int(cy // CELL)), ()):
+            if point_in_ring(cx, cy, osm_b[cand]["p"]):
+                b["sup"] = True
+                superseded += 1
+                break
+    doc["supersededByOsm"] = superseded
+
     # ── 3D massing parts ─────────────────────────────────────────────────────
     parts: list[dict[str, Any]] = []
     for el in fetch_parts(site):
@@ -193,18 +291,21 @@ def build(site: Site) -> dict[str, Any]:
             low = 0.0
         if top <= low:
             continue
-        flat: list[float] = []
+        slab: list[float] = []
         for pt in geom:
-            flat.append(round((pt["lon"] - site.lon) * mx, 2))
-            flat.append(round((pt["lat"] - site.lat) * my, 2))
+            slab.append(round((pt["lon"] - site.lon) * mx, 2))
+            slab.append(round((pt["lat"] - site.lat) * my, 2))
         parts.append({
-            "p": flat, "h": round(top, 1), "min": round(low, 1),
+            "p": slab, "h": round(top, 1), "min": round(low, 1),
             "roof": tags.get("roof:shape", "flat"),
         })
     doc["parts"] = parts
 
     # A footprint covered by parts must NOT also be extruded flat, or the tower
     # gets a stub through it. Mark by centroid containment.
+    # Anything a part sits on must not ALSO be drawn as a plain extrusion —
+    # neither the GlobalML footprint nor the OSM outline — or a stub runs
+    # through the tower. Mark both layers.
     covered = 0
     for pt in parts:
         px, py = pt["p"][0::2], pt["p"][1::2]
@@ -216,13 +317,24 @@ def build(site: Site) -> dict[str, Any]:
                     doc["b"][cand]["parts"] = True
                     covered += 1
                 break
+        for cand in osm_index.get((int(cx // CELL), int(cy // CELL)), ()):
+            if point_in_ring(cx, cy, osm_b[cand]["p"]):
+                osm_b[cand]["parts"] = True
+                break
     doc["partsCovered"] = covered
+    doc["osmPartsCovered"] = sum(1 for r in osm_b if r.get("parts"))
 
     real = sum(1 for b in doc["b"] if b.get("hs") == "osm")
     doc["heightsPresent"] = True
     doc["heightSources"] = {"osm": real, "prior": len(doc["b"]) - real}
     doc["heightAttribution"] = ATTRIBUTION
     doc["heightLicence"] = "ODbL-1.0 (heights only; footprints remain CDLA-Permissive-2.0)"
+    doc["osmNote"] = (
+        f"{len(osm_b):,} OSM outlines carry better geometry than the ML-derived "
+        f"footprints for the same buildings; {superseded:,} GlobalML footprints are "
+        f"marked superseded and must not be drawn. GlobalML remains the systematic "
+        f"base for everything OSM has not mapped."
+    )
     doc["partsNote"] = (
         f"{len(parts):,} OSM building:part slabs give real 3D massing — setbacks, "
         f"overhangs and roof shapes — for {covered:,} footprints. Those footprints "
@@ -252,9 +364,18 @@ def check() -> int:
         tall = [b for b in real if b["h"] > 200]
         if not tall:
             failures.append(f"{sid}: no building over 200 m -- Dubai without a skyline is wrong")
+        osm_b = d.get("osmB", [])
+        if len(osm_b) < 5000:
+            failures.append(f"{sid}: only {len(osm_b)} OSM outlines -- the fetch is short")
+        if d.get("supersededByOsm", 0) < 1000:
+            failures.append(f"{sid}: {d.get('supersededByOsm', 0)} superseded -- "
+                            f"duplicates will render inside each other")
         parts = d.get("parts", [])
         if len(parts) < 200:
             failures.append(f"{sid}: only {len(parts)} massing parts -- the 3D fetch is failing")
+        if d.get("osmPartsCovered", 0) < 50:
+            failures.append(f"{sid}: only {d.get('osmPartsCovered', 0)} OSM outlines marked as "
+                            f"part-covered -- towers will get a stub through them")
         if not any(p["h"] > 700 for p in parts):
             failures.append(f"{sid}: no part over 700 m -- Burj Khalifa's tip is missing")
         if any(p["h"] <= p["min"] for p in parts):
@@ -277,6 +398,13 @@ def check() -> int:
               f"tallest {tallest['h']:.0f} m ({tallest.get('name', 'unnamed')})")
         print(f"     3D massing: {len(parts):,} parts over {d.get('partsCovered', 0):,} "
               f"footprints | tallest part {max(p['h'] for p in parts):.0f} m")
+        ob = d.get("osmB", [])
+        roofs: dict[str, int] = {}
+        for r in ob:
+            roofs[r.get("roof", "flat")] = roofs.get(r.get("roof", "flat"), 0) + 1
+        print(f"     OSM outlines: {len(ob):,} ({sum(1 for r in ob if r.get('h')):,} with height, "
+              f"{d.get('supersededByOsm', 0):,} GlobalML superseded)")
+        print(f"     roof shapes: {dict(sorted(roofs.items(), key=lambda kv: -kv[1])[:5])}")
     return 0
 
 

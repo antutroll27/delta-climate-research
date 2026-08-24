@@ -144,6 +144,10 @@ def build_buildings(terrain_doc: dict[str, Any], doc: dict[str, Any]) -> Any:
         # through the tower they belong to.
         if b.get("parts"):
             continue
+        # Superseded: OSM has drawn this same building properly. Drawing both
+        # wedges a crude ML footprint inside the good geometry.
+        if b.get("sup"):
+            continue
         cx = sum(p[i * 2] for i in range(nv)) / nv
         cy = sum(p[i * 2 + 1] for i in range(nv)) / nv
         base = sample_ground(terrain_doc, cx, cy) - 0.4
@@ -162,6 +166,49 @@ def build_buildings(terrain_doc: dict[str, Any], doc: dict[str, Any]) -> Any:
             a0, a1 = start + i, start + (i + 1) % nv
             faces.append((a0, a1, a1 + nv, a0 + nv))
         faces.append(tuple(start + nv + i for i in range(nv)))
+    # ── OSM outlines ────────────────────────────────────────────────────────
+    # Hand-drawn geometry, so complex buildings keep their real plan instead of
+    # whatever the ML detector managed. 2,644 of these carry a measured height.
+    osm_drawn = 0
+    for rec in doc.get("osmB", []):
+        if rec.get("parts"):
+            continue                       # its massing slabs handle it
+        q = rec["p"]
+        nv = len(q) // 2
+        if nv >= 3 and abs(q[0] - q[-2]) < 1e-6 and abs(q[1] - q[-1]) < 1e-6:
+            nv -= 1
+        if nv < 3:
+            continue
+        area = ring_area(q)
+        if area < 12.0:
+            continue
+        cx = sum(q[i * 2] for i in range(nv)) / nv
+        cy = sum(q[i * 2 + 1] for i in range(nv)) / nv
+        base = sample_ground(terrain_doc, cx, cy) - 0.4
+        measured = rec.get("h")
+        top = base + (float(measured) if measured else estimate_height(area, osm_drawn + 7))
+        start = len(verts)
+        for i in range(nv):
+            verts.append((q[i * 2], q[i * 2 + 1], base))
+        for i in range(nv):
+            verts.append((q[i * 2], q[i * 2 + 1], top))
+        for i in range(nv):
+            a0, a1 = start + i, start + (i + 1) % nv
+            faces.append((a0, a1, a1 + nv, a0 + nv))
+        roof = rec.get("roof", "flat")
+        if roof in ("pyramidal", "dome") and nv >= 4:
+            # A single apex over the ring. Crude for a dome, but 2 domes and 3
+            # pyramids in 41,447 buildings does not justify a tessellator.
+            apex = len(verts)
+            rise = min(0.35 * math.sqrt(area), 25.0)
+            verts.append((cx, cy, top + rise))
+            for i in range(nv):
+                faces.append((start + nv + i, start + nv + (i + 1) % nv, apex))
+        else:
+            faces.append(tuple(start + nv + i for i in range(nv)))
+        osm_drawn += 1
+    print(f"  OSM outlines drawn: {osm_drawn:,}")
+
     # ── OSM 3D massing parts ────────────────────────────────────────────────
     # Each slab is its own prism from min_height to height. Stacked, they
     # reproduce a tower's setbacks — which a single footprint plus one height
