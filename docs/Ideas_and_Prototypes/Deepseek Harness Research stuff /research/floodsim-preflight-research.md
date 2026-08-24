@@ -124,11 +124,45 @@
 6. **Rainfall scenarios** → convective-cell-scale (single-MCS >70% of event rain), MAM+ENSO conditioning, atmospheric-river framing available. (§1.3/§3.17)
 7. **Drainage counterfactual** → optional "pre-Tasreef drainage" toggle with stated capacity assumptions (AED 30 bn programme, official). (§3.16)
 8. **Error-bar exhibit** → insured-loss revision history (0.85 → 1.8–3.4 bn USD across four sources) as an in-tool provenance card. (§1.7)
-9. **GlobalML hosting migration** → pipeline download URLs must move to `bfppub.blob.core.windows.net`; re-pull UAE tiles. (§8)
+9. **GlobalML hosting migration** → ~~pipeline download URLs must move to `bfppub.blob.core.windows.net`~~ **WRONG — CORRECTED 2026-08-24 by probe. That host returns 404 for the dataset index. The live index is `https://minedbuildings.z5.web.core.windows.net/global-buildings/dataset-links.csv`, taken from the project README. Release in use: 2026-02-03. The CSV column is `Location`, not `RegionName`.** (§8)
 10. **GLO-30 edition pinning** → pin 2024_1 (or newest at build) in lineage/methodology for reproducibility. (§8)
 11. **Exposure layer vintage** → HRSL UAE is 2020-vintage; state the caveat on population cards; consider WorldPop cross-check. (§8)
 12. **Validation scenes** → April 2024 imagery is S1A-only (document as single-scene caveat); ongoing monitoring benefits from S1C/S1D denser revisit. (§8)
-13. **Overture UAE** → empirical bbox test before any reliance; GlobalML + OSM is the safe fallback. (§8)
+13. **Overture UAE** → empirical bbox test before any reliance; GlobalML + OSM is the safe fallback. (§8) **Test run 2026-08-24 — see §12.**
+
+## 12. Measured findings that supersede the flags above (2026-08-24)
+
+Everything here came from probing the actual endpoints, not from reading
+documentation. Each of the corrections below was a claim the spec asserted with
+confidence and got wrong, which is the pattern worth noticing more than any one
+error: **the failure mode is a search result that looks like a citation.**
+
+- **GLO-30 needs no CDSE account.** BUILD-SPEC §2a said "CDSE registration". The
+  AWS Open Data mirror serves identical COGs anonymously with working HTTP range
+  requests. A windowed read is a few hundred kB against a 100 MB tile.
+- **GlobalML ships NO heights for the UAE.** The `height` property is −1.0 on all
+  241,667 footprints in the source tile. Nobody had checked; the spec's "heights
+  approximated from WSF3D" was right by accident, not by verification.
+- **Al Ain has no GlobalML coverage at all** (quadkey 123023311 absent). That is
+  the location of the 254.8 mm peak and the whole launch narrative.
+- **OSM has better footprint coverage than GlobalML here** — 23,005 buildings vs
+  13,577 in the same window — but only 4.8 % carry height or levels (1,099
+  buildings, median 35 m), and it is ODbL.
+- **Overture bbox test RUN (flag 13 discharged).** 24,109 buildings in the Dubai
+  Creek window — 78 % more than GlobalML's 13,577 — but the contributing datasets
+  are exactly `['Microsoft ML Buildings', 'OpenStreetMap']`, so the extra ~10,500
+  buildings ARE the OSM ones and carry ODbL share-alike. Heights are equally
+  sparse: 476 with `height` (2.0 %), 862 with `num_floors` (3.6 %), median 35 m,
+  max 317 m. Since Microsoft ships no heights for the UAE at all, **every height
+  in Overture's Dubai coverage is OSM-derived and therefore ODbL.** The trade is
+  explicit: +78 % footprints and the only per-building heights available, against
+  share-alike on a closed commercial derivative. Filtering Overture to its
+  Microsoft-sourced subset is licence-clean but returns us to the GlobalML set
+  with no heights, i.e. no gain.
+- **Fill-spill is noise-dominated on 30 m Dubai terrain.** See BUILD-SPEC §3a for
+  the sensitivity table. This supersedes the §4 method ranking for Dubai: rank 1
+  (fill-spill) was chosen on defensibility and build cost, without testing
+  whether the input data could support it.
 
 ## 10. Discrepancies to surface as error bars (never hide)
 
