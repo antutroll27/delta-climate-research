@@ -39,7 +39,14 @@ class Site(NamedTuple):
 # GlobalML has NO coverage there. Quadkey 123023311 is absent from the UAE tile
 # list, verified 2026-08-24. Any Al Ain work needs a different footprint source.
 SITES: dict[SiteId, Site] = {
-    "dubai-creek": Site("dubai-creek", 25.255, 55.305, 7680.0, 256),
+    # 12 km, NOT the original 7.68 km Creek window. The smaller box was the old
+    # city — Deira and Bur Dubai — and contained almost no landmark: Burj Khalifa
+    # missed by 2.6 km, Emirates Towers by 300 m, the Museum of the Future by
+    # 100 m. A Dubai tool with no Dubai skyline in it fails the first look test.
+    # This box holds Burj Khalifa, Emirates Towers, Museum of the Future, Dubai
+    # Frame, National Bank of Dubai, Etisalat Tower AND the Creek. Burj Al Arab
+    # is 8.7 km west, on the coast, and stays out.
+    "dubai-creek": Site("dubai-creek", 25.235, 55.290, 12000.0, 400),
 }
 
 # Copernicus DEM GLO-30, AWS Open Data mirror.
@@ -59,6 +66,21 @@ COP_DEM_TILE = (
 # HOST CORRECTED 2026-08-24. Preflight §9 flag 9 says the hosting moved to
 # `bfppub.blob.core.windows.net`; that 404s for this file. The live index is
 # below, taken from the project README rather than from the flag.
+# OpenStreetMap heights via Overpass.
+#
+# THE ONLY PER-BUILDING HEIGHTS THAT EXIST FOR DUBAI. Microsoft GlobalML ships a
+# `height` field that is -1.0 on all 241,667 UAE footprints, and Google Open
+# Buildings 2.5D excludes every GCC state. OSM carries height or building:levels
+# on 2,680 buildings in this window, 54 of them over 200 m.
+#
+# LICENCE, STATED PLAINLY: OSM is ODbL, which carries share-alike. GlobalML is
+# CDLA-Permissive. Attaching ODbL heights to permissive footprints raises a
+# derived-database question that has NOT been resolved here — this is fine for
+# look development and internal renders, and needs a decision before anything
+# ships. The artefact records which heights came from which source so the two
+# can be separated again.
+OVERPASS = "https://overpass-api.de/api/interpreter"
+
 GLOBALML_LINKS = (
     "https://minedbuildings.z5.web.core.windows.net/global-buildings/dataset-links.csv"
 )
