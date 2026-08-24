@@ -179,41 +179,53 @@ export function priorityFlood(H: Float32Array): Float32Array {
 export const STORM_HOURS = 6;
 
 /**
- * Initial abstraction, mm — depression storage, wetting and interception that
- * must be satisfied before any runoff is generated.
+ * Rainfall losses, CALIBRATED — replaces an invented 4 mm/h.
+ *
+ * WHAT WAS WRONG. The shipped values produced a 51-90 % runoff ratio. Hussein et
+ * al. 2025 (doi:10.1007/s11069-025-07156-9) measured ~7.14 % for the April-2024
+ * event in this hyper-arid catchment. In a desert, infiltration dominates the
+ * water budget far more than building geometry does, so this was the single
+ * largest error in the model.
+ *
+ * WHY TWO SURFACES AND NOT ONE. Roofs are sealed and open desert ground is not;
+ * they differ by more than an order of magnitude, so any single domain-wide loss
+ * is wrong in both directions at once. Splitting them by building-coverage ratio
+ * is the method in Li et al. 2026 (doi:10.1111/jfr3.70178) — the only found
+ * treatment operating at 30 m from open data.
+ *
+ * GROUND_F IS SOLVED, NOT PICKED. (254.8 - IA_GROUND - 6*f)/254.8 = 0.0714 gives
+ * f = 38.6 mm/h. High, but inside the 20-200 mm/h band for desert sand, and it
+ * reproduces the one measured number that exists for this event. The URBAN ratio
+ * is then an OUTPUT rather than an assertion: at 22 % coverage this domain
+ * generates ~27 % runoff, which is why Dubai flooded while the wadi absorbed its
+ * rain. The model returns ~7 % as coverage tends to zero.
  */
-export const INITIAL_ABSTRACTION_MM = 5;
+export const IA_GROUND = 5.0, GROUND_F = 38.6;   // mm, mm/h — desert sand
+export const IA_ROOF = 2.0, ROOF_F = 0.0;        // mm, mm/h — sealed
 
 /**
- * Constant infiltration rate, mm/h, for a partly-sealed urban desert surface.
+ * Runoff depth, mm, for a rainfall total at a given building-coverage ratio.
  *
- * SCALAR ON PURPOSE, FOR NOW. Real Dubai is a mosaic of sealed carriageway and
- * open sand whose infiltration rates differ by an order of magnitude, so this
- * becomes a per-cell field the moment imperviousness data lands. `runoffMm`
- * takes the rate as an argument so that swap does not reach callers.
- *
- * WHY THIS IS NOT FITTED TO THE 6.4 % RUNOFF RATIO IN Hussein et al. 2025.
- * That figure is a WATERSHED-OUTLET ratio: 2,216 km2 of Al Ain wadi, over a
- * multi-day three-pulse event, and it includes channel transmission losses as
- * the flood wave soaks into the wadi bed. This domain is a ~9 km2 urban block
- * over six hours with no channel to lose water to. They are different
- * quantities measured at different scales, and forcing this rate to reproduce
- * that ratio would need ~39 mm/h of loss -- which zeroes runoff below ~240 mm
- * and models a city that cannot flood. Sealed urban ground is precisely why
- * Dubai flooded while the wadi absorbed most of its rain.
- *
- * So the ratio is REPORTED (see `waterBudget`) and compared, never targeted.
+ * `bcr` is scalar here because the demo terrain is synthetic and uniform. The
+ * real pipeline ships a per-cell BCR raster in `<site>-terrain.json`; when the
+ * solver moves onto it this takes the field instead, and no caller changes.
  */
-export const INFILTRATION_MM_PER_H = 4;
+/**
+ * Building-coverage ratio used by the DEMO, which has synthetic terrain and no
+ * BCR raster. 0.22 is the MEASURED coverage of the real Dubai Creek window
+ * (13,577 GlobalML footprints, 22.0 % of 58.98 km2), so the demo generates the
+ * runoff a real Dubai district would rather than the runoff of bare sand.
+ *
+ * Without this the scenario ladder goes dry: unsealed desert absorbs 236 mm in
+ * six hours, so nothing below the APR-2024 total would produce any water at all.
+ * That is correct physics for a dune and wrong for a city.
+ */
+export const DEMO_BCR = 0.22;
 
-/** Rain depth that becomes runoff, mm. Losses are rate-limited, not proportional. */
-export function runoffMm(
-  rainMm: number,
-  initialAbstractionMm = INITIAL_ABSTRACTION_MM,
-  rateMmPerH = INFILTRATION_MM_PER_H,
-  hours = STORM_HOURS,
-): number {
-  return Math.max(0, rainMm - initialAbstractionMm - rateMmPerH * hours);
+export function runoffMm(rainMm: number, bcr = DEMO_BCR, hours = STORM_HOURS): number {
+  const roof = Math.max(0, rainMm - IA_ROOF - ROOF_F * hours);
+  const ground = Math.max(0, rainMm - IA_GROUND - GROUND_F * hours);
+  return bcr * roof + (1 - bcr) * ground;
 }
 
 // ---------------------------------------------------------------------------

@@ -13,7 +13,7 @@
 import {
   CELL, N, RAIN_STEPS,
   synthesizeTerrain, priorityFlood, buildModel, computeSnapshot, snapshotWithBudget,
-  runoffMm, INFILTRATION_MM_PER_H, STORM_HOURS,
+  runoffMm, IA_GROUND, GROUND_F, STORM_HOURS,
   handIndex, handExtent, extentMetrics,
 } from './sim.ts';
 
@@ -61,10 +61,19 @@ export function assertSolverLogic(): void {
 
   // 4. LOSSES ARE RATE-LIMITED, NOT PROPORTIONAL. A fixed runoff coefficient
   //    would hold the ratio constant; a real infiltration rate must not.
-  const loss = 5 + INFILTRATION_MM_PER_H * STORM_HOURS;
-  a(runoffMm(loss - 1) === 0, 'rain below the loss threshold must produce no runoff');
-  const rLo = runoffMm(100) / 100, rHi = runoffMm(300) / 300;
+  const loss = IA_GROUND + GROUND_F * STORM_HOURS;
+  a(runoffMm(loss - 1, 0) === 0, 'rain below the loss threshold must produce no runoff on bare ground');
+  const rLo = runoffMm(300, 0) / 300, rHi = runoffMm(600, 0) / 600;
   a(rHi > rLo, 'runoff ratio must rise with event size under a rate-limited loss');
+
+  // 4b. CALIBRATION. The unsealed surface must reproduce the one measured number
+  //     for this event: Hussein et al. 2025, ~7.14 % runoff at 254.8 mm. This is
+  //     the guard against anyone "tuning" the loss to make the demo wetter.
+  const measured = runoffMm(254.8, 0) / 254.8;
+  a(Math.abs(measured - 0.0714) < 0.002,
+    `unsealed runoff ratio ${measured.toFixed(4)}, Hussein et al. 2025 measured 0.0714`);
+  a(runoffMm(60, 1) > 50, 'a sealed roof must shed almost all of 60 mm');
+  a(runoffMm(60, 0) === 0, '60 mm on desert sand fully infiltrates in 6 h');
 
   // 5. NOTHING PONDS ON THE OPEN BOUNDARY — it is the sea, not a basin.
   const big = computeSnapshot(H, model, RAIN_STEPS[RAIN_STEPS.length - 1]);
