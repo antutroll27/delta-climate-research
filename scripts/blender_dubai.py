@@ -26,6 +26,7 @@ from typing import Any
 
 import bpy  # type: ignore[import-not-found]
 from mathutils import Vector  # type: ignore[import-not-found]
+from mathutils.geometry import tessellate_polygon  # type: ignore[import-not-found]
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DATA = os.path.join(HERE, "..", "public", "flood-sim", "data")
@@ -281,6 +282,104 @@ def build_apron(doc: dict[str, Any]) -> Any:
     return obj
 
 
+# Landcover palette. Sampled to read against the sand apron under a low sun,
+# not picked from a colour wheel: water has to be clearly water from 3 km up,
+# and roads have to separate from the ground without becoming black lines.
+LANDCOVER = {
+    "water":            ((0.045, 0.115, 0.150, 1.0), 0.12, 0.55, 0.35),
+    "beach":            ((0.560, 0.480, 0.350, 1.0), 0.95, 0.05, 0.10),
+    "green":            ((0.120, 0.190, 0.085, 1.0), 0.88, 0.05, 0.25),
+    "golf":             ((0.135, 0.230, 0.095, 1.0), 0.85, 0.05, 0.30),
+    "zone:commercial":  ((0.330, 0.320, 0.330, 1.0), 0.85, 0.08, 0.05),
+    "zone:retail":      ((0.340, 0.310, 0.290, 1.0), 0.85, 0.08, 0.05),
+    "zone:industrial":  ((0.300, 0.285, 0.265, 1.0), 0.90, 0.05, 0.05),
+    "zone:residential": ((0.360, 0.330, 0.290, 1.0), 0.92, 0.05, 0.05),
+    "road":             ((0.115, 0.110, 0.108, 1.0), 0.78, 0.10, 0.02),
+}
+# Draw order as height above ground, so overlapping layers do not z-fight.
+LAYER_LIFT = {
+    "zone:residential": 0.05, "zone:industrial": 0.06, "zone:retail": 0.07,
+    "zone:commercial": 0.08, "green": 0.14, "golf": 0.15, "beach": 0.20,
+    "water": 0.26, "road": 0.34,
+}
+
+
+def build_landcover(terrain_doc: dict[str, Any], doc: dict[str, Any]) -> list[Any]:
+    """Flat polygons and road ribbons draped on the terrain.
+
+    Each class is its own object so it can be toggled in the viewport, and each
+    sits at its own small lift above ground — coincident flat faces z-fight, and
+    Dubai's zones, parks and roads overlap constantly.
+    """
+    made: list[Any] = []
+    for kind, recs in doc["layers"].items():
+        if kind == "coastline":
+            continue                       # a line, not an area; the water polys carry it
+        style = LANDCOVER.get(kind)
+        if style is None:
+            continue
+        rgba, rough, spec, _ = style
+        lift = LAYER_LIFT.get(kind, 0.1)
+        verts: list[tuple[float, float, float]] = []
+        faces: list[tuple[int, ...]] = []
+        for rec in recs:
+            q = rec["p"]
+            nv = len(q) // 2
+            if nv < 2:
+                continue
+            if kind == "road":
+                # Ribbon: offset each segment by half-width along its normal.
+                half = float(rec.get("w", 6.0)) / 2.0
+                for i in range(nv - 1):
+                    x0, y0, x1, y1 = q[i * 2], q[i * 2 + 1], q[i * 2 + 2], q[i * 2 + 3]
+                    dx, dy = x1 - x0, y1 - y0
+                    length = math.hypot(dx, dy)
+                    if length < 0.5:
+                        continue
+                    nx, ny = -dy / length * half, dx / length * half
+                    start = len(verts)
+                    for px, py in ((x0 + nx, y0 + ny), (x1 + nx, y1 + ny),
+                                   (x1 - nx, y1 - ny), (x0 - nx, y0 - ny)):
+                        verts.append((px, py, sample_ground(terrain_doc, px, py) + lift))
+                    faces.append((start, start + 1, start + 2, start + 3))
+                continue
+            if nv < 3:
+                continue
+            if abs(q[0] - q[-2]) < 1e-6 and abs(q[1] - q[-1]) < 1e-6:
+                nv -= 1
+            if nv < 3:
+                continue
+            # TESSELLATE, do not emit an n-gon. Dubai's water and zone polygons
+            # are strongly concave — the Creek is a winding channel — and Blender
+            # renders a concave n-gon as a fan, which threw visible spikes across
+            # the frame. tessellate_polygon is ear-clipping and handles them.
+            start = len(verts)
+            ring2d = [Vector((q[i * 2], q[i * 2 + 1], 0.0)) for i in range(nv)]
+            for i in range(nv):
+                px, py = q[i * 2], q[i * 2 + 1]
+                verts.append((px, py, sample_ground(terrain_doc, px, py) + lift))
+            try:
+                tris = tessellate_polygon([ring2d])
+            except Exception:                                   # noqa: BLE001
+                tris = []
+            if tris:
+                for tri in tris:
+                    faces.append(tuple(start + int(v) for v in tri))
+            else:
+                faces.append(tuple(range(start, start + nv)))
+        if not faces:
+            continue
+        mesh = bpy.data.meshes.new(kind)
+        mesh.from_pydata(verts, [], faces)
+        mesh.update()
+        obj = bpy.data.objects.new(kind, mesh)
+        bpy.context.collection.objects.link(obj)
+        obj.data.materials.append(principled(kind, rgba, rough, spec))
+        made.append(obj)
+        print(f"    {kind:20} {len(faces):6,} faces")
+    return made
+
+
 def setup_world() -> None:
     """Nishita physical sky. The sun angle drives both the light and the sky,
     so the render cannot disagree with itself about where the sun is."""
@@ -364,6 +463,11 @@ def main() -> None:
         buildings_doc = json.load(fh)
     build_apron(terrain_doc)
     build_terrain(terrain_doc)
+    lc_path = os.path.join(DATA, "dubai-creek-landcover.json")
+    if os.path.exists(lc_path):
+        with open(lc_path) as fh:
+            print("  landcover:")
+            build_landcover(terrain_doc, json.load(fh))
     build_buildings(terrain_doc, buildings_doc)
     setup_world()
     setup_sun()
