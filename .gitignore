@@ -91,3 +91,8 @@ docs/research/*.mp4
 docs/research/*.mov
 /shot.png
 /_*.png
+
+# Download cache for the flood-sim fetchers. GlobalML tiles are ~23 MB gzipped
+# each and are re-fetchable from the URLs recorded in the artefacts; caching them
+# is a speed convenience, not project state.
+data/.cache/
