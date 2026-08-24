@@ -64,6 +64,32 @@ GLOBALML_LINKS = (
 )
 
 
+# DeltaDTM v1.1 (Pronk et al. 2024, Scientific Data, doi:10.1038/s41597-024-03091-9).
+#
+# CC BY 4.0 — COMMERCIALLY CLEAN, which is the whole reason it is here. The two
+# obvious alternatives are not: FABDEM and FathomDEM are both CC BY-NC-SA,
+# verified at their own licence records. DeltaDTM is a genuine bare-earth DTM at
+# 30 m with a stated MAE of 0.43 m, and its tile N25E055 covers Dubai.
+#
+# It ships as continent archives; Asia.zip is 9.8 GB and the Dubai tile inside it
+# is 4.6 MB. _remotezip.py pulls the one member over range requests. The file URL
+# is a 4TU UUID rather than a stable path, so it is resolved from the article API
+# at run time instead of being pinned here and rotting.
+DELTADTM_ARTICLE = "https://data.4tu.nl/v2/articles/21997565/files"
+DELTADTM_ARCHIVE = "Asia.zip"
+DELTADTM_LICENCE = "CC BY 4.0"
+DELTADTM_ATTRIBUTION = (
+    "DeltaDTM v1.1 © Pronk et al., TU Delft / 4TU.ResearchData (CC BY 4.0)"
+)
+
+
+def deltadtm_tile(lat: float, lon: float) -> str:
+    """Member name inside the continent archive, e.g. DeltaDTM_v1_0_N25E055.tif."""
+    ns = "N" if lat >= 0 else "S"
+    ew = "E" if lon >= 0 else "W"
+    return f"DeltaDTM_v1_0_{ns}{int(abs(lat)):02d}{ew}{int(abs(lon)):03d}"
+
+
 def site_bounds(s: Site) -> Bbox:
     """(west, south, east, north) in EPSG:4326 — rasterio `from_bounds` order.
 
