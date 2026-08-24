@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Δ DELTA — Flood Explorer · Dubai P1A · demo build</title>
+</head>
+<body>
+  <div id="app"></div>
+  <div id="hud" class="loading">
+    <header id="topbar">
+      <div class="brand"><span class="delta">Δ</span> <strong>DELTA</strong> FLOOD EXPLORER <span class="loc">· DUBAI P1A</span></div>
+      <div class="sheet">SHEET FS/01 · REV 0.1 · SCALE 1:DECISION</div>
+      <div class="tb-actions">
+        <span id="quality-chip" class="chip">CINEMATIC ON</span>
+        <button id="truth-toggle" class="chip chip-btn">TRUTH [T] <em>OFF</em></button>
+      </div>
+    </header>
+
+    <aside id="panel-left">
+      <section class="card">
+        <div class="card-label">RAIN EVENT · TOTAL</div>
+        <div class="card-big"><span id="rain-mm">220</span><span class="unit">mm</span></div>
+        <div class="card-sub" id="rain-rate">≈ 36.7 mm/h over 6 h</div>
+        <input id="rain-slider" type="range" min="0" max="7" step="0.05" value="6" />
+        <div class="presets">
+          <button data-preset="1">15</button>
+          <button data-preset="3">60</button>
+          <button data-preset="6" class="april">APR-2024</button>
+          <button data-preset="7">300</button>
+        </div>
+        <div class="footnote">FORCING SYNTHETIC · Apr-2024 benchmark: 254.8 mm Khatm Al Shakla (NCM · measured)</div>
+      </section>
+
+      <section class="card">
+        <div class="card-label">LAYERS</div>
+        <label class="check"><input type="checkbox" id="layer-water" checked /> FLOOD DEPTH</label>
+        <label class="check"><input type="checkbox" id="layer-drain" /> DRAINAGE SKELETON</label>
+        <label class="check"><input type="checkbox" id="layer-terrain" checked /> TERRAIN + BLOCKS</label>
+      </section>
+
+      <section class="card">
+        <div class="card-label">VIEW</div>
+        <button id="cine-toggle" class="wide-btn">CINEMATIC TIER · ON</button>
+        <button id="reset-cam" class="wide-btn ghost">RESET CAMERA</button>
+        <div class="footnote">OFF = FAST WEBGL2 · ON = BLOOM + STORM RAIN + SPECULAR WATER · TRUE PATH TRACING = LATER WEBGPU R&amp;D</div>
+      </section>
+
+      <section class="card">
+        <div class="card-label">PROVENANCE</div>
+        <span class="badge badge-syn">SYNTHETIC TERRAIN · SEED 0x0DE1A01</span>
+        <span class="badge badge-syn">SYNTHETIC BLOCKS</span>
+        <span class="badge badge-syn">SYNTHETIC FORCING</span>
+        <span class="badge badge-meas">ALGORITHM: DEPRESSION HIERARCHY + FILL-SPILL-MERGE · PRODUCTION PATH</span>
+      </section>
+    </aside>
+
+    <aside id="panel-right">
+      <section class="card">
+        <div class="card-label">CITY TOTALS</div>
+        <div class="stat-row"><span>INUNDATED</span><strong id="tot-area">0.00 km²</strong></div>
+        <div class="stat-row"><span>MAX DEPTH</span><strong id="tot-max">0.00 m</strong></div>
+        <div class="stat-row"><span>POP EXPOSED*</span><strong id="tot-pop">0</strong></div>
+        <div class="footnote">*SYNTHETIC POPULATION RASTER · DEPTH ≥ 5 cm · SPILL-TOPOLOGY POTENTIAL, NOT DRAIN DYNAMICS</div>
+      </section>
+
+      <section class="card">
+        <div class="card-label">PIN DEPTH</div>
+        <div id="pin-empty" class="empty">CLICK TERRAIN TO PIN</div>
+        <div id="pin-body" class="hidden">
+          <div class="card-big"><span id="pin-depth">0.00</span><span class="unit">m</span></div>
+          <div class="card-sub" id="pin-cell">E 000 · N 000</div>
+        </div>
+      </section>
+
+      <section class="card hidden" id="truth-card">
+        <div class="card-label">METHOD CROSS-CHECK · FSM vs HAND <span class="badge badge-syn">PROXY · NOT OBSERVED</span></div>
+        <div class="stat-row"><span>CSI</span><strong id="m-csi">—</strong></div>
+        <div class="stat-row"><span>F1</span><strong id="m-f1">—</strong></div>
+        <div class="stat-row"><span>POD</span><strong id="m-pod">—</strong></div>
+        <div class="stat-row"><span>FAR (RATIO)</span><strong id="m-far">—</strong></div>
+        <div class="footnote">TWO METHODS ON THE SAME SYNTHETIC DEM — NOT A SKILL SCORE. HAND (NOBRE ET AL. 2016) WETS THE CHANNEL NETWORK; FILL-SPILL-MERGE ONLY FLOODS CLOSED DEPRESSIONS, SO FSM NESTS INSIDE HAND AND FAR STAYS NEAR ZERO BY CONSTRUCTION. REAL VALIDATION IS SENTINEL-1 DERIVED EXTENT — NOT IN THIS DEMO.</div>
+        <div class="footnote">BINARY-PATTERN METRICS ARE SIZE- AND TERRAIN-BIASED — STEPHENS ET AL. 2014, HYDROL. PROC. 28. PRODUCTION TAB ADDS ELEVATION-RESIDUAL CHECKS. NATIONAL-SCALE MODELS REACH CSI 0.65–0.82 AGAINST OBSERVED EXTENTS (BATES ET AL. 2021/2023) — A DIFFERENT DENOMINATOR FROM THIS PANEL.</div>
+      </section>
+
+      <section class="card">
+        <div class="card-label">EVENT FACTS · APR 2024 <span class="badge badge-meas">MEASURED</span></div>
+        <div class="stat-row"><span>PEAK RAIN</span><strong>254.8 mm</strong></div>
+        <div class="stat-sub">KHATM AL SHAKLA, AL AIN — NCM</div>
+        <div class="stat-row"><span>DUBAI 24 H</span><strong>&gt;142 mm</strong></div>
+        <div class="stat-sub">VS 94.7 mm ANNUAL AVG (DXB) — HUSSEIN ET AL. 2025</div>
+        <div class="stat-row"><span>INSURED LOSS</span><strong>$1.8–3.4 bn</strong></div>
+        <div class="stat-sub">GALLAGHER RE / GUY CARPENTER RANGE</div>
+      </section>
+    </aside>
+
+    <footer id="statusbar">
+      <span id="cursor-readout">E — · N — · ELEV — m</span>
+      <span class="disclaimer">DEMO: SYNTHETIC TERRAIN · NO OBSERVED DATA · PRODUCTION ALGORITHM · INUNDATION POTENTIAL OVER SPILL TOPOLOGY — NOT STORMWATER-DRAIN DYNAMICS</span>
+      <span id="fps">— fps</span>
+    </footer>
+
+    <div id="pin-chip" class="hidden"><span id="pin-chip-val">0.00 m</span></div>
+    <button id="skip-intro">SKIP INTRO →</button>
+  </div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
