@@ -1,0 +1,16 @@
+{
+ "site": "dubai-creek",
+ "file": "dubai-creek-imagery.png",
+ "size": 2048,
+ "scene": "S2B_40RCN_20251223_0_L2A",
+ "source": "Copernicus Sentinel-2 L2A true-colour (TCI)",
+ "resolutionM": 5.86,
+ "licence": "Copernicus free, full and open (Reg. EU 377/2014; Del. Reg. 1159/2013)",
+ "attribution": "Contains modified Copernicus Sentinel data 2025",
+ "note": "Scene chosen by aerosol optical thickness, not cloud: cloud is under 3 % on all candidates while AOT varies fivefold. This is the measured clearest (AOT 0.096).",
+ "mean": [
+  131.5,
+  127.7,
+  111.9
+ ]
+}

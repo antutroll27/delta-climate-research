@@ -83,7 +83,35 @@ def build_terrain(doc: dict[str, Any]) -> Any:
     mesh.update()
     obj = bpy.data.objects.new("terrain", mesh)
     bpy.context.collection.objects.link(obj)
-    obj.data.materials.append(principled("sand", (0.34, 0.28, 0.21, 1.0), 0.94, 0.12))
+    # Satellite texture if the imagery fetcher has run, hand palette otherwise.
+    # Measured colour beats a chosen one: sabkha, irrigated green, sand, water
+    # and built fabric all land correctly without anyone deciding a shade.
+    tex = os.path.join(DATA, "dubai-creek-imagery.png")
+    if os.path.exists(tex):
+        mat = bpy.data.materials.new("satellite")
+        mat.use_nodes = True
+        nt = mat.node_tree
+        bsdf = nt.nodes["Principled BSDF"]
+        node = nt.nodes.new("ShaderNodeTexImage")
+        node.image = bpy.data.images.load(tex)
+        node.image.colorspace_settings.name = "sRGB"
+        nt.links.new(node.outputs["Color"], bsdf.inputs["Base Color"])
+        bsdf.inputs["Roughness"].default_value = 0.93
+        for key in ("Specular IOR Level", "Specular"):
+            if key in bsdf.inputs:
+                bsdf.inputs[key].default_value = 0.10
+                break
+        obj.data.materials.append(mat)
+        # The grid is row-major from the south-west corner and the texture was
+        # flipped north-up at fetch time, so a direct i/j map lines up.
+        uvl = mesh.uv_layers.new(name="UVMap")
+        for poly in mesh.polygons:
+            for li in poly.loop_indices:
+                vi = mesh.loops[li].vertex_index
+                uvl.data[li].uv = ((vi % n) / (n - 1), (vi // n) / (n - 1))
+        print("  terrain: satellite texture applied")
+    else:
+        obj.data.materials.append(principled("sand", (0.34, 0.28, 0.21, 1.0), 0.94, 0.12))
     mod = obj.modifiers.new("smooth", "SMOOTH")
     mod.factor, mod.iterations = 0.4, 2
     return obj
@@ -463,11 +491,21 @@ def main() -> None:
         buildings_doc = json.load(fh)
     build_apron(terrain_doc)
     build_terrain(terrain_doc)
+    # WITH SATELLITE COLOUR, MOST LANDCOVER TINTS ARE REDUNDANT. The imagery
+    # already shows parks, sand and zoning better than a flat fill can, and
+    # painting over it throws away the measurement. Only water and roads still
+    # earn their place: water because the flood layer needs a clean surface to
+    # sit against, roads because they read as structure at city scale.
+    lc_only = ({"water", "road"} if os.path.exists(os.path.join(DATA, "dubai-creek-imagery.png"))
+               else None)
     lc_path = os.path.join(DATA, "dubai-creek-landcover.json")
     if os.path.exists(lc_path):
         with open(lc_path) as fh:
             print("  landcover:")
-            build_landcover(terrain_doc, json.load(fh))
+            lcdoc = json.load(fh)
+            if lc_only is not None:
+                lcdoc["layers"] = {k: v for k, v in lcdoc["layers"].items() if k in lc_only}
+            build_landcover(terrain_doc, lcdoc)
     build_buildings(terrain_doc, buildings_doc)
     setup_world()
     setup_sun()
@@ -505,7 +543,7 @@ def main() -> None:
     scene.render.film_transparent = False
     scene.view_settings.view_transform = "AgX"
     scene.view_settings.look = a.get("look", "AgX - Punchy")
-    scene.view_settings.exposure = float(a.get("exposure", "-1.6"))
+    scene.view_settings.exposure = float(a.get("exposure", "-4.0"))
     scene.render.filepath = out
     # THE 3D VIEWPORT HAS ITS OWN CLIP RANGE, separate from the camera's.
     # Fixing camera.clip_end fixes the RENDER and leaves the interactive view
