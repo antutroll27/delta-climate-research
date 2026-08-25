@@ -43,7 +43,8 @@ CACHE_DIR = os.path.join(ROOT, "data", ".cache", "globalml")
 
 REGION = "UnitedArabEmirates"
 QUADKEY_ZOOM = 9
-MIN_AREA_M2 = 10.0          # below this a footprint is noise at 30 m terrain scale
+MIN_AREA_M2 = 10.0
+MIRROR_SAMPLE = 500      # rings that keep their lonlat twin, for the anti-mirror check          # below this a footprint is noise at 30 m terrain scale
 LICENCE = "CDLA-Permissive-2.0"
 ATTRIBUTION = "Building footprints © Microsoft, Microsoft GlobalML Building Footprints (CDLA-Permissive-2.0)"
 
@@ -143,10 +144,18 @@ def build(site: Site) -> dict[str, Any]:
             for lon, lat in ring:
                 flat.append(round((lon - site.lon) * mx, 2))   # +x east
                 flat.append(round((lat - site.lat) * my, 2))   # +y NORTH
-            buildings.append({
-                "p": flat,
-                "lonlat": [[round(lon, 7), round(lat, 7)] for lon, lat in ring],
-            })
+            rec: dict[str, Any] = {"p": flat}
+            # THE lonlat TWIN IS KEPT ONLY FOR THE CHECK SAMPLE. It exists so the
+            # local-metre projection can be verified against independent ground
+            # truth — the guard against the axis-sign bug that shipped a mirrored
+            # render on the Kolkata twin. But `check()` reads the first
+            # MIRROR_SAMPLE rings and no more, so carrying it on all of them was
+            # 36 % of the artefact for no additional verification. At this site
+            # that alone was the difference between ~99 MB and passing GitHub's
+            # 100 MB file limit.
+            if len(buildings) < MIRROR_SAMPLE:
+                rec["lonlat"] = [[round(lon, 7), round(lat, 7)] for lon, lat in ring]
+            buildings.append(rec)
 
     return {
         "site": site.id,
@@ -189,12 +198,16 @@ def check() -> int:
         # transposed axis, which is exactly the class of bug that shipped a
         # mirrored render for a day on the Kolkata twin.
         worst = 0.0
-        for bld in d["b"][:500]:
+        for bld in [b for b in d["b"] if "lonlat" in b][:MIRROR_SAMPLE]:
             flat, ll = bld["p"], bld["lonlat"]
             for i, (lon, lat) in enumerate(ll):
                 ex = (lon - site.lon) * mx
                 ey = (lat - site.lat) * my
                 worst = max(worst, abs(flat[2 * i] - ex), abs(flat[2 * i + 1] - ey))
+        checked = sum(1 for b in d["b"] if "lonlat" in b)
+        if checked < MIRROR_SAMPLE:
+            failures.append(f"{sid}: only {checked} rings carry a lonlat twin -- "
+                            f"the anti-mirror check has nothing to verify against")
         if worst > 0.05:
             failures.append(f"{sid}: p/lonlat disagree by {worst:.3f} m -- projection or axis sign is wrong")
 

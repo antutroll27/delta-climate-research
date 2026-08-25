@@ -109,13 +109,28 @@ def building_coverage(site: Site, shape: tuple[int, int],
         raise SystemExit(f"missing {path} — run fetch-dubai-buildings.py first")
     with open(path, encoding="utf-8") as fh:
         doc = json.load(fh)
-    shapes = [({"type": "Polygon", "coordinates": [b["lonlat"]]}, 1) for b in doc["b"]]
+    # RASTERISE IN SITE-LOCAL METRES, not lon/lat. `p` is the flat local-metre
+    # ring every footprint carries; `lonlat` is now kept only on the check
+    # sample, so reading it here broke the moment that trim landed. Local metres
+    # is also the better frame: the grid is defined in it, so this drops a
+    # projection round-trip rather than merely working around the trim.
+    half = site.footprint_m / 2.0
+    shapes = []
+    for b in doc["b"]:
+        q = b["p"]
+        ring = [(q[i], q[i + 1]) for i in range(0, len(q), 2)]
+        if len(ring) >= 3:
+            shapes.append(({"type": "Polygon", "coordinates": [ring]}, 1))
     h, w = shape
     fine = rasterize(
         shapes, out_shape=(h * SUPERSAMPLE, w * SUPERSAMPLE),
-        transform=transform_from_bounds(*bounds, w * SUPERSAMPLE, h * SUPERSAMPLE),
+        transform=transform_from_bounds(-half, -half, half, half,
+                                        w * SUPERSAMPLE, h * SUPERSAMPLE),
         fill=0, all_touched=False,
     ).astype("float32")
+    # from_bounds puts row 0 at the NORTH edge; the height grid runs south-up,
+    # so flip to match `h[]` rather than leaving a silent half-city offset.
+    fine = fine[::-1]
     coarse: np.ndarray[Any, Any] = fine.reshape(h, SUPERSAMPLE, w, SUPERSAMPLE).mean(axis=(1, 3))
     return coarse
 

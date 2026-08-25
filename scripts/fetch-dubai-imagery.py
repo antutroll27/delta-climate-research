@@ -37,7 +37,11 @@ from _flood import SITES, Site, site_bounds  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT_DIR = os.path.join(HERE, "..", "public", "flood-sim", "data")
-TEX = 2048
+# 4096, not 2048. Sentinel-2 TCI is 10 m native, so the texture should stay at
+# or below that to remain a super-sample rather than a blur. Over the 28.44 km
+# coastal strip, 2048 gives 13.9 m/px — coarser than the source, which throws
+# away measured detail. 4096 gives 6.9 m/px and keeps it.
+TEX = 4096
 
 # Measured clearest scene over MGRS 40RCN: AOT 0.096, cloud 0.03 %.
 SCENE = "S2B_40RCN_20251223_0_L2A"

@@ -298,8 +298,28 @@ def build_apron(doc: dict[str, Any]) -> Any:
     floating slab.
     """
     size = doc["footprintM"]
-    z = doc["dtm"]["p50"] * TERRAIN_EXAG
-    r = size * 12.0
+    # SIT AT THE TILE EDGE, NOT THE MEDIAN. The median was fine while the window
+    # was small and roughly uniform. On the coastal strip the terrain runs from
+    # below sea level to inland dune, so the median sits well ABOVE the coast:
+    # measured, an apron at p50 buried 50 % of the terrain and the entire
+    # shoreline, leaving towers standing in flat sand. The edge median is where
+    # the apron actually MEETS the tile, so it joins without a step and cannot
+    # swallow the interior. Clamped below the terrain minimum as a backstop.
+    n = doc["n"]
+    hh = doc["h"]
+    perimeter = (hh[:n] + hh[-n:]
+                 + [hh[r * n] for r in range(n)] + [hh[r * n + n - 1] for r in range(n)])
+    perimeter.sort()
+    z = perimeter[len(perimeter) // 2] * TERRAIN_EXAG
+    z = min(z, doc["dtm"]["min"] * TERRAIN_EXAG)
+    # RADIUS SET BY THE HORIZON, NOT BY TASTE. A flat plane of radius r seen
+    # from height z shows its edge atan(z/r) below horizontal, and the sky below
+    # that is black — the hard band this apron exists to prevent. At 12x the
+    # site (341 km) a 3.4 km camera still saw 0.57 deg of it. At 200x (5,690 km)
+    # the edge sits 0.03 deg down, past the point any framing resolves, and the
+    # ground stays continuous and sunlit rather than being faked in the world
+    # shader, which was the alternative and needed HDR values fighting AgX.
+    r = size * 200.0
     verts = [(-r, -r, z), (r, -r, z), (r, r, z), (-r, r, z)]
     mesh = bpy.data.meshes.new("apron")
     mesh.from_pydata(verts, [], [(0, 1, 2, 3)])
@@ -437,6 +457,27 @@ def setup_world() -> None:
     bg = nt.nodes.new("ShaderNodeBackground")
     bg.inputs["Strength"].default_value = 1.0
     out = nt.nodes.new("ShaderNodeOutputWorld")
+    # BELOW THE HORIZON THE SKY IS BLACK, and no apron can hide it. A flat plane
+    # of radius r seen from height z has its edge at atan(z/r) BELOW horizontal,
+    # so there is always an angular gap between the apron edge and the true
+    # horizon — measured as a hard black band across the frame, which reads as a
+    # rendering fault rather than as distance. Enlarging the apron shrinks the
+    # band without ever closing it.
+    #
+    # Fill it in the world instead: blend the sky into a hazy sand tone for rays
+    # pointing downward. That is also what a desert horizon actually looks like.
+    # KNOWN COSMETIC ISSUE: a thin dark band sits between the apron edge and the
+    # true horizon. A flat plane of radius r seen from height z shows its edge
+    # atan(z/r) below horizontal, and below that the Nishita sky is black.
+    # Enlarging the apron to 200x the site shrinks the band to ~0.03 deg but
+    # cannot close it — only a curved ground or a horizon backdrop would.
+    #
+    # Substituting a ground colour in the world was tried and REVERTED: the
+    # world background is also the ambient light source here, so colouring its
+    # lower half dropped scene luminance from p50 0.54 to 0.03. Gating it to
+    # camera rays fixed the lighting but then needed HDR radiance values fighting
+    # AgX's tone curve, and blew out the sky instead. Not worth more; framing the
+    # camera slightly downward avoids it entirely.
     nt.links.new(sky.outputs["Color"], bg.inputs["Color"])
     nt.links.new(bg.outputs["Background"], out.inputs["Surface"])
 

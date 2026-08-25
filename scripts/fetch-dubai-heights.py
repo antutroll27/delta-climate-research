@@ -49,7 +49,7 @@ from typing import Any
 import requests
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _flood import OVERPASS, SITES, Site, m_per_deg, site_bounds  # noqa: E402
+from _flood import OVERPASS, SITES, Site, m_per_deg, site_bounds, window_key  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT_DIR = os.path.join(HERE, "..", "public", "flood-sim", "data")
@@ -61,7 +61,7 @@ ATTRIBUTION = "Building heights © OpenStreetMap contributors (ODbL 1.0)"
 def fetch_osm(site: Site) -> list[dict[str, Any]]:
     w, s, e, n = site_bounds(site)
     os.makedirs(CACHE, exist_ok=True)
-    path = os.path.join(CACHE, f"{site.id}-heights.json")
+    path = os.path.join(CACHE, f"{site.id}-{window_key(site)}-heights.json")
     if not os.path.exists(path):
         query = (
             f"[out:json][timeout:180];("
@@ -96,7 +96,7 @@ def fetch_osm_buildings(site: Site) -> list[dict[str, Any]]:
     """
     w, s_, e, n = site_bounds(site)
     os.makedirs(CACHE, exist_ok=True)
-    path = os.path.join(CACHE, f"{site.id}-osm-buildings.json")
+    path = os.path.join(CACHE, f"{site.id}-{window_key(site)}-osm-buildings.json")
     if not os.path.exists(path):
         query = (
             f"[out:json][timeout:600];("
@@ -134,7 +134,7 @@ def fetch_parts(site: Site) -> list[dict[str, Any]]:
     """OSM `building:part` elements with full geometry, cached."""
     w, s_, e, n = site_bounds(site)
     os.makedirs(CACHE, exist_ok=True)
-    path = os.path.join(CACHE, f"{site.id}-parts.json")
+    path = os.path.join(CACHE, f"{site.id}-{window_key(site)}-parts.json")
     if not os.path.exists(path):
         query = (
             f"[out:json][timeout:300];("

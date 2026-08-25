@@ -39,14 +39,29 @@ class Site(NamedTuple):
 # GlobalML has NO coverage there. Quadkey 123023311 is absent from the UAE tile
 # list, verified 2026-08-24. Any Al Ain work needs a different footprint source.
 SITES: dict[SiteId, Site] = {
-    # 12 km, NOT the original 7.68 km Creek window. The smaller box was the old
-    # city — Deira and Bur Dubai — and contained almost no landmark: Burj Khalifa
-    # missed by 2.6 km, Emirates Towers by 300 m, the Museum of the Future by
-    # 100 m. A Dubai tool with no Dubai skyline in it fails the first look test.
-    # This box holds Burj Khalifa, Emirates Towers, Museum of the Future, Dubai
-    # Frame, National Bank of Dubai, Etisalat Tower AND the Creek. Burj Al Arab
-    # is 8.7 km west, on the coast, and stays out.
-    "dubai-creek": Site("dubai-creek", 25.235, 55.290, 12000.0, 400),
+    # THE COASTAL STRIP, and the boundary is physical rather than budgetary.
+    #
+    # 28.44 km at 30 m, centred to cover Downtown, Business Bay, the Creek, Deira,
+    # Al Quoz, Dubai Hills, MBR City, Meydan, JVC, JVT, Al Furjan, Discovery
+    # Gardens, Sports City, JLT, Internet/Media City, Dubai Marina, JBR, Palm
+    # Jumeirah, Ras Al Khor and Dubai Creek Harbour.
+    #
+    # IT STOPS SHORT OF DUBAI SOUTH ON PURPOSE. Sampled over 7,857 SRTM points,
+    # Dubai South and Al Maktoum sit ~35 m ABOVE Downtown some 25 km away — a
+    # topographic HIGH that sheds toward the coast rather than a basin that
+    # receives. It is a separate upper catchment, not an extension of this one.
+    # Independently, the published Dubai HEC-RAS study puts >90 % of its study
+    # area below 10 m amsl, which is almost exactly the coverage limit of the
+    # DeltaDTM bare earth this pipeline routes on. The data boundary and the
+    # flood boundary coincide.
+    #
+    # The economics agree with the physics: this strip holds 91.8 % of the
+    # buildings of a box that also reached Dubai South, in 63 % of the area. The
+    # southern band adds 8 % of buildings for 37 % of the area, and one
+    # south-east quadrant runs at 3.5 buildings/km2. It is also the worst-mapped
+    # part of any box — Dubai South is 62 % complete in OSM with ONE height on
+    # 1,571 buildings, so including it would render a guess.
+    "dubai-creek": Site("dubai-creek", 25.1540, 55.240, 28440.0, 948),
 }
 
 # Copernicus DEM GLO-30, AWS Open Data mirror.
@@ -175,3 +190,17 @@ CTBUH_LANDMARKS: list[tuple[str, float, float, float]] = [
     ("The Tower (Union Properties)",    25.216789, 55.280102, 242.6),
     ("One Za'abeel The Residences",     25.227255, 55.292927, 238.3),
 ]
+
+
+def window_key(s: Site) -> str:
+    """Short hash of the study window, for cache filenames.
+
+    CACHES WERE KEYED BY SITE ID ALONE, which is a silent-staleness trap: moving
+    the window from 12 km to 28 km left every Overpass and Wikidata response on
+    disk under the same name, so the fetchers would have re-served data for the
+    OLD bbox with no error and no warning. Keying by the window means a site
+    change simply misses the cache and re-fetches.
+    """
+    import hashlib
+    w, so, e, n = site_bounds(s)
+    return hashlib.sha1(f"{w:.5f},{so:.5f},{e:.5f},{n:.5f}".encode()).hexdigest()[:8]

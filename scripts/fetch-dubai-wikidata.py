@@ -34,7 +34,7 @@ from typing import Any
 import requests
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _flood import CTBUH_LANDMARKS, SITES, Site, m_per_deg, site_bounds  # noqa: E402
+from _flood import CTBUH_LANDMARKS, SITES, Site, m_per_deg, site_bounds, window_key  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT_DIR = os.path.join(HERE, "..", "public", "flood-sim", "data")
@@ -46,12 +46,15 @@ MATCH_RADIUS_M = 90.0
 
 SPARQL = """
 SELECT ?item ?itemLabel ?height ?lat ?lon ?inception WHERE {
-  ?item wdt:P31/wdt:P279* wd:Q41176 .
+  SERVICE wikibase:around {
+    ?item wdt:P625 ?loc .
+    bd:serviceParam wikibase:center "Point(%f %f)"^^geo:wktLiteral .
+    bd:serviceParam wikibase:radius "%f" .
+  }
   ?item wdt:P2048 ?height .
   OPTIONAL { ?item wdt:P571 ?inception . }
   ?item p:P625 ?st . ?st psv:P625 ?node .
   ?node wikibase:geoLatitude ?lat . ?node wikibase:geoLongitude ?lon .
-  FILTER(?lat > %f && ?lat < %f && ?lon > %f && ?lon < %f)
   SERVICE wikibase:label { bd:serviceParam wikibase:language "en,ar". }
 }
 """
@@ -60,13 +63,31 @@ SELECT ?item ?itemLabel ?height ?lat ?lon ?inception WHERE {
 def fetch(site: Site) -> list[dict[str, Any]]:
     w, s, e, n = site_bounds(site)
     os.makedirs(CACHE, exist_ok=True)
-    path = os.path.join(CACHE, f"{site.id}-wikidata.json")
+    path = os.path.join(CACHE, f"{site.id}-{window_key(site)}-wikidata.json")
     if not os.path.exists(path):
-        resp = requests.get(
-            ENDPOINT, params={"query": SPARQL % (s, n, w, e)}, timeout=300,
-            headers={"Accept": "application/sparql-results+json",
-                     "User-Agent": "delta-climate-flood-sim/0.1 (build-time pipeline)"},
-        )
+        # QUERY BY LOCATION FIRST. The previous form opened with
+        # `wdt:P31/wdt:P279* wd:Q41176`, walking the global building subclass
+        # tree before filtering by coordinate — WDQS answered 502 on GET and 504
+        # on POST every time at this window size. `wikibase:around` hits the
+        # geospatial index first and returns in under a second. The radius
+        # covers the window's half-diagonal; the box clip happens below in
+        # Python, where it is cheap.
+        import time
+        radius_km = (site.footprint_m / 1000.0) * 0.75   # covers the half-diagonal
+        resp = None
+        for attempt in range(4):
+            resp = requests.post(
+                ENDPOINT,
+                data={"query": SPARQL % (site.lon, site.lat, radius_km)},
+                timeout=300,
+                headers={"Accept": "application/sparql-results+json",
+                         "User-Agent": "delta-climate-flood-sim/0.1 (build-time pipeline)"},
+            )
+            if resp.status_code == 200:
+                break
+            print(f"  WDQS {resp.status_code}, retry {attempt + 1}/4")
+            time.sleep(5 * (attempt + 1))
+        assert resp is not None
         resp.raise_for_status()
         with open(path, "w", encoding="utf-8") as fh:
             fh.write(resp.text)
@@ -80,6 +101,7 @@ def build(site: Site) -> dict[str, Any]:
     with open(path, encoding="utf-8") as fh:
         doc: dict[str, Any] = json.load(fh)
     mx, my = m_per_deg(site.lat)
+    w, s_, e, n = site_bounds(site)
 
     # Idempotency: this script reads what it writes.
     for arr in (doc["b"], doc.get("osmB", [])):
@@ -105,6 +127,8 @@ def build(site: Site) -> dict[str, Any]:
             rejected += 1              # no completion date: treat as unbuilt
             continue
         lat, lon = float(row["lat"]["value"]), float(row["lon"]["value"])
+        if not (w <= lon <= e and s_ <= lat <= n):
+            continue                   # `around` returns a disc; the site is a box
         x, y = (lon - site.lon) * mx, (lat - site.lat) * my
         key = (int(x // 40), int(y // 40))
         if seen.get(key, 0.0) >= height:

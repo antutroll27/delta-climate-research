@@ -25,7 +25,7 @@ from typing import Any
 import requests
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _flood import OVERPASS, SITES, Site, m_per_deg, site_bounds  # noqa: E402
+from _flood import OVERPASS, SITES, Site, m_per_deg, site_bounds, window_key  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT_DIR = os.path.join(HERE, "..", "public", "flood-sim", "data")
@@ -62,7 +62,7 @@ def query(site: Site) -> str:
 
 def fetch(site: Site) -> list[dict[str, Any]]:
     os.makedirs(CACHE, exist_ok=True)
-    path = os.path.join(CACHE, f"{site.id}-landcover.json")
+    path = os.path.join(CACHE, f"{site.id}-{window_key(site)}-landcover.json")
     if not os.path.exists(path):
         resp = requests.post(
             OVERPASS, data={"data": query(site)}, timeout=900,
