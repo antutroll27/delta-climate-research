@@ -135,3 +135,43 @@ def dem_tile_url(lat: float, lon: float) -> str:
         ns="N" if lat >= 0 else "S", lat=int(math.floor(abs(lat))),
         ew="E" if lon >= 0 else "W", lon=int(math.floor(abs(lon))),
     )
+
+
+# ── CTBUH-verified landmark heights ──────────────────────────────────────────
+#
+# The Council on Tall Buildings and Urban Habitat is the industry authority for
+# tall-building heights, and its numbers disagree with OSM's on most of these.
+# OSM frequently derives height from `building:levels` x 3.2 m, which is a floor
+# -count approximation: Burj Khalifa came through at 521.6 m against a true 828.
+#
+# ARCHITECTURAL height is the figure used — to the architectural top, spire
+# included, mast excluded. CTBUH publishes Architectural, To Tip and Highest
+# Occupied and does NOT publish a roof height; any "roof height" quoted elsewhere
+# comes from somewhere else. Independently corroborated by Wikidata (CC0), which
+# returns 828.0 for Burj Khalifa from a separate lineage.
+#
+# Heights are FACTS, not creative expression, so a short reference table of
+# published measurements carries no licence burden — unlike the OSM geometry
+# these attach to.
+#
+# (name, lat, lon, architectural_height_m)
+CTBUH_LANDMARKS: list[tuple[str, float, float, float]] = [
+    ("Burj Khalifa",                    25.197321, 55.274250, 828.0),
+    ("City Tower One",                  25.218996, 55.279163, 362.8),
+    ("Gevora Hotel",                    25.212339, 55.277199, 356.2),
+    ("JW Marriott Marquis Tower 1",     25.185940, 55.258430, 355.4),
+    ("JW Marriott Marquis Tower 2",     25.185369, 55.257771, 355.4),
+    ("Emirates Tower One",              25.217609, 55.283588, 354.6),
+    ("Al Habtoor City Tower",           25.182184, 55.253124, 345.0),
+    ("Safa Two",                        25.181339, 55.252186, 340.0),
+    ("The A-Tower",                     25.210138, 55.273289, 334.0),
+    ("Rose Rayhaan by Rotana",          25.211679, 55.276699, 333.0),
+    ("Al Yaqoub Tower",                 25.216428, 55.279731, 328.0),
+    ("The Index",                       25.207430, 55.277802, 326.0),
+    ("Blue Tower (HHHR)",               25.221251, 55.280708, 317.6),
+    ("Emirates Tower Two",              25.217621, 55.282318, 309.0),
+    ("One Za'abeel The Tower",          25.227566, 55.291286, 301.4),
+    ("The Tower Plaza Hotel",           25.217640, 55.278549, 294.0),
+    ("The Tower (Union Properties)",    25.216789, 55.280102, 242.6),
+    ("One Za'abeel The Residences",     25.227255, 55.292927, 238.3),
+]

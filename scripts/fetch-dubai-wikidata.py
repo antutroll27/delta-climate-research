@@ -1,0 +1,242 @@
+"""Wikidata building heights -> the authoritative, CC0 height layer.
+
+TWO PROBLEMS AT ONCE.
+
+ACCURACY. OSM heights for Dubai are frequently `building:levels` x 3.2 m, which
+is a floor-count approximation. Burj Khalifa came through at 521.6 m against a
+true architectural height of 828 m — the tower was 306 m short, and the same
+multiplication error is in every building tagged by levels rather than height.
+
+LICENCE. Everything else in this pipeline that carries a height is ODbL, and the
+share-alike question that raises is unresolved. Wikidata is CC0 — no attribution
+required, no share-alike — so every height sourced here is one fewer ODbL
+dependency. It does not close the question (outlines and massing are still OSM)
+but it moves the most quotable numbers out of it.
+
+WHAT IS FILTERED OUT, AND WHY IT MATTERS. Wikidata lists proposals and cancelled
+projects alongside completed buildings. Unfiltered, greater Dubai returns Dubai
+City Tower at 2,400 m and Nakheel Tower at 1,400 m — neither was ever built, and
+either would tower absurdly over Burj Khalifa in the render. Only items with an
+inception date at or before the current year survive, and anything taller than
+Burj Khalifa is rejected outright.
+
+    python3 scripts/fetch-dubai-wikidata.py
+    python3 scripts/fetch-dubai-wikidata.py --check
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sys
+from typing import Any
+
+import requests
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _flood import CTBUH_LANDMARKS, SITES, Site, m_per_deg, site_bounds  # noqa: E402
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+OUT_DIR = os.path.join(HERE, "..", "public", "flood-sim", "data")
+CACHE = os.path.join(HERE, "..", "data", ".cache", "wikidata")
+ENDPOINT = "https://query.wikidata.org/sparql"
+ATTRIBUTION = "Building heights from Wikidata (CC0 1.0 — public domain)"
+BURJ_KHALIFA_M = 828.0      # nothing in Dubai is taller; a taller value is a proposal
+MATCH_RADIUS_M = 90.0
+
+SPARQL = """
+SELECT ?item ?itemLabel ?height ?lat ?lon ?inception WHERE {
+  ?item wdt:P31/wdt:P279* wd:Q41176 .
+  ?item wdt:P2048 ?height .
+  OPTIONAL { ?item wdt:P571 ?inception . }
+  ?item p:P625 ?st . ?st psv:P625 ?node .
+  ?node wikibase:geoLatitude ?lat . ?node wikibase:geoLongitude ?lon .
+  FILTER(?lat > %f && ?lat < %f && ?lon > %f && ?lon < %f)
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "en,ar". }
+}
+"""
+
+
+def fetch(site: Site) -> list[dict[str, Any]]:
+    w, s, e, n = site_bounds(site)
+    os.makedirs(CACHE, exist_ok=True)
+    path = os.path.join(CACHE, f"{site.id}-wikidata.json")
+    if not os.path.exists(path):
+        resp = requests.get(
+            ENDPOINT, params={"query": SPARQL % (s, n, w, e)}, timeout=300,
+            headers={"Accept": "application/sparql-results+json",
+                     "User-Agent": "delta-climate-flood-sim/0.1 (build-time pipeline)"},
+        )
+        resp.raise_for_status()
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(resp.text)
+    with open(path, encoding="utf-8") as fh:
+        rows: list[dict[str, Any]] = json.load(fh)["results"]["bindings"]
+    return rows
+
+
+def build(site: Site) -> dict[str, Any]:
+    path = os.path.join(OUT_DIR, f"{site.id}-buildings.json")
+    with open(path, encoding="utf-8") as fh:
+        doc: dict[str, Any] = json.load(fh)
+    mx, my = m_per_deg(site.lat)
+
+    # Idempotency: this script reads what it writes.
+    for arr in (doc["b"], doc.get("osmB", [])):
+        for rec in arr:
+            if rec.get("hs") == "wikidata":
+                rec.pop("h", None)
+                rec.pop("hs", None)
+                rec.pop("wd", None)
+
+    seen: dict[tuple[int, int], float] = {}
+    landmarks: list[dict[str, Any]] = []
+    rejected = 0
+    for row in fetch(site):
+        try:
+            height = float(row["height"]["value"])
+        except (KeyError, ValueError):
+            continue
+        name = row.get("itemLabel", {}).get("value", "")
+        if height > BURJ_KHALIFA_M + 1:
+            rejected += 1              # unbuilt proposal
+            continue
+        if "inception" not in row:
+            rejected += 1              # no completion date: treat as unbuilt
+            continue
+        lat, lon = float(row["lat"]["value"]), float(row["lon"]["value"])
+        x, y = (lon - site.lon) * mx, (lat - site.lat) * my
+        key = (int(x // 40), int(y // 40))
+        if seen.get(key, 0.0) >= height:
+            continue                   # duplicate item for the same structure
+        seen[key] = height
+        landmarks.append({"x": round(x, 1), "y": round(y, 1),
+                          "h": round(height, 1), "name": name})
+
+    # Attach to whichever outline contains or sits nearest the point.
+    attached = 0
+    for lm in landmarks:
+        best, best_d = None, MATCH_RADIUS_M
+        for arr in (doc.get("osmB", []), doc["b"]):
+            for rec in arr:
+                xs, ys = rec["p"][0::2], rec["p"][1::2]
+                cx, cy = sum(xs) / len(xs), sum(ys) / len(ys)
+                d = ((cx - lm["x"]) ** 2 + (cy - lm["y"]) ** 2) ** 0.5
+                if d < best_d:
+                    best, best_d = rec, d
+        if best is not None:
+            best["h"] = lm["h"]
+            best["hs"] = "wikidata"
+            best["wd"] = lm["name"]
+            attached += 1
+
+    # ── CTBUH overrides, applied LAST because they are the authority ─────────
+    # Wikidata is CC0 and broad; CTBUH is narrow and definitive. Where they
+    # disagree CTBUH wins, and where OSM disagrees with either it loses — its
+    # values are often levels x 3.2 m. Measured deltas on this set run to
+    # hundreds of metres.
+    ctbuh_applied = 0
+    deltas: list[tuple[str, float, float]] = []
+    for name, lat, lon, height in CTBUH_LANDMARKS:
+        lx, ly = (lon - site.lon) * mx, (lat - site.lat) * my
+        best, best_d = None, MATCH_RADIUS_M
+        for arr in (doc.get("osmB", []), doc["b"]):
+            for rec in arr:
+                xs, ys = rec["p"][0::2], rec["p"][1::2]
+                cx, cy = sum(xs) / len(xs), sum(ys) / len(ys)
+                d = ((cx - lx) ** 2 + (cy - ly) ** 2) ** 0.5
+                if d < best_d:
+                    best, best_d = rec, d
+        if best is not None:
+            was = float(best.get("h", 0.0))
+            if was and abs(was - height) > 5:
+                deltas.append((name, was, height))
+            best["h"] = height
+            best["hs"] = "ctbuh"
+            best["wd"] = name
+            ctbuh_applied += 1
+    doc["ctbuh"] = {
+        "applied": ctbuh_applied,
+        "corrected": len(deltas),
+        "note": (
+            "CTBUH architectural heights override every other source. "
+            + "; ".join(f"{n}: {w:.0f} -> {c:.0f} m" for n, w, c in sorted(
+                deltas, key=lambda t: -abs(t[1] - t[2]))[:6])
+        ),
+    }
+
+    doc["wikidata"] = {
+        "landmarks": len(landmarks), "attached": attached, "rejectedUnbuilt": rejected,
+        "licence": "CC0-1.0", "attribution": ATTRIBUTION,
+        "note": (
+            f"{attached:,} heights come from Wikidata (CC0) and override the ODbL "
+            f"OSM values, which are often building:levels x 3.2 m. Burj Khalifa was "
+            f"521.6 m under that approximation against a true 828 m. {rejected} items "
+            f"were rejected as unbuilt proposals or taller than Burj Khalifa."
+        ),
+    }
+    return doc
+
+
+def check() -> int:
+    failures: list[str] = []
+    for sid in SITES:
+        with open(os.path.join(OUT_DIR, f"{sid}-buildings.json"), encoding="utf-8") as fh:
+            d = json.load(fh)
+        wd = d.get("wikidata")
+        if not wd:
+            failures.append(f"{sid}: no wikidata block")
+            continue
+        allrecs = list(d["b"]) + list(d.get("osmB", []))
+        ct = [r for r in allrecs if r.get("hs") == "ctbuh"]
+        if len(ct) < 8:
+            failures.append(f"{sid}: only {len(ct)} CTBUH landmarks matched")
+        if not any(abs(r["h"] - 828.0) < 0.1 for r in ct):
+            failures.append(f"{sid}: Burj Khalifa is not 828 m -- the authority did not apply")
+        wdh = [r for r in allrecs if r.get("hs") in ("wikidata", "ctbuh")]
+        if len(wdh) < 10:
+            failures.append(f"{sid}: only {len(wdh)} Wikidata heights attached")
+        tallest = max((r["h"] for r in wdh), default=0.0)
+        if not 820 <= tallest <= 830:
+            failures.append(f"{sid}: tallest Wikidata height {tallest} m -- "
+                            f"Burj Khalifa is 828 m, so this is wrong or unbuilt")
+        if any(r["h"] > BURJ_KHALIFA_M + 1 for r in wdh):
+            failures.append(f"{sid}: a building taller than Burj Khalifa survived the filter")
+    if failures:
+        for line in failures:
+            print(f"  FAIL {line}")
+        return 1
+    for sid in SITES:
+        with open(os.path.join(OUT_DIR, f"{sid}-buildings.json"), encoding="utf-8") as fh:
+            d = json.load(fh)
+        wd = d["wikidata"]
+        allrecs = list(d["b"]) + list(d.get("osmB", []))
+        top = sorted((r for r in allrecs if r.get("hs") == "wikidata"),
+                     key=lambda r: -r["h"])[:3]
+        ctb = d.get("ctbuh", {})
+        print(f"  OK {sid}: {wd['attached']} CC0 heights, {ctb.get('applied', 0)} CTBUH "
+              f"landmarks ({ctb.get('corrected', 0)} corrected), "
+              f"{wd['rejectedUnbuilt']} unbuilt rejected")
+        if ctb.get("note"):
+            print(f"     {ctb['note'][:150]}")
+        for r in top:
+            print(f"     {r['h']:6.1f} m  {r.get('wd', '—')}")
+    return 0
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--check", action="store_true")
+    if parser.parse_args().check:
+        return check()
+    for sid, site in SITES.items():
+        doc = build(site)
+        path = os.path.join(OUT_DIR, f"{sid}-buildings.json")
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(doc, fh, separators=(",", ":"))
+        print(f"  {sid}: {os.path.getsize(path):,} B")
+    return check()
+
+
+if __name__ == "__main__":
+    sys.exit(main())
