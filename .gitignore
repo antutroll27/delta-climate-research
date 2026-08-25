@@ -96,3 +96,12 @@ docs/research/*.mov
 # each and are re-fetchable from the URLs recorded in the artefacts; caching them
 # is a speed convenience, not project state.
 data/.cache/
+
+# Blender scenes for the flood simulator. BUILD OUTPUT, not source: one command
+# rebuilds public/models/dubai-creek.blend from scripts/blender_dubai.py plus the
+# committed artefacts, in about 25 seconds. It was tracked while it was 26 MB and
+# the argument was preserving hand-tuning; at the coastal strip it is 128 MB —
+# past GitHub's 100 MB limit — and no hand-tuning was ever done. `.blend1` is
+# Blender's auto-backup and was being committed as a second 128 MB copy.
+public/models/*.blend
+public/models/*.blend1
