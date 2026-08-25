@@ -65,6 +65,22 @@ COVER_MASK = 0.5         # a cell is "building" once over half of it is covered
 GROUND_SMOOTH_M = 90.0   # smoothing of the interpolated under-building surface
 CACHE_DIR = os.path.join(ROOT, "data", ".cache", "deltadtm")
 NODATA = -9999.0
+
+# DELTADTM SATURATES; IT DOES NOT GO VOID. Verified against the source tile
+# (DeltaDTM_v1_0_N25E055.tif): max value is exactly 10.0, nothing exceeds it,
+# and 36.82 % of the tile IS exactly 10.0. The product covers coastal land
+# below 10 m MSL and CLAMPS everything higher to the ceiling rather than
+# marking it nodata.
+#
+# Testing only for -9999 therefore let a dead-flat mesa through as "measured
+# bare earth": 36.34 % of this window's land sat at exactly 10.000 m. That is
+# not a cosmetic problem — a plateau has zero gradient, so runoff on a third of
+# the city could only move by numerical noise, and the GLO-30 fill the
+# docstring promises never fired because those cells never looked empty.
+#
+# A genuine reading of exactly 10.000 m is indistinguishable from a clamped one,
+# so both are refilled. At 30 m over this window that costs nothing real.
+DELTADTM_CEILING_M = 10.0
 LICENCE = "Copernicus DEM — free, full and open (ESA / Copernicus Programme)"
 ATTRIBUTION = "Contains modified Copernicus DEM data (GLO-30, DLR e.V. / Airbus DS)"
 
@@ -115,12 +131,22 @@ def building_coverage(site: Site, shape: tuple[int, int],
     # is also the better frame: the grid is defined in it, so this drops a
     # projection round-trip rather than merely working around the trim.
     half = site.footprint_m / 2.0
+    # BOTH FOOTPRINT SETS, NOT JUST GLOBALML. This mask does two jobs — it decides
+    # which DSM cells are building rather than ground, and it becomes BCR, which
+    # the solver uses for storage porosity and roof runoff. Using GlobalML alone
+    # left 165,763 OSM outlines unmasked, and BUILD-SPEC records OSM as the better
+    # UAE coverage of the two (GlobalML misses Al Ain entirely). Unmasked buildings
+    # do not vanish: their height stays in the GLO-30 fill and is served as ground.
+    #
+    # Overlap is harmless here — rasterize() burns 1 for any covered subcell, so a
+    # building present in both sources is counted once, not twice.
     shapes = []
-    for b in doc["b"]:
-        q = b["p"]
-        ring = [(q[i], q[i + 1]) for i in range(0, len(q), 2)]
-        if len(ring) >= 3:
-            shapes.append(({"type": "Polygon", "coordinates": [ring]}, 1))
+    for key in ("b", "osmB"):
+        for b in doc.get(key, []):
+            q = b["p"]
+            ring = [(q[i], q[i + 1]) for i in range(0, len(q), 2)]
+            if len(ring) >= 3:
+                shapes.append(({"type": "Polygon", "coordinates": [ring]}, 1))
     h, w = shape
     fine = rasterize(
         shapes, out_shape=(h * SUPERSAMPLE, w * SUPERSAMPLE),
@@ -128,9 +154,12 @@ def building_coverage(site: Site, shape: tuple[int, int],
                                         w * SUPERSAMPLE, h * SUPERSAMPLE),
         fill=0, all_touched=False,
     ).astype("float32")
-    # from_bounds puts row 0 at the NORTH edge; the height grid runs south-up,
-    # so flip to match `h[]` rather than leaving a silent half-city offset.
-    fine = fine[::-1]
+    # STAYS NORTH-UP. This used to flip here to "match h[]", but h[] was itself
+    # north-up, so the flip created the mismatch it claimed to fix — and worse,
+    # to_bare_earth() then masked a north-up DSM with a south-up coverage grid,
+    # removing "buildings" from mirrored locations. Everything inside this module
+    # is north-up (rasterio's own order); the flip to the south-west origin that
+    # types.ts specifies happens once, at the artefact boundary in build().
     coarse: np.ndarray[Any, Any] = fine.reshape(h, SUPERSAMPLE, w, SUPERSAMPLE).mean(axis=(1, 3))
     return coarse
 
@@ -174,7 +203,11 @@ def build(site: Site) -> dict[str, Any]:
     delta = read_deltadtm(site)
     if delta is None or delta.shape != dsm.shape:
         raise SystemExit("DeltaDTM tile unavailable or misaligned — refusing to ship GLO-30 as bare earth")
-    void = (delta <= NODATA + 1) | ~np.isfinite(delta)
+    water = (delta <= NODATA + 1) | ~np.isfinite(delta)
+    ceiling = ~water & (delta >= DELTADTM_CEILING_M)
+    land = ~water
+    measured = land & ~ceiling
+    void = water | ceiling
 
     # Datum-match the GLO-30 fallback to DeltaDTM over the cells they share, so
     # the filled region does not step at the seam. Median, not mean: the overlap
@@ -184,12 +217,26 @@ def build(site: Site) -> dict[str, Any]:
     terrain = np.where(void, glo_dtm + offset, delta)
 
     removed = (dsm - glo_dtm)[mask]
-    grid = resample(terrain, site.grid_n)
-    bcr = resample(coverage.astype("float64"), site.grid_n).clip(0.0, 1.0)
+    # FLIP TO SOUTH-UP. rasterio hands back row 0 at the NORTH edge, and every
+    # array above inherits that. `bcr` is already corrected on its way out of
+    # rasterize(); `h` never was, so the two grids in this same artefact were
+    # mirrored against each other, and both against the footprints.
+    #
+    # MEASURED, not reasoned: 293,608 building centroids were tested against the
+    # sea mask derived from `h`. As stored, 36.57 % of Dubai's buildings stood in
+    # the Persian Gulf; flipped, 0.45 %. Buildings are on land, so this is the
+    # orientation. types.ts GridSpec fixes the convention -- "row-major from the
+    # south-west corner, +y north" -- and `bcr` already obeyed it.
+    #
+    # This hid because the old surface was a flat 10 m mesa: a mirror of a
+    # featureless plane looks identical. Fixing the DeltaDTM ceiling gave the
+    # terrain real relief, which is what made it visible.
+    grid = resample(terrain, site.grid_n)[::-1]
+    bcr = resample(coverage.astype("float64"), site.grid_n).clip(0.0, 1.0)[::-1]
 
     return {
         "site": site.id,
-        "source": "DeltaDTM v1.1 (bare earth) with Copernicus GLO-30 fill above the 10 m MSL clip",
+        "source": "DeltaDTM v1.0 (bare earth, <=10 m MSL) with Copernicus GLO-30 bare-earth fill at and above the 10 m ceiling",
         "licence": f"{DELTADTM_LICENCE}; {LICENCE}",
         "attribution": f"{DELTADTM_ATTRIBUTION}. {ATTRIBUTION}",
         "surface": "bare earth (measured DTM, not a filtered surface model)",
@@ -204,6 +251,12 @@ def build(site: Site) -> dict[str, Any]:
                 "min": float(terrain.min()), "max": float(terrain.max())},
         "deltadtm": {
             "voidFraction": round(float(void.mean()), 4),
+            "ceilingFraction": round(float((delta >= DELTADTM_CEILING_M).mean()), 4),
+            # LAND-RELATIVE, and that distinction matters. A third of this window
+            # is the Persian Gulf, where DeltaDTM has no land to measure — counting
+            # that as "failed to cover" made a healthy build look broken.
+            "measuredLandFraction": round(float(measured.sum() / max(land.sum(), 1)), 4),
+            "landFillFraction": round(float(ceiling.sum() / max(land.sum(), 1)), 4),
             "gloFillOffsetM": round(offset, 3),
             "reliefP5P95M": round(pc(delta[both], 95) - pc(delta[both], 5), 3) if both.any() else 0.0,
         },
@@ -242,16 +295,47 @@ def check() -> int:
             failures.append(f"{sid}: bcr raster missing or wrong length")
         if any(v < 0.0 or v > 1.0 for v in d["bcr"]):
             failures.append(f"{sid}: bcr outside [0,1] -- it is a fraction, not a count")
-        # Measured bare-earth relief must stay far below the surface model's.
-        # If these converge, the DeltaDTM read silently fell back to GLO-30.
-        dsm_span = d["dsm"]["p95"] - d["dsm"]["p5"]
-        dtm_span = d["dtm"]["p95"] - d["dtm"]["p5"]
-        if dtm_span > 0.6 * dsm_span:
-            failures.append(f"{sid}: bare-earth span {dtm_span:.2f} m is too close to the DSM's "
-                            f"{dsm_span:.2f} m -- is this really DeltaDTM?")
-        if d["deltadtm"]["voidFraction"] > 0.5:
-            failures.append(f"{sid}: DeltaDTM covers under half the window "
-                            f"({100*(1-d['deltadtm']['voidFraction']):.0f}%) -- fill dominates")
+        # WAS: bare-earth span must stay under 60 % of the DSM's, as a proxy for
+        # "DeltaDTM actually loaded". That proxy died when the 10 m ceiling bug was
+        # fixed: 37 % of LAND is legitimately GLO-30 fill now, and fill carries the
+        # DSM's full relief, so the spans converge on a correct build. Retuning the
+        # ratio would only have moved the goalposts, so it is replaced by a direct
+        # test of the thing it was standing in for.
+        if d["deltadtm"]["measuredLandFraction"] < 0.30:
+            failures.append(f"{sid}: only {100*d['deltadtm']['measuredLandFraction']:.0f}% of LAND is "
+                            f"measured DeltaDTM -- the read may have silently fallen back to GLO-30")
+        # Bare earth is never above the surface it was derived from.
+        if d["dtm"]["p95"] > d["dsm"]["p95"] + 0.01:
+            failures.append(f"{sid}: bare earth p95 {d['dtm']['p95']:.2f} m exceeds the DSM's "
+                            f"{d['dsm']['p95']:.2f} m -- that is not a ground surface")
+        # WAS: voidFraction > 0.5. That counted the Persian Gulf, a third of this
+        # window, as "DeltaDTM failed to cover" -- so a healthy build read as broken.
+        # Fill is only meaningful as a fraction of LAND.
+        if d["deltadtm"]["landFillFraction"] > 0.50:
+            failures.append(f"{sid}: {100*d['deltadtm']['landFillFraction']:.0f}% of land comes from "
+                            f"GLO-30 fill rather than measurement -- fill dominates")
+
+        # THE MIRROR GUARD. `h` came back from rasterio north-up while `bcr` was
+        # flipped south-up, so the two grids in this artefact were mirrored against
+        # each other and against every footprint. Measured at the time: 36.57 % of
+        # Dubai's buildings stood in the Persian Gulf. Nothing caught it, because a
+        # mirrored flat mesa looks exactly like an unmirrored one.
+        #
+        # Buildings are not built in the sea. If the two grids ever disagree about
+        # which cells are water again, this fails loudly.
+        hh = np.asarray(d["h"], dtype="float64").reshape(n, n)
+        bb = np.asarray(d["bcr"], dtype="float64").reshape(n, n)
+        lab, _ = ndimage.label(hh < 0.0)
+        edge = set(lab[0, :]) | set(lab[-1, :]) | set(lab[:, 0]) | set(lab[:, -1])
+        edge.discard(0)
+        sea = np.isin(lab, list(edge))
+        built = bb > 0.30
+        if built.sum() > 100:
+            drowned = float(sea[built].mean())
+            if drowned > 0.05:
+                failures.append(
+                    f"{sid}: {100*drowned:.1f}% of built-up cells fall inside the sea derived from h "
+                    f"-- h and bcr disagree about which way is north")
         if abs(d["deltadtm"]["gloFillOffsetM"]) > 10.0:
             failures.append(f"{sid}: GLO-30 fill offset {d['deltadtm']['gloFillOffsetM']} m "
                             f"-- the two surfaces disagree about the datum")
@@ -273,7 +357,8 @@ def check() -> int:
         dd = d["deltadtm"]
         print(f"  OK {sid}: {d['n']}^2 @ {d['cellM']} m | DSM span {d['dsm']['p95']-d['dsm']['p5']:.2f} m "
               f"-> bare earth {d['dtm']['p95']-d['dtm']['p5']:.2f} m | "
-              f"DeltaDTM covers {100*(1-dd['voidFraction']):.0f}%, fill offset {dd['gloFillOffsetM']} m | "
+              f"DeltaDTM measures {100*dd['measuredLandFraction']:.0f}% of land, "
+              f"fill {100*dd['landFillFraction']:.0f}% @ offset {dd['gloFillOffsetM']} m | "
               f"mean BCR {m['coverageMean']}")
     return 0
 

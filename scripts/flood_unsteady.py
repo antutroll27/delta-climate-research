@@ -55,6 +55,38 @@ IA_GROUND, GROUND_F = 5.0, 38.6      # mm, mm/h
 IA_ROOF, ROOF_F = 2.0, 0.0           # mm, mm/h -- roofs do not infiltrate
 
 
+def sea_mask(z: np.ndarray[Any, Any]) -> np.ndarray[Any, Any]:
+    """Permanent open water: the below-MSL region CONNECTED TO THE DOMAIN EDGE.
+
+    NOT simply z < 0. A third of this window is the Gulf and the Creek, and
+    treating it as floodable ground is why an early run reported an 11.87 m
+    "flood peak" — that was the sea. But inland sabkha also sits below MSL and
+    genuinely does flood, so a flat threshold would erase real signal: measured
+    on this domain, 33.20 % of cells are edge-connected sea and 0.47 % are
+    inland below-MSL depressions that must be kept.
+
+    Connectivity is the discriminator that separates them, and it needs no
+    coastline vector — the Gulf reaches the boundary and a sabkha does not.
+
+    INCOMPLETE ON ITS OWN. Cross-checked against OSM's 379 water polygons,
+    6,185 cells of permanent water sit OUTSIDE this mask: marina basins,
+    artificial lakes and lagoons that are above MSL and do not touch the
+    boundary, so neither test can see them. They are 0.69 % of the domain —
+    too small to move an aggregate, but they are exactly the cells a reader
+    would notice rendered as "flooded". Union this with rasterised OSM water
+    before building a shipped scenario; `validate-flood-stability.py` runs on
+    the elevation mask alone because a coastline that moves per realisation
+    would measure an unstable mask rather than an unstable flood pattern.
+    """
+    from scipy.ndimage import label as _label     # noqa: PLC0415 — optional at import time
+
+    lab, _ = _label(z < 0.0)
+    edge = set(lab[0, :]) | set(lab[-1, :]) | set(lab[:, 0]) | set(lab[:, -1])
+    edge.discard(0)
+    mask: np.ndarray[Any, Any] = np.isin(lab, list(edge))
+    return mask
+
+
 def runoff_field(rain_mm: float, bcr: np.ndarray[Any, Any],
                  hours: float = 6.0) -> np.ndarray[Any, Any]:
     """Per-cell runoff depth, mm. BCR-weighted (Li et al. 2026, 10.1111/jfr3.70178)."""
@@ -67,7 +99,14 @@ def runoff_field(rain_mm: float, bcr: np.ndarray[Any, Any],
 def simulate(z: np.ndarray[Any, Any], bcr: np.ndarray[Any, Any],
              runoff_mm: np.ndarray[Any, Any] | float, hours: float = 6.0,
              manning: float = 0.035, cell: float = 30.0, alpha: float = 0.7,
-             max_steps: int = 40000) -> tuple[np.ndarray[Any, Any], np.ndarray[Any, Any], int, float]:
+             max_steps: int = 40000,
+             sink: np.ndarray[Any, Any] | None = None) -> tuple[np.ndarray[Any, Any], np.ndarray[Any, Any], int, float]:
+    """`sink` cells drain freely — water reaching them has left the catchment.
+
+    This is how permanent water enters the physics. Without it the sea is a
+    closed basin that fills up, which both fabricates depth over the Gulf and
+    dams the coastal outfall that real runoff uses to escape.
+    """
     A = cell * cell
     # STORAGE porosity phi = 1 - BCR. The floor is 0.15, not 0.05: at 0.05 a
     # 95%-built cell holds so little that any inflow reads as metres of depth.
@@ -125,6 +164,9 @@ def simulate(z: np.ndarray[Any, Any], bcr: np.ndarray[Any, Any],
         out += float(h[0, :].sum() + h[-1, :].sum() + h[:, 0].sum() + h[:, -1].sum()) * A
         h[0, :] = h[-1, :] = 0.0
         h[:, 0] = h[:, -1] = 0.0
+        if sink is not None:
+            out += float(h[sink].sum()) * A       # volume that reached open water
+            h[sink] = 0.0                         # same treatment as the domain edge
         qx[0, :] = qx[-1, :] = qy[0, :] = qy[-1, :] = 0.0
         peak = np.maximum(peak, h)
         t += dt

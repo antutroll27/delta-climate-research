@@ -466,11 +466,14 @@ def setup_world() -> None:
     #
     # Fill it in the world instead: blend the sky into a hazy sand tone for rays
     # pointing downward. That is also what a desert horizon actually looks like.
-    # KNOWN COSMETIC ISSUE: a thin dark band sits between the apron edge and the
-    # true horizon. A flat plane of radius r seen from height z shows its edge
-    # atan(z/r) below horizontal, and below that the Nishita sky is black.
-    # Enlarging the apron to 200x the site shrinks the band to ~0.03 deg but
-    # cannot close it — only a curved ground or a horizon backdrop would.
+    # THE DARK BAND WAS THE CAMERA'S FAR CLIP, NOT THE SKY. This was misdiagnosed
+    # twice as a sky/apron problem and "fixed" in the world shader both times,
+    # which only made the sky worse. The apron at size*200 puts its edge 0.01 deg
+    # below horizontal — half a pixel, invisible. What actually cut the ground
+    # away was clip_end at 40 km: past the clip plane there is no geometry, so
+    # the black underside of the Nishita sky showed through. See setup_camera.
+    #
+    # The rule that falls out: clip_end > apron radius, or the band comes back.
     #
     # Substituting a ground colour in the world was tried and REVERTED: the
     # world background is also the ambient light source here, so colouring its
@@ -505,7 +508,13 @@ def setup_camera(target: tuple[float, float, float], pos: tuple[float, float, fl
     # across and the camera sits kilometres back, so the whole city fell beyond
     # clip_end and Workbench rendered a flat background — which read like a
     # camera-aim bug and cost three renders to find.
-    cam.clip_start, cam.clip_end = 1.0, 40_000.0
+    # clip_end MUST EXCEED THE APRON RADIUS. Anything past the far clip plane
+    # falls through to the Nishita sky, which is near-black below the horizon,
+    # so a too-near clip_end carves a dark band across the frame that looks
+    # exactly like a sky bug. Measured: at 40 km the band spanned rows 101-145
+    # of a 1080p frame (luminance 76 -> 14); raising clip_end past the apron
+    # held it flat at 76. The apron is size*200, so this must clear that.
+    cam.clip_start, cam.clip_end = 5.0, 8_000_000.0
     obj = bpy.data.objects.new("cam", cam)
     bpy.context.collection.objects.link(obj)
     obj.location = pos
@@ -598,9 +607,9 @@ def main() -> None:
                 continue
             for space in area.spaces:
                 if space.type == "VIEW_3D":
-                    space.clip_start, space.clip_end = 1.0, 60_000.0
+                    space.clip_start, space.clip_end = 5.0, 8_000_000.0
                     fixed += 1
-    print(f"  viewport clip set on {fixed} 3D view(s): 1 m .. 60 km")
+    print(f"  viewport clip set on {fixed} 3D view(s): 5 m .. 8000 km")
 
     blend = a.get("blend")
     if blend:
