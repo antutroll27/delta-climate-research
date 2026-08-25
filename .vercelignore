@@ -35,6 +35,10 @@ public/models/flora.glb
 public/models/flora_raw.glb
 public/models/flowers_pack_4.glb
 public/models/nature_vegetation_pack.glb
+# Blender look-dev scene for the flood simulator. Source asset: regenerable
+# from scripts/blender_dubai.py plus the committed artefacts, never requested
+# at runtime, and 26 MB.
+public/models/dubai-creek.blend
 
 # Research, design history, and local-only scratch. NOTE: scripts/ must NOT be
 # ignored here — the build command runs node scripts/prune-dist-assets.mjs, and

@@ -15,6 +15,7 @@ const unusedModelAssets = [
   'models/flora_raw.glb',
   'models/flowers_pack_4.glb',
   'models/nature_vegetation_pack.glb',
+  'models/dubai-creek.blend',
 ];
 
 const dist = resolve('dist');
