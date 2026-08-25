@@ -563,7 +563,17 @@ def main() -> None:
 
     blend = a.get("blend")
     if blend:
-        bpy.ops.wm.save_as_mainfile(filepath=os.path.abspath(blend))
+        # PACK TEXTURES BEFORE SAVING. Blender stores image paths RELATIVE to
+        # the .blend, so a scene saved in /tmp and later moved to public/models
+        # resolved its texture to `public/models/../Volumes/...` — nonsense, and
+        # the terrain rendered magenta with no error anywhere. Packing embeds
+        # the pixels, so the committed scene is portable across checkouts.
+        try:
+            bpy.ops.file.pack_all()
+        except Exception as exc:                                # noqa: BLE001
+            print(f"  WARNING: could not pack textures ({exc}) — the .blend "
+                  f"will depend on absolute paths")
+        bpy.ops.wm.save_as_mainfile(filepath=os.path.abspath(blend), compress=True)
         print(f"  saved {blend} — open this in the GUI to inspect or tweak")
     print(f"  rendering {samples} samples -> {out}")
     bpy.ops.render.render(write_still=True)
