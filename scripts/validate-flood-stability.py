@@ -64,7 +64,19 @@ DATA = os.path.join(HERE, "..", "public", "flood-sim", "data")
 SIGMA_M = 0.43
 CORR_M = 400.0
 WET_M = 0.10          # the access-disruption threshold from types.ts
-RAIN_MM = 254.8       # Dubai, 16 April 2024 — the event with a measured runoff ratio
+# 254.8 mm IS AL AIN, NOT DUBAI. Khatm Al Shakla, ~95 km from this window. Dubai
+# recorded ~142 mm on 16 April 2024, and Al Marmoom — inland Dubai emirate, near
+# this window — recorded 219.3 mm. So this is a TRANSPOSED event: roughly 1.74x
+# Dubai's official 1-in-100 design storm, run here as a deliberate stress case.
+#
+# It is still the right number to calibrate against, because Hussein et al. 2025
+# measured their 7.14 % runoff ratio in that same hyper-arid catchment — pairing
+# 254.8 mm with that ratio is internally coherent. What is NOT coherent is
+# describing the result as "the April 2024 Dubai flood". It is not; it is what
+# Al Ain's rain would do to Dubai's ground.
+#
+# _flood.py:38 already recorded this correctly. The mislabel was introduced here.
+RAIN_MM = 254.8
 STORM_HOURS = 6.0     # must match flood_unsteady.simulate()'s default
 
 

@@ -79,7 +79,14 @@ FR_MAX = 1.0          # critical flow; above this the shallow-water form is inva
 #
 # GROUND_F IS CALIBRATED, NOT CHOSEN. Hussein et al. 2025 (doi:10.1007/s11069-025
 # -07156-9) measured a ~7.14 % runoff ratio for the April-2024 event in this
-# hyper-arid catchment. Solving (254.8 - IA_GROUND - 6*f)/254.8 = 0.0714 gives
+# hyper-arid catchment.
+#
+# THE 254.8 mm BELOW IS AL AIN, NOT DUBAI (Khatm Al Shakla, ~95 km away). Dubai
+# recorded ~142 mm; Al Marmoom, inland Dubai emirate, 219.3 mm. Pairing 254.8 mm
+# with Hussein's ratio is coherent because both describe the SAME catchment — but
+# applying the result to Dubai is a transposition, at ~1.74x Dubai's official
+# 1-in-100 design storm. Label scenarios accordingly; do not call the output
+# "the April 2024 Dubai flood". Solving (254.8 - IA_GROUND - 6*f)/254.8 = 0.0714 gives
 # f = 38.6 mm/h -- high, but squarely inside the 20-200 mm/h band for desert
 # sand, and it reproduces the ONE measured number available for this event.
 #
