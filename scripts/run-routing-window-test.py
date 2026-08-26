@@ -51,8 +51,12 @@ from flood_unsteady import sea_mask, simulate  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DATA = os.path.join(HERE, "..", "public", "flood-sim", "data")
-OUT = ("/private/tmp/claude-501/-Volumes-VSTSAMPLES-Projects-Angad/"
-       "133f1c21-12cb-4d13-b8aa-55c78df99785/scratchpad")
+# OUTPUT LIVES ON THE PROJECT VOLUME, NOT IN /private/tmp. The 6 h baseline was
+# written to the session scratchpad and silently vanished — swept by a tmp
+# reaper, not a disk-space problem (27 GB free at the time). The scoreboard then
+# dropped that row without complaining, so a comparison point disappeared from a
+# table that reads as complete. data/.cache/ is gitignored and durable.
+OUT = os.path.join(HERE, "..", "data", ".cache", "flood-runs")
 
 RAIN_MM = 142.0        # Dubai's own 16 Apr 2024 total, NOT Al Ain's 254.8 mm
 STORM_H = 6.0
@@ -96,15 +100,20 @@ def main() -> int:
         print(f"    {steps:>7,} steps  {tt/3600:6.2f}/{T/3600:.0f} h ({frac*100:5.1f} %)  "
               f"h_max {float(h.max()):6.3f} m  peak_max {float(peak.max()):6.3f} m  "
               f"{el/60:5.1f} min elapsed, ~{eta/60:.0f} min left", flush=True)
-        np.save(os.path.join(a.out_dir, "peak_72h.partial.npy"), peak)
-        np.save(os.path.join(a.out_dir, "resid_72h.partial.npy"), h)
+        np.save(os.path.join(a.out_dir, f"peak_{int(a.hours)}h.partial.npy"), peak)
+        np.save(os.path.join(a.out_dir, f"resid_{int(a.hours)}h.partial.npy"), h)
 
     peak, resid, steps, tt = simulate(z, bcr, 0.0, hours=a.hours, cell=cell,
                                       sink=sink, hyeto=inten, max_steps=300000,
                                       progress=report, progress_every=2000)
 
-    np.save(os.path.join(a.out_dir, "peak_72h.npy"), peak)
-    np.save(os.path.join(a.out_dir, "resid_72h.npy"), resid)
+    # Name by window length so a SWEEP can run concurrently without collisions.
+    # One 72 h endpoint answers "does more time help"; a sweep answers "how much,
+    # and where does it saturate" — and the solver is single-threaded, so the
+    # only way to use more than one core is to run more than one scenario.
+    tag = f"{int(a.hours)}h"
+    np.save(os.path.join(a.out_dir, f"peak_{tag}.npy"), peak)
+    np.save(os.path.join(a.out_dir, f"resid_{tag}.npy"), resid)
     wet_p = int((peak > 0.20).sum())
     wet_r = int((resid > 0.20).sum())
     print(f"\n  DONE: {steps:,} steps, {tt/3600:.1f} h simulated, "

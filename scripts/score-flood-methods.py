@@ -43,8 +43,21 @@ from flood_unsteady import sea_mask  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DATA = os.path.join(HERE, "..", "public", "flood-sim", "data")
+# Durable run outputs. Reads BOTH locations because a sweep launched before the
+# move is still writing to the old one; the session scratchpad is checked second
+# so the durable copy always wins.
+RUNS = os.path.join(HERE, "..", "data", ".cache", "flood-runs")
 SCRATCH = ("/private/tmp/claude-501/-Volumes-VSTSAMPLES-Projects-Angad/"
            "133f1c21-12cb-4d13-b8aa-55c78df99785/scratchpad")
+
+
+def find_run(name: str) -> str | None:
+    """First existing path for a run array, durable location preferred."""
+    for base in (RUNS, SCRATCH):
+        p = os.path.join(base, name)
+        if os.path.exists(p):
+            return p
+    return None
 BLOCKS = (2, 4, 8, 16, 32, 64)
 
 
@@ -117,13 +130,20 @@ def main() -> int:
     fields: dict[str, np.ndarray[Any, Any]] = {}
     for name, fn in INDICES.items():
         fields[name] = fn(z, cell=cell, drainage=sea)
-    for label, path in (("solver-peak", f"{SCRATCH}/peak_scs.npy"),
-                        ("solver-72h", f"{SCRATCH}/peak_72h.npy"),
-                        ("solver-72h-resid", f"{SCRATCH}/resid_72h.npy")):
-        if os.path.exists(path):
-            fields[label] = np.load(path)
-        else:
-            print(f"  (skipping {label} — {os.path.basename(path)} not present yet)")
+    missing: list[str] = []
+    for h in (6, 12, 24, 48, 72):
+        for kind in ("peak", "resid"):
+            path = find_run(f"{kind}_{h}h.npy")
+            if path:
+                fields[f"solver-{h}h-{kind}"] = np.load(path)
+            else:
+                missing.append(f"{kind}_{h}h")
+    # SAY WHAT IS ABSENT, LOUDLY. The 6 h baseline vanished from a temp directory
+    # and this table simply stopped showing it — a missing comparison row reads
+    # as "not applicable" rather than "lost", which is how a scoreboard quietly
+    # becomes wrong.
+    if missing:
+        print(f"  NOT SCORED (files absent): {', '.join(missing)}\n")
 
     results: dict[str, Any] = {"prevalence": prevalence, "methods": {}}
     hdr = "  ".join(f"{k*int(cell):>6}m" for k in BLOCKS)
