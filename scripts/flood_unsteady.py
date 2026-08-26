@@ -13,49 +13,63 @@ level. On 30 m Dubai terrain that depression field is sensor noise (BUILD-SPEC
 DEPTH DURING THE STORM, which is what a flood map shows and what the published
 Dubai HEC-RAS study computes.
 
-!!! THE ROUTING IS DEFECTIVE. DO NOT QUOTE ANY DEPTH FROM THIS SOLVER. !!!
+WHAT IT IS HONEST ABOUT — MEASURED 2026-08-26, RE-RUNNABLE.
 
-Found 2026-08-26. On a uniform slope with a uniform wet film, this scheme drives
-odd-even decoupling: alternate cells drain to zero while their neighbours
-accumulate, and a raised row GAINS water instead of draining. In Dubai that
-surfaces as 16.09 m peak depths in isolated cells whose neighbours are dry.
+scripts/validate-flood-stability.py, 9 realisations, 4 workers, ~33 min. Every
+figure below comes from that harness against this surface; artefact written to
+public/flood-sim/flood-stability.json. Perturbation is DeltaDTM's own stated
+error (sigma 0.43 m) at a 400 m correlation length, because DEM error is
+spatially correlated and white noise is not how DEMs err.
 
-Reproducer, runs in a second:  scripts/check-flood-routing.py
+                        CSI     depth corr   wet drift   p95 drift
+    correlated (real)   0.624      0.834       6.22 %      6.54 %
+    white noise (ctrl)  0.290      0.338      11.23 %     36.22 %
 
-Three things it is NOT, each checked and ruled out:
-  · not a CFL violation — refining dt 20x (1.0 -> 0.05, sim time held) leaves the
-    checkerboard at 0.52 and the raised row at 2.596 m. It CONVERGES to the wrong
-    answer, which is the dangerous kind of wrong.
-  · not the porosity floor — the reproducer runs at store = 1. The floor only
-    amplifies it (small void, same trapped volume, larger depth), which is why
-    Dubai depth correlated with 1/store at +0.49 and the floor looked guilty.
-  · not the slope sign — (L[i] - L[i+1])/dx matches Bates 2010 given the flux
-    convention. Verified against a known-answer case.
+    baseline: wet 16.73 %, p95 0.363 m, mean 0.0681 m, max 9.18 m
+    all 9 realisations completed the full 6.00 h; 7,352-8,129 steps
 
-Removing the dV volume clip makes the case go NaN, so that clip is not a safety
-net on a sound scheme; it is the only thing preventing blow-up, and the
-checkerboard is what it yields instead. First place to look is the flux limiter
-interacting with the in-place `newh` update inside the axis loop.
+THE SPLIT IS THE POINT. Aggregates hold; the spatial pattern moves. CSI 0.624
+means five equally-plausible terrains agree on ~62 % of which cells flood. So
+the defensible claim is DISTRICT-SCALE — how much floods and how deep — and
+never which street. The white-noise column is the control that makes the rest
+mean anything: it collapses to CSI 0.290 with 36 % p95 drift, so the test
+discriminates rather than measuring its own noise.
 
-WITHDRAWN — the stability numbers that stood here.
+THE DRIFT GOT WORSE WHEN THE SOLVER GOT BETTER, AND THAT IS CORRECT.
 
-They read: "spatial overlap 0.56-0.65, depth correlation 0.71-0.80, wet fraction
-and p95 move under 6 %". Measured ad-hoc, never committed, on the old 7.68 km
-window, over a domain that was one-third Persian Gulf with no permanent-water
-mask, on terrain later found N-S mirrored with a third of it clamped flat.
+An earlier run of this same harness reported aggregate drift of 0.29 %. That
+number was too good, and it was too good BECAUSE of a bug: the routing defect
+(see below) was a deterministic artefact that largely cancelled between
+realisations, flattening the drift artificially. With water actually routing,
+realistic DEM error produces genuinely different totals. 6.22 % is the honest
+figure; 0.29 % was measuring a defect's reproducibility.
 
-Re-derived on the corrected surface by scripts/validate-flood-stability.py
-(committed, re-runnable): CSI 0.613-0.622, depth correlation 0.662-0.687,
-aggregate drift under 0.3 %, white-noise contrast CSI 0.203.
+Depth correlation moved the other way for the same reason: 0.670 -> 0.834, which
+is what you expect once depth is a field rather than a scatter of spikes.
 
-THOSE ARE ALSO NOT SAFE TO QUOTE YET. CSI measures how much the flood PATTERN
-moves under terrain error. If which cell wins the checkerboard is itself
-terrain-sensitive, the figure measures an artefact's sensitivity rather than the
-flood pattern's, and the two cannot currently be separated. Aggregate drift and
-the white-noise contrast probably survive, since a deterministic artefact largely
-cancels between realisations — but "probably" is not an accuracy claim.
+WHAT WAS FIXED TO GET HERE. Three defects, all found 2026-08-26, each hiding the
+next. The terrain was N-S mirrored against its own buildings (36.57 % of Dubai
+stood in the Persian Gulf). DeltaDTM saturates at 10.0 m rather than going void,
+so a third of the land was a dead-flat mesa with nothing to route. And the
+water-surface gradient was NEGATED, which drove flow up the slope and produced
+odd-even decoupling — 16.09 m peaks in isolated cells with dry neighbours.
 
-The district-scale claim may well be right. It is not evidenced today.
+    max depth   16.09 m -> 10.17 m -> 9.18 m
+    p95         0.881 m ->  0.360 m -> 0.363 m
+
+The first arrow is the sign fix, the second the GEDTM30 bare-earth fill. p95 is
+now stable across two independent terrain builds, which is the better evidence.
+
+Guarded by scripts/check-flood-routing.py and self-test groups 6-7. The self-test
+passed 5 of 5 for the entire life of the inverted sign because not one check
+looked at flow DIRECTION.
+
+STILL NOT VALIDATED AGAINST OBSERVATION. Everything above measures REPRODUCIBILITY
+under terrain error, not correctness. There is no observed depth field for Dubai:
+no gauge network, and the "2024 flood districts" list that circulates is Gulf News
+2018. The first real target is Landsat-9, 19 April 2024, path/row 160/043, 0.03 %
+cloud, USGS public domain — untried. Until then this model is self-consistent, not
+verified.
 
     python3 scripts/flood_unsteady.py --self-test
 """

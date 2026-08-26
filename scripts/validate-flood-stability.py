@@ -22,20 +22,20 @@ product claim is district-scale, and this file is the evidence for saying so.
 White noise is run alongside as a contrast: it is NOT how DEMs err, and it
 should look worse, which is what makes the correlated figure meaningful.
 
-!!! ITS OUTPUT IS NOT SAFE TO QUOTE YET (2026-08-26). !!!
+LAST RUN — 2026-08-26, on corrected routing and the GEDTM30 bare-earth fill.
 
-The harness is sound and the run completed, but the SOLVER underneath it has a
-routing defect (scripts/check-flood-routing.py). CSI measures how much the flood
-pattern moves under terrain error; if which cell wins that defect's checkerboard
-is itself terrain-sensitive, CSI is measuring the artefact, not the physics.
+                        CSI     depth corr   wet drift   p95 drift
+    correlated (real)   0.624      0.834       6.22 %      6.54 %
+    white noise (ctrl)  0.290      0.338      11.23 %     36.22 %
 
-Last run on the corrected terrain, for the record and not for a slide:
-    CSI 0.613-0.622   depth corr 0.662-0.687   aggregate drift < 0.3 %
-    white-noise contrast CSI 0.203
-    baseline wet 15.77 %, p95 0.881 m, max 16.09 m  <- the max is the artefact
+    baseline: wet 16.73 %, p95 0.363 m, mean 0.0681 m, max 9.18 m
+    9/9 realisations completed the full 6.00 h, 7,352-8,129 steps
 
-Re-run this once routing is fixed. The aggregate and contrast figures will
-probably hold; the CSI figure has to be re-earned.
+These supersede an earlier run of this harness that reported CSI 0.613-0.622,
+depth corr 0.662-0.687 and drift under 0.3 %. That run predated the routing fix,
+and its suspiciously low drift was an artefact cancelling between realisations
+rather than a stable model. Re-run this whenever the terrain or solver changes;
+the numbers are only as current as the surface underneath them.
 
     python3 scripts/validate-flood-stability.py --realisations 5 --workers 4
 """
