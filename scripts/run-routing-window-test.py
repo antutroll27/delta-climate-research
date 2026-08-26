@@ -69,13 +69,32 @@ def main() -> int:
     ap.add_argument("--rain", type=float, default=RAIN_MM)
     ap.add_argument("--out-dir", default=OUT)
     ap.add_argument("--storm", choices=("observed", "design"), default="observed")
+    # 38.6 mm/h is Hussein's measured WADI SAND -- loose and uncompacted. Urban
+    # Dubai's open ground is graded, compacted and partly sealed, so this is an
+    # upper bound on how fast it drinks. Sweepable because it is now the largest
+    # remaining assumption, having been the SECOND largest until the storm shape
+    # was fixed.
+    ap.add_argument("--ground-f", type=float, default=None,
+                    help="override bare-ground infiltration, mm/h (default 38.6)")
+    # PIPED DRAINAGE, SCALED BY BUILT COVER. Capacity is assumed proportional to
+    # BCR because development and drainage arrive together -- a sabkha flat has
+    # no gullies and a built block does. That is a PROXY, not a survey: no open
+    # dataset of Dubai's storm network exists. It is a hypothesis under test,
+    # which is why it is a flag with a default of off rather than a constant.
+    ap.add_argument("--drain-mmh", type=float, default=None,
+                    help="peak piped drainage at BCR=1, mm/h (default: none)")
     a = ap.parse_args()
+
+    if a.ground_f is not None:
+        import flood_unsteady
+        flood_unsteady.GROUND_F = a.ground_f
 
     terr = json.load(open(os.path.join(DATA, "dubai-creek-terrain.json")))
     n, cell = int(terr["n"]), float(terr["cellM"])
     z = np.asarray(terr["h"], dtype="float64").reshape(n, n)
     bcr = np.asarray(terr["bcr"], dtype="float64").reshape(n, n)
     sink = sea_mask(z)
+    drain = None if a.drain_mmh is None else (a.drain_mmh * bcr / 1000.0 / 3600.0)
 
     # THE STORM SHAPE IS NOW OBSERVED, NOT INVENTED (2026-08-27).
     #
@@ -96,8 +115,28 @@ def main() -> int:
         # IMERG reads 119.8 mm against the 142 mm ground report — a known dry
         # bias for extremes over arid land. Take SHAPE from the satellite and
         # TOTAL from the ground, rather than trusting either for both.
-        inten *= a.rain / (inten.sum() * (a.hours / len(inten)))
-        shape = f"observed IMERG, {len(inten)} steps"
+        # THE OBSERVED SERIES IS ANCHORED TO REAL TIME, AT A FIXED 30 min STEP.
+        #
+        # The array is 145 half-hours of actual April 2024. Handing it to a
+        # window of a different length and letting the step size stretch does
+        # not lengthen the storm — it RESCALES THE TIME AXIS. A 24 h storm
+        # squeezed into 6 h becomes 4x more intense, manufacturing the exact
+        # too-peaky storm this whole change removed.
+        #
+        # So the step is pinned at 30 min and a LONGER window is zero-padded:
+        # the same rain falls at the same rate, then it is dry while the water
+        # routes. That is what "give it more time to drain" has to mean. A
+        # SHORTER window is refused outright — it would silently drop rain.
+        step_h = 0.5
+        need = int(round(a.hours / step_h))
+        if need < len(inten):
+            sys.exit(f"--hours {a.hours:.0f} is shorter than the observed storm's "
+                     f"{len(inten) * step_h:.0f} h; that would discard rainfall. "
+                     f"Use --storm design to sweep shorter windows.")
+        inten *= a.rain / (inten.sum() * step_h)          # scale to the ground total
+        inten = np.concatenate([inten, np.zeros(need - len(inten))])
+        shape = (f"observed IMERG, {int((inten > 0).sum())} wet of "
+                 f"{len(inten)} x 30 min steps")
     else:
         t = np.arange(STEPS_HY) * (a.hours / STEPS_HY)
         w = np.where(t < STORM_H,
@@ -106,7 +145,10 @@ def main() -> int:
         shape = f"invented design storm, {STORM_H:.0f} h burst"
 
     print(f"  {n}x{n} @ {cell:.0f} m, {a.hours:.0f} h window, {a.rain} mm total\n"
-          f"  {shape}, peak {inten.max():.1f} mm/h", flush=True)
+          f"  {shape}, peak {inten.max():.1f} mm/h\n"
+          f"  infiltration {a.ground_f or 38.6:.1f} mm/h, drainage "
+          f"{'none' if a.drain_mmh is None else f'{a.drain_mmh:g} mm/h x BCR'}",
+          flush=True)
     os.makedirs(a.out_dir, exist_ok=True)
     t0 = time.time()
 
@@ -123,13 +165,16 @@ def main() -> int:
 
     peak, resid, steps, tt = simulate(z, bcr, 0.0, hours=a.hours, cell=cell,
                                       sink=sink, hyeto=inten, max_steps=300000,
+                                      drain=drain,
                                       progress=report, progress_every=2000)
 
     # Name by window length so a SWEEP can run concurrently without collisions.
     # One 72 h endpoint answers "does more time help"; a sweep answers "how much,
     # and where does it saturate" — and the solver is single-threaded, so the
     # only way to use more than one core is to run more than one scenario.
-    tag = f"{int(a.hours)}h" + ("" if a.storm == "design" else "-obs")
+    tag = (f"{int(a.hours)}h" + ("" if a.storm == "design" else "-obs")
+           + ("" if a.ground_f is None else f"-f{a.ground_f:g}")
+           + ("" if a.drain_mmh is None else f"-d{a.drain_mmh:g}"))
     np.save(os.path.join(a.out_dir, f"peak_{tag}.npy"), peak)
     np.save(os.path.join(a.out_dir, f"resid_{tag}.npy"), resid)
     wet_p = int((peak > 0.20).sum())

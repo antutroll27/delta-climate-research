@@ -191,6 +191,7 @@ def simulate(z: np.ndarray[Any, Any], bcr: np.ndarray[Any, Any],
              hold: np.ndarray[Any, Any] | None = None,
              closed: bool = False,
              hyeto: np.ndarray[Any, Any] | None = None,
+             drain: np.ndarray[Any, Any] | None = None,
              progress: Any = None,
              progress_every: int = 2000) -> tuple[np.ndarray[Any, Any], np.ndarray[Any, Any], int, float]:
     """`sink` cells drain freely — water reaching them has left the catchment.
@@ -198,6 +199,18 @@ def simulate(z: np.ndarray[Any, Any], bcr: np.ndarray[Any, Any],
     This is how permanent water enters the physics. Without it the sea is a
     closed basin that fills up, which both fabricates depth over the Gulf and
     dams the coastal outfall that real runoff uses to escape.
+
+    `drain` is the PARTIAL version of the same idea, in m/s per cell: piped storm
+    drainage that removes water at a finite rate instead of instantly. It exists
+    because `sink` is binary and a city is not.
+
+    WHY IT WAS ADDED (2026-08-27). Scored against Landsat, the model floods
+    where buildings ARE (block r +0.76 with built cover) and Dubai flooded where
+    they are NOT (-0.18). The elevation term has the right sign in both, so
+    routing works; the misplacement is entirely in where water is GENERATED and
+    what removes it. Roofs shed 100 % of their rain, so runoff is born on the
+    densest cells — and nothing in the model then takes it away, because the one
+    piece of infrastructure that exists precisely there was missing.
     """
     A = cell * cell
     # STORAGE porosity phi = 1 - BCR. The floor is 0.15, not 0.05: at 0.05 a
@@ -252,8 +265,20 @@ def simulate(z: np.ndarray[Any, Any], bcr: np.ndarray[Any, Any],
             fall = inten * dt                                    # m this step
             take = np.minimum(ia_left, fall)                     # IA first
             ia_left -= take
-            net = np.maximum(fall - take - f_cell * dt, 0.0)     # then infiltration
-            newh = h + net / store
+            # STANDING WATER INFILTRATES TOO.
+            #
+            # This was max(fall - take - f*dt, 0) added to h, which offsets
+            # infiltration against INCOMING RAIN ONLY: once a puddle existed
+            # nothing could remove it but flow, and any infiltration capacity
+            # left over after a light half-hour was thrown away. Measured
+            # consequence: 89.3 % of the wet domain was still wet 72 h after a
+            # storm, on sand that drinks 38.6 mm/h -- a 0.2 m puddle should be
+            # gone in five hours.
+            #
+            # Now rain lands first and the ground then drinks from the whole
+            # column at its capacity rate, bounded by what is actually there.
+            wet = h + (fall - take) / store
+            newh = wet - np.minimum(wet, f_cell * dt / store)
         else:
             newh = h + rain * dt / store             # rain first, then routing
         for axis, q, conv in ((0, qy, conv_y), (1, qx, conv_x)):
@@ -295,9 +320,28 @@ def simulate(z: np.ndarray[Any, Any], bcr: np.ndarray[Any, Any],
                 else:
                     qn[:, -1] = 0.0
             dV = qn * cell * conv * dt               # face width reduced by conveyance porosity
-            here = newh * store * A
-            there = np.roll(newh, -1, axis=axis) * store * A
-            dV = np.clip(dV, -there, here)           # never drain a cell negative
+            # DONOR-LIMITED, PER CELL — NOT PER FACE.
+            #
+            # This was np.clip(dV, -there, here), which bounds each FACE by the
+            # volume of the cell behind it. Every cell has TWO faces on this
+            # axis, so both could independently take its whole volume and the
+            # cell lost up to 2x what it held. newh went negative and the
+            # np.maximum(newh, 0.0) below turned that deficit into NEW WATER.
+            #
+            # Latent until 2026-08-27: rain topped every cell up each step, so
+            # nothing could empty one. Adding piped drainage was the first
+            # mechanism that could, and a closed flat basin promptly went from
+            # 44.1 to 142.2 units of water — mass creation beginning on the
+            # exact step the first cell reached zero depth.
+            #
+            # The fix bounds each CELL's total outflow across both its faces,
+            # then scales every face by its DONOR's factor, so the pair stays
+            # antisymmetric and mass is conserved exactly rather than clipped.
+            avail = newh * store * A
+            owed = (np.maximum(dV, 0.0)
+                    + np.maximum(-np.roll(dV, 1, axis=axis), 0.0))
+            scale = np.where(owed > avail, avail / np.maximum(owed, 1e-30), 1.0)
+            dV = np.where(dV > 0.0, dV * scale, dV * np.roll(scale, -1, axis=axis))
             newh = newh - dV / (store * A)
             newh = newh + np.roll(dV, 1, axis=axis) / (store * A)
             q[...] = qn
@@ -318,6 +362,13 @@ def simulate(z: np.ndarray[Any, Any], bcr: np.ndarray[Any, Any],
         if sink is not None:
             out += float(h[sink].sum()) * A       # volume that reached open water
             h[sink] = 0.0                         # same treatment as the domain edge
+        if drain is not None:
+            # RATE-LIMITED, AND IT CANNOT TAKE MORE THAN IS THERE. Clipping to h
+            # is what keeps this mass-conserving; an unclipped rate drives depth
+            # negative on shallow cells and quietly manufactures volume.
+            took = np.minimum(h, drain * dt)
+            out += float(took.sum()) * A
+            h -= took
         qx[0, :] = qx[-1, :] = qy[0, :] = qy[-1, :] = 0.0
         peak = np.maximum(peak, h)
         t += dt
@@ -406,9 +457,66 @@ def self_test() -> int:
     a(int((col[1:20] <= 1e-9).sum()) == 0,
       f"{int((col[1:20] <= 1e-9).sum())} interior cells drained to zero from a wet start")
 
+    # 8. Drainage removes water at a finite RATE and conserves mass exactly.
+    #
+    #    NOTE ON WHAT IS *NOT* ASSERTED HERE. A first version checked that the
+    #    drained middle of a closed basin ends up shallower than its undrained
+    #    edge. That is false, and the failure was instructive: on a 21x21 grid
+    #    gravity waves cross the domain in seconds, so the surface re-levels
+    #    almost immediately and depth stays near-uniform. The corner finishes
+    #    LOWEST because it has two neighbours rather than four and refills
+    #    slowest — connectivity, not drainage. Testing a spatial pattern here
+    #    would be testing the wave speed, so test the conserved quantity instead.
+    flat = np.zeros((21, 21))
+    start = np.full((21, 21), 0.10)
+
+    # a uniform drain has no gradient, so no flow: every cell must fall alone
+    _, hu, _, _ = simulate(flat, flat, 0.0, hours=1.0, cell=30.0, h0=start.copy(),
+                           closed=True, drain=np.full((21, 21), 20.0 / 1000.0 / 3600.0))
+    a(abs(float(hu.mean()) - 0.08) < 1e-6,
+      f"20 mm/h for 1 h left {float(hu.mean()):.5f} m from 0.100, expected 0.080")
+    a(float(hu.std()) < 1e-9,
+      f"a uniform drain produced spatial variation, std {float(hu.std()):.2e}")
+
+    # a PATCHY drain drives flow -- and mass must survive it exactly. This is
+    # the case that exposed the per-face clip creating water out of nothing.
+    rate = np.zeros((21, 21))
+    rate[5:16, 5:16] = 20.0 / 1000.0 / 3600.0
+    for hrs in (1.0, 6.0):
+        _, hd, _, _ = simulate(flat, flat, 0.0, hours=hrs, cell=30.0,
+                               h0=start.copy(), closed=True, drain=rate)
+        want = 44.1 - 121 * 0.020 * hrs
+        a(abs(float(hd.sum()) - want) < 1e-9,
+          f"closed basin held {float(hd.sum()):.6f} after {hrs:.0f} h, expected {want:.6f}")
+        a(float(hd.min()) >= 0.0, f"depth went to {float(hd.min()):.2e} m -- negative")
+
+    # cannot remove more than exists
+    _, he, _, _ = simulate(flat, flat, 0.0, hours=1.0, cell=30.0, h0=start.copy(),
+                           closed=True, drain=np.full((21, 21), 1.0))
+    a(float(he.min()) >= 0.0 and float(he.max()) < 1e-9,
+      f"an overwhelming drain left {float(he.max()):.2e} m instead of emptying")
+
+    # 9. A puddle must soak away. Closed flat basin, bare ground (bcr 0, so
+    #    38.6 mm/h), 0.10 m of standing water and a hyetograph of pure zeros.
+    #    Nothing can flow out, so infiltration is the ONLY exit -- which is
+    #    exactly the path that did not exist until 2026-08-27.
+    dry_storm = np.zeros(8)
+    _, hp, _, _ = simulate(np.zeros((21, 21)), np.zeros((21, 21)), 0.0, hours=1.0,
+                           cell=30.0, h0=np.full((21, 21), 0.10), closed=True,
+                           hyeto=dry_storm)
+    a(abs(float(hp.mean()) - 0.0614) < 5e-4,
+      f"standing water read {float(hp.mean()):.4f} m after 1 h on sand that "
+      f"drinks 38.6 mm/h, expected 0.0614")
+    # and it must stop at empty, not go negative
+    _, hz, _, _ = simulate(np.zeros((21, 21)), np.zeros((21, 21)), 0.0, hours=6.0,
+                           cell=30.0, h0=np.full((21, 21), 0.10), closed=True,
+                           hyeto=np.zeros(48))
+    a(float(hz.min()) >= 0.0 and float(hz.max()) < 1e-9,
+      f"a puddle left {float(hz.max()):.2e} m after 6 h of infiltration")
+
     for line in fails:
         print(f"  FAIL {line}")
-    print(f"\n  {7 - len(fails)} of 7 check groups passed.")
+    print(f"\n  {9 - len(fails)} of 9 check groups passed.")
     return 1 if fails else 0
 
 

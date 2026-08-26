@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import glob
 import os
 import sys
 from typing import Any
@@ -130,20 +131,23 @@ def main() -> int:
     fields: dict[str, np.ndarray[Any, Any]] = {}
     for name, fn in INDICES.items():
         fields[name] = fn(z, cell=cell, drainage=sea)
-    missing: list[str] = []
-    for h in (6, 12, 24, 48, 72):
-        for kind in ("peak", "resid"):
-            path = find_run(f"{kind}_{h}h.npy")
-            if path:
-                fields[f"solver-{h}h-{kind}"] = np.load(path)
-            else:
-                missing.append(f"{kind}_{h}h")
-    # SAY WHAT IS ABSENT, LOUDLY. The 6 h baseline vanished from a temp directory
-    # and this table simply stopped showing it — a missing comparison row reads
-    # as "not applicable" rather than "lost", which is how a scoreboard quietly
-    # becomes wrong.
-    if missing:
-        print(f"  NOT SCORED (files absent): {', '.join(missing)}\n")
+    # GLOB, DO NOT ENUMERATE. This listed five hardcoded window lengths, so the
+    # moment runs gained a storm tag (`-obs`) and an infiltration tag (`-f25`)
+    # every one of them became invisible to the scoreboard — silently, because
+    # an absent row reads as "not applicable" rather than "never scored".
+    seen: set[str] = set()
+    for base in (RUNS, SCRATCH):
+        for path in sorted(glob.glob(os.path.join(base, "*.npy"))):
+            name = os.path.basename(path)[:-4]
+            if name.endswith(".partial") or name in seen:
+                continue          # a partial is a live run, not a result
+            seen.add(name)
+            kind, _, tag = name.partition("_")
+            if kind not in ("peak", "resid"):
+                continue
+            fields[f"solver-{tag}-{kind}"] = np.load(path)
+    print(f"  scoring {len(fields)} fields "
+          f"({len([k for k in fields if k.startswith('solver')])} solver runs)\n")
 
     results: dict[str, Any] = {"prevalence": prevalence, "methods": {}}
     hdr = "  ".join(f"{k*int(cell):>6}m" for k in BLOCKS)
