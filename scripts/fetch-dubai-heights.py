@@ -54,7 +54,73 @@ from _flood import OVERPASS, SITES, Site, m_per_deg, site_bounds, window_key  # 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT_DIR = os.path.join(HERE, "..", "public", "flood-sim", "data")
 CACHE = os.path.join(HERE, "..", "data", ".cache", "osm")
-METRES_PER_LEVEL = 3.2      # OSM convention where only building:levels is tagged
+# STOREY HEIGHT WAS AN INDIAN CONSTANT AND IT UNDER-PREDICTED EVERY BUILDING.
+#
+# 3.2 m came from the National Building Code of India via scripts/compute-far.py,
+# where it is honestly labelled an assumption for Kolkata. It was carried into
+# Dubai unchanged. It is not an OSM convention either — the OSM wiki says 3 m.
+#
+# Measured against the 938 Dubai buildings that carry height and building:levels
+# INDEPENDENTLY (see below):
+#
+#     rule                      bias      MAE     median rel err
+#     3.2 x n  (this constant) -20.51 m  21.63 m      22.0 %
+#     3.0 x n  (OSM wiki)      -25.21 m  26.10 m      26.8 %
+#     4.0 x n                   -1.71 m   9.55 m       7.7 %
+#     2.09 + 3.98 x n           -0.09 m   9.14 m       7.0 %
+#
+# TWO THIRDS OF THE DUAL-TAGGED SAMPLE IS CIRCULAR and had to be excluded: 38.7 %
+# of Dubai buildings tagged with both have height EXACTLY levels x 4.0, 14.1 %
+# x 5.0, 7.9 % x 3.0. Those are mapper assumptions, not measurements. Fitting on
+# them produces a constant that agrees with itself — a first pass here reported
+# MAE 4.49 m by doing exactly that. The numbers above use only the 938 that are
+# genuinely independent.
+#
+# CORROBORATED INDEPENDENTLY. Dubai South's own Residential District Planning
+# Regulations give max height and max floors per sub-zone; dividing them across
+# zones Ha-He gives a mean of 3.99 m/floor against our regression's 3.98. Both
+# documents define height the same way — finished sidewalk to top of roof
+# parapet — which is also OSM `height` semantics.
+#
+# So there are TWO different numbers and mixing them biases everything:
+#   · floor-to-floor, structural            ~3.8 m
+#   · effective m/storey to reach roof top  ~4.0 m  (absorbs the taller ground
+#     floor and the 0.9-1.1 m parapet)
+# We render roofs, so we want the second.
+#
+# EXPECTED ERROR: about +/-9 m per building, and NO GULF VALIDATION STUDY EXISTS.
+# The only lidar-validated figure anywhere is Biljecki et al. 2017 (Rotterdam,
+# 1.6 m) which is European mid-rise and does not transfer. Above the constant,
+# error is dominated by the tag itself: Biljecki, Chow & Lee 2023 audited
+# building:levels globally against Street View and found 72.2 % exactly correct,
+# 93.3 % within one level — and one level here is ~4 m.
+METRES_PER_LEVEL = 4.0      # Dubai-measured; see above. NOT the OSM 3 m default.
+
+# Per-use metres-per-storey. Values are our own Dubai regression on non-circular
+# pairs unless noted; classes with too few independent samples inherit the
+# default rather than inventing a number.
+METRES_PER_LEVEL_BY_USE: dict[str, float] = {
+    "apartments": 3.9,      # our fit 3.85; Dubai South zones Ha-He mean 3.99
+    "residential": 3.9,
+    "hotel": 4.4,           # our fit 4.41; Dubai South hotel zone G+7 / 36 m = 4.50
+    "office": 4.3,          # our fit 4.29
+    "commercial": 4.1,      # our fit 4.14
+    "retail": 5.0,          # podium: Trakhees commercial centres clear 4.2-6.0 m
+    "parking": 3.0,         # Trakhees covered parking clear 2.4-3.0 m
+}
+
+# LEVELS x ANYTHING IS THE WRONG MODEL FOR A SHED. One "storey" IS the building,
+# so a multiplier cannot express it. Verified figures: JAFZA's own brochure says
+# "Warehouses eaves height varies from 6m to 12m"; a Dubai South Grade-A facility
+# is quoted at "usable eaves height of 16 metres"; Dubai South's MBR Aerospace
+# Hub guidelines cap light-industrial warehouses at "G+1 / 8m". Our Dubai South
+# median building is 16.8 m — a flat 3.2 rendered that as a 3.2 m shed.
+WAREHOUSE_PRIOR_M: dict[str, float] = {
+    "warehouse": 10.0,
+    "industrial": 8.0,
+    "hangar": 14.0,
+    "shed": 6.0,
+}
 
 # WHAT EACH SITE IS EXPECTED TO CONTAIN. These were global assertions — "no
 # building over 200 m, Dubai without a skyline is wrong" and "no part over 700 m,
@@ -180,12 +246,20 @@ def osm_height(tags: dict[str, str]) -> float | None:
             return float(str(raw).replace("m", "").strip())
         except ValueError:
             pass
+    use = str(tags.get("building", "yes")).lower()
+
+    # Sheds first: their height comes from a prior, not from a storey count,
+    # because a warehouse's single storey is the whole building.
+    if use in WAREHOUSE_PRIOR_M:
+        return WAREHOUSE_PRIOR_M[use]
+
     levels = tags.get("building:levels")
     if levels:
         try:
-            return float(levels) * METRES_PER_LEVEL
+            n = float(levels)
         except ValueError:
-            pass
+            return None
+        return n * METRES_PER_LEVEL_BY_USE.get(use, METRES_PER_LEVEL)
     return None
 
 
