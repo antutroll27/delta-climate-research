@@ -146,7 +146,31 @@ def sea_mask(z: np.ndarray[Any, Any]) -> np.ndarray[Any, Any]:
 
 def runoff_field(rain_mm: float, bcr: np.ndarray[Any, Any],
                  hours: float = 6.0) -> np.ndarray[Any, Any]:
-    """Per-cell runoff depth, mm. BCR-weighted (Li et al. 2026, 10.1111/jfr3.70178)."""
+    """Per-cell runoff depth, mm, from an EVENT TOTAL. BCR-weighted.
+
+    !!! THIS SPREADS RAIN UNIFORMLY AND THAT IS WHY IT FAILS BELOW ~237 mm. !!!
+
+    `rain - IA - f*hours` assumes constant intensity, so it compares a MEAN rate
+    against f. Over 6 h the ground here can absorb IA + f*6 = 236.6 mm before
+    yielding a single drop. Dubai's actual 16 Apr 2024 total was ~142 mm and Al
+    Marmoom's local extreme 219.3 mm, so for EVERY rainfall Dubai has recorded
+    this returns zero ground runoff and all runoff comes from roofs.
+
+    Measured consequence: modelled wet cells correlate with BCR at +0.18 while
+    the Landsat-observed extent correlates at -0.05. The model floods where
+    buildings are; reality floods where they are not.
+
+    Infiltration is rate-limited INSTANTANEOUSLY, not on an event mean. At 142 mm
+    the same IA and f give 0 % runoff uniform but 27.3 % under an SCS-Type-II
+    shape — a 38.8 mm swing on temporal distribution alone, larger than any other
+    term in this model. Prefer `simulate(..., hyeto=...)`, which applies losses
+    inside the time loop.
+
+    Kept because the self-test calibration against Hussein et al. is stated as an
+    event ratio, and because a uniform storm is still the right idealisation when
+    no hyetograph is available — as long as nobody mistakes it for conservative.
+    It is not: it under-predicts runoff badly at sub-237 mm totals.
+    """
     roof = max(0.0, rain_mm - IA_ROOF - ROOF_F * hours)
     ground = max(0.0, rain_mm - IA_GROUND - GROUND_F * hours)
     field: np.ndarray[Any, Any] = bcr * roof + (1.0 - bcr) * ground
@@ -160,7 +184,8 @@ def simulate(z: np.ndarray[Any, Any], bcr: np.ndarray[Any, Any],
              sink: np.ndarray[Any, Any] | None = None,
              h0: np.ndarray[Any, Any] | None = None,
              hold: np.ndarray[Any, Any] | None = None,
-             closed: bool = False) -> tuple[np.ndarray[Any, Any], np.ndarray[Any, Any], int, float]:
+             closed: bool = False,
+             hyeto: np.ndarray[Any, Any] | None = None) -> tuple[np.ndarray[Any, Any], np.ndarray[Any, Any], int, float]:
     """`sink` cells drain freely — water reaching them has left the catchment.
 
     This is how permanent water enters the physics. Without it the sea is a
@@ -188,7 +213,21 @@ def simulate(z: np.ndarray[Any, Any], bcr: np.ndarray[Any, Any],
     qx = np.zeros_like(z)                            # flux across the +x face, m2/s
     qy = np.zeros_like(z)
     T = hours * 3600.0
-    rain = (np.asarray(runoff_mm, dtype='float64') / 1000.0) / T   # m/s, per cell
+
+    # INTENSITY-RESOLVED LOSSES. When `hyeto` is given it is rainfall intensity in
+    # mm/h at evenly spaced points across the storm, and infiltration is applied
+    # PER STEP against the instantaneous rate rather than against an event mean.
+    # That distinction is the whole ballgame: see runoff_field's docstring for the
+    # 0 % vs 27.3 % measurement at Dubai's actual 142 mm.
+    #
+    # Initial abstraction is a per-cell store that depletes, not a subtraction
+    # from the total — a burst can exhaust it early and everything after runs off.
+    use_hyeto = hyeto is not None
+    hy = np.asarray(hyeto if use_hyeto else [0.0], dtype="float64")
+    ia_left = (bcr * IA_ROOF + (1.0 - bcr) * IA_GROUND) / 1000.0        # m
+    f_cell = (bcr * ROOF_F + (1.0 - bcr) * GROUND_F) / 1000.0 / 3600.0  # m/s
+    rain = (np.zeros_like(z) if use_hyeto
+            else np.asarray(runoff_mm, dtype='float64') / 1000.0 / T)   # m/s, per cell
     t, out, steps = 0.0, 0.0, 0
 
     while t < T and steps < max_steps:
@@ -197,7 +236,19 @@ def simulate(z: np.ndarray[Any, Any], bcr: np.ndarray[Any, Any],
         dt = min(alpha * cell / np.sqrt(G * max(hmax, 1e-3)), T - t, 20.0)
         dt = max(dt, 0.05)          # floor: a runaway dt collapse stalls the storm
 
-        newh = h + rain * dt / store                 # rain first, then routing
+        if use_hyeto:
+            # intensity now, in m/s, from the hyetograph's own time base
+            frac = min(max(t / T, 0.0), 1.0) * (len(hy) - 1)
+            i0 = int(frac)
+            i1 = min(i0 + 1, len(hy) - 1)
+            inten = (hy[i0] + (hy[i1] - hy[i0]) * (frac - i0)) / 1000.0 / 3600.0
+            fall = inten * dt                                    # m this step
+            take = np.minimum(ia_left, fall)                     # IA first
+            ia_left -= take
+            net = np.maximum(fall - take - f_cell * dt, 0.0)     # then infiltration
+            newh = h + net / store
+        else:
+            newh = h + rain * dt / store             # rain first, then routing
         for axis, q, conv in ((0, qy, conv_y), (1, qx, conv_x)):
             Ln = np.roll(L, -1, axis=axis)
             zn = np.roll(z, -1, axis=axis)
