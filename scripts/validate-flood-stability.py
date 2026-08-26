@@ -22,7 +22,22 @@ product claim is district-scale, and this file is the evidence for saying so.
 White noise is run alongside as a contrast: it is NOT how DEMs err, and it
 should look worse, which is what makes the correlated figure meaningful.
 
-    python3 scripts/validate-flood-stability.py --realisations 5 --workers 8
+!!! ITS OUTPUT IS NOT SAFE TO QUOTE YET (2026-08-26). !!!
+
+The harness is sound and the run completed, but the SOLVER underneath it has a
+routing defect (scripts/check-flood-routing.py). CSI measures how much the flood
+pattern moves under terrain error; if which cell wins that defect's checkerboard
+is itself terrain-sensitive, CSI is measuring the artefact, not the physics.
+
+Last run on the corrected terrain, for the record and not for a slide:
+    CSI 0.613-0.622   depth corr 0.662-0.687   aggregate drift < 0.3 %
+    white-noise contrast CSI 0.203
+    baseline wet 15.77 %, p95 0.881 m, max 16.09 m  <- the max is the artefact
+
+Re-run this once routing is fixed. The aggregate and contrast figures will
+probably hold; the CSI figure has to be re-earned.
+
+    python3 scripts/validate-flood-stability.py --realisations 5 --workers 4
 """
 from __future__ import annotations
 
@@ -50,6 +65,7 @@ SIGMA_M = 0.43
 CORR_M = 400.0
 WET_M = 0.10          # the access-disruption threshold from types.ts
 RAIN_MM = 254.8       # Dubai, 16 April 2024 — the event with a measured runoff ratio
+STORM_HOURS = 6.0     # must match flood_unsteady.simulate()'s default
 
 
 def correlated_noise(shape: tuple[int, int], sigma_m: float, corr_m: float,
@@ -68,7 +84,7 @@ def correlated_noise(shape: tuple[int, int], sigma_m: float, corr_m: float,
     return scaled
 
 
-def _run(job: tuple[str, int, float, float]) -> tuple[str, int, np.ndarray[Any, Any]]:
+def _run(job: tuple[str, int, float, float]) -> tuple[str, int, np.ndarray[Any, Any], int, float]:
     """One realisation. Module-level and self-loading so it survives spawn()."""
     kind, seed, sigma, corr = job
     d = json.load(open(os.path.join(DATA, "dubai-creek-terrain.json")))
@@ -84,8 +100,17 @@ def _run(job: tuple[str, int, float, float]) -> tuple[str, int, np.ndarray[Any, 
     if seed >= 0:
         z = z + correlated_noise((n, n), sigma, corr, cell, seed)
 
-    peak, _, _, _ = simulate(z, bcr, runoff_field(RAIN_MM, bcr), cell=cell, sink=sink)
-    return kind, seed, peak.astype("float32")
+    # KEEP steps AND t. simulate() ends on `t < T and steps < max_steps`, whichever
+    # comes first, so a realisation that exhausts its step budget returns a peak for
+    # a storm that stopped early — quietly, and looking entirely normal. Discarding
+    # these two values meant the harness could not tell a 6-hour result from a
+    # 4-hour one, and would have reported understated depths as fact.
+    #
+    # It matters more now than it did: the old flat-mesa terrain converged in 7,513
+    # steps because nothing moved. Real relief means real flow, a tighter CFL limit,
+    # and roughly 4-5x the steps.
+    peak, _, steps, t = simulate(z, bcr, runoff_field(RAIN_MM, bcr), cell=cell, sink=sink)
+    return kind, seed, peak.astype("float32"), steps, t
 
 
 def metrics(base: np.ndarray[Any, Any], other: np.ndarray[Any, Any],
@@ -134,14 +159,32 @@ def main() -> int:
     t0 = time.time()
     results: dict[str, list[np.ndarray[Any, Any]]] = {"correlated": [], "white": []}
     base: np.ndarray[Any, Any] | None = None
+    truncated: list[str] = []
     with ProcessPoolExecutor(max_workers=a.workers) as ex:
-        for kind, seed, peak in ex.map(_run, jobs):
+        for kind, seed, peak, steps, t in ex.map(_run, jobs):
             if kind == "base":
                 base = peak
             else:
                 results[kind].append(peak)
-            print(f"    {kind:11s} seed {seed:>4}  done  ({time.time()-t0:6.0f} s)")
+            full = t >= STORM_HOURS * 3600.0 - 1.0
+            flag = "" if full else "  <-- TRUNCATED, storm did not finish"
+            if not full:
+                truncated.append(f"{kind} seed {seed}: stopped at {t/3600:.2f} h after {steps:,} steps")
+            print(f"    {kind:11s} seed {seed:>4}  {steps:>6,} steps  {t/3600:.2f} h  "
+                  f"({time.time()-t0:6.0f} s){flag}")
     assert base is not None, "baseline realisation did not return"
+
+    if truncated:
+        # REFUSE TO REPORT. A truncated storm understates peak depth, wet fraction
+        # and every aggregate downstream of them. Printing those numbers with a
+        # footnote invites them to be quoted without it.
+        print(f"\n  ABORTING: {len(truncated)} of {len(jobs)} realisations hit the step budget.")
+        for line in truncated:
+            print(f"    {line}")
+        print("\n  These results are not comparable and are not being written.")
+        print("  Raise max_steps in flood_unsteady.simulate(), or shorten STORM_HOURS")
+        print("  deliberately — do not quote a partial storm as a 6-hour one.")
+        return 1
 
     bm = metrics(base, base, land)
     print(f"\n  BASELINE (unperturbed, land only)")
