@@ -3,6 +3,10 @@
  "file": "dubai-creek-imagery.png",
  "size": 4096,
  "scene": "S2B_40RCN_20251223_0_L2A",
+ "scenes": [
+  "S2B_40RCN_20251223_0_L2A"
+ ],
+ "coverage": 1.0,
  "source": "Copernicus Sentinel-2 L2A true-colour (TCI)",
  "resolutionM": 6.94,
  "licence": "Copernicus free, full and open (Reg. EU 377/2014; Del. Reg. 1159/2013)",

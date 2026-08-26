@@ -58,10 +58,42 @@ SITES: dict[SiteId, Site] = {
     # The economics agree with the physics: this strip holds 91.8 % of the
     # buildings of a box that also reached Dubai South, in 63 % of the area. The
     # southern band adds 8 % of buildings for 37 % of the area, and one
-    # south-east quadrant runs at 3.5 buildings/km2. It is also the worst-mapped
-    # part of any box — Dubai South is 62 % complete in OSM with ONE height on
-    # 1,571 buildings, so including it would render a guess.
+    # south-east quadrant runs at 3.5 buildings/km2.
+    #
+    # !!! THE "WORST-MAPPED" CLAIM THAT USED TO SIT HERE IS NOW FALSE. !!!
+    # It read: "Dubai South is 62 % complete in OSM with ONE height on 1,571
+    # buildings, so including it would render a guess." That was true when
+    # written and was overtaken by a 2025 hand-mapping wave. Re-measured
+    # 2026-08-27 via Overpass, same query both windows:
+    #
+    #                            DUBAI CREEK      DUBAI SOUTH
+    #     buildings                  165,755           33,745
+    #     with building:levels   19,689 11.9 %     8,689 25.7 %
+    #     with height             2,761  1.7 %       467  1.4 %
+    #     ANY vertical info             13.5 %           27.1 %
+    #
+    # Dubai South is TWICE as well attributed as the window we already shipped.
+    # The objection applied harder to this site than to the one it excluded.
     "dubai-creek": Site("dubai-creek", 25.1540, 55.240, 28440.0, 948),
+
+    # DUBAI SOUTH — A SEPARATE SITE, NOT AN EXTENSION. The hydrological argument
+    # above still stands: this is an upper catchment ~35 m above Downtown that
+    # SHEDS toward the coast. Merging the two boxes would model one basin where
+    # there are two. So it gets its own window and its own solve.
+    #
+    # What makes it buildable now, all measured rather than assumed:
+    #   · terrain — GEDTM30 covers it 100 % (DeltaDTM is 89.5 % saturated here,
+    #     clamped flat at its 10 m ceiling, and would render a mesa)
+    #   · vertical — 27.1 % of buildings carry height or levels, see above
+    #   · no supertalls — which matters because 3D-GloBFP saturates near 145 m
+    #     (its tallest building in a box centred on Burj Khalifa is 144.0 m
+    #     against 828 m of actual tower). That defect is fatal Downtown and
+    #     nearly irrelevant here, where the median building is 16.8 m.
+    #
+    # AND THE EMPTINESS IS THE SUBJECT, NOT A GAP. 75.4 % of plots in this window
+    # are vacant per DDA construction status. A render of graded plots, a single
+    # runway and sparse logistics sheds is MORE accurate than one that fills them.
+    "dubai-south": Site("dubai-south", 24.930, 55.120, 28440.0, 948),
 }
 
 # Copernicus DEM GLO-30, AWS Open Data mirror.

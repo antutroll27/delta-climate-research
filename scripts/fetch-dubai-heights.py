@@ -55,6 +55,25 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 OUT_DIR = os.path.join(HERE, "..", "public", "flood-sim", "data")
 CACHE = os.path.join(HERE, "..", "data", ".cache", "osm")
 METRES_PER_LEVEL = 3.2      # OSM convention where only building:levels is tagged
+
+# WHAT EACH SITE IS EXPECTED TO CONTAIN. These were global assertions — "no
+# building over 200 m, Dubai without a skyline is wrong" and "no part over 700 m,
+# Burj Khalifa's tip is missing" — which are true of the Creek and false of Dubai
+# South, where the median building is 16.8 m and there are no towers at all.
+#
+# A check that encodes one site's truth and fires on another is not a guard, it
+# is a hardcoded assumption. Same defect as heightsPresent meaning two different
+# things to two scripts. Sites declare what they should contain; the check reads
+# the declaration instead of assuming Downtown.
+SITE_EXPECT: dict[str, dict[str, float]] = {
+    "dubai-creek": {"tallestM": 200.0, "tallestPartM": 700.0, "minOsmOutlines": 5000,
+                    "minSuperseded": 1000, "minPartsCovered": 50},
+    # Dubai South: DWC, Expo City, logistics. Measured 43,479 footprints, median
+    # height 16.8 m, 7.8 % over 30 m, nothing over 133 m in 3D-GloBFP. Asking it
+    # for a 200 m tower would be asking it to be somewhere else.
+    "dubai-south": {"tallestM": 0.0, "tallestPartM": 0.0, "minOsmOutlines": 3000,
+                    "minSuperseded": 0, "minPartsCovered": 0},
+}
 ATTRIBUTION = "Building heights © OpenStreetMap contributors (ODbL 1.0)"
 
 
@@ -361,23 +380,26 @@ def check() -> int:
         real = [b for b in d["b"] if b.get("hs") == "osm"]
         if len(real) < 500:
             failures.append(f"{sid}: only {len(real)} measured heights -- the join is failing")
-        tall = [b for b in real if b["h"] > 200]
-        if not tall:
-            failures.append(f"{sid}: no building over 200 m -- Dubai without a skyline is wrong")
+        exp = SITE_EXPECT.get(sid, SITE_EXPECT["dubai-creek"])
+        if exp["tallestM"] > 0 and not [b for b in real if b["h"] > exp["tallestM"]]:
+            failures.append(f"{sid}: no building over {exp['tallestM']:.0f} m, and this site "
+                            f"is declared to have one")
         osm_b = d.get("osmB", [])
-        if len(osm_b) < 5000:
-            failures.append(f"{sid}: only {len(osm_b)} OSM outlines -- the fetch is short")
-        if d.get("supersededByOsm", 0) < 1000:
+        if len(osm_b) < exp["minOsmOutlines"]:
+            failures.append(f"{sid}: only {len(osm_b)} OSM outlines, expected "
+                            f"{exp['minOsmOutlines']:.0f}+ -- the fetch is short")
+        if d.get("supersededByOsm", 0) < exp["minSuperseded"]:
             failures.append(f"{sid}: {d.get('supersededByOsm', 0)} superseded -- "
                             f"duplicates will render inside each other")
         parts = d.get("parts", [])
         if len(parts) < 200:
             failures.append(f"{sid}: only {len(parts)} massing parts -- the 3D fetch is failing")
-        if d.get("osmPartsCovered", 0) < 50:
+        if d.get("osmPartsCovered", 0) < exp["minPartsCovered"]:
             failures.append(f"{sid}: only {d.get('osmPartsCovered', 0)} OSM outlines marked as "
                             f"part-covered -- towers will get a stub through them")
-        if not any(p["h"] > 700 for p in parts):
-            failures.append(f"{sid}: no part over 700 m -- Burj Khalifa's tip is missing")
+        if exp["tallestPartM"] > 0 and not any(p["h"] > exp["tallestPartM"] for p in parts):
+            failures.append(f"{sid}: no part over {exp['tallestPartM']:.0f} m, and this site "
+                            f"is declared to have one")
         if any(p["h"] <= p["min"] for p in parts):
             failures.append(f"{sid}: a part with top at or below its base")
         if any(b["h"] > 1000 for b in real):
@@ -411,9 +433,15 @@ def check() -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true")
-    if parser.parse_args().check:
+    parser.add_argument("--site", default=None,
+                        help="build one site only (default: all)")
+    args = parser.parse_args()
+    if args.check:
         return check()
-    for sid, site in SITES.items():
+    wanted = {k: v for k, v in SITES.items() if args.site in (None, k)}
+    if not wanted:
+        raise SystemExit(f"unknown site {args.site!r}; have {list(SITES)}")
+    for sid, site in wanted.items():
         doc = build(site)
         path = os.path.join(OUT_DIR, f"{sid}-buildings.json")
         with open(path, "w", encoding="utf-8") as fh:

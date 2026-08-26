@@ -33,6 +33,9 @@ from rasterio.warp import transform_bounds
 from rasterio.windows import from_bounds
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import requests
+from shapely.geometry import box, shape
+
 from _flood import SITES, Site, site_bounds  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -43,26 +46,69 @@ OUT_DIR = os.path.join(HERE, "..", "public", "flood-sim", "data")
 # away measured detail. 4096 gives 6.9 m/px and keeps it.
 TEX = 4096
 
-# Measured clearest scene over MGRS 40RCN: AOT 0.096, cloud 0.03 %.
-SCENE = "S2B_40RCN_20251223_0_L2A"
-TCI = ("/vsicurl/https://sentinel-cogs.s3.us-west-2.amazonaws.com/"
-       "sentinel-s2-l2a-cogs/40/R/CN/2025/12/" + SCENE + "/TCI.tif")
+# THE SCENE WAS A HARDCODED CONSTANT AND THAT ONLY WORKED FOR ONE WINDOW.
+# S2B_40RCN_20251223 is the measured clearest pass over the coastal strip (AOT
+# 0.096, cloud 0.03 %) and covers 100 % of it. It covers 85.7 % of Dubai South —
+# the western 14 % of that window falls outside the tile entirely, and the
+# fetcher would have written a texture with a blank strip and reported success.
+#
+# Same defect as both DEM readers had: one tile chosen once, silently clipping
+# any window that does not fit inside it. Scenes are now DISCOVERED per site and
+# mosaicked, on the date that was measured clearest.
+DATE = "2025-12-23"
+STAC = "https://earth-search.aws.element84.com/v1/search"
 ATTRIBUTION = "Contains modified Copernicus Sentinel data 2025"
 LICENCE = "Copernicus free, full and open (Reg. EU 377/2014; Del. Reg. 1159/2013)"
 
 
+def scenes_for(site: Site) -> list[tuple[str, str]]:
+    """Every TCI covering this window on the chosen date, most-covering first."""
+    w, s, e, n = site_bounds(site)
+    aoi = box(w, s, e, n)
+    r = requests.post(STAC, json={"collections": ["sentinel-2-l2a"], "bbox": [w, s, e, n],
+                                  "datetime": f"{DATE}T00:00:00Z/{DATE}T23:59:59Z",
+                                  "limit": 20}, timeout=120)
+    r.raise_for_status()
+    out = []
+    for f in r.json().get("features", []):
+        cov = aoi.intersection(shape(f["geometry"])).area / aoi.area
+        href = f["assets"].get("visual", {}).get("href")
+        if href and cov > 0.01:
+            out.append((cov, f["id"], "/vsicurl/" + href))
+    out.sort(reverse=True)
+    return [(i, h) for _, i, h in out]
+
+
 def build(site: Site) -> dict[str, Any]:
-    with rasterio.open(TCI) as ds:
-        bounds = transform_bounds("EPSG:4326", ds.crs, *site_bounds(site))
-        rgb = ds.read(window=from_bounds(*bounds, ds.transform), out_shape=(3, TEX, TEX))
+    picked = scenes_for(site)
+    if not picked:
+        raise SystemExit(f"no Sentinel-2 TCI found for {site.id} on {DATE}")
+    img = np.zeros((TEX, TEX, 3), dtype="float64")
+    filled = np.zeros((TEX, TEX), dtype=bool)
+    used: list[str] = []
+    for sid_scene, href in picked:
+        with rasterio.open(href) as ds:
+            bounds = transform_bounds("EPSG:4326", ds.crs, *site_bounds(site))
+            rgb = ds.read(window=from_bounds(*bounds, ds.transform),
+                          out_shape=(3, TEX, TEX), boundless=True, fill_value=0)
+        part = np.transpose(rgb, (1, 2, 0)).astype("float64")
+        take = (~filled) & (part.sum(axis=2) > 0)
+        img[take] = part[take]
+        filled |= take
+        used.append(sid_scene)
+        if filled.mean() > 0.999:
+            break
+    print(f"    {site.id}: {len(used)} scene(s), {filled.mean()*100:.1f} % of the texture filled")
     # Rows come north-down from the raster; the terrain grid runs south-up, so
     # flip once here rather than leaving every consumer to remember.
-    img = np.transpose(rgb, (1, 2, 0))[::-1]
+    img = img[::-1]
+    SCENE = "+".join(used)
     path = os.path.join(OUT_DIR, f"{site.id}-imagery.png")
     Image.fromarray(img.astype("uint8"), "RGB").save(path, optimize=True)
     return {
         "site": site.id, "file": os.path.basename(path), "size": TEX,
-        "scene": SCENE, "source": "Copernicus Sentinel-2 L2A true-colour (TCI)",
+        "scene": SCENE, "scenes": used, "coverage": round(float(filled.mean()), 4),
+        "source": "Copernicus Sentinel-2 L2A true-colour (TCI)",
         "resolutionM": round(site.footprint_m / TEX, 2),
         "licence": LICENCE, "attribution": ATTRIBUTION,
         "note": ("Scene chosen by aerosol optical thickness, not cloud: cloud is "
@@ -106,10 +152,16 @@ def check() -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true")
-    if parser.parse_args().check:
+    parser.add_argument("--site", default=None,
+                        help="build one site only (default: all)")
+    args = parser.parse_args()
+    if args.check:
         return check()
     os.makedirs(OUT_DIR, exist_ok=True)
-    for sid, site in SITES.items():
+    wanted = {k: v for k, v in SITES.items() if args.site in (None, k)}
+    if not wanted:
+        raise SystemExit(f"unknown site {args.site!r}; have {list(SITES)}")
+    for sid, site in wanted.items():
         doc = build(site)
         with open(os.path.join(OUT_DIR, f"{sid}-imagery.json"), "w", encoding="utf-8") as fh:
             json.dump(doc, fh, indent=1)

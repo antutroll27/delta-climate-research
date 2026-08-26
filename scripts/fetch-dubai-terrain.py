@@ -44,6 +44,7 @@ from typing import Any
 
 import numpy as np
 import rasterio
+from rasterio.enums import Resampling
 import requests
 from rasterio.features import rasterize
 from rasterio.transform import from_bounds as transform_from_bounds
@@ -52,7 +53,7 @@ from scipy import ndimage
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _flood import (DELTADTM_ARCHIVE, DELTADTM_ARTICLE, DELTADTM_ATTRIBUTION,  # noqa: E402
-                    DELTADTM_LICENCE, GEDTM30_ATTRIBUTION, GEDTM30_COG,
+                    DELTADTM_LICENCE, GEDTM30_ATTRIBUTION, GEDTM30_COG, m_per_deg,
                     GEDTM30_LICENCE, SITES, Site, deltadtm_tile, dem_tile_url,
                     site_bounds)
 from _remotezip import extract as zip_extract  # noqa: E402
@@ -86,31 +87,108 @@ LICENCE = "Copernicus DEM — free, full and open (ESA / Copernicus Programme)"
 ATTRIBUTION = "Contains modified Copernicus DEM data (GLO-30, DLR e.V. / Airbus DS)"
 
 
+def working_shape(site: Site) -> tuple[int, int]:
+    """The one grid every raster source is resampled onto, at ~30 m.
+
+    EVERY READER USED TO PICK ITS OWN. read_dsm took a GLO-30 tile by site
+    CENTRE and read a window from it; read_deltadtm did the same for DeltaDTM.
+    Both silently clip a window that crosses a 1-degree line, returning a
+    smaller array rather than an error — and the shapes then have to match by
+    luck. They matched for dubai-creek because that window sits inside one tile
+    of each. Dubai South crosses two lines and needs FOUR tiles of each, and the
+    mismatch surfaced as "DeltaDTM tile unavailable or misaligned", which is not
+    what was wrong.
+    """
+    w, s, e, n = site_bounds(site)
+    mx, my = m_per_deg(site.lat)
+    return (int(round((n - s) * my / 30.0)), int(round((e - w) * mx / 30.0)))
+
+
+def read_mosaic(urls: list[str], site: Site, shape: tuple[int, int],
+                nodata: float) -> np.ndarray[Any, Any] | None:
+    """Read every tile the window touches onto one grid, filling gaps.
+
+    boundless=True so a tile that covers only part of the window contributes its
+    part instead of failing; out_shape forces the common grid so no caller has to
+    reconcile shapes afterwards.
+    """
+    out = np.full(shape, nodata, dtype="float64")
+    got = False
+    for url in urls:
+        try:
+            with rasterio.open(url) as ds:
+                win = window_from_bounds(*site_bounds(site), ds.transform)
+                part = ds.read(1, window=win, out_shape=shape, boundless=True,
+                               fill_value=nodata,
+                               resampling=Resampling.bilinear).astype("float64")
+        except Exception as exc:                 # noqa: BLE001 — absent tile is not fatal
+            print(f"    tile unavailable ({str(exc)[:60]}) — skipped")
+            continue
+        take = (out <= nodata + 1) & (part > nodata + 1)
+        out[take] = part[take]
+        got = True
+    return out if got else None
+
+
 def read_dsm(site: Site) -> tuple[np.ndarray[Any, Any], tuple[float, float, float, float]]:
-    """Windowed read of the GLO-30 COG. Range requests keep this to a few hundred kB."""
+    """GLO-30, mosaicked across every tile the window touches."""
     bounds = site_bounds(site)
-    with rasterio.open(dem_tile_url(site.lat, site.lon)) as ds:
-        window = window_from_bounds(*bounds, ds.transform)
-        dsm = ds.read(1, window=window).astype("float64")
+    w, s, e, n = bounds
+    urls = sorted({dem_tile_url(la, lo) for la in (s, n) for lo in (w, e)})
+    shape = working_shape(site)
+    dsm = read_mosaic(urls, site, shape, NODATA)
+    if dsm is None:
+        raise SystemExit("no Copernicus GLO-30 tile could be read for this window")
+    print(f"    GLO-30: {len(urls)} tile(s) -> {shape[0]}x{shape[1]}, "
+          f"{float((dsm > NODATA + 1).mean())*100:.1f} % with data")
     return dsm, bounds
 
 
-def read_deltadtm(site: Site) -> np.ndarray[Any, Any] | None:
-    """Windowed read of the DeltaDTM bare-earth tile, cached on disk."""
-    member = deltadtm_tile(site.lat, site.lon)
+def _deltadtm_path(member: str) -> str | None:
+    """Local path for one DeltaDTM tile, downloading it if absent."""
     os.makedirs(CACHE_DIR, exist_ok=True)
     path = os.path.join(CACHE_DIR, f"{member}.tif")
-    if not os.path.exists(path):
-        files = requests.get(DELTADTM_ARTICLE, timeout=120).json()
-        rows = files if isinstance(files, list) else files.get("files", [])
-        url = next((f.get("download_url") or f.get("downloadUrl")
-                    for f in rows if f.get("name") == DELTADTM_ARCHIVE), None)
-        if url is None:
-            return None
-        with open(path, "wb") as fh:
-            fh.write(zip_extract(url, member))
-    with rasterio.open(path) as ds:
-        return ds.read(1, window=window_from_bounds(*site_bounds(site), ds.transform)).astype("float64")
+    if os.path.exists(path):
+        return path
+    files = requests.get(DELTADTM_ARTICLE, timeout=120).json()
+    rows = files if isinstance(files, list) else files.get("files", [])
+    url = next((f.get("download_url") or f.get("downloadUrl")
+                for f in rows if f.get("name") == DELTADTM_ARCHIVE), None)
+    if url is None:
+        return None
+    try:
+        blob = zip_extract(url, member)
+    except Exception:                      # noqa: BLE001 — a missing tile is not fatal
+        return None
+    with open(path, "wb") as fh:
+        fh.write(blob)
+    return path
+
+
+def read_deltadtm(site: Site) -> np.ndarray[Any, Any] | None:
+    """Windowed read of DeltaDTM, MOSAICKED across every tile the window touches.
+
+    DeltaDTM ships 1-degree tiles named by their SW corner. Resolving one tile
+    from the site CENTRE silently clips any window that crosses a degree line —
+    and Dubai South does, on two edges at once: its window spans lon
+    54.98-55.26 and lat 24.80-25.06, so it needs N24E054, N24E055, N25E054 and
+    N25E055. A single-tile read would have returned data rather than an error,
+    which is the failure mode this repo keeps meeting.
+
+    Tiles that do not exist (ocean-only squares are simply absent from the
+    archive) are skipped rather than fatal; their area stays nodata and the
+    GEDTM30 fill covers it.
+    """
+    w, s, e, n = site_bounds(site)
+    members = sorted({deltadtm_tile(la, lo) for la in (s, n) for lo in (w, e)})
+    paths = [p for p in (_deltadtm_path(m) for m in members) if p is not None]
+    if not paths:
+        return None
+    target = read_mosaic(paths, site, working_shape(site), NODATA)
+    if target is not None:
+        print(f"    DeltaDTM: {len(paths)}/{len(members)} tile(s), "
+              f"{float((target > NODATA + 1).mean())*100:.1f} % of the window has data")
+    return target
 
 
 def building_coverage(site: Site, shape: tuple[int, int],
@@ -231,8 +309,11 @@ def build(site: Site) -> dict[str, Any]:
     glo_dtm, mask, interp_span = to_bare_earth(dsm, coverage, px_m)
 
     delta = read_deltadtm(site)
-    if delta is None or delta.shape != dsm.shape:
-        raise SystemExit("DeltaDTM tile unavailable or misaligned — refusing to ship GLO-30 as bare earth")
+    if delta is None:
+        raise SystemExit("no DeltaDTM tile could be read — refusing to ship a DSM as bare earth")
+    assert delta.shape == dsm.shape, (
+        f"grid mismatch {delta.shape} vs {dsm.shape} — working_shape() is not "
+        f"being honoured by one of the readers")
     water = (delta <= NODATA + 1) | ~np.isfinite(delta)
     ceiling = ~water & (delta >= DELTADTM_CEILING_M)
     land = ~water
@@ -247,7 +328,7 @@ def build(site: Site) -> dict[str, Any]:
     ged = read_gedtm30(site, dsm.shape)
     fill_source = "GEDTM30 v1.2"
     if ged is None or not np.isfinite(ged).any():
-        fill, fill_source = glo_dtm, "Copernicus GLO-30 (masked)"
+        fill, fill_source = glo_dtm, "Copernicus GLO-30 (masked)"   # the fallback
     else:
         fill = np.where(np.isfinite(ged), ged, glo_dtm)
     both = ~void
@@ -296,6 +377,11 @@ def build(site: Site) -> dict[str, Any]:
             # that as "failed to cover" made a healthy build look broken.
             "measuredLandFraction": round(float(measured.sum() / max(land.sum(), 1)), 4),
             "landFillFraction": round(float(ceiling.sum() / max(land.sum(), 1)), 4),
+            # WHAT ACTUALLY FILLED, not what was hoped. The check used to warn
+            # about "falling back to GLO-30" while inferring it from a FRACTION —
+            # but a high fill fraction is expected wherever DeltaDTM is saturated,
+            # and says nothing about which source supplied it. Assert the source.
+            "fillSource": fill_source,
             "gloFillOffsetM": round(offset, 3),
             "reliefP5P95M": round(pc(delta[both], 95) - pc(delta[both], 5), 3) if both.any() else 0.0,
         },
@@ -340,9 +426,20 @@ def check() -> int:
         # DSM's full relief, so the spans converge on a correct build. Retuning the
         # ratio would only have moved the goalposts, so it is replaced by a direct
         # test of the thing it was standing in for.
-        if d["deltadtm"]["measuredLandFraction"] < 0.30:
+        # THE REAL RISK IS THE WRONG SOURCE, NOT A LOW FRACTION. DeltaDTM covers
+        # coastal land below 10 m MSL; how much of a window that is depends on
+        # where the window is, not on whether the pipeline worked. Dubai South is
+        # inland high ground and DeltaDTM is 89.5 % saturated there, so 21 %
+        # measured is correct rather than alarming. What must never happen is a
+        # DSM being served as bare earth.
+        fill_src = d["deltadtm"].get("fillSource", "")
+        if fill_src and "GEDTM30" not in fill_src:
+            failures.append(f"{sid}: fill came from {fill_src!r}, not GEDTM30 -- a surface "
+                            f"model is being served as bare earth")
+        floor = {"dubai-creek": 0.30, "dubai-south": 0.10}.get(sid, 0.30)
+        if d["deltadtm"]["measuredLandFraction"] < floor:
             failures.append(f"{sid}: only {100*d['deltadtm']['measuredLandFraction']:.0f}% of LAND is "
-                            f"measured DeltaDTM -- the read may have silently fallen back to GLO-30")
+                            f"measured DeltaDTM, below this site's {100*floor:.0f}% floor")
         # Bare earth is never above the surface it was derived from.
         if d["dtm"]["p95"] > d["dsm"]["p95"] + 0.01:
             failures.append(f"{sid}: bare earth p95 {d['dtm']['p95']:.2f} m exceeds the DSM's "
@@ -350,9 +447,10 @@ def check() -> int:
         # WAS: voidFraction > 0.5. That counted the Persian Gulf, a third of this
         # window, as "DeltaDTM failed to cover" -- so a healthy build read as broken.
         # Fill is only meaningful as a fraction of LAND.
-        if d["deltadtm"]["landFillFraction"] > 0.50:
-            failures.append(f"{sid}: {100*d['deltadtm']['landFillFraction']:.0f}% of land comes from "
-                            f"GLO-30 fill rather than measurement -- fill dominates")
+        cap = {"dubai-creek": 0.50, "dubai-south": 0.90}.get(sid, 0.50)
+        if d["deltadtm"]["landFillFraction"] > cap:
+            failures.append(f"{sid}: {100*d['deltadtm']['landFillFraction']:.0f}% of land is fill, "
+                            f"above this site's {100*cap:.0f}% cap")
 
         # THE MIRROR GUARD. `h` came back from rasterio north-up while `bcr` was
         # flipped south-up, so the two grids in this artefact were mirrored against
@@ -405,10 +503,16 @@ def check() -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true")
-    if parser.parse_args().check:
+    parser.add_argument("--site", default=None,
+                        help="build one site only (default: all)")
+    args = parser.parse_args()
+    if args.check:
         return check()
     os.makedirs(OUT_DIR, exist_ok=True)
-    for sid, site in SITES.items():
+    wanted = {k: v for k, v in SITES.items() if args.site in (None, k)}
+    if not wanted:
+        raise SystemExit(f"unknown site {args.site!r}; have {list(SITES)}")
+    for sid, site in wanted.items():
         doc = build(site)
         path = os.path.join(OUT_DIR, f"{sid}-terrain.json")
         with open(path, "w", encoding="utf-8") as fh:

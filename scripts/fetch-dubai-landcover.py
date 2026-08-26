@@ -169,10 +169,16 @@ def check() -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true")
-    if parser.parse_args().check:
+    parser.add_argument("--site", default=None,
+                        help="build one site only (default: all)")
+    args = parser.parse_args()
+    if args.check:
         return check()
     os.makedirs(OUT_DIR, exist_ok=True)
-    for sid, site in SITES.items():
+    wanted = {k: v for k, v in SITES.items() if args.site in (None, k)}
+    if not wanted:
+        raise SystemExit(f"unknown site {args.site!r}; have {list(SITES)}")
+    for sid, site in wanted.items():
         doc = build(site)
         path = os.path.join(OUT_DIR, f"{sid}-landcover.json")
         with open(path, "w", encoding="utf-8") as fh:

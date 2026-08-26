@@ -36,6 +36,13 @@ SUN_ELEV_DEG = 26.0    # late afternoon — long shadows across the fabric
 SUN_AZIM_DEG = 292.0
 
 
+# THE SITE WAS HARDCODED IN FIVE PLACES. Every artefact path said
+# "dubai-creek-", so building a second city meant editing the script rather than
+# passing an argument — and the two would drift the moment one was edited and the
+# other was not. Pass --site instead.
+SITE = "dubai-creek"
+
+
 def args() -> dict[str, str]:
     argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
     out: dict[str, str] = {}
@@ -86,7 +93,7 @@ def build_terrain(doc: dict[str, Any]) -> Any:
     # Satellite texture if the imagery fetcher has run, hand palette otherwise.
     # Measured colour beats a chosen one: sabkha, irrigated green, sand, water
     # and built fabric all land correctly without anyone deciding a shade.
-    tex = os.path.join(DATA, "dubai-creek-imagery.png")
+    tex = os.path.join(DATA, f"{SITE}-imagery.png")
     if os.path.exists(tex):
         mat = bpy.data.materials.new("satellite")
         mat.use_nodes = True
@@ -532,12 +539,14 @@ def setup_camera(target: tuple[float, float, float], pos: tuple[float, float, fl
 
 def main() -> None:
     a = args()
+    global SITE
+    SITE = a.get("site", "dubai-creek")
     out = a.get("out", "/tmp/dubai.png")
     samples = int(a.get("samples", "48"))
     clear()
-    with open(os.path.join(DATA, "dubai-creek-terrain.json")) as fh:
+    with open(os.path.join(DATA, f"{SITE}-terrain.json")) as fh:
         terrain_doc = json.load(fh)
-    with open(os.path.join(DATA, "dubai-creek-buildings.json")) as fh:
+    with open(os.path.join(DATA, f"{SITE}-buildings.json")) as fh:
         buildings_doc = json.load(fh)
     build_apron(terrain_doc)
     build_terrain(terrain_doc)
@@ -546,9 +555,9 @@ def main() -> None:
     # painting over it throws away the measurement. Only water and roads still
     # earn their place: water because the flood layer needs a clean surface to
     # sit against, roads because they read as structure at city scale.
-    lc_only = ({"water", "road"} if os.path.exists(os.path.join(DATA, "dubai-creek-imagery.png"))
+    lc_only = ({"water", "road"} if os.path.exists(os.path.join(DATA, f"{SITE}-imagery.png"))
                else None)
-    lc_path = os.path.join(DATA, "dubai-creek-landcover.json")
+    lc_path = os.path.join(DATA, f"{SITE}-landcover.json")
     if os.path.exists(lc_path):
         with open(lc_path) as fh:
             print("  landcover:")

@@ -132,8 +132,10 @@ def check_geometry(r: Result) -> None:
     r.claim(doc["count"] > 10_000, "footprint count", f"{doc['count']:,} in the window")
     r.claim(doc["licence"] == "CDLA-Permissive-2.0", "licence recorded",
             f"{doc['licence']} — permissive, no share-alike on derivatives")
-    r.claim(not doc["heightsPresent"], "artefact agrees heights are absent",
-            "heightsPresent=false")
+    # Checks the SOURCE claim, not the merged state — fetch-dubai-heights.py
+    # legitimately sets heightsPresent true after joining OSM heights in.
+    r.claim(not doc.get("globalmlHeights", doc["heightsPresent"]),
+            "artefact agrees GlobalML ships no heights", "globalmlHeights=false")
 
 
 def main() -> int:

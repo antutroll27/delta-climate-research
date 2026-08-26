@@ -163,6 +163,17 @@ def build(site: Site) -> dict[str, Any]:
         "source": "Microsoft GlobalML Building Footprints",
         "licence": LICENCE,
         "attribution": ATTRIBUTION,
+        # TWO FIELDS, BECAUSE THERE ARE TWO QUESTIONS. `globalmlHeights` is this
+        # script's own claim about its SOURCE and never changes. `heightsPresent`
+        # is the artefact's merged STATE, and fetch-dubai-heights.py sets it true
+        # after joining OSM heights in.
+        #
+        # They were one field, and the two checks asserted opposite things about
+        # it: this file failed if it was true, fetch-dubai-heights.py failed if it
+        # was false. Running the pipeline in its required order guaranteed one
+        # gate would fire. A guard that disagrees with its consumer about what a
+        # field MEANS is worse than no guard.
+        "globalmlHeights": False,
         "heightsPresent": False,
         "heightsNote": (
             "GlobalML ships a `height` property; for the UAE it is -1.0 on every "
@@ -218,8 +229,16 @@ def check() -> int:
         )
         if outside:
             failures.append(f"{sid}: {outside} vertices far outside the window -- clip failed")
-        if d["heightsPresent"]:
-            failures.append(f"{sid}: heightsPresent is true, but GlobalML UAE ships none")
+        # NO FALLBACK. An artefact written before globalmlHeights existed cannot
+        # answer this question — heightsPresent may be true simply because
+        # fetch-dubai-heights.py merged OSM heights in afterwards. Guessing from
+        # the old field would silently pass or silently fail; say so instead.
+        if "globalmlHeights" not in d:
+            failures.append(f"{sid}: predates globalmlHeights — cannot verify the source "
+                            f"claim; re-run fetch-dubai-buildings.py --site {sid}")
+        elif d["globalmlHeights"]:
+            failures.append(f"{sid}: globalmlHeights is true, but GlobalML UAE ships none "
+                            f"(-1.0 on all 241,667 footprints in the source tile)")
 
     if failures:
         for line in failures:
@@ -235,10 +254,16 @@ def check() -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true")
-    if parser.parse_args().check:
+    parser.add_argument("--site", default=None,
+                        help="build one site only (default: all)")
+    args = parser.parse_args()
+    if args.check:
         return check()
     os.makedirs(OUT_DIR, exist_ok=True)
-    for sid, site in SITES.items():
+    wanted = {k: v for k, v in SITES.items() if args.site in (None, k)}
+    if not wanted:
+        raise SystemExit(f"unknown site {args.site!r}; have {list(SITES)}")
+    for sid, site in wanted.items():
         doc = build(site)
         path = os.path.join(OUT_DIR, f"{sid}-buildings.json")
         with open(path, "w", encoding="utf-8") as fh:
