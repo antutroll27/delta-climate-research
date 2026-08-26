@@ -68,6 +68,7 @@ def main() -> int:
     ap.add_argument("--hours", type=float, default=72.0)
     ap.add_argument("--rain", type=float, default=RAIN_MM)
     ap.add_argument("--out-dir", default=OUT)
+    ap.add_argument("--storm", choices=("observed", "design"), default="observed")
     a = ap.parse_args()
 
     terr = json.load(open(os.path.join(DATA, "dubai-creek-terrain.json")))
@@ -76,19 +77,36 @@ def main() -> int:
     bcr = np.asarray(terr["bcr"], dtype="float64").reshape(n, n)
     sink = sea_mask(z)
 
-    # SCS-Type-II-like burst inside the first STORM_H hours, dry afterwards.
-    # This shape is a DESIGN STORM, not the observed hyetograph — GPM IMERG
-    # (0.1 deg, half-hourly) is the real source and is blocked pending an
-    # Earthdata EULA acceptance. Swap it in when that clears; runoff at 142 mm
-    # swings 0 % -> 27 % on shape alone, so this is the largest open assumption.
-    t = np.arange(STEPS_HY) * (a.hours / STEPS_HY)
-    w = np.where(t < STORM_H,
-                 np.exp(-0.5 * ((t - STORM_H * 0.45) / (STORM_H * 0.13)) ** 2), 0.0)
-    inten = (w / w.sum() * a.rain) / (a.hours / STEPS_HY)
+    # THE STORM SHAPE IS NOW OBSERVED, NOT INVENTED (2026-08-27).
+    #
+    # This was a Gaussian burst over 6 h — an SCS-Type-II-shaped guess, chosen
+    # because it is conventional. GPM IMERG says Dubai's storm was nothing like
+    # it: a 24 h event, half its rain spread across 8.5 h, peaking at 21 mm/h.
+    # The guess peaked at 61 mm/h and packed half the rain into 1.6 h.
+    #
+    # Same total, 11.3x the runoff. Infiltration is intensity-resolved, so the
+    # invented storm out-ran bare sand (38.6 mm/h) everywhere and every land
+    # cell generated runoff; the real one out-runs it on 15 % of them. That
+    # single error is the model's 3x over-prediction of flooded area.
+    #
+    #   --storm design   reproduces the old behaviour for comparison
+    if a.storm == "observed":
+        rain = json.load(open(os.path.join(DATA, "dubai-creek-rainfall.json")))
+        inten = np.asarray(rain["intensityMmHr"], dtype="float64")
+        # IMERG reads 119.8 mm against the 142 mm ground report — a known dry
+        # bias for extremes over arid land. Take SHAPE from the satellite and
+        # TOTAL from the ground, rather than trusting either for both.
+        inten *= a.rain / (inten.sum() * (a.hours / len(inten)))
+        shape = f"observed IMERG, {len(inten)} steps"
+    else:
+        t = np.arange(STEPS_HY) * (a.hours / STEPS_HY)
+        w = np.where(t < STORM_H,
+                     np.exp(-0.5 * ((t - STORM_H * 0.45) / (STORM_H * 0.13)) ** 2), 0.0)
+        inten = (w / w.sum() * a.rain) / (a.hours / STEPS_HY)
+        shape = f"invented design storm, {STORM_H:.0f} h burst"
 
-    print(f"  {n}x{n} @ {cell:.0f} m, {a.hours:.0f} h window, "
-          f"{a.rain} mm in the first {STORM_H:.0f} h, peak {inten.max():.1f} mm/h",
-          flush=True)
+    print(f"  {n}x{n} @ {cell:.0f} m, {a.hours:.0f} h window, {a.rain} mm total\n"
+          f"  {shape}, peak {inten.max():.1f} mm/h", flush=True)
     os.makedirs(a.out_dir, exist_ok=True)
     t0 = time.time()
 
@@ -111,7 +129,7 @@ def main() -> int:
     # One 72 h endpoint answers "does more time help"; a sweep answers "how much,
     # and where does it saturate" — and the solver is single-threaded, so the
     # only way to use more than one core is to run more than one scenario.
-    tag = f"{int(a.hours)}h"
+    tag = f"{int(a.hours)}h" + ("" if a.storm == "design" else "-obs")
     np.save(os.path.join(a.out_dir, f"peak_{tag}.npy"), peak)
     np.save(os.path.join(a.out_dir, f"resid_{tag}.npy"), resid)
     wet_p = int((peak > 0.20).sum())
