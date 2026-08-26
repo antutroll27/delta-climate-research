@@ -136,7 +136,10 @@ def simulate(z: np.ndarray[Any, Any], bcr: np.ndarray[Any, Any],
              runoff_mm: np.ndarray[Any, Any] | float, hours: float = 6.0,
              manning: float = 0.035, cell: float = 30.0, alpha: float = 0.7,
              max_steps: int = 40000,
-             sink: np.ndarray[Any, Any] | None = None) -> tuple[np.ndarray[Any, Any], np.ndarray[Any, Any], int, float]:
+             sink: np.ndarray[Any, Any] | None = None,
+             h0: np.ndarray[Any, Any] | None = None,
+             hold: np.ndarray[Any, Any] | None = None,
+             closed: bool = False) -> tuple[np.ndarray[Any, Any], np.ndarray[Any, Any], int, float]:
     """`sink` cells drain freely — water reaching them has left the catchment.
 
     This is how permanent water enters the physics. Without it the sea is a
@@ -155,7 +158,11 @@ def simulate(z: np.ndarray[Any, Any], bcr: np.ndarray[Any, Any],
     # face is limited by the tighter of the two cells it joins.
     conv_x = np.minimum(store, np.roll(store, -1, axis=1))
     conv_y = np.minimum(store, np.roll(store, -1, axis=0))
-    h = np.zeros_like(z)
+    # h0/hold/closed exist so scripts/check-flood-routing.py can drive the REAL
+    # loop instead of reimplementing it. The first version of that reproducer
+    # carried its own copy of this arithmetic, so it could not see a fix to this
+    # function at all — it reported the defect as unfixed after it was fixed.
+    h = np.zeros_like(z) if h0 is None else h0.astype("float64").copy()
     peak = np.zeros_like(z)
     qx = np.zeros_like(z)                            # flux across the +x face, m2/s
     qy = np.zeros_like(z)
@@ -175,7 +182,22 @@ def simulate(z: np.ndarray[Any, Any], bcr: np.ndarray[Any, Any],
             zn = np.roll(z, -1, axis=axis)
             hf = np.maximum(L, Ln) - np.maximum(z, zn)
             hf = np.maximum(hf, 0.0)
-            slope = (L - Ln) / cell
+            # SIGN: the gradient must be DOWNSTREAM-MINUS-UPSTREAM. Bates 2010
+            # writes q_next = (q - g*hf*dt * d(h+z)/dx); with flux defined
+            # positive from cell i to i+1, d(h+z)/dx is (L[i+1] - L[i])/dx.
+            #
+            # It was (L[i] - L[i+1])/dx, which accelerates flow UP the gradient.
+            # Measured on a closed domain with a uniform film on a uniform slope:
+            # the low end drained 1.000 -> 0.037 while the high end grew
+            # 1.000 -> 1.042. Water pooled on the hilltop, mass conserved exactly.
+            #
+            # Downstream it produced odd-even decoupling — alternate cells dry,
+            # their neighbours deep — which in Dubai read as 16.09 m peaks in
+            # isolated cells. Negating this drops the checkerboard from 0.5225 to
+            # 0.0062 and leaves no dry interior cells.
+            #
+            # Guarded by scripts/check-flood-routing.py and by self-test group 6.
+            slope = (Ln - L) / cell
             denom = 1.0 + G * dt * manning ** 2 * np.abs(q) / np.maximum(hf, 1e-6) ** (7.0 / 3.0)
             qn = (q - G * hf * dt * slope) / denom
             qn = np.where(hf > 1e-4, qn, 0.0)
@@ -188,6 +210,11 @@ def simulate(z: np.ndarray[Any, Any], bcr: np.ndarray[Any, Any],
             vmax = FR_MAX * np.sqrt(G * np.maximum(hf, 1e-6))
             qn = np.clip(qn, -vmax * hf, vmax * hf)
 
+            if closed:
+                if axis == 0:
+                    qn[-1, :] = 0.0
+                else:
+                    qn[:, -1] = 0.0
             dV = qn * cell * conv * dt               # face width reduced by conveyance porosity
             here = newh * store * A
             there = np.roll(newh, -1, axis=axis) * store * A
@@ -197,9 +224,18 @@ def simulate(z: np.ndarray[Any, Any], bcr: np.ndarray[Any, Any],
             q[...] = qn
 
         h = np.maximum(newh, 0.0)
-        out += float(h[0, :].sum() + h[-1, :].sum() + h[:, 0].sum() + h[:, -1].sum()) * A
-        h[0, :] = h[-1, :] = 0.0
-        h[:, 0] = h[:, -1] = 0.0
+        if closed:
+            # No open boundary. Used only by the routing check, where an open
+            # edge would act as a sink and hide which way water actually moves —
+            # exactly how the first sign test wrongly cleared this solver.
+            pass
+        elif hold is not None:
+            h[0, :] = h[-1, :] = hold[0, :]
+            h[:, 0] = h[:, -1] = hold[:, 0]
+        else:
+            out += float(h[0, :].sum() + h[-1, :].sum() + h[:, 0].sum() + h[:, -1].sum()) * A
+            h[0, :] = h[-1, :] = 0.0
+            h[:, 0] = h[:, -1] = 0.0
         if sink is not None:
             out += float(h[sink].sum()) * A       # volume that reached open water
             h[sink] = 0.0                         # same treatment as the domain edge
@@ -254,9 +290,36 @@ def self_test() -> int:
     a(float(pk.max()) < 50.0,
       f"a near-solid block reached {pk.max():.0f} m -- conveyance porosity is missing")
 
+    # 5. FLOW DIRECTION. The self-test passed 5 of 5 for the entire time the
+    #    momentum term drove water UP the water-surface gradient, because not one
+    #    check looked at direction. A closed domain matters here: with open edges
+    #    the low end drains regardless of which way flux points, which is how an
+    #    early sign test wrongly cleared this solver.
+    zt = np.tile(np.linspace(0.0, 10.0, 21).reshape(21, 1), (1, 21))
+    h0 = np.full((21, 21), 0.2)
+    _, hh, _, _ = simulate(zt, np.zeros((21, 21)), 0.0, hours=0.1, cell=30.0,
+                           h0=h0, closed=True)
+    low, high = float(hh[1:6, 10].sum()), float(hh[15:20, 10].sum())
+    a(low > high,
+      f"a uniform film on a slope pooled HIGH ({high:.3f}) not LOW ({low:.3f}) -- "
+      f"the water-surface gradient is driving flow up the slope")
+
+    # 6. NO ODD-EVEN DECOUPLING. The inverted gradient made alternate cells drain
+    #    to zero while their neighbours deepened; in Dubai that read as 16.09 m
+    #    peaks in isolated cells. Smooth slope, smooth start, smooth answer.
+    h0 = np.full((21, 21), 0.2)
+    h0[10, :] += 2.0
+    _, hh, _, _ = simulate(zt, np.zeros((21, 21)), 0.0, hours=0.05, cell=30.0,
+                           h0=h0, hold=np.full((21, 21), 0.2))
+    col = hh[:, 10]
+    alt = abs(float(col[2:10:2].mean()) - float(col[1:10:2].mean()))
+    a(alt < 0.05, f"adjacent cells differ by {alt:.4f} m on a smooth slope -- odd-even decoupling")
+    a(int((col[1:20] <= 1e-9).sum()) == 0,
+      f"{int((col[1:20] <= 1e-9).sum())} interior cells drained to zero from a wet start")
+
     for line in fails:
         print(f"  FAIL {line}")
-    print(f"\n  {5 - len(fails)} of 5 check groups passed.")
+    print(f"\n  {7 - len(fails)} of 7 check groups passed.")
     return 1 if fails else 0
 
 

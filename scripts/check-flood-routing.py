@@ -1,51 +1,55 @@
-"""Minimal reproducer for the routing defect in `flood_unsteady.simulate`.
+"""Guards the routing in `flood_unsteady.simulate` against odd-even decoupling.
 
-STATUS: KNOWN FAILING as of 2026-08-26. This script exists to document a defect
-that is not yet fixed, and to give any attempted fix an immediate pass/fail.
-It is deliberately NOT wired into a build gate, because it fails today.
+STATUS: PASSING since the gradient sign was corrected on 2026-08-26.
 
-THE CASE. A uniform slope, a uniform thin film of water everywhere, and one row
-of extra depth at mid-slope. No buildings, no porosity, no rain, no sea. The
-correct answer is not in dispute: the extra water spreads and runs downhill, and
-no interior cell should end up dry while its neighbour deepens.
+WHAT IT CHECKS. Two cases with answers that are not in dispute:
 
-WHAT ACTUALLY HAPPENS.
+  1. A uniform film on a uniform slope, CLOSED domain. Water must pool at the
+     BOTTOM. The closed domain is essential — with open edges the low end acts
+     as a sink and drains no matter which way flux points, and that is precisely
+     how an early test wrongly cleared this solver after the defect had already
+     been identified correctly.
 
-    row  1  0.0000   -0.2000
-    row  2  0.5182   +0.3182
-    row  3  0.0000   -0.2000
-    row  4  0.5197   +0.3197
-    row 10  2.5963   +2.3963   <- the raised row GAINED water
+  2. That same slope with one raised row at mid-slope. The extra water spreads
+     and runs downhill; no interior cell may end up dry while its neighbour
+     deepens, and the raised row may not gain water.
 
-Alternate cells drain to zero while their neighbours accumulate — odd-even
-decoupling — and the raised row grows instead of draining.
+THE DEFECT IT EXISTS FOR. `slope` was written as (L[i] - L[i+1])/dx. Bates et
+al. 2010 gives q_next = (q - g*hf*dt * d(h+z)/dx), and with flux defined
+positive from i to i+1 that gradient is (L[i+1] - L[i])/dx. Negated, the
+momentum term accelerates flow UP the water-surface gradient.
 
-IT IS NOT A TIMESTEP PROBLEM. Refining dt by 20x (1.0 -> 0.05, holding sim time
-constant) leaves the checkerboard amplitude unchanged at 0.52 and the raised row
-at 2.596 m in all three cases. The scheme CONVERGES to this answer rather than
-diverging toward it, which is the dangerous kind of wrong: it looks stable and
-produces plausible output.
+Measured on case 1 before the fix: the low end drained 1.000 -> 0.037 while the
+high end grew 1.000 -> 1.042, mass conserved exactly. Water pooled on a hilltop.
 
-IT IS NOT THE POROSITY FLOOR. This reproducer runs with store = 1 throughout.
-The floor only amplifies the artefact — a smaller void turns the same trapped
-volume into a larger depth, which is why depth in Dubai correlated with 1/store
-at +0.49 and why the floor looked like the cause. It is not.
+Downstream it produced odd-even decoupling — alternate cells dry, neighbours
+deep — which in Dubai read as 16.09 m peak depths in isolated cells, 3,585 cells
+over 5 m. Correcting the sign takes the checkerboard from 0.5225 to 0.0062 and
+leaves no dry interior cells.
 
-IT IS NOT THE SLOPE SIGN. `slope = (L[i] - L[i+1])/dx` matches Bates et al. 2010
-once the flux convention (positive from i to i+1) is accounted for. That was
-checked and the solver is right.
+FALSE LEADS, EACH RULED OUT BY MEASUREMENT, RECORDED SO THEY ARE NOT RE-WALKED:
 
-WHAT THE dV CLIP IS ACTUALLY DOING. Removing `np.clip(dV, -there, here)` makes
-this case go NaN. So the clip is not a safety net on a sound scheme — it is the
-only thing preventing blow-up, and the checkerboard is what it produces instead.
-That points at the flux limiter interacting with the in-place `newh` update
-inside the axis loop, which is the first place to look.
+  · The porosity floor. Depth correlated with 1/store at +0.49 and 98.6 % of
+    >10 m cells sat on the 0.15 floor. Compelling, and wrong: this reproducer
+    runs at store = 1 and showed the identical checkerboard. The floor only
+    amplifies — a smaller void turns the same trapped volume into a larger
+    depth. An amplifier mistaken for a cause.
 
-WHAT IT INVALIDATES. Every absolute depth from this solver: the 16.09 m peak
-cells in Dubai are this artefact. It also puts the CSI figure from
-validate-flood-stability.py in doubt, because if which cell wins the checkerboard
-is itself terrain-sensitive, that number measures an artefact's sensitivity
-rather than the flood pattern's.
+  · The timestep. Refining dt 20x (1.0 -> 0.05, sim time held) left the
+    checkerboard at 0.52 and the raised row at 2.596 m in all three cases. The
+    scheme converged to the wrong answer rather than diverging toward it.
+
+  · The dV volume clip. Removing it makes the case go NaN, which made it look
+    load-bearing. It is not the cause; two variants of it changed nothing.
+
+WHY NOTHING CAUGHT THIS. The solver self-test passed 5 of 5 throughout. Its
+checks cover the runoff ratio, monotonicity, the Froude cap and conveyance
+porosity — none looks at flow DIRECTION. And the Dubai terrain was a third
+dead-flat mesa until the same day, where a routing defect has nothing to route.
+
+This file drives simulate() directly. Its first version reimplemented the solver
+loop and therefore went on reporting the defect after it had been fixed; a
+reproducer that does not exercise the code under test is worthless.
 
     python3 scripts/check-flood-routing.py
 """
@@ -65,38 +69,42 @@ FILM = 0.20          # uniform wet film, so the dV clip never binds on a dry cel
 BLOB = 2.00          # extra depth on one row at mid-slope
 
 
-def profile(n: int = 21, steps: int = 150) -> np.ndarray[Any, Any]:
-    """Down-slope water profile after routing. Column 0 — every column is equal."""
+def profile(n: int = 21, hours: float = 0.05) -> np.ndarray[Any, Any]:
+    """Down-slope water profile after routing, from the REAL solver.
+
+    An earlier version of this file carried its own copy of the solver loop, so
+    it could not observe a fix to flood_unsteady at all — it went on reporting
+    the defect after the defect was gone. It now drives simulate() directly via
+    h0/hold, which is the whole point of a reproducer.
+    """
     z = np.tile(np.linspace(0.0, 10.0, n).reshape(n, 1), (1, n))
     bcr = np.zeros((n, n))
-    h = np.full((n, n), FILM)
-    h[n // 2, :] += BLOB
-
-    # simulate() starts from h = 0 and has no initial-condition argument, so the
-    # loop is reproduced here. It is the same arithmetic; see flood_unsteady.
-    g, fr = 9.81, 1.0
-    store = np.maximum(1.0 - bcr, 0.15)
-    area = CELL * CELL
-    qy = np.zeros_like(h)
-    for _ in range(steps):
-        lvl = z + h
-        dt = 1.0
-        newh = h.copy()
-        ln = np.roll(lvl, -1, axis=0)
-        zn = np.roll(z, -1, axis=0)
-        hf = np.maximum(np.maximum(lvl, ln) - np.maximum(z, zn), 0.0)
-        slope = (lvl - ln) / CELL
-        denom = 1.0 + g * dt * 0.035 ** 2 * np.abs(qy) / np.maximum(hf, 1e-6) ** (7.0 / 3.0)
-        qn = np.where(hf > 1e-4, (qy - g * hf * dt * slope) / denom, 0.0)
-        vmax = fr * np.sqrt(g * np.maximum(hf, 1e-6))
-        qn = np.clip(qn, -vmax * hf, vmax * hf)
-        dv = np.clip(qn * CELL * dt, -np.roll(newh, -1, axis=0) * area, newh * area)
-        newh = newh - dv / area + np.roll(dv, 1, axis=0) / area
-        qy = qn
-        h = np.maximum(newh, 0.0)
-        h[0, :] = h[-1, :] = FILM        # hold both ends, so neither end is a sink
-    out: np.ndarray[Any, Any] = h[:, 0]
+    h0 = np.full((n, n), FILM)
+    h0[n // 2, :] += BLOB
+    hold = np.full((n, n), FILM)
+    _, h, _, _ = simulate(z, bcr, 0.0, hours=hours, cell=CELL, h0=h0, hold=hold)
+    # INTERIOR column. `hold` pins the edge columns at FILM, so reading column 0
+    # returns the boundary condition rather than the solution — which is exactly
+    # what it did on the first run of this fixed version, showing a flat 0.2000
+    # everywhere and hiding whether the blob had drained at all.
+    out: np.ndarray[Any, Any] = h[:, n // 2]
     return out
+
+
+def closed_film(n: int = 21, hours: float = 0.1) -> tuple[float, float]:
+    """Uniform film on a uniform slope, CLOSED domain. Water must pool LOW.
+
+    This is the case that settles the gradient sign, and it needs a closed
+    domain: with open edges the low end acts as a sink and drains regardless of
+    which way flux points, which is exactly how an earlier test wrongly cleared
+    the solver after the sign had already been correctly identified as inverted.
+    """
+    z = np.tile(np.linspace(0.0, 10.0, n).reshape(n, 1), (1, n))
+    bcr = np.zeros((n, n))
+    h0 = np.full((n, n), FILM)
+    _, h, _, _ = simulate(z, bcr, 0.0, hours=hours, cell=CELL, h0=h0, closed=True)
+    c = n // 2
+    return float(h[1:6, c].sum()), float(h[n - 6:n - 1, c].sum())
 
 
 def main() -> int:
@@ -104,34 +112,32 @@ def main() -> int:
     p = profile(n)
     mid = n // 2
     interior = p[1:n - 1]
-
     fails: list[str] = []
 
-    # 1. NO CHECKERBOARD. Adjacent interior cells on a smooth slope with a smooth
-    #    initial condition must not alternate between full and empty.
-    ev = p[2:mid:2]
-    od = p[1:mid:2]
+    # 1. THE GRADIENT SIGN. Closed domain, uniform film: water pools at the
+    #    bottom of the hill. Nothing else is physically possible.
+    lo, hi = closed_film(n)
+    if hi >= lo:
+        fails.append(f"closed uniform film pooled HIGH ({hi:.3f}) not LOW ({lo:.3f}) "
+                     f"— the water-surface gradient drives flow up the slope")
+
+    # 2. NO CHECKERBOARD on a smooth slope from a smooth start.
+    ev, od = p[2:mid:2], p[1:mid:2]
     alt = abs(float(ev.mean()) - float(od.mean()))
     if alt > 0.05:
         fails.append(f"checkerboard amplitude {alt:.4f} m between adjacent cells (want < 0.05)")
 
-    # 2. NO DRY INTERIOR CELLS. Everything started wet and water was only added.
+    # 3. NO DRY INTERIOR CELLS — everything started wet and water was only added.
     dry = int((interior <= 1e-9).sum())
     if dry:
         fails.append(f"{dry} of {interior.size} interior cells drained to zero from a wet start")
 
-    # 3. THE RAISED ROW MUST DRAIN. It sits above its neighbours; it cannot gain.
+    # 4. THE RAISED ROW MUST DRAIN. It stands above its neighbours; it cannot gain.
     if p[mid] > FILM + BLOB:
         fails.append(f"the raised row grew from {FILM+BLOB:.3f} m to {p[mid]:.3f} m")
 
-    # 4. TIMESTEP INDEPENDENCE. A convergent scheme changes with dt; this one
-    #    does not, which is how we know refining dt is not the answer.
-    coarse = profile(n, 150)
-    fine = profile(n, 3000)
-    if abs(float(coarse[mid]) - float(fine[mid])) < 1e-3 and fails:
-        print(f"  note: dt-independent — raised row {coarse[mid]:.3f} m at both "
-              f"150 and 3000 steps, so this is structural, not CFL")
-
+    print(f"  closed uniform film: low end {lo:.3f}   high end {hi:.3f}"
+          f"   ({'pools LOW, correct' if lo > hi else 'POOLS HIGH'})")
     print(f"\n  down-slope profile (row 0 = low, row {n-1} = high, all started at {FILM} m):")
     for r in range(n):
         bar = "#" * int(min(p[r], 3.0) * 20)
@@ -142,9 +148,8 @@ def main() -> int:
         print(f"\n  FAIL ({len(fails)}):")
         for f in fails:
             print(f"    - {f}")
-        print("\n  This is the known routing defect. See the module docstring.")
         return 1
-    print("\n  OK: water routes downhill without decoupling.")
+    print("\n  OK: water routes downhill, no decoupling, no dry interior cells.")
     return 0
 
 
