@@ -42,6 +42,18 @@ SUN_AZIM_DEG = 292.0
 # other was not. Pass --site instead.
 SITE = "dubai-creek"
 
+# EXPOSURE IS A PROPERTY OF THE SURFACE, NOT A TASTE CHOICE. Bare desert reflects
+# far more than a built coastal city, so one value cannot serve both: -4.0 puts
+# the coastal strip at a healthy p50 0.46 and blows Dubai South out to 0.59.
+# Measured by sweep at 8 samples, reading the luminance quantiles the renderer
+# already prints:
+#
+#     dubai-south   -5.0 -> p50 0.439   -5.5 -> p50 0.367   -6.0 -> p50 0.301
+#
+# -5.5 sits mid-range with p05 0.094, so shadows still hold detail; -6.0 starts
+# crushing the low end. --exposure still overrides for look-dev.
+SITE_EXPOSURE = {"dubai-creek": -4.0, "dubai-south": -5.5}
+
 
 def args() -> dict[str, str]:
     argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
@@ -602,7 +614,8 @@ def main() -> None:
     scene.render.film_transparent = False
     scene.view_settings.view_transform = "AgX"
     scene.view_settings.look = a.get("look", "AgX - Punchy")
-    scene.view_settings.exposure = float(a.get("exposure", "-4.0"))
+    scene.view_settings.exposure = float(
+        a.get("exposure", str(SITE_EXPOSURE.get(SITE, -4.0))))
     scene.render.filepath = out
     # THE 3D VIEWPORT HAS ITS OWN CLIP RANGE, separate from the camera's.
     # Fixing camera.clip_end fixes the RENDER and leaves the interactive view
