@@ -32,6 +32,24 @@ TWO TRAPS THIS FILE ENCODES SO THEY ARE NOT RE-WALKED.
     airports. A DEM delivered in ELLIPSOIDAL heights would sit ~34 m below these
     orthometric values. Ours does not, and this check would scream if it did.
 
+LICENCE POSITION, AND IT IS NARROW. The UAE AIP is NOT open data. GEN 0.1.5.1
+grants only a "transient copy… for the purpose of viewing, planning and decision
+making", limits reuse to "aviation related activities", forbids reproduction "in
+any form or by any means", and expressly prohibits "software robots, spiders,
+crawlers, or similar data gathering and extraction tools".
+
+So: the AIP is an ORACLE WE READ, never a source we ingest. This file holds four
+hand-transcribed ground levels — facts, which are not copyrightable, quoted the
+way one quotes a figure in prose. That is defensible. What would NOT be:
+  · committing AIP chart PDFs to this repo (some were fetched during research and
+    have been deleted),
+  · scheduling any pipeline against AIRAC cycles,
+  · reproducing a chart in a deliverable,
+  · mirroring the obstacle table wholesale.
+
+If this check ever needs more reference points, add them by hand from a reading,
+and keep the count small enough that this stays a citation and not a copy.
+
     python3 scripts/check-terrain-accuracy.py
 """
 from __future__ import annotations
