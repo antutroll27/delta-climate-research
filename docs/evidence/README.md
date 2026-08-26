@@ -43,3 +43,9 @@ Assembled 2026-08-11 from four parallel harvests over the repo's research docs
 and methodology docs, and the project memory. Cheque sizes, licences, and eligibility were taken
 as-found on primary/official pages; **application windows and licences rotate — reconfirm before
 relying on any one line.**
+
+- **`building-heights-dubai.md`** — every open building-height source measured
+  against the same question: what does it make of Burj Khalifa? Ten datasets,
+  ceilings from 9 m to 667 m against an actual 828 m. Also the storey constant
+  that turned out to be Indian, the circularity trap in calibrating against OSM,
+  and the doors closed with licence text.

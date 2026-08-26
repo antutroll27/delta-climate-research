@@ -14,8 +14,33 @@ re-discover a reachable endpoint and assume reachable means permitted.
 | Landmark heights | CTBUH (published measurements) | facts, not expression | n/a |
 | Building heights | Wikidata | CC0 1.0 | no |
 | Footprints (base) | Microsoft GlobalML | CDLA-Permissive-2.0 | no |
+| Terrain fill above 10 m | GEDTM30 v1.2 | CC BY 4.0 | no |
+| Observed flood extent | Landsat 8/9 C2 L2 | US public domain | no |
 | Outlines, 3D massing, heights | OpenStreetMap | **ODbL 1.0** | **yes** |
 | Water, coast, beaches, roads, land use | OpenStreetMap | **ODbL 1.0** | **yes** |
+
+## Added 2026-08-26/27
+
+**GEDTM30 v1.2** replaced Copernicus GLO-30 as the fill above DeltaDTM's 10 m
+ceiling. GLO-30 is a SURFACE model — it was serving buildings and vegetation as
+ground across 37 % of the coastal window. GEDTM30 is a true bare-earth DTM fused
+from ICESat-2 and GEDI ground returns, CC BY 4.0, and it wins on every metric
+scored against DeltaDTM's own measured cells (MAE 1.49 m vs 1.78 m).
+
+**FABDEM and FathomDEM are BOTH CC BY-NC-SA** — verified via Zenodo's API,
+records 14511570 and 14523356. Commonly recommended, and unusable here.
+
+**The UAE AIP (GCAA) is an oracle, never a source.** GEN 0.1.5.1 grants only a
+*"transient copy… for viewing, planning and decision making"*, limits reuse to
+*"aviation related activities"*, forbids reproduction *"in any form or by any
+means"*, and expressly bans *"software robots, spiders, crawlers"*. Its
+obstacle tables yield surveyed ground levels — the best vertical reference we
+have for Dubai — so we quote a handful of figures as facts and mirror nothing.
+
+**Every building height we hold is ODbL.** Verified by Overture's per-feature
+source attribution: all 3,246 heights in the Dubai window are
+`dataset=OpenStreetMap, licence=ODbL-1.0`. There is no CC BY subset. Share-alike
+applies to 100 % of the height layer — see `building-heights-dubai.md`.
 
 ## REFUSED — reachable but not licensed
 
