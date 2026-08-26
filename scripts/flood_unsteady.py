@@ -72,6 +72,11 @@ cloud, USGS public domain — untried. Until then this model is self-consistent,
 verified.
 
     python3 scripts/flood_unsteady.py --self-test
+
+LONG RUNS: pass `progress=` a callable (steps, t, T, peak, h) and it is invoked
+every `progress_every` steps. Use it to log and to checkpoint — a 72 h window on
+the 948^2 grid runs past 50 minutes, and without this there is no way to observe
+it or to survive an interruption.
 """
 from __future__ import annotations
 
@@ -185,7 +190,9 @@ def simulate(z: np.ndarray[Any, Any], bcr: np.ndarray[Any, Any],
              h0: np.ndarray[Any, Any] | None = None,
              hold: np.ndarray[Any, Any] | None = None,
              closed: bool = False,
-             hyeto: np.ndarray[Any, Any] | None = None) -> tuple[np.ndarray[Any, Any], np.ndarray[Any, Any], int, float]:
+             hyeto: np.ndarray[Any, Any] | None = None,
+             progress: Any = None,
+             progress_every: int = 2000) -> tuple[np.ndarray[Any, Any], np.ndarray[Any, Any], int, float]:
     """`sink` cells drain freely — water reaching them has left the catchment.
 
     This is how permanent water enters the physics. Without it the sea is a
@@ -315,6 +322,16 @@ def simulate(z: np.ndarray[Any, Any], bcr: np.ndarray[Any, Any],
         peak = np.maximum(peak, h)
         t += dt
         steps += 1
+
+        # PROGRESS AND CHECKPOINTING. Long runs on this grid are 50+ minutes and
+        # were, twice on 2026-08-26, killed by an unrelated machine shutdown with
+        # nothing recoverable and no way to see how far they had got. `simulate`
+        # printed only on completion, so "99 % CPU for 52 minutes" was the entire
+        # status. A callback costs one modulo per step and fixes both: it can log
+        # and it can persist state, so an interrupted run resumes from its last
+        # checkpoint instead of from zero.
+        if progress is not None and steps % progress_every == 0:
+            progress(steps, t, T, peak, h)
     return peak, h, steps, t
 
 

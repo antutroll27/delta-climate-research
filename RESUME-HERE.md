@@ -1,45 +1,52 @@
-# Resume — flood-sim, paused 2026-08-26
+# Resume — flood-sim
 
-Branch `feat/flood-sim`, clean, all pushed through `9f55611`.
+Branch `feat/flood-sim`, clean, pushed. Nothing running.
 
-## Run this first
+## The overnight job — one command
 
     cd .claude/worktrees/flood-sim
-    nice -n 10 python3 scripts/validate-flood-stability.py --realisations 5 --white 3 --workers 4
+    nohup nice -n 10 python3 scripts/run-routing-window-test.py > /tmp/routing-test.log 2>&1 &
+    tail -f /tmp/routing-test.log
 
-~30 min on 4 niced workers. NO CHECKPOINTING — it restarts from zero, so don't
-kill it. It was 10 min in when the machine had to shut down.
+50-90 min. It now LOGS every 2,000 steps and CHECKPOINTS to
+`peak_72h.partial.npy` — two earlier attempts were killed by machine shutdowns
+with nothing recoverable, because simulate() printed only on completion.
 
-This is the ONLY thing blocking quotable accuracy numbers. Its previous output
-predates both the routing fix (c944393) and the GEDTM30 fill (b77a4db), so the
-CSI figure recorded in the file header is stale and marked unquotable.
+When it finishes:  `python3 scripts/score-flood-methods.py`  (picks it up automatically)
 
-## Gates, all green as of the pause
+## Where the project actually stands
 
-    python3 -m mypy                          # 90 files
-    python3 scripts/flood_unsteady.py --self-test    # 7/7
-    python3 scripts/check-flood-routing.py           # OK
-    python3 scripts/check-terrain-accuracy.py        # 4/4 within 1.5 m
-    python3 scripts/fetch-dubai-terrain.py --check   # OK
+The model is REPRODUCIBLE (CSI 0.624 under terrain error, white-noise control
+0.290) and NOT CORRECT. Scored against Landsat's observed April 2024 extent:
 
-## Then, in order
+    method              CSI   vs rand     1920m block r
+    elevation        0.0281    1.12x         +0.300
+    hand             0.0273    1.09x         +0.300   (= elevation in disguise)
+    depthBelow       0.0150    0.60x         +0.226
+    twi              0.0114    0.46x         -0.158
+    solver-peak      0.0187    0.74x         -0.057
 
-1. **Landsat-9 validation.** `LC09_L2SP_160043_20240419_20240424_02_T1`, 19 Apr
-   2024, 0.03 % cloud, USGS public domain. First real ground truth this model
-   has ever had. Caveat: a naive MNDWI threshold is unstable here (Gulf
-   turbidity, sun glint, sabkha salt crust) — the published work used a trained
-   classifier.
-2. **Union OSM water into `sea_mask()`.** 6,185 cells of above-MSL permanent
-   water (marina basins, lagoons) sit outside the elevation mask and would
-   render as flooded. 0.69 % of the domain — won't move aggregates, will be
-   noticed. Recorded in the `sea_mask()` docstring.
-3. **One cell still peaks at 10.17 m** and wants explaining.
+Nothing has cell-scale skill. `-elevation` is the least-bad method at r = +0.30
+for ~2 km districts — which explains ~9 % of variance. It is not a good model.
 
 ## Do NOT
 
-- Quote any depth or CSI figure until the ensemble re-runs.
-- Call 254.8 mm "the Dubai flood" — it is Al Ain (Khatm Al Shakla). Dubai got
-  ~142 mm. This is a transposed event at ~1.74x Dubai's 1-in-100 design storm.
-- Commit UAE AIP charts or schedule anything against AIRAC cycles.
-- Build Dubai South as a 3-D scene — geometry is current, heights are not
-  (OSM 1.3 %, 3D-GloBFP r = 0.416).
+- Present any of this as a validated flood map.
+- Quote 254.8 mm as "the Dubai flood" — that is Al Ain. Dubai got ~142 mm.
+- Fit a model to the observed extent to post a better number. The published
+  comparator (IoU 0.86) fits; we predict. A fitted model generalises to neither
+  another storm nor another city, and Dubai is meant to be city #1 of many.
+
+## Blocked on you
+
+1. **IMERG EULA** — https://urs.earthdata.nasa.gov/approve_app?client_id=e2WVk8Pw6weeLUKZYOxvTQ
+   Every rainfall number rests on a storm shape I invented. Runoff at 142 mm
+   swings 0 % -> 27 % on hyetograph shape alone: the largest open assumption.
+2. **The HDI / building aesthetic** you mentioned, for the Blender look-dev.
+
+## Next after the routing test
+
+- Tiled city (Dubai + South) for flood-sim and OBOS. Saved in memory.
+  TILING IS RENDERING-ONLY — the solve must stay contiguous or seams fabricate walls.
+- A better DEM is the biggest accuracy lever and is BLOCKED: FABDEM and
+  FathomDEM are both CC BY-NC-SA, no open lidar exists for Dubai.
