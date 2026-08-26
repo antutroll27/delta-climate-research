@@ -1,0 +1,52 @@
+{
+  "site": "dubai-creek",
+  "rainMm": 142.0,
+  "observed": {
+    "baseline": {
+      "date": "2024-03-18",
+      "id": "LC09_L2SP_160043_20240318_02_T1"
+    },
+    "flood": {
+      "date": "2024-04-19",
+      "id": "LC09_L2SP_160043_20240419_02_T1"
+    },
+    "recovery": {
+      "date": "2024-04-27",
+      "id": "LC08_L2SP_160043_20240427_02_T1"
+    }
+  },
+  "observedKm2": 14.772,
+  "observedRecoveryKm2": 5.686,
+  "scorableCells": 579790,
+  "peak": {
+    "modelledKm2": 44.432,
+    "areaRatio": 3.008,
+    "hits": 1169.0,
+    "misses": 13382.0,
+    "falseAlarms": 48200.0,
+    "csi": 0.0186,
+    "pod": 0.0803,
+    "far": 0.9763,
+    "bias": 3.3928,
+    "blockCorrelation": -0.0642,
+    "blockSizeM": 480.0
+  },
+  "residual": {
+    "modelledKm2": 44.432,
+    "areaRatio": 3.008,
+    "hits": 1169.0,
+    "misses": 13382.0,
+    "falseAlarms": 48200.0,
+    "csi": 0.0186,
+    "pod": 0.0803,
+    "far": 0.9763,
+    "bias": 3.3928,
+    "blockCorrelation": -0.0642,
+    "blockSizeM": 480.0
+  },
+  "recession": {
+    "observedDropFraction": 0.6151,
+    "modelledPeakToResidualDrop": 0.0,
+    "note": "observed drop is 8 days (19->27 Apr); modelled drop is the 6 h simulation window only, so the modelled figure should be SMALLER. If it is larger, the solver is draining too fast."
+  }
+}
