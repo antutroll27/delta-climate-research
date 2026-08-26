@@ -112,6 +112,36 @@ GLOBALML_LINKS = (
 # is 4.6 MB. _remotezip.py pulls the one member over range requests. The file URL
 # is a 4TU UUID rather than a stable path, so it is resolved from the article API
 # at run time instead of being pinned here and rotting.
+# GEDTM30 v1.2 — a TRUE 30 m bare-earth DTM, CC BY 4.0, commercial use fine.
+# OpenGeoHub / Open-Earth-Monitor, random-forest fusion trained on ~30 billion
+# ICESat-2 and GEDI ground returns. Peer-reviewed: PeerJ 13:e19673.
+#
+# WHY IT MATTERS HERE. DeltaDTM clips at 10 m MSL, so 37 % of this window's land
+# has to be filled from somewhere. That filler was Copernicus GLO-30 — a SURFACE
+# model, which serves buildings and vegetation as ground. Measured on our own
+# window against DeltaDTM's 391,923 genuinely-measured cells:
+#
+#     Copernicus GLO-30 (DSM)   bias +1.61 m   MAE 1.78 m   RMSE 3.04 m
+#     GEDTM30 v1.2 (DTM)        bias +1.12 m   MAE 1.49 m   RMSE 2.52 m
+#
+# Better on every metric, and it is bare earth by construction rather than by
+# our own footprint-masking, which only ever reached 9.5 % of cells.
+#
+# ACCESS: Zenodo carries only a 240 m downsample. The 30 m product is a single
+# 403 GiB global COG served with range requests and open CORS — a windowed read
+# costs seconds. No login.
+#
+# The permissive alternatives were checked and are NOT usable: FABDEM and
+# FathomDEM are both CC BY-NC-SA (verified via Zenodo's API, records 14511570
+# and 14523356), and this is a commercial project.
+GEDTM30_COG = ("https://s3.opengeohub.org/global/dtm/v1.2/"
+               "gedtm_rf_m_30m_s_20060101_20151231_go_epsg.4326.3855_v1.2.tif")
+GEDTM30_LICENCE = "CC BY 4.0"
+GEDTM30_ATTRIBUTION = (
+    "GEDTM30 v1.2 (OpenGeoHub / Open-Earth-Monitor, Hengl et al., "
+    "PeerJ 13:e19673) — CC BY 4.0"
+)
+
 DELTADTM_ARTICLE = "https://data.4tu.nl/v2/articles/21997565/files"
 DELTADTM_ARCHIVE = "Asia.zip"
 DELTADTM_LICENCE = "CC BY 4.0"

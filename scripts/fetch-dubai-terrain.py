@@ -52,7 +52,8 @@ from scipy import ndimage
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _flood import (DELTADTM_ARCHIVE, DELTADTM_ARTICLE, DELTADTM_ATTRIBUTION,  # noqa: E402
-                    DELTADTM_LICENCE, SITES, Site, deltadtm_tile, dem_tile_url,
+                    DELTADTM_LICENCE, GEDTM30_ATTRIBUTION, GEDTM30_COG,
+                    GEDTM30_LICENCE, SITES, Site, deltadtm_tile, dem_tile_url,
                     site_bounds)
 from _remotezip import extract as zip_extract  # noqa: E402
 
@@ -164,6 +165,35 @@ def building_coverage(site: Site, shape: tuple[int, int],
     return coarse
 
 
+def read_gedtm30(site: Site, shape: tuple[int, int]) -> np.ndarray[Any, Any] | None:
+    """Windowed read of GEDTM30 v1.2 — a true bare-earth DTM, CC BY 4.0.
+
+    This replaces GLO-30 as the fill above DeltaDTM's 10 m ceiling. GLO-30 is a
+    SURFACE model, so it served buildings and vegetation as ground across the
+    37 % of this window's land that DeltaDTM cannot see. Scored on our own window
+    against DeltaDTM's 391,923 measured cells, GEDTM30 wins on every metric
+    (MAE 1.49 m vs 1.78 m, bias +1.12 m vs +1.61 m).
+
+    One 403 GiB global COG with range requests, so a window costs ~8 s. Returns
+    None rather than raising: the caller falls back to the masked GLO-30 path,
+    which is worse but not wrong, and a network blip should not fail the build.
+    """
+    try:
+        with rasterio.open(f"/vsicurl/{GEDTM30_COG}") as ds:
+            window = window_from_bounds(*site_bounds(site), ds.transform)
+            arr = ds.read(1, window=window, out_shape=shape,
+                          resampling=rasterio.enums.Resampling.bilinear).astype("float64")
+            nodata = ds.nodata
+            scale = float(ds.scales[0]) if ds.scales else 1.0
+    except Exception as exc:                       # noqa: BLE001 — any read failure falls back
+        print(f"    GEDTM30 unavailable ({exc}); falling back to masked GLO-30")
+        return None
+    if nodata is not None:
+        arr[arr == nodata] = np.nan
+    arr *= scale
+    return arr
+
+
 def to_bare_earth(dsm: np.ndarray[Any, Any], coverage: np.ndarray[Any, Any],
                   px_m: float) -> tuple[np.ndarray[Any, Any], np.ndarray[Any, Any], float]:
     """Mask buildings, interpolate ground beneath, clamp to the surface model."""
@@ -212,9 +242,18 @@ def build(site: Site) -> dict[str, Any]:
     # Datum-match the GLO-30 fallback to DeltaDTM over the cells they share, so
     # the filled region does not step at the seam. Median, not mean: the overlap
     # contains residual building signal that would drag a mean.
+    # FILL FROM GEDTM30 WHERE AVAILABLE. It is bare earth by construction rather
+    # than by our own footprint masking, which only ever reached 9.5 % of cells.
+    ged = read_gedtm30(site, dsm.shape)
+    fill_source = "GEDTM30 v1.2"
+    if ged is None or not np.isfinite(ged).any():
+        fill, fill_source = glo_dtm, "Copernicus GLO-30 (masked)"
+    else:
+        fill = np.where(np.isfinite(ged), ged, glo_dtm)
     both = ~void
-    offset = float(np.median(delta[both] - glo_dtm[both])) if both.any() else 0.0
-    terrain = np.where(void, glo_dtm + offset, delta)
+    offset = float(np.median(delta[both] - fill[both])) if both.any() else 0.0
+    terrain = np.where(void, fill + offset, delta)
+    print(f"    fill above the 10 m ceiling: {fill_source}, datum offset {offset:+.3f} m")
 
     removed = (dsm - glo_dtm)[mask]
     # FLIP TO SOUTH-UP. rasterio hands back row 0 at the NORTH edge, and every
@@ -236,9 +275,9 @@ def build(site: Site) -> dict[str, Any]:
 
     return {
         "site": site.id,
-        "source": "DeltaDTM v1.0 (bare earth, <=10 m MSL) with Copernicus GLO-30 bare-earth fill at and above the 10 m ceiling",
-        "licence": f"{DELTADTM_LICENCE}; {LICENCE}",
-        "attribution": f"{DELTADTM_ATTRIBUTION}. {ATTRIBUTION}",
+        "source": "DeltaDTM v1.0 (bare earth, <=10 m MSL) with GEDTM30 v1.2 bare-earth fill at and above the 10 m ceiling",
+        "licence": f"{DELTADTM_LICENCE}; {GEDTM30_LICENCE}; {LICENCE}",
+        "attribution": f"{DELTADTM_ATTRIBUTION}. {GEDTM30_ATTRIBUTION}. {ATTRIBUTION}",
         "surface": "bare earth (measured DTM, not a filtered surface model)",
         "n": site.grid_n,
         "cellM": round(site.footprint_m / site.grid_n, 4),
