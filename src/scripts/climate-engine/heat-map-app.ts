@@ -11,7 +11,7 @@
 import maplibregl from 'maplibre-gl';
 import { WARD_MAP, wardLatLon, formatLatLon } from '../../data/wards.ts';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { DEFAULT_PARAMS, greenReferenceContrastC, type SimLayers, type SimParams } from './types';
+import { DEFAULT_PARAMS, greenReferenceContrastC, type ClimateConstants, type SimLayers, type SimParams } from './types';
 import { detectHeatCaps } from './caps';
 import { createGpuHost, createStaticHost, createWorkerHost } from './sim-host';
 import type { HeatSimHost, HeatSimRequest, HeatSimSnapshot } from './sim-protocol';
@@ -44,10 +44,41 @@ import {
 } from './explore/relief-lifecycle';
 import { addCoverage, removeCoverage, IMAGE_LAYER_ID } from './streetview/coverage-layer';
 import { nearestImage } from './streetview/nearest-image';
+import { resolve, requireCosts } from './scope/resolve.ts';
 
 // Ward set lives in src/data/wards.ts so widening beyond three is a data change,
 // not a code change (dc-urs-spec.md §1).
 const WARDS = WARD_MAP;
+
+/**
+ * The scope this page runs in: the country's warming pathway and unit costs, the
+ * city's fallback air temperature and park-cooling radius.
+ *
+ * INTERIM. Task 7 makes `state.ward` an `AreaKey` and this derives from it, so the
+ * constants follow whichever area is open. It is pinned here rather than left as
+ * literals in the physics because that is where they were, and there they were
+ * unmoveable: `state.ward` is still a bare slug, so there is nothing yet to derive
+ * a scope FROM. Pinning is a smaller lie than a default parameter would be — it is
+ * visible, it names the exact area it assumes, and it is one line to delete.
+ */
+const CLIMATE = resolve('in/kolkata/ballygunge').climate;
+
+/**
+ * The unit prices, refused ONCE here rather than defaulted deeper.
+ *
+ * `climate.costs` is `Costs | null`: a country that has adopted no cost basis has
+ * no capital-cost answer at all, and the tempting `?? 0` inside `computeCost` would
+ * quote it a budget of nothing — a number that computes cleanly and reads as a
+ * finding. So the null is refused at the seam where identity enters, and the
+ * physics keeps a signature that cannot express the absence.
+ *
+ * Unreachable today: India declares all four figures, and `CLIMATE` is pinned to
+ * Kolkata. It becomes reachable when Task 7 makes the scope follow the open area,
+ * and at that point the right change is a readout that says the cost basis is
+ * unavailable — not a fallback number. The throw is what stops that work from being
+ * skipped by accident.
+ */
+const COSTS = requireCosts(resolve('in/kolkata/ballygunge'));
 const { SIM_N, RESET_BURST } = M;
 /**
  * `dark` is OUR style now — OBOS Slate, built by scripts/build-map-style.mjs from
@@ -118,6 +149,9 @@ export function mountHeatMap(): () => void {
   /* ── state ── */
   interface State {
     ward: string; phase: 'peak' | 'night'; path: string; iv: M.Interventions;
+    /* Carried on the state so `currentParams(state)` stays one argument and the
+       physics never has to be told which ward is open. See CLIMATE above. */
+    climate: ClimateConstants;
     sunNow: number | null;
     /* Non-null forces the 1-in-100 air temperature in place of the observed one.
        A scenario override, not a phase — see phase-select.ts. */
@@ -129,7 +163,7 @@ export function mountHeatMap(): () => void {
     dcurs: Record<string, DcUrsInputs> | null;
   }
   
-  const state: State = { ward: 'ballygunge', phase: 'peak', path: '2025', iv: { trees: 0, roof: 0, parks: 0, facades: 0 }, sunNow: 0, heatTairC: null, base: null, baselineMean: 0, live: null, spatial: null, greenG: 0, lastMean: {}, dcurs: null };
+  const state: State = { ward: 'ballygunge', phase: 'peak', path: '2025', iv: { trees: 0, roof: 0, parks: 0, facades: 0 }, climate: CLIMATE, sunNow: 0, heatTairC: null, base: null, baselineMean: 0, live: null, spatial: null, greenG: 0, lastMean: {}, dcurs: null };
   const wardSession = createWardSession();
   let appDisposed = false;
   let mode: 'relief' | 'iso' = 'relief', env: 'dark' | 'studio' = 'dark';
@@ -1081,7 +1115,7 @@ export function mountHeatMap(): () => void {
     refreshNowSun();
     const p = M.currentParams(state);
     state.baselineMean = M.eqMean(state.base, { ...p, Q: DEFAULT_PARAMS.Q });
-    const layers = M.applyInterventions(state.base, state.iv, state.spatial);
+    const layers = M.applyInterventions(state.base, state.iv, state.spatial, CLIMATE.parkRadiusM);
     state.greenG = M.computeGreenG(layers);
     const request: HeatSimRequest = {
       generation: ++simGeneration,
@@ -1442,7 +1476,7 @@ export function mountHeatMap(): () => void {
     const mx = Math.max(...bins, 1);
     histo?.childNodes.forEach((elm, i) => { (elm as HTMLElement).style.height = `${Math.max(4, bins[i] / mx * 100)}%`; });
     const iv = state.iv;
-    const cost = M.computeCost(iv, state.spatial);
+    const cost = M.computeCost(iv, state.spatial, COSTS);
     const anyIv = iv.trees || iv.roof || iv.parks || iv.facades;
 
     /* ── DC-URS ────────────────────────────────────────────────────────────

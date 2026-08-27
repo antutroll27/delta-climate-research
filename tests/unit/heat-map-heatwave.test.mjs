@@ -6,11 +6,15 @@ import { fileURLToPath } from 'node:url';
 
 import { selectPhase, assertPhaseSelectLogic } from '../../src/scripts/climate-engine/phase-select.ts';
 import { shiftAirPreservingVapour, wetBulbC, assertSkyLogic } from '../../src/scripts/climate-engine/sky.ts';
-import { currentParams, PATH_DELTA } from '../../src/scripts/climate-engine/heat-map-model.ts';
+import { currentParams } from '../../src/scripts/climate-engine/heat-map-model.ts';
+import { resolve } from '../../src/scripts/climate-engine/scope/resolve.ts';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const P99 = 38.4;
 const LIVE = { tAir: 30, rh: 96, wind: 3, cloud: 20, feels: 40 };
+/* The scope constants the physics now takes as a parameter — read from the shipped
+   registry, not re-typed here, so a drifted registry fails these tests too. */
+const CLIMATE = resolve('in/kolkata/ballygunge').climate;
 
 test('the modules self-check', () => {
   assertPhaseSelectLogic();
@@ -66,8 +70,8 @@ test('heatwave is inert when its data failed to load', () => {
 
 test('the override moves the air and nothing else', () => {
   const iv = { trees: 0, roof: 0, parks: 0, facades: 0 };
-  const plain = currentParams({ live: LIVE, phase: 'peak', path: '2025', iv });
-  const heat = currentParams({ live: LIVE, phase: 'peak', path: '2025', iv, heatTairC: P99 });
+  const plain = currentParams({ live: LIVE, phase: 'peak', path: '2025', climate: CLIMATE, iv });
+  const heat = currentParams({ live: LIVE, phase: 'peak', path: '2025', climate: CLIMATE, iv, heatTairC: P99 });
   assert.equal(heat.tAir, P99);
   assert.equal(heat.sun, plain.sun, 'sun changed');
   assert.equal(heat.wind, plain.wind, 'wind changed');
@@ -79,8 +83,8 @@ test('the warming pathway composes on top of the override', () => {
   // If the override replaced the whole expression instead of the observation,
   // #segPath would silently do nothing whenever heatwave was on.
   const iv = { trees: 0, roof: 0, parks: 0, facades: 0 };
-  const hot = currentParams({ live: LIVE, phase: 'peak', path: 'ssp585', iv, heatTairC: P99 });
-  assert.equal(hot.tAir, P99 + PATH_DELTA.ssp585);
+  const hot = currentParams({ live: LIVE, phase: 'peak', path: 'ssp585', climate: CLIMATE, iv, heatTairC: P99 });
+  assert.equal(hot.tAir, P99 + CLIMATE.pathDelta.ssp585);
 });
 
 test('the heatwave atmosphere is one that can actually exist', () => {

@@ -122,6 +122,76 @@ export const CANOPY_BLEND_STRENGTH = 0;
  */
 export const WATER_LAYER_ENABLED = false;
 
+/**
+ * The constants a SCOPE supplies to the physics — a country's or a city's, never
+ * the model's own.
+ *
+ * WHY THIS LIVES IN types.ts AND NOT IN scope/. It is the contract BETWEEN the two
+ * halves, so it belongs to the vocabulary both already share rather than to either
+ * side of it. `scope/resolve.ts` PRODUCES one of these from an area key;
+ * `heat-map-model.ts` CONSUMES one and never learns where it came from. Declaring
+ * it in scope/ would force the physics to import an identity module to name the
+ * type of its own parameter, which inverts the layering the whole migration rests
+ * on: the model knows DATA and PARAMETERS, never IDENTITY. There is no ward, city
+ * or country named here, and there must never be — only numbers the physics uses.
+ *
+ * Everything here was a hard-coded constant inside heat-map-model.ts until the
+ * scope migration. Each was a fact about Kolkata, or about India, wearing the
+ * costume of a fact about heat transfer; see the note where they used to sit.
+ */
+export interface ClimateConstants {
+  /**
+   * Warming-pathway deltas, K, keyed by scenario — added to the air temperature.
+   *
+   * EMPTY when the country declares no pathway, and empty is a REAL ANSWER: no
+   * regional projection has been adopted there, so the pathway control contributes
+   * nothing and says so. It is deliberately not a zero-valued table, which would
+   * be indistinguishable from a pathway measured at zero warming. `currentParams`
+   * reads the difference: an unknown key in a POPULATED table throws; any key at
+   * all against an empty one contributes zero.
+   *
+   * `Readonly` because one object is shared by every consumer of a scope — a
+   * caller that mutated it would move the warming pathway for the whole session.
+   */
+  readonly pathDelta: Readonly<Record<string, number>>;
+  /** Air temperature, °C, used ONLY when the live met feed is down. */
+  readonly fallbackTairC: number;
+  /** Cooling-blob radius, metres — the city's measured tree-void-effect scale. */
+  readonly parkRadiusM: number;
+  /**
+   * Intervention unit costs, or `null` where the country has declared none.
+   *
+   * NULL IS NOT ZERO. A country with no adopted cost basis has no cost answer at
+   * all, and `0` would be a plausible-looking wrong one — a scenario would quote a
+   * budget of nothing and it would read as a finding. The null is refused at the
+   * seam where a scope is chosen, never carried into `computeCost`, whose
+   * signature therefore demands a real `Costs`.
+   */
+  readonly costs: Costs | null;
+}
+
+/**
+ * Intervention unit costs, in ONE currency.
+ *
+ * `currency` is carried for the readouts that must name it and is never read by
+ * the physics — there is no currency in an energy balance. The other four are the
+ * multipliers `computeCost` applies, each against a DIFFERENT spatial quantity, so
+ * an absent field is `undefined`, its term is NaN, and NaN poisons the whole total.
+ * That is why all five are required rather than optional.
+ */
+export interface Costs {
+  /** ISO 4217, e.g. 'INR'. Labelling only — the physics never reads it. */
+  readonly currency: string;
+  /** cool-roof coating, per m² of roof */
+  readonly roofM2: number;
+  /** one street tree, planted */
+  readonly tree: number;
+  /** one pocket park, in crore (1e7) of the currency unit */
+  readonly parkCr: number;
+  /** green facade, per m² of wall */
+  readonly facadeM2: number;
+}
+
 /** Per-cell input layers, each n*n in [0,1], row-major. */
 export interface SimLayers {
   albedo: Float32Array;

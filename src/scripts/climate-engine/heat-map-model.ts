@@ -9,7 +9,7 @@
  */
 // .ts extension: keeps this module runnable under `node --experimental-strip-types`
 // for assertInterventionLogic() (node doesn't do extensionless resolution).
-import { CANONICAL_GRID_N, DEFAULT_PARAMS, STORE_NIGHT, type SimParams, type SimLayers } from './types.ts';
+import { CANONICAL_GRID_N, DEFAULT_PARAMS, STORE_NIGHT, type ClimateConstants, type Costs, type SimParams, type SimLayers } from './types.ts';
 import { skyTemperatureC, dewpointC, shiftAirPreservingVapour } from './sky.ts';
 
 export const SIM_N = CANONICAL_GRID_N;         // grid side (ward 1400 m → dx ≈ 7.29 m/cell)
@@ -67,27 +67,43 @@ export const RESET_BURST = 600;               // relaxation steps after each res
  *  E_REF is TOOL-RELATIVE, not an external benchmark — no published
  *  cost-per-degree-cooled figure exists to normalise against. Labelled as such. */
 export const GREEN_REF = 0.45, DT_REF = 2.5, E_REF = 0.15;
-export const COST = { roofM2: 150, tree: 1500, parkCr: 1.5, facadeM2: 9500 };  // ₹ [C1–C5]
 /**
- * Regional warming deltas, °C. All positive: no emissions scenario produces
- * regional cooling over India — the previous −1.2 °C "target" pathway was a
- * mitigation aspiration drawn on a physical-temperature axis and is deleted.
- * Source: Dhara et al. 2025, PLOS Climate 4(11):e0000724 (post-AR6 India update).
+ * FOUR CONSTANTS USED TO LIVE HERE AND HAVE MOVED to the scope directory
+ * (`src/scripts/climate-engine/scope`, files `registry.ts` and `resolve.ts`),
+ * reaching this module as a `ClimateConstants` parameter. They are named so a reader
+ * looking for them finds the reason rather than an absence:
+ *
+ *   COST           four figures in RUPEES     → REGISTRY.<country>.costs
+ *   PATH_DELTA     all-India warming deltas   → REGISTRY.<country>.pathway, resolved
+ *                                               against PATHWAYS in resolve.ts
+ *   FALLBACK_TAIR  32 °C, Kolkata climatology → REGISTRY.<c>.cities.<y>.fallbackTairC
+ *   PARK_R_M       50 m, Kolkata TVoE scale   → REGISTRY.<c>.cities.<y>.parkRadiusM
+ *
+ * NOT ONE OF THEM WAS A FACT ABOUT HEAT TRANSFER. Two belong to a country and two
+ * to a city, and held here a second city could not be added without being wrong:
+ * Dubai's fallback air temperature is nearer 40 °C, no Gulf warming pathway has been
+ * adopted at all, and a DEWA audience quoted rupees would be reading Kolkata's
+ * economics under Dubai's name. None of those four failures throws. Each computes
+ * cleanly and prints a plausible number.
+ *
+ * THE DEPENDENCY POINTS ONE WAY ONLY. This module must not import from that
+ * directory — not even a type. It knows DATA and PARAMETERS, never IDENTITY: nothing
+ * here can name a ward, a city or a country, which is what lets the same physics run
+ * over ground it has never seen. `ClimateConstants` and `Costs` are declared in
+ * `./types.ts`, the vocabulary both halves already share, so neither has to import
+ * the other; `tests/unit/obos-scope.test.mjs` reads this file's source to keep it so.
+ *
+ * The move itself is guarded by `data/calibration/golden-params.json` and
+ * `golden-layers.json`, captured BEFORE it: 24 frozen `currentParams` cases, six
+ * `computeCost` figures and a park-blob transect that straddles the blob edge. A
+ * transcription that changed a value fails those rather than shipping quietly.
  */
-export const PATH_DELTA: Record<string, number> = {
-  '2025': 0,        // observed baseline
-  ssp245: 1.25,     // SSP2-4.5, 2041–2060 all-India mean (+1.2 to +1.3)
-  ssp585: 4.1,      // SSP5-8.5, 2065–2094 max temperature vs 1985–2014
-};
-export const FALLBACK_TAIR = 32;              // used only when the live feed is down
 
 const ALB_BASE = 0.15, ALB_COOL = 0.60;       // §3.2 dark vs aged-cool-roof albedo (LBNL)
 const TREE_CAP = 0.7;                         // §3.1 crown-closure cap
-/* §3.3 blob = Kolkata TVoE. EXPORTED ONLY so tests/unit/obos-scope.test.mjs can
-   assert that the scope registry's copy of this number has not drifted from it
-   while both exist. Task 5 moves it into the registry and deletes it here; that
-   assertion goes with it. Numerically inert — the Task 1 goldens prove it. */
-export const PARK_R_M = 50;
+/* §3.3's park blob radius is now `applyInterventions`' `parkRadiusM` parameter —
+   it was 50 m, measured as KOLKATA's tree-void-effect scale, and a city's measured
+   length is not a property of the operator that applies it. See the note above. */
 /**
  * Neighbourhood-scale anthropogenic-heat reduction from vertical greening.
  * Was 0.30 (uncited). Gunawardena & Steemers 2023 (Buildings & Cities,
@@ -189,6 +205,16 @@ export interface Spatial {
 }
 export interface ScenarioState {
   live: Ambient | null; phase: 'peak' | 'night'; path: string; iv: Interventions;
+  /**
+   * The scope's climate constants — the warming table `path` indexes into, and the
+   * air temperature to fall back on when the live feed is down.
+   *
+   * REQUIRED, not optional with a default. A default would have to be Kolkata's,
+   * which is the exact defect this parameter exists to end: every scenario that
+   * forgot to pass one would silently model Kolkata's climatology under another
+   * city's name and never say so. Absent, it is a compile error at the call site.
+   */
+  climate: ClimateConstants;
   /* HEATWAVE IS A FORCING OVERRIDE, NOT A THIRD PHASE — the same shape `sunNow`
      takes, and for the same reason its comment gives: every consumer downstream
      (ACCURACY, bandLabel, the DC-URS split, the Compare link, the phase label)
@@ -238,7 +264,9 @@ export function heatIndexC(T: number, RH: number): number {
 }
 
 /** Per-ward precompute: road corridors ranked hottest-first, open-land park
- *  centres, and ₹-cost quantities. Pure array math over the rasterised base. */
+ *  centres, and the geometry quantities `computeCost` prices (roof and facade
+ *  area, corridor length). Currency-free — the unit prices arrive with the scope.
+ *  Pure array math over the rasterised base. */
 export function buildSpatial(d: WardData, base: SimLayers, roads: RoadsData | null): Spatial {
   const n = SIM_N, half = d.sizeM / 2, cellM = d.sizeM / n, cellArea = cellM * cellM;
   const toCell = (mx: number, mz: number): [number, number] =>
@@ -284,8 +312,15 @@ export function buildSpatial(d: WardData, base: SimLayers, roads: RoadsData | nu
   return { corridorSorted, corridorKm: km, parkCenters, roofM2, facadeM2, cellArea, cellM };
 }
 
-/** Apply the four sliders onto copies of the base layers (spec §3). */
-export function applyInterventions(base: SimLayers, iv: Interventions, sp: Spatial | null): SimLayers {
+/**
+ * Apply the four sliders onto copies of the base layers (spec §3).
+ *
+ * `parkRadiusM` is the CITY's measured cooling-blob scale, passed in rather than
+ * held here — see the constants note above. It reaches the raster as
+ * `round(parkRadiusM / cellM)` cells, so the same metres describe the same ground
+ * whatever the grid resolution.
+ */
+export function applyInterventions(base: SimLayers, iv: Interventions, sp: Spatial | null, parkRadiusM: number): SimLayers {
   const N2 = SIM_N * SIM_N, albedo = base.albedo.slice(), veg = base.veg.slice();
   const dAlb = ALB_COOL - ALB_BASE;
   if (iv.roof > 0) for (let i = 0; i < N2; i++) { const b = base.built[i]; if (b > 0) albedo[i] = Math.min(0.85, albedo[i] + b * (iv.roof / 100) * dAlb); }
@@ -296,7 +331,7 @@ export function applyInterventions(base: SimLayers, iv: Interventions, sp: Spati
   // than accumulating. Adding ground veg for a wall treatment was double-counting.
   if (sp && iv.trees > 0) { const cs = sp.corridorSorted, k = Math.floor((iv.trees / 50) * cs.length); for (let q = 0; q < k; q++) { const i = cs[q]; veg[i] = Math.min(TREE_CAP, veg[i] + 0.6); albedo[i] = Math.min(0.85, albedo[i] + 0.04); } }
   if (sp && iv.parks > 0) {
-    const r = Math.round(PARK_R_M / sp.cellM), r2 = r * r;
+    const r = Math.round(parkRadiusM / sp.cellM), r2 = r * r;
     const requested = Math.min(Math.max(0, iv.parks), sp.parkCenters.length);
     const fullParks = Math.floor(requested), finalFraction = requested - fullParks;
     const patchCount = fullParks + (finalFraction > 0 ? 1 : 0);
@@ -326,13 +361,25 @@ export function computeGreenG(layers: SimLayers): number {
   return s / N2;
 }
 
-/** ₹ budget from real geometry quantities (§5). */
-export function computeCost(iv: Interventions, sp: Spatial | null): number {
+/**
+ * Capital budget from real geometry quantities (§5), in `costs.currency`.
+ *
+ * `costs` IS REQUIRED AND NON-NULL, deliberately. A country that has adopted no
+ * cost basis has no cost answer, and the tempting `costs ?? 0` here would quote it
+ * a budget of nothing — a number that computes cleanly, reads as a finding, and is
+ * wrong. The absence is refused once, where a scope is chosen — `requireCosts`, in
+ * the scope directory's `resolve.ts` — so that it can never arrive here as a zero.
+ *
+ * The four multipliers each act on a DIFFERENT spatial quantity, so an absent field
+ * would be `undefined`, its term NaN, and NaN poisons the whole total — which is
+ * loud, and is why `Costs` has no optional members.
+ */
+export function computeCost(iv: Interventions, sp: Spatial | null, costs: Costs): number {
   if (!sp) return 0;
-  return (iv.roof / 100) * sp.roofM2 * COST.roofM2
-    + (iv.trees / 50) * sp.corridorKm * TREES_PER_KM * COST.tree
-    + Math.min(iv.parks, sp.parkCenters.length) * PARK_HA * COST.parkCr * 1e7
-    + (iv.facades / 15) * sp.facadeM2 * 0.25 * COST.facadeM2;
+  return (iv.roof / 100) * sp.roofM2 * costs.roofM2
+    + (iv.trees / 50) * sp.corridorKm * TREES_PER_KM * costs.tree
+    + Math.min(iv.parks, sp.parkCenters.length) * PARK_HA * costs.parkCr * 1e7
+    + (iv.facades / 15) * sp.facadeM2 * 0.25 * costs.facadeM2;
 }
 
 /**
@@ -361,15 +408,48 @@ export function evapScale(rh: number): number {
   return Math.min(1, 0.6 + 0.6 * (1 - rh / 100));
 }
 
+/**
+ * The warming delta for one pathway key. Zero ONLY where zero is the truth.
+ *
+ * WHAT THIS REPLACED, AND WHY. The line was `PATH_DELTA[s.path] ?? 0`, which gave
+ * the same answer — no warming — to two situations that are not the same:
+ *
+ *   · a country that has adopted no regional projection, where zero is CORRECT and
+ *     the pathway control legitimately does nothing; and
+ *   · a typo, a renamed scenario, or a URL parameter naming a pathway that does not
+ *     exist, where zero is a WRONG answer silently substituted for a missing one.
+ *
+ * The second is the dangerous one and it is invisible: `Record<string, number>` with
+ * `noUncheckedIndexedAccess` off type-checks `table[path]` as a `number`, so a
+ * mistyped `ssp858` would type-check, run, and quietly model no warming under a
+ * pathway label the page still prints. The two cases are separated by the SHAPE of
+ * the table rather than by the value it returns: an empty table is a declared
+ * absence, and a populated one is a closed set that a stranger may not enter.
+ *
+ * `Object.hasOwn`, not `in`: `in` finds inherited members, so `path = 'toString'`
+ * would pass the check and multiply a function into the air temperature as NaN.
+ */
+function pathwayDelta(table: Readonly<Record<string, number>>, path: string): number {
+  const scenarios = Object.keys(table);
+  if (scenarios.length === 0) return 0;
+  if (!Object.hasOwn(table, path)) {
+    throw new Error(
+      `heat-map-model: warming pathway "${path}" is not in this scope's table `
+      + `(${scenarios.join(' | ')}). An unrecognised pathway is a missing answer, not a `
+      + 'zero one — zero is reserved for a scope that declares no pathway at all');
+  }
+  return table[path];
+}
+
 /** Scenario forcing → SimParams (§2 D retune, §3.4 facade Q cut, §4 diurnal/pathway). */
 export function currentParams(s: ScenarioState): SimParams {
-  const L = s.live, obsTair = L ? L.tAir : FALLBACK_TAIR, obsRh = L ? L.rh : 60;
-  /* PATH_DELTA STAYS ADDITIVE ON TOP OF THE OVERRIDE. Replacing the whole
+  const L = s.live, obsTair = L ? L.tAir : s.climate.fallbackTairC, obsRh = L ? L.rh : 60;
+  /* THE PATHWAY STAYS ADDITIVE ON TOP OF THE OVERRIDE. Replacing the whole
      expression would make the warming-pathway control silently dead whenever
      heatwave was on — a button that does nothing and says nothing, which is the
      fan-out the `sunNow` note exists to refuse. Composed, it reads as what it
      is: a 1-in-100 day under SSP5-8.5. Both are additive forcing shifts. */
-  const baseTair = (s.heatTairC ?? obsTair) + (PATH_DELTA[s.path] ?? 0);
+  const baseTair = (s.heatTairC ?? obsTair) + pathwayDelta(s.climate.pathDelta, s.path);
   const wind = L ? Math.min(2.5, Math.max(0.3, L.wind / 3)) : 1, cloud = L ? L.cloud / 100 : 0;
   /* Humidity gates evaporative cooling: dry air cools harder, muggy monsoon air
      stalls it. Under a heatwave the air mass is TODAY'S, warmed — so absolute
@@ -466,7 +546,46 @@ export function assertInterventionLogic(): void {
   const base = mk(); const streets: number[] = [];
   for (let i = 0; i < N2; i++) { const built = (i % 2 === 0) ? 1 : 0; base.built[i] = built; base.albedo[i] = built ? 0.2 : 0.32; base.veg[i] = built ? 0 : 0.05; if (!built) streets.push(i); }
   const sp: Spatial = { corridorSorted: Int32Array.from(streets), corridorKm: 40, parkCenters: [[48, 48], [140, 140]], roofM2: 5e5, facadeM2: 8e5, cellArea: 53.1, cellM: 7.29 };
-  const p: SimParams = currentParams({ live: null, phase: 'peak', path: '2025', iv: { trees: 0, roof: 0, parks: 0, facades: 0 } });
+
+  /* A TEST FIXTURE, not the constants coming back. The four scope constants left
+     this module (see the note near the top) and the shipped values now live in the
+     scope directory's `registry.ts`; these are inputs to a self-check, written here
+     rather than imported because a physics module that had to reach for an identity
+     module to check itself would have the layering backwards.
+
+     They match Kolkata's because the physical bars asserted below — a built core
+     equilibrating at 40–50 °C, cool roofs cooling the mean by 0.2 K — were measured
+     against that climatology. Substitute Gulf air and the bars would need re-deriving
+     rather than re-labelling. What matters for the migration is not these numbers but
+     that the physics READS them, which the first block of assertions proves. */
+  const climate: ClimateConstants = {
+    pathDelta: { '2025': 0, ssp245: 1.25, ssp585: 4.1 },
+    fallbackTairC: 32,
+    parkRadiusM: 50,
+    costs: { currency: 'INR', roofM2: 150, tree: 1500, parkCr: 1.5, facadeM2: 9500 },
+  };
+  const p: SimParams = currentParams({ live: null, phase: 'peak', path: '2025', climate, iv: { trees: 0, roof: 0, parks: 0, facades: 0 } });
+
+  /* ── the scope constants are READ, never remembered ───────────────────────
+     The migration's whole risk is a constant that appears to move and does not —
+     a parameter added, threaded, and then shadowed by a leftover literal. These
+     three assertions make that impossible to ship: the answers must FOLLOW the
+     scope object, and a scope naming a pathway that does not exist must be refused
+     rather than quietly warmed by zero. */
+  const zeroIv = { trees: 0, roof: 0, parks: 0, facades: 0 };
+  const gulf: ClimateConstants = { pathDelta: {}, fallbackTairC: 40, parkRadiusM: 50, costs: null };
+  const noFeed = (c: ClimateConstants) =>
+    currentParams({ live: null, phase: 'peak', path: '2025', climate: c, iv: zeroIv }).tAir;
+  a(noFeed(climate) === 32 && noFeed(gulf) === 40,
+    `the fallback air temperature must come from the scope (got ${noFeed(climate)}, ${noFeed(gulf)})`);
+  /* An empty table is a DECLARED absence: no adopted projection, so no warming,
+     whatever the control says. It must not throw — Dubai has to be reachable. */
+  a(currentParams({ live: null, phase: 'peak', path: 'ssp585', climate: gulf, iv: zeroIv }).tAir === 40,
+    'a scope with no pathway must contribute zero warming, not throw');
+  let refused = false;
+  try { currentParams({ live: null, phase: 'peak', path: 'ssp858', climate, iv: zeroIv }); }
+  catch { refused = true; }
+  a(refused, 'an unknown pathway against a POPULATED table must throw, not warm by zero');
 
   /* ── heatwave: a FORCING OVERRIDE, and only that ─────────────────────────
      The risk this pins down is scope creep in a substitution. The override must
@@ -475,8 +594,8 @@ export function assertInterventionLogic(): void {
   const iv0 = { trees: 0, roof: 0, parks: 0, facades: 0 };
   const live = { tAir: 30, rh: 96, wind: 3, cloud: 20, feels: 40 } as Ambient;
   const P99 = 38.4;
-  const plain = currentParams({ live, phase: 'peak', path: '2025', iv: iv0 });
-  const heat = currentParams({ live, phase: 'peak', path: '2025', iv: iv0, heatTairC: P99 });
+  const plain = currentParams({ live, phase: 'peak', path: '2025', climate, iv: iv0 });
+  const heat = currentParams({ live, phase: 'peak', path: '2025', climate, iv: iv0, heatTairC: P99 });
   a(Math.abs(heat.tAir - P99) < 1e-9, `heatwave tAir ${heat.tAir}, expected ${P99}`);
   a(heat.sun === plain.sun && heat.wind === plain.wind && heat.Q === plain.Q,
     'heatwave changed sun, wind or Q — it may only change the air');
@@ -485,16 +604,16 @@ export function assertInterventionLogic(): void {
   // drier air evaporates harder — L must rise, never fall.
   a(heat.L > plain.L, 'heatwave should dry the air and raise the latent term');
   // the pathway composes on top rather than being replaced by the override
-  const hot585 = currentParams({ live, phase: 'peak', path: 'ssp585', iv: iv0, heatTairC: P99 });
-  a(Math.abs(hot585.tAir - (P99 + PATH_DELTA.ssp585)) < 1e-9,
-    `heatwave + ssp585 = ${hot585.tAir}, expected ${P99 + PATH_DELTA.ssp585} — the pathway was swallowed`);
+  const hot585 = currentParams({ live, phase: 'peak', path: 'ssp585', climate, iv: iv0, heatTairC: P99 });
+  a(Math.abs(hot585.tAir - (P99 + climate.pathDelta.ssp585)) < 1e-9,
+    `heatwave + ssp585 = ${hot585.tAir}, expected ${P99 + climate.pathDelta.ssp585} — the pathway was swallowed`);
   // absent, it must be exactly the old behaviour
-  a(currentParams({ live, phase: 'peak', path: '2025', iv: iv0, heatTairC: null }).tAir === plain.tAir,
+  a(currentParams({ live, phase: 'peak', path: '2025', climate, iv: iv0, heatTairC: null }).tAir === plain.tAir,
     'a null override changed the forcing');
 
   const base0 = eqMean(base, p);
-  const roofed = eqMean(applyInterventions(base, { trees: 0, roof: 100, parks: 0, facades: 0 }, sp), p);
-  const treed = eqMean(applyInterventions(base, { trees: 50, roof: 0, parks: 0, facades: 0 }, sp), p);
+  const roofed = eqMean(applyInterventions(base, { trees: 0, roof: 100, parks: 0, facades: 0 }, sp, climate.parkRadiusM), p);
+  const treed = eqMean(applyInterventions(base, { trees: 50, roof: 0, parks: 0, facades: 0 }, sp, climate.parkRadiusM), p);
   a(roofed < base0 - 0.2, `cool roofs cool the mean (${base0.toFixed(1)}→${roofed.toFixed(1)})`);
   a(treed < base0 - 0.05, `trees cool the mean (${base0.toFixed(1)}→${treed.toFixed(1)})`);
 
@@ -503,9 +622,16 @@ export function assertInterventionLogic(): void {
   a(hotCell > 40 && hotCell < 50, `built-core equilibrium plausible (got ${hotCell.toFixed(1)}°C)`);
 
   // costs monotonic + non-zero
-  const c1 = computeCost({ trees: 10, roof: 20, parks: 1, facades: 2 }, sp);
-  const c2 = computeCost({ trees: 20, roof: 40, parks: 2, facades: 4 }, sp);
+  const costs = climate.costs;
+  if (costs === null) throw new Error('heat-map-model: the self-check fixture must declare costs');
+  const c1 = computeCost({ trees: 10, roof: 20, parks: 1, facades: 2 }, sp, costs);
+  const c2 = computeCost({ trees: 20, roof: 40, parks: 2, facades: 4 }, sp, costs);
   a(c1 > 0 && c2 > c1, 'cost increases with intervention');
+  /* Doubling one unit price must double that lever's share of the total, which no
+     leftover module-level COST could do. */
+  const dearRoofs = computeCost({ trees: 0, roof: 20, parks: 0, facades: 0 }, sp, { ...costs, roofM2: costs.roofM2 * 2 });
+  a(Math.abs(dearRoofs - 2 * computeCost({ trees: 0, roof: 20, parks: 0, facades: 0 }, sp, costs)) < 1e-6,
+    'the roof unit price must come from the `costs` argument');
 
   // score bounded, rises with cooling
   a(greenScore(0.3, 0, 0) >= 0 && greenScore(0.3, 2, 1e7) <= 100, 'score bounded 0–100');

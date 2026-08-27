@@ -1,14 +1,21 @@
 /**
- * Freeze what the OBOS physics produces TODAY, before the Country → City → Area
- * migration moves four constants out of the physics module.
+ * The frozen picture of what the OBOS physics produced BEFORE the Country → City →
+ * Area migration moved four constants out of the physics module.
  *
- * WHY THIS EXISTS. The scope migration lifts PATH_DELTA, COST, PARK_R_M and
+ * WHY THIS EXISTS. The scope migration lifted PATH_DELTA, COST, PARK_R_M and
  * FALLBACK_TAIR out of src/scripts/climate-engine/heat-map-model.ts, because each
  * belongs to a country or a city rather than to physics. Moving a constant out of the
  * module that reads it is exactly the kind of edit that changes a number while looking
  * like a move — the diff shows a deletion here and an addition there, and nothing shows
  * the value that shifted in between. These two files are the before-picture that makes
  * such a drift impossible to miss.
+ *
+ * THE CAPTURE IS FROZEN; THE SOURCE OF THE NUMBERS IS NOT. The JSON was written while
+ * the four constants were still literals in the model. The builders below now take them
+ * from `resolve('in/kolkata/ballygunge')` — the registry, through the same seam the app
+ * uses — and the frozen files are unchanged, which is the migration's own evidence:
+ * every value survived the move to the byte. Nothing here may ever be re-captured to
+ * make a comparison pass. See the note on the generator/consumer split below.
  *
  * WHY TWO MATRICES AND NOT ONE. currentParams reaches only HALF the migrated set. It
  * reads PATH_DELTA and FALLBACK_TAIR, so golden-params.json freezes those. It reads
@@ -58,6 +65,18 @@ import {
   currentParams,
   SIM_N,
 } from '../src/scripts/climate-engine/heat-map-model.ts';
+import { resolve } from '../src/scripts/climate-engine/scope/resolve.ts';
+
+/* The scope the frozen numbers were captured under. Named explicitly rather than
+   defaulted: these goldens are Kolkata's, and a second city's would be different
+   numbers under the same filename. */
+const CLIMATE = resolve('in/kolkata/ballygunge').climate;
+const COSTS = CLIMATE.costs;
+/* Not defensive noise. `costs` is nullable by design — a country that has adopted no
+   cost basis has no cost answer — and a null reaching computeCost as `undefined`
+   fields would make every frozen figure NaN, at which point `assert.deepEqual` in the
+   consumer would report a difference in six numbers rather than the one real cause. */
+assert.ok(COSTS, 'the Kolkata scope must declare unit costs; the cost matrix is meaningless without them');
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 export const GOLDEN_PARAMS = join(ROOT, 'data/calibration/golden-params.json');
@@ -65,8 +84,10 @@ export const GOLDEN_LAYERS = join(ROOT, 'data/calibration/golden-layers.json');
 
 /* ── Matrix 1 · currentParams — guards PATH_DELTA, FALLBACK_TAIR, FACADE_Q ──
    currentParams is WARD-INDEPENDENT: ScenarioState carries
-   {live, phase, path, iv, heatTairC, sunNow} and no ward, so the matrix varies only
-   what actually reaches the function. 2 phases x 3 pathways x 2 live x 2 heatwave.
+   {live, phase, path, climate, iv, heatTairC, sunNow} and no ward, so the matrix varies
+   only what actually reaches the function. 2 phases x 3 pathways x 2 live x 2 heatwave.
+   `climate` is held at Kolkata's — it is the scope these numbers were captured under,
+   and varying it would be capturing a different city, not the same one twice.
 
    `sunNow` is the one member of that shape held fixed (absent). It selects an
    alternative "right now" branch that reads NONE of the migrated constants beyond the
@@ -95,7 +116,7 @@ export function paramsMatrix() {
       for (const [liveName, live] of [['nolive', null], ['live', LIVE]]) {
         for (const [hwName, heatTairC] of [['plain', null], ['heatwave', 41.5]]) {
           const key = `${phase}/${path}/${liveName}/${hwName}`;
-          out[key] = currentParams({ live, phase, path, iv: IV, heatTairC });
+          out[key] = currentParams({ live, phase, path, climate: CLIMATE, iv: IV, heatTairC });
         }
       }
     }
@@ -105,10 +126,10 @@ export function paramsMatrix() {
 
 /* ── Matrix 2 · computeCost + applyInterventions — guards COST and PARK_R_M ── */
 
-/* computeCost reads only roofM2, corridorKm, parkCenters.length and facadeM2
-   (heat-map-model.ts:327-330); corridorSorted, cellArea and cellM are type-shape
-   padding it never touches. Each of the four quantities it DOES read is non-zero, so
-   none of the four COST fields can hide behind a zero multiplier. */
+/* computeCost reads only roofM2, corridorKm, parkCenters.length and facadeM2;
+   corridorSorted, cellArea and cellM are type-shape padding it never touches. Each of
+   the four quantities it DOES read is non-zero, so none of the four unit prices can
+   hide behind a zero multiplier. */
 export const COST_SPATIAL = {
   corridorSorted: new Int32Array(100),
   corridorKm: 12.5,
@@ -131,11 +152,11 @@ export const COST_CASES = {
 };
 
 /* The park fixture's cellM is 7.29 m — the shipped ward geometry, 1400 m across
-   SIM_N cells (heat-map-model.ts:15). So PARK_R_M = 50 m is round(50/7.29) = 7 cells,
-   and a halved PARK_R_M = 25 m is round(25/7.29) = 3. Offsets 4..7 therefore sit INSIDE
-   the real blob and OUTSIDE a halved one, which is what lets the frozen profile tell the
-   two radii apart. The dense run 0..9 pins the edge to an exact cell; 12/16/32 hold the
-   far field down. */
+   SIM_N cells (heat-map-model.ts:15). So Kolkata's parkRadiusM = 50 m is
+   round(50/7.29) = 7 cells, and a halved 25 m is round(25/7.29) = 3. Offsets 4..7
+   therefore sit INSIDE the real blob and OUTSIDE a halved one, which is what lets the
+   frozen profile tell the two radii apart. The dense run 0..9 pins the edge to an exact
+   cell; 12/16/32 hold the far field down. */
 export const TRANSECT = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 12, 16, 32];
 
 export function layersMatrix() {
@@ -154,7 +175,7 @@ export function layersMatrix() {
   };
   // parks 1.5 => patch 0 at full coverage, patch 1 blended at 0.5. A transect through
   // both pins the radius AND the fractional-coverage blend.
-  const layers = applyInterventions(base, { trees: 0, roof: 0, parks: 1.5, facades: 0 }, spatial);
+  const layers = applyInterventions(base, { trees: 0, roof: 0, parks: 1.5, facades: 0 }, spatial, CLIMATE.parkRadiusM);
 
   const transects = {};
   for (const [name, c] of [['full-40-40', [40, 40]], ['fractional-120-120', [120, 120]]]) {
@@ -170,7 +191,7 @@ export function layersMatrix() {
   }
 
   const cost = {};
-  for (const [name, iv] of Object.entries(COST_CASES)) cost[name] = computeCost(iv, COST_SPATIAL);
+  for (const [name, iv] of Object.entries(COST_CASES)) cost[name] = computeCost(iv, COST_SPATIAL, COSTS);
 
   return { cost, parkTransectPlusX: transects };
 }

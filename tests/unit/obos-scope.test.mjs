@@ -7,8 +7,9 @@ import {
   areaTableDrift, shippingAreaIds,
 } from '../../src/scripts/climate-engine/scope/registry.ts';
 import { paths, cityPaths } from '../../src/scripts/climate-engine/scope/paths.ts';
+import { resolve, requireCosts } from '../../src/scripts/climate-engine/scope/resolve.ts';
 import { WARDS as WARD_TABLE } from '../../src/data/wards.ts';
-import { COST, FALLBACK_TAIR, PARK_R_M } from '../../src/scripts/climate-engine/heat-map-model.ts';
+import { currentParams } from '../../src/scripts/climate-engine/heat-map-model.ts';
 
 test('registry invariants hold', () => {
   assertRegistryLogic();
@@ -96,40 +97,6 @@ test('today, the areas shipping data are exactly the ward table', () => {
   assert.deepEqual([...shippingAreaIds()].sort(), WARD_TABLE.map((w) => w.id).sort());
 });
 
-/* TRANSITIONAL -- DELETE IN TASK 5, WITH THE CONSTANTS IT WATCHES.
-
-   Until the scope migration moves them, these numbers exist in two places: here in
-   the registry and in heat-map-model.ts, which still owns them. That is the exact
-   shape of the divergence this whole design exists to prevent, pointed at a second
-   file, so it is guarded for the window in which it is true. Task 5 deletes COST,
-   FALLBACK_TAIR and PARK_R_M from the model, makes the registry the only source,
-   and this test goes with them.
-
-   It lives in the TEST, never in the module. Importing heat-map-model.ts from
-   scope/registry.ts would invert the layering the migration rests on -- the
-   registry is meant to sit above the model, not depend on it.
-
-   Task 1's goldens would catch each of these eventually: they froze the cost
-   matrix, the pathway/fallback params and the park blob edge, so a drifted copy
-   surfaces once Task 5 wires the registry in. This is the same failure four tasks
-   earlier and with the cause named, which is the whole argument for it -- facadeM2
-   was already found missing here once. */
-test('the registry has not drifted from the constants it will replace', () => {
-  const costs = REGISTRY.in.costs;
-  assert.equal(costs.roofM2, COST.roofM2);
-  assert.equal(costs.tree, COST.tree);
-  assert.equal(costs.parkCr, COST.parkCr);
-  assert.equal(costs.facadeM2, COST.facadeM2);
-  /* Field-for-field, and no field left behind: an absent one is `undefined`, which
-     multiplies to NaN and poisons computeCost's whole total. `currency` is
-     registry-only -- the model has no notion of one -- hence the +1. */
-  assert.equal(Object.keys(costs).length, Object.keys(COST).length + 1,
-    'REGISTRY.in.costs and COST must carry the same fields, plus currency');
-
-  assert.equal(REGISTRY.in.cities.kolkata.fallbackTairC, FALLBACK_TAIR);
-  assert.equal(REGISTRY.in.cities.kolkata.parkRadiusM, PARK_R_M);
-});
-
 /* ---------------------------------------------------------------------------
    scope/paths.ts — the ONE place a /heat-map/data/ URL may be built.
    --------------------------------------------------------------------------- */
@@ -198,6 +165,195 @@ test('every city-level URL exists on disk too', async () => {
     }
   }
   assert.ok(checked > 0, 'no city-level URL was checked');
+});
+
+
+/* ---------------------------------------------------------------------------
+   scope/resolve.ts -- the ONE place an area key becomes numbers.
+
+   The constants these tests watch used to be literals inside heat-map-model.ts,
+   and the transitional parity test that stood here watched the registry's copy of
+   them while both existed. Both copies are gone; the registry is the only source,
+   and what needs guarding now is the OTHER direction -- that the physics still
+   cannot see where its numbers came from.
+   --------------------------------------------------------------------------- */
+
+/** Source with comments removed, so a tripwire greps CODE and not prose. */
+const stripComments = (src) =>
+  src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+
+const engineSource = (name) =>
+  readFile(new URL(`../../src/scripts/climate-engine/${name}`, import.meta.url), 'utf8');
+
+test('resolve turns a key into a whole scope', () => {
+  const s = resolve('in/kolkata/ballygunge');
+  assert.equal(s.key, 'in/kolkata/ballygunge');
+  assert.deepEqual(s.country, { id: 'in', name: 'India' });
+  assert.deepEqual(s.city, { id: 'kolkata', name: 'Kolkata', koppen: 'Aw' });
+  assert.equal(s.tier, 'validated');
+  // The ward table's `name` carries <em> for the wordmark's stress. It is display
+  // markup, and a scope that passed it through would put raw tags in a page title.
+  assert.equal(s.area.name, 'Ballygunge');
+  assert.equal(s.area.descriptor, 'Urban Core · Ward 68');
+  assert.equal(s.area.hasData, true);
+});
+
+test('the area name comes from the ward table, never from a second copy', () => {
+  // src/data/wards.ts is THE area table. If a name were also written in the
+  // registry the two could disagree, which is the divergence the whole design
+  // exists to stop -- so resolve reads across rather than restating.
+  for (const w of WARD_TABLE) {
+    const s = resolve(`in/kolkata/${w.id}`);
+    assert.equal(s.area.name, w.name.replace(/<[^>]*>/g, ''));
+    assert.equal(s.area.descriptor, w.zone);
+    assert.ok(!/[<>]/.test(s.area.name), `${w.id} leaked display markup into its name`);
+  }
+});
+
+test('an area outside the ward table carries its own name and says what it is', () => {
+  const s = resolve('ae/dubai/al-quoz');
+  assert.deepEqual(s.country, { id: 'ae', name: 'United Arab Emirates' });
+  assert.equal(s.city.name, 'Dubai');
+  assert.equal(s.area.name, 'Al Quoz');
+  // "area · our tiling", not "ward": these are our own tiles, not municipal units.
+  assert.equal(s.area.descriptor, 'area · our tiling');
+  assert.equal(s.area.hasData, false);
+  assert.equal(s.tier, 'geometry');
+});
+
+test('every registered key resolves', () => {
+  // The module resolves all six eagerly at load, so this is really a check that
+  // nothing in the walk is unreachable -- and that the count has not silently
+  // shrunk, which would make the loop pass while covering less.
+  assert.equal(AREA_KEYS.length, 6);
+  for (const key of AREA_KEYS) assert.equal(resolve(key).key, key);
+});
+
+test('resolve refuses a key the registry does not know', () => {
+  // The type cannot police a value cast in from a URL. Returning null instead
+  // would let a typo read as a disabled city.
+  assert.throws(() => resolve('in/kolkata/typo'), /not a registered area key/);
+});
+
+test('the climate constants are the registry\'s, not a copy', () => {
+  const c = resolve('in/kolkata/ballygunge').climate;
+  assert.equal(c.fallbackTairC, REGISTRY.in.cities.kolkata.fallbackTairC);
+  assert.equal(c.parkRadiusM, REGISTRY.in.cities.kolkata.parkRadiusM);
+  assert.deepEqual(c.costs, REGISTRY.in.costs);
+  // The pathway NAME becomes a delta table here and nowhere else. The registry's
+  // own comment spells out the trap: indexing a delta table with the name
+  // type-checks clean as a number, evaluates to undefined and propagates NaN.
+  assert.equal(REGISTRY.in.pathway, 'dhara2025');
+  assert.deepEqual(c.pathDelta, { '2025': 0, ssp245: 1.25, ssp585: 4.1 });
+});
+
+test('a country with no pathway gets an EMPTY table, and no costs at all', () => {
+  const c = resolve('ae/dubai/creek').climate;
+  // Empty, not zero-filled: "no projection has been adopted" is a different fact
+  // from "the projection is zero warming", and currentParams reads the difference.
+  assert.deepEqual(c.pathDelta, {});
+  assert.equal(Object.keys(c.pathDelta).length, 0);
+  assert.equal(c.costs, null, 'a rupee figure carried into the Gulf would compute and read as an answer');
+  assert.equal(c.fallbackTairC, 40, 'Dubai is not 32 °C');
+});
+
+test('requireCosts hands over real prices, or refuses -- never a zero', () => {
+  assert.equal(requireCosts(resolve('in/kolkata/ballygunge')).currency, 'INR');
+  assert.throws(() => requireCosts(resolve('ae/dubai/creek')),
+    /declares no intervention costs/);
+});
+
+test('a scope is frozen, so one caller cannot move another\'s pathway', () => {
+  // resolve returns a shared object per key. A mutable pathDelta would let any
+  // consumer shift the warming table for the whole session.
+  const a = resolve('in/kolkata/ballygunge').climate;
+  assert.equal(a, resolve('in/kolkata/ballygunge').climate);
+  assert.throws(() => { a.pathDelta.ssp585 = 99; }, TypeError);
+});
+
+/* ── the fail-closed pathway lookup ──────────────────────────────────────────
+   The line this replaced was `PATH_DELTA[s.path] ?? 0`, which answered "no
+   warming" both to a country that has adopted no projection and to a typo. The
+   first is true; the second is a missing answer silently replaced by a wrong one,
+   and it is invisible -- Record<string, number> with noUncheckedIndexedAccess off
+   type-checks the lookup as a number. */
+
+const IV0 = { trees: 0, roof: 0, parks: 0, facades: 0 };
+const at = (climate, path) =>
+  currentParams({ live: null, phase: 'peak', path, climate, iv: IV0 }).tAir;
+
+test('an unknown pathway against a populated table THROWS', () => {
+  const kolkata = resolve('in/kolkata/ballygunge').climate;
+  assert.throws(() => at(kolkata, 'ssp858'), /not in this scope's table/);
+  assert.throws(() => at(kolkata, ''), /not in this scope's table/);
+  // `in` would find inherited members and multiply a function into the air
+  // temperature as NaN; the lookup uses Object.hasOwn for exactly this.
+  assert.throws(() => at(kolkata, 'toString'), /not in this scope's table/);
+  // ...while the three real scenarios still resolve.
+  assert.equal(at(kolkata, '2025'), 32);
+  assert.equal(at(kolkata, 'ssp585'), 36.1);
+});
+
+test('a scope with no pathway contributes zero, and does not throw', () => {
+  // Dubai has to be reachable. Zero warming is the honest answer where no regional
+  // projection has been adopted -- and it is the empty TABLE that says so, not a
+  // zero value, so the two cases stay distinguishable.
+  const dubai = resolve('ae/dubai/creek').climate;
+  assert.equal(at(dubai, '2025'), 40);
+  assert.equal(at(dubai, 'ssp585'), 40);
+  assert.equal(at(dubai, 'anything-at-all'), 40);
+});
+
+/* ── the layering, which is the whole point of the move ─────────────────────── */
+
+const PHYSICS = ['heat-map-model.ts', 'dc-urs.ts', 'sim-ts.ts'];
+const PLACE = /\b(kolkata|dubai|india|ballygunge|baruipur|barrackpore)\b/gi;
+
+test('the physics never imports identity', async () => {
+  /* The model knows DATA and PARAMETERS, never IDENTITY -- that is what lets the
+     same physics run over ground it has never seen. A single TYPE import from
+     scope/ would be enough to break it, because the next reader would then have a
+     precedent for a value import, and the type would already have made scope/ a
+     build dependency of the physics.
+
+     Comments are stripped first: heat-map-model.ts's own note NAMES the modules
+     its four constants moved to, and a tripwire that fires on its own explanation
+     gets deleted rather than heeded. */
+  for (const name of PHYSICS) {
+    assert.ok(!/scope\//.test(stripComments(await engineSource(name))),
+      `${name} references scope/ in code -- the physics must not depend on identity`);
+  }
+});
+
+test('the physics names no place, with one recorded exception', async () => {
+  /* A place name in a physics module is a constant wearing a disguise: it is how
+     PATH_DELTA and FALLBACK_TAIR got there in the first place, as "the" pathway and
+     "the" fallback, meaning Kolkata's.
+
+     dc-urs.ts is the exception, and it is MEASURED rather than waved through. Its
+     two names are ids on the frozen GOLDEN cases (dc-urs-spec.md §7) -- worked
+     examples the index is checked against, in a fixture, not values it reads. The
+     exact set is pinned so a third place cannot join them quietly. */
+  const found = async (name) => (stripComments(await engineSource(name)).match(PLACE) ?? []);
+  assert.deepEqual(await found('heat-map-model.ts'), []);
+  assert.deepEqual(await found('sim-ts.ts'), []);
+  assert.deepEqual([...new Set(await found('dc-urs.ts'))].sort(),
+    ['Ballygunge', 'Baruipur', 'ballygunge', 'baruipur'],
+    'dc-urs.ts names a place outside its frozen GOLDEN fixture');
+});
+
+test('the four migrated constants are gone from the physics', async () => {
+  // Not "moved and also kept". A leftover literal would shadow the parameter and
+  // the whole migration would be a decoration -- goldens green, second city wrong.
+  const code = stripComments(await engineSource('heat-map-model.ts'));
+  for (const gone of ['COST', 'PATH_DELTA', 'FALLBACK_TAIR', 'PARK_R_M']) {
+    assert.ok(!new RegExp(`\\b${gone}\\b`).test(code),
+      `heat-map-model.ts still declares ${gone} -- it belongs to a country or a city`);
+  }
+  // ...and the physics takes them as parameters instead.
+  assert.match(code, /parkRadiusM: number/, 'applyInterventions must take the radius');
+  assert.match(code, /costs: Costs/, 'computeCost must take the unit prices');
+  assert.match(code, /climate: ClimateConstants/, 'ScenarioState must carry the scope constants');
 });
 
 

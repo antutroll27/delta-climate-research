@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import { assertCapsLogic, resolveHeatCaps } from '../../src/scripts/climate-engine/caps.ts';
 import { applyInterventions, SIM_N } from '../../src/scripts/climate-engine/heat-map-model.ts';
+import { resolve } from '../../src/scripts/climate-engine/scope/resolve.ts';
 import { coverageToInterventions, deliveredQuantities } from '../../src/scripts/climate-engine/scenario/coverage.ts';
 import { parsePairedScenario, serializePairedScenario } from '../../src/scripts/climate-engine/scenario/scenario-url.ts';
 import { normalizeCoverage } from '../../src/scripts/climate-engine/scenario/scenario-state.ts';
@@ -42,7 +43,10 @@ test('park coverage retains a fractional final patch rather than rounding upward
     parkCenters: [[40, 40], [120, 120]], roofM2: 0, facadeM2: 0,
     cellArea: 53.1, cellM: 7.29,
   };
-  const layers = applyInterventions(base, { trees: 0, roof: 0, parks: 1.5, facades: 0 }, spatial);
+  /* The park radius is the CITY's, read from the registry — the blob centre this
+     asserts on is radius-independent, but the argument must still be the real one. */
+  const layers = applyInterventions(base, { trees: 0, roof: 0, parks: 1.5, facades: 0 }, spatial,
+    resolve('in/kolkata/ballygunge').climate.parkRadiusM);
   const first = 40 * SIM_N + 40;
   const second = 120 * SIM_N + 120;
   assert.ok(Math.abs(layers.veg[first] - 0.9) < 1e-6);
