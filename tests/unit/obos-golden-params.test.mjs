@@ -11,6 +11,8 @@ import {
   layersMatrix,
   paramsMatrix,
 } from '../../scripts/dump-obos-golden.mjs';
+/* Imported for its VALUE, not to re-derive it — see the FACADE_Q canary below. */
+import { DEFAULT_PARAMS } from '../../src/scripts/climate-engine/types.ts';
 
 /* THIS FILE NEVER WRITES. It is the consumer half of the generator/consumer split that
    scripts/dump-water-oracle.mjs and scripts/gen-cbam-fixtures.mjs already use, and the
@@ -47,11 +49,18 @@ test('currentParams output is frozen against the pre-migration baseline', async 
 
   /* FACADE_Q reaches the frozen numbers only through iv.facades, the single `iv` field
      currentParams reads. At facades = 0 the term multiplies out and the constant becomes
-     invisible, so assert the fixture still carries it rather than trusting the literal. */
+     invisible.
+
+     COMPARED AGAINST THE VALUE, NEVER A SNAPSHOT OF IT. This assertion first read
+     `!qs.has(0.419) && !qs.has(0.2095)` — literals copied from DEFAULT_PARAMS.Q and its
+     night product. Measured: retuning DEFAULT_PARAMS.Q and regressing facades to 0 left
+     FACADE_Q unobservable again with the suite GREEN, because the canary was watching for
+     two numbers that no longer meant anything. A guard that keeps passing while guarding
+     nothing is the exact defect this file exists to police. */
   const qs = new Set(Object.values(now).map((p) => p.Q));
-  assert.ok(!qs.has(0.419) && !qs.has(0.2095),
-    'Q is back at its facades = 0 values — the FACADE_Q term has collapsed and the '
-    + 'constant is no longer observable in this matrix');
+  assert.ok(!qs.has(DEFAULT_PARAMS.Q),
+    'Q equals the un-attenuated DEFAULT_PARAMS.Q — iv.facades has gone to zero, the '
+    + 'FACADE_Q term has collapsed, and the constant is no longer observable here');
 
   requireGolden(GOLDEN_PARAMS);
   const golden = JSON.parse(await readFile(GOLDEN_PARAMS, 'utf8'));
