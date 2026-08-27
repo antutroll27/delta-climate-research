@@ -1,12 +1,20 @@
 ---
 // Semantic shell for the Paired Ward Bench. The controller owns scenario state,
 // calculations, and canvas drawing; Astro owns landmarks and durable copy.
+//
+// The Explore link is STATIC and points at the default area, where the stage's own
+// Explore link points at the page it is on. The difference is real: Compare holds
+// two areas at once and neither is "the" one to explore, so picking pane A's would
+// be a guess dressed as a destination — and this shell is prerendered, so it cannot
+// read the ?a= the visitor arrived with anyway. The controller may sharpen this
+// later; what it must not do is point at /heat-map and cost every visitor a hop.
+import { DEFAULT_AREA_PATH } from '../../../scripts/climate-engine/scope/paths.ts';
 ---
 <main id="main" class="heat-compare" data-compare-root data-renderer="canvas" aria-busy="true">
   <header class="heat-compare__header">
     <a class="heat-compare__brand" href="/" aria-label="Back to Delta Climate Research"><img src="/logo-mark-96.webp" alt="" width="30" height="30" decoding="async" /></a>
     <nav class="heat-compare__modes" aria-label="Heat explorer modes">
-      <a href="/heat-map/">Explore</a>
+      <a href={DEFAULT_AREA_PATH}>Explore</a>
       <a href="/heat-map/compare/" aria-current="page">Compare</a>
     </nav>
     <a class="heat-compare__brief-link" data-role="brief-link" href="/heat-map/brief/">Open brief <span aria-hidden="true">↗</span></a>

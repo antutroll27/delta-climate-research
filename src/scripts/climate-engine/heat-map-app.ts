@@ -45,7 +45,7 @@ import {
 import { addCoverage, removeCoverage, IMAGE_LAYER_ID } from './streetview/coverage-layer';
 import { nearestImage } from './streetview/nearest-image';
 import { resolve, requireCosts } from './scope/resolve.ts';
-import { paths, cityPaths } from './scope/paths.ts';
+import { areaPath, paths, cityPaths } from './scope/paths.ts';
 import { isAreaKey, splitKey, type AreaKey } from './scope/registry.ts';
 import { toLegacyWard } from './scope/legacy.ts';
 
@@ -53,8 +53,36 @@ import { toLegacyWard } from './scope/legacy.ts';
 // not a code change (dc-urs-spec.md §1).
 const WARDS = WARD_MAP;
 
-/** The area this page opens on, and the only place its identity is written down. */
-const INITIAL_AREA: AreaKey = 'in/kolkata/ballygunge';
+/**
+ * The area this page opens on — READ FROM THE PAGE, never assumed here.
+ *
+ * This replaces `const INITIAL_AREA = 'in/kolkata/ballygunge'`. The constant was
+ * correct while there was exactly one heat-map URL; there are now six, one per
+ * registered area, and an instrument that picks its own ward would open Ballygunge
+ * on all of them — under the right title, with the right coordinate in the static
+ * markup, and Ballygunge's buildings underneath. Every readout on the page would
+ * agree with every other one and the whole page would be wrong, which is the
+ * failure shape this codebase keeps paying for.
+ *
+ * IT THROWS RATHER THAN FALLING BACK, and that is the point. A `?? DEFAULT_AREA`
+ * here would rebuild exactly the defect above: a page whose `data-area` failed to
+ * render, or rendered a slug the registry does not know, would open Kolkata and say
+ * nothing. The throw is loud, lands in the page's own boot promise, and leaves the
+ * server-rendered markup — the name, the coordinate, the tier — standing and
+ * truthful rather than overwritten with another area's numbers.
+ *
+ * `isAreaKey` and not a cast: `data-area` is an untrusted string as far as this
+ * module is concerned, whatever generated it.
+ */
+function bootArea(): AreaKey {
+  const declared = document.querySelector('.stage')?.getAttribute('data-area');
+  if (!isAreaKey(declared)) {
+    throw new Error(
+      `heat-map-app: the page declares data-area="${declared}", which is not a registered `
+      + 'area key. The route states which area it is; the instrument must not guess one');
+  }
+  return declared;
+}
 
 /**
  * The ward-table row for an area key. ONE HELPER, because there are eight sites.
@@ -99,27 +127,9 @@ const areaOf = (key: AreaKey): string => splitKey(key).area;
  * Kolkata's silently outliving the switch.
  */
 
-/**
- * The unit prices, refused ONCE here rather than defaulted deeper.
- *
- * `climate.costs` is `Costs | null`: a country that has adopted no cost basis has
- * no capital-cost answer at all, and the tempting `?? 0` inside `computeCost` would
- * quote it a budget of nothing — a number that computes cleanly and reads as a
- * finding. So the null is refused at the seam where identity enters, and the
- * physics keeps a signature that cannot express the absence.
- *
- * Unreachable today, and — unlike `state.climate` above — still resolved ONCE, from
- * the initial area. That is not an oversight and not a pin in the old sense: costs
- * are a COUNTRY fact, and every area this page can reach comes from the three tabs
- * in HeatMapStage.astro, which are the three Kolkata wards. Deriving it per switch
- * would compute the identical four figures while adding a throw to a paint path.
- *
- * It becomes reachable the moment a second COUNTRY is selectable here, and at that
- * point the right change is a readout that says the cost basis is unavailable — not
- * a fallback number. The throw is what stops that work from being skipped by
- * accident.
- */
-const COSTS = requireCosts(resolve(INITIAL_AREA));
+/* COSTS used to be declared here, under a docblock this one replaces. It moved into
+   `mountHeatMap` with the boot area it is resolved from; the explanation moved with
+   it, rather than being left behind pointing at the next declaration down. */
 const { SIM_N, RESET_BURST } = M;
 /**
  * `dark` is OUR style now — OBOS Slate, built by scripts/build-map-style.mjs from
@@ -155,6 +165,19 @@ const STYLES = { dark: '/heat-map/styles/obos-slate.json', studio: 'https://tile
 const REPLACED_BUILDING_GEOMETRY = ['building', 'building_3d'] as const;
 
 export function mountHeatMap(): () => void {
+  /* The route's area, resolved once, before anything reads geometry. Everything
+     below that used to name `INITIAL_AREA` names this instead. */
+  const INITIAL_AREA = bootArea();
+  /**
+   * The unit prices, refused ONCE here rather than defaulted deeper — see the
+   * docblock above `requireCosts`. It moved inside the mount when the boot area
+   * did: costs are a COUNTRY fact and every area reachable from this page's tabs
+   * shares one country, so this is still resolved once per mount rather than per
+   * switch. It becomes reachable — as a throw — the first time a page for a
+   * country with no adopted cost basis mounts an instrument, and at that point the
+   * right answer is a readout saying the cost basis is unavailable, not a zero.
+   */
+  const COSTS = requireCosts(resolve(INITIAL_AREA));
   const el = (id: string) => document.getElementById(id);
   // Per-layer provenance ("data receipts") panel, fetched on-demand per ward
   // (loadLayerManifest caches). null → degrade to the static credit line.
@@ -1093,7 +1116,7 @@ export function mountHeatMap(): () => void {
          city's geometry through the old city's fallback temperature and
          park-cooling radius — cleanly, and with a plausible number out. */
       state.ward = name; state.climate = resolve(name).climate;
-      updateCompareHref(); updateReportHref();
+      updateCompareHref(); updateReportHref(); updateAddressBar();
 
     /* Rebuild the pick registry from the SAME rows the extrusions come from, and
        drop any selection: building #1759 in Ballygunge is a different building in
@@ -1662,6 +1685,26 @@ export function mountHeatMap(): () => void {
     /* `/api/wards/[id]` is generated from src/data/wards.ts, one route per bare
        id, so the key would produce a 404 the page has no way to notice. */
     if (link) link.href = `/api/wards/${areaOf(state.ward)}/metadata.json`;
+  }
+
+  /**
+   * Keep the URL describing the view.
+   *
+   * Every area has its own page now, which is the whole point of the route change —
+   * a Baruipur reading can be bookmarked, sent, and cited. Switching wards by tab
+   * does NOT navigate (the map, the caches and the GPU host are reused), so without
+   * this the address bar would go on saying Ballygunge over Baruipur's buildings,
+   * and copying the URL would hand someone a different ward than the one on screen.
+   * That is precisely the failure `scope/legacy.ts` describes for Compare's deep
+   * link, one level up.
+   *
+   * `replaceState`, not `pushState`, so the history behaviour is exactly what it was
+   * before this line existed: a tab press is not a navigation and Back still leaves
+   * the tool rather than walking the wards. `paired-controller.ts:241` writes the
+   * Compare URL the same way, for the same reason.
+   */
+  function updateAddressBar() {
+    history.replaceState(null, '', `${areaPath(state.ward)}${window.location.search}${window.location.hash}`);
   }
 
   function updateCompareHref() {

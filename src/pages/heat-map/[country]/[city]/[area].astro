@@ -1,0 +1,85 @@
+---
+import Base from '../../../../layouts/Base.astro';
+import HeatMapStage from '../../../../components/ClimateEngine/HeatMapStage.astro';
+import { AREA_KEYS, splitKey, type AreaKey } from '../../../../scripts/climate-engine/scope/registry.ts';
+import { resolve } from '../../../../scripts/climate-engine/scope/resolve.ts';
+
+/**
+ * ONE PAGE PER AREA — `/heat-map/in/kolkata/ballygunge/`.
+ *
+ * WHAT THIS FIXES. The tool lived at `/heat-map` and chose its ward in memory, so
+ * the URL described the tool rather than the view: a Baruipur reading could not be
+ * bookmarked, sent to a colleague, or linked from a deck, and the address bar said
+ * the same thing whichever ward was open. That is not a missing convenience. It is
+ * the difference between a demo and an instrument someone can cite.
+ *
+ * PRERENDERED, one directory per key, six in all. The build is static — there is no
+ * `output` in astro.config.mjs — so `getStaticPaths` is the only way a dynamic
+ * route can exist here at all, and it is also the honest one: the registry is a
+ * closed set, and enumerating it means an unregistered URL 404s at the CDN instead
+ * of reaching a page that would have to decide what to do with it.
+ *
+ * THE PARAMS COME FROM `splitKey`, NEVER FROM SPLITTING THE KEY HERE. registry.ts's
+ * note on AREA_PARTS explains why a left-to-right split cannot be right in general,
+ * and this is the call site where being wrong would be most expensive: the params
+ * ARE the directory names, so a mis-split would prerender a page at a path nothing
+ * links to while the linked path 404s.
+ */
+export function getStaticPaths() {
+  return AREA_KEYS.map((key) => {
+    const { country, city, area } = splitKey(key);
+    return { params: { country, city, area }, props: { key } };
+  });
+}
+
+interface Props {
+  key: AreaKey;
+}
+
+const { key } = Astro.props;
+const scope = resolve(key);
+
+/* The tier is the honesty label, and it is what decides whether this page is worth
+   putting into search. An area that ships no artefacts renders the city's name, its
+   tier and what is missing — real content for a reader who followed a link, and
+   thin near-duplicate content for a crawler. `noindex` and the sitemap exclusion in
+   astro.config.mjs are driven off the SAME `hasData` flag, exactly as the papers and
+   projects pages are driven off their `published` flags, so the two cannot drift:
+   ship Dubai's artefacts and the page becomes indexable in both places at once. */
+const indexable = scope.area.hasData;
+
+const title = `${scope.area.name} Urban Heat Explorer — ${scope.city.name} — Delta Climate Research`;
+const description = scope.area.hasData
+  ? `Interactive urban-heat-island simulator for ${scope.area.name}, ${scope.city.name} `
+    + `(${scope.area.descriptor}) — test green interventions and see cooling in °C and `
+    + 'cost in ₹ on a live 3D map. Modelled scenario, screening-grade.'
+  : `${scope.area.name}, ${scope.city.name} is registered in the OBOS urban-heat twin at `
+    + `"${scope.tier}" confidence. No measured heat artefacts ship for it yet.`;
+---
+<Base title={title} description={description} noindex={!indexable}>
+  <HeatMapStage scope={scope} />
+</Base>
+
+<script>
+  let dispose: (() => void) | null = null;
+  let bootGeneration = 0;
+  // Keep the route shell interactive while MapLibre, Three, and the instrument
+  // load as one deferred module. This is a route-level boundary, not a change to
+  // model inputs or rendering fidelity.
+  //
+  // THE `#mlmap` CHECK IS ALSO THE DATA GATE. HeatMapStage renders the map host
+  // only for an area that ships artefacts, so an area that ships none never
+  // reaches `mountHeatMap` — which is what keeps it from being a half-render.
+  // mountHeatMap builds a MapLibre map centred on `wardOf(area)` BEFORE any of
+  // loadWard's refusals can run, and an area with no row in src/data/wards.ts has
+  // no coordinates, so it would fly to NaN and leave a dead canvas and a spinner.
+  const boot = async () => {
+    const generation = ++bootGeneration;
+    if (!document.getElementById('mlmap') || dispose) return;
+    const { mountHeatMap } = await import('../../../../scripts/climate-engine/heat-map-app');
+    if (generation === bootGeneration && document.getElementById('mlmap') && !dispose) dispose = mountHeatMap();
+  };
+  void boot();
+  document.addEventListener('astro:page-load', () => { void boot(); });
+  document.addEventListener('astro:before-swap', () => { dispose?.(); dispose = null; });
+</script>

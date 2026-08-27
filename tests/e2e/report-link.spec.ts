@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 test('the ward-record link is live and follows the ward selection', async ({ page }) => {
-  await page.goto('/heat-map/');
+  await page.goto('/heat-map/in/kolkata/ballygunge/');
   const link = page.locator('#report-link');
   await expect(link).toBeVisible();
   await expect(link).toHaveAttribute('href', '/api/wards/ballygunge/metadata.json');

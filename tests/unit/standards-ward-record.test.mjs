@@ -117,29 +117,60 @@ test('the heat-map card has no dead controls, and its record link is real', asyn
   }
 
   // and the link that replaced it must point at an endpoint that exists
-  const href = /<a[^>]*id="report-link"[^>]*href="([^"]+)"/.exec(stage)?.[1];
-  assert.ok(href, 'report-link must be an anchor with an href');
-  assert.match(href, /^\/api\/wards\/[a-z]+\/metadata\.json$/);
-  const defaultWard = /^\/api\/wards\/([a-z]+)\//.exec(href)[1];
+  const href = /<a[^>]*id="report-link"[^>]*href=\{([^}]+)\}/.exec(stage)?.[1];
+  assert.ok(href, 'report-link must be an anchor whose href is an expression');
+  assert.equal(href.trim(), 'reportHref');
+  assert.match(stage, /const reportHref = `\/api\/wards\/\$\{scope\.area\.id\}\/metadata\.json`;/,
+    'the record href must be built from the route\'s own area id');
 
-  /* The static href must match the ward the app boots with, or the first click
-     downloads the wrong ward's record.
+  /* The record link must name the ward the instrument opened, or the first click
+     downloads a different ward's record — under a filename that looks right.
 
-     Since Task 6 the boot ward is an AREA KEY held in one named constant, so this
-     reads the constant and takes its last segment — the file stem, which is what
-     the /api/wards/:id route is generated under. Pinning `INITIAL_AREA` as the
-     single source is STRICTER than the bare literal this replaced: it also refuses
-     a second copy of the id being inlined into `state`. */
-  const initialArea = /const INITIAL_AREA: AreaKey = '[a-z]+\/[a-z]+\/([a-z-]+)';/.exec(app);
-  assert.ok(initialArea, 'heat-map-app.ts must name its boot area once, as INITIAL_AREA');
+     THIS USED TO BE A REGEX PINNING TWO LITERALS TO EACH OTHER: a hardcoded
+     `/api/wards/ballygunge/metadata.json` in the markup, and a hardcoded
+     `INITIAL_AREA` in the app. Two files holding one opinion, agreeing only because
+     this assertion compared them. Task 8 gave every area its own URL, and both
+     copies are gone: the route resolves a scope, the markup builds the href from
+     `scope.area.id`, and the app reads the SAME scope back off `data-area`. There
+     is one source now, so the agreement is structural rather than asserted — and
+     what is worth watching is that it stays that way.
+
+     Both halves are checked, because either one regressing alone rebuilds the old
+     defect. A literal creeping back into the markup makes the link stop following
+     the route; the app naming its own boot area again makes the instrument open
+     Ballygunge on all six pages, under each page's own correct title and
+     coordinate, with nothing failing anywhere. */
+  /* COMMENTS STRIPPED FIRST, and the tripwire proved it needed to be: the docblock
+     that replaced `INITIAL_AREA` quotes the constant it removed, so a grep over raw
+     source fires on the explanation of the very fix it is checking for. A guard that
+     cries wolf on its own prose gets deleted rather than heeded — obos-scope.test.mjs
+     makes the same move for the same reason. */
+  const appCode = app.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+  assert.ok(!/'(in|ae)\/[a-z]+\/[a-z-]+'/.test(appCode),
+    'heat-map-app.ts hardcodes an area key — the route states which area it is, and '
+    + 'an instrument that names its own would open the same ward on every page');
+  assert.match(app, /function bootArea\(\): AreaKey \{[\s\S]{0,400}?getAttribute\('data-area'\)/,
+    'the app must read its boot area from the page');
+  assert.match(app, /if \(!isAreaKey\(declared\)\) \{[\s\S]{0,80}?throw new Error\(/,
+    'an unrecognised data-area must throw, not fall back — a fallback reopens the '
+    + 'defect this whole check exists against, silently');
+  assert.match(stage, /<main id="main" class="stage" data-area=\{scope\.key\}>/,
+    'the stage must state its area for the app to read');
+  assert.match(app, /const INITIAL_AREA = bootArea\(\);/);
   assert.match(app, /const state: State = \{ ward: INITIAL_AREA,/,
-    'the app must boot on INITIAL_AREA, not on a second copy of the id');
-  assert.equal(defaultWard, initialArea[1], 'the markup default and the app default must agree');
+    'the app must boot on the area it was given, not on a second copy of the id');
 
   // and it must follow the selection
   assert.ok(app.includes('updateReportHref'), 'the href must be updated on ward change');
-  assert.match(app, /state\.ward = name;[\s\S]{0,240}?updateCompareHref\(\); updateReportHref\(\);/,
-    'updateReportHref must run wherever the ward changes');
+  assert.match(app, /state\.ward = name;[\s\S]{0,240}?updateCompareHref\(\); updateReportHref\(\); updateAddressBar\(\);/,
+    'updateReportHref and updateAddressBar must run wherever the ward changes');
+  /* Added in Task 8. Switching ward by tab does not navigate — the map and the
+     caches are reused — so without this the address bar goes on naming the ward the
+     page was opened at while the instrument shows another. Copying the URL then
+     hands someone a different ward than the one on screen, which is the same
+     wrong-record failure the record link above is guarded against, one layer up. */
+  assert.match(app, /function updateAddressBar\(\) \{[\s\S]{0,300}?history\.replaceState\([\s\S]{0,80}?areaPath\(state\.ward\)/,
+    'the URL must follow the open area');
   /* Added in Task 6, and it belongs beside the two above: the scope is now derived
      from the open area, so a switch that moved `state.ward` without re-resolving
      `state.climate` would run the new area's geometry through the old one's

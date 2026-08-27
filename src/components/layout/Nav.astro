@@ -1,4 +1,9 @@
 ---
+// The tool's front door. /heat-map still resolves — it redirects — but a sitewide
+// nav link pointing at a redirect makes every visitor pay a hop, and the redirect
+// exists for links already in the wild, not for links we are writing today.
+import { DEFAULT_AREA_PATH } from '../../scripts/climate-engine/scope/paths.ts';
+
 // Simple links shown before the dropdown menus.
 const leadLinks = [
   { label: 'About', href: '/#about' },
@@ -24,7 +29,7 @@ const menus = [
   {
     label: 'Interactive Tools',
     items: [
-      { label: 'Heat Map', href: '/heat-map', summary: 'Interactive urban-heat explorer' },
+      { label: 'Heat Map', href: DEFAULT_AREA_PATH, summary: 'Interactive urban-heat explorer' },
       // THE CBAM PAIR, IN READING ORDER. Explainer first so a first-time visitor
       // walks the funnel by default — deep-linking straight to the estimator drops
       // them into a form asking for a CN code and a production route with nothing

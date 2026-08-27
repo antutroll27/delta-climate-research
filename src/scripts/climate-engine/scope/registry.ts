@@ -58,6 +58,23 @@ import { WARDS } from '../../../data/wards.ts';
 export const RESERVED_SLUGS = ['brief', 'compare', 'data', 'styles'] as const;
 
 /**
+ * The area the tool opens on when the URL names none.
+ *
+ * REPLACES `INITIAL_AREA` in heat-map-app.ts, which is the point: the app used to
+ * assume its own area, so the page and the instrument each held an opinion about
+ * which ward was open and nothing compared them. Now every page states its area in
+ * the URL and hands it to the instrument, and this is the one remaining case that
+ * has no URL to read — `/heat-map` with nothing after it, which redirects here.
+ *
+ * Named rather than taken as `AREA_KEYS[0]`. That spelling would make the site's
+ * front door a consequence of declaration order in the tree below: reorder two
+ * entries for tidiness and the nav, the redirect and the Compare page's Explore
+ * link all silently move to a different ward, with nothing failing anywhere. The
+ * `AreaKey` annotation is what stops this from naming an area that does not exist.
+ */
+export const DEFAULT_AREA: AreaKey = 'in/kolkata/ballygunge';
+
+/**
  * The confidence tiers, weakest last.
  *
  *   validated — measured against satellite observation for every area

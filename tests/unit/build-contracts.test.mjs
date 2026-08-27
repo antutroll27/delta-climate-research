@@ -10,6 +10,9 @@ import { gzipSync } from 'node:zlib';
 
 import { papers } from '../../src/data/papers.ts';
 import { projects } from '../../src/data/projects.ts';
+import { AREA_KEYS } from '../../src/scripts/climate-engine/scope/registry.ts';
+import { resolve as resolveScope } from '../../src/scripts/climate-engine/scope/resolve.ts';
+import { areaPath } from '../../src/scripts/climate-engine/scope/paths.ts';
 
 const execFileAsync = promisify(execFile);
 const projectRoot = fileURLToPath(new URL('../../', import.meta.url));
@@ -116,12 +119,22 @@ function publicationContracts() {
     { route: '/', indexable: true, placeholder: false },
     { route: '/team/', indexable: true, placeholder: false },
     { route: '/climate-highlights/', indexable: false, placeholder: true },
-    // ponytail: this list mirrors `routeContracts` in check-publication-contract.mjs by
-    // hand — a third place encoding "is /heat-map/ indexable", after that script and
-    // astro.config.mjs's sitemapFilter. That triplication is what let the three drift
-    // apart in the first place. Export the contract list from the checker and import it
-    // here if it drifts again.
-    { route: '/heat-map/', indexable: true, placeholder: false },
+    /* THE HEAT-MAP AREA PAGES, READ FROM THE REGISTRY — which is what makes this
+       list stop being the hand-copy the ponytail note used to flag. The fixture
+       these build is what check-publication-contract.mjs is then run against, and
+       that script writes its own list out because it is plain node with no
+       TypeScript loader. So the two are no longer asserted to agree: they are
+       EXERCISED against each other. Add an area, rename a slug or flip `shipsData`
+       and this fixture changes shape while the checker's list does not, and the run
+       fails with a missing-html violation naming the route.
+
+       astro.config.mjs's sitemapFilter reads the same `hasData` flag, so all three
+       places now follow one fact instead of three opinions. */
+    ...AREA_KEYS.map((key) => ({
+      route: areaPath(key),
+      indexable: resolveScope(key).area.hasData,
+      placeholder: false,
+    })),
     { route: '/heat-map/compare/', indexable: false, placeholder: false },
     { route: '/heat-map/brief/', indexable: false, placeholder: false },
     // the three standards documents — core, indexable, permanent (see the checker)

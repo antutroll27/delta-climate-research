@@ -1,28 +1,152 @@
 ---
-// Full-bleed instrument markup for /heat-map. Behaviour is mounted by
+// Full-bleed instrument markup for one AREA of /heat-map. Behaviour is mounted by
 // src/scripts/climate-engine/heat-map-app.ts (booted from the page). Styles are
-// is:global but only bundled onto /heat-map (the sole page importing this).
-// Brand tokens are scoped to .stage so nothing leaks to :root; Mona Sans /
+// is:global but only bundled onto the heat-map routes (the sole pages importing
+// this). Brand tokens are scoped to .stage so nothing leaks to :root; Mona Sans /
 // Noplato Mono come from global.css.
 import ConstructionStamp from '../states/ConstructionStamp.astro';
+import { areaKeysInCity } from '../../scripts/climate-engine/scope/registry.ts';
+import { areaPath, DEFAULT_AREA_PATH } from '../../scripts/climate-engine/scope/paths.ts';
+import { resolve, type ResolvedScope } from '../../scripts/climate-engine/scope/resolve.ts';
+import { wardById } from '../../data/wards.ts';
+
+/**
+ * THE PAGE TELLS THE INSTRUMENT WHICH AREA IT IS, rather than both assuming.
+ *
+ * Until the URL carried the area, this file hardcoded Ballygunge's coordinate and
+ * three literal `data-w` divs, and heat-map-app.ts separately hardcoded
+ * `INITIAL_AREA`. Two places holding one opinion, agreeing only by hand — which is
+ * the shape of every defect the scope migration exists to end. The one that had
+ * already happened is recorded in tests/unit/standards-ward-record.test.mjs: the
+ * download link's static href and the app's boot ward were pinned to each other by
+ * a REGEX OVER BOTH SOURCE FILES, because nothing structural made them agree.
+ *
+ * Now the scope arrives once, from the route, and everything on the page — the
+ * readout, the name, the tabs, the strip, the record link, the `data-area` the app
+ * boots from — is derived from it. The regex has nothing left to compare, because
+ * there is only one copy.
+ */
+interface Props {
+  scope: ResolvedScope;
+}
+
+const { scope } = Astro.props;
+
+/* The sibling areas, from the registry, IN THE SAME CITY. `AREA_KEYS` would put
+   Al Quoz in Kolkata's tab strip: two cities, two climates, two currencies, and
+   the second half shipping no artefacts at all. */
+const siblings = areaKeysInCity(scope.key).map(resolve);
+
+/** This page's own URL — so the Explore link points here rather than at a redirect. */
+const here = areaPath(scope.key);
+
+/* The ward-table row, where one exists. Coordinate and the <em>-stressed wordmark
+   live there and nowhere else; an area that is not in the table (Dubai's three,
+   which are our own tiling rather than municipal units) has neither, and gets the
+   registry's plain name and an em-dash instead of an invented coordinate. */
+const ward = wardById(scope.area.id);
+
+/**
+ * The strip swatch, DERIVED from the ward table's baseline vegetation fraction.
+ *
+ * Three radial-gradient strings used to be pasted here, one per ward. They were
+ * never arbitrary — they encode how green the ward is, which is the one thing the
+ * strip is comparing — so they are computed from `veg` rather than kept as a fourth
+ * per-ward table for someone to update in one place and not the other. The output
+ * is byte-identical to the three literals it replaces: 0.12 → red/bronze,
+ * 0.28 → orange/bronze, 0.62 → sage/cyan, from the legend's own five classes.
+ */
+const swatch = (veg: number): string => {
+  const head = veg >= 0.5 ? '#9fb98a' : veg >= 0.2 ? '#d46b4a' : '#e5484d';
+  const mid = veg >= 0.5 ? '#6fcad6 60%' : '#b08d57 55%';
+  return `background:radial-gradient(circle at 40% 40%,${head},${mid},#093a3e)`;
+};
+
+/**
+ * The ward strip's rows: the siblings that actually ship artefacts.
+ *
+ * Built here rather than in the template so the ward-table lookup can be NARROWED
+ * rather than asserted. `wardById` returns `Ward | undefined` and an inline `!`
+ * would be a promise made to the compiler with nothing keeping it — registry check
+ * 7 does in fact pin every data-shipping area to a ward row, but a `!` in the
+ * markup would survive that check being weakened. `flatMap` drops a row that has
+ * no ward instead, so the failure is a missing tile rather than a thrown render.
+ *
+ * The short label comes from the SAME descriptor the panel shows, cut at its first
+ * separator: "Urban Core · Ward 68" → "Urban Core". The strip has room for the kind
+ * and not the number, which is a layout fact, not a second name for the place.
+ */
+const strip = siblings.flatMap((sib) => {
+  const row = wardById(sib.area.id);
+  if (row === undefined || !sib.area.hasData) return [];
+  return [{
+    key: sib.key,
+    id: sib.area.id,
+    name: sib.area.name,
+    kind: sib.area.descriptor.split(' · ')[0],
+    swatch: swatch(row.veg),
+  }];
+});
+
+/* The ward's own data record. `/api/wards/[id]` is generated one route per BARE id
+   from src/data/wards.ts, so the key would 404 — and this link is a download, so
+   the browser would save the 404 body under a plausible filename rather than show
+   it. heat-map-app.ts's `updateReportHref` rebuilds this identically on every area
+   switch; the two agree because both read the area id, not because anyone matched
+   two strings by eye. */
+const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
 ---
-<main id="main" class="stage">
+<main id="main" class="stage" data-area={scope.key}>
   <header class="top">
     <div class="top-start">
       <a class="brand" href="/" aria-label="Back to Delta Climate Research home"><span class="ar" aria-hidden="true">←</span><img class="bm" src="/logo-mark-96.webp" alt="" width="30" height="30" decoding="async" /></a>
       <nav class="tool-modes" aria-label="Heat explorer modes">
-        <a href="/heat-map/" aria-current="page">Explore</a>
+        {/* `here`, not "/heat-map/". The old href claimed aria-current="page" while
+            pointing somewhere else entirely - a link that is both a lie to a screen
+            reader and, since /heat-map now redirects, an extra hop for everyone who
+            clicks it. Both halves are fixed by pointing it at the page it is on. */}
+        <a href={here} aria-current="page">Explore</a>
         <a id="compare-mode-link" href="/heat-map/compare/">Compare</a>
       </nav>
     </div>
+    {/* TWO SHAPES, because two different things happen when you press one. Where
+        the city ships artefacts the instrument is mounted and switches areas in
+        place, so the tab is a button and `data-w` is what heat-map-app.ts reads (the
+        app rewrites the address bar to match). Where it does not, no script runs at
+        all - a button there would be a control that does nothing, so the tab is the
+        link it would have to be anyway. */}
     <div class="tabs" id="tabs">
-      <button class="tab on" data-w="ballygunge">Ballygunge</button>
-      <button class="tab" data-w="baruipur">Baruipur</button>
-      <button class="tab" data-w="barrackpore">Barrackpore</button>
+      {siblings.map((sib) => (scope.area.hasData
+        ? <button class:list={['tab', { on: sib.key === scope.key }]} data-w={sib.area.id}>{sib.area.name}</button>
+        : <a class:list={['tab', { on: sib.key === scope.key }]} href={areaPath(sib.key)}>{sib.area.name}</a>))}
     </div>
-    <div class="read">MEDNI · HEAT INSTRUMENT<br><b id="coord">22.528° N · 88.366° E</b><br><span id="bcount">— buildings</span> · <span id="simBackend" aria-live="polite">SELECTING ENGINE</span></div>
+    {/* THE THIRD LINE IS GATED TOO, and it is the subtlest half-render on the page.
+        `#bcount` and `#simBackend` are written by the instrument; their static values
+        are the states it starts in. Left standing where no instrument mounts, an area
+        with no artefacts would sit for ever under "— buildings · SELECTING ENGINE" —
+        which does not read as "nothing ships here", it reads as still loading, and
+        that is the one impression this page must not give. So it says what is true
+        instead: no artefacts, and the tier that follows from that. */}
+    <div class="read">MEDNI · HEAT INSTRUMENT<br><b id="coord">{ward?.coord ?? '—'}</b><br>{scope.area.hasData
+      ? <Fragment><span id="bcount">— buildings</span> · <span id="simBackend" aria-live="polite">SELECTING ENGINE</span></Fragment>
+      : <span>no artefacts · {scope.tier} tier</span>}</div>
   </header>
 
+  {/* THE DATA GATE, AND IT IS A GATE RATHER THAN A SET OF EMPTY PANELS.
+      An area the registry says ships no artefacts has nothing for the model to run
+      over. The tempting shape — render the instrument anyway and let it show em-
+      dashes — is the exact silent degradation scope/paths.ts was written against: a
+      map with no buildings, a legend with no ramp and a resilience score reading
+      "unavailable" is indistinguishable at a glance from a city that simply has not
+      finished loading, and the only evidence is a console nobody has open.
+
+      Omitting `#mlmap` is also what stops the instrument booting: the page's boot
+      script returns early without it, and mountHeatMap centres a MapLibre map on
+      `wardOf(area)` BEFORE any of loadWard's refusals can run — an area with no
+      ward row has no coordinates, so it would fly to NaN and leave a dead canvas
+      under a spinner that never clears. */}
+  {scope.area.hasData ? (
+  <Fragment>
   <div class="map">
     <div id="mlmap"></div>
     <div class="synthetic"><span class="d"></span><span class="full">Live basemap + real footprints &amp; Google heights · </span>heat field modelled<span class="sp"> · block detail illustrative</span></div>
@@ -186,8 +310,11 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
     </div>
 
     <div class="place">
-      <div class="n" id="pname">Bally<em>gunge</em></div>
-      <div class="z" id="pzone">Urban Core · Ward 68</div>
+      {/* `ward.name` carries <em> around the syllable the wordmark stresses, which
+          is why this is set:html where `scope.area.name` - markup-stripped, for
+          titles and machine-readable fields - is not. */}
+      <div class="n" id="pname" set:html={ward?.name ?? scope.area.name}></div>
+      <div class="z" id="pzone">{scope.area.descriptor}</div>
     </div>
     <div class="chiprow">
       <div class="modechip" id="modechip"><button class="on" data-m="relief">3D Relief</button><button data-m="iso">2D Isotherm</button></div>
@@ -248,7 +375,11 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
       </div>
       <div class="metric" style="border-top:1px solid var(--line);padding-bottom:0"><div class="k">Heat-stress distribution</div></div>
       <div class="histo" id="histo"></div>
-      <a class="cta" id="report-link" href="/api/wards/ballygunge/metadata.json" download
+      {/* `/api/wards/[id]` is generated from src/data/wards.ts, one route per BARE
+          id, so this takes the area id and not the key. It used to be a literal that
+          a regex over two source files pinned to the app's boot ward; both now come
+          from one scope, so the agreement is structural. */}
+      <a class="cta" id="report-link" href={reportHref} download
          title="The ward's full data record: what is measured, the out-of-sample error and sample size, every source dataset with its licence, and the analysis CRS and bounding box.">Download ward record ↓</a>
     </aside>
 
@@ -286,11 +417,37 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
     </div>
   </div>
 
+  {/* The strip only ever lists areas that ship artefacts - it is a comparison of
+      measured means, and a tile that can never carry a number is a row of em-dashes
+      pretending to be a reading. `big-{id}` takes a BARE id because heat-map-app.ts
+      writes into it by that name, from src/data/wards.ts. */}
   <div class="strip" id="strip">
-    <div class="ward on" data-w="ballygunge"><span class="sw" style="background:radial-gradient(circle at 40% 40%,#e5484d,#b08d57 55%,#093a3e)"></span><div><div class="nm">Ballygunge</div><div class="ty">Urban Core</div></div><div class="big" id="big-ballygunge">—<span>°C mean</span></div></div>
-    <div class="ward" data-w="baruipur"><span class="sw" style="background:radial-gradient(circle at 40% 40%,#9fb98a,#6fcad6 60%,#093a3e)"></span><div><div class="nm">Baruipur</div><div class="ty">Peri-Urban Fringe</div></div><div class="big" id="big-baruipur">—<span>°C mean</span></div></div>
-    <div class="ward" data-w="barrackpore"><span class="sw" style="background:radial-gradient(circle at 40% 40%,#d46b4a,#b08d57 55%,#093a3e)"></span><div><div class="nm">Barrackpore</div><div class="ty">Industrial Corridor</div></div><div class="big" id="big-barrackpore">—<span>°C mean</span></div></div>
+    {strip.map((row) => (
+      <div class:list={['ward', { on: row.key === scope.key }]} data-w={row.id}>
+        <span class="sw" style={row.swatch}></span>
+        <div><div class="nm">{row.name}</div><div class="ty">{row.kind}</div></div>
+        <div class="big" id={`big-${row.id}`}>—<span>°C mean</span></div>
+      </div>
+    ))}
   </div>
+  </Fragment>
+  ) : (
+  <section class="notyet" aria-labelledby="notyet-h">
+    <p class="notyet-tier">{scope.tier} tier · {scope.city.koppen} climate</p>
+    <h1 class="notyet-h" id="notyet-h">{scope.area.name}</h1>
+    <p class="notyet-sub">{scope.area.descriptor} · {scope.city.name}, {scope.country.name}</p>
+    {/* What is missing, stated, rather than a spinner or an apology. The gap between
+        this tier and a validated one is the thing the twin is asking to be funded to
+        close, so naming it is the page's whole content. */}
+    <p class="notyet-body">
+      This area is registered in the twin and has a permanent address, but no measured
+      heat artefacts ship for it yet — no footprints, no surface temperature, no
+      canopy. Nothing here would be a reading, so nothing is drawn. The instrument
+      runs where the observations do.
+    </p>
+    <p class="notyet-links"><a href={DEFAULT_AREA_PATH}>Open a validated area →</a></p>
+  </section>
+  )}
 </main>
 
 <style is:global>
@@ -638,7 +795,7 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
   .tool-modes a:hover{color:var(--paper)}
   .tool-modes a:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
   .tabs{display:flex;gap:4px;background:rgb(9 58 62 /.5);border:1px solid var(--line);border-radius:10px;padding:4px}
-  .tab{font-family:var(--mono);font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;color:var(--ink);background:none;border:0;cursor:pointer;padding:.55rem .95rem;border-radius:7px;transition:.2s}
+  .tab{font-family:var(--mono);font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;color:var(--ink);background:none;border:0;cursor:pointer;padding:.55rem .95rem;border-radius:7px;transition:.2s;text-decoration:none;display:inline-block;line-height:1.2}
   .tab.on{background:var(--cyan);color:var(--base);font-weight:400}
   .top .read{justify-self:end;text-align:right;font-family:var(--mono);font-size:.58rem;letter-spacing:.12em;color:var(--faint);line-height:1.7;text-transform:uppercase}
   .top .read b{color:var(--cyan);font-weight:400}
@@ -819,6 +976,18 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
   .ward .ty{font-family:var(--mono);font-size:.5rem;letter-spacing:.12em;color:var(--ink);margin-top:2px;text-transform:uppercase}
   .ward .big{margin-left:auto;text-align:right;font-family:var(--mono);font-weight:400;font-size:1.35rem}
   .ward .big span{font-size:.55rem;color:var(--ink);display:block;letter-spacing:.14em;margin-top:2px;text-transform:uppercase}
+
+  /* The un-instrumented state — an area the registry names but ships no artefacts
+     for. Deliberately plain: it is a statement, not a degraded instrument, and
+     anything that looked like a dial here would imply a reading behind it. */
+  .notyet{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:.5rem;padding:6vh 8vw;overflow:auto}
+  .notyet-tier{font-family:var(--mono);font-size:.58rem;letter-spacing:.34em;text-transform:uppercase;color:var(--bronze)}
+  .notyet-h{font-weight:600;font-size:clamp(2.2rem,4.4vw,3.6rem);line-height:.92;letter-spacing:-.04em}
+  .notyet-sub{font-family:var(--mono);font-size:.58rem;letter-spacing:.24em;text-transform:uppercase;color:var(--ink)}
+  .notyet-body{max-width:52ch;margin-top:1.2rem;color:var(--ink);font-size:.92rem;line-height:1.65}
+  .notyet-links{margin-top:1.4rem}
+  .notyet-links a{font-family:var(--mono);font-size:.62rem;letter-spacing:.18em;text-transform:uppercase;color:var(--cyan);text-decoration:none;border-bottom:1px solid var(--line);padding-bottom:.3rem}
+  .notyet-links a:hover{border-bottom-color:var(--cyan)}
 
   @media (prefers-reduced-motion: reduce){ .synthetic .d,.livedot{animation:none} }
 

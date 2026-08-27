@@ -43,10 +43,44 @@
  * fetching them.
  */
 
-import { REGISTRY, splitKey, type AreaKey } from './registry.ts';
+import { DEFAULT_AREA, REGISTRY, splitKey, type AreaKey } from './registry.ts';
 
-/** The served directory. The one literal; everything below composes it. */
-const DATA = '/heat-map/data/';
+/** The tool's URL root. The one literal; the data directory and every area page compose it. */
+const ROOT = '/heat-map/';
+
+/** The served directory. */
+const DATA = `${ROOT}data/`;
+
+/**
+ * The PAGE url for an area — `/heat-map/in/kolkata/ballygunge/`.
+ *
+ * A DIFFERENT SHAPE FROM THE DATA URLS ABOVE AND BELOW, deliberately, and this is
+ * the file that is allowed to know both. The key is hierarchical and the page URL
+ * follows it segment for segment, because a URL is the one place the hierarchy is
+ * the point — it is what makes a view shareable, bookmarkable and linkable from a
+ * deck. The artefacts stay flat (`/heat-map/data/ballygunge.json`) for the reason
+ * the header gives: nothing on disk moves.
+ *
+ * THE TRAILING SLASH IS LOAD-BEARING. `Astro.site` + `Astro.url.pathname` build the
+ * canonical link and the sitemap entry with one, because the build format is
+ * `directory` and every route is emitted as `…/index.html`. An in-app href written
+ * without it is a different string from the canonical it points at, and whether
+ * that costs a 301 or a 404 is decided by host configuration rather than by
+ * anything in this repo — Vercel and `astro preview` do not agree. So every link
+ * this function emits is byte-identical to the canonical of the page it opens.
+ *
+ * Built from `splitKey`, never by pasting the key into the path. They happen to
+ * produce the same string today; they would stop the moment a slug contained a
+ * character the key tolerates and a path segment does not, and registry.ts check 8
+ * is the guard that keeps that from being reachable at all.
+ */
+export function areaPath(key: AreaKey): string {
+  const { country, city, area } = splitKey(key);
+  return `${ROOT}${country}/${city}/${area}/`;
+}
+
+/** Where `/heat-map` with nothing after it goes. See `DEFAULT_AREA`. */
+export const DEFAULT_AREA_PATH = areaPath(DEFAULT_AREA);
 
 /** The ten per-area artefacts. Names are the callers' vocabulary, not the files'. */
 export interface AreaPaths {

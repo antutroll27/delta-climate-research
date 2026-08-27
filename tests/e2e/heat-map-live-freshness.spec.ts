@@ -55,7 +55,7 @@ test.describe('live reading freshness', () => {
 
   test('a fresh reading is shown as fresh, and the dot may say live', async ({ page }) => {
     await stubMet(page, 0);
-    await page.goto('/heat-map/');
+    await page.goto('/heat-map/in/kolkata/ballygunge/');
     await expect(page.locator(dial)).toHaveAttribute('data-age', 'fresh', { timeout: 60_000 });
     await expect(page.locator('#livedot')).toHaveClass(/\bon\b/);
     // The tooltip must say what the readout is NOT, because big digits read as
@@ -78,7 +78,7 @@ test.describe('live reading freshness', () => {
 
   test('an overnight-stale reading loses the live claim', async ({ page }) => {
     await stubMet(page, 9);
-    await page.goto('/heat-map/');
+    await page.goto('/heat-map/in/kolkata/ballygunge/');
     await expect(page.locator(dial)).toHaveAttribute('data-age', 'stale', { timeout: 60_000 });
     await expect(page.locator('#clockAgeLab')).toHaveText('read 9h ago');
     // The whole point: the page stops asserting "live" once it isn't.
@@ -87,7 +87,7 @@ test.describe('live reading freshness', () => {
 
   test('activating the dial re-reads and re-drives the simulation', async ({ page }) => {
     await stubMet(page, 6.5, 24.0);
-    await page.goto('/heat-map/');
+    await page.goto('/heat-map/in/kolkata/ballygunge/');
     await expect(page.locator(dial)).toHaveAttribute('data-age', 'stale', { timeout: 60_000 });
     await expect(page.locator('#liveT')).toHaveText('24.0');
 
@@ -104,7 +104,7 @@ test.describe('live reading freshness', () => {
 
   test('the readout clears the evidence rail it sits beside', async ({ page }) => {
     await stubMet(page, 0);
-    await page.goto('/heat-map/');
+    await page.goto('/heat-map/in/kolkata/ballygunge/');
     await expect(page.locator(dial)).toBeVisible({ timeout: 60_000 });
     const m = await page.evaluate(() => {
       const box = (s: string) => document.querySelector(s)?.getBoundingClientRect() ?? null;
@@ -142,7 +142,7 @@ test.describe('live reading freshness', () => {
     await stubMet(page, 0, 33.7);
     let met = 0;
     await page.route(LIVE_ROUTE, (r) => { met += 1; r.fallback(); });
-    await page.goto('/heat-map/');
+    await page.goto('/heat-map/in/kolkata/ballygunge/');
     await expect(page.locator(dial)).toHaveAttribute('data-h12', 'true', { timeout: 60_000 });
     await expect(page.locator('#clockFace')).toHaveAttribute('aria-pressed', 'false');
 
@@ -175,7 +175,7 @@ test.describe('live reading freshness', () => {
 
   test('digits and freshness bar move together', async ({ page }) => {
     await stubMet(page, 0);
-    await page.goto('/heat-map/');
+    await page.goto('/heat-map/in/kolkata/ballygunge/');
     await expect(page.locator(dial)).toHaveAttribute('data-age', 'fresh', { timeout: 60_000 });
     // Digits are a real ward-local clock reading, not a placeholder.
     await expect(page.locator('#clockTime')).toHaveText(/^\d{1,2}:\d{2}$/);
@@ -198,7 +198,7 @@ test.describe('the now phase', () => {
 
   test('Now labels itself, and reads sanely against the air temperature', async ({ page }) => {
     await stubMet(page, 0);
-    await page.goto('/heat-map/');
+    await page.goto('/heat-map/in/kolkata/ballygunge/');
     await expect(page.locator('#clockw')).toBeVisible({ timeout: 60_000 });
 
     // The page now OPENS live: the reading agrees with the clock beside it
