@@ -68,8 +68,15 @@ export const REGISTRY = {
     name: 'India',
     /** key into PATH_DELTA — Dhara et al. 2025, PLOS Climate 4(11):e0000724 */
     pathway: 'dhara2025',
-    /** intervention unit costs; parkCr is ₹ crore. Currency is a country fact. */
-    costs: { currency: 'INR', roofM2: 150, tree: 1500, parkCr: 1.5 },
+    /* Intervention unit costs; parkCr is ₹ crore. Currency is a country fact.
+
+       THESE FOUR MATCH `COST` IN heat-map-model.ts:70 FIELD FOR FIELD, and have to.
+       computeCost multiplies each field by a DIFFERENT spatial quantity, so a field
+       missing here would not raise anything — it would silently zero its own term
+       and return a smaller, entirely plausible number. The facade term is the one
+       that would hurt: at ₹9,500/m² it is the largest of the four, and it was in
+       fact absent from the first draft of this entry. */
+    costs: { currency: 'INR', roofM2: 150, tree: 1500, parkCr: 1.5, facadeM2: 9500 },
     cities: {
       kolkata: {
         koppen: 'Aw',
@@ -177,7 +184,8 @@ interface AreaParts {
 
    Duplicates are kept in AREA_KEYS but the map keeps the FIRST binding, which is
    what makes the loser of a collision unreachable rather than silently swapped —
-   check 2 is what stops that state from shipping. */
+   check 2 is what stops that state from shipping, and check 8 refuses the slug that
+   causes it outright. */
 const keys: AreaKey[] = [];
 const AREA_PARTS = new Map<string, AreaParts>();
 for (const [country, entry] of Object.entries(COUNTRIES)) {
@@ -323,6 +331,35 @@ export function assertRegistryLogic(): void {
     need(registered === table,
       `Kolkata's registry areas [${registered}] do not match src/data/wards.ts `
       + `[${table}] — five Python scripts once diverged this way and nothing failed`);
+  }
+
+  /* 8 · No slug may contain a "/". Numbered last because it was added last, but it
+     belongs with check 2: it is that failure's ROOT CAUSE, and it catches the half
+     check 2 cannot see. A slash that happens to collide produces a duplicate key and
+     check 2 fires; a LONE slash-bearing slug produces a perfectly unique key and
+     sails past every check above.
+
+     It still breaks two things. The key is the URL form — routing puts these into
+     /heat-map/{country}/{city}/{area} — where a slug carrying a slash silently
+     becomes an extra path segment, so the route no longer matches what the registry
+     thinks it registered. And `ae/dubai/al/quoz` cannot be read back by eye or by
+     any consumer that parses on "/", even though splitKey itself now looks the parts
+     up rather than re-deriving them. Refusing the slug is cheaper than making every
+     downstream consumer slash-aware. */
+  const noSlash = (kind: string, slug: string): void => {
+    need(!slug.includes('/'),
+      `${kind} slug "${slug}" contains a "/" — a slug is ONE path segment in `
+      + '/heat-map/{country}/{city}/{area}, so a slash splits it into two and the area '
+      + 'key it builds cannot be read back unambiguously');
+  };
+  for (const [country, entry] of Object.entries(COUNTRIES)) {
+    noSlash('country', country);
+    for (const [city, cityEntry] of Object.entries(entry.cities)) {
+      noSlash(`city in "${country}"`, city);
+      for (const areaId of Object.keys(cityEntry.areas)) {
+        noSlash(`area in "${country}/${city}"`, areaId);
+      }
+    }
   }
 
   if (failures.length > 0) {
