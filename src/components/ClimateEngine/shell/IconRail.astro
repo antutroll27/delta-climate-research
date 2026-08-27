@@ -1,0 +1,290 @@
+---
+/**
+ * THE ICON RAIL — the console's only navigation.
+ *
+ * OBOS is becoming an ops console rather than a map with panels floating over it,
+ * and this 56px column is the whole of its navigation. Explore and Compare used to
+ * be tabs in the stage header; they are now two of the five places the rail can
+ * take you. Everything that used to be a second navigation is gone, because one
+ * navigation is easier to learn than two.
+ *
+ * THE RAIL CARRIES THE MODE, AND THE VERBS ARE MIXED ON PURPOSE:
+ *
+ *   Map        navigates to the Explore route      (was the Explore tab)
+ *   Layers     swaps the sidebar pane
+ *   Analysis   navigates to /heat-map/compare/     (was the Compare tab)
+ *   Reports    swaps the sidebar pane
+ *   Scenarios  swaps the sidebar pane
+ *
+ * Two of the five change the URL and three change what the sidebar shows. Every
+ * ops console works this way, and the alternative — a rail for routes and a
+ * second control for panes — is the two-navigations problem again.
+ *
+ * `active` IS THE SECTION THE PAGE IS, so `aria-current` states a fact rather than
+ * a hope. The old Explore tab carried `aria-current="page"` while its href pointed
+ * somewhere else entirely: a lie to a screen reader, and an extra hop for everyone
+ * who clicked it. Spec 1 fixed that by pointing the href at the page it was on,
+ * which closed one half of the defect and left the other — a link to the page you
+ * are already standing on. This closes it STRUCTURALLY: `items` below takes the
+ * href away from the current section, so no arm of the template can render it as
+ * an anchor. A section you are in is a `<button>`, because there is nowhere to go.
+ *
+ * NOT WIRED YET. Task 7 mounts this into the stage and gives the three pane
+ * sections their behaviour; the settings control at the bottom is likewise inert
+ * until then, and is marked below so it is wired or removed rather than shipped as
+ * a control that does nothing. Until Task 7 the component is imported by nothing,
+ * and `npm run build` compiling it is what proves it is real.
+ *
+ * ONE THING FOR TASK 7 TO DECIDE, because this component cannot: when a pane
+ * section is active on the Explore route — `active="layers"` while standing on
+ * `/heat-map/in/kolkata/ballygunge/` — Map still renders as an `<a>` pointing at
+ * that same URL, which is the self-link spec 1 removed. The rail is told which
+ * SECTION it is in, never which URL, so the page that mounts it is the only place
+ * that knows. Passing `active="map"` whenever the sidebar is showing its own pane,
+ * or passing an `explorePath` the page is not on, both avoid it.
+ *
+ * The icons are the founder-approved set from preview-obos/shell.html, path data
+ * copied verbatim.
+ */
+import { DEFAULT_AREA_PATH } from '../../../scripts/climate-engine/scope/paths.ts';
+
+/** The five places the rail can be. Exported for Task 7's callers to name one. */
+export type RailSection = 'map' | 'layers' | 'analysis' | 'reports' | 'scenarios';
+
+interface Props {
+  /** The section the page IS. The one that renders as a button. */
+  active: RailSection;
+  /**
+   * Where Map goes. The page knows its own area; the rail does not, and guessing
+   * would put a second copy of the default area URL in a second file.
+   */
+  explorePath?: string;
+}
+
+const { active, explorePath = DEFAULT_AREA_PATH } = Astro.props;
+
+/** The compare route, written once. `paths.ts` owns the per-area URLs, not this. */
+const COMPARE_PATH = '/heat-map/compare/';
+
+/**
+ * One rail glyph: an optional circle plus a path, both drawn on a 24-unit box.
+ *
+ * Structured rather than a blob of markup passed to `set:html`, because Astro's
+ * scoping hash only lands on elements Astro itself renders — an `<svg>` injected
+ * as raw HTML would silently miss `.rail-btn svg` and lose its stroke.
+ */
+interface Icon {
+  readonly circle?: readonly [cx: number, cy: number, r: number];
+  readonly d: string;
+}
+
+interface Section {
+  readonly id: RailSection;
+  readonly label: string;
+  readonly href: string | null;
+  readonly icon: Icon;
+}
+
+/* `href: null` is the whole of "this section swaps a pane". There is no second
+   `kind` field saying the same thing in other words, because two fields holding
+   one opinion is how they come to disagree. */
+const SECTIONS: readonly Section[] = [
+  { id: 'map', label: 'Map', href: explorePath, icon: {
+    d: 'M9 3 3 6v15l6-3 6 3 6-3V3l-6 3-6-3zM9 3v15M15 6v15' } },
+  { id: 'layers', label: 'Layers', href: null, icon: {
+    d: 'M12 2 2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5' } },
+  { id: 'analysis', label: 'Analysis', href: COMPARE_PATH, icon: {
+    d: 'M3 3v18h18M7 15l4-5 3 3 5-7' } },
+  { id: 'reports', label: 'Reports', href: null, icon: {
+    d: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M9 13h6M9 17h6' } },
+  { id: 'scenarios', label: 'Scenarios', href: null, icon: {
+    circle: [12, 12, 9], d: 'M12 8v4l3 2' } },
+];
+
+/* THE ONE LINE THAT MAKES THE ACTIVE SECTION A BUTTON. Taking the href away is
+   what removes the self-link, and it removes it for every section at once rather
+   than leaving each one to remember. The template then only has to ask whether a
+   section has somewhere to go. */
+const items = SECTIONS.map((s) => {
+  const current = s.id === active;
+  return { ...s, current, href: current ? null : s.href };
+});
+
+const settings: Icon = {
+  circle: [12, 12, 3],
+  d: 'M19 12a7 7 0 0 0-.1-1.2l2-1.6-2-3.4-2.4 1a7 7 0 0 0-2-1.2L14 3h-4l-.5 2.6a7 7 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.6a7 7 0 0 0 0 2.4l-2 1.6 2 3.4 2.4-1a7 7 0 0 0 2 1.2L10 21h4l.5-2.6a7 7 0 0 0 2-1.2l2.4 1 2-3.4-2-1.6c.06-.4.1-.8.1-1.2z',
+};
+---
+<nav class="rail" aria-label="OBOS sections">
+  <span class="mark" aria-hidden="true">OB</span>
+
+  {items.map((s) => s.href === null ? (
+    <button
+      type="button"
+      class="rail-btn"
+      data-rail={s.id}
+      aria-current={s.current ? 'page' : undefined}
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        {s.icon.circle && <circle cx={s.icon.circle[0]} cy={s.icon.circle[1]} r={s.icon.circle[2]} />}
+        <path d={s.icon.d} />
+      </svg>
+      <span class="rail-label">{s.label}</span>
+    </button>
+  ) : (
+    <a class="rail-btn" data-rail={s.id} href={s.href}>
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        {s.icon.circle && <circle cx={s.icon.circle[0]} cy={s.icon.circle[1]} r={s.icon.circle[2]} />}
+        <path d={s.icon.d} />
+      </svg>
+      <span class="rail-label">{s.label}</span>
+    </a>
+  ))}
+
+  {/* NOT a section: it is nowhere the rail can BE, so it carries no data-rail and
+      can never be current. It is also INERT until Task 7 gives it a destination —
+      a control that does nothing is a defect this project has already paid for
+      once, so it is either wired there or taken out there. */}
+  <button type="button" class="rail-btn rail-settings">
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <circle cx={settings.circle![0]} cy={settings.circle![1]} r={settings.circle![2]} />
+      <path d={settings.d} />
+    </svg>
+    <span class="rail-label">Settings</span>
+  </button>
+</nav>
+
+<style>
+  /* SCOPED, NOT is:global. The stage's own 581-line block is global for a reason
+     that does not extend here: MapLibre injects DOM the stage never rendered and
+     heat-map-app.ts re-classes elements at runtime, so Astro's scoping hash cannot
+     reach them. Every element in this file is Astro-rendered and static, the hash
+     reaches all of it, and the global surface shrinks rather than grows.
+
+     Colours are var() throughout. Task 2's guard fails the build on any hex
+     written more than once in a file — comments included — so the two below are
+     the mark's own gradient stop and its inked lettering, each written once and
+     nowhere else. --rail-ground is declared beside the rest of the palette in
+     HeatMapStage.astro, which is where the tokens live. */
+
+  .rail {
+    inline-size: var(--rail, 56px);
+    background: var(--rail-ground);
+    border-right: 1px solid var(--line);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 12px 0;
+  }
+
+  .mark {
+    inline-size: 30px;
+    block-size: 30px;
+    flex: none;
+    margin-bottom: 14px;
+    border-radius: 7px;
+    background: linear-gradient(145deg, var(--cyan), #2b7d88);
+    display: grid;
+    place-items: center;
+    font-family: var(--mono);
+    font-size: .72rem;
+    font-weight: 700;
+    color: #04191b;
+  }
+
+  /* One class for both arms: a link and a button that look identical, because
+     which one you get is a fact about where you already are, not a difference the
+     eye should have to resolve. */
+  .rail-btn {
+    inline-size: 38px;
+    block-size: 38px;
+    flex: none;
+    position: relative;
+    display: grid;
+    place-items: center;
+    border: 0;
+    border-radius: 8px;
+    padding: 0;
+    background: none;
+    color: var(--faint);
+    font: inherit;
+    text-decoration: none;
+    cursor: pointer;
+    transition: color .18s, background .18s;
+  }
+
+  .rail-btn svg {
+    inline-size: 19px;
+    block-size: 19px;
+    stroke: currentColor;
+    fill: none;
+    stroke-width: 1.6;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .rail-btn:hover { color: var(--ink); background: rgb(111 202 214 / .06); }
+
+  /* A rail you cannot see focus on is unusable by keyboard, and this is the only
+     navigation there is. */
+  .rail-btn:focus-visible {
+    outline: 2px solid var(--cyan);
+    outline-offset: 2px;
+    color: var(--ink);
+  }
+
+  .rail-btn[aria-current="page"] { color: var(--cyan); background: rgb(111 202 214 / .1); }
+
+  /* The accent bar, flush against the rail's left edge — which is what the
+     square-left, round-right radius is for. The offset is DERIVED: the button is
+     centred in the rail, so its own left edge sits (rail − 38px) / 2 inwards, and
+     50% − rail/2 is exactly that distance back out. The mockup's literal -12px was
+     measured against different geometry and lands at −3px, off the rail entirely. */
+  .rail-btn[aria-current="page"]::before {
+    content: "";
+    position: absolute;
+    left: calc(50% - var(--rail, 56px) / 2);
+    top: 9px;
+    bottom: 9px;
+    inline-size: 2px;
+    border-radius: 0 2px 2px 0;
+    background: var(--cyan);
+  }
+
+  .rail-settings { margin-top: auto; }
+
+  /* THE LABEL IS THE ACCESSIBLE NAME AND THE TOOLTIP, one span doing both jobs.
+     An icon on its own announces nothing, and `title` is not a reliable
+     accessible name — it is ignored outright by some screen readers and never
+     surfaces on touch. A hidden label beside a separate tooltip would be two
+     copies of one word, free to drift; this is one. `opacity: 0` hides it from
+     the eye while leaving it in the accessibility tree, which is exactly the
+     split we want — unlike `display: none` or `visibility: hidden`, which would
+     take the name away with the pixels. */
+  .rail-label {
+    position: absolute;
+    left: 46px;
+    z-index: 40;
+    white-space: nowrap;
+    padding: 3px 8px;
+    border: 1px solid rgb(111 202 214 / .3);
+    border-radius: 5px;
+    background: var(--surface2);
+    color: var(--paper);
+    font-size: .74rem;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateX(-4px);
+    transition: opacity .15s, transform .15s;
+  }
+
+  /* Keyboard focus reveals it too, or the tooltip would be mouse-only. */
+  .rail-btn:hover .rail-label,
+  .rail-btn:focus-visible .rail-label { opacity: 1; transform: none; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .rail-btn,
+    .rail-label { transition: none; }
+  }
+</style>

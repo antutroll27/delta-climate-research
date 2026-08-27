@@ -497,6 +497,13 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
     --sage:#9fb98a; --orange:#d46b4a;
     /* The compass sun: one colour across its disc, ray and hub. */
     --sun:#f2b544;
+    /* The icon rail's ground — a shade under --base, so the console's navigation
+       column reads as a step behind the surface it navigates. It is declared here
+       with the rest of the palette rather than inside shell/IconRail.astro,
+       because a token resolves from where it is DECLARED: the rail's scoped
+       styles reach it only once the rail is inside .stage, which is where Task 7
+       puts it. */
+    --rail-ground:#040808;
     /* Studio (light) mode's three inks — the same descending-emphasis idea as
        --paper/--ink/--faint above, inverted for a light ground. They live here
        rather than on `body.studio` because every element they colour is inside
