@@ -491,6 +491,11 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
     --base:#050606; --surface:#0b2c2e; --surface2:#093a3e;
     --paper:#ecedf0; --ink:#8fa3a5; --faint:#5c7173; --line:rgb(111 202 214 / 0.14);
     --cyan:#6fcad6; --bronze:#b08d57; --red:#e5484d;
+    /* The confidence-tier green — the `validated` badge on the scope switcher,
+       and nothing else. DELIBERATELY NOT --sage, which is the heat ramp's
+       Comfortable class: one token serving both a heat class and a trust label
+       means tuning the legend silently restates how much we trust a city. */
+    --green:#5db98a;
     /* The legend's five heat classes, in order: Comfortable, Warm, Hot, Severe,
        Extreme. The first, third and fifth were already tokens; --sage and --orange
        complete the ramp instead of being spelled by hand in three places each. */
