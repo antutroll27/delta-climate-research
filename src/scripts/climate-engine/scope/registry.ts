@@ -41,13 +41,14 @@ import { WARDS } from '../../../data/wards.ts';
  *
  * A country slug is the first segment of an area key and, once routing consumes
  * this, of the URL. `/heat-map/brief` and `/heat-map/compare` are real static
- * Astro pages; `/heat-map/data/…` is the served artefact directory in `public/`.
+ * Astro pages; `/heat-map/data/…` and `/heat-map/styles/…` are served directories
+ * in `public/` (the latter holds obos-slate.json, obos-dusk.json, obos-petrol.json).
  * Astro resolves a static route before a dynamic one, so a country registered
  * under any of these names would never reach its own page — the build would
  * succeed, the tests would pass, and the route would simply render the briefing
  * for ever. Check 1 exists because that failure has no other symptom.
  */
-export const RESERVED_SLUGS = ['brief', 'compare', 'data'] as const;
+export const RESERVED_SLUGS = ['brief', 'compare', 'data', 'styles'] as const;
 
 /**
  * The confidence tiers, weakest last.
@@ -66,16 +67,30 @@ const TIERS = ['validated', 'zone', 'geometry'] as const;
 export const REGISTRY = {
   in: {
     name: 'India',
-    /** key into PATH_DELTA — Dhara et al. 2025, PLOS Climate 4(11):e0000724 */
+    /* The NAME of the warming-pathway source: Dhara et al. 2025, PLOS Climate
+       4(11):e0000724 (post-AR6 India update). Task 5's scope/resolve.ts maps this
+       name to its own delta table.
+
+       IT IS EMPHATICALLY NOT A KEY INTO `PATH_DELTA`. That table is keyed by
+       SCENARIO — '2025' | 'ssp245' | 'ssp585' (heat-map-model.ts:77-81) — and
+       'dhara2025' is not among them. Indexing PATH_DELTA with this would fail
+       SILENTLY in the worst way available: PATH_DELTA is Record<string, number>
+       and noUncheckedIndexedAccess is off, so `PATH_DELTA[pathway]` type-checks
+       clean AS A NUMBER, evaluates to undefined, and propagates a NaN warming
+       delta with nothing raised anywhere. A pathway name and a scenario key are
+       different kinds of thing; only resolve.ts may turn one into the other. */
     pathway: 'dhara2025',
     /* Intervention unit costs; parkCr is ₹ crore. Currency is a country fact.
 
-       THESE FOUR MATCH `COST` IN heat-map-model.ts:70 FIELD FOR FIELD, and have to.
-       computeCost multiplies each field by a DIFFERENT spatial quantity, so a field
-       missing here would not raise anything — it would silently zero its own term
-       and return a smaller, entirely plausible number. The facade term is the one
-       that would hurt: at ₹9,500/m² it is the largest of the four, and it was in
-       fact absent from the first draft of this entry. */
+       THE FOUR COST FIGURES MATCH `COST` IN heat-map-model.ts:70 FIELD FOR FIELD,
+       and have to; `currency` is registry-only, the model having no notion of one.
+       computeCost multiplies each field by a DIFFERENT spatial quantity, so an
+       absent field is `undefined`, its term evaluates to NaN, and NaN POISONS THE
+       WHOLE TOTAL — measured: ₹110,966,666.67 becomes NaN outright, not a smaller
+       plausible number. That is the good case, loud rather than quiet, and the
+       `satisfies` clause below now makes it a compile error before it can happen.
+       facadeM2 was in fact absent from the first draft of this entry, and is the
+       largest of the four at ₹9,500/m². */
     costs: { currency: 'INR', roofM2: 150, tree: 1500, parkCr: 1.5, facadeM2: 9500 },
     cities: {
       kolkata: {
@@ -121,7 +136,7 @@ export const REGISTRY = {
       },
     },
   },
-} as const;
+} as const satisfies Record<string, CountryEntry>;
 
 type Registry = typeof REGISTRY;
 
@@ -151,17 +166,57 @@ export type AreaKey = {
   }[keyof Registry[C]['cities']]
 }[keyof Registry];
 
-/* The tree shape the runtime walkers need, and only that. Narrowing REGISTRY to
-   this before flattening keeps the walk from depending on any payload field, so
-   adding a per-city or per-country property can never change which keys exist. */
-interface CityShape {
-  readonly tier: string;
-  readonly areas: Readonly<Record<string, { readonly shipsData: boolean }>>;
+/**
+ * The authoring contract. REGISTRY closes with
+ * `as const satisfies Record<string, CountryEntry>`, and that clause is what makes
+ * an incomplete entry fail HERE.
+ *
+ * Without it a city omitting `fallbackTairC` compiled clean and passed all eight
+ * runtime guards — the guards walk the tree and not one of them reads that field,
+ * so the omission surfaced only at the first generic consumer, tasks away, as a
+ * type error naming the wrong file.
+ *
+ * `as const` comes FIRST and `satisfies` only checks, so the literal types survive
+ * and AreaKey still derives the six exact keys instead of widening to `string`.
+ * That is verified, not assumed: the negative probe still rejects
+ * `in/kolkata/typo` while accepting `in/kolkata/ballygunge`.
+ */
+type Tier = typeof TIERS[number];
+
+interface CountryCosts {
+  readonly currency: string;
+  readonly roofM2: number;
+  readonly tree: number;
+  readonly parkCr: number;
+  readonly facadeM2: number;
 }
-interface CountryShape {
-  readonly cities: Readonly<Record<string, CityShape>>;
+interface AreaEntry {
+  readonly shipsData: boolean;
+  /** present ONLY for areas absent from src/data/wards.ts — see the header */
+  readonly name?: string;
+  readonly descriptor?: string;
 }
-const COUNTRIES: Readonly<Record<string, CountryShape>> = REGISTRY;
+interface CityEntry {
+  readonly koppen: string;
+  /** the union, so a typo is a compile error and check 4 is the backstop */
+  readonly tier: Tier;
+  readonly fallbackTairC: number;
+  readonly parkRadiusM: number;
+  readonly data: { readonly heatwave: string | null; readonly dcUrs: string | null };
+  readonly areas: Readonly<Record<string, AreaEntry>>;
+}
+interface CountryEntry {
+  readonly name: string;
+  readonly pathway: string | null;
+  readonly costs: CountryCosts | null;
+  readonly cities: Readonly<Record<string, CityEntry>>;
+}
+
+/* The walkers below read REGISTRY through this WIDENED view, never its literal
+   type. Every invariant here is a property of the tree, not of which countries
+   happen to be in it today, and a walk written against the literal type would
+   have to be edited each time a city is added. */
+const COUNTRIES: Readonly<Record<string, CountryEntry>> = REGISTRY;
 
 interface AreaParts {
   readonly country: string;
@@ -232,6 +287,45 @@ export function splitKey(key: AreaKey): AreaParts {
   return parts;
 }
 
+/** Every area id that ships data, anywhere in the registry — not just Kolkata's. */
+export function shippingAreaIds(): readonly string[] {
+  const ids: string[] = [];
+  for (const entry of Object.values(COUNTRIES)) {
+    for (const cityEntry of Object.values(entry.cities)) {
+      for (const [areaId, areaEntry] of Object.entries(cityEntry.areas)) {
+        if (areaEntry.shipsData) ids.push(areaId);
+      }
+    }
+  }
+  return ids;
+}
+
+/**
+ * Check 7's comparison, pure and separate so it can be exercised against
+ * registries this one is not yet.
+ *
+ * It is separate for a reason. The first version compared the ward table against
+ * `Object.keys(kolkata.areas)`, which quietly encoded "the ward table IS Kolkata's
+ * area set" — a premise this file's own header denies. The first non-Kolkata area
+ * to ship data would have failed it spuriously, and nothing in the shipped
+ * registry could have caught that, because no such area exists YET. Pulling the
+ * comparison out lets the Dubai case be tested before it is real.
+ *
+ * Both directions matter. An area shipping data with no row in the ward table has
+ * no coordinates behind it; a row in the table that no area ships describes ground
+ * the twin does not model. Returns null when the two agree.
+ */
+export function areaTableDrift(
+  shippingIds: readonly string[], tableIds: readonly string[],
+): string | null {
+  const shipping = [...new Set(shippingIds)].sort().join(', ');
+  const table = [...new Set(tableIds)].sort().join(', ');
+  if (shipping === table) return null;
+  return `the registry ships data for [${shipping}] but src/data/wards.ts describes `
+    + `[${table}] — these must name the same ground. Five Python scripts once `
+    + 'diverged this way and nothing failed';
+}
+
 /**
  * Runnable self-check. Every assertion here guards a failure that is SILENT —
  * one that ships green and shows a wrong page rather than throwing.
@@ -258,7 +352,15 @@ export function assertRegistryLogic(): void {
   /* 2 · The key is a flat string with "/" as its separator, so (country, city,
      area) → key is a bijection only while no slug contains a "/". Let one through
      and two different places answer to one key; the loser is silently unreachable,
-     and which one loses depends on declaration order. */
+     and which one loses depends on declaration order.
+
+     Precisely what this proves, since the file should not overstate it: an object
+     literal cannot carry the same key twice, so a duplicate is reachable ONLY via a
+     slug containing a "/" — meaning check 2 never fires alone, always alongside
+     check 8. It is kept for two reasons. It names the CONSEQUENCE where check 8
+     names the cause, and AREA_KEYS need not always come from one literal: a
+     migration that concatenated legacy aliases could duplicate with no slash at
+     all, and then check 2 would be the only thing watching. */
   const seen = new Set<string>();
   for (const key of AREA_KEYS) {
     need(!seen.has(key),
@@ -321,23 +423,23 @@ export function assertRegistryLogic(): void {
       }
     }
   }
-  const kolkata = COUNTRIES.in?.cities?.kolkata;
-  need(kolkata !== undefined,
-    'in/kolkata is missing from the registry, but src/data/wards.ts still describes '
-    + `${tableIds.length} wards — the two have diverged`);
-  if (kolkata !== undefined) {
-    const registered = Object.keys(kolkata.areas).slice().sort().join(',');
-    const table = tableIds.slice().sort().join(',');
-    need(registered === table,
-      `Kolkata's registry areas [${registered}] do not match src/data/wards.ts `
-      + `[${table}] — five Python scripts once diverged this way and nothing failed`);
-  }
+  /* Against EVERY data-shipping area in the registry, not against Kolkata's.
+     Kolkata is merely the only city shipping data TODAY, and hard-coding that made
+     the two halves of this check contradict each other: the first says the ward
+     table must CONTAIN each shipping area, the second used to say it must EQUAL
+     Kolkata's. Give Dubai's creek `shipsData: true`, add the ward row that first
+     half then requires, and the second fired anyway. Loud, but wrong, and it would
+     have blocked Task 3 onwards. */
+  const drift = areaTableDrift(shippingAreaIds(), tableIds);
+  if (drift !== null) failures.push(drift);
 
   /* 8 · No slug may contain a "/". Numbered last because it was added last, but it
      belongs with check 2: it is that failure's ROOT CAUSE, and it catches the half
      check 2 cannot see. A slash that happens to collide produces a duplicate key and
      check 2 fires; a LONE slash-bearing slug produces a perfectly unique key and
-     sails past every check above.
+     sails past every check above. The converse holds too, and check 2's comment
+     says so: a duplicate is unreachable WITHOUT a slash, so the two always fire
+     together and check 2 never fires alone.
 
      It still breaks two things. The key is the URL form — routing puts these into
      /heat-map/{country}/{city}/{area} — where a slug carrying a slash silently

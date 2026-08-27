@@ -82,7 +82,12 @@ export const PATH_DELTA: Record<string, number> = {
 export const FALLBACK_TAIR = 32;              // used only when the live feed is down
 
 const ALB_BASE = 0.15, ALB_COOL = 0.60;       // §3.2 dark vs aged-cool-roof albedo (LBNL)
-const TREE_CAP = 0.7, PARK_R_M = 50;          // §3.1 crown-closure cap · §3.3 blob = Kolkata TVoE
+const TREE_CAP = 0.7;                         // §3.1 crown-closure cap
+/* §3.3 blob = Kolkata TVoE. EXPORTED ONLY so tests/unit/obos-scope.test.mjs can
+   assert that the scope registry's copy of this number has not drifted from it
+   while both exist. Task 5 moves it into the registry and deletes it here; that
+   assertion goes with it. Numerically inert — the Task 1 goldens prove it. */
+export const PARK_R_M = 50;
 /**
  * Neighbourhood-scale anthropogenic-heat reduction from vertical greening.
  * Was 0.30 (uncited). Gunawardena & Steemers 2023 (Buildings & Cities,
