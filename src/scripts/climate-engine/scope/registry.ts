@@ -9,15 +9,22 @@
  * climate, which confidence tier, what to fall back to when the live feed is
  * down) rather than of a patch of ground.
  *
- * WHAT THIS FILE MUST NEVER BECOME: a fourth ward table.
+ * WHAT THIS FILE MUST NEVER BECOME: a third ward table.
  *
- * Three already exist — `src/data/wards.ts`, `src/scripts/climate-engine/wards.ts`,
- * and `WARDS` in `scripts/_types.py` — and the comment above the Python one records
- * what happens when a table is copied rather than referenced: five scripts carried
+ * TWO exist — `src/data/wards.ts` and `WARDS` in `scripts/_types.py`, which mirrors
+ * it for six Python scripts — and the comment above the Python one records what
+ * happens when a table is copied rather than referenced: five scripts carried
  * private copies and they HAD ALREADY DIVERGED, `ecostress-census.py` sitting
  * 10–44 m from the others. Sub-pixel at ECOSTRESS's 70 m; four pixels at
  * Sentinel's 10 m. Nothing failed. The numbers were just quietly about slightly
  * different ground.
+ *
+ * There were THREE when this file was written. `src/scripts/climate-engine/wards.ts`
+ * was the third — the same three wards with fewer fields and no Python mirror — and
+ * Task 7 deleted it rather than adapting it, for exactly the reason above: a table
+ * that is redundant has no way to be right, only a way to be not-yet-wrong. Its
+ * consumers now read geography from `src/data/wards.ts` and identity from here. THE
+ * COUNT GOES DOWN, never up.
  *
  * So: `src/data/wards.ts` is THE area table, and an area entry here is a
  * REFERENCE to an id that already exists there. No lat. No lon. No footprint. No
@@ -285,6 +292,48 @@ export function splitKey(key: AreaKey): AreaParts {
     throw new Error(`scope/registry: "${key}" is not a registered area key`);
   }
   return parts;
+}
+
+/**
+ * The keys sharing one key's CITY, in declaration order — including the key itself.
+ *
+ * Reads the parts back through `splitKey`, never by splitting the string: see the
+ * note above `AREA_PARTS` for why a left-to-right split cannot be right in general.
+ */
+export function areaKeysInCity(key: AreaKey): readonly AreaKey[] {
+  const { country, city } = splitKey(key);
+  return AREA_KEYS.filter((candidate) => {
+    const parts = splitKey(candidate);
+    return parts.country === country && parts.city === city;
+  });
+}
+
+/**
+ * Pure half of `nextDistinctArea`, separate for the reason `areaTableDrift` is:
+ * so the case this registry does NOT yet contain — a city with exactly one area —
+ * can be exercised before it is real.
+ *
+ * Null, not the key back. A caller handed its own key would build a comparison of
+ * an area against itself, which `assertPairedResult` refuses and no reader wants;
+ * null makes the absence a thing the caller has to answer for.
+ */
+export function nextDistinctKey(cityKeys: readonly AreaKey[], key: AreaKey): AreaKey | null {
+  return cityKeys.find((candidate) => candidate !== key) ?? null;
+}
+
+/**
+ * A DIFFERENT area in the SAME city, or null when the city has only one.
+ *
+ * Same city is the whole point. This replaces `nextDistinctWard`, which searched a
+ * three-slug list that was Kolkata by construction, so the constraint was free.
+ * Over the registry it is not: `AREA_KEYS.find(k => k !== key)` would happily pair
+ * Ballygunge against Al Quoz — two cities, two climates, two currencies, and Dubai
+ * shipping no artefacts at all, so the second half of the comparison would fail to
+ * load while the first rendered. Confining the search to the city is what keeps the
+ * fallback a comparison rather than a category error.
+ */
+export function nextDistinctArea(key: AreaKey): AreaKey | null {
+  return nextDistinctKey(areaKeysInCity(key), key);
 }
 
 /** Every area id that ships data, anywhere in the registry — not just Kolkata's. */

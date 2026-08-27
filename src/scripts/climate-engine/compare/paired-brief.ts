@@ -1,5 +1,5 @@
 import { fmtCr } from '../heat-map-model.ts';
-import { WARDS } from '../wards.ts';
+import { resolve } from '../scope/resolve.ts';
 import { createPairedScenarioClient } from './paired-client.ts';
 import type { PairedResult, WardScenarioResult } from './paired-protocol.ts';
 import { parsePairedScenario, serializePairedScenario } from '../scenario/scenario-url.ts';
@@ -23,7 +23,10 @@ export function mountPairedBrief(): () => void {
   const client = createPairedScenarioClient();
 
   const writeWard = (slot: 'a' | 'b', result: WardScenarioResult) => {
-    set(`[data-value="${slot}-name"]`, WARDS[result.ward].name);
+    /* `resolve`, not `WARD_MAP`: the map is keyed by bare id (so a key reads back
+       `undefined`) and its `name` carries `<em>` markup that `textContent` would
+       print verbatim. Same reasoning as paired-controller.ts. */
+    set(`[data-value="${slot}-name"]`, resolve(result.ward).area.name);
     set(`[data-value="${slot}-baseline"]`, `${result.baselineMeanC.toFixed(1)}°C`);
     set(`[data-value="${slot}-scenario"]`, `${result.scenarioMeanC.toFixed(1)}°C`);
     set(`[data-value="${slot}-cooling"]`, `−${result.coolingC.toFixed(1)}°C`);

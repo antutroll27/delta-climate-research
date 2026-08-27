@@ -47,6 +47,7 @@ import { nearestImage } from './streetview/nearest-image';
 import { resolve, requireCosts } from './scope/resolve.ts';
 import { paths, cityPaths } from './scope/paths.ts';
 import { isAreaKey, splitKey, type AreaKey } from './scope/registry.ts';
+import { toLegacyWard } from './scope/legacy.ts';
 
 // Ward set lives in src/data/wards.ts so widening beyond three is a data change,
 // not a code change (dc-urs-spec.md §1).
@@ -71,13 +72,19 @@ const INITIAL_AREA: AreaKey = 'in/kolkata/ballygunge';
 const wardOf = (key: AreaKey): Ward => WARDS[splitKey(key).area];
 
 /**
- * The BARE area id — for the four places that address something OUTSIDE this app.
+ * The BARE area id — for the three places that address something OUTSIDE this app.
  *
  * The rule, applied per site: an `AreaKey` is right for anything internal (caches,
  * loaders, the scope), and the bare id is required by anything that already indexes
  * by file stem or slug — `dc-urs-inputs.json`'s `wards` object, the `/api/wards/:id`
- * route, the `big-{id}` DOM ids the stage authors against `src/data/wards.ts`, and
- * Compare's deep link, whose reader validates against `WardId`.
+ * route, and the `big-{id}` DOM ids the stage authors against `src/data/wards.ts`.
+ *
+ * FOUR IN TASK 6, THREE NOW. Compare's deep link was the fourth, and it is no
+ * longer a bare-id site by coincidence of what its reader accepted: it goes through
+ * `toLegacyWard`, which is a stated URL-compatibility alias rather than a slug that
+ * happens to fit. The distinction matters the day a second city is selectable — the
+ * three sites below still need a bare id and would break, loudly, while the deep
+ * link starts emitting a full key on its own.
  */
 const areaOf = (key: AreaKey): string => splitKey(key).area;
 
@@ -1661,9 +1668,12 @@ export function mountHeatMap(): () => void {
     const link = el('compare-mode-link') as HTMLAnchorElement | null;
     if (!link) return;
     const params = new URLSearchParams({
-      /* Compare reads `a` back through `isWardId`, a bare-slug union — an area
-         key fails that check and the deep link silently opens the default pair. */
-      a: areaOf(state.ward),
+      /* ONE function decides this spelling, for the writer here and the reader in
+         scenario-url.ts alike. It used to be `areaOf` plus a comment asserting what
+         Compare would accept — two places agreeing by hand, and Compare's reader
+         failed SOFT, so the day they disagreed the deep link would have opened the
+         default pair under this ward's name with nothing raised. */
+      a: toLegacyWard(state.ward),
       trees: String(Math.round(state.iv.trees / 50 * 100)),
       roof: String(Math.round(state.iv.roof / 5) * 5),
       parks: String(Math.round(state.iv.parks * M.PARK_HA / 196 * 1000) / 10),

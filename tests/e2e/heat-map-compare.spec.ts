@@ -20,6 +20,64 @@ test.describe('paired heat-map comparison', () => {
     await expect(brief).toHaveAttribute('href', /heat-map\/brief\/\?/);
   });
 
+  /*
+   * A LINK SHARED BEFORE THE SCOPE MIGRATION STILL NAMES THE SAME TWO WARDS.
+   *
+   * Compare reads `?a=`/`?b=` from the query string, and the state behind them is
+   * now an area key (`in/kolkata/barrackpore`) rather than a bare slug. The reader
+   * that was replaced FAILED SOFT — an unrecognised id fell through to the default
+   * pair — so the migration's plausible failure is not a crash or a 404 but a page
+   * that settles perfectly and shows the WRONG COMPARISON under the bookmarked URL.
+   * Nothing in the DOM would say so; the page even rewrites the address bar from
+   * whatever it parsed.
+   *
+   * So this asserts the RENDERED WARD NAMES, which is the only thing a user can
+   * check, and it does it with a NON-DEFAULT pair. Barrackpore-vs-Ballygunge
+   * differs from the default on both sides; Ballygunge-vs-Baruipur — the obvious
+   * choice — IS the default, and would pass against a legacy bridge that had been
+   * deleted outright. That is measured, not supposed: the unit test for this
+   * started on that pair and went green against exactly that mutant.
+   */
+  test('a legacy compare link renders the wards it names, in either spelling', async ({ page }) => {
+    test.setTimeout(90_000);
+    const missing: string[] = [];
+    page.on('response', (response) => {
+      if (response.status() === 404 && response.url().includes('/heat-map/data/')) {
+        missing.push(new URL(response.url()).pathname);
+      }
+    });
+
+    const namesAfterSettling = async (query: string) => {
+      await page.goto(`/heat-map/compare/${query}`);
+      await expect(page.locator('[data-role="status"]'))
+        .toContainText('Comparison settled', { timeout: 45_000 });
+      return {
+        a: await page.locator('[data-value="a-name"]').first().textContent(),
+        b: await page.locator('[data-value="b-name"]').first().textContent(),
+      };
+    };
+
+    // The legacy spelling — the one in every already-shared link.
+    const legacy = await namesAfterSettling('?a=barrackpore&b=ballygunge');
+    expect(legacy).toEqual({ a: 'Barrackpore', b: 'Ballygunge' });
+
+    // The same comparison addressed by full key must render identically.
+    const keyed = await namesAfterSettling('?a=in/kolkata/barrackpore&b=in/kolkata/ballygunge');
+    expect(keyed).toEqual(legacy);
+
+    /* An unresolvable id falls back to the default rather than throwing — and the
+       page must still SETTLE, not sit at "—" behind a swallowed error.
+
+       This link exercises the collision path too: `a` falls back to Ballygunge,
+       which is exactly what `b` asked for, so `b` is moved on to the next distinct
+       area IN THE SAME CITY. Hence Baruipur rather than a repeated Ballygunge —
+       a self-pairing would be refused by `assertPairedResult` and never settle. */
+    const nonsense = await namesAfterSettling('?a=nonsense&b=ballygunge');
+    expect(nonsense).toEqual({ a: 'Ballygunge', b: 'Baruipur' });
+
+    expect(missing, `data artefacts 404'd: ${missing.join(', ')}`).toEqual([]);
+  });
+
   test('keeps Compare and Brief nonindexable', async ({ page }) => {
     await page.goto('/heat-map/compare/');
     await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', /noindex/);

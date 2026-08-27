@@ -31,8 +31,6 @@
 
 import { paths, cityPaths } from './scope/paths.ts';
 import { splitKey, type AreaKey } from './scope/registry.ts';
-import { LEGACY_AREA_KEY } from './scope/legacy.ts';
-import type { WardId } from './wards.ts';
 
 /** Channel encoding, mirroring `quantise`/`dequantise` in the exporter. */
 const VEG_LO = 0, VEG_HI = 1;
@@ -272,15 +270,6 @@ export async function loadAreaSurface(key: AreaKey, signal?: AbortSignal): Promi
     console.error(error);
     return { means, surface: null };
   }
-}
-
-/**
- * @deprecated Bare-id entry point for `compare/`, which Task 7 migrates.
- * Delete with `scope/legacy.ts`. New callers take an `AreaKey` and call
- * `loadAreaSurface`.
- */
-export function loadWardSurface(id: WardId, signal?: AbortSignal): Promise<WardSurface> {
-  return loadAreaSurface(LEGACY_AREA_KEY[id], signal);
 }
 
 /**

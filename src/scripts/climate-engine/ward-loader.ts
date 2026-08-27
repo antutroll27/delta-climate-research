@@ -1,8 +1,6 @@
 import type { RoadsData, WardData, WaterData } from './heat-map-model.ts';
-import type { WardId } from './wards.ts';
 import { paths } from './scope/paths.ts';
 import type { AreaKey } from './scope/registry.ts';
-import { LEGACY_AREA_KEY } from './scope/legacy.ts';
 
 export interface LoadedWard {
   ward: WardData;
@@ -64,12 +62,4 @@ export function loadArea(key: AreaKey, signal?: AbortSignal): Promise<LoadedWard
   ]).then(([ward, roads, water]) => ({ ward, roads, water }));
   if (!signal) cache.set(key, load);
   return load;
-}
-
-/**
- * @deprecated Bare-id entry point for `compare/`, which Task 7 migrates.
- * Delete with `scope/legacy.ts`. New callers take an `AreaKey` and call `loadArea`.
- */
-export function loadWard(id: WardId, signal?: AbortSignal): Promise<LoadedWard> {
-  return loadArea(LEGACY_AREA_KEY[id], signal);
 }
