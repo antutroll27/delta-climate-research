@@ -84,10 +84,24 @@ test('no layer declares a city list', async () => {
   }
 });
 
-test('no stylesheet writes a colour a token already declares', async () => {
-  /* #6fcad6 appeared FOUR times longhand beside `--cyan: #6fcad6`. A colour with
-     two spellings drifts the moment someone edits one -- the CSS form of the
-     defect this migration exists to end. */
+test('no stylesheet writes a colour more than once', async () => {
+  /* A colour with two spellings drifts the moment someone edits one -- the CSS
+     form of the defect this migration exists to end.
+
+     THE FIRST VERSION OF THIS GUARD ASKED THE NARROWER QUESTION: "is this hex
+     also some token's declared value?" That can never, by construction, catch a
+     colour nobody declared -- and six of those were written 19 times between
+     them in the very file it was watching. So the rule is now the general one it
+     should always have been: a properly tokenised colour appears EXACTLY ONCE in
+     a file, in its own declaration, and every use of it is var(). Anything
+     appearing twice is therefore either a token being bypassed or a colour still
+     waiting for one, and the message says which.
+
+     COMMENTS ARE COUNTED, DELIBERATELY. A hex in prose is a copy that goes stale
+     exactly like a hex in a rule -- and once a colour has a token, the accurate
+     way to name it in prose is `--sage`, which points AT the single source of
+     truth instead of duplicating it. A hex may still appear once in a comment;
+     only a second spelling fails. */
   const files = [
     'src/components/ClimateEngine/HeatMapStage.astro',
     'src/components/ClimateEngine/shell/IconRail.astro',
@@ -100,13 +114,23 @@ test('no stylesheet writes a colour a token already declares', async () => {
     let src;
     try { src = await readFile(new URL(`../../${rel}`, import.meta.url), 'utf8'); }
     catch { continue; }                       // component not created yet
-    const decl = new Map();
-    for (const m of src.matchAll(/(--[a-z0-9-]+)\s*:\s*(#[0-9a-fA-F]{6})/g)) {
-      decl.set(m[2].toLowerCase(), m[1]);
+    // 3-8 digits, so a #abc shorthand or an #rrggbbaa cannot smuggle in a second
+    // spelling that a 6-digit-only pattern would wave through.
+    const token = new Map();
+    for (const m of src.matchAll(/(--[a-z0-9-]+)\s*:\s*(#[0-9a-fA-F]{3,8})\b/g)) {
+      token.set(m[2].toLowerCase(), m[1]);
     }
-    for (const [hex, token] of decl) {
-      const n = [...src.matchAll(new RegExp(hex, 'gi'))].length - 1;
-      if (n > 0) offences.push(`${rel}: ${hex} written longhand ${n}x beside ${token}`);
+    const seen = new Map();
+    for (const m of src.matchAll(/#[0-9a-fA-F]{3,8}\b/g)) {
+      const hex = m[0].toLowerCase();
+      seen.set(hex, (seen.get(hex) ?? 0) + 1);
+    }
+    for (const [hex, n] of [...seen].sort()) {
+      if (n < 2) continue;
+      const t = token.get(hex);
+      offences.push(t
+        ? `${rel}: ${hex} written longhand ${n - 1}x beside ${t}`
+        : `${rel}: ${hex} written ${n}x and no token declares it -- give it one`);
     }
   }
   assert.deepEqual(offences, []);

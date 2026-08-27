@@ -57,14 +57,13 @@ const ward = wardById(scope.area.id);
  * the same three swatches it replaced: 0.12 → red/bronze, 0.28 → orange/bronze,
  * 0.62 → sage/cyan, from the legend's own five classes.
  *
- * The tokened colours are written as `var()` and not as hexes. This string lands
- * in an inline `style` on `.ward .sw`, which is inside `.stage` — where the tokens
- * are declared — so they resolve; a `var()` used outside that subtree would resolve
- * to nothing and drop the declaration silently. `#9fb98a` and `#d46b4a` stay
- * literal because no token declares them.
+ * Every colour here is written as `var()` and not as a hex. This string lands in
+ * an inline `style` on `.ward .sw`, which is inside `.stage` — where the tokens
+ * are declared — so they resolve; a `var()` used outside that subtree would
+ * resolve to nothing and drop the declaration silently.
  */
 const swatch = (veg: number): string => {
-  const head = veg >= 0.5 ? '#9fb98a' : veg >= 0.2 ? '#d46b4a' : 'var(--red)';
+  const head = veg >= 0.5 ? 'var(--sage)' : veg >= 0.2 ? 'var(--orange)' : 'var(--red)';
   const mid = veg >= 0.5 ? 'var(--cyan) 60%' : 'var(--bronze) 55%';
   return `background:radial-gradient(circle at 40% 40%,${head},${mid},var(--surface2))`;
 };
@@ -423,9 +422,9 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
           is where the tokens are declared. */}
       <div class="cindex">
         <div class="ci"><span class="d" style="background:var(--red)"></span>Extreme</div>
-        <div class="ci"><span class="d" style="background:#d46b4a"></span>Severe</div>
+        <div class="ci"><span class="d" style="background:var(--orange)"></span>Severe</div>
         <div class="ci"><span class="d" style="background:var(--bronze)"></span>Hot</div>
-        <div class="ci"><span class="d" style="background:#9fb98a"></span>Warm</div>
+        <div class="ci"><span class="d" style="background:var(--sage)"></span>Warm</div>
         <div class="ci"><span class="d" style="background:var(--cyan)"></span>Comfortable</div>
       </div>
       <div class="k" style="margin:.9rem 0 .5rem"><span>Land Surface Temp</span><span>°C</span></div>
@@ -492,6 +491,18 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
     --base:#050606; --surface:#0b2c2e; --surface2:#093a3e;
     --paper:#ecedf0; --ink:#8fa3a5; --faint:#5c7173; --line:rgb(111 202 214 / 0.14);
     --cyan:#6fcad6; --bronze:#b08d57; --red:#e5484d;
+    /* The legend's five heat classes, in order: Comfortable, Warm, Hot, Severe,
+       Extreme. The first, third and fifth were already tokens; --sage and --orange
+       complete the ramp instead of being spelled by hand in three places each. */
+    --sage:#9fb98a; --orange:#d46b4a;
+    /* The compass sun: one colour across its disc, ray and hub. */
+    --sun:#f2b544;
+    /* Studio (light) mode's three inks — the same descending-emphasis idea as
+       --paper/--ink/--faint above, inverted for a light ground. They live here
+       rather than on `body.studio` because every element they colour is inside
+       .stage, and a token resolves from where it is DECLARED, not where the
+       theme class sits. */
+    --studio-ink:#16292b; --studio-muted:#4a5c5e; --studio-accent:#0e7b8c;
     --sans:'Mona Sans',system-ui,sans-serif; --mono:'Noplato Mono',ui-monospace,'SF Mono',monospace;
     position:fixed; inset:0; display:grid; grid-template-rows:auto 1fr auto;
     background:var(--base); color:var(--paper); font-family:var(--sans);
@@ -533,9 +544,9 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
   .compass .c-lab-n{fill:var(--red)}
   /* The sun is the one warm thing on a cool dial, so it reads at a glance
      without competing with the red north needle for "most important mark". */
-  .compass .c-sun-disc{fill:#f2b544}
-  .compass .c-sun-ray{stroke:#f2b544;stroke-width:1;opacity:.5}
-  .compass .c-sun-hub{fill:#f2b544;opacity:.45}
+  .compass .c-sun-disc{fill:var(--sun)}
+  .compass .c-sun-ray{stroke:var(--sun);stroke-width:1;opacity:.5}
+  .compass .c-sun-hub{fill:var(--sun);opacity:.45}
   /* `hidden` is not an SVG attribute — a class is, and it types cleanly. */
   .compass .c-sun.is-below{display:none}
   /* Sits directly above the compass, sharing its left edge so the two read as one
@@ -652,7 +663,7 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
   .tiphint button:hover{color:var(--paper)}
   .tiphint button:focus-visible{outline:2px solid var(--cyan);outline-offset:1px}
   @keyframes tipIn{from{opacity:0;transform:translate(-50%,8px)}to{opacity:1;transform:translate(-50%,0)}}
-  body.studio .tiphint{background:rgb(245 244 241 /.9);color:#16292b;border-color:rgb(20 40 42 /.25)}
+  body.studio .tiphint{background:rgb(245 244 241 /.9);color:var(--studio-ink);border-color:rgb(20 40 42 /.25)}
   @media (prefers-reduced-motion: reduce){ .tiphint{animation:none} }
 
   /* ── walk-time ring labels ──
@@ -701,7 +712,7 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
     background:rgb(111 202 214 /.09);border:1px solid rgb(111 202 214 /.2);
     font-size:.62rem;line-height:1.5;color:var(--paper);text-transform:none;letter-spacing:0}
   .bc-rings b{color:var(--cyan);font-weight:550}
-  body.studio .bc-rings{background:rgb(13 107 125 /.08);border-color:rgb(13 107 125 /.22);color:#16292b}
+  body.studio .bc-rings{background:rgb(13 107 125 /.08);border-color:rgb(13 107 125 /.22);color:var(--studio-ink)}
 
   /* MapLibre's own scale bar — a geospatial tool with no distance reference is
      asking the reader to guess. Restyled to the instrument's language.
@@ -730,7 +741,7 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
       rgb(111 202 214 /.72) 0 1.5px, transparent 1.5px 25%)!important;
     background-size:100% 7px!important;background-repeat:no-repeat!important;
     background-position:left bottom!important;background-origin:padding-box!important}
-  body.studio .maplibregl-ctrl-scale{color:#16292b!important;border-color:rgb(13 107 125 /.7)!important;
+  body.studio .maplibregl-ctrl-scale{color:var(--studio-ink)!important;border-color:rgb(13 107 125 /.7)!important;
     text-shadow:0 1px 3px rgb(255 255 255 /.85);
     background-image:repeating-linear-gradient(90deg,
       rgb(13 107 125 /.7) 0 1.5px, transparent 1.5px 25%)!important}
@@ -803,7 +814,7 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
   .src-row .meta{margin-top:3px;font:400 .46rem var(--mono);letter-spacing:.06em;color:var(--faint);line-height:1.5}
   body.studio .srcpanel{background:rgb(244 246 246 /.95);border-color:rgb(20 48 54 /.16)}
   body.studio .src-row .nm{color:#13232a}
-  body.studio .src-row .s,body.studio .srcpanel h4{color:#4a5c5e}
+  body.studio .src-row .s,body.studio .srcpanel h4{color:var(--studio-muted)}
   body.studio .src-row .meta{color:#7f9296}
   .svmodal{position:fixed;inset:0;z-index:40;display:none;place-items:center;background:rgb(2 9 10 /.72);backdrop-filter:blur(3px)}
   .svmodal:not([hidden]){display:grid}
@@ -821,8 +832,8 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
   .bc-x:hover{color:var(--paper)}
   .bc-x:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
   body.studio .bcard-in{background:rgb(245 244 241 /.9);border-color:rgb(20 40 42 /.22);box-shadow:0 14px 40px rgb(20 40 42 /.16)}
-  body.studio .bcard dd{color:#16292b}
-  body.studio .bc-x{background:rgb(20 40 42 /.06);color:#4a5c5e}
+  body.studio .bcard dd{color:var(--studio-ink)}
+  body.studio .bc-x{background:rgb(20 40 42 /.06);color:var(--studio-muted)}
   @media (max-width: 640px){ .bcard{width:196px} }
 
   .tool-modes{display:flex;gap:2px;padding:3px;border:1px solid var(--line);border-radius:8px;background:rgb(9 58 62 /.35)}
@@ -849,9 +860,9 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
   .modechip button{font-family:var(--mono);font-size:.56rem;letter-spacing:.14em;color:var(--ink);background:none;border:0;cursor:pointer;padding:.4rem .8rem;border-radius:6px;text-transform:uppercase}
   .modechip button.on{background:var(--surface2);color:var(--paper)}
   body.studio .place .n{color:#232b2d;text-shadow:0 4px 34px rgb(255 255 255/.6)}
-  body.studio .place .n em{color:#0e7b8c}
+  body.studio .place .n em{color:var(--studio-accent)}
   body.studio .place .z{color:#8a6d3f}
-  body.studio .loadchip{color:#0e7b8c}
+  body.studio .loadchip{color:var(--studio-accent)}
 
   .synthetic{position:absolute;top:20px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:.5rem;font-family:var(--mono);font-size:.56rem;letter-spacing:.2em;color:var(--bronze);background:rgb(176 141 87 /.14);border:1px solid rgb(176 141 87 /.3);border-radius:20px;padding:.42rem .9rem;z-index:3;text-transform:uppercase;backdrop-filter:blur(8px)}
   .synthetic .sp{opacity:.82}
@@ -1008,7 +1019,7 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
   .legend .k{font-family:var(--mono);font-size:.54rem;letter-spacing:.16em;color:var(--ink);display:flex;justify-content:space-between;margin-bottom:.55rem;text-transform:uppercase}
   /* A gradient colour stop takes var() like any other colour; .ramp is inside
      .legend, inside .stage, so the tokens are in scope. */
-  .ramp{height:9px;border-radius:4px;background:linear-gradient(90deg,var(--cyan),#9fb98a,var(--bronze),#d46b4a,var(--red))}
+  .ramp{height:9px;border-radius:4px;background:linear-gradient(90deg,var(--cyan),var(--sage),var(--bronze),var(--orange),var(--red))}
   .legend .sc{display:flex;justify-content:space-between;font-family:var(--mono);font-size:.52rem;color:var(--faint);margin-top:.4rem}
   .cindex{display:flex;flex-direction:column;gap:.34rem}
   .cindex .ci{display:flex;align-items:center;gap:.6rem;font-size:.7rem;color:var(--paper)}
