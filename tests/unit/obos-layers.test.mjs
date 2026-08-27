@@ -33,11 +33,22 @@ test('availability is DERIVED from paths, never declared', () => {
     const a = layerAvailability(id, 'in/kolkata/ballygunge', { mapillary: true });
     assert.equal(a.available, true, `${id} should be available in Kolkata`);
   }
+  let refused = 0;
   for (const id of LAYER_IDS) {
     const a = layerAvailability(id, 'ae/dubai/al-quoz', { mapillary: true });
     if (a.available) continue;
     assert.ok(a.reason && a.reason.length > 0, `${id} must say WHY it is unavailable`);
+    refused += 1;
   }
+  /* GUARD THE GUARD. The loop above `continue`s past anything available, so an
+     implementation that returned available:true for everything would make it
+     assert NOTHING and pass — the exact shape this suite exists to catch, found
+     by the Task 1 implementer inside the test as originally specified. Dubai
+     ships no artefacts, so the five artefact-backed layers MUST refuse; only the
+     capability-backed one may pass with a token present. */
+  assert.equal(refused, 5,
+    'Dubai ships no artefacts, so 5 of 6 layers must refuse — if this is 0, the '
+    + 'loop above checked nothing');
 });
 
 test('a capability layer follows the capability, not the artefacts', () => {
