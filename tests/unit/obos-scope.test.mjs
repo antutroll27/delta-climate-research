@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readdir } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 import {
@@ -199,3 +199,57 @@ test('every city-level URL exists on disk too', async () => {
   }
   assert.ok(checked > 0, 'no city-level URL was checked');
 });
+
+
+/* ────────────────────────────────────────────────────────────────────────────
+   TASK 4 — the choke point has to STAY a choke point.
+   Currently SKIPPED: the four known offenders are migrated in Task 6, which
+   turns this on. It is written now so the offender list is recorded against a
+   measured baseline rather than reconstructed later from memory.
+   ──────────────────────────────────────────────────────────────────────────── */
+
+/** Files permitted to name the data directory, relative to the engine root. */
+const PATH_ALLOWLIST = new Set(['scope/paths.ts']);
+
+async function dataUrlOffenders() {
+  const root = new URL('../../src/scripts/climate-engine/', import.meta.url);
+  const offenders = [];
+  const walk = async (dir, prefix) => {
+    for (const entry of await readdir(dir, { withFileTypes: true })) {
+      const next = new URL(`${entry.name}${entry.isDirectory() ? '/' : ''}`, dir);
+      if (entry.isDirectory()) { await walk(next, `${prefix}${entry.name}/`); continue; }
+      // `._` files are AppleDouble sidecars: exFAT artefacts, not source.
+      if (!entry.name.endsWith('.ts') || entry.name.startsWith('._')) continue;
+      const rel = `${prefix}${entry.name}`;
+      if (PATH_ALLOWLIST.has(rel)) continue;
+      /* STRIP COMMENTS FIRST. Three modules legitimately DOCUMENT the data
+         directory -- loader-progress.ts:39 and registry.ts:44,103. A grep over
+         raw source flags those, and a guard that cries wolf on documentation
+         gets weakened or deleted, which is how the real check dies. */
+      const code = (await readFile(next, 'utf8'))
+        .replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+      /* ANY data URL, not just interpolated ones. Three call sites fetch
+         heatwave-percentiles.json and dc-urs-inputs.json by PLAIN STRING --
+         precisely the two files that lie about their scope -- so a `${`-only
+         pattern would miss exactly the cases this migration is for. */
+      if (/['"`]\/heat-map\/data\//.test(code)) offenders.push(rel);
+    }
+  };
+  await walk(root, '');
+  return offenders.sort();
+}
+
+test('the four known offenders are exactly what Task 6 must migrate', async () => {
+  // Baseline, measured 2026-08-27. If this list SHRINKS, someone migrated a
+  // site without turning the real guard on; if it GROWS, a new hand-built URL
+  // was added while the guard was still skipped.
+  assert.deepEqual(await dataUrlOffenders(), [
+    'heat-map-app.ts', 'provenance.ts', 'surface-raster.ts', 'ward-loader.ts',
+  ]);
+});
+
+test('no module builds a /heat-map/data URL by hand',
+  { skip: 'enabled in Task 6, once the four offenders are migrated' }, async () => {
+    assert.deepEqual(await dataUrlOffenders(), [],
+      'these modules build a data URL by hand; use paths() from scope/paths.ts');
+  });
