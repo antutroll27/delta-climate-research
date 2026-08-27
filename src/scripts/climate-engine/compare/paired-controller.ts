@@ -1,6 +1,6 @@
-import { fmtCr } from '../heat-map-model.ts';
+import { fmtMoney } from '../money.ts';
 import { areaKeysInCity, isAreaKey, nextDistinctArea, type AreaKey } from '../scope/registry.ts';
-import { resolve } from '../scope/resolve.ts';
+import { resolve, requireCosts } from '../scope/resolve.ts';
 import { enablePairedMapInteraction, renderPairedMap, resetPairedMapView, thermalPatternSummary } from './paired-map-2d.ts';
 import { createPairedScenarioClient } from './paired-client.ts';
 import type { MetricValue, PairedResult, WardScenarioResult } from './paired-protocol.ts';
@@ -243,7 +243,8 @@ export function mountPairedBench(): () => void {
 
   function applyResult(result: PairedResult): void {
     const writeWard = (slot: 'a' | 'b', ward: WardScenarioResult) => {
-      const meta = resolve(ward.ward).area;
+      const scope = resolve(ward.ward);
+      const meta = scope.area;
       setText(`[data-value="${slot}-name"]`, meta.name);
       setText(`[data-value="${slot}-descriptor"]`, meta.descriptor);
       setText(`[data-value="${slot}-baseline"]`, formatTemperature(ward.baselineMeanC));
@@ -252,7 +253,9 @@ export function mountPairedBench(): () => void {
       setText(`[data-value="${slot}-hot-area"]`, formatMetric(ward.scenarioHotAreaPct));
       setText(`[data-value="${slot}-hot-change"]`, formatMetric(ward.hotAreaChangePp));
       setText(`[data-value="${slot}-green-reference"]`, `${ward.greenReferenceContrastC >= 0 ? '+' : ''}${ward.greenReferenceContrastC.toFixed(1)}°C`);
-      setText(`[data-value="${slot}-cost"]`, `₹${fmtCr(ward.capitalCost)}`);
+      /* Currency from the area's OWN scope, which is the same frozen object
+         paired-core resolved to price this figure — see paired-brief.ts. */
+      setText(`[data-value="${slot}-cost"]`, fmtMoney(ward.capitalCost, requireCosts(scope)));
       setText(`[data-value="${slot}-delivered"]`, formatDelivered(ward));
       setText(`[data-value="${slot}-pattern"]`, thermalPatternSummary(ward.field));
       const threeCanvas = one<HTMLCanvasElement>(`[data-map-three="${slot}"]`);

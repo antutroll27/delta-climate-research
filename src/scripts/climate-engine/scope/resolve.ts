@@ -54,7 +54,38 @@ export type { ClimateConstants, Costs };
  * warming control for that country while looking exactly like a country that had
  * declared none.
  */
-const PATHWAYS: Record<string, Record<string, number>> = {
+interface Scenario {
+  /** the key the physics indexes and the button carries as `data-p` */
+  readonly key: string;
+  /** what the button says */
+  readonly label: string;
+  /** °C added to observed air temperature */
+  readonly delta: number;
+}
+interface Pathway {
+  /**
+   * The citation the page must print beside the control.
+   *
+   * IT LIVES WITH THE NUMBERS IT DESCRIBES. It was a `title=` attribute in
+   * HeatMapStage.astro reading "All-India warming deltas from Dhara et al. 2025",
+   * hardcoded above three hardcoded buttons — so a second country would have cited
+   * an Indian paper for a table it had nothing to do with. Putting it in the
+   * REGISTRY instead would have fixed the country half and left the other one open:
+   * the registry names a pathway, this file turns that name into deltas, and a
+   * citation stored a level up could name a different paper than the deltas came
+   * from with nothing to notice. One record, one source line.
+   */
+  readonly source: string;
+  /**
+   * ORDERED, because the buttons are. An object keyed by scenario would put the
+   * control's left-to-right order at the mercy of property-declaration order —
+   * which is stable in V8 for string keys, and is still not a thing to render a UI
+   * from silently.
+   */
+  readonly scenarios: readonly Scenario[];
+}
+
+const PATHWAYS: Record<string, Pathway> = {
   /**
    * All-India warming deltas, °C. All positive: no emissions scenario produces
    * regional cooling over India — the previous −1.2 °C "target" pathway was a
@@ -65,11 +96,21 @@ const PATHWAYS: Record<string, Record<string, number>> = {
    *   ssp245  SSP2-4.5, 2041–2060 all-India mean (+1.2 to +1.3)
    *   ssp585  SSP5-8.5, 2065–2094 max temperature vs 1985–2014
    */
-  dhara2025: { '2025': 0, ssp245: 1.25, ssp585: 4.1 },
+  dhara2025: {
+    source: 'All-India warming deltas from Dhara et al. 2025, PLOS Climate (post-AR6). '
+      + 'No emissions scenario produces regional cooling, so there is no negative pathway.',
+    scenarios: [
+      { key: '2025', label: '2025', delta: 0 },
+      { key: 'ssp245', label: 'SSP2-4.5 ’50', delta: 1.25 },
+      { key: 'ssp585', label: 'SSP5-8.5 ’80', delta: 4.1 },
+    ],
+  },
 };
 
 /** The empty table, shared and frozen — one object for every pathway-less country. */
 const NO_PATHWAY: Readonly<Record<string, number>> = Object.freeze({});
+/** ...and the empty option list that goes with it. */
+const NO_OPTIONS: readonly PathwayOption[] = Object.freeze([]);
 
 /**
  * The confidence tier, which is the honesty label the page shows.
@@ -83,11 +124,62 @@ const NO_PATHWAY: Readonly<Record<string, number>> = Object.freeze({});
  */
 export type CityTier = 'validated' | 'zone' | 'geometry';
 
+/** One warming-pathway button: what it is called, and what it selects. */
+export interface PathwayOption {
+  readonly key: string;
+  readonly label: string;
+}
+
+/**
+ * The warming control, as the page has to draw it.
+ *
+ * THE MARKUP USED TO OWN THIS and the physics used to fail closed against it, which
+ * is the worst possible division. `HeatMapStage.astro` hardcoded three buttons —
+ * `data-p="2025" | "ssp245" | "ssp585"` — under a tooltip citing an Indian paper,
+ * and `pathwayDelta` correctly refuses a key that is not in the scope's table. So
+ * the day a second country with a DIFFERENT populated table became selectable, its
+ * page would render India's three buttons and the first click would THROW out of an
+ * event handler; and a country with an empty table would render three buttons that
+ * do nothing at all, under a citation for research it never adopted.
+ *
+ * The fail-closed lookup was never the bug. Rendering a control from a literal
+ * instead of from the table that answers it was.
+ */
+export interface PathwayControl {
+  /** in display order; EMPTY where the country has adopted no projection */
+  readonly options: readonly PathwayOption[];
+  /** the citation to print, or null when there is nothing to cite */
+  readonly source: string | null;
+  /**
+   * What the control starts on, or null when there is nothing to start on.
+   *
+   * Stated rather than left to each reader to take `options[0]` for itself. The
+   * page marks one button `on` and the instrument seeds `state.path`, and those two
+   * agreeing by both spelling "the first one" is agreement by convention — the same
+   * shape as the page and the app each holding their own opinion about which ward
+   * was open, which is what this whole migration was called in to end.
+   */
+  readonly initial: string | null;
+}
+
 /** Everything an area key means, resolved once. */
 export interface ResolvedScope {
   readonly key: AreaKey;
   readonly country: { readonly id: string; readonly name: string };
-  readonly city: { readonly id: string; readonly name: string; readonly koppen: string };
+  readonly city: {
+    readonly id: string;
+    readonly name: string;
+    readonly koppen: string;
+    /**
+     * The city's IANA clock zone — what the instrument's clock, weekday, meridiem
+     * and freshness tooltip are all read in.
+     *
+     * A CITY FACT, not a ward one, which is why it sits here and not on `area`:
+     * every area in a city keeps the same clock, and a per-area copy would be
+     * three chances for two of them to disagree about what time it is.
+     */
+    readonly tz: string;
+  };
   readonly area: {
     readonly id: string;
     readonly name: string;
@@ -98,6 +190,16 @@ export interface ResolvedScope {
   };
   readonly tier: CityTier;
   readonly climate: ClimateConstants;
+  /**
+   * The warming control, DERIVED FROM THE SAME RECORD as `climate.pathDelta`.
+   *
+   * Deliberately beside `climate` rather than inside it: `ClimateConstants` is the
+   * contract the physics consumes, and a label is not something an energy balance
+   * has any use for. Same record, two views — so a button cannot offer a scenario
+   * the delta table does not answer, which is the exact pairing `pathwayDelta`
+   * throws about.
+   */
+  readonly pathway: PathwayControl;
 }
 
 /* The registry read through a WIDENED view, and the element types DERIVED from it
@@ -163,17 +265,64 @@ function label(areaId: string, entry: AreaEntry): { name: string; descriptor: st
   return { name: entry.name, descriptor: entry.descriptor };
 }
 
-/** The country's warming table: declared and known, declared and unknown, or absent. */
-function pathDeltaFor(countryId: string, pathway: string | null): Readonly<Record<string, number>> {
-  if (pathway === null) return NO_PATHWAY;
-  const table = PATHWAYS[pathway];
-  if (table === undefined) {
+interface Warming {
+  readonly pathDelta: Readonly<Record<string, number>>;
+  readonly control: PathwayControl;
+}
+
+/** The pathway-less answer, shared and frozen. Empty table, empty control, no citation. */
+const NO_WARMING: Warming = Object.freeze({
+  pathDelta: NO_PATHWAY,
+  control: Object.freeze({ options: NO_OPTIONS, source: null, initial: null }),
+});
+
+/**
+ * The country's warming: declared and known, declared and unknown, or absent.
+ *
+ * ONE PASS, TWO OUTPUTS. The delta table the physics indexes and the button list
+ * the page draws are built here from the same array, in one walk, so there is no
+ * arrangement in which they disagree — no button without a delta behind it, and no
+ * scenario the control cannot reach. Two functions reading the same record would
+ * have been nearly as good and not quite: nearly-as-good is how the markup came to
+ * hold three scenario keys the table was free to stop containing.
+ */
+function warmingFor(countryId: string, pathway: string | null): Warming {
+  if (pathway === null) return NO_WARMING;
+  const record = PATHWAYS[pathway];
+  if (record === undefined) {
     throw new Error(
       `scope/resolve: country "${countryId}" names warming pathway "${pathway}", which is not `
       + `in PATHWAYS (${Object.keys(PATHWAYS).join(' | ')}) — a named pathway that resolves to `
       + 'nothing would silently disable the warming control');
   }
-  return Object.freeze({ ...table });
+  const pathDelta: Record<string, number> = {};
+  const options: PathwayOption[] = [];
+  for (const s of record.scenarios) {
+    pathDelta[s.key] = s.delta;
+    options.push(Object.freeze({ key: s.key, label: s.label }));
+  }
+  /* A REPEATED KEY IS SILENT IN EXACTLY ONE DIRECTION, which is why it is caught
+     here rather than left to review. The object keeps the last delta and the array
+     keeps both entries, so the control would render two buttons that look distinct,
+     select the same scenario, and light up independently — and the count is the
+     only place the two shapes disagree. */
+  if (Object.keys(pathDelta).length !== options.length) {
+    throw new Error(
+      `scope/resolve: pathway "${pathway}" declares ${options.length} scenarios but only `
+      + `${Object.keys(pathDelta).length} distinct keys — a repeated key renders two buttons `
+      + 'that select the same delta');
+  }
+  return Object.freeze({
+    pathDelta: Object.freeze(pathDelta),
+    control: Object.freeze({
+      options: Object.freeze(options),
+      source: record.source,
+      /* `?? null` and not `[0].key`: a pathway declaring an empty scenario list is
+         an authoring error the type permits, and it must not become a TypeError
+         thrown from a property access at module load. */
+      initial: options[0]?.key ?? null,
+    }),
+  });
 }
 
 function build(key: AreaKey): ResolvedScope {
@@ -184,17 +333,21 @@ function build(key: AreaKey): ResolvedScope {
   const areas: Readonly<Record<string, AreaEntry>> = cityEntry.areas;
   const areaEntry = areas[areaId];
   const { name, descriptor } = label(areaId, areaEntry);
+  const warming = warmingFor(countryId, countryEntry.pathway);
 
   return Object.freeze({
     key,
     country: Object.freeze({ id: countryId, name: countryEntry.name }),
-    city: Object.freeze({ id: cityId, name: titleCase(cityId), koppen: cityEntry.koppen }),
+    city: Object.freeze({
+      id: cityId, name: titleCase(cityId), koppen: cityEntry.koppen, tz: cityEntry.tz,
+    }),
     area: Object.freeze({ id: areaId, name, descriptor, hasData: areaEntry.shipsData }),
     /* Assigning the registry's literal tier into `CityTier` is the drift guard:
        widen the registry's own tier union past this one and it stops compiling. */
     tier: cityEntry.tier,
+    pathway: warming.control,
     climate: Object.freeze({
-      pathDelta: pathDeltaFor(countryId, countryEntry.pathway),
+      pathDelta: warming.pathDelta,
       fallbackTairC: cityEntry.fallbackTairC,
       parkRadiusM: cityEntry.parkRadiusM,
       /* Kept as declared, INCLUDING the null. Substituting a zero-valued Costs for

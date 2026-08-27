@@ -236,8 +236,14 @@ export interface ScenarioState {
   sunNow?: number | null;
 }
 
-export const fmtCr = (r: number) =>
-  r >= 1e7 ? `${(r / 1e7).toFixed(2)} cr` : r >= 1e5 ? `${(r / 1e5).toFixed(1)} L` : `${Math.round(r).toLocaleString('en-IN')}`;
+/* `fmtCr` STOOD HERE and is now `fmtMoney` in ./money.ts. It was the fifth thing
+   in this module that was not a fact about heat transfer: it hardcoded the rupee's
+   numbering convention (crore, lakh) and its digit grouping (`en-IN`), while all
+   three call sites separately pasted a ₹ in front of the result. A formatter is
+   presentation, a currency is a COUNTRY's, and neither belongs in the physics —
+   `tests/unit/obos-scope.test.mjs` now greps this file's code for ₹, en-IN, INR,
+   crore and lakh alongside the place names, because the place-name tripwire that
+   was already here walked straight past every one of them. */
 export const noise01 = (x: number, y: number) => { const h = Math.sin(x * 127.1 + y * 311.7) * 43758.5453; return h - Math.floor(h); };
 export const eqCell = (p: SimParams, a: number, v: number, b: number) => {
   const k = p.kRad + p.h * p.wind, pull = p.kRad * p.tSky + p.h * p.wind * p.tAir;
@@ -378,7 +384,11 @@ export function computeCost(iv: Interventions, sp: Spatial | null, costs: Costs)
   if (!sp) return 0;
   return (iv.roof / 100) * sp.roofM2 * costs.roofM2
     + (iv.trees / 50) * sp.corridorKm * TREES_PER_KM * costs.tree
-    + Math.min(iv.parks, sp.parkCenters.length) * PARK_HA * costs.parkCr * 1e7
+    /* The `* 1e7` that stood here was a crore-to-rupee conversion — an Indian
+       numbering convention living inside the physics, applied to every country's
+       money. It moved into the declared figure (see `Costs.park`); the arithmetic
+       is identical, since 1.5 crore is 15,000,000. */
+    + Math.min(iv.parks, sp.parkCenters.length) * PARK_HA * costs.park
     + (iv.facades / 15) * sp.facadeM2 * 0.25 * costs.facadeM2;
 }
 
@@ -562,7 +572,14 @@ export function assertInterventionLogic(): void {
     pathDelta: { '2025': 0, ssp245: 1.25, ssp585: 4.1 },
     fallbackTairC: 32,
     parkRadiusM: 50,
-    costs: { currency: 'INR', roofM2: 150, tree: 1500, parkCr: 1.5, facadeM2: 9500 },
+    /* `XTS` IS ISO 4217'S RESERVED TEST CODE, and it is here rather than the real
+       code for the same reason the note above gives about the numbers: this is a
+       fixture, and the self-check never formats it. Naming a real currency would
+       put a country's money inside the physics module — which is precisely what
+       the money tripwire in tests/unit/obos-scope.test.mjs now refuses, and it
+       would have to be waved through as an exception to keep passing. An exception
+       is how a tripwire stops meaning anything. */
+    costs: { currency: 'XTS', roofM2: 150, tree: 1500, park: 15_000_000, facadeM2: 9500 },
   };
   const p: SimParams = currentParams({ live: null, phase: 'peak', path: '2025', climate, iv: { trees: 0, roof: 0, parks: 0, facades: 0 } });
 

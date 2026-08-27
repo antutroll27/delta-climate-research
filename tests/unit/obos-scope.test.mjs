@@ -12,6 +12,8 @@ import { paths, cityPaths } from '../../src/scripts/climate-engine/scope/paths.t
 import { resolve, requireCosts } from '../../src/scripts/climate-engine/scope/resolve.ts';
 import { WARDS as WARD_TABLE } from '../../src/data/wards.ts';
 import { currentParams } from '../../src/scripts/climate-engine/heat-map-model.ts';
+import { fmtMoney } from '../../src/scripts/climate-engine/money.ts';
+import { tabKind, areaRefusal } from '../../src/scripts/climate-engine/scope/reachability.ts';
 
 test('registry invariants hold', () => {
   assertRegistryLogic();
@@ -207,7 +209,10 @@ test('resolve turns a key into a whole scope', () => {
   const s = resolve('in/kolkata/ballygunge');
   assert.equal(s.key, 'in/kolkata/ballygunge');
   assert.deepEqual(s.country, { id: 'in', name: 'India' });
-  assert.deepEqual(s.city, { id: 'kolkata', name: 'Kolkata', koppen: 'Aw' });
+  // deepEqual, so a field ADDED to the resolved city has to be acknowledged here
+  // rather than arriving unnoticed. `tz` did exactly that: it was the fifth scoped
+  // constant, and it reached this shape by failing this line.
+  assert.deepEqual(s.city, { id: 'kolkata', name: 'Kolkata', koppen: 'Aw', tz: 'Asia/Kolkata' });
   assert.equal(s.tier, 'validated');
   // The ward table's `name` carries <em> for the wordmark's stress. It is display
   // markup, and a scope that passed it through would put raw tags in a page title.
@@ -325,7 +330,24 @@ test('a scope with no pathway contributes zero, and does not throw', () => {
 /* ── the layering, which is the whole point of the move ─────────────────────── */
 
 const PHYSICS = ['heat-map-model.ts', 'dc-urs.ts', 'sim-ts.ts'];
-const PLACE = /\b(kolkata|dubai|india|ballygunge|baruipur|barrackpore)\b/gi;
+/**
+ * A place, or a country's MONEY. One pattern, because they are one defect.
+ *
+ * The money half is an extension paid for by a real miss. This read
+ * /\b(kolkata|dubai|india|...)\b/ and certified that heat-map-model.ts named no
+ * place -- while that same file exported `fmtCr`, which hardcoded THREE Indian
+ * facts at once: the crore/lakh scale words, the `en-IN` digit grouping, and
+ * (at its three call sites) a pasted rupee sign. None of those is a place name,
+ * so the tripwire walked past all of them, and `Costs.currency` sat declared and
+ * read by nothing while every readout on the page said the country's currency
+ * out loud from a template literal.
+ *
+ * `INR` is banned HERE and not everywhere: scope/registry.ts declares it, which
+ * is the point of the migration. What must never appear in a physics module is
+ * any of the five -- the code, the symbol, the grouping locale, or either scale
+ * word.
+ */
+const PLACE = /(\b(?:kolkata|dubai|india|ballygunge|baruipur|barrackpore|en-IN|INR|crore|lakh)\b|\u20b9)/gi;
 
 test('the physics never imports identity', async () => {
   /* The model knows DATA and PARAMETERS, never IDENTITY -- that is what lets the
@@ -343,7 +365,7 @@ test('the physics never imports identity', async () => {
   }
 });
 
-test('the physics names no place, with one recorded exception', async () => {
+test('the physics names no place and no currency, with one recorded exception', async () => {
   /* A place name in a physics module is a constant wearing a disguise: it is how
      PATH_DELTA and FALLBACK_TAIR got there in the first place, as "the" pathway and
      "the" fallback, meaning Kolkata's.
@@ -558,4 +580,333 @@ test('an area that ships nothing is refused by the loader, not fetched', async (
       // A network failure under Node is fine and expected; a refusal is not.
       if (/ships no artefacts/i.test(String(err && err.message))) throw err;
     }));
+});
+
+
+/* ────────────────────────────────────────────────────────────────────────────
+   THE FIFTH SCOPED CONSTANT — the city's clock zone.
+
+   `WARD_TZ = 'Asia/Kolkata'` sat in heat-map-app.ts driving four Intl formatters
+   and printed verbatim in the freshness tooltip. Its own comment argued for an
+   IANA zone over a fixed +05:30 offset because an offset "is the first thing
+   that breaks when a European or East Asian ward is added" — and then hardcoded
+   the zone, which breaks one city sooner and more quietly.
+   ──────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * A zone's offset from UTC at one instant, in minutes, THROUGH Intl.
+ *
+ * Formatting the wall-clock parts and re-composing them as UTC is the only way to
+ * ask this question that actually exercises the zone database. Comparing two
+ * printed clock strings would break across a date boundary — 23:30 in Kolkata and
+ * 22:00 in Dubai are ninety minutes apart, and on the far side of midnight the
+ * naive difference is minus one thousand three hundred and fifty.
+ */
+const zoneOffsetMinutes = (tz, instant) => {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: tz,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+  }).formatToParts(new Date(instant));
+  const at_ = (type) => Number(parts.find((p) => p.type === type).value);
+  const asUtc = Date.UTC(at_('year'), at_('month') - 1, at_('day'), at_('hour'), at_('minute'), at_('second'));
+  return (asUtc - instant) / 60_000;
+};
+
+test('the two cities keep two clocks, exactly ninety minutes apart', () => {
+  /* THE CHECK THAT A STRING COMPARISON CANNOT MAKE.
+     `assert.equal(scope.city.tz, 'Asia/Dubai')` proves a literal was copied from
+     the registry into this file and nothing else — it passes just as happily if
+     the value is a decoration nothing formats with. This formats ONE instant in
+     both zones, through the zone database, and asserts the gap.
+
+     Ninety minutes is a fact about the world, not about this codebase: IST is
+     UTC+5:30, Gulf Standard Time is UTC+4, and neither observes DST, so the gap is
+     constant and the assertion needs no date caveat. It appears in no source file,
+     so there is no way for a change to the registry to move this literal with it —
+     which is the trap six guards in this migration fell into. Point Dubai at
+     Kolkata's zone and the difference is zero. */
+  const kolkata = resolve('in/kolkata/ballygunge').city.tz;
+  const dubai = resolve('ae/dubai/creek').city.tz;
+  const instant = Date.parse('2026-08-27T00:00:00Z');
+  assert.equal(zoneOffsetMinutes(kolkata, instant) - zoneOffsetMinutes(dubai, instant), 90,
+    'the two cities resolve to the same clock — a second city is reading Kolkata\'s hour');
+
+  /* Two instants six months apart, because a hemisphere with DST would move and
+     these two must not. This is what catches a zone swapped for a neighbour that
+     happens to share an offset in August. */
+  const january = Date.parse('2026-01-15T00:00:00Z');
+  assert.equal(zoneOffsetMinutes(kolkata, january), zoneOffsetMinutes(kolkata, instant));
+  assert.equal(zoneOffsetMinutes(dubai, january), zoneOffsetMinutes(dubai, instant));
+
+  // ...and every registered city resolves to a zone the database actually knows.
+  for (const key of AREA_KEYS) {
+    const { tz } = resolve(key).city;
+    assert.doesNotThrow(() => new Intl.DateTimeFormat('en-GB', { timeZone: tz }), `${key}: ${tz}`);
+  }
+});
+
+test('the registry refuses an offset dressed up as a zone', () => {
+  /* Check 9 exists because "does Intl accept it" is NOT the test. MEASURED:
+     `new Intl.DateTimeFormat('en-GB', { timeZone: '+05:30' })` constructs without
+     complaint and resolves to '+05:30'. A fixed offset — the exact thing the old
+     WARD_TZ comment warned against — would pass a construct-and-see check and then
+     be an hour wrong twice a year in any city that keeps DST. So check 9 tests the
+     SHAPE first, and this is the measurement that says it has to. */
+  assert.doesNotThrow(() => new Intl.DateTimeFormat('en-GB', { timeZone: '+05:30' }),
+    'if Intl ever starts REFUSING offsets, check 9\'s shape test is redundant and this note is stale');
+});
+
+/**
+ * IANA area names, as they appear in code.
+ *
+ * Deliberately the AREA list rather than a `Word/Word` shape: a generic pattern
+ * matches half the string literals in a web app — MIME types, module specifiers,
+ * every URL path — so it would have to be neutered to be usable, and a neutered
+ * tripwire is the thing this suite keeps finding.
+ */
+const TZ_LITERAL = /['"`](?:Africa|America|Antarctica|Arctic|Asia|Atlantic|Australia|Europe|Indian|Pacific)\/[A-Za-z_+-]+['"`]/;
+
+/** Every .ts under the engine root, relative to it. Shared by the two tripwires below. */
+async function engineFiles(root, prefix = '') {
+  const found = [];
+  for (const entry of await readdir(root, { withFileTypes: true })) {
+    const next = new URL(`${entry.name}${entry.isDirectory() ? '/' : ''}`, root);
+    if (entry.isDirectory()) { found.push(...await engineFiles(next, `${prefix}${entry.name}/`)); continue; }
+    // `._` files are AppleDouble sidecars: exFAT artefacts, not source.
+    if (!entry.name.endsWith('.ts') || entry.name.startsWith('._')) continue;
+    found.push([`${prefix}${entry.name}`, next]);
+  }
+  return found;
+}
+
+const ENGINE_ROOT = new URL('../../src/scripts/climate-engine/', import.meta.url);
+
+test('only the registry names a clock zone', async () => {
+  /* THE HALF THE NINETY-MINUTE TEST CANNOT REACH. That one proves the registry
+     holds two real, distinct zones; it says nothing about whether anything READS
+     them. This is the other half: the instrument may not name a zone at all, so a
+     regression that re-pins the clock to 'Asia/Kolkata' fails here by name.
+
+     Driven over the whole engine tree rather than the one file that offended,
+     because the next hardcode will be in the next module. Comments are stripped —
+     three of them explain this very rule, and a guard that fires on its own
+     explanation gets deleted rather than heeded. */
+  const allow = new Set(['scope/registry.ts']);
+  const offenders = [];
+  let allowedMatched = false;
+  for (const [rel, url] of await engineFiles(ENGINE_ROOT)) {
+    const hit = TZ_LITERAL.test(stripComments(await readFile(url, 'utf8')));
+    if (allow.has(rel)) { allowedMatched ||= hit; continue; }
+    if (hit) offenders.push(rel);
+  }
+  assert.deepEqual(offenders.sort(), [],
+    'these modules name an IANA zone in code; read it from scope.city.tz instead');
+
+  // Guard the guard: the allowlisted file must still MATCH, or the walk has
+  // stopped finding anything and the empty list above means nothing.
+  assert.ok(allowedMatched,
+    'registry.ts no longer declares a zone in code — the pattern or the walk is broken');
+});
+
+
+/* ────────────────────────────────────────────────────────────────────────────
+   THE CURRENCY — declared by the country, read by the readout.
+   ──────────────────────────────────────────────────────────────────────────── */
+
+/* A UAE cost basis DOES NOT EXIST and is not being invented here: the registry
+   says `costs: null` for the UAE on purpose, because an AED figure we have not
+   sourced would compute cleanly and read as an answer. This is a fixture, the same
+   move `areaTableDrift`'s test makes — the case the registry is not yet, exercised
+   before it is real, because that is precisely when the bug gets written. */
+const AED_FIXTURE = { currency: 'AED', roofM2: 20, tree: 300, park: 4_000_000, facadeM2: 900 };
+
+test('the money says what the country says, scale words and all', () => {
+  const inr = requireCosts(resolve('in/kolkata/ballygunge'));
+
+  /* India keeps crore and lakh, which is the half a symbol swap would have got
+     right by accident. `1.11 cr` was the old hand-rolled output; this is the same
+     figure through Intl, so the readout did not regress on its way to being
+     portable. */
+  assert.match(fmtMoney(11_096_666.67, inr), /₹/, 'the rupee readout lost its symbol');
+  assert.match(fmtMoney(11_096_666.67, inr), /1\.11\s*Cr/i);
+  assert.match(fmtMoney(950_000, inr), /9\.5\s*L/i, 'lakh is the Indian scale below crore');
+
+  /* THE WHOLE POINT. A DEWA audience must not be shown a rupee sign, and must not
+     be shown "crore" either — crore is a unit of the Indian numbering system, not
+     a property of the rupee, so a symbol-only swap would have produced the
+     meaningless "AED 1.11 cr". Symbol, scale word and grouping move together. */
+  const gulf = fmtMoney(11_096_666.67, AED_FIXTURE);
+  assert.doesNotMatch(gulf, /₹/, 'a Gulf readout is showing the rupee sign');
+  assert.doesNotMatch(gulf, /\b(cr|crore|L|lakh)\b/i, 'a Gulf readout is counting in crore');
+  assert.match(gulf, /AED/);
+  assert.match(gulf, /11\.1\s*M/i, 'the Gulf counts in millions');
+
+  // The two must actually DIFFER on the same number, or the currency is decoration.
+  assert.notEqual(fmtMoney(11_096_666.67, inr), gulf);
+});
+
+test('the currency travels with the prices it labelled', () => {
+  /* `fmtMoney` takes the whole `Costs` rather than a bare currency string, and this
+     is what that buys: a call site physically cannot hold the right unit prices and
+     the wrong symbol, because there is only one object. The three readouts that
+     pasted a `₹` in front of the number could, and did. */
+  assert.match(fmtMoney(0, AED_FIXTURE), /AED/);
+  assert.throws(() => fmtMoney(1, { ...AED_FIXTURE, currency: 'RUPEE' }), RangeError,
+    'a malformed code must fail loudly here; registry check 10 stops it reaching a readout');
+});
+
+test('no module writes a currency by hand', async () => {
+  /* The three cost readouts each wrote `₹${fmtCr(...)}` — the symbol pasted at
+     the call site, in a template literal, while the country half of the scope knew
+     the currency perfectly well. The place-name tripwire could not see it and the
+     migration's own guards could not see it, because none of them was looking for
+     money.
+
+     `INR` is NOT in this pattern: scope/registry.ts declares it, which is the
+     correct place and the whole point. What is banned is the PRESENTATION — the
+     symbol, the grouping locale, and the two Indian scale words. */
+  const HAND_WRITTEN = /(₹|\ben-IN\b|\bcrore\b|\blakh\b)/i;
+  const offenders = [];
+  for (const [rel, url] of await engineFiles(ENGINE_ROOT)) {
+    if (HAND_WRITTEN.test(stripComments(await readFile(url, 'utf8')))) offenders.push(rel);
+  }
+  assert.deepEqual(offenders.sort(), [],
+    'these modules write a currency symbol, grouping locale or scale word by hand; '
+    + 'use fmtMoney(amount, costs) and let the country say');
+
+  // Guard the guard: the pattern must still fire on the shape it was written for.
+  assert.ok(HAND_WRITTEN.test('setText(sel, `₹${fmtCr(cost)}`)'),
+    'the money pattern no longer matches the offender it was written against');
+});
+
+
+/* ────────────────────────────────────────────────────────────────────────────
+   THE WARMING CONTROL — drawn from the table that answers it.
+   ──────────────────────────────────────────────────────────────────────────── */
+
+test('every button the page can draw is one the physics can answer', () => {
+  /* THE INVARIANT THAT MAKES THE CONTROL SAFE, and it is asserted over the SCOPE
+     rather than over a list of scenario names typed here — a list would be a fourth
+     copy of the pathway table and would pass whatever the other three did.
+
+     `pathwayDelta` fails closed: a key that is not in the scope's table THROWS. That
+     is correct, and it was aimed at a control whose three keys were hardcoded in
+     markup, so a country with a different populated table would have rendered
+     India's buttons and thrown out of a click handler. Every option must round-trip
+     through the physics, and so must the one the control opens on. */
+  let checked = 0;
+  for (const key of AREA_KEYS) {
+    const s = resolve(key);
+    assert.deepEqual(s.pathway.options.map((o) => o.key), Object.keys(s.climate.pathDelta),
+      `${key}: the buttons and the delta table have drifted apart`);
+    for (const opt of s.pathway.options) {
+      assert.ok(opt.label.length > 0, `${key}: option "${opt.key}" has no label`);
+      assert.doesNotThrow(() => at(s.climate, opt.key), `${key}: button "${opt.key}" throws`);
+      checked += 1;
+    }
+    // The boot value too: `state.path` is seeded from this, before any click.
+    assert.doesNotThrow(() => at(s.climate, s.pathway.initial ?? ''), `${key}: initial path throws`);
+  }
+  // Guard the guard: an empty options list everywhere would satisfy the loop.
+  assert.equal(checked, 9, 'expected 3 Kolkata areas x 3 scenarios, and none for Dubai');
+});
+
+test('a country that has adopted no pathway offers no buttons and cites no paper', () => {
+  const dubai = resolve('ae/dubai/creek');
+  assert.deepEqual(dubai.pathway.options, []);
+  assert.equal(dubai.pathway.initial, null);
+  /* NULL, not India's citation. The tooltip was hardcoded to "All-India warming
+     deltas from Dhara et al. 2025" above three hardcoded buttons, so the UAE would
+     have cited an Indian paper for a table it has nothing to do with. */
+  assert.equal(dubai.pathway.source, null);
+
+  const kolkata = resolve('in/kolkata/ballygunge');
+  assert.equal(kolkata.pathway.options.length, 3);
+  assert.equal(kolkata.pathway.initial, '2025');
+  assert.match(kolkata.pathway.source, /Dhara/, 'the adopted pathway must name its source');
+});
+
+test('the markup states no scenario and no citation of its own', async () => {
+  /* A SOURCE TRIPWIRE, and it is here because the defect was invisible to every
+     behavioural test that could be written: the buttons were CORRECT for the only
+     country that ships data, so nothing failed, and nothing would have failed until
+     a second country was selectable. What can be checked today is that the literals
+     are gone and have not come back. */
+  const stage = stripComments(await readFile(
+    new URL('../../src/components/ClimateEngine/HeatMapStage.astro', import.meta.url), 'utf8'));
+  assert.doesNotMatch(stage, /ssp\d/i,
+    'HeatMapStage.astro names a warming scenario; render scope.pathway.options instead');
+  assert.doesNotMatch(stage, /Dhara/,
+    'HeatMapStage.astro cites a paper; the citation belongs to the country, as scope.pathway.source');
+  assert.match(stage, /scope\.pathway\.options/, 'the control is no longer drawn from the scope');
+
+  const app = stripComments(await readFile(
+    new URL('../../src/scripts/climate-engine/heat-map-app.ts', import.meta.url), 'utf8'));
+  assert.doesNotMatch(app, /path:\s*'2025'/,
+    "heat-map-app.ts seeds state.path from a literal; '2025' is a key in INDIA's table");
+});
+
+
+/* ────────────────────────────────────────────────────────────────────────────
+   TWO SILENT NO-OPS — the tab that does nothing, and the refusal that says nothing.
+   ──────────────────────────────────────────────────────────────────────────── */
+
+test('a tab is a switch only where something is listening AND something is loadable', () => {
+  /* EXERCISED THROUGH THE PURE FUNCTION because the state that breaks it cannot be
+     built today: check 5 forbids a non-shipping area inside a `validated` city and
+     Kolkata is validated, so a MIXED city is unreachable until the Dubai plan ships
+     one — as a pure data change, with no code review attached.
+
+     The middle two rows are the whole test. Row 2 is the shipped defect: the markup
+     branched on the PAGE's flag, so a non-shipping sibling rendered as a <button> on
+     a data-shipping page, and pressing it reached loadWard's refusal in silence.
+     Row 3 is the defect the obvious fix introduces: branch on the SIBLING's flag
+     alone and a shipping sibling becomes a <button> on a page where no instrument
+     is mounted at all — the same dead control, on the other page. */
+  assert.equal(tabKind({ pageShipsData: true, tabShipsData: true }), 'switch');
+  assert.equal(tabKind({ pageShipsData: true, tabShipsData: false }), 'link');
+  assert.equal(tabKind({ pageShipsData: false, tabShipsData: true }), 'link');
+  assert.equal(tabKind({ pageShipsData: false, tabShipsData: false }), 'link');
+});
+
+test('the markup asks tabKind rather than reading one flag', async () => {
+  const stage = stripComments(await readFile(
+    new URL('../../src/components/ClimateEngine/HeatMapStage.astro', import.meta.url), 'utf8'));
+  assert.match(stage, /tabKind\(/, 'the tab strip is choosing its own shape again');
+  // Both flags must reach it. A call passing only the page's would type-check.
+  assert.match(stage, /pageShipsData:\s*scope\.area\.hasData/);
+  assert.match(stage, /tabShipsData:\s*sib\.area\.hasData/);
+});
+
+test('an area that cannot be opened is refused OUT LOUD', () => {
+  /* `loadWard` opened with two bare `return`s. Both were right to refuse and
+     neither said anything: they sit before the loading chip is touched, so the map,
+     the readings and the tab highlight all stayed exactly as they were — a control
+     that does nothing and says nothing, which at a glance is a click that missed. */
+  const refusal = areaRefusal('ae/dubai/al-quoz');
+  assert.ok(refusal, 'an area shipping no artefacts must produce a sentence, not null');
+  // It must NAME the place. "Nothing to load" over a map does not say which area,
+  // and six areas across two cities is exactly when that matters.
+  assert.match(refusal, /Al Quoz/);
+  assert.match(refusal, /ships no artefacts/i);
+  for (const key of ['ae/dubai/creek', 'ae/dubai/south']) assert.ok(areaRefusal(key));
+
+  /* ...and an area that CAN be opened is not refused. Without this a function that
+     returned a sentence for everything would satisfy every assertion above and
+     leave the instrument permanently unable to load a ward. */
+  for (const key of ['in/kolkata/ballygunge', 'in/kolkata/baruipur', 'in/kolkata/barrackpore']) {
+    assert.equal(areaRefusal(key), null, `${key} ships data and must not be refused`);
+  }
+});
+
+test('the instrument shows the refusal instead of returning in silence', async () => {
+  const app = stripComments(await readFile(
+    new URL('../../src/scripts/climate-engine/heat-map-app.ts', import.meta.url), 'utf8'));
+  /* The chip is the only thing on the map that speaks during a switch, so the
+     refusal has to reach it. Asserting the PAIRING rather than the mere presence of
+     `areaRefusal`: a call whose result is dropped would satisfy a looser check, and
+     dropping it is precisely the regression this is written against. */
+  assert.match(app, /const refusal = areaRefusal\(name\);[\s\S]{0,400}?loadchip[\s\S]{0,240}?refusal/,
+    'loadWard no longer paints the refusal onto the loading chip');
 });

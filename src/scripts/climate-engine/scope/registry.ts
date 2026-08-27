@@ -104,7 +104,13 @@ export const REGISTRY = {
        delta with nothing raised anywhere. A pathway name and a scenario key are
        different kinds of thing; only resolve.ts may turn one into the other. */
     pathway: 'dhara2025',
-    /* Intervention unit costs; parkCr is ₹ crore. Currency is a country fact.
+    /* Intervention unit costs, in whole rupees. Currency is a country fact, and it
+       is now a READ one: `money.ts` derives the symbol, the scale words (crore and
+       lakh here, millions elsewhere) and the digit grouping from this code alone.
+       Until that landed, `currency` was declared and consumed by nothing while all
+       three readouts pasted a ₹ in by hand.
+
+       `park` WAS `parkCr: 1.5`, "in crore", with a ×1e7 hidden inside computeCost.
 
        THE FOUR COST FIGURES MATCH `COST` IN heat-map-model.ts:70 FIELD FOR FIELD,
        and have to; `currency` is registry-only, the model having no notion of one.
@@ -115,11 +121,23 @@ export const REGISTRY = {
        `satisfies` clause below now makes it a compile error before it can happen.
        facadeM2 was in fact absent from the first draft of this entry, and is the
        largest of the four at ₹9,500/m². */
-    costs: { currency: 'INR', roofM2: 150, tree: 1500, parkCr: 1.5, facadeM2: 9500 },
+    costs: { currency: 'INR', roofM2: 150, tree: 1500, park: 15_000_000, facadeM2: 9500 },
     cities: {
       kolkata: {
         koppen: 'Aw',
         tier: 'validated',
+        /* THE FIFTH SCOPED CONSTANT. `WARD_TZ = 'Asia/Kolkata'` sat in
+           heat-map-app.ts driving four Intl formatters, and its own comment argued
+           for an IANA zone over a fixed +05:30 because an offset "is the first
+           thing that breaks when a European or East Asian ward is added" — and
+           then hardcoded the zone, which breaks one city sooner. A second city got
+           Kolkata's clock, Kolkata's weekday and Kolkata's AM/PM, under a tooltip
+           asserting the live reading was valid at an IST hour.
+
+           IANA NAME, NEVER AN OFFSET, and check 9 enforces it rather than trusting
+           this comment: Intl ACCEPTS '+05:30' and resolves it happily, so "does
+           Intl take it" is not the test — the shape is. */
+        tz: 'Asia/Kolkata',
         /** used only when the live met feed is down */
         fallbackTairC: 32,
         /** cooling-blob radius, metres — Kolkata's measured tree-void-effect scale */
@@ -146,6 +164,12 @@ export const REGISTRY = {
       dubai: {
         koppen: 'BWh',
         tier: 'geometry',
+        /* UTC+4 all year, where Kolkata is UTC+5:30 — ninety minutes, which is
+           exactly the size of the error the hardcode shipped. Neither city
+           observes DST, so the gap is constant and a test can assert it as a
+           number rather than as a string comparison that only proves the literal
+           was copied. */
+        tz: 'Asia/Dubai',
         fallbackTairC: 40,
         parkRadiusM: 50,
         data: { heatwave: null, dcUrs: null },
@@ -208,10 +232,12 @@ export type AreaKey = {
 type Tier = typeof TIERS[number];
 
 interface CountryCosts {
+  /** ISO 4217. Check 10 pins the shape; `money.ts` reads it. */
   readonly currency: string;
   readonly roofM2: number;
   readonly tree: number;
-  readonly parkCr: number;
+  /** per hectare of pocket park, in WHOLE units of `currency` — see Costs.park */
+  readonly park: number;
   readonly facadeM2: number;
 }
 interface AreaEntry {
@@ -224,6 +250,8 @@ interface CityEntry {
   readonly koppen: string;
   /** the union, so a typo is a compile error and check 4 is the backstop */
   readonly tier: Tier;
+  /** IANA zone name — `Region/Zone`, never an offset. See check 9. */
+  readonly tz: string;
   readonly fallbackTairC: number;
   readonly parkRadiusM: number;
   readonly data: { readonly heatwave: string | null; readonly dcUrs: string | null };
@@ -528,6 +556,53 @@ export function assertRegistryLogic(): void {
         noSlash(`area in "${country}/${city}"`, areaId);
       }
     }
+  }
+
+  /* 9 · THE CLOCK ZONE MUST BE AN IANA NAME, and "Intl accepts it" is not that
+     check. MEASURED: `new Intl.DateTimeFormat('en-GB', { timeZone: '+05:30' })`
+     constructs without complaint and resolves to '+05:30', so a fixed offset —
+     precisely what the old WARD_TZ comment warned against before hardcoding a zone
+     anyway — would sail through a construct-and-see test and then be wrong twice a
+     year in every city that keeps DST.
+
+     `Etc/GMT-4` is refused for the same reason wearing a legal name: it is in the
+     zone database but carries no transition rules, so it is an offset spelled as a
+     region. What the tooltip prints is this string, so it also has to READ as a
+     place to a human.
+
+     The Intl construction stays, second: it is what catches `Asia/Kolkta`, a typo
+     that has the right shape, throws RangeError from inside a formatter built at
+     mount, and takes the whole instrument down on the city it was added for. */
+  const IANA_NAME = /^[A-Za-z]+\/[A-Za-z0-9_+-]+$/;
+  for (const [country, entry] of Object.entries(COUNTRIES)) {
+    for (const [city, cityEntry] of Object.entries(entry.cities)) {
+      const tz = cityEntry.tz;
+      const shaped = IANA_NAME.test(tz) && !tz.startsWith('Etc/');
+      need(shaped,
+        `${country}/${city} declares tz "${tz}", which is not an IANA Region/Zone name — `
+        + 'a fixed offset is right by luck where it is right at all, and it is the first '
+        + 'thing that breaks in a city that observes DST');
+      if (!shaped) continue;
+      let known = true;
+      try { new Intl.DateTimeFormat('en-GB', { timeZone: tz }); } catch { known = false; }
+      need(known,
+        `${country}/${city} declares tz "${tz}", which the zone database does not contain — `
+        + 'Intl throws when the formatter is built, which is at mount, on the very city '
+        + 'this entry was added for');
+    }
+  }
+
+  /* 10 · THE CURRENCY CODE IS NOW LOAD-BEARING, so its shape has to be checked
+     somewhere that is not a readout. `money.ts` hands it to Intl.NumberFormat,
+     which throws RangeError on anything that is not a well-formed ISO 4217 code —
+     inside a paint function, on a slider frame, taking the score panel down. It
+     was safe to leave unchecked only while nothing read the field at all. */
+  for (const [country, entry] of Object.entries(COUNTRIES)) {
+    if (entry.costs === null) continue;
+    need(/^[A-Z]{3}$/.test(entry.costs.currency),
+      `country "${country}" declares currency "${entry.costs.currency}", which is not a `
+      + 'three-letter ISO 4217 code — Intl.NumberFormat throws on it, from inside the '
+      + 'cost readout rather than from here');
   }
 
   if (failures.length > 0) {

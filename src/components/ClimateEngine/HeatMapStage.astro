@@ -8,6 +8,7 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
 import { areaKeysInCity } from '../../scripts/climate-engine/scope/registry.ts';
 import { areaPath, DEFAULT_AREA_PATH } from '../../scripts/climate-engine/scope/paths.ts';
 import { resolve, type ResolvedScope } from '../../scripts/climate-engine/scope/resolve.ts';
+import { tabKind } from '../../scripts/climate-engine/scope/reachability.ts';
 import { wardById } from '../../data/wards.ts';
 
 /**
@@ -109,14 +110,15 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
         <a id="compare-mode-link" href="/heat-map/compare/">Compare</a>
       </nav>
     </div>
-    {/* TWO SHAPES, because two different things happen when you press one. Where
-        the city ships artefacts the instrument is mounted and switches areas in
-        place, so the tab is a button and `data-w` is what heat-map-app.ts reads (the
-        app rewrites the address bar to match). Where it does not, no script runs at
-        all - a button there would be a control that does nothing, so the tab is the
-        link it would have to be anyway. */}
+    {/* TWO SHAPES, because two different things happen when you press one. A button
+        is an in-place area switch handled by heat-map-app.ts, which reads `data-w`
+        and rewrites the address bar to match; a link is a navigation the next page
+        answers. `tabKind` owns the choice and its docblock owns the reasoning - the
+        short version is that BOTH flags matter, and this branched on only one of
+        them: the page's, so a non-shipping sibling rendered as a button that reached
+        loadWard and was refused in silence. */}
     <div class="tabs" id="tabs">
-      {siblings.map((sib) => (scope.area.hasData
+      {siblings.map((sib) => (tabKind({ pageShipsData: scope.area.hasData, tabShipsData: sib.area.hasData }) === 'switch'
         ? <button class:list={['tab', { on: sib.key === scope.key }]} data-w={sib.area.id}>{sib.area.name}</button>
         : <a class:list={['tab', { on: sib.key === scope.key }]} href={areaPath(sib.key)}>{sib.area.name}</a>))}
     </div>
@@ -328,7 +330,22 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
       <div class="ctl"><label>Cool-roof albedo <span class="v" id="v2">0%</span></label><input type="range" id="ivRoof" min="0" max="100" value="0" step="5" aria-label="Cool-roof albedo, percent of roofs treated"></div>
       <div class="ctl"><label>Vertical green facades <span class="v" id="v4">0</span></label><input type="range" id="ivFacades" min="0" max="15" value="0" aria-label="Vertical green facades"></div>
       <div class="ctl"><label style="margin-bottom:.35rem">Diurnal phase</label><div class="seg" id="segPhase"><button class="on" data-p="now">Now</button><button data-p="peak">13:00 Peak</button><button data-p="night">22:00 Retained</button><button data-p="heatwave">Heatwave</button></div></div>
-      <div class="ctl"><label style="margin-bottom:.35rem" title="All-India warming deltas from Dhara et al. 2025, PLOS Climate (post-AR6). No emissions scenario produces regional cooling, so there is no negative pathway.">Warming pathway</label><div class="seg" id="segPath"><button class="on" data-p="2025">2025</button><button data-p="ssp245">SSP2-4.5 ’50</button><button data-p="ssp585">SSP5-8.5 ’80</button></div></div>
+      {/* THE BUTTONS ARE THE SCOPE'S TABLE, DRAWN. Three were written out here -
+          data-p="2025" | "ssp245" | "ssp585" - under a title citing an Indian paper,
+          while `pathwayDelta` in heat-map-model.ts fails closed against whatever
+          table the scope actually carries. Two countries, one hardcoded control: a
+          country with a DIFFERENT populated table would render India's three and
+          throw out of the click handler on the first press, and a country with an
+          empty table would render three buttons that do nothing, under a citation
+          for research it has not adopted. See `PathwayControl`. */}
+      <div class="ctl"><label style="margin-bottom:.35rem" title={scope.pathway.source ?? undefined}>Warming pathway</label>{scope.pathway.options.length > 0
+        ? <div class="seg" id="segPath">{scope.pathway.options.map((opt) => (
+            <button class:list={{ on: opt.key === scope.pathway.initial }} data-p={opt.key}>{opt.label}</button>))}</div>
+        /* NOT AN EMPTY <div class="seg">, which would render as a hairline box with
+           nothing in it and read as a control still loading. An empty table is a
+           DECLARED absence - no regional projection has been adopted - and that is a
+           different fact from zero warming, so the control says which. */
+        : <p class="segnone">No regional warming pathway has been adopted for {scope.country.name}, so there is nothing to project. This is a stated absence, not a projection of no warming.</p>}</div>
       <div class="score">
         <div class="g">
           <svg viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="15.5" fill="none" stroke="#093a3e" stroke-width="3"></circle><circle id="scoreArc" cx="18" cy="18" r="15.5" fill="none" stroke="#6fcad6" stroke-width="3" stroke-dasharray="97" stroke-dashoffset="97" stroke-linecap="round" transform="rotate(-90 18 18)"></circle></svg>
@@ -882,6 +899,10 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
   .seg{display:flex;gap:2px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:3px;margin-top:.3rem}
   .seg button{flex:1;font-family:var(--mono);font-size:.54rem;letter-spacing:.1em;color:var(--ink);background:none;border:0;cursor:pointer;padding:.45rem;border-radius:5px;text-transform:uppercase}
   .seg button.on{background:var(--surface2);color:var(--paper)}
+  /* The stated absence where the segmented control would be. Prose, not a box:
+     an empty .seg is a hairline rectangle with nothing in it, which reads as a
+     control that has not finished loading. */
+  .segnone{margin-top:.3rem;font-size:.62rem;line-height:1.45;color:var(--ink);opacity:.78}
 
   .score{display:flex;align-items:center;gap:14px;padding:16px 18px}
   .score .g{position:relative;width:64px;height:64px;flex:none}

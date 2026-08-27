@@ -45,7 +45,9 @@ import {
 import { addCoverage, removeCoverage, IMAGE_LAYER_ID } from './streetview/coverage-layer';
 import { nearestImage } from './streetview/nearest-image';
 import { resolve, requireCosts } from './scope/resolve.ts';
+import { fmtMoney } from './money.ts';
 import { areaPath, paths, cityPaths } from './scope/paths.ts';
+import { areaRefusal } from './scope/reachability.ts';
 import { isAreaKey, splitKey, type AreaKey } from './scope/registry.ts';
 import { toLegacyWard } from './scope/legacy.ts';
 
@@ -169,6 +171,17 @@ export function mountHeatMap(): () => void {
      below that used to name `INITIAL_AREA` names this instead. */
   const INITIAL_AREA = bootArea();
   /**
+   * The boot area's whole scope, resolved once.
+   *
+   * THE CITY AND COUNTRY HALVES CANNOT CHANGE UNDER THIS MOUNT, which is what makes
+   * one resolution honest rather than a cached guess: the tab strip is built from
+   * `areaKeysInCity`, so every area reachable without a page load shares this city
+   * and therefore this country. Only the AREA half moves, and the things that
+   * follow the area — `state.climate`, the ward row, the artefact URLs — are
+   * re-resolved per switch in `loadWard`.
+   */
+  const SCOPE = resolve(INITIAL_AREA);
+  /**
    * The unit prices, refused ONCE here rather than defaulted deeper — see the
    * docblock above `requireCosts`. It moved inside the mount when the boot area
    * did: costs are a COUNTRY fact and every area reachable from this page's tabs
@@ -177,7 +190,7 @@ export function mountHeatMap(): () => void {
    * country with no adopted cost basis mounts an instrument, and at that point the
    * right answer is a readout saying the cost basis is unavailable, not a zero.
    */
-  const COSTS = requireCosts(resolve(INITIAL_AREA));
+  const COSTS = requireCosts(SCOPE);
   const el = (id: string) => document.getElementById(id);
   // Per-layer provenance ("data receipts") panel, fetched on-demand per ward
   // (loadLayerManifest caches). null → degrade to the static credit line.
@@ -230,7 +243,14 @@ export function mountHeatMap(): () => void {
     dcurs: Record<string, DcUrsInputs> | null;
   }
   
-  const state: State = { ward: INITIAL_AREA, phase: 'peak', path: '2025', iv: { trees: 0, roof: 0, parks: 0, facades: 0 }, climate: resolve(INITIAL_AREA).climate, sunNow: 0, heatTairC: null, base: null, baselineMean: 0, live: null, spatial: null, greenG: 0, lastMean: {}, dcurs: null };
+  /* THE OPENING PATHWAY IS THE SCOPE'S, not this file's.
+     `path: '2025'` was a literal here, and '2025' is a key in INDIA's table. A
+     country whose adopted projection is keyed differently would have booted on a
+     scenario its own table does not contain, and `pathwayDelta` — which fails
+     closed, correctly — would have thrown on the first simulation rather than the
+     first click. `?? ''` covers the country that has adopted no projection at all:
+     an empty table answers zero to every key, so the value is never read. */
+  const state: State = { ward: INITIAL_AREA, phase: 'peak', path: SCOPE.pathway.initial ?? '', iv: { trees: 0, roof: 0, parks: 0, facades: 0 }, climate: SCOPE.climate, sunNow: 0, heatTairC: null, base: null, baselineMean: 0, live: null, spatial: null, greenG: 0, lastMean: {}, dcurs: null };
   const wardSession = createWardSession();
   let appDisposed = false;
   let mode: 'relief' | 'iso' = 'relief', env: 'dark' | 'studio' = 'dark';
@@ -1039,18 +1059,28 @@ export function mountHeatMap(): () => void {
   }
 
   async function loadWard(name: AreaKey) {
-    /* Both refusals BEFORE the session is opened and before the chip says
+    /* The refusal comes BEFORE the session is opened and before the chip says
        "Loading …", so an unreachable area cannot leave a spinner running for a
-       fetch that was never going to happen.
+       fetch that was never going to happen — and it now SPEAKS.
 
-       `wardOf` first: an area with no row in src/data/wards.ts has no coordinates,
-       and the flyTo below would take the map to NaN. `paths()` second: it is null
-       for an area the registry says ships no artefacts, and nine requests that are
-       each guaranteed to 404 would half-render the city — seven of the nine
-       swallow their own failure, so there would be nothing to see but an empty
-       map that looks loaded. */
-    if (!wardOf(name)) return;
+       Two bare `return`s stood here: one for an area with no row in
+       src/data/wards.ts (the flyTo below would take the map to NaN), one for an
+       area the registry says ships no artefacts (nine guaranteed 404s, seven of
+       which swallow their own failure, leaving an empty map that looks loaded).
+       Both were right to refuse and neither said so, so a tab press against such an
+       area was indistinguishable from a click that missed: same map, same readings,
+       same highlight. `areaRefusal` holds both tests and the sentence for each. */
+    const refusal = areaRefusal(name);
+    if (refusal !== null) {
+      const chip = el('loadchip');
+      if (chip) { chip.textContent = refusal; chip.classList.add('on'); }
+      return;
+    }
     const P = paths(name);
+    /* Null here is unreachable — `areaRefusal` returns a sentence for exactly that
+       case — and the check is what narrows `AreaPaths | null` for the nine uses
+       below without a `!`, which would be a promise to the compiler with nothing
+       keeping it. */
     if (P === null) return;
     const w = wardOf(name);
     const token = wardSession.begin(name);
@@ -1257,11 +1287,18 @@ export function mountHeatMap(): () => void {
      shape — the ring goes red and says so rather than pulsing green forever. */
   const AGE_FRESH_MIN = 90, AGE_STALE_MIN = 360;
 
-  /* IANA zone, not a fixed offset. A hardcoded +5:30 happens to be right for
-     India, which observes no DST — but it is right by luck, and it is the first
-     thing that breaks when a European or East Asian ward is added. Intl reads
-     the zone database and handles the transitions we do not have yet. */
-  const WARD_TZ = 'Asia/Kolkata';
+  /* THE CITY'S ZONE, FROM THE SCOPE — not a constant here.
+     This line used to read `const WARD_TZ = 'Asia/Kolkata'` under a comment
+     arguing that a fixed +5:30 offset "is the first thing that breaks when a
+     European or East Asian ward is added". The argument was right and the fix was
+     half-done: a hardcoded ZONE breaks one city sooner than a hardcoded offset
+     does, and it breaks quietly — Dubai would have shown Kolkata's hour, weekday
+     and meridiem under a tooltip claiming the live reading was valid at an IST
+     time, with nothing anywhere to disagree with it.
+     `SCOPE`, not `resolve(state.ward)`: the zone is a CITY fact and the tab strip
+     never leaves the city, so re-reading it per switch would only add a second
+     place for it to be wrong. */
+  const WARD_TZ = SCOPE.city.tz;
   const wardClock = new Intl.DateTimeFormat('en-GB', {
     timeZone: WARD_TZ, hour: '2-digit', minute: '2-digit', hour12: false,
   });
@@ -1639,7 +1676,10 @@ export function mountHeatMap(): () => void {
       el('sCool')?.classList.toggle('soft', gap.fields.includes('socioVuln'));
 
       setHTML('scoreTxt', anyIv
-        ? `${(now - U.dcUrs(base)).toFixed(1)} pts from this plan · ₹${M.fmtCr(cost)}<br>${tier.guidance}`
+        /* The symbol comes from COSTS, not from this template. It used to be a ₹
+           typed in beside the number, which meant the country half of the scope
+           knew the currency and the readout ignored it. */
+        ? `${(now - U.dcUrs(base)).toFixed(1)} pts from this plan · ${fmtMoney(cost, COSTS)}<br>${tier.guidance}`
         // `headroom` is exactly invariant to the missing input — it shifts ceiling
         // and current equally — so it needs no hedge. `withheld` only ever RISES,
         // so one word makes it true instead of understated by a quarter.

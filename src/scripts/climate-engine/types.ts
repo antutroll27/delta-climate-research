@@ -173,21 +173,40 @@ export interface ClimateConstants {
 /**
  * Intervention unit costs, in ONE currency.
  *
- * `currency` is carried for the readouts that must name it and is never read by
- * the physics — there is no currency in an energy balance. The other four are the
- * multipliers `computeCost` applies, each against a DIFFERENT spatial quantity, so
- * an absent field is `undefined`, its term is NaN, and NaN poisons the whole total.
- * That is why all five are required rather than optional.
+ * The four figures are the multipliers `computeCost` applies, each against a
+ * DIFFERENT spatial quantity, so an absent field is `undefined`, its term is NaN,
+ * and NaN poisons the whole total. That is why all five are required rather than
+ * optional.
+ *
+ * `currency` is READ, by `money.ts`, and the tense of that sentence is the fix: it
+ * used to say "carried for the readouts that must name it" while no production code
+ * read it at all and every readout pasted a ₹ in by hand. A field declared for a
+ * purpose nothing performs is not documentation, it is a claim — and this one was
+ * false for as long as the currency was a country fact and the symbol was a
+ * template literal.
  */
 export interface Costs {
-  /** ISO 4217, e.g. 'INR'. Labelling only — the physics never reads it. */
+  /**
+   * ISO 4217, e.g. 'INR'. The physics never reads it; `money.ts` does, and derives
+   * the symbol, the scale words and the digit grouping from it together.
+   */
   readonly currency: string;
   /** cool-roof coating, per m² of roof */
   readonly roofM2: number;
   /** one street tree, planted */
   readonly tree: number;
-  /** one pocket park, in crore (1e7) of the currency unit */
-  readonly parkCr: number;
+  /**
+   * one pocket park, per hectare, in WHOLE UNITS of `currency`.
+   *
+   * WAS `parkCr`, "in crore (1e7)", with the ×1e7 applied inside `computeCost`.
+   * Crore is a unit of the Indian numbering system, so the shared cost vocabulary
+   * was asserting an Indian convention over every country that will ever appear
+   * here — and a Gulf figure entered as "1.5" would have been silently multiplied
+   * by ten million. The arithmetic is unchanged: 1.5 crore IS 15,000,000, and the
+   * multiplier moved out of the physics and into the declared value, where a
+   * reader can see the whole number.
+   */
+  readonly park: number;
   /** green facade, per m² of wall */
   readonly facadeM2: number;
 }
