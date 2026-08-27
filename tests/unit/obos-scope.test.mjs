@@ -431,3 +431,96 @@ test('the guard would still catch a NEW hand-built URL', async () => {
   // ...and does not fire on the paths() output the migrated modules now pass around.
   assert.equal(flags('fetch(p.trees, { signal })'), false);
 });
+
+
+/* ---------------------------------------------------------------------------
+   TASK 9 — the two axes, and the area that cannot be fetched.
+   --------------------------------------------------------------------------- */
+
+test('city tier and phase confidence are two axes, not one', async () => {
+  /* THE PROPERTY THIS PROTECTS. Kolkata is tier 'validated' -- we hold ECOSTRESS
+     for it -- AND its daytime phase is only 'indicative', because noon surface
+     temperature depends on insolation, cloud timing and soil moisture that 50 km
+     reanalysis forcing cannot resolve. Those are different claims about
+     different things: one is "have we measured this CITY", the other is "how
+     well does the model do at this TIME OF DAY".
+
+     Collapsing them into one field would either promote Kolkata's midday to a
+     quantitative claim it has not earned, or demote its nights, which ARE
+     quantitative at 2.93 K over 50 ward-scenes. The distinction was paid for in
+     79 overpass scenes and is the thing the WETEX pitch rests on -- Kolkata
+     validated, Dubai zone-calibrated, and the gap between them named out loud. */
+  const [{ ACCURACY }, { resolve: res }] = await Promise.all([
+    import('../../src/scripts/climate-engine/accuracy.ts'),
+    import('../../src/scripts/climate-engine/scope/resolve.ts'),
+  ]);
+
+  const kolkata = res('in/kolkata/ballygunge');
+  assert.equal(kolkata.tier, 'validated');
+  assert.equal(ACCURACY.peak.confidence, 'indicative');
+  assert.equal(ACCURACY.night.confidence, 'quantitative');
+
+  // A validated city with an indicative phase is the LIVE combination. If the
+  // two ever merge, this pair becomes unrepresentable and the assertion breaks.
+  assert.notEqual(kolkata.tier, ACCURACY.peak.confidence);
+
+  /* The vocabularies must not overlap -- a shared token is how two concepts
+     quietly become one during a later refactor.
+
+     READ FROM THE DECLARATIONS, NOT FROM A COPY OF THEM. This first compared
+     two hardcoded Sets, and MEASURED: redefining CityTier to
+     'quantitative' | 'indicative' | 'geometry' -- literally merging the two
+     axes -- left all 32 tests green, because the literals in the test were
+     unchanged. A guard that keeps passing while guarding nothing is the exact
+     defect this suite exists to police, and it had it. */
+  const union = (src, name) => {
+    const m = new RegExp(`type\\s+${name}\\s*=\\s*([^;]+);`).exec(src);
+    assert.ok(m, `could not find the declaration of ${name}`);
+    return new Set([...m[1].matchAll(/'([^']+)'/g)].map((x) => x[1]));
+  };
+  const [resolveSrc, accuracySrc] = await Promise.all([
+    readFile(new URL('../../src/scripts/climate-engine/scope/resolve.ts', import.meta.url), 'utf8'),
+    readFile(new URL('../../src/scripts/climate-engine/accuracy.ts', import.meta.url), 'utf8'),
+  ]);
+  const tiers = union(resolveSrc, 'CityTier');
+  const confRe = /readonly confidence:\s*([^;]+);/.exec(accuracySrc);
+  assert.ok(confRe, 'could not find PhaseAccuracy.confidence');
+  const phases = new Set([...confRe[1].matchAll(/'([^']+)'/g)].map((x) => x[1]));
+
+  assert.ok(tiers.size >= 2 && phases.size >= 2, 'a vocabulary collapsed to one token');
+  for (const t of tiers) {
+    assert.ok(!phases.has(t),
+      `"${t}" appears in BOTH CityTier and PhaseAccuracy.confidence -- the city `
+      + 'axis and the time-of-day axis have merged');
+  }
+
+  // Dubai carries the weaker tier while sharing the same phase accuracy: the
+  // phase figure is a property of the MODEL, not of the city.
+  assert.equal(res('ae/dubai/al-quoz').tier, 'geometry');
+});
+
+test('an area that ships nothing is refused by the loader, not fetched', async () => {
+  /* paths() returning null is only half the guarantee. The other half is that
+     the loader ACTS on it: a disabled city must be unreachable by construction,
+     so it cannot 404 in the console and cannot half-render from a partial
+     bundle. Nothing here stubs fetch -- if the rejection were missing, this
+     test would attempt a real request and fail differently, which is itself
+     the signal. */
+  const { loadArea } = await import('../../src/scripts/climate-engine/ward-loader.ts');
+  await assert.rejects(() => loadArea('ae/dubai/al-quoz'),
+    (err) => err instanceof Error
+      // The message must NAME THE KEY. A bare "nothing to load" in a console
+      // does not say which area, and six areas across two cities is exactly
+      // when that matters.
+      && err.message.includes('ae/dubai/al-quoz')
+      && /ships no artefacts/i.test(err.message));
+
+  // ...while a shipping area is NOT refused. Without this, a loader that
+  // rejected everything would pass the assertion above and guard nothing.
+  const shipping = loadArea('in/kolkata/ballygunge');
+  await assert.doesNotReject(
+    Promise.resolve(shipping).then(() => {}, (err) => {
+      // A network failure under Node is fine and expected; a refusal is not.
+      if (/ships no artefacts/i.test(String(err && err.message))) throw err;
+    }));
+});
