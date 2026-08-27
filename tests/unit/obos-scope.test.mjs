@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
+import { readdir } from 'node:fs/promises';
 import test from 'node:test';
 
 import {
   REGISTRY, AREA_KEYS, isAreaKey, splitKey, assertRegistryLogic,
   areaTableDrift, shippingAreaIds,
 } from '../../src/scripts/climate-engine/scope/registry.ts';
+import { paths, cityPaths } from '../../src/scripts/climate-engine/scope/paths.ts';
 import { WARDS as WARD_TABLE } from '../../src/data/wards.ts';
 import { COST, FALLBACK_TAIR, PARK_R_M } from '../../src/scripts/climate-engine/heat-map-model.ts';
 
@@ -126,4 +128,74 @@ test('the registry has not drifted from the constants it will replace', () => {
 
   assert.equal(REGISTRY.in.cities.kolkata.fallbackTairC, FALLBACK_TAIR);
   assert.equal(REGISTRY.in.cities.kolkata.parkRadiusM, PARK_R_M);
+});
+
+/* ---------------------------------------------------------------------------
+   scope/paths.ts — the ONE place a /heat-map/data/ URL may be built.
+   --------------------------------------------------------------------------- */
+
+test('paths builds every ward URL from the registry', () => {
+  const p = paths('in/kolkata/ballygunge');
+  assert.equal(p.ward, '/heat-map/data/ballygunge.json');
+  assert.equal(p.terrain, '/heat-map/data/ballygunge-terrain.json');
+  assert.equal(p.water, '/heat-map/data/ballygunge-water.json');
+  assert.equal(p.roads, '/heat-map/data/ballygunge-roads.json');
+  assert.equal(p.labels, '/heat-map/data/ballygunge-road-labels.geojson');
+  assert.equal(p.provenance, '/heat-map/data/ballygunge-provenance.json');
+  assert.equal(p.trees, '/heat-map/data/ballygunge-trees.json');
+  assert.equal(p.surface, '/heat-map/data/ballygunge-surface.png');
+  assert.equal(p.canopy, '/heat-map/data/ballygunge-canopy.png');
+  assert.equal(p.layers, '/heat-map/data/ballygunge-layers.json');
+});
+
+test('an area that ships no data resolves to null, never a URL', () => {
+  // A disabled city must be unreachable BY CONSTRUCTION, so it cannot 404 in
+  // the console and cannot half-render.
+  assert.equal(paths('ae/dubai/al-quoz'), null);
+  assert.equal(paths('ae/dubai/creek'), null);
+  assert.equal(paths('ae/dubai/south'), null);
+});
+
+test('city-level files are city-scoped, not global', () => {
+  // heatwave-percentiles.json carries a `city` key and dc-urs-inputs.json a
+  // `wards` key -- both Kolkata's -- at paths that imply they are global. A
+  // second city would silently inherit Kolkata's heat statistics.
+  assert.equal(cityPaths('in/kolkata/ballygunge').heatwave,
+    '/heat-map/data/heatwave-percentiles.json');
+  assert.equal(cityPaths('in/kolkata/ballygunge').dcUrs,
+    '/heat-map/data/dc-urs-inputs.json');
+  assert.equal(cityPaths('ae/dubai/al-quoz').heatwave, null);
+  assert.equal(cityPaths('ae/dubai/al-quoz').dcUrs, null);
+});
+
+test('every URL paths() emits exists on disk', async () => {
+  // A typo in a suffix would produce a plausible URL that 404s silently at
+  // runtime. This is the check that makes the builder trustworthy.
+  const present = new Set(await readdir(new URL('../../public/heat-map/data', import.meta.url)));
+  let checked = 0;
+  for (const key of AREA_KEYS) {
+    const p = paths(key);
+    if (p === null) continue;
+    for (const [name, url] of Object.entries(p)) {
+      const file = url.replace('/heat-map/data/', '');
+      assert.ok(present.has(file), `${key}: ${name} -> ${file} is missing on disk`);
+      checked += 1;
+    }
+  }
+  // Guard the guard: if paths() ever returned {} or every area stopped
+  // shipping, the loop above would pass while checking nothing.
+  assert.equal(checked, 30, 'expected 3 shipping areas x 10 files');
+});
+
+test('every city-level URL exists on disk too', async () => {
+  const present = new Set(await readdir(new URL('../../public/heat-map/data', import.meta.url)));
+  let checked = 0;
+  for (const key of AREA_KEYS) {
+    for (const url of Object.values(cityPaths(key))) {
+      if (url === null) continue;
+      assert.ok(present.has(url.replace('/heat-map/data/', '')), `${url} is missing on disk`);
+      checked += 1;
+    }
+  }
+  assert.ok(checked > 0, 'no city-level URL was checked');
 });
