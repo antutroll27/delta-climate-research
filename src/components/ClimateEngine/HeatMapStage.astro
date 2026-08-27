@@ -53,14 +53,20 @@ const ward = wardById(scope.area.id);
  * Three radial-gradient strings used to be pasted here, one per ward. They were
  * never arbitrary — they encode how green the ward is, which is the one thing the
  * strip is comparing — so they are computed from `veg` rather than kept as a fourth
- * per-ward table for someone to update in one place and not the other. The output
- * is byte-identical to the three literals it replaces: 0.12 → red/bronze,
- * 0.28 → orange/bronze, 0.62 → sage/cyan, from the legend's own five classes.
+ * per-ward table for someone to update in one place and not the other. It renders
+ * the same three swatches it replaced: 0.12 → red/bronze, 0.28 → orange/bronze,
+ * 0.62 → sage/cyan, from the legend's own five classes.
+ *
+ * The tokened colours are written as `var()` and not as hexes. This string lands
+ * in an inline `style` on `.ward .sw`, which is inside `.stage` — where the tokens
+ * are declared — so they resolve; a `var()` used outside that subtree would resolve
+ * to nothing and drop the declaration silently. `#9fb98a` and `#d46b4a` stay
+ * literal because no token declares them.
  */
 const swatch = (veg: number): string => {
-  const head = veg >= 0.5 ? '#9fb98a' : veg >= 0.2 ? '#d46b4a' : '#e5484d';
-  const mid = veg >= 0.5 ? '#6fcad6 60%' : '#b08d57 55%';
-  return `background:radial-gradient(circle at 40% 40%,${head},${mid},#093a3e)`;
+  const head = veg >= 0.5 ? '#9fb98a' : veg >= 0.2 ? '#d46b4a' : 'var(--red)';
+  const mid = veg >= 0.5 ? 'var(--cyan) 60%' : 'var(--bronze) 55%';
+  return `background:radial-gradient(circle at 40% 40%,${head},${mid},var(--surface2))`;
 };
 
 /**
@@ -348,7 +354,17 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
         : <p class="segnone">No regional warming pathway has been adopted for {scope.country.name}, so there is nothing to project. This is a stated absence, not a projection of no warming.</p>}</div>
       <div class="score">
         <div class="g">
-          <svg viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="15.5" fill="none" stroke="#093a3e" stroke-width="3"></circle><circle id="scoreArc" cx="18" cy="18" r="15.5" fill="none" stroke="#6fcad6" stroke-width="3" stroke-dasharray="97" stroke-dashoffset="97" stroke-linecap="round" transform="rotate(-90 18 18)"></circle></svg>
+          {/* `stroke` is an SVG PRESENTATION ATTRIBUTE, not CSS, so `var(--surface2)`
+              written here would not resolve — an attribute is parsed by the SVG
+              attribute grammar, which has no custom properties. `currentColor` is
+              the bridge: it defers to the element's own `color`, which IS CSS and
+              takes the token (see `.score .g .track` / `#scoreArc` below).
+
+              #scoreArc keeps its attribute writable on purpose — heat-map-app.ts
+              setAttribute('stroke', tier.colour)s it once a score exists, and no CSS
+              rule sets `stroke`, so the runtime value still wins. The token only
+              paints the pre-score state, exactly as the cyan literal here did. */}
+          <svg viewBox="0 0 36 36" aria-hidden="true"><circle class="track" cx="18" cy="18" r="15.5" fill="none" stroke="currentColor" stroke-width="3"></circle><circle id="scoreArc" cx="18" cy="18" r="15.5" fill="none" stroke="currentColor" stroke-width="3" stroke-dasharray="97" stroke-dashoffset="97" stroke-linecap="round" transform="rotate(-90 18 18)"></circle></svg>
           <div class="num" id="scoreNum">—</div>
         </div>
         <div class="t"><b>Resilience Score</b><span class="tier" id="scoreTier">—</span><span id="scoreTxt">move a slider to intervene</span></div>
@@ -402,12 +418,15 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
 
     <div class="legend">
       <div class="k" style="margin-bottom:.6rem"><span>What the colours mean</span></div>
+      {/* `style` is an attribute whose CONTENT is CSS, unlike `stroke` above, so
+          `var()` resolves here normally. These swatches are inside `.stage`, which
+          is where the tokens are declared. */}
       <div class="cindex">
-        <div class="ci"><span class="d" style="background:#e5484d"></span>Extreme</div>
+        <div class="ci"><span class="d" style="background:var(--red)"></span>Extreme</div>
         <div class="ci"><span class="d" style="background:#d46b4a"></span>Severe</div>
-        <div class="ci"><span class="d" style="background:#b08d57"></span>Hot</div>
+        <div class="ci"><span class="d" style="background:var(--bronze)"></span>Hot</div>
         <div class="ci"><span class="d" style="background:#9fb98a"></span>Warm</div>
-        <div class="ci"><span class="d" style="background:#6fcad6"></span>Comfortable</div>
+        <div class="ci"><span class="d" style="background:var(--cyan)"></span>Comfortable</div>
       </div>
       <div class="k" style="margin:.9rem 0 .5rem"><span>Land Surface Temp</span><span>°C</span></div>
       <div class="ramp"></div>
@@ -906,6 +925,12 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
 
   .score{display:flex;align-items:center;gap:14px;padding:16px 18px}
   .score .g{position:relative;width:64px;height:64px;flex:none}
+  /* Both circles paint stroke:currentColor, so `color` is what actually carries
+     the token — see the note beside the <svg>. Setting it per circle rather than
+     on the <svg> keeps the two strokes independent, which is what the two hex
+     attributes used to do. */
+  .score .g .track{color:var(--surface2)}
+  .score .g #scoreArc{color:var(--cyan)}
   .score .g .num{position:absolute;inset:0;display:grid;place-items:center;font-family:var(--mono);font-size:1.05rem;color:var(--cyan)}
   .subs{display:flex;gap:1px;background:var(--line);margin:0 18px 16px;border-radius:7px;overflow:hidden}
   .subs>div{flex:1;background:rgb(9 20 22 /.55);padding:8px 4px;text-align:center}
@@ -981,7 +1006,9 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
      dark rectangles 22px apart still want to fuse; a tonal step stops that. */
   .legend{position:relative;z-index:5;width:100%;flex:none;margin-top:auto;background:rgb(9 20 22 /.84);border-radius:12px;backdrop-filter:blur(16px);box-shadow:0 1px 2px rgb(0 0 0 /.45),0 8px 18px rgb(0 0 0 /.35);padding:12px 15px 7px}
   .legend .k{font-family:var(--mono);font-size:.54rem;letter-spacing:.16em;color:var(--ink);display:flex;justify-content:space-between;margin-bottom:.55rem;text-transform:uppercase}
-  .ramp{height:9px;border-radius:4px;background:linear-gradient(90deg,#6fcad6,#9fb98a,#b08d57,#d46b4a,#e5484d)}
+  /* A gradient colour stop takes var() like any other colour; .ramp is inside
+     .legend, inside .stage, so the tokens are in scope. */
+  .ramp{height:9px;border-radius:4px;background:linear-gradient(90deg,var(--cyan),#9fb98a,var(--bronze),#d46b4a,var(--red))}
   .legend .sc{display:flex;justify-content:space-between;font-family:var(--mono);font-size:.52rem;color:var(--faint);margin-top:.4rem}
   .cindex{display:flex;flex-direction:column;gap:.34rem}
   .cindex .ci{display:flex;align-items:center;gap:.6rem;font-size:.7rem;color:var(--paper)}

@@ -83,3 +83,62 @@ test('no layer declares a city list', async () => {
       `layers.ts names "${banned}" -- availability must be derived, not declared`);
   }
 });
+
+test('no stylesheet writes a colour a token already declares', async () => {
+  /* #6fcad6 appeared FOUR times longhand beside `--cyan: #6fcad6`. A colour with
+     two spellings drifts the moment someone edits one -- the CSS form of the
+     defect this migration exists to end. */
+  const files = [
+    'src/components/ClimateEngine/HeatMapStage.astro',
+    'src/components/ClimateEngine/shell/IconRail.astro',
+    'src/components/ClimateEngine/shell/ScopeSwitcher.astro',
+    'src/components/ClimateEngine/shell/LayerTree.astro',
+    'src/components/ClimateEngine/shell/InterventionPane.astro',
+  ];
+  const offences = [];
+  for (const rel of files) {
+    let src;
+    try { src = await readFile(new URL(`../../${rel}`, import.meta.url), 'utf8'); }
+    catch { continue; }                       // component not created yet
+    const decl = new Map();
+    for (const m of src.matchAll(/(--[a-z0-9-]+)\s*:\s*(#[0-9a-fA-F]{6})/g)) {
+      decl.set(m[2].toLowerCase(), m[1]);
+    }
+    for (const [hex, token] of decl) {
+      const n = [...src.matchAll(new RegExp(hex, 'gi'))].length - 1;
+      if (n > 0) offences.push(`${rel}: ${hex} written longhand ${n}x beside ${token}`);
+    }
+  }
+  assert.deepEqual(offences, []);
+});
+
+test('the new components use scoped styles, and never :global inside is:global', async () => {
+  /* The stage's 581-line block is is:global for a REAL reason: MapLibre injects
+     its own DOM and heat-map-app.ts re-classes elements at runtime, and Astro's
+     scoping hash only reaches markup Astro rendered. That reason does not extend
+     to a rail, a switcher and a tree, which are static -- so they scope, and the
+     global surface SHRINKS rather than grows.
+
+     The second half matters more than it looks: a :global(...) written INSIDE an
+     is:global block ships verbatim and the browser discards the whole rule.
+     HeatMapStage.astro already carries two comments warning about it. */
+  const shell = ['IconRail', 'ScopeSwitcher', 'LayerTree', 'InterventionPane'];
+  for (const name of shell) {
+    let src;
+    try {
+      src = await readFile(new URL(
+        `../../src/components/ClimateEngine/shell/${name}.astro`, import.meta.url), 'utf8');
+    } catch { continue; }                     // not created yet
+    // InterventionPane is the documented exception: it holds runtime-classed ids.
+    if (name !== 'InterventionPane') {
+      assert.ok(!/<style\s+is:global/.test(src),
+        `${name}.astro uses is:global -- its markup is static, so it can scope`);
+    }
+    for (const [, attrs, body] of src.matchAll(/<style([^>]*)>([\s\S]*?)<\/style>/g)) {
+      if (!attrs.includes('is:global')) continue;
+      assert.ok(!/:global\(/.test(body),
+        `${name}.astro writes :global() inside an is:global block -- it ships `
+        + 'verbatim and the browser discards the entire rule');
+    }
+  }
+});
