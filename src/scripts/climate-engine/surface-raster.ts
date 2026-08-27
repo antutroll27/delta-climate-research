@@ -29,6 +29,11 @@
  * module exists to remove.
  */
 
+import { paths, cityPaths } from './scope/paths.ts';
+import { splitKey, type AreaKey } from './scope/registry.ts';
+import { LEGACY_AREA_KEY } from './scope/legacy.ts';
+import type { WardId } from './wards.ts';
+
 /** Channel encoding, mirroring `quantise`/`dequantise` in the exporter. */
 const VEG_LO = 0, VEG_HI = 1;
 const ALB_LO = 0, ALB_HI = 0.5;
@@ -59,9 +64,15 @@ function mean(a: Float32Array): number {
  * range — albedo gets 0..0.5 because land albedo cannot reach 1 and a 0..1
  * range would throw away a bit of precision for nothing.
  */
-export async function loadSurfaceRaster(ward: string, signal?: AbortSignal): Promise<SurfaceRaster | null> {
+export async function loadSurfaceRaster(key: AreaKey, signal?: AbortSignal): Promise<SurfaceRaster | null> {
+  /* Null in, null out — an area that ships no texture must not fire a request
+     that is guaranteed to 404. Every failure here already degrades to a flat
+     field at the ward mean, so a mis-built URL would be indistinguishable from a
+     ward that genuinely has no measured surface. */
+  const p = paths(key);
+  if (p === null) return null;
   try {
-    const response = await fetch(`/heat-map/data/${ward}-surface.png`, { signal });
+    const response = await fetch(p.surface, { signal });
     if (!response.ok) return null;
     const bitmap = await createImageBitmap(await response.blob());
     const n = bitmap.width;
@@ -69,7 +80,7 @@ export async function loadSurfaceRaster(ward: string, signal?: AbortSignal): Pro
     // shape without this reader following, and sampling would silently skew.
     if (n !== bitmap.height) {
       bitmap.close();
-      throw new Error(`surface texture for ${ward} is ${bitmap.width}×${bitmap.height}, not square`);
+      throw new Error(`surface texture for ${key} is ${bitmap.width}×${bitmap.height}, not square`);
     }
     const canvas = new OffscreenCanvas(n, n);
     const context = canvas.getContext('2d', { willReadFrequently: true });
@@ -184,14 +195,37 @@ export function assertSurfaceMatches(
  * paired comparison — and it is one small file that never changes within a
  * session.
  */
-let inputsPromise: Promise<Record<string, { fvc: { value: number }; albedo: { value: number } }> | null> | null = null;
+type WardInputs = Record<string, { fvc: { value: number }; albedo: { value: number } }>;
 
-function loadInputs(): Promise<Record<string, { fvc: { value: number }; albedo: { value: number } }> | null> {
-  inputsPromise ??= fetch('/heat-map/data/dc-urs-inputs.json')
-    .then(r => (r.ok ? r.json() : null))
-    .then(j => j?.wards ?? null)
-    .catch(() => null);
-  return inputsPromise;
+/* Keyed by the RESOLVED URL, which is one per city: `dc-urs-inputs.json` sits
+   beside the ward files under a name that implies it is global, and it is not —
+   its `wards` object lists exactly ballygunge, baruipur and barrackpore. The old
+   single module-level promise WAS that assumption written down, and a second city
+   would have been scored on Kolkata's measured vegetation and albedo without a
+   word anywhere. */
+const inputsCache = new Map<string, Promise<WardInputs | null>>();
+
+/**
+ * The measured ward means for one area's CITY.
+ *
+ * A city that declares no inputs file resolves to null WITHOUT a request, and null
+ * is what the caller turns into "fvc 0, albedo at the mid-range default, no
+ * texture" — an honest absence. Falling back to Kolkata's file here would hand a
+ * DEWA audience Kolkata's greenery under Dubai's name, computed cleanly, with
+ * nothing on screen to flag it.
+ */
+function loadInputs(key: AreaKey): Promise<WardInputs | null> {
+  const url = cityPaths(key).dcUrs;
+  if (url === null) return Promise.resolve(null);
+  let pending = inputsCache.get(url);
+  if (!pending) {
+    pending = fetch(url)
+      .then(r => (r.ok ? r.json() : null))
+      .then(j => j?.wards ?? null)
+      .catch(() => null);
+    inputsCache.set(url, pending);
+  }
+  return pending;
 }
 
 export interface WardSurface {
@@ -217,9 +251,15 @@ export interface SurfaceMeans {
  * is a smaller, honest loss, and it is visible as an absence of detail rather
  * than as detail that is quietly wrong.
  */
-export async function loadWardSurface(ward: string, signal?: AbortSignal): Promise<WardSurface> {
-  const [inputs, surface] = await Promise.all([loadInputs(), loadSurfaceRaster(ward, signal)]);
-  const record = inputs?.[ward];
+export async function loadAreaSurface(key: AreaKey, signal?: AbortSignal): Promise<WardSurface> {
+  const [inputs, surface] = await Promise.all([loadInputs(key), loadSurfaceRaster(key, signal)]);
+  /* INDEXED BY THE BARE AREA ID, and it has to be: the `wards` object inside
+     dc-urs-inputs.json is keyed by file-stem ids (`ballygunge`), not by area keys.
+     Indexing it with `in/kolkata/ballygunge` returns undefined, `record` is
+     optional, and the function then returns fvc 0 with the texture DISCARDED — a
+     flat, empty, entirely plausible surface, and the resilience score built on it
+     would be wrong rather than absent. External data, so the external shape. */
+  const record = inputs?.[splitKey(key).area];
   const means: SurfaceMeans = {
     fvc: record?.fvc.value ?? 0,
     albedo: record?.albedo.value ?? DEFAULT_ALBEDO,
@@ -232,6 +272,15 @@ export async function loadWardSurface(ward: string, signal?: AbortSignal): Promi
     console.error(error);
     return { means, surface: null };
   }
+}
+
+/**
+ * @deprecated Bare-id entry point for `compare/`, which Task 7 migrates.
+ * Delete with `scope/legacy.ts`. New callers take an `AreaKey` and call
+ * `loadAreaSurface`.
+ */
+export function loadWardSurface(id: WardId, signal?: AbortSignal): Promise<WardSurface> {
+  return loadAreaSurface(LEGACY_AREA_KEY[id], signal);
 }
 
 /**
@@ -292,15 +341,19 @@ export function canopyHeightsFromPixels(data: Uint8ClampedArray, n: number, hi: 
  * flip: the PNG is north-up on disk, the sim grid is south-up, so row 0 of
  * the source is written to row (n-1) of the output.
  */
-export async function loadCanopyRaster(ward: string, signal?: AbortSignal): Promise<CanopyRaster | null> {
+export async function loadCanopyRaster(key: AreaKey, signal?: AbortSignal): Promise<CanopyRaster | null> {
+  /* Null in, null out — see loadSurfaceRaster. A miss here degrades to no
+     vegetation layer at all, which is the quietest absence on the page. */
+  const p = paths(key);
+  if (p === null) return null;
   try {
-    const response = await fetch(`/heat-map/data/${ward}-canopy.png`, { signal });
+    const response = await fetch(p.canopy, { signal });
     if (!response.ok) return null;
     const bitmap = await createImageBitmap(await response.blob());
     const n = bitmap.width;
     if (n !== bitmap.height) {
       bitmap.close();
-      throw new Error(`canopy texture for ${ward} is ${bitmap.width}×${bitmap.height}, not square`);
+      throw new Error(`canopy texture for ${key} is ${bitmap.width}×${bitmap.height}, not square`);
     }
     const canvas = new OffscreenCanvas(n, n);
     const context = canvas.getContext('2d', { willReadFrequently: true });
@@ -310,7 +363,11 @@ export async function loadCanopyRaster(ward: string, signal?: AbortSignal): Prom
     const { data } = context.getImageData(0, 0, n, n);
 
     const height = canopyHeightsFromPixels(data, n, CANOPY_HI);
-    return asCanopyRaster({ ward, n, hi: CANOPY_HI, height }, ward);
+    /* The raster's own `ward` label stays the BARE id: it is a diagnostic string
+       that sits alongside the same field in the trees and terrain artefacts, and
+       those are emitted by the Python pipeline under the file stem. */
+    const areaId = splitKey(key).area;
+    return asCanopyRaster({ ward: areaId, n, hi: CANOPY_HI, height }, areaId);
   } catch (error) {
     if ((error as Error)?.name === 'AbortError') return null;
     return null;

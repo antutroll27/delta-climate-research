@@ -9,7 +9,7 @@
  * `mountHeatMap()` returns a dispose fn (call it on astro:before-swap).
  */
 import maplibregl from 'maplibre-gl';
-import { WARD_MAP, wardLatLon, formatLatLon } from '../../data/wards.ts';
+import { WARD_MAP, wardLatLon, formatLatLon, type Ward } from '../../data/wards.ts';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { DEFAULT_PARAMS, greenReferenceContrastC, type ClimateConstants, type SimLayers, type SimParams } from './types';
 import { detectHeatCaps } from './caps';
@@ -23,7 +23,7 @@ import * as U from './dc-urs';
 import { applyScenario } from './dc-urs-scenario';
 import type { DcUrsInputs } from './dc-urs-inputs';
 import { rasterWardBase } from './ward-raster';
-import { loadWardSurface, loadCanopyRaster, type WardSurface, type CanopyRaster } from './surface-raster';
+import { loadAreaSurface, loadCanopyRaster, type WardSurface, type CanopyRaster } from './surface-raster';
 import { asTreesFile } from './vegetation-layer';
 import { buildRegistry, type BuildingMeta } from './explore/building-pick';
 import { selectPhase } from './phase-select';
@@ -45,23 +45,52 @@ import {
 import { addCoverage, removeCoverage, IMAGE_LAYER_ID } from './streetview/coverage-layer';
 import { nearestImage } from './streetview/nearest-image';
 import { resolve, requireCosts } from './scope/resolve.ts';
+import { paths, cityPaths } from './scope/paths.ts';
+import { isAreaKey, splitKey, type AreaKey } from './scope/registry.ts';
 
 // Ward set lives in src/data/wards.ts so widening beyond three is a data change,
 // not a code change (dc-urs-spec.md §1).
 const WARDS = WARD_MAP;
 
+/** The area this page opens on, and the only place its identity is written down. */
+const INITIAL_AREA: AreaKey = 'in/kolkata/ballygunge';
+
 /**
- * The scope this page runs in: the country's warming pathway and unit costs, the
- * city's fallback air temperature and park-cooling radius.
+ * The ward-table row for an area key. ONE HELPER, because there are eight sites.
  *
- * INTERIM. Task 7 makes `state.ward` an `AreaKey` and this derives from it, so the
- * constants follow whichever area is open. It is pinned here rather than left as
- * literals in the physics because that is where they were, and there they were
- * unmoveable: `state.ward` is still a bare slug, so there is nothing yet to derive
- * a scope FROM. Pinning is a smaller lie than a default parameter would be — it is
- * visible, it names the exact area it assumes, and it is one line to delete.
+ * `WARD_MAP` IS KEYED BY BARE ID and typed `Record<string, Ward>`, so
+ * `WARDS[state.ward]` type-checks perfectly against a hierarchical key, returns
+ * `undefined`, and the next property access throws at RUNTIME — a build that is
+ * green and a page that is blank. That is the whole reason this exists rather than
+ * eight open-coded `splitKey` calls: one place to be wrong, not eight.
+ *
+ * Typed `Ward` rather than `Ward | undefined`, exactly as the indexed access it
+ * replaces was: every reachable call site sits downstream of `loadArea`'s guard
+ * below, which refuses an area with no ward row before anything else can run.
  */
-const CLIMATE = resolve('in/kolkata/ballygunge').climate;
+const wardOf = (key: AreaKey): Ward => WARDS[splitKey(key).area];
+
+/**
+ * The BARE area id — for the four places that address something OUTSIDE this app.
+ *
+ * The rule, applied per site: an `AreaKey` is right for anything internal (caches,
+ * loaders, the scope), and the bare id is required by anything that already indexes
+ * by file stem or slug — `dc-urs-inputs.json`'s `wards` object, the `/api/wards/:id`
+ * route, the `big-{id}` DOM ids the stage authors against `src/data/wards.ts`, and
+ * Compare's deep link, whose reader validates against `WardId`.
+ */
+const areaOf = (key: AreaKey): string => splitKey(key).area;
+
+/**
+ * The city's park-cooling radius and fallback air temperature, and the country's
+ * warming pathway — FOLLOWING THE OPEN AREA, not pinned to one.
+ *
+ * Task 5 pinned this to `in/kolkata/ballygunge` and said Task 7 would make it
+ * derive; Task 6 got there first, because `paths()` needs an `AreaKey` and so
+ * `state.ward` had to become one here. `state.climate` is now re-resolved on every
+ * area switch, so a second city's constants arrive with its geometry rather than
+ * Kolkata's silently outliving the switch.
+ */
 
 /**
  * The unit prices, refused ONCE here rather than defaulted deeper.
@@ -72,13 +101,18 @@ const CLIMATE = resolve('in/kolkata/ballygunge').climate;
  * finding. So the null is refused at the seam where identity enters, and the
  * physics keeps a signature that cannot express the absence.
  *
- * Unreachable today: India declares all four figures, and `CLIMATE` is pinned to
- * Kolkata. It becomes reachable when Task 7 makes the scope follow the open area,
- * and at that point the right change is a readout that says the cost basis is
- * unavailable — not a fallback number. The throw is what stops that work from being
- * skipped by accident.
+ * Unreachable today, and — unlike `state.climate` above — still resolved ONCE, from
+ * the initial area. That is not an oversight and not a pin in the old sense: costs
+ * are a COUNTRY fact, and every area this page can reach comes from the three tabs
+ * in HeatMapStage.astro, which are the three Kolkata wards. Deriving it per switch
+ * would compute the identical four figures while adding a throw to a paint path.
+ *
+ * It becomes reachable the moment a second COUNTRY is selectable here, and at that
+ * point the right change is a readout that says the cost basis is unavailable — not
+ * a fallback number. The throw is what stops that work from being skipped by
+ * accident.
  */
-const COSTS = requireCosts(resolve('in/kolkata/ballygunge'));
+const COSTS = requireCosts(resolve(INITIAL_AREA));
 const { SIM_N, RESET_BURST } = M;
 /**
  * `dark` is OUR style now — OBOS Slate, built by scripts/build-map-style.mjs from
@@ -148,7 +182,10 @@ export function mountHeatMap(): () => void {
 
   /* ── state ── */
   interface State {
-    ward: string; phase: 'peak' | 'night'; path: string; iv: M.Interventions;
+    /* AN AREA KEY, never a bare slug: it is what `paths()` and `resolve()` take,
+       and typing it is what makes every loader call site compiler-checked. The
+       four sites that need the bare id say so and call `areaOf`. */
+    ward: AreaKey; phase: 'peak' | 'night'; path: string; iv: M.Interventions;
     /* Carried on the state so `currentParams(state)` stays one argument and the
        physics never has to be told which ward is open. See CLIMATE above. */
     climate: ClimateConstants;
@@ -163,7 +200,7 @@ export function mountHeatMap(): () => void {
     dcurs: Record<string, DcUrsInputs> | null;
   }
   
-  const state: State = { ward: 'ballygunge', phase: 'peak', path: '2025', iv: { trees: 0, roof: 0, parks: 0, facades: 0 }, climate: CLIMATE, sunNow: 0, heatTairC: null, base: null, baselineMean: 0, live: null, spatial: null, greenG: 0, lastMean: {}, dcurs: null };
+  const state: State = { ward: INITIAL_AREA, phase: 'peak', path: '2025', iv: { trees: 0, roof: 0, parks: 0, facades: 0 }, climate: resolve(INITIAL_AREA).climate, sunNow: 0, heatTairC: null, base: null, baselineMean: 0, live: null, spatial: null, greenG: 0, lastMean: {}, dcurs: null };
   const wardSession = createWardSession();
   let appDisposed = false;
   let mode: 'relief' | 'iso' = 'relief', env: 'dark' | 'studio' = 'dark';
@@ -174,7 +211,7 @@ export function mountHeatMap(): () => void {
   /* ── MapLibre basemap ── */
   const map = new maplibregl.Map({
     container: mapContainer, style: STYLES.dark,
-    center: [WARDS.ballygunge.lon, WARDS.ballygunge.lat], zoom: 15.3, pitch: 60, bearing: -18,
+    center: [wardOf(INITIAL_AREA).lon, wardOf(INITIAL_AREA).lat], zoom: 15.3, pitch: 60, bearing: -18,
     antialias: true, attributionControl: false, pixelRatio: Math.min(devicePixelRatio, 1.75),
   });
   map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right');
@@ -191,7 +228,7 @@ export function mountHeatMap(): () => void {
   let reliefReady: Promise<void> | null = null;
   let reliefWard: ReliefWardBundle | null = null;
   let currentField: Float32Array | null = null;
-  let currentWardSizeM = WARDS.ballygunge.footprintM;
+  let currentWardSizeM = wardOf(INITIAL_AREA).footprintM;
   let tintMode = 1;
   let growProgress = 1;
   let registry: BuildingMeta[] = [];
@@ -265,7 +302,7 @@ export function mountHeatMap(): () => void {
    */
   function syncSunBearing(): void {
     if (!sunEl) return;
-    const lat = WARDS[state.ward]?.lat ?? 22.55;
+    const lat = wardOf(state.ward)?.lat ?? 22.55;
     /* Which hour the dial should describe. `sunNow` non-null means the live
        clock drives the scene; otherwise the phase is one of the two fixed
        representative hours the engine actually solves. */
@@ -406,7 +443,7 @@ export function mountHeatMap(): () => void {
     /* The building's own coordinate, recovered by inverting the transform that
        created the local frame — so this IS the Overture centroid, not a value
        re-derived from the drawn position. `cz` is the row's northward y. */
-    const ll = wardLatLon(WARDS[state.ward], b.cx, b.cz);
+    const ll = wardLatLon(wardOf(state.ward), b.cx, b.cz);
     const svThumb = el('svThumb');
     if (svThumb && MLY_TOKEN) {
       const gen = ++svThumbGen;
@@ -934,28 +971,62 @@ export function mountHeatMap(): () => void {
      pushing undefined into the physics — the swallow-to-empty posture the roads
      and water loaders take. */
   let heatwaveP99: number | null = null;
-  async function loadHeatwave() {
-    if (heatwaveP99 != null) return;
+  /* WHICH CITY'S FILE the percentile above came from. `heatwave-percentiles.json`
+     sits beside the ward artefacts under a name that reads as global, and it is
+     not: it carries a `city` key saying "Kolkata". Memoising on the value alone —
+     which is what `if (heatwaveP99 != null) return;` did — would carry one city's
+     1-in-100 day across a switch into another, where it would compute cleanly and
+     read as that city's own extreme. */
+  let heatwaveFrom: string | null = null;
+  async function loadHeatwave(key: AreaKey) {
+    const url = cityPaths(key).heatwave;
+    /* A CITY THAT DECLARES NO FILE GETS NO PERCENTILE, never Kolkata's. Null is
+       already the "Heatwave button is inert" signal — `selectPhase` refuses the
+       phase rather than pushing undefined into the physics — so the scenario
+       disables itself instead of inheriting somebody else's heat. */
+    if (url === null) { heatwaveP99 = null; heatwaveFrom = null; return; }
+    if (heatwaveFrom === url && heatwaveP99 != null) return;
     try {
-      const r = await fetch('/heat-map/data/heatwave-percentiles.json');
-      if (r.ok) heatwaveP99 = (await r.json())?.tmaxC?.p99 ?? null;
-    } catch { heatwaveP99 = null; }
+      const r = await fetch(url);
+      if (r.ok) { heatwaveP99 = (await r.json())?.tmaxC?.p99 ?? null; heatwaveFrom = url; }
+    } catch { heatwaveP99 = null; heatwaveFrom = null; }
   }
 
-  async function loadDcUrs() {
-    if (state.dcurs) return;
+  /* Same story, same fix: dc-urs-inputs.json's `wards` object lists exactly
+     ballygunge, baruipur and barrackpore, so it is a CITY artefact wearing a
+     global name. A city declaring none leaves `state.dcurs` null, which the score
+     already renders as "resilience inputs unavailable". */
+  let dcursFrom: string | null = null;
+  async function loadDcUrs(key: AreaKey) {
+    const url = cityPaths(key).dcUrs;
+    if (url === null) { state.dcurs = null; dcursFrom = null; return; }
+    if (dcursFrom === url && state.dcurs) return;
     try {
-      const r = await fetch('/heat-map/data/dc-urs-inputs.json');
+      const r = await fetch(url);
       state.dcurs = (await r.json()).wards as Record<string, DcUrsInputs>;
-    } catch { state.dcurs = null; }
+      dcursFrom = url;
+    } catch { state.dcurs = null; dcursFrom = null; }
   }
 
-  async function loadWard(name: string) {
-    if (!WARDS[name]) return;
+  async function loadWard(name: AreaKey) {
+    /* Both refusals BEFORE the session is opened and before the chip says
+       "Loading …", so an unreachable area cannot leave a spinner running for a
+       fetch that was never going to happen.
+
+       `wardOf` first: an area with no row in src/data/wards.ts has no coordinates,
+       and the flyTo below would take the map to NaN. `paths()` second: it is null
+       for an area the registry says ships no artefacts, and nine requests that are
+       each guaranteed to 404 would half-render the city — seven of the nine
+       swallow their own failure, so there would be nothing to see but an empty
+       map that looks loaded. */
+    if (!wardOf(name)) return;
+    const P = paths(name);
+    if (P === null) return;
+    const w = wardOf(name);
     const token = wardSession.begin(name);
     if (!token) return;
     const load = el('loadchip');
-    if (load) { load.textContent = `Loading ${WARDS[name].name}…`; load.classList.add('on'); }
+    if (load) { load.textContent = `Loading ${w.name}…`; load.classList.add('on'); }
     await new Promise(r => setTimeout(r, 30));
     if (!wardSession.isCurrent(token)) return;
     const optional = async <T>(task: Promise<T>, fallback: T): Promise<T> => {
@@ -972,45 +1043,50 @@ export function mountHeatMap(): () => void {
       const [d, terrain, water, wardSurface, roads, labels, provenance, canopy, trees] = await Promise.all([
         cache[name]
           ? Promise.resolve(cache[name])
-          : fetch(`/heat-map/data/${name}.json`, { signal: token.signal }).then(async (r) => {
+          : fetch(P.ward, { signal: token.signal }).then(async (r) => {
             if (!r.ok) throw new Error(`Ward data unavailable (${r.status}).`);
             return r.json() as Promise<M.WardData>;
           }),
         terrainCache[name] !== undefined
           ? Promise.resolve(terrainCache[name])
-          : optional(fetch(`/heat-map/data/${name}-terrain.json`, { signal: token.signal })
+          : optional(fetch(P.terrain, { signal: token.signal })
             .then(async (r) => r.ok ? asTerrainField(await r.json()) : null), null),
         waterCache[name]
           ? Promise.resolve(waterCache[name])
-          : optional(fetch(`/heat-map/data/${name}-water.json`, { signal: token.signal })
+          : optional(fetch(P.water, { signal: token.signal })
             .then(async (r) => r.ok ? await r.json() as M.WaterData : { polys: [] }), { polys: [] }),
         surfaceCache[name]
           ? Promise.resolve(surfaceCache[name])
-          : loadWardSurface(name, token.signal),
+          : loadAreaSurface(name, token.signal),
         roadsCache[name]
           ? Promise.resolve(roadsCache[name])
-          : optional(fetch(`/heat-map/data/${name}-roads.json`, { signal: token.signal })
+          : optional(fetch(P.roads, { signal: token.signal })
             .then(async (r) => r.ok ? await r.json() as M.RoadsData : { ways: [] }), { ways: [] }),
         labelCache[name]
           ? Promise.resolve(labelCache[name])
-          : optional(fetch(`/heat-map/data/${name}-road-labels.geojson`, { signal: token.signal })
+          : optional(fetch(P.labels, { signal: token.signal })
             .then(async (r) => r.ok ? await r.json() : EMPTY_LABELS), EMPTY_LABELS),
         provCache[name] !== undefined
           ? Promise.resolve(provCache[name])
-          : optional(fetch(`/heat-map/data/${name}-provenance.json`, { signal: token.signal })
+          : optional(fetch(P.provenance, { signal: token.signal })
             .then(async (r) => r.ok ? await r.json() as { src: string[]; confidence: number[] } : null), null),
         canopyCache[name] !== undefined
           ? Promise.resolve(canopyCache[name])
           : optional(loadCanopyRaster(name, token.signal).then((c) => { canopyCache[name] = c; return c; }), null),
-        optional(fetch(`/heat-map/data/${name}-trees.json`, { signal: token.signal })
+        optional(fetch(P.trees, { signal: token.signal })
           .then(async (r) => (r.ok ? asTreesFile(await r.json()) : null)), null),
       ]);
       if (!wardSession.isCurrent(token)) return;
       cache[name] = d; terrainCache[name] = terrain; waterCache[name] = water;
       surfaceCache[name] = wardSurface; roadsCache[name] = roads; labelCache[name] = labels; provCache[name] = provenance;
       canopyCache[name] = canopy;
-      void loadDcUrs(); void loadHeatwave();
-      const w = WARDS[name]; state.ward = name; updateCompareHref(); updateReportHref();
+      void loadDcUrs(name); void loadHeatwave(name);
+      /* The scope moves WITH the area. `state.climate` is what `currentParams`
+         and `applyInterventions` read, so leaving it behind would run the new
+         city's geometry through the old city's fallback temperature and
+         park-cooling radius — cleanly, and with a plausible number out. */
+      state.ward = name; state.climate = resolve(name).climate;
+      updateCompareHref(); updateReportHref();
 
     /* Rebuild the pick registry from the SAME rows the extrusions come from, and
        drop any selection: building #1759 in Ballygunge is a different building in
@@ -1044,22 +1120,22 @@ export function mountHeatMap(): () => void {
        the same ward means the resilience score reads. loadWardSurface verifies
        that pairing before either reaches the model, so the map and the score
        cannot end up drawn from different vintages of the same measurement. */
-    surfaceCache[name] ??= await loadWardSurface(name);
+    surfaceCache[name] ??= await loadAreaSurface(name);
     const { means, surface } = surfaceCache[name];
     state.base = rasterWardBase(d, means, surface, canopy, water);
-    if (!roadsCache[name]) { try { roadsCache[name] = await (await fetch(`/heat-map/data/${name}-roads.json`)).json(); } catch { roadsCache[name] = { ways: [] }; } }
+    if (!roadsCache[name]) { try { roadsCache[name] = await (await fetch(P.roads)).json(); } catch { roadsCache[name] = { ways: [] }; } }
     /* Street names for this ward. Separate artefact, separate frame: these are
        lon/lat and go to MapLibre directly, so they never pass through our metre
        frame and act as a standing check on the geometry that does. */
     if (!labelCache[name]) {
-      labelCache[name] = await fetch(`/heat-map/data/${name}-road-labels.geojson`)
+      labelCache[name] = await fetch(P.labels)
         .then(r => (r.ok ? r.json() : EMPTY_LABELS))
         .catch(() => EMPTY_LABELS);
     }
     (map.getSource(LABEL_SOURCE) as maplibregl.GeoJSONSource | undefined)
       ?.setData(labelCache[name] as never);
     if (provCache[name] === undefined) {
-      provCache[name] = await fetch(`/heat-map/data/${name}-provenance.json`)
+      provCache[name] = await fetch(P.provenance)
         .then(r => (r.ok ? r.json() : null)).catch(() => null);
     }
     state.spatial = M.buildSpatial(d, state.base, roadsCache[name]);
@@ -1079,8 +1155,13 @@ export function mountHeatMap(): () => void {
 
     setHTML('pname', w.name); setText('pzone', w.zone); setText('coord', w.coord);
     setText('bcount', `${d.count.toLocaleString()} real buildings`);
-    document.querySelectorAll('#tabs .tab').forEach(t => t.classList.toggle('on', (t as HTMLElement).dataset.w === name));
-    document.querySelectorAll('#strip .ward').forEach(t => t.classList.toggle('on', (t as HTMLElement).dataset.w === name));
+    /* `data-w` IS A BARE WARD ID in HeatMapStage.astro, so it is compared against
+       the bare id and never against the key. Comparing it to `name` would match
+       nothing at all: every tab would lose its highlight on the first switch and
+       the page would look like it had failed to change ward. */
+    const activeId = areaOf(name);
+    document.querySelectorAll('#tabs .tab').forEach(t => t.classList.toggle('on', (t as HTMLElement).dataset.w === activeId));
+    document.querySelectorAll('#strip .ward').forEach(t => t.classList.toggle('on', (t as HTMLElement).dataset.w === activeId));
     if (load) { load.textContent = 'Building ward…'; load.classList.remove('on'); }
 
     const dur = relief ? 1400 : 0;
@@ -1100,7 +1181,7 @@ export function mountHeatMap(): () => void {
       if (!wardSession.isCurrent(token)) return;
       wardSession.fail(token);
       console.warn(`Ward ${name} could not load:`, error);
-      if (load) load.textContent = `${WARDS[name].name} could not load.`;
+      if (load) load.textContent = `${w.name} could not load.`;
     }
   }
 
@@ -1115,7 +1196,7 @@ export function mountHeatMap(): () => void {
     refreshNowSun();
     const p = M.currentParams(state);
     state.baselineMean = M.eqMean(state.base, { ...p, Q: DEFAULT_PARAMS.Q });
-    const layers = M.applyInterventions(state.base, state.iv, state.spatial, CLIMATE.parkRadiusM);
+    const layers = M.applyInterventions(state.base, state.iv, state.spatial, state.climate.parkRadiusM);
     state.greenG = M.computeGreenG(layers);
     const request: HeatSimRequest = {
       generation: ++simGeneration,
@@ -1326,8 +1407,8 @@ export function mountHeatMap(): () => void {
      "live" dot over yesterday evening's weather, while that same reading went on
      setting the simulation's boundary conditions. The freshness dial exposes the
      age; this is how a reader acts on it. */
-  async function fetchLive(name: string, force = false) {
-    const w = WARDS[name];
+  async function fetchLive(name: AreaKey, force = false) {
+    const w = wardOf(name);
     try {
       if (force || !liveCache[name]) {
         /* Through our own function, never api.met.no directly: their terms require
@@ -1484,7 +1565,12 @@ export function mountHeatMap(): () => void {
        the sliders' modelled changes applied. The ward-mean surface temperature
        the heat field just produced feeds the thermal pillar, so the physics and
        the index describe the same scenario. */
-    const base = state.dcurs?.[state.ward];
+    /* BY THE BARE ID. `dc-urs-inputs.json`'s `wards` object is keyed by file-stem
+       ids — ballygunge, baruipur, barrackpore — so indexing it with the area key
+       returns undefined. And this lookup is OPTIONAL-CHAINED: there would be no
+       error, no warning and no 404, just a resilience panel reading "—" for ever
+       on a page whose inputs are sitting right there in the fetched object. */
+    const base = state.dcurs?.[areaOf(state.ward)];
     if (base) {
       const phaseLst = state.phase === 'night' ? { nightC: st.meanC } : { dayC: st.meanC };
       const scen = applyScenario(base, iv, anyIv ? phaseLst : undefined);
@@ -1533,8 +1619,12 @@ export function mountHeatMap(): () => void {
       setText('scoreNum', '—');
       setHTML('scoreTxt', 'resilience inputs unavailable');
     }
+    /* `lastMean` is OURS, so it is keyed by the area key like every other cache
+       here — written and read under the one shape. The DOM id beside it is NOT:
+       `big-ballygunge` is authored in HeatMapStage.astro against
+       src/data/wards.ts, so it takes the bare id. */
     state.lastMean[state.ward] = st.meanC;
-    setHTML(`big-${state.ward}`, `${st.meanC.toFixed(1)}<span>°C mean</span>`);
+    setHTML(`big-${areaOf(state.ward)}`, `${st.meanC.toFixed(1)}<span>°C mean</span>`);
     /* Repaint the open building card from the SAME snapshot these stats came
        from. Without this it keeps whatever it read at selection time: move a
        slider or flip to night and the map recolours, the ward mean moves, and
@@ -1562,14 +1652,18 @@ export function mountHeatMap(): () => void {
      "report" we do not generate. */
   function updateReportHref() {
     const link = el('report-link') as HTMLAnchorElement | null;
-    if (link) link.href = `/api/wards/${state.ward}/metadata.json`;
+    /* `/api/wards/[id]` is generated from src/data/wards.ts, one route per bare
+       id, so the key would produce a 404 the page has no way to notice. */
+    if (link) link.href = `/api/wards/${areaOf(state.ward)}/metadata.json`;
   }
 
   function updateCompareHref() {
     const link = el('compare-mode-link') as HTMLAnchorElement | null;
     if (!link) return;
     const params = new URLSearchParams({
-      a: state.ward,
+      /* Compare reads `a` back through `isWardId`, a bare-slug union — an area
+         key fails that check and the deep link silently opens the default pair. */
+      a: areaOf(state.ward),
       trees: String(Math.round(state.iv.trees / 50 * 100)),
       roof: String(Math.round(state.iv.roof / 5) * 5),
       parks: String(Math.round(state.iv.parks * M.PARK_HA / 196 * 1000) / 10),
@@ -1581,7 +1675,28 @@ export function mountHeatMap(): () => void {
 
   /* ── instrument wiring ── */
   const onEl = (node: Element | null, ev: string, fn: EventListenerOrEventListenerObject) => { if (node) { node.addEventListener(ev, fn); cleanup.push(() => node.removeEventListener(ev, fn)); } };
-  document.querySelectorAll('#tabs .tab, #strip .ward').forEach(t => onEl(t, 'click', () => { nudgeOrbit(); loadWard((t as HTMLElement).dataset.w!); }));
+  /**
+   * `data-w="ballygunge"` → `in/kolkata/ballygunge`, or null.
+   *
+   * The stage's markup is authored against src/data/wards.ts and carries BARE ids,
+   * which is the right shape for it — this page opens one city, so the tab only has
+   * to say which area. This is the seam that turns that into a key, and it goes
+   * through `isAreaKey` rather than casting: `dataset.w` is an untrusted string, and
+   * a typo in the markup must be refused here rather than becoming a fetch for a
+   * file that does not exist. The city prefix comes from `splitKey`, never from
+   * slicing the key — registry.ts's own note explains why re-parsing on "/" cannot
+   * be right in general.
+   */
+  const { country: CO, city: CY } = splitKey(INITIAL_AREA);
+  const areaKeyFromTab = (id: string | undefined): AreaKey | null => {
+    const key = `${CO}/${CY}/${id ?? ''}`;
+    return isAreaKey(key) ? key : null;
+  };
+  document.querySelectorAll('#tabs .tab, #strip .ward').forEach(t => onEl(t, 'click', () => {
+    nudgeOrbit();
+    const key = areaKeyFromTab((t as HTMLElement).dataset.w);
+    if (key) void loadWard(key);
+  }));
   onEl(el('srcBtn'), 'click', () => {
     const panel = el('srcPanel'); const btn = el('srcBtn'); if (!panel || !btn) return;
     const opening = panel.hasAttribute('hidden');
@@ -1606,7 +1721,7 @@ export function mountHeatMap(): () => void {
        drawn on 82.5°E, so solar noon in Kolkata falls ~23 minutes before 12:00
        IST. Using the clock hour would put the modelled sun peak in the wrong
        place by that much, every day. */
-    const lon = WARDS[state.ward]?.lon ?? 88.3659;
+    const lon = wardOf(state.ward)?.lon ?? 88.3659;
     const utcH = (now() / 3_600_000) % 24;
     return ((utcH + lon / 15) % 24 + 24) % 24;
   }
@@ -1614,7 +1729,7 @@ export function mountHeatMap(): () => void {
     if (state.sunNow === undefined || state.sunNow === null) return;
     const h = wardSolarHour();
     const doy = Math.floor((now() - Date.UTC(new Date(now()).getUTCFullYear(), 0, 0)) / 86_400_000);
-    state.sunNow = solarElevationFactor(h, doy, WARDS[state.ward]?.lat ?? 22.55);
+    state.sunNow = solarElevationFactor(h, doy, wardOf(state.ward)?.lat ?? 22.55);
     state.phase = state.sunNow > M.SUN_LIT ? 'peak' : 'night';
   }
   document.querySelectorAll('#segPhase button').forEach(b => onEl(b, 'click', () => {
@@ -1739,7 +1854,7 @@ export function mountHeatMap(): () => void {
      or replace the selected ward. */
   const onStyleLoad = () => {
     const wardData = cache[state.ward];
-    if (wardData) coreField.rehydrate(WARDS[state.ward], wardData.sizeM);
+    if (wardData) coreField.rehydrate(wardOf(state.ward), wardData.sizeM);
     attachReliefLayer();
     syncRendererVisibility();
     /* Our own street names, in the BASEMAP's frame. Added after relief so
@@ -1758,7 +1873,7 @@ export function mountHeatMap(): () => void {
     map.triggerRepaint();
   };
   map.on('style.load', onStyleLoad);
-  const onMapLoad = () => { void loadWard('ballygunge'); };
+  const onMapLoad = () => { void loadWard(INITIAL_AREA); };
   map.once('load', onMapLoad);
   void capsReady.then((caps) => {
     if (!appDisposed && caps.tier > 0 && caps.mode !== 'isotherm') void ensureRelief();

@@ -122,13 +122,29 @@ test('the heat-map card has no dead controls, and its record link is real', asyn
   assert.match(href, /^\/api\/wards\/[a-z]+\/metadata\.json$/);
   const defaultWard = /^\/api\/wards\/([a-z]+)\//.exec(href)[1];
 
-  // the static href must match the ward the app boots with, or the first click
-  // downloads the wrong ward's record
-  const stateWard = /const state: State = \{ ward: '([a-z]+)'/.exec(app)?.[1];
-  assert.equal(defaultWard, stateWard, 'the markup default and the app default must agree');
+  /* The static href must match the ward the app boots with, or the first click
+     downloads the wrong ward's record.
+
+     Since Task 6 the boot ward is an AREA KEY held in one named constant, so this
+     reads the constant and takes its last segment — the file stem, which is what
+     the /api/wards/:id route is generated under. Pinning `INITIAL_AREA` as the
+     single source is STRICTER than the bare literal this replaced: it also refuses
+     a second copy of the id being inlined into `state`. */
+  const initialArea = /const INITIAL_AREA: AreaKey = '[a-z]+\/[a-z]+\/([a-z-]+)';/.exec(app);
+  assert.ok(initialArea, 'heat-map-app.ts must name its boot area once, as INITIAL_AREA');
+  assert.match(app, /const state: State = \{ ward: INITIAL_AREA,/,
+    'the app must boot on INITIAL_AREA, not on a second copy of the id');
+  assert.equal(defaultWard, initialArea[1], 'the markup default and the app default must agree');
 
   // and it must follow the selection
   assert.ok(app.includes('updateReportHref'), 'the href must be updated on ward change');
-  assert.match(app, /state\.ward = name; updateCompareHref\(\); updateReportHref\(\)/,
+  assert.match(app, /state\.ward = name;[\s\S]{0,240}?updateCompareHref\(\); updateReportHref\(\);/,
     'updateReportHref must run wherever the ward changes');
+  /* Added in Task 6, and it belongs beside the two above: the scope is now derived
+     from the open area, so a switch that moved `state.ward` without re-resolving
+     `state.climate` would run the new area's geometry through the old one's
+     fallback temperature and park-cooling radius — silently, with a plausible
+     number out. */
+  assert.match(app, /state\.ward = name; state\.climate = resolve\(name\)\.climate;/,
+    'state.climate must be re-resolved wherever the ward changes');
 });

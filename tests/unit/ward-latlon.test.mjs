@@ -85,7 +85,12 @@ test('the card asks for the coordinate row it now populates', async () => {
     'the building card lost its coordinate row; paintCard still writes to it');
   const app = await readFile(
     join(ROOT, 'src/scripts/climate-engine/heat-map-app.ts'), 'utf8');
-  assert.match(app, /wardLatLon\(WARDS\[state\.ward\], b\.cx, b\.cz\)/,
+  /* `wardOf(...)`, not `WARDS[...]`, since Task 6: `state.ward` is an AreaKey and
+     WARD_MAP is keyed by BARE id, so the direct index type-checks, returns
+     undefined, and throws on the next property access. The helper is the one place
+     that conversion happens. The invariant this pins is unchanged — the origin must
+     be the CURRENT ward's row, never a fixed one. */
+  assert.match(app, /wardLatLon\(wardOf\(state\.ward\), b\.cx, b\.cz\)/,
     'the coordinate must come from the building centroid and the CURRENT ward — '
     + 'a hardcoded origin was how the loader telemetry shipped a Ballygunge '
     + 'coordinate for every ward');

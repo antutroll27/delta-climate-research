@@ -358,10 +358,21 @@ test('the four migrated constants are gone from the physics', async () => {
 
 
 /* ────────────────────────────────────────────────────────────────────────────
-   TASK 4 — the choke point has to STAY a choke point.
-   Currently SKIPPED: the four known offenders are migrated in Task 6, which
-   turns this on. It is written now so the offender list is recorded against a
-   measured baseline rather than reconstructed later from memory.
+   TASK 4 — the choke point has to STAY a choke point. ARMED IN TASK 6.
+
+   The four offenders it was written against -- heat-map-app.ts, ward-loader.ts,
+   surface-raster.ts, provenance.ts -- now take an AreaKey and build every URL
+   through paths()/cityPaths(), so the guard below runs for real.
+
+   The baseline test that stood here is DELETED, not updated. It asserted the
+   offender list EQUALLED those four, and its whole purpose was to keep an honest
+   record of the migration's starting point while the real guard was skipped. With
+   the real guard armed that purpose is served better by the real guard: "exactly
+   these four offend" and "nothing offends" cannot both hold, so keeping a rewritten
+   version would mean asserting the empty list twice and pinning a historical fact
+   that git already records. Its stated failure modes are both covered -- a list
+   that SHRANK now means the guard passes, and a list that GREW fails the guard by
+   name.
    ──────────────────────────────────────────────────────────────────────────── */
 
 /** Files permitted to name the data directory, relative to the engine root. */
@@ -395,17 +406,28 @@ async function dataUrlOffenders() {
   return offenders.sort();
 }
 
-test('the four known offenders are exactly what Task 6 must migrate', async () => {
-  // Baseline, measured 2026-08-27. If this list SHRINKS, someone migrated a
-  // site without turning the real guard on; if it GROWS, a new hand-built URL
-  // was added while the guard was still skipped.
-  assert.deepEqual(await dataUrlOffenders(), [
-    'heat-map-app.ts', 'provenance.ts', 'surface-raster.ts', 'ward-loader.ts',
-  ]);
+test('no module builds a /heat-map/data URL by hand', async () => {
+  assert.deepEqual(await dataUrlOffenders(), [],
+    'these modules build a data URL by hand; use paths() from scope/paths.ts');
 });
 
-test('no module builds a /heat-map/data URL by hand',
-  { skip: 'enabled in Task 6, once the four offenders are migrated' }, async () => {
-    assert.deepEqual(await dataUrlOffenders(), [],
-      'these modules build a data URL by hand; use paths() from scope/paths.ts');
-  });
+test('the guard would still catch a NEW hand-built URL', async () => {
+  /* Guard the guard. `dataUrlOffenders` walks a directory, strips comments and
+     greps -- three steps, each of which can silently stop finding anything: a walk
+     that recurses wrongly, a comment-stripper that eats the code, a pattern that no
+     longer matches the quoting someone used. An empty result would then read as
+     "clean" for ever, which is the exact failure shape this whole migration exists
+     to end.
+
+     So the pattern is exercised against the four spellings a real regression would
+     arrive in -- the three quote styles, and the interpolated form the sixteen
+     original call sites actually used -- rather than by writing a decoy file to
+     disk, which would leave one behind if the run were interrupted. */
+  const flags = (code) => /['"`]\/heat-map\/data\//.test(code);
+  assert.equal(flags('fetch(`/heat-map/data/${name}-trees.json`)'), true);
+  assert.equal(flags("fetch('/heat-map/data/dc-urs-inputs.json')"), true);
+  assert.equal(flags('fetch("/heat-map/data/heatwave-percentiles.json")'), true);
+  assert.equal(flags('const DATA = `/heat-map/data/`;'), true);
+  // ...and does not fire on the paths() output the migrated modules now pass around.
+  assert.equal(flags('fetch(p.trees, { signal })'), false);
+});
