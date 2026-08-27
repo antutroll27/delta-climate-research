@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
-import { readdir, readFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
 
 import {
@@ -178,9 +180,25 @@ test('every city-level URL exists on disk too', async () => {
    cannot see where its numbers came from.
    --------------------------------------------------------------------------- */
 
-/** Source with comments removed, so a tripwire greps CODE and not prose. */
+/**
+ * Source with comments removed, so a tripwire greps CODE and not prose.
+ *
+ * THE LINE-COMMENT PATTERN MUST NOT MATCH THE `//` IN `https://`. It used to
+ * match a bare double-slash followed by anything up to the newline, which
+ * truncates at the FIRST double-slash on a line and deletes the rest with it.
+ * (The old pattern is not quoted here: a regex ending in star-slash closes this
+ * very comment, which is how the first attempt at this note broke the file.)
+ * MEASURED miss:
+ *
+ *     const b = 'https://x.com'; const u = `/heat-map/data/${n}.json`;
+ *
+ * -- a genuine hand-built data URL, invisible because a same-line absolute URL
+ * swallowed it. FOUR tripwires share this helper (the data-URL guard, the
+ * layering check, the place-names check and the migrated-constants check), so
+ * the same blind spot was in all of them. `(^|[^:])` keeps `://` out of it.
+ */
 const stripComments = (src) =>
-  src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+  src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/gm, '$1');
 
 const engineSource = (name) =>
   readFile(new URL(`../../src/scripts/climate-engine/${name}`, import.meta.url), 'utf8');
@@ -378,8 +396,19 @@ test('the four migrated constants are gone from the physics', async () => {
 /** Files permitted to name the data directory, relative to the engine root. */
 const PATH_ALLOWLIST = new Set(['scope/paths.ts']);
 
-async function dataUrlOffenders() {
-  const root = new URL('../../src/scripts/climate-engine/', import.meta.url);
+/**
+ * The one pattern. EXPORTED-BY-SHARING, not re-typed.
+ *
+ * The guard-the-guard test below used to declare its own copy of this regex and
+ * assert against that. MEASURED: replacing the walker's pattern with
+ * /NEVER_MATCHES_ANYTHING/ and dropping a real offender into the engine left
+ * BOTH tests green -- the choke point wide open, the suite reporting clean.
+ * That is the sixth guard in this migration to watch a copy of the thing
+ * instead of the thing.
+ */
+const DATA_URL = /['"`]\/heat-map\/data\//;
+
+async function dataUrlOffenders(root = new URL('../../src/scripts/climate-engine/', import.meta.url)) {
   const offenders = [];
   const walk = async (dir, prefix) => {
     for (const entry of await readdir(dir, { withFileTypes: true })) {
@@ -389,17 +418,10 @@ async function dataUrlOffenders() {
       if (!entry.name.endsWith('.ts') || entry.name.startsWith('._')) continue;
       const rel = `${prefix}${entry.name}`;
       if (PATH_ALLOWLIST.has(rel)) continue;
-      /* STRIP COMMENTS FIRST. Three modules legitimately DOCUMENT the data
-         directory -- loader-progress.ts:39 and registry.ts:44,103. A grep over
-         raw source flags those, and a guard that cries wolf on documentation
-         gets weakened or deleted, which is how the real check dies. */
-      const code = (await readFile(next, 'utf8'))
-        .replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
-      /* ANY data URL, not just interpolated ones. Three call sites fetch
-         heatwave-percentiles.json and dc-urs-inputs.json by PLAIN STRING --
-         precisely the two files that lie about their scope -- so a `${`-only
-         pattern would miss exactly the cases this migration is for. */
-      if (/['"`]\/heat-map\/data\//.test(code)) offenders.push(rel);
+      /* Comments are stripped first: three modules legitimately DOCUMENT the
+         data directory, and a guard that cries wolf on documentation gets
+         weakened or deleted, which is how the real check dies. */
+      if (DATA_URL.test(stripComments(await readFile(next, 'utf8')))) offenders.push(rel);
     }
   };
   await walk(root, '');
@@ -412,26 +434,39 @@ test('no module builds a /heat-map/data URL by hand', async () => {
 });
 
 test('the guard would still catch a NEW hand-built URL', async () => {
-  /* Guard the guard. `dataUrlOffenders` walks a directory, strips comments and
-     greps -- three steps, each of which can silently stop finding anything: a walk
-     that recurses wrongly, a comment-stripper that eats the code, a pattern that no
-     longer matches the quoting someone used. An empty result would then read as
-     "clean" for ever, which is the exact failure shape this whole migration exists
-     to end.
+  /* Guard the guard, THROUGH THE REAL FUNCTION.
+     dataUrlOffenders walks a directory, strips comments and greps -- three steps,
+     each of which can silently stop finding anything. The previous version tested
+     a re-typed copy of the pattern, so it exercised none of the three: not the
+     walk, not the stripper, not the pattern the walker actually uses. It is
+     driven over a temporary fixture tree instead, so all three run. */
+  const dir = await mkdtemp(join(tmpdir(), 'obos-guard-'));
+  try {
+    await mkdir(join(dir, 'nested'), { recursive: true });
+    const write = (rel, body) => writeFile(join(dir, rel), body, 'utf8');
 
-     So the pattern is exercised against the four spellings a real regression would
-     arrive in -- the three quote styles, and the interpolated form the sixteen
-     original call sites actually used -- rather than by writing a decoy file to
-     disk, which would leave one behind if the run were interrupted. */
-  const flags = (code) => /['"`]\/heat-map\/data\//.test(code);
-  assert.equal(flags('fetch(`/heat-map/data/${name}-trees.json`)'), true);
-  assert.equal(flags("fetch('/heat-map/data/dc-urs-inputs.json')"), true);
-  assert.equal(flags('fetch("/heat-map/data/heatwave-percentiles.json")'), true);
-  assert.equal(flags('const DATA = `/heat-map/data/`;'), true);
-  // ...and does not fire on the paths() output the migrated modules now pass around.
-  assert.equal(flags('fetch(p.trees, { signal })'), false);
+    // the four spellings a real regression arrives in, one per file so the
+    // offender list names each independently
+    await write('a.ts', 'fetch(`/heat-map/data/${name}-trees.json`)');
+    await write('b.ts', "fetch('/heat-map/data/dc-urs-inputs.json')");
+    await write('c.ts', 'fetch("/heat-map/data/heatwave-percentiles.json")');
+    await write(join('nested', 'd.ts'), 'const D = `/heat-map/data/`;');
+    // ...and the case the old stripper ATE: a real offender hidden behind a
+    // same-line https://, which truncated the line before the grep saw it.
+    await write('e.ts', "const b = 'https://x.com'; const u = `/heat-map/data/${n}.json`;");
+
+    // must NOT fire: documentation, and the migrated call style
+    await write('doc.ts', '// this module once fetched /heat-map/data/x.json\nexport const ok = 1;');
+    await write('clean.ts', 'fetch(p.trees, { signal });');
+    await write('skip.md', 'fetch("/heat-map/data/not-typescript.json")');
+
+    assert.deepEqual(await dataUrlOffenders(new URL(`file://${dir}/`)),
+      ['a.ts', 'b.ts', 'c.ts', 'e.ts', 'nested/d.ts'],
+      'the walk, the comment stripper, or the pattern has stopped finding offenders');
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });
-
 
 /* ---------------------------------------------------------------------------
    TASK 9 — the two axes, and the area that cannot be fetched.
