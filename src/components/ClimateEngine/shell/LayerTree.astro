@@ -1,0 +1,419 @@
+---
+/**
+ * THE LAYER TREE — the grouped checkbox list that fills the sidebar's Layers pane.
+ *
+ * ONE CLAIM, AND EVERYTHING HERE SERVES IT: a layer that cannot be drawn here is
+ * DISABLED WITH ITS REASON NAMED.
+ *
+ *   NEVER HIDDEN. An absent row reads as "this does not exist", which is a
+ *   different and wronger claim than "we do not have it here yet". Dubai's rows
+ *   are the whole point of the console being honest: the gap between what the
+ *   twin does in Kolkata and what it can do in Dubai is the thing we are asking
+ *   to be funded to close, so it has to be VISIBLE and it has to be NAMED. Hide
+ *   the rows and the city merely looks like it has no layers.
+ *
+ *   NEVER LIVE-BUT-INERT. A checkbox that ticks and changes nothing is the defect
+ *   this repo has already paid for twice; the spec-1 audit called it "a control
+ *   that does nothing and says nothing". So an unavailable row is `disabled` —
+ *   the native attribute, which is announced as unavailable, cannot be focused
+ *   and cannot be toggled — and it renders UNCHECKED, because a ticked box beside
+ *   a layer that is not on the map is the same lie one step quieter.
+ *
+ * `layerAvailability(id, key, caps)` already answers both halves: its
+ * `Availability` union makes `{ available: false }` UNCONSTRUCTIBLE WITHOUT A
+ * REASON. This component's whole job is to render that faithfully, and to invent
+ * nothing of its own — no city is named below, no label is spelled a second time,
+ * and no refusal sentence is written here.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * THE COUNT IS A CSS COUNTER, and that is the one subtle decision in the file.
+ *
+ * `n / total` is DERIVED FROM THE ROWS, by the browser, at style time: each row
+ * increments `tree-all`, a row whose box is checked also increments `tree-on`,
+ * and the group heading's ::after prints the pair. The number is therefore right
+ *
+ *   · on the first paint, with no script running at all;
+ *   · after a click;
+ *   · and after a toggle from ANYWHERE ELSE — Task 7's script, a restored
+ *     session, a query parameter, a devtools poke.
+ *
+ * A number rendered into the markup here would have been a SECOND COPY of a fact
+ * the checkboxes already carry, and it would have gone stale on the very first
+ * toggle, because this component ships no script of its own to refresh it. That
+ * is the exact defect class this migration keeps deleting — five Python scripts
+ * with private ward tables that had already drifted 10–44 m apart, a per-layer
+ * `cities: []` list that `paths()` already answers. A counter maintained
+ * alongside the rows is that defect one dimension over. This way there is nothing
+ * for Task 7 to remember to keep in step, because there is nothing to keep.
+ *
+ * The price is that the count element is EMPTY in the markup and its digits exist
+ * only once CSS has run. That is why it is `aria-hidden`: a bare "1 / 2"
+ * announced after the rows, with no word saying what it counts, is noise — and
+ * every checkbox already announces its own state, which is the authoritative
+ * version of the same fact.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * NOT WIRED YET. Task 7 mounts this into the stage and gives the checkboxes their
+ * `change` behaviour; it finds them by `data-layer`. Until then the component is
+ * imported by nothing, and `npm run check` compiling it — not `npm run build`,
+ * which never opens a file nothing imports — is what proves it is real.
+ */
+import {
+  LAYER_IDS, LAYERS, layerAvailability, splitLayerId,
+  type Capabilities, type LayerId,
+} from '../../../scripts/climate-engine/scope/layers.ts';
+import type { AreaKey } from '../../../scripts/climate-engine/scope/registry.ts';
+
+interface Props {
+  /**
+   * The area the console is scoped to. Every row's availability is derived from
+   * it — no prop for the city, none for the country, and no list of which layers
+   * work where, because `layerAvailability` already answers that from `paths()`.
+   */
+  current: AreaKey;
+  /**
+   * Whether this build has a Mapillary token.
+   *
+   * A PROP RATHER THAN A READ OF `import.meta.env` IN HERE, and the reason is the
+   * same one `Capabilities` gives in scope/layers.ts: a capability the caller
+   * cannot vary is a capability that cannot be RENDERED in both states, and so
+   * ships untested. The token-off tree — five rows live, street-level imagery
+   * disabled with a reason no file could have given — is the case that proves the
+   * capability axis is wired rather than assumed, and it only exists because this
+   * is a parameter.
+   */
+  mapillary: boolean;
+}
+
+const { current, mapillary } = Astro.props;
+
+const caps: Capabilities = { mapillary };
+
+/**
+ * The registry read through a WIDENED view — the move `scope/layers.ts` makes
+ * with its own `GROUPS`, and `registry.ts` with `COUNTRIES`, for the same reason.
+ *
+ * An ASSIGNMENT, never a cast. `LAYERS` is checked against this shape by the
+ * compiler, so it is the tree's structure that is being relied on, not an
+ * assertion about it that keeps compiling after it stops being true. The two
+ * fields this file needs are the two named here; `needs` is deliberately absent,
+ * because whether a layer can be drawn is `layerAvailability`'s question and this
+ * component must not be able to form a second opinion about it.
+ */
+interface TreeItem {
+  readonly label: string;
+  readonly defaultOn: boolean;
+}
+interface TreeGroup {
+  readonly label: string;
+  readonly items: Readonly<Record<string, TreeItem>>;
+}
+const GROUPS: Readonly<Record<string, TreeGroup>> = LAYERS;
+
+/**
+ * The dot beside each row, as a PALETTE TOKEN NAME.
+ *
+ * The founder's mockup wrote these as bare hexes. Three of the six were already
+ * tokens; the other three are now, declared beside the rest of the palette in
+ * HeatMapStage.astro. Task 2's guard fails the build on any hex written more than
+ * once in a file — and a hex written ONCE here and handed round in a variable
+ * would slip past that guard while defeating the point of it, which is that a
+ * colour has exactly ONE spelling in the codebase. So the table holds names and
+ * the template paints with var().
+ *
+ * `Record<LayerId, string>` is what makes it exhaustive: a seventh layer fails to
+ * compile HERE, naming itself, rather than rendering a dot with no colour.
+ */
+const DOT: Record<LayerId, string> = {
+  'thermal/surface': '--red',
+  'green/canopy': '--green',
+  'green/trees': '--pine',
+  'built/footprints': '--ink',
+  'built/heights': '--slate',
+  'ground/street': '--gold',
+};
+
+interface Row {
+  /** the registry's own id, straight off the walk — never rebuilt from slugs */
+  readonly id: LayerId;
+  readonly label: string;
+  /** the palette token to paint the dot with */
+  readonly dot: string;
+  readonly checked: boolean;
+  readonly disabled: boolean;
+  /** why it cannot be drawn, or null when it can. Never invented here. */
+  readonly reason: string | null;
+}
+
+interface Group {
+  readonly slug: string;
+  readonly label: string;
+  readonly rows: Row[];
+}
+
+/**
+ * The tree, built by ONE walk of `LAYER_IDS`.
+ *
+ * WALKING THE FLATTEN RATHER THAN THE NESTED LITERAL is what keeps `row.id` a
+ * real `LayerId` without a cast: the id is the loop variable, not a string
+ * rebuilt by joining a group to an item. `splitLayerId` then reads back the parts
+ * the flatten RECORDED, rather than re-splitting on "/" — the correction
+ * scope/layers.ts carried over from `splitKey`, which used to mis-resolve any
+ * slug containing a separator and return a thing that existed nowhere.
+ *
+ * Groups appear in first-seen order, which is registry declaration order, which
+ * is tree order. A group with no items therefore cannot appear — correctly: it
+ * would be a heading over nothing, a category a visitor is told exists and can
+ * never open. `assertLayerLogic`'s check 4 refuses to let one be declared at all.
+ */
+const groups: Group[] = [];
+const byGroup = new Map<string, Group>();
+
+for (const id of LAYER_IDS) {
+  const { group, item } = splitLayerId(id);
+  let g = byGroup.get(group);
+  if (g === undefined) {
+    g = { slug: group, label: GROUPS[group].label, rows: [] };
+    byGroup.set(group, g);
+    groups.push(g);
+  }
+  const entry = GROUPS[group].items[item];
+  const { available, reason } = layerAvailability(id, current, caps);
+  g.rows.push({
+    id,
+    label: entry.label,
+    dot: DOT[id],
+    /* A DEFAULT ONLY COUNTS WHERE IT CAN BE HONOURED. `defaultOn` says what the
+       tree starts with drawn; `available` says whether there is anything to draw.
+       A row that is one but not the other must render UNCHECKED, or the console
+       claims a layer is on the map that is not on the map — and the count, which
+       reads these boxes, would inherit the same lie. */
+    checked: entry.defaultOn && available,
+    disabled: !available,
+    reason,
+  });
+}
+
+/**
+ * The id a group's heading answers to, and the id its `role="group"` points at.
+ *
+ * ONE function used by both, so the two cannot be written differently — an
+ * `aria-labelledby` that misses its heading leaves the group with no accessible
+ * name at all, and nothing about the page looks wrong when it happens.
+ */
+const headingId = (slug: string): string => `layer-group-${slug}`;
+---
+<section class="tree" aria-labelledby="tree-heading">
+  <p class="tree-heading" id="tree-heading">Layers</p>
+
+  {groups.map((g) => (
+    <div class="tree-group" role="group" aria-labelledby={headingId(g.slug)}>
+      <p class="tree-group-name" id={headingId(g.slug)}>{g.label}</p>
+
+      <ul class="tree-rows">
+        {g.rows.map((row) => (
+          <li class:list={['tree-row', { 'is-blocked': row.disabled }]}>
+            {/* THE LABEL WRAPS THE CONTROL, so the whole row is the hit target
+                and no `for`/`id` pair can be written to miss each other. */}
+            <label class="tree-label">
+              <input
+                class="tree-box"
+                type="checkbox"
+                data-layer={row.id}
+                checked={row.checked}
+                disabled={row.disabled}
+              />
+              <span class="tree-dot" style={`background: var(${row.dot})`} aria-hidden="true"></span>
+              <span class="tree-name">{row.label}</span>
+              {row.reason !== null && <span class="tree-why">{row.reason}</span>}
+            </label>
+          </li>
+        ))}
+      </ul>
+
+      {/* EMPTY ON PURPOSE — see the header. Its digits are two CSS counters read
+          off the rows above it, which is why it sits AFTER them in the document
+          and is placed back into the heading row by grid: a counter can only be
+          printed at a point the rows have already been counted at. */}
+      <span class="tree-count" aria-hidden="true"></span>
+    </div>
+  ))}
+</section>
+
+<style>
+  /* SCOPED, NOT is:global, for the reason IconRail.astro and ScopeSwitcher.astro
+     both give: every element here is Astro-rendered and static, the scoping hash
+     reaches all of it, and the global surface SHRINKS rather than grows. The
+     stage's own block is global because MapLibre injects DOM it never rendered;
+     nothing here does.
+
+     Colours are var() throughout. The palette — including --pine, --slate and
+     --gold, added for three of the dots — is declared in HeatMapStage.astro,
+     because a token resolves from where it is DECLARED: these rules reach it only
+     once the tree is inside .stage, which is where Task 7 puts it. Task 2's guard
+     fails the build on any hex written more than once in a file, comments
+     included; this file writes none at all. */
+
+  .tree {
+    flex: 1;
+    min-block-size: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .tree-heading {
+    font-family: var(--mono);
+    font-size: .62rem;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--faint);
+    padding: 12px 14px 2px;
+  }
+
+  /* THE COUNTER SCOPE. Each group resets its own pair, so a group prints ITS
+     rows rather than the running total of every group above it — the same
+     shadowing that numbers each section of an ordered document from 1. */
+  .tree-group {
+    counter-reset: tree-on 0 tree-all 0;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      "name  count"
+      "rows  rows";
+    align-items: baseline;
+    padding: 8px 14px 9px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .tree-group-name {
+    grid-area: name;
+    font-family: var(--mono);
+    font-size: .65rem;
+    letter-spacing: .13em;
+    text-transform: uppercase;
+    color: var(--ink);
+  }
+
+  /* THE COUNT. Last in the document so the rows have been counted by the time it
+     is printed; first in the visual row because that is where the founder's
+     mockup put it. The reordering is deliberate and it is why the element is
+     aria-hidden — the reading order and the visual order disagree, and rather
+     than announce "1 / 2" out of position it stays out of the tree entirely.
+     Nothing is lost: each checkbox announces its own state, which is the
+     authoritative version of what this counts. */
+  .tree-count {
+    grid-area: count;
+    font-family: var(--mono);
+    font-size: .62rem;
+    letter-spacing: .06em;
+    color: var(--faint);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .tree-count::after { content: counter(tree-on) " / " counter(tree-all); }
+
+  .tree-rows {
+    grid-area: rows;
+    list-style: none;
+    margin: 0;
+    padding: 6px 0 0;
+  }
+
+  /* WHERE THE COUNT COMES FROM. Every row counts once toward the total; a row
+     whose box is checked counts toward both. `counter-increment` does not
+     accumulate across rules — the more specific declaration REPLACES the other —
+     so the checked rule has to name both counters, and naming only `tree-on`
+     there would silently drop that row from the denominator. */
+  .tree-row { counter-increment: tree-all 1; }
+  .tree-row:has(.tree-box:checked) { counter-increment: tree-all 1 tree-on 1; }
+
+  /* Two rows on the grid: the control line, and the reason beneath it aligned
+     under the name. The reason is a full sentence off scope/layers.ts, not a
+     word, so it has to be allowed to wrap — a row that clipped its own
+     explanation would be back to a greyed control that says nothing. */
+  .tree-label {
+    display: grid;
+    grid-template-columns: auto auto 1fr;
+    align-items: center;
+    column-gap: 9px;
+    row-gap: 3px;
+    padding: 4px 0;
+    font-size: .81rem;
+    color: var(--ink);
+    cursor: pointer;
+    transition: color .15s;
+  }
+
+  .tree-label:hover { color: var(--paper); }
+
+  /* appearance:none takes the platform tick away, so the box, its border and its
+     check are all drawn here — and :focus-visible below is then the ONLY thing
+     telling a keyboard user which layer they are on. */
+  .tree-box {
+    appearance: none;
+    inline-size: 14px;
+    block-size: 14px;
+    margin: 0;
+    border: 1px solid var(--line-hi);
+    border-radius: 3.5px;
+    position: relative;
+    cursor: pointer;
+    transition: background .15s, border-color .15s;
+  }
+
+  .tree-box:checked {
+    background: var(--cyan);
+    border-color: var(--cyan);
+  }
+
+  .tree-box:checked::after {
+    content: "";
+    position: absolute;
+    left: 4px;
+    top: 1px;
+    inline-size: 4px;
+    block-size: 8px;
+    border: solid var(--base);
+    border-width: 0 2px 2px 0;
+    transform: rotate(42deg);
+  }
+
+  .tree-box:focus-visible {
+    outline: 2px solid var(--cyan);
+    outline-offset: 3px;
+  }
+
+  .tree-dot {
+    inline-size: 7px;
+    block-size: 7px;
+    border-radius: 2px;
+  }
+
+  .tree-name { min-inline-size: 0; }
+
+  /* THE REASON, in the mockup's bronze micro-type. It spans from the name's
+     column to the end so it reads as an explanation OF the row rather than as a
+     row of its own. */
+  .tree-why {
+    grid-column: 3 / -1;
+    font-family: var(--mono);
+    font-size: .57rem;
+    line-height: 1.5;
+    letter-spacing: .06em;
+    color: var(--bronze);
+  }
+
+  /* A BLOCKED ROW DIMS ITS NAME AND ITS DOT — not the whole row, which is where
+     this departs from the mockup's blanket `opacity: .4`. The reason is the one
+     thing on a blocked row that a visitor actually needs to read, and fading it
+     to 40% would undo the entire point of showing the row instead of hiding it. */
+  .tree-row.is-blocked .tree-name { color: var(--faint); }
+  .tree-row.is-blocked .tree-dot { opacity: .3; }
+  .tree-row.is-blocked .tree-label { cursor: not-allowed; }
+  .tree-row.is-blocked .tree-label:hover { color: var(--ink); }
+  .tree-box:disabled { cursor: not-allowed; border-color: var(--line); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .tree-label, .tree-box { transition: none; }
+  }
+</style>

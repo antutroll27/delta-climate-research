@@ -637,3 +637,631 @@ test('the switcher is usable by keyboard and honours reduced motion', async () =
   assert.match(css, /@media\s*\(prefers-reduced-motion\s*:\s*reduce\)/,
     'the switcher transitions its cards with no prefers-reduced-motion escape');
 });
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   THE LAYER TREE — the grouped checkbox list that fills the Layers pane.
+
+   THE ONE CLAIM THIS COMPONENT MAKES: a layer that cannot be drawn here is
+   DISABLED WITH ITS REASON NAMED. Never hidden — an absent row reads as "this
+   does not exist", which is a different and wronger claim than "we do not have
+   it here yet". Never live-but-inert — a checkbox that ticks and changes
+   nothing is the defect this repo has already paid for twice, and the spec-1
+   audit called it "a control that does nothing and says nothing".
+
+   READ AS SOURCE, for the reason the two halves above give: an .astro component
+   cannot be imported into `node --import tsx --test`. So every data-driven claim
+   is asserted against `scope/layers.ts` ITSELF, imported below, and the source
+   assertions only establish that the markup DERIVES from it rather than
+   restating it. Where a claim is about the rendered page, the chain from the
+   source property to the output property is written out rather than assumed.
+
+   GUARD THE GUARD, and this suite has earned the paranoia: EIGHT guards in this
+   project have passed while protecting nothing, one of them inside a test a plan
+   specified verbatim. So, in this third half:
+
+     · an unreadable, empty or fenceless component FAILS (`treeSource`)
+     · a component with an EMPTY frontmatter FAILS — the whole tree is derived
+       there, and an empty one would satisfy every "names no label" check by
+       containing no code at all
+     · a registry whose LAYER_IDS is empty FAILS (`registryGroups`), because
+       every loop below walks it and would otherwise iterate zero times
+     · a registry that flattens to ZERO groups FAILS, same reason
+     · a registry that yields zero labels FAILS the no-copies test
+     · an area at which EVERY layer is available FAILS the disabled test — there
+       would then be nothing for `disabled` to be true about
+     · an area at which NO layer is available FAILS it too, because `disabled`
+       would be indistinguishable from "always off"
+     · a `.tree-count::after` rule that cannot be found FAILS rather than
+       yielding an empty content string the counter assertions then read
+     · a DOT table that parses to zero entries FAILS
+     · a palette with no tokens in it FAILS the dot test
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+import {
+  LAYERS, LAYER_IDS, layerAvailability, splitLayerId,
+} from '../../src/scripts/climate-engine/scope/layers.ts';
+
+const TREE = new URL(
+  '../../src/components/ClimateEngine/shell/LayerTree.astro', import.meta.url);
+const STAGE = new URL(
+  '../../src/components/ClimateEngine/HeatMapStage.astro', import.meta.url);
+
+/** Both capability states. The tree is rendered with the token and without it. */
+const CAPS_ON = { mapillary: true };
+const CAPS_OFF = { mapillary: false };
+
+async function treeSource() {
+  let src;
+  try {
+    src = await readFile(TREE, 'utf8');
+  } catch (err) {
+    assert.fail(
+      'src/components/ClimateEngine/shell/LayerTree.astro could not be read '
+      + `(${err.code ?? err.message}) -- every assertion below reads it, so a `
+      + 'missing file must fail rather than let the suite pass vacuously');
+  }
+  assert.ok(src.trim().length > 0, 'LayerTree.astro is empty -- nothing to check');
+
+  const split = src.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/);
+  assert.ok(split, 'LayerTree.astro has no `---` frontmatter fence -- the tests '
+    + 'below read the frontmatter and the template separately and cannot tell '
+    + 'them apart without it');
+  assert.ok(split[1].trim().length > 0,
+    'LayerTree.astro has an EMPTY frontmatter -- the whole tree is derived there, '
+    + 'and an empty one would satisfy every "names no label" and "contains no '
+    + 'cast" check below by containing no code at all');
+
+  const body = split[2];
+  const styles = [...body.matchAll(/<style([^>]*)>([\s\S]*?)<\/style>/g)];
+  return {
+    frontmatter: strip(split[1]),
+    template: strip(body.replace(/<style[^>]*>[\s\S]*?<\/style>/g, '')),
+    styles,
+    // COMMENTS STRIPPED, so a rule that exists only in prose cannot satisfy a
+    // check. `:focus-visible` mentioned in a comment is not a focus ring.
+    css: styles.map((m) => m[2]).join('\n').replace(/\/\*[\s\S]*?\*\//g, ''),
+  };
+}
+
+/**
+ * The groups the registry declares, derived TWO INDEPENDENT WAYS.
+ *
+ * `Object.keys(LAYERS)` reads the literal; walking `LAYER_IDS` through
+ * `splitLayerId` reads the runtime FLATTEN, which is the thing the component
+ * actually iterates. Comparing them is therefore not a tautology: it is the
+ * assertion that the walk the tree performs yields exactly the groups the
+ * registry declares, which is what "four groups, derived" has to mean.
+ */
+function registryGroups() {
+  assert.ok(LAYER_IDS.length > 0,
+    'LAYER_IDS came back EMPTY -- every loop in this half walks it, so an empty '
+    + 'registry would let all of them iterate zero times and pass while the tree '
+    + 'rendered nothing');
+
+  const walked = [];
+  for (const id of LAYER_IDS) {
+    const { group } = splitLayerId(id);
+    if (!walked.includes(group)) walked.push(group);
+  }
+  assert.ok(walked.length > 0,
+    'the LAYER_IDS walk produced ZERO groups -- the group list every assertion '
+    + 'below iterates would be empty');
+
+  assert.deepEqual(walked, Object.keys(LAYERS),
+    'the groups reached by walking LAYER_IDS are not the groups LAYERS declares '
+    + `(walk: ${walked.join(', ')} | literal: ${Object.keys(LAYERS).join(', ')}) -- `
+    + 'the tree walks the flatten, so a walk that misses a group renders a '
+    + 'category of layers nowhere at all');
+  return walked;
+}
+
+/** Every label the registry owns — group headings and row names alike. */
+function registryLabels() {
+  const labels = [];
+  for (const [group, entry] of Object.entries(LAYERS)) {
+    assert.ok(Object.keys(entry.items).length > 0,
+      `layer group "${group}" has no items -- it contributes no row labels, and `
+      + 'the no-copies loop below would check that many fewer strings');
+    labels.push(entry.label);
+    for (const item of Object.values(entry.items)) labels.push(item.label);
+  }
+  assert.ok(labels.length > 0,
+    'no labels were collected from the registry -- the loop that checks the tree '
+    + 'writes none of them by hand would then check nothing');
+  return labels;
+}
+
+/** The one area key that ships artefacts, and the one that ships none. */
+function twoAreas() {
+  const withData = AREA_KEYS.filter((k) => paths(k) !== null);
+  const noData = AREA_KEYS.filter((k) => paths(k) === null);
+  assert.ok(withData.length > 0,
+    'NO registered area ships artefacts -- there would be nothing for an ENABLED '
+    + 'row to be true about, and the comparisons below would prove nothing');
+  assert.ok(noData.length > 0,
+    'EVERY registered area ships artefacts -- there would then be nothing for '
+    + '`disabled` to be true about, and the Dubai half of this suite would pass '
+    + 'while protecting nothing. If that is genuinely the new state of the '
+    + 'registry, these tests need rewriting, not deleting');
+  return { rich: withData[0], bare: noData[0] };
+}
+
+/** How many rows the tree would render CHECKED — the numerator of the count. */
+function drawnCount(key, caps) {
+  return LAYER_IDS.filter((id) => {
+    const { group, item } = splitLayerId(id);
+    return LAYERS[group].items[item].defaultOn
+      && layerAvailability(id, key, caps).available;
+  }).length;
+}
+
+/** The per-layer dot table, as `{ id: token }`. Never an empty map. */
+function dotTable(frontmatter) {
+  const block = frontmatter.match(/const\s+DOT[^=]*=\s*\{([\s\S]*?)\n\s*\};/);
+  assert.ok(block, 'LayerTree.astro declares no `const DOT ... = { ... };` -- the '
+    + 'row dots are read from that table, and a table that cannot be found must '
+    + 'fail rather than yield an empty map that nothing then checks');
+  const entries = [...block[1].matchAll(/'([^']+)':\s*'([^']*)'/g)]
+    .map(([, id, token]) => [id, token]);
+  assert.ok(entries.length > 0,
+    'the DOT table parsed to ZERO entries -- either the table is empty or its '
+    + "entries are no longer `'id': 'token'`; both must fail, because the dot "
+    + 'assertions would otherwise iterate nothing');
+  return new Map(entries);
+}
+
+/** The `.tree-count::after` content, and the counters it is built from. */
+function countRule(css) {
+  const rule = css.match(/\.tree-count::after\s*\{([^}]*)\}/);
+  assert.ok(rule, 'the tree declares no `.tree-count::after { ... }` rule -- that '
+    + 'pseudo-element IS the count, so without the rule there is no count at all '
+    + 'and the assertions below would read an empty string and pass');
+  const content = rule[1].match(/content:\s*([^;]+)/);
+  assert.ok(content, '.tree-count::after declares no `content` -- the element is '
+    + 'empty in the markup on purpose, so with no content it renders nothing');
+  const counters = [...content[1].matchAll(/counter\(\s*([a-z][a-z0-9-]*)\s*\)/g)]
+    .map((m) => m[1]);
+  assert.equal(counters.length, 2,
+    `the count is built from ${counters.length} CSS counter(s) `
+    + `(${counters.join(', ') || 'none'}) -- it must be built from exactly two, `
+    + 'the drawn rows over the total rows, or one half of "n / total" is a literal');
+  return { content: flat(content[1]), counters };
+}
+
+test('the tree renders one group per registry group, derived from the registry', async () => {
+  /* WHY THIS IMPLIES THE OUTPUT CLAIM. The template writes ONE group heading,
+     inside one `groups.map(` loop, so the number of headings in the output is
+     the length of `groups` -- and `groups` is built by walking LAYER_IDS, which
+     `registryGroups()` has just shown yields exactly the registry's groups. Four
+     today, and whatever the registry says tomorrow, with no edit here. */
+  const { frontmatter, template } = await treeSource();
+  const groups = registryGroups();
+
+  assert.match(frontmatter, /\bfor\s*\(\s*const\s+id\s+of\s+LAYER_IDS\s*\)/,
+    'the frontmatter does not walk `LAYER_IDS` -- the groups must be DERIVED from '
+    + 'the registry flatten, not written out, or a fifth group ships a category of '
+    + `layers nowhere at all (the registry declares: ${groups.join(', ')})`);
+
+  const loop = template.indexOf('groups.map(');
+  assert.ok(loop !== -1,
+    'the template renders no `groups.map(` loop -- outside a loop there is one '
+    + 'group in the output however many the registry declares');
+
+  const headings = [...template.matchAll(/class="tree-group-name"/g)];
+  assert.equal(headings.length, 1,
+    `the group heading is written ${headings.length}x -- it must be written ONCE, `
+    + 'inside the groups loop, or the count of headings in the output stops being '
+    + 'the count of groups and this test no longer implies one heading per group');
+  assert.ok(template.indexOf('class="tree-group-name"') > loop,
+    'the group heading sits OUTSIDE the groups loop -- there would then be one '
+    + 'heading in the output however many groups the registry declares');
+  assert.ok(flat(template).includes('{g.label}'),
+    "the heading's text is not {g.label} -- it must be the registry's own label");
+});
+
+test('the tree writes down no label the registry owns', async () => {
+  /* A label copied here is a second spelling of a string the registry already
+     holds, and the two are then free to disagree -- the defect the whole scope
+     model was written against. registry.ts records what happened the last time
+     one was copied rather than referenced: five Python scripts held private ward
+     tables and had ALREADY DIVERGED, 10-44 m apart, with nothing failing. */
+  const { frontmatter, template } = await treeSource();
+  const code = `${frontmatter}\n${template}`;
+
+  for (const label of registryLabels()) {
+    assert.ok(!new RegExp(label.replace(/[.*+?^${}()|[\]\\-]/g, '\\$&'), 'i').test(code),
+      `LayerTree.astro writes the label "${label}" -- every heading and every row `
+      + 'name must come from the registry entry, never from a copy kept here');
+  }
+});
+
+test('every registered layer produces exactly one row', async () => {
+  /* THE COUNTING ARGUMENT. The frontmatter pushes one row per LAYER_ID -- one
+     `rows.push(` reached once per iteration of the LAYER_IDS walk -- and the
+     template writes ONE <input>, inside one `rows.map(` loop. So the number of
+     checkboxes in the output is the number of registered layers: six today.
+     A row written outside the loop, or a second push, breaks that arithmetic. */
+  const { frontmatter, template } = await treeSource();
+  registryGroups();
+
+  const pushes = [...frontmatter.matchAll(/\.rows\.push\(/g)];
+  assert.equal(pushes.length, 1,
+    `the frontmatter pushes a row ${pushes.length}x -- exactly one push, inside `
+    + 'the LAYER_IDS walk, is what makes the row count the layer count');
+
+  const loop = template.indexOf('rows.map(');
+  assert.ok(loop !== -1,
+    'the template renders no `rows.map(` loop -- outside a loop there is one row '
+    + 'in the output however many layers are registered');
+
+  const boxes = [...template.matchAll(/<input\b/g)];
+  assert.equal(boxes.length, 1,
+    `the template writes <input> ${boxes.length}x -- it must be written ONCE, `
+    + 'inside the rows loop, or the number of checkboxes stops being the number '
+    + 'of layers and this test no longer implies one row per layer');
+  assert.ok(template.indexOf('<input') > loop,
+    'the <input> sits OUTSIDE the rows loop -- one checkbox would then be '
+    + 'rendered however many layers the registry declares');
+});
+
+test('every checkbox carries the data-layer Task 7 finds it by', async () => {
+  const { frontmatter, template } = await treeSource();
+  registryGroups();
+
+  const input = template.match(/<input\b([^>]*?)\/?>/);
+  assert.ok(input, 'the template renders no <input>');
+  assert.match(flat(input[1]), /\sdata-layer=\{row\.id\}/,
+    'the checkbox carries no data-layer={row.id} -- Task 7 finds the layers by '
+    + 'that attribute, and a row without it is a control the script cannot reach, '
+    + 'which is a checkbox that ticks and changes nothing');
+  assert.match(flat(input[1]), /\stype="checkbox"/,
+    'the row control is not a checkbox');
+
+  /* AND `row.id` IS A REAL LayerId, because it is the loop variable of the
+     LAYER_IDS walk -- not a string rebuilt from the group and item slugs, which
+     is how `splitKey` next door once mis-resolved every slug containing a
+     separator, returning a key that existed nowhere. */
+  assert.match(frontmatter, /\brows\.push\(\{\s*id\s*,/,
+    'the row does not take its id straight from the LAYER_IDS walk -- an id '
+    + 'rebuilt by hand can name a layer that does not exist, and nothing about '
+    + 'the rendered page looks wrong when it does');
+});
+
+test('a layer that cannot be drawn HERE is DISABLED, says WHY, and is never checked', async () => {
+  /* THE POINT OF THE WHOLE COMPONENT, and asserted at DUBAI, where five of the
+     six layers are unavailable -- the case the tree exists for.
+
+     ASSERTED AGAINST scope/layers.ts, never against a list of layer names written
+     here. A hardcoded list would go stale the day a city starts or stops shipping
+     an artefact, and it would go stale SILENTLY, since a stale list still
+     iterates. */
+  const { bare } = twoAreas();
+  registryGroups();
+
+  const blocked = LAYER_IDS.filter((id) => !layerAvailability(id, bare, CAPS_ON).available);
+  const drawable = LAYER_IDS.filter((id) => layerAvailability(id, bare, CAPS_ON).available);
+  assert.ok(blocked.length > 0,
+    `every layer is available at "${bare}" -- there is then nothing for `
+    + '`disabled` to be true about, and this test would pass while proving nothing');
+  assert.ok(drawable.length > 0,
+    `no layer is available at "${bare}" -- \`disabled\` would be indistinguishable `
+    + 'from "always off", and the test would again prove nothing');
+
+  /* EVERY REFUSAL NAMES ITS REASON. The Availability union makes
+     `{ available: false }` unconstructible without one; this is the check that
+     the reason is a sentence rather than an empty string satisfying the type. */
+  for (const id of blocked) {
+    const { reason } = layerAvailability(id, bare, CAPS_ON);
+    assert.equal(typeof reason, 'string', `${id} at "${bare}" refuses with no reason`);
+    assert.ok(reason.trim().length > 0,
+      `${id} at "${bare}" refuses with an EMPTY reason -- a greyed row with no `
+      + 'stated reason reads as a bug in the page rather than as a fact about '
+      + 'the world');
+  }
+
+  const { frontmatter, template } = await treeSource();
+
+  /* ONE assignment, and it reads the availability. Anything else -- a second
+     assignment, a literal, a list of ids -- means a row can be greyed for a
+     reason `layerAvailability` never gave. The trailing comma is what keeps the
+     `readonly disabled: boolean;` of the Row interface out of the count: a type
+     annotation is not an assignment. */
+  const assigned = [...frontmatter.matchAll(/disabled:\s*([^,;\n}]+),/g)]
+    .map((m) => m[1].trim());
+  assert.equal(assigned.length, 1,
+    `the frontmatter assigns \`disabled\` ${assigned.length}x `
+    + `(${assigned.join(' | ') || 'never'}) -- exactly one assignment, from the `
+    + 'availability, is what makes scope/layers.ts the only thing that can '
+    + 'disable a row');
+  assert.equal(assigned[0], '!available',
+    `\`disabled\` is set from \`${assigned[0]}\` -- it must be the negation of the `
+    + 'availability `layerAvailability` returned');
+  assert.match(frontmatter, /layerAvailability\(\s*id\s*,\s*current\s*,\s*caps\s*\)/,
+    'the availability is not obtained from layerAvailability(id, current, caps) -- '
+    + 'it must be DERIVED per layer and per area, not declared');
+
+  const input = template.match(/<input\b([^>]*?)\/?>/);
+  assert.ok(input, 'the template renders no <input>');
+  assert.match(flat(input[1]), /\sdisabled=\{row\.disabled\}/,
+    'the <input> does not bind disabled={row.disabled} -- the derivation above '
+    + 'would then be computed and thrown away, and every row would render live');
+
+  /* NEVER LIVE-BUT-INERT. A row that cannot be drawn must not start ticked, or
+     the tree claims a layer is on the map that is not on the map. */
+  assert.match(frontmatter, /checked:\s*entry\.defaultOn\s*&&\s*available/,
+    "a row's `checked` is not `entry.defaultOn && available` -- a blocked layer "
+    + 'would then render ticked, which is a control that says something false');
+  assert.match(flat(input[1]), /\schecked=\{row\.checked\}/,
+    'the <input> does not bind checked={row.checked}');
+
+  /* AND THE REASON IS ON THE PAGE. Rendered from `row.reason`, conditioned on
+     there BEING one, so an available row grows no empty bronze span. */
+  assert.match(flat(template),
+    /\{row\.reason !== null && <span class="tree-why">\{row\.reason\}<\/span>\}/,
+    'the template does not render `{row.reason !== null && <span '
+    + 'class="tree-why">{row.reason}</span>}` -- a disabled row with no visible '
+    + 'reason is exactly the "control that does nothing and says nothing" the '
+    + 'spec-1 audit found shipped twice');
+
+  /* AND THE REASON IS NOT A COPY. If any refusal sentence appears in the source,
+     the tree is restating what layers.ts already says, and the two will drift.
+
+     EVERY SENTENCE THE REGISTRY CAN PRODUCE, not just the ones this area happens
+     to produce today. Checking only `bare`'s four would have left the other nine
+     copyable -- including the capability refusal and the "declares none under
+     that name" clause, neither of which Dubai ever emits. A guard that watches
+     four of thirteen is how the eight dead guards in this project got that way. */
+  const code = `${frontmatter}\n${template}`;
+  const everyReason = new Set();
+  for (const key of AREA_KEYS) {
+    for (const caps of [CAPS_ON, CAPS_OFF]) {
+      for (const id of LAYER_IDS) {
+        const { reason } = layerAvailability(id, key, caps);
+        if (reason !== null) everyReason.add(reason);
+      }
+    }
+  }
+  assert.ok(everyReason.size > 0,
+    'the registry produced NO refusal sentence at any area in either capability '
+    + 'state -- the loop below would then check nothing');
+  for (const reason of everyReason) {
+    assert.ok(!code.includes(reason),
+      'LayerTree.astro writes a refusal sentence verbatim -- the reason must come '
+      + `from layerAvailability, never from a copy kept here: "${reason}"`);
+  }
+});
+
+test('street-level imagery is refused on the CAPABILITY axis, not the artefact one', async () => {
+  /* THE SECOND KIND OF DEPENDENCY. Street-level imagery has no local artefact:
+     it is served from tiles.mapillary.com against a token, and the whole feature
+     tree-shakes out of a build whose PUBLIC_MAPILLARY_TOKEN is unset. So the tree
+     has to be able to disable ONE row for a reason no file could give -- which is
+     what proves the capability axis is wired rather than assumed. */
+  const { rich } = twoAreas();
+  registryGroups();
+
+  const onAtRich = LAYER_IDS.filter((id) => layerAvailability(id, rich, CAPS_ON).available);
+  const offAtRich = LAYER_IDS.filter((id) => !layerAvailability(id, rich, CAPS_OFF).available);
+  assert.equal(onAtRich.length, LAYER_IDS.length,
+    `only ${onAtRich.length} of ${LAYER_IDS.length} layers are available at `
+    + `"${rich}" with the token -- this test contrasts that state with the `
+    + 'token-off one, and needs the token-on state to be complete');
+  assert.equal(offAtRich.length, 1,
+    `dropping the capability changes ${offAtRich.length} rows at "${rich}" -- it `
+    + 'must change exactly one, or the capability and the artefacts are not the '
+    + 'two independent axes the registry claims');
+  assert.match(layerAvailability(offAtRich[0], rich, CAPS_OFF).reason, /mapillary/,
+    'the capability refusal does not name the capability, so the row would be '
+    + 'greyed for a reason nobody can act on');
+
+  /* AND THE COMPONENT PASSES IT THROUGH. A `caps` built from anything but the
+     prop -- a module-level read of import.meta.env, a literal true -- is a
+     capability the caller cannot vary, which is a capability that cannot be
+     rendered in both states and therefore ships untested. */
+  const { frontmatter } = await treeSource();
+  assert.match(frontmatter, /const\s+caps\s*:\s*Capabilities\s*=\s*\{\s*mapillary\s*\}/,
+    'the frontmatter does not build `caps` from the `mapillary` prop -- a tree '
+    + 'that reads the token itself cannot be rendered in the token-off state');
+  assert.match(frontmatter, /mapillary\s*:\s*boolean/,
+    'Props declares no `mapillary: boolean` -- the capability axis would then be '
+    + 'something the caller cannot state');
+});
+
+test('the n / total count is a CSS counter over the rows, not a number written down', async () => {
+  /* THE SUBTLE PART. `n / total` is DERIVED FROM THE ROWS by the browser: the
+     rows increment two CSS counters and the group heading's ::after prints them.
+     It is therefore right on the first paint with no script running, right after
+     a click, and right after a toggle from anywhere else -- Task 7's script, a
+     restored session, a query parameter.
+
+     A NUMBER RENDERED INTO THE MARKUP WOULD BE THE DEFECT THIS PROJECT KEEPS
+     DELETING: a second copy of a fact the checkboxes already carry, stale the
+     first time a layer is toggled by anything at all, since this component ships
+     no script of its own. So the count element is EMPTY in the markup, and these
+     assertions are what keep it that way. */
+  const { template, css } = await treeSource();
+  registryGroups();
+
+  const el = template.match(/<(\w+)([^>]*class="tree-count"[^>]*)>([\s\S]*?)<\/\1>/);
+  assert.ok(el, 'the template renders no `class="tree-count"` element');
+  assert.equal(el[3].trim(), '',
+    `the count element renders "${flat(el[3])}" -- it must be EMPTY in the markup. `
+    + 'A number written here is a second copy of what the checkboxes already say, '
+    + 'and it goes stale the first time a layer is toggled');
+
+  const { content, counters } = countRule(css);
+  assert.ok(!/\d/.test(content),
+    `the count content is \`${content}\` -- it contains a digit, so at least one `
+    + 'half of "n / total" is a literal rather than a reading of the rows');
+
+  /* BOTH counters are incremented BY THE ROWS, and the drawn one only by a row
+     whose checkbox is checked. That is what makes the number a reading of the
+     tree rather than a claim about it. */
+  const increments = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+    .map(([, selector, body]) => ({ selector: flat(selector), body: flat(body) }))
+    .filter((r) => /counter-increment:/.test(r.body));
+  assert.ok(increments.length > 0,
+    'nothing in the stylesheet increments a counter -- both halves of the count '
+    + 'would render as 0 for ever');
+  for (const name of counters) {
+    const owners = increments.filter((i) => new RegExp(`\\b${name}\\b`).test(i.body));
+    assert.ok(owners.length > 0,
+      `the counter \`${name}\` is printed but never incremented -- it renders 0 `
+      + 'whatever the tree contains');
+    for (const owner of owners) {
+      assert.match(owner.selector, /\.tree-row\b/,
+        `\`${name}\` is incremented on \`${owner.selector}\`, which is not a row -- `
+        + 'the count must be derived from the rows themselves, never from '
+        + 'something kept alongside them');
+    }
+  }
+  const drawn = increments.filter((i) => /:checked/.test(i.selector));
+  assert.equal(drawn.length, 1,
+    `${drawn.length} rules increment a counter on a :checked row -- exactly one `
+    + 'must, or the numerator is not "how many are drawn"');
+
+  /* SCOPED PER GROUP. Without its own counter-reset every group would print the
+     running total of all the groups above it. */
+  const reset = css.match(/\.tree-group\s*\{[^}]*counter-reset:\s*([^;}]*)/);
+  assert.ok(reset,
+    'no `.tree-group` rule resets the counters -- each group would then print the '
+    + 'running total of every group above it');
+  for (const name of counters) {
+    assert.match(reset[1], new RegExp(`\\b${name}\\b`),
+      `the counter \`${name}\` is never reset on .tree-group, so every group after `
+      + 'the first prints a running total rather than its own');
+  }
+});
+
+test('the count the tree shows is lower for Dubai than for Kolkata', async () => {
+  /* WHAT THE COUNTER READS. The rows it counts are the checked ones, and a row is
+     checked exactly when `entry.defaultOn && available`. So the number the
+     browser prints for an area is `drawnCount` of that area, and these are the
+     numbers the two renders differ by: Kolkata draws its defaults, Dubai -- which
+     ships no per-area artefact at all -- draws none of them.
+
+     THE `checked` ASSERTION IS DELIBERATELY SHARED with the disabled test rather
+     than parsed a second way here. It is one claim -- "a row is drawn iff it is a
+     default AND available" -- and it carries a different consequence in each
+     place: there, that a blocked layer never renders ticked; here, that the
+     printed count is `drawnCount`. Breaking it therefore fires both tests, which
+     is correct. Two parsers for one fact would be two things free to disagree,
+     which is the defect this whole migration exists to delete.
+
+     WITHOUT READING THE COMPONENT this test would be a statement about the
+     registry alone -- it would pass with no tree in the repo at all, which is
+     exactly the shape of the eight guards here that protected nothing. */
+  const { rich, bare } = twoAreas();
+  registryGroups();
+
+  const { frontmatter, template } = await treeSource();
+  assert.match(frontmatter, /checked:\s*entry\.defaultOn\s*&&\s*available/,
+    "a row's `checked` is not `entry.defaultOn && available` -- the printed count "
+    + 'would then be counting something other than the drawable defaults, and the '
+    + 'comparison below would be about a number the tree never shows');
+  assert.match(template, /class="tree-count"/,
+    'the tree renders no count element at all -- there is then no number for this '
+    + 'comparison to be about');
+
+  const here = drawnCount(rich, CAPS_ON);
+  const there = drawnCount(bare, CAPS_ON);
+  assert.ok(here > 0,
+    `no layer is drawn at "${rich}" either -- with nothing checked anywhere the `
+    + 'count is 0 everywhere and this comparison proves nothing');
+  assert.ok(here > there,
+    `"${rich}" draws ${here} layers and "${bare}" draws ${there} -- the tree must `
+    + 'show a LOWER count where fewer layers can be drawn, or the count is not '
+    + 'reading the rows');
+
+  /* AND NO AREA CAN EVER DRAW MORE THAN IT HAS, at either capability state. A
+     count that could exceed availability would mean a blocked row rendering
+     ticked -- the live-but-inert defect, arriving through the count. */
+  for (const key of AREA_KEYS) {
+    for (const caps of [CAPS_ON, CAPS_OFF]) {
+      const available = LAYER_IDS.filter(
+        (id) => layerAvailability(id, key, caps).available).length;
+      assert.ok(drawnCount(key, caps) <= available,
+        `"${key}" would draw ${drawnCount(key, caps)} of ${available} available `
+        + 'layers -- a blocked row is rendering ticked');
+    }
+  }
+});
+
+test('every dot is a token the palette declares, and the table is exhaustive', async () => {
+  /* THE MOCKUP'S DOTS ARE PER-LAYER HEXES. Task 2's guard fails the build on any
+     hex written more than once in a file, and three of the six were already
+     tokens. The other three now are too. Writing a hex ONCE here and reusing it
+     through a variable would slip past that guard while defeating its purpose, so
+     the table holds TOKEN NAMES and the dot is painted with var().
+
+     `Record<LayerId, string>` in the frontmatter is what makes the table
+     exhaustive: a seventh layer fails to compile here rather than rendering a
+     dot with no colour. This test checks the runtime half of the same claim. */
+  const { frontmatter, template } = await treeSource();
+  const dots = dotTable(frontmatter);
+
+  assert.deepEqual([...dots.keys()].sort(), [...LAYER_IDS].sort(),
+    'the DOT table does not cover exactly the registered layers -- a missing '
+    + 'entry renders a colourless dot, and a stale one names a layer that is gone');
+  assert.match(frontmatter, /const\s+DOT\s*:\s*Record<LayerId,\s*string>/,
+    'DOT is not typed `Record<LayerId, string>` -- without it a new layer would '
+    + 'compile clean here and render an undefined dot colour');
+
+  let stage;
+  try {
+    stage = await readFile(STAGE, 'utf8');
+  } catch (err) {
+    assert.fail(`HeatMapStage.astro could not be read (${err.code ?? err.message}) `
+      + '-- the palette is declared there, and a missing file must fail rather '
+      + 'than let every token check below pass vacuously');
+  }
+  const declared = new Set(
+    [...stage.matchAll(/(--[a-z0-9-]+)\s*:\s*#[0-9a-fA-F]{3,8}\b/g)].map((m) => m[1]));
+  assert.ok(declared.size > 0,
+    'no colour token was found in HeatMapStage.astro -- the loop below would '
+    + 'then accept every dot, including one naming a token nobody declares');
+
+  const seen = new Set();
+  for (const [id, token] of dots) {
+    assert.match(token, /^--[a-z][a-z0-9-]*$/,
+      `the dot for ${id} is \`${token}\` -- it must be a token NAME, so the colour `
+      + 'has exactly one spelling in the codebase');
+    assert.ok(declared.has(token),
+      `the dot for ${id} names \`${token}\`, which HeatMapStage.astro declares `
+      + 'nowhere -- var() would resolve to nothing and the dot would be invisible');
+    seen.add(token);
+  }
+  assert.equal(seen.size, dots.size,
+    'two layers share a dot colour ('
+    + [...dots].map(([i, t]) => `${i}=${t}`).join(', ')
+    + ') -- the dot is how a row is told from its neighbour at a glance');
+
+  assert.match(flat(template), /style=\{`background: var\(\$\{row\.dot\}\)`\}/,
+    'the dot is not painted with var(${row.dot}) -- a per-layer literal in the '
+    + 'template is a second place the palette has to be kept up to date');
+});
+
+test('the tree scopes its styles, casts nothing, and stays usable', async () => {
+  const { frontmatter, styles, css } = await treeSource();
+
+  assert.ok(styles.length > 0, 'LayerTree.astro has no <style> block at all');
+  for (const [, attrs] of styles) {
+    assert.ok(!/is:global/.test(attrs),
+      'LayerTree.astro uses <style is:global> -- its markup is entirely '
+      + 'Astro-rendered and static, so the scoping hash reaches it and the style '
+      + 'has no reason to leak');
+  }
+
+  for (const cast of [/\bas\s+any\b/, /\bas\s+unknown\s+as\b/, /@ts-(ignore|expect-error|nocheck)/]) {
+    assert.ok(!cast.test(frontmatter),
+      `LayerTree.astro frontmatter matches ${cast} -- scope/layers.ts exports a `
+      + 'typed splitter and a typed guard for everything this tree needs, and a '
+      + 'cast here is how the registry shape drifts out from under it');
+  }
+
+  assert.match(css, /:focus-visible/,
+    'the tree has no :focus-visible rule -- the checkboxes are appearance:none, '
+    + 'so without one a keyboard user cannot see which layer they are on');
+  assert.match(css, /@media\s*\(prefers-reduced-motion\s*:\s*reduce\)/,
+    'the tree transitions its rows with no prefers-reduced-motion escape');
+});

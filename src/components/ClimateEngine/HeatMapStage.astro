@@ -502,6 +502,16 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
     --sage:#9fb98a; --orange:#d46b4a;
     /* The compass sun: one colour across its disc, ray and hub. */
     --sun:#f2b544;
+    /* THREE OF THE LAYER TREE'S SIX DOTS. The other three are --red, --green and
+       --ink, which the palette already held; these are the colours the founder's
+       mockup wrote as bare hexes beside them. They are declared HERE, with the
+       rest of the palette, for the reason --rail-ground gives: a token resolves
+       from where it is DECLARED, so shell/LayerTree.astro's scoped rules reach
+       them only once the tree is inside .stage, which is where Task 7 puts it.
+       --pine is the deeper green that tells individual tree instances from the
+       canopy raster; --slate the dimmer grey that tells extruded heights from
+       footprint outlines; --gold the one warm mark in the Ground-truth group. */
+    --pine:#3f8f66; --slate:#6b7f81; --gold:#c9a227;
     /* The icon rail's ground — a shade under --base, so the console's navigation
        column reads as a step behind the surface it navigates. It is declared here
        with the rest of the palette rather than inside shell/IconRail.astro,
