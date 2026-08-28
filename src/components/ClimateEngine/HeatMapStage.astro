@@ -126,7 +126,12 @@ const strip = siblings.flatMap((sib) => {
    two strings by eye. */
 const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
 ---
-<main id="main" class="stage" data-area={scope.key}>
+{/* `data-console` is how shell/console-shell.ts finds a page with a rail and
+    panes on it. It is deliberately NOT `.stage`: Compare has a console too and
+    is not a stage, and keying the pane switcher on the stage is what left the
+    compare route's rail buttons inert. `data-area` stays the stage's own — it
+    is the scope half's subject, and Compare has no single area to declare. */}
+<main id="main" class="stage" data-console data-area={scope.key}>
   {/* THE RAIL IS THE ONLY NAVIGATION. It replaces the Explore/Compare pair that
       used to sit in the top bar beside a second brand link, and it carries the
       page's one brand mark home. `route` and `pane` are two different questions —

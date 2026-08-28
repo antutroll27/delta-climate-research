@@ -11,10 +11,18 @@
  * the ones that have something to instrument.
  *
  * ─────────────────────────────────────────────────────────────────────────────
- * WHAT IT OWNS
+ * WHAT IT OWNS, AND THE TWO HALVES ARE NOT THE SAME SHAPE
  *
- *   · the sidebar's pane, including collapse
- *   · the three scope selects
+ *   · the sidebar's pane, including collapse — on EVERY page with a console,
+ *     found by `[data-console]`. Explore and Compare both have one.
+ *   · the three scope selects — only on a page scoped to ONE area, which is a
+ *     page with a `.stage` carrying a valid `data-area`. Compare is scoped to a
+ *     PAIR, renders no scope switcher, and skips this half entirely.
+ *
+ * Splitting them is what let Compare have working panes. Keyed on
+ * `.stage[data-area]`, the whole function returned null there — so the rail's
+ * Layers, Reports and Scenarios were buttons with no handler and nothing behind
+ * them, which is this project's most-deleted defect on its only navigation.
  *
  * WHAT IT DOES NOT OWN. The layer checkboxes. Every one of them ends in a call
  * on the renderer, which lives inside `mountHeatMap`'s closure — so they are
@@ -73,17 +81,37 @@ type PaneState = { open: boolean; id: string };
  * element is a leak that also fires against the wrong document.
  */
 export function mountConsoleShell(): (() => void) | null {
-  const stage = document.querySelector<HTMLElement>('.stage[data-area]');
-  if (!stage) return null;
+  /* THE CONSOLE, NOT THE STAGE. Two routes render a rail and a sidebar now — the
+     Explore stage and the paired bench — and only one of them is a page scoped to
+     a single area. Keyed on `.stage[data-area]` the pane half simply did not run
+     on Compare, which left Layers, Reports and Scenarios as buttons with nothing
+     behind them. `[data-console]` is the mark a page puts on itself to say it has
+     a rail and panes; it is the only thing the portable half needs to know. */
+  const consoleRoot = document.querySelector<HTMLElement>('[data-console]');
+  if (!consoleRoot) return null;
 
-  const declared = stage.getAttribute('data-area');
+  /* THE SCOPE HALF'S PAGE, RESOLVED AND VALIDATED BEFORE A SINGLE LISTENER IS
+     BOUND. The refusal below throws, and a throw halfway through wiring would
+     leave the panes listening with no disposer ever returned to unwire them.
+
+     GATED ON `.stage`, NOT ON `.stage[data-area]`, and that is stricter than what
+     it replaces rather than looser. The old selector treated a stage that had LOST
+     its data-area as "no console here" and returned null in silence; now such a
+     stage is found and refused out loud. Compare has no stage at all, so it skips
+     the scope half entirely — it is not scoped to one area, and there is nothing
+     here to make optional. */
+  const stage = document.querySelector<HTMLElement>('.stage');
   /* THE SAME REFUSAL heat-map-app.ts's `bootArea` makes, and for the same reason:
      an unrecognised area is an authoring fault, and falling back to a default
      would open one place while the page names another — silently. */
-  if (!isAreaKey(declared)) {
-    throw new Error(`console-shell: the stage declares data-area="${declared}", which is not a registered area`);
+  let pageArea: AreaKey | null = null;
+  if (stage) {
+    const declared = stage.getAttribute('data-area');
+    if (!isAreaKey(declared)) {
+      throw new Error(`console-shell: the stage declares data-area="${declared}", which is not a registered area`);
+    }
+    pageArea = declared;
   }
-  const here: AreaKey = declared;
 
   const cleanup: Array<() => void> = [];
   const on = (node: EventTarget | null, ev: string, fn: EventListener): void => {
@@ -94,9 +122,12 @@ export function mountConsoleShell(): (() => void) | null {
 
   /* ── the sidebar's panes ─────────────────────────────────────────────────── */
 
-  const sidebar = document.querySelector<HTMLElement>('.sidebar');
-  const panes = [...document.querySelectorAll<HTMLElement>('.pane[data-pane]')];
-  const railButtons = [...document.querySelectorAll<HTMLButtonElement>('button[data-rail]')];
+  /* SCOPED TO THE CONSOLE, not to the document. Two routes carry these class
+     names now, and a query over the whole document would be one page swap away
+     from painting the other route's panes. */
+  const sidebar = consoleRoot.querySelector<HTMLElement>('.sidebar');
+  const panes = [...consoleRoot.querySelectorAll<HTMLElement>('.pane[data-pane]')];
+  const railButtons = [...consoleRoot.querySelectorAll<HTMLButtonElement>('button[data-rail]')];
 
   /* THE SERVER'S RENDER IS THE INITIAL STATE, read back rather than restated. A
      literal 'map' here would be a second copy of the pane HeatMapStage.astro
@@ -120,9 +151,12 @@ export function mountConsoleShell(): (() => void) | null {
 
   for (const button of railButtons) {
     const id = button.dataset.rail;
-    /* A rail button with no pane behind it is the CURRENT ROUTE rendered as a
-       button because there is nowhere to navigate — Analysis on the compare page.
-       Binding a pane swap to it would open a body that does not exist. */
+    /* A rail button with no pane behind it on THIS route: Map on the compare page
+       renders as a link, but a future section could be a button with its body
+       elsewhere. Binding a pane swap to it would open a body that is not in the
+       document. The rail already decided this — `aria-pressed` is written only
+       where its body is rendered here — and the `panes` check reads that decision
+       back off the DOM rather than restating the rail's table. */
     if (id === undefined || !panes.some((p) => p.dataset.pane === id)) continue;
     on(button, 'click', () => {
       /* CLICKING THE OPEN PANE COLLAPSES THE SIDEBAR — the behaviour every reader
@@ -139,55 +173,67 @@ export function mountConsoleShell(): (() => void) | null {
   /* ── the three scope selects ─────────────────────────────────────────────── */
 
   /**
+   * ONLY ON A PAGE THAT IS SCOPED TO ONE AREA. Every line below reads `here` — the
+   * country and city it belongs to, whether it ships data, the sibling it would
+   * switch to in place. Compare is scoped to a PAIR and renders no scope switcher,
+   * so there is nothing here to run and nothing to make optional; its A/B selects
+   * are its scope control and paired-controller.ts owns them.
+   *
    * One handler for all three levels, because Task 4 made every option's value an
    * AREA KEY at every level — Country, City and Area alike. There is nothing left
    * for a per-level branch to decide: the value read off any of the three is
    * already the thing `areaPath` and `loadWard` take.
    */
-  for (const select of document.querySelectorAll<HTMLSelectElement>('select[data-scope]')) {
-    on(select, 'change', () => {
-      const value = select.value;
-      /* `isAreaKey`, never a cast. The value is a string off the DOM — an option
-         list the registry built today, an autofilled value, a devtools poke — and
-         a key that resolves to nothing must be refused here rather than become a
-         fetch for a file that does not exist. */
-      if (!isAreaKey(value) || value === here) return;
+  if (pageArea !== null) {
+    /* NARROWED ONCE, KEEPING THE NAME. Every reference below is unchanged from
+       when this ran unconditionally -- `resolve(here)` included, which is the
+       exact text the tripwire in tests/unit/obos-scope.test.mjs reads. */
+    const here: AreaKey = pageArea;
+    for (const select of consoleRoot.querySelectorAll<HTMLSelectElement>('select[data-scope]')) {
+      on(select, 'change', () => {
+        const value = select.value;
+        /* `isAreaKey`, never a cast. The value is a string off the DOM — an option
+           list the registry built today, an autofilled value, a devtools poke — and
+           a key that resolves to nothing must be refused here rather than become a
+           fetch for a file that does not exist. */
+        if (!isAreaKey(value) || value === here) return;
 
-      /* SWITCH IN PLACE ONLY WITHIN ONE CITY, and only when both ends ship data.
-         The second half is `tabKind`'s rule, unchanged and not restated: something
-         here has to be listening and something there has to be loadable. The first
-         half is the instrument's own assumption made explicit — its ward table,
-         its climate constants and its currency are city and country facts, and it
-         rebuilds sibling keys from THIS page's country/city prefix. Crossing
-         either is a different page, so it is a navigation.
+        /* SWITCH IN PLACE ONLY WITHIN ONE CITY, and only when both ends ship data.
+           The second half is `tabKind`'s rule, unchanged and not restated: something
+           here has to be listening and something there has to be loadable. The first
+           half is the instrument's own assumption made explicit — its ward table,
+           its climate constants and its currency are city and country facts, and it
+           rebuilds sibling keys from THIS page's country/city prefix. Crossing
+           either is a different page, so it is a navigation.
 
-         TWO FLAGS OFF TWO DIFFERENT KEYS, spelled out rather than shortened. This
-         decision moved here from the stage's tab strip, and the defect it carries
-         a scar from is a call that passed ONE flag twice: branch on the page's and
-         a non-shipping target becomes an in-place switch that `loadWard` refuses
-         in silence; branch on the target's and a shipping target becomes an
-         in-place switch on a page with no instrument mounted at all. `here` and
-         `value` are visibly different arguments, which is the property the
-         tripwire in tests/unit/obos-scope.test.mjs reads. */
-      const from = splitKey(here);
-      const to = splitKey(value);
-      const sameCity = from.country === to.country && from.city === to.city;
-      const inPlace = sameCity && tabKind({
-        pageShipsData: resolve(here).area.hasData,
-        tabShipsData: resolve(value).area.hasData,
-      }) === 'switch';
+           TWO FLAGS OFF TWO DIFFERENT KEYS, spelled out rather than shortened. This
+           decision moved here from the stage's tab strip, and the defect it carries
+           a scar from is a call that passed ONE flag twice: branch on the page's and
+           a non-shipping target becomes an in-place switch that `loadWard` refuses
+           in silence; branch on the target's and a shipping target becomes an
+           in-place switch on a page with no instrument mounted at all. `here` and
+           `value` are visibly different arguments, which is the property the
+           tripwire in tests/unit/obos-scope.test.mjs reads. */
+        const from = splitKey(here);
+        const to = splitKey(value);
+        const sameCity = from.country === to.country && from.city === to.city;
+        const inPlace = sameCity && tabKind({
+          pageShipsData: resolve(here).area.hasData,
+          tabShipsData: resolve(value).area.hasData,
+        }) === 'switch';
 
-      if (inPlace) {
-        document.dispatchEvent(new CustomEvent<OpenAreaDetail>(OPEN_AREA_EVENT, {
-          detail: { key: value },
-        }));
-        return;
-      }
-      /* `areaPath`, not a string built here. It is the one place a per-area URL is
-         spelled, and a second spelling is how a link starts pointing at a
-         directory the build never prerendered. */
-      window.location.assign(areaPath(value));
-    });
+        if (inPlace) {
+          document.dispatchEvent(new CustomEvent<OpenAreaDetail>(OPEN_AREA_EVENT, {
+            detail: { key: value },
+          }));
+          return;
+        }
+        /* `areaPath`, not a string built here. It is the one place a per-area URL is
+           spelled, and a second spelling is how a link starts pointing at a
+           directory the build never prerendered. */
+        window.location.assign(areaPath(value));
+      });
+    }
   }
 
   return () => { for (const off of cleanup.splice(0)) off(); };

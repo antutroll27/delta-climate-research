@@ -154,7 +154,13 @@ test('the heat-map card has no dead controls, and its record link is real', asyn
   assert.match(app, /if \(!isAreaKey\(declared\)\) \{[\s\S]{0,80}?throw new Error\(/,
     'an unrecognised data-area must throw, not fall back — a fallback reopens the '
     + 'defect this whole check exists against, silently');
-  assert.match(stage, /<main id="main" class="stage" data-area=\{scope\.key\}>/,
+  /* WIDENED FOR A SIBLING ATTRIBUTE, NOT WEAKENED. The stage now also carries
+     `data-console`, which is how shell/console-shell.ts finds a page with a rail
+     and panes — Compare has one too and is not a stage. Both things this line
+     actually guards are still required exactly as before: that the tag is the
+     stage's own <main>, and that its area is `scope.key` rather than a literal.
+     Only the assumption that nothing else could ever sit between them is gone. */
+  assert.match(stage, /<main id="main" class="stage"[^>]*\sdata-area=\{scope\.key\}>/,
     'the stage must state its area for the app to read');
   assert.match(app, /const INITIAL_AREA = bootArea\(\);/);
   assert.match(app, /const state: State = \{ ward: INITIAL_AREA,/,

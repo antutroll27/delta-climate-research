@@ -130,6 +130,12 @@ test('no stylesheet writes a colour more than once', async () => {
     'src/components/ClimateEngine/shell/ScopeSwitcher.astro',
     'src/components/ClimateEngine/shell/LayerTree.astro',
     'src/components/ClimateEngine/shell/InterventionPane.astro',
+    /* THE SECOND ROUTE TO RENDER THE CONSOLE. It writes no hex today — its palette
+       is oklch throughout — so this costs nothing now and is the point: the rail's
+       token bridge lives in this file, and a hex pasted beside it is exactly how a
+       bridged colour would acquire a second spelling. A census that only watched
+       the Explore route would never have looked. */
+    'src/components/ClimateEngine/compare/PairedBench.astro',
   ];
   const offences = [];
   for (const rel of files) {

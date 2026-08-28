@@ -62,7 +62,7 @@ async function railSource() {
   };
 }
 
-/** The declared sections, as `{ id, label, href, pane }`. Never an empty list. */
+/** The declared sections, as `{ id, label, href, body }`. Never an empty list. */
 function sectionTable(frontmatter) {
   const block = frontmatter.match(/const\s+SECTIONS[^=]*=\s*\[([\s\S]*?)\n\s*\];/);
   assert.ok(block, 'IconRail.astro declares no `const SECTIONS = [ ... ];` -- the '
@@ -70,12 +70,12 @@ function sectionTable(frontmatter) {
     + 'fail rather than yield an empty list that nothing then checks');
 
   const entries = [...block[1].matchAll(
-    /\{\s*id:\s*'([a-z]+)'\s*,\s*label:\s*'([^']+)'\s*,\s*href:\s*([^,]+),\s*pane:\s*(true|false)\s*,/g)]
-    .map(([, id, label, href, pane]) => ({ id, label, href: href.trim(), pane: pane === 'true' }));
+    /\{\s*id:\s*'([a-z]+)'\s*,\s*label:\s*'([^']+)'\s*,\s*href:\s*([^,]+),\s*body:\s*'(always|own-route)'\s*,/g)]
+    .map(([, id, label, href, body]) => ({ id, label, href: href.trim(), body }));
 
   assert.ok(entries.length > 0, 'the SECTIONS table parsed to ZERO entries -- '
     + 'either the table is empty or its fields are no longer `id`, `label`, '
-    + '`href`, `pane` in that order; both must fail, because every loop below '
+    + '`href`, `body` in that order; both must fail, because every loop below '
     + 'would otherwise assert nothing');
   return entries;
 }
@@ -217,29 +217,48 @@ test('the rail is told the route and the pane SEPARATELY', async () => {
 
 test('a pane section says whether its pane is open; a section with no pane does not', async () => {
   /* TWO FACTS, STATED SEPARATELY, because they are separate. `aria-current="page"`
-     is about the DOCUMENT; `aria-pressed` is about the SIDEBAR. Analysis navigates
-     and owns no sidebar body, so it must carry no aria-pressed at all --
+     is about the DOCUMENT; `aria-pressed` is about the SIDEBAR. A section whose
+     pane does not exist on THIS route must carry no aria-pressed at all --
      `aria-pressed="false"` announces a toggle that happens to be off, which is a
      different and wrong claim. The shell script also reads the attribute's
      PRESENCE to learn which sections have panes, so an unconditional one would
-     wire a pane swap to a section with nothing to swap to. */
+     wire a pane swap to a section with nothing to swap to.
+
+     WHERE A PANE EXISTS IS A PROPERTY OF THE ROUTE, NOT OF THE SECTION, and that
+     is what `body` records. Layers, Reports and Scenarios are answers about
+     wherever you are standing, so their bodies are rendered on BOTH routes.
+     Map's body is the toolbox and Analysis's body is the paired bench: each is
+     rendered only on the route it belongs to, and each is a plain link from the
+     other. The first version of this table carried a boolean, which could not
+     say that -- `analysis: pane false` was true of the Explore route and false
+     of the Compare route, and it was read on both. */
   const { frontmatter, template } = await railSource();
   const table = sectionTable(frontmatter);
-  const pane = new Map(table.map((s) => [s.id, s.pane]));
+  const body = new Map(table.map((s) => [s.id, s.body]));
 
-  for (const id of ['map', 'layers', 'reports', 'scenarios']) {
-    assert.equal(pane.get(id), true, `${id} owns a sidebar body and must declare pane: true`);
+  for (const id of ['layers', 'reports', 'scenarios']) {
+    assert.equal(body.get(id), 'always',
+      `${id} navigates nowhere, so its pane is rendered on every route the rail `
+      + "appears on -- declaring 'own-route' would blank it on all of them, "
+      + 'because no route IS Layers, Reports or Scenarios');
   }
-  assert.equal(pane.get('analysis'), false,
-    'Analysis navigates to another page and owns no sidebar body -- declaring '
-    + 'pane: true would give it an aria-pressed it can never honour, and would '
-    + 'wire a pane swap to a body that does not exist');
+  for (const id of ['map', 'analysis']) {
+    assert.equal(body.get(id), 'own-route',
+      `${id} is a ROUTE as well as a section, and its pane is rendered only on `
+      + "that route -- declaring 'always' would give it an aria-pressed on the "
+      + 'other page, where the body it names is not in the document at all');
+  }
 
-  /* MAP DECLARES BOTH, and it is the entry that proves the two fields are not one
-     field written twice: it navigates (href) AND owns a pane. */
+  /* THE TWO FIELDS ARE NOT ONE FIELD WRITTEN TWICE, and Map is still the entry
+     that proves it: it navigates (href) AND owns a pane. The discriminator has
+     moved -- Analysis used to be the counter-example by declaring `pane: false`,
+     and now the two fields vary independently along a different axis: Layers has
+     no href and a body everywhere, Map has an href and a body in one place. */
   const href = new Map(table.map((s) => [s.id, s.href]));
   assert.equal(href.get('map'), 'explorePath');
-  assert.equal(pane.get('map'), true);
+  assert.equal(body.get('map'), 'own-route');
+  assert.equal(href.get('layers'), 'null');
+  assert.equal(body.get('layers'), 'always');
 
   const written = [...template.matchAll(/aria-pressed/g)];
   assert.equal(written.length, 1,
@@ -255,10 +274,20 @@ test('a pane section says whether its pane is open; a section with no pane does 
     + 'section with no pane -- anything unconditional gives Analysis a toggle '
     + 'state it does not have');
 
-  assert.match(flat(frontmatter), /pressed:\s*s\.pane\s*\?/,
-    '`pressed` must be gated on whether the section OWNS a pane. Computed for '
-    + 'every section it would render aria-pressed="false" on Analysis, which '
-    + 'announces a toggle that is off rather than no toggle at all');
+  /* THE PREDICATE, AND THAT IT READS THE ROUTE. A gate written against `s.body`
+     alone cannot distinguish Analysis-on-Compare (a real pane) from
+     Analysis-on-Explore (a link to another page), so it would put an
+     aria-pressed on a section whose body is not in the document -- which is
+     exactly the dead toggle this rewrite exists to remove. */
+  assert.match(flat(frontmatter), /const ownsPane = \(s[^)]*\)[^;]*s\.id === route/,
+    '`ownsPane` must decide against `route` -- a pane whose body is rendered '
+    + "only on its own route ('own-route') exists here only when this page IS "
+    + 'that route, and nothing else in the derivation knows which page this is');
+  assert.match(flat(frontmatter), /pressed:\s*ownsPane\(s\)\s*\?/,
+    '`pressed` must be gated on `ownsPane(s)`. Computed for every section it '
+    + 'would render aria-pressed="false" on a section whose body this route does '
+    + 'not render -- announcing a toggle that is off rather than no toggle at '
+    + 'all, and wiring a pane swap to a body that does not exist');
   assert.match(flat(frontmatter), /pressed:[^,]*s\.id === pane/,
     '`pressed` must compare against `pane` -- compared against `route` it would '
     + 'be a second spelling of aria-current and the sidebar state would be '
@@ -1638,4 +1667,304 @@ test('each shell component is mounted exactly once', async () => {
       + 'shell/ -- an Astro component that is not imported renders as an unknown '
       + 'HTML element, silently and with no styles');
   }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   THE PAIRED BENCH ADOPTS THE CONSOLE — the fifth part.
+
+   Compare is the SECOND route to render the rail, and every guard above reads
+   HeatMapStage.astro by name. A source tripwire names a FILE, so none of them
+   followed the rail here: "each shell component is mounted exactly once" would
+   pass just as happily with two rails on this page, because it never opens it.
+   That is the eleventh instance in this project of a guard watching a place its
+   subject was not, and the second created by a move rather than written that way.
+
+   GUARD THE GUARD, once more:
+
+     · an unreadable, empty or fenceless bench FAILS (`benchSource`)
+     · the EXPECTED pane list is DERIVED from the rail's own section table, not
+       written down here -- a sixth rail section with a body must then fail this
+       file until the bench renders one, which a hardcoded list of four could
+       never do
+     · a derivation yielding fewer than two panes FAILS, because a bench with one
+       pane is what this task existed to replace
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+const BENCH = new URL(
+  '../../src/components/ClimateEngine/compare/PairedBench.astro', import.meta.url);
+
+async function benchSource() {
+  let src;
+  try {
+    src = await readFile(BENCH, 'utf8');
+  } catch (err) {
+    assert.fail(
+      'src/components/ClimateEngine/compare/PairedBench.astro could not be read '
+      + `(${err.code ?? err.message}) -- every assertion below reads it, so a `
+      + 'missing file must fail rather than let "the bench renders no second '
+      + 'rail" pass over an empty string');
+  }
+  assert.ok(src.trim().length > 0,
+    'PairedBench.astro is EMPTY -- it would then mount no duplicate rail in the '
+    + 'least useful way available');
+  const split = src.split(/^---$/m);
+  assert.ok(split.length >= 3,
+    'PairedBench.astro has no `---` frontmatter fence -- the checks below read '
+    + 'the frontmatter and the template separately');
+  const body = split[2];
+  return {
+    src,
+    frontmatter: strip(split[1]),
+    template: strip(body.replace(/<style[^>]*>[\s\S]*?<\/style>/g, '')),
+    css: [...body.matchAll(/<style([^>]*)>([\s\S]*?)<\/style>/g)].map((m) => m[2]).join('\n'),
+  };
+}
+
+/**
+ * The panes THIS route must render, derived from the rail's own table.
+ *
+ * `always` bodies appear on every route; an `own-route` body appears only on the
+ * route of that name, and this route is Analysis. Deriving it is what makes the
+ * guard survive a sixth section: add one with a body and this list grows, and the
+ * bench fails until it renders one. A list written out here would agree with any
+ * rail at all.
+ */
+function panesExpectedOn(route, table) {
+  const ids = table.filter((s) => s.body === 'always' || s.id === route).map((s) => s.id);
+  assert.ok(ids.length >= 2,
+    `the rail's table yields ${ids.length} pane(s) for the ${route} route -- a `
+    + 'console with one pane is the thing this task replaced, so a derivation '
+    + 'that collapses to one must fail rather than be satisfied by it');
+  return ids.sort();
+}
+
+test('the bench mounts ONE rail, and no scope switcher', async () => {
+  /* COUNTED, NOT MERELY PRESENT. The toolbox was shipped twice by exactly this
+     mistake a task ago -- the old mount left standing beside the new one -- and
+     `assert.match(src, /<IconRail\b/)` passes with two rails on screen. Two rails
+     means two brand marks, two of every section, and a pane switcher that paints
+     one of them while the reader clicks the other. */
+  const { src, frontmatter } = await benchSource();
+
+  const rails = (src.match(/<IconRail\b/g) ?? []).length;
+  assert.equal(rails, 1,
+    rails === 0
+      ? 'PairedBench.astro renders no <IconRail /> -- Compare is a console route '
+        + 'and the rail is the only navigation it has'
+      : `PairedBench.astro mounts <IconRail /> ${rails} times`);
+  assert.match(frontmatter, /import IconRail from '\.\.\/shell\/IconRail\.astro'/,
+    'PairedBench.astro renders <IconRail /> without importing it -- an Astro '
+    + 'component that is not imported renders as an unknown HTML element, '
+    + 'silently and with no styles');
+
+  /* THE ROUTE AND THE PANE IT OPENS. `route="analysis"` is what takes Analysis's
+     href away so it cannot be a link to the page it is on, and what turns Map into
+     the link across. */
+  assert.match(src, /<IconRail\s+route="analysis"\s+pane="analysis"\s*\/>/,
+    'the rail on Compare must be told route="analysis" (this page IS Compare) '
+    + 'and pane="analysis" (the body the server renders open). A different route '
+    + 'would put a self-link back; a different pane would mark a body this route '
+    + 'does not open');
+
+  /* NO SCOPE SWITCHER, and this is a decision rather than an omission. It names
+     ONE area; Compare holds TWO and neither is "the" scope, so the only value
+     available to a prerendered page -- the default pair -- would state a false
+     scope to anyone who arrived on a different one. The A/B selects are this
+     route's scope control instead. */
+  assert.doesNotMatch(src, /<ScopeSwitcher\b/,
+    'PairedBench.astro renders a <ScopeSwitcher />. It names one area and this '
+    + 'route holds two, so it can only state a scope the page does not have -- '
+    + 'and console-shell.ts wires select[data-scope] only where a .stage '
+    + 'declares one data-area, so it would be inert as well as untrue');
+  assert.doesNotMatch(frontmatter, /ScopeSwitcher/,
+    'PairedBench.astro imports ScopeSwitcher without rendering it');
+});
+
+test('every rail section with a body here has one, and each empty pane says why', async () => {
+  const { frontmatter: railFm } = await railSource();
+  const { template } = await benchSource();
+  const expected = panesExpectedOn('analysis', sectionTable(railFm));
+
+  const rendered = [...template.matchAll(/data-pane="([a-z-]+)"/g)].map((m) => m[1]);
+  assert.deepEqual([...rendered].sort(), expected,
+    'the bench does not render exactly the panes the rail offers on this route. '
+    + `It renders [${rendered.join(', ')}]; the rail's table says [${expected.join(', ')}]. `
+    + 'A rail section whose body is missing here is a button that does nothing on '
+    + 'the console\'s only navigation -- and a body with no rail section is one '
+    + 'nothing can open');
+  assert.equal(new Set(rendered).size, rendered.length,
+    'a data-pane value is rendered TWICE in PairedBench.astro ('
+    + rendered.filter((id, i) => rendered.indexOf(id) !== i).join(', ')
+    + ') -- console-shell.ts paints every match, so one of them is invisible');
+
+  /* EXACTLY ONE OPEN, and it must be the one the rail was told about. The shell
+     script reads the server's `is-on` back as its starting state rather than
+     restating it, so two of them would leave the sidebar showing two bodies at
+     once until the first click. */
+  const open = [...template.matchAll(/class="pane is-on" data-pane="([a-z-]+)"/g)].map((m) => m[1]);
+  assert.deepEqual(open, ['analysis'],
+    `${open.length} pane(s) are rendered open (${open.join(', ') || 'none'}) -- `
+    + 'exactly one must be, and it must be the pane the rail is given');
+
+  /* A WAY OUT OF EVERY PANE THAT IS EMPTY HERE. Layers, Reports and Scenarios
+     hold no controls on this route; telling a reader why and leaving them there
+     is only half an answer. Analysis is exempt -- it is the live one. */
+  for (const id of expected.filter((x) => x !== 'analysis')) {
+    const pane = template.match(new RegExp(`data-pane="${id}"([\\s\\S]*?)</div>`));
+    assert.ok(pane, `the ${id} pane could not be sliced out of the template`);
+    assert.match(pane[1], /class="pane-out"/,
+      `the ${id} pane offers no way out. It states why it is empty on this route, `
+      + 'which is half the job -- the reader who opened it still has to be told '
+      + 'where the thing they came for actually lives');
+    assert.match(pane[1], /class="pane-note"/,
+      `the ${id} pane renders no prose. An empty box under a heading reads as a `
+      + 'pane that failed to load, which is the one impression this console must '
+      + 'never give');
+  }
+});
+
+test('the A/B selects sit inside the bench root, where the controller looks', async () => {
+  /* MEASURED CONSTRAINT, NOT A STYLE CHOICE. paired-controller.ts binds
+     `root = document.querySelector('[data-compare-root]')` once and runs every
+     query through it, so a select moved outside that element is simply never
+     found -- and `updateInputs` returns without throwing, leaving two empty
+     selects on a page that otherwise settles perfectly. */
+  const { template } = await benchSource();
+  const root = template.indexOf('data-compare-root');
+  assert.notEqual(root, -1, 'PairedBench.astro renders no [data-compare-root]');
+
+  for (const which of ['ward-a', 'ward-b']) {
+    const at = template.indexOf(`data-input="${which}"`);
+    assert.ok(at > root,
+      `the ${which} select is not inside [data-compare-root] -- paired-controller.ts `
+      + 'queries through that element, so it would never be found and would never '
+      + 'be filled');
+  }
+  const inPane = template.match(/data-pane="analysis"([\s\S]*?)data-pane="/);
+  assert.ok(inPane, 'the analysis pane could not be sliced out of the template');
+  for (const which of ['ward-a', 'ward-b']) {
+    assert.match(inPane[1], new RegExp(`data-input="${which}"`),
+      `the ${which} select is not in the Analysis pane -- the A/B pickers ARE this `
+      + "route's scope control, and they belong where Explore keeps its switcher");
+  }
+});
+
+test('every token the rail paints with resolves on the compare route', async () => {
+  /* THE DEFECT THIS IS WRITTEN AGAINST WAS MEASURED IN A BUILT BUNDLE, not
+     reasoned about. shell/IconRail.astro paints entirely in var(), and those
+     tokens are declared on `.stage` inside HeatMapStage.astro's is:global block --
+     a stylesheet only the Explore route loads. On /heat-map/compare/ the built CSS
+     declared no --rail-ground, no --mono and no --sans at all.
+
+     An undefined custom property does NOT fall back: the declaration using it is
+     invalid at computed-value time and unsets, so `background:var(--rail-ground)`
+     took the rail's ground away entirely. Nothing errored and nothing looked wrong
+     in the source -- the same shape as the --line-hi bug that left every unchecked
+     layer checkbox with no border.
+
+     WORSE THAN MISSING: INVERTED. --paper and --ink exist on both routes with
+     OPPOSITE roles. HeatMapStage declares --paper:#ecedf0 (its brightest ink) and
+     --ink:#8fa3a5; PairedBench declares --paper as the page's near-black ground
+     and --ink as its brightest text. `.rail-btn[aria-current="page"]{color:
+     var(--paper)}` therefore painted the active button near-black, on a rail that
+     had just lost its background. So a bare "is it declared" check is not enough
+     for that one, and the remap is asserted directly. */
+  const { css: railCss } = await railSource();
+  const { css: benchCss } = await benchSource();
+  assert.ok(railCss.trim().length > 0, 'the rail has no CSS -- nothing to check');
+  assert.ok(benchCss.trim().length > 0, 'the bench has no CSS -- nothing to check');
+
+  /* Only uses with NO fallback. `var(--rail, 56px)` survives an undeclared token
+     by design, and demanding a declaration for it would be a false positive. */
+  const needed = [...new Set(
+    [...railCss.matchAll(/var\(\s*(--[a-z0-9-]+)\s*\)/g)].map((m) => m[1]))].sort();
+  assert.ok(needed.length > 0,
+    'no fallback-less var() was found in the rail -- this loop would assert '
+    + 'nothing, and the rail is painted entirely in var()');
+
+  const declared = new Set(
+    [...benchCss.matchAll(/(--[a-z0-9-]+)\s*:/g)].map((m) => m[1]));
+  const missing = needed.filter((t) => !declared.has(t));
+  assert.deepEqual(missing, [],
+    `PairedBench.astro declares no ${missing.join(', ')}. The rail paints with `
+    + 'it and the compare route never loads HeatMapStage.astro, so the '
+    + 'declaration using it is invalid at computed-value time and unsets '
+    + 'entirely -- silently, and with nothing wrong-looking in either source');
+
+  assert.match(benchCss, /\.rail-slot\s*\{[^}]*--paper:\s*var\(--ink\)/,
+    'the rail wrapper does not remap --paper. This file declares --paper as the '
+    + "page's near-black GROUND and the rail uses it as its brightest INK, so "
+    + 'without the remap the active section renders near-black on near-black. '
+    + 'It must POINT AT --ink rather than restate its value, so the colour keeps '
+    + 'one spelling');
+  assert.match(benchCss, /\.rail-slot\s*\{[^}]*--rail-ground:/,
+    'the rail wrapper declares no --rail-ground -- the rail would have no '
+    + 'background on this route');
+});
+
+test('the pane switcher is portable and the scope half is not', async () => {
+  /* THE SPLIT, AND WHY IT IS A SPLIT RATHER THAN A LOOSENED CHECK. The pane half
+     is about a CONSOLE and both routes have one. The scope half is about a page
+     scoped to ONE area, which Compare is not -- it holds a pair, and its A/B
+     selects are its scope control. Keyed on `.stage[data-area]`, the whole
+     function returned null on Compare and left three rail buttons inert.
+     Making the area check optional would have traded those three dead buttons for
+     a silently unvalidated area, which is the worse bug: `resolve` dies mid-render
+     on a bad key, and the throw exists to say so at the boundary instead. */
+  const shell = strip(await readFile(
+    new URL('../../src/scripts/climate-engine/shell/console-shell.ts', import.meta.url),
+    'utf8'));
+  assert.ok(shell.length > 0, 'console-shell.ts read back empty');
+
+  assert.match(shell, /querySelector<HTMLElement>\('\[data-console\]'\)/,
+    'the shell no longer finds its console by [data-console] -- keyed on the '
+    + 'stage it does not run on Compare at all, and the rail there becomes three '
+    + 'buttons with nothing behind them');
+  assert.doesNotMatch(shell, /'\.stage\[data-area\]'/,
+    "the shell still keys on '.stage[data-area]'. That selector treats a stage "
+    + 'which has LOST its data-area as "no console here" and returns null in '
+    + "silence; querying '.stage' and refusing a bad key is stricter, not looser");
+  assert.match(shell, /const stage = document\.querySelector<HTMLElement>\('\.stage'\)/,
+    'the scope half must still find a stage of its own to validate');
+  assert.match(shell, /if \(!isAreaKey\(declared\)\) \{[\s\S]{0,200}?throw new Error/,
+    'the shell no longer THROWS on a stage whose data-area is not a registered '
+    + 'area. Falling back to a default would open one place while the page names '
+    + 'another, silently -- the refusal heat-map-app.ts makes for the same reason');
+
+  /* THE PANE QUERIES ARE SCOPED TO THE CONSOLE. Two routes carry `.pane` and
+     `.sidebar` now, and a document-wide query is one ClientRouter swap away from
+     painting the outgoing route's panes. */
+  for (const sel of ['\\.sidebar', '\\.pane\\[data-pane\\]', 'button\\[data-rail\\]']) {
+    assert.match(shell, new RegExp(`consoleRoot\\.querySelector(All)?<[^>]+>\\('${sel}'\\)`),
+      `the shell queries '${sel.replace(/\\\\/g, '')}' off the document rather than off the `
+      + 'console root -- with two consoles in the codebase that is a query that '
+      + 'can reach the wrong one');
+  }
+});
+
+test('the compare page mounts the console shell as well as the bench', async () => {
+  /* A mount that is never called is markup with no behaviour: the rail would
+     render, and every one of its buttons would do nothing -- which is precisely
+     the state this task exists to end. */
+  const page = await readFile(
+    new URL('../../src/pages/heat-map/compare.astro', import.meta.url), 'utf8');
+  assert.ok(page.trim().length > 0, 'compare.astro read back empty');
+  /* THE CALL, NOT THE NAME. This assertion was first written as
+     `assert.match(page, /mountConsoleShell/)` and was WATCHED TO FAIL -- it did
+     not. Deleting the call line left the import and the destructured binding
+     behind, so the name was still in the file and the guard passed over a page
+     whose rail was inert: the precise defect it exists to catch, and the twelfth
+     guard in this project caught protecting nothing. Asserting the ASSIGNMENT is
+     what makes it bite, because a mount whose disposer is dropped is the other
+     half of the same bug. */
+  assert.match(page, /disposeShell\s*=\s*mountConsoleShell\(\)/,
+    'compare.astro never CALLS mountConsoleShell and keeps its disposer -- the '
+    + 'rail renders and none of its pane buttons is wired to anything');
+  assert.match(page, /dispose\s*=\s*mountPairedBench\(\)/,
+    'compare.astro no longer mounts the bench itself');
+  /* DISPOSED, BOTH. The site runs Astro's ClientRouter, and a listener left on a
+     removed element leaks and then fires against the wrong document. */
+  assert.match(page, /astro:before-swap[\s\S]{0,300}?disposeShell/,
+    'the console shell is mounted on the compare route but never disposed on '
+    + 'astro:before-swap -- its listeners outlive the page they were bound to');
 });

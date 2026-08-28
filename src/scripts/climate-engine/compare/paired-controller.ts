@@ -13,7 +13,11 @@ import type {
 } from './paired-map-3d.ts';
 
 type SheetState = 'collapsed' | 'half' | 'full';
-type BenchTab = 'settings' | 'evidence' | 'wards';
+/* TWO TABS, NOT THREE. The bottom sheet's Wards panel held the A/B pickers, and
+   they moved to the console sidebar's Analysis pane — where this route's scope
+   control belongs. Leaving the tab behind would have left a third tab opening an
+   empty panel, which is the same dead control in a smaller place. */
+type BenchTab = 'settings' | 'evidence';
 
 /** Exposed levers. `parks` is retired from Compare and stays pinned at 0. */
 const coverageKeys = ['trees', 'roofs', 'facades'] as const;

@@ -12,13 +12,17 @@
  *
  *   Map        the Explore route, and the toolbox pane once you are on it
  *   Layers     swaps the sidebar pane
- *   Analysis   navigates to /heat-map/compare/     (was the Compare tab)
+ *   Analysis   the Compare route, and the paired bench's pane once you are on it
  *   Reports    swaps the sidebar pane
  *   Scenarios  swaps the sidebar pane
  *
  * Two of the five change the URL and four of them change what the sidebar shows.
  * Every ops console works this way, and the alternative — a rail for routes and a
  * second control for panes — is the two-navigations problem again.
+ *
+ * Map and Analysis are SYMMETRIC: each is a route, each owns the pane that route
+ * renders, and each is a plain link from the other page. Whichever of the two you
+ * are standing on is a button; the other is the way across.
  *
  * ─────────────────────────────────────────────────────────────────────────────
  * TWO PROPS, BECAUSE THERE ARE TWO QUESTIONS. `route` is WHICH PAGE THIS IS;
@@ -96,13 +100,26 @@ interface Icon {
   readonly d: string;
 }
 
+/**
+ * WHERE A SECTION'S SIDEBAR BODY IS RENDERED. Not whether it has one — where.
+ *
+ *   `always`      on every route the rail appears on. Layers, Reports and
+ *                 Scenarios are answers ABOUT wherever you are standing, so
+ *                 both routes render them.
+ *   `own-route`   only on the route of the same name. Map's body is the
+ *                 toolbox and Analysis's body is the paired bench; each is a
+ *                 plain link from the other page, where its body is not in the
+ *                 document at all.
+ */
+type PaneBody = 'always' | 'own-route';
+
 interface Section {
   readonly id: RailSection;
   readonly label: string;
   /** where it navigates, or null when it navigates nowhere */
   readonly href: string | null;
-  /** whether it owns a sidebar body */
-  readonly pane: boolean;
+  /** where its sidebar body is rendered */
+  readonly body: PaneBody;
   readonly icon: Icon;
 }
 
@@ -110,20 +127,35 @@ interface Section {
    carried only `href`, with `href: null` doing double duty as "this one swaps a
    pane" — which was true only while no section did both. Map does both: it is the
    Explore ROUTE from anywhere else, and the toolbox PANE once you are standing on
-   it. So the two facts are declared separately, and Analysis — which navigates and
-   owns no sidebar body — is the entry that proves they vary independently. */
+   it. Layers is the entry that proves they still vary independently: no href, and
+   a body on every route.
+
+   THE SECOND FIELD WAS A BOOLEAN AND COULD NOT HOLD THE TRUTH. `analysis: pane
+   false` was a fact about the EXPLORE route — Analysis navigates away and owns no
+   body there — being read on both routes. Composed onto Compare it made Analysis
+   the current page with no pane, and Layers, Reports and Scenarios into buttons
+   with `aria-pressed="false"` and nothing behind them: three dead controls on the
+   console's only navigation, which is this project's most-deleted defect. Where a
+   body is rendered depends on the route, so the field says so. */
 const SECTIONS: readonly Section[] = [
-  { id: 'map', label: 'Map', href: explorePath, pane: true, icon: {
+  { id: 'map', label: 'Map', href: explorePath, body: 'own-route', icon: {
     d: 'M9 3 3 6v15l6-3 6 3 6-3V3l-6 3-6-3zM9 3v15M15 6v15' } },
-  { id: 'layers', label: 'Layers', href: null, pane: true, icon: {
+  { id: 'layers', label: 'Layers', href: null, body: 'always', icon: {
     d: 'M12 2 2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5' } },
-  { id: 'analysis', label: 'Analysis', href: COMPARE_PATH, pane: false, icon: {
+  { id: 'analysis', label: 'Analysis', href: COMPARE_PATH, body: 'own-route', icon: {
     d: 'M3 3v18h18M7 15l4-5 3 3 5-7' } },
-  { id: 'reports', label: 'Reports', href: null, pane: true, icon: {
+  { id: 'reports', label: 'Reports', href: null, body: 'always', icon: {
     d: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M9 13h6M9 17h6' } },
-  { id: 'scenarios', label: 'Scenarios', href: null, pane: true, icon: {
+  { id: 'scenarios', label: 'Scenarios', href: null, body: 'always', icon: {
     circle: [12, 12, 9], d: 'M12 8v4l3 2' } },
 ];
+
+/* WHETHER THIS ROUTE RENDERS THE SECTION'S BODY. The one question `aria-pressed`
+   may be written about, and the one the shell script reads back to decide which
+   buttons get a pane-swap handler. It reads `route`, never `pane`: a body either
+   is or is not in this document, which has nothing to do with which one happens
+   to be showing. */
+const ownsPane = (s: Section): boolean => s.body === 'always' || s.id === route;
 
 /* THE ONE LINE THAT MAKES THE CURRENT ROUTE A BUTTON. Taking the href away is what
    removes the self-link, and it removes it for every section at once rather than
@@ -135,14 +167,15 @@ const items = SECTIONS.map((s) => {
   return {
     ...s,
     current,
-    /* `undefined`, not `false`, on a section that owns no pane: `aria-pressed`
-       announces a toggle, and Analysis is not one. Astro drops the attribute
+    /* `undefined`, not `false`, on a section whose body THIS ROUTE does not
+       render: `aria-pressed` announces a toggle, and Analysis-on-Explore is not
+       one — nor is Map-on-Compare. Astro drops the attribute
        entirely when the value is undefined — and the shell script reads the
        ATTRIBUTE back to learn which sections have panes, so its absence is the
        fact rather than a spelling of "off". The literals are spelled out because
        `aria-pressed` is a string enum, not a boolean attribute: `String(x)` is
        the same two words with the type thrown away. */
-    pressed: s.pane ? (s.id === pane ? 'true' as const : 'false' as const) : undefined,
+    pressed: ownsPane(s) ? (s.id === pane ? 'true' as const : 'false' as const) : undefined,
     href: current ? null : s.href,
   };
 });
