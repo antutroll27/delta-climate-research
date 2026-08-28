@@ -209,7 +209,14 @@ const FIELDS: readonly Field[] = [
 const fieldId = (id: Field['id']): string => `scope-${id}`;
 ---
 <section class="scope" aria-labelledby="scope-heading">
-  <p class="scope-heading" id="scope-heading">Scope</p>
+  {/* "Location", not "Scope", AND THE CODE AROUND IT STILL SAYS SCOPE ON PURPOSE.
+      A reader is picking a place; "scope" is the engineering word for what that
+      picking DOES — it scopes the registry, the artefacts, the climate constants
+      and the currency, which is why the module, this component, `data-scope` and
+      the tests all keep the name. Renaming those to match the label would rewrite
+      a vocabulary that is accurate about the machine, to match a word that is
+      accurate about the reader. Both words are right for their own audience. */}
+  <p class="scope-heading" id="scope-heading">Location</p>
 
   <div class="scope-stack">
     {FIELDS.map((f) => (

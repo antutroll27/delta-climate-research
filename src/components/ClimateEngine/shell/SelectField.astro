@@ -234,15 +234,22 @@ const selectedNote = selected?.note ?? '';
      tracking. Its colour is a step brighter than --ink and a step under --paper,
      and it is the only place in the console that wants that step — written once,
      here, rather than given a palette token nothing else would use. */
+  /* SMALLER THAN THE VALUE BY MORE THAN A STEP, and separated from it by more
+     than leading. The key is a category — COUNTRY, CITY, AREA — read once and
+     then ignored; the value is what a reader comes back to. Sized close together
+     they competed, and the gap under the key was doing no work at all because
+     `line-height` alone cannot open a space the eye reads as a break. Explicit
+     `margin-block-end` does. */
   .field-key {
     display: block;
     font-family: var(--sans);
-    font-size: .58rem;
+    font-size: .52rem;
     font-weight: 600;
-    letter-spacing: .1em;
+    letter-spacing: .11em;
     text-transform: uppercase;
     color: #c2d0d2;
-    line-height: 1.35;
+    line-height: 1.2;
+    margin-block-end: 5px;
   }
 
   .field-line {

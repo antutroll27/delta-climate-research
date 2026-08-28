@@ -259,7 +259,14 @@ import { DEFAULT_AREA_PATH } from '../../../scripts/climate-engine/scope/paths.t
        --rail is read three times — the rail's own inline-size, this padding and
        the mobile sheet's offset — and is written once so the three cannot drift.
        --sidebar is the console column beside it. */
-    --rail:58px; --sidebar:300px; padding-inline-start:calc(var(--rail) + clamp(1rem,4vw,4rem));}
+    --rail:58px; --sidebar:300px;
+    /* The console's panel ground, declared here for the same reason --rail-ground
+       is declared in the rail bridge: HeatMapStage.astro's palette never loads on
+       this route, so a token used here must be named here. The VALUE is the one
+       the stage declares — one colour, two declarations, and the duplicate-hex
+       census watches both files so a drift between them fails a test. */
+    --panel-ground:#232321;
+    padding-inline-start:calc(var(--rail) + clamp(1rem,4vw,4rem));}
   .heat-compare *{box-sizing:border-box}.heat-compare a{color:inherit}
   /* ── THE CONSOLE AROUND THE BENCH ───────────────────────────────────────────
      The rail is FIXED and full-height; the sidebar is a STICKY column beside a
@@ -296,7 +303,11 @@ import { DEFAULT_AREA_PATH } from '../../../scripts/climate-engine/scope/paths.t
      when it lands, rather than leaving a 300px hole. */
   .sidebar{inline-size:var(--sidebar);position:sticky;top:1.25rem;
     max-block-size:calc(100dvh - 2.5rem);display:flex;flex-direction:column;min-block-size:0;
-    background:var(--surface);border:1px solid var(--line);border-radius:.85rem;overflow:hidden}
+    /* THE SAME PANEL GROUND THE STAGE USES, written here because this route never
+       loads HeatMapStage.astro — the same reason the rail's token bridge above
+       exists. A hex rather than a var() would be the duplicate-colour defect the
+       census catches; declared once in the bridge, both sidebars read one value. */
+    background:var(--panel-ground);border:1px solid var(--line);border-radius:.85rem;overflow:hidden}
   .sidebar.is-collapsed{display:none}
 
   /* One grid cell, every pane stacked in it, so the cross-fade has nothing to

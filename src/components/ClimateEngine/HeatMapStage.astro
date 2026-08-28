@@ -602,6 +602,20 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
        the rail's scoped styles reach it only once the rail is inside .stage,
        which is where Task 7 puts it. */
     --rail-ground:#1D1D1B;
+    /* The sidebar's ground — the rail's neighbour in the same warm-neutral
+       family, one step forward.
+
+       ITS OWN TOKEN, NOT --surface. The sidebar used --surface, which is also the
+       ground under the readout cards, the brief and the paired bench: repointing
+       it to move ONE panel would have repainted every card on three routes. A
+       colour wanted in one place gets a name for that place.
+
+       ONE STEP ABOVE THE RAIL, NOT EQUAL TO IT. Identical values would merge the
+       navigation column into the panel it opens and lose the edge between them;
+       far apart would read as two unrelated surfaces. A single step is what says
+       "same family, different job" — the rail is the deeper column you navigate
+       FROM, this is the working surface you read. */
+    --panel-ground:#232321;
     /* Studio (light) mode's three inks — the same descending-emphasis idea as
        --paper/--ink/--faint above, inverted for a light ground. They live here
        rather than on `body.studio` because every element they colour is inside
@@ -640,7 +654,7 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
   /* ── the sidebar ──────────────────────────────────────────────────────────
      Scope pinned at the top, panes filling the rest. */
   .sidebar{grid-column:2;inline-size:var(--sidebar);display:flex;flex-direction:column;min-block-size:0;
-    background:var(--surface);border-right:1px solid var(--line)}
+    background:var(--panel-ground);border-right:1px solid var(--line)}
   /* COLLAPSE IS INSTANT, AND THAT IS THE POINT. Animating a column's width means a
      full relayout of the map beside it on every frame — and MapLibre's
      ResizeObserver reallocates its GL drawing buffer to match, so the cost is a
