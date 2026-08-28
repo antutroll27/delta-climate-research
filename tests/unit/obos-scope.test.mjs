@@ -833,12 +833,26 @@ test('the markup states no scenario and no citation of its own', async () => {
      country that ships data, so nothing failed, and nothing would have failed until
      a second country was selectable. What can be checked today is that the literals
      are gone and have not come back. */
-  const stage = stripComments(await readFile(
-    new URL('../../src/components/ClimateEngine/HeatMapStage.astro', import.meta.url), 'utf8'));
+  /* READS THE STAGE *AND* THE PANE, because the control moved between them.
+     The pathway markup lived in HeatMapStage.astro when this was written; the
+     shell extraction moved it to shell/InterventionPane.astro. Left pointed at
+     the stage alone, the two doesNotMatch assertions below would have kept
+     passing while protecting NOTHING -- a hardcoded scenario or citation in the
+     pane was suddenly invisible to them. That is the tenth guard in this project
+     to be caught watching a place its subject had left, and the first created by
+     a refactor rather than written that way. */
+  const sources = await Promise.all([
+    'src/components/ClimateEngine/HeatMapStage.astro',
+    'src/components/ClimateEngine/shell/InterventionPane.astro',
+  ].map(async (rel) => stripComments(
+    await readFile(new URL(`../../${rel}`, import.meta.url), 'utf8'))));
+  const stage = sources.join('\n');
+  assert.ok(sources.every((src) => src.length > 0),
+    'a source read back empty -- this check would pass while reading nothing');
   assert.doesNotMatch(stage, /ssp\d/i,
-    'HeatMapStage.astro names a warming scenario; render scope.pathway.options instead');
+    'the stage or the intervention pane names a warming scenario; render scope.pathway.options instead');
   assert.doesNotMatch(stage, /Dhara/,
-    'HeatMapStage.astro cites a paper; the citation belongs to the country, as scope.pathway.source');
+    'the stage or the intervention pane cites a paper; the citation belongs to the country, as scope.pathway.source');
   assert.match(stage, /scope\.pathway\.options/, 'the control is no longer drawn from the scope');
 
   const app = stripComments(await readFile(
