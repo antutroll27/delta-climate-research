@@ -61,11 +61,9 @@ export const REGISTRY = {
         // CITY-LEVEL data stems. These two files currently sit at paths that
         // imply they are global and are not — see §2.
         data: { heatwave: 'heatwave-percentiles', dcUrs: 'dc-urs-inputs' },
-        areas: {
-          ballygunge:  { name: 'Ballygunge',  descriptor: 'dense urban core',        file: 'ballygunge' },
-          baruipur:    { name: 'Baruipur',    descriptor: 'peri-urban fringe',       file: 'baruipur' },
-          barrackpore: { name: 'Barrackpore', descriptor: 'industrial river corridor', file: 'barrackpore' },
-        },
+        // AREA IDS REFERENCE src/data/wards.ts — see "The four tables" below.
+        // Name, lat, lon, footprintM, veg and body all live there already.
+        areas: { ballygunge: {}, baruipur: {}, barrackpore: {} },
       },
     },
   },
@@ -77,10 +75,12 @@ export const REGISTRY = {
       dubai: {
         name: 'Dubai', koppen: 'BWh', tier: 'geometry',
         data: { heatwave: null, dcUrs: null },
+        // Dubai ships no data, so these are registry-only placeholders. Any
+        // area that DOES ship data must exist in src/data/wards.ts — asserted.
         areas: {
-          creek:     { name: 'Dubai Creek', descriptor: 'area · our tiling', file: null },
-          'al-quoz': { name: 'Al Quoz',     descriptor: 'area · our tiling', file: null },
-          south:     { name: 'Dubai South', descriptor: 'area · our tiling', file: null },
+          creek:     { name: 'Dubai Creek', descriptor: 'area · our tiling' },
+          'al-quoz': { name: 'Al Quoz',     descriptor: 'area · our tiling' },
+          south:     { name: 'Dubai South', descriptor: 'area · our tiling' },
         },
       },
     },
@@ -118,7 +118,7 @@ exhaustiveness (a missing case fails as `not assignable to type 'never'`).
 
 | field | scope | meaning |
 |---|---|---|
-| `file` | area | data stem, or `null` for "no data ships" |
+| area key | area | must exist in `src/data/wards.ts` **if** it ships data |
 | `tier` | city | `validated` \| `zone` \| `geometry` |
 | `pathway` | country | warming-pathway key, or `null` for "not defined here" |
 | `costs` | country | intervention unit costs **and** currency, or `null` |
@@ -131,6 +131,33 @@ directly: greyed row, reason line, no fetch attempted. Dubai registers with
 **`pathway: null` is how a country declines a constant.** India points at
 `dhara2025`; the UAE points at nothing, so the warming-pathway control disables
 itself rather than applying Indian deltas to a Gulf city.
+
+### The four tables — the finding that reshaped this spec
+
+A first draft of this design declared `lat`, `lon` and `footprintM` in the
+registry. That would have created a **fourth** ward table. Three already exist:
+
+| # | table | consumers |
+|---|---|---|
+| 1 | `src/data/wards.ts` | 3 TS modules, `verify-served-data.mjs`, mirrored by Python |
+| 2 | `src/scripts/climate-engine/wards.ts` | `compare/`, `scenario/`, `ward-loader` |
+| 3 | `scripts/_types.py` `WARDS` | 6+ Python scripts |
+
+`src/data/wards.ts` is already the declared source of truth — its own header
+says *"Widening from three wards to all 144 KMC wards must be a change to this
+file alone"* — and `_types.py` mirrors it, with a comment recording that five
+scripts once carried private copies which **had already diverged**, one of them
+by 10–44 m of coordinate: sub-pixel at ECOSTRESS's 70 m, four pixels at
+Sentinel's 10 m.
+
+So the registry adds the **country and city layers above** table 1, and does not
+restate geography. Table 2 is redundant with table 1 and is **deleted**, its
+consumers repointed. Table 3 is untouched: Python keeps reading what it reads.
+
+**The anti-divergence guard.** `assertRegistryLogic()` asserts that every area
+which ships data exists in `src/data/wards.ts`, and that Kolkata's registry area
+ids exactly equal that file's ids. A fourth table cannot appear by accident, and
+the two that remain cannot silently disagree.
 
 ### Reserved slugs
 
@@ -168,8 +195,10 @@ the key shape**. Data files stay exactly where they are —
 Nothing on disk moves. Moving 30+ shipped files would be risk with no
 user-visible benefit.
 
-A test greps the source for `` `/heat-map/data/${ `` and fails if anyone
-reintroduces one.
+A test greps the source for **any** `/heat-map/data/` literal outside
+`scope/paths.ts` — not just interpolated ones. Three call sites fetch the two
+pseudo-global files by **plain string**, so a `${` -only pattern would have
+missed exactly the cases §2 is about.
 
 ### The two files that lie about their scope
 
@@ -292,7 +321,8 @@ Each step compiles and ships on its own.
 1. `registry.ts` + derived `AreaKey` + self-test — new file, no consumers
 2. `paths()` — replaces 17 raw interpolations across 5 files
 3. `resolve()` + `ClimateConstants` — the four constants leave the physics
-4. `WardId` → `AreaKey` — ~19 mechanical sites, all compiler-caught
+4. `WardId` → `AreaKey`, and **delete `climate-engine/wards.ts`** — its
+   consumers repoint at the registry and at `src/data/wards.ts`
 5. Route + redirect + compare compat map
 6. Dubai registered with `file: null`
 
