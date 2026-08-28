@@ -1265,3 +1265,194 @@ test('the tree scopes its styles, casts nothing, and stays usable', async () => 
   assert.match(css, /@media\s*\(prefers-reduced-motion\s*:\s*reduce\)/,
     'the tree transitions its rows with no prefers-reduced-motion escape');
 });
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   TASK 6 — THE INTERVENTION PANE, WHICH IS A MOVE AND NOT AN EDIT.
+
+   The Green Infrastructure Toolbox left HeatMapStage.astro for a file of its
+   own, so Task 7 has four components to compose rather than three and a
+   monolith. Nothing about it changed on the way out: same sliders, same
+   segmented controls, same score ring, same pillars, SAME IDS.
+
+   THE IDS ARE THE WHOLE RISK. heat-map-app.ts finds every one of the seventeen
+   below by name at runtime, through `el(...)` and
+   `querySelectorAll('#segPhase button')`. Rename one, drop one, or leave a
+   second copy behind in the stage, and the failure is SILENT: the query
+   returns null — or the wrong one of two duplicates — the handler shrugs, and
+   the control simply stops responding. Nothing throws and the page still looks
+   right. That is the exact failure shape this project keeps paying for, so it
+   gets a tripwire rather than a careful reviewer.
+
+   TWO HALVES, AND BOTH ARE NEEDED:
+
+     · every id is PRESENT in the component — a lost id is a dead control;
+     · no id is STILL IN THE STAGE — a copy-paste that forgot to delete the
+       original leaves two elements carrying one id, which is invalid HTML and
+       makes getElementById return whichever the parser reached first. The
+       markup would look moved and behave as though it had not been.
+
+   `scoreArc` is the sharpest of the seventeen: heat-map-app.ts:1656 does
+   setAttribute('stroke', tier.colour) on it, so its `stroke` has to stay an
+   attribute the runtime can win. That is a claim about its STYLING, held by
+   the stage's own comment and by Task 2's colour guard; here we only insist
+   the element still exists to be styled.
+
+   GUARD THE GUARD. Nine guards in this project have passed while protecting
+   nothing, one of them by checking a component that was not in the repo at
+   all. So, in this fourth part:
+
+     · an unreadable or empty component FAILS (`paneSource`), rather than
+       letting seventeen "is this id present" checks run over an empty string
+     · an unreadable or empty stage FAILS (`stageSource`), for the same reason
+       in the other direction — an absent file contains no duplicate ids
+     · an ID TABLE that is empty, that is not exactly seventeen long, or that
+       repeats an entry FAILS: every loop below walks it, and a table of zero
+       asserts nothing while a table with a duplicate covers sixteen ids while
+       claiming seventeen
+     · a stage that does not INVOKE the pane FAILS. Deleting the aside and
+       never mounting the component satisfies "no ids in the stage" perfectly,
+       and ships a page with no toolbox on it.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+const PANE = new URL(
+  '../../src/components/ClimateEngine/shell/InterventionPane.astro', import.meta.url);
+
+/**
+ * THE SEVENTEEN, verbatim as heat-map-app.ts spells them.
+ *
+ * Not derived from the component — a list read out of the file it is checking
+ * would agree with any file, including one that had lost sixteen of them. This
+ * is a second, independent copy on purpose: it is the specification, and the
+ * component is the thing measured against it.
+ */
+const PANE_IDS = [
+  'v1', 'ivTrees',
+  'v2', 'ivRoof',
+  'v4', 'ivFacades',
+  'segPhase', 'segPath',
+  'scoreArc', 'scoreNum', 'scoreTier', 'scoreTxt',
+  'subs', 'sGreen', 'sCool', 'sEff', 'scoreConf',
+];
+
+/**
+ * An `id="x"` ATTRIBUTE, in either quote style — never a CSS selector, never
+ * prose.
+ *
+ * This distinction is load-bearing for the no-duplicates half. The stage still
+ * STYLES the pane, because the toolbox's rules stayed in its is:global block
+ * (heat-map-app.ts writes classes onto these elements at runtime, and a
+ * scoping hash does not reach a class added after render). So `#scoreArc` and
+ * `#segPhase` legitimately remain in the stage's stylesheet, and its comments
+ * name them too. Only a second `id=` ATTRIBUTE puts a second element in the
+ * DOM, and only that is a defect.
+ */
+const idAttr = (id) => new RegExp(`id\\s*=\\s*["']${id}["']`);
+
+/** The table itself, checked before anything walks it. */
+function paneIds() {
+  assert.ok(PANE_IDS.length > 0,
+    'the PANE_IDS table is EMPTY -- every loop below would iterate zero times '
+    + 'and the suite would pass over a component containing nothing at all');
+  assert.equal(new Set(PANE_IDS).size, PANE_IDS.length,
+    'the PANE_IDS table repeats an entry ('
+    + PANE_IDS.filter((id, i) => PANE_IDS.indexOf(id) !== i).join(', ')
+    + ') -- it would then claim to cover seventeen ids while covering fewer');
+  assert.equal(PANE_IDS.length, 17,
+    `the PANE_IDS table holds ${PANE_IDS.length} ids, not the seventeen the `
+    + 'toolbox carries -- if the toolbox genuinely gained or lost a control '
+    + 'then heat-map-app.ts changed too, and this number is the record of it');
+  return PANE_IDS;
+}
+
+async function paneSource() {
+  let src;
+  try {
+    src = await readFile(PANE, 'utf8');
+  } catch (err) {
+    assert.fail(
+      'src/components/ClimateEngine/shell/InterventionPane.astro could not be '
+      + `read (${err.code ?? err.message}) -- the id assertions below read it, `
+      + 'so a missing file must fail rather than let seventeen "is it present" '
+      + 'checks run over an empty string and every one of them pass');
+  }
+  assert.ok(src.trim().length > 0,
+    'InterventionPane.astro is EMPTY -- an empty file contains no WRONG id, '
+    + 'which is not remotely the same as containing the right seventeen');
+  return src;
+}
+
+async function stageSource() {
+  let src;
+  try {
+    src = await readFile(STAGE, 'utf8');
+  } catch (err) {
+    assert.fail(
+      `HeatMapStage.astro could not be read (${err.code ?? err.message}) -- a `
+      + 'file that is not there holds no duplicate id, so its absence must '
+      + 'fail rather than read as a clean move');
+  }
+  assert.ok(src.trim().length > 0,
+    'HeatMapStage.astro is EMPTY -- it would then be free of duplicate ids in '
+    + 'the least useful way available');
+  return src;
+}
+
+test('the pane carries all seventeen ids heat-map-app.ts finds by name', async () => {
+  const ids = paneIds();
+  const src = await paneSource();
+
+  const missing = ids.filter((id) => !idAttr(id).test(src));
+  assert.deepEqual(missing, [],
+    `InterventionPane.astro is missing ${missing.length} of the seventeen `
+    + `ids: ${missing.join(', ')} -- heat-map-app.ts queries each of these by `
+    + 'name, gets null, and the matching control silently stops responding');
+
+  /* THE COUNT AS WELL AS THE MEMBERSHIP. A pane holding all seventeen plus a
+     stray eighteenth is a different component from the one that was moved, and
+     an extra `id=` is how a half-finished edit hides inside a "move". */
+  const present = [...src.matchAll(/id\s*=\s*["']([A-Za-z][\w-]*)["']/g)]
+    .map((m) => m[1]);
+  assert.ok(present.length > 0,
+    'no id attribute at all was found in InterventionPane.astro -- the file '
+    + 'exists and is not empty, so the markup did not arrive with it');
+  assert.deepEqual([...new Set(present)].sort(), [...ids].sort(),
+    'InterventionPane.astro does not hold exactly the seventeen moved ids -- '
+    + `it holds ${new Set(present).size}: `
+    + `${[...new Set(present)].sort().join(', ')}`);
+  assert.equal(present.length, ids.length,
+    'an id is written TWICE inside InterventionPane.astro ('
+    + present.filter((id, i) => present.indexOf(id) !== i).join(', ')
+    + ') -- two elements, one id, and getElementById picks the first');
+});
+
+test('the stage kept none of those ids, so none is in the DOM twice', async () => {
+  const ids = paneIds();
+  const stage = await stageSource();
+
+  /* THE MOUNT, FIRST. Without it, "the stage holds none of the seventeen" is
+     satisfied perfectly by a stage that deleted the toolbox and never rendered
+     it anywhere -- a green suite over a page with no toolbox on it. */
+  /* `assert.ok(regex.test(...))` rather than `assert.match(stage, ...)`: the
+     latter prints the ENTIRE 1,000-line stage as its `actual`, which buries the
+     one sentence explaining what went wrong. A tripwire is read exactly once,
+     at the moment it fires, so it has to be legible then. */
+  assert.ok(/<InterventionPane\b/.test(stage),
+    'HeatMapStage.astro never renders <InterventionPane ... /> -- the markup '
+    + 'was removed and nothing put it back, so the toolbox is GONE from the '
+    + 'page rather than moved off it');
+
+  const leftBehind = ids.filter((id) => idAttr(id).test(stage));
+  assert.deepEqual(leftBehind, [],
+    `HeatMapStage.astro still writes id= for: ${leftBehind.join(', ')} -- the `
+    + 'pane now renders those same ids, so each one is a DUPLICATE id in the '
+    + 'built DOM. That is invalid HTML, and getElementById returns whichever '
+    + 'element the parser reached first -- the stage copy, which is the one no '
+    + 'longer connected to anything');
+
+  /* The old container went with them. `<aside class="panel left">` was the
+     toolbox's own element, so a stage still opening one is a stage that
+     deleted the contents and kept the frame. */
+  assert.ok(!/<aside\s+class="panel left"/.test(stage),
+    'HeatMapStage.astro still opens <aside class="panel left"> -- the pane '
+    + 'took that element with it, so this is an empty duplicate frame');
+});

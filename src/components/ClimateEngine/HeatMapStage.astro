@@ -5,6 +5,11 @@
 // this). Brand tokens are scoped to .stage so nothing leaks to :root; Mona Sans /
 // Noplato Mono come from global.css.
 import ConstructionStamp from '../states/ConstructionStamp.astro';
+/* The Green Infrastructure Toolbox, MOVED rather than rewritten: it renders in
+   the same place, with the same seventeen runtime-queried ids, and its rules
+   stay in the is:global block below because heat-map-app.ts classes its markup
+   at runtime. See the component's own header. */
+import InterventionPane from './shell/InterventionPane.astro';
 import { areaKeysInCity } from '../../scripts/climate-engine/scope/registry.ts';
 import { areaPath, DEFAULT_AREA_PATH } from '../../scripts/climate-engine/scope/paths.ts';
 import { resolve, type ResolvedScope } from '../../scripts/climate-engine/scope/resolve.ts';
@@ -329,61 +334,7 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
       <div class="modechip" id="tintchip" title="Building colour: continuous ramp, or snapped to the 5 legend classes"><button class="on" data-t="1">Gradient</button><button data-t="2">5-Class</button></div>
     </div>
 
-    <aside class="panel left">
-      <div class="h">Green Infrastructure Toolbox</div>
-      <div class="ctl"><label>Tree canopy corridors <span class="v" id="v1">0</span></label><input type="range" id="ivTrees" min="0" max="50" value="0" aria-label="Tree canopy corridors"></div>
-      <div class="ctl"><label>Cool-roof albedo <span class="v" id="v2">0%</span></label><input type="range" id="ivRoof" min="0" max="100" value="0" step="5" aria-label="Cool-roof albedo, percent of roofs treated"></div>
-      <div class="ctl"><label>Vertical green facades <span class="v" id="v4">0</span></label><input type="range" id="ivFacades" min="0" max="15" value="0" aria-label="Vertical green facades"></div>
-      <div class="ctl"><label style="margin-bottom:.35rem">Diurnal phase</label><div class="seg" id="segPhase"><button class="on" data-p="now">Now</button><button data-p="peak">13:00 Peak</button><button data-p="night">22:00 Retained</button><button data-p="heatwave">Heatwave</button></div></div>
-      {/* THE BUTTONS ARE THE SCOPE'S TABLE, DRAWN. Three were written out here -
-          data-p="2025" | "ssp245" | "ssp585" - under a title citing an Indian paper,
-          while `pathwayDelta` in heat-map-model.ts fails closed against whatever
-          table the scope actually carries. Two countries, one hardcoded control: a
-          country with a DIFFERENT populated table would render India's three and
-          throw out of the click handler on the first press, and a country with an
-          empty table would render three buttons that do nothing, under a citation
-          for research it has not adopted. See `PathwayControl`. */}
-      <div class="ctl"><label style="margin-bottom:.35rem" title={scope.pathway.source ?? undefined}>Warming pathway</label>{scope.pathway.options.length > 0
-        ? <div class="seg" id="segPath">{scope.pathway.options.map((opt) => (
-            <button class:list={{ on: opt.key === scope.pathway.initial }} data-p={opt.key}>{opt.label}</button>))}</div>
-        /* NOT AN EMPTY <div class="seg">, which would render as a hairline box with
-           nothing in it and read as a control still loading. An empty table is a
-           DECLARED absence - no regional projection has been adopted - and that is a
-           different fact from zero warming, so the control says which. */
-        : <p class="segnone">No regional warming pathway has been adopted for {scope.country.name}, so there is nothing to project. This is a stated absence, not a projection of no warming.</p>}</div>
-      <div class="score">
-        <div class="g">
-          {/* `stroke` is an SVG PRESENTATION ATTRIBUTE, not CSS, so `var(--surface2)`
-              written here would not resolve — an attribute is parsed by the SVG
-              attribute grammar, which has no custom properties. `currentColor` is
-              the bridge: it defers to the element's own `color`, which IS CSS and
-              takes the token (see `.score .g .track` / `#scoreArc` below).
-
-              #scoreArc keeps its attribute writable on purpose — heat-map-app.ts
-              setAttribute('stroke', tier.colour)s it once a score exists, and no CSS
-              rule sets `stroke`, so the runtime value still wins. The token only
-              paints the pre-score state, exactly as the cyan literal here did. */}
-          <svg viewBox="0 0 36 36" aria-hidden="true"><circle class="track" cx="18" cy="18" r="15.5" fill="none" stroke="currentColor" stroke-width="3"></circle><circle id="scoreArc" cx="18" cy="18" r="15.5" fill="none" stroke="currentColor" stroke-width="3" stroke-dasharray="97" stroke-dashoffset="97" stroke-linecap="round" transform="rotate(-90 18 18)"></circle></svg>
-          <div class="num" id="scoreNum">—</div>
-        </div>
-        <div class="t"><b>Resilience Score</b><span class="tier" id="scoreTier">—</span><span id="scoreTxt">move a slider to intervene</span></div>
-      </div>
-      <!-- The three pillars, shown raw. A composite index is only trustworthy if
-           you can see what it is made of; the Green Score published its three
-           components for the same reason. Exposure and hazard are shown as their
-           COMPLEMENTS (1 − EVI, 1 − THI) so that on every bar, higher is better —
-           mixing polarities in one strip is how a reader misreads the worst ward
-           as the best. -->
-      <div class="subs" id="subs" title="DC-URS pillars, IPCC AR6 framing. Capacity: greenness, albedo and refuge access. Exposure: shown as 1 − EVI, so higher is better; driven by population, built density and social vulnerability, none of which any intervention can move. Hazard: shown as 1 − THI, from measured ECOSTRESS surface temperature.">
-        <div><b id="sGreen">—</b><span>capacity</span></div>
-        <div><b id="sCool">—</b><span>exposure</span></div>
-        <div><b id="sEff">—</b><span>hazard</span></div>
-      </div>
-      <!-- Written by the app from unmeasured(), which reads the data file's own
-           provenance. Deliberately no copy in this file for anyone to forget to
-           delete: when socio.json lands the chip removes itself. -->
-      <div class="conf indicative scoreconf" id="scoreConf" hidden></div>
-    </aside>
+    <InterventionPane scope={scope} />
 
     <div class="rail-r">
     <aside class="panel right">
