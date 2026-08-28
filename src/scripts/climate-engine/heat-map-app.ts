@@ -1175,7 +1175,7 @@ export function mountHeatMap(): () => void {
          city's geometry through the old city's fallback temperature and
          park-cooling radius — cleanly, and with a plausible number out. */
       state.ward = name; state.climate = resolve(name).climate;
-      updateCompareHref(); updateReportHref(); updateAddressBar(); updateScopeSwitcher();
+      updateCompareHref(); updateReportHref(); updateAddressBar(); updateStageArea(); updateScopeSwitcher();
 
     /* Rebuild the pick registry from the SAME rows the extrusions come from, and
        drop any selection: building #1759 in Ballygunge is a different building in
@@ -1783,6 +1783,35 @@ export function mountHeatMap(): () => void {
    */
   function updateAddressBar() {
     history.replaceState(null, '', `${areaPath(state.ward)}${window.location.search}${window.location.hash}`);
+  }
+
+  /**
+   * Keep `.stage[data-area]` naming the area that is actually open.
+   *
+   * IT IS NOT DECORATION — IT IS THE SEAM. shell/console-shell.ts cannot see this
+   * closure, so the attribute is how it learns which area the instrument is
+   * standing on: it decides from that whether a switch is an in-place swap or a
+   * page load, and refuses a selection equal to it as a no-op.
+   *
+   * LEFT UNWRITTEN IT FROZE AT THE SERVER-RENDERED VALUE, and the consequence was
+   * reproducible rather than rare: after switching away from the area the page
+   * loaded with, THAT AREA COULD NEVER BE SELECTED AGAIN. The handler compared the
+   * new value against a boot-time snapshot, matched, and returned silently — a
+   * dropdown naming one ward over a map showing another, with nothing said. Two
+   * hops out and back reproduced it every time.
+   *
+   * The neighbouring `updateScopeSwitcher` already names this failure — "its Area
+   * select goes on naming the ward the page was opened at" — and repaired the
+   * select's DISPLAYED value. The attribute driving the handler's LOGIC was left
+   * on the same stale footing, one layer down, where it was invisible.
+   *
+   * WRITTEN BESIDE `updateAddressBar` BECAUSE THEY ARE THE SAME OBLIGATION: both
+   * project `state.ward` outward for something that cannot read it directly, and a
+   * ward switch that updates one but not the other leaves the page disagreeing
+   * with itself about where it is.
+   */
+  function updateStageArea() {
+    document.querySelector('.stage')?.setAttribute('data-area', state.ward);
   }
 
   /**

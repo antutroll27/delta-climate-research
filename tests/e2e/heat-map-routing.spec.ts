@@ -91,6 +91,48 @@ test('the Area select switches ward in place, and the strip follows', async ({ p
   await expect(page.locator('#strip .ward.on')).toHaveAttribute('data-w', 'baruipur');
 });
 
+test('the area the page loaded with can be switched BACK to', async ({ page }) => {
+  /* THE RETURN TRIP, which the test above does not make and which was broken for
+     as long as the switcher has existed.
+
+     `console-shell.ts` used to capture the page's area ONCE at mount, from
+     `.stage[data-area]`, and refuse any selection equal to it as a no-op. An
+     in-place switch remounts nothing, and nothing rewrote that attribute -- so the
+     snapshot stayed on the boot area for the whole session and the reader could
+     never come back to it. Measured over six hops: the boot area was refused every
+     single time, every other area switched fine.
+
+     IT FAILED SILENTLY, which is why a one-way test could not see it. The select
+     took the new value, the map stayed where it was, and nothing threw or logged.
+     The page simply named two different wards in two places.
+
+     THE ASSERTION IS ON THE MAP, NOT THE SELECT. `#pname` is painted by `loadWard`;
+     the select's value is set by the browser the instant you click. Asserting the
+     select here would pass against the bug -- it always showed the right answer.
+
+     Three hops, because the second one is what makes the first one's success
+     meaningless: away, away again, then home. */
+  await page.goto(BALLYGUNGE);
+  await expect(page.locator('#lst')).not.toContainText('—', { timeout: 20_000 });
+
+  await page.locator('select[data-scope="area"]').selectOption('in/kolkata/baruipur');
+  await expect(page.locator('#pname')).toHaveText('Baruipur', { timeout: 20_000 });
+
+  await page.locator('select[data-scope="area"]').selectOption('in/kolkata/barrackpore');
+  await expect(page.locator('#pname')).toHaveText('Barrackpore', { timeout: 20_000 });
+
+  await page.locator('select[data-scope="area"]').selectOption('in/kolkata/ballygunge');
+  await expect(page.locator('#pname')).toHaveText('Ballygunge', { timeout: 20_000 });
+  await expect(page).toHaveURL(/\/heat-map\/in\/kolkata\/ballygunge\/$/);
+  await expect(page.locator('#strip .ward.on')).toHaveAttribute('data-w', 'ballygunge');
+
+  /* AND THE SEAM ITSELF, because the three assertions above would all pass again if
+     someone fixed the symptom by deleting the `value === here` guard while leaving
+     the attribute stale -- and `hasData`, which decides in-place versus navigate,
+     would still be read off the wrong area. */
+  await expect(page.locator('.stage')).toHaveAttribute('data-area', 'in/kolkata/ballygunge');
+});
+
 test('no rail section is a link to the page it is already on', async ({ page }) => {
   /* The defect this closes, in both of its historical forms: the Explore tab
      carried aria-current="page" while its href pointed elsewhere (a lie to a

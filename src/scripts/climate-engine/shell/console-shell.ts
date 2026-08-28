@@ -185,13 +185,50 @@ export function mountConsoleShell(): (() => void) | null {
    * already the thing `areaPath` and `loadWard` take.
    */
   if (pageArea !== null) {
-    /* NARROWED ONCE, KEEPING THE NAME. Every reference below is unchanged from
-       when this ran unconditionally -- `resolve(here)` included, which is the
-       exact text the tripwire in tests/unit/obos-scope.test.mjs reads. */
-    const here: AreaKey = pageArea;
+    /**
+     * WHERE THE INSTRUMENT IS STANDING **NOW**, re-read on every change.
+     *
+     * THIS WAS A CONSTANT AND THE CONSTANT WAS A BUG. It captured the area at
+     * mount, and an in-place switch does not remount anything — so after moving
+     * away from the area the page loaded with, `value === here` matched THAT area
+     * for the rest of the session and refused to go back to it. Silently: the
+     * dropdown took the new value, the map stayed put, and nothing said why.
+     * Measured over six hops, the boot area was refused every single time and
+     * every other area switched fine.
+     *
+     * `resolve(here).area.hasData` two branches down was stale for the same
+     * reason, and that one does not announce itself at all in Kolkata, where all
+     * three areas ship data. On a city with mixed coverage it would have routed
+     * an in-place-versus-navigate decision from a fact about a ward the reader
+     * left several clicks ago.
+     *
+     * THE ATTRIBUTE IS THE SEAM, and heat-map-app.ts's `updateStageArea` keeps it
+     * current for exactly this reader. Re-reading is what makes this handler
+     * correct across a switch; the mount-time validation above still stands, and
+     * is what guarantees this cannot start from a bad value.
+     */
+    const currentArea = (): AreaKey | null => {
+      const declared = document.querySelector('.stage')?.getAttribute('data-area');
+      return isAreaKey(declared) ? declared : null;
+    };
+
     for (const select of consoleRoot.querySelectorAll<HTMLSelectElement>('select[data-scope]')) {
       on(select, 'change', () => {
         const value = select.value;
+        /* NULL MEANS "WE NO LONGER KNOW WHERE WE ARE", which is a different case
+           from any this handler used to have. Only our own `updateStageArea`
+           writes this attribute, so a value that fails `isAreaKey` means something
+           outside this module rewrote it. Every in-place decision below is
+           relative to `here`, so without one there is no honest way to make them --
+           and the answer is NOT to refuse, which would be one more control that
+           does nothing. A navigation always lands correctly and resynchronises the
+           whole page, so an unknown origin degrades to the slower path rather than
+           to no path. */
+        const here = currentArea();
+        if (here === null) {
+          if (isAreaKey(value)) window.location.assign(areaPath(value));
+          return;
+        }
         /* `isAreaKey`, never a cast. The value is a string off the DOM — an option
            list the registry built today, an autofilled value, a devtools poke — and
            a key that resolves to nothing must be refused here rather than become a
