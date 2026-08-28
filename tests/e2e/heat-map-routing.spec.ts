@@ -177,16 +177,25 @@ test('an area with no data states its tier instead of half-rendering', async ({ 
 
   /* THE LAYER TREE shows its rows rather than hiding them — an absent row reads as
      "this does not exist", which is a different and wronger claim than "we do not
-     have it here yet" — and disables each one WITH A REASON. The five checked are
-     the artefact-backed layers; street-level imagery is refused on the capability
-     axis instead, which is a build fact rather than a fact about Dubai, so it is
-     deliberately not asserted here. */
+     have it here yet" — and disables each one WITH A REASON.
+
+     ALL SIX, INCLUDING STREET-LEVEL IMAGERY, and that is the half worth stating.
+     Street depends on a Mapillary token rather than on a shipped artefact, so it
+     used to be excluded here: with the token set it came back available, and this
+     page shipped a live checkbox with no map under it. Production sets that token.
+     `layerAvailability` now refuses at the PAGE level, before either axis — an area
+     that ships nothing mounts no instrument, so nothing is drawable whatever it
+     depends on — which makes this assertion hold in a token-bearing build too,
+     BY CONSTRUCTION rather than by the test environment happening to lack one. */
   for (const id of ['thermal/surface', 'green/canopy', 'green/trees',
-    'built/footprints', 'built/heights']) {
+    'built/footprints', 'built/heights', 'ground/street']) {
     await expect(page.locator(`input[data-layer="${id}"]`)).toBeDisabled();
     await expect(page.locator(`input[data-layer="${id}"]`)).not.toBeChecked();
+    /* AND THE REASON IS THE OPERATIVE ONE. Naming the missing artefact is true and
+       incidental; a reader looking at six greyed rows needs the fact that explains
+       all six. Six identical sentences is what a page-level refusal looks like. */
     await expect(page.locator(`.tree-row:has(input[data-layer="${id}"]) .tree-why`))
-      .not.toBeEmpty();
+      .toContainText('no map is mounted');
   }
 
   /* NOTHING IN THE SIDEBAR RESPONDS TO A CLICK EXCEPT THE WAY OUT, and this was

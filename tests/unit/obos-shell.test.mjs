@@ -1067,17 +1067,32 @@ test('a layer that cannot be drawn HERE is DISABLED, says WHY, and is never chec
      here. A hardcoded list would go stale the day a city starts or stops shipping
      an artefact, and it would go stale SILENTLY, since a stale list still
      iterates. */
-  const { bare } = twoAreas();
+  const { rich, bare } = twoAreas();
   registryGroups();
 
   const blocked = LAYER_IDS.filter((id) => !layerAvailability(id, bare, CAPS_ON).available);
-  const drawable = LAYER_IDS.filter((id) => layerAvailability(id, bare, CAPS_ON).available);
-  assert.ok(blocked.length > 0,
-    `every layer is available at "${bare}" -- there is then nothing for `
-    + '`disabled` to be true about, and this test would pass while proving nothing');
-  assert.ok(drawable.length > 0,
-    `no layer is available at "${bare}" -- \`disabled\` would be indistinguishable `
-    + 'from "always off", and the test would again prove nothing');
+  const drawable = LAYER_IDS.filter((id) => layerAvailability(id, rich, CAPS_ON).available);
+
+  /* GUARD THE GUARD, AND IT NOW SPANS TWO AREAS RATHER THAN ONE.
+     `disabled` has to be shown to VARY, or a component that hardcoded it either
+     way would satisfy everything below. It used to be shown to vary WITHIN the
+     bare area — some rows blocked, some drawable — which stopped being possible
+     when `layerAvailability` gained its page-level refusal: an area that ships no
+     artefacts mounts no map, so nothing there is drawable, including the
+     capability-backed row that used to pass on the token alone.
+     The variation is therefore asserted across the pair, and the claim is
+     STRONGER than the one it replaces: every layer blocked at `bare`, every layer
+     drawable at `rich`. Both halves are needed and neither is slack — drop the
+     first and `disabled` could be hardcoded false, drop the second and it could be
+     hardcoded true. */
+  assert.equal(blocked.length, LAYER_IDS.length,
+    `${blocked.length} of ${LAYER_IDS.length} layers are blocked at "${bare}", which `
+    + 'mounts no map — every one of them must be, or a row is live over a page with '
+    + 'no instrument behind it');
+  assert.equal(drawable.length, LAYER_IDS.length,
+    `only ${drawable.length} of ${LAYER_IDS.length} layers are available at "${rich}" `
+    + 'with the token -- `disabled` would be indistinguishable from "always on", and '
+    + 'the test would prove nothing');
 
   /* EVERY REFUSAL NAMES ITS REASON. The Availability union makes
      `{ available: false }` unconstructible without one; this is the check that

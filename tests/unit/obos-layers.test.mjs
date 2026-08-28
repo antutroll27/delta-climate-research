@@ -34,21 +34,43 @@ test('availability is DERIVED from paths, never declared', () => {
     assert.equal(a.available, true, `${id} should be available in Kolkata`);
   }
   let refused = 0;
+  const reasons = new Set();
   for (const id of LAYER_IDS) {
     const a = layerAvailability(id, 'ae/dubai/al-quoz', { mapillary: true });
     if (a.available) continue;
     assert.ok(a.reason && a.reason.length > 0, `${id} must say WHY it is unavailable`);
+    reasons.add(a.reason);
     refused += 1;
   }
   /* GUARD THE GUARD. The loop above `continue`s past anything available, so an
      implementation that returned available:true for everything would make it
      assert NOTHING and pass — the exact shape this suite exists to catch, found
-     by the Task 1 implementer inside the test as originally specified. Dubai
-     ships no artefacts, so the five artefact-backed layers MUST refuse; only the
-     capability-backed one may pass with a token present. */
-  assert.equal(refused, 5,
-    'Dubai ships no artefacts, so 5 of 6 layers must refuse — if this is 0, the '
-    + 'loop above checked nothing');
+     by the Task 1 implementer inside the test as originally specified.
+
+     SIX, NOT FIVE, AND THE CHANGE IS THE POINT. It was five: the five
+     artefact-backed layers refused and the capability-backed one passed on the
+     token alone. That was a DEAD CONTROL — an area shipping no artefacts renders
+     no map host at all, so nothing mounts, and street-level coverage is a MapLibre
+     source with no map to be added to. Production sets the token, so the console
+     shipped a live, tickable checkbox over a page with no instrument behind it.
+     `layerAvailability` now refuses at the PAGE level, before either axis, and the
+     property worth pinning is that the refusal reaches every layer regardless of
+     which axis it depends on. */
+  assert.equal(refused, LAYER_IDS.length,
+    `an area that ships no artefacts mounts no map, so ALL ${LAYER_IDS.length} `
+    + `layers must refuse there — ${refused} did. A layer still available is one `
+    + 'whose checkbox ticks with nothing behind it; if this is 0, the loop above '
+    + 'checked nothing');
+  /* ONE REASON, NOT SIX. The refusal is a fact about the PAGE, so every row states
+     the same operative one. Six different sentences would mean the artefact branch
+     is still answering — true, but incidental, and it leaves a reader of five
+     greyed rows without the fact that explains all six. */
+  assert.equal(reasons.size, 1,
+    `the ${refused} refusals give ${reasons.size} different reasons — the page-level `
+    + `refusal must answer for all of them: ${[...reasons].join(' | ')}`);
+  assert.match([...reasons][0], /no map is mounted|nothing renders/,
+    'the refusal names the missing artefact rather than the missing map — accurate '
+    + 'and incidental, where the operative fact is that nothing renders here at all');
 });
 
 test('a capability layer follows the capability, not the artefacts', () => {

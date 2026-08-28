@@ -123,7 +123,25 @@ export const LAYERS = {
   green: {
     label: 'Green infrastructure',
     items: {
-      canopy: { label: 'Tree canopy (CHM)', needs: 'canopy', defaultOn: true },
+      /* "Tree crowns", NOT "Tree canopy (CHM)", AND THE RENAME RECORDS A DEFECT.
+         The row hides the crowns and their shadows in the rendered vegetation
+         layer. It does NOT hide the measured canopy-height raster, because
+         nothing does: `{area}-canopy.png` is fetched, validated by
+         `asCanopyRaster` and cached by heat-map-app.ts, then handed to
+         `rasterWardBase`, which multiplies it by `CANOPY_BLEND_STRENGTH` — and
+         that constant is 0 (types.ts:72). The raster reaches the temperature
+         solve scaled to nothing, every ward, every load.
+         WHY THE LABEL MOVED RATHER THAN THE CONSTANT. Raising the blend changes
+         the vegetation field, which changes the solved surface temperature,
+         which moves the goldens and the published out-of-sample error. That is a
+         physics change and it needs its own pre-registered spec, not a rename's
+         worth of review. Until it has one the honest thing is a label that names
+         what the control actually does — a row promising the CHM while hiding
+         crowns is the quiet kind of lie this registry exists to refuse.
+         `needs: 'canopy'` is unchanged and correct either way: the crowns are
+         placed from that measurement, so a city shipping no CHM has no crowns to
+         hide. */
+      canopy: { label: 'Tree crowns', needs: 'canopy', defaultOn: true },
       trees: { label: 'Tree instances', needs: 'trees', defaultOn: true },
     },
   },
@@ -278,6 +296,11 @@ const refuse = (reason: string): Availability => Object.freeze({ available: fals
 /**
  * Can this layer be drawn for this area? DERIVED — the registry is never asked.
  *
+ * THREE CHECKS, IN THIS ORDER, and the order is the design. First: does this area
+ * mount an instrument at all? That is a fact about the PAGE and it outranks both
+ * dependency kinds, because a layer needs a surface before it needs a file or a
+ * token. Only then the capability, then the artefact.
+ *
  * The artefact branch resolves the need through `paths()` and `cityPaths()`, which
  * are the authority on what ships. A city that stops emitting a canopy raster
  * disables the canopy layer here with no edit to this file, and a city that never
@@ -305,6 +328,38 @@ export function layerAvailability(id: LayerId, key: AreaKey, caps: Capabilities)
   }
   const needs = record.entry.needs;
 
+  /* ── THE PAGE-LEVEL REFUSAL, AND IT COMES FIRST BECAUSE IT IS NOT ABOUT THE
+     LAYER. ──────────────────────────────────────────────────────────────────
+     An area that ships no per-area artefacts renders no map host at all:
+     HeatMapStage.astro gates `#mlmap` on the same flag `paths()` answers, and the
+     route's boot script returns without it, so `mountHeatMap` never runs. Nothing
+     is drawable there — not the artefact-backed layers, and not the capability-
+     backed one either, because street-level coverage is a MapLibre source and
+     there is no map to add it to.
+
+     WHAT THIS FIXES, MEASURED. `ground/street` depends only on `caps`, so on a
+     build with a Mapillary token it came back AVAILABLE for such an area: a live,
+     tickable checkbox over a page with no instrument behind it. Production sets
+     that token, so the console shipped one control that could never do anything —
+     on the very page whose entire content is a statement about what it cannot do.
+
+     GENERAL, NOT A SPECIAL CASE FOR STREET. Whether an area has a map is a
+     property of the PAGE; every axis a layer might depend on is downstream of it.
+     Refusing here keeps the capability axis clean and meaningful — it is simply
+     never asked on a page with no map — rather than teaching one layer to consult
+     the artefacts it deliberately does not use.
+
+     THE REASON IS THE OPERATIVE ONE. The artefact branch below would have said
+     `no "trees" artefact`, which is true and incidental; a reader looking at six
+     greyed rows needs the fact that explains all six of them, which is that
+     nothing renders here at all. */
+  const area = paths(key);
+  if (area === null) {
+    return refuse(
+      `nothing renders on "${key}" — it ships no per-area artefacts, so no map is `
+      + 'mounted and no layer of any kind has a surface to draw on');
+  }
+
   /* The capability branch. It reads `caps` and NOTHING else — deliberately not the
      artefacts, because street-level imagery has none: it is served from
      tiles.mapillary.com against a token, and a city with every artefact we ship can
@@ -318,20 +373,23 @@ export function layerAvailability(id: LayerId, key: AreaKey, caps: Capabilities)
       + 'token is unset');
   }
 
-  const area = paths(key);
+  /* `area` is non-null from here — the page-level refusal above returned on the
+     other case — so the spread needs no `?? {}` and the message below has one
+     clause rather than two. It USED to carry a second: an area that shipped
+     nothing at all said so here, per artefact, six times over. That sentence has
+     moved up to the one place it is true of the whole page, and its old clause is
+     gone rather than left standing unreachable. What survives is the case that
+     can still happen with a map on screen: a city that ships artefacts but not
+     THIS one. */
   const urls: Readonly<Record<string, string | null | undefined>> = {
-    ...cityPaths(key), ...(area ?? {}),
+    ...cityPaths(key), ...area,
   };
   const url = urls[needs];
   if (url === null || url === undefined) {
-    /* NAMING THE ARTEFACT IS THE REQUIREMENT, and the two clauses are different
-       facts an operator needs told apart: an area that ships nothing at all is a
-       scope the twin has not been built for, where a city missing one stem has
-       everything else. "Unavailable" alone would send both to the same shrug. */
-    return refuse(area === null
-      ? `no "${needs}" artefact — "${key}" ships no per-area artefacts at all, so there `
-        + 'is nothing to draw and nothing to fetch'
-      : `no "${needs}" artefact — this area's city declares none under that name`);
+    /* NAMING THE ARTEFACT IS THE REQUIREMENT. "Unavailable" alone sends an
+       operator to the console; the stem is what tells them which build step to
+       look at. */
+    return refuse(`no "${needs}" artefact — this area's city declares none under that name`);
   }
   return AVAILABLE;
 }
