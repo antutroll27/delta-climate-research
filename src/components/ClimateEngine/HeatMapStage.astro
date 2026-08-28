@@ -231,8 +231,16 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
         the three is somewhere you can go: there is no country page and no city
         page, and the scope switcher two columns left is the control that moves you.
         So it is a statement rather than a <nav> of links that would have to invent
-        destinations to justify its shape. */}
-    <p class="crumb"><span>{scope.country.name}</span><span>{scope.city.name}</span><b>{scope.area.name}</b></p>
+        destinations to justify its shape.
+
+        THE AREA CELL CARRIES AN ID BECAUSE IT HAS TO FOLLOW THE WARD. This is
+        server-rendered once, and an in-place switch reloads nothing — so without a
+        writer it went on naming the ward the page was opened at while `#pname`,
+        about two hundred pixels to the right, named the one actually loaded. The
+        country and city cells need no id: `console-shell.ts` navigates rather than
+        switching in place whenever a selection would cross either, so neither can
+        change without a page load. */}
+    <p class="crumb"><span>{scope.country.name}</span><span>{scope.city.name}</span><b id="crumbArea">{scope.area.name}</b></p>
     {/* THE READOUT IS GATED, and it is the subtlest half-render on the page.
         `#bcount` and `#simBackend` are written by the instrument; their static values
         are the states it starts in. Left standing where no instrument mounts, an area

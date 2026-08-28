@@ -215,6 +215,29 @@ test('the ward strip never prints two scenarios side by side', async ({ page }) 
     .not.toHaveText(ballyPeak ?? '');
 });
 
+test('the breadcrumb follows the ward', async ({ page }) => {
+  /* IT HAD NO WRITER AT ALL — `grep -rn crumb src/scripts/` found none. The crumb
+     is rendered once by HeatMapStage.astro and an in-place switch reloads nothing,
+     so after switching to Baruipur the top bar carried a bold "Ballygunge" about
+     two hundred pixels from a `#pname` reading "Baruipur", with the URL agreeing
+     with the second. Both are statements of where you are; only one was updated.
+
+     THE STRIP, NOT THE SELECT, so this covers the other in-place door too. */
+  await page.goto(BALLYGUNGE);
+  await expect(page.locator('.crumb b')).toHaveText('Ballygunge');
+  await expect(page.locator('#lst')).not.toContainText('—', { timeout: 20_000 });
+
+  await page.locator('#strip .ward[data-w="baruipur"]').click();
+  await expect(page.locator('#pname')).toHaveText('Baruipur', { timeout: 20_000 });
+  await expect(page.locator('.crumb b'),
+    'the breadcrumb is still naming the ward the page was opened at, beside a '
+    + 'readout and a URL that both name the one actually loaded')
+    .toHaveText('Baruipur');
+  /* The cells that CANNOT change stay put, which is what proves the writer moved
+     the right one rather than repainting the whole crumb from somewhere. */
+  await expect(page.locator('.crumb span')).toHaveText(['India', 'Kolkata']);
+});
+
 test('no rail section is a link to the page it is already on', async ({ page }) => {
   /* The defect this closes, in both of its historical forms: the Explore tab
      carried aria-current="page" while its href pointed elsewhere (a lie to a

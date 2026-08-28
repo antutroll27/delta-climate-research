@@ -1175,7 +1175,7 @@ export function mountHeatMap(): () => void {
          city's geometry through the old city's fallback temperature and
          park-cooling radius — cleanly, and with a plausible number out. */
       state.ward = name; state.climate = resolve(name).climate;
-      updateCompareHref(); updateReportHref(); updateAddressBar(); updateStageArea(); updateScopeSwitcher();
+      projectWard();
 
     /* Rebuild the pick registry from the SAME rows the extrusions come from, and
        drop any selection: building #1759 in Ballygunge is a different building in
@@ -1809,6 +1809,36 @@ export function mountHeatMap(): () => void {
   /* ── DOM helpers ── */
   function setText(id: string, v: string) { const e = el(id); if (e) e.textContent = v; }
   function setHTML(id: string, v: string) { const e = el(id); if (e) e.innerHTML = v; }
+  /**
+   * PROJECT `state.ward` ONTO EVERYTHING THAT RESTATES IT.
+   *
+   * THIS IS AN ENROLMENT LIST, and it is a function because the list got long
+   * enough that a call chain stopped being one. `updateAddressBar` and
+   * `updateStageArea` each describe themselves as "the same obligation"; so are the
+   * other four, and every one of them was added to a growing chain at a single call
+   * site inside `loadWard`. The chain's failure mode is not that it breaks — it is
+   * that a new projection gets written, checked by hand once, and never joined to
+   * it, which is how the breadcrumb and the document title came to be the only two
+   * statements of the open ward on this page that nobody had ever updated.
+   *
+   * THE MEMBERS KEEP THEIR OWN NAMES on their own lines, so `grep updateCrumb`
+   * still lands on the writer and a diff that adds a projection is one line that
+   * reads as one. One function body doing all six jobs would have saved nothing and
+   * hidden the list.
+   *
+   * `updateCompareHref` is here AND in the scenario handlers, which is right rather
+   * than duplicated: the Compare deep link restates the ward and the interventions
+   * both, so it is a member of two obligations.
+   */
+  function projectWard() {
+    updateCompareHref();
+    updateReportHref();
+    updateAddressBar();
+    updateStageArea();
+    updateScopeSwitcher();
+    updateCrumb();
+  }
+
   /* The card's primary action used to be a <button> with no handler anywhere in
      src/ — it had shipped to production doing nothing at all. It now points at
      the ward's own record, which is the one per-ward artefact we can actually
@@ -1868,6 +1898,32 @@ export function mountHeatMap(): () => void {
    */
   function updateStageArea() {
     document.querySelector('.stage')?.setAttribute('data-area', state.ward);
+  }
+
+  /**
+   * Keep the breadcrumb naming the area that is actually open.
+   *
+   * IT HAD NO WRITER AT ALL. `grep -rn crumb src/scripts/` found none: the crumb is
+   * rendered once by HeatMapStage.astro and an in-place switch reloads nothing, so
+   * after switching to Baruipur the page carried a bold "Ballygunge" in its top bar
+   * about two hundred pixels from a `#pname` reading "Baruipur", with the URL
+   * agreeing with the second one. Both are statements of where you are; only one of
+   * them was ever updated.
+   *
+   * `textContent`, NOT `innerHTML`. The scope registry's area name is the
+   * markup-stripped form — `#pname` is the readout that takes the ward table's
+   * `<em>`-stressed wordmark, and the crumb deliberately does not — so there is
+   * nothing here to parse and no reason to hand a registry string to the HTML
+   * parser.
+   *
+   * THE COUNTRY AND CITY CELLS ARE NOT WRITTEN, and that is a fact about the switch
+   * rather than an omission: `console-shell.ts` navigates rather than switching in
+   * place whenever a selection would cross a city or a country, so neither cell can
+   * go stale without a page load that re-renders all three.
+   */
+  function updateCrumb() {
+    const cell = el('crumbArea');
+    if (cell) cell.textContent = resolve(state.ward).area.name;
   }
 
   /**
