@@ -322,6 +322,123 @@ test('the document title, canonical and social tags follow the ward', async ({ p
     .toBe(new URL(shippedCanonical ?? '').origin);
 });
 
+test('the data receipts follow the ward while the panel is open', async ({ page }) => {
+  /* `renderSources` had exactly one caller — the `#srcBtn` click handler, and only
+     on its OPENING edge. So opening the panel and then switching ward left the
+     heading reading "Data receipts · ballygunge" over Ballygunge's rows, on a page
+     whose every other statement had moved to Baruipur. It is self-labelled, which is
+     the only reason it fails semi-loudly rather than silently — but a panel that
+     names the wrong ward is worse than one that names none, because it reads as an
+     answer.
+
+     THE HEADING IS THE ASSERTION and it comes from the MANIFEST (`manifest.ward`),
+     not from `state.ward`, so it cannot be satisfied by a repaint that re-labelled
+     the old rows: the name changes only when a different manifest has actually been
+     fetched and rendered. */
+  await page.goto(BALLYGUNGE);
+  await expect(page.locator('#lst')).not.toContainText('—', { timeout: 20_000 });
+
+  await page.locator('#srcBtn').click();
+  const panel = page.locator('#srcPanel');
+  await expect(panel).toContainText('ballygunge', { timeout: 20_000 });
+  const rowsAtBallygunge = await panel.locator('.src-row').count();
+  expect(rowsAtBallygunge, 'the receipts panel rendered no rows at all, so the '
+    + 'assertions below would be comparing two empty panels').toBeGreaterThan(0);
+
+  await page.locator('#strip .ward[data-w="baruipur"]').click();
+  await expect(page.locator('#pname')).toHaveText('Baruipur', { timeout: 20_000 });
+  await expect(panel, 'the open receipts panel is still headed with the ward the '
+    + 'reader has left, over that ward\'s rows, on a page where the name, the URL, '
+    + 'the breadcrumb and the strip have all moved on')
+    .toContainText('baruipur', { timeout: 20_000 });
+  await expect(panel).not.toContainText('ballygunge');
+
+  /* A CLOSED PANEL IS NOT RE-RENDERED, which is the other half of the rule: the
+     manifest is fetched per area, and re-rendering a panel nobody is looking at
+     would spend a request on every strip click for a view that is not on screen.
+
+     ASSERTED ON THE FETCH, AND ON A WARD NEVER YET VISITED. Asserting that the
+     closed panel merely LOOKS closed does not bite -- rendering into a hidden
+     element leaves it hidden, and it was written that way first and passed against
+     a deliberately broken build. `loadLayerManifest` also caches, so a ward already
+     opened would issue no request whatever the rule did. Barrackpore has not been
+     touched in this test, so its manifest can only be requested by a render. */
+  await page.locator('#srcBtn').click();
+  await expect(panel).toBeHidden();
+
+  let manifestFetches = 0;
+  await page.route('**/barrackpore-layers.json*', async (route) => {
+    manifestFetches += 1;
+    await route.continue();
+  });
+
+  await page.locator('#strip .ward[data-w="barrackpore"]').click();
+  await expect(page.locator('#pname')).toHaveText('Barrackpore', { timeout: 20_000 });
+  await expect(panel).toBeHidden();
+  expect(manifestFetches, 'the receipts panel is closed and its manifest was '
+    + 'fetched anyway, so every ward switch now pays for a panel nobody is looking '
+    + 'at').toBe(0);
+
+  /* And opening it gets the ward that is now open, not the one it last held — which
+     is also what proves the wait above was long enough for a fetch to have happened
+     if the rule had been broken. */
+  await page.locator('#srcBtn').click();
+  await expect(panel).toContainText('barrackpore', { timeout: 20_000 });
+  expect(manifestFetches, 'opening the panel did not fetch the manifest either, so '
+    + 'the check above was measuring a request that never happens at all')
+    .toBeGreaterThan(0);
+});
+
+test('a slow manifest cannot overwrite the ward the reader stopped on', async ({ page }) => {
+  /* THE RACE THE FIX MAKES REACHABLE. `renderSources` used to have one caller — the
+     opening click — and could not overlap itself. It is now also called on every
+     ward change, and a manifest fetch easily outlives a ward switch, so two
+     completed switches can leave two renders in flight. Whichever resolves LAST
+     writes the panel, and that is the network's decision rather than the reader's:
+     the ward passed through can overwrite the ward stopped on, rebuilding the
+     wrong-ward panel out of a race.
+
+     A FRESH PAGE, AND A WARD NOT YET OPENED. `loadLayerManifest` caches per area,
+     so delaying a manifest that has already been fetched delays nothing — the first
+     draft of this did exactly that, and passed against a build with the guard
+     deliberately removed.
+
+     THE SWITCHES COMPLETE. `loadWard` refuses a superseded token before it projects
+     anything, so two rapid clicks produce only ONE render and no race at all; each
+     switch here is waited for, which is what puts two renders in flight. */
+  test.slow();
+
+  /* Long enough to outlive a whole ward switch, which is what makes the resolution
+     order wrong rather than merely concurrent. */
+  await page.route('**/baruipur-layers.json*', async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 7000));
+    await route.continue();
+  });
+
+  await page.goto(BALLYGUNGE);
+  await expect(page.locator('#lst')).not.toContainText('—', { timeout: 20_000 });
+  const panel = page.locator('#srcPanel');
+  await page.locator('#srcBtn').click();
+  await expect(panel).toContainText('ballygunge', { timeout: 20_000 });
+
+  /* Baruipur's render starts here and blocks on its delayed manifest. */
+  await page.locator('#strip .ward[data-w="baruipur"]').click();
+  await expect(page.locator('#pname')).toHaveText('Baruipur', { timeout: 20_000 });
+
+  /* Barrackpore's render starts second and finishes first. */
+  await page.locator('#strip .ward[data-w="barrackpore"]').click();
+  await expect(page.locator('#pname')).toHaveText('Barrackpore', { timeout: 20_000 });
+  await expect(panel).toContainText('barrackpore', { timeout: 20_000 });
+
+  /* Now Baruipur's manifest lands, several seconds after the reader left it. */
+  await page.waitForTimeout(9000);
+  await expect(panel, 'the manifest for a ward the reader passed through arrived '
+    + 'after the one for the ward they stopped on and overwrote it — the receipts '
+    + 'panel is headed with a ward nothing else on the page names')
+    .toContainText('barrackpore');
+  await expect(panel).not.toContainText('baruipur');
+});
+
 test('no rail section is a link to the page it is already on', async ({ page }) => {
   /* The defect this closes, in both of its historical forms: the Explore tab
      carried aria-current="page" while its href pointed elsewhere (a lie to a

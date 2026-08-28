@@ -199,10 +199,21 @@ export function mountHeatMap(): () => void {
   // (loadLayerManifest caches). null → degrade to the static credit line.
   const escHtml = (s: string) => s.replace(/[&<>"]/g, (c) => (
     { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] ?? c);
+  /* WHICH RENDER IS THE CURRENT ONE. It used to be called from one place, on the
+     opening click, and could not overlap itself; it is now also called on a ward
+     switch, and two strip clicks in quick succession start two fetches whose
+     resolution order is the network's business rather than the reader's. Without
+     this the SECOND ward's panel could be overwritten by the FIRST ward's manifest
+     arriving late — the same wrong-ward panel this call site was added to fix,
+     rebuilt out of a race. `svThumbGen` guards the building card's street photo the
+     same way, for the same reason. */
+  let srcGen = 0;
   const renderSources = async () => {
     const panel = el('srcPanel');
     if (!panel) return;
+    const gen = ++srcGen;
     const manifest = await loadLayerManifest(state.ward);
+    if (gen !== srcGen) return;
     if (!manifest) {
       panel.innerHTML = '<h4>Data receipts</h4><div class="src-row"><div class="s">Provenance manifest unavailable.</div></div>';
       return;
@@ -1844,6 +1855,7 @@ export function mountHeatMap(): () => void {
     updateScopeSwitcher();
     updateCrumb();
     updateDocumentMeta();
+    updateSourcesPanel();
   }
 
   /* The card's primary action used to be a <button> with no handler anywhere in
@@ -1931,6 +1943,27 @@ export function mountHeatMap(): () => void {
   function updateCrumb() {
     const cell = el('crumbArea');
     if (cell) cell.textContent = resolve(state.ward).area.name;
+  }
+
+  /**
+   * Keep an OPEN Data-receipts panel describing the ward that is actually open.
+   *
+   * `renderSources` had exactly one caller — the `#srcBtn` click handler, and only
+   * on its opening edge. So opening the panel and then switching ward left the
+   * heading reading "Data receipts · ballygunge" over Ballygunge's rows, on a page
+   * whose name, URL, breadcrumb and strip had all moved to Baruipur. It is
+   * self-labelled, which is the only reason it failed semi-loudly rather than
+   * silently — and a panel that names the wrong ward is worse than one that names
+   * none, because it reads as an answer.
+   *
+   * ONLY WHILE IT IS OPEN, and that is a rule rather than an optimisation: the
+   * manifest is fetched per area, so re-rendering a panel nobody is looking at would
+   * spend a request on every strip click for a view that is not on screen. A closed
+   * panel is re-rendered by the click that opens it, which is where it always was.
+   */
+  function updateSourcesPanel() {
+    const panel = el('srcPanel');
+    if (panel && !panel.hasAttribute('hidden')) void renderSources();
   }
 
   /**
