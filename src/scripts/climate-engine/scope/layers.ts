@@ -131,7 +131,18 @@ export const LAYERS = {
     label: 'Built form',
     items: {
       footprints: { label: 'Building footprints', needs: 'ward', defaultOn: true },
-      heights: { label: 'Building heights', needs: 'ward', defaultOn: false },
+      /* TRUE, AND IT WAS FALSE UNTIL THE TREE WAS WIRED TO THE MAP.
+         `defaultOn` is not a preference — it is a CLAIM ABOUT THE MAP'S FIRST
+         PAINT, and the tree renders it as a ticked or unticked box before anything
+         has been clicked. The instrument opens in 3D relief with every building
+         extruded to its measured height, so `false` here would have shipped an
+         unticked box beside a layer that is plainly on the screen: the same lie as
+         a ticked box over a layer that is not drawn, which is the case this file's
+         `checked: defaultOn && available` rule already refuses.
+         The rationale beside it — that a visitor turns extrusion off far more
+         often than outlines — is an argument for the row EXISTING, and reads as
+         one for extrusion starting on. */
+      heights: { label: 'Building heights', needs: 'ward', defaultOn: true },
     },
   },
   ground: {

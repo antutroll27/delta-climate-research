@@ -19,6 +19,9 @@ import type {
 
 const RING_RADII = [80, 400] as const;
 
+/** How tall a "footprints, no heights" building is: a 30 m block becomes 0.45 m. */
+const FLAT_BUILDING_SCALE = 0.015;
+
 export class ThreeReliefRenderer implements ReliefRenderer {
   readonly layer: maplibregl.CustomLayerInterface;
   private scene: THREE.Scene | null = null;
@@ -59,6 +62,21 @@ export class ThreeReliefRenderer implements ReliefRenderer {
     mode: 'relief', environment: 'dark', tintMode: 1, grow: 1,
     overlayOpacity: 0.5, live: null, phase: 'peak',
   };
+  /**
+   * WHAT THE LAYER TREE HAS TURNED OFF, kept here rather than in the caller.
+   *
+   * `rebuildWard` discards the city mesh and the vegetation group and builds new
+   * ones on every ward switch, and a new mesh is visible and full height. Held in
+   * the caller, four switches would silently revert on the next switch — the
+   * checkbox still ticked, the layer back on the map. `applyLayerState` is called
+   * at the end of the rebuild, which is the one place that can be true.
+   *
+   * The defaults are the state the instrument boots in, which is what
+   * `scope/layers.ts` declares as `defaultOn` for these four. They agree because
+   * the tree renders the map's initial state; if they ever disagree the tree is
+   * lying about the map on first paint, before anything has been clicked.
+   */
+  private layers = { trees: true, canopy: true, buildings: true, extruded: true };
 
   constructor(private options: ReliefRendererOptions) {
     const n = options.simulationGridSize;
@@ -120,7 +138,47 @@ export class ThreeReliefRenderer implements ReliefRenderer {
     if (environmentChanged || this.studio.value !== (state.environment === 'studio' ? 1 : 0)) this.applyEnvironment(state.environment);
   }
 
-  setVegetationVisible(v: boolean): void { this.veg?.setVisible(v); this.options.map.triggerRepaint(); }
+  setVegetationVisible(v: boolean): void {
+    this.layers.trees = v;
+    this.veg?.setVisible(v);
+    this.options.map.triggerRepaint();
+  }
+
+  setCanopyVisible(v: boolean): void {
+    this.layers.canopy = v;
+    this.veg?.setCanopyVisible(v);
+    this.options.map.triggerRepaint();
+  }
+
+  setBuildingsVisible(v: boolean): void {
+    this.layers.buildings = v;
+    if (this.city) this.city.visible = v;
+    this.options.map.triggerRepaint();
+  }
+
+  setBuildingsExtruded(v: boolean): void {
+    this.layers.extruded = v;
+    this.applyExtrusion();
+    this.options.map.triggerRepaint();
+  }
+
+  /**
+   * Flat is a SCALE, not a rebuild.
+   *
+   * The extrusion depth is baked into the merged geometry — one `ExtrudeGeometry`
+   * per building, welded into a single mesh — so "draw these as footprints" cannot
+   * be a cheaper geometry without rebuilding all of it on every toggle. Scaling the
+   * mesh's y is the same operation the grow animation already performs in the
+   * vertex shader (`transformed.y *= gE`), about the same origin, so a flattened
+   * city sits exactly where a mid-grow city does.
+   *
+   * Not zero: a zero-height extrusion collapses the side walls onto the roof and
+   * the merged normals go degenerate, which reads as z-fighting rather than as a
+   * plan. A thin slab keeps the outline lit and legible.
+   */
+  private applyExtrusion(): void {
+    if (this.city) this.city.scale.y = this.layers.extruded ? 1 : FLAT_BUILDING_SCALE;
+  }
 
   setSelection(selection: ReliefSelection): void {
     const building = selection.building;
@@ -278,6 +336,18 @@ export class ThreeReliefRenderer implements ReliefRenderer {
     if (this.veg) { this.scene.remove(this.veg.group); this.veg.dispose(); this.veg = null; }
     const veg = createVegetationLayer(bundle.veg, this.grow, (x, y) => terrainDrawAt(bundle.terrain, x, y));
     if (veg) { this.veg = veg; this.scene.add(veg.group); }
+    /* LAST, AND IT HAS TO BE LAST. Everything above is newly constructed and
+       therefore visible and full height; this is where the four switches the layer
+       tree owns are put back on. */
+    this.applyLayerState();
+  }
+
+  /** Re-apply the layer switches to whatever `rebuildWard` has just constructed. */
+  private applyLayerState(): void {
+    if (this.city) this.city.visible = this.layers.buildings;
+    this.applyExtrusion();
+    this.veg?.setVisible(this.layers.trees);
+    this.veg?.setCanopyVisible(this.layers.canopy);
   }
 
   private displaceGround(field: ReliefWardBundle['terrain'], sizeM: number): void {

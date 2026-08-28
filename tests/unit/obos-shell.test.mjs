@@ -62,7 +62,7 @@ async function railSource() {
   };
 }
 
-/** The declared sections, as `{ id, label, href }`. Never an empty list. */
+/** The declared sections, as `{ id, label, href, pane }`. Never an empty list. */
 function sectionTable(frontmatter) {
   const block = frontmatter.match(/const\s+SECTIONS[^=]*=\s*\[([\s\S]*?)\n\s*\];/);
   assert.ok(block, 'IconRail.astro declares no `const SECTIONS = [ ... ];` -- the '
@@ -70,30 +70,33 @@ function sectionTable(frontmatter) {
     + 'fail rather than yield an empty list that nothing then checks');
 
   const entries = [...block[1].matchAll(
-    /\{\s*id:\s*'([a-z]+)'\s*,\s*label:\s*'([^']+)'\s*,\s*href:\s*([^,]+),/g)]
-    .map(([, id, label, href]) => ({ id, label, href: href.trim() }));
+    /\{\s*id:\s*'([a-z]+)'\s*,\s*label:\s*'([^']+)'\s*,\s*href:\s*([^,]+),\s*pane:\s*(true|false)\s*,/g)]
+    .map(([, id, label, href, pane]) => ({ id, label, href: href.trim(), pane: pane === 'true' }));
 
   assert.ok(entries.length > 0, 'the SECTIONS table parsed to ZERO entries -- '
     + 'either the table is empty or its fields are no longer `id`, `label`, '
-    + '`href` in that order; both must fail, because every loop below would '
-    + 'otherwise assert nothing');
+    + '`href`, `pane` in that order; both must fail, because every loop below '
+    + 'would otherwise assert nothing');
   return entries;
 }
 
 /**
  * The two arms of the section loop, as raw text.
  *
- * Sliced from `items.map(` to the settings control, which is deliberately NOT a
- * section: it is pinned to the bottom, it is nowhere the rail can BE, so it
- * carries no `data-rail` and can never be current. Excluding it keeps the
- * per-section assertions from being satisfied by a control that is not one.
+ * Sliced from `items.map(` to the end of the <nav>, so nothing outside the loop
+ * can satisfy a per-section assertion. It used to stop at `rail-settings`, a
+ * control pinned to the bottom that was deliberately NOT a section; that control
+ * has been deleted rather than wired, because nothing existed for it to open and
+ * a control that does nothing is the defect this project keeps paying for. The
+ * brand mark is the only other element in the nav and it sits BEFORE the loop, so
+ * the slice excludes it without having to name it.
  */
 function loopArms(template) {
   const start = template.indexOf('items.map(');
   assert.ok(start !== -1, 'IconRail.astro renders no `items.map(` loop -- the '
     + 'assertions below read the loop arms and cannot find them');
   const region = template.slice(start);
-  const end = region.indexOf('rail-settings');
+  const end = region.indexOf('</nav>');
   return end === -1 ? region : region.slice(0, end);
 }
 
@@ -141,6 +144,11 @@ test('the ACTIVE section renders as a <button>, never as a link to itself', asyn
      render it as an anchor. */
   const { frontmatter, template } = await railSource();
 
+  assert.ok(flat(frontmatter).includes('const current = s.id === route'),
+    'the section derivation must compare against `route` -- the page it is ON. '
+    + 'Compared against `pane` instead, Map would render as an <a> to the URL you '
+    + 'are already standing on the moment any other pane is opened, which is the '
+    + 'self-link this whole derivation exists to remove');
   assert.ok(flat(frontmatter).includes('href: current ? null : s.href'),
     'the section derivation must strip the href from the CURRENT section '
     + '(`href: current ? null : s.href`). Without it the active section renders '
@@ -179,6 +187,130 @@ test('aria-current="page" is written once, on the active section, and nowhere el
   assert.match(owner[0], /aria-current=\{\s*s\.current\s*\?\s*'page'\s*:\s*undefined\s*\}/,
     'aria-current must read `page` only when the section IS the current one; '
     + 'anything unconditional claims every section is the page');
+});
+
+test('the rail is told the route and the pane SEPARATELY', async () => {
+  /* THE DEFECT THIS PREVENTS, in full. The first rail took one prop, `active`, and
+     the component's own header flagged what that cost: with `active="layers"` on
+     the Explore route, Map still rendered as an <a> pointing at the URL the reader
+     was already on. One prop cannot answer two questions -- WHICH PAGE IS THIS and
+     WHICH SIDEBAR BODY IS SHOWING -- and the two genuinely differ the moment
+     anyone opens a pane, which is most of the time.
+     Both must be REQUIRED. An optional `pane` would let a caller pass only the
+     route, and the rail would then paint nothing as open while a pane was showing:
+     the same conflation with a default hiding it. */
+  const { frontmatter } = await railSource();
+  const props = frontmatter.match(/interface Props \{([\s\S]*?)\n\}/);
+  assert.ok(props, 'IconRail.astro declares no `interface Props { ... }`');
+
+  assert.match(props[1], /\broute:\s*RailSection\b/,
+    'the rail must take `route` -- the section the PAGE is, which is the only '
+    + 'thing that may decide whether a section is a link');
+  assert.match(props[1], /\bpane:\s*RailSection\b/,
+    'the rail must take `pane` -- the sidebar body showing right now. Without it '
+    + 'the rail cannot state which pane is open except by pretending it is the '
+    + 'route, which is exactly the conflation this split removes');
+  assert.doesNotMatch(props[1], /\bactive\s*[?:]/,
+    'the rail still takes an `active` prop -- one name for two questions is what '
+    + 'put a self-link back on the page');
+});
+
+test('a pane section says whether its pane is open; a section with no pane does not', async () => {
+  /* TWO FACTS, STATED SEPARATELY, because they are separate. `aria-current="page"`
+     is about the DOCUMENT; `aria-pressed` is about the SIDEBAR. Analysis navigates
+     and owns no sidebar body, so it must carry no aria-pressed at all --
+     `aria-pressed="false"` announces a toggle that happens to be off, which is a
+     different and wrong claim. The shell script also reads the attribute's
+     PRESENCE to learn which sections have panes, so an unconditional one would
+     wire a pane swap to a section with nothing to swap to. */
+  const { frontmatter, template } = await railSource();
+  const table = sectionTable(frontmatter);
+  const pane = new Map(table.map((s) => [s.id, s.pane]));
+
+  for (const id of ['map', 'layers', 'reports', 'scenarios']) {
+    assert.equal(pane.get(id), true, `${id} owns a sidebar body and must declare pane: true`);
+  }
+  assert.equal(pane.get('analysis'), false,
+    'Analysis navigates to another page and owns no sidebar body -- declaring '
+    + 'pane: true would give it an aria-pressed it can never honour, and would '
+    + 'wire a pane swap to a body that does not exist');
+
+  /* MAP DECLARES BOTH, and it is the entry that proves the two fields are not one
+     field written twice: it navigates (href) AND owns a pane. */
+  const href = new Map(table.map((s) => [s.id, s.href]));
+  assert.equal(href.get('map'), 'explorePath');
+  assert.equal(pane.get('map'), true);
+
+  const written = [...template.matchAll(/aria-pressed/g)];
+  assert.equal(written.length, 1,
+    `aria-pressed is written ${written.length}x in the template -- it belongs on `
+    + 'the button arm once, reading the value the derivation computed');
+  const owner = template.match(/<(\w+)[^>]*aria-pressed[^>]*>/);
+  assert.ok(owner, 'aria-pressed is not on an element open tag');
+  assert.equal(owner[1], 'button',
+    `aria-pressed sits on <${owner[1]}> -- a section that navigates is not a `
+    + 'toggle, and only the button arm can be one');
+  assert.match(owner[0], /aria-pressed=\{s\.pressed\}/,
+    'aria-pressed must read the derived `s.pressed`, which is undefined for a '
+    + 'section with no pane -- anything unconditional gives Analysis a toggle '
+    + 'state it does not have');
+
+  assert.match(flat(frontmatter), /pressed:\s*s\.pane\s*\?/,
+    '`pressed` must be gated on whether the section OWNS a pane. Computed for '
+    + 'every section it would render aria-pressed="false" on Analysis, which '
+    + 'announces a toggle that is off rather than no toggle at all');
+  assert.match(flat(frontmatter), /pressed:[^,]*s\.id === pane/,
+    '`pressed` must compare against `pane` -- compared against `route` it would '
+    + 'be a second spelling of aria-current and the sidebar state would be '
+    + 'unstated');
+});
+
+test('the rail ships no control that does nothing', async () => {
+  /* The first rail carried a settings button, inert, and said so in a comment: it
+     was to be wired or removed. Nothing exists for it to open, so it is removed.
+     A control that does nothing is the defect this project has deleted repeatedly
+     -- a <button class="cta"> with no handler, a warming-pathway control over an
+     empty table, a tab that reached a refusal in silence -- and shipping one on
+     the console's only navigation would be the loudest instance of it yet. */
+  const { template, css } = await railSource();
+  assert.doesNotMatch(template, /rail-settings|Settings/,
+    'the rail renders a settings control again -- there is still nothing for it '
+    + 'to open, so it must be wired to something real or not rendered');
+  assert.doesNotMatch(css, /rail-settings/,
+    'the rail styles a settings control that is no longer rendered');
+
+  /* EVERY CONTROL IN THE NAV IS ONE OF THREE THINGS: the brand link, a section
+     link, or a section button. Counting them is what stops a fourth arriving with
+     nothing behind it -- the check above only knows the name we happened to use. */
+  const controls = [...template.matchAll(/<(button|a)\b/g)].map((m) => m[1]);
+  assert.deepEqual(controls, ['a', 'button', 'a'],
+    'the rail renders controls other than the brand link and the loop\'s two '
+    + `arms: ${controls.join(', ')}`);
+});
+
+test('the console carries exactly one brand mark, and it is the rail\'s', async () => {
+  /* COMPOSED, THE TWO WERE EIGHT PIXELS APART. The rail has a mark at the top; the
+     stage's top bar had a logo link home directly to its right. Both went to `/`.
+     One of them had to go, and the rail's is the one that stays: the rail is the
+     navigation, so the way out of the console belongs in it.
+     BOTH HALVES ARE READ, and the second is the one that matters -- a check that
+     only confirmed the rail has a mark would have passed just as happily with the
+     stage's still there. */
+  const { template } = await railSource();
+  assert.match(template, /<a class="mark" href="\/"/,
+    'the rail no longer carries the brand mark as a link home -- it is the only '
+    + 'navigation on the page, so it is where the way out belongs');
+  assert.match(template, /aria-label="[^"]+"/,
+    'the brand link announces nothing -- two letters in a <span aria-hidden> is a '
+    + 'mark, not an accessible name');
+
+  const stage = await stageSource();
+  assert.doesNotMatch(stage, /class="brand"/,
+    'HeatMapStage.astro renders a brand link again -- composed with the rail\'s '
+    + 'mark that is two brands on one page, both going to the same place');
+  assert.doesNotMatch(stage, /logo-mark/,
+    'HeatMapStage.astro still loads the logo mark -- the top bar is the '
+    + 'breadcrumb and the readout now, and nothing else');
 });
 
 test('every section carries data-rail, which is how Task 7 will find it', async () => {
@@ -1436,10 +1568,23 @@ test('the stage kept none of those ids, so none is in the DOM twice', async () =
      latter prints the ENTIRE 1,000-line stage as its `actual`, which buries the
      one sentence explaining what went wrong. A tripwire is read exactly once,
      at the moment it fires, so it has to be legible then. */
-  assert.ok(/<InterventionPane\b/.test(stage),
-    'HeatMapStage.astro never renders <InterventionPane ... /> -- the markup '
-    + 'was removed and nothing put it back, so the toolbox is GONE from the '
-    + 'page rather than moved off it');
+  /* EXACTLY ONE MOUNT, not at least one -- and this half was MEASURED, not
+     imagined. Composing the console left the old `<InterventionPane />` standing
+     where it used to float over the map while adding a second one in the sidebar
+     pane, and the built page carried two toolboxes and seventeen duplicated ids.
+     Everything below passed: the stage writes no `id=` of its own, so "none is in
+     the DOM twice" was satisfied while every one of them was. The check that
+     matters is on the MOUNT, because that is what puts the ids in the document. */
+  const mounts = (stage.match(/<InterventionPane\b/g) ?? []).length;
+  assert.equal(mounts, 1,
+    mounts === 0
+      ? 'HeatMapStage.astro never renders <InterventionPane ... /> -- the markup '
+        + 'was removed and nothing put it back, so the toolbox is GONE from the '
+        + 'page rather than moved off it'
+      : `HeatMapStage.astro renders <InterventionPane /> ${mounts} times -- each `
+        + 'mount emits all seventeen ids, so the built page holds each of them '
+        + 'that many times. getElementById returns whichever the parser reached '
+        + 'first, and every control in the copies below it is dead');
 
   const leftBehind = ids.filter((id) => idAttr(id).test(stage));
   assert.deepEqual(leftBehind, [],
@@ -1455,4 +1600,27 @@ test('the stage kept none of those ids, so none is in the DOM twice', async () =
   assert.ok(!/<aside\s+class="panel left"/.test(stage),
     'HeatMapStage.astro still opens <aside class="panel left"> -- the pane '
     + 'took that element with it, so this is an empty duplicate frame');
+});
+
+test('each shell component is mounted exactly once', async () => {
+  /* THE GENERAL FORM OF THE DEFECT ABOVE. The toolbox was the one caught, because
+     its seventeen ids are queried by name and a duplicate id is unambiguously
+     wrong. The other three are quieter and no better: two layer trees means two
+     checkboxes per layer, and the tree's CSS counter would then count the rows of
+     whichever group it was reset in while the visitor clicked the other; two scope
+     switchers means two Area selects, only one of which the reader can see move.
+     None of that throws, and none of it looks wrong in the source -- the second
+     mount is one line, forty lines away from the first. */
+  const stage = await stageSource();
+  for (const name of ['IconRail', 'ScopeSwitcher', 'LayerTree', 'InterventionPane']) {
+    const n = (stage.match(new RegExp(`<${name}\\b`, 'g')) ?? []).length;
+    assert.equal(n, 1,
+      `HeatMapStage.astro mounts <${name} /> ${n} times -- the console composes `
+      + 'each of the four exactly once, and a second mount duplicates every '
+      + 'control inside it');
+    assert.match(stage, new RegExp(`import ${name} from '\\./shell/${name}\\.astro'`),
+      `HeatMapStage.astro renders <${name} /> without importing it from `
+      + 'shell/ -- an Astro component that is not imported renders as an unknown '
+      + 'HTML element, silently and with no styles');
+  }
 });

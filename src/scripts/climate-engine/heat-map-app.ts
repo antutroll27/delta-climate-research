@@ -44,6 +44,8 @@ import {
 } from './explore/relief-lifecycle';
 import { addCoverage, removeCoverage, IMAGE_LAYER_ID } from './streetview/coverage-layer';
 import { nearestImage } from './streetview/nearest-image';
+import { OPEN_AREA_EVENT, type OpenAreaDetail } from './shell/console-shell.ts';
+import { isLayerId, type LayerId } from './scope/layers.ts';
 import { resolve, requireCosts } from './scope/resolve.ts';
 import { fmtMoney } from './money.ts';
 import { areaPath, paths, cityPaths } from './scope/paths.ts';
@@ -254,8 +256,19 @@ export function mountHeatMap(): () => void {
   const wardSession = createWardSession();
   let appDisposed = false;
   let mode: 'relief' | 'iso' = 'relief', env: 'dark' | 'studio' = 'dark';
-  let vegOn = true;
-  let streetOn = false;
+  /* `vegOn` and `streetOn` WERE HERE, and they are gone rather than kept in step.
+     Each was a third copy of one fact — the chip's `.on` class said it, the
+     renderer held it, and this variable said it again — and the layer tree would
+     have made a fourth. The chip and the box are now painted from the value being
+     applied, and the renderer remembers what it has been told, so there is nothing
+     left for a variable to hold that is not already held somewhere that can be
+     read back. */
+  /* THE THERMAL FIELD'S OWN SWITCH is the exception, and it is one because the
+     field has no single object to hold its state: it is drawn twice — as the
+     shader overlay in relief mode and as the core canvas raster in isotherm mode —
+     and both are decided in `syncRendererVisibility`/`reliefVisualState`, which
+     read this rather than being pushed at. */
+  let surfaceOn = true;
   const MLY_TOKEN = (import.meta.env.PUBLIC_MAPILLARY_TOKEN as string | undefined) ?? '';
 
   /* ── MapLibre basemap ── */
@@ -929,7 +942,13 @@ export function mountHeatMap(): () => void {
   function reliefVisualState(): ReliefVisualState {
     return {
       mode, environment: env, tintMode, grow: growProgress,
-      overlayOpacity: opBase * Math.min(1, growProgress * 1.6),
+      /* THE SURFACE LAYER'S OFF STATE, expressed through the knob that was already
+         here rather than through a second one beside it. `uOp` is the overlay
+         shader's only alpha term, so zero is genuinely nothing drawn — and the
+         grow animation keeps running underneath, so ticking the box back on
+         restores the field at whatever opacity it should be at rather than
+         replaying the entrance. */
+      overlayOpacity: surfaceOn ? opBase * Math.min(1, growProgress * 1.6) : 0,
       live: state.live, phase: state.phase,
     };
   }
@@ -956,7 +975,12 @@ export function mountHeatMap(): () => void {
 
   function syncRendererVisibility(): void {
     const showRelief = shouldShowRelief(reliefIsAttached());
-    coreField.setVisible(!showRelief);
+    /* Two conditions, and they answer different questions: `showRelief` decides
+       WHICH renderer draws the thermal field, `surfaceOn` decides WHETHER it is
+       drawn at all. Folding them together — hiding the core field whenever the
+       layer is off and forgetting the mode — would leave the 2-D raster painted
+       under the 3-D scene in relief mode. */
+    coreField.setVisible(!showRelief && surfaceOn);
     if (relief && map.getLayer(relief.layer.id)) {
       map.setLayoutProperty(relief.layer.id, 'visibility', showRelief ? 'visible' : 'none');
     }
@@ -988,6 +1012,11 @@ export function mountHeatMap(): () => void {
       if (currentField) instance.updateField({ field: currentField, coolingMask: cooling?.mask ?? null, ramp });
       instance.setVisualState(reliefVisualState());
       instance.setSelection({ building: selected, nearestCooling: nearestCool });
+      /* The renderer boots with every layer on, because a mesh it has just built
+         is visible. Three.js is a deferred import and the tree is interactive
+         while it downloads, so anything unticked in the meantime has to be
+         re-stated the moment there is something to state it to. */
+      syncLayersToRenderer();
       syncRendererVisibility();
       map.triggerRepaint();
     }).catch((error) => {
@@ -1146,7 +1175,7 @@ export function mountHeatMap(): () => void {
          city's geometry through the old city's fallback temperature and
          park-cooling radius — cleanly, and with a plausible number out. */
       state.ward = name; state.climate = resolve(name).climate;
-      updateCompareHref(); updateReportHref(); updateAddressBar();
+      updateCompareHref(); updateReportHref(); updateAddressBar(); updateScopeSwitcher();
 
     /* Rebuild the pick registry from the SAME rows the extrusions come from, and
        drop any selection: building #1759 in Ballygunge is a different building in
@@ -1170,7 +1199,11 @@ export function mountHeatMap(): () => void {
     };
     coreField.attach(w, d.sizeM, relief && map.getLayer(relief.layer.id) ? relief.layer.id : undefined);
     relief?.setWard(reliefWard);
-    relief?.setVegetationVisible(vegOn);
+    /* `setWard` has just rebuilt the city mesh and the tree group, both of them
+       new and therefore fully on. This was one line — the trees — for as long as
+       the trees were the only layer with a switch; it is now every row of the
+       tree, read back off the checkboxes. */
+    syncLayersToRenderer();
     syncRendererVisibility();
     /* The exaggeration is stated wherever the optional ground relief is drawn. */
     const terrLab = el('terrLab');
@@ -1217,10 +1250,15 @@ export function mountHeatMap(): () => void {
     setText('bcount', `${d.count.toLocaleString()} real buildings`);
     /* `data-w` IS A BARE WARD ID in HeatMapStage.astro, so it is compared against
        the bare id and never against the key. Comparing it to `name` would match
-       nothing at all: every tab would lose its highlight on the first switch and
-       the page would look like it had failed to change ward. */
+       nothing at all: the strip would lose its highlight on the first switch and
+       the page would look like it had failed to change ward.
+       The header tabs used to be synced here too, from the same `activeId`. They
+       were a third area switcher beside the scope switcher's Area select and this
+       strip, and they are gone; the strip stays because it is the only control
+       that puts the wards side by side — though see `refreshStats`, which fills
+       `big-{id}` for the OPEN ward only, so the other tiles hold an em-dash until
+       they have been visited. */
     const activeId = areaOf(name);
-    document.querySelectorAll('#tabs .tab').forEach(t => t.classList.toggle('on', (t as HTMLElement).dataset.w === activeId));
     document.querySelectorAll('#strip .ward').forEach(t => t.classList.toggle('on', (t as HTMLElement).dataset.w === activeId));
     if (load) { load.textContent = 'Building ward…'; load.classList.remove('on'); }
 
@@ -1747,8 +1785,54 @@ export function mountHeatMap(): () => void {
     history.replaceState(null, '', `${areaPath(state.ward)}${window.location.search}${window.location.hash}`);
   }
 
+  /**
+   * Keep the scope switcher naming the area that is actually open.
+   *
+   * WITHOUT THIS THE CONSOLE STATES TWO WARDS AT ONCE. A click on the ward strip
+   * swaps the area in place — no page load, so nothing re-renders the switcher —
+   * and its Area select goes on naming the ward the page was opened at. That is
+   * the same wrong-record failure `updateReportHref` and `updateAddressBar` guard
+   * against, one control over, and it is worse here because the switcher is the
+   * control a reader would use to change area next.
+   *
+   * THE COUNTRY AND CITY SELECTS NEED THE OTHER HALF OF IT, and this is the part
+   * that is not obvious. ScopeSwitcher gives the option for the group you are
+   * ALREADY IN the value `current` — the whole page key, not the group's first
+   * area — precisely so that choosing "Kolkata" while standing in Barrackpore does
+   * not quietly move you to Ballygunge. That value is baked at render time, so
+   * after an in-place switch it names the previous ward: picking your own city
+   * would have walked you back to where you started. Rewriting the SELECTED
+   * option's value is what keeps that promise across a switch, and the selected
+   * option is the right one because switching in place never crosses a city — see
+   * console-shell.ts, which navigates when it would.
+   */
+  function updateScopeSwitcher() {
+    const key = state.ward;
+    document.querySelectorAll<HTMLSelectElement>('select[data-scope]').forEach((select) => {
+      if (select.dataset.scope === 'area') {
+        /* Assigned only when the option EXISTS. Setting `value` to something no
+           option carries silently clears the select to "", which reads as a
+           control that has lost its place rather than as one naming a ward. */
+        if (select.querySelector(`option[value="${key}"]`)) select.value = key;
+        return;
+      }
+      const option = select.selectedOptions[0];
+      if (option) option.value = key;
+    });
+  }
+
   function updateCompareHref() {
-    const link = el('compare-mode-link') as HTMLAnchorElement | null;
+    /* THE RAIL'S ANALYSIS SECTION, found by `data-rail` — the attribute the rail
+       declares for exactly this. It used to be `#compare-mode-link` on the Compare
+       tab in the stage header, and that tab is gone along with the rest of the
+       second navigation. A `querySelector` for `a[data-rail]` rather than an id
+       keeps the id contract from spreading into a shared component: the rail is
+       rendered by every console page, and a hard-coded id in it would be a
+       stage-shaped assumption living in a file the stage does not own.
+       `a`, not `button`: the rail takes the href away from the section you are
+       standing on, so on the compare page itself there is deliberately no link
+       here to deep-link — and there is no instrument there either. */
+    const link = document.querySelector<HTMLAnchorElement>('a[data-rail="analysis"]');
     if (!link) return;
     const params = new URLSearchParams({
       /* ONE function decides this spelling, for the writer here and the reader in
@@ -1771,8 +1855,8 @@ export function mountHeatMap(): () => void {
   /**
    * `data-w="ballygunge"` → `in/kolkata/ballygunge`, or null.
    *
-   * The stage's markup is authored against src/data/wards.ts and carries BARE ids,
-   * which is the right shape for it — this page opens one city, so the tab only has
+   * The strip's markup is authored against src/data/wards.ts and carries BARE ids,
+   * which is the right shape for it — this page opens one city, so a tile only has
    * to say which area. This is the seam that turns that into a key, and it goes
    * through `isAreaKey` rather than casting: `dataset.w` is an untrusted string, and
    * a typo in the markup must be refused here rather than becoming a fetch for a
@@ -1785,11 +1869,28 @@ export function mountHeatMap(): () => void {
     const key = `${CO}/${CY}/${id ?? ''}`;
     return isAreaKey(key) ? key : null;
   };
-  document.querySelectorAll('#tabs .tab, #strip .ward').forEach(t => onEl(t, 'click', () => {
+  document.querySelectorAll('#strip .ward').forEach(t => onEl(t, 'click', () => {
     nudgeOrbit();
     const key = areaKeyFromTab((t as HTMLElement).dataset.w);
     if (key) void loadWard(key);
   }));
+
+  /* THE SCOPE SWITCHER ASKS; THIS ANSWERS.
+     The three selects are wired by shell/console-shell.ts, which boots on every
+     area page — including the ones with no instrument, where getting OFF the page
+     is the only thing a scope control can do. It decides whether a key can be
+     opened without a page load (`tabKind`, plus "same city"), and when it can, it
+     says so here rather than reaching into this closure for `loadWard`. */
+  const onOpenArea = (event: Event) => {
+    const key = (event as CustomEvent<OpenAreaDetail>).detail?.key;
+    /* Re-validated on arrival. A CustomEvent is a public seam — anything on the
+       page can dispatch one — and this is the door into a fetch. */
+    if (!isAreaKey(key)) return;
+    nudgeOrbit();
+    void loadWard(key);
+  };
+  document.addEventListener(OPEN_AREA_EVENT, onOpenArea);
+  cleanup.push(() => document.removeEventListener(OPEN_AREA_EVENT, onOpenArea));
   onEl(el('srcBtn'), 'click', () => {
     const panel = el('srcPanel'); const btn = el('srcBtn'); if (!panel || !btn) return;
     const opening = panel.hasAttribute('hidden');
@@ -1861,22 +1962,148 @@ export function mountHeatMap(): () => void {
     map.setStyle(STYLES[e as 'dark' | 'studio']);
   }
   document.querySelectorAll('#envchip button').forEach(b => onEl(b, 'click', () => setEnv((b as HTMLElement).dataset.e!)));
-  document.querySelectorAll('#vegchip button').forEach(b => onEl(b, 'click', () => {
-    vegOn = (b as HTMLElement).dataset.v === '1';
-    document.querySelectorAll('#vegchip button').forEach((x) => x.classList.toggle('on', x === b));
-    relief?.setVegetationVisible(vegOn);
+  /* ── THE SIX LAYERS, AND THE TWO CONTROLS THAT REACH TWO OF THEM ──────────────
+     Trees and Street-level imagery each have a chip over the map as well as a row
+     in the layer tree, and two controls over one fact is how the two come to
+     disagree — the chip saying On beside an unticked box. So each is applied by
+     ONE function that moves the state, the renderer, the chip AND the box, and
+     both controls call it. The chips stay because they are the on-map hand: a
+     reader orbiting the city should not have to open a pane to hide the trees. */
+
+  /** Paint a `.modechip`'s two buttons from the value its `data-` attribute holds. */
+  const paintChip = (chip: string, key: string, value: string): void => {
+    document.querySelectorAll(`#${chip} button`).forEach((x) => {
+      x.classList.toggle('on', (x as HTMLElement).dataset[key] === value);
+    });
+  };
+
+  /**
+   * Put a layer row's checkbox back in step with the layer.
+   *
+   * The checkbox is the SOURCE OF TRUTH for visibility — a click reads it and
+   * nothing else — but it is not the only way a layer moves, and a box left
+   * ticked over a hidden layer is the quiet lie the tree exists to prevent.
+   */
+  const paintLayerBox = (id: LayerId, on: boolean): void => {
+    const box = document.querySelector<HTMLInputElement>(`input[data-layer="${id}"]`);
+    if (box) box.checked = on;
+  };
+
+  function setTreesVisible(on: boolean): void {
+    relief?.setVegetationVisible(on);
+    paintChip('vegchip', 'v', on ? '1' : '0');
+    paintLayerBox('green/trees', on);
     map.triggerRepaint();
+  }
+
+  function setStreetVisible(on: boolean): void {
+    /* The token is checked HERE and not at the caller, because there are two
+       callers: without it `addCoverage` would add a source that can never answer,
+       and the tree already refuses the row on the same capability. */
+    if (on && MLY_TOKEN) addCoverage(map, MLY_TOKEN); else removeCoverage(map);
+    paintChip('streetchip', 's', on ? '1' : '0');
+    paintLayerBox('ground/street', on);
+    map.triggerRepaint();
+  }
+
+  document.querySelectorAll('#vegchip button').forEach(b => onEl(b, 'click', () => {
+    setTreesVisible((b as HTMLElement).dataset.v === '1');
   }));
 
   /* ── street-view: coverage overlay + click-to-view ──
      The #svw wrapper stays hidden (see paintClock) unless a Mapillary token is
      actually configured — no point offering a toggle that can never do anything. */
   document.querySelectorAll('#streetchip button').forEach((b) => onEl(b, 'click', () => {
-    streetOn = (b as HTMLElement).dataset.s === '1';
-    document.querySelectorAll('#streetchip button').forEach((x) => x.classList.toggle('on', x === b));
-    if (streetOn && MLY_TOKEN) addCoverage(map, MLY_TOKEN); else removeCoverage(map);
-    map.triggerRepaint();
+    setStreetVisible((b as HTMLElement).dataset.s === '1');
   }));
+
+  /**
+   * ONE LAYER ID → ONE VISIBILITY CALL, and the `switch` is the point.
+   *
+   * `LayerId` is DERIVED from the registry in scope/layers.ts, so this switch is
+   * exhaustive over it by construction: add a seventh layer there and this stops
+   * compiling, HERE, naming the id it has no renderer for. The alternative — a
+   * `Record<string, () => void>` lookup, or an if-chain with a shrug at the end —
+   * would accept the new id, do nothing, and ship a checkbox that ticks against a
+   * map that never changes. That is the exact defect the tree was built to make
+   * impossible one layer up, and it would have walked straight back in here.
+   *
+   * FOUR OF THE SIX END ON THE RENDERER and two do not, which is a fact about what
+   * they are rather than an inconsistency: the thermal field is drawn twice (a
+   * shader overlay in relief, a canvas raster in isotherm) so its switch is read by
+   * both, and street-level coverage is a MapLibre source rather than anything in
+   * the 3-D scene.
+   */
+  function setLayerVisible(id: LayerId, on: boolean): void {
+    switch (id) {
+      case 'thermal/surface':
+        surfaceOn = on;
+        syncRendererVisibility(); syncReliefVisual(); map.triggerRepaint();
+        break;
+      case 'green/canopy':
+        relief?.setCanopyVisible(on);
+        break;
+      case 'green/trees':
+        setTreesVisible(on);
+        break;
+      case 'built/footprints':
+        relief?.setBuildingsVisible(on);
+        break;
+      case 'built/heights':
+        relief?.setBuildingsExtruded(on);
+        break;
+      case 'ground/street':
+        setStreetVisible(on);
+        break;
+    }
+  }
+
+  /**
+   * ONE HANDLER FOR ALL SIX ROWS, delegated from the tree's own container.
+   *
+   * THE CHECKBOX IS THE SOURCE OF TRUTH. `checked` is read off the element the
+   * browser has already toggled, rather than from a variable this file keeps
+   * beside it — so the two cannot drift, and a box the user has just clicked twice
+   * ends where it looks like it ends. That also makes the disabled rows safe by
+   * construction: a disabled input fires no `change`, cannot be focused and cannot
+   * be toggled by script through a click, so a layer whose artefact does not ship
+   * here can never be switched on. No second check is written for it, because a
+   * second check is a second opinion.
+   */
+  const layerTree = document.querySelector('.tree');
+  onEl(layerTree, 'change', (event) => {
+    const box = (event.target as HTMLElement | null)?.closest?.('input[data-layer]');
+    if (!(box instanceof HTMLInputElement)) return;
+    const id = box.dataset.layer;
+    /* `isLayerId`, never a cast: `dataset.layer` is a string off the DOM, and an
+       id the registry has never heard of must be refused here rather than fall
+       through the switch and silently do nothing. */
+    if (!isLayerId(id)) return;
+    nudgeOrbit();
+    setLayerVisible(id, box.checked);
+  });
+
+  /**
+   * Push every row's state at the renderer, in one pass.
+   *
+   * WHY THIS EXISTS RATHER THAN INITIAL FLAGS. The relief renderer arrives LATE —
+   * `ensureRelief` imports Three at the first optional boundary — and it arrives
+   * again, in effect, on every ward switch, because `rebuildWard` throws the city
+   * and the trees away and builds new ones. Both times the new objects are visible
+   * and full height. A visitor who unticked Building heights during the download,
+   * or before switching ward, would watch the layer come back on its own.
+   *
+   * It reads the CHECKBOXES, not a set of variables kept beside them, for the
+   * reason the change handler gives: they are the source of truth, and reading
+   * them here is what keeps that true across the two moments the map is rebuilt
+   * under them.
+   */
+  function syncLayersToRenderer(): void {
+    document.querySelectorAll<HTMLInputElement>('input[data-layer]').forEach((box) => {
+      const id = box.dataset.layer;
+      if (isLayerId(id)) setLayerVisible(id, box.checked);
+    });
+  }
   map.on('click', IMAGE_LAYER_ID, (e) => {
     const id = e.features?.[0]?.properties?.id;
     if (id != null) void openStreetView(String(id));

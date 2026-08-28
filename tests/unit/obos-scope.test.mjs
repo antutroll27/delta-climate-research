@@ -884,13 +884,35 @@ test('a tab is a switch only where something is listening AND something is loada
   assert.equal(tabKind({ pageShipsData: false, tabShipsData: false }), 'link');
 });
 
-test('the markup asks tabKind rather than reading one flag', async () => {
-  const stage = stripComments(await readFile(
-    new URL('../../src/components/ClimateEngine/HeatMapStage.astro', import.meta.url), 'utf8'));
-  assert.match(stage, /tabKind\(/, 'the tab strip is choosing its own shape again');
-  // Both flags must reach it. A call passing only the page's would type-check.
-  assert.match(stage, /pageShipsData:\s*scope\.area\.hasData/);
-  assert.match(stage, /tabShipsData:\s*sib\.area\.hasData/);
+test('the caller asks tabKind rather than reading one flag', async () => {
+  /* REPOINTED, BECAUSE ITS SUBJECT MOVED. This watched HeatMapStage.astro, where
+     the header tab strip decided per sibling whether to render a <button> or an
+     <a>. That strip is gone — it was the third area switcher on one page, after
+     the scope switcher's Area select and the ward strip — and the decision it
+     encoded moved to the Area select's handler in shell/console-shell.ts, which is
+     the one place left that has to choose between switching in place and
+     navigating.
+     Left pointed at the stage, this would have failed loudly rather than
+     hollowing out, because it asserts a PRESENCE. That is luck, not design: the
+     two `doesNotMatch` assertions above are the same kind of guard and they went
+     silent when their subject moved a task earlier. A source tripwire names a
+     FILE, so it does not follow a refactor. */
+  const caller = stripComments(await readFile(
+    new URL('../../src/scripts/climate-engine/shell/console-shell.ts', import.meta.url), 'utf8'));
+  assert.ok(caller.length > 0,
+    'console-shell.ts read back empty -- every assertion below would pass over '
+    + 'nothing at all');
+  assert.match(caller, /tabKind\(/,
+    'the scope select is choosing its own shape again rather than asking tabKind');
+  /* BOTH FLAGS, AND OFF TWO DIFFERENT KEYS. A call passing only one of them type-
+     checks perfectly and is the shipped defect in both of its directions: the
+     page's flag alone makes a non-shipping target an in-place switch that loadWard
+     refuses in silence, and the target's flag alone makes a shipping target an
+     in-place switch on a page where no instrument is mounted. */
+  assert.match(caller, /pageShipsData:\s*resolve\(here\)\.area\.hasData/,
+    "the page's own flag must come from the key the page declared");
+  assert.match(caller, /tabShipsData:\s*resolve\(value\)\.area\.hasData/,
+    "the target's flag must come from the key the select is offering, not from the page's");
 });
 
 test('an area that cannot be opened is refused OUT LOUD', () => {

@@ -7,6 +7,16 @@ export interface TreesFile { ward: string; grid: number; sizeM: number; retrieve
 export interface VegetationLayer {
   readonly group: THREE.Group;
   setVisible(v: boolean): void;
+  /**
+   * The CROWNS and their blob shadows, without the trunks.
+   *
+   * Two switches over one group, because the layer tree offers two rows over one
+   * measurement: the tree instances, and the canopy those instances carry. A
+   * shadow follows its crown rather than its trunk — it is the canopy's shadow, a
+   * disc scaled from `crownR` — so hiding one without the other would leave a
+   * ward's worth of shade cast by nothing.
+   */
+  setCanopyVisible(v: boolean): void;
   setTime(seconds: number, wind: number, windFrom: number): void;
   dispose(): void;
 }
@@ -140,6 +150,7 @@ export function createVegetationLayer(
   return {
     group,
     setVisible(v) { group.visible = v; },
+    setCanopyVisible(v) { crowns.visible = v; shadows.visible = v; },
     setTime(seconds, wind_, windFrom) {
       const rad = (windFrom * Math.PI) / 180;
       const mag = Math.min(0.5, wind_ / 30) * 0.4;

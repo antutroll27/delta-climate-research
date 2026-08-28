@@ -62,24 +62,42 @@ const description = scope.area.hasData
 
 <script>
   let dispose: (() => void) | null = null;
+  let disposeShell: (() => void) | null = null;
   let bootGeneration = 0;
-  // Keep the route shell interactive while MapLibre, Three, and the instrument
-  // load as one deferred module. This is a route-level boundary, not a change to
-  // model inputs or rendering fidelity.
+  // TWO MOUNTS, AND THEY ARE GATED DIFFERENTLY ON PURPOSE.
   //
-  // THE `#mlmap` CHECK IS ALSO THE DATA GATE. HeatMapStage renders the map host
-  // only for an area that ships artefacts, so an area that ships none never
-  // reaches `mountHeatMap` — which is what keeps it from being a half-render.
-  // mountHeatMap builds a MapLibre map centred on `wardOf(area)` BEFORE any of
-  // loadWard's refusals can run, and an area with no row in src/data/wards.ts has
-  // no coordinates, so it would fly to NaN and leave a dead canvas and a spinner.
+  // The CONSOLE SHELL — the rail's panes and the three scope selects — boots on
+  // EVERY area page, including the ones that ship nothing. Dubai renders the rail,
+  // the scope switcher and the layer tree around a statement that no artefacts
+  // ship there, and a scope select on that page with no handler behind it would be
+  // a control that does nothing: the defect this project has already paid for
+  // three times. It is the shell that has to get you off such a page.
+  //
+  // The INSTRUMENT is gated on `#mlmap`, which is the data gate. HeatMapStage
+  // renders the map host only for an area that ships artefacts, so an area that
+  // ships none never reaches `mountHeatMap` — which is what keeps it from being a
+  // half-render. mountHeatMap builds a MapLibre map centred on `wardOf(area)`
+  // BEFORE any of loadWard's refusals can run, and an area with no row in
+  // src/data/wards.ts has no coordinates, so it would fly to NaN and leave a dead
+  // canvas and a spinner.
+  //
+  // Both stay deferred, so the route shell is interactive while MapLibre, Three
+  // and the instrument load. This is a route-level boundary, not a change to model
+  // inputs or rendering fidelity.
   const boot = async () => {
     const generation = ++bootGeneration;
+    if (!disposeShell) {
+      const { mountConsoleShell } = await import('../../../../scripts/climate-engine/shell/console-shell');
+      if (generation === bootGeneration && !disposeShell) disposeShell = mountConsoleShell();
+    }
     if (!document.getElementById('mlmap') || dispose) return;
     const { mountHeatMap } = await import('../../../../scripts/climate-engine/heat-map-app');
     if (generation === bootGeneration && document.getElementById('mlmap') && !dispose) dispose = mountHeatMap();
   };
   void boot();
   document.addEventListener('astro:page-load', () => { void boot(); });
-  document.addEventListener('astro:before-swap', () => { dispose?.(); dispose = null; });
+  document.addEventListener('astro:before-swap', () => {
+    dispose?.(); dispose = null;
+    disposeShell?.(); disposeShell = null;
+  });
 </script>

@@ -2,58 +2,76 @@
 /**
  * THE ICON RAIL — the console's only navigation.
  *
- * OBOS is becoming an ops console rather than a map with panels floating over it,
- * and this 56px column is the whole of its navigation. Explore and Compare used to
- * be tabs in the stage header; they are now two of the five places the rail can
- * take you. Everything that used to be a second navigation is gone, because one
- * navigation is easier to learn than two.
+ * OBOS is an ops console rather than a map with panels floating over it, and this
+ * 56px column is the whole of its navigation. Explore and Compare used to be tabs
+ * in the stage header; they are now two of the five places the rail can take you.
+ * Everything that used to be a second navigation is gone, because one navigation
+ * is easier to learn than two.
  *
  * THE RAIL CARRIES THE MODE, AND THE VERBS ARE MIXED ON PURPOSE:
  *
- *   Map        navigates to the Explore route      (was the Explore tab)
+ *   Map        the Explore route, and the toolbox pane once you are on it
  *   Layers     swaps the sidebar pane
  *   Analysis   navigates to /heat-map/compare/     (was the Compare tab)
  *   Reports    swaps the sidebar pane
  *   Scenarios  swaps the sidebar pane
  *
- * Two of the five change the URL and three change what the sidebar shows. Every
- * ops console works this way, and the alternative — a rail for routes and a
+ * Two of the five change the URL and four of them change what the sidebar shows.
+ * Every ops console works this way, and the alternative — a rail for routes and a
  * second control for panes — is the two-navigations problem again.
  *
- * `active` IS THE SECTION THE PAGE IS, so `aria-current` states a fact rather than
- * a hope. The old Explore tab carried `aria-current="page"` while its href pointed
- * somewhere else entirely: a lie to a screen reader, and an extra hop for everyone
- * who clicked it. Spec 1 fixed that by pointing the href at the page it was on,
- * which closed one half of the defect and left the other — a link to the page you
- * are already standing on. This closes it STRUCTURALLY: `items` below takes the
- * href away from the current section, so no arm of the template can render it as
- * an anchor. A section you are in is a `<button>`, because there is nowhere to go.
+ * ─────────────────────────────────────────────────────────────────────────────
+ * TWO PROPS, BECAUSE THERE ARE TWO QUESTIONS. `route` is WHICH PAGE THIS IS;
+ * `pane` is WHICH SIDEBAR BODY IS SHOWING. The first version of this component
+ * conflated them into one `active`, and flagged the consequence itself: with
+ * `active="layers"` on the Explore route, Map still rendered as an `<a>` pointing
+ * at the URL the reader was already standing on — the self-link spec 1 removed,
+ * reintroduced by the act of opening a pane.
  *
- * NOT WIRED YET. Task 7 mounts this into the stage and gives the three pane
- * sections their behaviour; the settings control at the bottom is likewise inert
- * until then, and is marked below so it is wired or removed rather than shipped as
- * a control that does nothing. Until Task 7 the component is imported by nothing,
- * and `npm run build` compiling it is what proves it is real.
+ * Split, the rule is simple and holds in every combination: A SECTION IS A LINK
+ * ONLY WHEN IT NAVIGATES SOMEWHERE ELSE. The section whose id equals `route` has
+ * its href taken away by `items` below, so no arm of the template can render it as
+ * an anchor, whatever pane happens to be open.
  *
- * ONE THING FOR TASK 7 TO DECIDE, because this component cannot: when a pane
- * section is active on the Explore route — `active="layers"` while standing on
- * `/heat-map/in/kolkata/ballygunge/` — Map still renders as an `<a>` pointing at
- * that same URL, which is the self-link spec 1 removed. The rail is told which
- * SECTION it is in, never which URL, so the page that mounts it is the only place
- * that knows. Passing `active="map"` whenever the sidebar is showing its own pane,
- * or passing an `explorePath` the page is not on, both avoid it.
+ * The two facts are then stated separately in the output, because they ARE
+ * separate: `aria-current="page"` on the route (a fact about the document) and
+ * `aria-pressed` on the pane sections (a fact about the sidebar). A screen reader
+ * hears both, without either having to stand in for the other.
  *
- * The icons are the founder-approved set from preview-obos/shell.html, path data
- * copied verbatim.
+ * `pane` LIVES IN MEMORY, NOT IN THE URL. The switcher in
+ * scripts/climate-engine/shell/console-shell.ts owns that decision and writes down
+ * why; this prop is only the state the SERVER renders first.
+ *
+ * ONE BRAND, ONE PLACE. The mark at the top is the link home. The stage's top bar
+ * used to carry a second one directly to its right — composed, that was two brands
+ * eight pixels apart, both going to `/`. The top bar kept the breadcrumb and the
+ * readout; the mark moved here, where the navigation already is.
+ *
+ * NO SETTINGS CONTROL. The first version shipped one, inert, and said so. Nothing
+ * exists for it to open, and a control that does nothing is the defect this project
+ * has repeatedly deleted — so it is deleted rather than wired to a panel that would
+ * have had to be invented to justify it.
+ *
+ * The icons are the founder-approved set from the shell mockup, path data copied
+ * verbatim.
  */
 import { DEFAULT_AREA_PATH } from '../../../scripts/climate-engine/scope/paths.ts';
 
-/** The five places the rail can be. Exported for Task 7's callers to name one. */
+/** The five places the rail can be. Exported for callers to name one. */
 export type RailSection = 'map' | 'layers' | 'analysis' | 'reports' | 'scenarios';
 
 interface Props {
-  /** The section the page IS. The one that renders as a button. */
-  active: RailSection;
+  /**
+   * The section the page IS. The one that renders as a button rather than as a
+   * link to itself, and the one that carries `aria-current="page"`.
+   */
+  route: RailSection;
+  /**
+   * The sidebar body showing right now. Independent of `route`: you can stand on
+   * Explore with the Layers pane open, which is the case the single-prop version
+   * could not express without lying about one of the two.
+   */
+  pane: RailSection;
   /**
    * Where Map goes. The page knows its own area; the rail does not, and guessing
    * would put a second copy of the default area URL in a second file.
@@ -61,7 +79,7 @@ interface Props {
   explorePath?: string;
 }
 
-const { active, explorePath = DEFAULT_AREA_PATH } = Astro.props;
+const { route, pane, explorePath = DEFAULT_AREA_PATH } = Astro.props;
 
 /** The compare route, written once. `paths.ts` owns the per-area URLs, not this. */
 const COMPARE_PATH = '/heat-map/compare/';
@@ -81,42 +99,60 @@ interface Icon {
 interface Section {
   readonly id: RailSection;
   readonly label: string;
+  /** where it navigates, or null when it navigates nowhere */
   readonly href: string | null;
+  /** whether it owns a sidebar body */
+  readonly pane: boolean;
   readonly icon: Icon;
 }
 
-/* `href: null` is the whole of "this section swaps a pane". There is no second
-   `kind` field saying the same thing in other words, because two fields holding
-   one opinion is how they come to disagree. */
+/* TWO FIELDS, AND THEY ARE NOT ONE OPINION WRITTEN TWICE. The first version
+   carried only `href`, with `href: null` doing double duty as "this one swaps a
+   pane" — which was true only while no section did both. Map does both: it is the
+   Explore ROUTE from anywhere else, and the toolbox PANE once you are standing on
+   it. So the two facts are declared separately, and Analysis — which navigates and
+   owns no sidebar body — is the entry that proves they vary independently. */
 const SECTIONS: readonly Section[] = [
-  { id: 'map', label: 'Map', href: explorePath, icon: {
+  { id: 'map', label: 'Map', href: explorePath, pane: true, icon: {
     d: 'M9 3 3 6v15l6-3 6 3 6-3V3l-6 3-6-3zM9 3v15M15 6v15' } },
-  { id: 'layers', label: 'Layers', href: null, icon: {
+  { id: 'layers', label: 'Layers', href: null, pane: true, icon: {
     d: 'M12 2 2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5' } },
-  { id: 'analysis', label: 'Analysis', href: COMPARE_PATH, icon: {
+  { id: 'analysis', label: 'Analysis', href: COMPARE_PATH, pane: false, icon: {
     d: 'M3 3v18h18M7 15l4-5 3 3 5-7' } },
-  { id: 'reports', label: 'Reports', href: null, icon: {
+  { id: 'reports', label: 'Reports', href: null, pane: true, icon: {
     d: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M9 13h6M9 17h6' } },
-  { id: 'scenarios', label: 'Scenarios', href: null, icon: {
+  { id: 'scenarios', label: 'Scenarios', href: null, pane: true, icon: {
     circle: [12, 12, 9], d: 'M12 8v4l3 2' } },
 ];
 
-/* THE ONE LINE THAT MAKES THE ACTIVE SECTION A BUTTON. Taking the href away is
-   what removes the self-link, and it removes it for every section at once rather
-   than leaving each one to remember. The template then only has to ask whether a
-   section has somewhere to go. */
+/* THE ONE LINE THAT MAKES THE CURRENT ROUTE A BUTTON. Taking the href away is what
+   removes the self-link, and it removes it for every section at once rather than
+   leaving each one to remember. The template then only has to ask whether a
+   section has somewhere to go — and because this reads `route` and never `pane`,
+   opening a pane cannot put the self-link back. */
 const items = SECTIONS.map((s) => {
-  const current = s.id === active;
-  return { ...s, current, href: current ? null : s.href };
+  const current = s.id === route;
+  return {
+    ...s,
+    current,
+    /* `undefined`, not `false`, on a section that owns no pane: `aria-pressed`
+       announces a toggle, and Analysis is not one. Astro drops the attribute
+       entirely when the value is undefined — and the shell script reads the
+       ATTRIBUTE back to learn which sections have panes, so its absence is the
+       fact rather than a spelling of "off". The literals are spelled out because
+       `aria-pressed` is a string enum, not a boolean attribute: `String(x)` is
+       the same two words with the type thrown away. */
+    pressed: s.pane ? (s.id === pane ? 'true' as const : 'false' as const) : undefined,
+    href: current ? null : s.href,
+  };
 });
-
-const settings: Icon = {
-  circle: [12, 12, 3],
-  d: 'M19 12a7 7 0 0 0-.1-1.2l2-1.6-2-3.4-2.4 1a7 7 0 0 0-2-1.2L14 3h-4l-.5 2.6a7 7 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.6a7 7 0 0 0 0 2.4l-2 1.6 2 3.4 2.4-1a7 7 0 0 0 2 1.2L10 21h4l.5-2.6a7 7 0 0 0 2-1.2l2.4 1 2-3.4-2-1.6c.06-.4.1-.8.1-1.2z',
-};
 ---
 <nav class="rail" aria-label="OBOS sections">
-  <span class="mark" aria-hidden="true">OB</span>
+  {/* THE ONE BRAND ON THE PAGE, and the way out of the console. `aria-label`
+      rather than `title`: title is not a reliable accessible name — ignored by
+      some screen readers, never surfaced on touch — and the two letters are a
+      mark, not a sentence anyone can act on. */}
+  <a class="mark" href="/" aria-label="Delta Climate Research home"><span aria-hidden="true">OB</span></a>
 
   {items.map((s) => s.href === null ? (
     <button
@@ -124,6 +160,7 @@ const settings: Icon = {
       class="rail-btn"
       data-rail={s.id}
       aria-current={s.current ? 'page' : undefined}
+      aria-pressed={s.pressed}
     >
       <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
         {s.icon.circle && <circle cx={s.icon.circle[0]} cy={s.icon.circle[1]} r={s.icon.circle[2]} />}
@@ -140,23 +177,11 @@ const settings: Icon = {
       <span class="rail-label">{s.label}</span>
     </a>
   ))}
-
-  {/* NOT a section: it is nowhere the rail can BE, so it carries no data-rail and
-      can never be current. It is also INERT until Task 7 gives it a destination —
-      a control that does nothing is a defect this project has already paid for
-      once, so it is either wired there or taken out there. */}
-  <button type="button" class="rail-btn rail-settings">
-    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <circle cx={settings.circle![0]} cy={settings.circle![1]} r={settings.circle![2]} />
-      <path d={settings.d} />
-    </svg>
-    <span class="rail-label">Settings</span>
-  </button>
 </nav>
 
 <style>
-  /* SCOPED, NOT is:global. The stage's own 581-line block is global for a reason
-     that does not extend here: MapLibre injects DOM the stage never rendered and
+  /* SCOPED, NOT is:global. The stage's own block is global for a reason that does
+     not extend here: MapLibre injects DOM the stage never rendered and
      heat-map-app.ts re-classes elements at runtime, so Astro's scoping hash cannot
      reach them. Every element in this file is Astro-rendered and static, the hash
      reaches all of it, and the global surface shrinks rather than grows.
@@ -191,7 +216,12 @@ const settings: Icon = {
     font-size: .72rem;
     font-weight: 700;
     color: #04191b;
+    text-decoration: none;
+    transition: transform .18s;
   }
+
+  .mark:hover { transform: scale(1.06); }
+  .mark:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
 
   /* One class for both arms: a link and a button that look identical, because
      which one you get is a fact about where you already are, not a difference the
@@ -234,14 +264,21 @@ const settings: Icon = {
     color: var(--ink);
   }
 
-  .rail-btn[aria-current="page"] { color: var(--cyan); background: rgb(111 202 214 / .1); }
+  /* TWO STATES, TWO WEIGHTS, because they are two different facts and the reader
+     has to be able to tell them apart. The OPEN PANE is the loud one — cyan and
+     the accent bar — because it is what the sidebar is showing right now and what
+     a second click will close. The CURRENT ROUTE is the quiet one: a page you are
+     already on is worth stating and is not worth shouting, and on the Explore
+     route with Layers open the two are different sections. */
+  .rail-btn[aria-current="page"] { color: var(--paper); }
+  .rail-btn[aria-pressed="true"] { color: var(--cyan); background: rgb(111 202 214 / .1); }
 
   /* The accent bar, flush against the rail's left edge — which is what the
      square-left, round-right radius is for. The offset is DERIVED: the button is
      centred in the rail, so its own left edge sits (rail − 38px) / 2 inwards, and
      50% − rail/2 is exactly that distance back out. The mockup's literal -12px was
      measured against different geometry and lands at −3px, off the rail entirely. */
-  .rail-btn[aria-current="page"]::before {
+  .rail-btn[aria-pressed="true"]::before {
     content: "";
     position: absolute;
     left: calc(50% - var(--rail, 56px) / 2);
@@ -251,8 +288,6 @@ const settings: Icon = {
     border-radius: 0 2px 2px 0;
     background: var(--cyan);
   }
-
-  .rail-settings { margin-top: auto; }
 
   /* THE LABEL IS THE ACCESSIBLE NAME AND THE TOOLTIP, one span doing both jobs.
      An icon on its own announces nothing, and `title` is not a reliable
@@ -284,6 +319,7 @@ const settings: Icon = {
   .rail-btn:focus-visible .rail-label { opacity: 1; transform: none; }
 
   @media (prefers-reduced-motion: reduce) {
+    .mark,
     .rail-btn,
     .rail-label { transition: none; }
   }
