@@ -36,7 +36,9 @@ Measured, not assumed:
   preserves it.
 - `WardId` appears 25 times across 7 files: `wards.ts` (6), `compare/*` (10),
   `scenario/*` (6), `ward-loader.ts` (3).
-- **17 data paths are built by raw string interpolation** across 5 files.
+- **16 data paths are built by raw string interpolation** across 4 modules,
+  plus **3 more built from a plain string** — 19 in total. (Corrected after
+  implementation; see §10.)
 - `/heat-map/compare` ships (noindexed) and reads ward ids from `?a=` / `?b=`.
 - There is **no URL state on the main heat-map page** at all. Nothing to break.
 
@@ -54,7 +56,9 @@ export const REGISTRY = {
     pathway: 'dhara2025',
     // NOT just a symbol: the VALUES are Indian too (₹150/m², ₹1,500/tree).
     // A currency code alone would relabel rupee figures as dirhams.
-    costs: { currency: 'INR', roofM2: 150, tree: 1500, parkCr: 1.5 },
+    // FOUR fields, matching COST in heat-map-model.ts:70 field-for-field.
+    // facadeM2 was missing from the first draft of this spec — see §10.
+    costs: { currency: 'INR', roofM2: 150, tree: 1500, parkCr: 1.5, facadeM2: 9500 },
     cities: {
       kolkata: {
         name: 'Kolkata', koppen: 'Aw', tier: 'validated',
@@ -171,18 +175,22 @@ permanently shadowed and fail silently. The registry self-test rejects them.
 
 ### One path builder
 
-17 call sites currently interpolate a bare ward name into a URL:
+16 call sites interpolate a bare ward name into a URL:
 
 ```ts
-fetch(`/heat-map/data/${name}-trees.json`)   // and 16 more
+fetch(`/heat-map/data/${name}-trees.json`)   // and 15 more
 ```
+
+A further **3 fetch the two pseudo-global files by plain string** — 19 in all,
+across 4 modules. Those three matter disproportionately: a `${`-only search
+misses them, and they are exactly the files that lie about their scope.
 
 Under the new key these become `/heat-map/data/in/kolkata/ballygunge-trees.json`
 and 404. **Most are wrapped in `optional(...)` or `.catch()`**, so they would not
 error — they would render a city with no trees, no roads and no provenance.
 Silent degradation is the failure mode this codebase keeps paying for.
 
-Replace all 17 with a single builder:
+Replace all 19 with a single builder:
 
 ```ts
 const p = paths(key);
@@ -319,7 +327,7 @@ old links would not break loudly; they would quietly show the wrong wards.
 Each step compiles and ships on its own.
 
 1. `registry.ts` + derived `AreaKey` + self-test — new file, no consumers
-2. `paths()` — replaces 17 raw interpolations across 5 files
+2. `paths()` — replaces 19 hand-built URLs across 4 modules
 3. `resolve()` + `ClimateConstants` — the four constants leave the physics
 4. `WardId` → `AreaKey`, and **delete `climate-engine/wards.ts`** — its
    consumers repoint at the registry and at `src/data/wards.ts`
@@ -333,10 +341,21 @@ Each step compiles and ships on its own.
 ### The proof that Kolkata is unchanged
 
 Not "it looks the same" — eyeballing has produced false verdicts on this project
-before. A golden-numbers test captures `currentParams()` output for
-**3 wards × 2 phases × 3 pathways = 18 cases** before the change and asserts
-byte-identical output after. Same discipline that settled the vegetation
-regeneration, where determinism let `cmp` decide.
+before.
+
+**Corrected after checking the signature.** `ScenarioState` carries
+`{live, phase, path, iv, heatTairC, sunNow}` and **no ward** — `currentParams()`
+is ward-independent, which is the identity-free boundary restated. So the golden
+matrix is not over wards:
+
+**2 phases × 3 pathways × 2 live states (null, fixed) × 2 heatwave states
+= 24 cases**, captured before the change and asserted byte-identical after.
+
+That covers exactly what §3 moves: `PATH_DELTA` and `FALLBACK_TAIR` both feed
+`currentParams`, so any drift in extracting them shows up here. Ward-dependent
+output needs no golden of its own — the ward data files do not move, and
+`assertInterventionLogic()` already guards the layer maths. Same discipline that
+settled the vegetation regeneration, where determinism let `cmp` decide.
 
 ### Guards
 
@@ -351,7 +370,7 @@ specific failure:
 | `null-file-never-fetched` | a disabled city cannot reach the network |
 | `constants-scoped` | `heat-map-model.ts` contains no `₹`, no `PATH_DELTA`, no `India` |
 | `tier-vs-phase` | `CityTier` and `PhaseAccuracy.confidence` remain distinct types |
-| `golden-params` | the 18 cases, byte-identical |
+| `golden-params` | the 24 cases, byte-identical |
 
 `constants-scoped` is a grep against the physics module. Blunt, and it is the
 check that would have caught the rupees.
@@ -361,7 +380,10 @@ check that would have caught the rupees.
 ## 8. Done
 
 - Kolkata renders byte-identically; its URL is `/heat-map/in/kolkata/ballygunge`
-- Dubai appears in the switcher, greyed, tier `geometry`, and fetches nothing
+- Dubai is **reachable at its own URL**, renders `no artefacts · geometry tier`,
+  and fetches nothing. There is deliberately no city *switcher* in this spec —
+  the ward strip shows same-city siblings only, and the Country/City/Area
+  dropdowns are spec 2. (Wording corrected; see §10.)
 - The warming pathway disables itself under the UAE
 - Old `/heat-map/compare?a=ballygunge` links still resolve
 - `npm run verify` green
@@ -379,3 +401,133 @@ Each is its own spec. Listed so nobody treats their absence as an oversight.
 - Light theme
 - Per-city basemap styling
 - Removing the vertical-green-facades control from production
+
+---
+
+## 10. Corrections after implementation
+
+Shipped on `feat/obos-scope-model`, 2026-08-27. Four factual errors in the
+original of this document, each corrected in the body above and recorded here.
+
+They are recorded rather than quietly fixed for one reason: **three of the four
+are the same mistake** — a number written from reading rather than from
+measuring — and that mistake is the one this project has already paid for twice
+(the Indian storey constant carried into Dubai, and the five Python ward tables
+that had silently diverged by 10–44 m). A spec that corrects itself without
+saying how is a spec whose next unmeasured number nobody thinks to doubt.
+
+### C1 — the hand-built URL count
+
+**Was:** "17 data paths are built by raw string interpolation across 5 files."
+**Is:** 16 interpolating across 4 modules, plus 3 built from a plain string —
+19 in total, across 4 modules.
+
+*How it was caught:* the Task 3 implementer re-measured instead of trusting the
+brief, and reported the discrepancy rather than adapting silently.
+
+*Root cause:* I ran `grep -rn "heat-map/data/"`, counted the **lines** it
+returned, and reported that as the interpolating-site count — then miscounted
+the file total on top. The plain-string sites are not a rounding difference:
+they are the two files that lie about their scope, and a `${`-only pattern
+misses them, which is why the guard had to be widened.
+
+### C2 — `costs` was missing a field
+
+**Was:** `costs: { currency: 'INR', roofM2: 150, tree: 1500, parkCr: 1.5 }`
+**Is:** the same plus `facadeM2: 9500`, matching `COST` field-for-field.
+
+*How it was caught:* the Task 2 implementer followed the spec exactly, noticed
+`heat-map-model.ts:70` declares four fields, and flagged it instead of patching
+around it.
+
+*Root cause:* I transcribed three of four. `facadeM2` is the largest at
+₹9,500/m², and `computeCost` multiplies each field by a *different* spatial
+quantity, so an absent one does not scale the total — it makes that term
+`undefined`, and NaN poisons the whole sum.
+
+*Worth noting:* the Task 1 golden would have caught it in Task 5 regardless —
+`facades-only` is frozen at ₹296,875,000, which is linear in `COST.facadeM2`.
+The safety net worked. Finding it four tasks earlier was still much cheaper.
+
+### C3 — "Dubai appears in the switcher"
+
+**Was:** a done-criterion reading "Dubai appears in the switcher, greyed."
+**Is:** Dubai is reachable at its own URL and renders `no artefacts · geometry
+tier`. There is no city switcher in this spec.
+
+*Root cause:* I wrote a criterion describing spec 2's sidebar. The ward strip
+deliberately lists **same-city siblings only** — putting Al Quoz in Kolkata's
+strip would mix two climates and two currencies — so nothing in spec 1 offers a
+city switch. Left uncorrected, this would have read as an unmet requirement.
+
+### C4 — the golden matrix
+
+**Was:** "3 wards × 2 phases × 3 pathways = 18 cases."
+**Is:** 2 phases × 3 pathways × 2 live states × 2 heatwave states = 24.
+
+Corrected during planning rather than after, but it belongs in the list.
+
+*Root cause:* I proposed varying the matrix over wards without checking the
+signature. `ScenarioState` carries `{live, phase, path, iv, heatTairC, sunNow}`
+and **no ward** — `currentParams` is ward-independent, which is the
+identity-free boundary this whole design rests on, restated in the one place it
+would have mattered most.
+
+---
+
+## 11. What implementation found that this design did not anticipate
+
+Not errors in the spec — discoveries. They are the useful inheritance for
+specs 2 and 3.
+
+**A FIFTH scoped constant.** §3 named four. `heat-map-app.ts:1264` also carries
+`const WARD_TZ = 'Asia/Kolkata'`, driving four `Intl.DateTimeFormat` instances
+and printed verbatim in the freshness tooltip. Its own comment argues for an
+IANA zone over a fixed offset because an offset *"is the first thing that breaks
+when a European or East Asian ward is added"* — and then hardcodes the zone. It
+is unmigrated. A second city currently gets Kolkata's clock, weekday and AM/PM.
+
+**FIVE silent-degradation sites from the bare-id / `AreaKey` split**, none
+predicted here. In order of severity:
+
+1. `surface-raster`'s `inputs?.[ward]` — a miss made it discard the texture and
+   return **fvc 0**: a flat, plausible, wrong vegetation surface feeding the
+   resilience score. A wrong number, not a blank panel.
+2. `state.dcurs?.[state.ward]` — optional-chained into bare-keyed JSON, so the
+   DC-URS panel blanks with no error.
+3. `WARD_MAP[key]` — returns `undefined`, and `.name` then throws at **runtime**,
+   not at build, because it is `Record<string, Ward>`.
+4. Ward-strip highlights compared `dataset.w` (bare) against a key, silently
+   losing every highlight on the first switch.
+5. The header readout sat outside the no-data gate, so Dubai read
+   `— buildings · SELECTING ENGINE` for ever: *still loading*, not *nothing here*.
+
+The rule that emerged: **an `AreaKey` for anything internal, the bare area id for
+anything indexing external data** — `WARD_MAP`, `dc-urs-inputs.json`, file stems,
+DOM ids, the compare query string.
+
+**SIX guards that passed while protecting nothing.** Every one compared against a
+*copy* of the thing it guarded: literal `0.419` instead of `DEFAULT_PARAMS.Q`; a
+re-typed regex instead of the walker's own; hardcoded token sets instead of the
+declarations. One was the guard *guarding* another guard. Two were written by
+the author of this spec. None was found by reading — each was found by breaking
+the thing and watching what failed to happen.
+
+A shared `stripComments` helper also truncated at the `//` in `https://`,
+eating the rest of the line; **four** tripwires depended on it.
+
+**The Task 6/7 boundary moved.** `paths()` takes an `AreaKey`, so tightening the
+loaders forced their callers to hold one — which pulled the `heat-map-app.ts`
+conversion out of Task 7 and into Task 6. Sequencing a migration by *file* fails
+when the type system decides the order.
+
+**The redirect mechanism.** The plan specified `Astro.redirect()`, which needs
+SSR; this build is static. The house pattern is the `redirects` config in
+`astro.config.mjs`, already in use for `/cbam-calculator`.
+
+**Still India-shaped, and out of scope here.** `fmtCr` formats crore/lakh via
+`toLocaleString('en-IN')` inside the physics module, with `₹` hardcoded at three
+call sites, while `Costs.currency` is read by nothing in production. And on the
+Python side, four scripts still hardcode the three-ward tuple and
+`ecostress-census.py` still carries a private table 10–44 m from `_types.WARDS`.
+**"A second city is a data change" is true on the TypeScript side only.**

@@ -4,7 +4,7 @@
 
 **Goal:** Replace OBOS's hardcoded three-Kolkata-ward model with a Country → City → Area registry, so a second city can be added by data rather than by construction — with Kolkata rendering byte-identically.
 
-**Architecture:** One `as const` registry is the single source of truth; `AreaKey` (`'in/kolkata/ballygunge'`) is *derived* from it so the type cannot drift from the data. A single `paths()` builder replaces 17 raw string interpolations. Four constants that belong to India or Kolkata move out of the physics module and are passed in. City tier is a new field beside — never merged with — the existing phase confidence.
+**Architecture:** One `as const` registry is the single source of truth; `AreaKey` (`'in/kolkata/ballygunge'`) is *derived* from it so the type cannot drift from the data. A single `paths()` builder replaces 19 hand-built URLs (16 interpolated + 3 plain-string). Four constants that belong to India or Kolkata move out of the physics module and are passed in. City tier is a new field beside — never merged with — the existing phase confidence.
 
 **Tech Stack:** TypeScript (strict), Astro 7 (static/SSG), Node's built-in test runner via tsx (`tests/unit/*.test.mjs`).
 
@@ -31,9 +31,29 @@
 | `src/pages/heat-map/[country]/[city]/[area].astro` | The scoped route | create |
 | `tests/unit/obos-scope.test.mjs` | Registry, paths, guards | create |
 | `tests/unit/obos-golden-params.test.mjs` | The 24 frozen cases | create |
-| `data/calibration/golden-params.json` | The captured baseline | create |
+| `data/calibration/golden-params.json` | The captured baseline, 24 cases | create |
+| `data/calibration/golden-layers.json` | Cost figures + park transect — guards `COST` and `PARK_R_M`, which `currentParams` cannot reach | create |
+| `scripts/dump-obos-golden.mjs` | The golden GENERATOR, split from the test so a failing test cannot regenerate its own evidence | create |
+| `tests/e2e/heat-map-routing.spec.ts` | Each area URL renders its own ward; the Dubai disabled state | create |
 
-A new `scope/` directory keeps the three new modules together — they change together and nothing else needs them.
+A new `scope/` directory keeps the new modules together — they change together
+and nothing else needs them.
+
+**TWO STRUCTURAL CORRECTIONS, recorded after implementation.**
+
+`scope/legacy.ts` is listed under Task 7 below but is actually created in
+**Task 6**: `compare/paired-core.ts` calls the loaders with a bare `WardId`, and
+Task 6 tightens those signatures, so the compat shim has to exist by then.
+
+More importantly, **the Task 6/7 boundary moved.** `paths()` takes an `AreaKey`,
+so tightening the loaders forces their callers to hold one — which pulled the
+whole `heat-map-app.ts` conversion (`state.ward`, the six `WARD_MAP` lookups,
+the `dcurs` indexing) out of Task 7 and into Task 6. Task 7 kept the deletion of
+`climate-engine/wards.ts`, `compare/`, `scenario/` and the compare-link compat.
+
+The lesson for the next migration plan: **sequencing by file fails when the type
+system decides the order.** Tasks that share a type boundary are one task
+whether the plan says so or not.
 
 ---
 
@@ -223,7 +243,11 @@ export const REGISTRY = {
     pathway: 'dhara2025',
     /* NOT just a currency symbol: the VALUES are Indian too. Relabelling
        Rs 150/m2 as AED 150/m2 would be a different kind of wrong. */
-    costs: { currency: 'INR', roofM2: 150, tree: 1500, parkCr: 1.5 },
+    /* FOUR fields, matching COST in heat-map-model.ts:70. facadeM2 was absent
+       from the first draft and is the largest at Rs 9,500/m2; computeCost
+       multiplies each by a DIFFERENT spatial quantity, so a missing field
+       makes its term undefined and NaN poisons the whole sum. */
+    costs: { currency: 'INR', roofM2: 150, tree: 1500, parkCr: 1.5, facadeM2: 9500 },
     cities: {
       kolkata: {
         name: 'Kolkata',
@@ -472,7 +496,7 @@ Create `src/scripts/climate-engine/scope/paths.ts`:
  * Every data URL in OBOS, built from the registry. The ONLY place a
  * /heat-map/data/ URL may be constructed.
  *
- * WHY A CHOKE POINT. 17 call sites across 5 files used to interpolate a bare
+ * WHY A CHOKE POINT. 16 call sites across 4 modules interpolated a bare
  * ward name into a URL. Most were wrapped in optional()/catch, so a change to
  * the id shape would not have errored -- it would have rendered a city with no
  * trees, no roads and no provenance. Silent degradation is the failure mode this
@@ -561,7 +585,7 @@ data at paths that imply global."
 **Files:**
 - Modify: `tests/unit/obos-scope.test.mjs`
 
-- [ ] **Step 1: Write the guard test (it will fail — 17 sites still exist)**
+- [ ] **Step 1: Write the guard test (it will fail — 19 hand-built URLs still exist)**
 
 Append to `tests/unit/obos-scope.test.mjs`:
 
@@ -852,7 +876,8 @@ Expected: a list of call sites missing `climate`. Add `climate: resolve(currentK
 ```ts
 const TEST_CLIMATE = { pathDelta: { '2025': 0, ssp245: 1.25, ssp585: 4.1 },
                        fallbackTairC: 32, parkRadiusM: 50,
-                       costs: { currency: 'INR', roofM2: 150, tree: 1500, parkCr: 1.5 } };
+                       costs: { currency: 'INR', roofM2: 150, tree: 1500, parkCr: 1.5,
+                                facadeM2: 9500 } };
 ```
 
 - [ ] **Step 9: Run the whole unit suite**
@@ -1088,7 +1113,8 @@ Expected: errors ONLY where a bare ward string is still passed to a now-`AreaKey
 git add src/scripts/climate-engine/ tests/unit/obos-scope.test.mjs
 git commit -m "refactor(obos): every data URL now comes from paths()
 
-17 raw interpolations across 5 files replaced. The four loader signatures
+19 hand-built URLs across 4 modules replaced (16 interpolated, 3 plain-string).
+The four loader signatures
 were 'ward: string', NOT WardId -- so the compiler would not have caught the
 key change at any of them. Tightening them to AreaKey is what makes the
 migration compiler-enforced; the grep guard is now on."
@@ -1288,13 +1314,27 @@ const scope = resolve(key);
 
 Replace the body of `src/pages/heat-map.astro` with:
 
-```astro
----
-// The bare /heat-map URL keeps working and lands on the default scope, which is
-// the ward this page opened on before the scope model existed.
-return Astro.redirect('/heat-map/in/kolkata/ballygunge', 302);
----
+**CORRECTED AFTER IMPLEMENTATION.** This step originally specified
+`return Astro.redirect(...)`. That needs SSR, and this build is static (no
+`output` in `astro.config.mjs`). The house pattern is the `redirects` config,
+already in use for `/cbam-calculator`:
+
+```js
+// astro.config.mjs
+redirects: {
+  '/cbam-calculator': '/cbam/cbam-calculator',
+  '/heat-map': '/heat-map/in/kolkata/ballygunge/',
+},
 ```
+
+Delete `src/pages/heat-map.astro`. Astro emits a meta-refresh stub with
+`robots: noindex` and a canonical link, answering at both `/heat-map` and
+`/heat-map/`. Verify the emitted stub matches the `/cbam-calculator` one.
+
+Point every in-app link at the area URL directly rather than through the
+redirect — `Nav.astro`, `HeatMapStage.astro`'s Explore tab (which also carries
+`aria-current="page"` and would otherwise claim to be a page it links away
+from), and `PairedBench.astro`.
 
 - [ ] **Step 4: Build and confirm the pages exist**
 
