@@ -133,6 +133,88 @@ test('the area the page loaded with can be switched BACK to', async ({ page }) =
   await expect(page.locator('.stage')).toHaveAttribute('data-area', 'in/kolkata/ballygunge');
 });
 
+test('the ward strip never prints two scenarios side by side', async ({ page }) => {
+  /* THE STRIP IS THE ONLY CONTROL THAT PUTS THE WARDS BESIDE EACH OTHER, and its
+     tiles used to be written one at a time and never invalidated. `refreshStats`
+     filled `big-{id}` for the OPEN ward; a slider, a phase or a pathway moved the
+     scenario under all three and nothing cleared the ones it had just falsified.
+
+     MEASURED, ON THE SHIPPED BUILD. Open Ballygunge at 13:00 with no trees (40.6),
+     plant 50 trees (39.3), switch to Baruipur, take the trees back out, then flip
+     to 22:00: the strip read `ballygunge 39.3 · baruipur 29.9` and the console
+     asserted a 9.4 K gap between two wards whose honest like-for-like difference
+     was 2.4 K. The label is `°C mean` — no hour and no intervention set — so
+     nothing on the page said the two numbers came from different worlds.
+
+     THE ASSERTION IS ON THE RENDERED TILE, NOT ON `state.lastMean`. The internal
+     map going stale is the mechanism; the visible contradiction is the defect, and
+     a test on the cache would pass over a fix that cleared it without repainting.
+
+     AN EM-DASH IS THE HONEST STATE. It is what the stage renders before a ward has
+     been solved, and it says "not computed under this scenario" — which is true.
+     Recomputing all three instead would mean three solves on every slider drag.
+
+     BOTH DOORS, AND THE SPARED TILE ALTERNATES. Act one moves a slider with
+     Baruipur open; act two moves the phase with Ballygunge open. So neither the
+     blanking nor the sparing can be passing by naming one ward. */
+  test.slow();
+  const bally = page.locator('#big-ballygunge');
+  const baruipur = page.locator('#big-baruipur');
+
+  await page.goto(BALLYGUNGE);
+  /* AN EXPLICIT PHASE FIRST, because the default is "Now" and Now is the wall
+     clock: run this suite after dark in Kolkata and the night button below selects
+     the physics already running, the mean does not move, and the test would be
+     asserting against a scenario change that did not happen. 13:00 Peak fixes the
+     sun, so every comparison here is deterministic. */
+  await page.locator('#segPhase button[data-p="peak"]').click();
+  await expect(bally).not.toContainText('—', { timeout: 20_000 });
+  /* The unvisited tile starts blank, which is also what proves the em-dash below
+     is the state this page really renders and not a string invented by the test. */
+  await expect(baruipur).toContainText('—');
+
+  /* BOTH TILES UNDER ONE SCENARIO — the arrangement the strip exists for, and the
+     one a fix must not destroy. Blanking on a WARD change would clear this. */
+  await page.locator('#strip .ward[data-w="baruipur"]').click();
+  await expect(page.locator('#pname')).toHaveText('Baruipur', { timeout: 20_000 });
+  await expect(baruipur).not.toContainText('—', { timeout: 20_000 });
+  await expect(bally).not.toContainText('—');
+  const baruipurBare = await baruipur.textContent();
+
+  /* ACT ONE — A SLIDER, the case that happens on every drag. */
+  await page.locator('#ivTrees').fill('50');
+  await expect(bally, 'a slider moved the scenario under Ballygunge\'s tile and it '
+    + 'is still printing the mean from before the drag, beside a Baruipur value '
+    + 'about to be recomputed with the trees in')
+    .toContainText('—');
+  /* The open ward is re-solved rather than blanked with the rest — a strip of three
+     em-dashes would be honest and useless — and its number MOVES, which is what
+     proves the scenario really changed and this test is not passing vacuously. */
+  await expect(baruipur).not.toContainText('—', { timeout: 20_000 });
+  await expect(baruipur,
+    'planting 50 trees left Baruipur\'s mean exactly where it was, so the slider '
+    + 'changed nothing and neither act below is exercising a scenario change')
+    .not.toHaveText(baruipurBare ?? '');
+
+  /* ACT TWO — THE PHASE, with the OTHER ward open, so the tile that gets spared
+     and the tile that gets blanked swap places. */
+  await page.locator('#strip .ward[data-w="ballygunge"]').click();
+  await expect(page.locator('#pname')).toHaveText('Ballygunge', { timeout: 20_000 });
+  await expect(bally).not.toContainText('—', { timeout: 20_000 });
+  await expect(baruipur).not.toContainText('—');
+  const ballyPeak = await bally.textContent();
+
+  await page.locator('#segPhase button[data-p="night"]').click();
+  await expect(baruipur, 'the strip is showing Baruipur\'s 13:00 mean beside '
+    + 'Ballygunge\'s 22:00 one, under a single `°C mean` label — the console is '
+    + 'asserting a difference between two wards it never computed together')
+    .toContainText('—');
+  await expect(bally).not.toContainText('—', { timeout: 20_000 });
+  await expect(bally,
+    'the 22:00 mean equals the 13:00 one, so the phase button moved nothing')
+    .not.toHaveText(ballyPeak ?? '');
+});
+
 test('no rail section is a link to the page it is already on', async ({ page }) => {
   /* The defect this closes, in both of its historical forms: the Explore tab
      carried aria-current="page" while its href pointed elsewhere (a lie to a

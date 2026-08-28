@@ -1732,7 +1732,7 @@ export function mountHeatMap(): () => void {
        `big-ballygunge` is authored in HeatMapStage.astro against
        src/data/wards.ts, so it takes the bare id. */
     state.lastMean[state.ward] = st.meanC;
-    setHTML(`big-${areaOf(state.ward)}`, `${st.meanC.toFixed(1)}<span>°C mean</span>`);
+    setHTML(`big-${areaOf(state.ward)}`, meanTile(st.meanC.toFixed(1)));
     /* Repaint the open building card from the SAME snapshot these stats came
        from. Without this it keeps whatever it read at selection time: move a
        slider or flip to night and the map recolours, the ward mean moves, and
@@ -1748,6 +1748,62 @@ export function mountHeatMap(): () => void {
       refreshNowSun();
       if ((state.phase === 'night') !== wasNight) resetSim();
     }
+  }
+
+  /**
+   * ONE SPELLING OF A STRIP TILE — for the reading and for the blank alike.
+   *
+   * The unit `<span>` is markup HeatMapStage.astro authors, and the em-dash below
+   * is the exact state it renders a tile in before any ward has been solved. That
+   * identity is the whole claim `blankStaleWardTiles` makes: a tile this code
+   * blanks must be indistinguishable from one that was never filled, or "not
+   * computed" would read as some third state the reader has to interpret. Two
+   * literals in two places would drift the first time either is touched.
+   */
+  function meanTile(value: string) { return `${value}<span>°C mean</span>`; }
+
+  /**
+   * A SCENARIO MOVED: blank every tile it just falsified, then re-solve.
+   *
+   * WHAT THIS FIXES, MEASURED ON THE SHIPPED BUILD. `refreshStats` writes
+   * `big-{id}` for the OPEN ward only, and nothing invalidated the others when the
+   * scenario changed under them. Ballygunge at 13:00 with no trees read 40.6; plant
+   * 50 trees (39.3), open Baruipur, take the trees back out, flip to 22:00 — and
+   * the strip read `ballygunge 39.3 · baruipur 29.9`, asserting a 9.4 K gap whose
+   * honest like-for-like value was 2.4 K. The label is `°C mean` and nothing else:
+   * no hour, no intervention set, so the page never says the two numbers came from
+   * different worlds. A wrong number presented plausibly, in the one control that
+   * exists to compare wards.
+   *
+   * THE IRONY IS ONE LINE ABOVE the write, in `refreshStats`: the comment there
+   * describes fixing this exact staleness for the building card. The fix stopped
+   * short of the tiles beside it.
+   *
+   * AN EM-DASH, NOT A RECOMPUTE. Re-solving all three wards would be three solves
+   * on every slider drag. A tile reading "—" says "not computed under this
+   * scenario", which is true, and is the state the stage already renders.
+   *
+   * ON SCENARIO, NEVER ON WARD. A tile computed under the CURRENT scenario is
+   * still valid when you switch wards, and holding those two numbers beside each
+   * other is the strip's entire value — so `loadWard` must not call this.
+   *
+   * THE OPEN TILE IS SPARED AND ITS CACHE ENTRY IS NOT, which looks asymmetric and
+   * is deliberate. The tile is about to be overwritten by the solve this function
+   * ends with, so blanking it would only flicker on every drag; `state.lastMean` is
+   * read by `paintCard` for the building card's "vs ward mean" line, and a delta
+   * against a mean the scenario has just falsified is wrong in exactly the way this
+   * function exists to stop. An absent entry degrades that line to nothing —
+   * `Number.isFinite(undefined)` is false — until the solve returns.
+   */
+  function applyScenarioChange() {
+    state.lastMean = {};
+    /* The bare id, because `big-ballygunge` is authored against src/data/wards.ts
+       — the same asymmetry `refreshStats` writes the tile under. */
+    const open = `big-${areaOf(state.ward)}`;
+    document.querySelectorAll('#strip .ward .big').forEach((tile) => {
+      if (tile.id !== open) tile.innerHTML = meanTile('—');
+    });
+    resetSim();
   }
 
   /* ── DOM helpers ── */
@@ -1929,7 +1985,9 @@ export function mountHeatMap(): () => void {
   const bindSlider = (id: string, label: string, kk: keyof M.Interventions, fmt: (v: string) => string) => {
     const s = el(id) as HTMLInputElement | null; if (!s) return;
     onEl(s, 'input', () => { setText(label, fmt(s.value)); nudgeOrbit(); });
-    onEl(s, 'change', () => { state.iv[kk] = +s.value; updateCompareHref(); resetSim(); });
+    /* `applyScenarioChange`, not `resetSim`: a slider falsifies the OTHER wards'
+       tiles as surely as it does this one's, and only this door blanks them. */
+    onEl(s, 'change', () => { state.iv[kk] = +s.value; updateCompareHref(); applyScenarioChange(); });
   };
   bindSlider('ivTrees', 'v1', 'trees', v => v); bindSlider('ivRoof', 'v2', 'roof', v => v + '%');
   bindSlider('ivFacades', 'v4', 'facades', v => v);
@@ -1965,9 +2023,9 @@ export function mountHeatMap(): () => void {
     state.phase = sel.phase; state.sunNow = sel.sunNow; state.heatTairC = sel.heatTairC;
     if (sel.sunNow != null) refreshNowSun();
     document.querySelectorAll('#segPhase button').forEach(x => x.classList.toggle('on', x === b));
-    updateCompareHref(); resetSim();
+    updateCompareHref(); applyScenarioChange();
   }));
-  document.querySelectorAll('#segPath button').forEach(b => onEl(b, 'click', () => { state.path = (b as HTMLElement).dataset.p!; document.querySelectorAll('#segPath button').forEach(x => x.classList.toggle('on', x === b)); resetSim(); }));
+  document.querySelectorAll('#segPath button').forEach(b => onEl(b, 'click', () => { state.path = (b as HTMLElement).dataset.p!; document.querySelectorAll('#segPath button').forEach(x => x.classList.toggle('on', x === b)); applyScenarioChange(); }));
   /* 2D Isotherm is a CAMERA state over the same 3D scene, not a different scene:
      it flattens pitch and bearing and lets the ground overlay read as a plan.
      The relief layer keeps rendering (see shouldShowRelief), which is what keeps
