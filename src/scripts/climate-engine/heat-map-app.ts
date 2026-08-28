@@ -37,12 +37,12 @@ import { findCoolingSurfaces, nearestCooling, type CoolingSurfaces } from './exp
 import { createWardSession } from './ward-session';
 import { createExploreFrameScheduler } from './explore/frame-scheduler';
 import { exploreRuntimeBudget, nextFrameDelayMs, type ExploreDeviceTier } from './explore/runtime-budget';
-import { createCoreFieldLayer } from './explore/core-field-layer';
+import { createCoreFieldLayer, CORE_FIELD_SOURCE } from './explore/core-field-layer';
 import type { ReliefRenderer, ReliefWardBundle, ReliefVisualState } from './explore/relief-contract';
 import {
   attachReliefCustomLayer, isReliefLayerAttached, shouldShowRelief,
 } from './explore/relief-lifecycle';
-import { addCoverage, removeCoverage, IMAGE_LAYER_ID } from './streetview/coverage-layer';
+import { addCoverage, removeCoverage, COVERAGE_SOURCE, IMAGE_LAYER_ID } from './streetview/coverage-layer';
 import { nearestImage } from './streetview/nearest-image';
 import { OPEN_AREA_EVENT, type OpenAreaDetail } from './shell/console-shell.ts';
 import { isLayerId, type LayerId } from './scope/layers.ts';
@@ -270,6 +270,11 @@ export function mountHeatMap(): () => void {
      and both are decided in `syncRendererVisibility`/`reliefVisualState`, which
      read this rather than being pushed at. */
   let surfaceOn = true;
+  /* WHETHER STREET-LEVEL COVERAGE IS ON, kept here for the same reason `surfaceOn`
+     is: a basemap style swap throws the layer away and something has to know
+     whether to put it back. It is written in exactly one place — `setStreetVisible`
+     — so it cannot disagree with the map. */
+  let streetOn = false;
   const MLY_TOKEN = (import.meta.env.PUBLIC_MAPILLARY_TOKEN as string | undefined) ?? '';
 
   /* ── MapLibre basemap ── */
@@ -2172,7 +2177,22 @@ export function mountHeatMap(): () => void {
     document.body.classList.toggle('studio', s); opBase = s ? 0.42 : 0.5;
     syncReliefVisual();
     document.querySelectorAll('#envchip button').forEach(x => x.classList.toggle('on', (x as HTMLElement).dataset.e === e));
-    map.setStyle(STYLES[e as 'dark' | 'studio']);
+    /* `diff: false`, AND WITHOUT IT NONE OF THE RESTORATION EVER RUNS.
+       MapLibre's default `setStyle` DIFFS the two styles and applies the result to
+       the live Style object. Our two basemaps are diffable — measured: identical
+       `sprite`, identical `glyphs`, and both drawn on `openmaptiles` + `ne2_shaded`
+       — so the diff succeeds, and a successful diff never re-creates the Style and
+       therefore never re-fires `style.load`. What the diff DOES do is drop every
+       source and layer present in the old style and absent from the new one, which
+       is precisely everything this app added.
+       MEASURED ON THE SHIPPED BUILD: switching Dark to Clay left `getSource` and
+       `getLayer` answering false for the analytical field, the road-name labels, the
+       3-D relief scene AND the Mapillary coverage, with `onStyleLoad` never firing
+       once. Not one layer lost — all of them, silently, from a button whose only job
+       is to restyle the basemap. The handler's own comment claimed the opposite.
+       A full reload is the honest cost of a control that replaces the whole basemap,
+       and it is what makes `style.load` mean what this file has always assumed. */
+    map.setStyle(STYLES[e as 'dark' | 'studio'], { diff: false });
   }
   document.querySelectorAll('#envchip button').forEach(b => onEl(b, 'click', () => setEnv((b as HTMLElement).dataset.e!)));
   /* ── THE SIX LAYERS, AND THE TWO CONTROLS THAT REACH TWO OF THEM ──────────────
@@ -2213,6 +2233,7 @@ export function mountHeatMap(): () => void {
     /* The token is checked HERE and not at the caller, because there are two
        callers: without it `addCoverage` would add a source that can never answer,
        and the tree already refuses the row on the same capability. */
+    streetOn = on;
     if (on && MLY_TOKEN) addCoverage(map, MLY_TOKEN); else removeCoverage(map);
     paintChip('streetchip', 's', on ? '1' : '0');
     paintLayerBox('ground/street', on);
@@ -2385,21 +2406,68 @@ export function mountHeatMap(): () => void {
      what keeps the basemap's road layers hidden across an environment switch.
      It deliberately restores render state only: a style change must never fetch
      or replace the selected ward. */
+  /**
+   * EVERYTHING THIS APP PUT INTO SOMEONE ELSE'S STYLE, AND HOW TO PUT IT BACK.
+   *
+   * `setEnv` calls `map.setStyle(...)`, which replaces the whole style object and
+   * discards every source and layer added to the old one. This handler already knew
+   * that — it re-added the road-name labels and re-attached relief for exactly that
+   * reason — and it did not re-add the Mapillary coverage source. So ticking
+   * Street-level imagery and then switching Dark to Clay dropped the layer while
+   * the chip and the checkbox both went on reading On. `addCoverage` has one caller
+   * and this handler was not it.
+   *
+   * A LIST RATHER THAN A SEQUENCE OF RE-ADDS, so the next source added anywhere in
+   * the engine is covered by enrolling it here rather than by remembering that this
+   * function exists. The guard in tests/unit/heat-map-console-coherence.test.mjs
+   * finds every `map.addSource(...)` in the engine tree and fails naming any that
+   * this list does not.
+   *
+   * ORDERED, AND THE ORDER IS LOAD-BEARING. The analytical field is added before
+   * relief so the 3-D scene paints over the 2-D raster rather than under it — which
+   * is the same stacking `loadWard` gets by passing relief's id as `beforeId` — and
+   * the labels after it so street names are never eaten by a tower.
+   *
+   * ONE ENTRY NAMES NO SOURCE, and that is honest rather than a gap: the relief
+   * custom layer draws from the renderer's own WebGL context and adds nothing to
+   * the style but itself. It is in the list because its POSITION in this sequence
+   * is what the two entries around it are ordered against.
+   */
+  const STYLE_ADDITIONS: ReadonlyArray<{ source: string | null; restore: () => void }> = [
+    {
+      source: CORE_FIELD_SOURCE,
+      restore: () => {
+        const wardData = cache[state.ward];
+        if (wardData) coreField.rehydrate(wardOf(state.ward), wardData.sizeM);
+      },
+    },
+    { source: null, restore: () => { attachReliefLayer(); syncRendererVisibility(); } },
+    {
+      /* Our own street names, in the BASEMAP's frame. */
+      source: LABEL_SOURCE,
+      restore: () => {
+        if (!map.getSource(LABEL_SOURCE)) {
+          map.addSource(LABEL_SOURCE, { type: 'geojson', data: EMPTY_LABELS as never });
+        }
+        if (!map.getLayer(LABEL_LAYER)) {
+          map.addLayer(labelLayerSpec(env === 'studio' ? 'studio' : 'dark') as never);
+        }
+        const cached = labelCache[state.ward];
+        if (cached) (map.getSource(LABEL_SOURCE) as maplibregl.GeoJSONSource)?.setData(cached as never);
+      },
+    },
+    {
+      /* THROUGH `setStreetVisible`, NOT `addCoverage`, so the token check and the
+         two chips that report the layer's state are the same ones the user's own
+         click goes through. Off is a real restore too: `removeCoverage` on a style
+         that never had it is a no-op, and calling it keeps the chip in step. */
+      source: COVERAGE_SOURCE,
+      restore: () => setStreetVisible(streetOn),
+    },
+  ];
+
   const onStyleLoad = () => {
-    const wardData = cache[state.ward];
-    if (wardData) coreField.rehydrate(wardOf(state.ward), wardData.sizeM);
-    attachReliefLayer();
-    syncRendererVisibility();
-    /* Our own street names, in the BASEMAP's frame. Added after relief so
-       symbols draw above the 3D scene and are never eaten by a tower. */
-    if (!map.getSource(LABEL_SOURCE)) {
-      map.addSource(LABEL_SOURCE, { type: 'geojson', data: EMPTY_LABELS as never });
-    }
-    if (!map.getLayer(LABEL_LAYER)) {
-      map.addLayer(labelLayerSpec(env === 'studio' ? 'studio' : 'dark') as never);
-    }
-    const cached = labelCache[state.ward];
-    if (cached) (map.getSource(LABEL_SOURCE) as maplibregl.GeoJSONSource)?.setData(cached as never);
+    for (const { restore } of STYLE_ADDITIONS) restore();
     /* Relief supplies metre-scaled roads, so its mode hides the corresponding
        pixel-scaled basemap geometry. Core mode restores the basemap roads. */
     syncRendererVisibility();

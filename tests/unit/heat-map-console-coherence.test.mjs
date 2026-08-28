@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 /**
@@ -273,4 +273,107 @@ test('the page title and description have one spelling, shared by both writers',
       + 'areaPageTitle. Two copies is the state this test exists to prevent, and a '
       + 'call that sits next to a literal is the way it comes back');
   }
+});
+
+const ENGINE = new URL('../../src/scripts/climate-engine/', import.meta.url);
+
+/** Every `.ts` under the engine, as `[relative path, url]`. AppleDouble sidecars
+ *  are exFAT artefacts on this volume, not source. */
+async function engineFiles(root = ENGINE, prefix = '') {
+  const found = [];
+  for (const entry of await readdir(root, { withFileTypes: true })) {
+    const next = new URL(`${entry.name}${entry.isDirectory() ? '/' : ''}`, root);
+    if (entry.isDirectory()) { found.push(...await engineFiles(next, `${prefix}${entry.name}/`)); continue; }
+    if (!entry.name.endsWith('.ts') || entry.name.startsWith('._')) continue;
+    found.push([`${prefix}${entry.name}`, next]);
+  }
+  return found;
+}
+
+test('the style-load handler restores every source this app adds to the basemap', async () => {
+  /* WHAT A STYLE SWAP DOES, and the handler is the code's own evidence for it.
+     `setEnv` calls `map.setStyle(...)`, which throws away the whole style object —
+     including every source and layer this app added to it. `onStyleLoad` already
+     re-added the road-name labels and re-attached the relief layer for exactly that
+     reason, and did NOT re-add the Mapillary coverage source. So: tick Street-level
+     imagery, switch Dark to Clay, and the layer is gone while the chip and the
+     checkbox both still read On.
+
+     NOT REPRODUCIBLE IN THIS BUILD, WHICH IS WHY THE TEST IS HERE. `addCoverage`
+     has one caller, `setStreetVisible`, which short-circuits without
+     PUBLIC_MAPILLARY_TOKEN -- so the row is disabled and the browser cannot reach
+     the defect. Production sets the token. A spec that clicked the disabled row
+     would be asserting that a disabled control does nothing.
+
+     DRIVEN FROM THE `addSource` CALL SITES, NOT FROM A LIST OF THREE NAMES. The
+     requirement is completeness, and a list written out here would be a second copy
+     of the thing being checked -- free to agree today and to stop agreeing the next
+     time someone adds a source, which is precisely the day this test needs to fire.
+     So the required set is discovered by reading the engine, and the enrolment is
+     compared against it.
+
+     MATCHED BY IDENTIFIER, and the uniqueness check below is what makes that sound:
+     every source id in this engine is declared exactly once, so the constant's NAME
+     identifies the source as well as its value would, without this test having to
+     resolve imports across four files to find a string. */
+  const code = await appSource();
+  const files = await engineFiles();
+  assert.ok(files.length > 20,
+    `only ${files.length} engine modules were found -- the walk has lost the tree, `
+    + 'and a search over almost nothing would conclude there is nothing to restore');
+
+  const added = new Map();      // identifier -> [modules that add it]
+  const declaredIn = new Map(); // identifier -> [modules that declare it]
+  for (const [rel, url] of files) {
+    const src = strip(await readFile(url, 'utf8'));
+    for (const [, id] of src.matchAll(/\bmap\.addSource\(\s*([A-Z_][A-Z0-9_]*)\s*,/g)) {
+      added.set(id, [...(added.get(id) ?? []), rel]);
+    }
+    for (const [, id] of src.matchAll(/\bconst\s+([A-Z_][A-Z0-9_]*)\s*=\s*'[^']*'/g)) {
+      declaredIn.set(id, [...(declaredIn.get(id) ?? []), rel]);
+    }
+  }
+
+  assert.ok(added.size >= 3,
+    `only ${added.size} user-added sources were found (${[...added.keys()].join(', ')}). `
+    + 'This app adds the analytical field, the road-name labels and the Mapillary '
+    + 'coverage tiles at minimum, so a number this small means the matcher has '
+    + 'stopped finding `map.addSource(CONSTANT, ...)` -- perhaps because a call now '
+    + 'passes a string literal, which this test cannot follow and which should be a '
+    + 'named constant anyway');
+
+  const declared = code.match(/const STYLE_ADDITIONS[\s\S]*?=\s*\[([\s\S]*?)\n  \];/);
+  assert.ok(declared,
+    'heat-map-app.ts declares no `const STYLE_ADDITIONS = [ ... ];`. That list is '
+    + 'what the style-load handler walks to put back what a style swap threw away, '
+    + 'and a list this test cannot find is one it cannot check for completeness');
+  const enrolled = new Set([...declared[1].matchAll(/source:\s*([A-Za-z_][A-Za-z0-9_]*)/g)]
+    .map((m) => m[1]));
+  assert.ok(enrolled.size > 0,
+    'STYLE_ADDITIONS names no `source:` at all, so the comparison below would pass '
+    + 'for an empty list');
+
+  for (const [id, where] of added) {
+    assert.equal(declaredIn.get(id)?.length ?? 0, 1,
+      `\`${id}\` is declared in ${(declaredIn.get(id) ?? ['no module']).join(', ')}. `
+      + 'This test matches enrolment by identifier, which is only sound while one '
+      + 'name means one source -- two declarations and it could pass for the wrong '
+      + 'one');
+    assert.ok(enrolled.has(id),
+      `${where.join(', ')} adds the \`${id}\` source to the basemap's style, and `
+      + 'STYLE_ADDITIONS does not name it. `setEnv` calls `map.setStyle`, which '
+      + 'discards every source this app added -- so switching Dark to Clay drops '
+      + 'that layer while whatever control turned it on still reads On. Enrol it.');
+  }
+
+  /* AND THE HANDLER MUST ACTUALLY WALK THE LIST. A complete list nothing iterates
+     restores nothing, and would satisfy every assertion above. */
+  const handler = code.match(/const onStyleLoad = \(\) => \{([\s\S]*?)\n  \};/);
+  assert.ok(handler,
+    'heat-map-app.ts declares no `const onStyleLoad = () => { ... };` -- the '
+    + 'handler this whole test is about');
+  assert.match(handler[1], /of STYLE_ADDITIONS\)/,
+    'onStyleLoad does not iterate STYLE_ADDITIONS. Restoring the sources by hand '
+    + 'beside a list that says which they are is how the list and the handler come '
+    + 'apart, and the next source added is covered by neither');
 });
