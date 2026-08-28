@@ -45,6 +45,7 @@ import {
 import { addCoverage, removeCoverage, COVERAGE_SOURCE, IMAGE_LAYER_ID } from './streetview/coverage-layer';
 import { nearestImage } from './streetview/nearest-image';
 import { OPEN_AREA_EVENT, type OpenAreaDetail } from './shell/console-shell.ts';
+import { SELECT_SYNC_EVENT } from './shell/select-field.ts';
 import { isLayerId, type LayerId } from './scope/layers.ts';
 import { resolve, requireCosts } from './scope/resolve.ts';
 import { areaPageTitle, areaPageDescription } from './scope/page-meta.ts';
@@ -2068,6 +2069,16 @@ export function mountHeatMap(): () => void {
       const option = select.selectedOptions[0];
       if (option) option.value = key;
     });
+    /* AND THEN SAY SO, because assigning `select.value` raises nothing.
+       shell/SelectField.astro draws the words the reader actually sees over the
+       top of these selects; it repaints on the select's own `change`, and there
+       is no `change` here — this is a projection of `state.ward`, not a reader
+       choosing something. Left unsaid, the switcher's VALUE would follow the ward
+       and its VISIBLE LABEL would not: the exact two-wards-at-once failure the
+       header above describes, one layer up, where it is the only part anybody can
+       see. NOT a synthetic `change`: console-shell.ts answers that one by
+       travelling, and it would be asked to travel to where it already is. */
+    document.dispatchEvent(new Event(SELECT_SYNC_EVENT));
   }
 
   function updateCompareHref() {

@@ -17,35 +17,34 @@
  * quietly did nothing would be a defect this repo has already paid for twice.
  *
  * ─────────────────────────────────────────────────────────────────────────────
- * A NATIVE <select>, NOT THE MOCKUP'S CUSTOM LISTBOX. One deliberate departure,
- * and the reasons are:
+ * THE CONTROL IS SelectField, AND THIS FILE DOES NOT KNOW HOW IT OPENS.
  *
- *   · Keyboard, screen-reader and mobile behaviour arrive for free — arrow keys,
- *     type-ahead, the iOS wheel, the Android sheet, the accessible name, the
- *     expanded/collapsed state. None of it has to be written, and therefore none
- *     of it can be written wrong.
- *   · `disabled` on an <option> is EXACTLY the semantics an area with no data
- *     needs. It is announced as unavailable, it cannot be arrowed onto, and it
- *     cannot be submitted. A div with `aria-disabled` is a picture of that.
- *   · A custom listbox without roving tabindex and arrow-key handling would be a
- *     WORSE control than the one it replaces — and those are precisely the parts
- *     that get left for later.
+ * It used to be three bare <select>s, and the note here argued for them: keyboard,
+ * screen-reader and mobile behaviour arrive free, `disabled` on an <option> is
+ * exactly the semantics an unavailable area needs, and a hand-rolled listbox
+ * without arrow keys and type-ahead would be a WORSE control than the one it
+ * replaced. Every one of those arguments still holds — which is why SelectField
+ * did not throw the <select> away. It keeps it as the value, hides the OS popup,
+ * and writes the arrow keys, the type-ahead, Home/End and Escape by hand, against
+ * the options that select already carries.
  *
- * The mockup's visual treatment is kept — the card, the uppercase caption above
- * the value, the tier badge on the City card — because that is the part the
- * founder actually tuned. The styled listbox can come later without changing a
- * line of the data flow below: it would read the same three option lists.
+ * WHAT THIS FILE OWNS is the three lists and the tier badge. What it does NOT own
+ * is how a list opens, what a disabled row looks like, or which key does what —
+ * and that is the point of the split: those are the same questions for every
+ * dropdown this console will ever have, and answering them three times is how two
+ * of the three end up answered differently.
  *
- * NOT WIRED YET. Task 7 mounts this into the stage and gives the three selects
- * their `change` behaviour; it finds them by `data-scope`. Until then the
- * component is imported by nothing, and `npm run check` compiling it — not
- * `npm run build`, which never opens a file nothing imports — is what proves it
- * is real.
+ * The mockup's visual treatment survives intact — the card, the uppercase caption
+ * above the value, the tier badge on the City card — because that is the part the
+ * founder actually tuned. The card lives in SelectField now; the badge is a slot,
+ * so the tier stays a fact this file states about a city.
  */
 import {
   AREA_KEYS, areaKeysInCity, splitKey, type AreaKey,
 } from '../../../scripts/climate-engine/scope/registry.ts';
 import { resolve, type CityTier } from '../../../scripts/climate-engine/scope/resolve.ts';
+import type { SelectFieldOption } from '../../../scripts/climate-engine/shell/select-field.ts';
+import SelectField from './SelectField.astro';
 
 interface Props {
   /**
@@ -71,6 +70,12 @@ const here = splitKey(current);
  * be funded to close — so the honest presentation is to list them and say why
  * they cannot be opened, not to hide them and let the city look like it has no
  * areas at all.
+ *
+ * IT IS THE OPTION'S `note`, NOT WORDS GLUED ONTO ITS NAME. Concatenated, the
+ * dropdown could only ever print "Al Quoz — no data yet" as one run of text; kept
+ * apart, the name is a name and the reason is a reason, and SelectField sets them
+ * differently on the row and on the collapsed control. It also means nothing
+ * downstream has to guess where the name stopped.
  */
 const NO_DATA_NOTE = 'no data yet';
 
@@ -85,25 +90,23 @@ const TIER_LABEL: Record<CityTier, string> = {
   geometry: 'Geometry only',
 };
 
-interface Option {
-  /**
-   * ALWAYS AN AREA KEY, at all three levels — the key this option lands you on.
-   *
-   * Task 7 then has ONE handler for the three selects: the value it reads is
-   * already the thing `areaPath()` and `paths()` take. A country id here would
-   * need a second lookup to turn "a country" into "somewhere to go", and a
-   * lookup that only one of three otherwise-identical controls needs is a lookup
-   * that gets written wrong.
-   */
+/**
+ * A row, narrowed to the one kind of value this switcher deals in.
+ *
+ * ALWAYS AN AREA KEY, at all three levels — the key this option lands you on.
+ *
+ * console-shell.ts then has ONE handler for the three fields: the value it reads
+ * is already the thing `areaPath()` and `paths()` take. A country id here would
+ * need a second lookup to turn "a country" into "somewhere to go", and a lookup
+ * that only one of three otherwise-identical controls needs is a lookup that gets
+ * written wrong.
+ *
+ * EXTENDS SelectField's OWN OPTION TYPE rather than restating its shape, so a
+ * field the component starts reading is a field this file fails to supply at
+ * compile time rather than one it silently omits.
+ */
+interface Option extends SelectFieldOption {
   readonly value: AreaKey;
-  readonly text: string;
-  /**
-   * Absent rather than `false` on the levels that cannot be unavailable. Only an
-   * AREA ships or does not ship data; a country and a city are always reachable,
-   * and Dubai has to stay reachable in particular. Writing `false` twice more
-   * would be two more places for something to become true by accident.
-   */
-  readonly disabled?: boolean;
 }
 
 /**
@@ -168,8 +171,12 @@ const areaOptions = areaKeysInCity(current).map((key): Option => {
   const { name, hasData } = resolve(key).area;
   return {
     value: key,
-    text: hasData ? name : `${name} — ${NO_DATA_NOTE}`,
+    text: name,
     disabled: !hasData,
+    /* Absent rather than empty on an area that ships, so the note is a thing that
+       is either there or not — a blank one would render an empty tag beside the
+       name and read as a label whose word had gone missing. */
+    note: hasData ? undefined : NO_DATA_NOTE,
   };
 });
 
@@ -191,47 +198,36 @@ const FIELDS: readonly Field[] = [
 ];
 
 /**
- * The DOM id a level's select answers to, and the id its label points at.
+ * The id stem a level's field answers to.
  *
- * ONE function used by both, so the two cannot be written differently — a `for`
- * that misses its control leaves the select with no accessible name at all, and
- * nothing about the page looks wrong when it happens.
+ * ONE function, used once, because SelectField derives the label's `for`, the
+ * trigger's id, the list's id and the select's id from this single string. Four
+ * references that have to agree, and a `for` that misses its control leaves the
+ * field with no accessible name at all — with nothing about the page looking
+ * wrong when it happens.
  */
-const selectId = (id: Field['id']): string => `scope-${id}`;
+const fieldId = (id: Field['id']): string => `scope-${id}`;
 ---
 <section class="scope" aria-labelledby="scope-heading">
   <p class="scope-heading" id="scope-heading">Scope</p>
 
   <div class="scope-stack">
     {FIELDS.map((f) => (
-      <div class="scope-card">
-        {/* THE ACCESSIBLE NAME. A bare select announces only its value — "India",
-            with no word saying what India is being chosen as. The visible
-            caption below cannot do this job: it sits inside the card as a
-            caption above the value, and is marked aria-hidden so the name is
-            heard once rather than twice. Both read the SAME `f.label`, so there
-            is one string, not two free to drift. */}
-        <label class="scope-name" for={selectId(f.id)}>{f.label}</label>
-
-        <span class="scope-text">
-          <span class="scope-key" aria-hidden="true">{f.label}</span>
-          <select class="scope-value" id={selectId(f.id)} data-scope={f.id}>
-            {f.options.map((o) => (
-              <option value={o.value} disabled={o.disabled} selected={o.value === current}>
-                {o.text}
-              </option>
-            ))}
-          </select>
-        </span>
-
+      <SelectField
+        id={fieldId(f.id)}
+        label={f.label}
+        value={current}
+        options={f.options}
+        data-scope={f.id}
+      >
+        {/* THE ONE THING THIS SWITCHER ADDS TO A GENERIC FIELD. It is a slot
+            rather than a prop because a confidence badge is not something every
+            dropdown has, and teaching SelectField about tiers would teach it
+            about cities. */}
         {f.tier !== null && (
-          <span class={`scope-tier tier-${f.tier}`}>{TIER_LABEL[f.tier]}</span>
+          <span slot="badge" class={`scope-tier tier-${f.tier}`}>{TIER_LABEL[f.tier]}</span>
         )}
-
-        <svg class="scope-chevron" viewBox="0 0 12 12" aria-hidden="true" focusable="false">
-          <path d="M2 4.5 6 8.5 10 4.5" />
-        </svg>
-      </div>
+      </SelectField>
     ))}
   </div>
 </section>
@@ -242,12 +238,14 @@ const selectId = (id: Field['id']): string => `scope-${id}`;
      the global surface shrinks rather than grows. The stage's own block is
      global because MapLibre injects DOM it never rendered; nothing here does.
 
+     THE BADGE IS STYLED HERE EVEN THOUGH IT RENDERS INSIDE SelectField, and that
+     is how Astro slots work rather than an accident: the element is rendered by
+     THIS component, so it carries THIS component's scoping hash. The card around
+     it belongs to SelectField and is styled there.
+
      Colours are var() throughout, and --green is declared beside the rest of the
      palette in HeatMapStage.astro — a token resolves from where it is DECLARED,
-     so these scoped rules reach it only once the switcher is inside .stage,
-     which is where Task 7 puts it. Task 2's guard fails the build on any hex
-     written more than once in a file, comments included; the one below is
-     written once and nowhere else. */
+     so these scoped rules reach it only once the switcher is inside .stage. */
 
   .scope {
     padding: 12px 14px 11px;
@@ -270,94 +268,6 @@ const selectId = (id: Field['id']): string => `scope-${id}`;
     gap: 5px;
   }
 
-  /* The card. `position: relative` anchors two things: the clipped label, and
-     the chevron — which is absolute rather than a flex item so the select can
-     run the full width of the card and the whole value row stays clickable. */
-  .scope-card {
-    position: relative;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 26px 6px 9px;
-    border-radius: 7px;
-    background: rgb(9 58 62 / .42);
-    transition: background .18s;
-  }
-
-  .scope-card:hover { background: rgb(9 58 62 / .68); }
-
-  /* Focus is stated twice on purpose, and they are different facts: the ring is
-     on the control that actually has focus, and the card lifts so the eye lands
-     on the whole row rather than on a 12px-tall line of text. */
-  .scope-card:focus-within { background: rgb(9 58 62 / .68); }
-
-  .scope-value:focus-visible {
-    outline: 2px solid var(--cyan);
-    outline-offset: 3px;
-    border-radius: 3px;
-  }
-
-  /* CLIPPED, NOT display:none AND NOT visibility:hidden — both of those would
-     take the accessible name away along with the pixels, which is the entire
-     thing this element exists to provide. */
-  .scope-name {
-    position: absolute;
-    inline-size: 1px;
-    block-size: 1px;
-    margin: -1px;
-    padding: 0;
-    border: 0;
-    overflow: hidden;
-    white-space: nowrap;
-    clip-path: inset(50%);
-  }
-
-  .scope-text {
-    flex: 1;
-    min-inline-size: 0;
-    display: block;
-  }
-
-  /* The founder's caption: four rounds went into this size, this weight and this
-     tracking. Its colour is a step brighter than --ink and a step under --paper,
-     and it is the only place in the console that wants that step — written once,
-     here, rather than given a palette token nothing else would use. */
-  .scope-key {
-    display: block;
-    font-family: var(--sans);
-    font-size: .58rem;
-    font-weight: 600;
-    letter-spacing: .1em;
-    text-transform: uppercase;
-    color: #c2d0d2;
-    line-height: 1.35;
-  }
-
-  /* The select, dressed as the mockup's value line. `appearance: none` takes the
-     platform's own chevron and bevel away; `color-scheme: dark` is what makes
-     the popup the browser draws — which no stylesheet of ours can reach — come
-     up dark rather than as a white sheet over a dark console. */
-  .scope-value {
-    display: block;
-    inline-size: 100%;
-    padding: 0;
-    border: 0;
-    background: none;
-    appearance: none;
-    color-scheme: dark;
-    font-family: inherit;
-    font-size: .82rem;
-    font-weight: 600;
-    color: var(--paper);
-    line-height: 1.3;
-    cursor: pointer;
-    text-overflow: ellipsis;
-  }
-
-  /* An option that cannot be chosen has to LOOK unchoosable, or the announcement
-     and the pixels say different things. */
-  .scope-value option:disabled { color: var(--faint); }
-
   .scope-tier {
     flex: none;
     font-family: var(--mono);
@@ -375,23 +285,4 @@ const selectId = (id: Field['id']): string => `scope-${id}`;
   .tier-validated { background: rgb(93 185 138 / .16); color: var(--green); }
   .tier-zone { background: rgb(176 141 87 / .18); color: var(--bronze); }
   .tier-geometry { background: rgb(143 163 165 / .14); color: var(--ink); }
-
-  .scope-chevron {
-    position: absolute;
-    right: 9px;
-    top: 50%;
-    transform: translateY(-50%);
-    inline-size: 12px;
-    block-size: 12px;
-    stroke: var(--faint);
-    fill: none;
-    stroke-width: 1.8;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-    pointer-events: none;
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .scope-card { transition: none; }
-  }
 </style>

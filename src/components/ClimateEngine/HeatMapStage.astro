@@ -582,13 +582,26 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
        canopy raster; --slate the dimmer grey that tells extruded heights from
        footprint outlines; --gold the one warm mark in the Ground-truth group. */
     --pine:#3f8f66; --slate:#6b7f81; --gold:#c9a227;
-    /* The icon rail's ground — a shade under --base, so the console's navigation
-       column reads as a step behind the surface it navigates. It is declared here
-       with the rest of the palette rather than inside shell/IconRail.astro,
-       because a token resolves from where it is DECLARED: the rail's scoped
-       styles reach it only once the rail is inside .stage, which is where Task 7
-       puts it. */
-    --rail-ground:#040808;
+    /* The icon rail's ground — the Swiss print near-black, and it sits ABOVE
+       --base rather than under it.
+
+       IT USED TO BE #040808, "a shade under --base", and the intent did not
+       survive contact: it differed from --base by one step in one channel and
+       read as nothing at all. A navigation column that cannot be seen is not a
+       subtle navigation column.
+
+       The value now is the near-black Swiss and German design systems set as
+       Schwarz — what Pantone Black resolves to in print, rather than the pure
+       black a screen reaches for by default. R and G equal with B one under, so
+       it is warm where the rest of this palette is cyan-tinted at 205°: the rail
+       is the one element that is NOT part of the instrument's surface, and a
+       neutral ink against a tinted ground is what says so.
+
+       Declared here with the rest of the palette rather than inside
+       shell/IconRail.astro, because a token resolves from where it is DECLARED:
+       the rail's scoped styles reach it only once the rail is inside .stage,
+       which is where Task 7 puts it. */
+    --rail-ground:#1D1D1B;
     /* Studio (light) mode's three inks — the same descending-emphasis idea as
        --paper/--ink/--faint above, inverted for a light ground. They live here
        rather than on `body.studio` because every element they colour is inside

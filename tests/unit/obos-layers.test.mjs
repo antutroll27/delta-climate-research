@@ -128,6 +128,11 @@ test('no stylesheet writes a colour more than once', async () => {
     'src/components/ClimateEngine/HeatMapStage.astro',
     'src/components/ClimateEngine/shell/IconRail.astro',
     'src/components/ClimateEngine/shell/ScopeSwitcher.astro',
+    /* THE CARD THE SWITCHER IS MADE OF. It carries the one colour the console
+       wants nowhere else — the caption's step between --ink and --paper — and a
+       second spelling of it would be invisible until someone tuned one of the
+       two. Every other colour here is var() or a color-mix() pointing at one. */
+    'src/components/ClimateEngine/shell/SelectField.astro',
     'src/components/ClimateEngine/shell/LayerTree.astro',
     'src/components/ClimateEngine/shell/InterventionPane.astro',
     /* THE SECOND ROUTE TO RENDER THE CONSOLE. It writes no hex today — its palette
@@ -174,7 +179,7 @@ test('the new components use scoped styles, and never :global inside is:global',
      The second half matters more than it looks: a :global(...) written INSIDE an
      is:global block ships verbatim and the browser discards the whole rule.
      HeatMapStage.astro already carries two comments warning about it. */
-  const shell = ['IconRail', 'ScopeSwitcher', 'LayerTree', 'InterventionPane'];
+  const shell = ['IconRail', 'ScopeSwitcher', 'SelectField', 'LayerTree', 'InterventionPane'];
   for (const name of shell) {
     let src;
     try {

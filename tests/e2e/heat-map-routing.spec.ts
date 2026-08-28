@@ -1,4 +1,5 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
+import AxeBuilder from '@axe-core/playwright';
 
 /**
  * ONE URL PER AREA — the contract Task 8 exists to create, checked in a browser.
@@ -16,6 +17,31 @@ import { expect, test } from '@playwright/test';
 const BALLYGUNGE = '/heat-map/in/kolkata/ballygunge/';
 const BARUIPUR = '/heat-map/in/kolkata/baruipur/';
 
+/**
+ * PICK AN AREA THE WAY A READER DOES — open the dropdown, click a row.
+ *
+ * NOT `selectOption` ON THE <select>, and the difference matters more than it
+ * looks. The select is still there and still holds the value, so `selectOption`
+ * would still pass — while driving straight past the trigger, the list, the row
+ * and the commit, which is now the entire control. A test that keeps working after
+ * the thing it was testing was replaced is a test that has stopped testing it.
+ *
+ * The value assertions BELOW still read `select[data-scope]`, and that is the
+ * other half of the same argument: the select is the SEAM — what console-shell.ts
+ * reads and what heat-map-app.ts writes — so the control is driven where a hand
+ * goes and asserted where the machinery looks.
+ */
+async function pickArea(page: Page, key: string): Promise<void> {
+  const trigger = page.locator('#scope-area-trigger');
+  await trigger.click();
+  await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  await page.locator(`#scope-area-list li[data-value="${key}"]`).click();
+  /* The list closing is the control's own statement that it took the row. Waiting
+     on it here keeps a failure to commit from being reported three assertions
+     later as a map that did not move. */
+  await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+}
+
 test('each area URL renders its OWN ward, not the default', async ({ page }) => {
   await page.goto(BARUIPUR);
   await expect(page.locator('#pname')).toHaveText('Baruipur');
@@ -25,8 +51,12 @@ test('each area URL renders its OWN ward, not the default', async ({ page }) => 
      header tab strip was deleted as the third control over one fact. */
   await expect(page.locator('#strip .ward.on')).toHaveAttribute('data-w', 'baruipur');
   /* And the scope switcher, which is the control that scales past one city: its
-     Area select must be on the area the route named, not on the default. */
+     Area field must be on the area the route named, not on the default. BOTH
+     halves of it — the <select> that holds the value and console-shell.ts reads,
+     and the words the reader can actually see. Asserting only the first would pass
+     over a trigger that had never been painted at all. */
   await expect(page.locator('select[data-scope="area"]')).toHaveValue('in/kolkata/baruipur');
+  await expect(page.locator('#scope-area-trigger [data-select-value]')).toHaveText('Baruipur');
 
   /* The comparison, not the single reading. Baruipur alone proves nothing if the
      page were somehow serving one document for every route — these two must differ,
@@ -70,14 +100,20 @@ test('switching ward moves the address bar with it', async ({ page }) => {
   /* The scope switcher has to follow too, or the console shows one ward and its
      own Area control names another — the same wrong-record failure one control
      over. It follows because heat-map-app.ts re-selects it on every ward change,
-     which is the half a click on the strip would otherwise leave behind. */
+     which is the half a click on the strip would otherwise leave behind.
+     THE VISIBLE HALF IS THE ONE THAT CAN GO STALE ON ITS OWN, and it is asserted
+     for that reason: assigning `select.value` in script raises no event, so the
+     words on the trigger only follow because `updateScopeSwitcher` says so. Take
+     that line out and the value below still passes while the console reads
+     "Ballygunge" over Barrackpore's map. */
   await expect(page.locator('select[data-scope="area"]')).toHaveValue('in/kolkata/barrackpore');
+  await expect(page.locator('#scope-area-trigger [data-select-value]')).toHaveText('Barrackpore');
 });
 
-test('the Area select switches ward in place, and the strip follows', async ({ page }) => {
-  /* THE OTHER DIRECTION. The strip and the select are two controls over one fact,
-     which is exactly the arrangement that drifts: a select that switched the map
-     without moving the strip's highlight would leave the page stating two
+test('the Area dropdown switches ward in place, and the strip follows', async ({ page }) => {
+  /* THE OTHER DIRECTION. The strip and the dropdown are two controls over one
+     fact, which is exactly the arrangement that drifts: a dropdown that switched
+     the map without moving the strip's highlight would leave the page stating two
      different wards at once. Both directions are checked because either one alone
      would pass over a half-wired pair.
      IN PLACE, not a navigation: these two areas are in one city and both ship
@@ -85,7 +121,7 @@ test('the Area select switches ward in place, and the strip follows', async ({ p
      rewritten by `updateAddressBar`. */
   await page.goto(BALLYGUNGE);
   await expect(page.locator('#lst')).not.toContainText('—', { timeout: 20_000 });
-  await page.locator('select[data-scope="area"]').selectOption('in/kolkata/baruipur');
+  await pickArea(page, 'in/kolkata/baruipur');
   await expect(page.locator('#pname')).toHaveText('Baruipur', { timeout: 20_000 });
   await expect(page).toHaveURL(/\/heat-map\/in\/kolkata\/baruipur\/$/);
   await expect(page.locator('#strip .ward.on')).toHaveAttribute('data-w', 'baruipur');
@@ -102,26 +138,31 @@ test('the area the page loaded with can be switched BACK to', async ({ page }) =
      never come back to it. Measured over six hops: the boot area was refused every
      single time, every other area switched fine.
 
-     IT FAILED SILENTLY, which is why a one-way test could not see it. The select
+     IT FAILED SILENTLY, which is why a one-way test could not see it. The control
      took the new value, the map stayed where it was, and nothing threw or logged.
      The page simply named two different wards in two places.
 
-     THE ASSERTION IS ON THE MAP, NOT THE SELECT. `#pname` is painted by `loadWard`;
-     the select's value is set by the browser the instant you click. Asserting the
-     select here would pass against the bug -- it always showed the right answer.
+     THE ASSERTION IS ON THE MAP, NOT THE CONTROL. `#pname` is painted by
+     `loadWard`; the control's value moves the instant you click. Asserting the
+     control here would pass against the bug -- it always showed the right answer.
+
+     DRIVEN THROUGH THE DROPDOWN rather than through the <select> underneath it.
+     `selectOption` would still work -- the select is still the model -- and that
+     is exactly why it is not used: it would skip the trigger, the list, the row
+     and the commit, so the return trip would be proved for a path no reader takes.
 
      Three hops, because the second one is what makes the first one's success
      meaningless: away, away again, then home. */
   await page.goto(BALLYGUNGE);
   await expect(page.locator('#lst')).not.toContainText('—', { timeout: 20_000 });
 
-  await page.locator('select[data-scope="area"]').selectOption('in/kolkata/baruipur');
+  await pickArea(page, 'in/kolkata/baruipur');
   await expect(page.locator('#pname')).toHaveText('Baruipur', { timeout: 20_000 });
 
-  await page.locator('select[data-scope="area"]').selectOption('in/kolkata/barrackpore');
+  await pickArea(page, 'in/kolkata/barrackpore');
   await expect(page.locator('#pname')).toHaveText('Barrackpore', { timeout: 20_000 });
 
-  await page.locator('select[data-scope="area"]').selectOption('in/kolkata/ballygunge');
+  await pickArea(page, 'in/kolkata/ballygunge');
   await expect(page.locator('#pname')).toHaveText('Ballygunge', { timeout: 20_000 });
   await expect(page).toHaveURL(/\/heat-map\/in\/kolkata\/ballygunge\/$/);
   await expect(page.locator('#strip .ward.on')).toHaveAttribute('data-w', 'ballygunge');
@@ -131,6 +172,111 @@ test('the area the page loaded with can be switched BACK to', async ({ page }) =
      the attribute stale -- and `hasData`, which decides in-place versus navigate,
      would still be read off the wrong area. */
   await expect(page.locator('.stage')).toHaveAttribute('data-area', 'in/kolkata/ballygunge');
+});
+
+test('the Area dropdown is drivable from the keyboard alone', async ({ page }) => {
+  /* THE HALF THAT GETS LEFT FOR LATER. Replacing a native <select> hands you the
+     look and takes away arrow keys, Home/End, type-ahead, Escape and the focus
+     contract — all of which the platform was providing for free and none of which
+     is visible in a screenshot. So they are asserted here, on the real page, with
+     the map as the witness: a dropdown a keyboard cannot drive is a worse control
+     than the OS one it replaced, however good it looks.
+
+     NOT A SINGLE `click()` IN THIS TEST past the first Tab-free focus. Every step
+     is a key. */
+  /* A FULL BOOT, SIX KEY JOURNEYS AND A WARD LOAD in one test, on a page that puts
+     a WebGL instrument up first. It runs in six seconds on an idle machine and
+     four times that when the suite is competing with itself, which is inside the
+     default 30s only by luck rather than by margin. Stated here rather than raised
+     for the whole file, because this is the one test that does all three. */
+  test.setTimeout(90_000);
+  await page.goto(BALLYGUNGE);
+  await expect(page.locator('#lst')).not.toContainText('—', { timeout: 20_000 });
+
+  const trigger = page.locator('#scope-area-trigger');
+  const list = page.locator('#scope-area-list');
+  await trigger.focus();
+
+  /* CLOSED, ARROW DOWN OPENS AND COMMITS NOTHING. A native select would have
+     moved its value on this press — and here a value change is a NAVIGATION, so
+     the first press has to show the list rather than move the map. */
+  await page.keyboard.press('ArrowDown');
+  await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  await expect(trigger).toHaveAttribute('aria-activedescendant', 'scope-area-list-o0');
+  await expect(page.locator('select[data-scope="area"]')).toHaveValue('in/kolkata/ballygunge');
+  await expect(page.locator('#pname')).toHaveText('Ballygunge');
+
+  /* ESCAPE CLOSES AND CHANGES NOTHING, and focus is back where the reader left
+     it. `aria-activedescendant` has to go with the list: left behind, it points at
+     a row that no longer exists and a screen reader announces a phantom. */
+  await page.keyboard.press('ArrowDown');
+  await expect(trigger).toHaveAttribute('aria-activedescendant', 'scope-area-list-o1');
+  await page.keyboard.press('Escape');
+  await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+  await expect(trigger).not.toHaveAttribute('aria-activedescendant', /./);
+  await expect(page.locator('select[data-scope="area"]')).toHaveValue('in/kolkata/ballygunge');
+  await expect(trigger).toBeFocused();
+
+  /* HOME AND END REACH THE ENDS WITHOUT WALKING, which is the whole reason they
+     exist and the first thing a hand-rolled listbox drops. */
+  await page.keyboard.press('End');
+  await expect(trigger).toHaveAttribute('aria-activedescendant', 'scope-area-list-o2');
+  await page.keyboard.press('Home');
+  await expect(trigger).toHaveAttribute('aria-activedescendant', 'scope-area-list-o0');
+
+  /* TYPE-AHEAD, and the ward names are what make this worth asserting: Baruipur
+     and Barrackpore share "bar", so nothing shorter than "barr" can tell them
+     apart. A first-letter jump — which is all a lazy implementation does — cannot
+     reach the second of two neighbours whatever you type. */
+  await page.keyboard.type('barr', { delay: 40 });
+  await expect(list.locator('li.is-active .field-option-text')).toHaveText('Barrackpore');
+
+  /* AND ENTER COMMITS THE ACTIVE ROW — asserted on the MAP, because the value is
+     the easy half. `#pname` is painted by `loadWard`, so it moves only if the
+     commit reached console-shell.ts and the instrument answered. */
+  await page.keyboard.press('Enter');
+  await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.locator('#pname')).toHaveText('Barrackpore', { timeout: 20_000 });
+  await expect(page).toHaveURL(/\/heat-map\/in\/kolkata\/barrackpore\/$/);
+  await expect(page.locator('select[data-scope="area"]')).toHaveValue('in/kolkata/barrackpore');
+  await expect(page.locator('#scope-area-trigger [data-select-value]')).toHaveText('Barrackpore');
+  /* FOCUS COMES BACK TO THE TRIGGER on the committing path too, not just the
+     cancelling one. Dropped here, the next Tab would restart from the top of the
+     document and the reader would have to walk the whole console again. */
+  await expect(trigger).toBeFocused();
+});
+
+test('the OPEN dropdown has no automated WCAG A/AA violations, on either tier', async ({ page }) => {
+  /* THE STATE NOTHING ELSE SCANS. A <select> came with its popup already correct;
+     this one is a listbox we wrote, and every rule it has to satisfy — a named
+     combobox, a named listbox, rows that are really options, an active descendant
+     that resolves, text that clears AA against the panel it sits on — is now
+     something a person typed and can therefore mistype.
+
+     SCOPED TO `.scope`, DELIBERATELY. The page around it is a MapLibre canvas and
+     an instrument, and scanning all of it would drown this control in findings it
+     is not responsible for — the way to make an axe assertion meaningless is to
+     point it at something too big to keep clean.
+
+     BOTH TIERS, because they are structurally different pages: Kolkata's rows are
+     choosable and Dubai's are every one of them aria-disabled with a reason
+     attached, and it is the second that carries the markup nobody writes twice. */
+  for (const [route, at] of [[BALLYGUNGE, 'in/kolkata/ballygunge'], ['/heat-map/ae/dubai/al-quoz/', 'ae/dubai/al-quoz']] as const) {
+    await page.goto(route);
+    /* The control is server-rendered but INERT until console-shell.ts mounts it,
+       and an unopened list would take this scan past the whole point of it. */
+    await expect(page.locator('select[data-scope="area"]')).toHaveValue(at);
+    await page.locator('#scope-area-trigger').click();
+    await expect(page.locator('#scope-area-trigger')).toHaveAttribute('aria-expanded', 'true');
+    await expect(page.locator('#scope-area-list li').first()).toBeVisible();
+
+    const results = await new AxeBuilder({ page })
+      .include('.scope')
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
+      .analyze();
+    expect(results.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target).join(', ')}`),
+      `the open dropdown violates WCAG on ${route}`).toEqual([]);
+  }
 });
 
 test('the ward strip never prints two scenarios side by side', async ({ page }) => {
@@ -277,7 +423,7 @@ test('the document title, canonical and social tags follow the ward', async ({ p
       .toMatch(/ballygunge/i);
   }
 
-  await page.locator('select[data-scope="area"]').selectOption('in/kolkata/baruipur');
+  await pickArea(page, 'in/kolkata/baruipur');
   await expect(page.locator('#pname')).toHaveText('Baruipur', { timeout: 20_000 });
   const after = await read();
 
@@ -517,11 +663,50 @@ test('an area with no data states its tier instead of half-rendering', async ({ 
      mounted to handle a click. That strip is gone; the same claim is now made by
      the two controls that replaced it.
 
-     THE AREA SELECT offers Dubai's three tiles and DISABLES every one of them, so
+     THE AREA FIELD offers Dubai's three tiles and DISABLES every one of them, so
      the "not shipping" fact is announced rather than accepted-and-then-refused. */
   const areaOptions = page.locator('select[data-scope="area"] option');
   await expect(areaOptions).toHaveCount(3);
   await expect(page.locator('select[data-scope="area"] option:not([disabled])')).toHaveCount(0);
+
+  /* AND THE SAME THING AGAIN WHERE A READER CAN SEE IT. The three assertions above
+     are about the <select> that holds the value; it is invisible, and on its own
+     it would go on passing over a dropdown that had quietly stopped carrying the
+     refusal through. This is the page the whole disabled case exists for — Dubai's
+     areas are NAMED rather than hidden because the gap between its tier and
+     Kolkata's is the funding ask — so the drawn rows are checked too:
+
+       · all three present, so none has been hidden to avoid explaining it,
+       · every one aria-disabled, which is what a screen reader announces,
+       · every one carrying its REASON, because a greyed row with no explanation
+         reads as a bug in the page rather than as a fact about the world.
+
+     The collapsed control says it too: this area is the one the page is standing
+     on, so the note has to be legible without opening anything at all. */
+  await expect(page.locator('#scope-area-trigger [data-select-note]')).toHaveText('no data yet');
+  await page.locator('#scope-area-trigger').click();
+  await expect(page.locator('#scope-area-trigger')).toHaveAttribute('aria-expanded', 'true');
+  const areaRows = page.locator('#scope-area-list li');
+  await expect(areaRows).toHaveCount(3);
+  await expect(page.locator('#scope-area-list li[aria-disabled="true"]')).toHaveCount(3);
+  /* `allTextContents`, NOT `allInnerTexts`: the note is uppercased in CSS, and
+     innerText would hand back the RENDERED case. The string this is checking
+     against is the one the registry wrote, so the comparison has to be against
+     what the DOM holds rather than against what the stylesheet made of it. */
+  const notes = await page.locator('#scope-area-list li .field-option-note').allTextContents();
+  expect(notes.length, 'no row carried a note element at all').toBe(3);
+  for (const note of notes) {
+    expect(note.trim(), 'a disabled row carries no reason').toBe('no data yet');
+  }
+  /* AND IT REFUSES THE KEYBOARD, not just the eye. Enter on a disabled row must
+     leave the list open and the value where it was — a row that closed the list
+     would look exactly like one that had been accepted, which is the
+     accepted-then-quietly-ignored failure this console exists not to repeat. */
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#scope-area-trigger')).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.locator('select[data-scope="area"]')).toHaveValue('ae/dubai/al-quoz');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#scope-area-trigger')).toHaveAttribute('aria-expanded', 'false');
 
   /* THE LAYER TREE shows its rows rather than hiding them — an absent row reads as
      "this does not exist", which is a different and wronger claim than "we do not
@@ -553,9 +738,18 @@ test('an area with no data states its tier instead of half-rendering', async ({ 
      route the build never emitted, all on the page whose entire content is a
      statement that nothing can be computed here. No instrument is mounted to hear
      any of it.
-     The three scope selects are the exception and the point: they are how you
-     leave. Everything else must be absent or disabled. */
-  await expect(page.locator('.sidebar button')).toHaveCount(0);
+     The three scope fields are the exception and the point: they are how you
+     leave. Everything else must be absent or disabled.
+
+     THE CARVE-OUT IS NOW SPELLED IN TWO HALVES, and it is the same carve-out
+     rather than a loosened one. It used to read `.sidebar button` → 0, because the
+     scope fields were bare <select>s and the sidebar genuinely held no button at
+     all. They are dropdowns now and each opens from a <button>, so the exception
+     has to be named — and it is named by BOTH a floor and a ceiling: exactly three
+     triggers, and nothing else clickable. Asserting only `:not([data-select-trigger])`
+     would let the three quietly become none. */
+  await expect(page.locator('.sidebar button[data-select-trigger]')).toHaveCount(3);
+  await expect(page.locator('.sidebar button:not([data-select-trigger])')).toHaveCount(0);
   await expect(page.locator('.sidebar a')).toHaveCount(0);
   await expect(page.locator('.sidebar input:not(:disabled)')).toHaveCount(0);
   await expect(page.locator('.sidebar select:not([data-scope])')).toHaveCount(0);

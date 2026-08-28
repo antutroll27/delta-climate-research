@@ -272,7 +272,8 @@ test.describe('paired heat-map comparison', () => {
     const sheetBox = await page.locator('.heat-compare__controls').boundingBox();
     if (!railBox || !sheetBox) throw new Error('rail or sheet had no box at 390px');
     expect(sheetBox.x, 'the bottom sheet overlaps the rail — the sheet is fixed at '
-      + 'left:.6rem and the rail is a fixed 56px column, so it has to be offset past it')
+      + 'left:.6rem and the rail is a fixed column beside it, so it has to be offset '
+      + 'past whatever --rail currently is')
       .toBeGreaterThanOrEqual(railBox.x + railBox.width);
 
     /* And the page's own content clears it too — the mobile padding shorthand

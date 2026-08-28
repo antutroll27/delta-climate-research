@@ -34,6 +34,7 @@ import { areaPath } from '../scope/paths.ts';
 import { tabKind } from '../scope/reachability.ts';
 import { isAreaKey, splitKey, type AreaKey } from '../scope/registry.ts';
 import { resolve } from '../scope/resolve.ts';
+import { mountSelectFields } from './select-field.ts';
 
 /**
  * THE EVENT THE SELECT RAISES WHEN THE INSTRUMENT SHOULD SWITCH IN PLACE.
@@ -169,6 +170,20 @@ export function mountConsoleShell(): (() => void) | null {
   }
 
   paint();
+
+  /* ── the dropdowns ───────────────────────────────────────────────────────── */
+
+  /* PORTABLE, LIKE THE PANES ABOVE AND UNLIKE THE SCOPE HALF BELOW. A select
+     field is a control, not a scope: it knows how to open, how to be driven by a
+     keyboard and how to refuse a row that cannot be chosen, and none of that is a
+     question about which area this page is. Compare renders no scope switcher and
+     so has no fields today — `mountSelectFields` finds none and returns a
+     disposer that undoes nothing, which is the correct answer rather than a
+     special case to write.
+
+     BEFORE THE SCOPE HALF, so the trigger is showing the right words even on a
+     page the scope half refuses to wire. */
+  cleanup.push(mountSelectFields(consoleRoot));
 
   /* ── the three scope selects ─────────────────────────────────────────────── */
 

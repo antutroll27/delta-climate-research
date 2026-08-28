@@ -439,6 +439,10 @@ import { resolve } from '../../src/scripts/climate-engine/scope/resolve.ts';
 
 const SWITCHER = new URL(
   '../../src/components/ClimateEngine/shell/ScopeSwitcher.astro', import.meta.url);
+const FIELD = new URL(
+  '../../src/components/ClimateEngine/shell/SelectField.astro', import.meta.url);
+const FIELD_TS = new URL(
+  '../../src/scripts/climate-engine/shell/select-field.ts', import.meta.url);
 const RESOLVE_TS = new URL(
   '../../src/scripts/climate-engine/scope/resolve.ts', import.meta.url);
 
@@ -474,6 +478,76 @@ async function switcherSource() {
     styles,
     css: styles.map((m) => m[2]).join('\n'),
   };
+}
+
+/**
+ * SelectField.astro, split the same way and guarded the same way.
+ *
+ * THE SWITCHER'S MARKUP LIVES HERE NOW. The card, the label, the <select> that
+ * holds the value and the list the dropdown fills are all in this component, so
+ * the assertions that used to read ScopeSwitcher's template FOLLOW THEM rather
+ * than being dropped — which is the difference between a guard that moved and a
+ * guard that was deleted for going red.
+ */
+async function fieldSource() {
+  let src;
+  try {
+    src = await readFile(FIELD, 'utf8');
+  } catch (err) {
+    assert.fail(
+      'src/components/ClimateEngine/shell/SelectField.astro could not be read '
+      + `(${err.code ?? err.message}) -- it is the control the scope switcher is `
+      + 'made of, and every assertion below reads it');
+  }
+  assert.ok(src.trim().length > 0, 'SelectField.astro is empty -- nothing to check');
+
+  const split = src.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/);
+  assert.ok(split, 'SelectField.astro has no `---` frontmatter fence -- the tests '
+    + 'below read the frontmatter and the template separately');
+  assert.ok(split[1].trim().length > 0, 'SelectField.astro has an EMPTY frontmatter');
+
+  const body = split[2];
+  const styles = [...body.matchAll(/<style([^>]*)>([\s\S]*?)<\/style>/g)];
+  const css = styles.map((m) => m[2]).join('\n');
+  assert.ok(css.trim().length > 0, 'SelectField.astro ships no CSS -- the rules the '
+    + 'tests below look for could not be absent for any other reason');
+  return {
+    frontmatter: strip(split[1]),
+    template: strip(body.replace(/<style[^>]*>[\s\S]*?<\/style>/g, '')),
+    styles,
+    css,
+  };
+}
+
+/** shell/select-field.ts, comments stripped -- the behaviour half of the control. */
+async function fieldScript() {
+  let src;
+  try {
+    src = await readFile(FIELD_TS, 'utf8');
+  } catch (err) {
+    assert.fail(`shell/select-field.ts could not be read (${err.code ?? err.message}) `
+      + '-- it is where every key this control answers to is written, and an absent '
+      + 'file must fail rather than let the keyboard assertions pass over nothing');
+  }
+  const code = strip(src);
+  assert.ok(code.trim().length > 0,
+    'select-field.ts is nothing but comments -- the keyboard checks below would '
+    + 'then be reading prose and passing for it');
+  return { src, code };
+}
+
+/**
+ * A CSS rule body, by a class that may share its selector with others.
+ *
+ * `ruleBody` above demands the class be the WHOLE selector, which is right for a
+ * badge and wrong here: the label and the value store are clipped by ONE rule
+ * naming both, because they are one requirement and two copies of a
+ * visually-hidden block is how one of them silently stops hiding.
+ */
+function ruleFor(css, cls) {
+  const m = css.match(new RegExp(`(^|})([^{}]*\\.${cls}\\b[^{}]*)\\{([^}]*)\\}`, 'm'));
+  assert.ok(m, `SelectField.astro declares no rule matching \`.${cls}\``);
+  return m[3];
 }
 
 /** The declared levels, as `{ id, label, options, tier }`. Never an empty list. */
@@ -532,77 +606,193 @@ test('the switcher offers all three scope levels, each declared exactly once', a
     + `declares: ${ids.join(', ')}`);
 });
 
-test('each level is a native <select>, tagged with the data-scope Task 7 finds it by', async () => {
-  /* WHY A NATIVE SELECT AND NOT THE MOCKUP'S CUSTOM LISTBOX. Keyboard, screen
-     reader and mobile behaviour arrive for free; `disabled` on an <option> is
-     exactly how an area that ships no data should present; and a custom listbox
-     without roving tabindex and arrow-key handling would be a WORSE control than
-     the one it replaces. The styled listbox can come later without changing any
-     of the data flow below.
+test('each level is one SelectField, tagged with the data-scope console-shell finds it by', async () => {
+  /* THE COUNTING ARGUMENT, UNCHANGED THOUGH THE ELEMENT MOVED. The template
+     renders ONE field, inside the FIELDS loop, so the number in the output is the
+     number of FIELDS rows -- three, from the test above -- and each carries
+     data-scope={f.id}, so the three tags are `country`, `city` and `area`. That is
+     what makes a source assertion here imply the output claim.
 
-     THE COUNTING ARGUMENT. The template renders ONE <select>, inside the FIELDS
-     loop, so the number in the output is the number of FIELDS rows -- three, from
-     the test above -- and each carries data-scope={f.id}, so the three tags are
-     `country`, `city` and `area`. That is what makes a source assertion here
-     imply the output claim. */
+     IT USED TO SAY `<select>` AND NOW SAYS `<SelectField>`, because the control is
+     a dropdown of our own drawing rather than the platform's. The <select> did not
+     go away -- SelectField keeps it as the value, which is the next test -- so
+     data-scope still lands on it and console-shell.ts still finds it. */
   const { template } = await switcherSource();
 
-  const selects = [...template.matchAll(/<select\b([^>]*)>/g)];
-  assert.equal(selects.length, 1,
-    `the template writes <select> ${selects.length}x -- it must be written ONCE, `
-    + 'inside the FIELDS loop, or the count in the output stops being the count '
-    + 'of levels and this test no longer implies three selects');
+  const fields = [...template.matchAll(/<SelectField\b([\s\S]*?)>/g)];
+  assert.equal(fields.length, 1,
+    `the template writes <SelectField> ${fields.length}x -- it must be written `
+    + 'ONCE, inside the FIELDS loop, or the count in the output stops being the '
+    + 'count of levels and this test no longer implies three fields');
 
-  assert.match(selects[0][1], /\sdata-scope=\{f\.id\}/,
-    'the <select> carries no data-scope={f.id} -- Task 7 finds the three controls '
-    + 'by that attribute, and one without it is unreachable from the script');
+  assert.match(fields[0][1], /\sdata-scope=\{f\.id\}/,
+    'the field carries no data-scope={f.id} -- console-shell.ts finds the three '
+    + 'controls by that attribute, and one without it is unreachable from script');
 
   const loop = template.indexOf('FIELDS.map(');
-  assert.ok(loop !== -1 && loop < template.indexOf('<select'),
-    'the <select> is not inside a `FIELDS.map(` loop -- outside it there is one '
-    + 'select in the output however many levels are declared');
+  assert.ok(loop !== -1 && loop < template.indexOf('<SelectField'),
+    'the field is not inside a `FIELDS.map(` loop -- outside it there is one '
+    + 'field in the output however many levels are declared');
 
   assert.ok(!/role="(listbox|combobox|option)"/.test(template),
-    'the switcher hand-rolls listbox roles -- the native select already has them, '
-    + 'and a role without roving tabindex and arrow keys is a worse control');
+    'the switcher writes listbox roles of its own -- the control it composes owns '
+    + 'those, and a second set here would be a second dropdown to keep correct');
 });
 
-test('every select announces a text label, and it is visually hidden', async () => {
-  /* A BARE SELECT ANNOUNCES ONLY ITS VALUE. "India" with no name attached is not
+test('the field keeps a real <select> as its value, out of the tab order', async () => {
+  /* THE DECISION THIS WHOLE COMPONENT IS. The popup had to be redrawn -- no
+     stylesheet reaches the platform's -- but the VALUE did not: the <select> stays,
+     holds the answer, carries every option and raises `change`. That is what keeps
+     console-shell.ts reading `select.value` and heat-map-app.ts writing into it
+     while the thing a reader touches is entirely new.
+
+     TWO HALVES, AND NEITHER IS OPTIONAL. Present, so the seam still exists; and
+     out of the tab order AND out of the accessibility tree, or the page would
+     carry TWO controls over one fact and a screen reader would announce the field
+     twice, the second time as something the eye cannot find. */
+  const { template } = await fieldSource();
+
+  const selects = [...template.matchAll(/<select\b([\s\S]*?)>/g)];
+  assert.equal(selects.length, 1,
+    `SelectField writes <select> ${selects.length}x -- exactly one holds the value`);
+  const attrs = selects[0][1];
+
+  assert.match(attrs, /\sdata-select-store\b/,
+    'the <select> carries no data-select-store -- select-field.ts finds the value '
+    + 'it renders by that attribute, and a field without one is never wired');
+  assert.match(attrs, /aria-hidden="true"/,
+    'the <select> is not aria-hidden -- it and the trigger would BOTH be announced, '
+    + 'which is two controls over one fact');
+  assert.match(attrs, /tabindex="-1"/,
+    'the <select> is still in the tab order -- Tab would land on an invisible '
+    + 'control that looks, to anything driving by keyboard, like the real one');
+  assert.match(attrs, /\{\.\.\.store\}/,
+    "the <select> does not receive the caller's attributes -- data-scope would "
+    + 'never reach the element console-shell.ts queries for');
+
+  const options = [...template.matchAll(/<option\b([\s\S]*?)>/g)];
+  assert.equal(options.length, 1,
+    `SelectField writes <option> ${options.length}x -- once, inside the options `
+    + 'loop, or the count in the output stops being the count of options');
+  assert.match(template, /options\.map\(/,
+    'the options are not rendered from the `options` prop -- this component must '
+    + 'not know what it is listing');
+  assert.match(options[0][1], /\sdisabled=\{o\.disabled\}/,
+    'the <option> does not bind disabled={o.disabled} -- an unavailable row would '
+    + 'render selectable, which is the accepted-then-refused defect');
+  assert.match(options[0][1], /\sdata-note=\{o\.note\}/,
+    'the <option> does not carry its note -- the reason a row cannot be chosen '
+    + 'would exist in the props and nowhere in the DOM, and select-field.ts reads '
+    + 'it from the DOM');
+});
+
+test('the rows are BUILT from the options, never rendered beside them', async () => {
+  /* THE COPY THAT IS NOT MADE. A dropdown that renders its own <li> list next to
+     the <option> list has two lists to keep in step, and this repo has thirteen
+     guards that turned out to be comparing a value against a copy of itself. The
+     rows are created from the options at open time instead, so there is nothing to
+     drift -- and `updateScopeSwitcher` rewriting an option's value mid-session is
+     picked up rather than missed.
+
+     ASSERTED FROM BOTH ENDS, because either alone is satisfiable by an accident:
+     the component renders no row, and the script builds them from the select. */
+  const { template } = await fieldSource();
+  const { code } = await fieldScript();
+
+  assert.ok(!/role=["']option["']/.test(template),
+    'SelectField renders rows in its own markup -- they would be a second copy of '
+    + 'the option list, free to disagree with it the moment either moves');
+
+  const list = template.match(/<ul\b([\s\S]*?)>([\s\S]*?)<\/ul>/);
+  assert.ok(list, 'SelectField renders no <ul> for the dropdown to fill');
+  assert.equal(list[2].trim(), '',
+    `the list is rendered with content (${list[2].trim().slice(0, 60)}...) -- it `
+    + 'must be empty, because the script fills it from the <select>');
+  assert.match(list[1], /role="listbox"/, 'the list is not a listbox');
+  assert.match(list[1], /\shidden\b/,
+    'the list is rendered open -- before any script runs it would sit over the '
+    + 'panes below it with nothing able to close it');
+
+  assert.match(code, /store\.options/,
+    'select-field.ts does not read the <select>\'s options -- whatever it is '
+    + 'rendering the rows from, it is not the list that holds the value');
+  assert.match(code, /function buildRows[\s\S]*?document\.createElement\('li'\)/,
+    'the rows are not created in `buildRows` -- this test locates the one place '
+    + 'they are made, and cannot check what it cannot find');
+  /* AND ON EVERY OPEN, not once at mount. A list built once would hand back the
+     key the page was opened at for the rest of the session -- which is exactly the
+     bug this control shipped and had fixed hours before it was redrawn. */
+  assert.match(code, /function openList[\s\S]*?buildRows\(f\)/,
+    'openList does not rebuild the rows -- a list built once at mount goes stale '
+    + 'the first time `updateScopeSwitcher` rewrites an option value');
+});
+
+test('every field announces a text label, and it is visually hidden', async () => {
+  /* A BARE COMBOBOX ANNOUNCES ONLY ITS VALUE. "India" with no name attached is not
      a control anyone can use by ear. The mockup's uppercase caption is a
      decorative span sitting inside the card, so the accessible name is a real
-     <label for>, hidden from the eye and present in the tree -- and BOTH strings
-     come from the one `f.label`, so the two cannot drift apart. */
-  const { frontmatter, template, css } = await switcherSource();
+     <label>, hidden from the eye and present in the tree -- and it is ONE element
+     serving the trigger, the list and the <select> alike, so three names cannot
+     drift into disagreeing about what is being chosen.
+
+     THE STRING STILL COMES FROM `f.label`. The switcher declares it; the field
+     prints it as the caption AND uses it as the accessible name, both from the one
+     `label` prop. */
+  const { frontmatter, template: switcherTemplate } = await switcherSource();
+  const { template, css } = await fieldSource();
 
   for (const f of fieldTable(frontmatter)) {
     assert.ok(f.label.trim().length > 0, `level "${f.id}" declares no label`);
   }
+  assert.match(switcherTemplate, /<SelectField[\s\S]*?\slabel=\{f\.label\}/,
+    'the switcher does not pass f.label to the field -- the caption and the '
+    + 'accessible name would come from somewhere the FIELDS table does not control');
 
   const labels = [...template.matchAll(/<label\b([^>]*)>([\s\S]*?)<\/label>/g)];
   assert.equal(labels.length, 1,
-    `the template writes <label> ${labels.length}x -- exactly one, inside the `
-    + 'FIELDS loop, gives exactly one label per select');
+    `SelectField writes <label> ${labels.length}x -- exactly one gives exactly one `
+    + 'name per field');
 
   const [, labelAttrs, labelText] = labels[0];
-  assert.ok(flat(labelText).includes('{f.label}'),
-    `the label's text is \`${flat(labelText)}\` -- it must be {f.label}, the same `
+  assert.ok(flat(labelText).includes('{label}'),
+    `the label's text is \`${flat(labelText)}\` -- it must be {label}, the same `
     + 'string the visible caption shows, or the two spellings can drift');
 
   const forExpr = labelAttrs.match(/\sfor=(\{[^}]*\}|"[^"]*")/);
-  assert.ok(forExpr, 'the <label> carries no for= -- an unassociated label names '
-    + 'nothing, and the select still announces only its value');
-  const selectAttrs = [...template.matchAll(/<select\b([^>]*)>/g)][0][1];
+  assert.ok(forExpr, 'the <label> carries no for= -- the element that holds the '
+    + 'value would be nameless to anything reading the DOM rather than the tree');
+  const selectAttrs = [...template.matchAll(/<select\b([\s\S]*?)>/g)][0][1];
   const idExpr = selectAttrs.match(/\sid=(\{[^}]*\}|"[^"]*")/);
   assert.ok(idExpr, 'the <select> carries no id= for the label to point at');
   assert.equal(flat(forExpr[1]), flat(idExpr[1]),
     `the label points at ${flat(forExpr[1])} and the select is ${flat(idExpr[1])} -- `
-    + 'two different expressions cannot be relied on to produce one id, and a '
-    + 'for= that misses leaves the select unnamed');
+    + 'two different expressions cannot be relied on to produce one id');
+
+  /* AND THE TRIGGER -- the thing that is actually announced -- IS NAMED BY THE SAME
+     ELEMENT. A <label for> does not name a div or a button, so this is the
+     reference that carries the name onto the control a reader focuses; without it
+     the field is heard as an unlabelled combobox reading out a place name. */
+  const labelIdExpr = labelAttrs.match(/\sid=(\{[^}]*\}|"[^"]*")/);
+  assert.ok(labelIdExpr, 'the <label> carries no id -- nothing can point at it');
+  const trigger = template.match(/<button\b([\s\S]*?)>/);
+  assert.ok(trigger, 'SelectField renders no <button> trigger');
+  assert.match(trigger[1], /aria-labelledby=/,
+    'the trigger has no aria-labelledby -- a <label for> cannot name a button that '
+    + 'is not a form control, so the combobox would be announced with no name');
+  assert.match(template, /<ul[\s\S]*?aria-labelledby=/,
+    'the list has no aria-labelledby -- the popup would be an unnamed listbox');
+  assert.match(trigger[1], /role="combobox"/,
+    'the trigger is not a combobox -- a button that opens a listbox and reports a '
+    + 'value is a combobox, and anything else misdescribes it to a screen reader');
+  assert.match(trigger[1], /aria-expanded="false"/,
+    'the trigger does not declare aria-expanded -- a reader is never told the list '
+    + 'can open, nor whether it is open');
+  assert.match(trigger[1], /aria-controls=/,
+    'the trigger does not name the list it controls');
 
   const cls = labelAttrs.match(/\sclass="([^"]+)"/);
   assert.ok(cls, 'the <label> carries no class -- the rule that hides it cannot be found');
-  const hidden = ruleBody(css, `.${cls[1].trim().split(/\s+/)[0]}`);
+  const hidden = ruleFor(css, cls[1].trim().split(/\s+/)[0]);
   assert.match(hidden, /clip-path|clip:/,
     'the label class does not clip the label out of view -- the founder tuned the '
     + 'card to show the caption, not a second copy of the word beside it');
@@ -610,7 +800,7 @@ test('every select announces a text label, and it is visually hidden', async () 
     'the label is hidden with display:none or visibility:hidden, which takes the '
     + 'accessible name away with the pixels -- clip it instead');
 
-  assert.match(template, /<span[^>]*class="[^"]*scope-key[^"]*"[^>]*aria-hidden="true"/,
+  assert.match(template, /<span[^>]*class="[^"]*field-key[^"]*"[^>]*aria-hidden="true"/,
     'the visible caption is not aria-hidden -- a screen reader would then hear '
     + '"Country" twice, once from the caption and once from the real label');
 });
@@ -659,21 +849,34 @@ test('an area that ships no data is DISABLED, and the REGISTRY decides which', a
     `\`disabled\` is set from \`${assigned[0]}\` -- it must be set from the area's `
     + 'hasData, or an area could be greyed out for a reason the registry never gave');
 
-  const option = template.match(/<option\b([^>]*)>/);
-  assert.ok(option, 'the template renders no <option>');
-  assert.match(option[1], /\sdisabled=\{o\.disabled\}/,
-    'the <option> does not bind disabled={o.disabled} -- the derivation above '
-    + 'would then be computed and thrown away, and every option would render '
-    + 'selectable');
+  assert.match(template, /<SelectField[\s\S]*?\soptions=\{f\.options\}/,
+    'the switcher does not hand its options to the field -- the derivation above '
+    + 'would be computed and thrown away, and the dropdown would list something '
+    + 'else. (The <option> that binds disabled={o.disabled} lives in '
+    + 'SelectField.astro now, and is checked by its own test above.)');
 
-  /* AND THE REASON IS VISIBLE. A greyed row with no explanation reads as a bug. */
+  /* AND THE REASON IS CARRIED, on the option rather than glued onto its name.
+     Concatenated into the text it could only ever print as one run of words;
+     separate, the row shows a name and a reason and nothing downstream has to
+     guess where the name stopped. */
   const noteDecl = frontmatter.match(/const\s+NO_DATA_NOTE\s*=\s*'([^']*)'/);
   assert.ok(noteDecl, 'no NO_DATA_NOTE is declared -- a disabled option with no '
     + 'stated reason is mysterious rather than honest');
   assert.ok(noteDecl[1].trim().length > 0, 'NO_DATA_NOTE is the empty string');
-  assert.ok(flat(frontmatter).includes('NO_DATA_NOTE}'),
-    'NO_DATA_NOTE is declared and never interpolated into the option text -- the '
-    + 'reason would exist in the source and nowhere in the output');
+  const noteAssigned = [...frontmatter.matchAll(/note:\s*([^,\n}]+)/g)].map((m) => m[1].trim());
+  assert.equal(noteAssigned.length, 1,
+    `the frontmatter assigns \`note\` ${noteAssigned.length}x `
+    + `(${noteAssigned.join(' | ') || 'never'}) -- exactly one assignment, beside `
+    + 'the `disabled` it explains');
+  assert.match(noteAssigned[0], /NO_DATA_NOTE/,
+    `the option's note is \`${noteAssigned[0]}\` -- it must be NO_DATA_NOTE, or the `
+    + 'reason exists in the source and nowhere in the output');
+  /* AND ONLY WHERE IT IS TRUE. A note on an area that ships would print an
+     explanation for a refusal that is not happening. */
+  assert.match(noteAssigned[0], /hasData/,
+    `the note is set from \`${noteAssigned[0]}\` -- it must be conditioned on the `
+    + "same hasData `disabled` is, or a shipping area carries a reason it isn't "
+    + 'being refused for');
 });
 
 test('the tier badge is the RESOLVED tier, and the three tiers take three classes', async () => {
@@ -790,13 +993,181 @@ test('the switcher scopes its styles rather than going global', async () => {
   }
 });
 
-test('the switcher is usable by keyboard and honours reduced motion', async () => {
-  const { css } = await switcherSource();
+test('the field is usable by keyboard and honours reduced motion', async () => {
+  /* FOLLOWED THE CARD. The focus ring and the transition both moved into
+     SelectField with the card they belong to; the switcher's own block is now
+     three layout rules and a badge, and asserting on it would be asserting about
+     nothing. */
+  const { css } = await fieldSource();
   assert.match(css, /:focus-visible|:focus-within/,
-    'the switcher has no focus rule -- a select whose focus cannot be seen is '
+    'the field has no focus rule -- a control whose focus cannot be seen is '
     + 'unusable by keyboard, and this is the control the whole console is scoped by');
   assert.match(css, /@media\s*\(prefers-reduced-motion\s*:\s*reduce\)/,
-    'the switcher transitions its cards with no prefers-reduced-motion escape');
+    'the field transitions its card with no prefers-reduced-motion escape');
+});
+
+test('the dropdown answers every key the native select gave away', async () => {
+  /* THE BILL FOR REDRAWING THE POPUP. A <select> arrives with arrow keys,
+     Home/End, type-ahead, Escape and a focus contract, and NONE of it survives
+     replacing the popup -- it all has to be written, and it is the half that gets
+     left for later because it is the half a screenshot cannot show. A dropdown a
+     keyboard cannot drive is a WORSE control than the OS one it replaced, however
+     good it looks, so the keys are enumerated here.
+
+     THIS IS A SOURCE CHECK AND IT KNOWS IT. It proves each key is HANDLED, not
+     that it does the right thing -- tests/e2e/heat-map-routing.spec.ts drives them
+     in a browser against the map. What it catches is the deletion: a refactor that
+     drops the Home/End arm goes red here rather than being noticed by whoever next
+     tries to reach the bottom of a long list.
+
+     THE TWO ARMS ARE READ SEPARATELY, and the first version of this test did not
+     do that. It asked whether the file MENTIONED each key -- and deleting Home and
+     End from the open list left them in the closed branch, so the guard stayed
+     green over a dropdown you could no longer reach the end of. A control has two
+     states and the keys mean different things in each; asking one question about
+     both was asking about neither. */
+  const { code } = await fieldScript();
+
+  const open = code.match(/switch\s*\(e\.key\)\s*\{([\s\S]*?)default:/);
+  assert.ok(open, 'select-field.ts has no `switch (e.key)` for the OPEN list -- '
+    + 'this test locates the open-state keys there, and cannot check what it '
+    + 'cannot find');
+  const closed = code.match(/on\(trigger,\s*'keydown'[\s\S]*?if\s*\(!isOpen\(f\)\)\s*\{([\s\S]*?)\n      \}/);
+  assert.ok(closed, 'select-field.ts has no `if (!isOpen(f))` arm in the trigger\'s '
+    + 'keydown -- the closed-state keys cannot be located');
+
+  /* OPEN: every key that moves, commits or cancels. */
+  for (const key of ['ArrowDown', 'ArrowUp', 'Home', 'End', 'Enter', 'Escape', 'Tab']) {
+    assert.ok(open[1].includes(`case '${key}':`),
+      `${key} has no arm while the list is OPEN -- the native control answered it `
+      + 'and this one has to, or the reader is worse off than before the redraw');
+  }
+  /* CLOSED: every key that has to open it. A dropdown that only opens on click is
+     a dropdown a keyboard cannot reach at all. */
+  for (const key of ['ArrowDown', 'ArrowUp', 'Enter', 'Home', 'End']) {
+    assert.ok(closed[1].includes(`'${key}'`),
+      `${key} does not open the list from the CLOSED state -- there is no keyboard `
+      + 'route into the control');
+  }
+
+  assert.match(code, /function typeAhead/,
+    'there is no type-ahead -- it is how anyone reaches the eleventh of thirty '
+    + 'rows without pressing Down eleven times, and the first thing a hand-rolled '
+    + 'listbox drops');
+  /* AND FROM BOTH STATES. A native select answers a letter whether its popup is
+     showing or not; type-ahead wired only into the open list means the reader has
+     to open the thing first to be allowed to type at it. */
+  assert.ok(closed[1].includes('typeAhead('),
+    'typing does nothing while the list is CLOSED -- the reader has to open the '
+    + 'list before a letter counts, which the control it replaced did not ask');
+  const fallthrough = code.split('default:')[1] ?? '';
+  assert.ok(fallthrough.includes('typeAhead('),
+    'the OPEN list has no type-ahead -- every letter that is not a named key would '
+    + 'fall through and do nothing at all');
+  assert.match(code, /aria-activedescendant/,
+    'nothing sets aria-activedescendant -- the active row would move on screen and '
+    + 'be announced to nobody, which is a listbox a screen reader cannot follow');
+  assert.match(code, /trigger\.focus\(\)/,
+    'focus is never returned to the trigger -- closing the list would drop the '
+    + 'reader at the top of the document');
+
+  /* A DISABLED ROW IS REFUSED AT THE COMMIT, which is the only place it can be
+     refused while still being arrowable and announced. Skipping it in the arrow
+     keys instead would leave Dubai -- where every row is disabled -- a list nobody
+     can move through and a set of reasons nobody ever hears. */
+  assert.match(code, /function commit[\s\S]*?aria-disabled[\s\S]*?return false/,
+    'commit does not refuse an aria-disabled row -- an unavailable area could be '
+    + 'chosen by keyboard, which is the accepted-then-quietly-ignored defect');
+});
+
+test('every class the script creates is reachable by the stylesheet', async () => {
+  /* THE SCOPED-STYLE TRAP, and it is silent. Astro scopes a component's CSS by
+     stamping its markup with a hash attribute and rewriting `.field-option` to
+     `.field-option[data-astro-cid-…]`. The rows are created in script, so they
+     never carry that attribute -- and a plain rule for them matches NOTHING. The
+     list opens as a stack of unstyled text and no build step complains.
+
+     :global() is the escape, and it has to be written per class, so this test
+     reads the classes the script actually creates rather than a list kept beside
+     them. A new row element with a new class fails here the day it is added. */
+  const { css } = await fieldSource();
+  const { code } = await fieldScript();
+
+  const created = [...new Set(
+    [...code.matchAll(/\.className\s*=\s*'([^']+)'/g)].flatMap((m) => m[1].split(/\s+/)))];
+  assert.ok(created.length > 0,
+    'no script-created class was found in select-field.ts -- either the rows stopped '
+    + 'being built there, or the assignment is spelled some way this test cannot '
+    + 'see, and it is now checking nothing');
+
+  for (const cls of created) {
+    assert.ok(css.includes(`:global(.${cls}`),
+      `.${cls} is created in script and styled without :global() -- Astro's scoping `
+      + 'hash never reaches a node Astro did not render, so that rule matches '
+      + 'nothing and the dropdown opens unstyled');
+  }
+
+  /* AND THE TWO STATE CLASSES the script toggles rather than assigns, which the
+     scan above cannot see: they are `classList` calls, and they are what tells the
+     active row and the chosen one apart. */
+  for (const state of ['is-active', 'is-selected']) {
+    assert.ok(code.includes(`'${state}'`),
+      `select-field.ts never sets \`${state}\` -- the row state it stands for has `
+      + 'no way to reach the stylesheet');
+    assert.ok(css.includes(`.${state}`),
+      `\`${state}\` is set in script and styled nowhere -- the row it marks looks `
+      + 'exactly like the rows it is meant to be told apart from');
+  }
+});
+
+test('the seam is still a <select>, read and written where it always was', async () => {
+  /* THE ONE THING THIS REDRAW WAS NOT ALLOWED TO BREAK. Two modules outside the
+     component hold this element: console-shell.ts reads `select.value` off
+     `select[data-scope]` to decide between an in-place swap and a navigation, and
+     heat-map-app.ts writes back into it on every ward change. The control a reader
+     touches is entirely new; what those two hold is not.
+
+     AND THE WRITE HAS TO ANNOUNCE ITSELF. Assigning `select.value` raises no
+     event, so the words on the trigger follow only because `updateScopeSwitcher`
+     says so. Without that line the value moves and the label does not: the console
+     names one ward in its own scope control and another everywhere else, silently,
+     which is the failure this file's neighbours were written against. */
+  const shell = await readFile(new URL(
+    '../../src/scripts/climate-engine/shell/console-shell.ts', import.meta.url), 'utf8');
+  const app = await readFile(new URL(
+    '../../src/scripts/climate-engine/heat-map-app.ts', import.meta.url), 'utf8');
+
+  assert.match(shell, /querySelectorAll<HTMLSelectElement>\('select\[data-scope\]'\)/,
+    'console-shell.ts no longer finds the scope controls as `select[data-scope]` -- '
+    + 'if the seam moved, both sides had to move together');
+  assert.match(shell, /select\.value/,
+    'console-shell.ts no longer reads `select.value` -- it is deciding where to go '
+    + 'from something else');
+  assert.match(shell, /mountSelectFields\(/,
+    'console-shell.ts does not mount the dropdowns -- the triggers would be '
+    + 'buttons with no behaviour, which is a control that does nothing');
+
+  assert.match(app, /select\[data-scope\]/,
+    'heat-map-app.ts no longer writes back into the scope selects -- after an '
+    + 'in-place ward switch the switcher would name the ward the page was opened at');
+  /* THE DISPATCH, not the import. The first version of this asked whether the file
+     mentioned SELECT_SYNC_EVENT anywhere -- and deleting the dispatch left the
+     `import { SELECT_SYNC_EVENT }` line behind, so the guard went on passing over
+     a switcher whose visible label had stopped following the ward. A name in an
+     import is not a thing being done. */
+  assert.match(app, /function updateScopeSwitcher\(\)[\s\S]*?dispatchEvent\(new Event\(SELECT_SYNC_EVENT\)\)/,
+    'updateScopeSwitcher moves the value and tells nothing -- `select.value = x` '
+    + 'raises no event, so the trigger would go on showing the previous ward while '
+    + 'the map, the URL and the breadcrumb had all moved');
+
+  const { code } = await fieldScript();
+  assert.match(code, /SELECT_SYNC_EVENT[\s\S]*?paintValue/,
+    'select-field.ts declares the sync event and never repaints on it -- the '
+    + 'writer would be announcing a change nobody listens for');
+  assert.ok(!/'change'[^\n]*dispatchEvent/.test(app) && !app.includes("new Event('change'"),
+    'heat-map-app.ts raises a synthetic `change` on a scope select -- console-shell '
+    + 'answers that one by navigating, and would be asked to travel to where the '
+    + 'page already is');
 });
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -1874,10 +2245,22 @@ test('every token the rail paints with resolves on the compare route', async () 
   assert.ok(railCss.trim().length > 0, 'the rail has no CSS -- nothing to check');
   assert.ok(benchCss.trim().length > 0, 'the bench has no CSS -- nothing to check');
 
-  /* Only uses with NO fallback. `var(--rail, 56px)` survives an undeclared token
+  /* Only uses with NO fallback. `var(--rail, 64px)` survives an undeclared token
      by design, and demanding a declaration for it would be a false positive. */
-  const needed = [...new Set(
+  const used = [...new Set(
     [...railCss.matchAll(/var\(\s*(--[a-z0-9-]+)\s*\)/g)].map((m) => m[1]))].sort();
+
+  /* MINUS THE ONES THE RAIL DECLARES ON ITSELF. What this test is really asking is
+     which tokens the rail takes FROM THE ROUTE, and a property the rail sets on
+     `.rail` and reads back on a descendant is not one of them -- it inherits, and
+     no route can be missing it. --rail-w is the case: it resolves the width
+     fallback once so the accent bar cannot drift from the column. Without this
+     subtraction the guard would demand every route re-declare the rail's own
+     internals, which is how a guard starts getting weakened to shut it up. */
+  const ownTokens = new Set(
+    [...railCss.matchAll(/(--[a-z0-9-]+)\s*:/g)].map((m) => m[1]));
+  const needed = used.filter((t) => !ownTokens.has(t));
+
   assert.ok(needed.length > 0,
     'no fallback-less var() was found in the rail -- this loop would assert '
     + 'nothing, and the rail is painted entirely in var()');
@@ -1900,6 +2283,42 @@ test('every token the rail paints with resolves on the compare route', async () 
   assert.match(benchCss, /\.rail-slot\s*\{[^}]*--rail-ground:/,
     'the rail wrapper declares no --rail-ground -- the rail would have no '
     + 'background on this route');
+});
+
+test('both routes agree on how wide the rail is', async () => {
+  /* THE WIDTH IS WRITTEN TWICE AND CANNOT BE WRITTEN ONCE. HeatMapStage.astro
+     declares no --rail, so Explore takes IconRail's fallback; PairedBench.astro
+     must declare one because it pads the bench past the rail with
+     `calc(var(--rail) + ...)`, and a fallback it never names is a value it cannot
+     read. Two numbers, no shared stylesheet between the routes to hold one.
+
+     LEFT UNGUARDED THEY DRIFT, and this is not hypothetical: widening the column
+     found a THIRD copy inside the rail itself -- the active-pane accent bar was
+     offset by `var(--rail, 56px)` while the column had moved on. The bar is
+     positioned from the rail's own width, so the stale copy floated it half the
+     difference off the edge it is meant to sit flush against. That one is now
+     resolved once into --rail-w and inherited; these two remain, so they are
+     compared. */
+  const { css: railCss } = await railSource();
+  const { css: benchCss } = await benchSource();
+
+  const fallback = railCss.match(/--rail-w:\s*var\(\s*--rail\s*,\s*(\d+)px\s*\)/);
+  assert.ok(fallback,
+    'IconRail.astro no longer resolves --rail through a single --rail-w fallback. '
+    + 'That fallback is the width Explore actually renders, because HeatMapStage '
+    + 'declares no --rail -- if it has moved or been split again, this guard is '
+    + 'reading nothing and the routes can differ silently');
+
+  const declared = benchCss.match(/--rail:\s*(\d+)px/);
+  assert.ok(declared,
+    'PairedBench.astro declares no --rail. Its own padding reads var(--rail) with '
+    + 'no fallback, so the bench would sit under the rail rather than beside it');
+
+  assert.equal(declared[1], fallback[1],
+    `the compare route renders a ${declared[1]}px rail and the explore route a `
+    + `${fallback[1]}px one. The rail is the same component on both pages, so a `
+    + 'reader crossing between them watches the navigation change width -- and on '
+    + 'compare the bench is padded past the wrong number, so it overlaps or gaps');
 });
 
 test('the pane switcher is portable and the scope half is not', async () => {

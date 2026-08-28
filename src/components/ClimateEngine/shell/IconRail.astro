@@ -3,10 +3,17 @@
  * THE ICON RAIL — the console's only navigation.
  *
  * OBOS is an ops console rather than a map with panels floating over it, and this
- * 56px column is the whole of its navigation. Explore and Compare used to be tabs
- * in the stage header; they are now two of the five places the rail can take you.
- * Everything that used to be a second navigation is gone, because one navigation
- * is easier to learn than two.
+ * narrow column is the whole of its navigation. Explore and Compare used to be
+ * tabs in the stage header; they are now two of the five places the rail can take
+ * you. Everything that used to be a second navigation is gone, because one
+ * navigation is easier to learn than two.
+ *
+ * ITS WIDTH IS WRITTEN TWICE AND A GUARD SAYS SO. `var(--rail, N)` below is what
+ * Explore gets, because HeatMapStage.astro declares no `--rail`; PairedBench.astro
+ * declares one because it needs the VALUE, not just the column — the bench is
+ * padded past the rail by `calc(var(--rail) + …)` and cannot read a fallback it
+ * never names. The two numbers must agree or the routes wear different rails, so
+ * a unit test compares them rather than trusting whoever edits one to edit both.
  *
  * THE RAIL CARRIES THE MODE, AND THE VERBS ARE MIXED ON PURPOSE:
  *
@@ -183,9 +190,19 @@ const items = SECTIONS.map((s) => {
 <nav class="rail" aria-label="OBOS sections">
   {/* THE ONE BRAND ON THE PAGE, and the way out of the console. `aria-label`
       rather than `title`: title is not a reliable accessible name — ignored by
-      some screen readers, never surfaced on touch — and the two letters are a
-      mark, not a sentence anyone can act on. */}
-  <a class="mark" href="/" aria-label="Delta Climate Research home"><span aria-hidden="true">OB</span></a>
+      some screen readers, never surfaced on touch — and the logo is a mark, not
+      a sentence anyone can act on. The <img> carries alt="" because the anchor
+      is already named; a described image inside a labelled link is read twice.
+
+      THE MARK NO LONGER SITS ON A TILE. The "OB" it replaces was ink on a cyan
+      gradient, which is what two letters need to read as a mark. The logo is
+      itself cyan on transparent, so the same tile would have printed cyan on
+      cyan — the plate is dropped and the logo meets the rail's ground directly.
+      `eager`, not lazy: it is the topmost thing in the viewport on both routes,
+      and deferring it only guarantees a visible pop-in. */}
+  <a class="mark" href="/" aria-label="Delta Climate Research home">
+    <img src="/logo-mark-96.webp" alt="" width="34" height="34" loading="eager" decoding="async" />
+  </a>
 
   {items.map((s) => s.href === null ? (
     <button
@@ -226,31 +243,40 @@ const items = SECTIONS.map((s) => {
      HeatMapStage.astro, which is where the tokens live. */
 
   .rail {
-    inline-size: var(--rail, 56px);
+    /* THE FALLBACK RESOLVED ONCE, then inherited by everything that needs the
+       number. It used to be spelled `var(--rail, 56px)` in two rules, and the
+       accent bar below is derived from it — so widening the column while leaving
+       the bar's copy behind would have floated the bar off the rail's edge by
+       half the difference, on the one route that declares no `--rail`. */
+    --rail-w: var(--rail, 58px);
+    inline-size: var(--rail-w);
     background: var(--rail-ground);
     border-right: 1px solid var(--line);
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 4px;
+    gap: 10px;
     padding: 12px 0;
   }
 
   .mark {
-    inline-size: 30px;
-    block-size: 30px;
+    inline-size: 34px;
+    block-size: 34px;
     flex: none;
-    margin-bottom: 14px;
-    border-radius: 7px;
-    background: linear-gradient(145deg, var(--cyan), #2b7d88);
+    margin-bottom: 18px;
     display: grid;
     place-items: center;
-    font-family: var(--mono);
-    font-size: .72rem;
-    font-weight: 700;
-    color: #04191b;
     text-decoration: none;
     transition: transform .18s;
+  }
+
+  /* Sized in CSS as well as in the attributes. The width/height pair reserves the
+     box before the file lands, which is what stops the rail jumping; these rules
+     are what survive a user stylesheet or a zoom that overrides them. */
+  .mark img {
+    inline-size: 100%;
+    block-size: 100%;
+    object-fit: contain;
   }
 
   .mark:hover { transform: scale(1.06); }
@@ -314,7 +340,7 @@ const items = SECTIONS.map((s) => {
   .rail-btn[aria-pressed="true"]::before {
     content: "";
     position: absolute;
-    left: calc(50% - var(--rail, 56px) / 2);
+    left: calc(50% - var(--rail-w) / 2);
     top: 9px;
     bottom: 9px;
     inline-size: 2px;

@@ -259,7 +259,7 @@ import { DEFAULT_AREA_PATH } from '../../../scripts/climate-engine/scope/paths.t
        --rail is read three times — the rail's own inline-size, this padding and
        the mobile sheet's offset — and is written once so the three cannot drift.
        --sidebar is the console column beside it. */
-    --rail:56px; --sidebar:300px; padding-inline-start:calc(var(--rail) + clamp(1rem,4vw,4rem));}
+    --rail:58px; --sidebar:300px; padding-inline-start:calc(var(--rail) + clamp(1rem,4vw,4rem));}
   .heat-compare *{box-sizing:border-box}.heat-compare a{color:inherit}
   /* ── THE CONSOLE AROUND THE BENCH ───────────────────────────────────────────
      The rail is FIXED and full-height; the sidebar is a STICKY column beside a
@@ -283,7 +283,7 @@ import { DEFAULT_AREA_PATH } from '../../../scripts/climate-engine/scope/paths.t
        --paper POINTS AT this file's --ink rather than restating its value, so the
        colour has one spelling and the bench's own rules keep the --paper they were
        written against. */
-    --rail-ground:oklch(8% .014 205);
+    --rail-ground:#1D1D1B;
     --paper:var(--ink);
     --mono:'Noplato Mono',ui-monospace,monospace;
   }
