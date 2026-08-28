@@ -89,3 +89,30 @@ function formatterFor(currency: string): Intl.NumberFormat {
 export function fmtMoney(amount: number, costs: Costs): string {
   return formatterFor(costs.currency).format(amount);
 }
+
+/**
+ * The currency's own mark, for PROSE that names a currency without quoting a
+ * figure — "cost in X" rather than "X 1.11Cr".
+ *
+ * WHY THIS EXISTS AT ALL. The area pages' meta description ends "see cooling in
+ * degrees and cost in <mark> on a live 3D map", and that mark was typed into the
+ * template. It is the same defect the header describes one layer up and the
+ * currency tripwire in tests/unit/obos-scope.test.mjs is written against — the
+ * country half of the scope knew the currency perfectly well — but it had been
+ * sitting in an .astro page, outside the tree that guard scans, so nothing saw it.
+ * The day Dubai ships artefacts its page would have advertised Kolkata's rupee to
+ * a Gulf reader, in the one sentence a search engine quotes.
+ *
+ * FROM `formatToParts`, NEVER FROM A TABLE. It is the SAME formatter `fmtMoney`
+ * prints with, so the mark in this sentence and the mark on the figure beside it
+ * cannot disagree — which a `{ INR: 'x', AED: 'y' }` lookup would eventually let
+ * them do. What it yields is what that convention actually writes: a symbol where
+ * one exists, and the bare code where one does not.
+ */
+export function currencyMark(costs: Costs): string {
+  return formatterFor(costs.currency)
+    .formatToParts(0)
+    .filter((part) => part.type === 'currency')
+    .map((part) => part.value)
+    .join('');
+}

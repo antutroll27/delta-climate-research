@@ -238,6 +238,90 @@ test('the breadcrumb follows the ward', async ({ page }) => {
   await expect(page.locator('.crumb span')).toHaveText(['India', 'Kolkata']);
 });
 
+test('the document title, canonical and social tags follow the ward', async ({ page }) => {
+  /* NOTHING IN src/ WROTE `document.title`. Meanwhile `updateAddressBar` rewrites
+     the URL on every switch — so `replaceState` paired the NEW url with the OLD
+     title, and a bookmark taken after a switch was filed under a ward that is not
+     on screen. The canonical link, the one statement in this document addressed to
+     a crawler rather than a reader, went on pointing at a different page than the
+     one rendered.
+
+     ASSERTED ON THE LIVE DOCUMENT, not on the built HTML: the whole defect is that
+     the built HTML is right and stops being right the moment you switch. So the
+     "before" is read first, from the same page, and every assertion below is that
+     the value MOVED — a test that only checked the "after" would pass against a
+     server render of Baruipur and never exercise the writer at all. */
+  await page.goto(BALLYGUNGE);
+  await expect(page.locator('#lst')).not.toContainText('—', { timeout: 20_000 });
+
+  const read = () => page.evaluate(() => ({
+    title: document.title,
+    canonical: document.querySelector('link[rel="canonical"]')?.getAttribute('href') ?? null,
+    ogUrl: document.querySelector('meta[property="og:url"]')?.getAttribute('content') ?? null,
+    ogTitle: document.querySelector('meta[property="og:title"]')?.getAttribute('content') ?? null,
+    description: document.querySelector('meta[name="description"]')?.getAttribute('content') ?? null,
+    twitterTitle: document.querySelector('meta[name="twitter:title"]')?.getAttribute('content') ?? null,
+  }));
+
+  const before = await read();
+  /* Every tag this test reads must EXIST on the page it loaded, or the assertions
+     below would be comparing two nulls and passing for it. */
+  for (const [name, value] of Object.entries(before)) {
+    expect(value, `the page renders no ${name}, so this test would assert nothing `
+      + 'about it — Base.astro has stopped emitting it, or the selector has moved')
+      .not.toBeNull();
+    /* Case-insensitive: the titles carry "Ballygunge" and the URLs carry the
+       lowercase slug, and both are statements of the same area. */
+    expect(value, `${name} does not name the ward the page was opened at, so it is `
+      + 'not a projection of the area and does not belong in this test')
+      .toMatch(/ballygunge/i);
+  }
+
+  await page.locator('select[data-scope="area"]').selectOption('in/kolkata/baruipur');
+  await expect(page.locator('#pname')).toHaveText('Baruipur', { timeout: 20_000 });
+  const after = await read();
+
+  expect(after.title, 'the tab and any bookmark taken now are labelled with a ward '
+    + 'that is not on screen — and `replaceState` has already moved the URL to the '
+    + 'one that is, so the pair is internally inconsistent').toContain('Baruipur');
+  expect(after.canonical, 'the canonical link points at a different page than the '
+    + 'one rendered').toContain('/heat-map/in/kolkata/baruipur/');
+  expect(after.ogUrl).toContain('/heat-map/in/kolkata/baruipur/');
+  expect(after.ogTitle).toContain('Baruipur');
+  expect(after.twitterTitle).toContain('Baruipur');
+  expect(after.description).toContain('Baruipur');
+
+  /* AND NONE OF THEM STILL NAMES THE OLD WARD, which a `toContain` on the new name
+     alone would not catch: a writer that appended rather than replaced would
+     satisfy every assertion above. */
+  for (const [name, value] of Object.entries(after)) {
+    expect(value, `${name} still mentions Ballygunge`).not.toMatch(/ballygunge/i);
+  }
+
+  /* THE ORIGIN THE SERVER RENDERED IS KEPT. These are absolute against
+     `Astro.site`, so rebuilding them from `location.origin` would silently rewrite
+     production URLs to whatever host the page is being served from.
+
+     COMPARED AGAINST THE RAW HTML, NOT AGAINST `before`. The instrument runs this
+     same writer once on its FIRST ward load, so by the time the document is
+     interactive the canonical in the DOM has already been through it — and a
+     "before" taken from the live page would be a copy of the value under test,
+     which is how a guard ends up passing for the bug it was written against. This
+     one was: the check read identical rewritten origins and went green until the
+     raw response was fetched instead. */
+  const shipped = await page.request.get(BALLYGUNGE).then((r) => r.text());
+  const shippedCanonical = shipped.match(/<link rel="canonical" href="([^"]+)"/)?.[1];
+  expect(shippedCanonical, 'the prerendered HTML carries no canonical link, so '
+    + 'there is no server statement left to compare the live one against and this '
+    + 'assertion would be checking nothing').toBeTruthy();
+
+  expect(new URL(after.canonical ?? '').origin,
+    'the canonical URL has been rebuilt against the host the page is served from '
+    + 'rather than having its path swapped, so a production page would publish a '
+    + 'canonical pointing at wherever it was last previewed')
+    .toBe(new URL(shippedCanonical ?? '').origin);
+});
+
 test('no rail section is a link to the page it is already on', async ({ page }) => {
   /* The defect this closes, in both of its historical forms: the Explore tab
      carried aria-current="page" while its href pointed elsewhere (a lie to a

@@ -47,6 +47,7 @@ import { nearestImage } from './streetview/nearest-image';
 import { OPEN_AREA_EVENT, type OpenAreaDetail } from './shell/console-shell.ts';
 import { isLayerId, type LayerId } from './scope/layers.ts';
 import { resolve, requireCosts } from './scope/resolve.ts';
+import { areaPageTitle, areaPageDescription } from './scope/page-meta.ts';
 import { fmtMoney } from './money.ts';
 import { areaPath, paths, cityPaths } from './scope/paths.ts';
 import { areaRefusal } from './scope/reachability.ts';
@@ -1837,6 +1838,7 @@ export function mountHeatMap(): () => void {
     updateStageArea();
     updateScopeSwitcher();
     updateCrumb();
+    updateDocumentMeta();
   }
 
   /* The card's primary action used to be a <button> with no handler anywhere in
@@ -1924,6 +1926,74 @@ export function mountHeatMap(): () => void {
   function updateCrumb() {
     const cell = el('crumbArea');
     if (cell) cell.textContent = resolve(state.ward).area.name;
+  }
+
+  /**
+   * EVERY HEAD TAG THAT RESTATES THE AREA, and which of the three values it carries.
+   *
+   * A LIST RATHER THAN SEVEN ASSIGNMENTS, because the set is Base.astro's to decide
+   * and it grows: the layout already prints the title three times and the canonical
+   * URL twice, and the next social card added there would be one more stale
+   * statement nobody thought to enrol. The guard in
+   * tests/unit/heat-map-console-coherence.test.mjs reads Base.astro for every tag
+   * whose value is `{title}`, `{description}` or `{canonical}` and fails if this
+   * list does not cover it — so the enrolment is checked against the layout rather
+   * than against someone's memory of it.
+   *
+   * `document.title` is not in here because it is a property rather than an
+   * attribute; it is written beside the loop, from the same string.
+   */
+  const WARD_META: ReadonlyArray<{ sel: string; attr: string; of: 'title' | 'description' | 'url' }> = [
+    { sel: 'meta[name="description"]', attr: 'content', of: 'description' },
+    { sel: 'link[rel="canonical"]', attr: 'href', of: 'url' },
+    { sel: 'meta[property="og:title"]', attr: 'content', of: 'title' },
+    { sel: 'meta[property="og:description"]', attr: 'content', of: 'description' },
+    { sel: 'meta[property="og:url"]', attr: 'content', of: 'url' },
+    { sel: 'meta[name="twitter:title"]', attr: 'content', of: 'title' },
+    { sel: 'meta[name="twitter:description"]', attr: 'content', of: 'description' },
+  ];
+
+  /**
+   * Keep what the DOCUMENT calls itself naming the area that is actually open.
+   *
+   * NOTHING IN src/ WROTE `document.title` BEFORE THIS. Meanwhile `updateAddressBar`
+   * rewrites the URL on every switch — so `replaceState` was pairing the NEW url
+   * with the OLD title, and a bookmark taken after a switch was filed under a ward
+   * that is not on screen. The tab said Ballygunge over Baruipur's buildings, and
+   * the canonical link — the one statement in this document addressed to a crawler
+   * rather than a reader — pointed at a different page than the one rendered.
+   *
+   * THE TITLE AND DESCRIPTION COME FROM scope/page-meta.ts, which is also what the
+   * route renders at build time. Re-spelling them here would put two writers on one
+   * sentence, each correct on its own terms, and only a reader who had switched
+   * ward would ever see them disagree.
+   *
+   * THE URL IS RESOLVED AGAINST THE TAG'S OWN VALUE, never rebuilt from
+   * `location.origin`. `Astro.site` renders these absolute against the production
+   * host, and a preview or a local build served from somewhere else must keep
+   * saying what the server said — swapping only the path is what preserves that.
+   *
+   * A MISSING TAG IS SKIPPED RATHER THAN CREATED. `link[rel=canonical]` is absent
+   * on a `noindex` page by design, and an in-place switch can only ever land on an
+   * area that ships data — `tabKind` refuses the rest — so a tag that is not here
+   * is one this document is deliberately without.
+   */
+  function updateDocumentMeta() {
+    const scope = resolve(state.ward);
+    const title = areaPageTitle(scope);
+    const description = areaPageDescription(scope);
+    const path = areaPath(state.ward);
+    document.title = title;
+    for (const { sel, attr, of } of WARD_META) {
+      const node = document.head.querySelector(sel);
+      if (!node) continue;
+      if (of === 'url') {
+        const was = node.getAttribute(attr);
+        if (was) node.setAttribute(attr, new URL(path, was).toString());
+        continue;
+      }
+      node.setAttribute(attr, of === 'title' ? title : description);
+    }
   }
 
   /**

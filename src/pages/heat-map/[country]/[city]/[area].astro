@@ -3,6 +3,7 @@ import Base from '../../../../layouts/Base.astro';
 import HeatMapStage from '../../../../components/ClimateEngine/HeatMapStage.astro';
 import { AREA_KEYS, splitKey, type AreaKey } from '../../../../scripts/climate-engine/scope/registry.ts';
 import { resolve } from '../../../../scripts/climate-engine/scope/resolve.ts';
+import { areaPageTitle, areaPageDescription } from '../../../../scripts/climate-engine/scope/page-meta.ts';
 
 /**
  * ONE PAGE PER AREA — `/heat-map/in/kolkata/ballygunge/`.
@@ -48,13 +49,15 @@ const scope = resolve(key);
    ship Dubai's artefacts and the page becomes indexable in both places at once. */
 const indexable = scope.area.hasData;
 
-const title = `${scope.area.name} Urban Heat Explorer — ${scope.city.name} — Delta Climate Research`;
-const description = scope.area.hasData
-  ? `Interactive urban-heat-island simulator for ${scope.area.name}, ${scope.city.name} `
-    + `(${scope.area.descriptor}) — test green interventions and see cooling in °C and `
-    + 'cost in ₹ on a live 3D map. Modelled scenario, screening-grade.'
-  : `${scope.area.name}, ${scope.city.name} is registered in the OBOS urban-heat twin at `
-    + `"${scope.tier}" confidence. No measured heat artefacts ship for it yet.`;
+/* SPELLED IN scope/page-meta.ts, NOT HERE, and the reason is the same one the
+   route change was made for. Switching ward in place does not reload this
+   document, so the instrument rewrites the title and description in the browser —
+   otherwise `replaceState` pairs the new URL with the old title and a bookmark
+   taken after a switch is labelled with a ward that is not on screen. Two writers
+   for one sentence; written out in both places they would agree today and drift
+   silently after, because each would be right on its own terms. */
+const title = areaPageTitle(scope);
+const description = areaPageDescription(scope);
 ---
 <Base title={title} description={description} noindex={!indexable}>
   <HeatMapStage scope={scope} />

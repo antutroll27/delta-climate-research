@@ -12,7 +12,7 @@ import { paths, cityPaths } from '../../src/scripts/climate-engine/scope/paths.t
 import { resolve, requireCosts } from '../../src/scripts/climate-engine/scope/resolve.ts';
 import { WARDS as WARD_TABLE } from '../../src/data/wards.ts';
 import { currentParams } from '../../src/scripts/climate-engine/heat-map-model.ts';
-import { fmtMoney } from '../../src/scripts/climate-engine/money.ts';
+import { fmtMoney, currencyMark } from '../../src/scripts/climate-engine/money.ts';
 import { tabKind, areaRefusal } from '../../src/scripts/climate-engine/scope/reachability.ts';
 
 test('registry invariants hold', () => {
@@ -754,6 +754,33 @@ test('the currency travels with the prices it labelled', () => {
   assert.match(fmtMoney(0, AED_FIXTURE), /AED/);
   assert.throws(() => fmtMoney(1, { ...AED_FIXTURE, currency: 'RUPEE' }), RangeError,
     'a malformed code must fail loudly here; registry check 10 stops it reaching a readout');
+});
+
+test('the currency named in prose is the one the figures carry', () => {
+  /* THE HALF THE TRIPWIRE BELOW CANNOT SEE. It bans a hand-written symbol; it says
+     nothing about whether the DERIVED one is right, so a `currencyMark` that
+     returned an empty string would satisfy it perfectly while the area pages'
+     meta description quietly read "cost in  on a live 3D map".
+
+     TIED TO `fmtMoney`, NOT TO A LITERAL. The mark this returns must be the mark
+     the figures beside it are printed with -- that is the whole reason it comes off
+     the same formatter rather than out of a table -- so the assertion is that one
+     contains the other, which is a relation between two behaviours rather than
+     between a value and a copy of itself. The literals are only here to prove the
+     relation is not vacuously true of an empty string. */
+  const inr = requireCosts(resolve('in/kolkata/ballygunge'));
+
+  assert.ok(currencyMark(inr).length > 0, 'the rupee mark came back empty');
+  assert.ok(fmtMoney(11_096_666.67, inr).includes(currencyMark(inr)),
+    'the mark this sentence names is not the mark the figure beside it carries');
+  assert.ok(fmtMoney(11_096_666.67, AED_FIXTURE).includes(currencyMark(AED_FIXTURE)),
+    'the Gulf mark and the Gulf figure disagree');
+
+  /* And the two countries must actually DIFFER, or the mark is decoration and a
+     Dubai page would advertise the rupee in the one sentence search engines quote
+     -- which is exactly what the .astro template it replaced would have done. */
+  assert.notEqual(currencyMark(inr), currencyMark(AED_FIXTURE),
+    'both countries produce the same mark, so nothing is being derived');
 });
 
 test('no module writes a currency by hand', async () => {

@@ -168,8 +168,31 @@ test('the heat-map card has no dead controls, and its record link is real', asyn
 
   // and it must follow the selection
   assert.ok(app.includes('updateReportHref'), 'the href must be updated on ward change');
-  assert.match(app, /state\.ward = name;[\s\S]{0,240}?updateCompareHref\(\); updateReportHref\(\); updateAddressBar\(\);/,
-    'updateReportHref and updateAddressBar must run wherever the ward changes');
+  /* FOLLOWED THROUGH ONE INDIRECTION, AND STRICTLY STRONGER FOR IT. The chain
+     that used to be spelled out on this line is now `projectWard`, because it had
+     grown to seven members and a call chain that long stops reading as a list --
+     which is how the breadcrumb and the document title came to be projections of
+     the open ward that nothing had ever updated.
+
+     SO THE CHECK IS IN TWO HALVES, and it asserts more than the single regex did:
+     the ward change must call the door, AND the door must call each member by
+     name. Matching only the call site would have let `projectWard` quietly lose a
+     member; matching only the body would have let the ward change stop calling it.
+     Either alone is the shape of a guard that protects nothing. */
+  assert.match(app, /state\.ward = name;[\s\S]{0,240}?projectWard\(\);/,
+    'the ward change must project the new ward outward -- without `projectWard` '
+    + 'the record link, the URL and the stage attribute all go on naming the ward '
+    + 'the page was opened at');
+  const projection = app.match(/function projectWard\(\) \{([\s\S]*?)\n  \}/);
+  assert.ok(projection,
+    'heat-map-app.ts declares no `function projectWard()`, so the assertion above '
+    + 'is matching a call into nothing and the members below cannot be checked');
+  for (const member of ['updateCompareHref', 'updateReportHref', 'updateAddressBar']) {
+    assert.ok(projection[1].includes(`${member}()`),
+      `projectWard no longer calls ${member}. It is the list every ward projection `
+      + 'is enrolled in, and a member dropped from it is a statement of the open '
+      + 'area that silently stops following the area');
+  }
   /* Added in Task 8. Switching ward by tab does not navigate — the map and the
      caches are reused — so without this the address bar goes on naming the ward the
      page was opened at while the instrument shows another. Copying the URL then
