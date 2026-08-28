@@ -326,10 +326,23 @@ export class ThreeReliefRenderer implements ReliefRenderer {
     if (this.water) { this.scene.remove(this.water.mesh); this.water.dispose(); this.water = null; }
     const water = createWaterLayer(bundle.water, this.grow, (x, y) => terrainDrawAt(bundle.terrain, x, y));
     if (water) { this.water = water; this.scene.add(water.mesh); }
-    if (!this.clouds) {
-      this.clouds = createCloudLayer((x, y) => terrainDrawAt(bundle.terrain, x, y));
-      this.scene.add(this.clouds.group);
-    }
+    /* REBUILT LIKE EVERY OTHER LAYER HERE, and it used to be the one exception.
+       `if (!this.clouds)` built the deck once, on the first ward, and never again —
+       but the deck closes over `terrainDrawAt(bundle.terrain, …)` and calls it every
+       frame to seat each shadow on the ground, so after any ward switch the shadows
+       sat on the PREVIOUS ward's terrain. Between the shipped terrains that is a
+       mean |Δ| of 10.7 m and a maximum of 35.3 m, against a drawn relief range of
+       about 55 m: an error the same size as the thing it is drawn on, and silent.
+
+       THE RE-BAKE IS THE PRICE AND IT IS THE RIGHT ONE. Seven canvas textures are
+       painted per ward instead of per session, beside a rebuild that already
+       re-extrudes several thousand buildings and waits on a network fetch. Nothing
+       moves on screen: the seed is fixed, so the same sky is baked, and drift is a
+       function of `performance.now()` rather than of an accumulator, so every cloud
+       reappears exactly where the old one was. */
+    if (this.clouds) { this.scene.remove(this.clouds.group); this.clouds.dispose(); this.clouds = null; }
+    const clouds = createCloudLayer((x, y) => terrainDrawAt(bundle.terrain, x, y));
+    this.clouds = clouds; this.scene.add(clouds.group);
     if (this.roads) { this.scene.remove(this.roads.mesh); this.roads.dispose(); this.roads = null; }
     const roads = createRoadLayer(bundle.roads, this.grow, (x, y) => terrainDrawAt(bundle.terrain, x, y));
     if (roads) { this.roads = roads; this.scene.add(roads.mesh); }

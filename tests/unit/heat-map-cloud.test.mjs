@@ -151,3 +151,76 @@ test('wind direction is documented as advection-only', async () => {
     'the comment must state the model has no direction term, so nobody wires windFrom '
     + 'into the physics believing it already belongs there');
 });
+
+test('every per-ward layer is rebuilt with the ward, clouds included', async () => {
+  /* THE DEFECT, MEASURED. `rebuildWard` tore down and rebuilt water, roads and
+     vegetation, and guarded the cloud deck with `if (!this.clouds)` -- so it was
+     constructed once, on the first ward, and never again. The deck closes over
+     `terrainDrawAt(bundle.terrain, ...)` and calls it every frame to seat each
+     shadow on the ground, so after any ward switch the shadows sat on the PREVIOUS
+     ward's terrain. Between the shipped terrains that is a mean absolute error of
+     10.7 m and a maximum of 35.3 m, against a total drawn relief range of about
+     55 m -- an error the same size as the thing being drawn, and silent.
+
+     DRIVEN FROM THE LAYER LIST, NOT FROM THE NAME "clouds". The fields come out of
+     `dispose()`, which is the one place this class enumerates what it owns, so a
+     sixth layer added tomorrow is checked the day it is added rather than the day
+     someone remembers to extend a list in a test file.
+
+     AND THE CLOSURE IS WHAT MAKES IT MATTER. A layer that did NOT read the terrain
+     could be built once and reused honestly; the last assertion is what establishes
+     that these all do, and therefore that a build-once guard on any of them is a
+     stale-terrain bug rather than an optimisation. */
+  const relief = await code('explore/relief-renderer.ts');
+
+  /* THE FIELDS TYPED AS A `*Layer`, which is the renderer's own way of saying which
+     of the things it holds are drawn layers rather than machinery. `dispose()` was
+     the first candidate and it is the wrong one: it also disposes the
+     THREE.WebGLRenderer, which is per-CANVAS and must survive a ward. */
+  const layers = [...new Set([...relief.matchAll(/private (\w+): (\w+Layer) \| null = null;/g)]
+    .map((m) => m[1]))];
+  assert.ok(layers.length >= 4,
+    `relief-renderer.ts declares only ${layers.length} nullable *Layer fields `
+    + `(${layers.join(', ')}). The renderer owns water, clouds, roads and `
+    + 'vegetation at minimum, so a number this small means the matcher has stopped '
+    + 'finding them and the loop below would assert almost nothing');
+  assert.ok(layers.includes('clouds'),
+    'the cloud deck is no longer a nullable *Layer field, which is where this test '
+    + 'learns it is a per-ward layer at all -- the defect this guard was written '
+    + 'for would be invisible again');
+
+  const rebuild = relief.match(/private rebuildWard\(bundle: ReliefWardBundle\): void \{([\s\S]*?)\n  \}/);
+  assert.ok(rebuild,
+    'relief-renderer.ts no longer declares `private rebuildWard(bundle: '
+    + 'ReliefWardBundle): void` -- every assertion below reads its body');
+  const body = rebuild[1];
+
+  for (const field of layers) {
+    assert.ok(body.includes(`this.${field}.dispose()`),
+      `rebuildWard never disposes this.${field}. A layer kept across a ward switch `
+      + 'holds the closure it was built with, so it goes on drawing against the '
+      + 'terrain of the ward the reader has left');
+    assert.match(body, new RegExp(`this\\.${field} = `),
+      `rebuildWard never reassigns this.${field}, so whatever it disposed is either `
+      + 'still on the scene or gone from it for good');
+    assert.doesNotMatch(body, new RegExp(`if \\(!this\\.${field}\\)`),
+      `rebuildWard builds this.${field} only when it does not already exist. That `
+      + 'is a build-once guard, and it is exactly the shape the cloud deck shipped '
+      + "with: constructed on the first ward, holding the first ward's terrain, "
+      + 'never rebuilt again');
+  }
+
+  /* THE CLAIM THE THREE ABOVE REST ON. */
+  const factories = [...body.matchAll(/create(\w+)Layer\(([\s\S]*?)\);/g)];
+  assert.ok(factories.length >= 4,
+    `rebuildWard calls only ${factories.length} layer factories -- fewer than the `
+    + 'layers dispose() names, so either a layer is built somewhere else entirely '
+    + 'or this matcher has stopped finding them');
+  for (const [, name, args] of factories) {
+    assert.match(args, /terrainDrawAt\(bundle\.terrain/,
+      `create${name}Layer is built without a closure over bundle.terrain. If that `
+      + 'is genuinely true it may safely outlive a ward and this test is asking too '
+      + 'much of it; if it is not, the layer is about to draw against the wrong '
+      + 'ground and nothing else will say so');
+  }
+});

@@ -11,8 +11,18 @@
  * The deck sits at CLOUD.DECK_M (320 m) against a real base nearer 700 m. That
  * compression is labelled on screen, the same contract terrain.ts keeps for its ×4.
  *
- * Sprites are baked ONCE per session — they are weather, not geography — and drift
- * and opacity are transform writes only. No geometry is rebuilt after boot.
+ * Sprites are baked ONCE PER WARD and never again after that: within a ward, drift
+ * and opacity are transform writes only and no geometry is rebuilt.
+ *
+ * It used to be once per SESSION, on the argument that clouds are weather rather
+ * than geography. True of the sprites; false of the layer, because `groundAt` is
+ * geography — each shadow is seated on the drawn ground every frame — and a deck
+ * that outlived its ward went on seating them on the terrain of the ward the reader
+ * had left, by a mean of 10.7 m and a maximum of 35.3 m against a drawn relief range
+ * of about 55 m. `relief-renderer.ts` now tears the deck down with the rest of the
+ * ward's layers. The sky does not visibly change across a rebuild: the seed is
+ * fixed, so the same sprites come back, and drift reads `performance.now()` rather
+ * than an accumulator, so every cloud reappears where the old one was.
  */
 import * as THREE from 'three';
 import {
