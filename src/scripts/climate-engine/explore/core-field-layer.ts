@@ -58,6 +58,69 @@ export interface CoreFieldLayer {
 
 export function createCoreFieldLayer(map: maplibregl.Map, gridSize: number): CoreFieldLayer {
   let attached = false;
+  /** One pending `idle` listener at most — see `pushToGpu`. */
+  let settling = false;
+
+  /**
+   * PUSH THE PAINTED CANVAS TO THE GPU. Without this the field is never seen.
+   *
+   * THE DEFECT THIS EXISTS TO FIX. The source is registered `animate: false`, and
+   * maplibre-gl 4.7.1's `CanvasSource.prepare()` reads:
+   *
+   *     if (!this.texture) this.texture = new Texture(context, this.canvas, …);
+   *     else if (resize || this._playing) this.texture.update(this.canvas, …);
+   *
+   * `animate:false` leaves `_playing` false for ever, so the canvas is uploaded
+   * EXACTLY ONCE — on the first frame after `addSource`. `attach()` runs while the
+   * canvas is still blank (the first sim snapshot has not returned), and the
+   * flyTo alone renders 1400ms of frames before `update()` paints anything. The
+   * blank upload always won. `setCoordinates` clears `boundsBuffer` but not
+   * `texture`, so a ward switch did not refresh it either.
+   *
+   * MEASURED: canvas fully painted (36864/36864 px, mean alpha 210), layer visible
+   * at 0.5 opacity with correct coordinates — and nothing on the map. Calling
+   * `play()` by hand made the entire field appear in the same session.
+   *
+   * This is the ONLY renderer at tier 0, where the Three.js relief never loads. So
+   * every low-end device — and every browser test in this repo, which runs on
+   * SwiftShader — saw an empty basemap under a full set of confident readouts.
+   *
+   * WHY NOT `animate: true`. It re-uploads a 192×192 RGBA texture on EVERY frame
+   * whether or not the field changed. Tier 0 is the software-rendering path; a
+   * per-frame upload is precisely the cost it cannot pay, and the data changes
+   * only on a sim snapshot.
+   *
+   * WHY NOT `updateImage`. That is `ImageSource`, and its first line is
+   * `if (!options.url) return this;` — it takes a URL and re-fetches. There is no
+   * raw-pixel path on it.
+   *
+   * WHY PAUSE ON `idle` RATHER THAN IMMEDIATELY. `prepare()` returns early when
+   * `Object.keys(this.tiles).length === 0` — "not enough data for current
+   * position" — which is true while the map is still flying to the ward. A
+   * `play(); pause();` pair would then clear the flag WITHOUT having uploaded, and
+   * the fix would be a silent no-op in the exact window the bug lives in. `idle`
+   * means MapLibre has finished rendering, so the upload has happened.
+   *
+   * IF `idle` NEVER FIRES the source simply stays playing: the failure mode is a
+   * per-frame upload, not a blank map. Cost, never silence — which is the right
+   * direction for a defect this hard to see.
+   */
+  function pushToGpu(): void {
+    const source = map.getSource(CORE_FIELD_SOURCE) as maplibregl.CanvasSource | undefined;
+    /* `play`/`pause` are assigned in CanvasSource's async load callback, so they
+       are absent until the source is ready. Skipping is safe rather than lossy:
+       until then `this.texture` is unset, so the source's FIRST upload takes
+       whatever the canvas holds at that moment — which is this paint. */
+    if (!source || typeof source.play !== 'function') return;
+    source.play();
+    if (settling) return;
+    settling = true;
+    map.once('idle', () => {
+      settling = false;
+      const current = map.getSource(CORE_FIELD_SOURCE) as maplibregl.CanvasSource | undefined;
+      if (current && typeof current.pause === 'function') current.pause();
+    });
+  }
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = gridSize;
   const context = canvas.getContext('2d', { alpha: true });
@@ -81,6 +144,13 @@ export function createCoreFieldLayer(map: maplibregl.Map, gridSize: number): Cor
       }, beforeId);
     }
     attached = true;
+    /* AND AFTER A RE-ATTACH, because that is the other way the texture goes stale.
+       `rehydrate` runs after a basemap style swap, which discards the source and
+       its texture while the canvas keeps the field it was already showing. Without
+       this the reader would watch the field vanish on every Dark/Clay switch and
+       not come back until the next sim snapshot. Harmless on the first attach: the
+       canvas is blank, the source is not loaded yet, and `pushToGpu` returns. */
+    pushToGpu();
   }
 
   return {
@@ -99,7 +169,9 @@ export function createCoreFieldLayer(map: maplibregl.Map, gridSize: number): Cor
         }
       }
       context.putImageData(image, 0, 0);
-      if (attached) map.triggerRepaint();
+      /* PAINTING THE CANVAS IS NOT SHOWING IT. `triggerRepaint` asks MapLibre to
+         draw a frame; `pushToGpu` is what makes that frame carry these pixels. */
+      if (attached) { pushToGpu(); map.triggerRepaint(); }
     },
 
     setVisible(visible) {
