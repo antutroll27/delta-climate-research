@@ -439,6 +439,9 @@ export function mountHeatMap(): () => void {
    * palette edit still lands on the very next call.
    */
   let appliedSky = '';
+  /* Whether MapLibre has fired `load`. The one thing `syncSky` is allowed to wait
+     on — see the note inside it for what happens when it does not. */
+  let mapHasLoaded = false;
   function syncSky(): void {
     const spec = maplibreSky(
       currentSun().placement.elevationDeg,
@@ -447,8 +450,32 @@ export function mountHeatMap(): () => void {
     );
     const key = JSON.stringify(spec);
     if (key === appliedSky) return;
+
+    /* NOT UNTIL THE MAP HAS FIRED `load`, AND THE try/catch HERE WAS NOT ENOUGH.
+
+       MEASURED, and it cost an evening: calling `setSky` on a map that has not yet
+       fired `load` leaves MapLibre 4.7.1 in a state where THAT EVENT NEVER FIRES.
+       It does not throw — so the catch that used to sit here caught nothing and
+       reported nothing. `map.once('load', …)` is what calls `loadWard`, so the
+       whole instrument never started: no ward fetch, no buildings, every readout
+       frozen at its server-rendered em-dash, and not one error in the console.
+
+       The page LOOKS like it is still loading, which is why it survived review and
+       a full e2e suite — eleven tests waited twenty seconds each for a reading that
+       was never coming and reported it as a timeout rather than as a dead map.
+
+       `isStyleLoaded()` IS NOT THE GATE, and that was the first fix I tried.
+       `style.load` fires BEFORE `load`, so re-applying from `onStyleLoad` poisons
+       it just the same. The gate has to be `load` itself.
+
+       NOTHING IS LOST BY WAITING. `onMapLoad` calls this again, and `onStyleLoad`
+       clears `appliedSky` and calls it after every style swap — so a refusal here
+       is a call deferred to the first moment the map can take it, not a call
+       dropped. `appliedSky` is written only when the call actually happens, or a
+       refusal would mark the spec applied and the re-apply would skip it. */
+    if (!mapHasLoaded) return;
     appliedSky = key;
-    try { map.setSky(spec); } catch { /* pre-style-load; onStyleLoad re-applies */ }
+    map.setSky(spec);
   }
 
   /** Local solar hours -> HH:MM, for a readout that is explicitly solar time. */
@@ -2607,7 +2634,11 @@ export function mountHeatMap(): () => void {
     map.triggerRepaint();
   };
   map.on('style.load', onStyleLoad);
-  const onMapLoad = () => { void loadWard(INITIAL_AREA); };
+  /* THE WARD FIRST, THEN THE SKY. `mapHasLoaded` unlocks `syncSky`, which refuses
+     to touch the style before this moment because doing so stops this very event
+     from firing — see the note in `syncSky`. Ordered so the instrument starts
+     even if the sky call misbehaves again on a future MapLibre. */
+  const onMapLoad = () => { mapHasLoaded = true; void loadWard(INITIAL_AREA); syncSky(); };
   map.once('load', onMapLoad);
   void capsReady.then((caps) => {
     if (!appDisposed && caps.tier > 0 && caps.mode !== 'isotherm') void ensureRelief();
