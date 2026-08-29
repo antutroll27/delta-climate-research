@@ -17,7 +17,7 @@ import { createGpuHost, createStaticHost, createWorkerHost } from './sim-host';
 import type { HeatSimHost, HeatSimRequest, HeatSimSnapshot } from './sim-protocol';
 import * as M from './heat-map-model';
 import { ACCURACY, SPATIAL, HEIGHTS, bandLabel, unmeasuredNote, isTransitionHour, TRANSITION_RMSE_K } from './accuracy';
-import { solarElevationFactor, solarAzimuthDeg, solarElevationDeg, solarDayHours } from './sky';
+import { solarElevationFactor, solarDayHours } from './sky';
 import { loadLayerManifest } from './provenance';
 import * as U from './dc-urs';
 import { applyScenario } from './dc-urs-scenario';
@@ -37,6 +37,9 @@ import { findCoolingSurfaces, nearestCooling, type CoolingSurfaces } from './exp
 import { createWardSession } from './ward-session';
 import { createExploreFrameScheduler } from './explore/frame-scheduler';
 import { exploreRuntimeBudget, nextFrameDelayMs, type ExploreDeviceTier } from './explore/runtime-budget';
+import {
+  dayOfYearUtc, maplibreSky, representativeSolarHour, sunPlacement,
+} from './explore/sun-lighting';
 import { createCoreFieldLayer, CORE_FIELD_SOURCE } from './explore/core-field-layer';
 import type { ReliefRenderer, ReliefWardBundle, ReliefVisualState } from './explore/relief-contract';
 import {
@@ -294,6 +297,19 @@ export function mountHeatMap(): () => void {
     container: mapContainer, style: STYLES.dark,
     center: [wardOf(INITIAL_AREA).lon, wardOf(INITIAL_AREA).lat], zoom: 15.3, pitch: 60, bearing: -18,
     antialias: true, attributionControl: false, pixelRatio: Math.min(devicePixelRatio, 1.75),
+    /* THE DRAG HANDLER ALREADY ASKED FOR THIS AND WAS BEING IGNORED. Two hundred
+       lines below, the pitch drag clamps to `Math.min(78, ...)`; MapLibre's default
+       `maxPitch` is 60, so it silently clamped again and the last 18 degrees were
+       unreachable. Two places disagreeing about one number, with the quieter one
+       winning.
+
+       It is also the only tilt at which the sky is ever seen. MEASURED against
+       4.7.1's own sky shader: the horizon sits at `height/2 + getHorizon()` pixels,
+       which at pitch 60 is 1.24 screen-heights — above the top of the frame, so
+       `setSky` paints exactly zero pixels. It first appears at ~67 deg and reaches
+       a fifth of the frame at 80. The DEFAULT camera is untouched at 60: every
+       easeTo, flyTo and reset in this file still says 60 or 0. */
+    maxPitch: 78,
   });
   map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right');
   /* A distance reference. The instrument shows a 1.4 km window at a pitch that
@@ -369,6 +385,23 @@ export function mountHeatMap(): () => void {
   }
 
   /**
+   * WHERE THE SUN IS — computed HERE, once, for everything that shows it.
+   *
+   * The compass marker, the sun line, the 3-D scene's key light and the colour of
+   * the visible sky are four renderings of ONE fact, and until this existed they
+   * were not: the dial read a real bearing while `relief-renderer.ts` lit the city
+   * from a hard-coded `position.set(0.4, 1, 0.35)` that had never moved. A second
+   * call to `sunPlacement` anywhere in this file re-opens exactly that gap, and
+   * tests/unit/heat-sun-lighting.test.mjs counts them.
+   */
+  function currentSun() {
+    const lat = wardOf(state.ward)?.lat ?? 22.55;
+    const doy = dayOfYearUtc(now());
+    const hour = representativeSolarHour(state.sunNow, wardSolarHour(), state.phase);
+    return { hour, lat, doy, placement: sunPlacement(hour, doy, lat) };
+  }
+
+  /**
    * Put the sun on the dial, at its real bearing for the phase being shown.
    *
    * READ-ONLY, AND THAT IS THE DESIGN. The instrument is steady-state at a
@@ -383,18 +416,39 @@ export function mountHeatMap(): () => void {
    */
   function syncSunBearing(): void {
     if (!sunEl) return;
-    const lat = wardOf(state.ward)?.lat ?? 22.55;
-    /* Which hour the dial should describe. `sunNow` non-null means the live
-       clock drives the scene; otherwise the phase is one of the two fixed
-       representative hours the engine actually solves. */
-    const hour = state.sunNow !== null && state.sunNow !== undefined
-      ? wardSolarHour()
-      : (state.phase === 'night' ? 22 : 13);
-    const doy = Math.floor((now() - Date.UTC(new Date(now()).getUTCFullYear(), 0, 0)) / 86_400_000);
-    const up = solarElevationFactor(hour, doy, lat) > 0;
-    sunEl.classList.toggle('is-below', !up);
-    if (up) sunEl.setAttribute('transform', `rotate(${solarAzimuthDeg(hour, doy, lat)} 24 24)`);
-    writeSunLine(hour, doy, lat, up);
+    const sun = currentSun();
+    sunEl.classList.toggle('is-below', !sun.placement.up);
+    if (sun.placement.up) sunEl.setAttribute('transform', `rotate(${sun.placement.azimuthDeg} 24 24)`);
+    writeSunLine(sun);
+    syncSky();
+  }
+
+  /**
+   * THE VISIBLE SKY, WHICH IS MAPLIBRE'S AND NOT THREE'S.
+   *
+   * The 3-D scene is a custom layer with no background of its own — it composites
+   * over the basemap — so a three.js skybox would paint over the map tiles. The sky
+   * above the horizon therefore has to come from `map.setSky`, and it is coloured
+   * by the same solar elevation that aims the key light.
+   *
+   * THE `appliedSky` GUARD IS LOAD-BEARING, NOT AN OPTIMISATION. This is reached
+   * from `syncSunBearing` <- `syncCompass` <- `placeCard`, which is bound to
+   * `map.on('render')`. `setSky` writes the style and asks for a repaint, so an
+   * unguarded call here would ask for a repaint from inside the repaint it was
+   * called by, forever. Comparing the produced spec (not the inputs) also means a
+   * palette edit still lands on the very next call.
+   */
+  let appliedSky = '';
+  function syncSky(): void {
+    const spec = maplibreSky(
+      currentSun().placement.elevationDeg,
+      (state.live?.cloud ?? 0) / 100,
+      env,
+    );
+    const key = JSON.stringify(spec);
+    if (key === appliedSky) return;
+    appliedSky = key;
+    try { map.setSky(spec); } catch { /* pre-style-load; onStyleLoad re-applies */ }
   }
 
   /** Local solar hours -> HH:MM, for a readout that is explicitly solar time. */
@@ -417,13 +471,17 @@ export function mountHeatMap(): () => void {
    * relabelling them as clock time here would be a quiet 23-minute lie at Kolkata's
    * longitude.
    */
-  function writeSunLine(hour: number, doy: number, lat: number, up: boolean): void {
+  function writeSunLine(sun: ReturnType<typeof currentSun>): void {
     if (!sunLineEl || !sunTextEl) return;
-    const day = solarDayHours(doy, lat);
+    const day = solarDayHours(sun.doy, sun.lat);
     if (!day) { sunLineEl.setAttribute('hidden', ''); return; }   // polar; never here, but honest
     sunLineEl.removeAttribute('hidden');
-    sunTextEl.textContent = up
-      ? `sun ${Math.round(solarAzimuthDeg(hour, doy, lat))}° · ${Math.round(solarElevationDeg(hour, doy, lat))}° up · sets ${hhmm(day.sunset)}`
+    /* The bearing and height are READ OFF the same placement the key light was
+       aimed with, not recomputed from (hour, doy, lat) again. Identical inputs
+       could not have disagreed numerically — but "the readout and the light are
+       the same object" is a stronger statement than "they agree today". */
+    sunTextEl.textContent = sun.placement.up
+      ? `sun ${Math.round(sun.placement.azimuthDeg)}° · ${Math.round(sun.placement.elevationDeg)}° up · sets ${hhmm(day.sunset)}`
       : `sun below horizon · rises ${hhmm(day.sunrise)}`;
     sunNoteEl?.setAttribute('title',
       'Solar geometry only, in local solar time. The surface-temperature model uses a '
@@ -968,6 +1026,10 @@ export function mountHeatMap(): () => void {
          replaying the entrance. */
       overlayOpacity: surfaceOn ? opBase * Math.min(1, growProgress * 1.6) : 0,
       live: state.live, phase: state.phase,
+      /* The same computation the compass dial reads, handed to the renderer rather
+         than recomputed there — see currentSun. It aims the key light and nothing
+         else: the solve has never had a shade term and still does not. */
+      sun: currentSun().placement,
     };
   }
 
@@ -1023,6 +1085,11 @@ export function mountHeatMap(): () => void {
       const instance = createReliefRenderer({
         map, reducedMotion: reduceMotion,
         simulationGridSize: SIM_N, terrainGridSize: TERRAIN_N,
+        /* READ LATE, not captured. `runtimeTier` is still 'balanced' at this point
+           on every boot — it is promoted inside `initSimHost`, which runs from
+           `resetSim` after the ward loads, while this runs off `capsReady` directly.
+           Passing the value measured ZERO `.hdr` requests on a tier-2 machine. */
+        deviceTier: () => runtimeTier,
       });
       relief = instance;
       attachReliefLayer();
@@ -2184,7 +2251,7 @@ export function mountHeatMap(): () => void {
   function refreshNowSun() {
     if (state.sunNow === undefined || state.sunNow === null) return;
     const h = wardSolarHour();
-    const doy = Math.floor((now() - Date.UTC(new Date(now()).getUTCFullYear(), 0, 0)) / 86_400_000);
+    const doy = dayOfYearUtc(now());
     state.sunNow = solarElevationFactor(h, doy, wardOf(state.ward)?.lat ?? 22.55);
     state.phase = state.sunNow > M.SUN_LIT ? 'peak' : 'night';
   }
@@ -2512,6 +2579,14 @@ export function mountHeatMap(): () => void {
 
   const onStyleLoad = () => {
     for (const { restore } of STYLE_ADDITIONS) restore();
+    /* NOT IN THE LIST ABOVE, because that list is about sources and layers this app
+       ADDED — `setStyle({diff:false})` drops those. The sky is a property OF the
+       style object, so a replaced style arrives with the spec's own defaults rather
+       than with ours dropped. `appliedSky` is cleared first or the guard would
+       recognise our last value and skip re-applying it to a style that no longer
+       has it. */
+    appliedSky = '';
+    syncSky();
     /* Relief supplies metre-scaled roads, so its mode hides the corresponding
        pixel-scaled basemap geometry. Core mode restores the basemap roads. */
     syncRendererVisibility();

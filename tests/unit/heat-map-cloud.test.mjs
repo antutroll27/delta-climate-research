@@ -114,13 +114,28 @@ test('there is exactly one cloud source, and the model already reads it', async 
   }
 });
 
-test('the deck dims the ENVIRONMENT key light, never a literal', async () => {
+/**
+ * WIDENED 2026-08-29, SAME BUG. The guard used to name `keyBase` — the per-basemap
+ * base level — because writing a literal here clobbers the clay-studio environment,
+ * whose key is 1.7 and not 2.1.
+ *
+ * `keyBase` is no longer the right factor, and the difference is the reason the sky
+ * work happened: the key now also carries the SUN'S HEIGHT (`keyLevel = keyBase ×
+ * the elevation factor`). Multiplying `keyBase` here would throw that away on every
+ * frame the live ambient exists — which is every frame — and relight the 22:00
+ * retained-heat phase with a sun that set four hours ago. So the guard now names
+ * `keyLevel`, and still refuses both literals.
+ */
+test('the deck dims the ENVIRONMENT-AND-SUN key light, never a literal', async () => {
   const relief = await code('explore/relief-renderer.ts');
-  assert.match(relief, /this\.key\.intensity = this\.keyBase \* this\.clouds\.sunFactor/,
-    'writing a literal here clobbers the clay-studio environment, whose key is 1.7 '
-    + 'not 2.1 — the deck would silently drag studio back to the dark map lighting');
-  assert.doesNotMatch(relief, /this\.key\.intensity = 2\.1 \*/,
+  assert.match(relief, /this\.key\.intensity = this\.keyLevel \* this\.clouds\.sunFactor/,
+    'the deck must dim what the environment and the sun already agreed on');
+  assert.match(relief, /this\.keyLevel = this\.keyBase \* lighting\.keyFactor/,
+    'and keyLevel must be exactly that: the basemap base times the sun height');
+  assert.doesNotMatch(relief, /this\.key\.intensity = (?:2\.1|1\.7) \*/,
     'the literal form is the bug this guard exists for');
+  assert.doesNotMatch(relief, /this\.key\.intensity = this\.keyBase \* this\.clouds/,
+    'and dimming keyBase discards the sun height, which is the newer half of it');
 });
 
 test('the deck dims at night rather than lighting cloud tops at 22:00', async () => {

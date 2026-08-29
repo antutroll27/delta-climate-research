@@ -4,6 +4,8 @@ import type { TerrainField } from '../terrain.ts';
 import type { TreesFile } from '../vegetation-layer.ts';
 import type { WardFrame } from '../ward-frame.ts';
 import type { BuildingMeta } from './building-pick.ts';
+import type { ExploreDeviceTier } from './runtime-budget.ts';
+import type { SunPlacement } from './sun-lighting.ts';
 
 export interface ReliefWardBundle {
   wardData: WardData;
@@ -29,6 +31,21 @@ export interface ReliefVisualState {
   overlayOpacity: number;
   live: Ambient | null;
   phase: 'peak' | 'night';
+  /**
+   * Where the sun is, for the hour this phase describes.
+   *
+   * CARRIED, NOT DERIVED. The renderer could call `sunPlacement` itself from
+   * `phase` — and then the compass dial and the key light would be two answers to
+   * one question again, which is the defect this field exists to close. One
+   * `sunPlacement` call in heat-map-app.ts feeds the dial, this, and the sky.
+   *
+   * A plain vector, not a THREE.Vector3: `heat-map-app.ts` and this contract are
+   * the analytical core and must stay free of three.js — see
+   * tests/unit/heat-explore-module-boundary.test.mjs.
+   *
+   * It changes NO physics. `sun` and `kRad` in the solve are ward-wide scalars.
+   */
+  sun: SunPlacement;
 }
 
 export interface ReliefSelection {
@@ -71,4 +88,18 @@ export interface ReliefRendererOptions {
   reducedMotion: boolean;
   simulationGridSize: number;
   terrainGridSize: number;
+  /**
+   * Decides one thing only: whether the ~2.3 MB of image-based ambience is worth
+   * fetching and convolving here. `imageBasedLightingAllowed` in sun-lighting.ts
+   * holds the rule. Everything that carries meaning runs on every tier.
+   *
+   * A FUNCTION, AND THE VALUE FORM WAS A MEASURED BUG. `runtimeTier` starts at
+   * 'balanced' and is only promoted to 'full' inside `initSimHost`, which runs from
+   * `resetSim` — after the ward has loaded. `ensureRelief` fires much earlier, off
+   * `capsReady` directly, so a renderer handed the VALUE captured 'balanced'
+   * forever and the dome was never fetched once: measured with a request listener,
+   * zero `.hdr` requests over a full boot and a phase switch, on a machine that
+   * classifies as tier 2. Reading it late is what makes the gate mean what it says.
+   */
+  deviceTier: () => ExploreDeviceTier;
 }
