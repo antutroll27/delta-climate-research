@@ -2,6 +2,26 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
+/* THE ONE PART OF THE RAIL THAT IS NOT MARKUP, and so the one part that can be
+   RUN rather than read. Everything else in this file is a source assertion
+   because an .astro component cannot be imported here; the collapse preference
+   is a .ts module, so its behaviour is exercised directly against stores that
+   are empty, that hold junk, and that throw. */
+import {
+  COLLAPSED,
+  EXPANDED,
+  LAYOUT_PREPAINT,
+  PANEL_STATE_ATTR,
+  PANEL_STATE_KEY,
+  RAIL_STATE_ATTR,
+  RAIL_STATE_KEY,
+  RAIL_TOGGLE_ID,
+  readPanelCollapsed,
+  readRailCollapsed,
+  writePanelCollapsed,
+  writeRailCollapsed,
+} from '../../src/scripts/climate-engine/shell/layout-state.ts';
+
 /**
  * THE ICON RAIL, READ AS SOURCE.
  *
@@ -308,13 +328,34 @@ test('the rail ships no control that does nothing', async () => {
   assert.doesNotMatch(css, /rail-settings/,
     'the rail styles a settings control that is no longer rendered');
 
-  /* EVERY CONTROL IN THE NAV IS ONE OF THREE THINGS: the brand link, a section
-     link, or a section button. Counting them is what stops a fourth arriving with
-     nothing behind it -- the check above only knows the name we happened to use. */
+  /* EVERY CONTROL IN THE NAV IS ONE OF FOUR THINGS: the brand link, the collapse
+     chevron, a section link, a section button. Counting them is what stops a
+     fifth arriving with nothing behind it -- the check above only knows the name
+     we happened to use.
+
+     THE CHEVRON IS THE FOURTH, and it is the one this test has to be most careful
+     about, because "expand the labels" is exactly the kind of control that can
+     ship looking wired and do nothing. So the list is widened by one AND the
+     handler is read out of console-shell.ts below: the count alone would have
+     been satisfied by a button with no listener at all. */
   const controls = [...template.matchAll(/<(button|a)\b/g)].map((m) => m[1]);
-  assert.deepEqual(controls, ['a', 'button', 'a'],
-    'the rail renders controls other than the brand link and the loop\'s two '
-    + `arms: ${controls.join(', ')}`);
+  assert.deepEqual(controls, ['a', 'button', 'button', 'a'],
+    'the rail renders controls other than the brand link, the collapse chevron '
+    + `and the loop's two arms: ${controls.join(', ')}`);
+
+  assert.match(template, /<button[^>]*\sdata-rail-toggle/,
+    'the collapse chevron carries no data-rail-toggle -- console-shell.ts finds '
+    + 'it by that attribute, so without it the button renders and does nothing');
+
+  const shell = strip(await readFile(
+    new URL('../../src/scripts/climate-engine/shell/console-shell.ts', import.meta.url),
+    'utf8'));
+  assert.ok(shell.length > 0, 'console-shell.ts read back empty');
+  assert.match(shell, /querySelector<HTMLButtonElement>\('button\[data-rail-toggle\]'\)/,
+    'console-shell.ts never looks for the collapse chevron');
+  assert.match(shell, /on\(railToggle, 'click'/,
+    'console-shell.ts finds the collapse chevron and binds no click handler to '
+    + 'it -- the rail would render a chevron that cannot collapse anything');
 });
 
 test('the console carries exactly one brand mark, and it is the rail\'s', async () => {
@@ -406,6 +447,677 @@ test('the rail is usable by keyboard and honours reduced motion', async () => {
   assert.match(css, /@media\s*\(prefers-reduced-motion\s*:\s*reduce\)/,
     'the rail animates colour, background and its label with no '
     + 'prefers-reduced-motion escape');
+  /* THE WIDTH IS THE ONE THAT MATTERS NOW. Colour and opacity transitions are a
+     preference; a 114px column sliding out from under the page is motion in the
+     sense the setting is actually about. */
+  assert.match(css, /@media \(prefers-reduced-motion: reduce\)\s*\{[^}]*\.rail,/,
+    'the reduced-motion block no longer names .rail, so the column still '
+    + 'animates its width for a reader who asked for no motion');
+});
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   THE CONTRAST FLOOR — computed, never quoted.
+
+   THE RAIL'S GLYPHS BECAME WORDS, and that changes which rule applies to their
+   colour. WCAG's 3:1 is for a graphical object; text is 4.5:1, and the resting
+   ink the rail shipped with -- --faint on --rail-ground -- is 3.27:1. It was
+   legal for five icons and became illegal the moment each icon had a word beside
+   it, which is why the contrast fix is part of the labels rather than a tidy-up
+   filed after them.
+
+   EVERY NUMBER BELOW IS ARITHMETIC ON THE DECLARED VALUES. Not one ratio is
+   written down anywhere in this file: changing either the ink or the ground
+   re-runs the sum, which is the only version of this test that cannot go stale
+   while still passing. The first draft asserted `ratio === 6.9` and would have
+   had to be edited -- by hand, to a number someone worked out separately -- every
+   time either colour moved.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/** WCAG 2.x relative luminance. Nothing here is project-specific. */
+function luminance(hex) {
+  const h = hex.replace('#', '');
+  const full = h.length === 3 ? [...h].map((c) => c + c).join('') : h;
+  const [r, g, b] = [0, 2, 4]
+    .map((i) => parseInt(full.slice(i, i + 2), 16) / 255)
+    .map((x) => (x <= 0.04045 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4));
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+/** The WCAG contrast ratio, 1 to 21. */
+function ratio(a, b) {
+  const [x, y] = [luminance(a), luminance(b)];
+  return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+}
+
+/** Every `--token:#hex` in a source file, lowercased. Never an empty map. */
+function hexTokens(src, where) {
+  const found = new Map();
+  for (const m of src.matchAll(/(--[a-z0-9-]+)\s*:\s*(#[0-9a-fA-F]{3,8})\b/g)) {
+    found.set(m[1], m[2].toLowerCase());
+  }
+  assert.ok(found.size > 0,
+    `${where} declares no --token:#hex at all -- every ratio below would be `
+    + 'computed from undefined, and undefined compares against nothing');
+  return found;
+}
+
+/** The declared value of one token, or a failure naming which file lacked it. */
+function tokenValue(tokens, name, where) {
+  const value = tokens.get(name);
+  assert.ok(value,
+    `${where} declares no ${name}. The contrast floor below is computed from it, `
+    + 'so its absence must fail rather than be compared against undefined');
+  return value;
+}
+
+test('the contrast maths this suite judges by is itself correct', () => {
+  /* GUARD THE GUARD, and this one is the guard for three tests. A luminance
+     function with a transposed coefficient or a missing gamma step returns
+     plausible numbers for every pair it is handed, so the assertions that use it
+     would go on passing over colours nobody can read.
+
+     THE FIRST DRAFT OF THIS TEST WAS THE DEAD GUARD IT EXISTS TO PREVENT, and it
+     was caught by sabotage rather than by reading. It checked white on black, a
+     grey on itself, and a mid grey on white — every one of them a NEUTRAL, where
+     R, G and B are equal and the three coefficients are interchangeable. Swapping
+     the red and green weights, which is the single likeliest way this function
+     goes wrong, changed none of those three numbers and the test stayed green.
+
+     So the three primaries are here, and they are what make the coefficients
+     observable: green is by far the brightest of the three and blue by far the
+     darkest, and no transposition survives all three. */
+  assert.equal(Math.round(ratio('#ffffff', '#000000')), 21);
+  assert.equal(Math.round(ratio('#000000', '#ffffff')), 21);   // symmetric
+  assert.equal(ratio('#777777', '#777777'), 1);
+  /* Mid grey on white is the canonical worked example: 4.48:1, the famous
+     near-miss of the 4.5 floor. It pins the gamma step. */
+  assert.equal(Number(ratio('#777777', '#ffffff').toFixed(2)), 4.48);
+  /* And these pin the three weights, each against white. */
+  assert.equal(Number(ratio('#ff0000', '#ffffff').toFixed(2)), 4.00);
+  assert.equal(Number(ratio('#00ff00', '#ffffff').toFixed(2)), 1.37);
+  assert.equal(Number(ratio('#0000ff', '#ffffff').toFixed(2)), 8.59);
+});
+
+test("the rail's resting ink clears the 4.5:1 text floor on the ground it sits on", async () => {
+  const { css: railCss } = await railSource();
+  const stage = await stageSource();
+
+  const ink = tokenValue(hexTokens(railCss, 'IconRail.astro'), '--rail-ink',
+    'IconRail.astro');
+  const ground = tokenValue(hexTokens(stage, 'HeatMapStage.astro'), '--rail-ground',
+    'HeatMapStage.astro');
+
+  /* THE TOKEN HAS TO BE THE ONE THE RAIL ACTUALLY PAINTS WITH. Without this the
+     test measures a declaration nothing reads: a --rail-ink of any value at all
+     would pass while the buttons went on rendering in --faint. */
+  assert.match(railCss, /\.rail-btn\s*\{[^}]*color:\s*var\(--rail-ink\)/,
+    'the rail sections are not painted with --rail-ink, so the ratio computed '
+    + 'here is about a token nothing uses');
+  assert.match(railCss, /\.rail-toggle\s*\{[^}]*color:\s*var\(--rail-ink\)/,
+    'the collapse chevron is not painted with --rail-ink');
+
+  const rest = ratio(ink, ground);
+  assert.ok(rest >= 4.5,
+    `the rail's resting ink ${ink} on ${ground} is ${rest.toFixed(2)}:1, below the `
+    + '4.5:1 floor for text. It was legal while the rail held nothing but icons; '
+    + 'a label is text, and this is the ratio a reader has to make a word out of');
+
+  /* AND EVERY OTHER STATE, because the resting one is only the dimmest. Each of
+     these paints a whole row -- icon and word together -- so each is text. */
+  const palette = hexTokens(stage, 'HeatMapStage.astro');
+  for (const [token, what] of [
+    ['--paper', 'hover and the current route'],
+    ['--cyan', 'the open pane'],
+  ]) {
+    const colour = tokenValue(palette, token, 'HeatMapStage.astro');
+    assert.match(railCss, new RegExp(`color:\\s*var\\(${token}\\)`),
+      `the rail never paints anything ${token} -- this row is measuring a colour `
+      + 'the component does not use');
+    const r = ratio(colour, ground);
+    assert.ok(r >= 4.5,
+      `the rail's ink for ${what} (${token}, ${colour}) on ${ground} is `
+      + `${r.toFixed(2)}:1, below the 4.5:1 text floor`);
+  }
+
+  /* THE COLOUR THIS REPLACED, asserted as an absence rather than left to memory.
+     --faint is still the right token for a great many things on this console; it
+     is not the right token for a word on the rail, and the number says so. */
+  const faint = tokenValue(palette, '--faint', 'HeatMapStage.astro');
+  assert.ok(ratio(faint, ground) < 4.5,
+    `--faint (${faint}) now clears 4.5:1 on the rail ground. If that is true the `
+    + 'reason for --rail-ink has gone and the two tokens should be one');
+  assert.doesNotMatch(railCss, /color:\s*var\(--faint\)/,
+    'the rail paints something in --faint again. It is below the 4.5:1 text '
+    + 'floor on this ground, and every colour in this component now sits behind '
+    + 'a word');
+});
+
+test("the console's two grounds are the same colour on both routes", async () => {
+  /* TWO FILES, ONE COLOUR, AND THE CENSUS CANNOT SEE THE DRIFT. HeatMapStage.astro
+     declares the console's palette; PairedBench.astro re-declares the two grounds
+     because the compare route never loads that stylesheet and an undefined custom
+     property does not fall back -- it invalidates the whole declaration.
+
+     `no stylesheet writes a colour more than once` in obos-layers.test.mjs was
+     credited in a comment with watching this. It is a PER-FILE census: it counts
+     spellings inside one file and has no opinion about a second. Two files each
+     writing their own value once is exactly the shape it waves through, so the
+     rail could go violet on Explore and stay warm-neutral on Compare with every
+     test in this repository green. That comment has been corrected and this is
+     the guard it now points at.
+
+     THE CONTRAST TEST ABOVE NEEDS THIS TOO. It computes against the ground
+     HeatMapStage declares; without this, that number would be true of one route
+     and unmeasured on the other. */
+  const stage = hexTokens(await stageSource(), 'HeatMapStage.astro');
+  const { src: benchSrc } = await benchSource();
+  const bench = hexTokens(benchSrc, 'PairedBench.astro');
+
+  for (const token of ['--rail-ground', '--panel-ground']) {
+    const here = tokenValue(stage, token, 'HeatMapStage.astro');
+    const there = tokenValue(bench, token, 'PairedBench.astro');
+    assert.equal(there, here,
+      `${token} is ${here} on the explore route and ${there} on compare. It is `
+      + 'the same surface of the same console; a reader crossing between the two '
+      + 'watches it change colour');
+  }
+});
+
+test('the panel ground is in the rail ground\'s family, not beside it', async () => {
+  /* THE RAIL AND THE SIDEBAR ARE ONE CONSOLE, and the eye reads two surfaces as
+     related when they share a hue and differ in lightness. They were both warm
+     neutrals; the rail moved to violet -- to stay out of the hue --cyan carries
+     MEANING in, and to sit in the basemap's family -- and a warm-grey panel left
+     beside it would read as an unrelated surface docked onto the navigation.
+
+     ASSERTED AS AN ANGLE, NOT AS A VALUE. Checking the panel equals a particular
+     hex would be this test agreeing with itself; what has to hold is the
+     RELATIONSHIP -- same hue, different lightness -- and that survives either
+     colour being retuned. */
+  const stage = hexTokens(await stageSource(), 'HeatMapStage.astro');
+  const rail = tokenValue(stage, '--rail-ground', 'HeatMapStage.astro');
+  const panel = tokenValue(stage, '--panel-ground', 'HeatMapStage.astro');
+
+  /* sRGB hue, in degrees. Enough to tell a violet from a warm neutral, and it
+     needs no colour-space library to be trustworthy. */
+  const hue = (hex) => {
+    const h = hex.replace('#', '');
+    const [r, g, b] = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16) / 255);
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    if (max === min) return null;                       // neutral: no hue at all
+    const d = max - min;
+    const deg = max === r ? ((g - b) / d) % 6
+      : max === g ? (b - r) / d + 2
+        : (r - g) / d + 4;
+    return ((deg * 60) % 360 + 360) % 360;
+  };
+
+  const railHue = hue(rail);
+  const panelHue = hue(panel);
+  assert.ok(railHue !== null && panelHue !== null,
+    `one of the two grounds is a pure neutral (${rail}, ${panel}) and has no hue `
+    + 'to compare -- the family claim cannot be made about it either way');
+  const apart = Math.min(Math.abs(railHue - panelHue), 360 - Math.abs(railHue - panelHue));
+  assert.ok(apart <= 15,
+    `the rail ground is at ${railHue.toFixed(0)}° and the panel at `
+    + `${panelHue.toFixed(0)}°, ${apart.toFixed(0)}° apart. They are the two `
+    + 'surfaces of one console and read as two unrelated ones');
+
+  /* SEPARATED, THOUGH. Same hue and the same lightness would merge the navigation
+     column into the panel it opens and lose the edge between them entirely — and
+     joining the two into one family is exactly the change that could do it, since
+     the warm-neutral pair had a hue difference to fall back on and this pair has
+     none. The floor is the separation the console SHIPPED with, so this cannot be
+     satisfied by anything weaker than what the retint replaced. */
+  const step = ratio(rail, panel);
+  assert.ok(step > 1.07,
+    `the rail and the panel are ${step.toFixed(2)}:1 apart, which is no better `
+    + 'than the warm-neutral pair this replaced — and that pair had 137° of hue '
+    + 'between it to carry the edge. These two share a hue, so lightness is the '
+    + 'whole of the boundary between the column you navigate from and the surface '
+    + 'you read');
+  assert.ok(step < 2,
+    `the rail and the panel are ${step.toFixed(2)}:1 apart, which is a step big `
+    + 'enough to read as two different materials rather than one console');
+
+  /* THE PANEL'S OTHER EDGE, and the one that is easy to forget because it is
+     INSIDE the sidebar rather than beside it: `.seg` in the intervention pane is
+     drawn on --surface, on this ground. The warm-neutral panel sat 1.06:1 from it
+     and was told apart by hue alone -- which stops working the moment the panel
+     joins --surface's own family, so the two now have to be separated by
+     lightness like everything else. Every step away from the rail is a step
+     towards --surface, so this is the constraint that stops the panel simply
+     being brightened until the first assertion is comfortable. */
+  const surface = tokenValue(stage, '--surface', 'HeatMapStage.astro');
+  const inner = ratio(panel, surface);
+  assert.ok(inner > 1.07,
+    `the sidebar's ground and --surface, which the segmented control inside it is `
+    + `drawn on, are ${inner.toFixed(2)}:1 apart. They are now in the same hue `
+    + 'family, so there is nothing else left to tell them apart and the control '
+    + 'is carried by its 1px border alone');
+});
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   THE COLLAPSE PREFERENCE — run, not read.
+
+   A store that is merely EMPTY is the easy case and not the one that breaks:
+   `localStorage` in a private window, or with site data blocked, throws a
+   SecurityError at the PROPERTY, before getItem is reached. A `typeof` check
+   outside a try is not a guard against that, and the failure mode is a rail that
+   does not render at all rather than a rail that forgets.
+
+   Each test below hands in its own store, so nothing here depends on the runner
+   having a DOM.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/** A store that holds what it is given. */
+const fakeStore = (initial = {}) => {
+  const map = new Map(Object.entries(initial));
+  return {
+    getItem: (k) => (map.has(k) ? map.get(k) : null),
+    setItem: (k, v) => { map.set(k, String(v)); },
+    read: (k) => (map.has(k) ? map.get(k) : null),
+  };
+};
+
+/** A store that throws the way a blocked one does. */
+const hostileStore = () => ({
+  getItem() { throw new DOMException('The operation is insecure.', 'SecurityError'); },
+  setItem() { throw new DOMException('The operation is insecure.', 'SecurityError'); },
+});
+
+test('the rail defaults to expanded, and only an exact stored value collapses it', () => {
+  assert.equal(readRailCollapsed(fakeStore()), false,
+    'with nothing stored the rail must open EXPANDED -- the labels are the '
+    + 'point of this change, and a first visit that hides them ships the old '
+    + 'rail to everyone who has never pressed the chevron');
+
+  assert.equal(readRailCollapsed(fakeStore({ [RAIL_STATE_KEY]: COLLAPSED })), true);
+  assert.equal(readRailCollapsed(fakeStore({ [RAIL_STATE_KEY]: EXPANDED })), false);
+
+  /* ANYTHING ELSE IS THE DEFAULT. The origin is shared with the rest of the site
+     and this key is one string; a value left by an older build, or by a hand in
+     devtools, must not put the rail into a state nothing can name. */
+  for (const junk of ['', 'true', '1', 'COLLAPSED', 'collapse', '{"collapsed":true}']) {
+    assert.equal(readRailCollapsed(fakeStore({ [RAIL_STATE_KEY]: junk })), false,
+      `a stored value of ${JSON.stringify(junk)} collapsed the rail. Only the `
+      + 'exact token this module writes may do that');
+  }
+
+  /* AND A VALUE UNDER SOME OTHER KEY IS NOT THIS ONE. */
+  assert.equal(readRailCollapsed(fakeStore({ rail: COLLAPSED })), false);
+});
+
+test('an unreadable store leaves the rail expanded rather than unrendered', () => {
+  /* WATCHED TO FAIL: with the try/catch removed from readRailCollapsed this
+     throws out of the shell's mount, and a throw there takes the pane switcher
+     and the scope selects down with it -- the rail's collapse preference would
+     have disabled the console's entire navigation in a private window. */
+  assert.equal(readRailCollapsed(hostileStore()), false);
+  assert.equal(readRailCollapsed(null), false,
+    'a null store must read as the default rather than throw on a property of it');
+  assert.doesNotThrow(() => writeRailCollapsed(true, hostileStore()));
+  assert.doesNotThrow(() => writeRailCollapsed(false, null));
+});
+
+test('a store that throws on ACCESS, before getItem, is still the default', () => {
+  /* THE CASE A PASSED-IN STORE CANNOT REACH, and the one the browser actually
+     produces. With site data blocked, `localStorage` raises a SecurityError at
+     the PROPERTY — the object is never handed out, so a throwing `getItem` is a
+     test of the wrong half and a `typeof` check outside a try is not a guard at
+     all. Every other test here passes its own store and therefore never runs the
+     line that reaches for the real one.
+
+     WATCHED TO FAIL: taking the try/catch off the default-store lookup leaves
+     every other test in this file green, which is how this one earned its place.
+     Defined on globalThis rather than mocked, because the throw has to come from
+     the property access itself. */
+  const had = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+  Object.defineProperty(globalThis, 'localStorage', {
+    configurable: true,
+    get() { throw new DOMException('The operation is insecure.', 'SecurityError'); },
+  });
+  try {
+    assert.equal(readRailCollapsed(), false,
+      'reading the rail preference with no readable storage threw instead of '
+      + 'answering with the default. It is called from the shell mount, so this '
+      + 'takes the pane switcher and the scope selects down with it');
+    assert.equal(readPanelCollapsed(), false);
+    assert.doesNotThrow(() => writeRailCollapsed(true));
+    assert.doesNotThrow(() => writePanelCollapsed(true));
+  } finally {
+    if (had) Object.defineProperty(globalThis, 'localStorage', had);
+    else delete globalThis.localStorage;
+  }
+});
+
+test('the preference round-trips through the store it was written to', () => {
+  /* BOTH DIRECTIONS, and the second is the one worth writing down: a writer that
+     only ever wrote the collapsed token would leave "expanded" indistinguishable
+     from "never chosen", which is fine until the default changes. */
+  const store = fakeStore();
+  writeRailCollapsed(true, store);
+  assert.equal(store.read(RAIL_STATE_KEY), COLLAPSED);
+  assert.equal(readRailCollapsed(store), true);
+
+  writeRailCollapsed(false, store);
+  assert.equal(store.read(RAIL_STATE_KEY), EXPANDED);
+  assert.equal(readRailCollapsed(store), false);
+});
+
+test('the pre-paint script and the module that writes the preference agree', async () => {
+  /* THE ONE PLACE TWO SPELLINGS COULD HIDE. The inline script is a string: no
+     compiler checks that its key is the key `writeRailCollapsed` writes, and a
+     drift between them is silent -- the preference is stored where nothing reads
+     it and the rail simply forgets, on every load, forever.
+
+     SO THE SCRIPT IS BUILT FROM THE CONSTANTS, and this asserts that it was
+     rather than that it happens to contain the right words today. */
+  assert.ok(LAYOUT_PREPAINT.includes(JSON.stringify(RAIL_STATE_KEY)),
+    'the pre-paint script does not read the key this module writes');
+  assert.ok(LAYOUT_PREPAINT.includes(JSON.stringify(RAIL_STATE_ATTR)),
+    'the pre-paint script does not set the attribute the stylesheet selects on');
+  for (const value of [COLLAPSED, EXPANDED]) {
+    assert.ok(LAYOUT_PREPAINT.includes(JSON.stringify(value)),
+      `the pre-paint script never writes ${value}`);
+  }
+  assert.ok(LAYOUT_PREPAINT.includes(JSON.stringify(RAIL_TOGGLE_ID)),
+    'the pre-paint script does not look the chevron up by the id the rail renders '
+    + 'on it, so the state and name the server wrote stand until the shell mounts');
+  assert.match(LAYOUT_PREPAINT, /try\s*\{/,
+    'the pre-paint script touches localStorage outside a try. It runs BEFORE the '
+    + 'page is painted and is not a module, so a SecurityError there is an '
+    + 'uncaught exception on a blank console');
+
+  /* AND THE RAIL EMBEDS IT. A script exported and never rendered is the whole
+     mechanism absent, with every assertion above still green. */
+  const { template } = await railSource();
+  assert.match(template, /<script is:inline data-astro-rerun set:html=\{LAYOUT_PREPAINT\}/,
+    'IconRail.astro does not embed LAYOUT_PREPAINT as an inline, re-runnable '
+    + 'script. Deferred to the shell\'s module mount, a reader who collapsed the '
+    + 'rail watches it collapse -- and animate -- on every page load; and after a '
+    + 'ClientRouter swap, which copies the incoming document\'s <html> attributes '
+    + 'over ours, nothing puts the attribute back before the swap is painted');
+});
+
+test('the chevron announces what it does, in one place, in both states', async () => {
+  /* AN ICON-ONLY BUTTON WITH NO NAME is the regression this whole task exists to
+     end; shipping one as the control that ends it would be the joke version of
+     it. The name states the ACTION, aria-expanded states the state, and both
+     change together.
+
+     ONE AUTHOR FOR THE WORDS. The two names are rendered as data attributes and
+     read back off the DOM by the pre-paint script and by the shell, because the
+     alternative is the same two sentences in three files with only the invisible
+     ones free to drift. */
+  const { template } = await railSource();
+
+  const toggle = template.match(/<button[\s\S]*?data-rail-toggle[\s\S]*?>/);
+  assert.ok(toggle, 'the rail renders no chevron carrying data-rail-toggle');
+  const attrs = toggle[0];
+
+  assert.match(attrs, /aria-expanded="true"/,
+    'the chevron carries no aria-expanded. It is a disclosure, and without it a '
+    + 'screen reader is told only that there is a button');
+  assert.match(attrs, /id=\{RAIL_TOGGLE_ID\}/,
+    'the chevron does not carry the id the pre-paint script looks it up by, so '
+    + 'the name and state it renders cannot be corrected before they are read');
+
+  for (const which of ['expanded', 'collapsed']) {
+    const named = attrs.match(new RegExp(`data-label-${which}=\\{TOGGLE_LABEL\\.${which}\\}`));
+    assert.ok(named, `the chevron renders no data-label-${which} from TOGGLE_LABEL`);
+  }
+  assert.match(attrs, /aria-label=\{TOGGLE_LABEL\.expanded\}/,
+    'the chevron\'s server-rendered name is not the expanded one. Expanded is '
+    + 'what the server renders and what a reader with no JavaScript keeps, so '
+    + 'any other name is a lie about that document');
+
+  /* THE NAMES THEMSELVES: a verb about the rail, not a noun about the icon. */
+  const { frontmatter } = await railSource();
+  const labels = frontmatter.match(
+    /TOGGLE_LABEL = \{\s*expanded:\s*'([^']+)',\s*collapsed:\s*'([^']+)',/);
+  assert.ok(labels, 'IconRail.astro declares no TOGGLE_LABEL pair to read');
+  assert.notEqual(labels[1], labels[2],
+    'both chevron names are the same string, so the name never states which way '
+    + 'pressing it goes');
+  for (const name of [labels[1], labels[2]]) {
+    assert.ok(/\brail\b/i.test(name) && /\b(collapse|expand)\b/i.test(name),
+      `"${name}" does not say what pressing the chevron does to what. An `
+      + 'accessible name of "Toggle" or "Menu" is the icon described, not the '
+      + 'action announced');
+  }
+
+  /* AND THE SHELL READS THEM RATHER THAN RESTATING THEM. */
+  const shell = strip(await readFile(
+    new URL('../../src/scripts/climate-engine/shell/console-shell.ts', import.meta.url),
+    'utf8'));
+  assert.match(shell, /dataset\.labelCollapsed/,
+    'console-shell.ts does not take the collapsed name off the button');
+  assert.match(shell, /dataset\.labelExpanded/,
+    'console-shell.ts does not take the expanded name off the button');
+  for (const name of [labels[1], labels[2]]) {
+    assert.ok(!shell.includes(name),
+      `console-shell.ts spells "${name}" itself. The rail renders both names; a `
+      + 'second copy here is the one that goes stale unseen, because it is only '
+      + 'ever read aloud');
+  }
+  assert.match(shell, /setAttribute\('aria-expanded', String\(!collapsed\)\)/,
+    'console-shell.ts does not keep aria-expanded in step with the rail. A '
+    + 'disclosure whose state is announced wrong is worse than one with no state '
+    + 'announced at all');
+});
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   THE PANEL'S OWN COLLAPSE — a second door onto a state that already existed.
+
+   console-shell.ts has always put this column away when you click the rail
+   section whose pane is open. Nobody could find it: nothing on the page says the
+   active section is also a close button, and a touch reader never hovers into a
+   hint. The chevron is the same discoverability fix as the rail's labels, one
+   column over.
+
+   TWO DOORS ARE ONLY SAFE IF THEY CANNOT DIVERGE, so most of what follows is
+   about the single state and the single paint rather than about the button.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+const PANEL_TOGGLE = new URL(
+  '../../src/components/ClimateEngine/shell/PanelToggle.astro', import.meta.url);
+
+async function panelToggleSource() {
+  let src;
+  try {
+    src = await readFile(PANEL_TOGGLE, 'utf8');
+  } catch (err) {
+    assert.fail(
+      `PanelToggle.astro could not be read (${err.code ?? err.message}) -- every `
+      + 'assertion below reads it, so a missing file must fail rather than let '
+      + 'the suite pass over a control that is not there');
+  }
+  assert.ok(src.trim().length > 0, 'PanelToggle.astro is empty');
+  return src;
+}
+
+/** console-shell.ts, comments stripped. Read by four tests below. */
+async function shellSource() {
+  const src = strip(await readFile(
+    new URL('../../src/scripts/climate-engine/shell/console-shell.ts', import.meta.url),
+    'utf8'));
+  assert.ok(src.trim().length > 0, 'console-shell.ts read back empty');
+  return src;
+}
+
+test('the panel chevron has no state, no handler and no second toggle path', async () => {
+  /* THE SHAPE THIS PROJECT KEEPS DELETING is a second control that owns a COPY of
+     the fact. This one owns nothing: it is a button with a data attribute, and
+     the shell binds it to the same `state.open` and the same `paint()` the rail's
+     click path goes through. */
+  const src = await panelToggleSource();
+  assert.doesNotMatch(src, /<script/,
+    'PanelToggle.astro ships a script. The panel is opened and closed in exactly '
+    + 'one place; a handler here is the second path that can disagree with it');
+  assert.match(src, /data-panel-toggle/,
+    'the chevron carries no data-panel-toggle -- console-shell.ts finds it by '
+    + 'that attribute, so without it the button renders and does nothing');
+  assert.doesNotMatch(src, /localStorage/,
+    'PanelToggle.astro reaches for storage itself. layout-state.ts is the only '
+    + 'file that spells a key, and console-shell.ts is its only caller');
+
+  const shell = await shellSource();
+
+  const hiders = [...shell.matchAll(/classList\.toggle\('is-collapsed'/g)];
+  assert.equal(hiders.length, 1,
+    `console-shell.ts hides the sidebar from ${hiders.length} places. Two doors `
+    + 'onto one room is the design; two writers of the room is the defect, '
+    + 'because one of them will eventually be reached without the other');
+
+  const mirrors = [...shell.matchAll(/setAttribute\(\s*PANEL_STATE_ATTR/g)];
+  assert.equal(mirrors.length, 1,
+    'the document-level mirror of the panel state is written from '
+    + `${mirrors.length} places. It exists ONLY so the pre-paint script can apply `
+    + 'the preference before the sidebar is parsed; every later write belongs in '
+    + 'the same function as the class it mirrors');
+
+  /* BOTH DOORS REACH THE SAME FUNCTION. A chevron wired to its own DOM poke would
+     satisfy every assertion above and still leave the rail's aria-pressed stale. */
+  assert.match(shell, /on\(panelToggle, 'click', \(\) => \{\s*state\.open = false;\s*paint\(\);/,
+    "the chevron's handler does not go through state.open and paint(). Anything "
+    + "else leaves the rail's aria-pressed, the pane classes and the stored "
+    + 'preference describing a panel that is no longer on the page');
+  assert.match(shell, /if \(state\.open && state\.id === id\) state\.open = false;/,
+    "the rail's own close gesture is gone. The chevron was added BESIDE it, not "
+    + 'instead of it -- a reader who already learned the VS Code gesture keeps it');
+});
+
+test('the panel chevron announces what it does, and needs no breakpoint', async () => {
+  const src = await panelToggleSource();
+
+  assert.match(src, /aria-expanded="true"/, 'the chevron carries no aria-expanded');
+  assert.match(src, /aria-label=\{TOGGLE_LABEL\.expanded\}/,
+    "the chevron's server-rendered name is not the expanded one -- expanded is "
+    + 'what the server renders and what a reader with no JavaScript keeps');
+  for (const which of ['expanded', 'collapsed']) {
+    assert.match(src, new RegExp(`data-label-${which}=\\{TOGGLE_LABEL\\.${which}\\}`),
+      `the chevron renders no data-label-${which} from TOGGLE_LABEL`);
+  }
+
+  const labels = src.match(
+    /TOGGLE_LABEL = \{\s*expanded:\s*'([^']+)',\s*collapsed:\s*'([^']+)',/);
+  assert.ok(labels, 'PanelToggle.astro declares no TOGGLE_LABEL pair to read');
+  assert.notEqual(labels[1], labels[2], 'both chevron names are the same string');
+  for (const name of [labels[1], labels[2]]) {
+    assert.ok(/\bpanel\b/i.test(name) && /\b(collapse|expand)\b/i.test(name),
+      `"${name}" does not say what pressing the chevron does to what`);
+  }
+
+  const shell = await shellSource();
+  for (const name of [labels[1], labels[2]]) {
+    assert.ok(!shell.includes(name),
+      `console-shell.ts spells "${name}" itself -- a second copy of a sentence `
+      + 'that is only ever read aloud is the copy nobody notices going stale');
+  }
+
+  /* NO BREAKPOINT OF ITS OWN, AND THAT IS THE POINT. The rule is that the chevron
+     must not appear below 820px, where the Explore stage hides this column
+     outright -- and it does not, because it is rendered INSIDE the column. A media
+     query here would restate a fact the DOM already makes, and it would be WRONG
+     on Compare, where the sidebar becomes a block above the bench rather than
+     disappearing and the chevron still does something. */
+  assert.doesNotMatch(src, /@media\s*\(\s*(max-|min-)?width/,
+    'PanelToggle.astro declares a width breakpoint. It is inside the column it '
+    + 'collapses, so it is already gone wherever that column is -- and the one '
+    + 'route where the column survives a narrow viewport is the route where such '
+    + 'a rule would wrongly take the control away');
+  assert.match(src, /@media \(prefers-reduced-motion: reduce\)/,
+    'the chevron animates its colour with no reduced-motion escape');
+});
+
+test('both routes render the panel chevron, exactly once, inside the sidebar', async () => {
+  /* INSIDE THE SIDEBAR is load-bearing rather than tidy: it is what makes the
+     chevron vanish with the column it collapses, on both routes, with no rule
+     saying so -- and what makes "not below 820px" true for free on Explore. A
+     chevron rendered as a SIBLING of the sidebar would survive the column it just
+     hid, and sit there offering to hide it again. */
+  const stage = await stageSource();
+  const { src: bench } = await benchSource();
+
+  for (const [name, src] of [['HeatMapStage.astro', stage], ['PairedBench.astro', bench]]) {
+    const rendered = [...src.matchAll(/<PanelToggle\b/g)];
+    assert.equal(rendered.length, 1,
+      `${name} renders the panel chevron ${rendered.length} times. The console `
+      + 'has one panel; a second chevron over it is a second control the shell '
+      + 'never binds');
+    assert.match(src, /import PanelToggle from '[^']*shell\/PanelToggle\.astro'/,
+      `${name} does not import PanelToggle from the shared component`);
+
+    const open = src.indexOf('class="sidebar"');
+    const close = src.indexOf('</aside>', open);
+    const at = src.indexOf('<PanelToggle');
+    assert.ok(open !== -1 && close !== -1,
+      `${name} has no <aside class="sidebar"> to contain the chevron`);
+    assert.ok(at > open && at < close,
+      `${name} renders the panel chevron outside the sidebar. Collapsed, the `
+      + 'sidebar is display:none -- a chevron outside it outlives the column it '
+      + 'just hid, and sits there offering to hide it again');
+
+    /* THE PRE-PAINT RULE THAT CARRIES THE STORED VALUE DOWN FROM <html>, AND THE
+       CLASS THE SHELL AND THE BROWSER GUARDS BOTH READ. Both, on both routes. */
+    assert.match(src, /html\[data-panel="collapsed"\] \.sidebar\s*\{\s*display:\s*none/,
+      `${name} has no rule hiding the sidebar from the document-level attribute. `
+      + 'The pre-paint script runs where the rail is, before this column is '
+      + 'parsed, so without it a stored collapse renders open on every load and '
+      + 'then disappears once the module script mounts');
+    assert.match(src, /\.sidebar\.is-collapsed\s*\{\s*display:\s*none/,
+      `${name} no longer hides the sidebar from the class -- that class is the `
+      + "element's own state and what the browser guards read");
+  }
+});
+
+test('the panel preference is stored under its own key and defaults to open', () => {
+  assert.equal(readPanelCollapsed(fakeStore()), false,
+    "with nothing stored the panel must be OPEN -- it is the console's content, "
+    + 'and a first visit that hides it ships an empty page with a rail on it');
+  assert.equal(readPanelCollapsed(fakeStore({ [PANEL_STATE_KEY]: COLLAPSED })), true);
+  assert.equal(readPanelCollapsed(fakeStore({ [PANEL_STATE_KEY]: EXPANDED })), false);
+  assert.equal(readPanelCollapsed(hostileStore()), false);
+  assert.doesNotThrow(() => writePanelCollapsed(true, hostileStore()));
+
+  const store = fakeStore();
+  writePanelCollapsed(true, store);
+  assert.equal(store.read(PANEL_STATE_KEY), COLLAPSED);
+  assert.equal(readPanelCollapsed(store), true);
+  writePanelCollapsed(false, store);
+  assert.equal(store.read(PANEL_STATE_KEY), EXPANDED);
+
+  /* THE TWO FLAGS ARE NOT ONE FLAG. Stored under one key, collapsing the rail
+     would take the panel with it and neither chevron could say why. */
+  assert.notEqual(RAIL_STATE_KEY, PANEL_STATE_KEY);
+  const both = fakeStore({ [RAIL_STATE_KEY]: COLLAPSED });
+  assert.equal(readRailCollapsed(both), true);
+  assert.equal(readPanelCollapsed(both), false,
+    'a collapsed rail reads as a collapsed panel -- the two flags are sharing a '
+    + 'key, so one chevron moves both columns');
+
+  assert.ok(LAYOUT_PREPAINT.includes(JSON.stringify(PANEL_STATE_KEY)),
+    'the pre-paint script never reads the panel preference, so a collapsed panel '
+    + 'flashes open on every load before the module script puts it away');
+  assert.ok(LAYOUT_PREPAINT.includes(JSON.stringify(PANEL_STATE_ATTR)),
+    'the pre-paint script never sets the attribute the two stylesheets read');
+});
+
+test('the shell starts from the stored panel preference and writes it back', async () => {
+  /* THE SERVER RENDERS ONE PANE OPEN, ALWAYS. Without this the stored preference
+     would be read only by the pre-paint script: the CSS would hide the column
+     while `state.open` stayed true, so the rail would show a pressed section over
+     a panel that is not there and the first chevron press would close an
+     already-closed panel. */
+  const shell = await shellSource();
+  assert.match(shell, /open: opened !== undefined && !readPanelCollapsed\(\)/,
+    "console-shell.ts starts from the server's render alone and never asks "
+    + 'whether the reader put the panel away. The stylesheet would hide it while '
+    + 'the shell believed it open');
+  assert.match(shell, /writePanelCollapsed\(!state\.open\)/,
+    'nothing persists the panel state, so the chevron is forgotten on reload');
 });
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -2286,39 +2998,125 @@ test('every token the rail paints with resolves on the compare route', async () 
 });
 
 test('both routes agree on how wide the rail is', async () => {
-  /* THE WIDTH IS WRITTEN TWICE AND CANNOT BE WRITTEN ONCE. HeatMapStage.astro
-     declares no --rail, so Explore takes IconRail's fallback; PairedBench.astro
-     must declare one because it pads the bench past the rail with
-     `calc(var(--rail) + ...)`, and a fallback it never names is a value it cannot
-     read. Two numbers, no shared stylesheet between the routes to hold one.
+  /* THE WIDTH USED TO BE WRITTEN TWICE AND THIS TEST USED TO COMPARE THE TWO.
+     HeatMapStage.astro declared no --rail, so Explore took a fallback spelled
+     inside IconRail.astro; PairedBench.astro declared a literal of its own,
+     because it pads the bench past the rail with `calc(var(--rail) + ...)` and a
+     fallback it never names is a value it cannot read.
 
-     LEFT UNGUARDED THEY DRIFT, and this is not hypothetical: widening the column
-     found a THIRD copy inside the rail itself -- the active-pane accent bar was
-     offset by `var(--rail, 56px)` while the column had moved on. The bar is
-     positioned from the rail's own width, so the stale copy floated it half the
-     difference off the edge it is meant to sit flush against. That one is now
-     resolved once into --rail-w and inherited; these two remain, so they are
-     compared. */
+     THAT ARRANGEMENT DIED WHEN THE WIDTH BECAME A STATE. Two numbers with a guard
+     over them was tolerable for a constant; expanded-and-collapsed makes it two
+     numbers PER ROUTE, and the drift a comparison catches is then only one of the
+     four ways they can disagree -- the interesting failure being a route that
+     tracks one state and not the other, which two equal literals cannot express
+     at all. The last time this width moved it also turned up a THIRD copy inside
+     the rail: the accent bar offset by `var(--rail, 56px)` while the column had
+     gone to 58, floating the bar half the difference off the edge it is meant to
+     sit flush against.
+
+     SO THERE IS ONE DECLARATION NOW, and this guard proves the ABSENCE of the
+     others rather than the agreement of two. An absence is the stronger claim: a
+     comparison passes as soon as two copies happen to match, while this fails the
+     moment a second copy exists at all. What the rail actually RENDERS at each
+     state on each route is measured in a browser, in tests/e2e -- source cannot
+     see a computed width, and this test does not pretend to. */
   const { css: railCss } = await railSource();
   const { css: benchCss } = await benchSource();
+  const stageCss = await stageSource();
 
-  const fallback = railCss.match(/--rail-w:\s*var\(\s*--rail\s*,\s*(\d+)px\s*\)/);
-  assert.ok(fallback,
-    'IconRail.astro no longer resolves --rail through a single --rail-w fallback. '
-    + 'That fallback is the width Explore actually renders, because HeatMapStage '
-    + 'declares no --rail -- if it has moved or been split again, this guard is '
-    + 'reading nothing and the routes can differ silently');
+  /* THE TWO WIDTHS AND THE SELECTION, ALL THREE IN THE RAIL. */
+  const collapsed = railCss.match(/--rail-collapsed:\s*(\d+)px/);
+  const expanded = railCss.match(/--rail-expanded:\s*(\d+)px/);
+  assert.ok(collapsed && expanded,
+    'IconRail.astro no longer declares both --rail-collapsed and --rail-expanded '
+    + 'as plain pixel values. They are the only two widths the console has, and a '
+    + 'guard that cannot read them is reading nothing');
+  assert.notEqual(collapsed[1], expanded[1],
+    `both rail states are ${collapsed[1]}px. The expanded rail exists to hold the `
+    + 'labels; at the collapsed width they do not fit, so a rail that expands to '
+    + 'the same number is a collapse control that does nothing');
+  assert.ok(Number(expanded[1]) > Number(collapsed[1]),
+    `--rail-expanded (${expanded[1]}px) is not wider than --rail-collapsed `
+    + `(${collapsed[1]}px)`);
 
-  const declared = benchCss.match(/--rail:\s*(\d+)px/);
-  assert.ok(declared,
-    'PairedBench.astro declares no --rail. Its own padding reads var(--rail) with '
-    + 'no fallback, so the bench would sit under the rail rather than beside it');
+  /* DECLARED WHERE BOTH ROUTES INHERIT IT. On `.rail` the width would reach the
+     rail's own children and nothing above them -- and the bench's padding, which
+     has to clear a `position:fixed` rail, is above them. */
+  assert.match(railCss, /:global\(:root\)\s*\{[^}]*--rail:\s*var\(--rail-collapsed\)/,
+    'IconRail.astro does not resolve --rail on :root. Declared anywhere inside '
+    + 'the rail it cannot reach PairedBench.astro\'s padding-inline-start, which '
+    + 'is what stops the fixed rail covering the bench');
+  assert.match(railCss,
+    /html:not\(\[data-rail="collapsed"\]\)\)\s*\{\s*--rail:\s*var\(--rail-expanded\)/,
+    'nothing switches --rail to the expanded width. The labels would render '
+    + 'inside a 58px column');
 
-  assert.equal(declared[1], fallback[1],
-    `the compare route renders a ${declared[1]}px rail and the explore route a `
-    + `${fallback[1]}px one. The rail is the same component on both pages, so a `
-    + 'reader crossing between them watches the navigation change width -- and on '
-    + 'compare the bench is padded past the wrong number, so it overlaps or gaps');
+  /* AND NOWHERE ELSE. This is the whole guard: any second declaration on either
+     route shadows the one above for that route's subtree, and shadows it at ONE
+     state, so the routes come apart while both still look declared-and-correct
+     in their own file. */
+  for (const [name, css] of [['PairedBench.astro', benchCss], ['HeatMapStage.astro', stageCss]]) {
+    for (const token of ['--rail', '--rail-collapsed', '--rail-expanded']) {
+      assert.doesNotMatch(css, new RegExp(`${token}\\s*:`),
+        `${name} declares ${token} of its own. IconRail.astro declares it on `
+        + ':root for both routes; a second declaration lower in the tree wins for '
+        + 'everything under it, so this route would keep one width while the '
+        + 'other tracked the state');
+    }
+  }
+
+  /* THE READERS. The bench must still take its padding from the property rather
+     than from a number of its own, and the rail's accent bar from the same one --
+     that bar is the third copy the last widening turned up. */
+  assert.match(benchCss, /padding-inline-start:\s*calc\(\s*var\(--rail\)/,
+    'PairedBench.astro no longer pads the bench past var(--rail). Its rail is '
+    + 'position:fixed, so without that padding the navigation covers the bench');
+  assert.match(railCss, /\.rail\s*\{[^}]*inline-size:\s*var\(--rail\)/,
+    'the rail is not sized by var(--rail) -- whatever else reads it is then '
+    + 'reserving space for a column of a different width');
+  assert.match(railCss, /left:\s*calc\(50% - var\(--rail\) \/ 2\)/,
+    'the accent bar is no longer offset from var(--rail). It is positioned from '
+    + 'the rail\'s width, so a stale copy floats it half the difference off the '
+    + 'edge it is meant to sit flush against');
+});
+
+test('the rail collapses at exactly the width the console drops its sidebar', async () => {
+  /* TWO FILES, ONE BREAKPOINT, AND THEY ARE COMPLEMENTS RATHER THAN COPIES.
+     HeatMapStage.astro drops the sidebar at `max-width:820px`; the rail expands
+     above `width > 820px`. Written as different comparisons of the same number
+     they cannot be compared by looking for the same string, so the number is
+     pulled out of each and checked -- otherwise there is a band of widths where
+     the rail believes it has room for labels and the console has already decided
+     there is not. */
+  const { css: railCss } = await railSource();
+  const stageCss = await stageSource();
+
+  const sidebarGone = stageCss.match(
+    /@media\s*\(max-width:\s*(\d+)px\)\s*\{(?:[^{}]|\{[^{}]*\})*?\.sidebar\s*\{\s*display:\s*none/);
+  assert.ok(sidebarGone,
+    'HeatMapStage.astro no longer drops .sidebar at a max-width breakpoint -- '
+    + 'the rail\'s forced collapse is pinned to that number, and this guard can '
+    + 'no longer read it');
+
+  /* EVERY ONE OF THEM, not the first. The rail states this breakpoint more than
+     once -- once to switch the width, once to switch the look, once to take the
+     chevron away -- and the failure that matters is exactly the one where a
+     person edits one and not the others, so a `.match()` reading the first would
+     be blind to it. */
+  const thresholds = [...railCss.matchAll(/@media \(width (?:>|<=) (\d+)px\)/g)]
+    .map((m) => m[1]);
+  assert.ok(thresholds.length >= 3,
+    `the rail states a width breakpoint ${thresholds.length} times, expected at `
+    + 'least 3 (the width switch, the expanded look, and the chevron). Fewer '
+    + 'means one of the three has stopped being conditional at all');
+
+  const wrong = thresholds.filter((t) => t !== sidebarGone[1]);
+  assert.deepEqual(wrong, [],
+    `the rail changes state at ${wrong.join(', ')}px while the console drops its `
+    + `sidebar at ${sidebarGone[1]}px. Between the two there is a band of widths `
+    + 'where the rail believes it has room for labels and the console has already '
+    + 'decided there is not -- or where the chevron is offered over a rail that '
+    + 'cannot expand');
 });
 
 test('the pane switcher is portable and the scope half is not', async () => {

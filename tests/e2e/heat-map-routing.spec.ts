@@ -614,6 +614,282 @@ test('no rail section is a link to the page it is already on', async ({ page }) 
   await expect(page.locator('.pane[data-pane="map"]')).toHaveClass(/is-on/);
 });
 
+/**
+ * THE RAIL'S WIDTH, MEASURED RATHER THAN READ.
+ *
+ * Source cannot see a computed width, and the width is now the product of a
+ * declaration on `:root`, an attribute on <html>, a media query and whatever the
+ * viewport happens to be. The unit suite proves there is only ONE declaration of
+ * it; only a browser can say what that declaration resolves to on each route in
+ * each state, which is the fact the reader actually gets.
+ */
+/**
+ * WHETHER THE LABEL IS A WORD ON THE ROW OR A TOOLTIP WAITING FOR A POINTER.
+ *
+ * NOT `toBeVisible()`, and the difference is the whole point of the collapsed
+ * state. Playwright reads visibility as "has a box and is not display:none /
+ * visibility:hidden" -- and the collapsed label deliberately keeps its box, at
+ * `opacity: 0`, because that is what leaves the accessible name in the tree while
+ * taking the pixels away. So `toBeVisible()` is TRUE in both states, and the
+ * first draft of these tests asserted `not.toBeVisible()` against a collapsed
+ * rail and failed for the right reason. The two computed properties below are
+ * what actually separate the states.
+ */
+const labelStyle = (page: Page) => page.locator('[data-rail="layers"] .rail-label')
+  .evaluate((el) => {
+    const s = getComputedStyle(el);
+    return { opacity: Number(s.opacity), position: s.position };
+  });
+
+const railBox = (page: Page) => page.locator('nav.rail').evaluate((el) => {
+  const rail = el.getBoundingClientRect();
+  /* The accent bar is a ::before, so it has no box of its own to measure. Its
+     `left` is resolved against the button it hangs off, which does. */
+  const pressed = el.querySelector('[aria-pressed="true"]');
+  const barLeft = pressed === null ? null
+    : pressed.getBoundingClientRect().left
+      + parseFloat(getComputedStyle(pressed, '::before').left);
+  return { left: rail.left, width: rail.width, barLeft };
+});
+
+test('the rail shows its labels, remembers being collapsed, and keeps its names', async ({ page }) => {
+  /* REDUCED MOTION, because the width is transitioned: without it every
+     measurement below is a race against 180ms of easing, and the first draft of
+     this test read 141px — a number neither state has. */
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto(BALLYGUNGE);
+
+  const label = page.locator('[data-rail="layers"] .rail-label');
+  const toggle = page.locator('button[data-rail-toggle]');
+
+  /* EXPANDED IS WHAT A FIRST VISIT GETS. Nothing is stored, so this is the
+     default arriving through the CSS rather than through any script. */
+  expect(await labelStyle(page)).toEqual({ opacity: 1, position: 'static' });
+  await expect(label).toHaveText('Layers');
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  const open = await railBox(page);
+  expect(open.width, 'the rail is not wide enough to hold a word beside an icon')
+    .toBeGreaterThan(120);
+
+  /* THE ACCENT BAR IS FLUSH AT THIS WIDTH. It is offset from the rail's own
+     width, and the last time that width moved the bar was left reading a stale
+     copy and floated half the difference off the edge. */
+  await page.locator('[data-rail="layers"]').click();
+  const openPressed = await railBox(page);
+  expect(openPressed.barLeft, 'no section is showing its open-pane accent bar')
+    .not.toBeNull();
+  expect(Math.abs(openPressed.barLeft! - openPressed.left),
+    'the open-pane accent bar is not flush against the expanded rail\'s edge')
+    .toBeLessThan(1);
+
+  /* COLLAPSED. The labels go from the eye and stay in the accessibility tree —
+     an icon-only rail whose sections announce nothing is the regression this
+     replaces, not the state it collapses to. */
+  await toggle.click();
+  expect((await labelStyle(page)).opacity,
+    'the label is still painted after the rail collapsed').toBe(0);
+  expect((await labelStyle(page)).position,
+    'the collapsed label is not the floating tooltip -- it is still taking a row '
+    + "of the rail's own layout, in a column too narrow to hold it").toBe('absolute');
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.locator('[data-rail="layers"]'))
+    .toHaveAccessibleName(/Layers/);
+  const shut = await railBox(page);
+  expect(shut.width, 'the rail did not narrow when it was collapsed')
+    .toBeLessThan(open.width);
+  expect(Math.abs(shut.barLeft! - shut.left),
+    'the accent bar is flush when the rail is expanded and not when it is '
+    + 'collapsed — it is offset from a width that only tracks one of the two')
+    .toBeLessThan(1);
+
+  /* THE NAME FOLLOWS THE STATE. A disclosure that still says "Collapse" while
+     collapsed is worse than one that says nothing. */
+  const collapsedName = await toggle.getAttribute('aria-label');
+  expect(collapsedName).toMatch(/expand/i);
+
+  /* AND IT SURVIVES A RELOAD, which is the whole reason it is in localStorage.
+     Measured after `load`, so a rail that came back expanded and then collapsed
+     itself would show up as the flash it is rather than passing on the settled
+     value. */
+  await page.reload({ waitUntil: 'load' });
+  expect((await railBox(page)).width).toBe(shut.width);
+  expect((await labelStyle(page)).opacity).toBe(0);
+  await expect(page.locator('button[data-rail-toggle]'))
+    .toHaveAttribute('aria-expanded', 'false');
+
+  /* EXPANDING AGAIN IS REMEMBERED TOO. A preference that can only be set one way
+     is a door that locks — and it is exactly what a handler toggling the STORED
+     value rather than the rendered one produces where storage is unavailable. */
+  await page.locator('button[data-rail-toggle]').click();
+  await page.reload({ waitUntil: 'load' });
+  expect((await railBox(page)).width).toBe(open.width);
+});
+
+test('below the console breakpoint the rail is collapsed whatever was stored', async ({ page }) => {
+  /* THE STORED PREFERENCE IS OVERRIDDEN, NOT FORGOTTEN. At this width the stage
+     has already dropped the sidebar; a 172px navigation column over what is left
+     of the map would be the same trade made worse. The chevron goes with it,
+     because a control that cannot change anything is one this project deletes. */
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto(BALLYGUNGE);
+
+  const wide = await railBox(page);
+  expect(await labelStyle(page)).toEqual({ opacity: 1, position: 'static' });
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  const narrow = await railBox(page);
+  expect(narrow.width, 'the rail keeps its expanded width on a phone, over a map '
+    + 'that has already given up its sidebar').toBeLessThan(wide.width);
+  expect((await labelStyle(page)).opacity,
+    'the labels are still painted on a 390px rail').toBe(0);
+  await expect(page.locator('button[data-rail-toggle]')).not.toBeVisible();
+
+  /* THE SECTIONS ARE STILL NAMED. This is the width with no hover at all, so the
+     tooltip that used to be the only label is unreachable by definition. */
+  await expect(page.locator('[data-rail="layers"]')).toHaveAccessibleName(/Layers/);
+
+  /* AND THE PREFERENCE IS INTACT: widening brings the labels back without the
+     reader having to ask for them again. */
+  await page.setViewportSize({ width: 1400, height: 900 });
+  expect(await labelStyle(page)).toEqual({ opacity: 1, position: 'static' });
+  expect((await railBox(page)).width).toBe(wide.width);
+});
+
+test('the panel closes by either door, and both doors leave the same state', async ({ page }) => {
+  /* THE WIDTH IS PINNED WIDE FOR EVERY ASSERTION HERE. Below 820px this column is
+     `display:none` by media query, so a "the panel is hidden" check would pass
+     over a chevron that does nothing at all -- the exact shape of guard this
+     project has been caught shipping. Nothing below is read at a width where the
+     stylesheet would answer for the control. */
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto(BALLYGUNGE);
+
+  const sidebar = page.locator('.sidebar');
+  const chevron = page.locator('button[data-panel-toggle]');
+  const mapSection = page.locator('[data-rail="map"]');
+  const layers = page.locator('[data-rail="layers"]');
+
+  await expect(sidebar).toBeVisible();
+  await expect(chevron).toBeVisible();
+  await expect(chevron).toHaveAttribute('aria-expanded', 'true');
+  await expect(mapSection).toHaveAttribute('aria-pressed', 'true');
+
+  /* DOOR ONE: the chevron. Every part of the state has to move, not just the
+     column -- the rail's pressed section is a claim about a pane that is no
+     longer on the page. */
+  await chevron.click();
+  await expect(sidebar).toBeHidden();
+  await expect(page.locator('html')).toHaveAttribute('data-panel', 'collapsed');
+  await expect(mapSection).toHaveAttribute('aria-pressed', 'false');
+  await expect(chevron).toHaveAttribute('aria-expanded', 'false');
+
+  /* THE WAY BACK IS THE RAIL, which is the whole reason the chevron does not need
+     to reopen anything. A different section than the one that was showing, so
+     this cannot pass by the panel simply never having closed. */
+  await layers.click();
+  await expect(sidebar).toBeVisible();
+  await expect(page.locator('.pane[data-pane="layers"]')).toHaveClass(/is-on/);
+  await expect(layers).toHaveAttribute('aria-pressed', 'true');
+  await expect(chevron).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.locator('html')).toHaveAttribute('data-panel', 'expanded');
+
+  /* DOOR TWO: the rail's own gesture, clicking the section already showing. It
+     must land in exactly the state the chevron produced -- if the two write
+     different things, one of them is a second copy of the fact. */
+  await layers.click();
+  await expect(sidebar).toBeHidden();
+  await expect(page.locator('html')).toHaveAttribute('data-panel', 'collapsed');
+  await expect(layers).toHaveAttribute('aria-pressed', 'false');
+  await expect(chevron).toHaveAttribute('aria-expanded', 'false');
+
+  await mapSection.click();
+  await expect(sidebar).toBeVisible();
+  await expect(chevron).toHaveAttribute('aria-expanded', 'true');
+});
+
+test('a collapsed panel survives a reload, and 820px overrides an open one', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto(BALLYGUNGE);
+
+  await page.locator('button[data-panel-toggle]').click();
+  await expect(page.locator('.sidebar')).toBeHidden();
+
+  /* REMEMBERED. Read after `load` at the SAME width, so nothing here can be the
+     viewport answering instead of the preference. */
+  await page.reload({ waitUntil: 'load' });
+  await expect(page.locator('.sidebar')).toBeHidden();
+  await expect(page.locator('button[data-panel-toggle]'))
+    .toHaveAttribute('aria-expanded', 'false');
+
+  /* AND THE PANE IDENTITY IS STILL NOT REMEMBERED, which is the decision
+     console-shell.ts made and this one deliberately does not overturn: bringing
+     the panel back gives the DEFAULT pane, not whatever was showing when it was
+     put away. Layers was never opened in this test, so Map coming back is the
+     server's render rather than a restored choice. */
+  await page.locator('[data-rail="reports"]').click();
+  await expect(page.locator('.pane[data-pane="reports"]')).toHaveClass(/is-on/);
+  await page.reload({ waitUntil: 'load' });
+  await expect(page.locator('.pane[data-pane="map"]')).toHaveClass(/is-on/);
+
+  /* THE BREAKPOINT WINS OVER A STORED *OPEN*. The panel is open at this point, so
+     a hidden sidebar at 390px can only be the media query -- and it must come
+     back when there is room, without the reader asking again. */
+  await expect(page.locator('.sidebar')).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.locator('.sidebar')).toBeHidden();
+  await expect(page.locator('button[data-panel-toggle]')).toBeHidden();
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await expect(page.locator('.sidebar')).toBeVisible();
+});
+
+test('both stored preferences are applied before any module script runs', async ({ page }) => {
+  /* THE NO-FLASH GUARD, AND IT HAD TO BE WRITTEN THIS WAY. The obvious version —
+     collapse, reload, assert collapsed — passes whether the preference is applied
+     before first paint or three hundred milliseconds later by the shell's mount,
+     because Playwright waits for the settled state either way. Measured: deleting
+     the rule that applies the stored panel collapse early left that test green.
+     What it costs a reader is a 300px column and a 114px rail appearing and then
+     being taken away on every single load.
+     So every bundled module is BLOCKED. What is left is the server's HTML and the
+     one inline script the rail embeds, which is exactly the state the page is in
+     at first paint — and both preferences must already be honoured in it. */
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.setViewportSize({ width: 1400, height: 900 });
+
+  await page.addInitScript(() => {
+    try {
+      localStorage.setItem('obos:rail', 'collapsed');
+      localStorage.setItem('obos:panel', 'collapsed');
+    } catch { /* the test cannot run without storage; the assertions below say so */ }
+  });
+  await page.route('**/_astro/*.js', (route) => route.abort());
+  await page.goto(BALLYGUNGE, { waitUntil: 'commit' });
+
+  const html = page.locator('html');
+  await expect(html, 'the rail preference is not on the document before the '
+    + 'bundle runs — the inline pre-paint script is missing or threw')
+    .toHaveAttribute('data-rail', 'collapsed');
+  await expect(html).toHaveAttribute('data-panel', 'collapsed');
+
+  /* AND THE PIXELS FOLLOW, which is the half the attributes alone do not prove:
+     an attribute nothing selects on is a preference recorded and ignored. */
+  await expect(page.locator('.sidebar'),
+    'the panel is still on screen with its collapse stored and no script running '
+    + '— the attribute is set but no stylesheet reads it, so the column will '
+    + 'appear on every load and vanish once the bundle mounts').toBeHidden();
+  expect(await page.locator('nav.rail').evaluate((el) => el.getBoundingClientRect().width),
+    'the rail is at its expanded width with the collapse stored and no script '
+    + 'running, so it will be seen wide and then animate shut on every load')
+    .toBeLessThan(120);
+
+  /* THE SECTIONS ARE STILL NAMED WITH NO JAVASCRIPT AT ALL. */
+  await expect(page.locator('[data-rail="layers"]')).toHaveAccessibleName(/Layers/);
+});
+
 test('the console carries exactly one brand mark', async ({ page }) => {
   /* Two brands eight pixels apart, both linking to `/`, is what composing the rail
      with the old top bar produced. Counted in the built page rather than in either
@@ -741,15 +1017,24 @@ test('an area with no data states its tier instead of half-rendering', async ({ 
      The three scope fields are the exception and the point: they are how you
      leave. Everything else must be absent or disabled.
 
-     THE CARVE-OUT IS NOW SPELLED IN TWO HALVES, and it is the same carve-out
-     rather than a loosened one. It used to read `.sidebar button` → 0, because the
-     scope fields were bare <select>s and the sidebar genuinely held no button at
-     all. They are dropdowns now and each opens from a <button>, so the exception
-     has to be named — and it is named by BOTH a floor and a ceiling: exactly three
-     triggers, and nothing else clickable. Asserting only `:not([data-select-trigger])`
-     would let the three quietly become none. */
+     THE CARVE-OUT IS SPELLED AS A FLOOR AND A CEILING, and it is the same
+     carve-out rather than a loosened one. It used to read `.sidebar button` → 0,
+     because the scope fields were bare <select>s and the sidebar genuinely held no
+     button at all. They are dropdowns now and each opens from a <button>, so the
+     exception has to be named — and it is named by BOTH a count and a remainder:
+     exactly three triggers, and nothing else clickable. Asserting only the
+     remainder would let the three quietly become none.
+
+     THE PANEL'S CHEVRON IS THE SECOND NAMED EXCEPTION, and it belongs on the same
+     side of this test as the scope fields: it is not a control over data that is
+     not here, it is a control over how much of the screen this statement is using.
+     It works on this page exactly as it works on every other, which is why it is
+     counted rather than excluded — a `:not()` that merely stepped over it would
+     also step over a second one arriving with nothing behind it. */
   await expect(page.locator('.sidebar button[data-select-trigger]')).toHaveCount(3);
-  await expect(page.locator('.sidebar button:not([data-select-trigger])')).toHaveCount(0);
+  await expect(page.locator('.sidebar button[data-panel-toggle]')).toHaveCount(1);
+  await expect(page.locator(
+    '.sidebar button:not([data-select-trigger]):not([data-panel-toggle])')).toHaveCount(0);
   await expect(page.locator('.sidebar a')).toHaveCount(0);
   await expect(page.locator('.sidebar input:not(:disabled)')).toHaveCount(0);
   await expect(page.locator('.sidebar select:not([data-scope])')).toHaveCount(0);

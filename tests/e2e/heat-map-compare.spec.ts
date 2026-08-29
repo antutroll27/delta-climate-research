@@ -234,6 +234,45 @@ test.describe('paired heat-map comparison', () => {
     await expect(page.locator('.sidebar')).not.toHaveClass(/is-collapsed/);
   });
 
+  test('the panel chevron collapses this route too, and the rail brings it back', async ({ page }) => {
+    /* BOTH ROUTES HAVE THIS COLUMN, so both get the control. The width is pinned
+       because a hidden sidebar can be the viewport rather than the chevron —
+       though on THIS route it never is: the bench keeps its sidebar at every
+       width, becoming a block above the bench rather than disappearing, which is
+       precisely why the chevron carries no breakpoint of its own. */
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.setViewportSize({ width: 1400, height: 900 });
+    await page.goto('/heat-map/compare/');
+
+    const sidebar = page.locator('.sidebar');
+    const chevron = page.locator('button[data-panel-toggle]');
+    await expect(chevron).toHaveCount(1);       // one panel, one chevron
+    await expect(sidebar).toBeVisible();
+    await expect(chevron).toHaveAttribute('aria-expanded', 'true');
+
+    await chevron.click();
+    await expect(sidebar).toBeHidden();
+    await expect(sidebar).toHaveClass(/is-collapsed/);
+    await expect(page.locator('[data-rail="analysis"]')).toHaveAttribute('aria-pressed', 'false');
+
+    /* THE SAME WAY BACK AS ON EXPLORE. Analysis is this route's own pane, and it
+       returns with the pane the server rendered rather than an empty column. */
+    await page.locator('[data-rail="analysis"]').click();
+    await expect(sidebar).toBeVisible();
+    await expect(page.locator('[data-pane="analysis"]')).toHaveClass(/is-on/);
+    await expect(chevron).toHaveAttribute('aria-expanded', 'true');
+
+    /* AND THE BENCH IS NOT LEFT UNDER THE RAIL BY ANY OF IT. The rail is fixed
+       and the bench is padded past it; collapsing the panel moves the sidebar,
+       never the rail. */
+    const clear = await page.evaluate(() => {
+      const rail = document.querySelector('nav.rail')!.getBoundingClientRect();
+      const bench = document.querySelector('.heat-compare__console')!.getBoundingClientRect();
+      return bench.left - rail.right;
+    });
+    expect(clear, 'the bench is sitting under the fixed rail').toBeGreaterThan(0);
+  });
+
   test('the A/B pickers are the scope control, and they still drive the model', async ({ page }) => {
     test.setTimeout(60_000);
     await page.goto('/heat-map/compare/?a=barrackpore&b=ballygunge');

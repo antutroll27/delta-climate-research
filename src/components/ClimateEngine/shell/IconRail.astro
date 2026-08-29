@@ -8,12 +8,31 @@
  * you. Everything that used to be a second navigation is gone, because one
  * navigation is easier to learn than two.
  *
- * ITS WIDTH IS WRITTEN TWICE AND A GUARD SAYS SO. `var(--rail, N)` below is what
- * Explore gets, because HeatMapStage.astro declares no `--rail`; PairedBench.astro
- * declares one because it needs the VALUE, not just the column — the bench is
- * padded past the rail by `calc(var(--rail) + …)` and cannot read a fallback it
- * never names. The two numbers must agree or the routes wear different rails, so
- * a unit test compares them rather than trusting whoever edits one to edit both.
+ * ITS WIDTH IS NOW A STATE, AND IT IS WRITTEN ONCE. The rail expands to show its
+ * labels and collapses to the icon strip, so the column is two numbers rather
+ * than one — and the old arrangement could not hold two. Explore took a fallback
+ * spelled inside this file while PairedBench.astro declared a literal of its own,
+ * because the bench's rail is `position:fixed` and the bench is padded past it by
+ * `calc(var(--rail) + …)`: a value it cannot read from a fallback it never names.
+ * Two numbers with a test comparing them was tolerable for a constant; for a state
+ * it would have been two numbers per route in three files, agreeing at both ends.
+ *
+ * So both widths and the CURRENT one are declared here, on `:root`, and every
+ * reader on both routes reads the same property. `:root` rather than `.rail`
+ * because custom properties inherit DOWNWARDS: a width published on the rail
+ * could never reach the padding whose whole job is to clear it. This is the one
+ * thing this component declares outside itself, and it is declared where a
+ * page-level singleton belongs.
+ *
+ * THE COLLAPSE IS REMEMBERED, NOT ROUTED. shell/layout-state.ts owns the key, the
+ * attribute and the pre-paint script, and writes down why the preference is in
+ * localStorage rather than in the URL.
+ *
+ * BELOW THE STAGE'S OWN BREAKPOINT THE RAIL IS COLLAPSED WHATEVER WAS STORED, and
+ * the chevron goes with it. At that width HeatMapStage.astro already drops the
+ * sidebar entirely; a 172px navigation column over what is left of the map would
+ * be the same trade made worse, and a control that cannot change anything is one
+ * this project keeps deleting.
  *
  * THE RAIL CARRIES THE MODE, AND THE VERBS ARE MIXED ON PURPOSE:
  *
@@ -61,12 +80,23 @@
  * NO SETTINGS CONTROL. The first version shipped one, inert, and said so. Nothing
  * exists for it to open, and a control that does nothing is the defect this project
  * has repeatedly deleted — so it is deleted rather than wired to a panel that would
- * have had to be invented to justify it.
+ * have had to be invented to justify it. The chevron beside the wordmark is the
+ * one control here that is not a section, and it is wired in console-shell.ts
+ * before it is rendered.
+ *
+ * NO SECTION HEADERS. The mockup grouped the five under "Console" and "Output".
+ * Five rows do not need to be grouped — the headers would add two more strings to
+ * keep out of the tab order and two more surfaces to hold to the contrast floor,
+ * to divide a list short enough to be read at a glance.
  *
  * The icons are the founder-approved set from the shell mockup, path data copied
  * verbatim.
  */
 import { DEFAULT_AREA_PATH } from '../../../scripts/climate-engine/scope/paths.ts';
+import {
+  LAYOUT_PREPAINT,
+  RAIL_TOGGLE_ID,
+} from '../../../scripts/climate-engine/shell/layout-state.ts';
 
 /** The five places the rail can be. Exported for callers to name one. */
 export type RailSection = 'map' | 'layers' | 'analysis' | 'reports' | 'scenarios';
@@ -94,6 +124,25 @@ const { route, pane, explorePath = DEFAULT_AREA_PATH } = Astro.props;
 
 /** The compare route, written once. `paths.ts` owns the per-area URLs, not this. */
 const COMPARE_PATH = '/heat-map/compare/';
+
+/**
+ * THE CHEVRON'S TWO NAMES, AND THEY NAME THE ACTION RATHER THAN THE STATE.
+ *
+ * "Collapse the navigation rail" says what pressing it will do; "Navigation rail"
+ * would leave a reader to infer it from `aria-expanded` alone, and an icon-only
+ * button with no name at all is the regression this replaces — five glyphs whose
+ * only labels were tooltips, which a touch device never shows and a first-time
+ * reader never discovers.
+ *
+ * BOTH ARE RENDERED, as data attributes on the button. The name has to change when
+ * the state does, and the two scripts that change it — the pre-paint one from
+ * layout-state.ts and the shell's click handler — would otherwise each carry their
+ * own copy of both strings. Written here, read from the DOM, they have one author.
+ */
+const TOGGLE_LABEL = {
+  expanded: 'Collapse the navigation rail',
+  collapsed: 'Expand the navigation rail',
+} as const;
 
 /**
  * One rail glyph: an optional circle plus a path, both drawn on a 24-unit box.
@@ -200,9 +249,37 @@ const items = SECTIONS.map((s) => {
       cyan — the plate is dropped and the logo meets the rail's ground directly.
       `eager`, not lazy: it is the topmost thing in the viewport on both routes,
       and deferring it only guarantees a visible pop-in. */}
-  <a class="mark" href="/" aria-label="Delta Climate Research home">
-    <img src="/logo-mark-96.webp" alt="" width="34" height="34" loading="eager" decoding="async" />
-  </a>
+  <div class="brand">
+    <a class="mark" href="/" aria-label="OBOS — Delta Climate Research home">
+      <img src="/logo-mark-96.webp" alt="" width="34" height="34" loading="eager" decoding="async" />
+      {/* THE WORDMARK IS INSIDE THE LINK AND THE NAME BEGINS WITH IT. A visible
+          word whose control announces something else is WCAG 2.5.3 — someone
+          saying "OBOS" to a voice driver would be naming a link the browser
+          believes is called "Delta Climate Research home". */}
+      <b class="wordmark">OBOS</b>
+    </a>
+
+    {/* THE COLLAPSE CONTROL. `aria-expanded` states which way the rail is; the
+        label states what pressing it does, and console-shell.ts swaps both.
+        Server-rendered EXPANDED because that is the default and because it is
+        what a reader with no JavaScript will keep — nothing can collapse the
+        rail for them, so "expanded" is not an optimistic guess, it is the truth
+        about that document. */}
+    <button
+      type="button"
+      class="rail-toggle"
+      id={RAIL_TOGGLE_ID}
+      data-rail-toggle
+      aria-expanded="true"
+      aria-label={TOGGLE_LABEL.expanded}
+      data-label-expanded={TOGGLE_LABEL.expanded}
+      data-label-collapsed={TOGGLE_LABEL.collapsed}
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="m14 6-6 6 6 6" />
+      </svg>
+    </button>
+  </div>
 
   {items.map((s) => s.href === null ? (
     <button
@@ -229,6 +306,17 @@ const items = SECTIONS.map((s) => {
   ))}
 </nav>
 
+{/* BEFORE THE RAIL IS PAINTED, AND AFTER IT IS PARSED. The stored preference has
+    to be on <html> before the first paint or a reader who collapsed the rail
+    watches it collapse — and animate — on every load; it has to be after the
+    <nav> so the same pass can correct the chevron the server rendered expanded.
+    `is:inline` keeps it verbatim and blocking, which is the whole point;
+    `data-astro-rerun` runs it again after a ClientRouter swap, because the swap
+    copies the incoming document's <html> attributes over ours and this one is
+    not in any document the server wrote. A <script> is `display:none` by UA
+    default, so it is not a grid or flex item of the console around it. */}
+<script is:inline data-astro-rerun set:html={LAYOUT_PREPAINT} />
+
 <style>
   /* SCOPED, NOT is:global. The stage's own block is global for a reason that does
      not extend here: MapLibre injects DOM the stage never rendered and
@@ -236,20 +324,53 @@ const items = SECTIONS.map((s) => {
      reach them. Every element in this file is Astro-rendered and static, the hash
      reaches all of it, and the global surface shrinks rather than grows.
 
-     Colours are var() throughout. Task 2's guard fails the build on any hex
-     written more than once in a file — comments included — so the two below are
-     the mark's own gradient stop and its inked lettering, each written once and
-     nowhere else. --rail-ground is declared beside the rest of the palette in
+     THE ONE EXCEPTION IS THE COLUMN'S WIDTH, and `:global()` inside a SCOPED block
+     is the sanctioned way to write it — not a globally-marked block, which would
+     take the hash off everything else in the file and, worse, would make the
+     `:global()` below ship verbatim for the browser to discard. Astro's compiler
+     turns `:global(:root)` here into a bare `:root`; three rules leave this file
+     and the other thirty stay scoped.
+
+     Colours are var() throughout, and exactly one hex is written here: the
+     resting ink, which is this component's own and belongs to nothing else.
+     Task 2's guard fails the build on any hex written more than once in a file,
+     comments included. --rail-ground and the rest of the palette are declared in
      HeatMapStage.astro, which is where the tokens live. */
 
+  /* ── THE COLUMN'S WIDTH ───────────────────────────────────────────────────
+     Three declarations, and they are the only place either number is written.
+
+     ON :root BECAUSE CUSTOM PROPERTIES INHERIT DOWNWARDS. The paired bench's rail
+     is `position:fixed`, and the bench clears it with
+     `padding-inline-start:calc(var(--rail) + …)` — a reader ABOVE the rail in the
+     tree. Published on `.rail` the width could reach the rail's own children and
+     nothing else, so the bench would need a copy, and a copy that has to track two
+     states across two routes is four numbers and a guard hoping they agree.
+
+     COLLAPSED IS THE BASE, EXPANDED IS THE CONDITION, which is the opposite of how
+     the design reads and is deliberate. The expanded rail requires two things at
+     once — room for it, and a reader who has not asked for it gone — and stating
+     that as one rule is what keeps the width, the labels and the chevron from
+     disagreeing about which state they are in. It also degrades in the right
+     direction: anything that cannot resolve the condition gets the icon strip
+     this component shipped before it could expand at all.
+
+     820px IS THE STAGE'S NUMBER. HeatMapStage.astro drops the sidebar entirely at
+     `max-width:820px`; `width > 820px` is that condition's exact complement, so
+     there is no width at which the rail believes one thing and the console the
+     other. A unit test reads both files and compares the two numbers. */
+  :global(:root) {
+    --rail-collapsed: 58px;
+    --rail-expanded: 172px;
+    --rail: var(--rail-collapsed);
+  }
+
+  @media (width > 820px) {
+    :global(html:not([data-rail="collapsed"])) { --rail: var(--rail-expanded); }
+  }
+
   .rail {
-    /* THE FALLBACK RESOLVED ONCE, then inherited by everything that needs the
-       number. It used to be spelled `var(--rail, 56px)` in two rules, and the
-       accent bar below is derived from it — so widening the column while leaving
-       the bar's copy behind would have floated the bar off the rail's edge by
-       half the difference, on the one route that declares no `--rail`. */
-    --rail-w: var(--rail, 58px);
-    inline-size: var(--rail-w);
+    inline-size: var(--rail);
     background: var(--rail-ground);
     border-right: 1px solid var(--line);
     display: flex;
@@ -257,16 +378,44 @@ const items = SECTIONS.map((s) => {
     align-items: center;
     gap: 10px;
     padding: 12px 0;
+    /* The map beside it relayouts on every frame of this, and MapLibre's
+       ResizeObserver reallocates its GL drawing buffer to match — which is the
+       reason the SIDEBAR's collapse is instant and says so in HeatMapStage.astro.
+       The rail is transitioned anyway, and the difference is that this is one
+       gesture rather than a state the reader lives in: 114px over 180ms, once,
+       when they press the chevron. */
+    transition: inline-size .18s ease;
+  }
+
+  /* THE RESTING INK, AND IT IS A TOKEN BECAUSE IT IS A MEASUREMENT.
+     --faint against --rail-ground is 3.27:1 — legal for a glyph, which is all the
+     rail used to hold, and illegal the moment that glyph is standing next to a
+     word. This clears the 4.5:1 floor with room to spare on the ground the rail
+     actually paints, and a unit test recomputes the ratio from these two declared
+     values rather than trusting the number in this sentence. */
+  .rail { --rail-ink: #9aacae; }
+
+  /* THE BRAND ROW: mark, wordmark, chevron. Collapsed it is a column — the mark
+     centred with the chevron beneath it, because the chevron is the ONLY way back
+     out of the collapsed rail and hiding it there would be a door that locks. */
+  .brand {
+    inline-size: calc(var(--rail) - 20px);
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 14px;
   }
 
   .mark {
-    inline-size: 34px;
-    block-size: 34px;
     flex: none;
-    margin-bottom: 18px;
-    display: grid;
-    place-items: center;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    min-inline-size: 0;
     text-decoration: none;
+    color: var(--paper);
     transition: transform .18s;
   }
 
@@ -274,30 +423,80 @@ const items = SECTIONS.map((s) => {
      box before the file lands, which is what stops the rail jumping; these rules
      are what survive a user stylesheet or a zoom that overrides them. */
   .mark img {
-    inline-size: 100%;
-    block-size: 100%;
+    inline-size: 34px;
+    block-size: 34px;
+    flex: none;
     object-fit: contain;
+  }
+
+  .wordmark {
+    display: none;
+    font-weight: 600;
+    font-size: .78rem;
+    letter-spacing: -.01em;
+    white-space: nowrap;
   }
 
   .mark:hover { transform: scale(1.06); }
   .mark:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
 
+  .rail-toggle {
+    flex: none;
+    inline-size: 26px;
+    block-size: 26px;
+    display: grid;
+    place-items: center;
+    border: 0;
+    border-radius: 6px;
+    padding: 0;
+    background: none;
+    color: var(--rail-ink);
+    cursor: pointer;
+    transition: color .18s, background .18s;
+  }
+
+  .rail-toggle svg {
+    inline-size: 15px;
+    block-size: 15px;
+    stroke: currentColor;
+    fill: none;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    /* Points BACK the way pressing it goes: right to open the rail out when it is
+       shut, left to fold it away when it is open. */
+    transform: rotate(180deg);
+    transition: transform .18s;
+  }
+
+  .rail-toggle:hover { color: var(--paper); background: rgb(111 202 214 / .06); }
+  .rail-toggle:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+
   /* One class for both arms: a link and a button that look identical, because
      which one you get is a fact about where you already are, not a difference the
-     eye should have to resolve. */
+     eye should have to resolve.
+
+     ITS WIDTH IS THE COLUMN'S, MINUS THE SAME GUTTER AT BOTH ENDS. That is what
+     keeps the accent bar's derivation below true at every width without a second
+     rule: the button stays centred in the rail, so half the rail back from the
+     button's own centre is the rail's edge, whatever the rail currently is. */
   .rail-btn {
-    inline-size: 38px;
+    inline-size: calc(var(--rail) - 20px);
     block-size: 38px;
     flex: none;
     position: relative;
-    display: grid;
-    place-items: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     border: 0;
     border-radius: 8px;
     padding: 0;
     background: none;
-    color: var(--faint);
+    color: var(--rail-ink);
     font: inherit;
+    font-size: .78rem;
+    font-weight: 500;
+    text-align: start;
     text-decoration: none;
     cursor: pointer;
     transition: color .18s, background .18s;
@@ -306,6 +505,7 @@ const items = SECTIONS.map((s) => {
   .rail-btn svg {
     inline-size: 19px;
     block-size: 19px;
+    flex: none;
     stroke: currentColor;
     fill: none;
     stroke-width: 1.6;
@@ -313,14 +513,17 @@ const items = SECTIONS.map((s) => {
     stroke-linejoin: round;
   }
 
-  .rail-btn:hover { color: var(--ink); background: rgb(111 202 214 / .06); }
+  /* BRIGHTER ON HOVER, NOT DIMMER. This used to reach for --ink, which is a step
+     DOWN from the resting ink the contrast fix installed — so pointing at a row
+     would have faded it. */
+  .rail-btn:hover { color: var(--paper); background: rgb(111 202 214 / .06); }
 
   /* A rail you cannot see focus on is unusable by keyboard, and this is the only
      navigation there is. */
   .rail-btn:focus-visible {
     outline: 2px solid var(--cyan);
     outline-offset: 2px;
-    color: var(--ink);
+    color: var(--paper);
   }
 
   /* TWO STATES, TWO WEIGHTS, because they are two different facts and the reader
@@ -334,13 +537,15 @@ const items = SECTIONS.map((s) => {
 
   /* The accent bar, flush against the rail's left edge — which is what the
      square-left, round-right radius is for. The offset is DERIVED: the button is
-     centred in the rail, so its own left edge sits (rail − 38px) / 2 inwards, and
-     50% − rail/2 is exactly that distance back out. The mockup's literal -12px was
-     measured against different geometry and lands at −3px, off the rail entirely. */
+     centred in the rail, so its own left edge sits (rail − button) / 2 inwards, and
+     50% − rail/2 is exactly that distance back out. It reads the SAME property the
+     column is sized by, so it stays flush while the rail is mid-transition and at
+     both ends of it. The mockup's literal -12px was measured against different
+     geometry and lands at −3px, off the rail entirely. */
   .rail-btn[aria-pressed="true"]::before {
     content: "";
     position: absolute;
-    left: calc(50% - var(--rail-w) / 2);
+    left: calc(50% - var(--rail) / 2);
     top: 9px;
     bottom: 9px;
     inline-size: 2px;
@@ -348,14 +553,15 @@ const items = SECTIONS.map((s) => {
     background: var(--cyan);
   }
 
-  /* THE LABEL IS THE ACCESSIBLE NAME AND THE TOOLTIP, one span doing both jobs.
-     An icon on its own announces nothing, and `title` is not a reliable
-     accessible name — it is ignored outright by some screen readers and never
-     surfaces on touch. A hidden label beside a separate tooltip would be two
-     copies of one word, free to drift; this is one. `opacity: 0` hides it from
-     the eye while leaving it in the accessibility tree, which is exactly the
+  /* THE LABEL IS THE ACCESSIBLE NAME IN BOTH STATES, and the visible word in one
+     of them. One span does both jobs rather than a hidden label beside a separate
+     tooltip, because two copies of one word are two copies free to drift.
+
+     COLLAPSED it is the tooltip this rail has always had: `opacity: 0` hides it
+     from the eye while leaving it in the accessibility tree, which is exactly the
      split we want — unlike `display: none` or `visibility: hidden`, which would
-     take the name away with the pixels. */
+     take the name away with the pixels, and unlike `title`, which is ignored
+     outright by some screen readers and never surfaces on touch. */
   .rail-label {
     position: absolute;
     left: 46px;
@@ -377,8 +583,60 @@ const items = SECTIONS.map((s) => {
   .rail-btn:hover .rail-label,
   .rail-btn:focus-visible .rail-label { opacity: 1; transform: none; }
 
+  /* ── EXPANDED ─────────────────────────────────────────────────────────────
+     The same condition as the width above, and it has to be the same condition:
+     a rail 172px wide showing no labels is 114px of nothing, and a 58px rail
+     showing labels clips them. Every rule here is a look, not a measurement —
+     the geometry is `--rail` arithmetic and needs no state to follow. */
+  @media (width > 820px) {
+    html:not([data-rail="collapsed"]) .brand {
+      flex-direction: row;
+      gap: 9px;
+    }
+    /* The chevron leaves the mark's row-end and takes the space between them. */
+    html:not([data-rail="collapsed"]) .rail-toggle { margin-inline-start: auto; }
+    html:not([data-rail="collapsed"]) .rail-toggle svg { transform: none; }
+    html:not([data-rail="collapsed"]) .wordmark { display: block; }
+
+    html:not([data-rail="collapsed"]) .rail-btn {
+      justify-content: flex-start;
+      gap: 11px;
+      padding-inline: 9px;
+    }
+
+    /* THE TOOLTIP BECOMES THE ROW'S OWN TEXT. Everything the floating version
+       needed to be legible over the map — the plate, the border, its own colour —
+       is undone, because on a row it is just the word beside the icon and takes
+       the icon's colour through every one of the states above. */
+    html:not([data-rail="collapsed"]) .rail-label {
+      position: static;
+      z-index: auto;
+      padding: 0;
+      border: 0;
+      background: none;
+      color: inherit;
+      font-size: inherit;
+      opacity: 1;
+      transform: none;
+      pointer-events: auto;
+      min-inline-size: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+  }
+
+  /* AT THE STAGE'S BREAKPOINT THE CHEVRON GOES, because below it the rail is
+     collapsed whatever was stored and the button could not change that. Its
+     labels stay reachable: they are still the sections' accessible names. */
+  @media (width <= 820px) {
+    .rail-toggle { display: none; }
+  }
+
   @media (prefers-reduced-motion: reduce) {
+    .rail,
     .mark,
+    .rail-toggle,
+    .rail-toggle svg,
     .rail-btn,
     .rail-label { transition: none; }
   }

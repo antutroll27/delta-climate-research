@@ -216,7 +216,15 @@ const fieldId = (id: Field['id']): string => `scope-${id}`;
       the tests all keep the name. Renaming those to match the label would rewrite
       a vocabulary that is accurate about the machine, to match a word that is
       accurate about the reader. Both words are right for their own audience. */}
-  <p class="scope-heading" id="scope-heading">Location</p>
+  {/* THE HEADING ROW, WITH ROOM FOR ONE CONTROL AT ITS END. The slot is how the
+      panel's collapse chevron reaches the row a reader is already looking at
+      without this component learning what collapsing is — the same arrangement as
+      the tier badge below, which renders inside SelectField and knows nothing
+      about cities. A route that passes nothing gets the heading alone. */}
+  <div class="scope-head">
+    <p class="scope-heading" id="scope-heading">Location</p>
+    <slot name="head-control" />
+  </div>
 
   <div class="scope-stack">
     {FIELDS.map((f) => (
@@ -260,13 +268,25 @@ const fieldId = (id: Field['id']): string => `scope-${id}`;
     flex: none;
   }
 
+  /* The heading and whatever the route slotted beside it, on one line. The
+     control is 26px and the heading is small caps, so the row is centred on the
+     taller of the two and the heading's old bottom margin moves here — otherwise
+     a route that slots nothing would lose the space the stack below relies on. */
+  .scope-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 9px;
+  }
+
   .scope-heading {
     font-family: var(--mono);
     font-size: .62rem;
     letter-spacing: .14em;
     text-transform: uppercase;
     color: var(--faint);
-    margin-bottom: 9px;
+    min-inline-size: 0;
   }
 
   .scope-stack {

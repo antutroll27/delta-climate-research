@@ -15,6 +15,9 @@
  *
  *   · the sidebar's pane, including collapse — on EVERY page with a console,
  *     found by `[data-console]`. Explore and Compare both have one.
+ *   · the rail's own collapse — likewise on every page with a console, and
+ *     likewise portable: shell/layout-state.ts holds both flags and this only moves
+ *     it between the button, the document element and localStorage.
  *   · the three scope selects — only on a page scoped to ONE area, which is a
  *     page with a `.stage` carrying a valid `data-area`. Compare is scoped to a
  *     PAIR, renders no scope switcher, and skips this half entirely.
@@ -33,6 +36,16 @@
 import { areaPath } from '../scope/paths.ts';
 import { tabKind } from '../scope/reachability.ts';
 import { isAreaKey, splitKey, type AreaKey } from '../scope/registry.ts';
+import {
+  COLLAPSED,
+  EXPANDED,
+  PANEL_STATE_ATTR,
+  RAIL_STATE_ATTR,
+  readPanelCollapsed,
+  readRailCollapsed,
+  writePanelCollapsed,
+  writeRailCollapsed,
+} from './layout-state.ts';
 import { resolve } from '../scope/resolve.ts';
 import { mountSelectFields } from './select-field.ts';
 
@@ -129,18 +142,61 @@ export function mountConsoleShell(): (() => void) | null {
   const sidebar = consoleRoot.querySelector<HTMLElement>('.sidebar');
   const panes = [...consoleRoot.querySelectorAll<HTMLElement>('.pane[data-pane]')];
   const railButtons = [...consoleRoot.querySelectorAll<HTMLButtonElement>('button[data-rail]')];
+  /* THE PANEL'S OWN CHEVRON. Declared with the rest of the console's furniture
+     rather than beside its handler, because `paint` below reads it. */
+  const panelToggle = consoleRoot.querySelector<HTMLButtonElement>('button[data-panel-toggle]');
 
   /* THE SERVER'S RENDER IS THE INITIAL STATE, read back rather than restated. A
      literal 'map' here would be a second copy of the pane HeatMapStage.astro
      renders open, free to disagree with it the first time either moves. */
   const opened = panes.find((p) => p.classList.contains('is-on'))?.dataset.pane;
-  const state: PaneState = { open: opened !== undefined, id: opened ?? '' };
 
+  /* THE PANE THE SERVER OPENED, AND WHETHER THE READER WANTS THE COLUMN AT ALL.
+     Two facts with two different lifetimes, and layout-state.ts writes down why:
+     WHICH pane is deliberately forgotten on reload, because it is not part of the
+     reading a URL identifies; WHETHER the column is there is a standing
+     preference like the rail's width. So `id` comes off the server's render and
+     `open` comes off the store — a reader who put the panel away gets it away,
+     and gets the DEFAULT pane back when they bring it out with a rail click. */
+  const state: PaneState = {
+    open: opened !== undefined && !readPanelCollapsed(),
+    id: opened ?? '',
+  };
+
+  /**
+   * THE ONE PLACE THE PANEL IS OPENED OR CLOSED. Two controls reach it — the
+   * chevron on the panel's own heading row, and a click on the rail section whose
+   * pane is already showing — and neither has any state of its own. That is the
+   * difference between two doors to one room and the duplicated control this
+   * project keeps deleting: nothing here can diverge, because there is only one
+   * `state.open` and only one function that paints it.
+   */
   function paint(): void {
     for (const pane of panes) {
       pane.classList.toggle('is-on', state.open && pane.dataset.pane === state.id);
     }
+    /* BOTH SPELLINGS OF THE SAME FACT, WRITTEN TOGETHER SO THEY CANNOT DISAGREE.
+       The class is the element's own state and is what both stylesheets and the
+       browser guards read. The attribute on <html> exists for ONE reason: the
+       pre-paint script has to apply this preference before the sidebar has been
+       parsed, so there is no element to put a class on yet. Splitting them across
+       two functions is how the column would end up hidden by one and shown by the
+       other. */
     sidebar?.classList.toggle('is-collapsed', !state.open);
+    document.documentElement.setAttribute(
+      PANEL_STATE_ATTR, state.open ? EXPANDED : COLLAPSED);
+    if (panelToggle) {
+      panelToggle.setAttribute('aria-expanded', String(state.open));
+      const name = state.open
+        ? panelToggle.dataset.labelExpanded
+        : panelToggle.dataset.labelCollapsed;
+      if (name !== undefined) panelToggle.setAttribute('aria-label', name);
+    }
+    /* REMEMBERED HERE, for the same reason it is painted here: one writer. The
+       call at mount rewrites the value it just read, which is idempotent, and is
+       cheaper than a second code path whose only job is to know whether this call
+       was the first one. */
+    writePanelCollapsed(!state.open);
     for (const button of railButtons) {
       /* Only the sections that OWN a pane carry the attribute; the server decided
          which those are, and re-deciding it here would be a second copy of the
@@ -149,6 +205,16 @@ export function mountConsoleShell(): (() => void) | null {
       button.setAttribute('aria-pressed', String(state.open && button.dataset.rail === state.id));
     }
   }
+
+  /* THE SECOND DOOR. It only ever closes: the way back is a rail click, which
+     already reopens the panel with that section's body in it. A re-open control
+     here would be a second affordance for something the navigation beside it
+     already does, and it could not be reached anyway — a collapsed panel is
+     `display:none`, and this button is inside it. */
+  on(panelToggle, 'click', () => {
+    state.open = false;
+    paint();
+  });
 
   for (const button of railButtons) {
     const id = button.dataset.rail;
@@ -170,6 +236,54 @@ export function mountConsoleShell(): (() => void) | null {
   }
 
   paint();
+
+  /* ── the rail's collapse ─────────────────────────────────────────────────── */
+
+  /* PORTABLE, LIKE THE PANES. Both routes render the rail, and the fact this
+     moves — whether the navigation is showing its labels — is a fact about the
+     document rather than about the area anything is scoped to.
+
+     THE ATTRIBUTE GOES ON <html>, NOT ON THE RAIL, and layout-state.ts says why:
+     the paired bench clears the rail with `calc(var(--rail) + …)` from ABOVE it
+     in the tree, and custom properties only inherit downwards. The stylesheet
+     reads that attribute; nothing here measures or sets a width.
+
+     ALREADY APPLIED BY THE TIME WE GET HERE, by the pre-paint script the rail
+     embeds — this is a module script, so it runs long after first paint. Doing it
+     AGAIN rather than trusting that is deliberate: an Astro ClientRouter swap
+     copies the incoming document's <html> attributes over the current ones, and
+     this attribute is in no document the server wrote. */
+  const railToggle = consoleRoot.querySelector<HTMLButtonElement>('button[data-rail-toggle]');
+  if (railToggle) {
+    /* THE NAMES COME OFF THE BUTTON. IconRail.astro renders both; spelling them
+       here as well would be the same two sentences in two files, and the one that
+       drifted would be the one nobody can see. */
+    const applyRail = (collapsed: boolean): void => {
+      document.documentElement.setAttribute(
+        RAIL_STATE_ATTR, collapsed ? COLLAPSED : EXPANDED);
+      railToggle.setAttribute('aria-expanded', String(!collapsed));
+      const name = collapsed
+        ? railToggle.dataset.labelCollapsed
+        : railToggle.dataset.labelExpanded;
+      if (name !== undefined) railToggle.setAttribute('aria-label', name);
+    };
+
+    /* THE DOCUMENT IS THE STATE; THE STORE IS ONLY THE MEMORY OF IT. The click
+       handler asks the attribute what the rail is doing, not localStorage — and
+       the difference is a one-way chevron. Where storage is unavailable every
+       read comes back "expanded", so a handler that toggled the STORED value
+       would collapse the rail on the first press and then collapse it again on
+       every press after, with nothing on screen able to say otherwise. */
+    const collapsedNow = (): boolean =>
+      document.documentElement.getAttribute(RAIL_STATE_ATTR) === COLLAPSED;
+
+    applyRail(readRailCollapsed());
+    on(railToggle, 'click', () => {
+      const next = !collapsedNow();
+      writeRailCollapsed(next);
+      applyRail(next);
+    });
+  }
 
   /* ── the dropdowns ───────────────────────────────────────────────────────── */
 

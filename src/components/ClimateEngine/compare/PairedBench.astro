@@ -41,6 +41,7 @@
  * uses twice, for an area with no artefacts and for the unbuilt scenario store.
  */
 import IconRail from '../shell/IconRail.astro';
+import PanelToggle from '../shell/PanelToggle.astro';
 import { DEFAULT_AREA_PATH } from '../../../scripts/climate-engine/scope/paths.ts';
 ---
 <main id="main" class="heat-compare" data-compare-root data-console data-renderer="canvas" aria-busy="true">
@@ -52,6 +53,13 @@ import { DEFAULT_AREA_PATH } from '../../../scripts/climate-engine/scope/paths.t
 
   <div class="heat-compare__console">
     <aside class="sidebar" aria-label="Comparison console">
+      {/* THE PANEL'S CHEVRON, AND IT IS ITS OWN ROW HERE RATHER THAN A HEADING'S.
+          Explore slots this into the scope switcher's "Location" line; this route
+          has no such line — the sidebar opens straight into a pane whose own
+          heading belongs to the pane and changes with it — so the panel's top-right
+          corner is a row of its own. Same component, same state, same paint. */}
+      <div class="panel-head"><PanelToggle /></div>
+
       <div class="panes">
         {/* THE SCOPE CONTROL FOR THIS ROUTE, in the place Explore keeps its scope
             switcher. The selects are empty here on purpose: paired-controller.ts
@@ -256,16 +264,28 @@ import { DEFAULT_AREA_PATH } from '../../../scripts/climate-engine/scope/paths.t
 <style>
   .heat-compare{--ink:oklch(96% .008 210);--muted:oklch(68% .025 210);--faint:oklch(63% .024 210);--paper:oklch(12% .018 205);--surface:oklch(16% .024 205);--surface2:oklch(20% .03 205);--line:oklch(76% .055 205 / .2);--cyan:oklch(78% .105 202);--bronze:oklch(69% .08 75);--red:oklch(64% .16 28);--green:oklch(75% .09 145);min-height:100vh;background:var(--paper);color:var(--ink);font-family:'Mona Sans',system-ui,sans-serif;padding:1.25rem clamp(1rem,4vw,4rem) 3.5rem;
     /* THE RAIL IS FIXED AND OUT OF FLOW, so the page reserves its column here.
-       --rail is read three times — the rail's own inline-size, this padding and
-       the mobile sheet's offset — and is written once so the three cannot drift.
+       --rail IS NOT DECLARED ANYWHERE ON THIS ROUTE, and that is the fix rather
+       than an omission. It used to be a literal here and a fallback inside
+       shell/IconRail.astro, two numbers for one column with a test comparing
+       them — which was tolerable only while the width was a constant. The rail
+       expands and collapses now, so a per-route literal would have had to be TWO
+       numbers per route, in three files, agreeing at both states.
+       The rail declares both widths and the current one on :root instead, so this
+       padding, the mobile sheet's offset below and the rail's own inline-size all
+       read the one property the rail itself is sized by. There is no second copy
+       left to drift, which is why the width guard in tests/unit/obos-shell.test.mjs
+       now proves the absence rather than comparing two literals.
        --sidebar is the console column beside it. */
-    --rail:58px; --sidebar:300px;
+    --sidebar:300px;
     /* The console's panel ground, declared here for the same reason --rail-ground
        is declared in the rail bridge: HeatMapStage.astro's palette never loads on
        this route, so a token used here must be named here. The VALUE is the one
-       the stage declares — one colour, two declarations, and the duplicate-hex
-       census watches both files so a drift between them fails a test. */
-    --panel-ground:#232321;
+       the stage declares — one colour, two declarations. The duplicate-hex census
+       is per-file and CANNOT see a drift between the two, which it was wrongly
+       credited with here; `the console's two grounds are the same colour on both
+       routes` in tests/unit/obos-shell.test.mjs is the guard that actually reads
+       both files. */
+    --panel-ground:#091f26;
     padding-inline-start:calc(var(--rail) + clamp(1rem,4vw,4rem));}
   .heat-compare *{box-sizing:border-box}.heat-compare a{color:inherit}
   /* ── THE CONSOLE AROUND THE BENCH ───────────────────────────────────────────
@@ -290,7 +310,7 @@ import { DEFAULT_AREA_PATH } from '../../../scripts/climate-engine/scope/paths.t
        --paper POINTS AT this file's --ink rather than restating its value, so the
        colour has one spelling and the bench's own rules keep the --paper they were
        written against. */
-    --rail-ground:#1D1D1B;
+    --rail-ground:#001219;
     --paper:var(--ink);
     --mono:'Noplato Mono',ui-monospace,monospace;
   }
@@ -309,6 +329,16 @@ import { DEFAULT_AREA_PATH } from '../../../scripts/climate-engine/scope/paths.t
        census catches; declared once in the bridge, both sidebars read one value. */
     background:var(--panel-ground);border:1px solid var(--line);border-radius:.85rem;overflow:hidden}
   .sidebar.is-collapsed{display:none}
+  /* THE SAME FACT, READ BEFORE THE SIDEBAR EXISTS. shell/layout-state.ts's
+     pre-paint script runs where the rail is, at the top of the console, and the
+     parser has not reached this element yet — so the preference lands on <html>
+     and this rule carries it down. console-shell.ts's `paint` writes BOTH this
+     attribute and the class above, in one function, so they cannot disagree; the
+     class is the element's own state and this is the document-level mirror that
+     exists only to be applied early. Without it the sidebar renders open on every
+     load and then vanishes once the module script mounts. */
+  html[data-panel="collapsed"] .sidebar{display:none}
+  .panel-head{display:flex;justify-content:flex-end;padding:8px 8px 0;flex:none}
 
   /* One grid cell, every pane stacked in it, so the cross-fade has nothing to
      reflow. `visibility` rather than `display:none` keeps a hidden pane out of the

@@ -14,6 +14,7 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
    heat-map-app.ts classes its markup at runtime; see its own header. */
 import IconRail from './shell/IconRail.astro';
 import ScopeSwitcher from './shell/ScopeSwitcher.astro';
+import PanelToggle from './shell/PanelToggle.astro';
 import LayerTree from './shell/LayerTree.astro';
 import InterventionPane from './shell/InterventionPane.astro';
 import { areaKeysInCity } from '../../scripts/climate-engine/scope/registry.ts';
@@ -144,8 +145,15 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
   <aside class="sidebar">
     {/* SCOPE SITS ABOVE THE PANES, not inside one of them, because it is global to
         all four: the toolbox, the layer tree, the reports and the scenarios are all
-        answers ABOUT somewhere, and the somewhere is chosen once. */}
-    <ScopeSwitcher current={scope.key} />
+        answers ABOUT somewhere, and the somewhere is chosen once.
+
+        THE PANEL'S CHEVRON RIDES ON ITS HEADING ROW, because that row is the top
+        of this column and the reader is already looking at it. The switcher takes
+        it as a slot and knows nothing about what it does; console-shell.ts binds
+        it to the same state the rail's own click path collapses. */}
+    <ScopeSwitcher current={scope.key}>
+      <PanelToggle slot="head-control" />
+    </ScopeSwitcher>
 
     <div class="panes">
       {/* Map's pane. The toolbox is what the Map section shows once you are already
@@ -582,28 +590,47 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
        canopy raster; --slate the dimmer grey that tells extruded heights from
        footprint outlines; --gold the one warm mark in the Ground-truth group. */
     --pine:#3f8f66; --slate:#6b7f81; --gold:#c9a227;
-    /* The icon rail's ground — the Swiss print near-black, and it sits ABOVE
-       --base rather than under it.
+    /* The icon rail's ground — a fully saturated near-black at the cold end of
+       this palette, and it sits ABOVE --base rather than under it.
 
        IT USED TO BE #040808, "a shade under --base", and the intent did not
        survive contact: it differed from --base by one step in one channel and
-       read as nothing at all. A navigation column that cannot be seen is not a
-       subtle navigation column.
+       read as nothing at all — 1.01:1. A navigation column that cannot be seen is
+       not a subtle navigation column.
 
-       The value now is the near-black Swiss and German design systems set as
-       Schwarz — what Pantone Black resolves to in print, rather than the pure
-       black a screen reaches for by default. R and G equal with B one under, so
-       it is warm where the rest of this palette is cyan-tinted at 205°: the rail
-       is the one element that is NOT part of the instrument's surface, and a
-       neutral ink against a tinted ground is what says so.
+       IT WAS THEN A WARM NEUTRAL, and that argument is retired rather than merely
+       outvoted. It read the rail as "not part of the instrument" and gave it a
+       neutral ink to say so — which made it the one surface on the console
+       standing outside the family every other surface belongs to, and made the
+       sidebar beside it the only warm thing on a cold page.
+
+       THE VALUE NOW IS THE PALETTE'S OWN COLD END, TAKEN ALL THE WAY DOWN: 197°
+       at full saturation and 4.9% lightness. --base, --surface and --surface2 run
+       180–185°, and this is the darkest member of that run rather than a visitor
+       to it. That is a hue --cyan also lives in, which is a real objection and
+       survives on the numbers: --cyan is a mid-lightness accent and this is
+       ground at a twentieth of it, so nothing on the heat ramp is within reach of
+       being confused with it — the two are 10.08:1 apart.
+
+       WHAT IT COSTS, STATED RATHER THAN BURIED: against --base the rail is now
+       1.06:1 where the warm neutral was 1.20:1, so where the sidebar is collapsed
+       and the rail meets the map column directly, the 1px --line border is doing
+       most of the work of the edge. That is not the first version's failure
+       repeated — the hue difference is large where that one had none — but it is
+       the same axis, and it is the thing to look at first if the rail ever stops
+       reading as a column.
+
+       WHAT IT BUYS: every ink the rail paints with gains against it. The resting
+       label goes 7.14:1 to 8.07:1, the active section 14.42:1 to 16.30:1, the
+       open-pane accent 8.92:1 to 10.08:1.
 
        Declared here with the rest of the palette rather than inside
        shell/IconRail.astro, because a token resolves from where it is DECLARED:
        the rail's scoped styles reach it only once the rail is inside .stage,
        which is where Task 7 puts it. */
-    --rail-ground:#1D1D1B;
-    /* The sidebar's ground — the rail's neighbour in the same warm-neutral
-       family, one step forward.
+    --rail-ground:#001219;
+    /* The sidebar's ground — the rail's neighbour in the same cold family, one
+       step forward.
 
        ITS OWN TOKEN, NOT --surface. The sidebar used --surface, which is also the
        ground under the readout cards, the brief and the paired bench: repointing
@@ -614,8 +641,20 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
        navigation column into the panel it opens and lose the edge between them;
        far apart would read as two unrelated surfaces. A single step is what says
        "same family, different job" — the rail is the deeper column you navigate
-       FROM, this is the working surface you read. */
-    --panel-ground:#232321;
+       FROM, this is the working surface you read.
+
+       DERIVED AGAINST TWO EDGES, NOT ONE. It carries the rail's OKLCH hue and
+       chroma, and its lightness is chosen to hold BOTH of the boundaries it has:
+       the rail below it, and --surface, which is what .seg in the intervention
+       pane is drawn on INSIDE it. Those pull in opposite directions — every step
+       away from the rail is a step towards --surface — and the warm-neutral panel
+       resolved that by ignoring it, sitting 1.06:1 from --surface and separated
+       from it only by hue, which stops working the moment the panel joins the
+       cold family. Balanced instead, both edges land above anything this console
+       has shipped: 1.12:1 to the rail (was 1.07:1) and 1.14:1 to --surface (was
+       1.06:1), with every ink in the sidebar gaining — --paper 13.45 to 14.52,
+       --ink 5.96 to 6.43, --cyan 8.32 to 8.98. */
+    --panel-ground:#091f26;
     /* Studio (light) mode's three inks — the same descending-emphasis idea as
        --paper/--ink/--faint above, inverted for a light ground. They live here
        rather than on `body.studio` because every element they colour is inside
@@ -661,6 +700,16 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
      canvas resize per frame as well. The panes cross-fade (transform and opacity
      only, below); the column itself simply is or is not there. */
   .sidebar.is-collapsed{display:none}
+  /* THE SAME FACT, READ BEFORE THE SIDEBAR EXISTS. shell/layout-state.ts's
+     pre-paint script runs where the rail is, at the top of this column's
+     neighbour, and the parser has not reached this element yet — so the stored
+     preference lands on <html> and this rule carries it down. console-shell.ts's
+     `paint` writes BOTH this attribute and the class above, in one function, so
+     they cannot disagree; the class is the element's own state and this is the
+     document-level mirror that exists only to be applied early. Without it the
+     sidebar renders open on every load and then vanishes once the module script
+     mounts — 300px of the map, arriving late. */
+  html[data-panel="collapsed"] .sidebar{display:none}
 
   /* One grid cell, every pane stacked in it, so the cross-fade has nothing to
      reflow: the outgoing and incoming panes occupy the same box at the same time. */
