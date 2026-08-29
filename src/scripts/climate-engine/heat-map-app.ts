@@ -1745,7 +1745,21 @@ export function mountHeatMap(): () => void {
     const bins = new Array(12).fill(0);
     for (let i = 0; i < t.length; i++) { const b = Math.min(11, Math.max(0, ((t[i] - ramp[0]) / (ramp[1] - ramp[0]) * 12) | 0)); bins[b]++; }
     const mx = Math.max(...bins, 1);
-    histo?.childNodes.forEach((elm, i) => { (elm as HTMLElement).style.height = `${Math.max(4, bins[i] / mx * 100)}%`; });
+    /* AN EMPTY BIN DRAWS NOTHING, AND THAT IS THE POINT OF A DISTRIBUTION.
+       This was `Math.max(4, …)`, which gave every bin a floor whether or not any
+       cell fell in it — so a band containing NO cells and a band containing a
+       handful rendered identically. On a chart whose whole job is to show where
+       the ward's temperatures sit, "nothing here" and "a little here" being the
+       same picture is the one thing it must not do. The CSS baseline underneath
+       is what keeps an empty bin legible as a bin rather than as a gap.
+
+       The floor for a NON-empty bin stays, and is now big enough to see: one cell
+       out of thousands is still a fact, and rounding it to nothing would be the
+       opposite error. */
+    histo?.childNodes.forEach((elm, i) => {
+      const share = bins[i] / mx * 100;
+      (elm as HTMLElement).style.height = bins[i] === 0 ? '0%' : `${Math.max(7, share)}%`;
+    });
     const iv = state.iv;
     const cost = M.computeCost(iv, state.spatial, COSTS);
     const anyIv = iv.trees || iv.roof || iv.parks || iv.facades;

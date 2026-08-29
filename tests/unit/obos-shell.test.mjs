@@ -613,89 +613,107 @@ test("the console's two grounds are the same colour on both routes", async () =>
   const { src: benchSrc } = await benchSource();
   const bench = hexTokens(benchSrc, 'PairedBench.astro');
 
-  for (const token of ['--rail-ground', '--panel-ground']) {
-    const here = tokenValue(stage, token, 'HeatMapStage.astro');
-    const there = tokenValue(bench, token, 'PairedBench.astro');
-    assert.equal(there, here,
-      `${token} is ${here} on the explore route and ${there} on compare. It is `
-      + 'the same surface of the same console; a reader crossing between the two '
-      + 'watches it change colour');
-  }
+  /* ONLY --rail-ground CARRIES A VALUE NOW. `--panel-ground` became
+     `var(--rail-ground)` when the two panels were unified, so it has no hex of its
+     own on either route and cannot drift from one: whatever this check pins, the
+     panel inherits on both. Asking `hexTokens` for it would fail on a declaration
+     that is correct.
+
+     THE PROPERTY IS NOT WEAKER, IT MOVED. That the panel POINTS at the rail rather
+     than restating it is asserted in `the two panels are ONE colour, and the shape
+     is what separates them`, for both files. Together: one value, checked equal
+     across routes, and two references to it, checked present on each. */
+  const token = '--rail-ground';
+  const here = tokenValue(stage, token, 'HeatMapStage.astro');
+  const there = tokenValue(bench, token, 'PairedBench.astro');
+  assert.equal(there, here,
+    `${token} is ${here} on the explore route and ${there} on compare. It is `
+    + 'the same surface of the same console; a reader crossing between the two '
+    + 'watches it change colour — and since --panel-ground now points at this '
+    + 'token, a drift here moves both panels on one route only');
 });
 
-test('the panel ground is in the rail ground\'s family, not beside it', async () => {
-  /* THE RAIL AND THE SIDEBAR ARE ONE CONSOLE, and the eye reads two surfaces as
-     related when they share a hue and differ in lightness. They were both warm
-     neutrals; the rail moved to violet -- to stay out of the hue --cyan carries
-     MEANING in, and to sit in the basemap's family -- and a warm-grey panel left
-     beside it would read as an unrelated surface docked onto the navigation.
+test('the two panels are ONE colour, and the shape is what separates them', async () => {
+  /* THE FOUNDER MOVED THE CONSOLE TO A FLOATING PAIR: rail and sidebar sharing one
+     ground, held apart by a gap and drawn with rounded corners — the treatment
+     PairedBench's sidebar already had.
 
-     ASSERTED AS AN ANGLE, NOT AS A VALUE. Checking the panel equals a particular
-     hex would be this test agreeing with itself; what has to hold is the
-     RELATIONSHIP -- same hue, different lightness -- and that survives either
-     colour being retuned. */
-  const stage = hexTokens(await stageSource(), 'HeatMapStage.astro');
-  const rail = tokenValue(stage, '--rail-ground', 'HeatMapStage.astro');
-  const panel = tokenValue(stage, '--panel-ground', 'HeatMapStage.astro');
+     THIS TEST USED TO ASSERT THE OPPOSITE and it was right to, for the design it
+     was written for: same hue, DIFFERENT lightness, because two abutting columns
+     separated by a single border need a tonal step or they merge. That premise is
+     gone. The columns no longer abut, so lightness is no longer carrying the
+     boundary — and a test still demanding a step would now be enforcing a
+     difference the design deliberately removed.
 
-  /* sRGB hue, in degrees. Enough to tell a violet from a warm neutral, and it
-     needs no colour-space library to be trustworthy. */
-  const hue = (hex) => {
-    const h = hex.replace('#', '');
-    const [r, g, b] = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16) / 255);
-    const max = Math.max(r, g, b);
-    const min = Math.min(r, g, b);
-    if (max === min) return null;                       // neutral: no hue at all
-    const d = max - min;
-    const deg = max === r ? ((g - b) / d) % 6
-      : max === g ? (b - r) / d + 2
-        : (r - g) / d + 4;
-    return ((deg * 60) % 360 + 360) % 360;
-  };
+     WHAT CARRIES IT INSTEAD IS THE SHAPE, and that is what is asserted here. The
+     page behind the gap is 1.06:1 from the panels: invisible. Take away the radius
+     or the hairline and the two dissolve into each other and into the ground —
+     silently, because every colour would still be correct. That is the new failure
+     mode and it is the one worth a guard.
 
-  const railHue = hue(rail);
-  const panelHue = hue(panel);
-  assert.ok(railHue !== null && panelHue !== null,
-    `one of the two grounds is a pure neutral (${rail}, ${panel}) and has no hue `
-    + 'to compare -- the family claim cannot be made about it either way');
-  const apart = Math.min(Math.abs(railHue - panelHue), 360 - Math.abs(railHue - panelHue));
-  assert.ok(apart <= 15,
-    `the rail ground is at ${railHue.toFixed(0)}° and the panel at `
-    + `${panelHue.toFixed(0)}°, ${apart.toFixed(0)}° apart. They are the two `
-    + 'surfaces of one console and read as two unrelated ones');
+     ONE COLOUR MEANS ONE SPELLING. `--panel-ground` must POINT AT `--rail-ground`,
+     not repeat its value: two hexes that happen to match today are two hexes that
+     can stop matching, and the per-file colour census would wave the second one
+     through as a legitimate second token. */
+  const stageSrc = await stageSource();
+  const { src: benchSrc } = await benchSource();
 
-  /* SEPARATED, THOUGH. Same hue and the same lightness would merge the navigation
-     column into the panel it opens and lose the edge between them entirely — and
-     joining the two into one family is exactly the change that could do it, since
-     the warm-neutral pair had a hue difference to fall back on and this pair has
-     none. The floor is the separation the console SHIPPED with, so this cannot be
-     satisfied by anything weaker than what the retint replaced. */
-  const step = ratio(rail, panel);
-  assert.ok(step > 1.07,
-    `the rail and the panel are ${step.toFixed(2)}:1 apart, which is no better `
-    + 'than the warm-neutral pair this replaced — and that pair had 137° of hue '
-    + 'between it to carry the edge. These two share a hue, so lightness is the '
-    + 'whole of the boundary between the column you navigate from and the surface '
-    + 'you read');
-  assert.ok(step < 2,
-    `the rail and the panel are ${step.toFixed(2)}:1 apart, which is a step big `
-    + 'enough to read as two different materials rather than one console');
+  for (const [name, src] of [['HeatMapStage.astro', stageSrc], ['PairedBench.astro', benchSrc]]) {
+    assert.match(src, /--panel-ground:\s*var\(\s*--rail-ground\s*\)/,
+      `${name} gives --panel-ground its own value instead of pointing at `
+      + '--rail-ground. The two panels are one surface of one console and the '
+      + 'founder asked for one colour; spelled twice, they are one retint away '
+      + 'from being two');
+  }
+
+  /* THE HAIRLINE AND THE RADIUS, on both panels, because either alone is not the
+     shape. A radius with no border is a rounded rectangle nobody can see against a
+     ground it matches; a border with no radius is the abutting column again. */
+  const { css: railCss } = await railSource();
+  assert.match(railCss, /\.rail\s*\{[^}]*border:\s*1px solid var\(--line\)/,
+    'the rail lost its full border. It shares a ground with the panel beside it '
+    + 'and sits 1.06:1 from the page behind the gap — the hairline is the only '
+    + 'thing drawing its edge');
+  assert.match(railCss, /\.rail\s*\{[^}]*border-radius:/,
+    'the rail lost its radius, which is half of what makes it read as a panel '
+    + 'floating rather than a column butted against the next one');
+  assert.match(stageSrc, /\.sidebar\{[^}]*border-radius:/,
+    'the stage sidebar lost its radius while the rail kept one — the pair reads '
+    + 'as two different kinds of surface');
+
+  /* AND A GAP. Radius and hairline draw a panel; only the margin makes two of them
+     read as separate objects rather than one rounded box with a line through it.
+     The rail supplies the outer inset and the sidebar the space between — assert
+     both have a margin at all, without pinning the number, so the spacing can be
+     retuned without this test having an opinion about taste. */
+  assert.match(railCss, /\.rail\s*\{[^}]*margin:/,
+    'the rail sits flush against the viewport again — the inset is what makes it '
+    + 'a panel floating on the page rather than a strip welded to its edge');
+  assert.match(stageSrc, /\.sidebar\{[^}]*margin:/,
+    'the stage sidebar lost its margin, so it butts against the rail and the map. '
+    + 'Sharing a ground with the rail, that reads as one wide panel with a hairline '
+    + 'through the middle rather than as two');
 
   /* THE PANEL'S OTHER EDGE, and the one that is easy to forget because it is
      INSIDE the sidebar rather than beside it: `.seg` in the intervention pane is
-     drawn on --surface, on this ground. The warm-neutral panel sat 1.06:1 from it
-     and was told apart by hue alone -- which stops working the moment the panel
-     joins --surface's own family, so the two now have to be separated by
-     lightness like everything else. Every step away from the rail is a step
-     towards --surface, so this is the constraint that stops the panel simply
-     being brightened until the first assertion is comfortable. */
+     drawn on --surface, on this ground. This edge is the reason the panel cannot
+     simply be darkened towards the page until the gap reads — every step in that
+     direction is a step away from --surface, and the control inside would be
+     carried by its 1px border alone.
+
+     RESOLVED THROUGH THE REFERENCE, not read as a literal: `--panel-ground` is now
+     `var(--rail-ground)`, so its VALUE is whatever the rail's is. Reading the rail
+     here is what makes this measure the colour that actually paints, rather than a
+     second hex that agrees with it today. */
+  const stage = hexTokens(stageSrc, 'HeatMapStage.astro');
+  const panel = tokenValue(stage, '--rail-ground', 'HeatMapStage.astro');
   const surface = tokenValue(stage, '--surface', 'HeatMapStage.astro');
   const inner = ratio(panel, surface);
   assert.ok(inner > 1.07,
     `the sidebar's ground and --surface, which the segmented control inside it is `
-    + `drawn on, are ${inner.toFixed(2)}:1 apart. They are now in the same hue `
-    + 'family, so there is nothing else left to tell them apart and the control '
-    + 'is carried by its 1px border alone');
+    + `drawn on, are ${inner.toFixed(2)}:1 apart. They are in the same hue family, `
+    + 'so there is nothing else left to tell them apart and the control is carried '
+    + 'by its 1px border alone');
 });
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -3068,9 +3086,29 @@ test('both routes agree on how wide the rail is', async () => {
   /* THE READERS. The bench must still take its padding from the property rather
      than from a number of its own, and the rail's accent bar from the same one --
      that bar is the third copy the last widening turned up. */
-  assert.match(benchCss, /padding-inline-start:\s*calc\(\s*var\(--rail\)/,
-    'PairedBench.astro no longer pads the bench past var(--rail). Its rail is '
-    + 'position:fixed, so without that padding the navigation covers the bench');
+  /* CLEARANCE READS `--rail-edge`, NOT `--rail`, and the difference is the whole
+     point of the second token. The rail floats now — inset by a margin and drawn
+     with a hairline — so its right edge is no longer at `--rail` from the viewport.
+     Three rules on this route have to clear it: the bench's padding, the mobile
+     padding, and the bottom sheet's offset. Every one reads the derived property.
+
+     BOTH HALVES ARE ASSERTED. That the readers use `--rail-edge`, and that
+     `--rail-edge` is still DERIVED from `--rail` rather than typed — because a
+     literal there would be the same defect one level up: the rail would resize with
+     its state and the clearance would sit at yesterday's number. */
+  assert.match(railCss, /--rail-edge:\s*calc\([^;]*var\(--rail\)/,
+    'IconRail.astro no longer derives --rail-edge from --rail. It is the width '
+    + 'everything else clears the rail by, so a literal here means the rail can '
+    + 'expand while the bench beside it keeps reserving the collapsed width');
+  assert.match(benchCss, /padding-inline-start:\s*calc\(\s*var\(--rail-edge\)/,
+    'PairedBench.astro no longer pads the bench past var(--rail-edge). Its rail is '
+    + 'position:fixed, so without that padding the navigation covers the bench — '
+    + 'and padding past bare var(--rail) would clear the column but not the inset '
+    + 'it floats by');
+  assert.doesNotMatch(benchCss, /calc\(\s*var\(--rail\)\s*\+/,
+    'a clearance on the compare route still reads bare var(--rail). That was '
+    + 'correct while the rail sat flush against the viewport; it now floats, so '
+    + 'every clearance is short by the inset and the hairline');
   assert.match(railCss, /\.rail\s*\{[^}]*inline-size:\s*var\(--rail\)/,
     'the rail is not sized by var(--rail) -- whatever else reads it is then '
     + 'reserving space for a column of a different width');

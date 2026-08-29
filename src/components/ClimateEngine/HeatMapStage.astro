@@ -256,9 +256,22 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
         which does not read as "nothing ships here", it reads as still loading, and
         that is the one impression this page must not give. So it says what is true
         instead: no artefacts, and the tier that follows from that. */}
-    <div class="read">MEDNI · HEAT INSTRUMENT<br><b id="coord">{ward?.coord ?? '—'}</b><br>{scope.area.hasData
-      ? <Fragment><span id="bcount">— buildings</span> · <span id="simBackend" aria-live="polite">SELECTING ENGINE</span></Fragment>
-      : <span>no artefacts · {scope.tier} tier</span>}</div>
+    {/* TWO BLOCKS, SET APART, BECAUSE THEY ANSWER DIFFERENT QUESTIONS.
+        `.rig` is what the instrument is running on RIGHT NOW — a count that moves
+        with the area and an engine name that changes once the GPU is picked. The
+        `.read` beside it is what the page IS, and barely changes at all. Run
+        together on one line they read as a single sentence, and the live half
+        disappears into the static half. A gap is the cheapest thing that says
+        these are two readings rather than one.
+
+        The COORDINATE keeps its own line and its bold: it is the only value here
+        a reader might copy, and mid-sentence it would be furniture. */}
+    <div class="topmeta">
+      <div class="rig">{scope.area.hasData
+        ? <Fragment><span id="bcount">— buildings</span> · <span id="simBackend" aria-live="polite">SELECTING ENGINE</span></Fragment>
+        : <span>no artefacts · {scope.tier} tier</span>}</div>
+      <div class="read">MEDNI · HEAT INSTRUMENT<br><b id="coord">{ward?.coord ?? '—'}</b></div>
+    </div>
   </header>
 
   {/* THE DATA GATE, AND IT IS A GATE RATHER THAN A SET OF EMPTY PANELS.
@@ -628,7 +641,7 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
        shell/IconRail.astro, because a token resolves from where it is DECLARED:
        the rail's scoped styles reach it only once the rail is inside .stage,
        which is where Task 7 puts it. */
-    --rail-ground:#001219;
+    --rail-ground:#091416d6;
     /* The sidebar's ground — the rail's neighbour in the same cold family, one
        step forward.
 
@@ -654,7 +667,7 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
        has shipped: 1.12:1 to the rail (was 1.07:1) and 1.14:1 to --surface (was
        1.06:1), with every ink in the sidebar gaining — --paper 13.45 to 14.52,
        --ink 5.96 to 6.43, --cyan 8.32 to 8.98. */
-    --panel-ground:#091f26;
+    --panel-ground:var(--rail-ground);
     /* Studio (light) mode's three inks — the same descending-emphasis idea as
        --paper/--ink/--faint above, inverted for a light ground. They live here
        rather than on `body.studio` because every element they colour is inside
@@ -692,8 +705,13 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
 
   /* ── the sidebar ──────────────────────────────────────────────────────────
      Scope pinned at the top, panes filling the rest. */
+  /* THE SECOND FLOATING PANEL, matching the rail beside it — same ground, same
+     radius, same hairline, held apart by a gap rather than by a shared edge. The
+     margins are asymmetric on purpose: 10px from the rail, 10px from the map, and
+     the rail supplies the outer 10px against the viewport. */
   .sidebar{grid-column:2;inline-size:var(--sidebar);display:flex;flex-direction:column;min-block-size:0;
-    background:var(--panel-ground);border-right:1px solid var(--line)}
+    background:var(--panel-ground);border:1px solid var(--line);border-radius:12px;
+    margin:10px 10px 10px 10px}
   /* COLLAPSE IS INSTANT, AND THAT IS THE POINT. Animating a column's width means a
      full relayout of the map beside it on every frame — and MapLibre's
      ResizeObserver reallocates its GL drawing buffer to match, so the cost is a
@@ -740,6 +758,15 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
     padding-bottom:16px;overflow-y:auto;background:none;border-radius:0;
     backdrop-filter:none;box-shadow:none}
 
+  /* THE HEIGHT WAS NEVER THE PADDING'S ALONE, which is why the padding came back
+     to where it started and the bar is still shorter than it was. The readout used
+     to be THREE stacked lines at 1.7 leading, and that block — not this 18px — was
+     what set the bar's height. Splitting the rig readout out beside the mono line
+     and tightening the leading took two rows out of it; the padding is once again
+     the founder's original number, spent on breathing room rather than on
+     absorbing a tall block.
+     The horizontal 26px is untouched: it is the inset the compass and the rest of
+     the floating furniture align to. */
   .top{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:18px 26px;border-bottom:1px solid var(--line);position:relative;z-index:5;background:rgb(5 6 6 /.55);backdrop-filter:blur(8px)}
   /* The breadcrumb: three places, separated by a drawn mark rather than a typed
      one, so the separator cannot be selected, read aloud, or copied into a
@@ -1076,7 +1103,16 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
      fills that slot only for the ward it has loaded, so the other two carry an
      em-dash until they are opened. The comparison the strip is shaped for is
      therefore still half-drawn — the shape is right and the data is per-visit. */
-  .top .read{text-align:right;font-family:var(--mono);font-size:.58rem;letter-spacing:.12em;color:var(--faint);line-height:1.7;text-transform:uppercase;white-space:nowrap}
+  /* The two right-hand blocks, held apart. `align-items:baseline` rather than
+     center: the pair is type of one size, and baselines are what the eye lines up
+     on a row of text — centring would sit the one-line block optically high beside
+     the two-line one. */
+  .top .topmeta{display:flex;align-items:baseline;gap:2.4rem;min-inline-size:0}
+  .top .read{text-align:right;font-family:var(--mono);font-size:.58rem;letter-spacing:.12em;color:var(--faint);line-height:1.45;text-transform:uppercase;white-space:nowrap}
+  /* Same type as .read, deliberately: it is the same voice reporting a different
+     fact, and giving the live half its own size would make it look like a status
+     badge rather than a reading. */
+  .top .rig{font-family:var(--mono);font-size:.58rem;letter-spacing:.12em;color:var(--faint);line-height:1.45;text-transform:uppercase;white-space:nowrap}
   .top .read b{color:var(--cyan);font-weight:400}
 
   .map{position:relative;overflow:hidden}
@@ -1154,8 +1190,14 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
   .rail-r{position:absolute;right:26px;top:26px;bottom:26px;width:242px;display:flex;flex-direction:column;gap:22px;overflow-y:auto;z-index:4}
   .right{position:static;width:100%;flex:none}
 
-  .ctl{padding:14px 18px;border-bottom:1px solid var(--line)}
-  .ctl:last-child{border-bottom:0}
+  /* NO RULE BETWEEN THE ROWS. Each `.ctl` used to carry a border-bottom, which
+     drew a hairline between every slider and the next — five lines down a column
+     whose rows are already separated by their own padding and by a label sitting
+     directly above each control. A divider earns its place by grouping things
+     that would otherwise run together; between three sliders that each have a
+     name and a number, it only added ruled paper. The `:last-child` reset that
+     removed the final one goes with it — it existed solely to undo this rule. */
+  .ctl{padding:14px 18px}
   .ctl label{display:flex;justify-content:space-between;font-size:.72rem;color:var(--paper);margin-bottom:.5rem}
   .ctl label .v{font-family:var(--mono);color:var(--cyan);letter-spacing:.05em}
   .stage input[type=range]{width:100%;-webkit-appearance:none;appearance:none;height:3px;border-radius:2px;background:var(--surface2);outline:none}
@@ -1236,8 +1278,31 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
   .mrow{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:0 16px 16px}
   .mrow .k{font-family:var(--sans);font-size:.62rem;font-weight:450;letter-spacing:.005em;color:var(--ink);line-height:1.35}
   .mrow .val{font-family:var(--mono);font-weight:400;font-size:1.05rem;margin-top:4px}
-  .histo{display:flex;align-items:flex-end;gap:3px;height:32px;padding:12px 16px 4px}
-  .histo i{flex:1;background:linear-gradient(var(--cyan),var(--surface2));border-radius:2px;opacity:.8;min-height:2px;transition:height .4s}
+  /* THE DISTRIBUTION HAD 16px TO DRAW IN. `height:32px` with `padding:12px 16px
+     4px` and border-box sizing leaves a SIXTEEN pixel content box, so a bar at
+     100% was 16px and the chart could not read as a chart at any value. */
+  /* THE BARS NEED A FLOOR THAT IS NOT THE CARD'S EDGE. The first attempt set
+     `padding:… 0` and put the baseline on `border-bottom`, which lands on the
+     PADDING BOX — i.e. exactly where the card ends. The chart drew correctly and
+     still looked broken: bars running into a rounded corner with nothing beneath
+     them, which reads as clipped rather than as finished.
+     So the baseline is drawn at the bars' FEET by a pseudo-element, and the
+     padding below it is the card's own breathing room. */
+  .histo{position:relative;display:flex;align-items:flex-end;gap:3px;height:78px;padding:10px 16px 16px}
+  .histo::after{content:"";position:absolute;inset-inline:16px;bottom:16px;height:1px;background:var(--line)}
+
+  /* SOLID, NOT A GRADIENT, AND THAT WAS THE SECOND HALF OF THE BUG. The fill was
+     `linear-gradient(var(--cyan), var(--surface2))` — cyan at the top, near the
+     panel's own colour at the bottom. A bar is anchored at the bottom and grows
+     up, so a SHORT bar showed only the dark end: the smallest counts were painted
+     in the least visible colour in the ramp, on top of being the shortest. Height
+     already encodes the value; colour encoding it a second time is what made a few
+     cells indistinguishable from none.
+
+     NO `min-height`. It used to be 2px, which is what those dashes were — every
+     empty bin painting a stub the same size as a real one. An empty bin is now
+     genuinely empty and the baseline below is what says the bin exists. */
+  .histo i{flex:1;background:var(--cyan);border-radius:2px 2px 0 0;opacity:.85;transition:height .4s}
   .cta{margin:12px 16px 16px;display:block;width:calc(100% - 32px);background:var(--bronze);color:#0d0a05;border:0;border-radius:8px;padding:9px;font-family:var(--sans);font-size:.7rem;font-weight:600;letter-spacing:.005em;cursor:pointer}
 
   /* position:relative + z-index so the panel sits ABOVE maplibre's attribution
@@ -1304,7 +1369,10 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
   }
   @media (max-width:1120px){
     .stage{--sidebar:250px}
-    .top .read{display:none}
+    /* BOTH right-hand blocks, not just .read. The rig readout used to be a line
+       INSIDE .read and went away with it here; split into its own element it would
+       have reappeared on the one width where there is no room for it. */
+    .top .topmeta{display:none}
   }
   @media (max-width:980px){
     /* index retreats — the ward name is already in the breadcrumb + bottom strip */

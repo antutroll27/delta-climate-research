@@ -931,7 +931,19 @@ test('an area with no data states its tier instead of half-rendering', async ({ 
      as still loading, which is the one impression this page must not give. */
   await expect(page.locator('#simBackend')).toHaveCount(0);
   await expect(page.locator('#bcount')).toHaveCount(0);
-  await expect(page.locator('.read')).toContainText('no artefacts · geometry tier');
+  /* `.rig`, NOT `.read`. The top bar's readout was one three-line block; it is now
+     two, split so the live half — what the instrument is running over — sits apart
+     from the static half that names the page. This sentence is the live half's
+     no-data form, so it moved with it. The assertion is unchanged: what must hold
+     is that the page SAYS what is true here, and it is checked against the element
+     that carries that fact rather than against the block it used to live in. */
+  /* VISIBLE, then the text. `toContainText` alone reads `textContent`, which a
+     hidden element still has — measured: adding `hidden` to this block left the
+     assertion green. The claim is that a reader is TOLD what is true here, and a
+     sentence present in the DOM but never painted is exactly the silent
+     degradation this whole test exists against. */
+  await expect(page.locator('.rig')).toBeVisible();
+  await expect(page.locator('.rig')).toContainText('no artefacts · geometry tier');
 
   /* THE CONSOLE IS STILL AROUND THE STATEMENT, and every control in it tells the
      truth about this place. The header tab strip used to be checked here — its

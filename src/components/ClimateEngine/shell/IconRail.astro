@@ -363,16 +363,44 @@ const items = SECTIONS.map((s) => {
     --rail-collapsed: 58px;
     --rail-expanded: 172px;
     --rail: var(--rail-collapsed);
+    /* The rail's own box, inset and bordered. */
+    --rail-inset: 10px;
+    /* WHERE THE RAIL'S RIGHT EDGE ACTUALLY IS, published because three rules on
+       the compare route have to clear it and none of them can see this file's
+       margin. `--rail` is the COLUMN; this is the column plus the inset it floats
+       by and the hairline that draws it, which is what "clear the rail" means to
+       anything sitting beside it.
+
+       Derived rather than typed. The alternative was `calc(var(--rail) + 12px)`
+       written in three places — the bench's padding, the mobile padding and the
+       sheet's offset — where changing the inset would have moved the rail and left
+       all three clearances behind. That is the shape of defect this file already
+       carries a scar from: the accent bar kept its own copy of the rail's width
+       and floated off the edge the moment the column moved. */
+    --rail-edge: calc(var(--rail) + var(--rail-inset) + 2px);
   }
 
   @media (width > 820px) {
     :global(html:not([data-rail="collapsed"])) { --rail: var(--rail-expanded); }
   }
 
+  /* A PANEL THAT FLOATS, NOT A COLUMN THAT ABUTS.
+     The rail used to meet the sidebar edge to edge, separated by one border. Both
+     now sit inset with a gap between them and their own rounded corners, which is
+     the treatment PairedBench.astro's sidebar already had — so this unifies the
+     two routes rather than introducing a third idea.
+
+     THE BORDER GOES ALL THE WAY ROUND NOW, and it is doing real work rather than
+     decoration. The rail and the panel share one colour, and the page behind the
+     gap is 1.06:1 from it — invisible. What separates them is the SHAPE: the gap
+     and the radius, drawn by a hairline. Take the border away and the two panels
+     dissolve into the ground they float on. */
   .rail {
     inline-size: var(--rail);
     background: var(--rail-ground);
-    border-right: 1px solid var(--line);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    margin: var(--rail-inset) 0 var(--rail-inset) var(--rail-inset);
     display: flex;
     flex-direction: column;
     align-items: center;
