@@ -1616,10 +1616,26 @@ test('the tier badge is the RESOLVED tier, and the three tiers take three classe
   /* The badge belongs to the CITY, because the tier is a city fact: the gap
      between Kolkata's `validated` and Dubai's `geometry` IS the funding ask. */
   const tierExpr = new Map(fieldTable(frontmatter).map((f) => [f.id, f.tier]));
-  assert.equal(tierExpr.get('city'), 'scope.tier',
-    'the City level must take its tier from the resolved scope (`tier: scope.tier`) '
-    + `-- it declares \`${tierExpr.get('city')}\`, and a literal would state a `
-    + 'confidence the registry never claimed');
+  const cityTier = tierExpr.get('city') ?? '';
+  assert.match(cityTier, /scope\.tier/,
+    'the City level must take its tier from the resolved scope -- it declares '
+    + `\`${cityTier}\`, and a literal would state a confidence the registry never `
+    + 'claimed');
+
+  /* ONE TIER MAY BE SUPPRESSED, AND ONLY ONE. `validated` is not badged: it is
+     the tier every city should be and the only one whose areas open, so a badge
+     announcing it said nothing a reader could act on. The others are CAVEATS —
+     they are what explains a greyed area — and suppressing one of those would
+     quietly remove the warning while leaving the control looking complete.
+
+     So this reads which tier names appear in the expression rather than matching
+     it verbatim: the shape may be retuned, the set of silenced tiers may not. */
+  const silenced = tiers.filter((t) => cityTier.includes(`'${t}'`));
+  assert.deepEqual(silenced, ['validated'],
+    `the City tier expression names ${silenced.length === 0 ? 'no tier' : silenced.join(', ')}. `
+    + 'Exactly one may be singled out and it must be `validated` -- the other tiers '
+    + 'are the reason an area cannot be opened, and a city that silently stopped '
+    + 'declaring one would look fully available while shipping nothing');
   for (const id of ['country', 'area']) {
     assert.equal(tierExpr.get(id), 'null',
       `the ${id} level declares a tier -- the tier is a CITY fact, and a second `

@@ -191,9 +191,16 @@ interface Field {
 /* THE TIER SITS ON THE CITY AND NOWHERE ELSE, because that is where the registry
    puts it: every area in a city shares one confidence, and a second copy on the
    country or the area row would be a second thing free to disagree with it. */
+/* AND ONLY WHEN IT IS A CAVEAT. `validated` is the tier every city SHOULD be, and
+   the only one whose areas actually open — a badge announcing it sat permanently
+   on the one city that ships data, saying nothing a reader could act on. The badge
+   earns its place when it is a WARNING: `zone` and `geometry` are the tiers that
+   explain why an area is greyed out, and those still say so.
+   The tier itself is unchanged and still comes from the registry; this is only
+   about which values are worth interrupting a reader for. */
 const FIELDS: readonly Field[] = [
   { id: 'country', label: 'Country', options: countryOptions, tier: null },
-  { id: 'city', label: 'City', options: cityOptions, tier: scope.tier },
+  { id: 'city', label: 'City', options: cityOptions, tier: scope.tier === 'validated' ? null : scope.tier },
   { id: 'area', label: 'Area', options: areaOptions, tier: null },
 ];
 

@@ -224,6 +224,33 @@ const selectedNote = selected?.note ?? '';
     touch-action: manipulation;
   }
 
+  /* THE WHOLE CARD IS THE BUTTON, and it was not before.
+     MEASURED: of four places a reader would click, THREE were dead — the chevron,
+     the card's top strip and its left strip — and only the value text opened
+     anything. The chevron was the worst of them, because a downward arrow is the
+     one part of a dropdown people aim at.
+
+     THE CAUSE IS THE MARKUP, not the handler. `.field-chevron` and the tier badge
+     are SIBLINGS of the button, not children: the chevron is absolutely positioned
+     into the card's 26px right gutter and the badge is a flex item beside the
+     trigger. A click on either hits that element and stops. The card's own padding
+     — 6px top and bottom, 9px left — belongs to `.field` and was never the
+     button's either.
+
+     A STRETCHED PSEUDO-ELEMENT rather than moved markup. The chevron has to stay
+     outside the button: it is `aria-hidden` decoration, and `aria-labelledby` on
+     the trigger names it from the label and the trigger's own text, so pulling
+     visual furniture inside would put it in the accessible name's way. This gives
+     the button a hit area over the whole card while leaving the DOM — and the
+     accessibility tree — exactly as they were. The list is positioned BELOW the
+     card and carries its own z-index, so it stays clickable. */
+  .field-trigger::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+  }
+
   .field-trigger:focus-visible {
     outline: 2px solid var(--cyan);
     outline-offset: 3px;
