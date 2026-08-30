@@ -1132,7 +1132,17 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
   body.studio .place .z{color:#8a6d3f}
   body.studio .loadchip{color:var(--studio-accent)}
 
-  .synthetic{position:absolute;top:20px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:.5rem;font-family:var(--mono);font-size:.56rem;letter-spacing:.2em;color:var(--bronze);background:rgb(176 141 87 /.14);border:1px solid rgb(176 141 87 /.3);border-radius:20px;padding:.42rem .9rem;z-index:3;text-transform:uppercase;backdrop-filter:blur(8px)}
+  /* CENTRED BY MARGIN, NOT BY `left:50%`, AND THE DIFFERENCE IS THREE LINES OF TEXT.
+     An absolutely positioned shrink-to-fit box offered `left:50%` may only use the
+     space from that point to the containing block's right edge — HALF the stage. The
+     banner fitted on one line while the stage was the full viewport; once the rail
+     and the sidebar took their columns, half of what remained was 389px, the honesty
+     text wrapped to three lines, and the pill grew down onto the clock tile below it
+     (measured: 0.3px of clearance, where the layout contract asks for 10).
+     `inset-inline:0` gives the box the WHOLE width to shrink against and `margin-inline:
+     auto` still centres it, so the pill is one line again at the stage's real width and
+     the narrow-viewport rules below still get to wrap it when it genuinely cannot fit. */
+  .synthetic{position:absolute;top:20px;inset-inline:0;margin-inline:auto;width:max-content;max-width:calc(100% - 2rem);display:flex;align-items:center;gap:.5rem;font-family:var(--mono);font-size:.56rem;letter-spacing:.2em;color:var(--bronze);background:rgb(176 141 87 /.14);border:1px solid rgb(176 141 87 /.3);border-radius:20px;padding:.42rem .9rem;z-index:3;text-transform:uppercase;backdrop-filter:blur(8px)}
   .synthetic .sp{opacity:.82}
   .synthetic .d{width:6px;height:6px;border-radius:50%;background:var(--bronze);animation:hmPulse 2.2s infinite}
   @keyframes hmPulse{0%,100%{opacity:1}50%{opacity:.3}}
@@ -1187,7 +1197,16 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
      directly beneath it. A 70px shadow then spilled across a 14px gap and the
      two read as one slab. Space has to do that job now, and 14px is not enough
      space to read as a break between two dark surfaces. */
-  .rail-r{position:absolute;right:26px;top:26px;bottom:26px;width:242px;display:flex;flex-direction:column;gap:22px;overflow-y:auto;z-index:4}
+  /* THE RAIL STARTS BELOW THE HONESTY BANNER, because it was CUTTING THE SENTENCE
+     IN HALF. The banner is centred on the map and the rail is 242px of opaque card
+     at z-index 4 against the banner's 3, so the pill's right end ran underneath it
+     and the line read "… HEAT FIELD MODELLE" with the rest painted over — measured
+     at 1280 AND 1600, so it is not a narrow-window artefact.
+     Raising the rail's top past the pill is the fix that does not move anything
+     else: the banner, the build stamp, the load chip and the ward name all centre
+     on the same axis and stay where they are. The rail is `overflow-y:auto`, so the
+     34px it gives up costs reach, not content. */
+  .rail-r{position:absolute;right:26px;top:60px;bottom:26px;width:242px;display:flex;flex-direction:column;gap:22px;overflow-y:auto;z-index:4}
   .right{position:static;width:100%;flex:none}
 
   /* NO RULE BETWEEN THE ROWS. Each `.ctl` used to carry a border-bottom, which
