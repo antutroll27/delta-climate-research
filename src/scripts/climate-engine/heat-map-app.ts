@@ -1328,6 +1328,10 @@ export function mountHeatMap(): () => void {
     surfaceCache[name] ??= await loadAreaSurface(name);
     const { means, surface } = surfaceCache[name];
     state.base = rasterWardBase(d, means, surface, canopy, water);
+    /* The reveal belongs on this line and not on a later await: everything below
+       is optional artefacts, and a roads or labels fetch that hangs must not hold
+       back a control whose data is already in hand. */
+    paintWardTools();
     if (!roadsCache[name]) { try { roadsCache[name] = await (await fetch(P.roads)).json(); } catch { roadsCache[name] = { ways: [] }; } }
     /* Street names for this ward. Separate artefact, separate frame: these are
        lon/lat and go to MapLibre directly, so they never pass through our metre
@@ -1506,6 +1510,32 @@ export function mountHeatMap(): () => void {
     return Number.isFinite(t) ? Math.max(0, (now() - t) / 60000) : null;
   }
 
+  /**
+   * THE WARD'S OWN CONTROLS, REVEALED BY THE WARD.
+   *
+   * These used to hang off `state.live` inside `paintClock`, under a comment
+   * saying both are "meaningless until a ward has actually loaded" — which is
+   * true, and is not the condition that was written. A ward loads from its own
+   * artefacts; the live reading is a separate fetch to met.no that supplies the
+   * boundary conditions and nothing else. So met.no being down, rate-limiting, or
+   * answering through a proxy that 500s took away two features that never
+   * depended on it: the canopy the ward already shipped, and ground-truth
+   * photography already downloaded. The map drew the trees; the control that
+   * toggles them was hidden.
+   *
+   * `state.base` IS the ward: it is assigned once the ward's rasters resolve, and
+   * a refused or failed load leaves it null, which is exactly when these should
+   * stay hidden. The Mapillary token stays ANDed in for street view, so the
+   * feature still disappears cleanly when it has tree-shaken out of the build.
+   */
+  function paintWardTools(): void {
+    const ready = state.base !== null;
+    const vegw = el('vegw');
+    if (vegw) vegw.hidden = !ready;
+    const svw = el('svw');
+    if (svw) svw.hidden = !(ready && MLY_TOKEN);
+  }
+
   function paintClock() {
     /* The shell is a <div> since the tile split into two buttons; casting it to
        HTMLButtonElement compiled fine and would have been a lie the day someone
@@ -1514,15 +1544,6 @@ export function mountHeatMap(): () => void {
     if (!btn) return;
     const L = state.live;
     btn.hidden = !L;
-    /* The vegetation widget rides the same reveal gate as the clock: both are
-       meaningless until a ward has actually loaded. */
-    const vegw = el('vegw');
-    if (vegw) vegw.hidden = !L;
-    /* Street-view toggle sits directly below Trees; it rides the same reveal
-       gate, ANDed with the Mapillary token so it never appears when the
-       feature has tree-shaken out. */
-    const svw = el('svw');
-    if (svw) svw.hidden = !(L && MLY_TOKEN);
     if (!L) return;
 
     const mins = ageMinutes(L.validAt);

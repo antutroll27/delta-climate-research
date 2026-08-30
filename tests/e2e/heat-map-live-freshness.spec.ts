@@ -148,6 +148,33 @@ test.describe('live reading freshness', () => {
     await expect(page.locator('#livedot')).toHaveClass(/\bon\b/);
   });
 
+  test('a dead weather feed does not take the ward\'s own controls with it', async ({ page }) => {
+    /* THE GATE WAS ON THE WRONG FACT. `paintClock` revealed the Trees toggle and
+       the street-view toggle with `hidden = !state.live`, under a comment saying
+       both are "meaningless until a ward has actually loaded" — which is true, and
+       is not what the code tested. A ward loads from its own artefacts; the live
+       reading is a separate fetch to met.no that only sets the boundary
+       conditions. So an outage at met.no, or a rate-limit, or a proxy 500, removed
+       two working features that never depended on it: the canopy the ward ships
+       and the ground-truth photography, both already downloaded.
+       Nothing here is subtle once seen — but it can only be seen when the feed is
+       DOWN, which is never true on a developer's machine or in a normal test run.
+       Hence the stub. */
+    await page.route(LIVE_ROUTE, (route) => route.fulfill({ status: 500, body: 'upstream unavailable' }));
+    await page.goto('/heat-map/in/kolkata/ballygunge/');
+
+    /* The ward is up: the model ran on its own artefacts and produced a reading.
+       This is the precondition that makes the rest of the assertion meaningful —
+       without it the toggles could be missing simply because nothing had loaded. */
+    await expect(page.locator('#lst')).not.toContainText('—', { timeout: 60_000 });
+
+    /* And the clock IS allowed to be absent — it has nothing to show. That
+       contrast is the point: one widget depends on the feed, the others do not. */
+    await expect(page.locator('#clockw')).toBeHidden();
+    await expect(page.locator('#vegw')).toBeVisible();
+    await expect(page.locator('#vegw button[data-v="1"]')).toBeVisible();
+  });
+
   test('the readout clears the evidence rail it sits beside', async ({ page }) => {
     await stubMet(page, 0);
     await page.goto('/heat-map/in/kolkata/ballygunge/');

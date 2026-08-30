@@ -379,7 +379,9 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
     </div>
 
     <!-- Vegetation toggle: distinct widget directly below the clock. Shown when the
-         clock unhides (ward loaded). Binary on/off in the .modechip idiom. -->
+         ward's rasters resolve -- NOT when the weather arrives, which is a
+         different fetch that these controls do not depend on. Binary on/off in
+         the .modechip idiom. -->
     <div class="vegw" id="vegw" hidden>
       <span class="veg-lab">Trees</span>
       <div class="modechip" id="vegchip" title="Show or hide the modelled tree canopy">
