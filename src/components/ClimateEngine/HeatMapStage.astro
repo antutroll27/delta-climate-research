@@ -485,7 +485,7 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
       </div>
       <div class="mrow">
         <div><div class="k" title="Modelled land-cover thermal contrast: this ward's mean surface temperature minus a fully-vegetated reference cell under identical forcing. NOT a measured urban heat island — published Kolkata surface UHI is 0.85–1.5 °C from 1 km satellite data, a different quantity.">Δ vs all-green ref</div><div class="val" style="color:var(--cyan)" id="uhi">—</div></div>
-        <div><div class="k">Area above 40 °C</div><div class="val" style="color:var(--red)" id="area">—</div></div>
+        <div><div class="k">Area above 40 °C</div><div class="val" style="color:var(--red-ink)" id="area">—</div></div>
       </div>
       <div class="metric" style="border-top:1px solid var(--line);padding-bottom:0"><div class="k">Heat-stress distribution</div></div>
       <div class="histo" id="histo"></div>
@@ -570,7 +570,15 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
   body{ overflow:hidden; }
   .stage{
     --base:#050606; --surface:#0b2c2e; --surface2:#093a3e;
-    --paper:#ecedf0; --ink:#8fa3a5; --faint:#5c7173; --line:rgb(111 202 214 / 0.14);
+    /* --faint IS LIGHTER THAN IT WAS, because the value it held missed the 4.5:1
+       floor on every ground it was ever drawn on — measured from rendered pixels
+       at 3.52–3.93:1 across thirteen nodes: the breadcrumb, "Location", the
+       live-ambient units and the legend's scale numbers. It now clears 4.5:1
+       against rgb(19,29,31), the lightest ground the panels can produce once
+       --rail-ground is opaque enough to bound it, so it holds on every frame
+       rather than on the one that happened to be sampled. It stays clearly below
+       --ink, which is the whole job of the third ramp step. */
+    --paper:#ecedf0; --ink:#8fa3a5; --faint:#6e8789; --line:rgb(111 202 214 / 0.14);
     /* The louder rule, for a line that has to be FOUND rather than merely felt: an
        unchecked checkbox in the layer tree, and the breadcrumb's separators.
        Declared here, with the rest of the palette, because a token resolves from
@@ -582,6 +590,14 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
        invisible until ticked. */
     --line-hi:rgb(111 202 214 / 0.32);
     --cyan:#6fcad6; --bronze:#b08d57; --red:#e5484d;
+    /* THE SAME RED, ONE STEP UP, FOR WHEN IT IS A WORD RATHER THAN A SWATCH.
+       --red is the heat ramp's Extreme class and the compass's north needle —
+       both areas of colour, which WCAG scores against a 3:1 non-text floor it
+       clears comfortably. As 16.8px TEXT in the delta readout the floor is 4.5:1
+       and the same value reads 4.39:1, missing by a fortieth. Lightening --red
+       itself would restate the top of the heat legend in order to fix a number in
+       a metric card; this leaves the ramp alone. */
+    --red-ink:#eb4a4f;
     /* The confidence-tier green — the `validated` badge on the scope switcher,
        and nothing else. DELIBERATELY NOT --sage, which is the heat ramp's
        Comfortable class: one token serving both a heat class and a trust label
@@ -641,7 +657,21 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
        shell/IconRail.astro, because a token resolves from where it is DECLARED:
        the rail's scoped styles reach it only once the rail is inside .stage,
        which is where Task 7 puts it. */
-    --rail-ground:#091416d6;
+    /* ALPHA f5, NOT d6, AND THE READABILITY OF THE WHOLE CONSOLE RESTS ON IT.
+       At d6 (0.84) the panels admitted about a sixth of the LIVE MAP, so no
+       element inside them had a fixed background: the ground moved with the
+       basemap, the zoom, the hour and the heat field. A contrast floor cannot be
+       met against a ground that is not knowable, and measuring the stylesheet
+       instead of the frame hides that completely — the token maths said 3.93:1
+       for the worst small text while the rendered pixels said 2.87:1.
+       At f5 (0.96) the worst ground the panel can produce is bounded: a pure
+       white map pixel composites to rgb(19,29,31), so every ink here can be
+       chosen against a PROVABLE worst case rather than a sampled one. That is
+       also what preserves the ink ramp — cleared against rgb(19,29,31), --faint
+       lands well below --ink; cleared against the old wandering ground it had to
+       rise almost to it and the three-step ramp would have collapsed to two.
+       The blur is untouched, which is where the glass actually reads. */
+    --rail-ground:#091416f5;
     /* The sidebar's ground — the rail's neighbour in the same cold family, one
        step forward.
 
@@ -785,7 +815,7 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
      floating furniture uses. The breakpoint overrides that followed the panel down
      went with it. */
   .compass{position:absolute;left:26px;bottom:26px;z-index:6;width:62px;height:62px;padding:0;cursor:pointer;
-    background:rgb(9 20 22 /.82);border:1px solid var(--line);border-radius:50%;backdrop-filter:blur(12px);
+    background:rgb(9 20 22 /.96);border:1px solid var(--line);border-radius:50%;backdrop-filter:blur(12px);
     display:grid;place-items:center;transition:border-color .2s,transform .2s}
   .compass:hover{border-color:var(--cyan);transform:scale(1.06)}
   .compass:focus-visible{outline:2px solid var(--cyan);outline-offset:3px}
@@ -807,13 +837,18 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
   /* Sits directly above the compass, sharing its left edge so the two read as one
      cluster. Kept narrow: `.tiphint` is centred at bottom:88px, so a long line here
      would collide with it on a normal viewport. */
+  /* Same plate as the compass it sits above, and for the same reason: this is 7px
+     type on the open map. It read 1.33:1 on Clay, where the pale basemap meets a
+     near-white ink chosen for the dark one. The alpha on the colour goes too —
+     52 % of white over a photograph is a decoration, not a caption. */
   .sunline{position:absolute;left:26px;bottom:104px;z-index:6;margin:0;max-width:200px;
     font-family:var(--mono);font-size:7.5px;letter-spacing:.09em;line-height:1.45;
-    color:rgb(236 237 240 /.52);text-transform:uppercase;pointer-events:none;white-space:nowrap}
+    color:#c3cbcc;text-transform:uppercase;pointer-events:none;white-space:nowrap;
+    background:rgb(9 20 22 /.94);border-radius:6px;padding:.3rem .5rem;backdrop-filter:blur(8px)}
   .sunline[hidden]{display:none}
   /* The caveat is dimmer than the numbers but never hidden — a reader who sees a sun
      on a heat map will assume the model uses it, and it does not. */
-  .sunline-note{display:block;font-size:7px;color:rgb(242 181 68 /.5);letter-spacing:.07em;pointer-events:auto;cursor:help}
+  .sunline-note{display:block;font-size:7px;color:rgb(242 181 68 /.85);letter-spacing:.07em;pointer-events:auto;cursor:help}
   .sunline-note:focus-visible{outline:1px solid var(--cyan);outline-offset:2px}
   /* ── live-reading freshness dial ───────────────────────────────────────────
      Sits directly above the compass and borrows its whole visual language, so
@@ -904,21 +939,27 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
   .vegw .modechip button{font-size:.52rem;padding:.3rem .62rem;letter-spacing:.12em}
   #svw{top:222px}
 
-  body.studio .compass{background:rgb(245 244 241 /.86);border-color:rgb(20 40 42 /.2)}
+  body.studio .compass{background:rgb(245 244 241 /.97);border-color:rgb(20 40 42 /.2)}
   body.studio .compass .c-s{fill:rgb(20 40 42 /.34)}
   body.studio .compass .c-tick{fill:rgb(20 40 42 /.28)}
   body.studio .compass .c-lab{fill:rgb(20 40 42 /.66)}
 
   /* ── first-run hint ── */
   .tiphint{position:absolute;left:50%;bottom:88px;transform:translateX(-50%);z-index:7;display:flex;align-items:center;gap:.6rem;
-    background:rgb(9 20 22 /.86);border:1px solid rgb(111 202 214 /.35);border-radius:99px;padding:.5rem .55rem .5rem .95rem;
+    background:rgb(9 20 22 /.96);border:1px solid rgb(111 202 214 /.35);border-radius:99px;padding:.5rem .55rem .5rem .95rem;
     backdrop-filter:blur(10px);font-family:var(--mono);font-size:.53rem;letter-spacing:.12em;text-transform:uppercase;color:var(--paper);
     animation:tipIn .45s cubic-bezier(.2,0,0,1) both}
   .tiphint button{background:none;border:0;color:var(--ink);cursor:pointer;font-size:.6rem;line-height:1;padding:.25rem .4rem;border-radius:50%}
   .tiphint button:hover{color:var(--paper)}
   .tiphint button:focus-visible{outline:2px solid var(--cyan);outline-offset:1px}
   @keyframes tipIn{from{opacity:0;transform:translate(-50%,8px)}to{opacity:1;transform:translate(-50%,0)}}
-  body.studio .tiphint{background:rgb(245 244 241 /.9);color:var(--studio-ink);border-color:rgb(20 40 42 /.25)}
+  body.studio .tiphint{background:rgb(245 244 241 /.97);color:var(--studio-ink);border-color:rgb(20 40 42 /.25)}
+  /* THE DISMISS BUTTON DID NOT FOLLOW ITS OWN HINT INTO THE LIGHT THEME. The rule
+     above recolours `.tiphint`, but `.tiphint button` sets `color:var(--ink)`
+     explicitly, so the ✕ stayed the dark theme's pale grey on a near-white pill:
+     2.36:1, the worst thing left on Clay once the grounds were fixed. */
+  body.studio .tiphint button{color:var(--studio-ink)}
+  body.studio .tiphint button:hover{color:#000}
   @media (prefers-reduced-motion: reduce){ .tiphint{animation:none} }
 
   /* ── walk-time ring labels ──
@@ -1122,14 +1163,25 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
   .place{position:absolute;left:50%;top:34%;transform:translate(-50%,-50%);text-align:center;pointer-events:none;z-index:1}
   .place .n{font-weight:600;font-size:clamp(2.2rem,4.4vw,3.6rem);line-height:.92;letter-spacing:-.04em;text-shadow:0 4px 40px rgb(0 0 0 /.85);opacity:.82}
   .place .n em{font-style:normal;color:var(--cyan)}
-  .place .z{font-family:var(--mono);font-size:.58rem;letter-spacing:.34em;color:var(--bronze);margin-top:.7rem;text-transform:uppercase;opacity:.9}
+  /* THE SUBTITLE CARRIES ITS OWN GROUND; the ward name above it does not need to.
+     `.n` is 4rem, so it clears the 3:1 large-text floor on any basemap. These
+     tracked caps are 9px on whatever the map happens to be — measured 2.25:1 on
+     Slate and 2.99:1 on Clay — and no colour fixes a ground that is a photograph.
+     `opacity:.9` is gone with it: dimming the one line that already failed was
+     working against the only thing it had. */
+  .place .z{display:inline-block;font-family:var(--mono);font-size:.58rem;letter-spacing:.34em;color:var(--bronze);margin-top:.7rem;text-transform:uppercase;
+    background:rgb(5 6 6 /.94);padding:.24rem .62rem .24rem .68rem;border-radius:5px;backdrop-filter:blur(6px)}
   .chiprow{position:absolute;left:50%;bottom:26px;transform:translateX(-50%);display:flex;gap:8px;z-index:3}
-  .modechip{display:flex;gap:2px;background:rgb(5 6 6 /.7);border:1px solid var(--line);border-radius:9px;padding:3px;backdrop-filter:blur(8px)}
+  .modechip{display:flex;gap:2px;background:rgb(5 6 6 /.94);border:1px solid var(--line);border-radius:9px;padding:3px;backdrop-filter:blur(8px)}
   .modechip button{font-family:var(--mono);font-size:.56rem;letter-spacing:.14em;color:var(--ink);background:none;border:0;cursor:pointer;padding:.4rem .8rem;border-radius:6px;text-transform:uppercase}
   .modechip button.on{background:var(--surface2);color:var(--paper)}
   body.studio .place .n{color:#232b2d;text-shadow:0 4px 34px rgb(255 255 255/.6)}
   body.studio .place .n em{color:var(--studio-accent)}
-  body.studio .place .z{color:#8a6d3f}
+  /* GONE, NOT RECOLOURED. #8a6d3f was the darker bronze this label needed while it
+     sat directly on Clay's pale basemap. It now carries its own dark plate in both
+     themes, so that value became dark bronze on a dark plate — 2.64:1, worse than
+     the problem it was introduced to solve. The plate makes the theme fork
+     unnecessary: one colour, one ground, both basemaps. */
   body.studio .loadchip{color:var(--studio-accent)}
 
   /* CENTRED BY MARGIN, NOT BY `left:50%`, AND THE DIFFERENCE IS THREE LINES OF TEXT.
@@ -1142,7 +1194,14 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
      `inset-inline:0` gives the box the WHOLE width to shrink against and `margin-inline:
      auto` still centres it, so the pill is one line again at the stage's real width and
      the narrow-viewport rules below still get to wrap it when it genuinely cannot fit. */
-  .synthetic{position:absolute;top:20px;inset-inline:0;margin-inline:auto;width:max-content;max-width:calc(100% - 2rem);display:flex;align-items:center;gap:.5rem;font-family:var(--mono);font-size:.56rem;letter-spacing:.2em;color:var(--bronze);background:rgb(176 141 87 /.14);border:1px solid rgb(176 141 87 /.3);border-radius:20px;padding:.42rem .9rem;z-index:3;text-transform:uppercase;backdrop-filter:blur(8px)}
+  /* A BRONZE WASH IS NOT A GROUND. The pill used to be `rgb(176 141 87 /.14)` —
+     bronze text on a 14 % bronze tint over the live map — so the sentence scored
+     3.83:1 on Slate and 2.24:1 on Clay. It is the one line on this page whose
+     entire job is to be read, and it was the least readable thing on it.
+     A dark fill keeps the bronze identity where the identity actually lives (the
+     border, the pulsing dot, the text) and gives the words a ground that does not
+     move with the map beneath. */
+  .synthetic{position:absolute;top:20px;inset-inline:0;margin-inline:auto;width:max-content;max-width:calc(100% - 2rem);display:flex;align-items:center;gap:.5rem;font-family:var(--mono);font-size:.56rem;letter-spacing:.2em;color:var(--bronze);background:rgb(9 20 22 /.94);border:1px solid rgb(176 141 87 /.42);border-radius:20px;padding:.42rem .9rem;z-index:3;text-transform:uppercase;backdrop-filter:blur(8px)}
   .synthetic .sp{opacity:.82}
   .synthetic .d{width:6px;height:6px;border-radius:50%;background:var(--bronze);animation:hmPulse 2.2s infinite}
   @keyframes hmPulse{0%,100%{opacity:1}50%{opacity:.3}}
@@ -1162,7 +1221,7 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
      over it and never strips the `:global()`. It would ship verbatim, and the browser
      drops the whole rule as an invalid selector, leaving the stamp unbacked over the
      basemap. Inside is:global every selector is already global. */
-  .stamp-slot .con-stamp{opacity:1;background:rgb(6 14 16 /.72);backdrop-filter:blur(8px)}
+  .stamp-slot .con-stamp{opacity:1;background:rgb(6 14 16 /.94);backdrop-filter:blur(8px)}
   /* The within-ward caveat. Bronze, like every other provenance statement on
      this page, and directly under the colour ramp it qualifies. */
   .pattern-note{margin:.32rem 0 0;font-family:var(--mono);font-size:.5rem;line-height:1.75;
@@ -1183,7 +1242,7 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
      across the rail gap and glued this to the legend below it. The ambient is
      kept short (18px, not 70) for the same reason — it must not reach the next
      card. */
-  .panel{position:absolute;background:rgb(9 20 22 /.88);border-radius:14px;backdrop-filter:blur(16px);box-shadow:0 1px 2px rgb(0 0 0 /.45),0 8px 18px rgb(0 0 0 /.35);z-index:4}
+  .panel{position:absolute;background:rgb(9 20 22 /.96);border-radius:14px;backdrop-filter:blur(16px);box-shadow:0 1px 2px rgb(0 0 0 /.45),0 8px 18px rgb(0 0 0 /.35);z-index:4}
   .panel .h{font-family:var(--mono);font-size:.58rem;letter-spacing:.18em;color:var(--ink);padding:14px 18px 0;text-transform:uppercase}
   /* `.left`'s floating geometry is gone: the toolbox is a pane of the sidebar now,
      and `.sidebar .panel.left` up in the layout block gives it a column's shape.
@@ -1334,7 +1393,9 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
   /* Same shadow recipe as .panel. Fill nudged lighter (.88 -> .84) so the legend
      is visibly a DIFFERENT surface from the readout above it — two identical
      dark rectangles 22px apart still want to fuse; a tonal step stops that. */
-  .legend{position:relative;z-index:5;width:100%;flex:none;margin-top:auto;background:rgb(9 20 22 /.84);border-radius:12px;backdrop-filter:blur(16px);box-shadow:0 1px 2px rgb(0 0 0 /.45),0 8px 18px rgb(0 0 0 /.35);padding:12px 15px 7px}
+  /* .96 like --rail-ground, and for the same reason: at .84 the legend's own
+     scale numbers sat on whatever the map happened to be showing under them. */
+  .legend{position:relative;z-index:5;width:100%;flex:none;margin-top:auto;background:rgb(9 20 22 /.96);border-radius:12px;backdrop-filter:blur(16px);box-shadow:0 1px 2px rgb(0 0 0 /.45),0 8px 18px rgb(0 0 0 /.35);padding:12px 15px 7px}
   .legend .k{font-family:var(--mono);font-size:.54rem;letter-spacing:.16em;color:var(--ink);display:flex;justify-content:space-between;margin-bottom:.55rem;text-transform:uppercase}
   /* A gradient colour stop takes var() like any other colour; .ramp is inside
      .legend, inside .stage, so the tokens are in scope. */

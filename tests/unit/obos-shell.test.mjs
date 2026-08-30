@@ -542,19 +542,28 @@ test("the rail's resting ink clears the 4.5:1 text floor on the ground it sits o
   const { css: railCss } = await railSource();
   const stage = await stageSource();
 
-  const ink = tokenValue(hexTokens(railCss, 'IconRail.astro'), '--rail-ink',
-    'IconRail.astro');
+  const palette0 = hexTokens(stage, 'HeatMapStage.astro');
+  const ink = tokenValue(palette0, '--ink', 'HeatMapStage.astro');
   const ground = tokenValue(hexTokens(stage, 'HeatMapStage.astro'), '--rail-ground',
     'HeatMapStage.astro');
 
-  /* THE TOKEN HAS TO BE THE ONE THE RAIL ACTUALLY PAINTS WITH. Without this the
-     test measures a declaration nothing reads: a --rail-ink of any value at all
-     would pass while the buttons went on rendering in --faint. */
-  assert.match(railCss, /\.rail-btn\s*\{[^}]*color:\s*var\(--rail-ink\)/,
-    'the rail sections are not painted with --rail-ink, so the ratio computed '
+  /* THE RAIL HAS NO INK OF ITS OWN, AND THAT IS THE POINT OF THIS PAIR.
+     --rail-ink existed only because --faint could not clear 4.5:1 on this ground.
+     Raising --faint removed the reason; leaving the token behind would have left
+     two names for one job, with the unused one free to drift. So the absence is
+     asserted here rather than trusted to memory. */
+  assert.doesNotMatch(railCss, /--rail-ink\s*:/,
+    'the rail declares --rail-ink again. It was merged into --ink when --faint '
+    + 'was raised to clear this ground; a second ink token here means the rail '
+    + 'and the console can disagree about what a resting label looks like');
+
+  /* AND THE TOKEN MEASURED HAS TO BE THE ONE THE RAIL ACTUALLY PAINTS WITH.
+     Without this the test scores a declaration nothing reads. */
+  assert.match(railCss, /\.rail-btn\s*\{[^}]*color:\s*var\(--ink\)/,
+    'the rail sections are not painted with --ink, so the ratio computed '
     + 'here is about a token nothing uses');
-  assert.match(railCss, /\.rail-toggle\s*\{[^}]*color:\s*var\(--rail-ink\)/,
-    'the collapse chevron is not painted with --rail-ink');
+  assert.match(railCss, /\.rail-toggle\s*\{[^}]*color:\s*var\(--ink\)/,
+    'the collapse chevron is not painted with --ink');
 
   const rest = ratio(ink, ground);
   assert.ok(rest >= 4.5,
@@ -579,17 +588,21 @@ test("the rail's resting ink clears the 4.5:1 text floor on the ground it sits o
       + `${r.toFixed(2)}:1, below the 4.5:1 text floor`);
   }
 
-  /* THE COLOUR THIS REPLACED, asserted as an absence rather than left to memory.
-     --faint is still the right token for a great many things on this console; it
-     is not the right token for a word on the rail, and the number says so. */
+  /* --faint CLEARS THIS GROUND TOO NOW, and it is still not what the rail should
+     use. The two facts are separate and both matter: the first is why --rail-ink
+     could be deleted, the second is why the rail did not simply inherit --faint
+     in its place. These are primary navigation labels; --faint is the console's
+     THIRD ink tier, for units, scale numbers and credits. Legibility was never
+     the whole argument for the rail's colour — hierarchy was. */
   const faint = tokenValue(palette, '--faint', 'HeatMapStage.astro');
-  assert.ok(ratio(faint, ground) < 4.5,
-    `--faint (${faint}) now clears 4.5:1 on the rail ground. If that is true the `
-    + 'reason for --rail-ink has gone and the two tokens should be one');
+  assert.ok(ratio(faint, ground) >= 4.5,
+    `--faint (${faint}) reads ${ratio(faint, ground).toFixed(2)}:1 on the rail `
+    + 'ground, below the 4.5:1 floor. Every ink on this console has to clear it '
+    + 'on every ground it is painted on, and this is the darkest pairing there is');
   assert.doesNotMatch(railCss, /color:\s*var\(--faint\)/,
-    'the rail paints something in --faint again. It is below the 4.5:1 text '
-    + 'floor on this ground, and every colour in this component now sits behind '
-    + 'a word');
+    'the rail paints something in --faint. It clears the contrast floor, but it '
+    + 'is the tier below the one navigation belongs in -- a section name would '
+    + 'read as dimmer than the card headings it leads to');
 });
 
 test("the console's two grounds are the same colour on both routes", async () => {

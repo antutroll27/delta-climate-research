@@ -415,13 +415,17 @@ const items = SECTIONS.map((s) => {
     transition: inline-size .18s ease;
   }
 
-  /* THE RESTING INK, AND IT IS A TOKEN BECAUSE IT IS A MEASUREMENT.
-     --faint against --rail-ground is 3.27:1 — legal for a glyph, which is all the
-     rail used to hold, and illegal the moment that glyph is standing next to a
-     word. This clears the 4.5:1 floor with room to spare on the ground the rail
-     actually paints, and a unit test recomputes the ratio from these two declared
-     values rather than trusting the number in this sentence. */
-  .rail { --rail-ink: #9aacae; }
+  /* --rail-ink IS GONE, AND ITS JOB WENT BACK TO --ink.
+     It existed for one reason: --faint could not clear 4.5:1 on --rail-ground, so
+     a rail that had grown labels needed a lighter value than the token it would
+     otherwise have used. --faint has since been raised to clear that floor
+     everywhere it is painted, which removed the reason without removing the
+     token — two names for one job, and the dimmer of the two would have been the
+     one to drift.
+     The rail resolves to --ink instead: these are primary navigation labels, so
+     the ink tier is where they belonged all along, and --faint would have read
+     them as secondary. A unit test recomputes the ratio from the declared values
+     rather than trusting the number in this sentence. */
 
   /* THE BRAND ROW: mark, wordmark, chevron. Collapsed it is a column — the mark
      centred with the chevron beneath it, because the chevron is the ONLY way back
@@ -478,7 +482,7 @@ const items = SECTIONS.map((s) => {
     border-radius: 6px;
     padding: 0;
     background: none;
-    color: var(--rail-ink);
+    color: var(--ink);
     cursor: pointer;
     transition: color .18s, background .18s;
   }
@@ -520,7 +524,7 @@ const items = SECTIONS.map((s) => {
     border-radius: 8px;
     padding: 0;
     background: none;
-    color: var(--rail-ink);
+    color: var(--ink);
     font: inherit;
     font-size: .78rem;
     font-weight: 500;
