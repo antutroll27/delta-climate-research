@@ -1593,9 +1593,24 @@ export function mountHeatMap(): () => void {
     const L = state.live;
     setText('liveT', L ? L.tAir.toFixed(1) : '—'); setText('liveFeel', L ? L.feels.toFixed(1) : '—');
     setText('liveRH', L ? String(Math.round(L.rh)) : '—'); setText('liveWind', L ? L.wind.toFixed(1) : '—');
-    /* The dot claims "live"; it may only do so while the reading still is. */
+    /* The dot claims "live"; it may only do so while the reading still is.
+
+       AN UNKNOWN AGE IS NOT A FRESH ONE, and this line used to say it was:
+       `mins === null || mins <= AGE_STALE_MIN` lit the dot when `ageMinutes`
+       could not date the reading at all. `paintClock` had already settled the
+       question thirty lines above — grey tile, "age —", bar emptied, under the
+       comment "Unknown age must not render as fresh: empty bar, nothing
+       claimed" — so the one element whose whole job is the word LIVE was the
+       one element exempt from the rule the rest of the tile follows. On screen
+       that read as a grey tile saying "age —" beside a pulsing green light.
+
+       `validAt` is `ts.time` copied verbatim out of the upstream body and is
+       optional in our own type, so a reshaped or truncated met.no response
+       reaches here as a COMPLETE reading whose age is unknowable. That is the
+       moment the page most needs to stop claiming currency, and it was the
+       moment it started. */
     const mins = ageMinutes(L?.validAt);
-    el('livedot')?.classList.toggle('on', !!L && (mins === null || mins <= AGE_STALE_MIN));
+    el('livedot')?.classList.toggle('on', !!L && mins !== null && mins <= AGE_STALE_MIN);
     paintClock();
   }
 

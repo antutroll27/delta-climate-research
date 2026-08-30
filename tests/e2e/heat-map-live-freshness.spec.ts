@@ -46,6 +46,30 @@ async function stubMet(page: import('@playwright/test').Page, hoursAgo: number, 
   }));
 }
 
+/**
+ * A READING THAT ARRIVES WITHOUT A TIMESTAMP — the case where the page knows the
+ * weather but not how old it is.
+ *
+ * `validAt` is `ts.time` taken verbatim from the upstream body, so an entry with
+ * no `time` yields a complete reading whose age is unknowable rather than merely
+ * large. That distinction is the whole point: "stale" is a measurement, "unknown"
+ * is the absence of one, and only the second can be mistaken for fresh.
+ *
+ * Reachable rather than theoretical: the field is optional in our own type
+ * (`heat-map-model.ts`), nothing between met.no and the dial asserts its
+ * presence, and a truncated or reshaped upstream body produces exactly this.
+ */
+async function stubMetUndated(page: import('@playwright/test').Page) {
+  await page.route(LIVE_ROUTE, (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    headers: { date: new Date().toUTCString(), age: '0' },
+    body: JSON.stringify({
+      properties: { timeseries: [{ data: { instant: { details: CANNED } } }] },
+    }),
+  }));
+}
+
 const dial = '#clockw';
 
 test.describe('live reading freshness', () => {
@@ -82,6 +106,28 @@ test.describe('live reading freshness', () => {
     await expect(page.locator(dial)).toHaveAttribute('data-age', 'stale', { timeout: 60_000 });
     await expect(page.locator('#clockAgeLab')).toHaveText('read 9h ago');
     // The whole point: the page stops asserting "live" once it isn't.
+    await expect(page.locator('#livedot')).not.toHaveClass(/\bon\b/);
+  });
+
+  test('a reading of unknown age is not allowed to claim live', async ({ page }) => {
+    /* THE FILE ALREADY DECIDED THIS, AND THE DOT DISAGREED WITH IT.
+       `paintClock` handles an unknown age deliberately — grey tile, "age —",
+       bar emptied — under the comment "Unknown age must not render as fresh:
+       empty bar, nothing claimed". Thirty lines later `paintLive` lit the dot
+       on `mins === null`, so the one element whose entire job is the word LIVE
+       was the one element exempt from the rule. On screen that reads as a grey
+       tile saying "age —" beside a pulsing green light.
+
+       Both halves are asserted here on purpose. The tile's state is what makes
+       the dot's state wrong: either alone is a preference about styling, and
+       the pair is a contradiction the reader can see. */
+    await stubMetUndated(page);
+    await page.goto('/heat-map/in/kolkata/ballygunge/');
+    await expect(page.locator(dial)).toHaveAttribute('data-age', 'unknown', { timeout: 60_000 });
+    await expect(page.locator('#clockAgeLab')).toHaveText('age —');
+    // The reading itself did arrive — this is not a "no data" state, which is
+    // what makes the dot's claim a lie rather than a leftover.
+    await expect(page.locator('#liveT')).toHaveText(String(CANNED.air_temperature));
     await expect(page.locator('#livedot')).not.toHaveClass(/\bon\b/);
   });
 
