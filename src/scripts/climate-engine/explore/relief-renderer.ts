@@ -334,6 +334,10 @@ export class ThreeReliefRenderer implements ReliefRenderer {
         this.options.reducedMotion ? 0 : performance.now() / 1000,
         this.visual.live.cloud / 100, this.visual.live.wind, this.visual.live.windFrom ?? 0,
         this.visual.phase === 'night',
+        /* THE SAME SUN THAT AIMS THE KEY LIGHT, so the deck's shadows and the
+           scene's lighting cannot disagree about where the light is coming from.
+           They used to: the key followed the hour and the shadows were a literal. */
+        this.visual.sun,
       );
       /* keyLevel already carries the sun's height; cloud attenuates what is left.
          It was `keyBase` here, which threw away the elevation term every frame the

@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { layoutCumulus, layoutVeil, fitLobes, cloudFuse, CLOUD }
+import { layoutCumulus, layoutVeil, fitLobes, cloudFuse, CLOUD, cloudShadowOffset }
   from '../../src/scripts/climate-engine/cloud-sprites.ts';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -91,6 +91,87 @@ test('the approved constants are pinned', () => {
   assert.equal(CLOUD.COUNT, 26);
 });
 
+/** A sun placement in the scene's frame: x east, y up, z north, toward the sun. */
+function sunAt(azimuthDeg, elevationDeg) {
+  const R = Math.PI / 180;
+  const cosEl = Math.cos(elevationDeg * R);
+  return {
+    x: cosEl * Math.sin(azimuthDeg * R),
+    y: Math.sin(elevationDeg * R),
+    z: cosEl * Math.cos(azimuthDeg * R),
+    elevationDeg,
+  };
+}
+
+test('a cloud shadow falls AWAY from the sun, not in a fixed direction', () => {
+  /* THE DEFECT THIS PINS. The shadow used to be placed at a literal
+     `(wx - 130, wz + 95)` under a comment reading "offset along the light" — one
+     direction and one length, for every hour of every day. Those two numbers
+     describe a sun at azimuth 126 degrees and elevation 63: roughly mid-morning
+     in high summer, drawn unchanged at 08:00, at 16:00 and on the compass's own
+     "sun 274 deg" evenings, where the shadows pointed the wrong way entirely.
+     Sun due south means shadows due north. That is the whole assertion. */
+  const h = CLOUD.DECK_M;
+  const south = cloudShadowOffset(h, sunAt(180, 45));
+  assert.ok(Math.abs(south.dx) < 1e-9, `a due-south sun casts no east-west offset, got ${south.dx}`);
+  assert.ok(south.dz > 0, 'a sun in the south must throw the shadow north');
+
+  const east = cloudShadowOffset(h, sunAt(90, 45));
+  assert.ok(Math.abs(east.dz) < 1e-9, `a due-east sun casts no north-south offset, got ${east.dz}`);
+  assert.ok(east.dx < 0, 'a sun in the east must throw the shadow west');
+
+  /* And the west, because a test that only checks one hemisphere would pass on a
+     sign error that flips at noon -- which is precisely the bug being fixed. */
+  const west = cloudShadowOffset(h, sunAt(270, 45));
+  assert.ok(west.dx > 0, 'a sun in the west must throw the shadow east');
+  assert.ok(Math.abs(west.dx + east.dx) < 1e-9, 'east and west suns must mirror');
+});
+
+test('the shadow lengthens as the sun drops, and is directly under an overhead sun', () => {
+  const h = CLOUD.DECK_M;
+  /* Straight overhead: the shadow is the cloud's own footprint. */
+  const noon = cloudShadowOffset(h, sunAt(180, 90));
+  assert.ok(Math.hypot(noon.dx, noon.dz) < 1e-9, 'an overhead sun casts no offset');
+
+  /* 45 degrees is the identity case: offset equals height exactly. It is worth
+     asserting as a NUMBER rather than a direction, because it pins the
+     trigonometry and not merely its sign. */
+  const forty5 = cloudShadowOffset(h, sunAt(180, 45));
+  assert.ok(Math.abs(Math.hypot(forty5.dx, forty5.dz) - h) < 1e-6,
+    'at 45 degrees the horizontal offset must equal the cloud height');
+
+  /* Monotone: every step toward the horizon moves the shadow further out. */
+  let last = 0;
+  for (const el of [80, 60, 40, 25, 15]) {
+    const d = Math.hypot(...Object.values(cloudShadowOffset(h, sunAt(180, el))));
+    assert.ok(d > last, `shadow at ${el} deg is not further out than the step above it`);
+    last = d;
+  }
+});
+
+test('a sun at or below the horizon casts no shadow rather than an infinite one', () => {
+  /* h / tan(elevation) DIVERGES at the horizon, and a NaN or a 1e17 reaching a
+     THREE position is a whole scene gone. Both are answered here rather than
+     left to the clamp: at and below the horizon there is no shadow at all. */
+  for (const el of [0, -0.5, -12, -90]) {
+    const d = cloudShadowOffset(CLOUD.DECK_M, sunAt(180, el));
+    assert.ok(Number.isFinite(d.dx) && Number.isFinite(d.dz), `elevation ${el} produced a non-finite offset`);
+    assert.equal(d.dx, 0, `elevation ${el} still cast an east-west shadow`);
+    assert.equal(d.dz, 0, `elevation ${el} still cast a north-south shadow`);
+  }
+});
+
+test('a low sun clamps rather than throwing the shadow to infinity', () => {
+  /* The clamp is not cosmetic. At 1 degree a 320 m deck would place its shadow
+     18 km away -- seven times the sprite field -- and the transform cost is paid
+     on a sprite nobody can see. The direction has to survive the clamp. */
+  const grazing = cloudShadowOffset(CLOUD.DECK_M, sunAt(90, 1));
+  const far = Math.hypot(grazing.dx, grazing.dz);
+  assert.ok(far <= CLOUD.SHADOW_MAX_M + 1e-6,
+    `a 1-degree sun placed the shadow ${far.toFixed(0)} m out, past the ${CLOUD.SHADOW_MAX_M} m clamp`);
+  assert.ok(grazing.dx < 0, 'the clamp must not lose the direction the sun is in');
+});
+
 test('the cloud layer stays render-only', async () => {
   for (const f of ['cloud-sprites.ts', 'cloud-layer.ts']) {
     const t = await code(f);
@@ -157,6 +238,26 @@ test('a null reading draws no sky', async () => {
     'the deck must stay out of the 2D isotherm view: measured on an M4, it was the '
     + 'only thing keeping that page rendering (4.31 ms/frame against 0.07 ms idle) '
     + 'for clouds seen straight down over a flat isotherm');
+});
+
+test('the deck places its shadows from the sun the renderer lights with', async () => {
+  /* GEOMETRY IS TESTED ABOVE; THIS PINS THAT THE SCENE ACTUALLY CALLS IT. The
+     literal that was there before typechecked, rendered, and was wrong at every
+     hour but one -- so the guard that matters is not "is the maths right" but
+     "does the render loop use the maths at all". */
+  const layer = await code('cloud-layer.ts');
+  assert.match(layer, /cloudShadowOffset\(\s*c\.y\s*,\s*sun\s*\)/,
+    'the deck no longer solves each shadow from the cloud height and the sun');
+  assert.doesNotMatch(layer, /wz\s*\+\s*95|wx\s*-\s*130/,
+    'the fixed shadow offset is back. Those two numbers are a sun at azimuth 126 '
+    + 'and elevation 63, drawn at every hour of every day');
+
+  /* ONE SUN, NOT TWO. The renderer must hand the deck the same placement it aims
+     the key light with; a second source here is how the shadows and the lighting
+     came to disagree in the first place. */
+  const renderer = await code('explore/relief-renderer.ts');
+  assert.match(renderer, /this\.clouds\.update\([\s\S]{0,400}?this\.visual\.sun/,
+    'the renderer does not pass its own sun placement to the cloud deck');
 });
 
 test('wind direction is documented as advection-only', async () => {

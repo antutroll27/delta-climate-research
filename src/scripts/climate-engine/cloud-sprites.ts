@@ -41,6 +41,16 @@ export const CLOUD = Object.freeze({
   /** cover at which cumulus start fusing into veils, and the width of that fuse */
   FUSE_AT: 0.42,
   FUSE_SPAN: 0.44,
+  /**
+   * metres. How far a shadow may be thrown before the offset is clamped.
+   *
+   * `height / tan(elevation)` diverges at the horizon: a 320 m deck at one degree
+   * would sit its shadow eighteen kilometres away, seven times the sprite field,
+   * paying a transform on something nobody can see and risking a non-finite value
+   * reaching a THREE position. 2600 m is the field's own half-extent — past it a
+   * shadow has left the scene, so the clamp costs nothing that was visible.
+   */
+  SHADOW_MAX_M: 2600,
 });
 
 export interface Lobe {
@@ -214,3 +224,42 @@ export function paintShadow(ctx: CanvasRenderingContext2D, px: number): void {
  */
 export const CUMULUS_ASPECT = 0.74 - CLOUD.OVAL * 0.32;   // 0.51
 export const VEIL_ASPECT = 0.58 - CLOUD.OVAL * 0.22;      // 0.42
+
+/**
+ * WHERE A CLOUD'S SHADOW LANDS, relative to the cloud's own ground position.
+ *
+ * THE DEFECT THIS REPLACES. The shadow was placed at a literal `(wx - 130,
+ * wz + 95)` under a comment that read "offset along the light". It was along no
+ * light in particular: those two numbers describe a sun at azimuth 126 degrees
+ * and elevation 63 — roughly mid-morning at midsummer — and they were drawn
+ * unchanged at every hour. On an evening scene the compass said "sun 274 deg"
+ * while every shadow on the map pointed as though it were morning.
+ *
+ * THE GEOMETRY. `sun` is a unit vector pointing TOWARD the sun in the scene's
+ * frame: x east, y up, z north. Light travels along its negation, so a cloud at
+ * height h reaches the ground after h / sun.y and lands at
+ *
+ *     (-h * sun.x / sun.y, -h * sun.z / sun.y)
+ *
+ * which is the sun's horizontal bearing, reversed, scaled by h / tan(elevation).
+ * A sun in the south throws shadows north; an overhead sun throws none.
+ *
+ * AT AND BELOW THE HORIZON THERE IS NO SHADOW, returned as zero rather than as a
+ * clamped enormous number. The caller fades the shadow out across the same
+ * region, so this branch is reached only at true darkness — but `sun.y <= 0`
+ * would otherwise divide toward infinity and flip sign on the way, which is the
+ * one arrangement worse than a shadow in the wrong place.
+ */
+export function cloudShadowOffset(
+  heightM: number,
+  sun: { readonly x: number; readonly y: number; readonly z: number },
+): { readonly dx: number; readonly dz: number } {
+  if (!(sun.y > 0)) return { dx: 0, dz: 0 };
+  const reach = heightM / sun.y;
+  const dx = -sun.x * reach;
+  const dz = -sun.z * reach;
+  const far = Math.hypot(dx, dz);
+  if (far <= CLOUD.SHADOW_MAX_M) return { dx, dz };
+  const k = CLOUD.SHADOW_MAX_M / far;
+  return { dx: dx * k, dz: dz * k };
+}
