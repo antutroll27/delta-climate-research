@@ -47,6 +47,24 @@ const contrastOf = (el: Element): number => {
     return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
 };
 
+/**
+ * Both map cards must be wide enough to read a ward in.
+ *
+ * 280px is not a taste threshold: below it the card's own caption grid
+ * ("1.4 km x 1.4 km", the relief chip, the legend) starts wrapping mid-phrase,
+ * which is the visible symptom the 44px regression produced. Two cards plus
+ * their gap is the real constraint, so both are checked -- a layout that starves
+ * only the second would otherwise pass on the first.
+ */
+function assertPair(widths: number[], viewport: number): void {
+  expect(widths.length, `expected two map cards at ${viewport}px, found ${widths.length}`).toBe(2);
+  for (const w of widths) {
+    expect(w, `a map card is ${w}px wide at a ${viewport}px viewport (cards: ${widths.join(', ')}). `
+      + 'The comparison is the page; a card this narrow cannot show a ward, and its '
+      + 'caption wraps one word per line').toBeGreaterThanOrEqual(280);
+  }
+}
+
 test.describe('paired heat-map comparison', () => {
   test('settles an atomic comparison, updates state, and exposes the Brief', async ({ page }) => {
     test.setTimeout(45_000);
@@ -320,6 +338,38 @@ test.describe('paired heat-map comparison', () => {
     const h1 = await page.locator('main[data-compare-root] h1').boundingBox();
     if (!h1) throw new Error('h1 had no box');
     expect(h1.x).toBeGreaterThanOrEqual(railBox.x + railBox.width);
+  });
+
+  test('the two maps stay comparable at laptop widths, not slivers beside their panels',
+    async ({ page }) => {
+    /* THE PAGE IS A COMPARISON, SO THE THING THAT MUST NOT COLLAPSE IS THE PAIR.
+       `.heat-compare__layout` is `minmax(15rem,19rem) minmax(0,1fr) minmax(18rem,24rem)`
+       — controls, maps, evidence. Grid sizes the two non-flexible tracks to their
+       GROWTH LIMITS before the `1fr` sees anything, so the side panels always take
+       19rem and 24rem and the maps take the remainder, however little that is.
+
+       That was fine when the bench was the whole page. The OBOS shell then put a
+       172px rail and a 300px sidebar in front of it — some 482px, a third of a
+       laptop screen — and the stacked fallback that rescues this layout stayed on
+       `@media (max-width:1350px)`, a VIEWPORT query that cannot see any of it.
+       Measured at 1440: the grid resolved to `304px 104.8px 384px` and each map
+       card was FORTY-FOUR pixels wide, with its caption wrapping one word per
+       line. The most common laptop width there is, and the two maps the page
+       exists to compare were unreadable.
+
+       Asserted across the whole band rather than at one width, because the
+       failure is a band: it opens just above the old breakpoint and closes only
+       when the viewport is wide enough to pay for the shell AND both panels. */
+    for (const width of [1280, 1366, 1440, 1536, 1680]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto('/heat-map/compare/');
+      await expect(page.locator('[data-compare-root]')).toBeVisible();
+      await page.waitForTimeout(1_200);
+
+      const cards = await page.locator('.heat-compare__map-card').evaluateAll(
+        (els) => els.map((el) => Math.round(el.getBoundingClientRect().width)));
+      assertPair(cards, width);
+    }
   });
 
   test('keeps Compare and Brief nonindexable', async ({ page }) => {
