@@ -228,8 +228,27 @@ test('the Area dropdown is drivable from the keyboard alone', async ({ page }) =
      and Barrackpore share "bar", so nothing shorter than "barr" can tell them
      apart. A first-letter jump — which is all a lazy implementation does — cannot
      reach the second of two neighbours whatever you type. */
-  await page.keyboard.type('barr', { delay: 40 });
-  await expect(list.locator('li.is-active .field-option-text')).toHaveText('Barrackpore');
+  /* RETRIED AS A UNIT, because the thing between the keystrokes is a wall clock.
+     select-field.ts drops the type-ahead buffer after TYPEAHEAD_MS (600ms) of
+     silence — the platform's own behaviour, and correct. But this page is running
+     a WebGL heat simulation, and heat-map-app.ts measures a single advance at up
+     to 900ms on a machine with no GPU. One advance landing between two keystrokes
+     lapses the buffer: "bar" + a fresh "r" matches nothing, the active row stays
+     where "bar" left it, and the assertion sees Baruipur.
+
+     That is not a fault in the control and not something to widen a timeout over —
+     it is the difference between a laptop and a CI runner, and it failed both
+     retries on ubuntu-latest while passing every local run. Retrying the whole
+     journey keeps the claim exactly as strong: typing "barr" must still land on
+     Barrackpore, and Home still resets the row first so each attempt starts from
+     the same place. The gap between attempts is itself longer than TYPEAHEAD_MS,
+     so a retry always begins with an empty buffer. */
+  await expect(async () => {
+    await page.keyboard.press('Home');
+    await page.keyboard.type('barr', { delay: 40 });
+    await expect(list.locator('li.is-active .field-option-text'))
+      .toHaveText('Barrackpore', { timeout: 1_000 });
+  }).toPass({ timeout: 30_000 });
 
   /* AND ENTER COMMITS THE ACTIVE ROW — asserted on the MAP, because the value is
      the easy half. `#pname` is painted by `loadWard`, so it moves only if the
