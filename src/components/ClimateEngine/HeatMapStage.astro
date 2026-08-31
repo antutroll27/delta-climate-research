@@ -877,7 +877,7 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
      colour OUT to grey instead: same reading in both themes, and it is the
      same metaphor the bar already uses. */
   .clockw{--c:var(--cyan);--on:#051416;
-    position:absolute;right:320px;top:76px;z-index:6;padding:9px 13px 10px;
+    position:absolute;right:var(--instr-inset);top:76px;z-index:6;padding:9px 13px 10px;
     display:flex;flex-direction:column;
     border-radius:12px;border:0;background:var(--c);
     box-shadow:0 7px 20px rgb(0 0 0 /.38);
@@ -933,7 +933,7 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
     transform-origin:left center;transform:scaleX(1);transition:transform .5s ease}
   @media (prefers-reduced-motion: reduce){ .clockw .k-bar i{transition:none} }
 
-  .vegw{position:absolute;right:320px;top:186px;z-index:6;display:flex;align-items:center;gap:6px;
+  .vegw{position:absolute;right:var(--instr-inset);top:186px;z-index:6;display:flex;align-items:center;gap:6px;
     padding:4px 7px;border-radius:9px;background:rgb(5 6 6 /.7);border:1px solid var(--line);
     backdrop-filter:blur(8px);box-shadow:0 6px 18px rgb(0 0 0 /.30)}
   .vegw .veg-lab{font-family:var(--mono);font-size:.52rem;letter-spacing:.13em;color:var(--ink);text-transform:uppercase}
@@ -1158,7 +1158,34 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
   .top .rig{font-family:var(--mono);font-size:.58rem;letter-spacing:.12em;color:var(--faint);line-height:1.45;text-transform:uppercase;white-space:nowrap}
   .top .read b{color:var(--cyan);font-weight:400}
 
-  .map{position:relative;overflow:hidden}
+  /* THE RIGHT-HAND INSTRUMENT COLUMN, DECLARED ONCE.
+     The ward clock and the vegetation widget both hang off `--instr-inset`, and
+     the overlays that centre themselves on the map subtract `--instr-berth` before
+     doing it. Two anchors, one number: written separately they drifted, and the
+     drift is invisible until the window is narrow enough for them to touch.
+
+     WHAT IT COST TO NOT HAVE THIS. `.stamp-slot` centred on the FULL map width
+     while `.clockw` sat at a fixed right inset, so the gap between them closed as
+     the viewport did — measured 10px of overlap at 1536, 58px at 1440, 95px at
+     1366 and 122px at 1280, where only the "U" of "Under Construction" was still
+     legible. `.loadchip` was worse and quieter: at 1280 its whole box sat inside
+     the clock's, at z-index 3 against the clock's 6, so "Building ward…" was
+     painted over completely — the one message that only ever appears while a
+     reader is waiting for something.
+
+     CENTRING IS THE THING THAT HAD TO CHANGE, not the vertical order. The top band
+     is full — the honesty banner ends at 49px and the clock starts at 76px, and
+     the stamp needs 35 — so no amount of moving things up or down separates them,
+     and any fix that only works at today's widths is not a fix. Subtracting the
+     berth makes the centring width-invariant instead: these overlays now centre in
+     the space that is actually free, which is what "centred" meant all along.
+
+     `--instr-w` is a RESERVE rather than the clock's measured width (122px at the
+     time of writing). The clock is content-sized — the day name and the AM/PM vs
+     24H pair both move it — so pinning the reserve to today's render would put the
+     collision back the first time a longer weekday came round. */
+  .map{position:relative;overflow:hidden;
+    --instr-inset:320px;--instr-w:140px;--instr-berth:calc(var(--instr-inset) + var(--instr-w))}
   #mlmap{position:absolute;inset:0}
   .maplibregl-ctrl-attrib{font-family:var(--mono);font-size:.46rem}
   .maplibregl-ctrl-bottom-right{z-index:1}
@@ -1217,7 +1244,14 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
      the page's only statement that the tool is still being built, so it must be
      announced. Smaller than the placeholder-page stamp: this page has a working
      instrument, and the stamp is a caveat on it, not the headline. */
-  .stamp-slot{position:absolute;left:50%;top:68px;transform:translateX(-50%);z-index:3;pointer-events:none;
+  /* CENTRED IN THE FREE SPACE, NOT ON THE MAP — see `--instr-berth` on `.map`.
+     `inset-inline:0 var(--instr-berth)` with `margin-inline:auto` and a
+     max-content width is the same shape the honesty banner above uses; the only
+     difference is that the right edge stops short of the instrument column
+     instead of at the map's edge. */
+  .stamp-slot{position:absolute;inset-inline:0 var(--instr-berth);margin-inline:auto;
+    width:max-content;max-width:calc(100% - var(--instr-berth) - 1rem);
+    top:68px;z-index:3;pointer-events:none;
               --stamp-size:.62rem;--stamp-pad:.5rem 1rem;--stamp-tracking:.26em;--stamp-rot:-2.5deg}
   /* NOT :global(.con-stamp) — this block is `is:global`, so Astro runs no scoping pass
      over it and never strips the `:global()`. It would ship verbatim, and the browser
@@ -1229,7 +1263,14 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
   .pattern-note{margin:.32rem 0 0;font-family:var(--mono);font-size:.5rem;line-height:1.75;
                 letter-spacing:.09em;color:var(--bronze);text-transform:uppercase;
                 border-top:1px solid rgb(176 141 87 /.22);padding-top:.42rem;white-space:nowrap}
-  .loadchip{position:absolute;top:118px;left:50%;transform:translateX(-50%);font-family:var(--mono);font-size:.52rem;letter-spacing:.26em;color:var(--cyan);z-index:3;text-transform:uppercase;opacity:0;transition:opacity .25s}
+  /* Same berth as the stamp, and for a sharper reason: this chip's whole box sat
+     inside the clock's at 1280 — z-index 3 under the clock's 6 — so "Building
+     ward…" was painted over exactly when a reader was waiting to be told
+     something. It is only ever visible during a load, which is why nobody caught
+     it by looking. */
+  .loadchip{position:absolute;top:118px;inset-inline:0 var(--instr-berth);margin-inline:auto;
+    width:max-content;max-width:calc(100% - var(--instr-berth) - 1rem);
+    font-family:var(--mono);font-size:.52rem;letter-spacing:.26em;color:var(--cyan);z-index:3;text-transform:uppercase;opacity:0;transition:opacity .25s}
   .loadchip.on{opacity:1}
 
   /* Borderless glass. The 1px --line stroke was the last piece of the "grid of
