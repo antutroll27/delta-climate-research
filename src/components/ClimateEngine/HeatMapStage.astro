@@ -1,28 +1,294 @@
 ---
-// Full-bleed instrument markup for /heat-map. Behaviour is mounted by
+// Full-bleed instrument markup for one AREA of /heat-map. Behaviour is mounted by
 // src/scripts/climate-engine/heat-map-app.ts (booted from the page). Styles are
-// is:global but only bundled onto /heat-map (the sole page importing this).
-// Brand tokens are scoped to .stage so nothing leaks to :root; Mona Sans /
+// is:global but only bundled onto the heat-map routes (the sole pages importing
+// this). Brand tokens are scoped to .stage so nothing leaks to :root; Mona Sans /
 // Noplato Mono come from global.css.
 import ConstructionStamp from '../states/ConstructionStamp.astro';
+/* THE FOUR SHELL COMPONENTS, COMPOSED. Until this task each was imported by
+   nothing: the rail, the scope switcher and the layer tree were built and proven
+   against their own sources, and the toolbox had been moved out of this file with
+   its seventeen runtime-queried ids intact. Here they become one console — a rail,
+   a sidebar of panes, and a main column that keeps its top bar, its map and its
+   ward strip. The toolbox's rules stay in the is:global block below because
+   heat-map-app.ts classes its markup at runtime; see its own header. */
+import IconRail from './shell/IconRail.astro';
+import ScopeSwitcher from './shell/ScopeSwitcher.astro';
+import PanelToggle from './shell/PanelToggle.astro';
+import LayerTree from './shell/LayerTree.astro';
+import InterventionPane from './shell/InterventionPane.astro';
+import { areaKeysInCity } from '../../scripts/climate-engine/scope/registry.ts';
+import { areaPath, DEFAULT_AREA_PATH } from '../../scripts/climate-engine/scope/paths.ts';
+import { resolve, type ResolvedScope } from '../../scripts/climate-engine/scope/resolve.ts';
+import { wardById } from '../../data/wards.ts';
+
+/**
+ * THE PAGE TELLS THE INSTRUMENT WHICH AREA IT IS, rather than both assuming.
+ *
+ * Until the URL carried the area, this file hardcoded Ballygunge's coordinate and
+ * three literal `data-w` divs, and heat-map-app.ts separately hardcoded
+ * `INITIAL_AREA`. Two places holding one opinion, agreeing only by hand — which is
+ * the shape of every defect the scope migration exists to end. The one that had
+ * already happened is recorded in tests/unit/standards-ward-record.test.mjs: the
+ * download link's static href and the app's boot ward were pinned to each other by
+ * a REGEX OVER BOTH SOURCE FILES, because nothing structural made them agree.
+ *
+ * Now the scope arrives once, from the route, and everything on the page — the
+ * readout, the name, the scope switcher, the strip, the record link, the
+ * `data-area` the app boots from — is derived from it. The regex has nothing left
+ * to compare, because there is only one copy.
+ */
+interface Props {
+  scope: ResolvedScope;
+}
+
+const { scope } = Astro.props;
+
+/* The sibling areas, from the registry, IN THE SAME CITY. `AREA_KEYS` would put
+   Al Quoz in Kolkata's ward strip: two cities, two climates, two currencies, and
+   the second half shipping no artefacts at all. */
+const siblings = areaKeysInCity(scope.key).map(resolve);
+
+/** This page's own URL — so the Explore link points here rather than at a redirect. */
+const here = areaPath(scope.key);
+
+/**
+ * Whether this BUILD has a Mapillary token, passed to the layer tree as its one
+ * capability.
+ *
+ * READ HERE AND NOWHERE ELSE ON THE PAGE. `scope/layers.ts` takes capabilities as
+ * a parameter precisely so the tree can be rendered in both states, and the
+ * component's own header says why it must not read `import.meta.env` itself. This
+ * is the single site that turns a build fact into that parameter, and it spells
+ * the variable exactly as heat-map-app.ts does — the whole street-level feature
+ * tree-shakes out when it is unset, so a row offered here against a token the
+ * instrument does not have would be a control that could never do anything.
+ */
+const mapillary = ((import.meta.env.PUBLIC_MAPILLARY_TOKEN as string | undefined) ?? '') !== '';
+
+/* The ward-table row, where one exists. Coordinate and the <em>-stressed wordmark
+   live there and nowhere else; an area that is not in the table (Dubai's three,
+   which are our own tiling rather than municipal units) has neither, and gets the
+   registry's plain name and an em-dash instead of an invented coordinate. */
+const ward = wardById(scope.area.id);
+
+/**
+ * The strip swatch, DERIVED from the ward table's baseline vegetation fraction.
+ *
+ * Three radial-gradient strings used to be pasted here, one per ward. They were
+ * never arbitrary — they encode how green the ward is, which is the one thing the
+ * strip is comparing — so they are computed from `veg` rather than kept as a fourth
+ * per-ward table for someone to update in one place and not the other. It renders
+ * the same three swatches it replaced: 0.12 → red/bronze, 0.28 → orange/bronze,
+ * 0.62 → sage/cyan, from the legend's own five classes.
+ *
+ * Every colour here is written as `var()` and not as a hex. This string lands in
+ * an inline `style` on `.ward .sw`, which is inside `.stage` — where the tokens
+ * are declared — so they resolve; a `var()` used outside that subtree would
+ * resolve to nothing and drop the declaration silently.
+ */
+const swatch = (veg: number): string => {
+  const head = veg >= 0.5 ? 'var(--sage)' : veg >= 0.2 ? 'var(--orange)' : 'var(--red)';
+  const mid = veg >= 0.5 ? 'var(--cyan) 60%' : 'var(--bronze) 55%';
+  return `background:radial-gradient(circle at 40% 40%,${head},${mid},var(--surface2))`;
+};
+
+/**
+ * The ward strip's rows: the siblings that actually ship artefacts.
+ *
+ * Built here rather than in the template so the ward-table lookup can be NARROWED
+ * rather than asserted. `wardById` returns `Ward | undefined` and an inline `!`
+ * would be a promise made to the compiler with nothing keeping it — registry check
+ * 7 does in fact pin every data-shipping area to a ward row, but a `!` in the
+ * markup would survive that check being weakened. `flatMap` drops a row that has
+ * no ward instead, so the failure is a missing tile rather than a thrown render.
+ *
+ * The short label comes from the SAME descriptor the panel shows, cut at its first
+ * separator: "Urban Core · Ward 68" → "Urban Core". The strip has room for the kind
+ * and not the number, which is a layout fact, not a second name for the place.
+ */
+const strip = siblings.flatMap((sib) => {
+  const row = wardById(sib.area.id);
+  if (row === undefined || !sib.area.hasData) return [];
+  return [{
+    key: sib.key,
+    id: sib.area.id,
+    name: sib.area.name,
+    kind: sib.area.descriptor.split(' · ')[0],
+    swatch: swatch(row.veg),
+  }];
+});
+
+/* The ward's own data record. `/api/wards/[id]` is generated one route per BARE id
+   from src/data/wards.ts, so the key would 404 — and this link is a download, so
+   the browser would save the 404 body under a plausible filename rather than show
+   it. heat-map-app.ts's `updateReportHref` rebuilds this identically on every area
+   switch; the two agree because both read the area id, not because anyone matched
+   two strings by eye. */
+const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
 ---
-<main id="main" class="stage">
+{/* `data-console` is how shell/console-shell.ts finds a page with a rail and
+    panes on it. It is deliberately NOT `.stage`: Compare has a console too and
+    is not a stage, and keying the pane switcher on the stage is what left the
+    compare route's rail buttons inert. `data-area` stays the stage's own — it
+    is the scope half's subject, and Compare has no single area to declare. */}
+<main id="main" class="stage" data-console data-area={scope.key}>
+  {/* THE RAIL IS THE ONLY NAVIGATION. It replaces the Explore/Compare pair that
+      used to sit in the top bar beside a second brand link, and it carries the
+      page's one brand mark home. `route` and `pane` are two different questions —
+      which page this is, and which sidebar body is showing — and the rail's own
+      header explains why conflating them put a self-link back on the page. The
+      pane rendered open here is the state the shell script reads back as its
+      starting point; it is never restated in script. */}
+  <IconRail route="map" pane="map" explorePath={here} />
+
+  <aside class="sidebar">
+    {/* SCOPE SITS ABOVE THE PANES, not inside one of them, because it is global to
+        all four: the toolbox, the layer tree, the reports and the scenarios are all
+        answers ABOUT somewhere, and the somewhere is chosen once.
+
+        THE PANEL'S CHEVRON RIDES ON ITS HEADING ROW, because that row is the top
+        of this column and the reader is already looking at it. The switcher takes
+        it as a slot and knows nothing about what it does; console-shell.ts binds
+        it to the same state the rail's own click path collapses. */}
+    <ScopeSwitcher current={scope.key}>
+      <PanelToggle slot="head-control" />
+    </ScopeSwitcher>
+
+    <div class="panes">
+      {/* Map's pane. The toolbox is what the Map section shows once you are already
+          standing on the Explore route — the rail's Map entry navigates from
+          anywhere else and swaps this in from here.
+
+          GATED ON THE SAME FLAG AS THE MAP, and this is not symmetry for its own
+          sake. The toolbox used to live INSIDE the data gate below, so an area
+          with no artefacts never rendered it; the sidebar renders on every area
+          page, and moving the toolbox here without the gate put three live
+          sliders and a segmented control on the one page whose entire content is
+          a statement that nothing can be computed for it. Nothing is mounted to
+          hear them — the instrument boots only where `#mlmap` exists — so every
+          drag would have moved a thumb, changed a number, and left the score
+          reading "move a slider to intervene". */}
+      <div class="pane is-on" data-pane="map">{scope.area.hasData
+        ? <InterventionPane scope={scope} />
+        : <section class="pane-body" aria-labelledby="pane-map-h">
+            <p class="pane-h" id="pane-map-h">Interventions</p>
+            <p class="pane-note">There is nothing to intervene in here. The toolbox plants
+              canopy, raises albedo and greens facades over a MEASURED surface, and
+              {' '}{scope.area.name} ships none — so a slider would move a number that stands
+              for nothing.</p>
+            <p class="pane-note">It comes back with the artefacts, unchanged: the model is not
+              per-city, only the observations are.</p>
+          </section>}</div>
+
+      <div class="pane" data-pane="layers"><LayerTree current={scope.key} mapillary={mapillary} /></div>
+
+      <div class="pane" data-pane="reports">
+        <section class="pane-body" aria-labelledby="pane-reports-h">
+          <p class="pane-h" id="pane-reports-h">Reports</p>
+          {/* THE EXISTING RECORD LINK, MOVED HERE — not copied. It was the last
+              thing in the evidence rail on the right; there is now one of it, in
+              the pane named after it, and it keeps its id because
+              `updateReportHref` rewrites that href on every area switch. A second
+              copy left behind would be two elements with one id: invalid HTML, and
+              `getElementById` hands back whichever the parser reached first, so
+              the visible one would go on offering the ward the page opened at. */}
+          {/* GATED, LIKE THE TOOLBOX, and for a sharper reason than layout.
+              `/api/wards/[id]` is generated one route per row of src/data/wards.ts,
+              and an area with no artefacts has no row — so on such a page this href
+              names a route the build never emitted. It is a DOWNLOAD, so the
+              browser would not show the 404: it would save the error body under
+              `metadata.json` and hand someone a file that looks like a record. */}
+          {scope.area.hasData ? (
+          <Fragment>
+          <p class="pane-note">What is measured, the out-of-sample error and sample size, every
+            source dataset with its licence, and the analysis CRS and bounding box.</p>
+          <a class="cta" id="report-link" href={reportHref} download>Download ward record ↓</a>
+          </Fragment>
+          ) : (
+          <p class="pane-note">No record ships for {scope.area.name}. The ward record states what
+            was measured, with what error, from which datasets — and there is no measurement here
+            to state.</p>
+          )}
+        </section>
+      </div>
+
+      <div class="pane" data-pane="scenarios">
+        <section class="pane-body" aria-labelledby="pane-scenarios-h">
+          <p class="pane-h" id="pane-scenarios-h">Scenarios</p>
+          {/* NOT BUILT, SAID PLAINLY. An empty box under a heading reads as a pane
+              that failed to load, which is the one impression this console must
+              never give; naming the file the model already lives in is what makes
+              this a status rather than an apology. The toolbox next door runs ONE
+              scenario at a time and throws its result away — saving, naming and
+              comparing them is the thing that does not exist yet. */}
+          <p class="pane-note">Not built yet. The toolbox under Map runs one scenario at a time
+            and keeps none of them: there is nowhere to save an intervention set, name it, or
+            put two of them side by side.</p>
+          <p class="pane-note">The scoring model it would draw on is already here —
+            <code>src/scripts/climate-engine/dc-urs-scenario.ts</code> — which is why this pane
+            says so instead of rendering an empty panel.</p>
+        </section>
+      </div>
+    </div>
+  </aside>
+
+  <div class="col">
   <header class="top">
-    <div class="top-start">
-      <a class="brand" href="/" aria-label="Back to Delta Climate Research home"><span class="ar" aria-hidden="true">←</span><img class="bm" src="/logo-mark-96.webp" alt="" width="30" height="30" decoding="async" /></a>
-      <nav class="tool-modes" aria-label="Heat explorer modes">
-        <a href="/heat-map/" aria-current="page">Explore</a>
-        <a id="compare-mode-link" href="/heat-map/compare/">Compare</a>
-      </nav>
+    {/* BREADCRUMB, NOT NAVIGATION. Every part of it is a place you are, and none of
+        the three is somewhere you can go: there is no country page and no city
+        page, and the scope switcher two columns left is the control that moves you.
+        So it is a statement rather than a <nav> of links that would have to invent
+        destinations to justify its shape.
+
+        THE AREA CELL CARRIES AN ID BECAUSE IT HAS TO FOLLOW THE WARD. This is
+        server-rendered once, and an in-place switch reloads nothing — so without a
+        writer it went on naming the ward the page was opened at while `#pname`,
+        about two hundred pixels to the right, named the one actually loaded. The
+        country and city cells need no id: `console-shell.ts` navigates rather than
+        switching in place whenever a selection would cross either, so neither can
+        change without a page load. */}
+    <p class="crumb"><span>{scope.country.name}</span><span>{scope.city.name}</span><b id="crumbArea">{scope.area.name}</b></p>
+    {/* THE READOUT IS GATED, and it is the subtlest half-render on the page.
+        `#bcount` and `#simBackend` are written by the instrument; their static values
+        are the states it starts in. Left standing where no instrument mounts, an area
+        with no artefacts would sit for ever under "— buildings · SELECTING ENGINE" —
+        which does not read as "nothing ships here", it reads as still loading, and
+        that is the one impression this page must not give. So it says what is true
+        instead: no artefacts, and the tier that follows from that. */}
+    {/* TWO BLOCKS, SET APART, BECAUSE THEY ANSWER DIFFERENT QUESTIONS.
+        `.rig` is what the instrument is running on RIGHT NOW — a count that moves
+        with the area and an engine name that changes once the GPU is picked. The
+        `.read` beside it is what the page IS, and barely changes at all. Run
+        together on one line they read as a single sentence, and the live half
+        disappears into the static half. A gap is the cheapest thing that says
+        these are two readings rather than one.
+
+        The COORDINATE keeps its own line and its bold: it is the only value here
+        a reader might copy, and mid-sentence it would be furniture. */}
+    <div class="topmeta">
+      <div class="rig">{scope.area.hasData
+        ? <Fragment><span id="bcount">— buildings</span> · <span id="simBackend" aria-live="polite">SELECTING ENGINE</span></Fragment>
+        : <span>no artefacts · {scope.tier} tier</span>}</div>
+      <div class="read">MEDNI · HEAT INSTRUMENT<br><b id="coord">{ward?.coord ?? '—'}</b></div>
     </div>
-    <div class="tabs" id="tabs">
-      <button class="tab on" data-w="ballygunge">Ballygunge</button>
-      <button class="tab" data-w="baruipur">Baruipur</button>
-      <button class="tab" data-w="barrackpore">Barrackpore</button>
-    </div>
-    <div class="read">MEDNI · HEAT INSTRUMENT<br><b id="coord">22.528° N · 88.366° E</b><br><span id="bcount">— buildings</span> · <span id="simBackend" aria-live="polite">SELECTING ENGINE</span></div>
   </header>
 
+  {/* THE DATA GATE, AND IT IS A GATE RATHER THAN A SET OF EMPTY PANELS.
+      An area the registry says ships no artefacts has nothing for the model to run
+      over. The tempting shape — render the instrument anyway and let it show em-
+      dashes — is the exact silent degradation scope/paths.ts was written against: a
+      map with no buildings, a legend with no ramp and a resilience score reading
+      "unavailable" is indistinguishable at a glance from a city that simply has not
+      finished loading, and the only evidence is a console nobody has open.
+
+      Omitting `#mlmap` is also what stops the instrument booting: the page's boot
+      script returns early without it, and mountHeatMap centres a MapLibre map on
+      `wardOf(area)` BEFORE any of loadWard's refusals can run — an area with no
+      ward row has no coordinates, so it would fly to NaN and leave a dead canvas
+      under a spinner that never clears. */}
+  {scope.area.hasData ? (
+  <Fragment>
   <div class="map">
     <div id="mlmap"></div>
     <div class="synthetic"><span class="d"></span><span class="full">Live basemap + real footprints &amp; Google heights · </span>heat field modelled<span class="sp"> · block detail illustrative</span></div>
@@ -113,7 +379,9 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
     </div>
 
     <!-- Vegetation toggle: distinct widget directly below the clock. Shown when the
-         clock unhides (ward loaded). Binary on/off in the .modechip idiom. -->
+         ward's rasters resolve -- NOT when the weather arrives, which is a
+         different fetch that these controls do not depend on. Binary on/off in
+         the .modechip idiom. -->
     <div class="vegw" id="vegw" hidden>
       <span class="veg-lab">Trees</span>
       <div class="modechip" id="vegchip" title="Show or hide the modelled tree canopy">
@@ -186,8 +454,11 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
     </div>
 
     <div class="place">
-      <div class="n" id="pname">Bally<em>gunge</em></div>
-      <div class="z" id="pzone">Urban Core · Ward 68</div>
+      {/* `ward.name` carries <em> around the syllable the wordmark stresses, which
+          is why this is set:html where `scope.area.name` - markup-stripped, for
+          titles and machine-readable fields - is not. */}
+      <div class="n" id="pname" set:html={ward?.name ?? scope.area.name}></div>
+      <div class="z" id="pzone">{scope.area.descriptor}</div>
     </div>
     <div class="chiprow">
       <div class="modechip" id="modechip"><button class="on" data-m="relief">3D Relief</button><button data-m="iso">2D Isotherm</button></div>
@@ -195,36 +466,8 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
       <div class="modechip" id="tintchip" title="Building colour: continuous ramp, or snapped to the 5 legend classes"><button class="on" data-t="1">Gradient</button><button data-t="2">5-Class</button></div>
     </div>
 
-    <aside class="panel left">
-      <div class="h">Green Infrastructure Toolbox</div>
-      <div class="ctl"><label>Tree canopy corridors <span class="v" id="v1">0</span></label><input type="range" id="ivTrees" min="0" max="50" value="0" aria-label="Tree canopy corridors"></div>
-      <div class="ctl"><label>Cool-roof albedo <span class="v" id="v2">0%</span></label><input type="range" id="ivRoof" min="0" max="100" value="0" step="5" aria-label="Cool-roof albedo, percent of roofs treated"></div>
-      <div class="ctl"><label>Vertical green facades <span class="v" id="v4">0</span></label><input type="range" id="ivFacades" min="0" max="15" value="0" aria-label="Vertical green facades"></div>
-      <div class="ctl"><label style="margin-bottom:.35rem">Diurnal phase</label><div class="seg" id="segPhase"><button class="on" data-p="now">Now</button><button data-p="peak">13:00 Peak</button><button data-p="night">22:00 Retained</button><button data-p="heatwave">Heatwave</button></div></div>
-      <div class="ctl"><label style="margin-bottom:.35rem" title="All-India warming deltas from Dhara et al. 2025, PLOS Climate (post-AR6). No emissions scenario produces regional cooling, so there is no negative pathway.">Warming pathway</label><div class="seg" id="segPath"><button class="on" data-p="2025">2025</button><button data-p="ssp245">SSP2-4.5 ’50</button><button data-p="ssp585">SSP5-8.5 ’80</button></div></div>
-      <div class="score">
-        <div class="g">
-          <svg viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="15.5" fill="none" stroke="#093a3e" stroke-width="3"></circle><circle id="scoreArc" cx="18" cy="18" r="15.5" fill="none" stroke="#6fcad6" stroke-width="3" stroke-dasharray="97" stroke-dashoffset="97" stroke-linecap="round" transform="rotate(-90 18 18)"></circle></svg>
-          <div class="num" id="scoreNum">—</div>
-        </div>
-        <div class="t"><b>Resilience Score</b><span class="tier" id="scoreTier">—</span><span id="scoreTxt">move a slider to intervene</span></div>
-      </div>
-      <!-- The three pillars, shown raw. A composite index is only trustworthy if
-           you can see what it is made of; the Green Score published its three
-           components for the same reason. Exposure and hazard are shown as their
-           COMPLEMENTS (1 − EVI, 1 − THI) so that on every bar, higher is better —
-           mixing polarities in one strip is how a reader misreads the worst ward
-           as the best. -->
-      <div class="subs" id="subs" title="DC-URS pillars, IPCC AR6 framing. Capacity: greenness, albedo and refuge access. Exposure: shown as 1 − EVI, so higher is better; driven by population, built density and social vulnerability, none of which any intervention can move. Hazard: shown as 1 − THI, from measured ECOSTRESS surface temperature.">
-        <div><b id="sGreen">—</b><span>capacity</span></div>
-        <div><b id="sCool">—</b><span>exposure</span></div>
-        <div><b id="sEff">—</b><span>hazard</span></div>
-      </div>
-      <!-- Written by the app from unmeasured(), which reads the data file's own
-           provenance. Deliberately no copy in this file for anyone to forget to
-           delete: when socio.json lands the chip removes itself. -->
-      <div class="conf indicative scoreconf" id="scoreConf" hidden></div>
-    </aside>
+    {/* The toolbox WAS here, floating over the map's left edge. It is now the Map
+        section's pane in the sidebar, mounted once, up in the console shell. */}
 
     <div class="rail-r">
     <aside class="panel right">
@@ -244,22 +487,27 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
       </div>
       <div class="mrow">
         <div><div class="k" title="Modelled land-cover thermal contrast: this ward's mean surface temperature minus a fully-vegetated reference cell under identical forcing. NOT a measured urban heat island — published Kolkata surface UHI is 0.85–1.5 °C from 1 km satellite data, a different quantity.">Δ vs all-green ref</div><div class="val" style="color:var(--cyan)" id="uhi">—</div></div>
-        <div><div class="k">Area above 40 °C</div><div class="val" style="color:var(--red)" id="area">—</div></div>
+        <div><div class="k">Area above 40 °C</div><div class="val" style="color:var(--red-ink)" id="area">—</div></div>
       </div>
       <div class="metric" style="border-top:1px solid var(--line);padding-bottom:0"><div class="k">Heat-stress distribution</div></div>
       <div class="histo" id="histo"></div>
-      <a class="cta" id="report-link" href="/api/wards/ballygunge/metadata.json" download
-         title="The ward's full data record: what is measured, the out-of-sample error and sample size, every source dataset with its licence, and the analysis CRS and bounding box.">Download ward record ↓</a>
+      {/* The ward record used to end this card. It is now the Reports pane's one
+          piece of content — a download named after itself, in the section named
+          after it, rather than a bronze button under a histogram. One element, one
+          id; `updateReportHref` still finds it by name. */}
     </aside>
 
     <div class="legend">
       <div class="k" style="margin-bottom:.6rem"><span>What the colours mean</span></div>
+      {/* `style` is an attribute whose CONTENT is CSS, unlike `stroke` above, so
+          `var()` resolves here normally. These swatches are inside `.stage`, which
+          is where the tokens are declared. */}
       <div class="cindex">
-        <div class="ci"><span class="d" style="background:#e5484d"></span>Extreme</div>
-        <div class="ci"><span class="d" style="background:#d46b4a"></span>Severe</div>
-        <div class="ci"><span class="d" style="background:#b08d57"></span>Hot</div>
-        <div class="ci"><span class="d" style="background:#9fb98a"></span>Warm</div>
-        <div class="ci"><span class="d" style="background:#6fcad6"></span>Comfortable</div>
+        <div class="ci"><span class="d" style="background:var(--red)"></span>Extreme</div>
+        <div class="ci"><span class="d" style="background:var(--orange)"></span>Severe</div>
+        <div class="ci"><span class="d" style="background:var(--bronze)"></span>Hot</div>
+        <div class="ci"><span class="d" style="background:var(--sage)"></span>Warm</div>
+        <div class="ci"><span class="d" style="background:var(--cyan)"></span>Comfortable</div>
       </div>
       <div class="k" style="margin:.9rem 0 .5rem"><span>Land Surface Temp</span><span>°C</span></div>
       <div class="ramp"></div>
@@ -286,10 +534,37 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
     </div>
   </div>
 
+  {/* The strip only ever lists areas that ship artefacts - it is a comparison of
+      measured means, and a tile that can never carry a number is a row of em-dashes
+      pretending to be a reading. `big-{id}` takes a BARE id because heat-map-app.ts
+      writes into it by that name, from src/data/wards.ts. */}
   <div class="strip" id="strip">
-    <div class="ward on" data-w="ballygunge"><span class="sw" style="background:radial-gradient(circle at 40% 40%,#e5484d,#b08d57 55%,#093a3e)"></span><div><div class="nm">Ballygunge</div><div class="ty">Urban Core</div></div><div class="big" id="big-ballygunge">—<span>°C mean</span></div></div>
-    <div class="ward" data-w="baruipur"><span class="sw" style="background:radial-gradient(circle at 40% 40%,#9fb98a,#6fcad6 60%,#093a3e)"></span><div><div class="nm">Baruipur</div><div class="ty">Peri-Urban Fringe</div></div><div class="big" id="big-baruipur">—<span>°C mean</span></div></div>
-    <div class="ward" data-w="barrackpore"><span class="sw" style="background:radial-gradient(circle at 40% 40%,#d46b4a,#b08d57 55%,#093a3e)"></span><div><div class="nm">Barrackpore</div><div class="ty">Industrial Corridor</div></div><div class="big" id="big-barrackpore">—<span>°C mean</span></div></div>
+    {strip.map((row) => (
+      <div class:list={['ward', { on: row.key === scope.key }]} data-w={row.id}>
+        <span class="sw" style={row.swatch}></span>
+        <div><div class="nm">{row.name}</div><div class="ty">{row.kind}</div></div>
+        <div class="big" id={`big-${row.id}`}>—<span>°C mean</span></div>
+      </div>
+    ))}
+  </div>
+  </Fragment>
+  ) : (
+  <section class="notyet" aria-labelledby="notyet-h">
+    <p class="notyet-tier">{scope.tier} tier · {scope.city.koppen} climate</p>
+    <h1 class="notyet-h" id="notyet-h">{scope.area.name}</h1>
+    <p class="notyet-sub">{scope.area.descriptor} · {scope.city.name}, {scope.country.name}</p>
+    {/* What is missing, stated, rather than a spinner or an apology. The gap between
+        this tier and a validated one is the thing the twin is asking to be funded to
+        close, so naming it is the page's whole content. */}
+    <p class="notyet-body">
+      This area is registered in the twin and has a permanent address, but no measured
+      heat artefacts ship for it yet — no footprints, no surface temperature, no
+      canopy. Nothing here would be a reading, so nothing is drawn. The instrument
+      runs where the observations do.
+    </p>
+    <p class="notyet-links"><a href={DEFAULT_AREA_PATH}>Open a validated area →</a></p>
+  </section>
+  )}
   </div>
 </main>
 
@@ -297,36 +572,262 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
   body{ overflow:hidden; }
   .stage{
     --base:#050606; --surface:#0b2c2e; --surface2:#093a3e;
-    --paper:#ecedf0; --ink:#8fa3a5; --faint:#5c7173; --line:rgb(111 202 214 / 0.14);
+    /* --faint IS LIGHTER THAN IT WAS, because the value it held missed the 4.5:1
+       floor on every ground it was ever drawn on — measured from rendered pixels
+       at 3.52–3.93:1 across thirteen nodes: the breadcrumb, "Location", the
+       live-ambient units and the legend's scale numbers. It now clears 4.5:1
+       against rgb(19,29,31), the lightest ground the panels can produce once
+       --rail-ground is opaque enough to bound it, so it holds on every frame
+       rather than on the one that happened to be sampled. It stays clearly below
+       --ink, which is the whole job of the third ramp step. */
+    --paper:#ecedf0; --ink:#8fa3a5; --faint:#6e8789; --line:rgb(111 202 214 / 0.14);
+    /* The louder rule, for a line that has to be FOUND rather than merely felt: an
+       unchecked checkbox in the layer tree, and the breadcrumb's separators.
+       Declared here, with the rest of the palette, because a token resolves from
+       where it is DECLARED — and until this task it was declared NOWHERE while
+       shell/LayerTree.astro already painted with it. An undefined custom property
+       does not fall back: `border: 1px solid var(--line-hi)` is invalid at
+       computed-value time, so the whole shorthand unsets and every unchecked box in
+       the tree had no border at all. Nothing failed; the boxes were simply
+       invisible until ticked. */
+    --line-hi:rgb(111 202 214 / 0.32);
     --cyan:#6fcad6; --bronze:#b08d57; --red:#e5484d;
+    /* THE SAME RED, ONE STEP UP, FOR WHEN IT IS A WORD RATHER THAN A SWATCH.
+       --red is the heat ramp's Extreme class and the compass's north needle —
+       both areas of colour, which WCAG scores against a 3:1 non-text floor it
+       clears comfortably. As 16.8px TEXT in the delta readout the floor is 4.5:1
+       and the same value reads 4.39:1, missing by a fortieth. Lightening --red
+       itself would restate the top of the heat legend in order to fix a number in
+       a metric card; this leaves the ramp alone. */
+    --red-ink:#eb4a4f;
+    /* The confidence-tier green — the `validated` badge on the scope switcher,
+       and nothing else. DELIBERATELY NOT --sage, which is the heat ramp's
+       Comfortable class: one token serving both a heat class and a trust label
+       means tuning the legend silently restates how much we trust a city. */
+    --green:#5db98a;
+    /* The legend's five heat classes, in order: Comfortable, Warm, Hot, Severe,
+       Extreme. The first, third and fifth were already tokens; --sage and --orange
+       complete the ramp instead of being spelled by hand in three places each. */
+    --sage:#9fb98a; --orange:#d46b4a;
+    /* The compass sun: one colour across its disc, ray and hub. */
+    --sun:#f2b544;
+    /* THREE OF THE LAYER TREE'S SIX DOTS. The other three are --red, --green and
+       --ink, which the palette already held; these are the colours the founder's
+       mockup wrote as bare hexes beside them. They are declared HERE, with the
+       rest of the palette, for the reason --rail-ground gives: a token resolves
+       from where it is DECLARED, so shell/LayerTree.astro's scoped rules reach
+       them only once the tree is inside .stage, which is where Task 7 puts it.
+       --pine is the deeper green that tells individual tree instances from the
+       canopy raster; --slate the dimmer grey that tells extruded heights from
+       footprint outlines; --gold the one warm mark in the Ground-truth group. */
+    --pine:#3f8f66; --slate:#6b7f81; --gold:#c9a227;
+    /* The icon rail's ground — a fully saturated near-black at the cold end of
+       this palette, and it sits ABOVE --base rather than under it.
+
+       IT USED TO BE #040808, "a shade under --base", and the intent did not
+       survive contact: it differed from --base by one step in one channel and
+       read as nothing at all — 1.01:1. A navigation column that cannot be seen is
+       not a subtle navigation column.
+
+       IT WAS THEN A WARM NEUTRAL, and that argument is retired rather than merely
+       outvoted. It read the rail as "not part of the instrument" and gave it a
+       neutral ink to say so — which made it the one surface on the console
+       standing outside the family every other surface belongs to, and made the
+       sidebar beside it the only warm thing on a cold page.
+
+       THE VALUE NOW IS THE PALETTE'S OWN COLD END, TAKEN ALL THE WAY DOWN: 197°
+       at full saturation and 4.9% lightness. --base, --surface and --surface2 run
+       180–185°, and this is the darkest member of that run rather than a visitor
+       to it. That is a hue --cyan also lives in, which is a real objection and
+       survives on the numbers: --cyan is a mid-lightness accent and this is
+       ground at a twentieth of it, so nothing on the heat ramp is within reach of
+       being confused with it — the two are 10.08:1 apart.
+
+       WHAT IT COSTS, STATED RATHER THAN BURIED: against --base the rail is now
+       1.06:1 where the warm neutral was 1.20:1, so where the sidebar is collapsed
+       and the rail meets the map column directly, the 1px --line border is doing
+       most of the work of the edge. That is not the first version's failure
+       repeated — the hue difference is large where that one had none — but it is
+       the same axis, and it is the thing to look at first if the rail ever stops
+       reading as a column.
+
+       WHAT IT BUYS: every ink the rail paints with gains against it. The resting
+       label goes 7.14:1 to 8.07:1, the active section 14.42:1 to 16.30:1, the
+       open-pane accent 8.92:1 to 10.08:1.
+
+       Declared here with the rest of the palette rather than inside
+       shell/IconRail.astro, because a token resolves from where it is DECLARED:
+       the rail's scoped styles reach it only once the rail is inside .stage,
+       which is where Task 7 puts it. */
+    /* ALPHA f5, NOT d6, AND THE READABILITY OF THE WHOLE CONSOLE RESTS ON IT.
+       At d6 (0.84) the panels admitted about a sixth of the LIVE MAP, so no
+       element inside them had a fixed background: the ground moved with the
+       basemap, the zoom, the hour and the heat field. A contrast floor cannot be
+       met against a ground that is not knowable, and measuring the stylesheet
+       instead of the frame hides that completely — the token maths said 3.93:1
+       for the worst small text while the rendered pixels said 2.87:1.
+       At f5 (0.96) the worst ground the panel can produce is bounded: a pure
+       white map pixel composites to rgb(19,29,31), so every ink here can be
+       chosen against a PROVABLE worst case rather than a sampled one. That is
+       also what preserves the ink ramp — cleared against rgb(19,29,31), --faint
+       lands well below --ink; cleared against the old wandering ground it had to
+       rise almost to it and the three-step ramp would have collapsed to two.
+       The blur is untouched, which is where the glass actually reads. */
+    --rail-ground:#091416f5;
+    /* The sidebar's ground — the rail's neighbour in the same cold family, one
+       step forward.
+
+       ITS OWN TOKEN, NOT --surface. The sidebar used --surface, which is also the
+       ground under the readout cards, the brief and the paired bench: repointing
+       it to move ONE panel would have repainted every card on three routes. A
+       colour wanted in one place gets a name for that place.
+
+       ONE STEP ABOVE THE RAIL, NOT EQUAL TO IT. Identical values would merge the
+       navigation column into the panel it opens and lose the edge between them;
+       far apart would read as two unrelated surfaces. A single step is what says
+       "same family, different job" — the rail is the deeper column you navigate
+       FROM, this is the working surface you read.
+
+       DERIVED AGAINST TWO EDGES, NOT ONE. It carries the rail's OKLCH hue and
+       chroma, and its lightness is chosen to hold BOTH of the boundaries it has:
+       the rail below it, and --surface, which is what .seg in the intervention
+       pane is drawn on INSIDE it. Those pull in opposite directions — every step
+       away from the rail is a step towards --surface — and the warm-neutral panel
+       resolved that by ignoring it, sitting 1.06:1 from --surface and separated
+       from it only by hue, which stops working the moment the panel joins the
+       cold family. Balanced instead, both edges land above anything this console
+       has shipped: 1.12:1 to the rail (was 1.07:1) and 1.14:1 to --surface (was
+       1.06:1), with every ink in the sidebar gaining — --paper 13.45 to 14.52,
+       --ink 5.96 to 6.43, --cyan 8.32 to 8.98. */
+    --panel-ground:var(--rail-ground);
+    /* Studio (light) mode's three inks — the same descending-emphasis idea as
+       --paper/--ink/--faint above, inverted for a light ground. They live here
+       rather than on `body.studio` because every element they colour is inside
+       .stage, and a token resolves from where it is DECLARED, not where the
+       theme class sits. */
+    --studio-ink:#16292b; --studio-muted:#4a5c5e; --studio-accent:#0e7b8c;
     --sans:'Mona Sans',system-ui,sans-serif; --mono:'Noplato Mono',ui-monospace,'SF Mono',monospace;
-    position:fixed; inset:0; display:grid; grid-template-rows:auto 1fr auto;
+    /* The sidebar's width, named because three rules read it and because the pane
+       cross-fade's whole argument is about not animating this number. */
+    --sidebar:300px;
+    position:fixed; inset:0; display:grid;
+    /* THREE COLUMNS: rail, sidebar, everything else. The rail and the sidebar are
+       FULL HEIGHT — the top bar and the ward strip belong to the map, not to the
+       console, so they live in the third column and stop at its edges. That is the
+       one structural thing this layout says: navigation is beside the instrument,
+       not above it. `auto` on the first two so each column is sized by what is in
+       it (the rail's own inline-size, the sidebar's) rather than by a third copy
+       of those numbers here. */
+    grid-template-columns:auto auto minmax(0,1fr); grid-template-rows:100%;
     background:var(--base); color:var(--paper); font-family:var(--sans);
     -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
   }
   .stage *{ box-sizing:border-box; margin:0; }
 
-  .top{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:1rem;padding:18px 26px;border-bottom:1px solid var(--line);position:relative;z-index:5;background:rgb(5 6 6 /.55);backdrop-filter:blur(8px)}
-  .top-start{display:flex;align-items:center;gap:clamp(.7rem,1.4vw,1.2rem);min-width:0}
-  /* Mark, not wordmark: the tool header is a dense instrument bar and the name is
-     already in <title> + the aria-label. Same asset as the site nav on purpose —
-     /favicon.svg is the SIMPLIFIED cut drawn for the 16px favicon slot (no contour
-     lines), so using it here would show a different logo than every other page. */
-  .brand{display:inline-flex;align-items:center;gap:9px;text-decoration:none}
-  .brand .ar{color:var(--cyan);opacity:.5;font-size:.98rem;line-height:1;transition:opacity .2s,transform .2s}
-  .brand .bm{width:30px;height:30px;display:block;transition:opacity .2s}
-  .brand:hover .ar{opacity:1;transform:translateX(-3px)}
-  .brand:hover .bm{opacity:.82}
-  .brand:focus-visible{outline:2px solid var(--cyan);outline-offset:4px;border-radius:5px}
+  /* The main column keeps the rows the stage used to have: top bar, map, strip.
+
+     EXPLICITLY IN COLUMN 3, and this is load-bearing rather than tidy. Grid
+     auto-placement fills the first free column, so the moment the sidebar leaves
+     the flow — collapsed, or shed at the narrow breakpoint — the main column slid
+     LEFT into column 2 and sized itself `auto` against its own content, leaving
+     the 1fr column empty and a third of the viewport black. Naming the column is
+     what keeps the layout a statement about where things go rather than a
+     consequence of how many of them happen to exist. */
+  .col{grid-column:3;display:grid;grid-template-rows:auto minmax(0,1fr) auto;min-inline-size:0;overflow:hidden}
+
+  /* ── the sidebar ──────────────────────────────────────────────────────────
+     Scope pinned at the top, panes filling the rest. */
+  /* THE SECOND FLOATING PANEL, matching the rail beside it — same ground, same
+     radius, same hairline, held apart by a gap rather than by a shared edge. The
+     margins are asymmetric on purpose: 10px from the rail, 10px from the map, and
+     the rail supplies the outer 10px against the viewport. */
+  .sidebar{grid-column:2;inline-size:var(--sidebar);display:flex;flex-direction:column;min-block-size:0;
+    background:var(--panel-ground);border:1px solid var(--line);border-radius:12px;
+    margin:10px 10px 10px 10px}
+  /* COLLAPSE IS INSTANT, AND THAT IS THE POINT. Animating a column's width means a
+     full relayout of the map beside it on every frame — and MapLibre's
+     ResizeObserver reallocates its GL drawing buffer to match, so the cost is a
+     canvas resize per frame as well. The panes cross-fade (transform and opacity
+     only, below); the column itself simply is or is not there. */
+  .sidebar.is-collapsed{display:none}
+  /* THE SAME FACT, READ BEFORE THE SIDEBAR EXISTS. shell/layout-state.ts's
+     pre-paint script runs where the rail is, at the top of this column's
+     neighbour, and the parser has not reached this element yet — so the stored
+     preference lands on <html> and this rule carries it down. console-shell.ts's
+     `paint` writes BOTH this attribute and the class above, in one function, so
+     they cannot disagree; the class is the element's own state and this is the
+     document-level mirror that exists only to be applied early. Without it the
+     sidebar renders open on every load and then vanishes once the module script
+     mounts — 300px of the map, arriving late. */
+  html[data-panel="collapsed"] .sidebar{display:none}
+
+  /* One grid cell, every pane stacked in it, so the cross-fade has nothing to
+     reflow: the outgoing and incoming panes occupy the same box at the same time. */
+  .panes{flex:1;min-block-size:0;display:grid}
+  /* `visibility`, not `display`, is what takes a hidden pane out of the tab order
+     and the accessibility tree while still letting opacity animate — display:none
+     would cancel the transition outright, and opacity alone would leave the
+     invisible pane focusable, so a Tab press would land in a pane nobody can see.
+     Its transition is stepped: instant on the way in, delayed to the end of the
+     fade on the way out. */
+  .pane{grid-area:1/1;min-block-size:0;display:flex;flex-direction:column;overflow:hidden;
+    opacity:0;transform:translateY(6px);visibility:hidden;pointer-events:none;
+    transition:opacity .22s ease,transform .22s ease,visibility 0s .22s}
+  .pane.is-on{opacity:1;transform:none;visibility:visible;pointer-events:auto;
+    transition:opacity .22s ease,transform .22s ease,visibility 0s}
+  @media (prefers-reduced-motion: reduce){ .pane,.pane.is-on{transition:none} }
+
+  .pane-body{padding:14px;display:flex;flex-direction:column;gap:.7rem;overflow-y:auto}
+  .pane-h{font-family:var(--mono);font-size:.62rem;letter-spacing:.14em;text-transform:uppercase;color:var(--faint)}
+  .pane-note{font-size:.78rem;line-height:1.62;color:var(--ink)}
+  .pane-note code{font-family:var(--mono);font-size:.7rem;color:var(--cyan);overflow-wrap:anywhere}
+
+  /* The toolbox, unfloated. It arrived as `position:absolute` over the map, which
+     is what it was; in the sidebar it is a column that fills its pane. The rules
+     stay in this file because the component ships no stylesheet of its own — see
+     its header for why that is deliberate. */
+  .sidebar .panel.left{position:static;inline-size:100%;inset:auto;flex:1;min-block-size:0;
+    padding-bottom:16px;overflow-y:auto;background:none;border-radius:0;
+    backdrop-filter:none;box-shadow:none}
+
+  /* THE HEIGHT WAS NEVER THE PADDING'S ALONE, which is why the padding came back
+     to where it started and the bar is still shorter than it was. The readout used
+     to be THREE stacked lines at 1.7 leading, and that block — not this 18px — was
+     what set the bar's height. Splitting the rig readout out beside the mono line
+     and tightening the leading took two rows out of it; the padding is once again
+     the founder's original number, spent on breathing room rather than on
+     absorbing a tall block.
+     The horizontal 26px is untouched: it is the inset the compass and the rest of
+     the floating furniture align to. */
+  .top{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:18px 26px;border-bottom:1px solid var(--line);position:relative;z-index:5;background:rgb(5 6 6 /.55);backdrop-filter:blur(8px)}
+  /* The breadcrumb: three places, separated by a drawn mark rather than a typed
+     one, so the separator cannot be selected, read aloud, or copied into a
+     citation as part of a name. */
+  .crumb{display:flex;align-items:baseline;gap:.55rem;min-inline-size:0;font-family:var(--mono);font-size:.62rem;letter-spacing:.13em;text-transform:uppercase;color:var(--faint);white-space:nowrap;overflow:hidden}
+  .crumb b{font-weight:400;color:var(--paper)}
+  .crumb>*+*::before{content:"/";margin-inline-end:.55rem;color:var(--line-hi)}
   /* ── north compass ────────────────────────────────────────────────────────
      Sits opposite the legend so it never fights the right rail. The needle is
      rotated by JS on MapLibre's `render`; only the inner <g> turns, so the dial
      and the label stay upright and readable at any bearing. */
-  /* Sits clear of the toolbox, not under it: .left is 270 px wide at a 26 px
-     offset, so its right edge is 296 px and anything below 312 px would be
-     overlapped. The two follow the panel down at each breakpoint. */
-  .compass{position:absolute;left:312px;bottom:26px;z-index:6;width:62px;height:62px;padding:0;cursor:pointer;
-    background:rgb(9 20 22 /.82);border:1px solid var(--line);border-radius:50%;backdrop-filter:blur(12px);
+  /* 312px WAS THE TOOLBOX'S RIGHT EDGE PLUS A GAP — .left floated over the map at
+     270px wide and a 26px offset, and the compass had to clear it. The toolbox is
+     now a column of the console rather than a panel over the map, so the map's own
+     left edge is free and the compass sits at the same 26px inset the rest of the
+     floating furniture uses. The breakpoint overrides that followed the panel down
+     went with it. */
+  /* OPAQUE, AND THAT LAST 4% WAS NOT DECORATION — IT WAS THE FAILURE.
+     At .96 the live map bleeds through the dial, so the ground under the "N"
+     is not a colour in this stylesheet: it moves with the basemap, the zoom and
+     the heat field. Measured, the same letter on the same page scored 4.50:1 on
+     one machine and 4.49:1 on a CI runner — the WCAG floor is 4.5, so the
+     identical build passed locally and failed in CI on a difference of one
+     hundredth, decided by which pixels the map happened to be drawing.
+     A 62px dial gains nothing from being see-through and pays for it in a
+     contrast figure nobody can reproduce, so the ground is now a fixed colour and
+     the letter's ratio is a property of the design rather than of the map. */
+  .compass{position:absolute;left:26px;bottom:26px;z-index:6;width:62px;height:62px;padding:0;cursor:pointer;
+    background:rgb(9 20 22);border:1px solid var(--line);border-radius:50%;
     display:grid;place-items:center;transition:border-color .2s,transform .2s}
   .compass:hover{border-color:var(--cyan);transform:scale(1.06)}
   .compass:focus-visible{outline:2px solid var(--cyan);outline-offset:3px}
@@ -337,24 +838,34 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
   .compass .c-tick{fill:rgb(236 237 240 /.28)}
   .compass .c-lab{font-family:var(--sans);font-weight:700;font-size:8.4px;text-anchor:middle;
     fill:rgb(236 237 240 /.62)}
-  .compass .c-lab-n{fill:var(--red)}
+  /* --red-ink, NOT --red, for the same reason `#area` uses it: this is TEXT at
+     8.4px, so it answers to the 4.5:1 body floor rather than to the 3:1 a shape
+     gets, and --red is the shape red. The needle above keeps --red because a
+     filled triangle is not text. On the dial's fixed ground the letter now
+     measures 5.0:1 — margin, rather than the hundredth it was clearing by. */
+  .compass .c-lab-n{fill:var(--red-ink)}
   /* The sun is the one warm thing on a cool dial, so it reads at a glance
      without competing with the red north needle for "most important mark". */
-  .compass .c-sun-disc{fill:#f2b544}
-  .compass .c-sun-ray{stroke:#f2b544;stroke-width:1;opacity:.5}
-  .compass .c-sun-hub{fill:#f2b544;opacity:.45}
+  .compass .c-sun-disc{fill:var(--sun)}
+  .compass .c-sun-ray{stroke:var(--sun);stroke-width:1;opacity:.5}
+  .compass .c-sun-hub{fill:var(--sun);opacity:.45}
   /* `hidden` is not an SVG attribute — a class is, and it types cleanly. */
   .compass .c-sun.is-below{display:none}
   /* Sits directly above the compass, sharing its left edge so the two read as one
      cluster. Kept narrow: `.tiphint` is centred at bottom:88px, so a long line here
      would collide with it on a normal viewport. */
-  .sunline{position:absolute;left:312px;bottom:104px;z-index:6;margin:0;max-width:200px;
+  /* Same plate as the compass it sits above, and for the same reason: this is 7px
+     type on the open map. It read 1.33:1 on Clay, where the pale basemap meets a
+     near-white ink chosen for the dark one. The alpha on the colour goes too —
+     52 % of white over a photograph is a decoration, not a caption. */
+  .sunline{position:absolute;left:26px;bottom:104px;z-index:6;margin:0;max-width:200px;
     font-family:var(--mono);font-size:7.5px;letter-spacing:.09em;line-height:1.45;
-    color:rgb(236 237 240 /.52);text-transform:uppercase;pointer-events:none;white-space:nowrap}
+    color:#c3cbcc;text-transform:uppercase;pointer-events:none;white-space:nowrap;
+    background:rgb(9 20 22 /.94);border-radius:6px;padding:.3rem .5rem;backdrop-filter:blur(8px)}
   .sunline[hidden]{display:none}
   /* The caveat is dimmer than the numbers but never hidden — a reader who sees a sun
      on a heat map will assume the model uses it, and it does not. */
-  .sunline-note{display:block;font-size:7px;color:rgb(242 181 68 /.5);letter-spacing:.07em;pointer-events:auto;cursor:help}
+  .sunline-note{display:block;font-size:7px;color:rgb(242 181 68 /.85);letter-spacing:.07em;pointer-events:auto;cursor:help}
   .sunline-note:focus-visible{outline:1px solid var(--cyan);outline-offset:2px}
   /* ── live-reading freshness dial ───────────────────────────────────────────
      Sits directly above the compass and borrows its whole visual language, so
@@ -381,7 +892,7 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
      colour OUT to grey instead: same reading in both themes, and it is the
      same metaphor the bar already uses. */
   .clockw{--c:var(--cyan);--on:#051416;
-    position:absolute;right:320px;top:76px;z-index:6;padding:9px 13px 10px;
+    position:absolute;right:var(--instr-inset);top:76px;z-index:6;padding:9px 13px 10px;
     display:flex;flex-direction:column;
     border-radius:12px;border:0;background:var(--c);
     box-shadow:0 7px 20px rgb(0 0 0 /.38);
@@ -437,7 +948,7 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
     transform-origin:left center;transform:scaleX(1);transition:transform .5s ease}
   @media (prefers-reduced-motion: reduce){ .clockw .k-bar i{transition:none} }
 
-  .vegw{position:absolute;right:320px;top:186px;z-index:6;display:flex;align-items:center;gap:6px;
+  .vegw{position:absolute;right:var(--instr-inset);top:186px;z-index:6;display:flex;align-items:center;gap:6px;
     padding:4px 7px;border-radius:9px;background:rgb(5 6 6 /.7);border:1px solid var(--line);
     backdrop-filter:blur(8px);box-shadow:0 6px 18px rgb(0 0 0 /.30)}
   .vegw .veg-lab{font-family:var(--mono);font-size:.52rem;letter-spacing:.13em;color:var(--ink);text-transform:uppercase}
@@ -445,21 +956,31 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
   .vegw .modechip button{font-size:.52rem;padding:.3rem .62rem;letter-spacing:.12em}
   #svw{top:222px}
 
-  body.studio .compass{background:rgb(245 244 241 /.86);border-color:rgb(20 40 42 /.2)}
+  /* Opaque here too, and for the reason given on `.compass`: the pale dial has
+     the same map bleeding through it, and Clay is the theme where the map behind
+     is bright enough to move a ratio further. One rule, one behaviour, both
+     basemaps. */
+  body.studio .compass{background:rgb(245 244 241);border-color:rgb(20 40 42 /.2)}
   body.studio .compass .c-s{fill:rgb(20 40 42 /.34)}
   body.studio .compass .c-tick{fill:rgb(20 40 42 /.28)}
   body.studio .compass .c-lab{fill:rgb(20 40 42 /.66)}
 
   /* ── first-run hint ── */
   .tiphint{position:absolute;left:50%;bottom:88px;transform:translateX(-50%);z-index:7;display:flex;align-items:center;gap:.6rem;
-    background:rgb(9 20 22 /.86);border:1px solid rgb(111 202 214 /.35);border-radius:99px;padding:.5rem .55rem .5rem .95rem;
+    background:rgb(9 20 22 /.96);border:1px solid rgb(111 202 214 /.35);border-radius:99px;padding:.5rem .55rem .5rem .95rem;
     backdrop-filter:blur(10px);font-family:var(--mono);font-size:.53rem;letter-spacing:.12em;text-transform:uppercase;color:var(--paper);
     animation:tipIn .45s cubic-bezier(.2,0,0,1) both}
   .tiphint button{background:none;border:0;color:var(--ink);cursor:pointer;font-size:.6rem;line-height:1;padding:.25rem .4rem;border-radius:50%}
   .tiphint button:hover{color:var(--paper)}
   .tiphint button:focus-visible{outline:2px solid var(--cyan);outline-offset:1px}
   @keyframes tipIn{from{opacity:0;transform:translate(-50%,8px)}to{opacity:1;transform:translate(-50%,0)}}
-  body.studio .tiphint{background:rgb(245 244 241 /.9);color:#16292b;border-color:rgb(20 40 42 /.25)}
+  body.studio .tiphint{background:rgb(245 244 241 /.97);color:var(--studio-ink);border-color:rgb(20 40 42 /.25)}
+  /* THE DISMISS BUTTON DID NOT FOLLOW ITS OWN HINT INTO THE LIGHT THEME. The rule
+     above recolours `.tiphint`, but `.tiphint button` sets `color:var(--ink)`
+     explicitly, so the ✕ stayed the dark theme's pale grey on a near-white pill:
+     2.36:1, the worst thing left on Clay once the grounds were fixed. */
+  body.studio .tiphint button{color:var(--studio-ink)}
+  body.studio .tiphint button:hover{color:#000}
   @media (prefers-reduced-motion: reduce){ .tiphint{animation:none} }
 
   /* ── walk-time ring labels ──
@@ -508,7 +1029,7 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
     background:rgb(111 202 214 /.09);border:1px solid rgb(111 202 214 /.2);
     font-size:.62rem;line-height:1.5;color:var(--paper);text-transform:none;letter-spacing:0}
   .bc-rings b{color:var(--cyan);font-weight:550}
-  body.studio .bc-rings{background:rgb(13 107 125 /.08);border-color:rgb(13 107 125 /.22);color:#16292b}
+  body.studio .bc-rings{background:rgb(13 107 125 /.08);border-color:rgb(13 107 125 /.22);color:var(--studio-ink)}
 
   /* MapLibre's own scale bar — a geospatial tool with no distance reference is
      asking the reader to guess. Restyled to the instrument's language.
@@ -537,11 +1058,13 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
       rgb(111 202 214 /.72) 0 1.5px, transparent 1.5px 25%)!important;
     background-size:100% 7px!important;background-repeat:no-repeat!important;
     background-position:left bottom!important;background-origin:padding-box!important}
-  body.studio .maplibregl-ctrl-scale{color:#16292b!important;border-color:rgb(13 107 125 /.7)!important;
+  body.studio .maplibregl-ctrl-scale{color:var(--studio-ink)!important;border-color:rgb(13 107 125 /.7)!important;
     text-shadow:0 1px 3px rgb(255 255 255 /.85);
     background-image:repeating-linear-gradient(90deg,
       rgb(13 107 125 /.7) 0 1.5px, transparent 1.5px 25%)!important}
-  .maplibregl-ctrl-bottom-left{margin:0 0 30px 396px}
+  /* Clear of the compass, which is 62px wide at a 26px inset. It used to be clear
+     of the toolbox as well, at 396px; the toolbox is no longer over the map. */
+  .maplibregl-ctrl-bottom-left{margin:0 0 30px 110px}
 
   /* ── click-to-inspect ─────────────────────────────────────────────────────
      Both nodes are positioned in CSS pixels by heat-map-app.ts on MapLibre's
@@ -610,7 +1133,7 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
   .src-row .meta{margin-top:3px;font:400 .46rem var(--mono);letter-spacing:.06em;color:var(--faint);line-height:1.5}
   body.studio .srcpanel{background:rgb(244 246 246 /.95);border-color:rgb(20 48 54 /.16)}
   body.studio .src-row .nm{color:#13232a}
-  body.studio .src-row .s,body.studio .srcpanel h4{color:#4a5c5e}
+  body.studio .src-row .s,body.studio .srcpanel h4{color:var(--studio-muted)}
   body.studio .src-row .meta{color:#7f9296}
   .svmodal{position:fixed;inset:0;z-index:40;display:none;place-items:center;background:rgb(2 9 10 /.72);backdrop-filter:blur(3px)}
   .svmodal:not([hidden]){display:grid}
@@ -628,39 +1151,105 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
   .bc-x:hover{color:var(--paper)}
   .bc-x:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
   body.studio .bcard-in{background:rgb(245 244 241 /.9);border-color:rgb(20 40 42 /.22);box-shadow:0 14px 40px rgb(20 40 42 /.16)}
-  body.studio .bcard dd{color:#16292b}
-  body.studio .bc-x{background:rgb(20 40 42 /.06);color:#4a5c5e}
+  body.studio .bcard dd{color:var(--studio-ink)}
+  body.studio .bc-x{background:rgb(20 40 42 /.06);color:var(--studio-muted)}
   @media (max-width: 640px){ .bcard{width:196px} }
 
-  .tool-modes{display:flex;gap:2px;padding:3px;border:1px solid var(--line);border-radius:8px;background:rgb(9 58 62 /.35)}
-  .tool-modes a{padding:.42rem .58rem;border-radius:5px;color:var(--ink);font:400 .51rem var(--mono);letter-spacing:.1em;text-decoration:none;text-transform:uppercase}
-  .tool-modes a[aria-current]{background:var(--surface2);color:var(--paper)}
-  .tool-modes a:hover{color:var(--paper)}
-  .tool-modes a:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
-  .tabs{display:flex;gap:4px;background:rgb(9 58 62 /.5);border:1px solid var(--line);border-radius:10px;padding:4px}
-  .tab{font-family:var(--mono);font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;color:var(--ink);background:none;border:0;cursor:pointer;padding:.55rem .95rem;border-radius:7px;transition:.2s}
-  .tab.on{background:var(--cyan);color:var(--base);font-weight:400}
-  .top .read{justify-self:end;text-align:right;font-family:var(--mono);font-size:.58rem;letter-spacing:.12em;color:var(--faint);line-height:1.7;text-transform:uppercase}
+  /* `.tool-modes` and `.tabs` were here. The first was the Explore/Compare pair the
+     rail replaced; the second was a THIRD area switcher, after the scope switcher's
+     Area select and the ward strip below — all three reading the same `data-w`, all
+     three doing the same thing. Two of the three are gone.
+     THE STRIP IS THE ONE KEPT, because it is the only control that puts the wards
+     BESIDE each other: three tiles, each with its greenness swatch, its kind and a
+     `big-{id}` slot for its mean. Worth knowing while reading it: heat-map-app.ts
+     fills that slot only for the ward it has loaded, so the other two carry an
+     em-dash until they are opened. The comparison the strip is shaped for is
+     therefore still half-drawn — the shape is right and the data is per-visit. */
+  /* The two right-hand blocks, held apart. `align-items:baseline` rather than
+     center: the pair is type of one size, and baselines are what the eye lines up
+     on a row of text — centring would sit the one-line block optically high beside
+     the two-line one. */
+  .top .topmeta{display:flex;align-items:baseline;gap:2.4rem;min-inline-size:0}
+  .top .read{text-align:right;font-family:var(--mono);font-size:.58rem;letter-spacing:.12em;color:var(--faint);line-height:1.45;text-transform:uppercase;white-space:nowrap}
+  /* Same type as .read, deliberately: it is the same voice reporting a different
+     fact, and giving the live half its own size would make it look like a status
+     badge rather than a reading. */
+  .top .rig{font-family:var(--mono);font-size:.58rem;letter-spacing:.12em;color:var(--faint);line-height:1.45;text-transform:uppercase;white-space:nowrap}
   .top .read b{color:var(--cyan);font-weight:400}
 
-  .map{position:relative;overflow:hidden}
+  /* THE RIGHT-HAND INSTRUMENT COLUMN, DECLARED ONCE.
+     The ward clock and the vegetation widget both hang off `--instr-inset`, and
+     the overlays that centre themselves on the map subtract `--instr-berth` before
+     doing it. Two anchors, one number: written separately they drifted, and the
+     drift is invisible until the window is narrow enough for them to touch.
+
+     WHAT IT COST TO NOT HAVE THIS. `.stamp-slot` centred on the FULL map width
+     while `.clockw` sat at a fixed right inset, so the gap between them closed as
+     the viewport did — measured 10px of overlap at 1536, 58px at 1440, 95px at
+     1366 and 122px at 1280, where only the "U" of "Under Construction" was still
+     legible. `.loadchip` was worse and quieter: at 1280 its whole box sat inside
+     the clock's, at z-index 3 against the clock's 6, so "Building ward…" was
+     painted over completely — the one message that only ever appears while a
+     reader is waiting for something.
+
+     CENTRING IS THE THING THAT HAD TO CHANGE, not the vertical order. The top band
+     is full — the honesty banner ends at 49px and the clock starts at 76px, and
+     the stamp needs 35 — so no amount of moving things up or down separates them,
+     and any fix that only works at today's widths is not a fix. Subtracting the
+     berth makes the centring width-invariant instead: these overlays now centre in
+     the space that is actually free, which is what "centred" meant all along.
+
+     `--instr-w` is a RESERVE rather than the clock's measured width (122px at the
+     time of writing). The clock is content-sized — the day name and the AM/PM vs
+     24H pair both move it — so pinning the reserve to today's render would put the
+     collision back the first time a longer weekday came round. */
+  .map{position:relative;overflow:hidden;
+    --instr-inset:320px;--instr-w:140px;--instr-berth:calc(var(--instr-inset) + var(--instr-w))}
   #mlmap{position:absolute;inset:0}
   .maplibregl-ctrl-attrib{font-family:var(--mono);font-size:.46rem}
   .maplibregl-ctrl-bottom-right{z-index:1}
   .place{position:absolute;left:50%;top:34%;transform:translate(-50%,-50%);text-align:center;pointer-events:none;z-index:1}
   .place .n{font-weight:600;font-size:clamp(2.2rem,4.4vw,3.6rem);line-height:.92;letter-spacing:-.04em;text-shadow:0 4px 40px rgb(0 0 0 /.85);opacity:.82}
   .place .n em{font-style:normal;color:var(--cyan)}
-  .place .z{font-family:var(--mono);font-size:.58rem;letter-spacing:.34em;color:var(--bronze);margin-top:.7rem;text-transform:uppercase;opacity:.9}
+  /* THE SUBTITLE CARRIES ITS OWN GROUND; the ward name above it does not need to.
+     `.n` is 4rem, so it clears the 3:1 large-text floor on any basemap. These
+     tracked caps are 9px on whatever the map happens to be — measured 2.25:1 on
+     Slate and 2.99:1 on Clay — and no colour fixes a ground that is a photograph.
+     `opacity:.9` is gone with it: dimming the one line that already failed was
+     working against the only thing it had. */
+  .place .z{display:inline-block;font-family:var(--mono);font-size:.58rem;letter-spacing:.34em;color:var(--bronze);margin-top:.7rem;text-transform:uppercase;
+    background:rgb(5 6 6 /.94);padding:.24rem .62rem .24rem .68rem;border-radius:5px;backdrop-filter:blur(6px)}
   .chiprow{position:absolute;left:50%;bottom:26px;transform:translateX(-50%);display:flex;gap:8px;z-index:3}
-  .modechip{display:flex;gap:2px;background:rgb(5 6 6 /.7);border:1px solid var(--line);border-radius:9px;padding:3px;backdrop-filter:blur(8px)}
+  .modechip{display:flex;gap:2px;background:rgb(5 6 6 /.94);border:1px solid var(--line);border-radius:9px;padding:3px;backdrop-filter:blur(8px)}
   .modechip button{font-family:var(--mono);font-size:.56rem;letter-spacing:.14em;color:var(--ink);background:none;border:0;cursor:pointer;padding:.4rem .8rem;border-radius:6px;text-transform:uppercase}
   .modechip button.on{background:var(--surface2);color:var(--paper)}
   body.studio .place .n{color:#232b2d;text-shadow:0 4px 34px rgb(255 255 255/.6)}
-  body.studio .place .n em{color:#0e7b8c}
-  body.studio .place .z{color:#8a6d3f}
-  body.studio .loadchip{color:#0e7b8c}
+  body.studio .place .n em{color:var(--studio-accent)}
+  /* GONE, NOT RECOLOURED. #8a6d3f was the darker bronze this label needed while it
+     sat directly on Clay's pale basemap. It now carries its own dark plate in both
+     themes, so that value became dark bronze on a dark plate — 2.64:1, worse than
+     the problem it was introduced to solve. The plate makes the theme fork
+     unnecessary: one colour, one ground, both basemaps. */
+  body.studio .loadchip{color:var(--studio-accent)}
 
-  .synthetic{position:absolute;top:20px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:.5rem;font-family:var(--mono);font-size:.56rem;letter-spacing:.2em;color:var(--bronze);background:rgb(176 141 87 /.14);border:1px solid rgb(176 141 87 /.3);border-radius:20px;padding:.42rem .9rem;z-index:3;text-transform:uppercase;backdrop-filter:blur(8px)}
+  /* CENTRED BY MARGIN, NOT BY `left:50%`, AND THE DIFFERENCE IS THREE LINES OF TEXT.
+     An absolutely positioned shrink-to-fit box offered `left:50%` may only use the
+     space from that point to the containing block's right edge — HALF the stage. The
+     banner fitted on one line while the stage was the full viewport; once the rail
+     and the sidebar took their columns, half of what remained was 389px, the honesty
+     text wrapped to three lines, and the pill grew down onto the clock tile below it
+     (measured: 0.3px of clearance, where the layout contract asks for 10).
+     `inset-inline:0` gives the box the WHOLE width to shrink against and `margin-inline:
+     auto` still centres it, so the pill is one line again at the stage's real width and
+     the narrow-viewport rules below still get to wrap it when it genuinely cannot fit. */
+  /* A BRONZE WASH IS NOT A GROUND. The pill used to be `rgb(176 141 87 /.14)` —
+     bronze text on a 14 % bronze tint over the live map — so the sentence scored
+     3.83:1 on Slate and 2.24:1 on Clay. It is the one line on this page whose
+     entire job is to be read, and it was the least readable thing on it.
+     A dark fill keeps the bronze identity where the identity actually lives (the
+     border, the pulsing dot, the text) and gives the words a ground that does not
+     move with the map beneath. */
+  .synthetic{position:absolute;top:20px;inset-inline:0;margin-inline:auto;width:max-content;max-width:calc(100% - 2rem);display:flex;align-items:center;gap:.5rem;font-family:var(--mono);font-size:.56rem;letter-spacing:.2em;color:var(--bronze);background:rgb(9 20 22 /.94);border:1px solid rgb(176 141 87 /.42);border-radius:20px;padding:.42rem .9rem;z-index:3;text-transform:uppercase;backdrop-filter:blur(8px)}
   .synthetic .sp{opacity:.82}
   .synthetic .d{width:6px;height:6px;border-radius:50%;background:var(--bronze);animation:hmPulse 2.2s infinite}
   @keyframes hmPulse{0%,100%{opacity:1}50%{opacity:.3}}
@@ -674,19 +1263,33 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
      the page's only statement that the tool is still being built, so it must be
      announced. Smaller than the placeholder-page stamp: this page has a working
      instrument, and the stamp is a caveat on it, not the headline. */
-  .stamp-slot{position:absolute;left:50%;top:68px;transform:translateX(-50%);z-index:3;pointer-events:none;
+  /* CENTRED IN THE FREE SPACE, NOT ON THE MAP — see `--instr-berth` on `.map`.
+     `inset-inline:0 var(--instr-berth)` with `margin-inline:auto` and a
+     max-content width is the same shape the honesty banner above uses; the only
+     difference is that the right edge stops short of the instrument column
+     instead of at the map's edge. */
+  .stamp-slot{position:absolute;inset-inline:0 var(--instr-berth);margin-inline:auto;
+    width:max-content;max-width:calc(100% - var(--instr-berth) - 1rem);
+    top:68px;z-index:3;pointer-events:none;
               --stamp-size:.62rem;--stamp-pad:.5rem 1rem;--stamp-tracking:.26em;--stamp-rot:-2.5deg}
   /* NOT :global(.con-stamp) — this block is `is:global`, so Astro runs no scoping pass
      over it and never strips the `:global()`. It would ship verbatim, and the browser
      drops the whole rule as an invalid selector, leaving the stamp unbacked over the
      basemap. Inside is:global every selector is already global. */
-  .stamp-slot .con-stamp{opacity:1;background:rgb(6 14 16 /.72);backdrop-filter:blur(8px)}
+  .stamp-slot .con-stamp{opacity:1;background:rgb(6 14 16 /.94);backdrop-filter:blur(8px)}
   /* The within-ward caveat. Bronze, like every other provenance statement on
      this page, and directly under the colour ramp it qualifies. */
   .pattern-note{margin:.32rem 0 0;font-family:var(--mono);font-size:.5rem;line-height:1.75;
                 letter-spacing:.09em;color:var(--bronze);text-transform:uppercase;
                 border-top:1px solid rgb(176 141 87 /.22);padding-top:.42rem;white-space:nowrap}
-  .loadchip{position:absolute;top:118px;left:50%;transform:translateX(-50%);font-family:var(--mono);font-size:.52rem;letter-spacing:.26em;color:var(--cyan);z-index:3;text-transform:uppercase;opacity:0;transition:opacity .25s}
+  /* Same berth as the stamp, and for a sharper reason: this chip's whole box sat
+     inside the clock's at 1280 — z-index 3 under the clock's 6 — so "Building
+     ward…" was painted over exactly when a reader was waiting to be told
+     something. It is only ever visible during a load, which is why nobody caught
+     it by looking. */
+  .loadchip{position:absolute;top:118px;inset-inline:0 var(--instr-berth);margin-inline:auto;
+    width:max-content;max-width:calc(100% - var(--instr-berth) - 1rem);
+    font-family:var(--mono);font-size:.52rem;letter-spacing:.26em;color:var(--cyan);z-index:3;text-transform:uppercase;opacity:0;transition:opacity .25s}
   .loadchip.on{opacity:1}
 
   /* Borderless glass. The 1px --line stroke was the last piece of the "grid of
@@ -701,10 +1304,13 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
      across the rail gap and glued this to the legend below it. The ambient is
      kept short (18px, not 70) for the same reason — it must not reach the next
      card. */
-  .panel{position:absolute;background:rgb(9 20 22 /.88);border-radius:14px;backdrop-filter:blur(16px);box-shadow:0 1px 2px rgb(0 0 0 /.45),0 8px 18px rgb(0 0 0 /.35);z-index:4}
+  .panel{position:absolute;background:rgb(9 20 22 /.96);border-radius:14px;backdrop-filter:blur(16px);box-shadow:0 1px 2px rgb(0 0 0 /.45),0 8px 18px rgb(0 0 0 /.35);z-index:4}
   .panel .h{font-family:var(--mono);font-size:.58rem;letter-spacing:.18em;color:var(--ink);padding:14px 18px 0;text-transform:uppercase}
-  .left{left:26px;top:26px;bottom:26px;width:270px;padding-bottom:16px;overflow:auto}
-  /* right rail: one bounded column (like .left) so the data card + legend can
+  /* `.left`'s floating geometry is gone: the toolbox is a pane of the sidebar now,
+     and `.sidebar .panel.left` up in the layout block gives it a column's shape.
+     The rules kept here are the ones that describe the CONTROLS inside it, which
+     did not move. */
+  /* right rail: one bounded column so the data card + legend can
      never overlap — the data card scrolls internally when the viewport is short,
      the legend stays pinned to the bottom via margin-top:auto. */
   /* gap 14 -> 22. When the panels lost their 1px border the border stopped
@@ -712,11 +1318,26 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
      directly beneath it. A 70px shadow then spilled across a 14px gap and the
      two read as one slab. Space has to do that job now, and 14px is not enough
      space to read as a break between two dark surfaces. */
-  .rail-r{position:absolute;right:26px;top:26px;bottom:26px;width:242px;display:flex;flex-direction:column;gap:22px;overflow-y:auto;z-index:4}
+  /* THE RAIL STARTS BELOW THE HONESTY BANNER, because it was CUTTING THE SENTENCE
+     IN HALF. The banner is centred on the map and the rail is 242px of opaque card
+     at z-index 4 against the banner's 3, so the pill's right end ran underneath it
+     and the line read "… HEAT FIELD MODELLE" with the rest painted over — measured
+     at 1280 AND 1600, so it is not a narrow-window artefact.
+     Raising the rail's top past the pill is the fix that does not move anything
+     else: the banner, the build stamp, the load chip and the ward name all centre
+     on the same axis and stay where they are. The rail is `overflow-y:auto`, so the
+     34px it gives up costs reach, not content. */
+  .rail-r{position:absolute;right:26px;top:60px;bottom:26px;width:242px;display:flex;flex-direction:column;gap:22px;overflow-y:auto;z-index:4}
   .right{position:static;width:100%;flex:none}
 
-  .ctl{padding:14px 18px;border-bottom:1px solid var(--line)}
-  .ctl:last-child{border-bottom:0}
+  /* NO RULE BETWEEN THE ROWS. Each `.ctl` used to carry a border-bottom, which
+     drew a hairline between every slider and the next — five lines down a column
+     whose rows are already separated by their own padding and by a label sitting
+     directly above each control. A divider earns its place by grouping things
+     that would otherwise run together; between three sliders that each have a
+     name and a number, it only added ruled paper. The `:last-child` reset that
+     removed the final one goes with it — it existed solely to undo this rule. */
+  .ctl{padding:14px 18px}
   .ctl label{display:flex;justify-content:space-between;font-size:.72rem;color:var(--paper);margin-bottom:.5rem}
   .ctl label .v{font-family:var(--mono);color:var(--cyan);letter-spacing:.05em}
   .stage input[type=range]{width:100%;-webkit-appearance:none;appearance:none;height:3px;border-radius:2px;background:var(--surface2);outline:none}
@@ -725,9 +1346,19 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
   .seg{display:flex;gap:2px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:3px;margin-top:.3rem}
   .seg button{flex:1;font-family:var(--mono);font-size:.54rem;letter-spacing:.1em;color:var(--ink);background:none;border:0;cursor:pointer;padding:.45rem;border-radius:5px;text-transform:uppercase}
   .seg button.on{background:var(--surface2);color:var(--paper)}
+  /* The stated absence where the segmented control would be. Prose, not a box:
+     an empty .seg is a hairline rectangle with nothing in it, which reads as a
+     control that has not finished loading. */
+  .segnone{margin-top:.3rem;font-size:.62rem;line-height:1.45;color:var(--ink);opacity:.78}
 
   .score{display:flex;align-items:center;gap:14px;padding:16px 18px}
   .score .g{position:relative;width:64px;height:64px;flex:none}
+  /* Both circles paint stroke:currentColor, so `color` is what actually carries
+     the token — see the note beside the <svg>. Setting it per circle rather than
+     on the <svg> keeps the two strokes independent, which is what the two hex
+     attributes used to do. */
+  .score .g .track{color:var(--surface2)}
+  .score .g #scoreArc{color:var(--cyan)}
   .score .g .num{position:absolute;inset:0;display:grid;place-items:center;font-family:var(--mono);font-size:1.05rem;color:var(--cyan)}
   .subs{display:flex;gap:1px;background:var(--line);margin:0 18px 16px;border-radius:7px;overflow:hidden}
   .subs>div{flex:1;background:rgb(9 20 22 /.55);padding:8px 4px;text-align:center}
@@ -787,8 +1418,31 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
   .mrow{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:0 16px 16px}
   .mrow .k{font-family:var(--sans);font-size:.62rem;font-weight:450;letter-spacing:.005em;color:var(--ink);line-height:1.35}
   .mrow .val{font-family:var(--mono);font-weight:400;font-size:1.05rem;margin-top:4px}
-  .histo{display:flex;align-items:flex-end;gap:3px;height:32px;padding:12px 16px 4px}
-  .histo i{flex:1;background:linear-gradient(var(--cyan),var(--surface2));border-radius:2px;opacity:.8;min-height:2px;transition:height .4s}
+  /* THE DISTRIBUTION HAD 16px TO DRAW IN. `height:32px` with `padding:12px 16px
+     4px` and border-box sizing leaves a SIXTEEN pixel content box, so a bar at
+     100% was 16px and the chart could not read as a chart at any value. */
+  /* THE BARS NEED A FLOOR THAT IS NOT THE CARD'S EDGE. The first attempt set
+     `padding:… 0` and put the baseline on `border-bottom`, which lands on the
+     PADDING BOX — i.e. exactly where the card ends. The chart drew correctly and
+     still looked broken: bars running into a rounded corner with nothing beneath
+     them, which reads as clipped rather than as finished.
+     So the baseline is drawn at the bars' FEET by a pseudo-element, and the
+     padding below it is the card's own breathing room. */
+  .histo{position:relative;display:flex;align-items:flex-end;gap:3px;height:78px;padding:10px 16px 16px}
+  .histo::after{content:"";position:absolute;inset-inline:16px;bottom:16px;height:1px;background:var(--line)}
+
+  /* SOLID, NOT A GRADIENT, AND THAT WAS THE SECOND HALF OF THE BUG. The fill was
+     `linear-gradient(var(--cyan), var(--surface2))` — cyan at the top, near the
+     panel's own colour at the bottom. A bar is anchored at the bottom and grows
+     up, so a SHORT bar showed only the dark end: the smallest counts were painted
+     in the least visible colour in the ramp, on top of being the shortest. Height
+     already encodes the value; colour encoding it a second time is what made a few
+     cells indistinguishable from none.
+
+     NO `min-height`. It used to be 2px, which is what those dashes were — every
+     empty bin painting a stub the same size as a real one. An empty bin is now
+     genuinely empty and the baseline below is what says the bin exists. */
+  .histo i{flex:1;background:var(--cyan);border-radius:2px 2px 0 0;opacity:.85;transition:height .4s}
   .cta{margin:12px 16px 16px;display:block;width:calc(100% - 32px);background:var(--bronze);color:#0d0a05;border:0;border-radius:8px;padding:9px;font-family:var(--sans);font-size:.7rem;font-weight:600;letter-spacing:.005em;cursor:pointer}
 
   /* position:relative + z-index so the panel sits ABOVE maplibre's attribution
@@ -801,9 +1455,13 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
   /* Same shadow recipe as .panel. Fill nudged lighter (.88 -> .84) so the legend
      is visibly a DIFFERENT surface from the readout above it — two identical
      dark rectangles 22px apart still want to fuse; a tonal step stops that. */
-  .legend{position:relative;z-index:5;width:100%;flex:none;margin-top:auto;background:rgb(9 20 22 /.84);border-radius:12px;backdrop-filter:blur(16px);box-shadow:0 1px 2px rgb(0 0 0 /.45),0 8px 18px rgb(0 0 0 /.35);padding:12px 15px 7px}
+  /* .96 like --rail-ground, and for the same reason: at .84 the legend's own
+     scale numbers sat on whatever the map happened to be showing under them. */
+  .legend{position:relative;z-index:5;width:100%;flex:none;margin-top:auto;background:rgb(9 20 22 /.96);border-radius:12px;backdrop-filter:blur(16px);box-shadow:0 1px 2px rgb(0 0 0 /.45),0 8px 18px rgb(0 0 0 /.35);padding:12px 15px 7px}
   .legend .k{font-family:var(--mono);font-size:.54rem;letter-spacing:.16em;color:var(--ink);display:flex;justify-content:space-between;margin-bottom:.55rem;text-transform:uppercase}
-  .ramp{height:9px;border-radius:4px;background:linear-gradient(90deg,#6fcad6,#9fb98a,#b08d57,#d46b4a,#e5484d)}
+  /* A gradient colour stop takes var() like any other colour; .ramp is inside
+     .legend, inside .stage, so the tokens are in scope. */
+  .ramp{height:9px;border-radius:4px;background:linear-gradient(90deg,var(--cyan),var(--sage),var(--bronze),var(--orange),var(--red))}
   .legend .sc{display:flex;justify-content:space-between;font-family:var(--mono);font-size:.52rem;color:var(--faint);margin-top:.4rem}
   .cindex{display:flex;flex-direction:column;gap:.34rem}
   .cindex .ci{display:flex;align-items:center;gap:.6rem;font-size:.7rem;color:var(--paper)}
@@ -820,40 +1478,57 @@ import ConstructionStamp from '../states/ConstructionStamp.astro';
   .ward .big{margin-left:auto;text-align:right;font-family:var(--mono);font-weight:400;font-size:1.35rem}
   .ward .big span{font-size:.55rem;color:var(--ink);display:block;letter-spacing:.14em;margin-top:2px;text-transform:uppercase}
 
+  /* The un-instrumented state — an area the registry names but ships no artefacts
+     for. Deliberately plain: it is a statement, not a degraded instrument, and
+     anything that looked like a dial here would imply a reading behind it. */
+  .notyet{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:.5rem;padding:6vh 8vw;overflow:auto}
+  .notyet-tier{font-family:var(--mono);font-size:.58rem;letter-spacing:.34em;text-transform:uppercase;color:var(--bronze)}
+  .notyet-h{font-weight:600;font-size:clamp(2.2rem,4.4vw,3.6rem);line-height:.92;letter-spacing:-.04em}
+  .notyet-sub{font-family:var(--mono);font-size:.58rem;letter-spacing:.24em;text-transform:uppercase;color:var(--ink)}
+  .notyet-body{max-width:52ch;margin-top:1.2rem;color:var(--ink);font-size:.92rem;line-height:1.65}
+  .notyet-links{margin-top:1.4rem}
+  .notyet-links a{font-family:var(--mono);font-size:.62rem;letter-spacing:.18em;text-transform:uppercase;color:var(--cyan);text-decoration:none;border-bottom:1px solid var(--line);padding-bottom:.3rem}
+  .notyet-links a:hover{border-bottom-color:var(--cyan)}
+
   @media (prefers-reduced-motion: reduce){ .synthetic .d,.livedot{animation:none} }
 
-  /* ── responsive: the floating-instrument layout is desktop-first. It compresses
-     through these tiers, then sheds the editorial ward index + meta so nothing
-     collides with the data cards (user-reported). Panels stay floating down to
-     ~540px; true phone layout (bottom sheets) is the separate P5 mobile task. ── */
+  /* ── responsive: the console layout is desktop-first. The rail and the sidebar
+     are real columns now, so narrowing takes width from the SIDEBAR rather than
+     from the map — the map is the thing being read. Below 820px the sidebar goes
+     entirely and the rail's panes have nowhere to open; that width already has no
+     true phone layout (bottom sheets are the separate P5 mobile task), and a 300px
+     column over a 520px map would leave neither usable. ── */
   @media (max-width:1180px){
-    .left{width:250px;left:18px;top:18px;bottom:18px}
+    .stage{--sidebar:270px}
     /* Above the chip row, not beside it: from here the centred chips reach far
        enough left to sit under the compass. */
-    .compass{left:284px;bottom:120px}
-    .maplibregl-ctrl-bottom-left{margin:0 0 22px 368px}
+    .compass{bottom:120px}
+    .maplibregl-ctrl-bottom-left{margin:0 0 22px 110px}
     .rail-r{width:222px;right:18px;top:18px;bottom:18px}
     .place .n{font-size:clamp(1.7rem,3.2vw,2.7rem)}
     .synthetic{font-size:.5rem;letter-spacing:.16em}
     .stamp-slot{top:62px;--stamp-size:.54rem;--stamp-pad:.4rem .8rem;--stamp-tracking:.2em}
   }
   @media (max-width:1120px){
-    .top{grid-template-columns:auto 1fr}
-    .top .read{display:none}
-    .tabs{justify-self:end}
+    .stage{--sidebar:250px}
+    /* BOTH right-hand blocks, not just .read. The rig readout used to be a line
+       INSIDE .read and went away with it here; split into its own element it would
+       have reappeared on the one width where there is no room for it. */
+    .top .topmeta{display:none}
   }
   @media (max-width:980px){
-    /* index retreats — the ward name is already in the active tab + bottom strip */
+    /* index retreats — the ward name is already in the breadcrumb + bottom strip */
     .place,.legend{display:none}
     .synthetic .full{display:none}      /* short honesty tag ("heat field modelled") fits the gap */
     #envchip,#tintchip{display:none}    /* keep the primary 3D/2D view toggle; drop the style refinements */
   }
   @media (max-width:820px){
-    .top{grid-template-columns:1fr;padding-inline:18px}
-    .tabs{display:none}                 /* ward switch lives in the bottom strip at this width */
-    .left,.rail-r{width:210px}
-    .compass{left:244px}
-    .maplibregl-ctrl-bottom-left{margin:0 0 22px 328px}
+    .top{padding-inline:18px}
+    /* The sidebar goes, and with it the panes. The scope switcher's job is covered
+       at this width by the ward strip, which is the control that fits. */
+    .sidebar{display:none}
+    .rail-r{width:210px}
+    .maplibregl-ctrl-bottom-left{margin:0 0 22px 110px}
     .synthetic{font-size:.44rem;letter-spacing:.12em;padding:.34rem .62rem}
     .stamp-slot{top:58px;--stamp-size:.46rem;--stamp-pad:.32rem .62rem;--stamp-tracking:.16em}
   }

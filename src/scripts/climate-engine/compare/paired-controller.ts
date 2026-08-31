@@ -1,5 +1,6 @@
-import { fmtCr } from '../heat-map-model.ts';
-import { WARDS, WARD_IDS, nextDistinctWard, type WardId } from '../wards.ts';
+import { fmtMoney } from '../money.ts';
+import { areaKeysInCity, isAreaKey, nextDistinctArea, type AreaKey } from '../scope/registry.ts';
+import { resolve, requireCosts } from '../scope/resolve.ts';
 import { enablePairedMapInteraction, renderPairedMap, resetPairedMapView, thermalPatternSummary } from './paired-map-2d.ts';
 import { createPairedScenarioClient } from './paired-client.ts';
 import type { MetricValue, PairedResult, WardScenarioResult } from './paired-protocol.ts';
@@ -12,10 +13,29 @@ import type {
 } from './paired-map-3d.ts';
 
 type SheetState = 'collapsed' | 'half' | 'full';
-type BenchTab = 'settings' | 'evidence' | 'wards';
+/* TWO TABS, NOT THREE. The bottom sheet's Wards panel held the A/B pickers, and
+   they moved to the console sidebar's Analysis pane — where this route's scope
+   control belongs. Leaving the tab behind would have left a third tab opening an
+   empty panel, which is the same dead control in a smaller place. */
+type BenchTab = 'settings' | 'evidence';
 
 /** Exposed levers. `parks` is retired from Compare and stays pinned at 0. */
 const coverageKeys = ['trees', 'roofs', 'facades'] as const;
+
+/**
+ * Compare reads its display strings from `resolve`, NEVER from `WARD_MAP`.
+ *
+ * Two reasons, and the second is the one that would have shipped. `WARD_MAP` is
+ * keyed by BARE id, so `WARD_MAP[state.a]` type-checks perfectly against a
+ * hierarchical key, returns `undefined`, and throws on the next property access —
+ * the trap `heat-map-app.ts` needed its `wardOf` helper for. And the ward table's
+ * `name` carries wordmark markup (`Bally<em>gunge</em>`), which every call site here
+ * writes through `textContent`: it would have rendered the tags LITERALLY, on
+ * screen, in the heading. `resolve` already strips the markup and already maps a
+ * key to its row, so Compare needs no `wardOf` of its own — there is no second copy
+ * of that helper, because there is nothing here for it to do.
+ */
+const nameOf = (key: AreaKey): string => resolve(key).area.name;
 
 function formatTemperature(value: number): string {
   return `${value.toFixed(1)}°C`;
@@ -188,12 +208,18 @@ export function mountPairedBench(): () => void {
     const b = one<HTMLSelectElement>('[data-input="ward-b"]');
     for (const [select, selected, other] of [[a, state.a, state.b], [b, state.b, state.a]] as const) {
       if (!select) continue;
-      select.replaceChildren(...WARD_IDS.map((id) => {
+      /* The areas of the city ALREADY on screen, not every registered area. This
+         replaces `WARD_IDS`, which was Kolkata's three by construction; over the
+         registry an unfiltered list would offer Al Quoz beside Ballygunge — a pair
+         with two climates, two currencies, and no artefacts on one side.
+         `option.value` is the full key, because it is read straight back into the
+         state; only the URL ever speaks the legacy spelling. */
+      select.replaceChildren(...areaKeysInCity(selected).map((key) => {
         const option = document.createElement('option');
-        option.value = id;
-        option.textContent = WARDS[id].name;
-        option.selected = id === selected;
-        option.disabled = id === other;
+        option.value = key;
+        option.textContent = nameOf(key);
+        option.selected = key === selected;
+        option.disabled = key === other;
         return option;
       }));
     }
@@ -221,7 +247,8 @@ export function mountPairedBench(): () => void {
 
   function applyResult(result: PairedResult): void {
     const writeWard = (slot: 'a' | 'b', ward: WardScenarioResult) => {
-      const meta = WARDS[ward.ward];
+      const scope = resolve(ward.ward);
+      const meta = scope.area;
       setText(`[data-value="${slot}-name"]`, meta.name);
       setText(`[data-value="${slot}-descriptor"]`, meta.descriptor);
       setText(`[data-value="${slot}-baseline"]`, formatTemperature(ward.baselineMeanC));
@@ -230,7 +257,9 @@ export function mountPairedBench(): () => void {
       setText(`[data-value="${slot}-hot-area"]`, formatMetric(ward.scenarioHotAreaPct));
       setText(`[data-value="${slot}-hot-change"]`, formatMetric(ward.hotAreaChangePp));
       setText(`[data-value="${slot}-green-reference"]`, `${ward.greenReferenceContrastC >= 0 ? '+' : ''}${ward.greenReferenceContrastC.toFixed(1)}°C`);
-      setText(`[data-value="${slot}-cost"]`, `₹${fmtCr(ward.capitalCost)}`);
+      /* Currency from the area's OWN scope, which is the same frozen object
+         paired-core resolved to price this figure — see paired-brief.ts. */
+      setText(`[data-value="${slot}-cost"]`, fmtMoney(ward.capitalCost, requireCosts(scope)));
       setText(`[data-value="${slot}-delivered"]`, formatDelivered(ward));
       setText(`[data-value="${slot}-pattern"]`, thermalPatternSummary(ward.field));
       const threeCanvas = one<HTMLCanvasElement>(`[data-map-three="${slot}"]`);
@@ -246,7 +275,7 @@ export function mountPairedBench(): () => void {
     setText('[data-role="forcing-label"]', forcingLabel);
     setText('[data-role="backend-label"]', result.a.evidence.backendVersion);
     one<HTMLButtonElement>('[data-action="retry"]')?.setAttribute('hidden', '');
-    setStatus(`Comparison settled. ${WARDS[result.a.ward].name} and ${WARDS[result.b.ward].name} use the same ${result.forcing.label.toLowerCase()}.`);
+    setStatus(`Comparison settled. ${nameOf(result.a.ward)} and ${nameOf(result.b.ward)} use the same ${result.forcing.label.toLowerCase()}.`);
     void enhanceWithThree(result);
   }
 
@@ -311,9 +340,17 @@ export function mountPairedBench(): () => void {
   const wardB = one<HTMLSelectElement>('[data-input="ward-b"]');
   const bindWard = (select: HTMLSelectElement | null, side: 'a' | 'b') => {
     const listener = () => {
-      const chosen = select?.value as WardId;
+      /* Validated, not cast. The old `as WardId` took the DOM's word for it; an
+         option value that is not a registered key now stops here instead of
+         reaching `resolve`, which would throw mid-render. */
+      const chosen = select?.value;
+      if (!isAreaKey(chosen)) return;
       const other = side === 'a' ? state.b : state.a;
-      const valid = chosen === other ? nextDistinctWard(other) : chosen;
+      /* The colliding option is already `disabled`, so this only fires if the DOM
+         was driven around that — and a city of one area has no distinct sibling to
+         offer, so the change is refused rather than answered with a self-pairing. */
+      const valid = chosen === other ? nextDistinctArea(other) : chosen;
+      if (valid === null) return;
       state = side === 'a' ? { ...state, a: valid } : { ...state, b: valid };
       updateInputs();
       replaceUrl();

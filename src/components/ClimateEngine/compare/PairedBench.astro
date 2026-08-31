@@ -1,23 +1,125 @@
 ---
-// Semantic shell for the Paired Ward Bench. The controller owns scenario state,
-// calculations, and canvas drawing; Astro owns landmarks and durable copy.
+/**
+ * THE PAIRED WARD BENCH, INSIDE THE CONSOLE. The controller owns scenario state,
+ * calculations, and canvas drawing; Astro owns landmarks and durable copy.
+ *
+ * THE RAIL REPLACED THE HEADER. There used to be a brand link, an Explore/Compare
+ * pair and a brief link across the top of this page. All three are gone: the rail
+ * is the console's only navigation, it carries the one brand mark, and the brief
+ * link moved into the Analysis pane beside the method copy it belongs with.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * NO SCOPE SWITCHER ON THIS ROUTE, AND THE A/B PICKERS ARE WHY.
+ *
+ * shell/ScopeSwitcher.astro names ONE area. Compare holds TWO and neither is "the"
+ * scope — the same reasoning this file already applied to the old Explore link,
+ * which was static precisely because picking pane A's area would have been a guess
+ * dressed as a destination. Rendering the switcher here would have had to pass
+ * something, and the only value available at build time is the default pair: it
+ * would have read "Ballygunge" to a visitor comparing Barrackpore against
+ * Baruipur. A control stating a false scope is worse than no control.
+ *
+ * It could not have worked either. This shell is PRERENDERED and the pair arrives
+ * as `?a=`/`?b=`, parsed client-side; and console-shell.ts only wires
+ * `select[data-scope]` on a page with a `.stage` declaring one `data-area`, which
+ * this is not. So the switcher would have been inert as well as untrue.
+ *
+ * The A/B selects ARE this route's scope control, so they sit where the switcher
+ * sits on Explore — at the top of the sidebar, in the pane the rail opens. They
+ * are populated at runtime by paired-controller.ts from `areaKeysInCity`, so
+ * unlike a prerendered switcher they can tell the truth about the pair on screen.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * FOUR PANES, THREE OF WHICH SAY WHY THEY ARE EMPTY HERE.
+ *
+ * The rail's Layers, Reports and Scenarios navigate nowhere — they swap the
+ * sidebar body. Rendering the rail with no bodies for them would have shipped
+ * three buttons that do nothing on the one control every visitor has to use,
+ * which is the defect this project has deleted repeatedly. So each one is here,
+ * and each states in terms of what Compare IS why it holds nothing, with a way
+ * out to the route where it does. That is the pattern HeatMapStage.astro already
+ * uses twice, for an area with no artefacts and for the unbuilt scenario store.
+ */
+import IconRail from '../shell/IconRail.astro';
+import PanelToggle from '../shell/PanelToggle.astro';
+import { DEFAULT_AREA_PATH } from '../../../scripts/climate-engine/scope/paths.ts';
 ---
-<main id="main" class="heat-compare" data-compare-root data-renderer="canvas" aria-busy="true">
-  <header class="heat-compare__header">
-    <a class="heat-compare__brand" href="/" aria-label="Back to Delta Climate Research"><img src="/logo-mark-96.webp" alt="" width="30" height="30" decoding="async" /></a>
-    <nav class="heat-compare__modes" aria-label="Heat explorer modes">
-      <a href="/heat-map/">Explore</a>
-      <a href="/heat-map/compare/" aria-current="page">Compare</a>
-    </nav>
-    <a class="heat-compare__brief-link" data-role="brief-link" href="/heat-map/brief/">Open brief <span aria-hidden="true">↗</span></a>
-  </header>
+<main id="main" class="heat-compare" data-compare-root data-console data-renderer="canvas" aria-busy="true">
+  {/* `route="analysis"` because this page IS Compare, and `pane="analysis"` because
+      the pane below it is the one the server renders open. The rail derives the
+      rest: Map becomes a plain link to Explore and loses its aria-pressed, since
+      the toolbox it names is not in this document. */}
+  <div class="rail-slot"><IconRail route="analysis" pane="analysis" /></div>
 
+  <div class="heat-compare__console">
+    <aside class="sidebar" aria-label="Comparison console">
+      {/* THE PANEL'S CHEVRON, AND IT IS ITS OWN ROW HERE RATHER THAN A HEADING'S.
+          Explore slots this into the scope switcher's "Location" line; this route
+          has no such line — the sidebar opens straight into a pane whose own
+          heading belongs to the pane and changes with it — so the panel's top-right
+          corner is a row of its own. Same component, same state, same paint. */}
+      <div class="panel-head"><PanelToggle /></div>
+
+      <div class="panes">
+        {/* THE SCOPE CONTROL FOR THIS ROUTE, in the place Explore keeps its scope
+            switcher. The selects are empty here on purpose: paired-controller.ts
+            fills both from `areaKeysInCity` on every render, which is what keeps
+            the pair inside one city and what makes them true about the ?a= the
+            visitor actually arrived with. */}
+        <div class="pane is-on" data-pane="analysis">
+          <section class="pane-body" aria-labelledby="pane-analysis-h">
+            <p class="pane-h" id="pane-analysis-h">Analysis</p>
+            <p class="pane-note">One intervention package, two equal 1.4 km study windows, one pinned forcing record. Results show each ward’s response from its own baseline. They are not a ward ranking.</p>
+            <label class="heat-compare__select-label">Ward A
+              <select data-input="ward-a" aria-label="Ward A"></select>
+            </label>
+            <label class="heat-compare__select-label">Ward B
+              <select data-input="ward-b" aria-label="Ward B"></select>
+            </label>
+            <button type="button" class="heat-compare__button heat-compare__button--quiet heat-compare__swap" data-action="swap">Swap wards <span aria-hidden="true">↔</span></button>
+            <p class="pane-note">Both sides come from one city. A pair drawn across two of them would compare two climates and two currencies, and would price the result in neither.</p>
+            <a class="pane-out" data-role="brief-link" href="/heat-map/brief/">Open brief <span aria-hidden="true">↗</span></a>
+          </section>
+        </div>
+
+        <div class="pane" data-pane="layers">
+          <section class="pane-body" aria-labelledby="pane-layers-h">
+            <p class="pane-h" id="pane-layers-h">Layers</p>
+            <p class="pane-note">Layers turn on what the map draws. Compare draws no map: it renders two fixed 1.4 km thermal fields to a canvas from a single model run, so that the one thing differing between them is the fabric underneath.</p>
+            <p class="pane-note">There is no basemap here to switch roads, canopy, footprints or ground-truth photography over — the tree needs a map, and the map takes one ward at a time.</p>
+            <a class="pane-out" href={DEFAULT_AREA_PATH}>Open the map <span aria-hidden="true">→</span></a>
+          </section>
+        </div>
+
+        <div class="pane" data-pane="reports">
+          <section class="pane-body" aria-labelledby="pane-reports-h">
+            <p class="pane-h" id="pane-reports-h">Reports</p>
+            <p class="pane-note">The ward record is a document about ONE area: what was measured there, the out-of-sample error and sample size, and every source dataset with its licence. Compare holds two, and is a record of neither — the pairing is made in your browser and kept nowhere.</p>
+            <p class="pane-note">What this route can hand you is the brief, under Analysis. It carries this pair and this package; it does not carry a ward’s measurements.</p>
+            <a class="pane-out" href={DEFAULT_AREA_PATH}>Download a ward record from the map <span aria-hidden="true">→</span></a>
+          </section>
+        </div>
+
+        <div class="pane" data-pane="scenarios">
+          <section class="pane-body" aria-labelledby="pane-scenarios-h">
+            <p class="pane-h" id="pane-scenarios-h">Scenarios</p>
+            <p class="pane-note">Not built yet, and this route feels the gap twice. Compare runs exactly one package across both wards and keeps none of them: there is nowhere to save an intervention set, name it, or put two saved sets side by side — which here would be a comparison of comparisons.</p>
+            <p class="pane-note">The sliders that build one are on the bench itself, under the shared package. The same three are on the map, one ward at a time.</p>
+            <a class="pane-out" href={DEFAULT_AREA_PATH}>Open the map <span aria-hidden="true">→</span></a>
+          </section>
+        </div>
+      </div>
+    </aside>
+
+    <div class="heat-compare__main">
   <section class="heat-compare__intro" aria-labelledby="compare-title">
     <div>
       <p class="heat-compare__eyebrow">Urban Heat Explorer / Controlled comparison</p>
+      {/* THE H1 STAYS ON THE PAGE. It is the document's title; the method paragraph
+          that sat beside it has moved into the Analysis pane, where a reader
+          looking for scope and limits will already be. */}
       <h1 id="compare-title">Same policy.<br /><em>Different fabric.</em></h1>
     </div>
-    <p class="heat-compare__method">One intervention package, two equal 1.4 km study windows, one pinned forcing record. Results show each ward’s response from its own baseline. They are not a ward ranking.</p>
   </section>
 
   <noscript>
@@ -36,7 +138,6 @@
         <div class="heat-compare__mobile-tabs" role="tablist" aria-label="Comparison workspace sections">
           <button type="button" role="tab" aria-selected="true" data-tab="settings">Settings</button>
           <button type="button" role="tab" aria-selected="false" data-tab="evidence">Evidence</button>
-          <button type="button" role="tab" aria-selected="false" data-tab="wards">Wards</button>
         </div>
 
         <section class="heat-compare__control-panel" data-panel="settings" role="tabpanel">
@@ -75,17 +176,6 @@
             <span>Shareable URL</span>
             <input data-role="share-url" type="text" readonly />
           </label>
-        </section>
-
-        <section class="heat-compare__control-panel" data-panel="wards" role="tabpanel" hidden>
-          <div class="heat-compare__panel-heading"><p>Paired wards</p><span>Study areas remain equal</span></div>
-          <label class="heat-compare__select-label">Ward A
-            <select data-input="ward-a" aria-label="Ward A"></select>
-          </label>
-          <label class="heat-compare__select-label">Ward B
-            <select data-input="ward-b" aria-label="Ward B"></select>
-          </label>
-          <button type="button" class="heat-compare__button heat-compare__button--quiet heat-compare__swap" data-action="swap">Swap wards <span aria-hidden="true">↔</span></button>
         </section>
 
         <section class="heat-compare__control-panel" data-panel="evidence" role="tabpanel" hidden>
@@ -166,21 +256,157 @@
       </dl>
       <p class="heat-compare__caveat">Screening-grade output. It does not assess vulnerability, equity, feasibility, ownership, operations, maintenance, or investment priority.</p>
     </aside>
-  </div>
+      </div><!-- /.heat-compare__layout -->
+    </div><!-- /.heat-compare__main -->
+  </div><!-- /.heat-compare__console -->
 </main>
 
 <style>
-  .heat-compare{--ink:oklch(96% .008 210);--muted:oklch(68% .025 210);--faint:oklch(63% .024 210);--paper:oklch(12% .018 205);--surface:oklch(16% .024 205);--surface2:oklch(20% .03 205);--line:oklch(76% .055 205 / .2);--cyan:oklch(78% .105 202);--bronze:oklch(69% .08 75);--red:oklch(64% .16 28);--green:oklch(75% .09 145);min-height:100vh;background:var(--paper);color:var(--ink);font-family:'Mona Sans',system-ui,sans-serif;padding:1.25rem clamp(1rem,4vw,4rem) 3.5rem;}
-  .heat-compare *{box-sizing:border-box}.heat-compare a{color:inherit}.heat-compare__header{display:flex;align-items:center;justify-content:space-between;gap:1rem;border-bottom:1px solid var(--line);padding:0 0 1rem}.heat-compare__brand{display:inline-flex;text-decoration:none}.heat-compare__brand img{width:30px;height:30px;display:block;transition:opacity .2s}.heat-compare__brand:hover img{opacity:.82}.heat-compare__brand:focus-visible{outline:2px solid var(--cyan);outline-offset:4px;border-radius:5px}.heat-compare__modes{display:flex;gap:.25rem;background:var(--surface);border:1px solid var(--line);border-radius:.6rem;padding:.22rem}.heat-compare__modes a{font-family:'Noplato Mono',ui-monospace,monospace;font-size:.68rem;letter-spacing:.1em;text-decoration:none;text-transform:uppercase;padding:.48rem .72rem;border-radius:.4rem;color:var(--muted)}.heat-compare__modes a[aria-current]{background:var(--cyan);color:var(--paper);font-weight:700}.heat-compare__brief-link{font-family:'Noplato Mono',ui-monospace,monospace;font-size:.65rem;letter-spacing:.08em;text-decoration:none;text-transform:uppercase;color:var(--cyan)}
-  .heat-compare__intro{display:flex;justify-content:space-between;gap:3rem;padding:clamp(2.5rem,6vw,5.5rem) 0 clamp(1.75rem,4vw,3rem);max-width:110rem}.heat-compare__eyebrow,.heat-compare__panel-heading p,.heat-compare__evidence-heading p,.heat-compare__delivery>p{font-family:'Noplato Mono',ui-monospace,monospace;text-transform:uppercase;letter-spacing:.15em;font-size:.61rem;color:var(--bronze);margin:0 0 .65rem}.heat-compare h1{font-size:clamp(2.55rem,5.5vw,5.9rem);line-height:.86;letter-spacing:-.065em;margin:0;font-weight:650}.heat-compare h1 em{font-style:normal;color:var(--cyan)}.heat-compare__method{max-width:45ch;line-height:1.55;color:var(--muted);font-size:.95rem;margin:1.25rem 0 0}.heat-compare__noscript{background:oklch(29% .04 75);border:1px solid var(--bronze);padding:1rem;color:var(--ink)}
+  .heat-compare{--ink:oklch(96% .008 210);--muted:oklch(68% .025 210);--faint:oklch(63% .024 210);--paper:oklch(12% .018 205);--surface:oklch(16% .024 205);--surface2:oklch(20% .03 205);--line:oklch(76% .055 205 / .2);--cyan:oklch(78% .105 202);--bronze:oklch(69% .08 75);--red:oklch(64% .16 28);--green:oklch(75% .09 145);min-height:100vh;background:var(--paper);color:var(--ink);font-family:'Mona Sans',system-ui,sans-serif;padding:1.25rem clamp(1rem,4vw,4rem) 3.5rem;
+    /* THE RAIL IS FIXED AND OUT OF FLOW, so the page reserves its column here.
+       --rail IS NOT DECLARED ANYWHERE ON THIS ROUTE, and that is the fix rather
+       than an omission. It used to be a literal here and a fallback inside
+       shell/IconRail.astro, two numbers for one column with a test comparing
+       them — which was tolerable only while the width was a constant. The rail
+       expands and collapses now, so a per-route literal would have had to be TWO
+       numbers per route, in three files, agreeing at both states.
+       The rail declares both widths and the current one on :root instead, so this
+       padding, the mobile sheet's offset below and the rail's own inline-size all
+       read the one property the rail itself is sized by. There is no second copy
+       left to drift, which is why the width guard in tests/unit/obos-shell.test.mjs
+       now proves the absence rather than comparing two literals.
+       --sidebar is the console column beside it. */
+    --sidebar:300px;
+    /* The console's panel ground, declared here for the same reason --rail-ground
+       is declared in the rail bridge: HeatMapStage.astro's palette never loads on
+       this route, so a token used here must be named here. The VALUE is the one
+       the stage declares — one colour, two declarations. The duplicate-hex census
+       is per-file and CANNOT see a drift between the two, which it was wrongly
+       credited with here; `the console's two grounds are the same colour on both
+       routes` in tests/unit/obos-shell.test.mjs is the guard that actually reads
+       both files. */
+    --panel-ground:var(--rail-ground);
+    padding-inline-start:calc(var(--rail-edge) + clamp(1rem,4vw,4rem));}
+  .heat-compare *{box-sizing:border-box}.heat-compare a{color:inherit}
+  /* ── THE CONSOLE AROUND THE BENCH ───────────────────────────────────────────
+     The rail is FIXED and full-height; the sidebar is a STICKY column beside a
+     document that scrolls. That is the one structural difference from the Explore
+     stage, which is `position:fixed;inset:0` over `body{overflow:hidden}` — this
+     route is a scrolling document (`nativeScroll`), and a full-height grid would
+     have cut the bench off at the viewport. */
+
+  .rail-slot{
+    position:fixed;inset-block:0;inset-inline-start:0;z-index:40;display:flex;
+    /* THE TOKEN BRIDGE, AND IT IS A REMAP RATHER THAN A SECOND PALETTE.
+       shell/IconRail.astro paints with the console's tokens, which are declared on
+       .stage in HeatMapStage.astro — a stylesheet this route never loads. Two of
+       the names it needs exist here with the OPPOSITE role: the stage's --paper is
+       its brightest ink, and this file's --paper is the page's near-black ground.
+       Left alone, the rail's aria-current rule painted the active button near-black
+       on a rail whose background had silently unset — --rail-ground did not resolve,
+       and an undefined custom property makes the whole declaration invalid rather
+       than falling back. Nothing errored; the rail was simply not there.
+       So the three are declared HERE, on the rail's own wrapper and nowhere else.
+       --paper POINTS AT this file's --ink rather than restating its value, so the
+       colour has one spelling and the bench's own rules keep the --paper they were
+       written against. */
+    --rail-ground:#091416f5;
+    --paper:var(--ink);
+    --mono:'Noplato Mono',ui-monospace,monospace;
+  }
+
+  .heat-compare__console{display:grid;grid-template-columns:auto minmax(0,1fr);gap:1rem;align-items:start}
+  /* THE BENCH MEASURES ITSELF, BECAUSE THE VIEWPORT STOPPED BEING THE ANSWER.
+     `.heat-compare__main` is the column left over after the rail and the sidebar,
+     so its inline size IS the space the layout below actually has. Everything
+     that used to ask `@media (max-width:1350px)` asks this instead -- see the
+     @container rule further down for what that query was getting wrong.
+     ESTABLISHED ONLY ABOVE THE PHONE BREAKPOINT, and that is not tidiness:
+     `container-type` carries `contain: layout`, which makes this element the
+     containing block for FIXED descendants. The bottom sheet at <=767px is
+     `position:fixed` and pinned to the viewport; containing it here would anchor
+     it to this column instead and it would stop clearing the rail. */
+  @media (min-width:768px){ .heat-compare__main{container-type:inline-size} }
+  .heat-compare__main{min-inline-size:0}
+
+  /* `is-collapsed` is console-shell.ts's, set when the open pane's rail button is
+     clicked again. `auto` in the grid above is what lets the column go to zero
+     when it lands, rather than leaving a 300px hole. */
+  .sidebar{inline-size:var(--sidebar);position:sticky;top:1.25rem;
+    max-block-size:calc(100dvh - 2.5rem);display:flex;flex-direction:column;min-block-size:0;
+    /* THE SAME PANEL GROUND THE STAGE USES, written here because this route never
+       loads HeatMapStage.astro — the same reason the rail's token bridge above
+       exists. A hex rather than a var() would be the duplicate-colour defect the
+       census catches; declared once in the bridge, both sidebars read one value. */
+    background:var(--panel-ground);border:1px solid var(--line);border-radius:.85rem;overflow:hidden}
+  .sidebar.is-collapsed{display:none}
+  /* THE SAME FACT, READ BEFORE THE SIDEBAR EXISTS. shell/layout-state.ts's
+     pre-paint script runs where the rail is, at the top of the console, and the
+     parser has not reached this element yet — so the preference lands on <html>
+     and this rule carries it down. console-shell.ts's `paint` writes BOTH this
+     attribute and the class above, in one function, so they cannot disagree; the
+     class is the element's own state and this is the document-level mirror that
+     exists only to be applied early. Without it the sidebar renders open on every
+     load and then vanishes once the module script mounts. */
+  html[data-panel="collapsed"] .sidebar{display:none}
+  .panel-head{display:flex;justify-content:flex-end;padding:8px 8px 0;flex:none}
+
+  /* One grid cell, every pane stacked in it, so the cross-fade has nothing to
+     reflow. `visibility` rather than `display:none` keeps a hidden pane out of the
+     tab order and the accessibility tree while still letting opacity animate. */
+  .panes{flex:1;min-block-size:0;display:grid}
+  .pane{grid-area:1/1;min-block-size:0;overflow:auto;
+    opacity:0;transform:translateY(6px);visibility:hidden;pointer-events:none;
+    transition:opacity .22s ease,transform .22s ease,visibility 0s .22s}
+  .pane.is-on{opacity:1;transform:none;visibility:visible;pointer-events:auto;
+    transition:opacity .22s ease,transform .22s ease,visibility 0s}
+
+  .pane-body{padding:1rem;display:grid;gap:.75rem;align-content:start}
+  .pane-body>*{margin:0}
+  .pane-h{font-family:'Noplato Mono',ui-monospace,monospace;font-size:.62rem;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--faint)}
+  .pane-note{font-size:.78rem;line-height:1.6;color:var(--muted)}
+  /* The two bench controls that moved into the Analysis pane bring their own
+     spacing from a stacked panel; the grid gap here already provides it. */
+  .pane-body .heat-compare__select-label{margin-bottom:0}
+  .pane-body .heat-compare__swap{margin-top:0}
+  /* THE WAY OUT of a pane that is empty on this route. Without one, a reader who
+     opened Layers to find no layers is told why and left there. */
+  .pane-out{font-family:'Noplato Mono',ui-monospace,monospace;font-size:.6rem;letter-spacing:.08em;
+    text-transform:uppercase;text-decoration:none;color:var(--cyan);justify-self:start;
+    border-bottom:1px solid transparent;padding-bottom:2px;transition:border-color .18s}
+  .pane-out:hover{border-bottom-color:var(--cyan)}
+  .pane-out:focus-visible{outline:2px solid var(--cyan);outline-offset:3px}
+
+  /* Below the console's own breakpoint the sidebar stops being a column and
+     becomes a block above the bench. It does NOT go away, the way the stage's
+     does at 820px: there the ward strip still covers scope, and here the A/B
+     pickers ARE the scope control — hiding them would leave the pair unchangeable
+     on a phone. */
+  @media (max-width:1100px){
+    .heat-compare__console{grid-template-columns:minmax(0,1fr)}
+    .sidebar{position:static;inline-size:auto;max-block-size:none}
+  }
+  .heat-compare__intro{display:flex;justify-content:space-between;gap:3rem;padding:clamp(2.5rem,6vw,5.5rem) 0 clamp(1.75rem,4vw,3rem);max-width:110rem}.heat-compare__eyebrow,.heat-compare__panel-heading p,.heat-compare__evidence-heading p,.heat-compare__delivery>p{font-family:'Noplato Mono',ui-monospace,monospace;text-transform:uppercase;letter-spacing:.15em;font-size:.61rem;color:var(--bronze);margin:0 0 .65rem}.heat-compare h1{font-size:clamp(2.55rem,5.5vw,5.9rem);line-height:.86;letter-spacing:-.065em;margin:0;font-weight:650}.heat-compare h1 em{font-style:normal;color:var(--cyan)}.heat-compare__noscript{background:oklch(29% .04 75);border:1px solid var(--bronze);padding:1rem;color:var(--ink)}
   .heat-compare__layout{display:grid;grid-template-columns:minmax(15rem,19rem) minmax(0,1fr) minmax(18rem,24rem);gap:1rem;align-items:start}.heat-compare__controls,.heat-compare__evidence{background:var(--surface);border:1px solid var(--line);border-radius:.85rem}.heat-compare__controls{position:sticky;top:1rem}.heat-compare__sheet-handle{display:none}.heat-compare__sheet-content{padding:1rem}.heat-compare__mobile-tabs{display:none}.heat-compare__panel-heading,.heat-compare__evidence-heading{display:flex;justify-content:space-between;gap:.5rem;align-items:baseline;border-bottom:1px solid var(--line);padding-bottom:.85rem;margin-bottom:1rem}.heat-compare__panel-heading p,.heat-compare__evidence-heading p{color:var(--ink);margin:0}.heat-compare__panel-heading span,.heat-compare__evidence-heading span{color:var(--muted);font-family:'Noplato Mono',ui-monospace,monospace;font-size:.56rem;letter-spacing:.06em;text-transform:uppercase}.heat-compare__control-stack{display:grid;gap:1rem}.heat-compare__range{display:grid;gap:.45rem}.heat-compare__range>span{display:flex;justify-content:space-between;font-size:.78rem}.heat-compare output{font-family:'Noplato Mono',ui-monospace,monospace;color:var(--cyan);font-size:.75rem}.heat-compare__range small{font-size:.66rem;color:var(--faint)}.heat-compare input[type=range]{width:100%;accent-color:var(--cyan)}.heat-compare__phase{border:0;border-top:1px solid var(--line);margin:1.15rem 0 0;padding:1rem 0 0;display:grid;gap:.55rem}.heat-compare__phase legend{font-family:'Noplato Mono',ui-monospace,monospace;font-size:.58rem;letter-spacing:.13em;color:var(--muted);text-transform:uppercase;padding:0}.heat-compare__phase label{font-size:.74rem;display:flex;gap:.45rem;align-items:center}.heat-compare__phase input{accent-color:var(--cyan)}.heat-compare__actions{display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-top:1rem}.heat-compare__button{border:1px solid var(--line);border-radius:.5rem;padding:.65rem .7rem;font:600 .62rem/1 'Noplato Mono',ui-monospace,monospace;letter-spacing:.08em;text-transform:uppercase;cursor:pointer}.heat-compare__button--quiet{background:transparent;color:var(--ink)}.heat-compare__button--accent{background:var(--cyan);border-color:var(--cyan);color:var(--paper);grid-column:1 / -1}.heat-compare__button:disabled{opacity:.42;cursor:not-allowed}.heat-compare__share-field{display:grid;gap:.4rem;margin-top:.8rem;font: .58rem 'Noplato Mono',ui-monospace,monospace;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}.heat-compare__share-field input{min-width:0;background:var(--paper);color:var(--cyan);border:1px solid var(--line);padding:.55rem;border-radius:.35rem;font: .6rem 'Noplato Mono',ui-monospace,monospace}.heat-compare__select-label{display:grid;gap:.45rem;font-size:.72rem;color:var(--muted);margin-bottom:.85rem}.heat-compare select{background:var(--paper);border:1px solid var(--line);color:var(--ink);padding:.7rem;border-radius:.45rem;font: .75rem 'Mona Sans',system-ui,sans-serif}.heat-compare__swap{width:100%;margin-top:.25rem}.heat-compare__compact-evidence,.heat-compare__integrity{display:grid;gap:.75rem;margin:0}.heat-compare__compact-evidence div,.heat-compare__integrity div{display:grid;gap:.18rem}.heat-compare__compact-evidence dt,.heat-compare__integrity dt{font:.55rem 'Noplato Mono',ui-monospace,monospace;color:var(--faint);letter-spacing:.1em;text-transform:uppercase}.heat-compare__compact-evidence dd,.heat-compare__integrity dd{margin:0;font-size:.71rem;color:var(--muted);line-height:1.4}.heat-compare__caveat{color:var(--muted);font-size:.69rem;line-height:1.5;margin:1rem 0 0}
   .heat-compare__workbench{min-width:0}.heat-compare__status{min-height:1.25rem;font: .59rem 'Noplato Mono',ui-monospace,monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:.65rem}.heat-compare__maps{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}.heat-compare__map-card{margin:0;min-width:0;background:var(--surface);border:1px solid var(--line);border-radius:.85rem;overflow:hidden}.heat-compare__map-heading{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:.7rem;align-items:center;padding:.9rem .9rem .75rem}.heat-compare__map-index{display:grid;place-items:center;width:1.75rem;height:1.75rem;border-radius:50%;background:var(--cyan);color:var(--paper);font:700 .69rem 'Noplato Mono',ui-monospace,monospace}.heat-compare__map-heading h2{font-size:1rem;letter-spacing:-.025em;margin:0}.heat-compare__map-heading p{font:.55rem 'Noplato Mono',ui-monospace,monospace;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin:.15rem 0 0}.heat-compare__map-heading strong{font:700 .78rem 'Noplato Mono',ui-monospace,monospace;color:var(--green);white-space:nowrap}.heat-compare__map-surface{position:relative;background:var(--surface2);overflow:hidden}.heat-compare__map-surface canvas{display:block;width:100%;aspect-ratio:1/1;image-rendering:auto;background:var(--surface2);cursor:grab;touch-action:pan-y}.heat-compare__map-surface canvas[data-interacting="true"]{cursor:grabbing}.heat-compare__map-tools{position:absolute;left:.55rem;right:.55rem;bottom:.55rem;display:flex;align-items:flex-end;justify-content:space-between;gap:.45rem;font:.5rem 'Noplato Mono',ui-monospace,monospace;letter-spacing:.06em;text-transform:uppercase;color:oklch(91% .015 205);pointer-events:none}.heat-compare__map-tools span,.heat-compare__map-tools button{background:oklch(12% .018 205 / .94);border:1px solid oklch(85% .04 205 / .32);border-radius:.32rem;box-shadow:0 .25rem .8rem oklch(5% .01 205 / .38)}.heat-compare__map-tools span{max-width:12rem;padding:.36rem .45rem;line-height:1.3}.heat-compare__map-tools button{pointer-events:auto;color:var(--ink);padding:.36rem .45rem;font:inherit;cursor:pointer;white-space:nowrap}.heat-compare__map-tools button:hover{border-color:var(--cyan);color:var(--cyan)}.heat-compare__map-tools button:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}.heat-compare figcaption{display:flex;flex-wrap:wrap;gap:.45rem .8rem;padding:.6rem .9rem;border-top:1px solid var(--line);font:.51rem 'Noplato Mono',ui-monospace,monospace;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}.heat-compare__pattern{min-height:3.8em;padding:0 .9rem .9rem;margin:0;color:var(--muted);font-size:.69rem;line-height:1.45}.heat-compare__map-legend{display:grid;grid-template-columns:auto 1fr auto;gap:.55rem;align-items:center;margin-top:.75rem;font:.55rem 'Noplato Mono',ui-monospace,monospace;color:var(--muted);letter-spacing:.06em}.heat-compare__map-legend i{height:.55rem;border-radius:10rem;background:linear-gradient(90deg,oklch(78% .105 202),oklch(73% .08 145),oklch(69% .08 75),oklch(64% .16 28))}.heat-compare__map-legend b{grid-column:1/-1;font:inherit;text-align:center;text-transform:uppercase;color:var(--faint)}
   .heat-compare__sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}.heat-compare__stagebar{display:flex;align-items:center;justify-content:space-between;gap:.75rem;margin-bottom:.65rem}.heat-compare__stagebar .heat-compare__status{margin:0;min-width:0}.heat-compare__retry{flex:0 0 auto;border:1px solid var(--line);border-radius:.35rem;background:var(--surface);color:var(--ink);padding:.38rem .52rem;font:700 .5rem 'Noplato Mono',ui-monospace,monospace;letter-spacing:.06em;text-transform:uppercase;cursor:pointer}.heat-compare__retry:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}.heat-compare__view-controls{display:flex;align-items:center;gap:.22rem;flex:0 0 auto;background:var(--surface);border:1px solid var(--line);border-radius:.55rem;padding:.2rem}.heat-compare__renderer-state{display:flex;align-items:center;gap:.35rem;padding:0 .42rem;font:.5rem 'Noplato Mono',ui-monospace,monospace;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);white-space:nowrap}.heat-compare__renderer-state i{width:.38rem;height:.38rem;border-radius:50%;background:var(--faint)}.heat-compare[data-renderer="three"] .heat-compare__renderer-state i{background:var(--cyan);box-shadow:0 0 .65rem oklch(78% .105 202 / .55)}.heat-compare__renderer-state b{font:inherit;color:inherit}.heat-compare__view-controls button{min-height:2.35rem;border:0;border-radius:.35rem;background:transparent;color:var(--muted);padding:.45rem .58rem;font:600 .52rem 'Noplato Mono',ui-monospace,monospace;letter-spacing:.07em;text-transform:uppercase;cursor:pointer}.heat-compare__view-controls button[aria-pressed="true"]{background:var(--surface2);color:var(--ink)}.heat-compare__view-controls button:disabled{opacity:.38;cursor:not-allowed}.heat-compare__view-controls button:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}.heat-compare__map-surface>[data-map-field]{position:relative;z-index:0;opacity:1;transition:opacity .24s cubic-bezier(.25,1,.5,1)}.heat-compare__map-surface>.heat-compare__three{position:absolute;z-index:1;inset:0;width:100%;height:100%;opacity:0;pointer-events:none;transition:opacity .24s cubic-bezier(.25,1,.5,1)}.heat-compare[data-renderer="three"] .heat-compare__map-surface>[data-map-field]{opacity:0;pointer-events:none}.heat-compare[data-renderer="three"] .heat-compare__map-surface>.heat-compare__three{opacity:1;pointer-events:auto}.heat-compare__map-tools{z-index:3}.heat-compare__probe{position:absolute;z-index:3;top:.55rem;right:.55rem;background:oklch(12% .018 205 / .94);border:1px solid oklch(85% .04 205 / .32);border-radius:.32rem;color:var(--ink);padding:.38rem .48rem;font:700 .55rem 'Noplato Mono',ui-monospace,monospace;letter-spacing:.06em;pointer-events:none}.heat-compare__probe[hidden]{display:none}
   .heat-compare__evidence{padding:1rem}.heat-compare__evidence-table{display:grid;border-top:1px solid var(--line)}.heat-compare__evidence-row{display:grid;grid-template-columns:minmax(0,1.22fr) repeat(2,minmax(0,.8fr));gap:.5rem;padding:.72rem 0;border-bottom:1px solid var(--line);font-size:.68rem;align-items:start}.heat-compare__evidence-row>span{color:var(--muted);line-height:1.35}.heat-compare__evidence-row strong{font:600 .68rem 'Noplato Mono',ui-monospace,monospace;line-height:1.35}.heat-compare__evidence-row--header{font: .54rem 'Noplato Mono',ui-monospace,monospace;letter-spacing:.08em;text-transform:uppercase}.heat-compare__evidence-row--header span{color:var(--faint)}.heat-compare__evidence-row--accent strong{color:var(--green)}.heat-compare__delivery{padding:1rem 0;border-bottom:1px solid var(--line)}.heat-compare__delivery>p{color:var(--ink)}.heat-compare__delivery>div{display:grid;grid-template-columns:1fr 1fr;gap:.5rem}.heat-compare__delivery span{font-size:.62rem;line-height:1.45;color:var(--muted)}.heat-compare__integrity{padding:1rem 0}
-  @media (max-width:1350px){.heat-compare__layout{grid-template-columns:minmax(17rem,.78fr) minmax(0,2fr);grid-template-areas:"bench bench" "controls evidence"}.heat-compare__workbench{grid-area:bench}.heat-compare__controls{grid-area:controls;position:relative;top:auto}.heat-compare__evidence{grid-area:evidence;display:grid;grid-template-columns:minmax(0,1.6fr) minmax(14rem,1fr);column-gap:1rem}.heat-compare__evidence-heading,.heat-compare__evidence-table{grid-column:1}.heat-compare__delivery,.heat-compare__integrity,.heat-compare__evidence .heat-compare__caveat{grid-column:2}.heat-compare__delivery{grid-row:1}.heat-compare__integrity{grid-row:2}.heat-compare__evidence .heat-compare__caveat{grid-row:3;margin:0}}
-  @media (max-width:767px){.heat-compare{padding:1rem 1rem 8rem}.heat-compare__header{align-items:flex-start}.heat-compare__modes{order:3;width:100%;justify-content:center}.heat-compare__header{flex-wrap:wrap}.heat-compare__brief-link{margin-left:auto}.heat-compare__intro{display:block;padding:2.5rem 0 1.25rem}.heat-compare h1{font-size:clamp(2.6rem,14vw,4rem)}.heat-compare__method{font-size:.85rem}.heat-compare__layout{display:block}.heat-compare__workbench{padding-bottom:.5rem}.heat-compare__maps{grid-template-columns:1fr;gap:.8rem}.heat-compare__map-card{display:block}.heat-compare__map-surface canvas{aspect-ratio:1.08/1}.heat-compare__map-tools{font-size:.46rem}.heat-compare__evidence{margin-top:1rem;display:block}.heat-compare__evidence .heat-compare__caveat{margin-top:1rem}.heat-compare__controls{position:fixed;z-index:30;left:.6rem;right:.6rem;bottom:max(.6rem,env(safe-area-inset-bottom));border-radius:1rem;background:oklch(15% .024 205 / .98);box-shadow:0 1.2rem 3.5rem oklch(5% .02 205 / .52);max-height:calc(100dvh - 1.2rem);overflow:auto;transition:transform .2s ease-out}.heat-compare__controls[data-sheet="collapsed"] .heat-compare__sheet-content{display:none}.heat-compare__controls[data-sheet="half"]{max-height:min(58dvh,30rem)}.heat-compare__controls[data-sheet="full"]{top:.6rem;max-height:none}.heat-compare__sheet-handle{width:100%;display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:.65rem;background:transparent;border:0;color:var(--ink);padding:.82rem .95rem;text-align:left;cursor:pointer}.heat-compare__sheet-handle b{display:block;font-size:.78rem}.heat-compare__sheet-handle small{display:block;font:.55rem 'Noplato Mono',ui-monospace,monospace;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;margin-top:.18rem}.heat-compare__handle-line{width:1.6rem;height:.22rem;border-radius:1rem;background:var(--muted)}.heat-compare__sheet-content{padding:.1rem .95rem 1rem}.heat-compare__mobile-tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:.25rem;padding:.25rem;background:var(--paper);border:1px solid var(--line);border-radius:.55rem;margin:.4rem 0 1rem}.heat-compare__mobile-tabs button{background:transparent;border:0;border-radius:.35rem;color:var(--muted);padding:.55rem .25rem;font:.56rem 'Noplato Mono',ui-monospace,monospace;letter-spacing:.08em;text-transform:uppercase}.heat-compare__mobile-tabs button[aria-selected="true"]{background:var(--surface2);color:var(--ink)}.heat-compare__controls[data-sheet="full"] .heat-compare__sheet-handle{position:sticky;top:0;background:oklch(15% .024 205 / .98);z-index:1}.heat-compare__status{font-size:.52rem}.heat-compare__map-legend{margin-bottom:.5rem}.heat-compare__evidence-row{font-size:.65rem}.heat-compare__evidence-row strong{font-size:.62rem}}
+  /* 1400px OF THE BENCH'S OWN WIDTH, not 1350 of the window's.
+     The three tracks are `minmax(15rem,19rem) minmax(0,1fr) minmax(18rem,24rem)`,
+     and grid gives a non-flexible track its GROWTH LIMIT before a `1fr` sees
+     anything -- so the panels always take 19rem and 24rem and the maps take
+     whatever is left. The old query was written when this bench WAS the page; the
+     shell then put 172px of rail and 300px of sidebar in front of it and the
+     query could not see either. At a 1440px window that left the middle track
+     104.8px and each map card 44px wide, captions wrapping one word per line, on
+     the page whose entire subject is the two maps side by side.
+     1400px is where three columns start paying for themselves: 19rem + 24rem +
+     gaps is 720px, so the pair still clears 340px each at the switch. */
+  @container (width < 1400px){.heat-compare__layout{grid-template-columns:minmax(17rem,.78fr) minmax(0,2fr);grid-template-areas:"bench bench" "controls evidence"}.heat-compare__workbench{grid-area:bench}.heat-compare__controls{grid-area:controls;position:relative;top:auto}.heat-compare__evidence{grid-area:evidence;display:grid;grid-template-columns:minmax(0,1.6fr) minmax(14rem,1fr);column-gap:1rem}.heat-compare__evidence-heading,.heat-compare__evidence-table{grid-column:1}.heat-compare__delivery,.heat-compare__integrity,.heat-compare__evidence .heat-compare__caveat{grid-column:2}.heat-compare__delivery{grid-row:1}.heat-compare__integrity{grid-row:2}.heat-compare__evidence .heat-compare__caveat{grid-row:3;margin:0}}
+  @media (max-width:767px){.heat-compare{padding:1rem 1rem 8rem;padding-inline-start:calc(var(--rail-edge) + 1rem)}.heat-compare__intro{display:block;padding:2.5rem 0 1.25rem}.heat-compare h1{font-size:clamp(2.6rem,14vw,4rem)}.heat-compare__layout{display:block}.heat-compare__workbench{padding-bottom:.5rem}.heat-compare__maps{grid-template-columns:1fr;gap:.8rem}.heat-compare__map-card{display:block}.heat-compare__map-surface canvas{aspect-ratio:1.08/1}.heat-compare__map-tools{font-size:.46rem}.heat-compare__evidence{margin-top:1rem;display:block}.heat-compare__evidence .heat-compare__caveat{margin-top:1rem}.heat-compare__controls{position:fixed;z-index:30;left:calc(var(--rail-edge) + .6rem);right:.6rem;bottom:max(.6rem,env(safe-area-inset-bottom));border-radius:1rem;background:oklch(15% .024 205 / .98);box-shadow:0 1.2rem 3.5rem oklch(5% .02 205 / .52);max-height:calc(100dvh - 1.2rem);overflow:auto;transition:transform .2s ease-out}.heat-compare__controls[data-sheet="collapsed"] .heat-compare__sheet-content{display:none}.heat-compare__controls[data-sheet="half"]{max-height:min(58dvh,30rem)}.heat-compare__controls[data-sheet="full"]{top:.6rem;max-height:none}.heat-compare__sheet-handle{width:100%;display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:.65rem;background:transparent;border:0;color:var(--ink);padding:.82rem .95rem;text-align:left;cursor:pointer}.heat-compare__sheet-handle b{display:block;font-size:.78rem}.heat-compare__sheet-handle small{display:block;font:.55rem 'Noplato Mono',ui-monospace,monospace;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;margin-top:.18rem}.heat-compare__handle-line{width:1.6rem;height:.22rem;border-radius:1rem;background:var(--muted)}.heat-compare__sheet-content{padding:.1rem .95rem 1rem}.heat-compare__mobile-tabs{display:grid;grid-template-columns:repeat(2,1fr);gap:.25rem;padding:.25rem;background:var(--paper);border:1px solid var(--line);border-radius:.55rem;margin:.4rem 0 1rem}.heat-compare__mobile-tabs button{background:transparent;border:0;border-radius:.35rem;color:var(--muted);padding:.55rem .25rem;font:.56rem 'Noplato Mono',ui-monospace,monospace;letter-spacing:.08em;text-transform:uppercase}.heat-compare__mobile-tabs button[aria-selected="true"]{background:var(--surface2);color:var(--ink)}.heat-compare__controls[data-sheet="full"] .heat-compare__sheet-handle{position:sticky;top:0;background:oklch(15% .024 205 / .98);z-index:1}.heat-compare__status{font-size:.52rem}.heat-compare__map-legend{margin-bottom:.5rem}.heat-compare__evidence-row{font-size:.65rem}.heat-compare__evidence-row strong{font-size:.62rem}}
   @media (max-width:900px){.heat-compare__stagebar{align-items:flex-start;flex-direction:column}.heat-compare__view-controls{width:100%}.heat-compare__renderer-state{margin-right:auto}.heat-compare__view-controls button{min-width:3.4rem}}
   @media (pointer:coarse){.heat-compare__view-controls button{min-height:2.75rem;padding-inline:.7rem}.heat-compare__map-tools button{min-height:2.75rem}.heat-compare__map-surface>.heat-compare__three{touch-action:pan-y}}
-  @media (max-width:390px){.heat-compare__brief-link{font-size:.55rem}.heat-compare__map-heading{padding:.75rem}.heat-compare__map-heading h2{font-size:.9rem}.heat-compare__map-heading p{font-size:.48rem}.heat-compare__map-legend{font-size:.48rem}.heat-compare__evidence{padding:.8rem}}
-  @media (prefers-reduced-motion:reduce){.heat-compare__controls,.heat-compare__map-surface canvas{transition:none}}
+  @media (max-width:390px){.heat-compare__map-heading{padding:.75rem}.heat-compare__map-heading h2{font-size:.9rem}.heat-compare__map-heading p{font-size:.48rem}.heat-compare__map-legend{font-size:.48rem}.heat-compare__evidence{padding:.8rem}}
+  @media (prefers-reduced-motion:reduce){.heat-compare__controls,.heat-compare__map-surface canvas,.pane,.pane.is-on,.pane-out{transition:none}}
 </style>

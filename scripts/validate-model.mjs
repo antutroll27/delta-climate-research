@@ -11,6 +11,12 @@
  * adjust the model, or record why the benchmark does not apply.
  */
 const M = await import('../src/scripts/climate-engine/heat-map-model.ts');
+const { resolve, requireCosts } = await import('../src/scripts/climate-engine/scope/resolve.ts');
+
+/* Kolkata's constants, from the registry. Every benchmark below is a Kolkata
+   benchmark, so the scope is named rather than defaulted. */
+const SCOPE = resolve('in/kolkata/ballygunge');
+const CLIMATE = SCOPE.climate, COSTS = requireCosts(SCOPE);
 
 const N = M.SIM_N, N2 = N * N;
 const results = [];
@@ -41,7 +47,7 @@ function makeWard() {
   return { base, spatial };
 }
 const { base, spatial } = makeWard();
-const scen = (iv) => ({ live: null, phase: 'peak', path: '2025', iv });
+const scen = (iv) => ({ live: null, phase: 'peak', path: '2025', climate: CLIMATE, iv });
 const ZERO = { trees: 0, roof: 0, parks: 0, facades: 0 };
 /** local park cooling, used as the physically-necessary upper bound on ward-mean ΔT */
 function parkDropForBound() {
@@ -64,7 +70,7 @@ check(
 
 /* ── 2. maximum achievable ward-scale cooling ──────────────────────────────── */
 const MAXED = { trees: 50, roof: 100, parks: 4, facades: 15 };
-const maxCool = baseMean - M.eqMean(M.applyInterventions(base, MAXED, spatial), M.currentParams(scen(MAXED)));
+const maxCool = baseMean - M.eqMean(M.applyInterventions(base, MAXED, spatial, CLIMATE.parkRadiusM), M.currentParams(scen(MAXED)));
 // NOTE ON BENCHMARK CHOICE. The "2-3 °C ward-scale ceiling" in our own model doc
 // is an AIR-temperature claim; this model computes ward-mean LAND SURFACE
 // temperature. Those differ by roughly two orders of magnitude for the same
@@ -109,7 +115,7 @@ check(
 // path is swept too, because it derives its own rh by preserving vapour as the
 // air warms — the one route in the app that reaches genuinely dry air.
 const etBars = (live, heatTairC) => {
-  const p = M.currentParams({ live, phase: 'peak', path: '2025', iv: ZERO, ...(heatTairC == null ? {} : { heatTairC }) });
+  const p = M.currentParams({ live, phase: 'peak', path: '2025', climate: CLIMATE, iv: ZERO, ...(heatTairC == null ? {} : { heatTairC }) });
   return {
     park: M.eqCell(p, 0.20, 0, 0) - M.eqCell(p, 0.20, 0.9, 0),
     veg: p.tAir - M.eqCell(p, 0.25, 1.0, 0),
@@ -164,7 +170,7 @@ check(
 /* ── 3c. do the four levers saturate against each other? ───────────────────── */
 const solo = ['trees', 'roof', 'parks', 'facades'].map((key) => {
   const iv = { ...ZERO, [key]: MAXED[key] };
-  return baseMean - M.eqMean(M.applyInterventions(base, iv, spatial), M.currentParams(scen(iv)));
+  return baseMean - M.eqMean(M.applyInterventions(base, iv, spatial, CLIMATE.parkRadiusM), M.currentParams(scen(iv)));
 });
 const sumSolo = solo.reduce((a, b) => a + b, 0);
 // INFORMATIONAL, not pass/fail. Near-perfect additivity is CORRECT for a surface
@@ -177,7 +183,7 @@ const additivity = maxCool / sumSolo;
 /* ── 3d. canopy dose-response — the most directly citable calibration anchor ── */
 // WRI India: each +10% tree cover ≈ −0.3 °C. Measure the canopy actually added
 // by the trees lever, then compare our ΔT against that dose-response.
-const treedLayers = M.applyInterventions(base, { ...ZERO, trees: 50 }, spatial);
+const treedLayers = M.applyInterventions(base, { ...ZERO, trees: 50 }, spatial, CLIMATE.parkRadiusM);
 let vegBefore = 0, vegAfter = 0;
 for (let i = 0; i < N2; i++) { vegBefore += base.veg[i]; vegAfter += treedLayers.veg[i]; }
 const canopyAddedPct = 100 * (vegAfter - vegBefore) / N2;
@@ -191,12 +197,12 @@ const expectedByWRIair = 0.3 * (canopyAddedPct / 10);
 /* ── 4. cost-effectiveness ordering ────────────────────────────────────────── */
 const perDeg = (iv) => {
   const p = M.currentParams(scen(iv));
-  const dT = baseMean - M.eqMean(M.applyInterventions(base, iv, spatial), p);
-  const cost = M.computeCost(iv, spatial);
+  const dT = baseMean - M.eqMean(M.applyInterventions(base, iv, spatial, CLIMATE.parkRadiusM), p);
+  const cost = M.computeCost(iv, spatial, COSTS);
   return dT > 0.01 ? (cost / 1e7) / dT : Infinity;   // ₹ crore per °C
 };
 check(
-  'Facade vs cool-roof cost per m²', M.COST.facadeM2 / M.COST.roofM2, 40, 80, '×',
+  'Facade vs cool-roof cost per m²', COSTS.facadeM2 / COSTS.roofM2, 40, 80, '×',
   'Indian HAP practice leads with cool roofs: ₹9,500/m² facade vs ₹150/m² roof coating',
 );
 // Cost per DEGREE is now enormous for facades — correctly so, since the
@@ -209,8 +215,8 @@ console.log(`\n  [note] ₹ crore per °C — cool roofs ${roofCr.toFixed(1)}, f
 /* ── 5. score behaviour ────────────────────────────────────────────────────── */
 const scoreOf = (iv) => {
   const p = M.currentParams(scen(iv));
-  const layers = M.applyInterventions(base, iv, spatial);
-  return M.greenScore(M.computeGreenG(layers), baseMean - M.eqMean(layers, p), M.computeCost(iv, spatial));
+  const layers = M.applyInterventions(base, iv, spatial, CLIMATE.parkRadiusM);
+  return M.greenScore(M.computeGreenG(layers), baseMean - M.eqMean(layers, p), M.computeCost(iv, spatial, COSTS));
 };
 check('Score at zero intervention', scoreOf(ZERO), 0, 10, '/100', 'doing nothing should score near zero');
 check('Score at full intervention', scoreOf(MAXED), 0, 100, '/100', 'bounded by construction');

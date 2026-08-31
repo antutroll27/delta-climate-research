@@ -27,7 +27,11 @@ const ward = (id) => ({
 
 test('paired wire results transfer static render assets only once per known key', () => {
   const result = {
-    a: ward('ballygunge'), b: ward('baruipur'),
+    /* Area KEYS, the shape that actually crosses the worker boundary. The asset key
+       is `${dataVersion}:${ward}`, so these strings carry the `/` separator through
+       `toPairedWireResult` and back — a spelling that changed on one side only would
+       throw "Missing paired render asset" at runtime, not at compile time. */
+    a: ward('in/kolkata/ballygunge'), b: ward('in/kolkata/baruipur'),
     forcing: { id: 'delta-screening-reference-v1', status: 'fallback-reference', label: 'Reference', source: 'test', referenceLocation: null, referenceDate: null, values: {} },
     settledAt: '2026-01-01T00:00:00.000Z', contract: 'paired-coverage-v1',
   };

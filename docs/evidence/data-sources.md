@@ -189,6 +189,52 @@ placed/scaled from the CHM, receipted as "modelled, not measured" · status: shi
 fallback noted: Kenney/Quaternius CC0 low-poly trees (`https://kenney.nl/assets`,
 `https://quaternius.com/`).
 
+**Poly Haven sky domes (image-based lighting for the OBOS 3-D scene)** — two 1k Radiance `.hdr`
+environment maps, 1024×512 equirectangular · **CC0 1.0** — any purpose, commercial included, no
+attribution required (`https://polyhaven.com/license`) · fetched 2026-08-29 from
+`https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/<slug>_1k.hdr` via the asset API
+`https://api.polyhaven.com/files/<slug>`; **vendored into the repo** at `public/heat-map/sky/` — a
+third-party CDN in the render path would be a dependency we do not control and a per-visitor privacy
+leak · **role: RENDER-ONLY ambience.** They light building materials through `scene.environment`
+(PMREM-convolved); they are never `scene.background` and are never seen directly, because the three.js
+scene is a MapLibre custom layer that composites over the basemap. **They do not enter the temperature
+solve** — `sun` and `kRad` there are ward-wide scalars and there is no shade term · loaded after first
+paint, on device tier `full` only · status: shipped 2026-08-29 on `feat/obos-shell`.
+
+| | day | night |
+|---|---|---|
+| slug | `mud_road_puresky` | `kloppenheim_07_puresky` |
+| conditions | midday, overcast, sky only | night, overcast, sky only, town skyglow |
+| sha256 | `99d43df8e055fc8b8e9e4ca846c432e8d7184a15fd3f4d68f425b157cc99c03d` | `c18aa40364d1b5aa788f309f1c64d891c386e6f8e7d958c329f7470489e04f8a` |
+| bytes | 1,109,840 | 1,282,823 |
+| mean radiance (solid-angle weighted) | 0.367 | 0.249 |
+| **max / mean luminance** | **2.2** | **49** |
+| light in the brightest 0.1 % of solid angle | 0.2 % | 0.7 % |
+
+**WHY THESE TWO, AND THE NUMBER THAT DECIDED IT.** An HDRI's baked sun sits at the angle it was
+photographed at, which is not Kolkata's, and OBOS's key light is now driven by our own solar geometry —
+so a dome with a strong sun in it is a second, wrong key light fighting the right one. `max / mean`
+is that in one number: a sun or moon disc runs to hundreds of times the dome mean, an overcast dome has
+no disc at all. Measured by parsing the RGBE of the 1k files directly (eight candidates, all Poly Haven
+"pure skies" or open-sky night domes):
+
+| candidate | time / weather | max/mean | verdict |
+|---|---|---|---|
+| `mud_road_puresky` | midday, overcast | **2.2** | **adopted (day)** |
+| `overcast_soil_puresky` | afternoon, overcast | 6 | runner-up |
+| `kloofendal_overcast_puresky` | afternoon, overcast | 7 | runner-up |
+| `farm_field_puresky` | midday, partly cloudy | 28 | a visible sun |
+| `kloppenheim_07_puresky` | night, overcast, skyglow | **49** | **adopted (night)** |
+| `qwantani_night_puresky` | night, clear | 141 | bright horizon light source |
+| `rogland_clear_night` | night, clear | 215 | not sky-only; desert-brown ground bounce |
+| `satara_night_no_lamps` | night, clear, natural only | 2876 | Milky Way core; and heavy sensor noise |
+
+The night dome matters more than the day one — the 22:00 retained-heat phase is the one that looked
+worst, because it was lit by the same fixed key as noon. An **overcast** night was chosen over every
+clear-night option on the same argument: a clear night's bright spot is a moon, i.e. a directional
+source at the wrong angle, while an overcast night spreads its light across the whole cloud deck. It
+also happens to describe Kolkata at 22:00 — humid, hazy and light-polluted — rather than a desert sky.
+
 ---
 
 ## Candidate — brainstormed, not yet in the pipeline

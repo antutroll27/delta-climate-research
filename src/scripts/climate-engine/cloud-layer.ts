@@ -11,27 +11,58 @@
  * The deck sits at CLOUD.DECK_M (320 m) against a real base nearer 700 m. That
  * compression is labelled on screen, the same contract terrain.ts keeps for its ×4.
  *
- * Sprites are baked ONCE per session — they are weather, not geography — and drift
- * and opacity are transform writes only. No geometry is rebuilt after boot.
+ * Sprites are baked ONCE PER WARD and never again after that: within a ward, drift
+ * and opacity are transform writes only and no geometry is rebuilt.
+ *
+ * It used to be once per SESSION, on the argument that clouds are weather rather
+ * than geography. True of the sprites; false of the layer, because `groundAt` is
+ * geography — each shadow is seated on the drawn ground every frame — and a deck
+ * that outlived its ward went on seating them on the terrain of the ward the reader
+ * had left, by a mean of 10.7 m and a maximum of 35.3 m against a drawn relief range
+ * of about 55 m. `relief-renderer.ts` now tears the deck down with the rest of the
+ * ward's layers. The sky does not visibly change across a rebuild: the seed is
+ * fixed, so the same sprites come back, and drift reads `performance.now()` rather
+ * than an accumulator, so every cloud reappears where the old one was.
  */
 import * as THREE from 'three';
 import {
-  CLOUD, cloudFuse, fitLobes, layoutCumulus, layoutVeil,
+  CLOUD, cloudFuse, cloudShadowOffset, fitLobes, layoutCumulus, layoutVeil,
   paintCumulus, paintVeil, paintShadow, CUMULUS_ASPECT, VEIL_ASPECT,
 } from './cloud-sprites';
+
+/**
+ * The sun in the scene's frame: x east, y up, z north, pointing TOWARD it.
+ *
+ * Declared structurally rather than imported from explore/sun-lighting.ts, which
+ * sits ABOVE this module — relief-renderer.ts consumes both. `SunPlacement`
+ * satisfies this shape, so the call site passes its own sun unchanged and the
+ * dependency still points one way.
+ */
+export interface CloudSun {
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+  readonly elevationDeg: number;
+}
 
 export interface CloudLayer {
   readonly group: THREE.Group;
   /**
    * advance drift and cross-fade; seconds, cover 0..1, wind m/s, direction wind
-   * comes FROM, and whether the scene is on its night phase.
+   * comes FROM, whether the scene is on its night phase, and where the sun is.
    *
    * `night` is not cosmetic. Without it the deck draws sunlit white cumulus and
    * casts hard ground shadows at 22:00, which is a lie about where the light is
    * coming from — and this page already distinguishes the two phases everywhere
    * else it reports anything.
+   *
+   * `sun` is what places the shadows. It used to be absent, and the shadows were
+   * a fixed offset that answered to no hour of any day — see `cloudShadowOffset`.
+   * The same vector lights the scene's key, so what the deck implies about the
+   * sun and what the renderer does with it cannot drift apart.
    */
-  update(seconds: number, cover: number, windMs: number, fromDeg: number, night: boolean): void;
+  update(seconds: number, cover: number, windMs: number, fromDeg: number, night: boolean,
+    sun: CloudSun): void;
   /** key-light multiplier for this cover. Returns the SAME 0.6 coefficient the
    *  physics applies at heat-map-model.ts:371 and :394 (`sun: 1 * (1 - 0.6 * cloud)`),
    *  so what the eye infers about sunlight cannot drift from what the model computes.
@@ -109,14 +140,22 @@ export function createCloudLayer(
        seen the difference — but the docstring claims this tracks the physics, and a
        claim that is 97 % true is the kind that rots. */
     sunFactor: (cover) => 1 - cover * 0.6,
-    update(seconds, cover, windMs, fromDeg, night) {
+    update(seconds, cover, windMs, fromDeg, night, sun) {
       const fuse = cloudFuse(cover);
       /* At night there is no sun to light a cloud top or cast its shadow. The deck
          stays visible — overcast nights are a real and thermally important thing,
          which is exactly why cloud raises T_sky — but it reads as dim mass, and the
          ground shadow goes to zero rather than drawing a sunlit shape at 22:00. */
       const lit = night ? 0.42 : 1;
-      const shadowLit = night ? 0 : 1;
+      /* FADED ACROSS THE HORIZON, NOT SWITCHED AT IT. A shadow's length is
+         `height / tan(elevation)`, so the last few degrees before sunset throw it
+         kilometres out and `cloudShadowOffset` has to clamp. Clamping alone would
+         park every shadow on the field's edge at full strength; fading over the
+         same degrees means the clamp is only ever reached by something already on
+         its way to invisible. Physically it is the right direction too: a grazing
+         sun casts long, weak, diffuse shadows, not hard ones. */
+      const grazing = Math.max(0, Math.min(1, (sun.elevationDeg - 2) / 10));
+      const shadowLit = night ? 0 : grazing;
       /* met.no reports the direction wind comes FROM; cloud travels the opposite way. */
       const bear = (fromDeg + 180) * Math.PI / 180;
       const vx = Math.sin(bear), vz = Math.cos(bear);
@@ -144,8 +183,18 @@ export function createCloudLayer(
         c.ve.material.opacity = base * fuse * 0.9 * lit;
         c.ve.visible = c.ve.material.opacity > 0.004;
         const sr = c.sc * (1.1 + fuse * 0.8);
-        /* Offset along the light, and seated on the drawn ground so it follows relief. */
-        c.sh.position.set(wx - 130, groundAt(wx - 130, wz + 95) + 1.2, wz + 95);
+        /* CAST FROM THE ACTUAL SUN, and seated on the drawn ground so it follows
+           relief. Each cloud solves its own offset because the deck is 110 m
+           thick: the higher sprites throw further, which is what stops a drifting
+           sky from reading as one rigid sheet.
+           The offset is solved against a FLAT ground and the result is then seated
+           on the terrain — the same approximation the literal it replaced made.
+           Solving the true intercept would mean marching the ray against a 55 m
+           relief range under a 320 m deck, for a correction smaller than one
+           sprite's own radius. */
+        const { dx, dz } = cloudShadowOffset(c.y, sun);
+        const sx = wx + dx, sz = wz + dz;
+        c.sh.position.set(sx, groundAt(sx, sz) + 1.2, sz);
         c.sh.scale.set(sr, sr, 1);
         (c.sh.material as THREE.MeshBasicMaterial).opacity =
           base * (0.55 - fuse * 0.22) * shadowLit;

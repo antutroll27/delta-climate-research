@@ -1,3 +1,17 @@
+/**
+ * relief-renderer.ts — the 3-D city, drawn as a MapLibre custom layer.
+ *
+ * THE LIGHT IN HERE IS NOT PHYSICS. The key light now follows the real solar
+ * bearing (see `applySun`, and `sun-lighting.ts` for the frame and the domes), and
+ * the surface-temperature model still cannot see any of it: `sun` and `kRad` in
+ * the solve are ward-wide SCALARS and there is no shade term. A better-lit city
+ * moves no golden and changes no calibration. If a future reader wants the shadow
+ * to mean something thermally, the answer is in the memory: it was tried over 87
+ * ward-scenes and failed its pre-registered night placebo at p = 5.4e-07.
+ *
+ * The scene composites OVER the basemap and has no background of its own, which is
+ * why `scene.background` is never set here and the visible sky is MapLibre's.
+ */
 import type maplibregl from 'maplibre-gl';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
@@ -8,6 +22,10 @@ import { terrainDrawAt } from '../terrain.ts';
 import { createVegetationLayer, type VegetationLayer } from '../vegetation-layer.ts';
 import { createWaterLayer, type WaterLayer } from '../water-layer.ts';
 import { buildRegistry, pickBuilding, projectWard, type BuildingMeta } from './building-pick.ts';
+import {
+  imageBasedLightingAllowed, skyEnvironment, sunLighting, sunPlacement,
+  type SkyEnvironment, type SunPlacement,
+} from './sun-lighting.ts';
 import type {
   ReliefFieldUpdate,
   ReliefRenderer,
@@ -18,6 +36,9 @@ import type {
 } from './relief-contract.ts';
 
 const RING_RADII = [80, 400] as const;
+
+/** How tall a "footprints, no heights" building is: a 30 m block becomes 0.45 m. */
+const FLAT_BUILDING_SCALE = 0.015;
 
 export class ThreeReliefRenderer implements ReliefRenderer {
   readonly layer: maplibregl.CustomLayerInterface;
@@ -38,9 +59,27 @@ export class ThreeReliefRenderer implements ReliefRenderer {
   private disposed = false;
   private fieldDirty = false;
   private keyBase = 2.1;
+  private hemiBase = 1.05;
+  /** keyBase × the sun's own extinction factor; the cloud deck multiplies it again. */
+  private keyLevel = 2.1;
   private hemi!: THREE.HemisphereLight;
   private key!: THREE.DirectionalLight;
   private rim!: THREE.DirectionalLight;
+  /* ── image-based ambience, and the fields it takes to keep it off the critical
+     path. `wantedSky` is set synchronously by applySun; the fetch and the RGBE
+     parse happen off-frame; the GPU convolution happens INSIDE render(), where
+     three already owns the shared MapLibre context. See ensureEnvironment.
+
+     `convolved` holds at most two entries — one dome per phase — because the
+     diurnal chip is one click and re-running a 1.1 MB RGBE parse plus a PMREM
+     pass on every toggle is a hitch on a page that is already GPU-bound. */
+  private wantedSky: SkyEnvironment | null = null;
+  private appliedSkySlug: string | null = null;
+  private pendingSky: { slug: string; texture: THREE.DataTexture } | null = null;
+  private convolved = new Map<string, THREE.WebGLRenderTarget>();
+  private skyFailed = new Set<string>();
+  private skyLoading = false;
+  private firstPaint = false;
   private modelTransform: { x: number; y: number; z: number; frame: ReliefWardBundle['frame'] } | null = null;
   private pickMatrix = new THREE.Matrix4();
   private northFlip = new THREE.Matrix4().makeScale(1, 1, -1);
@@ -58,7 +97,27 @@ export class ThreeReliefRenderer implements ReliefRenderer {
   private visual: ReliefVisualState = {
     mode: 'relief', environment: 'dark', tintMode: 1, grow: 1,
     overlayOpacity: 0.5, live: null, phase: 'peak',
+    /* Replaced by heat-map-app's own computation on the setVisualState it makes
+       immediately after construction. A real solstice-noon sun rather than a zero
+       vector, so a renderer that somehow never got one is still lit from a place
+       that exists rather than from nowhere. */
+    sun: sunPlacement(13, 172),
   };
+  /**
+   * WHAT THE LAYER TREE HAS TURNED OFF, kept here rather than in the caller.
+   *
+   * `rebuildWard` discards the city mesh and the vegetation group and builds new
+   * ones on every ward switch, and a new mesh is visible and full height. Held in
+   * the caller, four switches would silently revert on the next switch — the
+   * checkbox still ticked, the layer back on the map. `applyLayerState` is called
+   * at the end of the rebuild, which is the one place that can be true.
+   *
+   * The defaults are the state the instrument boots in, which is what
+   * `scope/layers.ts` declares as `defaultOn` for these four. They agree because
+   * the tree renders the map's initial state; if they ever disagree the tree is
+   * lying about the map on first paint, before anything has been clicked.
+   */
+  private layers = { trees: true, canopy: true, buildings: true, extruded: true };
 
   constructor(private options: ReliefRendererOptions) {
     const n = options.simulationGridSize;
@@ -118,9 +177,50 @@ export class ThreeReliefRenderer implements ReliefRenderer {
     this.tint.value = state.tintMode;
     if (this.overlay) (this.overlay.material as THREE.ShaderMaterial).uniforms.uOp.value = state.overlayOpacity;
     if (environmentChanged || this.studio.value !== (state.environment === 'studio' ? 1 : 0)) this.applyEnvironment(state.environment);
+    else this.applySun(state.sun);
   }
 
-  setVegetationVisible(v: boolean): void { this.veg?.setVisible(v); this.options.map.triggerRepaint(); }
+  setVegetationVisible(v: boolean): void {
+    this.layers.trees = v;
+    this.veg?.setVisible(v);
+    this.options.map.triggerRepaint();
+  }
+
+  setCanopyVisible(v: boolean): void {
+    this.layers.canopy = v;
+    this.veg?.setCanopyVisible(v);
+    this.options.map.triggerRepaint();
+  }
+
+  setBuildingsVisible(v: boolean): void {
+    this.layers.buildings = v;
+    if (this.city) this.city.visible = v;
+    this.options.map.triggerRepaint();
+  }
+
+  setBuildingsExtruded(v: boolean): void {
+    this.layers.extruded = v;
+    this.applyExtrusion();
+    this.options.map.triggerRepaint();
+  }
+
+  /**
+   * Flat is a SCALE, not a rebuild.
+   *
+   * The extrusion depth is baked into the merged geometry — one `ExtrudeGeometry`
+   * per building, welded into a single mesh — so "draw these as footprints" cannot
+   * be a cheaper geometry without rebuilding all of it on every toggle. Scaling the
+   * mesh's y is the same operation the grow animation already performs in the
+   * vertex shader (`transformed.y *= gE`), about the same origin, so a flattened
+   * city sits exactly where a mid-grow city does.
+   *
+   * Not zero: a zero-height extrusion collapses the side walls onto the roof and
+   * the merged normals go degenerate, which reads as z-fighting rather than as a
+   * plan. A thin slab keeps the outline lit and legible.
+   */
+  private applyExtrusion(): void {
+    if (this.city) this.city.scale.y = this.layers.extruded ? 1 : FLAT_BUILDING_SCALE;
+  }
 
   setSelection(selection: ReliefSelection): void {
     const building = selection.building;
@@ -164,6 +264,10 @@ export class ThreeReliefRenderer implements ReliefRenderer {
     this.coolingLine?.geometry.dispose();
     (this.coolingLine?.material as THREE.Material | undefined)?.dispose?.();
     this.facade.dispose(); this.heatTexture.dispose();
+    this.pendingSky?.texture.dispose(); this.pendingSky = null;
+    for (const target of this.convolved.values()) target.dispose();
+    this.convolved.clear();
+    if (this.scene) this.scene.environment = null;
     this.renderer?.dispose();
     this.scene?.clear();
     this.scene = null;
@@ -173,8 +277,13 @@ export class ThreeReliefRenderer implements ReliefRenderer {
     if (this.disposed || this.scene) return;
     this.scene = new THREE.Scene();
     this.scene.scale.set(1, 1, -1);
-    this.hemi = new THREE.HemisphereLight(0xbfe2e8, 0x0a1518, 1.05); this.scene.add(this.hemi);
-    this.key = new THREE.DirectionalLight(0xffffff, 2.1); this.key.position.set(0.4, 1, 0.35); this.scene.add(this.key);
+    this.hemi = new THREE.HemisphereLight(0xbfe2e8, 0x0a1518, this.hemiBase); this.scene.add(this.hemi);
+    /* No position and no intensity here on purpose. `applyEnvironment` at the end
+       of this method sets both, through `applySun`, from the computed solar
+       bearing — and the constant that used to sit here, `position.set(0.4, 1,
+       0.35)`, was the bug: a 64°-high sun in the north-east that never moved,
+       while the compass dial reported the real one in the south-west. */
+    this.key = new THREE.DirectionalLight(0xffffff, this.keyBase); this.scene.add(this.key);
     this.rim = new THREE.DirectionalLight(0x6fcad6, 0.5); this.rim.position.set(-0.5, 0.4, -0.5); this.scene.add(this.rim);
     this.camera = new THREE.Camera();
     this.renderer = new THREE.WebGLRenderer({ canvas: map.getCanvas(), context: gl as WebGL2RenderingContext, antialias: true });
@@ -225,11 +334,21 @@ export class ThreeReliefRenderer implements ReliefRenderer {
         this.options.reducedMotion ? 0 : performance.now() / 1000,
         this.visual.live.cloud / 100, this.visual.live.wind, this.visual.live.windFrom ?? 0,
         this.visual.phase === 'night',
+        /* THE SAME SUN THAT AIMS THE KEY LIGHT, so the deck's shadows and the
+           scene's lighting cannot disagree about where the light is coming from.
+           They used to: the key followed the hour and the shadows were a literal. */
+        this.visual.sun,
       );
-      this.key.intensity = this.keyBase * this.clouds.sunFactor(this.visual.live.cloud / 100);
+      /* keyLevel already carries the sun's height; cloud attenuates what is left.
+         It was `keyBase` here, which threw away the elevation term every frame the
+         live ambient existed — i.e. every frame — and would have left the 22:00
+         phase lit by a sun that had set. */
+      this.key.intensity = this.keyLevel * this.clouds.sunFactor(this.visual.live.cloud / 100);
     }
     this.renderer.resetState();
+    this.consumePendingSky();
     this.renderer.render(this.scene, this.camera);
+    if (!this.firstPaint) { this.firstPaint = true; this.ensureEnvironment(); }
     if (this.grow.value < 1 || this.fieldDirty) { this.fieldDirty = false; this.options.map.triggerRepaint(); }
   }
 
@@ -268,16 +387,41 @@ export class ThreeReliefRenderer implements ReliefRenderer {
     if (this.water) { this.scene.remove(this.water.mesh); this.water.dispose(); this.water = null; }
     const water = createWaterLayer(bundle.water, this.grow, (x, y) => terrainDrawAt(bundle.terrain, x, y));
     if (water) { this.water = water; this.scene.add(water.mesh); }
-    if (!this.clouds) {
-      this.clouds = createCloudLayer((x, y) => terrainDrawAt(bundle.terrain, x, y));
-      this.scene.add(this.clouds.group);
-    }
+    /* REBUILT LIKE EVERY OTHER LAYER HERE, and it used to be the one exception.
+       `if (!this.clouds)` built the deck once, on the first ward, and never again —
+       but the deck closes over `terrainDrawAt(bundle.terrain, …)` and calls it every
+       frame to seat each shadow on the ground, so after any ward switch the shadows
+       sat on the PREVIOUS ward's terrain. Between the shipped terrains that is a
+       mean |Δ| of 10.7 m and a maximum of 35.3 m, against a drawn relief range of
+       about 55 m: an error the same size as the thing it is drawn on, and silent.
+
+       THE RE-BAKE IS THE PRICE AND IT IS THE RIGHT ONE. Seven canvas textures are
+       painted per ward instead of per session, beside a rebuild that already
+       re-extrudes several thousand buildings and waits on a network fetch. Nothing
+       moves on screen: the seed is fixed, so the same sky is baked, and drift is a
+       function of `performance.now()` rather than of an accumulator, so every cloud
+       reappears exactly where the old one was. */
+    if (this.clouds) { this.scene.remove(this.clouds.group); this.clouds.dispose(); this.clouds = null; }
+    const clouds = createCloudLayer((x, y) => terrainDrawAt(bundle.terrain, x, y));
+    this.clouds = clouds; this.scene.add(clouds.group);
     if (this.roads) { this.scene.remove(this.roads.mesh); this.roads.dispose(); this.roads = null; }
     const roads = createRoadLayer(bundle.roads, this.grow, (x, y) => terrainDrawAt(bundle.terrain, x, y));
     if (roads) { this.roads = roads; this.scene.add(roads.mesh); }
     if (this.veg) { this.scene.remove(this.veg.group); this.veg.dispose(); this.veg = null; }
     const veg = createVegetationLayer(bundle.veg, this.grow, (x, y) => terrainDrawAt(bundle.terrain, x, y));
     if (veg) { this.veg = veg; this.scene.add(veg.group); }
+    /* LAST, AND IT HAS TO BE LAST. Everything above is newly constructed and
+       therefore visible and full height; this is where the four switches the layer
+       tree owns are put back on. */
+    this.applyLayerState();
+  }
+
+  /** Re-apply the layer switches to whatever `rebuildWard` has just constructed. */
+  private applyLayerState(): void {
+    if (this.city) this.city.visible = this.layers.buildings;
+    this.applyExtrusion();
+    this.veg?.setVisible(this.layers.trees);
+    this.veg?.setCanopyVisible(this.layers.canopy);
   }
 
   private displaceGround(field: ReliefWardBundle['terrain'], sizeM: number): void {
@@ -315,16 +459,139 @@ export class ThreeReliefRenderer implements ReliefRenderer {
     this.scene.add(this.rings);
   }
 
+  /**
+   * The two basemaps' light. Colours and BASE levels only — the sun scales them.
+   *
+   * Split from `applySun` deliberately: this answers "which map am I on", that
+   * answers "what time is it", and folding them together is how a phase change
+   * would quietly reset the Clay palette (or an environment switch would relight
+   * a night scene as noon).
+   */
   private applyEnvironment(environment: ReliefVisualState['environment']): void {
     const studio = environment === 'studio'; this.studio.value = studio ? 1 : 0;
     if (!this.scene) return;
     if (studio) {
-      this.hemi.color.set(0xffffff); this.hemi.groundColor.set(0xd8d2c8); this.hemi.intensity = 1.45;
-      this.keyBase = 1.7; this.key.intensity = this.keyBase; this.rim.intensity = 0.12;
+      this.hemi.color.set(0xffffff); this.hemi.groundColor.set(0xd8d2c8);
+      this.hemiBase = 1.45; this.keyBase = 1.7; this.rim.intensity = 0.12;
     } else {
-      this.hemi.color.set(0xbfe2e8); this.hemi.groundColor.set(0x0a1518); this.hemi.intensity = 1.05;
-      this.keyBase = 2.1; this.key.intensity = this.keyBase; this.rim.intensity = 0.5;
+      this.hemi.color.set(0xbfe2e8); this.hemi.groundColor.set(0x0a1518);
+      this.hemiBase = 1.05; this.keyBase = 2.1; this.rim.intensity = 0.5;
     }
+    this.applySun(this.visual.sun);
+  }
+
+  /**
+   * POINT THE KEY LIGHT AT THE SUN THE CONSOLE IS ALREADY REPORTING.
+   *
+   * This is the whole point of the change. The key was created at a fixed
+   * `position.set(0.4, 1, 0.35)` and never moved — a 64°-high sun in the NORTH-EAST
+   * — while the compass dial two hundred pixels away read 231° / 71° up, the
+   * SOUTH-WEST. The vector arrives already in this scene's axes (+x east, +y up,
+   * +z north); `sun-lighting.ts` derives that frame from this file's own geometry
+   * builder, and a unit test reads the bearing back out of it.
+   *
+   * A directional light's `position` is a DIRECTION here, not a place: the target
+   * defaults to the origin, and only the direction from position to target is used.
+   * So a unit vector is exactly right and its magnitude is free.
+   *
+   * NO SHADOWS ARE CAST, and that is not an oversight. `castShadow` stays off
+   * because a shadow on this scene would be read as the model's shade term, and
+   * there is none — per-building shadow was tested over 87 ward-scenes and failed
+   * its pre-registered night placebo (p = 5.4e-07). The light says where the sun
+   * is. It does not claim the simulation knows.
+   */
+  private applySun(sun: SunPlacement): void {
+    if (!this.scene) return;
+    const lighting = sunLighting(sun.elevationDeg);
+    this.key.position.set(sun.x, sun.y, sun.z);
+    this.keyLevel = this.keyBase * lighting.keyFactor;
+    this.key.intensity = this.keyLevel;
+    /* Below the horizon the key is zero and the hemisphere takes over, which is
+       both what happens outdoors and what stops the 22:00 phase going black. */
+    this.hemi.intensity = this.hemiBase * lighting.fillFactor;
+    this.scene.environmentIntensity = lighting.environmentIntensity;
+    this.wantedSky = skyEnvironment(sun.elevationDeg);
+    this.ensureEnvironment();
+  }
+
+  /**
+   * Fetch the ambience dome — late, optionally, and never on the critical path.
+   *
+   * THE GATES, each for its own reason:
+   *  · `firstPaint` — 1.1 MB must not compete with the city's own first frame.
+   *  · `imageBasedLightingAllowed` — tier `full` only. A coarse pointer, <= 4 GB or
+   *    <= 6 cores lands at tier 1 and renders the same scene without it.
+   *  · `convolved` — the phase chip is one click, so a dome already convolved is
+   *    re-applied rather than re-fetched and re-filtered.
+   *  · `skyFailed` — a miss is remembered, so a 404 costs one request and not one
+   *    per frame. Ambience is optional by construction; the scene is already lit.
+   *
+   * The GPU half does NOT happen here. `PMREMGenerator` runs a render pass, and
+   * this three.js renderer shares MapLibre's GL context — doing that outside the
+   * custom layer's own render callback leaves MapLibre's state where it did not
+   * put it. So this stops at a parsed `DataTexture` and `render()` converts it.
+   */
+  private ensureEnvironment(): void {
+    if (!this.firstPaint || this.disposed || !this.scene) return;
+    if (!imageBasedLightingAllowed(this.options.deviceTier())) return;
+    const want = this.wantedSky;
+    if (!want || want.slug === this.appliedSkySlug || this.skyFailed.has(want.slug)) return;
+    /* Already parsed and waiting for the next frame to convolve it. Without this
+       the `finally` below re-entered before `consumePendingSky` had run and
+       fetched the same 1.1 MB a second time — measured, two requests per dome. */
+    if (this.pendingSky?.slug === want.slug) return;
+    const held = this.convolved.get(want.slug);
+    if (held) { this.applyEnvironmentMap(want.slug, held); return; }
+    if (this.skyLoading) return;
+    this.skyLoading = true;
+    void (async () => {
+      try {
+        /* HDRLoader, not RGBELoader: the latter is a deprecated alias of it as of
+           three r180 and warns on construction. Same Radiance parser. */
+        const { HDRLoader } = await import('three/examples/jsm/loaders/HDRLoader.js');
+        const texture = await new HDRLoader().loadAsync(want.url);
+        if (this.disposed) { texture.dispose(); return; }
+        texture.mapping = THREE.EquirectangularReflectionMapping;
+        this.pendingSky?.texture.dispose();
+        this.pendingSky = { slug: want.slug, texture };
+        this.options.map.triggerRepaint();
+      } catch (error) {
+        this.skyFailed.add(want.slug);
+        console.warn('Optional sky ambience unavailable:', error);
+      } finally {
+        this.skyLoading = false;
+        this.ensureEnvironment();
+      }
+    })();
+  }
+
+  /** The GPU half of the above, inside the frame where three owns the context. */
+  private consumePendingSky(): void {
+    const pending = this.pendingSky;
+    if (!pending || !this.scene) return;
+    this.pendingSky = null;
+    const pmrem = new THREE.PMREMGenerator(this.renderer);
+    const target = pmrem.fromEquirectangular(pending.texture);
+    pmrem.dispose();
+    pending.texture.dispose();
+    this.convolved.get(pending.slug)?.dispose();
+    this.convolved.set(pending.slug, target);
+    /* Only if it is STILL the one wanted: a fast phase toggle can land a dome the
+       reader has already switched away from, and applying it would put a night sky
+       on a noon scene until the next chip click. */
+    if (this.wantedSky?.slug === pending.slug) this.applyEnvironmentMap(pending.slug, target);
+  }
+
+  /**
+   * `environment`, NEVER `background`. The scene composites over the basemap as a
+   * MapLibre custom layer, so a background would paint the dome over the map tiles
+   * and the sky above the horizon would stop being MapLibre's — see `maplibreSky`.
+   */
+  private applyEnvironmentMap(slug: string, target: THREE.WebGLRenderTarget): void {
+    if (!this.scene) return;
+    this.scene.environment = target.texture;
+    this.appliedSkySlug = slug;
+    this.options.map.triggerRepaint();
   }
 
   private makeFacade(): THREE.MeshStandardMaterial {

@@ -2,7 +2,7 @@ import type { RoadsData, WardData } from '../heat-map-model.ts';
 import type { DeliveredQuantities } from '../scenario/coverage.ts';
 import type { PairedScenarioState } from '../scenario/scenario-state.ts';
 import { CANONICAL_GRID_VERSION, HEAT_METRICS_VERSION } from '../types.ts';
-import type { WardId } from '../wards.ts';
+import type { AreaKey } from '../scope/registry.ts';
 import type { CompareReferenceForcing } from './reference-forcing.ts';
 
 export type MetricValue =
@@ -30,7 +30,13 @@ export interface WardRenderAsset {
 }
 
 export interface WardScenarioResult {
-  ward: WardId;
+  /* An area KEY, and the same one on both sides of the worker boundary: this
+     interface is the wire contract, so `ward` is what `toPairedWireResult` posts
+     and `fromPairedWireResult` reads back. Changing the spelling on one side only
+     would fail at RUNTIME — a render asset filed under `ward-geometry-v1:ballygunge`
+     and looked up as `ward-geometry-v1:in/kolkata/ballygunge` throws "Missing paired
+     render asset" — which is why the type lives here and not in either half. */
+  ward: AreaKey;
   wardData: WardData;
   roads: RoadsData;
   field: Float32Array;
@@ -86,7 +92,7 @@ export type PairedWorkerResponse =
 
 export const PAIRED_DATA_VERSION = 'ward-geometry-v1' as const;
 
-export function wardRenderAssetKey(ward: WardId, dataVersion = PAIRED_DATA_VERSION): string {
+export function wardRenderAssetKey(ward: AreaKey, dataVersion = PAIRED_DATA_VERSION): string {
   return `${dataVersion}:${ward}`;
 }
 

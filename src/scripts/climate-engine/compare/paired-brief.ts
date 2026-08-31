@@ -1,5 +1,5 @@
-import { fmtCr } from '../heat-map-model.ts';
-import { WARDS } from '../wards.ts';
+import { fmtMoney } from '../money.ts';
+import { resolve, requireCosts } from '../scope/resolve.ts';
 import { createPairedScenarioClient } from './paired-client.ts';
 import type { PairedResult, WardScenarioResult } from './paired-protocol.ts';
 import { parsePairedScenario, serializePairedScenario } from '../scenario/scenario-url.ts';
@@ -23,11 +23,20 @@ export function mountPairedBrief(): () => void {
   const client = createPairedScenarioClient();
 
   const writeWard = (slot: 'a' | 'b', result: WardScenarioResult) => {
-    set(`[data-value="${slot}-name"]`, WARDS[result.ward].name);
+    /* `resolve`, not `WARD_MAP`: the map is keyed by bare id (so a key reads back
+       `undefined`) and its `name` carries `<em>` markup that `textContent` would
+       print verbatim. Same reasoning as paired-controller.ts. */
+    const scope = resolve(result.ward);
+    set(`[data-value="${slot}-name"]`, scope.area.name);
     set(`[data-value="${slot}-baseline"]`, `${result.baselineMeanC.toFixed(1)}°C`);
     set(`[data-value="${slot}-scenario"]`, `${result.scenarioMeanC.toFixed(1)}°C`);
     set(`[data-value="${slot}-cooling"]`, `−${result.coolingC.toFixed(1)}°C`);
-    set(`[data-value="${slot}-cost"]`, `₹${fmtCr(result.capitalCost)}`);
+    /* The SAME `Costs` paired-core priced this figure with — `runWard` resolves the
+       area's own scope and calls `requireCosts` before `computeCost`, and this
+       resolves the same key to the same frozen object. So the label cannot name a
+       currency other than the one the arithmetic used. The ₹ that stood here could,
+       and did: it was a literal, and it survived the country becoming data. */
+    set(`[data-value="${slot}-cost"]`, fmtMoney(result.capitalCost, requireCosts(scope)));
   };
   root.setAttribute('aria-busy', 'true');
   void client.run(state).then((result: PairedResult) => {

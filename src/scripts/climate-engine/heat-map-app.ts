@@ -9,21 +9,21 @@
  * `mountHeatMap()` returns a dispose fn (call it on astro:before-swap).
  */
 import maplibregl from 'maplibre-gl';
-import { WARD_MAP, wardLatLon, formatLatLon } from '../../data/wards.ts';
+import { WARD_MAP, wardLatLon, formatLatLon, type Ward } from '../../data/wards.ts';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { DEFAULT_PARAMS, greenReferenceContrastC, type SimLayers, type SimParams } from './types';
+import { DEFAULT_PARAMS, greenReferenceContrastC, type ClimateConstants, type SimLayers, type SimParams } from './types';
 import { detectHeatCaps } from './caps';
 import { createGpuHost, createStaticHost, createWorkerHost } from './sim-host';
 import type { HeatSimHost, HeatSimRequest, HeatSimSnapshot } from './sim-protocol';
 import * as M from './heat-map-model';
 import { ACCURACY, SPATIAL, HEIGHTS, bandLabel, unmeasuredNote, isTransitionHour, TRANSITION_RMSE_K } from './accuracy';
-import { solarElevationFactor, solarAzimuthDeg, solarElevationDeg, solarDayHours } from './sky';
+import { solarElevationFactor, solarDayHours } from './sky';
 import { loadLayerManifest } from './provenance';
 import * as U from './dc-urs';
 import { applyScenario } from './dc-urs-scenario';
 import type { DcUrsInputs } from './dc-urs-inputs';
 import { rasterWardBase } from './ward-raster';
-import { loadWardSurface, loadCanopyRaster, type WardSurface, type CanopyRaster } from './surface-raster';
+import { loadAreaSurface, loadCanopyRaster, type WardSurface, type CanopyRaster } from './surface-raster';
 import { asTreesFile } from './vegetation-layer';
 import { buildRegistry, type BuildingMeta } from './explore/building-pick';
 import { selectPhase } from './phase-select';
@@ -37,17 +37,108 @@ import { findCoolingSurfaces, nearestCooling, type CoolingSurfaces } from './exp
 import { createWardSession } from './ward-session';
 import { createExploreFrameScheduler } from './explore/frame-scheduler';
 import { exploreRuntimeBudget, nextFrameDelayMs, type ExploreDeviceTier } from './explore/runtime-budget';
-import { createCoreFieldLayer } from './explore/core-field-layer';
+import {
+  dayOfYearUtc, maplibreSky, representativeSolarHour, sunPlacement,
+} from './explore/sun-lighting';
+import { createCoreFieldLayer, CORE_FIELD_SOURCE } from './explore/core-field-layer';
 import type { ReliefRenderer, ReliefWardBundle, ReliefVisualState } from './explore/relief-contract';
 import {
   attachReliefCustomLayer, isReliefLayerAttached, shouldShowRelief,
 } from './explore/relief-lifecycle';
-import { addCoverage, removeCoverage, IMAGE_LAYER_ID } from './streetview/coverage-layer';
+import { addCoverage, removeCoverage, COVERAGE_SOURCE, IMAGE_LAYER_ID } from './streetview/coverage-layer';
 import { nearestImage } from './streetview/nearest-image';
+import { OPEN_AREA_EVENT, type OpenAreaDetail } from './shell/console-shell.ts';
+import { SELECT_SYNC_EVENT } from './shell/select-field.ts';
+import { isLayerId, type LayerId } from './scope/layers.ts';
+import { resolve, requireCosts } from './scope/resolve.ts';
+import { areaPageTitle, areaPageDescription } from './scope/page-meta.ts';
+import { fmtMoney } from './money.ts';
+import { areaPath, paths, cityPaths } from './scope/paths.ts';
+import { areaRefusal } from './scope/reachability.ts';
+import { isAreaKey, splitKey, type AreaKey } from './scope/registry.ts';
+import { toLegacyWard } from './scope/legacy.ts';
 
 // Ward set lives in src/data/wards.ts so widening beyond three is a data change,
 // not a code change (dc-urs-spec.md §1).
 const WARDS = WARD_MAP;
+
+/**
+ * The area this page opens on — READ FROM THE PAGE, never assumed here.
+ *
+ * This replaces `const INITIAL_AREA = 'in/kolkata/ballygunge'`. The constant was
+ * correct while there was exactly one heat-map URL; there are now six, one per
+ * registered area, and an instrument that picks its own ward would open Ballygunge
+ * on all of them — under the right title, with the right coordinate in the static
+ * markup, and Ballygunge's buildings underneath. Every readout on the page would
+ * agree with every other one and the whole page would be wrong, which is the
+ * failure shape this codebase keeps paying for.
+ *
+ * IT THROWS RATHER THAN FALLING BACK, and that is the point. A `?? DEFAULT_AREA`
+ * here would rebuild exactly the defect above: a page whose `data-area` failed to
+ * render, or rendered a slug the registry does not know, would open Kolkata and say
+ * nothing. The throw is loud, lands in the page's own boot promise, and leaves the
+ * server-rendered markup — the name, the coordinate, the tier — standing and
+ * truthful rather than overwritten with another area's numbers.
+ *
+ * `isAreaKey` and not a cast: `data-area` is an untrusted string as far as this
+ * module is concerned, whatever generated it.
+ */
+function bootArea(): AreaKey {
+  const declared = document.querySelector('.stage')?.getAttribute('data-area');
+  if (!isAreaKey(declared)) {
+    throw new Error(
+      `heat-map-app: the page declares data-area="${declared}", which is not a registered `
+      + 'area key. The route states which area it is; the instrument must not guess one');
+  }
+  return declared;
+}
+
+/**
+ * The ward-table row for an area key. ONE HELPER, because there are eight sites.
+ *
+ * `WARD_MAP` IS KEYED BY BARE ID and typed `Record<string, Ward>`, so
+ * `WARDS[state.ward]` type-checks perfectly against a hierarchical key, returns
+ * `undefined`, and the next property access throws at RUNTIME — a build that is
+ * green and a page that is blank. That is the whole reason this exists rather than
+ * eight open-coded `splitKey` calls: one place to be wrong, not eight.
+ *
+ * Typed `Ward` rather than `Ward | undefined`, exactly as the indexed access it
+ * replaces was: every reachable call site sits downstream of `loadArea`'s guard
+ * below, which refuses an area with no ward row before anything else can run.
+ */
+const wardOf = (key: AreaKey): Ward => WARDS[splitKey(key).area];
+
+/**
+ * The BARE area id — for the three places that address something OUTSIDE this app.
+ *
+ * The rule, applied per site: an `AreaKey` is right for anything internal (caches,
+ * loaders, the scope), and the bare id is required by anything that already indexes
+ * by file stem or slug — `dc-urs-inputs.json`'s `wards` object, the `/api/wards/:id`
+ * route, and the `big-{id}` DOM ids the stage authors against `src/data/wards.ts`.
+ *
+ * FOUR IN TASK 6, THREE NOW. Compare's deep link was the fourth, and it is no
+ * longer a bare-id site by coincidence of what its reader accepted: it goes through
+ * `toLegacyWard`, which is a stated URL-compatibility alias rather than a slug that
+ * happens to fit. The distinction matters the day a second city is selectable — the
+ * three sites below still need a bare id and would break, loudly, while the deep
+ * link starts emitting a full key on its own.
+ */
+const areaOf = (key: AreaKey): string => splitKey(key).area;
+
+/**
+ * The city's park-cooling radius and fallback air temperature, and the country's
+ * warming pathway — FOLLOWING THE OPEN AREA, not pinned to one.
+ *
+ * Task 5 pinned this to `in/kolkata/ballygunge` and said Task 7 would make it
+ * derive; Task 6 got there first, because `paths()` needs an `AreaKey` and so
+ * `state.ward` had to become one here. `state.climate` is now re-resolved on every
+ * area switch, so a second city's constants arrive with its geometry rather than
+ * Kolkata's silently outliving the switch.
+ */
+
+/* COSTS used to be declared here, under a docblock this one replaces. It moved into
+   `mountHeatMap` with the boot area it is resolved from; the explanation moved with
+   it, rather than being left behind pointing at the next declaration down. */
 const { SIM_N, RESET_BURST } = M;
 /**
  * `dark` is OUR style now — OBOS Slate, built by scripts/build-map-style.mjs from
@@ -83,15 +174,50 @@ const STYLES = { dark: '/heat-map/styles/obos-slate.json', studio: 'https://tile
 const REPLACED_BUILDING_GEOMETRY = ['building', 'building_3d'] as const;
 
 export function mountHeatMap(): () => void {
+  /* The route's area, resolved once, before anything reads geometry. Everything
+     below that used to name `INITIAL_AREA` names this instead. */
+  const INITIAL_AREA = bootArea();
+  /**
+   * The boot area's whole scope, resolved once.
+   *
+   * THE CITY AND COUNTRY HALVES CANNOT CHANGE UNDER THIS MOUNT, which is what makes
+   * one resolution honest rather than a cached guess: the tab strip is built from
+   * `areaKeysInCity`, so every area reachable without a page load shares this city
+   * and therefore this country. Only the AREA half moves, and the things that
+   * follow the area — `state.climate`, the ward row, the artefact URLs — are
+   * re-resolved per switch in `loadWard`.
+   */
+  const SCOPE = resolve(INITIAL_AREA);
+  /**
+   * The unit prices, refused ONCE here rather than defaulted deeper — see the
+   * docblock above `requireCosts`. It moved inside the mount when the boot area
+   * did: costs are a COUNTRY fact and every area reachable from this page's tabs
+   * shares one country, so this is still resolved once per mount rather than per
+   * switch. It becomes reachable — as a throw — the first time a page for a
+   * country with no adopted cost basis mounts an instrument, and at that point the
+   * right answer is a readout saying the cost basis is unavailable, not a zero.
+   */
+  const COSTS = requireCosts(SCOPE);
   const el = (id: string) => document.getElementById(id);
   // Per-layer provenance ("data receipts") panel, fetched on-demand per ward
   // (loadLayerManifest caches). null → degrade to the static credit line.
   const escHtml = (s: string) => s.replace(/[&<>"]/g, (c) => (
     { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] ?? c);
+  /* WHICH RENDER IS THE CURRENT ONE. It used to be called from one place, on the
+     opening click, and could not overlap itself; it is now also called on a ward
+     switch, and two strip clicks in quick succession start two fetches whose
+     resolution order is the network's business rather than the reader's. Without
+     this the SECOND ward's panel could be overwritten by the FIRST ward's manifest
+     arriving late — the same wrong-ward panel this call site was added to fix,
+     rebuilt out of a race. `svThumbGen` guards the building card's street photo the
+     same way, for the same reason. */
+  let srcGen = 0;
   const renderSources = async () => {
     const panel = el('srcPanel');
     if (!panel) return;
+    const gen = ++srcGen;
     const manifest = await loadLayerManifest(state.ward);
+    if (gen !== srcGen) return;
     if (!manifest) {
       panel.innerHTML = '<h4>Data receipts</h4><div class="src-row"><div class="s">Provenance manifest unavailable.</div></div>';
       return;
@@ -117,7 +243,13 @@ export function mountHeatMap(): () => void {
 
   /* ── state ── */
   interface State {
-    ward: string; phase: 'peak' | 'night'; path: string; iv: M.Interventions;
+    /* AN AREA KEY, never a bare slug: it is what `paths()` and `resolve()` take,
+       and typing it is what makes every loader call site compiler-checked. The
+       four sites that need the bare id say so and call `areaOf`. */
+    ward: AreaKey; phase: 'peak' | 'night'; path: string; iv: M.Interventions;
+    /* Carried on the state so `currentParams(state)` stays one argument and the
+       physics never has to be told which ward is open. See CLIMATE above. */
+    climate: ClimateConstants;
     sunNow: number | null;
     /* Non-null forces the 1-in-100 air temperature in place of the observed one.
        A scenario override, not a phase — see phase-select.ts. */
@@ -129,19 +261,55 @@ export function mountHeatMap(): () => void {
     dcurs: Record<string, DcUrsInputs> | null;
   }
   
-  const state: State = { ward: 'ballygunge', phase: 'peak', path: '2025', iv: { trees: 0, roof: 0, parks: 0, facades: 0 }, sunNow: 0, heatTairC: null, base: null, baselineMean: 0, live: null, spatial: null, greenG: 0, lastMean: {}, dcurs: null };
+  /* THE OPENING PATHWAY IS THE SCOPE'S, not this file's.
+     `path: '2025'` was a literal here, and '2025' is a key in INDIA's table. A
+     country whose adopted projection is keyed differently would have booted on a
+     scenario its own table does not contain, and `pathwayDelta` — which fails
+     closed, correctly — would have thrown on the first simulation rather than the
+     first click. `?? ''` covers the country that has adopted no projection at all:
+     an empty table answers zero to every key, so the value is never read. */
+  const state: State = { ward: INITIAL_AREA, phase: 'peak', path: SCOPE.pathway.initial ?? '', iv: { trees: 0, roof: 0, parks: 0, facades: 0 }, climate: SCOPE.climate, sunNow: 0, heatTairC: null, base: null, baselineMean: 0, live: null, spatial: null, greenG: 0, lastMean: {}, dcurs: null };
   const wardSession = createWardSession();
   let appDisposed = false;
   let mode: 'relief' | 'iso' = 'relief', env: 'dark' | 'studio' = 'dark';
-  let vegOn = true;
+  /* `vegOn` and `streetOn` WERE HERE, and they are gone rather than kept in step.
+     Each was a third copy of one fact — the chip's `.on` class said it, the
+     renderer held it, and this variable said it again — and the layer tree would
+     have made a fourth. The chip and the box are now painted from the value being
+     applied, and the renderer remembers what it has been told, so there is nothing
+     left for a variable to hold that is not already held somewhere that can be
+     read back. */
+  /* THE THERMAL FIELD'S OWN SWITCH is the exception, and it is one because the
+     field has no single object to hold its state: it is drawn twice — as the
+     shader overlay in relief mode and as the core canvas raster in isotherm mode —
+     and both are decided in `syncRendererVisibility`/`reliefVisualState`, which
+     read this rather than being pushed at. */
+  let surfaceOn = true;
+  /* WHETHER STREET-LEVEL COVERAGE IS ON, kept here for the same reason `surfaceOn`
+     is: a basemap style swap throws the layer away and something has to know
+     whether to put it back. It is written in exactly one place — `setStreetVisible`
+     — so it cannot disagree with the map. */
   let streetOn = false;
   const MLY_TOKEN = (import.meta.env.PUBLIC_MAPILLARY_TOKEN as string | undefined) ?? '';
 
   /* ── MapLibre basemap ── */
   const map = new maplibregl.Map({
     container: mapContainer, style: STYLES.dark,
-    center: [WARDS.ballygunge.lon, WARDS.ballygunge.lat], zoom: 15.3, pitch: 60, bearing: -18,
+    center: [wardOf(INITIAL_AREA).lon, wardOf(INITIAL_AREA).lat], zoom: 15.3, pitch: 60, bearing: -18,
     antialias: true, attributionControl: false, pixelRatio: Math.min(devicePixelRatio, 1.75),
+    /* THE DRAG HANDLER ALREADY ASKED FOR THIS AND WAS BEING IGNORED. Two hundred
+       lines below, the pitch drag clamps to `Math.min(78, ...)`; MapLibre's default
+       `maxPitch` is 60, so it silently clamped again and the last 18 degrees were
+       unreachable. Two places disagreeing about one number, with the quieter one
+       winning.
+
+       It is also the only tilt at which the sky is ever seen. MEASURED against
+       4.7.1's own sky shader: the horizon sits at `height/2 + getHorizon()` pixels,
+       which at pitch 60 is 1.24 screen-heights — above the top of the frame, so
+       `setSky` paints exactly zero pixels. It first appears at ~67 deg and reaches
+       a fifth of the frame at 80. The DEFAULT camera is untouched at 60: every
+       easeTo, flyTo and reset in this file still says 60 or 0. */
+    maxPitch: 78,
   });
   map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right');
   /* A distance reference. The instrument shows a 1.4 km window at a pitch that
@@ -157,7 +325,7 @@ export function mountHeatMap(): () => void {
   let reliefReady: Promise<void> | null = null;
   let reliefWard: ReliefWardBundle | null = null;
   let currentField: Float32Array | null = null;
-  let currentWardSizeM = WARDS.ballygunge.footprintM;
+  let currentWardSizeM = wardOf(INITIAL_AREA).footprintM;
   let tintMode = 1;
   let growProgress = 1;
   let registry: BuildingMeta[] = [];
@@ -217,6 +385,23 @@ export function mountHeatMap(): () => void {
   }
 
   /**
+   * WHERE THE SUN IS — computed HERE, once, for everything that shows it.
+   *
+   * The compass marker, the sun line, the 3-D scene's key light and the colour of
+   * the visible sky are four renderings of ONE fact, and until this existed they
+   * were not: the dial read a real bearing while `relief-renderer.ts` lit the city
+   * from a hard-coded `position.set(0.4, 1, 0.35)` that had never moved. A second
+   * call to `sunPlacement` anywhere in this file re-opens exactly that gap, and
+   * tests/unit/heat-sun-lighting.test.mjs counts them.
+   */
+  function currentSun() {
+    const lat = wardOf(state.ward)?.lat ?? 22.55;
+    const doy = dayOfYearUtc(now());
+    const hour = representativeSolarHour(state.sunNow, wardSolarHour(), state.phase);
+    return { hour, lat, doy, placement: sunPlacement(hour, doy, lat) };
+  }
+
+  /**
    * Put the sun on the dial, at its real bearing for the phase being shown.
    *
    * READ-ONLY, AND THAT IS THE DESIGN. The instrument is steady-state at a
@@ -231,18 +416,66 @@ export function mountHeatMap(): () => void {
    */
   function syncSunBearing(): void {
     if (!sunEl) return;
-    const lat = WARDS[state.ward]?.lat ?? 22.55;
-    /* Which hour the dial should describe. `sunNow` non-null means the live
-       clock drives the scene; otherwise the phase is one of the two fixed
-       representative hours the engine actually solves. */
-    const hour = state.sunNow !== null && state.sunNow !== undefined
-      ? wardSolarHour()
-      : (state.phase === 'night' ? 22 : 13);
-    const doy = Math.floor((now() - Date.UTC(new Date(now()).getUTCFullYear(), 0, 0)) / 86_400_000);
-    const up = solarElevationFactor(hour, doy, lat) > 0;
-    sunEl.classList.toggle('is-below', !up);
-    if (up) sunEl.setAttribute('transform', `rotate(${solarAzimuthDeg(hour, doy, lat)} 24 24)`);
-    writeSunLine(hour, doy, lat, up);
+    const sun = currentSun();
+    sunEl.classList.toggle('is-below', !sun.placement.up);
+    if (sun.placement.up) sunEl.setAttribute('transform', `rotate(${sun.placement.azimuthDeg} 24 24)`);
+    writeSunLine(sun);
+    syncSky();
+  }
+
+  /**
+   * THE VISIBLE SKY, WHICH IS MAPLIBRE'S AND NOT THREE'S.
+   *
+   * The 3-D scene is a custom layer with no background of its own — it composites
+   * over the basemap — so a three.js skybox would paint over the map tiles. The sky
+   * above the horizon therefore has to come from `map.setSky`, and it is coloured
+   * by the same solar elevation that aims the key light.
+   *
+   * THE `appliedSky` GUARD IS LOAD-BEARING, NOT AN OPTIMISATION. This is reached
+   * from `syncSunBearing` <- `syncCompass` <- `placeCard`, which is bound to
+   * `map.on('render')`. `setSky` writes the style and asks for a repaint, so an
+   * unguarded call here would ask for a repaint from inside the repaint it was
+   * called by, forever. Comparing the produced spec (not the inputs) also means a
+   * palette edit still lands on the very next call.
+   */
+  let appliedSky = '';
+  /* Whether MapLibre has fired `load`. The one thing `syncSky` is allowed to wait
+     on — see the note inside it for what happens when it does not. */
+  let mapHasLoaded = false;
+  function syncSky(): void {
+    const spec = maplibreSky(
+      currentSun().placement.elevationDeg,
+      (state.live?.cloud ?? 0) / 100,
+      env,
+    );
+    const key = JSON.stringify(spec);
+    if (key === appliedSky) return;
+
+    /* NOT UNTIL THE MAP HAS FIRED `load`, AND THE try/catch HERE WAS NOT ENOUGH.
+
+       MEASURED, and it cost an evening: calling `setSky` on a map that has not yet
+       fired `load` leaves MapLibre 4.7.1 in a state where THAT EVENT NEVER FIRES.
+       It does not throw — so the catch that used to sit here caught nothing and
+       reported nothing. `map.once('load', …)` is what calls `loadWard`, so the
+       whole instrument never started: no ward fetch, no buildings, every readout
+       frozen at its server-rendered em-dash, and not one error in the console.
+
+       The page LOOKS like it is still loading, which is why it survived review and
+       a full e2e suite — eleven tests waited twenty seconds each for a reading that
+       was never coming and reported it as a timeout rather than as a dead map.
+
+       `isStyleLoaded()` IS NOT THE GATE, and that was the first fix I tried.
+       `style.load` fires BEFORE `load`, so re-applying from `onStyleLoad` poisons
+       it just the same. The gate has to be `load` itself.
+
+       NOTHING IS LOST BY WAITING. `onMapLoad` calls this again, and `onStyleLoad`
+       clears `appliedSky` and calls it after every style swap — so a refusal here
+       is a call deferred to the first moment the map can take it, not a call
+       dropped. `appliedSky` is written only when the call actually happens, or a
+       refusal would mark the spec applied and the re-apply would skip it. */
+    if (!mapHasLoaded) return;
+    appliedSky = key;
+    map.setSky(spec);
   }
 
   /** Local solar hours -> HH:MM, for a readout that is explicitly solar time. */
@@ -265,13 +498,17 @@ export function mountHeatMap(): () => void {
    * relabelling them as clock time here would be a quiet 23-minute lie at Kolkata's
    * longitude.
    */
-  function writeSunLine(hour: number, doy: number, lat: number, up: boolean): void {
+  function writeSunLine(sun: ReturnType<typeof currentSun>): void {
     if (!sunLineEl || !sunTextEl) return;
-    const day = solarDayHours(doy, lat);
+    const day = solarDayHours(sun.doy, sun.lat);
     if (!day) { sunLineEl.setAttribute('hidden', ''); return; }   // polar; never here, but honest
     sunLineEl.removeAttribute('hidden');
-    sunTextEl.textContent = up
-      ? `sun ${Math.round(solarAzimuthDeg(hour, doy, lat))}° · ${Math.round(solarElevationDeg(hour, doy, lat))}° up · sets ${hhmm(day.sunset)}`
+    /* The bearing and height are READ OFF the same placement the key light was
+       aimed with, not recomputed from (hour, doy, lat) again. Identical inputs
+       could not have disagreed numerically — but "the readout and the light are
+       the same object" is a stronger statement than "they agree today". */
+    sunTextEl.textContent = sun.placement.up
+      ? `sun ${Math.round(sun.placement.azimuthDeg)}° · ${Math.round(sun.placement.elevationDeg)}° up · sets ${hhmm(day.sunset)}`
       : `sun below horizon · rises ${hhmm(day.sunrise)}`;
     sunNoteEl?.setAttribute('title',
       'Solar geometry only, in local solar time. The surface-temperature model uses a '
@@ -372,7 +609,7 @@ export function mountHeatMap(): () => void {
     /* The building's own coordinate, recovered by inverting the transform that
        created the local frame — so this IS the Overture centroid, not a value
        re-derived from the drawn position. `cz` is the row's northward y. */
-    const ll = wardLatLon(WARDS[state.ward], b.cx, b.cz);
+    const ll = wardLatLon(wardOf(state.ward), b.cx, b.cz);
     const svThumb = el('svThumb');
     if (svThumb && MLY_TOKEN) {
       const gen = ++svThumbGen;
@@ -808,8 +1045,18 @@ export function mountHeatMap(): () => void {
   function reliefVisualState(): ReliefVisualState {
     return {
       mode, environment: env, tintMode, grow: growProgress,
-      overlayOpacity: opBase * Math.min(1, growProgress * 1.6),
+      /* THE SURFACE LAYER'S OFF STATE, expressed through the knob that was already
+         here rather than through a second one beside it. `uOp` is the overlay
+         shader's only alpha term, so zero is genuinely nothing drawn — and the
+         grow animation keeps running underneath, so ticking the box back on
+         restores the field at whatever opacity it should be at rather than
+         replaying the entrance. */
+      overlayOpacity: surfaceOn ? opBase * Math.min(1, growProgress * 1.6) : 0,
       live: state.live, phase: state.phase,
+      /* The same computation the compass dial reads, handed to the renderer rather
+         than recomputed there — see currentSun. It aims the key light and nothing
+         else: the solve has never had a shade term and still does not. */
+      sun: currentSun().placement,
     };
   }
 
@@ -835,7 +1082,12 @@ export function mountHeatMap(): () => void {
 
   function syncRendererVisibility(): void {
     const showRelief = shouldShowRelief(reliefIsAttached());
-    coreField.setVisible(!showRelief);
+    /* Two conditions, and they answer different questions: `showRelief` decides
+       WHICH renderer draws the thermal field, `surfaceOn` decides WHETHER it is
+       drawn at all. Folding them together — hiding the core field whenever the
+       layer is off and forgetting the mode — would leave the 2-D raster painted
+       under the 3-D scene in relief mode. */
+    coreField.setVisible(!showRelief && surfaceOn);
     if (relief && map.getLayer(relief.layer.id)) {
       map.setLayoutProperty(relief.layer.id, 'visibility', showRelief ? 'visible' : 'none');
     }
@@ -860,6 +1112,11 @@ export function mountHeatMap(): () => void {
       const instance = createReliefRenderer({
         map, reducedMotion: reduceMotion,
         simulationGridSize: SIM_N, terrainGridSize: TERRAIN_N,
+        /* READ LATE, not captured. `runtimeTier` is still 'balanced' at this point
+           on every boot — it is promoted inside `initSimHost`, which runs from
+           `resetSim` after the ward loads, while this runs off `capsReady` directly.
+           Passing the value measured ZERO `.hdr` requests on a tier-2 machine. */
+        deviceTier: () => runtimeTier,
       });
       relief = instance;
       attachReliefLayer();
@@ -867,6 +1124,11 @@ export function mountHeatMap(): () => void {
       if (currentField) instance.updateField({ field: currentField, coolingMask: cooling?.mask ?? null, ramp });
       instance.setVisualState(reliefVisualState());
       instance.setSelection({ building: selected, nearestCooling: nearestCool });
+      /* The renderer boots with every layer on, because a mesh it has just built
+         is visible. Three.js is a deferred import and the tree is interactive
+         while it downloads, so anything unticked in the meantime has to be
+         re-stated the moment there is something to state it to. */
+      syncLayersToRenderer();
       syncRendererVisibility();
       map.triggerRepaint();
     }).catch((error) => {
@@ -900,28 +1162,72 @@ export function mountHeatMap(): () => void {
      pushing undefined into the physics — the swallow-to-empty posture the roads
      and water loaders take. */
   let heatwaveP99: number | null = null;
-  async function loadHeatwave() {
-    if (heatwaveP99 != null) return;
+  /* WHICH CITY'S FILE the percentile above came from. `heatwave-percentiles.json`
+     sits beside the ward artefacts under a name that reads as global, and it is
+     not: it carries a `city` key saying "Kolkata". Memoising on the value alone —
+     which is what `if (heatwaveP99 != null) return;` did — would carry one city's
+     1-in-100 day across a switch into another, where it would compute cleanly and
+     read as that city's own extreme. */
+  let heatwaveFrom: string | null = null;
+  async function loadHeatwave(key: AreaKey) {
+    const url = cityPaths(key).heatwave;
+    /* A CITY THAT DECLARES NO FILE GETS NO PERCENTILE, never Kolkata's. Null is
+       already the "Heatwave button is inert" signal — `selectPhase` refuses the
+       phase rather than pushing undefined into the physics — so the scenario
+       disables itself instead of inheriting somebody else's heat. */
+    if (url === null) { heatwaveP99 = null; heatwaveFrom = null; return; }
+    if (heatwaveFrom === url && heatwaveP99 != null) return;
     try {
-      const r = await fetch('/heat-map/data/heatwave-percentiles.json');
-      if (r.ok) heatwaveP99 = (await r.json())?.tmaxC?.p99 ?? null;
-    } catch { heatwaveP99 = null; }
+      const r = await fetch(url);
+      if (r.ok) { heatwaveP99 = (await r.json())?.tmaxC?.p99 ?? null; heatwaveFrom = url; }
+    } catch { heatwaveP99 = null; heatwaveFrom = null; }
   }
 
-  async function loadDcUrs() {
-    if (state.dcurs) return;
+  /* Same story, same fix: dc-urs-inputs.json's `wards` object lists exactly
+     ballygunge, baruipur and barrackpore, so it is a CITY artefact wearing a
+     global name. A city declaring none leaves `state.dcurs` null, which the score
+     already renders as "resilience inputs unavailable". */
+  let dcursFrom: string | null = null;
+  async function loadDcUrs(key: AreaKey) {
+    const url = cityPaths(key).dcUrs;
+    if (url === null) { state.dcurs = null; dcursFrom = null; return; }
+    if (dcursFrom === url && state.dcurs) return;
     try {
-      const r = await fetch('/heat-map/data/dc-urs-inputs.json');
+      const r = await fetch(url);
       state.dcurs = (await r.json()).wards as Record<string, DcUrsInputs>;
-    } catch { state.dcurs = null; }
+      dcursFrom = url;
+    } catch { state.dcurs = null; dcursFrom = null; }
   }
 
-  async function loadWard(name: string) {
-    if (!WARDS[name]) return;
+  async function loadWard(name: AreaKey) {
+    /* The refusal comes BEFORE the session is opened and before the chip says
+       "Loading …", so an unreachable area cannot leave a spinner running for a
+       fetch that was never going to happen — and it now SPEAKS.
+
+       Two bare `return`s stood here: one for an area with no row in
+       src/data/wards.ts (the flyTo below would take the map to NaN), one for an
+       area the registry says ships no artefacts (nine guaranteed 404s, seven of
+       which swallow their own failure, leaving an empty map that looks loaded).
+       Both were right to refuse and neither said so, so a tab press against such an
+       area was indistinguishable from a click that missed: same map, same readings,
+       same highlight. `areaRefusal` holds both tests and the sentence for each. */
+    const refusal = areaRefusal(name);
+    if (refusal !== null) {
+      const chip = el('loadchip');
+      if (chip) { chip.textContent = refusal; chip.classList.add('on'); }
+      return;
+    }
+    const P = paths(name);
+    /* Null here is unreachable — `areaRefusal` returns a sentence for exactly that
+       case — and the check is what narrows `AreaPaths | null` for the nine uses
+       below without a `!`, which would be a promise to the compiler with nothing
+       keeping it. */
+    if (P === null) return;
+    const w = wardOf(name);
     const token = wardSession.begin(name);
     if (!token) return;
     const load = el('loadchip');
-    if (load) { load.textContent = `Loading ${WARDS[name].name}…`; load.classList.add('on'); }
+    if (load) { load.textContent = `Loading ${w.name}…`; load.classList.add('on'); }
     await new Promise(r => setTimeout(r, 30));
     if (!wardSession.isCurrent(token)) return;
     const optional = async <T>(task: Promise<T>, fallback: T): Promise<T> => {
@@ -938,45 +1244,50 @@ export function mountHeatMap(): () => void {
       const [d, terrain, water, wardSurface, roads, labels, provenance, canopy, trees] = await Promise.all([
         cache[name]
           ? Promise.resolve(cache[name])
-          : fetch(`/heat-map/data/${name}.json`, { signal: token.signal }).then(async (r) => {
+          : fetch(P.ward, { signal: token.signal }).then(async (r) => {
             if (!r.ok) throw new Error(`Ward data unavailable (${r.status}).`);
             return r.json() as Promise<M.WardData>;
           }),
         terrainCache[name] !== undefined
           ? Promise.resolve(terrainCache[name])
-          : optional(fetch(`/heat-map/data/${name}-terrain.json`, { signal: token.signal })
+          : optional(fetch(P.terrain, { signal: token.signal })
             .then(async (r) => r.ok ? asTerrainField(await r.json()) : null), null),
         waterCache[name]
           ? Promise.resolve(waterCache[name])
-          : optional(fetch(`/heat-map/data/${name}-water.json`, { signal: token.signal })
+          : optional(fetch(P.water, { signal: token.signal })
             .then(async (r) => r.ok ? await r.json() as M.WaterData : { polys: [] }), { polys: [] }),
         surfaceCache[name]
           ? Promise.resolve(surfaceCache[name])
-          : loadWardSurface(name, token.signal),
+          : loadAreaSurface(name, token.signal),
         roadsCache[name]
           ? Promise.resolve(roadsCache[name])
-          : optional(fetch(`/heat-map/data/${name}-roads.json`, { signal: token.signal })
+          : optional(fetch(P.roads, { signal: token.signal })
             .then(async (r) => r.ok ? await r.json() as M.RoadsData : { ways: [] }), { ways: [] }),
         labelCache[name]
           ? Promise.resolve(labelCache[name])
-          : optional(fetch(`/heat-map/data/${name}-road-labels.geojson`, { signal: token.signal })
+          : optional(fetch(P.labels, { signal: token.signal })
             .then(async (r) => r.ok ? await r.json() : EMPTY_LABELS), EMPTY_LABELS),
         provCache[name] !== undefined
           ? Promise.resolve(provCache[name])
-          : optional(fetch(`/heat-map/data/${name}-provenance.json`, { signal: token.signal })
+          : optional(fetch(P.provenance, { signal: token.signal })
             .then(async (r) => r.ok ? await r.json() as { src: string[]; confidence: number[] } : null), null),
         canopyCache[name] !== undefined
           ? Promise.resolve(canopyCache[name])
           : optional(loadCanopyRaster(name, token.signal).then((c) => { canopyCache[name] = c; return c; }), null),
-        optional(fetch(`/heat-map/data/${name}-trees.json`, { signal: token.signal })
+        optional(fetch(P.trees, { signal: token.signal })
           .then(async (r) => (r.ok ? asTreesFile(await r.json()) : null)), null),
       ]);
       if (!wardSession.isCurrent(token)) return;
       cache[name] = d; terrainCache[name] = terrain; waterCache[name] = water;
       surfaceCache[name] = wardSurface; roadsCache[name] = roads; labelCache[name] = labels; provCache[name] = provenance;
       canopyCache[name] = canopy;
-      void loadDcUrs(); void loadHeatwave();
-      const w = WARDS[name]; state.ward = name; updateCompareHref(); updateReportHref();
+      void loadDcUrs(name); void loadHeatwave(name);
+      /* The scope moves WITH the area. `state.climate` is what `currentParams`
+         and `applyInterventions` read, so leaving it behind would run the new
+         city's geometry through the old city's fallback temperature and
+         park-cooling radius — cleanly, and with a plausible number out. */
+      state.ward = name; state.climate = resolve(name).climate;
+      projectWard();
 
     /* Rebuild the pick registry from the SAME rows the extrusions come from, and
        drop any selection: building #1759 in Ballygunge is a different building in
@@ -1000,7 +1311,11 @@ export function mountHeatMap(): () => void {
     };
     coreField.attach(w, d.sizeM, relief && map.getLayer(relief.layer.id) ? relief.layer.id : undefined);
     relief?.setWard(reliefWard);
-    relief?.setVegetationVisible(vegOn);
+    /* `setWard` has just rebuilt the city mesh and the tree group, both of them
+       new and therefore fully on. This was one line — the trees — for as long as
+       the trees were the only layer with a switch; it is now every row of the
+       tree, read back off the checkboxes. */
+    syncLayersToRenderer();
     syncRendererVisibility();
     /* The exaggeration is stated wherever the optional ground relief is drawn. */
     const terrLab = el('terrLab');
@@ -1010,22 +1325,26 @@ export function mountHeatMap(): () => void {
        the same ward means the resilience score reads. loadWardSurface verifies
        that pairing before either reaches the model, so the map and the score
        cannot end up drawn from different vintages of the same measurement. */
-    surfaceCache[name] ??= await loadWardSurface(name);
+    surfaceCache[name] ??= await loadAreaSurface(name);
     const { means, surface } = surfaceCache[name];
     state.base = rasterWardBase(d, means, surface, canopy, water);
-    if (!roadsCache[name]) { try { roadsCache[name] = await (await fetch(`/heat-map/data/${name}-roads.json`)).json(); } catch { roadsCache[name] = { ways: [] }; } }
+    /* The reveal belongs on this line and not on a later await: everything below
+       is optional artefacts, and a roads or labels fetch that hangs must not hold
+       back a control whose data is already in hand. */
+    paintWardTools();
+    if (!roadsCache[name]) { try { roadsCache[name] = await (await fetch(P.roads)).json(); } catch { roadsCache[name] = { ways: [] }; } }
     /* Street names for this ward. Separate artefact, separate frame: these are
        lon/lat and go to MapLibre directly, so they never pass through our metre
        frame and act as a standing check on the geometry that does. */
     if (!labelCache[name]) {
-      labelCache[name] = await fetch(`/heat-map/data/${name}-road-labels.geojson`)
+      labelCache[name] = await fetch(P.labels)
         .then(r => (r.ok ? r.json() : EMPTY_LABELS))
         .catch(() => EMPTY_LABELS);
     }
     (map.getSource(LABEL_SOURCE) as maplibregl.GeoJSONSource | undefined)
       ?.setData(labelCache[name] as never);
     if (provCache[name] === undefined) {
-      provCache[name] = await fetch(`/heat-map/data/${name}-provenance.json`)
+      provCache[name] = await fetch(P.provenance)
         .then(r => (r.ok ? r.json() : null)).catch(() => null);
     }
     state.spatial = M.buildSpatial(d, state.base, roadsCache[name]);
@@ -1045,8 +1364,18 @@ export function mountHeatMap(): () => void {
 
     setHTML('pname', w.name); setText('pzone', w.zone); setText('coord', w.coord);
     setText('bcount', `${d.count.toLocaleString()} real buildings`);
-    document.querySelectorAll('#tabs .tab').forEach(t => t.classList.toggle('on', (t as HTMLElement).dataset.w === name));
-    document.querySelectorAll('#strip .ward').forEach(t => t.classList.toggle('on', (t as HTMLElement).dataset.w === name));
+    /* `data-w` IS A BARE WARD ID in HeatMapStage.astro, so it is compared against
+       the bare id and never against the key. Comparing it to `name` would match
+       nothing at all: the strip would lose its highlight on the first switch and
+       the page would look like it had failed to change ward.
+       The header tabs used to be synced here too, from the same `activeId`. They
+       were a third area switcher beside the scope switcher's Area select and this
+       strip, and they are gone; the strip stays because it is the only control
+       that puts the wards side by side — though see `refreshStats`, which fills
+       `big-{id}` for the OPEN ward only, so the other tiles hold an em-dash until
+       they have been visited. */
+    const activeId = areaOf(name);
+    document.querySelectorAll('#strip .ward').forEach(t => t.classList.toggle('on', (t as HTMLElement).dataset.w === activeId));
     if (load) { load.textContent = 'Building ward…'; load.classList.remove('on'); }
 
     const dur = relief ? 1400 : 0;
@@ -1066,7 +1395,7 @@ export function mountHeatMap(): () => void {
       if (!wardSession.isCurrent(token)) return;
       wardSession.fail(token);
       console.warn(`Ward ${name} could not load:`, error);
-      if (load) load.textContent = `${WARDS[name].name} could not load.`;
+      if (load) load.textContent = `${w.name} could not load.`;
     }
   }
 
@@ -1081,7 +1410,7 @@ export function mountHeatMap(): () => void {
     refreshNowSun();
     const p = M.currentParams(state);
     state.baselineMean = M.eqMean(state.base, { ...p, Q: DEFAULT_PARAMS.Q });
-    const layers = M.applyInterventions(state.base, state.iv, state.spatial);
+    const layers = M.applyInterventions(state.base, state.iv, state.spatial, state.climate.parkRadiusM);
     state.greenG = M.computeGreenG(layers);
     const request: HeatSimRequest = {
       generation: ++simGeneration,
@@ -1112,11 +1441,18 @@ export function mountHeatMap(): () => void {
      shape — the ring goes red and says so rather than pulsing green forever. */
   const AGE_FRESH_MIN = 90, AGE_STALE_MIN = 360;
 
-  /* IANA zone, not a fixed offset. A hardcoded +5:30 happens to be right for
-     India, which observes no DST — but it is right by luck, and it is the first
-     thing that breaks when a European or East Asian ward is added. Intl reads
-     the zone database and handles the transitions we do not have yet. */
-  const WARD_TZ = 'Asia/Kolkata';
+  /* THE CITY'S ZONE, FROM THE SCOPE — not a constant here.
+     This line used to read `const WARD_TZ = 'Asia/Kolkata'` under a comment
+     arguing that a fixed +5:30 offset "is the first thing that breaks when a
+     European or East Asian ward is added". The argument was right and the fix was
+     half-done: a hardcoded ZONE breaks one city sooner than a hardcoded offset
+     does, and it breaks quietly — Dubai would have shown Kolkata's hour, weekday
+     and meridiem under a tooltip claiming the live reading was valid at an IST
+     time, with nothing anywhere to disagree with it.
+     `SCOPE`, not `resolve(state.ward)`: the zone is a CITY fact and the tab strip
+     never leaves the city, so re-reading it per switch would only add a second
+     place for it to be wrong. */
+  const WARD_TZ = SCOPE.city.tz;
   const wardClock = new Intl.DateTimeFormat('en-GB', {
     timeZone: WARD_TZ, hour: '2-digit', minute: '2-digit', hour12: false,
   });
@@ -1174,6 +1510,32 @@ export function mountHeatMap(): () => void {
     return Number.isFinite(t) ? Math.max(0, (now() - t) / 60000) : null;
   }
 
+  /**
+   * THE WARD'S OWN CONTROLS, REVEALED BY THE WARD.
+   *
+   * These used to hang off `state.live` inside `paintClock`, under a comment
+   * saying both are "meaningless until a ward has actually loaded" — which is
+   * true, and is not the condition that was written. A ward loads from its own
+   * artefacts; the live reading is a separate fetch to met.no that supplies the
+   * boundary conditions and nothing else. So met.no being down, rate-limiting, or
+   * answering through a proxy that 500s took away two features that never
+   * depended on it: the canopy the ward already shipped, and ground-truth
+   * photography already downloaded. The map drew the trees; the control that
+   * toggles them was hidden.
+   *
+   * `state.base` IS the ward: it is assigned once the ward's rasters resolve, and
+   * a refused or failed load leaves it null, which is exactly when these should
+   * stay hidden. The Mapillary token stays ANDed in for street view, so the
+   * feature still disappears cleanly when it has tree-shaken out of the build.
+   */
+  function paintWardTools(): void {
+    const ready = state.base !== null;
+    const vegw = el('vegw');
+    if (vegw) vegw.hidden = !ready;
+    const svw = el('svw');
+    if (svw) svw.hidden = !(ready && MLY_TOKEN);
+  }
+
   function paintClock() {
     /* The shell is a <div> since the tile split into two buttons; casting it to
        HTMLButtonElement compiled fine and would have been a lie the day someone
@@ -1182,15 +1544,6 @@ export function mountHeatMap(): () => void {
     if (!btn) return;
     const L = state.live;
     btn.hidden = !L;
-    /* The vegetation widget rides the same reveal gate as the clock: both are
-       meaningless until a ward has actually loaded. */
-    const vegw = el('vegw');
-    if (vegw) vegw.hidden = !L;
-    /* Street-view toggle sits directly below Trees; it rides the same reveal
-       gate, ANDed with the Mapillary token so it never appears when the
-       feature has tree-shaken out. */
-    const svw = el('svw');
-    if (svw) svw.hidden = !(L && MLY_TOKEN);
     if (!L) return;
 
     const mins = ageMinutes(L.validAt);
@@ -1261,9 +1614,24 @@ export function mountHeatMap(): () => void {
     const L = state.live;
     setText('liveT', L ? L.tAir.toFixed(1) : '—'); setText('liveFeel', L ? L.feels.toFixed(1) : '—');
     setText('liveRH', L ? String(Math.round(L.rh)) : '—'); setText('liveWind', L ? L.wind.toFixed(1) : '—');
-    /* The dot claims "live"; it may only do so while the reading still is. */
+    /* The dot claims "live"; it may only do so while the reading still is.
+
+       AN UNKNOWN AGE IS NOT A FRESH ONE, and this line used to say it was:
+       `mins === null || mins <= AGE_STALE_MIN` lit the dot when `ageMinutes`
+       could not date the reading at all. `paintClock` had already settled the
+       question thirty lines above — grey tile, "age —", bar emptied, under the
+       comment "Unknown age must not render as fresh: empty bar, nothing
+       claimed" — so the one element whose whole job is the word LIVE was the
+       one element exempt from the rule the rest of the tile follows. On screen
+       that read as a grey tile saying "age —" beside a pulsing green light.
+
+       `validAt` is `ts.time` copied verbatim out of the upstream body and is
+       optional in our own type, so a reshaped or truncated met.no response
+       reaches here as a COMPLETE reading whose age is unknowable. That is the
+       moment the page most needs to stop claiming currency, and it was the
+       moment it started. */
     const mins = ageMinutes(L?.validAt);
-    el('livedot')?.classList.toggle('on', !!L && (mins === null || mins <= AGE_STALE_MIN));
+    el('livedot')?.classList.toggle('on', !!L && mins !== null && mins <= AGE_STALE_MIN);
     paintClock();
   }
 
@@ -1292,8 +1660,8 @@ export function mountHeatMap(): () => void {
      "live" dot over yesterday evening's weather, while that same reading went on
      setting the simulation's boundary conditions. The freshness dial exposes the
      age; this is how a reader acts on it. */
-  async function fetchLive(name: string, force = false) {
-    const w = WARDS[name];
+  async function fetchLive(name: AreaKey, force = false) {
+    const w = wardOf(name);
     try {
       if (force || !liveCache[name]) {
         /* Through our own function, never api.met.no directly: their terms require
@@ -1320,12 +1688,20 @@ export function mountHeatMap(): () => void {
           const skew = served - Date.now();
           clockSkewMs = Math.abs(skew) > 120_000 ? skew : 0;
         }
-        const ts = (await r.json()).properties.timeseries[0];
-        const dd = ts.data.instant.details;
-        /* `ts.time` is the hour this reading is VALID FOR, which is what the
-           dial must show — not the moment we happened to fetch it. They differ
-           by up to an hour and only the former is a property of the data. */
-        liveCache[name] = { tAir: dd.air_temperature, rh: dd.relative_humidity, wind: dd.wind_speed, cloud: dd.cloud_area_fraction ?? 0, windFrom: dd.wind_from_direction, feels: M.heatIndexC(dd.air_temperature, dd.relative_humidity), validAt: ts.time };
+        /* PARSED, NOT DESTRUCTURED. This used to read the three numbers straight
+           off the body; all three are optional in met.no's schema, so a whole-but-
+           short response arrived as a complete reading holding `undefined` — which
+           made the heat field NaN and threw out of `paintLive`, costing the whole
+           ward. `asAmbient` refuses such a body, and a refusal lands on the same
+           path as an outage: `state.live` stays null, the dial says unknown rather
+           than fresh, and the ward's own controls stay up.
+
+           It also carries `validAt` — met.no's `timeseries[0].time`, the hour the
+           reading is VALID FOR rather than the moment we fetched it. Those differ
+           by up to an hour and only the first is a property of the data. */
+        const reading = M.asAmbient(await r.json());
+        if (!reading) throw new Error('met.no returned a reading with no usable numbers');
+        liveCache[name] = reading;
       }
       if (appDisposed || state.ward !== name) return;
       state.live = liveCache[name]; paintLive(); resetSim();
@@ -1440,9 +1816,23 @@ export function mountHeatMap(): () => void {
     const bins = new Array(12).fill(0);
     for (let i = 0; i < t.length; i++) { const b = Math.min(11, Math.max(0, ((t[i] - ramp[0]) / (ramp[1] - ramp[0]) * 12) | 0)); bins[b]++; }
     const mx = Math.max(...bins, 1);
-    histo?.childNodes.forEach((elm, i) => { (elm as HTMLElement).style.height = `${Math.max(4, bins[i] / mx * 100)}%`; });
+    /* AN EMPTY BIN DRAWS NOTHING, AND THAT IS THE POINT OF A DISTRIBUTION.
+       This was `Math.max(4, …)`, which gave every bin a floor whether or not any
+       cell fell in it — so a band containing NO cells and a band containing a
+       handful rendered identically. On a chart whose whole job is to show where
+       the ward's temperatures sit, "nothing here" and "a little here" being the
+       same picture is the one thing it must not do. The CSS baseline underneath
+       is what keeps an empty bin legible as a bin rather than as a gap.
+
+       The floor for a NON-empty bin stays, and is now big enough to see: one cell
+       out of thousands is still a fact, and rounding it to nothing would be the
+       opposite error. */
+    histo?.childNodes.forEach((elm, i) => {
+      const share = bins[i] / mx * 100;
+      (elm as HTMLElement).style.height = bins[i] === 0 ? '0%' : `${Math.max(7, share)}%`;
+    });
     const iv = state.iv;
-    const cost = M.computeCost(iv, state.spatial);
+    const cost = M.computeCost(iv, state.spatial, COSTS);
     const anyIv = iv.trees || iv.roof || iv.parks || iv.facades;
 
     /* ── DC-URS ────────────────────────────────────────────────────────────
@@ -1450,7 +1840,12 @@ export function mountHeatMap(): () => void {
        the sliders' modelled changes applied. The ward-mean surface temperature
        the heat field just produced feeds the thermal pillar, so the physics and
        the index describe the same scenario. */
-    const base = state.dcurs?.[state.ward];
+    /* BY THE BARE ID. `dc-urs-inputs.json`'s `wards` object is keyed by file-stem
+       ids — ballygunge, baruipur, barrackpore — so indexing it with the area key
+       returns undefined. And this lookup is OPTIONAL-CHAINED: there would be no
+       error, no warning and no 404, just a resilience panel reading "—" for ever
+       on a page whose inputs are sitting right there in the fetched object. */
+    const base = state.dcurs?.[areaOf(state.ward)];
     if (base) {
       const phaseLst = state.phase === 'night' ? { nightC: st.meanC } : { dayC: st.meanC };
       const scen = applyScenario(base, iv, anyIv ? phaseLst : undefined);
@@ -1489,7 +1884,10 @@ export function mountHeatMap(): () => void {
       el('sCool')?.classList.toggle('soft', gap.fields.includes('socioVuln'));
 
       setHTML('scoreTxt', anyIv
-        ? `${(now - U.dcUrs(base)).toFixed(1)} pts from this plan · ₹${M.fmtCr(cost)}<br>${tier.guidance}`
+        /* The symbol comes from COSTS, not from this template. It used to be a ₹
+           typed in beside the number, which meant the country half of the scope
+           knew the currency and the readout ignored it. */
+        ? `${(now - U.dcUrs(base)).toFixed(1)} pts from this plan · ${fmtMoney(cost, COSTS)}<br>${tier.guidance}`
         // `headroom` is exactly invariant to the missing input — it shifts ceiling
         // and current equally — so it needs no hedge. `withheld` only ever RISES,
         // so one word makes it true instead of understated by a quarter.
@@ -1499,8 +1897,12 @@ export function mountHeatMap(): () => void {
       setText('scoreNum', '—');
       setHTML('scoreTxt', 'resilience inputs unavailable');
     }
+    /* `lastMean` is OURS, so it is keyed by the area key like every other cache
+       here — written and read under the one shape. The DOM id beside it is NOT:
+       `big-ballygunge` is authored in HeatMapStage.astro against
+       src/data/wards.ts, so it takes the bare id. */
     state.lastMean[state.ward] = st.meanC;
-    setHTML(`big-${state.ward}`, `${st.meanC.toFixed(1)}<span>°C mean</span>`);
+    setHTML(`big-${areaOf(state.ward)}`, meanTile(st.meanC.toFixed(1)));
     /* Repaint the open building card from the SAME snapshot these stats came
        from. Without this it keeps whatever it read at selection time: move a
        slider or flip to night and the map recolours, the ward mean moves, and
@@ -1518,9 +1920,97 @@ export function mountHeatMap(): () => void {
     }
   }
 
+  /**
+   * ONE SPELLING OF A STRIP TILE — for the reading and for the blank alike.
+   *
+   * The unit `<span>` is markup HeatMapStage.astro authors, and the em-dash below
+   * is the exact state it renders a tile in before any ward has been solved. That
+   * identity is the whole claim `blankStaleWardTiles` makes: a tile this code
+   * blanks must be indistinguishable from one that was never filled, or "not
+   * computed" would read as some third state the reader has to interpret. Two
+   * literals in two places would drift the first time either is touched.
+   */
+  function meanTile(value: string) { return `${value}<span>°C mean</span>`; }
+
+  /**
+   * A SCENARIO MOVED: blank every tile it just falsified, then re-solve.
+   *
+   * WHAT THIS FIXES, MEASURED ON THE SHIPPED BUILD. `refreshStats` writes
+   * `big-{id}` for the OPEN ward only, and nothing invalidated the others when the
+   * scenario changed under them. Ballygunge at 13:00 with no trees read 40.6; plant
+   * 50 trees (39.3), open Baruipur, take the trees back out, flip to 22:00 — and
+   * the strip read `ballygunge 39.3 · baruipur 29.9`, asserting a 9.4 K gap whose
+   * honest like-for-like value was 2.4 K. The label is `°C mean` and nothing else:
+   * no hour, no intervention set, so the page never says the two numbers came from
+   * different worlds. A wrong number presented plausibly, in the one control that
+   * exists to compare wards.
+   *
+   * THE IRONY IS ONE LINE ABOVE the write, in `refreshStats`: the comment there
+   * describes fixing this exact staleness for the building card. The fix stopped
+   * short of the tiles beside it.
+   *
+   * AN EM-DASH, NOT A RECOMPUTE. Re-solving all three wards would be three solves
+   * on every slider drag. A tile reading "—" says "not computed under this
+   * scenario", which is true, and is the state the stage already renders.
+   *
+   * ON SCENARIO, NEVER ON WARD. A tile computed under the CURRENT scenario is
+   * still valid when you switch wards, and holding those two numbers beside each
+   * other is the strip's entire value — so `loadWard` must not call this.
+   *
+   * THE OPEN TILE IS SPARED AND ITS CACHE ENTRY IS NOT, which looks asymmetric and
+   * is deliberate. The tile is about to be overwritten by the solve this function
+   * ends with, so blanking it would only flicker on every drag; `state.lastMean` is
+   * read by `paintCard` for the building card's "vs ward mean" line, and a delta
+   * against a mean the scenario has just falsified is wrong in exactly the way this
+   * function exists to stop. An absent entry degrades that line to nothing —
+   * `Number.isFinite(undefined)` is false — until the solve returns.
+   */
+  function applyScenarioChange() {
+    state.lastMean = {};
+    /* The bare id, because `big-ballygunge` is authored against src/data/wards.ts
+       — the same asymmetry `refreshStats` writes the tile under. */
+    const open = `big-${areaOf(state.ward)}`;
+    document.querySelectorAll('#strip .ward .big').forEach((tile) => {
+      if (tile.id !== open) tile.innerHTML = meanTile('—');
+    });
+    resetSim();
+  }
+
   /* ── DOM helpers ── */
   function setText(id: string, v: string) { const e = el(id); if (e) e.textContent = v; }
   function setHTML(id: string, v: string) { const e = el(id); if (e) e.innerHTML = v; }
+  /**
+   * PROJECT `state.ward` ONTO EVERYTHING THAT RESTATES IT.
+   *
+   * THIS IS AN ENROLMENT LIST, and it is a function because the list got long
+   * enough that a call chain stopped being one. `updateAddressBar` and
+   * `updateStageArea` each describe themselves as "the same obligation"; so are the
+   * other four, and every one of them was added to a growing chain at a single call
+   * site inside `loadWard`. The chain's failure mode is not that it breaks — it is
+   * that a new projection gets written, checked by hand once, and never joined to
+   * it, which is how the breadcrumb and the document title came to be the only two
+   * statements of the open ward on this page that nobody had ever updated.
+   *
+   * THE MEMBERS KEEP THEIR OWN NAMES on their own lines, so `grep updateCrumb`
+   * still lands on the writer and a diff that adds a projection is one line that
+   * reads as one. One function body doing all six jobs would have saved nothing and
+   * hidden the list.
+   *
+   * `updateCompareHref` is here AND in the scenario handlers, which is right rather
+   * than duplicated: the Compare deep link restates the ward and the interventions
+   * both, so it is a member of two obligations.
+   */
+  function projectWard() {
+    updateCompareHref();
+    updateReportHref();
+    updateAddressBar();
+    updateStageArea();
+    updateScopeSwitcher();
+    updateCrumb();
+    updateDocumentMeta();
+    updateSourcesPanel();
+  }
+
   /* The card's primary action used to be a <button> with no handler anywhere in
      src/ — it had shipped to production doing nothing at all. It now points at
      the ward's own record, which is the one per-ward artefact we can actually
@@ -1528,14 +2018,241 @@ export function mountHeatMap(): () => void {
      "report" we do not generate. */
   function updateReportHref() {
     const link = el('report-link') as HTMLAnchorElement | null;
-    if (link) link.href = `/api/wards/${state.ward}/metadata.json`;
+    /* `/api/wards/[id]` is generated from src/data/wards.ts, one route per bare
+       id, so the key would produce a 404 the page has no way to notice. */
+    if (link) link.href = `/api/wards/${areaOf(state.ward)}/metadata.json`;
+  }
+
+  /**
+   * Keep the URL describing the view.
+   *
+   * Every area has its own page now, which is the whole point of the route change —
+   * a Baruipur reading can be bookmarked, sent, and cited. Switching wards by tab
+   * does NOT navigate (the map, the caches and the GPU host are reused), so without
+   * this the address bar would go on saying Ballygunge over Baruipur's buildings,
+   * and copying the URL would hand someone a different ward than the one on screen.
+   * That is precisely the failure `scope/legacy.ts` describes for Compare's deep
+   * link, one level up.
+   *
+   * `replaceState`, not `pushState`, so the history behaviour is exactly what it was
+   * before this line existed: a tab press is not a navigation and Back still leaves
+   * the tool rather than walking the wards. `paired-controller.ts:241` writes the
+   * Compare URL the same way, for the same reason.
+   */
+  function updateAddressBar() {
+    history.replaceState(null, '', `${areaPath(state.ward)}${window.location.search}${window.location.hash}`);
+  }
+
+  /**
+   * Keep `.stage[data-area]` naming the area that is actually open.
+   *
+   * IT IS NOT DECORATION — IT IS THE SEAM. shell/console-shell.ts cannot see this
+   * closure, so the attribute is how it learns which area the instrument is
+   * standing on: it decides from that whether a switch is an in-place swap or a
+   * page load, and refuses a selection equal to it as a no-op.
+   *
+   * LEFT UNWRITTEN IT FROZE AT THE SERVER-RENDERED VALUE, and the consequence was
+   * reproducible rather than rare: after switching away from the area the page
+   * loaded with, THAT AREA COULD NEVER BE SELECTED AGAIN. The handler compared the
+   * new value against a boot-time snapshot, matched, and returned silently — a
+   * dropdown naming one ward over a map showing another, with nothing said. Two
+   * hops out and back reproduced it every time.
+   *
+   * The neighbouring `updateScopeSwitcher` already names this failure — "its Area
+   * select goes on naming the ward the page was opened at" — and repaired the
+   * select's DISPLAYED value. The attribute driving the handler's LOGIC was left
+   * on the same stale footing, one layer down, where it was invisible.
+   *
+   * WRITTEN BESIDE `updateAddressBar` BECAUSE THEY ARE THE SAME OBLIGATION: both
+   * project `state.ward` outward for something that cannot read it directly, and a
+   * ward switch that updates one but not the other leaves the page disagreeing
+   * with itself about where it is.
+   */
+  function updateStageArea() {
+    document.querySelector('.stage')?.setAttribute('data-area', state.ward);
+  }
+
+  /**
+   * Keep the breadcrumb naming the area that is actually open.
+   *
+   * IT HAD NO WRITER AT ALL. `grep -rn crumb src/scripts/` found none: the crumb is
+   * rendered once by HeatMapStage.astro and an in-place switch reloads nothing, so
+   * after switching to Baruipur the page carried a bold "Ballygunge" in its top bar
+   * about two hundred pixels from a `#pname` reading "Baruipur", with the URL
+   * agreeing with the second one. Both are statements of where you are; only one of
+   * them was ever updated.
+   *
+   * `textContent`, NOT `innerHTML`. The scope registry's area name is the
+   * markup-stripped form — `#pname` is the readout that takes the ward table's
+   * `<em>`-stressed wordmark, and the crumb deliberately does not — so there is
+   * nothing here to parse and no reason to hand a registry string to the HTML
+   * parser.
+   *
+   * THE COUNTRY AND CITY CELLS ARE NOT WRITTEN, and that is a fact about the switch
+   * rather than an omission: `console-shell.ts` navigates rather than switching in
+   * place whenever a selection would cross a city or a country, so neither cell can
+   * go stale without a page load that re-renders all three.
+   */
+  function updateCrumb() {
+    const cell = el('crumbArea');
+    if (cell) cell.textContent = resolve(state.ward).area.name;
+  }
+
+  /**
+   * Keep an OPEN Data-receipts panel describing the ward that is actually open.
+   *
+   * `renderSources` had exactly one caller — the `#srcBtn` click handler, and only
+   * on its opening edge. So opening the panel and then switching ward left the
+   * heading reading "Data receipts · ballygunge" over Ballygunge's rows, on a page
+   * whose name, URL, breadcrumb and strip had all moved to Baruipur. It is
+   * self-labelled, which is the only reason it failed semi-loudly rather than
+   * silently — and a panel that names the wrong ward is worse than one that names
+   * none, because it reads as an answer.
+   *
+   * ONLY WHILE IT IS OPEN, and that is a rule rather than an optimisation: the
+   * manifest is fetched per area, so re-rendering a panel nobody is looking at would
+   * spend a request on every strip click for a view that is not on screen. A closed
+   * panel is re-rendered by the click that opens it, which is where it always was.
+   */
+  function updateSourcesPanel() {
+    const panel = el('srcPanel');
+    if (panel && !panel.hasAttribute('hidden')) void renderSources();
+  }
+
+  /**
+   * EVERY HEAD TAG THAT RESTATES THE AREA, and which of the three values it carries.
+   *
+   * A LIST RATHER THAN SEVEN ASSIGNMENTS, because the set is Base.astro's to decide
+   * and it grows: the layout already prints the title three times and the canonical
+   * URL twice, and the next social card added there would be one more stale
+   * statement nobody thought to enrol. The guard in
+   * tests/unit/heat-map-console-coherence.test.mjs reads Base.astro for every tag
+   * whose value is `{title}`, `{description}` or `{canonical}` and fails if this
+   * list does not cover it — so the enrolment is checked against the layout rather
+   * than against someone's memory of it.
+   *
+   * `document.title` is not in here because it is a property rather than an
+   * attribute; it is written beside the loop, from the same string.
+   */
+  const WARD_META: ReadonlyArray<{ sel: string; attr: string; of: 'title' | 'description' | 'url' }> = [
+    { sel: 'meta[name="description"]', attr: 'content', of: 'description' },
+    { sel: 'link[rel="canonical"]', attr: 'href', of: 'url' },
+    { sel: 'meta[property="og:title"]', attr: 'content', of: 'title' },
+    { sel: 'meta[property="og:description"]', attr: 'content', of: 'description' },
+    { sel: 'meta[property="og:url"]', attr: 'content', of: 'url' },
+    { sel: 'meta[name="twitter:title"]', attr: 'content', of: 'title' },
+    { sel: 'meta[name="twitter:description"]', attr: 'content', of: 'description' },
+  ];
+
+  /**
+   * Keep what the DOCUMENT calls itself naming the area that is actually open.
+   *
+   * NOTHING IN src/ WROTE `document.title` BEFORE THIS. Meanwhile `updateAddressBar`
+   * rewrites the URL on every switch — so `replaceState` was pairing the NEW url
+   * with the OLD title, and a bookmark taken after a switch was filed under a ward
+   * that is not on screen. The tab said Ballygunge over Baruipur's buildings, and
+   * the canonical link — the one statement in this document addressed to a crawler
+   * rather than a reader — pointed at a different page than the one rendered.
+   *
+   * THE TITLE AND DESCRIPTION COME FROM scope/page-meta.ts, which is also what the
+   * route renders at build time. Re-spelling them here would put two writers on one
+   * sentence, each correct on its own terms, and only a reader who had switched
+   * ward would ever see them disagree.
+   *
+   * THE URL IS RESOLVED AGAINST THE TAG'S OWN VALUE, never rebuilt from
+   * `location.origin`. `Astro.site` renders these absolute against the production
+   * host, and a preview or a local build served from somewhere else must keep
+   * saying what the server said — swapping only the path is what preserves that.
+   *
+   * A MISSING TAG IS SKIPPED RATHER THAN CREATED. `link[rel=canonical]` is absent
+   * on a `noindex` page by design, and an in-place switch can only ever land on an
+   * area that ships data — `tabKind` refuses the rest — so a tag that is not here
+   * is one this document is deliberately without.
+   */
+  function updateDocumentMeta() {
+    const scope = resolve(state.ward);
+    const title = areaPageTitle(scope);
+    const description = areaPageDescription(scope);
+    const path = areaPath(state.ward);
+    document.title = title;
+    for (const { sel, attr, of } of WARD_META) {
+      const node = document.head.querySelector(sel);
+      if (!node) continue;
+      if (of === 'url') {
+        const was = node.getAttribute(attr);
+        if (was) node.setAttribute(attr, new URL(path, was).toString());
+        continue;
+      }
+      node.setAttribute(attr, of === 'title' ? title : description);
+    }
+  }
+
+  /**
+   * Keep the scope switcher naming the area that is actually open.
+   *
+   * WITHOUT THIS THE CONSOLE STATES TWO WARDS AT ONCE. A click on the ward strip
+   * swaps the area in place — no page load, so nothing re-renders the switcher —
+   * and its Area select goes on naming the ward the page was opened at. That is
+   * the same wrong-record failure `updateReportHref` and `updateAddressBar` guard
+   * against, one control over, and it is worse here because the switcher is the
+   * control a reader would use to change area next.
+   *
+   * THE COUNTRY AND CITY SELECTS NEED THE OTHER HALF OF IT, and this is the part
+   * that is not obvious. ScopeSwitcher gives the option for the group you are
+   * ALREADY IN the value `current` — the whole page key, not the group's first
+   * area — precisely so that choosing "Kolkata" while standing in Barrackpore does
+   * not quietly move you to Ballygunge. That value is baked at render time, so
+   * after an in-place switch it names the previous ward: picking your own city
+   * would have walked you back to where you started. Rewriting the SELECTED
+   * option's value is what keeps that promise across a switch, and the selected
+   * option is the right one because switching in place never crosses a city — see
+   * console-shell.ts, which navigates when it would.
+   */
+  function updateScopeSwitcher() {
+    const key = state.ward;
+    document.querySelectorAll<HTMLSelectElement>('select[data-scope]').forEach((select) => {
+      if (select.dataset.scope === 'area') {
+        /* Assigned only when the option EXISTS. Setting `value` to something no
+           option carries silently clears the select to "", which reads as a
+           control that has lost its place rather than as one naming a ward. */
+        if (select.querySelector(`option[value="${key}"]`)) select.value = key;
+        return;
+      }
+      const option = select.selectedOptions[0];
+      if (option) option.value = key;
+    });
+    /* AND THEN SAY SO, because assigning `select.value` raises nothing.
+       shell/SelectField.astro draws the words the reader actually sees over the
+       top of these selects; it repaints on the select's own `change`, and there
+       is no `change` here — this is a projection of `state.ward`, not a reader
+       choosing something. Left unsaid, the switcher's VALUE would follow the ward
+       and its VISIBLE LABEL would not: the exact two-wards-at-once failure the
+       header above describes, one layer up, where it is the only part anybody can
+       see. NOT a synthetic `change`: console-shell.ts answers that one by
+       travelling, and it would be asked to travel to where it already is. */
+    document.dispatchEvent(new Event(SELECT_SYNC_EVENT));
   }
 
   function updateCompareHref() {
-    const link = el('compare-mode-link') as HTMLAnchorElement | null;
+    /* THE RAIL'S ANALYSIS SECTION, found by `data-rail` — the attribute the rail
+       declares for exactly this. It used to be `#compare-mode-link` on the Compare
+       tab in the stage header, and that tab is gone along with the rest of the
+       second navigation. A `querySelector` for `a[data-rail]` rather than an id
+       keeps the id contract from spreading into a shared component: the rail is
+       rendered by every console page, and a hard-coded id in it would be a
+       stage-shaped assumption living in a file the stage does not own.
+       `a`, not `button`: the rail takes the href away from the section you are
+       standing on, so on the compare page itself there is deliberately no link
+       here to deep-link — and there is no instrument there either. */
+    const link = document.querySelector<HTMLAnchorElement>('a[data-rail="analysis"]');
     if (!link) return;
     const params = new URLSearchParams({
-      a: state.ward,
+      /* ONE function decides this spelling, for the writer here and the reader in
+         scenario-url.ts alike. It used to be `areaOf` plus a comment asserting what
+         Compare would accept — two places agreeing by hand, and Compare's reader
+         failed SOFT, so the day they disagreed the deep link would have opened the
+         default pair under this ward's name with nothing raised. */
+      a: toLegacyWard(state.ward),
       trees: String(Math.round(state.iv.trees / 50 * 100)),
       roof: String(Math.round(state.iv.roof / 5) * 5),
       parks: String(Math.round(state.iv.parks * M.PARK_HA / 196 * 1000) / 10),
@@ -1547,7 +2264,45 @@ export function mountHeatMap(): () => void {
 
   /* ── instrument wiring ── */
   const onEl = (node: Element | null, ev: string, fn: EventListenerOrEventListenerObject) => { if (node) { node.addEventListener(ev, fn); cleanup.push(() => node.removeEventListener(ev, fn)); } };
-  document.querySelectorAll('#tabs .tab, #strip .ward').forEach(t => onEl(t, 'click', () => { nudgeOrbit(); loadWard((t as HTMLElement).dataset.w!); }));
+  /**
+   * `data-w="ballygunge"` → `in/kolkata/ballygunge`, or null.
+   *
+   * The strip's markup is authored against src/data/wards.ts and carries BARE ids,
+   * which is the right shape for it — this page opens one city, so a tile only has
+   * to say which area. This is the seam that turns that into a key, and it goes
+   * through `isAreaKey` rather than casting: `dataset.w` is an untrusted string, and
+   * a typo in the markup must be refused here rather than becoming a fetch for a
+   * file that does not exist. The city prefix comes from `splitKey`, never from
+   * slicing the key — registry.ts's own note explains why re-parsing on "/" cannot
+   * be right in general.
+   */
+  const { country: CO, city: CY } = splitKey(INITIAL_AREA);
+  const areaKeyFromTab = (id: string | undefined): AreaKey | null => {
+    const key = `${CO}/${CY}/${id ?? ''}`;
+    return isAreaKey(key) ? key : null;
+  };
+  document.querySelectorAll('#strip .ward').forEach(t => onEl(t, 'click', () => {
+    nudgeOrbit();
+    const key = areaKeyFromTab((t as HTMLElement).dataset.w);
+    if (key) void loadWard(key);
+  }));
+
+  /* THE SCOPE SWITCHER ASKS; THIS ANSWERS.
+     The three selects are wired by shell/console-shell.ts, which boots on every
+     area page — including the ones with no instrument, where getting OFF the page
+     is the only thing a scope control can do. It decides whether a key can be
+     opened without a page load (`tabKind`, plus "same city"), and when it can, it
+     says so here rather than reaching into this closure for `loadWard`. */
+  const onOpenArea = (event: Event) => {
+    const key = (event as CustomEvent<OpenAreaDetail>).detail?.key;
+    /* Re-validated on arrival. A CustomEvent is a public seam — anything on the
+       page can dispatch one — and this is the door into a fetch. */
+    if (!isAreaKey(key)) return;
+    nudgeOrbit();
+    void loadWard(key);
+  };
+  document.addEventListener(OPEN_AREA_EVENT, onOpenArea);
+  cleanup.push(() => document.removeEventListener(OPEN_AREA_EVENT, onOpenArea));
   onEl(el('srcBtn'), 'click', () => {
     const panel = el('srcPanel'); const btn = el('srcBtn'); if (!panel || !btn) return;
     const opening = panel.hasAttribute('hidden');
@@ -1557,7 +2312,9 @@ export function mountHeatMap(): () => void {
   const bindSlider = (id: string, label: string, kk: keyof M.Interventions, fmt: (v: string) => string) => {
     const s = el(id) as HTMLInputElement | null; if (!s) return;
     onEl(s, 'input', () => { setText(label, fmt(s.value)); nudgeOrbit(); });
-    onEl(s, 'change', () => { state.iv[kk] = +s.value; updateCompareHref(); resetSim(); });
+    /* `applyScenarioChange`, not `resetSim`: a slider falsifies the OTHER wards'
+       tiles as surely as it does this one's, and only this door blanks them. */
+    onEl(s, 'change', () => { state.iv[kk] = +s.value; updateCompareHref(); applyScenarioChange(); });
   };
   bindSlider('ivTrees', 'v1', 'trees', v => v); bindSlider('ivRoof', 'v2', 'roof', v => v + '%');
   bindSlider('ivFacades', 'v4', 'facades', v => v);
@@ -1572,15 +2329,15 @@ export function mountHeatMap(): () => void {
        drawn on 82.5°E, so solar noon in Kolkata falls ~23 minutes before 12:00
        IST. Using the clock hour would put the modelled sun peak in the wrong
        place by that much, every day. */
-    const lon = WARDS[state.ward]?.lon ?? 88.3659;
+    const lon = wardOf(state.ward)?.lon ?? 88.3659;
     const utcH = (now() / 3_600_000) % 24;
     return ((utcH + lon / 15) % 24 + 24) % 24;
   }
   function refreshNowSun() {
     if (state.sunNow === undefined || state.sunNow === null) return;
     const h = wardSolarHour();
-    const doy = Math.floor((now() - Date.UTC(new Date(now()).getUTCFullYear(), 0, 0)) / 86_400_000);
-    state.sunNow = solarElevationFactor(h, doy, WARDS[state.ward]?.lat ?? 22.55);
+    const doy = dayOfYearUtc(now());
+    state.sunNow = solarElevationFactor(h, doy, wardOf(state.ward)?.lat ?? 22.55);
     state.phase = state.sunNow > M.SUN_LIT ? 'peak' : 'night';
   }
   document.querySelectorAll('#segPhase button').forEach(b => onEl(b, 'click', () => {
@@ -1593,9 +2350,9 @@ export function mountHeatMap(): () => void {
     state.phase = sel.phase; state.sunNow = sel.sunNow; state.heatTairC = sel.heatTairC;
     if (sel.sunNow != null) refreshNowSun();
     document.querySelectorAll('#segPhase button').forEach(x => x.classList.toggle('on', x === b));
-    updateCompareHref(); resetSim();
+    updateCompareHref(); applyScenarioChange();
   }));
-  document.querySelectorAll('#segPath button').forEach(b => onEl(b, 'click', () => { state.path = (b as HTMLElement).dataset.p!; document.querySelectorAll('#segPath button').forEach(x => x.classList.toggle('on', x === b)); resetSim(); }));
+  document.querySelectorAll('#segPath button').forEach(b => onEl(b, 'click', () => { state.path = (b as HTMLElement).dataset.p!; document.querySelectorAll('#segPath button').forEach(x => x.classList.toggle('on', x === b)); applyScenarioChange(); }));
   /* 2D Isotherm is a CAMERA state over the same 3D scene, not a different scene:
      it flattens pitch and bearing and lets the ground overlay read as a plan.
      The relief layer keeps rendering (see shouldShowRelief), which is what keeps
@@ -1616,25 +2373,167 @@ export function mountHeatMap(): () => void {
     document.body.classList.toggle('studio', s); opBase = s ? 0.42 : 0.5;
     syncReliefVisual();
     document.querySelectorAll('#envchip button').forEach(x => x.classList.toggle('on', (x as HTMLElement).dataset.e === e));
-    map.setStyle(STYLES[e as 'dark' | 'studio']);
+    /* `diff: false`, AND WITHOUT IT NONE OF THE RESTORATION EVER RUNS.
+       MapLibre's default `setStyle` DIFFS the two styles and applies the result to
+       the live Style object. Our two basemaps are diffable — measured: identical
+       `sprite`, identical `glyphs`, and both drawn on `openmaptiles` + `ne2_shaded`
+       — so the diff succeeds, and a successful diff never re-creates the Style and
+       therefore never re-fires `style.load`. What the diff DOES do is drop every
+       source and layer present in the old style and absent from the new one, which
+       is precisely everything this app added.
+       MEASURED ON THE SHIPPED BUILD: switching Dark to Clay left `getSource` and
+       `getLayer` answering false for the analytical field, the road-name labels, the
+       3-D relief scene AND the Mapillary coverage, with `onStyleLoad` never firing
+       once. Not one layer lost — all of them, silently, from a button whose only job
+       is to restyle the basemap. The handler's own comment claimed the opposite.
+       A full reload is the honest cost of a control that replaces the whole basemap,
+       and it is what makes `style.load` mean what this file has always assumed. */
+    map.setStyle(STYLES[e as 'dark' | 'studio'], { diff: false });
   }
   document.querySelectorAll('#envchip button').forEach(b => onEl(b, 'click', () => setEnv((b as HTMLElement).dataset.e!)));
-  document.querySelectorAll('#vegchip button').forEach(b => onEl(b, 'click', () => {
-    vegOn = (b as HTMLElement).dataset.v === '1';
-    document.querySelectorAll('#vegchip button').forEach((x) => x.classList.toggle('on', x === b));
-    relief?.setVegetationVisible(vegOn);
+  /* ── THE SIX LAYERS, AND THE TWO CONTROLS THAT REACH TWO OF THEM ──────────────
+     Trees and Street-level imagery each have a chip over the map as well as a row
+     in the layer tree, and two controls over one fact is how the two come to
+     disagree — the chip saying On beside an unticked box. So each is applied by
+     ONE function that moves the state, the renderer, the chip AND the box, and
+     both controls call it. The chips stay because they are the on-map hand: a
+     reader orbiting the city should not have to open a pane to hide the trees. */
+
+  /** Paint a `.modechip`'s two buttons from the value its `data-` attribute holds. */
+  const paintChip = (chip: string, key: string, value: string): void => {
+    document.querySelectorAll(`#${chip} button`).forEach((x) => {
+      x.classList.toggle('on', (x as HTMLElement).dataset[key] === value);
+    });
+  };
+
+  /**
+   * Put a layer row's checkbox back in step with the layer.
+   *
+   * The checkbox is the SOURCE OF TRUTH for visibility — a click reads it and
+   * nothing else — but it is not the only way a layer moves, and a box left
+   * ticked over a hidden layer is the quiet lie the tree exists to prevent.
+   */
+  const paintLayerBox = (id: LayerId, on: boolean): void => {
+    const box = document.querySelector<HTMLInputElement>(`input[data-layer="${id}"]`);
+    if (box) box.checked = on;
+  };
+
+  function setTreesVisible(on: boolean): void {
+    relief?.setVegetationVisible(on);
+    paintChip('vegchip', 'v', on ? '1' : '0');
+    paintLayerBox('green/trees', on);
     map.triggerRepaint();
+  }
+
+  function setStreetVisible(on: boolean): void {
+    /* The token is checked HERE and not at the caller, because there are two
+       callers: without it `addCoverage` would add a source that can never answer,
+       and the tree already refuses the row on the same capability. */
+    streetOn = on;
+    if (on && MLY_TOKEN) addCoverage(map, MLY_TOKEN); else removeCoverage(map);
+    paintChip('streetchip', 's', on ? '1' : '0');
+    paintLayerBox('ground/street', on);
+    map.triggerRepaint();
+  }
+
+  document.querySelectorAll('#vegchip button').forEach(b => onEl(b, 'click', () => {
+    setTreesVisible((b as HTMLElement).dataset.v === '1');
   }));
 
   /* ── street-view: coverage overlay + click-to-view ──
      The #svw wrapper stays hidden (see paintClock) unless a Mapillary token is
      actually configured — no point offering a toggle that can never do anything. */
   document.querySelectorAll('#streetchip button').forEach((b) => onEl(b, 'click', () => {
-    streetOn = (b as HTMLElement).dataset.s === '1';
-    document.querySelectorAll('#streetchip button').forEach((x) => x.classList.toggle('on', x === b));
-    if (streetOn && MLY_TOKEN) addCoverage(map, MLY_TOKEN); else removeCoverage(map);
-    map.triggerRepaint();
+    setStreetVisible((b as HTMLElement).dataset.s === '1');
   }));
+
+  /**
+   * ONE LAYER ID → ONE VISIBILITY CALL, and the `switch` is the point.
+   *
+   * `LayerId` is DERIVED from the registry in scope/layers.ts, so this switch is
+   * exhaustive over it by construction: add a seventh layer there and this stops
+   * compiling, HERE, naming the id it has no renderer for. The alternative — a
+   * `Record<string, () => void>` lookup, or an if-chain with a shrug at the end —
+   * would accept the new id, do nothing, and ship a checkbox that ticks against a
+   * map that never changes. That is the exact defect the tree was built to make
+   * impossible one layer up, and it would have walked straight back in here.
+   *
+   * FOUR OF THE SIX END ON THE RENDERER and two do not, which is a fact about what
+   * they are rather than an inconsistency: the thermal field is drawn twice (a
+   * shader overlay in relief, a canvas raster in isotherm) so its switch is read by
+   * both, and street-level coverage is a MapLibre source rather than anything in
+   * the 3-D scene.
+   */
+  function setLayerVisible(id: LayerId, on: boolean): void {
+    switch (id) {
+      case 'thermal/surface':
+        surfaceOn = on;
+        syncRendererVisibility(); syncReliefVisual(); map.triggerRepaint();
+        break;
+      case 'green/canopy':
+        relief?.setCanopyVisible(on);
+        break;
+      case 'green/trees':
+        setTreesVisible(on);
+        break;
+      case 'built/footprints':
+        relief?.setBuildingsVisible(on);
+        break;
+      case 'built/heights':
+        relief?.setBuildingsExtruded(on);
+        break;
+      case 'ground/street':
+        setStreetVisible(on);
+        break;
+    }
+  }
+
+  /**
+   * ONE HANDLER FOR ALL SIX ROWS, delegated from the tree's own container.
+   *
+   * THE CHECKBOX IS THE SOURCE OF TRUTH. `checked` is read off the element the
+   * browser has already toggled, rather than from a variable this file keeps
+   * beside it — so the two cannot drift, and a box the user has just clicked twice
+   * ends where it looks like it ends. That also makes the disabled rows safe by
+   * construction: a disabled input fires no `change`, cannot be focused and cannot
+   * be toggled by script through a click, so a layer whose artefact does not ship
+   * here can never be switched on. No second check is written for it, because a
+   * second check is a second opinion.
+   */
+  const layerTree = document.querySelector('.tree');
+  onEl(layerTree, 'change', (event) => {
+    const box = (event.target as HTMLElement | null)?.closest?.('input[data-layer]');
+    if (!(box instanceof HTMLInputElement)) return;
+    const id = box.dataset.layer;
+    /* `isLayerId`, never a cast: `dataset.layer` is a string off the DOM, and an
+       id the registry has never heard of must be refused here rather than fall
+       through the switch and silently do nothing. */
+    if (!isLayerId(id)) return;
+    nudgeOrbit();
+    setLayerVisible(id, box.checked);
+  });
+
+  /**
+   * Push every row's state at the renderer, in one pass.
+   *
+   * WHY THIS EXISTS RATHER THAN INITIAL FLAGS. The relief renderer arrives LATE —
+   * `ensureRelief` imports Three at the first optional boundary — and it arrives
+   * again, in effect, on every ward switch, because `rebuildWard` throws the city
+   * and the trees away and builds new ones. Both times the new objects are visible
+   * and full height. A visitor who unticked Building heights during the download,
+   * or before switching ward, would watch the layer come back on its own.
+   *
+   * It reads the CHECKBOXES, not a set of variables kept beside them, for the
+   * reason the change handler gives: they are the source of truth, and reading
+   * them here is what keeps that true across the two moments the map is rebuilt
+   * under them.
+   */
+  function syncLayersToRenderer(): void {
+    document.querySelectorAll<HTMLInputElement>('input[data-layer]').forEach((box) => {
+      const id = box.dataset.layer;
+      if (isLayerId(id)) setLayerVisible(id, box.checked);
+    });
+  }
   map.on('click', IMAGE_LAYER_ID, (e) => {
     const id = e.features?.[0]?.properties?.id;
     if (id != null) void openStreetView(String(id));
@@ -1703,28 +2602,87 @@ export function mountHeatMap(): () => void {
      what keeps the basemap's road layers hidden across an environment switch.
      It deliberately restores render state only: a style change must never fetch
      or replace the selected ward. */
+  /**
+   * EVERYTHING THIS APP PUT INTO SOMEONE ELSE'S STYLE, AND HOW TO PUT IT BACK.
+   *
+   * `setEnv` calls `map.setStyle(...)`, which replaces the whole style object and
+   * discards every source and layer added to the old one. This handler already knew
+   * that — it re-added the road-name labels and re-attached relief for exactly that
+   * reason — and it did not re-add the Mapillary coverage source. So ticking
+   * Street-level imagery and then switching Dark to Clay dropped the layer while
+   * the chip and the checkbox both went on reading On. `addCoverage` has one caller
+   * and this handler was not it.
+   *
+   * A LIST RATHER THAN A SEQUENCE OF RE-ADDS, so the next source added anywhere in
+   * the engine is covered by enrolling it here rather than by remembering that this
+   * function exists. The guard in tests/unit/heat-map-console-coherence.test.mjs
+   * finds every `map.addSource(...)` in the engine tree and fails naming any that
+   * this list does not.
+   *
+   * ORDERED, AND THE ORDER IS LOAD-BEARING. The analytical field is added before
+   * relief so the 3-D scene paints over the 2-D raster rather than under it — which
+   * is the same stacking `loadWard` gets by passing relief's id as `beforeId` — and
+   * the labels after it so street names are never eaten by a tower.
+   *
+   * ONE ENTRY NAMES NO SOURCE, and that is honest rather than a gap: the relief
+   * custom layer draws from the renderer's own WebGL context and adds nothing to
+   * the style but itself. It is in the list because its POSITION in this sequence
+   * is what the two entries around it are ordered against.
+   */
+  const STYLE_ADDITIONS: ReadonlyArray<{ source: string | null; restore: () => void }> = [
+    {
+      source: CORE_FIELD_SOURCE,
+      restore: () => {
+        const wardData = cache[state.ward];
+        if (wardData) coreField.rehydrate(wardOf(state.ward), wardData.sizeM);
+      },
+    },
+    { source: null, restore: () => { attachReliefLayer(); syncRendererVisibility(); } },
+    {
+      /* Our own street names, in the BASEMAP's frame. */
+      source: LABEL_SOURCE,
+      restore: () => {
+        if (!map.getSource(LABEL_SOURCE)) {
+          map.addSource(LABEL_SOURCE, { type: 'geojson', data: EMPTY_LABELS as never });
+        }
+        if (!map.getLayer(LABEL_LAYER)) {
+          map.addLayer(labelLayerSpec(env === 'studio' ? 'studio' : 'dark') as never);
+        }
+        const cached = labelCache[state.ward];
+        if (cached) (map.getSource(LABEL_SOURCE) as maplibregl.GeoJSONSource)?.setData(cached as never);
+      },
+    },
+    {
+      /* THROUGH `setStreetVisible`, NOT `addCoverage`, so the token check and the
+         two chips that report the layer's state are the same ones the user's own
+         click goes through. Off is a real restore too: `removeCoverage` on a style
+         that never had it is a no-op, and calling it keeps the chip in step. */
+      source: COVERAGE_SOURCE,
+      restore: () => setStreetVisible(streetOn),
+    },
+  ];
+
   const onStyleLoad = () => {
-    const wardData = cache[state.ward];
-    if (wardData) coreField.rehydrate(WARDS[state.ward], wardData.sizeM);
-    attachReliefLayer();
-    syncRendererVisibility();
-    /* Our own street names, in the BASEMAP's frame. Added after relief so
-       symbols draw above the 3D scene and are never eaten by a tower. */
-    if (!map.getSource(LABEL_SOURCE)) {
-      map.addSource(LABEL_SOURCE, { type: 'geojson', data: EMPTY_LABELS as never });
-    }
-    if (!map.getLayer(LABEL_LAYER)) {
-      map.addLayer(labelLayerSpec(env === 'studio' ? 'studio' : 'dark') as never);
-    }
-    const cached = labelCache[state.ward];
-    if (cached) (map.getSource(LABEL_SOURCE) as maplibregl.GeoJSONSource)?.setData(cached as never);
+    for (const { restore } of STYLE_ADDITIONS) restore();
+    /* NOT IN THE LIST ABOVE, because that list is about sources and layers this app
+       ADDED — `setStyle({diff:false})` drops those. The sky is a property OF the
+       style object, so a replaced style arrives with the spec's own defaults rather
+       than with ours dropped. `appliedSky` is cleared first or the guard would
+       recognise our last value and skip re-applying it to a style that no longer
+       has it. */
+    appliedSky = '';
+    syncSky();
     /* Relief supplies metre-scaled roads, so its mode hides the corresponding
        pixel-scaled basemap geometry. Core mode restores the basemap roads. */
     syncRendererVisibility();
     map.triggerRepaint();
   };
   map.on('style.load', onStyleLoad);
-  const onMapLoad = () => { void loadWard('ballygunge'); };
+  /* THE WARD FIRST, THEN THE SKY. `mapHasLoaded` unlocks `syncSky`, which refuses
+     to touch the style before this moment because doing so stops this very event
+     from firing — see the note in `syncSky`. Ordered so the instrument starts
+     even if the sky call misbehaves again on a future MapLibre. */
+  const onMapLoad = () => { mapHasLoaded = true; void loadWard(INITIAL_AREA); syncSky(); };
   map.once('load', onMapLoad);
   void capsReady.then((caps) => {
     if (!appDisposed && caps.tier > 0 && caps.mode !== 'isotherm') void ensureRelief();

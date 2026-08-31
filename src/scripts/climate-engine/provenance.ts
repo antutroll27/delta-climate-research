@@ -1,13 +1,16 @@
 /**
  * Per-layer provenance manifest — the "receipts" data spine.
  *
- * Loads `public/heat-map/data/{ward}-layers.json` (emitted by
+ * Loads the area's layer manifest (emitted by
  * `scripts/build-provenance-manifest.py`) and narrows it defensively, the same
  * way `terrain.ts:asTerrainField` does: a malformed or missing manifest returns
  * `null` so the UI falls back to the static credit line, never half-renders a
  * receipt. Every field mirrors the Python `LayerRecord` (STAC + ISO 19115
  * lineage / ISO 19157 quality).
  */
+
+import { paths } from './scope/paths.ts';
+import type { AreaKey } from './scope/registry.ts';
 
 export type LayerKind = 'measured' | 'modelled' | 'derived' | 'reference';
 
@@ -63,17 +66,34 @@ export function asLayerManifest(value: unknown): LayerManifest | null {
   return value as LayerManifest;
 }
 
-const cache = new Map<string, Promise<LayerManifest | null>>();
+/* Keyed by AREA KEY, the only shape written or read here. A cache written under
+   one shape and read under another misses for ever while looking like it works. */
+const cache = new Map<AreaKey, Promise<LayerManifest | null>>();
 
-/** Fetch + cache the manifest for a ward; null on any failure (UI degrades). */
-export function loadLayerManifest(ward: string): Promise<LayerManifest | null> {
-  let pending = cache.get(ward);
+/**
+ * Fetch + cache the manifest for an area; null on any failure (UI degrades).
+ *
+ * THE URL COMES FROM `scope/paths.ts`, never from interpolation. This loader is the
+ * quietest of the four: every failure path returns null and the panel falls back to
+ * the static credit line, so a mis-built URL would show "Provenance manifest
+ * unavailable" on a page whose data is in fact right there on disk — a receipt
+ * missing for a reason that is nobody's fault and nowhere on screen.
+ *
+ * An area that ships nothing resolves to null WITHOUT a request, for the same
+ * reason `paths()` returns null at all: a city with no artefacts must be unable to
+ * 404, not merely unlikely to.
+ */
+export function loadLayerManifest(key: AreaKey): Promise<LayerManifest | null> {
+  let pending = cache.get(key);
   if (!pending) {
-    pending = fetch(`/heat-map/data/${ward}-layers.json`)
-      .then((response) => (response.ok ? (response.json() as Promise<unknown>) : null))
-      .then((json) => asLayerManifest(json))
-      .catch(() => null);
-    cache.set(ward, pending);
+    const p = paths(key);
+    pending = p === null
+      ? Promise.resolve(null)
+      : fetch(p.layers)
+        .then((response) => (response.ok ? (response.json() as Promise<unknown>) : null))
+        .then((json) => asLayerManifest(json))
+        .catch(() => null);
+    cache.set(key, pending);
   }
   return pending;
 }

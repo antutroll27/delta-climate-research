@@ -292,12 +292,29 @@ const routeContracts = [
   routeContract('/', 'core', true),
   routeContract('/team/', 'core', true),
   routeContract('/climate-highlights/', 'permanent-preview', false, true),
-  // /heat-map/ IS indexable — it carries its caveats on the page (04f7777). Its two
-  // sub-routes are not: Compare and Brief are deep-link views of the same instrument,
-  // and indexing near-duplicates makes them compete with the page they are views of.
-  // This mirrors `sitemapFilter` in astro.config.mjs; the two must agree or the build
-  // and this contract disagree about the same route.
-  routeContract('/heat-map/', 'heat-map-tool', true),
+  // THE HEAT-MAP ROUTES, one page per registered area. /heat-map itself is no longer
+  // a page — it redirects to the default area — and a redirect stub is not a route
+  // this contract can speak about: Astro emits it noindex, and it is not in the
+  // sitemap, so there is nothing to hold it to.
+  //
+  // Kolkata's three ship measured artefacts and carry their caveats on the page.
+  // Dubai's three ship none and render a stated confidence tier instead, so they are
+  // noindex — thin near-duplicates competing with the pages that have readings
+  // behind them would be the worse outcome for both.
+  //
+  // WRITTEN OUT rather than read from scope/registry.ts, because this script is
+  // plain node with no TypeScript loader — the same reason `papers` and `projects`
+  // above are parsed out of their source rather than imported. It is not left to
+  // agree by hand, though: `publicationContracts()` in tests/unit/build-contracts.
+  // test.mjs DOES import the registry and builds this checker's fixture from it, so
+  // a sixth area, a renamed slug or a flipped `shipsData` fails there as a
+  // missing-html violation naming the route.
+  routeContract('/heat-map/in/kolkata/ballygunge/', 'heat-map-tool', true),
+  routeContract('/heat-map/in/kolkata/baruipur/', 'heat-map-tool', true),
+  routeContract('/heat-map/in/kolkata/barrackpore/', 'heat-map-tool', true),
+  routeContract('/heat-map/ae/dubai/creek/', 'heat-map-tool', false),
+  routeContract('/heat-map/ae/dubai/al-quoz/', 'heat-map-tool', false),
+  routeContract('/heat-map/ae/dubai/south/', 'heat-map-tool', false),
   routeContract('/heat-map/compare/', 'heat-map-tool', false),
   routeContract('/heat-map/brief/', 'heat-map-tool', false),
   // The three standards documents. Indexable and permanent: they are the public

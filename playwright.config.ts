@@ -17,7 +17,40 @@ export default defineConfig({
     trace: 'on-first-retry',
   },
   projects: [
-    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+    /* THE DEFAULT PROJECT IS TIER 0, AND NOBODY KNEW.
+       Headless Chromium reports `ANGLE (Google, Vulkan … SwiftShader Device …)`,
+       which src/utils/render-quality.ts matches as LOW_GPU -> tier 0 -> isotherm.
+       So every browser test this repo has ever run exercised the canvas-raster
+       renderer and NONE of the Three.js relief path: relief-renderer, sun-lighting,
+       cloud-layer, vegetation-layer, road-layer, water-layer and building-pick were
+       never fetched, let alone asserted. Measured — the relief chunk is absent from
+       the network log here and present under the project below.
+
+       That is how `map.setSky()` stopping the map from ever loading passed a full
+       suite: eleven specs waited twenty seconds for a reading that was never coming
+       and reported timeouts, which reads as a slow machine.
+
+       The name says the tier now, so the gap cannot be re-opened by accident. */
+    { name: 'chromium-tier0', use: { ...devices['Desktop Chrome'] } },
+
+    /* THE RELIEF PATH, on a real GPU. `--use-angle=metal` gets Apple Silicon's
+       Metal backend instead of SwiftShader, which lifts render-quality.ts to tier 2
+       and loads the Three.js scene the founder actually looks at.
+
+       LOCAL ONLY, deliberately: a GitHub runner has no GPU, so this project would
+       silently demote to tier 0 there and become a second copy of the project
+       above — two names, one tier, and a false sense of coverage. Skipped in CI
+       rather than lying about what CI checks. */
+    ...(process.env.CI ? [] : [{
+      name: 'chromium-relief',
+      testMatch: '**/heat-map-tiers.spec.ts',
+      use: {
+        ...devices['Desktop Chrome'],
+        launchOptions: {
+          args: ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist'],
+        },
+      },
+    }]),
     {
       name: 'firefox-cbam',
       testMatch: '**/cbam-lines.spec.ts',
@@ -47,9 +80,30 @@ export default defineConfig({
     }]),
   ],
   webServer: {
-    // Browser contracts exercise the exact static output that will ship. A
-    // dedicated port prevents an existing development server masking it.
-    command: 'npm run preview -- --host 127.0.0.1 --port 4322',
+    /* Browser contracts exercise the exact static output that will ship. A
+       dedicated port prevents an existing development server masking it.
+
+       THE SERVER SERVES /api/live NOW, AND THAT IS NOT A CONVENIENCE.
+       This was `npm run preview` — a plain `astro preview`, which has no
+       serverless functions and answers 404 for it. The console reads that exactly
+       as it reads a met.no outage, which is correct behaviour and meant the ward
+       clock was never drawn: `paintClock` hides #clockw behind `btn.hidden = !L`.
+       MEASURED — 0x0 on that server against 122x75 with the feed answering.
+
+       So every spec that opens a ward console ran against one missing a widget,
+       and nothing said so. The lone exception was heat-map-live-freshness.spec.ts,
+       which stubs the route itself — the only reason the clock was tested at all.
+       console-contrast.spec.ts is the sharpest case: it walks every text node on
+       the console and asserts a contrast floor, over a console the clock was
+       absent from. The collision in heat-map-overlap.spec.ts sat in that blind
+       spot the whole time.
+
+       `--canned` answers the route from a fixed reading rather than calling
+       met.no: the suite must not depend on being online, and must not aim ten
+       requests per run at an endpoint whose terms cap the entire application at
+       20 a second. A spec's own page.route still intercepts first, so
+       heat-map-live-freshness.spec.ts goes on driving age with its own payloads. */
+    command: 'node scripts/preview-with-api.mjs --port 4322 --canned',
     url: 'http://127.0.0.1:4322',
     reuseExistingServer: false,
     timeout: 120_000,

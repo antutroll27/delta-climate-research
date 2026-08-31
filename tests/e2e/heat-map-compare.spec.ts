@@ -1,5 +1,70 @@
 import { expect, test } from '@playwright/test';
 
+
+/**
+ * WCAG contrast between an element's text colour and the first ancestor that
+ * actually paints a background.
+ *
+ * Module scope, and named, because two readings in one test must run the SAME
+ * code: the open-pane state and the collapsed state are painted by different CSS
+ * rules, and two copies of this arithmetic would be free to drift into agreeing
+ * for the wrong reason.
+ */
+const contrastOf = (el: Element): number => {
+    /* THE BROWSER DOES THE COLOUR CONVERSION, because we cannot. This palette is
+       oklch and Chromium serialises a computed oklch colour AS oklch — so a
+       regex pulling the first three numbers out of `getComputedStyle().color`
+       reads 0.78, 0.105 and 202 as if they were sRGB bytes and reports a
+       contrast of 1.01 for a perfectly readable cyan. That false negative was
+       measured here before this comment was written. Painting the colour onto a
+       canvas and reading the pixel back is the one conversion that is guaranteed
+       correct for every colour space the page might be written in. */
+    const ctx = document.createElement('canvas').getContext('2d')!;
+    const toRgb = (c: string): [number, number, number] => {
+      ctx.clearRect(0, 0, 1, 1);
+      ctx.fillStyle = c;
+      ctx.fillRect(0, 0, 1, 1);
+      const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
+      return [r, g, b];
+    };
+    const lum = (c: string) => {
+      const [r, g, b] = toRgb(c).map((v) => {
+        const x = v / 255;
+        return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
+      });
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    // The nearest ancestor that actually paints — the rail itself, or the page.
+    let ground: Element | null = el.parentElement;
+    let bg = 'rgba(0, 0, 0, 0)';
+    while (ground) {
+      const c = getComputedStyle(ground).backgroundColor;
+      if (c && !/rgba\(0, 0, 0, 0\)|transparent/.test(c)) { bg = c; break; }
+      ground = ground.parentElement;
+    }
+    const a = lum(getComputedStyle(el).color);
+    const b = lum(bg);
+    return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+};
+
+/**
+ * Both map cards must be wide enough to read a ward in.
+ *
+ * 280px is not a taste threshold: below it the card's own caption grid
+ * ("1.4 km x 1.4 km", the relief chip, the legend) starts wrapping mid-phrase,
+ * which is the visible symptom the 44px regression produced. Two cards plus
+ * their gap is the real constraint, so both are checked -- a layout that starves
+ * only the second would otherwise pass on the first.
+ */
+function assertPair(widths: number[], viewport: number): void {
+  expect(widths.length, `expected two map cards at ${viewport}px, found ${widths.length}`).toBe(2);
+  for (const w of widths) {
+    expect(w, `a map card is ${w}px wide at a ${viewport}px viewport (cards: ${widths.join(', ')}). `
+      + 'The comparison is the page; a card this narrow cannot show a ward, and its '
+      + 'caption wraps one word per line').toBeGreaterThanOrEqual(280);
+  }
+}
+
 test.describe('paired heat-map comparison', () => {
   test('settles an atomic comparison, updates state, and exposes the Brief', async ({ page }) => {
     test.setTimeout(45_000);
@@ -18,6 +83,293 @@ test.describe('paired heat-map comparison', () => {
 
     const brief = page.locator('[data-role="brief-link"]');
     await expect(brief).toHaveAttribute('href', /heat-map\/brief\/\?/);
+  });
+
+  /*
+   * A LINK SHARED BEFORE THE SCOPE MIGRATION STILL NAMES THE SAME TWO WARDS.
+   *
+   * Compare reads `?a=`/`?b=` from the query string, and the state behind them is
+   * now an area key (`in/kolkata/barrackpore`) rather than a bare slug. The reader
+   * that was replaced FAILED SOFT — an unrecognised id fell through to the default
+   * pair — so the migration's plausible failure is not a crash or a 404 but a page
+   * that settles perfectly and shows the WRONG COMPARISON under the bookmarked URL.
+   * Nothing in the DOM would say so; the page even rewrites the address bar from
+   * whatever it parsed.
+   *
+   * So this asserts the RENDERED WARD NAMES, which is the only thing a user can
+   * check, and it does it with a NON-DEFAULT pair. Barrackpore-vs-Ballygunge
+   * differs from the default on both sides; Ballygunge-vs-Baruipur — the obvious
+   * choice — IS the default, and would pass against a legacy bridge that had been
+   * deleted outright. That is measured, not supposed: the unit test for this
+   * started on that pair and went green against exactly that mutant.
+   */
+  test('a legacy compare link renders the wards it names, in either spelling', async ({ page }) => {
+    test.setTimeout(90_000);
+    const missing: string[] = [];
+    page.on('response', (response) => {
+      if (response.status() === 404 && response.url().includes('/heat-map/data/')) {
+        missing.push(new URL(response.url()).pathname);
+      }
+    });
+
+    const namesAfterSettling = async (query: string) => {
+      await page.goto(`/heat-map/compare/${query}`);
+      await expect(page.locator('[data-role="status"]'))
+        .toContainText('Comparison settled', { timeout: 45_000 });
+      return {
+        a: await page.locator('[data-value="a-name"]').first().textContent(),
+        b: await page.locator('[data-value="b-name"]').first().textContent(),
+      };
+    };
+
+    // The legacy spelling — the one in every already-shared link.
+    const legacy = await namesAfterSettling('?a=barrackpore&b=ballygunge');
+    expect(legacy).toEqual({ a: 'Barrackpore', b: 'Ballygunge' });
+
+    // The same comparison addressed by full key must render identically.
+    const keyed = await namesAfterSettling('?a=in/kolkata/barrackpore&b=in/kolkata/ballygunge');
+    expect(keyed).toEqual(legacy);
+
+    /* An unresolvable id falls back to the default rather than throwing — and the
+       page must still SETTLE, not sit at "—" behind a swallowed error.
+
+       This link exercises the collision path too: `a` falls back to Ballygunge,
+       which is exactly what `b` asked for, so `b` is moved on to the next distinct
+       area IN THE SAME CITY. Hence Baruipur rather than a repeated Ballygunge —
+       a self-pairing would be refused by `assertPairedResult` and never settle. */
+    const nonsense = await namesAfterSettling('?a=nonsense&b=ballygunge');
+    expect(nonsense).toEqual({ a: 'Ballygunge', b: 'Baruipur' });
+
+    expect(missing, `data artefacts 404'd: ${missing.join(', ')}`).toEqual([]);
+  });
+
+
+  /*
+   * THE CONSOLE ON THE COMPARE ROUTE.
+   *
+   * Every unit guard for this is a SOURCE tripwire — an .astro component cannot be
+   * imported into `node --import tsx --test`. So the claims that are actually about
+   * a rendered, styled, running page are made here, against the built output the
+   * visitor gets.
+   *
+   * The legibility assertion is the one worth explaining. The rail paints in var(),
+   * and its tokens are declared on `.stage` in HeatMapStage.astro — a stylesheet
+   * this route never loads. Two of the names exist here with the OPPOSITE role, so
+   * the active button rendered near-black on a rail whose background had silently
+   * unset. Nothing errored, nothing looked wrong in either source, and no assertion
+   * about a CSS rule EXISTING would have caught it: the rules were all there. The
+   * only thing that catches it is measuring the pixels the browser computed.
+   */
+  test('the rail is the console, and the section you are on is legible', async ({ page }) => {
+    /* REDUCED MOTION, AND IT IS LOAD-BEARING RATHER THAN POLITE. `.rail-btn` has
+       `transition: color .18s`, and getComputedStyle DURING a transition returns
+       the interpolated value — so reading the colour straight after the click that
+       collapses the sidebar returns the colour it is coming FROM. That is how the
+       collapsed assertion below first passed with its subject deleted: it was
+       measuring cyan, 180ms before the near-black arrived. Reduced motion removes
+       the transition outright (the rail honours it), which makes the reading
+       deterministic instead of timing-dependent. The colours are identical in both
+       modes; only the interpolation between them is not. */
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.goto('/heat-map/compare/');
+
+    const rail = page.locator('nav.rail');
+    await expect(rail).toHaveCount(1);          // counted: two rails is the shipped-twice defect
+    await expect(page.locator('nav.rail .mark')).toHaveCount(1);
+
+    /* ANALYSIS IS THE ROUTE AND ITS PANE IS OPEN — two facts, stated separately.
+       Map is the way across and carries no aria-pressed at all, because the toolbox
+       it names is not in this document. */
+    const analysis = page.locator('[data-rail="analysis"]');
+    await expect(analysis).toHaveAttribute('aria-current', 'page');
+    await expect(analysis).toHaveAttribute('aria-pressed', 'true');
+    await expect(analysis).toHaveJSProperty('tagName', 'BUTTON');
+    const map = page.locator('[data-rail="map"]');
+    await expect(map).toHaveAttribute('href', /\/heat-map\/in\/kolkata\//);
+    expect(await map.getAttribute('aria-pressed')).toBeNull();
+
+    /* THE PIXELS, NOT THE RULE. An undefined custom property makes the whole
+       declaration invalid rather than falling back, so `background:var(--rail-ground)`
+       left the rail transparent over a near-black page while the active button was
+       painted in a --paper that means "near-black ground" on this route. Both ends
+       were wrong and both were invisible to source. */
+    const contrast = await analysis.evaluate(contrastOf);
+    expect(contrast, 'the section marked as the current page must be readable '
+      + 'against the rail it sits on').toBeGreaterThan(3);
+
+    /* THE RAIL PAINTS ITS OWN GROUND. Readability alone cannot catch an
+       unresolved --rail-ground: the declaration unsets, the rail goes
+       transparent, and the near-black PAGE shows through — so the cyan text is
+       still perfectly legible against it and every contrast check passes while
+       the console's navigation column has visually ceased to exist. Measured:
+       deleting --rail-ground left the contrast assertions green. */
+    const railBg = await rail.evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(railBg, 'the rail has no background of its own — --rail-ground did not '
+      + 'resolve, so `background:var(--rail-ground)` is invalid at computed-value '
+      + 'time and unsets entirely, and the rail becomes a transparent strip over '
+      + 'the page').not.toMatch(/rgba\(0, 0, 0, 0\)|transparent/);
+
+    /* AND AGAIN WITH THE SIDEBAR COLLAPSED, which is the state that actually
+       exercises --paper. While a pane is open the button carries aria-pressed="true"
+       as well, and that rule wins on source order and paints it --cyan — so the
+       measurement above would pass with the --paper remap deleted. Collapsed, the
+       button is only aria-current, `color:var(--paper)` is the single rule painting
+       it, and an unremapped --paper is this route's near-black GROUND: the exact
+       shipped defect, near-black on near-black. Measured, not reasoned — this
+       assertion was watched to fail with the remap removed. */
+    await analysis.click();
+    await expect(page.locator('.sidebar')).toHaveClass(/is-collapsed/);
+    await expect(analysis).toHaveAttribute('aria-pressed', 'false');
+    const collapsedContrast = await analysis.evaluate(contrastOf);
+    expect(collapsedContrast, 'with the sidebar collapsed the current section is '
+      + 'painted only by its aria-current rule, and that colour must still be '
+      + 'readable against the rail').toBeGreaterThan(3);
+  });
+
+  test('every rail section opens a body that says what it holds here', async ({ page }) => {
+    await page.goto('/heat-map/compare/');
+    await expect(page.locator('[data-pane="analysis"]')).toHaveClass(/is-on/);
+
+    /* THE THREE THAT WOULD OTHERWISE BE DEAD. Each must open, each must say why it
+       is empty on this route, and each must offer a way out. Before this task they
+       were buttons with no handler and no body — the defect this project has
+       deleted more often than any other, on the one control every visitor uses. */
+    for (const id of ['layers', 'reports', 'scenarios']) {
+      await page.locator(`[data-rail="${id}"]`).click();
+      const pane = page.locator(`[data-pane="${id}"]`);
+      await expect(pane).toHaveClass(/is-on/);
+      await expect(pane.locator('.pane-note').first()).not.toBeEmpty();
+      await expect(pane.locator('.pane-out')).toHaveAttribute('href', /\/heat-map\//);
+      await expect(page.locator(`[data-rail="${id}"]`)).toHaveAttribute('aria-pressed', 'true');
+    }
+
+    // Clicking the OPEN pane collapses the sidebar — the VS Code behaviour.
+    await page.locator('[data-rail="scenarios"]').click();
+    await expect(page.locator('.sidebar')).toHaveClass(/is-collapsed/);
+
+    await page.locator('[data-rail="analysis"]').click();
+    await expect(page.locator('[data-pane="analysis"]')).toHaveClass(/is-on/);
+    await expect(page.locator('.sidebar')).not.toHaveClass(/is-collapsed/);
+  });
+
+  test('the panel chevron collapses this route too, and the rail brings it back', async ({ page }) => {
+    /* BOTH ROUTES HAVE THIS COLUMN, so both get the control. The width is pinned
+       because a hidden sidebar can be the viewport rather than the chevron —
+       though on THIS route it never is: the bench keeps its sidebar at every
+       width, becoming a block above the bench rather than disappearing, which is
+       precisely why the chevron carries no breakpoint of its own. */
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.setViewportSize({ width: 1400, height: 900 });
+    await page.goto('/heat-map/compare/');
+
+    const sidebar = page.locator('.sidebar');
+    const chevron = page.locator('button[data-panel-toggle]');
+    await expect(chevron).toHaveCount(1);       // one panel, one chevron
+    await expect(sidebar).toBeVisible();
+    await expect(chevron).toHaveAttribute('aria-expanded', 'true');
+
+    await chevron.click();
+    await expect(sidebar).toBeHidden();
+    await expect(sidebar).toHaveClass(/is-collapsed/);
+    await expect(page.locator('[data-rail="analysis"]')).toHaveAttribute('aria-pressed', 'false');
+
+    /* THE SAME WAY BACK AS ON EXPLORE. Analysis is this route's own pane, and it
+       returns with the pane the server rendered rather than an empty column. */
+    await page.locator('[data-rail="analysis"]').click();
+    await expect(sidebar).toBeVisible();
+    await expect(page.locator('[data-pane="analysis"]')).toHaveClass(/is-on/);
+    await expect(chevron).toHaveAttribute('aria-expanded', 'true');
+
+    /* AND THE BENCH IS NOT LEFT UNDER THE RAIL BY ANY OF IT. The rail is fixed
+       and the bench is padded past it; collapsing the panel moves the sidebar,
+       never the rail. */
+    const clear = await page.evaluate(() => {
+      const rail = document.querySelector('nav.rail')!.getBoundingClientRect();
+      const bench = document.querySelector('.heat-compare__console')!.getBoundingClientRect();
+      return bench.left - rail.right;
+    });
+    expect(clear, 'the bench is sitting under the fixed rail').toBeGreaterThan(0);
+  });
+
+  test('the A/B pickers are the scope control, and they still drive the model', async ({ page }) => {
+    test.setTimeout(60_000);
+    await page.goto('/heat-map/compare/?a=barrackpore&b=ballygunge');
+    await expect(page.locator('[data-role="status"]'))
+      .toContainText('Comparison settled', { timeout: 45_000 });
+
+    /* POPULATED, AND INSIDE THE PANE. paired-controller.ts fills both selects from
+       `areaKeysInCity`, querying through [data-compare-root] — so a select moved
+       outside that element is never found and never filled, and the page settles
+       perfectly around two empty controls. Three options because Kolkata has three
+       areas; the count is what proves they were built from the registry rather than
+       left as the empty markup the server ships. */
+    const a = page.locator('[data-pane="analysis"] [data-input="ward-a"]');
+    const b = page.locator('[data-pane="analysis"] [data-input="ward-b"]');
+    await expect(a.locator('option')).toHaveCount(3);
+    await expect(b.locator('option')).toHaveCount(3);
+    await expect(a).toHaveValue('in/kolkata/barrackpore');
+    await expect(b).toHaveValue('in/kolkata/ballygunge');
+    // The other side of the pair cannot be chosen on this one: no self-pairing.
+    await expect(a.locator('option[value="in/kolkata/ballygunge"]'))
+      .toHaveAttribute('disabled', '');
+
+    // ...and changing one still re-runs the model.
+    await a.selectOption('in/kolkata/baruipur');
+    await expect(page.locator('[data-value="a-name"]').first())
+      .toHaveText('Baruipur', { timeout: 45_000 });
+    await expect(page.locator('[data-role="status"]'))
+      .toContainText('Comparison settled', { timeout: 45_000 });
+  });
+
+  test('on a phone the bottom sheet clears the rail instead of sitting on it', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/heat-map/compare/');
+
+    const railBox = await page.locator('nav.rail').boundingBox();
+    const sheetBox = await page.locator('.heat-compare__controls').boundingBox();
+    if (!railBox || !sheetBox) throw new Error('rail or sheet had no box at 390px');
+    expect(sheetBox.x, 'the bottom sheet overlaps the rail — the sheet is fixed at '
+      + 'left:.6rem and the rail is a fixed column beside it, so it has to be offset '
+      + 'past whatever --rail currently is')
+      .toBeGreaterThanOrEqual(railBox.x + railBox.width);
+
+    /* And the page's own content clears it too — the mobile padding shorthand
+       reset the reserved column once already. */
+    const h1 = await page.locator('main[data-compare-root] h1').boundingBox();
+    if (!h1) throw new Error('h1 had no box');
+    expect(h1.x).toBeGreaterThanOrEqual(railBox.x + railBox.width);
+  });
+
+  test('the two maps stay comparable at laptop widths, not slivers beside their panels',
+    async ({ page }) => {
+    /* THE PAGE IS A COMPARISON, SO THE THING THAT MUST NOT COLLAPSE IS THE PAIR.
+       `.heat-compare__layout` is `minmax(15rem,19rem) minmax(0,1fr) minmax(18rem,24rem)`
+       — controls, maps, evidence. Grid sizes the two non-flexible tracks to their
+       GROWTH LIMITS before the `1fr` sees anything, so the side panels always take
+       19rem and 24rem and the maps take the remainder, however little that is.
+
+       That was fine when the bench was the whole page. The OBOS shell then put a
+       172px rail and a 300px sidebar in front of it — some 482px, a third of a
+       laptop screen — and the stacked fallback that rescues this layout stayed on
+       `@media (max-width:1350px)`, a VIEWPORT query that cannot see any of it.
+       Measured at 1440: the grid resolved to `304px 104.8px 384px` and each map
+       card was FORTY-FOUR pixels wide, with its caption wrapping one word per
+       line. The most common laptop width there is, and the two maps the page
+       exists to compare were unreadable.
+
+       Asserted across the whole band rather than at one width, because the
+       failure is a band: it opens just above the old breakpoint and closes only
+       when the viewport is wide enough to pay for the shell AND both panels. */
+    for (const width of [1280, 1366, 1440, 1536, 1680]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto('/heat-map/compare/');
+      await expect(page.locator('[data-compare-root]')).toBeVisible();
+      await page.waitForTimeout(1_200);
+
+      const cards = await page.locator('.heat-compare__map-card').evaluateAll(
+        (els) => els.map((el) => Math.round(el.getBoundingClientRect().width)));
+      assertPair(cards, width);
+    }
   });
 
   test('keeps Compare and Brief nonindexable', async ({ page }) => {

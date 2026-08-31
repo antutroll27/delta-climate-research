@@ -16,6 +16,9 @@ import { readFileSync } from 'node:fs';
 
 const M = await import('../src/scripts/climate-engine/heat-map-model.ts');
 const R = await import('../src/scripts/climate-engine/ward-raster.ts');
+const { resolve } = await import('../src/scripts/climate-engine/scope/resolve.ts');
+/* Kolkata's constants: the wards compared below are Kolkata's. */
+const CLIMATE = resolve('in/kolkata/ballygunge').climate;
 
 const WARDS = ['ballygunge', 'barrackpore', 'baruipur'];
 const inputs = JSON.parse(readFileSync('public/heat-map/data/dc-urs-inputs.json', 'utf8')).wards;
@@ -40,7 +43,7 @@ for (const ward of WARDS) {
   const meanFor = (dir, phase) => {
     const d = JSON.parse(readFileSync(`${dir}/${ward}.json`, 'utf8'));
     const base = R.rasterWardBase(d, means, null);
-    return M.eqMean(base, M.currentParams({ live: null, phase, path: '2025', iv: ZERO }));
+    return M.eqMean(base, M.currentParams({ live: null, phase, path: '2025', climate: CLIMATE, iv: ZERO }));
   };
 
   for (const phase of ['peak', 'night']) {

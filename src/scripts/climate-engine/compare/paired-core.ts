@@ -1,15 +1,42 @@
 import { runTsFieldCooperatively, type CooperativeFieldRequest } from '../sim-cooperative.ts';
 import { CANONICAL_GRID_N, CANONICAL_GRID_VERSION, HEAT_METRICS_VERSION, greenReferenceContrastC, type SimLayers, type SimParams, type SimStats } from '../types.ts';
 import { applyInterventions, buildSpatial, computeCost, currentParamsForReference, RESET_BURST, type Ambient, type RoadsData, type Spatial, type WardData } from '../heat-map-model.ts';
-import { loadWard } from '../ward-loader.ts';
+import { loadArea } from '../ward-loader.ts';
 import { rasterWardBase } from '../ward-raster.ts';
-import { loadWardSurface } from '../surface-raster.ts';
-import type { WardId } from '../wards.ts';
+import { loadAreaSurface } from '../surface-raster.ts';
+import type { AreaKey } from '../scope/registry.ts';
 import { coverageToInterventions, deliveredQuantities } from '../scenario/coverage.ts';
 import type { PairedScenarioState } from '../scenario/scenario-state.ts';
 import { SimulationCancelled } from '../sim-cooperative.ts';
 import { assertPairedResult, type MetricValue, type PairedBackendVersion, type PairedJobStage, type PairedResult, type ReleaseEvidence, type WardScenarioResult } from './paired-protocol.ts';
 import { resolveReferenceForcing, type CompareReferenceForcing } from './reference-forcing.ts';
+import { resolve, requireCosts } from '../scope/resolve.ts';
+
+/* ────────────────────────────────────────────────────────────────────────────
+   THE SCOPE COMPARE RUNS IN — the city's park-cooling radius and the country's
+   unit costs. NOT A DECLARATION ANY MORE, which is the note.
+
+   Two module-level constants stood here: `CLIMATE` and `COSTS`, both
+   `resolve('in/kolkata/ballygunge')`. Task 5 wrote them and said Task 7 would make
+   them derive; this is that, and the pin could not have survived the migration
+   honestly. `PairedScenarioState` used to carry two `WardId`s, so hard-coding
+   Kolkata restated a constraint the types already imposed. It carries two
+   `AreaKey`s now, which can name any registered city — and a pinned scope would
+   have gone on applying Kolkata's 50 m cooling radius and rupee prices to whatever
+   else was on screen, computing cleanly the whole way and printing a plausible
+   number. That is the failure mode this codebase keeps paying for.
+
+   So each side of the comparison resolves its OWN scope, in `runWard`, where the
+   area is known. `requireCosts` therefore runs per area rather than at module load
+   — a country with no adopted cost basis now fails when that country is asked for,
+   with a message naming it, rather than at import for everyone.
+
+   `currentParamsForReference` is deliberately NOT given a scope. It takes an
+   explicit `Ambient` from a named forcing record, so it reads neither the fallback
+   air temperature nor the warming table — the two constants a scope would supply
+   it. Adding a parameter it does not read would be a decoration that later readers
+   would have to disprove.
+   ──────────────────────────────────────────────────────────────────────────── */
 
 interface PreparedWard {
   wardData: WardData;
@@ -50,8 +77,8 @@ function evictOnRejection<K, V>(cache: Map<K, Promise<V>>, key: K, pending: Prom
 
 /** Worker-lifetime caches. Scenario fields intentionally never enter this cache. */
 export interface PairedScenarioCache {
-  /** Ward geometry, raster and spatial index, de-duplicated per ward. */
-  ward(id: WardId): Promise<PreparedWard>;
+  /** Ward geometry, raster and spatial index, de-duplicated per area. */
+  ward(id: AreaKey): Promise<PreparedWard>;
   /** The reference solve for a ward/forcing/phase key, de-duplicated while in flight
    *  and evicted if it rejects — see evictOnRejection. */
   baseline(key: string, create: () => Promise<FieldResult>): Promise<BaselineResult>;
@@ -59,7 +86,7 @@ export interface PairedScenarioCache {
 }
 
 export function createPairedScenarioCache(): PairedScenarioCache {
-  const prepared = new Map<WardId, Promise<PreparedWard>>();
+  const prepared = new Map<AreaKey, Promise<PreparedWard>>();
   const baselines = new Map<string, Promise<BaselineResult>>();
 
   return {
@@ -67,7 +94,7 @@ export function createPairedScenarioCache(): PairedScenarioCache {
       const cached = prepared.get(id);
       if (cached) return cached;
       const pending = (async () => {
-        const [loaded, surface] = await Promise.all([loadWard(id), loadWardSurface(id)]);
+        const [loaded, surface] = await Promise.all([loadArea(id), loadAreaSurface(id)]);
         const base = rasterWardBase(loaded.ward, surface.means, surface.surface, null, loaded.water);
         return { wardData: loaded.ward, roads: loaded.roads, base, spatial: buildSpatial(loaded.ward, base, loaded.roads) };
       })();
@@ -104,7 +131,7 @@ function hotMetric(value: number, phase: PairedScenarioState['phase']): MetricVa
     : { state: 'not-evaluated', reason: 'The retained phase does not evaluate the >40°C threshold.' };
 }
 
-function baselineKey(id: WardId, forcing: CompareReferenceForcing, phase: PairedScenarioState['phase']): string {
+function baselineKey(id: AreaKey, forcing: CompareReferenceForcing, phase: PairedScenarioState['phase']): string {
   return [id, forcing.id, phase, 'heat-model-v1', CANONICAL_GRID_VERSION].join(':');
 }
 
@@ -121,7 +148,7 @@ async function field(layers: SimLayers, params: SimParams, sizeM: number, option
 }
 
 async function runWard(
-  id: WardId,
+  id: AreaKey,
   prepared: PreparedWard,
   state: PairedScenarioState,
   forcing: CompareReferenceForcing,
@@ -129,6 +156,11 @@ async function runWard(
   options: PairedRunOptions,
 ): Promise<WardScenarioResult> {
   assertNotCancelled(options);
+  /* THIS area's scope, not the page's. See the header: a comparison can now name
+     two cities, and a shared radius or a shared currency would be applied to both
+     without a word. */
+  const scope = resolve(id);
+  const costs = requireCosts(scope);
   const interventions = coverageToInterventions(state.coverage);
   const phase = state.phase === 'peak' ? 'peak' : 'night';
   const forcingValues: Ambient = forcing.values[state.phase];
@@ -138,7 +170,7 @@ async function runWard(
   const baseline = await cache.baseline(baselineKey(id, forcing, state.phase), () => field(prepared.base, baselineParams, prepared.wardData.sizeM, options));
   assertNotCancelled(options);
   options.onStage?.('solving-scenarios');
-  const scenarioLayers = applyInterventions(prepared.base, interventions, prepared.spatial);
+  const scenarioLayers = applyInterventions(prepared.base, interventions, prepared.spatial, scope.climate.parkRadiusM);
   const scenario = await field(scenarioLayers, scenarioParams, prepared.wardData.sizeM, options);
   assertNotCancelled(options);
   const baselineHot = hotMetric(baseline.stats.fracAbove, state.phase);
@@ -169,7 +201,7 @@ async function runWard(
     scenarioHotAreaPct: scenarioHot,
     hotAreaChangePp: hotAreaChange,
     greenReferenceContrastC: greenReferenceContrastC(scenario.stats.meanC, scenarioParams),
-    capitalCost: computeCost(interventions, prepared.spatial),
+    capitalCost: computeCost(interventions, prepared.spatial, costs),
     delivered: deliveredQuantities(state.coverage, prepared.spatial),
     evidence,
   };

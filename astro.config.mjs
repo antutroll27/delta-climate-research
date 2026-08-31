@@ -12,6 +12,11 @@ import react from '@astrojs/react';
 // absent from the sitemap, and flips into both the moment its data publishes.
 import { papers } from './src/data/papers.ts';
 import { projects } from './src/data/projects.ts';
+// Same idea, one layer up: an area page's indexability is its `shipsData` flag, so
+// the sitemap reads the registry rather than keeping a list of heat-map routes.
+import { isAreaKey } from './src/scripts/climate-engine/scope/registry.ts';
+import { resolve } from './src/scripts/climate-engine/scope/resolve.ts';
+import { DEFAULT_AREA_PATH } from './src/scripts/climate-engine/scope/paths.ts';
 
 /**
  * Vercel functions in `npm run dev`.
@@ -78,14 +83,25 @@ const sitemapFilter = (page) => {
   // — but only once it has the explainer copy. Until then it is noindex like any
   // other coming-soon page, and this line comes out with the placeholder.
   if (path === '/cbam/') return false;
-  // /heat-map is indexable and carries its caveats on the page. Its SUB-routes
-  // are not: /heat-map/brief and /heat-map/compare are deep-link views of the
-  // same tool, and indexing near-duplicates makes them compete with the page
-  // they are views of.
-  // NOTE the `!== '/heat-map/'`. Sitemap paths carry a trailing slash, so the
-  // main route IS '/heat-map/' and a bare startsWith would exclude the very page
-  // this change exists to include.
-  if (path !== '/heat-map/' && path.startsWith('/heat-map/')) return false;
+  // THE HEAT-MAP ROUTES. /heat-map itself is no longer a page — it is a redirect
+  // to DEFAULT_AREA_PATH, and Astro leaves redirect routes out of the sitemap, so
+  // there is nothing here to say about it. What IS indexable is one page per area,
+  // and the test is the area's own `shipsData` flag read through the registry —
+  // the same mechanism as `published` above, for the same reason: `noindex` on the
+  // page and absence from the sitemap are then driven by ONE fact and cannot drift.
+  //
+  // Kolkata's three ship measured artefacts and carry their caveats on the page.
+  // Dubai's three do not: they render the city's name, its confidence tier and a
+  // statement that no observations ship yet. That is the right page for a reader
+  // who followed a link and the wrong page to put in front of a searcher — three
+  // near-duplicate shells competing with the pages that have readings behind them,
+  // under a title claiming a heat twin for a city we have not measured. They flip
+  // into search the moment their artefacts land, in both places at once.
+  const area = /^\/heat-map\/([^/]+\/[^/]+\/[^/]+)\/$/.exec(path);
+  if (area) return isAreaKey(area[1]) && resolve(area[1]).area.hasData;
+  // /heat-map/brief and /heat-map/compare are deep-link views of the same tool, and
+  // indexing near-duplicates makes them compete with the pages they are views of.
+  if (path.startsWith('/heat-map/')) return false;
   if (path === '/HeatMapVisualizer/') return false;               // legacy stub route, removed
   // Dev-only vegetation look mockup. Astro routes every file under src/pages/,
   // so its "not a real nav route" comment does not stop it building or being
@@ -115,10 +131,33 @@ export default defineConfig({
   // behaviour. ponytail: drop this line to take the v7 default once the type
   // has been eyeballed against it.
   compressHTML: true,
-  // The calculator moved under /cbam/ so the pair reads as a hierarchy. The flat
-  // URL was already deployed and is in the nav of any cached page, so it
-  // redirects rather than 404s.
-  redirects: { '/cbam-calculator': '/cbam/cbam-calculator' },
+  // Flat URLs that were already deployed and are in the nav of any cached page.
+  // They redirect rather than 404.
+  //
+  // A `redirects` ENTRY, not `Astro.redirect` in a page: this build is static (no
+  // `output` here, so Astro defaults to static) and `Astro.redirect` needs a server
+  // to run on. What this emits is a prerendered stub — `dist/heat-map/index.html`,
+  // carrying a meta-refresh, `robots: noindex` and a canonical pointing at the
+  // destination — verified against the `/cbam-calculator` entry that has been doing
+  // this job here for months.
+  //
+  // /heat-map WAS the tool. It is now one URL per area, so the bare route has no
+  // view of its own to render: keeping it as a second page showing Ballygunge would
+  // put two URLs on one view, which is the thing the route change exists to remove,
+  // and turning it into a chooser would insert a click between the nav and the
+  // instrument. So it redirects, and every in-app link that used to point at it —
+  // the nav, the Explore link in the stage and in PairedBench — now points at
+  // DEFAULT_AREA_PATH directly, so nobody inside the site pays the hop.
+  //
+  // TRAILING SLASHES: the key is written bare, exactly as the cbam entry is, because
+  // the emitted stub is a directory index and answers to both spellings. The TARGET
+  // carries one, because it must be byte-identical to the destination page's own
+  // canonical or the redirect costs a second hop that Vercel and `astro preview`
+  // would resolve differently.
+  redirects: {
+    '/cbam-calculator': '/cbam/cbam-calculator',
+    '/heat-map': DEFAULT_AREA_PATH,
+  },
   integrations: [
     // Omit <lastmod> until routes have content-owned modification dates. A
     // deploy timestamp would falsely mark every page as newly updated.

@@ -1,4 +1,4 @@
-import type { WardId } from '../wards.ts';
+import type { AreaKey } from '../scope/registry.ts';
 
 export type ComparePhase = 'peak' | 'retained';
 
@@ -19,8 +19,12 @@ export interface CoverageScenario {
 }
 
 export interface PairedScenarioState {
-  a: WardId;
-  b: WardId;
+  /* Area KEYS, not bare ward ids — the two areas being compared, in the same
+     vocabulary the loaders and the scope resolver speak. The URL still SAYS
+     `ballygunge`; `scope/legacy.ts` is the only place that alias is understood,
+     in either direction. */
+  a: AreaKey;
+  b: AreaKey;
   coverage: CoverageScenario;
   phase: ComparePhase;
   contract: 'paired-coverage-v1';
@@ -35,8 +39,8 @@ export const ILLUSTRATIVE_COVERAGE: CoverageScenario = {
 };
 
 export const DEFAULT_PAIRED_SCENARIO: PairedScenarioState = {
-  a: 'ballygunge',
-  b: 'baruipur',
+  a: 'in/kolkata/ballygunge',
+  b: 'in/kolkata/baruipur',
   coverage: ILLUSTRATIVE_COVERAGE,
   phase: 'peak',
   contract: 'paired-coverage-v1',

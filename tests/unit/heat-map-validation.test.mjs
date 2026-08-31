@@ -17,6 +17,7 @@ import { fileURLToPath } from 'node:url';
 
 import * as M from '../../src/scripts/climate-engine/heat-map-model.ts';
 import { DEFAULT_PARAMS, STORE_NIGHT } from '../../src/scripts/climate-engine/types.ts';
+import { resolve } from '../../src/scripts/climate-engine/scope/resolve.ts';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const read = async (p) => JSON.parse(await readFile(join(ROOT, p), 'utf8'));
@@ -127,8 +128,11 @@ test('more overpasses bought a tighter interval than the 12-scene baseline', (t)
    this model, and nothing here should be read as reinstating it. */
 
 const ZERO_IV = { trees: 0, roof: 0, parks: 0, facades: 0 };
+/* The scope constants the physics now takes as a parameter — read from the shipped
+   registry, not re-typed here, so a drifted registry fails these tests too. */
+const CLIMATE = resolve('in/kolkata/ballygunge').climate;
 const peakAt = (rh, over = {}) => M.currentParams({
-  live: { tAir: 32, rh, wind: 3, cloud: 0 }, phase: 'peak', path: '2025', iv: ZERO_IV, ...over,
+  live: { tAir: 32, rh, wind: 3, cloud: 0 }, phase: 'peak', path: '2025', climate: CLIMATE, iv: ZERO_IV, ...over,
 });
 const parkDropOf = (p) => M.eqCell(p, 0.20, 0, 0) - M.eqCell(p, 0.20, 0.9, 0);
 const vegBelowAirOf = (p) => p.tAir - M.eqCell(p, 0.25, 1.0, 0);
@@ -214,7 +218,7 @@ test('the heatwave overlay widens that defect rather than causing it', () => {
 test('night is not the binding phase — nightLatent cuts the ET term by an order of magnitude', () => {
   for (const rh of [20, 30, 60]) {
     const day = peakAt(rh);
-    const night = M.currentParams({ live: { tAir: 32, rh, wind: 3, cloud: 0 }, phase: 'night', path: '2025', iv: ZERO_IV });
+    const night = M.currentParams({ live: { tAir: 32, rh, wind: 3, cloud: 0 }, phase: 'night', path: '2025', climate: CLIMATE, iv: ZERO_IV });
     assert.ok(night.L < day.L / 5, `night ET must be far below day ET at rh ${rh}`);
     assert.ok(vegBelowAirOf(night) <= 4, `the bar must hold at night at rh ${rh}`);
   }
@@ -229,7 +233,7 @@ test('Explore and Compare gate evapotranspiration identically', () => {
      model different physics in dry air, silently and only for dry days. */
   for (const rh of [10, 22, 33, 45, 60, 85]) {
     const explore = M.currentParams({
-      live: { tAir: 32, rh, wind: 3, cloud: 0 }, phase: 'peak', path: '2025', iv: ZERO_IV,
+      live: { tAir: 32, rh, wind: 3, cloud: 0 }, phase: 'peak', path: '2025', climate: CLIMATE, iv: ZERO_IV,
     });
     const compare = M.currentParamsForReference(
       { tAir: 32, rh, wind: 3, cloud: 0 }, 'peak', ZERO_IV,

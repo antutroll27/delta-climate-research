@@ -4,7 +4,14 @@ import type { Map as MlMap } from 'maplibre-gl';
 const TILE_URL = (token: string) =>
   `https://tiles.mapillary.com/maps/vtp/mly1_computed_public/2/{z}/{x}/{y}?access_token=${token}`;
 
-const SOURCE = 'mly-coverage';
+/**
+ * EXPORTED BECAUSE SOMETHING ELSE HAS TO PUT IT BACK. `setEnv` calls
+ * `map.setStyle(...)`, which discards every source this app added to the basemap's
+ * style — this one included — and heat-map-app.ts's style-load handler re-adds
+ * them from a list keyed by exactly these ids. A private name here would have meant
+ * the enrolment naming a string nobody could check against the call site.
+ */
+export const COVERAGE_SOURCE = 'mly-coverage';
 const SEQ_LAYER = 'mly-sequence';
 const IMG_LAYER = 'mly-image';
 
@@ -27,19 +34,19 @@ export function coverageColorExpression(): unknown[] {
 /** Add the coverage source + sequence(line) & image(point) layers. Idempotent + null-safe. */
 export function addCoverage(map: MlMap, token: string): void {
   if (!token) return;
-  if (!map.getSource(SOURCE)) {
-    map.addSource(SOURCE, { type: 'vector', tiles: [TILE_URL(token)], minzoom: 6, maxzoom: 14 });
+  if (!map.getSource(COVERAGE_SOURCE)) {
+    map.addSource(COVERAGE_SOURCE, { type: 'vector', tiles: [TILE_URL(token)], minzoom: 6, maxzoom: 14 });
   }
   const color = coverageColorExpression() as never;
   if (!map.getLayer(SEQ_LAYER)) {
     map.addLayer({
-      id: SEQ_LAYER, type: 'line', source: SOURCE, 'source-layer': 'sequence',
+      id: SEQ_LAYER, type: 'line', source: COVERAGE_SOURCE, 'source-layer': 'sequence',
       paint: { 'line-color': color, 'line-width': 2, 'line-opacity': 0.85 },
     } as never);
   }
   if (!map.getLayer(IMG_LAYER)) {
     map.addLayer({
-      id: IMG_LAYER, type: 'circle', source: SOURCE, 'source-layer': 'image', minzoom: 14,
+      id: IMG_LAYER, type: 'circle', source: COVERAGE_SOURCE, 'source-layer': 'image', minzoom: 14,
       paint: { 'circle-color': color, 'circle-radius': 4, 'circle-stroke-width': 1, 'circle-stroke-color': '#02090a' },
     } as never);
   }
@@ -47,7 +54,7 @@ export function addCoverage(map: MlMap, token: string): void {
 
 export function removeCoverage(map: MlMap): void {
   for (const id of [IMG_LAYER, SEQ_LAYER]) if (map.getLayer(id)) map.removeLayer(id);
-  if (map.getSource(SOURCE)) map.removeSource(SOURCE);
+  if (map.getSource(COVERAGE_SOURCE)) map.removeSource(COVERAGE_SOURCE);
 }
 
 export const IMAGE_LAYER_ID = IMG_LAYER;
