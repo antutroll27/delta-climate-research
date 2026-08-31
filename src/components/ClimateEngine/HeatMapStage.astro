@@ -816,8 +816,18 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
      left edge is free and the compass sits at the same 26px inset the rest of the
      floating furniture uses. The breakpoint overrides that followed the panel down
      went with it. */
+  /* OPAQUE, AND THAT LAST 4% WAS NOT DECORATION — IT WAS THE FAILURE.
+     At .96 the live map bleeds through the dial, so the ground under the "N"
+     is not a colour in this stylesheet: it moves with the basemap, the zoom and
+     the heat field. Measured, the same letter on the same page scored 4.50:1 on
+     one machine and 4.49:1 on a CI runner — the WCAG floor is 4.5, so the
+     identical build passed locally and failed in CI on a difference of one
+     hundredth, decided by which pixels the map happened to be drawing.
+     A 62px dial gains nothing from being see-through and pays for it in a
+     contrast figure nobody can reproduce, so the ground is now a fixed colour and
+     the letter's ratio is a property of the design rather than of the map. */
   .compass{position:absolute;left:26px;bottom:26px;z-index:6;width:62px;height:62px;padding:0;cursor:pointer;
-    background:rgb(9 20 22 /.96);border:1px solid var(--line);border-radius:50%;backdrop-filter:blur(12px);
+    background:rgb(9 20 22);border:1px solid var(--line);border-radius:50%;
     display:grid;place-items:center;transition:border-color .2s,transform .2s}
   .compass:hover{border-color:var(--cyan);transform:scale(1.06)}
   .compass:focus-visible{outline:2px solid var(--cyan);outline-offset:3px}
@@ -828,7 +838,12 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
   .compass .c-tick{fill:rgb(236 237 240 /.28)}
   .compass .c-lab{font-family:var(--sans);font-weight:700;font-size:8.4px;text-anchor:middle;
     fill:rgb(236 237 240 /.62)}
-  .compass .c-lab-n{fill:var(--red)}
+  /* --red-ink, NOT --red, for the same reason `#area` uses it: this is TEXT at
+     8.4px, so it answers to the 4.5:1 body floor rather than to the 3:1 a shape
+     gets, and --red is the shape red. The needle above keeps --red because a
+     filled triangle is not text. On the dial's fixed ground the letter now
+     measures 5.0:1 — margin, rather than the hundredth it was clearing by. */
+  .compass .c-lab-n{fill:var(--red-ink)}
   /* The sun is the one warm thing on a cool dial, so it reads at a glance
      without competing with the red north needle for "most important mark". */
   .compass .c-sun-disc{fill:var(--sun)}
@@ -941,7 +956,11 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
   .vegw .modechip button{font-size:.52rem;padding:.3rem .62rem;letter-spacing:.12em}
   #svw{top:222px}
 
-  body.studio .compass{background:rgb(245 244 241 /.97);border-color:rgb(20 40 42 /.2)}
+  /* Opaque here too, and for the reason given on `.compass`: the pale dial has
+     the same map bleeding through it, and Clay is the theme where the map behind
+     is bright enough to move a ratio further. One rule, one behaviour, both
+     basemaps. */
+  body.studio .compass{background:rgb(245 244 241);border-color:rgb(20 40 42 /.2)}
   body.studio .compass .c-s{fill:rgb(20 40 42 /.34)}
   body.studio .compass .c-tick{fill:rgb(20 40 42 /.28)}
   body.studio .compass .c-lab{fill:rgb(20 40 42 /.66)}
