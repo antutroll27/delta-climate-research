@@ -356,10 +356,16 @@ test('the ward strip never prints two scenarios side by side', async ({ page }) 
      em-dashes would be honest and useless — and its number MOVES, which is what
      proves the scenario really changed and this test is not passing vacuously. */
   await expect(baruipur).not.toContainText('—', { timeout: 20_000 });
+  /* SAME BUDGET AS THE LINE ABOVE, because it is the same event. That assertion
+     waits 20s for the re-solve to land and this one inherited the default 5s —
+     two questions about one recomputation, given four times as long to answer one
+     of them. Under a full-suite run the solve outlives the shorter budget and the
+     tile still holds its old number when this reads it. The claim is untouched:
+     the mean must MOVE, or the slider changed nothing. */
   await expect(baruipur,
     'planting 50 trees left Baruipur\'s mean exactly where it was, so the slider '
     + 'changed nothing and neither act below is exercising a scenario change')
-    .not.toHaveText(baruipurBare ?? '');
+    .not.toHaveText(baruipurBare ?? '', { timeout: 20_000 });
 
   /* ACT TWO — THE PHASE, with the OTHER ward open, so the tile that gets spared
      and the tile that gets blanked swap places. */
@@ -375,9 +381,13 @@ test('the ward strip never prints two scenarios side by side', async ({ page }) 
     + 'asserting a difference between two wards it never computed together')
     .toContainText('—');
   await expect(bally).not.toContainText('—', { timeout: 20_000 });
+  /* And the same here — the phase re-solve gets 20s on the line above and had 5s
+     on this one. This is the assertion that failed a full local gate while passing
+     three times out of three in isolation, which is the signature of a budget that
+     is short rather than a behaviour that is wrong. */
   await expect(bally,
     'the 22:00 mean equals the 13:00 one, so the phase button moved nothing')
-    .not.toHaveText(ballyPeak ?? '');
+    .not.toHaveText(ballyPeak ?? '', { timeout: 20_000 });
 });
 
 test('the breadcrumb follows the ward', async ({ page }) => {

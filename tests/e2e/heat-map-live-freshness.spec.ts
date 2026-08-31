@@ -175,6 +175,49 @@ test.describe('live reading freshness', () => {
     await expect(page.locator('#vegw button[data-v="1"]')).toBeVisible();
   });
 
+  test('a reading missing a number costs the reading, never the ward', async ({ page }) => {
+    /* THE FAILURE THIS REPLACES WAS NOT A DEGRADED READOUT — IT WAS A LOST WARD.
+       api/live.js is a transparent proxy, and `air_temperature`, `relative_humidity`
+       and `wind_speed` are all OPTIONAL in met.no's schema. A body that arrives
+       whole but short of one reached the console as a complete reading holding
+       `undefined`, and two things followed, neither of them looking like an error:
+       the clamp in `currentParams` is `Math.max(0.3, undefined / 3)`, which is NaN
+       rather than 0.3, so every cell of the field went NaN; and `paintLive` calls
+       `L.wind.toFixed(1)`, which THROWS. That throw happens inside `loadWard`'s
+       try, so a single absent number surfaced as "ward could not load".
+
+       `asAmbient` refuses such a body, which puts it on the SAME path as an outage
+       — the case the test above pins. So this asserts the ward, not the parser:
+       the map is up, the model has produced a reading from the ward's own
+       artefacts, and the controls that never depended on the feed are still there.
+       Only the clock, which has nothing to show, is allowed to be absent. */
+    await page.route(LIVE_ROUTE, (route) => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: { date: new Date().toUTCString(), age: '0' },
+      /* Everything met.no usually sends EXCEPT wind_speed — the shape a truncated
+         or reshaped upstream body actually takes, not a mangled envelope. */
+      body: JSON.stringify({
+        properties: {
+          timeseries: [{
+            time: new Date().toISOString(),
+            data: { instant: { details: { air_temperature: 29.4, relative_humidity: 71, cloud_area_fraction: 38 } } },
+          }],
+        },
+      }),
+    }));
+    await page.goto('/heat-map/in/kolkata/ballygunge/');
+
+    await expect(page.locator('#lst')).not.toContainText('—', { timeout: 60_000 });
+    await expect(page.locator('#pname')).toHaveText('Ballygunge');
+    await expect(page.locator('#clockw')).toBeHidden();
+    await expect(page.locator('#vegw')).toBeVisible();
+    /* And the live row says it has nothing rather than showing NaN — the other
+       half of the old failure, which printed "NaN" where a temperature goes. */
+    await expect(page.locator('#liveWind')).toHaveText('—');
+    await expect(page.locator('#liveT')).toHaveText('—');
+  });
+
   test('the readout clears the evidence rail it sits beside', async ({ page }) => {
     await stubMet(page, 0);
     await page.goto('/heat-map/in/kolkata/ballygunge/');

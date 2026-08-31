@@ -258,6 +258,72 @@ export function eqMean(layers: SimLayers, p: SimParams): number {
   return s / N;
 }
 
+/**
+ * A LIVE READING, OR NOTHING — the met.no body parsed rather than trusted.
+ *
+ * WHAT THIS PREVENTS. api/live.js is a transparent proxy: it returns met.no's
+ * body verbatim, and until this existed the client read `air_temperature`,
+ * `relative_humidity` and `wind_speed` straight off it with no check. Every one
+ * of those is OPTIONAL in met.no's own schema. A body that arrives whole but
+ * short of a field therefore reached the console as a COMPLETE reading holding
+ * `undefined`, and two things happened, neither of them a visible error:
+ *
+ *   · `Math.max(0.3, undefined / 3)` is NaN — `Math.max` does not clamp NaN — so
+ *     `currentParams` produced a NaN wind, `eqCell` divided by a NaN `k`, and the
+ *     ENTIRE heat field became NaN. Measured, not reasoned about.
+ *   · `paintLive` calls `L.wind.toFixed(1)`, which THROWS on undefined. It runs
+ *     inside `loadWard`'s try, so the throw surfaced as "ward could not load" —
+ *     a whole ward lost to a single absent number.
+ *
+ * The engine's other ingests already work this way — `asTerrainField`,
+ * `asTreesFile`, `asCanopyRaster`, `asLayerManifest`, `asNearest`. The weather
+ * feed was the one that skipped it, which is also the one piece of data on this
+ * page that comes from someone else's server in real time.
+ *
+ * NULL MEANS "NO READING", which is a state the console already handles well: it
+ * is what a met.no outage produces, the dial renders it as unknown rather than
+ * fresh, and the ward's own controls stay up. Refusing a partial reading is
+ * therefore strictly better than admitting one — a missing number cannot be
+ * distinguished from a wrong one once it is inside the physics.
+ *
+ * `cloud` and `windFrom` are NOT required. Cloud already had a `?? 0` fallback
+ * before this existed and only tints the sky term; direction drives cloud drift
+ * and nothing else (see `windFrom` above). Requiring them would throw away a
+ * reading the model can use in full.
+ */
+export function asAmbient(raw: unknown): Ambient | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const series = (raw as { properties?: { timeseries?: unknown } }).properties?.timeseries;
+  if (!Array.isArray(series) || series.length === 0) return null;
+  const entry = series[0] as { time?: unknown; data?: { instant?: { details?: unknown } } };
+  const d = entry?.data?.instant?.details;
+  if (!d || typeof d !== 'object') return null;
+  const det = d as Record<string, unknown>;
+
+  /* FINITE, not merely `typeof === 'number'`. JSON carries no NaN, but it does
+     carry `null`, and a number coerced from one is 0 rather than a refusal —
+     while Infinity would sail through a typeof check and poison `k` exactly as
+     undefined does. */
+  const num = (v: unknown): number | null =>
+    typeof v === 'number' && Number.isFinite(v) ? v : null;
+
+  const tAir = num(det.air_temperature);
+  const rh = num(det.relative_humidity);
+  const wind = num(det.wind_speed);
+  if (tAir === null || rh === null || wind === null) return null;
+
+  return {
+    tAir, rh, wind,
+    cloud: num(det.cloud_area_fraction) ?? 0,
+    windFrom: num(det.wind_from_direction) ?? undefined,
+    feels: heatIndexC(tAir, rh),
+    /* Left absent rather than defaulted when it is not a string: `validAt` is
+       what the freshness dial ages, and an invented timestamp would be the exact
+       "claims to be live" defect the dial exists to prevent. */
+    validAt: typeof entry.time === 'string' ? entry.time : undefined,
+  };
+}
+
 /** NWS Rothfusz heat index (feels-like) — Met Norway ships no apparent-temp field. */
 export function heatIndexC(T: number, RH: number): number {
   const Tf = T * 9 / 5 + 32; if (Tf < 80) return T;

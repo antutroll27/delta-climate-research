@@ -1688,12 +1688,20 @@ export function mountHeatMap(): () => void {
           const skew = served - Date.now();
           clockSkewMs = Math.abs(skew) > 120_000 ? skew : 0;
         }
-        const ts = (await r.json()).properties.timeseries[0];
-        const dd = ts.data.instant.details;
-        /* `ts.time` is the hour this reading is VALID FOR, which is what the
-           dial must show — not the moment we happened to fetch it. They differ
-           by up to an hour and only the former is a property of the data. */
-        liveCache[name] = { tAir: dd.air_temperature, rh: dd.relative_humidity, wind: dd.wind_speed, cloud: dd.cloud_area_fraction ?? 0, windFrom: dd.wind_from_direction, feels: M.heatIndexC(dd.air_temperature, dd.relative_humidity), validAt: ts.time };
+        /* PARSED, NOT DESTRUCTURED. This used to read the three numbers straight
+           off the body; all three are optional in met.no's schema, so a whole-but-
+           short response arrived as a complete reading holding `undefined` — which
+           made the heat field NaN and threw out of `paintLive`, costing the whole
+           ward. `asAmbient` refuses such a body, and a refusal lands on the same
+           path as an outage: `state.live` stays null, the dial says unknown rather
+           than fresh, and the ward's own controls stay up.
+
+           It also carries `validAt` — met.no's `timeseries[0].time`, the hour the
+           reading is VALID FOR rather than the moment we fetched it. Those differ
+           by up to an hour and only the first is a property of the data. */
+        const reading = M.asAmbient(await r.json());
+        if (!reading) throw new Error('met.no returned a reading with no usable numbers');
+        liveCache[name] = reading;
       }
       if (appDisposed || state.ward !== name) return;
       state.live = liveCache[name]; paintLive(); resetSim();
