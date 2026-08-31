@@ -80,9 +80,30 @@ export default defineConfig({
     }]),
   ],
   webServer: {
-    // Browser contracts exercise the exact static output that will ship. A
-    // dedicated port prevents an existing development server masking it.
-    command: 'npm run preview -- --host 127.0.0.1 --port 4322',
+    /* Browser contracts exercise the exact static output that will ship. A
+       dedicated port prevents an existing development server masking it.
+
+       THE SERVER SERVES /api/live NOW, AND THAT IS NOT A CONVENIENCE.
+       This was `npm run preview` — a plain `astro preview`, which has no
+       serverless functions and answers 404 for it. The console reads that exactly
+       as it reads a met.no outage, which is correct behaviour and meant the ward
+       clock was never drawn: `paintClock` hides #clockw behind `btn.hidden = !L`.
+       MEASURED — 0x0 on that server against 122x75 with the feed answering.
+
+       So every spec that opens a ward console ran against one missing a widget,
+       and nothing said so. The lone exception was heat-map-live-freshness.spec.ts,
+       which stubs the route itself — the only reason the clock was tested at all.
+       console-contrast.spec.ts is the sharpest case: it walks every text node on
+       the console and asserts a contrast floor, over a console the clock was
+       absent from. The collision in heat-map-overlap.spec.ts sat in that blind
+       spot the whole time.
+
+       `--canned` answers the route from a fixed reading rather than calling
+       met.no: the suite must not depend on being online, and must not aim ten
+       requests per run at an endpoint whose terms cap the entire application at
+       20 a second. A spec's own page.route still intercepts first, so
+       heat-map-live-freshness.spec.ts goes on driving age with its own payloads. */
+    command: 'node scripts/preview-with-api.mjs --port 4322 --canned',
     url: 'http://127.0.0.1:4322',
     reuseExistingServer: false,
     timeout: 120_000,
