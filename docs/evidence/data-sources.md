@@ -73,25 +73,29 @@ status: shipped, in the pipeline.
 **Microsoft Global ML Building Footprints** — Microsoft, ML-derived from satellite imagery · vector
 polygons, tiles `123133323` (Ballygunge/Baruipur) + `123133321` (Barrackpore) · **ODbL** ·
 `https://github.com/microsoft/GlobalMLBuildingFootprints` · **role:** shipped building-massing/footprint
-source for all three wards (feeds `built` raster, DC-URS FAR) · status: **production, shipped**; counts
-Ballygunge 2,048 / Baruipur 3,528 / Barrackpore 3,003; ~88% complete against Overture (12.1% of Overture
-buildings sit >20 m from anything MS holds).
+source for all three wards **until 2026-08-04** · status: **superseded** by Overture (commit `6151975`,
+8,579 → 12,767 buildings); retained only as the completeness comparison — MS held ~88% of Overture (12.1% of
+Overture buildings sit >20 m from anything MS holds). Counts were Ballygunge 2,048 / Baruipur 3,528 /
+Barrackpore 3,003.
 
 **Google Open Buildings 2.5D Temporal** — Google Research, 2023 epoch, ~4 m per-pixel · **CC BY 4.0 —
 commercial OK** · public GCS bucket, no auth:
 `storage.googleapis.com/open-buildings-temporal-data/v1/geotiffs/…`; product page
-`https://sites.research.google/open-buildings/` · **role:** per-footprint building heights via zonal-mean
-sampling over MS footprints; feeds massing render + DC-URS FAR (0.35×0.30 weight) · status: **shipped**;
-98–99% of buildings got a direct zonal measurement (means Bally 7.6 m / Baruipur 4.6 m / Barrackpore
-4.9 m); **heights unvalidated with a suspected low bias** — no independent Kolkata ground truth; ICESat-2
+`https://sites.research.google/open-buildings/` · **role:** per-footprint building heights via zonal **p65**
+over Overture footprints (p75 also cached in `data/geometry/heights-overture.json`); feeds massing render +
+DC-URS FAR (0.35×0.30 weight) · status: **shipped**; shipped p65 medians Ballygunge 7.0 m / Barrackpore
+4.9 m / Baruipur 4.5 m; **~13% of buildings sit on Google's 2.5 m no-confident-height fill** (465/597/629);
+the p65→p75 caster swap was tested for PV shading and is a null (+0.01–0.04 pp) — the percentile is not a
+lever, the raster is; **heights unvalidated with a suspected low bias** — no independent Kolkata ground truth; ICESat-2
 comparison came back `underpowered` (n=28 vs bar of 30), so no correction/statistic applied.
 
 **Overture Maps footprints** — Overture Maps Foundation (merges OSM + Google Open Buildings + Microsoft
 ML) · release pinned `2026-07-22.0` · **ODbL** (in-repo attribution: "Footprints © Overture Maps
-Foundation (ODbL)") · GeoParquet via DuckDB · **role:** validation/QA — completeness + height cross-check
-against the shipped Microsoft geometry; a full-replacement production pipeline exists but is **not
-shipped** — stopped at its own parity gate (best statistic reaches only 67% of buildings within 2 m
-against a 90% threshold) · status: evaluation/validation use only.
+Foundation (ODbL)") · GeoParquet via DuckDB · **role:** **the shipped footprint source** for all three wards
+since 2026-08-04 (commit `6151975`; 3,527 / 4,702 / 4,538 = 12,767 buildings, GERS-deduplicated) · status:
+**production, shipped**. One overlapping pair survived dedup in Barrackpore and produced a spurious 100 %
+rooftop-PV shading loss — guarded by `OVERLAP_TOL` in `scripts/measure-pv-shading.py`. The earlier
+"stopped at its parity gate" note (also in `heat-map-feature.md`) predates the ship commit.
 
 **OpenStreetMap (OSM)** — community-mapped, via Overpass · vector, current · **ODbL — commercial OK** ·
 Overpass API fetchers (`scripts/fetch-water.py`, roads fetcher),
@@ -239,6 +243,21 @@ also happens to describe Kolkata at 22:00 — humid, hazy and light-polluted —
 
 ## Candidate — brainstormed, not yet in the pipeline
 
+**Ground irradiance — NIWE SRRA Advanced Measurement Station at IIEST Shibpur, and IMD Alipore** —
+researched 2026-09-02, **not acquired**. The IIEST station (Howrah) was established **2014** under
+MNRE's SRRA programme, built explicitly for "investor-grade" solar data: pyranometer (GHI), shaded
+pyranometer (DHI), pyrheliometer on tracker (DNI), **sun photometer for aerosols** (the term that breaks
+satellite irradiance over the Indo-Gangetic Plain), albedometer, net/IR/UV radiometers. **6.8 km from
+Ballygunge, 6.6 km from our POWER cell centre — inside the same POWER grid cell as all three wards**, so it
+is the natural bias-correction reference for the whole metro, not one roof. Access: NIWE sells *processed*
+data (NDA, payment in advance, FTP within 5 working days; prices behind a bot wall, not indexed); raw data
+only via MNRE-approved institutional collaboration — which, with a DST-funded solar hub on campus, may be
+the better route than purchase. Contact `dst.iiestsolarhub@gmail.com`. **IMD Alipore** is one of the original
+four IMD radiation stations (**1957**), measuring direct/diffuse/global; via the IMD Data Supply Portal
+(`dsp.imdpune.gov.in`, registration, cost-estimate tool, `data.service@imd.gov.in`). **Not established:**
+prices, whether IIEST is currently operational, ISO 9060 sensor class, commercial-use terms. **Priority:
+below the PV packing factor** — irradiance bias is a ~5% term; the Mumbai packing factor is +43%.
+
 **ETH Zurich Global Canopy Height (Lang et al. 2023)** — ETH Zurich, Sentinel-2 + GEDI fusion, 10 m ·
 **CC BY 4.0** (raster; repo code is MIT) · 3-deg COG tiles on `libdrive.ethz.ch`, range-readable via
 `/vsicurl/`; companion uncertainty layer is `*_Map_SD.tif` · cite the 2023 *Nature Ecology & Evolution*
@@ -298,7 +317,10 @@ through GEE. Avoided by pulling EO data through open STAC + AWS Open Data instea
 
 **FABDEM (free tier)** — proposed as the surface to drape canopy onto. **Free FABDEM is CC BY-NC-SA 4.0 —
 non-commercial.** A paid commercial licence exists via Fathom but isn't free; not needed since terrain
-already uses terrarium/GLO-30. `https://data.bris.ac.uk/data/dataset/25wfy0f9ukoge2gs7a5mqpq2j7`,
+already uses terrarium/GLO-30, and flood work uses GEDTM30 v1.2 (CC BY 4.0) + DeltaDTM. **Datum trap
+(2026-09-02):** FABDEM and GLO-30 are *already* EGM2008 orthometric — re-applying an ellipsoid→geoid
+correction (a proposed pipeline did) would shift Kolkata by the local geoid height, ~55 m, against a total
+ward relief of 3–5 m. Across a 1.4 km ward the geoid is a constant anyway. `https://data.bris.ac.uk/data/dataset/25wfy0f9ukoge2gs7a5mqpq2j7`,
 `https://www.fathom.global/product/fabdem/`.
 
 **DeepForest** — the tool is **MIT-licensed and fine**; the blocker is upstream input: it needs sub-metre
@@ -353,8 +375,28 @@ but the free hosted tier's **ToS is non-commercial** (the underlying data is CC 
 isn't). Usable only as a prototype cross-check; production needs the paid tier (~€29/mo) or self-hosting
 AGPL. Independently rejected on the same grounds in the Green Score methodology's cost/data section.
 
-**OpenAQ, Google Air Quality / Ambee / IQAir** — no browser CORS / key exposure (OpenAQ) or
-paid/non-commercial (Google AQ, Ambee, IQAir).
+**AQI APIs — landscape researched 2026-09-02** (multi-city: Kolkata, Mumbai, Bengaluru, Jamshedpur, Dubai).
+The rule that fell out: **the AQI standard follows the city's regulator, the source follows what that
+regulator publishes** — CPCB for every Indian city (free, GODL-India), US-EPA-based for Dubai.
+- **IQAir (AirVisual)** — $399/mo Startup, $999/mo Enterprise, free 500 calls/day. **Ruled out for India:**
+  its Kolkata data is re-served **WBPCB** (same seven stations as CPCB), and its primary field `aqius` is
+  US EPA, wrong for an Indian regulator. Would add nothing to Barrackpore/Baruipur, which have no station.
+  Legitimate only as a Dubai adapter, and only after the government sources below are checked.
+- **Google Air Quality API** (ex-BreezoMeter) — 500 m modelled field, 100+ countries, **70+ AQ indexes**
+  (so CPCB and EPA both available), free 10K calls/mo then $5/1K. **Best candidate for multi-city — BLOCKED
+  on one unverified question:** Maps Platform ToS has historically restricted use alongside non-Google
+  basemaps, and we render on MapLibre. Check that before anything else. A modelled field must be labelled
+  modelled; it is not a station reading.
+- **Ambee** — Indian company (Bengaluru), 15-day trial, custom pricing. Partnership angle; unpriced.
+- **OpenAQ** — free 300 calls/5 min, commercial on custom terms. The old "no CORS" objection is solvable
+  with a proxy; worth a second look.
+- **Copernicus CAMS** — free, commercial OK with attribution, global forecasts — but ~80 km outside Europe,
+  so city-scale context only, never within-city.
+- **WBPCB AQMS portal** (`aqmsdata.wbpcb.gov.in/hourly`) — the *primary* source for Kolkata, closer than
+  CPCB-via-data.gov.in; evaluate as the ingestion path. **Dubai:** UAE National Air Quality Platform and
+  Dubai Pulse open data — unverified; check before paying any vendor.
+No API fixes station density: seven stations in Kolkata, seven in Bengaluru. Within-city AQ is a sensor
+problem, and one low-cost sensor costs about a month of the IQAir Startup plan.
 
 **IMD Mausam API** — returns 401 anonymously; needs formal onboarding. (Distinct from the
 separately-acquired IMD OpenCity daily-temperature archive, which **is** in use.)

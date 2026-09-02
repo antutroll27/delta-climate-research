@@ -388,3 +388,39 @@ within-ward figures — **cannot see water at all**. Its predictor mirrors
 time-stepped solver, and the relaxation has no dt-free steady state. So that script is structurally blind
 to this whole layer, and its output is annotated to say so. Any future cover layer that enters only the
 time-stepped solve will be invisible to it in exactly the same way.
+
+## 8. Rooftop-PV screening: the capacity figure rests on a Mumbai constant, and the shading claim is a Ballygunge claim
+
+**Status:** OPEN · **Found:** 2026-08-21, while extending the shading gate to all three wards · **Scope:**
+`scripts/measure-pv-shading.py`, `scripts/build-pv-yield.py`, `data/calibration/pv-*.json`.
+
+**Shading is robust; capacity is not.** Per-building shading loss is a *ratio*, so the roof-packing
+assumption cancels out of it. Every MWp and GWh does not: they scale linearly with `PACKING_FACTOR = 0.28`,
+imported from Singh & Banerjee 2015 (*Solar Energy*) — a **Mumbai** sample, range 0.28–0.40, conservative
+end adopted. No Kolkata measurement exists. The artefact therefore publishes an **interval**
+(`totals_packing_range`), and the headline is its floor: Ballygunge 17.49–24.99 MWp, 22.24–31.78 GWh/yr.
+The band is one-sided (+43 %) and bounds our *imported assumption*, not the truth.
+
+**The pre-registered gate passes on all roofs and fails on the roofs the scheme addresses.** Restricted
+post hoc to ≥ 3 kWp, Barrackpore (1.22 % / 6.8 %) and Baruipur (1.12 % / 7.1 %) do not clear the rule; only
+Ballygunge does (3.32 % / 20.3 %). Correct physics — shading tracks built density (median heights 7.0 / 4.9
+/ 4.5 m) — but it means "a quarter of roofs are materially shaded" is a **Ballygunge** statement, and on
+installable roofs a fifth. The rule was not re-registered; the stratum is reported alongside it
+(`installable_ge_3kwp`).
+
+**Heights understate shading, in a known direction.** Building heights are unvalidated with a suspected low
+bias (§ICESat-2 in `accuracy.ts`), so shadows are too short and shading is *understated* — a PASS is safe, a
+FAIL means "not detected". ~13 % of buildings (465 / 597 / 629) sit on Google's 2.5 m no-confident-height
+fill; 5–6 % of ≥ 3 kWp roofs. The p65→p75 caster swap was tested and is a null (+0.01–0.04 pp): the lever
+is the raster, not the quantile.
+
+**Screening, not bankable.** NASA POWER publishes no per-site uncertainty, so no honest P50/P90 pair can be
+built from it; only one of three uncertainty terms (interannual, ~3 %) is in hand, and the dominant one
+(site bias) is unquantified. The artefacts self-label `SCREENING ONLY`.
+
+**What would close it.** In order of leverage: (1) a **Kolkata roof-packing measurement** from overhead
+imagery — collapses the +43 % band; ground-level imagery cannot resolve it. (2) **Ground irradiance** to
+bias-correct POWER for the whole metro — the NIWE SRRA Advanced Measurement Station at IIEST Shibpur sits
+inside our POWER cell (see `data-sources.md`, Candidate). (3) **Height data**, not height statistics —
+stereo VHR photogrammetry or lidar. Terrain is ~0 % (Kolkata's true relief is 3–5 m; ground moves < 1 m
+over a 25–50 m shadow run).
