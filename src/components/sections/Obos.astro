@@ -1,0 +1,229 @@
+---
+// Section — OBOS. The instrument, presented the way a product is presented:
+// the name set edge-to-edge at wordmark scale, one full-bleed frame of the
+// console with a single centred call over it, then hairline-ruled rows that
+// say what it is in three sentences. It inherits the landing-page slot that
+// Medni (04) held; Medni stays archived, untouched.
+//
+// Uses only the page's existing scroll system — data-reveal for the header and
+// rows, data-clip for the frame's wipe — and one static WebP. No new JS.
+//
+// EVERY NUMBER HERE IS ONE WE HAVE PUBLISHED ELSEWHERE IN THE REPO: 12,767
+// buildings (accuracy.ts), three wards (wards.ts), 87 ECOSTRESS ward-scenes
+// (accuracy.ts SPATIAL.n). Change them there first.
+import { DEFAULT_AREA_PATH } from '../../scripts/climate-engine/scope/paths.ts';
+
+// The visible section index. 02 is what the page reads now (01 About → OBOS);
+// change it here if 02/03 come back out of the archive.
+const INDEX = '02';
+
+const rows = [
+  { k: 'Measured, not rendered', v: '12,767 real buildings across three Kolkata wards, heights from satellite, the heat field validated against 87 ECOSTRESS thermal scenes.' },
+  { k: 'Says what it doesn’t know', v: 'Every readout carries its band. When the model is outside validation, the screen says so — in the same type, at the same size.' },
+  { k: 'Built for the Global South', v: 'One radiation station, seven air monitors, fifteen million people. Kolkata first, on purpose. Dubai next, same engine.' },
+];
+---
+
+<section id="obos" class="section divider-top" aria-labelledby="obos-title">
+  <span class="draw-line" data-draw aria-hidden="true"></span>
+
+  <div class="wrap">
+    <div class="head" data-reveal>
+      <p class="sec-index">{INDEX} OBOS</p>
+      <p class="strap">Urban heat instrument &nbsp;·&nbsp; Kolkata &nbsp;·&nbsp; live</p>
+    </div>
+
+    <!-- the name, at wordmark scale: one line, edge to edge -->
+    <h2 id="obos-title" class="mark" data-reveal aria-label="OBOS">
+      <span aria-hidden="true">OBOS</span>
+    </h2>
+
+    <p class="claim" data-reveal>
+      The city, measured.<br />
+      <em>What it doesn’t know, it says.</em>
+    </p>
+  </div>
+
+  <!-- the frame: full-bleed, hairline, one centred call over it -->
+  <div class="wrap">
+    <a class="frame" href={DEFAULT_AREA_PATH} data-clip style="--clip-radius: 14px;" aria-label="Open OBOS, the live urban heat instrument">
+      <picture>
+        <source media="(max-width: 1100px)" srcset="/images/obos/console-1280.webp" />
+        <img src="/images/obos/console-1920.webp" alt="The OBOS console: a 3D model of Ballygunge, Kolkata, with a modelled surface-temperature field, live weather readouts and an uncertainty band on every figure." width="1920" height="1064" loading="lazy" decoding="async" />
+      </picture>
+      <span class="scrim" aria-hidden="true"></span>
+      <span class="call" aria-hidden="true">Open the instrument <i>↗</i></span>
+      <span class="cap" aria-hidden="true">Ballygunge · Ward 68 &nbsp;·&nbsp; 3,527 real buildings &nbsp;·&nbsp; heat field modelled &nbsp;·&nbsp; band on screen</span>
+    </a>
+  </div>
+
+  <div class="wrap">
+    <dl class="rows">
+      {rows.map((r) => (
+        <div class="row" data-reveal>
+          <dt>{r.k}</dt>
+          <dd>{r.v}</dd>
+        </div>
+      ))}
+    </dl>
+
+    <div class="cta" data-reveal>
+      <a class="go" href={DEFAULT_AREA_PATH}>Open OBOS <span aria-hidden="true">↗</span></a>
+      <a class="receipts" href="/uncertainty">Read the receipts <span aria-hidden="true">→</span></a>
+    </div>
+  </div>
+</section>
+
+<style>
+  #obos { overflow: hidden; }
+
+  .head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; }
+  .sec-index { margin: 0; }
+  .strap {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--color-ink-faint);
+  }
+
+  /* THE MARK — fills the measure, one line. Sized off the viewport so it stays
+     edge-to-edge at every width; the clamp floor keeps phones legible. */
+  .mark {
+    margin: clamp(1rem, 2.5vh, 2rem) 0 0;
+    font-family: var(--font-sans);
+    font-weight: 800;
+    font-size: clamp(5.4rem, 23.4vw, 21rem);
+    line-height: 0.82;
+    letter-spacing: -0.055em;
+    color: var(--color-paper);
+    white-space: nowrap;
+    /* hairline underneath, like a rule on a survey plate */
+    padding-bottom: clamp(0.6rem, 1.6vh, 1.2rem);
+    border-bottom: 1px solid rgb(176 141 87 / 0.35);
+  }
+
+  .claim {
+    margin: clamp(1.4rem, 3vh, 2.2rem) 0 clamp(2.2rem, 5vh, 3.6rem);
+    font-size: clamp(1.3rem, 2.1vw, 1.95rem);
+    font-weight: 400;
+    line-height: 1.14;
+    letter-spacing: -0.025em;
+    color: var(--color-paper);
+    max-width: 24ch;
+  }
+  .claim em { font-style: normal; color: var(--color-cyan); }
+
+  /* THE FRAME */
+  .frame {
+    position: relative;
+    display: block;
+    border: 1px solid var(--color-hairline);
+    border-radius: 14px;
+    overflow: hidden;
+    background: var(--color-surface);
+    text-decoration: none;
+    aspect-ratio: 1920 / 1064;
+  }
+  .frame img { display: block; width: 100%; height: 100%; object-fit: cover; }
+  .scrim {
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(60% 50% at 50% 50%, rgb(5 6 6 / 0.55) 0%, rgb(5 6 6 / 0.15) 60%, transparent 100%);
+    opacity: 0;
+    transition: opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .call {
+    position: absolute; left: 50%; top: 50%;
+    transform: translate(-50%, -50%) translateY(6px);
+    font-family: var(--font-mono);
+    font-size: clamp(0.66rem, 0.9vw, 0.8rem);
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--color-paper);
+    padding: 0.85rem 1.4rem;
+    border: 1px solid rgb(236 237 240 / 0.55);
+    border-radius: 999px;
+    background: rgb(5 6 6 / 0.55);
+    backdrop-filter: blur(8px);
+    opacity: 0;
+    transition: opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1), transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+    white-space: nowrap;
+  }
+  .call i { font-style: normal; color: var(--color-cyan); margin-left: 0.4em; }
+  .frame:hover .scrim, .frame:focus-visible .scrim { opacity: 1; }
+  .frame:hover .call, .frame:focus-visible .call { opacity: 1; transform: translate(-50%, -50%); }
+  .cap {
+    position: absolute; left: 1.1rem; bottom: 0.9rem;
+    font-family: var(--font-mono);
+    font-size: 0.55rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--color-cyan-muted);
+    background: rgb(5 6 6 / 0.6);
+    padding: 0.35rem 0.6rem;
+    border-radius: 4px;
+  }
+
+  /* THE ROWS — short label, longer sentence, hairline between */
+  .rows {
+    margin: clamp(3rem, 7vh, 5rem) 0 0;
+    border-top: 1px solid rgb(176 141 87 / 0.35);
+  }
+  .row {
+    display: grid;
+    grid-template-columns: minmax(0, 22ch) 1fr;
+    gap: clamp(1.5rem, 5vw, 6rem);
+    padding: clamp(1.3rem, 2.6vh, 2rem) 0;
+    border-bottom: 1px solid var(--color-hairline);
+  }
+  .row dt {
+    font-size: clamp(1.05rem, 1.4vw, 1.3rem);
+    font-weight: 500;
+    letter-spacing: -0.015em;
+    color: var(--color-paper);
+  }
+  .row dd {
+    margin: 0;
+    max-width: 58ch;
+    font-size: clamp(0.98rem, 1.2vw, 1.12rem);
+    font-weight: 300;
+    line-height: 1.55;
+    color: var(--color-ink-muted);
+  }
+
+  .cta {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 1.5rem 2.5rem;
+    margin-top: clamp(2rem, 4vh, 3rem);
+  }
+  .go {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--color-base);
+    background: var(--color-cyan);
+    padding: 0.95rem 1.5rem;
+    border-radius: 8px;
+    text-decoration: none;
+    transition: background-color 0.2s ease;
+  }
+  .go:hover { background: var(--color-paper-bright); }
+  .receipts {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--color-cyan);
+    text-decoration: none;
+  }
+  .receipts:hover { opacity: 0.7; }
+
+  @media (max-width: 760px) {
+    .head { flex-direction: column; gap: 0.4rem; }
+    .row { grid-template-columns: 1fr; gap: 0.5rem; }
+    .cap { display: none; }
+    .call { opacity: 1; transform: translate(-50%, -50%); }   /* no hover on touch: show the call */
+  }
+</style>

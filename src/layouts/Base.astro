@@ -234,9 +234,11 @@ const jsonLd = {
       import { initSeamSnap, destroySeamSnap } from '../scripts/seam-snap';
       import { initDescentFacts, destroyDescentFacts } from '../scripts/descent-facts';
       import { initAboutField, destroyAboutField } from '../scripts/about-field';
+      import { initStudiesField, destroyStudiesField } from '../scripts/studies-field';
 
       function initScroll() {
         // destroy-first makes init idempotent (page-load can fire after a prior init)
+        destroyStudiesField();
         destroyAboutField();
         destroySectionEffects();
         destroyScrollEffects();
@@ -250,9 +252,11 @@ const jsonLd = {
         initSeamSnap();
         initDescentFacts();
         initAboutField(); // async (three.js code-split); no-ops off the home page
+        initStudiesField(); // canvas + DOM only; no-ops off the home page
       }
 
       function teardownScroll() {
+        destroyStudiesField();
         destroyAboutField();
         destroySectionEffects();
         destroyScrollEffects();
