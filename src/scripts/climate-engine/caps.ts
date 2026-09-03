@@ -162,7 +162,9 @@ export function assertCapsLogic(): void {
   // reduced motion never animates and never spins up the GPU
   const rm = resolveHeatCaps(2, false, gpu, '');
   assert(!rm.animate && rm.backend === 'ts', 'reduced-motion -> static ts');
-  // potato defaults to the cheap 2D view
-  assert(resolveHeatCaps(0, true, none, '').mode === 'isotherm', 'tier 0 -> isotherm');
+  // tier 0 opens on the 3D view too (2026-09-03): the flat map was hiding the
+  // city from every modern Mali phone, and the solver backend, not the view
+  // mode, is what carries the cost. A visitor can still drop to 2D by hand.
+  assert(resolveHeatCaps(0, true, none, '').mode === 'relief', 'tier 0 -> relief');
   assert(resolveHeatCaps(2, true, none, '').mode === 'relief', 'tier 2 -> relief');
 }
