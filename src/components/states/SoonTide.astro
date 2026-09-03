@@ -65,7 +65,12 @@ const live = statusRows.find((r) => r.live);
 const mailto = `mailto:angad@deltaclimate.earth,shirsha@deltaclimate.earth?subject=${encodeURIComponent(notifySubject)}`;
 ---
 
-<main id="main" tabindex="-1" class="soon">
+<!-- KEEP `soon-tide` ON THIS ELEMENT. scripts/check-publication-contract.mjs decides a
+     route is a placeholder by the presence of `soon-draft` or `soon-tide` in a class
+     attribute — nothing else. The 2026-09-03 re-set renamed this to `soon` for the new
+     styling and five placeholder pages silently stopped counting as placeholders; CI
+     caught it, but behind an unrelated red, so it shipped. `soon` stays for the styles. -->
+<main id="main" tabindex="-1" class="soon soon-tide">
   <div class="stars" aria-hidden="true">
     {stars.map((s) => <i style={`left:${s.x}%; top:${s.y}%; animation-delay:${s.d}s; --o:${s.o}`}></i>)}
   </div>
