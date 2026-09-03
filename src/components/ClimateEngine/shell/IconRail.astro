@@ -664,6 +664,49 @@ const items = SECTIONS.map((s) => {
     .rail-toggle { display: none; }
   }
 
+  /* ── LANDSCAPE PHONES: the rail becomes a bottom bar ──
+     It has to live here, not in HeatMapStage's is:global block: these styles are
+     scoped, so `.rail[data-astro-cid-…]` outranks a bare `.rail` no matter how
+     late that rule is written. The stage owns the rest of the phone HUD; the rail
+     owns its own shape, which is also where the desktop rail is described.
+
+     Along the bottom rather than the left edge because a landscape phone is held
+     in two hands: the left edge is under a palm, the bottom edge is under both
+     thumbs. */
+  @media (pointer: coarse) and (max-width: 560px),
+         (pointer: coarse) and (orientation: landscape) and (max-height: 560px) {
+    .rail {
+      position: fixed;
+      inset: auto 0 0 0;
+      /* the desktop rail floats on a --rail-inset margin; a full-width bar must not */
+      margin: 0;
+      inline-size: 100%;
+      block-size: auto;
+      z-index: 40;
+      flex-direction: row;
+      align-items: center;
+      justify-content: space-around;
+      gap: 0;
+      padding: 3px 6px calc(3px + env(safe-area-inset-bottom));
+      border: 0;
+      border-block-start: 1px solid var(--line, rgb(111 202 214 / .14));
+      border-radius: 0;
+      background: rgb(9 20 22 / .96);
+      backdrop-filter: blur(12px);
+    }
+    .brand, .rail-toggle, .rail-label { display: none; }
+    .rail-btn {
+      inline-size: auto;
+      block-size: 38px;
+      flex: 1;
+      min-inline-size: 0;
+      padding: 0;
+      border-radius: 9px;
+      justify-content: center;
+    }
+    .rail-btn svg { inline-size: 19px; block-size: 19px; }
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .rail,
     .mark,

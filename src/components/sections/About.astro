@@ -247,6 +247,19 @@ const pillars = [
     .sec-title .ln { white-space: normal; }
     .ghost-index { font-size: clamp(6rem, 30vw, 10rem); right: 0.5rem; }
     .practice td.k { width: auto; }
-    .practice td.s { display: none; }   /* scope line is too long for a phone row */
+    .practice td.s, .practice th:nth-child(3) { display: none; }   /* scope column is too long for a phone row — cells AND header */
+  }
+  /* phones: the page's shared gutter (so 01 lines up with 02 and 03), a shorter
+     water band (the sea is dark on a phone; the band was reading as dead space),
+     and a legibility floor for the mono — 11px, letter-spacing kept. */
+  @media (max-width: 760px) {
+    #about { padding-block: clamp(4rem, 8vh, 5rem) 5.5rem; }
+    .about-core { padding-inline: clamp(1rem, 4vw, 2.5rem); }
+    .water-deck { height: 5rem; }
+    .sec-kicker { font-size: 0.7rem; }
+    .practice { font-size: 0.7rem; }
+    .practice td.k { font-size: 1rem; }
+    .statement-meta { font-size: 0.64rem; }
+    .sec-meta { font-size: 0.62rem; }
   }
 </style>

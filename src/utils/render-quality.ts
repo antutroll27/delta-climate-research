@@ -71,7 +71,12 @@ function normaliseGpuLabel(label: string): string {
   return label.toLowerCase().replace(/\((?:tm|r)\)|[™®]/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
-const LOW_GPU = /(swiftshader|software|llvmpipe|virtualbox|microsoft basic|intel (uhd|hd) graphics|iris|mali-[gt][0-7]|adreno [1-5]|powervr)/;
+/* `mali-[gt][0-7]` was meant for old Mali parts and caught every modern one:
+   G78, G710, G715 and G610/G615 all matched its `g7`/`g6` prefix and were graded
+   LOW — the flagship Android GPUs, told they could not draw a city. Now: all
+   T-series (genuinely old), and TWO-DIGIT G-series up to G69. A word boundary is
+   what keeps `g61` from matching inside `g610`. */
+const LOW_GPU = /(swiftshader|software|llvmpipe|virtualbox|microsoft basic|intel (uhd|hd) graphics|iris|mali-(?:t\d{3}|g[1-6]\d\b)|adreno [1-5]|powervr)/;
 /**
  * Capable but INTEGRATED. Tier 1 keeps the 3D relief view while routing the
  * solver to the CPU, which is the point: a shared-memory ping-pong plus readback

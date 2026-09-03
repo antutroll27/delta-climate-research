@@ -43,7 +43,14 @@ export interface HeatCaps {
   gpuLabel: string;
 }
 
-const TIER_MODE: Record<RenderTier, MapMode> = { 2: 'relief', 1: 'relief', 0: 'isotherm' };
+/* EVERY TIER OPENS ON THE 3-D CITY. Tier 0 used to open flat, which meant the
+   thing people came to see was hidden from the devices most of them arrive on —
+   and the tier is a guess about a GPU label, not a measurement of what the phone
+   can do. The runtime already demotes on real evidence: render-quality.ts watches
+   frame times and drops the pixel ratio, and caps.ts routes tier 0 to the CPU
+   solver regardless of what is drawn. So the cost of being wrong here is a
+   softer picture, not a broken one, and the 2-D isotherm stays one tap away. */
+const TIER_MODE: Record<RenderTier, MapMode> = { 2: 'relief', 1: 'relief', 0: 'relief' };
 
 /** WebGPU counts as available only if an adapter resolves — the API can exist with none. */
 async function probeWebGpu(): Promise<boolean> {

@@ -48,6 +48,9 @@ const rows = [
   <div class="wrap">
     <a class="frame" href={DEFAULT_AREA_PATH} data-clip style="--clip-radius: 14px;" aria-label="Open OBOS, the live urban heat instrument">
       <picture>
+        <!-- phones get a 4:5 portrait crop of the SAME capture — the ward and its
+             readout — because a 1920px console shrunk to 360px is texture, not a product -->
+        <source media="(max-width: 760px)" srcset="/images/obos/console-mobile.webp" />
         <source media="(max-width: 1100px)" srcset="/images/obos/console-1280.webp" />
         <img src="/images/obos/console-1920.webp" alt="The OBOS console: a 3D model of Ballygunge, Kolkata, with a modelled surface-temperature field, live weather readouts and an uncertainty band on every figure." width="1920" height="1064" loading="lazy" decoding="async" />
       </picture>
@@ -222,8 +225,19 @@ const rows = [
 
   @media (max-width: 760px) {
     .head { flex-direction: column; gap: 0.4rem; }
+    .strap { font-size: 0.68rem; }
     .row { grid-template-columns: 1fr; gap: 0.5rem; }
     .cap { display: none; }
-    .call { opacity: 1; transform: translate(-50%, -50%); }   /* no hover on touch: show the call */
+    /* the frame goes portrait for the phone crop */
+    .frame { aspect-ratio: 4 / 5; }
+    .scrim { display: none; }
+    /* no hover on touch: the call becomes a bar along the frame's bottom edge,
+       so the crop stays clear and the target is a full-width 48px strip */
+    .call {
+      opacity: 1; left: 0; right: 0; top: auto; bottom: 0; transform: none;
+      display: flex; align-items: center; justify-content: center; min-height: 48px;
+      border: 0; border-top: 1px solid rgb(236 237 240 / 0.18); border-radius: 0;
+      background: rgb(5 6 6 / 0.74);
+    }
   }
 </style>
