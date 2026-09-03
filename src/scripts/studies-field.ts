@@ -24,7 +24,12 @@ let cleanup: (() => void) | undefined;
 
 /* ───────────────────────── HEAT ───────────────────────── */
 
-const W = 320, H = 200;
+// Phones pay less: a smaller buffer and a slower gate on coarse-pointer devices.
+// Nobody can see the difference at 360px; the battery can. (Decided at module
+// load — this file only ever runs in the browser, via Base.astro's client script.)
+const COARSE = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+const W = COARSE ? 240 : 320, H = COARSE ? 150 : 200;
+const FRAME_MS = COARSE ? 83 : 50;   // ~12 fps on phones, ~20 on desktop
 const T_MIN = 29, T_MAX = 38;
 
 // 5-stop ramp, close to the OBOS legend (Comfortable → Extreme). Not the
@@ -165,7 +170,7 @@ export function initStudiesField() {
   const drawHeat = (now: number) => {
     heatRaf = 0;
     if (!ctx || !img) return;
-    if (now - heatLast < 50) { heatRaf = requestAnimationFrame(drawHeat); return; } // ~20 fps
+    if (now - heatLast < FRAME_MS) { heatRaf = requestAnimationFrame(drawHeat); return; }
     heatLast = now;
     paintHeat(img, city, (now - t0) / 1000, true);
     ctx.putImageData(img, 0, 0);

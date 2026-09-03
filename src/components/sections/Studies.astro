@@ -37,7 +37,7 @@ if (!heat || !cbam) throw new Error('Studies.astro: expected both paper slugs in
       <article class="panel" data-reveal>
         <a class="frame" href={paperHref(heat)} data-clip style="--clip-radius: 14px;" aria-label={`Read: ${heat.title}`}>
           <canvas data-heat width="320" height="200" aria-hidden="true"></canvas>
-          <span class="tag tl" aria-hidden="true">LST &nbsp;·&nbsp; ECOSTRESS &nbsp;·&nbsp; 70 m &nbsp;·&nbsp; ISS overpass</span>
+          <span class="tag tl" aria-hidden="true">LST &nbsp;·&nbsp; ECOSTRESS<span class="more"> &nbsp;·&nbsp; 70 m &nbsp;·&nbsp; ISS overpass</span></span>
           <span class="tag bl warn" aria-hidden="true">Procedural field &nbsp;·&nbsp; not a measurement</span>
           <span class="bar" aria-hidden="true"><i>29</i><b></b><i>38 °C</i></span>
           <span class="scrim" aria-hidden="true"></span>
@@ -146,6 +146,7 @@ if (!heat || !cbam) throw new Error('Studies.astro: expected both paper slugs in
   .call { position: absolute; z-index: 4; left: 50%; top: 50%; transform: translate(-50%, -50%) translateY(6px);
     font-family: var(--font-mono); font-size: clamp(0.62rem, 0.85vw, 0.76rem); letter-spacing: 0.2em; text-transform: uppercase;
     color: var(--color-paper); padding: 0.8rem 1.3rem; border: 1px solid rgb(236 237 240 / 0.55); border-radius: 999px;
+    min-height: 44px; display: inline-flex; align-items: center; box-sizing: border-box;
     background: rgb(5 6 6 / 0.55); backdrop-filter: blur(8px); opacity: 0; white-space: nowrap;
     transition: opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1), transform 0.6s cubic-bezier(0.16, 1, 0.3, 1); }
   .call i { font-style: normal; color: var(--color-cyan); margin-left: 0.4em; }
@@ -189,9 +190,39 @@ if (!heat || !cbam) throw new Error('Studies.astro: expected both paper slugs in
 
   @media (max-width: 760px) {
     .head { flex-direction: column; gap: 0.4rem; }
-    .body { grid-template-columns: 1fr; }
-    .figs { text-align: left; }
+    .strap { font-size: 0.68rem; }
+    /* the title breaks on purpose: "Carbon / at the border." — not a widow */
+    .title { font-size: clamp(2.4rem, 9.6vw, 4rem); }
+    .title em { white-space: nowrap; }
+    /* mono legibility floor: 10px tags, 11px labels, letter-spacing kept */
+    .tag { font-size: 0.64rem; }
+    .bar { font-size: 0.64rem; }
+    .meta { font-size: 0.64rem; }
+    .tabs { font-size: 0.66rem; }
+    .lbl, .fig small, .route { font-size: 0.62rem; }
+    /* no hover on touch: the call becomes a bar along each frame's bottom edge — a
+       full-width 48px target that covers nothing (centred, it sat over the ledger's figures) */
+    .scrim { display: none; }
+    .call {
+      opacity: 1; left: 0; right: 0; top: auto; bottom: 0; transform: none;
+      display: flex; justify-content: center; min-height: 48px;
+      border: 0; border-top: 1px solid rgb(236 237 240 / 0.18); border-radius: 0;
+      background: rgb(5 6 6 / 0.74);
+    }
+    /* heat frame: colour bar to the top row beside a shortened LST tag; honesty tag above the bar */
+    .tag.tl .more { display: none; }
+    .bar { top: 0.9rem; right: 1rem; bottom: auto; }
+    .tag.bl { bottom: 3.7rem; }
     .tag.tr { display: none; }
-    .call { opacity: 1; transform: translate(-50%, -50%); }
+    /* THE LEDGER: a 16:10 frame held 222px while the stacked content needed 442,
+       so half of it was clipped. On phones it takes its own height, and the
+       figures come first — three across — with the bars underneath. */
+    .ledger { aspect-ratio: auto; padding: 2.9rem 1.1rem calc(1.1rem + 48px); }
+    .body { grid-template-columns: 1fr; gap: 1.1rem; padding-block: 1rem 0.9rem; }
+    .figs { order: -1; text-align: left; grid-template-columns: 1.3fr 1fr 1fr; align-items: end; gap: 0.6rem; }
+    .good { font-size: 0.9rem; }
+    .fig b { font-size: 1.5rem; }
+    .bars { min-height: 6rem; }
+    .track { min-height: 4.4rem; }
   }
 </style>
