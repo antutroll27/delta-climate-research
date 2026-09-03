@@ -1,14 +1,18 @@
 ---
-// Section 01 — About. Centered cathedral in a living GPU wave field: masked
-// title with the ghost index to its right, scrub-blur statement, three pillar
-// columns, and three image rafts floating on the same sea (about-field.ts —
-// the field calms as the section scrolls: data → decision). Static fallbacks:
-// without WebGL/motion the rafts render as plain <img> rows and the field is
-// a quiet gradient. Type choreography lives in section-effects.ts.
+// Section 01 — About. Left-set typography over the living GPU wave field:
+// a width-filling masked title (ghost index top-right), one clear band of open
+// water, then the statement beside a hairline mono table of the three
+// practice areas. about-field.ts still owns the sea (it calms as the section
+// scrolls: data → decision). Type choreography lives in section-effects.ts.
+//
+// 2026-09-02: typography ported from the about-v2 preview; the image rafts
+// were taken OUT at the same time (the <img data-raft-img> row that fed them
+// as textures is gone). about-field.ts handles zero rafts. To bring them back,
+// restore that row inside [data-deck] and give placeCards() three anchors.
 const pillars = [
-  { id: '/01', k: 'Climatology', v: 'Climate Risk Assessment · Geospatial Research · Global Climate Modelling', img: '/images/about/climate-science.webp', alt: 'Earth at night from orbit' },
-  { id: '/02', k: 'Nature Analytics', v: 'Human–Environment Interactions · Regional Planning · Ecological Outcomes', img: '/images/about/urban-heat.webp', alt: 'Dense city skyline in haze' },
-  { id: '/03', k: 'Sectoral Strategy', v: 'Regulatory Alignment · Environmental Compliance · Sustainability Reporting', img: '/images/about/industrial.webp', alt: 'Industrial plant pipework' },
+  { id: '/01', k: 'Climatology',       v: 'Climate risk assessment · Geospatial research · Global climate modelling' },
+  { id: '/02', k: 'Nature Analytics',  v: 'Human–environment interactions · Regional planning · Ecological outcomes' },
+  { id: '/03', k: 'Sectoral Strategy', v: 'Regulatory alignment · Environmental compliance · Sustainability reporting' },
 ];
 ---
 
@@ -16,44 +20,45 @@ const pillars = [
   <canvas data-field aria-hidden="true"></canvas>
   <div class="field-dim" aria-hidden="true"></div>
 
-  <div class="sec-frame corners" aria-hidden="true">
-    <span class="ck tl"></span><span class="ck tr"></span><span class="ck bl"></span><span class="ck br"></span>
-  </div>
+  <span class="ghost-index" aria-hidden="true">01</span>
 
   <div class="about-core">
-    <p class="sec-kicker">01 About</p>
+    <p class="sec-kicker"><b>01</b> About</p>
 
-    <div class="about-head">
-      <span class="ghost-index" aria-hidden="true">01</span>
-      <h2 id="about-title" class="sec-title" data-mask>
-        <span class="ln"><span>Between the data</span></span>
-        <span class="ln"><span>and the <em>decision.</em></span></span>
-      </h2>
-    </div>
+    <h2 id="about-title" class="sec-title" data-mask>
+      <span class="ln"><span>Between the data</span></span>
+      <span class="ln"><span>and the <em>decision.</em></span></span>
+    </h2>
 
-    <p class="statement" data-words>
-      Delta Climate Research sits between raw earth-science data and the institutions
-      that must act on it — turning <span class="em">decision-grade</span> measurement into
-      standards-aligned, <span class="em">defensible</span> adaptation strategy.
-    </p>
+    <!-- open water: the band where the sea shows through. about-field.ts reads
+         [data-deck] to place rafts; there are none now, so it is only the stage. -->
+    <div class="water-deck" data-deck aria-hidden="true"></div>
 
-    <ul class="pillars" role="list">
-      {pillars.map((p) => (
-        <li class="pillar">
-          <span class="p-id">{p.id}</span>
-          <span class="p-k">{p.k}</span>
-          <span class="p-v" set:html={p.v.replaceAll(' · ', '<br />')} />
-        </li>
-      ))}
-    </ul>
+    <div class="deck">
+      <div class="statement-col">
+        <!-- no data-words: the scrub-blur reveal left this copy faded until
+             well past the section, so the statement now renders at full opacity. -->
+        <p class="statement">
+          Delta Climate Research sits between raw earth-science data and the institutions
+          that must act on it — turning <span class="em">decision-grade</span> measurement into
+          standards-aligned, <span class="em">defensible</span> adaptation strategy.
+        </p>
+        <p class="statement-meta">Imagined in Kolkata · Built for the Global South</p>
+      </div>
 
-    <!-- water deck: the rafts render here inside the canvas; the <img>s are
-         the static fallback (no-JS / reduced-motion / no-WebGL) and the
-         texture source for the WebGL rafts. -->
-    <div class="water-deck" data-deck>
-      {pillars.map((p) => (
-        <img data-raft-img src={p.img} alt={p.alt} loading="lazy" decoding="async" width="1200" height="790" />
-      ))}
+      <table class="practice" aria-label="Practice areas">
+        <thead><tr><th scope="col">№</th><th scope="col">Discipline</th><th scope="col">Scope</th><th scope="col"><span class="sr-only">Open</span></th></tr></thead>
+        <tbody>
+          {pillars.map((p) => (
+            <tr>
+              <td class="i">{p.id}</td>
+              <td class="k">{p.k}</td>
+              <td class="s">{p.v}</td>
+              <td class="a" aria-hidden="true">→</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   </div>
 
@@ -68,7 +73,8 @@ const pillars = [
   #about {
     position: relative;
     overflow: hidden;
-    padding-block: clamp(7rem, 16vh, 12rem);
+    /* extra room at the foot so the coordinates meta sits below the table */
+    padding-block: clamp(5.5rem, 10vh, 8rem) clamp(6.5rem, 11vh, 8.5rem);
     /* quiet gradient — all the field non-WebGL users get */
     background:
       radial-gradient(60% 45% at 50% 62%, rgb(111 202 214 / 0.05), transparent 70%),
@@ -77,110 +83,147 @@ const pillars = [
 
   [data-field] { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 
-  /* vignette keeps type sovereign and melts the ocean into the page base */
+  /* vignette keeps type sovereign and melts the ocean into the page base —
+     the radial is wider than before because the title now spans the width */
   .field-dim {
     position: absolute;
     inset: 0;
     pointer-events: none;
     background:
-      radial-gradient(52% 38% at 50% 36%, rgb(5 6 6 / 0.58) 0%, rgb(5 6 6 / 0.26) 55%, transparent 80%),
+      radial-gradient(72% 40% at 50% 30%, rgb(5 6 6 / 0.58) 0%, rgb(5 6 6 / 0.26) 55%, transparent 80%),
       linear-gradient(to bottom, var(--color-base) 0%, transparent 32%, transparent 80%, var(--color-base) 100%),
       linear-gradient(to right, var(--color-base) 0%, transparent 9%, transparent 91%, var(--color-base) 100%);
   }
 
-  /* crosshair frame around the whole section */
-  .sec-frame { position: absolute; inset: clamp(1.2rem, 3vw, 2.6rem); pointer-events: none; z-index: 5; }
+  .about-core {
+    position: relative;
+    z-index: 2;
+    text-align: left;
+    padding-inline: clamp(1.5rem, 5vw, 5.5rem);
+  }
 
-  .about-core { position: relative; z-index: 2; text-align: center; }
-  .sec-kicker { display: block; text-align: center; margin-bottom: 0; }
+  /* kicker: small mono, bronze number, quiet label */
+  .sec-kicker {
+    display: block;
+    margin-bottom: 0;
+    font-size: 0.62rem;
+    letter-spacing: 0.18em;
+    color: var(--color-cyan-muted);
+  }
+  .sec-kicker b { font-weight: 400; color: var(--color-bronze); }
 
+  /* ghost index — top-right, in the display face, heavy and outlined */
+  .ghost-index {
+    position: absolute;
+    right: clamp(1rem, 4vw, 4rem);
+    top: clamp(0.6rem, 2vh, 2rem);
+    z-index: 1;
+    font-family: var(--font-sans);
+    font-weight: 800;
+    font-size: clamp(9rem, 21vw, 19rem);
+    line-height: 0.8;
+    letter-spacing: -0.06em;
+    -webkit-text-stroke: 1px rgb(176 141 87 / 0.26);
+    pointer-events: none;
+  }
+
+  /* THE TITLE — fills the width */
   .sec-title {
     position: relative;
     z-index: 1;
-    margin: 1.6rem auto 0;
+    margin: clamp(2.2rem, 5vh, 3.6rem) 0 0;
     max-width: none;
     font-weight: 500;
-    letter-spacing: -0.03em;
-    line-height: 1.02;
-    font-size: clamp(3.2rem, 7vw, 6.8rem);
+    letter-spacing: -0.045em;
+    line-height: 0.94;
+    font-size: clamp(3.4rem, 9.4vw, 9.6rem);
   }
+  .sec-title .ln { white-space: nowrap; }
+  /* the accent stays in the same face and weight as the line — colour only.
+     Overrides the global serif-800 / scaleY(1.18) / capitalised-first-letter accent. */
+  .sec-title em {
+    font-family: inherit;
+    font-weight: inherit;
+    font-style: normal;
+    color: var(--color-cyan);
+    letter-spacing: inherit;
+    display: inline;
+    transform: none;
+  }
+  .sec-title em::first-letter { text-transform: none; }
   /* phones: shrink with the shared .sec-title mobile tier so long words fit */
   @media (max-width: 480px) {
     .sec-title { font-size: clamp(2.2rem, 11vw, 3.2rem); }
   }
 
-  .about-head { position: relative; }
-  /* ghost index — right of the header */
-  .ghost-index {
-    position: absolute;
-    right: clamp(1rem, 5vw, 5rem);
-    top: 50%;
-    transform: translateY(-54%);
-    font-size: clamp(8rem, 19vw, 16rem);
-    -webkit-text-stroke: 1px rgb(176 141 87 / 0.22);
-    z-index: 0;
+  /* open water band — deliberately empty */
+  .water-deck { height: clamp(7rem, 14vh, 11rem); }
+
+  /* lower deck: statement column beside the practice table */
+  .deck {
+    display: grid;
+    grid-template-columns: minmax(0, 38ch) 1fr;
+    gap: clamp(2rem, 6vw, 6rem);
+    align-items: end;
   }
 
-  /* the statement — words get .w spans from section-effects.ts (scrub-blur) */
+  /* the statement — plain, no per-word reveal (see the markup note above) */
   .statement {
-    margin: clamp(3rem, 7vh, 5rem) auto 0;
-    max-width: 56ch;
-    font-size: clamp(0.98rem, 1.45vw, 1.25rem);
+    margin: 0;
+    max-width: none;
+    font-size: clamp(0.98rem, 1.25vw, 1.15rem);
     font-weight: 300;
     line-height: 1.55;
     letter-spacing: -0.005em;
-    padding-inline: 1.25rem;
     color: var(--color-paper);
   }
-  .statement :global(.w) { display: inline-block; white-space: pre-wrap; will-change: opacity, filter; }
-  .statement .em {
-    font-family: var(--font-serif);
-    font-style: normal;
-    font-weight: 800;
-    color: var(--color-cyan);
-  }
-
-  /* pillars — three centered columns (rise via the data-reveal-group system) */
-  .pillars {
-    max-width: 1080px;
-    margin: clamp(4rem, 9vh, 7rem) auto 0;
-    padding: 0 clamp(1.25rem, 4vw, 4rem);
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: clamp(1.5rem, 4vw, 3.5rem);
-    list-style: none;
-    text-align: center;
-  }
-  .pillar .p-id { font-family: var(--font-mono); font-size: 0.78rem; color: var(--color-bronze); display: block; margin-bottom: 0.7rem; }
-  .pillar .p-k { font-weight: 400; font-size: 1.45rem; display: block; margin-bottom: 0.55rem; color: var(--color-paper); }
-  .pillar .p-v {
+  .statement .em { font-weight: 800; color: var(--color-cyan); }
+  .statement-meta {
+    margin: 1.1rem 0 0;
     font-family: var(--font-mono);
-    font-size: 0.72rem;
-    letter-spacing: 0.1em;
+    font-size: 0.58rem;
+    letter-spacing: 0.16em;
     text-transform: uppercase;
     color: var(--color-ink-faint);
-    line-height: 1.8;
   }
 
-  /* water deck — the rafts' stage. Fallback <img>s show as a static row
-     until the WebGL field marks the section .field-on. */
-  .water-deck {
-    height: clamp(18rem, 38vh, 26rem);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: clamp(1rem, 3vw, 2.5rem);
-    padding-inline: clamp(1.25rem, 4vw, 4rem);
+  /* practice table — hairline rows, mono caps, the discipline in the display face */
+  .practice {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--font-mono);
+    font-size: 0.66rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
   }
-  .water-deck img {
-    width: min(26%, 320px);
-    height: auto;
-    border: 1px solid var(--color-hairline);
-    opacity: 0.92;
+  .practice th {
+    text-align: left;
+    font-weight: 400;
+    color: var(--color-ink-faint);
+    padding: 0 0 0.6rem;
+    border-bottom: 1px solid rgb(176 141 87 / 0.35);
   }
-  :global(#about.field-on) .water-deck img {
-    visibility: hidden; /* textures live on — the WebGL rafts take over */
+  .practice td {
+    padding: 0.95rem 0;
+    border-bottom: 1px solid var(--color-hairline);
+    vertical-align: top;
+    color: var(--color-ink-muted);
   }
+  .practice td.i { color: var(--color-bronze); width: 3.2rem; }
+  .practice td.k {
+    width: 15rem;
+    font-family: var(--font-sans);
+    font-size: 1.05rem;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    text-transform: none;
+    color: var(--color-paper);
+  }
+  .practice td.a { width: 2rem; text-align: right; color: var(--color-cyan-muted); }
+  .practice tbody tr { transition: color 0.35s ease; }
+  .practice tbody tr:hover td { color: var(--color-paper); }
+  .practice tbody tr:hover td.a { color: var(--color-cyan); }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
   /* coordinates meta — bottom right */
   .sec-meta {
@@ -198,10 +241,12 @@ const pillars = [
   }
   .sec-meta .live { color: var(--color-cyan-muted); }
 
-  @media (max-width: 760px) {
-    .pillars { grid-template-columns: 1fr; gap: 2rem; }
-    .water-deck { flex-direction: row; flex-wrap: wrap; }
-    .water-deck img { width: min(44%, 240px); }
-    .ghost-index { right: 0.5rem; }
+  @media (max-width: 900px) {
+    .deck { grid-template-columns: 1fr; }
+    .sec-title { font-size: clamp(2.4rem, 11vw, 4rem); }
+    .sec-title .ln { white-space: normal; }
+    .ghost-index { font-size: clamp(6rem, 30vw, 10rem); right: 0.5rem; }
+    .practice td.k { width: auto; }
+    .practice td.s { display: none; }   /* scope line is too long for a phone row */
   }
 </style>

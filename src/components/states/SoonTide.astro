@@ -1,11 +1,19 @@
 ---
-// "Night tide" coming-soon page body (Research side). Ties the empty research
-// pages to the About night ocean: drifting wave lines, a twinkling star field,
-// the ghost numeral bobbing like a berg, and a tide gauge tracking the draft
-// revision. Star positions are generated deterministically at build time — the
-// page ships as static HTML with pure-CSS animation; everything stills under
-// reduced motion.
-// Title goes in the default slot so pages can mark up <em> accents.
+// "In preparation" page body (Research side) — shared by /white-papers,
+// /white-papers/[slug], /cbam, /blog and /climate-highlights.
+//
+// 2026-09-02: re-set in the landing page's current typographic language
+// (About 01 / OBOS 02 / Studies 03): a width-filling title, the outlined
+// numeral top-right, small mono straps, a hairline-ruled status table, one
+// filled call. The night-tide furniture — three drifting wave SVGs, the tick
+// gauge, the corner crosshairs, the bobbing numeral — is gone; the star field
+// stays, quietly. Same props, same slots, same mailto, so every consumer
+// keeps working unchanged. `gaugeLabel` now renders as the small mono line
+// bottom-right rather than a gauge.
+//
+// Stars are generated deterministically at build time; the page ships as
+// static HTML with pure-CSS animation, and everything stills under reduced
+// motion. Title goes in the default slot so pages can mark up <em> accents.
 interface StatusRow {
   k: string;
   v: string;
@@ -29,8 +37,8 @@ const {
   ghost,
   gaugeLabel,
   statusRows = [],
-  backHref = '/#papers',
-  backLabel = 'Back to the feed',
+  backHref = '/',
+  backLabel = 'Back to home',
   nextHref,
   nextLabel,
   notifySubject,
@@ -47,78 +55,62 @@ const starRandom = () => {
   value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
   return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
 };
-
-const stars = Array.from({ length: 70 }, () => ({
+const stars = Array.from({ length: 60 }, () => ({
   x: +(starRandom() * 100).toFixed(2),
-  y: +(starRandom() * 55).toFixed(2),
+  y: +(starRandom() * 70).toFixed(2),
   d: +(starRandom() * 4).toFixed(2),
-  o: +(0.2 + starRandom() * 0.5).toFixed(2),
+  o: +(0.15 + starRandom() * 0.4).toFixed(2),
 }));
+const live = statusRows.find((r) => r.live);
+const mailto = `mailto:angad@deltaclimate.earth,shirsha@deltaclimate.earth?subject=${encodeURIComponent(notifySubject)}`;
 ---
 
-<main id="main" tabindex="-1" class="soon-tide">
+<main id="main" tabindex="-1" class="soon">
   <div class="stars" aria-hidden="true">
     {stars.map((s) => <i style={`left:${s.x}%; top:${s.y}%; animation-delay:${s.d}s; --o:${s.o}`}></i>)}
   </div>
 
-  <span class="ghost-index tide-ghost" aria-hidden="true">{ghost}</span>
-
-  {gaugeLabel && (
-    <div class="gauge" aria-hidden="true">
-      {Array.from({ length: 9 }, (_, i) => <i style={`bottom:${(i + 1) * 10}%`}></i>)}
-      <span class="lvl">{gaugeLabel}</span>
-    </div>
-  )}
-
-  <div class="sea" aria-hidden="true">
-    <svg class="w1" viewBox="0 0 2880 320" preserveAspectRatio="none">
-      <path d="M0 160 Q 180 110 360 160 T 720 160 T 1080 160 T 1440 160 T 1800 160 T 2160 160 T 2520 160 T 2880 160" />
-    </svg>
-    <svg class="w2" viewBox="0 0 2880 320" preserveAspectRatio="none">
-      <path d="M0 210 Q 240 170 480 210 T 960 210 T 1440 210 T 1920 210 T 2400 210 T 2880 210" />
-    </svg>
-    <svg class="w3" viewBox="0 0 2880 320" preserveAspectRatio="none">
-      <path d="M0 260 Q 144 235 288 260 T 576 260 T 864 260 T 1152 260 T 1440 260 T 1728 260 T 2016 260 T 2304 260 T 2592 260 T 2880 260" />
-    </svg>
-  </div>
-  <div class="sea-fade" aria-hidden="true"></div>
+  <span class="ghost-index soon-ghost" aria-hidden="true">{ghost}</span>
 
   <div class="wrap core" data-reveal-group data-stagger="110">
-    <p class="sec-kicker">{kicker}</p>
-    <h1 class="sec-title tide-title"><slot /></h1>
-    <p class="tide-sub">{sub}</p>
+    <div class="head">
+      <p class="kicker">{kicker}</p>
+      {live && <p class="state"><i class="dot"></i>{live.v}</p>}
+    </div>
+
+    <h1 class="sec-title soon-title"><slot /></h1>
+
+    <p class="sub">{sub}</p>
 
     {statusRows.length > 0 && (
-      <div class="status corners">
-        <span class="ck tl"></span><span class="ck tr"></span><span class="ck bl"></span><span class="ck br"></span>
+      <dl class="status">
         {statusRows.map((r) => (
-          <span class="st-row">
-            <span class="st-k">{r.k}</span>
-            {r.live
-              ? <span class="st-v st-live"><i class="dot"></i>{r.v}</span>
-              : <span class="st-v">{r.v}</span>}
-          </span>
+          <div class="row">
+            <dt>{r.k}</dt>
+            <dd class:list={[{ live: r.live }]}>{r.live && <i class="dot"></i>}{r.v}</dd>
+          </div>
         ))}
-      </div>
+      </dl>
     )}
 
-    <!-- Optional call to action. SoonDraft has had this slot since it shipped;
-         SoonTide gaining it means a coming-soon page can point somewhere real
-         instead of only offering a mailto. -->
+    <!-- Optional call to action. A coming-soon page can point somewhere real
+         instead of only offering a mailto (cbam.astro uses this for the estimator). -->
     <slot name="extra" />
 
     <div class="actions">
+      <a class="go" href={mailto}>Request a notification <span aria-hidden="true">↗</span></a>
       <a class="roll-link" href={backHref} data-roll>{backLabel} <span class="arrow" aria-hidden="true">↙</span></a>
       {nextHref && nextLabel && (
         <a class="roll-link" href={nextHref} data-roll>{nextLabel} <span class="arrow" aria-hidden="true">↗</span></a>
       )}
-      <a class="accent-link" href={`mailto:angad@deltaclimate.earth,shirsha@deltaclimate.earth?subject=${encodeURIComponent(notifySubject)}`}>Request a notification ↗</a>
     </div>
   </div>
+
+  {gaugeLabel && <span class="meta" aria-hidden="true">{gaugeLabel}</span>}
 </main>
 
 <style>
-  .soon-tide {
+  .soon {
     position: relative;
     min-height: 100dvh;
     display: flex;
@@ -129,103 +121,143 @@ const stars = Array.from({ length: 70 }, () => ({
       radial-gradient(55% 45% at 70% 25%, rgb(111 202 214 / 0.05), transparent 65%),
       var(--color-base);
   }
-  .core { position: relative; z-index: 3; }
 
-  /* star field */
+  /* star field — quiet, and the only thing that moves */
   .stars { position: absolute; inset: 0; z-index: 0; }
   .stars i {
     position: absolute; width: 2px; height: 2px; border-radius: 50%;
-    background: var(--color-paper); opacity: var(--o, 0.4);
-    animation: tide-twinkle 4s ease-in-out infinite;
+    background: var(--color-cyan-muted);
+    opacity: var(--o, 0.3);
+    animation: soon-twinkle 5.5s ease-in-out infinite;
   }
-  @keyframes tide-twinkle { 0%, 100% { opacity: 0.12; } 50% { opacity: var(--o, 0.6); } }
+  @keyframes soon-twinkle { 0%, 100% { opacity: 0.1; } 50% { opacity: var(--o, 0.5); } }
 
-  /* ghost numeral, bobbing like a berg */
-  .tide-ghost {
-    position: absolute; right: clamp(0.5rem, 6vw, 7rem); top: 46%; z-index: 1;
-    transform: translateY(-50%);
-    font-size: clamp(11rem, 30vw, 26rem);
+  /* the numeral — display face, heavy, outlined, top-right. Keeps .ghost-index
+     so section-effects' opacity/scale scrub still applies. */
+  .soon-ghost {
+    position: absolute;
+    right: clamp(1rem, 4vw, 4rem);
+    top: clamp(5rem, 12vh, 8rem);
+    z-index: 0;
+    font-family: var(--font-sans);
+    font-weight: 800;
+    font-size: clamp(9rem, 21vw, 19rem);
+    line-height: 0.8;
+    letter-spacing: -0.06em;
+    -webkit-text-stroke: 1px rgb(176 141 87 / 0.26);
     pointer-events: none;
-    animation: tide-bob 9s ease-in-out infinite;
-  }
-  @keyframes tide-bob {
-    0%, 100% { transform: translateY(-50%) rotate(0.4deg); }
-    50% { transform: translateY(calc(-50% - 14px)) rotate(-0.5deg); }
   }
 
-  /* tide gauge */
-  .gauge {
-    position: absolute; right: clamp(2rem, 8vw, 9rem); bottom: 0; z-index: 2;
-    height: 34vh; width: 1px; background: var(--color-hairline);
+  .core { position: relative; z-index: 2; width: 100%; }
+
+  .head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; }
+  .kicker,
+  .state {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--color-cyan-muted);
   }
-  .gauge i { position: absolute; left: -4px; width: 9px; height: 1px; background: var(--color-cyan-muted); opacity: 0.6; }
-  .gauge .lvl {
-    position: absolute; right: 1rem; white-space: nowrap;
-    font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 0.14em;
+  .dot {
+    display: inline-block; width: 5px; height: 5px; border-radius: 50%;
+    background: var(--color-cyan); margin-right: 0.55em; vertical-align: middle;
+    animation: soon-blink 2.4s ease-in-out infinite;
+  }
+  @keyframes soon-blink { 50% { opacity: 0.25; } }
+
+  /* THE TITLE — the About treatment, one step down for three-line paper titles */
+  .soon-title {
+    margin: clamp(2rem, 4.5vh, 3.2rem) 0 0;
+    max-width: 14ch;
+    font-weight: 500;
+    font-size: clamp(2.8rem, 6.8vw, 6.6rem);
+    line-height: 0.96;
+    letter-spacing: -0.04em;
+    color: var(--color-paper);
+  }
+  /* accent in the same face and weight — colour only. Overrides the global
+     serif-800 / scaleY(1.18) / capitalised-first-letter accent. */
+  .soon-title :global(em) {
+    font-family: inherit;
+    font-weight: inherit;
+    font-style: normal;
     color: var(--color-cyan);
-    bottom: 30%;
-    animation: tide-rise 8s ease-in-out infinite;
+    letter-spacing: inherit;
+    display: inline;
+    transform: none;
   }
-  @keyframes tide-rise { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4.08vh); } }
+  .soon-title :global(em)::first-letter { text-transform: none; }
 
-  /* drifting waves */
-  .sea { position: absolute; inset-inline: 0; bottom: 0; height: 38vh; z-index: 1; overflow: hidden; }
-  .sea svg { position: absolute; bottom: -2px; left: 0; width: 200%; height: 100%; }
-  .sea path { fill: none; stroke-width: 1.2; }
-  .w1 { animation: tide-drift 26s linear infinite; opacity: 0.5; }
-  .w2 { animation: tide-drift 18s linear infinite reverse; opacity: 0.32; }
-  .w3 { animation: tide-drift 13s linear infinite; opacity: 0.2; }
-  .w1 path { stroke: var(--color-cyan); }
-  .w2 path { stroke: var(--color-cyan-muted); }
-  .w3 path { stroke: var(--color-bronze); }
-  @keyframes tide-drift { to { transform: translateX(-50%); } }
-  .sea-fade {
-    position: absolute; inset-inline: 0; bottom: 0; height: 38vh; z-index: 2;
-    background: linear-gradient(to top, rgb(11 44 46 / 0.35), transparent);
-    pointer-events: none;
-  }
-
-  .tide-title { max-width: 18ch; }
-  .tide-sub {
-    margin-top: 1.5rem; max-width: 52ch;
-    font-size: clamp(1rem, 1.4vw, 1.2rem); font-weight: 300; line-height: 1.65;
+  .sub {
+    margin: clamp(1.4rem, 3vh, 2.2rem) 0 0;
+    max-width: 44ch;
+    font-size: clamp(0.98rem, 1.25vw, 1.15rem);
+    font-weight: 300;
+    line-height: 1.55;
     color: var(--color-ink-muted);
   }
 
-  /* status readout (instrument style, same as the approved WP block) */
+  /* status — hairline rows, not a card */
   .status {
-    display: inline-flex; flex-direction: column; gap: 0.55rem;
-    margin-top: clamp(2.5rem, 5vh, 4rem); padding: 1.4rem 1.7rem;
-    border: 1px solid var(--color-hairline);
-    background: rgb(11 44 46 / 0.25);
+    margin: clamp(2.2rem, 5vh, 3.4rem) 0 0;
+    max-width: 44ch;
+    border-top: 1px solid rgb(176 141 87 / 0.35);
   }
-  .st-row {
-    display: flex; gap: 2.2rem;
-    font-family: var(--font-mono); font-size: 0.68rem;
-    letter-spacing: 0.12em; text-transform: uppercase;
+  .status .row {
+    display: grid;
+    grid-template-columns: 9rem 1fr;
+    gap: 1rem;
+    padding: 0.7rem 0;
+    border-bottom: 1px solid var(--color-hairline);
+    font-family: var(--font-mono);
+    font-size: 0.66rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
   }
-  .st-k { min-width: 7ch; color: var(--color-ink-faint); }
-  .st-v { color: var(--color-paper); }
-  .st-live { color: var(--color-cyan); display: inline-flex; align-items: center; gap: 0.5rem; }
-  .st-live .dot {
-    width: 6px; height: 6px; border-radius: 50%;
-    background: var(--color-cyan);
-    animation: tide-blink 1.4s steps(2) infinite;
-  }
-  @keyframes tide-blink { 50% { opacity: 0.25; } }
+  .status dt { color: var(--color-ink-faint); }
+  .status dd { margin: 0; color: var(--color-paper); }
+  .status dd.live { color: var(--color-cyan); }
 
   .actions {
-    display: flex; flex-wrap: wrap; align-items: center;
-    gap: clamp(1.5rem, 4vw, 3rem);
-    margin-top: clamp(2.5rem, 5vh, 4rem);
+    display: flex; flex-wrap: wrap; align-items: center; gap: 1.2rem 2.2rem;
+    margin-top: clamp(2rem, 4.5vh, 3.2rem);
   }
-  .actions .accent-link { font-size: 0.78rem; letter-spacing: 0.14em; text-transform: uppercase; }
+  .go {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--color-base);
+    background: var(--color-cyan);
+    padding: 0.95rem 1.5rem;
+    border-radius: 8px;
+    text-decoration: none;
+    transition: background-color 0.2s ease;
+  }
+  .go:hover { background: var(--color-paper-bright); }
 
-  @media (max-width: 820px) {
-    .tide-ghost { right: -1rem; opacity: 0.6; }
-    .gauge { display: none; }
+  /* the draft line — small mono, bottom right, where the gauge used to be */
+  .meta {
+    position: absolute;
+    right: clamp(1.6rem, 4vw, 3.2rem);
+    bottom: clamp(1.6rem, 4vw, 3rem);
+    z-index: 2;
+    font-family: var(--font-mono);
+    font-size: 0.55rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--color-ink-faint);
+  }
+
+  @media (max-width: 760px) {
+    .soon-ghost { font-size: clamp(6rem, 30vw, 10rem); right: 0.5rem; top: 4.5rem; opacity: 0.7; }
+    .head { flex-direction: column; gap: 0.4rem; }
+    .soon-title { max-width: none; font-size: clamp(2.2rem, 11vw, 3.2rem); }
+    .status .row { grid-template-columns: 7rem 1fr; }
   }
   @media (prefers-reduced-motion: reduce) {
-    .stars i, .tide-ghost, .gauge .lvl, .w1, .w2, .w3, .st-live .dot { animation: none; }
+    .stars i, .dot { animation: none; }
   }
 </style>

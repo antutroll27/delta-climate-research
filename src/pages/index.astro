@@ -4,9 +4,21 @@ import Loader from '../components/layout/Loader.astro';
 import Nav from '../components/layout/Nav.astro';
 import Hero from '../components/sections/hero/Hero.astro';
 import About from '../components/sections/About.astro';
-import Projects from '../components/sections/Projects.astro';
-import WhitePapers from '../components/sections/WhitePapers.astro';
-import Medni from '../components/sections/Medni.astro';
+// ARCHIVED 2026-09-02 — sections 02 Projects, 03 White Papers, 04 Medni are
+// commented out of the landing page, NOT deleted. They were reading as finished
+// work to visitors arriving from social, and none of the three is complete:
+// /projects and /white-papers both render UNDER CONSTRUCTION placeholders, and
+// Medni is a dashboard shell with no map mounted.
+//
+// TO RESTORE: uncomment these three imports and the three tags in <main> below.
+// The components themselves are untouched, as are their nav and footer links.
+// NOTE the anchors #projects, #papers and #medni do not exist on this page while
+// this is archived — nav/footer links to them scroll nowhere until it is undone.
+// import Projects from '../components/sections/Projects.astro';
+// import WhitePapers from '../components/sections/WhitePapers.astro';
+// import Medni from '../components/sections/Medni.astro';
+import Obos from '../components/sections/Obos.astro';
+import Studies from '../components/sections/Studies.astro';
 import Faq from '../components/sections/Faq.astro';
 import CtaClose from '../components/sections/CtaClose.astro';
 import Footer from '../components/layout/Footer.astro';
@@ -18,9 +30,13 @@ import Footer from '../components/layout/Footer.astro';
   <main id="main" tabindex="-1">
     <Hero />
     <About />
-    <Projects />
-    <WhitePapers />
-    <Medni />
+    {/* ARCHIVED 2026-09-02 — see the note in the frontmatter above.
+        {<Projects />}
+        {<WhitePapers />}
+        {<Medni />} */}
+    {/* OBOS inherits the slot Medni (04) held. Medni stays archived above. */}
+    <Obos />
+    <Studies />
     <Faq />
     <CtaClose />
   </main>
