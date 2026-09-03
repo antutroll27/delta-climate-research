@@ -140,6 +140,42 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
       header explains why conflating them put a self-link back on the page. The
       pane rendered open here is the state the shell script reads back as its
       starting point; it is never restated in script. */}
+  {/* PHONE FURNITURE. Both are inert above the phone breakpoints — the CSS at the
+      foot of this file is the only thing that gives them a box.
+
+      THE NUDGE IS A NUDGE, NOT A GATE. It suggests rotating and can be dismissed,
+      because screen.orientation.lock() needs fullscreen and iOS Safari does not
+      implement it at all — a true lock is not available on the platform most of
+      this traffic arrives on. A gate would strand anyone with rotation locked. */}
+  {/* THE ENTRY NOTE. First thing a small screen sees, and easy to leave: the
+      console is a desktop instrument and saying so once is kinder than letting
+      someone conclude it is broken. Shown once per session, on touch screens only
+      — a desktop never sees it. Dismissed by the button, the backdrop, or Escape. */}
+  <div class="entry" id="entryNote" hidden role="dialog" aria-modal="true" aria-labelledby="entry-h">
+    <div class="entry-card">
+      <p class="entry-k">OBOS · Urban heat instrument</p>
+      <h2 class="entry-h" id="entry-h">Best on a <em>bigger screen</em></h2>
+      <p class="entry-b">This is a full console — a live 3-D city, a heat field and its
+        error bars. It works on a phone, but a laptop, desktop or tablet is where you
+        can actually read it.</p>
+      <p class="entry-b entry-b-sm">On a phone, turn it sideways for the full width.</p>
+      <button class="entry-go" type="button" data-entry-close>Continue anyway</button>
+    </div>
+  </div>
+
+  <div class="rotate-nudge" id="rotateNudge" hidden>
+    <span class="rn-ico" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="4" y="2.5" width="10.5" height="19" rx="2"/><path d="M17.5 9.5a6 6 0 0 1 0 5"/><path d="M19.6 8l.4 2.2-2.2.3"/>
+      </svg>
+    </span>
+    <span class="rn-txt">Turn your phone for the full instrument</span>
+    <button class="rn-x" type="button" data-rn-dismiss aria-label="Dismiss">✕</button>
+  </div>
+  {/* Tap-anywhere-else close for the landscape sheet. It drives the panel's own
+      chevron rather than the panel, so one writer still owns the state. */}
+  <button class="sheet-scrim" type="button" data-sheet-scrim tabindex="-1" aria-hidden="true"></button>
+
   <IconRail route="map" pane="map" explorePath={here} />
 
   <aside class="sidebar">
@@ -1522,6 +1558,248 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
     .synthetic .full{display:none}      /* short honesty tag ("heat field modelled") fits the gap */
     #envchip,#tintchip{display:none}    /* keep the primary 3D/2D view toggle; drop the style refinements */
   }
+  /* ═══════════════════════════════════════════════════════════════════════════
+     PHONES. Everything below is gated on a COARSE POINTER, so no laptop or
+     narrow desktop window ever sees it — the desktop console keeps the four
+     width breakpoints above unchanged.
+
+     The shape is a handheld HUD, not a shrunken desktop: the map is the whole
+     screen and every control floats over it, small, tucked into a corner, and
+     dismissible. Nothing permanent is taller than 44px.
+
+     WHY LANDSCAPE GETS THE REBUILD. Measured before writing any of this: at
+     844x390 the console sits ABOVE its own 820px breakpoint, so the full desktop
+     layout returned — rail, 250px sidebar, scope switcher — three columns of
+     chrome over a 390px-tall map, with ten elements measured off-screen. A phone
+     in landscape was getting the WORST layout, which is why the nudge alone
+     would not have been enough.
+     ═══════════════════════════════════════════════════════════════════════ */
+
+  /* BOTH PHONE ELEMENTS ARE DISPLAY:NONE BY DEFAULT, AND THAT IS LOAD-BEARING.
+     They are direct children of `.stage`, which is a grid with ONE declared row
+     (grid-template-rows:100%). A child with any other display becomes a grid item,
+     auto-places into an implicit SECOND row, and the main column — pushed into it —
+     collapses: measured `744px 22px` on the stage with the map at 0px tall and the
+     ward strip rendering below the viewport. Scoping the scrim's display:none to the
+     landscape media query alone did exactly that on every other width, desktop
+     included. Give them no box unless their own query is live. */
+  .rotate-nudge,.sheet-scrim,.entry{display:none}
+
+  /* ── the entry note (touch screens, once per session) ── */
+  @media (pointer:coarse){
+    .entry:not([hidden]){
+      position:fixed; inset:0; z-index:70; display:grid; place-items:center;
+      padding:5vh 5vw; background:rgb(5 6 6 /.82); backdrop-filter:blur(6px);
+      animation:entry-in .32s cubic-bezier(.16,1,.3,1) both;
+    }
+    .entry-card{
+      max-inline-size:34rem; padding:clamp(1.2rem,4vw,2rem);
+      background:var(--panel-ground,rgb(9 20 22 /.97));
+      border:1px solid var(--line); border-radius:14px;
+      box-shadow:0 24px 60px rgb(0 0 0 /.6);
+    }
+    .entry-k{font-family:var(--mono);font-size:.56rem;letter-spacing:.2em;
+             text-transform:uppercase;color:var(--bronze);margin-bottom:.9rem}
+    .entry-h{font-size:clamp(1.5rem,5vw,2.1rem);font-weight:500;letter-spacing:-.03em;
+             line-height:1.06;color:var(--paper);margin-bottom:.9rem}
+    .entry-h em{font-style:normal;color:var(--cyan)}
+    .entry-b{font-size:.94rem;font-weight:300;line-height:1.55;color:var(--ink);margin-bottom:.7rem}
+    .entry-b-sm{font-family:var(--mono);font-size:.58rem;letter-spacing:.13em;
+                text-transform:uppercase;color:var(--ink-faint,var(--ink));margin-bottom:1.3rem}
+    .entry-go{
+      inline-size:100%; min-block-size:48px; border:0; border-radius:9px; cursor:pointer;
+      font-family:var(--mono); font-size:.68rem; letter-spacing:.16em; text-transform:uppercase;
+      color:var(--base); background:var(--cyan);
+    }
+    @keyframes entry-in{from{opacity:0}to{opacity:1}}
+  }
+  @media (prefers-reduced-motion: reduce){ .entry:not([hidden]){animation:none} }
+  /* landscape phones: the card cannot be taller than the screen */
+  @media (pointer:coarse) and (orientation:landscape) and (max-height:560px){
+    .entry-card{max-block-size:86vh;overflow:auto}
+    .entry-h{font-size:1.25rem}
+    .entry-b{font-size:.82rem}
+  }
+
+  /* ═══════════════════════════════════════════════════════════════════════════
+     TABLETS. A coarse pointer with room — the desktop layout is right here, and
+     the phone HUD would waste the screen. What a tablet needs is not a different
+     shape but BIGGER TARGETS: the desktop console is built for a cursor, and a
+     finger is about 44px wide.
+
+     WHY LANDSCAPE NEEDED ITS OWN RULE. Measured: at 1133x744 and 1180x820 the
+     sidebar rendered 2px tall, the readout 0px, and the ward strip BELOW the
+     viewport — the console's `--sidebar` column plus a full-height right rail
+     leaves no room on a screen that is wide but short. Landscape tablets get the
+     sidebar narrowed and the readout capped instead.
+     ═══════════════════════════════════════════════════════════════════════ */
+  /* min-height guards the phone HUD: a landscape phone at 1024x460 CSS px matches
+     min-width:821px too, and these rules — written later — were overriding it. */
+  @media (pointer:coarse) and (min-width:821px) and (min-height:561px){
+    /* fingers, not cursors */
+    .modechip button{padding:9px 14px;font-size:.6rem}
+    .ward{padding:14px 18px}
+    .seg button{min-block-size:40px}
+    .bcard{width:250px}
+    .bcard dl{font-size:.76rem}
+    .bc-x{min-block-size:42px}
+    /* the toolbox sliders are the smallest thing a finger has to hit */
+    input[type=range]{block-size:34px}
+    input[type=range]::-webkit-slider-thumb{width:22px;height:22px}
+  }
+  /* landscape tablets: wide but short */
+  @media (pointer:coarse) and (min-width:821px) and (orientation:landscape) and (min-height:561px) and (max-height:900px){
+    .stage{--sidebar:250px}
+    /* SCROLLS RATHER THAN CLIPS. Capping this column with overflow:hidden cut the
+       colour legend off the bottom — the one thing that explains what the map's
+       colours mean. A tablet has room to scroll for it. */
+    .rail-r{width:210px;top:56px;bottom:26px;max-block-size:none;overflow-y:auto;overscroll-behavior:contain}
+    .rail-r .histo,.rail-r #histo{display:none}
+    .ward{padding:10px 14px}
+    .ward .sw{width:34px;height:34px}
+    .ward .big{font-size:1.1rem}
+    .compass{bottom:112px}
+  }
+
+  /* ── the nudge (portrait phones only) ── */
+  @media (pointer:coarse) and (orientation:portrait){
+    .rotate-nudge:not([hidden]){
+      position:fixed; left:10px; right:10px; bottom:calc(10px + env(safe-area-inset-bottom));
+      z-index:60; display:flex; align-items:center; gap:9px;
+      padding:9px 10px; border-radius:11px;
+      background:rgb(9 20 22 /.95); border:1px solid rgb(111 202 214 /.28);
+      backdrop-filter:blur(10px); box-shadow:0 8px 28px rgb(0 0 0 /.5);
+      animation:rn-in .5s cubic-bezier(.16,1,.3,1) both;
+    }
+    .rn-ico{flex:none;width:19px;height:19px;color:var(--cyan)}
+    .rn-ico svg{width:100%;height:100%;animation:rn-tip 2.6s ease-in-out infinite}
+    .rn-txt{flex:1;font-family:var(--mono);font-size:.58rem;letter-spacing:.11em;
+            text-transform:uppercase;color:var(--paper);line-height:1.35}
+    .rn-x{flex:none;width:30px;height:30px;border:0;background:none;color:var(--ink);
+          font-size:.8rem;cursor:pointer;border-radius:8px}
+    @keyframes rn-in{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+    @keyframes rn-tip{0%,62%,100%{transform:rotate(0)}80%{transform:rotate(-82deg)}}
+  }
+  @media (prefers-reduced-motion: reduce){
+    .rotate-nudge:not([hidden]){animation:none}
+    .rn-ico svg{animation:none}
+  }
+
+  /* ── landscape phones: the HUD ── */
+  /* PHONES, EITHER ORIENTATION. Portrait still gets the nudge — sideways is a
+     better read — but someone who ignores it should not get a console that
+     overflows its own screen. Measured before: a 639px canvas in a 390px
+     viewport, the map cut off at the right edge. */
+  @media (pointer:coarse) and (max-width:560px),
+         (pointer:coarse) and (orientation:landscape) and (max-height:560px){
+    .stage{grid-template-columns:minmax(0,1fr)}
+    .col{grid-column:1}
+    .rotate-nudge{display:none}
+
+    .top{padding:5px 10px;min-height:0}
+    .top .read,.top .topmeta{display:none}
+
+    /* The rail's bottom-bar form lives in IconRail.astro — its styles are scoped,
+       so a bare `.rail` here could never outrank them. */
+
+    /* THE SIDEBAR BECOMES A SHEET. Driven by data-panel on <html>, which
+       console-shell.ts already writes when a rail button opens a pane — so the
+       sheet needs no state of its own and cannot disagree with the rail. */
+    .sidebar{
+      position:fixed; inset-inline:0; bottom:0; top:auto;
+      /* the desktop panel floats on an inset margin; a full-width sheet must not */
+      margin:0;
+      inline-size:100%; max-block-size:62vh; z-index:45;
+      border-radius:14px 14px 0 0; border-inline:0; border-block-end:0;
+      padding-bottom:calc(44px + env(safe-area-inset-bottom));
+      transform:translateY(101%); transition:transform .32s cubic-bezier(.16,1,.3,1);
+      overflow:hidden auto; overscroll-behavior:contain;
+    }
+    html[data-panel="expanded"] .sidebar{transform:none}
+    .sidebar.is-collapsed{transform:translateY(101%)}
+    .sidebar::before{
+      content:''; position:sticky; top:0; display:block; z-index:2;
+      inline-size:34px; block-size:3px; margin:7px auto 3px;
+      border-radius:2px; background:rgb(236 237 240 /.3);
+    }
+    .sheet-scrim{display:none; position:fixed; inset:0; z-index:44;
+                 border:0; background:rgb(5 6 6 /.5); backdrop-filter:blur(1px)}
+    html[data-panel="expanded"] .sheet-scrim{display:block}
+
+    /* THE READOUT COLLAPSES. The 242px column was a quarter of the width; the
+       first card carries the ward, its mean and the band, and the rest is a tap
+       away in the sheet. */
+    .rail-r{
+      inset:32px 8px auto auto; inline-size:auto;
+      max-inline-size:44vw; max-block-size:none;
+      flex-direction:column; gap:5px; overflow:visible;
+    }
+    /* only the first card rides the HUD; the rest are a tap away in the sheet */
+    .rail-r > * + *{display:none}
+    /* AND THE CARD ITSELF SHRINKS RATHER THAN CLIPS. Capping its height cut the
+       mean surface temperature in half — the one number the card exists to show.
+       Scaling the type down instead keeps the whole reading, band included. */
+    .rail-r .panel{padding:7px 9px;border-radius:9px;gap:5px}
+    .rail-r .liverow{font-size:.52rem;letter-spacing:.08em}
+    .rail-r .mrow{gap:7px}
+    .rail-r .metric .val{font-size:.82rem}
+    .rail-r .metric .k,.rail-r .metric .u{font-size:.42rem;letter-spacing:.07em}
+    .rail-r .lst{font-size:1.5rem}
+    .rail-r .conf{font-size:.46rem;padding:.22rem .4rem}
+    /* the distribution chart is the tallest thing in the card and the least
+       legible at this size — it is in the sheet, a tap away, at a usable size */
+    .rail-r .histo,.rail-r #histo{display:none}
+    /* and a hard stop, so no future addition to this card can push it off-screen */
+    .rail-r .panel{max-block-size:calc(100dvh - 92px);overflow:hidden}
+
+    /* THE WARD STRIP BECOMES CHIPS. The cards are 200px+ each and cannot
+       survive; the swatch, the name and the mean fit a 30px chip. */
+    .strip{
+      position:fixed; left:8px; bottom:calc(50px + env(safe-area-inset-bottom));
+      right:auto; z-index:30; gap:5px; background:none; border:0;
+    }
+    .ward{
+      flex:none; gap:6px; padding:5px 8px; border-radius:9px;
+      background:rgb(9 20 22 /.9); border:1px solid var(--line);
+      backdrop-filter:blur(8px);
+    }
+    .ward .sw{width:15px;height:15px;border-radius:4px}
+    .ward .nm{font-size:.6rem;font-weight:500}
+    .ward .ty{display:none}
+    .ward .big{margin-left:4px;font-size:.76rem}
+    .ward .big span{display:none}
+
+    /* the rest of the HUD: smaller, tucked to the edges */
+    /* the bottom edge is a STACK, not a row — the ward chips and the mode chips
+       were both at 50px and overlapped ('Barrackpore' over '3D RELIEF') */
+    .chiprow{bottom:calc(92px + env(safe-area-inset-bottom));gap:5px}
+    .modechip button{padding:5px 9px;font-size:.5rem;letter-spacing:.1em}
+    .compass{width:44px;height:44px;bottom:auto;top:34px;left:8px}
+    .sunline{left:58px;bottom:auto;top:40px;font-size:.46rem;max-width:150px}
+    .synthetic{top:34px;font-size:.42rem;letter-spacing:.1em;padding:.26rem .5rem}
+    .synthetic .full,.synthetic .sp{display:none}
+    .stamp-slot,.place,.legend,.tiphint{display:none}
+    .loadchip{font-size:.5rem;padding:.3rem .6rem}
+    .maplibregl-ctrl-bottom-left,.maplibregl-ctrl-bottom-right{display:none}
+    .bcard{width:180px}
+    .bcard dl{font-size:.62rem}
+
+    /* THE CLOCK AND THE TREES TOGGLE MOVE TO THE LEFT COLUMN. Both are pinned with
+       `right:var(--instr-inset)` — a desktop offset sized for the right rail, which
+       on a 390px screen puts them off the LEFT edge (measured: both cut off). Under
+       the compass they have the one column the HUD leaves free. */
+    .clockw{right:auto;left:8px;top:86px;padding:6px 9px 7px}
+    .vegw{right:auto;left:8px;top:auto;bottom:calc(136px + env(safe-area-inset-bottom))}
+    .vegw .veg-lab{font-size:.46rem}
+  }
+
+  /* portrait phones have height to spare and no width: the readout gets more of it,
+     because at 44vw its own labels wrapped mid-phrase ("feels °C", "Δ vs all-green ref") */
+  @media (pointer:coarse) and (max-width:560px) and (orientation:portrait){
+    .rail-r{max-inline-size:62vw}
+    .clockw{top:auto;bottom:calc(186px + env(safe-area-inset-bottom))}
+  }
+
   @media (max-width:820px){
     .top{padding-inline:18px}
     /* The sidebar goes, and with it the panes. The scope switcher's job is covered
