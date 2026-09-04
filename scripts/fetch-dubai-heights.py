@@ -43,6 +43,7 @@ import argparse
 import json
 import math
 import os
+import statistics
 import sys
 from typing import Any
 
@@ -281,6 +282,59 @@ def osm_height(tags: dict[str, str]) -> float | None:
     return None
 
 
+# THE HEIGHT PRIOR IS MONOTONIC IN FOOTPRINT AND REALITY IS NOT. The fallback
+# curve, `3 + 9*log10(1 + area/100)`, assumes a bigger footprint means a taller
+# building. That is a residential assumption. Dubai South is Logistics City,
+# JAFZA and Al Maktoum, where the largest buildings are the flattest. Measured
+# medians, per site:
+#
+#   band              Creek    South    the global curve says
+#   500-2,000 m2       32 m      8 m    12.6 m
+#   2,000-10,000 m2    33 m      8 m    17.0 m
+#   10,000-50,000 m2   16 m     10 m    23.0 m
+#
+# The same footprint is a tower in one window and a warehouse in the other, so
+# one curve cannot serve both. Each site fits a table from its OWN measured
+# buildings instead.
+#
+# ONLY ABOVE 5,000 m2. Below that a fitted prior measurably does WORSE, so it is
+# not applied. Held out against genuine `height=` tags at or above 5,000 m2,
+# excluding every levels-derived value, mean absolute error moves:
+#   dubai-south  15.16 m -> 8.58 m   (n=45)
+#   dubai-creek  33.18 m -> 32.69 m  (n=56)
+HEIGHT_TABLE_MIN_AREA_M2 = 5000.0
+HEIGHT_TABLE_EDGES = [5000.0, 10000.0, 25000.0, 50000.0, float("inf")]
+HEIGHT_TABLE_MIN_SAMPLES = 25
+
+
+def height_table(outlines: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Median measured height per area band, from this site's own buildings."""
+    buckets: dict[int, list[float]] = {}
+    for rec in outlines:
+        h = rec.get("h")
+        if not h:
+            continue
+        a = ring_area(rec["p"])
+        for i in range(len(HEIGHT_TABLE_EDGES) - 1):
+            if HEIGHT_TABLE_EDGES[i] <= a < HEIGHT_TABLE_EDGES[i + 1]:
+                buckets.setdefault(i, []).append(float(h))
+                break
+    out: list[dict[str, Any]] = []
+    for i in range(len(HEIGHT_TABLE_EDGES) - 1):
+        vals = buckets.get(i, [])
+        # A THIN BAND IS NOT TRUSTED, and falls back to the nearest populated band
+        # BELOW it rather than to the global curve -- falling back to the curve
+        # would undo the fix precisely where footprints are largest and it is
+        # most wrong.
+        out.append({
+            "minArea": HEIGHT_TABLE_EDGES[i],
+            "n": len(vals),
+            "medianM": (round(statistics.median(vals), 1)
+                        if len(vals) >= HEIGHT_TABLE_MIN_SAMPLES else None),
+        })
+    return out
+
+
 def build(site: Site) -> dict[str, Any]:
     path = os.path.join(OUT_DIR, f"{site.id}-buildings.json")
     with open(path, encoding="utf-8") as fh:
@@ -401,6 +455,17 @@ def build(site: Site) -> dict[str, Any]:
 
         osm_b.append(rec)
     doc["osmB"] = osm_b
+    doc["heightTable"] = {
+        "minArea": HEIGHT_TABLE_MIN_AREA_M2,
+        "bands": height_table(osm_b),
+        "note": (
+            "Median MEASURED height per footprint band, fitted from this site's own "
+            "buildings. Used only at or above minArea; below it the global curve is "
+            "kept, because a fitted prior measurably does worse there. A band with "
+            f"fewer than {HEIGHT_TABLE_MIN_SAMPLES} samples has medianM null and falls "
+            "back to the nearest populated band below, never to the global curve."
+        ),
+    }
 
     # GlobalML footprints whose centroid sits inside an OSM outline are the SAME
     # building drawn twice. Drop ours, keep theirs — otherwise every landmark
