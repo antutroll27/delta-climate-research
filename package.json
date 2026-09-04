@@ -13,7 +13,7 @@
     "check:publication": "node scripts/check-publication-contract.mjs",
     "typecheck": "python3 -m mypy",
     "test:py": "python3 scripts/fetch-canopy.py --self-test && python3 scripts/fetch-canopy.py --check && python3 scripts/_ecostress.py && python3 scripts/check-geo-oracle.py && python3 scripts/_canopy.py && python3 scripts/check-canopy-oracle.py && python3 scripts/_water.py && python3 scripts/check-water-oracle.py && python3 scripts/_flood.py && python3 scripts/blender_landmarks.py",
-    "verify": "npm run check && npm run typecheck && npm run test:py && npm run build && npm run test:unit && npm run check:cityjson && npm run check:3dtiles && npm run check:ngsi && npm run check:stac && npm run check:fresh && npm run check:footprints && npm run check:heights && npm run report:build && npm run check:publication && npm run test:e2e:built",
+    "verify": "npm run check && npm run typecheck && npm run test:py && npm run build && npm run test:unit && npm run check:cityjson && npm run check:3dtiles && npm run check:ngsi && npm run check:stac && npm run check:fresh && npm run check:footprints && npm run check:heights && npm run check:heightprior && npm run report:build && npm run check:publication && npm run test:e2e:built",
     "test:e2e": "npm run build && npm run test:e2e:built",
     "test:e2e:built": "playwright test",
     "cbam:sync-check": "node scripts/cbam-sync-check.mjs",
@@ -23,7 +23,8 @@
     "check:stac": "sh scripts/check-stac.sh",
     "check:fresh": "python3 scripts/check-artefacts-fresh.py",
     "check:footprints": "python3 scripts/check-dubai-footprints.py",
-    "check:heights": "python3 scripts/fetch-dubai-wikidata.py --check"
+    "check:heights": "python3 scripts/fetch-dubai-wikidata.py --check",
+    "check:heightprior": "python3 scripts/check-height-prior.py"
   },
   "engines": {
     "node": ">=22.12.0",
