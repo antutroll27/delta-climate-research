@@ -26,7 +26,10 @@
       "form": "twist",
       "height": 306.4,
       "heightSource": "OSM height tag; agrees with CTBUH",
-      "params": { "twistDeg": 90.0, "levels": 30 }
+      "params": {
+        "twistDeg": 90.0,
+        "levels": 30
+      }
     },
     {
       "osm": "w10316322",
@@ -34,7 +37,12 @@
       "form": "wave",
       "height": 104.0,
       "heightSource": "OSM height tag (26 levels)",
-      "params": { "expDepth": 1.4, "expWidth": 1.0, "leanM": 18.0, "levels": 24 }
+      "params": {
+        "crestMin": 0.3,
+        "crestPower": 1.2,
+        "leanM": 14.0,
+        "flip": false
+      }
     }
   ]
 }

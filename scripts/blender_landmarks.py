@@ -117,35 +117,55 @@ def twist(ring: Ring, base: float, height: float, params: dict[str, Any]) -> Mes
 
 
 def wave(ring: Ring, base: float, height: float, params: dict[str, Any]) -> Mesh:
-    """Jumeirah Beach Hotel. A curved slab that leans as it rises to a crest.
+    """Jumeirah Beach Hotel. A long slab whose ROOFLINE is a curve.
 
-    The 75-vertex plan already carries the curve, so the builder adds only the
-    lean and the taper -- the wave is in the measurement, not in the parameters.
-    The lean is applied across the SHORT axis, because leaning a 262 m building
-    along its own length would shear it rather than curl it.
+    THE FIRST ATTEMPT WAS A CONE. Tapering the plan on both axes, the way `sail`
+    does, turns a 262 m-long building into a point -- it rendered as a tent
+    beside the Burj Al Arab and looked nothing like the hotel. The wave is not a
+    taper at all: the plan stays a long slab all the way up, and what curves is
+    the top edge.
+
+    So each vertex gets its own roof height, from where it sits ALONG the long
+    axis. `crestMin` is the low end as a fraction of full height, `crestPower`
+    bends the rise, and `leanM` lets the crest overhang the base like a breaking
+    wave. The 75-vertex plan already carries the curve in plan; this adds the
+    curve in elevation.
     """
-    exp_d, exp_w = float(params["expDepth"]), float(params["expWidth"])
-    lean = float(params["leanM"])
-    levels = int(params.get("levels", 24))
-    cx = sum(p[0] for p in ring) / len(ring)
-    cy = sum(p[1] for p in ring) / len(ring)
+    crest_min = float(params.get("crestMin", 0.18))
+    power = float(params.get("crestPower", 1.0))
+    lean = float(params.get("leanM", 0.0))
+    flip = bool(params.get("flip", False))
 
     xs = [p[0] for p in ring]
     ys = [p[1] for p in ring]
-    long_axis_x = (max(xs) - min(xs)) >= (max(ys) - min(ys))
+    long_x = (max(xs) - min(xs)) >= (max(ys) - min(ys))
+    lo, hi = (min(xs), max(xs)) if long_x else (min(ys), max(ys))
+    span = (hi - lo) or 1.0
 
-    sections: list[tuple[Ring, float]] = []
-    for level in range(levels + 1):
-        t = level / levels
-        sd = max(0.05, 1.0 - t ** exp_d)      # short axis: narrows fast
-        sw = max(0.05, 1.0 - t ** exp_w)      # long axis: narrows slowly
-        dx = 0.0 if long_axis_x else lean * t
-        dy = lean * t if long_axis_x else 0.0
-        sections.append(([(cx + (x - cx) * (sw if long_axis_x else sd) + dx,
-                           cy + (y - cy) * (sd if long_axis_x else sw) + dy)
-                          for (x, y) in ring],
-                         base + height * t))
-    return _loft(sections)
+    def crest(x: float, y: float) -> float:
+        s = ((x if long_x else y) - lo) / span
+        if flip:
+            s = 1.0 - s
+        return crest_min + (1.0 - crest_min) * float(math.sin(math.pi / 2 * s) ** power)
+
+    n = len(ring)
+    verts: list[tuple[float, float, float]] = []
+    faces: list[tuple[int, ...]] = []
+    for (x, y) in ring:
+        verts.append((x, y, base))
+    for (x, y) in ring:
+        e = crest(x, y)
+        # the crest leans across the SHORT axis, so the wave curls rather than
+        # shearing along its own 262 m length
+        dx = 0.0 if long_x else lean * e
+        dy = lean * e if long_x else 0.0
+        verts.append((x + dx, y + dy, base + height * e))
+    for i in range(n):
+        j = (i + 1) % n
+        faces.append((i, j, j + n, i + n))
+    faces.append(tuple(range(n - 1, -1, -1)))
+    faces.append(tuple(n + i for i in range(n)))
+    return verts, faces
 
 
 BUILDERS: dict[str, Callable[[Ring, float, float, dict[str, Any]], Mesh]] = {
@@ -205,14 +225,18 @@ def self_test() -> int:
                       for a in verts[:5] for b in verts[:5])
     assert base_spread > 20.0, f"sail base collapsed, spread {base_spread:.1f} m"
 
-    verts, _ = wave(square, 0.0, 50.0, {"expDepth": 1.4, "expWidth": 1.0,
-                                        "leanM": 10.0, "levels": 4})
-    assert abs(max(p[2] for p in verts) - 50.0) < 1e-6
-
-    def centroid(sl: list[tuple[float, float, float]]) -> tuple[float, float]:
-        return sum(p[0] for p in sl) / len(sl), sum(p[1] for p in sl) / len(sl)
-    b0, t0 = centroid(verts[:4]), centroid(verts[-4:])
-    assert math.hypot(t0[0] - b0[0], t0[1] - b0[1]) > 5.0, "wave did not lean"
+    # A LONG slab, so the long axis is unambiguous and the crest has room to rise
+    slab: Ring = [(0.0, 0.0), (100.0, 0.0), (100.0, 12.0), (0.0, 12.0)]
+    verts, _ = wave(slab, 0.0, 50.0, {"crestMin": 0.2, "crestPower": 1.0, "leanM": 6.0})
+    assert abs(max(p[2] for p in verts) - 50.0) < 1e-6, max(p[2] for p in verts)
+    # the roofline RISES along the long axis: low end near 20 %, high end at full
+    lo_end = [p[2] for p in verts[4:] if p[0] < 1.0]
+    hi_end = [p[2] for p in verts[4:] if p[0] > 99.0]
+    assert all(abs(z - 10.0) < 0.1 for z in lo_end), lo_end
+    assert all(abs(z - 50.0) < 0.1 for z in hi_end), hi_end
+    # ...and the plan does NOT collapse: a wave is a slab, not a cone
+    top_len = max(p[0] for p in verts[4:]) - min(p[0] for p in verts[4:])
+    assert top_len > 95.0, f"wave narrowed to {top_len:.1f} m; it must stay a slab"
 
     for form, ring, params, want in (
         ("torus", square, {}, "unknown landmark form"),
