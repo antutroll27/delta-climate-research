@@ -185,10 +185,23 @@ def fetch_osm_buildings(site: Site) -> list[dict[str, Any]]:
     """
     w, s_, e, n = site_bounds(site)
     os.makedirs(CACHE, exist_ok=True)
+    # OSM DOES NOT TAG EVERY STRUCTURE `building=`. Terra -- The Sustainability
+    # Pavilion carries tourism=attraction with height=30 and min_height=28, a
+    # fully described floating canopy, and was absent from the model entirely.
+    # So were ~27 Dubai Exhibition Centre halls at 10-14 m.
+    #
+    # The second and third clauses take anything carrying a height or a storey
+    # count, minus the things that are emphatically not buildings. The risk is
+    # bounded and was measured rather than guessed: 33 ways in the whole Dubai
+    # South window match, five of them walls.
+    excl = ('[!"building"][!"building:part"][!"barrier"][!"wall"]'
+            '[!"highway"][!"landuse"][!"natural"][!"boundary"]')
     query = (
         f"[out:json][timeout:600];("
         f'way["building"]({s_},{w},{n},{e});'
-        f'relation["building"]({s_},{w},{n},{e}););'
+        f'relation["building"]({s_},{w},{n},{e});'
+        f'way["height"]{excl}({s_},{w},{n},{e});'
+        f'way["building:levels"]{excl}({s_},{w},{n},{e}););'
         f"out tags geom;"
     )
     path = os.path.join(CACHE,
@@ -344,6 +357,9 @@ def build(site: Site) -> dict[str, Any]:
             b["hs"] = "prior"
     # ── OSM outlines: better geometry where it exists ────────────────────────
     osm_b: list[dict[str, Any]] = []
+    # Widened-clause records that describe a slab starting above the ground.
+    # Collected here and merged into `parts` below, where that shape is drawn.
+    parts_from_outlines: list[dict[str, Any]] = []
     for el in fetch_osm_buildings(site):
         geom = el.get("geometry") or []
         if len(geom) < 4:
@@ -366,6 +382,23 @@ def build(site: Site) -> dict[str, Any]:
             rec["h"] = round(top, 1)
         if tags.get("name"):
             rec["name"] = tags["name"]
+
+        # A RECORD WITH min_height IS A SLAB, NOT A BUILDING. Terra floats
+        # between 28 m and 30 m; drawn from the ground it is a solid block the
+        # size of a city square. The parts path already extrudes exactly this
+        # shape, so send it there and mark the outline so it is not ALSO drawn
+        # flat -- the same double-draw that `parts` and `sup` already guard.
+        try:
+            low = float(str(tags.get("min_height", "0")).replace("m", "").strip())
+        except ValueError:
+            low = 0.0
+        if low > 0.0 and top and top > low:
+            parts_from_outlines.append({
+                "p": flat, "h": round(top, 1), "min": round(low, 1),
+                "roof": tags.get("roof:shape", "flat"),
+            })
+            rec["parts"] = True
+
         osm_b.append(rec)
     doc["osmB"] = osm_b
 
@@ -413,6 +446,7 @@ def build(site: Site) -> dict[str, Any]:
             "p": slab, "h": round(top, 1), "min": round(low, 1),
             "roof": tags.get("roof:shape", "flat"),
         })
+    parts.extend(parts_from_outlines)
     doc["parts"] = parts
 
     # A footprint covered by parts must NOT also be extruded flat, or the tower
