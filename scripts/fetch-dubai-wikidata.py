@@ -34,7 +34,8 @@ from typing import Any
 import requests
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _flood import CTBUH_LANDMARKS, SITES, Site, m_per_deg, site_bounds, window_key  # noqa: E402
+from _flood import (CTBUH_LANDMARKS, SITES, Site, m_per_deg, names_agree,  # noqa: E402
+                    site_bounds, window_key)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT_DIR = os.path.join(HERE, "..", "public", "flood-sim", "data")
@@ -42,7 +43,10 @@ CACHE = os.path.join(HERE, "..", "data", ".cache", "wikidata")
 ENDPOINT = "https://query.wikidata.org/sparql"
 ATTRIBUTION = "Building heights from Wikidata (CC0 1.0 — public domain)"
 BURJ_KHALIFA_M = 828.0      # nothing in Dubai is taller; a taller value is a proposal
-MATCH_RADIUS_M = 90.0
+# Only a tie-break now that names decide the match, so it can be generous:
+# Wikidata points sit up to 133 m from their own building in this window, and
+# tightening it was never what made the join wrong.
+MATCH_RADIUS_M = 250.0
 
 SPARQL = """
 SELECT ?item ?itemLabel ?height ?lat ?lon ?inception WHERE {
@@ -137,22 +141,45 @@ def build(site: Site) -> dict[str, Any]:
         landmarks.append({"x": round(x, 1), "y": round(y, 1),
                           "h": round(height, 1), "name": name})
 
-    # Attach to whichever outline contains or sits nearest the point.
+    # ATTACH BY NAME, NOT BY DISTANCE. This loop used to take the nearest
+    # centroid within MATCH_RADIUS_M, and an audit of a real run found roughly
+    # nine of 42 attachments on the wrong building: Marina 106's 445 m on the
+    # 254 m Marina Arcade Tower, Ocean Heights' 310 m on Al Seef Tower, and the
+    # Burj Al Arab's 321 m on the Skyview Bar -- a room inside it.
+    #
+    # Geometry cannot fix that. 37 of those 42 points fall OUTSIDE the footprint
+    # they belong to, because Wikidata coordinates are approximate to 40-80 m, so
+    # a containment test would reject Princess Tower, 23 Marina and Cayan Tower,
+    # all correctly matched from outside. Nor does containment imply correctness:
+    # Ocean Heights fell inside Al Seef Tower and was still wrong.
+    #
+    # So: names decide, distance only breaks ties between name-agreeing
+    # candidates, one footprint per item, and an unnamed footprint is skipped
+    # rather than guessed -- a wrong height on a named landmark is worse than
+    # none at all.
     attached = 0
+    unverifiable = 0
     for lm in landmarks:
         best, best_d = None, MATCH_RADIUS_M
         for arr in (doc.get("osmB", []), doc["b"]):
             for rec in arr:
+                if rec.get("hs") in ("wikidata", "ctbuh"):
+                    continue           # already claimed by another item
+                if not names_agree(rec.get("name"), lm["name"]):
+                    continue
                 xs, ys = rec["p"][0::2], rec["p"][1::2]
                 cx, cy = sum(xs) / len(xs), sum(ys) / len(ys)
                 d = ((cx - lm["x"]) ** 2 + (cy - lm["y"]) ** 2) ** 0.5
                 if d < best_d:
                     best, best_d = rec, d
-        if best is not None:
-            best["h"] = lm["h"]
-            best["hs"] = "wikidata"
-            best["wd"] = lm["name"]
-            attached += 1
+        if best is None:
+            unverifiable += 1
+            continue
+        best["h"] = lm["h"]
+        best["hs"] = "wikidata"
+        best["wd"] = lm["name"]
+        attached += 1
+    print(f"  wikidata: {attached} attached by name, {unverifiable} unmatched")
 
     # ── CTBUH overrides, applied LAST because they are the authority ─────────
     # Wikidata is CC0 and broad; CTBUH is narrow and definitive. Where they
@@ -166,6 +193,10 @@ def build(site: Site) -> dict[str, Any]:
         best, best_d = None, MATCH_RADIUS_M
         for arr in (doc.get("osmB", []), doc["b"]):
             for rec in arr:
+                if rec.get("hs") == "ctbuh":
+                    continue           # one footprint per CTBUH entry
+                if not names_agree(rec.get("name"), name):
+                    continue
                 xs, ys = rec["p"][0::2], rec["p"][1::2]
                 cx, cy = sum(xs) / len(xs), sum(ys) / len(ys)
                 d = ((cx - lx) ** 2 + (cy - ly) ** 2) ** 0.5
