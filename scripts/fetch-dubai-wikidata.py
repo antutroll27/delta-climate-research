@@ -107,15 +107,24 @@ def build(site: Site) -> dict[str, Any]:
     mx, my = m_per_deg(site.lat)
     w, s_, e, n = site_bounds(site)
 
-    # Idempotency: this script reads what it writes.
+    # IDEMPOTENCY: this script reads what it writes, so it must undo its own last
+    # run before making the next one. It cleared "wikidata" and not "ctbuh",
+    # which meant CTBUH marks ACCUMULATED: on a second run each landmark found
+    # its previous footprint already marked, skipped it, and claimed another --
+    # so Burj Khalifa ended up owning two, and the artefact grew a tower that
+    # does not exist for every re-run.
+    #
+    # The same building is often present twice, as an OSM outline and as the
+    # GlobalML footprint underneath it, which is what gave the second claim
+    # somewhere plausible to land.
     for arr in (doc["b"], doc.get("osmB", [])):
         for rec in arr:
-            if rec.get("hs") == "wikidata":
+            if rec.get("hs") in ("wikidata", "ctbuh"):
                 rec.pop("h", None)
                 rec.pop("hs", None)
                 rec.pop("wd", None)
 
-    seen: dict[tuple[int, int], float] = {}
+    seen: dict[str, float] = {}
     landmarks: list[dict[str, Any]] = []
     rejected = 0
     for row in fetch(site):
@@ -134,9 +143,24 @@ def build(site: Site) -> dict[str, Any]:
         if not (w <= lon <= e and s_ <= lat <= n):
             continue                   # `around` returns a disc; the site is a box
         x, y = (lon - site.lon) * mx, (lat - site.lat) * my
-        key = (int(x // 40), int(y // 40))
-        if seen.get(key, 0.0) >= height:
-            continue                   # duplicate item for the same structure
+
+        # DEDUPLICATE BY ENTITY, NOT BY GRID CELL. SPARQL returns one row per
+        # combination of an item's coordinate and height statements, so a single
+        # building arrives several times: Q7712376 (Address Boulevard) carries two
+        # coordinates 36 m apart and comes back four times, and Q1244144 (JW
+        # Marriott Marquis) nine times.
+        #
+        # The previous key was a 40 m grid cell, which those two coordinates
+        # straddle -- so both survived and each claimed a different footprint,
+        # producing a tower that does not exist. It was also wrong in the other
+        # direction: two genuinely different buildings inside one cell collapsed
+        # into one, silently dropping a real height.
+        #
+        # A Q-id is the identity the data already carries. One entity, one
+        # building.
+        key = str(row["item"]["value"]).rsplit("/", 1)[-1]
+        if key in seen:
+            continue
         seen[key] = height
         landmarks.append({"x": round(x, 1), "y": round(y, 1),
                           "h": round(height, 1), "name": name})
@@ -290,7 +314,9 @@ def check() -> int:
     for sid in SITES:
         with open(os.path.join(OUT_DIR, f"{sid}-buildings.json"), encoding="utf-8") as fh:
             d = json.load(fh)
-        wd = d["wikidata"]
+        wd = d.get("wikidata")
+        if not wd:
+            continue                   # never built; the loop above already said so
         allrecs = list(d["b"]) + list(d.get("osmB", []))
         top = sorted((r for r in allrecs if r.get("hs") == "wikidata"),
                      key=lambda r: -r["h"])[:3]
