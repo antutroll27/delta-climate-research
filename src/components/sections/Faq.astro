@@ -32,6 +32,18 @@ const faqs = [
   },
 ];
 
+// Answers are authored as PLAIN strings above — that string is what the JSON-LD
+// below sends to search engines, and Google wants the schema answer to match the
+// visible one. So the emphasis is DERIVED from it rather than authored a second
+// time: escape the text, then wrap any email address. Strip the tags back out and
+// you are guaranteed the original string, which is what keeps the two in step.
+// Anything that isn't an address renders exactly as written.
+const EMAIL = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+const emphasise = (text: string): string =>
+  text
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(EMAIL, (m) => `<b class="faq-mail">${m}</b>`);
+
 const faqSchema = {
   '@context': 'https://schema.org',
   '@type': 'FAQPage',
@@ -57,7 +69,7 @@ const faqSchema = {
       {faqs.map((f) => (
         <div class="faq-row" data-reveal>
           <dt class="faq-q">{f.q}</dt>
-          <dd class="faq-a">{f.a}</dd>
+          <dd class="faq-a" set:html={emphasise(f.a)} />
         </div>
       ))}
     </dl>
@@ -92,6 +104,12 @@ const faqSchema = {
     line-height: 1.65;
     color: var(--color-ink-faint);
     max-width: 64ch;
+  }
+  /* addresses are the one thing on this page a reader is meant to ACT on, so they
+     step up out of the faint answer colour to full paper at a heavier weight */
+  .faq-a :global(.faq-mail) {
+    font-weight: 600;
+    color: var(--color-paper);
   }
   @media (max-width: 820px) {
     .faq-grid { grid-template-columns: 1fr; gap: 2.4rem; }
