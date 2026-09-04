@@ -33,10 +33,76 @@ case. **Heights are broadly sound; form is the whole defect.**
 only `building:levels=163`, and the pipeline's fallback is `levels x 4.0 m`.
 163 x 4.0 = 652. Exactly reproduced, not inferred.
 
+## The height join is broken, measurably
+
+Running `fetch-dubai-wikidata.py --site dubai-creek` on 2026-09-04 corrected 37
+`osmB` heights and 12 GlobalML heights, and several were catastrophic: 23 Marina
+rendered at 39 m against 392.4 m, the JW Marriott Marquis Hotel at 39.6 m against
+355 m, Al Seef Tower at 0. An earlier reading of this spec said heights were
+"broadly sound". That was drawn from eleven name-matched landmarks and does not
+survive the wider run — **158 of the 520 buildings over 100 m carry a height that
+is an exact multiple of 4.0, i.e. the `building:levels x 4.0` fallback rather than
+a measured value.**
+
+The run was reverted, because the tool that produced those fixes attaches heights
+by **nearest centroid within `MATCH_RADIUS_M = 90.0`**
+(`scripts/fetch-dubai-wikidata.py:143` and `:166`) — the same join that
+mis-identified buildings three times during this investigation.
+
+Auditing all 42 attachments against the Wikidata label the script stores beside
+the OSM name found roughly nine on the wrong building:
+
+| Wikidata item | attached to | should be |
+|---|---|---|
+| Marina 106 (445 m) | Marina Arcade Tower | a different tower (~254 m) |
+| Lighthouse Tower (402.1 m) | Al Fattan Currency House | nothing — looks unbuilt |
+| Burj al-Arab (321 m) | Skyview Bar | the bar is *inside* the tower |
+| Ocean Heights (310 m) | Al Seef Tower | a different tower |
+| Emirates Towers (354.6 m) | Thmanyah | a different tower |
+| Al Kazim Towers (265 m) | Business Central Towers | a different tower |
+| Acico Twin Towers (269 m) | Voco Hotel and Nassima Towers | a different tower |
+| Vision Tower (260 m) | Bugatti Residences | a different tower |
+| JW Marriott Marquis Dubai (355 m) | ذا كورت | already attached elsewhere |
+
+Plus **duplicate attachment**: one Wikidata item may claim several footprints.
+JW Marriott Marquis Dubai attached to three at 355 m each; Address Boulevard,
+Conrad Dubai and Ubora Towers to two apiece. Those are phantom towers.
+
+**The decisive finding: geometry cannot arbitrate this join.** 37 of the 42
+Wikidata points fall OUTSIDE the footprint they were attached to — including the
+correct ones. Princess Tower, 23 Marina and Cayan Tower all matched the right
+building from outside it, because Wikidata building coordinates are approximate to
+40-80 m. Requiring point-in-polygon containment would therefore reject most
+correct attachments. And containment does not even imply correctness: Ocean
+Heights fell INSIDE Al Seef Tower's footprint and is still the wrong building.
+
+**Names arbitrate; distance does not.** The corrected join is:
+
+1. Match on normalised name agreement, with an explicit alias table for the Arabic
+   and transliteration variants that are genuinely the same building
+   (برج الماس / Almas Tower, إل بريمو / Il Primo Tower, Al Hikma / Al Hekma,
+   Millenium / Millennium, The Torch / The Marina Torch, Rose Rayhaan by Rotana /
+   Rose Tower, برواز دبي / Dubai Frame, and the rest listed in Task 5).
+2. Reject any attachment where both records are named and the names disagree.
+3. Allow **at most one footprint per Wikidata item**.
+4. Keep proximity only as a tie-break among name-agreeing candidates, never as
+   the primary key.
+5. Tighten the unbuilt filter beyond "has an inception date", which let
+   Lighthouse Tower through.
+
+Where a footprint has no OSM name the join cannot be verified either way. Those
+attachments are dropped rather than guessed: twelve of the forty-two fell in this
+class, and a wrong height on a named landmark is worse than no height at all.
+
+Once corrected this fixes on the order of forty to fifty buildings with CC0
+provenance, which is the single largest visual improvement available to the Creek
+scene.
+
 ## Scope
 
-In: authored massing for a shortlist of true icons in the Creek window, plus
-cited heights for those landmarks.
+In: authored massing for a shortlist of true icons in the Creek window; cited
+heights for those landmarks; and a corrected name-based join so the CC0 Wikidata
+and CTBUH height layers can be applied to every major building in the window.
 
 Out: procedural massing for the other ~450 tall prisms; any change to Dubai South;
 any change to the systematic GlobalML/OSM base for the other 165,000 buildings;
@@ -202,6 +268,17 @@ means the recipe and the data disagree, and disagreement is information.
    recipe's `height` within 0.5 m.
 5. **Mutation check.** Change one recipe height by 50 m and confirm test 4 fails.
    A test that cannot fail is not a test.
+6. **Name agreement on every height attachment.** For each record carrying
+   `hs == "wikidata"` or `hs == "ctbuh"`, the footprint's OSM name and the source
+   label must agree under normalisation or via the alias table. Zero disagreements
+   allowed. This is the gate that catches Marina 106 landing on Marina Arcade.
+7. **One footprint per source item.** No Wikidata item or CTBUH entry may claim
+   more than one footprint. Catches the three phantom JW Marriott Marquis towers.
+8. **Known-bad fixture.** The nine mis-attachments listed above are a fixture: the
+   corrected join must reject every one of them, and must still accept Princess
+   Tower, 23 Marina and Cayan Tower, which matched correctly from outside their
+   own footprints. Both halves matter — a join that rejects everything passes the
+   first half and is useless.
 
 ## Provenance and honesty
 
@@ -222,10 +299,5 @@ exist so this stays obvious to whoever opens the file next.
 - **The other ~450 prisms.** Rule-driven massing would fix the "it looks like
   boxes" feeling at city scale, but it invents geometry at a scale that needs its
   own honesty argument. A separate decision.
-- **The orphaned CC0 height layer.** `fetch-dubai-wikidata.py` and
-  `CTBUH_LANDMARKS` exist and nothing consumes them — `fetch-dubai-heights.py`
-  references neither. Worth wiring eventually for the systematic base, but the
-  landmark heights this spec needs come from the recipe file, so it is off the
-  critical path.
 - **Membrane curvature.** The Burj Al Arab's sail is doubly curved; the prototype
   spans it flat. A few lines, and a look-dev call rather than a design one.
