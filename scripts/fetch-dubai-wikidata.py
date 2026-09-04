@@ -240,7 +240,10 @@ def check() -> int:
             d = json.load(fh)
         wd = d.get("wikidata")
         if not wd:
-            failures.append(f"{sid}: no wikidata block")
+            # A site that has never had the layer applied is not a failure, it is
+            # a site that has not been built. Failing here masked every real check
+            # behind a known-absent dubai-south.
+            print(f"  skip {sid}: no wikidata block yet")
             continue
         allrecs = list(d["b"]) + list(d.get("osmB", []))
         ct = [r for r in allrecs if r.get("hs") == "ctbuh"]
@@ -257,6 +260,29 @@ def check() -> int:
                             f"Burj Khalifa is 828 m, so this is wrong or unbuilt")
         if any(r["h"] > BURJ_KHALIFA_M + 1 for r in wdh):
             failures.append(f"{sid}: a building taller than Burj Khalifa survived the filter")
+
+        # THE GATE THAT WOULD HAVE CAUGHT THE REAL DEFECT. Every check above asks
+        # whether a height is plausible. None asked whether it landed on the
+        # building it belongs to, and that is the failure that happened: Marina
+        # 106's 445 m sat on a 254 m tower and passed all of them.
+        crossed = [r for r in wdh
+                   if r.get("name") and not names_agree(r.get("name"), r.get("wd"))]
+        for r in crossed[:5]:
+            failures.append(f"{sid}: {r['h']} m from {r.get('wd')!r} landed on "
+                            f"{r.get('name')!r} -- different buildings")
+        if len(crossed) > 5:
+            failures.append(f"{sid}: and {len(crossed) - 5} more crossed attachments")
+
+        # One source item, one footprint. JW Marriott Marquis Dubai previously
+        # claimed three at 355 m each, which is two towers that do not exist.
+        claims: dict[str, int] = {}
+        for r in wdh:
+            label = r.get("wd")
+            if label:
+                claims[label] = claims.get(label, 0) + 1
+        for label, n in sorted(claims.items()):
+            if n > 1:
+                failures.append(f"{sid}: {label!r} claims {n} footprints -- phantom towers")
     if failures:
         for line in failures:
             print(f"  FAIL {line}")
