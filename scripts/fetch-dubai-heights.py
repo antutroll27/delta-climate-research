@@ -49,7 +49,8 @@ from typing import Any
 import requests
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _flood import OVERPASS, SITES, Site, m_per_deg, site_bounds, window_key  # noqa: E402
+from _flood import (OVERPASS, SITES, Site, m_per_deg, query_key,  # noqa: E402
+                    ring_area, site_bounds, window_key)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT_DIR = os.path.join(HERE, "..", "public", "flood-sim", "data")
@@ -146,15 +147,18 @@ ATTRIBUTION = "Building heights © OpenStreetMap contributors (ODbL 1.0)"
 def fetch_osm(site: Site) -> list[dict[str, Any]]:
     w, s, e, n = site_bounds(site)
     os.makedirs(CACHE, exist_ok=True)
-    path = os.path.join(CACHE, f"{site.id}-{window_key(site)}-heights.json")
+    query = (
+        f"[out:json][timeout:180];("
+        f'way["building"]["height"]({s},{w},{n},{e});'
+        f'way["building"]["building:levels"]({s},{w},{n},{e});'
+        f'relation["building"]["height"]({s},{w},{n},{e}););'
+        f"out tags center;"
+    )
+    # KEYED BY THE QUESTION AS WELL AS THE PLACE. Keying on the window alone meant
+    # a widened query re-served the old, narrower response from disk: the new
+    # clause returned nothing and nothing errored.
+    path = os.path.join(CACHE, f"{site.id}-{window_key(site)}-{query_key(query)}-heights.json")
     if not os.path.exists(path):
-        query = (
-            f"[out:json][timeout:180];("
-            f'way["building"]["height"]({s},{w},{n},{e});'
-            f'way["building"]["building:levels"]({s},{w},{n},{e});'
-            f'relation["building"]["height"]({s},{w},{n},{e}););'
-            f"out tags center;"
-        )
         # Overpass returns 406 to requests with no User-Agent. Identify the
         # tool, as their usage policy asks.
         resp = requests.post(
@@ -181,14 +185,15 @@ def fetch_osm_buildings(site: Site) -> list[dict[str, Any]]:
     """
     w, s_, e, n = site_bounds(site)
     os.makedirs(CACHE, exist_ok=True)
-    path = os.path.join(CACHE, f"{site.id}-{window_key(site)}-osm-buildings.json")
+    query = (
+        f"[out:json][timeout:600];("
+        f'way["building"]({s_},{w},{n},{e});'
+        f'relation["building"]({s_},{w},{n},{e}););'
+        f"out tags geom;"
+    )
+    path = os.path.join(CACHE,
+                        f"{site.id}-{window_key(site)}-{query_key(query)}-osm-buildings.json")
     if not os.path.exists(path):
-        query = (
-            f"[out:json][timeout:600];("
-            f'way["building"]({s_},{w},{n},{e});'
-            f'relation["building"]({s_},{w},{n},{e}););'
-            f"out tags geom;"
-        )
         resp = requests.post(
             OVERPASS, data={"data": query}, timeout=900,
             headers={"User-Agent": "delta-climate-flood-sim/0.1 (build-time pipeline)"},
@@ -219,14 +224,14 @@ def fetch_parts(site: Site) -> list[dict[str, Any]]:
     """OSM `building:part` elements with full geometry, cached."""
     w, s_, e, n = site_bounds(site)
     os.makedirs(CACHE, exist_ok=True)
-    path = os.path.join(CACHE, f"{site.id}-{window_key(site)}-parts.json")
+    query = (
+        f"[out:json][timeout:300];("
+        f'way["building:part"]({s_},{w},{n},{e});'
+        f'relation["building:part"]({s_},{w},{n},{e}););'
+        f"out tags geom;"
+    )
+    path = os.path.join(CACHE, f"{site.id}-{window_key(site)}-{query_key(query)}-parts.json")
     if not os.path.exists(path):
-        query = (
-            f"[out:json][timeout:300];("
-            f'way["building:part"]({s_},{w},{n},{e});'
-            f'relation["building:part"]({s_},{w},{n},{e}););'
-            f"out tags geom;"
-        )
         resp = requests.post(
             OVERPASS, data={"data": query}, timeout=420,
             headers={"User-Agent": "delta-climate-flood-sim/0.1 (build-time pipeline)"},
@@ -274,8 +279,17 @@ def build(site: Site) -> dict[str, Any]:
     # changed depending on how many times it had been run, which is the worst
     # kind of wrong because the first run looks right. Strip every derived field
     # before recomputing.
+    # THE ARTEFACT MUST NOT SURVIVE ITS OWN REBUILD CLAIMING HEIGHTS IT NO LONGER
+    # HAS. Rebuilding drops every per-record `hs` mark below, which discards the
+    # whole Wikidata/CTBUH layer -- correctly, since it is applied afterwards by
+    # fetch-dubai-wikidata.py. But the `wikidata` and `ctbuh` METADATA blocks used
+    # to survive, so the file went on saying "32 CC0 heights attached" while
+    # carrying none, and Burj Khalifa quietly returned to 652 m.
+    #
+    # Dropping them makes the loss visible: fetch-dubai-wikidata.py --check then
+    # reports "no wikidata block yet" instead of passing over an empty claim.
     for stale in ("osmB", "parts", "partsCovered", "supersededByOsm",
-                  "heightSources", "osmNote", "partsNote"):
+                  "heightSources", "osmNote", "partsNote", "wikidata", "ctbuh"):
         doc.pop(stale, None)
     for b in doc["b"]:
         for stale in ("h", "hs", "name", "parts", "sup"):
