@@ -34,7 +34,8 @@ from typing import Any
 import requests
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _flood import CTBUH_LANDMARKS, SITES, Site, m_per_deg, site_bounds, window_key  # noqa: E402
+from _flood import (CTBUH_LANDMARKS, SITES, Site, m_per_deg, names_agree,  # noqa: E402
+                    site_bounds, window_key)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT_DIR = os.path.join(HERE, "..", "public", "flood-sim", "data")
@@ -42,7 +43,10 @@ CACHE = os.path.join(HERE, "..", "data", ".cache", "wikidata")
 ENDPOINT = "https://query.wikidata.org/sparql"
 ATTRIBUTION = "Building heights from Wikidata (CC0 1.0 — public domain)"
 BURJ_KHALIFA_M = 828.0      # nothing in Dubai is taller; a taller value is a proposal
-MATCH_RADIUS_M = 90.0
+# Only a tie-break now that names decide the match, so it can be generous:
+# Wikidata points sit up to 133 m from their own building in this window, and
+# tightening it was never what made the join wrong.
+MATCH_RADIUS_M = 250.0
 
 SPARQL = """
 SELECT ?item ?itemLabel ?height ?lat ?lon ?inception WHERE {
@@ -103,15 +107,24 @@ def build(site: Site) -> dict[str, Any]:
     mx, my = m_per_deg(site.lat)
     w, s_, e, n = site_bounds(site)
 
-    # Idempotency: this script reads what it writes.
+    # IDEMPOTENCY: this script reads what it writes, so it must undo its own last
+    # run before making the next one. It cleared "wikidata" and not "ctbuh",
+    # which meant CTBUH marks ACCUMULATED: on a second run each landmark found
+    # its previous footprint already marked, skipped it, and claimed another --
+    # so Burj Khalifa ended up owning two, and the artefact grew a tower that
+    # does not exist for every re-run.
+    #
+    # The same building is often present twice, as an OSM outline and as the
+    # GlobalML footprint underneath it, which is what gave the second claim
+    # somewhere plausible to land.
     for arr in (doc["b"], doc.get("osmB", [])):
         for rec in arr:
-            if rec.get("hs") == "wikidata":
+            if rec.get("hs") in ("wikidata", "ctbuh"):
                 rec.pop("h", None)
                 rec.pop("hs", None)
                 rec.pop("wd", None)
 
-    seen: dict[tuple[int, int], float] = {}
+    seen: dict[str, float] = {}
     landmarks: list[dict[str, Any]] = []
     rejected = 0
     for row in fetch(site):
@@ -130,29 +143,67 @@ def build(site: Site) -> dict[str, Any]:
         if not (w <= lon <= e and s_ <= lat <= n):
             continue                   # `around` returns a disc; the site is a box
         x, y = (lon - site.lon) * mx, (lat - site.lat) * my
-        key = (int(x // 40), int(y // 40))
-        if seen.get(key, 0.0) >= height:
-            continue                   # duplicate item for the same structure
+
+        # DEDUPLICATE BY ENTITY, NOT BY GRID CELL. SPARQL returns one row per
+        # combination of an item's coordinate and height statements, so a single
+        # building arrives several times: Q7712376 (Address Boulevard) carries two
+        # coordinates 36 m apart and comes back four times, and Q1244144 (JW
+        # Marriott Marquis) nine times.
+        #
+        # The previous key was a 40 m grid cell, which those two coordinates
+        # straddle -- so both survived and each claimed a different footprint,
+        # producing a tower that does not exist. It was also wrong in the other
+        # direction: two genuinely different buildings inside one cell collapsed
+        # into one, silently dropping a real height.
+        #
+        # A Q-id is the identity the data already carries. One entity, one
+        # building.
+        key = str(row["item"]["value"]).rsplit("/", 1)[-1]
+        if key in seen:
+            continue
         seen[key] = height
         landmarks.append({"x": round(x, 1), "y": round(y, 1),
                           "h": round(height, 1), "name": name})
 
-    # Attach to whichever outline contains or sits nearest the point.
+    # ATTACH BY NAME, NOT BY DISTANCE. This loop used to take the nearest
+    # centroid within MATCH_RADIUS_M, and an audit of a real run found roughly
+    # nine of 42 attachments on the wrong building: Marina 106's 445 m on the
+    # 254 m Marina Arcade Tower, Ocean Heights' 310 m on Al Seef Tower, and the
+    # Burj Al Arab's 321 m on the Skyview Bar -- a room inside it.
+    #
+    # Geometry cannot fix that. 37 of those 42 points fall OUTSIDE the footprint
+    # they belong to, because Wikidata coordinates are approximate to 40-80 m, so
+    # a containment test would reject Princess Tower, 23 Marina and Cayan Tower,
+    # all correctly matched from outside. Nor does containment imply correctness:
+    # Ocean Heights fell inside Al Seef Tower and was still wrong.
+    #
+    # So: names decide, distance only breaks ties between name-agreeing
+    # candidates, one footprint per item, and an unnamed footprint is skipped
+    # rather than guessed -- a wrong height on a named landmark is worse than
+    # none at all.
     attached = 0
+    unverifiable = 0
     for lm in landmarks:
         best, best_d = None, MATCH_RADIUS_M
         for arr in (doc.get("osmB", []), doc["b"]):
             for rec in arr:
+                if rec.get("hs") in ("wikidata", "ctbuh"):
+                    continue           # already claimed by another item
+                if not names_agree(rec.get("name"), lm["name"]):
+                    continue
                 xs, ys = rec["p"][0::2], rec["p"][1::2]
                 cx, cy = sum(xs) / len(xs), sum(ys) / len(ys)
                 d = ((cx - lm["x"]) ** 2 + (cy - lm["y"]) ** 2) ** 0.5
                 if d < best_d:
                     best, best_d = rec, d
-        if best is not None:
-            best["h"] = lm["h"]
-            best["hs"] = "wikidata"
-            best["wd"] = lm["name"]
-            attached += 1
+        if best is None:
+            unverifiable += 1
+            continue
+        best["h"] = lm["h"]
+        best["hs"] = "wikidata"
+        best["wd"] = lm["name"]
+        attached += 1
+    print(f"  wikidata: {attached} attached by name, {unverifiable} unmatched")
 
     # ── CTBUH overrides, applied LAST because they are the authority ─────────
     # Wikidata is CC0 and broad; CTBUH is narrow and definitive. Where they
@@ -166,6 +217,10 @@ def build(site: Site) -> dict[str, Any]:
         best, best_d = None, MATCH_RADIUS_M
         for arr in (doc.get("osmB", []), doc["b"]):
             for rec in arr:
+                if rec.get("hs") == "ctbuh":
+                    continue           # one footprint per CTBUH entry
+                if not names_agree(rec.get("name"), name):
+                    continue
                 xs, ys = rec["p"][0::2], rec["p"][1::2]
                 cx, cy = sum(xs) / len(xs), sum(ys) / len(ys)
                 d = ((cx - lx) ** 2 + (cy - ly) ** 2) ** 0.5
@@ -209,7 +264,10 @@ def check() -> int:
             d = json.load(fh)
         wd = d.get("wikidata")
         if not wd:
-            failures.append(f"{sid}: no wikidata block")
+            # A site that has never had the layer applied is not a failure, it is
+            # a site that has not been built. Failing here masked every real check
+            # behind a known-absent dubai-south.
+            print(f"  skip {sid}: no wikidata block yet")
             continue
         allrecs = list(d["b"]) + list(d.get("osmB", []))
         ct = [r for r in allrecs if r.get("hs") == "ctbuh"]
@@ -226,6 +284,29 @@ def check() -> int:
                             f"Burj Khalifa is 828 m, so this is wrong or unbuilt")
         if any(r["h"] > BURJ_KHALIFA_M + 1 for r in wdh):
             failures.append(f"{sid}: a building taller than Burj Khalifa survived the filter")
+
+        # THE GATE THAT WOULD HAVE CAUGHT THE REAL DEFECT. Every check above asks
+        # whether a height is plausible. None asked whether it landed on the
+        # building it belongs to, and that is the failure that happened: Marina
+        # 106's 445 m sat on a 254 m tower and passed all of them.
+        crossed = [r for r in wdh
+                   if r.get("name") and not names_agree(r.get("name"), r.get("wd"))]
+        for r in crossed[:5]:
+            failures.append(f"{sid}: {r['h']} m from {r.get('wd')!r} landed on "
+                            f"{r.get('name')!r} -- different buildings")
+        if len(crossed) > 5:
+            failures.append(f"{sid}: and {len(crossed) - 5} more crossed attachments")
+
+        # One source item, one footprint. JW Marriott Marquis Dubai previously
+        # claimed three at 355 m each, which is two towers that do not exist.
+        claims: dict[str, int] = {}
+        for r in wdh:
+            label = r.get("wd")
+            if label:
+                claims[label] = claims.get(label, 0) + 1
+        for label, n in sorted(claims.items()):
+            if n > 1:
+                failures.append(f"{sid}: {label!r} claims {n} footprints -- phantom towers")
     if failures:
         for line in failures:
             print(f"  FAIL {line}")
@@ -233,7 +314,9 @@ def check() -> int:
     for sid in SITES:
         with open(os.path.join(OUT_DIR, f"{sid}-buildings.json"), encoding="utf-8") as fh:
             d = json.load(fh)
-        wd = d["wikidata"]
+        wd = d.get("wikidata")
+        if not wd:
+            continue                   # never built; the loop above already said so
         allrecs = list(d["b"]) + list(d.get("osmB", []))
         top = sorted((r for r in allrecs if r.get("hs") == "wikidata"),
                      key=lambda r: -r["h"])[:3]

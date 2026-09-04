@@ -339,7 +339,14 @@ def build(site: Site) -> dict[str, Any]:
         for pt in geom:
             flat.append(round((pt["lon"] - site.lon) * mx, 2))
             flat.append(round((pt["lat"] - site.lat) * my, 2))
-        rec: dict[str, Any] = {"p": flat, "roof": tags.get("roof:shape", "flat")}
+        # THE ARTEFACT HAD NO STABLE HANDLE ON A BUILDING. Records carried only
+        # {p, roof, name}, so anything wanting to say "this footprint is the Burj
+        # Al Arab" had to match on coordinates -- which, on long concave plans and
+        # against approximate landmark points, silently picks the neighbour. It
+        # put a 328 m height on a metro station during the investigation that led
+        # here. `w12700546` is unambiguous and survives a re-fetch.
+        rec: dict[str, Any] = {"id": f"{el['type'][0]}{el['id']}",
+                               "p": flat, "roof": tags.get("roof:shape", "flat")}
         top = osm_height(tags)
         if top and top > 0:
             rec["h"] = round(top, 1)

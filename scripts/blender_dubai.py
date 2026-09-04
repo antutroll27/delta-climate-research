@@ -55,6 +55,33 @@ SITE = "dubai-creek"
 SITE_EXPOSURE = {"dubai-creek": -4.0, "dubai-south": -5.5}
 
 
+# Landmark recipes, keyed by OSM element id. Populated in main() before the
+# buildings are extruded, because build_buildings has to know which footprints to
+# leave alone.
+LANDMARKS: dict[str, dict[str, Any]] = {}
+
+
+def load_landmarks(site: str) -> dict[str, dict[str, Any]]:
+    """Recipes keyed by OSM id. An absent file is a warning, not an error.
+
+    Landmarks are an enhancement, not a dependency: the scene must stay
+    regenerable from OSM alone, so a missing recipe file draws prisms and says
+    so. Every OTHER disagreement between recipe and data is fatal, because a
+    recipe naming a building that is no longer there means an upstream edit
+    silently removed a landmark -- exactly the class of defect this work fixes.
+    """
+    path = os.path.join(DATA, f"{site}-landmarks.json")
+    if not os.path.exists(path):
+        print(f"  no landmark recipes at {path} -- drawing prisms")
+        return {}
+    with open(path, encoding="utf-8") as fh:
+        doc = json.load(fh)
+    out: dict[str, dict[str, Any]] = {}
+    for lm in doc["landmarks"]:
+        out[str(lm["osm"])] = lm
+    return out
+
+
 def args() -> dict[str, str]:
     argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
     out: dict[str, str] = {}
@@ -221,6 +248,8 @@ def build_buildings(terrain_doc: dict[str, Any], doc: dict[str, Any]) -> Any:
     for rec in doc.get("osmB", []):
         if rec.get("parts"):
             continue                       # its massing slabs handle it
+        if rec.get("id") in LANDMARKS:
+            continue                       # drawn as authored massing instead
         q = rec["p"]
         nv = len(q) // 2
         if nv >= 3 and abs(q[0] - q[-2]) < 1e-6 and abs(q[1] - q[-1]) < 1e-6:
@@ -304,6 +333,87 @@ def build_buildings(terrain_doc: dict[str, Any], doc: dict[str, Any]) -> Any:
         print(f"  measured heights: {len(tall):,} | median {tall[len(tall)//2]:.0f} m | "
               f"over 200 m: {sum(1 for v in tall if v > 200)} | tallest {tall[-1]:.0f} m")
     return obj
+
+
+def build_landmarks(terrain_doc: dict[str, Any], doc: dict[str, Any]) -> int:
+    """One named object per landmark, never merged into the buildings mesh.
+
+    Separate objects stay inspectable, swappable and independently hideable.
+    Merging them into the 1.6 M-face `buildings` mesh would make every future
+    landmark edit a surgery on a single enormous object.
+
+    The massing here is AUTHORED. Plans, positions and heights are measured or
+    cited; the vertical profile is not. See dubai-creek-landmarks.json.
+    """
+    if not LANDMARKS:
+        return 0
+    # Blender does not reliably put a --python script's own directory on
+    # sys.path, so the import has to be told where its sibling lives.
+    if HERE not in sys.path:
+        sys.path.insert(0, HERE)
+    import blender_landmarks as BL
+
+    mat = bpy.data.materials.get("concrete")
+    by_id = {r["id"]: r for r in doc.get("osmB", []) if "id" in r}
+    built = 0
+    for osm_id, lm in LANDMARKS.items():
+        rec = by_id.get(osm_id)
+        if rec is None:
+            raise SystemExit(
+                f"landmark {lm['name']!r} names {osm_id}, which is not in the "
+                f"artefact. An OSM edit may have removed or renumbered it.")
+        ring = BL.open_ring(rec["p"])
+        cx = sum(p[0] for p in ring) / len(ring)
+        cy = sum(p[1] for p in ring) / len(ring)
+        base = sample_ground(terrain_doc, cx, cy) - 0.4
+        height = float(lm["height"])
+        params = lm["params"]
+        verts, faces = BL.build(lm["form"], ring, base, height, params)
+
+        name = "lm." + str(lm["name"]).lower().replace(" ", "-")
+        me = bpy.data.meshes.new(name)
+        me.from_pydata(verts, [], faces)
+        me.validate()
+        me.update()
+        ob = bpy.data.objects.new(name, me)
+        if mat is not None:
+            ob.data.materials.append(mat)
+        bpy.context.collection.objects.link(ob)
+
+        # The mast carries the architectural height above the enclosed mass, and
+        # the helipad is the other half of the silhouette people recognise. Both
+        # are optional: only a recipe that asks for them gets them.
+        apex_i = params.get("apexVertex")
+        if params.get("mastRadius") and apex_i is not None:
+            ax, ay = ring[int(apex_i)]
+            bpy.ops.mesh.primitive_cylinder_add(
+                vertices=10, radius=float(params["mastRadius"]), depth=height,
+                location=(ax, ay, base + height / 2))
+            mast = bpy.context.object
+            mast.name = name + ".mast"
+            if mat is not None:
+                mast.data.materials.append(mat)
+        if params.get("helipadZ") and apex_i is not None:
+            ax, ay = ring[int(apex_i)]
+            others = [p for i, p in enumerate(ring) if i != int(apex_i)]
+            mx = sum(p[0] for p in others) / len(others) - ax
+            my = sum(p[1] for p in others) / len(others) - ay
+            mag = math.hypot(mx, my) or 1.0
+            t = (float(params["helipadZ"])) / (height * float(params.get("massFraction", 1.0)))
+            reach = mag * max(0.02, 1.0 - min(1.0, t) ** float(params.get("expDepth", 2.0)))
+            bpy.ops.mesh.primitive_cylinder_add(
+                vertices=24, radius=float(params["helipadRadius"]), depth=2.0,
+                location=(ax + mx / mag * (reach + 6.0), ay + my / mag * (reach + 6.0),
+                          base + float(params["helipadZ"])))
+            pad = bpy.context.object
+            pad.name = name + ".helipad"
+            if mat is not None:
+                pad.data.materials.append(mat)
+
+        built += 1
+        print(f"  landmark {name}: {lm['form']}, {len(verts):,} verts, "
+              f"{height:.0f} m ({lm['heightSource']})")
+    return built
 
 
 def build_apron(doc: dict[str, Any]) -> Any:
@@ -553,6 +663,8 @@ def main() -> None:
     a = args()
     global SITE
     SITE = a.get("site", "dubai-creek")
+    global LANDMARKS
+    LANDMARKS = load_landmarks(SITE)
     out = a.get("out", "/tmp/dubai.png")
     samples = int(a.get("samples", "48"))
     clear()
@@ -578,6 +690,7 @@ def main() -> None:
                 lcdoc["layers"] = {k: v for k, v in lcdoc["layers"].items() if k in lc_only}
             build_landcover(terrain_doc, lcdoc)
     build_buildings(terrain_doc, buildings_doc)
+    build_landmarks(terrain_doc, buildings_doc)
     setup_world()
     setup_sun()
     # Landmarks in site-local metres, so a shot can be named rather than guessed.

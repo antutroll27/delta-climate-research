@@ -16,6 +16,7 @@ re-discover a reachable endpoint and assume reachable means permitted.
 | Footprints (base) | Microsoft GlobalML | CDLA-Permissive-2.0 | no |
 | Terrain fill above 10 m | GEDTM30 v1.2 | CC BY 4.0 | no |
 | Observed flood extent | Landsat 8/9 C2 L2 | US public domain | no |
+| Rainfall hyetograph | GPM IMERG HH v07B | NASA Earthdata open policy | no |
 | Outlines, 3D massing, heights | OpenStreetMap | **ODbL 1.0** | **yes** |
 | Water, coast, beaches, roads, land use | OpenStreetMap | **ODbL 1.0** | **yes** |
 

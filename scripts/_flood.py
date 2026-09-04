@@ -254,6 +254,71 @@ CTBUH_LANDMARKS: list[tuple[str, float, float, float]] = [
 ]
 
 
+def norm_name(raw: str | None) -> str:
+    """Casefold to alphanumerics, keeping non-Latin scripts.
+
+    Arabic matters here: OSM names much of Dubai in Arabic while Wikidata labels
+    it in English, so a normaliser that stripped non-ASCII would erase one side
+    of the comparison entirely and turn every Arabic-named building into an
+    unverifiable match.
+    """
+    import unicodedata
+    s = unicodedata.normalize("NFKC", raw or "").casefold()
+    return "".join(ch for ch in s if ch.isalnum())
+
+
+# NAMES THAT LOOK DIFFERENT AND ARE THE SAME BUILDING. Every pair here was
+# produced by auditing a real run of fetch-dubai-wikidata.py against the OSM
+# names in the artefact, then read by hand. Arabic/English pairs dominate;
+# the rest are transliteration and house-style differences.
+#
+# This table only ever ACCEPTS a match. It cannot create one the audit did not
+# already surface, and adding a wrong pair is the one way to reintroduce the
+# defect this join exists to fix -- so a new entry needs the two names read side
+# by side, not a guess.
+NAME_ALIASES: list[tuple[str, str]] = [
+    ("برج خليفة", "Burj Khalifa"),
+    ("برج العرب جميرا", "Burj al-Arab"),
+    ("متحف المستقبل", "Museum of the Future"),
+    ("برواز دبي", "Dubai Frame"),
+    ("فندق جيفورا", "Gevora Hotel"),
+    ("بوليفارد", "Address Boulevard"),
+    ("برج الماس", "Almas Tower"),
+    ("إل بريمو", "Il Primo Tower"),
+    ("فندق العنوان داون تاون", "Address Downtown"),
+    ("مارينا بيناكل", "Marina Pinnacle"),
+    ("فندق أتلانتس", "Atlantis The Palm"),
+    ("JW Marriott Marquis Hotel", "JW Marriott Marquis Dubai"),
+    ("The Torch", "The Marina Torch"),
+    ("Rose Rayhaan by Rotana", "Rose Tower"),
+    ("Millenium Tower", "Millennium Tower"),
+    ("Al Hikma Tower", "Al Hekma Tower"),
+]
+
+_ALIAS_INDEX: dict[str, set[str]] = {}
+for _a, _b in NAME_ALIASES:
+    _na, _nb = norm_name(_a), norm_name(_b)
+    _ALIAS_INDEX.setdefault(_na, set()).add(_nb)
+    _ALIAS_INDEX.setdefault(_nb, set()).add(_na)
+
+
+def names_agree(osm: str | None, source: str | None) -> bool:
+    """Do an OSM name and a Wikidata/CTBUH label denote the same building?
+
+    Substring containment is allowed because "Emirates Tower One" and "Emirates
+    Tower One Hotel" are the same tower. It is also why the alias table is a
+    list of read pairs rather than a fuzzy matcher: containment plus fuzz would
+    have accepted "Marina 106" for "Marina Arcade Tower", which is exactly the
+    kind of near-miss that put a 445 m height on a 254 m building.
+    """
+    a, b = norm_name(osm), norm_name(source)
+    if not a or not b:
+        return False
+    if a == b or a in b or b in a:
+        return True
+    return b in _ALIAS_INDEX.get(a, set())
+
+
 def window_key(s: Site) -> str:
     """Short hash of the study window, for cache filenames.
 
@@ -266,3 +331,67 @@ def window_key(s: Site) -> str:
     import hashlib
     w, so, e, n = site_bounds(s)
     return hashlib.sha1(f"{w:.5f},{so:.5f},{e:.5f},{n:.5f}".encode()).hexdigest()[:8]
+
+
+def _self_test() -> int:
+    """The height join's fixture. Run: python3 scripts/_flood.py
+
+    Both halves matter. A join that rejected everything would pass the reject
+    list and be useless, so the accepted cases are pinned too -- and three of
+    them (Princess Tower, 23 Marina, Cayan Tower) are exactly the ones a naive
+    tightening breaks, because their Wikidata points fall OUTSIDE their own
+    footprints.
+    """
+    accept = [
+        ("Princess Tower", "Princess Tower"),
+        ("23 Marina", "23 Marina"),
+        ("Cayan Tower", "Cayan Tower"),
+        ("برج خليفة", "Burj Khalifa"),
+        ("برج الماس", "Almas Tower"),
+        ("Millenium Tower", "Millennium Tower"),
+        ("The Torch", "The Marina Torch"),
+        ("Emirates Tower One", "Emirates Tower One Hotel"),
+    ]
+    # DIFFERENT BUILDINGS. Every pair below was produced by the old
+    # nearest-centroid join on a real run, and every one shipped a wrong height:
+    # Marina 106's 445 m onto a 254 m tower, and the Burj Al Arab's 321 m onto
+    # the Skyview Bar, which is a room inside it.
+    reject = [
+        ("Marina Arcade Tower", "Marina 106"),
+        ("Al Fattan Currency House", "Lighthouse Tower"),
+        ("Skyview Bar", "Burj al-Arab"),
+        ("Al Seef Tower", "Ocean Heights"),
+        ("Thmanyah", "Emirates Towers"),
+        ("Business Central Towers", "Al Kazim Towers"),
+        ("Voco Hotel and Nassima Towers", "Acico Twin Towers"),
+        ("Bugatti Residences", "Vision Tower"),
+        ("ذا كورت", "JW Marriott Marquis Dubai"),
+    ]
+    bad: list[str] = []
+    for osm, src in accept:
+        if not names_agree(osm, src):
+            bad.append(f"should ACCEPT {osm!r} vs {src!r}")
+    for osm, src in reject:
+        if names_agree(osm, src):
+            bad.append(f"should REJECT {osm!r} vs {src!r}")
+
+    # An unnamed footprint can never be verified, so it must never match.
+    blank: list[tuple[str | None, str | None]] = [
+        (None, "Burj Khalifa"), ("", "Burj Khalifa"),
+        ("Burj Khalifa", None), ("", ""),
+    ]
+    for left, right in blank:
+        if names_agree(left, right):
+            bad.append(f"an unnamed record must not match: {left!r} vs {right!r}")
+
+    for line in bad:
+        print(f"  FAIL {line}")
+    if bad:
+        return 1
+    print(f"  _flood name join: {len(accept)} accepted, {len(reject)} rejected, OK")
+    return 0
+
+
+if __name__ == "__main__":
+    import sys as _sys
+    _sys.exit(_self_test())
