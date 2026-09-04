@@ -1,0 +1,40 @@
+{
+  "site": "dubai-creek",
+  "provenance": "Massing is AUTHORED and is not a measurement. Plans, positions and orientations are measured (OpenStreetMap, ODbL 1.0) and are never modified by this file. Heights are cited facts, sourced per landmark below. A render of these landmarks must never be offered as evidence for a number.",
+  "note": "Each recipe supplies only what OSM cannot express: the vertical profile. 461 of the 520 buildings over 100 m in this window have no building:part record, and a live Overpass query returns zero parts for the Burj Al Arab, so no re-fetch would ever produce a sail.",
+  "landmarks": [
+    {
+      "osm": "w12700546",
+      "name": "Burj Al Arab",
+      "form": "sail",
+      "height": 321.0,
+      "heightSource": "CTBUH architectural top; OSM height tag agrees",
+      "params": {
+        "apexVertex": 10,
+        "expDepth": 2.8,
+        "expWidth": 2.0,
+        "massFraction": 0.88,
+        "levels": 36,
+        "mastRadius": 3.0,
+        "helipadZ": 212.0,
+        "helipadRadius": 12.5
+      }
+    },
+    {
+      "osm": "w195527255",
+      "name": "Cayan Tower",
+      "form": "twist",
+      "height": 306.4,
+      "heightSource": "OSM height tag; agrees with CTBUH",
+      "params": { "twistDeg": 90.0, "levels": 30 }
+    },
+    {
+      "osm": "w10316322",
+      "name": "Jumeirah Beach Hotel",
+      "form": "wave",
+      "height": 104.0,
+      "heightSource": "OSM height tag (26 levels)",
+      "params": { "expDepth": 1.4, "expWidth": 1.0, "leanM": 18.0, "levels": 24 }
+    }
+  ]
+}
