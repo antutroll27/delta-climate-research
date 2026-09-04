@@ -182,9 +182,13 @@ def self_test() -> int:
     assert len(verts) == 4 * 5, len(verts)
     assert abs(min(p[2] for p in verts) - 5.0) < 1e-6
     assert abs(max(p[2] for p in verts) - 105.0) < 1e-6
-    # a 90-degree turn about the centroid maps (0,0) to (10,0)
-    top = verts[-4:]
-    assert any(abs(p[0] - 10.0) < 1e-6 and abs(p[1] - 0.0) < 1e-6 for p in top), top
+    # TRACK ONE VERTEX, NOT THE SET. A 90-degree rotation maps a square onto
+    # itself, so asserting that SOME top vertex sits at (10,0) passes whether the
+    # ring turned or not -- mutation-tested: zeroing the twist angle survived it.
+    # Vertex 0 starts at (0,0) and a quarter turn about the centroid (5,5) puts
+    # it at (10,0), so pin that one vertex.
+    assert abs(verts[-4][0] - 10.0) < 1e-6 and abs(verts[-4][1] - 0.0) < 1e-6, verts[-4]
+    assert abs(verts[0][0]) < 1e-6 and abs(verts[0][1]) < 1e-6, verts[0]
     # every quad plus a floor and a cap
     assert len(faces) == 4 * 4 + 2, len(faces)
 
