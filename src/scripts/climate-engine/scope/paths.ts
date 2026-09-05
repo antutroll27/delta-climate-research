@@ -82,7 +82,7 @@ export function areaPath(key: AreaKey): string {
 /** Where `/heat-map` with nothing after it goes. See `DEFAULT_AREA`. */
 export const DEFAULT_AREA_PATH = areaPath(DEFAULT_AREA);
 
-/** The ten per-area artefacts. Names are the callers' vocabulary, not the files'. */
+/** The eleven per-area artefacts. Names are the callers' vocabulary, not the files'. */
 export interface AreaPaths {
   readonly ward: string;
   readonly terrain: string;
@@ -94,6 +94,7 @@ export interface AreaPaths {
   readonly surface: string;
   readonly canopy: string;
   readonly layers: string;
+  readonly pv: string;
 }
 
 /**
@@ -206,6 +207,7 @@ export function paths(key: AreaKey): AreaPaths | null {
     surface: `${DATA}${area}-surface.png`,
     canopy: `${DATA}${area}-canopy.png`,
     layers: `${DATA}${area}-layers.json`,
+    pv: `${DATA}pv-${area}.json`,
   };
 }
 

@@ -262,6 +262,44 @@ export interface SimStats {
   thresholdC: number;
 }
 
+/**
+ * The rooftop-solar screen, one file per ward, written by scripts/build-pv-yield.py.
+ * Arrays join the ward's `b` rows BY INDEX — there is no id — so a file whose
+ * lengths disagree with the ward is a wrong-ward file and must be refused.
+ * `loss` is the central cell (buildings + trees); `loss_strict` is the strict-mask
+ * floor the card prints beside it; `totals` and `stratum` are the laboratory's
+ * ward numbers, carried so the browser never re-derives them.
+ */
+export interface PvFile {
+  readonly ward: string;
+  readonly kwp: readonly number[];
+  readonly kwh: readonly number[];
+  readonly loss: readonly number[];
+  readonly loss_buildings: readonly number[];
+  readonly loss_trees: readonly number[];
+  readonly loss_raised: readonly number[];
+  readonly loss_strict: readonly number[];
+  readonly specific_yield: number;
+  readonly packing_factor: number;
+  readonly basis: string;
+  readonly totals: {
+    readonly capacity_mwp: number;
+    readonly capacity_mwp_range: readonly [number, number];
+    readonly generation_gwh_yr: number;
+    readonly shading_loss_gwh_yr: number;
+    readonly mean_loss: number;
+    readonly mean_loss_strict: number;
+    readonly mean_loss_trees: number;
+    readonly mean_loss_raised: number;
+  };
+  readonly stratum: {
+    readonly threshold_kwp: number;
+    readonly n: number;
+    readonly share_losing_5pct: number;
+    readonly mean_loss: number;
+  };
+}
+
 /** The swappable engine contract (see docs/heat-map-feature.md). */
 export interface HeatSim {
   reset(grid: GridSpec, layers: SimLayers, params: SimParams): void;

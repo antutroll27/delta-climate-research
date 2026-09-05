@@ -11,7 +11,7 @@
 import maplibregl from 'maplibre-gl';
 import { WARD_MAP, wardLatLon, formatLatLon, type Ward } from '../../data/wards.ts';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { DEFAULT_PARAMS, greenReferenceContrastC, type ClimateConstants, type SimLayers, type SimParams } from './types';
+import { DEFAULT_PARAMS, greenReferenceContrastC, type ClimateConstants, type PvFile, type SimLayers, type SimParams } from './types';
 import { detectHeatCaps } from './caps';
 import { createGpuHost, createStaticHost, createWorkerHost } from './sim-host';
 import type { HeatSimHost, HeatSimRequest, HeatSimSnapshot } from './sim-protocol';
@@ -1036,6 +1036,23 @@ export function mountHeatMap(): () => void {
      of Ballygunge is hand-traced OSM and 99 % of Baruipur is model output — a
      difference nothing on screen showed until this shipped. */
   const provCache: Record<string, { src: string[]; confidence: number[] } | null> = {};
+  /* THE ROOFTOP-SOLAR SCREEN, one file per ward, fetched with the bundle and
+     cached like provenance. `null` is "no screen ships here", and everything
+     solar stays hidden; `undefined` is "not fetched yet". A file whose arrays
+     disagree with the ward's building count is refused, because the join is by
+     index with no id: a wrong-ward file would hand every roof a stranger's
+     figures without a single error, and the card would print them in good faith. */
+  const pvCache: Record<string, PvFile | null> = {};
+  function asPvFile(raw: unknown, buildings: number): PvFile | null {
+    if (!raw || typeof raw !== 'object') return null;
+    const f = raw as PvFile;
+    const arrays = [f.kwp, f.kwh, f.loss, f.loss_buildings, f.loss_trees, f.loss_raised, f.loss_strict];
+    if (!arrays.every((a) => Array.isArray(a) && a.length === buildings) || !f.totals || !f.stratum) {
+      console.warn(`solar screen for ${String(f.ward ?? '?')} does not match this ward's ${buildings} buildings — ignored`);
+      return null;
+    }
+    return f;
+  }
   /* Measured Sentinel-2 surface, one per ward, fetched once. A miss is non-fatal
      and falls back to a flat field at the measured ward mean — never to
      synthesised structure. */
@@ -1241,7 +1258,7 @@ export function mountHeatMap(): () => void {
       /* Fetch the complete immutable ward bundle before changing shared state. A
          superseded request therefore cannot replace geometry, labels, or metrics
          part way through a newer ward selection. */
-      const [d, terrain, water, wardSurface, roads, labels, provenance, canopy, trees] = await Promise.all([
+      const [d, terrain, water, wardSurface, roads, labels, provenance, canopy, trees, pvRaw] = await Promise.all([
         cache[name]
           ? Promise.resolve(cache[name])
           : fetch(P.ward, { signal: token.signal }).then(async (r) => {
@@ -1276,11 +1293,16 @@ export function mountHeatMap(): () => void {
           : optional(loadCanopyRaster(name, token.signal).then((c) => { canopyCache[name] = c; return c; }), null),
         optional(fetch(P.trees, { signal: token.signal })
           .then(async (r) => (r.ok ? asTreesFile(await r.json()) : null)), null),
+        pvCache[name] !== undefined
+          ? Promise.resolve(pvCache[name] as unknown)
+          : optional(fetch(P.pv, { signal: token.signal })
+            .then(async (r) => (r.ok ? await r.json() as unknown : null)), null as unknown),
       ]);
       if (!wardSession.isCurrent(token)) return;
       cache[name] = d; terrainCache[name] = terrain; waterCache[name] = water;
       surfaceCache[name] = wardSurface; roadsCache[name] = roads; labelCache[name] = labels; provCache[name] = provenance;
       canopyCache[name] = canopy;
+      pvCache[name] = asPvFile(pvRaw, d.b.length);
       void loadDcUrs(name); void loadHeatwave(name);
       /* The scope moves WITH the area. `state.climate` is what `currentParams`
          and `applyInterventions` read, so leaving it behind would run the new
