@@ -191,7 +191,7 @@ def rasterise(polys: list[Polygon], heights: F64, n: int, frame_m: float,
     order = np.argsort(heights, kind="stable")
     shapes = ((polys[int(i)], int(i) + 1) for i in order)
     # TYPING ONLY. The rasterio stub declares GeoJSON mappings, but rasterize does
-    # `geom = getattr(geom, '__geo_interface__', None) or geom` (features.py:134, rasterio 1.5.0),
+    # `geom = getattr(geom, '__geo_interface__', None) or geom` (features.py:339, rasterio 1.5.0),
     # so a shapely Polygon is the documented input. Casting the argument rather than converting
     # the geometries keeps the runtime call exactly as measured.
     raw = features.rasterize(cast(Any, shapes), out_shape=(n, n), transform=tr, fill=0,
@@ -273,8 +273,11 @@ def run_ward(ward_id: str) -> None:
     l_b, l_b_r = loss("b"), loss("b_r")
     l_t, l_t_r, l_m, l_s = loss("t"), loss("t_r"), loss("m"), loss("s")
     # Buildings without pixels (full-duplicate twins): the registered building-only figure,
-    # no tree term, flagged. Arrays stay full length so the index join holds.
+    # no tree term, flagged. Arrays stay full length so the index join holds. The raised
+    # scenario gets the same backfill, or its array would read 0 on exactly those indices
+    # while the total reads the polygon value (caught in review before any ward had one).
     l_b[no_pixels] = poly_loss[no_pixels]
+    l_b_r[no_pixels] = poly_loss[no_pixels]
 
     central = total(l_b, l_t, TAU)
     raised = total(l_b_r, l_t_r, TAU)
