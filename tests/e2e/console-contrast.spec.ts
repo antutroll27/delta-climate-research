@@ -94,6 +94,44 @@ async function contrastFailures(page: Page): Promise<Finding[]> {
       const cs = getComputedStyle(el);
       if (cs.visibility === 'hidden' || cs.opacity === '0') continue;
 
+      /* OCCLUSION. The ground is sampled inside the element's own box, which is
+         only its ground if nothing opaque sits on top — and the building card is
+         clamped inside the canvas, so it lands ON aside.panel.right. That put
+         about twenty right-panel readouts (#uhi, #liveT, #conf, #lst, the .k
+         labels, the tint chips) against the card's cream at ~1.1:1 while they
+         were really pale ink on a dark panel. Hit-test the box's centre; if the
+         topmost element there is neither this element, nor inside it, nor an
+         ancestor of it, something covers it and it is skipped.
+
+         THE HIT TEST IS NOT THE PAINT ORDER UNTIL TWO THINGS ARE CORRECTED, and
+         both were measured on this page rather than reasoned about.
+         · POINTER-EVENTS. Every overlay on the map sets `pointer-events:none` —
+           the sun line, the place name, the walk-time ring labels, the greenery
+           tag — so an unforced hit test falls through them to the canvas and
+           calls each one covered. It swallowed #sunLineText, the node this
+           file's header cites as the whole reason Clay is measured, and with it
+           the ring label's REAL 4.31:1 (its 88% cream pill over the dark panel
+           composites to rgb(217 217 215), not to the cream). The property is
+           forced on for the length of the test and put straight back; the
+           screenshot was taken before the loop, so nothing measured moves.
+         · AN ANCESTOR ON TOP. SelectField's `.field-trigger::after` is an empty
+           transparent inset:0 overlay that exists only to widen the hit area, so
+           the button answers for its own labels. An ancestor's box is BEHIND its
+           descendant's text, and its pseudo-elements are already in the pixels
+           this samples, so an ancestor is never a cover.
+         Together those took a plain sweep's removals from 14 to 4.
+
+         CEILINGS: a partially covered element is sampled as if uncovered, and a
+         fully transparent SIBLING on top still reads as a cover — the four left
+         in a plain sweep are that, and all four cleared their floor when they
+         were still being scored. */
+      const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+      const style = (el as HTMLElement).style, pe = style.pointerEvents;
+      style.pointerEvents = 'auto';
+      const topEl = document.elementFromPoint(cx, cy);
+      style.pointerEvents = pe;
+      if (topEl && topEl !== el && !el.contains(topEl) && !topEl.contains(el)) continue;
+
       const x0 = Math.round(r.left), y0 = Math.round(r.top);
       const x1 = Math.min(cv.width, Math.round(r.right));
       const y1 = Math.min(cv.height, Math.round(r.bottom));
