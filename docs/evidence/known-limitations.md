@@ -424,3 +424,60 @@ bias-correct POWER for the whole metro — the NIWE SRRA Advanced Measurement St
 inside our POWER cell (see `data-sources.md`, Candidate). (3) **Height data**, not height statistics —
 stereo VHR photogrammetry or lidar. Terrain is ~0 % (Kolkata's true relief is 3–5 m; ground moves < 1 m
 over a 25–50 m shadow run).
+
+> **ADDENDUM 2026-09-05 — trees are now in the shading pass, and the shipped loss is buildings + trees.**
+> Pre-registered (`docs/superpowers/specs/2026-09-05-pv-tree-shading-design.md`, Amendments A1–A4) and run
+> as written: raster shadow-casting on a 0.5 m surface of footprints plus the Meta/WRI CHM v2, cross-checked
+> against the registered polygon run on buildings alone before a tree was counted. Central cell = τ 0.30,
+> stated canopy heights, A1 connectedness mask, receiver at the roof plane. Both predictions held in all
+> three wards: trees exceed buildings on installable roofs, and the total never falls below buildings-only.
+>
+> | ward | cross-check mean / share (pp of 1.0 / 3.0) | all roofs: total mean · share ≥ 5 % | ≥ 3 kWp: total · share | trees vs buildings, ≥ 3 kWp | overhang kept | mask lever |
+> |---|---|---|---|---|---|---|
+> | Ballygunge | 0.29 / 1.56 | **21.95 %** · 67.7 % | 14.34 % · 58.2 % | 11.17 vs 3.16 | 99 % | 9.13 pp |
+> | Barrackpore | 0.20 / 1.38 | **19.03 %** · 64.2 % | 14.96 % · 59.9 % | 13.86 vs 1.10 | 98 % | 10.26 pp |
+> | Baruipur | 0.32 / 2.23 | **18.67 %** · 61.2 % | 11.54 % · 48.5 % | 10.59 vs 0.95 | 99 % | 9.14 pp |
+>
+> Generation falls by the tree term, capacity unchanged: 22.24 → 19.76, 18.70 → 15.90, 14.40 → 12.47 GWh/yr
+> (17.49 / 14.40 / 11.13 MWp floor). Shading now costs 3.22 / 3.05 / 2.14 GWh/yr against 0.74 / 0.25 / 0.20
+> before.
+>
+> **What the honest sentence now says.** The building term is still robust. The tree term is larger and
+> less certain, and the published figure sits at the **high end** of its own sensitivity table (Ballygunge
+> 12.8–24.4 %, Barrackpore 8.8–21.5 %, Baruipur 8.1–21.1 % across the eight registered cells). Four things
+> set that width, in order: (1) **the mask rule is the largest lever in every ward** (A1 → strict mask:
+> −9.1 / −10.3 / −9.1 pp). In continuous canopy the connectedness rule barely fires — 98–99 % of canopy over
+> roofs is kept as overhang — and overhang is 53–58 % of the whole tree term; the strict row is the floor.
+> (2) Crown opacity: τ across its 0.20–0.50 band moves the total 7.3–7.5 pp. (3) Canopy heights carry the
+> model's 3.0 m MAE and only the minus-MAE cell is run (−5.7 / −7.3 / −8.0 pp), so the shipped figure is not
+> the upper bound. (4) **The numbers are not grid-converged**: halving the grid from 1 m to 0.5 m raised every
+> ward's total by 2.0–2.5 pp, and the raster still reads low against the polygon sweep in all three wards
+> (4.83 vs 5.12, 1.46 vs 1.66, 1.47 vs 1.79 % on buildings alone), so these are floors within the A1 rule.
+> A crown standing directly over its own roof is also invisible to the march near zenith (27 % of the year's
+> GHI weight at 2 m above the roof) — understated, same direction. No species, no seasonal leaf drop.
+>
+> **Baruipur refused at 1 m, certified at 0.5 m (A4).** On the ward with the smallest roofs (88 pixels each
+> at 1 m against 177 in Ballygunge) the buildings-only raster undercounted the share of roofs above 5 % by
+> 3.60 pp against a 3.0 pp tolerance while the mean passed. The tolerance was not loosened; the grid was
+> refined for all three wards, everything else as registered, and the 1 m failure stays in history
+> (commit `cf7e60d`) and in every artefact's `notes.grid`. At 0.5 m Baruipur consumes 74 % of the share
+> budget — still the tight one.
+>
+> **The ≥ 3 kWp stratum, restated alongside the registered verdict, never as a re-registration.** On
+> building-only shading the registered gate still fails in Barrackpore (1.10 % / 6.0 %) and Baruipur
+> (0.94 % / 5.8 %) and passes in Ballygunge (3.16 % / 19.2 %) — the same finding as the PREREG addendum, to
+> within 0.16 pp. On the total it passes comfortably in all three. The `stratum.n` in the shading artefact
+> (1841 / 1771 / 1141) is computed from unrounded areas; the yield artefact's `installable_ge_3kwp.n`
+> (1840 / 1771 / 1140) from 1-dp areas — one boundary roof, not the same population, do not quote both as one.
+>
+> **A lever the consultant can pull.** Raising the array 2 m on an elevated mounting structure recovers
+> 5.2 / 6.0 / 6.6 pp of the total; it ships per building as `loss_raised` and is a what-if, not a claim.
+>
+> **A gap for whoever builds the card.** The browser file carries the central row only (`loss`,
+> `loss_buildings`, `loss_trees`, `loss_raised`) and no band; the eight-cell table lives in
+> `data/calibration/pv-shading-trees-<ward>.json`. A card that prints 21.95 % without the 12.8 % floor beside
+> it is overstating what was measured.
+>
+> **Artefacts:** `data/calibration/pv-shading-trees-<ward>.json` (sensitivity table, levers, predictions,
+> cross-check with the registered comparands, per-sun shaded fractions); the registered
+> `pv-shading-<ward>.json` is untouched and no longer read by the yield chain.

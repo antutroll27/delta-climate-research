@@ -391,6 +391,22 @@ not.
 > **Receipts:** `scripts/measure-pv-shading.py [--caster p75]`, `scripts/build-pv-yield.py`,
 > `data/calibration/pv-shading-<ward>.json`, `data/calibration/pv-yield-<ward>.json` (carries the
 > `installable_ge_3kwp` stratum and the packing-factor interval); commits `95f3f38`, `4e27f4a`, `4c8cf0d`.
+>
+> **Trees into the shading pass — pre-registered and run as written (2026-09-05).** Raster shadow-casting
+> on a 0.5 m surface model, the published DSM march (shift-and-max toward the sun): Ratti & Richens 2004,
+> *Environment and Planning B* 31(2); Lindberg & Grimmond 2011, *Theor. Appl. Climatol.* 105 — algorithm
+> reference only, SOLWEIG's code is GPL and is not used. Canopy beam transmittance τ = 0.30 (band 0.20–0.50):
+> Konarska et al. 2014, *Theor. Appl. Climatol.* 117 (single urban trees, in leaf); Wu, Lu & Lin 2025,
+> *Sustainable Cities and Society* (SRT 0.18–0.60, mean ≈ 0.3, R² 0.95 against LAI). Canopy source Meta/WRI
+> CHM v2 (Brandt et al. 2026, *Scientific Data*, arXiv:2603.06382; MAE 3.0 m; CC BY 4.0). Spec and four
+> amendments — A1 overhang kept by connectedness and a 2 m elevated-array scenario; A2 connectivity declared
+> and the raster's measured low bias; A3 the sanity statistic as applied, the near-zenith blind spot, the
+> mask as dominant lever; A4 Baruipur refused at 1 m, grid refined to 0.5 m, gate unchanged:
+> `docs/superpowers/specs/2026-09-05-pv-tree-shading-design.md`. Results and the honest sentence:
+> `known-limitations.md` §8 addendum 2026-09-05.
+> **Receipts:** `scripts/measure-pv-tree-shading.py [--self-check]`,
+> `data/calibration/pv-shading-trees-<ward>.json`. **The yield chain (`build-pv-yield.py`) now reads
+> these; `pv-shading-<ward>.json` above is the registered building-only record and is no longer its input.**
 
 ---
 

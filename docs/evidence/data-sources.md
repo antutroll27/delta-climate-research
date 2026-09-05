@@ -23,7 +23,7 @@ Maxar imagery · 1 m, single-epoch, MAE "a few metres," known ~150 m tiling arte
 commercial with attribution** · anonymous AWS Open Data, no credentials:
 `s3://dataforgood-fb-data/forests/v1/alsgedi_global_v6_float/chm/<quadkey>.tif`, zoom-9 Bing quadkey ·
 registry `https://registry.opendata.aws/dataforgood-fb-forests/` · **role:** Tier-2 canopy height —
-**RENDER-ONLY.** Drives tree placement/height for the render layer and **does not enter the temperature
+**render + PV screening (2026-09-05), never the temperature solve.** Drives tree placement/height for the render layer, and since 2026-09-05 casts shadows in the rooftop-PV shading pass (`scripts/measure-pv-tree-shading.py`, v2 read at 0.5 m, A1 connectedness mask — spec `2026-09-05-pv-tree-shading-design.md`, Amendments A1–A4). It still **does not enter the temperature
 solve** · status: **shipped to production 2026-08-11** for all three wards (8,896 / 4,413 / 6,797 trees);
 ward-mean accuracy unchanged throughout (night ±3.5K, day ±5.0K — the CHM has never affected it).
 
