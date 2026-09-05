@@ -185,9 +185,47 @@ def ring_area(p: list[float]) -> float:
 
 
 HEIGHT_TABLE: dict[str, Any] = {}
+HEIGHT_GRID: dict[str, Any] = {}
+_GRID_INDEX: dict[tuple[int, int, int], float] = {}
 
 
-def estimate_height(area: float, seed: int) -> float:
+def _grid_lookup(x: float, y: float, area: float) -> float | None:
+    """Median measured height of this neighbourhood, at roughly this size.
+
+    Widens by SIZE BAND before widening in SPACE: a tower two cells away is a
+    worse guide than a smaller building next door, because the size bands are
+    coarse and the districts are not.
+    """
+    if not _GRID_INDEX:
+        return None
+    cell = float(HEIGHT_GRID.get("cellM", 600.0))
+    edges = HEIGHT_GRID.get("bandEdges") or [500.0, 2000.0, 5000.0]
+    band = len(edges)
+    for i, edge in enumerate(edges):
+        if area < float(edge):
+            band = i
+            break
+    gx, gy = int(x // cell), int(y // cell)
+    nbands = len(edges) + 1
+    for rad in (0, 1, 2, 3):
+        same = [_GRID_INDEX[(i, j, band)]
+                for i in range(gx - rad, gx + rad + 1)
+                for j in range(gy - rad, gy + rad + 1)
+                if (i, j, band) in _GRID_INDEX]
+        if same:
+            same.sort()
+            return same[len(same) // 2]
+        anyb = [_GRID_INDEX[(i, j, b)]
+                for i in range(gx - rad, gx + rad + 1)
+                for j in range(gy - rad, gy + rad + 1)
+                for b in range(nbands) if (i, j, b) in _GRID_INDEX]
+        if anyb:
+            anyb.sort()
+            return anyb[len(anyb) // 2]
+    return None
+
+
+def estimate_height(area: float, seed: int, x: float = 0.0, y: float = 0.0) -> float:
     """Fallback ONLY. Used where OSM has no height for this footprint.
 
     Capped at 60 m rather than the earlier 40 m, but the cap is not the point —
@@ -204,6 +242,17 @@ def estimate_height(area: float, seed: int) -> float:
     worse there. The threshold is not a hedge; it is where the measurement
     changes sign.
     """
+    # WHERE it is beats HOW BIG it is, below 5,000 m2. Held out against genuine
+    # height tags the neighbourhood median takes mean error from 20.76 m to
+    # 11.58 m -- and in the 500-2,000 m2 band, where the Creek's towers sit, from
+    # 47.43 m to 21.66 m. Above 5,000 m2 it LOSES (38.17 against 28.11), because
+    # a mall's neighbours are villas, so that band keeps the fitted area table.
+    if _GRID_INDEX and area < float(HEIGHT_GRID.get("maxArea", 5000.0)):
+        near = _grid_lookup(x, y, area)
+        if near is not None:
+            jitter = 0.92 + 0.16 * ((math.sin(seed * 127.1) * 43758.5453) % 1.0)
+            return max(3.0, near * jitter)
+
     bands = HEIGHT_TABLE.get("bands") or []
     if bands and area >= float(HEIGHT_TABLE.get("minArea", 5000.0)):
         best: float | None = None
@@ -253,7 +302,7 @@ def build_buildings(terrain_doc: dict[str, Any], doc: dict[str, Any]) -> Any:
         # else falls back to the area prior. No cap is applied to measured data:
         # capping it was what flattened the skyline in the first place.
         measured = b.get("h")
-        top = base + (float(measured) if measured else estimate_height(area, idx + 1))
+        top = base + (float(measured) if measured else estimate_height(area, idx + 1, cx, cy))
         start = len(verts)
         for i in range(nv):
             verts.append((p[i * 2], p[i * 2 + 1], base))
@@ -285,7 +334,7 @@ def build_buildings(terrain_doc: dict[str, Any], doc: dict[str, Any]) -> Any:
         cy = sum(q[i * 2 + 1] for i in range(nv)) / nv
         base = sample_ground(terrain_doc, cx, cy) - 0.4
         measured = rec.get("h")
-        top = base + (float(measured) if measured else estimate_height(area, osm_drawn + 7))
+        top = base + (float(measured) if measured else estimate_height(area, osm_drawn + 7, cx, cy))
         start = len(verts)
         for i in range(nv):
             verts.append((q[i * 2], q[i * 2 + 1], base))
@@ -694,8 +743,14 @@ def main() -> None:
         terrain_doc = json.load(fh)
     with open(os.path.join(DATA, f"{SITE}-buildings.json")) as fh:
         buildings_doc = json.load(fh)
-    global HEIGHT_TABLE
+    global HEIGHT_TABLE, HEIGHT_GRID, _GRID_INDEX
     HEIGHT_TABLE = buildings_doc.get("heightTable") or {}
+    HEIGHT_GRID = buildings_doc.get("heightGrid") or {}
+    _GRID_INDEX = {(int(r[0]), int(r[1]), int(r[2])): float(r[3])
+                   for r in HEIGHT_GRID.get("cells", [])}
+    if _GRID_INDEX:
+        print(f"  height prior: spatial grid, {len(_GRID_INDEX):,} cells of "
+              f"{HEIGHT_GRID['cellM']:.0f} m below {HEIGHT_GRID['maxArea']:.0f} m2")
     if HEIGHT_TABLE:
         trusted = sum(1 for b in HEIGHT_TABLE["bands"] if b.get("medianM") is not None)
         print(f"  height prior: fitted table, {trusted} trusted band(s) "

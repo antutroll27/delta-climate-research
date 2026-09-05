@@ -363,6 +363,20 @@ def ring_area(flat: list[float]) -> float:
     return abs(a) / 2.0
 
 
+def ring_centroid(flat: list[float]) -> tuple[float, float]:
+    """Vertex mean of a flat ring. Beside ring_area for the same reason.
+
+    Deliberately the vertex mean, not the area centroid: it is what every other
+    consumer in this pipeline already uses, and two definitions of "the middle of
+    a building" would disagree on concave plans exactly where it matters.
+    """
+    n = len(flat) // 2
+    if n == 0:
+        return 0.0, 0.0
+    return (sum(flat[2 * i] for i in range(n)) / n,
+            sum(flat[2 * i + 1] for i in range(n)) / n)
+
+
 def _self_test() -> int:
     """The height join's fixture. Run: python3 scripts/_flood.py
 
