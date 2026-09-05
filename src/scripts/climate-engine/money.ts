@@ -116,3 +116,34 @@ export function currencyMark(costs: Costs): string {
     .map((part) => part.value)
     .join('');
 }
+
+/* The unit-price shape of the same formatter, cached in its own map because the
+   OPTIONS differ and the currency alone would key the two together. The locale
+   still comes from `localeFor`, so the region — and with it the grouping — is
+   derived in exactly one place for both shapes. */
+const RATE_FORMATTERS = new Map<string, Intl.NumberFormat>();
+
+function rateFormatterFor(currency: string): Intl.NumberFormat {
+  const cached = RATE_FORMATTERS.get(currency);
+  if (cached !== undefined) return cached;
+  const made = new Intl.NumberFormat(localeFor(currency), {
+    style: 'currency',
+    currency,
+    notation: 'standard',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  RATE_FORMATTERS.set(currency, made);
+  return made;
+}
+
+/**
+ * A UNIT PRICE — a tariff per kWh, a rate per tonne — with two fixed decimals and
+ * no compact scale. `fmtMoney` compacts (11.1M) and drops decimals, which is right
+ * for a figure and wrong for a rate; concatenating `currencyMark` with a number
+ * puts "AED" flush against the digits while the figure beside it prints "AED 8".
+ * Same locale, same currency, same formatter family, so the two can never disagree.
+ */
+export function fmtRate(amount: number, costs: Costs): string {
+  return rateFormatterFor(costs.currency).format(amount);
+}

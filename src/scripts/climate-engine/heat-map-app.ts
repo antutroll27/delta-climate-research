@@ -52,7 +52,7 @@ import { SELECT_SYNC_EVENT } from './shell/select-field.ts';
 import { isLayerId, type LayerId } from './scope/layers.ts';
 import { resolve, requireCosts } from './scope/resolve.ts';
 import { areaPageTitle, areaPageDescription } from './scope/page-meta.ts';
-import { fmtMoney, currencyMark } from './money.ts';
+import { fmtMoney, fmtRate } from './money.ts';
 import { areaPath, paths, cityPaths } from './scope/paths.ts';
 import { areaRefusal } from './scope/reachability.ts';
 import { isAreaKey, splitKey, type AreaKey } from './scope/registry.ts';
@@ -738,7 +738,7 @@ export function mountHeatMap(): () => void {
     setHTML('bcSolLoss', `${pct(pv.loss[i])}<small>of which trees ${pv.loss_trees[i] < 0.005 ? 'under 1%' : `${Math.round(pv.loss_trees[i] * 100)}%`} · annual</small>`);
     setHTML('bcSolFloor', `${pct(pv.loss_strict[i])}<small>under a strict roof mask</small>`);
     setHTML('bcSolRaised', `${pct(pv.loss_raised[i])}<small>elevated mounting · what-if</small>`);
-    setHTML('bcSolRs', `${fmtMoney(pv.kwh[i] * tariff, COSTS)}/yr<small>at ${currencyMark(COSTS)}${tariff.toFixed(2)} per kWh · assumed</small>`);
+    setHTML('bcSolRs', `${fmtMoney(pv.kwh[i] * tariff, COSTS)}/yr<small>at ${fmtRate(tariff, COSTS)} per kWh · assumed</small>`);
     box.removeAttribute('hidden');
   }
   /* ── rooftop solar, whole ward ──
@@ -751,13 +751,15 @@ export function mountHeatMap(): () => void {
       if (!e) return;
       if (on) e.removeAttribute('hidden'); else e.setAttribute('hidden', '');
     };
-    for (const id of ['solm', 'solRows', 'solFloor']) show(id, pv !== null && pv !== undefined);
+    const has = pv != null;
+    for (const id of ['solm', 'solRows', 'solFloor']) show(id, has);
     if (!pv) return;
     const t = pv.totals, s = pv.stratum, n = pv.kwp.length;
     setHTML('solKwp', `${t.capacity_mwp.toFixed(1)}<span class="u">MWp</span>`);
     setHTML('solConf', `Screening · <b>${t.capacity_mwp_range[0].toFixed(1)}–${t.capacity_mwp_range[1].toFixed(1)} MWp</b> · not bankable`);
     setHTML('solKwh', `${t.generation_gwh_yr.toFixed(1)}<small>GWh/yr · floor</small>`);
-    setHTML('solRs', `${fmtMoney(t.generation_gwh_yr * 1e6 * tariff, COSTS)}<small>per yr at ${currencyMark(COSTS)}${tariff.toFixed(2)} · assumed</small>`);
+    setHTML('solRs', `${fmtMoney(t.generation_gwh_yr * 1e6 * tariff, COSTS)}<small>per yr at ${fmtRate(tariff, COSTS)} · assumed</small>`);
+    setText('solBigK', `Roofs ≥ ${s.threshold_kwp} kWp`);
     setHTML('solBig', `${s.n.toLocaleString()}<small>${Math.round(100 * s.n / n)}% of ${n.toLocaleString()} roofs</small>`);
     setHTML('solSh', `${Math.round(s.share_losing_5pct * 100)}%<small>of those roofs</small>`);
     setText('solFloor', `Shading costs ${t.shading_loss_gwh_yr.toFixed(1)} GWh a year — at least `
@@ -873,7 +875,8 @@ export function mountHeatMap(): () => void {
        third would put the Close button past the edge. Clamp the centre so the box
        stays inside the canvas with a margin, and move the leader line by the same
        amount in the other direction so it still points at the building. */
-    const cardH = bcard.offsetHeight;
+    // measured once with the rest of the frame's reads; the height only changes on selection or theme
+    const cardH = cardBox ? cardBox.height : bcard.offsetHeight;
     const EDGE = 12;
     const lo = Math.min(cardH / 2 + EDGE, h / 2), hi = Math.max(h - cardH / 2 - EDGE, h / 2);
     const cy = Math.min(Math.max(p.y, lo), hi);
@@ -1124,10 +1127,14 @@ export function mountHeatMap(): () => void {
        distinct building counts today and a regenerated ward could land on a
        neighbour's; the lengths, because the join is by index; the element type,
        because the painters call number methods on these and a file of strings
-       would throw in paintCard rather than here. */
+       would throw in paintCard rather than here. The ward totals the panel prints
+       are probed for the same reason: an empty totals object would pass a
+       truthiness check and throw in paintSolarWard. */
     const ok = f.ward === area
       && arrays.every((a) => Array.isArray(a) && a.length === buildings && (a.length === 0 || typeof a[0] === 'number'))
-      && !!f.totals && !!f.stratum;
+      && typeof f.totals?.capacity_mwp === 'number' && Array.isArray(f.totals?.capacity_mwp_range)
+      && typeof f.totals?.mean_loss_strict === 'number'
+      && typeof f.stratum?.n === 'number' && typeof f.stratum?.share_losing_5pct === 'number';
     if (!ok) {
       console.warn(`solar screen "${String(f.ward ?? '?')}" does not match ${area} (${buildings} buildings) — ignored`);
       return null;

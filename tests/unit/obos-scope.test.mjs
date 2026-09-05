@@ -12,7 +12,7 @@ import { paths, cityPaths } from '../../src/scripts/climate-engine/scope/paths.t
 import { resolve, requireCosts } from '../../src/scripts/climate-engine/scope/resolve.ts';
 import { WARDS as WARD_TABLE } from '../../src/data/wards.ts';
 import { currentParams } from '../../src/scripts/climate-engine/heat-map-model.ts';
-import { fmtMoney, currencyMark } from '../../src/scripts/climate-engine/money.ts';
+import { fmtMoney, fmtRate, currencyMark } from '../../src/scripts/climate-engine/money.ts';
 import { tabKind, areaRefusal } from '../../src/scripts/climate-engine/scope/reachability.ts';
 
 test('registry invariants hold', () => {
@@ -775,6 +775,10 @@ test('the currency named in prose is the one the figures carry', () => {
   assert.ok(currencyMark(inr).length > 0, 'the rupee mark came back empty');
   assert.ok(fmtMoney(11_096_666.67, inr).includes(currencyMark(inr)),
     'the mark this sentence names is not the mark the figure beside it carries');
+  assert.ok(fmtRate(8, inr).includes(currencyMark(inr)) && fmtRate(8, inr).includes('8.00'),
+    'the unit price carries the mark and two fixed decimals');
+  assert.ok(fmtRate(8, AED_FIXTURE).includes(currencyMark(AED_FIXTURE)) && fmtRate(8, AED_FIXTURE).includes('8.00'),
+    'the Gulf unit price carries its mark and two fixed decimals');
   assert.ok(fmtMoney(11_096_666.67, AED_FIXTURE).includes(currencyMark(AED_FIXTURE)),
     'the Gulf mark and the Gulf figure disagree');
 
