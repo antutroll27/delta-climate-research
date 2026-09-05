@@ -132,9 +132,9 @@ test('the rail carries all six sections, each declared exactly once', async () =
     + `each once -- it declares: ${ids.join(', ')}`);
 });
 
-test('the rail carries the mode: two sections navigate, three swap the pane', async () => {
+test('the rail carries the mode: two sections navigate, four swap the pane', async () => {
   /* Mixed verbs, deliberately. Map and Analysis are ROUTES -- the old Explore and
-     Compare tabs, which the rail replaces as the only navigation. Layers, Reports
+     Compare tabs, which the rail replaces as the only navigation. Layers, Solar, Reports
      and Scenarios swap the sidebar pane and go nowhere, so they declare no href
      and can only ever be buttons. */
   const { frontmatter } = await railSource();
@@ -3266,4 +3266,31 @@ test('the compare page mounts the console shell as well as the bench', async () 
   assert.match(page, /astro:before-swap[\s\S]{0,300}?disposeShell/,
     'the console shell is mounted on the compare route but never disposed on '
     + 'astro:before-swap -- its listeners outlive the page they were bound to');
+});
+
+test('the solar screen is wired end to end and never prints a headline without its floor', async () => {
+  /* Source assertions, the harness's idiom: the card block is painted only when a
+     building is selected on a WebGL canvas the software renderer cannot reliably
+     click, so the wiring is pinned here and the page test reaches the card
+     through a ranked row instead. */
+  const stage = await readFile(new URL('../../src/components/ClimateEngine/HeatMapStage.astro', import.meta.url), 'utf8');
+  const bench = await readFile(new URL('../../src/components/ClimateEngine/compare/PairedBench.astro', import.meta.url), 'utf8');
+  const app = await readFile(new URL('../../src/scripts/climate-engine/heat-map-app.ts', import.meta.url), 'utf8');
+  const paths = await readFile(new URL('../../src/scripts/climate-engine/scope/paths.ts', import.meta.url), 'utf8');
+  for (const [name, src] of [['HeatMapStage', stage], ['PairedBench', bench]]) {
+    assert.match(src, /data-pane="solar"/,
+      `${name} renders no Solar pane -- the rail section is 'always', so a route without the pane shows a button that opens nothing`);
+  }
+  assert.match(paths, /pv:\s*`\$\{DATA\}pv-\$\{area\}\.json`/, 'paths.ts names no solar file');
+  assert.match(app, /pvCache\[name\] = asPvFile\(pvRaw, d\.b\.length, areaOf\(name\)\)/,
+    'the ward loader does not validate the solar file against the ward -- '
+    + "a wrong-ward file would hand every roof a stranger's figures");
+  assert.match(app, /pv\.loss_strict\[i\]/,
+    'the card does not print the strict-mask floor -- the mask rule is the largest lever and the headline must never print alone');
+  assert.match(app, /mean_loss_strict/, 'the ward panel and pane do not print the strict-mask floor');
+  assert.match(app, /paintSolarCard\(b\)/, 'paintCard does not paint the solar block');
+  assert.match(app, /localStorage\.setItem\(TARIFF_KEY/, 'the tariff is not remembered');
+  assert.match(app, /map\.easeTo\(/, 'a ranked row does not bring the camera to its building -- a card projected from a building outside the view is a card nobody sees');
+  assert.doesNotMatch(stage + bench + app, /payback/i,
+    'a payback figure has no place here: it needs capex and subsidy assumptions, and that is where liability lives');
 });

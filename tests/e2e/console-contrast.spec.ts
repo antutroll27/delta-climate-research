@@ -181,4 +181,27 @@ test.describe('console legibility', () => {
     const findings = await contrastFailures(page);
     expect(findings, report('Clay studio', findings)).toEqual([]);
   });
+
+  test('Clay studio with a building card open', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'chromium-tier0',
+      'one tier is enough: this measures ink against panel grounds, not the renderer');
+    /* THE INK THE OTHER TWO SWEEPS NEVER SEE. The building card, its solar block
+       and the Solar pane are painted only after a selection, so a walk over the
+       page as it boots reads none of them — on the theme where the ground moved. */
+    await page.goto(BALLYGUNGE);
+    await settled(page);
+    /* The software renderer skips the 3D layer at boot, so nothing projects and
+       the card stays at opacity 0 — which this sampler skips. Forcing relief is
+       what puts the card on screen at opacity 1, where it IS sampled. */
+    await page.locator('#modechip button[data-m="relief"]').click();
+    await page.waitForTimeout(4_000);
+    await page.locator('[data-rail="solar"]').click();
+    await expect(page.locator('#solList tr')).toHaveCount(10, { timeout: 15_000 });
+    await page.locator('#solList tr').first().click();
+    await page.waitForTimeout(1_500);
+    await page.locator('#envchip button[data-e="studio"]').click();
+    await page.waitForTimeout(4_000);
+    const findings = await contrastFailures(page);
+    expect(findings, report('Clay studio, card open', findings)).toEqual([]);
+  });
 });

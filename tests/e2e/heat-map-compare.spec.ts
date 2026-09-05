@@ -230,11 +230,11 @@ test.describe('paired heat-map comparison', () => {
     await page.goto('/heat-map/compare/');
     await expect(page.locator('[data-pane="analysis"]')).toHaveClass(/is-on/);
 
-    /* THE THREE THAT WOULD OTHERWISE BE DEAD. Each must open, each must say why it
+    /* THE FOUR THAT WOULD OTHERWISE BE DEAD. Each must open, each must say why it
        is empty on this route, and each must offer a way out. Before this task they
        were buttons with no handler and no body — the defect this project has
        deleted more often than any other, on the one control every visitor uses. */
-    for (const id of ['layers', 'reports', 'scenarios']) {
+    for (const id of ['layers', 'solar', 'reports', 'scenarios']) {
       await page.locator(`[data-rail="${id}"]`).click();
       const pane = page.locator(`[data-pane="${id}"]`);
       await expect(pane).toHaveClass(/is-on/);
