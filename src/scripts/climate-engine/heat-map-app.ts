@@ -741,6 +741,28 @@ export function mountHeatMap(): () => void {
     setHTML('bcSolRs', `${fmtMoney(pv.kwh[i] * tariff, COSTS)}/yr<small>at ${currencyMark(COSTS)}${tariff.toFixed(2)} per kWh · assumed</small>`);
     box.removeAttribute('hidden');
   }
+  /* ── rooftop solar, whole ward ──
+     The laboratory's totals and stratum, printed; the tariff line is the one
+     product this file computes. Hidden as a block when no screen ships. */
+  function paintSolarWard() {
+    const pv = pvCache[state.ward];
+    const show = (id: string, on: boolean) => {
+      const e = el(id);
+      if (!e) return;
+      if (on) e.removeAttribute('hidden'); else e.setAttribute('hidden', '');
+    };
+    for (const id of ['solm', 'solRows', 'solFloor']) show(id, pv !== null && pv !== undefined);
+    if (!pv) return;
+    const t = pv.totals, s = pv.stratum, n = pv.kwp.length;
+    setHTML('solKwp', `${t.capacity_mwp.toFixed(1)}<span class="u">MWp</span>`);
+    setHTML('solConf', `Screening · <b>${t.capacity_mwp_range[0].toFixed(1)}–${t.capacity_mwp_range[1].toFixed(1)} MWp</b> · not bankable`);
+    setHTML('solKwh', `${t.generation_gwh_yr.toFixed(1)}<small>GWh/yr · floor</small>`);
+    setHTML('solRs', `${fmtMoney(t.generation_gwh_yr * 1e6 * tariff, COSTS)}<small>per yr at ${currencyMark(COSTS)}${tariff.toFixed(2)} · assumed</small>`);
+    setHTML('solBig', `${s.n.toLocaleString()}<small>${Math.round(100 * s.n / n)}% of ${n.toLocaleString()} roofs</small>`);
+    setHTML('solSh', `${Math.round(s.share_losing_5pct * 100)}%<small>of those roofs</small>`);
+    setText('solFloor', `Shading costs ${t.shading_loss_gwh_yr.toFixed(1)} GWh a year — at least `
+      + `${(t.mean_loss_strict * 100).toFixed(1)}% of yield under a strict roof mask (headline ${(t.mean_loss * 100).toFixed(1)}%).`);
+  }
 
   /** Move the card, brackets and ring labels onto the selection, and keep the
       compass needle honest. Transform only — no layout. */
@@ -1379,6 +1401,7 @@ export function mountHeatMap(): () => void {
     registry = buildRegistry(d.b);
 
     currentWardSizeM = d.sizeM;
+    paintSolarWard();
     const mc = maplibregl.MercatorCoordinate.fromLngLat([w.lon, w.lat], 0);
     /* The scale comes from ward-frame.ts, not from mc.meterInMercatorCoordinateUnits()
        alone: that number is MapLibre's sphere, and our data's metres are not its

@@ -544,6 +544,23 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
       </div>
       <div class="metric" style="border-top:1px solid var(--line);padding-bottom:0"><div class="k">Heat-stress distribution</div></div>
       <div class="histo" id="histo"></div>
+      {/* ROOFTOP SOLAR, whole ward. Amber, not cyan: the heat above is CALIBRATED
+          against ECOSTRESS; this is a SCREENING estimate, and the chip says so.
+          Every number is the laboratory's (`totals`, `stratum` in the ward's solar
+          file); the browser multiplies by the tariff and nothing else. Hidden when
+          no screen ships for the area. */}
+      <div class="metric sep solm" id="solm" hidden>
+        <div class="k">Rooftop solar · installable, whole ward</div>
+        <div class="lst sun" id="solKwp">—<span class="u">MWp</span></div>
+        <div class="conf screening" id="solConf"></div>
+      </div>
+      <div class="mrow solm" id="solRows" hidden>
+        <div><div class="k">Annual yield</div><div class="val" id="solKwh">—</div></div>
+        <div><div class="k">Worth at tariff</div><div class="val sun" id="solRs">—</div></div>
+        <div><div class="k">Roofs ≥ 3 kWp</div><div class="val" id="solBig">—</div></div>
+        <div><div class="k">Losing ≥ 5 %, of those</div><div class="val sun" id="solSh">—</div></div>
+      </div>
+      <p class="solfloor" id="solFloor" hidden></p>
       {/* The ward record used to end this card. It is now the Reports pane's one
           piece of content — a download named after itself, in the section named
           after it, rather than a bronze button under a histogram. One element, one
@@ -1518,6 +1535,16 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
      So the baseline is drawn at the bars' FEET by a pseudo-element, and the
      padding below it is the card's own breathing room. */
   .histo{position:relative;display:flex;align-items:flex-end;gap:3px;height:78px;padding:10px 16px 16px}
+  /* ROOFTOP SOLAR block: the heat panel's grammar in the screening ink. The
+     panel ground is dark in both themes, so amber clears 4.5:1 unaided (11:1
+     on rgb(9 20 22)). */
+  .metric.sep{border-top:1px solid var(--line)}
+  .solm .lst.sun{color:var(--sun)}
+  .mrow .val.sun{color:var(--sun)}
+  .mrow .val small{display:block;font-family:var(--mono);font-size:.5rem;letter-spacing:.08em;text-transform:uppercase;color:var(--bronze);margin-top:2px}
+  .conf.screening{background:rgb(242 181 68 /.1);border:1px solid rgb(242 181 68 /.4);color:var(--paper)}
+  .conf.screening b{font-family:var(--mono);font-weight:400}
+  .solfloor{margin:0;padding:0 16px 16px;font-family:var(--sans);font-size:.66rem;line-height:1.45;color:var(--sun)}
   .histo::after{content:"";position:absolute;inset-inline:16px;bottom:16px;height:1px;background:var(--line)}
 
   /* SOLID, NOT A GRADIENT, AND THAT WAS THE SECOND HALF OF THE BUG. The fill was
