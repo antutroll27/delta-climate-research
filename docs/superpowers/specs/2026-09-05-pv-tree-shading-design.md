@@ -45,9 +45,9 @@ Chosen over crown detection into the polygon sweep (adds a crown-delineation ste
 error, on a model already 3 m off; fails on the continuous roadside canopy Ballygunge has) and over
 the trees file (above).
 
-**Grid.** One 1 m grid per ward, north-up, ward metres, the frame the geometry file already uses
-(`row 0 = north`, `x` east, `y` north). Resolution is free at 1.7 s per read, and a 50 m² roof is
-50 pixels rather than 12.
+**Grid.** One **0.5 m** grid per ward (A4; 1 m as first written), north-up, ward metres, the frame the
+geometry file already uses (`row 0 = north`, `x` east, `y` north). A read costs about two seconds at
+either resolution; the march is what pays for the finer grid.
 
 **Surfaces.** Two, built per ward:
 
@@ -329,6 +329,37 @@ same-population recomputation the gate uses.
 comparands; `cross_check_ge_3kwp` (informational, not gated); `stratum` (packing factor, m² per kWp,
 threshold, n); `levers`; `canopy.href`, `canopy.max_m`, `canopy.nonzero_px`; a note that the three
 per-building arrays are rounded independently to 4 dp.
+
+### A4 — 2026-09-05, after Baruipur REFUSED the cross-check at 1 m, before any ward ran at 0.5 m. Grid refined; gate unchanged
+
+**What happened.** On the final code, Ballygunge and Barrackpore passed both cross-check gates
+(mean 0.47 / 0.30 pp of 1.0; share 2.41 / 1.79 pp of 3.0) and both predictions held in all three
+wards. Baruipur passed the mean gate (0.47 pp) and **failed the share gate: raster 8.0 % vs polygon
+11.6 %, 3.60 pp against 3.0**. The run refused to write, as registered. Commit `cf7e60d` records it.
+
+**Why, measured.** Baruipur has the smallest roofs of the three: 87.6 raster pixels per building
+against 109.2 in Barrackpore and 177.1 in Ballygunge. Pixelisation reads low (A2's row), and the
+share statistic is a threshold count: Baruipur's 5–7 % band holds 3.59 pp of buildings, almost
+exactly the observed gap, so the systematic low bias tips the whole marginal band below 5 % at once.
+The edits made after the Task 4 review did not cause it: every published Ballygunge number is
+bit-identical before and after them, and no ward has an invalid footprint for `skip_invalid=False`
+to change.
+
+**Decision (Head of Technology, 2026-09-05): refine the grid, keep the gate.** `GRID_M` goes from
+1.0 to **0.5 m for all three wards**, so the artefacts stay comparable. Nothing else moves: both
+tolerances, τ, the pad, the height scenarios, the mask rule, the receiver rule and every prediction
+are as registered. This targets the diagnosed artefact rather than the number. The 1 m Baruipur
+failure stays published as the receipt for why the grid is what it is. If Baruipur fails again at
+0.5 m it is recorded as a refusal and keeps the registered building-only loss with no tree term.
+Cost: roughly 8× the compute per ward (4× the pixels, 2× the march length), about an hour for three.
+
+**Disclosed.** Before this amendment was written, a buildings-only cross-check for Baruipur at 0.5 m
+was started as a diagnostic — no canopy, no tree term, no prediction touched, nothing written. Its
+result is quoted in the Baruipur artefact's notes and in the limitations addendum. It informs the
+receipt; the decision above was taken independently of it.
+
+**Also folded in, no rule change:** Ballygunge's and Barrackpore's 1 m artefacts (commits `2e960ce`,
+`cf7e60d`) remain in history as the 1 m receipts and are superseded by the 0.5 m runs.
 
 ## References
 
