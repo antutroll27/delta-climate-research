@@ -280,7 +280,8 @@ own approximation (Ratti & Richens do the same), dominated by (i) in the opposit
 offset is zero for every k; a sign flip on the east-west term survived all nine checks AND both
 ward cross-check gates (measured: mean 0.491 pp, share 2.55 pp, r 0.9918). A mast under a sun due
 east must now throw its shadow west along its own row. `shadow_height` asserts a square grid
-(a rectangular one returned a valid-shaped array with no shadow at all).
+(measured: a rectangular one returned a valid-shaped array in which the columns beyond the row
+count never shade — partial and silent, which is worse than none).
 
 **Unchanged:** every prediction in §5, both cross-check tolerances, τ, the pad, the height
 scenarios, the receiver rule.
