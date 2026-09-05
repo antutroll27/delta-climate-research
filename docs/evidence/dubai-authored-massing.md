@@ -174,3 +174,55 @@ work.
 **If a source is found, the dome becomes a small job:** a `dome` builder and a
 recipe carrying the plaza ring as an explicit `plan`. Until then it is a known,
 recorded gap rather than a silent one.
+
+
+---
+
+# Dubai Creek, finishing pass (2026-09-05)
+
+## Measured
+
+- **A spatial height prior.** 87 % of Creek outlines carry no measured height, so
+  the area curve decided almost the whole scene while treating a 1,500 m² plot in
+  Downtown the same as a 1,500 m² warehouse. Each site now carries a grid of
+  median measured heights per 600 m cell and size band. Held out against genuine
+  `height=` tags, mean absolute error falls **20.76 m → 11.58 m**, and in the
+  500–2,000 m² band where the Creek's towers sit, **47.43 m → 21.66 m**. Applied
+  only below 5,000 m²: above it a large building's neighbours are small ones and
+  the fitted area table does better. 152,942 buildings changed.
+- **Heights no longer land on superseded footprints.** Almas Tower (363 m), The
+  Marina Torch (352 m) and Ocean Heights (310 m) were attaching to GlobalML
+  records OSM had already superseded — never drawn, and consuming the item so the
+  real outline got nothing.
+- **The Creek OSM refresh**, reviewed line by line: 47 buildings added, 18
+  removed. Nothing tall was lost.
+
+## Not built, and why
+
+- **The Link (One Za'abeel).** Wikidata `Q106617648` exists but carries no height
+  claim, only area. Its elevation above ground is not citable, so it is not
+  modelled. The two towers are genuinely rectangular and are correct as prisms at
+  235 m and 305 m.
+- **Museum of the Future** and **Atlantis The Palm** keep their measured heights
+  (77 m, 90.2 m) and stay as extruded outlines. Their plans do NOT encode their
+  form the way the Burj Al Arab's did — that plan *was* the sail, ten arc
+  vertices and a spine apex. A profile loft turns the Museum into a smooth ovoid,
+  and the real building is a torus whose hole is the whole point; Atlantis
+  becomes two wings with a low dip where the real one has a rectangular arch.
+  Both would mean inventing the feature people actually recognise.
+
+## The wave crest is a look choice, and is labelled as one
+
+Three derivations were tried and rejected:
+
+1. Tapering both plan axes, as `sail` does — gives a cone, because a 262 m
+   building narrows to a point.
+2. A roofline driven by the measured plan width — gives a central spike. The plan
+   is a crescent, widest in the middle at 40.5 m and narrow at both ends, and its
+   width does not track its height.
+3. Reading the high end off the shoreline — the building runs *along* the beach,
+   so both ends are equidistant from the sea.
+
+So the crest is authored: `crestMin` 0.22, `crestPower` 0.65, chosen by looking
+at three variants side by side. **Which end is high remains unverified**, and
+`flip: true` reverses it if someone with a reference says otherwise.
