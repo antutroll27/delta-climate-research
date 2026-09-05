@@ -64,7 +64,8 @@ def _load(name: str, fname: str) -> Any:
 
 
 #: LOCKED BY THE PRE-REGISTRATION (spec section 3 and Amendment A1).
-GRID_M = 1.0            # a 1 m read costs ~2 s, and a 50 m2 roof is 50 pixels instead of 12
+GRID_M = 0.5            # A4: 1.0 m refused Baruipur's share gate (3.60 pp of 3.0) by pixelisation on the
+                        # smallest roofs; 0.5 m for all wards, every other constant untouched
 PAD_M = 200.0           # canopy read beyond the ward box: a 34 m crown at 10 deg throws 193 m
 TAU = 0.30              # beam transmittance through an in-leaf crown, central
 TAU_BAND = (0.20, 0.50)  # Wu, Lu & Lin 2025; Konarska et al. 2014
@@ -442,6 +443,11 @@ def run_ward(ward_id: str) -> None:
                 "raster_bias": "The raster reads LOW against the polygon sweep (thin shadow slivers lost to "
                                "pixelisation, roofs quantised to whole pixels) -- see cross_check; the share "
                                "gate is the tight one (A2).",
+                "grid": "0.5 m per Amendment A4. At 1 m Baruipur failed the share gate: buildings-only "
+                        "raster 8.0% vs polygon 11.6% (3.60 pp of 3.0) while the mean passed (0.47 pp); "
+                        "Ballygunge and Barrackpore passed at 1 m (2.41 / 1.79 pp). A disclosed "
+                        "buildings-only diagnostic at 0.5 m for Baruipur gave mean 0.32 pp, share 2.23 pp, "
+                        "r 0.9759 before this run. Tolerances and predictions unchanged.",
                 "edge": "buildings have no pad (no geometry outside the ward), canopy has 200 m; "
                         "shading is understated at the ward edge.",
             },
