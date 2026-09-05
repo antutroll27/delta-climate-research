@@ -419,7 +419,7 @@ In `heat-map-app.ts`, immediately after the closing `  }` of `paintSolarCard`, a
     setHTML('solKwp', `${t.capacity_mwp.toFixed(1)}<span class="u">MWp</span>`);
     setHTML('solConf', `Screening · <b>${t.capacity_mwp_range[0].toFixed(1)}–${t.capacity_mwp_range[1].toFixed(1)} MWp</b> · not bankable`);
     setHTML('solKwh', `${t.generation_gwh_yr.toFixed(1)}<small>GWh/yr · floor</small>`);
-    setHTML('solRs', `${fmtMoney(t.generation_gwh_yr * 1e6 * tariff, COSTS)}<small>per yr at ${currencyMark(COSTS)}${tariff.toFixed(2)} · assumed</small>`);
+    setHTML('solRs', `${fmtMoney(t.generation_gwh_yr * 1e6 * tariff, COSTS)}<small>per yr at ${fmtRate(tariff, COSTS)} · assumed</small>`);
     setHTML('solBig', `${s.n.toLocaleString()}<small>${Math.round(100 * s.n / n)}% of ${n.toLocaleString()} roofs</small>`);
     setHTML('solSh', `${Math.round(s.share_losing_5pct * 100)}%<small>of those roofs</small>`);
     setText('solFloor', `Shading costs ${t.shading_loss_gwh_yr.toFixed(1)} GWh a year — at least `
@@ -460,7 +460,7 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 - Modify: `src/components/ClimateEngine/compare/PairedBench.astro:103` (pane before Scenarios)
 - Modify: `src/scripts/climate-engine/heat-map-app.ts` (after `paintSolarWard`; one line inside it; the wiring after the clock's `onFormat` listeners)
 
-**Currency rule (found by the Task 3 review):** `tests/unit/obos-scope.test.mjs` forbids `₹`, `en-IN`, `crore`, `lakh` in the engine's modules; the app's `fmtMoney(amount, COSTS)` and `currencyMark(COSTS)` (from `./money.ts`, `COSTS` already in scope) print money and its mark, and the tariff's mark is painted into `#solCur` by JS rather than typed into the template. The CSV names no currency in its columns and carries a `currency` column instead.
+**Currency rule (found by the Task 3 review, extended by the Task 4 review):** a tariff is printed with `fmtRate(amount, COSTS)` (two fixed decimals, the scope's formatter), a figure with `fmtMoney`, a bare mark with `currencyMark`. `tests/unit/obos-scope.test.mjs` forbids `₹`, `en-IN`, `crore`, `lakh` in the engine's modules; the app's `fmtMoney(amount, COSTS)` and `currencyMark(COSTS)` (from `./money.ts`, `COSTS` already in scope) print money and its mark, and the tariff's mark is painted into `#solCur` by JS rather than typed into the template. The CSV names no currency in its columns and carries a `currency` column instead.
 
 - [ ] **Step 1: The pane on the Explore route**
 
@@ -610,7 +610,7 @@ Immediately after the closing `  }` of `paintSolarWard`, add:
   };
   const tariffInput = el('solTariff') as HTMLInputElement | null;
   if (tariffInput) tariffInput.value = tariff.toFixed(2);
-  setText('solCur', currencyMark(COSTS));   // the country names the currency; never typed into a template
+  setText('solCur', currencyMark(COSTS));   // the country names the currency; never typed into a template (fmtRate prints the rate itself where a figure is shown)
   const onTariff = () => {
     const v = Number(tariffInput?.value);
     if (!Number.isFinite(v) || v <= 0) return;
