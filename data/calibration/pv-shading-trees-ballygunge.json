@@ -6,7 +6,7 @@
   "pad_m": 200.0,
   "frame_px": 3600,
   "sun_hours_sampled": 134,
-  "runtime_s": 1463.9,
+  "runtime_s": 1275.4,
   "canopy": {
     "source": "forests/v2/global/dinov3_global_chm_v2_ml3",
     "version": "v2",
@@ -23,7 +23,8 @@
     ],
     "href": "/vsis3/dataforgood-fb-data/forests/v2/global/dinov3_global_chm_v2_ml3/chm/1231333231.tif",
     "max_m": 34.0,
-    "nonzero_px": 12960000
+    "px_over_min_m": 5550629,
+    "reader_floor_note": "read_chm_grid returns a 1 m floor over the whole box (the tile's zeros sit under its mask band); native tile 47.9% zeros in Ballygunge. Nothing below CANOPY_MIN_M enters the mask or the march, so only the count above it is a fingerprint."
   },
   "buildings_without_pixels": 0,
   "buildings_without_pixels_idx": [],
