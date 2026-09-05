@@ -333,6 +333,36 @@ def window_key(s: Site) -> str:
     return hashlib.sha1(f"{w:.5f},{so:.5f},{e:.5f},{n:.5f}".encode()).hexdigest()[:8]
 
 
+def query_key(query: str) -> str:
+    """Short hash of the QUERY, to sit beside window_key in a cache filename.
+
+    Keying a cached response by the window alone is a silent-staleness trap that
+    this file already documents one level down, for site ids -- and the same trap
+    reappears one level up. Widening an Overpass query while the bounds stay put
+    leaves the old, narrower response on disk under the same name, so the fetcher
+    re-serves it, the new clause appears to return nothing, and nothing errors.
+
+    A cache entry should be keyed by the question as well as the place.
+    """
+    import hashlib
+    return hashlib.sha1(query.encode()).hexdigest()[:8]
+
+
+def ring_area(flat: list[float]) -> float:
+    """Shoelace area of a flat [x0,y0,x1,y1,...] ring, in square metres.
+
+    Lives here rather than in blender_dubai.py because that module imports bpy
+    and cannot be imported from a build-time fetcher. Two copies of a shoelace
+    are two chances to disagree about winding.
+    """
+    n = len(flat) // 2
+    a = 0.0
+    for i in range(n):
+        j = (i + 1) % n
+        a += flat[i * 2] * flat[j * 2 + 1] - flat[j * 2] * flat[i * 2 + 1]
+    return abs(a) / 2.0
+
+
 def _self_test() -> int:
     """The height join's fixture. Run: python3 scripts/_flood.py
 

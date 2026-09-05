@@ -89,3 +89,88 @@ like the building. That requires a person and a reference photograph.
 - Ciel Tower (366 m) and The Marina Torch (352 m) carry single unqualified
   Wikidata height statements, with no architectural-versus-roof distinction
   recorded. Neither has a CTBUH entry in `_flood.py` to override it.
+
+
+---
+
+# Dubai South (2026-09-05)
+
+**Everything done to Dubai South is measured. There is no authored geometry here
+at all.**
+
+## Structures the pipeline was dropping
+
+The fetcher asked Overpass for `way["building"]`, and OSM does not tag every
+structure that way. **Terra — The Sustainability Pavilion** carries
+`tourism=attraction` with `height=30` and `min_height=28` — a fully described
+floating canopy — and was absent from the model entirely. So were 14 Dubai
+Exhibition Centre halls at 10–14 m, and two majlis.
+
+They are now included at OSM's own heights. Terra renders as a 2 m disc floating
+28 m above ground, verified in the scene: 19 vertices at z=99 and 17 at z=101
+over a local ground of 71 m. That is what OSM described all along.
+
+The query widening was bounded by measurement, not hope: 33 ways in the whole
+window carry a height or storey count without a `building` key, five of them
+walls. 17 survived the exclusion list, and every one was read before the
+footprint baseline was moved.
+
+## The height prior
+
+The fallback curve `3 + 9·log10(1 + area/100)` is monotonic in footprint — it
+assumes a bigger building is a taller one. That is a residential assumption, and
+Dubai South is Logistics City, JAFZA and Al Maktoum, where the largest buildings
+are the flattest.
+
+Measured medians make the point:
+
+| band | Creek | South | the curve |
+|---|---:|---:|---:|
+| 500–2,000 m² | 32 m | 8 m | 12.6 m |
+| 2,000–10,000 m² | 33 m | 8 m | 17.0 m |
+| 10,000–50,000 m² | 16 m | 10 m | 23.0 m |
+
+Each site now fits a table from its own measured buildings, applied only at or
+above 5,000 m² because below that a fitted prior measurably does worse. Effect
+on the 1,202 affected Dubai South buildings:
+
+- median height **20.0 m → 8.0 m**
+- built volume **300.4 → 120.5 million m³ (−60 %)**
+- Concourse 1, 481,308 m²: **36.1 m → 10.0 m**
+
+Held out against genuine `height=` tags only, mean absolute error falls from
+**14.95 m to 6.80 m**.
+
+**An earlier version of that hold-out scored 100 % and was worthless.** It tested
+against all "measured" heights, but 76–81 % of those are `building:levels × 4.0`
+and 57 % of Dubai South is the single value 8.0 m, so predicting 8.0 is perfect
+and proves nothing. `scripts/check-height-prior.py` now excludes every
+levels-derived value, which is a harder test and the right direction for a check
+whose job is to stop a false claim.
+
+## Wikidata contributes nothing here
+
+Two items with a height statement fall inside the Dubai South window — Nakheel
+Tower (1,400 m) and Victory of Robots — and **both are unbuilt**, correctly
+rejected. Everything Wikidata knows about this region sits in Dubai Marina, which
+is in the Creek window.
+
+## Al Wasl Dome is absent, and stays absent
+
+The 130 m-wide trellis over Expo City's centre — the most recognisable structure
+in Dubai South — is **not modelled**.
+
+OSM has only the paved plaza beneath it (`w546958882`, `highway=pedestrian`,
+114 × 115 m) and the square (`w986435237`, `place=square`). Neither carries a
+dimension. Wikidata holds two items for it, `Q108748896` "Al-Wasl Plaza" and
+`Q108748865` "Al-Wasl dome", and **each has exactly one claim: country.**
+
+No height could be cited, so none was invented. A landmark whose height is
+guessed is precisely what the `heightSource` field exists to prevent, and the
+author of this note had a figure in mind that turned out to be unverifiable
+recall — the same failure mode that produced two false findings during the Creek
+work.
+
+**If a source is found, the dome becomes a small job:** a `dome` builder and a
+recipe carrying the plaza ring as an explicit `plan`. Until then it is a known,
+recorded gap rather than a silent one.

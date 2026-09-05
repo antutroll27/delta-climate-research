@@ -43,13 +43,15 @@ import argparse
 import json
 import math
 import os
+import statistics
 import sys
 from typing import Any
 
 import requests
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _flood import OVERPASS, SITES, Site, m_per_deg, site_bounds, window_key  # noqa: E402
+from _flood import (OVERPASS, SITES, Site, m_per_deg, query_key,  # noqa: E402
+                    ring_area, site_bounds, window_key)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT_DIR = os.path.join(HERE, "..", "public", "flood-sim", "data")
@@ -146,15 +148,18 @@ ATTRIBUTION = "Building heights © OpenStreetMap contributors (ODbL 1.0)"
 def fetch_osm(site: Site) -> list[dict[str, Any]]:
     w, s, e, n = site_bounds(site)
     os.makedirs(CACHE, exist_ok=True)
-    path = os.path.join(CACHE, f"{site.id}-{window_key(site)}-heights.json")
+    query = (
+        f"[out:json][timeout:180];("
+        f'way["building"]["height"]({s},{w},{n},{e});'
+        f'way["building"]["building:levels"]({s},{w},{n},{e});'
+        f'relation["building"]["height"]({s},{w},{n},{e}););'
+        f"out tags center;"
+    )
+    # KEYED BY THE QUESTION AS WELL AS THE PLACE. Keying on the window alone meant
+    # a widened query re-served the old, narrower response from disk: the new
+    # clause returned nothing and nothing errored.
+    path = os.path.join(CACHE, f"{site.id}-{window_key(site)}-{query_key(query)}-heights.json")
     if not os.path.exists(path):
-        query = (
-            f"[out:json][timeout:180];("
-            f'way["building"]["height"]({s},{w},{n},{e});'
-            f'way["building"]["building:levels"]({s},{w},{n},{e});'
-            f'relation["building"]["height"]({s},{w},{n},{e}););'
-            f"out tags center;"
-        )
         # Overpass returns 406 to requests with no User-Agent. Identify the
         # tool, as their usage policy asks.
         resp = requests.post(
@@ -181,14 +186,28 @@ def fetch_osm_buildings(site: Site) -> list[dict[str, Any]]:
     """
     w, s_, e, n = site_bounds(site)
     os.makedirs(CACHE, exist_ok=True)
-    path = os.path.join(CACHE, f"{site.id}-{window_key(site)}-osm-buildings.json")
+    # OSM DOES NOT TAG EVERY STRUCTURE `building=`. Terra -- The Sustainability
+    # Pavilion carries tourism=attraction with height=30 and min_height=28, a
+    # fully described floating canopy, and was absent from the model entirely.
+    # So were ~27 Dubai Exhibition Centre halls at 10-14 m.
+    #
+    # The second and third clauses take anything carrying a height or a storey
+    # count, minus the things that are emphatically not buildings. The risk is
+    # bounded and was measured rather than guessed: 33 ways in the whole Dubai
+    # South window match, five of them walls.
+    excl = ('[!"building"][!"building:part"][!"barrier"][!"wall"]'
+            '[!"highway"][!"landuse"][!"natural"][!"boundary"]')
+    query = (
+        f"[out:json][timeout:600];("
+        f'way["building"]({s_},{w},{n},{e});'
+        f'relation["building"]({s_},{w},{n},{e});'
+        f'way["height"]{excl}({s_},{w},{n},{e});'
+        f'way["building:levels"]{excl}({s_},{w},{n},{e}););'
+        f"out tags geom;"
+    )
+    path = os.path.join(CACHE,
+                        f"{site.id}-{window_key(site)}-{query_key(query)}-osm-buildings.json")
     if not os.path.exists(path):
-        query = (
-            f"[out:json][timeout:600];("
-            f'way["building"]({s_},{w},{n},{e});'
-            f'relation["building"]({s_},{w},{n},{e}););'
-            f"out tags geom;"
-        )
         resp = requests.post(
             OVERPASS, data={"data": query}, timeout=900,
             headers={"User-Agent": "delta-climate-flood-sim/0.1 (build-time pipeline)"},
@@ -219,14 +238,14 @@ def fetch_parts(site: Site) -> list[dict[str, Any]]:
     """OSM `building:part` elements with full geometry, cached."""
     w, s_, e, n = site_bounds(site)
     os.makedirs(CACHE, exist_ok=True)
-    path = os.path.join(CACHE, f"{site.id}-{window_key(site)}-parts.json")
+    query = (
+        f"[out:json][timeout:300];("
+        f'way["building:part"]({s_},{w},{n},{e});'
+        f'relation["building:part"]({s_},{w},{n},{e}););'
+        f"out tags geom;"
+    )
+    path = os.path.join(CACHE, f"{site.id}-{window_key(site)}-{query_key(query)}-parts.json")
     if not os.path.exists(path):
-        query = (
-            f"[out:json][timeout:300];("
-            f'way["building:part"]({s_},{w},{n},{e});'
-            f'relation["building:part"]({s_},{w},{n},{e}););'
-            f"out tags geom;"
-        )
         resp = requests.post(
             OVERPASS, data={"data": query}, timeout=420,
             headers={"User-Agent": "delta-climate-flood-sim/0.1 (build-time pipeline)"},
@@ -263,6 +282,59 @@ def osm_height(tags: dict[str, str]) -> float | None:
     return None
 
 
+# THE HEIGHT PRIOR IS MONOTONIC IN FOOTPRINT AND REALITY IS NOT. The fallback
+# curve, `3 + 9*log10(1 + area/100)`, assumes a bigger footprint means a taller
+# building. That is a residential assumption. Dubai South is Logistics City,
+# JAFZA and Al Maktoum, where the largest buildings are the flattest. Measured
+# medians, per site:
+#
+#   band              Creek    South    the global curve says
+#   500-2,000 m2       32 m      8 m    12.6 m
+#   2,000-10,000 m2    33 m      8 m    17.0 m
+#   10,000-50,000 m2   16 m     10 m    23.0 m
+#
+# The same footprint is a tower in one window and a warehouse in the other, so
+# one curve cannot serve both. Each site fits a table from its OWN measured
+# buildings instead.
+#
+# ONLY ABOVE 5,000 m2. Below that a fitted prior measurably does WORSE, so it is
+# not applied. Held out against genuine `height=` tags at or above 5,000 m2,
+# excluding every levels-derived value, mean absolute error moves:
+#   dubai-south  15.16 m -> 8.58 m   (n=45)
+#   dubai-creek  33.18 m -> 32.69 m  (n=56)
+HEIGHT_TABLE_MIN_AREA_M2 = 5000.0
+HEIGHT_TABLE_EDGES = [5000.0, 10000.0, 25000.0, 50000.0, float("inf")]
+HEIGHT_TABLE_MIN_SAMPLES = 25
+
+
+def height_table(outlines: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Median measured height per area band, from this site's own buildings."""
+    buckets: dict[int, list[float]] = {}
+    for rec in outlines:
+        h = rec.get("h")
+        if not h:
+            continue
+        a = ring_area(rec["p"])
+        for i in range(len(HEIGHT_TABLE_EDGES) - 1):
+            if HEIGHT_TABLE_EDGES[i] <= a < HEIGHT_TABLE_EDGES[i + 1]:
+                buckets.setdefault(i, []).append(float(h))
+                break
+    out: list[dict[str, Any]] = []
+    for i in range(len(HEIGHT_TABLE_EDGES) - 1):
+        vals = buckets.get(i, [])
+        # A THIN BAND IS NOT TRUSTED, and falls back to the nearest populated band
+        # BELOW it rather than to the global curve -- falling back to the curve
+        # would undo the fix precisely where footprints are largest and it is
+        # most wrong.
+        out.append({
+            "minArea": HEIGHT_TABLE_EDGES[i],
+            "n": len(vals),
+            "medianM": (round(statistics.median(vals), 1)
+                        if len(vals) >= HEIGHT_TABLE_MIN_SAMPLES else None),
+        })
+    return out
+
+
 def build(site: Site) -> dict[str, Any]:
     path = os.path.join(OUT_DIR, f"{site.id}-buildings.json")
     with open(path, encoding="utf-8") as fh:
@@ -274,8 +346,17 @@ def build(site: Site) -> dict[str, Any]:
     # changed depending on how many times it had been run, which is the worst
     # kind of wrong because the first run looks right. Strip every derived field
     # before recomputing.
+    # THE ARTEFACT MUST NOT SURVIVE ITS OWN REBUILD CLAIMING HEIGHTS IT NO LONGER
+    # HAS. Rebuilding drops every per-record `hs` mark below, which discards the
+    # whole Wikidata/CTBUH layer -- correctly, since it is applied afterwards by
+    # fetch-dubai-wikidata.py. But the `wikidata` and `ctbuh` METADATA blocks used
+    # to survive, so the file went on saying "32 CC0 heights attached" while
+    # carrying none, and Burj Khalifa quietly returned to 652 m.
+    #
+    # Dropping them makes the loss visible: fetch-dubai-wikidata.py --check then
+    # reports "no wikidata block yet" instead of passing over an empty claim.
     for stale in ("osmB", "parts", "partsCovered", "supersededByOsm",
-                  "heightSources", "osmNote", "partsNote"):
+                  "heightSources", "osmNote", "partsNote", "wikidata", "ctbuh"):
         doc.pop(stale, None)
     for b in doc["b"]:
         for stale in ("h", "hs", "name", "parts", "sup"):
@@ -330,6 +411,9 @@ def build(site: Site) -> dict[str, Any]:
             b["hs"] = "prior"
     # ── OSM outlines: better geometry where it exists ────────────────────────
     osm_b: list[dict[str, Any]] = []
+    # Widened-clause records that describe a slab starting above the ground.
+    # Collected here and merged into `parts` below, where that shape is drawn.
+    parts_from_outlines: list[dict[str, Any]] = []
     for el in fetch_osm_buildings(site):
         geom = el.get("geometry") or []
         if len(geom) < 4:
@@ -352,8 +436,36 @@ def build(site: Site) -> dict[str, Any]:
             rec["h"] = round(top, 1)
         if tags.get("name"):
             rec["name"] = tags["name"]
+
+        # A RECORD WITH min_height IS A SLAB, NOT A BUILDING. Terra floats
+        # between 28 m and 30 m; drawn from the ground it is a solid block the
+        # size of a city square. The parts path already extrudes exactly this
+        # shape, so send it there and mark the outline so it is not ALSO drawn
+        # flat -- the same double-draw that `parts` and `sup` already guard.
+        try:
+            low = float(str(tags.get("min_height", "0")).replace("m", "").strip())
+        except ValueError:
+            low = 0.0
+        if low > 0.0 and top and top > low:
+            parts_from_outlines.append({
+                "p": flat, "h": round(top, 1), "min": round(low, 1),
+                "roof": tags.get("roof:shape", "flat"),
+            })
+            rec["parts"] = True
+
         osm_b.append(rec)
     doc["osmB"] = osm_b
+    doc["heightTable"] = {
+        "minArea": HEIGHT_TABLE_MIN_AREA_M2,
+        "bands": height_table(osm_b),
+        "note": (
+            "Median MEASURED height per footprint band, fitted from this site's own "
+            "buildings. Used only at or above minArea; below it the global curve is "
+            "kept, because a fitted prior measurably does worse there. A band with "
+            f"fewer than {HEIGHT_TABLE_MIN_SAMPLES} samples has medianM null and falls "
+            "back to the nearest populated band below, never to the global curve."
+        ),
+    }
 
     # GlobalML footprints whose centroid sits inside an OSM outline are the SAME
     # building drawn twice. Drop ours, keep theirs — otherwise every landmark
@@ -399,6 +511,7 @@ def build(site: Site) -> dict[str, Any]:
             "p": slab, "h": round(top, 1), "min": round(low, 1),
             "roof": tags.get("roof:shape", "flat"),
         })
+    parts.extend(parts_from_outlines)
     doc["parts"] = parts
 
     # A footprint covered by parts must NOT also be extruded flat, or the tower

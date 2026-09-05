@@ -184,13 +184,35 @@ def ring_area(p: list[float]) -> float:
     return abs(total) / 2.0
 
 
+HEIGHT_TABLE: dict[str, Any] = {}
+
+
 def estimate_height(area: float, seed: int) -> float:
     """Fallback ONLY. Used where OSM has no height for this footprint.
 
     Capped at 60 m rather than the earlier 40 m, but the cap is not the point —
     real towers no longer come through here at all. Anything with a measured
     height bypasses this entirely, which is why the skyline exists now.
+
+    ABOVE THE TABLE'S minArea THE SITE'S OWN MEASURED MEDIAN WINS. The log curve
+    below is monotonic in footprint and reality is not: it assumes a bigger
+    footprint means a taller building, which is a residential assumption. In
+    Dubai South — Logistics City, JAFZA, Al Maktoum — the largest buildings are
+    the flattest, and 923 warehouses were rendering 2.3 to 2.6 times too tall.
+
+    Below minArea the curve is kept, because a fitted prior measurably does
+    worse there. The threshold is not a hedge; it is where the measurement
+    changes sign.
     """
+    bands = HEIGHT_TABLE.get("bands") or []
+    if bands and area >= float(HEIGHT_TABLE.get("minArea", 5000.0)):
+        best: float | None = None
+        for band in bands:
+            if area >= float(band["minArea"]) and band.get("medianM") is not None:
+                best = float(band["medianM"])   # nearest populated band at or below
+        if best is not None:
+            jitter = 0.92 + 0.16 * ((math.sin(seed * 127.1) * 43758.5453) % 1.0)
+            return max(3.0, best * jitter)
     base = 3.0 + 9.0 * math.log10(1.0 + area / 100.0)
     jitter = 0.85 + 0.30 * ((math.sin(seed * 127.1) * 43758.5453) % 1.0)
     return max(3.0, min(60.0, base * jitter))
@@ -672,6 +694,14 @@ def main() -> None:
         terrain_doc = json.load(fh)
     with open(os.path.join(DATA, f"{SITE}-buildings.json")) as fh:
         buildings_doc = json.load(fh)
+    global HEIGHT_TABLE
+    HEIGHT_TABLE = buildings_doc.get("heightTable") or {}
+    if HEIGHT_TABLE:
+        trusted = sum(1 for b in HEIGHT_TABLE["bands"] if b.get("medianM") is not None)
+        print(f"  height prior: fitted table, {trusted} trusted band(s) "
+              f"at or above {HEIGHT_TABLE['minArea']:.0f} m2")
+    else:
+        print("  height prior: no table in the artefact — using the global curve")
     build_apron(terrain_doc)
     build_terrain(terrain_doc)
     # WITH SATELLITE COLOUR, MOST LANDCOVER TINTS ARE REDUNDANT. The imagery
