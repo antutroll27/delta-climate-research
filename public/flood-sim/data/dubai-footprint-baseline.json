@@ -1,7 +1,7 @@
 {
   "note": "sha256 over every footprint ring; see scripts/check-dubai-footprints.py",
   "digests": {
-    "dubai-creek": "4bb426d1eb0f0c3492fcc1994dc44d25aeb14b12ec9882beb0af9a10637fc41b",
+    "dubai-creek": "e465e948bd175f9cf89abfd5a685ecb31d2dbe3edc35353cfedca340492a173a",
     "dubai-south": "54ff2c0810315b9dcb46feb479245597e474207c820530fbcd51ceaddb4e6b6d"
   }
 }
