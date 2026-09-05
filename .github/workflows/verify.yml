@@ -12,7 +12,11 @@ jobs:
   quality:
     name: Build and browser contracts
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # Measured 2026-09-05: this job has taken 17.5-20.0 min on every push to main since
+    # 0355181 (e2e on SwiftShader is the bulk), so 20 had no headroom and the run for
+    # c2b7bbb was cancelled at 21.8 min once test:py grew by the tree-shading self-check.
+    # 30 is a ceiling against a hung step, not a budget.
+    timeout-minutes: 30
 
     steps:
       - name: Check out repository
