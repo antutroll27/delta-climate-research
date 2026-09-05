@@ -182,9 +182,11 @@ No re-running with the trees file. No touching the building term, which stays as
 | ward-edge buildings | shading understated at the edge | no geometry outside the ward |
 | raster pixelisation vs the polygon sweep (A2, measured) | raster reads **low** | buildings-only Ballygunge: raster 4.648 % vs polygon 5.122 % mean, r 0.9944, raster lower on 93.7 % of buildings; share ≥ 5 %: 25.83 vs 28.24 |
 | integer rounding of k·s on off-cardinal azimuths (A2) | reads up to √2 further than the drop applied | the published algorithm's own approximation; dominated by the pixelisation row, which runs the other way |
+| near-zenith blind spot for canopy standing OVER a roof (A3, measured) | tree shading **under**stated | the march starts at k = 1, so a crown Δh above its own roof stops shading the pixels beneath it once tan α > Δh: a crown 2 m above its roof is invisible for 27.45 % of the year's GHI weight, 3–4 m for 11.67 %, 6 m for 6.85 %, 11 m never. Inherent to the pre-registered march; bites only the on-roof overhang term |
 
-The honest sentence for the card: *"Shaded X %, of which trees Y %. Screening: canopy heights
-±3 m, crowns treated as 70 % opaque."*
+The honest sentence for the card (revised in A3 to lead with the dominant lever): *"Shaded X %, of
+which trees Y %. Screening: the tree term is Z % under a strict roof mask; canopy heights ±3 m; crowns
+treated as 70 % opaque."*
 
 ## 7 · Verification
 
@@ -285,6 +287,48 @@ count never shade — partial and silent, which is worse than none).
 
 **Unchanged:** every prediction in §5, both cross-check tolerances, τ, the pad, the height
 scenarios, the receiver rule.
+
+### A3 — 2026-09-05, after the Task 4 review, before the other two wards ran. The statistic actually applied, a blind spot, and the dominant lever
+
+**Sanity check 3 as applied.** §5 registered "loss rises as the sun falls — mean shaded fraction per
+sun position is monotone in altitude within each sample day". The literal test is unimplementable:
+each sample day's altitudes are an exact palindrome about solar noon (day 1: 11.6, 23.4, 33.8, 42.1,
+46.8, 46.8, 42.1, 33.8, 23.4, 11.6°), so equal altitudes differ only by azimuth and any asymmetry in
+the built form breaks strict monotonicity on a physically correct run. What the code tests, per day:
+the shaded fraction at the lowest-altitude sample exceeds that at the highest-altitude sample, AND
+the correlation between altitude and shaded fraction is negative. This pair was in the approved plan's
+code before any ward ran and Ballygunge ran under it; it is written here so the artefact and the spec
+say the same thing. It is a weak check by design — it verifies that the drop is wired the right way
+up, nothing more; the east-west convention is pinned by the self-check (A2), not by this. The artefact
+now publishes the statistic, the per-sun shaded fractions and the sun samples, so a reader can
+re-verify it.
+
+**§6 gains a row: the near-zenith blind spot.** The march samples from k = 1, so canopy standing
+directly over its own roof is invisible whenever tan α exceeds its height above that roof. Measured on
+the real sun sample: a crown 2 m above its roof is missed for 27.45 % of the year's GHI weight (24 of
+134 samples), 3–4 m for 11.67 %, 6 m for 6.85 %, 11 m never. It cannot touch the off-roof tree term.
+Direction: understates, like the pixelisation row.
+
+**The mask rule is the dominant lever, and the sentence now says so.** Ballygunge: A1 → strict mask
+moves the central total 19.91 → 10.98 %, an 8.93 pp spread, against 6.54 pp for the whole τ band,
+5.33 pp for canopy −3 m and 4.87 pp for the raised array. Roughly 59 % of the tree term is canopy
+standing over footprints, of which A1 filters 2.0 % (`overhang_kept_frac` 0.980) — in continuous
+canopy the connectedness rule barely fires, exactly the weakness A1 wrote down. So the honest bracket
+is the strict-mask floor to the A1 figure, and any sentence quoting the A1 figure carries the floor.
+The artefact gains a `levers` block with the four spreads computed per ward. Predictions, tolerances
+and the central cell are unchanged.
+
+**Two receipts corrected.** A2's "raster lower on 93.7 % of buildings" is 95.6 % of the 2,882
+buildings whose two figures differ; over all 3,527 it is 78.1 %, the rest equal (434 both zero).
+And `polygon_share_5pct` was recomputed from the registered artefact's 4-dp arrays (0.2824) rather
+than read from it (0.2821); the artefact now publishes the registered figures verbatim beside the
+same-population recomputation the gate uses.
+
+**Artefact additions:** `sanity.loss_rises_as_sun_falls` becomes an object (`test`, `days`,
+`days_tested`, `pass`); `shaded_frac_by_sun[]`, `sun_samples[]`; `cross_check` gains the registered
+comparands; `cross_check_ge_3kwp` (informational, not gated); `stratum` (packing factor, m² per kWp,
+threshold, n); `levers`; `canopy.href`, `canopy.max_m`, `canopy.nonzero_px`; a note that the three
+per-building arrays are rounded independently to 4 dp.
 
 ## References
 
