@@ -115,7 +115,9 @@ tariff change.
 - **Tariff control:** label *Tariff · assumed*, a number input (step 0.25, min 0), and the band note
   from decision 5. Changing it repaints every rupee figure on the page.
 - **Best roofs by annual yield:** a ten-row table — `#id`, kWp, kWh/yr, shaded, m². Clicking a row
-  selects that building on the map (`select(registry[idx])`) — the pane and the card are one
+  selects that building on the map (`select(registry[idx])`) and eases the camera onto it at the
+  current zoom, pitch and bearing (instant under reduced motion): a card is projected from its
+  building, and a building outside the view is a card nobody sees. The pane and the card are one
   object. Footprint from the registry's `areaM2`. Rows over 10,000 m² render in bronze: a single
   footprint that size is a market shed or a merged record, and the reader should see it as one.
 - **Honesty note:** *Yield uses NASA POWER irradiance and a Mumbai packing factor; shading is
@@ -123,9 +125,10 @@ tariff change.
   (the "at least" figure is the strict-mask floor). Screening only, not bankable.*
 - **Download:** `<a class="cta" download="solar-<ward>.csv">Download roof list · CSV ↓</a>`. The
   CSV is built in the browser on first click from the arrays: `idx, lat, lon, footprint_m2, kwp,
-  kwh_yr, loss, loss_buildings, loss_trees, loss_strict, loss_raised, worth_inr_yr, tariff_inr_kwh,
-  basis`, one row per building, lat/lon from `wardLatLon` of the centroid. Object URL revoked on the
-  next ward load.
+  kwh_yr, loss, loss_buildings, loss_trees, loss_strict, loss_raised, worth_per_yr, tariff_per_kwh,
+  currency, basis` (the column names name no currency; a `currency` column carries the ISO code from
+  the scope, per the engine's rule that the country names the currency), one row per building, lat/lon
+  from `wardLatLon` of the centroid. Object URL revoked on the next ward load and on a tariff change.
 - On an area with no solar file: *No solar screen ships for {area}. The screen needs footprints,
   heights and canopy, and this area ships none.*
 - **On the Compare route** (`PairedBench.astro`): the Layers pattern — *Solar reads one ward's roofs
@@ -145,6 +148,17 @@ tariff change.
 | `tests/e2e/solar-pane.spec.ts` | the real page: rail button opens the pane; ten rows; the panel prints MWp; changing the tariff moves a rupee figure; the CSV download's first line is the header and it has one row per building |
 
 No new dependency. `console-shell.ts` needs no change: it wires every `.pane[data-pane]` generically.
+
+## 7b · Recorded during implementation (2026-09-06)
+
+- Money is printed only through the scope's formatters (`fmtMoney`, the new `fmtRate` for a unit
+  price with two fixed decimals, `currencyMark` for a bare mark); a unit tripwire forbids a typed
+  currency symbol in the engine, and the pane paints the mark into `#solCur` by script.
+- The card grew to 730–773 px on a 764 px canvas; `placeCard` caps the inner box from the canvas
+  height and clamps the centre, sliding the leader line back onto the building.
+- The tariff default (8.00) and the CESC band note are Kolkata facts in a template every area
+  shares; when a second country ships artefacts, both belong in the country's cost basis. Follow-up,
+  not done here.
 
 ## 8 · Not in scope
 
