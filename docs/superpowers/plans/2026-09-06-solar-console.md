@@ -8,7 +8,7 @@
 
 **Tech Stack:** Astro components (`HeatMapStage.astro`, `PairedBench.astro`, `IconRail.astro`), TypeScript (`heat-map-app.ts`, `paths.ts`, `types.ts`), `node --test` source assertions in `tests/unit/obos-shell.test.mjs`, Playwright e2e on `chromium-tier0`, the existing studio contrast gate.
 
-**Working tree:** `/Volumes/VSTSAMPLES/Projects/angad-built` (pushes to `origin/main`). exFAT: refresh and rebase in ONE invocation (`git update-index -q --refresh; git fetch -q origin; git rebase -q origin/main`); never `reset --hard`. Commit trailer: `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>`. `npm run typecheck` (tsc, whole project) after every code task; `npm run build` before any e2e (the suite runs against `dist/`).
+**Working tree:** `/Volumes/VSTSAMPLES/Projects/angad-built` (pushes to `origin/main`). exFAT: refresh and rebase in ONE invocation (`git update-index -q --refresh; git fetch -q origin; git rebase -q origin/main`); never `reset --hard`. Commit trailer: `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>`. `npm run check` (astro check, the TypeScript gate; `npm run typecheck` is mypy for the Python) after every code task; `npm run build` before any e2e (the suite runs against `dist/`).
 
 ---
 
@@ -102,7 +102,7 @@ and insert, immediately after the `analysis` entry in `SECTIONS` (the line endin
 
 - [ ] **Step 4: Run the unit suite and typecheck to verify they pass**
 
-Run: `cd /Volumes/VSTSAMPLES/Projects/angad-built && npm run -s test:unit 2>&1 | grep -E "ℹ (pass|fail)" && npm run -s typecheck | tail -1`
+Run: `cd /Volumes/VSTSAMPLES/Projects/angad-built && npm run -s test:unit 2>&1 | grep -E "ℹ (pass|fail)" && npm run -s check 2>&1 | tail -1`
 Expected: `ℹ fail 0` and `Success`. (Both routes will render a button for `solar` that opens no pane until Task 5 — the harness's pane-per-always-section check, if any fires, is answered in Task 5; report it if it does.)
 
 - [ ] **Step 5: Commit**
@@ -227,8 +227,8 @@ to
 
 - [ ] **Step 4: Typecheck, and prove the Python readers of types.ts still pass**
 
-Run: `cd /Volumes/VSTSAMPLES/Projects/angad-built && npm run -s typecheck | tail -1 && npm run -s test:py 2>&1 | tail -2`
-Expected: `Success` and the Python chain's last lines unchanged (`self-check: ok`). If a Python reader of `types.ts` objects to the new interface, report BLOCKED with its message — do not move the interface.
+Run: `cd /Volumes/VSTSAMPLES/Projects/angad-built && npm run -s check 2>&1 | tail -1 && npm run -s test:py 2>&1 | tail -2`
+Expected: `0 errors` from astro check and the Python chain's last lines unchanged (`self-check: ok`). If a Python reader of `types.ts` objects to the new interface, report BLOCKED with its message — do not move the interface.
 
 - [ ] **Step 5: Commit**
 
@@ -336,8 +336,8 @@ and change the line `    setHTML('bcIns', parts.join('<br>'));` (the last statem
 
 - [ ] **Step 4: Typecheck and build**
 
-Run: `cd /Volumes/VSTSAMPLES/Projects/angad-built && npm run -s typecheck | tail -1 && npm run -s build 2>&1 | grep -E "error|Complete!" | head -2`
-Expected: `Success`, `[build] Complete!`.
+Run: `cd /Volumes/VSTSAMPLES/Projects/angad-built && npm run -s check 2>&1 | tail -1 && npm run -s build 2>&1 | grep -E "error|Complete!" | head -2`
+Expected: `0 errors`, `[build] Complete!`.
 
 - [ ] **Step 5: Commit**
 
@@ -434,8 +434,8 @@ In `loadWard`, change `    currentWardSizeM = d.sizeM;` to:
 
 - [ ] **Step 4: Typecheck, build, and see it on the page**
 
-Run: `cd /Volumes/VSTSAMPLES/Projects/angad-built && npm run -s typecheck | tail -1 && npm run -s build 2>&1 | grep -E "error|Complete!" | head -2`
-Expected: `Success`, `[build] Complete!`.
+Run: `cd /Volumes/VSTSAMPLES/Projects/angad-built && npm run -s check 2>&1 | tail -1 && npm run -s build 2>&1 | grep -E "error|Complete!" | head -2`
+Expected: `0 errors`, `[build] Complete!`.
 
 - [ ] **Step 5: Commit**
 
@@ -631,10 +631,14 @@ Immediately after the closing `  }` of `paintSolarWard`, add:
 ```
 `paintSolarPane`, `select`, `registry`, `wardOf`, `areaOf`, `wardLatLon`, `cleanup`, `selected` all exist in this scope already; the functions are declarations and hoist, so `paintSolarWard` may call `paintSolarPane` before its text position.
 
+- [ ] **Step 4b: The rail's own prose stops saying five**
+
+In `src/components/ClimateEngine/shell/IconRail.astro`'s header comment (found by the review of Task 1): change "two of the five places the rail can take you" to "two of the six places the rail can take you"; add Solar to the prose list of sections (after Analysis: `Solar      swaps the sidebar pane: the ward's roofs ranked, each row a building on the map`); change "Two of the five change the URL and four of them change what the sidebar shows" to "Two of the six change the URL and five of them change what the sidebar shows"; and in the grouping paragraph change "the five" / "Five rows do not need to be grouped" to "the six" / "Six rows do not need to be grouped". Leave the historical "five glyphs whose only labels were tooltips" alone: it describes the rail this one replaced.
+
 - [ ] **Step 5: Typecheck, build, then the unit suite (the harness's pane checks now have their pane)**
 
-Run: `cd /Volumes/VSTSAMPLES/Projects/angad-built && npm run -s typecheck | tail -1 && npm run -s build 2>&1 | grep -E "error|Complete!" | head -2 && npm run -s test:unit 2>&1 | grep -E "ℹ (pass|fail)"`
-Expected: `Success`, `[build] Complete!`, `ℹ fail 0`.
+Run: `cd /Volumes/VSTSAMPLES/Projects/angad-built && npm run -s check 2>&1 | tail -1 && npm run -s build 2>&1 | grep -E "error|Complete!" | head -2 && npm run -s test:unit 2>&1 | grep -E "ℹ (pass|fail)"`
+Expected: `0 errors`, `[build] Complete!`, `ℹ fail 0`.
 
 - [ ] **Step 6: Commit**
 
@@ -688,6 +692,12 @@ test('the solar screen is wired end to end and never prints a headline without i
     'a payback figure has no place here: it needs capex and subsidy assumptions, and that is where liability lives');
 });
 ```
+
+- [ ] **Step 1b: Two titles that stopped being true in Task 1**
+
+In `tests/unit/obos-shell.test.mjs` change the test title `'the rail carries the mode: two sections navigate, three swap the pane'` to `'the rail carries the mode: two sections navigate, four swap the pane'`, and in the comment beneath it change "Layers, Reports
+     and Scenarios swap the sidebar pane" to "Layers, Solar, Reports
+     and Scenarios swap the sidebar pane" (match the existing line breaks). In `tests/e2e/heat-map-compare.spec.ts`, the test titled "every rail section opens a body that says what it holds here" iterates a hardcoded `['layers', 'reports', 'scenarios']`: add `'solar'` so the title stays true now that Compare renders a Solar body.
 
 - [ ] **Step 2: Run the unit suite**
 
