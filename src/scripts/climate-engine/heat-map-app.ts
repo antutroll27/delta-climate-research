@@ -781,7 +781,7 @@ export function mountHeatMap(): () => void {
     const sum = el('solPaneSum'), list = el('solList'), link = el('solCsv') as HTMLAnchorElement | null;
     if (!sum || !list || !link) return;
     if (!pv) {
-      sum.textContent = `No solar screen ships for ${areaName()}.`;
+      sum.textContent = `No solar screen ships for ${areaName()}. The screen needs footprints, heights and canopy, and this area ships none.`;
       list.innerHTML = '';
       link.setAttribute('hidden', '');
       return;
@@ -792,9 +792,10 @@ export function mountHeatMap(): () => void {
       + `<b>${Math.round(s.share_losing_5pct * 100)}%</b> of the roofs that could carry ${s.threshold_kwp} kWp or more lose at least 5% of their yield to shade. `
       + `Shading takes <b>${(t.mean_loss * 100).toFixed(1)}%</b> of the ward's yield — <b>at least ${(t.mean_loss_strict * 100).toFixed(1)}%</b> `
       + `under a strict roof mask; trees are <b>${(t.mean_loss_trees * 100).toFixed(1)} points</b> of it.`;
+    const byIdx = new Map(registry.map((b) => [b.idx, b] as const));
     const order = [...pv.kwh.keys()].sort((a, b) => pv.kwh[b] - pv.kwh[a]).slice(0, 10);
     list.innerHTML = order.map((i) => {
-      const meta = registry.find((b) => b.idx === i);
+      const meta = byIdx.get(i);
       const area = meta ? Math.round(meta.areaM2) : 0;
       const L = pv.loss[i];
       return `<tr tabindex="0" data-idx="${i}"${area > 10_000 ? ' class="big"' : ''}>`
@@ -834,14 +835,24 @@ export function mountHeatMap(): () => void {
     if (!tr) return;
     e.preventDefault();
     const b = registry.find((x) => x.idx === Number(tr.dataset.idx));
-    if (b) select(b);
+    if (!b) return;
+    select(b);
+    /* The card is projected from the building, so a building outside the view is
+       a card nobody sees — nine of ten rows, measured, once the reader has zoomed.
+       Ease there at the current zoom, pitch and bearing; instant under reduced
+       motion. */
+    const ll = wardLatLon(wardOf(state.ward), b.cx, b.cz);
+    map.easeTo({ center: [ll.lon, ll.lat], duration: reduceMotion ? 0 : 700, essential: true });
   };
   const tariffInput = el('solTariff') as HTMLInputElement | null;
   if (tariffInput) tariffInput.value = tariff.toFixed(2);
   setText('solCur', currencyMark(COSTS));   // the country names the currency; never typed into a template
+  tariffInput?.setAttribute('aria-label', `Tariff, ${currencyMark(COSTS)} per kilowatt-hour, assumed`);
   const onTariff = () => {
     const v = Number(tariffInput?.value);
-    if (!Number.isFinite(v) || v <= 0) return;
+    const bad = !Number.isFinite(v) || v <= 0;
+    tariffInput?.setAttribute('aria-invalid', bad ? 'true' : 'false');
+    if (bad) return;          // the figures keep the last good tariff; the box says so
     tariff = v;
     try { localStorage.setItem(TARIFF_KEY, String(v)); } catch { /* preference is transient */ }
     dropCsv();
@@ -965,13 +976,22 @@ export function mountHeatMap(): () => void {
     bcard.dataset.side = side;
     const dx = side === 'right' ? p.x + 30 : p.x - 260;
     /* KEEP THE CARD ON SCREEN. The card is centred on the building's apex, and
-       with the solar block it stands ~690px tall, so an apex in the top or bottom
+       with the solar block it stands 730-773 px tall (measured), so an apex in the top or bottom
        third would put the Close button past the edge. Clamp the centre so the box
        stays inside the canvas with a margin, and move the leader line by the same
        amount in the other direction so it still points at the building. */
     // measured once with the rest of the frame's reads; the height only changes on selection or theme
-    const cardH = cardBox ? cardBox.height : bcard.offsetHeight;
     const EDGE = 12;
+    /* The card may not be taller than the canvas minus its margins — beyond that it
+       scrolls (.bcard-in has overflow-y:auto) rather than hangs past the edges. The
+       CSS max-height is viewport-relative, which overshoots a canvas that starts
+       below the top bar; the canvas height is known here, so it is set here, and
+       only when it changes. Measured 2026-09-06: with the solar block the card is
+       730-773 px against a 764 px canvas. */
+    const inner = bcard.querySelector<HTMLElement>('.bcard-in');
+    const maxH = `${Math.max(h - 2 * EDGE, 240)}px`;
+    if (inner && inner.style.maxHeight !== maxH) inner.style.maxHeight = maxH;
+    const cardH = Math.min(cardBox ? cardBox.height : bcard.offsetHeight, h - 2 * EDGE);
     const lo = Math.min(cardH / 2 + EDGE, h / 2), hi = Math.max(h - cardH / 2 - EDGE, h / 2);
     const cy = Math.min(Math.max(p.y, lo), hi);
     const shift = cy - p.y;
