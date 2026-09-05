@@ -187,6 +187,25 @@ function report(theme: string, findings: Finding[]): string {
       + `${f.px}px ${f.color} on ${f.ground}\n        ${f.path}\n        "${f.text}"`).join('\n');
 }
 
+/** Wait until the selection's ring labels stop moving. placeCard repositions them
+    on every map render, and the sampler screenshots the page BEFORE it reads each
+    box — a label still travelling after a camera ease or a style swap is sampled
+    against whatever the map painted where it used to be (measured: #ringFar scored
+    2.36:1 against the dark map one run in four). Two identical reads 300 ms apart
+    is stillness enough; a page with no selection returns at once. */
+async function ringsStill(page: Page): Promise<void> {
+  await page.waitForFunction(() => {
+    const now = ['ringNear', 'ringFar']
+      .map((id) => { const r = document.getElementById(id)?.getBoundingClientRect(); return r ? [r.x, r.y, r.width, r.height].map(Math.round).join(',') : 'none'; })
+      .join('|');
+    const w = window as unknown as { __rings?: string; __ringsAt?: number };
+    const t = performance.now();
+    if (w.__rings === now && w.__ringsAt !== undefined && t - w.__ringsAt >= 300) return true;
+    if (w.__rings !== now) { w.__rings = now; w.__ringsAt = t; }
+    return false;
+  }, undefined, { polling: 150, timeout: 15_000 });
+}
+
 /** Wait for a reading — the console paints its numbers only once a ward is up. */
 async function settled(page: Page): Promise<void> {
   await expect(page.locator('#lst')).not.toContainText('—', { timeout: 60_000 });
@@ -237,8 +256,10 @@ test.describe('console legibility', () => {
     await expect(page.locator('#solList tr')).toHaveCount(10, { timeout: 15_000 });
     await page.locator('#solList tr').first().click();
     await page.waitForTimeout(1_500);
+    await ringsStill(page);
     await page.locator('#envchip button[data-e="studio"]').click();
     await page.waitForTimeout(4_000);
+    await ringsStill(page);
     const findings = await contrastFailures(page);
     expect(findings, report('Clay studio, card open', findings)).toEqual([]);
   });
