@@ -985,8 +985,12 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
   @media (prefers-reduced-motion: reduce){ .clockw .k-bar i{transition:none} }
 
   .vegw{position:absolute;right:var(--instr-inset);top:186px;z-index:6;display:flex;align-items:center;gap:6px;
-    padding:4px 7px;border-radius:9px;background:rgb(5 6 6 /.7);border:1px solid var(--line);
-    backdrop-filter:blur(8px);box-shadow:0 6px 18px rgb(0 0 0 /.30)}
+    /* THE WORST OF THEM: .7 let THIRTY PER CENT of the map through, under a
+       label. This is the element CI named — "Trees" at 4.564:1 on Clay in one
+       frame and under 4.5 in another, from the same build. A chip this small
+       carries no glass effect worth that. */
+    padding:4px 7px;border-radius:9px;background:rgb(5 6 6);border:1px solid var(--line);
+    box-shadow:0 6px 18px rgb(0 0 0 /.30)}
   .vegw .veg-lab{font-family:var(--mono);font-size:.52rem;letter-spacing:.13em;color:var(--ink);text-transform:uppercase}
   .vegw .modechip{padding:2px;gap:2px}
   .vegw .modechip button{font-size:.52rem;padding:.3rem .62rem;letter-spacing:.12em}
@@ -1343,7 +1347,21 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
      across the rail gap and glued this to the legend below it. The ambient is
      kept short (18px, not 70) for the same reason — it must not reach the next
      card. */
-  .panel{position:absolute;background:rgb(9 20 22 /.96);border-radius:14px;backdrop-filter:blur(16px);box-shadow:0 1px 2px rgb(0 0 0 /.45),0 8px 18px rgb(0 0 0 /.35);z-index:4}
+  /* OPAQUE, FOR THE REASON `.compass` IS — and this is the surface that proved
+     the rule matters on BOTH themes rather than one.
+
+     At .96 the live map contributed 4% of this panel's ground. On Slate that is
+     4% of a dark basemap and changes nothing measurable. On CLAY it is 4% of a
+     PALE one, which lightens the ground under text that is already light: measured,
+     `% RH` and `m/s wind` cleared the 4.5 floor by 0.035 and the vegetation chip's
+     label by 0.064 — margins smaller than the variation the map itself introduces
+     between two frames. That is how a suite goes green on a pull request and red on
+     main with identical code, which is exactly what happened.
+
+     4% of translucency is invisible on a panel this size and is not worth a
+     contrast figure that cannot be reproduced. The blur goes with it: it composites
+     what is behind, and there is no longer anything behind to see. */
+  .panel{position:absolute;background:rgb(9 20 22);border-radius:14px;box-shadow:0 1px 2px rgb(0 0 0 /.45),0 8px 18px rgb(0 0 0 /.35);z-index:4}
   .panel .h{font-family:var(--mono);font-size:.58rem;letter-spacing:.18em;color:var(--ink);padding:14px 18px 0;text-transform:uppercase}
   /* `.left`'s floating geometry is gone: the toolbox is a pane of the sidebar now,
      and `.sidebar .panel.left` up in the layout block gives it a column's shape.
