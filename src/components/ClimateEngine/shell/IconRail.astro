@@ -4,7 +4,7 @@
  *
  * OBOS is an ops console rather than a map with panels floating over it, and this
  * narrow column is the whole of its navigation. Explore and Compare used to be
- * tabs in the stage header; they are now two of the five places the rail can take
+ * tabs in the stage header; they are now two of the six places the rail can take
  * you. Everything that used to be a second navigation is gone, because one
  * navigation is easier to learn than two.
  *
@@ -39,10 +39,11 @@
  *   Map        the Explore route, and the toolbox pane once you are on it
  *   Layers     swaps the sidebar pane
  *   Analysis   the Compare route, and the paired bench's pane once you are on it
+ *   Solar      swaps the sidebar pane: the ward's roofs ranked, each row a building on the map
  *   Reports    swaps the sidebar pane
  *   Scenarios  swaps the sidebar pane
  *
- * Two of the five change the URL and four of them change what the sidebar shows.
+ * Two of the six change the URL and five of them change what the sidebar shows.
  * Every ops console works this way, and the alternative — a rail for routes and a
  * second control for panes — is the two-navigations problem again.
  *
@@ -84,8 +85,8 @@
  * one control here that is not a section, and it is wired in console-shell.ts
  * before it is rendered.
  *
- * NO SECTION HEADERS. The mockup grouped the five under "Console" and "Output".
- * Five rows do not need to be grouped — the headers would add two more strings to
+ * NO SECTION HEADERS. The mockup grouped the six under "Console" and "Output".
+ * Six rows do not need to be grouped — the headers would add two more strings to
  * keep out of the tab order and two more surfaces to hold to the contrast floor,
  * to divide a list short enough to be read at a glance.
  *

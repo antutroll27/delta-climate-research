@@ -249,6 +249,38 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
         </section>
       </div>
 
+      {/* SOLAR — the consultant's deliverable: which roofs, how much, how sure.
+          Painted by paintSolarPane from the ward's solar file. The tariff is an
+          ASSUMPTION the reader can change and the page remembers; the list is the
+          ten best roofs by yield, each row selecting its building on the map; the
+          download is every roof, built in the browser on click. Gated like
+          Reports: an area that ships no artefacts ships no screen. The currency
+          mark is painted by script from the scope's cost basis, never typed here. */}
+      <div class="pane" data-pane="solar">
+        <section class="pane-body" aria-labelledby="pane-solar-h">
+          <p class="pane-h" id="pane-solar-h">Solar · <span id="solPaneArea">{scope.area.name}</span></p>
+          {scope.area.hasData ? (
+          <Fragment>
+          <p class="pane-note" id="solPaneSum">Loading the rooftop-solar screen…</p>
+          <div class="sol-tariff">
+            <label for="solTariff">Tariff · assumed · change it</label>
+            <span><span id="solCur" aria-hidden="true"></span><input id="solTariff" type="number" inputmode="decimal" min="0" step="0.25" value="8.00" aria-describedby="solTariffNote"> / kWh</span>
+          </div>
+          <p class="pane-note sol-small" id="solTariffNote">CESC domestic slabs run 4.07–9.21 per unit (2025-26 tariff order); a solar unit displaces the top of the bill. Not a rate we assert.</p>
+          <p class="pane-h">Best roofs by annual yield</p>
+          <table class="roofs" aria-label="The ten best roofs by annual yield; each row selects its building on the map">
+            <thead><tr><th scope="col">#</th><th scope="col">kWp</th><th scope="col">kWh/yr</th><th scope="col">shaded</th><th scope="col">m²</th></tr></thead>
+            <tbody id="solList"></tbody>
+          </table>
+          <p class="pane-note sol-small">Yield uses NASA POWER irradiance and a Mumbai packing factor; shading is computed from this ward's own geometry and canopy, and the mask rule is its largest uncertainty — "at least" is the strict-mask floor. Screening only, not bankable.</p>
+          <a class="cta" id="solCsv" href="#" download>Download roof list · CSV ↓</a>
+          </Fragment>
+          ) : (
+          <p class="pane-note">No solar screen ships for {scope.area.name}. The screen needs footprints, heights and canopy, and this area ships none.</p>
+          )}
+        </section>
+      </div>
+
       <div class="pane" data-pane="scenarios">
         <section class="pane-body" aria-labelledby="pane-scenarios-h">
           <p class="pane-h" id="pane-scenarios-h">Scenarios</p>
@@ -850,6 +882,22 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
   .pane-body{padding:14px;display:flex;flex-direction:column;gap:.7rem;overflow-y:auto}
   .pane-h{font-family:var(--mono);font-size:.62rem;letter-spacing:.14em;text-transform:uppercase;color:var(--faint)}
   .pane-note{font-size:.78rem;line-height:1.62;color:var(--ink)}
+  /* THE SOLAR PANE. The sidebar ground is dark in both themes, so amber and the
+     faint mono clear 4.5:1 as they do on the pane headings. */
+  .sol-tariff{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;border:1px solid var(--line-hi);border-radius:8px;font:400 .58rem var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--ink)}
+  .sol-tariff span{display:flex;align-items:center;gap:4px;color:var(--sun);text-transform:none;letter-spacing:.02em;font-size:.72rem}
+  .sol-tariff input{width:4.6rem;font:400 .8rem var(--mono);color:var(--paper);background:var(--surface);border:1px solid var(--line-hi);border-radius:6px;padding:3px 6px}
+  .sol-tariff input:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+  .sol-small{font-size:.66rem}
+  .roofs{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:.64rem}
+  .roofs th{text-align:right;font-weight:400;font-size:.46rem;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);padding:0 0 6px;border-bottom:1px solid var(--line-hi)}
+  .roofs th:first-child,.roofs td:first-child{text-align:left}
+  .roofs td{padding:6px 0;border-bottom:1px solid var(--line);text-align:right;color:var(--paper);white-space:nowrap}
+  .roofs td.id{color:var(--cyan)} .roofs td.sh{color:var(--sun)} .roofs td.sh.z{color:var(--faint)} .roofs td.a{color:var(--ink)}
+  /* a single footprint over a hectare is a market shed or a merged record — bronze, so it reads as one */
+  .roofs tr.big td{color:var(--bronze)}
+  .roofs tbody tr{cursor:pointer} .roofs tbody tr:hover td{color:var(--paper)}
+  .roofs tbody tr:focus-visible{outline:2px solid var(--cyan);outline-offset:-2px}
   .pane-note code{font-family:var(--mono);font-size:.7rem;color:var(--cyan);overflow-wrap:anywhere}
 
   /* The toolbox, unfloated. It arrived as `position:absolute` over the map, which

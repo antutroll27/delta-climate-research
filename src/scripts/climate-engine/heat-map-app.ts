@@ -52,7 +52,7 @@ import { SELECT_SYNC_EVENT } from './shell/select-field.ts';
 import { isLayerId, type LayerId } from './scope/layers.ts';
 import { resolve, requireCosts } from './scope/resolve.ts';
 import { areaPageTitle, areaPageDescription } from './scope/page-meta.ts';
-import { fmtMoney, fmtRate } from './money.ts';
+import { fmtMoney, fmtRate, currencyMark } from './money.ts';
 import { areaPath, paths, cityPaths } from './scope/paths.ts';
 import { areaRefusal } from './scope/reachability.ts';
 import { isAreaKey, splitKey, type AreaKey } from './scope/registry.ts';
@@ -753,7 +753,7 @@ export function mountHeatMap(): () => void {
     };
     const has = pv != null;
     for (const id of ['solm', 'solRows', 'solFloor']) show(id, has);
-    if (!pv) return;
+    if (!pv) { paintSolarPane(null); return; }
     const t = pv.totals, s = pv.stratum, n = pv.kwp.length;
     setHTML('solKwp', `${t.capacity_mwp.toFixed(1)}<span class="u">MWp</span>`);
     setHTML('solConf', `Screening · <b>${t.capacity_mwp_range[0].toFixed(1)}–${t.capacity_mwp_range[1].toFixed(1)} MWp</b> · not bankable`);
@@ -764,7 +764,101 @@ export function mountHeatMap(): () => void {
     setHTML('solSh', `${Math.round(s.share_losing_5pct * 100)}%<small>of those roofs</small>`);
     setText('solFloor', `Shading costs ${t.shading_loss_gwh_yr.toFixed(1)} GWh a year — at least `
       + `${(t.mean_loss_strict * 100).toFixed(1)}% of yield under a strict roof mask (headline ${(t.mean_loss * 100).toFixed(1)}%).`);
+    paintSolarPane(pv);
   }
+
+  /* ── the Solar pane ──
+     The ten best roofs by yield, each row a building on the map; the download is
+     every roof. The CSV is built on first click and the object URL is dropped on
+     the next ward load or tariff change, so a stale list can never be handed
+     over under a fresh number. */
+  let csvUrl: string | null = null;
+  function dropCsv() { if (csvUrl) { URL.revokeObjectURL(csvUrl); csvUrl = null; } }
+  function areaName(): string { return (wardOf(state.ward)?.name ?? state.ward).replace(/<[^>]+>/g, ''); }
+  function paintSolarPane(pv: PvFile | null) {
+    dropCsv();
+    setText('solPaneArea', areaName());
+    const sum = el('solPaneSum'), list = el('solList'), link = el('solCsv') as HTMLAnchorElement | null;
+    if (!sum || !list || !link) return;
+    if (!pv) {
+      sum.textContent = `No solar screen ships for ${areaName()}.`;
+      list.innerHTML = '';
+      link.setAttribute('hidden', '');
+      return;
+    }
+    const t = pv.totals, s = pv.stratum, n = pv.kwp.length;
+    sum.innerHTML = `<b>${t.capacity_mwp.toFixed(1)} MWp</b> installable across <b>${n.toLocaleString()}</b> real roofs, `
+      + `the floor of a <b>${t.capacity_mwp_range[0].toFixed(1)}–${t.capacity_mwp_range[1].toFixed(1)} MWp</b> interval. `
+      + `<b>${Math.round(s.share_losing_5pct * 100)}%</b> of the roofs that could carry ${s.threshold_kwp} kWp or more lose at least 5% of their yield to shade. `
+      + `Shading takes <b>${(t.mean_loss * 100).toFixed(1)}%</b> of the ward's yield — <b>at least ${(t.mean_loss_strict * 100).toFixed(1)}%</b> `
+      + `under a strict roof mask; trees are <b>${(t.mean_loss_trees * 100).toFixed(1)} points</b> of it.`;
+    const order = [...pv.kwh.keys()].sort((a, b) => pv.kwh[b] - pv.kwh[a]).slice(0, 10);
+    list.innerHTML = order.map((i) => {
+      const meta = registry.find((b) => b.idx === i);
+      const area = meta ? Math.round(meta.areaM2) : 0;
+      const L = pv.loss[i];
+      return `<tr tabindex="0" data-idx="${i}"${area > 10_000 ? ' class="big"' : ''}>`
+        + `<td class="id">#${i}</td><td>${pv.kwp[i].toFixed(0)}</td><td>${Math.round(pv.kwh[i]).toLocaleString()}</td>`
+        + `<td class="sh${L < 0.005 ? ' z' : ''}">${L < 0.005 ? '—' : `−${Math.round(L * 100)}%`}</td>`
+        + `<td class="a">${area.toLocaleString()}</td></tr>`;
+    }).join('');
+    link.removeAttribute('hidden');
+    link.download = `solar-${areaOf(state.ward)}.csv`;
+    link.href = '#';
+  }
+  function buildCsv(pv: PvFile): string {
+    const w = wardOf(state.ward);
+    const byIdx = new Map(registry.map((b) => [b.idx, b] as const));
+    const rows = ['idx,lat,lon,footprint_m2,kwp,kwh_yr,loss,loss_buildings,loss_trees,loss_strict,loss_raised,worth_per_yr,tariff_per_kwh,currency,basis'];
+    for (let i = 0; i < pv.kwp.length; i += 1) {
+      const b = byIdx.get(i);
+      const ll = b ? wardLatLon(w, b.cx, b.cz) : null;
+      rows.push([
+        i, ll ? ll.lat.toFixed(5) : '', ll ? ll.lon.toFixed(5) : '', b ? Math.round(b.areaM2) : '',
+        pv.kwp[i], pv.kwh[i], pv.loss[i], pv.loss_buildings[i], pv.loss_trees[i], pv.loss_strict[i], pv.loss_raised[i],
+        Math.round(pv.kwh[i] * tariff), tariff.toFixed(2), COSTS.currency, i === 0 ? `"${pv.basis.replace(/"/g, '""')}"` : '',
+      ].join(','));
+    }
+    return `${rows.join('\n')}\n`;
+  }
+  const onCsv = (e: Event) => {
+    const link = e.currentTarget as HTMLAnchorElement;
+    const pv = pvCache[state.ward];
+    if (!pv) { e.preventDefault(); return; }
+    if (!csvUrl) csvUrl = URL.createObjectURL(new Blob([buildCsv(pv)], { type: 'text/csv;charset=utf-8' }));
+    link.href = csvUrl;             // the default action follows with the real URL
+  };
+  const onRow = (e: Event) => {
+    if (e instanceof KeyboardEvent && e.key !== 'Enter' && e.key !== ' ') return;
+    const tr = (e.target as HTMLElement).closest<HTMLElement>('tr[data-idx]');
+    if (!tr) return;
+    e.preventDefault();
+    const b = registry.find((x) => x.idx === Number(tr.dataset.idx));
+    if (b) select(b);
+  };
+  const tariffInput = el('solTariff') as HTMLInputElement | null;
+  if (tariffInput) tariffInput.value = tariff.toFixed(2);
+  setText('solCur', currencyMark(COSTS));   // the country names the currency; never typed into a template
+  const onTariff = () => {
+    const v = Number(tariffInput?.value);
+    if (!Number.isFinite(v) || v <= 0) return;
+    tariff = v;
+    try { localStorage.setItem(TARIFF_KEY, String(v)); } catch { /* preference is transient */ }
+    dropCsv();
+    paintSolarWard();
+    if (selected) paintSolarCard(selected);
+  };
+  el('solCsv')?.addEventListener('click', onCsv);
+  el('solList')?.addEventListener('click', onRow);
+  el('solList')?.addEventListener('keydown', onRow);
+  tariffInput?.addEventListener('input', onTariff);
+  cleanup.push(() => {
+    el('solCsv')?.removeEventListener('click', onCsv);
+    el('solList')?.removeEventListener('click', onRow);
+    el('solList')?.removeEventListener('keydown', onRow);
+    tariffInput?.removeEventListener('input', onTariff);
+    dropCsv();
+  });
 
   /** Move the card, brackets and ring labels onto the selection, and keep the
       compass needle honest. Transform only — no layout. */
