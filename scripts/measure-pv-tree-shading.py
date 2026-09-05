@@ -99,10 +99,18 @@ def shadow_height(dsm: F32, alt_deg: float, az_deg: float, step_m: float) -> F32
     Sub-pixel direction is handled by rounding k*s to integer offsets, as the papers do."""
     t = math.tan(math.radians(alt_deg))
     if t <= 0.0:
-        return np.full(dsm.shape, -np.inf, dtype=np.float32)
+        # Unreachable through sun_positions (MIN_ALT_DEG filters), and "nothing shaded" would be
+        # the anti-conservative answer for a sun on the horizon, so this fails loudly instead.
+        raise ValueError(f"sun at or below the horizon: altitude {alt_deg} deg")
     # Unit vector TOWARD the sun in (east, north): azimuth is clockwise from north.
     sx, sy = math.sin(math.radians(az_deg)), math.cos(math.radians(az_deg))
     n = dsm.shape[0]
+    # Square by construction (rasterise and read_chm_grid both produce n x n). A rectangle would
+    # not raise: the column slices would stop at n and the right of the grid would silently
+    # never shade (measured). So it is refused here rather than half-processed.
+    assert dsm.shape[0] == dsm.shape[1], f"square grid required, got {dsm.shape}"
+    # The surface floor is 0 by construction (ground pixels are 0, canopy is clipped >= 0), so
+    # max() alone bounds the reach. If terrain ever enters, this becomes max() - min().
     k_max = int(math.ceil(float(dsm.max()) / (step_m * t)))
     sh = np.full(dsm.shape, -np.inf, dtype=np.float32)
     for k in range(1, k_max + 1):
@@ -129,7 +137,10 @@ def mask_canopy(chm: F32, foot: BoolA) -> tuple[F32, float, float]:
     is harmless either way (DSM = max(building, canopy)), so the rule only bites where canopy
     over a roof stands above that roof."""
     tree = chm > CANOPY_MIN_M
-    foot_d = ndimage.binary_dilation(foot, iterations=1)
+    # 8-connected, matching the labelling below (spec Amendment A2). The 4-connected default
+    # left 29,885 px of Ballygunge footprint ring "outside", each able to flip a whole canopy
+    # component to rooted -- a choice that leaned toward the prediction, so it is declared.
+    foot_d = ndimage.binary_dilation(foot, structure=np.ones((3, 3), dtype=bool), iterations=1)
     lab, nlab = ndimage.label(tree, structure=np.ones((3, 3), dtype=bool))
     rooted = np.zeros(int(nlab) + 1, dtype=bool)
     rooted[np.unique(lab[tree & ~foot_d])] = True
@@ -149,6 +160,24 @@ def classify(sh_b: F32, sh_t: F32, roof_h: F32, raise_m: float) -> tuple[BoolA, 
     b = sh_b > roof_h + raise_m + EPS_M
     t = (sh_t > roof_h + raise_m + EPS_M) & ~b
     return b, t
+
+
+def total(loss_b: F64, loss_t: F64, tau: float) -> F64:
+    """Total loss from its two parts: building shade blocks everything, canopy blocks 1 - tau."""
+    return np.asarray(loss_b + (1.0 - tau) * loss_t, dtype=np.float64)
+
+
+def day_groups(suns: list[tuple[float, float, float]]) -> list[list[int]]:
+    """Indices grouped per sample day. sun_positions emits month by month, hour by hour, so a
+    day ends when the azimuth swings back to morning (drops by more than 90 deg). Kolkata's
+    summer sun passes north of zenith and its azimuth wraps UPWARD through 360 at noon, which
+    this rule does not mistake for a new day."""
+    groups: list[list[int]] = [[]]
+    for i, (_alt, az, _w) in enumerate(suns):
+        if groups[-1] and az < suns[groups[-1][-1]][1] - 90.0:
+            groups.append([])
+        groups[-1].append(i)
+    return groups
 
 
 def _self_check() -> None:
@@ -198,7 +227,8 @@ def _self_check() -> None:
     assert 6 <= nb <= 18, f"building block shaded {nb} px, expected ~12"
     assert 39 <= nt <= 54, f"tree-only shaded {nt} px, expected ~45"
     assert not bool((b & t).any()), "a pixel was both building- and tree-shaded"
-    loss = (nb + (1.0 - TAU) * nt) / float(roof.sum())
+    npx = float(roof.sum())
+    loss = float(total(np.asarray([nb / npx]), np.asarray([nt / npx]), TAU)[0])
     assert abs(loss - (12 + 0.7 * 45) / 400.0) < 0.02, f"composed loss {loss:.4f}"
     # 7. raising the array 2 m clears part of the building's shadow and none of the tree's reach
     b_r, t_r = classify(sh_b, sh_t, roof_h, RAISE_M)
@@ -219,20 +249,24 @@ def _self_check() -> None:
     groups = day_groups([(20.0, 100.0, 1.0), (50.0, 170.0, 1.0), (20.0, 250.0, 1.0),
                          (25.0, 95.0, 1.0), (55.0, 180.0, 1.0)])
     assert groups == [[0, 1, 2], [3, 4]], f"day groups {groups}"
+    # 10. east-west is a separate axis and every case above sits at az 180, where the column
+    #     offset is zero for every k. A mast under a sun due EAST must throw its shadow WEST,
+    #     along its own row, and nowhere else. (A sign flip on the east term survived cases 1-9
+    #     AND the ward cross-check gates, measured; this is the case that kills it.)
+    mast = np.zeros((n, n), dtype=np.float32)
+    mast[60, 60] = 20.0
+    lit = np.argwhere(shadow_height(mast, 30.0, 90.0, step) > EPS_M)
+    assert len(lit) > 0 and int(lit[:, 1].max()) < 60, "east sun did not shade westward"
+    assert int(lit[:, 0].min()) == 60 and int(lit[:, 0].max()) == 60, "east-sun shadow left the mast's row"
+    # 11. connectivity is declared (A2): dilation and labelling are BOTH 8-connected, so a blob
+    #     whose only off-roof pixel touches the roof's corner diagonally is still enclosed.
+    chm = np.zeros((n, n), dtype=np.float32)
+    chm[49, 49] = 9.0                          # diagonal corner pixel, off the roof (rows/cols 50-69)
+    chm[50:53, 50:53] = 9.0                    # the 9-px blob on the roof it connects to
+    masked, kept, dropped = mask_canopy(chm, roof)
+    assert float(masked[50:53, 50:53].max()) == 0.0 and dropped == 1.0 and kept == 0.0, \
+        f"diagonal corner counted as rooted: kept {kept} dropped {dropped}"
     print("  self-check: ok")
-
-
-def day_groups(suns: list[tuple[float, float, float]]) -> list[list[int]]:
-    """Indices grouped per sample day. sun_positions emits month by month, hour by hour, so a
-    day ends when the azimuth swings back to morning (drops by more than 90 deg). Kolkata's
-    summer sun passes north of zenith and its azimuth wraps UPWARD through 360 at noon, which
-    this rule does not mistake for a new day."""
-    groups: list[list[int]] = [[]]
-    for i, (_alt, az, _w) in enumerate(suns):
-        if groups[-1] and az < suns[groups[-1][-1]][1] - 90.0:
-            groups.append([])
-        groups[-1].append(i)
-    return groups
 
 
 def main() -> None:
