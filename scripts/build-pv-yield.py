@@ -12,9 +12,12 @@ good enough to rank roofs and spot the badly shaded ones, not to size debt again
 
 WHAT IS MEASURED AND WHAT IS ASSUMED — the split matters more than any single number:
 
-  MEASURED (ours)      inter-building shading, per building, from real footprints and
-                       heights. Pre-registered, gated, PASSED at 5.14% mean / 28.3% of
-                       roofs losing 5%+ (docs/.../2026-08-21-pv-shading-signtest-PREREG.md).
+  MEASURED (ours)      shading, per building, from real footprints and heights AND the Meta/WRI
+                       1 m canopy (v2, read at 0.5 m). Buildings-only was pre-registered, gated and
+                       PASSED (2026-08-21); the tree term was added 2026-09-05 under its own
+                       pre-registration and dominates: 17-18 pp of a 19-22 % total. Its largest
+                       uncertainty is a MASK RULE, not a physical constant -- see the artefact's
+                       levers block and known-limitations.md section 8.
   MEASURED (external)  GHI, five whole years of NASA POWER hourly in local solar time.
   ASSUMED              the packing factor. One number, declared below, and EVERY yield
                        scales linearly with it. It is the weakest link in the chain and
@@ -300,7 +303,7 @@ def main() -> None:
 
     # A SECOND, SLIMMER COPY FOR THE BROWSER. data/calibration/ is not web-served, so
     # the card cannot read the file above; and it should not, since that file carries
-    # provenance, assumptions and intervals the renderer has no use for. Three parallel
+    # provenance, assumptions and intervals the renderer has no use for. Six parallel
     # arrays, index-aligned to the ward file exactly as load_ward() now enforces.
     #
     # Rounded at the point of writing rather than at the point of display: kWp to 2 dp
@@ -309,6 +312,8 @@ def main() -> None:
     # instead of shipping fifteen digits the method cannot support.
     web = os.path.join(ROOT, "public", "heat-map", "data", f"pv-{args.ward}.json")
     with open(web, "w") as fh:
+        # Carried so the card can never present a screening number as a firm one, and so a
+        # stale artefact is visible rather than silently assumed current.
         json.dump({
             "ward": args.ward,
             "kwp": [round(float(v), 2) for v in kwp],
@@ -320,7 +325,7 @@ def main() -> None:
             "specific_yield": round(y, 1),
             "packing_factor": PACKING_FACTOR,
             "basis": "screening estimate - NASA POWER irradiance, Mumbai packing factor, canopy "
-                     "shading from Meta/WRI CHM v2 (A1 mask, crowns 70% opaque, heights +/-3 m, 0.5 m grid), "
+                     "shading from Meta/WRI CHM v2 (A1 mask, crowns 70% opaque, canopy heights carry the model's 3 m MAE, not propagated, 0.5 m grid), "
                      "no site uncertainty model, not bankable",
         }, fh, separators=(",", ":"))
     kb = os.path.getsize(web) / 1024
