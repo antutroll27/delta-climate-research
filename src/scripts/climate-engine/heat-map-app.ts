@@ -762,8 +762,12 @@ export function mountHeatMap(): () => void {
     setText('solBigK', `Roofs ≥ ${s.threshold_kwp} kWp`);
     setHTML('solBig', `${s.n.toLocaleString()}<small>${Math.round(100 * s.n / n)}% of ${n.toLocaleString()} roofs</small>`);
     setHTML('solSh', `${Math.round(s.share_losing_5pct * 100)}%<small>of those roofs</small>`);
-    setText('solFloor', `Shading costs ${t.shading_loss_gwh_yr.toFixed(1)} GWh a year — at least `
-      + `${(t.mean_loss_strict * 100).toFixed(1)}% of yield under a strict roof mask (headline ${(t.mean_loss * 100).toFixed(1)}%).`);
+    /* mean_loss is the UNWEIGHTED mean over roofs (the laboratory's "all roofs: total
+       mean"); the ward's energy loses less (3.2 of 23.0 GWh in Ballygunge, 14%), so the
+       sentence says "the average roof" and prints the GWh for the ward. */
+    setText('solFloor', `Shading costs ${t.shading_loss_gwh_yr.toFixed(1)} GWh a year. `
+      + `On the average roof it takes ${(t.mean_loss * 100).toFixed(1)}% of the yield, `
+      + `at least ${(t.mean_loss_strict * 100).toFixed(1)}% under a strict roof mask.`);
     paintSolarPane(pv);
   }
 
@@ -790,8 +794,9 @@ export function mountHeatMap(): () => void {
     sum.innerHTML = `<b>${t.capacity_mwp.toFixed(1)} MWp</b> installable across <b>${n.toLocaleString()}</b> real roofs, `
       + `the floor of a <b>${t.capacity_mwp_range[0].toFixed(1)}–${t.capacity_mwp_range[1].toFixed(1)} MWp</b> interval. `
       + `<b>${Math.round(s.share_losing_5pct * 100)}%</b> of the roofs that could carry ${s.threshold_kwp} kWp or more lose at least 5% of their yield to shade. `
-      + `Shading takes <b>${(t.mean_loss * 100).toFixed(1)}%</b> of the ward's yield — <b>at least ${(t.mean_loss_strict * 100).toFixed(1)}%</b> `
-      + `under a strict roof mask; trees are <b>${(t.mean_loss_trees * 100).toFixed(1)} points</b> of it.`;
+      + `On the average roof, shading takes <b>${(t.mean_loss * 100).toFixed(1)}%</b> of the yield — <b>at least ${(t.mean_loss_strict * 100).toFixed(1)}%</b> `
+      + `under a strict roof mask; trees are <b>${(t.mean_loss_trees * 100).toFixed(1)} points</b> of it. `
+      + `Across the ward that is <b>${t.shading_loss_gwh_yr.toFixed(1)} GWh</b> a year.`;
     const byIdx = new Map(registry.map((b) => [b.idx, b] as const));
     const order = [...pv.kwh.keys()].sort((a, b) => pv.kwh[b] - pv.kwh[a]).slice(0, 10);
     list.innerHTML = order.map((i) => {
@@ -810,6 +815,9 @@ export function mountHeatMap(): () => void {
   function buildCsv(pv: PvFile): string {
     const w = wardOf(state.ward);
     const byIdx = new Map(registry.map((b) => [b.idx, b] as const));
+    /* The receipt travels with every row: a sorted sheet keeps it. Written once
+       on row 0, it survived only while the sheet stayed in this order. */
+    const basis = `"${pv.basis.replace(/"/g, '""')}"`;
     const rows = ['idx,lat,lon,footprint_m2,kwp,kwh_yr,loss,loss_buildings,loss_trees,loss_strict,loss_raised,worth_per_yr,tariff_per_kwh,currency,basis'];
     for (let i = 0; i < pv.kwp.length; i += 1) {
       const b = byIdx.get(i);
@@ -817,7 +825,7 @@ export function mountHeatMap(): () => void {
       rows.push([
         i, ll ? ll.lat.toFixed(5) : '', ll ? ll.lon.toFixed(5) : '', b ? Math.round(b.areaM2) : '',
         pv.kwp[i], pv.kwh[i], pv.loss[i], pv.loss_buildings[i], pv.loss_trees[i], pv.loss_strict[i], pv.loss_raised[i],
-        Math.round(pv.kwh[i] * tariff), tariff.toFixed(2), COSTS.currency, i === 0 ? `"${pv.basis.replace(/"/g, '""')}"` : '',
+        Math.round(pv.kwh[i] * tariff), tariff.toFixed(2), COSTS.currency, basis,
       ].join(','));
     }
     return `${rows.join('\n')}\n`;
@@ -980,7 +988,6 @@ export function mountHeatMap(): () => void {
        third would put the Close button past the edge. Clamp the centre so the box
        stays inside the canvas with a margin, and move the leader line by the same
        amount in the other direction so it still points at the building. */
-    // measured once with the rest of the frame's reads; the height only changes on selection or theme
     const EDGE = 12;
     /* The card may not be taller than the canvas minus its margins — beyond that it
        scrolls (.bcard-in has overflow-y:auto) rather than hangs past the edges. The
@@ -991,6 +998,7 @@ export function mountHeatMap(): () => void {
     const inner = bcard.querySelector<HTMLElement>('.bcard-in');
     const maxH = `${Math.max(h - 2 * EDGE, 240)}px`;
     if (inner && inner.style.maxHeight !== maxH) inner.style.maxHeight = maxH;
+    // measured once with the rest of the frame's reads; the height only changes on selection or theme
     const cardH = Math.min(cardBox ? cardBox.height : bcard.offsetHeight, h - 2 * EDGE);
     const lo = Math.min(cardH / 2 + EDGE, h / 2), hi = Math.max(h - cardH / 2 - EDGE, h / 2);
     const cy = Math.min(Math.max(p.y, lo), hi);

@@ -808,6 +808,10 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
        .stage, and a token resolves from where it is DECLARED, not where the
        theme class sits. */
     --studio-ink:#16292b; --studio-muted:#4a5c5e; --studio-accent:#0e7b8c;
+    /* Clay inks for text that the dark theme paints in cyan, bronze and amber:
+       measured against the studio card's sampled ground (~rgb(227 226 223)) at
+       6.1:1, 6.0:1 and 6.3:1. */
+    --studio-ink-teal:#0a5a66; --studio-ink-bronze:#6b4d1f; --studio-ink-amber:#7a5200;
     --sans:'Mona Sans',system-ui,sans-serif; --mono:'Noplato Mono',ui-monospace,'SF Mono',monospace;
     /* The sidebar's width, named because three rules read it and because the pane
        cross-fade's whole argument is about not animating this number. */
@@ -1121,10 +1125,10 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
     border-radius:99px;padding:.22rem 0}
   /* The pill is 88% cream over WHATEVER IT LANDS ON, and where a ring crosses the
      right panel that is rgb(9 20 22) — so the ground under the ink is not the
-     cream but rgb(217 217 215), where #0d6b7d measured 4.31:1 and missed. #0a5a66
-     reads 5.5:1 there and 7.2:1 on the card, so the label clears wherever the ring
-     falls. Sampled from the frame, not computed from the token. */
-  body.studio .ringlab{background:rgb(245 244 241 /.88);color:#0a5a66;border-color:rgb(13 107 125 /.4)}
+     cream but rgb(217 217 215), where #0d6b7d measured 4.31:1 and missed.
+     `--studio-ink-teal` reads 5.5:1 there and 7.2:1 on the card, so the label clears
+     wherever the ring falls. Sampled from the frame, not computed from the token. */
+  body.studio .ringlab{background:rgb(245 244 241 /.88);color:var(--studio-ink-teal);border-color:rgb(13 107 125 /.4)}
 
   /* ── nearest-greenery tag: the FINDING, so it gets the data-chip anatomy ──
      Big value over a small label, in the cooling green of the patches it
@@ -1254,11 +1258,11 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
   .bc-sol dd.sun{color:var(--sun)}
   .bc-sol-note{margin:.4rem 0 0;font:400 .46rem var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--bronze);line-height:1.6}
   /* Clay: amber on the near-white card is 1.7:1, so the card's amber steps down
-     to an ink at 6.3:1 (computed against rgb(245 244 241); the contrast gate never
+     to `--studio-ink-amber` at 6.3:1 (computed against rgb(245 244 241); the contrast gate never
      opens a card, so the number is the receipt). The bronze notes were already
-     2.8:1 on Clay in .bc-prov; both step down to an ink at 7:1. */
-  body.studio .bc-sol .bc-h,body.studio .bc-sol dd.sun{color:#7a5200}
-  body.studio .bc-prov,body.studio .bc-sol-note{color:#6b4d1f}
+     2.8:1 on Clay in .bc-prov; both step down to `--studio-ink-bronze` at 7:1. */
+  body.studio .bc-sol .bc-h,body.studio .bc-sol dd.sun{color:var(--studio-ink-amber)}
+  body.studio .bc-prov,body.studio .bc-sol-note{color:var(--studio-ink-bronze)}
   body.studio .bc-sol{border-top-color:rgb(122 82 0 /.35)}
   /* Per-layer "data receipts" panel — populated from {ward}-layers.json (provenance.ts). */
   .srcbtn{margin:.4rem 0 0;cursor:pointer;font:400 .48rem var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--cyan);background:none;border:0;padding:.15rem 0}
@@ -1302,11 +1306,11 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
      test had opened a card in Clay until 2026-09-06. Ratios below are against the
      card's sampled ground (~rgb(227 226 223)): muted 5.4:1, bronze ink 6:1, teal
      ink 6.1:1 — the cream itself is lighter, so on it they read 6.4, 7.1 and 7.2.
-     The solar block's own amber ink (#7a5200) is set by a more specific rule and
+     The solar block's own amber ink (`--studio-ink-amber`) is set by a more specific rule and
      stands. */
   body.studio .bcard dt{color:var(--studio-muted)}
-  body.studio .bcard dd small{color:#6b4d1f}
-  body.studio .bc-h{color:#0a5a66}
+  body.studio .bcard dd small{color:var(--studio-ink-bronze)}
+  body.studio .bc-h{color:var(--studio-ink-teal)}
   body.studio .bc-x{background:rgb(20 40 42 /.06);color:var(--studio-muted)}
   @media (max-width: 640px){ .bcard{width:196px} }
 

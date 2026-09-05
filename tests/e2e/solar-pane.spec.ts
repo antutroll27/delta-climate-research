@@ -38,6 +38,7 @@ test.describe('the solar screen', () => {
     await expect(page.locator('#solKwp')).toHaveText(/\d+\.\d\s*MWp/, { timeout: 15_000 });
     await expect(page.locator('#solConf')).toContainText('Screening');
     await expect(page.locator('#solFloor')).toContainText('strict roof mask');
+    await expect(page.locator('#solFloor')).toContainText('GWh');
     await expect(page.locator('#solBigK')).toContainText('3 kWp');
   });
 
@@ -45,6 +46,7 @@ test.describe('the solar screen', () => {
     await openSolar(page);
     await expect(page.locator('#solPaneSum')).toContainText('MWp');
     await expect(page.locator('#solPaneSum')).toContainText('strict roof mask');
+    await expect(page.locator('#solPaneSum')).toContainText('average roof');
     await expect(page.locator('#solCur')).not.toBeEmpty();
     await expect(page.locator('#solTariff')).toHaveValue('8.00');
 
@@ -66,6 +68,9 @@ test.describe('the solar screen', () => {
     const row = lines[1].split(',');
     expect(row[12]).toBe('10.00');                 // the tariff the reader set
     expect(row[13]).toBe('INR');                   // the scope's currency, never typed
+    // the basis rides EVERY row, not just row 0 -- the join reassembles the one
+    // quoted field, which carries commas of its own.
+    expect(lines[2].split(',').slice(14).join(',')).toContain('screening');
   });
 
   test('a ranked row selects its building, brings the camera to it, and the card prints the floor inside the canvas', async ({ page }) => {
