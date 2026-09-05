@@ -120,8 +120,28 @@ def shadow_height(dsm: F32, alt_deg: float, az_deg: float, step_m: float) -> F32
 
 def mask_canopy(chm: F32, foot: BoolA) -> tuple[F32, float, float]:
     """Amendment A1 connectedness rule. Returns (masked canopy, share of on-roof canopy kept
-    as overhang, share dropped as enclosed)."""
-    raise NotImplementedError
+    as overhang, share dropped as enclosed).
+
+    Label the connected components of canopy > CANOPY_MIN_M. A component with ANY pixel
+    outside every footprint (dilated by one pixel) is a tree rooted outside: kept whole,
+    overhang included. A component enclosed entirely within footprints has no tree to belong
+    to: a building the model misread as canopy, zeroed. Canopy at or below a roof's own height
+    is harmless either way (DSM = max(building, canopy)), so the rule only bites where canopy
+    over a roof stands above that roof."""
+    tree = chm > CANOPY_MIN_M
+    foot_d = ndimage.binary_dilation(foot, iterations=1)
+    lab, nlab = ndimage.label(tree, structure=np.ones((3, 3), dtype=bool))
+    rooted = np.zeros(int(nlab) + 1, dtype=bool)
+    rooted[np.unique(lab[tree & ~foot_d])] = True
+    rooted[0] = False
+    enclosed = tree & ~rooted[lab]
+    on_roof = tree & foot
+    out = chm.copy()
+    out[enclosed] = 0.0
+    denom = max(1, int(on_roof.sum()))
+    kept = float((on_roof & rooted[lab]).sum()) / denom
+    dropped = float((on_roof & enclosed).sum()) / denom
+    return out, kept, dropped
 
 
 def classify(sh_b: F32, sh_t: F32, roof_h: F32, raise_m: float) -> tuple[BoolA, BoolA]:
@@ -207,7 +227,12 @@ def day_groups(suns: list[tuple[float, float, float]]) -> list[list[int]]:
     day ends when the azimuth swings back to morning (drops by more than 90 deg). Kolkata's
     summer sun passes north of zenith and its azimuth wraps UPWARD through 360 at noon, which
     this rule does not mistake for a new day."""
-    raise NotImplementedError
+    groups: list[list[int]] = [[]]
+    for i, (_alt, az, _w) in enumerate(suns):
+        if groups[-1] and az < suns[groups[-1][-1]][1] - 90.0:
+            groups.append([])
+        groups[-1].append(i)
+    return groups
 
 
 def main() -> None:
