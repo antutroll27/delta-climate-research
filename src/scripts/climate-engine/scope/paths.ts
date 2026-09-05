@@ -193,7 +193,7 @@ export function paths(key: AreaKey): AreaPaths | null {
      Kolkata's IS the funding ask — but it ships nothing. Returning `null` rather
      than a URL makes it unreachable BY CONSTRUCTION: a caller that cannot obtain a
      URL cannot fire a request that 404s, and cannot half-render a city from three
-     files out of ten. That is stronger than every caller remembering to check. */
+     files out of eleven. That is stronger than every caller remembering to check. */
   if (!SHIPPING.has(key)) return null;
 
   return {

@@ -117,6 +117,7 @@ test('paths builds every ward URL from the registry', () => {
   assert.equal(p.surface, '/heat-map/data/ballygunge-surface.png');
   assert.equal(p.canopy, '/heat-map/data/ballygunge-canopy.png');
   assert.equal(p.layers, '/heat-map/data/ballygunge-layers.json');
+  assert.equal(p.pv, '/heat-map/data/pv-ballygunge.json');
 });
 
 test('an area that ships no data resolves to null, never a URL', () => {
@@ -155,7 +156,8 @@ test('every URL paths() emits exists on disk', async () => {
   }
   // Guard the guard: if paths() ever returned {} or every area stopped
   // shipping, the loop above would pass while checking nothing.
-  assert.equal(checked, 30, 'expected 3 shipping areas x 10 files');
+  // eleven since 2026-09-06: the rooftop-solar screen pv-<area>.json joined the bundle
+  assert.equal(checked, 33, 'expected 3 shipping areas x 11 files');
 });
 
 test('every city-level URL exists on disk too', async () => {

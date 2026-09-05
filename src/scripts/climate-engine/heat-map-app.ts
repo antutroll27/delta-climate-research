@@ -1043,12 +1043,20 @@ export function mountHeatMap(): () => void {
      index with no id: a wrong-ward file would hand every roof a stranger's
      figures without a single error, and the card would print them in good faith. */
   const pvCache: Record<string, PvFile | null> = {};
-  function asPvFile(raw: unknown, buildings: number): PvFile | null {
+  function asPvFile(raw: unknown, buildings: number, area: string): PvFile | null {
     if (!raw || typeof raw !== 'object') return null;
     const f = raw as PvFile;
     const arrays = [f.kwp, f.kwh, f.loss, f.loss_buildings, f.loss_trees, f.loss_raised, f.loss_strict];
-    if (!arrays.every((a) => Array.isArray(a) && a.length === buildings) || !f.totals || !f.stratum) {
-      console.warn(`solar screen for ${String(f.ward ?? '?')} does not match this ward's ${buildings} buildings — ignored`);
+    /* Three refusals, all loud. The name, because the three wards happen to have
+       distinct building counts today and a regenerated ward could land on a
+       neighbour's; the lengths, because the join is by index; the element type,
+       because the painters call number methods on these and a file of strings
+       would throw in paintCard rather than here. */
+    const ok = f.ward === area
+      && arrays.every((a) => Array.isArray(a) && a.length === buildings && (a.length === 0 || typeof a[0] === 'number'))
+      && !!f.totals && !!f.stratum;
+    if (!ok) {
+      console.warn(`solar screen "${String(f.ward ?? '?')}" does not match ${area} (${buildings} buildings) — ignored`);
       return null;
     }
     return f;
@@ -1223,7 +1231,7 @@ export function mountHeatMap(): () => void {
 
        Two bare `return`s stood here: one for an area with no row in
        src/data/wards.ts (the flyTo below would take the map to NaN), one for an
-       area the registry says ships no artefacts (nine guaranteed 404s, seven of
+       area the registry says ships no artefacts (ten guaranteed 404s, eight of
        which swallow their own failure, leaving an empty map that looks loaded).
        Both were right to refuse and neither said so, so a tab press against such an
        area was indistinguishable from a click that missed: same map, same readings,
@@ -1236,7 +1244,7 @@ export function mountHeatMap(): () => void {
     }
     const P = paths(name);
     /* Null here is unreachable — `areaRefusal` returns a sentence for exactly that
-       case — and the check is what narrows `AreaPaths | null` for the nine uses
+       case — and the check is what narrows `AreaPaths | null` for the ten uses
        below without a `!`, which would be a promise to the compiler with nothing
        keeping it. */
     if (P === null) return;
@@ -1302,7 +1310,7 @@ export function mountHeatMap(): () => void {
       cache[name] = d; terrainCache[name] = terrain; waterCache[name] = water;
       surfaceCache[name] = wardSurface; roadsCache[name] = roads; labelCache[name] = labels; provCache[name] = provenance;
       canopyCache[name] = canopy;
-      pvCache[name] = asPvFile(pvRaw, d.b.length);
+      pvCache[name] = asPvFile(pvRaw, d.b.length, areaOf(name));
       void loadDcUrs(name); void loadHeatwave(name);
       /* The scope moves WITH the area. `state.climate` is what `currentParams`
          and `applyInterventions` read, so leaving it behind would run the new
