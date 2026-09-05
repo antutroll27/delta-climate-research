@@ -226,3 +226,42 @@ Three derivations were tried and rejected:
 So the crest is authored: `crestMin` 0.22, `crestPower` 0.65, chosen by looking
 at three variants side by side. **Which end is high remains unverified**, and
 `flip: true` reverses it if someone with a reference says otherwise.
+
+
+## Procedural massing for the remaining prisms: DECIDED AGAINST (2026-09-05)
+
+461 of the 520 Creek buildings over 100 m are plain vertical prisms. Giving them
+rule-driven crowns, setbacks and tapers would be the single biggest visual change
+available, and the founder was asked directly. **The answer was no, for now.**
+
+It would not have introduced fake *data*. Footprints are untouched — and they are
+the only building input the flood solve reads, since `fetch-dubai-terrain.py`'s
+`h` array is the terrain heightfield, not building heights. Cited heights would
+not move. No number anyone quotes would change, and no solver currently consumes
+Dubai building shape at all.
+
+It would have introduced fake *form*, and two costs decided it:
+
+**Scale changes what the label can mean.** Four authored landmarks are
+enumerable — this document names them and anyone can check. 461 procedurally
+massed buildings are not. The honest caption becomes "most of the Creek skyline
+is invented", which is a far heavier thing to carry into a room than "these four
+are authored".
+
+**A box is honest ignorance; a crowned tower is confident invention.** A prism
+says "we do not know this building's shape". Procedural massing ADDS apparent
+information that is not there, which makes the model look more knowledgeable than
+it is. That is a worse failure than being visibly wrong, because it is harder for
+a viewer to detect — the same shape as the tent that passed every automated gate.
+
+**The live risk path, for whoever revisits this.** Nothing computes on Dubai
+building geometry today: the shadow and solar scripts are Kolkata work and do not
+mention Dubai. But if Track F ever generalises, invented setbacks would produce
+invented shadows, and that WOULD be fake data. The separation today is that
+nobody has wired it up, not that anything prevents it.
+
+**If it is ever revisited, the condition is that the boundary must be structural
+rather than procedural**: emit procedural massing as separate objects the way
+`lm.*` landmarks are, and gate that no solver input can see that mesh. Then "it
+cannot reach a number" is a property of the code rather than a promise in a
+document.
