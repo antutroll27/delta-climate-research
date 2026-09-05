@@ -401,6 +401,10 @@ def run_ward(ward_id: str) -> None:
             "per_building_loss_buildings": [round(float(v), 4) for v in l_b],
             "per_building_loss_trees": [round(float(v), 4) for v in trees],
             "per_building_loss_total_raised": [round(float(v), 4) for v in raised],
+            # A5: the strict-mask cell per building, so the card can print the floor beside the
+            # headline. Same tau, same heights, canopy zeroed over every footprint (dilated one
+            # pixel, 8-connected). Computed in every run; published from this one.
+            "per_building_loss_total_strict": [round(float(v), 4) for v in strict_total],
             "per_building_area_m2": [round(float(a), 1) for a in areas],
             "per_building_height_m": [round(float(h), 1) for h in heights],
             "cross_check": {"polygon_mean_pct": round(mean_p * 100, 3), "raster_mean_pct": round(mean_r * 100, 3),

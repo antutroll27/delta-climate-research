@@ -207,7 +207,8 @@ def main() -> None:
     if sh["ward"] != args.ward:
         sys.exit(f"  shading artefact is for {sh['ward']}, not {args.ward} — rerun measure-pv-tree-shading.py")
     for key in ("per_building_loss_total", "per_building_loss_buildings",
-                "per_building_loss_trees", "per_building_loss_total_raised", "per_building_area_m2"):
+                "per_building_loss_trees", "per_building_loss_total_raised",
+                "per_building_loss_total_strict", "per_building_area_m2"):
         if key not in sh:
             sys.exit(f"  shading artefact has no {key} — rerun measure-pv-tree-shading.py")
     if not (sh["cross_check"]["pass"] and sh["sanity"]["loss_rises_as_sun_falls"]["pass"]):
@@ -232,6 +233,7 @@ def main() -> None:
     loss_b = np.asarray(sh["per_building_loss_buildings"], dtype=float)
     loss_t = np.asarray(sh["per_building_loss_trees"], dtype=float)
     loss_raised = np.asarray(sh["per_building_loss_total_raised"], dtype=float)
+    loss_strict = np.asarray(sh["per_building_loss_total_strict"], dtype=float)
     usable = area * PACKING_FACTOR
     kwp = usable / M2_PER_KWP
     kwh = kwp * y * (1.0 - loss)
@@ -303,7 +305,7 @@ def main() -> None:
 
     # A SECOND, SLIMMER COPY FOR THE BROWSER. data/calibration/ is not web-served, so
     # the card cannot read the file above; and it should not, since that file carries
-    # provenance, assumptions and intervals the renderer has no use for. Six parallel
+    # provenance, assumptions and intervals the renderer has no use for. Seven parallel
     # arrays, index-aligned to the ward file exactly as load_ward() now enforces.
     #
     # Rounded at the point of writing rather than at the point of display: kWp to 2 dp
@@ -322,8 +324,21 @@ def main() -> None:
             "loss_buildings": [round(float(v), 3) for v in loss_b],
             "loss_trees": [round(float(v), 3) for v in loss_t],
             "loss_raised": [round(float(v), 3) for v in loss_raised],
+            "loss_strict": [round(float(v), 3) for v in loss_strict],
             "specific_yield": round(y, 1),
             "packing_factor": PACKING_FACTOR,
+            # A5: the ward panel prints the laboratory's numbers, never re-derived in the browser
+            "totals": {"capacity_mwp": round(float(kwp.sum()) / 1000, 3),
+                       "capacity_mwp_range": [round(float(kwp.sum()) / PACKING_FACTOR * pf / 1000, 3) for pf in PACKING_RANGE],
+                       "generation_gwh_yr": round(float(kwh.sum()) / 1e6, 3),
+                       "shading_loss_gwh_yr": round(float((kwp * y).sum() - kwh.sum()) / 1e6, 3),
+                       "mean_loss": round(float(loss.mean()), 4),
+                       "mean_loss_strict": round(float(loss_strict.mean()), 4),
+                       "mean_loss_trees": round(float(loss_t.mean()), 4),
+                       "mean_loss_raised": round(float(loss_raised.mean()), 4)},
+            "stratum": {"threshold_kwp": 3.0, "n": int((kwp >= 3.0).sum()),
+                        "share_losing_5pct": round(float((loss[kwp >= 3.0] >= 0.05).mean()), 4),
+                        "mean_loss": round(float(loss[kwp >= 3.0].mean()), 4)},
             "basis": "screening estimate - NASA POWER irradiance, Mumbai packing factor, canopy "
                      "shading from Meta/WRI CHM v2 (A1 mask, crowns 70% opaque, canopy heights carry the model's 3 m MAE, not propagated, 0.5 m grid), "
                      "no site uncertainty model, not bankable",
