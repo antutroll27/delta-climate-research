@@ -742,34 +742,61 @@ export function mountHeatMap(): () => void {
     box.removeAttribute('hidden');
   }
   /* ── rooftop solar, whole ward ──
-     The laboratory's totals and stratum, printed; the tariff line is the one
-     product this file computes. Hidden as a block when no screen ships. */
+     The laboratory's totals and stratum, printed twice from one function: into the
+     Solar pane (its home) and into the legend's overlay (on request). The right
+     panel no longer carries it — a block stacked there pushed the colour legend
+     below the fold (2026-09-06). */
   function paintSolarWard() {
     const pv = pvCache[state.ward];
+    const has = pv != null;
     const show = (id: string, on: boolean) => {
       const e = el(id);
       if (!e) return;
       if (on) e.removeAttribute('hidden'); else e.setAttribute('hidden', '');
     };
-    const has = pv != null;
-    for (const id of ['solm', 'solRows', 'solFloor']) show(id, has);
-    if (!pv) { paintSolarPane(null); return; }
+    show('solPaneBlock', has);
+    show('solToggle', has);
+    if (!has) { collapseSolar(); paintSolarPane(null); return; }
     const t = pv.totals, s = pv.stratum, n = pv.kwp.length;
-    setHTML('solKwp', `${t.capacity_mwp.toFixed(1)}<span class="u">MWp</span>`);
-    setHTML('solConf', `Screening · <b>${t.capacity_mwp_range[0].toFixed(1)}–${t.capacity_mwp_range[1].toFixed(1)} MWp</b> · not bankable`);
-    setHTML('solKwh', `${t.generation_gwh_yr.toFixed(1)}<small>GWh/yr · floor</small>`);
-    setHTML('solRs', `${fmtMoney(t.generation_gwh_yr * 1e6 * tariff, COSTS)}<small>per yr at ${fmtRate(tariff, COSTS)} · assumed</small>`);
-    setText('solBigK', `Roofs ≥ ${s.threshold_kwp} kWp`);
-    setHTML('solBig', `${s.n.toLocaleString()}<small>${Math.round(100 * s.n / n)}% of ${n.toLocaleString()} roofs</small>`);
-    setHTML('solSh', `${Math.round(s.share_losing_5pct * 100)}%<small>of those roofs</small>`);
-    /* mean_loss is the UNWEIGHTED mean over roofs (the laboratory's "all roofs: total
-       mean"); the ward's energy loses less (3.2 of 23.0 GWh in Ballygunge, 14%), so the
-       sentence says "the average roof" and prints the GWh for the ward. */
-    setText('solFloor', `Shading costs ${t.shading_loss_gwh_yr.toFixed(1)} GWh a year. `
-      + `On the average roof it takes ${(t.mean_loss * 100).toFixed(1)}% of the yield, `
-      + `at least ${(t.mean_loss_strict * 100).toFixed(1)}% under a strict roof mask.`);
+    for (const pre of ['sol', 'solPane'] as const) {
+      setHTML(`${pre}Kwp`, `${t.capacity_mwp.toFixed(1)}<span class="u">MWp</span>`);
+      setHTML(`${pre}Conf`, `Screening · <b>${t.capacity_mwp_range[0].toFixed(1)}–${t.capacity_mwp_range[1].toFixed(1)} MWp</b> · not bankable`);
+      /* mean_loss is the UNWEIGHTED mean over roofs (the laboratory's "all roofs: total
+         mean"); the ward's energy loses less, so the sentence says "the average roof"
+         and prints the GWh for the ward. */
+      setText(`${pre}Floor`, `Shading costs ${t.shading_loss_gwh_yr.toFixed(1)} GWh a year. On the average roof it takes `
+        + `${(t.mean_loss * 100).toFixed(1)}% of the yield, at least ${(t.mean_loss_strict * 100).toFixed(1)}% under a strict roof mask.`);
+      setHTML(`${pre}Kwh`, `${t.generation_gwh_yr.toFixed(1)}<small>GWh/yr · floor</small>`);
+      setHTML(`${pre}Rs`, `${fmtMoney(t.generation_gwh_yr * 1e6 * tariff, COSTS)}<small>per yr at ${fmtRate(tariff, COSTS)} · assumed</small>`);
+      setText(`${pre}BigK`, `Roofs ≥ ${s.threshold_kwp} kWp`);
+      setHTML(`${pre}Big`, `${s.n.toLocaleString()}<small>${Math.round(100 * s.n / n)}% of ${n.toLocaleString()} roofs</small>`);
+      setHTML(`${pre}Sh`, `${Math.round(s.share_losing_5pct * 100)}%<small>of those roofs</small>`);
+    }
     paintSolarPane(pv);
   }
+  /* The legend overlay: collapsed by default, expanded on request, and collapsed again
+     when the ward changes to one with no screen. Escape collapses it too. */
+  function expandSolar() {
+    el('solOverlay')?.removeAttribute('hidden');
+    el('solToggle')?.setAttribute('aria-expanded', 'true');
+    el('solCollapse')?.focus();
+  }
+  function collapseSolar() {
+    const ov = el('solOverlay');
+    if (!ov || ov.hasAttribute('hidden')) return;
+    ov.setAttribute('hidden', '');
+    el('solToggle')?.setAttribute('aria-expanded', 'false');
+    el('solToggle')?.focus();
+  }
+  el('solToggle')?.addEventListener('click', expandSolar);
+  el('solCollapse')?.addEventListener('click', collapseSolar);
+  const onSolKey = (e: KeyboardEvent) => { if (e.key === 'Escape') collapseSolar(); };
+  el('solOverlay')?.addEventListener('keydown', onSolKey);
+  cleanup.push(() => {
+    el('solToggle')?.removeEventListener('click', expandSolar);
+    el('solCollapse')?.removeEventListener('click', collapseSolar);
+    el('solOverlay')?.removeEventListener('keydown', onSolKey);
+  });
 
   /* ── the Solar pane ──
      The ten best roofs by yield, each row a building on the map; the download is

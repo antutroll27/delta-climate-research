@@ -34,12 +34,25 @@ test.describe('the solar screen', () => {
   test.setTimeout(120_000);
   test.beforeEach(async ({ page }) => { await boot(page); });
 
-  test('the ward panel prints the floor beside the headline', async ({ page }) => {
-    await expect(page.locator('#solKwp')).toHaveText(/\d+\.\d\s*MWp/, { timeout: 15_000 });
-    await expect(page.locator('#solConf')).toContainText('Screening');
+  test('the ward block lives in the Solar pane and the legend can show it on request', async ({ page }) => {
+    await openSolar(page);
+    await expect(page.locator('#solPaneKwp')).toHaveText(/\d+\.\d\s*MWp/, { timeout: 15_000 });
+    await expect(page.locator('#solPaneConf')).toContainText('Screening');
+    await expect(page.locator('#solPaneFloor')).toContainText('strict roof mask');
+    await expect(page.locator('#solPaneFloor')).toContainText('GWh');
+    await expect(page.locator('#solPaneBigK')).toContainText('3 kWp');
+    /* The legend keeps its place: its header is inside the right rail's visible box,
+       and the solar numbers appear over it only when asked. */
+    const rail = (await page.locator('.rail-r').boundingBox())!;
+    const head = (await page.locator('.legend .legend-head').first().boundingBox())!;
+    expect(head.y).toBeLessThan(rail.y + rail.height);
+    await expect(page.locator('#solOverlay')).toBeHidden();
+    await page.locator('#solToggle').click();
+    await expect(page.locator('#solOverlay')).toBeVisible();
+    await expect(page.locator('#solKwp')).toHaveText(/\d+\.\d\s*MWp/);
     await expect(page.locator('#solFloor')).toContainText('strict roof mask');
-    await expect(page.locator('#solFloor')).toContainText('GWh');
-    await expect(page.locator('#solBigK')).toContainText('3 kWp');
+    await page.locator('#solCollapse').click();
+    await expect(page.locator('#solOverlay')).toBeHidden();
   });
 
   test('the Solar pane ranks ten roofs, remembers the tariff, and hands over every roof', async ({ page }) => {
@@ -50,10 +63,10 @@ test.describe('the solar screen', () => {
     await expect(page.locator('#solCur')).not.toBeEmpty();
     await expect(page.locator('#solTariff')).toHaveValue('8.00');
 
-    const before = await page.locator('#solRs').innerText();
+    const before = await page.locator('#solPaneRs').innerText();
     await page.locator('#solTariff').fill('10');
-    await expect(page.locator('#solRs')).not.toHaveText(before);
-    await expect(page.locator('#solRs')).toContainText('10.00');
+    await expect(page.locator('#solPaneRs')).not.toHaveText(before);
+    await expect(page.locator('#solPaneRs')).toContainText('10.00');
     await page.reload();
     await expect(page.locator('#lst')).not.toContainText('—', { timeout: 30_000 });
     await expect(page.locator('#solTariff')).toHaveValue('10.00');

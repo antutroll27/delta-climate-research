@@ -262,6 +262,21 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
           {scope.area.hasData ? (
           <Fragment>
           <p class="pane-note" id="solPaneSum">Loading the rooftop-solar screen…</p>
+          {/* THE WARD BLOCK, at home in the pane rather than on the right panel, where it
+              pushed the colour legend off-screen (2026-09-06). Same numbers, same
+              painter, pane-prefixed ids. */}
+          <div class="solblock" id="solPaneBlock">
+            <div class="k">Rooftop solar · installable, whole ward</div>
+            <div class="big" id="solPaneKwp">—<span class="u">MWp</span></div>
+            <div class="conf screening" id="solPaneConf"></div>
+            <p class="solfloor" id="solPaneFloor"></p>
+            <div class="mrow">
+              <div><div class="k">Annual yield</div><div class="val" id="solPaneKwh">—</div></div>
+              <div><div class="k">Worth at tariff</div><div class="val sun" id="solPaneRs">—</div></div>
+              <div><div class="k" id="solPaneBigK">Roofs ≥ 3 kWp</div><div class="val" id="solPaneBig">—</div></div>
+              <div><div class="k">Losing ≥ 5 %, of those</div><div class="val sun" id="solPaneSh">—</div></div>
+            </div>
+          </div>
           <div class="sol-tariff">
             <label for="solTariff">Tariff · assumed · change it</label>
             <span><span id="solCur" aria-hidden="true"></span><input id="solTariff" type="number" inputmode="decimal" min="0" step="0.25" value="8.00" aria-describedby="solTariffNote"> / kWh</span>
@@ -576,23 +591,6 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
       </div>
       <div class="metric sep" style="padding-bottom:0"><div class="k">Heat-stress distribution</div></div>
       <div class="histo" id="histo"></div>
-      {/* ROOFTOP SOLAR, whole ward. Amber, not cyan: the heat above is CALIBRATED
-          against ECOSTRESS; this is a SCREENING estimate, and the chip says so.
-          Every number is the laboratory's (`totals`, `stratum` in the ward's solar
-          file); the browser multiplies by the tariff and nothing else. Hidden when
-          no screen ships for the area. */}
-      <div class="metric sep solm" id="solm" hidden>
-        <div class="k">Rooftop solar · installable, whole ward</div>
-        <div class="lst sun" id="solKwp">—<span class="u">MWp</span></div>
-        <div class="conf screening" id="solConf"></div>
-        <p class="solfloor" id="solFloor" hidden></p>
-      </div>
-      <div class="mrow solm" id="solRows" hidden>
-        <div><div class="k">Annual yield</div><div class="val" id="solKwh">—</div></div>
-        <div><div class="k">Worth at tariff</div><div class="val sun" id="solRs">—</div></div>
-        <div><div class="k" id="solBigK">Roofs ≥ 3 kWp</div><div class="val" id="solBig">—</div></div>
-        <div><div class="k">Losing ≥ 5 %, of those</div><div class="val sun" id="solSh">—</div></div>
-      </div>
       {/* The ward record used to end this card. It is now the Reports pane's one
           piece of content — a download named after itself, in the section named
           after it, rather than a bronze button under a histogram. One element, one
@@ -600,7 +598,12 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
     </aside>
 
     <div class="legend">
-      <div class="k" style="margin-bottom:.6rem"><span>What the colours mean</span></div>
+      <div class="k legend-head" style="margin-bottom:.6rem"><span>What the colours mean</span>
+        {/* The ward's solar numbers, on request, OVER the legend rather than above it:
+            a block stacked in the rail pushed the colour key below the fold. Hidden
+            until a solar screen ships for the area; collapsed by default. */}
+        <button class="solbtn" id="solToggle" type="button" aria-expanded="false" aria-controls="solOverlay" hidden>Solar ▸</button>
+      </div>
       {/* `style` is an attribute whose CONTENT is CSS, unlike `stroke` above, so
           `var()` resolves here normally. These swatches are inside `.stage`, which
           is where the tokens are declared. */}
@@ -623,6 +626,18 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
       <div class="attr">Basemap © OpenStreetMap · OpenFreeMap · Footprints © Overture Maps Foundation (ODbL) · Heights Google Open Buildings 2.5D (CC BY 4.0) · Water © OpenStreetMap (ODbL) · Ground SRTM via AWS terrain tiles, <span id="terrLab">indicative</span> · Live weather © Met Norway (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>) · Cloud deck drawn at 320 m, real base ~700 m · left-drag orbit · right-drag pan · scroll zoom</div>
       <button class="srcbtn" id="srcBtn" type="button" aria-expanded="false" aria-controls="srcPanel">Data receipts ↗</button>
       <div class="srcpanel" id="srcPanel" role="dialog" aria-label="Per-layer data provenance" hidden></div>
+      <div class="soloverlay" id="solOverlay" hidden role="region" aria-label="Rooftop solar, whole ward">
+        <div class="k legend-head"><span>Rooftop solar · whole ward</span><button class="solbtn" id="solCollapse" type="button" aria-controls="solOverlay">◂ Colours</button></div>
+        <div class="big" id="solKwp">—<span class="u">MWp</span></div>
+        <div class="conf screening" id="solConf"></div>
+        <p class="solfloor" id="solFloor"></p>
+        <div class="mrow">
+          <div><div class="k">Annual yield</div><div class="val" id="solKwh">—</div></div>
+          <div><div class="k">Worth at tariff</div><div class="val sun" id="solRs">—</div></div>
+          <div><div class="k" id="solBigK">Roofs ≥ 3 kWp</div><div class="val" id="solBig">—</div></div>
+          <div><div class="k">Losing ≥ 5 %, of those</div><div class="val sun" id="solSh">—</div></div>
+        </div>
+      </div>
     </div>
     </div>
   </div>
@@ -1606,11 +1621,28 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
      panel ground is dark in both themes, so amber clears 4.5:1 unaided
      (10.2:1 on the panel ground rgb(9 20 22)). */
   .metric.sep{border-top:1px solid var(--line)}
-  .solm .lst.sun{color:var(--sun)}
   .mrow .val.sun{color:var(--sun)}
   .mrow .val small{display:block;font-family:var(--mono);font-size:.5rem;letter-spacing:.08em;text-transform:uppercase;color:var(--bronze);margin-top:2px}
   .conf.screening{background:rgb(242 181 68 /.1);border:1px solid rgb(242 181 68 /.4);color:var(--paper)}
-  .solfloor{margin:10px 0 0;padding:0;font-family:var(--sans);font-size:.66rem;line-height:1.45;color:var(--sun)}
+  /* THE WARD BLOCK, in the pane and in the legend overlay: the heat panel's grammar in
+     the screening ink, on dark grounds in both themes. */
+  .solblock,.soloverlay{display:flex;flex-direction:column;gap:8px}
+  /* NO GLOBAL `[hidden]` RESET EXISTS IN THIS SHEET — it hides per rule (`.srcpanel[hidden]`,
+     `.conf[hidden]`), and an AUTHOR `display:flex` beats the UA's `[hidden]{display:none}`
+     whatever the specificity. Without this line the overlay would ship open. */
+  .solblock[hidden],.soloverlay[hidden]{display:none}
+  .solblock .k,.soloverlay .k{font-family:var(--sans);font-size:.62rem;font-weight:450;letter-spacing:.005em;color:var(--ink);line-height:1.35}
+  .solblock .big,.soloverlay .big{font-family:var(--mono);font-size:1.9rem;line-height:1;color:var(--sun);letter-spacing:.01em}
+  .solblock .big .u,.soloverlay .big .u{font-size:.8rem;margin-left:.3rem;color:var(--ink)}
+  .solblock .mrow,.soloverlay .mrow{padding:0;gap:8px 10px}
+  .solfloor{margin:0;font-family:var(--sans);font-size:.66rem;line-height:1.45;color:var(--sun)}
+  .solblock{padding:10px 0 4px;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+  .legend-head{display:flex;justify-content:space-between;align-items:center;gap:8px}
+  .solbtn{font:400 .5rem var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--sun);background:none;border:1px solid var(--line-hi);border-radius:5px;padding:.3rem .5rem;cursor:pointer}
+  .solbtn:hover{color:var(--paper)} .solbtn:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+  /* the overlay sits ON the legend, inside its box, and scrolls if the box is shorter.
+     `.legend` already declares position:relative in its own rule, so it is not repeated. */
+  .soloverlay{position:absolute;inset:0;padding:12px 15px;background:rgb(9 20 22 /.98);border-radius:12px;overflow:auto;z-index:2}
   .histo::after{content:"";position:absolute;inset-inline:16px;bottom:16px;height:1px;background:var(--line)}
 
   /* SOLID, NOT A GRADIENT, AND THAT WAS THE SECOND HALF OF THE BUG. The fill was
