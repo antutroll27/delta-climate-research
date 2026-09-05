@@ -1153,7 +1153,8 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
   .bcard[data-side='left'] .lead::before{right:-3px}
   .bcard-in{pointer-events:auto;background:rgb(5 6 6 /.86);backdrop-filter:blur(9px);
     border:1px solid rgb(111 202 214 /.4);border-radius:11px;padding:11px 13px;
-    box-shadow:0 14px 40px rgb(0 0 0 /.45)}
+    box-shadow:0 14px 40px rgb(0 0 0 /.45);
+    max-height:calc(100dvh - 24px);overflow-y:auto;overscroll-behavior:contain}
   .bc-h{display:flex;justify-content:space-between;font:400 .5rem var(--mono);letter-spacing:.16em;
     text-transform:uppercase;color:var(--cyan);margin-bottom:.5rem}
   .bcard dl{display:grid;grid-template-columns:auto 1fr;gap:.22rem .7rem;margin:0;font-size:.7rem}
@@ -1182,9 +1183,12 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
   .bc-sol .bc-h{color:var(--sun);margin-bottom:.35rem}
   .bc-sol dd.sun{color:var(--sun)}
   .bc-sol-note{margin:.4rem 0 0;font:400 .46rem var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--bronze);line-height:1.6}
-  /* Clay: amber on the near-white card fails 4.5:1, so the card's amber steps
-     down to an ink that clears it; the studio contrast gate is the proof. */
+  /* Clay: amber on the near-white card is 1.7:1, so the card's amber steps down
+     to an ink at 6.3:1 (computed against rgb(245 244 241); the contrast gate never
+     opens a card, so the number is the receipt). The bronze notes were already
+     2.8:1 on Clay in .bc-prov; both step down to an ink at 7:1. */
   body.studio .bc-sol .bc-h,body.studio .bc-sol dd.sun{color:#7a5200}
+  body.studio .bc-prov,body.studio .bc-sol-note{color:#6b4d1f}
   body.studio .bc-sol{border-top-color:rgb(122 82 0 /.35)}
   /* Per-layer "data receipts" panel — populated from {ward}-layers.json (provenance.ts). */
   .srcbtn{margin:.4rem 0 0;cursor:pointer;font:400 .48rem var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--cyan);background:none;border:0;padding:.15rem 0}

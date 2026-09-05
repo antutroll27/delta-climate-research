@@ -52,7 +52,7 @@ import { SELECT_SYNC_EVENT } from './shell/select-field.ts';
 import { isLayerId, type LayerId } from './scope/layers.ts';
 import { resolve, requireCosts } from './scope/resolve.ts';
 import { areaPageTitle, areaPageDescription } from './scope/page-meta.ts';
-import { fmtMoney } from './money.ts';
+import { fmtMoney, currencyMark } from './money.ts';
 import { areaPath, paths, cityPaths } from './scope/paths.ts';
 import { areaRefusal } from './scope/reachability.ts';
 import { isAreaKey, splitKey, type AreaKey } from './scope/registry.ts';
@@ -712,7 +712,8 @@ export function mountHeatMap(): () => void {
 
   /* ── rooftop solar, per building ──
      Every figure is read from the ward's solar file by the building's index; the
-     only arithmetic here is rupees = kWh × tariff. The floor is the strict-mask
+     only arithmetic here is money = kWh × tariff, printed by the scope's own
+     formatter so the country names the currency. The floor is the strict-mask
      cell — the mask rule is the largest lever in the estimate (spec §2.4) — and
      it prints wherever the headline does. */
   const TARIFF_KEY = 'delta:hm-tariff';
@@ -725,21 +726,19 @@ export function mountHeatMap(): () => void {
     const t = Number(localStorage.getItem(TARIFF_KEY));
     if (Number.isFinite(t) && t > 0) tariff = t;
   } catch { /* default stands */ }
-  const inr = (v: number): string => v >= 1e7 ? `₹${(v / 1e7).toFixed(1)} cr`
-    : v >= 1e5 ? `₹${(v / 1e5).toFixed(1)} L` : `₹${Math.round(v).toLocaleString()}`;
   const pct = (f: number): string => (f < 0.005 ? 'none' : `−${Math.round(f * 100)}%`);
   function paintSolarCard(b: BuildingMeta) {
     const box = el('bcSol');
-    const pv = pvCache[state.ward];
     if (!box) return;
+    const pv = pvCache[state.ward];
     if (!pv) { box.setAttribute('hidden', ''); return; }
     const i = b.idx;
     setHTML('bcSolKwp', `${pv.kwp[i].toFixed(1)} kWp<small>${Math.round(pv.packing_factor * 100)}% of roof · floor</small>`);
     setHTML('bcSolKwh', `${Math.round(pv.kwh[i]).toLocaleString()} kWh/yr<small>${Math.round(pv.specific_yield).toLocaleString()} kWh per kWp</small>`);
-    setHTML('bcSolLoss', `${pct(pv.loss[i])}<small>of which trees ${Math.round(pv.loss_trees[i] * 100)}% · annual</small>`);
+    setHTML('bcSolLoss', `${pct(pv.loss[i])}<small>of which trees ${pv.loss_trees[i] < 0.005 ? 'under 1%' : `${Math.round(pv.loss_trees[i] * 100)}%`} · annual</small>`);
     setHTML('bcSolFloor', `${pct(pv.loss_strict[i])}<small>under a strict roof mask</small>`);
     setHTML('bcSolRaised', `${pct(pv.loss_raised[i])}<small>elevated mounting · what-if</small>`);
-    setHTML('bcSolRs', `${inr(pv.kwh[i] * tariff)}/yr<small>at ₹${tariff.toFixed(2)} per kWh · assumed</small>`);
+    setHTML('bcSolRs', `${fmtMoney(pv.kwh[i] * tariff, COSTS)}/yr<small>at ${currencyMark(COSTS)}${tariff.toFixed(2)} per kWh · assumed</small>`);
     box.removeAttribute('hidden');
   }
 
@@ -847,7 +846,25 @@ export function mountHeatMap(): () => void {
     const side = p.x > w - 268 ? 'left' : 'right';
     bcard.dataset.side = side;
     const dx = side === 'right' ? p.x + 30 : p.x - 260;
-    bcard.style.transform = `translate3d(${Math.round(dx)}px, ${Math.round(p.y)}px, 0) translateY(-50%)`;
+    /* KEEP THE CARD ON SCREEN. The card is centred on the building's apex, and
+       with the solar block it stands ~690px tall, so an apex in the top or bottom
+       third would put the Close button past the edge. Clamp the centre so the box
+       stays inside the canvas with a margin, and move the leader line by the same
+       amount in the other direction so it still points at the building. */
+    const cardH = bcard.offsetHeight;
+    const EDGE = 12;
+    const lo = Math.min(cardH / 2 + EDGE, h / 2), hi = Math.max(h - cardH / 2 - EDGE, h / 2);
+    const cy = Math.min(Math.max(p.y, lo), hi);
+    const shift = cy - p.y;
+    bcard.style.transform = `translate3d(${Math.round(dx)}px, ${Math.round(cy)}px, 0) translateY(-50%)`;
+    const lead = bcard.querySelector<HTMLElement>('.lead');
+    if (lead) {
+      /* The leader lives at the card's vertical middle; after a shift it would
+         point `shift` px away from the apex, so it slides back — within the card,
+         never past its corners. */
+      const leadY = Math.min(Math.max(cardH / 2 - shift, 8), Math.max(cardH - 8, 8));
+      lead.style.top = shift === 0 ? '' : `${Math.round(leadY)}px`;
+    }
   }
 
   /* ── the tag's entrance ──
@@ -1265,8 +1282,9 @@ export function mountHeatMap(): () => void {
 
        Two bare `return`s stood here: one for an area with no row in
        src/data/wards.ts (the flyTo below would take the map to NaN), one for an
-       area the registry says ships no artefacts (ten guaranteed 404s, eight of
-       which swallow their own failure, leaving an empty map that looks loaded).
+       area the registry says ships no artefacts (ten guaranteed 404s, nine of
+       which swallow their own failure (eight wrapped in `optional`, and the
+       surface loader swallows its own), leaving an empty map that looks loaded).
        Both were right to refuse and neither said so, so a tab press against such an
        area was indistinguishable from a click that missed: same map, same readings,
        same highlight. `areaRefusal` holds both tests and the sentence for each. */
@@ -1278,7 +1296,7 @@ export function mountHeatMap(): () => void {
     }
     const P = paths(name);
     /* Null here is unreachable — `areaRefusal` returns a sentence for exactly that
-       case — and the check is what narrows `AreaPaths | null` for the ten uses
+       case — and the check is what narrows `AreaPaths | null` for the eleven uses
        below without a `!`, which would be a promise to the compiler with nothing
        keeping it. */
     if (P === null) return;
