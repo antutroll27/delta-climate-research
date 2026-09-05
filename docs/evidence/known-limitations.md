@@ -428,9 +428,10 @@ over a 25–50 m shadow run).
 > **ADDENDUM 2026-09-05 — trees are now in the shading pass, and the shipped loss is buildings + trees.**
 > Pre-registered (`docs/superpowers/specs/2026-09-05-pv-tree-shading-design.md`, Amendments A1–A4) and run
 > as written: raster shadow-casting on a 0.5 m surface of footprints plus the Meta/WRI CHM v2, cross-checked
-> against the registered polygon run on buildings alone before a tree was counted. Central cell = τ 0.30,
-> stated canopy heights, A1 connectedness mask, receiver at the roof plane. Both predictions held in all
-> three wards: trees exceed buildings on installable roofs, and the total never falls below buildings-only.
+> against the registered polygon run on buildings alone, and refusing to publish anything if that check fails.
+> Central cell = τ 0.30, stated canopy heights, A1 connectedness mask, receiver at the roof plane. Both
+> predictions held in all three wards: trees exceed buildings on installable roofs, and the total never falls
+> below buildings-only.
 >
 > | ward | cross-check mean / share (pp of 1.0 / 3.0) | all roofs: total mean · share ≥ 5 % | ≥ 3 kWp: total · share | trees vs buildings, ≥ 3 kWp | overhang kept | mask lever |
 > |---|---|---|---|---|---|---|
@@ -450,11 +451,12 @@ over a 25–50 m shadow run).
 > roofs is kept as overhang — and overhang is 53–58 % of the whole tree term; the strict row is the floor.
 > (2) Crown opacity: τ across its 0.20–0.50 band moves the total 7.3–7.5 pp. (3) Canopy heights carry the
 > model's 3.0 m MAE and only the minus-MAE cell is run (−5.7 / −7.3 / −8.0 pp), so the shipped figure is not
-> the upper bound. (4) **The numbers are not grid-converged**: halving the grid from 1 m to 0.5 m raised every
-> ward's total by 2.0–2.5 pp, and the raster still reads low against the polygon sweep in all three wards
-> (4.83 vs 5.12, 1.46 vs 1.66, 1.47 vs 1.79 % on buildings alone), so these are floors within the A1 rule.
-> A crown standing directly over its own roof is also invisible to the march near zenith (27 % of the year's
-> GHI weight at 2 m above the roof) — understated, same direction. No species, no seasonal leaf drop.
+> the upper bound. (4) **The numbers are not grid-converged**: halving the grid from 1 m to 0.5 m raised
+> Ballygunge's total by 2.0 pp and Barrackpore's by 2.5 pp (Baruipur has no 1 m total: it refused before
+> publishing one), and the raster still reads low against the polygon sweep in all three wards (4.83 vs 5.12,
+> 1.46 vs 1.66, 1.47 vs 1.79 % on buildings alone), so these are floors within the A1 rule. A crown standing
+> directly over its own roof is also invisible to the march near zenith (27 % of the year's GHI weight at 2 m
+> above the roof) — understated, same direction. No species, no seasonal leaf drop.
 >
 > **Baruipur refused at 1 m, certified at 0.5 m (A4).** On the ward with the smallest roofs (88 pixels each
 > at 1 m against 177 in Ballygunge) the buildings-only raster undercounted the share of roofs above 5 % by
@@ -465,8 +467,8 @@ over a 25–50 m shadow run).
 >
 > **The ≥ 3 kWp stratum, restated alongside the registered verdict, never as a re-registration.** On
 > building-only shading the registered gate still fails in Barrackpore (1.10 % / 6.0 %) and Baruipur
-> (0.94 % / 5.8 %) and passes in Ballygunge (3.16 % / 19.2 %) — the same finding as the PREREG addendum, to
-> within 0.16 pp. On the total it passes comfortably in all three. The `stratum.n` in the shading artefact
+> (0.95 % / 5.8 %) and passes in Ballygunge (3.16 % / 19.2 %) — the same finding as the PREREG addendum, to
+> within 0.18 pp. On the total it passes comfortably in all three. The `stratum.n` in the shading artefact
 > (1841 / 1771 / 1141) is computed from unrounded areas; the yield artefact's `installable_ge_3kwp.n`
 > (1840 / 1771 / 1140) from 1-dp areas — one boundary roof, not the same population, do not quote both as one.
 >
@@ -481,3 +483,11 @@ over a 25–50 m shadow run).
 > **Artefacts:** `data/calibration/pv-shading-trees-<ward>.json` (sensitivity table, levers, predictions,
 > cross-check with the registered comparands, per-sun shaded fractions); the registered
 > `pv-shading-<ward>.json` is untouched and no longer read by the yield chain.
+>
+> **A reader property found on the way.** `fetch-canopy.read_chm_grid` returns a 1 m floor over the whole
+> box — the native v2 tile is 47.9 % exact zeros in Ballygunge (uint8, `nodata=None`, zeros under a
+> per-dataset mask band; the boundless average read fills them at 1). It cannot touch this result: the
+> fraction above the 2 m tree threshold agrees native vs reader (42.6 vs 42.8 %), and nothing below 2 m
+> enters the mask or clears a 2.5 m roof. The artefact's fingerprint is therefore `canopy.px_over_min_m`, a
+> count above the threshold, not a nonzero count. Whether the render layer's density mapping is affected
+> by the same floor is a separate question for the vegetation layer, not answered here.

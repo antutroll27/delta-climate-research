@@ -7,16 +7,27 @@ are given only where the docs state them; otherwise **not stated in docs**.
 > Two honesty notes carried from the harvest:
 > - The Gaussian-splatting / neural-rendering corpus (~30 papers) has **no author names anywhere in the
 >   docs** — every entry is a title + arXiv/DOI link, so none appear below.
-> - A formal academic citation for the Meta/WRI Canopy Height paper (Tolan et al.) and any citation for
->   Mapillary Vistas / Neuhold et al. ICCV 2017 are **absent from the repo** — flagged, not fabricated.
+> - A formal academic citation for the Meta/WRI Canopy Height **v1** paper (Tolan et al.) and any citation
+>   for Mapillary Vistas / Neuhold et al. ICCV 2017 are **absent from the repo** — flagged, not fabricated.
+>   *(Updated 2026-09-05: the **v2** paper is now cited formally — Brandt et al. 2026, Scientific Data,
+>   arXiv:2603.06382 — and v2 is what ships. The v1 gap stands.)*
 
 ## Researchers
 
+> **2026-09-05 — the rooftop-PV tree-shading sourcing pass.** Five sources in these tables moved from
+> *candidate* to *implemented* when trees entered the shading pass (Lindberg & Grimmond; Ratti & Richens;
+> Konarska; Wu, Lu & Lin; Meta AI + WRI). What was taken, in every case, is a **published description** — an
+> algorithm, or a measured constant. What was not taken: **no code** (SOLWEIG/UMEP is GPL and is not used;
+> the pass depends only on numpy/scipy/rasterio/shapely) and **no contact** with any author — none has seen,
+> reviewed or endorsed this work. Affiliations marked *per the paper* come from the publications themselves
+> rather than from repo docs, and are the one deliberate exception to the rule stated above.
+
 | Name / team | Affiliation (per docs) | Contribution | Component relying on it |
 |---|---|---|---|
-| **Lindberg, F. & Grimmond, C.S.B.** | "Gothenburg/Reading" | Developed & validated SOLWEIG (shadow-volume + SVF + Tmrt); R²=0.91, RMSE=3.1 K | Accuracy-context benchmark for the heat-map's LST error bars; shadow/SVF *intermediates* are the candidate reuse, not adopted |
-| **Ratti, C. & Richens, P.** | Not stated (a linked source points to MIT Senseable City Lab — **verify**) | Shear-and-running-max shadow-volume algorithm (1990) | Candidate cheap shadow-raster method |
-| **Konarska et al.** | Not in docs | Vegetation transmissivity default (3% canopy penetration, 25% trunk zone), via UMEP | Candidate vegetation-shadow parameterisation |
+| **Lindberg, F. & Grimmond, C.S.B.** | University of Gothenburg / University of Reading (docs: "Gothenburg/Reading") | Developed & validated SOLWEIG (shadow-volume + SVF + Tmrt); R²=0.91, RMSE=3.1 K. Lindberg & Grimmond 2011, *Theor. Appl. Climatol.* 105 sets out the DSM shadow-casting algorithm | Accuracy-context benchmark for the heat-map's LST error bars. **Taken 2026-09-05:** the DSM shadow-casting algorithm, implemented from the paper's description, in the rooftop-PV tree-shading pass. **Not taken:** their SOLWEIG/UMEP code — it is GPL and is not used; no contact |
+| **Ratti, C. & Richens, P.** | Ratti: MIT Senseable City Lab (per the senseable.mit.edu source linked in the docs); Richens: affiliation as on the paper | Shear-and-running-max shadow-volume algorithm (1990/1999); Ratti & Richens 2004, *Environment and Planning B* 31(2), raster analysis of urban form | **Taken 2026-09-05:** the shift-and-max shadow march, now the shadow engine of the rooftop-PV pass — no longer a candidate. **Not taken:** no code, no contact; the method reference only |
+| **Konarska, J. et al.** | University of Gothenburg (*per the paper*; not stated in docs) | *2013:* vegetation transmissivity default (3 % canopy penetration, 25 % trunk zone), cited via UMEP. *2014, Theor. Appl. Climatol. 117:* measured transmissivity of solar radiation through the crowns of single urban trees | **Taken 2026-09-05:** the 2014 measurement is our **τ = 0.30 central value** for canopy beam transmittance in the rooftop-PV pass. The 2013 UMEP default is a *different number* and remains only a candidate vegetation-shadow parameterisation for the heat map — do not merge the two. **Not taken:** no code, no contact |
+| **Wu, Y.-C., Lu, C.-L. & Lin, T.-P.** | National Cheng Kung University, Taiwan (*per the paper*; not stated in docs) | Wu, Lu & Lin 2025, *Sustainable Cities and Society* — measured solar radiation transmittance of tree canopy and building shade (SRT 0.18–0.60, mean ≈ 0.3, R² 0.95 against LAI) | **Taken 2026-09-05:** sets the **τ sensitivity band 0.20–0.50** swept in the rooftop-PV pass — the second-largest lever on the tree term after the mask rule. **Not taken:** no code, no contact |
 | **Wallenberg et al.** | Not in docs | Step-heating method for SOLWEIG wall-surface temperature (2026) | The "thermal admittance" ingredient still missing from the 2-D physics |
 | **Jiao et al.** | Not in docs | Evaluated four sky-view-factor algorithms | SVF-method background reading |
 | **Czekajlo, Coops, Wulder et al.** | Not in docs | Urban Greenness Score via 18-city Canadian Landsat unmixing (2020) | UGS pillar inspiration — internal review found the shipped formula is **not** their method (over-attribution corrected) |
@@ -43,7 +54,7 @@ are given only where the docs state them; otherwise **not stated in docs**.
 | Team / institution | Contribution | Component / use |
 |---|---|---|
 | **ECMWF, ESA, EUMETSAT; VITO** | Built + validated the Destination Earth UHI service (UrbClim model) | Heat-specific validation-transparency benchmark |
-| **Meta AI + WRI** | Produced the 1 m global Canopy Height Model on AWS Open Data (v1 + v2; **we ship v1**) | Canopy-height source for the **rendered** tree layer. Render-only since 2026-08-12: it does not enter the temperature solve (no formal paper in docs — flagged) |
+| **Meta AI + WRI** (Brandt et al.) | Produced the 1 m global Canopy Height Model on AWS Open Data (v1 + v2; **we ship v2, fetched since 2026-08-12**). v2: Brandt et al. 2026, *Scientific Data*, arXiv:2603.06382 — DINOv3 backbone, MAE 3.0 m, CC BY 4.0 | Canopy-height source for the **rendered** tree layer and, **taken 2026-09-05**, the canopy the rooftop-PV pass casts shadows from. Still **not** in the temperature solve. **Not taken:** no code, no contact; the v1 paper (Tolan et al.) is still cited as a dataset/provider rather than formally |
 | **NRF (Singapore) + Dassault Systèmes; SLA; GovTech** | Built Virtual Singapore | Cited exemplar (proprietary platform + authoritative LiDAR — posture, not stack) |
 | **City of Helsinki (open-data programme)** | Helsinki 3D+ / Kalasatama as open CityGML + reality mesh | Exemplar for open-data-as-authoritative |
 | **Victorian Government + CSIRO** | Digital Twin Victoria's 4,000+ dataset catalogue | Exemplar for "provenance-as-product at scale" |

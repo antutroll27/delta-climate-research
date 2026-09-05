@@ -18,11 +18,12 @@ collection), `https://earth-search.aws.element84.com/v1`; terms
 since 2026-08-12 the **sole** source of `veg[]` — the CHM used to redistribute it and no longer does (see
 the CHM entry below) · status: shipped, unchanged.
 
-**Meta / WRI 1 m Canopy Height Model (CHM) — we ship v1** — Meta AI + WRI, neural height regression on
-Maxar imagery · 1 m, single-epoch, MAE "a few metres," known ~150 m tiling artefacts · **CC BY 4.0 —
-commercial with attribution** · anonymous AWS Open Data, no credentials:
-`s3://dataforgood-fb-data/forests/v1/alsgedi_global_v6_float/chm/<quadkey>.tif`, zoom-9 Bing quadkey ·
-registry `https://registry.opendata.aws/dataforgood-fb-forests/` · **role:** Tier-2 canopy height —
+**Meta / WRI 1 m Canopy Height Model (CHM) — we ship v2 (since 2026-08-12; v1 before)** — Meta AI + WRI,
+neural height regression on Maxar imagery · 1 m, single-epoch, MAE 3.0 m (v2; v1 4.3 m), known ~150 m tiling
+artefacts · **CC BY 4.0 — commercial with attribution** · anonymous AWS Open Data, no credentials:
+`s3://dataforgood-fb-data/forests/v2/global/dinov3_global_chm_v2_ml3/chm/<quadkey>.tif`, zoom-10 Bing quadkey
+(v1: `forests/v1/alsgedi_global_v6_float`, zoom-9) · registry
+`https://registry.opendata.aws/dataforgood-fb-forests/` · **role:** Tier-2 canopy height —
 **render + PV screening (2026-09-05), never the temperature solve.** Drives tree placement/height for the render layer, and since 2026-09-05 casts shadows in the rooftop-PV shading pass (`scripts/measure-pv-tree-shading.py`, v2 read at 0.5 m, A1 connectedness mask — spec `2026-09-05-pv-tree-shading-design.md`, Amendments A1–A4). It still **does not enter the temperature
 solve** · status: **shipped to production 2026-08-11** for all three wards (8,896 / 4,413 / 6,797 trees);
 ward-mean accuracy unchanged throughout (night ±3.5K, day ±5.0K — the CHM has never affected it).
@@ -63,6 +64,10 @@ ward-mean accuracy unchanged throughout (night ±3.5K, day ±5.0K — the CHM ha
 > One thing v2 is NOT: fresher. Its paper puts ~80% of source imagery in 2018-2020, the same epoch as v1
 > — it is a **model** upgrade, not new observations. Do not sell it as newer data. *(The AWS registry
 > gives v1 source imagery as 2016 against the ~2018-2020 stated here — unresolved, verify.)*
+>
+> **UPDATE 2026-09-05:** v2 has been the fetched source since 2026-08-12 (`fetch-canopy.py`,
+> `<ward>-trees.json` carry the v2 prefix), so the entry header above now says v2. The reader floors at 1 m —
+> see `known-limitations.md` §8, addendum 2026-09-05.
 
 **ESA WorldCover 10 m (2020/2021)** — ESA · 10 m, 2020/2021 · **CC BY 4.0 — commercial OK** · AWS Open
 Data + MS Planetary Computer, `https://esa-worldcover.org/en`,

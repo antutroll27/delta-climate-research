@@ -15,7 +15,7 @@ WHAT IS MEASURED AND WHAT IS ASSUMED — the split matters more than any single 
   MEASURED (ours)      shading, per building, from real footprints and heights AND the Meta/WRI
                        1 m canopy (v2, read at 0.5 m). Buildings-only was pre-registered, gated and
                        PASSED (2026-08-21); the tree term was added 2026-09-05 under its own
-                       pre-registration and dominates: 17-18 pp of a 19-22 % total. Its largest
+                       pre-registration and dominates: 17-18 pp of an 18.7-22 % total. Its largest
                        uncertainty is a MASK RULE, not a physical constant -- see the artefact's
                        levers block and known-limitations.md section 8.
   MEASURED (external)  GHI, five whole years of NASA POWER hourly in local solar time.
