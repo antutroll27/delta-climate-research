@@ -60,10 +60,11 @@ the trees file (above).
 
 **Canopy, three rules.**
 
-1. **Masked on roofs.** Canopy is zeroed inside every footprint dilated by one pixel before
-   casting. A roof cannot shade itself, and we cannot tell an overhanging crown from a
-   mis-predicted building. This UNDERSTATES tree shading, the direction every other bias in the
-   chain already runs. The masked fraction is published as a diagnostic on the CHM.
+1. **Masked on roofs — SUPERSEDED by Amendment A1 below, before any run.** As first written:
+   canopy zeroed inside every footprint dilated by one pixel, on the reasoning that a roof cannot
+   shade itself and an overhanging crown cannot be told from a mis-predicted building. A1 replaces
+   the blanket mask with a connectedness rule that keeps overhanging crowns and drops enclosed
+   blobs, and publishes both fractions.
 2. **Transmittance τ = 0.30 central**, band **0.20–0.50**. Field measurements of solar radiation
    transmittance through in-leaf urban tree crowns (Wu, Lu & Lin 2025; Konarska et al. 2014) put
    common species at 0.2–0.5, mean ≈ 0.3. A canopy-shaded pixel therefore blocks **70 %** of beam;
@@ -175,7 +176,7 @@ No re-running with the trees file. No touching the building term, which stays as
 | term | direction | why |
 |---|---|---|
 | building heights | shading **under**stated | unvalidated, suspected low (registered 2026-08-21) |
-| canopy masked on roofs | tree shading **under**stated | overhanging crowns are removed with the artefacts |
+| canopy over roofs (A1 connectedness rule) | **either way** | overhanging crowns kept, enclosed misreads dropped; a misread touching a real crown survives, so the strict-mask sensitivity cell bounds it |
 | canopy heights (v2, MAE 3.0 m) | **either way** | published band covers −3 m; +3 m is not run, so the shipped figure is not the upper bound |
 | transmittance 0.30 | either way | 0.20–0.50 band published; no species, no seasonal leaf drop |
 | ward-edge buildings | shading understated at the edge | no geometry outside the ward |
@@ -201,6 +202,49 @@ The honest sentence for the card: *"Shaded X %, of which trees Y %. Screening: c
 Species, seasonal leaf drop, crown shape (a raster has none), terrain, buildings outside the
 ward, and any change to the console — the card's Solar block is the Option 1 build, which reads
 whatever `loss`, `loss_buildings` and `loss_trees` say.
+
+## Amendments
+
+### A1 — 2026-09-05, before any loss was computed. Canopy over roofs, and panels over canopy
+
+**Raised by the Head of Technology on reading the spec:** canopy over a footprint is not always
+an artefact. A crown from next door genuinely overhangs roofs, and panels are routinely mounted
+ABOVE the canopy on raised frames — elevated mounting structures on 2–2.5 m stilts are common
+practice on Indian terraces precisely to keep the roof usable. The blanket mask in §3 rule 1
+threw away the real overhangs with the mistakes, and the receiver-at-roof-plane assumption
+ignored the raised frame. Both are changed here; the predictions in §5 are not.
+
+**Rule 1 as amended — connectedness, not a blanket.** Label the connected components of
+`canopy > 2 m` on the padded grid. A component that has ANY pixel outside every footprint
+(dilated by one pixel) is a tree rooted outside: it is **kept whole**, overhang included, and
+where it rises above a roof it shades that roof at every sun position, as it should. A component
+**enclosed entirely within footprints** has no tree to belong to: it is a building the model
+misread as canopy, and it is zeroed. Canopy at or below a building's own height inside its
+footprint is harmless either way — `DSM = max(building, canopy)` — so the rule only bites where
+canopy over a roof stands above that roof. Two fractions are published: canopy-over-roof pixels
+kept as overhang, and dropped as enclosed. **Bias direction changes:** this no longer strictly
+understates tree shading, because an enclosed misread that happens to touch a real crown next door
+survives the test. The strict blanket mask is therefore run as a sensitivity cell (below) so the
+two rules bracket the effect.
+
+**Sensitivity grid, two cells added** (central τ 0.30, stated heights unless noted):
+
+| cell | what it answers |
+|---|---|
+| **strict mask** (all canopy over footprints zeroed, the original rule 1) | how much of the tree term rides on overhang and surviving misreads |
+| **array raised 2.0 m** (receiver at `h_i + 2.0`, everything else central) | how much shading a standard elevated mounting structure recovers — the consultant's lever |
+
+Eight cells in all. The shipped figure remains the central cell: connectedness rule, τ 0.30,
+stated canopy heights, receiver at the roof plane. The raised-array figure is reported per ward
+and, per building, as `per_building_loss_total_raised[]` so the card can offer it as a what-if
+rather than a claim.
+
+**Not taken from the same observation:** panels physically fixed to trees. Anecdotal, not a
+mounting class any scheme addresses, and a raster has no way to represent it.
+
+**Artefact fields added:** `canopy.overhang_kept_frac`, `canopy.enclosed_dropped_frac`,
+`per_building_loss_total_raised[]`, and the two sensitivity rows. §4's field list is to be read
+with these included.
 
 ## References
 
