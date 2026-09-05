@@ -475,10 +475,11 @@ over a 25–50 m shadow run).
 > **A lever the consultant can pull.** Raising the array 2 m on an elevated mounting structure recovers
 > 5.2 / 6.0 / 6.6 pp of the total; it ships per building as `loss_raised` and is a what-if, not a claim.
 >
-> **A gap for whoever builds the card.** The browser file carries the central row only (`loss`,
-> `loss_buildings`, `loss_trees`, `loss_raised`) and no band; the eight-cell table lives in
-> `data/calibration/pv-shading-trees-<ward>.json`. A card that prints 21.95 % without the 12.8 % floor beside
-> it is overstating what was measured.
+> **The card prints the floor (closed 2026-09-06).** The console's Solar section, card block and
+> ward-panel block (spec `docs/superpowers/specs/2026-09-05-solar-console-design.md`) read
+> `loss_strict` and print "at least X % under a strict roof mask" wherever the headline appears,
+> with the tariff shown as an assumption the reader can change. The eight-cell table still lives
+> only in `data/calibration/pv-shading-trees-<ward>.json`.
 >
 > **Artefacts:** `data/calibration/pv-shading-trees-<ward>.json` (sensitivity table, levers, predictions,
 > cross-check with the registered comparands, per-sun shaded fractions); the registered
