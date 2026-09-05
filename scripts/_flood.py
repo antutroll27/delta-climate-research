@@ -293,6 +293,11 @@ NAME_ALIASES: list[tuple[str, str]] = [
     ("Rose Rayhaan by Rotana", "Rose Tower"),
     ("Millenium Tower", "Millennium Tower"),
     ("Al Hikma Tower", "Al Hekma Tower"),
+    # Recovered by hand after the containment floor was added: both are the same
+    # building under a short name and a qualified one, and both fail the ratio
+    # test (0.29 and 0.35) that stops "tower" swallowing every tower in the city.
+    ("D1 Tower", "D1"),
+    ("The Tower", "The Tower (Union Properties)"),
 ]
 
 _ALIAS_INDEX: dict[str, set[str]] = {}
@@ -300,6 +305,14 @@ for _a, _b in NAME_ALIASES:
     _na, _nb = norm_name(_a), norm_name(_b)
     _ALIAS_INDEX.setdefault(_na, set()).add(_nb)
     _ALIAS_INDEX.setdefault(_nb, set()).add(_na)
+
+
+# A containment match must clear both: at least this many characters, and at
+# least this proportion of the longer name. Measured against the join fixture --
+# "emiratestowerone" inside "emiratestoweronehotel" is 0.76 and survives, while
+# "tower" inside "cayantower" is 0.50 and does not.
+_CONTAIN_MIN_CHARS = 5
+_CONTAIN_MIN_RATIO = 0.6
 
 
 def names_agree(osm: str | None, source: str | None) -> bool:
@@ -314,8 +327,21 @@ def names_agree(osm: str | None, source: str | None) -> bool:
     a, b = norm_name(osm), norm_name(source)
     if not a or not b:
         return False
-    if a == b or a in b or b in a:
+    if a == b:
         return True
+    # CONTAINMENT NEEDS A FLOOR AND A PROPORTION. Bare `a in b` let a building
+    # OSM calls "A" match every label containing the letter -- Burj Khalifa,
+    # Ocean Heights, Almas Tower, all of them -- and 11 % of named outlines
+    # across both windows normalise to under five characters ('MBC', 'ZOOM',
+    # '1', '38'). It only ever attached the right building because distance
+    # happened to break the tie, which is luck, not a rule.
+    #
+    # Length alone is not enough either: "tower" is five characters and would
+    # swallow "cayantower", "almastower" and "princesstower" equally. The
+    # shorter name must also be most of the longer one.
+    if len(min(a, b, key=len)) >= _CONTAIN_MIN_CHARS and (a in b or b in a):
+        if len(min(a, b, key=len)) / len(max(a, b, key=len)) >= _CONTAIN_MIN_RATIO:
+            return True
     return b in _ALIAS_INDEX.get(a, set())
 
 
@@ -395,6 +421,9 @@ def _self_test() -> int:
         ("Millenium Tower", "Millennium Tower"),
         ("The Torch", "The Marina Torch"),
         ("Emirates Tower One", "Emirates Tower One Hotel"),
+        # short name vs qualified name, rescued by the alias table
+        ("D1 Tower", "D1"),
+        ("The Tower", "The Tower (Union Properties)"),
     ]
     # DIFFERENT BUILDINGS. Every pair below was produced by the old
     # nearest-centroid join on a real run, and every one shipped a wrong height:
@@ -410,6 +439,18 @@ def _self_test() -> int:
         ("Voco Hotel and Nassima Towers", "Acico Twin Towers"),
         ("Bugatti Residences", "Vision Tower"),
         ("ذا كورت", "JW Marriott Marquis Dubai"),
+        # SHORT NAMES SWALLOW EVERYTHING under bare containment. OSM calls one
+        # Creek building "A", which matched Burj Khalifa, Ocean Heights, Almas
+        # Tower and The Marina Torch alike -- 11 % of named outlines across both
+        # windows normalise to under five characters. It only ever attached the
+        # right building because distance broke the tie.
+        ("A", "Burj Khalifa"),
+        ("A", "Almas Tower"),
+        ("1", "One Za'abeel Tower 1"),
+        # ...and a common suffix is not a name: "tower" is five characters and
+        # would swallow every tower in the city.
+        ("Tower", "Almas Tower"),
+        ("Tower", "Cayan Tower"),
     ]
     bad: list[str] = []
     for osm, src in accept:

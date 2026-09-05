@@ -181,6 +181,12 @@ def build(site: Site) -> dict[str, Any]:
     # candidates, one footprint per item, and an unnamed footprint is skipped
     # rather than guessed -- a wrong height on a named landmark is worse than
     # none at all.
+    # A SUPERSEDED FOOTPRINT IS NEVER DRAWN, so a height attached to one is a
+    # no-op that also consumes the item -- one footprint per item means the real
+    # outline then gets nothing. Almas Tower (363 m), The Marina Torch (352 m)
+    # and Ocean Heights (310 m) all landed on GlobalML records that OSM had
+    # already superseded, so three cited heights were spent on geometry the
+    # scene does not contain.
     attached = 0
     unverifiable = 0
     for lm in landmarks:
@@ -189,6 +195,8 @@ def build(site: Site) -> dict[str, Any]:
             for rec in arr:
                 if rec.get("hs") in ("wikidata", "ctbuh"):
                     continue           # already claimed by another item
+                if rec.get("sup"):
+                    continue           # superseded by an OSM outline: never drawn
                 if not names_agree(rec.get("name"), lm["name"]):
                     continue
                 xs, ys = rec["p"][0::2], rec["p"][1::2]
@@ -219,6 +227,8 @@ def build(site: Site) -> dict[str, Any]:
             for rec in arr:
                 if rec.get("hs") == "ctbuh":
                     continue           # one footprint per CTBUH entry
+                if rec.get("sup"):
+                    continue           # superseded by an OSM outline: never drawn
                 if not names_agree(rec.get("name"), name):
                     continue
                 xs, ys = rec["p"][0::2], rec["p"][1::2]
