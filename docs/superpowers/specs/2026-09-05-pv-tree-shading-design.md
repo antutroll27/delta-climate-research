@@ -361,6 +361,19 @@ receipt; the decision above was taken independently of it.
 **Also folded in, no rule change:** Ballygunge's and Barrackpore's 1 m artefacts (commits `2e960ce`,
 `cf7e60d`) remain in history as the 1 m receipts and are superseded by the 0.5 m runs.
 
+### A5 — 2026-09-05, publication only. The strict-mask floor per building, for the card
+
+The console card will print the headline beside its floor (A3: the mask rule is the dominant
+lever; the browser file carried only the central row, which the final review named as a gap).
+The strict-mask cell — τ 0.30, stated heights, receiver at the roof plane, canopy zeroed over
+every footprint — is computed per building in every run and was published only as a ward
+statistic. From this run it is written per building as `per_building_loss_total_strict`, and
+`build-pv-yield.py` carries it into the browser file as `loss_strict`. **Nothing else changes:**
+no rule, constant, tolerance or prediction; every existing array reproduces bit-for-bit. The
+totals and the ≥ 3 kWp stratum the ward panel needs are also carried into the browser file
+(`totals`, `stratum`) from the yield artefact, so the panel prints the laboratory's numbers
+rather than re-deriving them.
+
 ## References
 
 - Ratti C., Richens P. (2004) *Raster analysis of urban form*. Environment and Planning B 31(2).
