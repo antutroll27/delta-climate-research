@@ -98,8 +98,8 @@ import {
   RAIL_TOGGLE_ID,
 } from '../../../scripts/climate-engine/shell/layout-state.ts';
 
-/** The five places the rail can be. Exported for callers to name one. */
-export type RailSection = 'map' | 'layers' | 'analysis' | 'reports' | 'scenarios';
+/** The six places the rail can be. Exported for callers to name one. */
+export type RailSection = 'map' | 'layers' | 'analysis' | 'solar' | 'reports' | 'scenarios';
 
 interface Props {
   /**
@@ -200,6 +200,11 @@ const SECTIONS: readonly Section[] = [
     d: 'M12 2 2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5' } },
   { id: 'analysis', label: 'Analysis', href: COMPARE_PATH, body: 'own-route', icon: {
     d: 'M3 3v18h18M7 15l4-5 3 3 5-7' } },
+  /* SOLAR — a pane, not a route: the ward's roofs ranked by what they would make,
+     each row selecting its building on the map, and the list to take away.
+     Sits after Analysis because it reads the ward the reader is standing on. */
+  { id: 'solar', label: 'Solar', href: null, body: 'always', icon: {
+    circle: [12, 12, 4], d: 'M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1' } },
   { id: 'reports', label: 'Reports', href: null, body: 'always', icon: {
     d: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M9 13h6M9 17h6' } },
   { id: 'scenarios', label: 'Scenarios', href: null, body: 'always', icon: {

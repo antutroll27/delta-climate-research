@@ -44,8 +44,10 @@ import {
 
 const RAIL = new URL('../../src/components/ClimateEngine/shell/IconRail.astro', import.meta.url);
 
-/** The five sections the design gives the rail. Not four, and not six. */
-const SECTION_IDS = ['analysis', 'layers', 'map', 'reports', 'scenarios'];
+/** The six sections the design gives the rail. Not five, and not seven. Solar
+    joined on 2026-09-06 (spec 2026-09-05-solar-console-design.md §2.1): a pane
+    that ranks a ward's roofs, not a route. Sorted, because the test sorts. */
+const SECTION_IDS = ['analysis', 'layers', 'map', 'reports', 'scenarios', 'solar'];
 
 /** Comments are not code. An id, an `<a>` or a label in prose must not count. */
 const strip = (s) => s
@@ -120,13 +122,13 @@ function loopArms(template) {
   return end === -1 ? region : region.slice(0, end);
 }
 
-test('the rail carries all five sections, each declared exactly once', async () => {
+test('the rail carries all six sections, each declared exactly once', async () => {
   const { frontmatter } = await railSource();
   const ids = sectionTable(frontmatter).map((s) => s.id);
-  assert.equal(ids.length, 5,
-    `the rail declares ${ids.length} sections, not 5: ${ids.join(', ') || '(none)'}`);
+  assert.equal(ids.length, 6,
+    `the rail declares ${ids.length} sections, not 6: ${ids.join(', ') || '(none)'}`);
   assert.deepEqual([...ids].sort(), SECTION_IDS,
-    'the rail must carry exactly Map, Layers, Analysis, Reports and Scenarios, '
+    'the rail must carry exactly Map, Layers, Analysis, Solar, Reports and Scenarios, '
     + `each once -- it declares: ${ids.join(', ')}`);
 });
 
@@ -142,7 +144,7 @@ test('the rail carries the mode: two sections navigate, three swap the pane', as
     'Map must navigate to the Explore route the page was given');
   assert.equal(href.get('analysis'), 'COMPARE_PATH',
     'Analysis must navigate to the compare route');
-  for (const id of ['layers', 'reports', 'scenarios']) {
+  for (const id of ['layers', 'solar', 'reports', 'scenarios']) {
     assert.equal(href.get(id), 'null',
       `${id} swaps the sidebar pane -- it navigates nowhere, so it must declare `
       + 'no href and can only render as a button');
@@ -256,7 +258,7 @@ test('a pane section says whether its pane is open; a section with no pane does 
   const table = sectionTable(frontmatter);
   const body = new Map(table.map((s) => [s.id, s.body]));
 
-  for (const id of ['layers', 'reports', 'scenarios']) {
+  for (const id of ['layers', 'solar', 'reports', 'scenarios']) {
     assert.equal(body.get(id), 'always',
       `${id} navigates nowhere, so its pane is rendered on every route the rail `
       + "appears on -- declaring 'own-route' would blank it on all of them, "
