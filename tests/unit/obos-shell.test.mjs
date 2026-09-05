@@ -1830,6 +1830,19 @@ test('the dropdown answers every key the native select gave away', async () => {
     'focus is never returned to the trigger -- closing the list would drop the '
     + 'reader at the top of the document');
 
+  /* THE WINDOW IS MEASURED FROM THE KEY, NOT FROM THE HANDLER. Type-ahead drops its
+     buffer after 600ms of silence, and "silence" has to mean the person paused —
+     not that the page stalled between two keystrokes. Reading Date.now() inside the
+     handler measured the stall: a WebGL advance of up to ~900ms between letters
+     typed 40ms apart split "barr" into "bar"+"r" and landed the reader on Baruipur
+     instead of Barrackpore, every retry, on a CI runner with no GPU (2026-09-05).
+     e.timeStamp is when the key went down, and it survives whatever the page did. */
+  assert.doesNotMatch(code, /Date\.now\(\)\s*-\s*f\.bufferAt/,
+    'type-ahead must not read the clock in the handler: a main-thread stall between two '
+    + 'keystrokes then reads as the reader pausing, and the word is split');
+  assert.ok((code.match(/typeAhead\(f, [^)]*e\.timeStamp\)/g) ?? []).length >= 3,
+    'every type-ahead call passes the event\'s own timestamp');
+
   /* A DISABLED ROW IS REFUSED AT THE COMMIT, which is the only place it can be
      refused while still being arrowable and announced. Skipping it in the arrow
      keys instead would leave Dubai -- where every row is disabled -- a list nobody

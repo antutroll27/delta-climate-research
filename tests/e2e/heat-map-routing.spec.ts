@@ -236,13 +236,13 @@ test('the Area dropdown is drivable from the keyboard alone', async ({ page }) =
      lapses the buffer: "bar" + a fresh "r" matches nothing, the active row stays
      where "bar" left it, and the assertion sees Baruipur.
 
-     That is not a fault in the control and not something to widen a timeout over —
-     it is the difference between a laptop and a CI runner, and it failed both
-     retries on ubuntu-latest while passing every local run. Retrying the whole
-     journey keeps the claim exactly as strong: typing "barr" must still land on
-     Barrackpore, and Home still resets the row first so each attempt starts from
-     the same place. The gap between attempts is itself longer than TYPEAHEAD_MS,
-     so a retry always begins with an empty buffer. */
+     IT WAS A FAULT IN THE CONTROL, and it is fixed there (2026-09-05): type-ahead
+     read Date.now() when its handler ran, so a stall between two keystrokes counted
+     as the reader pausing. It now measures from e.timeStamp, the moment the key went
+     down, which no stall can move. The retry stays as a defence for the assertion's
+     own 1s window on a runner that can freeze for longer than that; it keeps the
+     claim exactly as strong: typing "barr" must still land on Barrackpore, and Home
+     still resets the row first so each attempt starts from the same place. */
   await expect(async () => {
     await page.keyboard.press('Home');
     await page.keyboard.type('barr', { delay: 40 });

@@ -277,10 +277,18 @@ function commit(f: Field, index: number): boolean {
  * is a prefix, matched from the active row onward and wrapping, so typing "ba" in
  * a list of three Ba- wards walks them rather than sticking on the first.
  */
-function typeAhead(f: Field, char: string): void {
-  const now = Date.now();
-  f.buffer = now - f.bufferAt > TYPEAHEAD_MS ? char : f.buffer + char;
-  f.bufferAt = now;
+function typeAhead(f: Field, char: string, at: number): void {
+  /* `at` IS THE EVENT'S OWN TIMESTAMP, never the clock read when this handler runs.
+     The 600ms window is about how fast a person typed, and the handler's clock says
+     how fast the page got round to listening: on a page running a WebGL heat
+     simulation the main thread can stall for up to ~900ms between two keystrokes
+     typed 40ms apart, and reading Date.now() here split the word — "bar" + a fresh
+     "r" matched nothing and the reader landed on the wrong ward. Measured on CI
+     (ubuntu-latest, no GPU), where it failed every retry twice; the same stall
+     happens on any janky phone. The event was stamped when the key went down, so
+     it survives whatever the page was doing in between. */
+  f.buffer = at - f.bufferAt > TYPEAHEAD_MS ? char : f.buffer + char;
+  f.bufferAt = at;
 
   const repeated = f.buffer.length > 1 && [...f.buffer].every((c) => c === f.buffer[0]);
   const needle = (repeated ? f.buffer.slice(0, 1) : f.buffer).toLowerCase();
@@ -368,7 +376,7 @@ export function mountSelectFields(root: ParentNode): () => void {
         if (isTypedChar(e)) {
           e.preventDefault();
           openList(f, 'selected');
-          typeAhead(f, e.key);
+          typeAhead(f, e.key, e.timeStamp);
         }
         return;
       }
@@ -385,7 +393,7 @@ export function mountSelectFields(root: ParentNode): () => void {
           e.preventDefault();
           /* A space inside a type-ahead is a space, not a commit — otherwise no
              two-word row past the first could ever be typed to. */
-          if (f.buffer !== '' && Date.now() - f.bufferAt <= TYPEAHEAD_MS) typeAhead(f, ' ');
+          if (f.buffer !== '' && e.timeStamp - f.bufferAt <= TYPEAHEAD_MS) typeAhead(f, ' ', e.timeStamp);
           else commit(f, f.active);
           return;
         case 'Escape':
@@ -403,7 +411,7 @@ export function mountSelectFields(root: ParentNode): () => void {
           closeList(f, false);
           return;
         default:
-          if (isTypedChar(e)) { e.preventDefault(); typeAhead(f, e.key); }
+          if (isTypedChar(e)) { e.preventDefault(); typeAhead(f, e.key, e.timeStamp); }
       }
     });
 
