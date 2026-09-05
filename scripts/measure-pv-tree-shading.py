@@ -92,8 +92,30 @@ def polygon_path(ward: str) -> str:
 
 def shadow_height(dsm: F32, alt_deg: float, az_deg: float, step_m: float) -> F32:
     """For every pixel, the tallest sightline any obstacle TOWARD the sun projects onto it.
-    A receiver at height h is shaded iff shadow_height > h + EPS_M. -inf where nothing does."""
-    raise NotImplementedError
+    A receiver at height h is shaded iff shadow_height > h + EPS_M. -inf where nothing does.
+
+    K shift-and-max passes: pass k reads the surface k pixels toward the sun and lowers it by
+    k*step*tan(alt), the height a sightline at that slope has dropped by the time it arrives.
+    Sub-pixel direction is handled by rounding k*s to integer offsets, as the papers do."""
+    t = math.tan(math.radians(alt_deg))
+    if t <= 0.0:
+        return np.full(dsm.shape, -np.inf, dtype=np.float32)
+    # Unit vector TOWARD the sun in (east, north): azimuth is clockwise from north.
+    sx, sy = math.sin(math.radians(az_deg)), math.cos(math.radians(az_deg))
+    n = dsm.shape[0]
+    k_max = int(math.ceil(float(dsm.max()) / (step_m * t)))
+    sh = np.full(dsm.shape, -np.inf, dtype=np.float32)
+    for k in range(1, k_max + 1):
+        dc = int(round(k * sx))            # east is +column
+        dr = -int(round(k * sy))           # north is -row (row 0 = north)
+        if abs(dc) >= n or abs(dr) >= n:
+            break
+        drop = np.float32(k * step_m * t)
+        # value at (r, c) reads dsm[r + dr, c + dc]: the two slices below are that, clipped
+        src = dsm[max(0, dr):n + min(0, dr), max(0, dc):n + min(0, dc)] - drop
+        dst = sh[max(0, -dr):n + min(0, -dr), max(0, -dc):n + min(0, -dc)]
+        np.maximum(dst, src, out=dst)
+    return sh
 
 
 def mask_canopy(chm: F32, foot: BoolA) -> tuple[F32, float, float]:
