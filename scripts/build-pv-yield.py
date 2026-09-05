@@ -57,7 +57,9 @@ solar_altaz = _shadowsig.solar_altaz
 SOLAR_CACHE = os.path.expanduser("~/.cache/delta-climate/power-solar-hourly.json")
 MET_CACHE = os.path.expanduser("~/.cache/delta-climate/power-hourly.json")
 def shading_path(ward: str) -> str:
-    return os.path.join(ROOT, "data", "calibration", f"pv-shading-{ward}.json")
+    """The TREE-INCLUSIVE artefact (2026-09-05). The registered building-only artefact
+    pv-shading-<ward>.json is kept as the record of that test and is no longer read here."""
+    return os.path.join(ROOT, "data", "calibration", f"pv-shading-trees-{ward}.json")
 
 
 def out_path(ward: str) -> str:
@@ -200,9 +202,13 @@ def main() -> None:
     with open(shading_path(args.ward)) as fh:
         sh = json.load(fh)
     if sh["ward"] != args.ward:
-        sys.exit(f"  shading artefact is for {sh['ward']}, not {args.ward} — rerun measure-pv-shading.py")
-    if "per_building_loss" not in sh:
-        sys.exit("  shading artefact has no per-building array — rerun measure-pv-shading.py")
+        sys.exit(f"  shading artefact is for {sh['ward']}, not {args.ward} — rerun measure-pv-tree-shading.py")
+    for key in ("per_building_loss_total", "per_building_loss_buildings",
+                "per_building_loss_trees", "per_building_loss_total_raised", "per_building_area_m2"):
+        if key not in sh:
+            sys.exit(f"  shading artefact has no {key} — rerun measure-pv-tree-shading.py")
+    if not (sh["cross_check"]["pass"] and sh["sanity"]["loss_rises_as_sun_falls"]["pass"]):
+        sys.exit("  shading artefact failed its own sanity checks — refusing to build yield on it")
 
     lat = _types.WARDS[args.ward].centre.lat
     y, meta = specific_yield(lat)
@@ -219,7 +225,10 @@ def main() -> None:
           f"Bhubaneswar measured ~1340)")
 
     area = np.asarray(sh["per_building_area_m2"], dtype=float)
-    loss = np.asarray(sh["per_building_loss"], dtype=float)
+    loss = np.asarray(sh["per_building_loss_total"], dtype=float)
+    loss_b = np.asarray(sh["per_building_loss_buildings"], dtype=float)
+    loss_t = np.asarray(sh["per_building_loss_trees"], dtype=float)
+    loss_raised = np.asarray(sh["per_building_loss_total_raised"], dtype=float)
     usable = area * PACKING_FACTOR
     kwp = usable / M2_PER_KWP
     kwh = kwp * y * (1.0 - loss)
@@ -244,13 +253,18 @@ def main() -> None:
             "basis": "SCREENING ONLY. NASA POWER publishes no per-site uncertainty, so no "
                      "P50/P90 pair can be derived and none is offered. Ranks roofs; does not "
                      "size debt.",
-            "measured": {"shading": sh["prereg"], "ghi": "NASA POWER, 5 y hourly, LST"},
+            "measured": {"shading": sh["prereg"],
+                         "shading_buildings_registered": "docs/superpowers/specs/2026-08-21-pv-shading-signtest-PREREG.md",
+                         "canopy": "Meta/WRI CHM v2, 1 m, MAE 3.0 m, CC BY 4.0 — A1 connectedness mask, 0.5 m grid (A4)",
+                         "ghi": "NASA POWER, 5 y hourly, LST"},
             "assumed": {"packing_factor": PACKING_FACTOR,
                         "packing_source": "Singh & Banerjee 2015 (Solar Energy), sample Mumbai "
                                           "buildings, PVA 0.28-0.40, conservative end adopted. "
                                           "NOT a Kolkata measurement; no Kolkata study exists. "
                                           "EVERY yield scales linearly with this.",
-                        "m2_per_kwp": M2_PER_KWP, "m2_per_kwp_source": "MNRE / PM Surya Ghar"},
+                        "m2_per_kwp": M2_PER_KWP, "m2_per_kwp_source": "MNRE / PM Surya Ghar",
+                        "canopy_transmittance": sh["canopy"]["transmittance"],
+                        "canopy_transmittance_band": sh["canopy"]["transmittance_band"]},
             "specific_yield_kwh_kwp_yr": round(y, 1), **meta,
             # Stratified by installable size, because the all-roofs statistics are
             # carried by buildings nobody will ever fit a system to: the worst-shaded
@@ -262,7 +276,9 @@ def main() -> None:
             "installable_ge_3kwp": {
                 "n": int((kwp >= 3.0).sum()),
                 "mean_shading_loss": round(float(loss[kwp >= 3.0].mean()), 4),
-                "share_losing_5pct": round(float((loss[kwp >= 3.0] >= 0.05).mean()), 4)},
+                "share_losing_5pct": round(float((loss[kwp >= 3.0] >= 0.05).mean()), 4),
+                "mean_shading_loss_trees": round(float(loss_t[kwp >= 3.0].mean()), 4),
+                "mean_shading_loss_buildings": round(float(loss_b[kwp >= 3.0].mean()), 4)},
             # Linear in the packing factor, so the interval is exact rather than
             # sampled — two endpoints, no bootstrap. Bounds our IMPORTED assumption,
             # not the truth: it is one Mumbai sample's spread, with no Kolkata evidence.
@@ -298,11 +314,13 @@ def main() -> None:
             "kwp": [round(float(v), 2) for v in kwp],
             "kwh": [int(round(float(v))) for v in kwh],
             "loss": [round(float(v), 3) for v in loss],
-            # Carried so the card can never present a screening number as a firm one,
-            # and so a stale artifact is visible rather than silently assumed current.
+            "loss_buildings": [round(float(v), 3) for v in loss_b],
+            "loss_trees": [round(float(v), 3) for v in loss_t],
+            "loss_raised": [round(float(v), 3) for v in loss_raised],
             "specific_yield": round(y, 1),
             "packing_factor": PACKING_FACTOR,
-            "basis": "screening estimate - NASA POWER irradiance, Mumbai packing factor, "
+            "basis": "screening estimate - NASA POWER irradiance, Mumbai packing factor, canopy "
+                     "shading from Meta/WRI CHM v2 (A1 mask, crowns 70% opaque, heights +/-3 m, 0.5 m grid), "
                      "no site uncertainty model, not bankable",
         }, fh, separators=(",", ":"))
     kb = os.path.getsize(web) / 1024
