@@ -180,6 +180,8 @@ No re-running with the trees file. No touching the building term, which stays as
 | canopy heights (v2, MAE 3.0 m) | **either way** | published band covers −3 m; +3 m is not run, so the shipped figure is not the upper bound |
 | transmittance 0.30 | either way | 0.20–0.50 band published; no species, no seasonal leaf drop |
 | ward-edge buildings | shading understated at the edge | no geometry outside the ward |
+| raster pixelisation vs the polygon sweep (A2, measured) | raster reads **low** | buildings-only Ballygunge: raster 4.648 % vs polygon 5.122 % mean, r 0.9944, raster lower on 93.7 % of buildings; share ≥ 5 %: 25.83 vs 28.24 |
+| integer rounding of k·s on off-cardinal azimuths (A2) | reads up to √2 further than the drop applied | the published algorithm's own approximation; dominated by the pixelisation row, which runs the other way |
 
 The honest sentence for the card: *"Shaded X %, of which trees Y %. Screening: canopy heights
 ±3 m, crowns treated as 70 % opaque."*
@@ -245,6 +247,43 @@ mounting class any scheme addresses, and a raster has no way to represent it.
 **Artefact fields added:** `canopy.overhang_kept_frac`, `canopy.enclosed_dropped_frac`,
 `per_building_loss_total_raised[]`, and the two sensitivity rows. §4's field list is to be read
 with these included.
+
+### A2 — 2026-09-05, after the code review of Tasks 1–3, before any tree loss was computed. Connectivity, and two biases the review measured
+
+**Raised by the code-quality review of the implementation** (`scripts/measure-pv-tree-shading.py`,
+commits 8ac62be…c790584). No ward tree-shading loss existed when this was written; the reviewer's
+only ward-scale run was the buildings-only march, which the mask does not touch.
+
+**Rule 1 (A1) — connectivity declared.** "Dilated by one pixel" did not say which neighbourhood.
+The implementation dilated 4-connected while labelling components 8-connected. Measured on
+Ballygunge at 1 m: the 4-connected ring is 167,266 px, the 8-connected ring 197,151 px — 29,885 px
+(4.78 % of footprint area) classed "outside a footprint" by the one and "inside" by the other, and
+each such pixel can flip a whole canopy component from enclosed to rooted. The direction is not
+neutral: the smaller ring keeps more canopy, i.e. leans toward P1. **Declared now: dilation is
+8-connected (3 × 3 structuring element), matching the labelling**, the natural reading of "one
+pixel" and the choice that does not lean. The self-check gains a case that discriminates (a blob
+whose only off-roof pixel touches the roof's corner diagonally is enclosed). Artefact gains
+`canopy.on_roof_px` beside the two fractions, so "no canopy on roofs" and "0 of many kept" are
+distinguishable.
+
+**§6 gains two rows, with receipts.** (i) The raster reads LOW against the polygon sweep:
+buildings-only Ballygunge, all 134 sun samples, raster 4.648 % vs polygon 5.122 % mean loss,
+r 0.9944, raster lower on 93.7 % of buildings (thin shadow slivers lost to pixelisation, roofs
+quantised to whole pixels). Share ≥ 5 %: 25.83 % vs 28.24 %, i.e. 2.41 pp of the 3.0 pp share
+tolerance consumed — **the share gate, not the mean, is the tight one**, and it may not clear in
+the lower-rise wards. If it does not, the tolerance is NOT loosened; the raster's systematic low
+bias is the published finding. (ii) Rounding k·s to integer offsets on off-cardinal azimuths
+reads a pixel up to √2·k·Δ away while applying k·Δ·tan α of drop — the pre-registered algorithm's
+own approximation (Ratti & Richens do the same), dominated by (i) in the opposite direction.
+
+**Self-check hardening, no rule change.** Every scene case sat at azimuth 180°, where the column
+offset is zero for every k; a sign flip on the east-west term survived all nine checks AND both
+ward cross-check gates (measured: mean 0.491 pp, share 2.55 pp, r 0.9918). A mast under a sun due
+east must now throw its shadow west along its own row. `shadow_height` asserts a square grid
+(a rectangular one returned a valid-shaped array with no shadow at all).
+
+**Unchanged:** every prediction in §5, both cross-check tolerances, τ, the pad, the height
+scenarios, the receiver rule.
 
 ## References
 
