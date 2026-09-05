@@ -481,6 +481,23 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
           <dt>Albedo</dt><dd id="bcAl">—</dd>
           <dt>Surface</dt><dd id="bcT">—</dd>
         </dl>
+        {/* ROOFTOP SOLAR — a screening estimate ABOUT the building, under the
+            measured rows and in a different ink. Painted by paintSolarCard from
+            the ward's solar file; hidden when none ships. "At least" is the
+            strict-mask floor: the mask rule is the largest lever in the estimate,
+            so the headline never prints without it (spec §2.4). */}
+        <div class="bc-sol" id="bcSol" hidden>
+          <div class="bc-h"><span>Rooftop solar</span><span>screening</span></div>
+          <dl>
+            <dt>Installable</dt><dd id="bcSolKwp" class="sun">—</dd>
+            <dt>Yield</dt><dd id="bcSolKwh">—</dd>
+            <dt>Shaded</dt><dd id="bcSolLoss">—</dd>
+            <dt>At least</dt><dd id="bcSolFloor">—</dd>
+            <dt>Raised 2 m</dt><dd id="bcSolRaised">—</dd>
+            <dt>Worth</dt><dd id="bcSolRs">—</dd>
+          </dl>
+          <p class="bc-sol-note">Screening estimate · not bankable · canopy Meta/WRI CHM v2 · 0.5 m grid · NASA POWER irradiance</p>
+        </div>
         <div class="sv-thumb" id="svThumb" hidden></div>
         <p class="bc-rings" id="bcRings"></p>
         <p class="bc-ins" id="bcIns"></p>
@@ -1158,6 +1175,17 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
   .bc-prov{margin:.4rem 0 0;font:400 .46rem var(--mono);letter-spacing:.08em;
     text-transform:uppercase;color:var(--bronze);line-height:1.6}
   .bc-prov:empty{display:none}
+  /* ROOFTOP SOLAR on the card: the card's own grid and notes, ruled off and headed
+     in amber, because it is a screening estimate about the building and must never
+     read as one of the measured rows above it. */
+  .bc-sol{margin:.55rem 0 0;padding-top:.5rem;border-top:1px solid rgb(242 181 68 /.35)}
+  .bc-sol .bc-h{color:var(--sun);margin-bottom:.35rem}
+  .bc-sol dd.sun{color:var(--sun)}
+  .bc-sol-note{margin:.4rem 0 0;font:400 .46rem var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--bronze);line-height:1.6}
+  /* Clay: amber on the near-white card fails 4.5:1, so the card's amber steps
+     down to an ink that clears it; the studio contrast gate is the proof. */
+  body.studio .bc-sol .bc-h,body.studio .bc-sol dd.sun{color:#7a5200}
+  body.studio .bc-sol{border-top-color:rgb(122 82 0 /.35)}
   /* Per-layer "data receipts" panel — populated from {ward}-layers.json (provenance.ts). */
   .srcbtn{margin:.4rem 0 0;cursor:pointer;font:400 .48rem var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--cyan);background:none;border:0;padding:.15rem 0}
   .srcbtn:hover{color:var(--paper)}
