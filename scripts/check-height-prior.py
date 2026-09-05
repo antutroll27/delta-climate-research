@@ -29,7 +29,7 @@ SITES = ("dubai-creek", "dubai-south")
 MIN_AREA = 5000.0
 
 sys.path.insert(0, HERE)
-from _flood import ring_area  # noqa: E402
+from _flood import ring_area, ring_centroid  # noqa: E402
 
 
 def global_prior(area: float) -> float:
@@ -51,6 +51,88 @@ def fitted(table: dict[str, Any], area: float) -> float:
         if best is not None:
             return best
     return global_prior(area)
+
+
+def grid_lookup(grid: dict[str, Any], index: dict[tuple[int, int, int], float],
+                x: float, y: float, area: float) -> float | None:
+    """Mirror of estimate_height's grid lookup. Widens by band, then by space."""
+    if not index:
+        return None
+    cell = float(grid.get("cellM", 600.0))
+    edges = [float(e) for e in (grid.get("bandEdges") or [500.0, 2000.0, 5000.0])]
+    band = len(edges)
+    for i, edge in enumerate(edges):
+        if area < edge:
+            band = i
+            break
+    gx, gy = int(x // cell), int(y // cell)
+    for rad in (0, 1, 2, 3):
+        same = sorted(index[(i, j, band)]
+                      for i in range(gx - rad, gx + rad + 1)
+                      for j in range(gy - rad, gy + rad + 1)
+                      if (i, j, band) in index)
+        if same:
+            return same[len(same) // 2]
+        anyb = sorted(index[(i, j, b)]
+                      for i in range(gx - rad, gx + rad + 1)
+                      for j in range(gy - rad, gy + rad + 1)
+                      for b in range(len(edges) + 1) if (i, j, b) in index)
+        if anyb:
+            return anyb[len(anyb) // 2]
+    return None
+
+
+def check_grid(sid: str, doc: dict[str, Any]) -> list[str]:
+    """Hold out the spatial grid the same way, and pin where it must NOT apply.
+
+    THE GRID IS BUILT FROM EVERY MEASURED BUILDING, so a held-out building's own
+    cell contains it and this understates the error. That is acceptable for a
+    REGRESSION gate -- it compares two predictors on identical terms and catches
+    the grid going wrong -- but it is not an accuracy estimate, and the honest
+    numbers came from a proper hold-out during development: 20.76 m -> 11.58 m.
+    """
+    failures: list[str] = []
+    grid = doc.get("heightGrid")
+    if not grid:
+        print(f"  skip {sid}: no heightGrid")
+        return failures
+    index = {(int(r[0]), int(r[1]), int(r[2])): float(r[3]) for r in grid.get("cells", [])}
+    maxa = float(grid.get("maxArea", MIN_AREA))
+
+    test = []
+    for rec in doc["osmB"]:
+        h = rec.get("h")
+        if not h or levels_derived(float(h)):
+            continue
+        a = ring_area(rec["p"])
+        if not (50.0 <= a < maxa) or not 1.5 <= float(h) <= 900.0:
+            continue
+        x, y = ring_centroid(rec["p"])
+        test.append((x, y, a, float(h)))
+    if len(test) < 50:
+        print(f"  skip {sid}: only {len(test)} genuine tags below {maxa:.0f} m2")
+        return failures
+
+    g = statistics.mean(abs(global_prior(a) - h) for _, _, a, h in test)
+    sp = statistics.mean(
+        abs((grid_lookup(grid, index, x, y, a) or global_prior(a)) - h)
+        for x, y, a, h in test)
+    print(f"  {sid} grid: n={len(test):4d}  global {g:6.2f} m -> spatial {sp:6.2f} m  "
+          f"({'better' if sp <= g else 'WORSE'})")
+    if sp > g:
+        failures.append(f"{sid}: the spatial grid is worse than the global curve")
+
+    # THE TWO PRIORS MUST TILE THE RANGE WITH NO GAP AND NO OVERLAP. The grid is
+    # consulted below maxArea and the fitted table at or above minArea; if those
+    # ever drift apart, footprints in between silently fall through to the global
+    # curve that both exist to replace, and nothing else would notice.
+    table = doc.get("heightTable") or {}
+    if table:
+        table_min = float(table.get("minArea", 0.0))
+        if abs(maxa - table_min) > 1e-9:
+            failures.append(f"{sid}: heightGrid.maxArea {maxa:.0f} != heightTable.minArea "
+                            f"{table_min:.0f} -- footprints between them fall through")
+    return failures
 
 
 def main() -> int:
@@ -105,11 +187,14 @@ def main() -> int:
                 failures.append(f"{sid}: thin band at {band['minArea']:.0f} m2 fell back to "
                                 f"the global curve instead of the band below it")
 
+        failures.extend(check_grid(sid, doc))
+
     if failures:
         for line in failures:
             print(f"  FAIL {line}")
         return 1
-    print("  height prior: fitted beats global above the threshold, and is inert below it")
+    print("  height prior: spatial wins below the cut-off, the fitted table above it, "
+          "and neither leaks into the other")
     return 0
 
 

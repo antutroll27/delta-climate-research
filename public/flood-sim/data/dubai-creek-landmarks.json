@@ -38,11 +38,12 @@
       "height": 104.0,
       "heightSource": "OSM height tag (26 levels)",
       "params": {
-        "crestMin": 0.3,
-        "crestPower": 1.2,
-        "leanM": 14.0,
+        "crestMin": 0.22,
+        "crestPower": 0.65,
+        "leanM": 18.0,
         "flip": false
-      }
+      },
+      "formNote": "Crest profile and orientation are a LOOK CHOICE, not a measurement. Three derivations were tried and rejected: tapering both axes gave a cone; a roofline driven by the measured plan width gave a central spike, because the plan is a crescent widest in the middle and its width does not track its height; and neither the shoreline nor the width profile identifies which end is high, since the building runs along the beach rather than into it. Set flip=true if someone with a reference says otherwise."
     }
   ]
 }

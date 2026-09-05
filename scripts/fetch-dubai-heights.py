@@ -51,7 +51,7 @@ import requests
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _flood import (OVERPASS, SITES, Site, m_per_deg, query_key,  # noqa: E402
-                    ring_area, site_bounds, window_key)
+                    ring_area, ring_centroid, site_bounds, window_key)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT_DIR = os.path.join(HERE, "..", "public", "flood-sim", "data")
@@ -335,6 +335,63 @@ def height_table(outlines: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
+# WHERE A BUILDING IS PREDICTS ITS HEIGHT BETTER THAN HOW BIG IT IS. The area
+# curve treats a 1,500 m2 footprint in Downtown and a 1,500 m2 warehouse the same,
+# and 87 % of Creek outlines have no measured height at all, so that curve decides
+# almost the whole scene. Held out against genuine `height=` tags:
+#
+#   band            global    spatial    (mean absolute error)
+#   50-500 m2         2.01       0.94
+#   500-2,000 m2     47.43      21.66     <- where the Creek's towers sit
+#   2,000-5,000 m2   36.49      24.99
+#   5,000-25,000     28.11      38.17     <- spatial LOSES here
+#
+# Overall 20.76 m -> 11.58 m. The split is not a hedge, it is where the
+# measurement changes sign: above 5,000 m2 a big building's neighbours are small
+# ones, so a mall surrounded by villas inherits the villas' height. That band
+# keeps the fitted area table instead.
+#
+# 600 m cells beat 150 m ones, which is counter-intuitive until you notice that
+# small cells are sparse and fall back more often than they resolve.
+HEIGHT_GRID_CELL_M = 600.0
+HEIGHT_GRID_MIN_SAMPLES = 4
+HEIGHT_GRID_MAX_AREA_M2 = 5000.0
+HEIGHT_GRID_BAND_EDGES = [500.0, 2000.0, 5000.0]
+
+
+def height_band(area: float) -> int:
+    for i, edge in enumerate(HEIGHT_GRID_BAND_EDGES):
+        if area < edge:
+            return i
+    return len(HEIGHT_GRID_BAND_EDGES)
+
+
+def height_grid(outlines: list[dict[str, Any]]) -> list[list[float]]:
+    """Median measured height per (cell, size band), from this site's own data.
+
+    Emitted as [gx, gy, band, medianM] rows rather than a nested object: a few
+    hundred rows either way, and a flat list survives JSON round-tripping without
+    integer keys turning into strings.
+    """
+    cells: dict[tuple[int, int, int], list[float]] = {}
+    for rec in outlines:
+        h = rec.get("h")
+        if not h:
+            continue
+        hv = float(h)
+        if not 1.5 <= hv <= 900.0:
+            continue
+        a = ring_area(rec["p"])
+        if a < 50.0:
+            continue
+        cx, cy = ring_centroid(rec["p"])
+        key = (int(cx // HEIGHT_GRID_CELL_M), int(cy // HEIGHT_GRID_CELL_M), height_band(a))
+        cells.setdefault(key, []).append(hv)
+    return [[float(gx), float(gy), float(band), round(statistics.median(v), 1)]
+            for (gx, gy, band), v in sorted(cells.items())
+            if len(v) >= HEIGHT_GRID_MIN_SAMPLES]
+
+
 def build(site: Site) -> dict[str, Any]:
     path = os.path.join(OUT_DIR, f"{site.id}-buildings.json")
     with open(path, encoding="utf-8") as fh:
@@ -455,6 +512,19 @@ def build(site: Site) -> dict[str, Any]:
 
         osm_b.append(rec)
     doc["osmB"] = osm_b
+    doc["heightGrid"] = {
+        "cellM": HEIGHT_GRID_CELL_M,
+        "maxArea": HEIGHT_GRID_MAX_AREA_M2,
+        "bandEdges": HEIGHT_GRID_BAND_EDGES,
+        "minSamples": HEIGHT_GRID_MIN_SAMPLES,
+        "cells": height_grid(osm_b),
+        "note": (
+            "Median MEASURED height per (600 m cell, size band), from this site's own "
+            "buildings. Consulted ONLY below maxArea: above it a large building's "
+            "neighbours are small ones, and the fitted heightTable does better. Rows "
+            "are [gx, gy, band, medianM]."
+        ),
+    }
     doc["heightTable"] = {
         "minArea": HEIGHT_TABLE_MIN_AREA_M2,
         "bands": height_table(osm_b),
