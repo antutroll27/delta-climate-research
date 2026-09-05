@@ -33,7 +33,7 @@ import math
 import os
 import sys
 import time
-from typing import Any, cast
+from typing import Any, Iterable, cast
 
 import numpy as np
 import numpy.typing as npt
@@ -104,7 +104,8 @@ def shadow_height(dsm: F32, alt_deg: float, az_deg: float, step_m: float) -> F32
     # Square by construction (rasterise and read_chm_grid both produce n x n). A rectangle would
     # not raise: the column slices would stop at n and the right of the grid would silently
     # never shade (measured). So it is refused here rather than half-processed.
-    assert dsm.shape[0] == dsm.shape[1], f"square grid required, got {dsm.shape}"
+    if dsm.shape[0] != dsm.shape[1]:
+        raise ValueError(f"square grid required, got {dsm.shape}")
     # The surface floor is 0 by construction (ground pixels are 0, canopy is clipped >= 0), so
     # max() alone bounds the reach. If terrain ever enters, this becomes max() - min().
     k_max = int(math.ceil(float(dsm.max()) / (step_m * t)))
@@ -190,12 +191,13 @@ def rasterise(polys: list[Polygon], heights: F64, n: int, frame_m: float,
     tr = from_origin(-frame_m / 2.0, frame_m / 2.0, step_m, step_m)
     order = np.argsort(heights, kind="stable")
     shapes = ((polys[int(i)], int(i) + 1) for i in order)
-    # TYPING ONLY. The rasterio stub declares GeoJSON mappings, but rasterize does
-    # `geom = getattr(geom, '__geo_interface__', None) or geom` (features.py:339, rasterio 1.5.0),
-    # so a shapely Polygon is the documented input. Casting the argument rather than converting
-    # the geometries keeps the runtime call exactly as measured.
-    raw = features.rasterize(cast(Any, shapes), out_shape=(n, n), transform=tr, fill=0,
-                             dtype="int32")
+    # The cast widens ONLY the geometry type: the rasterio stub asks for a Mapping, but rasterize
+    # does `geom = getattr(geom, '__geo_interface__', None) or geom` (features.py:339, rasterio
+    # 1.5.0), so a shapely Polygon is the documented input. Casting the argument rather than
+    # converting the geometries keeps the runtime call exactly as measured. skip_invalid=False
+    # because the default silently DROPS an invalid footprint into the pixel-less set.
+    raw = features.rasterize(cast(Iterable[tuple[Any, float]], shapes), out_shape=(n, n),
+                             transform=tr, fill=0, dtype="int32", skip_invalid=False)
     ids: I32 = np.asarray(raw, dtype=np.int32)
     dsm = np.zeros((n, n), dtype=np.float32)
     own = ids > 0
@@ -222,6 +224,8 @@ def run_ward(ward_id: str) -> None:
         raise SystemExit(f"{ward_id}: registered artefact has {len(poly_loss)} buildings, ward file {nb}")
 
     frame_m = float(ward.footprint_m) + 2.0 * PAD_M
+    if not frame_m.is_integer():
+        raise ValueError(f"frame must be a whole number of metres, got {frame_m}")
     n = int(round(frame_m / GRID_M))
     chm_read = canopy_mod.read_chm_grid(ward._replace(footprint_m=int(frame_m)), n)
     if chm_read is None:
@@ -272,10 +276,11 @@ def run_ward(ward_id: str) -> None:
 
     l_b, l_b_r = loss("b"), loss("b_r")
     l_t, l_t_r, l_m, l_s = loss("t"), loss("t_r"), loss("m"), loss("s")
-    # Buildings without pixels (full-duplicate twins): the registered building-only figure,
-    # no tree term, flagged. Arrays stay full length so the index join holds. The raised
-    # scenario gets the same backfill, or its array would read 0 on exactly those indices
-    # while the total reads the polygon value (caught in review before any ward had one).
+    # Buildings without pixels: a footprint lying wholly inside a taller neighbour's (measured:
+    # none are exact duplicates, none are sub-pixel; barrackpore has one such). They take the
+    # registered building-only figure, no tree term, and are listed by index. Arrays stay full
+    # length so the index join holds. The raised scenario gets the same backfill, or its array
+    # would read 0 on exactly those indices while the total reads the polygon value.
     l_b[no_pixels] = poly_loss[no_pixels]
     l_b_r[no_pixels] = poly_loss[no_pixels]
 
@@ -288,28 +293,48 @@ def run_ward(ward_id: str) -> None:
     has = npix > 0
     mean_r, mean_p = float(l_b[has].mean()), float(poly_loss[has].mean())
     share_r, share_p = float((l_b[has] >= 0.05).mean()), float((poly_loss[has] >= 0.05).mean())
+    mean_p_reg = float(poly_art["mean_loss_pct"]) / 100.0
+    share_p_reg = float(poly_art["frac_losing_5pct"])
     cross_ok = (abs(mean_r - mean_p) * 100 <= CROSS_CHECK_MEAN_PP
                 and abs(share_r - share_p) * 100 <= CROSS_CHECK_SHARE_PP)
     print(f"\n  cross-check buildings-only: raster {mean_r*100:.2f}% vs polygon {mean_p*100:.2f}% mean; "
           f"share>=5% {share_r*100:.1f}% vs {share_p*100:.1f}% -> {'PASS' if cross_ok else 'FAIL'}")
-    # SANITY 3 -- loss rises as the sun falls, within each sample day
+    # SANITY 3 -- loss rises as the sun falls. The registered wording ("monotone in altitude
+    # within each sample day") cannot be tested literally: each day's altitudes are an exact
+    # palindrome about solar noon (day 1: 11.6, 23.4, 33.8, 42.1, 46.8, 46.8, 42.1, ...), so equal
+    # altitudes differ only by azimuth and any asymmetry in the built form breaks strict
+    # monotonicity on a correct run. What is tested per day, and published as such (A3): the
+    # shaded fraction at the lowest-altitude sample exceeds that at the highest, and the
+    # correlation between altitude and shaded fraction is negative. A weak check by design: it
+    # verifies the drop is wired the right way up; the east-west convention is pinned by the
+    # self-check, not by this.
+    days = day_groups(suns)
     mono_ok = True
-    for grp in day_groups(suns):
+    days_tested = 0
+    for grp in days:
         if len(grp) < 3:
             continue
+        days_tested += 1
         alts = np.asarray([suns[i][0] for i in grp])
         fr = np.asarray([frac_by_sun[i] for i in grp])
         if not (fr[int(alts.argmin())] > fr[int(alts.argmax())] and float(np.corrcoef(alts, fr)[0, 1]) < 0.0):
             mono_ok = False
-    print(f"  loss rises as the sun falls (every sample day): {'PASS' if mono_ok else 'FAIL'}")
+    print(f"  loss rises as the sun falls ({days_tested}/{len(days)} days tested): {'PASS' if mono_ok else 'FAIL'}")
     # SANITY 2 and 4 are guaranteed by construction and asserted on the synthetic scene
     # (--self-check): isolation, and nothing at or below the roof shades it.
 
     # PREDICTIONS (spec section 5), evaluated and written, never adjusted.
     kwp = areas * float(pv_yield.PACKING_FACTOR) / float(pv_yield.M2_PER_KWP)
     big = kwp >= 3.0
+    xc_big = {"polygon_mean_pct": round(float(poly_loss[big & has].mean()) * 100, 3),
+              "raster_mean_pct": round(float(l_b[big & has].mean()) * 100, 3),
+              "polygon_share_5pct": round(float((poly_loss[big & has] >= 0.05).mean()), 4),
+              "raster_share_5pct": round(float((l_b[big & has] >= 0.05).mean()), 4),
+              "note": "informational, not gated"}
     p1 = float(trees[big].mean()) > float(l_b[big].mean())
-    p2 = bool(np.all(central >= l_b - 1e-9)) and float(central.mean()) > float(l_b.mean())
+    # Exact, not approximate: central = l_b + 0.7 * l_t with l_t >= 0 (a bincount of a boolean
+    # mask), and adding a non-negative is monotone in IEEE arithmetic.
+    p2 = bool(np.all(central >= l_b)) and float(central.mean()) > float(l_b.mean())
     print(f"  P1 trees > buildings on >=3 kWp roofs: trees {trees[big].mean()*100:.2f}% vs "
           f"buildings {l_b[big].mean()*100:.2f}% -> {p1}")
     print(f"  P2 total never falls below buildings-only: {p2}")
@@ -321,18 +346,30 @@ def run_ward(ward_id: str) -> None:
     sens: list[dict[str, Any]] = []
     for tau in (TAU_BAND[0], TAU, TAU_BAND[1]):
         for name, lt in (("stated", l_t), ("minus_mae", l_m)):
-            x = total(l_b, lt, tau)
+            tot = total(l_b, lt, tau)
             sens.append({"tau": tau, "canopy_height": name, "mask": "a1",
-                         "receiver": "roof", "mean_total_pct": stats(x)["mean_pct"],
-                         "share_5pct_total": stats(x)["share_5pct"],
-                         "mean_trees_pct": round(float((x - l_b).mean()) * 100, 3)})
-    x = total(l_b, l_s, TAU)
+                         "receiver": "roof", "mean_total_pct": stats(tot)["mean_pct"],
+                         "share_5pct_total": stats(tot)["share_5pct"],
+                         "mean_trees_pct": round(float((tot - l_b).mean()) * 100, 3)})
+    tot = total(l_b, l_s, TAU)
     sens.append({"tau": TAU, "canopy_height": "stated", "mask": "strict", "receiver": "roof",
-                 "mean_total_pct": stats(x)["mean_pct"], "share_5pct_total": stats(x)["share_5pct"],
-                 "mean_trees_pct": round(float((x - l_b).mean()) * 100, 3)})
+                 "mean_total_pct": stats(tot)["mean_pct"], "share_5pct_total": stats(tot)["share_5pct"],
+                 "mean_trees_pct": round(float((tot - l_b).mean()) * 100, 3)})
     sens.append({"tau": TAU, "canopy_height": "stated", "mask": "a1", "receiver": "raised_2m",
                  "mean_total_pct": stats(raised)["mean_pct"], "share_5pct_total": stats(raised)["share_5pct"],
                  "mean_trees_pct": round(float((raised - l_b_r).mean()) * 100, 3)})
+
+    # THE LEVERS, per ward, so the dominant uncertainty is a number and not a footnote (A3).
+    strict_total = total(l_b, l_s, TAU)
+    levers: dict[str, Any] = {
+        "mask_a1_vs_strict_pp": round(float(central.mean() - strict_total.mean()) * 100, 3),
+        "tau_band_pp": round(float(total(l_b, l_t, TAU_BAND[0]).mean() - total(l_b, l_t, TAU_BAND[1]).mean()) * 100, 3),
+        "canopy_minus_mae_pp": round(float(central.mean() - total(l_b, l_m, TAU).mean()) * 100, 3),
+        "raised_2m_pp": round(float(central.mean() - raised.mean()) * 100, 3),
+        "overhang_share_of_tree_term": round(1.0 - float((strict_total - l_b).mean()) / max(1e-12, float(trees.mean())), 4),
+    }
+    levers["largest"] = max((k for k in levers if k.endswith("_pp")), key=lambda k: float(levers[k]))
+    print(f"  levers (pp of mean total): {levers}")
 
     print(f"\n  CENTRAL: total {central.mean()*100:.2f}% (buildings {l_b.mean()*100:.2f}%, trees "
           f"{trees.mean()*100:.2f}%) · share>=5% {(central>=0.05).mean()*100:.1f}%")
@@ -352,7 +389,9 @@ def run_ward(ward_id: str) -> None:
                        "on_roof_px": on_roof_px,
                        "overhang_kept_frac": round(kept_frac, 4),
                        "enclosed_dropped_frac": round(dropped_frac, 4),
-                       "transmittance": TAU, "transmittance_band": list(TAU_BAND)},
+                       "transmittance": TAU, "transmittance_band": list(TAU_BAND),
+                       "href": canopy_mod.chm_href(ward), "max_m": round(float(chm.max()), 2),
+                       "nonzero_px": int((chm > 0).sum())},
             "buildings_without_pixels": int(len(no_pixels)),
             "buildings_without_pixels_idx": [int(i) for i in no_pixels],
             "per_building_loss_total": [round(float(v), 4) for v in central],
@@ -364,10 +403,23 @@ def run_ward(ward_id: str) -> None:
             "cross_check": {"polygon_mean_pct": round(mean_p * 100, 3), "raster_mean_pct": round(mean_r * 100, 3),
                             "abs_diff_pp": round(abs(mean_r - mean_p) * 100, 3),
                             "polygon_share_5pct": round(share_p, 4), "raster_share_5pct": round(share_r, 4),
-                            "abs_diff_share_pp": round(abs(share_r - share_p) * 100, 3), "pass": cross_ok},
-            "sanity": {"cross_check": cross_ok, "loss_rises_as_sun_falls": mono_ok,
+                            "abs_diff_share_pp": round(abs(share_r - share_p) * 100, 3), "pass": cross_ok,
+                            "polygon_mean_pct_registered": round(mean_p_reg * 100, 3),
+                            "polygon_share_5pct_registered": round(share_p_reg, 4),
+                            "population": "buildings with raster pixels; registered figures are over all buildings"},
+            "sanity": {"cross_check": cross_ok,
+                       "loss_rises_as_sun_falls": {
+                           "test": "per sample day: shaded fraction at the lowest-altitude sample > at the "
+                                   "highest, and r(altitude, shaded fraction) < 0",
+                           "days": len(days), "days_tested": days_tested, "pass": mono_ok},
                        "isolation_and_below_roof": "asserted on the synthetic scene (--self-check)"},
+            "shaded_frac_by_sun": [round(f, 5) for f in frac_by_sun],
+            "sun_samples": [[round(a, 2), round(z, 2), round(g, 1)] for a, z, g in suns],
             "sensitivity": sens,
+            "levers": levers,
+            "stratum": {"packing_factor": float(pv_yield.PACKING_FACTOR), "m2_per_kwp": float(pv_yield.M2_PER_KWP),
+                        "threshold_kwp": 3.0, "n": int(big.sum())},
+            "cross_check_ge_3kwp": xc_big,
             "predictions": {
                 "P1_trees_exceed_buildings_ge_3kwp": {"trees_mean_pct": round(float(trees[big].mean()) * 100, 3),
                                                       "buildings_mean_pct": round(float(l_b[big].mean()) * 100, 3),
@@ -378,10 +430,15 @@ def run_ward(ward_id: str) -> None:
                               "note": "reported ALONGSIDE the registered building-only verdict, never as a re-registration"},
             "notes": {
                 "height_bias": poly_art["height_bias_note"],
+                "rounding": "per_building_loss_total, _buildings and _trees are rounded independently to 4 dp, "
+                            "so total may differ from buildings + trees by 1e-4; read all three, never derive "
+                            "one from the other two",
                 "canopy": "A1 connectedness rule, 8-connected as declared in A2: rooted crowns kept whole, "
                           "enclosed misreads dropped; a misread touching a real crown survives, so the "
                           "strict-mask sensitivity row bounds it. Canopy heights carry the model's 3.0 m "
-                          "MAE; only the minus-MAE scenario is run, so the shipped figure is not the upper bound.",
+                          "MAE; only the minus-MAE scenario is run, so the shipped figure is not the upper bound."
+                          " The mask rule is the dominant lever in continuous canopy -- see "
+                          "levers.mask_a1_vs_strict_pp and levers.overhang_share_of_tree_term.",
                 "raster_bias": "The raster reads LOW against the polygon sweep (thin shadow slivers lost to "
                                "pixelisation, roofs quantised to whole pixels) -- see cross_check; the share "
                                "gate is the tight one (A2).",
@@ -435,17 +492,17 @@ def _self_check() -> None:
     sh_b = shadow_height(dsm_b2, alt, az, step)
     sh_t = shadow_height(np.maximum(dsm_b2, tree(20.0, slice(80, 83))), alt, az, step)
     b, t = classify(sh_b, sh_t, roof_h, 0.0)
-    nb, nt = int((b & roof).sum()), int((t & roof).sum())
-    assert 6 <= nb <= 18, f"building block shaded {nb} px, expected ~12"
-    assert 39 <= nt <= 54, f"tree-only shaded {nt} px, expected ~45"
+    n_b, n_t = int((b & roof).sum()), int((t & roof).sum())
+    assert 6 <= n_b <= 18, f"building block shaded {n_b} px, expected ~12"
+    assert 39 <= n_t <= 54, f"tree-only shaded {n_t} px, expected ~45"
     assert not bool((b & t).any()), "a pixel was both building- and tree-shaded"
     npx = float(roof.sum())
-    loss = float(total(np.asarray([nb / npx]), np.asarray([nt / npx]), TAU)[0])
+    loss = float(total(np.asarray([n_b / npx]), np.asarray([n_t / npx]), TAU)[0])
     assert abs(loss - (12 + 0.7 * 45) / 400.0) < 0.02, f"composed loss {loss:.4f}"
     # 7. raising the array 2 m clears part of the building's shadow and none of the tree's reach
     b_r, t_r = classify(sh_b, sh_t, roof_h, RAISE_M)
-    assert int((b_r & roof).sum()) < nb, "raising the array did not reduce building shading"
-    assert int((t_r & roof).sum()) <= nt, "raising the array increased tree shading"
+    assert int((b_r & roof).sum()) < n_b, "raising the array did not reduce building shading"
+    assert int((t_r & roof).sum()) <= n_t, "raising the array increased tree shading"
 
     # 8. the A1 connectedness rule: a blob enclosed in the footprint is dropped, a crown that
     #    straddles the edge is kept whole, and the two published fractions are exact
