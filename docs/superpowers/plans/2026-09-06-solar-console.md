@@ -419,7 +419,7 @@ In `heat-map-app.ts`, immediately after the closing `  }` of `paintSolarCard`, a
     setHTML('solKwp', `${t.capacity_mwp.toFixed(1)}<span class="u">MWp</span>`);
     setHTML('solConf', `Screening · <b>${t.capacity_mwp_range[0].toFixed(1)}–${t.capacity_mwp_range[1].toFixed(1)} MWp</b> · not bankable`);
     setHTML('solKwh', `${t.generation_gwh_yr.toFixed(1)}<small>GWh/yr · floor</small>`);
-    setHTML('solRs', `${inr(t.generation_gwh_yr * 1e6 * tariff)}<small>per yr at ₹${tariff.toFixed(2)} · assumed</small>`);
+    setHTML('solRs', `${fmtMoney(t.generation_gwh_yr * 1e6 * tariff, COSTS)}<small>per yr at ${currencyMark(COSTS)}${tariff.toFixed(2)} · assumed</small>`);
     setHTML('solBig', `${s.n.toLocaleString()}<small>${Math.round(100 * s.n / n)}% of ${n.toLocaleString()} roofs</small>`);
     setHTML('solSh', `${Math.round(s.share_losing_5pct * 100)}%<small>of those roofs</small>`);
     setText('solFloor', `Shading costs ${t.shading_loss_gwh_yr.toFixed(1)} GWh a year — at least `
@@ -460,6 +460,8 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 - Modify: `src/components/ClimateEngine/compare/PairedBench.astro:103` (pane before Scenarios)
 - Modify: `src/scripts/climate-engine/heat-map-app.ts` (after `paintSolarWard`; one line inside it; the wiring after the clock's `onFormat` listeners)
 
+**Currency rule (found by the Task 3 review):** `tests/unit/obos-scope.test.mjs` forbids `₹`, `en-IN`, `crore`, `lakh` in the engine's modules; the app's `fmtMoney(amount, COSTS)` and `currencyMark(COSTS)` (from `./money.ts`, `COSTS` already in scope) print money and its mark, and the tariff's mark is painted into `#solCur` by JS rather than typed into the template. The CSV names no currency in its columns and carries a `currency` column instead.
+
 - [ ] **Step 1: The pane on the Explore route**
 
 In `HeatMapStage.astro`, immediately before `      <div class="pane" data-pane="scenarios">` insert:
@@ -478,9 +480,9 @@ In `HeatMapStage.astro`, immediately before `      <div class="pane" data-pane="
           <p class="pane-note" id="solPaneSum">Loading the rooftop-solar screen…</p>
           <div class="sol-tariff">
             <label for="solTariff">Tariff · assumed · change it</label>
-            <span><span aria-hidden="true">₹</span><input id="solTariff" type="number" inputmode="decimal" min="0" step="0.25" value="8.00" aria-describedby="solTariffNote"> / kWh</span>
+            <span><span id="solCur" aria-hidden="true"></span><input id="solTariff" type="number" inputmode="decimal" min="0" step="0.25" value="8.00" aria-describedby="solTariffNote"> / kWh</span>
           </div>
-          <p class="pane-note sol-small" id="solTariffNote">CESC domestic slabs run ₹4.07–9.21 per unit (2025-26 tariff order); a solar unit displaces the top of the bill. Not a rate we assert.</p>
+          <p class="pane-note sol-small" id="solTariffNote">CESC domestic slabs run 4.07–9.21 per unit (2025-26 tariff order); a solar unit displaces the top of the bill. Not a rate we assert.</p>
           <p class="pane-h">Best roofs by annual yield</p>
           <table class="roofs" aria-label="The ten best roofs by annual yield; each row selects its building on the map">
             <thead><tr><th scope="col">#</th><th scope="col">kWp</th><th scope="col">kWh/yr</th><th scope="col">shaded</th><th scope="col">m²</th></tr></thead>
@@ -579,14 +581,14 @@ Immediately after the closing `  }` of `paintSolarWard`, add:
   function buildCsv(pv: PvFile): string {
     const w = wardOf(state.ward);
     const byIdx = new Map(registry.map((b) => [b.idx, b] as const));
-    const rows = ['idx,lat,lon,footprint_m2,kwp,kwh_yr,loss,loss_buildings,loss_trees,loss_strict,loss_raised,worth_inr_yr,tariff_inr_kwh,basis'];
+    const rows = ['idx,lat,lon,footprint_m2,kwp,kwh_yr,loss,loss_buildings,loss_trees,loss_strict,loss_raised,worth_per_yr,tariff_per_kwh,currency,basis'];
     for (let i = 0; i < pv.kwp.length; i += 1) {
       const b = byIdx.get(i);
       const ll = b ? wardLatLon(w, b.cx, b.cz) : null;
       rows.push([
         i, ll ? ll.lat.toFixed(5) : '', ll ? ll.lon.toFixed(5) : '', b ? Math.round(b.areaM2) : '',
         pv.kwp[i], pv.kwh[i], pv.loss[i], pv.loss_buildings[i], pv.loss_trees[i], pv.loss_strict[i], pv.loss_raised[i],
-        Math.round(pv.kwh[i] * tariff), tariff.toFixed(2), i === 0 ? `"${pv.basis.replace(/"/g, '""')}"` : '',
+        Math.round(pv.kwh[i] * tariff), tariff.toFixed(2), COSTS.currency, i === 0 ? `"${pv.basis.replace(/"/g, '""')}"` : '',
       ].join(','));
     }
     return `${rows.join('\n')}\n`;
@@ -608,6 +610,7 @@ Immediately after the closing `  }` of `paintSolarWard`, add:
   };
   const tariffInput = el('solTariff') as HTMLInputElement | null;
   if (tariffInput) tariffInput.value = tariff.toFixed(2);
+  setText('solCur', currencyMark(COSTS));   // the country names the currency; never typed into a template
   const onTariff = () => {
     const v = Number(tariffInput?.value);
     if (!Number.isFinite(v) || v <= 0) return;
@@ -717,7 +720,7 @@ import { test, expect } from '@playwright/test';
    floor is asserted wherever the headline is: that is the one claim the design
    makes about itself. */
 const BALLYGUNGE = '/heat-map/in/kolkata/ballygunge/';
-const HEADER = 'idx,lat,lon,footprint_m2,kwp,kwh_yr,loss,loss_buildings,loss_trees,loss_strict,loss_raised,worth_inr_yr,tariff_inr_kwh,basis';
+const HEADER = 'idx,lat,lon,footprint_m2,kwp,kwh_yr,loss,loss_buildings,loss_trees,loss_strict,loss_raised,worth_per_yr,tariff_per_kwh,currency,basis';
 
 test.describe('the solar screen', () => {
   test.beforeEach(async ({ page }) => {
@@ -741,7 +744,7 @@ test.describe('the solar screen', () => {
     const before = await page.locator('#solRs').innerText();
     await page.locator('#solTariff').fill('10');
     await expect(page.locator('#solRs')).not.toHaveText(before);
-    await expect(page.locator('#solRs')).toContainText('₹10.00');
+    await expect(page.locator('#solRs')).toContainText('10.00');
     await page.reload();
     await expect(page.locator('#lst')).not.toContainText('—', { timeout: 30_000 });
     await expect(page.locator('#solTariff')).toHaveValue('10.00');
@@ -755,6 +758,7 @@ test.describe('the solar screen', () => {
     expect(lines[0]).toBe(HEADER);
     expect(lines.length).toBe(1 + 3527);           // one row per Ballygunge building
     expect(lines[1].split(',')[12]).toBe('10.00'); // the tariff the reader set
+    expect(lines[1].split(',')[13]).toBe('INR');
   });
 
   test('a ranked row selects its building, and the card prints the floor', async ({ page }) => {
