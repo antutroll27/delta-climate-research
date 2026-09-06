@@ -16,7 +16,8 @@ jobs:
     # 0355181 (e2e on SwiftShader is the bulk), so 20 had no headroom and the run for
     # c2b7bbb was cancelled at 21.8 min once test:py grew by the tree-shading self-check.
     # 30 is a ceiling against a hung step, not a budget.
-    timeout-minutes: 30
+    # 2026-09-06: the verify step ran 26.6 min on 2a35c56 (two flaky retries, ~6 min, plus the solar specs, ~3 min); 40 keeps it a ceiling.
+    timeout-minutes: 40
 
     steps:
       - name: Check out repository

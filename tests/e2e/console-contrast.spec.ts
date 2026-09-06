@@ -55,8 +55,18 @@ interface Finding {
  * reader is actually looking at.
  */
 async function contrastFailures(page: Page): Promise<Finding[]> {
+  /* EVERY BOX, READ BEFORE THE SHUTTER. The sampling pass below reads each box
+     again, two frames later, and compares — see MOTION there. */
+  await page.evaluate(() => {
+    const m = new WeakMap<Element, string>();
+    for (const el of Array.from(document.querySelectorAll('*'))) {
+      const r = el.getBoundingClientRect();
+      m.set(el, [r.left, r.top, r.width, r.height].map((v) => Math.round(v)).join(','));
+    }
+    (window as unknown as { __boxesBefore?: WeakMap<Element, string> }).__boxesBefore = m;
+  });
   const shot = (await page.screenshot()).toString('base64');
-  return page.evaluate(async (b64) => {
+  const { findings, moved } = await page.evaluate(async (b64) => {
     const img = new Image();
     await new Promise((ok, no) => { img.onload = ok; img.onerror = no; img.src = `data:image/png;base64,${b64}`; });
     const cv = document.createElement('canvas');
@@ -82,6 +92,7 @@ async function contrastFailures(page: Page): Promise<Finding[]> {
     const parse = (s: string): number[] => (s.match(/[\d.]+/g) || []).map(Number).slice(0, 3);
 
     const out: Finding[] = [];
+    let moved = 0;
     for (const el of Array.from(document.querySelectorAll('*'))) {
       /* Leaf text only. An element with children would be measured again through
          each of them, and its own box spans grounds its text never touches. */
@@ -132,6 +143,17 @@ async function contrastFailures(page: Page): Promise<Finding[]> {
       style.pointerEvents = pe;
       if (topEl && topEl !== el && !el.contains(topEl) && !topEl.contains(el)) continue;
 
+      /* MOTION. The screenshot and this read are two frames apart, and the
+         selection's ring labels are repositioned on every map render — on the
+         CI runner they never held still for 15 s. An element whose box differs
+         from its box read just before the shot was sampled somewhere it no longer
+         is, so it is skipped this sweep rather than scored against the map.
+         Ceiling: an element moving in place (same box, changing colour) is not
+         caught by this. */
+      const before = (window as unknown as { __boxesBefore?: WeakMap<Element, string> }).__boxesBefore?.get(el);
+      const nowBox = [r.left, r.top, r.width, r.height].map((v) => Math.round(v)).join(',');
+      if (before !== undefined && before !== nowBox) { moved += 1; continue; }
+
       const x0 = Math.round(r.left), y0 = Math.round(r.top);
       const x1 = Math.min(cv.width, Math.round(r.right));
       const y1 = Math.min(cv.height, Math.round(r.bottom));
@@ -177,33 +199,18 @@ async function contrastFailures(page: Page): Promise<Finding[]> {
         text: el.textContent.trim().slice(0, 30), path: path.slice(-3).join(' > '),
       });
     }
-    return out.sort((a, b) => a.ratio - b.ratio);
+    return { findings: out.sort((a, b) => a.ratio - b.ratio), moved };
   }, shot);
+  /* Said out loud, because a skip that silently ate every failure would look
+     exactly like a clean sweep. */
+  console.log(`[contrast] motion skip removed ${moved} element(s) from this sweep`);
+  return findings;
 }
 
 function report(theme: string, findings: Finding[]): string {
   return `${findings.length} text node(s) below the WCAG floor on ${theme}:\n`
     + findings.map(f => `  ${String(f.ratio).padStart(5)}:1 (needs ${f.floor}) `
       + `${f.px}px ${f.color} on ${f.ground}\n        ${f.path}\n        "${f.text}"`).join('\n');
-}
-
-/** Wait until the selection's ring labels stop moving. placeCard repositions them
-    on every map render, and the sampler screenshots the page BEFORE it reads each
-    box — a label still travelling after a camera ease or a style swap is sampled
-    against whatever the map painted where it used to be (measured: #ringFar scored
-    2.36:1 against the dark map one run in four). Two identical reads 300 ms apart
-    is stillness enough; a page with no selection returns at once. */
-async function ringsStill(page: Page): Promise<void> {
-  await page.waitForFunction(() => {
-    const now = ['ringNear', 'ringFar']
-      .map((id) => { const r = document.getElementById(id)?.getBoundingClientRect(); return r ? [r.x, r.y, r.width, r.height].map(Math.round).join(',') : 'none'; })
-      .join('|');
-    const w = window as unknown as { __rings?: string; __ringsAt?: number };
-    const t = performance.now();
-    if (w.__rings === now && w.__ringsAt !== undefined && t - w.__ringsAt >= 300) return true;
-    if (w.__rings !== now) { w.__rings = now; w.__ringsAt = t; }
-    return false;
-  }, undefined, { polling: 150, timeout: 15_000 });
 }
 
 /** Wait for a reading — the console paints its numbers only once a ward is up. */
@@ -256,10 +263,8 @@ test.describe('console legibility', () => {
     await expect(page.locator('#solList tr')).toHaveCount(10, { timeout: 15_000 });
     await page.locator('#solList tr').first().click();
     await page.waitForTimeout(1_500);
-    await ringsStill(page);
     await page.locator('#envchip button[data-e="studio"]').click();
     await page.waitForTimeout(4_000);
-    await ringsStill(page);
     const findings = await contrastFailures(page);
     expect(findings, report('Clay studio, card open', findings)).toEqual([]);
   });

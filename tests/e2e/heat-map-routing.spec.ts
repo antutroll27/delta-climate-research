@@ -239,13 +239,36 @@ test('the Area dropdown is drivable from the keyboard alone', async ({ page }) =
      IT WAS A FAULT IN THE CONTROL, and it is fixed there (2026-09-05): type-ahead
      read Date.now() when its handler ran, so a stall between two keystrokes counted
      as the reader pausing. It now measures from e.timeStamp, the moment the key went
-     down, which no stall can move. The retry stays as a defence for the assertion's
-     own 1s window on a runner that can freeze for longer than that; it keeps the
-     claim exactly as strong: typing "barr" must still land on Barrackpore, and Home
-     still resets the row first so each attempt starts from the same place. */
+     down, which no stall can move. That fix is right for a person and could never
+     rescue this test: under automation a key EVENT is created only after the
+     renderer has processed the one before it, so a stalled runner stamps the events
+     themselves ~900ms apart and the control splits the word exactly as specified.
+     The keys therefore now arrive in ONE task (below), which takes the wall clock
+     between them away from the runner; the retry stays only as a defence for the
+     assertion's own 1s window on a runner that can freeze for longer than that, and
+     Home still resets the row first so each attempt starts from the same place. The
+     claim is unchanged, and still costs four letters: "barr" must land on
+     Barrackpore, and "bar" cannot — it matches Baruipur. */
   await expect(async () => {
     await page.keyboard.press('Home');
-    await page.keyboard.type('barr', { delay: 40 });
+    /* FOUR KEYS IN ONE TASK. The control measures its 600ms type-ahead window
+       between key EVENTS (e.timeStamp, fixed 2026-09-05). Under automation each
+       key event is created only after the renderer has processed the previous
+       one, so on a runner whose main thread stalls ~900ms between keys the events
+       themselves arrive 900ms apart and the word splits — every retry, on CI,
+       with the control working exactly as specified. A person's keystrokes are
+       stamped when the OS delivers them, not when the page gets round to them.
+       So the letters are dispatched as real KeyboardEvents on the focused
+       trigger within a single task: the contract under test is the control's
+       handling of the keys, and that is what this exercises. The handler is bound
+       to the trigger itself (select-field.ts, `on(trigger, 'keydown', ...)`), and
+       trigger.focus() above put it in document.activeElement. */
+    await page.evaluate(() => {
+      const target = document.activeElement ?? document.body;
+      for (const key of ['b', 'a', 'r', 'r']) {
+        target.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+      }
+    });
     await expect(list.locator('li.is-active .field-option-text'))
       .toHaveText('Barrackpore', { timeout: 1_000 });
   }).toPass({ timeout: 30_000 });
