@@ -597,13 +597,8 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
           id; `updateReportHref` still finds it by name. */}
     </aside>
 
-    <div class="legend">
-      <div class="k legend-head" style="margin-bottom:.6rem"><span>What the colours mean</span>
-        {/* The ward's solar numbers, on request, OVER the legend rather than above it:
-            a block stacked in the rail pushed the colour key below the fold. Hidden
-            until a solar screen ships for the area; collapsed by default. */}
-        <button class="solbtn" id="solToggle" type="button" aria-expanded="false" aria-controls="solOverlay" hidden>Solar ▸</button>
-      </div>
+    <div class="legend" id="legend">
+      <div class="k legend-head" style="margin-bottom:.6rem"><span>What the colours mean</span></div>
       {/* `style` is an attribute whose CONTENT is CSS, unlike `stroke` above, so
           `var()` resolves here normally. These swatches are inside `.stage`, which
           is where the tokens are declared. */}
@@ -626,16 +621,22 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
       <div class="attr">Basemap © OpenStreetMap · OpenFreeMap · Footprints © Overture Maps Foundation (ODbL) · Heights Google Open Buildings 2.5D (CC BY 4.0) · Water © OpenStreetMap (ODbL) · Ground SRTM via AWS terrain tiles, <span id="terrLab">indicative</span> · Live weather © Met Norway (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>) · Cloud deck drawn at 320 m, real base ~700 m · left-drag orbit · right-drag pan · scroll zoom</div>
       <button class="srcbtn" id="srcBtn" type="button" aria-expanded="false" aria-controls="srcPanel">Data receipts ↗</button>
       <div class="srcpanel" id="srcPanel" role="dialog" aria-label="Per-layer data provenance" hidden></div>
-      <div class="soloverlay" id="solOverlay" hidden role="region" aria-label="Rooftop solar, whole ward">
-        <div class="k legend-head"><span>Rooftop solar · whole ward</span><button class="solbtn" id="solCollapse" type="button" aria-controls="solOverlay">◂ Colours</button></div>
-        <div class="big" id="solKwp">—<span class="u">MWp</span></div>
-        <div class="conf screening" id="solConf"></div>
-        <p class="solfloor" id="solFloor"></p>
-        <div class="mrow">
-          <div><div class="k">Annual yield</div><div class="val" id="solKwh">—</div></div>
-          <div><div class="k">Worth at tariff</div><div class="val sun" id="solRs">—</div></div>
-          <div><div class="k" id="solBigK">Roofs ≥ 3 kWp</div><div class="val" id="solBig">—</div></div>
-          <div><div class="k">Losing ≥ 5 %, of those</div><div class="val sun" id="solSh">—</div></div>
+      {/* The ward's solar numbers, BELOW the colour key and folded to a header by
+          default: the key is what a reader entering the console sees first
+          (founder's call, 2026-09-06). On the Solar screen the script moves this
+          block above the key and unfolds it. Hidden until a solar screen ships. */}
+      <div class="solblock legend-solar" id="solBlock" role="region" aria-label="Rooftop solar, whole ward" hidden>
+        <div class="k legend-head"><span>Rooftop solar · whole ward</span><button class="solbtn" id="solToggle" type="button" aria-expanded="false" aria-controls="solBody">Show ▾</button></div>
+        <div class="solbody" id="solBody" hidden>
+          <div class="big" id="solKwp">—<span class="u">MWp</span></div>
+          <div class="conf screening" id="solConf"></div>
+          <p class="solfloor" id="solFloor"></p>
+          <div class="mrow">
+            <div><div class="k">Annual yield</div><div class="val" id="solKwh">—</div></div>
+            <div><div class="k">Worth at tariff</div><div class="val sun" id="solRs">—</div></div>
+            <div><div class="k" id="solBigK">Roofs ≥ 3 kWp</div><div class="val" id="solBig">—</div></div>
+            <div><div class="k">Losing ≥ 5 %, of those</div><div class="val sun" id="solSh">—</div></div>
+          </div>
         </div>
       </div>
     </div>
@@ -1252,25 +1253,25 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
     border:1px solid rgb(111 202 214 /.4);border-radius:11px;padding:11px 13px;
     box-shadow:0 14px 40px rgb(0 0 0 /.45);
     max-height:calc(100dvh - 24px);overflow-y:auto;overscroll-behavior:contain}
-  .bc-h{display:flex;justify-content:space-between;font:400 .5rem var(--mono);letter-spacing:.16em;
+  .bc-h{display:flex;justify-content:space-between;font:450 .5rem var(--sans);letter-spacing:.16em;
     text-transform:uppercase;color:var(--cyan);margin-bottom:.5rem}
   .bcard dl{display:grid;grid-template-columns:auto 1fr;gap:.22rem .7rem;margin:0;font-size:.7rem}
-  .bcard dt{font:400 .5rem var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--ink);align-self:baseline}
+  .bcard dt{font:450 .5rem var(--sans);letter-spacing:.1em;text-transform:uppercase;color:var(--ink);align-self:baseline}
   .bcard dd{margin:0;text-align:right;font-weight:550;letter-spacing:-.01em;color:var(--paper)}
-  .bcard dd small{display:block;font:400 .46rem var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--bronze)}
+  .bcard dd small{display:block;font:450 .46rem var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--bronze)}
   /* The Height row carries HEIGHTS.note as its title (heat-map-app.ts). Without an
      affordance nobody hovers a plain <dd>, so the whole ICESat-2 caveat goes unread
      — same reasoning as .conf, which is the precedent. */
   #bcH{cursor:help}
   .bc-ins{margin:.55rem 0 0;padding-top:.5rem;border-top:1px solid rgb(111 202 214 /.18);
-    font:400 .5rem var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--ink);line-height:1.75}
+    font:450 .5rem var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--ink);line-height:1.75}
   .bc-ins b{font-weight:400}
   .bc-ins .hot{color:var(--red)} .bc-ins .cool{color:var(--cyan)}
   /* HOW THE FOOTPRINT WAS MADE, as a card footnote rather than a qualifier hung
      under the source name. It reads standalone ("Footprint model · confidence
      0.85") because at the foot of the card it no longer sits beneath the
      "Footprint by" label that used to supply its subject. */
-  .bc-prov{margin:.4rem 0 0;font:400 .46rem var(--mono);letter-spacing:.08em;
+  .bc-prov{margin:.4rem 0 0;font:450 .46rem var(--sans);letter-spacing:.08em;
     text-transform:uppercase;color:var(--bronze);line-height:1.6}
   .bc-prov:empty{display:none}
   /* ROOFTOP SOLAR on the card: the card's own grid and notes, ruled off and headed
@@ -1279,7 +1280,7 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
   .bc-sol{margin:.55rem 0 0;padding-top:.5rem;border-top:1px solid rgb(242 181 68 /.35)}
   .bc-sol .bc-h{color:var(--sun);margin-bottom:.35rem}
   .bc-sol dd.sun{color:var(--sun)}
-  .bc-sol-note{margin:.4rem 0 0;font:400 .46rem var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--bronze);line-height:1.6}
+  .bc-sol-note{margin:.4rem 0 0;font:450 .46rem var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--bronze);line-height:1.6}
   /* Clay: amber on the near-white card is 1.7:1, so the card's amber steps down
      to `--studio-ink-amber` at 6.3:1 (computed against rgb(245 244 241); the contrast gate never
      opens a card, so the number is the receipt). The bronze notes were already
@@ -1634,15 +1635,15 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
   .conf.screening{background:rgb(242 181 68 /.1);border:1px solid rgb(242 181 68 /.4);color:var(--paper)}
   /* THE WARD BLOCK, in the pane and in the legend overlay: the heat panel's grammar in
      the screening ink, on dark grounds in both themes. */
-  .solblock,.soloverlay{display:flex;flex-direction:column;gap:8px}
+  .solblock,.solbody{display:flex;flex-direction:column;gap:8px}
   /* NO GLOBAL `[hidden]` RESET EXISTS IN THIS SHEET — it hides per rule (`.srcpanel[hidden]`,
      `.conf[hidden]`), and an AUTHOR `display:flex` beats the UA's `[hidden]{display:none}`
      whatever the specificity. Without this line the overlay would ship open. */
-  .solblock[hidden],.soloverlay[hidden]{display:none}
-  .solblock .k,.soloverlay .k{font-family:var(--sans);font-size:.62rem;font-weight:450;letter-spacing:.005em;color:var(--ink);line-height:1.35}
-  .solblock .big,.soloverlay .big{font-family:var(--mono);font-size:1.9rem;line-height:1;color:var(--sun);letter-spacing:.01em}
-  .solblock .big .u,.soloverlay .big .u{font-size:.8rem;margin-left:.3rem;color:var(--ink)}
-  .solblock .mrow,.soloverlay .mrow{padding:0;gap:8px 10px}
+  .solblock[hidden],.solbody[hidden]{display:none}
+  .solblock .k{font-family:var(--sans);font-size:.62rem;font-weight:450;letter-spacing:.005em;color:var(--ink);line-height:1.35}
+  .solblock .big{font-family:var(--mono);font-size:1.9rem;line-height:1;color:var(--sun);letter-spacing:.01em}
+  .solblock .big .u{font-size:.8rem;margin-left:.3rem;color:var(--ink)}
+  .solblock .mrow{padding:0;gap:8px 10px}
   .solfloor{margin:0;font-family:var(--sans);font-size:.66rem;line-height:1.45;color:var(--sun)}
   .solblock{padding:10px 0 4px;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
   .legend-head{display:flex;justify-content:space-between;align-items:center;gap:8px}
@@ -1650,7 +1651,8 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
   .solbtn:hover{color:var(--paper)} .solbtn:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
   /* the overlay sits ON the legend, inside its box, and scrolls if the box is shorter.
      `.legend` already declares position:relative in its own rule, so it is not repeated. */
-  .soloverlay{position:absolute;inset:0;padding:12px 15px;background:rgb(9 20 22 /.98);border-radius:12px;overflow:auto;z-index:2}
+  .legend-solar{margin-top:10px;border-bottom:0}
+  .legend-solar:first-child{margin:0 0 10px;border-top:0;border-bottom:1px solid var(--line)}
   .histo::after{content:"";position:absolute;inset-inline:16px;bottom:16px;height:1px;background:var(--line)}
 
   /* SOLID, NOT A GRADIENT, AND THAT WAS THE SECOND HALF OF THE BUG. The fill was

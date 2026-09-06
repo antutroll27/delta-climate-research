@@ -185,6 +185,10 @@ export function mountConsoleShell(): (() => void) | null {
     sidebar?.classList.toggle('is-collapsed', !state.open);
     document.documentElement.setAttribute(
       PANEL_STATE_ATTR, state.open ? EXPANDED : COLLAPSED);
+    /* WHICH pane, for the map's legend: its solar block sits above the colour key
+       on the Solar screen and below it elsewhere (2026-09-06). Read by
+       heat-map-app.ts through a MutationObserver; written nowhere else. */
+    document.documentElement.setAttribute('data-pane', state.open ? state.id : '');
     if (panelToggle) {
       panelToggle.setAttribute('aria-expanded', String(state.open));
       const name = state.open

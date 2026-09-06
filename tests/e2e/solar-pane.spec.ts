@@ -34,25 +34,29 @@ test.describe('the solar screen', () => {
   test.setTimeout(120_000);
   test.beforeEach(async ({ page }) => { await boot(page); });
 
-  test('the ward block lives in the Solar pane and the legend can show it on request', async ({ page }) => {
+  test('the legend folds the ward block under the colour key, and lifts it above on the Solar screen', async ({ page }) => {
+    /* Entering the console: the colour key first, the solar block folded under it. */
+    await expect(page.locator('#solBlock')).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('#solBody')).toBeHidden();
+    expect(await page.locator('#legend > :last-child').getAttribute('id')).toBe('solBlock');
+    const rail = (await page.locator('.rail-r').boundingBox())!;
+    const head = (await page.locator('.legend .legend-head').first().boundingBox())!;
+    expect(head.y).toBeLessThan(rail.y + rail.height);
+    await page.locator('#solToggle').click();
+    await expect(page.locator('#solBody')).toBeVisible();
+    await expect(page.locator('#solKwp')).toHaveText(/\d+\.\d\s*MWp/);
+    await expect(page.locator('#solFloor')).toContainText('strict roof mask');
+    await page.locator('#solToggle').click();
+    await expect(page.locator('#solBody')).toBeHidden();
+    /* On the Solar screen the block moves above the key and unfolds. */
     await openSolar(page);
     await expect(page.locator('#solPaneKwp')).toHaveText(/\d+\.\d\s*MWp/, { timeout: 15_000 });
     await expect(page.locator('#solPaneConf')).toContainText('Screening');
     await expect(page.locator('#solPaneFloor')).toContainText('strict roof mask');
     await expect(page.locator('#solPaneFloor')).toContainText('GWh');
     await expect(page.locator('#solPaneBigK')).toContainText('3 kWp');
-    /* The legend keeps its place: its header is inside the right rail's visible box,
-       and the solar numbers appear over it only when asked. */
-    const rail = (await page.locator('.rail-r').boundingBox())!;
-    const head = (await page.locator('.legend .legend-head').first().boundingBox())!;
-    expect(head.y).toBeLessThan(rail.y + rail.height);
-    await expect(page.locator('#solOverlay')).toBeHidden();
-    await page.locator('#solToggle').click();
-    await expect(page.locator('#solOverlay')).toBeVisible();
-    await expect(page.locator('#solKwp')).toHaveText(/\d+\.\d\s*MWp/);
-    await expect(page.locator('#solFloor')).toContainText('strict roof mask');
-    await page.locator('#solCollapse').click();
-    await expect(page.locator('#solOverlay')).toBeHidden();
+    expect(await page.locator('#legend > :first-child').getAttribute('id')).toBe('solBlock');
+    await expect(page.locator('#solBody')).toBeVisible();
   });
 
   test('the Solar pane ranks ten roofs, remembers the tariff, and hands over every roof', async ({ page }) => {

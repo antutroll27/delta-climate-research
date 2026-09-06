@@ -755,8 +755,8 @@ export function mountHeatMap(): () => void {
       if (on) e.removeAttribute('hidden'); else e.setAttribute('hidden', '');
     };
     show('solPaneBlock', has);
-    show('solToggle', has);
-    if (!has) { collapseSolar(); paintSolarPane(null); return; }
+    show('solBlock', has);
+    if (!has) { setSolarOpen(false); paintSolarPane(null); return; }
     const t = pv.totals, s = pv.stratum, n = pv.kwp.length;
     for (const pre of ['sol', 'solPane'] as const) {
       setHTML(`${pre}Kwp`, `${t.capacity_mwp.toFixed(1)}<span class="u">MWp</span>`);
@@ -774,29 +774,30 @@ export function mountHeatMap(): () => void {
     }
     paintSolarPane(pv);
   }
-  /* The legend overlay: collapsed by default, expanded on request, and collapsed again
-     when the ward changes to one with no screen. Escape collapses it too. */
-  function expandSolar() {
-    el('solOverlay')?.removeAttribute('hidden');
-    el('solToggle')?.setAttribute('aria-expanded', 'true');
-    el('solCollapse')?.focus();
+  /* The legend's solar block: below the colour key and folded by default; on the
+     Solar screen it moves above the key and unfolds (founder's call, 2026-09-06).
+     The shell publishes the open pane on <html data-pane>; this only reads it. */
+  function setSolarOpen(open: boolean) {
+    const body = el('solBody');
+    if (!body) return;
+    if (open) body.removeAttribute('hidden'); else body.setAttribute('hidden', '');
+    el('solToggle')?.setAttribute('aria-expanded', String(open));
+    setText('solToggle', open ? 'Hide ▴' : 'Show ▾');
   }
-  function collapseSolar() {
-    const ov = el('solOverlay');
-    if (!ov || ov.hasAttribute('hidden')) return;
-    ov.setAttribute('hidden', '');
-    el('solToggle')?.setAttribute('aria-expanded', 'false');
-    el('solToggle')?.focus();
+  function placeSolarBlock() {
+    const legend = el('legend'), block = el('solBlock');
+    if (!legend || !block) return;
+    const onSolar = document.documentElement.getAttribute('data-pane') === 'solar';
+    if (onSolar && legend.firstElementChild !== block) legend.prepend(block);
+    else if (!onSolar && legend.lastElementChild !== block) legend.append(block);
+    setSolarOpen(onSolar);
   }
-  el('solToggle')?.addEventListener('click', expandSolar);
-  el('solCollapse')?.addEventListener('click', collapseSolar);
-  const onSolKey = (e: KeyboardEvent) => { if (e.key === 'Escape') collapseSolar(); };
-  el('solOverlay')?.addEventListener('keydown', onSolKey);
-  cleanup.push(() => {
-    el('solToggle')?.removeEventListener('click', expandSolar);
-    el('solCollapse')?.removeEventListener('click', collapseSolar);
-    el('solOverlay')?.removeEventListener('keydown', onSolKey);
-  });
+  const onSolToggle = () => setSolarOpen(el('solBody')?.hasAttribute('hidden') ?? false);
+  el('solToggle')?.addEventListener('click', onSolToggle);
+  const paneObs = new MutationObserver(placeSolarBlock);
+  paneObs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-pane'] });
+  placeSolarBlock();
+  cleanup.push(() => { el('solToggle')?.removeEventListener('click', onSolToggle); paneObs.disconnect(); });
 
   /* ── the Solar pane ──
      The ten best roofs by yield, each row a building on the map; the download is
