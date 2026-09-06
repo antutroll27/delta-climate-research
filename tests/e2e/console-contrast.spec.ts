@@ -64,6 +64,9 @@ async function contrastFailures(page: Page): Promise<Finding[]> {
       m.set(el, [r.left, r.top, r.width, r.height].map((v) => Math.round(v)).join(','));
     }
     (window as unknown as { __boxesBefore?: WeakMap<Element, string> }).__boxesBefore = m;
+    const cardEl = document.querySelector('#bcard');
+    const cb = cardEl && !cardEl.hasAttribute('hidden') && getComputedStyle(cardEl).opacity !== '0' ? cardEl.getBoundingClientRect() : null;
+    (window as unknown as { __cardBoxBefore?: number[] | null }).__cardBoxBefore = cb ? [cb.left, cb.top, cb.right, cb.bottom] : null;
   });
   const shot = (await page.screenshot()).toString('base64');
   const { findings, moved } = await page.evaluate(async (b64) => {
@@ -142,6 +145,18 @@ async function contrastFailures(page: Page): Promise<Finding[]> {
       const topEl = document.elementFromPoint(cx, cy);
       style.pointerEvents = pe;
       if (topEl && topEl !== el && !el.contains(topEl) && !topEl.contains(el)) continue;
+      /* UNDER THE CARD. The card is the one opaque overlay that sits over other
+         text (z-index 7, 90% cream), and the hit test above missed it: on
+         2026-09-06 the right panel's confidence chip was scored against the
+         card's cream twice of two while a hit test one frame later resolved to
+         the chip itself. The card's box read in the same pre-shot pass as the
+         element boxes is what the screenshot shows, so an element whose centre
+         lies inside it, and is not part of it, is under it and is skipped.
+         Ceiling: a partial cover — the box edge across an element — is not. */
+      const cardNow = document.querySelector('#bcard');
+      const cbb = (window as unknown as { __cardBoxBefore?: number[] | null }).__cardBoxBefore;
+      if (cbb && cardNow && !cardNow.contains(el)
+        && cx >= cbb[0] && cx <= cbb[2] && cy >= cbb[1] && cy <= cbb[3]) continue;
 
       /* MOTION. The screenshot and this read are two frames apart, and the
          selection's ring labels are repositioned on every map render — on the

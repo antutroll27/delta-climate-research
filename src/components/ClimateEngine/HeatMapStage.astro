@@ -1209,8 +1209,16 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
     background-position:left bottom!important;background-origin:padding-box!important}
   body.studio .maplibregl-ctrl-scale{color:var(--studio-ink)!important;border-color:rgb(13 107 125 /.7)!important;
     text-shadow:0 1px 3px rgb(255 255 255 /.85);
-    background-image:repeating-linear-gradient(90deg,
-      rgb(13 107 125 /.7) 0 1.5px, transparent 1.5px 25%)!important}
+    /* THE NUMBER SITS ON A PLATE ON CLAY. The halo above is the dark theme's device,
+       and WCAG credits none of it: with a card open the camera puts a building under
+       the bar and the ink measured 2.64:1 on it (2026-09-06). So the number gets the
+       ring labels' plate as a top background layer, cut 9px short of the bottom so the
+       bracket and its quarter ticks stay unfilled — the box the dark theme refused. */
+    background-image:linear-gradient(rgb(245 244 241 /.88),rgb(245 244 241 /.88)),
+      repeating-linear-gradient(90deg,
+      rgb(13 107 125 /.7) 0 1.5px, transparent 1.5px 25%)!important;
+    background-size:100% calc(100% - 9px),100% 7px!important;
+    background-position:left top,left bottom!important}
   /* Clear of the compass, which is 62px wide at a 26px inset. It used to be clear
      of the toolbox as well, at 396px; the toolbox is no longer over the map. */
   .maplibregl-ctrl-bottom-left{margin:0 0 30px 110px}
