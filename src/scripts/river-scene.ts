@@ -96,13 +96,31 @@ export function createRiverScene(canvas: HTMLCanvasElement, opts: Opts = {}): Ri
   // flow 0.36, ripple 0.45, tile 7.5, foam 0.45, edge 0.56. Camera kept at the
   // frozen cam-6 framing (the dump's cam=14 was the editor default, not a choice).
   const UG = { value: 0.55 }, UTIME = { value: 0 }, UWGAIN = { value: 2.6 }, UWFLOW = { value: 0.36 }, UWAMP = { value: 1.0 };
-  const UFFIELD = { value: 1 }, USCALEN = { value: 7.5 }, UFOAM = { value: 0.45 }, UEDGE = { value: 0.56 };
+  const USCALEN = { value: 7.5 }, UFOAM = { value: 0.45 }, UEDGE = { value: 0.56 };
   // finer/faster 2nd normal octave — micro-detail borrowed from the Mancini water study (preview-approved 2026-06-23)
   const UNOCT = { value: 1.2 }, UNTILE = { value: 3.8 }, UNSPD = { value: 3.0 };
   const UTIER = { value: TIER };
-  const UGRASS = { value: 0.6 }, URIPPLE = { value: 0.7 };   // grass-green boost; hover-ripple strength
+  const UGRASS = { value: 0.6 }, URIPPLE = { value: 0.7 };   // grass-green boost; hover-ripple strength (1.5 with the physics pass, below)
+  // ── WATER PHYSICS PASS (signed off 2026-09-06 on previews/river-physics.html, A/B against
+  //    this shader verbatim; frame p75 7.0 → 7.1 ms with everything on). Three groups:
+  //    on the bed — real roughness so three's own Fresnel/GGX light the water, Beer–Lambert
+  //    absorption through a depth proxy, the bed sampled through the surface (refraction);
+  //    reacts to you — a capillary ring rides ahead of each ripple and a fast pointer makes
+  //    a wake; how it flows — eddies bend the flow where it is slow, and speed shapes chop,
+  //    glint and foam. Nothing adds a pass or a texture fetch: refraction REORDERS the
+  //    albedo sample behind the water normal, and the eddy field rides the jitter fetch.
+  //    applyTier() sets the values: the low tier keeps specular + absorption (free) and
+  //    its flat wAmp; the rest is gated like the octave. `#water=classic` in the URL hash
+  //    zeroes the pass without a deploy — the hero is the most-viewed surface on the site.
+  const WATER_CLASSIC = new URLSearchParams(location.hash.replace(/^#/, '')).get('water') === 'classic';
+  const PHYS = { wAmp: 0.42, rough: 0.15, envW: 1.05, absK: 1.10, refr: 0.006, ripple: 1.5, wake: 1.85, eddy: 0.54, shape: 0.5 };
+  const USPEC = { value: 0 }, UROUGH = { value: PHYS.rough }, UENVW = { value: PHYS.envW };
+  const UABS = { value: 0 }, UABSK = { value: PHYS.absK };
+  const UREFR = { value: 0 }, UREFRK = { value: PHYS.refr };
+  const URIPD = { value: 0 }, UEDDY = { value: 0 }, USHAPE = { value: 0 };
+  let wakeGain = 0;
   const RIPPLE_MAX = 12;
-  const rippleArr = Array.from({ length: RIPPLE_MAX }, () => new THREE.Vector3(0, 0, -1e9)); // (worldX, worldZ, birthTime)
+  const rippleArr = Array.from({ length: RIPPLE_MAX }, () => new THREE.Vector4(0, 0, -1e9, 1)); // (worldX, worldZ, birthTime, amp)
 
   const disposables: { dispose(): void }[] = [];
   const waterNorm = new THREE.TextureLoader().load(TEX + 'waternormals.webp', t => { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.NoColorSpace; });
@@ -133,10 +151,12 @@ export function createRiverScene(canvas: HTMLCanvasElement, opts: Opts = {}): Ri
       uShadow: { value: new THREE.Color('#05080a') }, uMid: { value: new THREE.Color('#6b4f2e') }, uHigh: { value: new THREE.Color('#6fcad6') },
       uRim: { value: new THREE.Color('#6fcad6') }, uWaterDeep: { value: new THREE.Color('#08323a') }, uWaterNorm: { value: waterNorm },
       uFlowMap: { value: flowTex }, uStripMin: { value: STRIP_MIN }, uStripMax: { value: STRIP_MAX },
-      uScaleN: USCALEN, uFField: UFFIELD, uFoam: { value: new THREE.Color('#9fe6ee') }, uFoamAmt: UFOAM,
+      uScaleN: USCALEN, uFoam: { value: new THREE.Color('#9fe6ee') }, uFoamAmt: UFOAM,
       uEdgeFade: UEDGE, uTier: UTIER, uFogCol: { value: FOG },
       uGrassAmt: UGRASS, uRippleAmp: URIPPLE, uRipples: { value: rippleArr },
       uNoiseOct: UNOCT, uNoiseTile: UNTILE, uNoiseSpd: UNSPD,
+      uSpecOn: USPEC, uRough: UROUGH, uEnvW: UENVW, uAbsOn: UABS, uAbsK: UABSK, uRefrOn: UREFR, uRefr: UREFRK,
+      uRipDisp: URIPD, uEddy: UEDDY, uSpdShape: USHAPE,
     };
     mat.onBeforeCompile = (sh: WebGLProgramParametersWithUniforms) => {
       Object.assign(sh.uniforms, u);
@@ -146,58 +166,29 @@ export function createRiverScene(canvas: HTMLCanvasElement, opts: Opts = {}): Ri
         vWPos = (modelMatrix * vec4(transformed,1.0)).xyz;
         vLocalXZ3 = transformed;`);
       sh.fragmentShader = `
-        uniform float uTime,uGrade,uWGain,uWFlow,uWAmp,uScaleN,uFField,uFoamAmt,uEdgeFade,uTier,uGrassAmt,uRippleAmp,uNoiseOct,uNoiseTile,uNoiseSpd;
-        uniform vec3 uShadow,uMid,uHigh,uRim,uWaterDeep,uFoam,uFogCol,uRipples[12]; uniform sampler2D uWaterNorm,uFlowMap; uniform vec2 uStripMin,uStripMax;
+        uniform float uTime,uGrade,uWGain,uWFlow,uWAmp,uScaleN,uFoamAmt,uEdgeFade,uTier,uGrassAmt,uRippleAmp,uNoiseOct,uNoiseTile,uNoiseSpd;
+        uniform float uSpecOn,uRough,uEnvW,uAbsOn,uAbsK,uRefrOn,uRefr,uRipDisp,uEddy,uSpdShape;
+        uniform vec3 uShadow,uMid,uHigh,uRim,uWaterDeep,uFoam,uFogCol; uniform vec4 uRipples[12]; uniform sampler2D uWaterNorm,uFlowMap; uniform vec2 uStripMin,uStripMax;
         varying vec3 vWPos; varying vec3 vLocalXZ3;
-        float gWater=0.0, gGlint=0.0, gSpd=0.0, gChan=0.0, gTj=0.0, gFoam=0.0; vec2 gFuv=vec2(0.0), gDir=vec2(1.0,0.0);
+        float gWater=0.0, gGlint=0.0, gSpd=0.0, gChan=0.0, gTj=0.0, gFoam=0.0, gDep=0.0; vec2 gFuv=vec2(0.0), gDir=vec2(1.0,0.0);
+        vec3 gWnA=vec3(0.0), gWnB=vec3(0.0);
       ` + sh.fragmentShader;
+
+      // ── the albedo sample is REPLACED, not appended: the flow field and the water
+      //    normal are computed first (they depend on position and time only), so the
+      //    bed can be sampled through the surface. With uRefrOn=0 the sample is at
+      //    vMapUv exactly as three's own chunk does it. ──
       sh.fragmentShader = sh.fragmentShader.replace('#include <map_fragment>', `
-        #include <map_fragment>
-        {
-          vec3 c = diffuseColor.rgb;
-          float lum = dot(c, vec3(0.299,0.587,0.114));
-          float maxc=max(max(c.r,c.g),c.b), minc=min(min(c.r,c.g),c.b);
-          float sat = maxc-minc;
-          float teal = clamp((c.b - max(c.r,c.g))*8.0, 0.0, 1.0);
-          float grey = clamp((0.16 - sat)*4.0,0.0,1.0)*smoothstep(0.42,0.75,lum);
-          gWater = clamp(max(teal, grey)*uWGain, 0.0, 1.0);
-          gFuv = (vLocalXZ3.xz - uStripMin) / (uStripMax - uStripMin);
-          if(uFField>0.5){ vec4 fm = texture2D(uFlowMap, gFuv); gDir = normalize(fm.rg*2.0-1.0 + 1e-5); gSpd = fm.b; gChan = fm.a; }
-          else           { gDir = vec2(1.0,0.0); gSpd = 0.45; gChan = smoothstep(0.02,0.25,gWater); }
-          float wmask = max(gWater, gChan*0.9);
-          float L = pow(clamp(lum*1.15,0.0,1.0), 1.25);
-          vec3 gBank = mix(uShadow, uMid, smoothstep(0.04,0.5,L));
-          gBank = mix(gBank, uHigh, smoothstep(0.5,0.92,L));
-          vec3 gWat = mix(uWaterDeep, uHigh, smoothstep(0.25,0.8,L));
-          vec3 g = mix(gBank, gWat, wmask);
-          float amt = max(clamp(uGrade,0.0,1.4), wmask*0.7);
-          diffuseColor.rgb = mix(diffuseColor.rgb, g, amt);
-          // greener grass: push green-dominant bank texels (the moss) toward a richer, more saturated green — never the water
-          float grassM = clamp((c.g - max(c.r,c.b))*4.0, 0.0, 1.0) * (1.0 - gChan);
-          vec3 greener = clamp(diffuseColor.rgb * vec3(0.80,1.22,0.70), 0.0, 1.0);
-          diffuseColor.rgb = mix(diffuseColor.rgb, greener, grassM*uGrassAmt);
-          if(gChan>0.001 && uWFlow>0.0001){
-            gTj = uTime*uWFlow*(0.5+gSpd*0.55) + texture2D(uWaterNorm, gFuv*3.1).r;
-            vec2 dirT = (uTier < 1.5) ? gDir : vec2(1.0,0.0);
-            float sAlong = dot(vLocalXZ3.xz, dirT);
-            float streaks = sin(sAlong*0.5 - gTj*6.0)*0.5 + sin(sAlong*1.05 - gTj*9.5 + 1.7)*0.5;
-            float glint = smoothstep(0.5, 1.0, streaks*0.5 + 0.5);
-            gGlint = glint * gChan;
-            diffuseColor.rgb += uHigh * gGlint * 0.24;
-            diffuseColor.rgb = mix(diffuseColor.rgb, uWaterDeep, gChan*0.14*(1.0-glint));
-            if(uTier < 1.5){
-              mat2 frot = mat2(dirT.y,dirT.x,-dirT.x,dirT.y); vec2 ruvF = frot*(gFuv*uScaleN); ruvF.y*=0.45;
-              float shore = smoothstep(0.06,0.4,gChan)*(1.0-smoothstep(0.4,0.85,gChan));
-              float rapids = (uTier < 0.5) ? smoothstep(0.74,1.0,gSpd)*gChan*0.55 : 0.0;
-              float fn = texture2D(uWaterNorm, ruvF*1.7 - vec2(0.0,fract(gTj))).g;
-              gFoam = smoothstep(0.5,0.8,fn)*max(shore,rapids);
-              diffuseColor.rgb = mix(diffuseColor.rgb, uFoam, gFoam*uFoamAmt);
-            }
-          }
-        }`);
-      sh.fragmentShader = sh.fragmentShader.replace('#include <normal_fragment_maps>', `
-        #include <normal_fragment_maps>
+        gFuv = (vLocalXZ3.xz - uStripMin) / (uStripMax - uStripMin);
+        { vec4 fm = texture2D(uFlowMap, gFuv); gDir = normalize(fm.rg*2.0-1.0 + 1e-5); gSpd = fm.b; gChan = fm.a; }
+        // one fetch serves three: .r is production's phase jitter; .gb bend the flow into
+        // eddies where it is slow. With uEddy=0 the offset is 0 and .r is what production reads.
+        vec3 jit = texture2D(uWaterNorm, gFuv*3.1 + vec2(uTime*0.012*uEddy, 0.0)).rgb;
+        if(uEddy > 0.001){ vec2 ed = jit.gb*2.0-1.0; gDir = normalize(gDir + ed*uEddy*(1.0 - 0.7*gSpd)); }
+        // depth proxy: distance into the channel, and (speed-shaped) pools deeper than riffles
+        gDep = gChan * (1.0 - 0.5*gSpd*uSpdShape);
         if(gChan>0.001 && uWFlow>0.0001){
+          gTj = uTime*uWFlow*(0.5+gSpd*0.55) + jit.r;
           vec2 dirN = (uTier < 1.5) ? gDir : vec2(1.0,0.0);
           float p0=fract(gTj), p1=fract(gTj+0.5);
           vec3 wn;
@@ -214,30 +205,98 @@ export function createRiverScene(canvas: HTMLCanvasElement, opts: Opts = {}): Ri
             vec3 n1 = texture2D(uWaterNorm, ruv - dirN*p1).xyz*2.0-1.0;
             wn = mix(n0, n1, 1.0-abs(1.0-2.0*fract(gTj)));
           }
-          normal = normalize(normal + vec3(wn.xy,0.0)*gChan*uWAmp);
-          // ── finer/faster 2nd normal octave (preview-approved micro-detail); desktop/tablet tiers only ──
+          // speed-shaped chop: fast reaches choppier, slow reaches glassier (uSpdShape=0 → uWAmp)
+          float ampS = uWAmp * mix(1.0, 0.55 + 0.9*gSpd, uSpdShape);
+          gWnA = vec3(wn.xy,0.0)*gChan*ampS;
           if(uNoiseOct > 0.001 && uTier < 1.5){
             mat2 rotE = mat2(dirN.y,dirN.x,-dirN.x,dirN.y);
             vec2 ruvE = (uTier < 0.5) ? rotE*(gFuv*uScaleN*uNoiseTile) : (gFuv*uScaleN*uNoiseTile);
             ruvE.y *= 0.45;
             vec3 nE = texture2D(uWaterNorm, ruvE - dirN*fract(gTj*uNoiseSpd)).xyz*2.0-1.0;
             if(uTier < 0.5) nE.xy = transpose(rotE)*nE.xy;
-            normal = normalize(normal + vec3(nE.xy,0.0)*gChan*uWAmp*uNoiseOct);
+            gWnB = vec3(nE.xy,0.0)*gChan*ampS*uNoiseOct;
           }
-          // ── hover ripples: radial rings expanding from recent cursor positions (desktop tiers only) ──
+        }
+        #ifdef USE_MAP
+          vec2 mapUv = vMapUv + (gWnA.xy + gWnB.xy) * uRefr * uRefrOn;
+          vec4 sampledDiffuseColor = texture2D( map, mapUv );
+          diffuseColor *= sampledDiffuseColor;
+        #endif
+        {
+          vec3 c = diffuseColor.rgb;
+          float lum = dot(c, vec3(0.299,0.587,0.114));
+          float maxc=max(max(c.r,c.g),c.b), minc=min(min(c.r,c.g),c.b);
+          float sat = maxc-minc;
+          float teal = clamp((c.b - max(c.r,c.g))*8.0, 0.0, 1.0);
+          float grey = clamp((0.16 - sat)*4.0,0.0,1.0)*smoothstep(0.42,0.75,lum);
+          gWater = clamp(max(teal, grey)*uWGain, 0.0, 1.0);
+          float wmask = max(gWater, gChan*0.9);
+          float L = pow(clamp(lum*1.15,0.0,1.0), 1.25);
+          vec3 gBank = mix(uShadow, uMid, smoothstep(0.04,0.5,L));
+          gBank = mix(gBank, uHigh, smoothstep(0.5,0.92,L));
+          vec3 gWat = mix(uWaterDeep, uHigh, smoothstep(0.25,0.8,L));
+          vec3 g = mix(gBank, gWat, wmask);
+          float amt = max(clamp(uGrade,0.0,1.4), wmask*0.7);
+          diffuseColor.rgb = mix(diffuseColor.rgb, g, amt);
+          float grassM = clamp((c.g - max(c.r,c.b))*4.0, 0.0, 1.0) * (1.0 - gChan);
+          vec3 greener = clamp(diffuseColor.rgb * vec3(0.80,1.22,0.70), 0.0, 1.0);
+          diffuseColor.rgb = mix(diffuseColor.rgb, greener, grassM*uGrassAmt);
+          // Beer–Lambert through the depth proxy: red goes first, blue last, so the pool
+          // reads as a volume rather than a tint. Applied before glint and foam, which sit
+          // ON the surface and must stay bright.
+          if(uAbsOn > 0.5){ diffuseColor.rgb *= exp(-vec3(2.4,1.15,0.55) * uAbsK * gDep); }
+          if(gChan>0.001 && uWFlow>0.0001){
+            vec2 dirT = (uTier < 1.5) ? gDir : vec2(1.0,0.0);
+            float sAlong = dot(vLocalXZ3.xz, dirT);
+            float streaks = sin(sAlong*0.5 - gTj*6.0)*0.5 + sin(sAlong*1.05 - gTj*9.5 + 1.7)*0.5;
+            float glint = smoothstep(0.5, 1.0, streaks*0.5 + 0.5);
+            float gAmp = mix(1.0, 0.5 + 1.0*gSpd, uSpdShape);       // fast water glints more
+            gGlint = glint * gChan * gAmp;
+            diffuseColor.rgb += uHigh * gGlint * 0.24;
+            diffuseColor.rgb = mix(diffuseColor.rgb, uWaterDeep, gChan*0.14*(1.0-glint));
+            if(uTier < 1.5){
+              mat2 frot = mat2(dirT.y,dirT.x,-dirT.x,dirT.y); vec2 ruvF = frot*(gFuv*uScaleN); ruvF.y*=0.45;
+              float shore = smoothstep(0.06,0.4,gChan)*(1.0-smoothstep(0.4,0.85,gChan));
+              float rapids = (uTier < 0.5) ? smoothstep(mix(0.74,0.55,uSpdShape),1.0,gSpd)*gChan*0.55 : 0.0;
+              float fn = texture2D(uWaterNorm, ruvF*1.7 - vec2(0.0,fract(gTj))).g;
+              gFoam = smoothstep(0.5,0.8,fn)*max(shore,rapids);
+              diffuseColor.rgb = mix(diffuseColor.rgb, uFoam, gFoam*uFoamAmt);
+            }
+          }
+        }`);
+
+      // ── real water roughness: three's own GGX and Fresnel do the rest ──
+      sh.fragmentShader = sh.fragmentShader.replace('#include <roughnessmap_fragment>', `
+        #include <roughnessmap_fragment>
+        if(uSpecOn > 0.5){ roughnessFactor = mix(roughnessFactor, uRough, gChan); }`);
+
+      sh.fragmentShader = sh.fragmentShader.replace('#include <normal_fragment_maps>', `
+        #include <normal_fragment_maps>
+        if(gChan>0.001 && uWFlow>0.0001){
+          normal = normalize(normal + gWnA);
+          if(uNoiseOct > 0.001 && uTier < 1.5) normal = normalize(normal + gWnB);
           if(uTier < 1.5 && uRippleAmp > 0.001){
             vec2 rn = vec2(0.0);
             for(int i=0;i<12;i++){
-              vec3 rp = uRipples[i];
+              vec4 rp = uRipples[i];
               float age = uTime - rp.z;
               float alive = step(-0.5, rp.z) * step(0.0, age) * step(age, 2.2);
               vec2 toC = vWPos.xz - rp.xy; float d = length(toC) + 1e-4;
               float ring = sin(d*2.4 - age*7.0) * exp(-d*0.5) * exp(-age*1.7) * smoothstep(2.2,0.0,age) * alive;
+              if(uRipDisp > 0.5){
+                // dispersion: a shorter, faster capillary ring rides ahead and dies sooner,
+                // which is what a real drop does; amp carries the pointer's speed (the wake)
+                float cap = sin(d*4.6 - age*11.0) * exp(-d*0.8) * exp(-age*2.6) * alive;
+                ring = (ring + 0.55*cap) * rp.w;
+              }
               rn += (toC/d) * ring;
             }
             normal = normalize(normal + vec3(rn,0.0)*gChan*uRippleAmp);
           }
         }`);
+      sh.fragmentShader = sh.fragmentShader.replace('#include <lights_fragment_end>', `
+        #include <lights_fragment_end>
+        if(uSpecOn > 0.5){ reflectedLight.indirectSpecular *= mix(1.0, uEnvW, gChan); }`);
       sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>', `
         #include <emissivemap_fragment>
         {
@@ -342,6 +401,14 @@ export function createRiverScene(canvas: HTMLCanvasElement, opts: Opts = {}): Ri
     bloom.enabled = cfg.bloom;
     splashPass.enabled = t < 2;            // skip the extra fullscreen pass on the minimal tier
     UTIER.value = t;
+    // the physics pass per tier (see PHYS above); `#water=classic` is the June look everywhere
+    const on = WATER_CLASSIC ? 0 : 1, full = on && t < 2 ? 1 : 0;
+    USPEC.value = on; UABS.value = on;
+    UREFR.value = full; URIPD.value = full;
+    UEDDY.value = full ? PHYS.eddy : 0; USHAPE.value = full ? PHYS.shape : 0;
+    UWAMP.value = full ? PHYS.wAmp : 1.0;          // the flat tier has no sheen to carry a quieter chop
+    URIPPLE.value = full ? PHYS.ripple : 0.7;
+    wakeGain = full ? PHYS.wake : 0;
   }
   const unsubscribeRenderQuality = subscribeRenderQuality((profile) => {
     applyTier(riverTier(profile.tier));
@@ -575,17 +642,22 @@ export function createRiverScene(canvas: HTMLCanvasElement, opts: Opts = {}): Ri
   const WATER_Y = -3.6;                                          // approx world Y of the channel surface
   const waterPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -WATER_Y);
   const ndc = new THREE.Vector2(), hit = new THREE.Vector3();
-  let rippleIdx = 0, lastRipple = 0;
+  let rippleIdx = 0, lastRipple = 0, lastPX = 0, lastPY = 0, lastPT = 0;
   const onPointer = (e: PointerEvent) => {
     camT.x = e.clientX / window.innerWidth - 0.5; camT.y = e.clientY / window.innerHeight - 0.5;
     if (reduce) return;
     const now = performance.now();
-    if (now - lastRipple < 70) return;                          // throttle ripple spawns
+    // the wake: pointer speed in px/ms (1.5 saturates) spawns twice as often and up to
+    // (1 + wakeGain)× the ring — a hand dragged through water, not a finger dipped in
+    const v = Math.hypot(e.clientX - lastPX, e.clientY - lastPY) / Math.max(1, now - lastPT);
+    lastPX = e.clientX; lastPY = e.clientY; lastPT = now;
+    const fast = wakeGain > 0 ? Math.min(1, v / 1.5) : 0;
+    if (now - lastRipple < 70 - 35 * fast) return;              // throttle ripple spawns
     const r = canvas.getBoundingClientRect();
     ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -(((e.clientY - r.top) / r.height) * 2 - 1));
     raycaster.setFromCamera(ndc, camera);
     if (raycaster.ray.intersectPlane(waterPlane, hit)) {        // cursor → water surface → spawn a ripple ring
-      rippleArr[rippleIdx].set(hit.x, hit.z, UTIME.value);
+      rippleArr[rippleIdx].set(hit.x, hit.z, UTIME.value, 1 + fast * wakeGain);
       rippleIdx = (rippleIdx + 1) % RIPPLE_MAX;
       lastRipple = now;
     }
