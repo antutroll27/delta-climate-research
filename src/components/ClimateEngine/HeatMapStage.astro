@@ -618,13 +618,12 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
            where a reader goes to interpret the colours, so it is where the limit
            of what the colours mean belongs. -->
       <p class="pattern-note" id="patternNote"></p>
-      <div class="attr">Basemap © OpenStreetMap · OpenFreeMap · Footprints © Overture Maps Foundation (ODbL) · Heights Google Open Buildings 2.5D (CC BY 4.0) · Water © OpenStreetMap (ODbL) · Ground SRTM via AWS terrain tiles, <span id="terrLab">indicative</span> · Live weather © Met Norway (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>) · Cloud deck drawn at 320 m, real base ~700 m · left-drag orbit · right-drag pan · scroll zoom</div>
-      <button class="srcbtn" id="srcBtn" type="button" aria-expanded="false" aria-controls="srcPanel">Data receipts ↗</button>
-      <div class="srcpanel" id="srcPanel" role="dialog" aria-label="Per-layer data provenance" hidden></div>
       {/* The ward's solar numbers, BELOW the colour key and folded to a header by
           default: the key is what a reader entering the console sees first
           (founder's call, 2026-09-06). On the Solar screen the script moves this
-          block above the key and unfolds it. Hidden until a solar screen ships. */}
+          block above the key and unfolds it. It sits above the attribution and the
+          receipts button so the receipts panel's anchor never moves. Hidden until a
+          solar screen ships. */}
       <div class="solblock legend-solar" id="solBlock" role="region" aria-label="Rooftop solar, whole ward" hidden>
         <div class="k legend-head"><span>Rooftop solar · whole ward</span><button class="solbtn" id="solToggle" type="button" aria-expanded="false" aria-controls="solBody">Show ▾</button></div>
         <div class="solbody" id="solBody" hidden>
@@ -639,6 +638,9 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
           </div>
         </div>
       </div>
+      <div class="attr">Basemap © OpenStreetMap · OpenFreeMap · Footprints © Overture Maps Foundation (ODbL) · Heights Google Open Buildings 2.5D (CC BY 4.0) · Water © OpenStreetMap (ODbL) · Ground SRTM via AWS terrain tiles, <span id="terrLab">indicative</span> · Live weather © Met Norway (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>) · Cloud deck drawn at 320 m, real base ~700 m · left-drag orbit · right-drag pan · scroll zoom</div>
+      <button class="srcbtn" id="srcBtn" type="button" aria-expanded="false" aria-controls="srcPanel">Data receipts ↗</button>
+      <div class="srcpanel" id="srcPanel" role="dialog" aria-label="Per-layer data provenance" hidden></div>
     </div>
     </div>
   </div>

@@ -187,8 +187,10 @@ export function mountConsoleShell(): (() => void) | null {
       PANEL_STATE_ATTR, state.open ? EXPANDED : COLLAPSED);
     /* WHICH pane, for the map's legend: its solar block sits above the colour key
        on the Solar screen and below it elsewhere (2026-09-06). Read by
-       heat-map-app.ts through a MutationObserver; written nowhere else. */
-    document.documentElement.setAttribute('data-pane', state.open ? state.id : '');
+       heat-map-app.ts through a MutationObserver; written nowhere else. NOT
+       `data-pane`: that is the panes' own attribute, and a root carrying it made
+       every `[data-pane="analysis"]` selector resolve to two elements. */
+    document.documentElement.setAttribute('data-open-pane', state.open ? state.id : '');
     if (panelToggle) {
       panelToggle.setAttribute('aria-expanded', String(state.open));
       const name = state.open

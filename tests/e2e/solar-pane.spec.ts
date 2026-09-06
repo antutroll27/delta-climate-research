@@ -38,7 +38,7 @@ test.describe('the solar screen', () => {
     /* Entering the console: the colour key first, the solar block folded under it. */
     await expect(page.locator('#solBlock')).toBeVisible({ timeout: 15_000 });
     await expect(page.locator('#solBody')).toBeHidden();
-    expect(await page.locator('#legend > :last-child').getAttribute('id')).toBe('solBlock');
+    expect(await page.locator('#solBlock').evaluate((b) => b.nextElementSibling?.className)).toBe('attr');
     const rail = (await page.locator('.rail-r').boundingBox())!;
     const head = (await page.locator('.legend .legend-head').first().boundingBox())!;
     expect(head.y).toBeLessThan(rail.y + rail.height);

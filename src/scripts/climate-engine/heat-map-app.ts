@@ -780,7 +780,7 @@ export function mountHeatMap(): () => void {
   }
   /* The legend's solar block: below the colour key and folded by default; on the
      Solar screen it moves above the key and unfolds (founder's call, 2026-09-06).
-     The shell publishes the open pane on <html data-pane>; this only reads it.
+     The shell publishes the open pane on <html data-open-pane>; this only reads it.
      Only a CHANGE of pane acts, and a change away from Solar is the one that folds:
      the shell repaints the attribute on every rail click, and a reader who pressed
      Show must not find it folded because they opened Layers. */
@@ -791,23 +791,27 @@ export function mountHeatMap(): () => void {
     el('solToggle')?.setAttribute('aria-expanded', String(open));
     setText('solToggle', open ? 'Hide ▴' : 'Show ▾');
   }
-  let lastPane = document.documentElement.getAttribute('data-pane') ?? '';
+  let lastPane = document.documentElement.getAttribute('data-open-pane') ?? '';
   function placeSolarBlock(reseat = false) {
     const legend = el('legend'), block = el('solBlock');
     if (!legend || !block) return;
-    const pane = document.documentElement.getAttribute('data-pane') ?? '';
+    const pane = document.documentElement.getAttribute('data-open-pane') ?? '';
     if (!reseat && pane === lastPane) return;
     const wasSolar = lastPane === 'solar', onSolar = pane === 'solar';
     lastPane = pane;
+    /* Below the key means ABOVE the attribution line and the receipts button, not
+       last: the receipts panel is anchored to the legend's bottom edge, and a block
+       under the button moved that edge and put the open panel over its own button. */
+    const attr = legend.querySelector(':scope > .attr');
     if (onSolar && legend.firstElementChild !== block) legend.prepend(block);
-    else if (!onSolar && legend.lastElementChild !== block) legend.append(block);
+    else if (!onSolar && block.nextElementSibling !== attr) legend.insertBefore(block, attr);
     if (onSolar) setSolarOpen(true);
     else if (wasSolar || reseat) setSolarOpen(false);
   }
   const onSolToggle = () => setSolarOpen(el('solBody')?.hasAttribute('hidden') ?? false);
   el('solToggle')?.addEventListener('click', onSolToggle);
   const paneObs = new MutationObserver(() => placeSolarBlock());
-  paneObs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-pane'] });
+  paneObs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-open-pane'] });
   placeSolarBlock(true);
   cleanup.push(() => { el('solToggle')?.removeEventListener('click', onSolToggle); paneObs.disconnect(); });
 
