@@ -233,3 +233,87 @@ test.describe('the relief tier — the scene the founder looks at', () => {
       .toBeGreaterThan(0.05);
   });
 });
+
+const WARD_ROUTE = '/heat-map/in/kolkata/ballygunge/';
+
+type Quality = { current?: { tier: number; gpuLabel: string }; baseline?: { tier: number }; applyTier?: (t: number) => void };
+
+const state = (page: Page) => page.evaluate(() => {
+  const c = (window as Window & { __deltaRenderQualityController?: Quality }).__deltaRenderQualityController;
+  return {
+    tier: c?.current?.tier, base: c?.baseline?.tier, gpu: c?.current?.gpuLabel ?? '',
+    sim: document.getElementById('simBackend')?.textContent?.trim() ?? '',
+    reliefChunk: performance.getEntriesByType('resource').some((e) => /relief-renderer/.test(e.name)),
+  };
+});
+
+/* The header reads "SELECTING ENGINE" until the capability probe resolves; the
+   renderer's chunk follows within the same tick on every tier now. */
+async function bootedWard(page: Page) {
+  await expect(page.locator('#simBackend')).not.toHaveText(/selecting/i, { timeout: 40_000 });
+  await expect.poll(async () => (await state(page)).reliefChunk, { timeout: 30_000 }).toBe(true);
+}
+
+test.describe('the tier verdict survives the visitor\'s route (2026-09-06)', () => {
+  /* THE FLAT-FIELD BOOT. A visitor arriving from the landing page found OBOS drawn
+     as a flat tinted quad with "3D relief" selected and "CPU SIM" in the header;
+     a reload cured it. Reproduced three ways on the built site, each a test here.
+     The tell in every case: the 3-D renderer is a dynamic import, so whether its
+     chunk was ever fetched says whether the city was attempted. RELIEF PROJECT
+     ONLY — on SwiftShader the city is not attempted by design (a software
+     rasteriser opens flat), so the tell means nothing there. */
+  test.beforeEach(({}, testInfo) => {
+    test.skip(testInfo.project.name !== 'chromium-relief',
+      'the 3-D chunk is the tell, and a software renderer opens flat by design');
+  });
+  test.setTimeout(150_000);
+
+  test('tier 0 opens on the 3-D city too', async ({ page }) => {
+    /* Two cores classify as tier 0 before any GPU label is read (classifyHardware). */
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, 'hardwareConcurrency', { configurable: true, value: 2 });
+    });
+    await page.goto(WARD_ROUTE);
+    await bootedWard(page);
+    const s = await state(page);
+    expect(s.base, 'the precondition: this run is tier 0').toBe(0);
+    expect(s.reliefChunk).toBe(true);
+    expect(s.sim).toMatch(/CPU/);
+  });
+
+  test('a demotion earned on the landing page does not follow the visitor into OBOS', async ({ page }) => {
+    await page.addInitScript(() => { sessionStorage.setItem('delta:loaded', '1'); });
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    await page.goto('/');
+    const hasController = () => page.evaluate(() => !!(window as Window & { __deltaRenderQualityController?: Quality }).__deltaRenderQualityController);
+    await expect.poll(hasController, { timeout: 30_000 }).toBe(true);
+    /* What six seconds of 34 ms frames did on the landing page, applied directly:
+       the governor's own step-down. The precondition proves it took. */
+    await page.evaluate(() => (window as Window & { __deltaRenderQualityController?: Quality }).__deltaRenderQualityController!.applyTier!(0));
+    expect((await state(page)).tier).toBe(0);
+    /* Through the site's own link, so the document — and the controller — survive. */
+    await page.evaluate(() => (document.querySelector('a[href*="ballygunge"]') as HTMLAnchorElement | null)?.click());
+    await page.waitForFunction(() => /ballygunge/.test(location.pathname), null, { timeout: 30_000 });
+    await bootedWard(page);
+    const s = await state(page);
+    expect(s.tier, 'the ward boots on the device\'s own tier').toBe(s.base);
+    expect(s.reliefChunk).toBe(true);
+  });
+
+  test('a capability probe that fails once is re-run, not cached as no WebGL', async ({ page }) => {
+    /* Only detached canvases fail, and only twice: the probe's own; the map's canvas
+       is attached and must keep its context or nothing boots at all. */
+    await page.addInitScript(() => {
+      const orig = HTMLCanvasElement.prototype.getContext; let failed = 0;
+      HTMLCanvasElement.prototype.getContext = function (this: HTMLCanvasElement, type: string, ...rest: unknown[]) {
+        if ((type === 'webgl2' || type === 'webgl') && !this.isConnected && failed < 2) { failed += 1; return null; }
+        return (orig as (...a: unknown[]) => unknown).call(this, type, ...rest);
+      } as typeof HTMLCanvasElement.prototype.getContext;
+    });
+    await page.goto(WARD_ROUTE);
+    await bootedWard(page);
+    const s = await state(page);
+    expect(s.gpu, 'the label was re-probed').not.toMatch(/no-webgl|gpu-detect-error/);
+    expect(s.reliefChunk).toBe(true);
+  });
+});

@@ -89,6 +89,10 @@ export function resolveHeatCaps(
   animate: boolean,
   caps: SimCapabilities,
   gpuLabel: string,
+  /** No GPU at all (SwiftShader, llvmpipe, a VM): the city would be a slideshow, so
+      the map opens flat with the city one tap away. Tier 0 on real hardware still
+      opens on the city. */
+  softwareRenderer = false,
 ): HeatCaps {
   const backend: SimBackend = !animate
     ? 'ts' // one static frame — no point spinning up a GPU context
@@ -101,7 +105,7 @@ export function resolveHeatCaps(
     tier,
     backend,
     grid: 192,
-    mode: TIER_MODE[tier],
+    mode: softwareRenderer ? 'isotherm' : TIER_MODE[tier],
     animate,
     webgpu: caps.webgpu,
     floatRenderTargets: caps.floatRenderTargets,
@@ -115,15 +119,21 @@ export function resolveHeatCaps(
  * runtime deps — that is what lets assertCapsLogic run in isolation under Node.
  */
 export async function detectHeatCaps(): Promise<HeatCaps> {
-  const [{ getRenderQuality }, { motionOK }] = await Promise.all([
+  const [{ getBaseRenderQuality, isSoftwareRenderer }, { motionOK }] = await Promise.all([
     import('../../utils/render-quality'),
     import('../../utils/motion'),
   ]);
-  const quality = getRenderQuality();
+  /* THE DEVICE'S TIER, NOT THE PAGE'S FRAME HISTORY. `getRenderQuality()` carries
+     whatever the adaptive governor took off on the way here — and until
+     2026-09-06 that included the landing page's boot jank, carried through the
+     view transition, so OBOS opened flat on machines that had just drawn the
+     river at full tilt. Runtime pressure on THIS page is exploreRuntimeBudget's
+     job; the boot verdict is the hardware's. */
+  const quality = getBaseRenderQuality();
   const animate = typeof window === 'undefined' ? true : motionOK();
   const webgpu = await probeWebGpu();
   const floatRenderTargets = probeFloatRenderTargets();
-  return resolveHeatCaps(quality.tier, animate, { webgpu, floatRenderTargets }, quality.gpuLabel);
+  return resolveHeatCaps(quality.tier, animate, { webgpu, floatRenderTargets }, quality.gpuLabel, isSoftwareRenderer(quality.gpuLabel));
 }
 
 /**
@@ -167,4 +177,7 @@ export function assertCapsLogic(): void {
   // mode, is what carries the cost. A visitor can still drop to 2D by hand.
   assert(resolveHeatCaps(0, true, none, '').mode === 'relief', 'tier 0 -> relief');
   assert(resolveHeatCaps(2, true, none, '').mode === 'relief', 'tier 2 -> relief');
+  // no GPU at all is not a weak GPU: a software rasteriser opens flat (2026-09-06)
+  assert(resolveHeatCaps(0, true, none, 'SwiftShader', true).mode === 'isotherm', 'software renderer -> isotherm');
+  assert(resolveHeatCaps(2, true, gpu, '', true).mode === 'isotherm', 'software renderer -> isotherm at any tier');
 }

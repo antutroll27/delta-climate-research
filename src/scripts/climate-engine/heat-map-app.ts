@@ -1183,7 +1183,12 @@ export function mountHeatMap(): () => void {
         const buttonMode = (button as HTMLElement).dataset.m === 'iso' ? 'iso' : 'relief';
         button.classList.toggle('on', buttonMode === mode);
       });
-      if (caps.tier > 0 && mode === 'relief') void ensureRelief();
+      /* EVERY TIER, not only the ones above 0: caps.ts has opened tier 0 on the
+         3-D city since 2026-09-03, and this gate was still refusing to load the
+         renderer for it — so a tier-0 verdict showed "3D relief" selected over a
+         flat field, with no way to the city short of a reload (2026-09-06). The
+         renderer takes `deviceTier` and drops its image-based lighting on 'low'. */
+      if (mode === 'relief') void ensureRelief();
       syncRendererVisibility();
       if (caps.backend === 'gpu') {
         try {
@@ -2963,7 +2968,7 @@ export function mountHeatMap(): () => void {
   const onMapLoad = () => { mapHasLoaded = true; void loadWard(INITIAL_AREA); syncSky(); };
   map.once('load', onMapLoad);
   void capsReady.then((caps) => {
-    if (!appDisposed && caps.tier > 0 && caps.mode !== 'isotherm') void ensureRelief();
+    if (!appDisposed && caps.mode !== 'isotherm') void ensureRelief();   // every tier — see initSimHost
   }).catch(() => { /* initSimHost owns the documented CPU fallback */ });
   const onVis = () => {
     runtimeVisible = !document.hidden;

@@ -110,7 +110,8 @@ WebGL2 float render targets — then maps tier → workload:
 |---|---|---|---|---|
 | 2 full | 192² canonical | `gpu-webgl2` if float targets exist, else `ts-worker` | relief | RTX / M-series / modern discrete |
 | 1 balanced | 192² canonical | `ts-worker` | relief | modern igpu / recent phone |
-| 0 low | 192² canonical | `ts-worker` | isotherm | 2015 igpu / old Xiaomi |
+| 0 low | 192² canonical | `ts-worker` | relief, no image-based lighting (since 2026-09-03; the isotherm stays one tap away) | 2015 igpu / old Xiaomi |
+| software renderer (SwiftShader, llvmpipe, a VM) | 192² canonical | `ts-worker` | isotherm — no GPU at all is not a weak GPU; the city stays one tap away (2026-09-06) | headless Chrome, CI, remote desktops |
 | reduced-motion | 192² canonical | `ts-worker`, one static frame | tier mode | any |
 
 The grid is deliberately **not** the weak-hardware knob: the model is calibrated in cell
@@ -118,6 +119,26 @@ units at 192². Capability changes execution and display quality, not the scient
 GPU is gated on tier 2 plus `EXT_color_buffer_float`; WebGPU remains diagnostic until a
 WebGPU solver exists. The host demotes GPU → worker → one settled main-thread TypeScript
 result without changing inputs. `resolveHeatCaps()` remains the pure decision boundary.
+
+**Boot verdict vs runtime demotion (2026-09-06).** OBOS was seen opening on a flat tinted
+quad with "3D relief" selected and "CPU SIM" in the header, cured by a reload — a visitor
+arriving from the reel would have taken that for the product. Reproduced three ways on the
+built site (the tell: the 3-D renderer is a dynamic import, so whether its chunk was ever
+fetched says whether the city was attempted): (1) `render-quality.ts`'s controller is a
+window singleton whose governor only ever demotes, and Astro's view transitions keep the
+document, so six seconds of slow frames on the landing page — a cold GLB decode is enough —
+stepped the shared profile to tier 0 and OBOS booted on it; (2) a WebGL probe that returned
+null once (context budget, GPU process restart) was cached as "no WebGL" for the document's
+life; (3) this table's tier-0 row had moved to relief, but the app still refused to load the
+renderer for tier 0, so the verdict showed the chip and not the city. Now: the controller
+keeps the device's own classification and restores it on every swap; `caps.ts` reads
+`getBaseRenderQuality()` — the boot verdict is the hardware's, runtime pressure on the page is
+`exploreRuntimeBudget`'s; an unsettled label is re-probed before it stands; and every tier
+loads the renderer — except a software rasteriser, which opens flat by design (a city at two
+frames a second is a worse first frame than a flat map, and it is what Playwright's default
+project and CI are). Guards: `tests/unit/render-quality.test.mjs`, `tests/e2e/heat-map-tier.spec.ts`.
+A "works after reload" report on any 3-D surface now has a first check:
+`window.__deltaRenderQualityController.current.tier` against `.baseline.tier`.
 
 ### Simulation model
 2D grid (start 256², tier-scaled). Per-cell `T` (°C) + input layers `albedo`, `veg`,

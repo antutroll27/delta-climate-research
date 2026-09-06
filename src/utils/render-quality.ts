@@ -76,6 +76,16 @@ function normaliseGpuLabel(label: string): string {
    LOW — the flagship Android GPUs, told they could not draw a city. Now: all
    T-series (genuinely old), and TWO-DIGIT G-series up to G69. A word boundary is
    what keeps `g61` from matching inside `g610`. */
+/* NO GPU AT ALL, as opposed to a weak one. Tier 0 opens on the 3-D city because
+   the phones it misjudged can draw one; a software rasteriser cannot, at any
+   tier, and a city drawn at two frames a second is a worse first frame than a
+   flat map with the city one tap away. Also what Playwright's default project
+   and CI are. */
+const SOFTWARE_GPU = /(swiftshader|software|llvmpipe|virtualbox|microsoft basic)/;
+export function isSoftwareRenderer(label: string): boolean {
+  return label === 'no-webgl' || SOFTWARE_GPU.test(normaliseGpuLabel(label));
+}
+
 const LOW_GPU = /(swiftshader|software|llvmpipe|virtualbox|microsoft basic|intel (uhd|hd) graphics|iris|mali-(?:t\d{3}|g[1-6]\d\b)|adreno [1-5]|powervr)/;
 /**
  * Capable but INTEGRATED. Tier 1 keeps the 3D relief view while routing the
@@ -160,6 +170,21 @@ export function readGpuLabel(): string {
   }
 }
 
+/**
+ * A VERDICT THE PROBE COULD NOT REACH IS NOT A VERDICT. `readGpuLabel` answers
+ * 'no-webgl' when getContext hands back null — which it does on a device with no
+ * WebGL, but also, transiently, when a page is over its live-context budget or
+ * the GPU process is mid-restart. The first is permanent; the second was being
+ * cached for the life of the document, and every route after it booted at
+ * tier 0 until a reload. Measured 2026-09-06: one null on the probe's detached
+ * canvas booted OBOS flat — CPU solver, "3D relief" selected, no 3D chunk ever
+ * fetched. A label like this is re-probed at the next read, a bounded number
+ * of times, before it is allowed to stand.
+ */
+export function isUnsettledGpuLabel(label: string): boolean {
+  return label === 'no-webgl' || label === 'gpu-detect-error';
+}
+
 export function resolveRenderQuality(hints: RenderHardwareHints, gpuLabel: string): RenderQualityProfile {
   const tier = Math.min(classifyHardware(hints), classifyGpu(gpuLabel)) as RenderTier;
   return profileFor(tier, gpuLabel);
@@ -235,16 +260,60 @@ export class AdaptiveRenderGovernor {
 }
 
 class RenderQualityController {
-  private profile = resolveRenderQuality(browserHints(), readGpuLabel());
+  /** The device's own classification — what every page starts from. */
+  private base = resolveRenderQuality(browserHints(), readGpuLabel());
+  /** `base`, minus whatever the governor has taken off it on THIS page. */
+  private profile = this.base;
+  private probes = 1;
   private readonly subscribers = new Set<(profile: RenderQualityProfile) => void>();
   private activeSurfaces = 0;
   private raf = 0;
-  private readonly governor = new AdaptiveRenderGovernor(this.profile.tier, {
-    onTierChange: (tier) => this.applyTier(tier),
-  });
+  private governor = this.newGovernor();
+
+  constructor() {
+    /* DEMOTIONS ARE PER PAGE, NOT PER DOCUMENT. The governor only ever steps
+       down, which is right while someone reads one page — but the site
+       navigates with view transitions, so the document, and with it this
+       controller, outlives the page. Six seconds of slow frames on the landing
+       page (a cold GLB decode is enough) stepped the shared profile to tier 0,
+       and OBOS then booted on that verdict: flat field, CPU solver, no 3D —
+       cured only by a reload (measured 2026-09-06). Every route starts from
+       the device's own classification. */
+    document.addEventListener('astro:after-swap', () => this.resetDemotion());
+  }
+
+  private newGovernor(): AdaptiveRenderGovernor {
+    return new AdaptiveRenderGovernor(this.base.tier, { onTierChange: (tier) => this.applyTier(tier) });
+  }
+
+  /** Re-run a probe that failed, up to twice more, before its verdict stands. */
+  private settle(): void {
+    if (!isUnsettledGpuLabel(this.base.gpuLabel) || this.probes >= 3) return;
+    this.probes += 1;
+    const label = readGpuLabel();
+    if (isUnsettledGpuLabel(label)) return;
+    this.base = resolveRenderQuality(browserHints(), label);
+    this.profile = this.base;
+    this.governor = this.newGovernor();
+    this.subscribers.forEach((subscriber) => subscriber(this.profile));
+  }
+
+  private resetDemotion(): void {
+    const demoted = this.profile.tier !== this.base.tier;
+    this.profile = this.base;
+    this.governor = this.newGovernor();
+    if (demoted) this.subscribers.forEach((subscriber) => subscriber(this.profile));
+  }
 
   get current(): RenderQualityProfile {
+    this.settle();
     return this.profile;
+  }
+
+  /** The device's classification, untouched by this page's frame history. */
+  get baseline(): RenderQualityProfile {
+    this.settle();
+    return this.base;
   }
 
   subscribe(listener: (profile: RenderQualityProfile) => void): () => void {
@@ -293,6 +362,15 @@ function getController(): RenderQualityController | undefined {
 
 export function getRenderQuality(): RenderQualityProfile {
   return getController()?.current ?? profileFor(2, 'server');
+}
+
+/**
+ * The device's own tier, before any demotion this page's frames have earned.
+ * For decisions taken ONCE at boot — which solver, whether to load the 3D
+ * renderer — where another surface's bad second must not be the verdict.
+ */
+export function getBaseRenderQuality(): RenderQualityProfile {
+  return getController()?.baseline ?? profileFor(2, 'server');
 }
 
 export function subscribeRenderQuality(listener: (profile: RenderQualityProfile) => void): () => void {
