@@ -743,9 +743,9 @@ export function mountHeatMap(): () => void {
   }
   /* ── rooftop solar, whole ward ──
      The laboratory's totals and stratum, printed twice from one function: into the
-     Solar pane (its home) and into the legend's overlay (on request). The right
-     panel no longer carries it — a block stacked there pushed the colour legend
-     below the fold (2026-09-06). */
+     Solar pane (its home) and into the legend's folded block. The right panel no
+     longer carries it — a block stacked there pushed the colour legend below the
+     fold (2026-09-06). */
   function paintSolarWard() {
     const pv = pvCache[state.ward];
     const has = pv != null;
@@ -754,6 +754,9 @@ export function mountHeatMap(): () => void {
       if (!e) return;
       if (on) e.removeAttribute('hidden'); else e.setAttribute('hidden', '');
     };
+    /* Coming back from a ward with no screen, the block is re-seated for the pane it
+       is on; a tariff keystroke repaints too, and must not touch the fold. */
+    const reseat = el('solBlock')?.hasAttribute('hidden') === true && has;
     show('solPaneBlock', has);
     show('solBlock', has);
     if (!has) { setSolarOpen(false); paintSolarPane(null); return; }
@@ -773,10 +776,14 @@ export function mountHeatMap(): () => void {
       setHTML(`${pre}Sh`, `${Math.round(s.share_losing_5pct * 100)}%<small>of those roofs</small>`);
     }
     paintSolarPane(pv);
+    if (reseat) placeSolarBlock(true);
   }
   /* The legend's solar block: below the colour key and folded by default; on the
      Solar screen it moves above the key and unfolds (founder's call, 2026-09-06).
-     The shell publishes the open pane on <html data-pane>; this only reads it. */
+     The shell publishes the open pane on <html data-pane>; this only reads it.
+     Only a CHANGE of pane acts, and a change away from Solar is the one that folds:
+     the shell repaints the attribute on every rail click, and a reader who pressed
+     Show must not find it folded because they opened Layers. */
   function setSolarOpen(open: boolean) {
     const body = el('solBody');
     if (!body) return;
@@ -784,19 +791,24 @@ export function mountHeatMap(): () => void {
     el('solToggle')?.setAttribute('aria-expanded', String(open));
     setText('solToggle', open ? 'Hide ▴' : 'Show ▾');
   }
-  function placeSolarBlock() {
+  let lastPane = document.documentElement.getAttribute('data-pane') ?? '';
+  function placeSolarBlock(reseat = false) {
     const legend = el('legend'), block = el('solBlock');
     if (!legend || !block) return;
-    const onSolar = document.documentElement.getAttribute('data-pane') === 'solar';
+    const pane = document.documentElement.getAttribute('data-pane') ?? '';
+    if (!reseat && pane === lastPane) return;
+    const wasSolar = lastPane === 'solar', onSolar = pane === 'solar';
+    lastPane = pane;
     if (onSolar && legend.firstElementChild !== block) legend.prepend(block);
     else if (!onSolar && legend.lastElementChild !== block) legend.append(block);
-    setSolarOpen(onSolar);
+    if (onSolar) setSolarOpen(true);
+    else if (wasSolar || reseat) setSolarOpen(false);
   }
   const onSolToggle = () => setSolarOpen(el('solBody')?.hasAttribute('hidden') ?? false);
   el('solToggle')?.addEventListener('click', onSolToggle);
-  const paneObs = new MutationObserver(placeSolarBlock);
+  const paneObs = new MutationObserver(() => placeSolarBlock());
   paneObs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-pane'] });
-  placeSolarBlock();
+  placeSolarBlock(true);
   cleanup.push(() => { el('solToggle')?.removeEventListener('click', onSolToggle); paneObs.disconnect(); });
 
   /* ── the Solar pane ──

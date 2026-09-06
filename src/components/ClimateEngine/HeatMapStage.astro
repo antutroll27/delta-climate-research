@@ -1633,12 +1633,12 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
   .mrow .val.sun{color:var(--sun)}
   .mrow .val small{display:block;font-family:var(--mono);font-size:.5rem;letter-spacing:.08em;text-transform:uppercase;color:var(--bronze);margin-top:2px}
   .conf.screening{background:rgb(242 181 68 /.1);border:1px solid rgb(242 181 68 /.4);color:var(--paper)}
-  /* THE WARD BLOCK, in the pane and in the legend overlay: the heat panel's grammar in
-     the screening ink, on dark grounds in both themes. */
+  /* THE WARD BLOCK, in the pane and folded into the legend: the heat panel's grammar
+     in the screening ink, on dark grounds in both themes. */
   .solblock,.solbody{display:flex;flex-direction:column;gap:8px}
   /* NO GLOBAL `[hidden]` RESET EXISTS IN THIS SHEET — it hides per rule (`.srcpanel[hidden]`,
      `.conf[hidden]`), and an AUTHOR `display:flex` beats the UA's `[hidden]{display:none}`
-     whatever the specificity. Without this line the overlay would ship open. */
+     whatever the specificity. Without this line the folded body would ship open. */
   .solblock[hidden],.solbody[hidden]{display:none}
   .solblock .k{font-family:var(--sans);font-size:.62rem;font-weight:450;letter-spacing:.005em;color:var(--ink);line-height:1.35}
   .solblock .big{font-family:var(--mono);font-size:1.9rem;line-height:1;color:var(--sun);letter-spacing:.01em}
@@ -1649,8 +1649,8 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
   .legend-head{display:flex;justify-content:space-between;align-items:center;gap:8px}
   .solbtn{font:400 .5rem var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--sun);background:none;border:1px solid var(--line-hi);border-radius:5px;padding:.3rem .5rem;cursor:pointer}
   .solbtn:hover{color:var(--paper)} .solbtn:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
-  /* the overlay sits ON the legend, inside its box, and scrolls if the box is shorter.
-     `.legend` already declares position:relative in its own rule, so it is not repeated. */
+  /* In the legend the block rules itself off from the key on whichever side it sits:
+     below by default, above (as :first-child) on the Solar screen. */
   .legend-solar{margin-top:10px;border-bottom:0}
   .legend-solar:first-child{margin:0 0 10px;border-top:0;border-bottom:1px solid var(--line)}
   .histo::after{content:"";position:absolute;inset-inline:16px;bottom:16px;height:1px;background:var(--line)}
