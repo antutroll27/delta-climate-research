@@ -53,6 +53,7 @@ import { isLayerId, type LayerId } from './scope/layers.ts';
 import { resolve, requireCosts } from './scope/resolve.ts';
 import { areaPageTitle, areaPageDescription } from './scope/page-meta.ts';
 import { fmtMoney, fmtRate, currencyMark } from './money.ts';
+import { pvRanges } from './solar-ranges.ts';
 import { areaPath, paths, cityPaths } from './scope/paths.ts';
 import { areaRefusal } from './scope/reachability.ts';
 import { isAreaKey, splitKey, type AreaKey } from './scope/registry.ts';
@@ -727,20 +728,65 @@ export function mountHeatMap(): () => void {
     if (Number.isFinite(t) && t > 0) tariff = t;
   } catch { /* default stands */ }
   const pct = (f: number): string => (f < 0.005 ? 'none' : `−${Math.round(f * 100)}%`);
+  /* THE FIFTH RUNG'S OTHER FACE. Captured from the server-rendered markup before
+     anything paints, so the ladder can swap between "never compared" and a measured
+     spread as the reader moves between wards — one of which may publish a
+     `tiers.validated` block while the others do not. Writing the sentence over the
+     <li> is also what hides its button, which is the point: there is nothing left to
+     join once the study has reported on this ward. */
+  const SURE_VALID_DEFAULT = el('bcSureValid')?.innerHTML ?? '';
+  /* The fix lines' one address. Not an <a href>: until a roof is selected there is
+     no building index to name, and a link that tabs to a half-written subject is
+     worse than a button that only exists once the card is painted. */
+  function mailtoFor(limit: string, idx: number): string {
+    const subject = `Solar assessment · ${areaName()} · #${idx} · ${limit}`;
+    return `mailto:ant@deltaclimate.earth?subject=${encodeURIComponent(subject)}`;
+  }
   function paintSolarCard(b: BuildingMeta) {
     const box = el('bcSol');
     if (!box) return;
     const pv = pvCache[state.ward];
     if (!pv) { box.setAttribute('hidden', ''); return; }
     const i = b.idx;
-    setHTML('bcSolKwp', `${pv.kwp[i].toFixed(1)} kWp<small>${Math.round(pv.packing_factor * 100)}% of roof · floor</small>`);
-    setHTML('bcSolKwh', `${Math.round(pv.kwh[i]).toLocaleString()} kWh/yr<small>${Math.round(pv.specific_yield).toLocaleString()} kWh per kWp</small>`);
+    /* THE INTERVAL LEADS, THE POINT FOLLOWS (spec §2.1). Both bounds are products
+       of numbers the artefact publishes — solar-ranges.ts re-derives nothing — so the
+       card can print a range without inventing a confidence the laboratory never
+       measured. */
+    const r = pvRanges(pv, i);
+    const [yLo, yHi] = pv.tiers.yield_bracket_kwh_per_kwp;
+    setHTML('bcSolKwp', `${r.kwpLow.toFixed(1)}–${r.kwpHigh.toFixed(1)} kWp<small>floor ${r.kwpLow.toFixed(1)} · ${Math.round(pv.packing_factor * 100)}% of roof</small>`);
+    setHTML('bcSolKwh', `${r.kwhLow.toLocaleString()}–${r.kwhHigh.toLocaleString()} kWh/yr<small>about ${Math.round(pv.kwh[i]).toLocaleString()} · screened</small>`);
     setHTML('bcSolLoss', `${pct(pv.loss[i])}<small>of which trees ${pv.loss_trees[i] < 0.005 ? 'under 1%' : `${Math.round(pv.loss_trees[i] * 100)}%`} · annual</small>`);
     setHTML('bcSolFloor', `${pct(pv.loss_strict[i])}<small>under a strict roof mask</small>`);
     setHTML('bcSolRaised', `${pct(pv.loss_raised[i])}<small>elevated mounting · what-if</small>`);
     setHTML('bcSolRs', `${fmtMoney(pv.kwh[i] * tariff, COSTS)}/yr<small>at ${fmtRate(tariff, COSTS)} per kWh · assumed</small>`);
+    /* THE LADDER, FILLED. Each rung's <b> is this roof's own band, so the limit is
+       stated in the reader's numbers rather than as a general caution. */
+    setText('bcSureRoof', `Capacity ${r.kwpLow.toFixed(1)}–${r.kwpHigh.toFixed(1)} kWp today.`);
+    setText('bcSureCanopy', `Shading ${pct(pv.loss[i])} headline, ${pct(pv.loss_strict[i])} floor.`);
+    setText('bcSureIrr', `Yield ${yLo.toLocaleString()}–${yHi.toLocaleString()} kWh per kWp today.`);
+    const v = pv.tiers.validated;
+    setHTML('bcSureValid', v === null
+      ? SURE_VALID_DEFAULT
+      : `Compared with ${v.n} real rooftops over ${v.months} months: median ratio ${v.median_ratio.toFixed(2)}, ${Math.round(v.within_15pct_share * 100)}% within 15%.`);
+    setText('bcSolTier', v === null ? 'screened' : 'validated');
+    /* The subject carries the ward and this roof's index, because a query about
+       "a roof in Ballygunge" is a query nobody can answer. */
+    box.querySelectorAll<HTMLElement>('.bc-ask').forEach((btn) => {
+      btn.dataset.href = mailtoFor(btn.dataset.limit ?? '', i);
+    });
     box.removeAttribute('hidden');
   }
+  /* One listener for five buttons and every rung the ladder grows: the painter only
+     has to write each button's `data-href`. */
+  const onSureClick = (ev: Event) => {
+    const t = ev.target;
+    if (!(t instanceof Element)) return;
+    const href = t.closest<HTMLElement>('.bc-ask')?.dataset.href;
+    if (href !== undefined && href !== '') location.href = href;
+  };
+  el('bcSure')?.addEventListener('click', onSureClick);
+  cleanup.push(() => el('bcSure')?.removeEventListener('click', onSureClick));
   /* ── rooftop solar, whole ward ──
      The laboratory's totals and stratum, printed twice from one function: into the
      Solar pane (its home) and into the legend's folded block. The right panel no

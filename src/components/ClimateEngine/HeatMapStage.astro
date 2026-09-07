@@ -534,7 +534,7 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
             strict-mask floor: the mask rule is the largest lever in the estimate,
             so the headline never prints without it (spec §2.4). */}
         <div class="bc-sol" id="bcSol" hidden>
-          <div class="bc-h"><span>Rooftop solar</span><span>screening</span></div>
+          <div class="bc-h"><span>Rooftop solar</span><span id="bcSolTier" class="bc-tier">screened</span></div>
           <dl>
             <dt>Installable</dt><dd id="bcSolKwp" class="sun">—</dd>
             <dt>Yield</dt><dd id="bcSolKwh">—</dd>
@@ -544,6 +544,24 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
             <dt>Worth</dt><dd id="bcSolRs">—</dd>
           </dl>
           <p class="bc-sol-note">Screening estimate · not bankable · canopy Meta/WRI CHM v2 · 0.5 m grid · NASA POWER irradiance</p>
+          {/* THE HOW-SURE LADDER (spec 2026-09-07-solar-guide §2.3). Every rung names a
+              limit, the fix for it, and what the fix narrows it to — the middle <b>
+              is this roof's own band, painted by paintSolarCard. The buttons open a
+              pre-filled email and nothing else: the survey app does not exist, and a
+              button that pretended it did would be the one dishonest thing on the card. */}
+          <details class="bc-sure" id="bcSure">
+            <summary>How sure, and what would make it surer</summary>
+            <ul>
+              <li data-limit="roof">Roof obstacles unknown: tanks, stair rooms, parapets. <b id="bcSureRoof"></b> A ten-minute walk of the roof with a phone narrows it to about ±10%. <button type="button" class="bc-ask" data-limit="roof">Ask about this</button></li>
+              <li data-limit="canopy">Canopy over the roof: usable or not. <b id="bcSureCanopy"></b> One photo from the roof settles it. <button type="button" class="bc-ask" data-limit="canopy">Ask about this</button></li>
+              <li data-limit="irradiance">Sunlight from a coarse satellite cell. <b id="bcSureIrr"></b> The ground station inside that cell narrows yield to about ±5%, city-wide. <button type="button" class="bc-ask" data-limit="irradiance">Ask about this</button></li>
+              <li data-limit="height">Building height unverified for this roof. A survey or a drone pass fixes it. <button type="button" class="bc-ask" data-limit="height">Ask about this</button></li>
+              <li data-limit="validation" id="bcSureValid">Never compared with real rooftops yet. The validation study is under way. <button type="button" class="bc-ask" data-limit="validation">Join the study</button></li>
+            </ul>
+          </details>
+          {/* Inert until the brief renderer lands — present so the card's shape is
+              settled and the ladder is not the last thing on it. */}
+          <button class="bc-brief" id="bcBrief" type="button">Print the installer brief</button>
         </div>
         <div class="sv-thumb" id="svThumb" hidden></div>
         <p class="bc-rings" id="bcRings"></p>
@@ -1290,6 +1308,41 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
   body.studio .bc-sol .bc-h,body.studio .bc-sol dd.sun{color:var(--studio-ink-amber)}
   body.studio .bc-prov,body.studio .bc-sol-note{color:var(--studio-ink-bronze)}
   body.studio .bc-sol{border-top-color:rgb(122 82 0 /.35)}
+  /* THE TIER CHIP. It states what the figures above it are, in the screening
+     amber, and its pill is bordered in `currentColor` — so the border can never
+     drift from the ink beside it, and no hex is written for it in either theme. */
+  .bc-tier{flex:none;align-self:center;color:var(--sun);border:1px solid currentColor;
+    border-radius:3px;padding:.05rem .32rem;line-height:1.55;
+    font:450 .44rem var(--sans);letter-spacing:.14em;text-transform:uppercase}
+  body.studio .bc-tier{color:var(--studio-ink-amber)}
+  /* THE HOW-SURE LADDER. The summary takes the card's label voice (.bc-ins's
+     grammar) and the rungs take its note voice — a limit is a footnote about the
+     figure above it, never a second figure. Closed by default: the reader who
+     wants the number gets the number, and the reader who asks how sure gets the
+     five things that would make it surer. */
+  .bc-sure{margin:.5rem 0 0}
+  .bc-sure summary{cursor:pointer;font:450 .5rem var(--sans);letter-spacing:.08em;
+    text-transform:uppercase;color:var(--ink);line-height:1.6}
+  .bc-sure summary:hover{color:var(--paper)}
+  .bc-sure summary:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+  .bc-sure ul{margin:.35rem 0 0;padding:0 0 0 .8rem;list-style:disc}
+  .bc-sure li{margin:.3rem 0;font:450 .46rem var(--sans);letter-spacing:.06em;
+    color:var(--bronze);line-height:1.7}
+  .bc-sure li b{font-weight:550;color:var(--paper)}
+  /* Text buttons, not chrome. The fix is an offer to talk; anything shaped like a
+     submit button would promise a survey service that does not exist (spec §2.4). */
+  .bc-ask,.bc-brief{cursor:pointer;background:none;border:0;padding:0;
+    font:450 .46rem var(--sans);letter-spacing:.1em;text-transform:uppercase;
+    color:var(--cyan);text-decoration:underline;text-underline-offset:2px}
+  .bc-ask:hover,.bc-brief:hover{color:var(--paper)}
+  .bc-ask:focus-visible,.bc-brief:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+  .bc-brief{display:block;margin:.55rem 0 0}
+  /* Clay: the same four inks the card already steps down to, no new colours. */
+  body.studio .bc-sure summary{color:var(--studio-muted)}
+  body.studio .bc-sure li{color:var(--studio-ink-bronze)}
+  body.studio .bc-sure li b{color:var(--studio-ink)}
+  body.studio .bc-ask,body.studio .bc-brief{color:var(--studio-ink-teal)}
+  body.studio .bc-sure summary:hover,body.studio .bc-ask:hover,body.studio .bc-brief:hover{color:var(--studio-ink)}
   /* Per-layer "data receipts" panel — populated from {ward}-layers.json (provenance.ts). */
   .srcbtn{margin:.4rem 0 0;cursor:pointer;font:400 .48rem var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--cyan);background:none;border:0;padding:.15rem 0}
   .srcbtn:hover{color:var(--paper)}

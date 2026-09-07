@@ -101,6 +101,16 @@ test.describe('the solar screen', () => {
     await expect(page.locator('#bcSol')).toBeVisible();
     await expect(page.locator('#bcSolFloor')).toContainText('strict roof mask');
     await expect(page.locator('#bcSolRs')).toContainText('assumed');
+    /* THE INTERVAL LEADS. The headline is a range before it is a point, the chip
+       says which rung of the ladder it stands on, and every rung offers its fix. */
+    await expect(page.locator('#bcSolKwp')).toHaveText(/^\d+\.\d–\d+\.\d kWp/);
+    await expect(page.locator('#bcSolTier')).toHaveText('screened');
+    await expect(page.locator('#bcSure li')).toHaveCount(5);
+    /* The mailto is asserted through `data-href` and never clicked: a mailto
+       navigation leaves the browser, so there is nothing left to observe. */
+    const ask = await page.locator('.bc-ask[data-limit="roof"]').getAttribute('data-href');
+    expect(ask).toMatch(/^mailto:ant@deltaclimate\.earth\?subject=/);
+    expect(ask).toContain(`%23${idx}`);
     await expect(page.locator('#bcard')).toHaveCSS('opacity', '1');
     const card = (await page.locator('#bcard').boundingBox())!;
     const canvas = await canvasBox(page);

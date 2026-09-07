@@ -3291,6 +3291,21 @@ test('the solar screen is wired end to end and never prints a headline without i
   assert.match(app, /paintSolarCard\(b\)/, 'paintCard does not paint the solar block');
   assert.match(app, /localStorage\.setItem\(TARIFF_KEY/, 'the tariff is not remembered');
   assert.match(app, /map\.easeTo\(/, 'a ranked row does not bring the camera to its building -- a card projected from a building outside the view is a card nobody sees');
+  /* THE LADDER. The card leads with the interval, wears the tier it has earned,
+     and every limit names the one thing that would narrow it. Pinned here because
+     the card paints only for a selected building, which the software renderer
+     cannot be trusted to click. */
+  assert.match(stage, /id="bcSolTier"/,
+    'the solar card wears no tier chip -- a screening figure that does not say it is screened reads as a measurement');
+  assert.match(stage, /<details class="bc-sure"/,
+    'the card carries no "how sure" disclosure -- the limits stay unwritten and only we know them');
+  assert.equal((stage.match(/<li data-limit=/g) ?? []).length, 5,
+    'the how-sure ladder does not have its five rungs (spec 2026-09-07-solar-guide §2.3)');
+  assert.match(stage, /id="bcBrief"/, 'the card offers no installer brief');
+  assert.match(app, /pvRanges\(/,
+    'the card paints points, not intervals -- pvRanges is the only place the published bands become a roof range');
+  assert.match(app, /mailto:ant@deltaclimate\.earth/,
+    'no fix line can be asked about -- the ladder names limits and offers no way to close one');
   assert.doesNotMatch(stage + bench + app, /payback/i,
     'a payback figure has no place here: it needs capex and subsidy assumptions, and that is where liability lives');
 });
