@@ -1314,9 +1314,16 @@ export function mountHeatMap(): () => void {
       && f.tiers?.yield_bracket_kwh_per_kwp?.length === 2
       && typeof f.tiers.yield_bracket_kwh_per_kwp[0] === 'number'
       && typeof f.tiers.yield_bracket_kwh_per_kwp[1] === 'number'
-      // `validated` is null until measure-pv-validation.py fills it; a shape check
-      // (not just truthiness) so a half-written slot cannot pass here and throw later.
-      && (f.tiers.validated === null || typeof f.tiers.validated?.n === 'number');
+      // `validated` is null until measure-pv-validation.py fills it; every field it
+      // then carries is probed, not just `n` — the card prints median_ratio and
+      // within_15pct_share too (spec §3), so a half-written slot must be refused
+      // here rather than throw when the ladder tries to print it.
+      && (f.tiers.validated === null
+        || (typeof f.tiers.validated?.n === 'number'
+          && typeof f.tiers.validated?.months === 'number'
+          && typeof f.tiers.validated?.median_ratio === 'number'
+          && typeof f.tiers.validated?.within_15pct_share === 'number'
+          && typeof f.tiers.validated?.date === 'string'));
     if (!ok) {
       console.warn(`solar screen "${String(f.ward ?? '?')}" does not match ${area} (${buildings} buildings) — ignored`);
       return null;

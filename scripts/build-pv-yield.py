@@ -142,9 +142,16 @@ def tiers_block(existing: dict[str, Any] | None = None) -> dict[str, Any]:
     The pre-registration (§6.3) says that slot is written ONLY by
     measure-pv-validation.py, once n >= 25; a rebuild of the screen (a new shading
     pass, a packing-factor tweak) is not that event and must not silently
-    un-validate a result that already exists. `existing` absent, or carrying no
-    `tiers`, or no `validated` key, all mean there is nothing yet to carry: None."""
-    validated = (existing or {}).get("tiers", {}).get("validated")
+    un-validate a result that already exists. `existing` absent or unreadable, or
+    carrying no `tiers`, a null `tiers`, no `validated` key, or a `validated` that
+    is not a well-formed dict (no numeric `n`) — all of these mean there is
+    nothing TRUSTWORTHY yet to carry, so the slot stays None rather than
+    propagate a corrupt value forward forever."""
+    raw_validated = ((existing or {}).get("tiers") or {}).get("validated")
+    validated = (raw_validated if isinstance(raw_validated, dict)
+                 and isinstance(raw_validated.get("n"), (int, float))
+                 and not isinstance(raw_validated.get("n"), bool)
+                 else None)
     return {
         "screened": True,
         "yield_bracket_kwh_per_kwp": [YIELD_MIN, YIELD_MAX],
@@ -176,6 +183,18 @@ def _self_check() -> None:
         "a rebuild must carry an existing validated slot forward, not erase it"
     # And the other three fields are untouched by carry-forward — only validated moves.
     assert carried["screened"] is True and carried["packing_range"] == [0.28, 0.40]
+
+    # A corrupt or half-written "validated" (a hand edit, a truncated write) must
+    # NOT be carried forward as though it were trustworthy — it is treated the
+    # same as absent, so the guard in heat-map-app.ts never has to see it.
+    garbage = tiers_block({"tiers": {"validated": "yes"}})
+    assert garbage["validated"] is None, \
+        "a validated slot that is not a well-formed dict must not be carried forward"
+    also_garbage = tiers_block({"tiers": {"validated": {"months": 8}}})
+    assert also_garbage["validated"] is None, \
+        "a validated slot with no numeric n must not be carried forward"
+    assert tiers_block({"tiers": None})["validated"] is None, \
+        "a null tiers block on the existing file must not raise"
 
     print("  self-check: ok")
 
@@ -371,9 +390,11 @@ def main() -> None:
     # carry its "validated" slot forward instead of resetting it (see tiers_block's
     # docstring). Absent or unreadable is fine — that just means nothing to carry.
     existing_web: dict[str, Any] | None = None
-    if os.path.exists(web):
+    try:
         with open(web) as fh:
             existing_web = json.load(fh)
+    except (OSError, json.JSONDecodeError):
+        existing_web = None
     with open(web, "w") as fh:
         # Carried so the card can never present a screening number as a firm one, and so a
         # stale artefact is visible rather than silently assumed current.
