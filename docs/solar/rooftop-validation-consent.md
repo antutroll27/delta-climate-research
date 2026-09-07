@@ -1,58 +1,62 @@
-# Rooftop solar study — what we ask of you, and what we do with it
+# Got solar on your roof? Help me check our maths.
 
-*Draft for the founder's and a lawyer's eye before it reaches an owner. Plain language on purpose.*
+Hi, I'm Antariksha. I build the tech at Delta Climate Research.
 
-## What this is
+We've made a free map that guesses how much solar every roof in Ballygunge, Barrackpore and Baruipur
+could hold, and how much it would generate. Here's the honest bit: we have never checked that guess
+against a real roof. Not one. Yours could be the first.
 
-Delta Climate Research has built a free screen that estimates how much solar each roof in Ballygunge,
-Barrackpore and Baruipur could hold and generate. We have never compared it with real rooftop systems.
-Yours would help us find out how good or bad the screen is, and we will publish the answer either way.
+We'll publish whatever we find, even if it makes us look bad. Especially then.
 
-## What we ask for
+## What I'm asking for
 
-- The **monthly generation** of your rooftop system, from your inverter's app or portal, or from your
-  electricity bill, for as many months as you have.
-- Your system's **size** (kilowatts), the **tilt** and **direction** of the panels, and when it was installed.
-- The **address**, so we can match your roof to the building on our map. The address is not kept.
+Ten minutes, once. No visit, no wires, nobody climbing on your roof.
 
-Ten minutes, once. Nothing is installed, nothing is touched.
+- **Your system's monthly generation**, from the inverter app or your electricity bill. As many months as
+  you've got.
+- **The basics of the system:** how big it is in kilowatts, which way the panels face, how tilted they
+  are, and when it went up.
+- **Your address**, only so I can find your roof on our map. I don't keep it.
 
-## What we do with it
+## What I do with it
 
-- We keep an anonymous record: a roof number, the ward, the building's index on our map, and your figures.
-  **Your name and address are not stored** in our files and are never published.
-- We publish the study's result on our website with the number of roofs and the months covered. Individual
-  roofs are not identifiable in what we publish.
-- We do not sell, share or pass your data to anyone, including installers, utilities or the municipality.
-- You can withdraw at any time by emailing us; your row is deleted.
+- I keep one anonymous row: a roof number, the ward, the building's number on our map, and your figures.
+  Your name and address don't go in the file. Ever.
+- We publish the overall result on our website: how many roofs, how many months, and how close we got.
+  Nobody can pick your roof out of it.
+- We don't sell it, share it, or hand it to anyone. Not installers, not the electricity company, not the
+  municipality.
+- Changed your mind? Email me and your row is gone the same day.
 
 ## What you get
 
-- Your roof's screen result and how it compared with your real generation, as a one-page sheet.
-- Our thanks, and a study that makes the next owner's decision better.
+- A one-page sheet: what our map said about your roof, next to what your roof actually did.
+- A better map for the next person on your street who's thinking about solar.
+- My genuine thanks, which cost nothing and are meant.
 
-There is no payment either way.
+No money changes hands, in either direction.
 
-**Contact:** ant@deltaclimate.earth (technical) · angad@deltaclimate.earth
+**Me:** ant@deltaclimate.earth · **Angad, our founder:** angad@deltaclimate.earth
 
 ---
 
-## The data sheet (one per roof)
+## The sheet (one per roof)
 
-| field | what to write | example |
+| what | what to write | example |
 |---|---|---|
-| System size | DC kilowatts, from the installer's invoice or the inverter app | 5.4 kW |
-| Panels face | the direction the panels face | south, or south-west |
-| Tilt | the angle from flat, if known; "flat" or "on a frame" is fine | 20° |
-| Installed on | month and year | March 2024 |
-| Monthly generation | kWh per month, as many months as you have | Jan 2025: 512, Feb 2025: 588, … |
-| Outages | any month the system was off for more than three days, and roughly how long | Aug 2025: 9 days |
-| Inverter app | the make, so we can help you export | Growatt, SolarEdge, Fronius, Sungrow, Huawei, other |
-| Anything else | shading you know of, a tank moved, panels cleaned | "neighbour's mango tree, west side" |
+| System size | kilowatts, from the installer's invoice or the inverter app | 5.4 kW |
+| Panels face | the direction they point | south, or south-west |
+| Tilt | the angle from flat. "Flat" or "on a frame" is fine if you don't know | 20° |
+| Installed | month and year | March 2024 |
+| Monthly generation | kWh per month, as many as you have | Jan 2025: 512 · Feb 2025: 588 · … |
+| Off days | any month the system was off for more than three days, and roughly how long | Aug 2025: 9 days |
+| Inverter app | the make, so I can help you export | Growatt, SolarEdge, Fronius, Sungrow, Huawei, other |
+| Anything else | shading you know about, a tank that moved, a cleaning | "neighbour's mango tree, west side" |
 
-**Exporting from the app:** most inverter portals have a *Reports* or *Energy* page with a monthly view and
-an export button. A screenshot of the monthly bar chart is enough if the export is awkward.
+**Getting the numbers out of the app:** most inverter apps have a *Reports* or *Energy* page with a monthly
+view and an export button. If the export is a pain, a screenshot of the monthly bar chart is enough.
 
-*Internal: rows are entered into `data/calibration/pv-validation-measured.csv` by a team member under the
-pre-registration in `docs/superpowers/specs/2026-09-07-pv-rooftop-validation-design.md`, with the address
-replaced by the building index at entry.*
+*Internal: rows go into `data/calibration/pv-validation-measured.csv` by a team member, under the
+pre-registration in `docs/superpowers/specs/2026-09-07-pv-rooftop-validation-design.md`, with the
+address replaced by the building index at entry. Draft v1, 7 September 2026, for Angad's and a lawyer's
+eye before it reaches an owner.*
