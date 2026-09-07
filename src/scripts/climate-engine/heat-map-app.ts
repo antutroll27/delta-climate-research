@@ -735,6 +735,15 @@ export function mountHeatMap(): () => void {
      <li> is also what hides its button, which is the point: there is nothing left to
      join once the study has reported on this ward. */
   const SURE_VALID_DEFAULT = el('bcSureValid')?.innerHTML ?? '';
+  /* The static note is captured the same way and for the same reason: it names the
+     tier in prose ("Screening estimate · not bankable · …"), so it cannot stay
+     frozen while the chip above it says the roof has been checked. */
+  const SOL_NOTE_DEFAULT = el('bcSolNote')?.textContent ?? '';
+  /* The tier last PAINTED, so the two nodes that carry it are rewritten only when it
+     changes. Both are innerHTML writes over a subtree the reader may be interacting
+     with — the fifth rung holds a button — and rebuilding them on every selection
+     would blow away focus for no reason. */
+  let solTierPainted: 'screened' | 'validated' | null = null;
   /* The fix lines' one address. Not an <a href>: until a roof is selected there is
      no building index to name, and a link that tabs to a half-written subject is
      worse than a button that only exists once the card is painted. */
@@ -766,10 +775,17 @@ export function mountHeatMap(): () => void {
     setText('bcSureCanopy', `Shading ${pct(pv.loss[i])} headline, ${pct(pv.loss_strict[i])} floor.`);
     setText('bcSureIrr', `Yield ${yLo.toLocaleString()}–${yHi.toLocaleString()} kWh per kWp today.`);
     const v = pv.tiers.validated;
-    setHTML('bcSureValid', v === null
-      ? SURE_VALID_DEFAULT
-      : `Compared with ${v.n} real rooftops over ${v.months} months: median ratio ${v.median_ratio.toFixed(2)}, ${Math.round(v.within_15pct_share * 100)}% within 15%.`);
-    setText('bcSolTier', v === null ? 'screened' : 'validated');
+    const tier = v === null ? 'screened' : 'validated';
+    if (tier !== solTierPainted) {
+      solTierPainted = tier;
+      setText('bcSolTier', tier);
+      setHTML('bcSureValid', v === null
+        ? SURE_VALID_DEFAULT
+        : `Compared with ${v.n} real rooftops over ${v.months} months: median ratio ${v.median_ratio.toFixed(2)}, ${Math.round(v.within_15pct_share * 100)}% within 15%.`);
+      setText('bcSolNote', v === null
+        ? SOL_NOTE_DEFAULT
+        : `Checked against ${v.n} real rooftops · still a screening estimate · ${SOL_NOTE_DEFAULT.replace(/^Screening estimate · /, '')}`);
+    }
     /* The subject carries the ward and this roof's index, because a query about
        "a roof in Ballygunge" is a query nobody can answer. */
     box.querySelectorAll<HTMLElement>('.bc-ask').forEach((btn) => {

@@ -132,4 +132,50 @@ test.describe('the solar screen', () => {
     expect(after.y).toBeGreaterThanOrEqual(canvas.y + 11);
     expect(after.y + after.height).toBeLessThanOrEqual(canvas.y + canvas.height - 11);
   });
+
+  /* THE RUNG THAT HAS NEVER FIRED. All three artefacts ship `tiers.validated: null`,
+     so the validated half of the card is unreachable on real data and would have gone
+     to production unexecuted. The ward's solar file is intercepted and given a
+     result; then the ward is switched WITHOUT a reload, which is the only way to
+     prove the swap reverses — the <li> and the note are innerHTML writes over the
+     markup's own default, and a one-way swap would look identical until the second
+     ward. */
+  test('a validated ward wears the measured rung, and switching wards puts the screened one back', async ({ page }) => {
+    const real = JSON.parse(await readFile('public/heat-map/data/pv-ballygunge.json', 'utf8'));
+    real.tiers.validated = { n: 31, months: 9, median_ratio: 0.97, within_15pct_share: 0.84, date: '2026-10-01' };
+    await page.route('**/heat-map/data/pv-ballygunge.json', (route) => route.fulfill({
+      contentType: 'application/json', body: JSON.stringify(real),
+    }));
+    /* Re-navigated, because beforeEach has already booted and cached the real file. */
+    await boot(page);
+    await withRelief(page);
+    await openSolar(page);
+    await page.locator('#solList tr').first().click();
+    await page.waitForTimeout(1_500);
+    await expect(page.locator('#bcSol')).toBeVisible();
+    await expect(page.locator('#bcSolTier')).toHaveText('validated');
+    await expect(page.locator('#bcSureValid')).toContainText('31 real rooftops');
+    await expect(page.locator('#bcSureValid')).toContainText('84% within 15%');
+    await expect(page.locator('#bcSureValid .bc-ask')).toHaveCount(0);
+    /* The prose note carries the tier too: a chip saying "validated" over a line
+       that still opened "Screening estimate" is the card contradicting itself. */
+    await expect(page.locator('#bcSolNote')).toContainText('Checked against 31 real rooftops');
+    await expect(page.locator('#bcSolNote')).toContainText('still a screening estimate');
+
+    /* Baruipur's file is NOT intercepted, so it arrives with `validated: null`.
+       The strip switches the ward IN PLACE — no navigation — so the Solar pane is
+       still open and `openSolar` would toggle it shut (console-shell.ts: a rail
+       click on the showing pane closes the panel). The pane's own ward heading is
+       the anchor instead; waiting on the row count alone would pass instantly
+       against Ballygunge's ten rows. */
+    await page.locator('#strip .ward[data-w="baruipur"]').click();
+    await expect(page.locator('#solPaneArea')).toHaveText(/Baruipur/i, { timeout: 30_000 });
+    await expect(page.locator('#solList tr')).toHaveCount(10, { timeout: 15_000 });
+    await page.locator('#solList tr').first().click();
+    await page.waitForTimeout(1_500);
+    await expect(page.locator('#bcSolTier')).toHaveText('screened');
+    await expect(page.locator('#bcSureValid .bc-ask')).toHaveCount(1);
+    await expect(page.locator('#bcSolNote')).toContainText('Screening estimate');
+    await expect(page.locator('#bcSolNote')).not.toContainText('Checked against');
+  });
 });

@@ -3299,9 +3299,14 @@ test('the solar screen is wired end to end and never prints a headline without i
     'the solar card wears no tier chip -- a screening figure that does not say it is screened reads as a measurement');
   assert.match(stage, /<details class="bc-sure"/,
     'the card carries no "how sure" disclosure -- the limits stay unwritten and only we know them');
-  assert.equal((stage.match(/<li data-limit=/g) ?? []).length, 5,
+  /* Counted INSIDE the disclosure, not over the file: a rung added to some other
+     block would otherwise satisfy the ladder's own count. */
+  const sure = stage.match(/<details class="bc-sure"[\s\S]*?<\/details>/)?.[0] ?? '';
+  assert.equal((sure.match(/<li data-limit=/g) ?? []).length, 5,
     'the how-sure ladder does not have its five rungs (spec 2026-09-07-solar-guide §2.3)');
-  assert.match(stage, /id="bcBrief"/, 'the card offers no installer brief');
+  assert.match(stage, /id="bcBrief"[^>]*hidden/,
+    'the installer-brief button is missing, or is on screen before anything wires its click -- '
+    + 'a styled button that does nothing is a lie the reader can click (Task 5 drops the `hidden`)');
   assert.match(app, /pvRanges\(/,
     'the card paints points, not intervals -- pvRanges is the only place the published bands become a roof range');
   assert.match(app, /mailto:ant@deltaclimate\.earth/,
