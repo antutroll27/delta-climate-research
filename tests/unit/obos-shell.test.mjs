@@ -3313,4 +3313,15 @@ test('the solar screen is wired end to end and never prints a headline without i
     'no fix line can be asked about -- the ladder names limits and offers no way to close one');
   assert.doesNotMatch(stage + bench + app, /payback/i,
     'a payback figure has no place here: it needs capex and subsidy assumptions, and that is where liability lives');
+  /* THE PANE AND THE CSV (Task 4, spec 2026-09-07-solar-guide §5). The ward block
+     wears its own tier chip -- the card's is per-roof and cannot stand in for the
+     whole ward -- and the CSV hands over the same ranges and tier the pane shows. */
+  assert.match(app, /kwh_low,kwh_high,kwp_high/,
+    'the CSV header carries no ranges -- the sheet a reader downloads must match the range the pane just showed them');
+  assert.match(app, /,tier,basis/,
+    'the CSV header carries no tier column -- a downloaded roof cannot be told apart from a validated one');
+  assert.match(stage, /id="solPaneTier"/,
+    'the Solar pane wears no tier chip of its own -- the card\'s chip is per-roof and cannot stand in for the whole ward');
+  assert.match(stage, /<th scope="col">range<\/th>/,
+    'the roof table gains no range column -- the ten-roof list still prints a point where the pane prose already promises a range');
 });

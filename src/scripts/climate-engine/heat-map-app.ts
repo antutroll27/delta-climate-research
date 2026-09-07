@@ -823,6 +823,9 @@ export function mountHeatMap(): () => void {
     show('solBlock', has);
     if (!has) { setSolarOpen(false); paintSolarPane(null); return; }
     const t = pv.totals, s = pv.stratum, n = pv.kwp.length;
+    /* The pane's own chip: the card's tier is per-roof and cannot stand in for the
+       whole ward, so this is painted independently rather than reusing solTierPainted. */
+    setText('solPaneTier', pv.tiers.validated === null ? 'screened' : 'validated');
     for (const pre of ['sol', 'solPane'] as const) {
       setHTML(`${pre}Kwp`, `${t.capacity_mwp.toFixed(1)}<span class="u">MWp</span>`);
       setHTML(`${pre}Conf`, `Screening · <b>${t.capacity_mwp_range[0].toFixed(1)}–${t.capacity_mwp_range[1].toFixed(1)} MWp</b> · not bankable`);
@@ -909,8 +912,10 @@ export function mountHeatMap(): () => void {
       const meta = byIdx.get(i);
       const area = meta ? Math.round(meta.areaM2) : 0;
       const L = pv.loss[i];
+      const r = pvRanges(pv, i);
       return `<tr tabindex="0" data-idx="${i}"${area > 10_000 ? ' class="big"' : ''}>`
         + `<td class="id">#${i}</td><td>${pv.kwp[i].toFixed(0)}</td><td>${Math.round(pv.kwh[i]).toLocaleString()}</td>`
+        + `<td class="range">${r.kwhLow.toLocaleString()}–${r.kwhHigh.toLocaleString()}</td>`
         + `<td class="sh${L < 0.005 ? ' z' : ''}">${L < 0.005 ? '—' : `−${Math.round(L * 100)}%`}</td>`
         + `<td class="a">${area.toLocaleString()}</td></tr>`;
     }).join('');
@@ -924,14 +929,16 @@ export function mountHeatMap(): () => void {
     /* The receipt travels with every row: a sorted sheet keeps it. Written once
        on row 0, it survived only while the sheet stayed in this order. */
     const basis = `"${pv.basis.replace(/"/g, '""')}"`;
-    const rows = ['idx,lat,lon,footprint_m2,kwp,kwh_yr,loss,loss_buildings,loss_trees,loss_strict,loss_raised,worth_per_yr,tariff_per_kwh,currency,basis'];
+    const tier = pv.tiers.validated === null ? 'screened' : 'validated';
+    const rows = ['idx,lat,lon,footprint_m2,kwp,kwh_yr,kwh_low,kwh_high,kwp_high,loss,loss_buildings,loss_trees,loss_strict,loss_raised,worth_per_yr,tariff_per_kwh,currency,tier,basis'];
     for (let i = 0; i < pv.kwp.length; i += 1) {
       const b = byIdx.get(i);
       const ll = b ? wardLatLon(w, b.cx, b.cz) : null;
+      const r = pvRanges(pv, i);
       rows.push([
         i, ll ? ll.lat.toFixed(5) : '', ll ? ll.lon.toFixed(5) : '', b ? Math.round(b.areaM2) : '',
-        pv.kwp[i], pv.kwh[i], pv.loss[i], pv.loss_buildings[i], pv.loss_trees[i], pv.loss_strict[i], pv.loss_raised[i],
-        Math.round(pv.kwh[i] * tariff), tariff.toFixed(2), COSTS.currency, basis,
+        pv.kwp[i], pv.kwh[i], r.kwhLow, r.kwhHigh, r.kwpHigh, pv.loss[i], pv.loss_buildings[i], pv.loss_trees[i], pv.loss_strict[i], pv.loss_raised[i],
+        Math.round(pv.kwh[i] * tariff), tariff.toFixed(2), COSTS.currency, tier, basis,
       ].join(','));
     }
     return `${rows.join('\n')}\n`;

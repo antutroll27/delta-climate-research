@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 import { test, expect, type Page } from '@playwright/test';
 
 /* THE SOLAR SCREEN ON THE REAL PAGE. The panel and the pane render from the ward
@@ -9,7 +10,7 @@ import { test, expect, type Page } from '@playwright/test';
    selected building never projects, so the tests that need the card force the
    layer first, as a reader on a weak GPU can by pressing "3D Relief". */
 const BALLYGUNGE = '/heat-map/in/kolkata/ballygunge/';
-const HEADER = 'idx,lat,lon,footprint_m2,kwp,kwh_yr,loss,loss_buildings,loss_trees,loss_strict,loss_raised,worth_per_yr,tariff_per_kwh,currency,basis';
+const HEADER = 'idx,lat,lon,footprint_m2,kwp,kwh_yr,kwh_low,kwh_high,kwp_high,loss,loss_buildings,loss_trees,loss_strict,loss_raised,worth_per_yr,tariff_per_kwh,currency,tier,basis';
 
 async function boot(page: Page) {
   await page.goto(BALLYGUNGE);
@@ -67,6 +68,15 @@ test.describe('the solar screen', () => {
     await expect(page.locator('#solCur')).not.toBeEmpty();
     await expect(page.locator('#solTariff')).toHaveValue('8.00');
 
+    /* THE RANGE COLUMN (spec 2026-09-07-solar-guide §5). Header and rows both --
+       a table that names the column but never fills it is worse than no column. */
+    await expect(page.locator('table.roofs thead th').nth(3)).toHaveText('range');
+    const rangeCells = page.locator('#solList tr td.range');
+    await expect(rangeCells).toHaveCount(10);
+    for (const cell of await rangeCells.all()) {
+      await expect(cell).toHaveText(/^\d[\d,]*–\d[\d,]*$/);
+    }
+
     const before = await page.locator('#solPaneRs').innerText();
     await page.locator('#solTariff').fill('10');
     await expect(page.locator('#solPaneRs')).not.toHaveText(before);
@@ -82,12 +92,24 @@ test.describe('the solar screen', () => {
     const lines = text.trim().split('\n');
     expect(lines[0]).toBe(HEADER);
     expect(lines.length).toBe(1 + 3527);           // one row per Ballygunge building
+    /* FIELD COUNT, WITHOUT A CSV PARSER. `basis` is the one quoted field and the
+       only one that can carry a comma of its own, and it is always LAST -- so
+       every field before it is comma-safe, and slicing there instead of counting
+       delimiters over the whole line is what keeps this from breaking on a basis
+       string that quotes a number. */
+    const headerFieldCount = HEADER.split(',').length;
     const row = lines[1].split(',');
-    expect(row[12]).toBe('10.00');                 // the tariff the reader set
-    expect(row[13]).toBe('INR');                   // the scope's currency, never typed
+    const fixed = row.slice(0, headerFieldCount - 1);
+    const basisField = row.slice(headerFieldCount - 1).join(',');
+    expect(fixed.length).toBe(headerFieldCount - 1);
+    expect(basisField.startsWith('"')).toBe(true);
+    expect(basisField.endsWith('"')).toBe(true);
+    expect(fixed[15]).toBe('10.00');               // the tariff the reader set
+    expect(fixed[16]).toBe('INR');                 // the scope's currency, never typed
+    expect(fixed[17]).toBe('screened');             // Ballygunge ships tiers.validated: null
     // the basis rides EVERY row, not just row 0 -- the join reassembles the one
     // quoted field, which carries commas of its own.
-    expect(lines[2].split(',').slice(14).join(',')).toContain('screening');
+    expect(lines[2].split(',').slice(headerFieldCount - 1).join(',')).toContain('screening');
   });
 
   test('a ranked row selects its building, brings the camera to it, and the card prints the floor inside the canvas', async ({ page }) => {
@@ -141,7 +163,9 @@ test.describe('the solar screen', () => {
      markup's own default, and a one-way swap would look identical until the second
      ward. */
   test('a validated ward wears the measured rung, and switching wards puts the screened one back', async ({ page }) => {
-    const real = JSON.parse(await readFile('public/heat-map/data/pv-ballygunge.json', 'utf8'));
+    const real = JSON.parse(await readFile(
+      fileURLToPath(new URL('../../public/heat-map/data/pv-ballygunge.json', import.meta.url)), 'utf8',
+    ));
     real.tiers.validated = { n: 31, months: 9, median_ratio: 0.97, within_15pct_share: 0.84, date: '2026-10-01' };
     await page.route('**/heat-map/data/pv-ballygunge.json', (route) => route.fulfill({
       contentType: 'application/json', body: JSON.stringify(real),
@@ -161,6 +185,10 @@ test.describe('the solar screen', () => {
        that still opened "Screening estimate" is the card contradicting itself. */
     await expect(page.locator('#bcSolNote')).toContainText('Checked against 31 real rooftops');
     await expect(page.locator('#bcSolNote')).toContainText('still a screening estimate');
+    /* A reworded default note could not silently double up "Screening estimate" --
+       the validated line already says the checked-against sentence, and the
+       original phrase must not survive alongside it. */
+    await expect(page.locator('#bcSolNote')).not.toContainText('Screening estimate');
 
     /* Baruipur's file is NOT intercepted, so it arrives with `validated: null`.
        The strip switches the ward IN PLACE — no navigation — so the Solar pane is

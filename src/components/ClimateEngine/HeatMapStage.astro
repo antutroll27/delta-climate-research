@@ -266,7 +266,7 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
               pushed the colour legend off-screen (2026-09-06). Same numbers, same
               painter, pane-prefixed ids. */}
           <div class="solblock" id="solPaneBlock">
-            <div class="k">Rooftop solar · installable, whole ward</div>
+            <div class="k legend-head"><span>Rooftop solar · installable, whole ward</span><span id="solPaneTier" class="bc-tier">screened</span></div>
             <div class="big" id="solPaneKwp">—<span class="u">MWp</span></div>
             <div class="conf screening" id="solPaneConf"></div>
             <p class="solfloor" id="solPaneFloor"></p>
@@ -284,7 +284,7 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
           <p class="pane-note sol-small" id="solTariffNote">CESC domestic slabs run 4.07–9.21 per unit (2025-26 tariff order); a solar unit displaces the top of the bill. Not a rate we assert.</p>
           <p class="pane-h">Best roofs by annual yield</p>
           <table class="roofs" aria-label="The ten best roofs by annual yield; each row selects its building on the map">
-            <thead><tr><th scope="col">#</th><th scope="col">kWp</th><th scope="col">kWh/yr</th><th scope="col">shaded</th><th scope="col">m²</th></tr></thead>
+            <thead><tr><th scope="col">#</th><th scope="col">kWp</th><th scope="col">kWh/yr</th><th scope="col">range</th><th scope="col">shaded</th><th scope="col">m²</th></tr></thead>
             <tbody id="solList"></tbody>
           </table>
           <p class="pane-note sol-small">Yield uses NASA POWER irradiance and a Mumbai packing factor; shading is computed from this ward's own geometry and canopy, and the mask rule is its largest uncertainty — "at least" is the strict-mask floor. Screening only, not bankable.</p>
