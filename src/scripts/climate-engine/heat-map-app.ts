@@ -825,7 +825,18 @@ export function mountHeatMap(): () => void {
     const t = pv.totals, s = pv.stratum, n = pv.kwp.length;
     /* The pane's own chip: the card's tier is per-roof and cannot stand in for the
        whole ward, so this is painted independently rather than reusing solTierPainted. */
-    setText('solPaneTier', pv.tiers.validated === null ? 'screened' : 'validated');
+    const wardV = pv.tiers.validated;
+    setText('solPaneTier', wardV === null ? 'screened' : 'validated');
+    /* THE WARD BLOCK'S OWN ONE-LINE LADDER SUMMARY (spec §5): the same five limits
+       the card's rungs name, condensed to a sentence for the pane that opens before
+       any building is selected. */
+    setText('solPaneSure', wardV === null
+      ? 'Screened from satellites and open data. What limits it: roof obstacles, canopy over roofs, '
+        + 'sunlight from a coarse cell, unverified heights, and no comparison with real rooftops yet. '
+        + 'Open any roof for what would narrow each.'
+      : `Checked against ${wardV.n} real rooftops over ${wardV.months} months (median ratio ${wardV.median_ratio.toFixed(2)}). `
+        + 'Still limited by roof obstacles, canopy over roofs, sunlight from a coarse cell and unverified heights; '
+        + 'open any roof for what would narrow each.');
     for (const pre of ['sol', 'solPane'] as const) {
       setHTML(`${pre}Kwp`, `${t.capacity_mwp.toFixed(1)}<span class="u">MWp</span>`);
       setHTML(`${pre}Conf`, `Screening · <b>${t.capacity_mwp_range[0].toFixed(1)}–${t.capacity_mwp_range[1].toFixed(1)} MWp</b> · not bankable`);

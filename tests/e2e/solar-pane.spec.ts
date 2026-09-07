@@ -178,6 +178,10 @@ test.describe('the solar screen', () => {
     await page.waitForTimeout(1_500);
     await expect(page.locator('#bcSol')).toBeVisible();
     await expect(page.locator('#bcSolTier')).toHaveText('validated');
+    /* The WARD BLOCK's own chip and summary (spec §5) -- painted independently of
+       the card's, and open before any building is selected. */
+    await expect(page.locator('#solPaneTier')).toHaveText('validated');
+    await expect(page.locator('#solPaneSure')).toContainText('31 real rooftops');
     await expect(page.locator('#bcSureValid')).toContainText('31 real rooftops');
     await expect(page.locator('#bcSureValid')).toContainText('84% within 15%');
     await expect(page.locator('#bcSureValid .bc-ask')).toHaveCount(0);
@@ -199,6 +203,8 @@ test.describe('the solar screen', () => {
     await page.locator('#strip .ward[data-w="baruipur"]').click();
     await expect(page.locator('#solPaneArea')).toHaveText(/Baruipur/i, { timeout: 30_000 });
     await expect(page.locator('#solList tr')).toHaveCount(10, { timeout: 15_000 });
+    await expect(page.locator('#solPaneTier')).toHaveText('screened');
+    await expect(page.locator('#solPaneSure')).toContainText('Screened from satellites');
     await page.locator('#solList tr').first().click();
     await page.waitForTimeout(1_500);
     await expect(page.locator('#bcSolTier')).toHaveText('screened');

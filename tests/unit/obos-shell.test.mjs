@@ -3324,4 +3324,8 @@ test('the solar screen is wired end to end and never prints a headline without i
     'the Solar pane wears no tier chip of its own -- the card\'s chip is per-roof and cannot stand in for the whole ward');
   assert.match(stage, /<th scope="col">range<\/th>/,
     'the roof table gains no range column -- the ten-roof list still prints a point where the pane prose already promises a range');
+  assert.match(stage, /id="solPaneSure"/,
+    'the ward block carries no one-line ladder summary -- spec §5 asks for the chip AND a summary, not the chip alone');
+  assert.match(app, /solPaneSure/,
+    'nothing paints the ward block\'s ladder summary -- the markup exists but is never filled');
 });
