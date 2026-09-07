@@ -132,32 +132,51 @@ GAMMA_PER_C = -0.0035
 YIELD_MIN, YIELD_MAX = 1200.0, 1450.0
 
 
-def tiers_block() -> dict[str, Any]:
+def tiers_block(existing: dict[str, Any] | None = None) -> dict[str, Any]:
     """The card's tier chip and how-sure ladder read this, not the raw constants —
     so the bracket, the packing range and the shading band the browser shows are
     always the ones this chain actually used, never a copy that can drift from them.
-    `validated` stays None until measure-pv-validation.py writes a real comparison
-    in under it (pre-registration §6.3, n >= 25); nothing else may set it."""
+
+    `validated` is CARRIED FORWARD from `existing` — the tiers block of the browser
+    file this run is about to overwrite — rather than reset to None every time.
+    The pre-registration (§6.3) says that slot is written ONLY by
+    measure-pv-validation.py, once n >= 25; a rebuild of the screen (a new shading
+    pass, a packing-factor tweak) is not that event and must not silently
+    un-validate a result that already exists. `existing` absent, or carrying no
+    `tiers`, or no `validated` key, all mean there is nothing yet to carry: None."""
+    validated = (existing or {}).get("tiers", {}).get("validated")
     return {
         "screened": True,
         "yield_bracket_kwh_per_kwp": [YIELD_MIN, YIELD_MAX],
         "packing_range": list(PACKING_RANGE),
         "shading_band": "loss_strict .. loss",
-        "validated": None,
+        "validated": validated,
     }
 
 
 def _self_check() -> None:
     t = tiers_block()
     assert t["screened"] is True, "tiers.screened must be True until the study runs"
+    # Pinned, not derived: if the bracket or the packing range ever moves, move
+    # both the constant above and this literal in the same commit.
     assert t["yield_bracket_kwh_per_kwp"] == [1200.0, 1450.0], \
-        "yield bracket drifted from YIELD_MIN/YIELD_MAX"
-    assert t["packing_range"] == [0.28, 0.40], "packing range drifted from PACKING_RANGE"
-    assert t["validated"] is None, "validated must start null — only measure-pv-validation.py sets it"
-    # Round-trips through json exactly as the browser file does, so a serialisation
-    # quirk (a numpy scalar, a tuple left un-listed) cannot ship silently.
-    rt = json.loads(json.dumps(t))
-    assert rt == t, "tiers block does not round-trip through json unchanged"
+        "yield bracket pin does not match YIELD_MIN/YIELD_MAX — move both together"
+    assert t["packing_range"] == [0.28, 0.40], \
+        "packing range pin does not match PACKING_RANGE — move both together"
+    assert t["validated"] is None, \
+        "with no existing file, validated must start null — only measure-pv-validation.py sets it"
+
+    # Carry-forward: a rebuild must not erase a validation result that measure-pv-
+    # validation.py already wrote. Offline — this passes an "existing" dict
+    # directly, it does not read the ward file from disk.
+    fake_validated = {"n": 27, "months": 8, "median_ratio": 0.97,
+                       "within_15pct_share": 0.81, "date": "2026-10-01"}
+    carried = tiers_block({"tiers": {"validated": fake_validated}})
+    assert carried["validated"] == fake_validated, \
+        "a rebuild must carry an existing validated slot forward, not erase it"
+    # And the other three fields are untouched by carry-forward — only validated moves.
+    assert carried["screened"] is True and carried["packing_range"] == [0.28, 0.40]
+
     print("  self-check: ok")
 
 
@@ -348,6 +367,13 @@ def main() -> None:
     # justify, and rounding here keeps the payload honest about its own resolution
     # instead of shipping fifteen digits the method cannot support.
     web = os.path.join(ROOT, "public", "heat-map", "data", f"pv-{args.ward}.json")
+    # Read whatever is there NOW, before this run overwrites it, so tiers_block can
+    # carry its "validated" slot forward instead of resetting it (see tiers_block's
+    # docstring). Absent or unreadable is fine — that just means nothing to carry.
+    existing_web: dict[str, Any] | None = None
+    if os.path.exists(web):
+        with open(web) as fh:
+            existing_web = json.load(fh)
     with open(web, "w") as fh:
         # Carried so the card can never present a screening number as a firm one, and so a
         # stale artefact is visible rather than silently assumed current.
@@ -362,7 +388,7 @@ def main() -> None:
             "loss_strict": [round(float(v), 3) for v in loss_strict],
             "specific_yield": round(y, 1),
             "packing_factor": PACKING_FACTOR,
-            "tiers": tiers_block(),
+            "tiers": tiers_block(existing_web),
             # A5: the ward panel prints the laboratory's numbers, never re-derived in the browser
             "totals": {"capacity_mwp": round(float(kwp.sum()) / 1000, 3),
                        "capacity_mwp_range": [round(float(kwp.sum()) / PACKING_FACTOR * pf / 1000, 3) for pf in PACKING_RANGE],

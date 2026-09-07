@@ -120,13 +120,24 @@ test('paths builds every ward URL from the registry', () => {
   assert.equal(p.pv, '/heat-map/data/pv-ballygunge.json');
 });
 
-test('the pv artefact carries its tiers block, typed and unrewritten by hand', async () => {
-  const pv = JSON.parse(await readFile(
-    new URL('../../public/heat-map/data/pv-ballygunge.json', import.meta.url), 'utf8'));
-  assert.equal(pv.tiers.screened, true);
-  assert.deepEqual(pv.tiers.yield_bracket_kwh_per_kwp, [1200, 1450]);
-  assert.deepEqual(pv.tiers.packing_range, [0.28, 0.4]);
-  assert.equal(pv.tiers.validated, null);
+test('every shipping area\'s pv artefact carries its tiers block, typed and unrewritten by hand', async () => {
+  let checked = 0;
+  for (const key of AREA_KEYS) {
+    const p = paths(key);
+    if (p === null) continue;
+    const pv = JSON.parse(await readFile(new URL(`../../public${p.pv}`, import.meta.url), 'utf8'));
+    assert.equal(pv.tiers.screened, true, `${key}: tiers.screened must be true until the study runs`);
+    assert.deepEqual(pv.tiers.yield_bracket_kwh_per_kwp, [1200, 1450],
+      `${key}: yield bracket drifted from the published pin`);
+    assert.deepEqual(pv.tiers.packing_range, [0.28, 0.4],
+      `${key}: packing range drifted from the published pin`);
+    assert.equal(pv.tiers.validated, null,
+      `${key}: validated must be null until measure-pv-validation.py writes it (n >= 25, §6.3)`);
+    checked += 1;
+  }
+  // Guard the guard: if paths() stopped shipping a pv file for every area, this
+  // loop would pass while checking nothing.
+  assert.equal(checked, 3, 'expected 3 shipping areas to carry a pv artefact');
 });
 
 test('an area that ships no data resolves to null, never a URL', () => {

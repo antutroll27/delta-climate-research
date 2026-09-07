@@ -268,7 +268,9 @@ export interface SimStats {
  * lengths disagree with the ward is a wrong-ward file and must be refused.
  * `loss` is the central cell (buildings + trees); `loss_strict` is the strict-mask
  * floor the card prints beside it; `totals` and `stratum` are the laboratory's
- * ward numbers, carried so the browser never re-derives them.
+ * ward numbers, carried so the browser never re-derives them. `tiers` carries the
+ * published yield bracket and packing interval the per-roof ranges scale by, plus
+ * the `validated` slot — null until measure-pv-validation.py fills it (§6.3).
  */
 export interface PvFile {
   readonly ward: string;

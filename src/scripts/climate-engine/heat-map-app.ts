@@ -1306,9 +1306,17 @@ export function mountHeatMap(): () => void {
       && typeof f.totals?.capacity_mwp === 'number' && Array.isArray(f.totals?.capacity_mwp_range)
       && typeof f.totals?.mean_loss_strict === 'number'
       && typeof f.stratum?.n === 'number' && typeof f.stratum?.share_losing_5pct === 'number'
-      // The card divides by tiers.packing_range to turn a screened kWp into a
-      // range; a file missing it must be refused here, not throw mid-paint.
-      && Array.isArray(f.tiers?.yield_bracket_kwh_per_kwp) && Array.isArray(f.tiers?.packing_range);
+      // The card's per-roof ranges scale by the packing interval and the yield
+      // bracket (products of published numbers, spec 2026-09-07-solar-guide §3);
+      // a file without them must be refused here, not throw mid-paint.
+      && f.tiers?.packing_range?.length === 2
+      && typeof f.tiers.packing_range[0] === 'number' && typeof f.tiers.packing_range[1] === 'number'
+      && f.tiers?.yield_bracket_kwh_per_kwp?.length === 2
+      && typeof f.tiers.yield_bracket_kwh_per_kwp[0] === 'number'
+      && typeof f.tiers.yield_bracket_kwh_per_kwp[1] === 'number'
+      // `validated` is null until measure-pv-validation.py fills it; a shape check
+      // (not just truthiness) so a half-written slot cannot pass here and throw later.
+      && (f.tiers.validated === null || typeof f.tiers.validated?.n === 'number');
     if (!ok) {
       console.warn(`solar screen "${String(f.ward ?? '?')}" does not match ${area} (${buildings} buildings) — ignored`);
       return null;
