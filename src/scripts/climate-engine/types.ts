@@ -298,6 +298,19 @@ export interface PvFile {
     readonly share_losing_5pct: number;
     readonly mean_loss: number;
   };
+  readonly tiers: {
+    readonly screened: boolean;
+    readonly yield_bracket_kwh_per_kwp: readonly [number, number];
+    readonly packing_range: readonly [number, number];
+    readonly shading_band: string;
+    readonly validated: null | {
+      readonly n: number;
+      readonly months: number;
+      readonly median_ratio: number;
+      readonly within_15pct_share: number;
+      readonly date: string;
+    };
+  };
 }
 
 /** The swappable engine contract (see docs/heat-map-feature.md). */

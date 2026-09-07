@@ -120,6 +120,15 @@ test('paths builds every ward URL from the registry', () => {
   assert.equal(p.pv, '/heat-map/data/pv-ballygunge.json');
 });
 
+test('the pv artefact carries its tiers block, typed and unrewritten by hand', async () => {
+  const pv = JSON.parse(await readFile(
+    new URL('../../public/heat-map/data/pv-ballygunge.json', import.meta.url), 'utf8'));
+  assert.equal(pv.tiers.screened, true);
+  assert.deepEqual(pv.tiers.yield_bracket_kwh_per_kwp, [1200, 1450]);
+  assert.deepEqual(pv.tiers.packing_range, [0.28, 0.4]);
+  assert.equal(pv.tiers.validated, null);
+});
+
 test('an area that ships no data resolves to null, never a URL', () => {
   // A disabled city must be unreachable BY CONSTRUCTION, so it cannot 404 in
   // the console and cannot half-render.

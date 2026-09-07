@@ -1305,7 +1305,10 @@ export function mountHeatMap(): () => void {
       && arrays.every((a) => Array.isArray(a) && a.length === buildings && (a.length === 0 || typeof a[0] === 'number'))
       && typeof f.totals?.capacity_mwp === 'number' && Array.isArray(f.totals?.capacity_mwp_range)
       && typeof f.totals?.mean_loss_strict === 'number'
-      && typeof f.stratum?.n === 'number' && typeof f.stratum?.share_losing_5pct === 'number';
+      && typeof f.stratum?.n === 'number' && typeof f.stratum?.share_losing_5pct === 'number'
+      // The card divides by tiers.packing_range to turn a screened kWp into a
+      // range; a file missing it must be refused here, not throw mid-paint.
+      && Array.isArray(f.tiers?.yield_bracket_kwh_per_kwp) && Array.isArray(f.tiers?.packing_range);
     if (!ok) {
       console.warn(`solar screen "${String(f.ward ?? '?')}" does not match ${area} (${buildings} buildings) — ignored`);
       return null;

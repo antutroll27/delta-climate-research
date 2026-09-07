@@ -132,6 +132,35 @@ GAMMA_PER_C = -0.0035
 YIELD_MIN, YIELD_MAX = 1200.0, 1450.0
 
 
+def tiers_block() -> dict[str, Any]:
+    """The card's tier chip and how-sure ladder read this, not the raw constants —
+    so the bracket, the packing range and the shading band the browser shows are
+    always the ones this chain actually used, never a copy that can drift from them.
+    `validated` stays None until measure-pv-validation.py writes a real comparison
+    in under it (pre-registration §6.3, n >= 25); nothing else may set it."""
+    return {
+        "screened": True,
+        "yield_bracket_kwh_per_kwp": [YIELD_MIN, YIELD_MAX],
+        "packing_range": list(PACKING_RANGE),
+        "shading_band": "loss_strict .. loss",
+        "validated": None,
+    }
+
+
+def _self_check() -> None:
+    t = tiers_block()
+    assert t["screened"] is True, "tiers.screened must be True until the study runs"
+    assert t["yield_bracket_kwh_per_kwp"] == [1200.0, 1450.0], \
+        "yield bracket drifted from YIELD_MIN/YIELD_MAX"
+    assert t["packing_range"] == [0.28, 0.40], "packing range drifted from PACKING_RANGE"
+    assert t["validated"] is None, "validated must start null — only measure-pv-validation.py sets it"
+    # Round-trips through json exactly as the browser file does, so a serialisation
+    # quirk (a numpy scalar, a tuple left un-listed) cannot ship silently.
+    rt = json.loads(json.dumps(t))
+    assert rt == t, "tiers block does not round-trip through json unchanged"
+    print("  self-check: ok")
+
+
 def specific_yield(lat: float) -> tuple[float, dict[str, Any]]:
     """Annual kWh per kWp for a fixed tilted array, from five years of POWER GHI."""
     import pvlib
@@ -200,7 +229,13 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--ward", default="ballygunge")
     ap.add_argument("--check", action="store_true")
+    ap.add_argument("--self-check", action="store_true",
+                     help="offline: assert the tiers block round-trips, no artefacts read")
     args = ap.parse_args()
+
+    if args.self_check:
+        _self_check()
+        return
 
     with open(shading_path(args.ward)) as fh:
         sh = json.load(fh)
@@ -327,6 +362,7 @@ def main() -> None:
             "loss_strict": [round(float(v), 3) for v in loss_strict],
             "specific_yield": round(y, 1),
             "packing_factor": PACKING_FACTOR,
+            "tiers": tiers_block(),
             # A5: the ward panel prints the laboratory's numbers, never re-derived in the browser
             "totals": {"capacity_mwp": round(float(kwp.sum()) / 1000, 3),
                        "capacity_mwp_range": [round(float(kwp.sum()) / PACKING_FACTOR * pf / 1000, 3) for pf in PACKING_RANGE],
