@@ -257,6 +257,12 @@ test.describe('the solar screen', () => {
        be overridden from here: the site's reset declares it
        `display:none!important` inside Tailwind's `base` layer, and a layered
        important beats an unlayered one whatever its specificity. */
+    /* MEASURED AT A4's WIDTH, not the browser's. Desktop Chrome is 1280 px wide and
+       an A4 page inside 16 mm margins is ~673 CSS px: at the wider viewport every
+       wrapped line is half the height it will be on paper, so a two-page sheet
+       could pass this check comfortably. The viewport is narrowed first and left
+       there -- the test ends on the next assertion. */
+    await page.setViewportSize({ width: 673, height: 1000 });
     await page.emulateMedia({ media: 'print' });
     await expect(page.locator('#solBrief')).toBeVisible();
     const sheet = (await page.locator('#solBrief').boundingBox())!;

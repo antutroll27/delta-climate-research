@@ -832,7 +832,13 @@ export function mountHeatMap(): () => void {
       : `${b.h.toFixed(1)} m`);
     setText('brKwp', `${r.kwpLow.toFixed(1)}–${r.kwpHigh.toFixed(1)} kWp · floor ${r.kwpLow.toFixed(1)}`);
     setText('brKwh', `${r.kwhLow.toLocaleString()}–${r.kwhHigh.toLocaleString()} kWh/yr · about ${Math.round(pv.kwh[i]).toLocaleString()} screened`);
-    setText('brLoss', `${pct(pv.loss[i])} · of which trees ${pv.loss_trees[i] < 0.005 ? 'under 1%' : `${Math.round(pv.loss_trees[i] * 100)}%`}`);
+    /* THE SPLIT, NOT JUST THE TOTAL (spec §6.3). Which half of the shading is
+       buildings and which is trees is the difference between a roof that can be
+       fixed by raising the array and one that cannot, and it is the first thing an
+       installer will argue about. Trees get the card's "under 1%" floor because
+       −0% reads as "none" when it means "a rounding away from none". */
+    const share = (f: number): string => (f < 0.005 ? 'under 1%' : `${Math.round(f * 100)}%`);
+    setText('brLoss', `${pct(pv.loss[i])} · buildings ${share(pv.loss_buildings[i])} · trees ${share(pv.loss_trees[i])}`);
     setText('brFloor', `${pct(pv.loss_strict[i])} · under a strict roof mask`);
     setText('brRaised', `${pct(pv.loss_raised[i])} · elevated mounting, what-if`);
     setText('brRs', `${fmtMoney(pv.kwh[i] * tariff, COSTS)}/yr at ${fmtRate(tariff, COSTS)} per kWh · assumed`);
