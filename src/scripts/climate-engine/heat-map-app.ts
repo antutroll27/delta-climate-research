@@ -744,11 +744,13 @@ export function mountHeatMap(): () => void {
      changes. Both are innerHTML writes over a subtree the reader may be interacting
      with — the fifth rung holds a button — and rebuilding them on every selection
      would blow away focus for no reason. */
-  let solTierPainted: 'screened' | 'validated' | null = null;
+  /* Keyed on the PAINTED TEXT, not the tier word: two validated wards carry different
+     numbers, and a guard on the word would leave ward A's sentence under ward B's headline. */
+  let solTierPainted: string | null = null;
   /* The ward block's own chip and summary are rewritten only when the tier they
      read changes — `paintSolarWard` reruns on every tariff keystroke, and a
      tariff change never moves `tiers.validated`. */
-  let solPaneTierPainted: 'screened' | 'validated' | null = null;
+  let solPaneSurePainted: string | null = null;
   /* The fix lines' one address. Not an <a href>: until a roof is selected there is
      no building index to name, and a link that tabs to a half-written subject is
      worse than a button that only exists once the card is painted. */
@@ -781,10 +783,11 @@ export function mountHeatMap(): () => void {
     setText('bcSureIrr', `Yield ${yLo.toLocaleString()}–${yHi.toLocaleString()} kWh per kWp today.`);
     const v = pv.tiers.validated;
     const tier = tierOf(pv);
-    if (tier !== solTierPainted) {
-      solTierPainted = tier;
+    const rung = v === null ? SURE_VALID_DEFAULT : validatedSentence(v);
+    if (rung !== solTierPainted) {
+      solTierPainted = rung;
       setText('bcSolTier', tier);
-      setHTML('bcSureValid', v === null ? SURE_VALID_DEFAULT : validatedSentence(v));
+      setHTML('bcSureValid', rung);
       setText('bcSolNote', noteFor(pv, SOL_NOTE_DEFAULT));
     }
     /* The subject carries the ward and this roof's index, because a query about
@@ -826,13 +829,14 @@ export function mountHeatMap(): () => void {
     const t = pv.totals, s = pv.stratum, n = pv.kwp.length;
     /* The pane's own chip and summary: the card's tier is per-roof and cannot
        stand in for the whole ward, so these are painted independently rather than
-       reusing solTierPainted -- but rewritten only when the ward's own tier
-       changes, since this function reruns on every tariff keystroke. */
+       reusing the card's pattern -- but rewritten only when the ward's own
+       summary text changes, since this function reruns on every tariff keystroke. */
     const wardTier = tierOf(pv);
-    if (wardTier !== solPaneTierPainted) {
-      solPaneTierPainted = wardTier;
+    const summary = wardSummary(pv);
+    if (summary !== solPaneSurePainted) {
+      solPaneSurePainted = summary;
       setText('solPaneTier', wardTier);
-      setText('solPaneSure', wardSummary(pv));
+      setText('solPaneSure', summary);
     }
     for (const pre of ['sol', 'solPane'] as const) {
       setHTML(`${pre}Kwp`, `${t.capacity_mwp.toFixed(1)}<span class="u">MWp</span>`);
