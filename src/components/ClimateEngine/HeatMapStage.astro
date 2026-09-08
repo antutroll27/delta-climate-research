@@ -562,11 +562,11 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
               <li data-limit="validation" id="bcSureValid">Never compared with real rooftops yet. The validation study is under way. <button type="button" class="bc-ask" data-limit="validation">Join the study</button></li>
             </ul>
           </details>
-          {/* HIDDEN UNTIL IT WORKS. The markup is here so the card's shape is settled
-              and the ladder is not the last thing on it, but a styled button that does
-              nothing is a lie the reader can click; Task 5 drops the `hidden` when it
-              wires the renderer. */}
-          <button class="bc-brief" id="bcBrief" type="button" hidden>Print the installer brief</button>
+          {/* THE WAY OFF THE SCREEN. It renders #solBrief from this roof and hands the
+              page to the browser's own print dialogue — no PDF library, no server.
+              It was born `hidden`, because a styled button that does nothing is a lie
+              the reader can click; the renderer exists now, so it does not stay one. */}
+          <button class="bc-brief" id="bcBrief" type="button">Print the installer brief</button>
         </div>
         <div class="sv-thumb" id="svThumb" hidden></div>
         <p class="bc-rings" id="bcRings"></p>
@@ -709,6 +709,64 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
   </section>
   )}
   </div>
+
+  {/* ── THE INSTALLER BRIEF (spec 2026-09-07-solar-guide §6) ──
+      One A4 page the reader hands to whoever quotes them: what the roof is, what we
+      think it can do and how wide that is, and the six questions a quote has to
+      answer. Rendered on demand by renderBrief() and printed by the browser itself.
+
+      IT SITS AT STAGE LEVEL rather than beside the card it opens from, because the
+      print rule is `.stage > *:not(#solBrief){display:none}` — and a display:none
+      ancestor takes its whole subtree with it, so a brief nested inside `.map`
+      would be hidden by the very rule written to reveal it.
+
+      NOTHING HERE IS COMPUTED THAT THE CARD DOES NOT ALREADY HOLD. The six
+      questions are the only static copy on the sheet, and they are the part a
+      reader actually carries into a sales conversation. */}
+  <section class="solbrief" id="solBrief" hidden aria-label="Installer brief">
+    <header class="sb-head">
+      <p class="sb-org">Delta Climate Research · Rooftop solar brief</p>
+      <p class="sb-who">
+        <span id="brWard">—</span><span id="brIdx">—</span><span id="brLatLon">—</span><span id="brDate">—</span><span id="brTier" class="bc-tier">screened</span>
+      </p>
+    </header>
+    <div class="sb-cols">
+      {/* The footprint as the registry holds it, drawn north-up. Empty in the
+          markup: the ring is a per-building Float32Array, so the one <polygon>
+          and the north arrow are written by renderBrief. */}
+      <figure class="sb-fig">
+        <svg id="brOutline" viewBox="0 0 200 200" role="img" aria-label="Roof outline, north up"></svg>
+        <figcaption>Footprint · north up</figcaption>
+      </figure>
+      <dl class="sb-dl">
+        <dt>Footprint</dt><dd id="brArea">—</dd>
+        <dt>Height</dt><dd id="brHeight">—</dd>
+        <dt>Installable</dt><dd id="brKwp">—</dd>
+        <dt>Annual yield</dt><dd id="brKwh">—</dd>
+        <dt>Shaded</dt><dd id="brLoss">—</dd>
+        <dt>At least</dt><dd id="brFloor">—</dd>
+        <dt>Raised 2 m</dt><dd id="brRaised">—</dd>
+        <dt>Worth at tariff</dt><dd id="brRs">—</dd>
+      </dl>
+    </div>
+    <h2 class="sb-h2">How sure, and what would make it surer</h2>
+    {/* Filled from the card's own ladder at render time, never retyped: two copies
+        of five sentences would disagree the first time one of them was edited. */}
+    <ol class="sb-sure" id="brSure"></ol>
+    <h2 class="sb-h2">Questions to ask your installer</h2>
+    <ol class="br-ask">
+      <li>The proposed tilt and orientation, and why.</li>
+      <li>The module count and DC capacity, against the range above.</li>
+      <li>Their expected yield against ours, and the assumptions behind theirs.</li>
+      <li>Whether a shading study was done, and how.</li>
+      <li>The net-metering limit that applies to this connection.</li>
+      <li>Their monitoring access, so generation can be checked against the promise.</li>
+    </ol>
+    <p class="sb-basis" id="brBasis">—</p>
+    <footer class="sb-foot">
+      <span>Screening estimate · not bankable</span><span>deltaclimate.earth</span>
+    </footer>
+  </section>
 </main>
 
 <style is:global>
@@ -853,6 +911,13 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
        measured against the studio card's sampled ground (~rgb(227 226 223)) at
        6.1:1, 6.0:1 and 6.3:1. */
     --studio-ink-teal:#0a5a66; --studio-ink-bronze:#6b4d1f; --studio-ink-amber:#7a5200;
+    /* THE TWO ABSOLUTE ENDS. Nothing on screen is pure black or pure white — the
+       console's grounds and inks are all a step in from both — but two places want
+       the ramp's actual ends: the Clay tiphint's hover, which needs the strongest
+       ink there is on a near-white pill, and the PRINTED sheet, which is ink on
+       paper and nothing else. Tokened because this stylesheet forbids a colour a
+       second spelling, and both were about to acquire one. */
+    --black:#000; --white:#fff;
     --sans:'Mona Sans',system-ui,sans-serif; --mono:'Noplato Mono',ui-monospace,'SF Mono',monospace;
     /* The sidebar's width, named because three rules read it and because the pane
        cross-fade's whole argument is about not animating this number. */
@@ -1163,7 +1228,7 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
      explicitly, so the ✕ stayed the dark theme's pale grey on a near-white pill:
      2.36:1, the worst thing left on Clay once the grounds were fixed. */
   body.studio .tiphint button{color:var(--studio-ink)}
-  body.studio .tiphint button:hover{color:#000}
+  body.studio .tiphint button:hover{color:var(--black)}
   @media (prefers-reduced-motion: reduce){ .tiphint{animation:none} }
 
   /* ── walk-time ring labels ──
@@ -1369,6 +1434,63 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
   body.studio .bc-sure li b{color:var(--studio-ink)}
   body.studio .bc-ask,body.studio .bc-brief{color:var(--studio-ink-teal)}
   body.studio .bc-sure summary:hover,body.studio .bc-ask:hover,body.studio .bc-brief:hover{color:var(--studio-ink)}
+  /* ── THE INSTALLER BRIEF ──
+     A sheet of paper that happens to be in the DOM. On screen it is `hidden` at all
+     times except the instant between renderBrief() and window.print(), so these
+     screen rules exist only so that instant does not flash a broken layout over the
+     console; everything that matters about the sheet is in the print block below.
+
+     THE PAGE HAD NO @media print UNTIL NOW. Printing the console printed a
+     screenshot of a fixed-position WebGL instrument, which is to say nothing. */
+  .solbrief{position:fixed;inset:0;z-index:40;overflow:auto;
+    background:var(--white);color:var(--black);padding:16px 20px;
+    font:400 12px/1.45 var(--sans)}
+  .solbrief[hidden]{display:none}
+  .sb-org{margin:0;font:550 .82rem var(--sans);letter-spacing:.02em}
+  .sb-who{margin:.25rem 0 .55rem;display:flex;flex-wrap:wrap;gap:.55rem;align-items:center;
+    font:450 .68rem var(--sans);letter-spacing:.04em;
+    border-bottom:1px solid currentColor;padding-bottom:.4rem}
+  .sb-cols{display:flex;gap:1rem;align-items:flex-start;margin:.6rem 0 .2rem}
+  .sb-fig{margin:0;flex:none;width:34mm}
+  .sb-fig svg{display:block;width:100%;height:auto}
+  .sb-fig figcaption{margin-top:.2rem;font:450 .52rem var(--sans);letter-spacing:.04em}
+  .sb-dl{flex:1 1 auto;margin:0;display:grid;grid-template-columns:auto 1fr;
+    gap:.1rem .7rem;font:450 .72rem var(--sans)}
+  .sb-dl dt{letter-spacing:.06em;text-transform:uppercase;font-size:.58rem;align-self:center}
+  .sb-dl dd{margin:0;font-weight:550}
+  .sb-h2{margin:.7rem 0 .2rem;font:550 .62rem var(--sans);letter-spacing:.1em;text-transform:uppercase}
+  /* NUMBERED, DELIBERATELY. The reset in Tailwind's `base` layer strips list
+     markers from every <ol> on the site, and these two lists are the ones a
+     reader points at across a table: "your answer to question three". */
+  .sb-sure,.br-ask{margin:0;padding:0 0 0 1.1rem;list-style:decimal;
+    font:400 .66rem/1.35 var(--sans)}
+  .sb-sure li,.br-ask li{margin:.12rem 0}
+  .sb-basis{margin:.6rem 0 .3rem;font:400 .58rem/1.35 var(--sans)}
+  .sb-foot{display:flex;justify-content:space-between;gap:1rem;
+    border-top:1px solid currentColor;padding-top:.3rem;
+    font:450 .58rem var(--sans);letter-spacing:.06em}
+  /* THE SHEET IS THE ONLY THING ON THIS PAGE THAT BELONGS ON PAPER, so print takes
+     it and drops the console entirely. `.stage` is a fixed, full-viewport grid: left
+     as it is, a fixed box repeats on every printed page and the sheet would be
+     trapped in one viewport-sized cell, so it is unwound to an ordinary block first. */
+  @media print{
+    @page{size:A4;margin:16mm}
+    body{overflow:visible}
+    body > *:not(.stage){display:none!important}
+    .stage{position:static;display:block;overflow:visible;height:auto}
+    .stage > *:not(#solBrief){display:none!important}
+    /* `!important` beats this file's own screen rules and nothing more. It does NOT
+       beat the `hidden` attribute: the site's reset declares
+       `[hidden]{display:none!important}` inside Tailwind's `base` LAYER, and for
+       important declarations an earlier layer outranks an unlayered rule whatever
+       its specificity — measured, after this rule was written expecting the
+       opposite. So the sheet is un-hidden by script before window.print(), and a
+       cold Ctrl+P with no roof selected prints a blank page rather than a sheet of
+       em-dashes, which is the better of the two. */
+    #solBrief{display:block!important;position:static;overflow:visible;padding:0;
+      color:var(--black);background:var(--white);font:11pt/1.4 var(--sans)}
+    #solBrief .bc-tier{color:var(--black)}
+  }
   /* Per-layer "data receipts" panel — populated from {ward}-layers.json (provenance.ts). */
   .srcbtn{margin:.4rem 0 0;cursor:pointer;font:400 .48rem var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--cyan);background:none;border:0;padding:.15rem 0}
   .srcbtn:hover{color:var(--paper)}

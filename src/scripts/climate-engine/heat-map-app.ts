@@ -807,6 +807,105 @@ export function mountHeatMap(): () => void {
   };
   el('bcSure')?.addEventListener('click', onSureClick);
   cleanup.push(() => el('bcSure')?.removeEventListener('click', onSureClick));
+  /* ── the installer brief (spec 2026-09-07-solar-guide §6) ──
+     One printable page for one roof: what the building is, what we think it can
+     carry and how wide that band is, and the six questions a quote has to answer.
+     It computes NOTHING the card does not already hold — the same `pvRanges`, the
+     same artefact cells, the same `fmtMoney` — and the how-sure ladder is lifted out
+     of the card's own DOM rather than retyped, because two copies of five sentences
+     disagree the first time one of them is edited. */
+  function renderBrief(b: BuildingMeta, pv: PvFile): void {
+    const w = wardOf(state.ward);
+    const i = b.idx;
+    const r = pvRanges(pv, i);
+    const ll = wardLatLon(w, b.cx, b.cz);
+    setText('brWard', areaName());
+    setText('brIdx', `#${b.idx}`);
+    setText('brLatLon', formatLatLon(ll.lat, ll.lon));
+    /* The day the sheet was printed, not the day the artefact was built: a quote
+       arrives weeks later and the reader has to be able to tell how old this is. */
+    setText('brDate', new Date().toISOString().slice(0, 10));
+    setText('brTier', tierOf(pv));
+    setText('brArea', `${Math.round(b.areaM2).toLocaleString()} m²`);
+    setText('brHeight', b.fill
+      ? `${b.h.toFixed(1)} m · unknown (fill value)`
+      : `${b.h.toFixed(1)} m`);
+    setText('brKwp', `${r.kwpLow.toFixed(1)}–${r.kwpHigh.toFixed(1)} kWp · floor ${r.kwpLow.toFixed(1)}`);
+    setText('brKwh', `${r.kwhLow.toLocaleString()}–${r.kwhHigh.toLocaleString()} kWh/yr · about ${Math.round(pv.kwh[i]).toLocaleString()} screened`);
+    setText('brLoss', `${pct(pv.loss[i])} · of which trees ${pv.loss_trees[i] < 0.005 ? 'under 1%' : `${Math.round(pv.loss_trees[i] * 100)}%`}`);
+    setText('brFloor', `${pct(pv.loss_strict[i])} · under a strict roof mask`);
+    setText('brRaised', `${pct(pv.loss_raised[i])} · elevated mounting, what-if`);
+    setText('brRs', `${fmtMoney(pv.kwh[i] * tariff, COSTS)}/yr at ${fmtRate(tariff, COSTS)} per kWh · assumed`);
+    setText('brBasis', pv.basis);
+    /* THE LADDER, COPIED OUT OF THE CARD. Each rung is cloned so the "Ask about
+       this" button can be dropped from the copy without touching the live one:
+       a button is an offer to talk, and on paper there is nobody to talk to. */
+    const sure = el('brSure');
+    if (sure) {
+      sure.textContent = '';
+      const rungs = el('bcSure')?.querySelectorAll<HTMLLIElement>('li') ?? [];
+      rungs.forEach((li) => {
+        const copy = li.cloneNode(true) as HTMLElement;
+        copy.querySelector('.bc-ask')?.remove();
+        const item = document.createElement('li');
+        item.textContent = (copy.textContent ?? '').replace(/\s+/g, ' ').trim();
+        sure.appendChild(item);
+      });
+    }
+    /* THE FOOTPRINT, NORTH UP. The ring is flat [x, z, …] in ward metres, scaled to
+       fit 180 of the 200-unit box and centred in it.
+
+       WHICH WAY NORTH POINTS IS ASKED, NOT ASSUMED. `wardLatLon` is the one
+       transform that knows, so a 10 m probe along −z decides it: if stepping −z
+       RAISES the latitude then north is −z, and since SVG's y already grows
+       downward the z values map straight through (north ends up at the top by
+       itself). Otherwise north is +z and the drawing is flipped in y so that it
+       does. Either way north is up when the polygon is written, which is why the
+       arrow can be drawn at the top of the box unconditionally. */
+    const northIsMinusZ = wardLatLon(w, b.cx, b.cz - 10).lat > wardLatLon(w, b.cx, b.cz).lat;
+    const zToY = northIsMinusZ ? 1 : -1;
+    const svg = el('brOutline');
+    if (svg) {
+      const n = Math.floor(b.ring.length / 2);
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      for (let k = 0; k < n; k += 1) {
+        const x = b.ring[k * 2], y = zToY * b.ring[k * 2 + 1];
+        if (x < minX) minX = x; if (x > maxX) maxX = x;
+        if (y < minY) minY = y; if (y > maxY) maxY = y;
+      }
+      const span = Math.max(maxX - minX, maxY - minY, 1e-6);
+      const sc = 180 / span;
+      const ox = 100 - ((minX + maxX) / 2) * sc, oy = 100 - ((minY + maxY) / 2) * sc;
+      const pts: string[] = [];
+      for (let k = 0; k < n; k += 1) {
+        pts.push(`${(b.ring[k * 2] * sc + ox).toFixed(1)},${(zToY * b.ring[k * 2 + 1] * sc + oy).toFixed(1)}`);
+      }
+      svg.innerHTML = n >= 3
+        ? `<polygon points="${pts.join(' ')}" fill="none" stroke="currentColor" stroke-width="2"/>`
+          + '<g stroke="currentColor" fill="currentColor">'
+          + '<path d="M14 34 V16" stroke-width="2" fill="none"/>'
+          + '<path d="M14 10 l5 8 h-10 z" stroke="none"/>'
+          + '<text x="14" y="48" text-anchor="middle" font-size="14" stroke="none">N</text>'
+          + '</g>'
+        : '';
+    }
+  }
+  /* THE PRINT MOMENT. The sheet is `hidden` at every other instant, so nothing on
+     screen ever has to lay out around it. `afterprint` fires whether the reader
+     printed or cancelled, and it is registered ONCE, out here: registering it
+     inside the click would stack one listener per print. */
+  const onAfterPrint = () => { el('solBrief')?.setAttribute('hidden', ''); };
+  window.addEventListener('afterprint', onAfterPrint);
+  cleanup.push(() => window.removeEventListener('afterprint', onAfterPrint));
+  const onBriefClick = () => {
+    const pv = pvCache[state.ward];
+    if (!selected || !pv) return;
+    renderBrief(selected, pv);
+    el('solBrief')?.removeAttribute('hidden');
+    window.print();
+  };
+  el('bcBrief')?.addEventListener('click', onBriefClick);
+  cleanup.push(() => el('bcBrief')?.removeEventListener('click', onBriefClick));
   /* ── rooftop solar, whole ward ──
      The laboratory's totals and stratum, printed twice from one function: into the
      Solar pane (its home) and into the legend's folded block. The right panel no

@@ -3304,9 +3304,34 @@ test('the solar screen is wired end to end and never prints a headline without i
   const sure = stage.match(/<details class="bc-sure"[\s\S]*?<\/details>/)?.[0] ?? '';
   assert.equal((sure.match(/<li data-limit=/g) ?? []).length, 5,
     'the how-sure ladder does not have its five rungs (spec 2026-09-07-solar-guide §2.3)');
-  assert.match(stage, /id="bcBrief"[^>]*hidden/,
-    'the installer-brief button is missing, or is on screen before anything wires its click -- '
-    + 'a styled button that does nothing is a lie the reader can click (Task 5 drops the `hidden`)');
+  /* THE INSTALLER BRIEF (Task 5, spec 2026-09-07-solar-guide §6). The button was
+     born `hidden` because a styled button that does nothing is a lie the reader can
+     click; it is on screen now, and these pins are what earn it that. The `hidden`
+     half is asserted in the NEGATIVE on purpose -- re-adding the attribute to quiet
+     a failing render would put the lie straight back. */
+  assert.match(stage, /id="bcBrief"/, 'the installer-brief button is gone from the card');
+  assert.doesNotMatch(stage, /id="bcBrief"[^>]*hidden/,
+    'the installer-brief button is still `hidden` -- its renderer exists, so the reader must be able to reach it');
+  assert.match(app, /function renderBrief\(/,
+    'nothing renders the installer brief -- the button would open an empty sheet');
+  assert.match(stage, /id="solBrief"/,
+    'the printable brief section is missing (spec §6): the button has nowhere to render into');
+  assert.match(stage, /@media print/,
+    'the stage carries no print stylesheet -- window.print() would put the whole console on paper');
+  /* THE SIX QUESTIONS, verbatim (spec §6.5). This list is the only part of the
+     sheet that is not computed, and it is the part a reader takes to a salesman:
+     a reworded question is a different question, so it is pinned word for word. */
+  for (const ask of [
+    'proposed tilt and orientation',
+    'module count and DC capacity',
+    'expected yield against ours',
+    'shading study',
+    'net-metering limit',
+    'monitoring access',
+  ]) {
+    assert.ok(stage.includes(ask),
+      `the installer brief does not ask about "${ask}" -- the checklist is the sheet's whole point`);
+  }
   assert.match(app, /pvRanges\(/,
     'the card paints points, not intervals -- pvRanges is the only place the published bands become a roof range');
   assert.match(app, /mailto:ant@deltaclimate\.earth/,

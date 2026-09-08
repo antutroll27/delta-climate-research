@@ -214,4 +214,60 @@ test.describe('the solar screen', () => {
     await expect(page.locator('#bcSolNote')).toContainText('Screening estimate');
     await expect(page.locator('#bcSolNote')).not.toContainText('Checked against');
   });
+
+  /* THE SHEET THAT LEAVES THE SCREEN (spec 2026-09-07-solar-guide §6). Everything
+     about the brief happens AROUND a native modal: window.print() blocks in a real
+     browser and does nothing at all in headless Chromium, so it is replaced before
+     the page loads with a stub that records the call and fires the `afterprint` the
+     browser would have fired. What is then asserted is the contract either side of
+     it -- the sheet was rendered for THIS roof, it carries the ladder and the six
+     questions, and under print media it is the only thing on the paper and fits on
+     one page of it. */
+  test('the card prints a one-page installer brief, and nothing else goes on the paper', async ({ page }) => {
+    await page.addInitScript(() => {
+      window.print = () => { (window as unknown as { __printed?: boolean }).__printed = true; };
+    });
+    /* Re-navigated: beforeEach has already booted this page with the real print. */
+    await boot(page);
+    await withRelief(page);
+    await openSolar(page);
+    const row = page.locator('#solList tr').first();
+    const idx = await row.getAttribute('data-idx');
+    await row.click();
+    await page.waitForTimeout(1_500);
+    await expect(page.locator('#bcSol')).toBeVisible();
+
+    await page.locator('#bcBrief').click();
+    expect(await page.evaluate(() => (window as unknown as { __printed?: boolean }).__printed)).toBe(true);
+    /* THIS roof, not the last one rendered: the sheet is printed away from the
+       screen, so a stale index is a mistake nobody would catch by eye. */
+    await expect(page.locator('#brIdx')).toHaveText(`#${idx}`);
+    await expect(page.locator('#brSure li')).toHaveCount(5);
+    await expect(page.locator('.br-ask li')).toHaveCount(6);
+    await expect(page.locator('#brOutline polygon')).toHaveCount(1);
+
+    /* ONE PAGE, MEASURED RATHER THAN HOPED FOR. A4 at 96 dpi is 1123 px tall and
+       the sheet takes 16 mm off the top and the bottom, leaving 1002 px; anything
+       past that silently becomes a second sheet of paper.
+
+       ASSERTED WHILE THE SHEET IS OPEN, which is the only state the printer ever
+       sees it in -- `afterprint` is dispatched by hand below, as the real event
+       would be when the dialogue closes. The stub does not fire it inside print()
+       because the sheet is `hidden` again the instant it does, and `hidden` cannot
+       be overridden from here: the site's reset declares it
+       `display:none!important` inside Tailwind's `base` layer, and a layered
+       important beats an unlayered one whatever its specificity. */
+    await page.emulateMedia({ media: 'print' });
+    await expect(page.locator('#solBrief')).toBeVisible();
+    const sheet = (await page.locator('#solBrief').boundingBox())!;
+    expect(sheet.height).toBeLessThanOrEqual(1000);
+    /* And the console is NOT on the paper -- the print rule hides every sibling,
+       so the card the brief was opened from goes with them. */
+    await expect(page.locator('#bcard')).toBeHidden();
+
+    /* The dialogue closes and the sheet leaves the screen again. Without this the
+       brief would sit over the console for the rest of the visit. */
+    await page.evaluate(() => window.dispatchEvent(new Event('afterprint')));
+    await expect(page.locator('#solBrief')).toBeHidden();
+  });
 });
