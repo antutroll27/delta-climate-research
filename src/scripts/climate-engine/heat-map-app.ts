@@ -53,7 +53,8 @@ import { isLayerId, type LayerId } from './scope/layers.ts';
 import { resolve, requireCosts } from './scope/resolve.ts';
 import { areaPageTitle, areaPageDescription } from './scope/page-meta.ts';
 import { fmtMoney, fmtRate, currencyMark } from './money.ts';
-import { pvRanges } from './solar-ranges.ts';
+import { pvRanges, tierOf } from './solar-ranges.ts';
+import { wardSummary, validatedSentence, noteFor } from './solar-copy.ts';
 import { areaPath, paths, cityPaths } from './scope/paths.ts';
 import { areaRefusal } from './scope/reachability.ts';
 import { isAreaKey, splitKey, type AreaKey } from './scope/registry.ts';
@@ -744,6 +745,10 @@ export function mountHeatMap(): () => void {
      with — the fifth rung holds a button — and rebuilding them on every selection
      would blow away focus for no reason. */
   let solTierPainted: 'screened' | 'validated' | null = null;
+  /* The ward block's own chip and summary are rewritten only when the tier they
+     read changes — `paintSolarWard` reruns on every tariff keystroke, and a
+     tariff change never moves `tiers.validated`. */
+  let solPaneTierPainted: 'screened' | 'validated' | null = null;
   /* The fix lines' one address. Not an <a href>: until a roof is selected there is
      no building index to name, and a link that tabs to a half-written subject is
      worse than a button that only exists once the card is painted. */
@@ -775,16 +780,12 @@ export function mountHeatMap(): () => void {
     setText('bcSureCanopy', `Shading ${pct(pv.loss[i])} headline, ${pct(pv.loss_strict[i])} floor.`);
     setText('bcSureIrr', `Yield ${yLo.toLocaleString()}–${yHi.toLocaleString()} kWh per kWp today.`);
     const v = pv.tiers.validated;
-    const tier = v === null ? 'screened' : 'validated';
+    const tier = tierOf(pv);
     if (tier !== solTierPainted) {
       solTierPainted = tier;
       setText('bcSolTier', tier);
-      setHTML('bcSureValid', v === null
-        ? SURE_VALID_DEFAULT
-        : `Compared with ${v.n} real rooftops over ${v.months} months: median ratio ${v.median_ratio.toFixed(2)}, ${Math.round(v.within_15pct_share * 100)}% within 15%.`);
-      setText('bcSolNote', v === null
-        ? SOL_NOTE_DEFAULT
-        : `Checked against ${v.n} real rooftops · still a screening estimate · ${SOL_NOTE_DEFAULT.replace(/^Screening estimate · /, '')}`);
+      setHTML('bcSureValid', v === null ? SURE_VALID_DEFAULT : validatedSentence(v));
+      setText('bcSolNote', noteFor(pv, SOL_NOTE_DEFAULT));
     }
     /* The subject carries the ward and this roof's index, because a query about
        "a roof in Ballygunge" is a query nobody can answer. */
@@ -823,20 +824,16 @@ export function mountHeatMap(): () => void {
     show('solBlock', has);
     if (!has) { setSolarOpen(false); paintSolarPane(null); return; }
     const t = pv.totals, s = pv.stratum, n = pv.kwp.length;
-    /* The pane's own chip: the card's tier is per-roof and cannot stand in for the
-       whole ward, so this is painted independently rather than reusing solTierPainted. */
-    const wardV = pv.tiers.validated;
-    setText('solPaneTier', wardV === null ? 'screened' : 'validated');
-    /* THE WARD BLOCK'S OWN ONE-LINE LADDER SUMMARY (spec §5): the same five limits
-       the card's rungs name, condensed to a sentence for the pane that opens before
-       any building is selected. */
-    setText('solPaneSure', wardV === null
-      ? 'Screened from satellites and open data. What limits it: roof obstacles, canopy over roofs, '
-        + 'sunlight from a coarse cell, unverified heights, and no comparison with real rooftops yet. '
-        + 'Open any roof for what would narrow each.'
-      : `Checked against ${wardV.n} real rooftops over ${wardV.months} months (median ratio ${wardV.median_ratio.toFixed(2)}). `
-        + 'Still limited by roof obstacles, canopy over roofs, sunlight from a coarse cell and unverified heights; '
-        + 'open any roof for what would narrow each.');
+    /* The pane's own chip and summary: the card's tier is per-roof and cannot
+       stand in for the whole ward, so these are painted independently rather than
+       reusing solTierPainted -- but rewritten only when the ward's own tier
+       changes, since this function reruns on every tariff keystroke. */
+    const wardTier = tierOf(pv);
+    if (wardTier !== solPaneTierPainted) {
+      solPaneTierPainted = wardTier;
+      setText('solPaneTier', wardTier);
+      setText('solPaneSure', wardSummary(pv));
+    }
     for (const pre of ['sol', 'solPane'] as const) {
       setHTML(`${pre}Kwp`, `${t.capacity_mwp.toFixed(1)}<span class="u">MWp</span>`);
       setHTML(`${pre}Conf`, `Screening · <b>${t.capacity_mwp_range[0].toFixed(1)}–${t.capacity_mwp_range[1].toFixed(1)} MWp</b> · not bankable`);
@@ -934,24 +931,46 @@ export function mountHeatMap(): () => void {
     link.download = `solar-${areaOf(state.ward)}.csv`;
     link.href = '#';
   }
+  /* ONE ORDERED LIST OF [name, value] PAIRS PER ROW, so the header can never
+     misalign with the values under it: both are read off the SAME list, and a
+     column inserted anywhere in this function moves its name and its value
+     together. The header is derived from row 0's names rather than typed out a
+     second time. */
   function buildCsv(pv: PvFile): string {
     const w = wardOf(state.ward);
     const byIdx = new Map(registry.map((b) => [b.idx, b] as const));
     /* The receipt travels with every row: a sorted sheet keeps it. Written once
        on row 0, it survived only while the sheet stayed in this order. */
     const basis = `"${pv.basis.replace(/"/g, '""')}"`;
-    const tier = pv.tiers.validated === null ? 'screened' : 'validated';
-    const rows = ['idx,lat,lon,footprint_m2,kwp,kwh_yr,kwh_low,kwh_high,kwp_high,loss,loss_buildings,loss_trees,loss_strict,loss_raised,worth_per_yr,tariff_per_kwh,currency,tier,basis'];
-    for (let i = 0; i < pv.kwp.length; i += 1) {
+    const tier = tierOf(pv);
+    const rowPairs = (i: number): Array<[string, string | number]> => {
       const b = byIdx.get(i);
       const ll = b ? wardLatLon(w, b.cx, b.cz) : null;
       const r = pvRanges(pv, i);
-      rows.push([
-        i, ll ? ll.lat.toFixed(5) : '', ll ? ll.lon.toFixed(5) : '', b ? Math.round(b.areaM2) : '',
-        pv.kwp[i], pv.kwh[i], r.kwhLow, r.kwhHigh, r.kwpHigh, pv.loss[i], pv.loss_buildings[i], pv.loss_trees[i], pv.loss_strict[i], pv.loss_raised[i],
-        Math.round(pv.kwh[i] * tariff), tariff.toFixed(2), COSTS.currency, tier, basis,
-      ].join(','));
-    }
+      return [
+        ['idx', i],
+        ['lat', ll ? ll.lat.toFixed(5) : ''],
+        ['lon', ll ? ll.lon.toFixed(5) : ''],
+        ['footprint_m2', b ? Math.round(b.areaM2) : ''],
+        ['kwp', pv.kwp[i]],
+        ['kwh_yr', pv.kwh[i]],
+        ['kwh_low', r.kwhLow],
+        ['kwh_high', r.kwhHigh],
+        ['kwp_high', r.kwpHigh],
+        ['loss', pv.loss[i]],
+        ['loss_buildings', pv.loss_buildings[i]],
+        ['loss_trees', pv.loss_trees[i]],
+        ['loss_strict', pv.loss_strict[i]],
+        ['loss_raised', pv.loss_raised[i]],
+        ['worth_per_yr', Math.round(pv.kwh[i] * tariff)],
+        ['tariff_per_kwh', tariff.toFixed(2)],
+        ['currency', COSTS.currency],
+        ['tier', tier],
+        ['basis', basis],
+      ];
+    };
+    const rows = [rowPairs(0).map(([name]) => name).join(',')];
+    for (let i = 0; i < pv.kwp.length; i += 1) rows.push(rowPairs(i).map(([, value]) => value).join(','));
     return `${rows.join('\n')}\n`;
   }
   const onCsv = (e: Event) => {

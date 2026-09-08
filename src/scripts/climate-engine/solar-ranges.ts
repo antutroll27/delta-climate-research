@@ -28,3 +28,11 @@ export function pvRanges(pv: Pick<PvFile, 'kwp' | 'loss' | 'loss_strict' | 'tier
     kwhHigh: Math.round(kwpHigh * yHi * (1 - pv.loss_strict[i])),
   };
 }
+
+/** ONE PLACE THAT READS `tiers.validated`'s null-ness. The card, the ward block and
+    the CSV each name the tier from the same artefact field; three separate
+    `=== null ? 'screened' : 'validated'` expressions is three places to drift the
+    day a third tier is added. */
+export function tierOf(pv: Pick<PvFile, 'tiers'>): 'screened' | 'validated' {
+  return pv.tiers.validated === null ? 'screened' : 'validated';
+}

@@ -270,7 +270,7 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
             <div class="big" id="solPaneKwp">—<span class="u">MWp</span></div>
             <div class="conf screening" id="solPaneConf"></div>
             <p class="solfloor" id="solPaneFloor"></p>
-            <p class="solfloor sol-sure" id="solPaneSure"></p>
+            <p class="solfloor" id="solPaneSure"></p>
             <div class="mrow">
               <div><div class="k">Annual yield</div><div class="val" id="solPaneKwh">—</div></div>
               <div><div class="k">Worth at tariff</div><div class="val sun" id="solPaneRs">—</div></div>
@@ -284,10 +284,12 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
           </div>
           <p class="pane-note sol-small" id="solTariffNote">CESC domestic slabs run 4.07–9.21 per unit (2025-26 tariff order); a solar unit displaces the top of the bill. Not a rate we assert.</p>
           <p class="pane-h">Best roofs by annual yield</p>
+          <div class="roofs-scroll">
           <table class="roofs" aria-label="The ten best roofs by annual yield; each row selects its building on the map">
             <thead><tr><th scope="col">#</th><th scope="col">kWp</th><th scope="col">kWh/yr</th><th scope="col">range</th><th scope="col">shaded</th><th scope="col">m²</th></tr></thead>
             <tbody id="solList"></tbody>
           </table>
+          </div>
           <p class="pane-note sol-small">Yield uses NASA POWER irradiance and a Mumbai packing factor; shading is computed from this ward's own geometry and canopy, and the mask rule is its largest uncertainty — "at least" is the strict-mask floor. Screening only, not bankable.</p>
           <a class="cta" id="solCsv" href="#" download>Download roof list · CSV ↓</a>
           </Fragment>
@@ -932,10 +934,23 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
   .sol-tariff input{width:4.6rem;font:400 .8rem var(--mono);color:var(--paper);background:var(--surface);border:1px solid var(--line-hi);border-radius:6px;padding:3px 6px}
   .sol-tariff input:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
   .sol-small{font-size:.66rem}
+  /* THE TABLE'S OWN ESCAPE. `.pane-body` clips overflow-y for the scroll shaft, and
+     the roof table's cells never wrap (a wrapped kWh figure is worse than a
+     scrollbar) — so at the 250-270px sidebar widths the table needs a horizontal
+     one of its own rather than clipping silently under the pane.
+
+     `flex-shrink:0` IS LOAD-BEARING. `.pane-body` is a flex column, and a flex
+     item that is itself a scroll container gets an automatic minimum size of 0
+     (CSS Flexbox §4.5) rather than its content size — so without this the whole
+     table could be squeezed to zero height whenever the pane's other rows push
+     total content past the sidebar's box, leaving ten `<tr>` in the DOM with no
+     visible pixels and every click on them landing on the paragraph behind. */
+  .roofs-scroll{overflow-x:auto;flex-shrink:0}
   .roofs{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:.64rem}
   .roofs th{text-align:right;font-weight:400;font-size:.46rem;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);padding:0 0 6px;border-bottom:1px solid var(--line-hi)}
   .roofs th:first-child,.roofs td:first-child{text-align:left}
   .roofs td{padding:6px 0;border-bottom:1px solid var(--line);text-align:right;color:var(--paper);white-space:nowrap}
+  .roofs td:not(:first-child){padding-left:8px}
   .roofs td.id{color:var(--cyan)} .roofs td.sh{color:var(--sun)} .roofs td.sh.z{color:var(--faint)} .roofs td.a{color:var(--ink)}
   /* a single footprint over a hectare is a market shed or a merged record — bronze, so it reads as one */
   .roofs tr.big td{color:var(--bronze)}
@@ -1317,7 +1332,12 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
   .bc-tier{flex:none;align-self:center;color:var(--sun);border:1px solid currentColor;
     border-radius:3px;padding:.05rem .32rem;line-height:1.55;
     font:450 .44rem var(--sans);letter-spacing:.14em;text-transform:uppercase}
-  body.studio .bc-tier{color:var(--studio-ink-amber)}
+  /* SCOPED TO THE CARD. `.bcard` sits on the pale Clay ground and needs the
+     darker studio ink to clear 4.5:1; `#solPaneTier` sits on the sidebar, which
+     stays dark in both themes (the sol-tariff comment above makes the same
+     argument for the pane's other ink), so it keeps `--sun` on Clay too and a
+     studio override there would UNDER-shoot, not improve, its contrast. */
+  body.studio .bcard .bc-tier{color:var(--studio-ink-amber)}
   /* THE HOW-SURE LADDER. The summary takes the card's label voice (.bc-ins's
      grammar) and the rungs take its note voice — a limit is a footnote about the
      figure above it, never a second figure. Closed by default: the reader who

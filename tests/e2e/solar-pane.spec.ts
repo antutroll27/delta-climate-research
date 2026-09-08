@@ -97,16 +97,18 @@ test.describe('the solar screen', () => {
        every field before it is comma-safe, and slicing there instead of counting
        delimiters over the whole line is what keeps this from breaking on a basis
        string that quotes a number. */
-    const headerFieldCount = HEADER.split(',').length;
+    const columns = HEADER.split(',');
+    const headerFieldCount = columns.length;
     const row = lines[1].split(',');
     const fixed = row.slice(0, headerFieldCount - 1);
     const basisField = row.slice(headerFieldCount - 1).join(',');
-    expect(fixed.length).toBe(headerFieldCount - 1);
     expect(basisField.startsWith('"')).toBe(true);
     expect(basisField.endsWith('"')).toBe(true);
-    expect(fixed[15]).toBe('10.00');               // the tariff the reader set
-    expect(fixed[16]).toBe('INR');                 // the scope's currency, never typed
-    expect(fixed[17]).toBe('screened');             // Ballygunge ships tiers.validated: null
+    // BY NAME, not position -- a column inserted ahead of these three must not
+    // silently start reading the wrong cell.
+    expect(fixed[columns.indexOf('tariff_per_kwh')]).toBe('10.00');   // the tariff the reader set
+    expect(fixed[columns.indexOf('currency')]).toBe('INR');           // the scope's currency, never typed
+    expect(fixed[columns.indexOf('tier')]).toBe('screened');          // Ballygunge ships tiers.validated: null
     // the basis rides EVERY row, not just row 0 -- the join reassembles the one
     // quoted field, which carries commas of its own.
     expect(lines[2].split(',').slice(headerFieldCount - 1).join(',')).toContain('screening');

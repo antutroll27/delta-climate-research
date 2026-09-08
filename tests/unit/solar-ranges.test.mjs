@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { pvRanges } from '../../src/scripts/climate-engine/solar-ranges.ts';
+import { pvRanges, tierOf } from '../../src/scripts/climate-engine/solar-ranges.ts';
 
 // Fixture: one screened roof (index 0) and one zero-capacity roof (index 1),
 // under the same ward tiers block published by build-pv-yield.py.
@@ -73,4 +73,12 @@ test('pvRanges is a pure product — it does not clamp even when loss_strict > l
     kwhLow: 10920,
     kwhHigh: 17612,
   });
+});
+
+test('tierOf reads the one field every consumer must agree on', () => {
+  assert.equal(tierOf({ tiers: { validated: null } }), 'screened');
+  assert.equal(
+    tierOf({ tiers: { validated: { n: 31, months: 9, median_ratio: 0.97, within_15pct_share: 0.84, date: '2026-10-01' } } }),
+    'validated',
+  );
 });
