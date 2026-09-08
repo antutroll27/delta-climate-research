@@ -113,6 +113,30 @@ The "questions" list is static copy; nothing on the sheet is computed that the c
 | `tests/e2e/solar-pane.spec.ts` | the card prints a range before a point and a tier chip; the brief view renders on one print page with the checklist; the CSV header has the new columns |
 | `docs/evidence/known-limitations.md` | the ladder, as the public statement of the solar limits |
 
+## 7b · Recorded during implementation (2026-09-07)
+
+- **The ranges are products, pinned.** `solar-ranges.ts` multiplies published numbers only; the plan's
+  worked example had the high yield as 14,523 and the product is 14,519 — the test pins the measured value.
+  `packing_factor` is not read: the low end of the packing range is the factor the artefact used.
+- **The card's validated swap is reversible.** The fifth rung's default and the note's default are captured
+  at mount and restored when a ward with `validated: null` follows a validated one; the guards are keyed on
+  the painted TEXT, not the tier word, because two validated wards carry different numbers.
+- **The pane's chip keeps its own ink on Clay.** The studio amber tuned for the pale card reads 2.7:1 on the
+  dark sidebar; the studio rule is scoped to `.bcard .bc-tier`.
+- **One source of truth for the CSV.** Rows are built from ordered `[name, value]` pairs and the header is
+  derived from them; the e2e finds columns by name. The roof table scrolls sideways in a wrapper that must
+  be `flex-shrink:0`, because a scroll container that is a flex item has an automatic minimum height of 0.
+- **The brief lives directly under `.stage`**, not beside the card: the print rule hides every other child of
+  the stage, and the card sits inside one of them. The site's `[hidden]` reset lives in a cascade layer and
+  outranks any print rule, so the sheet is un-hidden by script and re-hidden by four routes: `afterprint`,
+  the print media query going false, a 30 s timeout, and a Close button. `window.print()` is in a try/catch.
+- **North is +z.** `wardLatLon` adds `y/110_540` to the origin latitude, so the outline is drawn with y
+  flipped and the arrow up; the fact is a module constant with the citation, not a per-click probe.
+- **The one-page check measures at A4 width** (673 CSS px inside 16 mm margins), not at the 1280 px test
+  viewport, where wrapped lines are half their printed height; the sheet measures 490 px of 1,000.
+- **Copy has one home.** `solar-copy.ts` holds the ward summary, the validated sentence, the note derivation
+  and the "under 1 %" share; the card, the pane and the brief all call it.
+
 ## 8 · Verification
 
 - Units and the two e2e files; the studio contrast sweep with a card open, since the chip and the

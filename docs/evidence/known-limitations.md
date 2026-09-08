@@ -492,3 +492,31 @@ over a 25–50 m shadow run).
 > enters the mask or clears a 2.5 m roof. The artefact's fingerprint is therefore `canopy.px_over_min_m`, a
 > count above the threshold, not a nonzero count. Whether the render layer's density mapping is affected
 > by the same floor is a separate question for the vegetation layer, not answered here.
+
+
+### The ladder on the card (2026-09-07)
+
+Every solar figure on the building card and in the Solar pane now leads with its interval and wears a
+tier chip (*screened* today). Under the block, a "How sure, and what would make it surer" disclosure
+lists the five limits, each with the fix that narrows it. The bands are the artefacts' own; the
+"narrows to" column is an engineering expectation, labelled as such until the rungs are measured.
+
+| limit | today | the fix | narrows to (expectation) |
+|---|---|---|---|
+| roof obstacles unknown (tanks, stair rooms, parapets) | capacity at packing 0.28–0.40, about ±30 % | a ten-minute walk of the roof with a phone | about ±10 % |
+| canopy over the roof: usable or not | shading headline vs strict floor, up to nine points | one photo from the roof | settled for that roof |
+| irradiance from a coarse satellite cell | yield bracket 1,200–1,450 kWh/kWp | the ground station inside that cell | about ±5 %, city-wide |
+| building height unverified | ward-scale only | a survey or a drone pass | per roof |
+| never compared with real rooftops | no measured error | the pre-registered validation study | a measured spread, with its n |
+
+Each line is a button that opens a pre-filled email to the technical-queries address with the ward, the
+building index and the limit named; the survey and the measured rung do not exist yet and the button
+does not pretend they do. A one-page **installer brief** prints from the card (the browser's own print,
+no server): the roof's outline from its own footprint, the ranges, the shading split, the ladder, and six
+questions a vendor's quote must answer. When the validation study publishes at n ≥ 25, the fifth line
+prints the measured spread and the chip reads *validated*; the footer still says *not bankable*, because
+a comparison with real roofs is not an engineer's stamp.
+
+**The pre-registration** for that study is `docs/superpowers/specs/2026-09-07-pv-rooftop-validation-design.md`;
+its predictions are committed before any measured kilowatt-hour enters the repository, and the result is
+published whichever way it falls.

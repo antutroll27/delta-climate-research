@@ -37,7 +37,7 @@
 
 **Files:** Create `src/scripts/climate-engine/solar-ranges.ts`; Test `tests/unit/solar-ranges.test.mjs`.
 
-- [ ] **Step 1: the test.** Fixture `pv = { kwp:[7.3], kwh:[9470], loss:[0.09], loss_strict:[0.04], specific_yield:1313.8, packing_factor:0.28, tiers:{ yield_bracket_kwh_per_kwp:[1200,1450], packing_range:[0.28,0.40] } }`. Assert `pvRanges(pv, 0)` returns `{ kwpLow: 7.3, kwpHigh: 10.43 (7.3×0.40/0.28, 2 dp), kwhLow: 7972 (7.3×1200×0.91, rounded), kwhHigh: 14523 (10.43×1450×0.96, rounded) }`; that `kwhLow <= kwh[0] <= kwhHigh`; and that a roof with `kwp 0` returns all zeros. Run → fails (module missing).
+- [ ] **Step 1: the test.** Fixture `pv = { kwp:[7.3], kwh:[9470], loss:[0.09], loss_strict:[0.04], specific_yield:1313.8, packing_factor:0.28, tiers:{ yield_bracket_kwh_per_kwp:[1200,1450], packing_range:[0.28,0.40] } }`. Assert `pvRanges(pv, 0)` returns `{ kwpLow: 7.3, kwpHigh: 10.43 (7.3×0.40/0.28, 2 dp), kwhLow: 7972 (7.3×1200×0.91, rounded), kwhHigh: 14519 (10.43×1450×0.96 = 14,518.56, rounded — an earlier draft said 14,523; the test pins the measured product) }`; that `kwhLow <= kwh[0] <= kwhHigh`; and that a roof with `kwp 0` returns all zeros. Run → fails (module missing).
 - [ ] **Step 2: the module.**
   ```ts
   import type { PvFile } from './types';
