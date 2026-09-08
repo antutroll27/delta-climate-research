@@ -132,6 +132,8 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
     is not a stage, and keying the pane switcher on the stage is what left the
     compare route's rail buttons inert. `data-area` stays the stage's own — it
     is the scope half's subject, and Compare has no single area to declare. */}
+{/* The card's condensed label face lives only here, so it is preloaded here. */}
+<link rel="preload" href="/fonts/MonaSans-Cn85.woff2" as="font" type="font/woff2" crossorigin />
 <main id="main" class="stage" data-console data-area={scope.key}>
   {/* THE RAIL IS THE ONLY NAVIGATION. It replaces the Explore/Compare pair that
       used to sit in the top bar beside a second brand link, and it carries the
@@ -1363,25 +1365,25 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
     border:1px solid rgb(111 202 214 /.4);border-radius:11px;padding:11px 13px;
     box-shadow:0 14px 40px rgb(0 0 0 /.45);
     max-height:calc(100dvh - 24px);overflow-y:auto;overscroll-behavior:contain}
-  .bc-h{display:flex;justify-content:space-between;font:450 .5rem var(--sans);letter-spacing:.16em;
+  .bc-h{display:flex;justify-content:space-between;font:450 .5rem var(--sans);letter-spacing:.08em;
     text-transform:uppercase;color:var(--cyan);margin-bottom:.5rem}
   .bcard dl{display:grid;grid-template-columns:auto 1fr;gap:.22rem .7rem;margin:0;font-size:.7rem}
-  .bcard dt{font:450 .5rem var(--sans);letter-spacing:.1em;text-transform:uppercase;color:var(--ink);align-self:baseline}
+  .bcard dt{font:450 .5rem var(--sans);letter-spacing:.05em;text-transform:uppercase;color:var(--ink);align-self:baseline}
   .bcard dd{margin:0;text-align:right;font-weight:550;letter-spacing:-.01em;color:var(--paper)}
-  .bcard dd small{display:block;font:450 .46rem var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--bronze)}
+  .bcard dd small{display:block;font:450 .46rem var(--sans);letter-spacing:.04em;text-transform:uppercase;color:var(--bronze)}
   /* The Height row carries HEIGHTS.note as its title (heat-map-app.ts). Without an
      affordance nobody hovers a plain <dd>, so the whole ICESat-2 caveat goes unread
      — same reasoning as .conf, which is the precedent. */
   #bcH{cursor:help}
   .bc-ins{margin:.55rem 0 0;padding-top:.5rem;border-top:1px solid rgb(111 202 214 /.18);
-    font:450 .5rem var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--ink);line-height:1.75}
+    font:450 .5rem var(--sans);letter-spacing:.04em;text-transform:uppercase;color:var(--ink);line-height:1.75}
   .bc-ins b{font-weight:400}
   .bc-ins .hot{color:var(--red)} .bc-ins .cool{color:var(--cyan)}
   /* HOW THE FOOTPRINT WAS MADE, as a card footnote rather than a qualifier hung
      under the source name. It reads standalone ("Footprint model · confidence
      0.85") because at the foot of the card it no longer sits beneath the
      "Footprint by" label that used to supply its subject. */
-  .bc-prov{margin:.4rem 0 0;font:450 .46rem var(--sans);letter-spacing:.08em;
+  .bc-prov{margin:.4rem 0 0;font:450 .46rem var(--sans);letter-spacing:.04em;
     text-transform:uppercase;color:var(--bronze);line-height:1.6}
   .bc-prov:empty{display:none}
   /* ROOFTOP SOLAR on the card: the card's own grid and notes, ruled off and headed
@@ -1390,7 +1392,7 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
   .bc-sol{margin:.55rem 0 0;padding-top:.5rem;border-top:1px solid rgb(242 181 68 /.35)}
   .bc-sol .bc-h{color:var(--sun);margin-bottom:.35rem}
   .bc-sol dd.sun{color:var(--sun)}
-  .bc-sol-note{margin:.4rem 0 0;font:450 .46rem var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--bronze);line-height:1.6}
+  .bc-sol-note{margin:.4rem 0 0;font:450 .46rem var(--sans);letter-spacing:.04em;text-transform:uppercase;color:var(--bronze);line-height:1.6}
   /* Clay: amber on the near-white card is 1.7:1, so the card's amber steps down
      to `--studio-ink-amber` at 6.3:1 (computed against rgb(245 244 241); the contrast gate never
      opens a card, so the number is the receipt). The bronze notes were already
@@ -1403,7 +1405,7 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
      drift from the ink beside it, and no hex is written for it in either theme. */
   .bc-tier{flex:none;align-self:center;color:var(--sun);border:1px solid currentColor;
     border-radius:3px;padding:.05rem .32rem;line-height:1.55;
-    font:450 .44rem var(--sans);letter-spacing:.14em;text-transform:uppercase}
+    font:450 .44rem var(--sans);letter-spacing:.07em;text-transform:uppercase}
   /* SCOPED TO THE CARD. `.bcard` sits on the pale Clay ground and needs the
      darker studio ink to clear 4.5:1; `#solPaneTier` sits on the sidebar, which
      stays dark in both themes (the sol-tariff comment above makes the same
@@ -1416,20 +1418,28 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
      wants the number gets the number, and the reader who asks how sure gets the
      five things that would make it surer. */
   .bc-sure{margin:.5rem 0 0}
-  .bc-sure summary{cursor:pointer;font:450 .5rem var(--sans);letter-spacing:.08em;
+  .bc-sure summary{cursor:pointer;font:450 .5rem var(--sans);letter-spacing:.04em;
     text-transform:uppercase;color:var(--ink);line-height:1.6}
   .bc-sure summary:hover{color:var(--paper)}
   .bc-sure summary:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
   .bc-sure ul{margin:.35rem 0 0;padding:0 0 0 .8rem;list-style:disc}
-  .bc-sure li{margin:.3rem 0;font:450 .46rem var(--sans);letter-spacing:.06em;
+  .bc-sure li{margin:.3rem 0;font:450 .46rem var(--sans);letter-spacing:.03em;
     color:var(--bronze);line-height:1.7}
   .bc-sure li b{font-weight:550;color:var(--paper)}
   /* Text buttons, not chrome. The fix is an offer to talk; anything shaped like a
      submit button would promise a survey service that does not exist (spec §2.4). */
   .bc-ask,.bc-brief{cursor:pointer;background:none;border:0;padding:0;
-    font:450 .46rem var(--sans);letter-spacing:.1em;text-transform:uppercase;
+    font:450 .46rem var(--sans);letter-spacing:.05em;text-transform:uppercase;
     color:var(--cyan);text-decoration:underline;text-underline-offset:2px}
   .bc-ask:hover,.bc-brief:hover{color:var(--paper)}
+  /* THE CARD'S LABEL VOICE IS CONDENSED. These rules were drawn for Noplato Mono,
+     a license-plate condensed face; when the labels moved to Mona Sans (831e140)
+     the full-width caps ran 18–28 % wider and the mono's tracking came with them,
+     so the summary, the what-if caption and the yield all wrapped. The tracking
+     above is half what it was, and the labels take the 85 % width instance
+     (global.css). One rule, after every `font:` shorthand, because the shorthand
+     resets font-stretch to normal. `:is()` lifts the specificity above `.bcard dt`. */
+  .bcard :is(.bc-h,dt,dd small,.bc-ins,.bc-prov,.bc-sol-note,.bc-tier,.bc-sure summary,.bc-sure li,.bc-ask,.bc-brief){font-stretch:85%}
   .bc-ask:focus-visible,.bc-brief:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
   .bc-brief{display:block;margin:.55rem 0 0}
   /* An AUTHOR `display:block` beats the UA sheet's `[hidden]{display:none}` whatever

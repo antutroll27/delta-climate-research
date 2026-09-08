@@ -17,6 +17,19 @@
   font-display: swap;
 }
 
+/* The same family, 85 % wide — a static width instance of upstream Mona Sans
+   (wdth axis pinned, opsz pinned, wght 200–900 kept, same 221 glyphs as the file
+   above). Reached with `font-stretch:85%`, never by a second family name: the
+   card's labels were designed on the condensed Noplato Mono, and Mona Sans at
+   full width ran them 18–28 % wider than the space they were drawn for. */
+@font-face {
+  font-family: 'Mona Sans';
+  src: url('/fonts/MonaSans-Cn85.woff2') format('woff2');
+  font-weight: 200 900;
+  font-stretch: 85%;
+  font-style: normal;
+  font-display: swap;
+}
 
 /* Self-hosted Noplato Mono — the mono label face. Replaces Geist Mono.
    This is the CONDENSED license-plate cut (internal name "Noplato Demo Mono", 119 glyphs) —
