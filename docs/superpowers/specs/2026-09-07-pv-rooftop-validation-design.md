@@ -78,8 +78,7 @@ two pre-registered rules:
 - **Target n ≥ 30**, across the three wards; **publication floor n ≥ 10**. The result is published at
   whatever n is reached by the sprint's day fifteen, with n in the sentence.
 - **Eligible:** roof-mounted, fixed-tilt systems on a building inside the twin's three wards (matched to a
-  building index), or within 2 km of a ward boundary (matched to the ward's specific yield, shading
-  marked "not screened", and excluded from Q1's shading test).
+  building index). *(A1: the near-ward class was dropped.)*
 - **Excluded, declared before data:** trackers; systems with fewer than six months of data; owner-declared
   outages exceeding 10 % of covered days; exports with gaps above 20 % of days; systems whose installed
   capacity the owner cannot state to within 10 %.
@@ -90,9 +89,9 @@ two pre-registered rules:
 
 One row per roof, in `data/calibration/pv-validation-measured.csv`, anonymised at entry:
 
-`roof_id, ward, building_idx, lat, lon, kwp_dc, tilt_deg, azimuth_deg, install_date, months_covered,
-kwh_by_month (JSON list of [YYYY-MM, kWh]), outage_days_declared, inverter_make, source (portal export |
-bill | manual), notes`
+`roof_id, ward, building_idx, lat, lon, kwp_dc, capacity_uncertainty_pct, tracker, tilt_deg, azimuth_deg,
+install_date, months_covered, kwh_by_month (JSON list of [YYYY-MM, kWh]), outage_days_declared, inverter_make,
+source (portal export | bill | manual), notes` (A1 added `capacity_uncertainty_pct` and `tracker`)
 
 The consent form and the owner-facing template are in `docs/solar/rooftop-validation-consent.md`.
 
@@ -132,8 +131,32 @@ solar guide's ladder are re-ordered by what the study found.
 
 ## Amendments
 
-None yet. Any change to §3 or §4 after the predictions file is committed is an amendment here, dated,
-with what was known when it was made.
+Any change to §3 or §4 after the predictions file is committed is an amendment here, dated, with what
+was known when it was made.
+
+### A1 — 2026-09-07, before the predictions file exists. What the implementation review found
+
+The laboratory scripts were written and reviewed against this document before any roster or measured
+row existed (`data/calibration/` holds only an example roster). The review found four places where the
+document was silent or unimplementable, fixed now while it is free:
+
+1. **§3, the denominators of statistics 3 and 4.** `y_scr` is the product's printed annual figure,
+   `specific_yield × (1 − loss_i)`, **prorated onto the owner's months by a monthly seasonal shape taken
+   from the Ballygunge NASA POWER cell and applied to all three wards** (about 45 km apart). For a full
+   twelve months this reduces exactly to the printed number; for a partial year it reweights it, and that
+   is the honest comparison for "the number the card prints". `y_null` is the chain's model run at the
+   screen's 22°/south with `loss = 0` **on the owner's own days**, so the null shortfall carries no
+   interannual irradiance term that `r_i` does not.
+2. **§4, eligibility.** The "within 2 km of a ward boundary" class is dropped: the roster joins by
+   building index and the shading test needs a screened roof. In-ward indexed roofs only.
+3. **§4, the two percentage rules' denominators.** Outages are measured against the days of the months
+   the owner reported; gaps against the days of the months the owner declared as covered.
+4. **§5, two fields the rules need that the template did not carry.** `tracker` (yes / no; blank means
+   no) and `capacity_uncertainty_pct` (how far the stated kW might be off). Without them the tracker rule
+   and the "capacity not stated to within 10 %" rule could never fire on a real submission. The owner
+   pack and the sheet now ask both.
+
+Nothing in the statistics, the pass marks, the thresholds or the publication rules changed.
 
 ## References
 

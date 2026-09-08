@@ -14,8 +14,9 @@ Ten minutes, once. No visit, no wires, nobody climbing on your roof.
 
 - **Your system's monthly generation**, from the inverter app or your electricity bill. As many months as
   you've got.
-- **The basics of the system:** how big it is in kilowatts, which way the panels face, how tilted they
-  are, and when it went up.
+- **The basics of the system:** how big it is in kilowatts and how sure you are of that number, which way
+  the panels face, how tilted they are, whether they move to follow the sun (almost none do), and when it
+  went up.
 - **Your address**, only so I can find your roof on our map. I don't keep it.
 
 ## What I do with it
@@ -45,6 +46,8 @@ No money changes hands, in either direction.
 | what | what to write | example |
 |---|---|---|
 | System size | kilowatts, from the installer's invoice or the inverter app | 5.4 kW |
+| How sure of the size | from the invoice or the app (exact), or a rough guess | exact |
+| Do the panels move | to follow the sun through the day? almost none do | no |
 | Panels face | the direction they point | south, or south-west |
 | Tilt | the angle from flat. "Flat" or "on a frame" is fine if you don't know | 20° |
 | Installed | month and year | March 2024 |
@@ -58,5 +61,5 @@ view and an export button. If the export is a pain, a screenshot of the monthly 
 
 *Internal: rows go into `data/calibration/pv-validation-measured.csv` by a team member, under the
 pre-registration in `docs/superpowers/specs/2026-09-07-pv-rooftop-validation-design.md`, with the
-address replaced by the building index at entry. Draft v1, 7 September 2026, for Angad's and a lawyer's
+address replaced by the building index at entry. Draft v2, 7 September 2026, for Angad's and a lawyer's
 eye before it reaches an owner.*
