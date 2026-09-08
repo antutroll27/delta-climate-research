@@ -161,6 +161,58 @@ def tiers_block(existing: dict[str, Any] | None = None) -> dict[str, Any]:
     }
 
 
+#: §6.3 of the rooftop pre-registration: the card's yield band is validated only at
+#: n >= 25, and below that the card says "not yet compared to real rooftops". The
+#: threshold lives here as well as in pv_validation_lib because THIS file is the only
+#: writer of the slot — a caller cannot talk its way past it.
+VALIDATED_MIN_N = 25
+
+
+def validated_block(result: dict[str, Any]) -> dict[str, Any]:
+    """The five numbers the card is allowed to print from a finished study, and no more.
+
+    `median_ratio` is the SCREENED ratio (pre-registration §3, statistic 4) — measured
+    generation against what the product actually printed, not against the re-tilted
+    as-built prediction. The as-built ratio is the better test of the physics and it is
+    in the result file; it is not what the card is comparing itself to."""
+    return {
+        "n": int(result["n"]),
+        # The median months per roof, as an integer, because the card says "over N months"
+        # and half a month is not something a sentence can carry honestly.
+        "months": int(round(float(result["median_months"]))),
+        "median_ratio": float(result["screened_median_ratio"]),
+        "within_15pct_share": float(result["within_15pct_share"]),
+        "date": str(result["date"]),
+    }
+
+
+def write_validated(result_path: str, ward: str) -> None:
+    """Write `tiers.validated` into one ward's browser file from a finished result.
+
+    THIS DOES NOT RE-RUN THE PHYSICS, deliberately. Re-deriving every roof would need the
+    shading artefact and five years of POWER hourly, and would silently rewrite thousands
+    of numbers as a side effect of recording a study's result. The slot is written through
+    `tiers_block(existing)` — the same carry-forward path a normal rebuild uses — so the
+    other four fields are rebuilt from this file's constants and cannot drift, and a
+    malformed result is refused by that function's own guard rather than shipped."""
+    with open(result_path) as fh:
+        result: dict[str, Any] = json.load(fh)
+    n = int(result.get("n", 0))
+    if n < VALIDATED_MIN_N:
+        sys.exit(f"  result has n={n}, below the pre-registered {VALIDATED_MIN_N} — "
+                 "the card's yield band is not validated and this slot stays null (§6.3)")
+    block = validated_block(result)
+    web = os.path.join(ROOT, "public", "heat-map", "data", f"pv-{ward}.json")
+    with open(web) as fh:
+        art: dict[str, Any] = json.load(fh)
+    art["tiers"] = tiers_block({"tiers": {"validated": block}})
+    if art["tiers"]["validated"] is None:
+        sys.exit(f"  the result's validated block was refused by tiers_block: {block}")
+    with open(web, "w") as fh:
+        json.dump(art, fh, separators=(",", ":"))
+    print(f"  {os.path.relpath(web, ROOT)}: tiers.validated = {block}")
+
+
 def _self_check() -> None:
     t = tiers_block()
     assert t["screened"] is True, "tiers.screened must be True until the study runs"
@@ -195,6 +247,17 @@ def _self_check() -> None:
         "a validated slot with no numeric n must not be carried forward"
     assert tiers_block({"tiers": None})["validated"] is None, \
         "a null tiers block on the existing file must not raise"
+
+    # --validated: the five numbers the card may print, and WHICH ratio is among them.
+    # The screened one, never the as-built one — the card compares itself to what it
+    # printed, and the two differ whenever a recruited roof is not at 22 deg south.
+    block = validated_block({"n": 31, "median_months": 9.5, "screened_median_ratio": 0.94,
+                             "median_ratio": 1.02, "within_15pct_share": 0.83,
+                             "date": "2026-10-01"})
+    assert block == {"n": 31, "months": 10, "median_ratio": 0.94,
+                     "within_15pct_share": 0.83, "date": "2026-10-01"}, block
+    assert tiers_block({"tiers": {"validated": block}})["validated"] == block, \
+        "the block --validated writes must survive tiers_block's own guard"
 
     print("  self-check: ok")
 
@@ -269,10 +332,17 @@ def main() -> None:
     ap.add_argument("--check", action="store_true")
     ap.add_argument("--self-check", action="store_true",
                      help="offline: assert the tiers block round-trips, no artefacts read")
+    ap.add_argument("--validated", metavar="RESULT_JSON",
+                     help="write tiers.validated into --ward's browser file from a "
+                          "finished measure-pv-validation.py result (n >= 25 only)")
     args = ap.parse_args()
 
     if args.self_check:
         _self_check()
+        return
+
+    if args.validated:
+        write_validated(args.validated, args.ward)
         return
 
     with open(shading_path(args.ward)) as fh:
