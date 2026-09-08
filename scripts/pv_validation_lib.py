@@ -533,7 +533,9 @@ def _strip_non_finite(obj: Any) -> Any:
         return {k: _strip_non_finite(v) for k, v in obj.items()}
     if isinstance(obj, (list, tuple)):
         return [_strip_non_finite(v) for v in obj]
-    if isinstance(obj, bool) or not isinstance(obj, (int, float)):
+    # ints (counts, indices) pass through untouched: only a FLOAT can be non-finite,
+    # and float(n) would publish "30.0 roofs" (review, 2026-09-07).
+    if isinstance(obj, bool) or isinstance(obj, int) or not isinstance(obj, float):
         return obj
     return finite_or_none(float(obj))
 
@@ -622,7 +624,9 @@ def score(predictions: Mapping[str, RoofPrediction],
                      "n": len(losses)}
         else:
             skill = {"status": "declared", "n": len(losses), "rho": round(rho, 4),
-                     "p": round(p_value, 4),
+                     # 4 SIGNIFICANT figures, not 4 decimals: a real p of 5e-07 rounded to
+                     # 4 dp is 0.0, which is not a p-value (review, 2026-09-07).
+                     "p": float(f"{p_value:.4g}"),
                      "method": "scipy.stats.spearmanr (exact ranks, two-sided)",
                      "passes": bool(rho > 0.0 and p_value < 0.05)}
 
@@ -813,6 +817,22 @@ def _self_check() -> None:
     skill = score(big_p, big_m)["shading_skill"]
     assert skill["status"] == "declared" and skill["passes"] is True, skill
     assert skill["rho"] > 0.99, skill
+    # a perfect monotone series gives p exactly 0.0 (an infinite t statistic), so the
+    # rounding regression is caught on a NOISY series instead: rho below 1, p tiny but
+    # positive, and NOT flattened to 0.0 the way 4-decimal rounding did (2026-09-07)
+    assert skill["p"] >= 0.0, skill
+    noisy_p: dict[str, RoofPrediction] = {}
+    noisy_m: dict[str, RoofMeasured] = {}
+    for k in range(25):
+        rid = f"N{k}"
+        loss = 0.30 * k / 24.0
+        wiggle = 0.03 if k % 2 else -0.03
+        noisy_p[rid] = {"y_pred": 1000.0, "y_scr": 1000.0, "y_null": 1200.0, "kwp": 10.0, "loss": loss}
+        noisy_m[rid] = {"y_meas": 1200.0 * (1.0 - min(0.95, max(0.0, loss + wiggle))),
+                        "capacity_kwp": 5.0, "months": 12}
+    noisy = score(noisy_p, noisy_m)["shading_skill"]
+    assert noisy["status"] == "declared" and noisy["passes"] is True, noisy
+    assert 0.0 < noisy["p"] < 0.05, noisy
 
     # (c) THE EXCLUSIONS, by rule name. A four-month owner goes out on min_months_6.
     rows: list[Mapping[str, Any]] = [
@@ -907,6 +927,9 @@ def _self_check() -> None:
             pass
         assert _strip_non_finite({"x": float("nan"), "y": [float("inf"), 1.0]}) == \
             {"x": None, "y": [None, 1.0]}
+        # counts stay integers: the receipt must say "30 roofs", never "30.0"
+        scrubbed = _strip_non_finite({"n": 30, "idx": 0, "ok": True, "r": 1.5})
+        assert scrubbed == {"n": 30, "idx": 0, "ok": True, "r": 1.5} and isinstance(scrubbed["n"], int), scrubbed
 
     # (f) A DEGENERATE SPEARMAN IS NOT A DECLARED ONE. Twenty-five roofs all carrying the
     # same shading loss make the rank correlation undefined; scipy returns NaN and the
