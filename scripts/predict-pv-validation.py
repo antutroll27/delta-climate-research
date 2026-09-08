@@ -86,6 +86,7 @@ def _read_roster(path: str) -> list[dict[str, str]]:
     missing = [c for c in ROSTER_COLUMNS if c not in rows[0]]
     if missing:
         sys.exit(f"  roster is missing columns {missing} — see pre-registration §6.1")
+    lib.check_unique_ids(rows, "the roster")
     return rows
 
 
@@ -117,14 +118,19 @@ def build(roster_path: str, out_path: str, *, web_dir: str = WEB_DIR,
     for row in rows:
         ward = row["ward"].strip()
         art = _load_artefact(web_dir, ward, artefacts)
-        idx = int(row["building_idx"])
+        rid = str(row["roof_id"])
+        idx = int(lib.parse_number(rid, "building_idx", row["building_idx"], as_int=True))
         if not 0 <= idx < len(art["kwp"]):
-            sys.exit(f"  roof {row['roof_id']}: building_idx {idx} is outside "
+            sys.exit(f"  roof {rid}: building_idx {idx} is outside "
                      f"{ward}'s {len(art['kwp'])} buildings")
-        months = [m.strip() for m in row["months_covered"].split(";") if m.strip()]
+        # Validated here, before any of it reaches a POWER URL or a cache filename.
+        months = lib.check_months(
+            rid, "months_covered",
+            [m.strip() for m in row["months_covered"].split(";") if m.strip()])
         if not months:
-            sys.exit(f"  roof {row['roof_id']}: months_covered is empty")
-        tilt, azimuth = float(row["tilt_deg"]), float(row["azimuth_deg"])
+            sys.exit(f"  roof {rid}: months_covered is empty")
+        tilt = lib.parse_number(rid, "tilt_deg", row["tilt_deg"])
+        azimuth = lib.parse_number(rid, "azimuth_deg", row["azimuth_deg"])
         kwp = float(art["kwp"][idx])
         loss = float(art["loss"][idx])
         loss_strict = float(art["loss_strict"][idx])
@@ -146,7 +152,7 @@ def build(roster_path: str, out_path: str, *, web_dir: str = WEB_DIR,
             ghi = {d: v for d, v in ghi_all.items() if d.startswith(key)}
             t2m = {d: v for d, v in t2m_all.items() if d.startswith(key)}
             if not ghi:
-                sys.exit(f"  roof {row['roof_id']}: POWER returned no days for {month}")
+                sys.exit(f"  roof {rid}: POWER returned no days for {month}")
             # y_scr is the PRORATED PRINTED NUMBER — the five-year climatology the card
             # shows, cut to the owner's months by the pinned seasonal shape. Statistic 4
             # compares against exactly that, by design (§3, as amended): it judges what
@@ -164,7 +170,7 @@ def build(roster_path: str, out_path: str, *, web_dir: str = WEB_DIR,
                 "days": len(ghi),
             }
         roofs.append({
-            "roof_id": row["roof_id"], "ward": ward, "building_idx": idx,
+            "roof_id": rid, "ward": ward, "building_idx": idx,
             "tilt_deg": tilt, "azimuth_deg": azimuth,
             "months": sorted(months),
             "kwp": round(kwp, 2), "loss": round(loss, 3), "loss_strict": round(loss_strict, 3),
@@ -202,9 +208,7 @@ def build(roster_path: str, out_path: str, *, web_dir: str = WEB_DIR,
         "predictions_after_measured": bool(os.path.exists(measured_path) and allow_measured),
         "roofs": roofs,
     }
-    os.makedirs(os.path.dirname(out_path), exist_ok=True)
-    with open(out_path, "w", encoding="utf-8") as fh:
-        json.dump(out, fh, indent=2)
+    lib.dump_json(out, out_path)
     return out
 
 
@@ -305,8 +309,41 @@ def _self_check() -> None:
                            ward_centre={"testville": (22.528, 88.3659)})
             assert forced["predictions_after_measured"] is True, \
                 "the override must be recorded in the output, not only on the command line"
+            # BAD ROSTER INPUT NAMES THE ROOF, and never reaches a POWER URL or a
+            # cache filename.
+            for cells, why in (
+                    (["BAD1", "testville", 0, 22.0, 180.0, "2025-1"], "month not YYYY-MM"),
+                    (["BAD2", "testville", 0, 22.0, 180.0, "2025-01;2025-01"], "month twice"),
+                    (["BAD3", "testville", "seven", 22.0, 180.0, "2025-01"], "index not a number"),
+                    (["BAD4", "testville", 0, "steep", 180.0, "2025-01"], "tilt not a number")):
+                bad_roster = os.path.join(tmp, "bad.csv")
+                with open(bad_roster, "w", newline="", encoding="utf-8") as fh:
+                    bw = csv.writer(fh)
+                    bw.writerow(ROSTER_COLUMNS)
+                    bw.writerow(cells)
+                try:
+                    build(bad_roster, os.path.join(tmp, "bad.json"), web_dir=web,
+                          measured_path=os.path.join(tmp, "absent.csv"),
+                          ward_centre={"testville": (22.528, 88.3659)})
+                    raise AssertionError(f"{why} must be refused")
+                except SystemExit as exc:
+                    assert str(cells[0]) in str(exc), (why, str(exc))
+            dup = os.path.join(tmp, "dup.csv")
+            with open(dup, "w", newline="", encoding="utf-8") as fh:
+                dwr = csv.writer(fh)
+                dwr.writerow(ROSTER_COLUMNS)
+                dwr.writerow(["SAME", "testville", 0, 22.0, 180.0, "2025-01"])
+                dwr.writerow(["SAME", "testville", 1, 22.0, 180.0, "2025-01"])
+            try:
+                build(dup, os.path.join(tmp, "dup.json"), web_dir=web,
+                      measured_path=os.path.join(tmp, "absent.csv"),
+                      ward_centre={"testville": (22.528, 88.3659)})
+                raise AssertionError("a duplicate roof_id must be refused")
+            except SystemExit as exc:
+                assert "SAME" in str(exc), str(exc)
+
             print(f"  predict self-check: 2 roofs, y_null(12 mo) {a2['y_null']}, "
-                  f"y_null(6 mo) {a1['y_null']}, refusal and override both exercised")
+                  f"y_null(6 mo) {a1['y_null']}, refusal, override and 5 malformed rosters all exercised")
     finally:
         lib.POWER_SOURCE = None
     print("  self-check: ok")

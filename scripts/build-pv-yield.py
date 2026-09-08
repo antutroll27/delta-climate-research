@@ -43,6 +43,7 @@ import sys
 from typing import Any
 
 import numpy as np
+import pvlib
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.join(HERE, "..")
@@ -124,12 +125,60 @@ SYSTEM_LOSS = 0.129
 NOCT_C = 51.2
 GAMMA_PER_C = -0.0035
 
+#: Air temperature when POWER has no reading for an hour (absent, or its -999 fill).
+#: 27 C is close to this cell's long-run mean, so a handful of substituted hours move
+#: nothing; a zero would put the cell 27 C cold and quietly ADD yield. Named here rather
+#: than written inline twice because pv_validation_lib.py substitutes the same value on
+#: the same reasoning, and the two must not drift apart.
+T_AIR_FALLBACK_C = 27.0
+#: POWER's fill sentinel is -999. Tested as `< POWER_FILL_BELOW` rather than `== -999`
+#: because the API has served -999.0 and -999.00 both.
+POWER_FILL_BELOW = -900.0
+
 #: Sanity bracket for Kolkata rooftop specific yield, kWh/kWp/yr. GSA gives 1408 for
 #: the theoretical config; loss-scaled to small-residential that is ~1346, and an
 #: independently MEASURED 11.2 kWp rooftop at Bhubaneswar (same eastern-India monsoon
 #: climate, ~370 km) recorded ~1340 with PR 0.78. Two independent routes landing
 #: together is the strongest evidence available without a Kolkata ground station.
 YIELD_MIN, YIELD_MAX = 1200.0, 1450.0
+
+
+def step_poa_dc(ghi: float, zen: float, az: float, t_air: float, doy: int,
+                tilt: float, azimuth: float) -> tuple[float, float]:
+    """One timestep of the array model: (plane-of-array irradiance, DC output), both W/m2
+    per kW/m2 of rating — i.e. before the system loss and before any shading.
+
+    THIS IS THE ONLY COPY OF THE PHYSICS. It was inline in specific_yield()'s hourly loop
+    until pv_validation_lib.py needed the same four steps for the daily model and copied
+    them, which meant two versions of the decomposition, the transposition and the NOCT
+    temperature that could silently disagree. The laboratory now calls this, so a change
+    to the chain's physics reaches the validation model in the same commit or not at all.
+
+    The four steps, in the order they must happen: Erbs splits GHI into beam and diffuse
+    (POWER's own DNI/DHI do not close against its GHI — see solar-forcing.json); Hay-Davies
+    transposes onto the tilted plane; the NOCT model puts the cell temperature at the
+    plane-of-array irradiance the module actually sees, not at GHI; and gamma derates
+    about the 25 C rating point."""
+    if ghi <= 0.0:
+        return 0.0, 0.0
+    dec = pvlib.irradiance.erbs(ghi, zen, doy)
+    dni, dhi = float(dec["dni"]), float(dec["dhi"])
+    tot = pvlib.irradiance.get_total_irradiance(
+        tilt, azimuth, zen, az, dni, ghi, dhi,
+        dni_extra=float(pvlib.irradiance.get_extra_radiation(doy)),
+        model="haydavies")
+    poa = float(tot["poa_global"])
+    t_cell = t_air + (NOCT_C - 20.0) / 800.0 * poa
+    return poa, poa * (1.0 + GAMMA_PER_C * (t_cell - 25.0))
+
+
+def step_dc(ghi: float, zen: float, az: float, t_air: float, doy: int,
+            tilt: float, azimuth: float) -> float:
+    """The DC half of step_poa_dc, for callers that do not accumulate POA separately —
+    which is the laboratory. The pair exists so this chain can keep reporting its POA
+    total (it is in the artefact, and the temperature derate is quoted against it)
+    without computing the transposition twice."""
+    return step_poa_dc(ghi, zen, az, t_air, doy, tilt, azimuth)[1]
 
 
 def tiers_block(existing: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -259,13 +308,21 @@ def _self_check() -> None:
     assert tiers_block({"tiers": {"validated": block}})["validated"] == block, \
         "the block --validated writes must survive tiers_block's own guard"
 
+    # The extracted physics: a dark step is zero on both outputs, a lit step is positive
+    # on both, and step_dc IS step_poa_dc's second element — the laboratory calls one and
+    # this chain calls the other, so they may never disagree.
+    assert step_poa_dc(0.0, 30.0, 180.0, 27.0, 100, TILT_DEG, AZIMUTH_DEG) == (0.0, 0.0)
+    poa, dcw = step_poa_dc(800.0, 30.0, 180.0, 27.0, 100, TILT_DEG, AZIMUTH_DEG)
+    assert poa > 0.0 and 0.0 < dcw < poa, (poa, dcw)
+    assert step_dc(800.0, 30.0, 180.0, 27.0, 100, TILT_DEG, AZIMUTH_DEG) == dcw
+    # Hotter air must derate: gamma is negative and the NOCT model is monotonic in it.
+    assert step_dc(800.0, 30.0, 180.0, 40.0, 100, TILT_DEG, AZIMUTH_DEG) < dcw
+
     print("  self-check: ok")
 
 
 def specific_yield(lat: float) -> tuple[float, dict[str, Any]]:
     """Annual kWh per kWp for a fixed tilted array, from five years of POWER GHI."""
-    import pvlib
-
     with open(SOLAR_CACHE) as fh:
         cache = json.load(fh)
 
@@ -293,23 +350,14 @@ def specific_yield(lat: float) -> tuple[float, dict[str, Any]]:
             if alt <= 0:
                 continue
             zen = 90.0 - alt
-            # POWER's own DNI/DHI do not close against its GHI (see solar-forcing.json),
-            # so the split is DERIVED from GHI by Erbs rather than trusted from source.
-            dec = pvlib.irradiance.erbs(ghi, zen, doy)
-            dni, dhi = float(dec["dni"]), float(dec["dhi"])
-            tot = pvlib.irradiance.get_total_irradiance(
-                TILT_DEG, AZIMUTH_DEG, zen, az, dni, ghi, dhi,
-                dni_extra=float(pvlib.irradiance.get_extra_radiation(doy)),
-                model="haydavies")
-            g_poa = float(tot["poa_global"])
+            t_air = float(met.get(stamp, T_AIR_FALLBACK_C))
+            if t_air < POWER_FILL_BELOW:          # POWER fill
+                t_air = T_AIR_FALLBACK_C
+            # The four steps live in step_poa_dc, which the validation laboratory calls
+            # too — one copy of the physics, not two.
+            g_poa, g_dc = step_poa_dc(ghi, zen, az, t_air, doy, TILT_DEG, AZIMUTH_DEG)
             poa += g_poa
-            # Cell temperature from the plane-of-array irradiance the module actually
-            # sees, not from GHI — a tilted panel runs hotter than the horizontal.
-            t_air = float(met.get(stamp, 27.0))
-            if t_air < -900:                      # POWER fill
-                t_air = 27.0
-            t_cell = t_air + (NOCT_C - 20.0) / 800.0 * g_poa
-            dc += g_poa * (1.0 + GAMMA_PER_C * (t_cell - 25.0))
+            dc += g_dc
         poa_by_year.append(poa / 1000.0)          # Wh/m2 -> kWh/m2
         dc_by_year.append(dc / 1000.0)
 
@@ -328,7 +376,10 @@ def specific_yield(lat: float) -> tuple[float, dict[str, Any]]:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--ward", default="ballygunge")
+    #: No default on the --validated path: that path WRITES a browser artefact, and a
+    #: defaulted ward would quietly stamp a study's result onto Ballygunge because the
+    #: operator forgot to say which ward it belongs to. The build path keeps the default.
+    ap.add_argument("--ward", default=None)
     ap.add_argument("--check", action="store_true")
     ap.add_argument("--self-check", action="store_true",
                      help="offline: assert the tiers block round-trips, no artefacts read")
@@ -342,8 +393,13 @@ def main() -> None:
         return
 
     if args.validated:
+        if not args.ward:
+            sys.exit("  --validated writes one ward's browser file and will not guess "
+                     "which: pass --ward <id> as well")
         write_validated(args.validated, args.ward)
         return
+
+    args.ward = args.ward or "ballygunge"
 
     with open(shading_path(args.ward)) as fh:
         sh = json.load(fh)

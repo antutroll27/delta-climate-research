@@ -62,20 +62,40 @@ PUBLICATION_FLOOR_N = 10
 CARD_MIN_N: int = lib.VALIDATED_MIN_N
 
 
-def _kwh_by_month(row: Mapping[str, Any]) -> dict[str, float]:
-    """§5's `kwh_by_month` cell: a JSON list of [YYYY-MM, kWh] inside one CSV field."""
-    raw = row.get("kwh_by_month") or "[]"
-    parsed: Any = json.loads(raw) if isinstance(raw, str) else raw
-    return {str(pair[0]): float(pair[1]) for pair in parsed}
+def _artefact_drift(pred_file: Mapping[str, Any]) -> list[str]:
+    """The wards whose browser artefact is no longer the file the predictions were made
+    against, by sha256.
+
+    WHY THIS IS CHECKED HERE AND NOT LATER. `kwp` and `loss` come from those artefacts,
+    and a re-run of the shading pass or a packing tweak between the two steps changes
+    both — so a prediction made on the old file would be scored against a roof that no
+    longer has that capacity, and then, at n >= 25, the result would be stamped back INTO
+    the new artefact as though it had validated it. Caught before the write, not after."""
+    drifted: list[str] = []
+    for ward, entry in sorted((pred_file.get("artefacts") or {}).items()):
+        path = os.path.join(ROOT, str(entry.get("path", "")))
+        if not os.path.exists(path) or lib.sha256_of(path) != entry.get("sha256"):
+            drifted.append(ward)
+    return drifted
 
 
 def measure(predictions_path: str, measured_path: str, out_path: str, *,
-            write_artefacts: bool = True) -> dict[str, Any]:
+            write_artefacts: bool = True, accept_drift: bool = False) -> dict[str, Any]:
     with open(predictions_path, encoding="utf-8") as fh:
         pred_file: dict[str, Any] = json.load(fh)
     by_id: dict[str, dict[str, Any]] = {r["roof_id"]: r for r in pred_file["roofs"]}
     with open(measured_path, newline="", encoding="utf-8") as fh:
         rows: list[Mapping[str, Any]] = list(csv.DictReader(fh))
+    lib.check_unique_ids(rows, "the measured CSV")
+
+    drifted = _artefact_drift(pred_file)
+    if drifted and not accept_drift:
+        sys.exit(f"  the browser artefact for {', '.join(drifted)} has changed since the "
+                 "predictions were written — its sha256 no longer matches the one pinned "
+                 f"in {os.path.relpath(predictions_path, ROOT)}.\n"
+                 "  kwp and loss came from that file, so scoring against the new one "
+                 "compares a roof with itself changed. Re-run predict-pv-validation.py, "
+                 "or pass --accept-artefact-drift to record the mismatch and continue.")
 
     kept, by_rule = lib.apply_exclusions(rows)
 
@@ -92,12 +112,15 @@ def measure(predictions_path: str, measured_path: str, out_path: str, *,
             # roster. Recorded separately so the two can never be confused in the tally.
             unscorable[rid] = "no prediction was registered for this roof"
             continue
-        measured_months = _kwh_by_month(row)
+        measured_months = lib.parse_kwh_by_month(rid, row.get("kwh_by_month"))
         shared = sorted(set(measured_months) & set(pred["by_month"]))
         if not shared:
             unscorable[rid] = "no month is shared with the prediction"
             continue
-        capacity = float(row["kwp_dc"])
+        capacity = lib.parse_number(rid, "kwp_dc", row["kwp_dc"])
+        if capacity <= 0.0:
+            sys.exit(f"  roof {rid}: kwp_dc is {capacity} — a measured specific yield "
+                     "cannot be divided by it")
         preds[rid] = {
             "y_pred": sum(pred["by_month"][m]["y_pred"] for m in shared),
             "y_scr": sum(pred["by_month"][m]["y_scr"] for m in shared),
@@ -118,6 +141,23 @@ def measure(predictions_path: str, measured_path: str, out_path: str, *,
         "prereg": pred_file.get("prereg"),
         "prereg_blob_sha": pred_file.get("prereg_blob_sha"),
         "predictions": os.path.relpath(predictions_path, ROOT),
+        # THE CONTENT, not only the commit. A commit hash says which version git holds;
+        # it says nothing about the bytes on disk this run actually read, and an edited
+        # working copy has the same hash as the committed one. Both are recorded, and
+        # `predictions_dirty` says whether they agree.
+        "predictions_sha256": lib.sha256_of(predictions_path),
+        "predictions_dirty": lib.git_is_dirty(predictions_path),
+        # The artefacts the predictions were made against, carried through so the result
+        # stands alone: a reader need not open the predictions file to check the join.
+        "prediction_inputs": {"roster_sha256": pred_file.get("roster_sha256"),
+                              "artefacts": pred_file.get("artefacts") or {}},
+        "artefact_drift": drifted,
+        # What each ward's browser file hashed to BEFORE any --validated write below, so
+        # the rewrite this result may trigger has a documented starting point.
+        "artefacts_before_write": {
+            ward: lib.sha256_of(os.path.join(ROOT, str(entry["path"])))
+            for ward, entry in sorted((pred_file.get("artefacts") or {}).items())
+            if os.path.exists(os.path.join(ROOT, str(entry["path"])))},
         # §6.1's receipt: the commit that carried the predictions into the repository. If
         # it reads "uncommitted", the predictions were not registered before this ran and
         # the result is not a pre-registered one.
@@ -145,9 +185,9 @@ def measure(predictions_path: str, measured_path: str, out_path: str, *,
                          "soiling is not separable from shading and is not corrected"],
         **stats,
     }
-    os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
-    with open(out_path, "w", encoding="utf-8") as fh:
-        json.dump(result, fh, indent=2)
+    # Non-finite statistics become null on the way out and allow_nan=False refuses any
+    # survivor: a result file that JSON.parse cannot read is not a published result.
+    lib.dump_json(result, out_path)
 
     result["card_slot_written"] = False
     if n >= CARD_MIN_N:
@@ -231,6 +271,62 @@ def _self_check() -> None:
         assert written["measured_sha256"] and written["predictions_commit"]
         # Below 25, the card's slot is NOT written and the reason is printed.
         assert got["card_slot_written"] is False, "n=5 must not write tiers.validated"
+
+        # EVERY ROOF EXCLUDED. The study still writes a file, and that file must be
+        # readable: n is 0, every statistic is null, and json.loads accepts it. A NaN
+        # here used to make the result unparseable by the page meant to publish it.
+        none_left = os.path.join(tmp, "measured-none.csv")
+        with open(none_left, "w", newline="", encoding="utf-8") as fh:
+            w = csv.writer(fh)
+            w.writerow(["roof_id", "ward", "building_idx", "kwp_dc", "months_covered",
+                        "kwh_by_month", "outage_days_declared", "notes"])
+            w.writerow(["R0", "testville", 0, 5.0, ";".join(months[:4]),
+                        json.dumps([[m, 400.0] for m in months[:4]]), 0, ""])
+        empty_out = os.path.join(tmp, "result-empty.json")
+        empty = measure(predictions, none_left, empty_out, write_artefacts=False)
+        assert empty["n"] == 0 and empty["matched"] == 0, (empty["n"], empty["matched"])
+        assert empty["exclusions"]["by_rule"]["min_months_6"] == ["R0"]
+        with open(empty_out, encoding="utf-8") as fh:
+            parsed = json.loads(fh.read())      # the whole point: it PARSES
+        for key in ("median_ratio", "mape", "within_15pct_share", "screened_median_ratio"):
+            assert parsed[key] is None, (key, parsed[key])
+        assert parsed["iqr"] == [None, None] and parsed["median_months"] == 0
+        assert parsed["pass_mark"]["passes"] is False
+        assert "NaN" not in open(empty_out, encoding="utf-8").read(), \
+            "the bare token NaN must never appear in a result file"
+
+        # ARTEFACT DRIFT. A predictions file that pins a hash the artefact no longer has
+        # must stop the run, and --accept-artefact-drift must record the ward rather than
+        # forget it.
+        art = os.path.join(tmp, "pv-testville.json")
+        with open(art, "w", encoding="utf-8") as fh:
+            fh.write('{"ward": "testville"}')
+        pinned = os.path.join(tmp, "predictions-pinned.json")
+        with open(predictions, encoding="utf-8") as fh:
+            base: dict[str, Any] = json.load(fh)
+        base["artefacts"] = {"testville": {"path": os.path.relpath(art, ROOT),
+                                           "sha256": lib.sha256_of(art)}}
+        with open(pinned, "w", encoding="utf-8") as fh:
+            json.dump(base, fh)
+        ok_run = measure(pinned, measured, os.path.join(tmp, "r-ok.json"),
+                         write_artefacts=False)
+        assert ok_run["artefact_drift"] == [], ok_run["artefact_drift"]
+        assert ok_run["artefacts_before_write"]["testville"] == lib.sha256_of(art)
+        with open(art, "w", encoding="utf-8") as fh:
+            fh.write('{"ward": "testville", "changed": true}')
+        try:
+            measure(pinned, measured, os.path.join(tmp, "r-drift.json"),
+                    write_artefacts=False)
+            raise AssertionError("a changed artefact must stop the run")
+        except SystemExit as exc:
+            assert "testville" in str(exc), str(exc)
+        forced = measure(pinned, measured, os.path.join(tmp, "r-drift.json"),
+                         write_artefacts=False, accept_drift=True)
+        assert forced["artefact_drift"] == ["testville"], forced["artefact_drift"]
+        assert forced["prediction_inputs"]["artefacts"]["testville"]["sha256"] \
+            != lib.sha256_of(art), "the PINNED hash is recorded, not the current one"
+        assert forced["predictions_sha256"] == lib.sha256_of(pinned)
+        assert isinstance(forced["predictions_dirty"], bool)
 
         # n IS WHAT WAS SCORED. A roof whose registered prediction is zero still MATCHES
         # a measurement — it just cannot form a ratio — so `matched` must rise and `n`
@@ -324,26 +420,44 @@ def main() -> None:
     ap.add_argument("--measured", default=MEASURED)
     ap.add_argument("--out", default=os.path.join(
         ROOT, "data", "calibration", f"pv-validation-{dt.date.today().isoformat()}.json"))
+    ap.add_argument("--accept-artefact-drift", action="store_true",
+                    help="score even though a ward's browser artefact has changed since "
+                         "the predictions; the wards are recorded in the result")
     ap.add_argument("--self-check", action="store_true",
                     help="offline: synthetic roofs whose answer is known, on temp files")
     args = ap.parse_args()
     if args.self_check:
         _self_check()
         return
-    r = measure(args.predictions, args.measured, args.out)
+    r = measure(args.predictions, args.measured, args.out,
+                accept_drift=args.accept_artefact_drift)
+    def pct(value: float | None) -> str:
+        # Every statistic below can legitimately be null — an all-excluded study has no
+        # median and no spread — so the printer says "n/a" rather than raising on None.
+        return "n/a" if value is None else f"{value:.0%}"
+
     print(f"  n = {r['n']} roofs scored, {r['exclusions']['total']} excluded "
           f"({', '.join(f'{k} {len(v)}' for k, v in r['exclusions']['by_rule'].items() if v) or 'none'})")
+    if r["matched"] != r["n"]:
+        print(f"  ({r['matched']} matched a prediction; {r['matched'] - r['n']} could "
+              "not be scored — see roof_ids vs matched_roof_ids)")
+    if r["artefact_drift"]:
+        print(f"  WARNING: scored against DRIFTED artefacts for {', '.join(r['artefact_drift'])}")
     print(f"  ratio (as built)     : median {r['median_ratio']}, IQR {r['iqr']}, "
-          f"MAPE {r['mape']:.1%}")
-    print(f"  within +/-15 %       : {r['within_15pct_share']:.0%} — "
+          f"MAPE {pct(r['mape'])}")
+    print(f"  within +/-15 %       : {pct(r['within_15pct_share'])} — "
           f"{'PASSES' if r['pass_mark']['passes'] else 'MISSES'} the 80 % mark")
     print(f"  ratio (as screened)  : median {r['screened_median_ratio']}  "
           "<- the number the card prints")
     skill = r["shading_skill"]
-    print(f"  shading skill        : {skill['status']}"
-          + (f", rho {skill['rho']}, p {skill['p']:.4g}" if skill["status"] == "declared" else ""))
+    detail = ""
+    if skill["status"] == "declared":
+        detail = f", rho {skill['rho']}, p {skill['p']}"
+    elif skill["status"] == "degenerate":
+        detail = f" ({skill['reason']})"
+    print(f"  shading skill        : {skill['status']}{detail}")
     print(f"  capacity c = P/kwp   : median {r['capacity']['median']}, "
-          f"{r['capacity']['share_above_floor']:.0%} above our floor, "
+          f"{pct(r['capacity']['share_above_floor'])} above our floor, "
           f"hard failures {r['capacity']['hard_failures'] or 'none'}")
     print(f"  written to {os.path.relpath(args.out, ROOT)}")
 

@@ -25,11 +25,12 @@ THE SIMPLIFICATION, EXACTLY. Two things are assumed, and only two:
      following its own cycle, so the afternoon cell is modelled a little cool and the
      morning cell a little warm.
 
-Everything else is the chain's, by import and not by copy: `solar_altaz` (our own Spencer
-series, on POWER's local-solar clock), Erbs for the beam/diffuse split, Hay-Davies for the
-transposition, the NOCT cell-temperature model with the chain's NOCT and gamma, and the
-chain's 12.9 % system loss. If any of those constants move in `build-pv-yield.py`, they
-move here in the same run.
+Everything else is the chain's BY IMPORT AND NOT BY COPY, and that is now literally
+true: one timestep of Erbs, Hay-Davies and the NOCT temperature is `build-pv-yield.py`'s
+own `step_dc`, called from here — the same function object its hourly loop runs. It used
+to be a transcription of those four lines, which meant two versions of the physics that
+could drift apart without either test noticing. `solar_altaz` (our own Spencer series, on
+POWER's local-solar clock), the constants, and the 12.9 % system loss come the same way.
 
 WHAT THE SIMPLIFICATION COSTS, MEASURED. Fed the chain's own five-year POWER record
 aggregated to daily totals, this model returns 1325.3 kWh/kWp/yr against the chain's
@@ -52,12 +53,14 @@ import importlib.util
 import json
 import math
 import os
+import re
 import subprocess
 import sys
+import tempfile
+import warnings
 from typing import Any, Callable, Mapping, Sequence, TypedDict
 
 import numpy as np
-import pvlib
 from scipy.stats import spearmanr
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -120,9 +123,16 @@ HARD_FAILURE_RATIO = PACKING_RANGE[1] / PACKING_RANGE[0]
 CHAIN_SPECIFIC_YIELD_BALLYGUNGE = 1313.8
 BALLYGUNGE_LAT = 22.528
 
-#: NASA POWER's fill value. POWER writes -999 for a missing daily figure; treating it as
-#: a real zero would quietly bury a dark day inside a monthly total.
-POWER_FILL = -900.0
+#: NASA POWER's fill sentinel, tested the way the chain tests it (`< -900`, not
+#: `== -999`: the API has served -999.0 and -999.00 both). POWER writes it for a missing
+#: figure; treating it as a real zero would bury a dark day inside a monthly total.
+POWER_FILL_BELOW: float = float(_CHAIN.POWER_FILL_BELOW)
+#: The air temperature substituted for a day POWER did not measure. Re-exported from
+#: build-pv-yield.py rather than re-typed: the chain substitutes the same 27 C on the
+#: same reasoning (close to this cell's long-run mean, so a handful of days move nothing,
+#: where a zero would put the cell 27 C cold and ADD yield), and if that judgement is ever
+#: revised it must move in both models at once.
+T_AIR_FALLBACK_C: float = float(_CHAIN.T_AIR_FALLBACK_C)
 
 #: THE TWELVE-MONTH CLIMATOLOGY, aggregated from the chain's own five-year POWER hourly
 #: cache (2020-2024, Ballygunge cell): mean daily GHI in kWh/m2/day and mean air
@@ -194,22 +204,13 @@ def day_dc_kwh_per_kwp(ghi_kwh_m2: float, t_air_c: float, doy: int, lat: float,
     total_w = sum(weights)
     if total_w <= 0.0:                       # polar night; unreachable at 22 N, cheap to hold
         return 0.0
-    dni_extra = float(pvlib.irradiance.get_extra_radiation(doy))
     dc = 0.0
     for (alt, az), w in zip(pos, weights):
         if w <= 0.0:
             continue
         ghi = ghi_kwh_m2 * 1000.0 * w / total_w      # W/m2, mean over the hour
-        zen = 90.0 - alt
-        dec = pvlib.irradiance.erbs(ghi, zen, doy)
-        tot = pvlib.irradiance.get_total_irradiance(
-            tilt_deg, az_deg, zen, az, float(dec["dni"]), ghi, float(dec["dhi"]),
-            dni_extra=dni_extra, model="haydavies")
-        poa = float(tot["poa_global"])
-        # Cell temperature from the PLANE-OF-ARRAY irradiance, as the chain does — a
-        # tilted panel runs hotter than the horizontal it was measured on.
-        t_cell = t_air_c + (NOCT_C - 20.0) / 800.0 * poa
-        dc += poa * (1.0 + GAMMA_PER_C * (t_cell - 25.0))
+        # THE CHAIN'S OWN TIMESTEP, called not copied. Erbs, Hay-Davies, NOCT, gamma.
+        dc += float(_CHAIN.step_dc(ghi, 90.0 - alt, az, t_air_c, doy, tilt_deg, az_deg))
     return dc / 1000.0
 
 
@@ -227,13 +228,90 @@ def predict_roof(ghi_daily: Mapping[str, float], t2m_daily: Mapping[str, float],
     of unknown sign. Named, not corrected."""
     dc = 0.0
     for day, ghi in sorted(ghi_daily.items()):
-        if ghi <= POWER_FILL or ghi <= 0.0:
+        if ghi < POWER_FILL_BELOW or ghi <= 0.0:
             continue
-        t_air = float(t2m_daily.get(day, 27.0))
-        if t_air <= POWER_FILL:
-            t_air = 27.0
+        t_air = float(t2m_daily.get(day, T_AIR_FALLBACK_C))
+        if t_air < POWER_FILL_BELOW:
+            t_air = T_AIR_FALLBACK_C
         dc += day_dc_kwh_per_kwp(float(ghi), t_air, _doy(day), lat, tilt_deg, az_deg)
     return dc * (1.0 - SYSTEM_LOSS) * (1.0 - loss)
+
+
+#: 'YYYY-MM', and nothing else. Checked at every read — the roster and the measured CSV
+#: — because these strings reach three places where a malformed one does real damage:
+#: the POWER request URL, the cache FILENAME under data/calibration/power-daily/, and the
+#: month keys the two files are joined on. A row that says "Jan 2025" or "2025-13" must
+#: be a named error at read time, not a silent no-match at score time or a stray path.
+MONTH_RE = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
+
+
+def check_month(roof_id: str, field: str, month: str) -> str:
+    if not MONTH_RE.match(month):
+        sys.exit(f"  roof {roof_id}: {field} has {month!r}, which is not YYYY-MM")
+    return month
+
+
+def check_months(roof_id: str, field: str, months: Sequence[str]) -> list[str]:
+    """Every month well-formed, and no month twice. A repeat in `kwh_by_month` would be
+    silently last-wins in a dict — two different readings for one month, one of them
+    thrown away without a word."""
+    seen: set[str] = set()
+    for month in months:
+        check_month(roof_id, field, month)
+        if month in seen:
+            sys.exit(f"  roof {roof_id}: {field} lists {month} twice — "
+                     "which reading is the real one is not something this can guess")
+        seen.add(month)
+    return list(months)
+
+
+def check_unique_ids(rows: Sequence[Mapping[str, Any]], what: str) -> None:
+    """One row per roof (§5). A duplicate id would be last-wins through every dict here,
+    quietly dropping a roof from a study whose headline is its n."""
+    seen: set[str] = set()
+    for row in rows:
+        rid = str(row.get("roof_id", "")).strip()
+        if not rid:
+            sys.exit(f"  {what} has a row with no roof_id")
+        if rid in seen:
+            sys.exit(f"  {what} lists roof {rid} twice — one row per roof (§5)")
+        seen.add(rid)
+
+
+def parse_number(roof_id: str, field: str, raw: Any, *, as_int: bool = False) -> float:
+    """A number from a CSV cell, or an exit that NAMES THE ROOF AND THE FIELD. A bare
+    ValueError from float() says what the text was but not whose it is, and a roster of
+    thirty roofs then needs a bisect to find the one with a stray comma."""
+    try:
+        return float(int(str(raw).strip())) if as_int else float(str(raw).strip())
+    except (TypeError, ValueError) as exc:
+        sys.exit(f"  roof {roof_id}: {field} is {raw!r} — {exc}")
+
+
+def parse_kwh_by_month(roof_id: str, raw: Any) -> dict[str, float]:
+    """§5's `kwh_by_month` cell: a JSON list of [YYYY-MM, kWh] inside one CSV field. The
+    single most hand-edited value in the study, so every way it can be wrong — not JSON,
+    not a list, a pair that is not a pair, a month that is not a month, a month twice, a
+    reading that is not a number — exits naming the roof."""
+    if raw is None or str(raw).strip() == "":
+        return {}
+    try:
+        parsed: Any = json.loads(raw) if isinstance(raw, str) else raw
+    except json.JSONDecodeError as exc:
+        sys.exit(f"  roof {roof_id}: kwh_by_month is not JSON — {exc}")
+    if not isinstance(parsed, list):
+        sys.exit(f"  roof {roof_id}: kwh_by_month must be a list of [YYYY-MM, kWh] pairs")
+    out: dict[str, float] = {}
+    months: list[str] = []
+    for pair in parsed:
+        if not isinstance(pair, (list, tuple)) or len(pair) != 2:
+            sys.exit(f"  roof {roof_id}: kwh_by_month has {pair!r}, "
+                     "which is not a [YYYY-MM, kWh] pair")
+        month = check_month(roof_id, "kwh_by_month", str(pair[0]))
+        months.append(month)
+        out[month] = parse_number(roof_id, f"kwh_by_month[{month}]", pair[1])
+    check_months(roof_id, "kwh_by_month", months)
+    return out
 
 
 def _month_days(year: int, month: int) -> int:
@@ -297,10 +375,24 @@ def power_daily(lat: float, lon: float, start: str, end: str) -> dict[str, dict[
                          capture_output=True, text=True)
     if got.returncode != 0:
         sys.exit(f"  POWER daily request failed ({start}-{end}, curl {got.returncode})")
-    payload: dict[str, Any] = json.loads(got.stdout)
+    try:
+        payload: dict[str, Any] = json.loads(got.stdout)
+    except json.JSONDecodeError as exc:
+        # A truncated body, an HTML error page, a proxy notice. curl said 200; the bytes
+        # are still not JSON, and a traceback here would name neither the window nor why.
+        sys.exit(f"  POWER answered {start}-{end} with something that is not JSON "
+                 f"({exc}); first bytes: {got.stdout[:120]!r}")
     param = payload.get("properties", {}).get("parameter")
     if not param:
-        sys.exit(f"  POWER returned no parameters: {json.dumps(payload)[:200]}")
+        sys.exit(f"  POWER returned no parameters for {start}-{end}: "
+                 f"{json.dumps(payload)[:200]}")
+    for name in ("ALLSKY_SFC_SW_DWN", "T2M"):
+        # Both, or neither is usable: the model joins irradiance to temperature day by
+        # day, and a payload carrying only one of them would model every day at the
+        # substituted air temperature without saying so.
+        if name not in param:
+            sys.exit(f"  POWER returned no {name} for {start}-{end} — asked for both "
+                     "ALLSKY_SFC_SW_DWN and T2M")
     out: dict[str, dict[str, float]] = {
         "ALLSKY_SFC_SW_DWN": {k: float(v) for k, v in param["ALLSKY_SFC_SW_DWN"].items()},
         "T2M": {k: float(v) for k, v in param["T2M"].items()}}
@@ -326,22 +418,18 @@ MAX_CAPACITY_UNCERTAINTY_PCT = 10.0
 
 
 def _months_of(row: Mapping[str, Any]) -> list[str]:
-    """The months an owner actually reported kWh for, from §5's `kwh_by_month` cell (a
-    JSON list of [YYYY-MM, kWh] inside the CSV field)."""
-    raw = row.get("kwh_by_month") or "[]"
-    if isinstance(raw, str):
-        parsed: Any = json.loads(raw)
-    else:
-        parsed = raw
-    return [str(pair[0]) for pair in parsed]
+    """The months an owner actually reported kWh for, validated on the way through."""
+    return sorted(parse_kwh_by_month(str(row.get("roof_id", "?")), row.get("kwh_by_month")))
 
 
 def _declared_months(row: Mapping[str, Any]) -> list[str]:
     """The months the owner says the export COVERS (`months_covered`, 'YYYY-MM;...'),
     which is what a gap is measured against — a month present in the span but absent
     from `kwh_by_month` is the gap."""
+    rid = str(row.get("roof_id", "?"))
     raw = str(row.get("months_covered") or "").strip()
-    return [m.strip() for m in raw.split(";") if m.strip()]
+    return check_months(rid, "months_covered",
+                        [m.strip() for m in raw.split(";") if m.strip()])
 
 
 def _span_days(months: Sequence[str]) -> int:
@@ -361,6 +449,11 @@ def _float_or_none(value: Any) -> float | None:
 def excluded_by(row: Mapping[str, Any]) -> str | None:
     """The §4 rule that excludes this roof, by name, or None if it is kept."""
     reported = _months_of(row)
+    # A row with no `months_covered` falls back to the months it reported, and THE
+    # CONSEQUENCE IS THAT SUCH A ROW CAN NEVER TRIP THE GAP RULE: measured against
+    # itself, an export has no holes. That is the safe direction — a missing declaration
+    # is a recruiter's omission, not evidence of a gap — but it does mean the gap rule
+    # is only live for roofs whose owner said what the export was meant to cover.
     declared = _declared_months(row) or reported
 
     # tracker — THE COLUMN, and only the column: 'yes' excludes, 'no' and blank keep.
@@ -422,8 +515,47 @@ def apply_exclusions(
 # ── §3, the statistics ──────────────────────────────────────────────────────
 
 
-def _median(values: Sequence[float]) -> float:
-    return float(np.median(np.asarray(values, dtype=float))) if values else float("nan")
+def finite_or_none(value: float | None) -> float | None:
+    """NaN and the infinities are not JSON. `json.dump` writes them as the bare tokens
+    `NaN` and `Infinity`, which every strict parser — `JSON.parse` included — refuses, so
+    a result file computed on zero roofs used to be unreadable by the very page meant to
+    publish it. Every statistic goes through here on the way out, and `dump_json` below
+    then writes with allow_nan=False so a missed one is an exception at write time rather
+    than a broken file discovered in a browser."""
+    if value is None or not math.isfinite(value):
+        return None
+    return value
+
+
+def _strip_non_finite(obj: Any) -> Any:
+    """`finite_or_none` applied to a whole nested structure, on the way to disk."""
+    if isinstance(obj, dict):
+        return {k: _strip_non_finite(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_strip_non_finite(v) for v in obj]
+    if isinstance(obj, bool) or not isinstance(obj, (int, float)):
+        return obj
+    return finite_or_none(float(obj))
+
+
+def dump_json(obj: Any, path: str, *, indent: int | None = 2) -> None:
+    """Write a result or a predictions file. Non-finite numbers become null first, and
+    allow_nan=False makes any survivor raise here rather than ship."""
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump(_strip_non_finite(obj), fh, indent=indent, allow_nan=False)
+
+
+def _median(values: Sequence[float]) -> float | None:
+    """None, not NaN, on an empty input — see finite_or_none. A study that scored no
+    roofs has no median, and `null` is how a file says that."""
+    if not values:
+        return None
+    return finite_or_none(float(np.median(np.asarray(values, dtype=float))))
+
+
+def _round(value: float | None, places: int) -> float | None:
+    return None if value is None else round(value, places)
 
 
 def score(predictions: Mapping[str, RoofPrediction],
@@ -454,11 +586,14 @@ def score(predictions: Mapping[str, RoofPrediction],
     scr = {rid: measured[rid]["y_meas"] / predictions[rid]["y_scr"]
            for rid in ids if predictions[rid]["y_scr"] > 0.0}
     within = [1.0 if abs(r - 1.0) <= WITHIN_BAND else 0.0 for r in r_values]
-    within_share = float(np.mean(within)) if within else 0.0
-    mape = float(np.mean([abs(r - 1.0) for r in r_values])) if r_values else float("nan")
-    q1, q3 = ((float(np.percentile(np.asarray(r_values, dtype=float), 25)),
-               float(np.percentile(np.asarray(r_values, dtype=float), 75)))
-              if r_values else (float("nan"), float("nan")))
+    # An empty study has no share, no error and no spread — three nulls, not three zeros
+    # and certainly not three NaNs. A zero within-share would read as "we measured, and
+    # nothing was within 15 %", which is a finding rather than an absence of one.
+    within_share = finite_or_none(float(np.mean(within))) if within else None
+    mape = finite_or_none(float(np.mean([abs(r - 1.0) for r in r_values]))) if r_values else None
+    q1, q3 = ((finite_or_none(float(np.percentile(np.asarray(r_values, dtype=float), 25))),
+               finite_or_none(float(np.percentile(np.asarray(r_values, dtype=float), 75))))
+              if r_values else (None, None))
 
     # Statistic 3. The null predicts every roof at the ward's UNSHADED yield; if our
     # per-roof shading has skill, the roofs we call shaded are the roofs that fall short
@@ -470,11 +605,26 @@ def score(predictions: Mapping[str, RoofPrediction],
     if len(losses) < SKILL_MIN_N:
         skill = {"status": "underpowered", "n": len(losses)}
     else:
-        res = spearmanr(np.asarray(losses, dtype=float), np.asarray(shortfalls, dtype=float))
+        with warnings.catch_warnings():
+            # scipy warns "An input array is constant" on exactly the degenerate case
+            # handled two lines below. The result SAYS "degenerate" in a field a reader
+            # can act on, which is a better channel than a warning on stderr.
+            warnings.filterwarnings("ignore", message="An input array is constant")
+            res = spearmanr(np.asarray(losses, dtype=float),
+                            np.asarray(shortfalls, dtype=float))
         rho, p_value = float(res.statistic), float(res.pvalue)
-        skill = {"status": "declared", "n": len(losses), "rho": round(rho, 4),
-                 "p": p_value, "method": "scipy.stats.spearmanr (exact ranks, two-sided)",
-                 "passes": bool(rho > 0.0 and p_value < 0.05)}
+        if not (math.isfinite(rho) and math.isfinite(p_value)):
+            # Every roof carrying the SAME shading loss makes the rank correlation
+            # undefined — scipy returns NaN — and a NaN under `status: "declared"` reads
+            # as a test that ran and said nothing, which is worse than one that says it
+            # could not run. There is no rho and no p here, so neither is written.
+            skill = {"status": "degenerate", "reason": "no variance in loss",
+                     "n": len(losses)}
+        else:
+            skill = {"status": "declared", "n": len(losses), "rho": round(rho, 4),
+                     "p": round(p_value, 4),
+                     "method": "scipy.stats.spearmanr (exact ranks, two-sided)",
+                     "passes": bool(rho > 0.0 and p_value < 0.05)}
 
     # Q2. Owners install less than a roof can hold, so the SPREAD is the finding — but a
     # roof carrying more than the top of the packing interval is a failure of the geometry
@@ -494,21 +644,22 @@ def score(predictions: Mapping[str, RoofPrediction],
         "roof_ids": scored,
         "matched_roof_ids": ids,
         "ratios": {rid: round(ratios[rid], 4) for rid in sorted(ratios)},
-        "median_ratio": round(_median(r_values), 4),
-        "iqr": [round(q1, 4), round(q3, 4)],
-        "mape": round(mape, 4),
-        "within_15pct_share": round(within_share, 4),
+        "median_ratio": _round(_median(r_values), 4),
+        "iqr": [_round(q1, 4), _round(q3, 4)],
+        "mape": _round(mape, 4),
+        "within_15pct_share": _round(within_share, 4),
         "pass_mark": {"rule": f"at least {PASS_SHARE:.0%} of roofs within +/-{WITHIN_BAND:.0%}",
-                      "passes": bool(within_share >= PASS_SHARE and n > 0)},
+                      "passes": bool(within_share is not None
+                                     and within_share >= PASS_SHARE and n > 0)},
         "screened_ratios": {rid: round(scr[rid], 4) for rid in sorted(scr)},
-        "screened_median_ratio": round(_median([scr[rid] for rid in sorted(scr)]), 4),
+        "screened_median_ratio": _round(_median([scr[rid] for rid in sorted(scr)]), 4),
         "shading_skill": skill,
         "capacity": {
             "ratios": {rid: round(caps[rid], 4) for rid in sorted(caps)},
-            "median": round(_median(c_values), 4),
-            "share_above_floor": round(
-                float(np.mean([1.0 if c > 1.0 else 0.0 for c in c_values])), 4)
-            if c_values else 0.0,
+            "median": _round(_median(c_values), 4),
+            "share_above_floor": _round(finite_or_none(
+                float(np.mean([1.0 if c > 1.0 else 0.0 for c in c_values]))), 4)
+            if c_values else None,
             "hard_failure_threshold": round(HARD_FAILURE_RATIO, 4),
             "hard_failures": hard,
         },
@@ -526,6 +677,15 @@ def git_blob_hash(path: str) -> str:
     got = subprocess.run(["git", "hash-object", path], capture_output=True, text=True,
                          cwd=ROOT)
     return got.stdout.strip() if got.returncode == 0 else "unavailable"
+
+
+def git_is_dirty(path: str) -> bool:
+    """Whether the file on disk differs from what HEAD holds. `git_commit_of` alone can
+    say "committed" about a path whose working copy has since been edited — which for the
+    predictions file is exactly the failure the pre-registration exists to prevent."""
+    got = subprocess.run(["git", "diff", "--quiet", "HEAD", "--", path],
+                         capture_output=True, text=True, cwd=ROOT)
+    return got.returncode != 0
 
 
 def git_commit_of(path: str) -> str:
@@ -721,6 +881,75 @@ def _self_check() -> None:
     assert 1.42 < flagged["capacity"]["hard_failure_threshold"] < 1.43
     print(f"  (d) c=1.5 flagged: {flagged['capacity']['hard_failures']} "
           f"(threshold {flagged['capacity']['hard_failure_threshold']})")
+
+    # (e) NOTHING NON-FINITE MAY REACH A FILE. A study that scored no roofs has nulls,
+    # not NaNs — and the file it writes must parse, because the page that publishes it
+    # uses JSON.parse, which refuses the bare token NaN.
+    empty = score({}, {})
+    assert empty["n"] == 0 and empty["matched"] == 0, empty
+    for key in ("median_ratio", "mape", "screened_median_ratio", "within_15pct_share"):
+        assert empty[key] is None, (key, empty[key])
+    assert empty["iqr"] == [None, None], empty["iqr"]
+    assert empty["capacity"]["median"] is None and empty["capacity"]["share_above_floor"] is None
+    assert empty["pass_mark"]["passes"] is False, "an empty study cannot pass"
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "empty.json")
+        dump_json(empty, path)
+        with open(path, encoding="utf-8") as fh:
+            assert json.load(fh)["median_ratio"] is None
+        # And the writer REFUSES a NaN that reached it some other way, rather than
+        # writing a file no strict parser will read.
+        try:
+            with open(path, "w", encoding="utf-8") as fh:
+                json.dump({"x": float("nan")}, fh, allow_nan=False)
+            raise AssertionError("allow_nan=False must refuse a NaN")
+        except ValueError:
+            pass
+        assert _strip_non_finite({"x": float("nan"), "y": [float("inf"), 1.0]}) == \
+            {"x": None, "y": [None, 1.0]}
+
+    # (f) A DEGENERATE SPEARMAN IS NOT A DECLARED ONE. Twenty-five roofs all carrying the
+    # same shading loss make the rank correlation undefined; scipy returns NaN and the
+    # result must say it could not run, with no rho and no p to misread.
+    flat_p: dict[str, RoofPrediction] = {}
+    flat_m: dict[str, RoofMeasured] = {}
+    for i in range(SKILL_MIN_N):
+        rid = f"F{i:02d}"
+        flat_p[rid] = {"y_pred": 1000.0, "y_scr": 1100.0, "y_null": 1200.0,
+                       "kwp": 10.0, "loss": 0.10}
+        flat_m[rid] = {"y_meas": 1000.0 + i, "capacity_kwp": 5.0, "months": 12}
+    degenerate = score(flat_p, flat_m)["shading_skill"]
+    assert degenerate == {"status": "degenerate", "reason": "no variance in loss",
+                          "n": SKILL_MIN_N}, degenerate
+    print(f"  (e) empty study -> nulls that parse; (f) flat loss -> {degenerate['status']}")
+
+    # (g) BAD INPUT NAMES THE ROOF. Every one of these is an exit, not a traceback, and
+    # every message carries the roof id.
+    for bad, why in (
+            ({"roof_id": "B1", "kwh_by_month": "not json"}, "not JSON"),
+            ({"roof_id": "B2", "kwh_by_month": chr(39)}, "not a list"),
+            ({"roof_id": "B3", "kwh_by_month": '[["2025-13", 5]]'}, "month 13"),
+            ({"roof_id": "B4", "kwh_by_month": '[["Jan 2025", 5]]'}, "not YYYY-MM"),
+            ({"roof_id": "B5", "kwh_by_month": '[["2025-01", 5], ["2025-01", 6]]'}, "twice"),
+            ({"roof_id": "B6", "kwh_by_month": '[["2025-01", "lots"]]'}, "not a number"),
+            ({"roof_id": "B7", "kwh_by_month": '[["2025-01"]]'}, "not a pair"),
+            ({"roof_id": "B8", "kwh_by_month": "[]", "months_covered": "2025-1"}, "roster month")):
+        try:
+            excluded_by(bad)
+            raise AssertionError(f"{why} must be refused, not accepted")
+        except SystemExit as exc:
+            assert bad["roof_id"] in str(exc), (why, str(exc))
+    try:
+        check_unique_ids([{"roof_id": "D"}, {"roof_id": "D"}], "the measured CSV")
+        raise AssertionError("a duplicate roof_id must be refused")
+    except SystemExit as exc:
+        assert "D" in str(exc) and "twice" in str(exc), str(exc)
+    try:
+        parse_number("N1", "kwp_dc", "5,4")
+        raise AssertionError("a stray comma must be refused")
+    except SystemExit as exc:
+        assert "N1" in str(exc) and "kwp_dc" in str(exc), str(exc)
+    print("  (g) malformed cells refused by roof id: 8 shapes + duplicate id + bad number")
 
     # The seam: with POWER_SOURCE set, no network is reachable at all.
     global POWER_SOURCE
