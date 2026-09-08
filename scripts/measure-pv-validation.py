@@ -54,6 +54,13 @@ CHAIN = os.path.join(HERE, "build-pv-yield.py")
 TARGET_N = 30
 PUBLICATION_FLOOR_N = 10
 
+#: THE CARD GATE (§6.3), owned by the chain and imported, never re-typed here. It is 25,
+#: and so is `lib.SKILL_MIN_N` (§3's shading-skill declaration) — but they are two
+#: pre-registered decisions that merely agree today. This script gates the CARD on this
+#: one, so an amendment moving the skill threshold cannot silently un-gate the card, or
+#: the reverse. If they ever diverge, nothing here needs changing.
+CARD_MIN_N: int = lib.VALIDATED_MIN_N
+
 
 def _kwh_by_month(row: Mapping[str, Any]) -> dict[str, float]:
     """§5's `kwh_by_month` cell: a JSON list of [YYYY-MM, kWh] inside one CSV field."""
@@ -143,7 +150,7 @@ def measure(predictions_path: str, measured_path: str, out_path: str, *,
         json.dump(result, fh, indent=2)
 
     result["card_slot_written"] = False
-    if n >= lib.SKILL_MIN_N:
+    if n >= CARD_MIN_N:
         if write_artefacts:
             for ward in sorted(wards):
                 subprocess.run([sys.executable, CHAIN, "--validated", out_path,
@@ -151,7 +158,7 @@ def measure(predictions_path: str, measured_path: str, out_path: str, *,
         result["card_slot_written"] = True
     else:
         print(f"  tiers.validated NOT written: n={n}, and the pre-registration (§6.3) "
-              f"validates the card's yield band only at n >= {lib.SKILL_MIN_N}. "
+              f"validates the card's yield band only at n >= {CARD_MIN_N}. "
               "The card keeps saying it has not been compared to real rooftops.")
     return result
 
@@ -225,6 +232,36 @@ def _self_check() -> None:
         # Below 25, the card's slot is NOT written and the reason is printed.
         assert got["card_slot_written"] is False, "n=5 must not write tiers.validated"
 
+        # n IS WHAT WAS SCORED. A roof whose registered prediction is zero still MATCHES
+        # a measurement — it just cannot form a ratio — so `matched` must rise and `n`
+        # must not. A published n sitting beside a pass mark computed on fewer roofs is
+        # exactly what §8 forbids.
+        with open(predictions, encoding="utf-8") as fh:
+            pf: dict[str, Any] = json.load(fh)
+        pf["roofs"].append({**roofs[0], "roof_id": "ZERO", "building_idx": 8,
+                            "y_pred": 0.0,
+                            "by_month": {m: {"y_pred": 0.0, "y_scr": 100.0,
+                                             "y_null": 100.0, "days": 30}
+                                         for m in months}})
+        zeroed = os.path.join(tmp, "predictions-zero.json")
+        with open(zeroed, "w", encoding="utf-8") as fh:
+            json.dump(pf, fh)
+        with open(measured, encoding="utf-8") as fh:
+            zrows = list(csv.DictReader(fh))
+        zrows.append({**zrows[0], "roof_id": "ZERO", "building_idx": "8"})
+        zmeasured = os.path.join(tmp, "measured-zero.csv")
+        with open(zmeasured, "w", newline="", encoding="utf-8") as fh:
+            dw0 = csv.DictWriter(fh, fieldnames=list(zrows[0].keys()))
+            dw0.writeheader()
+            dw0.writerows(zrows)
+        counted = measure(zeroed, zmeasured, os.path.join(tmp, "result-zero.json"),
+                          write_artefacts=False)
+        assert counted["n"] == 5, counted["n"]
+        assert counted["matched"] == 6, counted["matched"]
+        assert "ZERO" not in counted["roof_ids"] and "ZERO" in counted["matched_roof_ids"]
+        assert counted["within_15pct_share"] == written["within_15pct_share"], \
+            "a roof that could not be scored must not move the pass mark"
+
         # The months the two have in COMMON: drop three months from one owner's export
         # and both sides must shorten together, leaving the ratio unchanged.
         with open(measured, encoding="utf-8") as fh:
@@ -245,9 +282,13 @@ def _self_check() -> None:
 
         # And the n >= 25 branch: 25 roofs, all present, must report that it wrote the
         # slot (the chain call itself is held back — no artefact is touched by a test).
+        # Enough roofs to trip BOTH 25s — the skill declaration and the card gate — so
+        # the case keeps exercising both branches even if the two thresholds diverge by
+        # amendment.
+        enough = max(lib.SKILL_MIN_N, CARD_MIN_N)
         many: list[dict[str, Any]] = [{**roofs[0], "roof_id": f"S{i:02d}",
                                        "building_idx": i, "loss": 0.01 * i}
-                                      for i in range(lib.SKILL_MIN_N)]
+                                      for i in range(enough)]
         with open(predictions, "w", encoding="utf-8") as fh:
             json.dump({"generated": "2026-09-07", "prereg": "spec.md",
                        "prereg_blob_sha": "0" * 40,
@@ -256,13 +297,13 @@ def _self_check() -> None:
             w = csv.writer(fh)
             w.writerow(["roof_id", "ward", "building_idx", "kwp_dc", "months_covered",
                         "kwh_by_month", "outage_days_declared", "notes"])
-            for i in range(lib.SKILL_MIN_N):
+            for i in range(enough):
                 per_month = 1200.0 * (1.0 - 0.01 * i) * 5.0 / 12.0
                 w.writerow([f"S{i:02d}", "testville", i, 5.0, ";".join(months),
                             json.dumps([[m, per_month] for m in months]), 0, ""])
         full = measure(predictions, measured, out, write_artefacts=False)
-        assert full["n"] == lib.SKILL_MIN_N, full["n"]
-        assert full["card_slot_written"] is True, "n=25 must write the card's slot"
+        assert full["n"] == enough, full["n"]
+        assert full["card_slot_written"] is True, "n >= CARD_MIN_N must write the slot"
         assert full["shading_skill"]["status"] == "declared", full["shading_skill"]
         assert full["shading_skill"]["passes"] is True, full["shading_skill"]
         # The five numbers the card gets are exactly the ones build-pv-yield.py will read.

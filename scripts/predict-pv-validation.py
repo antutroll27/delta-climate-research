@@ -24,8 +24,17 @@ WHAT IS PREDICTED, per roof, per month, from the pre-registration §3:
            climatology at 22 deg / 180 deg, times (1 - loss_i) — prorated onto the
            owner's months by the pinned seasonal shape, so statistic 4 compares a
            partial year with a partial year and not with a whole one.
-  y_null   THE NULL. The ward's unshaded specific yield over the same months. Statistic 3
-           tests whether our per-roof shading beats it.
+  y_null   THE NULL. The chain's 22 deg / 180 deg array on THE OWNER'S OWN DAYS, with no
+           shading at all. Statistic 3 asks whether our per-roof shading beats it, and
+           that question is only fair if the null and the prediction stand on the same
+           weather: a null built from the five-year climatology would carry an
+           interannual irradiance term that r_i does not, so a sunny year would read as
+           shading skill. Same POWER pull, same days, loss = 0 — nothing else.
+
+WHOSE ROOFS. In-ward, index-matched roofs only: every roster row names a `building_idx`
+into that ward's artefact, and a roof without one has no `kwp` and no `loss` to be
+compared against. §4's near-ward class ("within 2 km of a ward boundary") was DROPPED by
+amendment; there is no unindexed path through this script.
 
 Per-MONTH values are written as well as totals, because the measured export may cover
 fewer months than the roster declared and §3's ratios must then be formed on the months
@@ -138,11 +147,20 @@ def build(roster_path: str, out_path: str, *, web_dir: str = WEB_DIR,
             t2m = {d: v for d, v in t2m_all.items() if d.startswith(key)}
             if not ghi:
                 sys.exit(f"  roof {row['roof_id']}: POWER returned no days for {month}")
+            # y_scr is the PRORATED PRINTED NUMBER — the five-year climatology the card
+            # shows, cut to the owner's months by the pinned seasonal shape. Statistic 4
+            # compares against exactly that, by design (§3, as amended): it judges what
+            # the product says, not a re-run of it.
             share = lib.climatology_month_share(month)
+            # y_null is NOT prorated. It runs the same model over the same days as
+            # y_pred, at the screen's 22 deg / 180 deg with loss = 0, so the only
+            # differences between them are the array and the shading — which is the
+            # whole of statistic 3's question.
             by_month[month] = {
                 "y_pred": round(lib.predict_roof(ghi, t2m, tilt, azimuth, lat, loss), 2),
                 "y_scr": round(sy * (1.0 - loss) * share, 2),
-                "y_null": round(sy * share, 2),
+                "y_null": round(lib.predict_roof(ghi, t2m, lib.TILT_DEG,
+                                                 lib.AZIMUTH_DEG, lat, 0.0), 2),
                 "days": len(ghi),
             }
         roofs.append({
@@ -239,15 +257,32 @@ def _self_check() -> None:
             a1, a2 = got["roofs"]
             assert len(a1["by_month"]) == 6 and len(a2["by_month"]) == 12
             assert a1["y_pred"] == round(sum(v["y_pred"] for v in a1["by_month"].values()), 2)
-            # A whole year at the screen's own tilt, unshaded, is the chain's climatology:
-            # y_null must land on the artefact's specific yield, and y_scr on (1 - loss)
-            # of it. That is the prorating closing on itself over twelve months.
-            assert abs(a2["y_null"] - 1313.8) < 0.5, a2["y_null"]
+            # THE NULL IS THE MODEL, NOT THE CLIMATOLOGY. Recomputed here from the same
+            # synthetic days, at 22 deg / 180 deg with loss = 0, it must match to the
+            # rounding the file was written at — this is the check that y_null and y_pred
+            # stand on the same weather.
+            power = synthetic(22.528, 88.3659, "20250101", "20251231")
+            for roof in (a1, a2):
+                for month, values in roof["by_month"].items():
+                    key = month.replace("-", "")
+                    ghi = {d: v for d, v in power["ALLSKY_SFC_SW_DWN"].items()
+                           if d.startswith(key)}
+                    t2m = {d: v for d, v in power["T2M"].items() if d.startswith(key)}
+                    want = round(lib.predict_roof(ghi, t2m, lib.TILT_DEG, lib.AZIMUTH_DEG,
+                                                  22.528, 0.0), 2)
+                    assert values["y_null"] == want, (roof["roof_id"], month,
+                                                      values["y_null"], want)
+            # A whole synthetic year of the pinned climatology, unshaded, IS the daily
+            # model's own annual answer — 1325.7, the +0.91 % the library measures against
+            # the chain's 1313.8. The null is the model's, not the artefact's.
+            assert abs(a2["y_null"] - 1325.7) < 1.0, a2["y_null"]
+            # y_scr, by contrast, IS the artefact's printed climatology prorated, and over
+            # twelve months the prorating closes on itself.
             assert abs(a2["y_scr"] - 1313.8 * 0.70) < 0.5, a2["y_scr"]
             # Six months is NOT half a year: January-June carries the strong season, so
-            # the prorated null must be well above half. This is the whole reason the
+            # the null over them must be well above half. This is the whole reason the
             # seasonal shape is used instead of a day count.
-            assert 0.52 < a1["y_null"] / 1313.8 < 0.60, a1["y_null"] / 1313.8
+            assert 0.52 < a1["y_null"] / a2["y_null"] < 0.60, a1["y_null"] / a2["y_null"]
             # The as-built roof (22/180, the screen's own array) should sit close to the
             # screened figure; the off-south, low-tilt roof should sit below its own.
             assert abs(a1["y_pred"] / a1["y_scr"] - 1.0) < 0.05, a1["y_pred"] / a1["y_scr"]

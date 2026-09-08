@@ -34,7 +34,7 @@ move here in the same run.
 WHAT THE SIMPLIFICATION COSTS, MEASURED. Fed the chain's own five-year POWER record
 aggregated to daily totals, this model returns 1325.3 kWh/kWp/yr against the chain's
 1313.8 — **+0.88 %**. Fed the twelve-month climatology pinned below (the self-check's
-case (a)) it returns 1325.7 — **+0.90 %**. Both are inside the 1 % the plan demands.
+case (a)) it returns 1325.7 — **+0.91 %**. Both are inside the 1 % the plan demands.
 
 AND WHAT IT COSTS IF YOU FLATTEN FURTHER, also measured: a SINGLE constant daily GHI for
 the whole year (4.340 kWh/m2/day, the same five-year mean) returns 1373.6 — **+4.55 %**.
@@ -91,6 +91,13 @@ GAMMA_PER_C: float = float(_CHAIN.GAMMA_PER_C)
 PACKING_FACTOR: float = float(_CHAIN.PACKING_FACTOR)
 PACKING_RANGE: tuple[float, float] = (float(_CHAIN.PACKING_RANGE[0]),
                                       float(_CHAIN.PACKING_RANGE[1]))
+#: THE CHAIN'S CARD GATE, re-exported rather than re-typed. `build-pv-yield.py` owns the
+#: rule that the card's yield band is validated only at n >= 25 (§6.3); this is that same
+#: number, reached by import, so `measure-pv-validation.py` can gate on it without
+#: minting a second copy. It is DELIBERATELY not SKILL_MIN_N below: the two 25s are two
+#: different pre-registered decisions that happen to agree today, and an amendment to one
+#: must not silently move the other.
+VALIDATED_MIN_N: int = int(_CHAIN.VALIDATED_MIN_N)
 
 #: Pre-registration §3, statistic 2: the accuracy claim passes at 80 % of roofs inside
 #: +/-15 %. Both numbers are the pre-registration's, not tuning knobs.
@@ -99,6 +106,10 @@ PASS_SHARE = 0.80
 #: §3, statistic 3: the shading-skill test is DECLARED at n >= 25 and reported as
 #: underpowered below it. Not "reported anyway with a caveat" — the spec allows two
 #: outcomes and this is the boundary between them.
+#:
+#: THIS IS NOT THE CARD GATE. §6.3's "n >= 25 before the card's yield band is validated"
+#: is a separate pre-registered decision, owned by `build-pv-yield.py` and re-exported
+#: above as VALIDATED_MIN_N. They are equal today and nothing may assume they stay so.
 SKILL_MIN_N = 25
 #: §2/§4 and Q2: a roof carrying more than the top of the packing interval is a hard
 #: failure of the geometry model for that roof. 0.40 / 0.28 = 1.428...
@@ -352,22 +363,32 @@ def excluded_by(row: Mapping[str, Any]) -> str | None:
     reported = _months_of(row)
     declared = _declared_months(row) or reported
 
-    # tracker — §5 has no mount-type column, so a tracker declares itself either in an
-    # explicit `tracker` field or in the free-text `notes` the recruiter fills in.
+    # tracker — THE COLUMN, and only the column: 'yes' excludes, 'no' and blank keep.
+    # It used to also fire on the word "tracker" appearing anywhere in the free-text
+    # `notes`, which excluded a recruiter who had written "not a tracker, fixed tilt" —
+    # a valid roof, dropped, and INDISTINGUISHABLE in the result file from a real
+    # tracker. An exclusion rule that reads prose is a rule whose input nobody can
+    # audit; this one reads a field with three values and no others.
     tracker = str(row.get("tracker") or "").strip().lower()
-    if tracker in ("1", "true", "yes", "y") or "tracker" in str(row.get("notes") or "").lower():
+    if tracker in ("yes", "y", "true", "1"):
         return "tracker"
 
     if len(reported) < MIN_MONTHS:
         return "min_months_6"
 
+    # OUTAGE divides by the days of the REPORTED months — the days that actually
+    # produced the kWh in `kwh_by_month`. Ten per cent of what was measured, not of what
+    # was promised: an owner who exported six months and declared twelve is judged on the
+    # six, or a short honest export would carry a threshold set by months it never had.
     outage = _float_or_none(row.get("outage_days_declared")) or 0.0
-    covered_days = _span_days(reported)
-    if covered_days > 0 and outage > MAX_OUTAGE_SHARE * covered_days:
+    reported_days = _span_days(reported)
+    if reported_days > 0 and outage > MAX_OUTAGE_SHARE * reported_days:
         return "outage_over_10pct"
 
-    # A gap is a declared month with no exported figure, counted in DAYS because §4
-    # writes the threshold in days ("gaps above 20 % of days").
+    # GAPS divides by the days of the DECLARED months (`months_covered`) — the span the
+    # export claims to cover. That is the only denominator a hole can be measured
+    # against: a missing month is by definition absent from the reported set, so
+    # dividing by the reported days would make every export look gapless.
     declared_days = _span_days(declared)
     missing = [m for m in declared if m not in reported]
     if declared_days > 0 and _span_days(missing) > MAX_GAP_SHARE * declared_days:
@@ -420,10 +441,16 @@ def score(predictions: Mapping[str, RoofPrediction],
     MAPE's denominator is the PREDICTION, so it is exactly mean|r_i - 1| and the reader
     can recompute it from the ratios printed beside it."""
     ids = [rid for rid in sorted(predictions) if rid in measured]
-    n = len(ids)
     ratios = {rid: measured[rid]["y_meas"] / predictions[rid]["y_pred"]
               for rid in ids if predictions[rid]["y_pred"] > 0.0}
-    r_values = [ratios[rid] for rid in ids if rid in ratios]
+    scored = [rid for rid in ids if rid in ratios]
+    r_values = [ratios[rid] for rid in scored]
+    # `n` IS THE NUMBER OF ROOFS THE STATISTICS WERE COMPUTED ON, never the number that
+    # matched a prediction. §8 says no accuracy figure is ever quoted without its n, and
+    # that promise breaks the moment a published n sits beside a pass mark formed on
+    # fewer roofs. `matched` carries the other count, separately, so the gap between them
+    # is visible rather than absorbed.
+    n = len(r_values)
     scr = {rid: measured[rid]["y_meas"] / predictions[rid]["y_scr"]
            for rid in ids if predictions[rid]["y_scr"] > 0.0}
     within = [1.0 if abs(r - 1.0) <= WITHIN_BAND else 0.0 for r in r_values]
@@ -452,6 +479,8 @@ def score(predictions: Mapping[str, RoofPrediction],
     # Q2. Owners install less than a roof can hold, so the SPREAD is the finding — but a
     # roof carrying more than the top of the packing interval is a failure of the geometry
     # model for that roof and is named.
+    # Q2 runs over every MATCHED roof, not only the scored ones: c_i needs the owner's
+    # capacity and the artefact's, and neither depends on a yield prediction existing.
     caps = {rid: measured[rid]["capacity_kwp"] / predictions[rid]["kwp"]
             for rid in ids if predictions[rid]["kwp"] > 0.0}
     c_values = [caps[rid] for rid in sorted(caps)]
@@ -459,7 +488,11 @@ def score(predictions: Mapping[str, RoofPrediction],
 
     return {
         "n": n,
-        "roof_ids": ids,
+        "matched": len(ids),
+        # The roofs behind `n` — the ones with a usable prediction. `matched_roof_ids` is
+        # every roof that had both a prediction and a measurement, scored or not.
+        "roof_ids": scored,
+        "matched_roof_ids": ids,
         "ratios": {rid: round(ratios[rid], 4) for rid in sorted(ratios)},
         "median_ratio": round(_median(r_values), 4),
         "iqr": [round(q1, 4), round(q3, 4)],
@@ -576,7 +609,8 @@ def _self_check() -> None:
                       "kwp": 10.0, "loss": 0.05 * i}
         meas[rid] = {"y_meas": 1000.0 * r, "capacity_kwp": 5.0, "months": 12}
     got = score(preds, meas)
-    assert got["n"] == 5, got["n"]
+    assert got["n"] == 5 and got["matched"] == 5, (got["n"], got["matched"])
+    assert got["roof_ids"] == sorted(preds), got["roof_ids"]
     assert got["median_ratio"] == 1.0, got["median_ratio"]
     assert got["within_15pct_share"] == 0.6, got["within_15pct_share"]
     assert got["mape"] == 0.12, got["mape"]
@@ -590,6 +624,22 @@ def _self_check() -> None:
     print(f"  (b) five synthetic roofs: median {got['median_ratio']}, within-15 "
           f"{got['within_15pct_share']}, MAPE {got['mape']}, skill "
           f"{got['shading_skill']['status']}")
+
+    # n IS WHAT WAS SCORED. A sixth roof that matched but carries no usable prediction
+    # must raise `matched` and leave `n` alone — otherwise a published "6 roofs" would
+    # sit beside a within-15 share formed on five.
+    preds_plus = dict(preds)
+    meas_plus = dict(meas)
+    preds_plus["R5"] = {"y_pred": 0.0, "y_scr": 1100.0, "y_null": 1200.0,
+                        "kwp": 10.0, "loss": 0.0}
+    meas_plus["R5"] = {"y_meas": 950.0, "capacity_kwp": 5.0, "months": 12}
+    partial = score(preds_plus, meas_plus)
+    assert partial["n"] == 5 and partial["matched"] == 6, (partial["n"], partial["matched"])
+    assert "R5" not in partial["roof_ids"] and "R5" in partial["matched_roof_ids"]
+    assert partial["within_15pct_share"] == got["within_15pct_share"], \
+        "an unscoreable roof must not move a statistic it did not enter"
+    # Q2 is a different question and DOES see it — capacity needs no yield prediction.
+    assert "R5" in partial["capacity"]["ratios"], partial["capacity"]["ratios"]
 
     # The skill test DOES declare once n >= 25, and finds the signal when it is there.
     big_p: dict[str, RoofPrediction] = {}
@@ -613,10 +663,23 @@ def _self_check() -> None:
         {"roof_id": "short", "kwp_dc": "5.0", "months_covered": "2025-01;2025-02;2025-03;2025-04",
          "kwh_by_month": json.dumps([[f"2025-{m:02d}", 500.0] for m in range(1, 5)]),
          "outage_days_declared": "0", "notes": ""},
-        {"roof_id": "tracked", "kwp_dc": "5.0", "months_covered": ";".join(
+        {"roof_id": "tracked", "kwp_dc": "5.0", "tracker": "yes", "months_covered": ";".join(
             f"2025-{m:02d}" for m in range(1, 13)),
          "kwh_by_month": json.dumps([[f"2025-{m:02d}", 500.0] for m in range(1, 13)]),
-         "outage_days_declared": "0", "notes": "single-axis tracker, roof-mounted"},
+         "outage_days_declared": "0", "notes": ""},
+        # tracker = 'no' KEEPS the roof, and so does a blank column (the "keep" row
+        # above has no `tracker` key at all).
+        {"roof_id": "fixed", "kwp_dc": "5.0", "tracker": "no", "months_covered": ";".join(
+            f"2025-{m:02d}" for m in range(1, 13)),
+         "kwh_by_month": json.dumps([[f"2025-{m:02d}", 500.0] for m in range(1, 13)]),
+         "outage_days_declared": "0", "notes": ""},
+        # THE REGRESSION. A recruiter's note that says the roof is NOT a tracker must not
+        # exclude it. The rule reads the column; prose is not an input.
+        {"roof_id": "prose", "kwp_dc": "5.0", "tracker": "", "months_covered": ";".join(
+            f"2025-{m:02d}" for m in range(1, 13)),
+         "kwh_by_month": json.dumps([[f"2025-{m:02d}", 500.0] for m in range(1, 13)]),
+         "outage_days_declared": "0", "notes": "not a tracker, fixed tilt, single-axis "
+                                               "quote was declined"},
         {"roof_id": "dark", "kwp_dc": "5.0", "months_covered": ";".join(
             f"2025-{m:02d}" for m in range(1, 13)),
          "kwh_by_month": json.dumps([[f"2025-{m:02d}", 500.0] for m in range(1, 13)]),
@@ -635,7 +698,8 @@ def _self_check() -> None:
          "outage_days_declared": "0", "notes": ""},
     ]
     kept, by_rule = apply_exclusions(rows)
-    assert [r["roof_id"] for r in kept] == ["keep"], [r["roof_id"] for r in kept]
+    assert [r["roof_id"] for r in kept] == ["keep", "fixed", "prose"], \
+        [r["roof_id"] for r in kept]
     assert by_rule["min_months_6"] == ["short"], by_rule
     assert by_rule["tracker"] == ["tracked"], by_rule
     assert by_rule["outage_over_10pct"] == ["dark"], by_rule
