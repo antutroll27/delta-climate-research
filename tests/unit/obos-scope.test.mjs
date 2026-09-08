@@ -132,7 +132,7 @@ test('every shipping area\'s pv artefact carries its tiers block, typed and unre
     assert.deepEqual(pv.tiers.packing_range, [0.28, 0.4],
       `${key}: packing range drifted from the published pin`);
     assert.equal(pv.tiers.validated, null,
-      `${key}: validated must be null until measure-pv-validation.py writes it (n >= 25, §6.3)`);
+      `${key}: validated is null today; when the study publishes (n >= 25, §6.3) move this pin to assert the slot's shape, not its absence`);
     checked += 1;
   }
   // Guard the guard: if paths() stopped shipping a pv file for every area, this

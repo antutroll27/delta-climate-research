@@ -79,6 +79,6 @@ test('tierOf reads the one field every consumer must agree on', () => {
   assert.equal(tierOf({ tiers: { validated: null } }), 'screened');
   assert.equal(
     tierOf({ tiers: { validated: { n: 31, months: 9, median_ratio: 0.97, within_15pct_share: 0.84, date: '2026-10-01' } } }),
-    'validated',
+    'checked',
   );
 });

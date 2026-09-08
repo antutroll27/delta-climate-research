@@ -187,15 +187,17 @@ def measure(predictions_path: str, measured_path: str, out_path: str, *,
     }
     # Non-finite statistics become null on the way out and allow_nan=False refuses any
     # survivor: a result file that JSON.parse cannot read is not a published result.
+    # The receipt that the slot is written travels IN the file, so it is decided before
+    # the write, not after (audit 2026-09-07). It means "n clears the bar": the dry run
+    # (write_artefacts=False) reports the same value it would publish.
+    result["card_slot_written"] = bool(n >= CARD_MIN_N)
     lib.dump_json(result, out_path)
 
-    result["card_slot_written"] = False
     if n >= CARD_MIN_N:
         if write_artefacts:
             for ward in sorted(wards):
                 subprocess.run([sys.executable, CHAIN, "--validated", out_path,
                                 "--ward", ward], check=True, cwd=ROOT)
-        result["card_slot_written"] = True
     else:
         print(f"  tiers.validated NOT written: n={n}, and the pre-registration (§6.3) "
               f"validates the card's yield band only at n >= {CARD_MIN_N}. "

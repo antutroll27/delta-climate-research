@@ -503,8 +503,8 @@ lists the five limits, each with the fix that narrows it. The bands are the arte
 
 | limit | today | the fix | narrows to (expectation) |
 |---|---|---|---|
-| roof obstacles unknown (tanks, stair rooms, parapets) | capacity at packing 0.28–0.40, about ±30 % | a ten-minute walk of the roof with a phone | about ±10 % |
-| canopy over the roof: usable or not | shading headline vs strict floor, up to nine points | one photo from the roof | settled for that roof |
+| roof obstacles unknown (tanks, stair rooms, parapets) | capacity at packing 0.28–0.40, up to +43 % on the floor | a ten-minute walk of the roof with a phone | about ±10 % |
+| canopy over the roof: usable or not | shading headline vs strict floor, up to ten points (Barrackpore 10.3) | one photo from the roof | settled for that roof |
 | irradiance from a coarse satellite cell | yield bracket 1,200–1,450 kWh/kWp | the ground station inside that cell | about ±5 %, city-wide |
 | building height unverified | ward-scale only | a survey or a drone pass | per roof |
 | never compared with real rooftops | no measured error | the pre-registered validation study | a measured spread, with its n |
@@ -514,7 +514,7 @@ building index and the limit named; the survey and the measured rung do not exis
 does not pretend they do. A one-page **installer brief** prints from the card (the browser's own print,
 no server): the roof's outline from its own footprint, the ranges, the shading split, the ladder, and six
 questions a vendor's quote must answer. When the validation study publishes at n ≥ 25, the fifth line
-prints the measured spread and the chip reads *validated*; the footer still says *not bankable*, because
+prints the measured spread and the chip reads *checked*; the footer still says *not bankable*, because
 a comparison with real roofs is not an engineer's stamp.
 
 **The pre-registration** for that study is `docs/superpowers/specs/2026-09-07-pv-rooftop-validation-design.md`;

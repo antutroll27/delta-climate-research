@@ -3334,7 +3334,7 @@ test('the solar screen is wired end to end and never prints a headline without i
   }
   assert.match(app, /pvRanges\(/,
     'the card paints points, not intervals -- pvRanges is the only place the published bands become a roof range');
-  assert.match(app, /mailto:ant@deltaclimate\.earth/,
+  assert.match(app, /mailto:ant@deltaclimate\.earth\?subject=/,
     'no fix line can be asked about -- the ladder names limits and offers no way to close one');
   assert.doesNotMatch(stage + bench + app, /payback/i,
     'a payback figure has no place here: it needs capex and subsidy assumptions, and that is where liability lives');
@@ -3356,6 +3356,6 @@ test('the solar screen is wired end to end and never prints a headline without i
     'the roof table gains no range column -- the ten-roof list still prints a point where the pane prose already promises a range');
   assert.match(stage, /id="solPaneSure"/,
     'the ward block carries no one-line ladder summary -- spec §5 asks for the chip AND a summary, not the chip alone');
-  assert.match(app, /solPaneSure/,
+  assert.match(app, /setText\('solPaneSure'/,
     'nothing paints the ward block\'s ladder summary -- the markup exists but is never filled');
 });

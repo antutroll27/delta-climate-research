@@ -31,8 +31,11 @@ export function pvRanges(pv: Pick<PvFile, 'kwp' | 'loss' | 'loss_strict' | 'tier
 
 /** ONE PLACE THAT READS `tiers.validated`'s null-ness. The card, the ward block and
     the CSV each name the tier from the same artefact field; three separate
-    `=== null ? 'screened' : 'validated'` expressions is three places to drift the
+    `=== null ? 'screened' : 'checked'` expressions is three places to drift the
     day a third tier is added. */
-export function tierOf(pv: Pick<PvFile, 'tiers'>): 'screened' | 'validated' {
-  return pv.tiers.validated === null ? 'screened' : 'validated';
+/** `checked`, not `validated`: a comparison with real rooftops is a check on the
+    screen, not a stamp on the roof — and "validated" is the word a reader hears as
+    bankable (audit 2026-09-07). The artefact field keeps its name. */
+export function tierOf(pv: Pick<PvFile, 'tiers'>): 'screened' | 'checked' {
+  return pv.tiers.validated === null ? 'screened' : 'checked';
 }

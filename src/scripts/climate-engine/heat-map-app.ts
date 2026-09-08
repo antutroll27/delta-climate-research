@@ -927,12 +927,20 @@ export function mountHeatMap(): () => void {
      registering them inside the click would stack a set per print. */
   let briefTimer = 0;
   const printMql = window.matchMedia?.('print') ?? null;
+  /* While the sheet is open the console behind it is `inert`, so Tab cannot walk
+     into the ward strip and switch wards under a sheet about the old one; focus
+     lands on Close so Escape and Enter both mean the obvious thing. */
+  const stageOthers = () => Array.from(document.querySelector('.stage')?.children ?? []).filter((k) => k.id !== 'solBrief');
   const closeBrief = () => {
     el('solBrief')?.setAttribute('hidden', '');
+    stageOthers().forEach((k) => k.removeAttribute('inert'));
     window.clearTimeout(briefTimer);
   };
   const onAfterPrint = () => { closeBrief(); };
-  const onPrintMql = (e: MediaQueryListEvent) => { if (!e.matches) closeBrief(); };
+  /* Entering print clears the 30 s net: a reader who spends a minute in the preview
+     changing paper size must not have the sheet pulled out from under it. Leaving
+     print closes. */
+  const onPrintMql = (e: MediaQueryListEvent) => { if (e.matches) window.clearTimeout(briefTimer); else closeBrief(); };
   window.addEventListener('afterprint', onAfterPrint);
   printMql?.addEventListener('change', onPrintMql);
   el('brClose')?.addEventListener('click', closeBrief);
@@ -947,6 +955,8 @@ export function mountHeatMap(): () => void {
     if (!selected || !pv) return;
     renderBrief(selected, pv);
     el('solBrief')?.removeAttribute('hidden');
+    stageOthers().forEach((k) => k.setAttribute('inert', ''));
+    el('brClose')?.focus();
     briefTimer = window.setTimeout(closeBrief, 30_000);
     /* window.print() can throw synchronously — a permissions policy denying it, for
        one — and the sheet would then be open with no dialogue ever to close. */
@@ -987,7 +997,7 @@ export function mountHeatMap(): () => void {
     }
     for (const pre of ['sol', 'solPane'] as const) {
       setHTML(`${pre}Kwp`, `${t.capacity_mwp.toFixed(1)}<span class="u">MWp</span>`);
-      setHTML(`${pre}Conf`, `Screening · <b>${t.capacity_mwp_range[0].toFixed(1)}–${t.capacity_mwp_range[1].toFixed(1)} MWp</b> · not bankable`);
+      setHTML(`${pre}Conf`, `${wardTier === 'checked' ? 'Checked' : 'Screening'} · <b>${t.capacity_mwp_range[0].toFixed(1)}–${t.capacity_mwp_range[1].toFixed(1)} MWp</b> · not bankable`);
       /* mean_loss is the UNWEIGHTED mean over roofs (the laboratory's "all roofs: total
          mean"); the ward's energy loses less, so the sentence says "the average roof"
          and prints the GWh for the ward. */
@@ -1351,6 +1361,7 @@ export function mountHeatMap(): () => void {
 
   function select(b: BuildingMeta | null) {
     selected = b;
+    if (!b) closeBrief();             // a sheet about a roof nobody has selected
     if (b) {
       /* b.ring so the walk is measured from the building's nearest corner, not
          from a point inside it — nobody sets off from the middle of a block. */
@@ -1395,6 +1406,7 @@ export function mountHeatMap(): () => void {
   cv.addEventListener('pointerup', onPickUp);
   const onPickKey = (e: KeyboardEvent) => {
     if (e.key !== 'Escape') return;
+    closeBrief();                       // the sheet first: it is the topmost thing on screen
     if (selected) select(null);
     closeStreetView();
   };

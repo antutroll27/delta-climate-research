@@ -723,7 +723,7 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
       NOTHING HERE IS COMPUTED THAT THE CARD DOES NOT ALREADY HOLD. The six
       questions are the only static copy on the sheet, and they are the part a
       reader actually carries into a sales conversation. */}
-  <section class="solbrief" id="solBrief" hidden aria-label="Installer brief">
+  <section class="solbrief" id="solBrief" hidden role="dialog" aria-modal="true" aria-label="Installer brief">
     <header class="sb-head">
       <p class="sb-org">Delta Climate Research · Rooftop solar brief</p>
       <p class="sb-who">
@@ -1434,7 +1434,6 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
   .bc-brief{display:block;margin:.55rem 0 0}
   /* An AUTHOR `display:block` beats the UA sheet's `[hidden]{display:none}` whatever
      the specificity, so the hidden button would have shown anyway. */
-  .bc-brief[hidden]{display:none}
   /* Clay: the same four inks the card already steps down to, no new colours. */
   body.studio .bc-sure summary{color:var(--studio-muted)}
   body.studio .bc-sure li{color:var(--studio-ink-bronze)}

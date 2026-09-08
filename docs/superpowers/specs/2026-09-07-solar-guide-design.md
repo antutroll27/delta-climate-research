@@ -19,13 +19,15 @@ the owner leaves with a sheet a vendor's quote can be checked against.
    times the specific-yield bracket times the shading band (strict floor to A1).
 2. **Every figure carries a tier chip:** *Screened* (from satellites and open data, what ships today),
    *Assessed* (a survey of the roof), *Measured* (a month with our node on the roof). Only *Screened*
-   exists this sprint; the other two are named so the ladder has rungs to climb.
+   exists this sprint; the other two are named so the ladder has rungs to climb. A fourth word,
+   *Checked*, marks a ward whose screen has been compared with real rooftops (the validation study);
+   it is not a rung a client climbs and it is deliberately not "validated", which reads as bankable.
 3. **A "how sure" disclosure under the block** lists, for each limit, the fix and what it narrows to:
 
    | limit | today | the fix | narrows to |
    |---|---|---|---|
-   | roof obstacles unknown (tanks, stair rooms, parapets) | capacity 0.28–0.40 packing, about ±30 % | a ten-minute walk of the roof with a phone | about ±10 % |
-   | canopy over the roof: usable or not | shading headline vs strict floor, up to nine points | one photo from the roof | settled for that roof |
+   | roof obstacles unknown (tanks, stair rooms, parapets) | capacity 0.28–0.40 packing, up to +43 % on the floor | a ten-minute walk of the roof with a phone | about ±10 % |
+   | canopy over the roof: usable or not | shading headline vs strict floor, up to ten points | one photo from the roof | settled for that roof |
    | irradiance from a coarse satellite cell | yield bracket 1,200–1,450 kWh/kWp | the ground station inside that cell | about ±5 %, city-wide |
    | building height unverified | ward-scale only | a survey or a drone pass | per roof |
    | never compared with real rooftops | no measured error | the validation study | a measured spread, with its n |

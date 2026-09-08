@@ -173,16 +173,17 @@ test.describe('the solar screen', () => {
       contentType: 'application/json', body: JSON.stringify(real),
     }));
     /* Re-navigated, because beforeEach has already booted and cached the real file. */
+    await page.addInitScript(() => { window.print = () => { (window as unknown as { __printed?: boolean }).__printed = true; }; });
     await boot(page);
     await withRelief(page);
     await openSolar(page);
     await page.locator('#solList tr').first().click();
     await page.waitForTimeout(1_500);
     await expect(page.locator('#bcSol')).toBeVisible();
-    await expect(page.locator('#bcSolTier')).toHaveText('validated');
+    await expect(page.locator('#bcSolTier')).toHaveText('checked');
     /* The WARD BLOCK's own chip and summary (spec §5) -- painted independently of
        the card's, and open before any building is selected. */
-    await expect(page.locator('#solPaneTier')).toHaveText('validated');
+    await expect(page.locator('#solPaneTier')).toHaveText('checked');
     await expect(page.locator('#solPaneSure')).toContainText('31 real rooftops');
     await expect(page.locator('#bcSureValid')).toContainText('31 real rooftops');
     await expect(page.locator('#bcSureValid')).toContainText('84% within 15%');
@@ -195,6 +196,16 @@ test.describe('the solar screen', () => {
        the validated line already says the checked-against sentence, and the
        original phrase must not survive alongside it. */
     await expect(page.locator('#bcSolNote')).not.toContainText('Screening estimate');
+    /* The pane's headline under the chip, and the BRIEF's footer: a chip reading
+       "checked" over a line that still opens "Screening", or over a footer that
+       drops "not bankable", is the page contradicting itself (audit 2026-09-07). */
+    await expect(page.locator('#solPaneConf')).toContainText('Checked');
+    await page.locator('#bcBrief').click();
+    await expect(page.locator('#brTier')).toHaveText('checked');
+    await expect(page.locator('#brFoot')).toContainText('still a screening estimate');
+    await expect(page.locator('#brFoot')).toContainText('not bankable');
+    await page.evaluate(() => window.dispatchEvent(new Event('afterprint')));
+    await expect(page.locator('#solBrief')).toBeHidden();
 
     /* Baruipur's file is NOT intercepted, so it arrives with `validated: null`.
        The strip switches the ward IN PLACE — no navigation — so the Solar pane is

@@ -487,8 +487,13 @@ def excluded_by(row: Mapping[str, Any]) -> str | None:
     if declared_days > 0 and _span_days(missing) > MAX_GAP_SHARE * declared_days:
         return "gaps_over_20pct"
 
-    kwp_dc = _float_or_none(row.get("kwp_dc"))
-    uncertainty = _float_or_none(row.get("capacity_uncertainty_pct"))
+    # A typo'd capacity ("5,4") is BAD INPUT, refused by roof id — never booked as the
+    # pre-registered `capacity_unstated` exclusion, which is a published tally. Blank
+    # stays blank (audit 2026-09-07).
+    rid = str(row.get("roof_id", "?"))
+    raw_kwp, raw_unc = row.get("kwp_dc"), row.get("capacity_uncertainty_pct")
+    kwp_dc = None if raw_kwp in (None, "") or not str(raw_kwp).strip() else parse_number(rid, "kwp_dc", raw_kwp)
+    uncertainty = None if raw_unc in (None, "") or not str(raw_unc).strip() else parse_number(rid, "capacity_uncertainty_pct", raw_unc)
     if kwp_dc is None or kwp_dc <= 0.0 or (
             uncertainty is not None and uncertainty > MAX_CAPACITY_UNCERTAINTY_PCT):
         return "capacity_unstated"
@@ -889,6 +894,16 @@ def _self_check() -> None:
     assert sum(len(v) for v in by_rule.values()) == len(rows) - len(kept), \
         "first rule owns the roof — the exclusion counts must sum to the roofs dropped"
     print(f"  (c) exclusions: {', '.join(f'{k}={len(v)}' for k, v in by_rule.items())}")
+    # A typo'd capacity is refused by roof id, not booked as capacity_unstated.
+    import io, contextlib
+    typo = dict(rows[0], roof_id="typo", kwp_dc="5,4")
+    with contextlib.redirect_stderr(io.StringIO()):
+        try:
+            apply_exclusions([typo])
+        except SystemExit as exc:
+            assert "typo" in str(exc) and "kwp_dc" in str(exc), exc
+        else:
+            raise AssertionError("kwp_dc '5,4' must refuse, not exclude")
 
     # (d) A HARD FAILURE. c = 1.5 is above 0.40/0.28 = 1.43, so the roof is named.
     preds["R0"] = {"y_pred": 1000.0, "y_scr": 1100.0, "y_null": 1200.0,

@@ -258,7 +258,7 @@ def write_validated(result_path: str, ward: str) -> None:
     if art["tiers"]["validated"] is None:
         sys.exit(f"  the result's validated block was refused by tiers_block: {block}")
     with open(web, "w") as fh:
-        json.dump(art, fh, separators=(",", ":"))
+        json.dump(art, fh, separators=(",", ":"), allow_nan=False)
     print(f"  {os.path.relpath(web, ROOT)}: tiers.validated = {block}")
 
 
