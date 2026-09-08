@@ -764,8 +764,15 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
     </ol>
     <p class="sb-basis" id="brBasis">—</p>
     <footer class="sb-foot">
-      <span>Screening estimate · not bankable</span><span>deltaclimate.earth</span>
+      {/* PAINTED, NOT FIXED. renderBrief runs this through the same tier-aware
+          builder as the card's note, so a validated ward's sheet cannot wear a
+          `validated` chip over a footer that still opens "Screening estimate". */}
+      <span id="brFoot">Screening estimate · not bankable</span><span>deltaclimate.earth</span>
     </footer>
+    {/* THE WAY BACK. On paper this button is nothing, so print hides it; on screen it
+        is the only control the reader can see once an opaque sheet covers the
+        console, and the three event paths that also close it are all invisible. */}
+    <button class="sb-x" id="brClose" type="button">Close ✕</button>
   </section>
 </main>
 
@@ -1442,33 +1449,50 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
 
      THE PAGE HAD NO @media print UNTIL NOW. Printing the console printed a
      screenshot of a fixed-position WebGL instrument, which is to say nothing. */
-  .solbrief{position:fixed;inset:0;z-index:40;overflow:auto;
+  /* ABOVE EVERYTHING ELSE THE CONSOLE CAN RAISE. The street-view modal is 40, the
+     rotate nudge 60 and the phone entry note 70, and a sheet the reader is about to
+     print must not come up underneath any of them. */
+  .solbrief{position:fixed;inset:0;z-index:80;overflow:auto;
     background:var(--white);color:var(--black);padding:16px 20px;
     font:400 12px/1.45 var(--sans)}
   .solbrief[hidden]{display:none}
-  .sb-org{margin:0;font:550 .82rem var(--sans);letter-spacing:.02em}
+  /* EVERY SIZE BELOW IS `em`, NOT `rem`. The print block sets one font on the sheet
+     (`11pt/1.4`) and that is meant to be the size of the printed page; a child in
+     `rem` answers to the root instead and would print at the SCREEN's proportions
+     however the sheet was set. So the sheet declares the size and its children
+     declare ratios of it. Block MARGINS stay in rem: the gap between two blocks is
+     a distance on the paper, not a property of the type in them. */
+  .sb-org{margin:0;font:550 .89em var(--sans);letter-spacing:.02em}
   .sb-who{margin:.25rem 0 .55rem;display:flex;flex-wrap:wrap;gap:.55rem;align-items:center;
-    font:450 .68rem var(--sans);letter-spacing:.04em;
+    font:450 .74em var(--sans);letter-spacing:.04em;
     border-bottom:1px solid currentColor;padding-bottom:.4rem}
+  /* The chip is amber on the console, where it sits on a dark ground. On the sheet
+     it sits on white, so it takes the sheet's own ink — one rule for both media,
+     because `currentColor` here IS whatever colour the sheet is being drawn in. */
+  .solbrief .bc-tier{color:currentColor}
   .sb-cols{display:flex;gap:1rem;align-items:flex-start;margin:.6rem 0 .2rem}
   .sb-fig{margin:0;flex:none;width:34mm}
   .sb-fig svg{display:block;width:100%;height:auto}
-  .sb-fig figcaption{margin-top:.2rem;font:450 .52rem var(--sans);letter-spacing:.04em}
+  .sb-fig figcaption{margin-top:.2rem;font:450 .57em var(--sans);letter-spacing:.04em}
   .sb-dl{flex:1 1 auto;margin:0;display:grid;grid-template-columns:auto 1fr;
-    gap:.1rem .7rem;font:450 .72rem var(--sans)}
-  .sb-dl dt{letter-spacing:.06em;text-transform:uppercase;font-size:.58rem;align-self:center}
+    gap:.1rem .7rem;font:450 .79em var(--sans)}
+  .sb-dl dt{letter-spacing:.06em;text-transform:uppercase;font-size:.81em;align-self:center}
   .sb-dl dd{margin:0;font-weight:550}
-  .sb-h2{margin:.7rem 0 .2rem;font:550 .62rem var(--sans);letter-spacing:.1em;text-transform:uppercase}
+  .sb-h2{margin:.7rem 0 .2rem;font:550 .68em var(--sans);letter-spacing:.1em;text-transform:uppercase}
   /* NUMBERED, DELIBERATELY. The reset in Tailwind's `base` layer strips list
      markers from every <ol> on the site, and these two lists are the ones a
      reader points at across a table: "your answer to question three". */
-  .sb-sure,.br-ask{margin:0;padding:0 0 0 1.1rem;list-style:decimal;
-    font:400 .66rem/1.35 var(--sans)}
+  .sb-sure,.br-ask{margin:0;padding:0 0 0 1.55em;list-style:decimal;
+    font:400 .72em/1.35 var(--sans)}
   .sb-sure li,.br-ask li{margin:.12rem 0}
-  .sb-basis{margin:.6rem 0 .3rem;font:400 .58rem/1.35 var(--sans)}
+  .sb-basis{margin:.6rem 0 .3rem;font:400 .63em/1.35 var(--sans)}
+  .sb-x{position:absolute;top:12px;right:16px;cursor:pointer;background:none;
+    border:1px solid currentColor;border-radius:3px;padding:.15em .5em;
+    color:var(--black);font:450 .68em var(--sans);letter-spacing:.1em;text-transform:uppercase}
+  .sb-x:focus-visible{outline:2px solid var(--black);outline-offset:2px}
   .sb-foot{display:flex;justify-content:space-between;gap:1rem;
     border-top:1px solid currentColor;padding-top:.3rem;
-    font:450 .58rem var(--sans);letter-spacing:.06em}
+    font:450 .63em var(--sans);letter-spacing:.06em}
   /* THE SHEET IS THE ONLY THING ON THIS PAGE THAT BELONGS ON PAPER, so print takes
      it and drops the console entirely. `.stage` is a fixed, full-viewport grid: left
      as it is, a fixed box repeats on every printed page and the sheet would be
@@ -1489,7 +1513,13 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
        em-dashes, which is the better of the two. */
     #solBrief{display:block!important;position:static;overflow:visible;padding:0;
       color:var(--black);background:var(--white);font:11pt/1.4 var(--sans)}
-    #solBrief .bc-tier{color:var(--black)}
+    /* THE UN-HIDE DOES NOT DEPEND ON A CASCADE ARGUMENT. Stated explicitly and
+       important, at a specificity the rule above cannot outrank, so the sheet is
+       shown when script has opened it and hidden when it has not — whatever layer
+       the site's reset happens to declare `[hidden]` in. */
+    #solBrief[hidden]{display:none!important}
+    /* Nothing on paper can be clicked. */
+    #brClose{display:none!important}
   }
   /* Per-layer "data receipts" panel — populated from {ward}-layers.json (provenance.ts). */
   .srcbtn{margin:.4rem 0 0;cursor:pointer;font:400 .48rem var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--cyan);background:none;border:0;padding:.15rem 0}

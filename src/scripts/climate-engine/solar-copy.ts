@@ -28,6 +28,14 @@ export function validatedSentence(v: Validated): string {
     + `median ratio ${v.median_ratio.toFixed(2)}, ${Math.round(v.within_15pct_share * 100)}% within 15%.`;
 }
 
+/** A SHARE OF A WHOLE, FLOORED AT "under 1%". `Math.round` turns anything under
+    half a percent into `0%`, which reads as "none" when it means "a rounding away
+    from none" — and the card and the brief print the same tree share side by side,
+    so they cannot each own a copy of the rule. */
+export function sharePct(f: number): string {
+  return f < 0.005 ? 'under 1%' : `${Math.round(f * 100)}%`;
+}
+
 /** `#bcSolNote`'s tier-aware line. The static default names the tier in its own
     prose ("Screening estimate · …"), so once a roof is checked that prefix is
     stripped rather than left standing beside a note that now says otherwise. */

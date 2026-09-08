@@ -243,6 +243,9 @@ test.describe('the solar screen', () => {
        screen, so a stale index is a mistake nobody would catch by eye. */
     await expect(page.locator('#brIdx')).toHaveText(`#${idx}`);
     await expect(page.locator('#brSure li')).toHaveCount(5);
+    /* THE LADDER'S SENTENCES, NOT ITS BUTTONS. "Ask about this" is an offer to
+       email us; printed on paper it is a phrase with nothing behind it. */
+    await expect(page.locator('#brSure')).not.toContainText('Ask about this');
     await expect(page.locator('.br-ask li')).toHaveCount(6);
     await expect(page.locator('#brOutline polygon')).toHaveCount(1);
 
@@ -260,8 +263,9 @@ test.describe('the solar screen', () => {
     /* MEASURED AT A4's WIDTH, not the browser's. Desktop Chrome is 1280 px wide and
        an A4 page inside 16 mm margins is ~673 CSS px: at the wider viewport every
        wrapped line is half the height it will be on paper, so a two-page sheet
-       could pass this check comfortably. The viewport is narrowed first and left
-       there -- the test ends on the next assertion. */
+       could pass this check comfortably. The viewport is narrowed here and stays
+       narrow for the two assertions that follow it; neither reads a size, so
+       nothing after this line depends on the width either way. */
     await page.setViewportSize({ width: 673, height: 1000 });
     await page.emulateMedia({ media: 'print' });
     await expect(page.locator('#solBrief')).toBeVisible();

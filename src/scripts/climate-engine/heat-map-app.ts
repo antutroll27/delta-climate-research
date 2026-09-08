@@ -54,7 +54,7 @@ import { resolve, requireCosts } from './scope/resolve.ts';
 import { areaPageTitle, areaPageDescription } from './scope/page-meta.ts';
 import { fmtMoney, fmtRate, currencyMark } from './money.ts';
 import { pvRanges, tierOf } from './solar-ranges.ts';
-import { wardSummary, validatedSentence, noteFor } from './solar-copy.ts';
+import { wardSummary, validatedSentence, noteFor, sharePct } from './solar-copy.ts';
 import { areaPath, paths, cityPaths } from './scope/paths.ts';
 import { areaRefusal } from './scope/reachability.ts';
 import { isAreaKey, splitKey, type AreaKey } from './scope/registry.ts';
@@ -740,6 +740,11 @@ export function mountHeatMap(): () => void {
      tier in prose ("Screening estimate · not bankable · …"), so it cannot stay
      frozen while the chip above it says the roof has been checked. */
   const SOL_NOTE_DEFAULT = el('bcSolNote')?.textContent ?? '';
+  /* The BRIEF's footer, captured the same way and for the same reason: it says
+     "Screening estimate · not bankable" in the markup, and a sheet whose chip reads
+     `validated` while its footer still opens "Screening estimate" is the page
+     contradicting itself on paper, where nobody can click through to check. */
+  const BRIEF_FOOT_DEFAULT = el('brFoot')?.textContent ?? '';
   /* The tier last PAINTED, so the two nodes that carry it are rewritten only when it
      changes. Both are innerHTML writes over a subtree the reader may be interacting
      with — the fifth rung holds a button — and rebuilding them on every selection
@@ -772,7 +777,7 @@ export function mountHeatMap(): () => void {
     const [yLo, yHi] = pv.tiers.yield_bracket_kwh_per_kwp;
     setHTML('bcSolKwp', `${r.kwpLow.toFixed(1)}–${r.kwpHigh.toFixed(1)} kWp<small>floor ${r.kwpLow.toFixed(1)} · ${Math.round(pv.packing_factor * 100)}% of roof</small>`);
     setHTML('bcSolKwh', `${r.kwhLow.toLocaleString()}–${r.kwhHigh.toLocaleString()} kWh/yr<small>about ${Math.round(pv.kwh[i]).toLocaleString()} · screened</small>`);
-    setHTML('bcSolLoss', `${pct(pv.loss[i])}<small>of which trees ${pv.loss_trees[i] < 0.005 ? 'under 1%' : `${Math.round(pv.loss_trees[i] * 100)}%`} · annual</small>`);
+    setHTML('bcSolLoss', `${pct(pv.loss[i])}<small>of which trees ${sharePct(pv.loss_trees[i])} · annual</small>`);
     setHTML('bcSolFloor', `${pct(pv.loss_strict[i])}<small>under a strict roof mask</small>`);
     setHTML('bcSolRaised', `${pct(pv.loss_raised[i])}<small>elevated mounting · what-if</small>`);
     setHTML('bcSolRs', `${fmtMoney(pv.kwh[i] * tariff, COSTS)}/yr<small>at ${fmtRate(tariff, COSTS)} per kWh · assumed</small>`);
@@ -814,6 +819,12 @@ export function mountHeatMap(): () => void {
      same artefact cells, the same `fmtMoney` — and the how-sure ladder is lifted out
      of the card's own DOM rather than retyped, because two copies of five sentences
      disagree the first time one of them is edited. */
+  /* Ward metres run z NORTHWARD (src/data/wards.ts). Stated once, here, rather than
+     re-derived per roof: it is a fact about the frame every ward shares. */
+  const NORTH_IS_PLUS_Z = true;
+  /* The outline's box: 150 units of drawing in the right-hand 170, and a 30-unit
+     gutter on the left that belongs to the compass alone. */
+  const BRIEF_FIT = 150, BRIEF_GUTTER = 30;
   function renderBrief(b: BuildingMeta, pv: PvFile): void {
     const w = wardOf(state.ward);
     const i = b.idx;
@@ -833,16 +844,16 @@ export function mountHeatMap(): () => void {
     setText('brKwp', `${r.kwpLow.toFixed(1)}–${r.kwpHigh.toFixed(1)} kWp · floor ${r.kwpLow.toFixed(1)}`);
     setText('brKwh', `${r.kwhLow.toLocaleString()}–${r.kwhHigh.toLocaleString()} kWh/yr · about ${Math.round(pv.kwh[i]).toLocaleString()} screened`);
     /* THE SPLIT, NOT JUST THE TOTAL (spec §6.3). Which half of the shading is
-       buildings and which is trees is the difference between a roof that can be
-       fixed by raising the array and one that cannot, and it is the first thing an
-       installer will argue about. Trees get the card's "under 1%" floor because
-       −0% reads as "none" when it means "a rounding away from none". */
-    const share = (f: number): string => (f < 0.005 ? 'under 1%' : `${Math.round(f * 100)}%`);
-    setText('brLoss', `${pct(pv.loss[i])} · buildings ${share(pv.loss_buildings[i])} · trees ${share(pv.loss_trees[i])}`);
+       buildings and which is trees is the difference between a roof a raised array
+       can fix and one it cannot, and it is the first thing an installer will argue
+       about. Both shares take `sharePct`'s floor — the same one the card's tree
+       line prints — so the two can never disagree at the boundary. */
+    setText('brLoss', `${pct(pv.loss[i])} · buildings ${sharePct(pv.loss_buildings[i])} · trees ${sharePct(pv.loss_trees[i])}`);
     setText('brFloor', `${pct(pv.loss_strict[i])} · under a strict roof mask`);
     setText('brRaised', `${pct(pv.loss_raised[i])} · elevated mounting, what-if`);
     setText('brRs', `${fmtMoney(pv.kwh[i] * tariff, COSTS)}/yr at ${fmtRate(tariff, COSTS)} per kWh · assumed`);
     setText('brBasis', pv.basis);
+    setText('brFoot', noteFor(pv, BRIEF_FOOT_DEFAULT));
     /* THE LADDER, COPIED OUT OF THE CARD. Each rung is cloned so the "Ask about
        this" button can be dropped from the copy without touching the live one:
        a button is an offer to talk, and on paper there is nobody to talk to. */
@@ -852,24 +863,24 @@ export function mountHeatMap(): () => void {
       const rungs = el('bcSure')?.querySelectorAll<HTMLLIElement>('li') ?? [];
       rungs.forEach((li) => {
         const copy = li.cloneNode(true) as HTMLElement;
-        copy.querySelector('.bc-ask')?.remove();
+        copy.querySelectorAll('.bc-ask').forEach((btn) => { btn.remove(); });
         const item = document.createElement('li');
         item.textContent = (copy.textContent ?? '').replace(/\s+/g, ' ').trim();
         sure.appendChild(item);
       });
     }
-    /* THE FOOTPRINT, NORTH UP. The ring is flat [x, z, …] in ward metres, scaled to
-       fit 180 of the 200-unit box and centred in it.
+    /* THE FOOTPRINT, NORTH UP. The ring is flat [x, z, …] in ward metres. It is
+       drawn into the RIGHT-HAND 170 units of the 200-unit box, at 150 units across,
+       leaving a 30-unit gutter for the compass — an arrow inside the drawing area
+       would sit on top of the roof it is orienting, and on a big footprint it did.
 
-       WHICH WAY NORTH POINTS IS ASKED, NOT ASSUMED. `wardLatLon` is the one
-       transform that knows, so a 10 m probe along −z decides it: if stepping −z
-       RAISES the latitude then north is −z, and since SVG's y already grows
-       downward the z values map straight through (north ends up at the top by
-       itself). Otherwise north is +z and the drawing is flipped in y so that it
-       does. Either way north is up when the polygon is written, which is why the
-       arrow can be drawn at the top of the box unconditionally. */
-    const northIsMinusZ = wardLatLon(w, b.cx, b.cz - 10).lat > wardLatLon(w, b.cx, b.cz).lat;
-    const zToY = northIsMinusZ ? 1 : -1;
+       Z IS NORTHWARD (`src/data/wards.ts`: "y is NORTHWARD, x is EASTWARD", and
+       `wardLatLon` adds `+y / 110_540` to the latitude for every ward there). So
+       the sign is a property of the frame, not of the building: probing it per
+       roof asked a question that has one answer, and could only ever get `false`.
+       SVG's y grows DOWNWARD, so the polygon is flipped in y to put north at the
+       top — which is what lets the arrow be drawn pointing up, unconditionally. */
+    const zToY = NORTH_IS_PLUS_Z ? -1 : 1;
     const svg = el('brOutline');
     if (svg) {
       const n = Math.floor(b.ring.length / 2);
@@ -880,8 +891,9 @@ export function mountHeatMap(): () => void {
         if (y < minY) minY = y; if (y > maxY) maxY = y;
       }
       const span = Math.max(maxX - minX, maxY - minY, 1e-6);
-      const sc = 180 / span;
-      const ox = 100 - ((minX + maxX) / 2) * sc, oy = 100 - ((minY + maxY) / 2) * sc;
+      const sc = BRIEF_FIT / span;
+      const ox = (BRIEF_GUTTER + 200) / 2 - ((minX + maxX) / 2) * sc;
+      const oy = 100 - ((minY + maxY) / 2) * sc;
       const pts: string[] = [];
       for (let k = 0; k < n; k += 1) {
         pts.push(`${(b.ring[k * 2] * sc + ox).toFixed(1)},${(zToY * b.ring[k * 2 + 1] * sc + oy).toFixed(1)}`);
@@ -889,26 +901,56 @@ export function mountHeatMap(): () => void {
       svg.innerHTML = n >= 3
         ? `<polygon points="${pts.join(' ')}" fill="none" stroke="currentColor" stroke-width="2"/>`
           + '<g stroke="currentColor" fill="currentColor">'
-          + '<path d="M14 34 V16" stroke-width="2" fill="none"/>'
-          + '<path d="M14 10 l5 8 h-10 z" stroke="none"/>'
-          + '<text x="14" y="48" text-anchor="middle" font-size="14" stroke="none">N</text>'
+          + '<path d="M15 118 V92" stroke-width="2" fill="none"/>'
+          + '<path d="M15 84 l5 9 h-10 z" stroke="none"/>'
+          + '<text x="15" y="136" text-anchor="middle" font-size="14" stroke="none">N</text>'
           + '</g>'
         : '';
     }
   }
-  /* THE PRINT MOMENT. The sheet is `hidden` at every other instant, so nothing on
-     screen ever has to lay out around it. `afterprint` fires whether the reader
-     printed or cancelled, and it is registered ONCE, out here: registering it
-     inside the click would stack one listener per print. */
-  const onAfterPrint = () => { el('solBrief')?.setAttribute('hidden', ''); };
+  /* THE PRINT MOMENT, AND EVERY WAY OUT OF IT. The sheet is an OPAQUE, full-screen
+     layer: if the thing that opens it is the only thing that can close it, a print
+     that never reports back strands the reader on a sheet of paper with the console
+     unreachable behind it. So closing is reachable four ways, the same shape the
+     CBAM audit print uses (cbam-algos/cbam-app.ts):
+
+       1. `afterprint` — the normal round trip, whether they printed or cancelled.
+       2. `matchMedia('print')` falling back to false — fires around the print and
+          preview lifecycle in browsers that suppress `afterprint`.
+       3. a 30 s net under both, for a print that is silently blocked outright.
+       4. the Close button on the sheet, because the reader should never have to
+          know which of the three fired.
+
+     `closeBrief` is idempotent by construction — it sets an attribute that is
+     already set and clears a timer that has already run — so no path has to know
+     whether another beat it to it. The listeners are registered ONCE, out here;
+     registering them inside the click would stack a set per print. */
+  let briefTimer = 0;
+  const printMql = window.matchMedia?.('print') ?? null;
+  const closeBrief = () => {
+    el('solBrief')?.setAttribute('hidden', '');
+    window.clearTimeout(briefTimer);
+  };
+  const onAfterPrint = () => { closeBrief(); };
+  const onPrintMql = (e: MediaQueryListEvent) => { if (!e.matches) closeBrief(); };
   window.addEventListener('afterprint', onAfterPrint);
-  cleanup.push(() => window.removeEventListener('afterprint', onAfterPrint));
+  printMql?.addEventListener('change', onPrintMql);
+  el('brClose')?.addEventListener('click', closeBrief);
+  cleanup.push(() => {
+    window.removeEventListener('afterprint', onAfterPrint);
+    printMql?.removeEventListener('change', onPrintMql);
+    el('brClose')?.removeEventListener('click', closeBrief);
+    window.clearTimeout(briefTimer);
+  });
   const onBriefClick = () => {
     const pv = pvCache[state.ward];
     if (!selected || !pv) return;
     renderBrief(selected, pv);
     el('solBrief')?.removeAttribute('hidden');
-    window.print();
+    briefTimer = window.setTimeout(closeBrief, 30_000);
+    /* window.print() can throw synchronously — a permissions policy denying it, for
+       one — and the sheet would then be open with no dialogue ever to close. */
+    try { window.print(); } catch { closeBrief(); }
   };
   el('bcBrief')?.addEventListener('click', onBriefClick);
   cleanup.push(() => el('bcBrief')?.removeEventListener('click', onBriefClick));
