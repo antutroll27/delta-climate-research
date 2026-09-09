@@ -497,6 +497,30 @@ landmark rendered as a marquee while every check passed: closed geometry, exact
 height, no footprint moved. **Gates prove a scene is well-formed. Only looking
 proves it resembles the city.**
 
+### Wards are islands, not a map (decided 2026-09-10)
+
+Each ward is a **self-contained island**: its own 2.8 km terrain closed with a
+skirt and a base cap, its own `.blend`, its own `.glb`. The master file holds all
+three side by side, ordered west to east, on even spacing.
+
+**True geographic placement was built and rejected.** Measured, the wards sit
+4.11 km apart (Indiranagar to MG Road) and 11.88 km on to Whitefield, so a
+faithful layout puts two nearly touching and the third far off, with kilometres of
+empty ground between carrying no data at all. It also forces a single continuous
+terrain, because the 8.4 km context meshes of the two western wards overlap and
+would z-fight across the whole overlap.
+
+**Even spacing makes the three comparable, which is the entire point of putting
+them in one file**; keeping the west-to-east order preserves the only part of the
+real arrangement worth reading at a glance. The island is packaging — the ground
+surface is the same measured GLO-30 mesh, and the skirt hangs below the lowest
+real sample, so nothing about the landform changes.
+
+The island also fixes an honesty problem the continuous version had. A ward drawn
+on 8.4 km of surrounding ground **looks like a city that stops**, because
+buildings exist only inside the box. An island ends on purpose, and shows the
+study area exactly.
+
 ---
 
 ## 9. Ground texture, and the honest ceiling

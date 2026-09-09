@@ -71,7 +71,16 @@ MIN_AREA_M2 = 8.0
 #: CHOICE -- the same lesson the Dubai scenes recorded, where one value could not
 #: serve both bare desert and a built coastal strip. These are starting points
 #: for the same luminance-quantile sweep; --exposure overrides.
-WARD_EXPOSURE = {"indiranagar": -4.2, "mg-road": -4.2, "whitefield": -4.0}
+WARD_EXPOSURE = {"indiranagar": -3.8, "mg-road": -3.8, "whitefield": -3.6}
+
+#: Master-scene layout, WEST TO EAST. The islands do not sit at their true
+#: geographic offsets -- that was tried and rejected: 4.11 km between Indiranagar
+#: and MG Road against 11.88 km to Whitefield puts two wards nearly touching and
+#: the third a long way off, and the empty ground between them carries no data.
+#: Keeping the west-east ORDER preserves the only part of the real arrangement
+#: worth reading at a glance, while the even spacing makes the three comparable.
+MASTER_ORDER = ["mg-road", "indiranagar", "whitefield"]
+MASTER_GAP_M = 1_000.0
 
 
 def args() -> dict[str, str]:
@@ -182,36 +191,88 @@ def sample_ground(terrain: dict[str, Any], x: float, y: float) -> float:
             + (h01 * (1 - fx) + h11 * fx) * fy)
 
 
-def build_terrain(terrain: dict[str, Any], exag: float, datum: float) -> Any:
+def build_terrain(terrain: dict[str, Any], exag: float, datum: float,
+                  name: str = "terrain",
+                  offset: tuple[float, float] = (0.0, 0.0),
+                  island: bool = False, depth: float = 320.0) -> Any:
+    """The ward's ground, optionally as a free-standing island.
+
+    AN ISLAND IS A CLOSED SOLID, NOT A DRAPED SHEET. The plain grid is an open
+    surface: seen from below or from a low angle it is a paper-thin plane with
+    nothing underneath, which reads as a bug rather than as a choice. The island
+    adds a skirt down every boundary edge and a base cap, so each ward becomes a
+    diorama plinth that can be lit, shadowed and orbited from any angle.
+
+    NOTHING ABOUT THE GROUND SURFACE CHANGES. The skirt hangs below the lowest
+    real sample and the top face is the same measured GLO-30 mesh it always was,
+    so the island is packaging, not new landform.
+    """
     n = int(terrain["n"])
     size = float(terrain["sizeM"])
     h = terrain["h"]
+    ox, oy = offset
     verts: list[tuple[float, float, float]] = []
     for j in range(n):
         for i in range(n):
             x = -size / 2.0 + size * i / (n - 1)
             y = -size / 2.0 + size * j / (n - 1)
-            verts.append((x, y, (float(h[j * n + i]) - datum) * exag))
+            verts.append((x + ox, y + oy, (float(h[j * n + i]) - datum) * exag))
     faces: list[tuple[int, ...]] = []
+    slots: list[int] = []
     for j in range(n - 1):
         for i in range(n - 1):
             a = j * n + i
             faces.append((a, a + 1, a + n + 1, a + n))
-    mat = principled("ground", (0.20, 0.19, 0.16, 1.0), rough=0.95)
-    obj = mesh_object("terrain", verts, faces, [mat])
-    obj.data.shade_smooth()
+            slots.append(0)
+
+    mats = [principled("ground", (0.20, 0.19, 0.16, 1.0), rough=0.95)]
+    if island:
+        mats.append(principled("plinth", (0.13, 0.12, 0.11, 1.0), rough=0.9))
+        base = min(v[2] for v in verts) - depth
+        # The boundary ring, walked in order so the skirt quads are consistently
+        # wound. Corners appear once: south edge west->east, east edge south->
+        # north, north edge east->west, west edge north->south.
+        ring: list[int] = []
+        ring += [0 * n + i for i in range(n)]
+        ring += [j * n + (n - 1) for j in range(1, n)]
+        ring += [(n - 1) * n + i for i in range(n - 2, -1, -1)]
+        ring += [j * n + 0 for j in range(n - 2, 0, -1)]
+        skirt_start = len(verts)
+        for idx in ring:
+            verts.append((verts[idx][0], verts[idx][1], base))
+        m = len(ring)
+        for k in range(m):
+            a0, a1 = ring[k], ring[(k + 1) % m]
+            b0, b1 = skirt_start + k, skirt_start + (k + 1) % m
+            faces.append((a0, b0, b1, a1))
+            slots.append(1)
+        faces.append(tuple(range(skirt_start + m - 1, skirt_start - 1, -1)))
+        slots.append(1)
+
+    obj = mesh_object(name, verts, faces, mats)
+    if island and len(obj.data.polygons) == len(slots):
+        for poly, sl in zip(obj.data.polygons, slots):
+            poly.material_index = sl
+    # Shade the TOP smooth only. Smoothing the skirt rounds the plinth corners
+    # into a blob and loses the crisp edge that makes it read as a plinth.
+    for poly in obj.data.polygons:
+        poly.use_smooth = poly.material_index == 0
     return obj
 
 
 # ── buildings ───────────────────────────────────────────────────────────────
 
 def build_buildings(terrain: dict[str, Any], doc: dict[str, Any],
-                    exag: float, datum: float, qa: bool) -> tuple[Any, dict[str, int]]:
+                    exag: float, datum: float, qa: bool,
+                    name: str = "buildings",
+                    offset: tuple[float, float] = (0.0, 0.0)
+                    ) -> tuple[Any, dict[str, int]]:
     """One mesh for every footprint. Blender takes n-gons, so a cap face per
     ring plus a quad per edge is the whole job -- no roof triangulation."""
     verts: list[tuple[float, float, float]] = []
     faces: list[tuple[int, ...]] = []
     slots: list[int] = []
+    ox, oy = offset
     stats = {"drawn": 0, "tiny": 0, "flagged": 0, "filled": 0}
 
     for b in doc["b"]:
@@ -255,9 +316,9 @@ def build_buildings(terrain: dict[str, Any], doc: dict[str, Any],
 
         start = len(verts)
         for i in range(nv):
-            verts.append((p[i * 2], p[i * 2 + 1], base))
+            verts.append((p[i * 2] + ox, p[i * 2 + 1] + oy, base))
         for i in range(nv):
-            verts.append((p[i * 2], p[i * 2 + 1], top))
+            verts.append((p[i * 2] + ox, p[i * 2 + 1] + oy, top))
         for i in range(nv):
             a0, a1 = start + i, start + (i + 1) % nv
             faces.append((a0, a1, a1 + nv, a0 + nv))
@@ -274,7 +335,7 @@ def build_buildings(terrain: dict[str, Any], doc: dict[str, Any],
         mats.append(principled("qa-disagree", (0.85, 0.45, 0.08, 1.0), rough=0.6))
         mats.append(principled("qa-fill", (0.30, 0.31, 0.34, 1.0), rough=0.9))
 
-    obj = mesh_object("buildings", verts, faces, mats)
+    obj = mesh_object(name, verts, faces, mats)
     if qa and len(obj.data.polygons) == len(slots):
         for poly, s in zip(obj.data.polygons, slots):
             poly.material_index = s
@@ -399,34 +460,110 @@ def render(path: str, samples: int, exposure: float, res: int) -> None:
     bpy.ops.render.render(write_still=True)
 
 
-def build_ward(ward: str, a: dict[str, str]) -> None:
-    terrain, wide = load_terrain(ward)
+def export_glb(path: str) -> None:
+    """Write the current scene as a single binary glTF.
+
+    GLB rather than glTF+bin because one file cannot lose its buffer, and
+    because everything downstream here -- three.js, the mobile tiers, Blender
+    itself -- reads it directly.
+    """
+    try:
+        bpy.ops.export_scene.gltf(filepath=path, export_format="GLB",
+                                  export_apply=True)
+    except (AttributeError, RuntimeError) as exc:
+        print(f"  GLB export unavailable ({exc}) -- .blend written anyway")
+        return
+    mb = os.path.getsize(path) / 1e6 if os.path.exists(path) else 0.0
+    print(f"  exported {path} ({mb:.1f} MB)")
+
+
+def ward_scene(ward: str, a: dict[str, str], offset: tuple[float, float],
+               island: bool) -> dict[str, int]:
+    """Add one ward's ground and buildings to the CURRENT scene.
+
+    Shared by the single-ward files and the master, so the two can never drift
+    into drawing the same ward differently.
+    """
     doc = load(ward, "buildings")
     exag = float(a.get("exag", TERRAIN_EXAG))
     qa = a.get("qa") == "1"
-    # The CAMERA frames the ward, not the terrain. With the context mesh loaded
-    # `terrain["sizeM"]` is 8400 m, and sizing the shot to that would push the
-    # ward into the middle distance -- a wide landscape rather than a city.
-    size = float(doc["sizeM"])
+    depth = float(a.get("depth", 320.0))
+
+    if island:
+        # An island is the WARD, so it uses the 2.8 km ward terrain. The 8.4 km
+        # context sheet exists to stop a continuous scene ending in mid-air; an
+        # island ends on purpose.
+        terrain = load(ward, "terrain")
+    else:
+        terrain, _ = load_terrain(ward)
+
     datum = float(terrain["meanM"])
-
-    clear()
-    setup_world()
-    setup_sun()
-    build_terrain(terrain, exag, datum)
-    _, stats = build_buildings(terrain, doc, exag, datum, qa)
-
-    tallest = max((float(b["h"]) for b in doc["b"]), default=20.0)
-    setup_camera(size, tallest, float(a.get("pitch", 38.0)),
-                 float(a.get("azim", 215.0)), float(a.get("margin", 1.7)))
-
-    print(f"  {ward}: terrain {terrain['n']}x{terrain['n']} over "
-          f"{float(terrain['sizeM']):.0f} m"
-          f"{' (context)' if wide else ' (ward only -- no context mesh found)'}")
+    build_terrain(terrain, exag, datum, name=f"{ward}-ground",
+                  offset=offset, island=island, depth=depth)
+    _, stats = build_buildings(terrain, doc, exag, datum, qa,
+                               name=f"{ward}-buildings", offset=offset)
     print(f"  {ward}: {stats['drawn']:,} drawn, {stats['tiny']:,} skipped tiny, "
           f"{stats['flagged']:,} height-source disagreements, "
           f"{stats['filled']:,} on the fill height")
     print(f"  {ward}: {doc.get('crossCheck', '(no cross-check recorded)')}")
+    return stats
+
+
+def build_master(a: dict[str, str]) -> None:
+    """All three wards as separate islands in one file."""
+    qa = a.get("qa") == "1"
+    clear()
+    setup_world()
+    setup_sun()
+
+    size = float(load(MASTER_ORDER[0], "buildings")["sizeM"])
+    pitch = size + MASTER_GAP_M
+    tallest = 0.0
+    for k, ward in enumerate(MASTER_ORDER):
+        ox = (k - (len(MASTER_ORDER) - 1) / 2.0) * pitch
+        ward_scene(ward, a, (ox, 0.0), island=True)
+        doc = load(ward, "buildings")
+        tallest = max(tallest, max((float(b["h"]) for b in doc["b"]), default=0.0))
+
+    # Margin 1.05 rather than the single-ward 1.35: three islands in a row are
+    # already a wide, shallow subject, so the sqrt(2) diamond allowance a single
+    # square ward needs would only add empty sky above and below.
+    span = pitch * len(MASTER_ORDER)
+    setup_camera(span, tallest, float(a.get("pitch", 28.0)),
+                 float(a.get("azim", 200.0)), float(a.get("margin", 1.05)))
+
+    os.makedirs(SCENES, exist_ok=True)
+    blend = os.path.join(SCENES, "bangalore-master.blend")
+    bpy.ops.wm.save_as_mainfile(filepath=blend)
+    print(f"  master: saved {blend}")
+    if a.get("glb") == "1":
+        export_glb(os.path.join(SCENES, "bangalore-master.glb"))
+    out = a.get("out") or os.path.join(
+        SCENES, f"bangalore-master{'-qa' if qa else ''}.png")
+    # Brighter than a single ward: an island has no surrounding ground bouncing
+    # light back, so the same exposure reads about half a stop darker.
+    render(out, int(a.get("samples", 48)), float(a.get("exposure", -3.8)),
+           int(a.get("res", 2000)))
+    print(f"  master: rendered {out}")
+
+
+def build_ward(ward: str, a: dict[str, str]) -> None:
+    """One ward, one file, one island."""
+    qa = a.get("qa") == "1"
+    island = a.get("island", "1") != "0"
+    clear()
+    setup_world()
+    setup_sun()
+    ward_scene(ward, a, (0.0, 0.0), island=island)
+
+    doc = load(ward, "buildings")
+    size = float(doc["sizeM"])
+    tallest = max((float(b["h"]) for b in doc["b"]), default=20.0)
+    setup_camera(size, tallest, float(a.get("pitch", 38.0)),
+                 float(a.get("azim", 215.0)),
+                 float(a.get("margin", 1.35 if island else 1.7)))
+
+    exag = float(a.get("exag", TERRAIN_EXAG))
     if exag != 1.0:
         print(f"  {ward}: TERRAIN EXAGGERATED x{exag} -- label any render from this")
 
@@ -434,10 +571,12 @@ def build_ward(ward: str, a: dict[str, str]) -> None:
     blend = os.path.join(SCENES, f"{ward}.blend")
     bpy.ops.wm.save_as_mainfile(filepath=blend)
     print(f"  {ward}: saved {blend}")
+    if a.get("glb") == "1":
+        export_glb(os.path.join(SCENES, f"{ward}.glb"))
 
     out = a.get("out") or os.path.join(SCENES, f"{ward}{'-qa' if qa else ''}.png")
     render(out, int(a.get("samples", 48)),
-           float(a.get("exposure", WARD_EXPOSURE.get(ward, -3.4))),
+           float(a.get("exposure", WARD_EXPOSURE.get(ward, -4.2))),
            int(a.get("res", 1600)))
     print(f"  {ward}: rendered {out}")
 
@@ -445,8 +584,10 @@ def build_ward(ward: str, a: dict[str, str]) -> None:
 def main() -> None:
     a = args()
     which = a.get("ward", "all")
-    wards = (["indiranagar", "mg-road", "whitefield"] if which == "all"
-             else [which])
+    if which == "master":
+        build_master(a)
+        return
+    wards = MASTER_ORDER if which == "all" else [which]
     for w in wards:
         build_ward(w, a)
 
