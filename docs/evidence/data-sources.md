@@ -417,6 +417,12 @@ Google 2.5D heights, never the primary and never blended into it · status: `Ban
 commonest values (7, 5, 4, 6, 8 m) account for 58 % of the city — it under-resolves mid-rise. Minimum is
 **0.0 m** and maximum **492 m**; both are artefacts and must be dropped or clipped before any comparison.
 
+**Overture Maps buildings, 2026-07-22.0** — ODbL · **built and in hand 2026-09-10**:
+14,867 / 11,045 / 10,897 footprints for Indiranagar, MG Road and Whitefield, sliced from one
+102,382-building cache over the metro strip. Heights are joined from Google 2.5D as **zonal p65**,
+matching Kolkata exactly; fill rates came in at 2.3 / 3.2 / 4.6 %, **better than Kolkata's shipped
+4.0 / 6.5 / 10.8 %**, so Google's Bengaluru coverage is the stronger of the two.
+
 **ATREE-CSEI — Lakes & Streams of Bengaluru Urban** — Ashoka Trust for Research in Ecology and the
 Environment, Centre for Social and Environmental Innovation · 181 lake polygons, 3,927 stream lines ·
 **CC-BY** · **role:** the water layer, and the reason Bangalore's water can be drawn as a *system*

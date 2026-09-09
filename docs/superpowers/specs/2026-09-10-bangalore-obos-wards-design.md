@@ -38,6 +38,7 @@ during design, not quoted.
 | OSM `building:levels` | 1,177 | 556 | 191 |
 | OSM water features | 8 | **29** | 9 |
 | UT-GLOBUS buildings | 10,654 | *(tile 1, see §4)* | 7,813 |
+| Overture footprints **built** | **14,867** | 11,045 | 10,897 |
 | BBMP census trees (1 km) | **7,543** | *(not measured)* | 1,871 |
 | CTBUH landmarks | **0** | **5** (4 with a height) | **0** |
 
@@ -204,6 +205,51 @@ correlate and the statistic measures noise. **MAE is the honest number there, an
 **UT-GLOBUS reads systematically 2–3 m higher at both sites.** Neither source has
 Indian validation, so which is right is unknown. That offset is now a measured,
 publishable uncertainty band rather than an unknown.
+
+### BUILT 2026-09-10, and the built heights do not match §1
+
+The pipeline now exists (`scripts/fetch-bangalore.py`) and has run over all three
+wards. **Its per-building heights are materially lower than the pixel-census
+figures in §1, and the gap is much larger than the p50 note above prepares a
+reader for.**
+
+| | §1 pixel p50 | built p50 | §1 ≥15 m | built ≥15 m | fill |
+|---|---:|---:|---:|---:|---:|
+| Indiranagar | 7.1 m | 6.5 m | 3.3 % | **0.8 %** | 2.3 % |
+| MG Road | 8.2 m | 6.6 m | 15.5 % | **3.7 %** | 3.2 % |
+| Whitefield | 8.2 m | 5.6 m | 19.7 % | **5.1 %** | 4.6 % |
+
+**Both are correct measurements of different things, and the tall share is where
+that stops being a footnote.** §1 takes percentiles over *built pixels*, where
+every pixel of a tower is a tall pixel. The pipeline takes the zonal **p65 over
+each footprint**, which mixes a tower's tall core with its podium, courtyards,
+annexes and edge pixels — and averages down. Kolkata's `compute-heights.py`
+documents exactly this bias and offers p75 as the candidate fix, decided there by
+`validate-heights.py` against OSM evidence.
+
+**Bangalore ships p65 for parity with Kolkata, and p75 is untested here.** Two
+cities computed the same way are comparable; two computed differently are two
+projects. But the consequence must be stated plainly: **the massing renders a
+lower skyline than the pixel census implies**, and any claim about tall-building
+share must say which of the two numbers it is quoting. Maxima are unaffected and
+look right — 91.3 m in MG Road, 89.8 m in Whitefield, 40.0 m in Indiranagar.
+
+**Fill rates came in better than Kolkata's**, at 2.3 / 3.2 / 4.6 % against
+Kolkata's shipped 4.0 / 6.5 / 10.8 %. Google's coverage over Bengaluru is
+stronger than over Kolkata, so fewer buildings fall back to the 2.5 m convention.
+
+**The cross-check at full scale is tighter than the design sample suggested.**
+Against every matched building rather than a few hundred centroids:
+
+| | matched | MAE | flagged > 5 m |
+|---|---:|---:|---:|
+| Indiranagar | 2,274 | **3.12 m** | 391 |
+| Whitefield | 2,532 | **3.13 m** | 295 |
+| MG Road | — | — | **skipped, recorded** |
+
+Indiranagar's MAE improves from the 4.00 m of the design sample to 3.12 m, and
+the two wards now agree with each other almost exactly. **MG Road skipped and
+said so**, which is the §11 failure mode working as specified rather than a gap.
 
 ### Design
 

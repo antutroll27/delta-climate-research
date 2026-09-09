@@ -459,3 +459,44 @@ opposite direction.
 **One consequence worth stating separately:** the census numbers its wards on the **dead 198-ward
 scheme**, two reorganisations behind the current 369-ward GBA-2025 geometry. Trees are therefore consumed
 **by position and never by ward join**, which sidesteps the problem rather than solving it.
+
+---
+
+## 10. A height percentile means two different things, and the gap is 4x on tall buildings
+
+**Status:** measured 2026-09-10, disclosed · **See:** [data-sources.md](data-sources.md)
+
+Building the Bangalore wards produced two sets of height statistics from **the same
+raster on the same day**, differing by far more than rounding:
+
+| | over built PIXELS | over FOOTPRINTS (zonal p65) |
+|---|---:|---:|
+| Indiranagar, share ≥ 15 m | 3.3 % | **0.8 %** |
+| MG Road, share ≥ 15 m | 15.5 % | **3.7 %** |
+| Whitefield, share ≥ 15 m | 19.7 % | **5.1 %** |
+
+**Neither is wrong. They answer different questions, and the tall-building share is
+where that stops being pedantry** — MG Road's differs by a factor of four.
+
+A **pixel** census asks "how tall is the built surface here?", and every pixel of a
+tower is a tall pixel. A **footprint** statistic asks "how tall is this building?",
+and a zonal percentile over the footprint mixes the tower's core with its podium,
+courtyards, annexes, roof plant and edge pixels. It averages down, and it averages
+down hardest on exactly the large, complex buildings whose height people care most
+about.
+
+**This is a known property, not a discovery.** Kolkata's `compute-heights.py` names
+it in its own docstring and offers p75 as the candidate correction. What is new is
+the *size* of the effect on a derived share rather than on a median: the medians
+here differ by 0.6–2.6 m, which looks tolerable, while the ≥15 m share differs by
+4x from the same data.
+
+**The operational rule.** Any published tall-building share must name which
+statistic it came from. A massing render is built from the footprint statistic,
+because you extrude a building by its own height, so **renders will show a lower
+skyline than a pixel census implies** and that is correct behaviour, not a bug.
+
+**What would close it.** The same thing that would close limitation 8: Indian
+ground truth. Failing that, running p65 and p75 side by side and choosing against
+OSM `building:levels` evidence, which is what Kolkata's `validate-heights.py` does
+and what Bangalore has not yet done — it ships p65 for parity with Kolkata.
