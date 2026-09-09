@@ -116,6 +116,12 @@ def principled(name: str, rgba: tuple[float, float, float, float],
     survive the next rename too. A missing socket is a look regression; a hard
     KeyError is a broken build.
     """
+    # Reuse by name. The master builds three wards into one scene, and without
+    # this each gets its own copy -- building, building.001, building.002 --
+    # which is nine materials where three carry every property that matters.
+    existing = bpy.data.materials.get(name)
+    if existing is not None:
+        return existing
     mat = bpy.data.materials.new(name)
     mat.use_nodes = True
     bsdf = mat.node_tree.nodes.get("Principled BSDF")
@@ -441,7 +447,16 @@ def setup_camera(size: float, tallest: float, pitch_deg: float,
     return obj
 
 
-def render(path: str, samples: int, exposure: float, res: int) -> None:
+def configure_render(samples: int, exposure: float, res: int) -> None:
+    """Engine, exposure and resolution -- called BEFORE the .blend is saved.
+
+    THE FIRST VERSION SET THESE INSIDE render(), AFTER save_as_mainfile. The
+    render that came out of the script was right, and the file on disk carried
+    the factory defaults: EEVEE, 1080p, exposure 0. Anyone pressing F12 in the
+    saved file got a different picture from the one the script produced, and
+    was told it would be the same. Settings that describe the file belong in
+    the file.
+    """
     scene = bpy.context.scene
     scene.render.engine = "CYCLES"
     scene.cycles.samples = samples
@@ -455,8 +470,43 @@ def render(path: str, samples: int, exposure: float, res: int) -> None:
     scene.render.film_transparent = False
     scene.view_settings.exposure = exposure
     scene.view_settings.view_transform = "AgX"
-    scene.render.filepath = path
     scene.render.image_settings.file_format = "PNG"
+
+
+def configure_viewports() -> None:
+    """Make the saved file OPENABLE at city scale.
+
+    Blender's factory 3D viewport clips at 1,000 m. A single ward is 2,800 m
+    across and the master is 10,400 m, so on opening the file the far clip
+    plane slices straight through the geometry: the island appears to end in a
+    ragged line, its plinth vanishes below, and the other two islands are
+    simply not there. It looks like broken geometry and it is a viewport
+    setting. --background saves the factory UI, so this has to be set
+    explicitly on every 3D view the file carries.
+
+    clip_start is raised too: 0.01 m on a 10 km scene spreads the depth
+    buffer so thin that building walls z-fight with their own ground.
+    """
+    n = 0
+    for scr in bpy.data.screens:
+        for area in scr.areas:
+            if area.type != "VIEW_3D":
+                continue
+            for sp in area.spaces:
+                if sp.type != "VIEW_3D":
+                    continue
+                sp.clip_start = 1.0
+                sp.clip_end = 200_000.0
+                sp.shading.type = "MATERIAL"
+                # Open on the composed shot, not the factory view of the origin.
+                sp.region_3d.view_perspective = "CAMERA"
+                n += 1
+    print(f"  viewports configured: {n} (clip 1 m .. 200 km, camera view)")
+
+
+def render(path: str) -> None:
+    scene = bpy.context.scene
+    scene.render.filepath = path
     bpy.ops.render.render(write_still=True)
 
 
@@ -532,6 +582,11 @@ def build_master(a: dict[str, str]) -> None:
     setup_camera(span, tallest, float(a.get("pitch", 28.0)),
                  float(a.get("azim", 200.0)), float(a.get("margin", 1.05)))
 
+    # Brighter than a single ward: an island has no surrounding ground bouncing
+    # light back, so the same exposure reads about half a stop darker.
+    configure_render(int(a.get("samples", 48)), float(a.get("exposure", -3.8)),
+                     int(a.get("res", 2000)))
+    configure_viewports()
     os.makedirs(SCENES, exist_ok=True)
     blend = os.path.join(SCENES, "bangalore-master.blend")
     bpy.ops.wm.save_as_mainfile(filepath=blend)
@@ -540,10 +595,7 @@ def build_master(a: dict[str, str]) -> None:
         export_glb(os.path.join(SCENES, "bangalore-master.glb"))
     out = a.get("out") or os.path.join(
         SCENES, f"bangalore-master{'-qa' if qa else ''}.png")
-    # Brighter than a single ward: an island has no surrounding ground bouncing
-    # light back, so the same exposure reads about half a stop darker.
-    render(out, int(a.get("samples", 48)), float(a.get("exposure", -3.8)),
-           int(a.get("res", 2000)))
+    render(out)
     print(f"  master: rendered {out}")
 
 
@@ -567,6 +619,10 @@ def build_ward(ward: str, a: dict[str, str]) -> None:
     if exag != 1.0:
         print(f"  {ward}: TERRAIN EXAGGERATED x{exag} -- label any render from this")
 
+    configure_render(int(a.get("samples", 48)),
+                     float(a.get("exposure", WARD_EXPOSURE.get(ward, -4.2))),
+                     int(a.get("res", 1600)))
+    configure_viewports()
     os.makedirs(SCENES, exist_ok=True)
     blend = os.path.join(SCENES, f"{ward}.blend")
     bpy.ops.wm.save_as_mainfile(filepath=blend)
@@ -575,9 +631,7 @@ def build_ward(ward: str, a: dict[str, str]) -> None:
         export_glb(os.path.join(SCENES, f"{ward}.glb"))
 
     out = a.get("out") or os.path.join(SCENES, f"{ward}{'-qa' if qa else ''}.png")
-    render(out, int(a.get("samples", 48)),
-           float(a.get("exposure", WARD_EXPOSURE.get(ward, -4.2))),
-           int(a.get("res", 1600)))
+    render(out)
     print(f"  {ward}: rendered {out}")
 
 
