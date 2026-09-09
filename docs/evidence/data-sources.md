@@ -423,6 +423,15 @@ commonest values (7, 5, 4, 6, 8 m) account for 58 % of the city — it under-res
 matching Kolkata exactly; fill rates came in at 2.3 / 3.2 / 4.6 %, **better than Kolkata's shipped
 4.0 / 6.5 / 10.8 %**, so Google's Bengaluru coverage is the stronger of the two.
 
+**Overture Maps context themes, 2026-07-22.0** — `base/water`, `base/land_use`, `transportation/segment`
+· ODbL · **in the Blender scenes 2026-09-10**, clipped to each ward box: water polygons and stream lines,
+green land-use classes only, carriageway road classes only (footways and paths dropped as clutter at
+2.8 km). Same bucket and release as the buildings, so the whole scene is one licence and one vintage.
+
+**Poly Haven sky HDRI (`kloofendal_43d_clear_puresky`)** — **CC0** · **lighting only, not data.** A
+South African sky lights the Bengaluru islands; it is a look choice and the spec says so. Kept because
+it is the only licence class that needs no attribution at all in a render.
+
 **ATREE-CSEI — Lakes & Streams of Bengaluru Urban** — Ashoka Trust for Research in Ecology and the
 Environment, Centre for Social and Environmental Innovation · 181 lake polygons, 3,927 stream lines ·
 **CC-BY** · **role:** the water layer, and the reason Bangalore's water can be drawn as a *system*

@@ -43,6 +43,7 @@ import sys
 from typing import Any
 
 import bpy  # type: ignore[import-not-found]
+from mathutils.geometry import tessellate_polygon  # type: ignore[import-not-found]
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.join(HERE, "..")
@@ -81,6 +82,25 @@ WARD_EXPOSURE = {"indiranagar": -3.8, "mg-road": -3.8, "whitefield": -3.6}
 #: worth reading at a glance, while the even spacing makes the three comparable.
 MASTER_ORDER = ["mg-road", "indiranagar", "whitefield"]
 MASTER_GAP_M = 1_000.0
+
+#: Sky HDRI, if one has been fetched. CC0 from Poly Haven; the file name states
+#: the sun's elevation, and the actual sun is FOUND IN THE IMAGE rather than
+#: trusted from the name, so the shadow-casting lamp always matches the sky.
+HDRI_DIR = os.path.join(DATA, "raw", "hdri")
+
+#: Drawn carriageway widths, metres, by Overture class. Kerb to kerb, roughly:
+#: a Bengaluru residential street is 6-7 m and an arterial 4-lane is ~14 m.
+ROAD_WIDTH_M = {"motorway": 24.0, "trunk": 18.0, "primary": 14.0,
+                "secondary": 11.0, "tertiary": 8.0, "residential": 6.0,
+                "unclassified": 6.0, "living_street": 5.0, "service": 3.5,
+                "pedestrian": 4.0}
+
+#: How far each ground layer floats above the terrain. Ordered so a road over a
+#: park, or a pond inside one, resolves the right way instead of z-fighting.
+LIFT_GREEN_M = 0.10
+LIFT_WATER_M = 0.25
+LIFT_ROAD_M = 0.35
+STREAM_WIDTH_M = 3.0
 
 
 def args() -> dict[str, str]:
@@ -348,7 +368,185 @@ def build_buildings(terrain: dict[str, Any], doc: dict[str, Any],
     return obj, stats
 
 
+# ── context: green, water, roads ────────────────────────────────────────────
+
+def load_optional(ward: str, kind: str) -> dict[str, Any] | None:
+    path = os.path.join(DATA, f"{ward}-{kind}.json")
+    if not os.path.exists(path):
+        return None
+    with open(path, encoding="utf-8") as fh:
+        return dict(json.load(fh))
+
+
+def ground_z(terrain: dict[str, Any], exag: float, datum: float,
+             x: float, y: float) -> float:
+    return (sample_ground(terrain, x, y) - datum) * exag
+
+
+def build_polygons(name: str, feats: list[dict[str, Any]], terrain: dict[str, Any],
+                   exag: float, datum: float, offset: tuple[float, float],
+                   lift: float, mat: Any) -> int:
+    """Flat features draped on the ground: parks and water bodies.
+
+    DRAPED PER VERTEX, NOT SET TO ONE HEIGHT. A real lake is flat, but the
+    30 m terrain does not resolve its bed, so a lake at one elevation would
+    either float above the ground on one side or vanish into it on the other.
+    Following the ground at every vertex keeps it visible from the air, which
+    is the view that matters here, at the cost of a slope no one can see.
+
+    TRIANGULATED, because these rings are concave -- a park wrapping a
+    building, a lake with a bay -- and a concave n-gon renders with faces
+    bridging across the concavity.
+    """
+    ox, oy = offset
+    verts: list[tuple[float, float, float]] = []
+    faces: list[tuple[int, ...]] = []
+    for f in feats:
+        p = f.get("p")
+        if not p:
+            continue
+        ring = [(p[i], p[i + 1], 0.0) for i in range(0, len(p) - 1, 2)]
+        if len(ring) < 3:
+            continue
+        start = len(verts)
+        for x, y, _ in ring:
+            verts.append((x + ox, y + oy,
+                          ground_z(terrain, exag, datum, x, y) + lift))
+        for tri in tessellate_polygon([ring]):
+            faces.append(tuple(start + i for i in tri))
+    if not faces:
+        return 0
+    mesh_object(name, verts, faces, [mat])
+    return len(feats)
+
+
+def build_ribbons(name: str, feats: list[dict[str, Any]], terrain: dict[str, Any],
+                  exag: float, datum: float, offset: tuple[float, float],
+                  lift: float, width_of: Any, mat: Any) -> int:
+    """Polylines as flat ribbons of a given width: roads and streams.
+
+    One quad per segment, offset by the segment normal. Joints are not
+    mitred, so consecutive quads overlap slightly at bends. From the air, with
+    one material, that overlap is invisible, and mitring 40,000 joints is not
+    worth a single pixel it would change.
+    """
+    ox, oy = offset
+    verts: list[tuple[float, float, float]] = []
+    faces: list[tuple[int, ...]] = []
+    drawn = 0
+    for f in feats:
+        ln = f.get("line")
+        if not ln:
+            continue
+        half = float(width_of(f)) / 2.0
+        pts = [(ln[i], ln[i + 1]) for i in range(0, len(ln) - 1, 2)]
+        for (x0, y0), (x1, y1) in zip(pts, pts[1:]):
+            dx, dy = x1 - x0, y1 - y0
+            seg = math.hypot(dx, dy)
+            if seg < 0.5:
+                continue
+            nx, ny = -dy / seg * half, dx / seg * half
+            start = len(verts)
+            for x, y in ((x0 + nx, y0 + ny), (x0 - nx, y0 - ny),
+                         (x1 - nx, y1 - ny), (x1 + nx, y1 + ny)):
+                verts.append((x + ox, y + oy,
+                              ground_z(terrain, exag, datum, x, y) + lift))
+            faces.append((start, start + 1, start + 2, start + 3))
+        drawn += 1
+    if not faces:
+        return 0
+    mesh_object(name, verts, faces, [mat])
+    return drawn
+
+
+def build_context(ward: str, ctx: dict[str, Any], terrain: dict[str, Any],
+                  exag: float, datum: float,
+                  offset: tuple[float, float]) -> dict[str, int]:
+    green_mat = principled("green", (0.10, 0.16, 0.05, 1.0), rough=0.92)
+    water_mat = principled("water", (0.02, 0.07, 0.09, 1.0), rough=0.06)
+    road_mat = principled("road", (0.05, 0.05, 0.055, 1.0), rough=0.88)
+
+    n_green = build_polygons(f"{ward}-green", ctx.get("green", []), terrain,
+                             exag, datum, offset, LIFT_GREEN_M, green_mat)
+    water = ctx.get("water", [])
+    n_water = build_polygons(f"{ward}-water", [w for w in water if "p" in w],
+                             terrain, exag, datum, offset, LIFT_WATER_M, water_mat)
+    n_stream = build_ribbons(f"{ward}-streams", [w for w in water if "line" in w],
+                             terrain, exag, datum, offset, LIFT_WATER_M,
+                             lambda _f: STREAM_WIDTH_M, water_mat)
+    n_road = build_ribbons(f"{ward}-roads", ctx.get("roads", []), terrain,
+                           exag, datum, offset, LIFT_ROAD_M,
+                           lambda f: ROAD_WIDTH_M.get(str(f.get("cls")), 5.0),
+                           road_mat)
+    return {"green": n_green, "water": n_water, "streams": n_stream, "roads": n_road}
+
+
 # ── world, sun, camera ──────────────────────────────────────────────────────
+
+def find_hdri() -> str | None:
+    if not os.path.isdir(HDRI_DIR):
+        return None
+    for fn in sorted(os.listdir(HDRI_DIR)):
+        if fn.lower().endswith((".hdr", ".exr")):
+            return os.path.join(HDRI_DIR, fn)
+    return None
+
+
+def hdri_sun(img: Any) -> tuple[float, float]:
+    """(elevation_deg, azimuth_deg) of the brightest texel, in map terms.
+
+    Azimuth here is the mathematical angle from +X, counter-clockwise, in
+    Blender's equirectangular convention (image centre faces +X). Elevation is
+    from the row, bottom-up, because that is how `Image.pixels` is laid out.
+    """
+    import numpy as np
+    w, h = int(img.size[0]), int(img.size[1])
+    arr = np.empty(w * h * 4, dtype=np.float32)
+    img.pixels.foreach_get(arr)
+    rgb = arr.reshape(h, w, 4)[:, :, :3]
+    lum = 0.2126 * rgb[:, :, 0] + 0.7152 * rgb[:, :, 1] + 0.0722 * rgb[:, :, 2]
+    y, x = np.unravel_index(int(np.argmax(lum)), lum.shape)
+    u, v = (float(x) + 0.5) / w, (float(y) + 0.5) / h
+    return (v - 0.5) * 180.0, -(u - 0.5) * 360.0
+
+
+def setup_world_hdri(path: str) -> float:
+    """Light the scene with the sky image. Returns the sun elevation found.
+
+    THE SUN IS FOUND, THEN THE MAP IS TURNED TO PUT IT WHERE THE LAMP IS. A
+    sky HDRI carries its own sun; if the shadow-casting lamp sits at a
+    different azimuth, every building gets two lighting directions and the
+    render reads as wrong without anyone being able to say why. The lamp keeps
+    the azimuth this script has always used; the image is rotated to agree,
+    and the lamp's ELEVATION is taken from the image, since that is the one
+    thing the image cannot be turned to change.
+    """
+    world = bpy.data.worlds.new("world")
+    bpy.context.scene.world = world
+    world.use_nodes = True
+    nt = world.node_tree
+    nt.nodes.clear()
+    img = bpy.data.images.load(path)
+    elev, az_img = hdri_sun(img)
+    # Lamp rz -> sun compass azimuth is 180 - rz (see setup_sun); the map's
+    # angle is mathematical, so the target is rz - 90.
+    az_target = SUN_AZIM_DEG - 90.0
+    coord = nt.nodes.new("ShaderNodeTexCoord")
+    mapping = nt.nodes.new("ShaderNodeMapping")
+    mapping.inputs["Rotation"].default_value = (0.0, 0.0, math.radians(az_img - az_target))
+    env = nt.nodes.new("ShaderNodeTexEnvironment")
+    env.image = img
+    bg = nt.nodes.new("ShaderNodeBackground")
+    bg.inputs["Strength"].default_value = 1.0
+    out = nt.nodes.new("ShaderNodeOutputWorld")
+    nt.links.new(coord.outputs["Generated"], mapping.inputs["Vector"])
+    nt.links.new(mapping.outputs["Vector"], env.inputs["Vector"])
+    nt.links.new(env.outputs["Color"], bg.inputs["Color"])
+    nt.links.new(bg.outputs["Background"], out.inputs["Surface"])
+    print(f"  sky: {os.path.basename(path)}  sun elev {elev:.1f} deg, "
+          f"map az {az_img:.1f} -> rotated {az_img - az_target:+.1f} deg")
+    return elev
+
 
 def setup_world() -> None:
     world = bpy.data.worlds.new("world")
@@ -387,15 +585,46 @@ def setup_world() -> None:
     nt.links.new(bg.outputs[0], out.inputs[0])
 
 
-def setup_sun() -> None:
+def setup_sun(elev_deg: float = SUN_ELEV_DEG, strength: float = SUN_STRENGTH) -> None:
     light = bpy.data.lights.new("sun", type="SUN")
-    light.energy = SUN_STRENGTH
+    light.energy = strength
     light.angle = math.radians(0.545)     # the sun's real angular diameter
     obj = bpy.data.objects.new("sun", light)
     bpy.context.collection.objects.link(obj)
-    elev = math.radians(SUN_ELEV_DEG)
+    elev = math.radians(elev_deg)
     azim = math.radians(SUN_AZIM_DEG)
+    # With this euler the sun sits at compass azimuth 180 - SUN_AZIM_DEG:
+    # 285 puts it west-south-west, shadows falling east-north-east.
     obj.rotation_euler = (math.pi / 2 - elev, 0.0, azim)
+
+
+#: Film exposure per lighting path. THESE DIFFER BY NEARLY FOUR STOPS, and the
+#: first HDRI render came out black because the procedural value was reused.
+#: The Nishita sky plus a 4 W/m2 lamp is far brighter in absolute terms than a
+#: calibrated sky image at strength 1, which is built to sit near exposure 0.
+EXPOSURE_PROCEDURAL = -3.8
+EXPOSURE_HDRI = 0.0
+
+
+def setup_lighting(a: dict[str, str]) -> float:
+    """HDRI if one is on disk and not refused with --hdri 0; else the
+    procedural sky. The lamp follows whichever sun is in use.
+
+    Returns the exposure the chosen path wants, which the caller uses unless
+    --exposure overrides it. Lighting and exposure are one decision; splitting
+    them across two places is how the black render happened.
+    """
+    path = find_hdri() if a.get("hdri", "1") != "0" else None
+    if path:
+        elev = setup_world_hdri(path)
+        # The image already carries a sun disc that casts its own shadows in
+        # Cycles; the lamp only sharpens them, so it runs low to avoid lighting
+        # the sunlit faces twice.
+        setup_sun(elev_deg=elev, strength=1.5)
+        return EXPOSURE_HDRI
+    setup_world()
+    setup_sun()
+    return EXPOSURE_PROCEDURAL
 
 
 def setup_camera(size: float, tallest: float, pitch_deg: float,
@@ -550,6 +779,13 @@ def ward_scene(ward: str, a: dict[str, str], offset: tuple[float, float],
     datum = float(terrain["meanM"])
     build_terrain(terrain, exag, datum, name=f"{ward}-ground",
                   offset=offset, island=island, depth=depth)
+    ctx = load_optional(ward, "context")
+    if ctx is not None:
+        counts = build_context(ward, ctx, terrain, exag, datum, offset)
+        print(f"  {ward}: green {counts['green']}, water {counts['water']}, "
+              f"streams {counts['streams']}, roads {counts['roads']:,}")
+    else:
+        print(f"  {ward}: no context layer -- run fetch-bangalore.py --layer context")
     _, stats = build_buildings(terrain, doc, exag, datum, qa,
                                name=f"{ward}-buildings", offset=offset)
     print(f"  {ward}: {stats['drawn']:,} drawn, {stats['tiny']:,} skipped tiny, "
@@ -563,8 +799,7 @@ def build_master(a: dict[str, str]) -> None:
     """All three wards as separate islands in one file."""
     qa = a.get("qa") == "1"
     clear()
-    setup_world()
-    setup_sun()
+    exposure = setup_lighting(a)
 
     size = float(load(MASTER_ORDER[0], "buildings")["sizeM"])
     pitch = size + MASTER_GAP_M
@@ -582,9 +817,7 @@ def build_master(a: dict[str, str]) -> None:
     setup_camera(span, tallest, float(a.get("pitch", 28.0)),
                  float(a.get("azim", 200.0)), float(a.get("margin", 1.05)))
 
-    # Brighter than a single ward: an island has no surrounding ground bouncing
-    # light back, so the same exposure reads about half a stop darker.
-    configure_render(int(a.get("samples", 48)), float(a.get("exposure", -3.8)),
+    configure_render(int(a.get("samples", 48)), float(a.get("exposure", exposure)),
                      int(a.get("res", 2000)))
     configure_viewports()
     os.makedirs(SCENES, exist_ok=True)
@@ -604,8 +837,7 @@ def build_ward(ward: str, a: dict[str, str]) -> None:
     qa = a.get("qa") == "1"
     island = a.get("island", "1") != "0"
     clear()
-    setup_world()
-    setup_sun()
+    exposure = setup_lighting(a)
     ward_scene(ward, a, (0.0, 0.0), island=island)
 
     doc = load(ward, "buildings")
@@ -619,8 +851,10 @@ def build_ward(ward: str, a: dict[str, str]) -> None:
     if exag != 1.0:
         print(f"  {ward}: TERRAIN EXAGGERATED x{exag} -- label any render from this")
 
-    configure_render(int(a.get("samples", 48)),
-                     float(a.get("exposure", WARD_EXPOSURE.get(ward, -4.2))),
+    # Per-ward trims only apply to the procedural path they were measured on.
+    if exposure == EXPOSURE_PROCEDURAL:
+        exposure = WARD_EXPOSURE.get(ward, EXPOSURE_PROCEDURAL)
+    configure_render(int(a.get("samples", 48)), float(a.get("exposure", exposure)),
                      int(a.get("res", 1600)))
     configure_viewports()
     os.makedirs(SCENES, exist_ok=True)

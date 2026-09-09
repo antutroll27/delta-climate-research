@@ -516,6 +516,37 @@ real arrangement worth reading at a glance. The island is packaging — the grou
 surface is the same measured GLO-30 mesh, and the skirt hangs below the lowest
 real sample, so nothing about the landform changes.
 
+### What the scene draws, and where each layer comes from (2026-09-10)
+
+| layer | source | licence | drawn as |
+|---|---|---|---|
+| ground | Copernicus GLO-30 | free and open | the island's top face, 29 m posting |
+| buildings | Overture buildings + Google 2.5D heights | ODbL / CC BY | extruded prisms |
+| parks and green | Overture `base/land_use`, green classes only | ODbL | draped polygons |
+| water bodies | Overture `base/water` polygons | ODbL | draped, glossy |
+| streams and drains | Overture `base/water` lines | ODbL | 3 m ribbons |
+| roads | Overture `transportation/segment`, carriageways only | ODbL | ribbons, width by class |
+| sky and light | Poly Haven `kloofendal_43d_clear_puresky` | CC0 | environment map plus a shadow lamp |
+
+Per ward, clipped to the box: MG Road 166 green, 53 water, 37 streams, 2,941
+roads; Indiranagar 74 / 13 / 26 / 2,591; Whitefield 50 / 63 / 29 / 1,963. MG
+Road carrying the most green and the most water is Cubbon Park and its tanks,
+which is what the ward was chosen for.
+
+**Context features are clipped, not centroid-filtered.** A building belongs to
+one ward; a park, a lake or an arterial road crosses ward edges as a matter of
+course. Each is intersected with the box, so what is drawn is exactly the part
+inside it.
+
+**The sky is a look choice and is labelled as one.** The HDRI is a South African
+sky, not a Bengaluru one; it lights the model, it is not data about the city.
+Its sun is *found in the image* rather than trusted from the file name, the map
+is rotated so that sun sits where the shadow lamp has always sat, and the lamp's
+elevation is taken from the image. Measured with a top-down probe, the two cast
+a pole's shadow at the same angle. **Exposure is owned by the lighting path**:
+the procedural sky wants −3.8 stops, the calibrated image wants 0, and reusing
+one for the other produced a black render.
+
 The island also fixes an honesty problem the continuous version had. A ward drawn
 on 8.4 km of surrounding ground **looks like a city that stops**, because
 buildings exist only inside the box. An island ends on purpose, and shows the

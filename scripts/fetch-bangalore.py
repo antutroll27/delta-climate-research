@@ -46,6 +46,27 @@ import _bangalore as blr                            # noqa: E402  (path set abov
 RAW = os.path.join(blr.DATA, "raw")
 OVERTURE_PARQUET = os.path.join(RAW, "overture-buildings.parquet")
 
+#: The context layers, all from the same Overture release and bucket as the
+#: buildings and under the same ODbL. Each is one full-partition scan (~5 min),
+#: cached once over the union bbox and sliced per ward from there.
+CONTEXT_THEMES: dict[str, tuple[str, str, str]] = {
+    "water":   ("base", "water", "id, subtype, class, geometry"),
+    "landuse": ("base", "land_use", "id, subtype, class, geometry"),
+    "roads":   ("transportation", "segment", "id, subtype, class, geometry"),
+}
+
+#: Land-use classes drawn as green ground. Everything else stays bare, so a
+#: golf course reads as green and a car park does not.
+GREEN_CLASSES = {"park", "garden", "grass", "forest", "wood", "meadow",
+                 "recreation_ground", "cemetery", "golf_course", "orchard",
+                 "village_green", "nature_reserve", "greenfield", "plant_nursery"}
+
+#: Road classes that are drawn, i.e. carriageways. Footways, paths, steps and
+#: cycleways are real but at 2.8 km they are clutter, not information.
+ROAD_CLASSES = {"motorway", "trunk", "primary", "secondary", "tertiary",
+                "residential", "unclassified", "living_street", "service",
+                "pedestrian"}
+
 #: GLO-30 is a 1x1 degree COG grid. Bengaluru sits in N12/E077.
 GLO30 = ("/vsicurl/https://copernicus-dem-30m.s3.amazonaws.com/"
          "Copernicus_DSM_COG_10_N12_00_E077_00_DEM/"
@@ -233,6 +254,146 @@ def build_footprints(wards: list[blr.Ward]) -> None:
               f"skipped {skipped[w.id]}")
     print(f"  {outside_all:,} cached buildings fell outside every ward "
           f"(expected -- the cache spans the strip between them)")
+
+
+# ── context: water, green, roads ────────────────────────────────────────────
+
+def context_parquet(name: str) -> str:
+    return os.path.join(RAW, f"overture-{name}.parquet")
+
+
+def download_context() -> None:
+    """Three more Overture scans, each cached with the same atomic .part write."""
+    import duckdb
+    w, s, e, n = union_bounds()
+    con = duckdb.connect()
+    con.execute("INSTALL httpfs; LOAD httpfs; SET s3_region='us-west-2';")
+    for name, (theme, typ, cols) in CONTEXT_THEMES.items():
+        dst = context_parquet(name)
+        if os.path.exists(dst) and os.path.getsize(dst) > 0:
+            print(f"  {name:<8} cache present ({os.path.getsize(dst) / 1e6:.1f} MB)")
+            continue
+        os.makedirs(RAW, exist_ok=True)
+        src = (f"s3://overturemaps-us-west-2/release/{blr.OVERTURE_RELEASE}"
+               f"/theme={theme}/type={typ}/*")
+        print(f"  {name:<8} scanning {theme}/{typ} (~5 min) ...", flush=True)
+        part = dst + ".part"
+        con.execute(f"""
+            COPY (
+              SELECT {cols}
+              FROM read_parquet('{src}', hive_partitioning=1)
+              WHERE bbox.xmin <= {e} AND bbox.xmax >= {w}
+                AND bbox.ymin <= {n} AND bbox.ymax >= {s}
+            ) TO '{part}' (FORMAT PARQUET)
+        """)
+        rows = con.execute(f"SELECT COUNT(*) FROM read_parquet('{part}')").fetchone()
+        assert rows is not None
+        os.replace(part, dst)
+        print(f"  {name:<8} cached {rows[0]:,} features")
+
+
+def build_context(wards: list[blr.Ward]) -> None:
+    """Clip water, green land-use and roads to each ward box, in the local frame.
+
+    CLIPPED, NOT CENTROID-FILTERED. Buildings belong to one ward and a centroid
+    test is right for them. A lake, a park or an arterial road crosses ward
+    edges as a matter of course, and keeping or dropping it whole would either
+    spill kilometres past the island or delete the half that is inside. Every
+    feature is intersected with the box, so what is drawn is exactly the part
+    that is in the ward.
+    """
+    import duckdb
+    from shapely import wkb as shapely_wkb
+    from shapely.geometry import (LineString, MultiLineString, MultiPolygon,
+                                  Polygon, box)
+    from shapely.ops import transform as shp_transform
+
+    con = duckdb.connect()
+    tables: dict[str, list[Any]] = {
+        name: con.execute(
+            f"SELECT * FROM read_parquet('{context_parquet(name)}')").fetchall()
+        for name in CONTEXT_THEMES}
+    for name, rows in tables.items():
+        print(f"  {name:<8} {len(rows):,} cached features")
+
+    for w in wards:
+        half = w.size_m / 2.0
+        clip = box(-half, -half, half, half)
+
+        # Bound per iteration and called synchronously inside it, so the loop
+        # variable is safe to close over; the annotation is what shapely's
+        # transform() stub demands, not the Any a nested helper would default to.
+        def to_ward(x: float, y: float, z: float | None = None) -> tuple[float, ...]:
+            return blr.to_local(w, x, y)
+
+        def rings(geom: Any) -> list[list[float]]:
+            out: list[list[float]] = []
+            parts = geom.geoms if isinstance(geom, MultiPolygon) else [geom]
+            for g in parts:
+                if not isinstance(g, Polygon) or g.is_empty or g.area < 4.0:
+                    continue
+                flat: list[float] = []
+                for x, y in g.exterior.coords[:-1]:
+                    flat.extend((round(x, 2), round(y, 2)))
+                if len(flat) >= 6:
+                    out.append(flat)
+            return out
+
+        def lines(geom: Any) -> list[list[float]]:
+            out: list[list[float]] = []
+            parts = (geom.geoms if isinstance(geom, MultiLineString) else [geom])
+            for g in parts:
+                if not isinstance(g, LineString) or g.is_empty or g.length < 2.0:
+                    continue
+                flat: list[float] = []
+                for x, y in g.coords:
+                    flat.extend((round(x, 2), round(y, 2)))
+                if len(flat) >= 4:
+                    out.append(flat)
+            return out
+
+        water: list[dict[str, Any]] = []
+        for _id, subtype, cls, geom in tables["water"]:
+            g = shp_transform(to_ward, shapely_wkb.loads(bytes(geom)))
+            if not g.intersects(clip):
+                continue
+            g = g.intersection(clip)
+            for r in rings(g):
+                water.append({"cls": str(subtype or cls or "water"), "p": r})
+            for ln in lines(g):
+                water.append({"cls": str(subtype or cls or "stream"), "line": ln})
+
+        green: list[dict[str, Any]] = []
+        for _id, subtype, cls, geom in tables["landuse"]:
+            if str(cls) not in GREEN_CLASSES and str(subtype) not in GREEN_CLASSES:
+                continue
+            g = shp_transform(to_ward, shapely_wkb.loads(bytes(geom)))
+            if not g.intersects(clip):
+                continue
+            for r in rings(g.intersection(clip)):
+                green.append({"cls": str(cls or subtype), "p": r})
+
+        roads: list[dict[str, Any]] = []
+        for _id, subtype, cls, geom in tables["roads"]:
+            if str(subtype) != "road" or str(cls) not in ROAD_CLASSES:
+                continue
+            g = shp_transform(to_ward, shapely_wkb.loads(bytes(geom)))
+            if not g.intersects(clip):
+                continue
+            for ln in lines(g.intersection(clip)):
+                roads.append({"cls": str(cls), "line": ln})
+
+        doc = {
+            "ward": w.id, "sizeM": w.size_m, "release": blr.OVERTURE_RELEASE,
+            "source": "Overture Maps Foundation (ODbL): base/water, base/land_use, "
+                      "transportation/segment, clipped to the ward box",
+            "water": water, "green": green, "roads": roads,
+        }
+        with open(os.path.join(blr.DATA, f"{w.id}-context.json"), "w",
+                  encoding="utf-8") as fh:
+            json.dump(doc, fh, separators=(",", ":"))
+        print(f"  {w.id:<12} water {len(water):4d}  green {len(green):4d}  "
+              f"roads {len(roads):5,}")
 
 
 # ── heights ─────────────────────────────────────────────────────────────────
@@ -465,7 +626,7 @@ def build_terrain(w: blr.Ward, context: bool = False) -> None:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--layer", default="all",
-                    choices=("buildings", "heights", "terrain", "all"))
+                    choices=("buildings", "heights", "terrain", "context", "all"))
     ap.add_argument("--ward", default=None)
     a = ap.parse_args()
     wards = ward_list(a.ward)
@@ -479,6 +640,10 @@ def main() -> int:
         for w in wards:
             build_terrain(w)
             build_terrain(w, context=True)
+    if a.layer in ("context", "all"):
+        print("context (Overture water / land_use / segment):")
+        download_context()
+        build_context(wards)
     if a.layer in ("heights", "all"):
         print("heights (Google Open Buildings 2.5D):")
         init_ee()
