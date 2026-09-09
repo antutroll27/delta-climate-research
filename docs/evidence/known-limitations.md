@@ -388,3 +388,74 @@ within-ward figures — **cannot see water at all**. Its predictor mirrors
 time-stepped solver, and the relaxation has no dt-free steady state. So that script is structurally blind
 to this whole layer, and its output is annotated to say so. Any future cover layer that enters only the
 time-stepped solve will be invisible to it in exactly the same way.
+
+---
+
+## 8. Bangalore's building heights have two sources that disagree, and no Indian ground truth
+
+**Status:** open by design, published rather than hidden · **See:**
+[data-sources.md](data-sources.md),
+[../superpowers/specs/2026-09-10-bangalore-obos-wards-design.md](../superpowers/specs/2026-09-10-bangalore-obos-wards-design.md)
+
+Bangalore is the first city where the project has **two independent per-building height estimates** —
+Google Open Buildings 2.5D and UT-GLOBUS. That is an improvement on Kolkata (limitation 4 above), and it
+produced a harder problem rather than an answer: **the two disagree, and nothing available says which is
+right.**
+
+Measured at building centroids, 385 and 373 buildings:
+
+| site | UT-GLOBUS p50 | Google p50 | MAE | correlation | disagree > 5 m |
+|---|---:|---:|---:|---:|---:|
+| Indiranagar | 8.0 m | 5.3 m | 4.00 m | **+0.176** | 26.0 % |
+| Whitefield | 7.0 m | 5.0 m | 3.60 m | **+0.815** | 18.5 % |
+
+**The two correlations do not mean the same thing, and quoting them side by side without saying so would
+be the misleading move.** Whitefield's +0.815 is genuine cross-validation: there is real height variance
+and two independent methods track it. **Indiranagar's +0.176 is largely an artefact** — where almost
+every building is 5–8 m there is little variance to correlate, and the coefficient is measuring noise.
+**MAE is the honest statistic there, and 4.0 m on an 8 m building is a 50 % error.**
+
+This generalises past Bangalore: **correlation is the wrong summary for a low-variance population**, and
+a homogeneous neighbourhood will make any two height sources look uncorrelated no matter how good they
+both are.
+
+**UT-GLOBUS reads systematically 2–3 m higher at both sites.** Neither source has published Indian
+validation. Google's own documentation says the 1.5 m MAE *"was only evaluated in North America, Europe
+and Japan… heights prediction might not be as good in the Global South"*; UT-GLOBUS validates against US
+LiDAR only, at RMSE 9.1 m per building.
+
+**What we do about it.** Nothing that manufactures a number. Google 2.5D stays primary, UT-GLOBUS is
+attached as a second field, and where they differ by more than 5 m the building carries a **flag and a
+widened uncertainty band** — it is not corrected and not averaged. Blending would invent a value neither
+source states, and would hide the disagreement precisely where it is most informative.
+
+**What would close it.** Ground truth: a LiDAR or photogrammetric survey of a few hundred Bengaluru
+buildings. That is a procurement, not a download, and the sub-metre licence wall in
+[regulatory-and-licensing.md](regulatory-and-licensing.md) is why.
+
+---
+
+## 9. Bangalore's tree census is an inventory, not a density field
+
+**Status:** by design, disclosed · **See:** [data-sources.md](data-sources.md)
+
+The BBMP tree census is **702,109 individual trees with species** — nothing comparable exists for
+Kolkata, and it is genuinely better data than we have anywhere else. It also cannot be used the obvious
+way.
+
+**Counts track enumeration effort, not tree density.** Only **144 of 198 wards** appear at all; per-ward
+counts run from 1 to 45,831; 13 wards hold fewer than 100 trees; and **24.3 % of trees are recorded as
+species "Others"**. A ward with few trees in this dataset is a ward that was surveyed less, and a map
+shaded by census count would be a map of survey effort presented as a map of canopy.
+
+**It also carries no girth, height or crown diameter**, so crown radius has to be modelled from species —
+derived, not measured, and the artefact must say so.
+
+**So the two datasets do different jobs and are not substitutes:** canopy *fraction* comes from Meta CHM
+v1, which is a measurement; the census supplies *species and position*, which is an inventory. This is
+the same distinction as limitation 5 above — measured height versus modelled count — arriving from the
+opposite direction.
+
+**One consequence worth stating separately:** the census numbers its wards on the **dead 198-ward
+scheme**, two reorganisations behind the current 369-ward GBA-2025 geometry. Trees are therefore consumed
+**by position and never by ward join**, which sidesteps the problem rather than solving it.

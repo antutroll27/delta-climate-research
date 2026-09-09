@@ -382,11 +382,14 @@ Recording these is the point. Each looks usable and is not.
   RMSE 41.8 m**, underestimating by ~6 m for every 10 m of true height.
 - **Microsoft GlobalMLBuildingFootprints** — measured: **0 of 1,063,902 buildings
   in the India quadkey carry a height**; every record is `-1.0`.
-- **Meta canopy v2** — nearly **doubles** cover against v1 at every site (61 % for
-  Indiranagar is not credible for a dense urban neighbourhood), and an independent
-  Milan validation of the Meta layer found **31 % false positives**. **v1 is
-  primary; v2 is not used until measured against v1.** This is the same shape as a
-  hold-out that scores 100 % and means nothing.
+- **Meta canopy v2** — nearly **doubles** cover against v1 at every site, and
+  **61 % cover for Indiranagar is not credible** for a dense urban neighbourhood.
+  That measurement alone is the rejection. Independent urban validations of the
+  Meta layer are sobering in the same direction — against Milan's municipal tree
+  register only about a quarter of heights land within ±5 m — see
+  `docs/evidence/methods-and-papers.md`. **v1 is primary; v2 is not used until
+  measured against v1.** This is the same shape as a hold-out that scores 100 % and
+  means nothing.
 - **NOAA ISD** — every Bangalore entry ends **2025-08-24**; the 2026 file returns
   404. Any recipe inherited from Kolkata that reads ISD stops in August silently.
   GHCNh replaces it.
