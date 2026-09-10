@@ -1189,6 +1189,57 @@ def render(path: str) -> None:
     bpy.ops.render.render(write_still=True)
 
 
+def export_web_glb(path: str, ward: str) -> None:
+    """Buildings and landmarks only, Draco-compressed, for the browser.
+
+    WHAT IS DELIBERATELY LEFT OUT, and why each one is not a loss:
+      trees    OBOS already instances its own from `<ward>-trees.json`, tuned
+               over three Kolkata wards. Ours are 24,856 nodes in MG Road alone
+               and would be the whole payload.
+      terrain  the app builds its own relief layer and exaggerates it; a second
+               ground would z-fight with the first.
+      roads    drawn by `road-layer.ts` from the roads artefact, with labels.
+      water    drawn by `water-layer.ts`, and the SOLVER reads that layer, so
+               it has to come from the artefact rather than from a mesh.
+
+    THE FOOTPRINT RINGS STILL SHIP SEPARATELY and that is not negotiable:
+    `rasterizeWardBuilt` stamps every ring into the `built` grid the heat model
+    solves on. This file is what gets DRAWN; `<ward>.json` is what gets SOLVED.
+    Same separation the Dubai scenes enforce -- geometry may be added, the
+    physics input may never be modified by it.
+    """
+    keep = {"Buildings", "Landmarks"}
+    hidden: list[Any] = []
+    for ob in bpy.data.objects:
+        in_keep = any(c.name in keep for c in ob.users_collection)
+        if not in_keep and ob.type == "MESH":
+            hidden.append(ob)
+            ob.hide_set(True)
+            ob.hide_viewport = True
+    try:
+        bpy.ops.export_scene.gltf(
+            filepath=path, export_format="GLB", export_apply=False,
+            use_visible=True,
+            # Draco: positions are what dominates here, and buildings are flat
+            # prisms, so normals and UVs cost almost nothing to keep.
+            export_draco_mesh_compression_enable=True,
+            export_draco_mesh_compression_level=6,
+            export_draco_position_quantization=14,
+            export_normals=False, export_texcoords=False,
+            export_materials="NONE",
+        )
+    except (AttributeError, RuntimeError, TypeError) as exc:
+        print(f"  web GLB export failed ({exc})")
+        return
+    finally:
+        for ob in hidden:
+            ob.hide_set(False)
+            ob.hide_viewport = False
+    mb = os.path.getsize(path) / 1e6 if os.path.exists(path) else 0.0
+    print(f"  web GLB {os.path.basename(path)}: {mb:.2f} MB "
+          f"(buildings + landmarks only, Draco)")
+
+
 def export_glb(path: str) -> None:
     """Write the current scene as a single binary glTF.
 
@@ -1331,6 +1382,8 @@ def build_ward(ward: str, a: dict[str, str]) -> None:
     print(f"  {ward}: saved {blend}")
     if a.get("glb") == "1":
         export_glb(os.path.join(SCENES, f"{ward}.glb"))
+    if a.get("webglb") == "1":
+        export_web_glb(os.path.join(SCENES, f"{ward}-web.glb"), ward)
 
     out = a.get("out") or os.path.join(SCENES, f"{ward}{'-qa' if qa else ''}.png")
     render(out)
