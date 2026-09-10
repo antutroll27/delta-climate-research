@@ -441,6 +441,18 @@ the two choices are consistent with Kolkata's own finding that v2 improved how t
 Trees are scattered by Kolkata's rule imported from `fetch-canopy.py`, and candidates inside a building
 footprint are dropped — **6–9 % of candidates per ward**, a measured roof-for-crown confusion rate.
 
+**Poly Haven tree scans (`jacaranda_tree`, `island_tree_01/02/03`, `tree_small_02`)** — **CC0** ·
+fetched and wired in 2026-09-10, then **RULED OUT as the default for city-scale scenes** and kept
+behind `--trees scan` · photogrammetric, 1–4 M triangles each, textures verified loading.
+**Measured against a 112-triangle stylised crown at ward viewing distance (a 12 m tree ≈ 25 px), the
+scan reads as a pale grey wisp and the stylised tree reads as a tree.** Alpha-card foliage cannot be
+collapse-decimated (the UVs stop mapping to a leaf) and card-deletion thinning leaves ~7,000 leaves on
+a tree that has 1.2 M, so it renders bare; a 20 k → 400 k leaf sweep was still sparse at the top.
+The lesson generalises: **a photogrammetric hero asset is not automatically higher quality — quality
+is whether it reads at the size it will actually be drawn.** Note the Blender MCP add-on's Poly Haven
+search commands are unavailable in the installed version; `api.polyhaven.com` serves the catalogue
+without a key.
+
 **ATREE-CSEI — Lakes & Streams of Bengaluru Urban** — Ashoka Trust for Research in Ecology and the
 Environment, Centre for Social and Environmental Innovation · 181 lake polygons, 3,927 stream lines ·
 **CC-BY** · **role:** the water layer, and the reason Bangalore's water can be drawn as a *system*

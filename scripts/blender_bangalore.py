@@ -39,6 +39,7 @@ from __future__ import annotations
 import json
 import math
 import os
+import random
 import sys
 from typing import Any
 
@@ -113,6 +114,11 @@ STREAM_WIDTH_M = 3.0
 TREE_BUCKETS_M = [(2.0, 4.0), (4.0, 7.0), (7.0, 11.0), (11.0, 16.0),
                   (16.0, 22.0), (22.0, 80.0)]
 
+#: Distinct crown shapes per height bucket, so 27,000 trees are not one silhouette
+#: repeated 27,000 times. Six buckets x three variants is eighteen shapes for
+#: eighteen 112-triangle meshes -- the cost is nil and the repetition goes.
+TREE_VARIANTS = 3
+
 #: Scanned tree models, CC0 from Poly Haven, fetched into data/bangalore/raw/
 #: trees/<id>/ by the one-off in the commit that introduced them. One model per
 #: bucket, chosen by stature: the small broadleaf for street trees, the island
@@ -121,8 +127,30 @@ TREE_BUCKETS_M = [(2.0, 4.0), (4.0, 7.0), (7.0, 11.0), (11.0, 16.0),
 #: equals the bucket's mean canopy height, so the crown width follows the
 #: scan's proportions rather than the 0.35 h display heuristic.
 TREE_DIR = os.path.join(DATA, "raw", "trees")
-HQ_TREE_BY_BUCKET = {(2.0, 4.0): "tree_small_02", (4.0, 7.0): "island_tree_03",
-                     (7.0, 11.0): "island_tree_01", (11.0, 16.0): "island_tree_02",
+
+#: Triangle budgets per imported model, SPLIT BY WHAT THE GEOMETRY IS.
+#:
+#: The scans are 1-4 M triangles each and most of that is foliage: jacaranda is
+#: 2.40 M triangles of leaves, 1.23 M of branches, 0.23 M of trunk. A single
+#: collapse-decimate pass over the whole mesh was the first attempt and it
+#: STRIPPED THE TREES BARE -- a leaf is an alpha-textured quad, and collapsing
+#: quads merges them into slivers whose UVs no longer map to a leaf. The
+#: close-up probe showed branches with a few green flecks.
+#:
+#: So the two are reduced by different means. Leaves are thinned by DELETING
+#: WHOLE CARDS at random, which keeps every surviving leaf perfectly textured
+#: and just makes the canopy sparser. Branches and trunk are collapse-decimated,
+#: which is what that algorithm is good at. Deterministic: the leaf drop is
+#: seeded per model id, so a rebuild produces the same tree.
+HQ_LEAF_TRIS = 14_000
+HQ_SOLID_TRIS = 11_000
+#: Chosen so no scan is scaled beyond 0.7-1.8x its own height. Measured
+#: natural heights: island_tree_03 2.6 m, island_tree_02 3.4 m, tree_small_02
+#: 4.5 m, island_tree_01 5.0 m, jacaranda 19.4 m. The first mapping put the
+#: 3.4 m scan into the 11-16 m bucket -- a shrub blown up four times, with a
+#: shrub's proportions. Jacaranda carries every tall bucket instead.
+HQ_TREE_BY_BUCKET = {(2.0, 4.0): "island_tree_03", (4.0, 7.0): "tree_small_02",
+                     (7.0, 11.0): "island_tree_01", (11.0, 16.0): "jacaranda_tree",
                      (16.0, 22.0): "jacaranda_tree", (22.0, 80.0): "jacaranda_tree"}
 
 
@@ -146,8 +174,17 @@ def args() -> dict[str, str]:
 
 
 def clear() -> None:
-    """Empty the file. --background still opens the startup scene with a cube."""
+    """Empty the file. --background still opens the startup scene with a cube.
+
+    THE MODEL CACHE IS EMPTIED HERE TOO. It is module-level and outlives the
+    scene, but the Objects it holds do not: the factory reset destroys them,
+    and the next ward's `src.copy()` raised "StructRNA of type Object has been
+    removed". That killed a three-ward regeneration after its first ward, while
+    the master -- one scene, one reset -- sailed through. Re-importing per ward
+    costs ~75 s each; a dangling reference costs the run.
+    """
     bpy.ops.wm.read_factory_settings(use_empty=True)
+    _HQ_CACHE.clear()
 
 
 def principled(name: str, rgba: tuple[float, float, float, float],
@@ -506,35 +543,44 @@ def build_context(ward: str, ctx: dict[str, Any], terrain: dict[str, Any],
 
 # ── canopy ──────────────────────────────────────────────────────────────────
 
-def tree_template(name: str, h: float, r: float, mats: list[Any]) -> Any:
-    """A low-poly tree with its origin at the trunk base.
+def tree_template(name: str, h: float, r: float, mats: list[Any],
+                  seed: int = 0, lobes: int = 5) -> Any:
+    """A stylised tree: a tapered trunk under several overlapping crown lobes.
 
-    Trunk: 6-sided cylinder, no caps (the bottom is in the ground, the top is
-    inside the crown). Crown: subdivision-1 icosphere, squashed a little in z.
-    About 90 triangles, which is all a tree needs at 2.8 km.
+    ONE ICOSPHERE WAS A BALL ON A STICK. Five overlapping lobes at deterministic
+    offsets cost 112 triangles instead of 32 and give an irregular silhouette
+    that reads as a crown rather than a die. `seed` varies the lobe placement,
+    so a bucket can carry several distinct shapes and a street does not repeat.
 
-    THE FIRST VERSION PUT THE TRUNK ABOVE THE CROWN. It selected the crown's
-    vertices with `bm.verts[-42:]`, and a BMesh sequence sliced from a negative
-    index returns EVERY vertex, so the crown's height offset was applied to
-    the trunk too: crown 5-13 m, trunk 9-17 m, nothing touching the ground.
-    Measured in the saved file, not noticed by eye -- the close-up probe showed
-    trunks poking out of canopy tops and I explained them away. Each operator
-    returns the geometry it made; that is what is used now, and no sequence is
-    sliced.
+    THE FIRST VERSION PUT THE TRUNK ABOVE THE CROWN. It selected crown vertices
+    with `bm.verts[-42:]`, and a BMesh sequence sliced from a negative index
+    returns EVERY vertex, so the crown's height offset lifted the trunk too.
+    Each operator returns the geometry it made; that is what is used here, and
+    nothing is sliced.
     """
+    rng = random.Random(seed)
     bm = bmesh.new()
     trunk_r = max(0.15, 0.035 * h)
-    trunk_h = max(0.5, h - r * 0.9)
-    trunk = bmesh.ops.create_cone(bm, cap_ends=False, segments=6, radius1=trunk_r,
-                                  radius2=trunk_r * 0.8, depth=trunk_h)
-    for v in trunk["verts"]:
-        v.co.z += trunk_h / 2.0                 # base at z = 0, top at trunk_h
-    crown = bmesh.ops.create_icosphere(bm, subdivisions=1, radius=r)
-    crown_set = set(crown["verts"])
-    for v in crown["verts"]:
-        v.co.z = v.co.z * 0.85 + (h - r * 0.85)   # top at h, centre at h - 0.85 r
+    trunk_h = max(0.5, h - r * 1.0)
+    cone = bmesh.ops.create_cone(bm, cap_ends=False, segments=6, radius1=trunk_r,
+                                 radius2=trunk_r * 0.7, depth=trunk_h)
+    for v in cone["verts"]:
+        v.co.z += trunk_h / 2.0            # base at z = 0
+    solid = set(cone["verts"])
+    cz = h - r * 0.9
+    for i in range(lobes):
+        lobe_r = r * (0.52 + 0.30 * rng.random())
+        ang = 2 * math.pi * i / lobes + rng.random() * 0.6
+        rad = 0.0 if i == 0 else r * 0.42 * rng.random()
+        ox, oy = rad * math.cos(ang), rad * math.sin(ang)
+        oz = cz + r * (0.34 * rng.random() - 0.10) + (r * 0.30 if i == 0 else 0.0)
+        ico = bmesh.ops.create_icosphere(bm, subdivisions=1, radius=lobe_r)
+        for v in ico["verts"]:
+            v.co.x += ox
+            v.co.y += oy
+            v.co.z = v.co.z * 0.82 + oz    # squashed: crowns are wider than tall
     for f in bm.faces:
-        f.material_index = 1 if all(v in crown_set for v in f.verts) else 0
+        f.material_index = 0 if all(v in solid for v in f.verts) else 1
     mesh = bpy.data.meshes.new(name)
     bm.to_mesh(mesh)
     bm.free()
@@ -585,6 +631,75 @@ def import_hq_tree(model_id: str) -> Any | None:
         bpy.ops.object.join()
     src = meshes[0]
     bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+    tris_in = sum(len(p.vertices) - 2 for p in src.data.polygons)
+    leaf_slots = {i for i, sl in enumerate(src.material_slots)
+                  if sl.material is not None
+                  and ("leaf" in sl.material.name.lower()
+                       or "leaves" in sl.material.name.lower()
+                       or getattr(sl.material, "blend_method", "OPAQUE") == "BLEND")}
+
+    # ── leaves: drop whole cards, keep the survivors intact ──
+    if leaf_slots:
+        bm = bmesh.new()
+        bm.from_mesh(src.data)
+        bm.faces.ensure_lookup_table()
+        leaf_faces = [f for f in bm.faces if f.material_index in leaf_slots]
+        leaf_tris = sum(len(f.verts) - 2 for f in leaf_faces)
+        if leaf_tris > HQ_LEAF_TRIS and leaf_faces:
+            keep_frac = HQ_LEAF_TRIS / leaf_tris
+            rng = random.Random(model_id)          # deterministic per model
+            drop = [f for f in leaf_faces if rng.random() > keep_frac]
+            if drop:
+                bmesh.ops.delete(bm, geom=drop, context="FACES")
+        bm.to_mesh(src.data)
+        bm.free()
+        # Loose vertices left by the deleted cards would bloat the GLB.
+        bpy.context.view_layer.objects.active = src
+        bpy.ops.object.mode_set(mode="EDIT")
+        bpy.ops.mesh.select_all(action="SELECT")
+        bpy.ops.mesh.delete_loose(use_verts=True, use_edges=True, use_faces=False)
+        bpy.ops.object.mode_set(mode="OBJECT")
+
+    # ── branches and trunk: split off, collapse-decimate, join back ──
+    #
+    # A Decimate modifier restricted by vertex group was the obvious way and it
+    # does not work here: `vertex_groups.new()` on the freshly imported object
+    # yields a group the modifier cannot resolve ("DeformGroup '' not in
+    # object"). Separating the solid faces into their own object, decimating
+    # that alone and joining back needs no vertex group at all, and the leaf
+    # cards are never touched by the collapse.
+    solid_tris = sum(len(p.vertices) - 2 for p in src.data.polygons
+                     if p.material_index not in leaf_slots)
+    if leaf_slots and solid_tris > HQ_SOLID_TRIS:
+        for o in bpy.data.objects:
+            o.select_set(False)
+        src.select_set(True)
+        bpy.context.view_layer.objects.active = src
+        for p in src.data.polygons:
+            p.select = p.material_index not in leaf_slots
+        before_sep = set(bpy.data.objects)
+        bpy.ops.object.mode_set(mode="EDIT")
+        bpy.ops.mesh.separate(type="SELECTED")
+        bpy.ops.object.mode_set(mode="OBJECT")
+        solid = next((o for o in bpy.data.objects if o not in before_sep), None)
+        if solid is not None:
+            mod = solid.modifiers.new("decimate", "DECIMATE")
+            mod.ratio = HQ_SOLID_TRIS / solid_tris
+            mod.use_collapse_triangulate = True
+            bpy.context.view_layer.objects.active = solid
+            bpy.ops.object.modifier_apply(modifier=mod.name)
+            for o in bpy.data.objects:
+                o.select_set(False)
+            src.select_set(True)
+            solid.select_set(True)
+            bpy.context.view_layer.objects.active = src
+            bpy.ops.object.join()
+    elif solid_tris > HQ_SOLID_TRIS:
+        mod = src.modifiers.new("decimate", "DECIMATE")
+        mod.ratio = HQ_SOLID_TRIS / solid_tris
+        mod.use_collapse_triangulate = True
+        bpy.context.view_layer.objects.active = src
+        bpy.ops.object.modifier_apply(modifier=mod.name)
     for o in new:
         if o.type != "MESH" and o.name in bpy.data.objects:
             bpy.data.objects.remove(o, do_unlink=True)
@@ -603,8 +718,12 @@ def import_hq_tree(model_id: str) -> Any | None:
     for coll in list(src.users_collection):
         coll.objects.unlink(src)
     _HQ_CACHE[model_id] = src
-    print(f"  tree model {model_id}: {len(src.data.polygons):,} faces, "
-          f"{src['model_height']:.1f} m tall (CC0, Poly Haven)")
+    leaf_out = sum(len(p.vertices) - 2 for p in src.data.polygons
+                   if p.material_index in leaf_slots)
+    tris_out = sum(len(p.vertices) - 2 for p in src.data.polygons)
+    print(f"  tree model {model_id}: {tris_in:,} -> {tris_out:,} tris "
+          f"({leaf_out:,} leaf, {tris_out - leaf_out:,} solid), "
+          f"{src['model_height']:.1f} m tall (CC0, Poly Haven)", flush=True)
     return src
 
 
@@ -627,7 +746,7 @@ def hq_template(name: str, model_id: str, h: float) -> Any | None:
 
 def build_trees(ward: str, canopy: dict[str, Any], terrain: dict[str, Any],
                 exag: float, datum: float, offset: tuple[float, float],
-                hq: bool = True) -> int:
+                hq: bool = False) -> int:
     """One vertex per tree, one template per height bucket, dupli-verts.
 
     The original template is not rendered once its parent instances it, so
@@ -647,21 +766,39 @@ def build_trees(ward: str, canopy: dict[str, Any], terrain: dict[str, Any],
             continue
         h_rep = sum(float(t["h"]) for t in members) / len(members)
         r_rep = sum(float(t["r"]) for t in members) / len(members)
-        template = None
         if hq:
-            template = hq_template(f"{ward}-tree-{int(lo)}-{int(hi)}m",
-                                   HQ_TREE_BY_BUCKET.get((lo, hi), "island_tree_01"), h_rep)
-        if template is None:
-            template = tree_template(f"{ward}-tree-{int(lo)}-{int(hi)}m", h_rep, r_rep,
-                                     [trunk, crown])
-        verts = [(float(t["x"]) + ox, float(t["y"]) + oy,
-                  ground_z(terrain, exag, datum, float(t["x"]), float(t["y"])))
-                 for t in members]
-        cloud = mesh_object(f"{ward}-trees-{int(lo)}-{int(hi)}m", verts, [], [])
-        cloud.instance_type = "VERTS"
-        template.parent = cloud
-        template.location = (0.0, 0.0, 0.0)
-        drawn += len(members)
+            # One scanned template for the whole bucket: they are far too heavy
+            # to carry variants.
+            tmpl = hq_template(f"{ward}-tree-{int(lo)}-{int(hi)}m",
+                               HQ_TREE_BY_BUCKET.get((lo, hi), "island_tree_01"), h_rep)
+            groups = [(tmpl, members)] if tmpl is not None else []
+        else:
+            groups = []
+        if not groups:
+            # SPLIT EACH BUCKET INTO VARIANTS so a street is not one shape
+            # repeated. Assignment is by position, not by list order, so it is
+            # stable under any re-ordering of the canopy file.
+            buckets: list[list[dict[str, Any]]] = [[] for _ in range(TREE_VARIANTS)]
+            for t in members:
+                key = int(abs(float(t["x"])) * 7.0 + abs(float(t["y"])) * 13.0)
+                buckets[key % TREE_VARIANTS].append(t)
+            for vi, group in enumerate(buckets):
+                if not group:
+                    continue
+                gh = sum(float(t["h"]) for t in group) / len(group)
+                gr = sum(float(t["r"]) for t in group) / len(group)
+                groups.append((tree_template(
+                    f"{ward}-tree-{int(lo)}-{int(hi)}m-{vi}", gh, gr,
+                    [trunk, crown], seed=int(lo) * 31 + vi), group))
+        for template, group in groups:
+            verts = [(float(t["x"]) + ox, float(t["y"]) + oy,
+                      ground_z(terrain, exag, datum, float(t["x"]), float(t["y"])))
+                     for t in group]
+            cloud = mesh_object(f"{template.name}-cloud", verts, [], [])
+            cloud.instance_type = "VERTS"
+            template.parent = cloud
+            template.location = (0.0, 0.0, 0.0)
+            drawn += len(group)
     return drawn
 
 
@@ -931,8 +1068,13 @@ def export_glb(path: str) -> None:
     itself -- reads it directly.
     """
     try:
+        # export_apply=False: every modifier is already applied at import, and
+        # with apply ON the exporter evaluates each scaled bucket template into
+        # its own mesh -- six copies of a 25-69k-triangle scan per ward, eighteen
+        # in the master -- instead of one mesh per model with scale on the node.
+        # Measured before this change: mg-road.glb 54.1 MB, master 79.0 MB.
         bpy.ops.export_scene.gltf(filepath=path, export_format="GLB",
-                                  export_apply=True)
+                                  export_apply=False)
     except (AttributeError, RuntimeError) as exc:
         print(f"  GLB export unavailable ({exc}) -- .blend written anyway")
         return
@@ -973,7 +1115,7 @@ def ward_scene(ward: str, a: dict[str, str], offset: tuple[float, float],
     canopy = load_optional(ward, "canopy")
     if canopy is not None:
         n_trees = build_trees(ward, canopy, terrain, exag, datum, offset,
-                              hq=a.get("trees", "hq") != "lowpoly")
+                              hq=a.get("trees", "stylised") == "scan")
         cf = canopy.get("coverFrac", {})
         print(f"  {ward}: trees {n_trees:,} instanced; canopy cover "
               f"v1 {100 * float(cf.get('v1', 0)):.1f} % (v2 {100 * float(cf.get('v2', 0)):.1f} %), "

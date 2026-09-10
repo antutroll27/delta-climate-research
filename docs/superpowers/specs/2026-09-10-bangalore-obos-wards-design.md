@@ -538,7 +538,7 @@ real sample, so nothing about the landform changes.
 | water bodies | Overture `base/water` polygons | ODbL | draped, glossy |
 | streams and drains | Overture `base/water` lines | ODbL | 3 m ribbons |
 | roads | Overture `transportation/segment`, carriageways only | ODbL | ribbons, width by class |
-| trees | Meta/WRI CHM v1, placed by Kolkata's 10 m rule | CC BY 4.0 | instanced low-poly trees in six height buckets |
+| trees | Meta/WRI CHM v1, placed by Kolkata's 10 m rule | CC BY 4.0 | instanced stylised crowns, 6 buckets × 3 variants |
 | sky and light | Poly Haven `kloofendal_43d_clear_puresky` | CC0 | environment map plus a shadow lamp |
 
 Per ward, clipped to the box: MG Road 166 green, 53 water, 37 streams, 2,941
@@ -554,6 +554,46 @@ Tree **count** is therefore a display scaling, exactly as Kolkata's known
 limitation 5 states; canopy **height** and **cover** are the measurements.
 Species are not assigned: the BBMP census that would supply them is not yet
 joined, and a guessed species is worse than none.
+
+**Photogrammetric tree scans were built, measured, and rejected for this
+scale.** Five CC0 Poly Haven models were fetched and wired in behind
+`--trees scan`, which still works. The default is a **stylised crown**: a
+tapered trunk under five overlapping lobes, 112 triangles, in six height
+buckets × three shape variants so a street is not one silhouette repeated.
+
+The comparison was rendered rather than argued, at the distance the wards are
+actually viewed, where a 12 m tree is about 25 pixels tall:
+
+| | triangles | at ward distance |
+|---|---:|---|
+| single icosphere (first version) | 32 | reads as a green tree, obviously a ball |
+| **stylised lobed crown** | **112** | **reads as a green tree with an irregular crown** |
+| scanned jacaranda, 160 k leaf budget | 198,678 | reads as a **pale grey wisp** |
+
+**The scan loses at every budget tried, and the reason is instructive.** Its
+2.40 M triangles of leaves are alpha-textured cards, and a card cannot be
+collapse-decimated — merging quads produces slivers whose UVs no longer map to
+a leaf. Thinning by deleting whole cards keeps each survivor perfect but at
+14 k triangles leaves roughly 7,000 leaves on a tree that has 1.2 million, so
+it renders bare. A sweep at 20 k / 60 k / 160 k / 400 k leaf triangles was
+still sparse at the top of the range: the jacaranda scan is an **open-canopy
+specimen built for hero close-ups**, and no reduction of it produces the dense
+green mass a 25-pixel tree needs. Textures were verified as loading (nine
+images, 1024², all with data) before drawing that conclusion.
+
+So the honest result is that a 112-triangle stylised tree is **higher quality
+than a 199,000-triangle scan for this job**, because quality here means reading
+correctly at 25 pixels, 68,000 times over. `--trees scan` remains for anyone
+composing a close-up.
+
+**A bug worth recording, because its symptom looked like a data problem.** The
+first tree template rendered with the trunk *above* the crown, which the founder
+saw as the trees looking reversed. The crown vertices had been selected with a
+negative slice on a BMesh sequence, which returns every vertex, so the crown's
+height offset lifted the trunk too. Measured in the saved file: crown 5.2–12.9 m,
+trunk 9.1–16.6 m. A close-up probe had shown trunks poking out of canopy tops
+and I explained them away; the fix was verified by z-range per material, not by
+eye.
 
 **Candidates standing inside a building footprint are dropped**, and the count is
 kept as a measurement of how far the canopy model confuses roofs with crowns:
