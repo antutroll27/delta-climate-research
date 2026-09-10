@@ -506,3 +506,54 @@ skyline than a pixel census implies** and that is correct behaviour, not a bug.
 ground truth. Failing that, running p65 and p75 side by side and choosing against
 OSM `building:levels` evidence, which is what Kolkata's `validate-heights.py` does
 and what Bangalore has not yet done — it ships p65 for parity with Kolkata.
+
+---
+
+## 11. Three statistical fixes for Bengaluru's heights, all measured, all rejected
+
+**Status:** measured 2026-09-11, all three refused · **See:** `scripts/measure-bangalore-prior.py`
+
+Bengaluru's shipped heights are Google Open Buildings 2.5D at zonal p65, and that
+estimator has a known, measured weakness: it collapses on tall buildings. Against
+1,926 buildings carrying independent OSM evidence, its bias runs from **−0.68 m
+below 10 m to −27.09 m above 60 m** — at the top end it reads barely a third of
+the building.
+
+Three statistical repairs were tried against held-out data. **None ships.**
+
+| approach | result vs raw Google | why refused |
+|---|---:|---|
+| Neighbourhood spatial prior, 400 m cells | **−36 to −39 %** | loses outright |
+| Global linear fit, `0.846·g + 3.42` | **+7 %** MAE | shrinks the skyline |
+| Band-limited linear, 8–45 m only | **+1.5 %** MAE | 19.7 % made worse |
+
+**The spatial prior lost, and that is a finding about the cities, not the method.**
+On Dubai the same prior halved the error over 152,942 buildings — because 87 % of
+Dubai had no measured height at all, so anything beat nothing. Bengaluru already
+has a real estimator on every building, and a neighbourhood median cannot beat it:
+MAE 3.74 m for Google against 5.11 m for the prior on held-out storey-derived
+truth, and 16.58 m against 22.96 m on stated heights. **A method that transformed
+one city can be worthless in the next; re-test, never port.**
+
+**The linear fit is a regression-to-the-mean trap, and it is the instructive one.**
+It improves aggregate MAE by 7 % and would have been easy to ship on that number
+alone. Broken out by true height it improves the 10–60 m middle by 10–27 % and
+makes **both tails worse** — and the slope below 1 means it pulls tall buildings
+*down*. Five of the six tallest test buildings moved FURTHER from the truth,
+including one whose true height is 93.2 m being pushed from 50.8 m to 46.4 m.
+
+**An aggregate metric can improve while the thing you care about gets worse.** The
+skyline is what a viewer checks first and what the founder's demo rests on, so a
+correction that trades the towers for the mid-rise is a loss dressed as a gain.
+
+### What this leaves, and it is not nothing
+
+**Statistics on Google's own value cannot rescue the towers — only evidence can.**
+That is exactly what the measured tier does, and it is already shipped: a cited
+published height moved UB Tower from 18.2 m to 123 m, which no correction fitted
+to Google's reading could ever have achieved from an input of 10 m.
+
+So the route to better Bengaluru heights is **more evidence, not better maths**:
+the OSM buildings Overture is missing entirely (Vidhana Soudha among them), the
+Karnataka RERA elevation figures for Whitefield's under-construction towers, and
+the UT-GLOBUS `Bangalore_1` tile that would finally give MG Road a cross-check.
