@@ -113,6 +113,18 @@ STREAM_WIDTH_M = 3.0
 TREE_BUCKETS_M = [(2.0, 4.0), (4.0, 7.0), (7.0, 11.0), (11.0, 16.0),
                   (16.0, 22.0), (22.0, 80.0)]
 
+#: Scanned tree models, CC0 from Poly Haven, fetched into data/bangalore/raw/
+#: trees/<id>/ by the one-off in the commit that introduced them. One model per
+#: bucket, chosen by stature: the small broadleaf for street trees, the island
+#: trees for the mid-canopy, and jacaranda -- a genuine Bengaluru avenue tree
+#: -- for the tall buckets. The model is scaled uniformly so its own height
+#: equals the bucket's mean canopy height, so the crown width follows the
+#: scan's proportions rather than the 0.35 h display heuristic.
+TREE_DIR = os.path.join(DATA, "raw", "trees")
+HQ_TREE_BY_BUCKET = {(2.0, 4.0): "tree_small_02", (4.0, 7.0): "island_tree_03",
+                     (7.0, 11.0): "island_tree_01", (11.0, 16.0): "island_tree_02",
+                     (16.0, 22.0): "jacaranda_tree", (22.0, 80.0): "jacaranda_tree"}
+
 
 def args() -> dict[str, str]:
     """Everything after the `--` Blender itself stops reading at."""
@@ -500,23 +512,29 @@ def tree_template(name: str, h: float, r: float, mats: list[Any]) -> Any:
     Trunk: 6-sided cylinder, no caps (the bottom is in the ground, the top is
     inside the crown). Crown: subdivision-1 icosphere, squashed a little in z.
     About 90 triangles, which is all a tree needs at 2.8 km.
+
+    THE FIRST VERSION PUT THE TRUNK ABOVE THE CROWN. It selected the crown's
+    vertices with `bm.verts[-42:]`, and a BMesh sequence sliced from a negative
+    index returns EVERY vertex, so the crown's height offset was applied to
+    the trunk too: crown 5-13 m, trunk 9-17 m, nothing touching the ground.
+    Measured in the saved file, not noticed by eye -- the close-up probe showed
+    trunks poking out of canopy tops and I explained them away. Each operator
+    returns the geometry it made; that is what is used now, and no sequence is
+    sliced.
     """
     bm = bmesh.new()
     trunk_r = max(0.15, 0.035 * h)
     trunk_h = max(0.5, h - r * 0.9)
-    bmesh.ops.create_cone(bm, cap_ends=False, segments=6, radius1=trunk_r,
-                          radius2=trunk_r * 0.8, depth=trunk_h)
-    for v in bm.verts:
-        v.co.z += trunk_h / 2.0
+    trunk = bmesh.ops.create_cone(bm, cap_ends=False, segments=6, radius1=trunk_r,
+                                  radius2=trunk_r * 0.8, depth=trunk_h)
+    for v in trunk["verts"]:
+        v.co.z += trunk_h / 2.0                 # base at z = 0, top at trunk_h
+    crown = bmesh.ops.create_icosphere(bm, subdivisions=1, radius=r)
+    crown_set = set(crown["verts"])
+    for v in crown["verts"]:
+        v.co.z = v.co.z * 0.85 + (h - r * 0.85)   # top at h, centre at h - 0.85 r
     for f in bm.faces:
-        f.material_index = 0
-    n_trunk = len(bm.faces)
-    bmesh.ops.create_icosphere(bm, subdivisions=1, radius=r)
-    for f in bm.faces[n_trunk:]:
-        f.material_index = 1
-    crown_verts = bm.verts[-42:] if len(bm.verts) >= 42 else bm.verts[:]
-    for v in crown_verts:
-        v.co.z = v.co.z * 0.85 + (h - r * 0.85)
+        f.material_index = 1 if all(v in crown_set for v in f.verts) else 0
     mesh = bpy.data.meshes.new(name)
     bm.to_mesh(mesh)
     bm.free()
@@ -528,8 +546,88 @@ def tree_template(name: str, h: float, r: float, mats: list[Any]) -> Any:
     return obj
 
 
+_HQ_CACHE: dict[str, Any] = {}
+
+
+def import_hq_tree(model_id: str) -> Any | None:
+    """Import a Poly Haven glTF once, join it to one mesh, base it at the origin.
+
+    Returns the source object (unlinked from any collection -- it is only ever
+    copied into bucket templates), or None if the model is not on disk, in
+    which case the caller falls back to the low-poly tree for that bucket.
+
+    NORMALISED, NOT TRUSTED. The scan's origin is wherever the artist left it,
+    so the joined mesh is moved so its lowest point sits at z = 0 and its
+    footprint centres on the origin. The height is measured from the mesh and
+    stored on the object, because the bucket scale is computed from it.
+    """
+    if model_id in _HQ_CACHE:
+        return _HQ_CACHE[model_id]
+    d = os.path.join(TREE_DIR, model_id)
+    gltfs = [f for f in os.listdir(d)] if os.path.isdir(d) else []
+    gltfs = [f for f in gltfs if f.lower().endswith((".gltf", ".glb"))]
+    if not gltfs:
+        _HQ_CACHE[model_id] = None
+        return None
+    before = set(bpy.data.objects)
+    bpy.ops.import_scene.gltf(filepath=os.path.join(d, gltfs[0]))
+    new = [o for o in bpy.data.objects if o not in before]
+    meshes = [o for o in new if o.type == "MESH"]
+    if not meshes:
+        _HQ_CACHE[model_id] = None
+        return None
+    for o in bpy.data.objects:
+        o.select_set(False)
+    for o in meshes:
+        o.select_set(True)
+    bpy.context.view_layer.objects.active = meshes[0]
+    if len(meshes) > 1:
+        bpy.ops.object.join()
+    src = meshes[0]
+    bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+    for o in new:
+        if o.type != "MESH" and o.name in bpy.data.objects:
+            bpy.data.objects.remove(o, do_unlink=True)
+    xs = [v.co.x for v in src.data.vertices]
+    ys = [v.co.y for v in src.data.vertices]
+    zs = [v.co.z for v in src.data.vertices]
+    cx, cy, z0 = (min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2, min(zs)
+    for v in src.data.vertices:
+        v.co.x -= cx
+        v.co.y -= cy
+        v.co.z -= z0
+    src["model_height"] = max(zs) - z0
+    src["model_id"] = model_id
+    src.select_set(False)
+    # Unlink from the scene: only bucket-scaled copies are drawn.
+    for coll in list(src.users_collection):
+        coll.objects.unlink(src)
+    _HQ_CACHE[model_id] = src
+    print(f"  tree model {model_id}: {len(src.data.polygons):,} faces, "
+          f"{src['model_height']:.1f} m tall (CC0, Poly Haven)")
+    return src
+
+
+def hq_template(name: str, model_id: str, h: float) -> Any | None:
+    src = import_hq_tree(model_id)
+    if src is None:
+        return None
+    obj = src.copy()                     # shares the mesh datablock
+    obj.name = name
+    s = h / max(0.5, float(src["model_height"]))
+    obj.scale = (s, s, s)
+    # VIEWPORT PROXY. A scanned tree is tens of thousands of faces, and there
+    # are up to 68,000 of them in the master. Solid-mode viewport draws
+    # instances as their template's display type, so bounds keep the file
+    # navigable; the render and any rendered-mode viewport draw the real mesh.
+    obj.display_type = "BOUNDS"
+    bpy.context.collection.objects.link(obj)
+    return obj
+
+
 def build_trees(ward: str, canopy: dict[str, Any], terrain: dict[str, Any],
-                exag: float, datum: float, offset: tuple[float, float]) -> int:
+                exag: float, datum: float, offset: tuple[float, float],
+                hq: bool = True) -> int:
     """One vertex per tree, one template per height bucket, dupli-verts.
 
     The original template is not rendered once its parent instances it, so
@@ -549,8 +647,13 @@ def build_trees(ward: str, canopy: dict[str, Any], terrain: dict[str, Any],
             continue
         h_rep = sum(float(t["h"]) for t in members) / len(members)
         r_rep = sum(float(t["r"]) for t in members) / len(members)
-        template = tree_template(f"{ward}-tree-{int(lo)}-{int(hi)}m", h_rep, r_rep,
-                                 [trunk, crown])
+        template = None
+        if hq:
+            template = hq_template(f"{ward}-tree-{int(lo)}-{int(hi)}m",
+                                   HQ_TREE_BY_BUCKET.get((lo, hi), "island_tree_01"), h_rep)
+        if template is None:
+            template = tree_template(f"{ward}-tree-{int(lo)}-{int(hi)}m", h_rep, r_rep,
+                                     [trunk, crown])
         verts = [(float(t["x"]) + ox, float(t["y"]) + oy,
                   ground_z(terrain, exag, datum, float(t["x"]), float(t["y"])))
                  for t in members]
@@ -869,7 +972,8 @@ def ward_scene(ward: str, a: dict[str, str], offset: tuple[float, float],
         print(f"  {ward}: no context layer -- run fetch-bangalore.py --layer context")
     canopy = load_optional(ward, "canopy")
     if canopy is not None:
-        n_trees = build_trees(ward, canopy, terrain, exag, datum, offset)
+        n_trees = build_trees(ward, canopy, terrain, exag, datum, offset,
+                              hq=a.get("trees", "hq") != "lowpoly")
         cf = canopy.get("coverFrac", {})
         print(f"  {ward}: trees {n_trees:,} instanced; canopy cover "
               f"v1 {100 * float(cf.get('v1', 0)):.1f} % (v2 {100 * float(cf.get('v2', 0)):.1f} %), "
