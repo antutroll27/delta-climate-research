@@ -68,6 +68,15 @@ ROAD_CLASSES = {"motorway", "trunk", "primary", "secondary", "tertiary",
                 "residential", "unclassified", "living_street", "service",
                 "pedestrian"}
 
+#: Drawn carriageway widths, metres. MUST MATCH ROAD_WIDTH_M in
+#: blender_bangalore.py -- the canopy layer uses these to decide which trees
+#: stand in a road, and the scene uses them to draw it. If the two drift, trees
+#: are removed from a strip that is not where the road is drawn.
+ROAD_WIDTH_M = {"motorway": 24.0, "trunk": 18.0, "primary": 14.0,
+                "secondary": 11.0, "tertiary": 8.0, "residential": 6.0,
+                "unclassified": 6.0, "living_street": 5.0, "service": 3.5,
+                "pedestrian": 4.0}
+
 #: GLO-30 is a 1x1 degree COG grid. Bengaluru sits in N12/E077.
 GLO30 = ("/vsicurl/https://copernicus-dem-30m.s3.amazonaws.com/"
          "Copernicus_DSM_COG_10_N12_00_E077_00_DEM/"
@@ -397,6 +406,268 @@ def build_context(wards: list[blr.Ward]) -> None:
               f"roads {len(roads):5,}")
 
 
+# ── OSM measured heights and cited landmarks ────────────────────────────────
+
+#: Named buildings whose height is a PUBLISHED FACT, with the source named per
+#: row. This is the Dubai `heightSource` pattern: a height is a fact and facts
+#: are not copyrightable, and a hand-entered list of six landmarks comes nowhere
+#: near the bulk-extraction limit that database right actually protects.
+#:
+#: WHY THIS TIER HAS TO EXIST. Measured against these six, the zonal p65 that
+#: ships today reads UB Tower at 18.2 m against a cited 123 m. The statistic is
+#: not slightly low on towers, it collapses on them: a tower's Overture footprint
+#: is its PLOT, so two thirds of the pixels inside it are podium, forecourt and
+#: car park, and the 65th percentile of that is podium height.
+#:
+#: (name, lat, lon, height_m, source). Matched to the nearest footprint of at
+#: least MIN_LANDMARK_AREA within LANDMARK_SNAP_M -- never by name, because
+#: Overture's `names.primary` is absent on most of these.
+CITED_HEIGHTS: list[tuple[str, float, float, float, str]] = [
+    ("UB Tower", 12.97287, 77.595848, 123.0, "CTBUH 13883"),
+    ("UB City Concord Tower", 12.97250, 77.59620, 115.0, "CTBUH 13884"),
+    ("UB City Canberra Tower", 12.97270, 77.59650, 105.0, "CTBUH 13885"),
+    ("Subhas Chandra Bose Tower", 12.97406, 77.609894, 106.0,
+     "CTBUH 4991; Wikipedia infobox agrees"),
+    ("Vidhana Soudha", 12.9796, 77.5906, 45.7, "Wikipedia infobox, 150 ft"),
+    ("M. Chinnaswamy Stadium", 12.9789, 77.5997, 30.0,
+     "stadium roof line, estimated -- flagged as such, not cited"),
+]
+LANDMARK_SNAP_M = 90.0
+MIN_LANDMARK_AREA = 800.0
+
+#: A building this short is not a building. 1,682 footprints across the three
+#: wards carry a "measured" height under 1 m, which is the same p65 collapse
+#: seen on the towers, at the other end. Below this the height is refused and
+#: the fill convention applies instead, so the artefact never states a
+#: half-metre building as a measurement.
+MIN_CREDIBLE_H = 2.0
+
+#: Overpass mirrors, tried in order. The main instance returned HTTP 504 on
+#: two of four ward queries during this build, and the Bangalore probe earlier
+#: lost 7 of 12 requests to rate limiting. One endpoint is not a data source,
+#: it is a single point of failure.
+OVERPASS = ("https://overpass-api.de/api/interpreter",
+            "https://overpass.kumi.systems/api/interpreter",
+            "https://overpass.private.coffee/api/interpreter")
+
+
+def overpass_heights(w: blr.Ward) -> list[dict[str, Any]]:
+    """OSM buildings in the ward carrying `height` or `building:levels`.
+
+    `out center tags` rather than full geometry: the centroid is all that is
+    needed to match a footprint we already hold, and it is a fraction of the
+    payload. Overpass rate-limits hard, so this backs off rather than failing
+    the run -- the Bangalore probe lost 7 of 12 requests on the first attempt.
+    """
+    import ssl
+    import time
+    import urllib.parse
+    import urllib.request
+    import certifi
+
+    west, south, east, north = blr.bounds(w)
+    q = (f'[out:json][timeout:180];('
+         f'way["building"]["building:levels"]({south},{west},{north},{east});'
+         f'way["building"]["height"]({south},{west},{north},{east});'
+         f'relation["building"]["building:levels"]({south},{west},{north},{east});'
+         f'relation["building"]["height"]({south},{west},{north},{east}););'
+         f'out center tags;')
+    ctx = ssl.create_default_context(cafile=certifi.where())
+    last = ""
+    for attempt in range(6):
+        url = OVERPASS[attempt % len(OVERPASS)]
+        try:
+            req = urllib.request.Request(
+                url, data=urllib.parse.urlencode({"data": q}).encode(),
+                headers={"User-Agent": "delta-climate-obos/1.0"})
+            with urllib.request.urlopen(req, timeout=240, context=ctx) as r:
+                doc = json.loads(r.read())
+            return [e for e in doc.get("elements", []) if "center" in e or "lat" in e]
+        except Exception as exc:                       # noqa: BLE001 -- see docstring
+            last = f"{url.split('/')[2]}: {exc}"
+            print(f"    overpass retry {attempt + 1}/6 ({last})", flush=True)
+            time.sleep(6.0 + 5.0 * attempt)
+    raise SystemExit(f"Overpass failed for {w.id} after 6 tries -- last {last}")
+
+
+def parse_height(tags: dict[str, str]) -> float | None:
+    """OSM `height`, metres. Returns None for anything not plainly numeric.
+
+    Values arrive as "45", "45 m", "45.5m" and occasionally as feet-and-inches
+    (`12'6"`), which is refused rather than guessed at.
+    """
+    raw = tags.get("height", "").strip().lower().replace("meter", "").replace("metres", "")
+    raw = raw.replace("m", "").strip()
+    try:
+        v = float(raw)
+    except ValueError:
+        return None
+    return v if 1.5 <= v <= 900.0 else None
+
+
+def parse_levels(tags: dict[str, str]) -> float | None:
+    raw = tags.get("building:levels", "").strip()
+    try:
+        v = float(raw)
+    except ValueError:
+        return None
+    return v if 1.0 <= v <= 200.0 else None
+
+
+#: A "storey" below this is not reliably a storey. MEASURED: fitting over every
+#: building that carries both tags gives 3.93 m, and the sample that produces it
+#: is contaminated by monumental low-rise -- Karnataka High Court at 25 m over
+#: 2 floors (12.50 m per floor), Ambaji at 40 m over 2 (20.00), Vidhana Soudha at
+#: 30 m over 4 (7.50). Those are double-height civic halls, and they are real,
+#: but applying their ratio to 1,872 ordinary apartment blocks makes every one of
+#: them 18 % too tall. Excluding them the fit is 3.33 m and STABLE: the median
+#: does not move between a 3-storey and a 10-storey cut-off.
+MIN_FIT_STOREYS = 5.0
+
+
+def fit_storey_metres(rows: list[tuple[float, float]]) -> tuple[float, int]:
+    """Metres per storey, FITTED from local buildings carrying both tags.
+
+    Kolkata assumes 3.2 m and Dubai 4.0 m, and the Dubai work recorded that
+    importing Kolkata's Indian constant into the Gulf cost a 20 % bias. Rather
+    than import either into Bengaluru, this fits the ratio here -- but only from
+    buildings tall enough that a storey means a storey (see MIN_FIT_STOREYS).
+
+    The MEDIAN, not the mean: the mean over the same sample is 3.47 m against a
+    median of 3.33, because a handful of high-ceilinged outliers survive even the
+    storey cut-off. A median is what a contaminated sample calls for.
+    """
+    ratios = sorted(h / lv for h, lv in rows
+                    if lv >= MIN_FIT_STOREYS and 1.5 <= h <= 900.0)
+    if len(ratios) < 8:
+        return 3.2, len(ratios)
+    return round(statistics.median(ratios), 2), len(ratios)
+
+
+def apply_osm_heights(w: blr.Ward, els: list[dict[str, Any]],
+                      storey_m: float, n_fit: int) -> None:
+    """Layer measured OSM heights and cited landmarks over the Google baseline.
+
+    PRECEDENCE, best evidence first:
+      cited      a published figure for a named building
+      osm-height an OSM `height` tag -- a stated measurement
+      osm-levels `building:levels` x a locally fitted metres-per-storey
+      google     the zonal p65 that every building starts with
+      fill       Google had no confident pixel, or the p65 was not credible
+
+    Google's value is NEVER discarded -- it moves to `hGoogle` -- so the
+    disagreement between the tiers stays measurable after the fact.
+    """
+    from shapely.geometry import Point, Polygon
+    from shapely.strtree import STRtree
+
+    path = os.path.join(blr.DATA, f"{w.id}-buildings.json")
+    with open(path, encoding="utf-8") as fh:
+        doc = cast(dict[str, Any], json.load(fh))
+    bs = doc["b"]
+
+    polys = []
+    for b in bs:
+        p = b["p"]
+        pts = [(p[i], p[i + 1]) for i in range(0, len(p) - 1, 2)]
+        polys.append(Polygon(pts) if len(pts) >= 3 else Point(0, 0).buffer(0.01))
+    tree = STRtree(polys)
+    cents = [blr.ring_centroid(b["p"]) for b in bs]
+
+    for b, (cx, cy) in zip(bs, cents):
+        b.setdefault("hGoogle", float(b["h"]))
+        b["hSource"] = "fill" if b["fill"] else "google"
+        # The p65 collapse at the short end: refuse it rather than state it.
+        if not b["fill"] and float(b["h"]) < MIN_CREDIBLE_H:
+            b["h"], b["fill"], b["hSource"] = blr.FILL_HEIGHT_M, True, "fill"
+
+    def match(lat: float, lon: float, min_area: float, snap: float) -> int | None:
+        x, y = blr.to_local(w, lon, lat)
+        hits = tree.query(Point(x, y), predicate="within")
+        for i in hits:
+            if blr.ring_area(bs[int(i)]["p"]) >= min_area:
+                return int(i)
+        best, bd = None, snap
+        for i, (cx, cy) in enumerate(cents):
+            d = math.hypot(cx - x, cy - y)
+            if d < bd and blr.ring_area(bs[i]["p"]) >= min_area:
+                best, bd = i, d
+        return best
+
+    n_h = n_lv = 0
+    for e in els:
+        t = e.get("tags", {})
+        c = e.get("center") or e
+        idx = match(float(c["lat"]), float(c["lon"]), 12.0, 25.0)
+        if idx is None:
+            continue
+        h, lv = parse_height(t), parse_levels(t)
+        if h is not None:
+            bs[idx]["h"], bs[idx]["fill"] = round(h, 2), False
+            bs[idx]["hSource"] = "osm-height"
+            if lv is not None:
+                bs[idx]["levels"] = lv
+            n_h += 1
+        elif lv is not None:
+            bs[idx]["h"], bs[idx]["fill"] = round(lv * storey_m, 2), False
+            bs[idx]["hSource"] = "osm-levels"
+            bs[idx]["levels"] = lv
+            n_lv += 1
+
+    n_cited = 0
+    for name, lat, lon, h, src in CITED_HEIGHTS:
+        if not (blr.bounds(w)[0] <= lon <= blr.bounds(w)[2]
+                and blr.bounds(w)[1] <= lat <= blr.bounds(w)[3]):
+            continue
+        idx = match(lat, lon, MIN_LANDMARK_AREA, LANDMARK_SNAP_M)
+        if idx is None:
+            print(f"    cited {name}: NO footprint within {LANDMARK_SNAP_M:.0f} m "
+                  f"-- skipped, not invented")
+            continue
+        was = float(bs[idx]["h"])
+        was_src = str(bs[idx].get("hSource", "?"))
+        # A CITED HEIGHT OVERRIDES AN OSM ONE, AND THE DISAGREEMENT IS KEPT.
+        # Measured on UB City: CTBUH gives Concorde 115 m over 20 floors and
+        # Canberra 105 m over 18, i.e. 5.75 and 5.83 m per floor, which no
+        # office building has. OSM tags both at 60 m, i.e. 3.00 and 3.33 --
+        # ordinary. The likeliest reading is that CTBUH measures the podium
+        # too while the floor count is tower-only, but that is a guess, so the
+        # registry value ships and the conflict is published rather than
+        # silently resolved. Same rule as the UT-GLOBUS cross-check.
+        if was_src == "osm-height" and was > 0 and abs(h - was) / max(h, was) > 0.20:
+            bs[idx]["heightConflict"] = {
+                "cited": h, "osm": round(was, 2), "citedSource": src,
+                "note": "cited ships; OSM's own tag disagrees by more than 20 %"}
+            print(f"    CONFLICT {name:<24} cited {h:.1f} m vs OSM {was:.1f} m "
+                  f"-- cited ships, both recorded")
+        bs[idx]["h"], bs[idx]["fill"] = h, False
+        bs[idx]["hSource"], bs[idx]["heightSourceCite"] = "cited", src
+        bs[idx]["name"] = name
+        n_cited += 1
+        print(f"    cited {name:<28} {was:6.1f} -> {h:6.1f} m  ({src})")
+
+    doc["storeyMetres"] = storey_m
+    doc["storeyFitN"] = n_fit
+    doc["heightTiers"] = {
+        "cited": n_cited, "osm-height": n_h, "osm-levels": n_lv,
+        "google": sum(1 for b in bs if b["hSource"] == "google"),
+        "fill": sum(1 for b in bs if b["hSource"] == "fill"),
+    }
+    doc["heightNote"] = (
+        f"Heights, best evidence first: cited published figures ({n_cited}), OSM "
+        f"height tags ({n_h}), OSM building:levels x {storey_m} m fitted from "
+        f"{n_fit} local buildings of at least {MIN_FIT_STOREYS:.0f} storeys "
+        f"carrying both tags ({n_lv}), else zonal p65 of "
+        f"Open Buildings 2.5D at ~{SCALE_M} m. A p65 under {MIN_CREDIBLE_H} m is "
+        f"refused as not credible and falls back to the {blr.FILL_HEIGHT_M} m "
+        f"fill. Google's value is kept on every building as hGoogle.")
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump(doc, fh, separators=(",", ":"))
+    print(f"  {w.id:<12} storey {storey_m} m (fit n={n_fit})  "
+          f"cited {n_cited}  osm-height {n_h}  osm-levels {n_lv}  "
+          f"google {doc['heightTiers']['google']:,}  fill {doc['heightTiers']['fill']:,}")
+
+
 # ── canopy ──────────────────────────────────────────────────────────────────
 
 #: Meta / WRI canopy height model on AWS Open Data, read anonymously. v1 is
@@ -525,12 +796,43 @@ def build_canopy(w: blr.Ward) -> None:
                 r = round(h * 0.35 * (0.9 + 0.2 * hash01(col, row, kk, 2)), 2)
                 cands.append({"x": x, "y": y, "h": round(h, 1), "r": r})
 
-    # ── drop candidates standing inside a building footprint ──
-    # Kolkata records ~30 % of its rendered trees on rooftops or in roads as
-    # known limitation 2 and defers the fix. Here the footprints are already
-    # in hand, so a tree whose base falls inside one is dropped. The count is
-    # kept: it is a measurement of how much the canopy model confuses roofs
-    # with crowns, which is worth knowing on its own.
+    # ── drop candidates standing inside a building, or in a carriageway ──
+    # Kolkata records ~30 % of its rendered trees on rooftops OR IN ROADS as
+    # known limitation 2 and defers the fix. Both halves are closed here,
+    # because both layers are already in hand.
+    #
+    # The road half was measured before it was fixed: 3,843 of Indiranagar's
+    # trees (14.0 %), 3,754 of MG Road's (13.1 %) and 1,215 of Whitefield's
+    # (10.1 %) stood inside a drawn carriageway. That is the canopy model
+    # reading a tree-lined street as canopy over the whole street, which at
+    # 1 m resolution is what an overhanging crown looks like from above.
+    #
+    # Both counts are kept rather than just subtracted: they measure how far
+    # the canopy model disagrees with the building and road layers, which is
+    # worth knowing on its own.
+    rpath = os.path.join(blr.DATA, f"{w.id}-context.json")
+    dropped_road = 0
+    if os.path.exists(rpath) and cands:
+        from shapely.geometry import LineString
+        with open(rpath, encoding="utf-8") as fh:
+            ctx = json.load(fh)
+        ribbons = []
+        for r in ctx.get("roads", []):
+            ln = r.get("line") or []
+            pts = [(ln[i], ln[i + 1]) for i in range(0, len(ln) - 1, 2)]
+            if len(pts) >= 2:
+                ribbons.append(LineString(pts).buffer(
+                    ROAD_WIDTH_M.get(str(r.get("cls")), 5.0) / 2.0,
+                    cap_style="flat"))
+        if ribbons:
+            rtree = STRtree(ribbons)
+            rpts = [Point(c["x"], c["y"]) for c in cands]
+            rhit = rtree.query(rpts, predicate="within")
+            rin = set(int(i) for i in np.asarray(rhit)[0]) if len(rhit) else set()
+            kept0 = [c for i, c in enumerate(cands) if i not in rin]
+            dropped_road = len(cands) - len(kept0)
+            cands = kept0
+
     bpath = os.path.join(blr.DATA, f"{w.id}-buildings.json")
     dropped = 0
     if os.path.exists(bpath) and cands:
@@ -564,13 +866,14 @@ def build_canopy(w: blr.Ward) -> None:
                   "deterministic jitter. Tree COUNT is a display scaling, not a "
                   "measurement; canopy HEIGHT is measured. Species not assigned.",
         "densityRefM": DENSITY_REF_H, "minTreeH": MIN_TREE_H,
-        "candidates": len(cands), "droppedInBuildings": dropped,
+        "candidates": len(cands) + dropped_road, "droppedInBuildings": dropped,
+        "droppedInRoads": dropped_road,
         "count": len(kept), "trees": kept,
     }
     with open(os.path.join(blr.DATA, f"{w.id}-canopy.json"), "w", encoding="utf-8") as fh:
         json.dump(doc, fh, separators=(",", ":"))
-    print(f"  {w.id:<12} trees {len(kept):,} ({len(cands):,} candidates, "
-          f"{dropped:,} inside buildings dropped)", flush=True)
+    print(f"  {w.id:<12} trees {len(kept):,}  dropped {dropped:,} in buildings, "
+          f"{dropped_road:,} in roads", flush=True)
 
 
 # ── heights ─────────────────────────────────────────────────────────────────
@@ -803,7 +1106,8 @@ def build_terrain(w: blr.Ward, context: bool = False) -> None:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--layer", default="all",
-                    choices=("buildings", "heights", "terrain", "context", "canopy", "all"))
+                    choices=("buildings", "heights", "terrain", "context", "canopy",
+                             "osm", "all"))
     ap.add_argument("--ward", default=None)
     a = ap.parse_args()
     wards = ward_list(a.ward)
@@ -821,6 +1125,31 @@ def main() -> int:
         print("context (Overture water / land_use / segment):")
         download_context()
         build_context(wards)
+    if a.layer in ("osm", "all"):
+        # AFTER heights: this layer OVERRIDES the Google baseline where better
+        # evidence exists, so it cannot run before the baseline is there.
+        #
+        # THE STOREY CONSTANT IS FITTED ONCE, ACROSS ALL THREE WARDS. Fitted per
+        # ward it was 3.2 m in Indiranagar from six buildings -- too thin to fit,
+        # so it silently fell back to Kolkata's imported constant -- against
+        # 4.16 m from twenty-five in MG Road. One city-wide figure with a real
+        # sample beats one ward guessing and another importing.
+        print("measured heights (OSM tags + cited landmarks):")
+        fetched = {}
+        rows: list[tuple[float, float]] = []
+        for w in wards:
+            print(f"  {w.id:<12} querying Overpass ...", flush=True)
+            fetched[w.id] = overpass_heights(w)
+            for e in fetched[w.id]:
+                t = e.get("tags", {})
+                h, lv = parse_height(t), parse_levels(t)
+                if h is not None and lv is not None:
+                    rows.append((h, lv))
+        storey_m, n_fit = fit_storey_metres(rows)
+        print(f"  storey height fitted city-wide: {storey_m} m from {n_fit} "
+              f"buildings carrying both height and building:levels")
+        for w in wards:
+            apply_osm_heights(w, fetched[w.id], storey_m, n_fit)
     if a.layer in ("canopy", "all"):
         print("canopy (Meta/WRI CHM v1, v2 measured alongside):")
         for w in wards:
