@@ -40,6 +40,8 @@ during design, not quoted.
 | UT-GLOBUS buildings | 10,654 | *(tile 1, see §4)* | 7,813 |
 | Overture footprints **built** | **14,867** | 11,045 | 10,897 |
 | BBMP census trees (1 km) | **7,543** | *(not measured)* | 1,871 |
+| canopy cover ≥ 3 m, CHM v1 | **34.1 %** | 31.5 % | 18.9 % |
+| trees instanced (v1, 10 m rule) | 27,408 | **28,573** | 12,015 |
 | CTBUH landmarks | **0** | **5** (4 with a height) | **0** |
 
 **Three different urban forms, not three samples of one.** Dense low-rise under
@@ -128,7 +130,7 @@ Every layer below is commercially usable. Licences were read, not assumed.
 | Footprints | Overture Maps 2026-07-22.0 | ODbL | measured: 7,531 / 6,394 in test boxes |
 | Heights (primary) | Google Open Buildings 2.5D Temporal v1 | CC BY-4.0 **or** ODbL | measured, 8 epochs, latest 2023-06-30 |
 | Heights (cross-check) | UT-GLOBUS (UT Austin, *Sci Data* 11:617) | CC BY-4.0 | measured, 774,118 buildings, 100 % height coverage |
-| Canopy | Meta/WRI CHM **v1** (`alsgedi_global_v6`) | CC BY-4.0 | measured at the *candidate* sites, see note |
+| Canopy | Meta/WRI CHM **v1** (`alsgedi_global_v6`) | CC BY-4.0 | **measured per ward**: 34.1 / 31.5 / 18.9 % cover ≥ 3 m |
 | Tree species | BBMP Tree Census, July 2026 | see §6 | measured: 702,109 trees |
 | Water | ATREE-CSEI Lakes & Streams of Bengaluru Urban | **CC-BY** | 181 lake polygons, 3,927 stream lines |
 | Land cover | KGIS `State_LULC_2023` ArcGIS REST | see §6 | live, feature-level, verified at all sites |
@@ -139,12 +141,22 @@ Every layer below is commercially usable. Licences were read, not assumed.
 | LST validation | Landsat 8/9 C2 L2 | USGS public domain | 42 scenes < 20 % cloud in 24 months over the ward boxes |
 | LST validation | ECOSTRESS `ECO_L2T_LSTE` via LP DAAC | NASA open | **214 overpasses, all 24 local hours** |
 
-**The canopy percentages are not yet per-ward.** Meta CHM v1 was sampled while the
-shortlist was still Indiranagar, Koramangala and Whitefield, giving 33.9 / 23.5 /
-23.2 % cover at ≥3 m. **Indiranagar's 33.9 % is the figure that carries forward**;
-MG Road was never sampled, because it was not a candidate at the time. Per-ward
-canopy fraction for all three is measured during implementation, before any figure
-is quoted.
+**Canopy is now measured per ward, on 1 m pixels, for both model versions**
+(2026-09-10, `fetch-bangalore.py --layer canopy`):
+
+| | Indiranagar | MG Road | Whitefield |
+|---|---:|---:|---:|
+| CHM v1 cover ≥ 3 m | **34.1 %** | 31.5 % | 18.9 % |
+| CHM v2 cover ≥ 3 m | 55.5 % | 50.6 % | 33.8 % |
+| v2 / v1 | 1.63 | 1.61 | 1.79 |
+
+Indiranagar's 34.1 % reproduces the 33.9 % sampled during design to within a
+fifth of a point. **v2 reports 1.6–1.8× the cover of v1 at every ward**, which is
+the doubling that had it rejected in §6, now measured on the final boxes rather
+than remembered from the candidate ones. The condition "v2 is not used until
+measured against v1" is met, and the answer is the same: **v1 is shipped.**
+Kolkata's own characterisation of v2 — better at *how tall*, not at *where* — is
+consistent with this; tree placement is a where question.
 
 ### The layers that matter most, and why
 
@@ -526,12 +538,29 @@ real sample, so nothing about the landform changes.
 | water bodies | Overture `base/water` polygons | ODbL | draped, glossy |
 | streams and drains | Overture `base/water` lines | ODbL | 3 m ribbons |
 | roads | Overture `transportation/segment`, carriageways only | ODbL | ribbons, width by class |
+| trees | Meta/WRI CHM v1, placed by Kolkata's 10 m rule | CC BY 4.0 | instanced low-poly trees in six height buckets |
 | sky and light | Poly Haven `kloofendal_43d_clear_puresky` | CC0 | environment map plus a shadow lamp |
 
 Per ward, clipped to the box: MG Road 166 green, 53 water, 37 streams, 2,941
 roads; Indiranagar 74 / 13 / 26 / 2,591; Whitefield 50 / 63 / 29 / 1,963. MG
 Road carrying the most green and the most water is Cubbon Park and its tanks,
 which is what the ward was chosen for.
+
+**Trees are placed by Kolkata's rule, imported rather than copied.** The
+scatter — 10 m cells, zero to four instances per cell scaling with height against
+a fixed 30 m reference, deterministic jitter — is *the same function*, loaded from
+`fetch-canopy.py` at run time, so a tree density means one thing in both cities.
+Tree **count** is therefore a display scaling, exactly as Kolkata's known
+limitation 5 states; canopy **height** and **cover** are the measurements.
+Species are not assigned: the BBMP census that would supply them is not yet
+joined, and a guessed species is worse than none.
+
+**Candidates standing inside a building footprint are dropped**, and the count is
+kept as a measurement of how far the canopy model confuses roofs with crowns:
+2,126 of 29,534 in Indiranagar (7.2 %), 1,926 of 30,499 in MG Road (6.3 %),
+1,135 of 13,150 in Whitefield (8.6 %). Kolkata records ~30 % of its trees on roofs
+*or roads* as an open limitation; here the footprints were already in hand, so the
+roof half is closed.
 
 **Context features are clipped, not centroid-filtered.** A building belongs to
 one ward; a park, a lake or an arterial road crosses ward edges as a matter of

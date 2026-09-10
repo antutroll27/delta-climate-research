@@ -432,6 +432,15 @@ green land-use classes only, carriageway road classes only (footways and paths d
 South African sky lights the Bengaluru islands; it is a look choice and the spec says so. Kept because
 it is the only licence class that needs no attribution at all in a render.
 
+**Meta / WRI canopy height model v1 — Bangalore** — same product as the Kolkata entry above, read from the
+same bucket · **in the Blender scenes 2026-09-10**, tile `123303312` · cover ≥ 3 m on 1 m pixels: **Indiranagar
+34.1 %, MG Road 31.5 %, Whitefield 18.9 %**. **v2 was measured alongside** on the same boxes and reports
+1.6–1.8× the cover at every ward (55.5 / 50.6 / 33.8 %), so the spec's rejection of v2 for *placement* stands
+on the final geometry, not on the candidate boxes it was first made on. Kolkata ships v2 for *height*;
+the two choices are consistent with Kolkata's own finding that v2 improved how tall, not where.
+Trees are scattered by Kolkata's rule imported from `fetch-canopy.py`, and candidates inside a building
+footprint are dropped — **6–9 % of candidates per ward**, a measured roof-for-crown confusion rate.
+
 **ATREE-CSEI — Lakes & Streams of Bengaluru Urban** — Ashoka Trust for Research in Ecology and the
 Environment, Centre for Social and Environmental Innovation · 181 lake polygons, 3,927 stream lines ·
 **CC-BY** · **role:** the water layer, and the reason Bangalore's water can be drawn as a *system*

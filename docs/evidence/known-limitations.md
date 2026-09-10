@@ -290,6 +290,12 @@ therefore not a measured quantity and must never be quoted as one — canopy **h
 and species are modelled. The receipt says so. This is listed as a limitation because it is the single
 easiest thing for a viewer to misread.
 
+**Bangalore inherits this by construction (2026-09-10).** Its tree scatter is the same
+`_generate` function, imported from `fetch-canopy.py` rather than reimplemented, so the
+Bangalore tree counts (27,408 / 28,573 / 12,015) are display scalings in exactly the same
+sense. The two cities differ in one respect: Bangalore drops candidates that fall inside a
+building footprint, which closes the roof half of limitation 2 there and measures it at 6–9 %.
+
 ---
 
 ## 6. The ward-mean observations do not identify `Q` — they only pin the product `Q·built`

@@ -35,10 +35,11 @@ import argparse
 import json
 import math
 import os
+import importlib.util
 import sqlite3
 import statistics
 import sys
-from typing import Any, cast
+from typing import Any, Callable, cast
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _bangalore as blr                            # noqa: E402  (path set above)
@@ -396,6 +397,182 @@ def build_context(wards: list[blr.Ward]) -> None:
               f"roads {len(roads):5,}")
 
 
+# ── canopy ──────────────────────────────────────────────────────────────────
+
+#: Meta / WRI canopy height model on AWS Open Data, read anonymously. v1 is
+#: PRIMARY for Bangalore, as the design spec pins it: the research pass found
+#: v2 nearly doubles cover at every Bangalore site (61 % for Indiranagar is not
+#: credible), and Kolkata's own fetch-canopy.py characterises v2 as better at
+#: HOW TALL, not at WHERE. Placement is a where question. Both are measured
+#: here so the choice carries numbers rather than a memory of them.
+CHM_BUCKET = "dataforgood-fb-data"
+CHM_V1 = ("forests/v1/alsgedi_global_v6_float", 9)
+CHM_V2 = ("forests/v2/global/dinov3_global_chm_v2_ml3", 10)
+
+#: KOLKATA'S PLACEMENT CONSTANTS, VERBATIM. 10 m cells (Kolkata: 140 over 1400 m,
+#: here 280 over 2800 m), 0..4 instances per cell scaling with height against a
+#: FIXED 30 m reference, positions jittered deterministically. Two cities placed
+#: by the same rule are comparable; retuning any of these here would quietly make
+#: "tree density" mean something different in each city.
+CANOPY_GRID = 280
+MIN_TREE_H = 2.0
+DENSITY_MAX = 4
+DENSITY_REF_H = 30.0
+JITTER = 0.80
+#: The spec's cover threshold, measured at ~1 m on the native raster, never on
+#: the 10 m averages -- averaging blurs a threshold.
+COVER_H = 3.0
+
+
+def _kolkata_canopy() -> Any:
+    """Load fetch-canopy.py as a module so its hash and quadkey are REUSED.
+
+    Not copied: the jitter hash is what makes a Kolkata tree scatter and a
+    Bangalore one the same procedure, and a copy drifts the day someone edits
+    one of them. The hyphen in the file name forces importlib; the result is
+    typed at the two call sites with cast rather than left as Any.
+    """
+    spec = importlib.util.spec_from_file_location(
+        "fetch_canopy", os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                     "fetch-canopy.py"))
+    assert spec is not None and spec.loader is not None
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def chm_path(w: blr.Ward, prefix: str, zoom: int, quadkey: Callable[[float, float, int], str]) -> str:
+    return f"/vsis3/{CHM_BUCKET}/{prefix}/chm/{quadkey(w.centre.lat, w.centre.lon, zoom)}.tif"
+
+
+def read_chm_metre(w: blr.Ward, path: str) -> Any:
+    """The ward box at 1 m (2800 x 2800), north-up, metres. numpy float32.
+
+    ONE READ PER PRODUCT. The 1 m array is used twice: the cover fraction is
+    measured on it, and the 10 m placement grid is a 10x10 block mean of it.
+    The v1 tile is a 65536-wide untiled monolith where any window costs whole
+    rows, so a second read for the coarse grid would double the transfer.
+    """
+    import numpy as np
+    import rasterio
+    from rasterio.enums import Resampling
+    from rasterio.warp import transform_bounds
+    from rasterio.windows import from_bounds
+
+    os.environ.setdefault("AWS_NO_SIGN_REQUEST", "YES")
+    # THE v1 TILE IS STORED IN ONE-ROW STRIPS, 65,536 pixels wide and untiled,
+    # so a window costs whole rows and minutes per ward. The obvious remedy --
+    # GDAL_HTTP_MERGE_CONSECUTIVE_RANGES, GDAL_HTTP_MULTIRANGE and an 8 MB
+    # CPL_VSIL_CURL_CHUNK_SIZE -- was MEASURED on a 300 x 300 window of this
+    # tile: 12.3 s at the defaults, 22.7 s tuned. Slower. It is not applied,
+    # and this note exists so the next person does not re-apply it on the
+    # same reasoning.
+    west, south, east, north = blr.bounds(w)
+    n = int(w.size_m)
+    with rasterio.open(path) as src:
+        l, b, r, t = transform_bounds("EPSG:4326", src.crs, west, south, east, north)
+        win = from_bounds(l, b, r, t, src.transform)
+        arr = src.read(1, window=win, out_dtype="float32", out_shape=(n, n),
+                       boundless=True, fill_value=0.0, resampling=Resampling.average)
+    out = np.asarray(arr, dtype=np.float32)
+    out[~np.isfinite(out)] = 0.0
+    np.clip(out, 0.0, None, out=out)
+    return out
+
+
+def build_canopy(w: blr.Ward) -> None:
+    import numpy as np
+    from shapely.geometry import Point, Polygon
+    from shapely.strtree import STRtree
+
+    kc = _kolkata_canopy()
+    quadkey = cast(Callable[[float, float, int], str], kc._quadkey)
+    hash01 = cast(Callable[[int, int, int, int], float], kc._hash01)
+
+    p1 = chm_path(w, CHM_V1[0], CHM_V1[1], quadkey)
+    p2 = chm_path(w, CHM_V2[0], CHM_V2[1], quadkey)
+    print(f"  {w.id:<12} reading v1 tile ...", flush=True)
+    m1 = read_chm_metre(w, p1)
+    print(f"  {w.id:<12} reading v2 tile ...", flush=True)
+    m2 = read_chm_metre(w, p2)
+    cover1 = float((m1 >= COVER_H).mean())
+    cover2 = float((m2 >= COVER_H).mean())
+    print(f"  {w.id:<12} cover >= {COVER_H:.0f} m: v1 {100 * cover1:5.1f} %   v2 {100 * cover2:5.1f} %",
+          flush=True)
+
+    # 10 m placement grid from the 1 m array. Reshape is exact because size_m
+    # is a multiple of CANOPY_GRID, and the assert keeps it that way.
+    n = int(w.size_m)
+    k = n // CANOPY_GRID
+    assert k * CANOPY_GRID == n, "ward size must be a whole number of 10 m cells"
+    grid = m1.reshape(CANOPY_GRID, k, CANOPY_GRID, k).mean(axis=(1, 3))
+
+    # ── Kolkata's _generate, verbatim in logic, species omitted ──
+    cell_m = w.size_m / CANOPY_GRID
+    half = w.size_m / 2.0
+    cands: list[dict[str, float]] = []
+    for row in range(CANOPY_GRID):
+        for col in range(CANOPY_GRID):
+            h = float(grid[row, col])
+            if h < MIN_TREE_H:
+                continue
+            count = min(DENSITY_MAX, int(DENSITY_MAX * h / DENSITY_REF_H + 0.5))
+            for kk in range(count):
+                jx = (hash01(col, row, kk, 0) - 0.5) * JITTER * cell_m
+                jy = (hash01(col, row, kk, 1) - 0.5) * JITTER * cell_m
+                x = round((col + 0.5) * cell_m - half + jx, 2)
+                y = round(half - (row + 0.5) * cell_m + jy, 2)
+                r = round(h * 0.35 * (0.9 + 0.2 * hash01(col, row, kk, 2)), 2)
+                cands.append({"x": x, "y": y, "h": round(h, 1), "r": r})
+
+    # ── drop candidates standing inside a building footprint ──
+    # Kolkata records ~30 % of its rendered trees on rooftops or in roads as
+    # known limitation 2 and defers the fix. Here the footprints are already
+    # in hand, so a tree whose base falls inside one is dropped. The count is
+    # kept: it is a measurement of how much the canopy model confuses roofs
+    # with crowns, which is worth knowing on its own.
+    bpath = os.path.join(blr.DATA, f"{w.id}-buildings.json")
+    dropped = 0
+    if os.path.exists(bpath) and cands:
+        with open(bpath, encoding="utf-8") as fh:
+            bdoc = cast(blr.BlrBuildingsFile, json.load(fh))
+        polys = []
+        for b in bdoc["b"]:
+            p = b["p"]
+            pts = [(p[i], p[i + 1]) for i in range(0, len(p) - 1, 2)]
+            if len(pts) >= 3:
+                polys.append(Polygon(pts))
+        tree = STRtree(polys)
+        pts_geom = [Point(c["x"], c["y"]) for c in cands]
+        hit = tree.query(pts_geom, predicate="within")
+        inside = set(int(i) for i in np.asarray(hit)[0]) if len(hit) else set()
+        kept = [c for i, c in enumerate(cands) if i not in inside]
+        dropped = len(cands) - len(kept)
+    else:
+        kept = cands
+
+    doc = {
+        "ward": w.id, "sizeM": w.size_m, "grid": CANOPY_GRID,
+        "source": f"Meta/WRI global canopy height model v1 ({CHM_V1[0]}), "
+                  f"CC BY 4.0, tile {quadkey(w.centre.lat, w.centre.lon, CHM_V1[1])}",
+        "coverFrac": {"v1": round(cover1, 4), "v2": round(cover2, 4),
+                      "thresholdM": COVER_H, "note":
+                      "v1 is shipped; v2 measured alongside per the design spec. "
+                      "Cover is the share of 1 m pixels at or above the threshold."},
+        "method": "Kolkata fetch-canopy.py _generate: 10 m cells, 0..4 instances "
+                  "per cell scaling with height against a fixed 30 m reference, "
+                  "deterministic jitter. Tree COUNT is a display scaling, not a "
+                  "measurement; canopy HEIGHT is measured. Species not assigned.",
+        "densityRefM": DENSITY_REF_H, "minTreeH": MIN_TREE_H,
+        "candidates": len(cands), "droppedInBuildings": dropped,
+        "count": len(kept), "trees": kept,
+    }
+    with open(os.path.join(blr.DATA, f"{w.id}-canopy.json"), "w", encoding="utf-8") as fh:
+        json.dump(doc, fh, separators=(",", ":"))
+    print(f"  {w.id:<12} trees {len(kept):,} ({len(cands):,} candidates, "
+          f"{dropped:,} inside buildings dropped)", flush=True)
+
+
 # ── heights ─────────────────────────────────────────────────────────────────
 
 def init_ee() -> None:
@@ -626,7 +803,7 @@ def build_terrain(w: blr.Ward, context: bool = False) -> None:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--layer", default="all",
-                    choices=("buildings", "heights", "terrain", "context", "all"))
+                    choices=("buildings", "heights", "terrain", "context", "canopy", "all"))
     ap.add_argument("--ward", default=None)
     a = ap.parse_args()
     wards = ward_list(a.ward)
@@ -644,6 +821,10 @@ def main() -> int:
         print("context (Overture water / land_use / segment):")
         download_context()
         build_context(wards)
+    if a.layer in ("canopy", "all"):
+        print("canopy (Meta/WRI CHM v1, v2 measured alongside):")
+        for w in wards:
+            build_canopy(w)
     if a.layer in ("heights", "all"):
         print("heights (Google Open Buildings 2.5D):")
         init_ee()

@@ -42,6 +42,7 @@ import os
 import sys
 from typing import Any
 
+import bmesh  # type: ignore[import-not-found]
 import bpy  # type: ignore[import-not-found]
 from mathutils.geometry import tessellate_polygon  # type: ignore[import-not-found]
 
@@ -101,6 +102,16 @@ LIFT_GREEN_M = 0.10
 LIFT_WATER_M = 0.25
 LIFT_ROAD_M = 0.35
 STREAM_WIDTH_M = 3.0
+
+#: Trees are INSTANCED, not modelled one by one. A ward carries tens of
+#: thousands, and the master three wards' worth. Each bucket below becomes one
+#: template tree, sized to the bucket's mean height and crown, duplicated onto
+#: a vertex cloud with one vertex per tree. The .blend stays small, the
+#: viewport stays interactive, and the render cost is one mesh per bucket.
+#: Height varies at bucket resolution, which at this scale is what the eye
+#: resolves anyway.
+TREE_BUCKETS_M = [(2.0, 4.0), (4.0, 7.0), (7.0, 11.0), (11.0, 16.0),
+                  (16.0, 22.0), (22.0, 80.0)]
 
 
 def args() -> dict[str, str]:
@@ -481,6 +492,76 @@ def build_context(ward: str, ctx: dict[str, Any], terrain: dict[str, Any],
     return {"green": n_green, "water": n_water, "streams": n_stream, "roads": n_road}
 
 
+# ── canopy ──────────────────────────────────────────────────────────────────
+
+def tree_template(name: str, h: float, r: float, mats: list[Any]) -> Any:
+    """A low-poly tree with its origin at the trunk base.
+
+    Trunk: 6-sided cylinder, no caps (the bottom is in the ground, the top is
+    inside the crown). Crown: subdivision-1 icosphere, squashed a little in z.
+    About 90 triangles, which is all a tree needs at 2.8 km.
+    """
+    bm = bmesh.new()
+    trunk_r = max(0.15, 0.035 * h)
+    trunk_h = max(0.5, h - r * 0.9)
+    bmesh.ops.create_cone(bm, cap_ends=False, segments=6, radius1=trunk_r,
+                          radius2=trunk_r * 0.8, depth=trunk_h)
+    for v in bm.verts:
+        v.co.z += trunk_h / 2.0
+    for f in bm.faces:
+        f.material_index = 0
+    n_trunk = len(bm.faces)
+    bmesh.ops.create_icosphere(bm, subdivisions=1, radius=r)
+    for f in bm.faces[n_trunk:]:
+        f.material_index = 1
+    crown_verts = bm.verts[-42:] if len(bm.verts) >= 42 else bm.verts[:]
+    for v in crown_verts:
+        v.co.z = v.co.z * 0.85 + (h - r * 0.85)
+    mesh = bpy.data.meshes.new(name)
+    bm.to_mesh(mesh)
+    bm.free()
+    mesh.validate()
+    obj = bpy.data.objects.new(name, mesh)
+    for m in mats:
+        obj.data.materials.append(m)
+    bpy.context.collection.objects.link(obj)
+    return obj
+
+
+def build_trees(ward: str, canopy: dict[str, Any], terrain: dict[str, Any],
+                exag: float, datum: float, offset: tuple[float, float]) -> int:
+    """One vertex per tree, one template per height bucket, dupli-verts.
+
+    The original template is not rendered once its parent instances it, so
+    the scene contains exactly the trees the data lists and nothing at the
+    origin.
+    """
+    trees = canopy.get("trees", [])
+    if not trees:
+        return 0
+    ox, oy = offset
+    trunk = principled("trunk", (0.16, 0.11, 0.07, 1.0), rough=0.95)
+    crown = principled("crown", (0.07, 0.19, 0.06, 1.0), rough=0.85)
+    drawn = 0
+    for lo, hi in TREE_BUCKETS_M:
+        members = [t for t in trees if lo <= float(t["h"]) < hi]
+        if not members:
+            continue
+        h_rep = sum(float(t["h"]) for t in members) / len(members)
+        r_rep = sum(float(t["r"]) for t in members) / len(members)
+        template = tree_template(f"{ward}-tree-{int(lo)}-{int(hi)}m", h_rep, r_rep,
+                                 [trunk, crown])
+        verts = [(float(t["x"]) + ox, float(t["y"]) + oy,
+                  ground_z(terrain, exag, datum, float(t["x"]), float(t["y"])))
+                 for t in members]
+        cloud = mesh_object(f"{ward}-trees-{int(lo)}-{int(hi)}m", verts, [], [])
+        cloud.instance_type = "VERTS"
+        template.parent = cloud
+        template.location = (0.0, 0.0, 0.0)
+        drawn += len(members)
+    return drawn
+
+
 # ── world, sun, camera ──────────────────────────────────────────────────────
 
 def find_hdri() -> str | None:
@@ -786,6 +867,15 @@ def ward_scene(ward: str, a: dict[str, str], offset: tuple[float, float],
               f"streams {counts['streams']}, roads {counts['roads']:,}")
     else:
         print(f"  {ward}: no context layer -- run fetch-bangalore.py --layer context")
+    canopy = load_optional(ward, "canopy")
+    if canopy is not None:
+        n_trees = build_trees(ward, canopy, terrain, exag, datum, offset)
+        cf = canopy.get("coverFrac", {})
+        print(f"  {ward}: trees {n_trees:,} instanced; canopy cover "
+              f"v1 {100 * float(cf.get('v1', 0)):.1f} % (v2 {100 * float(cf.get('v2', 0)):.1f} %), "
+              f"{int(canopy.get('droppedInBuildings', 0)):,} dropped inside buildings")
+    else:
+        print(f"  {ward}: no canopy layer -- run fetch-bangalore.py --layer canopy")
     _, stats = build_buildings(terrain, doc, exag, datum, qa,
                                name=f"{ward}-buildings", offset=offset)
     print(f"  {ward}: {stats['drawn']:,} drawn, {stats['tiny']:,} skipped tiny, "
