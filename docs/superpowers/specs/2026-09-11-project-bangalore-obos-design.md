@@ -159,10 +159,50 @@ parks, canopy and trees, 47 named landmarks.
 reaches the physics from a per-ward image; `loadSurfaceRaster` returns null when
 it is missing and the whole ward collapses to a **single uniform vegetation
 value**. The heat field would then be driven by buildings alone, with no green
-structure anywhere, and nothing would error. This means fetching and processing
-Sentinel-2 over the two MGRS tiles the predecessor spec identified — the only
-piece of this build with no Bangalore precedent, and therefore the likeliest
-place to find a surprise.
+structure anywhere, and nothing would error. **The build therefore gates on its
+presence** rather than trusting it.
+
+### That risk was measured on 2026-09-11, and most of it is gone
+
+It was written up as the likeliest place to find a surprise. Four things could
+have gone wrong; three do not.
+
+**The pipeline is coordinate-driven, not Kolkata-shaped.** `_sentinel.search()`
+and `read_window()` both take a latitude and longitude and work anywhere. The
+only Kolkata-specific parts are a private ward table and `FOOTPRINT_M = 1400`,
+and `GRID = FOOTPRINT_M // 10` derives from it — so 2.8 km yields a 280 x 280
+grid with no further change.
+
+**No ward straddles a tile boundary.** The predecessor spec's warning that
+Bengaluru spans 43PGQ and 43PHQ is true of a city-wide mosaic and false of our
+windows: **all three wards sit entirely inside 43PGQ**, so there is no
+mosaicking to write.
+
+**Scene supply is comfortable** — 22 scenes under 20 % cloud per ward in 2024,
+against the 6 per year the compositor asks for.
+
+**The one genuine unknown was the vegetation conversion, and it holds.** FVC is
+`(NDVI − 0.05) / (0.8 − 0.05)` on Carlson & Ripley endmembers — bare soil and
+full canopy reference values. Bengaluru is a semi-arid plateau where Kolkata is
+a humid delta, so there was a real chance every ward would read artificially
+bare. Measured on a cloud-free scene over Indiranagar (S2B_43PGQ_20240313, 0.0 %
+cloud):
+
+| | value |
+|---|---:|
+| NDVI median | 0.270 |
+| NDVI p99 | 0.741 |
+| mean FVC under Kolkata's endmembers | **0.344** |
+| pixels saturating at 1 | 0.03 % |
+| pixels clipped at 0 | 1.74 % |
+
+The p99 lands just under the upper endmember rather than crashing through it,
+almost nothing saturates, and the mean sits between Ballygunge's 0.329 and
+Baruipur's 0.447 — where a leafy Indian neighbourhood should be. **The
+endmembers transfer; no recalibration is needed.**
+
+What remains is mechanical: make the footprint per-ward, point the pipeline at
+the Bangalore registry, and gate on the output.
 
 **Also to build:** road-name labels, which Overture carries and we have not
 pulled; and the layers and provenance manifests, derived from what we hold.
