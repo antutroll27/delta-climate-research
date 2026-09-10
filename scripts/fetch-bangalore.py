@@ -602,6 +602,13 @@ def apply_osm_heights(w: blr.Ward, els: list[dict[str, Any]],
         if idx is None:
             continue
         h, lv = parse_height(t), parse_levels(t)
+        # THE NAME IS KEPT WHEREVER OSM HAS ONE, not only on cited landmarks.
+        # It was dropped at first, and the cost showed up in the scene: 44
+        # Whitefield buildings of 8 storeys or more carry a name in OSM and not
+        # one reached the artefact, so a ward full of recognisable towers had
+        # nothing selectable in it. A name is evidence too.
+        if t.get("name"):
+            bs[idx]["name"] = str(t["name"])
         if h is not None:
             bs[idx]["h"], bs[idx]["fill"] = round(h, 2), False
             bs[idx]["hSource"] = "osm-height"

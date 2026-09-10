@@ -23,12 +23,23 @@ does real thermal work here. `--exag` still overrides for look-dev, and anything
 above 1.0 is a look choice that must be labelled as one.
 
 THE QA LENS. `--qa` is why this script exists at all rather than only the web
-view. It colours buildings by *what we know about them* instead of by material:
-amber where Google 2.5D and UT-GLOBUS disagree by more than 5 m, and grey where
-Google had no confident pixel and the height is the 2.5 m fill. Automated gates
-prove a scene is well-formed; only looking at it proves the city is there. The
-Dubai work learned that the expensive way -- a landmark rendered as a tent while
-every check passed.
+view. It colours every building by WHERE ITS HEIGHT CAME FROM, best evidence
+first: blue for a published figure, green for a survey tag, pale green for a
+storey count times a fitted constant, grey for the zonal statistic, near-black
+where there was no confident pixel at all. That is the console-and-disc
+argument made visible -- the engine is ours, and the picture says exactly how
+good the disc is, without anyone having to take it on trust.
+
+Automated gates prove a scene is well-formed; only looking at it proves the
+city is there. The Dubai work learned that the expensive way -- a landmark
+rendered as a tent while every check passed.
+
+NAMED LANDMARKS ARE THEIR OWN OBJECTS. A building carrying a cited height is
+drawn as `lm.<slug>` rather than as one prism among eleven thousand in a single
+mesh, and carries `height_m` and `height_source` as custom properties. A
+landmark nobody can select is a landmark nobody can check, and the height a
+render asserts should be readable from inside the file rather than only from
+the JSON that built it.
 """
 from __future__ import annotations
 
@@ -114,6 +125,36 @@ STREAM_WIDTH_M = 3.0
 TREE_BUCKETS_M = [(2.0, 4.0), (4.0, 7.0), (7.0, 11.0), (11.0, 16.0),
                   (16.0, 22.0), (22.0, 80.0)]
 
+#: THE QA LENS COLOURS BY WHAT WE KNOW, NOT BY WHAT THINGS ARE MADE OF. One
+#: slot per height tier, in descending order of evidence. This is the founder's
+#: console-and-disc argument made visible: the engine is ours, and the picture
+#: shows exactly how good the disc is. A room can see at a glance that five
+#: buildings carry a published figure, that a couple of thousand carry a survey
+#: tag, and that the rest are a model.
+QA_TIERS = [
+    ("cited",      (0.05, 0.42, 0.95, 1.0)),   # a published figure
+    ("osm-height", (0.10, 0.72, 0.55, 1.0)),   # a stated survey measurement
+    ("osm-levels", (0.55, 0.80, 0.20, 1.0)),   # storeys x a fitted constant
+    ("google",     (0.62, 0.60, 0.56, 1.0)),   # the zonal statistic
+    ("fill",       (0.24, 0.22, 0.21, 1.0)),   # no confident pixel: a convention
+]
+
+#: Notable buildings are ALSO drawn as their own named object, so UB Tower can
+#: be clicked in the outliner instead of being one prism among 11,045 in a
+#: single mesh. Dubai does the same with its `lm.` prefix, and the reason is the
+#: same: a landmark nobody can select is a landmark nobody can check.
+#:
+#: A building qualifies if it is NAMED, its height is MEASURED rather than
+#: modelled, and it is either cited or at least LANDMARK_MIN_H tall. Cited
+#: buildings qualify at any height, because a published figure is the point --
+#: Vidhana Soudha is 45.7 m and matters more than a 60 m office slab.
+#:
+#: The tier is NOT in the name, it is a property on the object. Naming it
+#: `lm.cited.ub-tower` would bake today's evidence into an identifier that a
+#: better source is supposed to change.
+LANDMARK_PREFIX = "lm."
+LANDMARK_MIN_H = 40.0
+
 #: Distinct crown shapes per height bucket, so 27,000 trees are not one silhouette
 #: repeated 27,000 times. Six buckets x three variants is eighteen shapes for
 #: eighteen 112-triangle meshes -- the cost is nil and the repetition goes.
@@ -152,6 +193,52 @@ HQ_SOLID_TRIS = 11_000
 HQ_TREE_BY_BUCKET = {(2.0, 4.0): "island_tree_03", (4.0, 7.0): "tree_small_02",
                      (7.0, 11.0): "island_tree_01", (11.0, 16.0): "jacaranda_tree",
                      (16.0, 22.0): "jacaranda_tree", (22.0, 80.0): "jacaranda_tree"}
+
+#: Which collection each object goes in, matched on a fragment of its name. A
+#: master scene holds forty-odd objects across three wards, and a flat outliner
+#: makes the file something to endure rather than use -- hiding the trees to
+#: check a facade should be one click, not a hunt through
+#: `whitefield-trees-11-16m-v2`. Ordered: the FIRST match wins, so Landmarks is
+#: listed before Buildings even though `lm.ub-tower` matches neither by accident.
+COLLECTIONS: list[tuple[str, tuple[str, ...]]] = [
+    ("Landmarks", (LANDMARK_PREFIX,)),
+    ("Buildings", ("-buildings",)),
+    ("Vegetation", ("-trees", "-tree-", "-green")),
+    ("Water", ("-water", "-streams")),
+    ("Roads", ("-roads",)),
+    ("Ground", ("-ground",)),
+    ("Lighting", ("sun", "camera", "look-at")),
+]
+
+
+def organise_collections() -> None:
+    """Sort the scene into named collections, by object-name fragment.
+
+    Runs once, immediately before the save, over whatever the builders made --
+    so a new layer lands in the right place by naming itself consistently
+    rather than by registering anywhere. Anything unmatched STAYS WHERE IT IS
+    rather than being swept into a bucket that hides it: an object nobody
+    thought about should be visible, not filed away.
+    """
+    scene_coll = bpy.context.scene.collection
+    made: dict[str, Any] = {}
+    for ob in list(bpy.data.objects):
+        target = None
+        for coll_name, fragments in COLLECTIONS:
+            if any(f in ob.name for f in fragments):
+                target = coll_name
+                break
+        if target is None:
+            continue
+        if target not in made:
+            made[target] = bpy.data.collections.new(target)
+            scene_coll.children.link(made[target])
+        for c in list(ob.users_collection):
+            c.objects.unlink(ob)
+        made[target].objects.link(ob)
+    if made:
+        print("  collections: " + ", ".join(
+            f"{k} {len(v.objects)}" for k, v in made.items()))
 
 
 def args() -> dict[str, str]:
@@ -359,7 +446,9 @@ def build_buildings(terrain: dict[str, Any], doc: dict[str, Any],
     faces: list[tuple[int, ...]] = []
     slots: list[int] = []
     ox, oy = offset
-    stats = {"drawn": 0, "tiny": 0, "flagged": 0, "filled": 0}
+    stats = {"drawn": 0, "tiny": 0, "flagged": 0, "filled": 0, "landmarks": 0}
+    tier_index = {t: i for i, (t, _) in enumerate(QA_TIERS)}
+    landmarks: list[tuple[str, dict[str, Any]]] = []
 
     for b in doc["b"]:
         p = b["p"]
@@ -388,17 +477,23 @@ def build_buildings(terrain: dict[str, Any], doc: dict[str, Any],
         # both would make a 20 m building read as 60 m at --exag 3.
         top = base + max(2.0, float(b["h"]))
 
-        slot = 0
-        if qa:
-            if b.get("flag"):
-                slot, stats["flagged"] = 1, stats["flagged"] + 1
-            elif b.get("fill"):
-                slot, stats["filled"] = 2, stats["filled"] + 1
-        else:
-            if b.get("flag"):
-                stats["flagged"] += 1
-            if b.get("fill"):
-                stats["filled"] += 1
+        if b.get("flag"):
+            stats["flagged"] += 1
+        if b.get("fill"):
+            stats["filled"] += 1
+
+        src = str(b.get("hSource", "google"))
+        slot = tier_index.get(src, tier_index["google"]) if qa else 0
+
+        # A notable building becomes its own object as well. It is EXCLUDED
+        # from the bulk mesh rather than drawn twice, which would leave two
+        # coincident prisms z-fighting on every face.
+        measured = src in ("cited", "osm-height", "osm-levels")
+        if (b.get("name") and measured
+                and (src == "cited" or float(b["h"]) >= LANDMARK_MIN_H)):
+            landmarks.append((str(b["name"]), b))
+            stats["landmarks"] += 1
+            continue
 
         start = len(verts)
         for i in range(nv):
@@ -413,18 +508,52 @@ def build_buildings(terrain: dict[str, Any], doc: dict[str, Any],
         slots.append(slot)
         stats["drawn"] += 1
 
-    mats = [principled("building", (0.52, 0.50, 0.47, 1.0), rough=0.75)]
     if qa:
-        # Amber: the two height sources disagree by more than 5 m here. Grey:
-        # Google had no confident pixel and this is the 2.5 m fill, so the
-        # building's height is a convention rather than a measurement.
-        mats.append(principled("qa-disagree", (0.85, 0.45, 0.08, 1.0), rough=0.6))
-        mats.append(principled("qa-fill", (0.30, 0.31, 0.34, 1.0), rough=0.9))
+        mats = [principled(f"qa-{t}", c, rough=0.7) for t, c in QA_TIERS]
+    else:
+        mats = [principled("building", (0.52, 0.50, 0.47, 1.0), rough=0.75)]
 
     obj = mesh_object(name, verts, faces, mats)
     if qa and len(obj.data.polygons) == len(slots):
         for poly, s in zip(obj.data.polygons, slots):
             poly.material_index = s
+
+    # ── cited buildings, each as its own named, selectable object ──
+    lm_mat = (mats[tier_index["cited"]] if qa
+              else principled("landmark", (0.72, 0.70, 0.66, 1.0), rough=0.55))
+    for lname, b in landmarks:
+        p = b["p"]
+        nv = len(p) // 2
+        if nv >= 3 and abs(p[0] - p[-2]) < 1e-6 and abs(p[1] - p[-1]) < 1e-6:
+            nv -= 1
+        cx = sum(p[i * 2] for i in range(nv)) / nv
+        cy = sum(p[i * 2 + 1] for i in range(nv)) / nv
+        base = (sample_ground(terrain, cx, cy) - datum) * exag - BASE_SINK_M
+        top = base + max(2.0, float(b["h"]))
+        lv: list[tuple[float, float, float]] = []
+        lf: list[tuple[int, ...]] = []
+        for i in range(nv):
+            lv.append((p[i * 2] + ox, p[i * 2 + 1] + oy, base))
+        for i in range(nv):
+            lv.append((p[i * 2] + ox, p[i * 2 + 1] + oy, top))
+        for i in range(nv):
+            a0, a1 = i, (i + 1) % nv
+            lf.append((a0, a1, a1 + nv, a0 + nv))
+        lf.append(tuple(nv + i for i in range(nv)))
+        slug = "".join(ch if ch.isalnum() else "-" for ch in lname.lower()).strip("-")
+        lo = mesh_object(f"{LANDMARK_PREFIX}{slug}", lv, lf, [lm_mat])
+        # The provenance travels WITH the object, so anyone who opens the file
+        # can read where the height came from without going back to the JSON.
+        lo["height_m"] = float(b["h"])
+        lo["height_tier"] = str(b.get("hSource", "?"))
+        lo["height_source"] = str(b.get("heightSourceCite")
+                                  or ("OSM height tag" if b.get("hSource") == "osm-height"
+                                      else f"OSM building:levels={b.get('levels', '?')}"))
+        if "heightConflict" in b:
+            lo["height_conflict"] = json.dumps(b["heightConflict"])
+        if b.get("hSource") == "cited":
+            print(f"    {LANDMARK_PREFIX}{slug}: {float(b['h']):.1f} m "
+                  f"({b.get('heightSourceCite', '?')})")
     return obj, stats
 
 
@@ -1124,7 +1253,8 @@ def ward_scene(ward: str, a: dict[str, str], offset: tuple[float, float],
         print(f"  {ward}: no canopy layer -- run fetch-bangalore.py --layer canopy")
     _, stats = build_buildings(terrain, doc, exag, datum, qa,
                                name=f"{ward}-buildings", offset=offset)
-    print(f"  {ward}: {stats['drawn']:,} drawn, {stats['tiny']:,} skipped tiny, "
+    print(f"  {ward}: {stats['drawn']:,} drawn, {stats['landmarks']} named landmark "
+          f"objects, {stats['tiny']:,} skipped tiny, "
           f"{stats['flagged']:,} height-source disagreements, "
           f"{stats['filled']:,} on the fill height")
     print(f"  {ward}: {doc.get('crossCheck', '(no cross-check recorded)')}")
@@ -1156,6 +1286,7 @@ def build_master(a: dict[str, str]) -> None:
     configure_render(int(a.get("samples", 48)), float(a.get("exposure", exposure)),
                      int(a.get("res", 2000)))
     configure_viewports()
+    organise_collections()
     os.makedirs(SCENES, exist_ok=True)
     blend = os.path.join(SCENES, "bangalore-master.blend")
     bpy.ops.wm.save_as_mainfile(filepath=blend)
@@ -1193,6 +1324,7 @@ def build_ward(ward: str, a: dict[str, str]) -> None:
     configure_render(int(a.get("samples", 48)), float(a.get("exposure", exposure)),
                      int(a.get("res", 1600)))
     configure_viewports()
+    organise_collections()
     os.makedirs(SCENES, exist_ok=True)
     blend = os.path.join(SCENES, f"{ward}.blend")
     bpy.ops.wm.save_as_mainfile(filepath=blend)
