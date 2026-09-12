@@ -1167,6 +1167,54 @@ for axis, vals in (("x", xs), ("z", zs)):
   `size/2` and confirm that is caught too. A gate this file has shipped twice
   without is not one to take on trust.
 
+### Task 8b: Bengaluru's canopy is one species, and the founder asked for the best visuals
+
+**Files:** `scripts/export-bangalore-obos.py` (the `species` field), reusing
+`scripts/fetch-canopy.py:236`
+
+Task 7 shipped **59,184 Bengaluru trees, every one `"neem"`**, because the
+plan's snippet hard-coded it. Kolkata draws from a deterministic mix:
+
+```python
+SPECIES = ("neem", "neem", "gulmohar", "palm")   # deterministic broadleaf-dominant mix
+```
+
+giving Ballygunge 6,101 neem / 3,065 palm / 2,993 gulmohar. So Bengaluru — the
+city briefed as *"this city shall have the best visuals and UX"* — will render
+a visibly more monotone canopy than the city it is meant to surpass.
+
+**The constraint that decides the fix.** `src/scripts/climate-engine/vegetation-layer.ts:3`
+declares a CLOSED union:
+
+```typescript
+export type Species = 'neem' | 'gulmohar' | 'palm';
+```
+
+and `asTreesFile` rejects **the whole file** on a single unrecognised species
+(`fetch-canopy.py:474-478` records this trap explicitly). So a botanically
+truer Bengaluru palette — jacaranda, rain tree, African tulip — is **not** a
+data change. It needs the union, the GLB templates and the loader widened
+first. Do not reach for it here.
+
+- [ ] **Step 1:** Reuse `fetch-canopy.py`'s existing `SPECIES` tuple and its
+  deterministic per-tree draw, so Bengaluru gets Kolkata's mix from the same
+  function rather than a second copy of the rule.
+- [ ] **Step 2:** Assert the drawn set is a subset of the union, the way
+  `fetch-canopy.py:478` already does — one bad species silently voids the
+  entire canopy layer.
+- [ ] **Step 3:** Print the per-ward species counts, and confirm no ward is
+  single-species.
+
+**Say plainly what this is.** Species is a DISPLAY DRAW in both cities — the
+canopy height model gives height, never taxon. This is not a measurement and
+must never be described as one; it is a plausible palette, chosen the same
+deterministic way for both cities. Widening the union to real Bengaluru species
+would make it *look* more authoritative while remaining just as invented, which
+is the argument for leaving the union alone until someone has actual species
+data.
+
+---
+
 ### Task 9: Export the web models
 
 **Files:**
