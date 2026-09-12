@@ -115,7 +115,7 @@ test('every admitted pair yields the same cell size, so cities are comparable', 
 
 test('the grid version names the pair, not just the grid', () => {
   assert.equal(gridVersion(1400), 'hm-grid-192-v1', 'Kolkata keeps its existing version string');
-  assert.equal(gridVersion(2800), 'hm-grid-384-v1');
+  assert.equal(gridVersion(2800), 'hm-grid-384-2800-v1');
   assert.throws(() => gridVersion(999), /admitted/i);
 });
 ```
@@ -154,7 +154,7 @@ export interface AdmittedGrid {
 
 export const ADMITTED_GRIDS: readonly AdmittedGrid[] = [
   { n: 192, sizeM: 1400, version: 'hm-grid-192-v1' },
-  { n: 384, sizeM: 2800, version: 'hm-grid-384-v1' },
+  { n: 384, sizeM: 2800, version: 'hm-grid-384-2800-v1' },
 ] as const;
 
 /** Cells per side for a ward of this size, or undefined if unsupported. */
@@ -526,9 +526,19 @@ Expected: PASS.
 
 - [ ] **Step 6b: The Kolkata grid facts still hard-coded in production code**
 
-A review of Task 1 found four places that hard-code 192 and appear in **no task
-in this plan**. All four were verified present. A 2800 m ward fails outright at
-the first and mislabels itself in the other three:
+**PARTLY DONE ALREADY — read this before you start.** Task 1's follow-up commit
+`4643a01` fixed the two logic sites while it was in those files. Verify rather
+than redo:
+
+    paired-protocol.ts   FIXED — now `requireGrid(result.a.wardData.sizeM).n`
+    scenario-url.ts      FIXED — now `gridVersion(wardA.footprintM)`, and it
+                         OMITS the stamp for an unidentifiable ward rather than
+                         asserting a grid it cannot know
+    PairedBench.astro    STILL STALE — 2 sites, deferred to Task 12
+    HeatMapBrief.astro   STILL STALE — deferred to Task 12
+
+Your job here is only to confirm the first two still hold after your `SIM_N`
+changes. The table below records what was found and why it mattered:
 
 | file:line | what | effect on a Bengaluru ward |
 |---|---|---|
