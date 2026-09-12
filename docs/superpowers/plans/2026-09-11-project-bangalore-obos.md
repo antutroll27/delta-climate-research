@@ -1078,6 +1078,41 @@ it fails at build rather than in a user's browser.
 
 ---
 
+**THE RASTERS TASK 6 BUILT ARE CURRENTLY INERT, AND THE FALLBACK RUNS HOT.**
+
+`src/scripts/climate-engine/surface-raster.ts:221`, `loadWardSurface`:
+
+```typescript
+const record = inputs?.[ward];
+if (!surface || !record) return { means, surface: null };
+```
+
+`inputs` is `dc-urs-inputs.json`, which is **Kolkata-only**. So for every
+Bengaluru ward the measured texture is fetched, decoded, and then **thrown
+away**, and the ward falls back to a uniform field at `fvc: 0, albedo: 0.2`.
+
+**Zero vegetation is a hot-biased fallback.** This is the worst failure shape
+this project knows: Bengaluru would render, would look plausible, would run
+warm, and every number would be fabricated. Nothing throws. The measured
+0.401 / 0.388 / 0.370 would never reach a pixel.
+
+Fix it in this task, before anything draws a Bengaluru ward. Two routes:
+
+- **Teach `loadWardSurface` to accept `level: "measured"`** from
+  `surface-meta.json`, which is where Bengaluru's real means already live
+  (`fvc_mean` / `albedo_mean` rather than `fvc_target` / `albedo_target`). This
+  is preferred — it keeps the measured path first-class instead of making every
+  new city wait for a DC-URS scalar.
+- Or give the Bengaluru wards `dc-urs-inputs.json` records. **Do not invent the
+  numbers to do it** — see Task 12b on `Ward.veg`, where exactly this shortcut
+  was refused.
+
+Whichever you pick, prove it: assert a Bengaluru ward's loaded surface is NOT
+uniform and NOT `fvc: 0`. A test that only checks "a surface came back" passes
+against the bug.
+
+---
+
 ### Task 8: The artefact gate
 
 **Files:**
