@@ -21,7 +21,7 @@ function post(message: PairedWorkerResponse): void {
   self.postMessage(message);
 }
 
-function failure(error: unknown): { code: 'invalid-request' | 'input-unavailable' | 'calculation-failed' | 'contract-failed'; message: string } {
+export function classifyPairedFailure(error: unknown): { code: 'invalid-request' | 'input-unavailable' | 'calculation-failed' | 'contract-failed'; message: string } {
   const message = (error as Error | undefined)?.message ?? '';
   /* EVERY SPELLING OF "WRONG GRID" IS A BAD REQUEST, and each one is listed
      because this classifier matches MESSAGE TEXT: a refusal whose wording is
@@ -42,7 +42,10 @@ function failure(error: unknown): { code: 'invalid-request' | 'input-unavailable
          explore/relief-renderer.ts, likewise not on this path today.
 
      A coded refusal would need none of this; until there is one, those strings
-     and this regex move together. */
+     and this regex move together — and they are now held together by
+     tests/unit/heat-paired-failure-classifier.test.mjs, which CALLS each real
+     throw site rather than copying its wording, so a reworded refusal fails
+     there instead of silently demoting a bad request to a failed sum. */
   if (/valid comparison|reference forcing|canonical grid|admitted grid|does not pair/i.test(message)) return { code: 'invalid-request', message: 'The requested comparison is invalid.' };
   if (/load|surface|fetch|Unable to/i.test(message)) return { code: 'input-unavailable', message: 'Comparison inputs are unavailable.' };
   if (/contract|Missing paired/i.test(message)) return { code: 'contract-failed', message: 'The paired analytical contract could not be verified.' };
@@ -79,7 +82,7 @@ async function pump(): Promise<void> {
         if (isAbortError(error) || controller.signal.aborted) {
           if (!disposed) post({ type: 'cancelled', requestId: request.requestId, generation: request.generation });
         } else if (!disposed) {
-          const detail = failure(error);
+          const detail = classifyPairedFailure(error);
           post({ type: 'failure', requestId: request.requestId, generation: request.generation, ...detail });
           console.warn('paired worker failure', error);
         }
@@ -116,4 +119,10 @@ export function handlePairedWorkerMessage(message: PairedWorkerRequest): void {
   void pump();
 }
 
-self.addEventListener('message', (event: MessageEvent<PairedWorkerRequest>) => handlePairedWorkerMessage(event.data));
+/* The listener is what makes this module a worker entry point. The guard is what
+   lets a test import it at all: `self` is undefined under Node, so the bare call
+   threw at import time, and `classifyPairedFailure` — the code that has already
+   misreported a refusal to a visitor once — was unreachable from any test. */
+if (typeof self !== 'undefined') {
+  self.addEventListener('message', (event: MessageEvent<PairedWorkerRequest>) => handlePairedWorkerMessage(event.data));
+}
