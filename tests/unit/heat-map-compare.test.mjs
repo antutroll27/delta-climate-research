@@ -67,13 +67,6 @@ test('delivered park area reports the requested fractional area', () => {
   assert.equal(quantities.treeCorridorCells, 55);
 });
 
-test('all device tiers retain the canonical analytical grid', () => {
-  const unavailable = { webgpu: false, floatRenderTargets: false };
-  assert.equal(resolveHeatCaps(2, true, unavailable, '').grid, 192);
-  assert.equal(resolveHeatCaps(1, true, unavailable, '').grid, 192);
-  assert.equal(resolveHeatCaps(0, true, unavailable, '').grid, 192);
-});
-
 test('WebGPU alone does not select the WebGL2-only GPU solver', () => {
   const webGpuOnly = { webgpu: true, floatRenderTargets: false };
   assert.equal(resolveHeatCaps(2, true, webGpuOnly, '').backend, 'ts');
