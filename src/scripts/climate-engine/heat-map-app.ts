@@ -11,7 +11,7 @@
 import maplibregl from 'maplibre-gl';
 import { WARD_MAP, wardLatLon, formatLatLon } from '../../data/wards.ts';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { DEFAULT_PARAMS, greenReferenceContrastC, type SimLayers, type SimParams } from './types';
+import { DEFAULT_PARAMS, greenReferenceContrastC, requireGrid, type SimLayers, type SimParams } from './types';
 import { detectHeatCaps } from './caps';
 import { createGpuHost, createStaticHost, createWorkerHost } from './sim-host';
 import type { HeatSimHost, HeatSimRequest, HeatSimSnapshot } from './sim-protocol';
@@ -48,7 +48,7 @@ import { nearestImage } from './streetview/nearest-image';
 // Ward set lives in src/data/wards.ts so widening beyond three is a data change,
 // not a code change (dc-urs-spec.md §1).
 const WARDS = WARD_MAP;
-const { SIM_N, RESET_BURST } = M;
+const { RESET_BURST } = M;
 /**
  * `dark` is OUR style now — OBOS Slate, built by scripts/build-map-style.mjs from
  * the OpenFreeMap dark style it replaces. Derived rather than authored on purpose:
@@ -151,7 +151,12 @@ export function mountHeatMap(): () => void {
   /* The analytical core is intentionally Three-free. Its canvas raster remains
      available while the optional relief chunk is downloading and is the whole
      renderer on capability tier 0. */
-  const coreField = createCoreFieldLayer(map, SIM_N);
+  /* THE OPEN WARD'S GRID, re-read on every ward load — not a module constant.
+     Every published ward is Kolkata's 1400 m today, so this opens at 192; a
+     2800 m ward brings its own 384 with it rather than inheriting 192 and
+     solving 14.58 m cells under a 7.29 m calibration. */
+  let simN = requireGrid(WARDS.ballygunge.footprintM).n;
+  const coreField = createCoreFieldLayer(map, simN);
   const capsReady = detectHeatCaps();
   let relief: ReliefRenderer | null = null;
   let reliefReady: Promise<void> | null = null;
@@ -356,9 +361,9 @@ export function mountHeatMap(): () => void {
 
   function cellIndexAt(cx: number, cz: number): number {
     const size = currentWardSizeM;
-    const gx = Math.min(SIM_N - 1, Math.max(0, Math.floor((cx / size + 0.5) * SIM_N)));
-    const gy = Math.min(SIM_N - 1, Math.max(0, Math.floor((cz / size + 0.5) * SIM_N)));
-    return gy * SIM_N + gx;
+    const gx = Math.min(simN - 1, Math.max(0, Math.floor((cx / size + 0.5) * simN)));
+    const gy = Math.min(simN - 1, Math.max(0, Math.floor((cz / size + 0.5) * simN)));
+    return gy * simN + gx;
   }
 
   function paintCard(b: BuildingMeta) {
@@ -625,9 +630,9 @@ export function mountHeatMap(): () => void {
     if (b) {
       /* b.ring so the walk is measured from the building's nearest corner, not
          from a point inside it — nobody sets off from the middle of a block. */
-      nearestCool = cooling ? nearestCooling(cooling, b.cx, b.cz, SIM_N, currentWardSizeM, b.ring) : null;
-      const lo = coolingLo ? nearestCooling(coolingLo, b.cx, b.cz, SIM_N, currentWardSizeM, b.ring) : null;
-      const hi = coolingHi ? nearestCooling(coolingHi, b.cx, b.cz, SIM_N, currentWardSizeM, b.ring) : null;
+      nearestCool = cooling ? nearestCooling(cooling, b.cx, b.cz, simN, currentWardSizeM, b.ring) : null;
+      const lo = coolingLo ? nearestCooling(coolingLo, b.cx, b.cz, simN, currentWardSizeM, b.ring) : null;
+      const hi = coolingHi ? nearestCooling(coolingHi, b.cx, b.cz, simN, currentWardSizeM, b.ring) : null;
       coolRangeM = lo && hi ? [Math.min(lo.distM, hi.distM), Math.max(lo.distM, hi.distM)] : null;
       /* The tag's value is written HERE, once per selection — placeCard only
          moves it. Rounded to 10 m because the grid cell is 7.3 m. */
@@ -859,7 +864,12 @@ export function mountHeatMap(): () => void {
       if (appDisposed) return;
       const instance = createReliefRenderer({
         map, reducedMotion: reduceMotion,
-        simulationGridSize: SIM_N, terrainGridSize: TERRAIN_N,
+        /* The relief renderer sizes its field buffers ONCE, from the grid of the
+           ward open when this chunk resolves. Every published ward is 1400 m
+           today; the day a city with a different pair ships, this must be
+           re-read on setWard. Its own updateField guard throws on a mismatched
+           field rather than mis-striding one, so that failure is loud. */
+        simulationGridSize: simN, terrainGridSize: TERRAIN_N,
       });
       relief = instance;
       attachReliefLayer();
@@ -986,6 +996,11 @@ export function mountHeatMap(): () => void {
     registry = buildRegistry(d.b);
 
     currentWardSizeM = d.sizeM;
+    /* The ward's own admitted pair, taken from the size that just loaded.
+       Everything downstream — the cooling passes, the pick index, the sim
+       request — strides the layers `rasterWardBase` derives from this same
+       `d.sizeM`, so they cannot disagree about where a row ends. */
+    simN = requireGrid(d.sizeM).n;
     const mc = maplibregl.MercatorCoordinate.fromLngLat([w.lon, w.lat], 0);
     /* The scale comes from ward-frame.ts, not from mc.meterInMercatorCoordinateUnits()
        alone: that number is MapLibre's sphere, and our data's metres are not its
@@ -1032,13 +1047,13 @@ export function mountHeatMap(): () => void {
     /* Cooling surfaces are a property of the MEASURED vegetation, so they are
        computed from the ward's base layers and never move when a scenario does —
        planting trees in the model must not invent a park that is not there. */
-    const cellM2 = (d.sizeM / SIM_N) * (d.sizeM / SIM_N);
-    cooling = findCoolingSurfaces(state.base.veg, SIM_N, cellM2);
+    const cellM2 = (d.sizeM / simN) * (d.sizeM / simN);
+    cooling = findCoolingSurfaces(state.base.veg, simN, cellM2);
     /* Two more passes at the bracketing thresholds. Three flood fills over 37k
        cells is a few milliseconds once per ward, and it buys the only honest
        way to show a figure this parameter-sensitive: as a range. */
-    coolingLo = findCoolingSurfaces(state.base.veg, SIM_N, cellM2, VEG_BRACKET[0]);
-    coolingHi = findCoolingSurfaces(state.base.veg, SIM_N, cellM2, VEG_BRACKET[1]);
+    coolingLo = findCoolingSurfaces(state.base.veg, simN, cellM2, VEG_BRACKET[0]);
+    coolingHi = findCoolingSurfaces(state.base.veg, simN, cellM2, VEG_BRACKET[1]);
     if (currentField) relief?.updateField({ field: currentField, coolingMask: cooling.mask, ramp });
     state.live = liveCache[name] ?? null; paintLive();
     resetSim();
@@ -1085,7 +1100,11 @@ export function mountHeatMap(): () => void {
     state.greenG = M.computeGreenG(layers);
     const request: HeatSimRequest = {
       generation: ++simGeneration,
-      grid: { n: SIM_N, cellMeters: cache[state.ward].sizeM / SIM_N },
+      grid: { n: simN, cellMeters: cache[state.ward].sizeM / simN },
+      /* The ward size travels WITH the grid, because the protocol admits the
+         two as a pair: the same `n` over a different ward is a different cell
+         size, and every array would still be exactly the right length. */
+      sizeM: cache[state.ward].sizeM,
       layers, params: p, settleSteps: RESET_BURST, thresholdC: 40,
     };
     latestSimRequest = request;

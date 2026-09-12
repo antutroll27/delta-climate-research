@@ -1,5 +1,6 @@
 import {
   ADMITTED_GRIDS,
+  isAdmittedGrid,
   type GridSpec,
   type SimLayers,
   type SimParams,
@@ -11,6 +12,17 @@ export type ExploreBackend = 'gpu-webgl2' | 'ts-worker' | 'ts-main';
 export interface HeatSimRequest {
   generation: number;
   grid: GridSpec;
+  /**
+   * The ward's analysis footprint, metres.
+   *
+   * THE CONTRACT IS THE PAIR, so the request has to carry both halves. `grid`
+   * alone cannot tell 384 cells over a 2800 m ward (7.29 m, admitted) from 384
+   * over a 1400 m one (3.65 m, described by no calibration here) — both produce
+   * arrays of exactly the right length. Nor can the size be recovered from
+   * `cellMeters`, which is why this is a field and not a derivation: callers
+   * have rounded that number (7.29 for 1400/192).
+   */
+  sizeM: number;
   layers: SimLayers;
   params: SimParams;
   settleSteps: number;
@@ -54,17 +66,21 @@ export type HeatWorkerResponse = WorkerSnapshotMessage | WorkerFailureMessage;
 export function assertHeatRequest(request: HeatSimRequest): void {
   const count = request.grid.n * request.grid.n;
   if (!Number.isInteger(request.generation) || request.generation < 0) throw new RangeError('Invalid simulation generation.');
-  /* HALF THE GATE, DELIBERATELY, AND ONLY UNTIL TASK 3. The contract is the
-     PAIR (grid, ward size), but the request does not carry its ward size yet,
-     and the size cannot be recovered from `cellMeters` because callers round it
-     (7.29 for 1400/192). So this admits any grid in the set and cannot yet
-     refuse 384-over-1400 — the silent case this whole change exists for. Task 3
-     adds `sizeM` to the request and this becomes
-     `isAdmittedGrid(request.grid, request.sizeM)`. */
-  if (!ADMITTED_GRIDS.some((g) => g.n === request.grid.n)) throw new RangeError('The heat model requires the canonical grid.');
-  if (!Number.isFinite(request.grid.cellMeters) || request.grid.cellMeters <= 0) throw new RangeError('Invalid heat grid cell size.');
+  /* THE WHOLE GATE NOW: the pair, not the grid. `isAdmittedGrid` checks that
+     `n` belongs to this ward size AND that `cellMeters` is the metres those two
+     imply — so a non-finite or zero cell size is refused here too, and the
+     separate cell-size branch this replaces is gone. That is deliberate: a cell
+     size disagreeing with sizeM/n is not a lesser fault, it is the same one.
+
+     THE WORDING IS LOAD-BEARING. compare/paired-worker.ts classifies failures
+     by matching message TEXT, so this string and that regex move together. */
+  if (!isAdmittedGrid(request.grid, request.sizeM))
+    throw new RangeError(
+      `Grid ${request.grid.n} does not pair with a ${request.sizeM} m ward. `
+      + 'A mismatched pair produces arrays of the right length and models a cell '
+      + 'size no calibration describes.');
   for (const layer of [request.layers.albedo, request.layers.veg, request.layers.built, request.layers.water]) {
-    if (layer.length !== count) throw new RangeError('Heat layers must match the canonical grid.');
+    if (layer.length !== count) throw new RangeError(`Heat layers must hold ${count} cells — one per cell of this ward's admitted grid.`);
   }
   if (!Number.isInteger(request.settleSteps) || request.settleSteps < 0) throw new RangeError('Invalid settle step count.');
   if (!Number.isFinite(request.thresholdC)) throw new RangeError('Invalid heat threshold.');
@@ -72,19 +88,4 @@ export function assertHeatRequest(request: HeatSimRequest): void {
 
 export function isCurrentSnapshot(snapshot: HeatSimSnapshot, generation: number): boolean {
   return snapshot.generation === generation && ADMITTED_GRIDS.some((g) => g.version === snapshot.gridVersion);
-}
-
-/**
- * The version string for a grid, looked up BY `n` — the weaker half of the pair.
- *
- * `gridVersion(sizeM)` in types.ts is the one to prefer; this exists only
- * because the request does not carry its ward size yet (see `assertHeatRequest`),
- * and `n` alone identifies a pair only while the mapping stays bijective. It
- * throws rather than inventing a version. Task 3 replaces it with
- * `gridVersion(request.sizeM)`, which names the pair instead of half of it.
- */
-export function gridVersionByN(n: number): string {
-  const g = ADMITTED_GRIDS.find((a) => a.n === n);
-  if (!g) throw new RangeError(`No admitted grid with ${n} cells per side.`);
-  return g.version;
 }

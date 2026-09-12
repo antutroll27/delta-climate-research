@@ -11,8 +11,11 @@
  * adjust the model, or record why the benchmark does not apply.
  */
 const M = await import('../src/scripts/climate-engine/heat-map-model.ts');
+const T = await import('../src/scripts/climate-engine/types.ts');
 
-const N = M.SIM_N, N2 = N * N;
+/* Kolkata's admitted pair. This harness builds a SYNTHETIC ward, so it has no
+   ward size of its own to derive from — it names the one it is imitating. */
+const N = T.requireGrid(1400).n, N2 = N * N;
 const results = [];
 const check = (name, value, lo, hi, unit, source) => {
   const ok = value >= lo && value <= hi;

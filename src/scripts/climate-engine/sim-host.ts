@@ -1,9 +1,10 @@
 import { WebGl2HeatSim } from './sim-gpu-webgl2';
 import { TsHeatSim } from './sim-ts';
 import {
-  assertHeatRequest, gridVersionByN, type ExploreBackend, type HeatSimHost, type HeatSimRequest,
+  assertHeatRequest, type ExploreBackend, type HeatSimHost, type HeatSimRequest,
   type HeatSimSnapshot, type HeatWorkerResponse,
 } from './sim-protocol';
+import { gridVersion } from './types';
 
 /**
  * The three engines behind `HeatSimHost`, in demotion order:
@@ -24,7 +25,9 @@ function makeSnapshot(backend: ExploreBackend, request: HeatSimRequest, sim: Pic
     backend,
     field: sim.temperature().slice(),
     stats: sim.stats(request.thresholdC),
-    gridVersion: gridVersionByN(request.grid.n),
+    /* Stamped from the ward SIZE, which names the whole pair — `n` alone names
+       one only while the mapping happens to stay bijective. */
+    gridVersion: gridVersion(request.sizeM),
   };
 }
 

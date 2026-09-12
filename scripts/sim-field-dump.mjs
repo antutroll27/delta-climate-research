@@ -32,9 +32,12 @@ if (!inPath || !outPath) {
 
 const { TsHeatSim } = await import('../src/scripts/climate-engine/sim-ts.ts');
 const M = await import('../src/scripts/climate-engine/heat-map-model.ts');
+const T = await import('../src/scripts/climate-engine/types.ts');
 
 const spec = JSON.parse(readFileSync(inPath, 'utf8'));
-const n = spec.n ?? M.SIM_N;
+/* The caller states its own grid; the fallback names Kolkata's admitted pair,
+   because there is no longer a single module constant to default to. */
+const n = spec.n ?? T.requireGrid(1400).n;
 const count = n * n;
 
 for (const k of ['albedo', 'veg', 'built', 'water']) {

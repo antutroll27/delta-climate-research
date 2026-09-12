@@ -12,14 +12,12 @@
 import { requireGrid, DEFAULT_PARAMS, STORE_NIGHT, type SimParams, type SimLayers } from './types.ts';
 import { skyTemperatureC, dewpointC, shiftAirPreservingVapour } from './sky.ts';
 
-/* Kolkata's grid, resolved once at module load — and THIS IS WHAT STILL MAKES
-   THIS MODULE SINGLE-CITY, because one module-level N cannot describe two ward
-   sizes. Task 3 of the Bangalore plan deletes it and passes `n` from
-   `gridFor(ward.sizeM)` at each call site. Until then it is DERIVED from the
-   admitted pair rather than written as 192, so constant and contract cannot
-   drift apart in the meantime. */
-const KOLKATA_WARD_M = 1400;
-export const SIM_N = requireGrid(KOLKATA_WARD_M).n;  // grid side (ward 1400 m → dx ≈ 7.29 m/cell)
+/* THE GRID IS PER-WARD, so this module has no N of its own. One module-level
+   constant cannot describe two ward sizes: 192 cells over Bengaluru's 2800 m
+   ward would be 14.58 m per cell, a different physical quantity wearing the
+   same name. Each function below takes its grid from the WARD it was handed
+   (`requireGrid(d.sizeM).n`) or, where it only strides an array, from the
+   layers it is indexing — so the stride and the data cannot disagree. */
 /**
  * Colour-ramp bounds, °C. Kept as the LEGACY FIXED PAIR for anything that still
  * wants a constant; `rampBounds()` below is what the map uses.
@@ -242,7 +240,10 @@ export function heatIndexC(T: number, RH: number): number {
 /** Per-ward precompute: road corridors ranked hottest-first, open-land park
  *  centres, and ₹-cost quantities. Pure array math over the rasterised base. */
 export function buildSpatial(d: WardData, base: SimLayers, roads: RoadsData | null): Spatial {
-  const n = SIM_N, half = d.sizeM / 2, cellM = d.sizeM / n, cellArea = cellM * cellM;
+  /* The ward's own admitted pair, derived from the SAME `d.sizeM` that
+     `rasterWardBase` derived `base` from — so this stride cannot disagree with
+     the layers it indexes, whichever city the ward belongs to. */
+  const n = requireGrid(d.sizeM).n, half = d.sizeM / 2, cellM = d.sizeM / n, cellArea = cellM * cellM;
   const toCell = (mx: number, mz: number): [number, number] =>
     [Math.floor((mx + half) / d.sizeM * n), n - 1 - Math.floor((half - mz) / d.sizeM * n)]; // → sim (x,y), matches rasterBase Y-flip
   const corridor = new Uint8Array(n * n); let km = 0;
@@ -288,7 +289,15 @@ export function buildSpatial(d: WardData, base: SimLayers, roads: RoadsData | nu
 
 /** Apply the four sliders onto copies of the base layers (spec §3). */
 export function applyInterventions(base: SimLayers, iv: Interventions, sp: Spatial | null): SimLayers {
-  const N2 = SIM_N * SIM_N, albedo = base.albedo.slice(), veg = base.veg.slice();
+  /* THE STRIDE COMES FROM THE LAYERS THEMSELVES — not from a caller, and no
+     longer from a constant. The park patch below indexes `y * n + x`, so an `n`
+     off by one row would read the wrong cells and still return a plausible
+     field: silent, and exactly the failure an admitted PAIR exists to prevent.
+     A parameter can be passed wrong; the length of the array being written
+     cannot. */
+  const N2 = base.albedo.length, n = Math.round(Math.sqrt(N2));
+  if (n * n !== N2) throw new RangeError(`Heat layers of ${N2} cells are not a square grid.`);
+  const albedo = base.albedo.slice(), veg = base.veg.slice();
   const dAlb = ALB_COOL - ALB_BASE;
   if (iv.roof > 0) for (let i = 0; i < N2; i++) { const b = base.built[i]; if (b > 0) albedo[i] = Math.min(0.85, albedo[i] + b * (iv.roof / 100) * dAlb); }
   // Facades act ONLY through the anthropogenic-heat term (FACADE_Q, applied in
@@ -304,9 +313,9 @@ export function applyInterventions(base: SimLayers, iv: Interventions, sp: Spati
     const patchCount = fullParks + (finalFraction > 0 ? 1 : 0);
     for (let kk = 0; kk < patchCount; kk++) { const c = sp.parkCenters[kk];
       const coverage = kk < fullParks ? 1 : finalFraction;
-      for (let y = Math.max(0, c[1] - r); y <= Math.min(SIM_N - 1, c[1] + r); y++) for (let x = Math.max(0, c[0] - r); x <= Math.min(SIM_N - 1, c[0] + r); x++) {
+      for (let y = Math.max(0, c[1] - r); y <= Math.min(n - 1, c[1] + r); y++) for (let x = Math.max(0, c[0] - r); x <= Math.min(n - 1, c[0] + r); x++) {
         const dx = x - c[0], dy = y - c[1]; if (dx * dx + dy * dy <= r2) {
-          const i = y * SIM_N + x;
+          const i = y * n + x;
           // The final patch is blended by requested area fraction. This keeps a
           // 0.1% control from rounding up to a whole 0.785 ha intervention.
           veg[i] = Math.max(veg[i], veg[i] + (0.90 - veg[i]) * coverage);
@@ -319,7 +328,9 @@ export function applyInterventions(base: SimLayers, iv: Interventions, sp: Spati
 
 /** Weighted-area greening ratio (BAF/Seattle-consolidated weights, §5 eq 9). */
 export function computeGreenG(layers: SimLayers): number {
-  const N2 = SIM_N * SIM_N; let s = 0;
+  /* Every cell of whatever grid these layers are on. This only SUMS — it never
+     strides — so the array length is the whole contract. */
+  const N2 = layers.albedo.length; let s = 0;
   for (let i = 0; i < N2; i++) {
     const b = layers.built[i], v = layers.veg[i], w = layers.water[i];
     const coolRoof = b > 0 ? Math.max(0, Math.min(1, (layers.albedo[i] - 0.30) / 0.30)) : 0;
@@ -461,7 +472,10 @@ export function greenScore(greenG: number, coolingC: number, cost: number): numb
  *  "import('./heat-map-model.ts').then(m=>m.assertInterventionLogic())" */
 export function assertInterventionLogic(): void {
   const a = (ok: boolean, msg: string) => { if (!ok) throw new Error(`heat-map-model: ${msg}`); };
-  const N2 = SIM_N * SIM_N;
+  /* Kolkata's admitted pair, named rather than assumed: the park centres below
+     ([48,48], [140,140]) and the 7.29 m `cellM` in `sp` are 1400 m / 192 cells
+     facts, so this self-check states which ward size it is imitating. */
+  const N2 = requireGrid(1400).n ** 2;
   const mk = (): SimLayers => ({ albedo: new Float32Array(N2), veg: new Float32Array(N2), built: new Float32Array(N2), water: new Float32Array(N2) });
   // realistic morphology: alternating building / bare-street columns (streets
   // start low-veg like real roads, so trees have somewhere to green)

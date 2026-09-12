@@ -2,13 +2,17 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { assertCapsLogic, resolveHeatCaps } from '../../src/scripts/climate-engine/caps.ts';
-import { applyInterventions, SIM_N } from '../../src/scripts/climate-engine/heat-map-model.ts';
+import { applyInterventions } from '../../src/scripts/climate-engine/heat-map-model.ts';
 import { coverageToInterventions, deliveredQuantities } from '../../src/scripts/climate-engine/scenario/coverage.ts';
 import { parsePairedScenario, serializePairedScenario } from '../../src/scripts/climate-engine/scenario/scenario-url.ts';
 import { normalizeCoverage } from '../../src/scripts/climate-engine/scenario/scenario-state.ts';
 import { TsHeatSim } from '../../src/scripts/climate-engine/sim-ts.ts';
-import { DEFAULT_PARAMS } from '../../src/scripts/climate-engine/types.ts';
+import { DEFAULT_PARAMS, requireGrid } from '../../src/scripts/climate-engine/types.ts';
 import { rasterizeWardBuilt, rasterWardBase } from '../../src/scripts/climate-engine/ward-raster.ts';
+
+/* Kolkata's admitted pair — the grid every fixture below is built on. This was
+   imported as `SIM_N` from heat-map-model until the grid became per-ward. */
+const SIM_N = requireGrid(1400).n;
 
 test('coverage controls convert once into the existing model units', () => {
   const coverage = normalizeCoverage({ trees: 55, roofs: 65, facades: 35 });

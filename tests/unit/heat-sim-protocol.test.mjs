@@ -19,12 +19,15 @@ const request = () => ({
     built: new Float32Array(count), water: new Float32Array(count),
   },
   params: DEFAULT_PARAMS, settleSteps: 0, thresholdC: 40,
+  /* The request carries its ward size: the protocol admits (grid, ward size) as
+     a PAIR, and half a pair cannot be checked at all. */
+  sizeM: 1400,
 });
 
-test('heat protocol accepts only canonical complete requests', () => {
+test('heat protocol accepts only complete requests on an admitted pair', () => {
   assert.doesNotThrow(() => assertHeatRequest(request()));
   const bad = request(); bad.grid.n = 64;
-  assert.throws(() => assertHeatRequest(bad), /canonical grid/);
+  assert.throws(() => assertHeatRequest(bad), /does not pair with a 1400 m ward/);
 });
 
 test('only a current canonical snapshot may update Explore', () => {

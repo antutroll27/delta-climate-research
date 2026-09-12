@@ -20,9 +20,13 @@ const GRID_VERSION = gridVersion(1400);
 
 const CELLS = GRID_N * GRID_N;
 
+/* 1400 / 192 EXACTLY, where this file used to round it to 7.29. The protocol
+   checks the PAIR now, and part of that check is that `cellMeters` really is the
+   metres `sizeM` and `n` imply — a rounded display value is not that number. */
 const request = (generation = 1, over = {}) => ({
   generation,
-  grid: { n: GRID_N, cellMeters: 7.29 },
+  grid: { n: GRID_N, cellMeters: 1400 / GRID_N },
+  sizeM: 1400,
   layers: {
     albedo: new Float32Array(CELLS).fill(0.2),
     veg: new Float32Array(CELLS).fill(0.1),
@@ -94,11 +98,11 @@ test('reset posts the request and resolves with the worker snapshot', async () =
   host.dispose();
 });
 
-test('reset refuses a non-canonical grid before anything reaches the worker', async () => {
+test('reset refuses a grid that does not pair with the ward, before anything reaches the worker', async () => {
   const { worker, host } = hosted();
   await assert.rejects(
     () => host.reset(request(1, { grid: { n: 64, cellMeters: 7.29 } })),
-    /canonical grid/,
+    /does not pair with a 1400 m ward/,
   );
   assert.equal(worker.posted.length, 0, 'an invalid request must never be posted');
   host.dispose();
@@ -352,9 +356,9 @@ test('the GPU host settles on reset and reports gpu-webgl2', async () => {
   host.dispose();
 });
 
-test('the GPU host refuses a non-canonical grid', async () => {
+test('the GPU host refuses a grid that does not pair with the ward', async () => {
   const { sim, host } = gpuHosted();
-  await assert.rejects(() => host.reset(request(1, { grid: { n: 64, cellMeters: 7.29 } })), /canonical grid/);
+  await assert.rejects(() => host.reset(request(1, { grid: { n: 64, cellMeters: 7.29 } })), /does not pair with a 1400 m ward/);
   assert.equal(sim.resets, 0, 'an invalid request must never reach the solver');
   host.dispose();
 });

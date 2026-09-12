@@ -23,20 +23,27 @@ function post(message: PairedWorkerResponse): void {
 
 function failure(error: unknown): { code: 'invalid-request' | 'input-unavailable' | 'calculation-failed' | 'contract-failed'; message: string } {
   const message = (error as Error | undefined)?.message ?? '';
-  /* `admitted grid` joins the list because assertPairedResult stopped saying
-     "canonical grid" when the contract became a set of pairs. Both spellings
-     are matched: without the new one a grid-mismatched pair fell through every
-     branch to `calculation-failed`, reporting a refused request as a failed
-     sum.
+  /* EVERY SPELLING OF "WRONG GRID" IS A BAD REQUEST, and each one is listed
+     because this classifier matches MESSAGE TEXT: a refusal whose wording is
+     absent here falls through every branch to `calculation-failed`, reporting a
+     REJECTED REQUEST as a failed sum. That has already happened once on this
+     branch, when `assertPairedResult` stopped saying "canonical grid".
 
-     THE SAME ALTERNATION ALSO CATCHES `requireGrid`'s OWN REFUSAL ("No admitted
-     grid for a 900 m ward…"), and that is intended rather than incidental: an
-     unadmitted ward size is a bad request, not a calculation that failed. It
-     moves from `calculation-failed` to `invalid-request` with this change.
+       · `admitted grid` — assertPairedResult, and `requireGrid`'s own refusal
+         ("No admitted grid for a 900 m ward…"). Catching the latter is intended
+         rather than incidental: an unadmitted ward size is a bad request, not a
+         calculation that failed.
+       · `does not pair` — assertHeatRequest's pair refusal, added with `sizeM`.
+         It cannot reach this worker today, because the paired path solves
+         through runTsFieldCooperatively and never calls that gate. It is
+         matched anyway, so the day a path does reach it the wording is already
+         classified instead of silently demoted.
+       · `canonical grid` — still thrown by the render-side field guard in
+         explore/relief-renderer.ts, likewise not on this path today.
 
-     This classifier matches on MESSAGE TEXT, so it silently reclassifies
-     whenever wording moves — a coded refusal would not have this problem. */
-  if (/valid comparison|reference forcing|canonical grid|admitted grid/i.test(message)) return { code: 'invalid-request', message: 'The requested comparison is invalid.' };
+     A coded refusal would need none of this; until there is one, those strings
+     and this regex move together. */
+  if (/valid comparison|reference forcing|canonical grid|admitted grid|does not pair/i.test(message)) return { code: 'invalid-request', message: 'The requested comparison is invalid.' };
   if (/load|surface|fetch|Unable to/i.test(message)) return { code: 'input-unavailable', message: 'Comparison inputs are unavailable.' };
   if (/contract|Missing paired/i.test(message)) return { code: 'contract-failed', message: 'The paired analytical contract could not be verified.' };
   return { code: 'calculation-failed', message: 'The paired calculation could not complete.' };
