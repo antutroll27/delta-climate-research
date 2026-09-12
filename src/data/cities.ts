@@ -50,6 +50,21 @@ export interface WardRecord {
   readonly veg: number;
   /** analysis footprint, metres. Must have an admitted grid. */
   readonly footprintM: number;
+  /**
+   * The ward strip's 44 px swatch — a CSS `background` value.
+   *
+   * IT LIVES HERE BECAUSE THE STRIP IS NOW GENERATED. These three gradients
+   * were hand-written inline styles in HeatMapStage.astro, one per hard-coded
+   * card; the moment the cards are rendered from this registry there is nowhere
+   * else for a per-ward colour to come from. Kolkata's values are carried across
+   * CHARACTER FOR CHARACTER from that markup, so generating the strip changes
+   * nothing on screen for the city that already shipped.
+   *
+   * Not derived from `veg` or from the thermal model: it is an identifying mark,
+   * not a reading. A swatch computed from data would be a fourth, uncalibrated
+   * colour scale sitting beside the legend's five-class one.
+   */
+  readonly swatch: string;
 }
 
 export interface CityRecord {
@@ -64,25 +79,31 @@ export interface CityRecord {
 const KOLKATA_WARDS: readonly WardRecord[] = [
   { id: 'ballygunge', name: 'Bally<em>gunge</em>', zone: 'Urban Core · Ward 68',
     body: 'Kolkata Municipal Corporation, Ward 68',
-    lat: 22.528, lon: 88.3659, veg: 0.12, footprintM: 1400 },
+    lat: 22.528, lon: 88.3659, veg: 0.12, footprintM: 1400,
+    swatch: 'radial-gradient(circle at 40% 40%,#e5484d,#b08d57 55%,#093a3e)' },
   { id: 'baruipur', name: 'Baru<em>ipur</em>', zone: 'Peri-Urban Fringe',
     body: 'Baruipur Municipality',
-    lat: 22.3654, lon: 88.4319, veg: 0.62, footprintM: 1400 },
+    lat: 22.3654, lon: 88.4319, veg: 0.62, footprintM: 1400,
+    swatch: 'radial-gradient(circle at 40% 40%,#9fb98a,#6fcad6 60%,#093a3e)' },
   { id: 'barrackpore', name: 'Barrack<em>pore</em>', zone: 'Industrial River Corridor',
     body: 'Barrackpore Municipality',
-    lat: 22.7621, lon: 88.3713, veg: 0.28, footprintM: 1400 },
+    lat: 22.7621, lon: 88.3713, veg: 0.28, footprintM: 1400,
+    swatch: 'radial-gradient(circle at 40% 40%,#d46b4a,#b08d57 55%,#093a3e)' },
 ];
 
 const BENGALURU_WARDS: readonly WardRecord[] = [
   { id: 'indiranagar', name: 'Indira<em>nagar</em>', zone: 'Dense Low-Rise',
     body: 'Greater Bengaluru Authority (GBA-2025)',
-    lat: 12.9784, lon: 77.6408, veg: 0.344, footprintM: 2800 },
+    lat: 12.9784, lon: 77.6408, veg: 0.344, footprintM: 2800,
+    swatch: 'radial-gradient(circle at 40% 40%,#d46b4a,#9fb98a 58%,#093a3e)' },
   { id: 'mg-road', name: 'MG <em>Road</em>', zone: 'Mixed Downtown',
     body: 'Greater Bengaluru Authority (GBA-2025)',
-    lat: 12.9755, lon: 77.6030, veg: 0.344, footprintM: 2800 },
+    lat: 12.9755, lon: 77.6030, veg: 0.344, footprintM: 2800,
+    swatch: 'radial-gradient(circle at 40% 40%,#e5484d,#d46b4a 55%,#093a3e)' },
   { id: 'whitefield', name: 'White<em>field</em>', zone: 'Sparse High-Rise',
     body: 'Greater Bengaluru Authority (GBA-2025)',
-    lat: 12.9698, lon: 77.7500, veg: 0.344, footprintM: 2800 },
+    lat: 12.9698, lon: 77.7500, veg: 0.344, footprintM: 2800,
+    swatch: 'radial-gradient(circle at 40% 40%,#b08d57,#9fb98a 58%,#093a3e)' },
 ];
 
 /**

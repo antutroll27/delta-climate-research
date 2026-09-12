@@ -7,6 +7,40 @@ import {
   type PairedScenarioState,
 } from './scenario-state.ts';
 
+/**
+ * The wards `parsePairedScenario` FALLS BACK TO must themselves be published.
+ *
+ * The requested ward is gated by `isWardId` below; the default it falls back to
+ * was not, so an unpublished default would sail straight through the guard that
+ * exists to stop exactly this — and put a 404 behind Compare's OPENING view,
+ * before the reader has touched a control.
+ *
+ * Inert while both defaults are Kolkata wards. THE EVENT THAT MAKES IT LIVE IS
+ * PUBLISHING A SECOND CITY, because that is when `PUBLISHED_CITIES` and this
+ * literal pair can disagree. Same trade `nextDistinctWard` makes in
+ * climate-engine/wards.ts: fail at module load, naming the constant to fix,
+ * rather than in a visitor's browser.
+ *
+ * Exported so the refusal can be exercised with a ward that is NOT published —
+ * a module-load assertion that only ever runs on good input is not a gate.
+ */
+export function assertDefaultScenarioPublished(
+  scenario: Pick<PairedScenarioState, 'a' | 'b'> = DEFAULT_PAIRED_SCENARIO,
+): void {
+  for (const side of ['a', 'b'] as const) {
+    const ward = scenario[side];
+    if (!isWardId(ward)) {
+      throw new RangeError(
+        `DEFAULT_PAIRED_SCENARIO.${side} names "${ward}", which is not a published ward, `
+        + 'so Compare would open on artefacts that 404. Fix DEFAULT_PAIRED_SCENARIO in '
+        + 'scenario-state.ts, or PUBLISHED_CITIES in src/data/wards.ts.',
+      );
+    }
+  }
+}
+
+assertDefaultScenarioPublished();
+
 const numeric = (params: URLSearchParams, key: string, fallback: number) => {
   const raw = params.get(key);
   if (raw === null || raw.trim() === '') return fallback;

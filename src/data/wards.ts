@@ -47,6 +47,69 @@ const PUBLISHED_CITIES: readonly string[] = ['kolkata'];
  *  collections, /attribution). */
 export const WARDS: readonly Ward[] = PUBLISHED_CITIES.flatMap((c) => [...wardsOfCity(c)]);
 
+/**
+ * The cities OBOS can DRAW — a deliberately larger set than the one it PUBLISHES.
+ *
+ * THIS SPLIT IS MEASURED, NOT ASSUMED. Adding 'bengaluru' to PUBLISHED_CITIES
+ * above was tried and reverted. `npm run build` aborts while prerendering
+ * /api/collections/wards/items/indiranagar.json with
+ *
+ *     ENOENT … public/heat-map/data/indiranagar-provenance.json
+ *
+ * and 27 unit tests fail for the same class of absence — no
+ * public/3d-tiles/<ward>/tileset.json, no {ward}-layers.json. Those are the
+ * STANDARDS artefacts, and Bengaluru has none of them yet.
+ *
+ * The RENDERER needs a different and much smaller set: {ward}.json, plus
+ * -roads / -trees / -water / -surface.png / .glb, each of which the instrument
+ * already treats as optional. Bengaluru ships every one of them — that is what
+ * scripts/check-bangalore-artefacts.py asserts. So the two questions are kept
+ * apart instead of being answered by a single list:
+ *
+ *     WARDS            → what the CATALOGUE publishes (provenance, STAC, 3D Tiles)
+ *     RENDERABLE_WARDS → what the INSTRUMENT can open (geometry + surface)
+ *
+ * Until its provenance, layer manifest and tileset exist, a Bengaluru ward draws
+ * on /heat-map and is absent from /attribution, /api/** and the STAC catalogue.
+ * That is the honest state rather than a gap: the catalogue must not advertise
+ * files that are not on disk, and the map must not refuse data that is.
+ */
+export const RENDERABLE_CITIES: readonly string[] = ['kolkata', 'bengaluru'];
+
+export const RENDERABLE_WARDS: readonly Ward[] =
+  RENDERABLE_CITIES.flatMap((c) => [...wardsOfCity(c)]);
+
+/**
+ * A published ward that cannot be drawn would be a catalogue entry for a ward
+ * the instrument refuses to open — the same broken promise as the reverse, in
+ * the other direction. Checked at module load so it is a build failure rather
+ * than a blank stage.
+ */
+for (const city of PUBLISHED_CITIES) {
+  if (!RENDERABLE_CITIES.includes(city)) {
+    throw new RangeError(
+      `'${city}' is in PUBLISHED_CITIES but not RENDERABLE_CITIES, so the catalogue `
+      + 'would publish a ward the heat map cannot draw. See src/data/wards.ts.',
+    );
+  }
+}
+
+/** Lookup by id over the RENDERABLE set — what the instrument indexes. */
+export const RENDERABLE_WARD_MAP: Readonly<Record<string, Ward>> =
+  Object.fromEntries(RENDERABLE_WARDS.map(w => [w.id, w]));
+
+/**
+ * Does this ward have a record in the standards catalogue?
+ *
+ * The tabs and the ward strip offer more wards than this. `/api/wards/{id}/
+ * metadata.json` is generated from WARDS, so the "Download ward record" link is
+ * a 404 for a ward that is renderable but not published — this is what the app
+ * asks before offering it.
+ */
+export function isPublishedWard(id: string): boolean {
+  return WARDS.some(w => w.id === id);
+}
+
 /** Lookup by id. Returns undefined for an unknown id rather than throwing. */
 export function wardById(id: string): Ward | undefined {
   return WARDS.find(w => w.id === id);
