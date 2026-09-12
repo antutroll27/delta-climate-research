@@ -1014,6 +1014,26 @@ Drawn and solved are different jobs from the same measurement."
 
 ---
 
+**Before this task flips `PUBLISHED_CITIES`, fix the sibling fallback.**
+The Task 2b review found `src/scripts/climate-engine/compare/scenario-url.ts:21-22`:
+
+```typescript
+const a = isWardId(requestedA) ? requestedA : DEFAULT_PAIRED_SCENARIO.a;
+```
+
+The requested ward is gated against the published set; **the default it falls
+back to is not**. Task 2b fixed exactly this bug class in `nextDistinctWard`
+(which now throws a `RangeError` naming `PUBLISHED_CITIES`) and left this
+instance, in a file it did not touch.
+
+Harmless while both defaults are published Kolkata wards. **The event that
+makes it live is this task** — the moment `PUBLISHED_CITIES` gains a city, a
+default that names an unpublished ward puts a 404 behind the opening view.
+Assert `DEFAULT_PAIRED_SCENARIO`'s two wards are published, at module load, so
+it fails at build rather than in a user's browser.
+
+---
+
 ### Task 8: The artefact gate
 
 **Files:**
