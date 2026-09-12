@@ -43,9 +43,19 @@ export const ADMITTED_GRIDS: readonly AdmittedGrid[] = [
   /* KOLKATA'S VERSION NAMES ONLY THE GRID, AND KEEPS DOING SO: it is pinned by a
      test, persisted in Compare's baseline cache keys, and already emitted into
      published ReleaseEvidence. Every version added after it names BOTH halves,
-     because `n` alone identifies a pair only while the mapping is bijective —
-     and a coarse tier (192 cells over a 2800 m ward, for a low-end device; see
-     the tier-invariant `grid` in caps.ts) is exactly the pair added next. */
+     because `n` alone identifies a pair only while the mapping is bijective.
+
+     `sizeM` IS THE LOOKUP KEY — `gridFor` finds on it — so it must stay unique
+     across this list, and a test pins that. A second row at the same ward size
+     is not a second option but an unreachable one: `find` returns the first
+     match, so the later row could never be selected.
+
+     A DEVICE-TIER VARIANT THEREFORE NEEDS A DIFFERENT MECHANISM, not a row
+     here. A coarser grid over the same ward would need a second key beyond
+     `sizeM` to be reachable at all, and it would give two cities two different
+     cell sizes — which is the comparability every admitted pair exists to
+     preserve, and what makes a Bengaluru cell and a Kolkata cell the same
+     measurement. */
   { n: 192, sizeM: 1400, version: 'hm-grid-192-v1' },
   { n: 384, sizeM: 2800, version: 'hm-grid-384-2800-v1' },
 ];

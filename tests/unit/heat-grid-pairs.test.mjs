@@ -45,6 +45,16 @@ test('every admitted pair yields the same cell size, so cities are comparable', 
     `admitted pairs must share one cell size; got ${sizes.join(', ')}`);
 });
 
+/* `gridFor` FINDS ON `sizeM`, which makes it the lookup key: a duplicate ward
+   size is not a second admitted option, it is an unreachable row, because `find`
+   returns the first match and the later one can never be selected. The comment
+   on ADMITTED_GRIDS states that uniqueness; this is what keeps it true. */
+test('no two admitted pairs share a ward size, because sizeM is the lookup key', () => {
+  const sizes = ADMITTED_GRIDS.map((g) => g.sizeM);
+  assert.equal(new Set(sizes).size, sizes.length,
+    `ADMITTED_GRIDS must not repeat a ward size; got ${sizes.join(', ')}`);
+});
+
 test('the grid version names the pair, not just the grid', () => {
   assert.equal(gridVersion(1400), 'hm-grid-192-v1', 'Kolkata keeps its existing version string');
   assert.equal(gridVersion(2800), 'hm-grid-384-2800-v1',
