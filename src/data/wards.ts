@@ -91,8 +91,17 @@ export function wardLatLon(
  * transform, and deliberately so: this is the centroid of a footprint traced
  * from imagery, and a sixth decimal would claim 11 cm of siting accuracy that
  * the FOOTPRINT does not have, however exact the arithmetic is.
+ *
+ * `decimals` IS A PARAMETER BECAUSE THE WARD HEADER PRINTS THREE, not five.
+ * That string used to be stored as `coord` on every registry row — a
+ * pre-formatted second copy of `lat`/`lon` in the file whose entire purpose is
+ * being the single source. Deriving it away had to reproduce the precision it
+ * actually shipped at, so the header passes 3 while the building card keeps the
+ * default 5. Both are pinned in ward-latlon.test.mjs.
  */
-export function formatLatLon(lat: number, lon: number, separator = ', '): string {
-  return `${Math.abs(lat).toFixed(5)}° ${lat >= 0 ? 'N' : 'S'}${separator}`
-       + `${Math.abs(lon).toFixed(5)}° ${lon >= 0 ? 'E' : 'W'}`;
+export function formatLatLon(
+  lat: number, lon: number, separator = ', ', decimals = 5,
+): string {
+  return `${Math.abs(lat).toFixed(decimals)}° ${lat >= 0 ? 'N' : 'S'}${separator}`
+       + `${Math.abs(lon).toFixed(decimals)}° ${lon >= 0 ? 'E' : 'W'}`;
 }

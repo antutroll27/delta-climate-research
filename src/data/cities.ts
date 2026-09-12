@@ -25,7 +25,12 @@ export interface WardRecord {
   readonly zone: string;
   /** the local body whose statistical returns cover this ward */
   readonly body: string;
-  readonly coord: string;
+  /**
+   * WGS-84 centre. The coordinate the ward header PRINTS is derived from these
+   * by `formatLatLon` — it used to be stored alongside them as `coord`, a
+   * pre-formatted duplicate, which is two sources for one fact in the file
+   * whose entire purpose is being the single one.
+   */
   readonly lat: number;
   readonly lon: number;
   /**
@@ -58,25 +63,25 @@ export interface CityRecord {
 
 const KOLKATA_WARDS: readonly WardRecord[] = [
   { id: 'ballygunge', name: 'Bally<em>gunge</em>', zone: 'Urban Core · Ward 68',
-    body: 'Kolkata Municipal Corporation, Ward 68', coord: '22.528° N · 88.366° E',
+    body: 'Kolkata Municipal Corporation, Ward 68',
     lat: 22.528, lon: 88.3659, veg: 0.12, footprintM: 1400 },
   { id: 'baruipur', name: 'Baru<em>ipur</em>', zone: 'Peri-Urban Fringe',
-    body: 'Baruipur Municipality', coord: '22.365° N · 88.432° E',
+    body: 'Baruipur Municipality',
     lat: 22.3654, lon: 88.4319, veg: 0.62, footprintM: 1400 },
   { id: 'barrackpore', name: 'Barrack<em>pore</em>', zone: 'Industrial River Corridor',
-    body: 'Barrackpore Municipality', coord: '22.762° N · 88.371° E',
+    body: 'Barrackpore Municipality',
     lat: 22.7621, lon: 88.3713, veg: 0.28, footprintM: 1400 },
 ];
 
 const BENGALURU_WARDS: readonly WardRecord[] = [
   { id: 'indiranagar', name: 'Indira<em>nagar</em>', zone: 'Dense Low-Rise',
-    body: 'Greater Bengaluru Authority (GBA-2025)', coord: '12.978° N · 77.641° E',
+    body: 'Greater Bengaluru Authority (GBA-2025)',
     lat: 12.9784, lon: 77.6408, veg: 0.344, footprintM: 2800 },
   { id: 'mg-road', name: 'MG <em>Road</em>', zone: 'Mixed Downtown',
-    body: 'Greater Bengaluru Authority (GBA-2025)', coord: '12.976° N · 77.603° E',
+    body: 'Greater Bengaluru Authority (GBA-2025)',
     lat: 12.9755, lon: 77.6030, veg: 0.344, footprintM: 2800 },
   { id: 'whitefield', name: 'White<em>field</em>', zone: 'Sparse High-Rise',
-    body: 'Greater Bengaluru Authority (GBA-2025)', coord: '12.970° N · 77.750° E',
+    body: 'Greater Bengaluru Authority (GBA-2025)',
     lat: 12.9698, lon: 77.7500, veg: 0.344, footprintM: 2800 },
 ];
 

@@ -1058,7 +1058,12 @@ export function mountHeatMap(): () => void {
     state.live = liveCache[name] ?? null; paintLive();
     resetSim();
 
-    setHTML('pname', w.name); setText('pzone', w.zone); setText('coord', w.coord);
+    /* The coordinate is DERIVED, not stored. It used to sit on the registry row
+       as `coord`, a pre-formatted duplicate of `lat`/`lon` in the file whose
+       whole purpose is being the single source. Three decimals is the precision
+       it shipped at, passed explicitly so the visible string did not move. */
+    setHTML('pname', w.name); setText('pzone', w.zone);
+    setText('coord', formatLatLon(w.lat, w.lon, ' · ', 3));
     setText('bcount', `${d.count.toLocaleString()} real buildings`);
     document.querySelectorAll('#tabs .tab').forEach(t => t.classList.toggle('on', (t as HTMLElement).dataset.w === name));
     document.querySelectorAll('#strip .ward').forEach(t => t.classList.toggle('on', (t as HTMLElement).dataset.w === name));
