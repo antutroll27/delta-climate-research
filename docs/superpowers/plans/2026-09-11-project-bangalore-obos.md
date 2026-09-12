@@ -1454,6 +1454,59 @@ streams on mobile."
 
 ### Task 10: The model loader, with fallback
 
+**TWO DEFECTS IN THIS TASK AS ORIGINALLY WRITTEN. Both were measured, both ship
+a bug that renders perfectly.**
+
+**1. THE FRAME IS NOT `z north`. +Z POINTS SOUTH.**
+
+This task's docstring said the model is `x east / y up / z north`. It is not.
+Blender is Z-up; the glTF exporter rotates to Y-up, so a vertex is
+`(x_east, z_up, -y_north)`.
+
+Settled numerically against three published landmark positions in `mg-road.glb`,
+converted through `blr.to_local` — the same function the frame gate uses:
+
+| landmark | published local (x, y) | glTF centre (x, z) | error if +Z = north | error if +Z = south |
+|---|---|---|---|---|
+| M. Chinnaswamy Stadium | (−358.0, 375.8) | (−376.9, −368.0) | **744.1 m** | **20.5 m** |
+| UB Tower | (−775.8, −290.7) | (−774.0, 285.7) | **576.4 m** | **5.3 m** |
+| Subhas Chandra Bose Tower | (747.8, −159.2) | (735.6, 143.1) | **302.5 m** | **20.2 m** |
+
+Ward-local recovery is therefore **`x = position.x`, `y = -position.z`**. Node
+translations are identity; the geometry carries the position.
+
+**Why this matters more than an axis typo.** A loader trusting `z north` ships a
+**north–south mirror** — and a mirror renders perfectly. It is invisible to
+every symmetric statistic: mirroring a ward leaves `|lo + hi|`, min, max, mean
+and sd identical. `check-bangalore-artefacts.py` passes mirrored data (measured:
+exit 0). Only `check-bangalore-frame.py` catches it, because it uses published
+landmark positions as asymmetric EXTERNAL references. This codebase has already
+shipped a mirrored render once, and the retraction of that finding was itself
+wrong.
+
+- [ ] **Run `python3 scripts/check-bangalore-frame.py` after any change to this
+  loader**, and add a unit test that places one known landmark within 60 m of
+  its published position. A test on the mesh's extent cannot catch this.
+
+**2. `child.name.startsWith('lm.')` MATCHES NOTHING.**
+
+three.js `GLTFLoader.createUniqueName` passes every node name through
+`PropertyBinding.sanitizeNodeName`, whose `_RESERVED_CHARS_RE` includes `\.` —
+so the dot is stripped at load. The GLB genuinely contains `lm.barton-centre`
+(verified in the file), but three.js hands you **`lmbarton-centre`**.
+
+The loader would report **zero landmarks in every ward** while silently folding
+all 47 into the bulk group — no error, nothing missing on screen, just the
+signature feature quietly gone.
+
+- [ ] Match the **sanitised** name (`startsWith('lm')` plus a real check, since
+  `lm` alone is a weak prefix), or read `gltf.parser.json.nodes` for the
+  original names. Prove whichever you choose by asserting a non-zero landmark
+  count per ward — `mg-road` has 12, `whitefield` 35, `indiranagar` 0.
+
+  Note Task 11's Python test is unaffected: it parses the raw glTF JSON, where
+  the dot survives. So a green Python test is NOT evidence the loader works.
+
 **Files:**
 - Create: `src/scripts/climate-engine/explore/building-model.ts`
 - Modify: `src/scripts/climate-engine/explore/relief-renderer.ts` (the extrusion at ~line 240)
