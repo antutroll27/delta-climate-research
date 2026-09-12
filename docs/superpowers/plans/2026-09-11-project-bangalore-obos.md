@@ -430,6 +430,52 @@ entry is dead UI. Modelling it now avoids restructuring later."
 
 ---
 
+### Task 2b: Delete the `WardId` union
+
+**Files:**
+- Modify: `src/scripts/climate-engine/wards.ts:12`
+
+**WHY THIS EXISTS AS ITS OWN TASK.** The plan's file table says "delete the
+`WardId` union; derive ids from the registry", and the Task 2 commit message
+calls that union *the* blocker — but it was in no numbered task, so Task 2
+correctly stayed inside its file list and left it standing. A spec review caught
+the gap. Task 12 renders a second city's tabs and would hit a type admitting
+only three Kolkata ids.
+
+```typescript
+export type WardId = 'ballygunge' | 'baruipur' | 'barrackpore';
+```
+
+- [ ] **Step 1: See how far it reaches**
+
+`grep -rn "WardId" src/ tests/`. Every switch and `Record<WardId, …>` narrows on
+these three literals; widening the type is what surfaces the places that assume
+three Kolkata wards.
+
+- [ ] **Step 2: Widen it to the registry**
+
+```typescript
+import { allWards } from '../../data/cities.ts';
+
+/** Any ward in the registry, published or not. WAS a union of three Kolkata
+ *  ids, which wrote "there are exactly three wards and they are Kolkata's"
+ *  into the type system — so a second city was a type change rippling through
+ *  every switch rather than a data change. */
+export type WardId = string;
+```
+
+If a `Record<WardId, …>` becomes unsound once `WardId` widens, that record was
+silently asserting completeness over three ids. Make it `Partial<Record<…>>` or
+key it off `allWards()`, and say which in your commit.
+
+- [ ] **Step 3: Gates**
+
+`npm run check` 0 errors, `npm run test:unit` 512+/0, `npm run typecheck` clean.
+
+- [ ] **Step 4: Commit**
+
+---
+
 ### Task 3: `SIM_N` becomes per-ward
 
 **Files:**
@@ -1338,6 +1384,16 @@ of a projection is how a frame drifts."
 ---
 
 ### Task 12: Render tabs and cards from the registry
+
+**READ FIRST — which list do you render?** Task 2 filters the *publication*
+surface: `allWards()` and `CITIES` hold all six wards, while `WARDS` in
+`src/data/wards.ts` is gated by `PUBLISHED_CITIES` to Kolkata only until
+Bengaluru's artefacts land (Tasks 7–8).
+
+So: render the **city chip and its wards from `CITIES` / `wardsOfCity()`**, not
+from `WARDS`. Reading `WARDS` would render three tabs and Bengaluru would
+silently never appear no matter how much data existed. Reading `allWards()`
+flat would render six tabs with no data behind three.
 
 **Files:**
 - Modify: `src/components/ClimateEngine/HeatMapStage.astro:19-21` (tabs), `:290-292` (cards)
