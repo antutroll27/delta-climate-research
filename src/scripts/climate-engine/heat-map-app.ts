@@ -886,11 +886,6 @@ export function mountHeatMap(): () => void {
       if (appDisposed) return;
       const instance = createReliefRenderer({
         map, reducedMotion: reduceMotion,
-        /* The relief renderer sizes its field buffers ONCE, from the grid of the
-           ward open when this chunk resolves. Every published ward is 1400 m
-           today; the day a city with a different pair ships, this must be
-           re-read on setWard. Its own updateField guard throws on a mismatched
-           field rather than mis-striding one, so that failure is loud. */
         simulationGridSize: simN, terrainGridSize: TERRAIN_N,
       });
       relief = instance;

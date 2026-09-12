@@ -5,6 +5,7 @@ import { createCloudLayer, type CloudLayer } from '../cloud-layer.ts';
 import * as M from '../heat-map-model.ts';
 import { createRoadLayer, type RoadLayer } from '../road-layer.ts';
 import { terrainDrawAt } from '../terrain.ts';
+import { requireGrid } from '../types.ts';
 import { createVegetationLayer, type VegetationLayer } from '../vegetation-layer.ts';
 import { createWaterLayer, type WaterLayer } from '../water-layer.ts';
 import { buildRegistry, pickBuilding, projectWard, type BuildingMeta } from './building-pick.ts';
@@ -47,6 +48,16 @@ export class ThreeReliefRenderer implements ReliefRenderer {
   private heatData: Float32Array;
   private blur: Float32Array;
   private heatTexture: THREE.DataTexture;
+  /** Cells per side of the CURRENTLY ALLOCATED field buffers — not
+      `options.simulationGridSize`, which is only ever the grid of whichever ward
+      happened to be open when this chunk resolved. */
+  private fieldN: number;
+  /** One shared holder for the heat texture, in the same style as every other
+      uniform in this class. A DataTexture's dimensions are fixed at
+      construction, so a ward of a different size REPLACES it; both the overlay
+      shader and the facade's injected `tField` read through this object, so
+      re-pointing it once re-points every material that draws the field. */
+  private heatUniform: { value: THREE.DataTexture };
   private grow = { value: 1 };
   private studio = { value: 0 };
   private size = { value: 1400 };
@@ -62,11 +73,13 @@ export class ThreeReliefRenderer implements ReliefRenderer {
 
   constructor(private options: ReliefRendererOptions) {
     const n = options.simulationGridSize;
+    this.fieldN = n;
     this.heatData = new Float32Array(n * n * 4);
     this.blur = new Float32Array(n * n);
     this.heatTexture = new THREE.DataTexture(this.heatData, n, n, THREE.RGBAFormat, THREE.FloatType);
     this.heatTexture.minFilter = this.heatTexture.magFilter = THREE.LinearFilter;
     this.heatTexture.needsUpdate = true;
+    this.heatUniform = { value: this.heatTexture };
     this.facade = this.makeFacade();
     this.layer = {
       id: 'delta-city', type: 'custom', renderingMode: '3d',
@@ -80,13 +93,20 @@ export class ThreeReliefRenderer implements ReliefRenderer {
     this.registry = buildRegistry(bundle.wardData.b);
     this.modelTransform = { ...bundle.mercatorOrigin, frame: bundle.frame };
     this.size.value = bundle.wardData.sizeM;
+    /* THE FIELD BUFFERS FOLLOW THE WARD, not the chunk-load order. They were
+       sized once in the constructor, from whichever ward was open when the Three
+       chunk resolved, so opening a 2800 m Bengaluru ward after a 1400 m Kolkata
+       one poured a 384² field into 192² buffers. `requireGrid` refuses a ward
+       size with no admitted pair rather than guessing one. Deliberately BEFORE
+       the early return below: the buffers are not scene-dependent. */
+    this.resizeField(requireGrid(bundle.wardData.sizeM).n);
     if (!this.scene) return;
     this.rebuildWard(bundle);
     this.options.map.triggerRepaint();
   }
 
   updateField(update: ReliefFieldUpdate): void {
-    const n = this.options.simulationGridSize;
+    const n = this.fieldN;
     if (update.field.length !== n * n) throw new RangeError('Relief field dimensions do not match the canonical grid.');
     for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
       let sum = 0, count = 0;
@@ -109,6 +129,23 @@ export class ThreeReliefRenderer implements ReliefRenderer {
     this.heatTexture.needsUpdate = true;
     this.fieldDirty = true;
     this.options.map.triggerRepaint();
+  }
+
+  /** Re-allocate the field buffers for a ward of `n` cells per side. */
+  private resizeField(n: number): void {
+    if (n === this.fieldN) return;
+    this.fieldN = n;
+    this.heatData = new Float32Array(n * n * 4);
+    this.blur = new Float32Array(n * n);
+    /* A DataTexture's width and height are fixed at construction — there is no
+       resize — so the old one is disposed and replaced. Every material reads it
+       through `heatUniform`, so this single assignment re-points all of them;
+       missing one would leave that material sampling a freed texture. */
+    this.heatTexture.dispose();
+    this.heatTexture = new THREE.DataTexture(this.heatData, n, n, THREE.RGBAFormat, THREE.FloatType);
+    this.heatTexture.minFilter = this.heatTexture.magFilter = THREE.LinearFilter;
+    this.heatTexture.needsUpdate = true;
+    this.heatUniform.value = this.heatTexture;
   }
 
   setVisualState(state: ReliefVisualState): void {
@@ -183,7 +220,7 @@ export class ThreeReliefRenderer implements ReliefRenderer {
       new THREE.PlaneGeometry(1, 1, this.options.terrainGridSize - 1, this.options.terrainGridSize - 1),
       new THREE.ShaderMaterial({
         transparent: true, depthWrite: false,
-        uniforms: { tT: { value: this.heatTexture }, uMin: this.heatMin, uMax: this.heatMax, uOp: { value: 0.5 }, uCool: this.cooling },
+        uniforms: { tT: this.heatUniform, uMin: this.heatMin, uMax: this.heatMax, uOp: { value: 0.5 }, uCool: this.cooling },
         vertexShader: 'varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
         fragmentShader: `varying vec2 vUv; uniform sampler2D tT; uniform float uMin,uMax,uOp,uCool;
           vec3 ramp(float t){ vec3 cA=vec3(.204,.412,.529),cB=vec3(.318,.635,.729),c0=vec3(.435,.792,.839),c1=vec3(.624,.725,.541),c2=vec3(.690,.553,.341),c3=vec3(.831,.420,.290),c4=vec3(.898,.282,.302);
@@ -331,7 +368,7 @@ export class ThreeReliefRenderer implements ReliefRenderer {
     const material = new THREE.MeshStandardMaterial({ roughness: 0.84, metalness: 0.05 });
     material.onBeforeCompile = (shader) => {
       shader.uniforms.uGrow = this.grow; shader.uniforms.uStudio = this.studio; shader.uniforms.uSize = this.size; shader.uniforms.uTintMode = this.tint;
-      shader.uniforms.tField = { value: this.heatTexture }; shader.uniforms.uHeatMin = this.heatMin; shader.uniforms.uHeatMax = this.heatMax; shader.uniforms.uSelCtr = this.selected;
+      shader.uniforms.tField = this.heatUniform; shader.uniforms.uHeatMin = this.heatMin; shader.uniforms.uHeatMax = this.heatMax; shader.uniforms.uSelCtr = this.selected;
       shader.vertexShader = 'attribute float aDelay; attribute float aH; attribute vec2 aCtr;\nvarying vec3 vFp; varying vec3 vFn; varying float vTop; varying float vT; varying float vSel;\nuniform float uGrow; uniform float uSize; uniform sampler2D tField; uniform vec2 uSelCtr;\n'
         + shader.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
           float gT=clamp((uGrow-aDelay*.55)/.45,0.,1.); float gE=1.+2.70158*pow(gT-1.,3.)+1.70158*pow(gT-1.,2.);
