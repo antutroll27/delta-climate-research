@@ -37,12 +37,19 @@ OUT = os.path.join(blr.ROOT, "public", "heat-map", "data")
 #: for the drawn ribbon, and -- the one that matters -- `buildSpatial`
 #: (heat-map-model.ts) does `rad = way.w > 1 ? 2 : 1`, which at 7.29 m per cell
 #: is a 36.5 m or 21.9 m TREE-PLANTING CORRIDOR feeding `corridorSorted` and
-#: from there the published cost and cooling figures.
+#: from there the published COOLING and the delivered `treeCorridorCells`.
+#: NOT the rupee cost: `computeCost` reads `corridorKm`, which sums segment
+#: length regardless of `w`. Saying "cost" here overstates the blast radius,
+#: and the claim was inherited from road-ribbon.ts's own comment.
 #:
 #: So a blanket `w = 2` -- which is what the first draft of this exporter did --
 #: would not merely draw fat roads. It would declare every service alley behind
 #: a shop a 36.5 m planting corridor and inflate the tree count and the rupee
-#: cost of every Bengaluru intervention. Kolkata ships 45 of 500 ways (9 %) at
+#: cost of every Bengaluru intervention. Kolkata's own share is 9.0 % at
+#: Ballygunge but 7.1 % at Barrackpore and 2.5 % at Baruipur, so the honest
+#: comparison is a 2.5-9.0 % RANGE, not the one flattering ward. Bengaluru
+#: lands at 9.2 / 13.7 / 3.7 %; mg-road sits above every Kolkata ward, which is
+#: what a CBD should do. Kolkata ships 45 of 500 ways (9 %) at
 #: the major width; this list puts Indiranagar at 9.2 %, MG Road at 13.7 % and
 #: Whitefield at 3.7 %, which is the same shape of city.
 #:
@@ -170,7 +177,7 @@ def export_context(w: blr.Ward) -> tuple[int, int, int]:
     # nowhere to put one: `rasterizeWardWater` stamps rings, and the render
     # layer fills polygons. Buffering a centreline into a ring here would invent
     # a width nobody measured. Measured cost: 26 of Indiranagar's 39 water
-    # features, 40 of MG Road's 90, 29 of Whitefield's 92 -- mostly the storm
+    # features, 37 of MG Road's 90, 29 of Whitefield's 92 -- mostly the storm
     # canals. They are in data/bangalore/<ward>-context.json for whoever gives
     # `WaterData` a line contract; they are not silently gone.
     polys: list[dict[str, Any]] = []

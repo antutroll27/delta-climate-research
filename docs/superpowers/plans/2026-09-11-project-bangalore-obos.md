@@ -1367,6 +1367,41 @@ data.
 
 ---
 
+### Task 8c: MG Road loses 41 % of its water features, and it shows
+
+**File:** `scripts/export-bangalore-obos.py` (`export_context`)
+
+Task 7 exported water **polygons** and dropped water **centrelines**, because
+`WaterData.polys` has nowhere to put a line and buffering one would invent a
+width nobody measured. Measured losses:
+
+| ward | source features | exported polys | centrelines dropped |
+|---|---|---|---|
+| indiranagar | 39 | 13 | 26 (67 %) |
+| mg-road | 90 | 53 | **37 (41 %)** |
+| whitefield | 92 | 63 | 29 (32 %) |
+
+**Nothing is lost from the physics today** — `rasterizeWardWater` is gated off
+behind `WATER_LAYER_ENABLED = false`. The loss is to the RENDERED layer, and at
+MG Road it is largely the storm canals. A local would notice they are missing,
+in the city briefed for the best visuals.
+
+Until now this existed only in a docstring and a commit message. Recording it
+the way [[Task 8b]] records the neem canopy, because an invisible omission that
+only the author knows about is how a render quietly stops matching the place.
+
+- [ ] **Step 1:** Decide deliberately between three options, and say which:
+  (a) leave it, and note the omission in the ward's provenance so the gap is
+  stated rather than hidden; (b) widen `WaterData` to carry a line plus a
+  rendered width, marking the width as a DISPLAY choice, never a measurement;
+  (c) buffer the centrelines at a documented nominal width — **only** if that
+  width is sourced, not guessed.
+- [ ] **Step 2:** Whatever is chosen, the dropped count must be visible outside
+  the exporter's stdout — in the artefact gate, the provenance manifest, or
+  both. The lines remain in `data/bangalore/`, so nothing needs re-fetching.
+
+---
+
 ### Task 9: Export the web models
 
 **Files:**

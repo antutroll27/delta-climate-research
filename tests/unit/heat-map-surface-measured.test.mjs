@@ -136,6 +136,32 @@ for (const ward of ['indiranagar', 'mg-road', 'whitefield']) {
   });
 }
 
+/* THE INVARIANT THE PRECEDENCE RESTS ON, PINNED.
+
+   `loadWardSurface` checks the DC-URS scalar FIRST and only then the measured
+   level. Inverting that order passes every other test in this file — not
+   because the tests are weak, but because no artefact in this repo can tell the
+   two orderings apart: `export-surface-rasters.py` writes MUTUALLY EXCLUSIVE
+   entries, a pinned ward getting `level: "dc-urs-scalar"` + `fvc_target`, an
+   unpinned one `level: "measured"` + `fvc_mean`.
+
+   So the ordering is safe because of a branch in a Python script that nothing
+   asserted. This asserts it. If a future exporter ever writes both a scalar
+   record and a measured level for one ward, the precedence stops being
+   academic — and this fails here rather than silently changing which number
+   Kolkata renders. */
+test('no ward carries both a DC-URS scalar and a measured level', async () => {
+  const inputs = JSON.parse(await readFile(join(DATA, 'dc-urs-inputs.json'), 'utf8')).wards;
+  const pinned = Object.keys(inputs);
+  assert.ok(pinned.length > 0, 'dc-urs-inputs.json listed no wards, so this test pins nothing');
+  for (const ward of pinned) {
+    assert.notEqual(meta[ward]?.level, 'measured',
+      `${ward} has a DC-URS record AND level "measured". The two are meant to be mutually `
+      + 'exclusive, so loadWardSurface\'s scalar-first ordering now decides which number the '
+      + 'ward renders — decide it deliberately rather than by line order.');
+  }
+});
+
 /* The other half of the fix, and the reason it is an ORDERING rather than a
    replacement: Kolkata's level still comes from the scalar DC-URS scores on, and
    surface-meta.json is never consulted for it. If that inverted, the map and the
