@@ -1115,57 +1115,209 @@ against the bug.
 
 ### Task 8: The artefact gate
 
-**THIS GATE IS WRONG AS ORIGINALLY WRITTEN — two defects, both measured.**
+**Files:**
+- Create: `scripts/check-bangalore-artefacts.py`
+- Modify: `src/scripts/climate-engine/explore/relief-renderer.ts` (Step 4b)
 
-1. **Its bound refuses a correct ward.** The check was `abs(v) <= size/2 + 40`,
-   i.e. 1440 m for a 2800 m ward. Measured spans after Task 7:
+- [ ] **Step 1: Write the gate**
 
-   | ward | x | z |
-   |---|---|---|
-   | indiranagar | −1422 … 1417 | −1414 … 1412 |
-   | mg-road | −1400 … 1431 | −1434 … 1416 |
-   | whitefield | −1421 … 1415 | −1400 … **1443** |
-
-   Whitefield exceeds 1440 legitimately: a building whose centroid sits inside
-   the box carries ring vertices up to its own footprint's width beyond the
-   edge. The gate would fail on correct data.
-
-2. **It only scanned `doc["b"][:2000]` of ~14,867 rows**, so whether it fired
-   at all was luck. A gate that inspects 13 % of the evidence is not a gate.
-
-**The deeper problem is that an absolute bound is the wrong invariant.** This
-gate exists to catch a MIRRORED or OFFSET frame — the failure this codebase has
-actually shipped twice. An offset frame spans −2800…0; a mirrored one spans the
-right numbers with the wrong sign pattern. Neither is caught by "is every
-vertex within 1440 m", and a bound tight enough to catch them rejects honest
-overhang.
-
-- [ ] **Step 1:** Gate on **centredness**, not magnitude, and scan **every**
-  row:
+Create `scripts/check-bangalore-artefacts.py`:
 
 ```python
-for axis, vals in (("x", xs), ("z", zs)):
-    lo, hi = min(vals), max(vals)
-    # An offset frame spans -size..0; a centred one spans about -size/2..+size/2.
-    # |lo + hi| is ~0 when centred and ~size when offset, so this separates the
-    # two by three orders of magnitude instead of quibbling over overhang.
-    skew = abs(lo + hi) / size
-    if skew > 0.05:
-        raise SystemExit(f"{ward}: {axis} spans {lo:.0f}..{hi:.0f}, skew {skew:.1%} "
-                         f"— the frame is offset, not merely overhanging")
-    # A generous absolute sanity bound, wide enough for real ring overhang.
-    if max(abs(lo), abs(hi)) > size / 2 + 120:
-        raise SystemExit(f"{ward}: {axis} reaches {max(abs(lo), abs(hi)):.0f} m, "
-                         f"beyond any plausible building overhang")
+"""Every artefact OBOS fetches for a Bengaluru ward is present and coherent.
+
+THE SURFACE RASTER IS THE POINT. `loadSurfaceRaster` returns null when it is
+missing and the ward silently collapses to ONE uniform vegetation value — the
+heat field driven by buildings alone, no error anywhere. This gate refuses that.
+
+    python3 scripts/check-bangalore-artefacts.py
+"""
+from __future__ import annotations
+
+import json
+import os
+import sys
+
+import numpy as np
+from PIL import Image
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _bangalore as blr                            # noqa: E402
+
+OUT = os.path.join(blr.ROOT, "public", "heat-map", "data")
+REQUIRED = ("{w}.json", "{w}-roads.json", "{w}-water.json",
+            "{w}-trees.json", "{w}-surface.png")
+
+
+def main() -> int:
+    failures: list[str] = []
+    for w in blr.WARDS.values():
+        for pattern in REQUIRED:
+            path = os.path.join(OUT, pattern.format(w=w.id))
+            if not os.path.exists(path):
+                failures.append(f"{w.id}: missing {os.path.basename(path)}")
+                continue
+            if os.path.getsize(path) == 0:
+                failures.append(f"{w.id}: {os.path.basename(path)} is empty")
+
+        bpath = os.path.join(OUT, f"{w.id}.json")
+        if os.path.exists(bpath):
+            with open(bpath, encoding="utf-8") as fh:
+                doc = json.load(fh)
+            if abs(float(doc["sizeM"]) - w.size_m) > 1e-6:
+                failures.append(f"{w.id}: sizeM {doc['sizeM']} != registry {w.size_m}")
+            if doc["count"] != len(doc["b"]):
+                failures.append(f"{w.id}: count {doc['count']} != {len(doc['b'])} rows")
+            # NOT an absolute bound, and NOT a sample. Both were wrong:
+            #   · `size/2 + 40` is 1440 m, and Whitefield's z legitimately
+            #     reaches 1443 — a building whose centroid sits inside the box
+            #     carries ring vertices up to its own width past the edge. The
+            #     old bound refused correct data.
+            #   · `doc["b"][:2000]` inspected 13 % of 14,867 rows, so whether
+            #     the gate fired at all was luck.
+            # What this gate is FOR is a mirrored or offset frame — the failure
+            # this codebase has shipped twice. |lo + hi| is ~0 when centred and
+            # ~size when offset, separating the two by three orders of
+            # magnitude instead of quibbling over a few metres of overhang.
+            xs = [float(row[i]) for row in doc["b"] for i in range(1, len(row), 2)]
+            zs = [float(row[i]) for row in doc["b"] for i in range(2, len(row), 2)]
+            for axis, vals in (("x", xs), ("z", zs)):
+                lo, hi = min(vals), max(vals)
+                skew = abs(lo + hi) / w.size_m
+                if skew > 0.05:
+                    failures.append(
+                        f"{w.id}: {axis} spans {lo:.0f}..{hi:.0f}, skew {skew:.1%} — "
+                        f"the frame is offset or mirrored, not merely overhanging")
+                if max(abs(lo), abs(hi)) > w.size_m / 2 + 120.0:
+                    failures.append(
+                        f"{w.id}: {axis} reaches {max(abs(lo), abs(hi)):.0f} m, beyond "
+                        f"any plausible building overhang")
+
+        spath = os.path.join(OUT, f"{w.id}-surface.png")
+        if os.path.exists(spath):
+            a = np.asarray(Image.open(spath)).astype(float)
+            veg = a[:, :, 0] / 255.0
+            if float(veg.std()) < 0.01:
+                failures.append(
+                    f"{w.id}: surface raster has no spatial variance (std "
+                    f"{veg.std():.4f}) — this is the silent-uniform-vegetation "
+                    f"failure the artefact exists to prevent")
+            print(f"  {w.id:<12} veg mean {veg.mean():.3f} std {veg.std():.3f} "
+                  f"grid {a.shape[0]}x{a.shape[1]}")
+
+    if failures:
+        for f in failures:
+            print(f"  FAIL {f}")
+        return 1
+    print("\n  every Bengaluru artefact present, sized and spatially varying")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
 ```
 
-  Measured skews with the shipped data: all three wards are under 1.6 %, and an
-  offset frame would read 100 %.
+- [ ] **Step 2: Type-check and run**
 
-- [ ] **Step 2: prove the gate can fail.** Negate one axis of one ward's rings
-  in a scratch copy and confirm the mirror is caught; offset another by
-  `size/2` and confirm that is caught too. A gate this file has shipped twice
-  without is not one to take on trust.
+Run: `npm run typecheck && python3 scripts/check-bangalore-artefacts.py`
+Expected: three lines of veg statistics, then the success line.
+
+- [ ] **Step 3: Mutation-check the uniform-vegetation trap**
+
+```bash
+python3 - <<'EOF'
+from PIL import Image
+import numpy as np, shutil
+shutil.copy('public/heat-map/data/mg-road-surface.png', '/tmp/mg-surface-backup.png')
+a = np.asarray(Image.open('public/heat-map/data/mg-road-surface.png')).copy()
+a[:, :, 0] = 88                       # flatten vegetation to one value
+Image.fromarray(a).save('public/heat-map/data/mg-road-surface.png')
+EOF
+python3 scripts/check-bangalore-artefacts.py; echo "exit=$? (want 1)"
+cp /tmp/mg-surface-backup.png public/heat-map/data/mg-road-surface.png
+python3 scripts/check-bangalore-artefacts.py >/dev/null; echo "restored exit=$? (want 0)"
+```
+
+- [ ] **Step 3b: Mutation-check the frame invariant too**
+
+The variance trap above proves the surface half of the gate. The frame half
+needs its own proof, and this codebase has shipped a mirrored render twice —
+measured spans on the real artefacts are `indiranagar` x −1422…1417,
+`mg-road` z −1434…1416, `whitefield` z −1400…1443, all under 1.6 % skew.
+
+```bash
+python3 - <<'EOF'
+import json, shutil
+p = 'public/heat-map/data/whitefield.json'
+shutil.copy(p, '/tmp/whitefield-backup.json')
+doc = json.load(open(p))
+for row in doc['b']:                       # offset every x by half a ward
+    for i in range(1, len(row), 2):
+        row[i] = row[i] - 1400.0
+json.dump(doc, open(p, 'w'), separators=(',', ':'))
+EOF
+python3 scripts/check-bangalore-artefacts.py; echo "exit=$? (want 1, naming skew)"
+cp /tmp/whitefield-backup.json public/heat-map/data/whitefield.json
+python3 scripts/check-bangalore-artefacts.py >/dev/null; echo "restored exit=$? (want 0)"
+```
+
+Then repeat with a MIRROR (`row[i] = -row[i]` on one axis) and record what
+happens. A pure mirror about a centred origin leaves the skew unchanged, so if
+it passes, say so plainly rather than claiming the gate catches mirrors — the
+mirror guard for Bengaluru is `scripts/check-bangalore-frame.py`, and this step
+is where you confirm which of the two actually owns that job.
+
+- [ ] **Step 4: Wire it into the verify chain**
+
+In `package.json`, add `"check:bangalore": "python3 scripts/check-bangalore-artefacts.py"` and append ` && npm run check:bangalore` to the `verify` script.
+
+- [ ] **Step 4b: The relief renderer still sizes its field buffers once**
+
+A comment is not a task. `src/scripts/climate-engine/heat-map-app.ts:866-871`
+states this defect plainly — "the day a city with a different pair ships, this
+must be re-read on setWard" — and assigns it to nobody. It is assigned here.
+
+`src/scripts/climate-engine/explore/relief-renderer.ts:63-67` allocates
+`heatData`, `blur` and `heatTexture` in the constructor, from the
+`simulationGridSize` of whichever ward was open when the Three chunk resolved.
+`setWard` (`:78-86`) updates `size.value` and rebuilds the scene but never
+resizes those three, so the first Bengaluru ward opened after a Kolkata one
+pours a 384² field into 192² buffers.
+
+**What must change:** `setWard` re-reads the pair from `bundle.wardData.sizeM`
+and, when `n` differs, reallocates `heatData` and `blur` and replaces
+`heatTexture` — a `DataTexture`'s dimensions are fixed at construction, so it is
+disposed and rebuilt, and every material holding it re-pointed. `updateField`
+then reads that `n` rather than `this.options.simulationGridSize`.
+
+**Why it is safe to defer until here:** the failure is LOUD. `updateField`
+already throws a `RangeError` on a field whose length is not `n * n`, so a
+mismatched ward cannot mis-stride a buffer and draw a plausible-looking wrong
+city — it refuses to draw at all. That is the opposite of the silent failure the
+grid-pair work exists to prevent, where a wrong grid produces arrays of exactly
+the right length and passes every bounds check. It must land before a Bengaluru
+ward becomes selectable in Task 12, and the standing comment in `heat-map-app.ts`
+is deleted when it does.
+
+Commit this separately from the gate — it is renderer work, not artefact work.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add scripts/check-bangalore-artefacts.py package.json
+git commit -m "test(bangalore): gate the artefacts, especially the surface raster
+
+A missing surface raster does not error — the ward collapses to one uniform
+vegetation value and the heat field is driven by buildings alone. The gate
+asserts spatial VARIANCE rather than presence, and is mutation-checked by
+flattening a raster and confirming it fails."
+```
+
+---
+
+# PHASE 3 — Render
+
+---
 
 ### Task 8b: Bengaluru's canopy is one species, and the founder asked for the best visuals
 
