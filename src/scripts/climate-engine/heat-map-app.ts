@@ -9,7 +9,10 @@
  * `mountHeatMap()` returns a dispose fn (call it on astro:before-swap).
  */
 import maplibregl from 'maplibre-gl';
-import { WARD_MAP, WARDS as PUBLISHED_WARDS, wardLatLon, formatLatLon } from '../../data/wards.ts';
+import {
+  RENDERABLE_WARDS, RENDERABLE_WARD_MAP, isPublishedWard, wardLatLon, formatLatLon,
+} from '../../data/wards.ts';
+import { CITIES } from '../../data/cities.ts';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { DEFAULT_PARAMS, greenReferenceContrastC, requireGrid, type SimLayers, type SimParams } from './types';
 import { detectHeatCaps } from './caps';
@@ -47,26 +50,37 @@ import { nearestImage } from './streetview/nearest-image';
 
 // Ward set lives in src/data/wards.ts so widening beyond three is a data change,
 // not a code change (dc-urs-spec.md §1).
-const WARDS = WARD_MAP;
+//
+// THE RENDERABLE MAP, NOT THE PUBLISHED ONE. The instrument can draw a ward from
+// {ward}.json plus optional layers; the CATALOGUE additionally needs provenance,
+// a layer manifest and a tileset. Bengaluru has the first set and not the second,
+// so indexing the published map here would leave its tabs inert — `loadWard`
+// returns immediately on an id this record does not hold.
+const WARDS = RENDERABLE_WARD_MAP;
 
 /**
- * The ward the instrument opens on — the FIRST PUBLISHED ONE, never a literal.
+ * The ward the instrument opens on — the FIRST RENDERABLE ONE, never a literal.
  *
  * This was `WARDS.ballygunge`, read at five sites, two of which size the solver
  * grid. `noUncheckedIndexedAccess` is off, so indexing that record types as
- * present whether or not it is: the moment PUBLISHED_CITIES changes without
- * keeping Ballygunge in it, all five reads are `undefined` and the page dies at
+ * present whether or not it is: the moment the city lists change without
+ * keeping Ballygunge first, all five reads are `undefined` and the page dies at
  * mount, in the visitor's browser, with TypeScript having said nothing.
  *
  * Refusing here at module load makes that a build-time failure instead — the
  * same trade `nextDistinctWard` makes in climate-engine/wards.ts, and it names
  * the same line so the fix is one lookup away.
+ *
+ * RENDERABLE rather than published, and it must stay in step with the stage:
+ * HeatMapStage.astro marks the first ward of its default city `.on`, and this is
+ * the ward actually loaded at mount. Both resolve to the first entry of the
+ * first renderable city.
  */
-const BOOTSTRAP_WARD = PUBLISHED_WARDS[0];
+const BOOTSTRAP_WARD = RENDERABLE_WARDS[0];
 if (!BOOTSTRAP_WARD) {
   throw new RangeError(
-    'The heat-map instrument needs a published ward to open on; none are published. '
-    + 'See PUBLISHED_CITIES in src/data/wards.ts.',
+    'The heat-map instrument needs a renderable ward to open on; none are renderable. '
+    + 'See RENDERABLE_CITIES in src/data/wards.ts.',
   );
 }
 
@@ -1570,7 +1584,15 @@ export function mountHeatMap(): () => void {
      "report" we do not generate. */
   function updateReportHref() {
     const link = el('report-link') as HTMLAnchorElement | null;
-    if (link) link.href = `/api/wards/${state.ward}/metadata.json`;
+    if (!link) return;
+    /* A RENDERABLE ward is not necessarily a PUBLISHED one. /api/wards/{id}/
+       metadata.json is generated from WARDS in src/data/wards.ts, so leaving this
+       link up for a Bengaluru ward would offer a download that 404s. Hidden
+       rather than disabled: there is no ward record to describe yet, and a dead
+       greyed button invites the click anyway. */
+    const published = isPublishedWard(state.ward);
+    link.hidden = !published;
+    if (published) link.href = `/api/wards/${state.ward}/metadata.json`;
   }
 
   function updateCompareHref() {
@@ -1590,6 +1612,36 @@ export function mountHeatMap(): () => void {
   /* ── instrument wiring ── */
   const onEl = (node: Element | null, ev: string, fn: EventListenerOrEventListenerObject) => { if (node) { node.addEventListener(ev, fn); cleanup.push(() => node.removeEventListener(ev, fn)); } };
   document.querySelectorAll('#tabs .tab, #strip .ward').forEach(t => onEl(t, 'click', () => { nudgeOrbit(); loadWard((t as HTMLElement).dataset.w!); }));
+
+  /* ── city switch ──
+     Every renderable city's tabs and cards are already in the DOM, server-
+     rendered, with the inactive city's `hidden`. This flips that attribute
+     rather than re-rendering, because the handlers bound directly above are
+     bound ONCE PER NODE at mount — rebuilding the markup would unbind every
+     ward in the instrument and leave a strip that looks right and does nothing.
+     The city order is read from the DOM so it cannot disagree with what shipped. */
+  const cityChip = el('cityChip');
+  if (cityChip) {
+    const cityOrder = [...new Set(
+      [...document.querySelectorAll<HTMLElement>('#tabs .tab')].map(t => t.dataset.city ?? ''),
+    )].filter(Boolean);
+    const showCity = (city: string) => {
+      document.querySelectorAll<HTMLElement>('#tabs .tab, #strip .ward')
+        .forEach(n => { n.hidden = n.dataset.city !== city; });
+      cityChip.dataset.city = city;
+      setText('cityName', CITIES[city]?.name ?? city);
+      /* The readout re-declares the resolution per city: a third city may not
+         have the data to run at 7.29 m, and a stale figure would misdescribe it. */
+      setText('cityRes', CITIES[city] ? `${CITIES[city].cellMeters.toFixed(2)} m cells` : '— m cells');
+      const first = document.querySelector<HTMLElement>(`#tabs .tab[data-city="${city}"]`);
+      if (first?.dataset.w) { nudgeOrbit(); void loadWard(first.dataset.w); }
+    };
+    onEl(cityChip, 'click', () => {
+      const current = cityChip.dataset.city ?? cityOrder[0];
+      const next = cityOrder[(cityOrder.indexOf(current) + 1) % cityOrder.length];
+      if (next && next !== current) showCity(next);
+    });
+  }
   onEl(el('srcBtn'), 'click', () => {
     const panel = el('srcPanel'); const btn = el('srcBtn'); if (!panel || !btn) return;
     const opening = panel.hasAttribute('hidden');

@@ -134,11 +134,21 @@ test('the heat-map card has no dead controls, and its record link is real', asyn
      rather than against a second literal scraped from the same file. That also
      makes this the gate that fires when the published order changes and this
      hard-coded markup does not follow it (Task 12 replaces the markup). */
-  const { WARDS: publishedWards } = await import('../../src/data/wards.ts');
-  assert.match(app, /const BOOTSTRAP_WARD = PUBLISHED_WARDS\[0\];/,
-    'the app must derive its opening ward from the published registry, not from a literal');
-  assert.equal(defaultWard, publishedWards[0].id,
+  /* TASK 12 SPLIT THE TWO SURFACES, and this assertion had to follow it. The app
+     opens on the first RENDERABLE ward — the instrument can draw more wards than
+     the catalogue publishes, so the published list is no longer what it boots
+     from. The requirement is unchanged: derived from the registry, never a
+     literal. */
+  const { RENDERABLE_WARDS: renderableWards, isPublishedWard } = await import('../../src/data/wards.ts');
+  assert.match(app, /const BOOTSTRAP_WARD = RENDERABLE_WARDS\[0\];/,
+    'the app must derive its opening ward from the registry, not from a literal');
+  assert.equal(defaultWard, renderableWards[0].id,
     'the markup default and the ward the app boots on must agree');
+  /* AND THE STATIC HREF MUST NAME A PUBLISHED WARD. /api/wards/{id}/metadata.json
+     is generated from WARDS, so a renderable-but-unpublished opening ward would
+     ship a 404 as the card's primary action before anyone clicks a tab. */
+  assert.ok(isPublishedWard(defaultWard),
+    `the opening ward ${defaultWard} has no ward record, so this link would 404 on first paint`);
 
   // and it must follow the selection
   assert.ok(app.includes('updateReportHref'), 'the href must be updated on ward change');
