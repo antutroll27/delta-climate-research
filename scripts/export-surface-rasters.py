@@ -63,7 +63,7 @@ import _types  # noqa: E402
 # copy of the BOA offset rule or the albedo coefficients would be a second thing
 # to keep in step, and that rule has already caused one silent data defect.
 from _sentinel import (  # noqa: E402
-    FOOTPRINT_M, GRID, NDVI_BARE, NDVI_VEG, scene_arrays, search,
+    NDVI_BARE, NDVI_VEG, scene_arrays, search, uniform_grid,
 )
 
 ROOT = os.path.join(HERE, "..")
@@ -104,7 +104,7 @@ def composite(ward: _types.Ward, years: list[int]) -> tuple[npt.NDArray[np.float
     albedos: list[npt.NDArray[np.float32]] = []
     for y in years:
         for feat in search(lat, lon, y):
-            got = scene_arrays(feat, lat, lon)
+            got = scene_arrays(feat, lat, lon, ward.footprint_m)
             if got is None:
                 continue
             ndvis.append(got[0])
@@ -194,12 +194,20 @@ def main() -> None:
         inputs = json.load(fh)["wards"]
 
     os.makedirs(OUT_DIR, exist_ok=True)
+
+    # `grid` and `footprint_m` are stated ONCE for the whole file, so they are
+    # only true while every ward in the run is the same size. `uniform_grid`
+    # refuses a mixed table rather than stamping all three wards with whichever
+    # footprint happened to come first. The grid IS the footprint over 10 m, so
+    # the second figure is derived from the first and the two cannot disagree.
+    surface_grid = uniform_grid(_types.WARDS.values())
+
     meta: dict[str, Any] = {
         "source": "Sentinel-2 L2A surface reflectance via Earth Search STAC; NDVI -> FVC "
                   "with the same NDVI_BARE/NDVI_VEG endpoints as the ward composite, "
                   "albedo via the source document's §3B band coefficients.",
-        "grid": GRID,
-        "footprint_m": FOOTPRINT_M,
+        "grid": surface_grid,
+        "footprint_m": surface_grid * 10,
         "encoding": "PNG, R = vegetation fraction, G = albedo. value = ch/255 * (hi-lo) + lo",
         "veg_range": list(VEG_RANGE),
         "albedo_range": list(ALBEDO_RANGE),

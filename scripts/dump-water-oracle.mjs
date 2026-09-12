@@ -46,7 +46,9 @@ const OUT_DIR = 'tests/fixtures/water-oracle';
 const DATA_DIR = 'public/heat-map/data';
 const WARDS = ['ballygunge', 'baruipur', 'barrackpore'];
 
-/** The Sentinel-2 surface grid measure-spatial-accuracy.py works at (_sentinel.GRID). */
+/** The Sentinel-2 surface grid measure-spatial-accuracy.py works at — there it is
+ *  _sentinel.uniform_grid(_types.WARDS.values()), derived from the 1400 m ward
+ *  footprint rather than a baked constant. Every ward in this oracle is 1400 m. */
 const SURFACE_GRID = 140;
 
 /** The solver grid these wards run on. Every ward in this oracle is 1400 m, so

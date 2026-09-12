@@ -11,7 +11,7 @@ Produces, per ward:
     albedo      broadband surface albedo, 0-1
 
 NO CREDENTIALS. AWS earth-search STAC over the public `sentinel-cogs` bucket.
-Only the ~140x140 pixel window covering each ward is read, via HTTP range
+Only the pixel window covering each ward is read, via HTTP range
 requests into the COGs, so the whole job moves a few MB rather than whole scenes.
 
 SEASONALITY IS NOT OPTIONAL. Kolkata's NDVI swings hard between monsoon and dry
@@ -46,15 +46,19 @@ import _types  # noqa: E402
 # Search, the windowed reader and the per-scene arrays now live in _sentinel,
 # shared with export-surface-rasters.py. This file owns one thing: the reduction
 # of those arrays to the ward scalars DC-URS scores on.
+# The ward table comes from _types, which is the only Python ward table that
+# carries `footprint_m` — and the footprint is now required to size a read.
+# _sentinel's own copy was a third one and is gone; see the note in its place.
 from _sentinel import (  # noqa: E402
-    ALBEDO_W, BANDS, CACHE, FOOTPRINT_M, GRID, MAX_CLOUD, NDVI_BARE, NDVI_VEG,
-    SCENES_PER_YEAR, WARDS, read_window, scene_arrays, scene_metrics, search,
+    ALBEDO_W, CACHE, MAX_CLOUD, NDVI_BARE, NDVI_VEG, SCENES_PER_YEAR,
+    scene_metrics, search,
 )
 
 ROOT = os.path.join(HERE, "..")
 OUT = os.path.join(ROOT, "data", "dc-urs", "sentinel.json")
 
-def ward(name: str, lat: float, lon: float, years: list[int]) -> _types.SentinelWard:
+def ward(name: str, lat: float, lon: float, footprint_m: int,
+         years: list[int]) -> _types.SentinelWard:
     os.makedirs(CACHE, exist_ok=True)
     cache = os.path.join(CACHE, f"{name}.json")
     if os.path.exists(cache):
@@ -69,7 +73,7 @@ def ward(name: str, lat: float, lon: float, years: list[int]) -> _types.Sentinel
         feats = search(lat, lon, y)
         vals = []
         for f in feats:
-            m = scene_metrics(f, lat, lon)
+            m = scene_metrics(f, lat, lon, footprint_m)
             if m:
                 vals.append(m)
         if vals:
@@ -119,7 +123,7 @@ def main() -> None:
     args = ap.parse_args()
 
     years = list(range(2026 - args.years, 2026))
-    todo = {args.ward: WARDS[args.ward]} if args.ward else WARDS
+    todo = {args.ward: _types.WARDS[args.ward]} if args.ward else _types.WARDS
 
     out: _types.SentinelFile = {
         "source": "Sentinel-2 L2A via AWS earth-search STAC / public sentinel-cogs bucket (keyless)",
@@ -137,9 +141,9 @@ def main() -> None:
         "years_requested": years,
         "wards": {},
     }
-    for w, (lat, lon) in todo.items():
-        print(f"  {w}:")
-        out["wards"][w] = ward(w, lat, lon, years)
+    for wid, rec in todo.items():
+        print(f"  {wid}:")
+        out["wards"][wid] = ward(wid, rec.centre.lat, rec.centre.lon, rec.footprint_m, years)
 
     if args.ward:                      # merge into an existing file
         if os.path.exists(OUT):

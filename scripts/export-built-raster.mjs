@@ -27,7 +27,9 @@ import { join } from 'node:path';
 // .ts import directly, so no loader registration is needed here.
 import { rasterizeWardBuilt } from '../src/scripts/climate-engine/ward-raster.ts';
 
-/** Matches _sentinel.GRID (1400 m / 10 m). Both sides must agree or the
+/** Matches _sentinel.grid_for(1400) — a ward footprint over Sentinel-2's 10 m
+ *  posting, which is no longer a module constant on the Python side. Both sides
+ *  must agree or the
  *  downsample to the ECOSTRESS grid silently compares offset cells. */
 const GRID = 140;
 const WARDS = ['ballygunge', 'baruipur', 'barrackpore'];
