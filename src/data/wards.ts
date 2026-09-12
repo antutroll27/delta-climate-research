@@ -1,60 +1,47 @@
 /**
- * The study wards.
+ * The study wards THAT SHIP DATA — the standards-facing ward list.
  *
- * Extracted from `heat-map-app.ts` so the ward set is DATA rather than code
- * (dc-urs-spec.md §1). Widening from three wards to all 144 KMC wards must be a
- * change to this file alone — no script may hardcode a ward id or a count.
+ * The ward set is no longer written here. It lives in `src/data/cities.ts` as a
+ * country → city → ward registry, because it was previously hard-coded in four
+ * places, one of which was the type `WardId = 'ballygunge' | 'baruipur' |
+ * 'barrackpore'` — which made a second city a type change rather than a data
+ * change. This file now derives from that registry and keeps its own exported
+ * shape, because 14 consumers read it.
  *
- * The three wards sit under THREE DIFFERENT local bodies, which is why `body` is
- * recorded: their statistical returns are not directly comparable, and DC-URS
- * handles that by areal interpolation onto the common footprint rather than by
- * taking any one body's ward figures.
+ * WHY THIS IS NOT SIMPLY `allWards()`. The registry describes what EXISTS;
+ * this list drives what we PUBLISH. Every consumer below joins a ward to
+ * artefacts on disk, and Bengaluru has none of them yet:
+ *
+ *   · ward-record.ts:readProvenance reads public/heat-map/data/{id}-provenance
+ *     .json and throws ENOENT — that is /api/wards/{id}/metadata.json, the
+ *     NGSI-LD entities, the OGC items, CityJSON and the whole /attribution page
+ *   · stac.ts publishes one Item per ward × product, each asserting assets that
+ *     would 404
+ *   · public/3d-tiles/{id}/tileset.json and data/geometry/heights-overture.json
+ *     have no Bengaluru entries
+ *   · the analysis CRS is not even the same UTM zone — Kolkata derives to
+ *     EPSG:32645, Bengaluru to EPSG:32643
+ *
+ * Publishing a ward before its artefacts exist is the quiet kind of wrong: the
+ * catalogue would advertise data that is not there. So the gate is publication,
+ * not identity, and it is stated as one line that a later task deletes when
+ * Bengaluru's artefacts land — at which point the standards surface must also
+ * stop assuming a single UTM zone and a single provenance root.
  */
+import { wardsOfCity, type WardRecord } from './cities.ts';
 
-export interface Ward {
-  readonly id: string;
-  /** display name; `<em>` marks the syllable the wordmark emphasises */
-  readonly name: string;
-  readonly zone: string;
-  /** the local body whose statistical returns cover this ward */
-  readonly body: string;
-  /** pre-formatted coordinate string for the UI */
-  readonly coord: string;
-  readonly lat: number;
-  readonly lon: number;
-  /** baseline vegetation fraction — the thermal model's layer seed */
-  readonly veg: number;
-  /** analysis footprint, metres. Matches the thermal simulation domain so
-   *  DC-URS and the heat model describe the same ground. */
-  readonly footprintM: number;
-}
+export type Ward = WardRecord;
 
-export const WARDS: readonly Ward[] = [
-  {
-    id: 'ballygunge',
-    name: 'Bally<em>gunge</em>',
-    zone: 'Urban Core · Ward 68',
-    body: 'Kolkata Municipal Corporation, Ward 68',
-    coord: '22.528° N · 88.366° E',
-    lat: 22.528, lon: 88.3659, veg: 0.12, footprintM: 1400,
-  },
-  {
-    id: 'baruipur',
-    name: 'Baru<em>ipur</em>',
-    zone: 'Peri-Urban Fringe',
-    body: 'Baruipur Municipality',
-    coord: '22.365° N · 88.432° E',
-    lat: 22.3654, lon: 88.4319, veg: 0.62, footprintM: 1400,
-  },
-  {
-    id: 'barrackpore',
-    name: 'Barrack<em>pore</em>',
-    zone: 'Industrial River Corridor',
-    body: 'Barrackpore Municipality',
-    coord: '22.762° N · 88.371° E',
-    lat: 22.7621, lon: 88.3713, veg: 0.28, footprintM: 1400,
-  },
-] as const;
+/**
+ * The cities whose artefacts are built and served. Bengaluru joins this list in
+ * the task that produces its rasters, footprints and provenance — not before.
+ */
+const PUBLISHED_CITIES: readonly string[] = ['kolkata'];
+
+/** Kept a readonly array, and in registry order, because every consumer maps,
+ *  finds or flat-maps over it (getStaticPaths, the STAC catalogue, the OGC
+ *  collections, /attribution). */
+export const WARDS: readonly Ward[] = PUBLISHED_CITIES.flatMap((c) => [...wardsOfCity(c)]);
 
 /** Lookup by id. Returns undefined for an unknown id rather than throwing. */
 export function wardById(id: string): Ward | undefined {
