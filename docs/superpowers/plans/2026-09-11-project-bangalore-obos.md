@@ -1573,6 +1573,47 @@ the data for 7.29 m and the instrument should say so rather than degrade."
 
 ---
 
+### Task 12b: `Ward.veg` — measured, and do NOT just overwrite it
+
+**File:** `src/data/cities.ts:50, 67-85`
+
+Task 6 measured Bengaluru's real vegetation fraction, so the registry's
+`veg: 0.344` on all three Bengaluru rows is now *provably* wrong per ward
+(measured 0.401 / 0.388 / 0.370). The obvious fix — paste the measured numbers
+in — is wrong, and here is the measurement that says so:
+
+| ward | registry `veg` | measured `fvc_target` |
+|---|---|---|
+| ballygunge | 0.12 | **0.3291** |
+| baruipur | 0.62 | **0.4469** |
+| barrackpore | 0.28 | **0.3089** |
+| indiranagar | 0.344 | 0.401 (measured, unpinned) |
+| mg-road | 0.344 | 0.388 (measured, unpinned) |
+| whitefield | 0.344 | 0.370 (measured, unpinned) |
+
+**Kolkata's `veg` is not a vegetation fraction.** It disagrees with measured FVC
+by −64 %, +39 % and −9 %, and it does not even preserve the rank order
+(registry says Baruipur ≫ Barrackpore > Ballygunge; FVC says Baruipur >
+Ballygunge > Barrackpore). Writing measured FVC into the Bengaluru rows would
+put **three rows in one unit and three in another**, inside a single column —
+worse than a uniform placeholder, because it would look authoritative.
+
+**The field is read by nothing.** Verified across `src/`, `scripts/` and
+`tests/`: no `ward.veg`, no `WARD_MAP[…].veg`, no destructure, no mention in
+`src/data/wards.ts`. Every `.veg` hit in the tree is a different thing — the
+`base.veg` / `surface.veg` Float32Array raster layers, the three.js vegetation
+layer, or a `.veg-lab` CSS class.
+
+- [ ] **Step 1:** Establish what Kolkata's numbers actually are before writing
+  any. Check the spec and `git log -S "veg: 0.12" -- src/data/cities.ts` for
+  their provenance. They may be a hand-set display seed or an artefact of an
+  older model.
+- [ ] **Step 2:** Then pick ONE of: delete the column (it has no reader and the
+  measured value already lives in `surface-meta.json`), or define its unit in a
+  comment and populate all six rows consistently. **Do not populate three.**
+
+---
+
 ### Task 13: Measure the browser load before tuning it
 
 **Files:** none — this is a measurement.
