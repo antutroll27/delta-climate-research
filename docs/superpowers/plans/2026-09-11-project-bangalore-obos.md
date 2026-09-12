@@ -20,6 +20,11 @@
 - **Every `.py` must pass strict mypy.** Run `npm run typecheck` (which is `python3 -m mypy`) before any Python commit.
 - **TS type gate** is `npm run check` (astro check).
 - **Never** `git stash` / `git stash pop` — this repo shares a stash stack across worktrees. Use a WIP commit instead.
+- **Run `npm install` first.** On 2026-09-12 `check` failed with 2 errors, `build`
+  failed outright and `test:unit` had 10 failures — all one cause, `mapillary-js`
+  declared in `package.json` but absent from `node_modules`. After installing:
+  **check 0 errors, build OK, test:unit 506 pass / 0 fail, mypy clean on 81
+  files.** That is the real baseline every task must hold.
 - Branch is `feat/bangalore-wards`, already checked out.
 
 ---
@@ -434,8 +439,17 @@ entry is dead UI. Modelling it now avoids restructuring later."
 
 - [ ] **Step 1: Read what you are about to change**
 
-Run: `grep -rn "SIM_N" src/ | tee /tmp/sim-n-sites.txt && wc -l /tmp/sim-n-sites.txt`
-You will see roughly 20 sites across `heat-map-model.ts` and `heat-map-app.ts`.
+Run: `grep -rn "SIM_N\|Task 3" src/ | tee /tmp/sim-n-sites.txt && wc -l /tmp/sim-n-sites.txt`
+You will see roughly 20 `SIM_N` sites across `heat-map-model.ts` and
+`heat-map-app.ts`, **plus four pieces of scaffolding Task 1 left behind and
+marked for you**: `KOLKATA_WARD_M`, `KOLKATA_GRID`, `SIM_N` itself (all adjacent
+in `heat-map-model.ts`) and **`gridVersionOf` in `sim-protocol.ts`**.
+
+`gridVersionOf` is the one that gets missed: it sits sixty lines from any
+`SIM_N`, and after you edit `HeatSimRequest` it still compiles perfectly, so
+nothing forces its removal. Replace its callers with `gridVersion(request.sizeM)`
+and delete it. Its name is also two characters from `gridVersion` with the same
+return type, which is a trap for the next reader either way.
 **Read every one before editing any.** Several compute `d.sizeM / n` already and are correct once `n` is per-ward; a few use `SIM_N` as an array stride and must take the same value the layers were built with, or they will read the wrong row.
 
 - [ ] **Step 2: Write the failing test**
@@ -509,6 +523,34 @@ Run: `node --import tsx --test tests/unit/heat-sim-per-ward-grid.test.mjs`
 Expected: PASS, 4 tests.
 Run: `npm run check && npm run test:unit`
 Expected: PASS.
+
+- [ ] **Step 6b: The Kolkata grid facts still hard-coded in production code**
+
+A review of Task 1 found four places that hard-code 192 and appear in **no task
+in this plan**. All four were verified present. A 2800 m ward fails outright at
+the first and mislabels itself in the other three:
+
+| file:line | what | effect on a Bengaluru ward |
+|---|---|---|
+| `compare/paired-protocol.ts:99` | `field.length !== 192 * 192` | **throws** — rejects every Bengaluru paired result |
+| `scenario/scenario-url.ts:49` | `grid: 'hm-grid-192-v1'` | a shared scenario link claims the wrong grid |
+| `components/ClimateEngine/compare/PairedBench.astro:95,162` | `192 × 192, canonical` / `hm-grid-192-v1` | on-screen copy becomes false |
+| `components/ClimateEngine/brief/HeatMapBrief.astro:22` | `192 × 192, hm-grid-192-v1` | printed brief becomes false |
+
+Fix the first two here, because they are logic. For `paired-protocol.ts:99`, check
+the length against the ward's own pair rather than a literal:
+
+```typescript
+  const expect = requireGrid(result.a.wardData.sizeM).n;
+  if (result.a.field.length !== expect * expect || result.b.field.length !== expect * expect) {
+    throw new Error(`The paired result does not match the ${result.a.wardData.sizeM} m ward's admitted grid.`);
+  }
+```
+
+For `scenario-url.ts:49`, take the version from `gridVersion(sizeM)`.
+
+**Leave the two Astro files' display copy to Task 12**, which already rewrites
+that component from the registry — note it there rather than fixing it twice.
 
 - [ ] **Step 7: Commit**
 
