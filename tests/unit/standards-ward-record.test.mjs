@@ -122,10 +122,23 @@ test('the heat-map card has no dead controls, and its record link is real', asyn
   assert.match(href, /^\/api\/wards\/[a-z]+\/metadata\.json$/);
   const defaultWard = /^\/api\/wards\/([a-z]+)\//.exec(href)[1];
 
-  // the static href must match the ward the app boots with, or the first click
-  // downloads the wrong ward's record
-  const stateWard = /const state: State = \{ ward: '([a-z]+)'/.exec(app)?.[1];
-  assert.equal(defaultWard, stateWard, 'the markup default and the app default must agree');
+  /* The static href must match the ward the app boots with, or the first click
+     downloads the wrong ward's record.
+
+     THE APP NO LONGER NAMES THAT WARD. It was the literal 'ballygunge', read at
+     five sites including the two that size the solver grid — and with
+     `noUncheckedIndexedAccess` off, that indexed as present whether or not it
+     was, so the day the published set stopped containing it the page died at
+     mount in the visitor's browser. It derives from the registry now, so this
+     compares the markup against the REGISTRY VALUE the app actually boots on
+     rather than against a second literal scraped from the same file. That also
+     makes this the gate that fires when the published order changes and this
+     hard-coded markup does not follow it (Task 12 replaces the markup). */
+  const { WARDS: publishedWards } = await import('../../src/data/wards.ts');
+  assert.match(app, /const BOOTSTRAP_WARD = PUBLISHED_WARDS\[0\];/,
+    'the app must derive its opening ward from the published registry, not from a literal');
+  assert.equal(defaultWard, publishedWards[0].id,
+    'the markup default and the ward the app boots on must agree');
 
   // and it must follow the selection
   assert.ok(app.includes('updateReportHref'), 'the href must be updated on ward change');

@@ -9,7 +9,7 @@
  * `mountHeatMap()` returns a dispose fn (call it on astro:before-swap).
  */
 import maplibregl from 'maplibre-gl';
-import { WARD_MAP, wardLatLon, formatLatLon } from '../../data/wards.ts';
+import { WARD_MAP, WARDS as PUBLISHED_WARDS, wardLatLon, formatLatLon } from '../../data/wards.ts';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { DEFAULT_PARAMS, greenReferenceContrastC, requireGrid, type SimLayers, type SimParams } from './types';
 import { detectHeatCaps } from './caps';
@@ -48,6 +48,28 @@ import { nearestImage } from './streetview/nearest-image';
 // Ward set lives in src/data/wards.ts so widening beyond three is a data change,
 // not a code change (dc-urs-spec.md §1).
 const WARDS = WARD_MAP;
+
+/**
+ * The ward the instrument opens on — the FIRST PUBLISHED ONE, never a literal.
+ *
+ * This was `WARDS.ballygunge`, read at five sites, two of which size the solver
+ * grid. `noUncheckedIndexedAccess` is off, so indexing that record types as
+ * present whether or not it is: the moment PUBLISHED_CITIES changes without
+ * keeping Ballygunge in it, all five reads are `undefined` and the page dies at
+ * mount, in the visitor's browser, with TypeScript having said nothing.
+ *
+ * Refusing here at module load makes that a build-time failure instead — the
+ * same trade `nextDistinctWard` makes in climate-engine/wards.ts, and it names
+ * the same line so the fix is one lookup away.
+ */
+const BOOTSTRAP_WARD = PUBLISHED_WARDS[0];
+if (!BOOTSTRAP_WARD) {
+  throw new RangeError(
+    'The heat-map instrument needs a published ward to open on; none are published. '
+    + 'See PUBLISHED_CITIES in src/data/wards.ts.',
+  );
+}
+
 const { RESET_BURST } = M;
 /**
  * `dark` is OUR style now — OBOS Slate, built by scripts/build-map-style.mjs from
@@ -129,7 +151,7 @@ export function mountHeatMap(): () => void {
     dcurs: Record<string, DcUrsInputs> | null;
   }
   
-  const state: State = { ward: 'ballygunge', phase: 'peak', path: '2025', iv: { trees: 0, roof: 0, parks: 0, facades: 0 }, sunNow: 0, heatTairC: null, base: null, baselineMean: 0, live: null, spatial: null, greenG: 0, lastMean: {}, dcurs: null };
+  const state: State = { ward: BOOTSTRAP_WARD.id, phase: 'peak', path: '2025', iv: { trees: 0, roof: 0, parks: 0, facades: 0 }, sunNow: 0, heatTairC: null, base: null, baselineMean: 0, live: null, spatial: null, greenG: 0, lastMean: {}, dcurs: null };
   const wardSession = createWardSession();
   let appDisposed = false;
   let mode: 'relief' | 'iso' = 'relief', env: 'dark' | 'studio' = 'dark';
@@ -140,7 +162,7 @@ export function mountHeatMap(): () => void {
   /* ── MapLibre basemap ── */
   const map = new maplibregl.Map({
     container: mapContainer, style: STYLES.dark,
-    center: [WARDS.ballygunge.lon, WARDS.ballygunge.lat], zoom: 15.3, pitch: 60, bearing: -18,
+    center: [BOOTSTRAP_WARD.lon, BOOTSTRAP_WARD.lat], zoom: 15.3, pitch: 60, bearing: -18,
     antialias: true, attributionControl: false, pixelRatio: Math.min(devicePixelRatio, 1.75),
   });
   map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right');
@@ -155,14 +177,14 @@ export function mountHeatMap(): () => void {
      Every published ward is Kolkata's 1400 m today, so this opens at 192; a
      2800 m ward brings its own 384 with it rather than inheriting 192 and
      solving 14.58 m cells under a 7.29 m calibration. */
-  let simN = requireGrid(WARDS.ballygunge.footprintM).n;
+  let simN = requireGrid(BOOTSTRAP_WARD.footprintM).n;
   const coreField = createCoreFieldLayer(map, simN);
   const capsReady = detectHeatCaps();
   let relief: ReliefRenderer | null = null;
   let reliefReady: Promise<void> | null = null;
   let reliefWard: ReliefWardBundle | null = null;
   let currentField: Float32Array | null = null;
-  let currentWardSizeM = WARDS.ballygunge.footprintM;
+  let currentWardSizeM = BOOTSTRAP_WARD.footprintM;
   let tintMode = 1;
   let growProgress = 1;
   let registry: BuildingMeta[] = [];
@@ -1748,7 +1770,7 @@ export function mountHeatMap(): () => void {
     map.triggerRepaint();
   };
   map.on('style.load', onStyleLoad);
-  const onMapLoad = () => { void loadWard('ballygunge'); };
+  const onMapLoad = () => { void loadWard(BOOTSTRAP_WARD.id); };
   map.once('load', onMapLoad);
   void capsReady.then((caps) => {
     if (!appDisposed && caps.tier > 0 && caps.mode !== 'isotherm') void ensureRelief();
