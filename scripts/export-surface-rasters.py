@@ -103,7 +103,7 @@ def composite(ward: _types.Ward, years: list[int]) -> tuple[npt.NDArray[np.float
     ndvis: list[npt.NDArray[np.float32]] = []
     albedos: list[npt.NDArray[np.float32]] = []
     for y in years:
-        for feat in search(lat, lon, y):
+        for feat in search(lat, lon, y, ward.footprint_m):
             got = scene_arrays(feat, lat, lon, ward.footprint_m)
             if got is None:
                 continue

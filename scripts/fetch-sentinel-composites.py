@@ -70,7 +70,7 @@ def ward(name: str, lat: float, lon: float, footprint_m: int,
     for y in years:
         if str(y) in annual:
             continue
-        feats = search(lat, lon, y)
+        feats = search(lat, lon, y, footprint_m)
         vals = []
         for f in feats:
             m = scene_metrics(f, lat, lon, footprint_m)

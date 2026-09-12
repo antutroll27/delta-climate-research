@@ -70,9 +70,46 @@ BANDS = list(ALBEDO_W)
 #: exactly what this module can no longer do without.
 
 
-def search(lat: float, lon: float, year: int) -> list[dict[str, Any]]:
-    """Lowest-cloud scenes for one year, spread across the calendar."""
-    d = 0.02   # ~2 km box around the ward centre
+def _covers_ward(bbox: list[float] | None, lat: float, lon: float, footprint_m: int) -> bool:
+    """Does this scene's bounding box contain the WHOLE ward window?
+
+    STAC's `bbox` filter is INTERSECTS, not CONTAINS, so a scene clipping one
+    corner of the search box comes back looking like any other candidate and can
+    win its month on cloud cover alone. `read_window` reads it `boundless=True,
+    fill_value=0`, so the missing part arrives as zeros rather than an error.
+
+    Two guards already catch the gross case: `scene_arrays` drops a scene whose
+    window is more than half invalid, and the exporter refuses a composite built
+    from fewer than three scenes. What neither catches is a scene covering, say,
+    60 % of the ward — it passes both and contributes NaN for the rest. That was
+    a small exposure at Kolkata's 1400 m, where the ward is a third of the fixed
+    search box; at Bengaluru's 2800 m it is two thirds, so the clipped share of
+    candidates rises with the ward.
+
+    ponytail: bbox containment, not the `geometry` polygon — a partial swath
+    inside its own bbox can still clip. Tighten with `geometry` if a ward ever
+    comes back short of scenes.
+    """
+    if not bbox or len(bbox) < 4:
+        return False
+    dlat = (footprint_m / 2) / 110_540.0
+    dlon = (footprint_m / 2) / (111_320.0 * float(np.cos(np.radians(lat))))
+    return (bbox[0] <= lon - dlon and bbox[1] <= lat - dlat
+            and bbox[2] >= lon + dlon and bbox[3] >= lat + dlat)
+
+
+def search(lat: float, lon: float, year: int, footprint_m: int) -> list[dict[str, Any]]:
+    """Lowest-cloud scenes for one year, spread across the calendar.
+
+    `footprint_m` has no default for the reason the read path has none, plus a
+    second: it is what decides whether a returned scene actually COVERS the ward
+    or merely touches the search box.
+    """
+    # A fixed box is correct here and does not need to scale: any scene that
+    # covers the ward necessarily intersects a box that also contains the ward,
+    # so widening it would only admit more clipped candidates, never recover a
+    # good one. `_covers_ward` is what does the real filtering.
+    d = 0.02   # ~2 km box around the ward centre; ward half-width ≤ 1.4 km
     body = json.dumps({
         "collections": [COLLECTION],
         "bbox": [lon - d, lat - d, lon + d, lat + d],
@@ -88,6 +125,11 @@ def search(lat: float, lon: float, year: int) -> list[dict[str, Any]]:
         feats = json.loads(r.stdout).get("features", [])
     except json.JSONDecodeError:
         return []
+
+    # Drop scenes that only clip the ward BEFORE the per-month pick, not after:
+    # picking first would let a clipped scene win its month on cloud cover and
+    # then be discarded, losing the month entirely.
+    feats = [f for f in feats if _covers_ward(f.get("bbox"), lat, lon, footprint_m)]
 
     # spread across months rather than taking the N cleanest, which would all
     # cluster in the dry season and reintroduce exactly the bias we are avoiding
@@ -255,11 +297,23 @@ def _self_test() -> None:
     # window must each demand it, so the omission is a TypeError at the call
     # site rather than a quarter-ward raster nine steps downstream.
     import inspect
-    for fn in (read_window, scene_arrays, scene_metrics):
+    for fn in (search, read_window, scene_arrays, scene_metrics):
         p = inspect.signature(fn).parameters.get("footprint_m")
         assert p is not None, f"{fn.__name__} does not take a footprint"
         assert p.default is inspect.Parameter.empty, (
             f"{fn.__name__} defaults its footprint to {p.default!r} — that is the bug")
+
+    # A scene must CONTAIN the ward, not merely touch the search box. MG Road at
+    # 2800 m: half-width is ~0.0127 deg lat, ~0.0129 deg lon.
+    lat_b, lon_b = 12.9755, 77.6030
+    clips = [77.60, 12.97, 77.61, 12.98]          # overlaps, does not contain
+    holds = [77.50, 12.90, 77.70, 13.05]          # contains
+    assert not _covers_ward(clips, lat_b, lon_b, 2800), "a scene that clips the ward must be refused"
+    assert _covers_ward(holds, lat_b, lon_b, 2800), "a scene containing the ward must be kept"
+    assert not _covers_ward(None, lat_b, lon_b, 2800), "a scene with no bbox must be refused"
+    # the same box that HOLDS a 1400 m ward CLIPS a 2800 m one — the whole point
+    assert _covers_ward([77.59, 12.965, 77.615, 12.986], lat_b, lon_b, 1400)
+    assert not _covers_ward([77.59, 12.965, 77.615, 12.986], lat_b, lon_b, 2800)
 
     for gone in ("GRID", "FOOTPRINT_M"):
         assert gone not in globals(), f"{gone} is back as a module constant"

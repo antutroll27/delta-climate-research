@@ -111,7 +111,7 @@ def window_fvc(lat: float, lon: float, years: list[int]) -> float | None:
     """Median FVC of one ward-sized window, identical arithmetic to the ward composite."""
     ndvis: list[npt.NDArray[np.float32]] = []
     for y in years:
-        for feat in search(lat, lon, y):
+        for feat in search(lat, lon, y, WINDOW_M):
             got = scene_arrays(feat, lat, lon, WINDOW_M)
             if got is not None:
                 ndvis.append(got[0])
