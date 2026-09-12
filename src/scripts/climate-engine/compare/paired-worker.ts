@@ -27,8 +27,15 @@ function failure(error: unknown): { code: 'invalid-request' | 'input-unavailable
      "canonical grid" when the contract became a set of pairs. Both spellings
      are matched: without the new one a grid-mismatched pair fell through every
      branch to `calculation-failed`, reporting a refused request as a failed
-     sum. This classifier matches on MESSAGE TEXT, so it silently reclassifies
-     whenever wording moves — a codeed refusal would not have this problem. */
+     sum.
+
+     THE SAME ALTERNATION ALSO CATCHES `requireGrid`'s OWN REFUSAL ("No admitted
+     grid for a 900 m ward…"), and that is intended rather than incidental: an
+     unadmitted ward size is a bad request, not a calculation that failed. It
+     moves from `calculation-failed` to `invalid-request` with this change.
+
+     This classifier matches on MESSAGE TEXT, so it silently reclassifies
+     whenever wording moves — a coded refusal would not have this problem. */
   if (/valid comparison|reference forcing|canonical grid|admitted grid/i.test(message)) return { code: 'invalid-request', message: 'The requested comparison is invalid.' };
   if (/load|surface|fetch|Unable to/i.test(message)) return { code: 'input-unavailable', message: 'Comparison inputs are unavailable.' };
   if (/contract|Missing paired/i.test(message)) return { code: 'contract-failed', message: 'The paired analytical contract could not be verified.' };

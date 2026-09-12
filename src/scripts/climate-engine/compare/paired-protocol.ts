@@ -97,9 +97,13 @@ export function isAbortError(error: unknown): boolean {
 
 export function assertPairedResult(result: PairedResult): void {
   if (result.a.ward === result.b.ward) throw new Error('A paired result requires two distinct wards.');
-  /* Both fields are sized against A's ward, which is safe because a pair whose
-     wards disagree on grid is already refused by the gridVersion comparison
-     below — the two checks together are what make one `expect` legitimate. */
+  /* Both fields are sized against A's ward, and the two checks divide the work
+     by era. TODAY no two admitted pairs share an `n`, so a mixed-grid pair
+     cannot reach the gridVersion comparison below: B's field length will not
+     match A's grid and THIS check throws, naming A's size — the only size it
+     can vouch for. Once a coarse tier lands (192 cells over a 2800 m ward, the
+     case ADMITTED_GRIDS anticipates) two pairs DO share an `n`, the lengths
+     agree, and the gridVersion comparison becomes the one that catches it. */
   const expect = requireGrid(result.a.wardData.sizeM).n;
   if (result.a.field.length !== expect * expect || result.b.field.length !== expect * expect) {
     throw new Error(`The paired result does not match the ${result.a.wardData.sizeM} m ward's admitted grid.`);
