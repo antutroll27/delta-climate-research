@@ -30,11 +30,20 @@ test('heat protocol accepts only complete requests on an admitted pair', () => {
   assert.throws(() => assertHeatRequest(bad), /does not pair with a 1400 m ward/);
 });
 
-test('only a current canonical snapshot may update Explore', () => {
+test("only a current snapshot, on THIS ward size's grid, may update Explore", () => {
   const snapshot = {
     generation: 2, backend: 'ts-worker', field: new Float32Array(count),
     stats: { meanC: 31, peakC: 35, fracAbove: 0, thresholdC: 40 }, gridVersion: gridVersion(1400),
   };
-  assert.equal(isCurrentSnapshot(snapshot, 2), true);
-  assert.equal(isCurrentSnapshot(snapshot, 3), false);
+  assert.equal(isCurrentSnapshot(snapshot, 2, 1400), true);
+  assert.equal(isCurrentSnapshot(snapshot, 3, 1400), false);
+
+  /* THE CASE "IS IT ANY ADMITTED GRID" CANNOT SEE. Both versions are admitted,
+     so that weaker form passed a 2800 m field as current for a 1400 m view —
+     a field of 384² cells reaching a ward solved on 192², which this gate is
+     the last place to refuse. Only equality against the REQUESTED size does. */
+  assert.equal(isCurrentSnapshot({ ...snapshot, gridVersion: gridVersion(2800) }, 2, 1400), false,
+    "a 2800 m ward's field is not current for a 1400 m ward");
+  assert.equal(isCurrentSnapshot(snapshot, 2, 999), false,
+    'an unadmitted ward size answers false rather than throwing out of a predicate');
 });

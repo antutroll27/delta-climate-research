@@ -1,5 +1,5 @@
 import {
-  ADMITTED_GRIDS,
+  gridFor,
   isAdmittedGrid,
   type GridSpec,
   type SimLayers,
@@ -35,7 +35,8 @@ export interface HeatSimSnapshot {
   field: Float32Array;
   stats: SimStats;
   /** Which admitted pair solved this field — one of ADMITTED_GRIDS' versions.
-   *  A literal type here could only name Kolkata's; `isCurrentSnapshot` checks it. */
+   *  A literal type here could only name Kolkata's; `isCurrentSnapshot` checks
+   *  it against the ward size the caller asked for. */
   gridVersion: string;
 }
 
@@ -86,6 +87,22 @@ export function assertHeatRequest(request: HeatSimRequest): void {
   if (!Number.isFinite(request.thresholdC)) throw new RangeError('Invalid heat threshold.');
 }
 
-export function isCurrentSnapshot(snapshot: HeatSimSnapshot, generation: number): boolean {
-  return snapshot.generation === generation && ADMITTED_GRIDS.some((g) => g.version === snapshot.gridVersion);
+/**
+ * Is this snapshot the one the caller is waiting for — right generation, and
+ * solved on the grid THIS ward's size admits?
+ *
+ * THE GRID HALF WAS WEAKENED WHEN THE SECOND PAIR LANDED. It had been equality
+ * against the one canonical version. It became `ADMITTED_GRIDS.some(...)`,
+ * which asks "is this any grid we admit" rather than "is this the grid I asked
+ * for" — so a 2800 m Bengaluru field reads as current for a 1400 m Kolkata
+ * view, both versions being admitted. `sizeM` is the ward the caller is asking
+ * about, so equality against that size's version is the honest check.
+ *
+ * `gridFor` rather than `gridVersion` only so an unadmitted size answers
+ * `false` instead of throwing out of a predicate.
+ */
+export function isCurrentSnapshot(
+  snapshot: HeatSimSnapshot, generation: number, sizeM: number,
+): boolean {
+  return snapshot.generation === generation && snapshot.gridVersion === gridFor(sizeM)?.version;
 }
