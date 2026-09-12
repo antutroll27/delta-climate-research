@@ -75,16 +75,16 @@ export function isCurrentSnapshot(snapshot: HeatSimSnapshot, generation: number)
 }
 
 /**
- * The version string for the grid a request is being solved on.
+ * The version string for a grid, looked up BY `n` — the weaker half of the pair.
  *
- * Looked up by `n` rather than by ward size because the request does not carry
- * its size yet (see `assertHeatRequest`). Every reset path runs that assertion
- * before a snapshot exists, so this cannot miss for a live request; it throws
- * rather than inventing a version if it ever does. Task 3 replaces it with
+ * `gridVersion(sizeM)` in types.ts is the one to prefer; this exists only
+ * because the request does not carry its ward size yet (see `assertHeatRequest`),
+ * and `n` alone identifies a pair only while the mapping stays bijective. It
+ * throws rather than inventing a version. Task 3 replaces it with
  * `gridVersion(request.sizeM)`, which names the pair instead of half of it.
  */
-export function gridVersionOf(grid: GridSpec): string {
-  const g = ADMITTED_GRIDS.find((a) => a.n === grid.n);
-  if (!g) throw new RangeError(`No admitted grid with ${grid.n} cells per side.`);
+export function gridVersionByN(n: number): string {
+  const g = ADMITTED_GRIDS.find((a) => a.n === n);
+  if (!g) throw new RangeError(`No admitted grid with ${n} cells per side.`);
   return g.version;
 }

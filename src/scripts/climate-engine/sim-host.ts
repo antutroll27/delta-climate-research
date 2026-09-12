@@ -1,7 +1,7 @@
 import { WebGl2HeatSim } from './sim-gpu-webgl2';
 import { TsHeatSim } from './sim-ts';
 import {
-  assertHeatRequest, gridVersionOf, type ExploreBackend, type HeatSimHost, type HeatSimRequest,
+  assertHeatRequest, gridVersionByN, type ExploreBackend, type HeatSimHost, type HeatSimRequest,
   type HeatSimSnapshot, type HeatWorkerResponse,
 } from './sim-protocol';
 
@@ -24,7 +24,7 @@ function makeSnapshot(backend: ExploreBackend, request: HeatSimRequest, sim: Pic
     backend,
     field: sim.temperature().slice(),
     stats: sim.stats(request.thresholdC),
-    gridVersion: gridVersionOf(request.grid),
+    gridVersion: gridVersionByN(request.grid.n),
   };
 }
 

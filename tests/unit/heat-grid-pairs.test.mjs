@@ -47,6 +47,7 @@ test('every admitted pair yields the same cell size, so cities are comparable', 
 
 test('the grid version names the pair, not just the grid', () => {
   assert.equal(gridVersion(1400), 'hm-grid-192-v1', 'Kolkata keeps its existing version string');
-  assert.equal(gridVersion(2800), 'hm-grid-384-v1');
+  assert.equal(gridVersion(2800), 'hm-grid-384-2800-v1',
+    'a version added now names BOTH halves: 384 alone stops identifying a pair the moment a coarse tier exists');
   assert.throws(() => gridVersion(999), /admitted/i);
 });

@@ -6,7 +6,7 @@
  * by a hash function here, which meant two of `eqCell`'s three inputs were
  * invented and every within-ward pattern on the map was decoration.
  */
-import { gridFor, CANOPY_BLEND_STRENGTH, WATER_LAYER_ENABLED, type SimLayers } from './types.ts';
+import { requireGrid, CANOPY_BLEND_STRENGTH, WATER_LAYER_ENABLED, type SimLayers } from './types.ts';
 import type { WardData, WaterData } from './heat-map-model.ts';
 import { resample, type CanopyRaster, type SurfaceMeans, type SurfaceRaster } from './surface-raster.ts';
 
@@ -218,9 +218,7 @@ export function rasterWardBase(
      what keeps a cell at 7.29 m in both cities. An unadmitted ward size is
      refused here rather than defaulted, because a wrong-grid raster is
      invisible downstream: every layer is exactly the length the solver expects. */
-  const grid = gridFor(ward.sizeM);
-  if (!grid) throw new RangeError(`No admitted grid for a ${ward.sizeM} m ward.`);
-  const n = grid.n;
+  const n = requireGrid(ward.sizeM).n;
   const count = n * n;
   const built = rasterizeWardBuilt(ward, n);
   const waterFraction = WATER_LAYER_ENABLED

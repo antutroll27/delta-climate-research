@@ -1,3 +1,5 @@
+import { wardById } from '../../../data/wards.ts';
+import { gridVersion } from '../types.ts';
 import { isWardId, nextDistinctWard } from '../wards.ts';
 import {
   DEFAULT_PAIRED_SCENARIO,
@@ -37,6 +39,13 @@ export function parsePairedScenario(search: string): PairedScenarioState {
 }
 
 export function serializePairedScenario(state: PairedScenarioState): string {
+  /* The grid stamp comes from A's ward, not from a literal — the same ward
+     `assertPairedResult` sizes the pair against. One stamp stays truthful for a
+     two-ward link because a pair whose wards disagree on grid is refused there.
+     An unidentifiable ward omits the stamp rather than asserting a grid it
+     cannot know; `parsePairedScenario` never reads this back, so a missing
+     stamp costs a reader provenance, while a wrong one would mislabel a run. */
+  const wardA = wardById(state.a);
   const params = new URLSearchParams({
     a: state.a,
     b: state.b,
@@ -46,7 +55,7 @@ export function serializePairedScenario(state: PairedScenarioState): string {
     phase: state.phase,
     contract: state.contract,
     forcing: state.forcing,
-    grid: 'hm-grid-192-v1',
+    ...(wardA ? { grid: gridVersion(wardA.footprintM) } : {}),
     data: 'ward-geometry-v1',
     stock: 'modelled-stock-v1',
     backend: 'ts-v1',

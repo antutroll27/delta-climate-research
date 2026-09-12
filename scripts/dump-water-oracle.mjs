@@ -40,7 +40,7 @@
  */
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { rasterizeWardWater } from '../src/scripts/climate-engine/ward-raster.ts';
-import { gridFor, WATER_LAYER_ENABLED } from '../src/scripts/climate-engine/types.ts';
+import { requireGrid, WATER_LAYER_ENABLED } from '../src/scripts/climate-engine/types.ts';
 
 const OUT_DIR = 'tests/fixtures/water-oracle';
 const DATA_DIR = 'public/heat-map/data';
@@ -52,9 +52,7 @@ const SURFACE_GRID = 140;
 /** The solver grid these wards run on. Every ward in this oracle is 1400 m, so
  *  the pair is 192-over-1400 — taken from the admitted set rather than written
  *  as a literal, so the fixture cannot drift from the shipped contract. */
-const KOLKATA = gridFor(1400);
-if (!KOLKATA) throw new Error('the 1400 m Kolkata pair must stay admitted');
-const SIM_GRID = KOLKATA.n;
+const SIM_GRID = requireGrid(1400).n;
 
 /** Plain array of doubles, so JSON round-trips the float32 values exactly. */
 const nums = (a) => Array.from(a, (v) => v);

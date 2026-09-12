@@ -4,7 +4,7 @@ import test from 'node:test';
 import {
   createGpuHost, createStaticHost, createWorkerHost,
 } from '../../src/scripts/climate-engine/sim-host.ts';
-import { gridFor, gridVersion, DEFAULT_PARAMS } from '../../src/scripts/climate-engine/types.ts';
+import { requireGrid, gridVersion, DEFAULT_PARAMS } from '../../src/scripts/climate-engine/types.ts';
 
 /* The sim host is the only thing standing between a wedged worker and a page
    that looks alive while showing a frozen field. Every guard below was written
@@ -15,9 +15,7 @@ import { gridFor, gridVersion, DEFAULT_PARAMS } from '../../src/scripts/climate-
    tests/e2e/heat-map-sim-backend.spec.ts. */
 
 /* Kolkata's admitted pair — every request in this file is a 1400 m ward. */
-const KOLKATA = gridFor(1400);
-if (!KOLKATA) throw new Error('the 1400 m Kolkata pair must stay admitted');
-const GRID_N = KOLKATA.n;
+const GRID_N = requireGrid(1400).n;
 const GRID_VERSION = gridVersion(1400);
 
 const CELLS = GRID_N * GRID_N;

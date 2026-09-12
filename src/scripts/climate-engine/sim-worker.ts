@@ -2,7 +2,7 @@
 import { TsHeatSim } from './sim-ts';
 import {
   assertHeatRequest,
-  gridVersionOf,
+  gridVersionByN,
   type HeatSimRequest,
   type HeatSimSnapshot,
   type HeatWorkerRequest,
@@ -20,7 +20,7 @@ function snapshot(request: HeatSimRequest): HeatSimSnapshot {
     backend: 'ts-worker',
     field: sim.temperature().slice(),
     stats: sim.stats(request.thresholdC),
-    gridVersion: gridVersionOf(request.grid),
+    gridVersion: gridVersionByN(request.grid.n),
   };
 }
 

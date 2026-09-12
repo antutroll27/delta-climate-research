@@ -9,7 +9,7 @@
  */
 // .ts extension: keeps this module runnable under `node --experimental-strip-types`
 // for assertInterventionLogic() (node doesn't do extensionless resolution).
-import { gridFor, DEFAULT_PARAMS, STORE_NIGHT, type SimParams, type SimLayers } from './types.ts';
+import { requireGrid, DEFAULT_PARAMS, STORE_NIGHT, type SimParams, type SimLayers } from './types.ts';
 import { skyTemperatureC, dewpointC, shiftAirPreservingVapour } from './sky.ts';
 
 /* Kolkata's grid, resolved once at module load — and THIS IS WHAT STILL MAKES
@@ -19,9 +19,7 @@ import { skyTemperatureC, dewpointC, shiftAirPreservingVapour } from './sky.ts';
    admitted pair rather than written as 192, so constant and contract cannot
    drift apart in the meantime. */
 const KOLKATA_WARD_M = 1400;
-const KOLKATA_GRID = gridFor(KOLKATA_WARD_M);
-if (!KOLKATA_GRID) throw new RangeError(`No admitted grid for a ${KOLKATA_WARD_M} m ward.`);
-export const SIM_N = KOLKATA_GRID.n;           // grid side (ward 1400 m → dx ≈ 7.29 m/cell)
+export const SIM_N = requireGrid(KOLKATA_WARD_M).n;  // grid side (ward 1400 m → dx ≈ 7.29 m/cell)
 /**
  * Colour-ramp bounds, °C. Kept as the LEGACY FIXED PAIR for anything that still
  * wants a constant; `rampBounds()` below is what the map uses.

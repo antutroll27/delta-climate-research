@@ -1,7 +1,7 @@
 import type { RoadsData, WardData } from '../heat-map-model.ts';
 import type { DeliveredQuantities } from '../scenario/coverage.ts';
 import type { PairedScenarioState } from '../scenario/scenario-state.ts';
-import { HEAT_METRICS_VERSION } from '../types.ts';
+import { requireGrid, HEAT_METRICS_VERSION } from '../types.ts';
 import type { WardId } from '../wards.ts';
 import type { CompareReferenceForcing } from './reference-forcing.ts';
 
@@ -97,8 +97,12 @@ export function isAbortError(error: unknown): boolean {
 
 export function assertPairedResult(result: PairedResult): void {
   if (result.a.ward === result.b.ward) throw new Error('A paired result requires two distinct wards.');
-  if (result.a.field.length !== 192 * 192 || result.b.field.length !== 192 * 192) {
-    throw new Error('The paired result does not use the canonical grid.');
+  /* Both fields are sized against A's ward, which is safe because a pair whose
+     wards disagree on grid is already refused by the gridVersion comparison
+     below — the two checks together are what make one `expect` legitimate. */
+  const expect = requireGrid(result.a.wardData.sizeM).n;
+  if (result.a.field.length !== expect * expect || result.b.field.length !== expect * expect) {
+    throw new Error(`The paired result does not match the ${result.a.wardData.sizeM} m ward's admitted grid.`);
   }
   const evidence = [result.a.evidence, result.b.evidence];
   if (evidence[0].forcingId !== evidence[1].forcingId

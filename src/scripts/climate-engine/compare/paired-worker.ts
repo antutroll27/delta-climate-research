@@ -23,7 +23,13 @@ function post(message: PairedWorkerResponse): void {
 
 function failure(error: unknown): { code: 'invalid-request' | 'input-unavailable' | 'calculation-failed' | 'contract-failed'; message: string } {
   const message = (error as Error | undefined)?.message ?? '';
-  if (/valid comparison|reference forcing|canonical grid/i.test(message)) return { code: 'invalid-request', message: 'The requested comparison is invalid.' };
+  /* `admitted grid` joins the list because assertPairedResult stopped saying
+     "canonical grid" when the contract became a set of pairs. Both spellings
+     are matched: without the new one a grid-mismatched pair fell through every
+     branch to `calculation-failed`, reporting a refused request as a failed
+     sum. This classifier matches on MESSAGE TEXT, so it silently reclassifies
+     whenever wording moves — a codeed refusal would not have this problem. */
+  if (/valid comparison|reference forcing|canonical grid|admitted grid/i.test(message)) return { code: 'invalid-request', message: 'The requested comparison is invalid.' };
   if (/load|surface|fetch|Unable to/i.test(message)) return { code: 'input-unavailable', message: 'Comparison inputs are unavailable.' };
   if (/contract|Missing paired/i.test(message)) return { code: 'contract-failed', message: 'The paired analytical contract could not be verified.' };
   return { code: 'calculation-failed', message: 'The paired calculation could not complete.' };

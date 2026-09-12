@@ -3,12 +3,10 @@ import test from 'node:test';
 
 import { runTsFieldCooperatively } from '../../src/scripts/climate-engine/sim-cooperative.ts';
 import { TsHeatSim } from '../../src/scripts/climate-engine/sim-ts.ts';
-import { gridFor, DEFAULT_PARAMS } from '../../src/scripts/climate-engine/types.ts';
+import { requireGrid, DEFAULT_PARAMS } from '../../src/scripts/climate-engine/types.ts';
 
 /* Kolkata's admitted pair — 192 cells over a 1400 m ward. */
-const KOLKATA = gridFor(1400);
-if (!KOLKATA) throw new Error('the 1400 m Kolkata pair must stay admitted');
-const GRID_N = KOLKATA.n;
+const GRID_N = requireGrid(1400).n;
 
 const count = GRID_N * GRID_N;
 const layers = () => ({

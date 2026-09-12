@@ -2,13 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 const { TsHeatSim } = await import('../../src/scripts/climate-engine/sim-ts.ts');
-const { gridFor, DEFAULT_PARAMS, STORE_NIGHT, equilibriumC, stableDt } = await import('../../src/scripts/climate-engine/types.ts');
+const { requireGrid, DEFAULT_PARAMS, STORE_NIGHT, equilibriumC, stableDt } = await import('../../src/scripts/climate-engine/types.ts');
 const { RESET_BURST } = await import('../../src/scripts/climate-engine/heat-map-model.ts');
 
 /* Kolkata's admitted pair — the 192-cell grid this parity contract was written against. */
-const KOLKATA = gridFor(1400);
-if (!KOLKATA) throw new Error('the 1400 m Kolkata pair must stay admitted');
-const GRID_N = KOLKATA.n;
+const GRID_N = requireGrid(1400).n;
 
 /*
  * GPU ↔ TypeScript solver parity — the contract in

@@ -1,5 +1,5 @@
 import { runTsFieldCooperatively, type CooperativeFieldRequest } from '../sim-cooperative.ts';
-import { gridFor, gridVersion, HEAT_METRICS_VERSION, greenReferenceContrastC, type SimLayers, type SimParams, type SimStats } from '../types.ts';
+import { requireGrid, gridVersion, HEAT_METRICS_VERSION, greenReferenceContrastC, type SimLayers, type SimParams, type SimStats } from '../types.ts';
 import { applyInterventions, buildSpatial, computeCost, currentParamsForReference, RESET_BURST, type Ambient, type RoadsData, type Spatial, type WardData } from '../heat-map-model.ts';
 import { loadWard } from '../ward-loader.ts';
 import { rasterWardBase } from '../ward-raster.ts';
@@ -111,8 +111,7 @@ function baselineKey(id: WardId, forcing: CompareReferenceForcing, phase: Paired
 }
 
 async function field(layers: SimLayers, params: SimParams, sizeM: number, options: PairedRunOptions): Promise<FieldResult> {
-  const grid = gridFor(sizeM);
-  if (!grid) throw new RangeError(`No admitted grid for a ${sizeM} m ward.`);
+  const grid = requireGrid(sizeM);
   return (options.runField ?? runTsFieldCooperatively)({
     grid: { n: grid.n, cellMeters: sizeM / grid.n },
     layers,

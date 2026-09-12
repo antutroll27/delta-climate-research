@@ -40,19 +40,38 @@ export interface AdmittedGrid {
 }
 
 export const ADMITTED_GRIDS: readonly AdmittedGrid[] = [
+  /* KOLKATA'S VERSION NAMES ONLY THE GRID, AND KEEPS DOING SO: it is pinned by a
+     test, persisted in Compare's baseline cache keys, and already emitted into
+     published ReleaseEvidence. Every version added after it names BOTH halves,
+     because `n` alone identifies a pair only while the mapping is bijective —
+     and a coarse tier (192 cells over a 2800 m ward, for a low-end device; see
+     the tier-invariant `grid` in caps.ts) is exactly the pair added next. */
   { n: 192, sizeM: 1400, version: 'hm-grid-192-v1' },
-  { n: 384, sizeM: 2800, version: 'hm-grid-384-v1' },
-] as const;
+  { n: 384, sizeM: 2800, version: 'hm-grid-384-2800-v1' },
+];
 
 /** Cells per side for a ward of this size, or undefined if unsupported. */
 export function gridFor(sizeM: number): AdmittedGrid | undefined {
   return ADMITTED_GRIDS.find((g) => g.sizeM === sizeM);
 }
 
-export function gridVersion(sizeM: number): string {
+/** The admitted pair for this ward size, or a refusal that names the fix. */
+export function requireGrid(sizeM: number): AdmittedGrid {
   const g = gridFor(sizeM);
-  if (!g) throw new RangeError(`No admitted grid for a ${sizeM} m ward.`);
-  return g.version;
+  if (!g) throw new RangeError(
+    `No admitted grid for a ${sizeM} m ward. Admitted ward sizes are `
+    + `${ADMITTED_GRIDS.map((a) => a.sizeM).join(', ')} m — add the pair to ADMITTED_GRIDS in types.ts.`);
+  return g;
+}
+
+/**
+ * The version string for this ward size's pair — what a cached or published
+ * result must carry to be read back as comparable. THROWS on an unadmitted
+ * size, because a result labelled with a grid nobody admits is worse than one
+ * that never got written.
+ */
+export function gridVersion(sizeM: number): string {
+  return requireGrid(sizeM).version;
 }
 
 export function isAdmittedGrid(grid: GridSpec, sizeM: number): boolean {
