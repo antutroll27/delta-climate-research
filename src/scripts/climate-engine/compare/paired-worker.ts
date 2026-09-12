@@ -40,13 +40,19 @@ export function classifyPairedFailure(error: unknown): { code: 'invalid-request'
          classified instead of silently demoted.
        · `canonical grid` — still thrown by the render-side field guard in
          explore/relief-renderer.ts, likewise not on this path today.
+       · `distinct wards` — assertPairedResult's same-ward refusal ("A paired
+         result requires two distinct wards."). This one hid behind a near-miss:
+         `valid comparison` matches paired-core's almost identical wording, and
+         paired-core throws FIRST, so the reachable path classified correctly
+         while the unreachable one fell through. A near-duplicate message that
+         matches is exactly what stops anyone noticing the one that does not.
 
      A coded refusal would need none of this; until there is one, those strings
      and this regex move together — and they are now held together by
      tests/unit/heat-paired-failure-classifier.test.mjs, which CALLS each real
      throw site rather than copying its wording, so a reworded refusal fails
      there instead of silently demoting a bad request to a failed sum. */
-  if (/valid comparison|reference forcing|canonical grid|admitted grid|does not pair/i.test(message)) return { code: 'invalid-request', message: 'The requested comparison is invalid.' };
+  if (/valid comparison|reference forcing|canonical grid|admitted grid|does not pair|distinct wards/i.test(message)) return { code: 'invalid-request', message: 'The requested comparison is invalid.' };
   if (/load|surface|fetch|Unable to/i.test(message)) return { code: 'input-unavailable', message: 'Comparison inputs are unavailable.' };
   if (/contract|Missing paired/i.test(message)) return { code: 'contract-failed', message: 'The paired analytical contract could not be verified.' };
   return { code: 'calculation-failed', message: 'The paired calculation could not complete.' };

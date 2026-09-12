@@ -831,14 +831,58 @@ wrong quarter of the ward."
 
 The endmembers were verified to transfer on 2026-09-11: NDVI p99 0.741 against an 0.8 upper endmember, 0.03 % saturating, mean FVC 0.344 between Ballygunge's 0.329 and Baruipur's 0.447. **No recalibration.**
 
-- [ ] **Step 1: Point the exporter at the registry rather than its private ward table**
+- [ ] **Step 1: Point the exporter at the Bengaluru registry**
 
-Replace the module-level `WARDS` dict in `scripts/_sentinel.py` with a read of `data/bangalore/` plus the Kolkata centres, or simplest: accept `--ward` and `--lat/--lon/--footprint` on the command line so the caller supplies them.
+**This step's premise is out of date — read this before following it.** It told
+you to replace `_sentinel.py`'s module-level `WARDS` dict. **That dict no longer
+exists**: Task 5 deleted it (`fbb0c39`) because it was a third copy of
+`_types.WARDS`, already flagged as diverged at `dump-parity-oracle.py:69`. The
+remaining seam is the exporter's own ward source, plus a CLI.
+
+**The real work is a type bridge, and it needs doing deliberately.** The two
+Python ward tables are *different NamedTuples with different field names and
+different types*:
+
+| | table | field | type |
+|---|---|---|---|
+| Kolkata | `scripts/_types.py:80` | `footprint_m` | **`int`** |
+| Bengaluru | `scripts/_bangalore.py:70` | `size_m` | **`float`** (`2800.0`) |
+
+So `uniform_grid(Iterable[_types.Ward])` **cannot accept `_bangalore.WARDS`
+at all**, and `grid_for` demands an `int` on purpose — a float `%` is a trap in
+both directions (`1400.0000000001` raises where it should pass, `1399.9999`
+passes where it should fail).
+
+**Do not sprinkle a silent `int()` at the call site.** Convert once, and assert
+wholeness where you convert, so a non-integral ward size is a named refusal
+rather than a truncation:
+
+```python
+size = w.size_m
+if size != int(size):
+    raise ValueError(f"{w.id}: ward size {size} m is not a whole number of metres")
+n = grid_for(int(size))
+```
+
+Also note `search()` gained a required `footprint_m` in `f0cc26f` — it now
+refuses scenes that merely *touch* the search box instead of containing the
+ward. Pass the Bengaluru footprint, not a Kolkata default.
+
+**If Bengaluru comes back with too few scenes, suspect that filter first.**
+`export-surface-rasters.py` refuses a composite under three scenes, by design.
+A thin result means the containment filter is rejecting partial-coverage tiles
+— check how many candidates it dropped before loosening anything, because
+loosening it is how a quarter-empty raster gets shipped.
 
 - [ ] **Step 2: Run it for the three Bengaluru wards**
 
+**No credentials are needed.** This line used to say to export
+`GOOGLE_APPLICATION_CREDENTIALS`; that was wrong. `export-surface-rasters.py`
+imports only argparse/json/os/sys/numpy/PIL/`_types`/`_sentinel`, and `_sentinel`
+reads the unauthenticated AWS `earth-search` STAC over plain `curl`. Earth Engine
+is not on this path — don't go hunting for a service account.
+
 ```bash
-export GOOGLE_APPLICATION_CREDENTIALS=~/.config/delta-climate/ee-service-account.json
 python3 scripts/export-surface-rasters.py --ward indiranagar
 python3 scripts/export-surface-rasters.py --ward mg-road
 python3 scripts/export-surface-rasters.py --ward whitefield

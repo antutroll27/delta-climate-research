@@ -113,6 +113,16 @@ test('the same ward on both sides is a bad request', async () => {
   assert.equal(classifyPairedFailure(error).code, 'invalid-request', error.message);
 });
 
+test('assertPairedResult refusing the same ward on both sides is a bad request', () => {
+  const result = pairedResult();
+  result.b = wardResult('ballygunge');
+  const error = thrownBy(() => assertPairedResult(result));
+  assert.match(error.message, /distinct wards/,
+    `this test pins assertPairedResult's OWN refusal, not paired-core's: ${error.message}`);
+  assert.equal(classifyPairedFailure(error).code, 'invalid-request',
+    `declining a same-ward pair is a refusal, not a failed sum: ${error.message}`);
+});
+
 /* The fallback must stay a fallback: a genuine solver failure is still reported
    as one. A classifier that called everything a bad request would pass every
    test above and be just as wrong. */
