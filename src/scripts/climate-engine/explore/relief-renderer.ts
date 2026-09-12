@@ -8,6 +8,7 @@ import { terrainDrawAt } from '../terrain.ts';
 import { requireGrid } from '../types.ts';
 import { createVegetationLayer, type VegetationLayer } from '../vegetation-layer.ts';
 import { createWaterLayer, type WaterLayer } from '../water-layer.ts';
+import { hasBuildingModel, loadBuildingModel, type LandmarkNode } from './building-model.ts';
 import { buildRegistry, pickBuilding, projectWard, type BuildingMeta } from './building-pick.ts';
 import type {
   ReliefFieldUpdate,
@@ -25,7 +26,17 @@ export class ThreeReliefRenderer implements ReliefRenderer {
   private scene: THREE.Scene | null = null;
   private camera!: THREE.Camera;
   private renderer!: THREE.WebGLRenderer;
+  /** the EXTRUDED city — Kolkata's only path, and the fallback everywhere */
   private city: THREE.Mesh | null = null;
+  /** the authored glTF city, for wards that ship one. Never both at once. */
+  private model: THREE.Group | null = null;
+  /** compiled lazily: a ward with no model never builds this shader variant */
+  private modelFacade: THREE.MeshStandardMaterial | null = null;
+  /** landmark nodes of the ward currently drawn; empty on the extrusion path */
+  landmarks: readonly LandmarkNode[] = [];
+  /** bumped on every ward rebuild, so a model that finishes loading after a ward
+      switch or a teardown is dropped instead of added to the wrong city */
+  private wardToken = 0;
   private overlay: THREE.Mesh | null = null;
   private facade: THREE.MeshStandardMaterial;
   private water: WaterLayer | null = null;
@@ -65,6 +76,7 @@ export class ThreeReliefRenderer implements ReliefRenderer {
   private heatMin = { value: M.RAMP_MIN };
   private heatMax = { value: M.RAMP_MAX };
   private selected = { value: new THREE.Vector2(1e9, 1e9) };
+  private selRadius = { value: 0 };
   private cooling = { value: 0 };
   private visual: ReliefVisualState = {
     mode: 'relief', environment: 'dark', tintMode: 1, grow: 1,
@@ -162,6 +174,10 @@ export class ThreeReliefRenderer implements ReliefRenderer {
   setSelection(selection: ReliefSelection): void {
     const building = selection.building;
     this.selected.value.set(building?.cx ?? 1e9, building?.cz ?? 1e9);
+    /* The merged glTF carries no per-building id, so the model facade highlights
+       a disc of the picked building's own footprint area. The extrusion path
+       matches its `aCtr` attribute exactly and ignores this. */
+    this.selRadius.value = building ? Math.sqrt(building.areaM2 / Math.PI) : 0;
     if (this.coolingLine && building && selection.nearestCooling) {
       const position = this.coolingLine.geometry.getAttribute('position') as THREE.BufferAttribute;
       position.setXYZ(0, building.cx, 1.2, building.cz);
@@ -189,7 +205,8 @@ export class ThreeReliefRenderer implements ReliefRenderer {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
-    this.city?.geometry.dispose();
+    this.clearBuildings();
+    this.modelFacade?.dispose();
     this.overlay?.geometry.dispose();
     (this.overlay?.material as THREE.Material | undefined)?.dispose();
     this.water?.dispose(); this.clouds?.dispose(); this.roads?.dispose(); this.veg?.dispose();
@@ -272,6 +289,85 @@ export class ThreeReliefRenderer implements ReliefRenderer {
 
   private rebuildWard(bundle: ReliefWardBundle): void {
     if (!this.scene || !this.overlay) return;
+    /* THE BUILDINGS ARE DRAWN ONE OF TWO WAYS, AND THE RINGS SHIP EITHER WAY.
+       The solver rasterises `wardData.b` into `built` and building-pick.ts
+       projects those same rings to hit-test a click, so the mesh was never the
+       source of identity — which is exactly what makes this fallback free. A
+       ward with no authored model, or one whose model fails to load, ends up
+       rendering precisely what Kolkata renders today. */
+    const token = ++this.wardToken;
+    this.clearBuildings();
+    if (hasBuildingModel(bundle.wardId)) void this.installModel(bundle, token);
+    else this.installExtrusion(bundle);
+    this.overlay.scale.set(bundle.wardData.sizeM, bundle.wardData.sizeM, 1);
+    this.displaceGround(bundle.terrain, bundle.wardData.sizeM);
+    if (this.water) { this.scene.remove(this.water.mesh); this.water.dispose(); this.water = null; }
+    const water = createWaterLayer(bundle.water, this.grow, (x, y) => terrainDrawAt(bundle.terrain, x, y));
+    if (water) { this.water = water; this.scene.add(water.mesh); }
+    if (!this.clouds) {
+      this.clouds = createCloudLayer((x, y) => terrainDrawAt(bundle.terrain, x, y));
+      this.scene.add(this.clouds.group);
+    }
+    if (this.roads) { this.scene.remove(this.roads.mesh); this.roads.dispose(); this.roads = null; }
+    const roads = createRoadLayer(bundle.roads, this.grow, (x, y) => terrainDrawAt(bundle.terrain, x, y));
+    if (roads) { this.roads = roads; this.scene.add(roads.mesh); }
+    if (this.veg) { this.scene.remove(this.veg.group); this.veg.dispose(); this.veg = null; }
+    const veg = createVegetationLayer(bundle.veg, this.grow, (x, y) => terrainDrawAt(bundle.terrain, x, y));
+    if (veg) { this.veg = veg; this.scene.add(veg.group); }
+  }
+
+  /** Drop whatever city is on screen, by either path. */
+  private clearBuildings(): void {
+    if (this.city) { this.scene?.remove(this.city); this.city.geometry.dispose(); this.city = null; }
+    if (this.model) {
+      this.scene?.remove(this.model);
+      this.model.traverse((object) => { (object as THREE.Mesh).geometry?.dispose?.(); });
+      this.model = null;
+    }
+    this.landmarks = [];
+  }
+
+  /**
+   * Draw the ward's authored glTF, falling back to extrusion if it does not load.
+   *
+   * THE FALLBACK IS INSIDE THE AWAIT DELIBERATELY. A ward that is supposed to
+   * have a model but cannot fetch one — offline, a bad deploy, a decoder that
+   * will not start — must still end with a city on screen, not an empty map.
+   */
+  private async installModel(bundle: ReliefWardBundle, token: number): Promise<void> {
+    const model = await loadBuildingModel(bundle.wardId);
+    /* A ward switch or a teardown during the fetch must not add a city nobody is
+       looking at any more, nor repopulate a disposed scene. */
+    if (this.disposed || token !== this.wardToken || !this.scene) {
+      model?.buildings.traverse((object) => { (object as THREE.Mesh).geometry?.dispose?.(); });
+      return;
+    }
+    if (!model) { this.installExtrusion(bundle); return; }
+    const facade = (this.modelFacade ??= this.makeFacade('model'));
+    model.buildings.traverse((object) => {
+      if (!(object instanceof THREE.Mesh)) return;
+      /* The GLB declares no materials, so GLTFLoader handed each mesh a default
+         MeshStandardMaterial. Dispose them rather than leak one per ward switch. */
+      (object.material as THREE.Material | undefined)?.dispose?.();
+      object.material = facade;
+    });
+    this.model = model.buildings;
+    this.landmarks = model.landmarks;
+    this.scene.add(model.buildings);
+    this.options.map.triggerRepaint();
+  }
+
+  /** The extrusion path, unchanged — the only city Kolkata has ever drawn. */
+  private installExtrusion(bundle: ReliefWardBundle): void {
+    const merged = this.extrudeBuildings(bundle);
+    if (!merged || !this.scene) return;
+    this.city = new THREE.Mesh(merged, this.facade);
+    this.scene.add(this.city);
+  }
+
+  /** One merged BufferGeometry from the ward's footprint rings, with the three
+   *  per-building attributes the facade shader reads. */
+  private extrudeBuildings(bundle: ReliefWardBundle): THREE.BufferGeometry | null {
     const geometries: THREE.BufferGeometry[] = [];
     const half = bundle.wardData.sizeM / 2;
     for (const building of bundle.wardData.b) {
@@ -297,24 +393,9 @@ export class ThreeReliefRenderer implements ReliefRenderer {
       geometry.setAttribute('aCtr', new THREE.BufferAttribute(centres, 2));
       geometries.push(geometry);
     }
-    const merged = mergeGeometries(geometries, false); geometries.forEach((geometry) => geometry.dispose());
-    if (this.city) { this.scene.remove(this.city); this.city.geometry.dispose(); }
-    if (merged) { this.city = new THREE.Mesh(merged, this.facade); this.scene.add(this.city); }
-    this.overlay.scale.set(bundle.wardData.sizeM, bundle.wardData.sizeM, 1);
-    this.displaceGround(bundle.terrain, bundle.wardData.sizeM);
-    if (this.water) { this.scene.remove(this.water.mesh); this.water.dispose(); this.water = null; }
-    const water = createWaterLayer(bundle.water, this.grow, (x, y) => terrainDrawAt(bundle.terrain, x, y));
-    if (water) { this.water = water; this.scene.add(water.mesh); }
-    if (!this.clouds) {
-      this.clouds = createCloudLayer((x, y) => terrainDrawAt(bundle.terrain, x, y));
-      this.scene.add(this.clouds.group);
-    }
-    if (this.roads) { this.scene.remove(this.roads.mesh); this.roads.dispose(); this.roads = null; }
-    const roads = createRoadLayer(bundle.roads, this.grow, (x, y) => terrainDrawAt(bundle.terrain, x, y));
-    if (roads) { this.roads = roads; this.scene.add(roads.mesh); }
-    if (this.veg) { this.scene.remove(this.veg.group); this.veg.dispose(); this.veg = null; }
-    const veg = createVegetationLayer(bundle.veg, this.grow, (x, y) => terrainDrawAt(bundle.terrain, x, y));
-    if (veg) { this.veg = veg; this.scene.add(veg.group); }
+    const merged = mergeGeometries(geometries, false);
+    geometries.forEach((geometry) => geometry.dispose());
+    return merged;
   }
 
   private displaceGround(field: ReliefWardBundle['terrain'], sizeM: number): void {
@@ -364,16 +445,36 @@ export class ThreeReliefRenderer implements ReliefRenderer {
     }
   }
 
-  private makeFacade(): THREE.MeshStandardMaterial {
+  private makeFacade(kind: 'extruded' | 'model' = 'extruded'): THREE.MeshStandardMaterial {
     const material = new THREE.MeshStandardMaterial({ roughness: 0.84, metalness: 0.05 });
     material.onBeforeCompile = (shader) => {
       shader.uniforms.uGrow = this.grow; shader.uniforms.uStudio = this.studio; shader.uniforms.uSize = this.size; shader.uniforms.uTintMode = this.tint;
       shader.uniforms.tField = this.heatUniform; shader.uniforms.uHeatMin = this.heatMin; shader.uniforms.uHeatMax = this.heatMax; shader.uniforms.uSelCtr = this.selected;
-      shader.vertexShader = 'attribute float aDelay; attribute float aH; attribute vec2 aCtr;\nvarying vec3 vFp; varying vec3 vFn; varying float vTop; varying float vT; varying float vSel;\nuniform float uGrow; uniform float uSize; uniform sampler2D tField; uniform vec2 uSelCtr;\n'
-        + shader.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+      /* THE MODEL CARRIES POSITION AND NORMAL AND NOTHING ELSE. The extrusion
+         path feeds this shader three per-building attributes; a merged glTF has
+         no per-building anything, so the model variant derives what it can from
+         the vertex itself — grow delay from the radius, heat from the vertex's
+         own cell (finer than per-building, not coarser), selection from a disc
+         of the picked footprint's area — and drops `vTop`, whose roof-line
+         highlight genuinely needs a building height this geometry lacks.
+         `position.xz` is already ward metres because building-model.ts BAKES the
+         glTF→ward axis flip into the geometry rather than into a node scale. */
+      if (kind === 'model') shader.uniforms.uSelR = this.selRadius;
+      const declare = kind === 'model'
+        ? 'varying vec3 vFp; varying vec3 vFn; varying float vTop; varying float vT; varying float vSel;\nuniform float uGrow; uniform float uSize; uniform sampler2D tField; uniform vec2 uSelCtr; uniform float uSelR;\nfloat mdh(vec2 p){float h=sin(p.x*127.1+p.y*311.7)*43758.5453;return h-floor(h);}\n'
+        : 'attribute float aDelay; attribute float aH; attribute vec2 aCtr;\nvarying vec3 vFp; varying vec3 vFn; varying float vTop; varying float vT; varying float vSel;\nuniform float uGrow; uniform float uSize; uniform sampler2D tField; uniform vec2 uSelCtr;\n';
+      const place = kind === 'model'
+        ? `#include <begin_vertex>
+          float aDelay=min(1.,length(position.xz)/max(uSize*.5,1.))*.72+mdh(floor(position.xz))*.28;
+          float gT=clamp((uGrow-aDelay*.55)/.45,0.,1.); float gE=1.+2.70158*pow(gT-1.,3.)+1.70158*pow(gT-1.,2.);
+          transformed.y*=gE;vFp=transformed;vFn=normal;vTop=0.;
+          vT=texture2D(tField,clamp(position.xz/uSize+.5,0.,1.)).g;
+          vSel=uSelR>0.?1.-step(uSelR,distance(position.xz,uSelCtr)):0.;`
+        : `#include <begin_vertex>
           float gT=clamp((uGrow-aDelay*.55)/.45,0.,1.); float gE=1.+2.70158*pow(gT-1.,3.)+1.70158*pow(gT-1.,2.);
           transformed.y*=gE;vFp=transformed;vFn=normal;vTop=position.y/max(aH,.001);
-          vT=texture2D(tField,clamp(aCtr/uSize+.5,0.,1.)).g;vSel=1.-step(.5,distance(aCtr,uSelCtr));`);
+          vT=texture2D(tField,clamp(aCtr/uSize+.5,0.,1.)).g;vSel=1.-step(.5,distance(aCtr,uSelCtr));`;
+      shader.vertexShader = declare + shader.vertexShader.replace('#include <begin_vertex>', place);
       shader.fragmentShader = 'varying vec3 vFp; varying vec3 vFn; varying float vTop; varying float vT; varying float vSel;\nuniform float uStudio,uSize,uHeatMin,uHeatMax,uTintMode; uniform sampler2D tField;\nfloat dh(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}\nvec3 rampc(float t){vec3 c0=vec3(.435,.792,.839),c1=vec3(.624,.725,.541),c2=vec3(.690,.553,.341),c3=vec3(.831,.420,.290),c4=vec3(.898,.282,.302);return t<.35?mix(c0,c1,t/.35):t<.6?mix(c1,c2,(t-.35)/.25):t<.8?mix(c2,c3,(t-.6)/.2):mix(c3,c4,min((t-.8)/.2,1.));}\n'
         + shader.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
           vec3 fn=normalize(vFn);bool wall=abs(fn.y)<.5;bool stu=uStudio>.5;vec2 fuv=clamp(vFp.xz/uSize+.5,0.,1.);

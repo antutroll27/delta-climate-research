@@ -6,6 +6,12 @@ import type { WardFrame } from '../ward-frame.ts';
 import type { BuildingMeta } from './building-pick.ts';
 
 export interface ReliefWardBundle {
+  /**
+   * The ward's id. The renderer needs it to know whether an authored glTF city
+   * exists for this ward, and `WardData` deliberately does not carry one: it is
+   * the geometry payload the solver and the picker share, not an identity.
+   */
+  wardId: string;
   wardData: WardData;
   roads: RoadsData;
   water: WaterData;

@@ -13,6 +13,9 @@ const RING = [12, -5, -5, 5, -5, 5, 5, -5, 5];
 
 function bundle(sizeM) {
   return {
+    /* A Kolkata ward, so this stays on the extrusion path and the grid contract
+       is measured without a model fetch in the way. */
+    wardId: 'ballygunge',
     wardData: { center: [77.6, 12.97], sizeM, count: 1, b: [RING] },
     roads: { ways: [] },
     water: { polys: [] },

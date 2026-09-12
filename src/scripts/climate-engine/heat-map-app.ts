@@ -1025,6 +1025,7 @@ export function mountHeatMap(): () => void {
        growing with |y|. Only the ALTITUDE term is still MapLibre's own, because
        building heights never pass through the ward frame. */
     reliefWard = {
+      wardId: name,
       wardData: d, roads, water, terrain,
       mercatorOrigin: { x: mc.x, y: mc.y, z: mc.z ?? 0 },
       frame: wardMercatorScale(w.lat),
