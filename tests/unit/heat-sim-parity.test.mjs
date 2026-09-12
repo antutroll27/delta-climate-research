@@ -2,8 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 const { TsHeatSim } = await import('../../src/scripts/climate-engine/sim-ts.ts');
-const { CANONICAL_GRID_N, DEFAULT_PARAMS, STORE_NIGHT, equilibriumC, stableDt } = await import('../../src/scripts/climate-engine/types.ts');
+const { gridFor, DEFAULT_PARAMS, STORE_NIGHT, equilibriumC, stableDt } = await import('../../src/scripts/climate-engine/types.ts');
 const { RESET_BURST } = await import('../../src/scripts/climate-engine/heat-map-model.ts');
+
+/* Kolkata's admitted pair — the 192-cell grid this parity contract was written against. */
+const KOLKATA = gridFor(1400);
+if (!KOLKATA) throw new Error('the 1400 m Kolkata pair must stay admitted');
+const GRID_N = KOLKATA.n;
 
 /*
  * GPU ↔ TypeScript solver parity — the contract in
@@ -170,7 +175,7 @@ const CEILING = { mean: 0.02, peak: 0.05, rms: 0.03, hotAreaPp: 0.1 };
    and the same RESET_BURST relaxation the instrument actually runs, so fp32
    accumulation is measured over the real number of steps rather than a sample. */
 test('the GPU stencil and the TypeScript solver agree after a full relaxation burst', () => {
-  const d = compareSolvers(CANONICAL_GRID_N, RESET_BURST, DEFAULT_PARAMS);
+  const d = compareSolvers(GRID_N, RESET_BURST, DEFAULT_PARAMS);
 
   // The comparison is only meaningful on a field with real structure in it.
   assert.ok(d.cpuStats.peakC - d.cpuStats.meanC > 4, `field must have contrast (got ${(d.cpuStats.peakC - d.cpuStats.meanC).toFixed(2)} K)`);

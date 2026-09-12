@@ -103,7 +103,12 @@ test('footprint rasterisation is deterministic and unions subcell coverage', () 
   assert.equal(built[6], 1);
   assert.equal(built[9], 1);
   assert.equal(built[10], 1);
-  assert.deepEqual(rasterWardBase(ward, 0.2).built, rasterWardBase(ward, 0.2).built);
+  /* rasterWardBase now takes its grid from the WARD'S OWN SIZE, and the 4 m
+     synthetic above exists to pin subcell coverage at n=4 — a size no admitted
+     pair covers. Determinism is what this line claims, so claim it on a ward
+     size the solver actually runs: 192 cells over 1400 m. */
+  const kolkataWard = { ...ward, sizeM: 1400 };
+  assert.deepEqual(rasterWardBase(kolkataWard, 0.2).built, rasterWardBase(kolkataWard, 0.2).built);
 });
 
 test('scenario URLs normalize duplicate wards and preserve reproducible state', () => {

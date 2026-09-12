@@ -1,5 +1,5 @@
 import { runTsFieldCooperatively, type CooperativeFieldRequest } from '../sim-cooperative.ts';
-import { CANONICAL_GRID_N, CANONICAL_GRID_VERSION, HEAT_METRICS_VERSION, greenReferenceContrastC, type SimLayers, type SimParams, type SimStats } from '../types.ts';
+import { gridFor, gridVersion, HEAT_METRICS_VERSION, greenReferenceContrastC, type SimLayers, type SimParams, type SimStats } from '../types.ts';
 import { applyInterventions, buildSpatial, computeCost, currentParamsForReference, RESET_BURST, type Ambient, type RoadsData, type Spatial, type WardData } from '../heat-map-model.ts';
 import { loadWard } from '../ward-loader.ts';
 import { rasterWardBase } from '../ward-raster.ts';
@@ -104,13 +104,17 @@ function hotMetric(value: number, phase: PairedScenarioState['phase']): MetricVa
     : { state: 'not-evaluated', reason: 'The retained phase does not evaluate the >40°C threshold.' };
 }
 
-function baselineKey(id: WardId, forcing: CompareReferenceForcing, phase: PairedScenarioState['phase']): string {
-  return [id, forcing.id, phase, 'heat-model-v1', CANONICAL_GRID_VERSION].join(':');
+/* `sizeM` joins the key because the grid version is a property of the WARD now,
+   not of the build: two cities' baselines must not collide on one key. */
+function baselineKey(id: WardId, forcing: CompareReferenceForcing, phase: PairedScenarioState['phase'], sizeM: number): string {
+  return [id, forcing.id, phase, 'heat-model-v1', gridVersion(sizeM)].join(':');
 }
 
 async function field(layers: SimLayers, params: SimParams, sizeM: number, options: PairedRunOptions): Promise<FieldResult> {
+  const grid = gridFor(sizeM);
+  if (!grid) throw new RangeError(`No admitted grid for a ${sizeM} m ward.`);
   return (options.runField ?? runTsFieldCooperatively)({
-    grid: { n: CANONICAL_GRID_N, cellMeters: sizeM / CANONICAL_GRID_N },
+    grid: { n: grid.n, cellMeters: sizeM / grid.n },
     layers,
     params,
     steps: RESET_BURST,
@@ -135,7 +139,7 @@ async function runWard(
   const baselineParams = currentParamsForReference(forcingValues, phase, { trees: 0, roof: 0, parks: 0, facades: 0 });
   const scenarioParams = currentParamsForReference(forcingValues, phase, interventions);
   options.onStage?.('solving-baselines');
-  const baseline = await cache.baseline(baselineKey(id, forcing, state.phase), () => field(prepared.base, baselineParams, prepared.wardData.sizeM, options));
+  const baseline = await cache.baseline(baselineKey(id, forcing, state.phase, prepared.wardData.sizeM), () => field(prepared.base, baselineParams, prepared.wardData.sizeM, options));
   assertNotCancelled(options);
   options.onStage?.('solving-scenarios');
   const scenarioLayers = applyInterventions(prepared.base, interventions, prepared.spatial);
@@ -150,7 +154,7 @@ async function runWard(
     forcingId: forcing.id,
     forcingStatus: forcing.status,
     modelVersion: 'heat-model-v1',
-    gridVersion: CANONICAL_GRID_VERSION,
+    gridVersion: gridVersion(prepared.wardData.sizeM),
     dataVersion: 'ward-geometry-v1',
     stockBasis: 'modelled-stock-v1',
     backendVersion: options.backendVersion,

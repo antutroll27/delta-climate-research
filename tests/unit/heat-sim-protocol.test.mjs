@@ -1,16 +1,21 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  CANONICAL_GRID_N,
-  CANONICAL_GRID_VERSION,
+  gridFor,
+  gridVersion,
   DEFAULT_PARAMS,
 } from '../../src/scripts/climate-engine/types.ts';
 import { assertHeatRequest, isCurrentSnapshot } from '../../src/scripts/climate-engine/sim-protocol.ts';
 
-const count = CANONICAL_GRID_N * CANONICAL_GRID_N;
+/* Kolkata's admitted pair — 192 cells over a 1400 m ward. */
+const KOLKATA = gridFor(1400);
+if (!KOLKATA) throw new Error('the 1400 m Kolkata pair must stay admitted');
+const GRID_N = KOLKATA.n;
+
+const count = GRID_N * GRID_N;
 const request = () => ({
   generation: 2,
-  grid: { n: CANONICAL_GRID_N, cellMeters: 1400 / CANONICAL_GRID_N },
+  grid: { n: GRID_N, cellMeters: 1400 / GRID_N },
   layers: {
     albedo: new Float32Array(count), veg: new Float32Array(count),
     built: new Float32Array(count), water: new Float32Array(count),
@@ -27,7 +32,7 @@ test('heat protocol accepts only canonical complete requests', () => {
 test('only a current canonical snapshot may update Explore', () => {
   const snapshot = {
     generation: 2, backend: 'ts-worker', field: new Float32Array(count),
-    stats: { meanC: 31, peakC: 35, fracAbove: 0, thresholdC: 40 }, gridVersion: CANONICAL_GRID_VERSION,
+    stats: { meanC: 31, peakC: 35, fracAbove: 0, thresholdC: 40 }, gridVersion: gridVersion(1400),
   };
   assert.equal(isCurrentSnapshot(snapshot, 2), true);
   assert.equal(isCurrentSnapshot(snapshot, 3), false);

@@ -2,12 +2,12 @@
 import { TsHeatSim } from './sim-ts';
 import {
   assertHeatRequest,
+  gridVersionOf,
   type HeatSimRequest,
   type HeatSimSnapshot,
   type HeatWorkerRequest,
   type HeatWorkerResponse,
 } from './sim-protocol';
-import { CANONICAL_GRID_VERSION } from './types';
 
 let sim: TsHeatSim | null = null;
 let current: HeatSimRequest | null = null;
@@ -20,7 +20,7 @@ function snapshot(request: HeatSimRequest): HeatSimSnapshot {
     backend: 'ts-worker',
     field: sim.temperature().slice(),
     stats: sim.stats(request.thresholdC),
-    gridVersion: CANONICAL_GRID_VERSION,
+    gridVersion: gridVersionOf(request.grid),
   };
 }
 

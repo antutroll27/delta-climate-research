@@ -9,10 +9,19 @@
  */
 // .ts extension: keeps this module runnable under `node --experimental-strip-types`
 // for assertInterventionLogic() (node doesn't do extensionless resolution).
-import { CANONICAL_GRID_N, DEFAULT_PARAMS, STORE_NIGHT, type SimParams, type SimLayers } from './types.ts';
+import { gridFor, DEFAULT_PARAMS, STORE_NIGHT, type SimParams, type SimLayers } from './types.ts';
 import { skyTemperatureC, dewpointC, shiftAirPreservingVapour } from './sky.ts';
 
-export const SIM_N = CANONICAL_GRID_N;         // grid side (ward 1400 m → dx ≈ 7.29 m/cell)
+/* Kolkata's grid, resolved once at module load — and THIS IS WHAT STILL MAKES
+   THIS MODULE SINGLE-CITY, because one module-level N cannot describe two ward
+   sizes. Task 3 of the Bangalore plan deletes it and passes `n` from
+   `gridFor(ward.sizeM)` at each call site. Until then it is DERIVED from the
+   admitted pair rather than written as 192, so constant and contract cannot
+   drift apart in the meantime. */
+const KOLKATA_WARD_M = 1400;
+const KOLKATA_GRID = gridFor(KOLKATA_WARD_M);
+if (!KOLKATA_GRID) throw new RangeError(`No admitted grid for a ${KOLKATA_WARD_M} m ward.`);
+export const SIM_N = KOLKATA_GRID.n;           // grid side (ward 1400 m → dx ≈ 7.29 m/cell)
 /**
  * Colour-ramp bounds, °C. Kept as the LEGACY FIXED PAIR for anything that still
  * wants a constant; `rampBounds()` below is what the map uses.

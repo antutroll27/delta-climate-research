@@ -92,7 +92,9 @@ ROOT = os.path.join(HERE, "..")
 SURFACE_DIR = os.path.join(ROOT, "public", "heat-map", "data")
 OUT = os.path.join(ROOT, "data", "calibration", "canopy-blend-residual.json")
 
-#: The browser's display grid. CANONICAL_GRID_N in src/scripts/climate-engine/types.ts.
+#: The browser's display grid for a 1400 m ward — the 192-over-1400 entry in
+#: ADMITTED_GRIDS, src/scripts/climate-engine/types.ts. This measurement is
+#: Kolkata-only, so the pair is fixed here rather than looked up per ward.
 DISPLAY_GRID = 192
 
 #: The per-cell RMS the CHM v1 -> v2 canopy change itself moved the field by, measured

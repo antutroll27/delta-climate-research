@@ -1,7 +1,7 @@
 import type { RoadsData, WardData } from '../heat-map-model.ts';
 import type { DeliveredQuantities } from '../scenario/coverage.ts';
 import type { PairedScenarioState } from '../scenario/scenario-state.ts';
-import { CANONICAL_GRID_VERSION, HEAT_METRICS_VERSION } from '../types.ts';
+import { HEAT_METRICS_VERSION } from '../types.ts';
 import type { WardId } from '../wards.ts';
 import type { CompareReferenceForcing } from './reference-forcing.ts';
 
@@ -15,7 +15,8 @@ export interface ReleaseEvidence {
   forcingId: string;
   forcingStatus: CompareReferenceForcing['status'];
   modelVersion: 'heat-model-v1';
-  gridVersion: typeof CANONICAL_GRID_VERSION;
+  /** Which admitted (grid, ward size) pair produced this — see ADMITTED_GRIDS. */
+  gridVersion: string;
   dataVersion: 'ward-geometry-v1';
   stockBasis: 'modelled-stock-v1';
   backendVersion: PairedBackendVersion;

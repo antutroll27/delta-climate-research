@@ -18,15 +18,47 @@ export interface GridSpec {
 }
 
 /**
- * The intervention model is calibrated in cell units. All production analytical
- * results therefore use this one canonical grid until a separately versioned
- * metre-based recalibration and convergence study exists.
+ * The admitted (grid, ward size) PAIRS.
+ *
+ * This was a single constant, `CANONICAL_GRID_N = 192`, from the day the model
+ * was calibrated in cell units. That was correct while every ward was 1400 m.
+ * Bengaluru's are 2800 m, and 192 cells there would be 14.58 m per cell — a
+ * different physical quantity wearing the same name.
+ *
+ * BOTH HALVES ARE CHECKED TOGETHER because the failure mode is silent: 384
+ * cells over a 1400 m ward produces arrays of exactly the right length, passes
+ * every bounds check, and models 3.65 m cells that no calibration in this repo
+ * describes.
+ *
+ * Every admitted pair yields 7.29 m per cell. That is deliberate: it is what
+ * makes a Bengaluru cell and a Kolkata cell the same measurement.
  */
-export const CANONICAL_GRID_N = 192;
-export const CANONICAL_GRID_VERSION = 'hm-grid-192-v1';
+export interface AdmittedGrid {
+  readonly n: number;
+  readonly sizeM: number;
+  readonly version: string;
+}
 
-export function isCanonicalGrid(grid: GridSpec): boolean {
-  return grid.n === CANONICAL_GRID_N;
+export const ADMITTED_GRIDS: readonly AdmittedGrid[] = [
+  { n: 192, sizeM: 1400, version: 'hm-grid-192-v1' },
+  { n: 384, sizeM: 2800, version: 'hm-grid-384-v1' },
+] as const;
+
+/** Cells per side for a ward of this size, or undefined if unsupported. */
+export function gridFor(sizeM: number): AdmittedGrid | undefined {
+  return ADMITTED_GRIDS.find((g) => g.sizeM === sizeM);
+}
+
+export function gridVersion(sizeM: number): string {
+  const g = gridFor(sizeM);
+  if (!g) throw new RangeError(`No admitted grid for a ${sizeM} m ward.`);
+  return g.version;
+}
+
+export function isAdmittedGrid(grid: GridSpec, sizeM: number): boolean {
+  const g = gridFor(sizeM);
+  if (!g || grid.n !== g.n) return false;
+  return Math.abs(grid.cellMeters - sizeM / g.n) < 1e-6;
 }
 
 /**

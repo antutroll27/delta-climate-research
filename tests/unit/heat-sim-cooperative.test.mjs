@@ -3,9 +3,14 @@ import test from 'node:test';
 
 import { runTsFieldCooperatively } from '../../src/scripts/climate-engine/sim-cooperative.ts';
 import { TsHeatSim } from '../../src/scripts/climate-engine/sim-ts.ts';
-import { CANONICAL_GRID_N, DEFAULT_PARAMS } from '../../src/scripts/climate-engine/types.ts';
+import { gridFor, DEFAULT_PARAMS } from '../../src/scripts/climate-engine/types.ts';
 
-const count = CANONICAL_GRID_N * CANONICAL_GRID_N;
+/* Kolkata's admitted pair — 192 cells over a 1400 m ward. */
+const KOLKATA = gridFor(1400);
+if (!KOLKATA) throw new Error('the 1400 m Kolkata pair must stay admitted');
+const GRID_N = KOLKATA.n;
+
+const count = GRID_N * GRID_N;
 const layers = () => ({
   albedo: new Float32Array(count).fill(0.2),
   veg: new Float32Array(count).fill(0.25),
@@ -14,7 +19,7 @@ const layers = () => ({
 });
 
 test('cooperative TypeScript execution preserves the canonical settled field', async () => {
-  const grid = { n: CANONICAL_GRID_N, cellMeters: 1400 / CANONICAL_GRID_N };
+  const grid = { n: GRID_N, cellMeters: 1400 / GRID_N };
   const direct = new TsHeatSim();
   const source = layers();
   direct.reset(grid, source, DEFAULT_PARAMS);
@@ -45,7 +50,7 @@ test('cooperative execution observes cancellation between slices', async () => {
   let yields = 0;
   await assert.rejects(
     runTsFieldCooperatively({
-      grid: { n: CANONICAL_GRID_N, cellMeters: 1400 / CANONICAL_GRID_N },
+      grid: { n: GRID_N, cellMeters: 1400 / GRID_N },
       layers: layers(),
       params: DEFAULT_PARAMS,
       steps: 600,
