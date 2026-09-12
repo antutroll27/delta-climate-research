@@ -24,17 +24,21 @@
  *
  * Publishing a ward before its artefacts exist is the quiet kind of wrong: the
  * catalogue would advertise data that is not there. So the gate is publication,
- * not identity, and it is stated as one line that a later task deletes when
- * Bengaluru's artefacts land — at which point the standards surface must also
- * stop assuming a single UTM zone and a single provenance root.
+ * not identity, and it is stated as one line that Task 7 deletes once Task 8's
+ * artefact gate passes — at which point the standards surface must also stop
+ * assuming a single UTM zone and a single provenance root.
  */
 import { wardsOfCity, type WardRecord } from './cities.ts';
 
 export type Ward = WardRecord;
 
 /**
- * The cities whose artefacts are built and served. Bengaluru joins this list in
- * the task that produces its rasters, footprints and provenance — not before.
+ * The cities whose artefacts are built and served.
+ *
+ * Bengaluru joins this list in TASK 7 (export the artefacts), which is gated by
+ * TASK 8 (the artefact gate) — not before, and not by anyone who merely wants
+ * to see six wards on the page. A line whose whole purpose is to be deleted
+ * should name the work that deletes it.
  */
 const PUBLISHED_CITIES: readonly string[] = ['kolkata'];
 

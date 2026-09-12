@@ -29,7 +29,11 @@ export interface WardRecord {
   readonly lat: number;
   readonly lon: number;
   /**
-   * Measured Sentinel-2 fractional vegetation cover.
+   * Nominal vegetation fraction — and it does NOT mean the same thing in both
+   * cities, so it cannot be described in one clause. Bengaluru's rows carry
+   * MEASURED Sentinel-2 fractional vegetation cover. Kolkata's carry the
+   * unsourced archetype values it has always had, which the measurement
+   * contradicts. Read it per row, not as a column of like quantities.
    *
    * NOTE: the field this replaces claimed to be "the thermal model's layer
    * seed" and was read by NOTHING — the solver takes vegetation from the
