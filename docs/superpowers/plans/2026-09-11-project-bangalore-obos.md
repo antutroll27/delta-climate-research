@@ -1038,6 +1038,7 @@ it fails at build rather than in a user's browser.
 
 **Files:**
 - Create: `scripts/check-bangalore-artefacts.py`
+- Modify: `src/scripts/climate-engine/explore/relief-renderer.ts` (Step 4b)
 
 - [ ] **Step 1: Write the gate**
 
@@ -1143,6 +1144,36 @@ python3 scripts/check-bangalore-artefacts.py >/dev/null; echo "restored exit=$? 
 - [ ] **Step 4: Wire it into the verify chain**
 
 In `package.json`, add `"check:bangalore": "python3 scripts/check-bangalore-artefacts.py"` and append ` && npm run check:bangalore` to the `verify` script.
+
+- [ ] **Step 4b: The relief renderer still sizes its field buffers once**
+
+A comment is not a task. `src/scripts/climate-engine/heat-map-app.ts:866-871`
+states this defect plainly — "the day a city with a different pair ships, this
+must be re-read on setWard" — and assigns it to nobody. It is assigned here.
+
+`src/scripts/climate-engine/explore/relief-renderer.ts:63-67` allocates
+`heatData`, `blur` and `heatTexture` in the constructor, from the
+`simulationGridSize` of whichever ward was open when the Three chunk resolved.
+`setWard` (`:78-86`) updates `size.value` and rebuilds the scene but never
+resizes those three, so the first Bengaluru ward opened after a Kolkata one
+pours a 384² field into 192² buffers.
+
+**What must change:** `setWard` re-reads the pair from `bundle.wardData.sizeM`
+and, when `n` differs, reallocates `heatData` and `blur` and replaces
+`heatTexture` — a `DataTexture`'s dimensions are fixed at construction, so it is
+disposed and rebuilt, and every material holding it re-pointed. `updateField`
+then reads that `n` rather than `this.options.simulationGridSize`.
+
+**Why it is safe to defer until here:** the failure is LOUD. `updateField`
+already throws a `RangeError` on a field whose length is not `n * n`, so a
+mismatched ward cannot mis-stride a buffer and draw a plausible-looking wrong
+city — it refuses to draw at all. That is the opposite of the silent failure the
+grid-pair work exists to prevent, where a wrong grid produces arrays of exactly
+the right length and passes every bounds check. It must land before a Bengaluru
+ward becomes selectable in Task 12, and the standing comment in `heat-map-app.ts`
+is deleted when it does.
+
+Commit this separately from the gate — it is renderer work, not artefact work.
 
 - [ ] **Step 5: Commit**
 
