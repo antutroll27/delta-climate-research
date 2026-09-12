@@ -1,5 +1,5 @@
 import { fmtCr } from '../heat-map-model.ts';
-import { WARDS, WARD_IDS, nextDistinctWard, type WardId } from '../wards.ts';
+import { WARDS, WARD_IDS, isWardId, nextDistinctWard } from '../wards.ts';
 import { enablePairedMapInteraction, renderPairedMap, resetPairedMapView, thermalPatternSummary } from './paired-map-2d.ts';
 import { createPairedScenarioClient } from './paired-client.ts';
 import type { MetricValue, PairedResult, WardScenarioResult } from './paired-protocol.ts';
@@ -311,7 +311,15 @@ export function mountPairedBench(): () => void {
   const wardB = one<HTMLSelectElement>('[data-input="ward-b"]');
   const bindWard = (select: HTMLSelectElement | null, side: 'a' | 'b') => {
     const listener = () => {
-      const chosen = select?.value as WardId;
+      /* `select.value` is an unchecked string from the DOM. It used to be cast
+         straight to WardId — a cast asserting membership of a three-literal
+         union that it could not actually check, and which also swallowed the
+         `undefined` from `select?`. Now that the ward set is data, the only
+         honest check is the runtime one: anything that is not a PUBLISHED ward
+         leaves the state untouched rather than handing `loadWard` an id whose
+         /heat-map/data/{id}.json is a 404. */
+      const chosen = select?.value;
+      if (!isWardId(chosen)) return;
       const other = side === 'a' ? state.b : state.a;
       const valid = chosen === other ? nextDistinctWard(other) : chosen;
       state = side === 'a' ? { ...state, a: valid } : { ...state, b: valid };
