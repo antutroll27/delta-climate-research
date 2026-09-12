@@ -718,6 +718,31 @@ rather than discovered later."
 
 ---
 
+### Task 4b: A dangling cross-language contract
+
+**File:** `scripts/measure-shipped-amplitude.py:56-57`
+
+```python
+#: Must match SIM_N in heat-map-model.ts. Asserted against the dump, not trusted.
+SIM_N = 192
+```
+
+**`heat-map-model.ts` no longer has `SIM_N`** — Task 3 deleted it. This comment
+now points at a constant that does not exist, so the contract it describes
+cannot be checked by the next reader.
+
+The good news, and the reason this is not urgent: line 96 asserts the value
+against the dumped field and exits with a message rather than trusting it, so
+it fails **loudly** if the grid ever moves. This is a documentation defect, not
+a live bug.
+
+- [ ] **Step 1:** Point the comment at the real source of truth —
+  `ADMITTED_GRIDS` in `src/scripts/climate-engine/types.ts` — and say that
+  192 is Kolkata's half of the `(192, 1400)` pair, not a global constant.
+- [ ] **Step 2:** `npm run typecheck` clean, then commit.
+
+---
+
 ### Task 5: Sentinel footprint becomes per-ward
 
 **Files:**
