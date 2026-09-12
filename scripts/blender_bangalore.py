@@ -10,6 +10,14 @@ every save rewriting all three.
 
     ... --ward all --samples 128          # all three, production samples
     ... --ward mg-road --qa               # QA lens: tint what we do not know
+    ... --ward all --webglb 1 --render 0  # web GLBs only, no Cycles render
+
+`--render 0` exists because the web GLB is written BEFORE the render and does
+not need it. Dropping the samples and the resolution to make the render cheap
+would have worked too -- and would have saved those cheap values INTO the
+.blend, since configure_render deliberately runs before save_as_mainfile, so
+the file on disk would open at 4 samples and 400 px. Skipping the picture keeps
+the file's settings and the picture honest.
 
 Coordinates: site-local metres, x east / y north / z up -- Blender's own
 convention and the one the artefacts already use, so nothing is transposed.
@@ -1202,6 +1210,20 @@ def export_web_glb(path: str, ward: str) -> None:
       water    drawn by `water-layer.ts`, and the SOLVER reads that layer, so
                it has to come from the artefact rather than from a mesh.
 
+    THE FRAME THE FILE IS IN, MEASURED -- READ THIS BEFORE CONSUMING IT.
+    Blender is Z-up and the glTF exporter rotates to glTF's Y-up, so a vertex
+    written here is (x_east, z_up, -y_north): +Z IN THE FILE POINTS SOUTH. Node
+    translations are identity, so the accessor values are already ward-local
+    metres, and a consumer recovers them as x = position.x, y = -position.z.
+
+    That was settled against three published coordinates rather than by reading
+    the exporter: UB Tower, M. Chinnaswamy Stadium and the Subhas Chandra Bose
+    Tower land 5, 20 and 20 m from where their lat/lon puts them, while reading
+    +Z as north puts the same three 576, 744 and 303 m out. A consumer that
+    assumes "z north" draws the ward MIRRORED NORTH-SOUTH -- which renders
+    perfectly, is invisible to every symmetric statistic, and has already
+    shipped once on this project.
+
     THE FOOTPRINT RINGS STILL SHIP SEPARATELY and that is not negotiable:
     `rasterizeWardBuilt` stamps every ring into the `built` grid the heat model
     solves on. This file is what gets DRAWN; `<ward>.json` is what gets SOLVED.
@@ -1212,7 +1234,13 @@ def export_web_glb(path: str, ward: str) -> None:
     hidden: list[Any] = []
     for ob in bpy.data.objects:
         in_keep = any(c.name in keep for c in ob.users_collection)
-        if not in_keep and ob.type == "MESH":
+        # EVERY type is hidden, not just MESH. The first version tested
+        # `ob.type == "MESH"`, so the camera's `look-at` EMPTY stayed visible and
+        # the exporter wrote it as a node: mg-road's web GLB shipped 14 nodes for
+        # 13 meshes, one of them a target for a camera the file does not contain.
+        # Harmless to draw, but the docstring above says "buildings and landmarks
+        # only" and it was not true.
+        if not in_keep:
             hidden.append(ob)
             ob.hide_set(True)
             ob.hide_viewport = True
@@ -1344,6 +1372,9 @@ def build_master(a: dict[str, str]) -> None:
     print(f"  master: saved {blend}")
     if a.get("glb") == "1":
         export_glb(os.path.join(SCENES, "bangalore-master.glb"))
+    if a.get("render", "1") == "0":
+        print("  master: render skipped (--render 0)")
+        return
     out = a.get("out") or os.path.join(
         SCENES, f"bangalore-master{'-qa' if qa else ''}.png")
     render(out)
@@ -1385,6 +1416,9 @@ def build_ward(ward: str, a: dict[str, str]) -> None:
     if a.get("webglb") == "1":
         export_web_glb(os.path.join(SCENES, f"{ward}-web.glb"), ward)
 
+    if a.get("render", "1") == "0":
+        print(f"  {ward}: render skipped (--render 0)")
+        return
     out = a.get("out") or os.path.join(SCENES, f"{ward}{'-qa' if qa else ''}.png")
     render(out)
     print(f"  {ward}: rendered {out}")
