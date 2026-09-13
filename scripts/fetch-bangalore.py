@@ -1118,9 +1118,8 @@ def run_crosscheck(w: blr.Ward) -> None:
             f"{w.id}: no UT-GLOBUS tile found, and the file already holds a real cross-check "
             f"({existing[:60]}...). Refusing to overwrite evidence with a skip.")
     for b in doc["b"]:
-        loose = cast(dict[str, Any], b)
-        loose.pop("hUt", None)
-        loose.pop("flag", None)
+        b["hUt"] = None
+        b["flag"] = False
     cross_check(w, doc, tile)
     with open(path, "w", encoding="utf-8") as fh:
         json.dump(doc, fh, separators=(",", ":"))
