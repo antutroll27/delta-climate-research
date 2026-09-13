@@ -939,6 +939,9 @@ test('a switch that finishes before the threshold never shows the chip', () => {
   const r = rig();
   r.chip.start('Loading MG Road…');
   r.advance(299);
+  /* Checked HERE, not only at the end: a chip shown at 0 ms is hidden again by
+     2,299 ms, so an end-only assertion passes with SHOW_AFTER_MS = 0. */
+  assert.equal(r.visible(), false, 'shown before the threshold');
   r.chip.done();
   r.advance(2000);
   assert.equal(r.visible(), false);
@@ -1332,6 +1335,8 @@ test('the plan is the two other Bengaluru wards, each with its model', () => {
   assert.ok(flat.includes('/heat-map/data/mg-road.json'));
   assert.ok(flat.includes('/heat-map/data/whitefield-trees.json'));
   assert.ok(flat.includes('/heat-map/models/mg-road.glb'));
+  assert.ok(flat.includes('/heat-map/data/whitefield-layers.json'), 'renderSources re-reads the manifest on every switch');
+  assert.ok(flat.includes('/heat-map/data/mg-road-surface.png'), 'surface-raster fetches the PNG on every switch');
   assert.ok(!flat.some((url) => url.includes('indiranagar')), 'never the ward already open');
 });
 
@@ -1418,9 +1423,11 @@ export function prefetchPlan(key: AreaKey): string[][] {
     .flatMap((sibling) => {
       const p = paths(sibling);
       if (p === null) return [];
-      /* The same files loadWard fetches for a ward, so every one of them is warm. */
+      /* The same files a switch fetches for a ward, so every one of them is warm:
+         loadWard's JSON, surface-raster's two PNGs, and the layers manifest that
+         renderSources (heat-map-app.ts) re-reads on every switch. */
       const urls = [p.ward, p.terrain, p.water, p.roads, p.labels, p.provenance,
-        p.trees, p.surface, p.canopy, p.pv];
+        p.trees, p.surface, p.canopy, p.layers, p.pv];
       const model = modelPath(splitKey(sibling).area);
       return [model === null ? urls : [...urls, model]];
     });
@@ -1675,7 +1682,7 @@ await cdp.send('Network.enable');
 await cdp.send('Network.emulateNetworkConditions', { offline: false, latency: 150, downloadThroughput: 1.6e6 / 8, uploadThroughput: 750e3 / 8 });
 const before = await page.$eval('#bcount', (e) => e.textContent ?? '');
 const started = Date.now();
-await page.$eval('#scope-area', (s) => { s.value = 'in/bengaluru/mg-road'; s.dispatchEvent(new Event('change', { bubbles: true })); });
+await page.click('#strip .ward[data-w="mg-road"]');   // the ward tile; heat-map-app.ts wires its click to loadWard
 await page.waitForFunction((b) => { const t = document.querySelector('#bcount')?.textContent ?? ''; return t !== b && /\d/.test(t); }, before, { timeout: 180000 });
 console.log(`first visit to MG Road, prefetched, Slow 4G: ${Date.now() - started} ms`);
 await browser.close();
