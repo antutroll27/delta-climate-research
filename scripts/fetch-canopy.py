@@ -78,6 +78,7 @@ from rasterio.windows import from_bounds
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import _types  # noqa: E402
+import _trees  # noqa: E402
 from _types import WARDS, Ward  # noqa: E402
 
 RETRIEVED = "2026-08-10"          # constant, not date.today() -- byte-stable regeneration
@@ -298,7 +299,8 @@ def document(ward: Ward, trees: list[_types.TreeInstanceJSON]) -> _types.TreesFi
     return {
         "ward": ward.id, "grid": GRID, "sizeM": float(ward.footprint_m),
         "retrieved": RETRIEVED, "source": CHM_PREFIX, "densityRefM": DENSITY_REF_H,
-        "trees": trees,
+        "cols": list(_trees.COLS), "speciesNames": list(_trees.SPECIES_NAMES),
+        "trees": _trees.encode_trees(trees),
     }
 
 
@@ -370,23 +372,29 @@ def check(data_dir: str = DATA) -> None:
         assert doc["ward"] == wid, f"{wid}: ward mismatch"
         assert doc["grid"] == GRID, f"{wid}: grid must be {GRID}"
         check_provenance(wid, doc)
-        for t in doc["trees"]:
+        # A pre-row-format artefact has neither key, and must say "regenerate"
+        # rather than die on a KeyError -- same reasoning as check_provenance.
+        raw = cast("dict[str, object]", doc)
+        assert "cols" in raw and "speciesNames" in raw, (
+            f"{wid}: trees file predates the row format -- regenerate it")
+        trees = _trees.decode_trees(doc["cols"], doc["speciesNames"], doc["trees"])
+        for t in trees:
             assert MIN_TREE_H - 0.05 <= t["h"] <= CANOPY_HI + 5, f"{wid}: tree height out of range {t['h']}"
             assert abs(t["x"]) <= doc["sizeM"] / 2 + 1 and abs(t["y"]) <= doc["sizeM"] / 2 + 1, f"{wid}: tree outside ward"
             assert t["species"] in set(SPECIES), f"{wid}: bad species {t['species']}"
         # v2 tripwires. Count FIRST: an empty ward also makes `off_lattice > 0/2` false,
         # so the lattice assert would fire first and misreport it as graph paper.
-        assert 0 < len(doc["trees"]) <= 30_000, f"{wid}: implausible tree count {len(doc['trees'])}"
+        assert 0 < len(trees) <= 30_000, f"{wid}: implausible tree count {len(trees)}"
         # The lattice must be dead. Distance to the NEARER lattice line, because
         # `v % cell_m` alone is one-sided -- a tree 4 cm PAST a centre reads as 9.96 and
         # counts as off-lattice, so a collapse to +-7.5 cm jitter would pass unnoticed.
         cell_m = doc["sizeM"] / doc["grid"]
         off_lattice = 0
-        for t in doc["trees"]:
+        for t in trees:
             d = (t["x"] + doc["sizeM"] / 2 - cell_m / 2) % cell_m
             if min(d, cell_m - d) > 0.05:
                 off_lattice += 1
-        assert off_lattice > len(doc["trees"]) / 2, f"{wid}: trees still sit on the cell-centre lattice"
+        assert off_lattice > len(trees) / 2, f"{wid}: trees still sit on the cell-centre lattice"
     print("canopy artefacts OK")
 
 

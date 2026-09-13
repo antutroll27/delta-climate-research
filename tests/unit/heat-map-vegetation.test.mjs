@@ -45,14 +45,31 @@ test('canopy blend preserves the ward-mean vegetation but redistributes it', () 
   for (const v of out) assert.ok(v >= 0 && v <= 1, 'stays in [0,1]');
 });
 
-import { asTreesFile, assertVegetationLogic, createVegetationLayer } from '../../src/scripts/climate-engine/vegetation-layer.ts';
+import { asTreesFile, assertVegetationLogic, createVegetationLayer, TREE_COLS } from '../../src/scripts/climate-engine/vegetation-layer.ts';
 
-test('asTreesFile validates the instance list', () => {
+const HEADER = { ward: 'x', grid: 140, sizeM: 1400, retrieved: '2026-08-10',
+  cols: ['x_m', 'y_m', 'h_dm', 'r_dm', 'species'], speciesNames: ['neem', 'gulmohar', 'palm'] };
+
+test('asTreesFile decodes rows into the objects the layer draws', () => {
+  assert.deepEqual([...TREE_COLS], HEADER.cols, 'the column order is the contract with scripts/_trees.py');
+  const f = asTreesFile({ ...HEADER, trees: [[1, -2, 63, 21, 2], [-916, 1395, 43, 15, 0]] });
+  assert.ok(f, 'valid rows accepted');
+  assert.deepEqual(f.trees[0], { x: 1, y: -2, h: 6.3, species: 'palm', r: 2.1 });
+  assert.equal(f.trees[1].species, 'neem');
+});
+
+test('asTreesFile refuses the old object rows rather than rendering half a migration', () => {
+  assert.equal(asTreesFile({ ...HEADER, trees: [{ x: 1, y: 2, h: 6, species: 'neem', r: 2 }] }), null);
+  assert.equal(asTreesFile({ ward: 'x', grid: 140, sizeM: 1400, trees: [{ x: 1, y: 2, h: 6, species: 'neem', r: 2 }] }), null);
+});
+
+test('asTreesFile refuses a header or row it cannot trust', () => {
   assert.equal(asTreesFile(null), null, 'null rejected');
-  assert.equal(asTreesFile({ ward: 'x', grid: 140, sizeM: 1400, trees: 'no' }), null, 'trees must be array');
-  const f = asTreesFile({ ward: 'x', grid: 140, sizeM: 1400, retrieved: '2026-08-10',
-    trees: [{ x: 1, y: 2, h: 6, species: 'neem', r: 2 }] });
-  assert.ok(f && f.trees.length === 1 && f.trees[0].species === 'neem', 'valid trees accepted');
+  assert.equal(asTreesFile({ ...HEADER, trees: 'no' }), null, 'trees must be an array');
+  assert.equal(asTreesFile({ ...HEADER, cols: ['y_m', 'x_m', 'h_dm', 'r_dm', 'species'], trees: [] }), null, 'swapped columns');
+  assert.equal(asTreesFile({ ...HEADER, speciesNames: ['oak'], trees: [[0, 0, 50, 10, 0]] }), null, 'unknown species name');
+  assert.equal(asTreesFile({ ...HEADER, trees: [[0, 0, 50, 10, 3]] }), null, 'species index out of range');
+  assert.equal(asTreesFile({ ...HEADER, trees: [[0, 0, 50, 10]] }), null, 'short row');
 });
 
 test('vegetation self-check passes', () => { assertVegetationLogic(); });

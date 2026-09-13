@@ -27,6 +27,7 @@ from typing import Any, cast
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _bangalore as blr                            # noqa: E402  (path set above)
+import _trees  # noqa: E402
 
 OUT = os.path.join(blr.ROOT, "public", "heat-map", "data")
 
@@ -66,13 +67,6 @@ MAJOR_ROAD_CLASSES = frozenset({"primary", "secondary"})
 #: are KEYS INTO `ROAD_WIDTH_M`, not measurements -- see the note above.
 W_MAJOR = 2
 W_MINOR = 1
-
-#: Kolkata's trees carry a deterministic species mix and Bengaluru's carry one
-#: value. Species is a DISPLAY DRAW in both cities and is measured in neither:
-#: the CHM gives height, never taxon. `asTreesFile` (vegetation-layer.ts) rejects
-#: the WHOLE file on an unknown species, so this must stay inside its
-#: 'neem' | 'gulmohar' | 'palm' union.
-TREE_SPECIES = "neem"
 
 
 def ward_size_m(w: blr.Ward) -> int:
@@ -207,6 +201,9 @@ def export_trees(w: blr.Ward) -> int:
     with open(os.path.join(blr.DATA, f"{w.id}-canopy.json"), encoding="utf-8") as fh:
         cn = cast(dict[str, Any], json.load(fh))
 
+    if any("species" not in t for t in cn["trees"]):
+        raise SystemExit(f"{w.id}: canopy file has trees with no species -- run "
+                         "python3 scripts/fetch-bangalore.py --layer species first")
     doc: dict[str, Any] = {
         "ward": w.id,
         "grid": cn["grid"],
@@ -214,8 +211,9 @@ def export_trees(w: blr.Ward) -> int:
         "retrieved": "2026-09-11",
         "source": cn["source"],
         "densityRefM": cn["densityRefM"],
-        "trees": [{"x": t["x"], "y": t["y"], "h": t["h"], "r": t["r"],
-                   "species": TREE_SPECIES} for t in cn["trees"]],
+        "cols": list(_trees.COLS),
+        "speciesNames": list(_trees.SPECIES_NAMES),
+        "trees": _trees.encode_trees(cn["trees"]),
     }
     with open(os.path.join(OUT, f"{w.id}-trees.json"), "w", encoding="utf-8") as fh:
         json.dump(doc, fh, separators=(",", ":"))

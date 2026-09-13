@@ -21,17 +21,32 @@ export interface VegetationLayer {
   dispose(): void;
 }
 
+/** The on-disk row format written by scripts/_trees.py. The order is the contract. */
+export const TREE_COLS = ['x_m', 'y_m', 'h_dm', 'r_dm', 'species'] as const;
+const SPECIES_NAMES: readonly Species[] = ['neem', 'gulmohar', 'palm'];
+
 export function asTreesFile(raw: unknown): TreesFile | null {
   if (!raw || typeof raw !== 'object') return null;
   const d = raw as Record<string, unknown>;
+  /* ONE FORMAT, AND THE OLD ONE IS REFUSED. A reader that also accepted the old
+     object rows would hide a half-migrated artefact set: some wards would render
+     and nothing would say the rest were stale. The rows are decoded here, at the
+     boundary, so everything that draws a tree still sees TreeInstance objects. */
+  if (!Array.isArray(d.cols) || d.cols.length !== TREE_COLS.length
+      || d.cols.some((c, i) => c !== TREE_COLS[i])) return null;
+  if (!Array.isArray(d.speciesNames)) return null;
+  const names = d.speciesNames as unknown[];
+  if (names.some((n) => !SPECIES_NAMES.includes(n as Species))) return null;
   if (!Array.isArray(d.trees)) return null;
   const trees: TreeInstance[] = [];
-  for (const t of d.trees) {
-    if (!t || typeof t !== 'object') return null;
-    const o = t as Record<string, unknown>;
-    if (typeof o.x !== 'number' || typeof o.y !== 'number' || typeof o.h !== 'number' || typeof o.r !== 'number') return null;
-    if (o.species !== 'neem' && o.species !== 'gulmohar' && o.species !== 'palm') return null;
-    trees.push({ x: o.x, y: o.y, h: o.h, species: o.species, r: o.r });
+  for (const row of d.trees) {
+    if (!Array.isArray(row) || row.length !== TREE_COLS.length) return null;
+    const [x, y, hDm, rDm, s] = row as unknown[];
+    if (typeof x !== 'number' || typeof y !== 'number' || typeof hDm !== 'number'
+        || typeof rDm !== 'number' || typeof s !== 'number' || !Number.isInteger(s)) return null;
+    const species = names[s];
+    if (species === undefined) return null;
+    trees.push({ x, y, h: hDm / 10, species: species as Species, r: rDm / 10 });
   }
   return {
     ward: typeof d.ward === 'string' ? d.ward : '',
@@ -166,10 +181,13 @@ export function createVegetationLayer(
 
 export function assertVegetationLogic(): void {
   const ok = (c: boolean, m: string) => { if (!c) throw new Error(`vegetation: ${m}`); };
+  const header = { ward: 'x', grid: 140, sizeM: 1400, retrieved: 'd',
+    cols: [...TREE_COLS], speciesNames: ['neem', 'gulmohar', 'palm'] };
   ok(asTreesFile(null) === null, 'null rejected');
-  ok(asTreesFile({ trees: [{ x: 0, y: 0, h: 5, species: 'oak', r: 1 }] }) === null, 'bad species rejected');
-  const f = asTreesFile({ ward: 'x', grid: 140, sizeM: 1400, retrieved: 'd', trees: [{ x: 1, y: 2, h: 6, species: 'palm', r: 2 }] });
-  ok(f !== null && f.trees[0].species === 'palm', 'valid accepted');
+  ok(asTreesFile({ ...header, speciesNames: ['oak'], trees: [[0, 0, 50, 10, 0]] }) === null, 'unknown species name rejected');
+  ok(asTreesFile({ ...header, trees: [{ x: 1, y: 2, h: 6, species: 'palm', r: 2 }] }) === null, 'old object rows rejected');
+  const f = asTreesFile({ ...header, trees: [[1, 2, 60, 20, 2]] });
+  ok(f !== null && f.trees[0].species === 'palm' && f.trees[0].h === 6 && f.trees[0].r === 2, 'valid rows accepted');
   // No-data path only: constructing InstancedMeshes requires a WebGL-capable
   // renderer context that node does not provide, so real-data construction is
   // NOT exercised here (it is covered by the headless-browser screenshot check).
