@@ -10,6 +10,13 @@
 
 **Spec:** [`docs/superpowers/specs/2026-09-13-obos-ward-switch-and-canopy-design.md`](../specs/2026-09-13-obos-ward-switch-and-canopy-design.md)
 
+> **Addendum, 2026-09-13, after execution.** Deviations from the task text below, each made on review evidence. The Goal's "take the revisit path" is wrong; see the spec's addendum.
+> - **Task 5:** the refusal of a species-less canopy file runs in `main()` before any ward is written. Inside `export_trees` it left half an export on disk.
+> - **Task 7:** `loadChip.done()` is guarded by `wardSession.isCurrent(token)`; the chip's static "Building ward…" text is gone from `HeatMapStage.astro`; two chip tests were added (hide at once past the minimum; retitle while shown).
+> - **Tasks 8–9:** the boundary test is a transitive static-import walker with a positive control. `runPrefetch` returns `Promise<void>` with no `RequestInit` cast, and its header no longer claims the revisit path.
+> - **Task 10:** `prefetchDone` re-schedules on each committed load until a run completes; `schedulePrefetch` runs only when `commit` succeeds; the e2e has 3 tests.
+> - **Task 11:** the e2e total is 7. This machine has no bundled Playwright browsers, so e2e ran through a temporary `channel: 'chrome'` config. The comparison measured was 11,950–11,986 ms without prefetch against 699–717 ms with, on one build; the 17,747 ms baseline predates the tree re-encoding.
+
 ---
 
 ## Conventions this plan assumes

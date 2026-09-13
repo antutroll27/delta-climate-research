@@ -2,6 +2,15 @@
 
 **Date:** 2026-09-13 · **Branch:** `feat/bangalore-wards` · **Status:** agreed in brainstorm, awaiting written review
 
+> **Addendum, 2026-09-13, after implementation.** What shipped differs from this design in the places below; the body is kept as written.
+> - **Prefetch does not reach the 393 ms revisit path.** That path is `loadWard`'s in-memory caches. Under `must-revalidate` a prefetched switch still sends one conditional request per file (304, no body) and parses everything. Measured on the dev server (uncompressed), Slow 4G, same build, three runs each: a first visit to MG Road took 11,950–11,986 ms without prefetch and 699–717 ms with it. Production is not yet measured.
+> - **Scheduled on every committed load until one run completes**, not once per page: a switch in the first ~12 s aborted the only run.
+> - Prefetch also warms `{area}-layers.json`, which `renderSources` re-reads on every switch. The GLB URL comes from `modelPath` in `scope/paths.ts`, not `hasBuildingModel`.
+> - Cost: two sibling wards, ~3.4–4.0 MB raw, about 1.5 MB on the wire from Indiranagar.
+> - The three-free boundary is guarded by a transitive import walker with a positive control, not a one-hop grep.
+> - §3: 393 ms was a revisit, not a prefetched switch. The 500 ms minimum still holds for loads that land just after the delay.
+> - Testing adds a deterministic e2e for a switch made before the warm-up runs, and two chip tests (hide at once past the minimum; retitle while shown).
+
 ## The ask
 
 Two items from the Project Bangalore list, in this order:

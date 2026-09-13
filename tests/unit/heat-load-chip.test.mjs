@@ -77,3 +77,23 @@ test('a failure after a pending start cancels the delayed show and stays up', ()
   assert.equal(r.visible(), true);
   assert.equal(r.el.textContent, 'could not load');
 });
+
+test('a slow load, visible past the minimum, hides the moment it finishes', () => {
+  /* The common case on Slow 4G, and the one no other test reaches: done() with the
+     minimum already served. A chip that never hides here passed the other five. */
+  const r = rig();
+  r.chip.start('Loading');
+  r.advance(2000);
+  assert.equal(r.visible(), true);
+  r.chip.done();
+  assert.equal(r.visible(), false, 'no extra hold once the minimum has passed');
+});
+
+test('a new load while the chip is up retitles it at once and keeps it up', () => {
+  const r = rig();
+  r.chip.start('Loading MG Road…');
+  r.advance(SHOW_AFTER_MS);
+  r.chip.start('Loading Whitefield…');
+  assert.equal(r.visible(), true);
+  assert.equal(r.el.textContent, 'Loading Whitefield…', 'the old ward named for another 400 ms');
+});

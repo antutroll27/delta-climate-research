@@ -220,7 +220,8 @@ export function mountHeatMap(): () => void {
     clearTimeout: (id) => window.clearTimeout(id),
   });
   /* Background warm-up of the city's other wards — see ward-prefetch.ts for what it
-     buys (measured: a first visit on Slow 4G, 11,950 ms without, 699 ms with) and
+     buys (measured on the dev server, uncompressed, Slow 4G: a first visit took
+     11,950 ms without, 699 ms with; production is unmeasured) and
      what it costs. RE-SCHEDULED ON EVERY COMMITTED LOAD UNTIL ONE RUN COMPLETES: a
      switch aborts a run in flight, and scheduling once per page meant a reader who
      clicked the strip in the first ~12 s lost the warm-up for the rest of the visit. */
@@ -2164,9 +2165,9 @@ export function mountHeatMap(): () => void {
        they have been visited. */
     const activeId = areaOf(name);
     document.querySelectorAll('#strip .ward').forEach(t => t.classList.toggle('on', (t as HTMLElement).dataset.w === activeId));
-    /* Guarded, not merely safe today: nothing awaits between the last isCurrent
-       check and here, but one added await would let a superseded load hide a newer
-       load's chip or its failure. */
+    /* Guarded, not merely safe today. The awaits between the last isCurrent check and
+       here do not suspend (the caches they read were filled just after that check),
+       but one that did would let a superseded load hide a newer load's chip or failure. */
     if (wardSession.isCurrent(token)) loadChip.done();
 
     const dur = relief ? 1400 : 0;
@@ -2180,7 +2181,9 @@ export function mountHeatMap(): () => void {
       syncReliefVisual();
       requestRuntimeFrame('grow', dur * 0.45);
     }
-      wardSession.commit(token);
+      /* Same hazard as the guarded done() above: a superseded load must not start a
+         warm-up after the newer load has already aborted the previous one. */
+      if (!wardSession.commit(token)) return;
       fetchLive(name);
       schedulePrefetch(name);
     } catch (error) {

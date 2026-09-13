@@ -47,7 +47,7 @@ test('with Save-Data set, no other ward is fetched', async ({ page }) => {
 });
 
 test('a switch before the warm-up runs does not cancel it for the rest of the visit', async ({ page }) => {
-  /* DETERMINISTIC, NOT A RACE. The prefetch's idle callbacks (the only ones asking for a
+  /* DETERMINISTIC, NOT A RACE. The prefetch's idle callbacks (on this page, the only ones asking for a
      4 s timeout) are held until the switch has committed, then released. Scheduled once
      per page, the first ward's warm-up was aborted by the switch and never re-scheduled,
      so Whitefield was never fetched; re-scheduled per commit, the switch's own commit

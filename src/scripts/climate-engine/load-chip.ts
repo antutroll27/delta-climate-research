@@ -3,9 +3,9 @@
  *
  * Measured: the chip fades over 0.25 s and an in-place switch takes 248–299 ms,
  * so it used to fade in and be removed as it reached full opacity. A delay alone
- * does not fix that — a prefetched switch took 393 ms on Slow 4G, so a slightly
- * slower connection finishes just after the delay and would remove the chip the
- * instant it appears. So: show only after SHOW_AFTER_MS, and once shown stay up
+ * does not fix that — a revisit took 393 ms on Slow 4G and a prefetched first visit
+ * about 700 ms (dev server), so loads land just after the delay and would remove
+ * the chip the instant it appears. So: show only after SHOW_AFTER_MS, and once shown stay up
  * at least MIN_VISIBLE_MS. A refusal or failure shows at once and is never delayed.
  */
 export const SHOW_AFTER_MS = 400;
