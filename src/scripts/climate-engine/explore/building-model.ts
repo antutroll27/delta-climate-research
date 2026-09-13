@@ -50,24 +50,18 @@
  *    raw names and keys the result by what three.js will actually produce.
  */
 import * as THREE from 'three';
+import { MODEL_WARDS, modelPath } from '../scope/paths.ts';
 
 /** glTF node-name prefix marking a published landmark. The dot does NOT survive
  *  three.js's node-name sanitiser — see trap 2 above. */
 const LANDMARK_PREFIX = 'lm.';
 
-/**
- * Wards that ship `public/heat-map/models/<ward>.glb`.
- *
- * A LIST RATHER THAN A PROBE, for two reasons. It keeps a Kolkata ward from
- * issuing a 404 and from downloading the GLTF/Draco chunk at all, and it lets
- * the renderer decide synchronously whether to extrude — extruding 11,025
- * bevelled footprints and then throwing them away is the cost this avoids.
- * It cannot drift from the directory: the unit test asserts the two are equal.
- */
-export const MODEL_WARDS: readonly string[] = ['indiranagar', 'mg-road', 'whitefield'];
+/* Re-exported so existing importers keep working; the list itself lives in
+   scope/paths.ts, which is three-free. See the note there. */
+export { MODEL_WARDS };
 
 export function hasBuildingModel(ward: string): boolean {
-  return MODEL_WARDS.includes(ward);
+  return modelPath(ward) !== null;
 }
 
 /** A point in the ward frame the rest of the instrument speaks: x east, y NORTH. */
@@ -225,7 +219,9 @@ export async function loadBuildingModel(
 ): Promise<BuildingModel | null> {
   if (!hasBuildingModel(ward)) return null;
   try {
-    const response = await fetch(`/heat-map/models/${ward}.glb`, { signal });
+    const url = modelPath(ward);
+    if (url === null) return null;
+    const response = await fetch(url, { signal });
     if (!response.ok) return null;
     const buffer = await response.arrayBuffer();
     /* Loaded at use, not at import: a Kolkata ward never downloads the glTF or
