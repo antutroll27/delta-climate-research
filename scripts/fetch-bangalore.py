@@ -1056,6 +1056,76 @@ def utglobus_heights(w: blr.Ward, path: str) -> dict[tuple[int, int], float]:
     return out
 
 
+def crosscheck_would_erase(existing: str, tile: str | None) -> bool:
+    """True when recording a cross-check now would replace real evidence with a skip."""
+    return tile is None and bool(existing) and not existing.startswith("SKIPPED")
+
+
+def cross_check(w: blr.Ward, doc: blr.BlrBuildingsFile, tile: str | None) -> None:
+    """Attach UT-GLOBUS heights as `hUt` and `flag`, and write `crossCheck`.
+
+    NEVER TOUCHES `h`. The cross-check is a flag, not a correction: two sources that
+    disagree by more than DISAGREE_M are marked, never blended. Split out of
+    compute_heights so it can run without Earth Engine (see run_crosscheck).
+    """
+    bs = doc["b"]
+    if tile:
+        ut = utglobus_heights(w, tile)
+        mx, my = 0, 0
+        diffs: list[float] = []
+        for b in bs:
+            cx, cy = blr.ring_centroid(b["p"])
+            hu = ut.get((round(cx / 5.0), round(cy / 5.0)))
+            if hu is None:
+                continue
+            mx += 1
+            b["hUt"] = hu
+            if not b["fill"] and abs(hu - b["h"]) > blr.DISAGREE_M:
+                b["flag"] = True
+                my += 1
+            if not b["fill"]:
+                diffs.append(abs(hu - b["h"]))
+        mae = statistics.mean(diffs) if diffs else 0.0
+        doc["crossCheck"] = (
+            f"UT-GLOBUS {os.path.basename(tile)}: {mx:,} of {len(bs):,} matched, "
+            f"MAE {mae:.2f} m, {my:,} flagged >{blr.DISAGREE_M:.0f} m. "
+            "Flag only -- never blended into h.")
+        print(f"  {w.id:<12} cross-check {mx:,} matched, MAE {mae:.2f} m, "
+              f"{my:,} flagged")
+    else:
+        doc["crossCheck"] = (
+            "SKIPPED -- no UT-GLOBUS tile covering this ward was found. "
+            "This is a recorded skip, not an absence of disagreement.")
+        print(f"  {w.id:<12} cross-check SKIPPED (no covering tile)")
+
+
+def run_crosscheck(w: blr.Ward) -> None:
+    """--layer crosscheck: re-run the UT-GLOBUS comparison on COMMITTED heights, offline.
+
+    WHY THIS EXISTS. The comparison lived only inside compute_heights, which first
+    re-reduces every footprint through Earth Engine -- so recording MG Road's check
+    meant re-deriving (and possibly moving) every shipped height, on an account that
+    now returns 403. This reads the committed file and changes only hUt, flag and
+    crossCheck.
+    """
+    path = os.path.join(blr.DATA, f"{w.id}-buildings.json")
+    with open(path, encoding="utf-8") as fh:
+        doc = cast(blr.BlrBuildingsFile, json.load(fh))
+    tile = utglobus_tile(w)
+    existing = str(doc.get("crossCheck", ""))
+    if crosscheck_would_erase(existing, tile):
+        raise SystemExit(
+            f"{w.id}: no UT-GLOBUS tile found, and the file already holds a real cross-check "
+            f"({existing[:60]}...). Refusing to overwrite evidence with a skip.")
+    for b in doc["b"]:
+        loose = cast(dict[str, Any], b)
+        loose.pop("hUt", None)
+        loose.pop("flag", None)
+    cross_check(w, doc, tile)
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump(doc, fh, separators=(",", ":"))
+
+
 def compute_heights(w: blr.Ward) -> None:
     import ee
 
@@ -1091,35 +1161,7 @@ def compute_heights(w: blr.Ward) -> None:
         print(f"    {done:6,}/{len(bs):,}", end="\r", flush=True)
     print()
 
-    tile = utglobus_tile(w)
-    if tile:
-        ut = utglobus_heights(w, tile)
-        mx, my = 0, 0
-        diffs: list[float] = []
-        for b in bs:
-            cx, cy = blr.ring_centroid(b["p"])
-            hu = ut.get((round(cx / 5.0), round(cy / 5.0)))
-            if hu is None:
-                continue
-            mx += 1
-            b["hUt"] = hu
-            if not b["fill"] and abs(hu - b["h"]) > blr.DISAGREE_M:
-                b["flag"] = True
-                my += 1
-            if not b["fill"]:
-                diffs.append(abs(hu - b["h"]))
-        mae = statistics.mean(diffs) if diffs else 0.0
-        doc["crossCheck"] = (
-            f"UT-GLOBUS {os.path.basename(tile)}: {mx:,} of {len(bs):,} matched, "
-            f"MAE {mae:.2f} m, {my:,} flagged >{blr.DISAGREE_M:.0f} m. "
-            "Flag only -- never blended into h.")
-        print(f"  {w.id:<12} cross-check {mx:,} matched, MAE {mae:.2f} m, "
-              f"{my:,} flagged")
-    else:
-        doc["crossCheck"] = (
-            "SKIPPED -- no UT-GLOBUS tile covering this ward was found. "
-            "This is a recorded skip, not an absence of disagreement.")
-        print(f"  {w.id:<12} cross-check SKIPPED (no covering tile)")
+    cross_check(w, doc, utglobus_tile(w))
 
     doc["heightSource"] = "Google Open Buildings 2.5D Temporal v1 (2023 epoch)"
     doc["heightNote"] = (
@@ -1221,6 +1263,12 @@ def _self_test() -> None:
         pass
     else:
         raise AssertionError("a tree no placement could have produced must be refused, not guessed")
+    real = "UT-GLOBUS Bangalore_2.gpkg: 2,274 of 14,867 matched, MAE 3.12 m"
+    skip = "SKIPPED -- no UT-GLOBUS tile covering this ward was found."
+    assert crosscheck_would_erase(real, None), "a missing tile must not overwrite real evidence"
+    assert not crosscheck_would_erase(real, "/tiles/Bangalore_2.gpkg"), "a present tile may re-run"
+    assert not crosscheck_would_erase(skip, None), "a skip may be re-recorded as a skip"
+    assert not crosscheck_would_erase("", None), "a file with no cross-check may record a skip"
     print("  fetch-bangalore self-test OK")
 
 
@@ -1228,7 +1276,7 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--layer", default="all",
                     choices=("buildings", "heights", "terrain", "context", "canopy",
-                             "species", "osm", "all"))
+                             "species", "crosscheck", "osm", "all"))
     ap.add_argument("--ward", default=None)
     ap.add_argument("--self-test", action="store_true")
     a = ap.parse_args()
@@ -1283,6 +1331,10 @@ def main() -> int:
         print("species (backfill Kolkata's draw into existing canopy files, offline):")
         for w in wards:
             backfill_species(w)
+    if a.layer == "crosscheck":
+        print("cross-check (UT-GLOBUS against committed heights, offline):")
+        for w in wards:
+            run_crosscheck(w)
     if a.layer in ("heights", "all"):
         print("heights (Google Open Buildings 2.5D):")
         init_ee()
