@@ -960,9 +960,28 @@ Overture footprint whose centroid matches a UT-GLOBUS building to 5 m; the table
 | MG Road | Bangalore_1 | <from Step 2> | <from Step 2> | <from Step 2> |
 ```
 
-Fill MG Road's row with the exact numbers printed in Step 2. Also in §8, replace `the building carries a **flag and a widened uncertainty band**` with `the building carries a **flag** (a widened on-screen uncertainty band is designed but not yet built)`.
+Fill MG Road's row with the exact numbers printed in Step 2. Also in §8, the phrase is hard-wrapped across two lines. Replace
 
-In `docs/evidence/data-sources.md`, replace `status: \`Bangalore_2\` tile in hand (774,118 buildings, 100 % height coverage); \`Bangalore_1\` still to fetch for the MG Road ward.` with:
+```text
+the building carries a **flag and a
+widened uncertainty band**
+```
+
+with
+
+```text
+the building carries a **flag** (a widened on-screen uncertainty band is
+designed but not yet built)
+```
+
+In `docs/evidence/data-sources.md`, the status sentence is hard-wrapped across lines 507–508. Replace
+
+```text
+status: `Bangalore_2` tile in hand
+(774,118 buildings, 100 % height coverage); `Bangalore_1` still to fetch for the MG Road ward.
+```
+
+with:
 
 ```markdown
 status: **both tiles in hand**, fetched from `Asia.zip` by HTTP range and decompressed as Deflate64 —
@@ -1641,7 +1660,7 @@ Open both PNGs with the Read tool and describe what you see:
 
 - [ ] **Step 5b: Drain evidence**
 
-In `docs/evidence/data-sources.md`, directly after the UT-GLOBUS paragraph, add:
+In `docs/evidence/data-sources.md`, directly after the UT-GLOBUS paragraph, which ends with the line `**0.0 m** and maximum **492 m**; both are artefacts and must be dropped or clipped before any comparison.`, leave one blank line and add:
 
 ```markdown
 **Overture Maps `base/water` centrelines (OSM-derived), release 2026-07-22.0** — **ODbL 1.0**; a published
