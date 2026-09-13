@@ -39,6 +39,7 @@ import {
 } from './road-labels';
 import { findCoolingSurfaces, nearestCooling, type CoolingSurfaces } from './explore/cooling-surfaces';
 import { createWardSession } from './ward-session';
+import { createLoadChip } from './load-chip';
 import { createExploreFrameScheduler } from './explore/frame-scheduler';
 import { exploreRuntimeBudget, nextFrameDelayMs, type ExploreDeviceTier } from './explore/runtime-budget';
 import {
@@ -212,6 +213,11 @@ export function mountHeatMap(): () => void {
    */
   const COSTS = requireCosts(SCOPE);
   const el = (id: string) => document.getElementById(id);
+  const loadChip = createLoadChip(el('loadchip'), {
+    now: () => performance.now(),
+    setTimeout: (fn, ms) => window.setTimeout(fn, ms),
+    clearTimeout: (id) => window.clearTimeout(id),
+  });
   // Per-layer provenance ("data receipts") panel, fetched on-demand per ward
   // (loadLayerManifest caches). null → degrade to the static credit line.
   const escHtml = (s: string) => s.replace(/[&<>"]/g, (c) => (
@@ -1965,8 +1971,7 @@ export function mountHeatMap(): () => void {
        same highlight. `areaRefusal` holds both tests and the sentence for each. */
     const refusal = areaRefusal(name);
     if (refusal !== null) {
-      const chip = el('loadchip');
-      if (chip) { chip.textContent = refusal; chip.classList.add('on'); }
+      loadChip.fail(refusal);
       return;
     }
     const P = paths(name);
@@ -1978,8 +1983,7 @@ export function mountHeatMap(): () => void {
     const w = wardOf(name);
     const token = wardSession.begin(name);
     if (!token) return;
-    const load = el('loadchip');
-    if (load) { load.textContent = `Loading ${w.name}…`; load.classList.add('on'); }
+    loadChip.start(`Loading ${w.name}…`);
     await new Promise(r => setTimeout(r, 30));
     if (!wardSession.isCurrent(token)) return;
     const optional = async <T>(task: Promise<T>, fallback: T): Promise<T> => {
@@ -2135,7 +2139,7 @@ export function mountHeatMap(): () => void {
        they have been visited. */
     const activeId = areaOf(name);
     document.querySelectorAll('#strip .ward').forEach(t => t.classList.toggle('on', (t as HTMLElement).dataset.w === activeId));
-    if (load) { load.textContent = 'Building ward…'; load.classList.remove('on'); }
+    loadChip.done();
 
     const dur = relief ? 1400 : 0;
     orbit = false; clearTimeout(orbitResume);
@@ -2154,7 +2158,7 @@ export function mountHeatMap(): () => void {
       if (!wardSession.isCurrent(token)) return;
       wardSession.fail(token);
       console.warn(`Ward ${name} could not load:`, error);
-      if (load) load.textContent = `${w.name} could not load.`;
+      loadChip.fail(`${w.name} could not load.`);
     }
   }
 

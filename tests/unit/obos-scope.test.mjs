@@ -1023,6 +1023,10 @@ test('the instrument shows the refusal instead of returning in silence', async (
      refusal has to reach it. Asserting the PAIRING rather than the mere presence of
      `areaRefusal`: a call whose result is dropped would satisfy a looser check, and
      dropping it is precisely the regression this is written against. */
-  assert.match(app, /const refusal = areaRefusal\(name\);[\s\S]{0,400}?loadchip[\s\S]{0,240}?refusal/,
+  /* Two halves since load-chip.ts: the refusal goes to `loadChip.fail` (which shows
+     at once, never after the load delay), and `loadChip` is the #loadchip element. */
+  assert.match(app, /const refusal = areaRefusal\(name\);[\s\S]{0,400}?loadChip\.fail\(refusal\)/,
     'loadWard no longer paints the refusal onto the loading chip');
+  assert.match(app, /const loadChip = createLoadChip\(el\('loadchip'\)/,
+    'the loading chip is no longer the #loadchip element');
 });
