@@ -552,6 +552,22 @@ and two independent methods track it. **Indiranagar's +0.176 is largely an artef
 every building is 5–8 m there is little variance to correlate, and the coefficient is measuring noise.
 **MAE is the honest statistic there, and 4.0 m on an 8 m building is a 50 % error.**
 
+**Full-ward results, 2026-09-14** (`python3 scripts/fetch-bangalore.py --layer crosscheck`, every
+Overture footprint whose centroid matches a UT-GLOBUS building to 5 m; the table above is the earlier
+385/373-building sample and stands as that):
+
+| ward | tile | matched | MAE | flagged > 5 m |
+|---|---|---:|---:|---:|
+| Indiranagar | Bangalore_2 | 2,274 of 14,867 | 2.83 m | 302 |
+| Whitefield | Bangalore_2 | 2,532 of 10,897 | 2.80 m | 178 |
+| MG Road | Bangalore_1 | 2,100 of 11,045 | 3.65 m | 339 |
+
+These are measured against the **shipped** heights. The earlier strings (Indiranagar 3.12 m / 391, Whitefield
+3.13 m / 295) were measured against the Google 2.5D baseline before OSM-measured heights replaced 1,941 and
+1,430 buildings (`1fec16e`). They reproduce to the digit on those older heights, so they were stale, not wrong.
+The two sets are not like-for-like (the fill set changed too), so read the drop as consistent with the OSM
+heights, not as a measured improvement.
+
 This generalises past Bangalore: **correlation is the wrong summary for a low-variance population**, and
 a homogeneous neighbourhood will make any two height sources look uncorrelated no matter how good they
 both are.
@@ -562,8 +578,8 @@ and Japan… heights prediction might not be as good in the Global South"*; UT-G
 LiDAR only, at RMSE 9.1 m per building.
 
 **What we do about it.** Nothing that manufactures a number. Google 2.5D stays primary, UT-GLOBUS is
-attached as a second field, and where they differ by more than 5 m the building carries a **flag and a
-widened uncertainty band** — it is not corrected and not averaged. Blending would invent a value neither
+attached as a second field, and where they differ by more than 5 m the building carries a **flag** (a widened on-screen uncertainty band is
+designed but not yet built) — it is not corrected and not averaged. Blending would invent a value neither
 source states, and would hide the disagreement precisely where it is most informative.
 
 **What would close it.** Ground truth: a LiDAR or photogrammetric survey of a few hundred Bengaluru

@@ -516,8 +516,10 @@ and Open-Meteo's free tier (non-commercial).
 **UT-GLOBUS (Urban Terrain and Global Building heights)** — University of Texas at Austin ·
 per-building height, area, volume and surface area, machine-learned from street-view, footprints and
 elevation · **CC BY 4.0** · Zenodo record `11156602`, `Asia.zip` · **role:** the **cross-check** on
-Google 2.5D heights, never the primary and never blended into it · status: `Bangalore_2` tile in hand
-(774,118 buildings, 100 % height coverage); `Bangalore_1` still to fetch for the MG Road ward.
+Google 2.5D heights, never the primary and never blended into it · status: **both tiles in hand**, fetched from `Asia.zip` by HTTP range and decompressed as Deflate64 —
+`Bangalore_1.gpkg` (273,190,912 B, MD5 `6efdf6d82d8d2fe5b7dd95ddd3a9c45b`, 964,234 buildings, covers MG
+Road) and `Bangalore_2.gpkg` (214,093,824 B, MD5 `2fa854a9176cbdaf1af6ec4c626fc84f`, 774,118 buildings,
+covers Indiranagar and Whitefield). Validated only against US LiDAR (building RMSE 9.1 m); no Indian city.
 *Measured character:* integer metres, **only 122 distinct values city-wide**, mean 6.87 m, and the five
 commonest values (7, 5, 4, 6, 8 m) account for 58 % of the city — it under-resolves mid-rise. Minimum is
 **0.0 m** and maximum **492 m**; both are artefacts and must be dropped or clipped before any comparison.

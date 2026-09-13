@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 
 import numpy as np
@@ -33,6 +34,16 @@ def main() -> int:
                 continue
             if os.path.getsize(path) == 0:
                 failures.append(f"{w.id}: {os.path.basename(path)} is empty")
+
+        # THE HEIGHT CROSS-CHECK MUST EXIST. A "SKIPPED" here once meant only that a
+        # tile was missing, and it read like "no disagreement". Every ward now has a
+        # covering UT-GLOBUS tile, so a skip or zero matches is a regression.
+        cpath = os.path.join(blr.DATA, f"{w.id}-buildings.json")
+        with open(cpath, encoding="utf-8") as fh:
+            cross = str(json.load(fh).get("crossCheck", ""))
+        matched = re.match(r"UT-GLOBUS \S+: ([\d,]+) of", cross)
+        if cross.startswith("SKIPPED") or not matched or int(matched.group(1).replace(",", "")) == 0:
+            failures.append(f"{w.id}: no UT-GLOBUS cross-check recorded ({cross[:50]!r})")
 
         bpath = os.path.join(OUT, f"{w.id}.json")
         if os.path.exists(bpath):

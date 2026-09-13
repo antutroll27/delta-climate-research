@@ -294,7 +294,8 @@ said so**, which is the §11 failure mode working as specified rather than a gap
 wards. `Bangalore_2` spans 77.6187–77.9799 E and covers **Indiranagar and
 Whitefield**. **MG Road at 77.6030 E falls in `Bangalore_1`** (77.2018–77.6218 E),
 which is not yet fetched. Its whole 2.8 km box (77.5901–77.6159 E) sits inside
-`Bangalore_1` with 59 m of margin at the eastern edge, so one additional tile
+`Bangalore_1` with 637 m of margin at the eastern edge (measured 2026-09-14 from
+the tile's building extents), so one additional tile
 suffices. **The westward shift in §1 widened that margin rather than narrowing
 it** — the box moved away from the seam, not toward it.
 
