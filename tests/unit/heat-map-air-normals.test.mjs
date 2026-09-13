@@ -31,3 +31,9 @@ test('the month picks the row, and hours wrap', () => {
   assert.equal(at(30), at(6), 'hour 30 is 06:00 the next day');
   assert.equal(at(-2), at(22), 'hour -2 is 22:00 the day before');
 });
+
+test('a non-finite clock is refused, never turned into a NaN air temperature', () => {
+  assert.throws(() => at(Number.NaN), RangeError);
+  assert.throws(() => fallbackTair(N, { month: Number.NaN, hour: 14 }), RangeError);
+  assert.throws(() => at(Number.POSITIVE_INFINITY), RangeError);
+});

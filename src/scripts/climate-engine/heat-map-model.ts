@@ -229,6 +229,11 @@ export const T_MAX_HOUR = 14;
  * here rather than passed off as observed. Used only when there is no live reading.
  */
 export function fallbackTair(normals: AirNormals, clock: ScenarioClock): number {
+  /* A non-finite month or hour would index no row and return NaN, which then flows
+     into every cell of the solve. Refused loudly, as an unknown pathway is. */
+  if (!Number.isFinite(clock.month) || !Number.isFinite(clock.hour)) {
+    throw new RangeError(`heat-map-model: fallbackTair needs a finite month and hour, got ${clock.month} / ${clock.hour}`);
+  }
   const m = Math.min(12, Math.max(1, Math.round(clock.month))) - 1;
   const lo = normals.minC[m], hi = normals.maxC[m];
   const h = ((clock.hour % 24) + 24) % 24;
