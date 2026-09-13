@@ -43,7 +43,7 @@ import { createLoadChip } from './load-chip';
 import { createExploreFrameScheduler } from './explore/frame-scheduler';
 import { exploreRuntimeBudget, nextFrameDelayMs, type ExploreDeviceTier } from './explore/runtime-budget';
 import {
-  dayOfYearUtc, maplibreSky, representativeSolarHour, sunPlacement,
+  dayOfYearUtc, maplibreSky, representativeSolarHour, sunPlacement, wardMonthHour,
 } from './explore/sun-lighting';
 import { createCoreFieldLayer, CORE_FIELD_SOURCE } from './explore/core-field-layer';
 import type { ReliefRenderer, ReliefWardBundle, ReliefVisualState } from './explore/relief-contract';
@@ -2268,15 +2268,12 @@ export function mountHeatMap(): () => void {
      "Now" (sunNow non-null) uses the real local hour; the two canonical views use the
      hours their chips print — 13:00 peak, 22:00 retained — in the current month.
      The hour rule is the shared `representativeSolarHour` (sun-lighting.ts), never a second copy. */
-  const wardMonthHour = new Intl.DateTimeFormat('en-GB', {
-    timeZone: WARD_TZ, month: 'numeric', hour: 'numeric', minute: 'numeric', hourCycle: 'h23',
-  });
   function scenarioClock(): M.ScenarioClock {
-    const parts = wardMonthHour.formatToParts(new Date(now()));
-    const part = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? NaN);
-    const localHour = part('hour') + part('minute') / 60;
-    const hour = representativeSolarHour(state.sunNow, localHour, state.phase);
-    return { month: part('month'), hour };
+    const local = wardMonthHour(now(), WARD_TZ);
+    /* CLOCK hour here, not solar: the IMD normals are clock-based. The sun is placed
+       from `wardSolarHour()` through the same rule, which is why the argument name
+       reads "solar" — ~20 min apart, never printed, and replaced by any live reading. */
+    return { month: local.month, hour: representativeSolarHour(state.sunNow, local.hour, state.phase) };
   }
   const wardClock = new Intl.DateTimeFormat('en-GB', {
     timeZone: WARD_TZ, hour: '2-digit', minute: '2-digit', hour12: false,

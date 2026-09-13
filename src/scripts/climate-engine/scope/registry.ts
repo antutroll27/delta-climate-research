@@ -147,7 +147,7 @@ export const REGISTRY = {
         airNormals: {
           station: 'IMD Kolkata (Alipore) 42807',
           period: '1991–2020',
-          source: 'IMD, Climatological Tables of Observatories in India 1991–2020 (National Data Centre, Pune)',
+          source: 'IMD, Climatological Tables of Observatories in India 1991–2020 (National Data Centre, Pune), p. 209',
           measured: true,
           maxC: [25.5, 29.4, 33.7, 35.4, 35.5, 34.1, 32.5, 32.3, 32.6, 32.3, 30.2, 26.7],
           minC: [14.3, 18.1, 22.9, 25.7, 26.8, 27.1, 26.7, 26.6, 26.3, 24.4, 20.1, 15.5],
