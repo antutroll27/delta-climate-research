@@ -25,6 +25,10 @@ import { createWaterLayer, type WaterLayer } from '../water-layer.ts';
 import { hasBuildingModel, loadBuildingModel, type LandmarkNode } from './building-model.ts';
 import { buildRegistry, pickBuilding, projectWard, type BuildingMeta } from './building-pick.ts';
 import {
+  createLandmarkLayer,
+  type LandmarkLabel, type LandmarkLayer, type LandmarkPick,
+} from './landmark-layer.ts';
+import {
   imageBasedLightingAllowed, skyEnvironment, sunLighting, sunPlacement,
   type SkyEnvironment, type SunPlacement,
 } from './sun-lighting.ts';
@@ -55,6 +59,9 @@ export class ThreeReliefRenderer implements ReliefRenderer {
   private modelFacade: THREE.MeshStandardMaterial | null = null;
   /** landmark nodes of the ward currently drawn; empty on the extrusion path */
   landmarks: readonly LandmarkNode[] = [];
+  /** Labels and hit-testing for those nodes, with the no-source rule applied.
+   *  Null on the extrusion path, where there are no authored landmarks at all. */
+  private landmarkLayer: LandmarkLayer | null = null;
   /** bumped on every ward rebuild, so a model that finishes loading after a ward
       switch or a teardown is dropped instead of added to the wrong city */
   private wardToken = 0;
@@ -302,10 +309,32 @@ export class ThreeReliefRenderer implements ReliefRenderer {
     return projectWard(this.pickMatrix, x, y, z, width, height);
   }
 
+  /* ── the landmarks ──────────────────────────────────────────────────────────
+     Both of these hand the layer THIS renderer's `pickMatrix` — the clip matrix
+     rebuilt inside `render()` from what MapLibre gives the custom layer, and the
+     same one `pick` and `project` use. It cannot be reached from outside the
+     renderer, which is precisely why these methods exist rather than the caller
+     holding a matrix of its own: two copies of a projection is how a frame
+     drifts, and the symptom would be labels sitting a few metres off the
+     buildings they name.
+
+     An extrusion-path ward answers with nothing, and that is an answer: Kolkata
+     ships no authored model, so it has no landmark nodes to label. */
+  landmarkLabels(width: number, height: number): LandmarkLabel[] {
+    return this.landmarkLayer?.labelsFor(this.pickMatrix, width, height) ?? [];
+  }
+
+  pickLandmark(
+    x: number, y: number, width: number, height: number, radiusPx?: number,
+  ): LandmarkPick | null {
+    return this.landmarkLayer?.pick(this.pickMatrix, x, y, width, height, radiusPx) ?? null;
+  }
+
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
     this.clearBuildings();
+    this.landmarkLayer?.dispose(); this.landmarkLayer = null;
     this.modelFacade?.dispose();
     this.overlay?.geometry.dispose();
     (this.overlay?.material as THREE.Material | undefined)?.dispose();
@@ -416,6 +445,14 @@ export class ThreeReliefRenderer implements ReliefRenderer {
        rendering precisely what Kolkata renders today. */
     const token = ++this.wardToken;
     this.clearBuildings();
+    /* REBUILT PER WARD, in the same idiom as water, clouds, roads and vegetation
+       below, because it is the same kind of thing: a layer holding THIS ward's
+       data. It closes over the ward's landmark sites, so one kept across a switch
+       would label MG Road's towers over Whitefield. `installModel` builds the
+       replacement when the new ward's authored model finishes decoding — and a
+       ward with no model leaves it null, which is why the extrusion path reports
+       no landmarks rather than the previous ward's. */
+    if (this.landmarkLayer) { this.landmarkLayer.dispose(); this.landmarkLayer = null; }
     if (hasBuildingModel(bundle.wardId)) void this.installModel(bundle, token);
     else this.installExtrusion(bundle);
     this.overlay.scale.set(bundle.wardData.sizeM, bundle.wardData.sizeM, 1);
@@ -483,6 +520,9 @@ export class ThreeReliefRenderer implements ReliefRenderer {
     });
     this.model = model.buildings;
     this.landmarks = model.landmarks;
+    /* The no-source rule is applied HERE, once, at the boundary where the
+       authored model becomes something the instrument will draw claims from. */
+    this.landmarkLayer = createLandmarkLayer(model.landmarks);
     this.scene.add(model.buildings);
     this.options.map.triggerRepaint();
   }

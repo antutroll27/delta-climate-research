@@ -107,6 +107,15 @@ const MIRRORS_HANDEDNESS = MODEL_TO_SCENE[0] * MODEL_TO_SCENE[1] * MODEL_TO_SCEN
 export interface LandmarkNode {
   /** landmark id with the `lm.` prefix stripped, e.g. `ub-tower` */
   readonly name: string;
+  /**
+   * The human name, from the node's glTF `extras` — "M. Chinnaswamy Stadium".
+   *
+   * CARRIED, NOT UN-SLUGGED. `name` is an identifier: the node is
+   * `lm.m--chinnaswamy-stadium`, and reversing that is lossy in exactly the
+   * cases worth labelling ("M." and "UB City" do not survive the round trip).
+   * Falls back to `name` for a model exported before the exporter wrote it.
+   */
+  readonly title: string;
   readonly object: THREE.Object3D;
   /** centroid, metres east of the ward centre */
   readonly x: number;
@@ -253,8 +262,10 @@ export async function loadBuildingModel(
          layer labels is the number the mesh is drawn at. */
       box.setFromObject(child);
       const extras = extrasByRaw.get(raw) ?? {};
+      const slug = raw.slice(LANDMARK_PREFIX.length);
       landmarks.push({
-        name: raw.slice(LANDMARK_PREFIX.length),
+        name: slug,
+        title: String(extras.name ?? '').trim() || slug,
         object: child,
         x: (box.min.x + box.max.x) / 2,
         y: (box.min.z + box.max.z) / 2,

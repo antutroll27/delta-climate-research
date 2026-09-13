@@ -4,6 +4,10 @@ import type { TerrainField } from '../terrain.ts';
 import type { TreesFile } from '../vegetation-layer.ts';
 import type { WardFrame } from '../ward-frame.ts';
 import type { BuildingMeta } from './building-pick.ts';
+/* Type-only, and it has to stay that way: landmark-layer.ts is pure arithmetic
+   over a structural clip matrix and imports no three, so this contract keeps the
+   no-three guarantee tests/unit/heat-explore-module-boundary.test.mjs asserts. */
+import type { LandmarkLabel, LandmarkPick } from './landmark-layer.ts';
 import type { ExploreDeviceTier } from './runtime-budget.ts';
 import type { SunPlacement } from './sun-lighting.ts';
 
@@ -86,6 +90,19 @@ export interface ReliefRenderer {
   setBuildingsExtruded(extruded: boolean): void;
   pick(x: number, y: number, width: number, height: number, radiusPx?: number): number;
   project(x: number, y: number, z: number, width: number, height: number): { x: number; y: number; w: number };
+  /* ── THE LANDMARKS: the only buildings whose height the instrument asserts BY
+     NAME, and therefore the only ones that must cite a source for it.
+
+     Both read the renderer's own clip matrix, exactly as `pick` and `project` do,
+     because that matrix is rebuilt inside `render()` from what MapLibre hands the
+     custom layer and cannot be reached from out here. A caller holding its own
+     copy would be a second projection, which is how a frame drifts.
+
+     Empty and null on the extrusion path: Kolkata ships no authored model, so it
+     has no landmark nodes, and that is an answer rather than a missing feature. */
+  landmarkLabels(width: number, height: number): LandmarkLabel[];
+  pickLandmark(x: number, y: number, width: number, height: number,
+               radiusPx?: number): LandmarkPick | null;
   dispose(): void;
 }
 
