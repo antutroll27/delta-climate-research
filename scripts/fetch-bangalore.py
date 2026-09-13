@@ -758,6 +758,93 @@ def read_chm_metre(w: blr.Ward, path: str) -> Any:
     return out
 
 
+def place_canopy(grid: Any, size_m: float,
+                 hash01: Callable[[int, int, int, int], float],
+                 species: tuple[str, ...]) -> list[dict[str, Any]]:
+    """Kolkata's `_generate` over a CANOPY_GRID x CANOPY_GRID height grid, species INCLUDED.
+
+    WAS INLINE IN build_canopy WITH SPECIES OMITTED ("verbatim in logic, species
+    omitted"), which is why every Bengaluru tree rendered as neem. The draw is the
+    same `hash01(col, row, kk, 3)` Kolkata uses, keyed on the cell identity that
+    exists only here -- once candidates are a flat list it is gone.
+    """
+    cell_m = size_m / CANOPY_GRID
+    half = size_m / 2.0
+    cands: list[dict[str, Any]] = []
+    for row in range(CANOPY_GRID):
+        for col in range(CANOPY_GRID):
+            h = float(grid[row, col])
+            if h < MIN_TREE_H:
+                continue
+            count = min(DENSITY_MAX, int(DENSITY_MAX * h / DENSITY_REF_H + 0.5))
+            for kk in range(count):
+                jx = (hash01(col, row, kk, 0) - 0.5) * JITTER * cell_m
+                jy = (hash01(col, row, kk, 1) - 0.5) * JITTER * cell_m
+                x = round((col + 0.5) * cell_m - half + jx, 2)
+                y = round(half - (row + 0.5) * cell_m + jy, 2)
+                r = round(h * 0.35 * (0.9 + 0.2 * hash01(col, row, kk, 2)), 2)
+                sp = species[int(hash01(col, row, kk, 3) * len(species))]
+                cands.append({"x": x, "y": y, "h": round(h, 1), "r": r, "species": sp})
+    return cands
+
+
+def recover_species(tree: dict[str, Any], size_m: float,
+                    hash01: Callable[[int, int, int, int], float],
+                    species: tuple[str, ...]) -> str:
+    """The species `place_canopy` would have drawn for an already-placed tree.
+
+    For canopy files written before the draw was restored. The canopy height model
+    is an untiled S3 monolith read over the network, so re-placing is minutes per
+    ward; the placement is deterministic, so the cell is recovered instead:
+
+    - col/row from the position: jitter is bounded at JITTER (0.8) of a cell, so a
+      tree never leaves its cell.
+    - kk by matching the stored x/y to 1 cm against each candidate draw.
+    - ties (two kk landing within 1 cm) broken by the stored radius, which is drawn
+      from the same hash.
+
+    Measured on the shipped wards: 59,184 of 59,184 recovered uniquely.
+    """
+    cell_m = size_m / CANOPY_GRID
+    half = size_m / 2.0
+    col = int((tree["x"] + half) / cell_m)
+    row = int((half - tree["y"]) / cell_m)
+    hits: list[int] = []
+    for kk in range(DENSITY_MAX):
+        jx = (hash01(col, row, kk, 0) - 0.5) * JITTER * cell_m
+        jy = (hash01(col, row, kk, 1) - 0.5) * JITTER * cell_m
+        if (abs(round((col + 0.5) * cell_m - half + jx, 2) - tree["x"]) < 0.011
+                and abs(round(half - (row + 0.5) * cell_m + jy, 2) - tree["y"]) < 0.011):
+            hits.append(kk)
+    if len(hits) > 1:
+        hits = [kk for kk in hits
+                if abs(round(tree["h"] * 0.35 * (0.9 + 0.2 * hash01(col, row, kk, 2)), 2)
+                       - tree["r"]) < 0.011]
+    if len(hits) != 1:
+        raise ValueError(f"cannot recover the cell of tree {tree} (candidates {hits})")
+    return species[int(hash01(col, row, hits[0], 3) * len(species))]
+
+
+def backfill_species(w: blr.Ward) -> None:
+    """Write the species draw into an existing {ward}-canopy.json, offline."""
+    kc = _kolkata_canopy()
+    hash01 = cast(Callable[[int, int, int, int], float], kc._hash01)
+    species = cast(tuple[str, ...], kc.SPECIES)
+    path = os.path.join(blr.DATA, f"{w.id}-canopy.json")
+    with open(path, encoding="utf-8") as fh:
+        doc = cast(dict[str, Any], json.load(fh))
+    mix: dict[str, int] = {}
+    for t in doc["trees"]:
+        t["species"] = recover_species(t, float(w.size_m), hash01, species)
+        mix[t["species"]] = mix.get(t["species"], 0) + 1
+    doc["method"] = str(doc["method"]).replace(
+        "Species not assigned.",
+        "Species drawn as Kolkata's: hash01(col, row, kk, 3) over its SPECIES tuple.")
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump(doc, fh, separators=(",", ":"))
+    print(f"  {w.id:<12} species {dict(sorted(mix.items()))}", flush=True)
+
+
 def build_canopy(w: blr.Ward) -> None:
     import numpy as np
     from shapely.geometry import Point, Polygon
@@ -785,23 +872,9 @@ def build_canopy(w: blr.Ward) -> None:
     assert k * CANOPY_GRID == n, "ward size must be a whole number of 10 m cells"
     grid = m1.reshape(CANOPY_GRID, k, CANOPY_GRID, k).mean(axis=(1, 3))
 
-    # ── Kolkata's _generate, verbatim in logic, species omitted ──
-    cell_m = w.size_m / CANOPY_GRID
-    half = w.size_m / 2.0
-    cands: list[dict[str, float]] = []
-    for row in range(CANOPY_GRID):
-        for col in range(CANOPY_GRID):
-            h = float(grid[row, col])
-            if h < MIN_TREE_H:
-                continue
-            count = min(DENSITY_MAX, int(DENSITY_MAX * h / DENSITY_REF_H + 0.5))
-            for kk in range(count):
-                jx = (hash01(col, row, kk, 0) - 0.5) * JITTER * cell_m
-                jy = (hash01(col, row, kk, 1) - 0.5) * JITTER * cell_m
-                x = round((col + 0.5) * cell_m - half + jx, 2)
-                y = round(half - (row + 0.5) * cell_m + jy, 2)
-                r = round(h * 0.35 * (0.9 + 0.2 * hash01(col, row, kk, 2)), 2)
-                cands.append({"x": x, "y": y, "h": round(h, 1), "r": r})
+    # ── Kolkata's _generate, with Kolkata's species draw (see place_canopy) ──
+    species = cast(tuple[str, ...], kc.SPECIES)
+    cands = place_canopy(grid, w.size_m, hash01, species)
 
     # ── drop candidates standing inside a building, or in a carriageway ──
     # Kolkata records ~30 % of its rendered trees on rooftops OR IN ROADS as
@@ -871,7 +944,8 @@ def build_canopy(w: blr.Ward) -> None:
         "method": "Kolkata fetch-canopy.py _generate: 10 m cells, 0..4 instances "
                   "per cell scaling with height against a fixed 30 m reference, "
                   "deterministic jitter. Tree COUNT is a display scaling, not a "
-                  "measurement; canopy HEIGHT is measured. Species not assigned.",
+                  "measurement; canopy HEIGHT is measured. Species drawn as "
+                  "Kolkata's: hash01(col, row, kk, 3) over its SPECIES tuple.",
         "densityRefM": DENSITY_REF_H, "minTreeH": MIN_TREE_H,
         "candidates": len(cands) + dropped_road, "droppedInBuildings": dropped,
         "droppedInRoads": dropped_road,
@@ -1110,13 +1184,50 @@ def build_terrain(w: blr.Ward, context: bool = False) -> None:
           f"{doc['maxM'] - doc['minM']:.1f} m (native {relief_native:.1f} m)")
 
 
+def _self_test() -> None:
+    """Offline: the backfill must reproduce the source fix exactly."""
+    import numpy as np
+    kc = _kolkata_canopy()
+    hash01 = cast(Callable[[int, int, int, int], float], kc._hash01)
+    species = cast(tuple[str, ...], kc.SPECIES)
+    assert (JITTER, DENSITY_MAX, DENSITY_REF_H, MIN_TREE_H) == (
+        kc.JITTER, kc.DENSITY_MAX, kc.DENSITY_REF_H, kc.MIN_TREE_H), \
+        "Bengaluru's placement constants must equal Kolkata's, or its species draw is not Kolkata's"
+    size_m = float(CANOPY_GRID * 10)
+    grid = np.zeros((CANOPY_GRID, CANOPY_GRID), dtype=np.float32)
+    grid[0, 0] = 30.0
+    grid[3, 40] = 25.0
+    grid[10, 10] = 15.0
+    grid[150, 200] = 8.0
+    grid[279, 279] = 22.5
+    placed = place_canopy(grid, size_m, hash01, species)
+    assert placed, "the probe grid must place trees"
+    assert {t["species"] for t in placed} <= set(species)
+    assert len({t["species"] for t in placed}) > 1, "the species draw must vary, not always neem"
+    for t in placed:
+        stripped = {k: v for k, v in t.items() if k != "species"}
+        assert recover_species(stripped, size_m, hash01, species) == t["species"], \
+            f"backfill disagrees with the source draw at {t}"
+    try:
+        recover_species({"x": 3.0, "y": 3.0, "h": 5.0, "r": 1.0}, size_m, hash01, species)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("a tree no placement could have produced must be refused, not guessed")
+    print("  fetch-bangalore self-test OK")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--layer", default="all",
                     choices=("buildings", "heights", "terrain", "context", "canopy",
-                             "osm", "all"))
+                             "species", "osm", "all"))
     ap.add_argument("--ward", default=None)
+    ap.add_argument("--self-test", action="store_true")
     a = ap.parse_args()
+    if a.self_test:
+        _self_test()
+        return 0
     wards = ward_list(a.ward)
 
     if a.layer in ("buildings", "all"):
@@ -1161,6 +1272,10 @@ def main() -> int:
         print("canopy (Meta/WRI CHM v1, v2 measured alongside):")
         for w in wards:
             build_canopy(w)
+    if a.layer == "species":
+        print("species (backfill Kolkata's draw into existing canopy files, offline):")
+        for w in wards:
+            backfill_species(w)
     if a.layer in ("heights", "all"):
         print("heights (Google Open Buildings 2.5D):")
         init_ee()
