@@ -524,6 +524,17 @@ covers Indiranagar and Whitefield). Validated only against US LiDAR (building RM
 commonest values (7, 5, 4, 6, 8 m) account for 58 % of the city — it under-resolves mid-rise. Minimum is
 **0.0 m** and maximum **492 m**; both are artefacts and must be dropped or clipped before any comparison.
 
+**Overture Maps `base/water` centrelines (OSM-derived), release 2026-07-22.0** — **ODbL 1.0**; a published
+derived database must be shared alike · **role:** Bengaluru's open drains and streams, drawn as 3 m
+**illustrative** ribbons, never in the solver · covered reaches (OSM `tunnel`/`culvert`/`covered=yes`)
+counted and not drawn. **No defensible channel widths exist openly**: OSM tags one width in 38 MG Road
+reaches; BBMP's 2022 storm-water-drain KMLs carry order only (and a portal-only licence label); the
+"22 / 16 / 6–9 ft" primary/secondary/tertiary figures are blog-sourced. **Legal buffers are not widths** —
+the current rule is Karnataka Gazette UDD 468 MNJ 2025(E), 15 Oct 2025: 15 / 10 / 5 m from the drain edge;
+the NGT's 50 / 35 / 25 m (4 May 2016) was set aside by the Supreme Court in *Mantri Techzone v Forward
+Foundation* (5 Mar 2019). BBMP's primary/secondary/tertiary order was considered and not adopted: its
+licence is a portal label only, and its tertiary drains largely do not align with OSM outside MG Road.
+
 **Overture Maps buildings, 2026-07-22.0** — ODbL · **built and in hand 2026-09-10**:
 14,867 / 11,045 / 10,897 footprints for Indiranagar, MG Road and Whitefield, sliced from one
 102,382-building cache over the metro strip. Heights are joined from Google 2.5D as **zonal p65**,

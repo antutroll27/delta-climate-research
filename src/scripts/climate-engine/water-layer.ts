@@ -1,18 +1,11 @@
 /**
  * water-layer.ts — the ward's water, as animated surfaces in the city scene.
  *
- * RENDER ONLY, STILL — but the sentence that followed is no longer true, and the
- * change is worth naming here because this file is where a reader looks for it.
- * This module draws OSM water polygons ({ward}-water.json, fetched by
- * scripts/fetch-water.py) and touches nothing in the physics. It used to add that
- * SimLayers.water "stays zero", and that the sim's water terms (sim-ts.ts
- * ventilation + relaxation) were gated behind the calibration protocol.
- *
- * THAT GATE WAS OPENED ON 2026-08-13. `rasterizeWardWater` (ward-raster.ts) now fills
- * the layer from these same polygons, so the terms are live and the ward mean has
- * moved. The protocol ran rather than being bypassed: docs/heat-map-water-layer.md
- * carries the before/after against ECOSTRESS. What is still true is the SPLIT — this
- * file is the look, the rasteriser is the physics, and they share only the artefact.
+ * RENDER ONLY. This module draws water polygons and, for Bengaluru, open drain and
+ * stream centrelines ({ward}-water.json) and touches nothing in the physics. The
+ * solver's water terms exist, but `WATER_LAYER_ENABLED` is false: feeding them was
+ * measured and made agreement with ECOSTRESS worse (docs/evidence/known-limitations.md
+ * §7). An earlier version of this header said that gate was opened; it was closed again.
  *
  * WHAT MAKES IT READ AS WATER AND NOT A BLUE HOLE. Three things, all derived
  * from geometry alone — no bathymetry, no API, nothing invented:
@@ -39,7 +32,8 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { WaterData } from './heat-map-model';
-import { buildDepthField } from './water-depth';
+import { buildDepthField, waterFieldM } from './water-depth';
+import { buildRibbonMesh } from './road-ribbon';
 
 export interface WaterLayer {
   readonly mesh: THREE.Mesh;
@@ -53,9 +47,12 @@ export interface WaterLayer {
 /** Water sits just above the heat overlay (y=0.6) and below every roof. */
 const SURFACE_Y = 0.9;
 
-/** The frame the depth field covers. Matches CLIP_M*2 in scripts/fetch-water.py,
- *  so a polygon clipped at the artefact's edge is clipped at the field's edge. */
-const FIELD_SIZE_M = 1520;
+/**
+ * How wide a drawn centreline is. ILLUSTRATIVE, NOT MEASURED: no open source gives
+ * Bengaluru drain widths (OSM tags one of 38 MG Road reaches). 3 m is the Blender
+ * scenes' STREAM_WIDTH_M, so the web map and the offline renders agree.
+ */
+export const WATER_LINE_WIDTH_M = 3;
 
 const VERT = /* glsl */ `
   attribute float aFlow;
@@ -172,7 +169,7 @@ function ringGeometry(flat: readonly number[]): THREE.ShapeGeometry | null {
 
 /** The shore-distance field, as a single-channel texture the shader samples. */
 function depthTexture(data: WaterData): THREE.DataTexture {
-  const field = buildDepthField(data.polys, FIELD_SIZE_M);
+  const field = buildDepthField(data.polys, waterFieldM(data));
   const texture = new THREE.DataTexture(field.data, field.n, field.n, THREE.RedFormat);
   texture.minFilter = texture.magFilter = THREE.LinearFilter;
   texture.wrapS = texture.wrapT = THREE.ClampToEdgeWrapping;
@@ -197,6 +194,10 @@ export function createWaterLayer(
   for (const poly of data.polys) {
     const geometry = ringGeometry(poly.p);
     if (!geometry) continue;
+    /* The shader reads only position and aFlow. Dropping the rest lets rings merge
+       with centreline ribbons, which carry nothing else. */
+    geometry.deleteAttribute('normal');
+    geometry.deleteAttribute('uv');
     const count = geometry.attributes.position.count;
     const flow = new Float32Array(count).fill(poly.k === 'river' ? 1 : 0);
     geometry.setAttribute('aFlow', new THREE.BufferAttribute(flow, 1));
@@ -207,6 +208,18 @@ export function createWaterLayer(
       geometry.translate(0, groundAt(cx / n, cy / n), 0);
     }
     geometries.push(geometry);
+  }
+  /* OPEN CENTRELINES, as ribbons that follow the land — a drain runs downhill, unlike
+     a pond's level surface — through the same builder roads use. They flow. */
+  const ribbons = buildRibbonMesh(data.lines ?? [], () => WATER_LINE_WIDTH_M / 2,
+    groundAt ?? (() => 0), 0);
+  if (ribbons) {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(ribbons.positions, 3));
+    g.setIndex(new THREE.BufferAttribute(ribbons.indices, 1));
+    g.setAttribute('aFlow', new THREE.BufferAttribute(
+      new Float32Array(ribbons.positions.length / 3).fill(1), 1));
+    geometries.push(g);
   }
   if (!geometries.length) return null;
 
@@ -222,13 +235,14 @@ export function createWaterLayer(
       tDepth: { value: tDepth },
       uTime: timeU,
       uGrow: growU,                     /* SHARED with the facade's grow-in */
-      uFieldSize: { value: FIELD_SIZE_M },
+      uFieldSize: { value: waterFieldM(data) },
       uView: viewU,
     },
     vertexShader: VERT,
     fragmentShader: FRAG,
     transparent: true,
     depthWrite: false,                  /* buildings occlude; water never does */
+    side: THREE.DoubleSide,             /* a ribbon mitre can wind either way */
   });
   const mesh = new THREE.Mesh(merged, material);
   mesh.position.y = SURFACE_Y;

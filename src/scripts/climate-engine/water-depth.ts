@@ -171,3 +171,19 @@ export function assertWaterDepthLogic(): void {
   const empty = buildDepthField([], 1000, 64);
   ok(empty.maxDistM === 0 && empty.data.every(v => v === 0), 'empty water must be all zero');
 }
+
+/** Kolkata's water artefacts are clipped to ±760 m (CLIP_M*2 in scripts/fetch-water.py). */
+export const DEFAULT_WATER_FIELD_M = 1520;
+
+/**
+ * The side of the box a water artefact was clipped to, metres.
+ *
+ * WAS A CONSTANT 1520, which is Kolkata's box. Bengaluru's wards are 2800 m, so
+ * every pond beyond 760 m from the centre sampled the depth texture's clamped edge
+ * and lost its shading. The artefact now says its own size; files without it are
+ * Kolkata's.
+ */
+export function waterFieldM(data: { readonly fieldM?: number }): number {
+  const f = data.fieldM;
+  return typeof f === 'number' && Number.isFinite(f) && f > 0 ? f : DEFAULT_WATER_FIELD_M;
+}

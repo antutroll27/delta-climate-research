@@ -45,3 +45,12 @@ test('water lines never reach the heat model', async () => {
   const polysOnly = rasterizeWardWater({ polys: d.polys }, 2800, 384);
   assert.deepEqual([...withLines], [...polysOnly], 'the solver raster changed when lines were present');
 });
+
+import { waterFieldM } from '../../src/scripts/climate-engine/water-depth.ts';
+
+test('the depth field takes the artefact’s own size, and falls back to Kolkata’s', () => {
+  assert.equal(waterFieldM({ polys: [], fieldM: 2800 }), 2800);
+  assert.equal(waterFieldM({ polys: [] }), 1520, 'absent → Kolkata clip box');
+  assert.equal(waterFieldM({ polys: [], fieldM: 0 }), 1520, 'zero → fallback');
+  assert.equal(waterFieldM({ polys: [], fieldM: Number.NaN }), 1520, 'NaN → fallback');
+});
