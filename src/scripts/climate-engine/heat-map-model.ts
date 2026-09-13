@@ -9,7 +9,7 @@
  */
 // .ts extension: keeps this module runnable under `node --experimental-strip-types`
 // for assertInterventionLogic() (node doesn't do extensionless resolution).
-import { requireGrid, DEFAULT_PARAMS, STORE_NIGHT, type ClimateConstants, type Costs, type SimParams, type SimLayers } from './types.ts';
+import { requireGrid, DEFAULT_PARAMS, STORE_NIGHT, type AirNormals, type ClimateConstants, type Costs, type SimParams, type SimLayers } from './types.ts';
 import { skyTemperatureC, dewpointC, shiftAirPreservingVapour } from './sky.ts';
 
 /* THE GRID IS PER-WARD, so this module has no N of its own. One module-level
@@ -208,6 +208,38 @@ export interface Spatial {
   corridorSorted: Int32Array; corridorKm: number; parkCenters: [number, number][];
   roofM2: number; facadeM2: number; cellArea: number; cellM: number;
 }
+/** The moment a scenario describes, in the ward's own time zone. */
+export interface ScenarioClock {
+  /** 1–12 */
+  readonly month: number;
+  /** 0 ≤ hour < 24, fractional; out-of-range values wrap */
+  readonly hour: number;
+}
+
+/** When the diurnal fallback reaches its daily minimum and maximum, local hours. */
+export const T_MIN_HOUR = 6;
+export const T_MAX_HOUR = 14;
+
+/**
+ * Air temperature, °C, from a city's monthly normals at a month and hour.
+ *
+ * THE SHAPE IS AN ASSUMPTION, THE ENDPOINTS ARE NOT. The station tables give only
+ * each month's mean daily maximum and minimum. The minimum is placed at 06:00 and
+ * the maximum at 14:00, joined by half-cosines: the textbook diurnal cycle, stated
+ * here rather than passed off as observed. Used only when there is no live reading.
+ */
+export function fallbackTair(normals: AirNormals, clock: ScenarioClock): number {
+  const m = Math.min(12, Math.max(1, Math.round(clock.month))) - 1;
+  const lo = normals.minC[m], hi = normals.maxC[m];
+  const h = ((clock.hour % 24) + 24) % 24;
+  if (h >= T_MIN_HOUR && h < T_MAX_HOUR) {
+    const t = (h - T_MIN_HOUR) / (T_MAX_HOUR - T_MIN_HOUR);
+    return lo + (hi - lo) * (1 - Math.cos(Math.PI * t)) / 2;
+  }
+  const t = ((h - T_MAX_HOUR + 24) % 24) / (24 - (T_MAX_HOUR - T_MIN_HOUR));
+  return hi - (hi - lo) * (1 - Math.cos(Math.PI * t)) / 2;
+}
+
 export interface ScenarioState {
   live: Ambient | null; phase: 'peak' | 'night'; path: string; iv: Interventions;
   /**

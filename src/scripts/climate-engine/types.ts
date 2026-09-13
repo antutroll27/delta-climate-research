@@ -200,6 +200,24 @@ export const WATER_LAYER_ENABLED = false;
  * scope migration. Each was a fact about Kolkata, or about India, wearing the
  * costume of a fact about heat transfer; see the note where they used to sit.
  */
+/**
+ * A city's monthly air-temperature climatology: the mean daily maximum and minimum
+ * for each calendar month, from a named station and period.
+ *
+ * `measured: false` marks a placeholder that has not been sourced (Dubai), so no
+ * consumer can mistake a flat invented table for a climatology.
+ */
+export interface AirNormals {
+  readonly station: string;
+  readonly period: string;
+  readonly source: string;
+  readonly measured: boolean;
+  /** 12 values, January first: mean daily maximum, °C */
+  readonly maxC: readonly number[];
+  /** 12 values, January first: mean daily minimum, °C */
+  readonly minC: readonly number[];
+}
+
 export interface ClimateConstants {
   /**
    * Warming-pathway deltas, K, keyed by scenario — added to the air temperature.
