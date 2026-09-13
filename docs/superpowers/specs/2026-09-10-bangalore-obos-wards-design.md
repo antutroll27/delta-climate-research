@@ -255,13 +255,15 @@ Against every matched building rather than a few hundred centroids:
 
 | | matched | MAE | flagged > 5 m |
 |---|---:|---:|---:|
-| Indiranagar | 2,274 | **3.12 m** | 391 |
-| Whitefield | 2,532 | **3.13 m** | 295 |
-| MG Road | — | — | **skipped, recorded** |
+| Indiranagar | 2,274 of 14,867 | **2.83 m** | 302 |
+| Whitefield | 2,532 of 10,897 | **2.80 m** | 178 |
+| MG Road | 2,100 of 11,045 (`Bangalore_1`) | **3.65 m** | 339 |
 
-Indiranagar's MAE improves from the 4.00 m of the design sample to 3.12 m, and
-the two wards now agree with each other almost exactly. **MG Road skipped and
-said so**, which is the §11 failure mode working as specified rather than a gap.
+Re-recorded 2026-09-14 against shipped heights; the earlier 3.12/3.13 m figures
+predate the OSM height override (`1fec16e`), see known-limitations §8.
+Indiranagar's MAE improves from the 4.00 m of the design sample to 2.83 m, and
+MG Road now has its own recorded cross-check rather than a skip, at 3.65 m MAE
+and 339 flagged.
 
 ### Design
 
@@ -293,7 +295,8 @@ said so**, which is the §11 failure mode working as specified rather than a gap
 **UT-GLOBUS splits Bangalore across two tiles**, and the split falls between our
 wards. `Bangalore_2` spans 77.6187–77.9799 E and covers **Indiranagar and
 Whitefield**. **MG Road at 77.6030 E falls in `Bangalore_1`** (77.2018–77.6218 E),
-which is not yet fetched. Its whole 2.8 km box (77.5901–77.6159 E) sits inside
+now fetched and its cross-check recorded (2,100 of 11,045 matched, MAE 3.65 m,
+339 flagged >5 m). Its whole 2.8 km box (77.5901–77.6159 E) sits inside
 `Bangalore_1` with 637 m of margin at the eastern edge (measured 2026-09-14 from
 the tile's building extents), so one additional tile
 suffices. **The westward shift in §1 widened that margin rather than narrowing
@@ -667,7 +670,7 @@ a ward can render correctly before its thermal evidence is ported.
 | failure | behaviour |
 |---|---|
 | a ward's `(n, sizeM)` pair is not in the admitted set | build fails naming both values — an `n` without its `sizeM` silently changes what a cell means while every array length still checks out |
-| UT-GLOBUS tile missing for a ward | the cross-check is **skipped and recorded as skipped**, never silently absent. MG Road will hit this until `Bangalore_1` is fetched |
+| UT-GLOBUS tile missing for a ward | the cross-check is **skipped and recorded as skipped**, never silently absent. All three wards now have a covering tile (MG Road's `Bangalore_1` was fetched 2026-09-14), so this fires only if a future ward falls outside both tiles |
 | Google 2.5D returns no confident pixel for a footprint | height is the documented fill with `fill: true`, carried openly — Google's own convention, already handled by `scripts/compute-heights.py`. Kolkata's shipped fill rates are 4.0 / 6.5 / 10.8 %; a Bangalore ward far outside that band means a coordinate mismatch, not a data gap |
 | a landmark height has no stated datum (roof vs helipad) | it is not used. A ~10 m over-extrusion that looks plausible is worse than an omission |
 | a landmark's coordinates fall outside the ward box it is cited for | build fails. Vidhana Soudha sat 271 m outside before the centre moved, and Park Grove may sit outside Whitefield; containment is tested, never assumed from a locality name |

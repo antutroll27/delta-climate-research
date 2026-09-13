@@ -1067,8 +1067,16 @@ def cross_check(w: blr.Ward, doc: blr.BlrBuildingsFile, tile: str | None) -> Non
     NEVER TOUCHES `h`. The cross-check is a flag, not a correction: two sources that
     disagree by more than DISAGREE_M are marked, never blended. Split out of
     compute_heights so it can run without Earth Engine (see run_crosscheck).
+
+    Resets hUt/flag on every building FIRST, unconditionally -- both compute_heights
+    and run_crosscheck may call this on a doc that already carries a prior
+    cross-check, and a skip (tile is None) must not leave stale flags standing: no
+    comparison exists, so None/False is the honest state.
     """
     bs = doc["b"]
+    for b in bs:
+        b["hUt"] = None
+        b["flag"] = False
     if tile:
         ut = utglobus_heights(w, tile)
         mx, my = 0, 0
@@ -1117,9 +1125,6 @@ def run_crosscheck(w: blr.Ward) -> None:
         raise SystemExit(
             f"{w.id}: no UT-GLOBUS tile found, and the file already holds a real cross-check "
             f"({existing[:60]}...). Refusing to overwrite evidence with a skip.")
-    for b in doc["b"]:
-        b["hUt"] = None
-        b["flag"] = False
     cross_check(w, doc, tile)
     with open(path, "w", encoding="utf-8") as fh:
         json.dump(doc, fh, separators=(",", ":"))
@@ -1268,6 +1273,14 @@ def _self_test() -> None:
     assert not crosscheck_would_erase(real, "/tiles/Bangalore_2.gpkg"), "a present tile may re-run"
     assert not crosscheck_would_erase(skip, None), "a skip may be re-recorded as a skip"
     assert not crosscheck_would_erase("", None), "a file with no cross-check may record a skip"
+
+    stale_doc = cast(blr.BlrBuildingsFile, {
+        "b": [{"hUt": 12.0, "flag": True}, {"hUt": 12.0, "flag": True}]})
+    cross_check(next(iter(blr.WARDS.values())), stale_doc, None)
+    assert all(b["hUt"] is None and b["flag"] is False for b in stale_doc["b"]), \
+        "a skipped cross-check must reset stale hUt/flag, not leave them standing"
+    assert str(stale_doc["crossCheck"]).startswith("SKIPPED"), \
+        "cross_check(tile=None) must record a skip"
     print("  fetch-bangalore self-test OK")
 
 

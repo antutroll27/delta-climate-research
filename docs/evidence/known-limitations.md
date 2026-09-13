@@ -701,9 +701,8 @@ published height moved UB Tower from 18.2 m to 123 m, which no correction fitted
 to Google's reading could ever have achieved from an input of 10 m.
 
 So the route to better Bengaluru heights is **more evidence, not better maths**:
-the OSM buildings Overture is missing entirely (Vidhana Soudha among them), the
-Karnataka RERA elevation figures for Whitefield's under-construction towers, and
-the UT-GLOBUS `Bangalore_1` tile that would finally give MG Road a cross-check.
+the OSM buildings Overture is missing entirely (Vidhana Soudha among them), and
+the Karnataka RERA elevation figures for Whitefield's under-construction towers.
 
 ---
 
