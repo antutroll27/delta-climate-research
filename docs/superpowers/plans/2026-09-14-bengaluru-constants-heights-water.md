@@ -1756,7 +1756,10 @@ In `docs/heat-map-intervention-model.md`, directly after the `> Full record: \`g
 
 Then:
 - In the line `blob radius r = 50 m (≈ 0.77 ha — Kolkata's TVoE = the efficient park size)`, replace the parenthetical with `(≈ 0.8 ha pocket park — a design default; see the 2026-09-14 correction)`.
-- On line ~91, change `TVoE ≈ 0.77 ha` to `TVoE ≈ 0.77 (a slope, not an area — see §3.3)`.
+- `TVoE ≈ 0.77 ha` occurs **twice**; change both, using these unique strings:
+  - Line ~91: replace `max cooling distance ≈ 420 m, TVoE ≈ 0.77 ha** [4]` with `max cooling distance ≈ 420 m, TVoE ≈ 0.77 (a slope, not an area — see §3.3)** [4]`.
+  - Line ~166: replace `**TVoE ≈ 0.77 ha**, reach ≤ 420 m` with `**TVoE ≈ 0.77** (a slope, not a park size — see the 2026-09-14 correction), reach ≤ 420 m`.
+- Run `grep -c "TVoE ≈ 0.77 ha" docs/heat-map-intervention-model.md`. Expected: `0`.
 - On the correction line ~162, change `**TVoE 0.77 ha and reach 420 m are genuinely Kolkata's and stand.**` to `**Reach 420 m is genuinely Kolkata's and stands; "TVoE 0.77 ha" does not mean a park size — see the 2026-09-14 correction.**`.
 
 - [ ] **Step 3: The saved pre-registration**
