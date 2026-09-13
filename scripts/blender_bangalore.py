@@ -552,6 +552,13 @@ def build_buildings(terrain: dict[str, Any], doc: dict[str, Any],
         lo = mesh_object(f"{LANDMARK_PREFIX}{slug}", lv, lf, [lm_mat])
         # The provenance travels WITH the object, so anyone who opens the file
         # can read where the height came from without going back to the JSON.
+        # THE NAME TRAVELS TOO, and the object's own name cannot carry it. The
+        # node is `lm.m--chinnaswamy-stadium`: a slug is an identifier, and
+        # un-slugging it is lossy in exactly the cases that matter ("M.
+        # Chinnaswamy" and "UB City" do not survive the round trip). A map that
+        # labels a landmark `m--chinnaswamy-stadium` has not got the landmark
+        # right, so the human name ships beside the height it belongs to.
+        lo["name"] = str(lname)
         lo["height_m"] = float(b["h"])
         lo["height_tier"] = str(b.get("hSource", "?"))
         lo["height_source"] = str(b.get("heightSourceCite")
@@ -1255,6 +1262,20 @@ def export_web_glb(path: str, ward: str) -> None:
             export_draco_position_quantization=14,
             export_normals=False, export_texcoords=False,
             export_materials="NONE",
+            # THE PROVENANCE TRAVELS, AND WITHOUT THIS FLAG IT DOES NOT.
+            # Every `lm.` object carries `height_m` and `height_source` as
+            # Blender custom properties (see the landmark block above), but the
+            # exporter writes custom properties onto glTF node `extras` ONLY
+            # when this is on. It was off, so all 47 landmark nodes shipped
+            # correctly named, correctly placed, and stripped of the one thing
+            # that makes a named height a claim rather than a guess -- and
+            # nothing errored, because building-model.ts reads `extras`
+            # defensively and simply found none.
+            #
+            # A height with no stated source is not drawn as a landmark, so
+            # this flag is the difference between the feature existing and not.
+            # Gated by tests/unit/landmark-provenance.test.mjs.
+            export_extras=True,
         )
     except (AttributeError, RuntimeError, TypeError) as exc:
         print(f"  web GLB export failed ({exc})")
