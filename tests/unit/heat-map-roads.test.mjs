@@ -162,3 +162,39 @@ test('the basemap casing we replaced stays hidden, in both styles', async () => 
   assert.match(app, /map\.on\('style\.load'/,
     'the hide must ride the re-firing style.load handler, not a once');
 });
+
+import { createHash } from 'node:crypto';
+
+/* BYTE-IDENTITY PIN FOR THE RIBBON EXTRACTION. Hashes of buildRoadMesh over every
+   shipped roads file, on flat and on sloping ground, captured BEFORE the loop moved
+   into buildRibbonMesh. A refactor that changes one vertex fails here. */
+const ROAD_FILES = ['ballygunge', 'baruipur', 'barrackpore', 'indiranagar', 'mg-road', 'whitefield'];
+const SLOPE = (x, y) => 0.01 * x - 0.005 * y;
+const meshHash = (mesh) => createHash('sha256')
+  .update(Buffer.from(mesh.positions.buffer, mesh.positions.byteOffset, mesh.positions.byteLength))
+  .update(Buffer.from(mesh.indices.buffer, mesh.indices.byteOffset, mesh.indices.byteLength))
+  .digest('hex');
+
+const ROAD_MESH_HASHES = {
+  'ballygunge/flat': 'cfcef5df4033745a43001f9610c41042210912cc66aea78636d55c0d5d935e02',
+  'ballygunge/slope': '01ab6f862feea2e21c518e00cde4d6a94d2f748f9fee8e0c3fa970e30e75eabf',
+  'baruipur/flat': 'ced004ce3763f4520efdb6077630cf69d32752f5fa931b6afcb8f568472ce803',
+  'baruipur/slope': 'e3d76b1596cf2e45bbbe0c12e60b7c2ef27c9ca077c199195401f5397edd76ad',
+  'barrackpore/flat': 'a1c6f0a386f17546b1b10fc8ea6da0c3aea725850c796356421f99059ac77146',
+  'barrackpore/slope': '63d91b3f7067bfa2fb7d7b78b396c321d2ae48986b98b5a98ca553e345f474a3',
+  'indiranagar/flat': 'ffb0723b5fb680be9106377c95a5534ce8137068117aa84654338454c2ce9c8c',
+  'indiranagar/slope': '87d9297ad547604b1cb32eed09ac88826bf7939ce7668833948517cc1ab213f8',
+  'mg-road/flat': '51ce94a5ca7b456282078109b50995f670e7a18915ee6cd7808e978415116aa5',
+  'mg-road/slope': '7757d1e21cf134e7d503b65e57a3a2ec37f0b41b2e1f481f46410dfe0056c846',
+  'whitefield/flat': 'c1bea3159164d73db0a9d1d9888d8eea47633bb7bbd59a6582205628e3313159',
+  'whitefield/slope': '21d50441f039d37f648b245ae29885b3340cb4cb767e14c171ecd5173efec9ef',
+};
+
+test('road meshes are byte-identical to the pre-extraction builder', async () => {
+  for (const ward of ROAD_FILES) {
+    const data = JSON.parse(await readFile(join(ROOT, `public/heat-map/data/${ward}-roads.json`), 'utf8'));
+    for (const [name, ground] of [['flat', FLAT], ['slope', SLOPE]]) {
+      assert.equal(meshHash(buildRoadMesh(data, ground)), ROAD_MESH_HASHES[`${ward}/${name}`], `${ward}/${name}`);
+    }
+  }
+});
