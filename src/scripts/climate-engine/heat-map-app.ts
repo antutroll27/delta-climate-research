@@ -26,6 +26,10 @@ import { rasterWardBase } from './ward-raster';
 import { loadAreaSurface, loadCanopyRaster, type WardSurface, type CanopyRaster } from './surface-raster';
 import { asTreesFile } from './vegetation-layer';
 import { buildRegistry, type BuildingMeta } from './explore/building-pick';
+/* Type-only, and it must stay that way: landmark-layer.ts is pure arithmetic over
+   a structural clip matrix and imports no three, so this keeps the analytical
+   core free of it — tests/unit/heat-explore-module-boundary.test.mjs asserts it. */
+import type { LandmarkLabel, LandmarkPick } from './explore/landmark-layer';
 import { selectPhase } from './phase-select';
 import { asTerrainField, terrainLabel, TERRAIN_N, type TerrainField } from './terrain';
 import { wardMercatorScale } from './ward-frame';
@@ -1375,8 +1379,17 @@ export function mountHeatMap(): () => void {
   }
   cleanup.push(() => { cancelAnimationFrame(coolCount); coolPop?.cancel(); });
 
-  function select(b: BuildingMeta | null) {
+  /**
+   * `landmark` is supplied ONLY by the two paths that can know one: a click on a
+   * landmark's massing, and a click on its label. Every other caller — the solar
+   * roof list, Escape, a ward switch — takes the default, so the landmark block
+   * shuts. Clearing it HERE rather than at each call site is what stops one
+   * building's citation being shown beside the next building the reader selects.
+   */
+  function select(b: BuildingMeta | null, landmark: LandmarkPick | null = null) {
     selected = b;
+    selectedLandmark = b ? landmark : null;
+    paintLandmark(selectedLandmark);
     if (!b) closeBrief();             // a sheet about a roof nobody has selected
     if (b) {
       /* b.ring so the walk is measured from the building's nearest corner, not
@@ -1414,9 +1427,14 @@ export function mountHeatMap(): () => void {
     downAt = null;
     if (moved > 6 || !relief || !registry.length) return;
     const r = cv.getBoundingClientRect();
-    const hit = relief.pick(e.clientX - r.left, e.clientY - r.top, cv.clientWidth, cv.clientHeight);
+    const px = e.clientX - r.left, py = e.clientY - r.top;
+    const hit = relief.pick(px, py, cv.clientWidth, cv.clientHeight);
     if (hit >= 0) dismissTip();
-    select(hit >= 0 ? registry.find(b => b.idx === hit) ?? null : null);
+    /* Asked at the SAME pixel as the building, so the citation and the building
+       it is printed beside can never be about two different buildings. A ward
+       with no authored model answers null and nothing here changes. */
+    select(hit >= 0 ? registry.find(b => b.idx === hit) ?? null : null,
+      relief.pickLandmark(px, py, cv.clientWidth, cv.clientHeight));
   };
   cv.addEventListener('pointerdown', onPickDown);
   cv.addEventListener('pointerup', onPickUp);
@@ -1436,6 +1454,167 @@ export function mountHeatMap(): () => void {
     cv.removeEventListener('pointerup', onPickUp);
     window.removeEventListener('keydown', onPickKey);
     map.off('render', placeCard);
+  });
+
+  /* ── THE LANDMARK LABELS ─────────────────────────────────────────────────────
+     The named buildings, labelled on the map and clickable — the one place the
+     instrument says "this building is 123 m" out loud, and therefore the one
+     place it has to say who measured it.
+
+     A CHIP PER LANDMARK, CREATED ONCE PER WARD, MOVED PER REPAINT. Same discipline
+     as the ring labels and the cooling tag: the text is written at creation and
+     every frame afterwards writes only a transform, so 35 labels in Whitefield
+     cost 35 matrix multiplies and 35 transform strings — no layout, no reflow.
+
+     WHICH LABELS ARE DRAWN IS THE LAYER'S DECISION, NOT THIS FILE'S. It drops
+     landmarks with no stated source, culls the ones behind the camera or off the
+     canvas, and collapses overlapping ones onto the nearest. So the set changes
+     every frame, and chips absent from a frame are hidden rather than destroyed. */
+  let selectedLandmark: LandmarkPick | null = null;
+  const lmBox = el('lmlabs');
+  const lmChips = new Map<string, HTMLButtonElement>();
+  /** The most recent label per landmark — a chip's click handler must read the
+   *  CURRENT screen anchor, not the one from the frame it was created in. */
+  const lmLast = new Map<string, LandmarkLabel>();
+  /** Each chip's rendered box, measured ONCE when it is created.
+   *
+   *  The keep-out test below needs the chip's real width, and a chip's text never
+   *  changes after creation — so reading `offsetWidth` here costs one layout per
+   *  landmark per ward, where reading it in the loop would cost 35 forced layouts
+   *  on every repaint of Whitefield. */
+  const lmSize = new Map<string, { w: number; h: number }>();
+  let lmWard = '';
+
+  /**
+   * The instrument's own furniture, which floats OVER the map.
+   *
+   * MEASURED, NOT ASSUMED. A landmark whose label lands under the legend or the
+   * live-ambient panel is not merely untidy: the first screenshots of this layer
+   * had "Subhas Chandra Bose Tower" sitting across the legend's Extreme swatch
+   * and a Whitefield chip covering the 38.1 °C readout — the label hid a reading
+   * the instrument exists to give. Same approach `placeCard` already takes with
+   * the ring labels: ask the elements where they are, rather than hard-coding
+   * insets that go stale the first time a panel is resized.
+   */
+  const LM_KEEP_OUT = '.top,.stamp-slot,.vegw,.chiprow,.rail-r,.legend,.strip,.bcard,.tiphint,.cooltag';
+
+  /** Paint the card's landmark block, and mark which chip the open card is about. */
+  function paintLandmark(lm: LandmarkPick | null): void {
+    const block = el('bcLm');
+    if (block) {
+      if (lm) {
+        setText('bcLmName', lm.title);
+        setText('bcLmH', `${lm.heightM.toFixed(1)} m`);
+        /* Verbatim, never reworded. "CTBUH 13883" is a reference someone can
+           follow and "stadium roof line, estimated" is an admission — flattening
+           either into a tidy label is how an estimate starts reading as a
+           measurement. */
+        setText('bcLmSrc', lm.source);
+        block.removeAttribute('hidden');
+      } else block.setAttribute('hidden', '');
+    }
+    for (const [name, chip] of lmChips) chip.classList.toggle('on', lm?.name === name);
+  }
+
+  /** Open the card for a landmark whose chip was clicked. */
+  function selectLandmark(name: string): void {
+    const label = lmLast.get(name);
+    if (!label || !relief || !registry.length) return;
+    dismissTip();
+    /* Pick the BUILDING at the chip's own anchor rather than matching centroids
+       in ward metres. The chip sits on the landmark's roof, so this asks exactly
+       the question the reader asks by clicking the tower, through exactly the
+       code path that answers it — and no second matching rule exists to drift. */
+    const hit = relief.pick(label.x, label.y, cv.clientWidth, cv.clientHeight, 40);
+    select(hit >= 0 ? registry.find(b => b.idx === hit) ?? null : null, {
+      name: label.name, title: label.title,
+      heightM: label.heightM, source: label.source,
+    });
+  }
+
+  function hideAllChips(): void {
+    for (const chip of lmChips.values()) chip.hidden = true;
+    lmBox?.setAttribute('hidden', '');
+  }
+
+  function placeLandmarks(): void {
+    if (!lmBox) return;
+    /* A ward switch renames every landmark, so the pool is rebuilt rather than
+       reused — carrying `ub-tower` into Whitefield would label a building that
+       is not there. Keyed on the ward rather than hooked to the switch because
+       the model loads asynchronously AFTER it, and this is the first frame that
+       can see the result either way. */
+    if (lmWard !== state.ward) {
+      lmWard = state.ward;
+      lmChips.clear(); lmLast.clear(); lmSize.clear();
+      lmBox.replaceChildren();
+    }
+    /* The isotherm view is a 2-D raster with no city in it, so a chip pinned to a
+       building's roof would be pointing at nothing. */
+    if (!relief || mode !== 'relief') { hideAllChips(); return; }
+
+    const labels = relief.landmarkLabels(cv.clientWidth, cv.clientHeight);
+    if (!labels.length) { hideAllChips(); return; }
+    lmBox.removeAttribute('hidden');
+
+    /* Where the furniture is THIS frame — one pass, shared by every chip. The
+       panels do not move between repaints, but they do open, close and resize,
+       and a cached rect would be wrong on exactly those frames. */
+    const cvBox = cv.getBoundingClientRect();
+    const blocked: DOMRect[] = [];
+    for (const node of document.querySelectorAll<HTMLElement>(LM_KEEP_OUT)) {
+      if (node.hasAttribute('hidden')) continue;
+      const box = node.getBoundingClientRect();
+      if (box.width > 0 && box.height > 0) blocked.push(box);
+    }
+
+    const seen = new Set<string>();
+    for (const label of labels) {
+      seen.add(label.name);
+      lmLast.set(label.name, label);
+      let chip = lmChips.get(label.name);
+      if (!chip) {
+        chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'lmlab';
+        chip.textContent = label.title;
+        /* The claim and its evidence, before anything is clicked — a landmark
+           whose source only appears after a click is a landmark whose source
+           most readers never see. */
+        chip.title = `${label.title} — ${label.heightM.toFixed(1)} m · ${label.source}`;
+        chip.addEventListener('click', () => selectLandmark(label.name));
+        lmChips.set(label.name, chip);
+        lmBox.appendChild(chip);
+        /* Measured here, once: the text never changes after this point. */
+        lmSize.set(label.name, { w: chip.offsetWidth, h: chip.offsetHeight });
+      }
+      chip.classList.toggle('on', selectedLandmark?.name === label.name);
+
+      /* A chip that would land on the instrument's own furniture is DROPPED, not
+         nudged. Nudging it would put the name somewhere the building is not,
+         which is worse than not naming it — the map still carries the landmark's
+         massing, and an orbit of a few degrees brings the label back. */
+      const size = lmSize.get(label.name) ?? { w: 130, h: 20 };
+      const left = cvBox.left + label.x - size.w / 2;
+      const top = cvBox.top + label.y - size.h / 2;
+      chip.hidden = blocked.some((box) =>
+        left < box.right && left + size.w > box.left
+        && top < box.bottom && top + size.h > box.top);
+      if (chip.hidden) continue;
+
+      /* Centred on the anchor by the transform itself, so a chip is as wide as
+         its name needs — a fixed width would clip "M. Chinnaswamy Stadium". */
+      chip.style.transform =
+        `translate3d(${Math.round(label.x)}px, ${Math.round(label.y)}px, 0) translate(-50%, -50%)`;
+    }
+    for (const [name, chip] of lmChips) if (!seen.has(name)) chip.hidden = true;
+  }
+  /* Same hook as the card, and for the same reason: MapLibre fires `render` only
+     when a repaint actually happened. */
+  map.on('render', placeLandmarks);
+  cleanup.push(() => {
+    map.off('render', placeLandmarks);
+    lmChips.clear(); lmLast.clear(); lmSize.clear();
   });
 
   /* ── capability-selected heat sim + field bridge (R=blur ground · G=raw buildings) ── */
