@@ -64,6 +64,7 @@ import { areaPath, paths, cityPaths } from './scope/paths.ts';
 import { areaRefusal } from './scope/reachability.ts';
 import { isAreaKey, splitKey, type AreaKey } from './scope/registry.ts';
 import { toLegacyWard } from './scope/legacy.ts';
+import { prefetchPlan, runPrefetch, shouldPrefetch } from './ward-prefetch';
 
 // Ward set lives in src/data/wards.ts so widening beyond three is a data change,
 // not a code change (dc-urs-spec.md §1).
@@ -218,6 +219,26 @@ export function mountHeatMap(): () => void {
     setTimeout: (fn, ms) => window.setTimeout(fn, ms),
     clearTimeout: (id) => window.clearTimeout(id),
   });
+  /* One background warm-up per page load — see ward-prefetch.ts for the measurement
+     that justifies it and the data it costs. */
+  let prefetchStarted = false;
+  let prefetchAbort: AbortController | null = null;
+  function schedulePrefetch(key: AreaKey): void {
+    if (prefetchStarted) return;
+    prefetchStarted = true;
+    const connection = (navigator as { connection?: { saveData?: boolean; effectiveType?: string } }).connection;
+    if (!shouldPrefetch(connection)) return;
+    const plan = prefetchPlan(key);
+    if (plan.length === 0) return;
+    const controller = new AbortController();
+    prefetchAbort = controller;
+    const go = (): void => {
+      if (appDisposed || controller.signal.aborted) return;
+      void runPrefetch(plan, fetch.bind(window), controller.signal).catch(() => undefined);
+    };
+    if (typeof window.requestIdleCallback === 'function') window.requestIdleCallback(go, { timeout: 4000 });
+    else window.setTimeout(go, 2000);
+  }
   // Per-layer provenance ("data receipts") panel, fetched on-demand per ward
   // (loadLayerManifest caches). null → degrade to the static credit line.
   const escHtml = (s: string) => s.replace(/[&<>"]/g, (c) => (
@@ -1983,6 +2004,8 @@ export function mountHeatMap(): () => void {
     const w = wardOf(name);
     const token = wardSession.begin(name);
     if (!token) return;
+    /* A real load owns the network: any background warm-up stops the moment it starts. */
+    prefetchAbort?.abort();
     loadChip.start(`Loading ${w.name}…`);
     await new Promise(r => setTimeout(r, 30));
     if (!wardSession.isCurrent(token)) return;
@@ -2157,6 +2180,7 @@ export function mountHeatMap(): () => void {
     }
       wardSession.commit(token);
       fetchLive(name);
+      schedulePrefetch(name);
     } catch (error) {
       if (!wardSession.isCurrent(token)) return;
       wardSession.fail(token);
@@ -3465,6 +3489,7 @@ export function mountHeatMap(): () => void {
   return function dispose() {
     appDisposed = true;
     wardSession.dispose();
+    prefetchAbort?.abort();
     frameScheduler.dispose();
     clearTimeout(orbitResume);
     nudgeEvents.forEach(ev => cv.removeEventListener(ev, nudgeOrbit));
