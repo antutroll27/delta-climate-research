@@ -115,6 +115,20 @@ export function wardById(id: string): Ward | undefined {
   return WARDS.find(w => w.id === id);
 }
 
+/**
+ * Lookup by id over the RENDERABLE set — what the INSTRUMENT can open.
+ *
+ * Deliberately separate from `wardById`, which searches the PUBLISHED list and
+ * must go on refusing Bengaluru: `/api/wards/{id}/metadata.json`, the STAC items
+ * and the OGC collections are all generated from `WARDS`, and widening that
+ * lookup would have the catalogue advertise records that are not on disk.
+ * `scope/resolve.ts` needs the other question answered — what is this area
+ * CALLED — for every area the map can draw, published or not.
+ */
+export function renderableWardById(id: string): Ward | undefined {
+  return RENDERABLE_WARDS.find(w => w.id === id);
+}
+
 /** Legacy shape for call sites that still index by id. */
 export const WARD_MAP: Readonly<Record<string, Ward>> =
   Object.fromEntries(WARDS.map(w => [w.id, w]));

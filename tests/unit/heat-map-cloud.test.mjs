@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { layoutCumulus, layoutVeil, fitLobes, cloudFuse, CLOUD }
+import { layoutCumulus, layoutVeil, fitLobes, cloudFuse, CLOUD, cloudShadowOffset }
   from '../../src/scripts/climate-engine/cloud-sprites.ts';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -91,6 +91,87 @@ test('the approved constants are pinned', () => {
   assert.equal(CLOUD.COUNT, 26);
 });
 
+/** A sun placement in the scene's frame: x east, y up, z north, toward the sun. */
+function sunAt(azimuthDeg, elevationDeg) {
+  const R = Math.PI / 180;
+  const cosEl = Math.cos(elevationDeg * R);
+  return {
+    x: cosEl * Math.sin(azimuthDeg * R),
+    y: Math.sin(elevationDeg * R),
+    z: cosEl * Math.cos(azimuthDeg * R),
+    elevationDeg,
+  };
+}
+
+test('a cloud shadow falls AWAY from the sun, not in a fixed direction', () => {
+  /* THE DEFECT THIS PINS. The shadow used to be placed at a literal
+     `(wx - 130, wz + 95)` under a comment reading "offset along the light" — one
+     direction and one length, for every hour of every day. Those two numbers
+     describe a sun at azimuth 126 degrees and elevation 63: roughly mid-morning
+     in high summer, drawn unchanged at 08:00, at 16:00 and on the compass's own
+     "sun 274 deg" evenings, where the shadows pointed the wrong way entirely.
+     Sun due south means shadows due north. That is the whole assertion. */
+  const h = CLOUD.DECK_M;
+  const south = cloudShadowOffset(h, sunAt(180, 45));
+  assert.ok(Math.abs(south.dx) < 1e-9, `a due-south sun casts no east-west offset, got ${south.dx}`);
+  assert.ok(south.dz > 0, 'a sun in the south must throw the shadow north');
+
+  const east = cloudShadowOffset(h, sunAt(90, 45));
+  assert.ok(Math.abs(east.dz) < 1e-9, `a due-east sun casts no north-south offset, got ${east.dz}`);
+  assert.ok(east.dx < 0, 'a sun in the east must throw the shadow west');
+
+  /* And the west, because a test that only checks one hemisphere would pass on a
+     sign error that flips at noon -- which is precisely the bug being fixed. */
+  const west = cloudShadowOffset(h, sunAt(270, 45));
+  assert.ok(west.dx > 0, 'a sun in the west must throw the shadow east');
+  assert.ok(Math.abs(west.dx + east.dx) < 1e-9, 'east and west suns must mirror');
+});
+
+test('the shadow lengthens as the sun drops, and is directly under an overhead sun', () => {
+  const h = CLOUD.DECK_M;
+  /* Straight overhead: the shadow is the cloud's own footprint. */
+  const noon = cloudShadowOffset(h, sunAt(180, 90));
+  assert.ok(Math.hypot(noon.dx, noon.dz) < 1e-9, 'an overhead sun casts no offset');
+
+  /* 45 degrees is the identity case: offset equals height exactly. It is worth
+     asserting as a NUMBER rather than a direction, because it pins the
+     trigonometry and not merely its sign. */
+  const forty5 = cloudShadowOffset(h, sunAt(180, 45));
+  assert.ok(Math.abs(Math.hypot(forty5.dx, forty5.dz) - h) < 1e-6,
+    'at 45 degrees the horizontal offset must equal the cloud height');
+
+  /* Monotone: every step toward the horizon moves the shadow further out. */
+  let last = 0;
+  for (const el of [80, 60, 40, 25, 15]) {
+    const d = Math.hypot(...Object.values(cloudShadowOffset(h, sunAt(180, el))));
+    assert.ok(d > last, `shadow at ${el} deg is not further out than the step above it`);
+    last = d;
+  }
+});
+
+test('a sun at or below the horizon casts no shadow rather than an infinite one', () => {
+  /* h / tan(elevation) DIVERGES at the horizon, and a NaN or a 1e17 reaching a
+     THREE position is a whole scene gone. Both are answered here rather than
+     left to the clamp: at and below the horizon there is no shadow at all. */
+  for (const el of [0, -0.5, -12, -90]) {
+    const d = cloudShadowOffset(CLOUD.DECK_M, sunAt(180, el));
+    assert.ok(Number.isFinite(d.dx) && Number.isFinite(d.dz), `elevation ${el} produced a non-finite offset`);
+    assert.equal(d.dx, 0, `elevation ${el} still cast an east-west shadow`);
+    assert.equal(d.dz, 0, `elevation ${el} still cast a north-south shadow`);
+  }
+});
+
+test('a low sun clamps rather than throwing the shadow to infinity', () => {
+  /* The clamp is not cosmetic. At 1 degree a 320 m deck would place its shadow
+     18 km away -- seven times the sprite field -- and the transform cost is paid
+     on a sprite nobody can see. The direction has to survive the clamp. */
+  const grazing = cloudShadowOffset(CLOUD.DECK_M, sunAt(90, 1));
+  const far = Math.hypot(grazing.dx, grazing.dz);
+  assert.ok(far <= CLOUD.SHADOW_MAX_M + 1e-6,
+    `a 1-degree sun placed the shadow ${far.toFixed(0)} m out, past the ${CLOUD.SHADOW_MAX_M} m clamp`);
+  assert.ok(grazing.dx < 0, 'the clamp must not lose the direction the sun is in');
+});
+
 test('the cloud layer stays render-only', async () => {
   for (const f of ['cloud-sprites.ts', 'cloud-layer.ts']) {
     const t = await code(f);
@@ -114,13 +195,28 @@ test('there is exactly one cloud source, and the model already reads it', async 
   }
 });
 
-test('the deck dims the ENVIRONMENT key light, never a literal', async () => {
+/**
+ * WIDENED 2026-08-29, SAME BUG. The guard used to name `keyBase` — the per-basemap
+ * base level — because writing a literal here clobbers the clay-studio environment,
+ * whose key is 1.7 and not 2.1.
+ *
+ * `keyBase` is no longer the right factor, and the difference is the reason the sky
+ * work happened: the key now also carries the SUN'S HEIGHT (`keyLevel = keyBase ×
+ * the elevation factor`). Multiplying `keyBase` here would throw that away on every
+ * frame the live ambient exists — which is every frame — and relight the 22:00
+ * retained-heat phase with a sun that set four hours ago. So the guard now names
+ * `keyLevel`, and still refuses both literals.
+ */
+test('the deck dims the ENVIRONMENT-AND-SUN key light, never a literal', async () => {
   const relief = await code('explore/relief-renderer.ts');
-  assert.match(relief, /this\.key\.intensity = this\.keyBase \* this\.clouds\.sunFactor/,
-    'writing a literal here clobbers the clay-studio environment, whose key is 1.7 '
-    + 'not 2.1 — the deck would silently drag studio back to the dark map lighting');
-  assert.doesNotMatch(relief, /this\.key\.intensity = 2\.1 \*/,
+  assert.match(relief, /this\.key\.intensity = this\.keyLevel \* this\.clouds\.sunFactor/,
+    'the deck must dim what the environment and the sun already agreed on');
+  assert.match(relief, /this\.keyLevel = this\.keyBase \* lighting\.keyFactor/,
+    'and keyLevel must be exactly that: the basemap base times the sun height');
+  assert.doesNotMatch(relief, /this\.key\.intensity = (?:2\.1|1\.7) \*/,
     'the literal form is the bug this guard exists for');
+  assert.doesNotMatch(relief, /this\.key\.intensity = this\.keyBase \* this\.clouds/,
+    'and dimming keyBase discards the sun height, which is the newer half of it');
 });
 
 test('the deck dims at night rather than lighting cloud tops at 22:00', async () => {
@@ -144,10 +240,103 @@ test('a null reading draws no sky', async () => {
     + 'for clouds seen straight down over a flat isotherm');
 });
 
+test('the deck places its shadows from the sun the renderer lights with', async () => {
+  /* GEOMETRY IS TESTED ABOVE; THIS PINS THAT THE SCENE ACTUALLY CALLS IT. The
+     literal that was there before typechecked, rendered, and was wrong at every
+     hour but one -- so the guard that matters is not "is the maths right" but
+     "does the render loop use the maths at all". */
+  const layer = await code('cloud-layer.ts');
+  assert.match(layer, /cloudShadowOffset\(\s*c\.y\s*,\s*sun\s*\)/,
+    'the deck no longer solves each shadow from the cloud height and the sun');
+  assert.doesNotMatch(layer, /wz\s*\+\s*95|wx\s*-\s*130/,
+    'the fixed shadow offset is back. Those two numbers are a sun at azimuth 126 '
+    + 'and elevation 63, drawn at every hour of every day');
+
+  /* ONE SUN, NOT TWO. The renderer must hand the deck the same placement it aims
+     the key light with; a second source here is how the shadows and the lighting
+     came to disagree in the first place. */
+  const renderer = await code('explore/relief-renderer.ts');
+  assert.match(renderer, /this\.clouds\.update\([\s\S]{0,400}?this\.visual\.sun/,
+    'the renderer does not pass its own sun placement to the cloud deck');
+});
+
 test('wind direction is documented as advection-only', async () => {
   const model = await src('heat-map-model.ts');
   assert.match(model, /windFrom\?: number/, 'Ambient must carry the direction');
   assert.match(model, /wind as a scalar/,
     'the comment must state the model has no direction term, so nobody wires windFrom '
     + 'into the physics believing it already belongs there');
+});
+
+test('every per-ward layer is rebuilt with the ward, clouds included', async () => {
+  /* THE DEFECT, MEASURED. `rebuildWard` tore down and rebuilt water, roads and
+     vegetation, and guarded the cloud deck with `if (!this.clouds)` -- so it was
+     constructed once, on the first ward, and never again. The deck closes over
+     `terrainDrawAt(bundle.terrain, ...)` and calls it every frame to seat each
+     shadow on the ground, so after any ward switch the shadows sat on the PREVIOUS
+     ward's terrain. Between the shipped terrains that is a mean absolute error of
+     10.7 m and a maximum of 35.3 m, against a total drawn relief range of about
+     55 m -- an error the same size as the thing being drawn, and silent.
+
+     DRIVEN FROM THE LAYER LIST, NOT FROM THE NAME "clouds". The fields come out of
+     `dispose()`, which is the one place this class enumerates what it owns, so a
+     sixth layer added tomorrow is checked the day it is added rather than the day
+     someone remembers to extend a list in a test file.
+
+     AND THE CLOSURE IS WHAT MAKES IT MATTER. A layer that did NOT read the terrain
+     could be built once and reused honestly; the last assertion is what establishes
+     that these all do, and therefore that a build-once guard on any of them is a
+     stale-terrain bug rather than an optimisation. */
+  const relief = await code('explore/relief-renderer.ts');
+
+  /* THE FIELDS TYPED AS A `*Layer`, which is the renderer's own way of saying which
+     of the things it holds are drawn layers rather than machinery. `dispose()` was
+     the first candidate and it is the wrong one: it also disposes the
+     THREE.WebGLRenderer, which is per-CANVAS and must survive a ward. */
+  const layers = [...new Set([...relief.matchAll(/private (\w+): (\w+Layer) \| null = null;/g)]
+    .map((m) => m[1]))];
+  assert.ok(layers.length >= 4,
+    `relief-renderer.ts declares only ${layers.length} nullable *Layer fields `
+    + `(${layers.join(', ')}). The renderer owns water, clouds, roads and `
+    + 'vegetation at minimum, so a number this small means the matcher has stopped '
+    + 'finding them and the loop below would assert almost nothing');
+  assert.ok(layers.includes('clouds'),
+    'the cloud deck is no longer a nullable *Layer field, which is where this test '
+    + 'learns it is a per-ward layer at all -- the defect this guard was written '
+    + 'for would be invisible again');
+
+  const rebuild = relief.match(/private rebuildWard\(bundle: ReliefWardBundle\): void \{([\s\S]*?)\n  \}/);
+  assert.ok(rebuild,
+    'relief-renderer.ts no longer declares `private rebuildWard(bundle: '
+    + 'ReliefWardBundle): void` -- every assertion below reads its body');
+  const body = rebuild[1];
+
+  for (const field of layers) {
+    assert.ok(body.includes(`this.${field}.dispose()`),
+      `rebuildWard never disposes this.${field}. A layer kept across a ward switch `
+      + 'holds the closure it was built with, so it goes on drawing against the '
+      + 'terrain of the ward the reader has left');
+    assert.match(body, new RegExp(`this\\.${field} = `),
+      `rebuildWard never reassigns this.${field}, so whatever it disposed is either `
+      + 'still on the scene or gone from it for good');
+    assert.doesNotMatch(body, new RegExp(`if \\(!this\\.${field}\\)`),
+      `rebuildWard builds this.${field} only when it does not already exist. That `
+      + 'is a build-once guard, and it is exactly the shape the cloud deck shipped '
+      + "with: constructed on the first ward, holding the first ward's terrain, "
+      + 'never rebuilt again');
+  }
+
+  /* THE CLAIM THE THREE ABOVE REST ON. */
+  const factories = [...body.matchAll(/create(\w+)Layer\(([\s\S]*?)\);/g)];
+  assert.ok(factories.length >= 4,
+    `rebuildWard calls only ${factories.length} layer factories -- fewer than the `
+    + 'layers dispose() names, so either a layer is built somewhere else entirely '
+    + 'or this matcher has stopped finding them');
+  for (const [, name, args] of factories) {
+    assert.match(args, /terrainDrawAt\(bundle\.terrain/,
+      `create${name}Layer is built without a closure over bundle.terrain. If that `
+      + 'is genuinely true it may safely outlive a ward and this test is asking too '
+      + 'much of it; if it is not, the layer is about to draw against the wrong '
+      + 'ground and nothing else will say so');
+  }
 });

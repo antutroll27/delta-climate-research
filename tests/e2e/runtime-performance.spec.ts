@@ -138,8 +138,25 @@ test.describe('normal-motion runtime', () => {
     });
 
     await visitWithMotion(page);
-    await page.locator('#about').scrollIntoViewIfNeeded();
-    await expect(page.locator('#about')).toHaveClass(/field-on/, { timeout: 10_000 });
+    // THE SCROLL MUST LAND AFTER `load`, AND STAY. ScrollTrigger auto-refreshes on the
+    // window load event, and while Lenis is animating that refresh it does not adopt
+    // a native jump — so a scrollIntoView that lands in that window is glided back to
+    // where Lenis thinks the page is. Locally the About observer won the race; on the
+    // SwiftShader runner it lost it every time (3 retries, class never appeared).
+    // Wait for load, jump, then prove the section is actually on screen before
+    // asserting anything about what it did once there.
+    await page.waitForLoadState('load');
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await page.locator('#about').scrollIntoViewIfNeeded();
+      await page.waitForTimeout(600);
+      const top = await page.evaluate(() => document.getElementById('about')!.getBoundingClientRect().top);
+      if (Math.abs(top) < 200) break;
+    }
+    await expect
+      .poll(() => page.evaluate(() => document.getElementById('about')!.getBoundingClientRect().top), { timeout: 5_000 })
+      .toBeLessThan(200);
+    // the boot itself is ~3s locally and an order of magnitude slower without a GPU
+    await expect(page.locator('#about')).toHaveClass(/field-on/, { timeout: 30_000 });
 
     for (let visit = 0; visit < 2; visit += 1) {
       await page.getByRole('link', { name: 'Our Team' }).first().click();

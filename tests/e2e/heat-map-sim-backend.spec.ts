@@ -21,7 +21,7 @@ test('the GPU host is actually selected and produces live readouts', async ({ pa
   page.on('requestfailed', (r) => notFound.push(r.url()));
   page.on('response', (r) => { if (r.status() >= 400) notFound.push(`${r.status()} ${r.url()}`); });
 
-  await page.goto('/heat-map/');
+  await page.goto('/heat-map/in/kolkata/ballygunge/');
   await expect(backendOf(page)).not.toHaveText('SELECTING ENGINE', { timeout: 20_000 });
   const backend = (await backendOf(page).textContent())?.trim();
   console.log(`  BACKEND SELECTED: ${backend}`);
@@ -53,7 +53,7 @@ test('losing the WebGL context demotes instead of freezing or throwing', async (
       return ctx;
     } as typeof real;
   });
-  await page.goto('/heat-map/');
+  await page.goto('/heat-map/in/kolkata/ballygunge/');
   await expect(backendOf(page)).not.toHaveText('SELECTING ENGINE', { timeout: 20_000 });
   const before = (await backendOf(page).textContent())?.trim();
   await expect(page.locator('#lst')).not.toContainText('—', { timeout: 25_000 });

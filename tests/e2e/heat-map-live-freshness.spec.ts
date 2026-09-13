@@ -46,6 +46,30 @@ async function stubMet(page: import('@playwright/test').Page, hoursAgo: number, 
   }));
 }
 
+/**
+ * A READING THAT ARRIVES WITHOUT A TIMESTAMP — the case where the page knows the
+ * weather but not how old it is.
+ *
+ * `validAt` is `ts.time` taken verbatim from the upstream body, so an entry with
+ * no `time` yields a complete reading whose age is unknowable rather than merely
+ * large. That distinction is the whole point: "stale" is a measurement, "unknown"
+ * is the absence of one, and only the second can be mistaken for fresh.
+ *
+ * Reachable rather than theoretical: the field is optional in our own type
+ * (`heat-map-model.ts`), nothing between met.no and the dial asserts its
+ * presence, and a truncated or reshaped upstream body produces exactly this.
+ */
+async function stubMetUndated(page: import('@playwright/test').Page) {
+  await page.route(LIVE_ROUTE, (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    headers: { date: new Date().toUTCString(), age: '0' },
+    body: JSON.stringify({
+      properties: { timeseries: [{ data: { instant: { details: CANNED } } }] },
+    }),
+  }));
+}
+
 const dial = '#clockw';
 
 test.describe('live reading freshness', () => {
@@ -55,7 +79,7 @@ test.describe('live reading freshness', () => {
 
   test('a fresh reading is shown as fresh, and the dot may say live', async ({ page }) => {
     await stubMet(page, 0);
-    await page.goto('/heat-map/');
+    await page.goto('/heat-map/in/kolkata/ballygunge/');
     await expect(page.locator(dial)).toHaveAttribute('data-age', 'fresh', { timeout: 60_000 });
     await expect(page.locator('#livedot')).toHaveClass(/\bon\b/);
     // The tooltip must say what the readout is NOT, because big digits read as
@@ -78,16 +102,38 @@ test.describe('live reading freshness', () => {
 
   test('an overnight-stale reading loses the live claim', async ({ page }) => {
     await stubMet(page, 9);
-    await page.goto('/heat-map/');
+    await page.goto('/heat-map/in/kolkata/ballygunge/');
     await expect(page.locator(dial)).toHaveAttribute('data-age', 'stale', { timeout: 60_000 });
     await expect(page.locator('#clockAgeLab')).toHaveText('read 9h ago');
     // The whole point: the page stops asserting "live" once it isn't.
     await expect(page.locator('#livedot')).not.toHaveClass(/\bon\b/);
   });
 
+  test('a reading of unknown age is not allowed to claim live', async ({ page }) => {
+    /* THE FILE ALREADY DECIDED THIS, AND THE DOT DISAGREED WITH IT.
+       `paintClock` handles an unknown age deliberately — grey tile, "age —",
+       bar emptied — under the comment "Unknown age must not render as fresh:
+       empty bar, nothing claimed". Thirty lines later `paintLive` lit the dot
+       on `mins === null`, so the one element whose entire job is the word LIVE
+       was the one element exempt from the rule. On screen that reads as a grey
+       tile saying "age —" beside a pulsing green light.
+
+       Both halves are asserted here on purpose. The tile's state is what makes
+       the dot's state wrong: either alone is a preference about styling, and
+       the pair is a contradiction the reader can see. */
+    await stubMetUndated(page);
+    await page.goto('/heat-map/in/kolkata/ballygunge/');
+    await expect(page.locator(dial)).toHaveAttribute('data-age', 'unknown', { timeout: 60_000 });
+    await expect(page.locator('#clockAgeLab')).toHaveText('age —');
+    // The reading itself did arrive — this is not a "no data" state, which is
+    // what makes the dot's claim a lie rather than a leftover.
+    await expect(page.locator('#liveT')).toHaveText(String(CANNED.air_temperature));
+    await expect(page.locator('#livedot')).not.toHaveClass(/\bon\b/);
+  });
+
   test('activating the dial re-reads and re-drives the simulation', async ({ page }) => {
     await stubMet(page, 6.5, 24.0);
-    await page.goto('/heat-map/');
+    await page.goto('/heat-map/in/kolkata/ballygunge/');
     await expect(page.locator(dial)).toHaveAttribute('data-age', 'stale', { timeout: 60_000 });
     await expect(page.locator('#liveT')).toHaveText('24.0');
 
@@ -102,9 +148,79 @@ test.describe('live reading freshness', () => {
     await expect(page.locator('#livedot')).toHaveClass(/\bon\b/);
   });
 
+  test('a dead weather feed does not take the ward\'s own controls with it', async ({ page }) => {
+    /* THE GATE WAS ON THE WRONG FACT. `paintClock` revealed the Trees toggle and
+       the street-view toggle with `hidden = !state.live`, under a comment saying
+       both are "meaningless until a ward has actually loaded" — which is true, and
+       is not what the code tested. A ward loads from its own artefacts; the live
+       reading is a separate fetch to met.no that only sets the boundary
+       conditions. So an outage at met.no, or a rate-limit, or a proxy 500, removed
+       two working features that never depended on it: the canopy the ward ships
+       and the ground-truth photography, both already downloaded.
+       Nothing here is subtle once seen — but it can only be seen when the feed is
+       DOWN, which is never true on a developer's machine or in a normal test run.
+       Hence the stub. */
+    await page.route(LIVE_ROUTE, (route) => route.fulfill({ status: 500, body: 'upstream unavailable' }));
+    await page.goto('/heat-map/in/kolkata/ballygunge/');
+
+    /* The ward is up: the model ran on its own artefacts and produced a reading.
+       This is the precondition that makes the rest of the assertion meaningful —
+       without it the toggles could be missing simply because nothing had loaded. */
+    await expect(page.locator('#lst')).not.toContainText('—', { timeout: 60_000 });
+
+    /* And the clock IS allowed to be absent — it has nothing to show. That
+       contrast is the point: one widget depends on the feed, the others do not. */
+    await expect(page.locator('#clockw')).toBeHidden();
+    await expect(page.locator('#vegw')).toBeVisible();
+    await expect(page.locator('#vegw button[data-v="1"]')).toBeVisible();
+  });
+
+  test('a reading missing a number costs the reading, never the ward', async ({ page }) => {
+    /* THE FAILURE THIS REPLACES WAS NOT A DEGRADED READOUT — IT WAS A LOST WARD.
+       api/live.js is a transparent proxy, and `air_temperature`, `relative_humidity`
+       and `wind_speed` are all OPTIONAL in met.no's schema. A body that arrives
+       whole but short of one reached the console as a complete reading holding
+       `undefined`, and two things followed, neither of them looking like an error:
+       the clamp in `currentParams` is `Math.max(0.3, undefined / 3)`, which is NaN
+       rather than 0.3, so every cell of the field went NaN; and `paintLive` calls
+       `L.wind.toFixed(1)`, which THROWS. That throw happens inside `loadWard`'s
+       try, so a single absent number surfaced as "ward could not load".
+
+       `asAmbient` refuses such a body, which puts it on the SAME path as an outage
+       — the case the test above pins. So this asserts the ward, not the parser:
+       the map is up, the model has produced a reading from the ward's own
+       artefacts, and the controls that never depended on the feed are still there.
+       Only the clock, which has nothing to show, is allowed to be absent. */
+    await page.route(LIVE_ROUTE, (route) => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: { date: new Date().toUTCString(), age: '0' },
+      /* Everything met.no usually sends EXCEPT wind_speed — the shape a truncated
+         or reshaped upstream body actually takes, not a mangled envelope. */
+      body: JSON.stringify({
+        properties: {
+          timeseries: [{
+            time: new Date().toISOString(),
+            data: { instant: { details: { air_temperature: 29.4, relative_humidity: 71, cloud_area_fraction: 38 } } },
+          }],
+        },
+      }),
+    }));
+    await page.goto('/heat-map/in/kolkata/ballygunge/');
+
+    await expect(page.locator('#lst')).not.toContainText('—', { timeout: 60_000 });
+    await expect(page.locator('#pname')).toHaveText('Ballygunge');
+    await expect(page.locator('#clockw')).toBeHidden();
+    await expect(page.locator('#vegw')).toBeVisible();
+    /* And the live row says it has nothing rather than showing NaN — the other
+       half of the old failure, which printed "NaN" where a temperature goes. */
+    await expect(page.locator('#liveWind')).toHaveText('—');
+    await expect(page.locator('#liveT')).toHaveText('—');
+  });
+
   test('the readout clears the evidence rail it sits beside', async ({ page }) => {
     await stubMet(page, 0);
-    await page.goto('/heat-map/');
+    await page.goto('/heat-map/in/kolkata/ballygunge/');
     await expect(page.locator(dial)).toBeVisible({ timeout: 60_000 });
     const m = await page.evaluate(() => {
       const box = (s: string) => document.querySelector(s)?.getBoundingClientRect() ?? null;
@@ -142,7 +258,7 @@ test.describe('live reading freshness', () => {
     await stubMet(page, 0, 33.7);
     let met = 0;
     await page.route(LIVE_ROUTE, (r) => { met += 1; r.fallback(); });
-    await page.goto('/heat-map/');
+    await page.goto('/heat-map/in/kolkata/ballygunge/');
     await expect(page.locator(dial)).toHaveAttribute('data-h12', 'true', { timeout: 60_000 });
     await expect(page.locator('#clockFace')).toHaveAttribute('aria-pressed', 'false');
 
@@ -175,7 +291,7 @@ test.describe('live reading freshness', () => {
 
   test('digits and freshness bar move together', async ({ page }) => {
     await stubMet(page, 0);
-    await page.goto('/heat-map/');
+    await page.goto('/heat-map/in/kolkata/ballygunge/');
     await expect(page.locator(dial)).toHaveAttribute('data-age', 'fresh', { timeout: 60_000 });
     // Digits are a real ward-local clock reading, not a placeholder.
     await expect(page.locator('#clockTime')).toHaveText(/^\d{1,2}:\d{2}$/);
@@ -198,7 +314,7 @@ test.describe('the now phase', () => {
 
   test('Now labels itself, and reads sanely against the air temperature', async ({ page }) => {
     await stubMet(page, 0);
-    await page.goto('/heat-map/');
+    await page.goto('/heat-map/in/kolkata/ballygunge/');
     await expect(page.locator('#clockw')).toBeVisible({ timeout: 60_000 });
 
     // The page now OPENS live: the reading agrees with the clock beside it

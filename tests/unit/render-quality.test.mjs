@@ -102,3 +102,51 @@ test('demotes after sustained slow browser frames and ignores tab suspensions', 
   [1_020, 1_040, 1_060, 1_080].forEach((timestamp) => governor.frame(timestamp));
   assert.deepEqual(changes, [1, 0]);
 });
+
+/* THE FLAT-FIELD BOOT (2026-09-06). OBOS opened on a flat tinted quad with "3D
+   relief" selected and "CPU SIM" in the header, cured by a reload. Three ways
+   to get there were reproduced on the built site, and each has a guard here:
+   a demotion earned on the landing page carried through the view transition
+   (the controller is a window singleton and the governor only ever steps down);
+   a WebGL probe that returned null once was cached as "no WebGL" for the life
+   of the document; and tier 0, which caps.ts opens on the 3-D city, was still
+   refused the 3-D renderer by the app. */
+import { readFileSync } from 'node:fs';
+import { isSoftwareRenderer, isUnsettledGpuLabel } from '../../src/utils/render-quality.ts';
+
+test('a probe that could not reach a verdict is unsettled, and would otherwise be tier 0', () => {
+  assert.equal(isUnsettledGpuLabel('no-webgl'), true);
+  assert.equal(isUnsettledGpuLabel('gpu-detect-error'), true);
+  assert.equal(isUnsettledGpuLabel('ANGLE (Apple, ANGLE Metal Renderer: Apple M4, Unspecified Version)'), false);
+  assert.equal(isUnsettledGpuLabel('Apple GPU'), false);
+  // the reason the retry exists: a stuck probe is the lowest tier, everywhere, until reload
+  assert.equal(resolveRenderQuality({ hardwareConcurrency: 16, deviceMemory: 16 }, 'no-webgl').tier, 0);
+});
+
+test('demotions reset on every view-transition swap, and boot decisions read the baseline', () => {
+  const quality = readFileSync('src/utils/render-quality.ts', 'utf8');
+  assert.match(quality, /addEventListener\('astro:after-swap', \(\) => this\.resetDemotion\(\)\)/,
+    'the controller must restore the device classification when the document swaps routes — '
+    + 'a slow second on the landing page is not a verdict on OBOS');
+  assert.match(quality, /export function getBaseRenderQuality\(\)/,
+    'boot-time decisions need the un-demoted profile');
+  const caps = readFileSync('src/scripts/climate-engine/caps.ts', 'utf8');
+  assert.match(caps, /const quality = getBaseRenderQuality\(\);/, 'caps.ts must read the device tier, not the page\'s frame history');
+  assert.doesNotMatch(caps, /= getRenderQuality\(\)/, 'caps.ts must not read the demoted runtime profile');
+});
+
+test('every tier loads the 3-D renderer once caps opens it on relief', () => {
+  const app = readFileSync('src/scripts/climate-engine/heat-map-app.ts', 'utf8');
+  assert.doesNotMatch(app, /caps\.tier > 0 && (mode === 'relief'|caps\.mode)/,
+    'ensureRelief must not be gated on the tier: caps.ts maps tier 0 to relief, so a gate here '
+    + 'leaves "3D relief" selected over a flat field with no way to the city');
+  assert.match(app, /if \(mode === 'relief'\) void ensureRelief\(\);/, 'the boot path loads the renderer whenever the mode is relief');
+});
+
+test('a software rasteriser is no GPU at all, not a weak one', () => {
+  assert.equal(isSoftwareRenderer('ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero)))'), true);
+  assert.equal(isSoftwareRenderer('llvmpipe (LLVM 15.0.7, 256 bits)'), true);
+  assert.equal(isSoftwareRenderer('no-webgl'), true);
+  assert.equal(isSoftwareRenderer('ANGLE (ARM, Mali-G57 MC2, OpenGL ES 3.2)'), false);   // a weak GPU opens on the city
+  assert.equal(isSoftwareRenderer('ANGLE (Intel(R) UHD Graphics 630 Direct3D11)'), false);
+});

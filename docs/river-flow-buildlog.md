@@ -218,7 +218,41 @@ Measured this session by decoding the real asset:
 - ⏳ Wire into the production hero (lazy island, reduced-motion poster).
 - 🌱 The hover-spawn flora (separate thread) hangs off the same object-space plumbing.
 
+## The water physics pass (2026-09-06)
+
+Three months in production and the water still read as a wet matte surface: the scan's photogrammetry
+roughness (~0.9) meant the key light and the environment barely reflected off it, the channel was a
+tint rather than a volume, and the bed did not move under the surface. Three groups landed, A/B'd on
+`previews/river-physics.html` (gitignored — the real GLB, the production shader verbatim as state A,
+every upgrade a toggle with a slider, frame p75/p95 on screen), values signed off by the client:
+
+- **On the bed.** `roughnessFactor` mixes to **0.15** inside the channel mask so three's own Fresnel and
+  GGX light the water, with the environment term scaled **1.05** there; **Beer–Lambert absorption**
+  through a depth proxy (channel mask, pools deeper than riffles) at strength **1.10**, red absorbed
+  first; the **albedo is sampled through the surface** — the flow field and the water normal are
+  computed first (position and time only), then the bed is fetched at a UV offset of **0.006** × normal.
+- **Reacts to you.** Each ripple ring carries a **capillary companion** (shorter, faster, dies sooner —
+  the dispersion a real drop shows), ripple amplitude **1.5**; a fast pointer spawns every 35 ms instead
+  of 70 and at up to **1.85×** the ring — a wake. The ripple uniform is `vec4` now: x, z, birth, amp.
+- **How it flows.** The jitter fetch's `.gb` bend the flow direction into **eddies (0.54)** where the
+  water is slow; **speed shaping (0.5)** makes fast reaches choppier with more glint and lower foam
+  threshold, and slow reaches glassier and deeper. Base `wAmp` dropped **1.0 → 0.42** on the tiers that
+  have the sheen; the flat tier keeps 1.0.
+
+**Cost.** No new pass, no new texture fetch: refraction reorders the albedo sample behind the water
+normal, the eddy field rides the jitter fetch. Measured on an M-series Mac: vsync-bound at every
+production scale (7.0 ms p75 A and B); at a 3× stress scale where the GPU is the bottleneck, A 14.3–14.7
+ms vs B 14.5–16.0 ms p75 — inside run-to-run spread, an upper bound of ~10 % of fragment cost. The
+adaptive governor still steps weaker machines down.
+
+**Tiers.** Full and balanced get everything. The low tier gets specular and absorption only (free) and
+keeps its flat chop. **Kill switch:** `#water=classic` in the URL hash zeroes the pass without a deploy.
+
+**Dropped:** the fallback for a missing flow field (`uFField`), unreachable since the bake shipped and
+circular once the albedo is sampled after the normal.
+
 ## Files
+- `previews/river-physics.html` — the water-physics A/B harness (gitignored; serve the repo root).
 - `previews/hero-river-native.html` — the working preview (water shader in `gradeMaterial`).
 - `public/textures/river-flow.png` — the baked flow-field (RG=tangent, B=speed, A=presence).
 - `scripts/bake-river-flow.mjs` — the bake (needs `gltf-transform`, `sharp`, `meshoptimizer` installed).

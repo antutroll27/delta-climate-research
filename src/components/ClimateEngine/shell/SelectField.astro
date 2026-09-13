@@ -1,0 +1,434 @@
+---
+/**
+ * A SELECT FIELD — one labelled control that picks one option from a list, and
+ * draws its own dropdown instead of the operating system's.
+ *
+ * IT KNOWS NOTHING ABOUT WHAT IT IS PICKING. Options arrive as data; the caption
+ * is a string; the badge is a slot. Three of these make the scope switcher, and
+ * nothing here says "country", "city" or "area" — which is the property that lets
+ * the next control that needs a dropdown use this one rather than grow a second.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * A REAL <select> IS STILL IN HERE, AND IT IS THE MODEL RATHER THAN A FALLBACK.
+ *
+ * The part of a native select that looks like the OS is the POPUP, and no
+ * stylesheet reaches it — so replacing the look means drawing the popup. What does
+ * NOT have to be replaced is the VALUE: the select below holds it, carries every
+ * option, carries `disabled` on the ones that cannot be chosen, and raises
+ * `change` when it moves.
+ *
+ * That is why the rows are NOT rendered here. shell/select-field.ts builds them
+ * from the <option>s every time the list opens, so there is no second list to keep
+ * in step and nothing that can be right at render and wrong three ward-switches
+ * later. It also keeps the seam still: shell/console-shell.ts reads `select.value`
+ * and heat-map-app.ts writes back into it, both unchanged.
+ *
+ * NO NO-SCRIPT FALLBACK, DELIBERATELY. Rendering the select live for a
+ * script-less reader would put a control on the page that looks like it works —
+ * and nothing would happen, because console-shell.ts is the only thing that gives
+ * any of these a behaviour and it is script too. A control that accepts input and
+ * does nothing is the defect this console has already paid for three times, so the
+ * markup states the enhanced shape and the script completes it.
+ */
+import type { SelectFieldOption } from '../../../scripts/climate-engine/shell/select-field.ts';
+
+interface Props {
+  /**
+   * The id stem. Every id this field needs is derived from it by ONE function
+   * below, so a label pointing at nothing — which costs the control its
+   * accessible name and looks like nothing at all — cannot be written here.
+   */
+  id: string;
+  /**
+   * The field's name, heard AND seen: it is the accessible name of both the
+   * trigger and the list, and the caption printed above the value. One string,
+   * so the two cannot drift into disagreeing about what is being chosen.
+   */
+  label: string;
+  /** The option that is selected. A value matching no option selects nothing. */
+  value: string;
+  readonly options: readonly SelectFieldOption[];
+  /**
+   * Attributes handed to the <select> that holds the value — the hook a script
+   * finds this field's model by. Spread rather than named, because WHICH
+   * attribute is the caller's business: this component would have to learn the
+   * caller's vocabulary to name it, and that is the one thing it must not do.
+   */
+  [key: `data-${string}`]: string | undefined;
+}
+
+const { id, label, value, options, ...store } = Astro.props;
+
+/**
+ * The four ids this field needs, from one stem.
+ *
+ * WRITTEN ONCE EACH AND READ TWICE EACH — the label's `for` and the select's `id`;
+ * the trigger's `id` and its own `aria-labelledby`; the list's `id` and the
+ * trigger's `aria-controls`. Every one of those pairs is a reference that names
+ * nothing if the two spellings drift, and nothing about the page looks wrong when
+ * it happens: the control simply stops having a name, or stops being connected to
+ * the list it opens.
+ */
+const selectId = id;
+const labelId = `${id}-label`;
+const triggerId = `${id}-trigger`;
+const listId = `${id}-list`;
+
+/* WHAT THE TRIGGER SAYS BEFORE ANY SCRIPT RUNS. Derived from the same `options`
+   the <select> is built from, so the server's first paint and the script's first
+   repaint cannot disagree — and there is no flash of an empty control while the
+   console shell is being fetched. */
+const selected = options.find((o) => o.value === value) ?? null;
+const selectedNote = selected?.note ?? '';
+---
+<div class="field" data-select-field>
+  {/* THE ACCESSIBLE NAME, ONCE, SHARED BY THREE THINGS. The visible caption
+      inside the trigger is aria-hidden so the word is heard once rather than
+      three times, and this element is what the trigger and the list are named
+      by. It keeps its `for` on the select as well: the select is still the
+      element that holds the value, and an unnamed one is a mystery to anything
+      that reads the DOM rather than the accessibility tree. */}
+  <label class="field-name" id={labelId} for={selectId}>{label}</label>
+
+  <button
+    type="button"
+    class="field-trigger"
+    id={triggerId}
+    role="combobox"
+    aria-haspopup="listbox"
+    aria-expanded="false"
+    aria-controls={listId}
+    aria-labelledby={`${labelId} ${triggerId}`}
+    data-select-trigger
+  >
+    <span class="field-key" aria-hidden="true">{label}</span>
+    <span class="field-line">
+      <span class="field-value" data-select-value>{selected?.text ?? ''}</span>
+      {/* THE REASON AN UNAVAILABLE CHOICE IS UNAVAILABLE, on the collapsed
+          control too. A page whose own area ships nothing is exactly the page
+          where this must be legible without opening anything. */}
+      <span class="field-note" data-select-note hidden={selectedNote === ''}>{selectedNote}</span>
+    </span>
+  </button>
+
+  <slot name="badge" />
+
+  <svg class="field-chevron" viewBox="0 0 12 12" aria-hidden="true" focusable="false">
+    <path d="M2 4.5 6 8.5 10 4.5" />
+  </svg>
+
+  {/* EMPTY ON PURPOSE — shell/select-field.ts fills it from the <select> on every
+      open. See this file's header: rows rendered here would be a copy of the
+      options, and a copy is what goes stale. */}
+  <ul
+    class="field-list"
+    id={listId}
+    role="listbox"
+    aria-labelledby={labelId}
+    tabindex="-1"
+    hidden
+    data-select-list
+  ></ul>
+
+  {/* THE VALUE. Out of the tab order and out of the accessibility tree, because
+      the trigger above is the control and two controls over one fact is how a
+      screen reader ends up announcing the field twice. It is NOT display:none:
+      the options have to stay measurable and settable by everything that already
+      reads this element. */}
+  <select
+    class="field-store"
+    id={selectId}
+    aria-hidden="true"
+    tabindex="-1"
+    data-select-store
+    {...store}
+  >
+    {options.map((o) => (
+      <option value={o.value} disabled={o.disabled} selected={o.value === value} data-note={o.note}>
+        {o.text}
+      </option>
+    ))}
+  </select>
+</div>
+
+<style>
+  /* SCOPED, for the reason IconRail.astro gives: this markup is Astro-rendered
+     and the scoping hash reaches it.
+
+     THE ROWS ARE THE EXCEPTION, and they are marked :global for a reason that is
+     easy to get wrong: shell/select-field.ts CREATES them, so they never carry
+     the scoping attribute and a plain `.field-option` rule would compile to
+     `.field-option[data-astro-cid-…]` and match nothing at all. The list would
+     open as a stack of unstyled text. Written as `.field-list :global(.field-option)`
+     the scope still applies where it can — to the list this component rendered —
+     and stops at the children it did not.
+
+     Colours are var() throughout and resolve from .stage, where HeatMapStage.astro
+     declares the palette. */
+
+  /* ── the card ───────────────────────────────────────────────────────────── */
+
+  .field {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 26px 6px 9px;
+    border-radius: 7px;
+    background: rgb(9 58 62 / .42);
+    transition: background .18s;
+  }
+
+  .field:hover { background: rgb(9 58 62 / .68); }
+
+  /* Focus is stated twice on purpose, and they are different facts: the ring is
+     on the control that actually has focus, and the card lifts so the eye lands
+     on the whole row rather than on a 12px-tall line of text. */
+  .field:focus-within { background: rgb(9 58 62 / .68); }
+
+  /* CLIPPED, NOT display:none AND NOT visibility:hidden — for the label those
+     would take the accessible name away along with the pixels, which is the
+     entire thing it exists to provide; for the store they would take the options
+     out of the layout in ways the things that read this element do not expect.
+     One rule, because they are one requirement. */
+  .field-name,
+  .field-store {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    margin: -1px;
+    padding: 0;
+    border: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    clip-path: inset(50%);
+  }
+
+  .field-store { pointer-events: none; }
+
+  /* ── the trigger ────────────────────────────────────────────────────────── */
+
+  .field-trigger {
+    flex: 1;
+    min-inline-size: 0;
+    display: block;
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    color: inherit;
+    text-align: start;
+    cursor: pointer;
+    /* No 300ms tap delay and no double-tap zoom on the one control that has to
+       work on a phone held one-handed. */
+    touch-action: manipulation;
+  }
+
+  /* THE WHOLE CARD IS THE BUTTON, and it was not before.
+     MEASURED: of four places a reader would click, THREE were dead — the chevron,
+     the card's top strip and its left strip — and only the value text opened
+     anything. The chevron was the worst of them, because a downward arrow is the
+     one part of a dropdown people aim at.
+
+     THE CAUSE IS THE MARKUP, not the handler. `.field-chevron` and the tier badge
+     are SIBLINGS of the button, not children: the chevron is absolutely positioned
+     into the card's 26px right gutter and the badge is a flex item beside the
+     trigger. A click on either hits that element and stops. The card's own padding
+     — 6px top and bottom, 9px left — belongs to `.field` and was never the
+     button's either.
+
+     A STRETCHED PSEUDO-ELEMENT rather than moved markup. The chevron has to stay
+     outside the button: it is `aria-hidden` decoration, and `aria-labelledby` on
+     the trigger names it from the label and the trigger's own text, so pulling
+     visual furniture inside would put it in the accessible name's way. This gives
+     the button a hit area over the whole card while leaving the DOM — and the
+     accessibility tree — exactly as they were. The list is positioned BELOW the
+     card and carries its own z-index, so it stays clickable. */
+  .field-trigger::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+  }
+
+  .field-trigger:focus-visible {
+    outline: 2px solid var(--cyan);
+    outline-offset: 3px;
+    border-radius: 3px;
+  }
+
+  /* The founder's caption: four rounds went into this size, this weight and this
+     tracking. Its colour is a step brighter than --ink and a step under --paper,
+     and it is the only place in the console that wants that step — written once,
+     here, rather than given a palette token nothing else would use. */
+  /* SMALLER THAN THE VALUE BY MORE THAN A STEP, and separated from it by more
+     than leading. The key is a category — COUNTRY, CITY, AREA — read once and
+     then ignored; the value is what a reader comes back to. Sized close together
+     they competed, and the gap under the key was doing no work at all because
+     `line-height` alone cannot open a space the eye reads as a break. Explicit
+     `margin-block-end` does. */
+  .field-key {
+    display: block;
+    font-family: var(--sans);
+    font-size: .52rem;
+    font-weight: 600;
+    letter-spacing: .11em;
+    text-transform: uppercase;
+    color: #c2d0d2;
+    line-height: 1.2;
+    margin-block-end: 5px;
+  }
+
+  .field-line {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    min-inline-size: 0;
+  }
+
+  .field-value {
+    min-inline-size: 0;
+    font-family: var(--sans);
+    font-size: .82rem;
+    font-weight: 600;
+    color: var(--paper);
+    line-height: 1.3;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* The unavailability note, in --mono like the tier badge beside it: both are
+     labels ABOUT the value rather than part of it, and they read as one family. */
+  .field-note {
+    flex: none;
+    font-family: var(--mono);
+    font-size: .52rem;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--faint);
+    white-space: nowrap;
+  }
+
+  .field-note[hidden] { display: none; }
+
+  .field-chevron {
+    position: absolute;
+    right: 9px;
+    top: 50%;
+    transform: translateY(-50%);
+    inline-size: 12px;
+    block-size: 12px;
+    stroke: var(--faint);
+    fill: none;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    pointer-events: none;
+    transition: transform .18s, stroke .18s;
+  }
+
+  /* THE ONLY THING THAT SAYS "THIS ONE IS OPEN" once the list is drawn over the
+     card below it. Read off aria-expanded rather than a class, so the pixels and
+     the announcement cannot disagree: there is one state, and it is the one the
+     screen reader is being told. */
+  .field-trigger[aria-expanded='true'] ~ .field-chevron {
+    transform: translateY(-50%) rotate(180deg);
+    stroke: var(--cyan);
+  }
+
+  /* ── the list ───────────────────────────────────────────────────────────── */
+
+  .field-list {
+    position: absolute;
+    inset-inline: 0;
+    top: calc(100% + 4px);
+    z-index: 60;
+    margin: 0;
+    padding: 4px;
+    list-style: none;
+    max-block-size: min(46vh, 300px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    background: var(--surface2);
+    border: 1px solid var(--line-hi);
+    border-radius: 8px;
+    box-shadow: 0 14px 30px rgb(0 0 0 / .5);
+  }
+
+  .field-list[hidden] { display: none; }
+
+  .field-list :global(.field-option) {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 7px 9px;
+    border-radius: 5px;
+    font-family: var(--sans);
+    font-size: .82rem;
+    font-weight: 600;
+    color: var(--paper);
+    line-height: 1.3;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+
+  .field-list :global(.field-option-text) {
+    min-inline-size: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Same treatment as the collapsed control's note, because it is the same fact.
+     Its rule is written separately rather than shared with .field-note: one is
+     Astro-rendered and one is script-created, so they cannot be one selector. */
+  .field-list :global(.field-option-note) {
+    flex: none;
+    font-family: var(--mono);
+    font-size: .52rem;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--faint);
+    white-space: nowrap;
+  }
+
+  /* THE ACTIVE ROW — where the keyboard is standing and where the pointer is
+     hovering, which are one state because they are one question. `color-mix`
+     points AT --cyan rather than restating a tint of it, so the accent has one
+     spelling in this file and the console has one accent. */
+  .field-list :global(.field-option.is-active) {
+    background: color-mix(in srgb, var(--cyan) 15%, transparent);
+  }
+
+  /* THE CHOSEN ROW, told from the active one because they are different claims:
+     one is where you are, the other is where you already were. */
+  .field-list :global(.field-option.is-selected .field-option-text) {
+    color: var(--cyan);
+  }
+
+  /* An option that cannot be chosen has to LOOK unchoosable, or the announcement
+     and the pixels say different things. It stays arrowable — see
+     select-field.ts: on a city at the geometry tier every row is disabled, and a
+     list nobody can move through is a list whose reasons nobody ever hears. */
+  .field-list :global(.field-option[aria-disabled='true']) {
+    color: var(--faint);
+    cursor: not-allowed;
+  }
+
+  .field-list :global(.field-option[aria-disabled='true'].is-active) {
+    background: color-mix(in srgb, var(--cyan) 7%, transparent);
+  }
+
+  /* A FINGER IS NOT A MOUSE POINTER. 44px is the smallest target that is reliably
+     hit one-handed, and the rows are the whole of this control on touch. */
+  @media (pointer: coarse) {
+    .field-list :global(.field-option) { padding-block: 12px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .field,
+    .field-chevron { transition: none; }
+  }
+</style>

@@ -1,45 +1,10 @@
-import { wardById } from '../../../data/wards.ts';
-import { gridVersion } from '../types.ts';
-import { isWardId, nextDistinctWard } from '../wards.ts';
+import { nextDistinctArea } from '../scope/registry.ts';
+import { fromLegacyWard, toLegacyWard } from '../scope/legacy.ts';
 import {
   DEFAULT_PAIRED_SCENARIO,
   normalizeCoverage,
   type PairedScenarioState,
 } from './scenario-state.ts';
-
-/**
- * The wards `parsePairedScenario` FALLS BACK TO must themselves be published.
- *
- * The requested ward is gated by `isWardId` below; the default it falls back to
- * was not, so an unpublished default would sail straight through the guard that
- * exists to stop exactly this — and put a 404 behind Compare's OPENING view,
- * before the reader has touched a control.
- *
- * Inert while both defaults are Kolkata wards. THE EVENT THAT MAKES IT LIVE IS
- * PUBLISHING A SECOND CITY, because that is when `PUBLISHED_CITIES` and this
- * literal pair can disagree. Same trade `nextDistinctWard` makes in
- * climate-engine/wards.ts: fail at module load, naming the constant to fix,
- * rather than in a visitor's browser.
- *
- * Exported so the refusal can be exercised with a ward that is NOT published —
- * a module-load assertion that only ever runs on good input is not a gate.
- */
-export function assertDefaultScenarioPublished(
-  scenario: Pick<PairedScenarioState, 'a' | 'b'> = DEFAULT_PAIRED_SCENARIO,
-): void {
-  for (const side of ['a', 'b'] as const) {
-    const ward = scenario[side];
-    if (!isWardId(ward)) {
-      throw new RangeError(
-        `DEFAULT_PAIRED_SCENARIO.${side} names "${ward}", which is not a published ward, `
-        + 'so Compare would open on artefacts that 404. Fix DEFAULT_PAIRED_SCENARIO in '
-        + 'scenario-state.ts, or PUBLISHED_CITIES in src/data/wards.ts.',
-      );
-    }
-  }
-}
-
-assertDefaultScenarioPublished();
 
 const numeric = (params: URLSearchParams, key: string, fallback: number) => {
   const raw = params.get(key);
@@ -48,13 +13,29 @@ const numeric = (params: URLSearchParams, key: string, fallback: number) => {
   return Number.isFinite(value) ? value : fallback;
 };
 
+/**
+ * A shared Compare link → the state it names.
+ *
+ * `a` AND `b` ARRIVE IN EITHER SPELLING. Every link already in the world says
+ * `?a=ballygunge`; the state is now an `AreaKey`. `fromLegacyWard` accepts both and
+ * maps them to the same area, so a bookmark keeps addressing the ground it always
+ * did. Reaching for `isAreaKey` here instead would have been the quiet disaster:
+ * every legacy link would still have LOADED, and shown a different pair.
+ *
+ * The fallback to the default is deliberate and unchanged in shape — a Compare page
+ * that refuses to render on a mistyped id helps nobody — but it is now reached only
+ * by a value that is neither a key nor a known alias.
+ */
 export function parsePairedScenario(search: string): PairedScenarioState {
   const params = new URLSearchParams(search);
-  const requestedA = params.get('a');
-  const requestedB = params.get('b');
-  const a = isWardId(requestedA) ? requestedA : DEFAULT_PAIRED_SCENARIO.a;
-  const bCandidate = isWardId(requestedB) ? requestedB : DEFAULT_PAIRED_SCENARIO.b;
-  const b = bCandidate === a ? nextDistinctWard(a) : bCandidate;
+  const a = fromLegacyWard(params.get('a')) ?? DEFAULT_PAIRED_SCENARIO.a;
+  const bCandidate = fromLegacyWard(params.get('b')) ?? DEFAULT_PAIRED_SCENARIO.b;
+  /* Falls back WITHIN a's own city, never to the default pair: `DEFAULT.b` is a
+     Kolkata ward, and handing it to a request for some other city would answer with
+     a cross-city comparison — two climates, two currencies, one of them shipping no
+     artefacts. Null (a city of one area) yields a === b, which
+     `runPairedScenarioCore` refuses BY NAME rather than papering over. */
+  const b = bCandidate === a ? (nextDistinctArea(a) ?? a) : bCandidate;
   const phase = params.get('phase') === 'retained' ? 'retained' : 'peak';
   return {
     a,
@@ -72,24 +53,22 @@ export function parsePairedScenario(search: string): PairedScenarioState {
   };
 }
 
+/**
+ * The state → the link. Emits the LEGACY spelling wherever one exists, so a link
+ * written today and one bookmarked before the scope migration are the same string —
+ * see `toLegacyWard`, which owns that decision for the writer and the reader alike.
+ */
 export function serializePairedScenario(state: PairedScenarioState): string {
-  /* The grid stamp comes from A's ward, not from a literal — the same ward
-     `assertPairedResult` sizes the pair against. One stamp stays truthful for a
-     two-ward link because a pair whose wards disagree on grid is refused there.
-     An unidentifiable ward omits the stamp rather than asserting a grid it
-     cannot know; `parsePairedScenario` never reads this back, so a missing
-     stamp costs a reader provenance, while a wrong one would mislabel a run. */
-  const wardA = wardById(state.a);
   const params = new URLSearchParams({
-    a: state.a,
-    b: state.b,
+    a: toLegacyWard(state.a),
+    b: toLegacyWard(state.b),
     trees: String(state.coverage.trees),
     roof: String(state.coverage.roofs),
     facades: String(state.coverage.facades),
     phase: state.phase,
     contract: state.contract,
     forcing: state.forcing,
-    ...(wardA ? { grid: gridVersion(wardA.footprintM) } : {}),
+    grid: 'hm-grid-192-v1',
     data: 'ward-geometry-v1',
     stock: 'modelled-stock-v1',
     backend: 'ts-v1',

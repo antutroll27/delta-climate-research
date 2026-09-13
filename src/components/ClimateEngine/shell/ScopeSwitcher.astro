@@ -1,0 +1,322 @@
+---
+/**
+ * THE SCOPE SWITCHER — Country → City → Area, pinned above the sidebar's panes.
+ *
+ * Scope is global to every pane the rail can show, which is why it sits above
+ * them rather than inside one of them: the Layers tree, the Reports pane and the
+ * Scenarios pane are all answers ABOUT somewhere, and the somewhere is chosen
+ * once.
+ *
+ * EVERY VALUE HERE IS REAL, which is the whole difference between this and the
+ * founder's mockup. There the three cards held strings — "India", "Kolkata",
+ * "Validated" — and the fourth round of tuning was about their letter-spacing.
+ * Here the tier is a `CityTier` off the registry, the countries and cities are
+ * the ones that exist, and an area that ships nothing is UNSELECTABLE rather
+ * than selectable-then-refused. `paths()` returns `null` for such an area, so it
+ * genuinely cannot be fetched; a control that accepted the click and then
+ * quietly did nothing would be a defect this repo has already paid for twice.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * THE CONTROL IS SelectField, AND THIS FILE DOES NOT KNOW HOW IT OPENS.
+ *
+ * It used to be three bare <select>s, and the note here argued for them: keyboard,
+ * screen-reader and mobile behaviour arrive free, `disabled` on an <option> is
+ * exactly the semantics an unavailable area needs, and a hand-rolled listbox
+ * without arrow keys and type-ahead would be a WORSE control than the one it
+ * replaced. Every one of those arguments still holds — which is why SelectField
+ * did not throw the <select> away. It keeps it as the value, hides the OS popup,
+ * and writes the arrow keys, the type-ahead, Home/End and Escape by hand, against
+ * the options that select already carries.
+ *
+ * WHAT THIS FILE OWNS is the three lists and the tier badge. What it does NOT own
+ * is how a list opens, what a disabled row looks like, or which key does what —
+ * and that is the point of the split: those are the same questions for every
+ * dropdown this console will ever have, and answering them three times is how two
+ * of the three end up answered differently.
+ *
+ * The mockup's visual treatment survives intact — the card, the uppercase caption
+ * above the value, the tier badge on the City card — because that is the part the
+ * founder actually tuned. The card lives in SelectField now; the badge is a slot,
+ * so the tier stays a fact this file states about a city.
+ */
+import {
+  AREA_KEYS, areaKeysInCity, splitKey, type AreaKey,
+} from '../../../scripts/climate-engine/scope/registry.ts';
+import { resolve, type CityTier } from '../../../scripts/climate-engine/scope/resolve.ts';
+import type { SelectFieldOption } from '../../../scripts/climate-engine/shell/select-field.ts';
+import SelectField from './SelectField.astro';
+
+interface Props {
+  /**
+   * The area the console is scoped to. EVERYTHING else on this control derives
+   * from it — no second prop for the country, none for the city, and none for
+   * the tier, because a caller free to pass a country that disagrees with the
+   * key would eventually pass one.
+   */
+  current: AreaKey;
+}
+
+const { current } = Astro.props;
+
+const scope = resolve(current);
+const here = splitKey(current);
+
+/**
+ * What a disabled option says INSTEAD of nothing.
+ *
+ * A greyed row with no explanation reads as a bug in the page rather than as a
+ * fact about the world. Dubai's three areas are registered so they can be
+ * NAMED — the gap between their tier and Kolkata's is the thing we are asking to
+ * be funded to close — so the honest presentation is to list them and say why
+ * they cannot be opened, not to hide them and let the city look like it has no
+ * areas at all.
+ *
+ * IT IS THE OPTION'S `note`, NOT WORDS GLUED ONTO ITS NAME. Concatenated, the
+ * dropdown could only ever print "Al Quoz — no data yet" as one run of text; kept
+ * apart, the name is a name and the reason is a reason, and SelectField sets them
+ * differently on the row and on the collapsed control. It also means nothing
+ * downstream has to guess where the name stopped.
+ */
+const NO_DATA_NOTE = 'no data yet';
+
+/**
+ * The badge text for each tier. Presentation only: the tier VALUES come from the
+ * registry through `resolve`, and this record is exhaustive over `CityTier`, so
+ * a fourth tier fails to compile here rather than rendering a blank badge.
+ */
+const TIER_LABEL: Record<CityTier, string> = {
+  validated: 'Validated',
+  zone: 'Zone transfer',
+  geometry: 'Geometry only',
+};
+
+/**
+ * A row, narrowed to the one kind of value this switcher deals in.
+ *
+ * ALWAYS AN AREA KEY, at all three levels — the key this option lands you on.
+ *
+ * console-shell.ts then has ONE handler for the three fields: the value it reads
+ * is already the thing `areaPath()` and `paths()` take. A country id here would
+ * need a second lookup to turn "a country" into "somewhere to go", and a lookup
+ * that only one of three otherwise-identical controls needs is a lookup that gets
+ * written wrong.
+ *
+ * EXTENDS SelectField's OWN OPTION TYPE rather than restating its shape, so a
+ * field the component starts reading is a field this file fails to supply at
+ * compile time rather than one it silently omits.
+ */
+interface Option extends SelectFieldOption {
+  readonly value: AreaKey;
+}
+
+/**
+ * One option per distinct group, in registry declaration order.
+ *
+ * DERIVED FROM `AREA_KEYS`, never by walking `REGISTRY`'s nested shape. That
+ * shape needs a cast to index generically, and a cast is how the shape drifts
+ * out from under its readers. The keys are already flat, and `splitKey` reads
+ * back the parts the flatten recorded rather than re-splitting the string.
+ *
+ * A GROUP WITH NO AREAS CANNOT APPEAR, which is the right answer: selecting a
+ * country means landing in one of its areas, so a country with none is not
+ * somewhere this control could take you, and offering it would be the
+ * silently-does-nothing failure again.
+ *
+ * THE GROUP YOU ARE ALREADY IN LANDS ON `current` ITSELF, not on its first area.
+ * That is what lets the template mark the selected option with one comparison
+ * against one value at every level — otherwise picking City would quietly move
+ * you to a different ward whenever you were not standing in the first one.
+ */
+function groupOptions(
+  keys: readonly AreaKey[],
+  groupOf: (key: AreaKey) => string,
+  text: (key: AreaKey) => string,
+): readonly Option[] {
+  const hereGroup = groupOf(current);
+  const seen = new Set<string>();
+  const options: Option[] = [];
+  for (const key of keys) {
+    const group = groupOf(key);
+    if (seen.has(group)) continue;
+    seen.add(group);
+    options.push({ value: group === hereGroup ? current : key, text: text(key) });
+  }
+  return options;
+}
+
+/** Every country that has somewhere to go. */
+const countryOptions = groupOptions(
+  AREA_KEYS,
+  (key) => splitKey(key).country,
+  (key) => resolve(key).country.name,
+);
+
+/** The cities of the selected country — the fiddly one, and the reason
+    `resolve` is asked for the name: a city's display name is not in the key. */
+const cityOptions = groupOptions(
+  AREA_KEYS.filter((key) => splitKey(key).country === here.country),
+  (key) => splitKey(key).city,
+  (key) => resolve(key).city.name,
+);
+
+/**
+ * The areas of the selected city, each carrying its own availability.
+ *
+ * `areaKeysInCity` exists for exactly this: same city, declaration order,
+ * including the current key. The alternative — filtering AREA_KEYS by hand — is
+ * the same thing spelled a second way, and the same thing spelled twice is the
+ * only way for the two to disagree.
+ */
+const areaOptions = areaKeysInCity(current).map((key): Option => {
+  const { name, hasData } = resolve(key).area;
+  return {
+    value: key,
+    text: name,
+    disabled: !hasData,
+    /* Absent rather than empty on an area that ships, so the note is a thing that
+       is either there or not — a blank one would render an empty tag beside the
+       name and read as a label whose word had gone missing. */
+    note: hasData ? undefined : NO_DATA_NOTE,
+  };
+});
+
+interface Field {
+  readonly id: 'country' | 'city' | 'area';
+  readonly label: string;
+  readonly options: readonly Option[];
+  /** the confidence tier to badge, or null where the level has none */
+  readonly tier: CityTier | null;
+}
+
+/* THE TIER SITS ON THE CITY AND NOWHERE ELSE, because that is where the registry
+   puts it: every area in a city shares one confidence, and a second copy on the
+   country or the area row would be a second thing free to disagree with it. */
+/* AND ONLY WHEN IT IS A CAVEAT. `validated` is the tier every city SHOULD be, and
+   the only one whose areas actually open — a badge announcing it sat permanently
+   on the one city that ships data, saying nothing a reader could act on. The badge
+   earns its place when it is a WARNING: `zone` and `geometry` are the tiers that
+   explain why an area is greyed out, and those still say so.
+   The tier itself is unchanged and still comes from the registry; this is only
+   about which values are worth interrupting a reader for. */
+const FIELDS: readonly Field[] = [
+  { id: 'country', label: 'Country', options: countryOptions, tier: null },
+  { id: 'city', label: 'City', options: cityOptions, tier: scope.tier === 'validated' ? null : scope.tier },
+  { id: 'area', label: 'Area', options: areaOptions, tier: null },
+];
+
+/**
+ * The id stem a level's field answers to.
+ *
+ * ONE function, used once, because SelectField derives the label's `for`, the
+ * trigger's id, the list's id and the select's id from this single string. Four
+ * references that have to agree, and a `for` that misses its control leaves the
+ * field with no accessible name at all — with nothing about the page looking
+ * wrong when it happens.
+ */
+const fieldId = (id: Field['id']): string => `scope-${id}`;
+---
+<section class="scope" aria-labelledby="scope-heading">
+  {/* "Location", not "Scope", AND THE CODE AROUND IT STILL SAYS SCOPE ON PURPOSE.
+      A reader is picking a place; "scope" is the engineering word for what that
+      picking DOES — it scopes the registry, the artefacts, the climate constants
+      and the currency, which is why the module, this component, `data-scope` and
+      the tests all keep the name. Renaming those to match the label would rewrite
+      a vocabulary that is accurate about the machine, to match a word that is
+      accurate about the reader. Both words are right for their own audience. */}
+  {/* THE HEADING ROW, WITH ROOM FOR ONE CONTROL AT ITS END. The slot is how the
+      panel's collapse chevron reaches the row a reader is already looking at
+      without this component learning what collapsing is — the same arrangement as
+      the tier badge below, which renders inside SelectField and knows nothing
+      about cities. A route that passes nothing gets the heading alone. */}
+  <div class="scope-head">
+    <p class="scope-heading" id="scope-heading">Location</p>
+    <slot name="head-control" />
+  </div>
+
+  <div class="scope-stack">
+    {FIELDS.map((f) => (
+      <SelectField
+        id={fieldId(f.id)}
+        label={f.label}
+        value={current}
+        options={f.options}
+        data-scope={f.id}
+      >
+        {/* THE ONE THING THIS SWITCHER ADDS TO A GENERIC FIELD. It is a slot
+            rather than a prop because a confidence badge is not something every
+            dropdown has, and teaching SelectField about tiers would teach it
+            about cities. */}
+        {f.tier !== null && (
+          <span slot="badge" class={`scope-tier tier-${f.tier}`}>{TIER_LABEL[f.tier]}</span>
+        )}
+      </SelectField>
+    ))}
+  </div>
+</section>
+
+<style>
+  /* SCOPED, NOT is:global, for the reason IconRail.astro gives: every element
+     here is Astro-rendered and static, the scoping hash reaches all of it, and
+     the global surface shrinks rather than grows. The stage's own block is
+     global because MapLibre injects DOM it never rendered; nothing here does.
+
+     THE BADGE IS STYLED HERE EVEN THOUGH IT RENDERS INSIDE SelectField, and that
+     is how Astro slots work rather than an accident: the element is rendered by
+     THIS component, so it carries THIS component's scoping hash. The card around
+     it belongs to SelectField and is styled there.
+
+     Colours are var() throughout, and --green is declared beside the rest of the
+     palette in HeatMapStage.astro — a token resolves from where it is DECLARED,
+     so these scoped rules reach it only once the switcher is inside .stage. */
+
+  .scope {
+    padding: 12px 14px 11px;
+    border-bottom: 1px solid var(--line);
+    flex: none;
+  }
+
+  /* The heading and whatever the route slotted beside it, on one line. The
+     control is 26px and the heading is small caps, so the row is centred on the
+     taller of the two and the heading's old bottom margin moves here — otherwise
+     a route that slots nothing would lose the space the stack below relies on. */
+  .scope-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 9px;
+  }
+
+  .scope-heading {
+    font-family: var(--mono);
+    font-size: .62rem;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--faint);
+    min-inline-size: 0;
+  }
+
+  .scope-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .scope-tier {
+    flex: none;
+    font-family: var(--mono);
+    font-size: .53rem;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    padding: 2px 4px;
+    border-radius: 3px;
+  }
+
+  /* THREE TIERS, THREE COLOURS, and they must stay three: the badge is the
+     honesty label the whole console is judged on, and two tiers that look alike
+     are one tier. Weakest last, and deliberately colourless — `geometry` means
+     the physics has not been evidenced here, so it gets no reassuring hue. */
+  .tier-validated { background: rgb(93 185 138 / .16); color: var(--green); }
+  .tier-zone { background: rgb(176 141 87 / .18); color: var(--bronze); }
+  .tier-geometry { background: rgb(143 163 165 / .14); color: var(--ink); }
+</style>

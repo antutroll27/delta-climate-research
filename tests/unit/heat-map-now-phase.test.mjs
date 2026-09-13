@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { currentParams, SUN_LIT } from '../../src/scripts/climate-engine/heat-map-model.ts';
+import { resolve } from '../../src/scripts/climate-engine/scope/resolve.ts';
 import { solarElevationFactor } from '../../src/scripts/climate-engine/sky.ts';
 import {
   ACCURACY, TRANSITION_HOURS, TRANSITION_RMSE_K, isTransitionHour,
@@ -9,7 +10,10 @@ import {
 
 const AMBIENT = { tAir: 27.6, rh: 96, wind: 2.1, cloud: 95, feels: 34.2 };
 const IV = { trees: 0, roof: 0, parks: 0, facades: 0 };
-const scenario = (over) => ({ live: AMBIENT, phase: 'peak', path: '2025', iv: IV, ...over });
+/* The scope constants the physics now takes as a parameter — read from the shipped
+   registry, not re-typed here, so a drifted registry fails these tests too. */
+const CLIMATE = resolve('in/kolkata/ballygunge').climate;
+const scenario = (over) => ({ live: AMBIENT, phase: 'peak', path: '2025', climate: CLIMATE, iv: IV, ...over });
 
 test('the canonical peak applies noon sun regardless of when you look', () => {
   // This is the incoherence "now" exists to sit beside, not a defect to fix:

@@ -1,0 +1,141 @@
+---
+/**
+ * THE GREEN INFRASTRUCTURE TOOLBOX — the sidebar's Scenarios pane.
+ *
+ * THIS FILE IS A MOVE, NOT AN EDIT. Every line of the template below arrived
+ * verbatim from `<aside class="panel left">` in HeatMapStage.astro, which was
+ * 1,050 lines and had to stop being the place where four components live. Same
+ * sliders, same segmented controls, same score ring, same three pillars, same
+ * ids, same comments — including the two that say "below", which now means the
+ * stage's stylesheet rather than this file's. Nothing was tidied on the way
+ * out, because a move mixed with an edit is a diff nobody can review: the
+ * reviewer cannot tell which changed lines were the point and which were
+ * incidental, so both halves go unchecked.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * THE IDS ARE LOAD-BEARING, AND THEY FAIL SILENTLY.
+ *
+ * heat-map-app.ts finds seventeen elements in here BY NAME at runtime —
+ * `el('scoreArc')`, `querySelectorAll('#segPhase button')` — because the
+ * instrument is vanilla TS mounted over server-rendered markup, with no
+ * framework binding the two. There is therefore no compiler, no type and no
+ * import edge holding the names together: rename one and the query returns
+ * `null`, the optional chain shrugs, and that control simply stops responding.
+ * Nothing throws. The page still looks right.
+ *
+ *   v1 ivTrees · v2 ivRoof · v4 ivFacades · segPhase segPath
+ *   scoreArc scoreNum scoreTier scoreTxt · subs sGreen sCool sEff · scoreConf
+ *
+ * A second copy left behind in the stage would be just as quiet and slightly
+ * worse: two elements with one id is invalid HTML, and `getElementById` hands
+ * back whichever the parser reached first — the dead one. Both halves are
+ * pinned by tests/unit/obos-shell.test.mjs, which asserts all seventeen are
+ * here and that none of them is still there.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * WHY THIS COMPONENT SHIPS NO <style>, WHERE THE OTHER THREE SCOPE.
+ *
+ * IconRail, ScopeSwitcher and LayerTree each carry their own scoped block, and
+ * Task 2's guard holds them to it. This one is the documented exception, and
+ * the exception is exempted there BY NAME.
+ *
+ * The toolbox's rules stay in HeatMapStage.astro's `is:global` block because
+ * heat-map-app.ts WRITES CLASSES ONTO THIS MARKUP AT RUNTIME:
+ *
+ *   · `.on`, toggled across `#segPhase button` and `#segPath button` on every
+ *     click (heat-map-app.ts:1837, 1840) — the segmented controls' entire
+ *     visual state;
+ *   · `.soft` on `#sCool` (heat-map-app.ts:1676), which greys the exposure
+ *     pillar when its social-vulnerability input is unmeasured.
+ *
+ * Astro's scoping hash is applied at COMPILE time, to the selectors it can see
+ * and the elements it rendered. A rule written here as `.seg button.on` would
+ * compile to `.seg button.on[data-astro-cid-…]`, and the whole point of moving
+ * the sheet would be to have the app's `classList.toggle('on', …)` keep
+ * matching it — which it only does for as long as every element the app can
+ * touch is one Astro itself emitted. That is true today and is exactly the
+ * kind of invariant that stops being true the first time the app builds a
+ * button, so the sheet stays global rather than resting on it.
+ *
+ * `#scoreArc` is the sharpest case and the reason nothing here was "cleaned
+ * up": heat-map-app.ts:1656 does `setAttribute('stroke', tier.colour)` on it.
+ * `stroke` is deliberately NOT set by any CSS rule — a `stroke:` declaration
+ * anywhere would outrank the presentation attribute and permanently shadow the
+ * runtime colour, so the ring would paint its pre-score cyan for ever while
+ * every score still computed correctly. The element takes `currentColor` and
+ * the stage's sheet sets `color`. Do not give this file a stylesheet that
+ * "just" restates that.
+ */
+import { type ResolvedScope } from '../../../scripts/climate-engine/scope/resolve.ts';
+
+/**
+ * The scope, unchanged from what the stage already had.
+ *
+ * The moved markup reads exactly four things from it — `pathway.source`,
+ * `pathway.options`, `pathway.initial` and `country.name` — all of them in the
+ * warming-pathway control, whose whole argument is written out below. Passing
+ * the resolved scope rather than those four fields keeps that control's
+ * reasoning intact: it renders the scope's OWN table, and a narrower prop
+ * would be the first step back towards a hardcoded one.
+ */
+interface Props {
+  scope: ResolvedScope;
+}
+
+const { scope } = Astro.props;
+---
+<aside class="panel left">
+      <div class="h">Green Infrastructure Toolbox</div>
+      <div class="ctl"><label>Tree canopy corridors <span class="v" id="v1">0</span></label><input type="range" id="ivTrees" min="0" max="50" value="0" aria-label="Tree canopy corridors"></div>
+      <div class="ctl"><label>Cool-roof albedo <span class="v" id="v2">0%</span></label><input type="range" id="ivRoof" min="0" max="100" value="0" step="5" aria-label="Cool-roof albedo, percent of roofs treated"></div>
+      <div class="ctl"><label>Vertical green facades <span class="v" id="v4">0</span></label><input type="range" id="ivFacades" min="0" max="15" value="0" aria-label="Vertical green facades"></div>
+      <div class="ctl"><label style="margin-bottom:.35rem">Diurnal phase</label><div class="seg" id="segPhase"><button class="on" data-p="now">Now</button><button data-p="peak">13:00 Peak</button><button data-p="night">22:00 Retained</button><button data-p="heatwave">Heatwave</button></div></div>
+      {/* THE BUTTONS ARE THE SCOPE'S TABLE, DRAWN. Three were written out here -
+          data-p="2025" | "ssp245" | "ssp585" - under a title citing an Indian paper,
+          while `pathwayDelta` in heat-map-model.ts fails closed against whatever
+          table the scope actually carries. Two countries, one hardcoded control: a
+          country with a DIFFERENT populated table would render India's three and
+          throw out of the click handler on the first press, and a country with an
+          empty table would render three buttons that do nothing, under a citation
+          for research it has not adopted. See `PathwayControl`. */}
+      <div class="ctl"><label style="margin-bottom:.35rem" title={scope.pathway.source ?? undefined}>Warming pathway</label>{scope.pathway.options.length > 0
+        ? <div class="seg" id="segPath">{scope.pathway.options.map((opt) => (
+            <button class:list={{ on: opt.key === scope.pathway.initial }} data-p={opt.key}>{opt.label}</button>))}</div>
+        /* NOT AN EMPTY <div class="seg">, which would render as a hairline box with
+           nothing in it and read as a control still loading. An empty table is a
+           DECLARED absence - no regional projection has been adopted - and that is a
+           different fact from zero warming, so the control says which. */
+        : <p class="segnone">No regional warming pathway has been adopted for {scope.country.name}, so there is nothing to project. This is a stated absence, not a projection of no warming.</p>}</div>
+      <div class="score">
+        <div class="g">
+          {/* `stroke` is an SVG PRESENTATION ATTRIBUTE, not CSS, so `var(--surface2)`
+              written here would not resolve — an attribute is parsed by the SVG
+              attribute grammar, which has no custom properties. `currentColor` is
+              the bridge: it defers to the element's own `color`, which IS CSS and
+              takes the token (see `.score .g .track` / `#scoreArc` below).
+
+              #scoreArc keeps its attribute writable on purpose — heat-map-app.ts
+              setAttribute('stroke', tier.colour)s it once a score exists, and no CSS
+              rule sets `stroke`, so the runtime value still wins. The token only
+              paints the pre-score state, exactly as the cyan literal here did. */}
+          <svg viewBox="0 0 36 36" aria-hidden="true"><circle class="track" cx="18" cy="18" r="15.5" fill="none" stroke="currentColor" stroke-width="3"></circle><circle id="scoreArc" cx="18" cy="18" r="15.5" fill="none" stroke="currentColor" stroke-width="3" stroke-dasharray="97" stroke-dashoffset="97" stroke-linecap="round" transform="rotate(-90 18 18)"></circle></svg>
+          <div class="num" id="scoreNum">—</div>
+        </div>
+        <div class="t"><b>Resilience Score</b><span class="tier" id="scoreTier">—</span><span id="scoreTxt">move a slider to intervene</span></div>
+      </div>
+      <!-- The three pillars, shown raw. A composite index is only trustworthy if
+           you can see what it is made of; the Green Score published its three
+           components for the same reason. Exposure and hazard are shown as their
+           COMPLEMENTS (1 − EVI, 1 − THI) so that on every bar, higher is better —
+           mixing polarities in one strip is how a reader misreads the worst ward
+           as the best. -->
+      <div class="subs" id="subs" title="DC-URS pillars, IPCC AR6 framing. Capacity: greenness, albedo and refuge access. Exposure: shown as 1 − EVI, so higher is better; driven by population, built density and social vulnerability, none of which any intervention can move. Hazard: shown as 1 − THI, from measured ECOSTRESS surface temperature.">
+        <div><b id="sGreen">—</b><span>capacity</span></div>
+        <div><b id="sCool">—</b><span>exposure</span></div>
+        <div><b id="sEff">—</b><span>hazard</span></div>
+      </div>
+      <!-- Written by the app from unmeasured(), which reads the data file's own
+           provenance. Deliberately no copy in this file for anyone to forget to
+           delete: when socio.json lands the chip removes itself. -->
+      <div class="conf indicative scoreconf" id="scoreConf" hidden></div>
+    </aside>

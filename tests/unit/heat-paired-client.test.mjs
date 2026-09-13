@@ -14,7 +14,7 @@ class FakeWorker {
 }
 
 const state = {
-  a: 'ballygunge', b: 'baruipur', forcing: 'illustrative', phase: 'peak',
+  a: 'in/kolkata/ballygunge', b: 'in/kolkata/baruipur', forcing: 'illustrative', phase: 'peak',
   coverage: { trees: 0, roofs: 0, parks: 0, facades: 0 },
 };
 

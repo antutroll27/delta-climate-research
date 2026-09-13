@@ -12,9 +12,12 @@ good enough to rank roofs and spot the badly shaded ones, not to size debt again
 
 WHAT IS MEASURED AND WHAT IS ASSUMED — the split matters more than any single number:
 
-  MEASURED (ours)      inter-building shading, per building, from real footprints and
-                       heights. Pre-registered, gated, PASSED at 5.14% mean / 28.3% of
-                       roofs losing 5%+ (docs/.../2026-08-21-pv-shading-signtest-PREREG.md).
+  MEASURED (ours)      shading, per building, from real footprints and heights AND the Meta/WRI
+                       1 m canopy (v2, read at 0.5 m). Buildings-only was pre-registered, gated and
+                       PASSED (2026-08-21); the tree term was added 2026-09-05 under its own
+                       pre-registration and dominates: 17-18 pp of an 18.7-22 % total. Its largest
+                       uncertainty is a MASK RULE, not a physical constant -- see the artefact's
+                       levers block and known-limitations.md section 8.
   MEASURED (external)  GHI, five whole years of NASA POWER hourly in local solar time.
   ASSUMED              the packing factor. One number, declared below, and EVERY yield
                        scales linearly with it. It is the weakest link in the chain and
@@ -40,6 +43,7 @@ import sys
 from typing import Any
 
 import numpy as np
+import pvlib
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.join(HERE, "..")
@@ -57,7 +61,9 @@ solar_altaz = _shadowsig.solar_altaz
 SOLAR_CACHE = os.path.expanduser("~/.cache/delta-climate/power-solar-hourly.json")
 MET_CACHE = os.path.expanduser("~/.cache/delta-climate/power-hourly.json")
 def shading_path(ward: str) -> str:
-    return os.path.join(ROOT, "data", "calibration", f"pv-shading-{ward}.json")
+    """The TREE-INCLUSIVE artefact (2026-09-05). The registered building-only artefact
+    pv-shading-<ward>.json is kept as the record of that test and is no longer read here."""
+    return os.path.join(ROOT, "data", "calibration", f"pv-shading-trees-{ward}.json")
 
 
 def out_path(ward: str) -> str:
@@ -119,6 +125,16 @@ SYSTEM_LOSS = 0.129
 NOCT_C = 51.2
 GAMMA_PER_C = -0.0035
 
+#: Air temperature when POWER has no reading for an hour (absent, or its -999 fill).
+#: 27 C is close to this cell's long-run mean, so a handful of substituted hours move
+#: nothing; a zero would put the cell 27 C cold and quietly ADD yield. Named here rather
+#: than written inline twice because pv_validation_lib.py substitutes the same value on
+#: the same reasoning, and the two must not drift apart.
+T_AIR_FALLBACK_C = 27.0
+#: POWER's fill sentinel is -999. Tested as `< POWER_FILL_BELOW` rather than `== -999`
+#: because the API has served -999.0 and -999.00 both.
+POWER_FILL_BELOW = -900.0
+
 #: Sanity bracket for Kolkata rooftop specific yield, kWh/kWp/yr. GSA gives 1408 for
 #: the theoretical config; loss-scaled to small-residential that is ~1346, and an
 #: independently MEASURED 11.2 kWp rooftop at Bhubaneswar (same eastern-India monsoon
@@ -127,10 +143,186 @@ GAMMA_PER_C = -0.0035
 YIELD_MIN, YIELD_MAX = 1200.0, 1450.0
 
 
+def step_poa_dc(ghi: float, zen: float, az: float, t_air: float, doy: int,
+                tilt: float, azimuth: float) -> tuple[float, float]:
+    """One timestep of the array model: (plane-of-array irradiance, DC output), both W/m2
+    per kW/m2 of rating — i.e. before the system loss and before any shading.
+
+    THIS IS THE ONLY COPY OF THE PHYSICS. It was inline in specific_yield()'s hourly loop
+    until pv_validation_lib.py needed the same four steps for the daily model and copied
+    them, which meant two versions of the decomposition, the transposition and the NOCT
+    temperature that could silently disagree. The laboratory now calls this, so a change
+    to the chain's physics reaches the validation model in the same commit or not at all.
+
+    The four steps, in the order they must happen: Erbs splits GHI into beam and diffuse
+    (POWER's own DNI/DHI do not close against its GHI — see solar-forcing.json); Hay-Davies
+    transposes onto the tilted plane; the NOCT model puts the cell temperature at the
+    plane-of-array irradiance the module actually sees, not at GHI; and gamma derates
+    about the 25 C rating point."""
+    if ghi <= 0.0:
+        return 0.0, 0.0
+    dec = pvlib.irradiance.erbs(ghi, zen, doy)
+    dni, dhi = float(dec["dni"]), float(dec["dhi"])
+    tot = pvlib.irradiance.get_total_irradiance(
+        tilt, azimuth, zen, az, dni, ghi, dhi,
+        dni_extra=float(pvlib.irradiance.get_extra_radiation(doy)),
+        model="haydavies")
+    poa = float(tot["poa_global"])
+    t_cell = t_air + (NOCT_C - 20.0) / 800.0 * poa
+    return poa, poa * (1.0 + GAMMA_PER_C * (t_cell - 25.0))
+
+
+def step_dc(ghi: float, zen: float, az: float, t_air: float, doy: int,
+            tilt: float, azimuth: float) -> float:
+    """The DC half of step_poa_dc, for callers that do not accumulate POA separately —
+    which is the laboratory. The pair exists so this chain can keep reporting its POA
+    total (it is in the artefact, and the temperature derate is quoted against it)
+    without computing the transposition twice."""
+    return step_poa_dc(ghi, zen, az, t_air, doy, tilt, azimuth)[1]
+
+
+def tiers_block(existing: dict[str, Any] | None = None) -> dict[str, Any]:
+    """The card's tier chip and how-sure ladder read this, not the raw constants —
+    so the bracket, the packing range and the shading band the browser shows are
+    always the ones this chain actually used, never a copy that can drift from them.
+
+    `validated` is CARRIED FORWARD from `existing` — the tiers block of the browser
+    file this run is about to overwrite — rather than reset to None every time.
+    The pre-registration (§6.3) says that slot is written ONLY by
+    measure-pv-validation.py, once n >= 25; a rebuild of the screen (a new shading
+    pass, a packing-factor tweak) is not that event and must not silently
+    un-validate a result that already exists. `existing` absent or unreadable, or
+    carrying no `tiers`, a null `tiers`, no `validated` key, or a `validated` that
+    is not a well-formed dict (no numeric `n`) — all of these mean there is
+    nothing TRUSTWORTHY yet to carry, so the slot stays None rather than
+    propagate a corrupt value forward forever."""
+    raw_validated = ((existing or {}).get("tiers") or {}).get("validated")
+    validated = (raw_validated if isinstance(raw_validated, dict)
+                 and isinstance(raw_validated.get("n"), (int, float))
+                 and not isinstance(raw_validated.get("n"), bool)
+                 else None)
+    return {
+        "screened": True,
+        "yield_bracket_kwh_per_kwp": [YIELD_MIN, YIELD_MAX],
+        "packing_range": list(PACKING_RANGE),
+        "shading_band": "loss_strict .. loss",
+        "validated": validated,
+    }
+
+
+#: §6.3 of the rooftop pre-registration: the card's yield band is validated only at
+#: n >= 25, and below that the card says "not yet compared to real rooftops". The
+#: threshold lives here as well as in pv_validation_lib because THIS file is the only
+#: writer of the slot — a caller cannot talk its way past it.
+VALIDATED_MIN_N = 25
+
+
+def validated_block(result: dict[str, Any]) -> dict[str, Any]:
+    """The five numbers the card is allowed to print from a finished study, and no more.
+
+    `median_ratio` is the SCREENED ratio (pre-registration §3, statistic 4) — measured
+    generation against what the product actually printed, not against the re-tilted
+    as-built prediction. The as-built ratio is the better test of the physics and it is
+    in the result file; it is not what the card is comparing itself to."""
+    return {
+        "n": int(result["n"]),
+        # The median months per roof, as an integer, because the card says "over N months"
+        # and half a month is not something a sentence can carry honestly.
+        "months": int(round(float(result["median_months"]))),
+        "median_ratio": float(result["screened_median_ratio"]),
+        "within_15pct_share": float(result["within_15pct_share"]),
+        "date": str(result["date"]),
+    }
+
+
+def write_validated(result_path: str, ward: str) -> None:
+    """Write `tiers.validated` into one ward's browser file from a finished result.
+
+    THIS DOES NOT RE-RUN THE PHYSICS, deliberately. Re-deriving every roof would need the
+    shading artefact and five years of POWER hourly, and would silently rewrite thousands
+    of numbers as a side effect of recording a study's result. The slot is written through
+    `tiers_block(existing)` — the same carry-forward path a normal rebuild uses — so the
+    other four fields are rebuilt from this file's constants and cannot drift, and a
+    malformed result is refused by that function's own guard rather than shipped."""
+    with open(result_path) as fh:
+        result: dict[str, Any] = json.load(fh)
+    n = int(result.get("n", 0))
+    if n < VALIDATED_MIN_N:
+        sys.exit(f"  result has n={n}, below the pre-registered {VALIDATED_MIN_N} — "
+                 "the card's yield band is not validated and this slot stays null (§6.3)")
+    block = validated_block(result)
+    web = os.path.join(ROOT, "public", "heat-map", "data", f"pv-{ward}.json")
+    with open(web) as fh:
+        art: dict[str, Any] = json.load(fh)
+    art["tiers"] = tiers_block({"tiers": {"validated": block}})
+    if art["tiers"]["validated"] is None:
+        sys.exit(f"  the result's validated block was refused by tiers_block: {block}")
+    with open(web, "w") as fh:
+        json.dump(art, fh, separators=(",", ":"), allow_nan=False)
+    print(f"  {os.path.relpath(web, ROOT)}: tiers.validated = {block}")
+
+
+def _self_check() -> None:
+    t = tiers_block()
+    assert t["screened"] is True, "tiers.screened must be True until the study runs"
+    # Pinned, not derived: if the bracket or the packing range ever moves, move
+    # both the constant above and this literal in the same commit.
+    assert t["yield_bracket_kwh_per_kwp"] == [1200.0, 1450.0], \
+        "yield bracket pin does not match YIELD_MIN/YIELD_MAX — move both together"
+    assert t["packing_range"] == [0.28, 0.40], \
+        "packing range pin does not match PACKING_RANGE — move both together"
+    assert t["validated"] is None, \
+        "with no existing file, validated must start null — only measure-pv-validation.py sets it"
+
+    # Carry-forward: a rebuild must not erase a validation result that measure-pv-
+    # validation.py already wrote. Offline — this passes an "existing" dict
+    # directly, it does not read the ward file from disk.
+    fake_validated = {"n": 27, "months": 8, "median_ratio": 0.97,
+                       "within_15pct_share": 0.81, "date": "2026-10-01"}
+    carried = tiers_block({"tiers": {"validated": fake_validated}})
+    assert carried["validated"] == fake_validated, \
+        "a rebuild must carry an existing validated slot forward, not erase it"
+    # And the other three fields are untouched by carry-forward — only validated moves.
+    assert carried["screened"] is True and carried["packing_range"] == [0.28, 0.40]
+
+    # A corrupt or half-written "validated" (a hand edit, a truncated write) must
+    # NOT be carried forward as though it were trustworthy — it is treated the
+    # same as absent, so the guard in heat-map-app.ts never has to see it.
+    garbage = tiers_block({"tiers": {"validated": "yes"}})
+    assert garbage["validated"] is None, \
+        "a validated slot that is not a well-formed dict must not be carried forward"
+    also_garbage = tiers_block({"tiers": {"validated": {"months": 8}}})
+    assert also_garbage["validated"] is None, \
+        "a validated slot with no numeric n must not be carried forward"
+    assert tiers_block({"tiers": None})["validated"] is None, \
+        "a null tiers block on the existing file must not raise"
+
+    # --validated: the five numbers the card may print, and WHICH ratio is among them.
+    # The screened one, never the as-built one — the card compares itself to what it
+    # printed, and the two differ whenever a recruited roof is not at 22 deg south.
+    block = validated_block({"n": 31, "median_months": 9.5, "screened_median_ratio": 0.94,
+                             "median_ratio": 1.02, "within_15pct_share": 0.83,
+                             "date": "2026-10-01"})
+    assert block == {"n": 31, "months": 10, "median_ratio": 0.94,
+                     "within_15pct_share": 0.83, "date": "2026-10-01"}, block
+    assert tiers_block({"tiers": {"validated": block}})["validated"] == block, \
+        "the block --validated writes must survive tiers_block's own guard"
+
+    # The extracted physics: a dark step is zero on both outputs, a lit step is positive
+    # on both, and step_dc IS step_poa_dc's second element — the laboratory calls one and
+    # this chain calls the other, so they may never disagree.
+    assert step_poa_dc(0.0, 30.0, 180.0, 27.0, 100, TILT_DEG, AZIMUTH_DEG) == (0.0, 0.0)
+    poa, dcw = step_poa_dc(800.0, 30.0, 180.0, 27.0, 100, TILT_DEG, AZIMUTH_DEG)
+    assert poa > 0.0 and 0.0 < dcw < poa, (poa, dcw)
+    assert step_dc(800.0, 30.0, 180.0, 27.0, 100, TILT_DEG, AZIMUTH_DEG) == dcw
+    # Hotter air must derate: gamma is negative and the NOCT model is monotonic in it.
+    assert step_dc(800.0, 30.0, 180.0, 40.0, 100, TILT_DEG, AZIMUTH_DEG) < dcw
+
+    print("  self-check: ok")
+
+
 def specific_yield(lat: float) -> tuple[float, dict[str, Any]]:
     """Annual kWh per kWp for a fixed tilted array, from five years of POWER GHI."""
-    import pvlib
-
     with open(SOLAR_CACHE) as fh:
         cache = json.load(fh)
 
@@ -158,23 +350,14 @@ def specific_yield(lat: float) -> tuple[float, dict[str, Any]]:
             if alt <= 0:
                 continue
             zen = 90.0 - alt
-            # POWER's own DNI/DHI do not close against its GHI (see solar-forcing.json),
-            # so the split is DERIVED from GHI by Erbs rather than trusted from source.
-            dec = pvlib.irradiance.erbs(ghi, zen, doy)
-            dni, dhi = float(dec["dni"]), float(dec["dhi"])
-            tot = pvlib.irradiance.get_total_irradiance(
-                TILT_DEG, AZIMUTH_DEG, zen, az, dni, ghi, dhi,
-                dni_extra=float(pvlib.irradiance.get_extra_radiation(doy)),
-                model="haydavies")
-            g_poa = float(tot["poa_global"])
+            t_air = float(met.get(stamp, T_AIR_FALLBACK_C))
+            if t_air < POWER_FILL_BELOW:          # POWER fill
+                t_air = T_AIR_FALLBACK_C
+            # The four steps live in step_poa_dc, which the validation laboratory calls
+            # too — one copy of the physics, not two.
+            g_poa, g_dc = step_poa_dc(ghi, zen, az, t_air, doy, TILT_DEG, AZIMUTH_DEG)
             poa += g_poa
-            # Cell temperature from the plane-of-array irradiance the module actually
-            # sees, not from GHI — a tilted panel runs hotter than the horizontal.
-            t_air = float(met.get(stamp, 27.0))
-            if t_air < -900:                      # POWER fill
-                t_air = 27.0
-            t_cell = t_air + (NOCT_C - 20.0) / 800.0 * g_poa
-            dc += g_poa * (1.0 + GAMMA_PER_C * (t_cell - 25.0))
+            dc += g_dc
         poa_by_year.append(poa / 1000.0)          # Wh/m2 -> kWh/m2
         dc_by_year.append(dc / 1000.0)
 
@@ -193,16 +376,42 @@ def specific_yield(lat: float) -> tuple[float, dict[str, Any]]:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--ward", default="ballygunge")
+    #: No default on the --validated path: that path WRITES a browser artefact, and a
+    #: defaulted ward would quietly stamp a study's result onto Ballygunge because the
+    #: operator forgot to say which ward it belongs to. The build path keeps the default.
+    ap.add_argument("--ward", default=None)
     ap.add_argument("--check", action="store_true")
+    ap.add_argument("--self-check", action="store_true",
+                     help="offline: assert the tiers block round-trips, no artefacts read")
+    ap.add_argument("--validated", metavar="RESULT_JSON",
+                     help="write tiers.validated into --ward's browser file from a "
+                          "finished measure-pv-validation.py result (n >= 25 only)")
     args = ap.parse_args()
+
+    if args.self_check:
+        _self_check()
+        return
+
+    if args.validated:
+        if not args.ward:
+            sys.exit("  --validated writes one ward's browser file and will not guess "
+                     "which: pass --ward <id> as well")
+        write_validated(args.validated, args.ward)
+        return
+
+    args.ward = args.ward or "ballygunge"
 
     with open(shading_path(args.ward)) as fh:
         sh = json.load(fh)
     if sh["ward"] != args.ward:
-        sys.exit(f"  shading artefact is for {sh['ward']}, not {args.ward} — rerun measure-pv-shading.py")
-    if "per_building_loss" not in sh:
-        sys.exit("  shading artefact has no per-building array — rerun measure-pv-shading.py")
+        sys.exit(f"  shading artefact is for {sh['ward']}, not {args.ward} — rerun measure-pv-tree-shading.py")
+    for key in ("per_building_loss_total", "per_building_loss_buildings",
+                "per_building_loss_trees", "per_building_loss_total_raised",
+                "per_building_loss_total_strict", "per_building_area_m2"):
+        if key not in sh:
+            sys.exit(f"  shading artefact has no {key} — rerun measure-pv-tree-shading.py")
+    if not (sh["cross_check"]["pass"] and sh["sanity"]["loss_rises_as_sun_falls"]["pass"]):
+        sys.exit("  shading artefact failed its own sanity checks — refusing to build yield on it")
 
     lat = _types.WARDS[args.ward].centre.lat
     y, meta = specific_yield(lat)
@@ -219,7 +428,11 @@ def main() -> None:
           f"Bhubaneswar measured ~1340)")
 
     area = np.asarray(sh["per_building_area_m2"], dtype=float)
-    loss = np.asarray(sh["per_building_loss"], dtype=float)
+    loss = np.asarray(sh["per_building_loss_total"], dtype=float)
+    loss_b = np.asarray(sh["per_building_loss_buildings"], dtype=float)
+    loss_t = np.asarray(sh["per_building_loss_trees"], dtype=float)
+    loss_raised = np.asarray(sh["per_building_loss_total_raised"], dtype=float)
+    loss_strict = np.asarray(sh["per_building_loss_total_strict"], dtype=float)
     usable = area * PACKING_FACTOR
     kwp = usable / M2_PER_KWP
     kwh = kwp * y * (1.0 - loss)
@@ -244,13 +457,18 @@ def main() -> None:
             "basis": "SCREENING ONLY. NASA POWER publishes no per-site uncertainty, so no "
                      "P50/P90 pair can be derived and none is offered. Ranks roofs; does not "
                      "size debt.",
-            "measured": {"shading": sh["prereg"], "ghi": "NASA POWER, 5 y hourly, LST"},
+            "measured": {"shading": sh["prereg"],
+                         "shading_buildings_registered": "docs/superpowers/specs/2026-08-21-pv-shading-signtest-PREREG.md",
+                         "canopy": "Meta/WRI CHM v2, 1 m, MAE 3.0 m, CC BY 4.0 — A1 connectedness mask, 0.5 m grid (A4)",
+                         "ghi": "NASA POWER, 5 y hourly, LST"},
             "assumed": {"packing_factor": PACKING_FACTOR,
                         "packing_source": "Singh & Banerjee 2015 (Solar Energy), sample Mumbai "
                                           "buildings, PVA 0.28-0.40, conservative end adopted. "
                                           "NOT a Kolkata measurement; no Kolkata study exists. "
                                           "EVERY yield scales linearly with this.",
-                        "m2_per_kwp": M2_PER_KWP, "m2_per_kwp_source": "MNRE / PM Surya Ghar"},
+                        "m2_per_kwp": M2_PER_KWP, "m2_per_kwp_source": "MNRE / PM Surya Ghar",
+                        "canopy_transmittance": sh["canopy"]["transmittance"],
+                        "canopy_transmittance_band": sh["canopy"]["transmittance_band"]},
             "specific_yield_kwh_kwp_yr": round(y, 1), **meta,
             # Stratified by installable size, because the all-roofs statistics are
             # carried by buildings nobody will ever fit a system to: the worst-shaded
@@ -262,7 +480,9 @@ def main() -> None:
             "installable_ge_3kwp": {
                 "n": int((kwp >= 3.0).sum()),
                 "mean_shading_loss": round(float(loss[kwp >= 3.0].mean()), 4),
-                "share_losing_5pct": round(float((loss[kwp >= 3.0] >= 0.05).mean()), 4)},
+                "share_losing_5pct": round(float((loss[kwp >= 3.0] >= 0.05).mean()), 4),
+                "mean_shading_loss_trees": round(float(loss_t[kwp >= 3.0].mean()), 4),
+                "mean_shading_loss_buildings": round(float(loss_b[kwp >= 3.0].mean()), 4)},
             # Linear in the packing factor, so the interval is exact rather than
             # sampled — two endpoints, no bootstrap. Bounds our IMPORTED assumption,
             # not the truth: it is one Mumbai sample's spread, with no Kolkata evidence.
@@ -284,7 +504,7 @@ def main() -> None:
 
     # A SECOND, SLIMMER COPY FOR THE BROWSER. data/calibration/ is not web-served, so
     # the card cannot read the file above; and it should not, since that file carries
-    # provenance, assumptions and intervals the renderer has no use for. Three parallel
+    # provenance, assumptions and intervals the renderer has no use for. Seven parallel
     # arrays, index-aligned to the ward file exactly as load_ward() now enforces.
     #
     # Rounded at the point of writing rather than at the point of display: kWp to 2 dp
@@ -292,17 +512,44 @@ def main() -> None:
     # justify, and rounding here keeps the payload honest about its own resolution
     # instead of shipping fifteen digits the method cannot support.
     web = os.path.join(ROOT, "public", "heat-map", "data", f"pv-{args.ward}.json")
+    # Read whatever is there NOW, before this run overwrites it, so tiers_block can
+    # carry its "validated" slot forward instead of resetting it (see tiers_block's
+    # docstring). Absent or unreadable is fine — that just means nothing to carry.
+    existing_web: dict[str, Any] | None = None
+    try:
+        with open(web) as fh:
+            existing_web = json.load(fh)
+    except (OSError, json.JSONDecodeError):
+        existing_web = None
     with open(web, "w") as fh:
+        # Carried so the card can never present a screening number as a firm one, and so a
+        # stale artefact is visible rather than silently assumed current.
         json.dump({
             "ward": args.ward,
             "kwp": [round(float(v), 2) for v in kwp],
             "kwh": [int(round(float(v))) for v in kwh],
             "loss": [round(float(v), 3) for v in loss],
-            # Carried so the card can never present a screening number as a firm one,
-            # and so a stale artifact is visible rather than silently assumed current.
+            "loss_buildings": [round(float(v), 3) for v in loss_b],
+            "loss_trees": [round(float(v), 3) for v in loss_t],
+            "loss_raised": [round(float(v), 3) for v in loss_raised],
+            "loss_strict": [round(float(v), 3) for v in loss_strict],
             "specific_yield": round(y, 1),
             "packing_factor": PACKING_FACTOR,
-            "basis": "screening estimate - NASA POWER irradiance, Mumbai packing factor, "
+            "tiers": tiers_block(existing_web),
+            # A5: the ward panel prints the laboratory's numbers, never re-derived in the browser
+            "totals": {"capacity_mwp": round(float(kwp.sum()) / 1000, 3),
+                       "capacity_mwp_range": [round(float(kwp.sum()) / PACKING_FACTOR * pf / 1000, 3) for pf in PACKING_RANGE],
+                       "generation_gwh_yr": round(float(kwh.sum()) / 1e6, 3),
+                       "shading_loss_gwh_yr": round(float((kwp * y).sum() - kwh.sum()) / 1e6, 3),
+                       "mean_loss": round(float(loss.mean()), 4),
+                       "mean_loss_strict": round(float(loss_strict.mean()), 4),
+                       "mean_loss_trees": round(float(loss_t.mean()), 4),
+                       "mean_loss_raised": round(float(loss_raised.mean()), 4)},
+            "stratum": {"threshold_kwp": 3.0, "n": int((kwp >= 3.0).sum()),
+                        "share_losing_5pct": round(float((loss[kwp >= 3.0] >= 0.05).mean()), 4),
+                        "mean_loss": round(float(loss[kwp >= 3.0].mean()), 4)},
+            "basis": "screening estimate - NASA POWER irradiance, Mumbai packing factor, canopy "
+                     "shading from Meta/WRI CHM v2 (A1 mask, crowns 70% opaque, canopy heights carry the model's 3 m MAE, not propagated, 0.5 m grid), "
                      "no site uncertainty model, not bankable",
         }, fh, separators=(",", ":"))
     kb = os.path.getsize(web) / 1024

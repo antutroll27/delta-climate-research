@@ -48,6 +48,7 @@ export {
   Timer,
   Vector2,
   Vector3,
+  Vector4,
   WebGLRenderer,
   WebGLRenderTarget,
 } from 'three';

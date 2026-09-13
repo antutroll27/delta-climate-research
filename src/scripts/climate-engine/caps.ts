@@ -47,7 +47,14 @@ export interface HeatCaps {
   gpuLabel: string;
 }
 
-const TIER_MODE: Record<RenderTier, MapMode> = { 2: 'relief', 1: 'relief', 0: 'isotherm' };
+/* EVERY TIER OPENS ON THE 3-D CITY. Tier 0 used to open flat, which meant the
+   thing people came to see was hidden from the devices most of them arrive on —
+   and the tier is a guess about a GPU label, not a measurement of what the phone
+   can do. The runtime already demotes on real evidence: render-quality.ts watches
+   frame times and drops the pixel ratio, and caps.ts routes tier 0 to the CPU
+   solver regardless of what is drawn. So the cost of being wrong here is a
+   softer picture, not a broken one, and the 2-D isotherm stays one tap away. */
+const TIER_MODE: Record<RenderTier, MapMode> = { 2: 'relief', 1: 'relief', 0: 'relief' };
 
 /** WebGPU counts as available only if an adapter resolves — the API can exist with none. */
 async function probeWebGpu(): Promise<boolean> {
@@ -86,6 +93,10 @@ export function resolveHeatCaps(
   animate: boolean,
   caps: SimCapabilities,
   gpuLabel: string,
+  /** No GPU at all (SwiftShader, llvmpipe, a VM): the city would be a slideshow, so
+      the map opens flat with the city one tap away. Tier 0 on real hardware still
+      opens on the city. */
+  softwareRenderer = false,
 ): HeatCaps {
   const backend: SimBackend = !animate
     ? 'ts' // one static frame — no point spinning up a GPU context
@@ -97,7 +108,7 @@ export function resolveHeatCaps(
   return {
     tier,
     backend,
-    mode: TIER_MODE[tier],
+    mode: softwareRenderer ? 'isotherm' : TIER_MODE[tier],
     animate,
     webgpu: caps.webgpu,
     floatRenderTargets: caps.floatRenderTargets,
@@ -111,15 +122,21 @@ export function resolveHeatCaps(
  * runtime deps — that is what lets assertCapsLogic run in isolation under Node.
  */
 export async function detectHeatCaps(): Promise<HeatCaps> {
-  const [{ getRenderQuality }, { motionOK }] = await Promise.all([
+  const [{ getBaseRenderQuality, isSoftwareRenderer }, { motionOK }] = await Promise.all([
     import('../../utils/render-quality'),
     import('../../utils/motion'),
   ]);
-  const quality = getRenderQuality();
+  /* THE DEVICE'S TIER, NOT THE PAGE'S FRAME HISTORY. `getRenderQuality()` carries
+     whatever the adaptive governor took off on the way here — and until
+     2026-09-06 that included the landing page's boot jank, carried through the
+     view transition, so OBOS opened flat on machines that had just drawn the
+     river at full tilt. Runtime pressure on THIS page is exploreRuntimeBudget's
+     job; the boot verdict is the hardware's. */
+  const quality = getBaseRenderQuality();
   const animate = typeof window === 'undefined' ? true : motionOK();
   const webgpu = await probeWebGpu();
   const floatRenderTargets = probeFloatRenderTargets();
-  return resolveHeatCaps(quality.tier, animate, { webgpu, floatRenderTargets }, quality.gpuLabel);
+  return resolveHeatCaps(quality.tier, animate, { webgpu, floatRenderTargets }, quality.gpuLabel, isSoftwareRenderer(quality.gpuLabel));
 }
 
 /**
@@ -154,7 +171,12 @@ export function assertCapsLogic(): void {
   // reduced motion never animates and never spins up the GPU
   const rm = resolveHeatCaps(2, false, gpu, '');
   assert(!rm.animate && rm.backend === 'ts', 'reduced-motion -> static ts');
-  // potato defaults to the cheap 2D view
-  assert(resolveHeatCaps(0, true, none, '').mode === 'isotherm', 'tier 0 -> isotherm');
+  // tier 0 opens on the 3D view too (2026-09-03): the flat map was hiding the
+  // city from every modern Mali phone, and the solver backend, not the view
+  // mode, is what carries the cost. A visitor can still drop to 2D by hand.
+  assert(resolveHeatCaps(0, true, none, '').mode === 'relief', 'tier 0 -> relief');
   assert(resolveHeatCaps(2, true, none, '').mode === 'relief', 'tier 2 -> relief');
+  // no GPU at all is not a weak GPU: a software rasteriser opens flat (2026-09-06)
+  assert(resolveHeatCaps(0, true, none, 'SwiftShader', true).mode === 'isotherm', 'software renderer -> isotherm');
+  assert(resolveHeatCaps(2, true, gpu, '', true).mode === 'isotherm', 'software renderer -> isotherm at any tier');
 }

@@ -395,6 +395,137 @@ time-stepped solver, and the relaxation has no dt-free steady state. So that scr
 to this whole layer, and its output is annotated to say so. Any future cover layer that enters only the
 time-stepped solve will be invisible to it in exactly the same way.
 
+## 8. Rooftop-PV screening: the capacity figure rests on a Mumbai constant, and the shading claim is a Ballygunge claim
+
+**Status:** OPEN · **Found:** 2026-08-21, while extending the shading gate to all three wards · **Scope:**
+`scripts/measure-pv-shading.py`, `scripts/build-pv-yield.py`, `data/calibration/pv-*.json`.
+
+**Shading is robust; capacity is not.** Per-building shading loss is a *ratio*, so the roof-packing
+assumption cancels out of it. Every MWp and GWh does not: they scale linearly with `PACKING_FACTOR = 0.28`,
+imported from Singh & Banerjee 2015 (*Solar Energy*) — a **Mumbai** sample, range 0.28–0.40, conservative
+end adopted. No Kolkata measurement exists. The artefact therefore publishes an **interval**
+(`totals_packing_range`), and the headline is its floor: Ballygunge 17.49–24.99 MWp, 22.24–31.78 GWh/yr.
+The band is one-sided (+43 %) and bounds our *imported assumption*, not the truth.
+
+**The pre-registered gate passes on all roofs and fails on the roofs the scheme addresses.** Restricted
+post hoc to ≥ 3 kWp, Barrackpore (1.22 % / 6.8 %) and Baruipur (1.12 % / 7.1 %) do not clear the rule; only
+Ballygunge does (3.32 % / 20.3 %). Correct physics — shading tracks built density (median heights 7.0 / 4.9
+/ 4.5 m) — but it means "a quarter of roofs are materially shaded" is a **Ballygunge** statement, and on
+installable roofs a fifth. The rule was not re-registered; the stratum is reported alongside it
+(`installable_ge_3kwp`).
+
+**Heights understate shading, in a known direction.** Building heights are unvalidated with a suspected low
+bias (§ICESat-2 in `accuracy.ts`), so shadows are too short and shading is *understated* — a PASS is safe, a
+FAIL means "not detected". ~13 % of buildings (465 / 597 / 629) sit on Google's 2.5 m no-confident-height
+fill; 5–6 % of ≥ 3 kWp roofs. The p65→p75 caster swap was tested and is a null (+0.01–0.04 pp): the lever
+is the raster, not the quantile.
+
+**Screening, not bankable.** NASA POWER publishes no per-site uncertainty, so no honest P50/P90 pair can be
+built from it; only one of three uncertainty terms (interannual, ~3 %) is in hand, and the dominant one
+(site bias) is unquantified. The artefacts self-label `SCREENING ONLY`.
+
+**What would close it.** In order of leverage: (1) a **Kolkata roof-packing measurement** from overhead
+imagery — collapses the +43 % band; ground-level imagery cannot resolve it. (2) **Ground irradiance** to
+bias-correct POWER for the whole metro — the NIWE SRRA Advanced Measurement Station at IIEST Shibpur sits
+inside our POWER cell (see `data-sources.md`, Candidate). (3) **Height data**, not height statistics —
+stereo VHR photogrammetry or lidar. Terrain is ~0 % (Kolkata's true relief is 3–5 m; ground moves < 1 m
+over a 25–50 m shadow run).
+
+> **ADDENDUM 2026-09-05 — trees are now in the shading pass, and the shipped loss is buildings + trees.**
+> Pre-registered (`docs/superpowers/specs/2026-09-05-pv-tree-shading-design.md`, Amendments A1–A4) and run
+> as written: raster shadow-casting on a 0.5 m surface of footprints plus the Meta/WRI CHM v2, cross-checked
+> against the registered polygon run on buildings alone, and refusing to publish anything if that check fails.
+> Central cell = τ 0.30, stated canopy heights, A1 connectedness mask, receiver at the roof plane. Both
+> predictions held in all three wards: trees exceed buildings on installable roofs, and the total never falls
+> below buildings-only.
+>
+> | ward | cross-check mean / share (pp of 1.0 / 3.0) | all roofs: total mean · share ≥ 5 % | ≥ 3 kWp: total · share | trees vs buildings, ≥ 3 kWp | overhang kept | mask lever |
+> |---|---|---|---|---|---|---|
+> | Ballygunge | 0.29 / 1.56 | **21.95 %** · 67.7 % | 14.34 % · 58.2 % | 11.17 vs 3.16 | 99 % | 9.13 pp |
+> | Barrackpore | 0.20 / 1.38 | **19.03 %** · 64.2 % | 14.96 % · 59.9 % | 13.86 vs 1.10 | 98 % | 10.26 pp |
+> | Baruipur | 0.32 / 2.23 | **18.67 %** · 61.2 % | 11.54 % · 48.5 % | 10.59 vs 0.95 | 99 % | 9.14 pp |
+>
+> Generation falls by the tree term, capacity unchanged: 22.24 → 19.76, 18.70 → 15.90, 14.40 → 12.47 GWh/yr
+> (17.49 / 14.40 / 11.13 MWp floor). Shading now costs 3.22 / 3.05 / 2.14 GWh/yr against 0.74 / 0.25 / 0.20
+> before.
+>
+> **What the honest sentence now says.** The building term is still robust. The tree term is larger and
+> less certain, and the published figure sits at the **high end** of its own sensitivity table (Ballygunge
+> 12.8–24.4 %, Barrackpore 8.8–21.5 %, Baruipur 8.1–21.1 % across the eight registered cells). Four things
+> set that width, in order: (1) **the mask rule is the largest lever in every ward** (A1 → strict mask:
+> −9.1 / −10.3 / −9.1 pp). In continuous canopy the connectedness rule barely fires — 98–99 % of canopy over
+> roofs is kept as overhang — and overhang is 53–58 % of the whole tree term; the strict row is the floor.
+> (2) Crown opacity: τ across its 0.20–0.50 band moves the total 7.3–7.5 pp. (3) Canopy heights carry the
+> model's 3.0 m MAE and only the minus-MAE cell is run (−5.7 / −7.3 / −8.0 pp), so the shipped figure is not
+> the upper bound. (4) **The numbers are not grid-converged**: halving the grid from 1 m to 0.5 m raised
+> Ballygunge's total by 2.0 pp and Barrackpore's by 2.5 pp (Baruipur has no 1 m total: it refused before
+> publishing one), and the raster still reads low against the polygon sweep in all three wards (4.83 vs 5.12,
+> 1.46 vs 1.66, 1.47 vs 1.79 % on buildings alone), so these are floors within the A1 rule. A crown standing
+> directly over its own roof is also invisible to the march near zenith (27 % of the year's GHI weight at 2 m
+> above the roof) — understated, same direction. No species, no seasonal leaf drop.
+>
+> **Baruipur refused at 1 m, certified at 0.5 m (A4).** On the ward with the smallest roofs (88 pixels each
+> at 1 m against 177 in Ballygunge) the buildings-only raster undercounted the share of roofs above 5 % by
+> 3.60 pp against a 3.0 pp tolerance while the mean passed. The tolerance was not loosened; the grid was
+> refined for all three wards, everything else as registered, and the 1 m failure stays in history
+> (commit `cf7e60d`) and in every artefact's `notes.grid`. At 0.5 m Baruipur consumes 74 % of the share
+> budget — still the tight one.
+>
+> **The ≥ 3 kWp stratum, restated alongside the registered verdict, never as a re-registration.** On
+> building-only shading the registered gate still fails in Barrackpore (1.10 % / 6.0 %) and Baruipur
+> (0.95 % / 5.8 %) and passes in Ballygunge (3.16 % / 19.2 %) — the same finding as the PREREG addendum, to
+> within 0.18 pp. On the total it passes comfortably in all three. The `stratum.n` in the shading artefact
+> (1841 / 1771 / 1141) is computed from unrounded areas; the yield artefact's `installable_ge_3kwp.n`
+> (1840 / 1771 / 1140) from 1-dp areas — one boundary roof, not the same population, do not quote both as one.
+>
+> **A lever the consultant can pull.** Raising the array 2 m on an elevated mounting structure recovers
+> 5.2 / 6.0 / 6.6 pp of the total; it ships per building as `loss_raised` and is a what-if, not a claim.
+>
+> **The card prints the floor (closed 2026-09-06).** The console's Solar section, card block and
+> ward-panel block (spec `docs/superpowers/specs/2026-09-05-solar-console-design.md`) read
+> `loss_strict` and print "at least X % under a strict roof mask" wherever the headline appears,
+> with the tariff shown as an assumption the reader can change. The eight-cell table still lives
+> only in `data/calibration/pv-shading-trees-<ward>.json`.
+>
+> **Artefacts:** `data/calibration/pv-shading-trees-<ward>.json` (sensitivity table, levers, predictions,
+> cross-check with the registered comparands, per-sun shaded fractions); the registered
+> `pv-shading-<ward>.json` is untouched and no longer read by the yield chain.
+>
+> **A reader property found on the way.** `fetch-canopy.read_chm_grid` returns a 1 m floor over the whole
+> box — the native v2 tile is 47.9 % exact zeros in Ballygunge (uint8, `nodata=None`, zeros under a
+> per-dataset mask band; the boundless average read fills them at 1). It cannot touch this result: the
+> fraction above the 2 m tree threshold agrees native vs reader (42.6 vs 42.8 %), and nothing below 2 m
+> enters the mask or clears a 2.5 m roof. The artefact's fingerprint is therefore `canopy.px_over_min_m`, a
+> count above the threshold, not a nonzero count. Whether the render layer's density mapping is affected
+> by the same floor is a separate question for the vegetation layer, not answered here.
+
+
+### The ladder on the card (2026-09-07)
+
+Every solar figure on the building card and in the Solar pane now leads with its interval and wears a
+tier chip (*screened* today). Under the block, a "How sure, and what would make it surer" disclosure
+lists the five limits, each with the fix that narrows it. The bands are the artefacts' own; the
+"narrows to" column is an engineering expectation, labelled as such until the rungs are measured.
+
+| limit | today | the fix | narrows to (expectation) |
+|---|---|---|---|
+| roof obstacles unknown (tanks, stair rooms, parapets) | capacity at packing 0.28–0.40, up to +43 % on the floor | a ten-minute walk of the roof with a phone | about ±10 % |
+| canopy over the roof: usable or not | shading headline vs strict floor, up to ten points (Barrackpore 10.3) | one photo from the roof | settled for that roof |
+| irradiance from a coarse satellite cell | yield bracket 1,200–1,450 kWh/kWp | the ground station inside that cell | about ±5 %, city-wide |
+| building height unverified | ward-scale only | a survey or a drone pass | per roof |
+| never compared with real rooftops | no measured error | the pre-registered validation study | a measured spread, with its n |
+
+Each line is a button that opens a pre-filled email to the technical-queries address with the ward, the
+building index and the limit named; the survey and the measured rung do not exist yet and the button
+does not pretend they do. A one-page **installer brief** prints from the card (the browser's own print,
+no server): the roof's outline from its own footprint, the ranges, the shading split, the ladder, and six
+questions a vendor's quote must answer. When the validation study publishes at n ≥ 25, the fifth line
+prints the measured spread and the chip reads *checked*; the footer still says *not bankable*, because
+a comparison with real roofs is not an engineer's stamp.
+
+**The pre-registration** for that study is `docs/superpowers/specs/2026-09-07-pv-rooftop-validation-design.md`;
+its predictions are committed before any measured kilowatt-hour enters the repository, and the result is
+published whichever way it falls.
 ---
 
 ## 8. Bangalore's building heights have two sources that disagree, and no Indian ground truth

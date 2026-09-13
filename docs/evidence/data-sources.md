@@ -18,12 +18,13 @@ collection), `https://earth-search.aws.element84.com/v1`; terms
 since 2026-08-12 the **sole** source of `veg[]` — the CHM used to redistribute it and no longer does (see
 the CHM entry below) · status: shipped, unchanged.
 
-**Meta / WRI 1 m Canopy Height Model (CHM) — we ship v1** — Meta AI + WRI, neural height regression on
-Maxar imagery · 1 m, single-epoch, MAE "a few metres," known ~150 m tiling artefacts · **CC BY 4.0 —
-commercial with attribution** · anonymous AWS Open Data, no credentials:
-`s3://dataforgood-fb-data/forests/v1/alsgedi_global_v6_float/chm/<quadkey>.tif`, zoom-9 Bing quadkey ·
-registry `https://registry.opendata.aws/dataforgood-fb-forests/` · **role:** Tier-2 canopy height —
-**RENDER-ONLY.** Drives tree placement/height for the render layer and **does not enter the temperature
+**Meta / WRI 1 m Canopy Height Model (CHM) — we ship v2 (since 2026-08-12; v1 before)** — Meta AI + WRI,
+neural height regression on Maxar imagery · 1 m, single-epoch, MAE 3.0 m (v2; v1 4.3 m), known ~150 m tiling
+artefacts · **CC BY 4.0 — commercial with attribution** · anonymous AWS Open Data, no credentials:
+`s3://dataforgood-fb-data/forests/v2/global/dinov3_global_chm_v2_ml3/chm/<quadkey>.tif`, zoom-10 Bing quadkey
+(v1: `forests/v1/alsgedi_global_v6_float`, zoom-9) · registry
+`https://registry.opendata.aws/dataforgood-fb-forests/` · **role:** Tier-2 canopy height —
+**render + PV screening (2026-09-05), never the temperature solve.** Drives tree placement/height for the render layer, and since 2026-09-05 casts shadows in the rooftop-PV shading pass (`scripts/measure-pv-tree-shading.py`, v2 read at 0.5 m, A1 connectedness mask — spec `2026-09-05-pv-tree-shading-design.md`, Amendments A1–A4). It still **does not enter the temperature
 solve** · status: **shipped to production 2026-08-11** for all three wards (8,896 / 4,413 / 6,797 trees);
 ward-mean accuracy unchanged throughout (night ±3.5K, day ±5.0K — the CHM has never affected it).
 
@@ -63,6 +64,10 @@ ward-mean accuracy unchanged throughout (night ±3.5K, day ±5.0K — the CHM ha
 > One thing v2 is NOT: fresher. Its paper puts ~80% of source imagery in 2018-2020, the same epoch as v1
 > — it is a **model** upgrade, not new observations. Do not sell it as newer data. *(The AWS registry
 > gives v1 source imagery as 2016 against the ~2018-2020 stated here — unresolved, verify.)*
+>
+> **UPDATE 2026-09-05:** v2 has been the fetched source since 2026-08-12 (`fetch-canopy.py`,
+> `<ward>-trees.json` carry the v2 prefix), so the entry header above now says v2. The reader floors at 1 m —
+> see `known-limitations.md` §8, addendum 2026-09-05.
 
 **ESA WorldCover 10 m (2020/2021)** — ESA · 10 m, 2020/2021 · **CC BY 4.0 — commercial OK** · AWS Open
 Data + MS Planetary Computer, `https://esa-worldcover.org/en`,
@@ -73,25 +78,29 @@ status: shipped, in the pipeline.
 **Microsoft Global ML Building Footprints** — Microsoft, ML-derived from satellite imagery · vector
 polygons, tiles `123133323` (Ballygunge/Baruipur) + `123133321` (Barrackpore) · **ODbL** ·
 `https://github.com/microsoft/GlobalMLBuildingFootprints` · **role:** shipped building-massing/footprint
-source for all three wards (feeds `built` raster, DC-URS FAR) · status: **production, shipped**; counts
-Ballygunge 2,048 / Baruipur 3,528 / Barrackpore 3,003; ~88% complete against Overture (12.1% of Overture
-buildings sit >20 m from anything MS holds).
+source for all three wards **until 2026-08-04** · status: **superseded** by Overture (commit `6151975`,
+8,579 → 12,767 buildings); retained only as the completeness comparison — MS held ~88% of Overture (12.1% of
+Overture buildings sit >20 m from anything MS holds). Counts were Ballygunge 2,048 / Baruipur 3,528 /
+Barrackpore 3,003.
 
 **Google Open Buildings 2.5D Temporal** — Google Research, 2023 epoch, ~4 m per-pixel · **CC BY 4.0 —
 commercial OK** · public GCS bucket, no auth:
 `storage.googleapis.com/open-buildings-temporal-data/v1/geotiffs/…`; product page
-`https://sites.research.google/open-buildings/` · **role:** per-footprint building heights via zonal-mean
-sampling over MS footprints; feeds massing render + DC-URS FAR (0.35×0.30 weight) · status: **shipped**;
-98–99% of buildings got a direct zonal measurement (means Bally 7.6 m / Baruipur 4.6 m / Barrackpore
-4.9 m); **heights unvalidated with a suspected low bias** — no independent Kolkata ground truth; ICESat-2
+`https://sites.research.google/open-buildings/` · **role:** per-footprint building heights via zonal **p65**
+over Overture footprints (p75 also cached in `data/geometry/heights-overture.json`); feeds massing render +
+DC-URS FAR (0.35×0.30 weight) · status: **shipped**; shipped p65 medians Ballygunge 7.0 m / Barrackpore
+4.9 m / Baruipur 4.5 m; **~13% of buildings sit on Google's 2.5 m no-confident-height fill** (465/597/629);
+the p65→p75 caster swap was tested for PV shading and is a null (+0.01–0.04 pp) — the percentile is not a
+lever, the raster is; **heights unvalidated with a suspected low bias** — no independent Kolkata ground truth; ICESat-2
 comparison came back `underpowered` (n=28 vs bar of 30), so no correction/statistic applied.
 
 **Overture Maps footprints** — Overture Maps Foundation (merges OSM + Google Open Buildings + Microsoft
 ML) · release pinned `2026-07-22.0` · **ODbL** (in-repo attribution: "Footprints © Overture Maps
-Foundation (ODbL)") · GeoParquet via DuckDB · **role:** validation/QA — completeness + height cross-check
-against the shipped Microsoft geometry; a full-replacement production pipeline exists but is **not
-shipped** — stopped at its own parity gate (best statistic reaches only 67% of buildings within 2 m
-against a 90% threshold) · status: evaluation/validation use only.
+Foundation (ODbL)") · GeoParquet via DuckDB · **role:** **the shipped footprint source** for all three wards
+since 2026-08-04 (commit `6151975`; 3,527 / 4,702 / 4,538 = 12,767 buildings, GERS-deduplicated) · status:
+**production, shipped**. One overlapping pair survived dedup in Barrackpore and produced a spurious 100 %
+rooftop-PV shading loss — guarded by `OVERLAP_TOL` in `scripts/measure-pv-shading.py`. The earlier
+"stopped at its parity gate" note (also in `heat-map-feature.md`) predates the ship commit.
 
 **OpenStreetMap (OSM)** — community-mapped, via Overpass · vector, current · **ODbL — commercial OK** ·
 Overpass API fetchers (`scripts/fetch-water.py`, roads fetcher),
@@ -189,9 +198,70 @@ placed/scaled from the CHM, receipted as "modelled, not measured" · status: shi
 fallback noted: Kenney/Quaternius CC0 low-poly trees (`https://kenney.nl/assets`,
 `https://quaternius.com/`).
 
+**Poly Haven sky domes (image-based lighting for the OBOS 3-D scene)** — two 1k Radiance `.hdr`
+environment maps, 1024×512 equirectangular · **CC0 1.0** — any purpose, commercial included, no
+attribution required (`https://polyhaven.com/license`) · fetched 2026-08-29 from
+`https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/<slug>_1k.hdr` via the asset API
+`https://api.polyhaven.com/files/<slug>`; **vendored into the repo** at `public/heat-map/sky/` — a
+third-party CDN in the render path would be a dependency we do not control and a per-visitor privacy
+leak · **role: RENDER-ONLY ambience.** They light building materials through `scene.environment`
+(PMREM-convolved); they are never `scene.background` and are never seen directly, because the three.js
+scene is a MapLibre custom layer that composites over the basemap. **They do not enter the temperature
+solve** — `sun` and `kRad` there are ward-wide scalars and there is no shade term · loaded after first
+paint, on device tier `full` only · status: shipped 2026-08-29 on `feat/obos-shell`.
+
+| | day | night |
+|---|---|---|
+| slug | `mud_road_puresky` | `kloppenheim_07_puresky` |
+| conditions | midday, overcast, sky only | night, overcast, sky only, town skyglow |
+| sha256 | `99d43df8e055fc8b8e9e4ca846c432e8d7184a15fd3f4d68f425b157cc99c03d` | `c18aa40364d1b5aa788f309f1c64d891c386e6f8e7d958c329f7470489e04f8a` |
+| bytes | 1,109,840 | 1,282,823 |
+| mean radiance (solid-angle weighted) | 0.367 | 0.249 |
+| **max / mean luminance** | **2.2** | **49** |
+| light in the brightest 0.1 % of solid angle | 0.2 % | 0.7 % |
+
+**WHY THESE TWO, AND THE NUMBER THAT DECIDED IT.** An HDRI's baked sun sits at the angle it was
+photographed at, which is not Kolkata's, and OBOS's key light is now driven by our own solar geometry —
+so a dome with a strong sun in it is a second, wrong key light fighting the right one. `max / mean`
+is that in one number: a sun or moon disc runs to hundreds of times the dome mean, an overcast dome has
+no disc at all. Measured by parsing the RGBE of the 1k files directly (eight candidates, all Poly Haven
+"pure skies" or open-sky night domes):
+
+| candidate | time / weather | max/mean | verdict |
+|---|---|---|---|
+| `mud_road_puresky` | midday, overcast | **2.2** | **adopted (day)** |
+| `overcast_soil_puresky` | afternoon, overcast | 6 | runner-up |
+| `kloofendal_overcast_puresky` | afternoon, overcast | 7 | runner-up |
+| `farm_field_puresky` | midday, partly cloudy | 28 | a visible sun |
+| `kloppenheim_07_puresky` | night, overcast, skyglow | **49** | **adopted (night)** |
+| `qwantani_night_puresky` | night, clear | 141 | bright horizon light source |
+| `rogland_clear_night` | night, clear | 215 | not sky-only; desert-brown ground bounce |
+| `satara_night_no_lamps` | night, clear, natural only | 2876 | Milky Way core; and heavy sensor noise |
+
+The night dome matters more than the day one — the 22:00 retained-heat phase is the one that looked
+worst, because it was lit by the same fixed key as noon. An **overcast** night was chosen over every
+clear-night option on the same argument: a clear night's bright spot is a moon, i.e. a directional
+source at the wrong angle, while an overcast night spreads its light across the whole cloud deck. It
+also happens to describe Kolkata at 22:00 — humid, hazy and light-polluted — rather than a desert sky.
+
 ---
 
 ## Candidate — brainstormed, not yet in the pipeline
+
+**Ground irradiance — NIWE SRRA Advanced Measurement Station at IIEST Shibpur, and IMD Alipore** —
+researched 2026-09-02, **not acquired**. The IIEST station (Howrah) was established **2014** under
+MNRE's SRRA programme, built explicitly for "investor-grade" solar data: pyranometer (GHI), shaded
+pyranometer (DHI), pyrheliometer on tracker (DNI), **sun photometer for aerosols** (the term that breaks
+satellite irradiance over the Indo-Gangetic Plain), albedometer, net/IR/UV radiometers. **6.8 km from
+Ballygunge, 6.6 km from our POWER cell centre — inside the same POWER grid cell as all three wards**, so it
+is the natural bias-correction reference for the whole metro, not one roof. Access: NIWE sells *processed*
+data (NDA, payment in advance, FTP within 5 working days; prices behind a bot wall, not indexed); raw data
+only via MNRE-approved institutional collaboration — which, with a DST-funded solar hub on campus, may be
+the better route than purchase. Contact `dst.iiestsolarhub@gmail.com`. **IMD Alipore** is one of the original
+four IMD radiation stations (**1957**), measuring direct/diffuse/global; via the IMD Data Supply Portal
+(`dsp.imdpune.gov.in`, registration, cost-estimate tool, `data.service@imd.gov.in`). **Not established:**
+prices, whether IIEST is currently operational, ISO 9060 sensor class, commercial-use terms. **Priority:
+below the PV packing factor** — irradiance bias is a ~5% term; the Mumbai packing factor is +43%.
 
 **ETH Zurich Global Canopy Height (Lang et al. 2023)** — ETH Zurich, Sentinel-2 + GEDI fusion, 10 m ·
 **CC BY 4.0** (raster; repo code is MIT) · 3-deg COG tiles on `libdrive.ethz.ch`, range-readable via
@@ -252,7 +322,10 @@ through GEE. Avoided by pulling EO data through open STAC + AWS Open Data instea
 
 **FABDEM (free tier)** — proposed as the surface to drape canopy onto. **Free FABDEM is CC BY-NC-SA 4.0 —
 non-commercial.** A paid commercial licence exists via Fathom but isn't free; not needed since terrain
-already uses terrarium/GLO-30. `https://data.bris.ac.uk/data/dataset/25wfy0f9ukoge2gs7a5mqpq2j7`,
+already uses terrarium/GLO-30, and flood work uses GEDTM30 v1.2 (CC BY 4.0) + DeltaDTM. **Datum trap
+(2026-09-02):** FABDEM and GLO-30 are *already* EGM2008 orthometric — re-applying an ellipsoid→geoid
+correction (a proposed pipeline did) would shift Kolkata by the local geoid height, ~55 m, against a total
+ward relief of 3–5 m. Across a 1.4 km ward the geoid is a constant anyway. `https://data.bris.ac.uk/data/dataset/25wfy0f9ukoge2gs7a5mqpq2j7`,
 `https://www.fathom.global/product/fabdem/`.
 
 **DeepForest** — the tool is **MIT-licensed and fine**; the blocker is upstream input: it needs sub-metre
@@ -307,8 +380,28 @@ but the free hosted tier's **ToS is non-commercial** (the underlying data is CC 
 isn't). Usable only as a prototype cross-check; production needs the paid tier (~€29/mo) or self-hosting
 AGPL. Independently rejected on the same grounds in the Green Score methodology's cost/data section.
 
-**OpenAQ, Google Air Quality / Ambee / IQAir** — no browser CORS / key exposure (OpenAQ) or
-paid/non-commercial (Google AQ, Ambee, IQAir).
+**AQI APIs — landscape researched 2026-09-02** (multi-city: Kolkata, Mumbai, Bengaluru, Jamshedpur, Dubai).
+The rule that fell out: **the AQI standard follows the city's regulator, the source follows what that
+regulator publishes** — CPCB for every Indian city (free, GODL-India), US-EPA-based for Dubai.
+- **IQAir (AirVisual)** — $399/mo Startup, $999/mo Enterprise, free 500 calls/day. **Ruled out for India:**
+  its Kolkata data is re-served **WBPCB** (same seven stations as CPCB), and its primary field `aqius` is
+  US EPA, wrong for an Indian regulator. Would add nothing to Barrackpore/Baruipur, which have no station.
+  Legitimate only as a Dubai adapter, and only after the government sources below are checked.
+- **Google Air Quality API** (ex-BreezoMeter) — 500 m modelled field, 100+ countries, **70+ AQ indexes**
+  (so CPCB and EPA both available), free 10K calls/mo then $5/1K. **Best candidate for multi-city — BLOCKED
+  on one unverified question:** Maps Platform ToS has historically restricted use alongside non-Google
+  basemaps, and we render on MapLibre. Check that before anything else. A modelled field must be labelled
+  modelled; it is not a station reading.
+- **Ambee** — Indian company (Bengaluru), 15-day trial, custom pricing. Partnership angle; unpriced.
+- **OpenAQ** — free 300 calls/5 min, commercial on custom terms. The old "no CORS" objection is solvable
+  with a proxy; worth a second look.
+- **Copernicus CAMS** — free, commercial OK with attribution, global forecasts — but ~80 km outside Europe,
+  so city-scale context only, never within-city.
+- **WBPCB AQMS portal** (`aqmsdata.wbpcb.gov.in/hourly`) — the *primary* source for Kolkata, closer than
+  CPCB-via-data.gov.in; evaluate as the ingestion path. **Dubai:** UAE National Air Quality Platform and
+  Dubai Pulse open data — unverified; check before paying any vendor.
+No API fixes station density: seven stations in Kolkata, seven in Bengaluru. Within-city AQ is a sensor
+problem, and one low-cost sensor costs about a month of the IQAir Startup plan.
 
 **IMD Mausam API** — returns 401 anonymously; needs formal onboarding. (Distinct from the
 separately-acquired IMD OpenCity daily-temperature archive, which **is** in use.)

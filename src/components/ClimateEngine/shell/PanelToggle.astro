@@ -1,0 +1,111 @@
+---
+/**
+ * THE PANEL'S OWN COLLAPSE CONTROL — a chevron that puts the sidebar away.
+ *
+ * THE BEHAVIOUR ALREADY EXISTED AND NOBODY COULD FIND IT. console-shell.ts has
+ * always collapsed this column when you click the rail section whose pane is
+ * already open — the VS Code gesture — and it was completely invisible: there is
+ * no hint on the page that the active section is also a close button, and a touch
+ * reader never hovers into one. This is the same defect the rail's labels fix, one
+ * column over: a working thing nobody is told about.
+ *
+ * TWO DOORS, ONE STATE, AND THAT IS THE WHOLE DESIGN. This project deletes
+ * controls that duplicate a fact, and the rule is about controls that can
+ * DIVERGE. This one cannot: it has no state of its own, no handler of its own and
+ * no idea what a pane is. It carries a `data-panel-toggle` attribute, and
+ * console-shell.ts binds it to the same `state.open` and the same `paint()` the
+ * rail's click path already goes through. There is exactly one place where the
+ * panel is opened or closed, and both doors lead to it.
+ *
+ * IT ONLY EVER CLOSES, AND THAT IS DELIBERATE. The way back is the rail: click
+ * any section and the panel returns with that section's body in it, which is
+ * behaviour that already works and is already the only way a reader learns the
+ * rail opens panes at all. A second re-open affordance would be a control whose
+ * whole job is to undo this one.
+ *
+ * SO IT GOES AWAY WITH THE COLUMN, and it goes away for free: it is rendered
+ * INSIDE the sidebar, and a collapsed sidebar is `display:none`. That is also why
+ * this component needs no breakpoint of its own. Below 820px the Explore stage
+ * already hides the sidebar outright, so the chevron inside it is gone there too
+ * without a rule saying so — and on Compare, where the sidebar becomes a block
+ * above the bench rather than disappearing, the chevron is still there and still
+ * does something, which is the correct answer on that route rather than a
+ * breakpoint copied across from the other one.
+ *
+ * WHERE IT SITS IS THE ROUTE'S DECISION, NOT THIS COMPONENT'S. On Explore it is
+ * slotted into shell/ScopeSwitcher.astro's heading row, so it shares the line with
+ * "Location". On Compare there is no such heading — the sidebar opens straight
+ * into a pane — so it is the sidebar's own first row. Both are the panel's
+ * top-right corner; only one of them has a word to sit beside.
+ */
+import { PANEL_TOGGLE_ID } from '../../../scripts/climate-engine/shell/layout-state.ts';
+
+/**
+ * THE TWO NAMES, NAMING THE ACTION RATHER THAN THE STATE — the pattern the rail's
+ * chevron uses, for the reason it gives there: "Panel" would leave a reader to
+ * infer what pressing it does from `aria-expanded` alone.
+ *
+ * BOTH ARE RENDERED, as data attributes, so console-shell.ts can swap the name
+ * with the state without holding its own copy of either sentence.
+ */
+const TOGGLE_LABEL = {
+  expanded: 'Collapse the console panel',
+  collapsed: 'Expand the console panel',
+} as const;
+---
+<button
+  type="button"
+  class="panel-toggle"
+  id={PANEL_TOGGLE_ID}
+  data-panel-toggle
+  aria-expanded="true"
+  aria-label={TOGGLE_LABEL.expanded}
+  data-label-expanded={TOGGLE_LABEL.expanded}
+  data-label-collapsed={TOGGLE_LABEL.collapsed}
+>
+  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+    <path d="m14 6-6 6 6 6" />
+  </svg>
+</button>
+
+<style>
+  /* SCOPED, for the reason IconRail.astro gives: this markup is entirely
+     Astro-rendered and static, so the scoping hash reaches all of it.
+
+     NO HEX AT ALL. --ink on --panel-ground is 6.43:1, which clears the 4.5:1 text
+     floor with room to spare and needs no token of its own — unlike the rail,
+     where the resting colour had to move because --faint was 3.27:1 on the ground
+     it sits on. */
+
+  .panel-toggle {
+    flex: none;
+    inline-size: 26px;
+    block-size: 26px;
+    display: grid;
+    place-items: center;
+    border: 0;
+    border-radius: 6px;
+    padding: 0;
+    background: none;
+    color: var(--ink);
+    cursor: pointer;
+    transition: color .18s, background .18s;
+  }
+
+  .panel-toggle svg {
+    inline-size: 15px;
+    block-size: 15px;
+    stroke: currentColor;
+    fill: none;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .panel-toggle:hover { color: var(--paper); background: rgb(111 202 214 / .06); }
+  .panel-toggle:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .panel-toggle { transition: none; }
+  }
+</style>

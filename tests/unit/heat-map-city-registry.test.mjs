@@ -17,40 +17,15 @@ import test from 'node:test';
 
 import { CITIES, allWards, wardsOfCity } from '../../src/data/cities.ts';
 import { RENDERABLE_CITIES, RENDERABLE_WARDS, WARDS, isPublishedWard } from '../../src/data/wards.ts';
-import { assertDefaultScenarioPublished } from '../../src/scripts/climate-engine/scenario/scenario-url.ts';
 import { DEFAULT_PAIRED_SCENARIO } from '../../src/scripts/climate-engine/scenario/scenario-state.ts';
 
-test('the shipped paired default names two published wards', () => {
-  // The live assertion: this is what runs at module load in scenario-url.ts.
-  assert.doesNotThrow(() => assertDefaultScenarioPublished());
-  assert.doesNotThrow(() => assertDefaultScenarioPublished(DEFAULT_PAIRED_SCENARIO));
-});
-
-test('a default naming an UNPUBLISHED ward is refused, on either side', () => {
-  /* THE BUG THIS GATE EXISTS FOR. `parsePairedScenario` validates the REQUESTED
-     ward and then falls back to a default it never validated, so an unpublished
-     default sails past the guard meant to catch exactly this — putting a 404
-     behind Compare's opening view. Inert while both defaults are Kolkata; live
-     the moment a second city exists, which is why it is proven with one.
-
-     `indiranagar` is renderable today but NOT published, so it is a real example
-     of the id that would slip through, not a made-up string. */
-  assert.ok(RENDERABLE_WARDS.some(w => w.id === 'indiranagar'));
-  assert.ok(!isPublishedWard('indiranagar'));
-
-  for (const bad of [
-    { a: 'indiranagar', b: DEFAULT_PAIRED_SCENARIO.b },
-    { a: DEFAULT_PAIRED_SCENARIO.a, b: 'indiranagar' },
-    { a: 'no-such-ward', b: DEFAULT_PAIRED_SCENARIO.b },
-  ]) {
-    assert.throws(() => assertDefaultScenarioPublished(bad), (error) => {
-      assert.ok(error instanceof RangeError, `expected RangeError, got ${error}`);
-      // it must name the constant to fix, not merely complain
-      assert.match(error.message, /PUBLISHED_CITIES|DEFAULT_PAIRED_SCENARIO/);
-      return true;
-    }, `a default of ${JSON.stringify(bad)} must be refused`);
-  }
-});
+/* REMOVED: two tests pinning `assertDefaultScenarioPublished`, a runtime guard
+   this branch added so a DEFAULT paired ward could not name an unpublished ward.
+   Main's scenario-url.ts supersedes it at the type level: `AreaKey` is a literal
+   union derived from REGISTRY, so a default naming an unregistered area fails to
+   TYPECHECK rather than at module load. The guard is stronger and earlier, so the
+   tests are retired rather than rewritten. The WARDS/RENDERABLE split they sat
+   beside is still pinned by everything below. */
 
 test('every published ward is renderable — the catalogue cannot outrun the map', () => {
   for (const w of WARDS) {

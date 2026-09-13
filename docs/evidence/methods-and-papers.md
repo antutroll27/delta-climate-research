@@ -398,6 +398,53 @@ population; MAE is the honest one.** Written up in
 > The SVF literature above is retained as *why we checked*, not as an adopted method. The companion
 > shadow half of this test is a separate, later measurement.
 
+> **Rooftop-PV shading gate — pre-registered, PASSED as registered, and honestly weaker on the roofs that
+> matter (2026-08-21).** Pre-registration (`docs/superpowers/specs/2026-08-21-pv-shading-signtest-PREREG.md`)
+> fixed the rule before any output existed: PASS if mean loss ≥ 3.0 % **or** ≥ 10 % of buildings lose ≥ 5 %.
+> All three wards pass on all footprints (Ballygunge 5.12 % / 28.2 %; Barrackpore 1.66 % / 10.3 %; Baruipur
+> 1.79 % / 11.6 %). Restricted *post hoc* to roofs supporting ≥ 3 kWp — what PM Surya Ghar addresses — only
+> Ballygunge still passes (3.32 % / 20.3 %); Barrackpore (1.22 % / 6.8 %) and Baruipur (1.12 % / 7.1 %) fail
+> their own gate. The all-roofs margin in those two wards was carried by sheds; Ballygunge's "worst roof,
+> 66.6 %" is 16 m² at 0.43 kWp. The rule was **not** re-registered — a conservative post-hoc subset is still
+> a post-hoc subset. Reported alongside, never instead.
+>
+> **Height percentile as a shading lever — measured and NULL (2026-08-21).** Hypothesis: the shipped zonal
+> p65 understates towers, shadow length is set by the *caster*, so p75 casters should raise shading in the
+> direction our height bias already runs. Result, p75 casters against shipped p65 receivers, three wards:
+>
+> | ward | all footprints (p65 → p75) | ≥ 3 kWp roofs (p65 → p75) |
+> |---|---|---|
+> | ballygunge | 5.12 → 5.13 % PASS | 3.32 → 3.33 % PASS |
+> | barrackpore | 1.66 → 1.67 % PASS | 1.22 → 1.23 % FAIL |
+> | baruipur | 1.79 → 1.83 % PASS | 1.12 → 1.15 % FAIL |
+>
+> +0.01 / +0.01 / +0.04 pp, no verdict flips. Shading is driven by the caster–receiver *difference*, and p75
+> lifts casters by only 0.27–0.62 m on average (1.31 m for buildings over 15 m) against gaps of several
+> metres; a third of buildings do not move at all. So the residual height bias, if real, lives in the
+> **raster**, not in which quantile is taken from it — fixing heights needs different data (stereo VHR
+> photogrammetry or lidar), not a different statistic. Flag kept, default inert (baruipur re-runs
+> byte-identical at p65).
+>
+> **Receipts:** `scripts/measure-pv-shading.py [--caster p75]`, `scripts/build-pv-yield.py`,
+> `data/calibration/pv-shading-<ward>.json`, `data/calibration/pv-yield-<ward>.json` (carries the
+> `installable_ge_3kwp` stratum and the packing-factor interval); commits `95f3f38`, `4e27f4a`, `4c8cf0d`.
+>
+> **Trees into the shading pass — pre-registered and run as written (2026-09-05).** Raster shadow-casting
+> on a 0.5 m surface model, the published DSM march (shift-and-max toward the sun): Ratti & Richens 2004,
+> *Environment and Planning B* 31(2); Lindberg & Grimmond 2011, *Theor. Appl. Climatol.* 105 — algorithm
+> reference only, SOLWEIG's code is GPL and is not used. Canopy beam transmittance τ = 0.30 (band 0.20–0.50):
+> Konarska et al. 2014, *Theor. Appl. Climatol.* 117 (single urban trees, in leaf); Wu, Lu & Lin 2025,
+> *Sustainable Cities and Society* (SRT 0.18–0.60, mean ≈ 0.3, R² 0.95 against LAI). Canopy source Meta/WRI
+> CHM v2 (Brandt et al. 2026, *Scientific Data*, arXiv:2603.06382; MAE 3.0 m; CC BY 4.0). Spec and four
+> amendments — A1 overhang kept by connectedness and a 2 m elevated-array scenario; A2 connectivity declared
+> and the raster's measured low bias; A3 the sanity statistic as applied, the near-zenith blind spot, the
+> mask as dominant lever; A4 Baruipur refused at 1 m, grid refined to 0.5 m, gate unchanged:
+> `docs/superpowers/specs/2026-09-05-pv-tree-shading-design.md`. Results and the honest sentence:
+> `known-limitations.md` §8 addendum 2026-09-05.
+> **Receipts:** `scripts/measure-pv-tree-shading.py [--self-check]`,
+> `data/calibration/pv-shading-trees-<ward>.json`. **The yield chain (`build-pv-yield.py`) now reads
+> these; `pv-shading-<ward>.json` above is the registered building-only record and is no longer its input.**
+
 ---
 
 ## 3D Gaussian splatting, neural rendering, neural microclimate surrogates (survey only — not adopted)

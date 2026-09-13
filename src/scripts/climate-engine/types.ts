@@ -183,6 +183,95 @@ export const CANOPY_BLEND_STRENGTH = 0;
  */
 export const WATER_LAYER_ENABLED = false;
 
+/**
+ * The constants a SCOPE supplies to the physics — a country's or a city's, never
+ * the model's own.
+ *
+ * WHY THIS LIVES IN types.ts AND NOT IN scope/. It is the contract BETWEEN the two
+ * halves, so it belongs to the vocabulary both already share rather than to either
+ * side of it. `scope/resolve.ts` PRODUCES one of these from an area key;
+ * `heat-map-model.ts` CONSUMES one and never learns where it came from. Declaring
+ * it in scope/ would force the physics to import an identity module to name the
+ * type of its own parameter, which inverts the layering the whole migration rests
+ * on: the model knows DATA and PARAMETERS, never IDENTITY. There is no ward, city
+ * or country named here, and there must never be — only numbers the physics uses.
+ *
+ * Everything here was a hard-coded constant inside heat-map-model.ts until the
+ * scope migration. Each was a fact about Kolkata, or about India, wearing the
+ * costume of a fact about heat transfer; see the note where they used to sit.
+ */
+export interface ClimateConstants {
+  /**
+   * Warming-pathway deltas, K, keyed by scenario — added to the air temperature.
+   *
+   * EMPTY when the country declares no pathway, and empty is a REAL ANSWER: no
+   * regional projection has been adopted there, so the pathway control contributes
+   * nothing and says so. It is deliberately not a zero-valued table, which would
+   * be indistinguishable from a pathway measured at zero warming. `currentParams`
+   * reads the difference: an unknown key in a POPULATED table throws; any key at
+   * all against an empty one contributes zero.
+   *
+   * `Readonly` because one object is shared by every consumer of a scope — a
+   * caller that mutated it would move the warming pathway for the whole session.
+   */
+  readonly pathDelta: Readonly<Record<string, number>>;
+  /** Air temperature, °C, used ONLY when the live met feed is down. */
+  readonly fallbackTairC: number;
+  /** Cooling-blob radius, metres — the city's measured tree-void-effect scale. */
+  readonly parkRadiusM: number;
+  /**
+   * Intervention unit costs, or `null` where the country has declared none.
+   *
+   * NULL IS NOT ZERO. A country with no adopted cost basis has no cost answer at
+   * all, and `0` would be a plausible-looking wrong one — a scenario would quote a
+   * budget of nothing and it would read as a finding. The null is refused at the
+   * seam where a scope is chosen, never carried into `computeCost`, whose
+   * signature therefore demands a real `Costs`.
+   */
+  readonly costs: Costs | null;
+}
+
+/**
+ * Intervention unit costs, in ONE currency.
+ *
+ * The four figures are the multipliers `computeCost` applies, each against a
+ * DIFFERENT spatial quantity, so an absent field is `undefined`, its term is NaN,
+ * and NaN poisons the whole total. That is why all five are required rather than
+ * optional.
+ *
+ * `currency` is READ, by `money.ts`, and the tense of that sentence is the fix: it
+ * used to say "carried for the readouts that must name it" while no production code
+ * read it at all and every readout pasted a ₹ in by hand. A field declared for a
+ * purpose nothing performs is not documentation, it is a claim — and this one was
+ * false for as long as the currency was a country fact and the symbol was a
+ * template literal.
+ */
+export interface Costs {
+  /**
+   * ISO 4217, e.g. 'INR'. The physics never reads it; `money.ts` does, and derives
+   * the symbol, the scale words and the digit grouping from it together.
+   */
+  readonly currency: string;
+  /** cool-roof coating, per m² of roof */
+  readonly roofM2: number;
+  /** one street tree, planted */
+  readonly tree: number;
+  /**
+   * one pocket park, per hectare, in WHOLE UNITS of `currency`.
+   *
+   * WAS `parkCr`, "in crore (1e7)", with the ×1e7 applied inside `computeCost`.
+   * Crore is a unit of the Indian numbering system, so the shared cost vocabulary
+   * was asserting an Indian convention over every country that will ever appear
+   * here — and a Gulf figure entered as "1.5" would have been silently multiplied
+   * by ten million. The arithmetic is unchanged: 1.5 crore IS 15,000,000, and the
+   * multiplier moved out of the physics and into the declared value, where a
+   * reader can see the whole number.
+   */
+  readonly park: number;
+  /** green facade, per m² of wall */
+  readonly facadeM2: number;
+}
+
 /** Per-cell input layers, each n*n in [0,1], row-major. */
 export interface SimLayers {
   albedo: Float32Array;
@@ -232,6 +321,59 @@ export interface SimStats {
   /** fraction of cells above the heat-stress threshold. */
   fracAbove: number;
   thresholdC: number;
+}
+
+/**
+ * The rooftop-solar screen, one file per ward, written by scripts/build-pv-yield.py.
+ * Arrays join the ward's `b` rows BY INDEX — there is no id — so a file whose
+ * lengths disagree with the ward is a wrong-ward file and must be refused.
+ * `loss` is the central cell (buildings + trees); `loss_strict` is the strict-mask
+ * floor the card prints beside it; `totals` and `stratum` are the laboratory's
+ * ward numbers, carried so the browser never re-derives them. `tiers` carries the
+ * published yield bracket and packing interval the per-roof ranges scale by, plus
+ * the `validated` slot — null until measure-pv-validation.py fills it (§6.3).
+ */
+export interface PvFile {
+  readonly ward: string;
+  readonly kwp: readonly number[];
+  readonly kwh: readonly number[];
+  readonly loss: readonly number[];
+  readonly loss_buildings: readonly number[];
+  readonly loss_trees: readonly number[];
+  readonly loss_raised: readonly number[];
+  readonly loss_strict: readonly number[];
+  readonly specific_yield: number;
+  readonly packing_factor: number;
+  readonly basis: string;
+  readonly totals: {
+    readonly capacity_mwp: number;
+    readonly capacity_mwp_range: readonly [number, number];
+    readonly generation_gwh_yr: number;
+    readonly shading_loss_gwh_yr: number;
+    readonly mean_loss: number;
+    readonly mean_loss_strict: number;
+    readonly mean_loss_trees: number;
+    readonly mean_loss_raised: number;
+  };
+  readonly stratum: {
+    readonly threshold_kwp: number;
+    readonly n: number;
+    readonly share_losing_5pct: number;
+    readonly mean_loss: number;
+  };
+  readonly tiers: {
+    readonly screened: boolean;
+    readonly yield_bracket_kwh_per_kwp: readonly [number, number];
+    readonly packing_range: readonly [number, number];
+    readonly shading_band: string;
+    readonly validated: null | {
+      readonly n: number;
+      readonly months: number;
+      readonly median_ratio: number;
+      readonly within_15pct_share: number;
+      readonly date: string;
+    };
+  };
 }
 
 /** The swappable engine contract (see docs/heat-map-feature.md). */

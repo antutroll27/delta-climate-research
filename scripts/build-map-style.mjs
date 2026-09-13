@@ -175,6 +175,32 @@ const SLATE = {
 
 const VARIANTS = { dusk: DUSK, petrol: PETROL, slate: SLATE };
 
+/**
+ * id -> paint keys that must NOT survive the merge into our style.
+ *
+ * WHY THIS EXISTS AT ALL — THE WOODLAND WAS NEVER DRAWN.
+ *
+ * Upstream paints woodland with BOTH a colour and `fill-pattern: "wood-pattern"`.
+ * Our override sets `fill-color` and the merge below is a shallow spread, so the
+ * pattern came through untouched — and in the MapLibre style spec `fill-color` is
+ * *disabled by* `fill-pattern`. A layer with a pattern therefore ignores the
+ * colour entirely, and when the image is missing it paints NOTHING.
+ *
+ * MEASURED: the declared sprite (`tiles.openfreemap.org/sprites/ofm_f384/ofm`,
+ * the one upstream itself declares) holds 264 icons and not one pattern, so
+ * `wood-pattern` resolves to nothing. Every woodland polygon on all three OBOS
+ * basemaps was invisible, and the three wood greens picked for them — #20382a,
+ * #1c3629, #1e3129 — had never once been on screen. The browser says so on every
+ * ward that has woodland: "Image 'wood-pattern' could not be loaded". That is
+ * Baruipur and Barrackpore, the two green wards, and never Dubai.
+ *
+ * It is an upstream defect we inherited verbatim rather than one we introduced —
+ * which is exactly why it needed writing down instead of quietly patching.
+ */
+const PAINT_DROP = {
+  landcover_wood: ['fill-pattern'],
+};
+
 /** id -> paint overrides, per token set. Absent ids keep upstream's value. */
 const paintFor = (T) => ({
   background:              { 'background-color': T.ground },
@@ -264,6 +290,27 @@ function build(upstream, name, T) {
     layer.paint = layer.id === 'highway_motorway_inner'
       ? { ...layer.paint, ...MOTORWAY_INNER }
       : { ...layer.paint, ...patch };
+    /* AFTER the spread, because the spread is what carried the dead key through. */
+    for (const key of PAINT_DROP[layer.id] ?? []) delete layer.paint[key];
+  }
+
+  /* NOTHING MAY REFERENCE A PATTERN IMAGE, and this is stated as an invariant
+     rather than trusted to the drop list above.
+
+     The sprite this style declares is upstream's own and contains no patterns at
+     all, so ANY `*-pattern` paint property that reaches the output is a colour
+     that will never be drawn — silent, because a missing pattern paints nothing
+     and only whispers in the browser console. Checking the property rather than
+     the one id we know about means the next one cannot arrive unnoticed: if
+     upstream adds a pattern it genuinely ships an image for, this fails the build
+     and a human decides, which is the outcome we want either way. */
+  const patterned = style.layers.flatMap((l) => Object.keys(l.paint ?? {})
+    .filter((k) => k.endsWith('-pattern'))
+    .map((k) => `${l.id}.${k}`));
+  if (patterned.length) {
+    throw new Error(`these layers reference a pattern image, but the sprite this style declares `
+      + `(${style.sprite}) contains none — the paint below them would never be drawn: `
+      + `${patterned.join(', ')}. Drop the key via PAINT_DROP, or ship a sprite that has it.`);
   }
 
   /* A token that matches nothing is a silent no-op — exactly how a palette rots

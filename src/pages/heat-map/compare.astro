@@ -12,15 +12,36 @@ import PairedBench from '../../components/ClimateEngine/compare/PairedBench.astr
 </Base>
 
 <script>
+  /* TWO MOUNTS, AND THEY DO NOT KNOW ABOUT EACH OTHER.
+     `mountPairedBench` owns the bench: scenario state, the model run, the canvases,
+     and the A/B selects inside the Analysis pane. `mountConsoleShell` owns the rail
+     and which pane the sidebar shows — the same function the Explore route calls,
+     which is the point: one console, one switcher, no second copy of it here.
+     ORDER DOES NOT MATTER. Both only read server-rendered markup and attach
+     listeners to it; neither creates an element the other looks for. The bench
+     binds its root once and queries through it, and the shell queries within
+     [data-console]. Disposed together on `astro:before-swap`, because the site runs
+     Astro's ClientRouter and a listener left on a removed element fires against the
+     wrong document. */
   let dispose: (() => void) | null = null;
+  let disposeShell: (() => void) | null = null;
   let bootGeneration = 0;
   const boot = async () => {
     const generation = ++bootGeneration;
     if (!document.querySelector('[data-compare-root]') || dispose) return;
-    const { mountPairedBench } = await import('../../scripts/climate-engine/compare/paired-controller');
-    if (generation === bootGeneration && document.querySelector('[data-compare-root]') && !dispose) dispose = mountPairedBench();
+    const [{ mountPairedBench }, { mountConsoleShell }] = await Promise.all([
+      import('../../scripts/climate-engine/compare/paired-controller'),
+      import('../../scripts/climate-engine/shell/console-shell'),
+    ]);
+    if (generation === bootGeneration && document.querySelector('[data-compare-root]') && !dispose) {
+      dispose = mountPairedBench();
+      if (!disposeShell) disposeShell = mountConsoleShell();
+    }
   };
   void boot();
   document.addEventListener('astro:page-load', () => { void boot(); });
-  document.addEventListener('astro:before-swap', () => { dispose?.(); dispose = null; });
+  document.addEventListener('astro:before-swap', () => {
+    dispose?.(); dispose = null;
+    disposeShell?.(); disposeShell = null;
+  });
 </script>

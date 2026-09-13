@@ -13,7 +13,7 @@ const DATA = join(ROOT, 'public', 'heat-map', 'data');
 /**
  * A MEASURED SURFACE RASTER MUST REACH THE SOLVER, IN EVERY CITY.
  *
- * For one commit it did not. `loadWardSurface` gated the texture on a record in
+ * For one commit it did not. `loadAreaSurface` gated the texture on a record in
  * dc-urs-inputs.json:
  *
  *     const record = inputs?.[ward];
@@ -31,7 +31,7 @@ const DATA = join(ROOT, 'public', 'heat-map', 'data');
  * ward means (0.401 / 0.388 / 0.370 FVC) would never have reached a pixel.
  *
  * WHY THIS TEST IS SHAPED THE WAY IT IS. "A surface came back" PASSES AGAINST
- * THE BUG — `loadWardSurface` always returns an object, and `loadSurfaceRaster`
+ * THE BUG — `loadAreaSurface` always returns an object, and `loadSurfaceRaster`
  * decodes the PNG successfully before the gate throws it away. So the assertions
  * below are on the two properties the bug actually destroys, measured on the
  * array the SOLVER receives rather than on the loader's return value:
@@ -39,7 +39,7 @@ const DATA = join(ROOT, 'public', 'heat-map', 'data');
  *   · NOT `fvc: 0`     — the hot-biased fallback level
  *   · NOT UNIFORM      — a flat field is what a discarded texture leaves behind
  *
- * It drives the real `loadWardSurface` against the real committed artefacts, so
+ * It drives the real `loadAreaSurface` against the real committed artefacts, so
  * it also transitively covers the decode, the north-up/south-up row flip and
  * `assertSurfaceMatches` — any of which failing would null the surface and fail
  * these same assertions.
@@ -80,8 +80,15 @@ globalThis.OffscreenCanvas = class {
   }
 };
 
-const { loadWardSurface } = await import('../../src/scripts/climate-engine/surface-raster.ts');
+const { loadAreaSurface } = await import('../../src/scripts/climate-engine/surface-raster.ts');
 const { rasterWardBase } = await import('../../src/scripts/climate-engine/ward-raster.ts');
+
+/* Ward id -> AreaKey. The loader takes a hierarchical key now; the artefacts on
+   disk, and dc-urs-inputs.json, are still keyed by bare stem — which is exactly
+   what `splitKey(key).area` inside the loader indexes with. */
+const CITY_OF = { ballygunge: 'kolkata', baruipur: 'kolkata', barrackpore: 'kolkata',
+  indiranagar: 'bengaluru', 'mg-road': 'bengaluru', whitefield: 'bengaluru' };
+const key = (id) => `in/${CITY_OF[id]}/${id}`;
 
 const wardData = async (id) => JSON.parse(await readFile(join(DATA, `${id}.json`), 'utf8'));
 
@@ -105,10 +112,10 @@ for (const ward of ['indiranagar', 'mg-road', 'whitefield']) {
     assert.equal(entry?.level, 'measured',
       `${ward} must be an unpinned, measured-level ward for this test to mean anything`);
 
-    const { means, surface } = await loadWardSurface(ward);
+    const { means, surface } = await loadAreaSurface(key(ward));
 
     assert.ok(surface, `${ward}: the texture was fetched and decoded, then discarded. That is `
-      + 'the inert-raster bug — see the gate in loadWardSurface.');
+      + 'the inert-raster bug — see the gate in loadAreaSurface.');
 
     /* NOT fvc: 0. The fallback level, and a hot one. */
     assert.ok(means.fvc > 0,
@@ -138,7 +145,7 @@ for (const ward of ['indiranagar', 'mg-road', 'whitefield']) {
 
 /* THE INVARIANT THE PRECEDENCE RESTS ON, PINNED.
 
-   `loadWardSurface` checks the DC-URS scalar FIRST and only then the measured
+   `loadAreaSurface` checks the DC-URS scalar FIRST and only then the measured
    level. Inverting that order passes every other test in this file — not
    because the tests are weak, but because no artefact in this repo can tell the
    two orderings apart: `export-surface-rasters.py` writes MUTUALLY EXCLUSIVE
@@ -157,7 +164,7 @@ test('no ward carries both a DC-URS scalar and a measured level', async () => {
   for (const ward of pinned) {
     assert.notEqual(meta[ward]?.level, 'measured',
       `${ward} has a DC-URS record AND level "measured". The two are meant to be mutually `
-      + 'exclusive, so loadWardSurface\'s scalar-first ordering now decides which number the '
+      + 'exclusive, so loadAreaSurface\'s scalar-first ordering now decides which number the '
       + 'ward renders — decide it deliberately rather than by line order.');
   }
 });
@@ -170,7 +177,7 @@ test('no ward carries both a DC-URS scalar and a measured level', async () => {
 test('Kolkata still takes its level from the DC-URS scalar, unchanged', async () => {
   const inputs = JSON.parse(await readFile(join(DATA, 'dc-urs-inputs.json'), 'utf8')).wards;
   for (const ward of ['ballygunge', 'baruipur', 'barrackpore']) {
-    const { means, surface } = await loadWardSurface(ward);
+    const { means, surface } = await loadAreaSurface(key(ward));
     assert.ok(surface, `${ward}: Kolkata's texture must still load`);
     assert.equal(means.fvc, inputs[ward].fvc.value,
       `${ward}: fvc must come from dc-urs-inputs.json, not from surface-meta.json`);
@@ -183,8 +190,13 @@ test('Kolkata still takes its level from the DC-URS scalar, unchanged', async ()
    it did not remove the requirement for one. A ward with neither a scalar nor a
    measured entry keeps getting the honest nothing — because a texture whose
    level nothing confirms is the exact case assertSurfaceMatches guards. */
+/* DUBAI, deliberately. This case needs an area that is REGISTERED — so it
+   resolves — but ships no evidence of either kind: no dc-urs-inputs record and no
+   `level: "measured"` in surface-meta.json. Every Kolkata ward has a scalar and
+   every Bengaluru ward has a measurement, so neither city can express it. Dubai is
+   registered precisely to be named while shipping nothing. */
 test('a ward with no scalar AND no measured level still gets no surface', async () => {
-  const { means, surface } = await loadWardSurface('a-ward-that-does-not-exist');
+  const { means, surface } = await loadAreaSurface('ae/dubai/creek');
   assert.equal(surface, null);
   assert.equal(means.fvc, 0, 'the fallback level is unchanged — it is just no longer reachable '
     + 'by a ward that HAS a measurement');
