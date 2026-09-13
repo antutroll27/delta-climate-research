@@ -64,7 +64,7 @@ import { areaPath, paths, cityPaths } from './scope/paths.ts';
 import { areaRefusal } from './scope/reachability.ts';
 import { isAreaKey, splitKey, type AreaKey } from './scope/registry.ts';
 import { toLegacyWard } from './scope/legacy.ts';
-import { prefetchPlan, runPrefetch, shouldPrefetch } from './ward-prefetch';
+import { prefetchPlan, runPrefetch, shouldPrefetch, type PrefetchConnection } from './ward-prefetch';
 
 // Ward set lives in src/data/wards.ts so widening beyond three is a data change,
 // not a code change (dc-urs-spec.md §1).
@@ -219,22 +219,24 @@ export function mountHeatMap(): () => void {
     setTimeout: (fn, ms) => window.setTimeout(fn, ms),
     clearTimeout: (id) => window.clearTimeout(id),
   });
-  /* One background warm-up per page load — see ward-prefetch.ts for the measurement
-     that justifies it and the data it costs. */
-  let prefetchStarted = false;
+  /* Background warm-up of the city's other wards — see ward-prefetch.ts for what it
+     buys (measured: a first visit on Slow 4G, 11,950 ms without, 699 ms with) and
+     what it costs. RE-SCHEDULED ON EVERY COMMITTED LOAD UNTIL ONE RUN COMPLETES: a
+     switch aborts a run in flight, and scheduling once per page meant a reader who
+     clicked the strip in the first ~12 s lost the warm-up for the rest of the visit. */
+  let prefetchDone = false;
   let prefetchAbort: AbortController | null = null;
   function schedulePrefetch(key: AreaKey): void {
-    if (prefetchStarted) return;
-    prefetchStarted = true;
-    const connection = (navigator as { connection?: { saveData?: boolean; effectiveType?: string } }).connection;
-    if (!shouldPrefetch(connection)) return;
+    if (prefetchDone) return;
+    if (!shouldPrefetch((navigator as { connection?: PrefetchConnection }).connection)) return;
     const plan = prefetchPlan(key);
     if (plan.length === 0) return;
     const controller = new AbortController();
     prefetchAbort = controller;
     const go = (): void => {
       if (appDisposed || controller.signal.aborted) return;
-      void runPrefetch(plan, fetch.bind(window), controller.signal).catch(() => undefined);
+      void runPrefetch(plan, fetch.bind(window), controller.signal)
+        .then(() => { if (!controller.signal.aborted) prefetchDone = true; });
     };
     if (typeof window.requestIdleCallback === 'function') window.requestIdleCallback(go, { timeout: 4000 });
     else window.setTimeout(go, 2000);

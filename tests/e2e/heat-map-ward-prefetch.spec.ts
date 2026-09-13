@@ -45,3 +45,30 @@ test('with Save-Data set, no other ward is fetched', async ({ page }) => {
   await page.waitForTimeout(8_000);
   expect(SIBLINGS.filter((url) => seen.includes(url))).toEqual([]);
 });
+
+test('a switch before the warm-up runs does not cancel it for the rest of the visit', async ({ page }) => {
+  /* DETERMINISTIC, NOT A RACE. The prefetch's idle callbacks (the only ones asking for a
+     4 s timeout) are held until the switch has committed, then released. Scheduled once
+     per page, the first ward's warm-up was aborted by the switch and never re-scheduled,
+     so Whitefield was never fetched; re-scheduled per commit, the switch's own commit
+     queues one. Nothing else on an MG Road switch requests Whitefield. */
+  await page.addInitScript(() => {
+    const held: IdleRequestCallback[] = [];
+    const real = window.requestIdleCallback.bind(window);
+    window.requestIdleCallback = (callback, options) => {
+      if (options?.timeout !== 4000) return real(callback, options);
+      held.push(callback);
+      return 0;
+    };
+    (window as unknown as { releaseIdle: () => void }).releaseIdle = () =>
+      held.splice(0).forEach((callback) => callback({ didTimeout: true, timeRemaining: () => 0 }));
+  });
+  const seen = recordRequests(page);
+  await page.goto(OPEN, { waitUntil: 'domcontentloaded' });
+  await waitForWard(page);
+  const first = (await page.locator('#bcount').textContent()) ?? '';
+  await page.click('#strip .ward[data-w="mg-road"]');
+  await expect(page.locator('#bcount')).not.toHaveText(first, { timeout: 30_000 });
+  await page.evaluate(() => (window as unknown as { releaseIdle: () => void }).releaseIdle());
+  await expect.poll(() => seen.includes('/heat-map/data/whitefield.json'), { timeout: 20_000 }).toBe(true);
+});
