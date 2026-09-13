@@ -183,7 +183,7 @@ to `neem` either way.
 
 | Ward | neem | palm | gulmohar |
 |---|---|---|---|
-| Indiranagar | 11,777 | 5,930 | 5,856 |
+| Indiranagar | 11,779 | 5,930 | 5,856 |
 | MG Road | 12,316 | 6,262 | 6,241 |
 | Whitefield | 5,308 | 2,754 | 2,738 |
 

@@ -762,7 +762,7 @@ const EXPECTED = {
   ballygunge: { count: 12159 },
   baruipur: { count: 8415 },
   barrackpore: { count: 6811 },
-  indiranagar: { count: 23565, mix: { neem: 11777, palm: 5930, gulmohar: 5856 } },
+  indiranagar: { count: 23565, mix: { neem: 11779, palm: 5930, gulmohar: 5856 } },
   'mg-road': { count: 24819, mix: { neem: 12316, palm: 6262, gulmohar: 6241 } },
   whitefield: { count: 10800, mix: { neem: 5308, palm: 2754, gulmohar: 2738 } },
 };
@@ -790,7 +790,7 @@ Run: `python3 scripts/fetch-bangalore.py --layer species`
 Expected:
 ```
 species (backfill Kolkata's draw into existing canopy files, offline):
-  indiranagar  species {'gulmohar': 5856, 'neem': 11777, 'palm': 5930}
+  indiranagar  species {'gulmohar': 5856, 'neem': 11779, 'palm': 5930}
   mg-road      species {'gulmohar': 6241, 'neem': 12316, 'palm': 6262}
   whitefield   species {'gulmohar': 2738, 'neem': 5308, 'palm': 2754}
 ```
