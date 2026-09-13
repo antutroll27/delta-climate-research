@@ -251,6 +251,10 @@ export class ThreeReliefRenderer implements ReliefRenderer {
   setBuildingsVisible(v: boolean): void {
     this.layers.buildings = v;
     if (this.city) this.city.visible = v;
+    /* A Bengaluru ward draws an authored model, not `city`; toggling only `city` left
+       the footprints row doing nothing there. Heights stay extrusion-only: scaling a
+       model seated on up to ±35 m of relief about y = 0 would bury footprints in hills. */
+    if (this.model) this.model.visible = v;
     this.options.map.triggerRepaint();
   }
 
@@ -524,6 +528,9 @@ export class ThreeReliefRenderer implements ReliefRenderer {
        authored model becomes something the instrument will draw claims from. */
     this.landmarkLayer = createLandmarkLayer(model.landmarks);
     this.scene.add(model.buildings);
+    /* The model lands AFTER rebuildWard's applyLayerState, so without this a reader who
+       had switched buildings off saw them reappear once the GLB finished decoding. */
+    this.applyLayerState();
     this.options.map.triggerRepaint();
   }
 
@@ -571,6 +578,7 @@ export class ThreeReliefRenderer implements ReliefRenderer {
   /** Re-apply the layer switches to whatever `rebuildWard` has just constructed. */
   private applyLayerState(): void {
     if (this.city) this.city.visible = this.layers.buildings;
+    if (this.model) this.model.visible = this.layers.buildings;
     this.applyExtrusion();
     this.veg?.setVisible(this.layers.trees);
     this.veg?.setCanopyVisible(this.layers.canopy);

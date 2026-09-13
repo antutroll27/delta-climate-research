@@ -1526,7 +1526,9 @@ export function mountHeatMap(): () => void {
    * the ring labels: ask the elements where they are, rather than hard-coding
    * insets that go stale the first time a panel is resized.
    */
-  const LM_KEEP_OUT = '.top,.stamp-slot,.vegw,.chiprow,.rail-r,.legend,.strip,.bcard,.tiphint,.cooltag';
+  /* `#pname,#pzone,.compass` added after the 2026-09-13 live audit caught
+     "M. Chinnaswamy Stadium" across the MG Road title and "Tower C" on the compass. */
+  const LM_KEEP_OUT = '.top,.stamp-slot,.vegw,.chiprow,.rail-r,.legend,.strip,.bcard,.tiphint,.cooltag,#pname,#pzone,.compass';
 
   /** Paint the card's landmark block, and mark which chip the open card is about. */
   function paintLandmark(lm: LandmarkPick | null): void {
@@ -2006,10 +2008,17 @@ export function mountHeatMap(): () => void {
     if (P === null) return;
     const w = wardOf(name);
     const token = wardSession.begin(name);
-    if (!token) return;
+    if (!token) {
+      /* Refused because this ward is already on screen. After a failed switch that is
+         the one click the reader will try, and the failure chip was up for good. */
+      if (wardSession.pendingWard === null) loadChip.done();
+      return;
+    }
     /* A real load owns the network: any background warm-up stops the moment it starts. */
     prefetchAbort?.abort();
-    loadChip.start(`Loading ${w.name}…`);
+    /* Plain name: `w.name` carries the wordmark's `<em>`, and the chip sets textContent,
+       so it printed "Loading MG <em>Road</em>…" (live audit, 2026-09-13). */
+    loadChip.start(`Loading ${resolve(name).area.name}…`);
     await new Promise(r => setTimeout(r, 30));
     if (!wardSession.isCurrent(token)) return;
     const optional = async <T>(task: Promise<T>, fallback: T): Promise<T> => {
@@ -2190,7 +2199,7 @@ export function mountHeatMap(): () => void {
       if (!wardSession.isCurrent(token)) return;
       wardSession.fail(token);
       console.warn(`Ward ${name} could not load:`, error);
-      loadChip.fail(`${w.name} could not load.`);
+      loadChip.fail(`${resolve(name).area.name} could not load.`);
     }
   }
 
@@ -3161,7 +3170,7 @@ export function mountHeatMap(): () => void {
     if (mode === 'relief') void ensureRelief();
     syncReliefVisual(); syncRendererVisibility();
     if (mode === 'iso') { orbit = false; map.easeTo({ pitch: 0, bearing: 0, duration: 900 }); }
-    else { map.easeTo({ pitch: 60, duration: 900 }); if (!reduceMotion) orbitResume = window.setTimeout(() => { orbit = true; requestRuntimeFrame('orbit'); }, 1100); }
+    else { map.easeTo({ pitch: 60, duration: 900 }); clearTimeout(orbitResume); if (!reduceMotion) orbitResume = window.setTimeout(() => { orbit = true; requestRuntimeFrame('orbit'); }, 1100); }
   }));
   document.querySelectorAll('#tintchip button').forEach(b => onEl(b, 'click', () => { tintMode = +((b as HTMLElement).dataset.t!); document.querySelectorAll('#tintchip button').forEach(x => x.classList.toggle('on', x === b)); syncReliefVisual(); map.triggerRepaint(); }));
   function setEnv(e: string) {

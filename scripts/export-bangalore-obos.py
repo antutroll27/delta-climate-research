@@ -217,6 +217,56 @@ def export_trees(w: blr.Ward) -> int:
     return len(doc["trees"])
 
 
+def export_terrain(w: blr.Ward) -> float:
+    """`{ward}-terrain.json` -- the ground the GLB buildings were SEATED on.
+
+    WITHOUT IT THE TREES FLOAT. blender_bangalore.py seats every building base at
+    `(sample_ground - meanM) * TERRAIN_EXAG - BASE_SINK_M` and bakes that into the
+    GLB, but the browser had no Bengaluru terrain, so `terrainDrawAt` read 0 and
+    the trees, roads, water and heat ground lay flat beneath buildings standing on
+    up to +-35 m of real relief. Measured 2026-09-13: 61-67 % of trees sat more
+    than 5 m off the ground their neighbouring buildings stand on.
+
+    THREE CONVERSIONS, each a way to get this wrong:
+    - ROWS FLIPPED. fetch-bangalore.py stores row 0 as the SOUTH edge; terrain.ts
+      reads row 0 as the NORTH edge. Unflipped, the ground is mirrored against the
+      buildings by up to 50 m (measured). bangalore-terrain-frame.test.mjs pins it.
+    - RELATIVE TO meanM, the datum blender_bangalore.py used -- not the median.
+    - EXAGGERATION 1, carried in the file. The browser's default is x4, chosen for
+      Kolkata's 5-8 m delta; the GLB was baked at x1, so x4 would reopen the gap.
+
+    Render-only, as terrain.ts insists: no simulation layer reads it. Returns the
+    p5-p95 relief span in metres, for the progress line.
+    """
+    with open(os.path.join(blr.DATA, f"{w.id}-terrain.json"), encoding="utf-8") as fh:
+        src = cast(dict[str, Any], json.load(fh))
+    n = int(src["n"])
+    datum = float(src["meanM"])
+    h = [float(v) for v in src["h"]]
+    rows = [h[r * n:(r + 1) * n] for r in range(n)]
+    rel = [round(v - datum, 2) for row in reversed(rows) for v in row]
+    ordered = sorted(rel)
+    span = round(ordered[int(0.95 * (len(ordered) - 1))] - ordered[int(0.05 * (len(ordered) - 1))], 1)
+    doc: dict[str, Any] = {
+        "ward": w.id,
+        "source": src["source"],
+        "n": n,
+        "sizeM": float(src["sizeM"]),
+        "datumM": datum,
+        "exaggeration": 1.0,
+        "rawSpanM": span,
+        "smoothSpanM": span,
+        "confidence": "indicative",
+        "note": ("GLO-30 resampled bilinear to the mesh blender_bangalore.py seated the GLB "
+                 "buildings on; metres relative to datumM (the mesh mean), rows north-first; "
+                 "not smoothed, so smoothSpanM equals rawSpanM; NOT used by the simulation"),
+        "h": rel,
+    }
+    with open(os.path.join(OUT, f"{w.id}-terrain.json"), "w", encoding="utf-8") as fh:
+        json.dump(doc, fh, separators=(",", ":"))
+    return span
+
+
 def main() -> int:
     # Refuse BEFORE writing anything. Checked per ward inside export_trees, a
     # missing species left that ward's buildings, roads and water rewritten and
@@ -231,8 +281,10 @@ def main() -> int:
         buildings = export_buildings(w)
         ways, polys, dropped = export_context(w)
         trees = export_trees(w)
+        span = export_terrain(w)
         print(f"  {w.id:<12} {buildings:6,} buildings · {ways:5,} ways · "
-              f"{polys:3,} water polys ({dropped} centrelines dropped) · {trees:6,} trees")
+              f"{polys:3,} water polys ({dropped} centrelines dropped) · {trees:6,} trees · "
+              f"ground {span:.1f} m")
     print(f"  written to {os.path.relpath(OUT, blr.ROOT)}/")
     return 0
 

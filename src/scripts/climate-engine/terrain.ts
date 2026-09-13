@@ -50,6 +50,13 @@ export interface TerrainField {
   /** …and after — what the eye actually sees */
   readonly smoothSpanM: number;
   readonly confidence: string;
+  /**
+   * The draw multiplier, carried BY THE ARTEFACT. Kolkata's files omit it and get
+   * TERRAIN_EXAGGERATION (x4 for a 5-8 m delta). Bengaluru's say 1: its GLB
+   * buildings were baked onto the ground at x1, so x4 would lift the ground off
+   * them by up to ~100 m.
+   */
+  readonly exaggeration: number;
 }
 
 /**
@@ -91,13 +98,15 @@ export function terrainAt(field: TerrainField, x: number, y: number): number {
 
 /** The same, scaled for drawing. The ONLY place exaggeration is applied. */
 export function terrainDrawAt(field: TerrainField | null, x: number, y: number): number {
-  return field ? TERRAIN_EXAGGERATION * terrainAt(field, x, y) : 0;
+  return field ? field.exaggeration * terrainAt(field, x, y) : 0;
 }
 
 /** The label the reader sees. An exaggeration nobody is told about is a lie about slope. */
 export function terrainLabel(field: TerrainField | null): string {
   if (!field) return '';
-  return `ground ×${TERRAIN_EXAGGERATION} · indicative relief`;
+  return field.exaggeration === 1
+    ? 'ground 1:1 · indicative relief'
+    : `ground ×${field.exaggeration} · indicative relief`;
 }
 
 /**
@@ -120,6 +129,8 @@ export function asTerrainField(raw: unknown): TerrainField | null {
     rawSpanM: typeof d.rawSpanM === 'number' ? d.rawSpanM : 0,
     smoothSpanM: typeof d.smoothSpanM === 'number' ? d.smoothSpanM : 0,
     confidence: typeof d.confidence === 'string' ? d.confidence : 'indicative',
+    exaggeration: typeof d.exaggeration === 'number' && Number.isFinite(d.exaggeration) && d.exaggeration > 0
+      ? d.exaggeration : TERRAIN_EXAGGERATION,
   };
 }
 
@@ -131,7 +142,7 @@ export function assertTerrainLogic(): void {
   const n = 4, sizeM = 400;
   const h: number[] = [];
   for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) h.push(c);
-  const f: TerrainField = { ward: 't', h, n, sizeM, rawSpanM: 3, smoothSpanM: 3, confidence: 'indicative' };
+  const f: TerrainField = { ward: 't', h, n, sizeM, rawSpanM: 3, smoothSpanM: 3, confidence: 'indicative', exaggeration: TERRAIN_EXAGGERATION };
 
   ok(Math.abs(terrainAt(f, -sizeM / 2, 0) - 0) < 1e-9, 'west edge should read the first column');
   /* The east edge lands at 2.999, not 3: `n - 1.001` deliberately holds the
@@ -176,4 +187,11 @@ export function assertTerrainLogic(): void {
   ok(asTerrainField(null) === null, 'null is not a field');
   ok(asTerrainField({ h: [1, 2], n: 4, sizeM: 400 }) === null, 'a short h array must be rejected');
   ok(asTerrainField({ h, n, sizeM })?.n === n, 'a well-formed artefact must load');
+
+  // The artefact's own multiplier wins; an absent or nonsense one falls back to x4.
+  const flat = asTerrainField({ h, n, sizeM, exaggeration: 1 });
+  ok(flat !== null && terrainDrawAt(flat, 0, 0) === mid, 'an x1 artefact must draw unexaggerated');
+  ok(flat !== null && terrainLabel(flat).includes('1:1'), 'an x1 artefact must say 1:1');
+  ok(asTerrainField({ h, n, sizeM, exaggeration: -2 })?.exaggeration === TERRAIN_EXAGGERATION,
+    'a non-positive multiplier must fall back, not invert the ground');
 }
