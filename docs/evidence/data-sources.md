@@ -501,6 +501,18 @@ the measured numbers live in
 
 ### In use
 
+**IMD Climatological Tables of Observatories in India, 1991–2020** — India Meteorological Department,
+National Data Centre, Pune (imdpune.gov.in, 844-page PDF) · **no licence stated; the monthly normals are
+cited as published facts, not redistributed as a dataset** · **role:** the fallback air temperature when no
+live reading exists (`airNormals` in `scope/registry.ts`) · stations: **Bengaluru City 43295** (pp. 133–138)
+and **Kolkata (Alipore) 42807**, mean daily maximum and minimum by month.
+*Cross-check:* GHCN-Daily `IN009010100` agrees within 0.4 °C for 1991–2020; its 2016–2025 mean is warmer
+(April 34.9 °C against the normal's 34.1 °C). **Kempegowda International (43293) opened in 2014 — its
+"1991–2020" column is a few years of data and must not be used.**
+*Ruled out for this role:* the IMD Data Service Portal (commercial use is paid and forbids redistribution
+and "consultancy fees"), NOAA GSOD/ISD for non-US stations (WMO Resolution 40 bars commercial re-export),
+and Open-Meteo's free tier (non-commercial).
+
 **UT-GLOBUS (Urban Terrain and Global Building heights)** — University of Texas at Austin ·
 per-building height, area, volume and surface area, machine-learned from street-view, footprints and
 elevation · **CC BY 4.0** · Zenodo record `11156602`, `Asia.zip` · **role:** the **cross-check** on

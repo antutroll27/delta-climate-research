@@ -688,3 +688,22 @@ So the route to better Bengaluru heights is **more evidence, not better maths**:
 the OSM buildings Overture is missing entirely (Vidhana Soudha among them), the
 Karnataka RERA elevation figures for Whitefield's under-construction towers, and
 the UT-GLOBUS `Bangalore_1` tile that would finally give MG Road a cross-check.
+
+---
+
+## 12. The fallback air temperature is a climatology, not a forecast
+
+**Status:** accepted · **See:** [data-sources.md](data-sources.md) (IMD 1991–2020)
+
+When there is no live met.no reading — including the first seconds of every page load — the instrument
+models air temperature from the city's IMD 1991–2020 monthly normals: that month's mean daily minimum at
+06:00 and maximum at 14:00, joined by half-cosines. Three things this is not:
+
+- **Not today's weather.** A heatwave day or a cool monsoon afternoon sits far from its monthly mean; the
+  live reading replaces this the moment it arrives.
+- **Not the recent climate.** The normals end in 2020, and the last decade has run warmer (GHCN-Daily,
+  Bengaluru: April 2016–2025 averaged 34.9 °C against a normal of 34.1 °C).
+- **Not an observed diurnal cycle.** The tables give only daily extremes; the 06:00 / 14:00 placement and
+  the curve between them are the standard assumption.
+
+It replaced a single 32 °C for both Indian cities, which ran up to 16 °C too hot at Bengaluru nights.
