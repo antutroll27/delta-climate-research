@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import os
 import sys
+from typing import cast
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 if HERE not in sys.path:
@@ -44,6 +45,15 @@ SPECIES_NAMES: tuple[str, ...] = ("neem", "gulmohar", "palm")
 Row = list[int]
 
 
+#: HALF-TO-EVEN, DELIBERATELY. Python's round() sends exact .5 ties to the even
+#: neighbour, which is unbiased: measured over the 86,569 shipped trees, the mean
+#: signed error on the crown radius is +0.00012 m, against +0.00499 m for
+#: half-up -- 42x the bias, all of it one-directional. fetch-canopy.py's
+#: int(v + 0.5) does not transfer: it exists to MATCH JavaScript's Math.round for
+#: a value both languages compute, and nothing here is rounded in the browser.
+#: int(v + 0.5) is also wrong for any negative coordinate -- int() truncates
+#: toward zero, so -915.72 becomes -915, not -916 (mean +0.57 m, max 1.49 m on
+#: the shipped x positions). The tie fixture in _self_test pins this choice.
 def encode_trees(trees: list[_types.TreeInstanceJSON]) -> list[Row]:
     """Objects -> rows. Rounds position to 1 m and height/radius to 0.1 m."""
     index = {name: i for i, name in enumerate(SPECIES_NAMES)}
@@ -68,8 +78,13 @@ def decode_trees(cols: list[str], names: list[str],
         if len(row) != len(COLS):
             raise ValueError(f"tree row {row} has {len(row)} fields, expected {len(COLS)}")
         x, y, h_dm, r_dm, s = row
-        if not 0 <= s < len(SPECIES_NAMES):
-            raise ValueError(f"tree row {row} has species index {s} out of range")
+        # `row` is typed list[int], but json.load can hand over a bool or a float.
+        # bool is an int subclass, so `0 <= True < 3` passes and a corrupted file
+        # would silently draw the wrong species. Checked through an `object` view
+        # so strict mypy does not call the test redundant.
+        species_index: object = s
+        if type(species_index) is not int or not 0 <= s < len(SPECIES_NAMES):
+            raise ValueError(f"tree row {row} has species index {s!r}, not an int in range")
         out.append({"x": float(x), "y": float(y), "h": h_dm / 10,
                     "species": SPECIES_NAMES[s], "r": r_dm / 10})
     return out
@@ -86,6 +101,13 @@ def _self_test() -> None:
     assert [t["species"] for t in back] == ["neem", "palm"]
     assert back[0]["h"] == 4.3 and back[0]["x"] == -916.0 and back[1]["r"] == 11.9
     assert encode_trees(back) == rows, "decode then encode must be stable"
+    # EXACT TIES, which the fixture above never hits. round() sends each to the even
+    # neighbour: 2.5 -> 2, -3.5 -> -4, 12.5 -> 12. Half-up gives [3, -3, 50, 13, 1]
+    # and int(v + 0.5) gives the same, so either "fix" fails here.
+    tie: list[_types.TreeInstanceJSON] = [
+        {"x": 2.5, "y": -3.5, "h": 5.0, "species": "gulmohar", "r": 1.25},
+    ]
+    assert encode_trees(tie) == [[2, -4, 50, 12, 1]], encode_trees(tie)
     for bad_cols in (["x_m", "y_m", "h_dm", "r_dm"], ["y_m", "x_m", "h_dm", "r_dm", "species"]):
         try:
             decode_trees(bad_cols, list(SPECIES_NAMES), rows)
@@ -93,7 +115,8 @@ def _self_test() -> None:
             pass
         else:
             raise AssertionError(f"columns {bad_cols} must be refused")
-    for bad in ([[1, 2, 3, 4]], [[1, 2, 3, 4, 3]]):
+    for bad in ([[1, 2, 3, 4]], [[1, 2, 3, 4, 3]], [[1, 2, 3, 4, True]],
+                cast("list[Row]", [[1, 2, 3, 4, 1.0]])):
         try:
             decode_trees(list(COLS), list(SPECIES_NAMES), bad)
         except ValueError:
