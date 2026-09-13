@@ -54,14 +54,19 @@ const DATA = `${ROOT}data/`;
 /**
  * Wards with an authored glTF city, and where it is served.
  *
- * MOVED HERE FROM explore/building-model.ts, which imports three.js at module
- * scope. Anything outside the lazy relief chunk that needed to know whether a
- * ward has a model — ward prefetch first — would otherwise pull three.js into
- * the main bundle through that import. heat-explore-module-boundary.test.mjs
- * greps heat-map-app.ts's own source for a static three.js import, so it would
- * not see a TRANSITIVE import; this module is three-free by construction
- * instead. It is also the one module allowed to spell a data URL, and
- * building-model.ts used to spell this one by hand.
+ * A LIST RATHER THAN A PROBE, for two reasons. It keeps a Kolkata ward from
+ * issuing a 404 and from downloading the GLTF/Draco chunk at all, and it lets
+ * the renderer decide synchronously whether to extrude — extruding 11,025
+ * bevelled footprints and then throwing them away is the cost this avoids.
+ * It cannot drift from the directory: bangalore-building-model.test.mjs asserts
+ * the two are equal.
+ *
+ * HERE, NOT IN explore/building-model.ts, which imports three.js at module scope.
+ * Ward prefetch needs this answer from outside the lazy relief chunk, and asking
+ * building-model would pull three.js into the main bundle. This module is
+ * three-free by construction, and heat-explore-module-boundary.test.mjs walks its
+ * imports transitively to keep it so. It is also the one module allowed to spell
+ * a data URL; building-model.ts used to spell this one by hand.
  */
 export const MODEL_WARDS: readonly string[] = ['indiranagar', 'mg-road', 'whitefield'];
 
