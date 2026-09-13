@@ -152,7 +152,7 @@ export const REGISTRY = {
           maxC: [25.5, 29.4, 33.7, 35.4, 35.5, 34.1, 32.5, 32.3, 32.6, 32.3, 30.2, 26.7],
           minC: [14.3, 18.1, 22.9, 25.7, 26.8, 27.1, 26.7, 26.6, 26.3, 24.4, 20.1, 15.5],
         },
-        /** cooling-blob radius, metres — Kolkata's measured tree-void-effect scale */
+        /** pocket-park disc radius, metres — a DESIGN DEFAULT (~0.8 ha), not a measurement; see docs/evidence/park-size-tvoe-preregistration.md */
         parkRadiusM: 50,
         /** basenames under public/heat-map/data/ — artefacts, not geography */
         data: { heatwave: 'heatwave-percentiles', dcUrs: 'dc-urs-inputs' },

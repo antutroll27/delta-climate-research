@@ -722,3 +722,16 @@ models air temperature from the city's IMD 1991–2020 monthly normals: that mon
   the curve between them are the standard assumption.
 
 It replaced a single 32 °C for both Indian cities, which ran up to 16 °C too hot at Bengaluru nights.
+
+---
+
+## 13. The pocket-park size is a design default, not a measurement
+
+**Status:** accepted · **See:** [park-size-tvoe-preregistration.md](park-size-tvoe-preregistration.md)
+
+The pocket-parks slider paints discs of 50 m radius (~0.8 ha) in every city. That number was justified as
+Kolkata's "efficient park size" (TVoE 0.77 ha, Li et al. 2022). It is not one: TVoE is a regression slope
+whose value does not change with the area unit, the paper is internally inconsistent, and the Kolkata
+sample was hand-picked in Google Earth and cannot be reproduced from open data. The radius stands as a
+reasonable pocket-park size; the cooling it produces comes from the solver running on the painted
+vegetation, not from the radius itself.

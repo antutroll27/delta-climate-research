@@ -82,7 +82,7 @@ export const GREEN_REF = 0.45, DT_REF = 2.5, E_REF = 0.15;
  *   PATH_DELTA     all-India warming deltas   → REGISTRY.<country>.pathway, resolved
  *                                               against PATHWAYS in resolve.ts
  *   FALLBACK_TAIR  32 °C, Kolkata climatology → REGISTRY.<c>.cities.<y>.airNormals (monthly)
- *   PARK_R_M       50 m, Kolkata TVoE scale   → REGISTRY.<c>.cities.<y>.parkRadiusM
+ *   PARK_R_M       50 m, pocket-park default  → REGISTRY.<c>.cities.<y>.parkRadiusM
  *
  * NOT ONE OF THEM WAS A FACT ABOUT HEAT TRANSFER. Two belong to a country and two
  * to a city, and held here a second city could not be added without being wrong:
@@ -106,9 +106,11 @@ export const GREEN_REF = 0.45, DT_REF = 2.5, E_REF = 0.15;
 
 const ALB_BASE = 0.15, ALB_COOL = 0.60;       // §3.2 dark vs aged-cool-roof albedo (LBNL)
 const TREE_CAP = 0.7;                         // §3.1 crown-closure cap
-/* §3.3's park blob radius is now `applyInterventions`' `parkRadiusM` parameter —
-   it was 50 m, measured as KOLKATA's tree-void-effect scale, and a city's measured
-   length is not a property of the operator that applies it. See the note above. */
+/* §3.3's park blob radius is now `applyInterventions`' `parkRadiusM` parameter — a
+   CITY's value, not a property of the operator that applies it. It is a design
+   default (50 m, a ~0.8 ha pocket park), NOT a measurement: the Li et al. 2022
+   "efficient park size" it was once derived from is a regression slope whose value
+   does not depend on the area unit. See docs/evidence/park-size-tvoe-preregistration.md. */
 /**
  * Neighbourhood-scale anthropogenic-heat reduction from vertical greening.
  * Was 0.30 (uncited). Gunawardena & Steemers 2023 (Buildings & Cities,

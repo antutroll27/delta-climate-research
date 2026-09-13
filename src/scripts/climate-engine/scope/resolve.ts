@@ -7,7 +7,7 @@
  *
  *   PATH_DELTA     all-India warming deltas — a COUNTRY's adopted projection
  *   COST           four figures denominated in RUPEES — a COUNTRY's currency
- *   PARK_R_M       50 m, measured as Kolkata's tree-void-effect scale — a CITY's
+ *   PARK_R_M       50 m, a pocket-park design default — a CITY's
  *   FALLBACK_TAIR  32 °C, a Kolkata climatology — a CITY's (now `airNormals`: IMD monthly normals)
  *
  * Held there, a second city could not be added without being wrong. Dubai's

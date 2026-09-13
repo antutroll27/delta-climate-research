@@ -241,7 +241,7 @@ export interface ClimateConstants {
    * for Bengaluru: up to 16 °C too hot at night against IMD 1991–2020.
    */
   readonly airNormals: AirNormals;
-  /** Cooling-blob radius, metres — the city's measured tree-void-effect scale. */
+  /** Pocket-park disc radius, metres — a design default, not a measured size. See docs/evidence/park-size-tvoe-preregistration.md. */
   readonly parkRadiusM: number;
   /**
    * Intervention unit costs, or `null` where the country has declared none.
