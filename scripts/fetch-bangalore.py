@@ -817,9 +817,12 @@ def recover_species(tree: dict[str, Any], size_m: float,
                 and abs(round(half - (row + 0.5) * cell_m + jy, 2) - tree["y"]) < 0.011):
             hits.append(kk)
     if len(hits) > 1:
+        # tree["h"] is rounded to 0.1 m in the file, but r was computed from the
+        # unrounded height: that rounding can move r by up to
+        # 0.05 * 0.35 * 1.1 ~= 0.019, plus the 0.011 x/y tolerance ~= 0.030.
         hits = [kk for kk in hits
                 if abs(round(tree["h"] * 0.35 * (0.9 + 0.2 * hash01(col, row, kk, 2)), 2)
-                       - tree["r"]) < 0.011]
+                       - tree["r"]) < 0.030]
     if len(hits) != 1:
         raise ValueError(f"cannot recover the cell of tree {tree} (candidates {hits})")
     return species[int(hash01(col, row, hits[0], 3) * len(species))]
@@ -1187,6 +1190,7 @@ def build_terrain(w: blr.Ward, context: bool = False) -> None:
 def _self_test() -> None:
     """Offline: the backfill must reproduce the source fix exactly."""
     import numpy as np
+    from types import SimpleNamespace
     kc = _kolkata_canopy()
     hash01 = cast(Callable[[int, int, int, int], float], kc._hash01)
     species = cast(tuple[str, ...], kc.SPECIES)
@@ -1200,7 +1204,10 @@ def _self_test() -> None:
     grid[10, 10] = 15.0
     grid[150, 200] = 8.0
     grid[279, 279] = 22.5
+    grid[9, 270] = 30.0
     placed = place_canopy(grid, size_m, hash01, species)
+    assert placed == kc._generate(SimpleNamespace(footprint_m=size_m), grid), \
+        "place_canopy must equal Kolkata's _generate on the same grid, species included"
     assert placed, "the probe grid must place trees"
     assert {t["species"] for t in placed} <= set(species)
     assert len({t["species"] for t in placed}) > 1, "the species draw must vary, not always neem"
