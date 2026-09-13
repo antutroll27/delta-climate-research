@@ -80,11 +80,11 @@ def decode_trees(cols: list[str], names: list[str],
         x, y, h_dm, r_dm, s = row
         # `row` is typed list[int], but json.load can hand over a bool or a float.
         # bool is an int subclass, so `0 <= True < 3` passes and a corrupted file
-        # would silently draw the wrong species. Checked through an `object` view
-        # so strict mypy does not call the test redundant.
-        species_index: object = s
-        if type(species_index) is not int or not 0 <= s < len(SPECIES_NAMES):
-            raise ValueError(f"tree row {row} has species index {s!r}, not an int in range")
+        # would silently draw the wrong species -- hence `type(s) is int`, not
+        # isinstance, which accepts True.
+        if type(s) is not int or not 0 <= s < len(SPECIES_NAMES):
+            raise ValueError(f"tree row {row}: species index must be an int from 0 to "
+                             f"{len(SPECIES_NAMES) - 1}, got {s!r}")
         out.append({"x": float(x), "y": float(y), "h": h_dm / 10,
                     "species": SPECIES_NAMES[s], "r": r_dm / 10})
     return out
