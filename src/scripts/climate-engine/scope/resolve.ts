@@ -8,7 +8,7 @@
  *   PATH_DELTA     all-India warming deltas — a COUNTRY's adopted projection
  *   COST           four figures denominated in RUPEES — a COUNTRY's currency
  *   PARK_R_M       50 m, measured as Kolkata's tree-void-effect scale — a CITY's
- *   FALLBACK_TAIR  32 °C, a Kolkata climatology — a CITY's
+ *   FALLBACK_TAIR  32 °C, a Kolkata climatology — a CITY's (now `airNormals`: IMD monthly normals)
  *
  * Held there, a second city could not be added without being wrong. Dubai's
  * fallback air temperature is nearer 40 °C, no Gulf warming pathway has been
@@ -373,7 +373,7 @@ function build(key: AreaKey): ResolvedScope {
     pathway: warming.control,
     climate: Object.freeze({
       pathDelta: warming.pathDelta,
-      fallbackTairC: cityEntry.fallbackTairC,
+      airNormals: cityEntry.airNormals,
       parkRadiusM: cityEntry.parkRadiusM,
       /* Kept as declared, INCLUDING the null. Substituting a zero-valued Costs for
          a country that has adopted none would put a budget of nothing on screen —

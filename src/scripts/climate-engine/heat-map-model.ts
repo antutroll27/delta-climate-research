@@ -81,7 +81,7 @@ export const GREEN_REF = 0.45, DT_REF = 2.5, E_REF = 0.15;
  *   COST           four figures in RUPEES     → REGISTRY.<country>.costs
  *   PATH_DELTA     all-India warming deltas   → REGISTRY.<country>.pathway, resolved
  *                                               against PATHWAYS in resolve.ts
- *   FALLBACK_TAIR  32 °C, Kolkata climatology → REGISTRY.<c>.cities.<y>.fallbackTairC
+ *   FALLBACK_TAIR  32 °C, Kolkata climatology → REGISTRY.<c>.cities.<y>.airNormals (monthly)
  *   PARK_R_M       50 m, Kolkata TVoE scale   → REGISTRY.<c>.cities.<y>.parkRadiusM
  *
  * NOT ONE OF THEM WAS A FACT ABOUT HEAT TRANSFER. Two belong to a country and two
@@ -257,6 +257,14 @@ export interface ScenarioState {
    * city's name and never say so. Absent, it is a compile error at the call site.
    */
   climate: ClimateConstants;
+  /**
+   * The moment the scenario describes, in the ward's own time zone.
+   *
+   * REQUIRED, for the reason `climate` is: the fallback air temperature depends
+   * on month and hour, and a default would silently model a moment nobody chose.
+   * Read only when `live` is null.
+   */
+  clock: ScenarioClock;
   /* HEATWAVE IS A FORCING OVERRIDE, NOT A THIRD PHASE — the same shape `sunNow`
      takes, and for the same reason its comment gives: every consumer downstream
      (ACCURACY, bandLabel, the DC-URS split, the Compare link, the phase label)
@@ -573,7 +581,7 @@ function pathwayDelta(table: Readonly<Record<string, number>>, path: string): nu
 
 /** Scenario forcing → SimParams (§2 D retune, §3.4 facade Q cut, §4 diurnal/pathway). */
 export function currentParams(s: ScenarioState): SimParams {
-  const L = s.live, obsTair = L ? L.tAir : s.climate.fallbackTairC, obsRh = L ? L.rh : 60;
+  const L = s.live, obsTair = L ? L.tAir : fallbackTair(s.climate.airNormals, s.clock), obsRh = L ? L.rh : 60;
   /* THE PATHWAY STAYS ADDITIVE ON TOP OF THE OVERRIDE. Replacing the whole
      expression would make the warming-pathway control silently dead whenever
      heatwave was on — a button that does nothing and says nothing, which is the
@@ -693,7 +701,10 @@ export function assertInterventionLogic(): void {
      that the physics READS them, which the first block of assertions proves. */
   const climate: ClimateConstants = {
     pathDelta: { '2025': 0, ssp245: 1.25, ssp585: 4.1 },
-    fallbackTairC: 32,
+    /* Flat by month and hour, so the physical bars below see the 32 °C they were
+       derived against whatever clock a case carries. */
+    airNormals: { station: 'fixture', period: 'fixture', source: 'fixture', measured: false,
+      maxC: Array(12).fill(32), minC: Array(12).fill(32) },
     parkRadiusM: 50,
     /* `XTS` IS ISO 4217'S RESERVED TEST CODE, and it is here rather than the real
        code for the same reason the note above gives about the numbers: this is a
@@ -704,7 +715,8 @@ export function assertInterventionLogic(): void {
        is how a tripwire stops meaning anything. */
     costs: { currency: 'XTS', roofM2: 150, tree: 1500, park: 15_000_000, facadeM2: 9500 },
   };
-  const p: SimParams = currentParams({ live: null, phase: 'peak', path: '2025', climate, iv: { trees: 0, roof: 0, parks: 0, facades: 0 } });
+  const CLOCK = { month: 4, hour: 13 };
+  const p: SimParams = currentParams({ live: null, phase: 'peak', path: '2025', climate, iv: { trees: 0, roof: 0, parks: 0, facades: 0 }, clock: CLOCK });
 
   /* ── the scope constants are READ, never remembered ───────────────────────
      The migration's whole risk is a constant that appears to move and does not —
@@ -713,17 +725,19 @@ export function assertInterventionLogic(): void {
      scope object, and a scope naming a pathway that does not exist must be refused
      rather than quietly warmed by zero. */
   const zeroIv = { trees: 0, roof: 0, parks: 0, facades: 0 };
-  const gulf: ClimateConstants = { pathDelta: {}, fallbackTairC: 40, parkRadiusM: 50, costs: null };
+  const gulf: ClimateConstants = { pathDelta: {}, parkRadiusM: 50, costs: null,
+    airNormals: { station: 'fixture', period: 'fixture', source: 'fixture', measured: false,
+      maxC: Array(12).fill(40), minC: Array(12).fill(40) } };
   const noFeed = (c: ClimateConstants) =>
-    currentParams({ live: null, phase: 'peak', path: '2025', climate: c, iv: zeroIv }).tAir;
+    currentParams({ live: null, phase: 'peak', path: '2025', climate: c, iv: zeroIv, clock: CLOCK }).tAir;
   a(noFeed(climate) === 32 && noFeed(gulf) === 40,
     `the fallback air temperature must come from the scope (got ${noFeed(climate)}, ${noFeed(gulf)})`);
   /* An empty table is a DECLARED absence: no adopted projection, so no warming,
      whatever the control says. It must not throw — Dubai has to be reachable. */
-  a(currentParams({ live: null, phase: 'peak', path: 'ssp585', climate: gulf, iv: zeroIv }).tAir === 40,
+  a(currentParams({ live: null, phase: 'peak', path: 'ssp585', climate: gulf, iv: zeroIv, clock: CLOCK }).tAir === 40,
     'a scope with no pathway must contribute zero warming, not throw');
   let refused = false;
-  try { currentParams({ live: null, phase: 'peak', path: 'ssp858', climate, iv: zeroIv }); }
+  try { currentParams({ live: null, phase: 'peak', path: 'ssp858', climate, iv: zeroIv, clock: CLOCK }); }
   catch { refused = true; }
   a(refused, 'an unknown pathway against a POPULATED table must throw, not warm by zero');
 
@@ -734,8 +748,8 @@ export function assertInterventionLogic(): void {
   const iv0 = { trees: 0, roof: 0, parks: 0, facades: 0 };
   const live = { tAir: 30, rh: 96, wind: 3, cloud: 20, feels: 40 } as Ambient;
   const P99 = 38.4;
-  const plain = currentParams({ live, phase: 'peak', path: '2025', climate, iv: iv0 });
-  const heat = currentParams({ live, phase: 'peak', path: '2025', climate, iv: iv0, heatTairC: P99 });
+  const plain = currentParams({ live, phase: 'peak', path: '2025', climate, iv: iv0, clock: CLOCK });
+  const heat = currentParams({ live, phase: 'peak', path: '2025', climate, iv: iv0, heatTairC: P99, clock: CLOCK });
   a(Math.abs(heat.tAir - P99) < 1e-9, `heatwave tAir ${heat.tAir}, expected ${P99}`);
   a(heat.sun === plain.sun && heat.wind === plain.wind && heat.Q === plain.Q,
     'heatwave changed sun, wind or Q — it may only change the air');
@@ -744,11 +758,11 @@ export function assertInterventionLogic(): void {
   // drier air evaporates harder — L must rise, never fall.
   a(heat.L > plain.L, 'heatwave should dry the air and raise the latent term');
   // the pathway composes on top rather than being replaced by the override
-  const hot585 = currentParams({ live, phase: 'peak', path: 'ssp585', climate, iv: iv0, heatTairC: P99 });
+  const hot585 = currentParams({ live, phase: 'peak', path: 'ssp585', climate, iv: iv0, heatTairC: P99, clock: CLOCK });
   a(Math.abs(hot585.tAir - (P99 + climate.pathDelta.ssp585)) < 1e-9,
     `heatwave + ssp585 = ${hot585.tAir}, expected ${P99 + climate.pathDelta.ssp585} — the pathway was swallowed`);
   // absent, it must be exactly the old behaviour
-  a(currentParams({ live, phase: 'peak', path: '2025', climate, iv: iv0, heatTairC: null }).tAir === plain.tAir,
+  a(currentParams({ live, phase: 'peak', path: '2025', climate, iv: iv0, heatTairC: null, clock: CLOCK }).tAir === plain.tAir,
     'a null override changed the forcing');
 
   const base0 = eqMean(base, p);

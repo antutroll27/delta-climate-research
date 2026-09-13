@@ -88,8 +88,9 @@ export const GOLDEN_LAYERS = join(ROOT, 'data/calibration/golden-layers.json');
 
 /* ── Matrix 1 · currentParams — guards PATH_DELTA, FALLBACK_TAIR, FACADE_Q ──
    currentParams is WARD-INDEPENDENT: ScenarioState carries
-   {live, phase, path, climate, iv, heatTairC, sunNow} and no ward, so the matrix varies
+   {live, phase, path, climate, iv, heatTairC, sunNow, clock} and no ward, so the matrix varies
    only what actually reaches the function. 2 phases x 3 pathways x 2 live x 2 heatwave.
+   The clock is fixed at April (13:00 peak, 22:00 retained) so the frozen fallback cases name one moment.
    `climate` is held at Kolkata's — it is the scope these numbers were captured under,
    and varying it would be capturing a different city, not the same one twice.
 
@@ -120,7 +121,7 @@ export function paramsMatrix() {
       for (const [liveName, live] of [['nolive', null], ['live', LIVE]]) {
         for (const [hwName, heatTairC] of [['plain', null], ['heatwave', 41.5]]) {
           const key = `${phase}/${path}/${liveName}/${hwName}`;
-          out[key] = currentParams({ live, phase, path, climate: CLIMATE, iv: IV, heatTairC });
+          out[key] = currentParams({ live, phase, path, climate: CLIMATE, iv: IV, heatTairC, clock: { month: 4, hour: phase === 'night' ? 22 : 13 } });
         }
       }
     }

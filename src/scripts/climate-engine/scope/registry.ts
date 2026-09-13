@@ -46,6 +46,7 @@
    invariant is right: an area that SHIPS DATA must be in the published ward
    table, because shipsData is what puts it in the sitemap and the catalogue. */
 import { WARDS as WARD_TABLE } from '../../../data/wards.ts';
+import type { AirNormals } from '../types.ts';
 
 /**
  * Path segments under `/heat-map/` that are already taken.
@@ -142,8 +143,15 @@ export const REGISTRY = {
            this comment: Intl ACCEPTS '+05:30' and resolves it happily, so "does
            Intl take it" is not the test — the shape is. */
         tz: 'Asia/Kolkata',
-        /** used only when the live met feed is down */
-        fallbackTairC: 32,
+        /** Monthly normals for the fallback air temperature — used only without a live reading. */
+        airNormals: {
+          station: 'IMD Kolkata (Alipore) 42807',
+          period: '1991–2020',
+          source: 'IMD, Climatological Tables of Observatories in India 1991–2020 (National Data Centre, Pune)',
+          measured: true,
+          maxC: [25.5, 29.4, 33.7, 35.4, 35.5, 34.1, 32.5, 32.3, 32.6, 32.3, 30.2, 26.7],
+          minC: [14.3, 18.1, 22.9, 25.7, 26.8, 27.1, 26.7, 26.6, 26.3, 24.4, 20.1, 15.5],
+        },
         /** cooling-blob radius, metres — Kolkata's measured tree-void-effect scale */
         parkRadiusM: 50,
         /** basenames under public/heat-map/data/ — artefacts, not geography */
@@ -162,22 +170,25 @@ export const REGISTRY = {
          3D Tiles tileset. `src/data/wards.ts` holds the same split as
          PUBLISHED vs RENDERABLE, measured rather than assumed.
 
-         TWO NUMBERS HERE ARE INHERITED FROM KOLKATA AND ARE NOT MEASURED.
-         `parkRadiusM` is a CITY's cooling-blob scale and `fallbackTairC` its
-         still-air baseline; both were measured for Kolkata and neither has been
-         measured for Bengaluru. They are carried over so the city runs at all,
-         and they are wrong in an unknown direction — Bengaluru sits 900 m up
-         with a milder mean than deltaic Kolkata, so the fallback air temperature
-         is the likelier of the two to be overstated. Importing one city's
-         constant into another under a different climate is the same shape as
-         the Mumbai packing factor already recorded in the solar work; it is
-         flagged rather than quietly adopted, and it should be measured before
-         any Bengaluru number is quoted to anyone. */
+         ONE NUMBER HERE IS BORROWED, AND IT IS NOT A MEASUREMENT ANYWHERE.
+         `airNormals` is Bengaluru's own: IMD Bengaluru City 1991–2020, which put
+         the old inherited 32 °C fallback up to 16 °C too hot at night.
+         `parkRadiusM` (50 m) is the pocket-park disc, shared with Kolkata, and it
+         is a DESIGN DEFAULT: the "efficient park size" it was once justified by
+         is a unit-dependent regression slope, not an area, and could not be
+         reproduced from open data. See docs/evidence/park-size-tvoe-preregistration.md. */
       bengaluru: {
         koppen: 'Aw',
         tier: 'geometry',
         tz: 'Asia/Kolkata',
-        fallbackTairC: 32,
+        airNormals: {
+          station: 'IMD Bengaluru City 43295',
+          period: '1991–2020',
+          source: 'IMD, Climatological Tables of Observatories in India 1991–2020 (National Data Centre, Pune), pp. 133–138',
+          measured: true,
+          maxC: [28.4, 30.9, 33.4, 34.1, 33.1, 29.7, 28.3, 28.1, 28.6, 28.5, 27.4, 26.9],
+          minC: [16.1, 17.6, 20.2, 22.1, 21.8, 20.6, 20.1, 20.0, 20.0, 19.8, 18.3, 16.4],
+        },
         parkRadiusM: 50,
         data: { heatwave: null, dcUrs: null },
         /* shipsData is FALSE, and that is the honest value rather than a
@@ -218,7 +229,16 @@ export const REGISTRY = {
            number rather than as a string comparison that only proves the literal
            was copied. */
         tz: 'Asia/Dubai',
-        fallbackTairC: 40,
+        /* NOT MEASURED. A flat 40 °C carried from the old scalar so the type holds;
+           `measured: false` is what stops it reading as a Gulf climatology. */
+        airNormals: {
+          station: 'none — placeholder',
+          period: 'none',
+          source: 'unsourced placeholder, carried from the previous fallbackTairC',
+          measured: false,
+          maxC: [40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40],
+          minC: [40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40],
+        },
         parkRadiusM: 50,
         data: { heatwave: null, dcUrs: null },
         /* These three are NOT in src/data/wards.ts, which is why they carry a
@@ -267,8 +287,8 @@ export type AreaKey = {
  * `as const satisfies Record<string, CountryEntry>`, and that clause is what makes
  * an incomplete entry fail HERE.
  *
- * Without it a city omitting `fallbackTairC` compiled clean and passed all eight
- * runtime guards — the guards walk the tree and not one of them reads that field,
+ * Without it a city omitting a required field (`fallbackTairC` then, `airNormals`
+ * now) compiled clean and passed all eight runtime guards — the guards walk the tree and not one of them reads that field,
  * so the omission surfaced only at the first generic consumer, tasks away, as a
  * type error naming the wrong file.
  *
@@ -329,7 +349,7 @@ interface CityEntry {
   readonly tier: Tier;
   /** IANA zone name — `Region/Zone`, never an offset. See check 9. */
   readonly tz: string;
-  readonly fallbackTairC: number;
+  readonly airNormals: AirNormals;
   readonly parkRadiusM: number;
   readonly data: { readonly heatwave: string | null; readonly dcUrs: string | null };
   readonly areas: Readonly<Record<string, AreaEntry>>;

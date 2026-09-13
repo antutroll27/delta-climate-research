@@ -233,8 +233,14 @@ export interface ClimateConstants {
    * caller that mutated it would move the warming pathway for the whole session.
    */
   readonly pathDelta: Readonly<Record<string, number>>;
-  /** Air temperature, °C, used ONLY when the live met feed is down. */
-  readonly fallbackTairC: number;
+  /**
+   * Monthly air-temperature normals, used ONLY when there is no live reading —
+   * which includes the first seconds of every page load, before the feed answers.
+   * `fallbackTair` (heat-map-model.ts) turns them into a temperature for a month and
+   * hour. They replaced one `fallbackTairC` that was 32 °C for Kolkata and, copied,
+   * for Bengaluru: up to 16 °C too hot at night against IMD 1991–2020.
+   */
+  readonly airNormals: AirNormals;
   /** Cooling-blob radius, metres — the city's measured tree-void-effect scale. */
   readonly parkRadiusM: number;
   /**

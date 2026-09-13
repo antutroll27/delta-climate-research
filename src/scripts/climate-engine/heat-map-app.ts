@@ -2217,7 +2217,7 @@ export function mountHeatMap(): () => void {
        mode is on" sentinel; without this the opening frame would run night
        physics at noon and then visibly flip when the stats tick corrected it. */
     refreshNowSun();
-    const p = M.currentParams(state);
+    const p = M.currentParams({ ...state, clock: scenarioClock() });
     state.baselineMean = M.eqMean(state.base, { ...p, Q: DEFAULT_PARAMS.Q });
     const layers = M.applyInterventions(state.base, state.iv, state.spatial, state.climate.parkRadiusM);
     state.greenG = M.computeGreenG(layers);
@@ -2263,6 +2263,21 @@ export function mountHeatMap(): () => void {
      never leaves the city, so re-reading it per switch would only add a second
      place for it to be wrong. */
   const WARD_TZ = SCOPE.city.tz;
+  /* THE SCENARIO'S MOMENT, in the ward's own zone. The fallback air temperature is a
+     month × hour climatology now, so the physics has to be told when it is modelling.
+     "Now" (sunNow non-null) uses the real local hour; the two canonical views use the
+     hours their chips print — 13:00 peak, 22:00 retained — in the current month.
+     The hour rule is the shared `representativeSolarHour` (sun-lighting.ts), never a second copy. */
+  const wardMonthHour = new Intl.DateTimeFormat('en-GB', {
+    timeZone: WARD_TZ, month: 'numeric', hour: 'numeric', minute: 'numeric', hourCycle: 'h23',
+  });
+  function scenarioClock(): M.ScenarioClock {
+    const parts = wardMonthHour.formatToParts(new Date(now()));
+    const part = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? NaN);
+    const localHour = part('hour') + part('minute') / 60;
+    const hour = representativeSolarHour(state.sunNow, localHour, state.phase);
+    return { month: part('month'), hour };
+  }
   const wardClock = new Intl.DateTimeFormat('en-GB', {
     timeZone: WARD_TZ, hour: '2-digit', minute: '2-digit', hour12: false,
   });
@@ -2618,7 +2633,7 @@ export function mountHeatMap(): () => void {
       (lst as HTMLElement).style.color = lstColor(st.meanC);
     }
     applyConfidence();
-    const p = M.currentParams(state);
+    const p = M.currentParams({ ...state, clock: scenarioClock() });
     syncRamp(p);
     const uhi = greenReferenceContrastC(st.meanC, p);
     setText('uhi', `${uhi >= 0 ? '+' : ''}${uhi.toFixed(1)}°`);

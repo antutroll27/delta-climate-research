@@ -51,7 +51,9 @@ function makeWard() {
   return { base, spatial };
 }
 const { base, spatial } = makeWard();
-const scen = (iv) => ({ live: null, phase: 'peak', path: '2025', climate: CLIMATE, iv });
+/* A FIXED hot-season canonical peak, so validation never depends on the date it runs. */
+const CLOCK = { month: 4, hour: 13 };
+const scen = (iv) => ({ live: null, phase: 'peak', path: '2025', climate: CLIMATE, iv, clock: CLOCK });
 const ZERO = { trees: 0, roof: 0, parks: 0, facades: 0 };
 /** local park cooling, used as the physically-necessary upper bound on ward-mean ΔT */
 function parkDropForBound() {
@@ -119,7 +121,7 @@ check(
 // path is swept too, because it derives its own rh by preserving vapour as the
 // air warms — the one route in the app that reaches genuinely dry air.
 const etBars = (live, heatTairC) => {
-  const p = M.currentParams({ live, phase: 'peak', path: '2025', climate: CLIMATE, iv: ZERO, ...(heatTairC == null ? {} : { heatTairC }) });
+  const p = M.currentParams({ live, phase: 'peak', path: '2025', climate: CLIMATE, iv: ZERO, clock: CLOCK, ...(heatTairC == null ? {} : { heatTairC }) });
   return {
     park: M.eqCell(p, 0.20, 0, 0) - M.eqCell(p, 0.20, 0.9, 0),
     veg: p.tAir - M.eqCell(p, 0.25, 1.0, 0),

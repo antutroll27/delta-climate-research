@@ -11,7 +11,7 @@ import {
 import { paths, cityPaths } from '../../src/scripts/climate-engine/scope/paths.ts';
 import { resolve, requireCosts } from '../../src/scripts/climate-engine/scope/resolve.ts';
 import { WARDS as WARD_TABLE } from '../../src/data/wards.ts';
-import { currentParams } from '../../src/scripts/climate-engine/heat-map-model.ts';
+import { currentParams, fallbackTair } from '../../src/scripts/climate-engine/heat-map-model.ts';
 import { fmtMoney, fmtRate, currencyMark } from '../../src/scripts/climate-engine/money.ts';
 import { tabKind, areaRefusal } from '../../src/scripts/climate-engine/scope/reachability.ts';
 
@@ -304,7 +304,7 @@ test('resolve refuses a key the registry does not know', () => {
 
 test('the climate constants are the registry\'s, not a copy', () => {
   const c = resolve('in/kolkata/ballygunge').climate;
-  assert.equal(c.fallbackTairC, REGISTRY.in.cities.kolkata.fallbackTairC);
+  assert.deepEqual(c.airNormals, REGISTRY.in.cities.kolkata.airNormals);
   assert.equal(c.parkRadiusM, REGISTRY.in.cities.kolkata.parkRadiusM);
   assert.deepEqual(c.costs, REGISTRY.in.costs);
   // The pathway NAME becomes a delta table here and nowhere else. The registry's
@@ -321,7 +321,8 @@ test('a country with no pathway gets an EMPTY table, and no costs at all', () =>
   assert.deepEqual(c.pathDelta, {});
   assert.equal(Object.keys(c.pathDelta).length, 0);
   assert.equal(c.costs, null, 'a rupee figure carried into the Gulf would compute and read as an answer');
-  assert.equal(c.fallbackTairC, 40, 'Dubai is not 32 °C');
+  assert.ok(c.airNormals.maxC.every((v) => v === 40) && c.airNormals.measured === false,
+    'Dubai is a flagged placeholder, not Kolkata’s climatology');
 });
 
 test('requireCosts hands over real prices, or refuses -- never a zero', () => {
@@ -346,8 +347,11 @@ test('a scope is frozen, so one caller cannot move another\'s pathway', () => {
    type-checks the lookup as a number. */
 
 const IV0 = { trees: 0, roof: 0, parks: 0, facades: 0 };
+/* A fixed moment. The fallback air temperature is a month × hour table now, so a
+   no-live scenario must say when it is; April 13:00 is the canonical hot peak. */
+const CLOCK = { month: 4, hour: 13 };
 const at = (climate, path) =>
-  currentParams({ live: null, phase: 'peak', path, climate, iv: IV0 }).tAir;
+  currentParams({ live: null, phase: 'peak', path, climate, iv: IV0, clock: CLOCK }).tAir;
 
 test('an unknown pathway against a populated table THROWS', () => {
   const kolkata = resolve('in/kolkata/ballygunge').climate;
@@ -356,9 +360,12 @@ test('an unknown pathway against a populated table THROWS', () => {
   // `in` would find inherited members and multiply a function into the air
   // temperature as NaN; the lookup uses Object.hasOwn for exactly this.
   assert.throws(() => at(kolkata, 'toString'), /not in this scope's table/);
-  // ...while the three real scenarios still resolve.
-  assert.equal(at(kolkata, '2025'), 32);
-  assert.equal(at(kolkata, 'ssp585'), 36.1);
+  // ...while the three real scenarios still resolve: the city's fallback at this
+  // clock, plus the pathway's delta — the delta is what this test is about.
+  const base = fallbackTair(kolkata.airNormals, CLOCK);
+  assert.equal(at(kolkata, '2025'), base);
+  assert.ok(Math.abs(at(kolkata, 'ssp585') - (base + 4.1)) < 1e-9,
+    `ssp585 must add exactly 4.1 K to the fallback (got ${at(kolkata, 'ssp585') - base})`);
 });
 
 test('a scope with no pathway contributes zero, and does not throw', () => {
