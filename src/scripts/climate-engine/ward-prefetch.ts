@@ -1,15 +1,20 @@
 /**
  * PREFETCH THE CITY'S OTHER WARDS ONCE THE FIRST HAS LOADED.
  *
- * Measured on production under Slow 4G: switching back to a ward already visited
- * took 393 ms; to one not yet visited, 2,238 and 2,176 ms. The difference is the
- * first download. Every ward file loads through a plain fetch — the ward JSON,
- * the GLB and the surface PNG alike — so fetching the same URLs in the background
- * warms exactly the cache a switch reads, and the switch takes the revisit path.
+ * Measured on production (Kolkata wards) under Slow 4G: switching back to a ward
+ * already visited took 393 ms; to one not yet visited, 2,238 and 2,176 ms.
  *
- * The cost is data the reader may never use (about 1.5-1.9 MB per Bengaluru
- * visit), so this backs off for Save-Data and 2G, fetches one ward at a time, and
- * is aborted the moment a real ward load begins.
+ * WHAT THIS BUYS, AND WHAT IT DOES NOT. Every ward file loads through a plain
+ * fetch, so fetching the same URLs in the background puts their bodies in the HTTP
+ * cache. The deployment sends `max-age=0, must-revalidate`, so a prefetched switch
+ * still revalidates each file, but gets 304s with no body (measured in Chrome). It
+ * does NOT take the 393 ms revisit path: a revisit is served from loadWard's
+ * in-memory caches with no request and no parse, while a prefetched first visit
+ * still parses and decodes everything.
+ *
+ * The cost is data the reader may never use: two sibling wards, about 3.4-4.0 MB
+ * raw per Bengaluru visit. So this backs off for Save-Data and 2G, fetches one ward
+ * at a time, and is aborted the moment a real ward load begins.
  *
  * Three-free on purpose, and pinned by heat-explore-module-boundary.test.mjs: the
  * model URL comes from scope/paths.ts, never from the explore model loader.
@@ -46,19 +51,16 @@ export function prefetchPlan(key: AreaKey): string[][] {
     });
 }
 
-/** Fetch ward by ward, each ward's files together. Resolves with how many completed. */
+/** Fetch ward by ward, each ward's files together, until done or aborted. Never rejects. */
 export async function runPrefetch(plan: readonly (readonly string[])[], fetchImpl: typeof fetch,
-  signal: AbortSignal): Promise<number> {
-  let fetched = 0;
+  signal: AbortSignal): Promise<void> {
   for (const urls of plan) {
     if (signal.aborted) break;
-    const results = await Promise.allSettled(urls.map(async (url) => {
-      const response = await fetchImpl(url, { signal, priority: 'low' } as RequestInit);
-      /* READ THE BODY. An unread response can leave the cache entry incomplete, and a
-         half-warmed cache is the one outcome worse than not prefetching at all. */
+    await Promise.allSettled(urls.map(async (url) => {
+      const response = await fetchImpl(url, { signal, priority: 'low' });
+      /* READ THE BODY. Chrome caches an unread body anyway (measured), but that is an
+         engine detail; reading it is what guarantees a complete entry everywhere. */
       await response.arrayBuffer();
     }));
-    fetched += results.filter((result) => result.status === 'fulfilled').length;
   }
-  return fetched;
 }

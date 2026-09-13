@@ -36,8 +36,7 @@ test('runPrefetch goes ward by ward, reads every body, and stops when aborted', 
     calls.push(url);
     return { arrayBuffer: async () => { bodies += 1; if (url === 'b1') controller.abort(); return new ArrayBuffer(0); } };
   };
-  const fetched = await runPrefetch([['a1', 'a2'], ['b1'], ['c1']], fakeFetch, controller.signal);
+  await runPrefetch([['a1', 'a2'], ['b1'], ['c1']], fakeFetch, controller.signal);
   assert.deepEqual(calls, ['a1', 'a2', 'b1'], 'the ward after the abort is never started');
   assert.equal(bodies, 3);
-  assert.equal(fetched, 3);
 });
