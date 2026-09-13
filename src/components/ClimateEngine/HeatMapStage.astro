@@ -1791,8 +1791,21 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
      it by looking. */
   .loadchip{position:absolute;top:118px;inset-inline:0 var(--instr-berth);margin-inline:auto;
     width:max-content;max-width:calc(100% - var(--instr-berth) - 1rem);
-    font-family:var(--mono);font-size:.52rem;letter-spacing:.26em;color:var(--cyan);z-index:3;text-transform:uppercase;opacity:0;transition:opacity .25s}
+    font-family:var(--mono);font-size:.52rem;letter-spacing:.26em;color:var(--cyan);z-index:3;text-transform:uppercase;opacity:0;transition:opacity .25s;
+    padding-bottom:7px;overflow:hidden}
   .loadchip.on{opacity:1}
+  /* THE LOADER. A hairline beam sweeps along a faint track under the words while a
+     ward loads. Transform only, so it holds 60 fps on a GPU-bound page; the static
+     track makes the sweep read as travel rather than flicker. It now stays up until
+     the buildings are on screen (heat-map-app waits on relief.buildingsReady). */
+  .loadchip::before,.loadchip::after{content:'';position:absolute;left:0;right:0;bottom:0;height:1px;pointer-events:none}
+  .loadchip::before{background:currentColor;opacity:.18}
+  .loadchip::after{background:linear-gradient(90deg,transparent,currentColor 50%,transparent);transform:translateX(-100%)}
+  .loadchip.on::after{animation:loadchip-sweep 1.15s cubic-bezier(.65,0,.35,1) infinite}
+  .loadchip.fail{color:var(--red-ink)}
+  .loadchip.fail::after{animation:none;opacity:0}
+  @keyframes loadchip-sweep{to{transform:translateX(100%)}}
+  @media (prefers-reduced-motion:reduce){.loadchip.on::after{animation:none;transform:none;opacity:.55}}
 
   /* Borderless glass. The 1px --line stroke was the last piece of the "grid of
      boxes" read, and it also fought the legend directly beneath it in the same

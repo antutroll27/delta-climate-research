@@ -66,6 +66,10 @@ export interface ReliefSelection {
 export interface ReliefRenderer {
   readonly layer: maplibregl.CustomLayerInterface;
   setWard(bundle: ReliefWardBundle): void;
+  /** Resolves once the ward last passed to `setWard` has its buildings in the scene —
+   *  or was superseded, or the renderer was disposed. Never rejects, never hangs on a
+   *  ward that will not finish: the loader waits on it, so it must always settle. */
+  buildingsReady(): Promise<void>;
   updateField(update: ReliefFieldUpdate): void;
   setVisualState(state: ReliefVisualState): void;
   setSelection(selection: ReliefSelection): void;

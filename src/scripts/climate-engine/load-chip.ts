@@ -54,6 +54,7 @@ export function createLoadChip(el: ChipElement | null, clock: ChipClock): LoadCh
   return {
     start(text) {
       clear();
+      el?.classList.remove('fail');
       /* Already visible from a load this one superseded: retitle and keep it up,
          rather than blinking it off and on again. */
       if (shownAt !== null) { show(text); return; }
@@ -68,6 +69,9 @@ export function createLoadChip(el: ChipElement | null, clock: ChipClock): LoadCh
     },
     fail(text) {
       clear();
+      /* Marked, so the loader's sweep stops: a moving beam under "could not load"
+         would say the opposite of the words. */
+      el?.classList.add('fail');
       show(text);
     },
   };

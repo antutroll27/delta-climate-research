@@ -24,7 +24,7 @@ function rig() {
   };
   const classes = new Set();
   const el = { textContent: '', classList: { add: (c) => classes.add(c), remove: (c) => classes.delete(c) } };
-  return { chip: createLoadChip(el, clock), el, visible: () => classes.has('on'), advance };
+  return { chip: createLoadChip(el, clock), el, visible: () => classes.has('on'), has: (c) => classes.has(c), advance };
 }
 
 test('a switch that finishes before the threshold never shows the chip', () => {
@@ -87,6 +87,14 @@ test('a slow load, visible past the minimum, hides the moment it finishes', () =
   assert.equal(r.visible(), true);
   r.chip.done();
   assert.equal(r.visible(), false, 'no extra hold once the minimum has passed');
+});
+
+test('a failure is marked so the loader stops sweeping, and the next load clears the mark', () => {
+  const r = rig();
+  r.chip.fail('MG Road could not load.');
+  assert.equal(r.has('fail'), true, 'the sweep would keep running under a failure');
+  r.chip.start('Loading MG Road…');
+  assert.equal(r.has('fail'), false, 'a new load must not inherit the failure colour');
 });
 
 test('a new load while the chip is up retitles it at once and keeps it up', () => {

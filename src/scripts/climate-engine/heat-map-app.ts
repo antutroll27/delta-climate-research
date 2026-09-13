@@ -2174,10 +2174,6 @@ export function mountHeatMap(): () => void {
        they have been visited. */
     const activeId = areaOf(name);
     document.querySelectorAll('#strip .ward').forEach(t => t.classList.toggle('on', (t as HTMLElement).dataset.w === activeId));
-    /* Guarded, not merely safe today. The awaits between the last isCurrent check and
-       here do not suspend (the caches they read were filled just after that check),
-       but one that did would let a superseded load hide a newer load's chip or failure. */
-    if (wardSession.isCurrent(token)) loadChip.done();
 
     const dur = relief ? 1400 : 0;
     orbit = false; clearTimeout(orbitResume);
@@ -2190,11 +2186,20 @@ export function mountHeatMap(): () => void {
       syncReliefVisual();
       requestRuntimeFrame('grow', dur * 0.45);
     }
-      /* Same hazard as the guarded done() above: a superseded load must not start a
-         warm-up after the newer load has already aborted the previous one. */
+      /* A superseded load must not start a warm-up after the newer load has already
+         aborted the previous one, nor take the loader down. */
       if (!wardSession.commit(token)) return;
       fetchLive(name);
       schedulePrefetch(name);
+      /* THE LOADER HOLDS UNTIL THE BUILDINGS ARE ON SCREEN, not until the data lands.
+         A Bengaluru GLB installs after this point, and the chip used to vanish while
+         the map still showed bare ground (audit, 2026-09-13). Capped at 8 s so a model
+         that never arrives cannot pin it up; skipped if another load has since begun. */
+      const buildingsShown = relief ? relief.buildingsReady() : Promise.resolve();
+      void Promise.race([buildingsShown, new Promise<void>((settle) => window.setTimeout(settle, 8000))])
+        .then(() => {
+          if (wardSession.pendingWard === null && wardSession.committedWard === name) loadChip.done();
+        });
     } catch (error) {
       if (!wardSession.isCurrent(token)) return;
       wardSession.fail(token);

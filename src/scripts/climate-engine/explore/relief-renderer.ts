@@ -43,6 +43,13 @@ import type {
 
 const RING_RADII = [80, 400] as const;
 
+/** A promise with its resolver held outside; `settled` starts it already resolved. */
+function readyLatch(settled: boolean): { promise: Promise<void>; resolve: () => void } {
+  let resolve: () => void = () => undefined;
+  const promise = settled ? Promise.resolve() : new Promise<void>((r) => { resolve = r; });
+  return { promise, resolve };
+}
+
 /** How tall a "footprints, no heights" building is: a 30 m block becomes 0.45 m. */
 const FLAT_BUILDING_SCALE = 0.015;
 
@@ -57,6 +64,18 @@ export class ThreeReliefRenderer implements ReliefRenderer {
   private model: THREE.Group | null = null;
   /** compiled lazily: a ward with no model never builds this shader variant */
   private modelFacade: THREE.MeshStandardMaterial | null = null;
+  /**
+   * DECODED MODELS, KEPT PER WARD. Revisiting a ward used to re-fetch and re-decode
+   * its GLB on the main thread, so buildings vanished and stuttered back on every
+   * switch. A model is prepared once (facade material, ground attribute) and then
+   * only added to and removed from the scene; `dispose` frees them all.
+   * ponytail: no eviction — a city has three wards; add an LRU if one ships dozens.
+   */
+  private modelCache = new Map<string, { buildings: THREE.Group; landmarks: readonly LandmarkNode[] }>();
+  /** 1 extruded, FLAT_BUILDING_SCALE flat — the model's heights switch, applied about the ground. */
+  private modelExtrude = { value: 1 };
+  /** Settles when the current ward's buildings are in the scene. See `buildingsReady`. */
+  private ready: { promise: Promise<void>; resolve: () => void } = readyLatch(true);
   /** landmark nodes of the ward currently drawn; empty on the extrusion path */
   landmarks: readonly LandmarkNode[] = [];
   /** Labels and hit-testing for those nodes, with the no-source rule applied.
@@ -166,6 +185,10 @@ export class ThreeReliefRenderer implements ReliefRenderer {
     };
   }
 
+  buildingsReady(): Promise<void> {
+    return this.ready.promise;
+  }
+
   setWard(bundle: ReliefWardBundle): void {
     this.ward = bundle;
     this.registry = buildRegistry(bundle.wardData.b);
@@ -252,8 +275,7 @@ export class ThreeReliefRenderer implements ReliefRenderer {
     this.layers.buildings = v;
     if (this.city) this.city.visible = v;
     /* A Bengaluru ward draws an authored model, not `city`; toggling only `city` left
-       the footprints row doing nothing there. Heights stay extrusion-only: scaling a
-       model seated on up to ±35 m of relief about y = 0 would bury footprints in hills. */
+       the footprints row doing nothing there. */
     if (this.model) this.model.visible = v;
     this.options.map.triggerRepaint();
   }
@@ -280,6 +302,10 @@ export class ThreeReliefRenderer implements ReliefRenderer {
    */
   private applyExtrusion(): void {
     if (this.city) this.city.scale.y = this.layers.extruded ? 1 : FLAT_BUILDING_SCALE;
+    /* The MODEL cannot use a node scale: it is seated on up to ±35 m of relief, and
+       scaling about y = 0 would bury its footprints in hills and float them over
+       valleys. The model shader scales height above each vertex's own ground instead. */
+    this.modelExtrude.value = this.layers.extruded ? 1 : FLAT_BUILDING_SCALE;
   }
 
   setSelection(selection: ReliefSelection): void {
@@ -338,6 +364,11 @@ export class ThreeReliefRenderer implements ReliefRenderer {
     if (this.disposed) return;
     this.disposed = true;
     this.clearBuildings();
+    this.ready.resolve();
+    for (const cached of this.modelCache.values()) {
+      cached.buildings.traverse((object) => { (object as THREE.Mesh).geometry?.dispose?.(); });
+    }
+    this.modelCache.clear();
     this.landmarkLayer?.dispose(); this.landmarkLayer = null;
     this.modelFacade?.dispose();
     this.overlay?.geometry.dispose();
@@ -448,6 +479,9 @@ export class ThreeReliefRenderer implements ReliefRenderer {
        ward with no authored model, or one whose model fails to load, ends up
        rendering precisely what Kolkata renders today. */
     const token = ++this.wardToken;
+    /* Whoever waited on the previous ward is released — superseded counts as settled. */
+    this.ready.resolve();
+    this.ready = readyLatch(false);
     this.clearBuildings();
     /* REBUILT PER WARD, in the same idiom as water, clouds, roads and vegetation
        below, because it is the same kind of thing: a layer holding THIS ward's
@@ -458,7 +492,7 @@ export class ThreeReliefRenderer implements ReliefRenderer {
        no landmarks rather than the previous ward's. */
     if (this.landmarkLayer) { this.landmarkLayer.dispose(); this.landmarkLayer = null; }
     if (hasBuildingModel(bundle.wardId)) void this.installModel(bundle, token);
-    else this.installExtrusion(bundle);
+    else { this.installExtrusion(bundle); this.ready.resolve(); }
     this.overlay.scale.set(bundle.wardData.sizeM, bundle.wardData.sizeM, 1);
     this.displaceGround(bundle.terrain, bundle.wardData.sizeM);
     if (this.water) { this.scene.remove(this.water.mesh); this.water.dispose(); this.water = null; }
@@ -491,8 +525,8 @@ export class ThreeReliefRenderer implements ReliefRenderer {
   private clearBuildings(): void {
     if (this.city) { this.scene?.remove(this.city); this.city.geometry.dispose(); this.city = null; }
     if (this.model) {
+      /* Removed, NOT disposed: it lives in `modelCache` for the next visit. */
       this.scene?.remove(this.model);
-      this.model.traverse((object) => { (object as THREE.Mesh).geometry?.dispose?.(); });
       this.model = null;
     }
     this.landmarks = [];
@@ -506,31 +540,44 @@ export class ThreeReliefRenderer implements ReliefRenderer {
    * will not start — must still end with a city on screen, not an empty map.
    */
   private async installModel(bundle: ReliefWardBundle, token: number): Promise<void> {
-    const model = await loadBuildingModel(bundle.wardId);
+    let cached = this.modelCache.get(bundle.wardId);
+    if (!cached) {
+      const model = await loadBuildingModel(bundle.wardId);
+      if (this.disposed) {
+        model?.buildings.traverse((object) => { (object as THREE.Mesh).geometry?.dispose?.(); });
+        return;
+      }
+      if (!model) {
+        if (token === this.wardToken && this.scene) { this.installExtrusion(bundle); this.ready.resolve(); }
+        return;
+      }
+      /* PREPARED ONCE, even when the reader has already moved on: a decode that
+         finishes late is exactly the one a quick tour of the wards comes back to. */
+      const facade = (this.modelFacade ??= this.makeFacade('model'));
+      model.buildings.traverse((object) => {
+        if (!(object instanceof THREE.Mesh)) return;
+        /* The GLB declares no materials, so GLTFLoader handed each mesh a default
+           MeshStandardMaterial. Dispose them rather than leak one per ward. */
+        (object.material as THREE.Material | undefined)?.dispose?.();
+        object.material = facade;
+        seatOnGround(object.geometry, bundle.terrain);
+      });
+      cached = { buildings: model.buildings, landmarks: model.landmarks };
+      this.modelCache.set(bundle.wardId, cached);
+    }
     /* A ward switch or a teardown during the fetch must not add a city nobody is
        looking at any more, nor repopulate a disposed scene. */
-    if (this.disposed || token !== this.wardToken || !this.scene) {
-      model?.buildings.traverse((object) => { (object as THREE.Mesh).geometry?.dispose?.(); });
-      return;
-    }
-    if (!model) { this.installExtrusion(bundle); return; }
-    const facade = (this.modelFacade ??= this.makeFacade('model'));
-    model.buildings.traverse((object) => {
-      if (!(object instanceof THREE.Mesh)) return;
-      /* The GLB declares no materials, so GLTFLoader handed each mesh a default
-         MeshStandardMaterial. Dispose them rather than leak one per ward switch. */
-      (object.material as THREE.Material | undefined)?.dispose?.();
-      object.material = facade;
-    });
-    this.model = model.buildings;
-    this.landmarks = model.landmarks;
+    if (this.disposed || token !== this.wardToken || !this.scene) return;
+    this.model = cached.buildings;
+    this.landmarks = cached.landmarks;
     /* The no-source rule is applied HERE, once, at the boundary where the
        authored model becomes something the instrument will draw claims from. */
-    this.landmarkLayer = createLandmarkLayer(model.landmarks);
-    this.scene.add(model.buildings);
+    this.landmarkLayer = createLandmarkLayer(cached.landmarks);
+    this.scene.add(cached.buildings);
     /* The model lands AFTER rebuildWard's applyLayerState, so without this a reader who
        had switched buildings off saw them reappear once the GLB finished decoding. */
     this.applyLayerState();
+    this.ready.resolve();
     this.options.map.triggerRepaint();
   }
 
@@ -768,15 +815,15 @@ export class ThreeReliefRenderer implements ReliefRenderer {
          highlight genuinely needs a building height this geometry lacks.
          `position.xz` is already ward metres because building-model.ts BAKES the
          glTF→ward axis flip into the geometry rather than into a node scale. */
-      if (kind === 'model') shader.uniforms.uSelR = this.selRadius;
+      if (kind === 'model') { shader.uniforms.uSelR = this.selRadius; shader.uniforms.uExtrude = this.modelExtrude; }
       const declare = kind === 'model'
-        ? 'varying vec3 vFp; varying vec3 vFn; varying float vTop; varying float vT; varying float vSel;\nuniform float uGrow; uniform float uSize; uniform sampler2D tField; uniform vec2 uSelCtr; uniform float uSelR;\nfloat mdh(vec2 p){float h=sin(p.x*127.1+p.y*311.7)*43758.5453;return h-floor(h);}\n'
+        ? 'varying vec3 vFp; varying vec3 vFn; varying float vTop; varying float vT; varying float vSel;\nuniform float uGrow; uniform float uSize; uniform sampler2D tField; uniform vec2 uSelCtr; uniform float uSelR; attribute float aGround; uniform float uExtrude;\nfloat mdh(vec2 p){float h=sin(p.x*127.1+p.y*311.7)*43758.5453;return h-floor(h);}\n'
         : 'attribute float aDelay; attribute float aH; attribute vec2 aCtr;\nvarying vec3 vFp; varying vec3 vFn; varying float vTop; varying float vT; varying float vSel;\nuniform float uGrow; uniform float uSize; uniform sampler2D tField; uniform vec2 uSelCtr;\n';
       const place = kind === 'model'
         ? `#include <begin_vertex>
           float aDelay=min(1.,length(position.xz)/max(uSize*.5,1.))*.72+mdh(floor(position.xz))*.28;
           float gT=clamp((uGrow-aDelay*.55)/.45,0.,1.); float gE=1.+2.70158*pow(gT-1.,3.)+1.70158*pow(gT-1.,2.);
-          transformed.y*=gE;vFp=transformed;vFn=normal;vTop=0.;
+          float lift=(transformed.y-aGround)*gE*uExtrude;transformed.y=aGround+lift;vFp=transformed;vFp.y=lift;vFn=normal;vTop=0.;
           vT=texture2D(tField,clamp(position.xz/uSize+.5,0.,1.)).g;
           vSel=uSelR>0.?1.-step(uSelR,distance(position.xz,uSelCtr)):0.;`
         : `#include <begin_vertex>
@@ -794,6 +841,26 @@ export class ThreeReliefRenderer implements ReliefRenderer {
     };
     return material;
   }
+}
+
+/**
+ * Store the drawn ground height under every vertex of a model mesh as `aGround`.
+ *
+ * The GLB's buildings are seated on the ward's terrain (blender_bangalore.py), so the
+ * grow animation and the heights switch must scale height ABOVE THAT GROUND. Scaling
+ * `y` about 0, as the extrusion path does, grew buildings out of the wrong level and
+ * would flatten footprints into hills. Model vertices are ward metres with z north,
+ * the same frame `terrainDrawAt` reads. No terrain: every vertex reads 0, as before.
+ */
+export function seatOnGround(geometry: THREE.BufferGeometry, terrain: ReliefWardBundle['terrain']): void {
+  const position = geometry.attributes.position as THREE.BufferAttribute;
+  const ground = new Float32Array(position.count);
+  if (terrain) {
+    for (let index = 0; index < position.count; index++) {
+      ground[index] = terrainDrawAt(terrain, position.getX(index), position.getZ(index));
+    }
+  }
+  geometry.setAttribute('aGround', new THREE.BufferAttribute(ground, 1));
 }
 
 export function createReliefRenderer(options: ReliefRendererOptions): ReliefRenderer {
