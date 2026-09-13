@@ -32,9 +32,12 @@ test('Explore loads relief through one explicit dynamic boundary', async () => {
   assert.match(relief, /from\s+['"]three['"]/);
 });
 
-test('scope/paths.ts stays free of three.js, directly and via building-model', async () => {
-  const source = await read('../../src/scripts/climate-engine/scope/paths.ts');
-  assert.doesNotMatch(source, /from\s+['"]three(?:\/|['"])/, 'paths.ts imports three');
-  assert.doesNotMatch(source, /from\s+['"][^'"]*building-model(?:\.ts)?['"]/,
-    'paths.ts imports building-model, which imports three at module scope');
+test('scope/paths.ts and ward-prefetch.ts stay free of three.js, directly and via building-model', async () => {
+  for (const path of ['../../src/scripts/climate-engine/scope/paths.ts',
+    '../../src/scripts/climate-engine/ward-prefetch.ts']) {
+    const source = await read(path);
+    assert.doesNotMatch(source, /from\s+['"]three(?:\/|['"])/, `${path} imports three`);
+    assert.doesNotMatch(source, /from\s+['"][^'"]*building-model(?:\.ts)?['"]/,
+      `${path} imports building-model, which imports three at module scope`);
+  }
 });
