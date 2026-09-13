@@ -51,7 +51,7 @@ OVERTURE_PARQUET = os.path.join(RAW, "overture-buildings.parquet")
 #: buildings and under the same ODbL. Each is one full-partition scan (~5 min),
 #: cached once over the union bbox and sliced per ward from there.
 CONTEXT_THEMES: dict[str, tuple[str, str, str]] = {
-    "water":   ("base", "water", "id, subtype, class, geometry"),
+    "water":   ("base", "water", "id, subtype, class, geometry, source_tags"),
     "landuse": ("base", "land_use", "id, subtype, class, geometry"),
     "roads":   ("transportation", "segment", "id, subtype, class, geometry"),
 }
@@ -281,8 +281,16 @@ def download_context() -> None:
     for name, (theme, typ, cols) in CONTEXT_THEMES.items():
         dst = context_parquet(name)
         if os.path.exists(dst) and os.path.getsize(dst) > 0:
-            print(f"  {name:<8} cache present ({os.path.getsize(dst) / 1e6:.1f} MB)")
-            continue
+            # A CACHE IS ONLY VALID FOR THE COLUMNS IT WAS SCANNED WITH. The water
+            # cache predates `source_tags`, and reusing it would silently draw every
+            # culverted drain as open water.
+            have = [r[0] for r in con.execute(
+                f"DESCRIBE SELECT * FROM read_parquet('{dst}')").fetchall()]
+            want = [c.strip() for c in cols.split(",")]
+            if have == want:
+                print(f"  {name:<8} cache present ({os.path.getsize(dst) / 1e6:.1f} MB)")
+                continue
+            print(f"  {name:<8} cache columns {have} != {want} -- re-scanning")
         os.makedirs(RAW, exist_ok=True)
         src = (f"s3://overturemaps-us-west-2/release/{blr.OVERTURE_RELEASE}"
                f"/theme={theme}/type={typ}/*")
@@ -300,6 +308,20 @@ def download_context() -> None:
         assert rows is not None
         os.replace(part, dst)
         print(f"  {name:<8} cached {rows[0]:,} features")
+
+
+def covered_reach(tags: dict[str, str] | None) -> bool:
+    """True for a waterway reach that runs under a road or slab (OSM tunnel/culvert/covered).
+
+    Such a reach is real but invisible from above, so it is not drawn; the exporter
+    counts it as `coveredDropped` rather than losing it silently. About 40 % of MG
+    Road's reaches are culverts or tunnels (Overpass, 2026-09-14).
+    """
+    if not tags:
+        return False
+    return (tags.get("tunnel", "no") not in ("no", "")
+            or tags.get("covered") == "yes"
+            or "culvert" in tags)
 
 
 def build_context(wards: list[blr.Ward]) -> None:
@@ -363,7 +385,7 @@ def build_context(wards: list[blr.Ward]) -> None:
             return out
 
         water: list[dict[str, Any]] = []
-        for _id, subtype, cls, geom in tables["water"]:
+        for _id, subtype, cls, geom, tags in tables["water"]:
             g = shp_transform(to_ward, shapely_wkb.loads(bytes(geom)))
             if not g.intersects(clip):
                 continue
@@ -371,7 +393,10 @@ def build_context(wards: list[blr.Ward]) -> None:
             for r in rings(g):
                 water.append({"cls": str(subtype or cls or "water"), "p": r})
             for ln in lines(g):
-                water.append({"cls": str(subtype or cls or "stream"), "line": ln})
+                # CLASS FIRST for lines: Overture files a drain as subtype=canal,
+                # class=drain, and "drain" is the fact worth keeping.
+                water.append({"cls": str(cls or subtype or "stream"), "line": ln,
+                              "covered": covered_reach(cast("dict[str, str] | None", tags))})
 
         green: list[dict[str, Any]] = []
         for _id, subtype, cls, geom in tables["landuse"]:
@@ -1281,6 +1306,13 @@ def _self_test() -> None:
         "a skipped cross-check must reset stale hUt/flag, not leave them standing"
     assert str(stale_doc["crossCheck"]).startswith("SKIPPED"), \
         "cross_check(tile=None) must record a skip"
+    assert covered_reach({"tunnel": "culvert"}), "a culvert is covered"
+    assert covered_reach({"tunnel": "yes"}), "a tunnel is covered"
+    assert covered_reach({"covered": "yes"}), "covered=yes is covered"
+    assert covered_reach({"culvert": "yes"}), "a culvert key is covered"
+    assert not covered_reach({"tunnel": "no"}), "tunnel=no is open"
+    assert not covered_reach({"waterway": "drain"}), "an untagged drain is open"
+    assert not covered_reach(None), "no tags is open"
     print("  fetch-bangalore self-test OK")
 
 

@@ -187,7 +187,14 @@ export interface WardData { center: [number, number]; sizeM: number; count: numb
 export interface RoadsData { ways: { w: number; p: number[] }[]; }
 /** {ward}-water.json — OSM polygons in the roads contract's frame. `k` is the
  * broad class ('water' | 'river' | 'pool'); `p` is flat [x,y,…] ward metres. */
-export interface WaterData { polys: { k: string; p: number[] }[]; }
+export interface WaterData {
+  polys: { k: string; p: number[] }[];
+  /** Open (not culverted) drain/stream/river centrelines, flat [x,y,…] ward metres.
+   *  Bengaluru only. DRAWN as illustrative ribbons; never rasterised into SimLayers. */
+  lines?: { k: string; p: number[] }[];
+  /** Side of the box the artefact was clipped to, metres. Absent means Kolkata's 1520. */
+  fieldM?: number;
+}
 export interface Interventions { trees: number; roof: number; parks: number; facades: number; }
 export interface Ambient {
   tAir: number; rh: number; wind: number; cloud: number; feels: number;

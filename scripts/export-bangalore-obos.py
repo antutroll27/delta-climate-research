@@ -141,10 +141,10 @@ def export_buildings(w: blr.Ward) -> int:
     return len(rows)
 
 
-def export_context(w: blr.Ward) -> tuple[int, int, int]:
+def export_context(w: blr.Ward) -> tuple[int, int, int, int]:
     """`{ward}-roads.json` and `{ward}-water.json`, in the RoadsData / WaterData shapes.
 
-    Returns (ways, polygons, water features dropped as centrelines).
+    Returns (ways, polygons, open lines, covered reaches dropped).
     """
     with open(os.path.join(blr.DATA, f"{w.id}-context.json"), encoding="utf-8") as fh:
         ctx = cast(dict[str, Any], json.load(fh))
@@ -166,29 +166,35 @@ def export_context(w: blr.Ward) -> tuple[int, int, int]:
     with open(os.path.join(OUT, f"{w.id}-roads.json"), "w", encoding="utf-8") as fh:
         json.dump(roads, fh, separators=(",", ":"))
 
-    # WATER CENTRELINES ARE DROPPED, AND THAT IS A LOSS WORTH NAMING. Overture
-    # gives a canal or a stream as a LINE, not a ring, and `WaterData.polys` has
-    # nowhere to put one: `rasterizeWardWater` stamps rings, and the render
-    # layer fills polygons. Buffering a centreline into a ring here would invent
-    # a width nobody measured. Measured cost: 26 of Indiranagar's 39 water
-    # features, 37 of MG Road's 90, 29 of Whitefield's 92 -- mostly the storm
-    # canals. They are in data/bangalore/<ward>-context.json for whoever gives
-    # `WaterData` a line contract; they are not silently gone.
+    # OPEN CENTRELINES SHIP; COVERED ONES ARE COUNTED. Overture gives a drain or a
+    # stream as a LINE. They used to be dropped because `WaterData` had nowhere to
+    # put one (26 / 37 / 29 across the wards, mostly storm drains). They now travel
+    # as `lines`, drawn as illustrative ribbons and never rasterised. A reach under a
+    # road or slab (OSM tunnel/culvert/covered) is invisible from above, so it is
+    # counted in `coveredDropped` rather than drawn. `fieldM` is the side of the box
+    # this artefact was clipped to, which the depth field needs.
     polys: list[dict[str, Any]] = []
-    dropped = 0
+    lines: list[dict[str, Any]] = []
+    covered = 0
     for x in ctx.get("water", []):
-        if not x.get("p"):
-            dropped += 1
-            continue
-        polys.append({"k": str(x.get("cls", "water")), "p": x["p"]})
+        if x.get("p"):
+            polys.append({"k": str(x.get("cls", "water")), "p": x["p"]})
+        elif x.get("line"):
+            if x.get("covered"):
+                covered += 1
+                continue
+            lines.append({"k": str(x.get("cls", "stream")), "p": x["line"]})
     water: dict[str, Any] = {
         "ward": w.id, "count": len(polys),
         "source": ctx["source"],
+        "fieldM": ward_size_m(w),
         "polys": polys,
+        "lines": lines,
+        "coveredDropped": covered,
     }
     with open(os.path.join(OUT, f"{w.id}-water.json"), "w", encoding="utf-8") as fh:
         json.dump(water, fh, separators=(",", ":"))
-    return (len(ways), len(polys), dropped)
+    return (len(ways), len(polys), len(lines), covered)
 
 
 def export_trees(w: blr.Ward) -> int:
@@ -279,11 +285,11 @@ def main() -> int:
     os.makedirs(OUT, exist_ok=True)
     for w in blr.WARDS.values():
         buildings = export_buildings(w)
-        ways, polys, dropped = export_context(w)
+        ways, polys, nlines, covered = export_context(w)
         trees = export_trees(w)
         span = export_terrain(w)
         print(f"  {w.id:<12} {buildings:6,} buildings · {ways:5,} ways · "
-              f"{polys:3,} water polys ({dropped} centrelines dropped) · {trees:6,} trees · "
+              f"{polys:3,} water polys · {nlines:3,} open lines ({covered} covered dropped) · {trees:6,} trees · "
               f"ground {span:.1f} m")
     print(f"  written to {os.path.relpath(OUT, blr.ROOT)}/")
     return 0
