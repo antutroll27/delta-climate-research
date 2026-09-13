@@ -9,7 +9,7 @@
  * `mountHeatMap()` returns a dispose fn (call it on astro:before-swap).
  */
 import maplibregl from 'maplibre-gl';
-import { WARD_MAP, wardLatLon, formatLatLon, type Ward } from '../../data/wards.ts';
+import { RENDERABLE_WARD_MAP, wardLatLon, formatLatLon, type Ward } from '../../data/wards.ts';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { DEFAULT_PARAMS, greenReferenceContrastC, requireGrid, type ClimateConstants, type PvFile, type SimLayers, type SimParams } from './types';
 import { detectHeatCaps } from './caps';
@@ -62,7 +62,14 @@ import { toLegacyWard } from './scope/legacy.ts';
 
 // Ward set lives in src/data/wards.ts so widening beyond three is a data change,
 // not a code change (dc-urs-spec.md §1).
-const WARDS = WARD_MAP;
+/* THE RENDERABLE MAP, NOT THE PUBLISHED ONE, and this line was the whole bug.
+   `WARD_MAP` is built from `WARDS` — the CATALOGUE list, gated to Kolkata — so
+   `wardOf('in/bengaluru/mg-road')` returned undefined and line ~300's
+   `center: [wardOf(INITIAL_AREA).lon, …]` threw BEFORE maplibre was constructed.
+   Measured: zero canvases, no map, "SELECTING ENGINE" for ever, every readout a
+   dash — a whole city silently dead while 728 unit tests passed, because none of
+   them opened a Bengaluru ward. This file draws what the instrument can open. */
+const WARDS = RENDERABLE_WARD_MAP;
 
 /**
  * The area this page opens on — READ FROM THE PAGE, never assumed here.

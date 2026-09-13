@@ -20,7 +20,7 @@ import InterventionPane from './shell/InterventionPane.astro';
 import { areaKeysInCity } from '../../scripts/climate-engine/scope/registry.ts';
 import { areaPath, DEFAULT_AREA_PATH } from '../../scripts/climate-engine/scope/paths.ts';
 import { resolve, type ResolvedScope } from '../../scripts/climate-engine/scope/resolve.ts';
-import { wardById, formatLatLon } from '../../data/wards.ts';
+import { renderableWardById as wardById, formatLatLon } from '../../data/wards.ts';
 
 /**
  * THE PAGE TELLS THE INSTRUMENT WHICH AREA IT IS, rather than both assuming.
