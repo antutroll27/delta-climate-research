@@ -860,7 +860,7 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 ### Task 5: Record MG Road's cross-check and gate it
 
 **Files:**
-- Regenerate: `data/bangalore/mg-road-buildings.json` (Indiranagar and Whitefield must come out byte-identical)
+- Regenerate: `data/bangalore/{indiranagar,mg-road,whitefield}-buildings.json` (only `hUt`, `flag`, `crossCheck` may change; see Step 2b)
 - Modify: `scripts/check-bangalore-artefacts.py`
 - Modify: `docs/evidence/known-limitations.md` §8, `docs/evidence/data-sources.md`, `docs/superpowers/specs/2026-09-10-bangalore-obos-wards-design.md`
 
@@ -879,12 +879,31 @@ If either is missing or differs, stop and report.
 Run: `python3 scripts/fetch-bangalore.py --layer crosscheck`
 Then: `git diff --stat data/bangalore/`
 
-Expected:
-- Indiranagar prints `2,274 matched, MAE 3.12 m, 391 flagged`.
-- Whitefield prints `2,532 matched, MAE 3.13 m, 295 flagged`.
-- `git diff` shows **only** `mg-road-buildings.json`, so the other two are byte-identical.
+Expected (measured 2026-09-14; the command is deterministic):
+- Indiranagar prints `2,274 matched, MAE 2.83 m, 302 flagged`.
+- MG Road prints `2,100 matched, MAE 3.65 m, 339 flagged`.
+- Whitefield prints `2,532 matched, MAE 2.80 m, 178 flagged`.
+- `git diff --stat` shows all three `*-buildings.json` changed. Only `hUt`, `flag` and `crossCheck` may differ. Prove it with Step 2b.
 
-**If Indiranagar or Whitefield differ in any number, or their files changed, stop and report before going further.** Record MG Road's printed line verbatim.
+**Why Indiranagar and Whitefield no longer read 3.12 m / 391 and 3.13 m / 295.** Those strings were written at `b740dbb` against Google 2.5D heights. `1fec16e` then gave 1,941 and 1,430 buildings OSM-measured heights. The same formula on the `b740dbb` heights reproduces 3.12 / 391 and 3.13 / 295 exactly, so the old strings and per-building `flag`s were stale. **Matched counts must still be 2,274 and 2,532 (same tile). If a matched count differs, stop and report.**
+
+- [ ] **Step 2b: Prove nothing but the cross-check moved**
+
+```bash
+python3 - <<'EOF'
+import json, subprocess
+for w in ("indiranagar", "mg-road", "whitefield"):
+    p = f"data/bangalore/{w}-buildings.json"
+    old = json.loads(subprocess.check_output(["git", "show", f"HEAD:{p}"]))
+    new = json.load(open(p))
+    strip = lambda d: ({k: v for k, v in d.items() if k not in ("crossCheck", "b")},
+                       [{k: v for k, v in b.items() if k not in ("hUt", "flag")} for b in d["b"]])
+    assert strip(old) == strip(new), f"{w}: something other than hUt/flag/crossCheck changed"
+    print(w, "only the cross-check moved")
+EOF
+```
+
+Expected: three `only the cross-check moved` lines.
 
 - [ ] **Step 3: Confirm the map did not change**
 
@@ -955,12 +974,18 @@ Overture footprint whose centroid matches a UT-GLOBUS building to 5 m; the table
 
 | ward | tile | matched | MAE | flagged > 5 m |
 |---|---|---:|---:|---:|
-| Indiranagar | Bangalore_2 | 2,274 of 14,867 | 3.12 m | 391 |
-| Whitefield | Bangalore_2 | 2,532 of 10,897 | 3.13 m | 295 |
+| Indiranagar | Bangalore_2 | 2,274 of 14,867 | 2.83 m | 302 |
+| Whitefield | Bangalore_2 | 2,532 of 10,897 | 2.80 m | 178 |
 | MG Road | Bangalore_1 | <from Step 2> | <from Step 2> | <from Step 2> |
+
+These are measured against the **shipped** heights. The earlier strings (Indiranagar 3.12 m / 391, Whitefield
+3.13 m / 295) were measured against the Google 2.5D baseline before OSM-measured heights replaced 1,941 and
+1,430 buildings (`1fec16e`). They reproduce to the digit on those older heights, so they were stale, not wrong.
+The two sets are not like-for-like (the fill set changed too), so read the drop as consistent with the OSM
+heights, not as a measured improvement.
 ```
 
-Fill MG Road's row with the exact numbers printed in Step 2. Also in §8, the phrase is hard-wrapped across two lines. Replace
+Fill MG Road's row with the exact numbers printed in Step 2. If Step 2 printed different Indiranagar or Whitefield numbers than the ones above, use the printed ones. Also in §8, the phrase is hard-wrapped across two lines. Replace
 
 ```text
 the building carries a **flag and a
@@ -999,9 +1024,11 @@ git add data/bangalore/mg-road-buildings.json scripts/check-bangalore-artefacts.
 git commit -m "feat(bangalore): MG Road's UT-GLOBUS height cross-check, recorded and gated
 
 --layer crosscheck against Bangalore_1: <paste MG Road's line from Step 2>.
-Indiranagar (3.12 m) and Whitefield (3.13 m) reproduced byte-identically, which
-also proves the re-fetched Bangalore_2 is the original tile. Served files
-unchanged. check-bangalore-artefacts now refuses a skipped or empty cross-check
+Indiranagar and Whitefield re-recorded against the shipped heights (2.83 m /
+302, 2.80 m / 178). Their old 3.12 / 3.13 m strings predate the OSM height
+override (1fec16e) and reproduce exactly on the b740dbb heights. Matched
+counts are unchanged, which proves Bangalore_2 is the original tile. Only
+hUt/flag/crossCheck moved; served files unchanged. check-bangalore-artefacts now refuses a skipped or empty cross-check
 (proven by reverting MG Road to SKIPPED). Tile margin re-measured.
 
 Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
@@ -1910,7 +1937,7 @@ Report:
 | Evidence: normals, recent decade, Kempegowda, licence traps | 3 |
 | `cross_check` extracted; offline `--layer crosscheck`; never touches `h` | 4 |
 | Guard against a SKIPPED overwrite | 4 |
-| 3.12 / 3.13 reproduce; MG Road recorded; served files byte-identical | 5 |
+| Match counts reproduce; all three re-recorded on shipped `h`; served files byte-identical | 5 |
 | Artefact gate refuses skip or zero matches, proven | 5 |
 | known-limitations §8, data-sources, tile margin | 5 |
 | Overture re-scan with `source_tags`, release pinned; covered reaches excluded and counted | 7 |

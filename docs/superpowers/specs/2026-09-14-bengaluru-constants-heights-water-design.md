@@ -130,10 +130,9 @@ It also records the licence traps, because they are why the IMD PDF is used as a
 **Guard.** If no covering tile is found and the file already holds a non-SKIPPED `crossCheck`, the command refuses (exit non-zero, message names the ward) rather than overwrite real evidence with "SKIPPED".
 
 **Acceptance.**
-1. Indiranagar and Whitefield reproduce their committed results exactly:
-   - Indiranagar: `2,274 of 14,867 matched, MAE 3.12 m, 391 flagged`.
-   - Whitefield: `2,532 of 10,897 matched, MAE 3.13 m, 295 flagged`.
-   This also proves the re-fetched `Bangalore_2` tile is the one originally used. If they do not reproduce, stop and investigate before recording MG Road.
+1. Indiranagar and Whitefield reproduce their committed **match counts** exactly (2,274 and 2,532). Matching reads only footprint centroids, so this proves the re-fetched `Bangalore_2` tile is the one originally used.
+   - **Amended 2026-09-14, measured.** The committed MAE and flag counts (3.12 m / 391, 3.13 m / 295) do **not** reproduce, and should not. They were written at `b740dbb` against the Google 2.5D heights. `1fec16e` then gave 1,941 Indiranagar and 1,430 Whitefield buildings OSM-measured heights. Re-running the same formula on the `b740dbb` heights gives 3.12 m / 391 and 3.13 m / 295 to the digit. The committed strings and per-building `flag`s were therefore stale.
+   - All three wards are re-recorded against the shipped `h`: Indiranagar 2,274 matched, MAE 2.83 m, 302 flagged; Whitefield 2,532, 2.80 m, 178. The docs keep the superseded figures and say why they moved.
 2. MG Road gets its first real result against `Bangalore_1`, recorded verbatim.
 3. `python3 scripts/export-bangalore-obos.py` leaves every served `public/heat-map/data/*` Bengaluru ward file byte-identical. The exporter ships only `h`.
 
