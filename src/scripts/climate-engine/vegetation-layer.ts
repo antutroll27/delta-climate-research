@@ -43,7 +43,9 @@ export function asTreesFile(raw: unknown): TreesFile | null {
     if (!Array.isArray(row) || row.length !== TREE_COLS.length) return null;
     const [x, y, hDm, rDm, s] = row as unknown[];
     if (typeof x !== 'number' || typeof y !== 'number' || typeof hDm !== 'number'
-        || typeof rDm !== 'number' || typeof s !== 'number' || !Number.isInteger(s)) return null;
+        || typeof rDm !== 'number' || typeof s !== 'number' || !Number.isInteger(s)
+        /* JSON.parse turns 1e400 into Infinity, which would land in the instance matrix. */
+        || ![x, y, hDm, rDm].every(Number.isFinite)) return null;
     const species = names[s];
     if (species === undefined) return null;
     trees.push({ x, y, h: hDm / 10, species: species as Species, r: rDm / 10 });

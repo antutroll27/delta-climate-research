@@ -18,9 +18,11 @@ const read = (ward) => asTreesFile(JSON.parse(readFileSync(
 const mixOf = (file) => file.trees.reduce((m, t) => ({ ...m, [t.species]: (m[t.species] ?? 0) + 1 }), {});
 
 const EXPECTED = {
-  ballygunge: { count: 12159 },
-  baruipur: { count: 8415 },
-  barrackpore: { count: 6811 },
+  /* Kolkata's mixes pinned too: counts alone let a species-index swap through, and
+     fetch-canopy --check only tests membership in SPECIES. */
+  ballygunge: { count: 12159, mix: { neem: 6101, palm: 3065, gulmohar: 2993 } },
+  baruipur: { count: 8415, mix: { neem: 4182, palm: 2112, gulmohar: 2121 } },
+  barrackpore: { count: 6811, mix: { neem: 3396, palm: 1688, gulmohar: 1727 } },
   indiranagar: { count: 23565, mix: { neem: 11779, palm: 5930, gulmohar: 5856 } },
   'mg-road': { count: 24819, mix: { neem: 12316, palm: 6262, gulmohar: 6241 } },
   whitefield: { count: 10800, mix: { neem: 5308, palm: 2754, gulmohar: 2738 } },

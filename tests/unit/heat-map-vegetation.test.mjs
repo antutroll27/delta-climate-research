@@ -70,6 +70,8 @@ test('asTreesFile refuses a header or row it cannot trust', () => {
   assert.equal(asTreesFile({ ...HEADER, speciesNames: ['oak'], trees: [[0, 0, 50, 10, 0]] }), null, 'unknown species name');
   assert.equal(asTreesFile({ ...HEADER, trees: [[0, 0, 50, 10, 3]] }), null, 'species index out of range');
   assert.equal(asTreesFile({ ...HEADER, trees: [[0, 0, 50, 10]] }), null, 'short row');
+  assert.equal(asTreesFile(JSON.parse(`{"cols":${JSON.stringify(HEADER.cols)},"speciesNames":["neem"],"trees":[[1e400,0,50,10,0]]}`)),
+    null, 'a non-finite position (1e400 parses to Infinity)');
 });
 
 test('vegetation self-check passes', () => { assertVegetationLogic(); });

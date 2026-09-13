@@ -201,9 +201,6 @@ def export_trees(w: blr.Ward) -> int:
     with open(os.path.join(blr.DATA, f"{w.id}-canopy.json"), encoding="utf-8") as fh:
         cn = cast(dict[str, Any], json.load(fh))
 
-    if any("species" not in t for t in cn["trees"]):
-        raise SystemExit(f"{w.id}: canopy file has trees with no species -- run "
-                         "python3 scripts/fetch-bangalore.py --layer species first")
     doc: dict[str, Any] = {
         "ward": w.id,
         "grid": cn["grid"],
@@ -221,6 +218,14 @@ def export_trees(w: blr.Ward) -> int:
 
 
 def main() -> int:
+    # Refuse BEFORE writing anything. Checked per ward inside export_trees, a
+    # missing species left that ward's buildings, roads and water rewritten and
+    # its trees not -- a half export that exits 1 but is already on disk.
+    for w in blr.WARDS.values():
+        with open(os.path.join(blr.DATA, f"{w.id}-canopy.json"), encoding="utf-8") as fh:
+            if any("species" not in t for t in json.load(fh)["trees"]):
+                raise SystemExit(f"{w.id}: canopy file has trees with no species -- run "
+                                 "python3 scripts/fetch-bangalore.py --layer species first")
     os.makedirs(OUT, exist_ok=True)
     for w in blr.WARDS.values():
         buildings = export_buildings(w)

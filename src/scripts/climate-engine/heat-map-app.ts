@@ -2139,7 +2139,10 @@ export function mountHeatMap(): () => void {
        they have been visited. */
     const activeId = areaOf(name);
     document.querySelectorAll('#strip .ward').forEach(t => t.classList.toggle('on', (t as HTMLElement).dataset.w === activeId));
-    loadChip.done();
+    /* Guarded, not merely safe today: nothing awaits between the last isCurrent
+       check and here, but one added await would let a superseded load hide a newer
+       load's chip or its failure. */
+    if (wardSession.isCurrent(token)) loadChip.done();
 
     const dur = relief ? 1400 : 0;
     orbit = false; clearTimeout(orbitResume);
