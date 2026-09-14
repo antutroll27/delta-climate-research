@@ -774,6 +774,11 @@ def _kolkata_module(file_name: str, module_name: str) -> Any:
     return mod
 
 
+def looks_like_raster_or_zip(head: bytes) -> bool:
+    """A TIFF (either byte order) or a ZIP; anything else is an error page, not data."""
+    return head in (b"II*\x00", b"MM\x00*", b"PK\x03\x04")
+
+
 def cached_download(url: str, dst: str) -> str:
     """Download once into the shared cache; an atomic rename means a partial file never counts."""
     if os.path.exists(dst):
@@ -783,6 +788,11 @@ def cached_download(url: str, dst: str) -> str:
     rc = subprocess.run(["curl", "-s", "--fail", "-L", "--max-time", "1800", "-o", tmp, url]).returncode
     if rc != 0 or not os.path.exists(tmp):
         raise SystemExit(f"download failed (curl {rc}): {url}")
+    with open(tmp, "rb") as fh:
+        head = fh.read(4)
+    if not looks_like_raster_or_zip(head):
+        os.remove(tmp)
+        raise SystemExit(f"download is not a TIFF or ZIP (got {head!r}): {url}")
     os.replace(tmp, dst)
     return dst
 
@@ -824,8 +834,9 @@ def worldpop_box_density(w: blr.Ward, tif: str) -> tuple[float, int]:
         r0f, r1f = (north - t.f) / t.e, (south - t.f) / t.e
         c0, c1 = int(np.floor(c0f)), int(np.ceil(c1f))
         r0, r1 = int(np.floor(r0f)), int(np.ceil(r1f))
-        arr = src.read(1, window=Window(c0, r0, c1 - c0, r1 - r0),
-                       boundless=True, fill_value=0).astype("float64")
+        if not (0 <= c0 and c1 <= src.width and 0 <= r0 and r1 <= src.height):
+            raise SystemExit(f"{w.id}: ward box runs outside {tif}")
+        arr = src.read(1, window=Window(c0, r0, c1 - c0, r1 - r0)).astype("float64")
         nodata = src.nodata
     if nodata is not None:
         arr = np.where(arr == nodata, 0.0, arr)
@@ -1446,6 +1457,48 @@ def _self_test() -> None:
     assert [round(float(x), 6) for x in ew] == [0.5, 1.0, 0.25], \
         f"edge pixels are weighted by the fraction inside the box, got {list(ew)}"
     assert float(edge_weights(0.0, 3.0, 0, 3).sum()) == 3.0, "a box on pixel edges counts whole pixels"
+
+    for good in (b"II*\x00", b"MM\x00*", b"PK\x03\x04"):
+        assert looks_like_raster_or_zip(good), f"{good!r} is a TIFF or ZIP header"
+    assert not looks_like_raster_or_zip(b"<htm"), "an HTML error page must never be cached"
+
+    # worldpop_box_density's index arithmetic, pinned against a brute-force
+    # overlap sum that shares no code with it. A north/south row flip moves the
+    # real ward totals by well under 1 %, which no sanity range can see.
+    import tempfile
+    import rasterio
+    from rasterio.transform import from_origin
+    with tempfile.TemporaryDirectory() as td:
+        synth = os.path.join(td, "synthetic.tif")
+        vals = np.array([[100.0 * r + c + 1 for c in range(10)] for r in range(10)], dtype=np.float32)
+        vals[0, 0] = -99999.0
+        with rasterio.open(synth, "w", driver="GTiff", width=10, height=10, count=1,
+                           dtype="float32", crs="EPSG:4326", nodata=-99999,
+                           transform=from_origin(77.0, 13.0, 0.01, 0.01)) as dst:
+            dst.write(vals, 1)
+        probe = blr.Ward("probe", "Probe", blr.LatLon(12.969, 77.043), 3000.0)
+        west, south, east, north = blr.bounds(probe)
+        assert 77.0 < west < east < 77.1 and 12.9 < south < north < 13.0, \
+            "the probe box must sit well inside the synthetic raster"
+        expected = 0.0
+        for r in range(10):
+            for c in range(10):
+                pw, pe = 77.0 + c * 0.01, 77.0 + (c + 1) * 0.01
+                pn, ps = 13.0 - r * 0.01, 13.0 - (r + 1) * 0.01
+                ox = max(0.0, min(pe, east) - max(pw, west))
+                oy = max(0.0, min(pn, north) - max(ps, south))
+                v = float(vals[r, c])
+                expected += (0.0 if v == -99999.0 else v) * ox * oy / (0.01 * 0.01)
+        _, total_people = worldpop_box_density(probe, synth)
+        assert abs(total_people - round(expected)) <= 1, \
+            f"box sum {total_people} disagrees with the brute-force overlap sum {expected:.2f}"
+        off = blr.Ward("off", "Off", blr.LatLon(12.99, 77.095), 3000.0)
+        try:
+            worldpop_box_density(off, synth)
+        except SystemExit:
+            pass
+        else:
+            raise AssertionError("a ward box running off the raster must be refused, not zero-filled")
     print("  fetch-bangalore self-test OK")
 
 
