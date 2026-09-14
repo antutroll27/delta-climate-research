@@ -245,8 +245,9 @@ def ward_record(t: Thermal, s: StaticWard, fvc: float, albedo: float) -> DcUrsWa
         "ruralBaseC": lst(t["ruralBaseC"], t["dayVintage"],
                           "EFFECTIVE rural baseline: lstDayC minus the median per-scene difference "
                           "(ward - GHS-SMOD rural 11/12/13), so lstDayC - ruralBaseC is that median"),
-        "popDensity": sourced(s["popDensity"], "measured", "2020",
-                              "JRC GHS-POP R2023A 100 m, tile R8_C26, people in the 2.8 km box / 7.84 km2"),
+        "popDensity": sourced(s["popDensity"], "modelled", "2025",
+                              "WorldPop R2025A constrained 100 m (CC BY 4.0), people in exactly the "
+                              "2.8 km box / 7.84 km2; biased flat (understates central wards)"),
         "far": sourced(s["far"], "measured", "2023-2026",
                        f"Overture footprints + Google Open Buildings 2.5D / OSM heights, storey {s['storeyM']} m"),
         "socioVuln": sourced(0.0, "placeholder", None,

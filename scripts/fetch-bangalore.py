@@ -36,9 +36,12 @@ import json
 import math
 import os
 import importlib.util
+import shutil
 import sqlite3
 import statistics
+import subprocess
 import sys
+import zipfile
 from typing import Any, Callable, cast
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -46,6 +49,23 @@ import _bangalore as blr                            # noqa: E402  (path set abov
 
 RAW = os.path.join(blr.DATA, "raw")
 OVERTURE_PARQUET = os.path.join(RAW, "overture-buildings.parquet")
+
+# ── DC-URS inputs (spec 2026-09-14-bengaluru-resilience-score-design.md) ────────
+GEO_CACHE = os.path.expanduser("~/.cache/delta-climate")
+#: GHSL tile covering all three wards, CONFIRMED 2026-09-15: the SMOD tile's
+#: bounds contain every ward centre (class 30, Urban Centre). R8_C25 does not exist.
+GHS_TILE = "R8_C26"
+#: Constrained WorldPop, CHOSEN OVER GHS-POP after a Census 2011 check of all 198 BBMP
+#: wards (spec amendment 2026-09-15): GHS-POP misplaced ~2.7 M people in the south-east.
+WORLDPOP_URL = ("https://data.worldpop.org/GIS/Population/Global_2015_2030/R2025A/2025/IND/v1/"
+                "100m/constrained/ind_pop_2025_CN_100m_R2025A_v1.tif")
+GHS_SMOD_URL = ("https://jeodpp.jrc.ec.europa.eu/ftp/jrc-opendata/GHSL/GHS_SMOD_GLOBE_R2023A/"
+                "GHS_SMOD_E2020_GLOBE_R2023A_54009_1000/V2-0/tiles/"
+                f"GHS_SMOD_E2020_GLOBE_R2023A_54009_1000_V2_0_{GHS_TILE}.zip")
+#: WorldCover tiles are 3 deg squares named by their south-west corner; HTTP 200 confirmed.
+WORLDCOVER_URL = ("https://esa-worldcover.s3.eu-central-1.amazonaws.com/v200/2021/map/"
+                  "ESA_WorldCover_10m_2021_v200_N12E075_Map.tif")
+SENTINEL_YEARS = [2021, 2022, 2023, 2024, 2025]
 
 #: The context layers, all from the same Overture release and bucket as the
 #: buildings and under the same ODbL. Each is one full-partition scan (~5 min),
@@ -744,6 +764,77 @@ def _kolkata_canopy() -> Any:
     return mod
 
 
+def _kolkata_module(file_name: str, module_name: str) -> Any:
+    """Load one of Kolkata's hyphenated scripts so its measurement is REUSED, not copied."""
+    spec = importlib.util.spec_from_file_location(
+        module_name, os.path.join(os.path.dirname(os.path.abspath(__file__)), file_name))
+    assert spec is not None and spec.loader is not None
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def cached_download(url: str, dst: str) -> str:
+    """Download once into the shared cache; an atomic rename means a partial file never counts."""
+    if os.path.exists(dst):
+        return dst
+    os.makedirs(os.path.dirname(dst), exist_ok=True)
+    tmp = dst + ".part"
+    rc = subprocess.run(["curl", "-s", "--fail", "-L", "--max-time", "1800", "-o", tmp, url]).returncode
+    if rc != 0 or not os.path.exists(tmp):
+        raise SystemExit(f"download failed (curl {rc}): {url}")
+    os.replace(tmp, dst)
+    return dst
+
+
+def tif_from_zip(zip_path: str) -> str:
+    out = zip_path[:-4] + ".tif"
+    if os.path.exists(out):
+        return out
+    with zipfile.ZipFile(zip_path) as z:
+        name = next(n for n in z.namelist() if n.endswith(".tif"))
+        with z.open(name) as src, open(out + ".part", "wb") as dst:
+            shutil.copyfileobj(src, dst)
+    os.replace(out + ".part", out)
+    return out
+
+
+def edge_weights(lo: float, hi: float, start: int, n: int) -> Any:
+    """Fraction of each of n unit pixels, starting at index `start`, that lies inside [lo, hi)."""
+    import numpy as np
+    edges = start + np.arange(n + 1, dtype=np.float64)
+    return np.clip(np.minimum(edges[1:], hi) - np.maximum(edges[:-1], lo), 0.0, 1.0)
+
+
+def worldpop_box_density(w: blr.Ward, tif: str) -> tuple[float, int]:
+    """People per km2 over EXACTLY the ward box.
+
+    WorldPop is on a geographic grid, so the box edges run along pixel rows and
+    columns and each edge pixel is weighted by the fraction of it inside the box.
+    Kolkata's fetch-worldpop.py summed a whole projected ENVELOPE but divided by the
+    box area, which inflates density (Indiranagar 20,028 vs 16,026 on GHS-POP).
+    """
+    import numpy as np
+    import rasterio
+    from rasterio.windows import Window
+    west, south, east, north = blr.bounds(w)
+    with rasterio.open(tif) as src:
+        t = src.transform
+        c0f, c1f = (west - t.c) / t.a, (east - t.c) / t.a
+        r0f, r1f = (north - t.f) / t.e, (south - t.f) / t.e
+        c0, c1 = int(np.floor(c0f)), int(np.ceil(c1f))
+        r0, r1 = int(np.floor(r0f)), int(np.ceil(r1f))
+        arr = src.read(1, window=Window(c0, r0, c1 - c0, r1 - r0),
+                       boundless=True, fill_value=0).astype("float64")
+        nodata = src.nodata
+    if nodata is not None:
+        arr = np.where(arr == nodata, 0.0, arr)
+    arr = np.where(np.isfinite(arr) & (arr > 0), arr, 0.0)
+    weight = np.outer(edge_weights(r0f, r1f, r0, r1 - r0), edge_weights(c0f, c1f, c0, c1 - c0))
+    total = float((arr * weight).sum())
+    return round(total / (w.size_m / 1000.0) ** 2, 1), round(total)
+
+
 def chm_path(w: blr.Ward, prefix: str, zoom: int, quadkey: Callable[[float, float, int], str]) -> str:
     return f"/vsis3/{CHM_BUCKET}/{prefix}/chm/{quadkey(w.centre.lat, w.centre.lon, zoom)}.tif"
 
@@ -1258,6 +1349,44 @@ def build_terrain(w: blr.Ward, context: bool = False) -> None:
           f"{doc['maxM'] - doc['minM']:.1f} m (native {relief_native:.1f} m)")
 
 
+def build_dcurs_static(wards: list[blr.Ward]) -> None:
+    """--layer dcurs-static: the four non-thermal DC-URS inputs, per ward, into one file."""
+    import rasterio
+    import _dcurs_blr as dc
+    import _types
+    pop_tif = cached_download(WORLDPOP_URL, os.path.join(GEO_CACHE, "worldpop", os.path.basename(WORLDPOP_URL)))
+    wc_tif = cached_download(WORLDCOVER_URL, os.path.join(GEO_CACHE, "worldcover", "N12E075.tif"))
+    cf = _kolkata_module("compute-far.py", "compute_far")
+    ct = _kolkata_module("compute-tra.py", "compute_tra")
+    fsc = _kolkata_module("fetch-sentinel-composites.py", "fetch_sentinel_composites")
+    out: dc.StaticFile = {
+        "generated": "fetch-bangalore.py --layer dcurs-static",
+        "ghsPop": WORLDPOP_URL,
+        "worldCover": WORLDCOVER_URL,
+        "sentinel": f"earth-search sentinel-2-l2a via _sentinel.py, years {SENTINEL_YEARS}",
+        "wards": {},
+    }
+    for w in wards:
+        density, population = worldpop_box_density(w, pop_tif)
+        with open(os.path.join(blr.DATA, f"{w.id}-buildings.json"), encoding="utf-8") as fh:
+            storey = float(json.load(fh)["storeyMetres"])
+        wb = cf.ward_buildings(os.path.join(blr.ROOT, "public", "heat-map", "data", f"{w.id}.json"))
+        far = round(float(cf.far_of(wb, wb.heights, storey)), 4)
+        tw = _types.Ward(w.id, _types.LatLon(w.centre.lat, w.centre.lon), int(w.size_m))
+        with rasterio.open(wc_tif) as src:
+            dist = round(float(ct.ward_tra(src, tw)["median_dist_m"]), 1)
+        sw = fsc.ward(f"blr-{w.id}", w.centre.lat, w.centre.lon, int(w.size_m), SENTINEL_YEARS)
+        out["wards"][w.id] = {
+            "popDensity": density, "population": population, "far": far, "storeyM": storey,
+            "distCoolM": dist, "ndviMean": float(sw["ndvi_mean"]), "ndviStd": float(sw["ndvi_std"]),
+            "ndviYears": int(sw["years"]),
+        }
+        print(f"  {w.id:<12} pop {density:,.0f}/km2 · FAR {far} (storey {storey} m) · "
+              f"refuge {dist:.0f} m · NDVI {sw['ndvi_mean']} ± {sw['ndvi_std']} ({sw['years']} yr)")
+    with open(dc.STATIC_PATH, "w", encoding="utf-8") as fh:
+        json.dump(out, fh, indent=2)
+
+
 def _self_test() -> None:
     """Offline: the backfill must reproduce the source fix exactly."""
     import numpy as np
@@ -1313,6 +1442,10 @@ def _self_test() -> None:
     assert not covered_reach({"tunnel": "no"}), "tunnel=no is open"
     assert not covered_reach({"waterway": "drain"}), "an untagged drain is open"
     assert not covered_reach(None), "no tags is open"
+    ew = edge_weights(0.5, 2.25, 0, 3)
+    assert [round(float(x), 6) for x in ew] == [0.5, 1.0, 0.25], \
+        f"edge pixels are weighted by the fraction inside the box, got {list(ew)}"
+    assert float(edge_weights(0.0, 3.0, 0, 3).sum()) == 3.0, "a box on pixel edges counts whole pixels"
     print("  fetch-bangalore self-test OK")
 
 
@@ -1320,7 +1453,7 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--layer", default="all",
                     choices=("buildings", "heights", "terrain", "context", "canopy",
-                             "species", "crosscheck", "osm", "all"))
+                             "species", "crosscheck", "osm", "dcurs-static", "dcurs-lst", "all"))
     ap.add_argument("--ward", default=None)
     ap.add_argument("--self-test", action="store_true")
     a = ap.parse_args()
@@ -1328,6 +1461,8 @@ def main() -> int:
         _self_test()
         return 0
     wards = ward_list(a.ward)
+    if a.layer in ("dcurs-static", "dcurs-lst") and a.ward:
+        raise SystemExit("the dcurs layers measure all three wards together; drop --ward")
 
     if a.layer in ("buildings", "all"):
         print("buildings (Overture):")
@@ -1379,6 +1514,9 @@ def main() -> int:
         print("cross-check (UT-GLOBUS against committed heights, offline):")
         for w in wards:
             run_crosscheck(w)
+    if a.layer == "dcurs-static":
+        print("DC-URS static inputs (WorldPop, FAR, WorldCover refuge, Sentinel-2 NDVI):")
+        build_dcurs_static(wards)
     if a.layer in ("heights", "all"):
         print("heights (Google Open Buildings 2.5D):")
         init_ee()
