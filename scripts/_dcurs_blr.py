@@ -140,8 +140,12 @@ def scene_row(utc: str, phase: Phase, cel: F32, view: F32 | None,
     rural_c = round(float(np.mean(cel[rural])), 3) if rural_px >= MIN_RURAL_PX else None
     view_delta: float | None = None
     if view is not None and rural_c is not None and bool((ok & union).any()):
-        vu = float(np.nanmean(np.abs(view[ok & union])))
-        vr = float(np.nanmean(np.abs(view[rural])))
+        vu_px = view[ok & union]
+        vr_px = view[rural]
+        # nanmean over an all-NaN slice warns AND returns NaN; skip the call rather than
+        # suppress the warning, so an all-NaN side becomes the same NaN sentinel either way.
+        vu = float(np.nanmean(np.abs(vu_px))) if bool(np.isfinite(vu_px).any()) else math.nan
+        vr = float(np.nanmean(np.abs(vr_px))) if bool(np.isfinite(vr_px).any()) else math.nan
         if math.isfinite(vu) and math.isfinite(vr):
             view_delta = round(abs(vu - vr), 2)
     return {"utc": utc, "phase": phase, "view_delta": view_delta, "rural_c": rural_c,
@@ -355,6 +359,8 @@ def _self_test() -> None:
     qc_bit1 = np.array([[2]], dtype=np.uint16)          # bit 1 set, bit 0 clear
     assert np.isnan(granule_celsius(good_lst, qc_bit1, None, None)[0, 0]), \
         "QC bit 1 (not just bit 0) is masked"
+    hot_lst = np.array([[401.0]], dtype=np.float32)
+    assert np.isnan(granule_celsius(hot_lst, None, None, None)[0, 0]), "401 K exceeds the upper range"
 
     # 2. first finite wins across overlapping granules.
     a = np.array([[1.0, nan]], dtype=np.float32)
@@ -394,6 +400,14 @@ def _self_test() -> None:
     smod_sparse[0:4, 0:4] = 11                            # ...except a 16-pixel rural patch (< 50 after ward)
     sparse_row = scene_row("2024-03-03T05:00:00", "day", grid, view, smod_sparse, {"a": ma, "b": mb})
     assert sparse_row["rural_c"] is None, "fewer than 50 rural pixels must not synthesize a reference"
+
+    # 3d. a NaN view angle over the RURAL side (wards themselves are fine) must also refuse.
+    view_rural_nan = np.full((10, 10), -5.0, dtype=np.float32)  # finite over the wards
+    view_rural_nan[~(ma | mb)] = nan                             # NaN over everything else
+    row_rural_nan = scene_row("2024-03-04T05:00:00", "day", grid, view_rural_nan, smod, {"a": ma, "b": mb})
+    assert row_rural_nan["view_delta"] is None, \
+        "an all-NaN rural view slice must not silently pass through nanmean either"
+    assert not shared(row_rural_nan, ["a", "b"]), "no valid rural view angle means the scene is not shared"
 
     # 4. THE RANKING FLIP (dc-urs-diagnosis.md): unpaired medians rank b hottest,
     #    the shared-scene method ranks a hottest, on the same rows.
@@ -477,6 +491,18 @@ def _self_test() -> None:
         "ward_record must carry the SAME ruralBaseC value thermal() computed, not lstDayC or some other field"
     assert "EFFECTIVE" in str(measured["ruralBaseC"].get("cite", "")), "the baseline construction is disclosed"
 
+    # 9b. per-phase vintage: day scenes in 2024 and night scenes in 2025 must not cross-contaminate.
+    day_rows_24 = [_row(f"2024-06-{i + 1:02d}T05:00:00", "day", {"a": 32.0, "b": 32.0, "c": 32.0}, rural=27.0)
+                   for i in range(8)]
+    night_rows_25 = [_row(f"2025-07-{i + 1:02d}T18:00:00", "night", {"a": 22.0, "b": 22.0, "c": 22.0},
+                          rural=20.0) for i in range(8)]
+    th_mixed = thermal(day_rows_24 + night_rows_25, ids)["a"]
+    assert th_mixed["dayVintage"] == "2024-2024" and th_mixed["nightVintage"] == "2025-2025", th_mixed
+    rec_mixed = ward_record(th_mixed, static, 0.4, 0.17)
+    assert rec_mixed["lstDayC"]["vintage"] == "2024-2024", rec_mixed["lstDayC"]
+    assert rec_mixed["ruralBaseC"]["vintage"] == "2024-2024", rec_mixed["ruralBaseC"]
+    assert rec_mixed["lstNightC"]["vintage"] == "2025-2025", rec_mixed["lstNightC"]
+
     # 10. clamp report.
     cold_night = t2.copy()
     cold_night["lstNightC"] = 18.0
@@ -488,12 +514,12 @@ def _self_test() -> None:
 
     # 10b. every clamp branch, built directly so each threshold is hit in isolation.
     def _ward(day: float | None, rural: float | None, night: float | None,
-              far: float = 1.0, albedo_v: float = 0.2) -> DcUrsWard:
+              far: float = 1.0, albedo_v: float = 0.2, pop: float = 1_000.0) -> DcUrsWard:
         def m(v: float | None) -> Sourced[float]:
             return sourced(0.0, "placeholder") if v is None else sourced(v, "measured", "2025-2025", "test")
         return {
             "lstDayC": m(day), "lstNightC": m(night), "ruralBaseC": m(rural),
-            "popDensity": sourced(1_000.0, "measured", "2020", "test"),
+            "popDensity": sourced(pop, "measured", "2020", "test"),
             "far": sourced(far, "measured", "2023-2026", "test"),
             "socioVuln": sourced(0.0, "placeholder"),
             "fvc": sourced(0.4, "measured", "2021-2025", "test"),
@@ -518,6 +544,14 @@ def _self_test() -> None:
     far_albedo = clamps(_ward(day=None, rural=None, night=None, far=5.0, albedo_v=0.60))
     assert any(s.startswith("far ") and "ceiling" in s for s in far_albedo), far_albedo
     assert any(s.startswith("albedo ") and "reference" in s for s in far_albedo), far_albedo
+    assert not any("lstDayC" in s for s in far_albedo), \
+        f"lstDayC is a placeholder here and must not appear in the clamp report: {far_albedo}"
+    assert not any("lstNightC" in s for s in far_albedo), \
+        f"lstNightC is a placeholder here and must not appear in the clamp report: {far_albedo}"
+
+    pop_boundary = clamps(_ward(day=None, rural=None, night=None, pop=25_000.0))
+    assert any(s.startswith("popDensity") for s in pop_boundary), \
+        f"exactly 25,000/km2 is at the ceiling, inclusive: {pop_boundary}"
 
     print("  _dcurs_blr self-test OK")
 
