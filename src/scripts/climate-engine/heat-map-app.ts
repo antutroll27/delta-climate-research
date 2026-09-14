@@ -2670,7 +2670,7 @@ export function mountHeatMap(): () => void {
     const base = state.dcurs?.[areaOf(state.ward)];
     if (base) {
       const phaseLst = state.phase === 'night' ? { nightC: st.meanC } : { dayC: st.meanC };
-      const scen = applyScenario(base, iv, anyIv ? phaseLst : undefined);
+      const scen = applyScenario(base, iv, anyIv ? phaseLst : undefined, currentWardSizeM);
       const now = U.dcUrs(anyIv ? scen.inputs : base);
       const p = U.pillars(anyIv ? scen.inputs : base);
       const tier = U.tierFor(now);

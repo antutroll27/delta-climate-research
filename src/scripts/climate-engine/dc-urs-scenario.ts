@@ -58,6 +58,21 @@ export const SCENARIO = {
   facadeFvcGain: 0.01,
 } as const;
 
+/** The ward the SCENARIO gains were sized for. Kolkata's wards are exactly this. */
+export const REFERENCE_WARD_M = 1400;
+
+/**
+ * How far a slider's gain carries over a ward of side `sizeM`.
+ *
+ * The gains are a fixed PACKAGE — 50 street trees, 10 pocket parks — so over a
+ * ward four times the area (Bengaluru's 2800 m) the same package moves the ward
+ * mean a quarter as far. Kolkata's 1400 m wards scale by exactly 1.
+ */
+export function areaScale(sizeM: number): number {
+  if (!(sizeM > 0)) throw new RangeError(`dc-urs-scenario: ward size must be positive, got ${sizeM}`);
+  return (REFERENCE_WARD_M / sizeM) ** 2;
+}
+
 export interface ScenarioResult {
   readonly inputs: DcUrsInputs;
   /** true when any slider is off zero */
@@ -78,9 +93,11 @@ export function applyScenario(
   base: DcUrsInputs,
   iv: Interventions,
   lst?: { dayC?: number; nightC?: number },
+  sizeM: number = REFERENCE_WARD_M,
 ): ScenarioResult {
-  const trees = iv.trees / 50, roof = iv.roof / 100;
-  const parks = Math.min(1, iv.parks / 10), facades = iv.facades / 15;
+  const k = areaScale(sizeM);
+  const trees = (iv.trees / 50) * k, roof = (iv.roof / 100) * k;
+  const parks = Math.min(1, iv.parks / 10) * k, facades = (iv.facades / 15) * k;
   const active = iv.trees > 0 || iv.roof > 0 || iv.parks > 0 || iv.facades > 0;
 
   const fvc = clamp01(base.fvc.value
