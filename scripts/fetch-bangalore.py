@@ -67,6 +67,11 @@ WORLDCOVER_URL = ("https://esa-worldcover.s3.eu-central-1.amazonaws.com/v200/202
                   "ESA_WorldCover_10m_2021_v200_N12E075_Map.tif")
 SENTINEL_YEARS = [2021, 2022, 2023, 2024, 2025]
 
+#: The rural reference box: 0.8 x 0.8 deg around the three wards, inside GHSL
+#: tile R8_C26 and under _ecostress.MAX_STUDY_WIDTH_DEG (12), so one UTM zone (43N).
+RURAL_BBOX = (77.22, 12.57, 78.02, 13.37)
+ECOSTRESS_START = "2018-07-01"
+
 #: The context layers, all from the same Overture release and bucket as the
 #: buildings and under the same ODbL. Each is one full-partition scan (~5 min),
 #: cached once over the union bbox and sliced per ward from there.
@@ -1398,6 +1403,180 @@ def build_dcurs_static(wards: list[blr.Ward]) -> None:
         json.dump(out, fh, indent=2)
 
 
+def box_mask(tf: Any, width: int, height: int,
+             west: float, south: float, east: float, north: float) -> Any:
+    """(height, width) bool array, True for pixels whose row AND column fall inside the box.
+
+    `target_grid`'s affine is north-up, so rows run from the NORTH edge down and
+    columns from the WEST edge: (west, north) is the box's first (row, col) and
+    (east, south) its last, inclusive -- the same convention worldpop_box_density
+    uses for its own row/column arithmetic. That arithmetic went untested until a
+    code review caught it (a north/south flip there moves real totals by well
+    under 1 %, invisible to any sanity range); this is the same shape of risk on
+    the ECOSTRESS grid, pulled out as a pure function so it can be pinned directly
+    rather than only through a population number three steps downstream.
+
+    CLAMPED, NOT WRAPPED. A raw negative index (a box reaching west or north of
+    the grid) handed straight to a numpy slice wraps around from the far edge
+    instead of refusing, which reads as a plausible mask over the wrong pixels.
+    Each bound is clamped into [0, dim-1] independently, so an out-of-range edge
+    is pulled to the grid boundary rather than silently relocated.
+    """
+    import numpy as np
+    from rasterio.transform import rowcol
+    r0, c0 = cast(tuple[int, int], rowcol(tf, west, north))
+    r1, c1 = cast(tuple[int, int], rowcol(tf, east, south))
+    r0c, r1c = max(0, min(r0, height - 1)), max(0, min(r1, height - 1))
+    c0c, c1c = max(0, min(c0, width - 1)), max(0, min(c1, width - 1))
+    m = np.zeros((height, width), dtype=bool)
+    m[r0c:r1c + 1, c0c:c1c + 1] = True
+    return m
+
+
+#: G2 pre-run gate: the expected mask size, (2800 m / 70 m)**2, and how far a
+#: mask's centre pixel may sit from the ward's true centre before the run refuses.
+DCURS_MASK_PX = (1300, 1900)
+DCURS_MASK_OFFSET_M = 150.0
+
+
+def dcurs_mask_report(tf: Any, width: int, height: int, crs: str,
+                      wards: list[blr.Ward]) -> dict[str, Any]:
+    """Build and gate every ward's mask on the rural grid, entirely offline.
+
+    Runs before any CMR search or download: it costs nothing, and it is the
+    guard that stops a mis-built mask (say, a north/south rowcol swap) before
+    the 22-hour run rather than after it. Two checks, neither of which a
+    sanity range on the final numbers would catch on its own:
+
+      - the pixel count must be close to (2800 / 70)**2 ~= 1600, so a mask that
+        is empty, doubled, or reading the wrong axis is refused outright;
+      - the mask's own centre pixel, converted back to lon/lat, must sit within
+        DCURS_MASK_OFFSET_M of the ward's registered centre -- catching a mask
+        that has the right SIZE but is shifted, e.g. by a swapped row/column.
+
+    Returns the built masks, keyed by ward id, for the caller to reuse.
+    """
+    import numpy as np
+    from rasterio.warp import transform, transform_bounds
+    lo, hi = DCURS_MASK_PX
+    masks: dict[str, Any] = {}
+    for w in wards:
+        west, south, east, north = transform_bounds("EPSG:4326", crs, *blr.bounds(w), densify_pts=21)
+        m = box_mask(tf, width, height, west, south, east, north)
+        n = int(m.sum())
+        if not (lo <= n <= hi):
+            raise SystemExit(f"{w.id}: mask has {n} px, expected {lo}-{hi} (~1600) -- "
+                             f"refusing to run dcurs-lst with a mis-built ward mask")
+        rows, cols = np.nonzero(m)
+        row_c, col_c = float(rows.mean()) + 0.5, float(cols.mean()) + 0.5
+        x, y = tf * (col_c, row_c)
+        lons, lats = cast(tuple[list[float], list[float]],
+                          transform(crs, "EPSG:4326", [x], [y]))
+        mx, my = blr.m_per_deg(w.centre.lat)
+        d = math.hypot((lons[0] - w.centre.lon) * mx, (lats[0] - w.centre.lat) * my)
+        if d > DCURS_MASK_OFFSET_M:
+            raise SystemExit(f"{w.id}: mask centre is {d:.0f} m from the ward centre, "
+                             f"beyond the {DCURS_MASK_OFFSET_M:.0f} m gate -- refusing to "
+                             f"run dcurs-lst with a mis-built ward mask")
+        masks[w.id] = m
+        print(f"  mask {w.id}: {n} px, centre offset {d:.0f} m", flush=True)
+    return masks
+
+
+def run_dcurs_lst(wards: list[blr.Ward]) -> None:
+    """--layer dcurs-lst: one row per ECOSTRESS acquisition, all wards and the rural reference.
+
+    RESUMABLE: rows are saved every 10 acquisitions and on exit, and a re-run skips
+    what is recorded. DISK-BOUNDED: each acquisition's newly downloaded bands are
+    deleted once measured, so the cache never holds more than one scene.
+    """
+    import datetime as dt
+    import numpy as np
+    import _dcurs_blr as dc
+    import _ecostress as eco
+
+    # G2 gate, offline and first: the pure target grid is all this needs, so a
+    # mis-built mask is caught before the GHS-SMOD download, the token check, or
+    # a single CMR search.
+    crs = eco.target_crs(RURAL_BBOX)
+    tf, width, height = eco.target_grid(RURAL_BBOX)
+    masks = dcurs_mask_report(tf, width, height, crs, wards)
+
+    smod_tif = tif_from_zip(cached_download(
+        GHS_SMOD_URL, os.path.join(GEO_CACHE, "ghsl", os.path.basename(GHS_SMOD_URL))))
+    tok = eco.token()
+    if os.path.exists(dc.LST_PATH):
+        with open(dc.LST_PATH, encoding="utf-8") as fh:
+            doc = cast(dc.ScenesFile, json.load(fh))
+    else:
+        doc = {"source": ("NASA ECOSTRESS ECO_L2T_LSTE v002 via CMR/LP DAAC; rural reference = "
+                          "GHS-SMOD R2023A tile R8_C26 classes 11/12/13"),
+               "rural_bbox": list(RURAL_BBOX), "start": ECOSTRESS_START, "rows": [], "skipped": []}
+    done = {f"{r['phase']} {r['utc']}" for r in doc["rows"]} | set(doc["skipped"])
+
+    smod = eco.align(smod_tif, -200, "int16", bbox=RURAL_BBOX)
+
+    def band(g: dict[str, Any], suffix: str, nodata: float, dtype: str) -> Any:
+        p = eco.fetch(eco.band_url(g, suffix), tok)
+        return eco.align(p, nodata, dtype, bbox=RURAL_BBOX) if p else None
+
+    def save() -> None:
+        with open(dc.LST_PATH, "w", encoding="utf-8") as fh:
+            json.dump(doc, fh, separators=(",", ":"))
+
+    no_lst_in_a_row = 0
+    end = dt.date.today().isoformat()
+    for phase in ("day", "night"):
+        acqs = eco.cmr_search(phase, ECOSTRESS_START, None, end, bbox=RURAL_BBOX)
+        print(f"  {phase}: {len(acqs)} acquisitions since {ECOSTRESS_START}", flush=True)
+        for n, (utc, grans) in enumerate(acqs, 1):
+            key = f"{phase} {utc}"
+            if key in done:
+                continue
+            before: set[str] = set(os.listdir(eco.CACHE)) if os.path.isdir(eco.CACHE) else set()
+            cel: Any = None
+            view: Any = None
+            got_lst = False
+            for g in grans:
+                lst_k = band(g, "_LST.tif", np.nan, "float32")
+                if lst_k is None:
+                    continue
+                got_lst = True
+                c = dc.granule_celsius(lst_k, band(g, "_QC.tif", 0xFFFF, "uint16"),
+                                       band(g, "_cloud.tif", 255, "uint16"),
+                                       band(g, "_water.tif", 0, "uint16"))
+                cel = dc.first_finite(cel, c)
+                v = band(g, "_view_zenith.tif", np.nan, "float32")
+                if v is not None:
+                    view = dc.first_finite(view, v)
+            if os.path.isdir(eco.CACHE):       # measured, then dropped: the disk never holds more than one scene
+                for f in set(os.listdir(eco.CACHE)) - before:
+                    os.remove(os.path.join(eco.CACHE, f))
+            if not got_lst:
+                no_lst_in_a_row += 1
+                if no_lst_in_a_row >= 5:
+                    save()
+                    raise SystemExit(
+                        "5 acquisitions in a row downloaded no LST band -- the Earthdata token at "
+                        f"{eco.TOKEN_PATH} has probably expired; renew it at urs.earthdata.nasa.gov "
+                        "and re-run (progress is saved)")
+                continue
+            no_lst_in_a_row = 0
+            if not bool(np.isfinite(cel).any()):
+                doc["skipped"].append(key)
+            else:
+                doc["rows"].append(dc.scene_row(utc, phase, cel, view, smod, masks))
+            done.add(key)
+            if n % 10 == 0:
+                save()
+                print(f"    {phase} {n}/{len(acqs)} · {len(doc['rows'])} rows", flush=True)
+    save()
+    th = dc.thermal(doc["rows"], [w.id for w in wards])
+    first = next(iter(th.values()))
+    print(f"  shared clear scenes: {first['dayScenes']} day, {first['nightScenes']} night "
+          f"(gate {dc.MIN_SHARED_SCENES} per phase)")
+
+
 def _self_test() -> None:
     """Offline: the backfill must reproduce the source fix exactly."""
     import numpy as np
@@ -1499,6 +1678,27 @@ def _self_test() -> None:
             pass
         else:
             raise AssertionError("a ward box running off the raster must be refused, not zero-filled")
+
+    # box_mask: pinned against a HAND-COMPUTED expected rectangle on a known grid,
+    # not against box_mask's own arithmetic re-run -- a self-check that only
+    # reruns the code under test cannot catch a mistake shared by both runs.
+    grid_tf = from_origin(700000.0, 1450000.0, 70.0, 70.0)
+    # west=700140 -> col 2, north=1449790 -> row 3, east=700490 -> col 7, south=1449370 -> row 9.
+    m_in = box_mask(grid_tf, 20, 20, 700140.0, 1449370.0, 700490.0, 1449790.0)
+    expect_in = np.zeros((20, 20), dtype=bool)
+    expect_in[3:10, 2:8] = True
+    assert bool((m_in == expect_in).all()), \
+        "box_mask must be True on rows 3-9 (from the north edge down), cols 2-7 (from the west edge)"
+
+    # Partly off-grid on both the west and north sides: west -> col -5, north -> row 1,
+    # east -> col 3, south -> row 15. A negative column handed straight to a numpy
+    # slice WRAPS from the far edge instead of refusing -- this must clamp to col 0.
+    m_off = box_mask(grid_tf, 20, 20, 699650.0, 1448950.0, 700210.0, 1449930.0)
+    expect_off = np.zeros((20, 20), dtype=bool)
+    expect_off[1:16, 0:4] = True
+    assert bool((m_off == expect_off).all()), \
+        "an off-grid box must be CLAMPED to the grid edge, not wrapped around it"
+
     print("  fetch-bangalore self-test OK")
 
 
@@ -1570,6 +1770,9 @@ def main() -> int:
     if a.layer == "dcurs-static":
         print("DC-URS static inputs (WorldPop, FAR, WorldCover refuge, Sentinel-2 NDVI):")
         build_dcurs_static(wards)
+    if a.layer == "dcurs-lst":
+        print("DC-URS surface temperature (ECOSTRESS, scenes shared by all three wards):")
+        run_dcurs_lst(wards)
     if a.layer in ("heights", "all"):
         print("heights (Google Open Buildings 2.5D):")
         init_ee()
