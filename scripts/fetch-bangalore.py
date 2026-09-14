@@ -71,6 +71,13 @@ SENTINEL_YEARS = [2021, 2022, 2023, 2024, 2025]
 #: tile R8_C26 and under _ecostress.MAX_STUDY_WIDTH_DEG (12), so one UTM zone (43N).
 RURAL_BBOX = (77.22, 12.57, 78.02, 13.37)
 ECOSTRESS_START = "2018-07-01"
+#: LP DAAC may still be ingesting the most recent scenes, and a scene that
+#: arrives late changes an orbit's EARLIEST timestamp -- which is that orbit's
+#: `done` key (see group_by_orbit). Stopping the search this many days short of
+#: today means a re-run never discovers an earlier sibling of an orbit already
+#: recorded under its (previously earliest, now second) timestamp, which would
+#: double-count the orbit across a resume.
+ECOSTRESS_SETTLE_DAYS = 14
 
 #: The context layers, all from the same Overture release and bucket as the
 #: buildings and under the same ODbL. Each is one full-partition scan (~5 min),
@@ -1523,6 +1530,55 @@ def group_by_orbit(acqs: list[tuple[str, list[dict[str, Any]]]]
 BandStatus = Literal["ok", "absent", "failed"]
 
 
+def band(eco: Any, tok: str, g: dict[str, Any], suffix: str, nodata: float, dtype: str,
+        before: set[str]) -> tuple[BandStatus, Any]:
+    """Fetch and align one ECOSTRESS band, telling ABSENT apart from FAILED (see BandStatus).
+
+    `eco.fetch` can raise `subprocess.TimeoutExpired` on a stalled curl and
+    leave a partial file bigger than `MIN_TIF_BYTES` sitting at exactly the
+    path it would have returned -- `eco.align` then raises on that file every
+    time, forever, on every future run. The header check catches the same
+    failure when curl exits 0 on a truncated body.
+
+    On any such FAILURE the file at this band's cache path is removed
+    UNCONDITIONALLY -- not only when this acquisition created it. The path is
+    derived from this granule's own URL, so a file already sitting there is
+    corrupt or truncated from some earlier attempt and is never useful to
+    anything else; leaving it in place would fail this same acquisition again
+    on every future run. (Only the per-acquisition sweep of brand-new files,
+    in `run_dcurs_lst`, still consults `before` -- that sweep must not delete
+    a file that predates this acquisition and is still good.)
+
+    `eco` is untyped (`Any`) deliberately: this is called with the real
+    `_ecostress` module in production and with a small fake module in
+    `_self_test`, so it can be pinned without a live token or network.
+    """
+    import rasterio.errors
+    url = eco.band_url(g, suffix)
+    if url is None:
+        return "absent", None
+    path = os.path.join(eco.CACHE, url.rsplit("/", 1)[-1])
+    ok = False
+    arr: Any = None
+    try:
+        p = eco.fetch(url, tok)
+        if p is not None:
+            with open(p, "rb") as fh:
+                head = fh.read(4)
+            if looks_like_raster_or_zip(head):
+                arr = eco.align(p, nodata, dtype, bbox=RURAL_BBOX)
+                ok = True
+    except (subprocess.TimeoutExpired, rasterio.errors.RasterioError, OSError):
+        ok = False
+    if not ok:
+        try:
+            os.remove(path)
+        except FileNotFoundError:
+            pass
+        return "failed", None
+    return "ok", arr
+
+
 def run_dcurs_lst(wards: list[blr.Ward]) -> None:
     """--layer dcurs-lst: one row per ECOSTRESS acquisition, all wards and the rural reference.
 
@@ -1538,7 +1594,6 @@ def run_dcurs_lst(wards: list[blr.Ward]) -> None:
     """
     import datetime as dt
     import numpy as np
-    import rasterio.errors
     import _dcurs_blr as dc
     import _ecostress as eco
 
@@ -1571,40 +1626,6 @@ def run_dcurs_lst(wards: list[blr.Ward]) -> None:
             json.dump(doc, fh, separators=(",", ":"))
         os.replace(part, dc.LST_PATH)
 
-    def band(g: dict[str, Any], suffix: str, nodata: float, dtype: str,
-             before: set[str]) -> tuple[BandStatus, Any]:
-        """Fetch and align one band, telling ABSENT apart from FAILED (see BandStatus).
-
-        `eco.fetch` can raise `subprocess.TimeoutExpired` on a stalled curl and
-        leave a partial file bigger than `MIN_TIF_BYTES` sitting at exactly the
-        path it would have returned -- `eco.align` then raises on that file
-        every time, forever, on every future run. The header check catches the
-        same failure when curl exits 0 on a truncated body. Either way this is
-        a FAILURE, and the leftover file is removed -- but only if this
-        acquisition created it (`before` holds what was already in the cache).
-        """
-        url = eco.band_url(g, suffix)
-        if url is None:
-            return "absent", None
-        path = os.path.join(eco.CACHE, url.rsplit("/", 1)[-1])
-        ok = False
-        arr: Any = None
-        try:
-            p = eco.fetch(url, tok)
-            if p is not None:
-                with open(p, "rb") as fh:
-                    head = fh.read(4)
-                if looks_like_raster_or_zip(head):
-                    arr = eco.align(p, nodata, dtype, bbox=RURAL_BBOX)
-                    ok = True
-        except (subprocess.TimeoutExpired, rasterio.errors.RasterioError, OSError):
-            ok = False
-        if not ok:
-            if os.path.exists(path) and os.path.basename(path) not in before:
-                os.remove(path)
-            return "failed", None
-        return "ok", arr
-
     #: (suffix, nodata, dtype) for the three masks a granule's LST needs. A
     #: granule missing any one of them cannot be trusted unmasked, so it is
     #: dropped whole rather than merged in with a silently disabled filter.
@@ -1623,7 +1644,7 @@ def run_dcurs_lst(wards: list[blr.Ward]) -> None:
         cel: Any = None
         view: Any = None
         for g in grans:
-            lst_status, lst_k = band(g, "_LST.tif", np.nan, "float32", before)
+            lst_status, lst_k = band(eco, tok, g, "_LST.tif", np.nan, "float32", before)
             if lst_status == "failed":
                 return "incomplete", None, None
             if lst_status == "absent":
@@ -1631,7 +1652,7 @@ def run_dcurs_lst(wards: list[blr.Ward]) -> None:
             mask_arrays: dict[str, Any] = {}
             drop_granule = False
             for suffix, nodata, dtype in mask_bands:
-                st, arr = band(g, suffix, nodata, dtype, before)
+                st, arr = band(eco, tok, g, suffix, nodata, dtype, before)
                 if st == "failed":
                     return "incomplete", None, None
                 if st == "absent":
@@ -1643,7 +1664,7 @@ def run_dcurs_lst(wards: list[blr.Ward]) -> None:
             c = dc.granule_celsius(lst_k, mask_arrays["_QC.tif"],
                                    mask_arrays["_cloud.tif"], mask_arrays["_water.tif"])
             cel = dc.first_finite(cel, c)
-            v_status, v = band(g, "_view_zenith.tif", np.nan, "float32", before)
+            v_status, v = band(eco, tok, g, "_view_zenith.tif", np.nan, "float32", before)
             if v_status == "failed":
                 return "incomplete", None, None
             if v_status == "ok":
@@ -1652,11 +1673,25 @@ def run_dcurs_lst(wards: list[blr.Ward]) -> None:
 
     no_lst_in_a_row = 0
     processed = 0                          # I3: saves are counted on this, not on the CMR list index
-    end = dt.date.today().isoformat()
+    # Stop short of today: LP DAAC may still be ingesting the most recent
+    # scenes, and a late-arriving one would change an already-recorded orbit's
+    # earliest timestamp -- its `done` key -- causing a resumed run to record
+    # it a second time under the new, earlier key. See ECOSTRESS_SETTLE_DAYS.
+    end = (dt.date.today() - dt.timedelta(days=ECOSTRESS_SETTLE_DAYS)).isoformat()
     for phase in ("day", "night"):
         try:
             acqs = group_by_orbit(eco.cmr_search(phase, ECOSTRESS_START, None, end, bbox=RURAL_BBOX))
             print(f"  {phase}: {len(acqs)} acquisitions since {ECOSTRESS_START}", flush=True)
+
+            def checkpoint(idx: int = 0) -> None:
+                # Robustness fix: save/print every 10 PROCESSED acquisitions --
+                # complete OR incomplete -- so a stretch of server throttling
+                # (all incomplete) is not silently unsaved for hours.
+                if processed % 10 == 0:
+                    save()
+                    print(f"    {phase} {idx}/{len(acqs)} · {processed} processed · "
+                          f"{len(doc['rows'])} rows", flush=True)
+
             for idx, (utc, grans) in enumerate(acqs, 1):
                 key = f"{phase} {utc}"
                 if key in done:
@@ -1668,10 +1703,14 @@ def run_dcurs_lst(wards: list[blr.Ward]) -> None:
                     # measured, then dropped: the disk never holds more than one scene
                     if os.path.isdir(eco.CACHE):
                         for f in set(os.listdir(eco.CACHE)) - before:
-                            os.remove(os.path.join(eco.CACHE, f))
+                            try:
+                                os.remove(os.path.join(eco.CACHE, f))
+                            except FileNotFoundError:
+                                pass
                 processed += 1
                 if status == "incomplete":
                     no_lst_in_a_row += 1
+                    checkpoint(idx)
                     if no_lst_in_a_row >= 5:
                         raise SystemExit(
                             "5 acquisitions in a row could not be downloaded completely "
@@ -1684,10 +1723,7 @@ def run_dcurs_lst(wards: list[blr.Ward]) -> None:
                 else:
                     doc["rows"].append(dc.scene_row(utc, phase, cel, view, smod, masks))
                 done.add(key)
-                if processed % 10 == 0:
-                    save()
-                    print(f"    {phase} {idx}/{len(acqs)} · {processed} processed · "
-                          f"{len(doc['rows'])} rows", flush=True)
+                checkpoint(idx)
         finally:
             # C1: any exception -- including a CMR RuntimeError or the SystemExit
             # above -- persists progress before it propagates.
@@ -1847,6 +1883,39 @@ def _self_test() -> None:
            [_gran("ECOv002_L2T_LSTE_99999_001_45QXE_20240201T000000_0711_01"),
             _gran("ECOv002_L2T_LSTE_99999_001_45QXE_20240201T000000_0711_01")])]
     assert len(group_by_orbit(dup)[0][1]) == 1, "a repeated GranuleUR must not be double-counted"
+
+    # band(): a FAILURE must remove the file at the band's cache path
+    # UNCONDITIONALLY, even one that predates this acquisition (its name is
+    # already in `before`) -- the path is unique to this granule+band, so a
+    # corrupt leftover there can never be useful to anything else, and leaving
+    # it in place would fail this same acquisition again on every future run.
+    # `eco` is faked so this runs with no network and no token.
+    class _FakeEcoStalledFetch:
+        CACHE = ""                     # set to a real tempdir just below
+
+        @staticmethod
+        def band_url(g: dict[str, Any], suffix: str) -> str | None:
+            return "https://example.test/granule_LST.tif"
+
+        @staticmethod
+        def fetch(url: str, tok: str) -> str | None:
+            raise subprocess.TimeoutExpired(cmd="curl", timeout=600)
+
+        @staticmethod
+        def align(p: str, nodata: float, dtype: str, bbox: Any) -> Any:
+            raise AssertionError("align must not be reached when fetch itself raised")
+
+    with tempfile.TemporaryDirectory() as td:
+        _FakeEcoStalledFetch.CACHE = td
+        corrupt = os.path.join(td, "granule_LST.tif")
+        with open(corrupt, "wb") as fh:
+            fh.write(b"leftover bytes from a stalled curl in an earlier run")
+        status, arr = band(_FakeEcoStalledFetch, "tok", {}, "_LST.tif", float("nan"), "float32",
+                           before={"granule_LST.tif"})   # pre-existing: its name IS in `before`
+        assert status == "failed" and arr is None, (status, arr)
+        assert not os.path.exists(corrupt), \
+            "a pre-existing corrupt file at the band's cache path must be removed on FAILURE " \
+            "unconditionally, even though its name is already in `before`"
 
     print("  fetch-bangalore self-test OK")
 
