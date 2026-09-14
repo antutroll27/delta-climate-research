@@ -32,7 +32,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { WaterData } from './heat-map-model';
-import { buildDepthField, waterFieldM } from './water-depth';
+import { buildDepthField, openLines, waterFieldM } from './water-depth';
 import { buildRibbonMesh } from './road-ribbon';
 
 export interface WaterLayer {
@@ -211,7 +211,7 @@ export function createWaterLayer(
   }
   /* OPEN CENTRELINES, as ribbons that follow the land — a drain runs downhill, unlike
      a pond's level surface — through the same builder roads use. They flow. */
-  const ribbons = buildRibbonMesh(data.lines ?? [], () => WATER_LINE_WIDTH_M / 2,
+  const ribbons = buildRibbonMesh(openLines(data), () => WATER_LINE_WIDTH_M / 2,
     groundAt ?? (() => 0), 0);
   if (ribbons) {
     const g = new THREE.BufferGeometry();

@@ -46,11 +46,41 @@ test('water lines never reach the heat model', async () => {
   assert.deepEqual([...withLines], [...polysOnly], 'the solver raster changed when lines were present');
 });
 
-import { waterFieldM } from '../../src/scripts/climate-engine/water-depth.ts';
+import { openLines, waterFieldM } from '../../src/scripts/climate-engine/water-depth.ts';
+import { buildRibbonMesh } from '../../src/scripts/climate-engine/road-ribbon.ts';
 
 test('the depth field takes the artefact’s own size, and falls back to Kolkata’s', () => {
   assert.equal(waterFieldM({ polys: [], fieldM: 2800 }), 2800);
   assert.equal(waterFieldM({ polys: [] }), 1520, 'absent → Kolkata clip box');
   assert.equal(waterFieldM({ polys: [], fieldM: 0 }), 1520, 'zero → fallback');
   assert.equal(waterFieldM({ polys: [], fieldM: Number.NaN }), 1520, 'NaN → fallback');
+});
+
+test('a malformed `lines` field is dropped, not thrown', () => {
+  assert.deepEqual(openLines({ polys: [] }), [], 'absent lines → empty');
+  assert.deepEqual(openLines({ polys: [], lines: {} }), [], 'a non-array lines value → empty');
+  assert.deepEqual(openLines({ polys: [], lines: null }), [], 'null lines → empty');
+  assert.deepEqual(openLines({ polys: [], lines: 'nope' }), [], 'a string lines value → empty');
+
+  const good = { k: 'drain', p: [0, 0, 10, 10] };
+  const mixed = [good, { k: 'bad', p: 'not-an-array' }, { k: 'worse' }, null, 42];
+  assert.deepEqual(openLines({ polys: [], lines: mixed }), [good],
+    'entries whose p is not an array are dropped; the well-formed one survives');
+});
+
+test('buildRibbonMesh never throws on a malformed water artefact', () => {
+  const groundAt = () => 0;
+  const half = () => 1.5;
+  for (const bad of [{}, null, 'nope', 42, [{ k: 'x' }, { k: 'y', p: null }]]) {
+    assert.doesNotThrow(
+      () => buildRibbonMesh(openLines({ polys: [], lines: bad }), half, groundAt, 0),
+      `lines=${JSON.stringify(bad)} must not throw`,
+    );
+  }
+  // and a well-formed line still produces geometry
+  const mesh = buildRibbonMesh(
+    openLines({ polys: [], lines: [{ k: 'drain', p: [0, 0, 10, 0, 10, 10] }] }),
+    half, groundAt, 0,
+  );
+  assert.ok(mesh && mesh.positions.length > 0, 'a valid line still builds a ribbon');
 });

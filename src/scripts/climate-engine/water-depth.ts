@@ -187,3 +187,21 @@ export function waterFieldM(data: { readonly fieldM?: number }): number {
   const f = data.fieldM;
   return typeof f === 'number' && Number.isFinite(f) && f > 0 ? f : DEFAULT_WATER_FIELD_M;
 }
+
+/**
+ * Bengaluru's open (not culverted) centrelines, defensively parsed.
+ *
+ * `lines` is optional and comes straight off a fetched artefact — a malformed value
+ * (wrong type, or an entry with no polyline) must not throw and abort the ward's
+ * whole 3D build. Anything that is not an array becomes no lines; any entry whose
+ * `p` is not an array is dropped rather than passed on to `buildRibbonMesh`.
+ */
+export function openLines(
+  data: { readonly lines?: unknown },
+): readonly { readonly k: string; readonly p: readonly number[] }[] {
+  const raw = Array.isArray(data.lines) ? data.lines : [];
+  return raw.filter(
+    (l): l is { k: string; p: number[] } =>
+      !!l && typeof l === 'object' && Array.isArray((l as { p?: unknown }).p),
+  );
+}

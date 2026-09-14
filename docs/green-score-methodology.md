@@ -120,7 +120,7 @@ against our own output · **Placeholder** = explicitly temporary.
 |---|---|---|---|
 | Dark roof albedo | 0.15 | Cited — high | LBNL Heat Island Group |
 | Aged cool-roof albedo | 0.60 | Cited — high | LBNL *aged* value, not fresh-white 0.85 — deliberately conservative |
-| Pocket park radius | 50 m (0.785 ha) | Cited — **Kolkata-specific** | Li et al. 2022, threshold value of efficiency (TVoE 0.77 ha — genuinely Kolkata's; see §4.2 correction) |
+| Pocket park radius | 50 m (0.785 ha) | **Design default** | Not Li et al. 2022's TVoE: that is a cooling-slope value, borrowed as an area, not a measured Kolkata minimum. 50 m stands as a reasonable pocket-park size — see §4.2 correction |
 | **Evapotranspiration L** | **0.46** (shipped) | **Re-derived §4.2.1 — an admissible choice, not a determined one; its humidity ramp has a defect, §4.2.2** | Chosen inside a one-sided feasible region; the old two-constraint band is a fossil |
 | **Facade heat reduction** | **0.03** | **Cited — corrected from 0.30** | Gunawardena & Steemers 2023 |
 | Influence kernel λ | ≈47 m | Empirical, honestly labelled | See §4.4 |
@@ -228,8 +228,9 @@ itself does not survive: §4.2.1 shows it cannot be reproduced from the current 
 >    is *Bangkok's* maximum.** It is a cross-city range of daytime, winter maxima from fused
 >    Landsat/MODIS — not a range of park cooling measured within Kolkata.
 >
-> What from that paper *is* genuinely Kolkata's, and stands: **TVoE 0.77 ha** and **reach
-> 420 m**.
+> What from that paper *is* genuinely Kolkata's, and stands: **reach 420 m**. **TVoE ≈ 0.77**
+> is Kolkata's too, but it is a regression slope, not a park area — see the 2026-09-14
+> correction in `heat-map-intervention-model.md` §3.3.
 >
 > **This is precisely the error §4.1 flags as "the one I would most want caught in my own
 > work" — two numbers that share a name and not a definition.** There it was a validation
@@ -814,7 +815,7 @@ Verification status is marked per item: **[V]** full text or primary document co
 | Source | Used for | Link |
 |---|---|---|
 | Voogt & Oke (2003), *Thermal remote sensing of urban climates*, **RSE** 86(3):370–384 **[V]** | **§4.1** — daytime *surface* UHI 10–15 °C vs canopy *air* UHI 2–5 °C | [doi:10.1016/S0034-4257(03)00079-8](https://doi.org/10.1016/S0034-4257(03)00079-8) |
-| **Li, Lu, Fu, Sun, Pan, Han, Guo & Li (2022)**, *Diverse cooling effects of green space on urban heat island in tropical megacities*, **Frontiers in Environmental Science** **[V]** — *previously miscited here as "Mitra et al."* | **§4.2** — TVoE **0.77 ha** and reach **420 m** are Kolkata's and stand. **Kolkata's daytime maximum UCI is 8.07 °C; 4.83 °C is Bangkok's** — the "4.83–8.07 °C Kolkata band" this register formerly claimed does not exist. See the §4.2 correction. | [doi:10.3389/fenvs.2022.1073914](https://doi.org/10.3389/fenvs.2022.1073914) |
+| **Li, Lu, Fu, Sun, Pan, Han, Guo & Li (2022)**, *Diverse cooling effects of green space on urban heat island in tropical megacities*, **Frontiers in Environmental Science** **[V]** — *previously miscited here as "Mitra et al."* | **§4.2** — reach **420 m** is Kolkata's and stands. **TVoE ≈ 0.77** is Kolkata's too, but it is a regression slope, not a park area — see the 2026-09-14 correction in `heat-map-intervention-model.md` §3.3. **Kolkata's daytime maximum UCI is 8.07 °C; 4.83 °C is Bangkok's** — the "4.83–8.07 °C Kolkata band" this register formerly claimed does not exist. See the §4.2 correction. | [doi:10.3389/fenvs.2022.1073914](https://doi.org/10.3389/fenvs.2022.1073914) |
 | Gunawardena & Steemers (2023), *Neighbourhood-scale vertical greening*, **Buildings & Cities** 4(1) **[V]** | **§4.3** — heat-island intensity 1.86→1.81 K (~3%); energy 2.1–5.2% | [doi:10.5334/bc.282](https://doi.org/10.5334/bc.282) |
 | **LBNL Heat Island Group** — cool roof materials **[V]** | Albedo 0.15 dark / 0.60 aged-cool | [heatisland.lbl.gov/coolscience/cool-roofs](https://heatisland.lbl.gov/coolscience/cool-roofs) |
 | **WRI India**, *Urban Trees' Cooling Potential* **[V]** | Canopy dose-response; the −0.3 °C air vs −27.5 °C surface contrast in §5 | [wri.org/insights/urban-trees-cooling-potential](https://www.wri.org/insights/urban-trees-cooling-potential) |

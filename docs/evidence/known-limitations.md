@@ -735,3 +735,8 @@ whose value does not change with the area unit, the paper is internally inconsis
 sample was hand-picked in Google Earth and cannot be reproduced from open data. The radius stands as a
 reasonable pocket-park size; the cooling it produces comes from the solver running on the painted
 vegetation, not from the radius itself.
+
+The same borrowed number sets the DC-URS thermal-refuge floor (`MIN_REFUGE_HA = 0.77`,
+`MIN_PATCH_M2 = 7,700` in `scripts/compute-tra.py` and `cooling-surfaces.ts`) — it too is a design
+threshold, kept because it keeps the index discriminating, not because it is a measured minimum cooling
+area.

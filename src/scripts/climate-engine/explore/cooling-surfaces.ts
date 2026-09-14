@@ -37,7 +37,9 @@
  * rings, whose radii are exact, and offers the metres only as approximate.
  */
 export const VEG_THRESHOLD = 0.5;
-/** Minimum patch area in m². 0.77 ha mirrors compute-tra.py's floor. */
+/** Minimum patch area in m². 0.77 ha mirrors compute-tra.py's floor — a design
+ *  threshold (Li et al. 2022's TVoE regression slope, borrowed as an area),
+ *  not a measured minimum cooling area. */
 export const MIN_PATCH_M2 = 7_700;
 
 export interface CoolingSurfaces {

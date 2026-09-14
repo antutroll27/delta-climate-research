@@ -202,9 +202,12 @@ of these changed the shipped p75 method — they are context/benchmarking)*
   third "negative" pathway was deleted as unsupported by the citation.
 - **Li, Lu, Fu, Sun, Pan, Han, Guo & Li (2022)**, *Frontiers in Environmental Science*, DOI
   [10.3389/fenvs.2022.1073914](https://doi.org/10.3389/fenvs.2022.1073914) — tropical-megacity park cooling
-  incl. Kolkata: threshold-value-of-effect 0.77 ha, cooling reach 420 m, daytime max UCI 8.07 °C (Kolkata)
-  vs 4.83 °C (Bangkok — a *different* city). **Correction on record:** previously miscited as "Mitra et al.
-  2022" with a false "4.83–8.07 °C Kolkata band"; corrected 2026-08-08.
+  incl. Kolkata: threshold-value-of-effect (TVoE) ≈ 0.77, cooling reach 420 m, daytime max UCI 8.07 °C
+  (Kolkata) vs 4.83 °C (Bangkok — a *different* city). **Correction on record:** previously miscited as
+  "Mitra et al. 2022" with a false "4.83–8.07 °C Kolkata band"; corrected 2026-08-08. **Second correction,
+  2026-09-14:** TVoE is the slope of `UCI = a·ln(Area) + b` where that slope equals one, so TVoE = a — a
+  regression slope, unit-independent, not a park area; "0.77 ha" was never a measured Kolkata park size.
+  See `heat-map-intervention-model.md` §3.3.
 - **Schwaab, Meier, Mussetti, Seneviratne, Bürgi & Davin (2021)**, *Nature Communications* 12:6763 — LST
   cooling by urban trees vs treeless green space across **293 European cities**; trees cool roughly **2–4×**
   more than grass-only green, with a strong north–south gradient. **Engine use — this one changed the

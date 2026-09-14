@@ -260,7 +260,8 @@ Against every matched building rather than a few hundred centroids:
 | MG Road | 2,100 of 11,045 (`Bangalore_1`) | **3.65 m** | 339 |
 
 Re-recorded 2026-09-14 against shipped heights; the earlier 3.12/3.13 m figures
-predate the OSM height override (`1fec16e`), see known-limitations §8.
+predate the OSM height override (`1fec16e`), see known-limitations §8, "Bangalore's
+building heights have two sources that disagree, and no Indian ground truth".
 Indiranagar's MAE improves from the 4.00 m of the design sample to 2.83 m, and
 MG Road now has its own recorded cross-check rather than a skip, at 3.65 m MAE
 and 339 flagged.
@@ -270,8 +271,9 @@ and 339 flagged.
 1. Height comes from Google 2.5D, joined to the Overture footprint by GERS id —
    unchanged from Kolkata, so the pipeline stays one thing.
 2. UT-GLOBUS height is attached to the same record as a second field.
-3. Where the two disagree by **more than 5 m**, the building carries a flag and a
-   widened uncertainty band. It is not corrected and not averaged.
+3. Where the two disagree by **more than 5 m**, the building carries a flag (a widened
+   on-screen uncertainty band is designed but not yet built). It is not corrected and
+   not averaged.
 4. The artefact publishes the per-ward agreement statistics above, so a reader
    can see how much of the ward is in disagreement.
 
