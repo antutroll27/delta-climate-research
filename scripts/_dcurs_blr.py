@@ -9,6 +9,7 @@ Spec: docs/superpowers/specs/2026-09-14-bengaluru-resilience-score-design.md
 """
 from __future__ import annotations
 
+import math
 import os
 import statistics
 import sys
@@ -100,7 +101,8 @@ class Thermal(TypedDict):
     suhiiNightC: float | None
     dayScenes: int
     nightScenes: int
-    vintage: str
+    dayVintage: str
+    nightVintage: str
 
 
 def granule_celsius(lst_k: F32, qc: U16 | None, cloud: U16 | None, water: U16 | None) -> F32:
@@ -140,14 +142,16 @@ def scene_row(utc: str, phase: Phase, cel: F32, view: F32 | None,
     if view is not None and rural_c is not None and bool((ok & union).any()):
         vu = float(np.nanmean(np.abs(view[ok & union])))
         vr = float(np.nanmean(np.abs(view[rural])))
-        view_delta = round(abs(vu - vr), 2)
+        if math.isfinite(vu) and math.isfinite(vr):
+            view_delta = round(abs(vu - vr), 2)
     return {"utc": utc, "phase": phase, "view_delta": view_delta, "rural_c": rural_c,
             "rural_px": rural_px, "wards": wards}
 
 
 def shared(row: SceneRow, ward_ids: list[str]) -> bool:
     """A scene counts only if it is near-nadir, has a rural reference, and every ward is clear."""
-    if row["rural_c"] is None or row["view_delta"] is None or row["view_delta"] > VIEW_CUT:
+    vd = row["view_delta"]
+    if row["rural_c"] is None or vd is None or not (vd <= VIEW_CUT):
         return False
     for w in ward_ids:
         st = row["wards"].get(w)
@@ -173,8 +177,12 @@ def thermal(rows: list[SceneRow], ward_ids: list[str]) -> dict[str, Thermal]:
     use = [r for r in rows if shared(r, ward_ids)]
     day = [r for r in use if r["phase"] == "day"]
     night = [r for r in use if r["phase"] == "night"]
-    years = sorted({r["utc"][:4] for r in use})
-    vintage = f"{years[0]}-{years[-1]}" if years else ""
+
+    def _vintage(rs: list[SceneRow]) -> str:
+        years = sorted({r["utc"][:4] for r in rs})
+        return f"{years[0]}-{years[-1]}" if years else ""
+
+    day_vintage, night_vintage = _vintage(day), _vintage(night)
     day_ok, night_ok = len(day) >= MIN_SHARED_SCENES, len(night) >= MIN_SHARED_SCENES
     out: dict[str, Thermal] = {}
     for w in ward_ids:
@@ -190,7 +198,8 @@ def thermal(rows: list[SceneRow], ward_ids: list[str]) -> dict[str, Thermal]:
                             if night_ok else None),
             "dayScenes": len(day),
             "nightScenes": len(night),
-            "vintage": vintage,
+            "dayVintage": day_vintage,
+            "nightVintage": night_vintage,
         }
     return out
 
@@ -220,15 +229,16 @@ ECO = "NASA ECOSTRESS L2T LSTE v002, scenes clear in all three wards"
 
 def ward_record(t: Thermal, s: StaticWard, fvc: float, albedo: float) -> DcUrsWard:
     """One ward's twelve indicators, in the TypeScript DcUrsInputs shape."""
-    def lst(v: float | None, cite: str) -> Sourced[float]:
+    def lst(v: float | None, vintage: str, cite: str) -> Sourced[float]:
         if v is None:
             return sourced(0.0, "placeholder", None,
                            f"{cite} -- fewer than {MIN_SHARED_SCENES} shared clear scenes")
-        return sourced(v, "measured", t["vintage"], cite)
+        return sourced(v, "measured", vintage, cite)
     return {
-        "lstDayC": lst(t["lstDayC"], f"{ECO}, median of {t['dayScenes']} day scenes"),
-        "lstNightC": lst(t["lstNightC"], f"{ECO}, median of {t['nightScenes']} night scenes"),
-        "ruralBaseC": lst(t["ruralBaseC"],
+        "lstDayC": lst(t["lstDayC"], t["dayVintage"], f"{ECO}, median of {t['dayScenes']} day scenes"),
+        "lstNightC": lst(t["lstNightC"], t["nightVintage"],
+                         f"{ECO}, median of {t['nightScenes']} night scenes"),
+        "ruralBaseC": lst(t["ruralBaseC"], t["dayVintage"],
                           "EFFECTIVE rural baseline: lstDayC minus the median per-scene difference "
                           "(ward - GHS-SMOD rural 11/12/13), so lstDayC - ruralBaseC is that median"),
         "popDensity": sourced(s["popDensity"], "measured", "2020",
@@ -339,6 +349,12 @@ def _self_test() -> None:
         "out-of-range, QC-flagged and missing pixels are unusable"
     wet = np.array([[1, 0], [0, 0]], dtype=np.uint16)
     assert np.isnan(granule_celsius(lst, None, None, wet)[0, 0]), "water is masked"
+    good_lst = np.array([[300.0]], dtype=np.float32)
+    cloud_flag = np.array([[1]], dtype=np.uint16)
+    assert np.isnan(granule_celsius(good_lst, None, cloud_flag, None)[0, 0]), "cloud=1 is masked"
+    qc_bit1 = np.array([[2]], dtype=np.uint16)          # bit 1 set, bit 0 clear
+    assert np.isnan(granule_celsius(good_lst, qc_bit1, None, None)[0, 0]), \
+        "QC bit 1 (not just bit 0) is masked"
 
     # 2. first finite wins across overlapping granules.
     a = np.array([[1.0, nan]], dtype=np.float32)
@@ -355,12 +371,29 @@ def _self_test() -> None:
     grid[ma] = 35.0
     grid[1, 1] = nan                                   # one of ward a's 4 pixels is cloud
     smod = np.full((10, 10), 11, dtype=np.int16)
-    view = np.full((10, 10), -5.0, dtype=np.float32)
+    smod[5:7, 5:7] = 30                                 # a hot URBAN patch, not a rural class
+    grid[5:7, 5:7] = 45.0
+    view = np.full((10, 10), 2.0, dtype=np.float32)     # rural |view| = 2
+    view[ma | mb] = -5.0                                # ward |view| = 5
     row = scene_row("2024-03-01T05:00:00", "day", grid, view, smod, {"a": ma, "b": mb})
     assert row["wards"]["a"] == {"mean_c": 35.0, "clear": 0.75}, row["wards"]["a"]
     assert row["wards"]["b"] == {"mean_c": 30.0, "clear": 1.0}, row["wards"]["b"]
-    assert row["rural_px"] == 92 and row["rural_c"] == 30.0, "ward pixels are excluded from rural"
-    assert row["view_delta"] == 0.0
+    assert row["rural_px"] == 88 and row["rural_c"] == 30.0, \
+        "the SMOD-30 hot patch must be excluded from the rural class, or rural_c would drift above 30"
+    assert row["view_delta"] == 3.0, "|ward view| 5 minus |rural view| 2"
+
+    # 3b. a NaN view angle over the used footprint must not silently pass np.nanmean.
+    view_allnan_union = np.full((10, 10), -5.0, dtype=np.float32)
+    view_allnan_union[ma | mb] = nan
+    row_bad_view = scene_row("2024-03-02T05:00:00", "day", grid, view_allnan_union, smod, {"a": ma, "b": mb})
+    assert row_bad_view["view_delta"] is None, \
+        "an all-NaN view slice over the wards must not silently pass through nanmean"
+
+    # 3c. fewer than MIN_RURAL_PX rural pixels must refuse a rural reference altogether.
+    smod_sparse = np.full((10, 10), 30, dtype=np.int16)   # urban everywhere...
+    smod_sparse[0:4, 0:4] = 11                            # ...except a 16-pixel rural patch (< 50 after ward)
+    sparse_row = scene_row("2024-03-03T05:00:00", "day", grid, view, smod_sparse, {"a": ma, "b": mb})
+    assert sparse_row["rural_c"] is None, "fewer than 50 rural pixels must not synthesize a reference"
 
     # 4. THE RANKING FLIP (dc-urs-diagnosis.md): unpaired medians rank b hottest,
     #    the shared-scene method ranks a hottest, on the same rows.
@@ -385,7 +418,7 @@ def _self_test() -> None:
     assert t2["suhiiDayC"] == 1.0, f"median of per-scene differences is 1, got {t2['suhiiDayC']}"
     assert t2["lstDayC"] == 34.0 and t2["ruralBaseC"] == 33.0, \
         "effective baseline = lstDayC - median difference, so the engine reproduces 1.0"
-    assert t2["vintage"] == "2025-2025"
+    assert t2["dayVintage"] == "2025-2025"
 
     # 6. the 8-scene gate.
     t3 = thermal(rows2[:7], ids)["a"]
@@ -398,10 +431,37 @@ def _self_test() -> None:
     ok_rows = [_row(r["utc"], "night", {"a": 22.0, "b": 22.0, "c": 22.0}, rural=20.0) for r in night_rows]
     assert night_suhii_refusal(thermal(ok_rows, ids)) is None, "2.0 C at night is plausible"
 
-    # 8. view angle and clear-fraction filters.
+    # 7b. the night heat island is ALSO a median of differences, not a difference of medians:
+    #     the same shape as test 5, at night.
+    wn = [20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 28.0]
+    rn = [19.0, 20.0, 21.0, 22.0, 23.0, 10.0, 11.0, 12.0, 13.0]
+    night_rows2 = [_row(f"2025-03-{i + 1:02d}T18:00:00", "night", {"a": v, "b": v, "c": v}, rural=r)
+                   for i, (v, r) in enumerate(zip(wn, rn))]
+    th_night = thermal(night_rows2, ids)["a"]
+    assert statistics.median(wn) - statistics.median(rn) == 5.0, \
+        "fixture: difference of medians is 5, above the 2.5 C gate"
+    assert th_night["suhiiNightC"] == 1.0, \
+        f"median of per-scene night differences is 1, got {th_night['suhiiNightC']}"
+    assert night_suhii_refusal(thermal(night_rows2, ids)) is None, \
+        "the median of differences (1.0) must not refuse, even though the difference of medians (5.0) would"
+
+    # 7c. the night gate boundary: exactly 2.5 C must not refuse, only strictly above it.
+    th_edge: dict[str, Thermal] = {"a": {
+        "lstDayC": None, "lstNightC": None, "ruralBaseC": None, "suhiiDayC": None,
+        "suhiiNightC": 2.5, "dayScenes": 0, "nightScenes": 8, "dayVintage": "", "nightVintage": "2025-2025",
+    }}
+    assert night_suhii_refusal(th_edge) is None, "exactly 2.5 C at night must not refuse"
+
+    # 8. view angle and clear-fraction filters, including their boundaries and NaN handling.
     assert not shared(_row("x", "day", {"a": 1.0, "b": 1.0, "c": 1.0}, view=0.9), ids), "off-nadir"
     assert not shared(_row("x", "day", {"a": 1.0, "b": 1.0, "c": 1.0}, clear=0.09), ids), "under 10 %"
     assert not shared(_row("x", "day", {"a": 1.0, "b": 1.0, "c": 1.0}, rural=None), ids), "no rural"
+    assert not shared(_row("x", "day", {"a": 1.0, "b": 1.0, "c": 1.0}, view=float("nan")), ids), \
+        "a NaN view_delta must not pass as near-nadir"
+    assert shared(_row("x", "day", {"a": 1.0, "b": 1.0, "c": 1.0}, view=0.75), ids), \
+        "view 0.75 is at the cut, inclusive"
+    assert shared(_row("x", "day", {"a": 1.0, "b": 1.0, "c": 1.0}, clear=0.10), ids), \
+        "clear 0.10 is at the floor, inclusive"
 
     # 9. records: a gated field is a placeholder at 0; socio is always a placeholder.
     static: StaticWard = {"popDensity": 30_000.0, "population": 235_200, "far": 1.2, "storeyM": 3.33,
@@ -412,6 +472,9 @@ def _self_test() -> None:
     assert rec["fvc"]["value"] == 0.4 and rec["albedo"]["value"] == 0.17
     measured = ward_record(t2, static, 0.4, 0.17)
     assert measured["lstDayC"]["source"] == "measured" and measured["lstDayC"]["vintage"] == "2025-2025"
+    assert measured["ruralBaseC"]["value"] == 33.0 and \
+        measured["lstDayC"]["value"] - measured["ruralBaseC"]["value"] == 1.0, \
+        "ward_record must carry the SAME ruralBaseC value thermal() computed, not lstDayC or some other field"
     assert "EFFECTIVE" in str(measured["ruralBaseC"].get("cite", "")), "the baseline construction is disclosed"
 
     # 10. clamp report.
@@ -422,6 +485,40 @@ def _self_test() -> None:
     assert any("lstNightC" in s for s in report), report
     assert any("popDensity" in s for s in report), "30,000/km2 is over the 25,000 ceiling"
     assert sourced(1.0, "measured") == {"value": 1.0, "source": "measured"}, "None keys are omitted"
+
+    # 10b. every clamp branch, built directly so each threshold is hit in isolation.
+    def _ward(day: float | None, rural: float | None, night: float | None,
+              far: float = 1.0, albedo_v: float = 0.2) -> DcUrsWard:
+        def m(v: float | None) -> Sourced[float]:
+            return sourced(0.0, "placeholder") if v is None else sourced(v, "measured", "2025-2025", "test")
+        return {
+            "lstDayC": m(day), "lstNightC": m(night), "ruralBaseC": m(rural),
+            "popDensity": sourced(1_000.0, "measured", "2020", "test"),
+            "far": sourced(far, "measured", "2023-2026", "test"),
+            "socioVuln": sourced(0.0, "placeholder"),
+            "fvc": sourced(0.4, "measured", "2021-2025", "test"),
+            "canopyFrac": sourced(0.0, "placeholder"),
+            "ndviMean": sourced(0.3, "measured", "5 yr", "test"),
+            "ndviStd": sourced(0.02, "measured", "5 yr", "test"),
+            "albedo": sourced(albedo_v, "measured", "2021-2025", "test"),
+            "distCoolM": sourced(150.0, "measured", "2021", "test"),
+        }
+
+    day_ceiling = clamps(_ward(day=45.0, rural=30.0, night=None))
+    assert any("lstDayC" in s and "C ceiling" in s for s in day_ceiling), day_ceiling
+    assert any("heat island at or above the 10.0 C ceiling" in s for s in day_ceiling), day_ceiling
+
+    day_floor = clamps(_ward(day=25.0, rural=30.0, night=None))
+    assert any("day hazard reads 0" in s for s in day_floor), day_floor
+    assert any("UHI term reads 0" in s for s in day_floor), day_floor
+
+    night_ceiling = clamps(_ward(day=None, rural=None, night=35.0))
+    assert any("lstNightC" in s and "C ceiling" in s for s in night_ceiling), night_ceiling
+
+    far_albedo = clamps(_ward(day=None, rural=None, night=None, far=5.0, albedo_v=0.60))
+    assert any(s.startswith("far ") and "ceiling" in s for s in far_albedo), far_albedo
+    assert any(s.startswith("albedo ") and "reference" in s for s in far_albedo), far_albedo
+
     print("  _dcurs_blr self-test OK")
 
 
