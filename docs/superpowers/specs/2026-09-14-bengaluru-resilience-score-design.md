@@ -48,7 +48,7 @@ Standing constraints:
 |---|---|---|
 | `lstDayC`, `lstNightC` | ECOSTRESS L2T LSTE v002, per ward | §2 |
 | `ruralBaseC` | ECOSTRESS over GHS-SMOD rural classes near Bengaluru (CC BY 4.0) | §2 |
-| `popDensity` | GHS-POP R2023A, 100 m (CC BY 4.0): people in the 2.8 km box ÷ 7.84 km² | The covering tile is confirmed in the plan. The Kolkata script is named WorldPop but uses GHS-POP too. |
+| `popDensity` | **WorldPop R2025A constrained, 2025, 100 m (CC BY 4.0)**: people in EXACTLY the 2.8 km box (edge pixels weighted by the fraction inside) ÷ 7.84 km², labelled `modelled` | Amended 2026-09-15 (see "Amendment: population source" below). GHS-POP was the original choice and failed a Census 2011 check. |
 | `far` | The committed ward buildings, with Bengaluru's fitted storey height of 3.33 m (Kolkata: 3.2 m) | Data already in hand |
 | `fvc`, `albedo` | Sentinel-2. Ward means already exist in `public/heat-map/data/surface-meta.json` | The plan first checks they match Kolkata's method (FVC endmembers, 2021–2025 per-year medians); otherwise recompute |
 | `ndviMean`, `ndviStd` | The same Sentinel-2 composites, per ward | New |
@@ -169,6 +169,26 @@ Standing constraints:
 - The AR5 ward-risk redesign (`2026-09-08-ward-risk-score-design.md`).
 - Any water or flood dimension.
 - The "IPCC AR6 framing" tooltip claim, already flagged as inaccurate in the diagnosis.
+
+## Amendment: population source (2026-09-15, measured)
+
+The first `dcurs-static` run gave Whitefield 625 people/km² from GHS-POP, far below the 5,000 sanity floor. Both grids were then checked against Census 2011 across all 198 BBMP wards (PCA totals 8,443,675, joined to the DataMeet 198-ward boundaries). The census is used for this check only and never enters the score.
+
+**GHS-POP R2023A is unfit for Bengaluru, in both epochs.**
+- 64 contiguous south-east wards held 3.01 M people in 2011; GHS-POP E2010 gives them 0.29 M.
+- Its correlation with census ward population, log(pop), is −0.03. That is worse than assuming uniform density.
+- Whitefield comes out at about 0.1× the census and MG Road at about 3×.
+- Unconstrained WorldPop 2011 shows the same artefact.
+
+**Constrained WorldPop R2025A is the only grid that beats the uniform baseline.**
+- Log(pop) correlation 0.595; mean absolute log error 0.64 against 0.88 for uniform density.
+- It is still too flat: about 0.34× the census in wards within 7 km of the centre, and about 1.7× in Mahadevapura.
+
+**Decision (founder, 2026-09-15).**
+- Bengaluru uses constrained WorldPop, 2025, labelled `modelled`.
+- Its flattening bias is recorded in `known-limitations.md`: it probably understates MG Road and Indiranagar.
+
+**Method fix.** The original density sum (copied from Kolkata's `fetch-worldpop.py`) totalled every pixel in the projected envelope of the box but divided by the nominal box area. That inflated density (Indiranagar 20,028 against 16,026 over the exact box). Bengaluru now sums exactly the box. Kolkata's live `popDensity` very likely carries the same inflation. It is recorded, and not changed here, because changing it moves Kolkata's scores.
 
 ## Risks
 

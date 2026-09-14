@@ -55,6 +55,98 @@ In the browser, the only change is that slider gains scale by ward area.
 - **Bengaluru's fitted storey height.** `storeyMetres` = 3.33 in every `data/bangalore/{ward}-buildings.json`.
 - **ECOSTRESS cache.** Kolkata's granules average about 0.7 MB per band. Each Bengaluru acquisition's files are deleted after measurement, so the disk stays bounded. At plan time 15 GB is free, and Kolkata's 1.9 GB cache is kept.
 
+## AMENDMENT A (2026-09-15): the population source changes. This OVERRIDES Tasks 1, 3 and 8 where they differ.
+
+**Why (measured).** Task 3's first run gave Whitefield 625 people per km² from GHS-POP. A Census 2011 check across all 198 BBMP wards then showed:
+- GHS-POP is systematically wrong for Bengaluru, and already so in E2010. Its log(pop) correlation is −0.03, worse than uniform density. It gives Whitefield about 0.1× the census and MG Road about 3×.
+- Constrained WorldPop R2025A is the only grid that beats uniform density: log(pop) correlation 0.595, mean absolute log error 0.64 against 0.88.
+
+The founder chose constrained WorldPop 2025, labelled `modelled`. The spec carries the same amendment.
+
+**A1. Task 1 (`scripts/_dcurs_blr.py`, `ward_record`).** Replace the `popDensity` line with:
+
+```python
+        "popDensity": sourced(s["popDensity"], "modelled", "2025",
+                              "WorldPop R2025A constrained 100 m (CC BY 4.0), people in exactly the "
+                              "2.8 km box / 7.84 km2; biased flat (understates central wards)"),
+```
+
+**A2. Task 3 (`scripts/fetch-bangalore.py`).**
+
+(a) Replace the `GHS_POP_URL` constant with:
+
+```python
+#: Constrained WorldPop, CHOSEN OVER GHS-POP after a Census 2011 check of all 198 BBMP
+#: wards (spec amendment 2026-09-15): GHS-POP misplaced ~2.7 M people in the south-east.
+WORLDPOP_URL = ("https://data.worldpop.org/GIS/Population/Global_2015_2030/R2025A/2025/IND/v1/"
+                "100m/constrained/ind_pop_2025_CN_100m_R2025A_v1.tif")
+```
+
+Keep `GHS_TILE` and `GHS_SMOD_URL`, because Task 4's rural reference still uses GHS-SMOD.
+
+(b) Replace `ghs_pop_density` with these two functions:
+
+```python
+def edge_weights(lo: float, hi: float, start: int, n: int) -> Any:
+    """Fraction of each of n unit pixels, starting at index `start`, that lies inside [lo, hi)."""
+    import numpy as np
+    edges = start + np.arange(n + 1, dtype=np.float64)
+    return np.clip(np.minimum(edges[1:], hi) - np.maximum(edges[:-1], lo), 0.0, 1.0)
+
+
+def worldpop_box_density(w: blr.Ward, tif: str) -> tuple[float, int]:
+    """People per km2 over EXACTLY the ward box.
+
+    WorldPop is on a geographic grid, so the box edges run along pixel rows and
+    columns and each edge pixel is weighted by the fraction of it inside the box.
+    Kolkata's fetch-worldpop.py summed a whole projected ENVELOPE but divided by the
+    box area, which inflates density (Indiranagar 20,028 vs 16,026 on GHS-POP).
+    """
+    import numpy as np
+    import rasterio
+    from rasterio.windows import Window
+    west, south, east, north = blr.bounds(w)
+    with rasterio.open(tif) as src:
+        t = src.transform
+        c0f, c1f = (west - t.c) / t.a, (east - t.c) / t.a
+        r0f, r1f = (north - t.f) / t.e, (south - t.f) / t.e
+        c0, c1 = int(np.floor(c0f)), int(np.ceil(c1f))
+        r0, r1 = int(np.floor(r0f)), int(np.ceil(r1f))
+        arr = src.read(1, window=Window(c0, r0, c1 - c0, r1 - r0),
+                       boundless=True, fill_value=0).astype("float64")
+        nodata = src.nodata
+    if nodata is not None:
+        arr = np.where(arr == nodata, 0.0, arr)
+    arr = np.where(np.isfinite(arr) & (arr > 0), arr, 0.0)
+    weight = np.outer(edge_weights(r0f, r1f, r0, r1 - r0), edge_weights(c0f, c1f, c0, c1 - c0))
+    total = float((arr * weight).sum())
+    return round(total / (w.size_m / 1000.0) ** 2, 1), round(total)
+```
+
+(c) In `build_dcurs_static`:
+- Replace the `pop_tif = tif_from_zip(cached_download(GHS_POP_URL, …))` statement with `pop_tif = cached_download(WORLDPOP_URL, os.path.join(GEO_CACHE, "worldpop", os.path.basename(WORLDPOP_URL)))`.
+- Replace `ghs_pop_density(w, pop_tif)` with `worldpop_box_density(w, pop_tif)`.
+- Replace `"ghsPop": GHS_POP_URL,` with `"ghsPop": WORLDPOP_URL,`. The `StaticFile` key name stays, to avoid a type change; its value now names WorldPop.
+
+(d) Add these assertions to `_self_test()`, before its final `print`:
+
+```python
+    ew = edge_weights(0.5, 2.25, 0, 3)
+    assert [round(float(x), 6) for x in ew] == [0.5, 1.0, 0.25], \
+        f"edge pixels are weighted by the fraction inside the box, got {list(ew)}"
+    assert float(edge_weights(0.0, 3.0, 0, 3).sum()) == 3.0, "a box on pixel edges counts whole pixels"
+```
+
+Mutation proof: make `edge_weights` return all ones. The first assertion must fail.
+
+(e) **New sanity range** for population density: 3,000 to 40,000 people per km². The census box estimates are 4,010 to 16,671, and WorldPop's 2015 box values are 8,083 to 9,399.
+
+(f) The WorldPop raster is about 740 MB, downloads slowly, and the server ignores range requests. The **controller** pre-downloads it to `~/.cache/delta-climate/worldpop/ind_pop_2025_CN_100m_R2025A_v1.tif`. The implementer must confirm that file exists, and that no `.part` file is present, before re-running the layer.
+
+**A3. Task 8 (docs).**
+- In `known-limitations.md` §14, add a paragraph "Population density is modelled, and the obvious grid was wrong". It carries the Census 2011 comparison figures above, WorldPop's flattening bias, and the Kolkata envelope-inflation note (recorded, not fixed).
+- In `data-sources.md`, replace the GHS-POP row with WorldPop R2025A constrained 2025 (CC BY 4.0), and list GHS-POP under *ruled out*, with the Census evidence.
+
 ## Working rules for every task
 
 - **Git.**
