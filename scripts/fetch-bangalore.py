@@ -42,7 +42,7 @@ import statistics
 import subprocess
 import sys
 import zipfile
-from typing import Any, Callable, cast
+from typing import Any, Callable, Literal, cast
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _bangalore as blr                            # noqa: E402  (path set above)
@@ -1483,15 +1483,62 @@ def dcurs_mask_report(tf: Any, width: int, height: int, crs: str,
     return masks
 
 
+def group_by_orbit(acqs: list[tuple[str, list[dict[str, Any]]]]
+                   ) -> list[tuple[str, list[dict[str, Any]]]]:
+    """Merge acquisitions that `cmr_search` split, but that are one orbital pass.
+
+    `cmr_search` groups granules by their exact `BeginningDateTime`, but
+    ECOSTRESS captures an orbit as a sequence of scenes a few seconds apart, and
+    RURAL_BBOX (0.8 deg) is wide enough that one pass over it can cross a scene
+    boundary -- surfacing as two or more separate "acquisitions" at slightly
+    different timestamps, which would otherwise count as extra, weaker rows
+    instead of the one wide-coverage row they actually are.
+
+    Regrouped by ORBIT instead: a granule's GranuleUR carries it as the 4th
+    underscore-separated field, e.g.
+    `ECOv002_L2T_LSTE_31137_030_45QXE_20240102T162318_0711_01` -> `31137`
+    (index 3). Each orbit's group is keyed by the EARLIEST of its timestamps,
+    and granules are de-duplicated by GranuleUR -- the same granule can appear
+    twice if a network retry re-lists a page. Returned newest first, like
+    `cmr_search` itself.
+    """
+    by_orbit: dict[str, tuple[str, dict[str, dict[str, Any]]]] = {}
+    for utc, grans in acqs:
+        for g in grans:
+            ur = str(g["GranuleUR"])
+            orbit = ur.split("_")[3]
+            prev_utc, prev_grans = by_orbit.get(orbit, (utc, {}))
+            by_orbit[orbit] = (min(prev_utc, utc), prev_grans)
+            by_orbit[orbit][1][ur] = g
+    out = [(utc, list(grans.values())) for utc, grans in by_orbit.values()]
+    out.sort(key=lambda t: t[0], reverse=True)
+    return out
+
+
+#: The three ECOSTRESS band results a granule can yield. ABSENT means
+#: `band_url` found no such band for this granule -- a normal fact, e.g. an
+#: older granule with no water mask. FAILED means the band's URL existed but
+#: the download stalled or was truncated, or the file would not warp -- a
+#: TRANSIENT problem that must not be recorded as if the band were absent.
+BandStatus = Literal["ok", "absent", "failed"]
+
+
 def run_dcurs_lst(wards: list[blr.Ward]) -> None:
     """--layer dcurs-lst: one row per ECOSTRESS acquisition, all wards and the rural reference.
 
-    RESUMABLE: rows are saved every 10 acquisitions and on exit, and a re-run skips
-    what is recorded. DISK-BOUNDED: each acquisition's newly downloaded bands are
-    deleted once measured, so the cache never holds more than one scene.
+    RESUMABLE: rows are saved every 10 acquisitions PROCESSED and on any exit
+    (including an error), and a re-run skips what is recorded. DISK-BOUNDED:
+    each acquisition's newly downloaded bands are deleted once measured, so the
+    cache never holds more than one scene.
+
+    DO NOT RUN A KOLKATA ECOSTRESS SCRIPT CONCURRENTLY WITH THIS LAYER. They
+    share `eco.CACHE`, and this layer deletes every file that appears there
+    during one acquisition's processing -- including a Kolkata download that
+    happens to land mid-window.
     """
     import datetime as dt
     import numpy as np
+    import rasterio.errors
     import _dcurs_blr as dc
     import _ecostress as eco
 
@@ -1516,61 +1563,135 @@ def run_dcurs_lst(wards: list[blr.Ward]) -> None:
 
     smod = eco.align(smod_tif, -200, "int16", bbox=RURAL_BBOX)
 
-    def band(g: dict[str, Any], suffix: str, nodata: float, dtype: str) -> Any:
-        p = eco.fetch(eco.band_url(g, suffix), tok)
-        return eco.align(p, nodata, dtype, bbox=RURAL_BBOX) if p else None
-
     def save() -> None:
-        with open(dc.LST_PATH, "w", encoding="utf-8") as fh:
+        # I1: write through a .part file and rename, so a crash mid-write can
+        # never leave a truncated JSON that the next run cannot parse.
+        part = dc.LST_PATH + ".part"
+        with open(part, "w", encoding="utf-8") as fh:
             json.dump(doc, fh, separators=(",", ":"))
+        os.replace(part, dc.LST_PATH)
+
+    def band(g: dict[str, Any], suffix: str, nodata: float, dtype: str,
+             before: set[str]) -> tuple[BandStatus, Any]:
+        """Fetch and align one band, telling ABSENT apart from FAILED (see BandStatus).
+
+        `eco.fetch` can raise `subprocess.TimeoutExpired` on a stalled curl and
+        leave a partial file bigger than `MIN_TIF_BYTES` sitting at exactly the
+        path it would have returned -- `eco.align` then raises on that file
+        every time, forever, on every future run. The header check catches the
+        same failure when curl exits 0 on a truncated body. Either way this is
+        a FAILURE, and the leftover file is removed -- but only if this
+        acquisition created it (`before` holds what was already in the cache).
+        """
+        url = eco.band_url(g, suffix)
+        if url is None:
+            return "absent", None
+        path = os.path.join(eco.CACHE, url.rsplit("/", 1)[-1])
+        ok = False
+        arr: Any = None
+        try:
+            p = eco.fetch(url, tok)
+            if p is not None:
+                with open(p, "rb") as fh:
+                    head = fh.read(4)
+                if looks_like_raster_or_zip(head):
+                    arr = eco.align(p, nodata, dtype, bbox=RURAL_BBOX)
+                    ok = True
+        except (subprocess.TimeoutExpired, rasterio.errors.RasterioError, OSError):
+            ok = False
+        if not ok:
+            if os.path.exists(path) and os.path.basename(path) not in before:
+                os.remove(path)
+            return "failed", None
+        return "ok", arr
+
+    #: (suffix, nodata, dtype) for the three masks a granule's LST needs. A
+    #: granule missing any one of them cannot be trusted unmasked, so it is
+    #: dropped whole rather than merged in with a silently disabled filter.
+    mask_bands = (("_QC.tif", 0xFFFF, "uint16"), ("_cloud.tif", 255, "uint16"),
+                  ("_water.tif", 0, "uint16"))
+
+    def process(grans: list[dict[str, Any]], before: set[str]) -> tuple[str, Any, Any]:
+        """One acquisition's granules -> ("complete" | "incomplete", cel, view).
+
+        A FAILED band anywhere makes the whole acquisition "incomplete": the
+        caller records nothing and retries it on the next run. An ABSENT LST
+        band means that granule has no data and is skipped. An ABSENT mask
+        band means that granule's LST cannot be used unmasked, so the whole
+        granule is dropped -- not silently merged in unmasked.
+        """
+        cel: Any = None
+        view: Any = None
+        for g in grans:
+            lst_status, lst_k = band(g, "_LST.tif", np.nan, "float32", before)
+            if lst_status == "failed":
+                return "incomplete", None, None
+            if lst_status == "absent":
+                continue
+            mask_arrays: dict[str, Any] = {}
+            drop_granule = False
+            for suffix, nodata, dtype in mask_bands:
+                st, arr = band(g, suffix, nodata, dtype, before)
+                if st == "failed":
+                    return "incomplete", None, None
+                if st == "absent":
+                    drop_granule = True
+                    break
+                mask_arrays[suffix] = arr
+            if drop_granule:
+                continue
+            c = dc.granule_celsius(lst_k, mask_arrays["_QC.tif"],
+                                   mask_arrays["_cloud.tif"], mask_arrays["_water.tif"])
+            cel = dc.first_finite(cel, c)
+            v_status, v = band(g, "_view_zenith.tif", np.nan, "float32", before)
+            if v_status == "failed":
+                return "incomplete", None, None
+            if v_status == "ok":
+                view = dc.first_finite(view, v)
+        return "complete", cel, view
 
     no_lst_in_a_row = 0
+    processed = 0                          # I3: saves are counted on this, not on the CMR list index
     end = dt.date.today().isoformat()
     for phase in ("day", "night"):
-        acqs = eco.cmr_search(phase, ECOSTRESS_START, None, end, bbox=RURAL_BBOX)
-        print(f"  {phase}: {len(acqs)} acquisitions since {ECOSTRESS_START}", flush=True)
-        for n, (utc, grans) in enumerate(acqs, 1):
-            key = f"{phase} {utc}"
-            if key in done:
-                continue
-            before: set[str] = set(os.listdir(eco.CACHE)) if os.path.isdir(eco.CACHE) else set()
-            cel: Any = None
-            view: Any = None
-            got_lst = False
-            for g in grans:
-                lst_k = band(g, "_LST.tif", np.nan, "float32")
-                if lst_k is None:
+        try:
+            acqs = group_by_orbit(eco.cmr_search(phase, ECOSTRESS_START, None, end, bbox=RURAL_BBOX))
+            print(f"  {phase}: {len(acqs)} acquisitions since {ECOSTRESS_START}", flush=True)
+            for idx, (utc, grans) in enumerate(acqs, 1):
+                key = f"{phase} {utc}"
+                if key in done:
                     continue
-                got_lst = True
-                c = dc.granule_celsius(lst_k, band(g, "_QC.tif", 0xFFFF, "uint16"),
-                                       band(g, "_cloud.tif", 255, "uint16"),
-                                       band(g, "_water.tif", 0, "uint16"))
-                cel = dc.first_finite(cel, c)
-                v = band(g, "_view_zenith.tif", np.nan, "float32")
-                if v is not None:
-                    view = dc.first_finite(view, v)
-            if os.path.isdir(eco.CACHE):       # measured, then dropped: the disk never holds more than one scene
-                for f in set(os.listdir(eco.CACHE)) - before:
-                    os.remove(os.path.join(eco.CACHE, f))
-            if not got_lst:
-                no_lst_in_a_row += 1
-                if no_lst_in_a_row >= 5:
+                before: set[str] = set(os.listdir(eco.CACHE)) if os.path.isdir(eco.CACHE) else set()
+                try:
+                    status, cel, view = process(grans, before)
+                finally:
+                    # measured, then dropped: the disk never holds more than one scene
+                    if os.path.isdir(eco.CACHE):
+                        for f in set(os.listdir(eco.CACHE)) - before:
+                            os.remove(os.path.join(eco.CACHE, f))
+                processed += 1
+                if status == "incomplete":
+                    no_lst_in_a_row += 1
+                    if no_lst_in_a_row >= 5:
+                        raise SystemExit(
+                            "5 acquisitions in a row could not be downloaded completely "
+                            f"(expired Earthdata token at {eco.TOKEN_PATH}, or server "
+                            "throttling); progress is saved, fix and re-run")
+                    continue
+                no_lst_in_a_row = 0
+                if cel is None or not bool(np.isfinite(cel).any()):
+                    doc["skipped"].append(key)
+                else:
+                    doc["rows"].append(dc.scene_row(utc, phase, cel, view, smod, masks))
+                done.add(key)
+                if processed % 10 == 0:
                     save()
-                    raise SystemExit(
-                        "5 acquisitions in a row downloaded no LST band -- the Earthdata token at "
-                        f"{eco.TOKEN_PATH} has probably expired; renew it at urs.earthdata.nasa.gov "
-                        "and re-run (progress is saved)")
-                continue
-            no_lst_in_a_row = 0
-            if not bool(np.isfinite(cel).any()):
-                doc["skipped"].append(key)
-            else:
-                doc["rows"].append(dc.scene_row(utc, phase, cel, view, smod, masks))
-            done.add(key)
-            if n % 10 == 0:
-                save()
-                print(f"    {phase} {n}/{len(acqs)} · {len(doc['rows'])} rows", flush=True)
-    save()
+                    print(f"    {phase} {idx}/{len(acqs)} · {processed} processed · "
+                          f"{len(doc['rows'])} rows", flush=True)
+        finally:
+            # C1: any exception -- including a CMR RuntimeError or the SystemExit
+            # above -- persists progress before it propagates.
+            save()
     th = dc.thermal(doc["rows"], [w.id for w in wards])
     first = next(iter(th.values()))
     print(f"  shared clear scenes: {first['dayScenes']} day, {first['nightScenes']} night "
@@ -1698,6 +1819,34 @@ def _self_test() -> None:
     expect_off[1:16, 0:4] = True
     assert bool((m_off == expect_off).all()), \
         "an off-grid box must be CLAMPED to the grid edge, not wrapped around it"
+
+    # group_by_orbit: two scenes of the SAME orbit (field [3] of GranuleUR) must
+    # merge into one group keyed by the EARLIEST timestamp, with both granules
+    # kept; a different orbit must stay its own group; a repeated GranuleUR
+    # (e.g. a re-listed CMR page) must not be double-counted.
+    def _gran(ur: str) -> dict[str, Any]:
+        return {"GranuleUR": ur}
+
+    acqs_orbit = [
+        ("2024-01-02T16:25:18", [_gran("ECOv002_L2T_LSTE_31137_031_45QXE_20240102T162518_0711_01")]),
+        ("2024-01-02T16:23:18", [_gran("ECOv002_L2T_LSTE_31137_030_45QXE_20240102T162318_0711_01")]),
+        ("2024-01-02T15:10:00", [_gran("ECOv002_L2T_LSTE_31140_012_45QXE_20240102T151000_0711_01")]),
+    ]
+    grouped = group_by_orbit(acqs_orbit)
+    by_utc = dict(grouped)
+    assert len(grouped) == 2, f"one orbit split into two scenes must merge: got {grouped}"
+    assert len(by_utc["2024-01-02T16:23:18"]) == 2, \
+        "both same-orbit scenes must land in one group"
+    assert "2024-01-02T16:25:18" not in by_utc, \
+        "the merged group must be keyed by the EARLIEST scene, not the later one"
+    assert len(by_utc["2024-01-02T15:10:00"]) == 1, "a different orbit must stay its own group"
+    assert [utc for utc, _ in grouped] == sorted(by_utc, reverse=True), \
+        "groups must come back newest first, like cmr_search"
+
+    dup = [("2024-02-01T00:00:00",
+           [_gran("ECOv002_L2T_LSTE_99999_001_45QXE_20240201T000000_0711_01"),
+            _gran("ECOv002_L2T_LSTE_99999_001_45QXE_20240201T000000_0711_01")])]
+    assert len(group_by_orbit(dup)[0][1]) == 1, "a repeated GranuleUR must not be double-counted"
 
     print("  fetch-bangalore self-test OK")
 
