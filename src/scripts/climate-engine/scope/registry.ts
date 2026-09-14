@@ -41,7 +41,12 @@
  * the registry has to exist and be proven correct before anything is pointed at it.
  */
 
-import { WARDS } from '../../../data/wards.ts';
+/* THE PUBLISHED TABLE. An earlier attempt pointed this at RENDERABLE_WARDS so
+   Bengaluru could claim shipsData — that bent the gate to fit the mistake. The
+   invariant is right: an area that SHIPS DATA must be in the published ward
+   table, because shipsData is what puts it in the sitemap and the catalogue. */
+import { WARDS as WARD_TABLE } from '../../../data/wards.ts';
+import type { AirNormals } from '../types.ts';
 
 /**
  * Path segments under `/heat-map/` that are already taken.
@@ -138,17 +143,71 @@ export const REGISTRY = {
            this comment: Intl ACCEPTS '+05:30' and resolves it happily, so "does
            Intl take it" is not the test — the shape is. */
         tz: 'Asia/Kolkata',
-        /** used only when the live met feed is down */
-        fallbackTairC: 32,
-        /** cooling-blob radius, metres — Kolkata's measured tree-void-effect scale */
+        /** Monthly normals for the fallback air temperature — used only without a live reading. */
+        airNormals: {
+          station: 'IMD Kolkata (Alipore) 42807',
+          period: '1991–2020',
+          source: 'IMD, Climatological Tables of Observatories in India 1991–2020 (National Data Centre, Pune), p. 209',
+          measured: true,
+          maxC: [25.5, 29.4, 33.7, 35.4, 35.5, 34.1, 32.5, 32.3, 32.6, 32.3, 30.2, 26.7],
+          minC: [14.3, 18.1, 22.9, 25.7, 26.8, 27.1, 26.7, 26.6, 26.3, 24.4, 20.1, 15.5],
+        },
+        /** pocket-park disc radius, metres — a DESIGN DEFAULT (~0.8 ha), not a measurement; see docs/evidence/park-size-tvoe-preregistration.md */
         parkRadiusM: 50,
         /** basenames under public/heat-map/data/ — artefacts, not geography */
         data: { heatwave: 'heatwave-percentiles', dcUrs: 'dc-urs-inputs' },
         /* Names, zones and coordinates deliberately absent: see the header. */
         areas: {
-          ballygunge: { shipsData: true },
-          baruipur: { shipsData: true },
-          barrackpore: { shipsData: true },
+          ballygunge: { shipsData: true, drawable: true },
+          baruipur: { shipsData: true, drawable: true },
+          barrackpore: { shipsData: true, drawable: true },
+        },
+      },
+      /* BENGALURU DRAWS BUT DOES NOT PUBLISH, and `tier` is where that is said
+         out loud. It ships the instrument's artefacts — geometry, roads, water,
+         trees, a measured Sentinel-2 surface raster and an authored glTF city —
+         and none of the catalogue's: no provenance record, no STAC item, no
+         3D Tiles tileset. `src/data/wards.ts` holds the same split as
+         PUBLISHED vs RENDERABLE, measured rather than assumed.
+
+         ONE NUMBER HERE IS BORROWED, AND IT IS NOT A MEASUREMENT ANYWHERE.
+         `airNormals` is Bengaluru's own: IMD Bengaluru City 1991–2020, which put
+         the old inherited 32 °C fallback up to 16 °C too hot at night.
+         `parkRadiusM` (50 m) is the pocket-park disc, shared with Kolkata, and it
+         is a DESIGN DEFAULT: the "efficient park size" it was once justified by
+         is a unit-dependent regression slope, not an area, and could not be
+         reproduced from open data. See docs/evidence/park-size-tvoe-preregistration.md. */
+      bengaluru: {
+        koppen: 'Aw',
+        tier: 'geometry',
+        tz: 'Asia/Kolkata',
+        airNormals: {
+          station: 'IMD Bengaluru City 43295',
+          period: '1991–2020',
+          source: 'IMD, Climatological Tables of Observatories in India 1991–2020 (National Data Centre, Pune), pp. 133–138',
+          measured: true,
+          maxC: [28.4, 30.9, 33.4, 34.1, 33.1, 29.7, 28.3, 28.1, 28.6, 28.5, 27.4, 26.9],
+          minC: [16.1, 17.6, 20.2, 22.1, 21.8, 20.6, 20.1, 20.0, 20.0, 19.8, 18.3, 16.4],
+        },
+        parkRadiusM: 50,
+        data: { heatwave: null, dcUrs: null },
+        /* shipsData is FALSE, and that is the honest value rather than a
+           placeholder. It is the CATALOGUE's promise — `paths()` returns a URL
+           for every one of eleven artefacts, obos-scope asserts each exists on
+           disk, and the sitemap advertises the page. Setting it true emitted
+           https://deltaclimate.earth/heat-map/in/bengaluru/indiranagar/ into the
+           live sitemap for a page whose pv, terrain and layer artefacts do not
+           exist — the catalogue advertising data that is not there, which is the
+           precise failure src/data/wards.ts records at length.
+
+           Bengaluru DRAWS: RENDERABLE_WARDS carries it, the instrument fetches
+           {ward}.json, -roads, -trees, -water, -surface.png and the glTF, and
+           check-bangalore-artefacts.py asserts all six. Registered and nameable
+           here; published when its provenance, layers and tileset exist. */
+        areas: {
+          indiranagar: { shipsData: false, drawable: true },
+          'mg-road': { shipsData: false, drawable: true },
+          whitefield: { shipsData: false, drawable: true },
         },
       },
     },
@@ -170,16 +229,25 @@ export const REGISTRY = {
            number rather than as a string comparison that only proves the literal
            was copied. */
         tz: 'Asia/Dubai',
-        fallbackTairC: 40,
+        /* NOT MEASURED. A flat 40 °C carried from the old scalar so the type holds;
+           `measured: false` is what stops it reading as a Gulf climatology. */
+        airNormals: {
+          station: 'none — placeholder',
+          period: 'none',
+          source: 'unsourced placeholder, carried from the previous fallbackTairC',
+          measured: false,
+          maxC: [40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40],
+          minC: [40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40],
+        },
         parkRadiusM: 50,
         data: { heatwave: null, dcUrs: null },
         /* These three are NOT in src/data/wards.ts, which is why they carry a
            display name here: they are our own tiling of the city, not municipal
            units, and the descriptor says so rather than implying a ward. */
         areas: {
-          creek: { shipsData: false, name: 'Dubai Creek', descriptor: 'area · our tiling' },
-          'al-quoz': { shipsData: false, name: 'Al Quoz', descriptor: 'area · our tiling' },
-          south: { shipsData: false, name: 'Dubai South', descriptor: 'area · our tiling' },
+          creek: { shipsData: false, drawable: false, name: 'Dubai Creek', descriptor: 'area · our tiling' },
+          'al-quoz': { shipsData: false, drawable: false, name: 'Al Quoz', descriptor: 'area · our tiling' },
+          south: { shipsData: false, drawable: false, name: 'Dubai South', descriptor: 'area · our tiling' },
         },
       },
     },
@@ -219,8 +287,8 @@ export type AreaKey = {
  * `as const satisfies Record<string, CountryEntry>`, and that clause is what makes
  * an incomplete entry fail HERE.
  *
- * Without it a city omitting `fallbackTairC` compiled clean and passed all eight
- * runtime guards — the guards walk the tree and not one of them reads that field,
+ * Without it a city omitting a required field (`fallbackTairC` then, `airNormals`
+ * now) compiled clean and passed all eight runtime guards — the guards walk the tree and not one of them reads that field,
  * so the omission surfaced only at the first generic consumer, tasks away, as a
  * type error naming the wrong file.
  *
@@ -241,7 +309,36 @@ interface CountryCosts {
   readonly facadeM2: number;
 }
 interface AreaEntry {
+  /**
+   * THE CATALOGUE'S PROMISE. True means every one of `paths()`'s eleven URLs is
+   * on disk, the area has a provenance record, a STAC item, a 3D Tiles tileset
+   * and a pv artefact, it appears in the sitemap, and it has a row in `WARDS`.
+   * Setting it true for an area that merely DRAWS put
+   * https://deltaclimate.earth/heat-map/in/bengaluru/indiranagar/ into the live
+   * sitemap for a page whose pv, terrain and layer files do not exist.
+   */
   readonly shipsData: boolean;
+  /**
+   * CAN THE INSTRUMENT OPEN IT. A separate question, and Bengaluru is why.
+   *
+   * It ships the six the map needs — {area}.json, -roads, -trees, -water,
+   * -surface.png and an authored glTF — and none of the five the catalogue
+   * needs. One flag could not say that: true advertised files that are absent,
+   * false returned `null` from `paths()` so the city drew nothing at all. Both
+   * are wrong, in opposite directions.
+   *
+   * `src/data/wards.ts` already draws this line as WARDS vs RENDERABLE_WARDS,
+   * and it was MEASURED: publishing Bengaluru aborts the build on ENOENT and
+   * fails 27 tests. This is the same split, one layer up.
+   *
+   * STATED ON EVERY AREA, not optional. `paths.ts` and `resolve.ts` derive this
+   * type structurally — `ValuesOf<CityEntry['areas']>` — because this interface
+   * is private, so a key present on only one city is absent from the derived
+   * union and reading it is a compile error. Spelling it everywhere is also the
+   * honest shape: a published area necessarily draws, and Dubai's false is a
+   * fact about Dubai rather than an omission.
+   */
+  readonly drawable: boolean;
   /** present ONLY for areas absent from src/data/wards.ts — see the header */
   readonly name?: string;
   readonly descriptor?: string;
@@ -252,7 +349,7 @@ interface CityEntry {
   readonly tier: Tier;
   /** IANA zone name — `Region/Zone`, never an offset. See check 9. */
   readonly tz: string;
-  readonly fallbackTairC: number;
+  readonly airNormals: AirNormals;
   readonly parkRadiusM: number;
   readonly data: { readonly heatwave: string | null; readonly dcUrs: string | null };
   readonly areas: Readonly<Record<string, AreaEntry>>;
@@ -382,6 +479,25 @@ export function nextDistinctArea(key: AreaKey): AreaKey | null {
 }
 
 /** Every area id that ships data, anywhere in the registry — not just Kolkata's. */
+export function drawableAreaIds(): readonly string[] {
+  const ids: string[] = [];
+  for (const entry of Object.values(COUNTRIES)) {
+    for (const cityEntry of Object.values(entry.cities)) {
+      for (const [areaId, areaEntry] of Object.entries(cityEntry.areas)) {
+        if (areaEntry.drawable) ids.push(areaId);
+      }
+    }
+  }
+  return ids;
+}
+
+/** Is this area one the INSTRUMENT can open? Falls back to the catalogue flag. */
+export function isDrawable(country: string, city: string, area: string): boolean {
+  const entry = COUNTRIES[country]?.cities[city]?.areas[area];
+  if (entry === undefined) return false;
+  return entry.drawable;
+}
+
 export function shippingAreaIds(): readonly string[] {
   const ids: string[] = [];
   for (const entry of Object.values(COUNTRIES)) {
@@ -503,7 +619,7 @@ export function assertRegistryLogic(): void {
      registry references it. Read against it rather than trusted, because the
      defect being prevented is precisely the one that leaves both files internally
      consistent and quietly about different ground. */
-  const tableIds = WARDS.map((w) => w.id);
+  const tableIds = WARD_TABLE.map((w) => w.id);
   /* Walks the tree rather than the keys. Going back through a key would make this
      check depend on check 2 having already passed, and a check that only works on
      a healthy registry is no use on a broken one — see the note above AREA_PARTS. */

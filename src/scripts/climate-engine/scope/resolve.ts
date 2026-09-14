@@ -7,8 +7,8 @@
  *
  *   PATH_DELTA     all-India warming deltas — a COUNTRY's adopted projection
  *   COST           four figures denominated in RUPEES — a COUNTRY's currency
- *   PARK_R_M       50 m, measured as Kolkata's tree-void-effect scale — a CITY's
- *   FALLBACK_TAIR  32 °C, a Kolkata climatology — a CITY's
+ *   PARK_R_M       50 m, a pocket-park design default — a CITY's
+ *   FALLBACK_TAIR  32 °C, a Kolkata climatology — a CITY's (now `airNormals`: IMD monthly normals)
  *
  * Held there, a second city could not be added without being wrong. Dubai's
  * fallback air temperature is nearer 40 °C, no Gulf warming pathway has been
@@ -31,7 +31,12 @@
  * not geography and has nowhere else to be.
  */
 import { REGISTRY, splitKey, AREA_KEYS, type AreaKey } from './registry.ts';
-import { wardById } from '../../../data/wards.ts';
+/* THE RENDERABLE TABLE, not the published one. `label()` answers "what is this
+   area called" for every area the instrument can open; `wardById` searches the
+   CATALOGUE list and would throw here for a city that draws but does not yet
+   publish. Both lists live in src/data/wards.ts, so check 7's "described there,
+   not here" still holds. */
+import { renderableWardById as wardById } from '../../../data/wards.ts';
 import type { ClimateConstants, Costs } from '../types.ts';
 
 /* Re-exported so a consumer needs ONE import to take a scope apart. They are
@@ -185,8 +190,24 @@ export interface ResolvedScope {
     readonly name: string;
     /** what KIND of unit this is — a ward, or a tile of our own drawing */
     readonly descriptor: string;
-    /** whether artefacts ship for it; `scope/paths.ts` is the authority on which */
+    /**
+     * Whether the INSTRUMENT can open it — `scope/paths.ts` is the authority,
+     * and since the `drawable` split that is the question 16 of this flag's 19
+     * consumers actually ask: render the tool or the placeholder, enable a tab,
+     * switch in place or navigate.
+     */
     readonly hasData: boolean;
+    /**
+     * Whether the CATALOGUE publishes it — a different question, and Bengaluru
+     * is why it had to be separated.
+     *
+     * It draws (six artefacts on disk) and publishes nothing (no provenance, no
+     * STAC item, no tileset, no pv). Driving indexability off `hasData` put
+     * https://deltaclimate.earth/heat-map/in/bengaluru/indiranagar/ into the live
+     * sitemap for a page with no catalogue record behind it. A page can be worth
+     * opening without being worth advertising.
+     */
+    readonly publishes: boolean;
   };
   readonly tier: CityTier;
   readonly climate: ClimateConstants;
@@ -341,14 +362,18 @@ function build(key: AreaKey): ResolvedScope {
     city: Object.freeze({
       id: cityId, name: titleCase(cityId), koppen: cityEntry.koppen, tz: cityEntry.tz,
     }),
-    area: Object.freeze({ id: areaId, name, descriptor, hasData: areaEntry.shipsData }),
+    /* `hasData` decides whether the page renders the INSTRUMENT or the
+       ships-nothing placeholder, so it follows `drawable`. */
+    area: Object.freeze({ id: areaId, name, descriptor,
+      hasData: areaEntry.drawable,
+      publishes: areaEntry.shipsData }),
     /* Assigning the registry's literal tier into `CityTier` is the drift guard:
        widen the registry's own tier union past this one and it stops compiling. */
     tier: cityEntry.tier,
     pathway: warming.control,
     climate: Object.freeze({
       pathDelta: warming.pathDelta,
-      fallbackTairC: cityEntry.fallbackTairC,
+      airNormals: cityEntry.airNormals,
       parkRadiusM: cityEntry.parkRadiusM,
       /* Kept as declared, INCLUDING the null. Substituting a zero-valued Costs for
          a country that has adopted none would put a budget of nothing on screen —

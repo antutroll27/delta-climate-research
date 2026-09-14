@@ -57,7 +57,14 @@ if HERE not in sys.path:
 
 import _types  # noqa: E402
 from _ecostress import align  # noqa: E402
-from _sentinel import NDVI_BARE, NDVI_VEG, scene_arrays, search  # noqa: E402
+from _sentinel import NDVI_BARE, NDVI_VEG, scene_arrays, search, uniform_grid  # noqa: E402
+
+#: These windows are compared against the Kolkata ward composites, so they must
+#: be the size of one. DERIVED from the ward table rather than typed in as 1400:
+#: `scene_arrays` no longer has a default footprint, and the number it is given
+#: has to be the same one the composite used or the comparison is between two
+#: different areas of ground.
+WINDOW_M = uniform_grid(_types.WARDS.values()) * 10
 
 ROOT = os.path.join(HERE, "..")
 OUT = os.path.join(ROOT, "data", "calibration", "mask-fvc.json")
@@ -101,11 +108,11 @@ def mask_centres(codes: set[int], n: int, rng: np.random.Generator
 
 
 def window_fvc(lat: float, lon: float, years: list[int]) -> float | None:
-    """Median FVC of one 1400 m window, identical arithmetic to the ward composite."""
+    """Median FVC of one ward-sized window, identical arithmetic to the ward composite."""
     ndvis: list[npt.NDArray[np.float32]] = []
     for y in years:
-        for feat in search(lat, lon, y):
-            got = scene_arrays(feat, lat, lon)
+        for feat in search(lat, lon, y, WINDOW_M):
+            got = scene_arrays(feat, lat, lon, WINDOW_M)
             if got is not None:
                 ndvis.append(got[0])
     if len(ndvis) < 2:

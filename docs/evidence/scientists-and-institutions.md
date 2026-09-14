@@ -48,6 +48,8 @@ are given only where the docs state them; otherwise **not stated in docs**.
 | **Cai et al.** | Not in docs | ICESat-2 building-height method with land-cover/FABDEM/relief guards (2024) | Ground-line guard design; independently converges on the same 10 m relief threshold this project measured |
 | **Wu, Huang & Zhao; Hu et al.; Dandabathula et al.; Wu, Z. (TU Delft MSc); Liu et al.; Lao et al.; Kaya; Goud & Bhardwaj; Watson & Elliott** | Not in docs | Comparative ICESat-2 roof-estimator + photon-count literature | Context for this project's p75 estimator, roof-band floor, and `MIN_ROOF_PH` — none changed the shipped method |
 | **Singh et al.** | Not in docs | INSAT-3D/3DR split-window LST retrieval (2016) | Proposed geostationary transfer-standard for the ECOSTRESS↔Landsat offset |
+| **Kamath, Niyogi et al.** | University of Texas at Austin | UT-GLOBUS: machine-learned per-building height/area/volume/surface, *Sci Data* 11:617 (2024), CC BY 4.0 | The **cross-check** on Bangalore building heights — deliberately not blended into the primary. US-LiDAR validation only (RMSE 9.1 m) |
+| **Alonzo, M. & Corton** | Not in docs | Meta/WRI urban canopy validation across 15 cities **including Bangalore**; balanced accuracy 79.7 % | Justifies aggregating canopy to coarse resolution rather than making per-tree claims — applies directly to the Bangalore wards |
 
 ## Institutions & teams (named directly in docs)
 
@@ -64,3 +66,7 @@ are given only where the docs state them; otherwise **not stated in docs**.
 | **Data Nutrition Project** | The "data nutrition label" framework | Template for the unified per-layer receipt |
 | **Google (Earth Engine team)** | Earth Engine Data Catalog | Template for the per-dataset provenance card |
 | **Our World in Data (OWID) team** | Grapher + measured-vs-derived labelling | Template for the measured-vs-modelled honesty line |
+| **ATREE — Centre for Social and Environmental Innovation (CSEI)** | Lakes & Streams of Bengaluru Urban: 181 lake polygons, 3,927 stream lines, **CC-BY**, carrying a `Valley` field that names the tank chain | The Bangalore water layer. The tank-chain attribute is what lets the city's water read as a connected system rather than scattered ponds — no other surveyed source carries it |
+| **Greater Bengaluru Authority (GBA)** | The 369-ward, five-corporation delimitation notified **19 Nov 2025** | The pinned ward geometry. Guards against the widespread "Census 2011 → 198 BBMP wards" join, which is now two reorganisations stale |
+| **BBMP (Bruhat Bengaluru Mahanagara Palike)** | Tree census, July 2026: 702,109 trees with species and ward | Tree species and position. **An inventory, not a density field** — counts track enumeration effort ([known-limitations.md §9](known-limitations.md)) |
+| **KSRSAC / Karnataka GIS (K-GIS)** | `State_LULC_2023` land cover via ArcGIS REST (used); 50 cm imagery (**barred — no commercial use**) | Land cover is first-party and in use. The sub-metre imagery is the clearest case that Bangalore's texture ceiling is contractual, not financial |

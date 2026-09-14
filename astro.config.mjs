@@ -98,7 +98,13 @@ const sitemapFilter = (page) => {
   // under a title claiming a heat twin for a city we have not measured. They flip
   // into search the moment their artefacts land, in both places at once.
   const area = /^\/heat-map\/([^/]+\/[^/]+\/[^/]+)\/$/.exec(path);
-  if (area) return isAreaKey(area[1]) && resolve(area[1]).area.hasData;
+  // `publishes`, not `hasData`: since Bengaluru those are different questions.
+  // It DRAWS — six artefacts and an authored glTF city — and publishes none of
+  // the catalogue's five, so `hasData` (which now means "the instrument can open
+  // it") would put three pages with no catalogue record into the live sitemap.
+  // The comment above says the test is the area's own `shipsData` flag; this is
+  // the field that still means exactly that.
+  if (area) return isAreaKey(area[1]) && resolve(area[1]).area.publishes;
   // /heat-map/brief and /heat-map/compare are deep-link views of the same tool, and
   // indexing near-duplicates makes them compete with the pages they are views of.
   if (path.startsWith('/heat-map/')) return false;

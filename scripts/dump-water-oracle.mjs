@@ -40,14 +40,21 @@
  */
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { rasterizeWardWater } from '../src/scripts/climate-engine/ward-raster.ts';
-import { CANONICAL_GRID_N, WATER_LAYER_ENABLED } from '../src/scripts/climate-engine/types.ts';
+import { requireGrid, WATER_LAYER_ENABLED } from '../src/scripts/climate-engine/types.ts';
 
 const OUT_DIR = 'tests/fixtures/water-oracle';
 const DATA_DIR = 'public/heat-map/data';
 const WARDS = ['ballygunge', 'baruipur', 'barrackpore'];
 
-/** The Sentinel-2 surface grid measure-spatial-accuracy.py works at (_sentinel.GRID). */
+/** The Sentinel-2 surface grid measure-spatial-accuracy.py works at — there it is
+ *  _sentinel.uniform_grid(_types.WARDS.values()), derived from the 1400 m ward
+ *  footprint rather than a baked constant. Every ward in this oracle is 1400 m. */
 const SURFACE_GRID = 140;
+
+/** The solver grid these wards run on. Every ward in this oracle is 1400 m, so
+ *  the pair is 192-over-1400 — taken from the admitted set rather than written
+ *  as a literal, so the fixture cannot drift from the shipped contract. */
+const SIM_GRID = requireGrid(1400).n;
 
 /** Plain array of doubles, so JSON round-trips the float32 values exactly. */
 const nums = (a) => Array.from(a, (v) => v);
@@ -159,7 +166,7 @@ for (const ward of WARDS) {
   const water = JSON.parse(readFileSync(`${DATA_DIR}/${ward}-water.json`, 'utf8'));
   const sizeM = JSON.parse(readFileSync(`${DATA_DIR}/${ward}.json`, 'utf8')).sizeM;
   const grids = {};
-  for (const n of [CANONICAL_GRID_N, SURFACE_GRID]) {
+  for (const n of [SIM_GRID, SURFACE_GRID]) {
     const out = rasterizeWardWater(water, sizeM, n);
     const rowSums = new Float64Array(n), colSums = new Float64Array(n);
     let sum = 0, wet = 0;
@@ -196,7 +203,7 @@ const oracle = {
   // there — free to diverge silently in exactly the way known-limitations.md warns
   // about. Imported from types.ts, written here, asserted by check-water-oracle.py.
   shippedEnabled: WATER_LAYER_ENABLED,
-  simGrid: CANONICAL_GRID_N,
+  simGrid: SIM_GRID,
   surfaceGrid: SURFACE_GRID,
   rasterizeWardWater: cases,
   wards: wardCases,
@@ -211,8 +218,8 @@ for (const [name, c] of Object.entries(cases)) {
     + `  area ${c.sum.toFixed(2)} cells`);
 }
 for (const [ward, c] of Object.entries(wardCases)) {
-  const g = c.grids[CANONICAL_GRID_N];
+  const g = c.grids[SIM_GRID];
   console.log(`    ${ward.padEnd(28)} ${c.rings} rings  mean fraction `
-    + `${(g.sum / (CANONICAL_GRID_N ** 2)).toFixed(5)}  wet cells ${g.wet}`);
+    + `${(g.sum / (SIM_GRID ** 2)).toFixed(5)}  wet cells ${g.wet}`);
 }
 console.log(`\n  wrote ${OUT_DIR}/oracle.json`);

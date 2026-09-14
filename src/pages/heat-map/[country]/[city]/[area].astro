@@ -47,7 +47,12 @@ const scope = resolve(key);
    astro.config.mjs are driven off the SAME `hasData` flag, exactly as the papers and
    projects pages are driven off their `published` flags, so the two cannot drift:
    ship Dubai's artefacts and the page becomes indexable in both places at once. */
-const indexable = scope.area.hasData;
+/* PUBLISHES, not hasData. They were the same flag until Bengaluru: it DRAWS —
+   six artefacts on disk, an authored glTF city — and publishes none of the
+   catalogue's five. Indexing the page would advertise a record that does not
+   exist, which is the crawler-facing form of the same false promise
+   src/data/wards.ts refuses. Worth opening is not worth advertising. */
+const indexable = scope.area.publishes;
 
 /* SPELLED IN scope/page-meta.ts, NOT HERE, and the reason is the same one the
    route change was made for. Switching ward in place does not reload this

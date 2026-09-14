@@ -1,0 +1,14 @@
+# Source rasters and tiles: large, redistributable from their own publishers,
+# and regenerable by scripts/fetch-bangalore.py. The DERIVED artefacts beside
+# this file ARE committed -- footprints, heights and terrain -- because they
+# cost a 5-minute Overture scan plus ~20 minutes of Earth Engine to rebuild and
+# the Kolkata pipeline commits its equivalents.
+raw/
+
+# Scenes are the OUTPUT of those artefacts and rebuild in seconds, so they stay
+# out: three .blend files are ~15 MB and six renders another ~13 MB, none of it
+# carrying information the artefacts do not already hold.
+scenes/
+
+# exFAT on this volume writes AppleDouble sidecars for every file.
+._*

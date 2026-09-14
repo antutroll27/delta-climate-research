@@ -128,11 +128,16 @@ function publicationContracts() {
        and this fixture changes shape while the checker's list does not, and the run
        fails with a missing-html violation naming the route.
 
-       astro.config.mjs's sitemapFilter reads the same `hasData` flag, so all three
-       places now follow one fact instead of three opinions. */
+       `publishes`, NOT `hasData`, and the two parted company when Bengaluru
+       arrived. `hasData` now means "the INSTRUMENT can open it" — Bengaluru ships
+       the map's six artefacts — while `publishes` means "the CATALOGUE has a
+       record for it", which Bengaluru has none of. Indexability is the catalogue's
+       question. astro.config.mjs's sitemapFilter and the checker's own route list
+       both read `publishes` too, so all three still follow ONE fact rather than
+       three opinions; the fact simply got more precise. */
     ...AREA_KEYS.map((key) => ({
       route: areaPath(key),
-      indexable: resolveScope(key).area.hasData,
+      indexable: resolveScope(key).area.publishes,
       placeholder: false,
     })),
     { route: '/heat-map/compare/', indexable: false, placeholder: false },

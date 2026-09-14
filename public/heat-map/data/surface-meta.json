@@ -1,7 +1,5 @@
 {
   "source": "Sentinel-2 L2A surface reflectance via Earth Search STAC; NDVI -> FVC with the same NDVI_BARE/NDVI_VEG endpoints as the ward composite, albedo via the source document's \u00a73B band coefficients.",
-  "grid": 140,
-  "footprint_m": 1400,
   "encoding": "PNG, R = vegetation fraction, G = albedo. value = ch/255 * (hi-lo) + lo",
   "veg_range": [
     0.0,
@@ -20,7 +18,9 @@
       "fvc_quantised_err": 9e-06,
       "albedo_quantised_err": 1e-06,
       "veg_std": 0.2134,
-      "albedo_std": 0.0221
+      "albedo_std": 0.0221,
+      "grid": 140,
+      "footprint_m": 1400
     },
     "baruipur": {
       "fvc_target": 0.4469,
@@ -28,7 +28,9 @@
       "fvc_quantised_err": 3e-06,
       "albedo_quantised_err": 6e-06,
       "veg_std": 0.2292,
-      "albedo_std": 0.0212
+      "albedo_std": 0.0212,
+      "grid": 140,
+      "footprint_m": 1400
     },
     "barrackpore": {
       "fvc_target": 0.3089,
@@ -36,7 +38,36 @@
       "fvc_quantised_err": 7e-06,
       "albedo_quantised_err": 3e-06,
       "veg_std": 0.2556,
-      "albedo_std": 0.0242
+      "albedo_std": 0.0242,
+      "grid": 140,
+      "footprint_m": 1400
+    },
+    "indiranagar": {
+      "grid": 280,
+      "footprint_m": 2800,
+      "veg_std": 0.2858,
+      "albedo_std": 0.0329,
+      "level": "measured",
+      "fvc_mean": 0.4014,
+      "albedo_mean": 0.1671
+    },
+    "mg-road": {
+      "grid": 280,
+      "footprint_m": 2800,
+      "veg_std": 0.3171,
+      "albedo_std": 0.036,
+      "level": "measured",
+      "fvc_mean": 0.3884,
+      "albedo_mean": 0.1652
+    },
+    "whitefield": {
+      "grid": 280,
+      "footprint_m": 2800,
+      "veg_std": 0.2539,
+      "albedo_std": 0.0352,
+      "level": "measured",
+      "fvc_mean": 0.3698,
+      "albedo_mean": 0.1775
     }
   }
 }

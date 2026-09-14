@@ -230,7 +230,12 @@ class TreesFileJSON(TypedDict):
     #: ignores the rest, so adding these needed no TS change.
     source: str
     densityRefM: float
-    trees: list[TreeInstanceJSON]
+    #: The on-disk row format (scripts/_trees.py): column names, species names,
+    #: and one [x_m, y_m, h_dm, r_dm, species] row per tree. In memory, callers
+    #: still use TreeInstanceJSON objects -- decode_trees converts.
+    cols: list[str]
+    speciesNames: list[str]
+    trees: list[list[int]]
 
 
 class TraWard(TypedDict):

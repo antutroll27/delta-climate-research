@@ -11,7 +11,7 @@ import {
 import { paths, cityPaths } from '../../src/scripts/climate-engine/scope/paths.ts';
 import { resolve, requireCosts } from '../../src/scripts/climate-engine/scope/resolve.ts';
 import { WARDS as WARD_TABLE } from '../../src/data/wards.ts';
-import { currentParams } from '../../src/scripts/climate-engine/heat-map-model.ts';
+import { currentParams, fallbackTair } from '../../src/scripts/climate-engine/heat-map-model.ts';
 import { fmtMoney, fmtRate, currencyMark } from '../../src/scripts/climate-engine/money.ts';
 import { tabKind, areaRefusal } from '../../src/scripts/climate-engine/scope/reachability.ts';
 
@@ -21,8 +21,13 @@ test('registry invariants hold', () => {
 
 test('every registered area produces a key', () => {
   assert.ok(AREA_KEYS.includes('in/kolkata/ballygunge'));
+  assert.ok(AREA_KEYS.includes('in/bengaluru/mg-road'));
   assert.ok(AREA_KEYS.includes('ae/dubai/al-quoz'));
-  assert.equal(AREA_KEYS.length, 6);
+  /* NINE: Kolkata's three, Bengaluru's three, Dubai's three. Bengaluru is
+     registered but does not ship the catalogue's artefacts — see `drawable` in
+     registry.ts. Registration is what makes an area NAMEABLE; shipsData is what
+     makes it published. */
+  assert.equal(AREA_KEYS.length, 9);
 });
 
 test('isAreaKey rejects anything not registered', () => {
@@ -123,6 +128,14 @@ test('paths builds every ward URL from the registry', () => {
 test('every shipping area\'s pv artefact carries its tiers block, typed and unrewritten by hand', async () => {
   let checked = 0;
   for (const key of AREA_KEYS) {
+    /* SHIPS DATA, not "paths() gave me something". Those were the same predicate
+       until `drawable` split the catalogue's promise from the instrument's:
+       paths() now answers for a Bengaluru ward that DRAWS, while this test is
+       about the eleven artefacts a PUBLISHED area promises. The counts below are
+       unchanged, which is the proof this restores the original meaning rather
+       than widening it. */
+    const { country, city, area } = splitKey(key);
+    if (!REGISTRY[country].cities[city].areas[area].shipsData) continue;
     const p = paths(key);
     if (p === null) continue;
     const pv = JSON.parse(await readFile(new URL(`../../public${p.pv}`, import.meta.url), 'utf8'));
@@ -166,6 +179,14 @@ test('every URL paths() emits exists on disk', async () => {
   const present = new Set(await readdir(new URL('../../public/heat-map/data', import.meta.url)));
   let checked = 0;
   for (const key of AREA_KEYS) {
+    /* SHIPS DATA, not "paths() gave me something". Those were the same predicate
+       until `drawable` split the catalogue's promise from the instrument's:
+       paths() now answers for a Bengaluru ward that DRAWS, while this test is
+       about the eleven artefacts a PUBLISHED area promises. The counts below are
+       unchanged, which is the proof this restores the original meaning rather
+       than widening it. */
+    const { country, city, area } = splitKey(key);
+    if (!REGISTRY[country].cities[city].areas[area].shipsData) continue;
     const p = paths(key);
     if (p === null) continue;
     for (const [name, url] of Object.entries(p)) {
@@ -267,10 +288,11 @@ test('an area outside the ward table carries its own name and says what it is', 
 });
 
 test('every registered key resolves', () => {
-  // The module resolves all six eagerly at load, so this is really a check that
+  // The module resolves all NINE eagerly at load, so this is really a check that
   // nothing in the walk is unreachable -- and that the count has not silently
-  // shrunk, which would make the loop pass while covering less.
-  assert.equal(AREA_KEYS.length, 6);
+  // shrunk, which would make the loop pass while covering less. Nine since
+  // Bengaluru was registered: three Kolkata, three Bengaluru, three Dubai.
+  assert.equal(AREA_KEYS.length, 9);
   for (const key of AREA_KEYS) assert.equal(resolve(key).key, key);
 });
 
@@ -282,7 +304,7 @@ test('resolve refuses a key the registry does not know', () => {
 
 test('the climate constants are the registry\'s, not a copy', () => {
   const c = resolve('in/kolkata/ballygunge').climate;
-  assert.equal(c.fallbackTairC, REGISTRY.in.cities.kolkata.fallbackTairC);
+  assert.deepEqual(c.airNormals, REGISTRY.in.cities.kolkata.airNormals);
   assert.equal(c.parkRadiusM, REGISTRY.in.cities.kolkata.parkRadiusM);
   assert.deepEqual(c.costs, REGISTRY.in.costs);
   // The pathway NAME becomes a delta table here and nowhere else. The registry's
@@ -299,7 +321,8 @@ test('a country with no pathway gets an EMPTY table, and no costs at all', () =>
   assert.deepEqual(c.pathDelta, {});
   assert.equal(Object.keys(c.pathDelta).length, 0);
   assert.equal(c.costs, null, 'a rupee figure carried into the Gulf would compute and read as an answer');
-  assert.equal(c.fallbackTairC, 40, 'Dubai is not 32 °C');
+  assert.ok(c.airNormals.maxC.every((v) => v === 40) && c.airNormals.measured === false,
+    'Dubai is a flagged placeholder, not Kolkata’s climatology');
 });
 
 test('requireCosts hands over real prices, or refuses -- never a zero', () => {
@@ -324,8 +347,11 @@ test('a scope is frozen, so one caller cannot move another\'s pathway', () => {
    type-checks the lookup as a number. */
 
 const IV0 = { trees: 0, roof: 0, parks: 0, facades: 0 };
+/* A fixed moment. The fallback air temperature is a month × hour table now, so a
+   no-live scenario must say when it is; April 13:00 is the canonical hot peak. */
+const CLOCK = { month: 4, hour: 13 };
 const at = (climate, path) =>
-  currentParams({ live: null, phase: 'peak', path, climate, iv: IV0 }).tAir;
+  currentParams({ live: null, phase: 'peak', path, climate, iv: IV0, clock: CLOCK }).tAir;
 
 test('an unknown pathway against a populated table THROWS', () => {
   const kolkata = resolve('in/kolkata/ballygunge').climate;
@@ -334,9 +360,12 @@ test('an unknown pathway against a populated table THROWS', () => {
   // `in` would find inherited members and multiply a function into the air
   // temperature as NaN; the lookup uses Object.hasOwn for exactly this.
   assert.throws(() => at(kolkata, 'toString'), /not in this scope's table/);
-  // ...while the three real scenarios still resolve.
-  assert.equal(at(kolkata, '2025'), 32);
-  assert.equal(at(kolkata, 'ssp585'), 36.1);
+  // ...while the three real scenarios still resolve: the city's fallback at this
+  // clock, plus the pathway's delta — the delta is what this test is about.
+  const base = fallbackTair(kolkata.airNormals, CLOCK);
+  assert.equal(at(kolkata, '2025'), base);
+  assert.ok(Math.abs(at(kolkata, 'ssp585') - (base + 4.1)) < 1e-9,
+    `ssp585 must add exactly 4.1 K to the fallback (got ${at(kolkata, 'ssp585') - base})`);
 });
 
 test('a scope with no pathway contributes zero, and does not throw', () => {
@@ -862,7 +891,12 @@ test('every button the page can draw is one the physics can answer', () => {
     assert.doesNotThrow(() => at(s.climate, s.pathway.initial ?? ''), `${key}: initial path throws`);
   }
   // Guard the guard: an empty options list everywhere would satisfy the loop.
-  assert.equal(checked, 9, 'expected 3 Kolkata areas x 3 scenarios, and none for Dubai');
+  /* EIGHTEEN: India's SIX areas — Kolkata's three and Bengaluru's three — times
+     three scenarios, and still none for Dubai. The pathway table is a property of
+     the COUNTRY, so a second Indian city inherits Dhara 2025 rather than needing
+     its own; a country that has adopted no pathway still offers no buttons, which
+     the next test pins. */
+  assert.equal(checked, 18, 'expected 6 Indian areas x 3 scenarios, and none for Dubai');
 });
 
 test('a country that has adopted no pathway offers no buttons and cites no paper', () => {
@@ -996,6 +1030,10 @@ test('the instrument shows the refusal instead of returning in silence', async (
      refusal has to reach it. Asserting the PAIRING rather than the mere presence of
      `areaRefusal`: a call whose result is dropped would satisfy a looser check, and
      dropping it is precisely the regression this is written against. */
-  assert.match(app, /const refusal = areaRefusal\(name\);[\s\S]{0,400}?loadchip[\s\S]{0,240}?refusal/,
+  /* Two halves since load-chip.ts: the refusal goes to `loadChip.fail` (which shows
+     at once, never after the load delay), and `loadChip` is the #loadchip element. */
+  assert.match(app, /const refusal = areaRefusal\(name\);[\s\S]{0,400}?loadChip\.fail\(refusal\)/,
     'loadWard no longer paints the refusal onto the loading chip');
+  assert.match(app, /const loadChip = createLoadChip\(el\('loadchip'\)/,
+    'the loading chip is no longer the #loadchip element');
 });

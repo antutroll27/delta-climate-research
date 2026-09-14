@@ -32,6 +32,7 @@ import subprocess
 import sys
 import urllib.request
 from collections import defaultdict
+from collections.abc import Iterable
 from typing import Any
 
 import numpy as np
@@ -43,13 +44,14 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
+import _types  # noqa: E402
+
 CACHE = os.path.expanduser("~/.cache/delta-climate/sentinel")
 
 STAC = "https://earth-search.aws.element84.com/v1/search"
 COLLECTION = "sentinel-2-l2a"
 MAX_CLOUD = 25
 SCENES_PER_YEAR = 6          # spread across seasons; median-reduced
-FOOTPRINT_M = 1400
 
 # FVC endmembers. NDVI of bare soil and of full canopy, the standard pair used
 # with the source document's FVC definition (Carlson & Ripley 1997).
@@ -60,16 +62,54 @@ NDVI_BARE, NDVI_VEG = 0.05, 0.80
 ALBEDO_W = {"blue": 0.356, "red": 0.130, "nir": 0.373, "swir16": 0.085, "swir22": 0.055}
 BANDS = list(ALBEDO_W)
 
-WARDS = {
-    "ballygunge":  (22.528,  88.3659),
-    "baruipur":    (22.3654, 88.4319),
-    "barrackpore": (22.7621, 88.3713),
-}
+#: NO WARD TABLE HERE. There was one — a third copy of `_types.WARDS`, which
+#: `dump-parity-oracle.py` already names as the known-diverged one and `_types`
+#: own comment records had drifted 10-44 m: sub-pixel at ECOSTRESS's 70 m, four
+#: pixels at Sentinel's 10 m. Its single consumer now reads `_types.WARDS`, which
+#: is the only Python ward table carrying `footprint_m` — and a footprint is
+#: exactly what this module can no longer do without.
 
 
-def search(lat: float, lon: float, year: int) -> list[dict[str, Any]]:
-    """Lowest-cloud scenes for one year, spread across the calendar."""
-    d = 0.02   # ~2 km box around the ward centre
+def _covers_ward(bbox: list[float] | None, lat: float, lon: float, footprint_m: int) -> bool:
+    """Does this scene's bounding box contain the WHOLE ward window?
+
+    STAC's `bbox` filter is INTERSECTS, not CONTAINS, so a scene clipping one
+    corner of the search box comes back looking like any other candidate and can
+    win its month on cloud cover alone. `read_window` reads it `boundless=True,
+    fill_value=0`, so the missing part arrives as zeros rather than an error.
+
+    Two guards already catch the gross case: `scene_arrays` drops a scene whose
+    window is more than half invalid, and the exporter refuses a composite built
+    from fewer than three scenes. What neither catches is a scene covering, say,
+    60 % of the ward — it passes both and contributes NaN for the rest. That was
+    a small exposure at Kolkata's 1400 m, where the ward is a third of the fixed
+    search box; at Bengaluru's 2800 m it is two thirds, so the clipped share of
+    candidates rises with the ward.
+
+    ponytail: bbox containment, not the `geometry` polygon — a partial swath
+    inside its own bbox can still clip. Tighten with `geometry` if a ward ever
+    comes back short of scenes.
+    """
+    if not bbox or len(bbox) < 4:
+        return False
+    dlat = (footprint_m / 2) / 110_540.0
+    dlon = (footprint_m / 2) / (111_320.0 * float(np.cos(np.radians(lat))))
+    return (bbox[0] <= lon - dlon and bbox[1] <= lat - dlat
+            and bbox[2] >= lon + dlon and bbox[3] >= lat + dlat)
+
+
+def search(lat: float, lon: float, year: int, footprint_m: int) -> list[dict[str, Any]]:
+    """Lowest-cloud scenes for one year, spread across the calendar.
+
+    `footprint_m` has no default for the reason the read path has none, plus a
+    second: it is what decides whether a returned scene actually COVERS the ward
+    or merely touches the search box.
+    """
+    # A fixed box is correct here and does not need to scale: any scene that
+    # covers the ward necessarily intersects a box that also contains the ward,
+    # so widening it would only admit more clipped candidates, never recover a
+    # good one. `_covers_ward` is what does the real filtering.
+    d = 0.02   # ~2 km box around the ward centre; ward half-width ≤ 1.4 km
     body = json.dumps({
         "collections": [COLLECTION],
         "bbox": [lon - d, lat - d, lon + d, lat + d],
@@ -86,6 +126,11 @@ def search(lat: float, lon: float, year: int) -> list[dict[str, Any]]:
     except json.JSONDecodeError:
         return []
 
+    # Drop scenes that only clip the ward BEFORE the per-month pick, not after:
+    # picking first would let a clipped scene win its month on cloud cover and
+    # then be discarded, losing the month entirely.
+    feats = [f for f in feats if _covers_ward(f.get("bbox"), lat, lon, footprint_m)]
+
     # spread across months rather than taking the N cleanest, which would all
     # cluster in the dry season and reintroduce exactly the bias we are avoiding
     by_month = defaultdict(list)
@@ -101,23 +146,70 @@ def search(lat: float, lon: float, year: int) -> list[dict[str, Any]]:
 
 # Sentinel-2 mixes resolutions: blue/red/nir are 10 m, the SWIR bands 20 m. Read
 # every band onto one 10 m grid so they can be combined pixel-for-pixel.
-GRID = FOOTPRINT_M // 10          # 140 x 140
+def grid_for(footprint_m: int) -> int:
+    """Cells per side at Sentinel-2's 10 m native posting.
+
+    WAS `GRID = FOOTPRINT_M // 10`, a module constant baked at Kolkata's 1400 m.
+    Bengaluru's wards are 2800 m and need 280, and the failure mode of getting
+    this wrong is not an exception — it is a correctly-shaped array holding the
+    wrong quarter of the ward.
+
+    `int`, NOT `float`, and that choice is half the guard. `%` on a float is a
+    trap in both directions: a footprint that arrived through JSON arithmetic as
+    1400.0000000001 would raise here where it was meant to pass, and 1399.9999
+    would pass a `% 10 != 0` test it should fail. A ward footprint is a whole
+    number of metres — `_types.Ward.footprint_m` is already `int` — so demanding
+    one lets mypy refuse a float at the call site, where a caller can convert
+    deliberately, instead of deferring the question to a runtime remainder that
+    is correct only by luck.
+    """
+    if footprint_m <= 0:
+        raise ValueError(f"footprint {footprint_m} m is not a ward")
+    if footprint_m % 10 != 0:
+        raise ValueError(f"footprint {footprint_m} m is not a whole number of 10 m cells")
+    return footprint_m // 10
 
 
-def read_window(href: str, lat: float, lon: float) -> npt.NDArray[np.float32] | None:
-    """Read the ward window from a COG, resampled to the common grid."""
+def uniform_grid(wards: Iterable[_types.Ward]) -> int:
+    """The one surface grid shared by a set of wards, or a refusal.
+
+    Several Kolkata-only measurement scripts want "the" grid as a module-level
+    constant — for a cache filename, an expected array shape, a default
+    argument. They may keep one, but derived from the ward table and only for as
+    long as that table holds a single footprint. The moment a 2800 m ward joins
+    it, either answer is wrong for half the wards, and answering silently is the
+    exact defect this module is being cured of.
+    """
+    sizes = {w.footprint_m for w in wards}
+    if len(sizes) != 1:
+        raise ValueError(
+            f"no single surface grid for footprints {sorted(sizes)} m — this caller "
+            f"assumes one ward size and must take the grid per ward instead")
+    return grid_for(sizes.pop())
+
+
+def read_window(href: str, lat: float, lon: float,
+                footprint_m: int) -> npt.NDArray[np.float32] | None:
+    """Read the ward window from a COG, resampled to the common grid.
+
+    `footprint_m` HAS NO DEFAULT, deliberately. A default is precisely what made
+    this Kolkata-only, and what it hides is not an exception: the window would
+    still be square, still full of real reflectance, and still the wrong quarter
+    of a 2800 m ward.
+    """
     try:
         with rasterio.open(href) as src:
             # COGs are in UTM; transform the ward box into the scene CRS
             from rasterio.warp import transform_bounds
-            half = FOOTPRINT_M / 2
+            n = grid_for(footprint_m)
+            half = footprint_m / 2
             dlat = half / 110_540.0
             dlon = half / (111_320.0 * np.cos(np.radians(lat)))
             l, b, r_, t = transform_bounds("EPSG:4326", src.crs,
                                            lon - dlon, lat - dlat, lon + dlon, lat + dlat)
             win = from_bounds(l, b, r_, t, src.transform)
             arr = src.read(1, window=win, out_dtype="float32",
-                           out_shape=(GRID, GRID),
+                           out_shape=(n, n),
                            boundless=True, fill_value=0,
                            resampling=rasterio.enums.Resampling.bilinear)
             return arr if arr.size else None
@@ -125,9 +217,11 @@ def read_window(href: str, lat: float, lon: float) -> npt.NDArray[np.float32] | 
         return None
 
 
-def scene_arrays(feat: dict[str, Any], lat: float, lon: float
+def scene_arrays(feat: dict[str, Any], lat: float, lon: float, footprint_m: int
                  ) -> tuple[npt.NDArray[np.float32], npt.NDArray[np.float32]] | None:
-    """Per-cell NDVI and albedo for one scene (GRID x GRID), or None if unreadable.
+    """Per-cell NDVI and albedo for one scene, `grid_for(footprint_m)` per side.
+
+    Returns None if unreadable.
 
     THIS is the measurement. `scene_metrics` below is one reduction of it and the
     raster exporter is another; both must see identical masking, which is why
@@ -154,7 +248,7 @@ def scene_arrays(feat: dict[str, Any], lat: float, lon: float
 
     refl = {}
     for b in BANDS:
-        dn = read_window(assets[b]["href"], lat, lon)
+        dn = read_window(assets[b]["href"], lat, lon, footprint_m)
         if dn is None:
             return None
         r = (dn + offset) / 10_000.0
@@ -169,13 +263,63 @@ def scene_arrays(feat: dict[str, Any], lat: float, lon: float
     return ndvi.astype(np.float32), albedo.astype(np.float32)
 
 
-def scene_metrics(feat: dict[str, Any], lat: float, lon: float) -> tuple[float, float] | None:
+def scene_metrics(feat: dict[str, Any], lat: float, lon: float,
+                  footprint_m: int) -> tuple[float, float] | None:
     """Ward-median NDVI and albedo for one scene — scene_arrays, spatially reduced.
 
-    The median, not the mean: one undetected cloud edge in a 140 x 140 window
-    moves a mean and barely touches a median.
+    The median, not the mean: one undetected cloud edge in a ward window moves a
+    mean and barely touches a median.
     """
-    got = scene_arrays(feat, lat, lon)
+    got = scene_arrays(feat, lat, lon, footprint_m)
     if got is None:
         return None
     return float(np.nanmedian(got[0])), float(np.nanmedian(got[1]))
+
+
+def _self_test() -> None:
+    """Grid must derive from the ward, not from a module constant.
+
+    Bengaluru's wards are 2800 m; at Kolkata's fixed 1400 m the window would be
+    read a quarter of the size and silently mis-scaled onto a 140 grid.
+    """
+    assert grid_for(1400) == 140, grid_for(1400)
+    assert grid_for(2800) == 280, grid_for(2800)
+    try:
+        grid_for(1234)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("a footprint that is not a whole number of 10 m cells must raise")
+
+    # NO DEFAULT FOOTPRINT, ANYWHERE ON THE READ PATH. A default is how the
+    # Kolkata bias would come back: every caller that forgot the argument would
+    # keep working and keep reading 1400 m. The three functions that size a
+    # window must each demand it, so the omission is a TypeError at the call
+    # site rather than a quarter-ward raster nine steps downstream.
+    import inspect
+    for fn in (search, read_window, scene_arrays, scene_metrics):
+        p = inspect.signature(fn).parameters.get("footprint_m")
+        assert p is not None, f"{fn.__name__} does not take a footprint"
+        assert p.default is inspect.Parameter.empty, (
+            f"{fn.__name__} defaults its footprint to {p.default!r} — that is the bug")
+
+    # A scene must CONTAIN the ward, not merely touch the search box. MG Road at
+    # 2800 m: half-width is ~0.0127 deg lat, ~0.0129 deg lon.
+    lat_b, lon_b = 12.9755, 77.6030
+    clips = [77.60, 12.97, 77.61, 12.98]          # overlaps, does not contain
+    holds = [77.50, 12.90, 77.70, 13.05]          # contains
+    assert not _covers_ward(clips, lat_b, lon_b, 2800), "a scene that clips the ward must be refused"
+    assert _covers_ward(holds, lat_b, lon_b, 2800), "a scene containing the ward must be kept"
+    assert not _covers_ward(None, lat_b, lon_b, 2800), "a scene with no bbox must be refused"
+    # the same box that HOLDS a 1400 m ward CLIPS a 2800 m one — the whole point
+    assert _covers_ward([77.59, 12.965, 77.615, 12.986], lat_b, lon_b, 1400)
+    assert not _covers_ward([77.59, 12.965, 77.615, 12.986], lat_b, lon_b, 2800)
+
+    for gone in ("GRID", "FOOTPRINT_M"):
+        assert gone not in globals(), f"{gone} is back as a module constant"
+
+    print("  _sentinel: grid derives from the ward footprint")
+
+
+if __name__ == "__main__":
+    _self_test()

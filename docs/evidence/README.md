@@ -36,6 +36,26 @@ shows the diligence.
   described in our words, with measurements, rather than discovering them unaided. An engine that lists what
   it cannot yet prove is more trustworthy than one that lists only wins.
 
+## Extended 2026-09-10 — Bangalore, the second city
+
+The library was assembled around Kolkata. Bangalore's research pass added a **state** layer of
+constraint that Kolkata never surfaced, and those additions run through four files:
+`data-sources.md` (the Bengaluru stack, in use and ruled out), `regulatory-and-licensing.md`
+(the Karnataka licence walls and the Indian Space Policy 2023 sub-5 m rule), `known-limitations.md`
+(§8 the two disagreeing height sources, §9 the tree census as inventory), and `methods-and-papers.md`
+(per-building height literature).
+
+**Three findings from that pass are reusable beyond Bangalore**, which is why they are in the library
+rather than only in the spec:
+
+- **A per-building schema is not a per-building measurement.** Two of the three rejected height products
+  are GHS-BUILT-H at 100 m redistributed onto polygons. Ask which raster a product was derived from
+  before trusting its resolution.
+- **Correlation is the wrong summary for a low-variance population.** A uniformly low-rise neighbourhood
+  makes any two height sources look uncorrelated regardless of quality. Use MAE.
+- **An open licence on a mirror is not an open licence on the source.** Read the terms of the authority
+  that produced the data, not the portal that republished it.
+
 ## Provenance of this compilation
 
 Assembled 2026-08-11 from four parallel harvests over the repo's research docs

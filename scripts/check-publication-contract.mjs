@@ -312,6 +312,17 @@ const routeContracts = [
   routeContract('/heat-map/in/kolkata/ballygunge/', 'heat-map-tool', true),
   routeContract('/heat-map/in/kolkata/baruipur/', 'heat-map-tool', true),
   routeContract('/heat-map/in/kolkata/barrackpore/', 'heat-map-tool', true),
+  /* BENGALURU DRAWS AND DOES NOT PUBLISH, so `false` like Dubai's three — but for
+     a different reason worth stating. Dubai is registered so it can be NAMED and
+     ships nothing at all. Bengaluru ships every artefact the INSTRUMENT needs and
+     none the CATALOGUE needs: no provenance record, no STAC item, no tileset, no
+     pv screen. Indexing it would put three pages in front of a searcher with no
+     catalogue record behind them. They flip to `true` in the same commit that
+     lands those artefacts — this list is hand-maintained precisely so that a new
+     area cannot slip into search without someone deciding it should. */
+  routeContract('/heat-map/in/bengaluru/indiranagar/', 'heat-map-tool', false),
+  routeContract('/heat-map/in/bengaluru/mg-road/', 'heat-map-tool', false),
+  routeContract('/heat-map/in/bengaluru/whitefield/', 'heat-map-tool', false),
   routeContract('/heat-map/ae/dubai/creek/', 'heat-map-tool', false),
   routeContract('/heat-map/ae/dubai/al-quoz/', 'heat-map-tool', false),
   routeContract('/heat-map/ae/dubai/south/', 'heat-map-tool', false),

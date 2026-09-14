@@ -20,7 +20,7 @@ import InterventionPane from './shell/InterventionPane.astro';
 import { areaKeysInCity } from '../../scripts/climate-engine/scope/registry.ts';
 import { areaPath, DEFAULT_AREA_PATH } from '../../scripts/climate-engine/scope/paths.ts';
 import { resolve, type ResolvedScope } from '../../scripts/climate-engine/scope/resolve.ts';
-import { wardById } from '../../data/wards.ts';
+import { renderableWardById as wardById, formatLatLon } from '../../data/wards.ts';
 
 /**
  * THE PAGE TELLS THE INSTRUMENT WHICH AREA IT IS, rather than both assuming.
@@ -358,7 +358,7 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
       <div class="rig">{scope.area.hasData
         ? <Fragment><span id="bcount">— buildings</span> · <span id="simBackend" aria-live="polite">SELECTING ENGINE</span></Fragment>
         : <span>no artefacts · {scope.tier} tier</span>}</div>
-      <div class="read">MEDNI · HEAT INSTRUMENT<br><b id="coord">{ward?.coord ?? '—'}</b></div>
+      <div class="read">MEDNI · HEAT INSTRUMENT<br><b id="coord">{ward ? formatLatLon(ward.lat, ward.lon, ' · ', 3) : '—'}</b></div>
     </div>
   </header>
 
@@ -381,7 +381,7 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
     <div id="mlmap"></div>
     <div class="synthetic"><span class="d"></span><span class="full">Live basemap + real footprints &amp; Google heights · </span>heat field modelled<span class="sp"> · block detail illustrative</span></div>
     <div class="stamp-slot"><ConstructionStamp /></div>
-    <div class="loadchip" id="loadchip">Building ward…</div>
+    <div class="loadchip" id="loadchip"></div>
 
     <!-- North reference. The idle orbit turns the map continuously, so without
          this there is no way to know which way you are facing, and no way back. -->
@@ -517,6 +517,18 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
       </div>
     </div>
 
+    <!-- LANDMARK LABELS. The named buildings of a ward that ships an authored
+         model — 0 in Indiranagar (a genuinely low-rise ward), 12 in MG Road, 35
+         in Whitefield. These are the only buildings whose height the instrument
+         asserts BY NAME, so every chip here has a citation behind it and one
+         without a stated source is never drawn at all.
+
+         Chips are created per ward by heat-map-app.ts and only TRANSFORMED per
+         repaint — the text never changes once written. They are real buttons
+         because the city is a <canvas>: this is the only way to reach a landmark
+         from the keyboard. -->
+    <div class="lmlabs" id="lmlabs" hidden></div>
+
     <!-- Click-to-inspect. Positioned from the building's own ward-metre centroid
          every time MapLibre repaints, so it tracks orbit, pan, zoom and flyTo. -->
     <div class="bsel" id="bsel" hidden aria-hidden="true"><i></i><i></i><i></i><i></i></div>
@@ -533,6 +545,23 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
           <dt>Albedo</dt><dd id="bcAl">—</dd>
           <dt>Surface</dt><dd id="bcT">—</dd>
         </dl>
+        {/* LANDMARK — shown only when the selected building is one of the ward's
+            named buildings, and then it prints the published height AND where
+            that height came from. The source row is not decoration: a height
+            with no stated source is not drawn as a landmark at all, so this row
+            is the reason the rest of the block is allowed to exist.
+
+            ABOVE the rooftop-solar block and ruled off in cyan rather than the
+            screening amber, because this is the best-evidenced number on the
+            card and must never read as a sibling of the estimate below it. */}
+        <div class="bc-lm" id="bcLm" hidden>
+          <div class="bc-h"><span>Landmark</span></div>
+          <p class="bc-lm-name" id="bcLmName">—</p>
+          <dl>
+            <dt>Published height</dt><dd id="bcLmH">—</dd>
+            <dt>Source</dt><dd id="bcLmSrc">—</dd>
+          </dl>
+        </div>
         {/* ROOFTOP SOLAR — a screening estimate ABOUT the building, under the
             measured rows and in a different ink. Painted by paintSolarCard from
             the ward's solar file; hidden when none ships. "At least" is the
@@ -1258,6 +1287,54 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
      wherever the ring falls. Sampled from the frame, not computed from the token. */
   body.studio .ringlab{background:rgb(245 244 241 /.88);color:var(--studio-ink-teal);border-color:rgb(13 107 125 /.4)}
 
+  /* ── landmark labels ──
+     The ring labels' contour-label treatment, for the same reason: a chip on the
+     map points AT something and is never a finding in its own right — the
+     finding is the citation, and that lives on the card.
+
+     WHERE THEY DIFFER: these are clickable, so they carry hover and focus states
+     the ring labels have no use for. The transform centres them on the anchor
+     (translate(-50%,-50%)) instead of a negative margin, so a chip can be as
+     wide as its name needs without a fixed width that would clip "M. Chinnaswamy
+     Stadium" or pad "Canberra". */
+  .lmlabs{position:absolute;inset:0;pointer-events:none;z-index:6}
+  .lmlab{position:absolute;left:0;top:0;pointer-events:auto;cursor:pointer;
+    will-change:transform;max-width:190px;overflow:hidden;text-overflow:ellipsis;
+    white-space:nowrap;display:block;
+    font-family:var(--mono);font-size:.5rem;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--cyan);background:rgb(9 20 22 /.82);border:1px solid rgb(111 202 214 /.4);
+    border-radius:99px;padding:.24rem .6rem}
+  /* `display:block` above beats the `hidden` attribute's UA `display:none`, and a
+     chip culled from a frame is hidden by exactly that attribute — without this
+     rule every landmark the layer dropped (behind the camera, off-canvas, or
+     collapsed into a nearer one) would stay on screen at a stale position. */
+  .lmlab[hidden]{display:none}
+  .lmlab:hover{background:rgb(9 20 22 /.96);border-color:var(--cyan)}
+  .lmlab:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+  /* The selected landmark is filled, so the map says which chip the open card is
+     about. Tokens on both sides, no hex: the stage already spells this near-black
+     as `--on` inside .clockw, and a second longhand copy would be invisible until
+     someone tuned one of the two (tests/unit/obos-layers.test.mjs counts them). */
+  .lmlab.on{background:var(--cyan);color:var(--black);border-color:var(--cyan)}
+  body.studio .lmlab{background:rgb(245 244 241 /.88);color:var(--studio-ink-teal);border-color:rgb(13 107 125 /.4)}
+  body.studio .lmlab.on{background:var(--studio-ink-teal);color:var(--paper);border-color:var(--studio-ink-teal)}
+
+  /* THE LANDMARK BLOCK on the building card. Cyan rule, above the solar block's
+     amber one: a published height is the best-evidenced figure the card carries
+     and must not read as a sibling of the screening estimate under it. */
+  .bc-lm{margin:.55rem 0 0;padding-top:.5rem;border-top:1px solid rgb(111 202 214 /.35)}
+  .bc-lm .bc-h{margin-bottom:.3rem}
+  .bc-lm-name{margin:0 0 .4rem;font:600 .78rem var(--sans);letter-spacing:-.01em;color:var(--paper)}
+  .bc-lm dd{color:var(--cyan)}
+  /* The source is a note about the figure above it, so it takes the card's note
+     voice (.bc-prov's grammar) rather than a second value's. */
+  #bcLmSrc{font:450 .5rem var(--sans);letter-spacing:.03em;text-transform:uppercase;
+    color:var(--bronze);line-height:1.5}
+  body.studio .bc-lm{border-top-color:rgb(13 107 125 /.35)}
+  body.studio .bc-lm-name{color:var(--studio-ink)}
+  body.studio .bc-lm dd{color:var(--studio-ink-teal)}
+  body.studio #bcLmSrc{color:var(--studio-ink-bronze)}
+
   /* ── nearest-greenery tag: the FINDING, so it gets the data-chip anatomy ──
      Big value over a small label, in the cooling green of the patches it
      stands on. Anchored at the nearest cooling cell; the value is written once
@@ -1714,8 +1791,21 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
      it by looking. */
   .loadchip{position:absolute;top:118px;inset-inline:0 var(--instr-berth);margin-inline:auto;
     width:max-content;max-width:calc(100% - var(--instr-berth) - 1rem);
-    font-family:var(--mono);font-size:.52rem;letter-spacing:.26em;color:var(--cyan);z-index:3;text-transform:uppercase;opacity:0;transition:opacity .25s}
+    font-family:var(--mono);font-size:.52rem;letter-spacing:.26em;color:var(--cyan);z-index:3;text-transform:uppercase;opacity:0;transition:opacity .25s;
+    padding-bottom:7px;overflow:hidden}
   .loadchip.on{opacity:1}
+  /* THE LOADER. A hairline beam sweeps along a faint track under the words while a
+     ward loads. Transform only, so it holds 60 fps on a GPU-bound page; the static
+     track makes the sweep read as travel rather than flicker. It now stays up until
+     the buildings are on screen (heat-map-app waits on relief.buildingsReady). */
+  .loadchip::before,.loadchip::after{content:'';position:absolute;left:0;right:0;bottom:0;height:1px;pointer-events:none}
+  .loadchip::before{background:currentColor;opacity:.18}
+  .loadchip::after{background:linear-gradient(90deg,transparent,currentColor 50%,transparent);transform:translateX(-100%)}
+  .loadchip.on::after{animation:loadchip-sweep 1.15s cubic-bezier(.65,0,.35,1) infinite}
+  .loadchip.fail{color:var(--red-ink)}
+  .loadchip.fail::after{animation:none;opacity:0}
+  @keyframes loadchip-sweep{to{transform:translateX(100%)}}
+  @media (prefers-reduced-motion:reduce){.loadchip.on::after{animation:none;transform:none;opacity:.55}}
 
   /* Borderless glass. The 1px --line stroke was the last piece of the "grid of
      boxes" read, and it also fought the legend directly beneath it in the same

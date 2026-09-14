@@ -290,6 +290,12 @@ therefore not a measured quantity and must never be quoted as one — canopy **h
 and species are modelled. The receipt says so. This is listed as a limitation because it is the single
 easiest thing for a viewer to misread.
 
+**Bangalore inherits this by construction (2026-09-10).** Its tree scatter is the same
+`_generate` function, imported from `fetch-canopy.py` rather than reimplemented, so the
+Bangalore tree counts (27,408 / 28,573 / 12,015) are display scalings in exactly the same
+sense. The two cities differ in one respect: Bangalore drops candidates that fall inside a
+building footprint, which closes the roof half of limitation 2 there and measures it at 6–9 %.
+
 ---
 
 ## 6. The ward-mean observations do not identify `Q` — they only pin the product `Q·built`
@@ -520,3 +526,217 @@ a comparison with real roofs is not an engineer's stamp.
 **The pre-registration** for that study is `docs/superpowers/specs/2026-09-07-pv-rooftop-validation-design.md`;
 its predictions are committed before any measured kilowatt-hour enters the repository, and the result is
 published whichever way it falls.
+---
+
+## 8. Bangalore's building heights have two sources that disagree, and no Indian ground truth
+
+**Status:** open by design, published rather than hidden · **See:**
+[data-sources.md](data-sources.md),
+[../superpowers/specs/2026-09-10-bangalore-obos-wards-design.md](../superpowers/specs/2026-09-10-bangalore-obos-wards-design.md)
+
+Bangalore is the first city where the project has **two independent per-building height estimates** —
+Google Open Buildings 2.5D and UT-GLOBUS. That is an improvement on Kolkata (limitation 4 above), and it
+produced a harder problem rather than an answer: **the two disagree, and nothing available says which is
+right.**
+
+Measured at building centroids, 385 and 373 buildings:
+
+| site | UT-GLOBUS p50 | Google p50 | MAE | correlation | disagree > 5 m |
+|---|---:|---:|---:|---:|---:|
+| Indiranagar | 8.0 m | 5.3 m | 4.00 m | **+0.176** | 26.0 % |
+| Whitefield | 7.0 m | 5.0 m | 3.60 m | **+0.815** | 18.5 % |
+
+**The two correlations do not mean the same thing, and quoting them side by side without saying so would
+be the misleading move.** Whitefield's +0.815 is genuine cross-validation: there is real height variance
+and two independent methods track it. **Indiranagar's +0.176 is largely an artefact** — where almost
+every building is 5–8 m there is little variance to correlate, and the coefficient is measuring noise.
+**MAE is the honest statistic there, and 4.0 m on an 8 m building is a 50 % error.**
+
+**Full-ward results, 2026-09-14** (`python3 scripts/fetch-bangalore.py --layer crosscheck`, every
+Overture footprint whose centroid matches a UT-GLOBUS building to 5 m; the table above is the earlier
+385/373-building sample and stands as that):
+
+| ward | tile | matched | MAE | flagged > 5 m |
+|---|---|---:|---:|---:|
+| Indiranagar | Bangalore_2 | 2,274 of 14,867 | 2.83 m | 302 |
+| Whitefield | Bangalore_2 | 2,532 of 10,897 | 2.80 m | 178 |
+| MG Road | Bangalore_1 | 2,100 of 11,045 | 3.65 m | 339 |
+
+These are measured against the **shipped** heights. The earlier strings (Indiranagar 3.12 m / 391, Whitefield
+3.13 m / 295) were measured against the Google 2.5D baseline before OSM-measured heights replaced 1,941 and
+1,430 buildings (`1fec16e`). They reproduce to the digit on those older heights, so they were stale, not wrong.
+The two sets are not like-for-like (the fill set changed too), so read the drop as consistent with the OSM
+heights, not as a measured improvement.
+
+This generalises past Bangalore: **correlation is the wrong summary for a low-variance population**, and
+a homogeneous neighbourhood will make any two height sources look uncorrelated no matter how good they
+both are.
+
+**UT-GLOBUS reads systematically 2–3 m higher at both sites.** Neither source has published Indian
+validation. Google's own documentation says the 1.5 m MAE *"was only evaluated in North America, Europe
+and Japan… heights prediction might not be as good in the Global South"*; UT-GLOBUS validates against US
+LiDAR only, at RMSE 9.1 m per building.
+
+**What we do about it.** Nothing that manufactures a number. Google 2.5D stays primary, UT-GLOBUS is
+attached as a second field, and where they differ by more than 5 m the building carries a **flag** (a widened on-screen uncertainty band is
+designed but not yet built) — it is not corrected and not averaged. Blending would invent a value neither
+source states, and would hide the disagreement precisely where it is most informative.
+
+**What would close it.** Ground truth: a LiDAR or photogrammetric survey of a few hundred Bengaluru
+buildings. That is a procurement, not a download, and the sub-metre licence wall in
+[regulatory-and-licensing.md](regulatory-and-licensing.md) is why.
+
+---
+
+## 9. Bangalore's tree census is an inventory, not a density field
+
+**Status:** by design, disclosed · **See:** [data-sources.md](data-sources.md)
+
+The BBMP tree census is **702,109 individual trees with species** — nothing comparable exists for
+Kolkata, and it is genuinely better data than we have anywhere else. It also cannot be used the obvious
+way.
+
+**Counts track enumeration effort, not tree density.** Only **144 of 198 wards** appear at all; per-ward
+counts run from 1 to 45,831; 13 wards hold fewer than 100 trees; and **24.3 % of trees are recorded as
+species "Others"**. A ward with few trees in this dataset is a ward that was surveyed less, and a map
+shaded by census count would be a map of survey effort presented as a map of canopy.
+
+**It also carries no girth, height or crown diameter**, so crown radius has to be modelled from species —
+derived, not measured, and the artefact must say so.
+
+**So the two datasets do different jobs and are not substitutes:** canopy *fraction* comes from Meta CHM
+v1, which is a measurement; the census supplies *species and position*, which is an inventory. This is
+the same distinction as limitation 5 above — measured height versus modelled count — arriving from the
+opposite direction.
+
+**One consequence worth stating separately:** the census numbers its wards on the **dead 198-ward
+scheme**, two reorganisations behind the current 369-ward GBA-2025 geometry. Trees are therefore consumed
+**by position and never by ward join**, which sidesteps the problem rather than solving it.
+
+---
+
+## 10. A height percentile means two different things, and the gap is 4x on tall buildings
+
+**Status:** measured 2026-09-10, disclosed · **See:** [data-sources.md](data-sources.md)
+
+Building the Bangalore wards produced two sets of height statistics from **the same
+raster on the same day**, differing by far more than rounding:
+
+| | over built PIXELS | over FOOTPRINTS (zonal p65) |
+|---|---:|---:|
+| Indiranagar, share ≥ 15 m | 3.3 % | **0.8 %** |
+| MG Road, share ≥ 15 m | 15.5 % | **3.7 %** |
+| Whitefield, share ≥ 15 m | 19.7 % | **5.1 %** |
+
+**Neither is wrong. They answer different questions, and the tall-building share is
+where that stops being pedantry** — MG Road's differs by a factor of four.
+
+A **pixel** census asks "how tall is the built surface here?", and every pixel of a
+tower is a tall pixel. A **footprint** statistic asks "how tall is this building?",
+and a zonal percentile over the footprint mixes the tower's core with its podium,
+courtyards, annexes, roof plant and edge pixels. It averages down, and it averages
+down hardest on exactly the large, complex buildings whose height people care most
+about.
+
+**This is a known property, not a discovery.** Kolkata's `compute-heights.py` names
+it in its own docstring and offers p75 as the candidate correction. What is new is
+the *size* of the effect on a derived share rather than on a median: the medians
+here differ by 0.6–2.6 m, which looks tolerable, while the ≥15 m share differs by
+4x from the same data.
+
+**The operational rule.** Any published tall-building share must name which
+statistic it came from. A massing render is built from the footprint statistic,
+because you extrude a building by its own height, so **renders will show a lower
+skyline than a pixel census implies** and that is correct behaviour, not a bug.
+
+**What would close it.** The same thing that would close limitation 8: Indian
+ground truth. Failing that, running p65 and p75 side by side and choosing against
+OSM `building:levels` evidence, which is what Kolkata's `validate-heights.py` does
+and what Bangalore has not yet done — it ships p65 for parity with Kolkata.
+
+---
+
+## 11. Three statistical fixes for Bengaluru's heights, all measured, all rejected
+
+**Status:** measured 2026-09-11, all three refused · **See:** `scripts/measure-bangalore-prior.py`
+
+Bengaluru's shipped heights are Google Open Buildings 2.5D at zonal p65, and that
+estimator has a known, measured weakness: it collapses on tall buildings. Against
+1,926 buildings carrying independent OSM evidence, its bias runs from **−0.68 m
+below 10 m to −27.09 m above 60 m** — at the top end it reads barely a third of
+the building.
+
+Three statistical repairs were tried against held-out data. **None ships.**
+
+| approach | result vs raw Google | why refused |
+|---|---:|---|
+| Neighbourhood spatial prior, 400 m cells | **−36 to −39 %** | loses outright |
+| Global linear fit, `0.846·g + 3.42` | **+7 %** MAE | shrinks the skyline |
+| Band-limited linear, 8–45 m only | **+1.5 %** MAE | 19.7 % made worse |
+
+**The spatial prior lost, and that is a finding about the cities, not the method.**
+On Dubai the same prior halved the error over 152,942 buildings — because 87 % of
+Dubai had no measured height at all, so anything beat nothing. Bengaluru already
+has a real estimator on every building, and a neighbourhood median cannot beat it:
+MAE 3.74 m for Google against 5.11 m for the prior on held-out storey-derived
+truth, and 16.58 m against 22.96 m on stated heights. **A method that transformed
+one city can be worthless in the next; re-test, never port.**
+
+**The linear fit is a regression-to-the-mean trap, and it is the instructive one.**
+It improves aggregate MAE by 7 % and would have been easy to ship on that number
+alone. Broken out by true height it improves the 10–60 m middle by 10–27 % and
+makes **both tails worse** — and the slope below 1 means it pulls tall buildings
+*down*. Five of the six tallest test buildings moved FURTHER from the truth,
+including one whose true height is 93.2 m being pushed from 50.8 m to 46.4 m.
+
+**An aggregate metric can improve while the thing you care about gets worse.** The
+skyline is what a viewer checks first and what the founder's demo rests on, so a
+correction that trades the towers for the mid-rise is a loss dressed as a gain.
+
+### What this leaves, and it is not nothing
+
+**Statistics on Google's own value cannot rescue the towers — only evidence can.**
+That is exactly what the measured tier does, and it is already shipped: a cited
+published height moved UB Tower from 18.2 m to 123 m, which no correction fitted
+to Google's reading could ever have achieved from an input of 10 m.
+
+So the route to better Bengaluru heights is **more evidence, not better maths**:
+the OSM buildings Overture is missing entirely (Vidhana Soudha among them), and
+the Karnataka RERA elevation figures for Whitefield's under-construction towers.
+
+---
+
+## 12. The fallback air temperature is a climatology, not a forecast
+
+**Status:** accepted · **See:** [data-sources.md](data-sources.md) (IMD 1991–2020)
+
+When there is no live met.no reading — including the first seconds of every page load — the instrument
+models air temperature from the city's IMD 1991–2020 monthly normals: that month's mean daily minimum at
+06:00 and maximum at 14:00, joined by half-cosines. Three things this is not:
+
+- **Not today's weather.** A heatwave day or a cool monsoon afternoon sits far from its monthly mean; the
+  live reading replaces this the moment it arrives.
+- **Not the recent climate.** The normals end in 2020, and the last decade has run warmer (GHCN-Daily,
+  Bengaluru: April 2016–2025 averaged 34.9 °C against a normal of 34.1 °C).
+- **Not an observed diurnal cycle.** The tables give only daily extremes; the 06:00 / 14:00 placement and
+  the curve between them are the standard assumption.
+
+It replaced a single 32 °C for both Indian cities, which ran up to 16 °C too hot at Bengaluru nights.
+
+---
+
+## 13. The pocket-park size is a design default, not a measurement
+
+**Status:** accepted · **See:** [park-size-tvoe-preregistration.md](park-size-tvoe-preregistration.md)
+
+The pocket-parks slider paints discs of 50 m radius (~0.8 ha) in every city. That number was justified as
+Kolkata's "efficient park size" (TVoE 0.77 ha, Li et al. 2022). It is not one: TVoE is a regression slope
+whose value does not change with the area unit, the paper is internally inconsistent, and the Kolkata
+sample was hand-picked in Google Earth and cannot be reproduced from open data. The radius stands as a
+reasonable pocket-park size; the cooling it produces comes from the solver running on the painted
+vegetation, not from the radius itself.
+
+The same borrowed number sets the DC-URS thermal-refuge floor (`MIN_REFUGE_HA = 0.77`,
+`MIN_PATCH_M2 = 7,700` in `scripts/compute-tra.py` and `cooling-surfaces.ts`) — it too is a design
+threshold, kept because it keeps the index discriminating, not because it is a measured minimum cooling
+area.

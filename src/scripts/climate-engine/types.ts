@@ -18,15 +18,76 @@ export interface GridSpec {
 }
 
 /**
- * The intervention model is calibrated in cell units. All production analytical
- * results therefore use this one canonical grid until a separately versioned
- * metre-based recalibration and convergence study exists.
+ * The admitted (grid, ward size) PAIRS.
+ *
+ * This was a single constant, `CANONICAL_GRID_N = 192`, from the day the model
+ * was calibrated in cell units. That was correct while every ward was 1400 m.
+ * Bengaluru's are 2800 m, and 192 cells there would be 14.58 m per cell — a
+ * different physical quantity wearing the same name.
+ *
+ * BOTH HALVES ARE CHECKED TOGETHER because the failure mode is silent: 384
+ * cells over a 1400 m ward produces arrays of exactly the right length, passes
+ * every bounds check, and models 3.65 m cells that no calibration in this repo
+ * describes.
+ *
+ * Every admitted pair yields 7.29 m per cell. That is deliberate: it is what
+ * makes a Bengaluru cell and a Kolkata cell the same measurement.
  */
-export const CANONICAL_GRID_N = 192;
-export const CANONICAL_GRID_VERSION = 'hm-grid-192-v1';
+export interface AdmittedGrid {
+  readonly n: number;
+  readonly sizeM: number;
+  readonly version: string;
+}
 
-export function isCanonicalGrid(grid: GridSpec): boolean {
-  return grid.n === CANONICAL_GRID_N;
+export const ADMITTED_GRIDS: readonly AdmittedGrid[] = [
+  /* KOLKATA'S VERSION NAMES ONLY THE GRID, AND KEEPS DOING SO: it is pinned by a
+     test, persisted in Compare's baseline cache keys, and already emitted into
+     published ReleaseEvidence. Every version added after it names BOTH halves,
+     because `n` alone identifies a pair only while the mapping is bijective.
+
+     `sizeM` IS THE LOOKUP KEY — `gridFor` finds on it — so it must stay unique
+     across this list, and a test pins that. A second row at the same ward size
+     is not a second option but an unreachable one: `find` returns the first
+     match, so the later row could never be selected.
+
+     A DEVICE-TIER VARIANT THEREFORE NEEDS A DIFFERENT MECHANISM, not a row
+     here. A coarser grid over the same ward would need a second key beyond
+     `sizeM` to be reachable at all, and it would give two cities two different
+     cell sizes — which is the comparability every admitted pair exists to
+     preserve, and what makes a Bengaluru cell and a Kolkata cell the same
+     measurement. */
+  { n: 192, sizeM: 1400, version: 'hm-grid-192-v1' },
+  { n: 384, sizeM: 2800, version: 'hm-grid-384-2800-v1' },
+];
+
+/** Cells per side for a ward of this size, or undefined if unsupported. */
+export function gridFor(sizeM: number): AdmittedGrid | undefined {
+  return ADMITTED_GRIDS.find((g) => g.sizeM === sizeM);
+}
+
+/** The admitted pair for this ward size, or a refusal that names the fix. */
+export function requireGrid(sizeM: number): AdmittedGrid {
+  const g = gridFor(sizeM);
+  if (!g) throw new RangeError(
+    `No admitted grid for a ${sizeM} m ward. Admitted ward sizes are `
+    + `${ADMITTED_GRIDS.map((a) => a.sizeM).join(', ')} m — add the pair to ADMITTED_GRIDS in types.ts.`);
+  return g;
+}
+
+/**
+ * The version string for this ward size's pair — what a cached or published
+ * result must carry to be read back as comparable. THROWS on an unadmitted
+ * size, because a result labelled with a grid nobody admits is worse than one
+ * that never got written.
+ */
+export function gridVersion(sizeM: number): string {
+  return requireGrid(sizeM).version;
+}
+
+export function isAdmittedGrid(grid: GridSpec, sizeM: number): boolean {
+  const g = gridFor(sizeM);
+  if (!g || grid.n !== g.n) return false;
+  return Math.abs(grid.cellMeters - sizeM / g.n) < 1e-6;
 }
 
 /**
@@ -139,6 +200,24 @@ export const WATER_LAYER_ENABLED = false;
  * scope migration. Each was a fact about Kolkata, or about India, wearing the
  * costume of a fact about heat transfer; see the note where they used to sit.
  */
+/**
+ * A city's monthly air-temperature climatology: the mean daily maximum and minimum
+ * for each calendar month, from a named station and period.
+ *
+ * `measured: false` marks a placeholder that has not been sourced (Dubai), so no
+ * consumer can mistake a flat invented table for a climatology.
+ */
+export interface AirNormals {
+  readonly station: string;
+  readonly period: string;
+  readonly source: string;
+  readonly measured: boolean;
+  /** 12 values, January first: mean daily maximum, °C */
+  readonly maxC: readonly number[];
+  /** 12 values, January first: mean daily minimum, °C */
+  readonly minC: readonly number[];
+}
+
 export interface ClimateConstants {
   /**
    * Warming-pathway deltas, K, keyed by scenario — added to the air temperature.
@@ -154,9 +233,15 @@ export interface ClimateConstants {
    * caller that mutated it would move the warming pathway for the whole session.
    */
   readonly pathDelta: Readonly<Record<string, number>>;
-  /** Air temperature, °C, used ONLY when the live met feed is down. */
-  readonly fallbackTairC: number;
-  /** Cooling-blob radius, metres — the city's measured tree-void-effect scale. */
+  /**
+   * Monthly air-temperature normals, used ONLY when there is no live reading —
+   * which includes the first seconds of every page load, before the feed answers.
+   * `fallbackTair` (heat-map-model.ts) turns them into a temperature for a month and
+   * hour. They replaced one `fallbackTairC` that was 32 °C for Kolkata and, copied,
+   * for Bengaluru: up to 16 °C too hot at night against IMD 1991–2020.
+   */
+  readonly airNormals: AirNormals;
+  /** Pocket-park disc radius, metres — a design default, not a measured size. See docs/evidence/park-size-tvoe-preregistration.md. */
   readonly parkRadiusM: number;
   /**
    * Intervention unit costs, or `null` where the country has declared none.

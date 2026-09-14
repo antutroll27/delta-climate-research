@@ -1,5 +1,6 @@
 /// <reference lib="webworker" />
 import { TsHeatSim } from './sim-ts';
+import { gridVersion } from './types';
 import {
   assertHeatRequest,
   type HeatSimRequest,
@@ -7,7 +8,6 @@ import {
   type HeatWorkerRequest,
   type HeatWorkerResponse,
 } from './sim-protocol';
-import { CANONICAL_GRID_VERSION } from './types';
 
 let sim: TsHeatSim | null = null;
 let current: HeatSimRequest | null = null;
@@ -20,7 +20,8 @@ function snapshot(request: HeatSimRequest): HeatSimSnapshot {
     backend: 'ts-worker',
     field: sim.temperature().slice(),
     stats: sim.stats(request.thresholdC),
-    gridVersion: CANONICAL_GRID_VERSION,
+    /* From the ward SIZE: it names the admitted pair, where `n` names half. */
+    gridVersion: gridVersion(request.sizeM),
   };
 }
 

@@ -89,7 +89,13 @@ import _physics  # noqa: E402
 import _types  # noqa: E402
 import _water  # noqa: E402
 from _ecostress import align, band_url, cmr_search, fetch, target_grid, token  # noqa: E402
-from _sentinel import GRID as SURFACE_GRID  # noqa: E402
+from _sentinel import uniform_grid  # noqa: E402
+
+#: The Sentinel-2 surface grid, DERIVED from the ward footprint rather than read
+#: as a module constant baked at Kolkata's 1400 m. This script is Kolkata-only,
+#: and `uniform_grid` refuses the moment the ward table holds two footprints —
+#: which is exactly when one number for "the" grid stops being a fact.
+SURFACE_GRID = uniform_grid(_types.WARDS.values())
 
 ROOT = os.path.join(HERE, "..")
 SURFACE_DIR = os.path.join(ROOT, "public", "heat-map", "data")

@@ -4,7 +4,7 @@ import test from 'node:test';
 import {
   createGpuHost, createStaticHost, createWorkerHost,
 } from '../../src/scripts/climate-engine/sim-host.ts';
-import { CANONICAL_GRID_N, CANONICAL_GRID_VERSION, DEFAULT_PARAMS } from '../../src/scripts/climate-engine/types.ts';
+import { requireGrid, gridVersion, DEFAULT_PARAMS } from '../../src/scripts/climate-engine/types.ts';
 
 /* The sim host is the only thing standing between a wedged worker and a page
    that looks alive while showing a frozen field. Every guard below was written
@@ -14,11 +14,19 @@ import { CANONICAL_GRID_N, CANONICAL_GRID_VERSION, DEFAULT_PARAMS } from '../../
    integration behind that seam is covered headed, in
    tests/e2e/heat-map-sim-backend.spec.ts. */
 
-const CELLS = CANONICAL_GRID_N * CANONICAL_GRID_N;
+/* Kolkata's admitted pair — every request in this file is a 1400 m ward. */
+const GRID_N = requireGrid(1400).n;
+const GRID_VERSION = gridVersion(1400);
 
+const CELLS = GRID_N * GRID_N;
+
+/* 1400 / 192 EXACTLY, where this file used to round it to 7.29. The protocol
+   checks the PAIR now, and part of that check is that `cellMeters` really is the
+   metres `sizeM` and `n` imply — a rounded display value is not that number. */
 const request = (generation = 1, over = {}) => ({
   generation,
-  grid: { n: CANONICAL_GRID_N, cellMeters: 7.29 },
+  grid: { n: GRID_N, cellMeters: 1400 / GRID_N },
+  sizeM: 1400,
   layers: {
     albedo: new Float32Array(CELLS).fill(0.2),
     veg: new Float32Array(CELLS).fill(0.1),
@@ -39,7 +47,7 @@ const snapshotFor = (requestId, generation) => ({
     backend: 'ts-worker',
     field: new Float32Array(CELLS).fill(30),
     stats: { meanC: 30, peakC: 30, fracAbove: 0, thresholdC: 35 },
-    gridVersion: CANONICAL_GRID_VERSION,
+    gridVersion: GRID_VERSION,
   },
 });
 
@@ -80,7 +88,7 @@ test('reset posts the request and resolves with the worker snapshot', async () =
   const sent = worker.lastOf('reset');
   assert.ok(sent, 'reset must reach the worker');
   assert.equal(sent.request.generation, 4);
-  assert.equal(sent.request.grid.n, CANONICAL_GRID_N, 'the worker must be told the grid it is solving on');
+  assert.equal(sent.request.grid.n, GRID_N, 'the worker must be told the grid it is solving on');
   assert.equal(sent.request.layers.built.length, CELLS);
 
   worker.reply(snapshotFor(sent.requestId, 4));
@@ -90,11 +98,11 @@ test('reset posts the request and resolves with the worker snapshot', async () =
   host.dispose();
 });
 
-test('reset refuses a non-canonical grid before anything reaches the worker', async () => {
+test('reset refuses a grid that does not pair with the ward, before anything reaches the worker', async () => {
   const { worker, host } = hosted();
   await assert.rejects(
     () => host.reset(request(1, { grid: { n: 64, cellMeters: 7.29 } })),
-    /canonical grid/,
+    /does not pair with a 1400 m ward/,
   );
   assert.equal(worker.posted.length, 0, 'an invalid request must never be posted');
   host.dispose();
@@ -276,7 +284,7 @@ test('the static host settles a real field and reports ts-main', async () => {
   const snapshot = await host.reset(request(1, { settleSteps: 48 }));
   assert.equal(snapshot.backend, 'ts-main');
   assert.equal(snapshot.generation, 1);
-  assert.equal(snapshot.gridVersion, CANONICAL_GRID_VERSION);
+  assert.equal(snapshot.gridVersion, GRID_VERSION);
   assert.equal(snapshot.field.length, CELLS);
   assert.ok(Number.isFinite(snapshot.stats.meanC), 'a settled field must produce finite stats');
   assert.equal(snapshot.stats.thresholdC, 35);
@@ -343,14 +351,14 @@ test('the GPU host settles on reset and reports gpu-webgl2', async () => {
   assert.deepEqual(sim.steps, [40], 'settleSteps must reach the solver verbatim');
   assert.equal(snapshot.backend, 'gpu-webgl2');
   assert.equal(snapshot.generation, 2);
-  assert.equal(snapshot.gridVersion, CANONICAL_GRID_VERSION);
+  assert.equal(snapshot.gridVersion, GRID_VERSION);
   assert.equal(snapshot.stats.thresholdC, 35);
   host.dispose();
 });
 
-test('the GPU host refuses a non-canonical grid', async () => {
+test('the GPU host refuses a grid that does not pair with the ward', async () => {
   const { sim, host } = gpuHosted();
-  await assert.rejects(() => host.reset(request(1, { grid: { n: 64, cellMeters: 7.29 } })), /canonical grid/);
+  await assert.rejects(() => host.reset(request(1, { grid: { n: 64, cellMeters: 7.29 } })), /does not pair with a 1400 m ward/);
   assert.equal(sim.resets, 0, 'an invalid request must never reach the solver');
   host.dispose();
 });

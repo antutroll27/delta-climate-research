@@ -77,6 +77,37 @@ Each of these looked usable and was not. They are recorded because the *reason* 
 - **Google Photorealistic 3D Tiles** — runtime-only ToS (no caching, which breaks the static-asset
   pattern), uncapped per-session billing on a public page, and no building IDs.
 
+### Karnataka and Bengaluru, added 2026-09-10
+
+The second city brought a **state** layer of restriction on top of the national one. Each of these is a
+different authority, so clearing one says nothing about the next.
+
+- **Indian Space Policy 2023 — the sub-5 m rule.** Data finer than **5 m** is free only to government
+  entities; everyone else is priced through **NSIL**. This is what closes the DIY route of buying
+  Cartosat-1 2.5 m stereo and deriving an nDSM. Only **CartoDEM at 30 m** is free, and that is terrain,
+  not buildings. It sits alongside the 2021 DST guidelines above rather than replacing them.
+- **KSRSAC / K-GIS 50 cm imagery — barred outright.** *"Under no circumstances data will be used for any
+  commercial purposes by anyone"* and *"shall not be used for any legal purpose."* This is the only
+  sub-metre imagery covering Bengaluru comprehensively, and it is the clearest single illustration that
+  the sub-metre ceiling here is contractual, not financial.
+- **Bhuvan / NRSC Bhoonidhi — "no Internet based hosting."** The EULA does permit derivative works, which
+  reads as an opening until you reach the hosting exclusion. **A web 3D scene is precisely the excluded
+  use.** Registration is single-user and non-transferable. Note this refines the older "viewing only"
+  note above: the bar for us is the hosting clause specifically.
+- **IMD direct — Certificate of Undertaking.** *"The data shall not be used for commercial purpose"* and
+  *"will not be put on Internet."* The workaround is not a negotiation: **the same observations are US
+  public domain through NOAA GHCNh.**
+- **OpenCity (`data.opencity.in`) — four contradictory statements.** Per-dataset "Public Domain", a
+  footer saying CC BY-NC-SA, terms saying non-commercial, and an FAQ clarifying that **posts** are
+  CC BY-NC-SA while **data** is **ODbL**. We treat the FAQ as authoritative and the datasets as ODbL,
+  preferring the **KGIS government REST service** as the source where one exists. **The founder has
+  declined to seek written confirmation at this stage**; revisit before publishing any derived database
+  externally.
+
+**The reusable lesson from this set:** an open *schema* is not an open *licence*, and an open licence on
+a mirror is not an open licence on the source. Read the terms attached to the authority that actually
+produced the data.
+
 ## Licences we rely on, and why they hold
 
 | source | licence | commercial |
@@ -89,6 +120,13 @@ Each of these looked usable and was not. They are recorded because the *reason* 
 | Mapillary | imagery CC-BY-SA; API ToU §12 permits commercial use of derived data | yes, streamed not rehosted |
 | ETH Global Canopy Height | CC BY 4.0 (raster; repo code MIT) | yes |
 | CPCB via data.gov.in | GODL-India | yes |
+| UT-GLOBUS building heights (UT Austin, Zenodo 11156602) | CC BY 4.0 | yes, with attribution |
+| ATREE-CSEI Lakes & Streams of Bengaluru Urban | CC-BY | yes, with attribution |
+| NOAA GHCNh hourly station data | US public domain | yes |
+| Copernicus GLO-30 DEM | ESA/Airbus free-and-open | yes |
+
+*(The canopy row above is a licence statement only. **v2 is ruled out on accuracy, not licence** —
+see [data-sources.md](data-sources.md).)*
 
 **The pattern worth naming for an investor:** every layer in the shipped engine is either public domain or
 permissively licensed for commercial use, and the sub-metre upgrade path is closed by regulation rather

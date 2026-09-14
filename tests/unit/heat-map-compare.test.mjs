@@ -2,7 +2,11 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { assertCapsLogic, resolveHeatCaps } from '../../src/scripts/climate-engine/caps.ts';
-import { applyInterventions, SIM_N } from '../../src/scripts/climate-engine/heat-map-model.ts';
+import { applyInterventions } from '../../src/scripts/climate-engine/heat-map-model.ts';
+import { requireGrid } from '../../src/scripts/climate-engine/types.ts';
+/* Kolkata's grid, named rather than imported: the solver grid is a property of
+   the ward now, and every case below is built on a 1400 m ward. */
+const SIM_N = requireGrid(1400).n;
 import { resolve } from '../../src/scripts/climate-engine/scope/resolve.ts';
 import { coverageToInterventions, deliveredQuantities } from '../../src/scripts/climate-engine/scenario/coverage.ts';
 import { parsePairedScenario, serializePairedScenario } from '../../src/scripts/climate-engine/scenario/scenario-url.ts';
@@ -69,11 +73,20 @@ test('delivered park area reports the requested fractional area', () => {
   assert.equal(quantities.treeCorridorCells, 55);
 });
 
-test('all device tiers retain the canonical analytical grid', () => {
+/* WAS: `all device tiers retain the canonical analytical grid`, asserting
+   `resolveHeatCaps(...).grid === 192` at every tier. `HeatCaps.grid` is gone — it
+   was a literal-typed 192 that nothing outside its own self-checks ever read, the
+   same "the ward set was a type" shape the per-ward grid work exists to end, and
+   it is simply wrong for a 2800 m ward. The tier-invariance it asserted is now a
+   property of ADMITTED_GRIDS, pinned in heat-grid-pairs.test.mjs. */
+test('the grid is a property of the ward, not of the device tier', () => {
   const unavailable = { webgpu: false, floatRenderTargets: false };
-  assert.equal(resolveHeatCaps(2, true, unavailable, '').grid, 192);
-  assert.equal(resolveHeatCaps(1, true, unavailable, '').grid, 192);
-  assert.equal(resolveHeatCaps(0, true, unavailable, '').grid, 192);
+  for (const tier of [2, 1, 0]) {
+    assert.equal(Object.hasOwn(resolveHeatCaps(tier, true, unavailable, ''), 'grid'), false,
+      'caps must not carry a second grid authority; the ward footprint decides it');
+  }
+  assert.equal(requireGrid(1400).n, 192);
+  assert.equal(requireGrid(2800).n, 384);
 });
 
 test('WebGPU alone does not select the WebGL2-only GPU solver', () => {
@@ -109,7 +122,12 @@ test('footprint rasterisation is deterministic and unions subcell coverage', () 
   assert.equal(built[6], 1);
   assert.equal(built[9], 1);
   assert.equal(built[10], 1);
-  assert.deepEqual(rasterWardBase(ward, 0.2).built, rasterWardBase(ward, 0.2).built);
+  /* rasterWardBase demands an ADMITTED (grid, ward size) pair, and a 4 m ward has
+     none — deliberately: that refusal is the whole point of the contract. The
+     property under test here is determinism, which does not depend on the size,
+     so the determinism half runs on a real ward footprint. */
+  const admitted = { ...ward, sizeM: 1400 };
+  assert.deepEqual(rasterWardBase(admitted, 0.2).built, rasterWardBase(admitted, 0.2).built);
 });
 
 test('scenario URLs normalize duplicate wards and preserve reproducible state', () => {
