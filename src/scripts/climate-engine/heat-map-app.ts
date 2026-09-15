@@ -11,7 +11,7 @@
 import maplibregl from 'maplibre-gl';
 import { RENDERABLE_WARD_MAP, wardLatLon, formatLatLon, type Ward } from '../../data/wards.ts';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { DEFAULT_PARAMS, greenReferenceContrastC, requireGrid, type ClimateConstants, type PvFile, type SimLayers, type SimParams } from './types';
+import { greenReferenceContrastC, requireGrid, type ClimateConstants, type PvFile, type SimLayers, type SimParams } from './types';
 import { detectHeatCaps } from './caps';
 import { createGpuHost, createStaticHost, createWorkerHost } from './sim-host';
 import type { HeatSimHost, HeatSimRequest, HeatSimSnapshot } from './sim-protocol';
@@ -297,7 +297,7 @@ export function mountHeatMap(): () => void {
     /* Non-null forces the 1-in-100 air temperature in place of the observed one.
        A scenario override, not a phase — see phase-select.ts. */
     heatTairC: number | null;
-    base: SimLayers | null; baselineMean: number; live: M.Ambient | null;
+    base: SimLayers | null; live: M.Ambient | null;
     spatial: M.Spatial | null; greenG: number; lastMean: Record<string, number>;
     /* Observed DC-URS inputs per ward, loaded once. null while unloaded or if the
        fetch failed — the score reports itself unavailable rather than inventing one. */
@@ -311,7 +311,7 @@ export function mountHeatMap(): () => void {
      closed, correctly — would have thrown on the first simulation rather than the
      first click. `?? ''` covers the country that has adopted no projection at all:
      an empty table answers zero to every key, so the value is never read. */
-  const state: State = { ward: INITIAL_AREA, phase: 'peak', path: SCOPE.pathway.initial ?? '', iv: { trees: 0, roof: 0, parks: 0, facades: 0 }, climate: SCOPE.climate, sunNow: 0, heatTairC: null, base: null, baselineMean: 0, live: null, spatial: null, greenG: 0, lastMean: {}, dcurs: null };
+  const state: State = { ward: INITIAL_AREA, phase: 'peak', path: SCOPE.pathway.initial ?? '', iv: { trees: 0, roof: 0, parks: 0, facades: 0 }, climate: SCOPE.climate, sunNow: 0, heatTairC: null, base: null, live: null, spatial: null, greenG: 0, lastMean: {}, dcurs: null };
   const wardSession = createWardSession();
   let appDisposed = false;
   let mode: 'relief' | 'iso' = 'relief', env: 'dark' | 'studio' = 'dark';
@@ -2240,7 +2240,6 @@ export function mountHeatMap(): () => void {
        physics at noon and then visibly flip when the stats tick corrected it. */
     refreshNowSun();
     const p = M.currentParams({ ...state, clock: scenarioClock() });
-    state.baselineMean = M.eqMean(state.base, { ...p, Q: DEFAULT_PARAMS.Q });
     const layers = M.applyInterventions(state.base, state.iv, state.spatial, state.climate.parkRadiusM);
     state.greenG = M.computeGreenG(layers);
     const request: HeatSimRequest = {
