@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
 import { dcUrs } from '../../src/scripts/climate-engine/dc-urs.ts';
+import { applyScenario } from '../../src/scripts/climate-engine/dc-urs-scenario.ts';
 import type { DcUrsInputs } from '../../src/scripts/climate-engine/dc-urs-inputs.ts';
 
 /**
@@ -66,13 +67,44 @@ const TREE_WARDS = [
   { name: 'Ballygunge', path: '/heat-map/in/kolkata/ballygunge/', id: 'ballygunge', inputs: 'dc-urs-inputs.json' },
 ] as const;
 
+/** The plan this test drives, in the shape the slider writes onto `state.iv`. */
+const PLAN = { trees: 25, roof: 0, parks: 0, facades: 0 } as const;
+
+/* THE MARGIN IS THE THERMAL HALF, which is the half this test exists to see.
+   "> 0" alone proved nothing: the index's OWN gains — fvc, canopy, albedo, refuge
+   distance, none of them a temperature — are already positive at +0.12 pts for MG
+   Road and +0.48 for Ballygunge, so passing the same params to both sides of
+   `scenarioLst`, i.e. no Δ at all, would have sailed through it.
+
+   MEASURED on the built page at 13:00 Peak with 25 trees: MG Road gains +0.6 pts
+   in total and Ballygunge +0.9, so the LST term is worth about 0.48 and 0.42 pts
+   respectively. 0.2 sits well under both and well over the ±0.05 that the readout's
+   single decimal place can hide. */
+const THERMAL_MARGIN = 0.2;
+
 for (const ward of TREE_WARDS) {
   test(`${ward.name}: planting 25 trees raises the resilience score`, async ({ page }) => {
     const raw = JSON.parse(await readFile(
       fileURLToPath(new URL(`../../public/heat-map/data/${ward.inputs}`, import.meta.url)),
       'utf8',
     )) as { wards: Record<string, DcUrsInputs> };
-    const baseScore = Math.round(dcUrs(raw.wards[ward.id]));
+    const inputs = raw.wards[ward.id];
+    const baseScore = Math.round(dcUrs(inputs));
+
+    /* THE WARD'S OWN SIDE LENGTH, read from the artefact the page itself fetches
+       (`currentWardSizeM = d.sizeM` in heat-map-app.ts). Typing 2800 and 1400 in
+       here would let this test go on agreeing with a page that had stopped scaling
+       the slider gains by ward area. */
+    const { sizeM } = JSON.parse(await readFile(
+      fileURLToPath(new URL(`../../public/heat-map/data/${ward.id}.json`, import.meta.url)),
+      'utf8',
+    )) as { sizeM: number };
+
+    /* WHAT THE INDEX ALONE IS WORTH. `applyScenario` with no LST moves fvc, canopy,
+       albedo and refuge distance and touches no temperature — so this is the gain the
+       page would still print if `scenarioLst` were handed the same params on both
+       sides and its Δ collapsed to zero. */
+    const indexOnly = dcUrs(applyScenario(inputs, PLAN, undefined, sizeM).inputs) - dcUrs(inputs);
 
     const thrown: string[] = [];
     page.on('pageerror', (error) => thrown.push(String(error)));
@@ -83,13 +115,29 @@ for (const ward of TREE_WARDS) {
     await expect(readout).toContainText('pts reachable', { timeout: 30_000 });
     await expect(score).toHaveText(String(baseScore));
 
-    await page.locator('#ivTrees').fill('25');
+    /* PIN THE PHASE BEFORE THE SLIDER MOVES. The console opens on "Now", whose sun —
+       and therefore the plan's thermal Δ, and even which of lstDayC/lstNightC is fed
+       — follows whatever wall clock the suite runs at. THERMAL_MARGIN was measured at
+       13:00 Peak, so this asks for 13:00 Peak. The no-plan score is phase-independent,
+       which is what makes it the settle signal here. */
+    const peak = page.locator('#segPhase button[data-p="peak"]');
+    await peak.click();
+    await expect(peak).toHaveClass(/\bon\b/);
+    await expect(score).toHaveText(String(baseScore));
+
+    await page.locator('#ivTrees').fill(String(PLAN.trees));
     await expect(readout).toContainText('from this plan', { timeout: 30_000 });
 
     const text = (await readout.textContent()) ?? '';
     const gained = text.match(/(-?\d+\.\d) pts from this plan/);
     expect(gained, `no signed "pts from this plan" figure in: ${text}`).not.toBeNull();
-    expect(Number(gained![1]), `25 trees read "${gained![0]}"`).toBeGreaterThan(0);
+    expect(
+      Number(gained![1]),
+      `${PLAN.trees} trees read "${gained![0]}" at 13:00 peak. The index's own gains are `
+      + `worth ${indexOnly.toFixed(2)} pts over this ${sizeM} m ward, so anything below `
+      + `${(indexOnly + THERMAL_MARGIN).toFixed(2)} means the measured LST is not being moved `
+      + 'by the plan -- scenarioLst\'s Δ has collapsed to zero',
+    ).toBeGreaterThanOrEqual(indexOnly + THERMAL_MARGIN);
     expect(Number(await score.textContent())).toBeGreaterThanOrEqual(baseScore);
 
     expect(thrown, `threw:\n${thrown.join('\n')}`).toEqual([]);
