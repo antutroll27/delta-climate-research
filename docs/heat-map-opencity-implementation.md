@@ -407,12 +407,17 @@ unchanged pair numbers · `npm run verify` green.
 1. **Humidity** — resolved by CEO decision: hold vapour pressure (§1b). The alternative
    produces a physically impossible atmosphere on muggy days.
 
-2. **DC-URS silently absorbs the scenario forcing.** `:1157` feeds `st.meanC` in as
-   `dayC` whenever a slider is non-zero and `:1191` reports "pts from this plan", so
-   heatwave's shift would be credited to the plan. **Pre-existing** — `#segPath` at
-   `ssp585` already does this at +4.1 K, unguarded, since it shipped. Do not widen scope
-   (spec §8 forbids DC-URS changes); record it as pre-existing in the commit and add a
-   test pinning heatwave → `dayC`, never `nightC`, so the eventual fix is visible.
+2. **DC-URS silently absorbed the scenario forcing. FIXED 2026-09-16** in "fix(heat-map):
+   score the plan against the measured LST, not the simulated ward mean". `:1157` fed
+   `st.meanC` in as `dayC` whenever a slider was non-zero and `:1191` reported "pts from
+   this plan", so heatwave's shift was credited to the plan. **Pre-existing** — `#segPath`
+   at `ssp585` did this at +4.1 K since it shipped. Worse than recorded: the simulated
+   ward mean replaced the MEASURED satellite LST outright, so on the built page 25 trees
+   read −6.6 pts at MG Road and −3.7 at Ballygunge. **The rule now:** DC-URS keeps the
+   measured `lstDayC` / `lstNightC` and adds only Δ = `eqMean`(plan) − `eqMean`(no plan),
+   both solved under the same forcing, so heatwave and pathway cancel out of Δ
+   (`scenarioLst` in `dc-urs-scenario.ts`, pinned in `tests/unit/dc-urs-logic.test.mjs`).
+   Heatwave still feeds `dayC`, never `nightC`, because it rides `peak`.
 
 3. **The Compare deep-link drops the heatwave silently.** `phase === 'peak'` so the link
    is correct for the pinned contract, but the reader lands on materially cooler numbers

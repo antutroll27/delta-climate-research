@@ -902,7 +902,11 @@ All three Bengaluru wards read "Moderate Resilience". **The cross-city gap is co
 Both exposure confounds widen the gap in Bengaluru's favour. **"Bengaluru is more resilient than Kolkata"
 is not a supported claim yet.** Scenario sliders do not compare either: gains scale by `(1400 / sizeM)²`,
 so a 2.8 km Bengaluru ward's interventions are a quarter as strong per unit slider as a 1.4 km Kolkata
-ward's (before this scaling they were not scaled at all).
+ward's (before this scaling they were not scaled at all). That scaling covers the index's own gains
+(`fvc`, `canopyFrac`, `albedo`, `distCoolM`). The LST change is different: it comes from the heat model's
+layers, where trees and cool roofs cover a share of the ward's corridors and roofs, so it is not rescaled.
+Since 2026-09-16 the scenario keeps the measured LST and adds only that modelled change. Before, the
+simulated ward mean replaced the measured LST, and 25 trees lowered MG Road's score by 6.6 points.
 
 **Known staleness paths.** `far` in `data/bangalore/dcurs-static.json` comes from
 `data/bangalore/*-buildings.json` (footprints × heights ÷ storey 3.33 m). If the buildings are re-fetched
