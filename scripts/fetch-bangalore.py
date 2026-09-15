@@ -42,7 +42,7 @@ import statistics
 import subprocess
 import sys
 import zipfile
-from typing import Any, Callable, Literal, cast
+from typing import Any, Callable, Literal, Mapping, cast
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _bangalore as blr                            # noqa: E402  (path set above)
@@ -1579,6 +1579,27 @@ def band(eco: Any, tok: str, g: dict[str, Any], suffix: str, nodata: float, dtyp
     return "ok", arr
 
 
+def resume_mismatch(doc: Mapping[str, Any]) -> str | None:
+    """A reason to refuse resuming from an existing dcurs-lst scenes file, or None.
+
+    An existing scenes file records the `rural_bbox` and `start` it was built
+    with. If RURAL_BBOX or ECOSTRESS_START has since changed, rows measured
+    under the old settings and rows measured under the new ones would mix
+    silently in the same file. JSON round-trips floats, so `rural_bbox` is
+    compared as a list, not against the RURAL_BBOX tuple directly.
+    """
+    old_bbox = list(doc["rural_bbox"])
+    if old_bbox != list(RURAL_BBOX):
+        return (f"the existing scenes file was built with rural_bbox={old_bbox}, but RURAL_BBOX is "
+                f"now {list(RURAL_BBOX)}; move the old scenes file aside, or restore RURAL_BBOX to "
+                "match it, before resuming")
+    if doc["start"] != ECOSTRESS_START:
+        return (f"the existing scenes file was built with start={doc['start']!r}, but ECOSTRESS_START "
+                f"is now {ECOSTRESS_START!r}; move the old scenes file aside, or restore "
+                "ECOSTRESS_START to match it, before resuming")
+    return None
+
+
 def run_dcurs_lst(wards: list[blr.Ward]) -> None:
     """--layer dcurs-lst: one row per ECOSTRESS acquisition, all wards and the rural reference.
 
@@ -1604,17 +1625,25 @@ def run_dcurs_lst(wards: list[blr.Ward]) -> None:
     tf, width, height = eco.target_grid(RURAL_BBOX)
     masks = dcurs_mask_report(tf, width, height, crs, wards)
 
-    smod_tif = tif_from_zip(cached_download(
-        GHS_SMOD_URL, os.path.join(GEO_CACHE, "ghsl", os.path.basename(GHS_SMOD_URL))))
-    tok = eco.token()
+    # Loading and checking any existing scenes file is also offline and pure --
+    # a re-run with a changed RURAL_BBOX or ECOSTRESS_START is refused here,
+    # before the GHS-SMOD download or the token check, for the same reason as
+    # the G2 gate above: fail on what is cheap to check before what is not.
     if os.path.exists(dc.LST_PATH):
         with open(dc.LST_PATH, encoding="utf-8") as fh:
             doc = cast(dc.ScenesFile, json.load(fh))
+        mismatch = resume_mismatch(doc)
+        if mismatch is not None:
+            raise SystemExit(mismatch)
     else:
         doc = {"source": ("NASA ECOSTRESS ECO_L2T_LSTE v002 via CMR/LP DAAC; rural reference = "
                           "GHS-SMOD R2023A tile R8_C26 classes 11/12/13"),
                "rural_bbox": list(RURAL_BBOX), "start": ECOSTRESS_START, "rows": [], "skipped": []}
     done = {f"{r['phase']} {r['utc']}" for r in doc["rows"]} | set(doc["skipped"])
+
+    smod_tif = tif_from_zip(cached_download(
+        GHS_SMOD_URL, os.path.join(GEO_CACHE, "ghsl", os.path.basename(GHS_SMOD_URL))))
+    tok = eco.token()
 
     smod = eco.align(smod_tif, -200, "int16", bbox=RURAL_BBOX)
 
@@ -1916,6 +1945,21 @@ def _self_test() -> None:
         assert not os.path.exists(corrupt), \
             "a pre-existing corrupt file at the band's cache path must be removed on FAILURE " \
             "unconditionally, even though its name is already in `before`"
+
+    # resume_mismatch(): a resumed scenes file must have been built with today's
+    # RURAL_BBOX and ECOSTRESS_START, or the run must refuse to mix old and new rows.
+    matching_doc = {"rural_bbox": list(RURAL_BBOX), "start": ECOSTRESS_START}
+    assert resume_mismatch(matching_doc) is None, "matching settings must not refuse a resume"
+
+    changed_start = {"rural_bbox": list(RURAL_BBOX), "start": "2020-01-01"}
+    msg = resume_mismatch(changed_start)
+    assert msg is not None and "2020-01-01" in msg and ECOSTRESS_START in msg, \
+        f"a changed start must refuse and name both values: {msg}"
+
+    changed_bbox = {"rural_bbox": [0.0, 0.0, 1.0, 1.0], "start": ECOSTRESS_START}
+    msg2 = resume_mismatch(changed_bbox)
+    assert msg2 is not None and "0.0" in msg2 and str(RURAL_BBOX[0]) in msg2, \
+        f"a changed rural_bbox must refuse and name both values: {msg2}"
 
     print("  fetch-bangalore self-test OK")
 
