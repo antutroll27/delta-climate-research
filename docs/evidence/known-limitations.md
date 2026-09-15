@@ -843,6 +843,19 @@ consequence is that the UHI term reads 0 in all three wards** (the clamp above),
 hazard carries no heat-island contribution. The night heat-island refusal (above 2.5 °C refuses the export)
 did not fire.
 
+**The dead heat-island term, and a knock-on effect on the structural floor.**
+
+- **The term is dead in all three wards.** The day heat island is negative everywhere (−1.38 / −1.12 /
+  −0.84 °C), so the engine's UHI term `max(0, lstDayC − ruralBaseC) / uhiSpan` reads 0. Its 5 points of
+  weight carry no information for Bengaluru and are identical across the wards.
+- **Knock-on:** `structuralFloor` models a "perfect retrofit" by setting `lstDayC = ruralBaseC`. Where the
+  rural baseline is **warmer** than the ward, that "retrofit" warms the ward. This is true for all three
+  Bengaluru wards, and also for Kolkata, where `ruralBaseC` 30.96 °C exceeds the wards' 30.72 °C.
+- **Size of the error:** the displayed "withheld by exposure" figure is overstated by roughly 0.4–0.7
+  points. MG Road's ceiling computes to 87.77 instead of 88.33. Computed with the engine, the overstatement
+  is 0.69 / 0.56 / 0.42 points for Indiranagar / MG Road / Whitefield, and 0.12 in each Kolkata ward.
+- **Status:** this predates Bengaluru and is recorded, not fixed.
+
 **The thermal inputs come from scenes clear in all three wards at once.** NASA ECOSTRESS L2T LSTE v002 via
 CMR / LP DAAC, searched from 2018-07-01 to 2026-09-01, with scenes from the last 14 days excluded as
 unsettled: 690 acquisitions (333 day, 357 night) over MGRS tiles 43PGP/PGQ/PHP/PHQ, of which 480 were
@@ -898,3 +911,6 @@ two**. The gates cover only what comes after that step: `export-bangalore-obos.p
 inputs file from `dcurs-static.json`, `dcurs-lst-scenes.json` and `surface-meta.json` and fails if it is
 stale (in CI via `npm run check:bangalore`); `verify-served-data.mjs` fails a stale served copy; and
 `tests/e2e/heat-map-bengaluru-resilience.spec.ts` pins MG Road's rendered score to the engine's value.
+`data/bangalore/dcurs-lst-scenes.json` rows carry no orbit id, so the 14-day settle window is the **only**
+guard against a very late granule being counted as a second scene. The data is clean today: no two rows are
+within 10 minutes of each other.
