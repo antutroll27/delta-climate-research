@@ -318,6 +318,48 @@ export function eqMean(layers: SimLayers, p: SimParams): number {
 }
 
 /**
+ * The three layer means, which is ALL of a grid that `eqMean` can see.
+ *
+ * `eqCell` is affine in its three arguments: `albedo` enters once through
+ * `S(1−a)·sun`, `built` once through `Q·b`, `veg` once through `−L·v`, and every
+ * other term (`store`, `pull`, the divisor `k`) is a constant of the params. The
+ * mean of an affine function is that function of the means, so a 147,456-cell
+ * grid and these three numbers answer `eqMean` identically. `water` is absent
+ * because the surface balance never reads it.
+ */
+export interface LayerMeans {
+  readonly albedo: number;
+  readonly veg: number;
+  readonly built: number;
+}
+
+/** The layer means: one pass, and the only O(N) step a scenario comparison needs. */
+export function layerMeans(layers: SimLayers): LayerMeans {
+  let a = 0, v = 0, b = 0; const N = layers.albedo.length;
+  for (let i = 0; i < N; i++) { a += layers.albedo[i]; v += layers.veg[i]; b += layers.built[i]; }
+  return { albedo: a / N, veg: v / N, built: b / N };
+}
+
+/**
+ * `eqMean` in constant time, from means that were taken once.
+ *
+ * WHY IT EXISTS. The resilience score compares two solved sides on every stats
+ * tick, and the tick rebuilt both grids to do it — `applyInterventions` copying
+ * two Float32Arrays, then two full-grid passes — 720–1500 ms apart by tier, for
+ * three numbers that only move when the ward or a slider does. The scenario now
+ * caches the means and calls this instead; `eqMean`'s loop stays for the callers
+ * that hold a grid and want it read once.
+ *
+ * THE TWO MUST NOT DRIFT. `tests/unit/dc-urs-logic.test.mjs` compares them
+ * directly over the same grid and forcing, because a divergence here would move
+ * the score with nothing that mentions the score failing.
+ */
+export function eqMeanFromMeans(m: LayerMeans, p: SimParams): number {
+  const k = p.kRad + p.h * p.wind, pull = p.kRad * p.tSky + p.h * p.wind * p.tAir;
+  return (p.S * (1 - m.albedo) * p.sun + p.Q * m.built - p.L * m.veg + p.store + pull) / k;
+}
+
+/**
  * A LIVE READING, OR NOTHING — the met.no body parsed rather than trusted.
  *
  * WHAT THIS PREVENTS. api/live.js is a transparent proxy: it returns met.no's

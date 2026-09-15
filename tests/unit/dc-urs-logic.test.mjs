@@ -6,7 +6,9 @@ import { assertDcUrsLogic, dcUrs, GOLDEN } from '../../src/scripts/climate-engin
 import {
   applyScenario, areaScale, assertScenarioLogic, REFERENCE_WARD_M, scenarioLst,
 } from '../../src/scripts/climate-engine/dc-urs-scenario.ts';
-import { applyInterventions, currentParams } from '../../src/scripts/climate-engine/heat-map-model.ts';
+import {
+  applyInterventions, currentParams, eqMean, eqMeanFromMeans, layerMeans,
+} from '../../src/scripts/climate-engine/heat-map-model.ts';
 import { resolve } from '../../src/scripts/climate-engine/scope/resolve.ts';
 
 /* THE ENGINE'S OWN SELF-CHECKS, WHICH NOTHING CALLED. assertDcUrsLogic and
@@ -106,7 +108,8 @@ test('no plan leaves the measured LST exactly as it was, in both phases', async 
   const { layers } = syntheticWard();
   for (const phase of ['peak', 'night']) {
     const p = forcing(phase, NO_IV, firstPath());
-    const lst = scenarioLst(base, { layers, params: p.before }, { layers, params: p.after }, phase);
+    const m = layerMeans(layers);
+    const lst = scenarioLst(base, { means: m, params: p.before }, { means: m, params: p.after }, phase);
     if (phase === 'night') assert.deepEqual(lst, { nightC: base.lstNightC.value });
     else assert.deepEqual(lst, { dayC: base.lstDayC.value });
   }
@@ -119,7 +122,9 @@ test('planting trees cools the measured LST and never lowers the score', async (
   const planted = applyInterventions(layers, iv, spatial, resolve(MG_KEY).climate.parkRadiusM);
   for (const phase of ['peak', 'night']) {
     const p = forcing(phase, iv, firstPath());
-    const lst = scenarioLst(base, { layers, params: p.before }, { layers: planted, params: p.after }, phase);
+    const lst = scenarioLst(base,
+      { means: layerMeans(layers), params: p.before },
+      { means: layerMeans(planted), params: p.after }, phase);
     const measured = phase === 'night' ? base.lstNightC.value : base.lstDayC.value;
     assert.ok(lstOf(lst) < measured,
       `${phase}: 25 trees put the LST at ${lstOf(lst)} against a measured ${measured}`);
@@ -136,7 +141,8 @@ test('green facades reach the LST through Q, so the no-plan side must not carry 
   const { layers } = syntheticWard();
   const iv = { ...NO_IV, facades: 15 };
   const p = forcing('peak', iv, firstPath());
-  const lst = scenarioLst(base, { layers, params: p.before }, { layers, params: p.after }, 'peak');
+  const m = layerMeans(layers);
+  const lst = scenarioLst(base, { means: m, params: p.before }, { means: m, params: p.after }, 'peak');
   assert.ok(lst.dayC < base.lstDayC.value,
     `facades at full travel left the day LST at ${lst.dayC} against ${base.lstDayC.value}`);
 });
@@ -154,7 +160,9 @@ test('a hotter air mass is not scored as the plan: the forcing cancels out of th
   const iv = { trees: 25, roof: 40, parks: 3, facades: 5 };
   const planted = applyInterventions(layers, iv, spatial, resolve(MG_KEY).climate.parkRadiusM);
   const delta = (before, after) =>
-    scenarioLst(base, { layers, params: before }, { layers: planted, params: after }, 'peak').dayC
+    scenarioLst(base,
+      { means: layerMeans(layers), params: before },
+      { means: layerMeans(planted), params: after }, 'peak').dayC
     - base.lstDayC.value;
 
   const p = forcing('peak', iv, firstPath());
@@ -172,4 +180,33 @@ test('a hotter air mass is not scored as the plan: the forcing cancels out of th
   assert.ok(Math.abs(delta(hi.before, hi.after) - delta(lo.before, lo.after)) < 1e-9,
     `pathway ${paths.at(-1)[0]} moved the plan's change from `
     + `${delta(lo.before, lo.after)} to ${delta(hi.before, hi.after)}`);
+});
+
+/* ── THE ALGEBRA IS THE LOOP ───────────────────────────────────────────────────
+   `eqMeanFromMeans` is what makes a stats tick constant-time (see its own note, and
+   `refreshScenarioMeans` in heat-map-app.ts). It is a SECOND expression for a number
+   the per-cell loop already computes, and the two agree only because `eqCell` is
+   affine in albedo, built and veg. Should that stop holding — a term dropped, a
+   nonlinearity added on one side — every resilience score on the page moves, and not
+   one test that mentions the score would fail. So the two are compared head to head,
+   over the same grid and the same forcing, at both phases and with a plan applied. */
+test('eqMeanFromMeans reproduces the per-cell loop exactly', () => {
+  const { layers, spatial } = syntheticWard();
+  const { climate } = resolve(MG_KEY);
+  const planted = applyInterventions(
+    layers, { ...NO_IV, trees: 25, roof: 60 }, spatial, climate.parkRadiusM);
+  for (const phase of ['peak', 'night']) {
+    const p = currentParams({
+      live: null, phase, path: firstPath(), iv: NO_IV, climate, clock: { month: 5, hour: 13 },
+    });
+    for (const [what, grid] of [['base', layers], ['planted', planted]]) {
+      const loop = eqMean(grid, p), algebra = eqMeanFromMeans(layerMeans(grid), p);
+      assert.ok(Math.abs(loop - algebra) < 1e-9,
+        `${phase}/${what}: the loop says ${loop}, the algebra says ${algebra}`);
+    }
+  }
+  /* The two grids must actually differ, or the comparison above would hold just as
+     well for a function that ignored the vegetation it was handed. */
+  assert.notEqual(layerMeans(layers).veg, layerMeans(planted).veg,
+    'planting moved no vegetation mean -- this case is not testing what it says');
 });

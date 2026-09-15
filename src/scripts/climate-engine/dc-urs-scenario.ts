@@ -29,8 +29,8 @@
  * cannot fix it. `structuralFloor()` in dc-urs.ts quantifies exactly how much.
  */
 import type { DcUrsInputs } from './dc-urs-inputs.ts';
-import { eqMean, type Interventions } from './heat-map-model.ts';
-import type { SimLayers, SimParams } from './types.ts';
+import { eqMeanFromMeans, type Interventions, type LayerMeans } from './heat-map-model.ts';
+import type { SimParams } from './types.ts';
 
 /** How far each slider can push its indicator, at full travel.
  *
@@ -137,9 +137,19 @@ export function applyScenario(
   };
 }
 
-/** One side of the comparison `scenarioLst` draws: layers, and the forcing they are solved under. */
-export interface SolvedLayers {
-  readonly layers: SimLayers;
+/**
+ * One side of the comparison `scenarioLst` draws: the layer MEANS, and the
+ * forcing they are solved under.
+ *
+ * MEANS RATHER THAN GRIDS, because means are all that can reach the answer —
+ * `eqMean` averages a per-cell expression affine in albedo, built and veg, and
+ * `eqMeanFromMeans` is that algebra. Taking grids here invited the caller to
+ * rebuild them on every stats tick, which is exactly what heat-map-app.ts did:
+ * two Float32Array copies and two full-grid passes, 720–1500 ms apart, for three
+ * numbers that only move when the ward or a slider does.
+ */
+export interface SolvedSide {
+  readonly means: LayerMeans;
   readonly params: SimParams;
 }
 
@@ -158,7 +168,7 @@ export interface SolvedLayers {
  * THE RULE. Keep the measurement; add only the difference, both sides solved
  * analytically:
  *
- *   Δ = eqMean(after.layers, after.params) − eqMean(before.layers, before.params)
+ *   Δ = eqMeanFromMeans(after.means, after.params) − eqMeanFromMeans(before.means, before.params)
  *
  * THE FORCING CANCELS. Per cell `eqMean` averages
  * (S(1−a)·sun + Q·built − L·veg + store + pull) / k, and `tAir`, `tSky` and `store`
@@ -176,11 +186,11 @@ export interface SolvedLayers {
  */
 export function scenarioLst(
   base: DcUrsInputs,
-  before: SolvedLayers,
-  after: SolvedLayers,
+  before: SolvedSide,
+  after: SolvedSide,
   phase: 'peak' | 'night',
 ): { dayC: number } | { nightC: number } {
-  const delta = eqMean(after.layers, after.params) - eqMean(before.layers, before.params);
+  const delta = eqMeanFromMeans(after.means, after.params) - eqMeanFromMeans(before.means, before.params);
   return phase === 'night'
     ? { nightC: base.lstNightC.value + delta }
     : { dayC: base.lstDayC.value + delta };

@@ -2639,6 +2639,47 @@ export function mountHeatMap(): () => void {
   }
 
   const histo = el('histo'); if (histo) for (let i = 0; i < 12; i++) histo.appendChild(document.createElement('i'));
+  /** The no-plan side of the DC-URS comparison. NOT `state.iv`, which is mutated. */
+  const NO_PLAN: M.Interventions = { trees: 0, roof: 0, parks: 0, facades: 0 };
+
+  /* ── THE SCENARIO'S LAYER MEANS, HELD ACROSS TICKS ──────────────────────────
+     Three numbers are all of a ward's grids that the score can see (see
+     `LayerMeans`), and they only move when the ward or a slider does. The stats
+     tick was rebuilding them anyway — `applyInterventions` copying two
+     Float32Arrays, then two full-grid passes over 147,456 cells — every
+     720–1500 ms by tier, on the same main thread as MapLibre and the renderer.
+
+     MEASURED on MG Road's 384² grid, over the whole DC-URS block. BEFORE: 1.13 MB
+     of Float32Array per tick, median 0.34 ms / p95 0.44 ms / max 1.84 ms under
+     node on this machine. AFTER: no array allocation at all, median and p95 both
+     0.00 ms, max 0.01 ms. The same block timed on the page itself ran 2.81 / 6.90
+     / 19.5 ms before — the allocation is identical there, and the wall clock is
+     what sharing a main thread with MapLibre and the renderer does to it. Against
+     the project's 60 fps rule, a 19.5 ms tick is more than a whole frame.
+
+     KEYED ON IDENTITY, NOT ON THE WRITERS. Hanging the recompute off the three
+     places that move (`state.base`, `state.spatial`, the slider handler) would be
+     a fourth enrolment list of exactly the kind `projectWard` was written to warn
+     about — and the failure of a missed member here is a stale mean and a quietly
+     wrong score, not a visible break. Comparing what the means were built FROM is
+     two reference compares and four number compares, and cannot be forgotten. */
+  let meansOfBase: M.LayerMeans | null = null, meansOfPlan: M.LayerMeans | null = null;
+  let meansFromBase: SimLayers | null = null, meansFromSpatial: M.Spatial | null = null;
+  let meansFromTrees = -1, meansFromRoof = -1, meansFromParks = -1, meansFromFacades = -1;
+  function refreshScenarioMeans() {
+    const layers = state.base, iv = state.iv;
+    if (!layers) { meansOfBase = null; meansOfPlan = null; meansFromBase = null; return; }
+    if (layers === meansFromBase && state.spatial === meansFromSpatial
+      && iv.trees === meansFromTrees && iv.roof === meansFromRoof
+      && iv.parks === meansFromParks && iv.facades === meansFromFacades) return;
+    meansFromBase = layers; meansFromSpatial = state.spatial;
+    meansFromTrees = iv.trees; meansFromRoof = iv.roof;
+    meansFromParks = iv.parks; meansFromFacades = iv.facades;
+    meansOfBase = M.layerMeans(layers);
+    meansOfPlan = M.layerMeans(
+      M.applyInterventions(layers, iv, state.spatial, state.climate.parkRadiusM));
+  }
+
   function refreshStats(snapshot: HeatSimSnapshot | null = latestSnapshot) {
     if (!snapshot) return;
     const st = snapshot.stats, t = snapshot.field;
@@ -2697,14 +2738,16 @@ export function mountHeatMap(): () => void {
       /* THE SCENARIO LST IS THE MEASUREMENT PLUS THE PLAN, never `st.meanC`.
          Both sides are solved under this tick's forcing: `p` above, and the same
          state and clock with the sliders at zero (facades act only through Q, so the
-         no-plan side must not carry their cut). The layers are recomputed rather
-         than read off `latestSimRequest`, which lags `state.iv` while `resetSim`
-         awaits its host — and `iv` is what the cost and the "from this plan" line
-         below describe. Measured at ~1 ms (median; p95 1.6 ms) on a 384² grid. */
-      const lst = anyIv && state.base
+         no-plan side must not carry their cut). The means come from `state.iv`
+         rather than off `latestSimRequest`, which lags it while `resetSim` awaits
+         its host — and `iv` is what the cost and the "from this plan" line below
+         describe. `refreshScenarioMeans` makes that two constant-time evaluations
+         and no allocation; see its note for what this cost before. */
+      refreshScenarioMeans();
+      const lst = anyIv && meansOfBase && meansOfPlan
         ? scenarioLst(base,
-          { layers: state.base, params: M.currentParams({ ...state, clock, iv: { trees: 0, roof: 0, parks: 0, facades: 0 } }) },
-          { layers: M.applyInterventions(state.base, iv, state.spatial, state.climate.parkRadiusM), params: p },
+          { means: meansOfBase, params: M.currentParams({ ...state, clock, iv: NO_PLAN }) },
+          { means: meansOfPlan, params: p },
           state.phase)
         : undefined;
       const scen = applyScenario(base, iv, lst, currentWardSizeM);
