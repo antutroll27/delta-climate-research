@@ -47,14 +47,18 @@ if (source !== served) {
 
 // A placeholder on a field that carries score weight means the page is showing
 // its most optimistic number. That is allowed — the UI discloses it — but it
-// must never be silent, so say it here too.
-const wards = JSON.parse(source).wards;
-const ph = new Set();
-for (const w of Object.values(wards))
-  for (const [k, v] of Object.entries(w)) if (v.source === 'placeholder') ph.add(k);
+// must never be silent, so say it here too. Shared with the Bengaluru block
+// below, which has its own placeholder (socioVuln) to disclose the same way.
+const INERT_FIELDS = new Set(['canopyFrac']);   // weight 0 in the v1 formula
+const scoringPlaceholders = (wardsObj) => {
+  const ph = new Set();
+  for (const w of Object.values(wardsObj))
+    for (const [k, v] of Object.entries(w)) if (v.source === 'placeholder') ph.add(k);
+  return [...ph].filter((k) => !INERT_FIELDS.has(k));
+};
 
-const inert = new Set(['canopyFrac']);   // weight 0 in the v1 formula
-const scoring = [...ph].filter((k) => !inert.has(k));
+const wards = JSON.parse(source).wards;
+const scoring = scoringPlaceholders(wards);
 
 console.log(`  ✓ served DC-URS inputs match ${SOURCE}`
   + (scoring.length ? `\n  ! still placeholder and score-bearing: ${scoring.join(', ')}`
@@ -90,7 +94,11 @@ console.log(`  ✓ per-layer provenance manifests complete (${Object.keys(wards)
 const BLR_SOURCE = 'data/bangalore/dc-urs-inputs.json';
 const BLR_SERVED = 'public/heat-map/data/bengaluru-dc-urs-inputs.json';
 for (const p of [BLR_SOURCE, BLR_SERVED]) if (!existsSync(p)) die(`${p} is missing.`);
-if (readFileSync(BLR_SOURCE, 'utf8') !== readFileSync(BLR_SERVED, 'utf8'))
+const blrSource = readFileSync(BLR_SOURCE, 'utf8');
+if (blrSource !== readFileSync(BLR_SERVED, 'utf8'))
   die(`${BLR_SERVED} is STALE against ${BLR_SOURCE}.\n`
     + `    Fix: python3 scripts/export-bangalore-obos.py   (it writes both)`);
-console.log(`  ✓ served Bengaluru DC-URS inputs match ${BLR_SOURCE}`);
+const blrScoring = scoringPlaceholders(JSON.parse(blrSource).wards);
+console.log(`  ✓ served Bengaluru DC-URS inputs match ${BLR_SOURCE}`
+  + (blrScoring.length ? `\n  ! still placeholder and score-bearing: ${blrScoring.join(', ')}`
+                       : `\n  ✓ every score-bearing indicator is measured`));
