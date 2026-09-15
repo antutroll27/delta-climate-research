@@ -415,7 +415,8 @@ unchanged pair numbers · `npm run verify` green.
    ward mean replaced the MEASURED satellite LST outright, so on the built page 25 trees
    read −6.6 pts at MG Road and −3.7 at Ballygunge. **The rule now:** DC-URS keeps the
    measured `lstDayC` / `lstNightC` and adds only Δ = `eqMean`(plan) − `eqMean`(no plan),
-   both solved under the same forcing, so heatwave and pathway cancel out of Δ
+   both solved under the same forcing, so the forcing's own warming cancels out of Δ
+   (it still sets how strong the plan is, through sun, humidity and wind)
    (`scenarioLst` in `dc-urs-scenario.ts`, pinned in `tests/unit/dc-urs-logic.test.mjs`).
    Heatwave still feeds `dayC`, never `nightC`, because it rides `peak`.
 

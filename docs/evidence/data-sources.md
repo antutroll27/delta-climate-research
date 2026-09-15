@@ -613,7 +613,7 @@ limitations and the clamp report in [known-limitations.md](known-limitations.md)
 |---|---|---|
 | WorldPop R2025A constrained 2025, 100 m (`ind_pop_2025_CN_100m_R2025A_v1.tif`) | CC BY 4.0 | `popDensity`: summed over exactly the box with fractional edge-pixel weights; labelled `modelled` |
 | JRC GHS-SMOD R2023A E2020, 1 km, tile `R8_C26` | CC BY 4.0 | rural reference = classes 11/12/13; all three ward centres verified class 30 (urban centre) |
-| ESA WorldCover 2021 v200, 10 m, tile `N12E075` | CC BY 4.0 | `distCoolM`: distance to the nearest cool refuge |
+| ESA WorldCover 2021 v200, 10 m, tile `N12E075` | CC BY 4.0 | `distCoolM`: distance to the nearest cool refuge; also describes the rural reference's land cover (§14) |
 | Sentinel-2 L2A via earth-search | Copernicus | NDVI, 2021–2025 |
 | NASA ECOSTRESS L2T LSTE v002 via CMR / LP DAAC | US public domain | day and night LST, and the heat island |
 

@@ -376,9 +376,11 @@ dcurs-static` and `--layer dcurs-lst`, then `scripts/export-bangalore-obos.py`, 
 - **`fvc` / `albedo`:** copied from the served surface raster (`surface-meta.json`), so the map and the
   score read one measurement.
 
-**Sliders.** Gains scale by `(1400 / sizeM)²` (`REFERENCE_WARD_M`, `areaScale` in
-`src/scripts/climate-engine/dc-urs-scenario.ts`), so a 2.8 km ward moves a quarter as far per unit slider
-as a 1.4 km one.
+**Sliders.** The index's own gains (`fvc`, `canopyFrac`, `albedo`, `distCoolM`) scale by `(1400 / sizeM)²`
+(`REFERENCE_WARD_M`, `areaScale` in `src/scripts/climate-engine/dc-urs-scenario.ts`), a quarter for a
+2.8 km ward. The LST change is not rescaled: `scenarioLst` keeps the measured LST and adds the heat model's
+plan-minus-no-plan difference, both solved under the same forcing. Detail in
+[evidence/known-limitations.md](evidence/known-limitations.md) §14.
 
 **Gates.** `export-bangalore-obos.py --check` fails a stale inputs file (CI: `npm run check:bangalore`);
 `scripts/verify-served-data.mjs` fails a stale served copy; and
