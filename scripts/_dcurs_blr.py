@@ -13,6 +13,7 @@ import math
 import os
 import statistics
 import sys
+from datetime import datetime
 from typing import Literal, TypedDict
 
 import numpy as np
@@ -34,6 +35,7 @@ MAX_NIGHT_SUHII_C = 2.5     # above this a night heat island is a processing err
 VIEW_CUT = 0.75             # near-nadir, as build-dcurs-inputs.py and _physics.py
 MIN_RURAL_PX = 50           # as _suhii.measure_scene
 RURAL_CLASSES = (11, 12, 13)
+ORBIT_GAP_MIN = 10          # ISS orbits are ~92 min apart, so two distinct overpasses can never be 10 min apart
 
 #: Mirror of ANCHORS in src/scripts/climate-engine/dc-urs.ts, used only for the
 #: clamp report. tests/unit/bangalore-dc-urs.test.mjs pins the two equal.
@@ -176,11 +178,41 @@ def _rural(row: SceneRow) -> float:
     return v
 
 
+def _parse_utc(utc: str) -> datetime:
+    """Scene timestamps are stored as "2026-09-08T12:48:04"; tolerate a trailing Z too."""
+    return datetime.fromisoformat(utc[:-1] if utc.endswith("Z") else utc)
+
+
+def _dedupe_orbits(rows: list[SceneRow]) -> list[SceneRow]:
+    """Collapse a late-arriving granule's re-recorded row back onto its own overpass.
+
+    Rows carry no orbit id, so a granule reprocessed and re-ingested more than
+    14 days after its overpass can land as a second row a few minutes from the
+    first. Two rows within ORBIT_GAP_MIN of each other cannot be distinct
+    overpasses (ISS orbits repeat every ~92 min), so within each phase this
+    keeps only the earliest of any such cluster.
+
+    Applied AFTER `shared()`, not before: every row here already passed the
+    clear-sky/near-nadir gates, so this never has to choose between a clear
+    duplicate and a cloudy original (or the reverse) -- both candidates are
+    already known-good, and only the earlier one is kept.
+    """
+    out: list[SceneRow] = []
+    kept: list[datetime] = []
+    for r in sorted(rows, key=lambda r: r["utc"]):
+        t = _parse_utc(r["utc"])
+        if any(abs((t - k).total_seconds()) < ORBIT_GAP_MIN * 60 for k in kept):
+            continue
+        out.append(r)
+        kept.append(t)
+    return out
+
+
 def thermal(rows: list[SceneRow], ward_ids: list[str]) -> dict[str, Thermal]:
     """Day/night medians over SHARED scenes, and the heat island as a median of differences."""
     use = [r for r in rows if shared(r, ward_ids)]
-    day = [r for r in use if r["phase"] == "day"]
-    night = [r for r in use if r["phase"] == "night"]
+    day = _dedupe_orbits([r for r in use if r["phase"] == "day"])
+    night = _dedupe_orbits([r for r in use if r["phase"] == "night"])
 
     def _vintage(rs: list[SceneRow]) -> str:
         years = sorted({r["utc"][:4] for r in rs})
@@ -553,6 +585,28 @@ def _self_test() -> None:
     pop_boundary = clamps(_ward(day=None, rural=None, night=None, pop=25_000.0))
     assert any(s.startswith("popDensity") for s in pop_boundary), \
         f"exactly 25,000/km2 is at the ceiling, inclusive: {pop_boundary}"
+
+    # 11. orbit dedupe: a granule re-recorded a few minutes after its own overpass
+    #     must not be counted a second time, but a genuinely later pass must.
+    assert _parse_utc("2025-04-01T05:00:00Z") == _parse_utc("2025-04-01T05:00:00"), \
+        "a trailing Z must not change the parsed instant"
+    wd = [30.0, 31.0, 32.0, 33.0, 34.0, 35.0, 36.0, 37.0]  # 8 distinct overpasses, median 33.5
+    orbit_rows = [_row(f"2025-04-{i + 1:02d}T05:00:00", "day", {"a": v, "b": v, "c": v}, rural=25.0)
+                  for i, v in enumerate(wd)]
+    th_orbit = thermal(orbit_rows, ids)["a"]
+    assert th_orbit["dayScenes"] == 8 and th_orbit["lstDayC"] == statistics.median(wd), th_orbit
+
+    dup_close = _row("2025-04-01T05:03:00", "day", {"a": 999.0, "b": 999.0, "c": 999.0}, rural=1.0)
+    th_dup = thermal(orbit_rows + [dup_close], ids)["a"]
+    assert th_dup["dayScenes"] == 8, \
+        "a row 3 minutes after an existing overpass is the SAME orbit and must not double-count"
+    assert th_dup["lstDayC"] == th_orbit["lstDayC"], \
+        "the dropped duplicate's wildly different values must not reach the median"
+
+    dup_far = _row("2025-04-01T06:35:00", "day", {"a": 40.0, "b": 40.0, "c": 40.0}, rural=25.0)
+    th_far = thermal(orbit_rows + [dup_far], ids)["a"]
+    assert th_far["dayScenes"] == 9, \
+        "a row 95 minutes after an existing overpass is a DISTINCT orbit and must count"
 
     print("  _dcurs_blr self-test OK")
 
