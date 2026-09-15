@@ -1962,6 +1962,19 @@ export function mountHeatMap(): () => void {
     if (heatwaveFrom === url && heatwaveP99 != null) return;
     try {
       const r = await fetch(url);
+      /* THE WARD-SWITCH RACE. Nothing above passes this fetch a signal, so a slow
+         response keeps travelling after the reader has moved to a ward whose city
+         wants a different file (or none). `state.ward` is what `loadWard` sets
+         AFTER firing this call, and by the time any await here resumes it already
+         names the CURRENT ward — see the ordering at the `void loadHeatwave(name)`
+         call site. Not reachable today: every in-place switch is same-city
+         (console-shell.ts's `sameCity` gate, and the ward strip's tabs are built
+         from one fixed CO/CY), so `cityPaths(...).heatwave` cannot change value
+         within one mount, and a cross-city move tears this whole closure down
+         (astro:before-swap) before a same-named `mountHeatMap` call could see the
+         old response. Kept as the correct invariant anyway, cheaply, rather than
+         resting the guarantee on those two facts staying true. */
+      if (cityPaths(state.ward).heatwave !== url) return;
       if (r.ok) { heatwaveP99 = (await r.json())?.tmaxC?.p99 ?? null; heatwaveFrom = url; }
     } catch { heatwaveP99 = null; heatwaveFrom = null; }
   }
@@ -1977,6 +1990,9 @@ export function mountHeatMap(): () => void {
     if (dcursFrom === url && state.dcurs) return;
     try {
       const r = await fetch(url);
+      // THE SAME RACE AS `loadHeatwave`, immediately above — see its comment.
+      if (cityPaths(state.ward).dcUrs !== url) return;
+      if (!r.ok) throw new Error(`DC-URS inputs unavailable (${r.status}).`);
       state.dcurs = (await r.json()).wards as Record<string, DcUrsInputs>;
       dcursFrom = url;
     } catch { state.dcurs = null; dcursFrom = null; }
