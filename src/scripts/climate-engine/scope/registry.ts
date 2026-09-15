@@ -190,7 +190,11 @@ export const REGISTRY = {
           minC: [16.1, 17.6, 20.2, 22.1, 21.8, 20.6, 20.1, 20.0, 20.0, 19.8, 18.3, 16.4],
         },
         parkRadiusM: 50,
-        data: { heatwave: null, dcUrs: null },
+        /* DC-URS inputs are Bengaluru's own file, never rows in Kolkata's:
+           verify-served-data.mjs requires a layers manifest for every ward in
+           dc-urs-inputs.json, and Bengaluru ships none yet. Heatwave percentiles
+           stay null — none are measured for this city. */
+        data: { heatwave: null, dcUrs: 'bengaluru-dc-urs-inputs' },
         /* shipsData is FALSE, and that is the honest value rather than a
            placeholder. It is the CATALOGUE's promise — `paths()` returns a URL
            for every one of eleven artefacts, obos-scope asserts each exists on

@@ -169,6 +169,17 @@ test('no ward carries both a DC-URS scalar and a measured level', async () => {
   }
 });
 
+/* BENGALURU HAS BOTH, DELIBERATELY. loadAreaSurface takes a DC-URS record first,
+   so Bengaluru's record carries its measured surface means VERBATIM: the map and
+   the score then read one measurement, and the texture's pinned means still hold. */
+test("Bengaluru's DC-URS vegetation and albedo are its measured surface means, exactly", async () => {
+  const blr = JSON.parse(await readFile(join(DATA, 'bengaluru-dc-urs-inputs.json'), 'utf8')).wards;
+  for (const ward of ['indiranagar', 'mg-road', 'whitefield']) {
+    assert.equal(blr[ward].fvc.value, meta[ward].fvc_mean, `${ward}: fvc`);
+    assert.equal(blr[ward].albedo.value, meta[ward].albedo_mean, `${ward}: albedo`);
+  }
+});
+
 /* The other half of the fix, and the reason it is an ORDERING rather than a
    replacement: Kolkata's level still comes from the scalar DC-URS scores on, and
    surface-meta.json is never consulted for it. If that inverted, the map and the

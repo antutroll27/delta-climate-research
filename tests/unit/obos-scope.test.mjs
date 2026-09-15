@@ -169,6 +169,9 @@ test('city-level files are city-scoped, not global', () => {
     '/heat-map/data/heatwave-percentiles.json');
   assert.equal(cityPaths('in/kolkata/ballygunge').dcUrs,
     '/heat-map/data/dc-urs-inputs.json');
+  assert.equal(cityPaths('in/bengaluru/mg-road').dcUrs,
+    '/heat-map/data/bengaluru-dc-urs-inputs.json');
+  assert.equal(cityPaths('in/bengaluru/mg-road').heatwave, null);
   assert.equal(cityPaths('ae/dubai/al-quoz').heatwave, null);
   assert.equal(cityPaths('ae/dubai/al-quoz').dcUrs, null);
 });

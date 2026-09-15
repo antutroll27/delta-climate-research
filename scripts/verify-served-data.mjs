@@ -83,3 +83,14 @@ if (provProblems.length)
     + `    silently degrade to the static credit line.\n\n${provProblems.slice(0, 12).join('\n')}\n\n`
     + `    Fix: python3 scripts/build-provenance-manifest.py`);
 console.log(`  ✓ per-layer provenance manifests complete (${Object.keys(wards).length} wards × ${EXPECTED_LAYERS.length} layers)`);
+
+// Bengaluru's inputs: its own file pair, written together by export-bangalore-obos.py.
+// No layer manifests are required here — the registry keeps Bengaluru's areas at
+// shipsData: false.
+const BLR_SOURCE = 'data/bangalore/dc-urs-inputs.json';
+const BLR_SERVED = 'public/heat-map/data/bengaluru-dc-urs-inputs.json';
+for (const p of [BLR_SOURCE, BLR_SERVED]) if (!existsSync(p)) die(`${p} is missing.`);
+if (readFileSync(BLR_SOURCE, 'utf8') !== readFileSync(BLR_SERVED, 'utf8'))
+  die(`${BLR_SERVED} is STALE against ${BLR_SOURCE}.\n`
+    + `    Fix: python3 scripts/export-bangalore-obos.py   (it writes both)`);
+console.log(`  ✓ served Bengaluru DC-URS inputs match ${BLR_SOURCE}`);
