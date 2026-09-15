@@ -400,7 +400,12 @@ test('the resilience score is fed the measured LST plus the plan, at the ward\'s
     + 'argument list now holds a nested call it cannot read), more means a second '
     + 'scoring path this test is not checking');
 
-  const args = calls[0][1].split(',').map((a) => a.trim());
+  /* `.filter(Boolean)` so a TRAILING COMMA stays a formatting change. `split(',')`
+     yields a fifth, empty argument for `applyScenario(base, iv, lst, currentWardSizeM,)`,
+     and this test would then report a wrong argument count for a reason that has
+     nothing to do with what it guards. Dropping the ward size still fails it, which
+     is the case that matters. */
+  const args = calls[0][1].split(',').map((a) => a.trim()).filter(Boolean);
   assert.equal(args.length, 4,
     `applyScenario is called with ${args.length} arguments (${args.join(', ')}); it `
     + 'takes base, interventions, LST and ward size, and a missing size silently '
