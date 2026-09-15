@@ -335,7 +335,36 @@ def export_dcurs(prepared: tuple[dict[str, dc.Thermal], DcUrsInputsFile]) -> str
     return "\n".join(lines)
 
 
+def check_dcurs() -> int:
+    """`--check`: is the committed source still what its own inputs derive today?
+
+    Nothing here writes. `prepare_dcurs()` re-reads dcurs-static.json,
+    dcurs-lst-scenes.json and surface-meta.json -- all three committed, no
+    network -- and re-assembles the document exactly as `main()` would. If that
+    document no longer matches dc.SOURCE_PATH byte for byte, someone re-ran a
+    fetch layer (most likely `--layer dcurs-lst`, appending scenes) and committed
+    the new inputs without re-running this exporter. Every OTHER gate stays green
+    in that state: `verify-served-data.mjs` only compares the source file to the
+    served copy, and they are still equal to each other -- just both stale.
+    """
+    _th, doc = prepare_dcurs()
+    fresh = json.dumps(doc, indent=2)
+    with open(dc.SOURCE_PATH, encoding="utf-8") as fh:
+        committed = fh.read()
+    if fresh != committed:
+        raise SystemExit(
+            f"{dc.SOURCE_PATH} is STALE against its own inputs (dcurs-static.json, "
+            "dcurs-lst-scenes.json, surface-meta.json).\n"
+            "    Fix: python3 scripts/export-bangalore-obos.py   (it re-derives and writes both)")
+    print(f"  ✓ {os.path.relpath(dc.SOURCE_PATH, blr.ROOT)} matches a fresh re-derivation from "
+          "dcurs-static.json, dcurs-lst-scenes.json and surface-meta.json")
+    return 0
+
+
 def main() -> int:
+    if "--check" in sys.argv:
+        return check_dcurs()
+
     # Refuse BEFORE writing anything. Checked per ward inside export_trees, a
     # missing species left that ward's buildings, roads and water rewritten and
     # its trees not -- a half export that exits 1 but is already on disk.

@@ -22,7 +22,7 @@
     "check:ngsi": "python3 scripts/check-ngsi-ld.py",
     "check:stac": "sh scripts/check-stac.sh",
     "check:fresh": "python3 scripts/check-artefacts-fresh.py",
-    "check:bangalore": "python3 scripts/check-bangalore-artefacts.py",
+    "check:bangalore": "python3 scripts/check-bangalore-artefacts.py && python3 scripts/export-bangalore-obos.py --check",
     "check:bangalore-frame": "python3 scripts/check-bangalore-frame.py"
   },
   "engines": {
