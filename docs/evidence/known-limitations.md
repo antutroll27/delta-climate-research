@@ -828,18 +828,21 @@ A daytime surface cool island over Bengaluru is in the literature, and both sour
 - **Sussman, H. S. (2022).** *The urban heat island of Bengaluru, India: characteristics, trends, and
   mechanisms.* PhD dissertation, University at Albany, SUNY. doi:10.54014/BEQ7-GX6J. Mean surface UHI
   intensity from MODIS LST 2003–2018: Dec–Feb (dry) night 1.43 °C; Aug–Oct (wet) day 1.14 °C; Aug–Oct night
-  1.02 °C; **Dec–Feb day −0.60 °C**. Our night values (1.06–1.59 °C) sit in the same range. Her daytime sign
+  1.02 °C; **Dec–Feb day −0.60 °C**. Our night values (1.06–1.59 °C) are of similar magnitude to her 1.02–1.43 °C, which come
+  from 1 km MODIS. Her daytime sign
   depends on season; our day median pools every season in the record.
 - **Shastri, H., Barik, B., Ghosh, S., Venkataraman, C., & Sadavarte, P. (2017).** Flip flop of day-night and
   summer-winter surface urban heat island intensity in India. *Scientific Reports* 7, 40178.
   doi:10.1038/srep40178. MODIS-Aqua 2003–2013 over 84 Indian urban locations: **negative daytime SUHII in the
-  pre-monsoon (Mar–May) season across most of India**, attributed to sparse vegetation and low
+  pre-monsoon (Mar–May) season over a majority of the urban areas studied**, attributed to sparse vegetation and low
   evapotranspiration on non-urban land. It gives no Bengaluru-specific value, so it is cited for the
   **mechanism only**.
 
-Our rural reference is the GHS-SMOD rural class within 77.22–78.02 E, 12.57–13.37 N: largely dry farmland
-and exposed rock, the sparsely vegetated, low-evapotranspiration surface Shastri et al. describe. **The
-consequence is that the UHI term reads 0 in all three wards** (the clamp above), so Bengaluru's daytime
+Our rural reference is the GHS-SMOD rural class within 77.22–78.02 E, 12.57–13.37 N. Sampled over that
+rural bbox, ESA WorldCover 2021 reads cropland 47.8 %, shrub 14.2 %, tree 14.0 %, built-up 13.1 %,
+grassland 9.6 % and bare 0.8 %. **Whether that surface is dry enough for the mechanism Shastri et al.
+describe has not been tested.** Their result is also for the pre-monsoon (March–May) season, while our
+median pools every season. **The consequence is that the UHI term reads 0 in all three wards** (the clamp above), so Bengaluru's daytime
 hazard carries no heat-island contribution. The night heat-island refusal (above 2.5 °C refuses the export)
 did not fire.
 
@@ -867,7 +870,10 @@ overpass.
 - **Median of differences, not difference of medians.** `ruralBaseC` is an **effective** baseline
   (`lstDayC` − median day heat island), so the unchanged engine reproduces the median heat island. It is not
   a rural LST anyone could observe.
-- **"Night" mixes dusk and predawn acquisitions,** as Kolkata's does, because the ISS orbit precesses.
+- **"Night" mixes dusk and predawn acquisitions,** because the ISS orbit precesses. Of the 49 shared night
+  scenes, 23 are dusk (17–23 h local) and 26 are predawn (0–6 h). Kolkata selects night scenes with the
+  same CMR `day_night_flag="night"` (`_ecostress.cmr_search`), so its night set can mix the two as well,
+  but its split was not counted.
 - **Ward masks include a border ring of up to 70 m.** A box mask on the 70 m ECOSTRESS grid takes
   1,764 / 1,722 / 1,722 px, with centre offsets of 4 / 14 / 16 m.
 
@@ -894,13 +900,18 @@ case (`socioVuln` = 0) and with `socioVuln` at its maximum (10):
 
 All three Bengaluru wards read "Moderate Resilience". **The cross-city gap is confounded:**
 
-- **Bengaluru's exposure is understated:** `socioVuln` is at its best case, and WorldPop is flat
-  (Indiranagar 10,143 against a census 16,671).
-- **Kolkata's density is likely inflated** by the envelope-sum method above.
-- **The hazard difference is real:** lower day LST, and a day heat-island term of 0.
+- **`socioVuln` at its best case favours all three Bengaluru wards** (up to 8.75 pts).
+- **WorldPop's flatness cuts both ways.** It favours Indiranagar (10,143 against a census 16,671, about
+  +4.1 pts) and MG Road (about +1.0 pt), but penalises Whitefield (8,691 against a census 4,010, about
+  −2.9 pts).
+- **Kolkata's envelope over-count can move only Barrackpore** (8,772/km²). Ballygunge (68,810) and
+  Baruipur (36,728) sit above the 25,000/km² exposure anchor whether or not the density is corrected.
+- **The hazard difference is measured, but from different scene sets.** Kolkata's are bbox-wide 2024–2026
+  scenes; Bengaluru's are per-ward shared scenes from 2018–2026. It comes mostly from night LST (20.3–21.5
+  °C against Kolkata's 25.4 °C, about 84 % of Indiranagar's THI gap) and partly from day LST (29.5–29.6 °C
+  against 30.72 °C). The heat-island term is 0 in both cities.
 
-Both exposure confounds widen the gap in Bengaluru's favour. **"Bengaluru is more resilient than Kolkata"
-is not a supported claim yet.** Scenario sliders do not compare either: gains scale by `(1400 / sizeM)²`,
+**"Bengaluru is more resilient than Kolkata" is not a supported claim yet.** Scenario sliders do not compare either: gains scale by `(1400 / sizeM)²`,
 so a 2.8 km Bengaluru ward's interventions are a quarter as strong per unit slider as a 1.4 km Kolkata
 ward's (before this scaling they were not scaled at all). That scaling covers the index's own gains
 (`fvc`, `canopyFrac`, `albedo`, `distCoolM`). The LST change is different: it comes from the heat model's
