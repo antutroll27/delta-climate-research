@@ -13,7 +13,9 @@
 export type Provenance =
   /** from an observation — satellite, survey, enumeration */
   | 'measured'
-  /** produced by our thermal model, and therefore carrying its measured error */
+  /** produced by a model rather than observed directly (our thermal model, or an external
+   *  model product such as WorldPop's population surface), and therefore carrying that
+   *  model's error */
   | 'modelled'
   /** a defensible stand-in, sourced but not observed for this ward */
   | 'estimated'

@@ -1530,8 +1530,8 @@ def group_by_orbit(acqs: list[tuple[str, list[dict[str, Any]]]]
 BandStatus = Literal["ok", "absent", "failed"]
 
 
-def band(eco: Any, tok: str, g: dict[str, Any], suffix: str, nodata: float, dtype: str,
-        before: set[str]) -> tuple[BandStatus, Any]:
+def band(eco: Any, tok: str, g: dict[str, Any], suffix: str, nodata: float,
+        dtype: str) -> tuple[BandStatus, Any]:
     """Fetch and align one ECOSTRESS band, telling ABSENT apart from FAILED (see BandStatus).
 
     `eco.fetch` can raise `subprocess.TimeoutExpired` on a stalled curl and
@@ -1545,9 +1545,10 @@ def band(eco: Any, tok: str, g: dict[str, Any], suffix: str, nodata: float, dtyp
     derived from this granule's own URL, so a file already sitting there is
     corrupt or truncated from some earlier attempt and is never useful to
     anything else; leaving it in place would fail this same acquisition again
-    on every future run. (Only the per-acquisition sweep of brand-new files,
-    in `run_dcurs_lst`, still consults `before` -- that sweep must not delete
-    a file that predates this acquisition and is still good.)
+    on every future run. (This function does not need to know what predates
+    this acquisition -- only the per-acquisition sweep of brand-new files, in
+    `run_dcurs_lst`, consults `before`, to avoid deleting a file that predates
+    this acquisition and is still good.)
 
     `eco` is untyped (`Any`) deliberately: this is called with the real
     `_ecostress` module in production and with a small fake module in
@@ -1661,7 +1662,7 @@ def run_dcurs_lst(wards: list[blr.Ward]) -> None:
     mask_bands = (("_QC.tif", 0xFFFF, "uint16"), ("_cloud.tif", 255, "uint16"),
                   ("_water.tif", 0, "uint16"))
 
-    def process(grans: list[dict[str, Any]], before: set[str]) -> tuple[str, Any, Any]:
+    def process(grans: list[dict[str, Any]]) -> tuple[str, Any, Any]:
         """One acquisition's granules -> ("complete" | "incomplete", cel, view).
 
         A FAILED band anywhere makes the whole acquisition "incomplete": the
@@ -1673,7 +1674,7 @@ def run_dcurs_lst(wards: list[blr.Ward]) -> None:
         cel: Any = None
         view: Any = None
         for g in grans:
-            lst_status, lst_k = band(eco, tok, g, "_LST.tif", np.nan, "float32", before)
+            lst_status, lst_k = band(eco, tok, g, "_LST.tif", np.nan, "float32")
             if lst_status == "failed":
                 return "incomplete", None, None
             if lst_status == "absent":
@@ -1681,7 +1682,7 @@ def run_dcurs_lst(wards: list[blr.Ward]) -> None:
             mask_arrays: dict[str, Any] = {}
             drop_granule = False
             for suffix, nodata, dtype in mask_bands:
-                st, arr = band(eco, tok, g, suffix, nodata, dtype, before)
+                st, arr = band(eco, tok, g, suffix, nodata, dtype)
                 if st == "failed":
                     return "incomplete", None, None
                 if st == "absent":
@@ -1693,7 +1694,7 @@ def run_dcurs_lst(wards: list[blr.Ward]) -> None:
             c = dc.granule_celsius(lst_k, mask_arrays["_QC.tif"],
                                    mask_arrays["_cloud.tif"], mask_arrays["_water.tif"])
             cel = dc.first_finite(cel, c)
-            v_status, v = band(eco, tok, g, "_view_zenith.tif", np.nan, "float32", before)
+            v_status, v = band(eco, tok, g, "_view_zenith.tif", np.nan, "float32")
             if v_status == "failed":
                 return "incomplete", None, None
             if v_status == "ok":
@@ -1727,7 +1728,7 @@ def run_dcurs_lst(wards: list[blr.Ward]) -> None:
                     continue
                 before: set[str] = set(os.listdir(eco.CACHE)) if os.path.isdir(eco.CACHE) else set()
                 try:
-                    status, cel, view = process(grans, before)
+                    status, cel, view = process(grans)
                 finally:
                     # measured, then dropped: the disk never holds more than one scene
                     if os.path.isdir(eco.CACHE):
@@ -1914,11 +1915,11 @@ def _self_test() -> None:
     assert len(group_by_orbit(dup)[0][1]) == 1, "a repeated GranuleUR must not be double-counted"
 
     # band(): a FAILURE must remove the file at the band's cache path
-    # UNCONDITIONALLY, even one that predates this acquisition (its name is
-    # already in `before`) -- the path is unique to this granule+band, so a
-    # corrupt leftover there can never be useful to anything else, and leaving
-    # it in place would fail this same acquisition again on every future run.
-    # `eco` is faked so this runs with no network and no token.
+    # UNCONDITIONALLY, even one that predates this acquisition -- the path is
+    # unique to this granule+band, so a corrupt leftover there can never be
+    # useful to anything else, and leaving it in place would fail this same
+    # acquisition again on every future run. `eco` is faked so this runs with
+    # no network and no token.
     class _FakeEcoStalledFetch:
         CACHE = ""                     # set to a real tempdir just below
 
@@ -1939,12 +1940,11 @@ def _self_test() -> None:
         corrupt = os.path.join(td, "granule_LST.tif")
         with open(corrupt, "wb") as fh:
             fh.write(b"leftover bytes from a stalled curl in an earlier run")
-        status, arr = band(_FakeEcoStalledFetch, "tok", {}, "_LST.tif", float("nan"), "float32",
-                           before={"granule_LST.tif"})   # pre-existing: its name IS in `before`
+        status, arr = band(_FakeEcoStalledFetch, "tok", {}, "_LST.tif", float("nan"), "float32")
         assert status == "failed" and arr is None, (status, arr)
         assert not os.path.exists(corrupt), \
             "a pre-existing corrupt file at the band's cache path must be removed on FAILURE " \
-            "unconditionally, even though its name is already in `before`"
+            "unconditionally, whether or not it predates this acquisition"
 
     # resume_mismatch(): a resumed scenes file must have been built with today's
     # RURAL_BBOX and ECOSTRESS_START, or the run must refuse to mix old and new rows.

@@ -89,7 +89,8 @@ class StaticWard(TypedDict):
 
 class StaticFile(TypedDict):
     generated: str
-    ghsPop: str
+    ghsPop: str  # key name predates Amendment A; now holds the WorldPop R2025A URL, kept as-is
+                 # (not renamed) to avoid a type change
     worldCover: str
     sentinel: str
     wards: dict[str, StaticWard]
