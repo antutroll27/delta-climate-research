@@ -27,7 +27,10 @@ from typing import Any, cast
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _bangalore as blr                            # noqa: E402  (path set above)
+import _dcurs_blr as dc  # noqa: E402
 import _trees  # noqa: E402
+from _types import DcUrsInputsFile  # noqa: E402  (dc.py imports it too, but strict mypy's
+                                     # no_implicit_reexport means DcUrsInputsFile isn't visible here)
 
 OUT = os.path.join(blr.ROOT, "public", "heat-map", "data")
 
@@ -273,18 +276,24 @@ def export_terrain(w: blr.Ward) -> float:
     return span
 
 
-def export_dcurs() -> str:
-    """Bengaluru's DC-URS inputs: the committed source and the byte-identical served copy.
+def prepare_dcurs() -> tuple[dict[str, dc.Thermal], DcUrsInputsFile]:
+    """Read, validate and assemble Bengaluru's DC-URS inputs -- but write nothing.
+
+    Every refusal in this exporter fires before any ward file is written (see the
+    comment in main()): a half export that exits 1 with buildings/roads/water/trees
+    already rewritten is worse than one that refuses cleanly. So every way DC-URS
+    can refuse -- a missing input file, a ward absent from surface-meta.json, the
+    night heat-island sanity gate -- is checked HERE, before the ward loop runs.
+    `export_dcurs` below only writes what this function already validated.
 
     fvc and albedo are copied from surface-meta.json, not recomputed: loadAreaSurface
     reads a DC-URS record FIRST, and the served texture is pinned to those means
     (tests/unit/heat-map-surface-measured.test.mjs), so any other value would put
     the map and the score on two different measurements.
     """
-    import _dcurs_blr as dc
     if not (os.path.exists(dc.STATIC_PATH) and os.path.exists(dc.LST_PATH)):
-        return ("  dc-urs       not built -- run fetch-bangalore.py --layer dcurs-static "
-                "and --layer dcurs-lst first")
+        raise SystemExit("  dc-urs       not built -- run fetch-bangalore.py --layer dcurs-static "
+                          "and --layer dcurs-lst first")
     with open(dc.STATIC_PATH, encoding="utf-8") as fh:
         static = cast(dc.StaticFile, json.load(fh))
     with open(dc.LST_PATH, encoding="utf-8") as fh:
@@ -292,16 +301,30 @@ def export_dcurs() -> str:
     with open(os.path.join(OUT, "surface-meta.json"), encoding="utf-8") as fh:
         meta = cast(dict[str, Any], json.load(fh))["wards"]
     ids = list(blr.WARDS)
+    missing = [w for w in ids if w not in meta]
+    if missing:
+        raise SystemExit(f"surface-meta.json is missing {missing} -- run "
+                          "python3 scripts/export-surface-rasters.py first")
     th = dc.thermal(scenes["rows"], ids)
     refusal = dc.night_suhii_refusal(th)
     if refusal:
         raise SystemExit(refusal)
     surface = {w: (float(meta[w]["fvc_mean"]), float(meta[w]["albedo_mean"])) for w in ids}
     doc = dc.assemble(th, static["wards"], surface)
+    return th, doc
+
+
+def export_dcurs(prepared: tuple[dict[str, dc.Thermal], DcUrsInputsFile]) -> str:
+    """Write the committed source and the byte-identical served copy, and report.
+
+    Everything that could refuse already ran in `prepare_dcurs`; this only writes.
+    """
+    th, doc = prepared
     blob = json.dumps(doc, indent=2)
     for dst in (dc.SOURCE_PATH, os.path.join(OUT, dc.SERVED_NAME)):
         with open(dst, "w", encoding="utf-8") as fh:
             fh.write(blob)
+    ids = list(blr.WARDS)
     lines = [f"  dc-urs       {th[ids[0]]['dayScenes']} day / {th[ids[0]]['nightScenes']} night shared scenes"]
     for w in ids:
         t = th[w]
@@ -321,6 +344,7 @@ def main() -> int:
             if any("species" not in t for t in json.load(fh)["trees"]):
                 raise SystemExit(f"{w.id}: canopy file has trees with no species -- run "
                                  "python3 scripts/fetch-bangalore.py --layer species first")
+    dcurs_prepared = prepare_dcurs()
     os.makedirs(OUT, exist_ok=True)
     for w in blr.WARDS.values():
         buildings = export_buildings(w)
@@ -330,7 +354,7 @@ def main() -> int:
         print(f"  {w.id:<12} {buildings:6,} buildings · {ways:5,} ways · "
               f"{polys:3,} water polys · {nlines:3,} open lines ({covered} covered dropped) · {trees:6,} trees · "
               f"ground {span:.1f} m")
-    print(export_dcurs())
+    print(export_dcurs(dcurs_prepared))
     print(f"  written to {os.path.relpath(OUT, blr.ROOT)}/")
     return 0
 
