@@ -355,6 +355,41 @@ Phase 0 is independent of all data acquisition and can start immediately.
 
 ---
 
+## Bengaluru (2026-09)
+
+**Same engine, Kolkata's anchors, its own inputs.** Indiranagar, MG Road and Whitefield (2.8 km boxes) are
+scored by the unchanged `src/scripts/climate-engine/dc-urs.ts` against the §4 anchors, from
+`data/bangalore/dc-urs-inputs.json`, served byte-identical as
+`public/heat-map/data/bengaluru-dc-urs-inputs.json`. It is built by `scripts/fetch-bangalore.py --layer
+dcurs-static` and `--layer dcurs-lst`, then `scripts/export-bangalore-obos.py`, with the rules in
+`scripts/_dcurs_blr.py`. Design:
+[superpowers/specs/2026-09-14-bengaluru-resilience-score-design.md](superpowers/specs/2026-09-14-bengaluru-resilience-score-design.md).
+
+**What differs from Kolkata's inputs:**
+
+- **Thermal:** per-ward ECOSTRESS LST from the scenes clear in all three wards at once (46 day, 49 night).
+- **Heat island:** the median of per-scene (ward − rural) differences, with an **effective** rural baseline
+  (`ruralBaseC` = `lstDayC` − that median) so the engine reproduces it. It is negative by day in all three
+  wards, so the UHI term clamps to 0.
+- **Population:** WorldPop R2025A constrained 100 m, summed over exactly the box and labelled `modelled`.
+- **`socioVuln`:** unmeasured, held at its best case (up to 8.75 points), and disclosed by the chip.
+- **`fvc` / `albedo`:** copied from the served surface raster (`surface-meta.json`), so the map and the
+  score read one measurement.
+
+**Sliders.** Gains scale by `(1400 / sizeM)²` (`REFERENCE_WARD_M`, `areaScale` in
+`src/scripts/climate-engine/dc-urs-scenario.ts`), so a 2.8 km ward moves a quarter as far per unit slider
+as a 1.4 km one.
+
+**Gates.** `export-bangalore-obos.py --check` fails a stale inputs file (CI: `npm run check:bangalore`);
+`scripts/verify-served-data.mjs` fails a stale served copy; and
+`tests/e2e/heat-map-bengaluru-resilience.spec.ts` pins MG Road's rendered score to the engine's value.
+
+**Limitations.** [evidence/known-limitations.md](evidence/known-limitations.md) §14 holds the clamp report,
+the population evidence and the cross-city confounds. The §10 row "WorldPop and Census 2011 disagree on
+population" said to use WorldPop and record the gap; Bengaluru did exactly that, and §14 records it.
+
+---
+
 ## Sequencing rule
 
 Same as the thermal calibration: **one change at a time, measured after each.** Every phase ends

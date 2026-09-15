@@ -601,6 +601,34 @@ recorded for Kolkata.
 night, spanning all 24 local hours.** The ISS orbit precesses where Landsat is pinned near 10:30 local,
 so this is the first dataset that could validate the engine's **night** regression separably. Access is
 the existing bearer-token CMR route, **not** Earth Engine (below).
+*Full run:* the 2018–2026 search behind the resilience score found 690 acquisitions (333 day, 357 night);
+the counts are under **Bengaluru DC-URS inputs** below.
+
+**Bengaluru DC-URS inputs (2026-09-15)** — **every source below permits commercial use** · **role:** the
+resilience score's per-ward inputs, built by `scripts/fetch-bangalore.py --layer dcurs-static` and
+`--layer dcurs-lst`, then `scripts/export-bangalore-obos.py` into `data/bangalore/dc-urs-inputs.json` ·
+limitations and the clamp report in [known-limitations.md](known-limitations.md) §14.
+
+| Source | Licence | Role |
+|---|---|---|
+| WorldPop R2025A constrained 2025, 100 m (`ind_pop_2025_CN_100m_R2025A_v1.tif`) | CC BY 4.0 | `popDensity`: summed over exactly the box with fractional edge-pixel weights; labelled `modelled` |
+| JRC GHS-SMOD R2023A E2020, 1 km, tile `R8_C26` | CC BY 4.0 | rural reference = classes 11/12/13; all three ward centres verified class 30 (urban centre) |
+| ESA WorldCover 2021 v200, 10 m, tile `N12E075` | CC BY 4.0 | `distCoolM`: distance to the nearest cool refuge |
+| Sentinel-2 L2A via earth-search | Copernicus | NDVI, 2021–2025 |
+| NASA ECOSTRESS L2T LSTE v002 via CMR / LP DAAC | US public domain | day and night LST, and the heat island |
+
+*ECOSTRESS run:* searched 2018-07-01 to 2026-09-01, with the last 14 days excluded as unsettled — 690
+acquisitions (333 day, 357 night) over MGRS tiles 43PGP/PGQ/PHP/PHQ, 480 recorded and 210 with no usable
+granule. **46 day and 49 night scenes are clear (≥ 10 %) in all three wards at once, near-nadir
+(view-zenith difference ≤ 0.75°), with a rural reference present**; the pre-registered gate of ≥ 8 per
+phase passes in both. `fvc` and `albedo` are not fetched here: they are copied from the served
+`surface-meta.json`. The `dcurs-static` layer prints, per ward:
+
+```
+indiranagar  pop 10,143/km2 · FAR 0.6356 (storey 3.33 m) · refuge 29 m · NDVI 0.3104 ± 0.0179 (5 yr)
+mg-road      pop 9,557/km2 · FAR 0.9816 (storey 3.33 m) · refuge 50 m · NDVI 0.2805 ± 0.0118 (5 yr)
+whitefield   pop 8,691/km2 · FAR 0.7386 (storey 3.33 m) · refuge 29 m · NDVI 0.2924 ± 0.044 (5 yr)
+```
 
 ### Ruled out, with the reason
 
@@ -655,6 +683,15 @@ NOAA GHCNh.
 **OpenAerialMap, for Bengaluru** — the whole metro returns **exactly one** record: a 669 × 537 m drone
 tile from 2022, **18.8 km from the nearest ward**. Sentinel-2 at 10 m is therefore the ceiling for
 ground texture, as it was in Kolkata.
+
+**JRC GHS-POP R2023A (E2010, E2020) — for Bengaluru population** — tested against the Census 2011 counts
+of all 198 BBMP wards, each grid summed over each ward polygon: Pearson r of log population is **−0.03
+(E2010) and −0.01 (E2020)**, against 0.56 for a uniform density. It **misplaces the south-east**: 64
+contiguous south and east wards hold 3.01 M people in the census and 0.29 M in E2010. At box scale
+(E2020, people/km²) Whitefield reads **565 against a census 4,010**, and MG Road **43,584 against
+11,151**. Unconstrained WorldPop 2011 shows the same pattern (r = −0.07). Constrained WorldPop R2025A
+(r = 0.595) is used instead; the full table is in [known-limitations.md](known-limitations.md) §14.
+The error is already present in E2010, so it is not growth. Do not re-test on a newer epoch.
 
 ### The OpenCity licence position, stated so it can be revisited
 

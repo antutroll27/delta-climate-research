@@ -740,3 +740,161 @@ The same borrowed number sets the DC-URS thermal-refuge floor (`MIN_REFUGE_HA = 
 `MIN_PATCH_M2 = 7,700` in `scripts/compute-tra.py` and `cooling-surfaces.ts`) — it too is a design
 threshold, kept because it keeps the index discriminating, not because it is a measured minimum cooling
 area.
+
+---
+
+## 14. Bengaluru's resilience score: what is measured, what is borrowed, what is missing
+
+**Status:** accepted · **See:** [design spec](../superpowers/specs/2026-09-14-bengaluru-resilience-score-design.md), [data-sources.md](data-sources.md) (Bangalore — Bengaluru DC-URS inputs)
+
+Indiranagar, MG Road and Whitefield are scored by the same DC-URS v1 engine as Kolkata, against Kolkata's
+normalisation anchors, from their own inputs file `data/bangalore/dc-urs-inputs.json` (served byte-identical
+as `public/heat-map/data/bengaluru-dc-urs-inputs.json`). This section records what that file measures, what
+it borrows, and what it lacks.
+
+**Heat vulnerability is unmeasured (up to 8.75 points).** `socioVuln` sits at 0, its optimistic endpoint, so
+every Bengaluru score is shown at its **best case**, and the confidence chip says so: "Best case · up to 8.8
+pts lower". No source checked is commercially clear at ward level:
+
+- **District and parliamentary-constituency data:** identical for all three wards (Bengaluru Urban;
+  Bangalore Central), so they cannot discriminate.
+- **WorldPop R2025A age/sex (CC BY 4.0):** spreads India's age structure from state-level inputs, so every
+  Karnataka pixel reads 65+ = 8.024 % and under-5 = 6.673 % (measured 2026-09-14).
+- **Census 2011 BBMP ward tables:** would discriminate, but the catalogue is marked "All Rights Reserved"
+  and the houselisting copies carry uploader-set labels.
+
+The open route is a written request to ORGI (Office of the Registrar General of India) for commercial use.
+`canopyFrac` is a placeholder, as in Kolkata; its weight is 0, so it is inert in the v1 formula.
+
+**Population density is modelled, and the obvious grid was wrong.** `popDensity` is WorldPop R2025A
+constrained 2025 at 100 m, summed over exactly the 2.8 km × 2.8 km box (7.84 km²) with fractional
+edge-pixel weights: 79,524 / 74,927 / 68,138 people, or 10,143 / 9,557 / 8,691 per km², labelled
+`modelled`. Before it was chosen, each candidate grid was tested against the Census 2011 counts of all 198
+BBMP wards (PCA workbook total 8,443,675, joined to DataMeet `BBMP_oldWards.geojson`, 198/198 matched;
+each grid summed over each ward polygon by fractional coverage):
+
+| Grid | Pearson r of log(pop) | Mean abs log error | Total |
+|---|---:|---:|---:|
+| GHS-POP E2010 | −0.03 | 1.12 | 8.54 M |
+| GHS-POP E2020 | −0.01 | 1.20 | 11.9 M |
+| WorldPop 2011 unconstrained | −0.07 | 1.16 | 7.25 M |
+| **WorldPop R2025A constrained (2015 layer)** | **0.595** | **0.64** | 5.61 M |
+| Uniform density (baseline) | 0.56 | 0.88 | – |
+
+**Only constrained WorldPop beats a uniform density.** **GHS-POP misplaces the south-east:** 64 contiguous
+south and east wards (BTM, Jayanagar, CV Raman Nagar, KR Puram, Mahadevapura) hold 3.01 M people in the
+census, and GHS E2010 gives them 0.29 M. The error is already there in E2010, so it is not growth. A
+sub-district disaggregation artefact is a likely cause; that has **not** been tested.
+
+At box scale, in people/km² (census figure = ward population × box overlap share ÷ ward area):
+
+| Box | Census 2011 | GHS E2020 | WorldPop constrained 2015 |
+|---|---:|---:|---:|
+| Indiranagar | 16,671 | 16,026 | 9,399 |
+| MG Road | 11,151 | 43,584 | 8,889 |
+| Whitefield | 4,010 | 565 | 8,083 |
+
+**WorldPop's own bias is flatness.** It reads about 0.34× the census in wards within 7 km of the centre and
+about 1.7× in Mahadevapura, with a low total. Bengaluru's central wards are therefore **understated**, and
+Whitefield is overstated relative to the census.
+
+**Kolkata's density method over-counts: recorded, not fixed.** `scripts/fetch-worldpop.py` sums every
+pixel in the projected (Mollweide) envelope of the lat/lon box but divides by the nominal box area.
+Recomputed on GHS-POP, Indiranagar read 20,028 against 16,026 exactly in the box, and MG Road 48,368
+against 43,584. Kolkata's live `popDensity` is probably inflated the same way. Correcting it would move
+Kolkata's scores, so it needs founder sign-off. Bengaluru's exporter uses the exact box sum instead.
+
+**The anchors are Kolkata's, and these Bengaluru terms clamp against them.** The exporter's CLAMP report,
+verbatim:
+
+- `indiranagar: heat island at or below 0: the UHI term reads 0`
+- `mg-road: heat island at or below 0: the UHI term reads 0`
+- `whitefield: heat island at or below 0: the UHI term reads 0`
+
+**No other term clamps.** Day and night LST sit above their floors of 25 / 20 °C, population is below
+25,000, FAR is below 5 and albedo is below 0.6.
+
+**Bengaluru is cooler than its countryside by day, and that is measured, not a bug.** LST in °C; the heat
+island is the median of per-scene (ward − rural) differences:
+
+| Ward | Day LST | Night LST | Day heat island | Night heat island | `ruralBaseC` |
+|---|---:|---:|---:|---:|---:|
+| indiranagar | 29.5 | 20.71 | −1.38 | 1.44 | 30.88 |
+| mg-road | 29.49 | 21.47 | −1.12 | 1.59 | 30.61 |
+| whitefield | 29.58 | 20.3 | −0.84 | 1.06 | 30.42 |
+
+A daytime surface cool island over Bengaluru is in the literature, and both sources were read:
+
+- **Sussman, H. S. (2022).** *The urban heat island of Bengaluru, India: characteristics, trends, and
+  mechanisms.* PhD dissertation, University at Albany, SUNY. doi:10.54014/BEQ7-GX6J. Mean surface UHI
+  intensity from MODIS LST 2003–2018: Dec–Feb (dry) night 1.43 °C; Aug–Oct (wet) day 1.14 °C; Aug–Oct night
+  1.02 °C; **Dec–Feb day −0.60 °C**. Our night values (1.06–1.59 °C) sit in the same range. Her daytime sign
+  depends on season; our day median pools every season in the record.
+- **Shastri, H., Barik, B., Ghosh, S., Venkataraman, C., & Sadavarte, P. (2017).** Flip flop of day-night and
+  summer-winter surface urban heat island intensity in India. *Scientific Reports* 7, 40178.
+  doi:10.1038/srep40178. MODIS-Aqua 2003–2013 over 84 Indian urban locations: **negative daytime SUHII in the
+  pre-monsoon (Mar–May) season across most of India**, attributed to sparse vegetation and low
+  evapotranspiration on non-urban land. It gives no Bengaluru-specific value, so it is cited for the
+  **mechanism only**.
+
+Our rural reference is the GHS-SMOD rural class within 77.22–78.02 E, 12.57–13.37 N: largely dry farmland
+and exposed rock, the sparsely vegetated, low-evapotranspiration surface Shastri et al. describe. **The
+consequence is that the UHI term reads 0 in all three wards** (the clamp above), so Bengaluru's daytime
+hazard carries no heat-island contribution. The night heat-island refusal (above 2.5 °C refuses the export)
+did not fire.
+
+**The thermal inputs come from scenes clear in all three wards at once.** NASA ECOSTRESS L2T LSTE v002 via
+CMR / LP DAAC, searched from 2018-07-01 to 2026-09-01, with scenes from the last 14 days excluded as
+unsettled: 690 acquisitions (333 day, 357 night) over MGRS tiles 43PGP/PGQ/PHP/PHQ, of which 480 were
+recorded and 210 had no usable granule. **46 day and 49 night scenes are clear (≥ 10 %) in all three wards
+at once, near-nadir (view-zenith difference ≤ 0.75°), with a rural reference present.** The pre-registered
+gate was ≥ 8 per phase, and both phases pass. Shared scenes mean the three wards are compared under the same
+overpass.
+
+- **Median of differences, not difference of medians.** `ruralBaseC` is an **effective** baseline
+  (`lstDayC` − median day heat island), so the unchanged engine reproduces the median heat island. It is not
+  a rural LST anyone could observe.
+- **"Night" mixes dusk and predawn acquisitions,** as Kolkata's does, because the ISS orbit precesses.
+- **Ward masks include a border ring of up to 70 m.** A box mask on the 70 m ECOSTRESS grid takes
+  1,764 / 1,722 / 1,722 px, with centre offsets of 4 / 14 / 16 m.
+
+**Vegetation cover and albedo use the map's reduction, not Kolkata's.** Bengaluru's `fvc` and `albedo` are
+copied verbatim from `public/heat-map/data/surface-meta.json` `fvc_mean` / `albedo_mean`: indiranagar
+0.4014 / 0.1671, mg-road 0.3884 / 0.1652, whitefield 0.3698 / 0.1775. These are the per-cell Sentinel-2
+composite means already served for the map texture: the per-cell median over 2021–2025, then the spatial
+mean. Kolkata's `sentinel.json` reduces per scene, then per year. They are copied because `loadAreaSurface`
+reads the DC-URS record **first**, so a recomputed value would put the map texture and the score on
+different measurements. A unit test pins the equality. A cross-city difference in `fvc` or `albedo`
+therefore carries a method difference as well as a surface difference.
+
+**The scores are not yet comparable across cities.** Scores as rendered by the engine; Bengaluru's at best
+case (`socioVuln` = 0) and with `socioVuln` at its maximum (10):
+
+| Ward | Score | Score, `socioVuln` = 10 | THI (hazard) | EVI (exposure) | ACI (adaptive capacity) |
+|---|---:|---:|---:|---:|---:|
+| Indiranagar | 69.9 | 61.2 | 0.109 | 0.221 | 0.509 |
+| MG Road | 68.4 (renders "68") | 59.7 | 0.129 | 0.231 | 0.493 |
+| Whitefield | 70.3 | 61.5 | 0.100 | 0.201 | 0.495 |
+| Ballygunge (Kolkata) | 49.6 | – | 0.258 | 0.626 | 0.449 |
+| Baruipur (Kolkata) | 53.9 | – | 0.258 | 0.586 | 0.523 |
+| Barrackpore (Kolkata) | 61.9 | – | 0.258 | 0.271 | 0.445 |
+
+All three Bengaluru wards read "Moderate Resilience". **The cross-city gap is confounded:**
+
+- **Bengaluru's exposure is understated:** `socioVuln` is at its best case, and WorldPop is flat
+  (Indiranagar 10,143 against a census 16,671).
+- **Kolkata's density is likely inflated** by the envelope-sum method above.
+- **The hazard difference is real:** lower day LST, and a day heat-island term of 0.
+
+Both exposure confounds widen the gap in Bengaluru's favour. **"Bengaluru is more resilient than Kolkata"
+is not a supported claim yet.** Scenario sliders do not compare either: gains scale by `(1400 / sizeM)²`,
+so a 2.8 km Bengaluru ward's interventions are a quarter as strong per unit slider as a 1.4 km Kolkata
+ward's (before this scaling they were not scaled at all).
+
+**Known staleness paths.** `far` in `data/bangalore/dcurs-static.json` comes from
+`data/bangalore/*-buildings.json` (footprints × heights ÷ storey 3.33 m). If the buildings are re-fetched
+without re-running `fetch-bangalore.py --layer dcurs-static`, `far` goes stale, and **nothing compares the
+two**. The gates cover only what comes after that step: `export-bangalore-obos.py --check` re-derives the
+inputs file from `dcurs-static.json`, `dcurs-lst-scenes.json` and `surface-meta.json` and fails if it is
+stale (in CI via `npm run check:bangalore`); `verify-served-data.mjs` fails a stale served copy; and
+`tests/e2e/heat-map-bengaluru-resilience.spec.ts` pins MG Road's rendered score to the engine's value.
