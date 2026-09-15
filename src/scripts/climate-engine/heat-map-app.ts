@@ -20,7 +20,7 @@ import { ACCURACY, SPATIAL, HEIGHTS, bandLabel, unmeasuredNote, isTransitionHour
 import { solarElevationFactor, solarDayHours } from './sky';
 import { loadLayerManifest } from './provenance';
 import * as U from './dc-urs';
-import { applyScenario } from './dc-urs-scenario';
+import { applyScenario, scenarioLst } from './dc-urs-scenario';
 import type { DcUrsInputs } from './dc-urs-inputs';
 import { rasterWardBase } from './ward-raster';
 import { loadAreaSurface, loadCanopyRaster, type WardSurface, type CanopyRaster } from './surface-raster';
@@ -2652,7 +2652,10 @@ export function mountHeatMap(): () => void {
       (lst as HTMLElement).style.color = lstColor(st.meanC);
     }
     applyConfidence();
-    const p = M.currentParams({ ...state, clock: scenarioClock() });
+    /* ONE CLOCK for this tick: the DC-URS block below solves the no-plan side under
+       it too, and two reads of `now()` could straddle an hour. */
+    const clock = scenarioClock();
+    const p = M.currentParams({ ...state, clock });
     syncRamp(p);
     const uhi = greenReferenceContrastC(st.meanC, p);
     setText('uhi', `${uhi >= 0 ? '+' : ''}${uhi.toFixed(1)}°`);
@@ -2681,9 +2684,10 @@ export function mountHeatMap(): () => void {
 
     /* ── DC-URS ────────────────────────────────────────────────────────────
        One score, evaluated twice: the observed baseline, and the same ward with
-       the sliders' modelled changes applied. The ward-mean surface temperature
-       the heat field just produced feeds the thermal pillar, so the physics and
-       the index describe the same scenario. */
+       the sliders' modelled changes applied. The thermal pillar keeps the ward's
+       MEASURED LST and takes only the change the plan makes, solved analytically
+       under this tick's forcing (see `scenarioLst`) — so a heatwave or a warming
+       pathway is never scored as the plan's doing. */
     /* BY THE BARE ID. `dc-urs-inputs.json`'s `wards` object is keyed by file-stem
        ids — ballygunge, baruipur, barrackpore — so indexing it with the area key
        returns undefined. And this lookup is OPTIONAL-CHAINED: there would be no
@@ -2691,19 +2695,31 @@ export function mountHeatMap(): () => void {
        on a page whose inputs are sitting right there in the fetched object. */
     const base = state.dcurs?.[areaOf(state.ward)];
     if (base) {
-      const phaseLst = state.phase === 'night' ? { nightC: st.meanC } : { dayC: st.meanC };
-      const scen = applyScenario(base, iv, anyIv ? phaseLst : undefined, currentWardSizeM);
+      /* THE SCENARIO LST IS THE MEASUREMENT PLUS THE PLAN, never `st.meanC`.
+         Both sides are solved under this tick's forcing: `p` above, and the same
+         state and clock with the sliders at zero (facades act only through Q, so the
+         no-plan side must not carry their cut). The layers are recomputed rather
+         than read off `latestSimRequest`, which lags `state.iv` while `resetSim`
+         awaits its host — and `iv` is what the cost and the "from this plan" line
+         below describe. Measured at ~1 ms (median; p95 1.6 ms) on a 384² grid. */
+      const lst = anyIv && state.base
+        ? scenarioLst(base,
+          { layers: state.base, params: M.currentParams({ ...state, clock, iv: { trees: 0, roof: 0, parks: 0, facades: 0 } }) },
+          { layers: M.applyInterventions(state.base, iv, state.spatial, state.climate.parkRadiusM), params: p },
+          state.phase)
+        : undefined;
+      const scen = applyScenario(base, iv, lst, currentWardSizeM);
       const now = U.dcUrs(anyIv ? scen.inputs : base);
-      const p = U.pillars(anyIv ? scen.inputs : base);
+      const pillars = U.pillars(anyIv ? scen.inputs : base);
       const tier = U.tierFor(now);
       const floor = U.structuralFloor(base);
 
       setText('scoreNum', String(Math.round(now)));
       // The three pillars raw, as the Green Score's components were: a composite
       // is only auditable if you can see which part produced the number.
-      setText('sGreen', `${Math.round(p.aci * 100)}`);
-      setText('sCool', `${Math.round((1 - p.evi) * 100)}`);
-      setText('sEff', `${Math.round((1 - p.thi) * 100)}`);
+      setText('sGreen', `${Math.round(pillars.aci * 100)}`);
+      setText('sCool', `${Math.round((1 - pillars.evi) * 100)}`);
+      setText('sEff', `${Math.round((1 - pillars.thi) * 100)}`);
       el('scoreArc')?.setAttribute('stroke-dashoffset', String(97 - now * 0.97));
       el('scoreArc')?.setAttribute('stroke', tier.colour);
       const tierEl = el('scoreTier');

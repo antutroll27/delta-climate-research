@@ -377,3 +377,43 @@ test('the style-load handler restores every source this app adds to the basemap'
     + 'beside a list that says which they are is how the list and the handler come '
     + 'apart, and the next source added is covered by neither');
 });
+
+test('the resilience score is fed the measured LST plus the plan, at the ward\'s own size', async () => {
+  /* WHAT THIS PROTECTS, TWO DEFECTS IN ONE CALL.
+     · The LST argument used to be the simulator's ward-mean surface temperature,
+       which replaced the measured satellite LST the moment a slider moved. On the
+       built page (2026-09-15) 25 trees read "-6.6 pts from this plan" at MG Road and
+       "-3.7" at Ballygunge. It must come from `scenarioLst`, which keeps the
+       measurement and adds only the change the plan makes.
+     · The ward size scales the slider gains by (1400 / sizeM)^2. Dropped, the call
+       still type-checks (the parameter defaults to 1400 m) and a 2.8 km ward's plan
+       is scored four times too strong, with nothing on screen to say so.
+     The rendered consequence of the first is driven in a browser by
+     tests/e2e/heat-map-bengaluru-resilience.spec.ts; the second has no rendered
+     signature a test could pin without re-deriving the gains, so it is read here. */
+  const code = await appSource();
+
+  const calls = [...code.matchAll(/\bapplyScenario\(([^()]*)\)/g)];
+  assert.equal(calls.length, 1,
+    `heat-map-app.ts calls \`applyScenario(...)\` ${calls.length} times. This test reads `
+    + 'the one call that scores the plan; none means the matcher lost it (or the '
+    + 'argument list now holds a nested call it cannot read), more means a second '
+    + 'scoring path this test is not checking');
+
+  const args = calls[0][1].split(',').map((a) => a.trim());
+  assert.equal(args.length, 4,
+    `applyScenario is called with ${args.length} arguments (${args.join(', ')}); it `
+    + 'takes base, interventions, LST and ward size, and a missing size silently '
+    + 'defaults to the 1400 m reference ward');
+  assert.equal(args[3], 'currentWardSizeM',
+    `applyScenario's ward size is \`${args[3]}\`, not \`currentWardSizeM\` -- the open `
+    + 'ward\'s side length, which is what scales the slider gains');
+
+  const lstDef = code.match(new RegExp(`const ${args[2]} = [^;]*?\\bscenarioLst\\(`));
+  assert.ok(lstDef,
+    `applyScenario's LST argument \`${args[2]}\` is not built by \`scenarioLst(...)\`. `
+    + 'Anything else -- the simulator\'s ward mean above all -- replaces the measured '
+    + 'satellite LST with a different quantity, and planting trees lowers the score');
+  assert.doesNotMatch(code, /\b(dayC|nightC)\s*:\s*st\.meanC\b/,
+    'the simulated ward mean is being handed to DC-URS as a surface temperature again');
+});

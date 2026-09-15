@@ -10,7 +10,8 @@
  *   fvc, canopyFrac   trees and parks add vegetation
  *   albedo            cool roofs raise reflectance
  *   distCoolM         a new park shortens the distance to a refuge
- *   lstDayC/NightC    from the thermal model, carrying its measured error
+ *   lstDayC/NightC    the MEASURED value, moved by the modelled change the
+ *                     plan makes (`scenarioLst`, below)
  *
  *   ndviStd           FROZEN — see below
  *   popDensity, far, socioVuln   inert; no intervention touches them
@@ -28,7 +29,8 @@
  * cannot fix it. `structuralFloor()` in dc-urs.ts quantifies exactly how much.
  */
 import type { DcUrsInputs } from './dc-urs-inputs.ts';
-import type { Interventions } from './heat-map-model.ts';
+import { eqMean, type Interventions } from './heat-map-model.ts';
+import type { SimLayers, SimParams } from './types.ts';
 
 /** How far each slider can push its indicator, at full travel.
  *
@@ -86,8 +88,8 @@ const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
 /**
  * Apply interventions to the baseline inputs.
  *
- * `lst` is supplied by the caller from the thermal model, so this module does no
- * physics — it maps sliders onto indicators and nothing else.
+ * `lst` is supplied by the caller, built by `scenarioLst` below. This function
+ * does no physics — it maps sliders onto indicators and nothing else.
  */
 export function applyScenario(
   base: DcUrsInputs,
@@ -133,6 +135,55 @@ export function applyScenario(
       // ndviStd deliberately untouched — see the module note on VSI.
     },
   };
+}
+
+/** One side of the comparison `scenarioLst` draws: layers, and the forcing they are solved under. */
+export interface SolvedLayers {
+  readonly layers: SimLayers;
+  readonly params: SimParams;
+}
+
+/**
+ * The scenario's surface temperature: the MEASURED LST, moved by what the plan changes.
+ *
+ * WHAT THIS REPLACED. The caller used to pass the simulator's ward-mean surface
+ * temperature as the scenario LST. That is a different quantity from the
+ * all-season satellite median it overwrote — MG Road's measured day LST is
+ * 29.49 °C, the simulated noon mean 35–41 °C — so the moment a slider left zero
+ * the score absorbed a jump no intervention could offset. On the built page
+ * (2026-09-15) 25 trees read "−6.6 pts from this plan" at MG Road and "−3.7" at
+ * Ballygunge. The same substitution scored a heatwave or a warming pathway as the
+ * plan's doing.
+ *
+ * THE RULE. Keep the measurement; add only the difference, both sides solved
+ * analytically:
+ *
+ *   Δ = eqMean(after.layers, after.params) − eqMean(before.layers, before.params)
+ *
+ * THE FORCING CANCELS. Per cell `eqMean` averages
+ * (S(1−a)·sun + Q·built − L·veg + store + pull) / k, and `tAir`, `tSky` and `store`
+ * live only in `pull` and `store`, identical on both sides. What survives is
+ * (S·sun·Δa + ΔQ·built − L·Δveg) / k: the forcing still sets how STRONG a plan is
+ * (a cool roof does more under noon sun, evapotranspiration follows humidity, wind
+ * sets k) but a warmer air mass never adds itself to the score.
+ *
+ * TWO PARAMS, NOT ONE. Green facades act only through `Q` — `currentParams` cuts it
+ * — and touch no layer, so `before.params` must be the same forcing with the
+ * sliders at zero. One shared params object would drop facades from Δ entirely.
+ *
+ * The phase picks the field, as before: 'night' feeds `lstNightC`, 'peak' feeds
+ * `lstDayC`. Heatwave is a forcing override riding 'peak', so it feeds `lstDayC`.
+ */
+export function scenarioLst(
+  base: DcUrsInputs,
+  before: SolvedLayers,
+  after: SolvedLayers,
+  phase: 'peak' | 'night',
+): { dayC: number } | { nightC: number } {
+  const delta = eqMean(after.layers, after.params) - eqMean(before.layers, before.params);
+  return phase === 'night'
+    ? { nightC: base.lstNightC.value + delta }
+    : { dayC: base.lstDayC.value + delta };
 }
 
 /** ponytail: one runnable check */
