@@ -273,6 +273,45 @@ def export_terrain(w: blr.Ward) -> float:
     return span
 
 
+def export_dcurs() -> str:
+    """Bengaluru's DC-URS inputs: the committed source and the byte-identical served copy.
+
+    fvc and albedo are copied from surface-meta.json, not recomputed: loadAreaSurface
+    reads a DC-URS record FIRST, and the served texture is pinned to those means
+    (tests/unit/heat-map-surface-measured.test.mjs), so any other value would put
+    the map and the score on two different measurements.
+    """
+    import _dcurs_blr as dc
+    if not (os.path.exists(dc.STATIC_PATH) and os.path.exists(dc.LST_PATH)):
+        return ("  dc-urs       not built -- run fetch-bangalore.py --layer dcurs-static "
+                "and --layer dcurs-lst first")
+    with open(dc.STATIC_PATH, encoding="utf-8") as fh:
+        static = cast(dc.StaticFile, json.load(fh))
+    with open(dc.LST_PATH, encoding="utf-8") as fh:
+        scenes = cast(dc.ScenesFile, json.load(fh))
+    with open(os.path.join(OUT, "surface-meta.json"), encoding="utf-8") as fh:
+        meta = cast(dict[str, Any], json.load(fh))["wards"]
+    ids = list(blr.WARDS)
+    th = dc.thermal(scenes["rows"], ids)
+    refusal = dc.night_suhii_refusal(th)
+    if refusal:
+        raise SystemExit(refusal)
+    surface = {w: (float(meta[w]["fvc_mean"]), float(meta[w]["albedo_mean"])) for w in ids}
+    doc = dc.assemble(th, static["wards"], surface)
+    blob = json.dumps(doc, indent=2)
+    for dst in (dc.SOURCE_PATH, os.path.join(OUT, dc.SERVED_NAME)):
+        with open(dst, "w", encoding="utf-8") as fh:
+            fh.write(blob)
+    lines = [f"  dc-urs       {th[ids[0]]['dayScenes']} day / {th[ids[0]]['nightScenes']} night shared scenes"]
+    for w in ids:
+        t = th[w]
+        lines.append(f"    {w:<12} day {t['lstDayC']} C · night {t['lstNightC']} C · "
+                     f"heat island day {t['suhiiDayC']} / night {t['suhiiNightC']} C")
+        for s in dc.clamps(doc["wards"][w]):
+            lines.append(f"      CLAMP {s}")
+    return "\n".join(lines)
+
+
 def main() -> int:
     # Refuse BEFORE writing anything. Checked per ward inside export_trees, a
     # missing species left that ward's buildings, roads and water rewritten and
@@ -291,6 +330,7 @@ def main() -> int:
         print(f"  {w.id:<12} {buildings:6,} buildings · {ways:5,} ways · "
               f"{polys:3,} water polys · {nlines:3,} open lines ({covered} covered dropped) · {trees:6,} trees · "
               f"ground {span:.1f} m")
+    print(export_dcurs())
     print(f"  written to {os.path.relpath(OUT, blr.ROOT)}/")
     return 0
 

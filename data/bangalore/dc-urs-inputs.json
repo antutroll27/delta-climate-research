@@ -1,0 +1,229 @@
+{
+  "generated": "export-bangalore-obos.py",
+  "engine": "v1 -- see docs/dc-urs-source-of-truth.md; Bengaluru inputs per docs/superpowers/specs/2026-09-14-bengaluru-resilience-score-design.md",
+  "note": "Every field carries source and vintage. A 'placeholder' sits at its optimistic endpoint and is disclosed by the score's confidence chip.",
+  "known_limitations": [
+    "socioVuln is unmeasured: district data is identical across the three wards, WorldPop age shares are state-uniform for India, and the Census 2011 ward tables are not cleared for commercial use.",
+    "fvc and albedo are the map's per-cell Sentinel-2 composite means (surface-meta.json), a different reduction from Kolkata's sentinel.json, kept identical to the served texture so the map and the score cannot disagree.",
+    "ruralBaseC is an effective baseline (lstDayC minus the median per-scene heat island), so the engine reproduces a median of differences, not a difference of medians.",
+    "Anchors are Kolkata's; the clamp report is in docs/evidence/known-limitations.md."
+  ],
+  "wards": {
+    "indiranagar": {
+      "lstDayC": {
+        "value": 29.5,
+        "source": "measured",
+        "vintage": "2018-2026",
+        "cite": "NASA ECOSTRESS L2T LSTE v002, scenes clear in all three wards, median of 46 day scenes"
+      },
+      "lstNightC": {
+        "value": 20.71,
+        "source": "measured",
+        "vintage": "2018-2026",
+        "cite": "NASA ECOSTRESS L2T LSTE v002, scenes clear in all three wards, median of 49 night scenes"
+      },
+      "ruralBaseC": {
+        "value": 30.88,
+        "source": "measured",
+        "vintage": "2018-2026",
+        "cite": "EFFECTIVE rural baseline: lstDayC minus the median per-scene difference (ward - GHS-SMOD rural 11/12/13), so lstDayC - ruralBaseC is that median"
+      },
+      "popDensity": {
+        "value": 10143.4,
+        "source": "modelled",
+        "vintage": "2025",
+        "cite": "WorldPop R2025A constrained 100 m (CC BY 4.0), people in exactly the 2.8 km box / 7.84 km2; biased flat (understates central wards)"
+      },
+      "far": {
+        "value": 0.6356,
+        "source": "measured",
+        "vintage": "2023-2026",
+        "cite": "Overture footprints + Google Open Buildings 2.5D / OSM heights, storey 3.33 m"
+      },
+      "socioVuln": {
+        "value": 0.0,
+        "source": "placeholder",
+        "cite": "not measured: no commercially clear ward-level source (docs/evidence/known-limitations.md)"
+      },
+      "fvc": {
+        "value": 0.4014,
+        "source": "measured",
+        "vintage": "2021-2025",
+        "cite": "Sentinel-2 L2A per-cell composite, surface-meta.json fvc_mean"
+      },
+      "canopyFrac": {
+        "value": 0.0,
+        "source": "placeholder",
+        "cite": "v2 only -- inert in the v1 greenness formula"
+      },
+      "ndviMean": {
+        "value": 0.3104,
+        "source": "measured",
+        "vintage": "5 yr",
+        "cite": "Sentinel-2 L2A"
+      },
+      "ndviStd": {
+        "value": 0.0179,
+        "source": "measured",
+        "vintage": "5 yr",
+        "cite": "Sentinel-2 L2A, across-year std of annual medians"
+      },
+      "albedo": {
+        "value": 0.1671,
+        "source": "measured",
+        "vintage": "2021-2025",
+        "cite": "Sentinel-2 per-cell composite, surface-meta.json albedo_mean"
+      },
+      "distCoolM": {
+        "value": 28.6,
+        "source": "measured",
+        "vintage": "2021",
+        "cite": "ESA WorldCover 10 m, tile N12E075, patches >= 0.77 ha"
+      }
+    },
+    "mg-road": {
+      "lstDayC": {
+        "value": 29.49,
+        "source": "measured",
+        "vintage": "2018-2026",
+        "cite": "NASA ECOSTRESS L2T LSTE v002, scenes clear in all three wards, median of 46 day scenes"
+      },
+      "lstNightC": {
+        "value": 21.47,
+        "source": "measured",
+        "vintage": "2018-2026",
+        "cite": "NASA ECOSTRESS L2T LSTE v002, scenes clear in all three wards, median of 49 night scenes"
+      },
+      "ruralBaseC": {
+        "value": 30.61,
+        "source": "measured",
+        "vintage": "2018-2026",
+        "cite": "EFFECTIVE rural baseline: lstDayC minus the median per-scene difference (ward - GHS-SMOD rural 11/12/13), so lstDayC - ruralBaseC is that median"
+      },
+      "popDensity": {
+        "value": 9557.0,
+        "source": "modelled",
+        "vintage": "2025",
+        "cite": "WorldPop R2025A constrained 100 m (CC BY 4.0), people in exactly the 2.8 km box / 7.84 km2; biased flat (understates central wards)"
+      },
+      "far": {
+        "value": 0.9816,
+        "source": "measured",
+        "vintage": "2023-2026",
+        "cite": "Overture footprints + Google Open Buildings 2.5D / OSM heights, storey 3.33 m"
+      },
+      "socioVuln": {
+        "value": 0.0,
+        "source": "placeholder",
+        "cite": "not measured: no commercially clear ward-level source (docs/evidence/known-limitations.md)"
+      },
+      "fvc": {
+        "value": 0.3884,
+        "source": "measured",
+        "vintage": "2021-2025",
+        "cite": "Sentinel-2 L2A per-cell composite, surface-meta.json fvc_mean"
+      },
+      "canopyFrac": {
+        "value": 0.0,
+        "source": "placeholder",
+        "cite": "v2 only -- inert in the v1 greenness formula"
+      },
+      "ndviMean": {
+        "value": 0.2805,
+        "source": "measured",
+        "vintage": "5 yr",
+        "cite": "Sentinel-2 L2A"
+      },
+      "ndviStd": {
+        "value": 0.0118,
+        "source": "measured",
+        "vintage": "5 yr",
+        "cite": "Sentinel-2 L2A, across-year std of annual medians"
+      },
+      "albedo": {
+        "value": 0.1652,
+        "source": "measured",
+        "vintage": "2021-2025",
+        "cite": "Sentinel-2 per-cell composite, surface-meta.json albedo_mean"
+      },
+      "distCoolM": {
+        "value": 49.5,
+        "source": "measured",
+        "vintage": "2021",
+        "cite": "ESA WorldCover 10 m, tile N12E075, patches >= 0.77 ha"
+      }
+    },
+    "whitefield": {
+      "lstDayC": {
+        "value": 29.58,
+        "source": "measured",
+        "vintage": "2018-2026",
+        "cite": "NASA ECOSTRESS L2T LSTE v002, scenes clear in all three wards, median of 46 day scenes"
+      },
+      "lstNightC": {
+        "value": 20.3,
+        "source": "measured",
+        "vintage": "2018-2026",
+        "cite": "NASA ECOSTRESS L2T LSTE v002, scenes clear in all three wards, median of 49 night scenes"
+      },
+      "ruralBaseC": {
+        "value": 30.42,
+        "source": "measured",
+        "vintage": "2018-2026",
+        "cite": "EFFECTIVE rural baseline: lstDayC minus the median per-scene difference (ward - GHS-SMOD rural 11/12/13), so lstDayC - ruralBaseC is that median"
+      },
+      "popDensity": {
+        "value": 8691.1,
+        "source": "modelled",
+        "vintage": "2025",
+        "cite": "WorldPop R2025A constrained 100 m (CC BY 4.0), people in exactly the 2.8 km box / 7.84 km2; biased flat (understates central wards)"
+      },
+      "far": {
+        "value": 0.7386,
+        "source": "measured",
+        "vintage": "2023-2026",
+        "cite": "Overture footprints + Google Open Buildings 2.5D / OSM heights, storey 3.33 m"
+      },
+      "socioVuln": {
+        "value": 0.0,
+        "source": "placeholder",
+        "cite": "not measured: no commercially clear ward-level source (docs/evidence/known-limitations.md)"
+      },
+      "fvc": {
+        "value": 0.3698,
+        "source": "measured",
+        "vintage": "2021-2025",
+        "cite": "Sentinel-2 L2A per-cell composite, surface-meta.json fvc_mean"
+      },
+      "canopyFrac": {
+        "value": 0.0,
+        "source": "placeholder",
+        "cite": "v2 only -- inert in the v1 greenness formula"
+      },
+      "ndviMean": {
+        "value": 0.2924,
+        "source": "measured",
+        "vintage": "5 yr",
+        "cite": "Sentinel-2 L2A"
+      },
+      "ndviStd": {
+        "value": 0.044,
+        "source": "measured",
+        "vintage": "5 yr",
+        "cite": "Sentinel-2 L2A, across-year std of annual medians"
+      },
+      "albedo": {
+        "value": 0.1775,
+        "source": "measured",
+        "vintage": "2021-2025",
+        "cite": "Sentinel-2 per-cell composite, surface-meta.json albedo_mean"
+      },
+      "distCoolM": {
+        "value": 29.1,
+        "source": "measured",
+        "vintage": "2021",
+        "cite": "ESA WorldCover 10 m, tile N12E075, patches >= 0.77 ha"
+      }
+    }
+  }
+}
