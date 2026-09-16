@@ -385,9 +385,11 @@ test('the resilience score is fed the measured LST plus the plan, at the ward\'s
        built page (2026-09-15) 25 trees read "-6.6 pts from this plan" at MG Road and
        "-3.7" at Ballygunge. It must come from `scenarioLst`, which keeps the
        measurement and adds only the change the plan makes.
-     · The ward size scales the slider gains by (1400 / sizeM)^2. Dropped, the call
-       still type-checks (the parameter defaults to 1400 m) and a 2.8 km ward's plan
-       is scored four times too strong, with nothing on screen to say so.
+     · The ward size scales the PARKS gain by (1400 / sizeM)^2 — trees, cool roofs
+       and facades are a share of the ward and are deliberately not scaled. Dropped,
+       the call still type-checks (the parameter defaults to 1400 m) and a 2.8 km
+       ward's pocket parks are scored four times too strong, with nothing on screen
+       to say so.
      The rendered consequence of the first is driven in a browser by
      tests/e2e/heat-map-bengaluru-resilience.spec.ts; the second has no rendered
      signature a test could pin without re-deriving the gains, so it is read here. */

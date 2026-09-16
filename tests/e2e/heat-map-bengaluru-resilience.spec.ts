@@ -76,10 +76,18 @@ const PLAN = { trees: 25, roof: 0, parks: 0, facades: 0 } as const;
    Road and +0.48 for Ballygunge, so passing the same params to both sides of
    `scenarioLst`, i.e. no Δ at all, would have sailed through it.
 
-   MEASURED on the built page at 13:00 Peak with 25 trees: MG Road gains +0.6 pts
-   in total and Ballygunge +0.9, so the LST term is worth about 0.48 and 0.42 pts
-   respectively. 0.2 sits well under both and well over the ±0.05 that the readout's
-   single decimal place can hide. */
+   THE INDEX-ONLY FIGURE QUADRUPLED AT MG ROAD on 2026-09-16 (+0.12 → +0.48) when the
+   trees gain stopped being scaled by ward area; a slider is a share of the ward, as
+   the heat layers and the cost already had it. The thermal half did not move —
+   `scenarioLst` never carried that scaling — so the margin is re-derived from the
+   same measured split, not from the total.
+
+   MEASURED on the built page at 13:00 Peak with 25 trees (2026-09-16): both wards
+   read "0.9 pts from this plan" against an index-only 0.48, so the LST term is worth
+   about 0.42 pts in each. 0.2 sits well under that, and well over the ±0.05 that the
+   readout's single decimal place can hide. With the Δ unwired both wards would print
+   the index-only 0.5, under the 0.68 this asks for — which is the failure this margin
+   exists to force. */
 const THERMAL_MARGIN = 0.2;
 
 for (const ward of TREE_WARDS) {
@@ -92,9 +100,11 @@ for (const ward of TREE_WARDS) {
     const baseScore = Math.round(dcUrs(inputs));
 
     /* THE WARD'S OWN SIDE LENGTH, read from the artefact the page itself fetches
-       (`currentWardSizeM = d.sizeM` in heat-map-app.ts). Typing 2800 and 1400 in
-       here would let this test go on agreeing with a page that had stopped scaling
-       the slider gains by ward area. */
+       (`currentWardSizeM = d.sizeM` in heat-map-app.ts), and passed on exactly as the
+       page passes it. Since 2026-09-16 only the PARKS gain scales by ward area, so
+       this trees-only plan is worth the same over either ward — but reading the real
+       figure keeps this test measuring the call the page actually makes, and still
+       catches a plan here that grows a parks term. */
     const { sizeM } = JSON.parse(await readFile(
       fileURLToPath(new URL(`../../public/heat-map/data/${ward.id}.json`, import.meta.url)),
       'utf8',

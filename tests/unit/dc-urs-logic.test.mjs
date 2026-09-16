@@ -20,6 +20,7 @@ test('the scenario self-check holds on every golden ward', () => {
 });
 
 const IV = { trees: 30, roof: 40, parks: 4, facades: 5 };
+const ZERO = { trees: 0, roof: 0, parks: 0, facades: 0 };
 const close = (a, b, msg) => assert.ok(Math.abs(a - b) < 1e-9, `${msg}: ${a} vs ${b}`);
 
 /* A 1400 m ward is the reference the gains were sized for, so it must be scored
@@ -30,20 +31,71 @@ test('a 1400 m ward moves exactly as before', () => {
   assert.deepEqual(applyScenario(base, IV, undefined, REFERENCE_WARD_M), applyScenario(base, IV));
   const r = applyScenario(base, IV);
   close(r.inputs.fvc.value, 0.12 + 0.6 * 0.12 + 0.4 * 0.06 + (5 / 15) * 0.01, 'fvc');
+  close(r.inputs.canopyFrac.value, 0.1 + 0.6 * 0.10 + 0.4 * 0.04, 'canopyFrac');
   close(r.inputs.albedo.value, 0.15 + 0.4 * 0.10, 'albedo');
   close(r.inputs.distCoolM.value, 800 - 0.4 * 220, 'distCoolM');
 });
 
-/* Bengaluru's wards are 2800 m, four times the area: the same package of trees,
-   parks and roofs moves a ward mean a quarter as far. */
-test('a 2800 m ward moves a quarter as far', () => {
+/* THE RULE, SINCE 2026-09-16: a slider is a SHARE OF THE WARD, not a fixed package
+   of work, so trees, cool roofs and facades carry the same index gain whatever the
+   ward's side. That is what the rest of the tool already said — `applyInterventions`
+   greens a fraction of THIS ward's corridor cells and shifts a fraction of its OWN
+   roof area, and `computeCost` prices its OWN corridor length. Parks are the one
+   exception: at most ten patches of a fixed metre radius, so the same ten patches
+   really are a smaller share of a bigger ward, and they alone still dilute. */
+test('a 2800 m ward dilutes the parks gain, and nothing else', () => {
   const base = GOLDEN[0].inputs;
   assert.equal(areaScale(2800), 0.25);
   const r = applyScenario(base, IV, undefined, 2800);
-  close(r.inputs.fvc.value, 0.12 + 0.25 * (0.6 * 0.12 + 0.4 * 0.06 + (5 / 15) * 0.01), 'fvc');
-  close(r.inputs.albedo.value, 0.15 + 0.25 * 0.4 * 0.10, 'albedo');
+  close(r.inputs.fvc.value, 0.12 + 0.6 * 0.12 + 0.25 * 0.4 * 0.06 + (5 / 15) * 0.01, 'fvc');
+  close(r.inputs.canopyFrac.value, 0.1 + 0.6 * 0.10 + 0.25 * 0.4 * 0.04, 'canopyFrac');
+  close(r.inputs.albedo.value, 0.15 + 0.4 * 0.10, 'albedo');
   close(r.inputs.distCoolM.value, 800 - 0.25 * 0.4 * 220, 'distCoolM');
   assert.equal(r.active, true, 'a scaled plan is still an active plan');
+});
+
+/* SLIDER BY SLIDER, ON THE SCORE THE PAGE ACTUALLY PRINTS, so a gain that started
+   being re-scaled again could not hide inside a four-slider plan where three other
+   terms move at once. */
+const soloGain = (iv, sizeM) => dcUrs(
+  applyScenario(GOLDEN[0].inputs, { ...ZERO, ...iv }, undefined, sizeM).inputs,
+) - dcUrs(GOLDEN[0].inputs);
+
+for (const [name, iv] of [
+  ['trees', { trees: 25 }], ['cool roofs', { roof: 50 }], ['facades', { facades: 8 }],
+]) {
+  test(`${name}: worth the same index gain over a 2800 m ward as over a 1400 m one`, () => {
+    const small = soloGain(iv, REFERENCE_WARD_M), big = soloGain(iv, 2800);
+    assert.ok(small > 0,
+      `${name} moved the 1400 m score by ${small} -- this case would hold just as well `
+      + 'for a slider that did nothing at either size');
+    close(big, small, `${name}: 2800 m against 1400 m`);
+  });
+}
+
+/* PARKS, PINNED ON THE INPUTS, because that is where the quarter is exact. The
+   SCORE is not linear in refuge distance: `parks: 2` on this ward gains 0.244577 pts
+   at 1400 m and 0.059928 at 2800 m — a ratio of 0.2450, not 0.2500 — so asserting a
+   quarter of the score would be asserting a coincidence. The 1400 m figure is pinned
+   as it stood before 2026-09-16, since Kolkata must not move. */
+test('parks are a fixed package, so a 2800 m ward moves a quarter as far', () => {
+  const base = GOLDEN[0].inputs;
+  const iv = { ...ZERO, parks: 2 };
+  const small = applyScenario(base, iv, undefined, REFERENCE_WARD_M).inputs;
+  const big = applyScenario(base, iv, undefined, 2800).inputs;
+  const moved = (r, key) => r[key].value - base[key].value;
+  for (const key of ['fvc', 'canopyFrac', 'distCoolM']) {
+    assert.notEqual(moved(small, key), 0,
+      `parks left ${key} where it was at 1400 m -- this case is not testing what it says`);
+    close(moved(big, key), 0.25 * moved(small, key),
+      `parks ${key}: 2800 m against a quarter of 1400 m`);
+  }
+  const gSmall = soloGain(iv, REFERENCE_WARD_M), gBig = soloGain(iv, 2800);
+  assert.ok(Math.abs(gSmall - 0.2445767) < 1e-6,
+    `parks: 2 is worth ${gSmall} pts over a 1400 m ward; it was 0.2445767 before the `
+    + 'trees, roof and facade gains stopped being scaled, and Kolkata must not move');
+  assert.ok(gBig < gSmall / 3,
+    `parks at 2800 m gained ${gBig} pts against ${gSmall} at 1400 m -- not diluted`);
 });
 
 test('a ward size that is not positive is refused, not scored', () => {
@@ -61,7 +113,7 @@ test('a ward size that is not positive is refused, not scored', () => {
    `applyInterventions` and `eqMean` need. */
 const MG_KEY = 'in/bengaluru/mg-road';
 const MG_SIZE_M = 2800;
-const NO_IV = { trees: 0, roof: 0, parks: 0, facades: 0 };
+const NO_IV = ZERO;
 
 async function mgRoad() {
   const raw = JSON.parse(await readFile(

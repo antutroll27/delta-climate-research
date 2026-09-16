@@ -64,11 +64,20 @@ export const SCENARIO = {
 export const REFERENCE_WARD_M = 1400;
 
 /**
- * How far a slider's gain carries over a ward of side `sizeM`.
+ * How far a PARK's gain carries over a ward of side `sizeM`.
  *
- * The gains are a fixed PACKAGE — 50 street trees, 10 pocket parks — so over a
- * ward four times the area (Bengaluru's 2800 m) the same package moves the ward
- * mean a quarter as far. Kolkata's 1400 m wards scale by exactly 1.
+ * Parks are the one slider that is a fixed PACKAGE of work: `applyInterventions`
+ * paints at most ten patches of a fixed metre radius, so over a ward four times
+ * the area (Bengaluru's 2800 m) the same ten patches move the ward mean a quarter
+ * as far. Kolkata's 1400 m wards scale by exactly 1.
+ *
+ * TREES, ROOFS AND FACADES ARE NOT SCALED, because neither the physics nor the
+ * bill treats them as a fixed package. `applyInterventions` greens a FRACTION of
+ * the ward's own corridor cells and shifts the albedo of a fraction of its own
+ * roof area, and `computeCost` prices that ward's own corridor length — MG Road's
+ * 198.9 km against Ballygunge's 51.3 km, about 3.9x the money for the same slider.
+ * A slider is a SHARE OF THE WARD, and scaling its index gain by area made the
+ * index move a quarter as far as the heat layers and the cost it sits beside.
  */
 export function areaScale(sizeM: number): number {
   if (!(sizeM > 0)) throw new RangeError(`dc-urs-scenario: ward size must be positive, got ${sizeM}`);
@@ -97,9 +106,12 @@ export function applyScenario(
   lst?: { dayC?: number; nightC?: number },
   sizeM: number = REFERENCE_WARD_M,
 ): ScenarioResult {
-  const k = areaScale(sizeM);
-  const trees = (iv.trees / 50) * k, roof = (iv.roof / 100) * k;
-  const parks = Math.min(1, iv.parks / 10) * k, facades = (iv.facades / 15) * k;
+  /* ONLY PARKS CARRY THE AREA SCALING — see `areaScale` for why. The four
+     contributions below are ADDITIVE, so scaling the parks fraction alone is
+     exact even for `fvc` and `canopyFrac`, which take a parks term and a trees
+     term together. */
+  const trees = iv.trees / 50, roof = iv.roof / 100;
+  const parks = Math.min(1, iv.parks / 10) * areaScale(sizeM), facades = iv.facades / 15;
   const active = iv.trees > 0 || iv.roof > 0 || iv.parks > 0 || iv.facades > 0;
 
   const fvc = clamp01(base.fvc.value
