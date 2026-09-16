@@ -210,9 +210,18 @@ test('a city inside the window is announced, and names its showcase ward', () =>
   assert.equal(found?.href, '/heat-map/in/bengaluru/mg-road/');
 });
 
-test('outside the window nothing is announced, so the badge retires itself', () => {
-  const late = new Date(ARRIVED + (NEW_CITY_DAYS + 1) * DAY);
-  assert.equal(newCityToAnnounce('kolkata', late, fakeStore()), null);
+test('the window is ninety days: a city 89 days old is still announced, 91 days old is not', () => {
+  /* LITERALS ON PURPOSE. Deriving the boundary from NEW_CITY_DAYS makes the
+     constant cancel out of its own guard: cutoff lands one day after arrival for
+     D = 1, 90 or 90_000 alike, so every value passes and the ninety is pinned by
+     nothing. Two literal days either side pin the number and the comparison. */
+  const store = fakeStore();
+  assert.equal(newCityToAnnounce('kolkata', new Date(ARRIVED + 89 * DAY), store)?.id, 'bengaluru',
+    'a city 89 days old is inside a ninety-day window');
+  assert.equal(newCityToAnnounce('kolkata', new Date(ARRIVED + 91 * DAY), store), null,
+    'a city 91 days old is outside it, and the badge retires itself');
+  assert.equal(NEW_CITY_DAYS, 90,
+    'the two day counts above are written against a ninety-day window');
 });
 
 test('the reader is never told about the city they are already in', () => {
@@ -403,7 +412,7 @@ Leave every assertion, the `checked` counter and the messages exactly as they ar
 - [ ] **Step 6: Mutation proofs (paste each FAIL, then the restored PASS)**
 
 1. In `newCityToAnnounce`, delete the `.filter((city) => city.id !== openCityId)` line — "the reader is never told about the city they are already in" must fail.
-2. Change `NEW_CITY_DAYS` to `90_000` — "outside the window nothing is announced" must fail.
+2. Change `NEW_CITY_DAYS` to `90_000` — the 91-day assertion in "the window is ninety days" must fail, because a city 91 days old would still be announced. Then change it to `1` — the 89-day assertion must fail, because nothing would be announced. Both directions are required: a test that only checks one side passes for a constant that is far too large OR far too small.
 3. In `openableAreaKey`, replace `preferred ?? drawable[0]` with `drawable[0]` — the showcase assertion in the first announce test must fail (it would return indiranagar).
 4. In `wasDismissed`, change the `catch` to `return true` — "an unreadable store shows the badge" must fail.
 
