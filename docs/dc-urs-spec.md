@@ -376,10 +376,17 @@ dcurs-static` and `--layer dcurs-lst`, then `scripts/export-bangalore-obos.py`, 
 - **`fvc` / `albedo`:** copied from the served surface raster (`surface-meta.json`), so the map and the
   score read one measurement.
 
-**Sliders.** The index's own gains (`fvc`, `canopyFrac`, `albedo`, `distCoolM`) scale by `(1400 / sizeM)²`
-(`REFERENCE_WARD_M`, `areaScale` in `src/scripts/climate-engine/dc-urs-scenario.ts`), a quarter for a
-2.8 km ward. The LST change is not rescaled: `scenarioLst` keeps the measured LST and adds the heat model's
-plan-minus-no-plan difference, both solved under the same forcing. Detail in
+**Sliders.** A slider is a **share of the ward**, not a fixed package of work, so the trees, cool-roof and
+facade gains (`fvc`, `canopyFrac`, `albedo`) are the same over a 2.8 km ward as over a 1.4 km one. That is
+what the rest of the tool already says: `applyInterventions` greens a fraction of the ward's **own**
+corridor cells and shifts the albedo of a fraction of its **own** roof area, and `computeCost` prices its
+**own** corridor length (MG Road's 198.9 km against Ballygunge's 51.3 km). Parks are the exception — at
+most ten patches of a fixed metre radius — so the **parks** contribution to `fvc`, `canopyFrac` and
+`distCoolM` alone scales by `(1400 / sizeM)²` (`REFERENCE_WARD_M`, `areaScale` in
+`src/scripts/climate-engine/dc-urs-scenario.ts`), a quarter for a 2.8 km ward. Kolkata's 1.4 km wards are
+unaffected either way: the factor is exactly 1. The LST change is not rescaled either: `scenarioLst` keeps
+the measured LST and adds the heat model's plan-minus-no-plan difference, both solved under the same
+forcing. Detail in
 [evidence/known-limitations.md](evidence/known-limitations.md) §14.
 
 **Gates.** `export-bangalore-obos.py --check` fails a stale inputs file (CI: `npm run check:bangalore`);

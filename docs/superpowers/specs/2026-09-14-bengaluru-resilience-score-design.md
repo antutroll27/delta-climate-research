@@ -134,6 +134,7 @@ Standing constraints:
 
 - `dc-urs-scenario.ts` sizes its gains "over a 1400 m ward".
 - Gains scale by ward area, `(1400 / sizeM)²`: 0.25 for Bengaluru's 2800 m wards, 1 for Kolkata, which is therefore unchanged.
+  - **Superseded 2026-09-16.** Only the **parks** gain scales by area. Trees, cool roofs and facades are a share of the ward — which is how `applyInterventions` and `computeCost` already read them — so their index gains are not scaled. Kolkata is unchanged under either rule. See `docs/dc-urs-spec.md` §"Sliders".
 
 **Tests.** Every new test or gate is proven able to fail once, by breaking what it guards.
 

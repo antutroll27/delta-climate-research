@@ -747,8 +747,9 @@ area.
 
 **Status:** accepted · **See:** [design spec](../superpowers/specs/2026-09-14-bengaluru-resilience-score-design.md), [data-sources.md](data-sources.md) (Bangalore — Bengaluru DC-URS inputs)
 
-*Figures are as of `32d8943`: ECOSTRESS searched to 2026-09-01, Kolkata inputs as served then. Re-running
-`--layer dcurs-lst` changes them, and nothing checks this section.*
+*Figures are as of `3052c7c`: ECOSTRESS searched to 2026-09-01, Kolkata inputs as served then, and the
+slider rule as it stands at that commit. Re-running `--layer dcurs-lst` changes them, and nothing checks
+this section.*
 
 Indiranagar, MG Road and Whitefield are scored by the same DC-URS v1 engine as Kolkata, against Kolkata's
 normalisation anchors, from their own inputs file `data/bangalore/dc-urs-inputs.json` (served byte-identical
@@ -920,12 +921,19 @@ All three Bengaluru wards read "Moderate Resilience". **The cross-city gap is co
   against 30.72 °C). The heat-island term is 0 in both cities.
 
 **"Bengaluru is more resilient than Kolkata" is not a supported claim yet.** Scenario sliders do not
-compare either: gains scale by `(1400 / sizeM)²`, so a 2.8 km Bengaluru ward's interventions are a quarter
-as strong per unit slider as a 1.4 km Kolkata ward's (before this scaling they were not scaled at all).
-That scaling covers the index's own gains (`fvc`, `canopyFrac`, `albedo`, `distCoolM`). The LST change is
-different: it comes from the heat model's layers, where trees and cool roofs cover a share of the ward's
-corridors and roofs, so it is not rescaled (parks are fixed-size patches, so their LST effect does dilute
-with ward area). Since 2026-09-16 the scenario keeps the measured LST and adds only that modelled change.
+compare either, though not for the reason this section gave until 2026-09-16. A slider is a **share of the
+ward**: the same position greens the same fraction of the ward's own corridor cells and roof area, so a
+2.8 km Bengaluru ward's trees, cool roofs and facades move its index exactly as far per unit slider as a
+1.4 km Kolkata ward's — but they buy about 3.9x as much work and cost (MG Road's 198.9 km of street
+corridor against Ballygunge's 51.3 km), which is the real obstacle to comparing two plans. Only **parks**
+dilute with ward area: they are at most ten patches of a fixed metre radius, so the parks contribution to
+`fvc`, `canopyFrac` and `distCoolM` scales by `(1400 / sizeM)²`, a quarter over a 2.8 km ward. Until
+2026-09-16 every slider's index gain carried that quarter, which left the index moving a quarter as far as
+the heat layers and the bill beside it (the same plan moved the layers' ward-mean vegetation by +0.118 and
+`fvc` by only +0.015); the trees, roof and facade gains are no longer scaled. The LST change was never
+rescaled: it comes from the heat model's layers, where trees and cool roofs cover a share of the ward's
+corridors and roofs (parks are fixed-size patches, so their LST effect does dilute with ward area). Since
+2026-09-16 the scenario keeps the measured LST and adds only that modelled change.
 Before, the simulated ward mean replaced the measured LST, and 25 trees lowered MG Road's score by 6.6
 points. In live "Now" mode the plan's LST change is sized by the current hour's sun, so the same plan reads
 +0.18 pts at dusk and +0.58 at solar noon on MG Road, while the measured LST it is added to is a fixed
