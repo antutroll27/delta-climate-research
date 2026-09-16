@@ -489,6 +489,9 @@ test('the badge renders only where it can be true', () => {
     'the component must ask the module, not decide for itself');
   assert.match(markup, /newCity &&/,
     'nothing renders when there is no city to announce');
+  assert.match(markup, /data-since=\{newCity\.since\}/,
+    'the arrival date must travel to the client: these pages are prerendered, so the shell '
+    + 'has the only live clock and needs the date to re-check the window');
 });
 
 test('the badge is solid bronze with no border, the pairing this console already ships', () => {
@@ -519,9 +522,15 @@ Then, after `scope` is resolved in the frontmatter, add:
 
 ```ts
 /* THE OTHER CITY, ANNOUNCED ONCE. Server-rendered rather than drawn by the app:
-   the markup is identical for every reader, and the one reader-specific fact —
-   whether they dismissed it — is applied by console-shell.ts on mount. Rendering
-   it client-side would mean a badge that pops in after the scene has settled. */
+   the markup is identical for every reader, and the two reader-specific facts —
+   whether they dismissed it, and whether the window is still open on THEIR clock —
+   are applied by console-shell.ts on mount. Rendering it client-side would mean a
+   badge that pops in after the scene has settled.
+
+   THE ARRIVAL DATE TRAVELS WITH IT, as `data-since`, and that is load-bearing.
+   These pages are prerendered, so the `new Date()` this call uses is the BUILD
+   clock: without the date on the element the shell could not tell a window that
+   is still open from one that closed two months and no deploys ago. */
 const newCity = scope.area.hasData ? newCityToAnnounce(scope.city.id) : null;
 ```
 
@@ -531,7 +540,7 @@ In the `.map` container, directly after the line `<div class="loadchip" id="load
 
 ```astro
     {newCity && (
-      <div class="newcity" id="newCity" data-city={newCity.id} hidden>
+      <div class="newcity" id="newCity" data-city={newCity.id} data-since={newCity.since} hidden>
         <a href={newCity.href} aria-label={`${newCity.name} — newly added city`}>
           <span class="nc-eyebrow">New city</span>
           <span class="nc-name">{newCity.name} <span aria-hidden="true">→</span></span>
@@ -621,6 +630,11 @@ test('the shell unhides the badge and wires its dismiss through the same cleanup
   assert.match(src, /on\(hide, 'click'/,
     "the listener must go through mountConsoleShell's on(), which pushes its own removal "
     + 'onto cleanup — a bare addEventListener survives the page swap and leaks');
+  assert.match(src, /arrivedMs\(\{ since: newCity\?\.dataset\.since \}\)/,
+    'the shell must re-check the window on a LIVE clock: these pages are prerendered, so the '
+    + "component's new Date() froze at build time and the badge would announce for ever");
+  assert.match(src, /NEW_CITY_DAYS/,
+    'the client-side window must read the same constant as the module, not a second literal');
 });
 ```
 
@@ -634,7 +648,7 @@ Expected: FAIL — "the shell never looks for the dismiss button".
 In `src/scripts/climate-engine/shell/console-shell.ts`, add to the imports:
 
 ```ts
-import { rememberDismissed, wasDismissed } from './new-city.ts';
+import { NEW_CITY_DAYS, arrivedMs, rememberDismissed, wasDismissed } from './new-city.ts';
 ```
 
 Then, inside `mountConsoleShell()` after the sidebar/pane wiring and before the function returns its disposer, add:
@@ -647,7 +661,14 @@ Then, inside `mountConsoleShell()` after the sidebar/pane wiring and before the 
      this way round means a reader who dismissed it never sees it flash. */
   const newCity = consoleRoot.querySelector<HTMLElement>('#newCity');
   const cityId = newCity?.dataset.city ?? '';
-  if (newCity && cityId && !wasDismissed(cityId)) {
+  /* THE WINDOW IS RE-CHECKED HERE, ON A LIVE CLOCK, and that is not belt and
+     braces. These pages are prerendered — no `output`, no adapter, `getStaticPaths`
+     — so the `new Date()` the component used is the BUILD clock, frozen. Without
+     this the badge would keep announcing on day 120 and day 300 until somebody
+     redeployed, which is exactly what the arrival date exists to prevent. */
+  const stillNew = arrivedMs({ since: newCity?.dataset.since })
+    > Date.now() - NEW_CITY_DAYS * 86_400_000;
+  if (newCity && cityId && stillNew && !wasDismissed(cityId)) {
     newCity.hidden = false;
     const hide = newCity.querySelector<HTMLButtonElement>('#newCityHide');
     on(hide, 'click', () => {
