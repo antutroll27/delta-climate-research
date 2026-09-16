@@ -489,7 +489,7 @@ test('the badge renders only where it can be true', () => {
     'the component must ask the module, not decide for itself');
   assert.match(markup, /newCity &&/,
     'nothing renders when there is no city to announce');
-  assert.match(markup, /data-since=\{newCity\.since\}/,
+  assert.match(markup, /data-since=\{[^}]*since\}/,
     'the arrival date must travel to the client: these pages are prerendered, so the shell '
     + 'has the only live clock and needs the date to re-check the window');
 });
@@ -630,9 +630,13 @@ test('the shell unhides the badge and wires its dismiss through the same cleanup
   assert.match(src, /on\(hide, 'click'/,
     "the listener must go through mountConsoleShell's on(), which pushes its own removal "
     + 'onto cleanup — a bare addEventListener survives the page swap and leaks');
-  assert.match(src, /arrivedMs\(\{ since: newCity\?\.dataset\.since \}\)/,
-    'the shell must re-check the window on a LIVE clock: these pages are prerendered, so the '
-    + "component's new Date() froze at build time and the badge would announce for ever");
+  /* MEANING, NOT FORMATTING. An exact-spelling regex here would fail on a
+     line-wrap or a renamed local while the behaviour stayed perfectly correct —
+     a guard on whitespace is not a guard on the rule. */
+  assert.match(src, /arrivedMs\([^)]*dataset\.since/,
+    'the shell must re-check the window on a LIVE clock, reading the date off the element: '
+    + "these pages are prerendered, so the component's new Date() froze at build time and the "
+    + 'badge would announce for ever');
   assert.match(src, /NEW_CITY_DAYS/,
     'the client-side window must read the same constant as the module, not a second literal');
 });
@@ -666,10 +670,12 @@ Then, inside `mountConsoleShell()` after the sidebar/pane wiring and before the 
      — so the `new Date()` the component used is the BUILD clock, frozen. Without
      this the badge would keep announcing on day 120 and day 300 until somebody
      redeployed, which is exactly what the arrival date exists to prevent. */
-  const stillNew = arrivedMs({ since: newCity?.dataset.since })
-    > Date.now() - NEW_CITY_DAYS * 86_400_000;
-  if (newCity && cityId && stillNew && !wasDismissed(cityId)) {
-    newCity.hidden = false;
+  if (newCity && cityId) {
+    const stillNew = arrivedMs({ since: newCity.dataset.since })
+      > Date.now() - NEW_CITY_DAYS * 86_400_000;
+    if (stillNew && !wasDismissed(cityId)) {
+      newCity.hidden = false;
+    }
     const hide = newCity.querySelector<HTMLButtonElement>('#newCityHide');
     on(hide, 'click', () => {
       newCity.hidden = true;
@@ -677,6 +683,8 @@ Then, inside `mountConsoleShell()` after the sidebar/pane wiring and before the 
     });
   }
 ```
+
+The dismiss listener binds whether or not the badge was revealed: it costs nothing, and it means a badge revealed by any future path is still dismissible.
 
 - [ ] **Step 4: Run it and watch it pass**
 
