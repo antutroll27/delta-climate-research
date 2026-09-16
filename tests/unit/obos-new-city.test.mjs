@@ -5,13 +5,11 @@ import { CITIES } from '../../src/data/cities.ts';
 import { AREA_KEYS, splitKey } from '../../src/scripts/climate-engine/scope/registry.ts';
 
 /**
- * THE CITY RECORD CARRIES WHEN IT ARRIVED, AND WHAT TO SHOW.
+ * `showcase` NAMES THE WARD WORTH OPENING FIRST, NOT "THE FIRST ONE".
  *
- * `since` is the date a city became reachable in production. The badge's window
- * is measured from it, so the announcement retires itself rather than living as
- * copy someone must remember to delete. `showcase` names the ward worth opening
- * first: Bengaluru declares indiranagar first in the registry, so "the first
- * drawable area" would send a reader somewhere the city is not at its best.
+ * Bengaluru declares indiranagar first in the registry, but its citable
+ * landmarks are in MG Road; a reader who follows the badge's link should land
+ * where the city is recognisable, not wherever the array happens to start.
  */
 test('Bengaluru declares when it arrived and which ward represents it', () => {
   const blr = CITIES.bengaluru;
@@ -37,6 +35,7 @@ test('Kolkata declares no arrival date, so it is never announced as new', () => 
  * for free.
  */
 test('every declared arrival date is a real day, and the day it names', () => {
+  let checked = 0;
   for (const [id, city] of Object.entries(CITIES)) {
     if (city.since === undefined) continue;
     const t = Date.parse(`${city.since}T00:00:00Z`);
@@ -44,7 +43,12 @@ test('every declared arrival date is a real day, and the day it names', () => {
       `${id}.since "${city.since}" is not a real date; newCityToAnnounce would silently never announce it`);
     assert.equal(new Date(t).toISOString().slice(0, 10), city.since,
       `${id}.since "${city.since}" is not the day it names — Date.parse rolled it over`);
+    checked += 1;
   }
+  // Guard the guard: if no city declared a `since`, the loop above would pass
+  // while checking nothing, and the badge could never fire for anyone.
+  assert.ok(checked > 0,
+    'no city declares an arrival date, so this loop checked nothing — and the badge can never fire');
 });
 
 /**
