@@ -121,7 +121,12 @@ const { scope } = Astro.props;
           <svg viewBox="0 0 36 36" aria-hidden="true"><circle class="track" cx="18" cy="18" r="15.5" fill="none" stroke="currentColor" stroke-width="3"></circle><circle id="scoreArc" cx="18" cy="18" r="15.5" fill="none" stroke="currentColor" stroke-width="3" stroke-dasharray="97" stroke-dashoffset="97" stroke-linecap="round" transform="rotate(-90 18 18)"></circle></svg>
           <div class="num" id="scoreNum">—</div>
         </div>
-        <div class="t"><b>Resilience Score</b><span class="tier" id="scoreTier">—</span><span id="scoreTxt">move a slider to intervene</span></div>
+        {/* INSIDE the <b>, not beside it: `.score .t b` is display:block, so a
+            sibling span would drop onto its own line under the heading. The chip
+            is bronze — this instrument's established "not decision-grade" colour,
+            the same one the confidence chip and the softened exposure pillar use —
+            so beta reads as a caveat rather than as a feature badge. */}
+        <div class="t"><b>Resilience Score<span class="beta">beta</span></b><span class="tier" id="scoreTier">—</span><span id="scoreTxt">move a slider to intervene</span></div>
       </div>
       <!-- The three pillars, shown raw. A composite index is only trustworthy if
            you can see what it is made of; the Green Score published its three
