@@ -197,3 +197,77 @@ test('a newer city the instrument cannot open silences the badge, never demotes 
     delete CITIES.northwich;
   }
 });
+
+import { readFile } from 'node:fs/promises';
+
+/* SOURCE ASSERTIONS, for the reason obos-shell.test.mjs states at its head: an
+   .astro component cannot be imported under `node --import tsx --test`. Each one
+   names the property of the source it reads and why that forces the property of
+   the rendered page that matters. */
+const stage = await readFile(
+  new URL('../../src/components/ClimateEngine/HeatMapStage.astro', import.meta.url), 'utf8');
+const flat = (s) => s.replace(/\s+/g, ' ').trim();
+
+test('the badge is a link with a SIBLING dismiss button, never a button inside a link', () => {
+  const markup = flat(stage);
+  assert.match(markup, /<div class="newcity" id="newCity"[^>]*>/,
+    'the badge container is missing');
+  const block = markup.slice(markup.indexOf('<div class="newcity"'));
+  const inner = block.slice(0, block.indexOf('</div>'));
+  assert.match(inner, /<a [^>]*href=/, 'the badge must contain a real link');
+  assert.match(inner, /<button [^>]*id="newCityHide"/, 'the dismiss control must be a button');
+  assert.ok(inner.indexOf('</a>') < inner.indexOf('<button'),
+    'the button must CLOSE the link before opening: a button inside an anchor is invalid '
+    + 'HTML and traps keyboard users');
+});
+
+test('both controls carry their own name, because bronze alone says nothing to a screen reader', () => {
+  const markup = flat(stage);
+  const block = markup.slice(markup.indexOf('<div class="newcity"'));
+  const inner = block.slice(0, block.indexOf('</div>'));
+  /* MEANING, NOT SPELLING — AND NOT MERELY PRESENCE. `aria-label=` alone passes on
+     aria-label="Bengaluru", which is the exact failure the message below names, so
+     that form could not be mutation-proved against its own claim. Pinning the whole
+     backtick expression instead would fail on a line-wrap or a renamed local while
+     the behaviour stayed correct — what commit a17b257 rejected for `data-since`.
+     This reads the two things that must be true: the city is named FROM the record,
+     and the label says why the badge is there. */
+  assert.match(inner, /<a [^>]*aria-label=\{[^>]*newCity\.name[^>]*newly added city/,
+    'the link must name the city AND say it is newly added: "Bengaluru →" alone tells a '
+    + 'screen-reader user nothing about why it is there');
+  assert.match(inner, /<button [^>]*aria-label="Dismiss"/, 'a bare × has no accessible name');
+  assert.match(markup, /\.newcity a:focus-visible,\.newcity button:focus-visible\{outline:/,
+    'both controls need a visible focus ring — they sit on a bronze fill, where the '
+    + "browser's default ring is nearly invisible");
+});
+
+test('the badge renders only where it can be true', () => {
+  const markup = flat(stage);
+  assert.match(markup, /newCityToAnnounce\(scope\.city\.id\)/,
+    'the component must ask the module, not decide for itself');
+  assert.match(markup, /newCity &&/,
+    'nothing renders when there is no city to announce');
+  assert.match(markup, /data-since=\{[^}]*since\}/,
+    'the arrival date must travel to the client: these pages are prerendered, so the shell '
+    + 'has the only live clock and needs the date to re-check the window');
+  assert.match(markup, /id="newCity"[^>]*hidden/,
+    'it ships hidden: the shell reveals it only after checking the live window and the '
+    + "reader's own dismissal, so a dismissed reader never sees it flash");
+});
+
+test('the badge is solid bronze with no border, the pairing this console already ships', () => {
+  const css = flat(stage);
+  assert.ok(css.includes('.newcity{'), 'the badge has no CSS rule');
+  const rule = css.slice(css.indexOf('.newcity{'), css.indexOf('.newcity{') + 400);
+  assert.match(rule, /background:var\(--bronze\)/, 'the fill must be the bronze token');
+  /* THE TOKEN, NOT THE HEX. This assertion read /color:#0d0a05/ until the badge
+     shipped: writing the literal here made it the fourth spelling of that colour in
+     HeatMapStage.astro, and obos-layers.test.mjs refuses a second spelling of any
+     hex in this file — a token declaration included, since it counts occurrences.
+     The intent is unchanged and better served: .cta and the badge now point at ONE
+     declaration, so the near-black cannot be tuned in one place and not the other. */
+  assert.match(rule, /color:var\(--bronze-ink\)/,
+    'the text must be the near-black .cta pairs with bronze, AS THE TOKEN');
+  assert.match(rule, /border:0/, 'the founder asked for no border');
+  assert.match(rule, /position:absolute/, 'it is pinned to the frame, not floating over the model');
+});

@@ -20,6 +20,7 @@ import InterventionPane from './shell/InterventionPane.astro';
 import { areaKeysInCity } from '../../scripts/climate-engine/scope/registry.ts';
 import { areaPath, DEFAULT_AREA_PATH } from '../../scripts/climate-engine/scope/paths.ts';
 import { resolve, type ResolvedScope } from '../../scripts/climate-engine/scope/resolve.ts';
+import { newCityToAnnounce } from '../../scripts/climate-engine/shell/new-city.ts';
 import { renderableWardById as wardById, formatLatLon } from '../../data/wards.ts';
 
 /**
@@ -126,6 +127,18 @@ const strip = siblings.flatMap((sib) => {
    switch; the two agree because both read the area id, not because anyone matched
    two strings by eye. */
 const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
+
+/* THE OTHER CITY, ANNOUNCED ONCE. Server-rendered rather than drawn by the app:
+   the markup is identical for every reader, and the two reader-specific facts —
+   whether they dismissed it, and whether the window is still open on THEIR clock —
+   are applied by console-shell.ts on mount. Rendering it client-side would mean a
+   badge that pops in after the scene has settled.
+
+   THE ARRIVAL DATE TRAVELS WITH IT, as `data-since`, and that is load-bearing.
+   These pages are prerendered, so the `new Date()` this call uses is the BUILD
+   clock: without the date on the element the shell could not tell a window that
+   is still open from one that closed two months and no deploys ago. */
+const newCity = scope.area.hasData ? newCityToAnnounce(scope.city.id) : null;
 ---
 {/* `data-console` is how shell/console-shell.ts finds a page with a rail and
     panes on it. It is deliberately NOT `.stage`: Compare has a console too and
@@ -382,6 +395,16 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
     <div class="synthetic"><span class="d"></span><span class="full">Live basemap + real footprints &amp; Google heights · </span>heat field modelled<span class="sp"> · block detail illustrative</span></div>
     <div class="stamp-slot"><ConstructionStamp /></div>
     <div class="loadchip" id="loadchip"></div>
+
+    {newCity && (
+      <div class="newcity" id="newCity" data-city={newCity.id} data-since={newCity.since} hidden>
+        <a href={newCity.href} aria-label={`${newCity.name} — newly added city`}>
+          <span class="nc-eyebrow">New city</span>
+          <span class="nc-name">{newCity.name} <span aria-hidden="true">→</span></span>
+        </a>
+        <button type="button" id="newCityHide" aria-label="Dismiss">×</button>
+      </div>
+    )}
 
     <!-- North reference. The idle orbit turns the map continuously, so without
          this there is no way to know which way you are facing, and no way back. -->
@@ -831,6 +854,12 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
        invisible until ticked. */
     --line-hi:rgb(111 202 214 / 0.32);
     --cyan:#6fcad6; --bronze:#b08d57; --red:#e5484d;
+    /* THE OFF-BLACK THAT GOES ON BRONZE, and the only legible ink for it: --ink on
+       a --bronze fill is a 1.7:1 wash. It became a token when the new-city badge
+       made it the SECOND place pairing text with bronze — .cta was the first, and
+       two hand-copied spellings of one colour is the drift obos-layers.test.mjs
+       refuses. Same value Footer.astro has carried under this name all along. */
+    --bronze-ink:#0d0a05;
     /* THE SAME RED, ONE STEP UP, FOR WHEN IT IS A WORD RATHER THAN A SWATCH.
        --red is the heat ramp's Extreme class and the compass's north needle —
        both areas of colour, which WCAG scores against a 3:1 non-text floor it
@@ -1807,6 +1836,32 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
   @keyframes loadchip-sweep{to{transform:translateX(100%)}}
   @media (prefers-reduced-motion:reduce){.loadchip.on::after{animation:none;transform:none;opacity:.55}}
 
+  /* THE OTHER CITY. Top-left is the only free corner: .synthetic and the stamp are
+     top-centre, .loadchip sits at 118px, .place at 34%, and the compass, sun line,
+     chip row and tip hint own the bottom. PINNED TO THE FRAME, never floating over
+     the model — the idle orbit turns the scene forever (heat-map-app.ts), so any
+     patch of empty sky fills with buildings at another bearing.
+     Solid bronze with --bronze-ink on it is the pairing .cta already ships. */
+  .newcity{position:absolute;top:14px;left:14px;z-index:6;display:flex;align-items:center;gap:2px;
+    background:var(--bronze);color:var(--bronze-ink);border:0;border-radius:9px;
+    box-shadow:0 6px 18px rgb(0 0 0 /.35)}
+  .newcity[hidden]{display:none}
+  .newcity a{display:block;padding:8px 4px 8px 11px;color:inherit;text-decoration:none}
+  .newcity .nc-eyebrow{display:block;font-family:var(--mono);font-size:.44rem;letter-spacing:.2em;
+    text-transform:uppercase;opacity:.72}
+  .newcity .nc-name{display:block;font-size:.74rem;font-weight:700;letter-spacing:-.01em;margin-top:1px}
+  .newcity button{background:none;border:0;color:inherit;opacity:.55;cursor:pointer;
+    font-size:.8rem;line-height:1;padding:8px 10px 8px 6px}
+  .newcity button:hover{opacity:1}
+  .newcity a:focus-visible,.newcity button:focus-visible{outline:2px solid var(--bronze-ink);outline-offset:-3px;border-radius:7px}
+  /* Phones: the eyebrow goes, the name and arrow stay. */
+  @media (pointer:coarse) and (max-width:560px){
+    .newcity{top:10px;left:10px;border-radius:8px}
+    .newcity .nc-eyebrow{display:none}
+    .newcity .nc-name{font-size:.66rem}
+    .newcity a{padding:6px 3px 6px 9px}
+  }
+
   /* Borderless glass. The 1px --line stroke was the last piece of the "grid of
      boxes" read, and it also fought the legend directly beneath it in the same
      rail. Separation is now DEPTH, not a line — which is how the reference UI
@@ -2004,7 +2059,7 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
      empty bin painting a stub the same size as a real one. An empty bin is now
      genuinely empty and the baseline below is what says the bin exists. */
   .histo i{flex:1;background:var(--cyan);border-radius:2px 2px 0 0;opacity:.85;transition:height .4s}
-  .cta{margin:12px 16px 16px;display:block;width:calc(100% - 32px);background:var(--bronze);color:#0d0a05;border:0;border-radius:8px;padding:9px;font-family:var(--sans);font-size:.7rem;font-weight:600;letter-spacing:.005em;cursor:pointer}
+  .cta{margin:12px 16px 16px;display:block;width:calc(100% - 32px);background:var(--bronze);color:var(--bronze-ink);border:0;border-radius:8px;padding:9px;font-family:var(--sans);font-size:.7rem;font-weight:600;letter-spacing:.005em;cursor:pointer}
 
   /* position:relative + z-index so the panel sits ABOVE maplibre's attribution
      control, which is z-index 1 and anchored to the same corner. As `static` the
