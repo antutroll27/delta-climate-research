@@ -280,6 +280,22 @@ import { defaultStore, type LayoutStore } from './layout-state.ts';
 /** How long a city counts as new, in days. */
 export const NEW_CITY_DAYS = 90;
 
+/**
+ * When a city arrived, in epoch milliseconds, or NaN if it declares no usable date.
+ *
+ * EXPORTED SO THE TEST AND THE CONSUMER CANNOT DRIFT. The `Z` is load-bearing:
+ * `Date.parse('2026-09-16T00:00:00')` is local time, which at UTC+14 is fourteen
+ * hours early and round-trips to the fifteenth — a whole day at the window's edge.
+ * Two copies of this concatenation is two chances to lose the Z, so there is one.
+ *
+ * NaN IS THE SILENT CASE, and deliberately so: a city that declares no date, or a
+ * malformed one, is never announced rather than wrongly announced. A forgotten
+ * field costs an opportunity; a wrong one puts a lie on screen.
+ */
+export function arrivedMs(city: { readonly since?: string }): number {
+  return city.since ? Date.parse(`${city.since}T00:00:00Z`) : NaN;
+}
+
 /** What the badge needs to render itself, and nothing more. */
 export interface NewCity {
   readonly id: string;
@@ -343,11 +359,11 @@ export function newCityToAnnounce(
   const candidates = Object.values(CITIES)
     .filter((city) => city.id !== openCityId)
     .filter((city) => {
-      const since = city.since ? Date.parse(`${city.since}T00:00:00Z`) : NaN;
+      const since = arrivedMs(city);
       return Number.isFinite(since) && since > cutoff && since <= now.getTime();
     })
     .filter((city) => !wasDismissed(city.id, store))
-    .sort((a, b) => Date.parse(b.since ?? '') - Date.parse(a.since ?? ''));
+    .sort((a, b) => arrivedMs(b) - arrivedMs(a));
 
   for (const city of candidates) {
     const key = openableAreaKey(city.id);
@@ -363,6 +379,26 @@ Run: `node --import tsx --test tests/unit/obos-new-city.test.mjs`
 Expected: `fail 0`.
 
 Note: if `isDrawable` or `splitKey` is not exported from `scope/registry.ts`, export it there rather than re-deriving the logic here, and say so in your report.
+
+- [ ] **Step 5b: Point Task 1's date test at the shared parse**
+
+`tests/unit/obos-new-city.test.mjs` parses the arrival date itself, and `new-city.ts` now exports `arrivedMs` for exactly that reason: two copies of `` `${since}T00:00:00Z` `` are two chances for one of them to lose the `Z`, and a local-time parse is fourteen hours early at UTC+14 — a whole day at the window's edge.
+
+In that test file, add `arrivedMs` to the `new-city.ts` import, then inside the date loop replace:
+
+```js
+    const t = Date.parse(`${city.since}T00:00:00Z`);
+```
+
+with:
+
+```js
+    const t = arrivedMs(city);
+```
+
+Leave every assertion, the `checked` counter and the messages exactly as they are. Re-run the file: still passing, same count.
+
+**Mutation proof:** temporarily drop the `Z` inside `arrivedMs` (`Date.parse(\`${city.since}T00:00:00\`)`) and run with `TZ=Pacific/Kiritimati node --import tsx --test tests/unit/obos-new-city.test.mjs` — the round-trip assertion must fail, reporting `2026-09-15`. Restore the `Z` and show it passing under the same `TZ`.
 
 - [ ] **Step 6: Mutation proofs (paste each FAIL, then the restored PASS)**
 
@@ -673,11 +709,16 @@ test('Kolkata announces Bengaluru, and the dismissal sticks', async ({ page }) =
 
   if (!announced) {
     /* The window has closed. That is the badge working, not failing — and the
-       assertion still has teeth: a badge rendering past its own window fails here. */
+       assertion still has teeth: a badge rendering past its own window fails here.
+       SAY WHICH BRANCH RAN. Past the window both tests in this file reduce to
+       "no badge", which is also exactly what a completely broken feature looks
+       like; the run has to be able to tell those apart afterwards. */
+    console.log('new-city e2e: WINDOW CLOSED branch — asserting absence');
     await expect(page.locator('#bcount')).not.toHaveText(/^—/, { timeout: 30_000 });
     await expect(badge).toHaveCount(0);
     return;
   }
+  console.log(`new-city e2e: ANNOUNCING branch — expecting ${announced.name} at ${announced.href}`);
 
   await expect(badge).toBeVisible({ timeout: 30_000 });
   await expect(badge.locator('a')).toHaveAttribute('href', announced.href);
@@ -720,7 +761,11 @@ Both in the FOREGROUND with the Bash tool's timeout at 600000. Never background 
 
 In `console-shell.ts`, comment out `newCity.hidden = false;`, rebuild, and re-run: the first test must fail on `toBeVisible`. Restore, rebuild, re-run: `2 passed`. Delete `.pw-chrome.config.ts`.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 4: Say which branch ran**
+
+The spec logs `ANNOUNCING branch` or `WINDOW CLOSED branch`. Quote that line from the run in your report, and state plainly which one it was. Today it must be `ANNOUNCING` — Bengaluru's `since` is inside the window, so a `WINDOW CLOSED` run means the badge is not rendering and the test passed for the wrong reason.
+
+- [ ] **Step 5: Commit**
 
 ```bash
 git add tests/e2e/heat-map-new-city.spec.ts
