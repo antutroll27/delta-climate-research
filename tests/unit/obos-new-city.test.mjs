@@ -303,12 +303,12 @@ test('the centred overlays berth around the badge rather than under it', () => {
   assert.ok(declared,
     'the berth must be declared on a REVEALED badge — scoping it to :has() keeps the '
     + 'full width on every page that never shows one');
-  /* DERIVED, NOT COPIED: the badge's 24px left inset + its 118px measured width. A
+  /* DERIVED, NOT COPIED: the badge's 40px left inset + its 118px measured width. A
      berth under that is a berth the badge sticks out of — and the two move together,
      so widening the gap to the sidebar without widening the berth would simply take
      the same pixels back off the other side. */
-  assert.ok(Number(declared[1]) >= 142,
-    `--badge-berth is ${declared[1]}px, under the badge's own 142px extent (24px inset `
+  assert.ok(Number(declared[1]) >= 158,
+    `--badge-berth is ${declared[1]}px, under the badge's own 158px extent (40px inset `
     + '+ 118px measured width) — the overlays would centre straight back into it');
   for (const sel of ['.synthetic', '.stamp-slot', '.loadchip']) {
     assert.match(css, new RegExp(`\\${sel}\\{[^}]*inset-inline:var\\(--badge-berth`),

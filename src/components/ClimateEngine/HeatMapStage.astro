@@ -1875,7 +1875,7 @@ const newCity = scope.area.hasData
      21px, "UNDER CONSTRUCTION" wrapped to two lines at every width from 600 to 1280,
      and the taller box grew down into the loadchip's band — covering "Building
      ward…" at 1200-1280, the one message that only appears while a reader waits. */
-  .map:has(.newcity:not([hidden])){--badge-berth:152px}
+  .map:has(.newcity:not([hidden])){--badge-berth:168px}
 
   /* THE OTHER CITY. Top-left is free only BELOW the honesty banner, and the first
      version of this comment was wrong to call the corner free outright. `.synthetic`
@@ -1902,7 +1902,7 @@ const newCity = scope.area.hasData
      Paper and near-black are both tokens this console already owns: a third
      off-white spelled twice would trip obos-layers.test.mjs, and inventing one
      would put the card outside the palette the rest of the instrument speaks. */
-  .newcity{position:absolute;top:56px;left:24px;z-index:3;display:flex;align-items:center;gap:2px;
+  .newcity{position:absolute;top:56px;left:40px;z-index:3;display:flex;align-items:center;gap:2px;
     background:radial-gradient(circle at 0 50%,transparent 0 3px,var(--paper) 3px) left/6px 100% no-repeat,
       var(--paper);
     color:var(--bronze-ink);border:0;border-radius:12px;
@@ -1924,6 +1924,23 @@ const newCity = scope.area.hasData
     font-size:.8rem;line-height:1;padding:8px;min-inline-size:28px;display:grid;place-items:center}
   .newcity button:hover{opacity:1}
   .newcity a:focus-visible,.newcity button:focus-visible{outline:2px solid var(--bronze-ink);outline-offset:-3px;border-radius:7px}
+  /* THE GAP IS ONLY AFFORDABLE WHERE THERE IS MAP TO SPEND. Every pixel between the
+     sidebar and the card is taken from the centred overlays on the right, and below
+     1366 there is not enough: at left:40px the card sat 3.1px from the banner and
+     2.4px from the stamp at 1280, and the banner overflowed the map's right edge by
+     20.5px. So the wider inset is a wide-screen luxury and the card tucks back to
+     24px — where it measured ~81px clear — rather than crowding two overlays that
+     cannot move.
+     BELOW THE BASE RULE, NOT ABOVE IT. Written above `.newcity{…left:40px}` this
+     block's berth applied and its inset did not: same specificity, and the base rule
+     came later in source, so it simply won. The measurement said `--badge-berth` was
+     152px while `left` stayed 40 — the two halves of one fix disagreeing is what
+     source order looks like from the outside. */
+  @media (max-width:1365px){
+    .newcity{left:24px}
+    .map:has(.newcity:not([hidden])){--badge-berth:152px}
+  }
+
   /* PHONES, EITHER ORIENTATION — the same two-branch gate the HUD block above uses,
      and for the same reason. Written with the `max-width:560px` branch alone, this
      rule never fired on a landscape phone: at 844x390 the badge kept its desktop box
