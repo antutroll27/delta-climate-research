@@ -4,6 +4,8 @@ import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
+import { decodePng } from './_png.mjs';
+
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 /**
@@ -22,56 +24,6 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
  */
 
 const WARDS = ['ballygunge', 'barrackpore', 'baruipur'];
-
-/** Minimal PNG reader: enough for the 8-bit RGB(A) the exporter writes. */
-async function decodePng(path) {
-  const { createRequire } = await import('node:module');
-  const require = createRequire(import.meta.url);
-  const zlib = require('node:zlib');
-  const buf = await readFile(path);
-  let pos = 8, width = 0, height = 0, bitDepth = 0, colorType = 0;
-  const idat = [];
-  while (pos < buf.length) {
-    const len = buf.readUInt32BE(pos);
-    const type = buf.toString('ascii', pos + 4, pos + 8);
-    const body = buf.subarray(pos + 8, pos + 8 + len);
-    if (type === 'IHDR') {
-      width = body.readUInt32BE(0); height = body.readUInt32BE(4);
-      bitDepth = body[8]; colorType = body[9];
-    } else if (type === 'IDAT') idat.push(body);
-    else if (type === 'IEND') break;
-    pos += 12 + len;
-  }
-  assert.equal(bitDepth, 8, 'exporter writes 8-bit');
-  const channels = { 0: 1, 2: 3, 4: 2, 6: 4 }[colorType];
-  assert.ok(channels, `unsupported PNG colour type ${colorType}`);
-  const raw = zlib.inflateSync(Buffer.concat(idat));
-  const stride = width * channels;
-  const out = new Uint8Array(width * height * channels);
-  let prev = new Uint8Array(stride);
-  for (let y = 0; y < height; y++) {
-    const filter = raw[y * (stride + 1)];
-    const line = raw.subarray(y * (stride + 1) + 1, y * (stride + 1) + 1 + stride);
-    const cur = new Uint8Array(stride);
-    for (let i = 0; i < stride; i++) {
-      const a = i >= channels ? cur[i - channels] : 0;
-      const b = prev[i];
-      const c = i >= channels ? prev[i - channels] : 0;
-      let v = line[i];
-      if (filter === 1) v += a;
-      else if (filter === 2) v += b;
-      else if (filter === 3) v += (a + b) >> 1;
-      else if (filter === 4) {
-        const p = a + b - c, pa = Math.abs(p - a), pb = Math.abs(p - b), pc = Math.abs(p - c);
-        v += (pa <= pb && pa <= pc) ? a : (pb <= pc ? b : c);
-      }
-      cur[i] = v & 0xff;
-    }
-    out.set(cur, y * stride);
-    prev = cur;
-  }
-  return { width, height, channels, data: out };
-}
 
 const corr = (a, b) => {
   const ma = a.reduce((s, v) => s + v, 0) / a.length;

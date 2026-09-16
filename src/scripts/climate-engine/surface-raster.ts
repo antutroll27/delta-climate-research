@@ -22,6 +22,30 @@
  * re-checks it here, in the browser, against the same inputs the score reads.
  * Pattern from measurement, level from the approved scalar.
  *
+ * AND WHERE THERE WAS NO APPROVED SCALAR, THE MEASURED LEVEL WAS THE LEVEL. This
+ * loader used to require a dc-urs-inputs.json record before it would keep a
+ * texture at all — `if (!surface || !record) return { means, surface: null }`.
+ * Kolkata's was the only such file that existed then, so for every Bengaluru
+ * ward the measured raster was fetched, decoded, and then THROWN AWAY, and the
+ * ward fell back to a uniform field at `fvc: 0, albedo: 0.2`.
+ *
+ * Zero vegetation is a HOT-BIASED fallback: `eqCell` has `- p.L * veg`, so a
+ * ward with no scalar rendered warmer than the satellite says it is, plausibly,
+ * and with nothing thrown anywhere. The measured 0.401 / 0.388 / 0.370 never
+ * reached a pixel.
+ *
+ * So the gate became "is there a level we can stand behind", not "is this ward
+ * in the DC-URS file" — and it still is, even though Bengaluru now HAS one
+ * (`bengaluru-dc-urs-inputs.json`). A pinned ward takes its level from the
+ * scalar the score reads. An unpinned ward takes the MEASURED mean the exporter
+ * recorded in surface-meta.json beside the raster it describes. A ward with
+ * neither still refuses the texture, because a texture whose level nothing
+ * confirms is exactly the drift `assertSurfaceMatches` exists to catch.
+ * Bengaluru is PINNED today — its scalar's fvc/albedo are these same measured
+ * means, copied at export time — so no shipped ward takes the measured branch
+ * right now; it stays live for the day a drawable city ships wards with no
+ * DC-URS file of its own, which is exactly what Bengaluru was before Task 6.
+ *
  * WHEN THE TEXTURE IS MISSING the caller falls back to a UNIFORM field at the
  * measured ward mean — not to noise. A flat field is an honest statement that we
  * know the average and not the pattern. Re-deriving a plausible-looking pattern
@@ -31,6 +55,7 @@
 
 import { paths, cityPaths } from './scope/paths.ts';
 import { splitKey, type AreaKey } from './scope/registry.ts';
+import { SURFACE_META } from './scope/paths.ts';
 
 /** Channel encoding, mirroring `quantise`/`dequantise` in the exporter. */
 const VEG_LO = 0, VEG_HI = 1;
@@ -226,6 +251,58 @@ function loadInputs(key: AreaKey): Promise<WardInputs | null> {
   return pending;
 }
 
+/**
+ * One ward's entry in surface-meta.json — what the exporter recorded BESIDE the
+ * PNG, at the moment it wrote it.
+ *
+ * EVERY FIELD IS OPTIONAL BECAUSE THE FILE IS ASYMMETRIC, and that asymmetry is
+ * load-bearing now that something reads it. Kolkata's three entries predate
+ * `level` and carry `fvc_target` / `albedo_target`; Bengaluru's carry
+ * `level: "measured"` with `fvc_mean` / `albedo_mean`. The merge in
+ * export-surface-rasters.py preserves old entries verbatim, so a missing `level`
+ * is the NORMAL state of a pinned ward, not a corrupt file — `measuredMeans`
+ * below therefore requires the key to be present and to say "measured", rather
+ * than inferring a level from whichever numbers happen to be there.
+ *
+ * snake_case because these are the JSON keys Python wrote, not our own naming.
+ */
+interface SurfaceMetaEntry {
+  readonly level?: string;
+  readonly fvc_mean?: number;
+  readonly albedo_mean?: number;
+}
+
+/** Same one-file-per-session cache as `loadInputs`, for the same reason. */
+let surfaceMetaPromise: Promise<Record<string, SurfaceMetaEntry> | null> | null = null;
+
+function loadSurfaceMeta(): Promise<Record<string, SurfaceMetaEntry> | null> {
+  surfaceMetaPromise ??= fetch(SURFACE_META)
+    .then(r => (r.ok ? r.json() : null))
+    .then(j => j?.wards ?? null)
+    .catch(() => null);
+  return surfaceMetaPromise;
+}
+
+/**
+ * The measured ward means for a ward with no DC-URS scalar, or null.
+ *
+ * Null is the answer for EVERY ward currently shipped: Kolkata's three are
+ * pinned to a scalar, and so — since Task 6 — are Bengaluru's three (their
+ * scalar's fvc/albedo values are these same measured means, copied at export
+ * time, so reading either path gives the same number). It is also the answer
+ * for a malformed or half-written entry, because the cost of being wrong is a
+ * level nothing confirms, which is the drift `assertSurfaceMatches` exists to
+ * catch. This function stays live for a drawable, registered city that ships
+ * no DC-URS file of its own — Bengaluru's shape before Task 6 wired one in.
+ */
+function measuredMeans(entry: SurfaceMetaEntry | undefined): SurfaceMeans | null {
+  if (entry?.level !== 'measured') return null;
+  const { fvc_mean: fvc, albedo_mean: albedo } = entry;
+  if (typeof fvc !== 'number' || !Number.isFinite(fvc)) return null;
+  if (typeof albedo !== 'number' || !Number.isFinite(albedo)) return null;
+  return { fvc, albedo };
+}
+
 export interface WardSurface {
   readonly means: SurfaceMeans;
   readonly surface: SurfaceRaster | null;
@@ -250,19 +327,36 @@ export interface SurfaceMeans {
  * than as detail that is quietly wrong.
  */
 export async function loadAreaSurface(key: AreaKey, signal?: AbortSignal): Promise<WardSurface> {
-  const [inputs, surface] = await Promise.all([loadInputs(key), loadSurfaceRaster(key, signal)]);
+  const [inputs, meta, surface] = await Promise.all([
+    loadInputs(key), loadSurfaceMeta(), loadSurfaceRaster(key, signal),
+  ]);
   /* INDEXED BY THE BARE AREA ID, and it has to be: the `wards` object inside
      dc-urs-inputs.json is keyed by file-stem ids (`ballygunge`), not by area keys.
-     Indexing it with `in/kolkata/ballygunge` returns undefined, `record` is
-     optional, and the function then returns fvc 0 with the texture DISCARDED — a
-     flat, empty, entirely plausible surface, and the resilience score built on it
-     would be wrong rather than absent. External data, so the external shape. */
-  const record = inputs?.[splitKey(key).area];
-  const means: SurfaceMeans = {
-    fvc: record?.fvc.value ?? 0,
-    albedo: record?.albedo.value ?? DEFAULT_ALBEDO,
-  };
-  if (!surface || !record) return { means, surface: null };
+     Indexing it with `in/kolkata/ballygunge` returns undefined, and the ward would
+     fall through to the hot fallback below with its texture discarded — flat,
+     empty, and entirely plausible. External data, so the external shape. */
+  const areaId = splitKey(key).area;
+  const record = inputs?.[areaId];
+  /* THE DC-URS SCALAR WINS WHERE THERE IS ONE, and that ordering is what keeps
+     Kolkata bit-for-bit where it was: its three wards are in inputs.json, so
+     `record` is truthy and `measured` is never consulted.
+
+     BENGALURU NOW HAS A SCALAR TOO. `bengaluru-dc-urs-inputs.json`'s fvc and
+     albedo are copied verbatim from surface-meta.json's own fvc_mean/albedo_mean
+     at export time — a parity `tests/unit/heat-map-surface-measured.test.mjs`
+     pins — so taking the scalar path for a Bengaluru ward reads the exact same
+     numbers `measured` below would. The measured path is the fallback for a
+     DRAWABLE, registered city that ships NO DC-URS file of its own; that is not
+     Bengaluru's route today, but it is what stood between it and the hot-biased
+     fallback (`fvc: 0`, the decoded texture THROWN AWAY, the city rendering
+     warm, plausible and entirely invented) before this file's fix landed.
+     `surface-meta.json` records the measured means beside the raster; a ward
+     with neither a scalar nor a measurement is still refused. */
+  const measured = record ? null : measuredMeans(meta?.[areaId]);
+  const means: SurfaceMeans = record
+    ? { fvc: record.fvc.value, albedo: record.albedo.value }
+    : measured ?? { fvc: 0, albedo: DEFAULT_ALBEDO };
+  if (!surface || (!record && !measured)) return { means, surface: null };
   try {
     assertSurfaceMatches(surface, means.fvc, means.albedo);
     return { means, surface };

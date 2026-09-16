@@ -105,6 +105,35 @@ export function representativeSolarHour(
   return phase === 'night' ? 22 : 13;
 }
 
+const MONTH_HOUR_FORMATS = new Map<string, Intl.DateTimeFormat>();
+
+/**
+ * The ward's local calendar month (1–12) and CLOCK hour (fractional) at an instant.
+ *
+ * Clock time, not solar time: this feeds the IMD air-temperature normals, which are
+ * tabulated against the clock. The sun is placed from `wardSolarHour` instead.
+ * Refuses rather than returning NaN, because a missing part would otherwise surface
+ * as a RangeError in `fallbackTair` and stop the simulation without saying why.
+ */
+export function wardMonthHour(ms: number, timeZone: string): { month: number; hour: number } {
+  let format = MONTH_HOUR_FORMATS.get(timeZone);
+  if (!format) {
+    format = new Intl.DateTimeFormat('en-GB', {
+      timeZone, month: 'numeric', hour: 'numeric', minute: 'numeric', hourCycle: 'h23',
+    });
+    MONTH_HOUR_FORMATS.set(timeZone, format);
+  }
+  const parts = format.formatToParts(new Date(ms));
+  const part = (type: string) => Number(parts.find((p) => p.type === type)?.value);
+  const month = part('month');
+  const hour = part('hour') + part('minute') / 60;
+  if (!Number.isFinite(month) || !Number.isFinite(hour)) {
+    throw new RangeError(`wardMonthHour: could not read a month and hour for ${timeZone} at ${ms}`);
+  }
+  /* `% 24`: some engines print midnight as "24" even under h23. */
+  return { month, hour: hour % 24 };
+}
+
 export interface SunLighting {
   /** multiplies the environment's key-light base; 0 once the sun has set */
   readonly keyFactor: number;

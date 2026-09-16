@@ -1,5 +1,6 @@
 import type maplibregl from 'maplibre-gl';
 import { wardLatLon, type Ward } from '../../../data/wards.ts';
+import { requireGrid } from '../types.ts';
 
 export const CORE_FIELD_SOURCE = 'delta-core-field-source';
 export const CORE_FIELD_LAYER = 'delta-core-field';
@@ -58,6 +59,11 @@ export interface CoreFieldLayer {
 
 export function createCoreFieldLayer(map: maplibregl.Map, gridSize: number): CoreFieldLayer {
   let attached = false;
+  /* THE CANVAS IS THE OPEN WARD'S GRID, not one fixed at construction.
+     `gridSize` is only the first ward's; `attach` re-reads it from the ward
+     being attached, because a 2800 m ward solves 384² cells and a canvas left
+     at Kolkata's 192² would reject every field it was handed. */
+  let n = gridSize;
   /** One pending `idle` listener at most — see `pushToGpu`. */
   let settling = false;
 
@@ -122,11 +128,13 @@ export function createCoreFieldLayer(map: maplibregl.Map, gridSize: number): Cor
     });
   }
   const canvas = document.createElement('canvas');
-  canvas.width = canvas.height = gridSize;
+  canvas.width = canvas.height = n;
   const context = canvas.getContext('2d', { alpha: true });
   if (!context) throw new Error('The analytical field canvas is unavailable.');
 
   function attach(ward: Ward, sizeM: number, beforeId?: string): void {
+    const wardN = requireGrid(sizeM).n;
+    if (wardN !== n) { n = wardN; canvas.width = canvas.height = n; }
     const coordinates = wardFieldCoordinates(ward, sizeM);
     if (!map.getSource(CORE_FIELD_SOURCE)) {
       map.addSource(CORE_FIELD_SOURCE, {
@@ -157,13 +165,13 @@ export function createCoreFieldLayer(map: maplibregl.Map, gridSize: number): Cor
     attach,
 
     update(field, min, max) {
-      if (field.length !== gridSize * gridSize) throw new RangeError('Core field dimensions do not match the canonical grid.');
-      const image = context.createImageData(gridSize, gridSize);
-      for (let southRow = 0; southRow < gridSize; southRow++) {
-        const canvasRow = gridSize - 1 - southRow;
-        for (let x = 0; x < gridSize; x++) {
-          const source = southRow * gridSize + x;
-          const target = (canvasRow * gridSize + x) * 4;
+      if (field.length !== n * n) throw new RangeError(`Core field of ${field.length} cells does not match this ward's ${n}×${n} admitted grid.`);
+      const image = context.createImageData(n, n);
+      for (let southRow = 0; southRow < n; southRow++) {
+        const canvasRow = n - 1 - southRow;
+        for (let x = 0; x < n; x++) {
+          const source = southRow * n + x;
+          const target = (canvasRow * n + x) * 4;
           const [r, g, b] = heatRampRgb(field[source], min, max);
           image.data[target] = r; image.data[target + 1] = g; image.data[target + 2] = b; image.data[target + 3] = 210;
         }

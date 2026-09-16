@@ -18,7 +18,11 @@ const { resolve, requireCosts } = await import('../src/scripts/climate-engine/sc
 const SCOPE = resolve('in/kolkata/ballygunge');
 const CLIMATE = SCOPE.climate, COSTS = requireCosts(SCOPE);
 
-const N = M.SIM_N, N2 = N * N;
+const { requireGrid } = await import('../src/scripts/climate-engine/types.ts');
+/* `SIM_N` was a module constant at Kolkata's 192. The grid is a property of the
+   WARD now, and every benchmark below is a Kolkata benchmark — the scope named
+   above — so it is read from Kolkata's 1400 m footprint rather than assumed. */
+const N = requireGrid(1400).n, N2 = N * N;
 const results = [];
 const check = (name, value, lo, hi, unit, source) => {
   const ok = value >= lo && value <= hi;
@@ -47,7 +51,9 @@ function makeWard() {
   return { base, spatial };
 }
 const { base, spatial } = makeWard();
-const scen = (iv) => ({ live: null, phase: 'peak', path: '2025', climate: CLIMATE, iv });
+/* A FIXED hot-season canonical peak, so validation never depends on the date it runs. */
+const CLOCK = { month: 4, hour: 13 };
+const scen = (iv) => ({ live: null, phase: 'peak', path: '2025', climate: CLIMATE, iv, clock: CLOCK });
 const ZERO = { trees: 0, roof: 0, parks: 0, facades: 0 };
 /** local park cooling, used as the physically-necessary upper bound on ward-mean ΔT */
 function parkDropForBound() {
@@ -115,7 +121,7 @@ check(
 // path is swept too, because it derives its own rh by preserving vapour as the
 // air warms — the one route in the app that reaches genuinely dry air.
 const etBars = (live, heatTairC) => {
-  const p = M.currentParams({ live, phase: 'peak', path: '2025', climate: CLIMATE, iv: ZERO, ...(heatTairC == null ? {} : { heatTairC }) });
+  const p = M.currentParams({ live, phase: 'peak', path: '2025', climate: CLIMATE, iv: ZERO, clock: CLOCK, ...(heatTairC == null ? {} : { heatTairC }) });
   return {
     park: M.eqCell(p, 0.20, 0, 0) - M.eqCell(p, 0.20, 0.9, 0),
     veg: p.tAir - M.eqCell(p, 0.25, 1.0, 0),

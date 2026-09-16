@@ -16,7 +16,11 @@
 import { paths } from './paths.ts';
 import { splitKey, type AreaKey } from './registry.ts';
 import { resolve } from './resolve.ts';
-import { wardById } from '../../../data/wards.ts';
+/* The RENDERABLE lookup: this module decides whether the INSTRUMENT can open an
+   area, and `wardById` searches the published catalogue list. With it, every
+   Bengaluru ward was refused as "no row in the ward table" — an authoring-fault
+   message for a city that is simply unpublished. */
+import { renderableWardById as wardById } from '../../../data/wards.ts';
 
 /**
  * What a tab in the strip has to BE.

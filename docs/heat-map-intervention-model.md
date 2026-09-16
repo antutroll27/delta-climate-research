@@ -88,7 +88,7 @@ UGS decay vanishing ~800 m [12]). Adding an explicit `e^(−d/L)` kernel on top 
 ```
 
 **Calibration target:** empirical decay lengths L ≈ 60–150 m, max measurable reach
-2–3·λ; **Kolkata-specific: max cooling distance ≈ 420 m, TVoE ≈ 0.77 ha** [4].
+2–3·λ; **Kolkata-specific: max cooling distance ≈ 420 m, TVoE ≈ 0.77 (a slope, not an area — see §3.3)** [4].
 
 **LST-contrast caveat (learned 2026-07-24):** a *single* diffusion constant cannot both
 (a) spread a park's cooling ~90 m AND (b) preserve the sharp hot-roof/cool-street contrast
@@ -159,15 +159,25 @@ from (1) (albedo term only acts where sun hits built cells).
 > **Li et al. 2022**, not Mitra, and 4.83–8.07 °C is a *cross-city* range of daytime winter
 > maxima: **8.07 °C is Kolkata's maximum, 4.83 °C is Bangkok's**. The lower bound was never a
 > Kolkata constraint, so everywhere this document used the pair as a *band* it is now stated
-> **one-sided (≤ 8.07 °C)**. **TVoE 0.77 ha and reach 420 m are genuinely Kolkata's and stand.**
+> **one-sided (≤ 8.07 °C)**. **Reach 420 m is genuinely Kolkata's and stands; "TVoE 0.77 ha" does not mean a park size — see the 2026-09-14 correction.**
 > Full record: `green-score-methodology.md` §4.2.
 
+> **CORRECTION 2026-09-14 — "TVoE 0.77 ha" is not a park size.** Li et al. 2022 define TVoE as the point
+> where the slope of `UCI = a·ln(Area) + b` equals one, which makes **TVoE = a**: a cooling slope whose
+> numeric value is the same whatever unit the area is in (0.77 would read as 0.77 m² or 0.77 km² just as
+> well). It is also internally inconsistent in the paper (Table 7 gives Bangkok 0.62 against the text's
+> 0.42), and Kolkata's sample cannot be reproduced from open data (the 90 parks were hand-picked in
+> Google Earth; OSM with the stated rules yields 28). **The 50 m blob radius is therefore a design
+> default — a ~0.8 ha pocket park — not a measured efficient size, for Kolkata or Bengaluru.** A
+> pre-registered method to measure it properly is saved, not run:
+> `docs/evidence/park-size-tvoe-preregistration.md`.
+
 Kolkata evidence [4]: cool-island intensity `UCI = a·ln(Area) + b`, efficiency threshold
-**TVoE ≈ 0.77 ha**, reach ≤ 420 m, daytime **maximum** intensity **8.07 °C** (one-sided — see
+**TVoE ≈ 0.77** (a slope, not a park size — see the 2026-09-14 correction), reach ≤ 420 m, daytime **maximum** intensity **8.07 °C** (one-sided — see
 the correction above). Several medium patches beat one big one [5].
 
 ```
-blob radius r = 50 m (≈ 0.77 ha — Kolkata's TVoE = the efficient park size)
+blob radius r = 50 m (≈ 0.8 ha pocket park — a design default; see the 2026-09-14 correction)
 inside blob:  park:    veg = max(veg, 0.90), albedo = max(albedo, 0.20)
               wetland: water = 1, albedo = 0.06                                          (6)
 placement: rank coarse cells by open-land fraction (1 − built density), enforce ≥ 180 m
@@ -453,7 +463,7 @@ readouts/stats: raw sim field directly (never the blurred copy)
 1. Berlin Biotope Area Factor — formula + weights. ugl.sg/wp-content/uploads/2021/01/20191002_biotope_area_factor.pdf
 2. Seattle Green Factor score sheet. app.dcoz.dc.gov/Exhibits/2010/ZC/08-06-9/Exhibit14.pdf
 3. URA Singapore — Green Plot Ratio / LUSH. ura.gov.sg/guidelines/development-control/…/greenery/
-4. **Li, Lu, Fu, Sun, Pan, Han, Guo & Li 2022** (Frontiers Env. Sci.), *Diverse cooling effects of green space on urban heat island in tropical megacities* — tropical megacities incl. **Kolkata**: UCI = a·ln A + b, TVoE **0.77 ha** and reach **420 m** (both Kolkata's). Daytime maximum UCI **8.07 °C is Kolkata's**; **4.83 °C is Bangkok's** — the two are a cross-city range of maxima, **not** a Kolkata band. *Previously miscited here as "Mitra et al. 2022" with a "4.83–8.07 °C" Kolkata band; corrected 2026-08-08, see §3.3.* frontiersin.org/articles/10.3389/fenvs.2022.1073914/full
+4. **Li, Lu, Fu, Sun, Pan, Han, Guo & Li 2022** (Frontiers Env. Sci.), *Diverse cooling effects of green space on urban heat island in tropical megacities* — tropical megacities incl. **Kolkata**: UCI = a·ln A + b, reach **420 m** (Kolkata's and stands) and TVoE ≈ **0.77** (Kolkata's too, but a regression slope, not a park area — see the 2026-09-14 correction, §3.3). Daytime maximum UCI **8.07 °C is Kolkata's**; **4.83 °C is Bangkok's** — the two are a cross-city range of maxima, **not** a Kolkata band. *Previously miscited here as "Mitra et al. 2022" with a "4.83–8.07 °C" Kolkata band; corrected 2026-08-08, see §3.3.* frontiersin.org/articles/10.3389/fenvs.2022.1073914/full
 5. Zhengzhou park spillover 2023 (Frontiers Earth Sci.) — cooling distance mean 179 m, ~1 °C/100 m, patch-splitting result. frontiersin.org/articles/10.3389/feart.2023.1133901/full
 6. LBNL Heat Island Group — roof albedo values. heatisland.lbl.gov/coolscience/cool-roofs
 7. UMEP docs (SOLWEIG/SUEWS) — model-class positioning. umep-docs.readthedocs.io

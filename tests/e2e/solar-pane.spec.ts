@@ -33,7 +33,13 @@ test.describe('the solar screen', () => {
      ranked-row test failed on the clock, not on an assertion. Raised so the test
      can finish saying what it came to say. */
   test.setTimeout(120_000);
-  test.beforeEach(async ({ page }) => { await boot(page); });
+  /* A test that must intercept a file BEFORE the page loads boots itself and is
+     tagged @own-boot. Booting it here first cost a whole extra ward load, about
+     15-20 s on a 2-CPU CI runner (measured 2026-09-14). */
+  test.beforeEach(async ({ page }, testInfo) => {
+    if (testInfo.tags.includes('@own-boot')) return;
+    await boot(page);
+  });
 
   test('the legend folds the ward block under the colour key, and lifts it above on the Solar screen', async ({ page }) => {
     /* Entering the console: the colour key first, the solar block folded under it. */
@@ -164,7 +170,12 @@ test.describe('the solar screen', () => {
      prove the swap reverses — the <li> and the note are innerHTML writes over the
      markup's own default, and a one-way swap would look identical until the second
      ward. */
-  test('a validated ward wears the measured rung, and switching wards puts the screened one back', async ({ page }) => {
+  test('a validated ward wears the measured rung, and switching wards puts the screened one back', { tag: '@own-boot' }, async ({ page }) => {
+    /* SLOW BY MEASUREMENT, NOT BY GUESS (2026-09-14). In a 2-CPU Linux container
+       running Playwright's CI image, main and feat/bangalore-wards both ran past
+       120 s: each eased click needs fresh frames, and a frame costs seconds on two
+       software-rendering cores. test.slow() triples the describe's 120 s. */
+    test.slow();
     const real = JSON.parse(await readFile(
       fileURLToPath(new URL('../../public/heat-map/data/pv-ballygunge.json', import.meta.url)), 'utf8',
     ));
@@ -172,7 +183,8 @@ test.describe('the solar screen', () => {
     await page.route('**/heat-map/data/pv-ballygunge.json', (route) => route.fulfill({
       contentType: 'application/json', body: JSON.stringify(real),
     }));
-    /* Re-navigated, because beforeEach has already booted and cached the real file. */
+    /* The first navigation, made only after the route is in place, so the page never
+       loads the real file (beforeEach skips @own-boot tests). */
     await page.addInitScript(() => { window.print = () => { (window as unknown as { __printed?: boolean }).__printed = true; }; });
     await boot(page);
     await withRelief(page);

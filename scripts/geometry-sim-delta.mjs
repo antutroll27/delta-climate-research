@@ -43,7 +43,7 @@ for (const ward of WARDS) {
   const meanFor = (dir, phase) => {
     const d = JSON.parse(readFileSync(`${dir}/${ward}.json`, 'utf8'));
     const base = R.rasterWardBase(d, means, null);
-    return M.eqMean(base, M.currentParams({ live: null, phase, path: '2025', climate: CLIMATE, iv: ZERO }));
+    return M.eqMean(base, M.currentParams({ live: null, phase, path: '2025', climate: CLIMATE, iv: ZERO, clock: { month: 4, hour: phase === 'night' ? 22 : 13 } }));
   };
 
   for (const phase of ['peak', 'night']) {

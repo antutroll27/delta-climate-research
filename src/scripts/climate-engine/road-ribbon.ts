@@ -72,25 +72,32 @@ function points(p: readonly number[]): [number, number][] {
   return out;
 }
 
+/** A polyline to draw as a flat ribbon: flat [x, y, …] in the data frame (x east, y north). */
+export interface RibbonLine { readonly p?: readonly number[] }
+
 /**
- * Every way in the artefact as ONE indexed triangle soup, ready for a single
- * draw call.
+ * Every line as ONE indexed triangle soup, ready for a single draw call.
  *
+ * Shared by roads and water centrelines. Both follow the land, so both drape per
+ * vertex; only the width rule and the lift above the ground differ.
+ *
+ * @param halfWidthOf half the ribbon's width, metres, for one line
  * @param groundAt drawn ground height in metres at a point in the DATA frame
- *   (x east, y north). Sampled per vertex, not per way: a road follows the land,
- *   which is the one way it differs from water — a lane really does run downhill.
+ * @param lift metres above the ground the ribbon sits at
  */
-export function buildRoadMesh(
-  data: RoadsData,
+export function buildRibbonMesh<L extends RibbonLine>(
+  lines: readonly L[],
+  halfWidthOf: (line: L) => number,
   groundAt: (x: number, y: number) => number,
+  lift: number,
 ): RoadMesh | null {
   const pos: number[] = [], idx: number[] = [];
   let ways = 0;
 
-  for (const way of data.ways ?? []) {
-    const pts = points(way.p ?? []);
+  for (const line of lines) {
+    const pts = points(line.p ?? []);
     if (pts.length < 2) continue;
-    const half = roadHalfWidthM(way.w);
+    const half = halfWidthOf(line);
     const base = pos.length / 3;
 
     /* Unit normal of each segment, left-hand side. */
@@ -113,7 +120,7 @@ export function buildRoadMesh(
       const off = half * scale;
       for (const s of [1, -1]) {
         const x = pts[i][0] + nx * off * s, y = pts[i][1] + ny * off * s;
-        pos.push(x, groundAt(x, y) + ROAD_Y, y);
+        pos.push(x, groundAt(x, y) + lift, y);
       }
     }
 
@@ -126,4 +133,17 @@ export function buildRoadMesh(
 
   if (!ways) return null;
   return { positions: new Float32Array(pos), indices: new Uint32Array(idx), ways };
+}
+
+/**
+ * Every way in the roads artefact as one ribbon mesh.
+ *
+ * @param groundAt drawn ground height in metres at a point in the DATA frame
+ *   (x east, y north). Sampled per vertex, not per way: a road follows the land.
+ */
+export function buildRoadMesh(
+  data: RoadsData,
+  groundAt: (x: number, y: number) => number,
+): RoadMesh | null {
+  return buildRibbonMesh(data.ways ?? [], (way) => roadHalfWidthM(way.w), groundAt, ROAD_Y);
 }

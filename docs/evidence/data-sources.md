@@ -491,6 +491,234 @@ regardless of price.
 
 ---
 
+## Bangalore — the second-city stack (researched 2026-09-09/10)
+
+Everything below was checked for **Bengaluru specifically**. India's licence landscape is not Kolkata's
+plus a rename: the state GIS agency, the national remote-sensing portal and the met department each
+carry their own restriction, and three otherwise-excellent datasets die on them. Design decisions and
+the measured numbers live in
+[../superpowers/specs/2026-09-10-bangalore-obos-wards-design.md](../superpowers/specs/2026-09-10-bangalore-obos-wards-design.md).
+
+### In use
+
+**IMD Climatological Tables of Observatories in India, 1991–2020** — India Meteorological Department,
+National Data Centre, Pune (imdpune.gov.in, 844-page PDF) · **no licence stated; the monthly normals are
+cited as published facts, not redistributed as a dataset** · **role:** the fallback air temperature when no
+live reading exists (`airNormals` in `scope/registry.ts`) · stations: **Bengaluru City 43295** (pp. 133–138)
+and **Kolkata (Alipore) 42807**, mean daily maximum and minimum by month.
+*Cross-check:* GHCN-Daily `IN009010100` agrees within 0.4 °C for 1991–2020; its 2016–2025 mean is warmer
+(April 34.9 °C against the normal's 34.1 °C). **Kempegowda International (43293) opened in 2014 — its
+"1991–2020" column is a few years of data and must not be used.**
+*Ruled out for this role:* the IMD Data Service Portal (commercial use is paid and forbids redistribution
+and "consultancy fees"), NOAA GSOD/ISD for non-US stations (WMO Resolution 40 bars commercial re-export),
+and Open-Meteo's free tier (non-commercial).
+
+**UT-GLOBUS (Urban Terrain and Global Building heights)** — University of Texas at Austin ·
+per-building height, area, volume and surface area, machine-learned from street-view, footprints and
+elevation · **CC BY 4.0** · Zenodo record `11156602`, `Asia.zip` · **role:** the **cross-check** on
+Google 2.5D heights, never the primary and never blended into it · status: **both tiles in hand**, fetched from `Asia.zip` by HTTP range and decompressed as Deflate64 —
+`Bangalore_1.gpkg` (273,190,912 B, MD5 `6efdf6d82d8d2fe5b7dd95ddd3a9c45b`, 964,234 buildings, covers MG
+Road) and `Bangalore_2.gpkg` (214,093,824 B, MD5 `2fa854a9176cbdaf1af6ec4c626fc84f`, 774,118 buildings,
+covers Indiranagar and Whitefield). Validated only against US LiDAR (building RMSE 9.1 m); no Indian city.
+*Measured character:* integer metres, **only 122 distinct values city-wide**, mean 6.87 m, and the five
+commonest values (7, 5, 4, 6, 8 m) account for 58 % of the city — it under-resolves mid-rise. Minimum is
+**0.0 m** and maximum **492 m**; both are artefacts and must be dropped or clipped before any comparison.
+
+**Overture Maps `base/water` centrelines (OSM-derived), release 2026-07-22.0** — **ODbL 1.0**; a published
+derived database must be shared alike · **role:** Bengaluru's open drains and streams, drawn as 3 m
+**illustrative** ribbons, never in the solver · covered reaches (OSM `tunnel`/`culvert`/`covered=yes`)
+counted and not drawn. **No defensible channel widths exist openly**: OSM tags one width in 38 MG Road
+reaches; BBMP's 2022 storm-water-drain KMLs carry order only (and a portal-only licence label); the
+"22 / 16 / 6–9 ft" primary/secondary/tertiary figures are blog-sourced. **Legal buffers are not widths** —
+the current rule is Karnataka Gazette UDD 468 MNJ 2025(E), 15 Oct 2025: 15 / 10 / 5 m from the drain edge;
+the NGT's 50 / 35 / 25 m (4 May 2016) was set aside by the Supreme Court in *Mantri Techzone v Forward
+Foundation* (5 Mar 2019). BBMP's primary/secondary/tertiary order was considered and not adopted: its
+licence is a portal label only, and its tertiary drains largely do not align with OSM outside MG Road.
+
+**Overture Maps buildings, 2026-07-22.0** — ODbL · **built and in hand 2026-09-10**:
+14,867 / 11,045 / 10,897 footprints for Indiranagar, MG Road and Whitefield, sliced from one
+102,382-building cache over the metro strip. Heights are joined from Google 2.5D as **zonal p65**,
+matching Kolkata exactly; fill rates came in at 2.3 / 3.2 / 4.6 %, **better than Kolkata's shipped
+4.0 / 6.5 / 10.8 %**, so Google's Bengaluru coverage is the stronger of the two.
+
+**Overture Maps context themes, 2026-07-22.0** — `base/water`, `base/land_use`, `transportation/segment`
+· ODbL · **in the Blender scenes 2026-09-10**, clipped to each ward box: water polygons and stream lines,
+green land-use classes only, carriageway road classes only (footways and paths dropped as clutter at
+2.8 km). Same bucket and release as the buildings, so the whole scene is one licence and one vintage.
+
+**Poly Haven sky HDRI (`kloofendal_43d_clear_puresky`)** — **CC0** · **lighting only, not data.** A
+South African sky lights the Bengaluru islands; it is a look choice and the spec says so. Kept because
+it is the only licence class that needs no attribution at all in a render.
+
+**Meta / WRI canopy height model v1 — Bangalore** — same product as the Kolkata entry above, read from the
+same bucket · **in the Blender scenes 2026-09-10**, tile `123303312` · cover ≥ 3 m on 1 m pixels: **Indiranagar
+34.1 %, MG Road 31.5 %, Whitefield 18.9 %**. **v2 was measured alongside** on the same boxes and reports
+1.6–1.8× the cover at every ward (55.5 / 50.6 / 33.8 %), so the spec's rejection of v2 for *placement* stands
+on the final geometry, not on the candidate boxes it was first made on. Kolkata ships v2 for *height*;
+the two choices are consistent with Kolkata's own finding that v2 improved how tall, not where.
+Trees are scattered by Kolkata's rule imported from `fetch-canopy.py`, and candidates inside a building
+footprint are dropped — **6–9 % of candidates per ward**, a measured roof-for-crown confusion rate.
+
+**Poly Haven tree scans (`jacaranda_tree`, `island_tree_01/02/03`, `tree_small_02`)** — **CC0** ·
+fetched and wired in 2026-09-10, then **RULED OUT as the default for city-scale scenes** and kept
+behind `--trees scan` · photogrammetric, 1–4 M triangles each, textures verified loading.
+**Measured against a 112-triangle stylised crown at ward viewing distance (a 12 m tree ≈ 25 px), the
+scan reads as a pale grey wisp and the stylised tree reads as a tree.** Alpha-card foliage cannot be
+collapse-decimated (the UVs stop mapping to a leaf) and card-deletion thinning leaves ~7,000 leaves on
+a tree that has 1.2 M, so it renders bare; a 20 k → 400 k leaf sweep was still sparse at the top.
+The lesson generalises: **a photogrammetric hero asset is not automatically higher quality — quality
+is whether it reads at the size it will actually be drawn.** Note the Blender MCP add-on's Poly Haven
+search commands are unavailable in the installed version; `api.polyhaven.com` serves the catalogue
+without a key.
+
+**ATREE-CSEI — Lakes & Streams of Bengaluru Urban** — Ashoka Trust for Research in Ecology and the
+Environment, Centre for Social and Environmental Innovation · 181 lake polygons, 3,927 stream lines ·
+**CC-BY** · **role:** the water layer, and the reason Bangalore's water can be drawn as a *system*
+rather than scattered ponds — the layer carries a **`Valley`** field naming the tank chain
+(Vrishabhavathi, Koramangala-Challaghatta, Hebbal). **Nothing else surveyed carries that attribute.**
+
+**BBMP Tree Census (July 2026)** — 702,109 individual trees with species and ward number · licence per
+the OpenCity position below · **role:** tree **species and position**, an inventory. It is emphatically
+**not** a density field — see [known-limitations.md](known-limitations.md).
+
+**KGIS `State_LULC_2023`** — Karnataka GIS, ArcGIS REST feature service · live, feature-level, verified
+at all three ward sites · **role:** land cover. Harvested from the **government REST service** in
+preference to the OpenCity mirror, so the provenance is first-party.
+
+**GBA-2025 ward boundaries** — Greater Bengaluru Authority, **369 wards across five corporations,
+notified 19 Nov 2025** · via OpenCity `gba-wards-delimitation-2025` · **role:** the ward geometry, and a
+trap defused. See the ward-vintage note below.
+
+**NOAA GHCNh** — hourly station observations, US public domain · 3 Bengaluru-area stations, ~4-day
+latency · **role:** live weather. It **replaces NOAA ISD**, which is dead here (below), and it is also
+how IMD's own observations reach us legally.
+
+**data.gov.in CPCB air-quality feed** — 9 stations city-wide, hourly · **GODL-India** · **role:** a
+city-level AQ ribbon only. Station spacing cannot support a within-ward field — the same ceiling
+recorded for Kolkata.
+
+**ECOSTRESS `ECO_L2T_LSTE` via LP DAAC/CMR** — **214 unique overpasses in 24 months, 88 day and 126
+night, spanning all 24 local hours.** The ISS orbit precesses where Landsat is pinned near 10:30 local,
+so this is the first dataset that could validate the engine's **night** regression separably. Access is
+the existing bearer-token CMR route, **not** Earth Engine (below).
+*Full run:* the 2018–2026 search behind the resilience score found 690 acquisitions (333 day, 357 night);
+the counts are under **Bengaluru DC-URS inputs** below.
+
+**Bengaluru DC-URS inputs (2026-09-15)** — **every source below permits commercial use** · **role:** the
+resilience score's per-ward inputs, built by `scripts/fetch-bangalore.py --layer dcurs-static` and
+`--layer dcurs-lst`, then `scripts/export-bangalore-obos.py` into `data/bangalore/dc-urs-inputs.json` ·
+limitations and the clamp report in [known-limitations.md](known-limitations.md) §14.
+
+| Source | Licence | Role |
+|---|---|---|
+| WorldPop R2025A constrained 2025, 100 m (`ind_pop_2025_CN_100m_R2025A_v1.tif`) | CC BY 4.0 | `popDensity`: summed over exactly the box with fractional edge-pixel weights; labelled `modelled` |
+| JRC GHS-SMOD R2023A E2020, 1 km, tile `R8_C26` | CC BY 4.0 | rural reference = classes 11/12/13; all three ward centres verified class 30 (urban centre) |
+| ESA WorldCover 2021 v200, 10 m, tile `N12E075` | CC BY 4.0 | `distCoolM`: distance to the nearest cool refuge; also describes the rural reference's land cover (§14) |
+| Sentinel-2 L2A via earth-search | Copernicus | NDVI, 2021–2025 |
+| NASA ECOSTRESS L2T LSTE v002 via CMR / LP DAAC | US public domain | day and night LST, and the heat island |
+
+*ECOSTRESS run:* searched 2018-07-01 to 2026-09-01, with the last 14 days excluded as unsettled — 690
+acquisitions (333 day, 357 night) over MGRS tiles 43PGP/PGQ/PHP/PHQ, 480 recorded and 210 with no usable
+granule. **46 day and 49 night scenes are clear (≥ 10 %) in all three wards at once, near-nadir
+(view-zenith difference ≤ 0.75°), with a rural reference present**; the pre-registered gate of ≥ 8 per
+phase passes in both. `fvc` and `albedo` are not fetched here: they are copied from the served
+`surface-meta.json`. The `dcurs-static` layer prints, per ward:
+
+```
+indiranagar  pop 10,143/km2 · FAR 0.6356 (storey 3.33 m) · refuge 29 m · NDVI 0.3104 ± 0.0179 (5 yr)
+mg-road      pop 9,557/km2 · FAR 0.9816 (storey 3.33 m) · refuge 50 m · NDVI 0.2805 ± 0.0118 (5 yr)
+whitefield   pop 8,691/km2 · FAR 0.7386 (storey 3.33 m) · refuge 29 m · NDVI 0.2924 ± 0.044 (5 yr)
+```
+
+### Ruled out, with the reason
+
+**KSRSAC / K-GIS 50 cm imagery** — the only sub-metre imagery covering Bengaluru comprehensively, and
+contractually closed: *"Under no circumstances data will be used for any commercial purposes by anyone"*
+and *"shall not be used for any legal purpose."*
+
+**Bhuvan / NRSC (Bhoonidhi)** — the EULA permits derivative works but **excludes "Internet based
+hosting" explicitly**, which is exactly what a web 3D scene is. Registration is single-user and
+non-transferable.
+
+**Cartosat stereo (the DIY nDSM route)** — under the **Indian Space Policy 2023**, data finer than 5 m
+is free only to government entities and priced via NSIL for everyone else. Only CartoDEM 30 m is free,
+and that is terrain, not buildings.
+
+**GlobalBuildingAtlas heights** — **CC BY-NC 4.0**, and its commercially-usable ODbL tier has **no
+height field at all** (verified by byte-ranging the Bangalore tile: properties are only `source`, `id`,
+`region`). Accuracy would have disqualified it anyway — a published Indian evaluation **including
+Bengaluru** measures ME −30.3 m, MAE 30.3 m, RMSE 41.8 m.
+
+**FABDEM** — already ruled out for Kolkata on CC BY-NC-SA; **re-confirmed for Bangalore**, same licence,
+same answer. Do not re-test.
+
+**GHS-OBAT** and **OpenBuildingMap** — both advertise per-building heights on billions of footprints
+under open licences. **Both derive them by zonal statistics from GHS-BUILT-H at 100 m**, the layer this
+project already rejected on measurement. GHS-OBAT's own validation is MAE 2.88 m, r = 0.29, and
+buildings under 100 m apart inherit identical heights. **This is the disguised-GHSL pattern: an open
+licence and a per-building schema wrapped around a 100 m raster.**
+
+**Microsoft GlobalMLBuildingFootprints — for heights** — measured: **0 of 1,063,902 buildings in the
+India quadkey carry a height**; every record is `-1.0`. The footprints remain fine.
+
+**Meta / WRI canopy v2** — nearly **doubles** cover against v1 at every site, and **61 % cover for
+Indiranagar is not credible** for a dense urban neighbourhood. That measurement is the rejection on its
+own; the urban-validation literature already in
+[methods-and-papers.md](methods-and-papers.md#urban-canopy-height-validation--what-good-actually-looks-like)
+points the same way. **v1 stays primary; v2 is not used until measured against v1.**
+
+**NOAA ISD** — every Bengaluru entry ends **2025-08-24** and the 2026 file returns 404. Any recipe
+inherited from Kolkata that reads ISD **stops in August without erroring**. GHCNh replaces it.
+
+**Google Earth Engine's ECOSTRESS collection** — its metadata advertises a global bounding box and
+current dates, while its description says verbatim: *"only tiles covering the Los Angeles metro area
+have been ingested."* **Verifying by bbox and date alone leads to the opposite conclusion.** The
+LP DAAC/CMR route stays mandatory. Worth re-checking each quarter: the day this changes, the ingest
+simplifies to a one-line collection load.
+
+**IMD direct** — the Certificate of Undertaking states *"The data shall not be used for commercial
+purpose"* and *"will not be put on Internet."* The same observations are free and public-domain through
+NOAA GHCNh.
+
+**OpenAerialMap, for Bengaluru** — the whole metro returns **exactly one** record: a 669 × 537 m drone
+tile from 2022, **18.8 km from the nearest ward**. Sentinel-2 at 10 m is therefore the ceiling for
+ground texture, as it was in Kolkata.
+
+**JRC GHS-POP R2023A (E2010, E2020) — for Bengaluru population** — tested against the Census 2011 counts
+of all 198 BBMP wards, each grid summed over each ward polygon: Pearson r of log population is **−0.03
+(E2010) and −0.01 (E2020)**, against 0.56 for a uniform density. It **misplaces the south-east**: 64
+contiguous south and east wards hold 3.01 M people in the census and 0.29 M in E2010. At box scale
+(E2020, people/km²) Whitefield reads **565 against a census 4,010**, and MG Road **43,584 against
+11,151**. Unconstrained WorldPop 2011 shows the same pattern (r = −0.07). Constrained WorldPop R2025A
+(r = 0.595) is used instead; the full table is in [known-limitations.md](known-limitations.md) §14.
+The error is already present in E2010, so it is not growth. Do not re-test on a newer epoch.
+
+### The OpenCity licence position, stated so it can be revisited
+
+`data.opencity.in` makes four inconsistent statements: per-dataset "Public Domain", a site footer saying
+CC BY-NC-SA, terms saying non-commercial only, and an FAQ clarifying that **posts** are CC BY-NC-SA
+while **data** is **ODbL**. We treat the FAQ as the authoritative disambiguation — the NC clause
+attaches to their editorial posts, not the datasets.
+
+**Position taken: the BBMP tree census and KGIS-derived layers are ODbL** — commercial use permitted,
+**share-alike attaching to any derived database**. Where practical they are pulled from the KGIS
+government service instead. **The founder has declined to seek written confirmation at this stage**;
+that is recorded here so it can be revisited before any external publication of a derived database.
+
+### The ward-vintage trap
+
+Bengaluru's ward geometry moved twice and most published data has not caught up: 198 wards (2014
+delimitation on Census 2011) → 243 proposed → 225 under the never-implemented BBMP Act 2020 → BBMP
+abolished under the Greater Bengaluru Governance Act → **369 wards across five corporations, notified
+19 Nov 2025**.
+
+**So the ubiquitous "Census 2011 joined to 198 BBMP wards" product is two reorganisations stale**, and
+wrong in the way that produces plausible-looking ward rankings rather than obvious errors. The BBMP tree
+census also numbers its wards on the dead 198-ward scheme, which is why **trees are consumed by position
+and never by ward join.**
+
+---
+
 ## Free EO backbones the open-data pitch rests on (commercial use OK)
 
 [Copernicus Data Space](https://dataspace.copernicus.eu/) · [MS Planetary

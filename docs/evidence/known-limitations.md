@@ -290,6 +290,12 @@ therefore not a measured quantity and must never be quoted as one — canopy **h
 and species are modelled. The receipt says so. This is listed as a limitation because it is the single
 easiest thing for a viewer to misread.
 
+**Bangalore inherits this by construction (2026-09-10).** Its tree scatter is the same
+`_generate` function, imported from `fetch-canopy.py` rather than reimplemented, so the
+Bangalore tree counts (27,408 / 28,573 / 12,015) are display scalings in exactly the same
+sense. The two cities differ in one respect: Bangalore drops candidates that fall inside a
+building footprint, which closes the roof half of limitation 2 there and measures it at 6–9 %.
+
 ---
 
 ## 6. The ward-mean observations do not identify `Q` — they only pin the product `Q·built`
@@ -520,3 +526,444 @@ a comparison with real roofs is not an engineer's stamp.
 **The pre-registration** for that study is `docs/superpowers/specs/2026-09-07-pv-rooftop-validation-design.md`;
 its predictions are committed before any measured kilowatt-hour enters the repository, and the result is
 published whichever way it falls.
+---
+
+## 8. Bangalore's building heights have two sources that disagree, and no Indian ground truth
+
+**Status:** open by design, published rather than hidden · **See:**
+[data-sources.md](data-sources.md),
+[../superpowers/specs/2026-09-10-bangalore-obos-wards-design.md](../superpowers/specs/2026-09-10-bangalore-obos-wards-design.md)
+
+Bangalore is the first city where the project has **two independent per-building height estimates** —
+Google Open Buildings 2.5D and UT-GLOBUS. That is an improvement on Kolkata (limitation 4 above), and it
+produced a harder problem rather than an answer: **the two disagree, and nothing available says which is
+right.**
+
+Measured at building centroids, 385 and 373 buildings:
+
+| site | UT-GLOBUS p50 | Google p50 | MAE | correlation | disagree > 5 m |
+|---|---:|---:|---:|---:|---:|
+| Indiranagar | 8.0 m | 5.3 m | 4.00 m | **+0.176** | 26.0 % |
+| Whitefield | 7.0 m | 5.0 m | 3.60 m | **+0.815** | 18.5 % |
+
+**The two correlations do not mean the same thing, and quoting them side by side without saying so would
+be the misleading move.** Whitefield's +0.815 is genuine cross-validation: there is real height variance
+and two independent methods track it. **Indiranagar's +0.176 is largely an artefact** — where almost
+every building is 5–8 m there is little variance to correlate, and the coefficient is measuring noise.
+**MAE is the honest statistic there, and 4.0 m on an 8 m building is a 50 % error.**
+
+**Full-ward results, 2026-09-14** (`python3 scripts/fetch-bangalore.py --layer crosscheck`, every
+Overture footprint whose centroid matches a UT-GLOBUS building to 5 m; the table above is the earlier
+385/373-building sample and stands as that):
+
+| ward | tile | matched | MAE | flagged > 5 m |
+|---|---|---:|---:|---:|
+| Indiranagar | Bangalore_2 | 2,274 of 14,867 | 2.83 m | 302 |
+| Whitefield | Bangalore_2 | 2,532 of 10,897 | 2.80 m | 178 |
+| MG Road | Bangalore_1 | 2,100 of 11,045 | 3.65 m | 339 |
+
+These are measured against the **shipped** heights. The earlier strings (Indiranagar 3.12 m / 391, Whitefield
+3.13 m / 295) were measured against the Google 2.5D baseline before OSM-measured heights replaced 1,941 and
+1,430 buildings (`1fec16e`). They reproduce to the digit on those older heights, so they were stale, not wrong.
+The two sets are not like-for-like (the fill set changed too), so read the drop as consistent with the OSM
+heights, not as a measured improvement.
+
+This generalises past Bangalore: **correlation is the wrong summary for a low-variance population**, and
+a homogeneous neighbourhood will make any two height sources look uncorrelated no matter how good they
+both are.
+
+**UT-GLOBUS reads systematically 2–3 m higher at both sites.** Neither source has published Indian
+validation. Google's own documentation says the 1.5 m MAE *"was only evaluated in North America, Europe
+and Japan… heights prediction might not be as good in the Global South"*; UT-GLOBUS validates against US
+LiDAR only, at RMSE 9.1 m per building.
+
+**What we do about it.** Nothing that manufactures a number. Google 2.5D stays primary, UT-GLOBUS is
+attached as a second field, and where they differ by more than 5 m the building carries a **flag** (a widened on-screen uncertainty band is
+designed but not yet built) — it is not corrected and not averaged. Blending would invent a value neither
+source states, and would hide the disagreement precisely where it is most informative.
+
+**What would close it.** Ground truth: a LiDAR or photogrammetric survey of a few hundred Bengaluru
+buildings. That is a procurement, not a download, and the sub-metre licence wall in
+[regulatory-and-licensing.md](regulatory-and-licensing.md) is why.
+
+---
+
+## 9. Bangalore's tree census is an inventory, not a density field
+
+**Status:** by design, disclosed · **See:** [data-sources.md](data-sources.md)
+
+The BBMP tree census is **702,109 individual trees with species** — nothing comparable exists for
+Kolkata, and it is genuinely better data than we have anywhere else. It also cannot be used the obvious
+way.
+
+**Counts track enumeration effort, not tree density.** Only **144 of 198 wards** appear at all; per-ward
+counts run from 1 to 45,831; 13 wards hold fewer than 100 trees; and **24.3 % of trees are recorded as
+species "Others"**. A ward with few trees in this dataset is a ward that was surveyed less, and a map
+shaded by census count would be a map of survey effort presented as a map of canopy.
+
+**It also carries no girth, height or crown diameter**, so crown radius has to be modelled from species —
+derived, not measured, and the artefact must say so.
+
+**So the two datasets do different jobs and are not substitutes:** canopy *fraction* comes from Meta CHM
+v1, which is a measurement; the census supplies *species and position*, which is an inventory. This is
+the same distinction as limitation 5 above — measured height versus modelled count — arriving from the
+opposite direction.
+
+**One consequence worth stating separately:** the census numbers its wards on the **dead 198-ward
+scheme**, two reorganisations behind the current 369-ward GBA-2025 geometry. Trees are therefore consumed
+**by position and never by ward join**, which sidesteps the problem rather than solving it.
+
+---
+
+## 10. A height percentile means two different things, and the gap is 4x on tall buildings
+
+**Status:** measured 2026-09-10, disclosed · **See:** [data-sources.md](data-sources.md)
+
+Building the Bangalore wards produced two sets of height statistics from **the same
+raster on the same day**, differing by far more than rounding:
+
+| | over built PIXELS | over FOOTPRINTS (zonal p65) |
+|---|---:|---:|
+| Indiranagar, share ≥ 15 m | 3.3 % | **0.8 %** |
+| MG Road, share ≥ 15 m | 15.5 % | **3.7 %** |
+| Whitefield, share ≥ 15 m | 19.7 % | **5.1 %** |
+
+**Neither is wrong. They answer different questions, and the tall-building share is
+where that stops being pedantry** — MG Road's differs by a factor of four.
+
+A **pixel** census asks "how tall is the built surface here?", and every pixel of a
+tower is a tall pixel. A **footprint** statistic asks "how tall is this building?",
+and a zonal percentile over the footprint mixes the tower's core with its podium,
+courtyards, annexes, roof plant and edge pixels. It averages down, and it averages
+down hardest on exactly the large, complex buildings whose height people care most
+about.
+
+**This is a known property, not a discovery.** Kolkata's `compute-heights.py` names
+it in its own docstring and offers p75 as the candidate correction. What is new is
+the *size* of the effect on a derived share rather than on a median: the medians
+here differ by 0.6–2.6 m, which looks tolerable, while the ≥15 m share differs by
+4x from the same data.
+
+**The operational rule.** Any published tall-building share must name which
+statistic it came from. A massing render is built from the footprint statistic,
+because you extrude a building by its own height, so **renders will show a lower
+skyline than a pixel census implies** and that is correct behaviour, not a bug.
+
+**What would close it.** The same thing that would close limitation 8: Indian
+ground truth. Failing that, running p65 and p75 side by side and choosing against
+OSM `building:levels` evidence, which is what Kolkata's `validate-heights.py` does
+and what Bangalore has not yet done — it ships p65 for parity with Kolkata.
+
+---
+
+## 11. Three statistical fixes for Bengaluru's heights, all measured, all rejected
+
+**Status:** measured 2026-09-11, all three refused · **See:** `scripts/measure-bangalore-prior.py`
+
+Bengaluru's shipped heights are Google Open Buildings 2.5D at zonal p65, and that
+estimator has a known, measured weakness: it collapses on tall buildings. Against
+1,926 buildings carrying independent OSM evidence, its bias runs from **−0.68 m
+below 10 m to −27.09 m above 60 m** — at the top end it reads barely a third of
+the building.
+
+Three statistical repairs were tried against held-out data. **None ships.**
+
+| approach | result vs raw Google | why refused |
+|---|---:|---|
+| Neighbourhood spatial prior, 400 m cells | **−36 to −39 %** | loses outright |
+| Global linear fit, `0.846·g + 3.42` | **+7 %** MAE | shrinks the skyline |
+| Band-limited linear, 8–45 m only | **+1.5 %** MAE | 19.7 % made worse |
+
+**The spatial prior lost, and that is a finding about the cities, not the method.**
+On Dubai the same prior halved the error over 152,942 buildings — because 87 % of
+Dubai had no measured height at all, so anything beat nothing. Bengaluru already
+has a real estimator on every building, and a neighbourhood median cannot beat it:
+MAE 3.74 m for Google against 5.11 m for the prior on held-out storey-derived
+truth, and 16.58 m against 22.96 m on stated heights. **A method that transformed
+one city can be worthless in the next; re-test, never port.**
+
+**The linear fit is a regression-to-the-mean trap, and it is the instructive one.**
+It improves aggregate MAE by 7 % and would have been easy to ship on that number
+alone. Broken out by true height it improves the 10–60 m middle by 10–27 % and
+makes **both tails worse** — and the slope below 1 means it pulls tall buildings
+*down*. Five of the six tallest test buildings moved FURTHER from the truth,
+including one whose true height is 93.2 m being pushed from 50.8 m to 46.4 m.
+
+**An aggregate metric can improve while the thing you care about gets worse.** The
+skyline is what a viewer checks first and what the founder's demo rests on, so a
+correction that trades the towers for the mid-rise is a loss dressed as a gain.
+
+### What this leaves, and it is not nothing
+
+**Statistics on Google's own value cannot rescue the towers — only evidence can.**
+That is exactly what the measured tier does, and it is already shipped: a cited
+published height moved UB Tower from 18.2 m to 123 m, which no correction fitted
+to Google's reading could ever have achieved from an input of 10 m.
+
+So the route to better Bengaluru heights is **more evidence, not better maths**:
+the OSM buildings Overture is missing entirely (Vidhana Soudha among them), and
+the Karnataka RERA elevation figures for Whitefield's under-construction towers.
+
+---
+
+## 12. The fallback air temperature is a climatology, not a forecast
+
+**Status:** accepted · **See:** [data-sources.md](data-sources.md) (IMD 1991–2020)
+
+When there is no live met.no reading — including the first seconds of every page load — the instrument
+models air temperature from the city's IMD 1991–2020 monthly normals: that month's mean daily minimum at
+06:00 and maximum at 14:00, joined by half-cosines. Three things this is not:
+
+- **Not today's weather.** A heatwave day or a cool monsoon afternoon sits far from its monthly mean; the
+  live reading replaces this the moment it arrives.
+- **Not the recent climate.** The normals end in 2020, and the last decade has run warmer (GHCN-Daily,
+  Bengaluru: April 2016–2025 averaged 34.9 °C against a normal of 34.1 °C).
+- **Not an observed diurnal cycle.** The tables give only daily extremes; the 06:00 / 14:00 placement and
+  the curve between them are the standard assumption.
+
+It replaced a single 32 °C for both Indian cities, which ran up to 16 °C too hot at Bengaluru nights.
+
+---
+
+## 13. The pocket-park size is a design default, not a measurement
+
+**Status:** accepted · **See:** [park-size-tvoe-preregistration.md](park-size-tvoe-preregistration.md)
+
+The pocket-parks slider paints discs of 50 m radius (~0.8 ha) in every city. (That control is not exposed
+in the console today — see §14 — so this describes the model, not a lever a user can currently move.) That number was justified as
+Kolkata's "efficient park size" (TVoE 0.77 ha, Li et al. 2022). It is not one: TVoE is a regression slope
+whose value does not change with the area unit, the paper is internally inconsistent, and the Kolkata
+sample was hand-picked in Google Earth and cannot be reproduced from open data. The radius stands as a
+reasonable pocket-park size; the cooling it produces comes from the solver running on the painted
+vegetation, not from the radius itself.
+
+The same borrowed number sets the DC-URS thermal-refuge floor (`MIN_REFUGE_HA = 0.77`,
+`MIN_PATCH_M2 = 7,700` in `scripts/compute-tra.py` and `cooling-surfaces.ts`) — it too is a design
+threshold, kept because it keeps the index discriminating, not because it is a measured minimum cooling
+area.
+
+---
+
+## 14. Bengaluru's resilience score: what is measured, what is borrowed, what is missing
+
+**Status:** accepted · **See:** [design spec](../superpowers/specs/2026-09-14-bengaluru-resilience-score-design.md), [data-sources.md](data-sources.md) (Bangalore — Bengaluru DC-URS inputs)
+
+*Figures are as of `3052c7c`: ECOSTRESS searched to 2026-09-01, Kolkata inputs as served then, and the
+slider rule as it stands at that commit. Re-running `--layer dcurs-lst` changes them, and nothing checks
+this section.*
+
+Indiranagar, MG Road and Whitefield are scored by the same DC-URS v1 engine as Kolkata, against Kolkata's
+normalisation anchors, from their own inputs file `data/bangalore/dc-urs-inputs.json` (served byte-identical
+as `public/heat-map/data/bengaluru-dc-urs-inputs.json`). This section records what that file measures, what
+it borrows, and what it lacks.
+
+**Quoting the score.** Quote a Bengaluru score only as a best case ("up to 8.8 pts lower") and never beside
+Kolkata's; the gap is confounded (see "The scores are not yet comparable"). Within Bengaluru, the ranking is
+inside the unmeasured `socioVuln` range.
+
+**Heat vulnerability is unmeasured (up to 8.75 points).** `socioVuln` sits at 0, its optimistic endpoint, so
+every Bengaluru score is shown at its **best case**, and the confidence chip says so: "Best case · up to 8.8
+pts lower". No source checked is commercially clear at ward level:
+
+- **District and parliamentary-constituency data:** identical for all three wards (Bengaluru Urban;
+  Bangalore Central), so they cannot discriminate.
+- **WorldPop R2025A age/sex (CC BY 4.0):** spreads India's age structure from state-level inputs, so every
+  Karnataka pixel reads 65+ = 8.024 % and under-5 = 6.673 % (measured 2026-09-14).
+- **Census 2011 BBMP ward tables:** would discriminate, but the catalogue is marked "All Rights Reserved"
+  and the houselisting copies carry uploader-set labels.
+
+The open route is a written request to ORGI (Office of the Registrar General of India) for commercial use.
+`canopyFrac` is a placeholder, as in Kolkata; its weight is 0, so it is inert in the v1 formula.
+
+**Population density is modelled, and the obvious grid was wrong.** `popDensity` is WorldPop R2025A
+constrained 2025 at 100 m, summed over exactly the 2.8 km × 2.8 km box (7.84 km²) with fractional
+edge-pixel weights: 79,524 / 74,927 / 68,138 people, or 10,143 / 9,557 / 8,691 per km², labelled
+`modelled`. Before it was chosen, each candidate grid was tested against the Census 2011 counts of all 198
+BBMP wards (PCA workbook total 8,443,675, joined to DataMeet `BBMP_oldWards.geojson`, 198/198 matched;
+each grid summed over each ward polygon by fractional coverage):
+
+| Grid | Pearson r of log(pop) | Mean abs log error | Total |
+|---|---:|---:|---:|
+| GHS-POP E2010 | −0.03 | 1.12 | 8.54 M |
+| GHS-POP E2020 | −0.01 | 1.20 | 11.9 M |
+| WorldPop 2011 unconstrained | −0.07 | 1.16 | 7.25 M |
+| **WorldPop R2025A constrained (2015 layer)** | **0.595** | **0.64** | 5.61 M |
+| Uniform density (baseline) | 0.56 | 0.88 | – |
+
+**Only constrained WorldPop beats a uniform density.** **GHS-POP misplaces the south-east:** 64 contiguous
+south and east wards (BTM, Jayanagar, CV Raman Nagar, KR Puram, Mahadevapura) hold 3.01 M people in the
+census, and GHS E2010 gives them 0.29 M. The error is already there in E2010, so it is not growth. A
+sub-district disaggregation artefact is a likely cause; that has **not** been tested.
+
+At box scale, in people/km² (census figure = ward population × box overlap share ÷ ward area):
+
+| Box | Census 2011 | GHS E2020 | WorldPop constrained 2015 |
+|---|---:|---:|---:|
+| Indiranagar | 16,671 | 16,026 | 9,399 |
+| MG Road | 11,151 | 43,584 | 8,889 |
+| Whitefield | 4,010 | 565 | 8,083 |
+
+**WorldPop's own bias is flatness.** It reads about 0.34× the census in wards within 7 km of the centre and
+about 1.7× in Mahadevapura, with a low total. Bengaluru's central wards are therefore **understated**, and
+Whitefield is overstated relative to the census.
+
+**Kolkata's density method over-counts: recorded, not fixed.** `scripts/fetch-worldpop.py` sums every
+pixel in the projected (Mollweide) envelope of the lat/lon box but divides by the nominal box area.
+Recomputed on GHS-POP, Indiranagar read 20,028 against 16,026 exactly in the box, and MG Road 48,368
+against 43,584. Kolkata's live `popDensity` is probably inflated the same way. Correcting it would move
+Kolkata's scores, so it needs founder sign-off. Bengaluru's exporter uses the exact box sum instead.
+
+**The anchors are Kolkata's, and these Bengaluru terms clamp against them.** The exporter's CLAMP report,
+verbatim:
+
+- `indiranagar: heat island at or below 0: the UHI term reads 0`
+- `mg-road: heat island at or below 0: the UHI term reads 0`
+- `whitefield: heat island at or below 0: the UHI term reads 0`
+
+**No other term clamps.** Day and night LST sit above their floors of 25 / 20 °C, population is below
+25,000, FAR is below 5 and albedo is below 0.6.
+
+**Bengaluru is cooler than its countryside by day, and that is measured, not a bug.** LST in °C; the heat
+island is the median of per-scene (ward − rural) differences:
+
+| Ward | Day LST | Night LST | Day heat island | Night heat island | `ruralBaseC` |
+|---|---:|---:|---:|---:|---:|
+| indiranagar | 29.5 | 20.71 | −1.38 | 1.44 | 30.88 |
+| mg-road | 29.49 | 21.47 | −1.12 | 1.59 | 30.61 |
+| whitefield | 29.58 | 20.3 | −0.84 | 1.06 | 30.42 |
+
+A daytime surface cool island over Bengaluru is in the literature, and both sources were read:
+
+- **Sussman, H. S. (2022).** *The urban heat island of Bengaluru, India: characteristics, trends, and
+  mechanisms.* PhD dissertation, University at Albany, SUNY. doi:10.54014/BEQ7-GX6J. Mean surface UHI
+  intensity from MODIS LST 2003–2018: Dec–Feb (dry) night 1.43 °C; Aug–Oct (wet) day 1.14 °C; Aug–Oct night
+  1.02 °C; **Dec–Feb day −0.60 °C**. Our night values (1.06–1.59 °C) are of similar magnitude to her
+  1.02–1.43 °C, which come from 1 km MODIS. Her daytime sign depends on season; our day median pools every
+  season in the record.
+- **Shastri, H., Barik, B., Ghosh, S., Venkataraman, C., & Sadavarte, P. (2017).** Flip flop of day-night and
+  summer-winter surface urban heat island intensity in India. *Scientific Reports* 7, 40178.
+  doi:10.1038/srep40178. MODIS-Aqua 2003–2013 over 84 Indian urban locations: **negative daytime SUHII in
+  the pre-monsoon (Mar–May) season over a majority of the urban areas studied**, associated with sparse
+  vegetation and low evapotranspiration on non-urban land. It gives no Bengaluru-specific value, so it is
+  cited for the **mechanism only**.
+
+Our rural reference is the GHS-SMOD rural class (11–13) within 77.22–78.02 E, 12.57–13.37 N. Those pixels
+cover 55 % of the bbox. In ESA WorldCover 2021 (tile N12E075, which ends at 78.0 E, so the last 0.02° is
+not sampled) they read cropland 47 %, shrub 20 %, tree 15 %, grassland 13 %, built-up 3 %, bare 1 % and
+water 0.5 % (sampled at ~90 m, 2026-09-16). Per scene, the rural mask is further cut by cloud and excludes
+the ward boxes. **Whether that surface is dry enough for the mechanism Shastri et al. describe has not been
+tested.** Their result is also for the pre-monsoon (March–May) season, while our median pools every season.
+
+The night heat-island refusal (above 2.5 °C refuses the export) did not fire.
+
+**The dead heat-island term, and a knock-on effect on the structural floor.**
+
+- **The term is dead in all three wards.** The day heat island is negative everywhere (−1.38 / −1.12 /
+  −0.84 °C), so the engine's UHI term `max(0, lstDayC − ruralBaseC) / uhiSpan` reads 0. Its 5 points of
+  weight carry no information for Bengaluru and are identical across the wards.
+- **Knock-on:** `structuralFloor` models a "perfect retrofit" by setting `lstDayC = ruralBaseC`. Where the
+  rural baseline is **warmer** than the ward, that "retrofit" warms the ward. This is true for all three
+  Bengaluru wards, and also for Kolkata, where `ruralBaseC` 30.96 °C exceeds the wards' 30.72 °C.
+- **Size of the error:** the displayed "withheld by exposure" figure is overstated by roughly 0.4–0.7
+  points. MG Road's ceiling computes to 87.77 instead of 88.33. Computed with the engine, the overstatement
+  is 0.69 / 0.56 / 0.42 points for Indiranagar / MG Road / Whitefield, and 0.12 in each Kolkata ward.
+- **Status:** this predates Bengaluru and is recorded, not fixed.
+
+**The thermal inputs come from scenes clear in all three wards at once.** NASA ECOSTRESS L2T LSTE v002 via
+CMR / LP DAAC, searched from 2018-07-01 to 2026-09-01, with scenes from the last 14 days excluded as
+unsettled: 690 acquisitions (333 day, 357 night) over MGRS tiles 43PGP/PGQ/PHP/PHQ, of which 480 were
+recorded and 210 had no usable granule. **46 day and 49 night scenes are clear (≥ 10 %) in all three wards
+at once, near-nadir (view-zenith difference ≤ 0.75°), with a rural reference present.** The pre-registered
+gate was ≥ 8 per phase, and both phases pass. Shared scenes mean the three wards are compared under the same
+overpass.
+
+- **Median of differences, not difference of medians.** `ruralBaseC` is an **effective** baseline
+  (`lstDayC` − median day heat island), so the unchanged engine reproduces the median heat island. It is not
+  a rural LST anyone could observe.
+- **"Night" mixes dusk and predawn acquisitions,** because the ISS orbit precesses. Of the 49 shared night
+  scenes, 23 are dusk (17–23 h local) and 26 are predawn (0–6 h). Kolkata selects night scenes with the
+  same CMR `day_night_flag="night"` (`_ecostress.cmr_search`), so its night set can mix the two as well,
+  but its split was not counted.
+- **Ward masks include a border ring of up to 70 m.** A box mask on the 70 m ECOSTRESS grid takes
+  1,764 / 1,722 / 1,722 px, with centre offsets of 4 / 14 / 16 m.
+
+**Vegetation cover and albedo use the map's reduction, not Kolkata's.** Bengaluru's `fvc` and `albedo` are
+copied verbatim from `public/heat-map/data/surface-meta.json` `fvc_mean` / `albedo_mean`: indiranagar
+0.4014 / 0.1671, mg-road 0.3884 / 0.1652, whitefield 0.3698 / 0.1775. These are the per-cell Sentinel-2
+composite means already served for the map texture: the per-cell median over 2021–2025, then the spatial
+mean. Kolkata's `sentinel.json` reduces per scene, then per year. They are copied because `loadAreaSurface`
+reads the DC-URS record **first**, so a recomputed value would put the map texture and the score on
+different measurements. A unit test pins the equality. A cross-city difference in `fvc` or `albedo`
+therefore carries a method difference as well as a surface difference.
+
+**The scores are not yet comparable across cities.** Scores as rendered by the engine; Bengaluru's at best
+case (`socioVuln` = 0) and with `socioVuln` at its maximum (10):
+
+| Ward | Score | Score, `socioVuln` = 10 | THI (hazard) | EVI (exposure) | ACI (adaptive capacity) |
+|---|---:|---:|---:|---:|---:|
+| Indiranagar | 69.9 | 61.2 | 0.109 | 0.221 | 0.509 |
+| MG Road | 68.4 (renders "68") | 59.7 | 0.129 | 0.231 | 0.493 |
+| Whitefield | 70.3 | 61.5 | 0.100 | 0.201 | 0.495 |
+| Ballygunge (Kolkata) | 49.6 | – | 0.258 | 0.626 | 0.449 |
+| Baruipur (Kolkata) | 53.9 | – | 0.258 | 0.586 | 0.523 |
+| Barrackpore (Kolkata) | 61.9 | – | 0.258 | 0.271 | 0.445 |
+
+All three Bengaluru wards read "Moderate Resilience". **The cross-city gap is confounded:**
+
+- **`socioVuln` at its best case favours all three Bengaluru wards** (up to 8.75 pts).
+- **WorldPop's flatness cuts both ways.** It favours Indiranagar (10,143 (2025 layer) against a census 16,671, about
+  +4.1 pts) and MG Road (about +1.0 pt), but penalises Whitefield (8,691 (2025 layer) against a census
+  4,010, about −2.9 pts). The box table above is the 2015 layer.
+- **Kolkata's envelope over-count can move only Barrackpore** (8,772/km²). Ballygunge (68,810) and
+  Baruipur (36,728) sit above the 25,000/km² exposure anchor whether or not the density is corrected.
+- **The hazard difference is measured, but from different scene sets.** Kolkata's are bbox-wide 2024–2026
+  scenes; Bengaluru's are per-ward shared scenes from 2018–2026. It comes mostly from night LST (20.3–21.5
+  °C against Kolkata's 25.4 °C, about 84 % of Indiranagar's THI gap) and partly from day LST (29.5–29.6 °C
+  against 30.72 °C). The heat-island term is 0 in both cities.
+
+**"Bengaluru is more resilient than Kolkata" is not a supported claim yet.** Scenario sliders do not
+compare either, though not for the reason this section gave until 2026-09-16. A slider is a **share of the
+ward**: the same position greens the same fraction of the ward's own corridor cells and roof area, so a
+2.8 km Bengaluru ward's trees, cool roofs and facades move its index exactly as far per unit slider as a
+1.4 km Kolkata ward's — but they buy about 3.9x as much work and cost (MG Road's 198.9 km of street
+corridor against Ballygunge's 51.3 km), which is the real obstacle to comparing two plans. Only **parks**
+dilute with ward area: they are at most ten patches of a fixed metre radius, so the parks contribution to
+`fvc`, `canopyFrac` and `distCoolM` scales by `(1400 / sizeM)²`, a quarter over a 2.8 km ward. Until
+2026-09-16 every slider's index gain carried that quarter, which left the index moving a quarter as far as
+the heat layers and the bill beside it (the same plan moved the layers' ward-mean vegetation by +0.118 and
+`fvc` by only +0.015); the trees, roof and facade gains are no longer scaled.
+
+**Three qualifications on the parks exception, none of them small.** First, **it is dormant**: no
+pocket-parks control is rendered (the console draws `ivTrees`, `ivRoof` and `ivFacades` only, and Compare's
+reader pins a legacy `?parks=` to 0), so `iv.parks` is always 0 and the shipped effect of the 2026-09-16
+change is simply that **no** slider's index gain scales by area. The exception applies if that control
+returns. Second, **`canopyFrac` is collected but inert**: all six served rows are 0 and `placeholder`, and
+a unit test pins that the v1 score cannot read it — so of the three inputs parks moves, only `fvc` scales
+cleanly. Third, **`distCoolM` saturates**: it is floored at 0 and every served ward sits at 27.3–93.3 m, so
+the 1.4 km ward exhausts its refuge distance while the 2.8 km ward is still cutting, and the ratio climbs
+from a quarter back toward 1 — measured at MG Road's 49.5 m, 0.250 at `parks = 2`, 0.556 at 5 and 1.000 at
+10; at Ballygunge's 77.8 m, 0.250, 0.354 and 0.707. "The parks contribution scales by a quarter" is
+therefore true of the vegetation gains at any setting, and of the refuge distance only above the floor. The LST change was never
+rescaled: it comes from the heat model's layers, where trees and cool roofs cover a share of the ward's
+corridors and roofs (parks are fixed-size patches, so their LST effect does dilute with ward area). Since
+2026-09-16 the scenario keeps the measured LST and adds only that modelled change.
+Before, the simulated ward mean replaced the measured LST, and 25 trees lowered MG Road's score by 6.6
+points. In live "Now" mode the plan's LST change is sized by the current hour's sun, so the same plan reads
+about **+0.5 pts at dusk and +0.9 at solar noon** on MG Road, while the measured LST it is added to is a
+fixed overpass value. The 13:00 Peak and 22:00 Retained phases are the stable comparisons. (Those two
+figures were +0.18 and +0.58 before `3052c7c`. The thermal half did not move — `scenarioLst` never carried
+the area scaling — but the index half went +0.12 to +0.48, which is where the restated ≈+0.54 and ≈+0.94
+come from. The noon figure is corroborated: `heat-map-bengaluru-resilience.spec.ts` measures "0.9 pts from
+this plan" at 13:00 Peak. The dusk figure is carried arithmetically from the recorded split, not
+re-measured, because "Now" mode follows the wall clock.)
+
+**Known staleness paths.** `far` in `data/bangalore/dcurs-static.json` comes from
+`data/bangalore/*-buildings.json` (footprints × heights ÷ storey 3.33 m). If the buildings are re-fetched
+without re-running `fetch-bangalore.py --layer dcurs-static`, `far` goes stale, and **nothing compares the
+two**. The gates cover only what comes after that step: `export-bangalore-obos.py --check` re-derives the
+inputs file from `dcurs-static.json`, `dcurs-lst-scenes.json` and `surface-meta.json` and fails if it is
+stale (in CI via `npm run check:bangalore`); `verify-served-data.mjs` fails a stale served copy; and
+`tests/e2e/heat-map-bengaluru-resilience.spec.ts` pins MG Road's rendered score to the engine's value.
+`data/bangalore/dcurs-lst-scenes.json` rows carry no orbit id, so the 14-day settle window is the **only**
+guard against a very late granule being counted as a second scene. The data is clean today: no two rows are
+within 10 minutes of each other.

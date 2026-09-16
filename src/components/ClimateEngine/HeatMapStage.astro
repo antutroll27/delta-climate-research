@@ -20,7 +20,8 @@ import InterventionPane from './shell/InterventionPane.astro';
 import { areaKeysInCity } from '../../scripts/climate-engine/scope/registry.ts';
 import { areaPath, DEFAULT_AREA_PATH } from '../../scripts/climate-engine/scope/paths.ts';
 import { resolve, type ResolvedScope } from '../../scripts/climate-engine/scope/resolve.ts';
-import { wardById } from '../../data/wards.ts';
+import { newCityToAnnounce } from '../../scripts/climate-engine/shell/new-city.ts';
+import { renderableWardById as wardById, formatLatLon } from '../../data/wards.ts';
 
 /**
  * THE PAGE TELLS THE INSTRUMENT WHICH AREA IT IS, rather than both assuming.
@@ -126,6 +127,27 @@ const strip = siblings.flatMap((sib) => {
    switch; the two agree because both read the area id, not because anyone matched
    two strings by eye. */
 const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
+
+/* THE OTHER CITY, ANNOUNCED ONCE. Server-rendered rather than drawn by the app:
+   the markup is identical for every reader, and the two reader-specific facts —
+   whether they dismissed it, and whether the window is still open on THEIR clock —
+   are applied by console-shell.ts on mount. Rendering it client-side would mean a
+   badge that pops in after the scene has settled.
+
+   THE ARRIVAL DATE TRAVELS WITH IT, as `data-since`, and that is load-bearing.
+   These pages are prerendered, so the `new Date()` this call uses is the BUILD
+   clock: without the date on the element the shell could not tell a window that
+   is still open from one that closed two months and no deploys ago. */
+/* THE STORE IS PASSED EXPLICITLY AS NULL, not left to default. `newCityToAnnounce`
+   falls back to `defaultStore()`, which returns null here — but only by accident of
+   Node having no `localStorage`. A polyfill, or an adapter that gave the build one,
+   would let a SINGLE dismissal at build time silence the badge for every reader of
+   every prerendered page, silently and until someone redeployed. The server has no
+   reader whose preference it could be consulting; the dismissal is re-checked on
+   the client, which is the only place it exists. */
+const newCity = scope.area.hasData
+  ? newCityToAnnounce(scope.city.id, new Date(), null)
+  : null;
 ---
 {/* `data-console` is how shell/console-shell.ts finds a page with a rail and
     panes on it. It is deliberately NOT `.stage`: Compare has a console too and
@@ -236,8 +258,15 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
               and an area with no artefacts has no row — so on such a page this href
               names a route the build never emitted. It is a DOWNLOAD, so the
               browser would not show the 404: it would save the error body under
-              `metadata.json` and hand someone a file that looks like a record. */}
-          {scope.area.hasData ? (
+              `metadata.json` and hand someone a file that looks like a record.
+
+              THE FLAG IS `publishes`, NOT `hasData`, and the two parted company
+              when Bengaluru arrived. `hasData` became `drawable` — true for
+              Bengaluru, which ships the map's six artefacts — while WARDS is
+              still built from PUBLISHED_CITIES alone. Gated on `hasData` this
+              shipped exactly the file the paragraph above describes, on all three
+              Bengaluru pages. `publishes` IS the fact WARDS is built from. */}
+          {scope.area.publishes ? (
           <Fragment>
           <p class="pane-note">What is measured, the out-of-sample error and sample size, every
             source dataset with its licence, and the analysis CRS and bounding box.</p>
@@ -284,7 +313,17 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
             <label for="solTariff">Tariff · assumed · change it</label>
             <span><span id="solCur" aria-hidden="true"></span><input id="solTariff" type="number" inputmode="decimal" min="0" step="0.25" value="8.00" aria-describedby="solTariffNote"> / kWh</span>
           </div>
-          <p class="pane-note sol-small" id="solTariffNote">CESC domestic slabs run 4.07–9.21 per unit (2025-26 tariff order); a solar unit displaces the top of the bill. Not a rate we assert.</p>
+          {/* THE UTILITY IS NAMED ONLY WHERE ITS TARIFF WAS SOURCED. CESC is
+              Kolkata's DISCOM; Bengaluru's is BESCOM, whose slabs we have not
+              sourced — so this sentence shipped a Kolkata utility's rates onto
+              Bengaluru's page, under a box pre-filled at 8.00. The other city
+              asserts no rate rather than guessing one.
+              ponytail: a city-id test, because one city has the datum and one does
+              not. It becomes a registry field beside the cost basis the moment a
+              second tariff is sourced — not before. */}
+          <p class="pane-note sol-small" id="solTariffNote">{scope.city.id === 'kolkata'
+            ? 'CESC domestic slabs run 4.07–9.21 per unit (2025-26 tariff order); a solar unit displaces the top of the bill. Not a rate we assert.'
+            : 'No local tariff is sourced for this city yet, so the box above is an assumption you should change. Not a rate we assert.'}</p>
           <p class="pane-h">Best roofs by annual yield</p>
           <div class="roofs-scroll">
           <table class="roofs" aria-label="The ten best roofs by annual yield; each row selects its building on the map">
@@ -358,7 +397,7 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
       <div class="rig">{scope.area.hasData
         ? <Fragment><span id="bcount">— buildings</span> · <span id="simBackend" aria-live="polite">SELECTING ENGINE</span></Fragment>
         : <span>no artefacts · {scope.tier} tier</span>}</div>
-      <div class="read">MEDNI · HEAT INSTRUMENT<br><b id="coord">{ward?.coord ?? '—'}</b></div>
+      <div class="read">MEDNI · HEAT INSTRUMENT<br><b id="coord">{ward ? formatLatLon(ward.lat, ward.lon, ' · ', 3) : '—'}</b></div>
     </div>
   </header>
 
@@ -381,7 +420,22 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
     <div id="mlmap"></div>
     <div class="synthetic"><span class="d"></span><span class="full">Live basemap + real footprints &amp; Google heights · </span>heat field modelled<span class="sp"> · block detail illustrative</span></div>
     <div class="stamp-slot"><ConstructionStamp /></div>
-    <div class="loadchip" id="loadchip">Building ward…</div>
+    <div class="loadchip" id="loadchip"></div>
+
+    {newCity && (
+      <div class="newcity" id="newCity" data-city={newCity.id} data-since={newCity.since} hidden>
+        {/* NO aria-label. The visible text already reads "New city Bengaluru", and a
+            label of "Bengaluru — newly added city" replaced it with a string those
+            visible words are not contained in — Label in Name (WCAG 2.5.3), so
+            "click New city" matched nothing by speech. The eyebrow is CLIPPED rather
+            than display:none on phones, so the name keeps "New city" there too. */}
+        <a href={newCity.href}>
+          <span class="nc-eyebrow">New city</span>
+          <span class="nc-name">{newCity.name} <span aria-hidden="true">→</span></span>
+        </a>
+        <button type="button" id="newCityHide" aria-label="Dismiss">×</button>
+      </div>
+    )}
 
     <!-- North reference. The idle orbit turns the map continuously, so without
          this there is no way to know which way you are facing, and no way back. -->
@@ -517,6 +571,18 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
       </div>
     </div>
 
+    <!-- LANDMARK LABELS. The named buildings of a ward that ships an authored
+         model — 0 in Indiranagar (a genuinely low-rise ward), 12 in MG Road, 35
+         in Whitefield. These are the only buildings whose height the instrument
+         asserts BY NAME, so every chip here has a citation behind it and one
+         without a stated source is never drawn at all.
+
+         Chips are created per ward by heat-map-app.ts and only TRANSFORMED per
+         repaint — the text never changes once written. They are real buttons
+         because the city is a <canvas>: this is the only way to reach a landmark
+         from the keyboard. -->
+    <div class="lmlabs" id="lmlabs" hidden></div>
+
     <!-- Click-to-inspect. Positioned from the building's own ward-metre centroid
          every time MapLibre repaints, so it tracks orbit, pan, zoom and flyTo. -->
     <div class="bsel" id="bsel" hidden aria-hidden="true"><i></i><i></i><i></i><i></i></div>
@@ -533,6 +599,23 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
           <dt>Albedo</dt><dd id="bcAl">—</dd>
           <dt>Surface</dt><dd id="bcT">—</dd>
         </dl>
+        {/* LANDMARK — shown only when the selected building is one of the ward's
+            named buildings, and then it prints the published height AND where
+            that height came from. The source row is not decoration: a height
+            with no stated source is not drawn as a landmark at all, so this row
+            is the reason the rest of the block is allowed to exist.
+
+            ABOVE the rooftop-solar block and ruled off in cyan rather than the
+            screening amber, because this is the best-evidenced number on the
+            card and must never read as a sibling of the estimate below it. */}
+        <div class="bc-lm" id="bcLm" hidden>
+          <div class="bc-h"><span>Landmark</span></div>
+          <p class="bc-lm-name" id="bcLmName">—</p>
+          <dl>
+            <dt>Published height</dt><dd id="bcLmH">—</dd>
+            <dt>Source</dt><dd id="bcLmSrc">—</dd>
+          </dl>
+        </div>
         {/* ROOFTOP SOLAR — a screening estimate ABOUT the building, under the
             measured rows and in a different ink. Painted by paintSolarCard from
             the ward's solar file; hidden when none ships. "At least" is the
@@ -802,6 +885,12 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
        invisible until ticked. */
     --line-hi:rgb(111 202 214 / 0.32);
     --cyan:#6fcad6; --bronze:#b08d57; --red:#e5484d;
+    /* THE OFF-BLACK THAT GOES ON BRONZE, and the only legible ink for it: --ink on
+       a --bronze fill is a 1.7:1 wash. It became a token when the new-city badge
+       made it the SECOND place pairing text with bronze — .cta was the first, and
+       two hand-copied spellings of one colour is the drift obos-layers.test.mjs
+       refuses. Same value Footer.astro has carried under this name all along. */
+    --bronze-ink:#0d0a05;
     /* THE SAME RED, ONE STEP UP, FOR WHEN IT IS A WORD RATHER THAN A SWATCH.
        --red is the heat ramp's Extreme class and the compass's north needle —
        both areas of colour, which WCAG scores against a 3:1 non-text floor it
@@ -1258,6 +1347,54 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
      wherever the ring falls. Sampled from the frame, not computed from the token. */
   body.studio .ringlab{background:rgb(245 244 241 /.88);color:var(--studio-ink-teal);border-color:rgb(13 107 125 /.4)}
 
+  /* ── landmark labels ──
+     The ring labels' contour-label treatment, for the same reason: a chip on the
+     map points AT something and is never a finding in its own right — the
+     finding is the citation, and that lives on the card.
+
+     WHERE THEY DIFFER: these are clickable, so they carry hover and focus states
+     the ring labels have no use for. The transform centres them on the anchor
+     (translate(-50%,-50%)) instead of a negative margin, so a chip can be as
+     wide as its name needs without a fixed width that would clip "M. Chinnaswamy
+     Stadium" or pad "Canberra". */
+  .lmlabs{position:absolute;inset:0;pointer-events:none;z-index:6}
+  .lmlab{position:absolute;left:0;top:0;pointer-events:auto;cursor:pointer;
+    will-change:transform;max-width:190px;overflow:hidden;text-overflow:ellipsis;
+    white-space:nowrap;display:block;
+    font-family:var(--mono);font-size:.5rem;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--cyan);background:rgb(9 20 22 /.82);border:1px solid rgb(111 202 214 /.4);
+    border-radius:99px;padding:.24rem .6rem}
+  /* `display:block` above beats the `hidden` attribute's UA `display:none`, and a
+     chip culled from a frame is hidden by exactly that attribute — without this
+     rule every landmark the layer dropped (behind the camera, off-canvas, or
+     collapsed into a nearer one) would stay on screen at a stale position. */
+  .lmlab[hidden]{display:none}
+  .lmlab:hover{background:rgb(9 20 22 /.96);border-color:var(--cyan)}
+  .lmlab:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+  /* The selected landmark is filled, so the map says which chip the open card is
+     about. Tokens on both sides, no hex: the stage already spells this near-black
+     as `--on` inside .clockw, and a second longhand copy would be invisible until
+     someone tuned one of the two (tests/unit/obos-layers.test.mjs counts them). */
+  .lmlab.on{background:var(--cyan);color:var(--black);border-color:var(--cyan)}
+  body.studio .lmlab{background:rgb(245 244 241 /.88);color:var(--studio-ink-teal);border-color:rgb(13 107 125 /.4)}
+  body.studio .lmlab.on{background:var(--studio-ink-teal);color:var(--paper);border-color:var(--studio-ink-teal)}
+
+  /* THE LANDMARK BLOCK on the building card. Cyan rule, above the solar block's
+     amber one: a published height is the best-evidenced figure the card carries
+     and must not read as a sibling of the screening estimate under it. */
+  .bc-lm{margin:.55rem 0 0;padding-top:.5rem;border-top:1px solid rgb(111 202 214 /.35)}
+  .bc-lm .bc-h{margin-bottom:.3rem}
+  .bc-lm-name{margin:0 0 .4rem;font:600 .78rem var(--sans);letter-spacing:-.01em;color:var(--paper)}
+  .bc-lm dd{color:var(--cyan)}
+  /* The source is a note about the figure above it, so it takes the card's note
+     voice (.bc-prov's grammar) rather than a second value's. */
+  #bcLmSrc{font:450 .5rem var(--sans);letter-spacing:.03em;text-transform:uppercase;
+    color:var(--bronze);line-height:1.5}
+  body.studio .bc-lm{border-top-color:rgb(13 107 125 /.35)}
+  body.studio .bc-lm-name{color:var(--studio-ink)}
+  body.studio .bc-lm dd{color:var(--studio-ink-teal)}
+  body.studio #bcLmSrc{color:var(--studio-ink-bronze)}
+
   /* ── nearest-greenery tag: the FINDING, so it gets the data-chip anatomy ──
      Big value over a small label, in the cooling green of the patches it
      stands on. Anchored at the nearest cooling cell; the value is written once
@@ -1674,7 +1811,7 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
      A dark fill keeps the bronze identity where the identity actually lives (the
      border, the pulsing dot, the text) and gives the words a ground that does not
      move with the map beneath. */
-  .synthetic{position:absolute;top:20px;inset-inline:0;margin-inline:auto;width:max-content;max-width:calc(100% - 2rem);display:flex;align-items:center;gap:.5rem;font-family:var(--mono);font-size:.56rem;letter-spacing:.2em;color:var(--bronze);background:rgb(9 20 22 /.94);border:1px solid rgb(176 141 87 /.42);border-radius:20px;padding:.42rem .9rem;z-index:3;text-transform:uppercase;backdrop-filter:blur(8px)}
+  .synthetic{position:absolute;top:20px;inset-inline:var(--badge-berth,0px) 0;margin-inline:auto;width:max-content;max-width:calc(100% - 2rem);display:flex;align-items:center;gap:.5rem;font-family:var(--mono);font-size:.56rem;letter-spacing:.2em;color:var(--bronze);background:rgb(9 20 22 /.94);border:1px solid rgb(176 141 87 /.42);border-radius:20px;padding:.42rem .9rem;z-index:3;text-transform:uppercase;backdrop-filter:blur(8px)}
   .synthetic .sp{opacity:.82}
   .synthetic .d{width:6px;height:6px;border-radius:50%;background:var(--bronze);animation:hmPulse 2.2s infinite}
   @keyframes hmPulse{0%,100%{opacity:1}50%{opacity:.3}}
@@ -1693,7 +1830,7 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
      max-content width is the same shape the honesty banner above uses; the only
      difference is that the right edge stops short of the instrument column
      instead of at the map's edge. */
-  .stamp-slot{position:absolute;inset-inline:0 var(--instr-berth);margin-inline:auto;
+  .stamp-slot{position:absolute;inset-inline:var(--badge-berth,0px) var(--instr-berth);margin-inline:auto;
     width:max-content;max-width:calc(100% - var(--instr-berth) - 1rem);
     top:68px;z-index:3;pointer-events:none;
               --stamp-size:.62rem;--stamp-pad:.5rem 1rem;--stamp-tracking:.26em;--stamp-rot:-2.5deg}
@@ -1712,10 +1849,165 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
      ward…" was painted over exactly when a reader was waiting to be told
      something. It is only ever visible during a load, which is why nobody caught
      it by looking. */
-  .loadchip{position:absolute;top:118px;inset-inline:0 var(--instr-berth);margin-inline:auto;
+  .loadchip{position:absolute;top:118px;inset-inline:var(--badge-berth,0px) var(--instr-berth);margin-inline:auto;
     width:max-content;max-width:calc(100% - var(--instr-berth) - 1rem);
-    font-family:var(--mono);font-size:.52rem;letter-spacing:.26em;color:var(--cyan);z-index:3;text-transform:uppercase;opacity:0;transition:opacity .25s}
+    font-family:var(--mono);font-size:.52rem;letter-spacing:.26em;color:var(--cyan);z-index:3;text-transform:uppercase;opacity:0;transition:opacity .25s;
+    padding-bottom:7px;overflow:hidden}
   .loadchip.on{opacity:1}
+  /* THE LOADER. A hairline beam sweeps along a faint track under the words while a
+     ward loads. Transform only, so it holds 60 fps on a GPU-bound page; the static
+     track makes the sweep read as travel rather than flicker. It now stays up until
+     the buildings are on screen (heat-map-app waits on relief.buildingsReady). */
+  .loadchip::before,.loadchip::after{content:'';position:absolute;left:0;right:0;bottom:0;height:1px;pointer-events:none}
+  .loadchip::before{background:currentColor;opacity:.18}
+  .loadchip::after{background:linear-gradient(90deg,transparent,currentColor 50%,transparent);transform:translateX(-100%)}
+  .loadchip.on::after{animation:loadchip-sweep 1.15s cubic-bezier(.65,0,.35,1) infinite}
+  .loadchip.fail{color:var(--red-ink)}
+  .loadchip.fail::after{animation:none;opacity:0}
+  @keyframes loadchip-sweep{to{transform:translateX(100%)}}
+  @media (prefers-reduced-motion:reduce){.loadchip.on::after{animation:none;transform:none;opacity:.55}}
+
+  /* THE BADGE'S BERTH — the counterpart to --instr-berth, which does the same job on
+     the right. `.synthetic`, `.stamp-slot` and `.loadchip` all centre themselves in
+     the map's free space, so their LEFT edges walk toward a fixed-left badge as the
+     viewport narrows. The banner collided first, at 1280; moving the badge below it
+     then put it over the construction stamp at every width from 600 to 1380 — 88% of
+     the stamp at 600-700 — and only horizontal distance saved it from 1400 up. Two
+     collisions with two different centred overlays is a CLASS of defect, not two
+     instances, so the fix is the one --instr-berth already uses: subtract the badge's
+     column before centring, and every present and future centred overlay is covered.
+
+     142px = the badge's 14px left inset + its measured 118px width + a 10px gap. The
+     width is content-driven ("New city" over "Bengaluru →"), so a markedly longer
+     city name would need this raised; obos-new-city.test.mjs pins the floor at 132 so
+     the derivation cannot quietly stop being true.
+
+     :has() IS ALREADY USED IN THIS CONSOLE — LayerTree.astro's
+     `.tree-row:has(.tree-box:checked)` — so this is precedent rather than a new
+     dependency. Scoped to a REVEALED badge, so a page that never shows one keeps the
+     full width it has always centred in. */
+  /* ON THE INSET ONLY, never in a max-width. `inset-inline` already reserves the
+     badge's column before `margin-inline:auto` centres what is left, so subtracting
+     the berth again from `max-width` counts it twice: the stamp's box collapsed to
+     21px, "UNDER CONSTRUCTION" wrapped to two lines at every width from 600 to 1280,
+     and the taller box grew down into the loadchip's band — covering "Building
+     ward…" at 1200-1280, the one message that only appears while a reader waits. */
+  .map:has(.newcity:not([hidden])){--badge-berth:168px}
+
+  /* THE OTHER CITY. Top-left is free only BELOW the honesty banner, and the first
+     version of this comment was wrong to call the corner free outright. `.synthetic`
+     is centred with width:max-content, so it GROWS LEFTWARDS as the viewport
+     narrows: at top:14px the badge covered it by 11.0x28.9px at 1366 and 54.0x28.9
+     at 1280 — the two widths heat-map-overlap.spec.ts names as the commonest
+     laptops — and by 111.2x27.4 at 1024 touch. The banner's centre moves with the
+     viewport while the badge's left edge does not, so no width makes sitting BESIDE
+     it safe. The badge sits UNDER its band instead: the banner ends 48.9px into
+     .map, so top:56px clears it at every width measured and still leaves .loadchip
+     its own line at 118px. The line being covered was the one whose own comment
+     says it exists to be read.
+     PINNED TO THE FRAME, never floating over the model — the idle orbit turns the
+     scene forever (heat-map-app.ts), so any patch of empty sky fills with buildings
+     at another bearing.
+     z-index 3 is the banner-and-chip tier, chosen rather than copied: the badge has
+     to sit over the map and its labels and nothing else. At 6 it outranked .panel
+     (4) and .top (5) and was kept off the top bar only by .map's overflow, while
+     against the compass — also 6 — DOM order broke the tie and the badge lost.
+     Solid bronze with --bronze-ink on it is the pairing .cta already ships. */
+  /* A TORN STUB, NOT A PAINTED NOTCH. The left edge carries a 3px bite out of the
+     paper — a radial-gradient layer over the flat fill, so the card stays one box
+     for layout, focus and hit-testing while reading as a ticket someone tore off.
+     Paper and near-black are both tokens this console already owns: a third
+     off-white spelled twice would trip obos-layers.test.mjs, and inventing one
+     would put the card outside the palette the rest of the instrument speaks. */
+  .newcity{position:absolute;top:56px;left:40px;z-index:3;display:flex;align-items:center;gap:2px;
+    background:radial-gradient(circle at 0 50%,transparent 0 3px,var(--paper) 3px) left/6px 100% no-repeat,
+      var(--paper);
+    color:var(--bronze-ink);border:0;border-radius:12px;
+    box-shadow:0 6px 18px rgb(0 0 0 /.35)}
+  .newcity[hidden]{display:none}
+  /* 14px on the left, not 11: the notch strip is 6px wide, and at 11 the eyebrow
+     started on the tear itself. */
+  .newcity a{display:block;padding:8px 4px 8px 14px;color:inherit;text-decoration:none}
+  .newcity .nc-eyebrow{display:block;font-family:var(--mono);font-size:.44rem;letter-spacing:.2em;
+    text-transform:uppercase;opacity:.72}
+  .newcity .nc-name{display:block;font-size:.78rem;font-weight:700;letter-spacing:-.01em;margin-top:1px}
+  /* WCAG 2.5.8 TARGET SIZE. `padding:8px 10px 8px 6px` measured 23.7x28.8 at every
+     viewport from 390 to 1600 — under the 24px floor on WIDTH, and the spacing
+     exception does not rescue it because gap:2px puts the link's edge 2px away. It
+     was also the smallest control in this file: .rn-x is 30x30, .svmodal-x 32x32,
+     .entry-go 48. The badge ships `hidden`, so no axe scan will ever walk into it;
+     obos-new-city.test.mjs pins the minimum instead. */
+  .newcity button{background:none;border:0;color:inherit;opacity:.55;cursor:pointer;
+    font-size:.8rem;line-height:1;padding:8px;min-inline-size:28px;display:grid;place-items:center}
+  .newcity button:hover{opacity:1}
+  .newcity a:focus-visible,.newcity button:focus-visible{outline:2px solid var(--bronze-ink);outline-offset:-3px;border-radius:7px}
+  /* THE GAP IS ONLY AFFORDABLE WHERE THERE IS MAP TO SPEND. Every pixel between the
+     sidebar and the card is taken from the centred overlays on the right, and below
+     1366 there is not enough: at left:40px the card sat 3.1px from the banner and
+     2.4px from the stamp at 1280, and the banner overflowed the map's right edge by
+     20.5px. So the wider inset is a wide-screen luxury and the card tucks back to
+     24px — where it measured ~81px clear — rather than crowding two overlays that
+     cannot move.
+     BELOW THE BASE RULE, NOT ABOVE IT. Written above `.newcity{…left:40px}` this
+     block's berth applied and its inset did not: same specificity, and the base rule
+     came later in source, so it simply won. The measurement said `--badge-berth` was
+     152px while `left` stayed 40 — the two halves of one fix disagreeing is what
+     source order looks like from the outside. */
+  /* AND BELOW 1366 IT DOES NOT APPEAR AT ALL. MEASURED 2026-09-17, and it cost a
+     CI failure to learn: at 1024 the 152px berth moved the construction stamp from
+     x473 to x603, while the right-anchored ward clock starts at x653 — an 88x20px
+     overlap, 42% of the stamp. 1280 grazed it by a sub-pixel. heat-map-overlap.spec.ts
+     sweeps both widths and `npm run verify` ends in that suite, so this would have
+     failed the merge rather than reaching anyone.
+
+     The berth cannot simply be dropped here: it is what stops the centred overlays
+     walking left INTO the card, which is how they covered 88% of the stamp at 600-700
+     (see the base rule above). Below 1366 the map cannot seat the card AND the two
+     centred overlays the card displaces — so the card is the thing that gives way, and
+     this geometry returns byte-for-byte to the console that shipped before the badge.
+
+     BOTH HALVES, because `:has(.newcity:not([hidden]))` tests the ATTRIBUTE, not
+     visibility: `display:none` alone would hide the card and go on reserving its
+     column, which is the collision above with nothing left in the gap to justify it. */
+  @media (max-width:1365px){
+    .newcity{display:none}
+    .map:has(.newcity:not([hidden])){--badge-berth:0px}
+  }
+
+  /* PHONES, EITHER ORIENTATION — the same two-branch gate the HUD block above uses,
+     and for the same reason. Written with the `max-width:560px` branch alone, this
+     rule never fired on a landscape phone: at 844x390 the badge kept its desktop box
+     while the HUD moved `.compass` to top:34px;left:8px, and the compass painted
+     OVER it by 38x25.3px — covering the city's name and part of the link's hit area.
+     No other rule in this file spells that gate with one branch.
+     THE BAND ABOVE THE HUD IS 34px AND THE CARD IS 30, so top:2px centres it with
+     2px either side. top:4px was measured first and put the card's bottom edge at
+     exactly 34.0 — flush against the compass, touching but not overlapping, which
+     is one rounding error away from the defect this rule exists to fix. The card is
+     30px rather than the 28.8 the arithmetic assumed because the dismiss target's
+     30px minimum (below) now sets the height.
+     THE EYEBROW IS CLIPPED, NOT REMOVED. `display:none` took "New city" out of the
+     accessible name as well as off the screen — which is precisely what the link's
+     aria-label was added to compensate for, one problem solved twice in opposite
+     directions. Clipped, the name still reads "New city Bengaluru" here, so the
+     visible text is contained in it and no override is needed. */
+  @media (pointer:coarse) and (max-width:560px),
+         (pointer:coarse) and (orientation:landscape) and (max-height:560px){
+    /* NO BERTH ON PHONES. Here the badge sits in its own 34px band ABOVE the HUD,
+       so the overlays already clear it on the vertical — 2.0px to the banner,
+       measured — and the stamp is display:none in this block entirely. A 142px
+       berth on a 390px screen would shove the banner off-centre to buy nothing.
+       Same selector as the declaration, so it wins on source order rather than by
+       an accident of specificity. */
+    .map:has(.newcity:not([hidden])){--badge-berth:0px}
+    .newcity{top:2px;left:10px;border-radius:8px}
+    .newcity .nc-eyebrow{position:absolute;width:1px;height:1px;margin:-1px;padding:0;
+      overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+    .newcity .nc-name{font-size:.66rem}
+    .newcity a{padding:6px 3px 6px 9px}
+    /* 30px to match .rn-x, the next smallest control a phone offers */
+    .newcity button{min-inline-size:30px;min-block-size:30px}
+  }
 
   /* Borderless glass. The 1px --line stroke was the last piece of the "grid of
      boxes" read, and it also fought the legend directly beneath it in the same
@@ -1808,6 +2100,11 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
   /* Own line: the tier is a verdict, not a prefix to the sentence beneath it.
      Inline it ran straight into the text — "Vulnerable24 pts reachable". */
   .score .t .tier{display:block;font-family:var(--mono);font-size:.5rem;letter-spacing:.16em;text-transform:uppercase;margin-bottom:3px}
+  /* BETA, in the bronze this instrument already spends on "not decision-grade"
+     (.conf.indicative, .subs b.soft). The score is measured but socioVuln ships
+     unmeasured, so the heading says so before the number does. Lives here, not in
+     InterventionPane.astro, for that file's documented no-<style> reason. */
+  .score .t b .beta{margin-left:7px;font-family:var(--mono);font-weight:400;font-size:.44rem;letter-spacing:.14em;text-transform:uppercase;color:var(--bronze);background:rgb(176 141 87 /.14);border-radius:5px;padding:2px 5px;vertical-align:middle}
   .scoreconf{margin:0 18px 16px}
   .conf[hidden]{display:none}
   /* the pillar the missing indicator sits in, in the colour this instrument
@@ -1909,7 +2206,7 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
      empty bin painting a stub the same size as a real one. An empty bin is now
      genuinely empty and the baseline below is what says the bin exists. */
   .histo i{flex:1;background:var(--cyan);border-radius:2px 2px 0 0;opacity:.85;transition:height .4s}
-  .cta{margin:12px 16px 16px;display:block;width:calc(100% - 32px);background:var(--bronze);color:#0d0a05;border:0;border-radius:8px;padding:9px;font-family:var(--sans);font-size:.7rem;font-weight:600;letter-spacing:.005em;cursor:pointer}
+  .cta{margin:12px 16px 16px;display:block;width:calc(100% - 32px);background:var(--bronze);color:var(--bronze-ink);border:0;border-radius:8px;padding:9px;font-family:var(--sans);font-size:.7rem;font-weight:600;letter-spacing:.005em;cursor:pointer}
 
   /* position:relative + z-index so the panel sits ABOVE maplibre's attribution
      control, which is z-index 1 and anchored to the same corner. As `static` the

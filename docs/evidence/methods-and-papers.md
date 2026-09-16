@@ -202,9 +202,12 @@ of these changed the shipped p75 method — they are context/benchmarking)*
   third "negative" pathway was deleted as unsupported by the citation.
 - **Li, Lu, Fu, Sun, Pan, Han, Guo & Li (2022)**, *Frontiers in Environmental Science*, DOI
   [10.3389/fenvs.2022.1073914](https://doi.org/10.3389/fenvs.2022.1073914) — tropical-megacity park cooling
-  incl. Kolkata: threshold-value-of-effect 0.77 ha, cooling reach 420 m, daytime max UCI 8.07 °C (Kolkata)
-  vs 4.83 °C (Bangkok — a *different* city). **Correction on record:** previously miscited as "Mitra et al.
-  2022" with a false "4.83–8.07 °C Kolkata band"; corrected 2026-08-08.
+  incl. Kolkata: threshold-value-of-effect (TVoE) ≈ 0.77, cooling reach 420 m, daytime max UCI 8.07 °C
+  (Kolkata) vs 4.83 °C (Bangkok — a *different* city). **Correction on record:** previously miscited as
+  "Mitra et al. 2022" with a false "4.83–8.07 °C Kolkata band"; corrected 2026-08-08. **Second correction,
+  2026-09-14:** TVoE is the slope of `UCI = a·ln(Area) + b` where that slope equals one, so TVoE = a — a
+  regression slope, unit-independent, not a park area; "0.77 ha" was never a measured Kolkata park size.
+  See `heat-map-intervention-model.md` §3.3.
 - **Schwaab, Meier, Mussetti, Seneviratne, Bürgi & Davin (2021)**, *Nature Communications* 12:6763 — LST
   cooling by urban trees vs treeless green space across **293 European cities**; trees cool roughly **2–4×**
   more than grass-only green, with a strong north–south gradient. **Engine use — this one changed the
@@ -289,6 +292,43 @@ our agreement statistics without the benchmark beside them.
 benchmark, and say why — 10 m products carry ~25 m effective resolution, and a ward of 3-8 m street trees is
 the hardest case for them. That framing survives a reviewer who knows the literature; "our data agrees" does
 not.
+
+---
+
+## Per-building height products — the Bangalore literature (gathered 2026-09-09/10)
+
+Assembled because Bangalore is the first city where we have **two** independent per-building height
+estimates, and we needed to know what either is worth. The short answer: **no per-building height product
+has published Indian validation**, so every figure below is transferred from elsewhere.
+
+- **UT-GLOBUS** — Kamath, Niyogi et al., *Scientific Data* **11:617** (2024), the source of our
+  cross-check layer. Machine-learned per-building height, area, volume and surface area, published on
+  Zenodo under CC BY 4.0. **Validation is US LiDAR only, RMSE 9.1 m per building.** Its predictors
+  include **WSF-3D, which has no coverage over this region** — the likely explanation for the flat
+  distribution we measured (122 distinct integer values city-wide, mean 6.87 m).
+- **Google Open Buildings 2.5D Temporal v1** — the primary height source, and candid in its own
+  documentation: the **1.5 m MAE "was only evaluated in North America, Europe and Japan… heights
+  prediction might not be as good in the Global South."** The nearest independent checks
+  (Nairobi, Kathmandu, Quito) measure **1.2–3.34 m MAE**, which still makes it the best-validated option
+  available to us.
+- **GlobalBuildingAtlas — the Indian evaluation that disqualifies it on accuracy as well as licence.**
+  A published assessment **including Bengaluru** measures **ME −30.3 m, MAE 30.3 m, RMSE 41.8 m**,
+  underestimating by roughly 6 m for every 10 m of true height. *(Figures via search extraction —
+  **(verify)** against the paper before publishing.)*
+- **GHS-OBAT** — self-reported validation **MAE 2.88 m, r = 0.29**. Recorded here because the r value is
+  the giveaway: it is a 100 m raster redistributed onto building polygons, so neighbouring buildings
+  inherit identical heights. **A per-building schema is not a per-building measurement.**
+
+**The methodological point worth carrying beyond this city:** two of our three rejected height products
+were rejected for the *same underlying reason* — they present GHS-BUILT-H at 100 m through a
+per-building interface. When a product advertises billions of per-building heights under an open licence,
+the first question is which raster it was derived from.
+
+**And a statistics point that cost us time.** Our own Indiranagar cross-check returned r = +0.176 and
+looked like a failure. It is not — the neighbourhood is uniformly 5–8 m, so there is almost no variance
+to correlate and the coefficient measures noise. **Correlation is the wrong summary for a low-variance
+population; MAE is the honest one.** Written up in
+[known-limitations.md §8](known-limitations.md).
 
 ---
 

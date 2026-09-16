@@ -84,7 +84,7 @@ export interface LayoutStore {
  * blocked raises a SecurityError at the property itself, so a `typeof` guard
  * outside a try is not a guard at all.
  */
-function defaultStore(): LayoutStore | null {
+export function defaultStore(): LayoutStore | null {
   try {
     return globalThis.localStorage ?? null;
   } catch {

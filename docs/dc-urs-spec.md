@@ -210,10 +210,10 @@ DC-URS replaces the Green Score, so the sliders must still move it. One score, e
 
 | Indicator | Under intervention | Note |
 |---|---|---|
-| `FVC` | **moves** | trees, parks → vegetation fraction from the existing model |
-| `CanopyFrac` | **moves** | tree corridors add canopy |
+| `FVC` | **moves** | trees, facades → vegetation fraction from the existing model (parks too, when exposed) |
+| `CanopyFrac` | **moves, but inert** | tree corridors add canopy; the v1 score does not read `CanopyFrac`, and a unit test in `dc-urs.ts` pins that it cannot |
 | `CRI` | **moves** | cool roofs → albedo, already modelled |
-| `TRA` | **moves** | new parks shorten distance to refuge |
+| `TRA` | **parks only** | new parks shorten distance to refuge — and no parks control is rendered today, so `TRA` does not move on the shipped page |
 | `LST_day/night`, `UHI_Δ` | **moves** | from the thermal model, carrying its measured error |
 | `VSI` | **frozen** | see below |
 | `ρ_pop`, `FAR`, `HVI_socio` | **inert** | no intervention changes them |
@@ -352,6 +352,59 @@ Phase 0 is independent of all data acquisition and can start immediately.
 | WorldPop and Census 2011 disagree on population | They will — different vintages and methods. Use WorldPop, record the gap |
 | Score moves a lot vs the Green Score | Expected and pre-agreed. Document the delta per ward |
 | A pillar goes to exactly zero | The `[0.001, 1.0]` clamp catches it; log it, because it usually means missing data rather than a real zero |
+
+---
+
+## Bengaluru (2026-09)
+
+**Same engine, Kolkata's anchors, its own inputs.** Indiranagar, MG Road and Whitefield (2.8 km boxes) are
+scored by the unchanged `src/scripts/climate-engine/dc-urs.ts` against the §4 anchors, from
+`data/bangalore/dc-urs-inputs.json`, served byte-identical as
+`public/heat-map/data/bengaluru-dc-urs-inputs.json`. It is built by `scripts/fetch-bangalore.py --layer
+dcurs-static` and `--layer dcurs-lst`, then `scripts/export-bangalore-obos.py`, with the rules in
+`scripts/_dcurs_blr.py`. Design:
+[superpowers/specs/2026-09-14-bengaluru-resilience-score-design.md](superpowers/specs/2026-09-14-bengaluru-resilience-score-design.md).
+
+**What differs from Kolkata's inputs:**
+
+- **Thermal:** per-ward ECOSTRESS LST from the scenes clear in all three wards at once (46 day, 49 night).
+- **Heat island:** the median of per-scene (ward − rural) differences, with an **effective** rural baseline
+  (`ruralBaseC` = `lstDayC` − that median) so the engine reproduces it. It is negative by day in all three
+  wards, so the UHI term clamps to 0.
+- **Population:** WorldPop R2025A constrained 100 m, summed over exactly the box and labelled `modelled`.
+- **`socioVuln`:** unmeasured, held at its best case (up to 8.75 points), and disclosed by the chip.
+- **`fvc` / `albedo`:** copied from the served surface raster (`surface-meta.json`), so the map and the
+  score read one measurement.
+
+**Sliders.** A slider is a **share of the ward**, not a fixed package of work, so the trees, cool-roof and
+facade gains (`fvc`, `canopyFrac`, `albedo`) are the same over a 2.8 km ward as over a 1.4 km one. That is
+what the rest of the tool already says: `applyInterventions` greens a fraction of the ward's **own**
+corridor cells and shifts the albedo of a fraction of its **own** roof area, and `computeCost` prices its
+**own** corridor length (MG Road's 198.9 km against Ballygunge's 51.3 km). Parks are the exception — at
+most ten patches of a fixed metre radius — so the **parks** contribution to `fvc`, `canopyFrac` and
+`distCoolM` alone scales by `(1400 / sizeM)²` (`REFERENCE_WARD_M`, `areaScale` in
+`src/scripts/climate-engine/dc-urs-scenario.ts`), a quarter for a 2.8 km ward. Kolkata's 1.4 km wards are
+unaffected either way: the factor is exactly 1.
+
+Two qualifications on that exception, both measured. **It is dormant:** no pocket-parks control is
+rendered — the console draws `ivTrees`, `ivRoof` and `ivFacades` only — and Compare's reader pins a legacy
+`?parks=` to 0, so `iv.parks` is always 0 and `areaScale` currently scales nothing that reaches a score. It
+is kept for the day that control returns. **And the quarter holds only above the floor:** `distCoolM` is
+floored at 0, and every served ward sits at 27.3–93.3 m, so the 1.4 km ward exhausts its refuge distance
+first and the ratio climbs back toward 1 — at MG Road's 49.5 m the 2.8 km cut is 0.25 of the 1.4 km cut at
+`parks = 2`, 0.556 at 5 and 1.000 at 10. The vegetation gains have no floor and stay a clean quarter
+(`canopyFrac` among them, though v1 does not read it). The LST change is not rescaled either: `scenarioLst` keeps
+the measured LST and adds the heat model's plan-minus-no-plan difference, both solved under the same
+forcing. Detail in
+[evidence/known-limitations.md](evidence/known-limitations.md) §14.
+
+**Gates.** `export-bangalore-obos.py --check` fails a stale inputs file (CI: `npm run check:bangalore`);
+`scripts/verify-served-data.mjs` fails a stale served copy; and
+`tests/e2e/heat-map-bengaluru-resilience.spec.ts` pins MG Road's rendered score to the engine's value.
+
+**Limitations.** [evidence/known-limitations.md](evidence/known-limitations.md) §14 holds the clamp report,
+the population evidence and the cross-city confounds. The §10 row "WorldPop and Census 2011 disagree on
+population" said to use WorldPop and record the gap; Bengaluru did exactly that, and §14 records it.
 
 ---
 

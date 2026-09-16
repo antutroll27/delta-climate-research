@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { allWards } from '../../src/data/cities.ts';
 import { WARD_MAP, wardLatLon, formatLatLon } from '../../src/data/wards.ts';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -76,6 +77,36 @@ test('five decimals, and the hemisphere is stated', () => {
   assert.doesNotMatch(formatLatLon(22.528123456, 88.365987654), /\d\.\d{6}/,
     'a sixth decimal claims 11 cm of siting accuracy that a traced footprint '
     + 'centroid does not have, however exact the arithmetic is');
+});
+
+/* THE WARD HEADER'S COORDINATE WAS STORED, as `coord` on every registry row — a
+   pre-formatted second copy of `lat`/`lon` in the file whose entire purpose is
+   being the single source. It is derived now, and these are the six strings that
+   shipped, byte for byte. They are THREE decimals and a middot, not this
+   function's default five, which is why `decimals` became a parameter: removing
+   a duplicate must not move text a visitor can see. */
+test('deriving the ward coordinate labels reproduces the six shipped strings', async () => {
+  const shipped = {
+    ballygunge: '22.528° N · 88.366° E',
+    baruipur: '22.365° N · 88.432° E',
+    barrackpore: '22.762° N · 88.371° E',
+    indiranagar: '12.978° N · 77.641° E',
+    'mg-road': '12.976° N · 77.603° E',
+    whitefield: '12.970° N · 77.750° E',
+  };
+  const wards = allWards();
+  assert.equal(wards.length, 6, 'every registry ward must be covered, published or not');
+  for (const w of wards) {
+    assert.equal(formatLatLon(w.lat, w.lon, ' · ', 3), shipped[w.id],
+      `${w.id}: the header coordinate moved when the stored copy went`);
+  }
+
+  /* And the reader must keep asking for that format. The check above compares
+     values, so it cannot see a 3 changed to a 5 at the call site. */
+  const app = await readFile(
+    join(ROOT, 'src/scripts/climate-engine/heat-map-app.ts'), 'utf8');
+  assert.match(app, /formatLatLon\(w\.lat, w\.lon, ' · ', 3\)/,
+    'the ward header must derive its coordinate at the three decimals it shipped at');
 });
 
 test('the card asks for the coordinate row it now populates', async () => {

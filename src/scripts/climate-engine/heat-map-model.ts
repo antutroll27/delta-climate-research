@@ -9,10 +9,15 @@
  */
 // .ts extension: keeps this module runnable under `node --experimental-strip-types`
 // for assertInterventionLogic() (node doesn't do extensionless resolution).
-import { CANONICAL_GRID_N, DEFAULT_PARAMS, STORE_NIGHT, type ClimateConstants, type Costs, type SimParams, type SimLayers } from './types.ts';
+import { requireGrid, DEFAULT_PARAMS, STORE_NIGHT, type AirNormals, type ClimateConstants, type Costs, type SimParams, type SimLayers } from './types.ts';
 import { skyTemperatureC, dewpointC, shiftAirPreservingVapour } from './sky.ts';
 
-export const SIM_N = CANONICAL_GRID_N;         // grid side (ward 1400 m → dx ≈ 7.29 m/cell)
+/* THE GRID IS PER-WARD, so this module has no N of its own. One module-level
+   constant cannot describe two ward sizes: 192 cells over Bengaluru's 2800 m
+   ward would be 14.58 m per cell, a different physical quantity wearing the
+   same name. Each function below takes its grid from the WARD it was handed
+   (`requireGrid(d.sizeM).n`) or, where it only strides an array, from the
+   layers it is indexing — so the stride and the data cannot disagree. */
 /**
  * Colour-ramp bounds, °C. Kept as the LEGACY FIXED PAIR for anything that still
  * wants a constant; `rampBounds()` below is what the map uses.
@@ -76,8 +81,8 @@ export const GREEN_REF = 0.45, DT_REF = 2.5, E_REF = 0.15;
  *   COST           four figures in RUPEES     → REGISTRY.<country>.costs
  *   PATH_DELTA     all-India warming deltas   → REGISTRY.<country>.pathway, resolved
  *                                               against PATHWAYS in resolve.ts
- *   FALLBACK_TAIR  32 °C, Kolkata climatology → REGISTRY.<c>.cities.<y>.fallbackTairC
- *   PARK_R_M       50 m, Kolkata TVoE scale   → REGISTRY.<c>.cities.<y>.parkRadiusM
+ *   FALLBACK_TAIR  32 °C, Kolkata climatology → REGISTRY.<c>.cities.<y>.airNormals (monthly)
+ *   PARK_R_M       50 m, pocket-park default  → REGISTRY.<c>.cities.<y>.parkRadiusM
  *
  * NOT ONE OF THEM WAS A FACT ABOUT HEAT TRANSFER. Two belong to a country and two
  * to a city, and held here a second city could not be added without being wrong:
@@ -101,9 +106,11 @@ export const GREEN_REF = 0.45, DT_REF = 2.5, E_REF = 0.15;
 
 const ALB_BASE = 0.15, ALB_COOL = 0.60;       // §3.2 dark vs aged-cool-roof albedo (LBNL)
 const TREE_CAP = 0.7;                         // §3.1 crown-closure cap
-/* §3.3's park blob radius is now `applyInterventions`' `parkRadiusM` parameter —
-   it was 50 m, measured as KOLKATA's tree-void-effect scale, and a city's measured
-   length is not a property of the operator that applies it. See the note above. */
+/* §3.3's park blob radius is now `applyInterventions`' `parkRadiusM` parameter — a
+   CITY's value, not a property of the operator that applies it. It is a design
+   default (50 m, a ~0.8 ha pocket park), NOT a measurement: the Li et al. 2022
+   "efficient park size" it was once derived from is a regression slope whose value
+   does not depend on the area unit. See docs/evidence/park-size-tvoe-preregistration.md. */
 /**
  * Neighbourhood-scale anthropogenic-heat reduction from vertical greening.
  * Was 0.30 (uncited). Gunawardena & Steemers 2023 (Buildings & Cities,
@@ -182,7 +189,14 @@ export interface WardData { center: [number, number]; sizeM: number; count: numb
 export interface RoadsData { ways: { w: number; p: number[] }[]; }
 /** {ward}-water.json — OSM polygons in the roads contract's frame. `k` is the
  * broad class ('water' | 'river' | 'pool'); `p` is flat [x,y,…] ward metres. */
-export interface WaterData { polys: { k: string; p: number[] }[]; }
+export interface WaterData {
+  polys: { k: string; p: number[] }[];
+  /** Open (not culverted) drain/stream/river centrelines, flat [x,y,…] ward metres.
+   *  Bengaluru only. DRAWN as illustrative ribbons; never rasterised into SimLayers. */
+  lines?: { k: string; p: number[] }[];
+  /** Side of the box the artefact was clipped to, metres. Absent means Kolkata's 1520. */
+  fieldM?: number;
+}
 export interface Interventions { trees: number; roof: number; parks: number; facades: number; }
 export interface Ambient {
   tAir: number; rh: number; wind: number; cloud: number; feels: number;
@@ -203,6 +217,43 @@ export interface Spatial {
   corridorSorted: Int32Array; corridorKm: number; parkCenters: [number, number][];
   roofM2: number; facadeM2: number; cellArea: number; cellM: number;
 }
+/** The moment a scenario describes, in the ward's own time zone. */
+export interface ScenarioClock {
+  /** 1–12 */
+  readonly month: number;
+  /** 0 ≤ hour < 24, fractional; out-of-range values wrap */
+  readonly hour: number;
+}
+
+/** When the diurnal fallback reaches its daily minimum and maximum, local hours. */
+export const T_MIN_HOUR = 6;
+export const T_MAX_HOUR = 14;
+
+/**
+ * Air temperature, °C, from a city's monthly normals at a month and hour.
+ *
+ * THE SHAPE IS AN ASSUMPTION, THE ENDPOINTS ARE NOT. The station tables give only
+ * each month's mean daily maximum and minimum. The minimum is placed at 06:00 and
+ * the maximum at 14:00, joined by half-cosines: the textbook diurnal cycle, stated
+ * here rather than passed off as observed. Used only when there is no live reading.
+ */
+export function fallbackTair(normals: AirNormals, clock: ScenarioClock): number {
+  /* A non-finite month or hour would index no row and return NaN, which then flows
+     into every cell of the solve. Refused loudly, as an unknown pathway is. */
+  if (!Number.isFinite(clock.month) || !Number.isFinite(clock.hour)) {
+    throw new RangeError(`heat-map-model: fallbackTair needs a finite month and hour, got ${clock.month} / ${clock.hour}`);
+  }
+  const m = Math.min(12, Math.max(1, Math.round(clock.month))) - 1;
+  const lo = normals.minC[m], hi = normals.maxC[m];
+  const h = ((clock.hour % 24) + 24) % 24;
+  if (h >= T_MIN_HOUR && h < T_MAX_HOUR) {
+    const t = (h - T_MIN_HOUR) / (T_MAX_HOUR - T_MIN_HOUR);
+    return lo + (hi - lo) * (1 - Math.cos(Math.PI * t)) / 2;
+  }
+  const t = ((h - T_MAX_HOUR + 24) % 24) / (24 - (T_MAX_HOUR - T_MIN_HOUR));
+  return hi - (hi - lo) * (1 - Math.cos(Math.PI * t)) / 2;
+}
+
 export interface ScenarioState {
   live: Ambient | null; phase: 'peak' | 'night'; path: string; iv: Interventions;
   /**
@@ -215,6 +266,14 @@ export interface ScenarioState {
    * city's name and never say so. Absent, it is a compile error at the call site.
    */
   climate: ClimateConstants;
+  /**
+   * The moment the scenario describes, in the ward's own time zone.
+   *
+   * REQUIRED, for the reason `climate` is: the fallback air temperature depends
+   * on month and hour, and a default would silently model a moment nobody chose.
+   * Read only when `live` is null.
+   */
+  clock: ScenarioClock;
   /* HEATWAVE IS A FORCING OVERRIDE, NOT A THIRD PHASE — the same shape `sunNow`
      takes, and for the same reason its comment gives: every consumer downstream
      (ACCURACY, bandLabel, the DC-URS split, the Compare link, the phase label)
@@ -256,6 +315,48 @@ export function eqMean(layers: SimLayers, p: SimParams): number {
   let s = 0; const N = layers.albedo.length;
   for (let i = 0; i < N; i++) s += (p.S * (1 - layers.albedo[i]) * p.sun + p.Q * layers.built[i] - p.L * layers.veg[i] + p.store + pull) / k;
   return s / N;
+}
+
+/**
+ * The three layer means, which is ALL of a grid that `eqMean` can see.
+ *
+ * `eqCell` is affine in its three arguments: `albedo` enters once through
+ * `S(1−a)·sun`, `built` once through `Q·b`, `veg` once through `−L·v`, and every
+ * other term (`store`, `pull`, the divisor `k`) is a constant of the params. The
+ * mean of an affine function is that function of the means, so a 147,456-cell
+ * grid and these three numbers answer `eqMean` identically. `water` is absent
+ * because the surface balance never reads it.
+ */
+export interface LayerMeans {
+  readonly albedo: number;
+  readonly veg: number;
+  readonly built: number;
+}
+
+/** The layer means: one pass, and the only O(N) step a scenario comparison needs. */
+export function layerMeans(layers: SimLayers): LayerMeans {
+  let a = 0, v = 0, b = 0; const N = layers.albedo.length;
+  for (let i = 0; i < N; i++) { a += layers.albedo[i]; v += layers.veg[i]; b += layers.built[i]; }
+  return { albedo: a / N, veg: v / N, built: b / N };
+}
+
+/**
+ * `eqMean` in constant time, from means that were taken once.
+ *
+ * WHY IT EXISTS. The resilience score compares two solved sides on every stats
+ * tick, and the tick rebuilt both grids to do it — `applyInterventions` copying
+ * two Float32Arrays, then two full-grid passes — 720–1500 ms apart by tier, for
+ * three numbers that only move when the ward or a slider does. The scenario now
+ * caches the means and calls this instead; `eqMean`'s loop stays for the callers
+ * that hold a grid and want it read once.
+ *
+ * THE TWO MUST NOT DRIFT. `tests/unit/dc-urs-logic.test.mjs` compares them
+ * directly over the same grid and forcing, because a divergence here would move
+ * the score with nothing that mentions the score failing.
+ */
+export function eqMeanFromMeans(m: LayerMeans, p: SimParams): number {
+  const k = p.kRad + p.h * p.wind, pull = p.kRad * p.tSky + p.h * p.wind * p.tAir;
+  return (p.S * (1 - m.albedo) * p.sun + p.Q * m.built - p.L * m.veg + p.store + pull) / k;
 }
 
 /**
@@ -340,7 +441,10 @@ export function heatIndexC(T: number, RH: number): number {
  *  area, corridor length). Currency-free — the unit prices arrive with the scope.
  *  Pure array math over the rasterised base. */
 export function buildSpatial(d: WardData, base: SimLayers, roads: RoadsData | null): Spatial {
-  const n = SIM_N, half = d.sizeM / 2, cellM = d.sizeM / n, cellArea = cellM * cellM;
+  /* The ward's own admitted pair, derived from the SAME `d.sizeM` that
+     `rasterWardBase` derived `base` from — so this stride cannot disagree with
+     the layers it indexes, whichever city the ward belongs to. */
+  const n = requireGrid(d.sizeM).n, half = d.sizeM / 2, cellM = d.sizeM / n, cellArea = cellM * cellM;
   const toCell = (mx: number, mz: number): [number, number] =>
     [Math.floor((mx + half) / d.sizeM * n), n - 1 - Math.floor((half - mz) / d.sizeM * n)]; // → sim (x,y), matches rasterBase Y-flip
   const corridor = new Uint8Array(n * n); let km = 0;
@@ -388,12 +492,19 @@ export function buildSpatial(d: WardData, base: SimLayers, roads: RoadsData | nu
  * Apply the four sliders onto copies of the base layers (spec §3).
  *
  * `parkRadiusM` is the CITY's measured cooling-blob scale, passed in rather than
- * held here — see the constants note above. It reaches the raster as
- * `round(parkRadiusM / cellM)` cells, so the same metres describe the same ground
- * whatever the grid resolution.
+ * held here. It reaches the raster as `round(parkRadiusM / cellM)` cells, so the
+ * same metres describe the same ground whatever the grid resolution.
  */
 export function applyInterventions(base: SimLayers, iv: Interventions, sp: Spatial | null, parkRadiusM: number): SimLayers {
-  const N2 = SIM_N * SIM_N, albedo = base.albedo.slice(), veg = base.veg.slice();
+  /* THE STRIDE COMES FROM THE LAYERS THEMSELVES — not from a caller, and no
+     longer from a constant. The park patch below indexes `y * n + x`, so an `n`
+     off by one row would read the wrong cells and still return a plausible
+     field: silent, and exactly the failure an admitted PAIR exists to prevent.
+     A parameter can be passed wrong; the length of the array being written
+     cannot. This is also why SIM_N is gone: a 2800 m ward solves 384 cells. */
+  const N2 = base.albedo.length, n = Math.round(Math.sqrt(N2));
+  if (n * n !== N2) throw new RangeError(`Heat layers of ${N2} cells are not a square grid.`);
+  const albedo = base.albedo.slice(), veg = base.veg.slice();
   const dAlb = ALB_COOL - ALB_BASE;
   if (iv.roof > 0) for (let i = 0; i < N2; i++) { const b = base.built[i]; if (b > 0) albedo[i] = Math.min(0.85, albedo[i] + b * (iv.roof / 100) * dAlb); }
   // Facades act ONLY through the anthropogenic-heat term (FACADE_Q, applied in
@@ -409,9 +520,9 @@ export function applyInterventions(base: SimLayers, iv: Interventions, sp: Spati
     const patchCount = fullParks + (finalFraction > 0 ? 1 : 0);
     for (let kk = 0; kk < patchCount; kk++) { const c = sp.parkCenters[kk];
       const coverage = kk < fullParks ? 1 : finalFraction;
-      for (let y = Math.max(0, c[1] - r); y <= Math.min(SIM_N - 1, c[1] + r); y++) for (let x = Math.max(0, c[0] - r); x <= Math.min(SIM_N - 1, c[0] + r); x++) {
+      for (let y = Math.max(0, c[1] - r); y <= Math.min(n - 1, c[1] + r); y++) for (let x = Math.max(0, c[0] - r); x <= Math.min(n - 1, c[0] + r); x++) {
         const dx = x - c[0], dy = y - c[1]; if (dx * dx + dy * dy <= r2) {
-          const i = y * SIM_N + x;
+          const i = y * n + x;
           // The final patch is blended by requested area fraction. This keeps a
           // 0.1% control from rounding up to a whole 0.785 ha intervention.
           veg[i] = Math.max(veg[i], veg[i] + (0.90 - veg[i]) * coverage);
@@ -424,7 +535,9 @@ export function applyInterventions(base: SimLayers, iv: Interventions, sp: Spati
 
 /** Weighted-area greening ratio (BAF/Seattle-consolidated weights, §5 eq 9). */
 export function computeGreenG(layers: SimLayers): number {
-  const N2 = SIM_N * SIM_N; let s = 0;
+  /* Every cell of whatever grid these layers are on. This only SUMS — it never
+     strides — so the array length is the whole contract. */
+  const N2 = layers.albedo.length; let s = 0;
   for (let i = 0; i < N2; i++) {
     const b = layers.built[i], v = layers.veg[i], w = layers.water[i];
     const coolRoof = b > 0 ? Math.max(0, Math.min(1, (layers.albedo[i] - 0.30) / 0.30)) : 0;
@@ -519,7 +632,7 @@ function pathwayDelta(table: Readonly<Record<string, number>>, path: string): nu
 
 /** Scenario forcing → SimParams (§2 D retune, §3.4 facade Q cut, §4 diurnal/pathway). */
 export function currentParams(s: ScenarioState): SimParams {
-  const L = s.live, obsTair = L ? L.tAir : s.climate.fallbackTairC, obsRh = L ? L.rh : 60;
+  const L = s.live, obsTair = L ? L.tAir : fallbackTair(s.climate.airNormals, s.clock), obsRh = L ? L.rh : 60;
   /* THE PATHWAY STAYS ADDITIVE ON TOP OF THE OVERRIDE. Replacing the whole
      expression would make the warming-pathway control silently dead whenever
      heatwave was on — a button that does nothing and says nothing, which is the
@@ -615,7 +728,10 @@ export function greenScore(greenG: number, coolingC: number, cost: number): numb
  *  "import('./heat-map-model.ts').then(m=>m.assertInterventionLogic())" */
 export function assertInterventionLogic(): void {
   const a = (ok: boolean, msg: string) => { if (!ok) throw new Error(`heat-map-model: ${msg}`); };
-  const N2 = SIM_N * SIM_N;
+  /* Kolkata's admitted pair, named rather than assumed: the park centres below
+     ([48,48], [140,140]) and the 7.29 m `cellM` in `sp` are 1400 m / 192 cells
+     facts, so this self-check states which ward size it is imitating. */
+  const N2 = requireGrid(1400).n ** 2;
   const mk = (): SimLayers => ({ albedo: new Float32Array(N2), veg: new Float32Array(N2), built: new Float32Array(N2), water: new Float32Array(N2) });
   // realistic morphology: alternating building / bare-street columns (streets
   // start low-veg like real roads, so trees have somewhere to green)
@@ -636,7 +752,10 @@ export function assertInterventionLogic(): void {
      that the physics READS them, which the first block of assertions proves. */
   const climate: ClimateConstants = {
     pathDelta: { '2025': 0, ssp245: 1.25, ssp585: 4.1 },
-    fallbackTairC: 32,
+    /* Flat by month and hour, so the physical bars below see the 32 °C they were
+       derived against whatever clock a case carries. */
+    airNormals: { station: 'fixture', period: 'fixture', source: 'fixture', measured: false,
+      maxC: Array(12).fill(32), minC: Array(12).fill(32) },
     parkRadiusM: 50,
     /* `XTS` IS ISO 4217'S RESERVED TEST CODE, and it is here rather than the real
        code for the same reason the note above gives about the numbers: this is a
@@ -647,7 +766,8 @@ export function assertInterventionLogic(): void {
        is how a tripwire stops meaning anything. */
     costs: { currency: 'XTS', roofM2: 150, tree: 1500, park: 15_000_000, facadeM2: 9500 },
   };
-  const p: SimParams = currentParams({ live: null, phase: 'peak', path: '2025', climate, iv: { trees: 0, roof: 0, parks: 0, facades: 0 } });
+  const CLOCK = { month: 4, hour: 13 };
+  const p: SimParams = currentParams({ live: null, phase: 'peak', path: '2025', climate, iv: { trees: 0, roof: 0, parks: 0, facades: 0 }, clock: CLOCK });
 
   /* ── the scope constants are READ, never remembered ───────────────────────
      The migration's whole risk is a constant that appears to move and does not —
@@ -656,17 +776,19 @@ export function assertInterventionLogic(): void {
      scope object, and a scope naming a pathway that does not exist must be refused
      rather than quietly warmed by zero. */
   const zeroIv = { trees: 0, roof: 0, parks: 0, facades: 0 };
-  const gulf: ClimateConstants = { pathDelta: {}, fallbackTairC: 40, parkRadiusM: 50, costs: null };
+  const gulf: ClimateConstants = { pathDelta: {}, parkRadiusM: 50, costs: null,
+    airNormals: { station: 'fixture', period: 'fixture', source: 'fixture', measured: false,
+      maxC: Array(12).fill(40), minC: Array(12).fill(40) } };
   const noFeed = (c: ClimateConstants) =>
-    currentParams({ live: null, phase: 'peak', path: '2025', climate: c, iv: zeroIv }).tAir;
+    currentParams({ live: null, phase: 'peak', path: '2025', climate: c, iv: zeroIv, clock: CLOCK }).tAir;
   a(noFeed(climate) === 32 && noFeed(gulf) === 40,
     `the fallback air temperature must come from the scope (got ${noFeed(climate)}, ${noFeed(gulf)})`);
   /* An empty table is a DECLARED absence: no adopted projection, so no warming,
      whatever the control says. It must not throw — Dubai has to be reachable. */
-  a(currentParams({ live: null, phase: 'peak', path: 'ssp585', climate: gulf, iv: zeroIv }).tAir === 40,
+  a(currentParams({ live: null, phase: 'peak', path: 'ssp585', climate: gulf, iv: zeroIv, clock: CLOCK }).tAir === 40,
     'a scope with no pathway must contribute zero warming, not throw');
   let refused = false;
-  try { currentParams({ live: null, phase: 'peak', path: 'ssp858', climate, iv: zeroIv }); }
+  try { currentParams({ live: null, phase: 'peak', path: 'ssp858', climate, iv: zeroIv, clock: CLOCK }); }
   catch { refused = true; }
   a(refused, 'an unknown pathway against a POPULATED table must throw, not warm by zero');
 
@@ -677,8 +799,8 @@ export function assertInterventionLogic(): void {
   const iv0 = { trees: 0, roof: 0, parks: 0, facades: 0 };
   const live = { tAir: 30, rh: 96, wind: 3, cloud: 20, feels: 40 } as Ambient;
   const P99 = 38.4;
-  const plain = currentParams({ live, phase: 'peak', path: '2025', climate, iv: iv0 });
-  const heat = currentParams({ live, phase: 'peak', path: '2025', climate, iv: iv0, heatTairC: P99 });
+  const plain = currentParams({ live, phase: 'peak', path: '2025', climate, iv: iv0, clock: CLOCK });
+  const heat = currentParams({ live, phase: 'peak', path: '2025', climate, iv: iv0, heatTairC: P99, clock: CLOCK });
   a(Math.abs(heat.tAir - P99) < 1e-9, `heatwave tAir ${heat.tAir}, expected ${P99}`);
   a(heat.sun === plain.sun && heat.wind === plain.wind && heat.Q === plain.Q,
     'heatwave changed sun, wind or Q — it may only change the air');
@@ -687,11 +809,11 @@ export function assertInterventionLogic(): void {
   // drier air evaporates harder — L must rise, never fall.
   a(heat.L > plain.L, 'heatwave should dry the air and raise the latent term');
   // the pathway composes on top rather than being replaced by the override
-  const hot585 = currentParams({ live, phase: 'peak', path: 'ssp585', climate, iv: iv0, heatTairC: P99 });
+  const hot585 = currentParams({ live, phase: 'peak', path: 'ssp585', climate, iv: iv0, heatTairC: P99, clock: CLOCK });
   a(Math.abs(hot585.tAir - (P99 + climate.pathDelta.ssp585)) < 1e-9,
     `heatwave + ssp585 = ${hot585.tAir}, expected ${P99 + climate.pathDelta.ssp585} — the pathway was swallowed`);
   // absent, it must be exactly the old behaviour
-  a(currentParams({ live, phase: 'peak', path: '2025', climate, iv: iv0, heatTairC: null }).tAir === plain.tAir,
+  a(currentParams({ live, phase: 'peak', path: '2025', climate, iv: iv0, heatTairC: null, clock: CLOCK }).tAir === plain.tAir,
     'a null override changed the forcing');
 
   const base0 = eqMean(base, p);

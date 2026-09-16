@@ -21,9 +21,38 @@ function post(message: PairedWorkerResponse): void {
   self.postMessage(message);
 }
 
-function failure(error: unknown): { code: 'invalid-request' | 'input-unavailable' | 'calculation-failed' | 'contract-failed'; message: string } {
+export function classifyPairedFailure(error: unknown): { code: 'invalid-request' | 'input-unavailable' | 'calculation-failed' | 'contract-failed'; message: string } {
   const message = (error as Error | undefined)?.message ?? '';
-  if (/valid comparison|reference forcing|canonical grid/i.test(message)) return { code: 'invalid-request', message: 'The requested comparison is invalid.' };
+  /* EVERY SPELLING OF "WRONG GRID" IS A BAD REQUEST, and each one is listed
+     because this classifier matches MESSAGE TEXT: a refusal whose wording is
+     absent here falls through every branch to `calculation-failed`, reporting a
+     REJECTED REQUEST as a failed sum. That has already happened once on this
+     branch, when `assertPairedResult` stopped saying "canonical grid".
+
+       · `admitted grid` — assertPairedResult, and `requireGrid`'s own refusal
+         ("No admitted grid for a 900 m ward…"). Catching the latter is intended
+         rather than incidental: an unadmitted ward size is a bad request, not a
+         calculation that failed.
+       · `does not pair` — assertHeatRequest's pair refusal, added with `sizeM`.
+         It cannot reach this worker today, because the paired path solves
+         through runTsFieldCooperatively and never calls that gate. It is
+         matched anyway, so the day a path does reach it the wording is already
+         classified instead of silently demoted.
+       · `canonical grid` — still thrown by the render-side field guard in
+         explore/relief-renderer.ts, likewise not on this path today.
+       · `distinct wards` — assertPairedResult's same-ward refusal ("A paired
+         result requires two distinct wards."). This one hid behind a near-miss:
+         `valid comparison` matches paired-core's almost identical wording, and
+         paired-core throws FIRST, so the reachable path classified correctly
+         while the unreachable one fell through. A near-duplicate message that
+         matches is exactly what stops anyone noticing the one that does not.
+
+     A coded refusal would need none of this; until there is one, those strings
+     and this regex move together — and they are now held together by
+     tests/unit/heat-paired-failure-classifier.test.mjs, which CALLS each real
+     throw site rather than copying its wording, so a reworded refusal fails
+     there instead of silently demoting a bad request to a failed sum. */
+  if (/valid comparison|reference forcing|canonical grid|admitted grid|does not pair|distinct wards/i.test(message)) return { code: 'invalid-request', message: 'The requested comparison is invalid.' };
   if (/load|surface|fetch|Unable to/i.test(message)) return { code: 'input-unavailable', message: 'Comparison inputs are unavailable.' };
   if (/contract|Missing paired/i.test(message)) return { code: 'contract-failed', message: 'The paired analytical contract could not be verified.' };
   return { code: 'calculation-failed', message: 'The paired calculation could not complete.' };
@@ -59,7 +88,7 @@ async function pump(): Promise<void> {
         if (isAbortError(error) || controller.signal.aborted) {
           if (!disposed) post({ type: 'cancelled', requestId: request.requestId, generation: request.generation });
         } else if (!disposed) {
-          const detail = failure(error);
+          const detail = classifyPairedFailure(error);
           post({ type: 'failure', requestId: request.requestId, generation: request.generation, ...detail });
           console.warn('paired worker failure', error);
         }
@@ -96,4 +125,10 @@ export function handlePairedWorkerMessage(message: PairedWorkerRequest): void {
   void pump();
 }
 
-self.addEventListener('message', (event: MessageEvent<PairedWorkerRequest>) => handlePairedWorkerMessage(event.data));
+/* The listener is what makes this module a worker entry point. The guard is what
+   lets a test import it at all: `self` is undefined under Node, so the bare call
+   threw at import time, and `classifyPairedFailure` — the code that has already
+   misreported a refusal to a visitor once — was unreachable from any test. */
+if (typeof self !== 'undefined') {
+  self.addEventListener('message', (event: MessageEvent<PairedWorkerRequest>) => handlePairedWorkerMessage(event.data));
+}

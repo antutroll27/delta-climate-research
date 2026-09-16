@@ -9,9 +9,9 @@
  * `mountHeatMap()` returns a dispose fn (call it on astro:before-swap).
  */
 import maplibregl from 'maplibre-gl';
-import { WARD_MAP, wardLatLon, formatLatLon, type Ward } from '../../data/wards.ts';
+import { RENDERABLE_WARD_MAP, wardLatLon, formatLatLon, type Ward } from '../../data/wards.ts';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { DEFAULT_PARAMS, greenReferenceContrastC, type ClimateConstants, type PvFile, type SimLayers, type SimParams } from './types';
+import { greenReferenceContrastC, requireGrid, type ClimateConstants, type PvFile, type SimLayers, type SimParams } from './types';
 import { detectHeatCaps } from './caps';
 import { createGpuHost, createStaticHost, createWorkerHost } from './sim-host';
 import type { HeatSimHost, HeatSimRequest, HeatSimSnapshot } from './sim-protocol';
@@ -20,12 +20,16 @@ import { ACCURACY, SPATIAL, HEIGHTS, bandLabel, unmeasuredNote, isTransitionHour
 import { solarElevationFactor, solarDayHours } from './sky';
 import { loadLayerManifest } from './provenance';
 import * as U from './dc-urs';
-import { applyScenario } from './dc-urs-scenario';
+import { applyScenario, scenarioLst } from './dc-urs-scenario';
 import type { DcUrsInputs } from './dc-urs-inputs';
 import { rasterWardBase } from './ward-raster';
 import { loadAreaSurface, loadCanopyRaster, type WardSurface, type CanopyRaster } from './surface-raster';
 import { asTreesFile } from './vegetation-layer';
 import { buildRegistry, type BuildingMeta } from './explore/building-pick';
+/* Type-only, and it must stay that way: landmark-layer.ts is pure arithmetic over
+   a structural clip matrix and imports no three, so this keeps the analytical
+   core free of it — tests/unit/heat-explore-module-boundary.test.mjs asserts it. */
+import type { LandmarkLabel, LandmarkPick } from './explore/landmark-layer';
 import { selectPhase } from './phase-select';
 import { asTerrainField, terrainLabel, TERRAIN_N, type TerrainField } from './terrain';
 import { wardMercatorScale } from './ward-frame';
@@ -35,10 +39,11 @@ import {
 } from './road-labels';
 import { findCoolingSurfaces, nearestCooling, type CoolingSurfaces } from './explore/cooling-surfaces';
 import { createWardSession } from './ward-session';
+import { createLoadChip } from './load-chip';
 import { createExploreFrameScheduler } from './explore/frame-scheduler';
 import { exploreRuntimeBudget, nextFrameDelayMs, type ExploreDeviceTier } from './explore/runtime-budget';
 import {
-  dayOfYearUtc, maplibreSky, representativeSolarHour, sunPlacement,
+  dayOfYearUtc, maplibreSky, representativeSolarHour, sunPlacement, wardMonthHour,
 } from './explore/sun-lighting';
 import { createCoreFieldLayer, CORE_FIELD_SOURCE } from './explore/core-field-layer';
 import type { ReliefRenderer, ReliefWardBundle, ReliefVisualState } from './explore/relief-contract';
@@ -59,10 +64,18 @@ import { areaPath, paths, cityPaths } from './scope/paths.ts';
 import { areaRefusal } from './scope/reachability.ts';
 import { isAreaKey, splitKey, type AreaKey } from './scope/registry.ts';
 import { toLegacyWard } from './scope/legacy.ts';
+import { prefetchPlan, runPrefetch, shouldPrefetch, type PrefetchConnection } from './ward-prefetch';
 
 // Ward set lives in src/data/wards.ts so widening beyond three is a data change,
 // not a code change (dc-urs-spec.md §1).
-const WARDS = WARD_MAP;
+/* THE RENDERABLE MAP, NOT THE PUBLISHED ONE, and this line was the whole bug.
+   `WARD_MAP` is built from `WARDS` — the CATALOGUE list, gated to Kolkata — so
+   `wardOf('in/bengaluru/mg-road')` returned undefined and line ~300's
+   `center: [wardOf(INITIAL_AREA).lon, …]` threw BEFORE maplibre was constructed.
+   Measured: zero canvases, no map, "SELECTING ENGINE" for ever, every readout a
+   dash — a whole city silently dead while 728 unit tests passed, because none of
+   them opened a Bengaluru ward. This file draws what the instrument can open. */
+const WARDS = RENDERABLE_WARD_MAP;
 
 /**
  * The area this page opens on — READ FROM THE PAGE, never assumed here.
@@ -141,7 +154,7 @@ const areaOf = (key: AreaKey): string => splitKey(key).area;
 /* COSTS used to be declared here, under a docblock this one replaces. It moved into
    `mountHeatMap` with the boot area it is resolved from; the explanation moved with
    it, rather than being left behind pointing at the next declaration down. */
-const { SIM_N, RESET_BURST } = M;
+const { RESET_BURST } = M;
 /**
  * `dark` is OUR style now — OBOS Slate, built by scripts/build-map-style.mjs from
  * the OpenFreeMap dark style it replaces. Derived rather than authored on purpose:
@@ -201,6 +214,34 @@ export function mountHeatMap(): () => void {
    */
   const COSTS = requireCosts(SCOPE);
   const el = (id: string) => document.getElementById(id);
+  const loadChip = createLoadChip(el('loadchip'), {
+    now: () => performance.now(),
+    setTimeout: (fn, ms) => window.setTimeout(fn, ms),
+    clearTimeout: (id) => window.clearTimeout(id),
+  });
+  /* Background warm-up of the city's other wards — see ward-prefetch.ts for what it
+     buys (measured on the dev server, uncompressed, Slow 4G: a first visit took
+     11,950 ms without, 699 ms with; production is unmeasured) and
+     what it costs. RE-SCHEDULED ON EVERY COMMITTED LOAD UNTIL ONE RUN COMPLETES: a
+     switch aborts a run in flight, and scheduling once per page meant a reader who
+     clicked the strip in the first ~12 s lost the warm-up for the rest of the visit. */
+  let prefetchDone = false;
+  let prefetchAbort: AbortController | null = null;
+  function schedulePrefetch(key: AreaKey): void {
+    if (prefetchDone) return;
+    if (!shouldPrefetch((navigator as { connection?: PrefetchConnection }).connection)) return;
+    const plan = prefetchPlan(key);
+    if (plan.length === 0) return;
+    const controller = new AbortController();
+    prefetchAbort = controller;
+    const go = (): void => {
+      if (appDisposed || controller.signal.aborted) return;
+      void runPrefetch(plan, fetch.bind(window), controller.signal)
+        .then(() => { if (!controller.signal.aborted) prefetchDone = true; });
+    };
+    if (typeof window.requestIdleCallback === 'function') window.requestIdleCallback(go, { timeout: 4000 });
+    else window.setTimeout(go, 2000);
+  }
   // Per-layer provenance ("data receipts") panel, fetched on-demand per ward
   // (loadLayerManifest caches). null → degrade to the static credit line.
   const escHtml = (s: string) => s.replace(/[&<>"]/g, (c) => (
@@ -256,7 +297,7 @@ export function mountHeatMap(): () => void {
     /* Non-null forces the 1-in-100 air temperature in place of the observed one.
        A scenario override, not a phase — see phase-select.ts. */
     heatTairC: number | null;
-    base: SimLayers | null; baselineMean: number; live: M.Ambient | null;
+    base: SimLayers | null; live: M.Ambient | null;
     spatial: M.Spatial | null; greenG: number; lastMean: Record<string, number>;
     /* Observed DC-URS inputs per ward, loaded once. null while unloaded or if the
        fetch failed — the score reports itself unavailable rather than inventing one. */
@@ -270,7 +311,7 @@ export function mountHeatMap(): () => void {
      closed, correctly — would have thrown on the first simulation rather than the
      first click. `?? ''` covers the country that has adopted no projection at all:
      an empty table answers zero to every key, so the value is never read. */
-  const state: State = { ward: INITIAL_AREA, phase: 'peak', path: SCOPE.pathway.initial ?? '', iv: { trees: 0, roof: 0, parks: 0, facades: 0 }, climate: SCOPE.climate, sunNow: 0, heatTairC: null, base: null, baselineMean: 0, live: null, spatial: null, greenG: 0, lastMean: {}, dcurs: null };
+  const state: State = { ward: INITIAL_AREA, phase: 'peak', path: SCOPE.pathway.initial ?? '', iv: { trees: 0, roof: 0, parks: 0, facades: 0 }, climate: SCOPE.climate, sunNow: 0, heatTairC: null, base: null, live: null, spatial: null, greenG: 0, lastMean: {}, dcurs: null };
   const wardSession = createWardSession();
   let appDisposed = false;
   let mode: 'relief' | 'iso' = 'relief', env: 'dark' | 'studio' = 'dark';
@@ -321,13 +362,22 @@ export function mountHeatMap(): () => void {
   /* The analytical core is intentionally Three-free. Its canvas raster remains
      available while the optional relief chunk is downloading and is the whole
      renderer on capability tier 0. */
-  const coreField = createCoreFieldLayer(map, SIM_N);
+  /* DECLARED BEFORE `simN()` IS FIRST CALLED, and that ordering is load-bearing:
+     `simN` closes over this `let`, so a call above the declaration is a temporal
+     dead zone ReferenceError at mount — on every ward, not just the new city. */
+  let currentWardSizeM = wardOf(INITIAL_AREA).footprintM;
+  /* THE SOLVER GRID COMES FROM THE OPEN WARD, not from a module constant.
+     `SIM_N` was 192 — Kolkata's — and a 2800 m ward solves 384. Getting this
+     wrong does not throw: it yields an array of exactly the right length for
+     the wrong cell size, which is the silent failure ADMITTED_GRIDS refuses.
+     Declared HERE because it closes over `currentWardSizeM`. */
+  const simN = (): number => requireGrid(currentWardSizeM).n;
+  const coreField = createCoreFieldLayer(map, simN());
   const capsReady = detectHeatCaps();
   let relief: ReliefRenderer | null = null;
   let reliefReady: Promise<void> | null = null;
   let reliefWard: ReliefWardBundle | null = null;
   let currentField: Float32Array | null = null;
-  let currentWardSizeM = wardOf(INITIAL_AREA).footprintM;
   let tintMode = 1;
   let growProgress = 1;
   let registry: BuildingMeta[] = [];
@@ -595,9 +645,9 @@ export function mountHeatMap(): () => void {
 
   function cellIndexAt(cx: number, cz: number): number {
     const size = currentWardSizeM;
-    const gx = Math.min(SIM_N - 1, Math.max(0, Math.floor((cx / size + 0.5) * SIM_N)));
-    const gy = Math.min(SIM_N - 1, Math.max(0, Math.floor((cz / size + 0.5) * SIM_N)));
-    return gy * SIM_N + gx;
+    const gx = Math.min(simN() - 1, Math.max(0, Math.floor((cx / size + 0.5) * simN())));
+    const gy = Math.min(simN() - 1, Math.max(0, Math.floor((cz / size + 0.5) * simN())));
+    return gy * simN() + gx;
   }
 
   function paintCard(b: BuildingMeta) {
@@ -1359,15 +1409,24 @@ export function mountHeatMap(): () => void {
   }
   cleanup.push(() => { cancelAnimationFrame(coolCount); coolPop?.cancel(); });
 
-  function select(b: BuildingMeta | null) {
+  /**
+   * `landmark` is supplied ONLY by the two paths that can know one: a click on a
+   * landmark's massing, and a click on its label. Every other caller — the solar
+   * roof list, Escape, a ward switch — takes the default, so the landmark block
+   * shuts. Clearing it HERE rather than at each call site is what stops one
+   * building's citation being shown beside the next building the reader selects.
+   */
+  function select(b: BuildingMeta | null, landmark: LandmarkPick | null = null) {
     selected = b;
+    selectedLandmark = b ? landmark : null;
+    paintLandmark(selectedLandmark);
     if (!b) closeBrief();             // a sheet about a roof nobody has selected
     if (b) {
       /* b.ring so the walk is measured from the building's nearest corner, not
          from a point inside it — nobody sets off from the middle of a block. */
-      nearestCool = cooling ? nearestCooling(cooling, b.cx, b.cz, SIM_N, currentWardSizeM, b.ring) : null;
-      const lo = coolingLo ? nearestCooling(coolingLo, b.cx, b.cz, SIM_N, currentWardSizeM, b.ring) : null;
-      const hi = coolingHi ? nearestCooling(coolingHi, b.cx, b.cz, SIM_N, currentWardSizeM, b.ring) : null;
+      nearestCool = cooling ? nearestCooling(cooling, b.cx, b.cz, simN(), currentWardSizeM, b.ring) : null;
+      const lo = coolingLo ? nearestCooling(coolingLo, b.cx, b.cz, simN(), currentWardSizeM, b.ring) : null;
+      const hi = coolingHi ? nearestCooling(coolingHi, b.cx, b.cz, simN(), currentWardSizeM, b.ring) : null;
       coolRangeM = lo && hi ? [Math.min(lo.distM, hi.distM), Math.max(lo.distM, hi.distM)] : null;
       /* The tag's value is written HERE, once per selection — placeCard only
          moves it. Rounded to 10 m because the grid cell is 7.3 m. */
@@ -1398,9 +1457,14 @@ export function mountHeatMap(): () => void {
     downAt = null;
     if (moved > 6 || !relief || !registry.length) return;
     const r = cv.getBoundingClientRect();
-    const hit = relief.pick(e.clientX - r.left, e.clientY - r.top, cv.clientWidth, cv.clientHeight);
+    const px = e.clientX - r.left, py = e.clientY - r.top;
+    const hit = relief.pick(px, py, cv.clientWidth, cv.clientHeight);
     if (hit >= 0) dismissTip();
-    select(hit >= 0 ? registry.find(b => b.idx === hit) ?? null : null);
+    /* Asked at the SAME pixel as the building, so the citation and the building
+       it is printed beside can never be about two different buildings. A ward
+       with no authored model answers null and nothing here changes. */
+    select(hit >= 0 ? registry.find(b => b.idx === hit) ?? null : null,
+      relief.pickLandmark(px, py, cv.clientWidth, cv.clientHeight));
   };
   cv.addEventListener('pointerdown', onPickDown);
   cv.addEventListener('pointerup', onPickUp);
@@ -1420,6 +1484,169 @@ export function mountHeatMap(): () => void {
     cv.removeEventListener('pointerup', onPickUp);
     window.removeEventListener('keydown', onPickKey);
     map.off('render', placeCard);
+  });
+
+  /* ── THE LANDMARK LABELS ─────────────────────────────────────────────────────
+     The named buildings, labelled on the map and clickable — the one place the
+     instrument says "this building is 123 m" out loud, and therefore the one
+     place it has to say who measured it.
+
+     A CHIP PER LANDMARK, CREATED ONCE PER WARD, MOVED PER REPAINT. Same discipline
+     as the ring labels and the cooling tag: the text is written at creation and
+     every frame afterwards writes only a transform, so 35 labels in Whitefield
+     cost 35 matrix multiplies and 35 transform strings — no layout, no reflow.
+
+     WHICH LABELS ARE DRAWN IS THE LAYER'S DECISION, NOT THIS FILE'S. It drops
+     landmarks with no stated source, culls the ones behind the camera or off the
+     canvas, and collapses overlapping ones onto the nearest. So the set changes
+     every frame, and chips absent from a frame are hidden rather than destroyed. */
+  let selectedLandmark: LandmarkPick | null = null;
+  const lmBox = el('lmlabs');
+  const lmChips = new Map<string, HTMLButtonElement>();
+  /** The most recent label per landmark — a chip's click handler must read the
+   *  CURRENT screen anchor, not the one from the frame it was created in. */
+  const lmLast = new Map<string, LandmarkLabel>();
+  /** Each chip's rendered box, measured ONCE when it is created.
+   *
+   *  The keep-out test below needs the chip's real width, and a chip's text never
+   *  changes after creation — so reading `offsetWidth` here costs one layout per
+   *  landmark per ward, where reading it in the loop would cost 35 forced layouts
+   *  on every repaint of Whitefield. */
+  const lmSize = new Map<string, { w: number; h: number }>();
+  let lmWard = '';
+
+  /**
+   * The instrument's own furniture, which floats OVER the map.
+   *
+   * MEASURED, NOT ASSUMED. A landmark whose label lands under the legend or the
+   * live-ambient panel is not merely untidy: the first screenshots of this layer
+   * had "Subhas Chandra Bose Tower" sitting across the legend's Extreme swatch
+   * and a Whitefield chip covering the 38.1 °C readout — the label hid a reading
+   * the instrument exists to give. Same approach `placeCard` already takes with
+   * the ring labels: ask the elements where they are, rather than hard-coding
+   * insets that go stale the first time a panel is resized.
+   */
+  /* `#pname,#pzone,.compass` added after the 2026-09-13 live audit caught
+     "M. Chinnaswamy Stadium" across the MG Road title and "Tower C" on the compass. */
+  const LM_KEEP_OUT = '.top,.stamp-slot,.vegw,.chiprow,.rail-r,.legend,.strip,.bcard,.tiphint,.cooltag,#pname,#pzone,.compass';
+
+  /** Paint the card's landmark block, and mark which chip the open card is about. */
+  function paintLandmark(lm: LandmarkPick | null): void {
+    const block = el('bcLm');
+    if (block) {
+      if (lm) {
+        setText('bcLmName', lm.title);
+        setText('bcLmH', `${lm.heightM.toFixed(1)} m`);
+        /* Verbatim, never reworded. "CTBUH 13883" is a reference someone can
+           follow and "stadium roof line, estimated" is an admission — flattening
+           either into a tidy label is how an estimate starts reading as a
+           measurement. */
+        setText('bcLmSrc', lm.source);
+        block.removeAttribute('hidden');
+      } else block.setAttribute('hidden', '');
+    }
+    for (const [name, chip] of lmChips) chip.classList.toggle('on', lm?.name === name);
+  }
+
+  /** Open the card for a landmark whose chip was clicked. */
+  function selectLandmark(name: string): void {
+    const label = lmLast.get(name);
+    if (!label || !relief || !registry.length) return;
+    dismissTip();
+    /* Pick the BUILDING at the chip's own anchor rather than matching centroids
+       in ward metres. The chip sits on the landmark's roof, so this asks exactly
+       the question the reader asks by clicking the tower, through exactly the
+       code path that answers it — and no second matching rule exists to drift. */
+    const hit = relief.pick(label.x, label.y, cv.clientWidth, cv.clientHeight, 40);
+    select(hit >= 0 ? registry.find(b => b.idx === hit) ?? null : null, {
+      name: label.name, title: label.title,
+      heightM: label.heightM, source: label.source,
+    });
+  }
+
+  function hideAllChips(): void {
+    for (const chip of lmChips.values()) chip.hidden = true;
+    lmBox?.setAttribute('hidden', '');
+  }
+
+  function placeLandmarks(): void {
+    if (!lmBox) return;
+    /* A ward switch renames every landmark, so the pool is rebuilt rather than
+       reused — carrying `ub-tower` into Whitefield would label a building that
+       is not there. Keyed on the ward rather than hooked to the switch because
+       the model loads asynchronously AFTER it, and this is the first frame that
+       can see the result either way. */
+    if (lmWard !== state.ward) {
+      lmWard = state.ward;
+      lmChips.clear(); lmLast.clear(); lmSize.clear();
+      lmBox.replaceChildren();
+    }
+    /* The isotherm view is a 2-D raster with no city in it, so a chip pinned to a
+       building's roof would be pointing at nothing. */
+    if (!relief || mode !== 'relief') { hideAllChips(); return; }
+
+    const labels = relief.landmarkLabels(cv.clientWidth, cv.clientHeight);
+    if (!labels.length) { hideAllChips(); return; }
+    lmBox.removeAttribute('hidden');
+
+    /* Where the furniture is THIS frame — one pass, shared by every chip. The
+       panels do not move between repaints, but they do open, close and resize,
+       and a cached rect would be wrong on exactly those frames. */
+    const cvBox = cv.getBoundingClientRect();
+    const blocked: DOMRect[] = [];
+    for (const node of document.querySelectorAll<HTMLElement>(LM_KEEP_OUT)) {
+      if (node.hasAttribute('hidden')) continue;
+      const box = node.getBoundingClientRect();
+      if (box.width > 0 && box.height > 0) blocked.push(box);
+    }
+
+    const seen = new Set<string>();
+    for (const label of labels) {
+      seen.add(label.name);
+      lmLast.set(label.name, label);
+      let chip = lmChips.get(label.name);
+      if (!chip) {
+        chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'lmlab';
+        chip.textContent = label.title;
+        /* The claim and its evidence, before anything is clicked — a landmark
+           whose source only appears after a click is a landmark whose source
+           most readers never see. */
+        chip.title = `${label.title} — ${label.heightM.toFixed(1)} m · ${label.source}`;
+        chip.addEventListener('click', () => selectLandmark(label.name));
+        lmChips.set(label.name, chip);
+        lmBox.appendChild(chip);
+        /* Measured here, once: the text never changes after this point. */
+        lmSize.set(label.name, { w: chip.offsetWidth, h: chip.offsetHeight });
+      }
+      chip.classList.toggle('on', selectedLandmark?.name === label.name);
+
+      /* A chip that would land on the instrument's own furniture is DROPPED, not
+         nudged. Nudging it would put the name somewhere the building is not,
+         which is worse than not naming it — the map still carries the landmark's
+         massing, and an orbit of a few degrees brings the label back. */
+      const size = lmSize.get(label.name) ?? { w: 130, h: 20 };
+      const left = cvBox.left + label.x - size.w / 2;
+      const top = cvBox.top + label.y - size.h / 2;
+      chip.hidden = blocked.some((box) =>
+        left < box.right && left + size.w > box.left
+        && top < box.bottom && top + size.h > box.top);
+      if (chip.hidden) continue;
+
+      /* Centred on the anchor by the transform itself, so a chip is as wide as
+         its name needs — a fixed width would clip "M. Chinnaswamy Stadium". */
+      chip.style.transform =
+        `translate3d(${Math.round(label.x)}px, ${Math.round(label.y)}px, 0) translate(-50%, -50%)`;
+    }
+    for (const [name, chip] of lmChips) if (!seen.has(name)) chip.hidden = true;
+  }
+  /* Same hook as the card, and for the same reason: MapLibre fires `render` only
+     when a repaint actually happened. */
+  map.on('render', placeLandmarks);
+  cleanup.push(() => {
+    map.off('render', placeLandmarks);
+    lmChips.clear(); lmLast.clear(); lmSize.clear();
   });
 
   /* ── capability-selected heat sim + field bridge (R=blur ground · G=raw buildings) ── */
@@ -1667,7 +1894,7 @@ export function mountHeatMap(): () => void {
       if (appDisposed) return;
       const instance = createReliefRenderer({
         map, reducedMotion: reduceMotion,
-        simulationGridSize: SIM_N, terrainGridSize: TERRAIN_N,
+        simulationGridSize: simN(), terrainGridSize: TERRAIN_N,
         /* READ LATE, not captured. `runtimeTier` is still 'balanced' at this point
            on every boot — it is promoted inside `initSimHost`, which runs from
            `resetSim` after the ward loads, while this runs off `capsReady` directly.
@@ -1735,8 +1962,25 @@ export function mountHeatMap(): () => void {
     if (heatwaveFrom === url && heatwaveP99 != null) return;
     try {
       const r = await fetch(url);
-      if (r.ok) { heatwaveP99 = (await r.json())?.tmaxC?.p99 ?? null; heatwaveFrom = url; }
-    } catch { heatwaveP99 = null; heatwaveFrom = null; }
+      if (!r.ok) return;
+      const p99 = (await r.json())?.tmaxC?.p99 ?? null;
+      /* THE WARD-SWITCH RACE. Nothing above passes this fetch a signal, so a slow
+         response keeps travelling after the reader has moved to a ward whose city
+         wants a different file (or none). `state.ward` is what `loadWard` sets
+         AFTER firing this call, so once any await here resumes it names the CURRENT
+         ward — see the ordering at the `void loadHeatwave(name)` call site. The
+         check sits AFTER the last await (the body parse), so no switch can land
+         between it and the write; the catch applies the same test before clearing.
+         Not reachable today: every in-place switch is same-city (console-shell.ts's
+         `sameCity` gate, and the ward strip's tabs are built from one fixed CO/CY),
+         and a cross-city move is a full navigation (`location.assign`), so this
+         closure dies with the page. Kept because `OPEN_AREA_EVENT` is a public seam
+         that does not re-check the city itself. */
+      if (cityPaths(state.ward).heatwave !== url) return;
+      heatwaveP99 = p99; heatwaveFrom = url;
+    } catch {
+      if (cityPaths(state.ward).heatwave === url) { heatwaveP99 = null; heatwaveFrom = null; }
+    }
   }
 
   /* Same story, same fix: dc-urs-inputs.json's `wards` object lists exactly
@@ -1750,9 +1994,14 @@ export function mountHeatMap(): () => void {
     if (dcursFrom === url && state.dcurs) return;
     try {
       const r = await fetch(url);
-      state.dcurs = (await r.json()).wards as Record<string, DcUrsInputs>;
-      dcursFrom = url;
-    } catch { state.dcurs = null; dcursFrom = null; }
+      if (!r.ok) throw new Error(`DC-URS inputs unavailable (${r.status}).`);
+      const wards = (await r.json()).wards as Record<string, DcUrsInputs>;
+      // THE SAME RACE AS `loadHeatwave`, immediately above — see its comment.
+      if (cityPaths(state.ward).dcUrs !== url) return;
+      state.dcurs = wards; dcursFrom = url;
+    } catch {
+      if (cityPaths(state.ward).dcUrs === url) { state.dcurs = null; dcursFrom = null; }
+    }
   }
 
   async function loadWard(name: AreaKey) {
@@ -1770,8 +2019,7 @@ export function mountHeatMap(): () => void {
        same highlight. `areaRefusal` holds both tests and the sentence for each. */
     const refusal = areaRefusal(name);
     if (refusal !== null) {
-      const chip = el('loadchip');
-      if (chip) { chip.textContent = refusal; chip.classList.add('on'); }
+      loadChip.fail(refusal);
       return;
     }
     const P = paths(name);
@@ -1782,9 +2030,17 @@ export function mountHeatMap(): () => void {
     if (P === null) return;
     const w = wardOf(name);
     const token = wardSession.begin(name);
-    if (!token) return;
-    const load = el('loadchip');
-    if (load) { load.textContent = `Loading ${w.name}…`; load.classList.add('on'); }
+    if (!token) {
+      /* Refused because this ward is already on screen. After a failed switch that is
+         the one click the reader will try, and the failure chip was up for good. */
+      if (wardSession.pendingWard === null) loadChip.done();
+      return;
+    }
+    /* A real load owns the network: any background warm-up stops the moment it starts. */
+    prefetchAbort?.abort();
+    /* Plain name: `w.name` carries the wordmark's `<em>`, and the chip sets textContent,
+       so it printed "Loading MG <em>Road</em>…" (live audit, 2026-09-13). */
+    loadChip.start(`Loading ${resolve(name).area.name}…`);
     await new Promise(r => setTimeout(r, 30));
     if (!wardSession.isCurrent(token)) return;
     const optional = async <T>(task: Promise<T>, fallback: T): Promise<T> => {
@@ -1867,6 +2123,7 @@ export function mountHeatMap(): () => void {
        growing with |y|. Only the ALTITUDE term is still MapLibre's own, because
        building heights never pass through the ward frame. */
     reliefWard = {
+      wardId: w.id,
       wardData: d, roads, water, terrain,
       mercatorOrigin: { x: mc.x, y: mc.y, z: mc.z ?? 0 },
       frame: wardMercatorScale(w.lat),
@@ -1914,18 +2171,18 @@ export function mountHeatMap(): () => void {
     /* Cooling surfaces are a property of the MEASURED vegetation, so they are
        computed from the ward's base layers and never move when a scenario does —
        planting trees in the model must not invent a park that is not there. */
-    const cellM2 = (d.sizeM / SIM_N) * (d.sizeM / SIM_N);
-    cooling = findCoolingSurfaces(state.base.veg, SIM_N, cellM2);
+    const cellM2 = (d.sizeM / simN()) * (d.sizeM / simN());
+    cooling = findCoolingSurfaces(state.base.veg, simN(), cellM2);
     /* Two more passes at the bracketing thresholds. Three flood fills over 37k
        cells is a few milliseconds once per ward, and it buys the only honest
        way to show a figure this parameter-sensitive: as a range. */
-    coolingLo = findCoolingSurfaces(state.base.veg, SIM_N, cellM2, VEG_BRACKET[0]);
-    coolingHi = findCoolingSurfaces(state.base.veg, SIM_N, cellM2, VEG_BRACKET[1]);
+    coolingLo = findCoolingSurfaces(state.base.veg, simN(), cellM2, VEG_BRACKET[0]);
+    coolingHi = findCoolingSurfaces(state.base.veg, simN(), cellM2, VEG_BRACKET[1]);
     if (currentField) relief?.updateField({ field: currentField, coolingMask: cooling.mask, ramp });
     state.live = liveCache[name] ?? null; paintLive();
     resetSim();
 
-    setHTML('pname', w.name); setText('pzone', w.zone); setText('coord', w.coord);
+    setHTML('pname', w.name); setText('pzone', w.zone); setText('coord', formatLatLon(w.lat, w.lon, ' · ', 3));
     setText('bcount', `${d.count.toLocaleString()} real buildings`);
     /* `data-w` IS A BARE WARD ID in HeatMapStage.astro, so it is compared against
        the bare id and never against the key. Comparing it to `name` would match
@@ -1939,7 +2196,6 @@ export function mountHeatMap(): () => void {
        they have been visited. */
     const activeId = areaOf(name);
     document.querySelectorAll('#strip .ward').forEach(t => t.classList.toggle('on', (t as HTMLElement).dataset.w === activeId));
-    if (load) { load.textContent = 'Building ward…'; load.classList.remove('on'); }
 
     const dur = relief ? 1400 : 0;
     orbit = false; clearTimeout(orbitResume);
@@ -1952,13 +2208,25 @@ export function mountHeatMap(): () => void {
       syncReliefVisual();
       requestRuntimeFrame('grow', dur * 0.45);
     }
-      wardSession.commit(token);
+      /* A superseded load must not start a warm-up after the newer load has already
+         aborted the previous one, nor take the loader down. */
+      if (!wardSession.commit(token)) return;
       fetchLive(name);
+      schedulePrefetch(name);
+      /* THE LOADER HOLDS UNTIL THE BUILDINGS ARE ON SCREEN, not until the data lands.
+         A Bengaluru GLB installs after this point, and the chip used to vanish while
+         the map still showed bare ground (audit, 2026-09-13). Capped at 8 s so a model
+         that never arrives cannot pin it up; skipped if another load has since begun. */
+      const buildingsShown = relief ? relief.buildingsReady() : Promise.resolve();
+      void Promise.race([buildingsShown, new Promise<void>((settle) => window.setTimeout(settle, 8000))])
+        .then(() => {
+          if (wardSession.pendingWard === null && wardSession.committedWard === name) loadChip.done();
+        });
     } catch (error) {
       if (!wardSession.isCurrent(token)) return;
       wardSession.fail(token);
       console.warn(`Ward ${name} could not load:`, error);
-      if (load) load.textContent = `${w.name} could not load.`;
+      loadChip.fail(`${resolve(name).area.name} could not load.`);
     }
   }
 
@@ -1971,13 +2239,13 @@ export function mountHeatMap(): () => void {
        mode is on" sentinel; without this the opening frame would run night
        physics at noon and then visibly flip when the stats tick corrected it. */
     refreshNowSun();
-    const p = M.currentParams(state);
-    state.baselineMean = M.eqMean(state.base, { ...p, Q: DEFAULT_PARAMS.Q });
+    const p = M.currentParams({ ...state, clock: scenarioClock() });
     const layers = M.applyInterventions(state.base, state.iv, state.spatial, state.climate.parkRadiusM);
     state.greenG = M.computeGreenG(layers);
     const request: HeatSimRequest = {
       generation: ++simGeneration,
-      grid: { n: SIM_N, cellMeters: cache[state.ward].sizeM / SIM_N },
+      grid: { n: simN(), cellMeters: cache[state.ward].sizeM / simN() },
+      sizeM: cache[state.ward].sizeM,
       layers, params: p, settleSteps: RESET_BURST, thresholdC: 40,
     };
     latestSimRequest = request;
@@ -2016,6 +2284,18 @@ export function mountHeatMap(): () => void {
      never leaves the city, so re-reading it per switch would only add a second
      place for it to be wrong. */
   const WARD_TZ = SCOPE.city.tz;
+  /* THE SCENARIO'S MOMENT, in the ward's own zone. The fallback air temperature is a
+     month × hour climatology now, so the physics has to be told when it is modelling.
+     "Now" (sunNow non-null) uses the real local hour; the two canonical views use the
+     hours their chips print — 13:00 peak, 22:00 retained — in the current month.
+     The hour rule is the shared `representativeSolarHour` (sun-lighting.ts), never a second copy. */
+  function scenarioClock(): M.ScenarioClock {
+    const local = wardMonthHour(now(), WARD_TZ);
+    /* CLOCK hour here, not solar: the IMD normals are clock-based. The sun is placed
+       from `wardSolarHour()` through the same rule, which is why the argument name
+       reads "solar" — ~20 min apart, never printed, and replaced by any live reading. */
+    return { month: local.month, hour: representativeSolarHour(state.sunNow, local.hour, state.phase) };
+  }
   const wardClock = new Intl.DateTimeFormat('en-GB', {
     timeZone: WARD_TZ, hour: '2-digit', minute: '2-digit', hour12: false,
   });
@@ -2359,6 +2639,47 @@ export function mountHeatMap(): () => void {
   }
 
   const histo = el('histo'); if (histo) for (let i = 0; i < 12; i++) histo.appendChild(document.createElement('i'));
+  /** The no-plan side of the DC-URS comparison. NOT `state.iv`, which is mutated. */
+  const NO_PLAN: M.Interventions = { trees: 0, roof: 0, parks: 0, facades: 0 };
+
+  /* ── THE SCENARIO'S LAYER MEANS, HELD ACROSS TICKS ──────────────────────────
+     Three numbers are all of a ward's grids that the score can see (see
+     `LayerMeans`), and they only move when the ward or a slider does. The stats
+     tick was rebuilding them anyway — `applyInterventions` copying two
+     Float32Arrays, then two full-grid passes over 147,456 cells — every
+     720–1500 ms by tier, on the same main thread as MapLibre and the renderer.
+
+     MEASURED on MG Road's 384² grid, over the whole DC-URS block. BEFORE: 1.13 MB
+     of Float32Array per tick, median 0.34 ms / p95 0.44 ms / max 1.84 ms under
+     node on this machine. AFTER: no array allocation at all, median and p95 both
+     0.00 ms, max 0.01 ms. The same block timed on the page itself ran 2.81 / 6.90
+     / 19.5 ms before — the allocation is identical there, and the wall clock is
+     what sharing a main thread with MapLibre and the renderer does to it. Against
+     the project's 60 fps rule, a 19.5 ms tick is more than a whole frame.
+
+     KEYED ON IDENTITY, NOT ON THE WRITERS. Hanging the recompute off the three
+     places that move (`state.base`, `state.spatial`, the slider handler) would be
+     a fourth enrolment list of exactly the kind `projectWard` was written to warn
+     about — and the failure of a missed member here is a stale mean and a quietly
+     wrong score, not a visible break. Comparing what the means were built FROM is
+     two reference compares and four number compares, and cannot be forgotten. */
+  let meansOfBase: M.LayerMeans | null = null, meansOfPlan: M.LayerMeans | null = null;
+  let meansFromBase: SimLayers | null = null, meansFromSpatial: M.Spatial | null = null;
+  let meansFromTrees = -1, meansFromRoof = -1, meansFromParks = -1, meansFromFacades = -1;
+  function refreshScenarioMeans() {
+    const layers = state.base, iv = state.iv;
+    if (!layers) { meansOfBase = null; meansOfPlan = null; meansFromBase = null; return; }
+    if (layers === meansFromBase && state.spatial === meansFromSpatial
+      && iv.trees === meansFromTrees && iv.roof === meansFromRoof
+      && iv.parks === meansFromParks && iv.facades === meansFromFacades) return;
+    meansFromBase = layers; meansFromSpatial = state.spatial;
+    meansFromTrees = iv.trees; meansFromRoof = iv.roof;
+    meansFromParks = iv.parks; meansFromFacades = iv.facades;
+    meansOfBase = M.layerMeans(layers);
+    meansOfPlan = M.layerMeans(
+      M.applyInterventions(layers, iv, state.spatial, state.climate.parkRadiusM));
+  }
+
   function refreshStats(snapshot: HeatSimSnapshot | null = latestSnapshot) {
     if (!snapshot) return;
     const st = snapshot.stats, t = snapshot.field;
@@ -2371,7 +2692,10 @@ export function mountHeatMap(): () => void {
       (lst as HTMLElement).style.color = lstColor(st.meanC);
     }
     applyConfidence();
-    const p = M.currentParams(state);
+    /* ONE CLOCK for this tick: the DC-URS block below solves the no-plan side under
+       it too, and two reads of `now()` could straddle an hour. */
+    const clock = scenarioClock();
+    const p = M.currentParams({ ...state, clock });
     syncRamp(p);
     const uhi = greenReferenceContrastC(st.meanC, p);
     setText('uhi', `${uhi >= 0 ? '+' : ''}${uhi.toFixed(1)}°`);
@@ -2400,9 +2724,10 @@ export function mountHeatMap(): () => void {
 
     /* ── DC-URS ────────────────────────────────────────────────────────────
        One score, evaluated twice: the observed baseline, and the same ward with
-       the sliders' modelled changes applied. The ward-mean surface temperature
-       the heat field just produced feeds the thermal pillar, so the physics and
-       the index describe the same scenario. */
+       the sliders' modelled changes applied. The thermal pillar keeps the ward's
+       MEASURED LST and takes only the change the plan makes, solved analytically
+       under this tick's forcing (see `scenarioLst`) — so a heatwave or a warming
+       pathway is never scored as the plan's doing. */
     /* BY THE BARE ID. `dc-urs-inputs.json`'s `wards` object is keyed by file-stem
        ids — ballygunge, baruipur, barrackpore — so indexing it with the area key
        returns undefined. And this lookup is OPTIONAL-CHAINED: there would be no
@@ -2410,19 +2735,33 @@ export function mountHeatMap(): () => void {
        on a page whose inputs are sitting right there in the fetched object. */
     const base = state.dcurs?.[areaOf(state.ward)];
     if (base) {
-      const phaseLst = state.phase === 'night' ? { nightC: st.meanC } : { dayC: st.meanC };
-      const scen = applyScenario(base, iv, anyIv ? phaseLst : undefined);
+      /* THE SCENARIO LST IS THE MEASUREMENT PLUS THE PLAN, never `st.meanC`.
+         Both sides are solved under this tick's forcing: `p` above, and the same
+         state and clock with the sliders at zero (facades act only through Q, so the
+         no-plan side must not carry their cut). The means come from `state.iv`
+         rather than off `latestSimRequest`, which lags it while `resetSim` awaits
+         its host — and `iv` is what the cost and the "from this plan" line below
+         describe. `refreshScenarioMeans` makes that two constant-time evaluations
+         and no allocation; see its note for what this cost before. */
+      refreshScenarioMeans();
+      const lst = anyIv && meansOfBase && meansOfPlan
+        ? scenarioLst(base,
+          { means: meansOfBase, params: M.currentParams({ ...state, clock, iv: NO_PLAN }) },
+          { means: meansOfPlan, params: p },
+          state.phase)
+        : undefined;
+      const scen = applyScenario(base, iv, lst, currentWardSizeM);
       const now = U.dcUrs(anyIv ? scen.inputs : base);
-      const p = U.pillars(anyIv ? scen.inputs : base);
+      const pillars = U.pillars(anyIv ? scen.inputs : base);
       const tier = U.tierFor(now);
       const floor = U.structuralFloor(base);
 
       setText('scoreNum', String(Math.round(now)));
       // The three pillars raw, as the Green Score's components were: a composite
       // is only auditable if you can see which part produced the number.
-      setText('sGreen', `${Math.round(p.aci * 100)}`);
-      setText('sCool', `${Math.round((1 - p.evi) * 100)}`);
-      setText('sEff', `${Math.round((1 - p.thi) * 100)}`);
+      setText('sGreen', `${Math.round(pillars.aci * 100)}`);
+      setText('sCool', `${Math.round((1 - pillars.evi) * 100)}`);
+      setText('sEff', `${Math.round((1 - pillars.thi) * 100)}`);
       el('scoreArc')?.setAttribute('stroke-dashoffset', String(97 - now * 0.97));
       el('scoreArc')?.setAttribute('stroke', tier.colour);
       const tierEl = el('scoreTier');
@@ -2818,7 +3157,11 @@ export function mountHeatMap(): () => void {
       a: toLegacyWard(state.ward),
       trees: String(Math.round(state.iv.trees / 50 * 100)),
       roof: String(Math.round(state.iv.roof / 5) * 5),
-      parks: String(Math.round(state.iv.parks * M.PARK_HA / 196 * 1000) / 10),
+      /* NO `parks`. It was `state.iv.parks * PARK_HA / 196`, where 196 ha IS a
+         1400 m ward — a hardcoded ward size on a page that now reads its own. It
+         was doubly dead: no parks control is rendered, so `iv.parks` is always 0,
+         and Compare's reader pins `parks` to 0 anyway (`normalizeCoverage`), which
+         `serializePairedScenario` matches by emitting none. */
       facades: String(Math.round(state.iv.facades / 15 * 1000) / 10),
       phase: state.phase === 'night' ? 'retained' : 'peak',
     });
@@ -2928,7 +3271,7 @@ export function mountHeatMap(): () => void {
     if (mode === 'relief') void ensureRelief();
     syncReliefVisual(); syncRendererVisibility();
     if (mode === 'iso') { orbit = false; map.easeTo({ pitch: 0, bearing: 0, duration: 900 }); }
-    else { map.easeTo({ pitch: 60, duration: 900 }); if (!reduceMotion) orbitResume = window.setTimeout(() => { orbit = true; requestRuntimeFrame('orbit'); }, 1100); }
+    else { map.easeTo({ pitch: 60, duration: 900 }); clearTimeout(orbitResume); if (!reduceMotion) orbitResume = window.setTimeout(() => { orbit = true; requestRuntimeFrame('orbit'); }, 1100); }
   }));
   document.querySelectorAll('#tintchip button').forEach(b => onEl(b, 'click', () => { tintMode = +((b as HTMLElement).dataset.t!); document.querySelectorAll('#tintchip button').forEach(x => x.classList.toggle('on', x === b)); syncReliefVisual(); map.triggerRepaint(); }));
   function setEnv(e: string) {
@@ -3261,6 +3604,7 @@ export function mountHeatMap(): () => void {
   return function dispose() {
     appDisposed = true;
     wardSession.dispose();
+    prefetchAbort?.abort();
     frameScheduler.dispose();
     clearTimeout(orbitResume);
     nudgeEvents.forEach(ev => cv.removeEventListener(ev, nudgeOrbit));

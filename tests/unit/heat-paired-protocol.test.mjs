@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { CANONICAL_GRID_VERSION, HEAT_METRICS_VERSION } from '../../src/scripts/climate-engine/types.ts';
+import { gridVersion, HEAT_METRICS_VERSION } from '../../src/scripts/climate-engine/types.ts';
 import { fromPairedWireResult, toPairedWireResult } from '../../src/scripts/climate-engine/compare/paired-protocol.ts';
 
 const ward = (id) => ({
@@ -20,7 +20,7 @@ const ward = (id) => ({
   delivered: { treeCorridorCells: 1, roofAreaM2: 1, facadeIntensityPct: 1, requestedParkHa: 0, appliedParkHa: 0 },
   evidence: {
     forcingId: 'delta-screening-reference-v1', forcingStatus: 'fallback-reference', modelVersion: 'heat-model-v1',
-    gridVersion: CANONICAL_GRID_VERSION, dataVersion: 'ward-geometry-v1', stockBasis: 'modelled-stock-v1',
+    gridVersion: gridVersion(1400), dataVersion: 'ward-geometry-v1', stockBasis: 'modelled-stock-v1',
     backendVersion: 'ts-worker-v1', metricsVersion: HEAT_METRICS_VERSION, screening: true,
   },
 });

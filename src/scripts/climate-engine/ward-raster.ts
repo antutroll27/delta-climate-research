@@ -6,7 +6,7 @@
  * by a hash function here, which meant two of `eqCell`'s three inputs were
  * invented and every within-ward pattern on the map was decoration.
  */
-import { CANONICAL_GRID_N, CANOPY_BLEND_STRENGTH, WATER_LAYER_ENABLED, type SimLayers } from './types.ts';
+import { requireGrid, CANOPY_BLEND_STRENGTH, WATER_LAYER_ENABLED, type SimLayers } from './types.ts';
 import type { WardData, WaterData } from './heat-map-model.ts';
 import { resample, type CanopyRaster, type SurfaceMeans, type SurfaceRaster } from './surface-raster.ts';
 
@@ -111,8 +111,14 @@ function coverageFromBits(sampleBits: Uint8Array): Float32Array {
  * same comparison URL produce slightly different roof areas and hot-cell
  * counts in Chromium and WebKit. Keeping analytical rasterisation in pure
  * arithmetic makes the canonical grid independent of the display engine.
+ *
+ * `n` IS REQUIRED. It defaulted to the one canonical grid while every ward was
+ * 1400 m; with two admitted (grid, ward size) pairs a default would quietly
+ * raster a 2800 m ward onto Kolkata's grid — right array length, wrong cell
+ * size, no error anywhere. Every caller already passed one, so no convenience
+ * was lost in removing it.
  */
-export function rasterizeWardBuilt(ward: WardData, n = CANONICAL_GRID_N): Float32Array {
+export function rasterizeWardBuilt(ward: WardData, n: number): Float32Array {
   if (!Number.isInteger(n) || n <= 0) throw new Error('Ward raster size must be a positive integer.');
   const half = ward.sizeM / 2;
   const cellM = ward.sizeM / n;
@@ -152,7 +158,9 @@ export function rasterizeWardBuilt(ward: WardData, n = CANONICAL_GRID_N): Float3
 export function rasterizeWardWater(
   water: WaterData | null,
   sizeM: number,
-  n = CANONICAL_GRID_N,
+  /** Required, for the reason given on `rasterizeWardBuilt`: a defaulted grid
+   *  cannot know which ward size it is rasterising. */
+  n: number,
 ): Float32Array {
   if (!Number.isInteger(n) || n <= 0) throw new Error('Ward raster size must be a positive integer.');
   const half = sizeM / 2;
@@ -206,7 +214,11 @@ export function rasterWardBase(
   canopy: CanopyRaster | null = null,
   water: WaterData | null = null,
 ): SimLayers {
-  const n = CANONICAL_GRID_N;
+  /* The grid comes from the WARD'S OWN SIZE, not from a constant — the pair is
+     what keeps a cell at 7.29 m in both cities. An unadmitted ward size is
+     refused here rather than defaulted, because a wrong-grid raster is
+     invisible downstream: every layer is exactly the length the solver expects. */
+  const n = requireGrid(ward.sizeM).n;
   const count = n * n;
   const built = rasterizeWardBuilt(ward, n);
   const waterFraction = WATER_LAYER_ENABLED

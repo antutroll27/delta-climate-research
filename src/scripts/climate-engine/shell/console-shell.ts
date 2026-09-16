@@ -46,6 +46,12 @@ import {
   writePanelCollapsed,
   writeRailCollapsed,
 } from './layout-state.ts';
+import {
+  NEW_CITY_DAYS,
+  arrivedMs,
+  rememberDismissed,
+  wasDismissed,
+} from './new-city.ts';
 import { resolve } from '../scope/resolve.ts';
 import { mountSelectFields } from './select-field.ts';
 
@@ -406,6 +412,34 @@ export function mountConsoleShell(): (() => void) | null {
         window.location.assign(areaPath(value));
       });
     }
+  }
+
+  /* ── the other city ──────────────────────────────────────────────────────── */
+
+  /* SERVER-RENDERED HIDDEN, REVEALED HERE, and both halves of that are deliberate.
+     The markup is identical for every reader, so it can be prerendered; the two
+     facts that differ per reader live only in the browser.
+
+     THE WINDOW IS RE-CHECKED ON A LIVE CLOCK. These pages are prerendered — no
+     `output`, no adapter, `getStaticPaths` — so the `new Date()` the component used
+     is the BUILD clock, frozen. Without this the badge would still be announcing on
+     day 120 and day 300 until somebody happened to redeploy, which is precisely what
+     the arrival date exists to prevent. A missing, empty or malformed `data-since`
+     parses to NaN and leaves it hidden: every degenerate case fails closed. */
+  const newCity = consoleRoot.querySelector<HTMLElement>('#newCity');
+  const newCityId = newCity?.dataset.city ?? '';
+  if (newCity && newCityId) {
+    const stillNew = arrivedMs({ since: newCity.dataset.since })
+      > Date.now() - NEW_CITY_DAYS * 86_400_000;
+    if (stillNew && !wasDismissed(newCityId)) newCity.hidden = false;
+    /* Bound whether or not it was revealed: it costs nothing, and a badge revealed
+       by any future path is still dismissible. `on()` pushes its own removal onto
+       `cleanup`, so this unwires itself with the rest of the console. */
+    const hide = newCity.querySelector<HTMLButtonElement>('#newCityHide');
+    on(hide, 'click', () => {
+      newCity.hidden = true;
+      rememberDismissed(newCityId);
+    });
   }
 
   return () => { for (const off of cleanup.splice(0)) off(); };
