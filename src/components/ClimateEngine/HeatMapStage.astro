@@ -1896,14 +1896,24 @@ const newCity = scope.area.hasData
      (4) and .top (5) and was kept off the top bar only by .map's overflow, while
      against the compass — also 6 — DOM order broke the tie and the badge lost.
      Solid bronze with --bronze-ink on it is the pairing .cta already ships. */
+  /* A TORN STUB, NOT A PAINTED NOTCH. The left edge carries a 3px bite out of the
+     paper — a radial-gradient layer over the flat fill, so the card stays one box
+     for layout, focus and hit-testing while reading as a ticket someone tore off.
+     Paper and near-black are both tokens this console already owns: a third
+     off-white spelled twice would trip obos-layers.test.mjs, and inventing one
+     would put the card outside the palette the rest of the instrument speaks. */
   .newcity{position:absolute;top:56px;left:14px;z-index:3;display:flex;align-items:center;gap:2px;
-    background:var(--bronze);color:var(--bronze-ink);border:0;border-radius:9px;
+    background:radial-gradient(circle at 0 50%,transparent 0 3px,var(--paper) 3px) left/6px 100% no-repeat,
+      var(--paper);
+    color:var(--bronze-ink);border:0;border-radius:12px;
     box-shadow:0 6px 18px rgb(0 0 0 /.35)}
   .newcity[hidden]{display:none}
-  .newcity a{display:block;padding:8px 4px 8px 11px;color:inherit;text-decoration:none}
+  /* 14px on the left, not 11: the notch strip is 6px wide, and at 11 the eyebrow
+     started on the tear itself. */
+  .newcity a{display:block;padding:8px 4px 8px 14px;color:inherit;text-decoration:none}
   .newcity .nc-eyebrow{display:block;font-family:var(--mono);font-size:.44rem;letter-spacing:.2em;
     text-transform:uppercase;opacity:.72}
-  .newcity .nc-name{display:block;font-size:.74rem;font-weight:700;letter-spacing:-.01em;margin-top:1px}
+  .newcity .nc-name{display:block;font-size:.78rem;font-weight:700;letter-spacing:-.01em;margin-top:1px}
   /* WCAG 2.5.8 TARGET SIZE. `padding:8px 10px 8px 6px` measured 23.7x28.8 at every
      viewport from 390 to 1600 — under the 24px floor on WIDTH, and the spacing
      exception does not rescue it because gap:2px puts the link's edge 2px away. It

@@ -336,7 +336,7 @@ test('the badge renders only where it can be true', () => {
     + "reader's own dismissal, so a dismissed reader never sees it flash");
 });
 
-test('the badge is solid bronze with no border, the pairing this console already ships', () => {
+test('the badge is a paper postcard with a torn stub, and no border', () => {
   const css = flat(stage);
   assert.ok(css.includes('.newcity{'), 'the badge has no CSS rule');
   /* TO THE CLOSING BRACE, NOT A FIXED WINDOW. `+ 400` ran 188 characters PAST the
@@ -351,15 +351,25 @@ test('the badge is solid bronze with no border, the pairing this console already
      keeps paying to relearn. */
   const start = css.indexOf('.newcity{');
   const rule = css.slice(start, css.indexOf('}', start) + 1);
-  assert.match(rule, /background:var\(--bronze\)/, 'the fill must be the bronze token');
+  assert.match(rule, /var\(--paper\)/,
+    'the card is paper, and it must be the token — a third off-white spelled here would '
+    + 'trip obos-layers.test.mjs and put the card outside the palette the console speaks');
+  /* THE TORN STUB IS THE WHOLE IDEA, so it gets its own guard. It is a gradient
+     LAYER over the flat fill rather than a shape, which keeps the card one box for
+     layout, focus and hit-testing — and makes it exactly the kind of declaration a
+     later tidy-up deletes as decorative noise, with nothing failing. */
+  assert.match(rule, /radial-gradient\(circle at 0 50%,transparent 0 3px/,
+    'the left edge must keep its 3px bite: without it this is a plain rounded label, '
+    + 'not the torn stub the design asks for');
   /* THE TOKEN, NOT THE HEX. This assertion read /color:#0d0a05/ until the badge
      shipped: writing the literal here made it the fourth spelling of that colour in
      HeatMapStage.astro, and obos-layers.test.mjs refuses a second spelling of any
      hex in this file — a token declaration included, since it counts occurrences.
-     The intent is unchanged and better served: .cta and the badge now point at ONE
-     declaration, so the near-black cannot be tuned in one place and not the other. */
+     The name still says "bronze-ink" because that is what Footer.astro called this
+     near-black first; the card is paper now, and the ink is the same ink. */
   assert.match(rule, /color:var\(--bronze-ink\)/,
-    'the text must be the near-black .cta pairs with bronze, AS THE TOKEN');
+    'the text must be the near-black, AS THE TOKEN — off-black on paper, not a second '
+    + 'spelling of the same colour');
   assert.match(rule, /border:0/, 'the founder asked for no border');
   assert.match(rule, /position:absolute/, 'it is pinned to the frame, not floating over the model');
 });
