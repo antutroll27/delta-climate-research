@@ -38,7 +38,7 @@ test('every declared arrival date is a real day, and the day it names', () => {
   let checked = 0;
   for (const [id, city] of Object.entries(CITIES)) {
     if (city.since === undefined) continue;
-    const t = Date.parse(`${city.since}T00:00:00Z`);
+    const t = arrivedMs(city);
     assert.ok(Number.isFinite(t),
       `${id}.since "${city.since}" is not a real date; newCityToAnnounce would silently never announce it`);
     assert.equal(new Date(t).toISOString().slice(0, 10), city.since,
@@ -71,4 +71,81 @@ test('every declared showcase is a ward of its own city and an area the instrume
       `${id}.showcase "${city.showcase}" is not a registered area id — newCityToAnnounce `
       + 'would silently fall back to the first drawable area');
   }
+});
+
+import {
+  NEW_CITY_DAYS,
+  arrivedMs,
+  newCityKey,
+  newCityToAnnounce,
+  wasDismissed,
+  rememberDismissed,
+} from '../../src/scripts/climate-engine/shell/new-city.ts';
+
+/** A store that records writes, like the ones obos-shell.test.mjs uses. */
+const fakeStore = (seed = {}) => {
+  const data = { ...seed };
+  return {
+    data,
+    getItem: (k) => (k in data ? data[k] : null),
+    setItem: (k, v) => { data[k] = v; },
+  };
+};
+
+/** A store that throws on both halves — a private window, or blocked site data. */
+const hostileStore = () => ({
+  getItem() { throw new Error('SecurityError'); },
+  setItem() { throw new Error('SecurityError'); },
+});
+
+const DAY = 86_400_000;
+const ARRIVED = Date.parse('2026-09-16T00:00:00Z');
+
+test('a city inside the window is announced, and names its showcase ward', () => {
+  const found = newCityToAnnounce('kolkata', new Date(ARRIVED + 3 * DAY), fakeStore());
+  assert.equal(found?.id, 'bengaluru');
+  assert.equal(found?.name, 'Bengaluru');
+  assert.equal(found?.href, '/heat-map/in/bengaluru/mg-road/');
+});
+
+test('outside the window nothing is announced, so the badge retires itself', () => {
+  const late = new Date(ARRIVED + (NEW_CITY_DAYS + 1) * DAY);
+  assert.equal(newCityToAnnounce('kolkata', late, fakeStore()), null);
+});
+
+test('a city is not announced before it arrives', () => {
+  const early = new Date(ARRIVED - DAY);
+  assert.equal(newCityToAnnounce('kolkata', early, fakeStore()), null);
+});
+
+test('the reader is never told about the city they are already in', () => {
+  const when = new Date(ARRIVED + DAY);
+  assert.equal(newCityToAnnounce('bengaluru', when, fakeStore()), null);
+});
+
+test('a dismissed city stays dismissed, and only that city', () => {
+  const store = fakeStore();
+  const when = new Date(ARRIVED + DAY);
+  assert.equal(newCityToAnnounce('kolkata', when, store)?.id, 'bengaluru');
+  rememberDismissed('bengaluru', store);
+  assert.equal(wasDismissed('bengaluru', store), true);
+  assert.equal(wasDismissed('someplace-else', store), false);
+  assert.equal(newCityToAnnounce('kolkata', when, store), null);
+});
+
+test('the key is namespaced like every other preference this console stores', () => {
+  assert.equal(newCityKey('bengaluru'), 'obos:new-city:bengaluru');
+});
+
+test('an unreadable store shows the badge rather than swallowing it', () => {
+  const when = new Date(ARRIVED + DAY);
+  assert.equal(newCityToAnnounce('kolkata', when, hostileStore())?.id, 'bengaluru');
+  assert.equal(wasDismissed('bengaluru', hostileStore()), false);
+  assert.doesNotThrow(() => rememberDismissed('bengaluru', hostileStore()));
+});
+
+test('a null store is the same as no store, never a crash', () => {
+  const when = new Date(ARRIVED + DAY);
+  assert.equal(newCityToAnnounce('kolkata', when, null)?.id, 'bengaluru');
+  assert.doesNotThrow(() => rememberDismissed('bengaluru', null));
 });
