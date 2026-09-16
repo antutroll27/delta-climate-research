@@ -32,24 +32,33 @@ import type { DcUrsInputs } from './dc-urs-inputs.ts';
 import { eqMeanFromMeans, type Interventions, type LayerMeans } from './heat-map-model.ts';
 import type { SimParams } from './types.ts';
 
-/** How far each slider can push its indicator, at full travel.
+/** How far each slider can push its indicator, at FULL SLIDER TRAVEL.
  *
  *  These are deliberately conservative and describe the SCENARIO, not a
- *  prediction. They are ceilings on plausible change over a 1400 m ward, not
- *  fitted constants — an intervention model calibrated against measurement does
- *  not exist for these wards, and pretending otherwise would repeat the mistake
- *  the thermal calibration was built to correct. */
+ *  prediction. They are ceilings on plausible change, not fitted constants — an
+ *  intervention model calibrated against measurement does not exist for these
+ *  wards, and pretending otherwise would repeat the mistake the thermal
+ *  calibration was built to correct.
+ *
+ *  Only the two PARKS gains are additionally sized OVER A 1400 m WARD, because
+ *  parks are a fixed package and `areaScale` rescales them. The rest are a share
+ *  of the ward and mean the same thing at any ward size. */
 export const SCENARIO = {
-  /** 50 street-tree units at full travel. Canopy over a ward is bounded by the
-   *  street network, so the reachable ceiling is modest. */
+  /** Full travel is the ward's whole street corridor planted, which is a
+   *  different number of trees in every ward: `computeCost` bills 110 trees per
+   *  corridor km, so about 21,900 at MG Road's 198.9 km against 5,600 at
+   *  Ballygunge's 51.3 km. Canopy over a ward is bounded by the street network,
+   *  so the reachable ceiling is modest. */
   treesFvcGain: 0.12,
   treesCanopyGain: 0.10,
-  /** 10 pocket parks. Parks add ground vegetation and, more importantly, put a
-   *  refuge within reach. */
+  /** 10 pocket parks over a 1400 m ward. Parks add ground vegetation and, more
+   *  importantly, put a refuge within reach. */
   parksFvcGain: 0.06,
   parksCanopyGain: 0.04,
-  /** Metres of refuge distance removed at full park travel. A pocket park in a
-   *  ward that had none is the single largest TRA move available. */
+  /** Metres of refuge distance removed at full park travel, over a 1400 m ward.
+   *  A pocket park in a ward that had none is the single largest TRA move
+   *  available — but every served refuge distance is 27.3–93.3 m, and the cut
+   *  FLOORS at zero, so on a real ward full travel is never reached. */
   parksDistCut: 220,
   /** 100 % cool-roof coverage over the built fraction. LBNL aged value 0.60
    *  against a dark-roof 0.15; the ward-mean shift is far smaller than that
@@ -78,6 +87,19 @@ export const REFERENCE_WARD_M = 1400;
  * 198.9 km against Ballygunge's 51.3 km, about 3.9x the money for the same slider.
  * A slider is a SHARE OF THE WARD, and scaling its index gain by area made the
  * index move a quarter as far as the heat layers and the cost it sits beside.
+ *
+ * DORMANT TODAY, AND SAY SO. The pocket-parks control is not rendered: the console
+ * draws `ivTrees`, `ivRoof` and `ivFacades` only (`shell/InterventionPane.astro`),
+ * `heat-map-app.ts` binds those three, and `normalizeCoverage` pins a Compare link's
+ * `parks` to 0 so a stale URL cannot reintroduce it. `iv.parks` is therefore always
+ * 0 on the shipped page, and this function currently scales nothing that reaches a
+ * score. It is kept exported, tested and correct for the day that control returns.
+ *
+ * THE QUARTER HOLDS ONLY WHILE THE REFUGE DISTANCE IS ABOVE ZERO. `applyScenario`
+ * floors `distCoolM` at 0, and every served ward sits at 27.3–93.3 m, so the 1400 m
+ * side exhausts its refuge distance first and the ratio climbs back toward 1: at MG
+ * Road's 49.5 m the 2800 m cut is 0.25 of the 1400 m cut at `parks = 2`, 0.556 at 5
+ * and 1.000 at 10. The vegetation gains have no floor and stay a clean quarter.
  */
 export function areaScale(sizeM: number): number {
   if (!(sizeM > 0)) throw new RangeError(`dc-urs-scenario: ward size must be positive, got ${sizeM}`);

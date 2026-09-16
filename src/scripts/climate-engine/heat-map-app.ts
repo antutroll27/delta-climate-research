@@ -3157,7 +3157,11 @@ export function mountHeatMap(): () => void {
       a: toLegacyWard(state.ward),
       trees: String(Math.round(state.iv.trees / 50 * 100)),
       roof: String(Math.round(state.iv.roof / 5) * 5),
-      parks: String(Math.round(state.iv.parks * M.PARK_HA / 196 * 1000) / 10),
+      /* NO `parks`. It was `state.iv.parks * PARK_HA / 196`, where 196 ha IS a
+         1400 m ward — a hardcoded ward size on a page that now reads its own. It
+         was doubly dead: no parks control is rendered, so `iv.parks` is always 0,
+         and Compare's reader pins `parks` to 0 anyway (`normalizeCoverage`), which
+         `serializePairedScenario` matches by emitting none. */
       facades: String(Math.round(state.iv.facades / 15 * 1000) / 10),
       phase: state.phase === 'night' ? 'retained' : 'peak',
     });

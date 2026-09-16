@@ -77,8 +77,12 @@ for (const [name, iv] of [
    SCORE is not linear in refuge distance: `parks: 2` on this ward gains 0.244577 pts
    at 1400 m and 0.059928 at 2800 m — a ratio of 0.2450, not 0.2500 — so asserting a
    quarter of the score would be asserting a coincidence. The 1400 m figure is pinned
-   as it stood before 2026-09-16, since Kolkata must not move. */
-test('parks are a fixed package, so a 2800 m ward moves a quarter as far', () => {
+   as it stood before 2026-09-16, since Kolkata must not move.
+
+   THIS IS THE LINEAR REGIME, and only that. GOLDEN[0]'s refuge distance is 800 m,
+   which no real ward reaches — every served ward is 27.3–93.3 m. The case below
+   covers what actually happens there. */
+test('parks: in the linear regime a 2800 m ward moves a quarter as far', () => {
   const base = GOLDEN[0].inputs;
   const iv = { ...ZERO, parks: 2 };
   const small = applyScenario(base, iv, undefined, REFERENCE_WARD_M).inputs;
@@ -96,6 +100,36 @@ test('parks are a fixed package, so a 2800 m ward moves a quarter as far', () =>
     + 'trees, roof and facade gains stopped being scaled, and Kolkata must not move');
   assert.ok(gBig < gSmall / 3,
     `parks at 2800 m gained ${gBig} pts against ${gSmall} at 1400 m -- not diluted`);
+});
+
+/* AND ON A REAL WARD THE QUARTER RUNS OUT. `dist` floors at zero
+   (`Math.max(0, base - parks * 220)`), and every served refuge distance is 27.3–93.3 m,
+   so the 1400 m ward exhausts its distance while the 2800 m ward is still cutting:
+   the ratio climbs from a quarter back toward 1. Measured at MG Road's served 49.5 m —
+   0.250 at parks = 2, 0.556 at 5, 1.000 at 10 — which is why "the parks contribution to
+   distCoolM scales by a quarter" is true only above the floor, and the docs say so. */
+test('parks: once the refuge distance floors at zero, the smaller ward saturates first', () => {
+  const g = GOLDEN[0].inputs;
+  const base = { ...g, distCoolM: { ...g.distCoolM, value: 49.5 } };  // MG Road, as served
+  const cutAt = (parks, sizeM) => base.distCoolM.value
+    - applyScenario(base, { ...ZERO, parks }, undefined, sizeM).inputs.distCoolM.value;
+
+  close(cutAt(2, 2800) / cutAt(2, 1400), 0.25, 'parks = 2 is still the linear quarter');
+  close(cutAt(5, 2800) / cutAt(5, 1400), 27.5 / 49.5, 'parks = 5: only the 1400 m ward has floored');
+
+  const small = applyScenario(base, { ...ZERO, parks: 10 }, undefined, REFERENCE_WARD_M).inputs;
+  const big = applyScenario(base, { ...ZERO, parks: 10 }, undefined, 2800).inputs;
+  assert.equal(small.distCoolM.value, 0,
+    'parks = 10 cuts 220 m, so a 49.5 m refuge distance must floor at 0 on a 1400 m ward');
+  assert.equal(big.distCoolM.value, 0,
+    'parks = 10 over a 2800 m ward still cuts 55 m, which exhausts 49.5 m -- it must floor too');
+  close(cutAt(10, 2800) / cutAt(10, 1400), 1,
+    'both wards floored, so the refuge cut is EQUAL, not a quarter');
+
+  /* The vegetation gains have no floor, so they are still a clean quarter in the very
+     same call -- which is why the saturation is a statement about `distCoolM` alone. */
+  close(big.fvc.value - base.fvc.value, 0.25 * (small.fvc.value - base.fvc.value),
+    'fvc is unfloored and must still be a quarter');
 });
 
 test('a ward size that is not positive is refused, not scored', () => {
