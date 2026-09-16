@@ -208,43 +208,91 @@ const stage = await readFile(
   new URL('../../src/components/ClimateEngine/HeatMapStage.astro', import.meta.url), 'utf8');
 const flat = (s) => s.replace(/\s+/g, ' ').trim();
 
+/* THE BADGE'S OWN MARKUP, AND NOT A CHARACTER MORE. Slicing to `</div>` alone
+   assumed the badge contains no element of its own: wrapping the link in a layout
+   div would move that closing tag and silently re-point every assertion below at
+   markup the badge does not own. Stop at whichever comes first — the close, or the
+   next element — so a nested div FAILS these tests instead of escaping them. */
+const badgeInner = (markup) => {
+  const start = markup.indexOf('<div class="newcity"');
+  assert.notEqual(start, -1, 'the badge container is missing');
+  const block = markup.slice(start);
+  const ends = [block.indexOf('</div>'), block.indexOf('<div', 1)].filter((i) => i !== -1);
+  return block.slice(0, ends.length > 0 ? Math.min(...ends) : block.length);
+};
+
 test('the badge is a link with a SIBLING dismiss button, never a button inside a link', () => {
   const markup = flat(stage);
   assert.match(markup, /<div class="newcity" id="newCity"[^>]*>/,
     'the badge container is missing');
-  const block = markup.slice(markup.indexOf('<div class="newcity"'));
-  const inner = block.slice(0, block.indexOf('</div>'));
+  const inner = badgeInner(markup);
   assert.match(inner, /<a [^>]*href=/, 'the badge must contain a real link');
   assert.match(inner, /<button [^>]*id="newCityHide"/, 'the dismiss control must be a button');
-  assert.ok(inner.indexOf('</a>') < inner.indexOf('<button'),
+  /* GUARDED AGAINST -1, which is what indexOf returns for absent — and -1 is less
+     than every real index, so a badge that had lost its </a> altogether would have
+     satisfied this comparison rather than failed it. */
+  const linkEnd = inner.indexOf('</a>');
+  const buttonStart = inner.indexOf('<button');
+  assert.ok(linkEnd !== -1 && buttonStart !== -1 && linkEnd < buttonStart,
     'the button must CLOSE the link before opening: a button inside an anchor is invalid '
     + 'HTML and traps keyboard users');
 });
 
-test('both controls carry their own name, because bronze alone says nothing to a screen reader', () => {
+test('the link keeps its own visible text as its name, and the phone rule keeps the eyebrow', () => {
   const markup = flat(stage);
-  const block = markup.slice(markup.indexOf('<div class="newcity"'));
-  const inner = block.slice(0, block.indexOf('</div>'));
-  /* MEANING, NOT SPELLING — AND NOT MERELY PRESENCE. `aria-label=` alone passes on
-     aria-label="Bengaluru", which is the exact failure the message below names, so
-     that form could not be mutation-proved against its own claim. Pinning the whole
-     backtick expression instead would fail on a line-wrap or a renamed local while
-     the behaviour stayed correct — what commit a17b257 rejected for `data-since`.
-     This reads the two things that must be true: the city is named FROM the record,
-     and the label says why the badge is there. */
-  assert.match(inner, /<a [^>]*aria-label=\{[^>]*newCity\.name[^>]*newly added city/,
-    'the link must name the city AND say it is newly added: "Bengaluru →" alone tells a '
-    + 'screen-reader user nothing about why it is there');
+  const inner = badgeInner(markup);
+  /* LABEL IN NAME (WCAG 2.5.3, level A). The visible text is "New city Bengaluru →";
+     an aria-label of "Bengaluru — newly added city" REPLACED that with a string the
+     visible words are not contained in, so a speech-input user saying "click New
+     city" matched nothing. On a desktop the override was never needed — the visible
+     text already says it — and on a phone it existed only to restore an eyebrow that
+     `display:none` had removed from the name. Deleting the label and clipping the
+     eyebrow fixes both ends at once, which is why these two assertions sit together:
+     either one alone would let the other regress. */
+  assert.doesNotMatch(inner, /<a [^>]*aria-label/,
+    'the link must not override its own visible text: the accessible name has to CONTAIN '
+    + '"New city", and the visible eyebrow already puts it there');
   assert.match(inner, /<button [^>]*aria-label="Dismiss"/, 'a bare × has no accessible name');
+  assert.match(markup, /\.newcity \.nc-eyebrow\{position:absolute;[^}]*clip-path:inset\(50%\)/,
+    'on phones the eyebrow must be CLIPPED rather than display:none — display:none takes '
+    + '"New city" out of the accessible name as well as off the screen, which is the very '
+    + 'thing the deleted aria-label was papering over');
+  assert.doesNotMatch(markup, /\.newcity \.nc-eyebrow\{display:none\}/,
+    "display:none on the eyebrow silently shortens the link's accessible name");
   assert.match(markup, /\.newcity a:focus-visible,\.newcity button:focus-visible\{outline:/,
     'both controls need a visible focus ring — they sit on a bronze fill, where the '
     + "browser's default ring is nearly invisible");
 });
 
+/**
+ * WCAG 2.5.8, AND NOTHING ELSE IN THE SUITE WILL EVER CATCH IT.
+ *
+ * The dismiss button measured 23.7 x 28.8 px at every viewport from 390 to 1600 —
+ * under the 24px floor on width. The spacing exception does not apply: `gap:2px`
+ * puts the link's edge 2px away. The badge ships `hidden`, so an axe scan walks
+ * straight past it, and the phone rule used to shrink the LINK's padding while
+ * leaving the button exactly as it was.
+ */
+test('the dismiss target is big enough to hit, on a desktop and on a phone', () => {
+  const css = flat(stage);
+  assert.match(css, /\.newcity button\{[^}]*min-inline-size:28px/,
+    'the dismiss button needs an explicit minimum width — padding alone left it 23.7px');
+  assert.match(css, /\.newcity button\{min-inline-size:30px/,
+    'and 30px under the coarse-pointer gate, matching .rn-x, the next smallest control '
+    + 'a phone offers');
+});
+
 test('the badge renders only where it can be true', () => {
   const markup = flat(stage);
-  assert.match(markup, /newCityToAnnounce\(scope\.city\.id\)/,
+  /* `[,)]` so the call may take arguments. It now passes the store explicitly as
+     null — the server must never consult a reader's dismissal — and pinning the
+     one-argument spelling would have failed that correction while the rule it
+     guards, "ask the module rather than decide for yourself", stayed intact. */
+  assert.match(markup, /newCityToAnnounce\(scope\.city\.id[,)]/,
     'the component must ask the module, not decide for itself');
+  assert.match(markup, /newCityToAnnounce\(scope\.city\.id, new Date\(\), null\)/,
+    'and it must pass the store as NULL: `defaultStore()` is empty under Node only by '
+    + 'accident, and one dismissal at BUILD time would silence the badge for everyone');
   assert.match(markup, /newCity &&/,
     'nothing renders when there is no city to announce');
   assert.match(markup, /data-since=\{[^}]*since\}/,
@@ -258,7 +306,11 @@ test('the badge renders only where it can be true', () => {
 test('the badge is solid bronze with no border, the pairing this console already ships', () => {
   const css = flat(stage);
   assert.ok(css.includes('.newcity{'), 'the badge has no CSS rule');
-  const rule = css.slice(css.indexOf('.newcity{'), css.indexOf('.newcity{') + 400);
+  /* TO THE CLOSING BRACE, NOT A FIXED WINDOW. `+ 400` ran 189 characters past the
+     rule and swept in `.newcity button{…}`, which also declares `border:0` — so the
+     "no border" assertion below could be satisfied by a rule it does not name. */
+  const start = css.indexOf('.newcity{');
+  const rule = css.slice(start, css.indexOf('}', start) + 1);
   assert.match(rule, /background:var\(--bronze\)/, 'the fill must be the bronze token');
   /* THE TOKEN, NOT THE HEX. This assertion read /color:#0d0a05/ until the badge
      shipped: writing the literal here made it the fourth spelling of that colour in

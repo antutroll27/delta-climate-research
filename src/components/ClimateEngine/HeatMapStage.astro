@@ -138,7 +138,16 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
    These pages are prerendered, so the `new Date()` this call uses is the BUILD
    clock: without the date on the element the shell could not tell a window that
    is still open from one that closed two months and no deploys ago. */
-const newCity = scope.area.hasData ? newCityToAnnounce(scope.city.id) : null;
+/* THE STORE IS PASSED EXPLICITLY AS NULL, not left to default. `newCityToAnnounce`
+   falls back to `defaultStore()`, which returns null here — but only by accident of
+   Node having no `localStorage`. A polyfill, or an adapter that gave the build one,
+   would let a SINGLE dismissal at build time silence the badge for every reader of
+   every prerendered page, silently and until someone redeployed. The server has no
+   reader whose preference it could be consulting; the dismissal is re-checked on
+   the client, which is the only place it exists. */
+const newCity = scope.area.hasData
+  ? newCityToAnnounce(scope.city.id, new Date(), null)
+  : null;
 ---
 {/* `data-console` is how shell/console-shell.ts finds a page with a rail and
     panes on it. It is deliberately NOT `.stage`: Compare has a console too and
@@ -398,7 +407,12 @@ const newCity = scope.area.hasData ? newCityToAnnounce(scope.city.id) : null;
 
     {newCity && (
       <div class="newcity" id="newCity" data-city={newCity.id} data-since={newCity.since} hidden>
-        <a href={newCity.href} aria-label={`${newCity.name} — newly added city`}>
+        {/* NO aria-label. The visible text already reads "New city Bengaluru", and a
+            label of "Bengaluru — newly added city" replaced it with a string those
+            visible words are not contained in — Label in Name (WCAG 2.5.3), so
+            "click New city" matched nothing by speech. The eyebrow is CLIPPED rather
+            than display:none on phones, so the name keeps "New city" there too. */}
+        <a href={newCity.href}>
           <span class="nc-eyebrow">New city</span>
           <span class="nc-name">{newCity.name} <span aria-hidden="true">→</span></span>
         </a>
@@ -1836,13 +1850,26 @@ const newCity = scope.area.hasData ? newCityToAnnounce(scope.city.id) : null;
   @keyframes loadchip-sweep{to{transform:translateX(100%)}}
   @media (prefers-reduced-motion:reduce){.loadchip.on::after{animation:none;transform:none;opacity:.55}}
 
-  /* THE OTHER CITY. Top-left is the only free corner: .synthetic and the stamp are
-     top-centre, .loadchip sits at 118px, .place at 34%, and the compass, sun line,
-     chip row and tip hint own the bottom. PINNED TO THE FRAME, never floating over
-     the model — the idle orbit turns the scene forever (heat-map-app.ts), so any
-     patch of empty sky fills with buildings at another bearing.
+  /* THE OTHER CITY. Top-left is free only BELOW the honesty banner, and the first
+     version of this comment was wrong to call the corner free outright. `.synthetic`
+     is centred with width:max-content, so it GROWS LEFTWARDS as the viewport
+     narrows: at top:14px the badge covered it by 11.0x28.9px at 1366 and 54.0x28.9
+     at 1280 — the two widths heat-map-overlap.spec.ts names as the commonest
+     laptops — and by 111.2x27.4 at 1024 touch. The banner's centre moves with the
+     viewport while the badge's left edge does not, so no width makes sitting BESIDE
+     it safe. The badge sits UNDER its band instead: the banner ends 48.9px into
+     .map, so top:56px clears it at every width measured and still leaves .loadchip
+     its own line at 118px. The line being covered was the one whose own comment
+     says it exists to be read.
+     PINNED TO THE FRAME, never floating over the model — the idle orbit turns the
+     scene forever (heat-map-app.ts), so any patch of empty sky fills with buildings
+     at another bearing.
+     z-index 3 is the banner-and-chip tier, chosen rather than copied: the badge has
+     to sit over the map and its labels and nothing else. At 6 it outranked .panel
+     (4) and .top (5) and was kept off the top bar only by .map's overflow, while
+     against the compass — also 6 — DOM order broke the tie and the badge lost.
      Solid bronze with --bronze-ink on it is the pairing .cta already ships. */
-  .newcity{position:absolute;top:14px;left:14px;z-index:6;display:flex;align-items:center;gap:2px;
+  .newcity{position:absolute;top:56px;left:14px;z-index:3;display:flex;align-items:center;gap:2px;
     background:var(--bronze);color:var(--bronze-ink);border:0;border-radius:9px;
     box-shadow:0 6px 18px rgb(0 0 0 /.35)}
   .newcity[hidden]{display:none}
@@ -1850,16 +1877,42 @@ const newCity = scope.area.hasData ? newCityToAnnounce(scope.city.id) : null;
   .newcity .nc-eyebrow{display:block;font-family:var(--mono);font-size:.44rem;letter-spacing:.2em;
     text-transform:uppercase;opacity:.72}
   .newcity .nc-name{display:block;font-size:.74rem;font-weight:700;letter-spacing:-.01em;margin-top:1px}
+  /* WCAG 2.5.8 TARGET SIZE. `padding:8px 10px 8px 6px` measured 23.7x28.8 at every
+     viewport from 390 to 1600 — under the 24px floor on WIDTH, and the spacing
+     exception does not rescue it because gap:2px puts the link's edge 2px away. It
+     was also the smallest control in this file: .rn-x is 30x30, .svmodal-x 32x32,
+     .entry-go 48. The badge ships `hidden`, so no axe scan will ever walk into it;
+     obos-new-city.test.mjs pins the minimum instead. */
   .newcity button{background:none;border:0;color:inherit;opacity:.55;cursor:pointer;
-    font-size:.8rem;line-height:1;padding:8px 10px 8px 6px}
+    font-size:.8rem;line-height:1;padding:8px;min-inline-size:28px;display:grid;place-items:center}
   .newcity button:hover{opacity:1}
   .newcity a:focus-visible,.newcity button:focus-visible{outline:2px solid var(--bronze-ink);outline-offset:-3px;border-radius:7px}
-  /* Phones: the eyebrow goes, the name and arrow stay. */
-  @media (pointer:coarse) and (max-width:560px){
-    .newcity{top:10px;left:10px;border-radius:8px}
-    .newcity .nc-eyebrow{display:none}
+  /* PHONES, EITHER ORIENTATION — the same two-branch gate the HUD block above uses,
+     and for the same reason. Written with the `max-width:560px` branch alone, this
+     rule never fired on a landscape phone: at 844x390 the badge kept its desktop box
+     while the HUD moved `.compass` to top:34px;left:8px, and the compass painted
+     OVER it by 38x25.3px — covering the city's name and part of the link's hit area.
+     No other rule in this file spells that gate with one branch.
+     THE BAND ABOVE THE HUD IS 34px AND THE CARD IS 30, so top:2px centres it with
+     2px either side. top:4px was measured first and put the card's bottom edge at
+     exactly 34.0 — flush against the compass, touching but not overlapping, which
+     is one rounding error away from the defect this rule exists to fix. The card is
+     30px rather than the 28.8 the arithmetic assumed because the dismiss target's
+     30px minimum (below) now sets the height.
+     THE EYEBROW IS CLIPPED, NOT REMOVED. `display:none` took "New city" out of the
+     accessible name as well as off the screen — which is precisely what the link's
+     aria-label was added to compensate for, one problem solved twice in opposite
+     directions. Clipped, the name still reads "New city Bengaluru" here, so the
+     visible text is contained in it and no override is needed. */
+  @media (pointer:coarse) and (max-width:560px),
+         (pointer:coarse) and (orientation:landscape) and (max-height:560px){
+    .newcity{top:2px;left:10px;border-radius:8px}
+    .newcity .nc-eyebrow{position:absolute;width:1px;height:1px;margin:-1px;padding:0;
+      overflow:hidden;clip-path:inset(50%);white-space:nowrap}
     .newcity .nc-name{font-size:.66rem}
     .newcity a{padding:6px 3px 6px 9px}
+    /* 30px to match .rn-x, the next smallest control a phone offers */
+    .newcity button{min-inline-size:30px;min-block-size:30px}
   }
 
   /* Borderless glass. The 1px --line stroke was the last piece of the "grid of
