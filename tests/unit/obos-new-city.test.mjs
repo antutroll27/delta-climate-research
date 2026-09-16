@@ -74,6 +74,7 @@ test('every declared showcase is a ward of its own city and an area the instrume
 });
 
 import {
+  DISMISSED,
   NEW_CITY_DAYS,
   arrivedMs,
   newCityKey,
@@ -106,6 +107,9 @@ test('a city inside the window is announced, and names its showcase ward', () =>
   assert.equal(found?.id, 'bengaluru');
   assert.equal(found?.name, 'Bengaluru');
   assert.equal(found?.href, '/heat-map/in/bengaluru/mg-road/');
+  assert.equal(found?.since, '2026-09-16',
+    'the arrival date travels to the client: these pages are prerendered, so the window '
+    + 'was checked against the build clock and the browser must re-check it before revealing');
 });
 
 test('the window is ninety days: a city 89 days old is still announced, 91 days old is not', () => {
@@ -138,6 +142,14 @@ test('a dismissed city stays dismissed, and only that city', () => {
   const when = new Date(ARRIVED + DAY);
   assert.equal(newCityToAnnounce('kolkata', when, store)?.id, 'bengaluru');
   rememberDismissed('bengaluru', store);
+  assert.equal(store.data[newCityKey('bengaluru')], 'dismissed',
+    'the stored value is spelled out here ON PURPOSE: asserting it against DISMISSED would '
+    + 'cancel out of its own guard the way the ninety-day window once did. This string is '
+    + 'already in real readers’ localStorage — change it and everyone who put the badge '
+    + 'away gets it back');
+  assert.equal(DISMISSED, 'dismissed',
+    'and the exported constant IS that wire value — if these two ever disagree, the module '
+    + 'is writing a value its own readers cannot match');
   assert.equal(wasDismissed('bengaluru', store), true);
   assert.equal(wasDismissed('someplace-else', store), false);
   assert.equal(newCityToAnnounce('kolkata', when, store), null);
@@ -158,4 +170,30 @@ test('a null store is the same as no store, never a crash', () => {
   const when = new Date(ARRIVED + DAY);
   assert.equal(newCityToAnnounce('kolkata', when, null)?.id, 'bengaluru');
   assert.doesNotThrow(() => rememberDismissed('bengaluru', null));
+});
+
+/**
+ * THE NEWEST CANDIDATE IS THE ONLY CANDIDATE.
+ *
+ * `CITIES` and `scope/registry.ts` are already divergent — Dubai is declared with
+ * three areas that are all `drawable: false` — so "a newer city the instrument
+ * cannot open" is an ordinary state, not a contrived one. A loop that walked past
+ * it would hand the badge to Bengaluru, the SECOND-newest, while this module's own
+ * docblock promises the most recent arrival wins. Nothing else in the suite would
+ * notice, because every other test has exactly one candidate.
+ */
+test('a newer city the instrument cannot open silences the badge, never demotes it to the runner-up', () => {
+  CITIES.northwich = {
+    id: 'northwich', name: 'Northwich', country: 'India',
+    cellMeters: 30, wards: [], since: '2026-09-20',
+  };
+  try {
+    const when = new Date(Date.parse('2026-09-21T00:00:00Z'));
+    assert.equal(newCityToAnnounce('kolkata', when, fakeStore()), null,
+      'Northwich is newer than Bengaluru and has no registered area, so there is nothing to '
+      + 'announce — naming Bengaluru here would tell the reader they just gained a city they '
+      + 'did not, in a way that looks like success');
+  } finally {
+    delete CITIES.northwich;
+  }
 });
