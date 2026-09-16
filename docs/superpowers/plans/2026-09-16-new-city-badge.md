@@ -644,6 +644,7 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 
 ```ts
 import { expect, test } from '@playwright/test';
+import { newCityToAnnounce } from '../../src/scripts/climate-engine/shell/new-city.ts';
 
 /**
  * THE BADGE, IN A BROWSER.
@@ -651,19 +652,36 @@ import { expect, test } from '@playwright/test';
  * The unit tests prove the rules and the markup; only a browser proves the badge
  * is revealed, that its link goes where it says, and that a dismissal survives a
  * reload — which is the whole promise of a dismissible announcement.
+ *
+ * THE EXPECTATION IS DERIVED, NOT TYPED, and that is what stops this test dying
+ * of old age. `since` starts a 90-day window; a spec that simply asserts "the
+ * badge is there" passes until the window closes and then fails for ever, with no
+ * code change and nothing wrong. So it asks the module the page asks — on the same
+ * real clock — and asserts the DOM agrees: present while the window is open,
+ * absent once it is not.
  */
 const KOLKATA = '/heat-map/in/kolkata/ballygunge/';
 const BENGALURU = '/heat-map/in/bengaluru/mg-road/';
 
 test('Kolkata announces Bengaluru, and the dismissal sticks', async ({ page }) => {
+  const announced = newCityToAnnounce('kolkata', new Date(), null);
   const thrown: string[] = [];
   page.on('pageerror', (error) => thrown.push(String(error)));
 
   await page.goto(KOLKATA, { waitUntil: 'domcontentloaded' });
   const badge = page.locator('#newCity');
+
+  if (!announced) {
+    /* The window has closed. That is the badge working, not failing — and the
+       assertion still has teeth: a badge rendering past its own window fails here. */
+    await expect(page.locator('#bcount')).not.toHaveText(/^—/, { timeout: 30_000 });
+    await expect(badge).toHaveCount(0);
+    return;
+  }
+
   await expect(badge).toBeVisible({ timeout: 30_000 });
-  await expect(badge.locator('a')).toHaveAttribute('href', BENGALURU);
-  await expect(badge).toContainText('Bengaluru');
+  await expect(badge.locator('a')).toHaveAttribute('href', announced.href);
+  await expect(badge).toContainText(announced.name);
 
   await badge.locator('#newCityHide').click();
   await expect(badge).toBeHidden();
@@ -727,10 +745,26 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 | `npm run build` | completes |
 | e2e: `heat-map-new-city`, `heat-map-second-city`, `heat-map-bengaluru-resilience` | all pass |
 
-- [ ] **Step 2: Look at it**
+- [ ] **Step 2: Re-stamp the arrival date**
+
+`src/data/cities.ts` carries `since: '2026-09-16'`, and the field's own docblock says it is the day the city became reachable **in production**. Bengaluru is not: PR #29 is open, not merged. The 90-day window is therefore already burning down against a date that has not happened, and if the merge slips past 2026-12-15 the badge retires before it ever announces — with every gate green, because no test can know the merge date.
+
+So: set `since` to the day this work actually merges to `main`. If that day is not yet known, leave it and put the re-stamp on the merge checklist — but say so explicitly in the Step 3 report rather than letting it pass silently.
+
+```bash
+# when the merge date is known
+# edit src/data/cities.ts: since: '<YYYY-MM-DD of the merge>'
+npm run test:unit   # the date tests must still pass
+git add src/data/cities.ts
+git commit -m "chore(obos): stamp Bengaluru's arrival with its real merge date
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
+```
+
+- [ ] **Step 3: Look at it**
 
 With `npm run dev` running, open `http://localhost:4321/heat-map/in/kolkata/ballygunge/` and confirm: the badge sits top-left, solid bronze, no border; it does not collide with the provenance strip or the construction stamp at 1280 or at 1920; and at 390px width the eyebrow is gone and the card still reads.
 
-- [ ] **Step 3: Report**
+- [ ] **Step 4: Report**
 
-Report every gate result, the unit-test count, and a screenshot or description of the badge at desktop and phone width.
+Report every gate result, the unit-test count, whether `since` was re-stamped or deferred to the merge checklist, and a screenshot or description of the badge at desktop and phone width.
