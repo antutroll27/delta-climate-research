@@ -1794,7 +1794,7 @@ const newCity = scope.area.hasData
      A dark fill keeps the bronze identity where the identity actually lives (the
      border, the pulsing dot, the text) and gives the words a ground that does not
      move with the map beneath. */
-  .synthetic{position:absolute;top:20px;inset-inline:var(--badge-berth,0px) 0;margin-inline:auto;width:max-content;max-width:calc(100% - var(--badge-berth,0px) - 2rem);display:flex;align-items:center;gap:.5rem;font-family:var(--mono);font-size:.56rem;letter-spacing:.2em;color:var(--bronze);background:rgb(9 20 22 /.94);border:1px solid rgb(176 141 87 /.42);border-radius:20px;padding:.42rem .9rem;z-index:3;text-transform:uppercase;backdrop-filter:blur(8px)}
+  .synthetic{position:absolute;top:20px;inset-inline:var(--badge-berth,0px) 0;margin-inline:auto;width:max-content;max-width:calc(100% - 2rem);display:flex;align-items:center;gap:.5rem;font-family:var(--mono);font-size:.56rem;letter-spacing:.2em;color:var(--bronze);background:rgb(9 20 22 /.94);border:1px solid rgb(176 141 87 /.42);border-radius:20px;padding:.42rem .9rem;z-index:3;text-transform:uppercase;backdrop-filter:blur(8px)}
   .synthetic .sp{opacity:.82}
   .synthetic .d{width:6px;height:6px;border-radius:50%;background:var(--bronze);animation:hmPulse 2.2s infinite}
   @keyframes hmPulse{0%,100%{opacity:1}50%{opacity:.3}}
@@ -1814,7 +1814,7 @@ const newCity = scope.area.hasData
      difference is that the right edge stops short of the instrument column
      instead of at the map's edge. */
   .stamp-slot{position:absolute;inset-inline:var(--badge-berth,0px) var(--instr-berth);margin-inline:auto;
-    width:max-content;max-width:calc(100% - var(--badge-berth,0px) - var(--instr-berth) - 1rem);
+    width:max-content;max-width:calc(100% - var(--instr-berth) - 1rem);
     top:68px;z-index:3;pointer-events:none;
               --stamp-size:.62rem;--stamp-pad:.5rem 1rem;--stamp-tracking:.26em;--stamp-rot:-2.5deg}
   /* NOT :global(.con-stamp) — this block is `is:global`, so Astro runs no scoping pass
@@ -1833,7 +1833,7 @@ const newCity = scope.area.hasData
      something. It is only ever visible during a load, which is why nobody caught
      it by looking. */
   .loadchip{position:absolute;top:118px;inset-inline:var(--badge-berth,0px) var(--instr-berth);margin-inline:auto;
-    width:max-content;max-width:calc(100% - var(--badge-berth,0px) - var(--instr-berth) - 1rem);
+    width:max-content;max-width:calc(100% - var(--instr-berth) - 1rem);
     font-family:var(--mono);font-size:.52rem;letter-spacing:.26em;color:var(--cyan);z-index:3;text-transform:uppercase;opacity:0;transition:opacity .25s;
     padding-bottom:7px;overflow:hidden}
   .loadchip.on{opacity:1}
@@ -1869,6 +1869,12 @@ const newCity = scope.area.hasData
      `.tree-row:has(.tree-box:checked)` — so this is precedent rather than a new
      dependency. Scoped to a REVEALED badge, so a page that never shows one keeps the
      full width it has always centred in. */
+  /* ON THE INSET ONLY, never in a max-width. `inset-inline` already reserves the
+     badge's column before `margin-inline:auto` centres what is left, so subtracting
+     the berth again from `max-width` counts it twice: the stamp's box collapsed to
+     21px, "UNDER CONSTRUCTION" wrapped to two lines at every width from 600 to 1280,
+     and the taller box grew down into the loadchip's band — covering "Building
+     ward…" at 1200-1280, the one message that only appears while a reader waits. */
   .map:has(.newcity:not([hidden])){--badge-berth:142px}
 
   /* THE OTHER CITY. Top-left is free only BELOW the honesty banner, and the first
