@@ -581,7 +581,26 @@ It ships `hidden`. `console-shell.ts` removes that in Task 4 once it knows the r
 
 Then repoint the existing `.cta` rule from `color:#0d0a05` to `color:var(--bronze-ink)`, so exactly one spelling of the hex remains in the file and the button and the badge cannot drift apart.
 
-- [ ] **Step 5b: Style the badge**
+- [ ] **Step 5b: Berth the centred overlays around the badge**
+
+`.synthetic`, `.stamp-slot` and `.loadchip` all centre in the map's free space, so each one's left edge walks toward a fixed-left badge as the viewport narrows. Every (fixed-left, centred) pair is a width-dependent collision, and moving the badge only changes which overlay it hits. The file already solves the mirror problem on the right with `--instr-berth`; add its counterpart, and have all three overlays subtract it from BOTH the inset and the max-width — subtracting from the inset alone just re-centres the overflow.
+
+```css
+  /* THE BADGE'S BERTH. Scoped with :has() so the berth exists only while a badge
+     is actually revealed — precedent: LayerTree.astro's .tree-row:has(.tree-box:checked).
+     142 = the badge's left inset (14) + its measured width (118) + a 10px gap. */
+  .map:has(.newcity:not([hidden])){--badge-berth:142px}
+```
+
+Then on each of the three overlays: `inset-inline:var(--badge-berth,0px) <whatever it already has on the right>` and `max-width:calc(100% - var(--badge-berth,0px) - …)`.
+
+**Pin the floor, not the literal.** The badge's width is content-driven, so a longer city name would silently re-collide. Assert `--badge-berth` ≥ 132 with the derivation in the failure message.
+
+**Reset it to `0px` in the coarse-pointer branch:** on phones the badge sits in its own band above the HUD, the overlays already clear it, and the stamp is `display:none` — a 142px berth there would shove the banner off-centre to buy nothing.
+
+**Measure after a proper settle, or you will measure noise.** These overlays MOVE as the console boots: the stamp sits near x=80 early and settles near x=149. Same-tick reads, fixed waits and "two consecutive identical reads" all capture pre-boot transients and will invent collisions that do not exist. Use the settle contract `tests/e2e/heat-map-overlap.spec.ts` already implements — ward data in, clock visible, then settle.
+
+- [ ] **Step 5c: Style the badge**
 
 In the `is:global` block, after the loadchip group ends — that is, after its `@keyframes loadchip-sweep` and the reduced-motion guard, not between `.loadchip.fail::after` and the keyframes it depends on — add:
 
@@ -589,9 +608,11 @@ In the `is:global` block, after the loadchip group ends — that is, after its `
   /* THE OTHER CITY. Top-left, BELOW the banner's band — not beside it. `.synthetic`
      is centred with width:max-content and grows LEFTWARDS as the map narrows, so at
      1366 it reaches the badge and at 1280 it overlaps by 54px, covering the opening
-     of the one line on this page whose whole job is to be read. Measured, not
-     reasoned: 56px clears it at every width. The chip row, compass, sun line and
-     tip hint own the bottom; .place sits at 34%.
+     of the one line on this page whose whole job is to be read. 56px clears THAT —
+     and lands on the construction stamp instead, 88% of it at 600px. Moving the
+     badge only moves the collision, because the badge is pinned left while three
+     overlays centre in the map: see --badge-berth below, which fixes the class.
+     The chip row, compass, sun line and tip hint own the bottom; .place sits at 34%.
      PINNED TO THE FRAME, never floating over the model — the idle orbit turns the
      scene forever (heat-map-app.ts), so any patch of empty sky fills with buildings
      at another bearing.
