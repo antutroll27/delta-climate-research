@@ -473,7 +473,10 @@ test('both controls carry their own name, because bronze alone says nothing to a
   const markup = flat(stage);
   const block = markup.slice(markup.indexOf('<div class="newcity"'));
   const inner = block.slice(0, block.indexOf('</div>'));
-  assert.match(inner, /<a [^>]*aria-label=\{`\$\{newCity\.name\} — newly added city`\}/,
+  /* MEANING, NOT SPELLING — AND NOT MERELY PRESENCE. `aria-label=` alone passes on
+     aria-label="Bengaluru", which is the exact failure the message below names, so
+     the proof would have been vacuous. Pin both halves, not the whitespace. */
+  assert.match(inner, /<a [^>]*aria-label=\{[^>]*newCity\.name[^>]*newly added city/,
     'the link must name the city AND say it is newly added: "Bengaluru →" alone tells a '
     + 'screen-reader user nothing about why it is there');
   assert.match(inner, /<button [^>]*aria-label="Dismiss"/,
@@ -499,7 +502,9 @@ test('the badge is solid bronze with no border, the pairing this console already
   const rule = css.slice(css.indexOf('.newcity{'), css.indexOf('.newcity{') + 400);
   assert.ok(css.includes('.newcity{'), 'the badge has no CSS rule');
   assert.match(rule, /background:var\(--bronze\)/, 'the fill must be the bronze token');
-  assert.match(rule, /color:#0d0a05/, 'the text must be the near-black .cta pairs with bronze');
+  assert.match(rule, /color:var\(--bronze-ink\)/,
+    'the text must be the near-black .cta pairs with bronze, AS THE TOKEN — obos-layers.test.mjs '
+    + 'refuses a hex written twice without one, and a token also stops .cta and the badge drifting');
   assert.match(rule, /border:0/, 'the founder asked for no border');
   assert.match(rule, /position:absolute/, 'it is pinned to the frame, not floating over the model');
 });
@@ -552,9 +557,21 @@ In the `.map` container, directly after the line `<div class="loadchip" id="load
 
 It ships `hidden`. `console-shell.ts` removes that in Task 4 once it knows the reader has not dismissed it — so a dismissed reader never sees a flash of it before the script runs.
 
-- [ ] **Step 5: Style it**
+- [ ] **Step 5a: Give the near-black a token**
 
-In the `is:global` block, directly after the `.loadchip.fail::after` rule, add:
+`tests/unit/obos-layers.test.mjs` refuses any hex written more than once in `HeatMapStage.astro` unless a token declares it — and it counts occurrences in comments too. `.cta` already spells `#0d0a05`, so the badge's rule, its focus ring and its comment would take the file to four spellings and fail the suite.
+
+`Footer.astro:91` already names this exact colour, so reuse that name rather than coining one. In the `is:global` block's token declaration (beside `--cyan`, `--bronze` and `--red`), add:
+
+```css
+    --bronze-ink:#0d0a05;               /* off-black text on bronze — Footer.astro's name */
+```
+
+Then repoint the existing `.cta` rule from `color:#0d0a05` to `color:var(--bronze-ink)`, so exactly one spelling of the hex remains in the file and the button and the badge cannot drift apart.
+
+- [ ] **Step 5b: Style the badge**
+
+In the `is:global` block, after the loadchip group ends — that is, after its `@keyframes loadchip-sweep` and the reduced-motion guard, not between `.loadchip.fail::after` and the keyframes it depends on — add:
 
 ```css
   /* THE OTHER CITY. Top-left is the only free corner: .synthetic and the stamp are
@@ -562,9 +579,9 @@ In the `is:global` block, directly after the `.loadchip.fail::after` rule, add:
      chip row and tip hint own the bottom. PINNED TO THE FRAME, never floating over
      the model — the idle orbit turns the scene forever (heat-map-app.ts), so any
      patch of empty sky fills with buildings at another bearing.
-     Solid bronze with #0d0a05 on it is the pairing .cta already ships. */
+     Solid bronze with --bronze-ink on it is the pairing .cta already ships. */
   .newcity{position:absolute;top:14px;left:14px;z-index:6;display:flex;align-items:center;gap:2px;
-    background:var(--bronze);color:#0d0a05;border:0;border-radius:9px;
+    background:var(--bronze);color:var(--bronze-ink);border:0;border-radius:9px;
     box-shadow:0 6px 18px rgb(0 0 0 /.35)}
   .newcity[hidden]{display:none}
   .newcity a{display:block;padding:8px 4px 8px 11px;color:inherit;text-decoration:none}
@@ -574,7 +591,7 @@ In the `is:global` block, directly after the `.loadchip.fail::after` rule, add:
   .newcity button{background:none;border:0;color:inherit;opacity:.55;cursor:pointer;
     font-size:.8rem;line-height:1;padding:8px 10px 8px 6px}
   .newcity button:hover{opacity:1}
-  .newcity a:focus-visible,.newcity button:focus-visible{outline:2px solid #0d0a05;outline-offset:-3px;border-radius:7px}
+  .newcity a:focus-visible,.newcity button:focus-visible{outline:2px solid var(--bronze-ink);outline-offset:-3px;border-radius:7px}
   /* Phones: the eyebrow goes, the name and arrow stay. */
   @media (pointer:coarse) and (max-width:560px){
     .newcity{top:10px;left:10px;border-radius:8px}
@@ -591,7 +608,7 @@ Expected: `fail 0`.
 
 - [ ] **Step 7: Mutation proofs**
 
-1. Change `border:0` to `border:1px solid #0d0a05` — the CSS assertion must fail. Revert.
+1. Change `border:0` to `border:1px solid var(--bronze-ink)` — the CSS assertion must fail. Revert. (Use the token, not the raw hex: a second spelling of `#0d0a05` in this file trips `obos-layers.test.mjs` and you would be debugging the wrong failure.)
 2. Move the `<button>` inside the `<a>` — the nesting assertion must fail. Revert.
 
 - [ ] **Step 8: Gates and commit**
