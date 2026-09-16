@@ -729,7 +729,8 @@ It replaced a single 32 °C for both Indian cities, which ran up to 16 °C too h
 
 **Status:** accepted · **See:** [park-size-tvoe-preregistration.md](park-size-tvoe-preregistration.md)
 
-The pocket-parks slider paints discs of 50 m radius (~0.8 ha) in every city. That number was justified as
+The pocket-parks slider paints discs of 50 m radius (~0.8 ha) in every city. (That control is not exposed
+in the console today — see §14 — so this describes the model, not a lever a user can currently move.) That number was justified as
 Kolkata's "efficient park size" (TVoE 0.77 ha, Li et al. 2022). It is not one: TVoE is a regression slope
 whose value does not change with the area unit, the paper is internally inconsistent, and the Kolkata
 sample was hand-picked in Google Earth and cannot be reproduced from open data. The radius stands as a
@@ -930,14 +931,31 @@ dilute with ward area: they are at most ten patches of a fixed metre radius, so 
 `fvc`, `canopyFrac` and `distCoolM` scales by `(1400 / sizeM)²`, a quarter over a 2.8 km ward. Until
 2026-09-16 every slider's index gain carried that quarter, which left the index moving a quarter as far as
 the heat layers and the bill beside it (the same plan moved the layers' ward-mean vegetation by +0.118 and
-`fvc` by only +0.015); the trees, roof and facade gains are no longer scaled. The LST change was never
+`fvc` by only +0.015); the trees, roof and facade gains are no longer scaled.
+
+**Three qualifications on the parks exception, none of them small.** First, **it is dormant**: no
+pocket-parks control is rendered (the console draws `ivTrees`, `ivRoof` and `ivFacades` only, and Compare's
+reader pins a legacy `?parks=` to 0), so `iv.parks` is always 0 and the shipped effect of the 2026-09-16
+change is simply that **no** slider's index gain scales by area. The exception applies if that control
+returns. Second, **`canopyFrac` is collected but inert**: all six served rows are 0 and `placeholder`, and
+a unit test pins that the v1 score cannot read it — so of the three inputs parks moves, only `fvc` scales
+cleanly. Third, **`distCoolM` saturates**: it is floored at 0 and every served ward sits at 27.3–93.3 m, so
+the 1.4 km ward exhausts its refuge distance while the 2.8 km ward is still cutting, and the ratio climbs
+from a quarter back toward 1 — measured at MG Road's 49.5 m, 0.250 at `parks = 2`, 0.556 at 5 and 1.000 at
+10; at Ballygunge's 77.8 m, 0.250, 0.354 and 0.707. "The parks contribution scales by a quarter" is
+therefore true of the vegetation gains at any setting, and of the refuge distance only above the floor. The LST change was never
 rescaled: it comes from the heat model's layers, where trees and cool roofs cover a share of the ward's
 corridors and roofs (parks are fixed-size patches, so their LST effect does dilute with ward area). Since
 2026-09-16 the scenario keeps the measured LST and adds only that modelled change.
 Before, the simulated ward mean replaced the measured LST, and 25 trees lowered MG Road's score by 6.6
 points. In live "Now" mode the plan's LST change is sized by the current hour's sun, so the same plan reads
-+0.18 pts at dusk and +0.58 at solar noon on MG Road, while the measured LST it is added to is a fixed
-overpass value. The 13:00 Peak and 22:00 Retained phases are the stable comparisons.
+about **+0.5 pts at dusk and +0.9 at solar noon** on MG Road, while the measured LST it is added to is a
+fixed overpass value. The 13:00 Peak and 22:00 Retained phases are the stable comparisons. (Those two
+figures were +0.18 and +0.58 before `3052c7c`. The thermal half did not move — `scenarioLst` never carried
+the area scaling — but the index half went +0.12 to +0.48, which is where the restated ≈+0.54 and ≈+0.94
+come from. The noon figure is corroborated: `heat-map-bengaluru-resilience.spec.ts` measures "0.9 pts from
+this plan" at 13:00 Peak. The dusk figure is carried arithmetically from the recorded split, not
+re-measured, because "Now" mode follows the wall clock.)
 
 **Known staleness paths.** `far` in `data/bangalore/dcurs-static.json` comes from
 `data/bangalore/*-buildings.json` (footprints × heights ÷ storey 3.33 m). If the buildings are re-fetched

@@ -210,10 +210,10 @@ DC-URS replaces the Green Score, so the sliders must still move it. One score, e
 
 | Indicator | Under intervention | Note |
 |---|---|---|
-| `FVC` | **moves** | trees, parks → vegetation fraction from the existing model |
-| `CanopyFrac` | **moves** | tree corridors add canopy |
+| `FVC` | **moves** | trees, facades → vegetation fraction from the existing model (parks too, when exposed) |
+| `CanopyFrac` | **moves, but inert** | tree corridors add canopy; the v1 score does not read `CanopyFrac`, and a unit test in `dc-urs.ts` pins that it cannot |
 | `CRI` | **moves** | cool roofs → albedo, already modelled |
-| `TRA` | **moves** | new parks shorten distance to refuge |
+| `TRA` | **parks only** | new parks shorten distance to refuge — and no parks control is rendered today, so `TRA` does not move on the shipped page |
 | `LST_day/night`, `UHI_Δ` | **moves** | from the thermal model, carrying its measured error |
 | `VSI` | **frozen** | see below |
 | `ρ_pop`, `FAR`, `HVI_socio` | **inert** | no intervention changes them |
@@ -384,7 +384,16 @@ corridor cells and shifts the albedo of a fraction of its **own** roof area, and
 most ten patches of a fixed metre radius — so the **parks** contribution to `fvc`, `canopyFrac` and
 `distCoolM` alone scales by `(1400 / sizeM)²` (`REFERENCE_WARD_M`, `areaScale` in
 `src/scripts/climate-engine/dc-urs-scenario.ts`), a quarter for a 2.8 km ward. Kolkata's 1.4 km wards are
-unaffected either way: the factor is exactly 1. The LST change is not rescaled either: `scenarioLst` keeps
+unaffected either way: the factor is exactly 1.
+
+Two qualifications on that exception, both measured. **It is dormant:** no pocket-parks control is
+rendered — the console draws `ivTrees`, `ivRoof` and `ivFacades` only — and Compare's reader pins a legacy
+`?parks=` to 0, so `iv.parks` is always 0 and `areaScale` currently scales nothing that reaches a score. It
+is kept for the day that control returns. **And the quarter holds only above the floor:** `distCoolM` is
+floored at 0, and every served ward sits at 27.3–93.3 m, so the 1.4 km ward exhausts its refuge distance
+first and the ratio climbs back toward 1 — at MG Road's 49.5 m the 2.8 km cut is 0.25 of the 1.4 km cut at
+`parks = 2`, 0.556 at 5 and 1.000 at 10. The vegetation gains have no floor and stay a clean quarter
+(`canopyFrac` among them, though v1 does not read it). The LST change is not rescaled either: `scenarioLst` keeps
 the measured LST and adds the heat model's plan-minus-no-plan difference, both solved under the same
 forcing. Detail in
 [evidence/known-limitations.md](evidence/known-limitations.md) §14.
