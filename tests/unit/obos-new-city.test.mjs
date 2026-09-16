@@ -249,6 +249,11 @@ test('the link keeps its own visible text as its name, and the phone rule keeps 
      `display:none` had removed from the name. Deleting the label and clipping the
      eyebrow fixes both ends at once, which is why these two assertions sit together:
      either one alone would let the other regress. */
+  /* THE NEGATIVE NEEDS SOMETHING TO STAND ON. `doesNotMatch` passes VACUOUSLY on an
+     empty or shortened slice — which is exactly what the nested-div mutation does to
+     it — so without this line the neighbouring positive assertions are the only
+     reason that mutation fails, and this one is along for the ride. */
+  assert.match(inner, /<a /, 'the badge must still contain the link this test is about');
   assert.doesNotMatch(inner, /<a [^>]*aria-label/,
     'the link must not override its own visible text: the accessible name has to CONTAIN '
     + '"New city", and the visible eyebrow already puts it there');
@@ -282,6 +287,34 @@ test('the dismiss target is big enough to hit, on a desktop and on a phone', () 
     + 'a phone offers');
 });
 
+/**
+ * THE BERTH IS A CLASS FIX, AND THE TEST HAS TO GUARD IT AS ONE.
+ *
+ * Three overlays centre themselves in the map's free space — `.synthetic`,
+ * `.stamp-slot`, `.loadchip` — and a fixed-left badge has now collided with two of
+ * them: the banner at 1280, then the construction stamp at every width from 600 to
+ * 1380 once the badge moved below the banner. Pinning the badge's `top` would guard
+ * the instance; this guards the rule, so the third overlay and the fourth are
+ * covered before anyone measures them.
+ */
+test('the centred overlays berth around the badge rather than under it', () => {
+  const css = flat(stage);
+  const declared = css.match(/\.map:has\(\.newcity:not\(\[hidden\]\)\)\{--badge-berth:(\d+)px\}/);
+  assert.ok(declared,
+    'the berth must be declared on a REVEALED badge — scoping it to :has() keeps the '
+    + 'full width on every page that never shows one');
+  /* DERIVED, NOT COPIED: the badge's 14px left inset + its 118px measured width. A
+     berth under that is a berth the badge sticks out of. */
+  assert.ok(Number(declared[1]) >= 132,
+    `--badge-berth is ${declared[1]}px, under the badge's own 132px extent (14px inset `
+    + '+ 118px measured width) — the overlays would centre straight back into it');
+  for (const sel of ['.synthetic', '.stamp-slot', '.loadchip']) {
+    assert.match(css, new RegExp(`\\${sel}\\{[^}]*inset-inline:var\\(--badge-berth`),
+      `${sel} centres itself in the map's free space, so it must subtract the badge's `
+      + 'berth first — exactly as it already subtracts --instr-berth on the right');
+  }
+});
+
 test('the badge renders only where it can be true', () => {
   const markup = flat(stage);
   /* `[,)]` so the call may take arguments. It now passes the store explicitly as
@@ -306,9 +339,16 @@ test('the badge renders only where it can be true', () => {
 test('the badge is solid bronze with no border, the pairing this console already ships', () => {
   const css = flat(stage);
   assert.ok(css.includes('.newcity{'), 'the badge has no CSS rule');
-  /* TO THE CLOSING BRACE, NOT A FIXED WINDOW. `+ 400` ran 189 characters past the
-     rule and swept in `.newcity button{…}`, which also declares `border:0` — so the
-     "no border" assertion below could be satisfied by a rule it does not name. */
+  /* TO THE CLOSING BRACE, NOT A FIXED WINDOW. `+ 400` ran 188 characters PAST the
+     rule's closing brace, and would swallow whatever followed as the rule grew.
+
+     MEASURED, BECAUSE THE FIRST VERSION OF THIS COMMENT WAS FALSE. It claimed the
+     window could satisfy `border:0` from `.newcity button{…}` — but in the file that
+     shipped it, that rule began 568 characters after `.newcity{`, far outside a
+     400-character window whose tail ended mid-`.nc-eyebrow`. Deleting `border:0`
+     from the base rule made the old window match neither. The change is still right;
+     the reason given for it was not, and "measure, don't read" is the rule this repo
+     keeps paying to relearn. */
   const start = css.indexOf('.newcity{');
   const rule = css.slice(start, css.indexOf('}', start) + 1);
   assert.match(rule, /background:var\(--bronze\)/, 'the fill must be the bronze token');

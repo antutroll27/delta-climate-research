@@ -1794,7 +1794,7 @@ const newCity = scope.area.hasData
      A dark fill keeps the bronze identity where the identity actually lives (the
      border, the pulsing dot, the text) and gives the words a ground that does not
      move with the map beneath. */
-  .synthetic{position:absolute;top:20px;inset-inline:0;margin-inline:auto;width:max-content;max-width:calc(100% - 2rem);display:flex;align-items:center;gap:.5rem;font-family:var(--mono);font-size:.56rem;letter-spacing:.2em;color:var(--bronze);background:rgb(9 20 22 /.94);border:1px solid rgb(176 141 87 /.42);border-radius:20px;padding:.42rem .9rem;z-index:3;text-transform:uppercase;backdrop-filter:blur(8px)}
+  .synthetic{position:absolute;top:20px;inset-inline:var(--badge-berth,0px) 0;margin-inline:auto;width:max-content;max-width:calc(100% - var(--badge-berth,0px) - 2rem);display:flex;align-items:center;gap:.5rem;font-family:var(--mono);font-size:.56rem;letter-spacing:.2em;color:var(--bronze);background:rgb(9 20 22 /.94);border:1px solid rgb(176 141 87 /.42);border-radius:20px;padding:.42rem .9rem;z-index:3;text-transform:uppercase;backdrop-filter:blur(8px)}
   .synthetic .sp{opacity:.82}
   .synthetic .d{width:6px;height:6px;border-radius:50%;background:var(--bronze);animation:hmPulse 2.2s infinite}
   @keyframes hmPulse{0%,100%{opacity:1}50%{opacity:.3}}
@@ -1813,8 +1813,8 @@ const newCity = scope.area.hasData
      max-content width is the same shape the honesty banner above uses; the only
      difference is that the right edge stops short of the instrument column
      instead of at the map's edge. */
-  .stamp-slot{position:absolute;inset-inline:0 var(--instr-berth);margin-inline:auto;
-    width:max-content;max-width:calc(100% - var(--instr-berth) - 1rem);
+  .stamp-slot{position:absolute;inset-inline:var(--badge-berth,0px) var(--instr-berth);margin-inline:auto;
+    width:max-content;max-width:calc(100% - var(--badge-berth,0px) - var(--instr-berth) - 1rem);
     top:68px;z-index:3;pointer-events:none;
               --stamp-size:.62rem;--stamp-pad:.5rem 1rem;--stamp-tracking:.26em;--stamp-rot:-2.5deg}
   /* NOT :global(.con-stamp) — this block is `is:global`, so Astro runs no scoping pass
@@ -1832,8 +1832,8 @@ const newCity = scope.area.hasData
      ward…" was painted over exactly when a reader was waiting to be told
      something. It is only ever visible during a load, which is why nobody caught
      it by looking. */
-  .loadchip{position:absolute;top:118px;inset-inline:0 var(--instr-berth);margin-inline:auto;
-    width:max-content;max-width:calc(100% - var(--instr-berth) - 1rem);
+  .loadchip{position:absolute;top:118px;inset-inline:var(--badge-berth,0px) var(--instr-berth);margin-inline:auto;
+    width:max-content;max-width:calc(100% - var(--badge-berth,0px) - var(--instr-berth) - 1rem);
     font-family:var(--mono);font-size:.52rem;letter-spacing:.26em;color:var(--cyan);z-index:3;text-transform:uppercase;opacity:0;transition:opacity .25s;
     padding-bottom:7px;overflow:hidden}
   .loadchip.on{opacity:1}
@@ -1849,6 +1849,27 @@ const newCity = scope.area.hasData
   .loadchip.fail::after{animation:none;opacity:0}
   @keyframes loadchip-sweep{to{transform:translateX(100%)}}
   @media (prefers-reduced-motion:reduce){.loadchip.on::after{animation:none;transform:none;opacity:.55}}
+
+  /* THE BADGE'S BERTH — the counterpart to --instr-berth, which does the same job on
+     the right. `.synthetic`, `.stamp-slot` and `.loadchip` all centre themselves in
+     the map's free space, so their LEFT edges walk toward a fixed-left badge as the
+     viewport narrows. The banner collided first, at 1280; moving the badge below it
+     then put it over the construction stamp at every width from 600 to 1380 — 88% of
+     the stamp at 600-700 — and only horizontal distance saved it from 1400 up. Two
+     collisions with two different centred overlays is a CLASS of defect, not two
+     instances, so the fix is the one --instr-berth already uses: subtract the badge's
+     column before centring, and every present and future centred overlay is covered.
+
+     142px = the badge's 14px left inset + its measured 118px width + a 10px gap. The
+     width is content-driven ("New city" over "Bengaluru →"), so a markedly longer
+     city name would need this raised; obos-new-city.test.mjs pins the floor at 132 so
+     the derivation cannot quietly stop being true.
+
+     :has() IS ALREADY USED IN THIS CONSOLE — LayerTree.astro's
+     `.tree-row:has(.tree-box:checked)` — so this is precedent rather than a new
+     dependency. Scoped to a REVEALED badge, so a page that never shows one keeps the
+     full width it has always centred in. */
+  .map:has(.newcity:not([hidden])){--badge-berth:142px}
 
   /* THE OTHER CITY. Top-left is free only BELOW the honesty banner, and the first
      version of this comment was wrong to call the corner free outright. `.synthetic`
@@ -1906,6 +1927,13 @@ const newCity = scope.area.hasData
      visible text is contained in it and no override is needed. */
   @media (pointer:coarse) and (max-width:560px),
          (pointer:coarse) and (orientation:landscape) and (max-height:560px){
+    /* NO BERTH ON PHONES. Here the badge sits in its own 34px band ABOVE the HUD,
+       so the overlays already clear it on the vertical — 2.0px to the banner,
+       measured — and the stamp is display:none in this block entirely. A 142px
+       berth on a 390px screen would shove the banner off-centre to buy nothing.
+       Same selector as the declaration, so it wins on source order rather than by
+       an accident of specificity. */
+    .map:has(.newcity:not([hidden])){--badge-berth:0px}
     .newcity{top:2px;left:10px;border-radius:8px}
     .newcity .nc-eyebrow{position:absolute;width:1px;height:1px;margin:-1px;padding:0;
       overflow:hidden;clip-path:inset(50%);white-space:nowrap}
