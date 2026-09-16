@@ -74,6 +74,23 @@ export interface CityRecord {
   /** declared instrument resolution, metres per solver cell */
   readonly cellMeters: number;
   readonly wards: readonly WardRecord[];
+  /**
+   * The day this city became reachable in production, ISO `YYYY-MM-DD`.
+   *
+   * ABSENT MEANS ESTABLISHED, not unknown. The new-city badge measures its window
+   * from this date and stops announcing the city when the window passes, so the
+   * announcement expires on its own rather than as a line of copy somebody has to
+   * remember to delete. Kolkata has none because it has always been here.
+   */
+  readonly since?: string;
+  /**
+   * The ward to open when the city is announced, by ward id.
+   *
+   * NOT "the first one". Bengaluru declares indiranagar first and its landmarks
+   * are in MG Road; a reader who follows an announcement should land where the
+   * city is recognisable.
+   */
+  readonly showcase?: string;
 }
 
 const KOLKATA_WARDS: readonly WardRecord[] = [
@@ -126,7 +143,8 @@ export const CITIES: Record<string, CityRecord> = {
   kolkata: { id: 'kolkata', name: 'Kolkata', country: 'India',
     cellMeters: declaredCellMeters(KOLKATA_WARDS), wards: KOLKATA_WARDS },
   bengaluru: { id: 'bengaluru', name: 'Bengaluru', country: 'India',
-    cellMeters: declaredCellMeters(BENGALURU_WARDS), wards: BENGALURU_WARDS },
+    cellMeters: declaredCellMeters(BENGALURU_WARDS), wards: BENGALURU_WARDS,
+    since: '2026-09-16', showcase: 'mg-road' },
 };
 
 export const CITY_OF: Record<string, string> = Object.fromEntries(
