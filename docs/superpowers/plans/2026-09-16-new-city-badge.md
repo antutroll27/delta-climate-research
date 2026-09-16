@@ -473,12 +473,13 @@ test('both controls carry their own name, because bronze alone says nothing to a
   const markup = flat(stage);
   const block = markup.slice(markup.indexOf('<div class="newcity"'));
   const inner = block.slice(0, block.indexOf('</div>'));
-  /* MEANING, NOT SPELLING — AND NOT MERELY PRESENCE. `aria-label=` alone passes on
-     aria-label="Bengaluru", which is the exact failure the message below names, so
-     the proof would have been vacuous. Pin both halves, not the whitespace. */
-  assert.match(inner, /<a [^>]*aria-label=\{[^>]*newCity\.name[^>]*newly added city/,
-    'the link must name the city AND say it is newly added: "Bengaluru →" alone tells a '
-    + 'screen-reader user nothing about why it is there');
+  /* THE LINK MUST NOT CARRY AN aria-label AT ALL. An earlier revision labelled it
+     "Bengaluru — newly added city", which does not contain the visible words "New
+     city" — Label in Name (WCAG 2.5.3, level A), so a speech-input user saying
+     "click New city" matched nothing. The visible text already says it. */
+  assert.doesNotMatch(inner, /<a [^>]*aria-label=/,
+    'the link keeps its own visible text as its name: an aria-label here replaced '
+    + '"New city Bengaluru" with a string those words are not inside of');
   assert.match(inner, /<button [^>]*aria-label="Dismiss"/,
     'a bare × has no accessible name');
   assert.match(markup, /\.newcity a:focus-visible,\.newcity button:focus-visible\{outline:/,
@@ -536,7 +537,13 @@ Then, after `scope` is resolved in the frontmatter, add:
    These pages are prerendered, so the `new Date()` this call uses is the BUILD
    clock: without the date on the element the shell could not tell a window that
    is still open from one that closed two months and no deploys ago. */
-const newCity = scope.area.hasData ? newCityToAnnounce(scope.city.id) : null;
+/* THE STORE IS PASSED EXPLICITLY AS NULL, not left to default. `defaultStore()`
+   returns null under Node today, so the default is correct by accident; if a build
+   ever runs somewhere `localStorage` exists — a polyfill, a future adapter — one
+   dismissal at build time would silence the badge for every reader, silently. */
+const newCity = scope.area.hasData
+  ? newCityToAnnounce(scope.city.id, new Date(), null)
+  : null;
 ```
 
 - [ ] **Step 4: Render it**
@@ -546,7 +553,12 @@ In the `.map` container, directly after the line `<div class="loadchip" id="load
 ```astro
     {newCity && (
       <div class="newcity" id="newCity" data-city={newCity.id} data-since={newCity.since} hidden>
-        <a href={newCity.href} aria-label={`${newCity.name} — newly added city`}>
+        {/* NO aria-label. The visible text already reads "New city Bengaluru", and a
+            label of "Bengaluru — newly added city" replaced it with a string those
+            visible words are not contained in — Label in Name (WCAG 2.5.3), so
+            "click New city" matched nothing by speech. The eyebrow is CLIPPED rather
+            than display:none on phones, so the name keeps "New city" there too. */}
+        <a href={newCity.href}>
           <span class="nc-eyebrow">New city</span>
           <span class="nc-name">{newCity.name} <span aria-hidden="true">→</span></span>
         </a>
@@ -574,13 +586,19 @@ Then repoint the existing `.cta` rule from `color:#0d0a05` to `color:var(--bronz
 In the `is:global` block, after the loadchip group ends — that is, after its `@keyframes loadchip-sweep` and the reduced-motion guard, not between `.loadchip.fail::after` and the keyframes it depends on — add:
 
 ```css
-  /* THE OTHER CITY. Top-left is the only free corner: .synthetic and the stamp are
-     top-centre, .loadchip sits at 118px, .place at 34%, and the compass, sun line,
-     chip row and tip hint own the bottom. PINNED TO THE FRAME, never floating over
-     the model — the idle orbit turns the scene forever (heat-map-app.ts), so any
-     patch of empty sky fills with buildings at another bearing.
+  /* THE OTHER CITY. Top-left, BELOW the banner's band — not beside it. `.synthetic`
+     is centred with width:max-content and grows LEFTWARDS as the map narrows, so at
+     1366 it reaches the badge and at 1280 it overlaps by 54px, covering the opening
+     of the one line on this page whose whole job is to be read. Measured, not
+     reasoned: 56px clears it at every width. The chip row, compass, sun line and
+     tip hint own the bottom; .place sits at 34%.
+     PINNED TO THE FRAME, never floating over the model — the idle orbit turns the
+     scene forever (heat-map-app.ts), so any patch of empty sky fills with buildings
+     at another bearing.
+     z-index 3 is the banner/chip tier, chosen rather than copied: at 6 the badge
+     outranked .panel and .top and tied with .compass, where DOM order decided it.
      Solid bronze with --bronze-ink on it is the pairing .cta already ships. */
-  .newcity{position:absolute;top:14px;left:14px;z-index:6;display:flex;align-items:center;gap:2px;
+  .newcity{position:absolute;top:56px;left:14px;z-index:3;display:flex;align-items:center;gap:2px;
     background:var(--bronze);color:var(--bronze-ink);border:0;border-radius:9px;
     box-shadow:0 6px 18px rgb(0 0 0 /.35)}
   .newcity[hidden]{display:none}
@@ -588,16 +606,33 @@ In the `is:global` block, after the loadchip group ends — that is, after its `
   .newcity .nc-eyebrow{display:block;font-family:var(--mono);font-size:.44rem;letter-spacing:.2em;
     text-transform:uppercase;opacity:.72}
   .newcity .nc-name{display:block;font-size:.74rem;font-weight:700;letter-spacing:-.01em;margin-top:1px}
+  /* 28px wide minimum: padding alone left this 23.7px, under WCAG 2.5.8's 24, and
+     the spacing exception cannot rescue it because gap:2px puts the link's edge
+     2px away. It ships hidden, so no axe scan will ever see it — the unit test is
+     the only guard there is. */
   .newcity button{background:none;border:0;color:inherit;opacity:.55;cursor:pointer;
-    font-size:.8rem;line-height:1;padding:8px 10px 8px 6px}
+    font-size:.8rem;line-height:1;padding:8px;min-inline-size:28px;
+    display:grid;place-items:center}
   .newcity button:hover{opacity:1}
   .newcity a:focus-visible,.newcity button:focus-visible{outline:2px solid var(--bronze-ink);outline-offset:-3px;border-radius:7px}
-  /* Phones: the eyebrow goes, the name and arrow stay. */
-  @media (pointer:coarse) and (max-width:560px){
-    .newcity{top:10px;left:10px;border-radius:8px}
-    .newcity .nc-eyebrow{display:none}
+  /* Phones: the eyebrow leaves the screen but NOT the accessible name, and the card
+     tucks above the compass.
+     BOTH BRANCHES, matching the HUD rule that moves .compass to top:34px. A
+     single-branch copy left the badge at desktop size in landscape, where the
+     compass painted over "Bengaluru" — 38 x 25px of it.
+     top:2px, not 4: the 30px dismiss target makes the card 30px tall, so 4 put its
+     bottom edge at exactly 34.0 — flush, one rounding error from overlapping. */
+  @media (pointer:coarse) and (max-width:560px),
+         (pointer:coarse) and (orientation:landscape) and (max-height:560px){
+    .newcity{top:2px;left:10px;border-radius:8px}
+    /* CLIPPED, never display:none — the name must keep "New city" here, because on
+       phones the label is the only thing carrying why the badge exists. */
+    .newcity .nc-eyebrow{position:absolute;width:1px;height:1px;margin:-1px;padding:0;
+      overflow:hidden;clip-path:inset(50%);white-space:nowrap}
     .newcity .nc-name{font-size:.66rem}
     .newcity a{padding:6px 3px 6px 9px}
+    /* 30px to match .rn-x, the next smallest control a phone offers */
+    .newcity button{min-inline-size:30px;min-block-size:30px}
   }
 ```
 
@@ -610,6 +645,17 @@ Expected: `fail 0`.
 
 1. Change `border:0` to `border:1px solid var(--bronze-ink)` — the CSS assertion must fail. Revert. (Use the token, not the raw hex: a second spelling of `#0d0a05` in this file trips `obos-layers.test.mjs` and you would be debugging the wrong failure.)
 2. Move the `<button>` inside the `<a>` — the nesting assertion must fail. Revert.
+3. Remove `data-since={newCity.since}` — that assertion must fail. Revert.
+4. Remove the `hidden` attribute — that assertion must fail. Revert.
+5. Revert the dismiss button to `padding:8px 10px 8px 6px` with no `min-inline-size` — the target-size assertion must fail, reporting the 23.7px box. Revert.
+6. Delete `min-inline-size:30px` from the coarse-pointer branch — the phone half of that assertion must fail. Revert.
+7. Put an `aria-label` back on the link — the Label in Name assertion must fail. Revert.
+8. Change the clipped eyebrow to `display:none` in the coarse branch — the clipped-eyebrow assertion must fail, because `display:none` removes it from the accessible name as well as from the screen. Revert.
+9. Drop the explicit `null` store, leaving `newCityToAnnounce(scope.city.id)` — that assertion must fail. Revert.
+
+**Slice the windows tightly, or two of these proofs lie.** Take the CSS rule to its own closing brace (`css.slice(i, css.indexOf('}', i) + 1)`) rather than a fixed character count: a 400-character window runs past the rule into `.newcity button{…}`, where `border:0` also appears, so proof 1 could be satisfied by a rule the assertion does not name. Slice the markup to whichever comes first of `</div>` and the next `<div`, so wrapping the link in a layout div cannot silently redirect the structural checks, and guard the `</a>` / `<button>` ordering comparison against `-1` — `-1 < n` is true, so an absent `</a>` would pass.
+
+**Measure the geometry in a browser, don't infer it.** With the dev server running, unhide `#newCity` and report the badge's box and its overlap with `.synthetic` and `.compass` at 1280, 1366, 1440, 844×390 touch and 390×844 touch. Both axes must be zero — an overlap needs both, so a non-zero x with a zero y is clear.
 
 - [ ] **Step 8: Gates and commit**
 
