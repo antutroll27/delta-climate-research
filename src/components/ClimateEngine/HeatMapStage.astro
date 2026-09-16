@@ -1875,7 +1875,7 @@ const newCity = scope.area.hasData
      21px, "UNDER CONSTRUCTION" wrapped to two lines at every width from 600 to 1280,
      and the taller box grew down into the loadchip's band — covering "Building
      ward…" at 1200-1280, the one message that only appears while a reader waits. */
-  .map:has(.newcity:not([hidden])){--badge-berth:142px}
+  .map:has(.newcity:not([hidden])){--badge-berth:152px}
 
   /* THE OTHER CITY. Top-left is free only BELOW the honesty banner, and the first
      version of this comment was wrong to call the corner free outright. `.synthetic`
@@ -1902,7 +1902,7 @@ const newCity = scope.area.hasData
      Paper and near-black are both tokens this console already owns: a third
      off-white spelled twice would trip obos-layers.test.mjs, and inventing one
      would put the card outside the palette the rest of the instrument speaks. */
-  .newcity{position:absolute;top:56px;left:14px;z-index:3;display:flex;align-items:center;gap:2px;
+  .newcity{position:absolute;top:56px;left:24px;z-index:3;display:flex;align-items:center;gap:2px;
     background:radial-gradient(circle at 0 50%,transparent 0 3px,var(--paper) 3px) left/6px 100% no-repeat,
       var(--paper);
     color:var(--bronze-ink);border:0;border-radius:12px;
