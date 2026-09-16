@@ -108,9 +108,19 @@ test('a city inside the window is announced, and names its showcase ward', () =>
   assert.equal(found?.href, '/heat-map/in/bengaluru/mg-road/');
 });
 
-test('outside the window nothing is announced, so the badge retires itself', () => {
-  const late = new Date(ARRIVED + (NEW_CITY_DAYS + 1) * DAY);
-  assert.equal(newCityToAnnounce('kolkata', late, fakeStore()), null);
+test('the window is ninety days: a city 89 days old is still announced, 91 days old is not', () => {
+  /* LITERALS ON PURPOSE. Deriving the boundary from NEW_CITY_DAYS — as this test
+     first did — makes the constant cancel out of its own guard: cutoff lands one
+     day after arrival for D = 1, 90 or 90_000 alike, so every value passes and the
+     ninety is pinned by nothing. Two literal days either side pin the number and
+     the comparison at once. */
+  const store = fakeStore();
+  assert.equal(newCityToAnnounce('kolkata', new Date(ARRIVED + 89 * DAY), store)?.id, 'bengaluru',
+    'a city 89 days old is inside a ninety-day window');
+  assert.equal(newCityToAnnounce('kolkata', new Date(ARRIVED + 91 * DAY), store), null,
+    'a city 91 days old is outside it, and the badge retires itself');
+  assert.equal(NEW_CITY_DAYS, 90,
+    'the two day counts above are written against a ninety-day window');
 });
 
 test('a city is not announced before it arrives', () => {
