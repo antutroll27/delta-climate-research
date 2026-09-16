@@ -258,8 +258,15 @@ const newCity = scope.area.hasData
               and an area with no artefacts has no row — so on such a page this href
               names a route the build never emitted. It is a DOWNLOAD, so the
               browser would not show the 404: it would save the error body under
-              `metadata.json` and hand someone a file that looks like a record. */}
-          {scope.area.hasData ? (
+              `metadata.json` and hand someone a file that looks like a record.
+
+              THE FLAG IS `publishes`, NOT `hasData`, and the two parted company
+              when Bengaluru arrived. `hasData` became `drawable` — true for
+              Bengaluru, which ships the map's six artefacts — while WARDS is
+              still built from PUBLISHED_CITIES alone. Gated on `hasData` this
+              shipped exactly the file the paragraph above describes, on all three
+              Bengaluru pages. `publishes` IS the fact WARDS is built from. */}
+          {scope.area.publishes ? (
           <Fragment>
           <p class="pane-note">What is measured, the out-of-sample error and sample size, every
             source dataset with its licence, and the analysis CRS and bounding box.</p>
@@ -306,7 +313,17 @@ const newCity = scope.area.hasData
             <label for="solTariff">Tariff · assumed · change it</label>
             <span><span id="solCur" aria-hidden="true"></span><input id="solTariff" type="number" inputmode="decimal" min="0" step="0.25" value="8.00" aria-describedby="solTariffNote"> / kWh</span>
           </div>
-          <p class="pane-note sol-small" id="solTariffNote">CESC domestic slabs run 4.07–9.21 per unit (2025-26 tariff order); a solar unit displaces the top of the bill. Not a rate we assert.</p>
+          {/* THE UTILITY IS NAMED ONLY WHERE ITS TARIFF WAS SOURCED. CESC is
+              Kolkata's DISCOM; Bengaluru's is BESCOM, whose slabs we have not
+              sourced — so this sentence shipped a Kolkata utility's rates onto
+              Bengaluru's page, under a box pre-filled at 8.00. The other city
+              asserts no rate rather than guessing one.
+              ponytail: a city-id test, because one city has the datum and one does
+              not. It becomes a registry field beside the cost basis the moment a
+              second tariff is sourced — not before. */}
+          <p class="pane-note sol-small" id="solTariffNote">{scope.city.id === 'kolkata'
+            ? 'CESC domestic slabs run 4.07–9.21 per unit (2025-26 tariff order); a solar unit displaces the top of the bill. Not a rate we assert.'
+            : 'No local tariff is sourced for this city yet, so the box above is an assumption you should change. Not a rate we assert.'}</p>
           <p class="pane-h">Best roofs by annual yield</p>
           <div class="roofs-scroll">
           <table class="roofs" aria-label="The ten best roofs by annual yield; each row selects its building on the map">
@@ -1936,9 +1953,25 @@ const newCity = scope.area.hasData
      came later in source, so it simply won. The measurement said `--badge-berth` was
      152px while `left` stayed 40 — the two halves of one fix disagreeing is what
      source order looks like from the outside. */
+  /* AND BELOW 1366 IT DOES NOT APPEAR AT ALL. MEASURED 2026-09-17, and it cost a
+     CI failure to learn: at 1024 the 152px berth moved the construction stamp from
+     x473 to x603, while the right-anchored ward clock starts at x653 — an 88x20px
+     overlap, 42% of the stamp. 1280 grazed it by a sub-pixel. heat-map-overlap.spec.ts
+     sweeps both widths and `npm run verify` ends in that suite, so this would have
+     failed the merge rather than reaching anyone.
+
+     The berth cannot simply be dropped here: it is what stops the centred overlays
+     walking left INTO the card, which is how they covered 88% of the stamp at 600-700
+     (see the base rule above). Below 1366 the map cannot seat the card AND the two
+     centred overlays the card displaces — so the card is the thing that gives way, and
+     this geometry returns byte-for-byte to the console that shipped before the badge.
+
+     BOTH HALVES, because `:has(.newcity:not([hidden]))` tests the ATTRIBUTE, not
+     visibility: `display:none` alone would hide the card and go on reserving its
+     column, which is the collision above with nothing left in the gap to justify it. */
   @media (max-width:1365px){
-    .newcity{left:24px}
-    .map:has(.newcity:not([hidden])){--badge-berth:152px}
+    .newcity{display:none}
+    .map:has(.newcity:not([hidden])){--badge-berth:0px}
   }
 
   /* PHONES, EITHER ORIENTATION — the same two-branch gate the HUD block above uses,

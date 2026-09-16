@@ -1040,3 +1040,40 @@ test('the instrument shows the refusal instead of returning in silence', async (
   assert.match(app, /const loadChip = createLoadChip\(el\('loadchip'\)/,
     'the loading chip is no longer the #loadchip element');
 });
+
+/* THE DOWNLOAD GATE FOLLOWS ROUTE EMISSION, NOT DRAWABILITY.
+ *
+ * `/api/wards/[id]` is generated one route per row of WARDS, and the Reports
+ * pane's download link is gated on `publishes`. Those must be the same fact.
+ * They parted company once, and the failure was silent: the gate read `hasData`,
+ * which the city refactor redefined from `shipsData` to `drawable`, so all three
+ * Bengaluru pages shipped `href="/api/wards/<id>/metadata.json"` with `download`
+ * for a route the build never emitted. A download does not show a 404 — it saves
+ * the error body under the name of a ward record and hands it to the reader.
+ *
+ * BOTH HALVES ARE PINNED, because either alone still passes. The registry half
+ * catches `shipsData` and PUBLISHED_CITIES drifting apart (they are two separate
+ * source files); the source half catches the gate being pointed back at a flag
+ * that merely means "the instrument can draw it".
+ */
+test('every area offering the ward-record download has a route to download', async () => {
+  const emitted = new Set(WARD_TABLE.map((w) => w.id));
+  for (const key of AREA_KEYS) {
+    const { area } = resolve(key);
+    assert.equal(area.publishes, emitted.has(area.id),
+      `${key}: publishes=${area.publishes}, but WARDS ${emitted.has(area.id) ? 'has' : 'has no'} row `
+      + 'for it. The download link is gated on `publishes` and the route comes from WARDS, so a '
+      + 'disagreement ships a download for a route that does not exist.');
+  }
+
+  /* THE COUNTER-PROOF. Without these the loop above is satisfied by a registry in
+     which nothing publishes, or everything does — and this file's whole subject is
+     that the two sets are deliberately different sizes. */
+  assert.ok(AREA_KEYS.some((k) => resolve(k).area.publishes), 'no area publishes at all');
+  assert.ok(AREA_KEYS.some((k) => !resolve(k).area.publishes), 'every area publishes');
+
+  const stage = stripComments(await readFile(
+    new URL('../../src/components/ClimateEngine/HeatMapStage.astro', import.meta.url), 'utf8'));
+  assert.match(stage, /\{scope\.area\.publishes \? \([\s\S]{0,400}?id="report-link"/,
+    'the ward-record download is no longer gated on `publishes` — see the comment above it');
+});

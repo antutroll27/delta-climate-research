@@ -375,3 +375,40 @@ test('the badge is a paper postcard with a torn stub, and no border', () => {
   assert.match(rule, /border:0/, 'the founder asked for no border');
   assert.match(rule, /position:absolute/, 'it is pinned to the frame, not floating over the model');
 });
+
+/**
+ * BELOW 1366 THE CARD STANDS DOWN, AND TAKES ITS BERTH WITH IT.
+ *
+ * MEASURED 2026-09-17, after CI's own suite caught it: at 1024 the 152px berth put
+ * the construction stamp at x603 while the right-anchored ward clock starts at x653
+ * — an 88x20px overlap, 42% of the stamp. heat-map-overlap.spec.ts sweeps 1024 and
+ * 1280 and `npm run verify` ends in that suite, so the badge would have failed the
+ * merge rather than reaching a reader.
+ *
+ * THE TWO HALVES ARE ONE FIX. `:has(.newcity:not([hidden]))` tests the ATTRIBUTE,
+ * not visibility — so hiding the card with `display:none` while leaving a non-zero
+ * berth would go on reserving a column for a card nobody can see, which is the same
+ * collision with nothing left in the gap to justify it. Neither half is load-bearing
+ * alone, so neither is pinned alone.
+ */
+test('below 1366 the badge stands down, and its berth goes with it', () => {
+  const css = flat(stage);
+  const at = css.indexOf('(max-width:1365px)');
+  assert.ok(at > 0, 'the sub-1366 block is gone — the badge is back in the stamp\'s lane at 1024');
+
+  /* Everything from that breakpoint to the NEXT media query: the phone rules below
+     restyle the card again, and reading past them would let a later `0px` satisfy a
+     block that no longer declares one. */
+  const next = css.indexOf('@media', at);
+  const block = css.slice(at, next === -1 ? css.length : next);
+
+  assert.match(block, /\.newcity\{[^}]*display:none/,
+    'the card must not render below 1366: at 1024 its berth moves the construction '
+    + 'stamp onto the ward clock, and the berth cannot be dropped instead because it '
+    + 'is what keeps the centred overlays out of the card (see the base rule)');
+  assert.match(block, /--badge-berth:0px/,
+    'the card is hidden below 1366 but its berth is still reserved — `:has()` matches '
+    + 'the [hidden] ATTRIBUTE, not `display`, so the overlays are still displaced');
+  assert.doesNotMatch(block, /--badge-berth:(?!0px)\d+px/,
+    'a non-zero berth below 1366 is the 42%-of-the-stamp collision, measured at 1024');
+});
