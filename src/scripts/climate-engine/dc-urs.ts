@@ -26,6 +26,25 @@
 // .ts extension keeps this runnable under `node --experimental-strip-types`
 import type { DcUrsInputs } from './dc-urs-inputs.ts';
 
+/**
+ * WHETHER ANYONE SEES THE SCORE. OFF SINCE 2026-09-17: the founder judged the
+ * scores in both cities too inaccurate to publish.
+ *
+ * Only the PRESENTATION is off. This engine, the served inputs and every unit test
+ * stay exactly as they are; the score's own loader stops fetching the inputs, the
+ * console never paints a number, and "Coming soon" lies over the block. (The heat
+ * surface still reads the ward's measured greenness and albedo from the same file,
+ * via surface-raster.ts — that is physics, not the score, and it must not change.)
+ * The number is absent from the DOM, not hidden under the veil — a blurred score is
+ * still a published score to view-source and to a screen reader.
+ *
+ * ONE FACT, TWO READERS: InterventionPane.astro renders the veil from this, and
+ * heat-map-app.ts gates the fetch and the paint on it, so the page cannot show
+ * "Coming soon" while the app paints a score underneath. Turning it back on is
+ * this line; heat-map-bengaluru-resilience.spec.ts swaps its tests on the same flag.
+ */
+export const RESILIENCE_SCORE_LIVE: boolean = false;
+
 const clamp = (x: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, x));
 
 /* ── Normalisation anchors ────────────────────────────────────────────────────

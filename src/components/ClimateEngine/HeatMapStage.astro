@@ -2106,6 +2106,15 @@ const newCity = scope.area.hasData
      InterventionPane.astro, for that file's documented no-<style> reason. */
   .score .t b .beta{margin-left:7px;font-family:var(--mono);font-weight:400;font-size:.44rem;letter-spacing:.14em;text-transform:uppercase;color:var(--bronze);background:rgb(176 141 87 /.14);border-radius:5px;padding:2px 5px;vertical-align:middle}
   .scoreconf{margin:0 18px 16px}
+  /* THE SCORE, WITHDRAWN (RESILIENCE_SCORE_LIVE in dc-urs.ts). The block keeps its
+     shape so the toolbox does not jump, blurred behind a veil whose label borrows
+     the beta chip's bronze — this instrument's "not decision-grade" colour. Only
+     dashes sit under the blur: the app paints no number while the flag is off. */
+  .scorebox{position:relative}
+  .scorebox[data-soon] .scorebox-body{filter:blur(2px);opacity:.3;user-select:none;pointer-events:none}
+  .scorebox .soon{position:absolute;inset:0;margin:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;text-align:center;background:rgb(9 20 22 /.35)}
+  .scorebox .soon b{font-family:var(--sans);font-size:.82rem;font-weight:600;letter-spacing:-.01em;color:var(--paper)}
+  .scorebox .soon span{font-family:var(--mono);font-size:.5rem;letter-spacing:.16em;text-transform:uppercase;color:var(--bronze);background:rgb(176 141 87 /.14);border-radius:5px;padding:4px 9px}
   .conf[hidden]{display:none}
   /* the pillar the missing indicator sits in, in the colour this instrument
      already uses for "not decision-grade" */

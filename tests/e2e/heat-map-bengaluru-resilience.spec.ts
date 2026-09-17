@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
-import { dcUrs } from '../../src/scripts/climate-engine/dc-urs.ts';
+import { dcUrs, RESILIENCE_SCORE_LIVE } from '../../src/scripts/climate-engine/dc-urs.ts';
 import { applyScenario } from '../../src/scripts/climate-engine/dc-urs-scenario.ts';
 import type { DcUrsInputs } from '../../src/scripts/climate-engine/dc-urs-inputs.ts';
 
@@ -21,9 +21,15 @@ import type { DcUrsInputs } from '../../src/scripts/climate-engine/dc-urs-inputs
  * two things the page itself combines, not retyped by hand.
  */
 const WARD_PATH = '/heat-map/in/bengaluru/mg-road/';
+/* The score was withdrawn from the console on 2026-09-17 (RESILIENCE_SCORE_LIVE in
+   dc-urs.ts). These score tests are its re-enable checklist, so they skip rather than
+   go: flip the flag and they run again, and the "Coming soon" guard at the foot of
+   this file stands down in the same move. */
+const WITHDRAWN = 'the resilience score is withdrawn (RESILIENCE_SCORE_LIVE = false)';
 const WARD_ID = 'mg-road';
 
 test('MG Road shows a resilience score and its confidence chip', async ({ page }) => {
+  test.skip(!RESILIENCE_SCORE_LIVE, WITHDRAWN);
   const raw = JSON.parse(await readFile(
     fileURLToPath(new URL('../../public/heat-map/data/bengaluru-dc-urs-inputs.json', import.meta.url)),
     'utf8',
@@ -92,6 +98,7 @@ const THERMAL_MARGIN = 0.2;
 
 for (const ward of TREE_WARDS) {
   test(`${ward.name}: planting 25 trees raises the resilience score`, async ({ page }) => {
+    test.skip(!RESILIENCE_SCORE_LIVE, WITHDRAWN);
     const raw = JSON.parse(await readFile(
       fileURLToPath(new URL(`../../public/heat-map/data/${ward.inputs}`, import.meta.url)),
       'utf8',
@@ -150,6 +157,55 @@ for (const ward of TREE_WARDS) {
     ).toBeGreaterThanOrEqual(indexOnly + THERMAL_MARGIN);
     expect(Number(await score.textContent())).toBeGreaterThanOrEqual(baseScore);
 
+    expect(thrown, `threw:\n${thrown.join('\n')}`).toEqual([]);
+  });
+}
+
+/**
+ * WHILE THE SCORE IS WITHDRAWN, NEITHER CITY PUBLISHES ONE — NOT EVEN UNDER THE VEIL.
+ *
+ * A "Coming soon" overlay laid over a number that is still painted underneath would
+ * pass any test that only looks for the overlay, and would still publish the score to
+ * view-source, to a screen reader and to anyone who removes the veil in devtools. So
+ * this asserts the ABSENCE: after the ward has loaded (the moment the old page painted
+ * its score) and after a slider has moved (the moment it rewrote the readout), every
+ * score field still holds its server-rendered dash.
+ *
+ * THE INPUTS FILE IS STILL FETCHED, AND THAT IS CORRECT. surface-raster.ts reads the
+ * ward's measured greenness and albedo from the same dc-urs-inputs file to build the
+ * heat surface — physics, not the score — so asserting "never requested" would demand
+ * a change to the temperature field. Measured 2026-09-17: that request fired and every
+ * score field still read "—"; the DOM is where a published score would show.
+ */
+const WITHDRAWN_WARDS = [
+  { name: 'Ballygunge', path: '/heat-map/in/kolkata/ballygunge/' },
+  { name: 'MG Road', path: WARD_PATH },
+] as const;
+
+for (const ward of WITHDRAWN_WARDS) {
+  test(`${ward.name}: the resilience score reads "Coming soon" and paints no number`, async ({ page }) => {
+    test.skip(RESILIENCE_SCORE_LIVE, 'the score is live; the tests above cover it');
+
+    const thrown: string[] = [];
+    page.on('pageerror', (error) => thrown.push(String(error)));
+
+    await page.goto(ward.path, { waitUntil: 'domcontentloaded' });
+    await expect(page.locator('#bcount')).not.toHaveText(/^—/, { timeout: 30_000 });
+
+    const veil = page.locator('.scorebox .soon');
+    await expect(veil).toBeVisible();
+    await expect(veil).toContainText(/coming soon/i);
+    await expect(page.locator('.scorebox-body')).toHaveAttribute('aria-hidden', 'true');
+
+    /* A slider move is what used to rewrite the readout, so move one, then give the
+       stats tick — which painted within a second or two before — ample time to do it. */
+    await page.locator('#ivTrees').fill('25');
+    await page.waitForTimeout(5_000);
+
+    await expect(page.locator('#scoreNum')).toHaveText('—');
+    for (const id of ['sGreen', 'sCool', 'sEff']) await expect(page.locator(`#${id}`)).toHaveText('—');
+    await expect(page.locator('#scoreTxt')).not.toContainText(/pts|unavailable/);
+    await expect(page.locator('#scoreConf')).toHaveAttribute('hidden', '');
     expect(thrown, `threw:\n${thrown.join('\n')}`).toEqual([]);
   });
 }

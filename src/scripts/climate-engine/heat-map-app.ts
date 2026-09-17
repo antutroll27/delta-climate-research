@@ -1990,7 +1990,10 @@ export function mountHeatMap(): () => void {
   let dcursFrom: string | null = null;
   async function loadDcUrs(key: AreaKey) {
     const url = cityPaths(key).dcUrs;
-    if (url === null) { state.dcurs = null; dcursFrom = null; return; }
+    /* The SCORE fetches nothing while withdrawn (see RESILIENCE_SCORE_LIVE; the heat
+       surface's own read of this file, in surface-raster.ts, is untouched):
+       `state.dcurs` stays null, and the painter's no-inputs branch stays silent. */
+    if (url === null || !U.RESILIENCE_SCORE_LIVE) { state.dcurs = null; dcursFrom = null; return; }
     if (dcursFrom === url && state.dcurs) return;
     try {
       const r = await fetch(url);
@@ -2795,7 +2798,9 @@ export function mountHeatMap(): () => void {
         // so one word makes it true instead of understated by a quarter.
         : `${floor.headroom.toFixed(0)} pts reachable · <b>${gap.points > 0.05 ? 'at least ' : ''}`
           + `${floor.withheld.toFixed(0)} withheld</b> by exposure`);
-    } else {
+    } else if (U.RESILIENCE_SCORE_LIVE) {
+      /* Withdrawn, this branch writes NOTHING: "inputs unavailable" would be false,
+         and the server-rendered placeholders under the veil are already right. */
       setText('scoreNum', '—');
       setHTML('scoreTxt', 'resilience inputs unavailable');
     }
