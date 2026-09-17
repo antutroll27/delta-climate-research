@@ -67,6 +67,7 @@
  * "just" restates that.
  */
 import { type ResolvedScope } from '../../../scripts/climate-engine/scope/resolve.ts';
+import { RESILIENCE_SCORE_LIVE } from '../../../scripts/climate-engine/dc-urs.ts';
 
 /**
  * The scope, unchanged from what the stage already had.
@@ -106,6 +107,13 @@ const { scope } = Astro.props;
            DECLARED absence - no regional projection has been adopted - and that is a
            different fact from zero warming, so the control says which. */
         : <p class="segnone">No regional warming pathway has been adopted for {scope.country.name}, so there is nothing to project. This is a stated absence, not a projection of no warming.</p>}</div>
+      {/* WITHDRAWN 2026-09-17 — see RESILIENCE_SCORE_LIVE in dc-urs.ts. Every id below
+          stays (heat-map-app.ts and obos-shell.test.mjs find them by name); while the
+          score is off the app paints none of them, so the block keeps its server-
+          rendered dashes, and it is `inert` + aria-hidden so the veil is the only
+          thing a keyboard or a screen reader meets. */}
+      <div class="scorebox" data-soon={RESILIENCE_SCORE_LIVE ? undefined : ''}>
+      <div class="scorebox-body" inert={!RESILIENCE_SCORE_LIVE} aria-hidden={RESILIENCE_SCORE_LIVE ? undefined : 'true'}>
       <div class="score">
         <div class="g">
           {/* `stroke` is an SVG PRESENTATION ATTRIBUTE, not CSS, so `var(--surface2)`
@@ -143,4 +151,7 @@ const { scope } = Astro.props;
            provenance. Deliberately no copy in this file for anyone to forget to
            delete: when socio.json lands the chip removes itself. -->
       <div class="conf indicative scoreconf" id="scoreConf" hidden></div>
+      </div>
+      {!RESILIENCE_SCORE_LIVE && <p class="soon"><b>Resilience Score</b><span>Coming soon</span></p>}
+      </div>
     </aside>
