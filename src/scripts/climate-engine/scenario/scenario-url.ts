@@ -1,4 +1,4 @@
-import { nextDistinctArea } from '../scope/registry.ts';
+import { areaKeysInCity, isDrawable, nextDistinctKey, splitKey, type AreaKey } from '../scope/registry.ts';
 import { fromLegacyWard, toLegacyWard } from '../scope/legacy.ts';
 import {
   DEFAULT_PAIRED_SCENARIO,
@@ -13,6 +13,16 @@ const numeric = (params: URLSearchParams, key: string, fallback: number) => {
   return Number.isFinite(value) ? value : fallback;
 };
 
+/** Can the instrument draw this area? Dubai's areas are registered but not drawable. */
+const drawable = (key: AreaKey): boolean => {
+  const { country, city, area } = splitKey(key);
+  return isDrawable(country, city, area);
+};
+
+/** Is `b` a valid partner for `a`: drawable, in a's own city, and not a itself? */
+const pairsWith = (a: AreaKey, b: AreaKey | null): b is AreaKey =>
+  b !== null && b !== a && drawable(b) && areaKeysInCity(a).includes(b);
+
 /**
  * A shared Compare link → the state it names.
  *
@@ -24,18 +34,26 @@ const numeric = (params: URLSearchParams, key: string, fallback: number) => {
  *
  * The fallback to the default is deliberate and unchanged in shape — a Compare page
  * that refuses to render on a mistyped id helps nobody — but it is now reached only
- * by a value that is neither a key nor a known alias.
+ * by a value that is neither a key nor a known alias, or names an area the
+ * instrument cannot draw.
+ *
+ * `b` MUST SHARE a's CITY. The ward page's Compare link carries only `a`, and this
+ * used to fill a missing `b` with DEFAULT.b — a Kolkata ward — whatever the city, so
+ * every Bengaluru ward opened a cross-city pair that fails the grid check (2026-09-23
+ * audit, item 2). A given `b` is kept only if it pairs with `a`; otherwise DEFAULT.b
+ * if THAT pairs with `a` (which keeps every existing Kolkata link byte-identical);
+ * otherwise the first other drawable area in a's city. Null there (a city of one
+ * drawable area) yields a === b, which `runPairedScenarioCore` refuses BY NAME rather
+ * than papering over.
  */
 export function parsePairedScenario(search: string): PairedScenarioState {
   const params = new URLSearchParams(search);
-  const a = fromLegacyWard(params.get('a')) ?? DEFAULT_PAIRED_SCENARIO.a;
-  const bCandidate = fromLegacyWard(params.get('b')) ?? DEFAULT_PAIRED_SCENARIO.b;
-  /* Falls back WITHIN a's own city, never to the default pair: `DEFAULT.b` is a
-     Kolkata ward, and handing it to a request for some other city would answer with
-     a cross-city comparison — two climates, two currencies, one of them shipping no
-     artefacts. Null (a city of one area) yields a === b, which
-     `runPairedScenarioCore` refuses BY NAME rather than papering over. */
-  const b = bCandidate === a ? (nextDistinctArea(a) ?? a) : bCandidate;
+  const parsedA = fromLegacyWard(params.get('a'));
+  const a = parsedA !== null && drawable(parsedA) ? parsedA : DEFAULT_PAIRED_SCENARIO.a;
+  const parsedB = fromLegacyWard(params.get('b'));
+  const b = pairsWith(a, parsedB) ? parsedB
+    : pairsWith(a, DEFAULT_PAIRED_SCENARIO.b) ? DEFAULT_PAIRED_SCENARIO.b
+    : (nextDistinctKey(areaKeysInCity(a).filter(drawable), a) ?? a);
   const phase = params.get('phase') === 'retained' ? 'retained' : 'peak';
   return {
     a,
