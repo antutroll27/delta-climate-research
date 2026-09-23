@@ -16,20 +16,31 @@ import { join } from 'node:path';
  * info/exclude carries these same patterns plus the name-revealing ones no
  * committed file may hold. Asked inside the real repository this test would pass
  * locally against an empty .gitignore. So the committed .gitignore is copied into a
- * fresh repository that contains nothing else.
+ * fresh repository that contains nothing else. The git calls also run with every
+ * inherited GIT_* variable stripped and with git init given an empty template, so
+ * neither an inherited GIT_DIR nor a global init.templateDir can point them at, or
+ * seed them from, the real repository.
  */
 const repo = mkdtempSync(join(tmpdir(), 'gitignore-check-'));
-execFileSync('git', ['init', '-q', repo]);
-copyFileSync('.gitignore', join(repo, '.gitignore'));
 after(() => rmSync(repo, { recursive: true, force: true }));
+
+// Every GIT_* variable is dropped: git exports GIT_DIR (and friends) to hooks, `rebase -x`
+// and `bisect run`, and an inherited GIT_DIR points `git init` and `check-ignore` at the
+// REAL repository, which both defeats the isolation and rewrites its shared config.
+const env = Object.fromEntries(
+  Object.entries(process.env).filter(([name]) => !name.startsWith('GIT_')),
+);
+execFileSync('git', ['init', '-q', '--template=', repo], { env });
+copyFileSync('.gitignore', join(repo, '.gitignore'));
 
 const ignored = (path) => {
   try {
     execFileSync('git', ['-C', repo, '-c', 'core.excludesFile=/dev/null',
-      'check-ignore', '--no-index', '-q', '--', path], { stdio: 'ignore' });
+      'check-ignore', '--no-index', '-q', '--', path], { stdio: 'ignore', env });
     return true;   // exit 0: ignored
-  } catch {
-    return false;  // exit 1: not ignored
+  } catch (error) {
+    if (error.status === 1) return false;  // exit 1: not ignored
+    throw error;                            // anything else is a broken check, not an answer
   }
 };
 
