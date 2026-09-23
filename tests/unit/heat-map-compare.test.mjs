@@ -307,6 +307,9 @@ test('Kolkata links resolve exactly as they did before', () => {
   assert.equal(parsePairedScenario('?a=ballygunge').b, 'in/kolkata/baruipur');
   // …and for Baruipur itself the first other ward in the city, as nextDistinctArea gave.
   assert.equal(parsePairedScenario('?a=baruipur').b, nextDistinctArea('in/kolkata/baruipur'));
+  // A link naming one ward twice falls to the first other ward, as it always did,
+  // not to DEFAULT.b: this case is where the two orders differ.
+  assert.equal(parsePairedScenario('?a=barrackpore&b=barrackpore').b, nextDistinctArea('in/kolkata/barrackpore'));
 });
 
 test('TypeScript HeatSim produces stable finite statistics on the canonical grid', () => {

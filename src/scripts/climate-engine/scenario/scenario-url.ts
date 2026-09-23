@@ -40,11 +40,12 @@ const pairsWith = (a: AreaKey, b: AreaKey | null): b is AreaKey =>
  * `b` MUST SHARE a's CITY. The ward page's Compare link carries only `a`, and this
  * used to fill a missing `b` with DEFAULT.b — a Kolkata ward — whatever the city, so
  * every Bengaluru ward opened a cross-city pair that fails the grid check (2026-09-23
- * audit, item 2). A given `b` is kept only if it pairs with `a`; otherwise DEFAULT.b
- * if THAT pairs with `a` (which keeps every existing Kolkata link byte-identical);
- * otherwise the first other drawable area in a's city. Null there (a city of one
- * drawable area) yields a === b, which `runPairedScenarioCore` refuses BY NAME rather
- * than papering over.
+ * audit, item 2). A given `b` is kept only if it pairs with `a`. A `b` that repeats
+ * `a` falls to the first other drawable area in a's city, as it always did; any other
+ * missing or unusable `b` takes DEFAULT.b if THAT pairs with `a`, else that same first
+ * other area. Together these keep every existing Kolkata link byte-identical. Null
+ * there (a city of one drawable area) yields a === b, which `runPairedScenarioCore`
+ * refuses BY NAME rather than papering over.
  */
 export function parsePairedScenario(search: string): PairedScenarioState {
   const params = new URLSearchParams(search);
@@ -52,7 +53,7 @@ export function parsePairedScenario(search: string): PairedScenarioState {
   const a = parsedA !== null && drawable(parsedA) ? parsedA : DEFAULT_PAIRED_SCENARIO.a;
   const parsedB = fromLegacyWard(params.get('b'));
   const b = pairsWith(a, parsedB) ? parsedB
-    : pairsWith(a, DEFAULT_PAIRED_SCENARIO.b) ? DEFAULT_PAIRED_SCENARIO.b
+    : parsedB !== a && pairsWith(a, DEFAULT_PAIRED_SCENARIO.b) ? DEFAULT_PAIRED_SCENARIO.b
     : (nextDistinctKey(areaKeysInCity(a).filter(drawable), a) ?? a);
   const phase = params.get('phase') === 'retained' ? 'retained' : 'peak';
   return {
