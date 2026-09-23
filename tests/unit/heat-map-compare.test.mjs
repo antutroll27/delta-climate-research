@@ -292,6 +292,8 @@ test('an explicit cross-city partner is repaired within a\'s own city', () => {
   assert.equal(state.a, 'in/bengaluru/whitefield');
   assert.notEqual(state.b, state.a);
   assert.ok(state.b.startsWith('in/bengaluru/'), state.b);
+  // …and a Kolkata `a` handed another city's ward takes DEFAULT.b, not the first other ward.
+  assert.equal(parsePairedScenario('?a=barrackpore&b=in/bengaluru/whitefield').b, DEFAULT_PAIRED_SCENARIO.b);
 });
 
 test('an area the instrument cannot draw falls back to the default pair', () => {

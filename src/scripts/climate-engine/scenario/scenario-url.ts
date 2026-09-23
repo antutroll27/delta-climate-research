@@ -20,8 +20,8 @@ const drawable = (key: AreaKey): boolean => {
 };
 
 /** Is `b` a valid partner for `a`: drawable, in a's own city, and not a itself? */
-const pairsWith = (a: AreaKey, b: AreaKey | null): b is AreaKey =>
-  b !== null && b !== a && drawable(b) && areaKeysInCity(a).includes(b);
+const pairsWith = (a: AreaKey, b: AreaKey): boolean =>
+  b !== a && drawable(b) && areaKeysInCity(a).includes(b);
 
 /**
  * A shared Compare link → the state it names.
@@ -41,18 +41,19 @@ const pairsWith = (a: AreaKey, b: AreaKey | null): b is AreaKey =>
  * used to fill a missing `b` with DEFAULT.b — a Kolkata ward — whatever the city, so
  * every Bengaluru ward opened a cross-city pair that fails the grid check (2026-09-23
  * audit, item 2). A given `b` is kept only if it pairs with `a`. A `b` that repeats
- * `a` falls to the first other drawable area in a's city, as it always did; any other
- * missing or unusable `b` takes DEFAULT.b if THAT pairs with `a`, else that same first
- * other area. Together these keep every existing Kolkata link byte-identical. Null
- * there (a city of one drawable area) yields a === b, which `runPairedScenarioCore`
- * refuses BY NAME rather than papering over.
+ * `a` falls to the first other area in a's city, as it always did, though only a
+ * drawable one now qualifies; any other missing or unusable `b` takes DEFAULT.b if
+ * THAT pairs with `a`, else that same first other area. Together these keep every
+ * existing Kolkata link byte-identical. Null there (a city of one drawable area)
+ * yields a === b, which `runPairedScenarioCore` refuses BY NAME rather than
+ * papering over.
  */
 export function parsePairedScenario(search: string): PairedScenarioState {
   const params = new URLSearchParams(search);
   const parsedA = fromLegacyWard(params.get('a'));
   const a = parsedA !== null && drawable(parsedA) ? parsedA : DEFAULT_PAIRED_SCENARIO.a;
   const parsedB = fromLegacyWard(params.get('b'));
-  const b = pairsWith(a, parsedB) ? parsedB
+  const b = parsedB !== null && pairsWith(a, parsedB) ? parsedB
     : parsedB !== a && pairsWith(a, DEFAULT_PAIRED_SCENARIO.b) ? DEFAULT_PAIRED_SCENARIO.b
     : (nextDistinctKey(areaKeysInCity(a).filter(drawable), a) ?? a);
   const phase = params.get('phase') === 'retained' ? 'retained' : 'peak';
