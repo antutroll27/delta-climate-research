@@ -22,7 +22,7 @@ test('every page that renders the OBOS stage opts out of Lenis', () => {
   for (const file of stages) {
     const base = readFileSync(file, 'utf8').match(/<Base\b[^>]*>/s);
     assert.ok(base, `${file}: no <Base> element`);
-    assert.match(base[0], /\bnativeScroll\b/,
+    assert.match(base[0], /\bnativeScroll(?:=\{true\})?(?=[\s/>])/,
       `${file}: <Base> lacks nativeScroll, so Lenis will swallow wheel events in the panels`);
   }
 });
