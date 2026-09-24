@@ -257,8 +257,9 @@ def check() -> int:
         # The stamp is only as good as `utc`, so pin `utc` to two columns the scene lists
         # wrote before this script ran: its UTC date, and its local solar hour (computed at
         # the scene's own meridian with seconds dropped, so a few minutes' slack; the
-        # largest gap measured on the committed rows is 63 s).
-        elif utc[:10] != r["date"] or _hour_gap(utc, r["local_solar_hour"]) > 0.1:
+        # largest gap on the 2026-09-24 rebuild is 63 s).
+        # `not <=` rather than `>`: a nan gap (a nan or infinite hour) must fail, not pass.
+        elif utc[:10] != r["date"] or not _hour_gap(utc, r["local_solar_hour"]) <= 0.1:
             print(f"  UTC DISAGREES {where}: utc {utc}, local solar hour {r['local_solar_hour']}")
             bad += 1
     if bad:
