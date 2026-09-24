@@ -3,6 +3,7 @@ import test from 'node:test';
 import { readFileSync } from 'node:fs';
 
 import { ACCURACY } from '../../src/scripts/climate-engine/accuracy.ts';
+import { DEFAULT_PARAMS, STORE_NIGHT } from '../../src/scripts/climate-engine/types.ts';
 
 /* accuracy.ts is hand-maintained, and it feeds the headline error bars on
    /uncertainty and every ward API payload. It had no artefact behind it and no
@@ -44,4 +45,15 @@ test('a pending recalibration is declared, not silently carried', () => {
       'peak n disagrees with the artefact, so model-accuracy.json must declare pending_recalibration');
     assert.match(JSON.stringify(ws.pending_recalibration), /reviewed change/i);
   }
+});
+
+/* 2026-09-24. measure-accuracy.py overlaid the matched candidate's free-fit q_day on
+   the shipped constants, so every re-run scored a model that does not ship and nothing
+   noticed. The artefact now records what it scored; this pins that to what ships. */
+test('the accuracy artefact scores the constants that ship', () => {
+  const ws = JSON.parse(readFileSync('data/calibration/model-accuracy.json', 'utf8')).ward_scale;
+  assert.ok(ws.scored, 'model-accuracy.json must record the constants it scored');
+  assert.equal(ws.scored.q_day, DEFAULT_PARAMS.Q, 'measure-accuracy scored a q_day that does not ship');
+  assert.ok(Math.abs(ws.scored.release_base - STORE_NIGHT) < 5e-4,
+    `measure-accuracy scored release_base ${ws.scored.release_base}, but STORE_NIGHT ships ${STORE_NIGHT}`);
 });
