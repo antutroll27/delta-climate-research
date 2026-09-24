@@ -22,8 +22,8 @@ import datetime as dt
 import sys
 from typing import Final
 
-#: The one NASA POWER point the Kolkata forcing is read at: the centre of the
-#: three-ward bbox. POWER stamps its hours in local solar time AT THIS LONGITUDE.
+#: The one NASA POWER point the Kolkata forcing is read at: near the three wards, not
+#: the centre of their bbox. POWER stamps its hours in local solar time AT THIS LONGITUDE.
 POWER_LAT: Final = 22.55
 POWER_LON: Final = 88.37
 

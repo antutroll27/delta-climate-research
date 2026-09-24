@@ -3,6 +3,7 @@
 Attach meteorological forcing to each ECOSTRESS calibration scene.
 
     python3 scripts/fetch-met.py
+    python3 scripts/fetch-met.py --check   # verify the committed CSV's stamps offline
 
 The calibration CSV records what the surface WAS; the model predicts surface
 temperature GIVEN the atmosphere. Without air temperature, humidity and wind at
@@ -36,6 +37,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import datetime as dt
 import json
 import os
 import subprocess
@@ -55,7 +57,7 @@ LANDSAT = os.path.join(ROOT, "data", "calibration", "landsat-ward-lst.json")
 OUT = os.path.join(ROOT, "data", "calibration", "met-forcing.csv")
 CACHE = os.path.expanduser("~/.cache/delta-climate/power-hourly.json")
 
-LAT, LON = _power.POWER_LAT, _power.POWER_LON  # centre of the three-ward bbox; defined once, in _power.py
+LAT, LON = _power.POWER_LAT, _power.POWER_LON  # the one POWER query point; defined once, in _power.py
 POWER_PARAMS = ("T2M", "RH2M", "WS2M", "CLOUD_AMT")
 PARAMS = ",".join(POWER_PARAMS)               # one source for the request and the read
 FILL_MAX = -900.0                             # POWER fill value is -999
@@ -215,6 +217,12 @@ def landsat_scenes() -> list[SuhiiRow]:
     return sorted(by_pass.values(), key=lambda r: r["date"])
 
 
+def _hour_gap(utc: str, local_solar_hour: str) -> float:
+    """Hours between `utc` read on POWER's clock and a recorded local solar hour, mod 24."""
+    t = dt.datetime.fromisoformat(utc.rstrip("Z")) + dt.timedelta(hours=LON / 15)
+    return abs((t.hour + t.minute / 60 + t.second / 3600 - float(local_solar_hour) + 12) % 24 - 12)
+
+
 def check() -> int:
     """Every committed forcing row read the POWER stamp its own UTC instant implies.
 
@@ -222,20 +230,39 @@ def check() -> int:
     row's own `utc` column and compares. A row keyed the old way — UTC date plus local
     solar hour — fails here for every pass after local midnight but before UTC midnight.
     """
+    name = os.path.relpath(OUT, ROOT)
     with open(OUT, newline="") as fh:
         rows = cast(list[_types.MetRow], list(csv.DictReader(fh)))
     if not rows:
-        print(f"  {os.path.relpath(OUT, ROOT)} has no rows")
+        print(f"  {name} has no rows")
         return 1
     missing = [c for c in ("utc", "power_stamp") if c not in rows[0]]
     if missing:
-        print(f"  {os.path.relpath(OUT, ROOT)} lacks {', '.join(missing)} — rebuild it")
+        print(f"  {name} lacks {', '.join(missing)} — rebuild it")
         return 1
-    bad = [(r["date"], r["phase"], r["power_stamp"], _power.power_stamp(r["utc"], LON))
-           for r in rows if r["power_stamp"] != _power.power_stamp(r["utc"], LON)]
-    for date, phase, got, want in bad:
-        print(f"  WRONG STAMP {date} {phase}: the row read {got}, its UTC instant implies {want}")
+    bad = 0
+    for r in rows:
+        utc, got, where = r["utc"], r["power_stamp"], f"{r['date']} {r['phase']}"
+        try:
+            # a short row reads None and an empty cell "", neither of which is an instant
+            want = _power.power_stamp(utc, LON) if utc else None
+        except ValueError:
+            want = None
+        if want is None:
+            print(f"  BAD UTC {where}: {utc!r} is not an ISO-8601 instant")
+            bad += 1
+        elif got != want:
+            print(f"  WRONG STAMP {where}: the row read {got!r}, its UTC instant implies {want}")
+            bad += 1
+        # The stamp is only as good as `utc`, so pin `utc` to two columns the scene lists
+        # wrote before this script ran: its UTC date, and its local solar hour (computed at
+        # the scene's own meridian with seconds dropped, so a few minutes' slack; the
+        # largest gap measured on the committed rows is 63 s).
+        elif utc[:10] != r["date"] or _hour_gap(utc, r["local_solar_hour"]) > 0.1:
+            print(f"  UTC DISAGREES {where}: utc {utc}, local solar hour {r['local_solar_hour']}")
+            bad += 1
     if bad:
+        print(f"  {bad} of {len(rows)} forcing rows fail")
         return 1
     print(f"  {len(rows)} forcing rows: every POWER stamp matches the row's own UTC instant")
     return 0
