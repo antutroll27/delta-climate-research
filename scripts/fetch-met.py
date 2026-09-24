@@ -21,18 +21,21 @@ the right quantity: the model takes regional air temperature as forcing and
 generates the local anomaly itself. Feeding it a ward-level air temperature
 would double-count the heat island.
 
-TIME BASE. POWER hourly is stamped in Local Solar Time, and the calibration CSV
-already carries local_solar_hour derived from centre longitude. The join is
-therefore direct, with no timezone arithmetic to get wrong — which is why the
-LST check below is a raised error rather than an assert: under `python3 -O`
-asserts vanish, and every scene would silently join to the wrong hour.
+TIME BASE. POWER hourly is stamped in Local Solar Time at the queried longitude,
+so each scene's reading is found by converting the pass's own UTC instant to that
+clock, date and hour together, in _power.power_stamp. The scene's local solar
+HOUR is not enough on its own: joined to the UTC DATE, it read POWER a day early
+for a pass after local midnight but before UTC midnight, which here is a night
+pass, until the correction recorded in _power.py. The LST check below is a raised
+error rather than an assert: under `python3 -O` asserts vanish, and every scene
+would silently join to the wrong hour.
 
 Output: data/calibration/met-forcing.csv
 """
 from __future__ import annotations
 
+import argparse
 import csv
-import datetime
 import json
 import os
 import subprocess
@@ -43,7 +46,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
-import _types  # noqa: E402  (path must be set first — the scripts are not a package)
+import _power  # noqa: E402  (path must be set first — the scripts are not a package)
+import _types  # noqa: E402
 
 ROOT = os.path.join(HERE, "..")
 SCENES = os.path.join(ROOT, "data", "calibration", "ecostress-suhii.csv")
@@ -51,7 +55,7 @@ LANDSAT = os.path.join(ROOT, "data", "calibration", "landsat-ward-lst.json")
 OUT = os.path.join(ROOT, "data", "calibration", "met-forcing.csv")
 CACHE = os.path.expanduser("~/.cache/delta-climate/power-hourly.json")
 
-LAT, LON = 22.55, 88.37                       # centre of the three-ward bbox
+LAT, LON = _power.POWER_LAT, _power.POWER_LON  # centre of the three-ward bbox; defined once, in _power.py
 POWER_PARAMS = ("T2M", "RH2M", "WS2M", "CLOUD_AMT")
 PARAMS = ",".join(POWER_PARAMS)               # one source for the request and the read
 FILL_MAX = -900.0                             # POWER fill value is -999
@@ -72,6 +76,7 @@ class SuhiiRow(TypedDict):
     date: str
     phase: str
     status: str
+    utc: str
     local_solar_hour: str
     view_delta: str
     usable_frac: str
@@ -96,6 +101,8 @@ class MetOutRow(TypedDict):
     rh: float
     wind: float
     cloud: float
+    utc: str
+    power_stamp: str
 
 
 class PowerHeader(TypedDict):
@@ -200,6 +207,7 @@ def landsat_scenes() -> list[SuhiiRow]:
         # overpass as two items, and they share one forcing hour.
         by_pass.setdefault(r["date"], cast("SuhiiRow", {
             "date": r["date"], "phase": "day", "status": "ok",
+            "utc": f'{r["date"]}T{r["time_utc"].rstrip("Z")}',
             "local_solar_hour": f'{r["hour_lst"]:.2f}',
             "view_delta": "", "usable_frac": "",
             "urban_mean": "", "rural_strict": "", "suhii": "",
@@ -207,15 +215,41 @@ def landsat_scenes() -> list[SuhiiRow]:
     return sorted(by_pass.values(), key=lambda r: r["date"])
 
 
+def check() -> int:
+    """Every committed forcing row read the POWER stamp its own UTC instant implies.
+
+    Offline and cache-free, so CI can run it: it re-derives each row's stamp from the
+    row's own `utc` column and compares. A row keyed the old way — UTC date plus local
+    solar hour — fails here for every pass after local midnight but before UTC midnight.
+    """
+    with open(OUT, newline="") as fh:
+        rows = cast(list[_types.MetRow], list(csv.DictReader(fh)))
+    if not rows:
+        print(f"  {os.path.relpath(OUT, ROOT)} has no rows")
+        return 1
+    missing = [c for c in ("utc", "power_stamp") if c not in rows[0]]
+    if missing:
+        print(f"  {os.path.relpath(OUT, ROOT)} lacks {', '.join(missing)} — rebuild it")
+        return 1
+    bad = [(r["date"], r["phase"], r["power_stamp"], _power.power_stamp(r["utc"], LON))
+           for r in rows if r["power_stamp"] != _power.power_stamp(r["utc"], LON)]
+    for date, phase, got, want in bad:
+        print(f"  WRONG STAMP {date} {phase}: the row read {got}, its UTC instant implies {want}")
+    if bad:
+        return 1
+    print(f"  {len(rows)} forcing rows: every POWER stamp matches the row's own UTC instant")
+    return 0
+
+
 def main() -> None:
     with open(SCENES, newline="") as fh:
         rows_in = cast(list[SuhiiRow], list(csv.DictReader(fh)))
     scenes = [r for r in rows_in if r["status"] == "ok"]
     n_ecostress = len(scenes)
-    # Landsat passes join through exactly the same LST-rounding path below. If
-    # the two sources ever disagree about what `local_solar_hour` means, this is
-    # where it would show up as forcing attached to the wrong hour, which is why
-    # both go through one loop rather than two.
+    # Landsat passes join through exactly the same UTC-instant path below. If
+    # the two sources ever disagree about what `utc` means, this is where it
+    # would show up as forcing attached to the wrong hour, which is why both go
+    # through one loop rather than two.
     scenes = scenes + landsat_scenes()
     print(f"  scenes: {n_ecostress} ECOSTRESS + {len(scenes) - n_ecostress} Landsat "
           f"overpasses = {len(scenes)}")
@@ -226,7 +260,8 @@ def main() -> None:
     blob = power_hourly(dates[0].replace("-", ""), dates[-1].replace("-", ""))
 
     # A raised error, not an assert: `python3 -O` strips asserts, and the whole
-    # timezone-free join rests on this one invariant.
+    # join rests on this one invariant — _power.power_stamp converts each pass's
+    # UTC instant to local solar time because that is the clock POWER stamps in.
     if blob["header"]["time_standard"] != "LST":
         sys.exit(f"POWER time base is {blob['header']['time_standard']!r}, not LST — "
                  f"the local-solar-hour join in this script is no longer valid")
@@ -242,16 +277,12 @@ def main() -> None:
     rows: list[MetOutRow] = []
     missing = 0
     for s in scenes:
-        # POWER keys are YYYYMMDDHH in local solar time; round the scene's solar
-        # hour to the nearest stamp rather than truncating, so a 13:50 overpass
-        # takes the 14:00 reading it is closest to. Rounding 23.84 up to 24 must
-        # roll the DATE forward too, or the scene silently takes a reading 24
-        # hours early.
-        hour = int(round(float(s["local_solar_hour"])))
-        day = datetime.date.fromisoformat(s["date"])
-        if hour >= 24:
-            hour, day = hour - 24, day + datetime.timedelta(days=1)
-        key = day.strftime("%Y%m%d") + f"{hour:02d}"
+        # The POWER stamp comes from the pass's own UTC instant, date and hour in one
+        # calculation (_power.power_stamp). Building it from the scene's UTC DATE plus
+        # its local solar HOUR read POWER 24 hours early for every pass after local
+        # midnight but before UTC midnight — 20 of 97 rows, all at night (2026-09-23
+        # audit, item 3).
+        key = _power.power_stamp(s["utc"], LON)
         vals = reading(param, key)
         if vals is None:
             missing += 1
@@ -266,6 +297,7 @@ def main() -> None:
             "suhii": s["suhii"],
             "tAir": round(t2m, 2), "rh": round(rh2m, 2),
             "wind": round(ws2m, 2), "cloud": round(cloud_pct / 100, 3),
+            "utc": s["utc"], "power_stamp": key,
         })
 
     # Guarded BEFORE the file is opened. Opening for write truncates it to zero
@@ -292,4 +324,9 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    ap = argparse.ArgumentParser(description="Attach NASA POWER hourly forcing to each calibration scene.")
+    ap.add_argument("--check", action="store_true",
+                    help="verify the committed CSV's POWER stamps offline; fetches and writes nothing")
+    if ap.parse_args().check:
+        sys.exit(check())
     main()
