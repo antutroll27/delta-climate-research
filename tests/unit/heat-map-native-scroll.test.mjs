@@ -9,17 +9,19 @@ import { join } from 'node:path';
  * panels — on a page whose own body never scrolls (HeatMapStage sets
  * body{overflow:hidden}). Base.astro states the rule: interactive tools manage their
  * own native scrolling and must not start Lenis. compare.astro and brief.astro
- * followed it; the ward route, the one people actually use, did not.
+ * followed it; the ward route, the one people actually use, did not. So every page
+ * under src/pages/heat-map is held to the rule: all three are interactive tools.
  */
 const PAGES = 'src/pages/heat-map';
 const astroFiles = readdirSync(PAGES, { recursive: true })
   .filter((f) => String(f).endsWith('.astro'))
   .map((f) => join(PAGES, String(f)));
 
-test('every page that renders the OBOS stage opts out of Lenis', () => {
-  const stages = astroFiles.filter((f) => readFileSync(f, 'utf8').includes('<HeatMapStage'));
-  assert.ok(stages.length >= 1, `no page under ${PAGES} renders <HeatMapStage> — did the route move?`);
-  for (const file of stages) {
+test('every heat-map page opts out of Lenis', () => {
+  const pages = astroFiles.filter((f) => /<Base\b/.test(readFileSync(f, 'utf8')));
+  assert.ok(pages.some((f) => readFileSync(f, 'utf8').includes('<HeatMapStage')),
+    `no page under ${PAGES} renders <HeatMapStage> — did the route move?`);
+  for (const file of pages) {
     // The template only: past the frontmatter's closing ---, with template comments removed,
     // so a <Base …> written in a comment can neither satisfy nor fail the check.
     const template = readFileSync(file, 'utf8')

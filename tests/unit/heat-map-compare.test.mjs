@@ -273,12 +273,11 @@ test('the distinct-area fallback never leaves the city', () => {
  * Whitefield vs Baruipur. A same-city Bengaluru pair settles in about 2.5 s.
  */
 test('a Compare link from a Bengaluru ward pairs it with a Bengaluru ward', () => {
-  for (const area of ['indiranagar', 'mg-road', 'whitefield']) {
-    const key = `in/bengaluru/${area}`;
+  for (const key of areaKeysInCity('in/bengaluru/whitefield')) {
     const state = parsePairedScenario(`?a=${encodeURIComponent(key)}&trees=0&roof=0&facades=0&phase=peak`);
     assert.equal(state.a, key);
     assert.notEqual(state.b, state.a);
-    assert.ok(state.b.startsWith('in/bengaluru/'), `${area} was paired with ${state.b}`);
+    assert.ok(state.b.startsWith('in/bengaluru/'), `${key} was paired with ${state.b}`);
   }
   // The exact link the Whitefield page writes, as captured on production.
   const written = parsePairedScenario('?a=in%2Fbengaluru%2Fwhitefield&trees=0&roof=0&facades=0&phase=peak');

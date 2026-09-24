@@ -37,7 +37,7 @@ const pairsWith = (a: AreaKey, b: AreaKey): boolean =>
  * The fallback to the default is deliberate and unchanged in shape — a Compare page
  * that refuses to render on a mistyped id helps nobody — but it is now reached only
  * by a value that is neither a key nor a known alias, or names an area the
- * instrument cannot draw.
+ * instrument cannot draw, or, for `b`, names an area outside a's city.
  *
  * `b` MUST SHARE a's CITY. The ward page's Compare link carries only `a`, and this
  * used to fill a missing `b` with DEFAULT.b — a Kolkata ward — whatever the city, so
