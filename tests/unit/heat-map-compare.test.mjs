@@ -314,6 +314,29 @@ test('Kolkata links resolve exactly as they did before', () => {
   assert.equal(parsePairedScenario('?a=barrackpore&b=barrackpore').b, nextDistinctArea('in/kolkata/barrackpore'));
 });
 
+test('every Kolkata-only link resolves exactly as the pre-fix parser did', () => {
+  // The pre-fix rule (e215f1e), reproduced: an unknown or missing `a` took DEFAULT.a, an
+  // unknown or missing `b` took DEFAULT.b, and a `b` equal to `a` fell to nextDistinctArea(a).
+  const preFix = (search) => {
+    const params = new URLSearchParams(search);
+    const a = fromLegacyWard(params.get('a')) ?? DEFAULT_PAIRED_SCENARIO.a;
+    const b = fromLegacyWard(params.get('b')) ?? DEFAULT_PAIRED_SCENARIO.b;
+    return [a, b === a ? (nextDistinctArea(a) ?? a) : b];
+  };
+  const values = [null, '', 'nonsense', 'ballygunge', 'baruipur', 'barrackpore',
+    'in/kolkata/ballygunge', 'in/kolkata/baruipur', 'in/kolkata/barrackpore'];
+  for (const a of values) {
+    for (const b of values) {
+      const query = new URLSearchParams();
+      if (a !== null) query.set('a', a);
+      if (b !== null) query.set('b', b);
+      const search = `?${query}`;
+      const state = parsePairedScenario(search);
+      assert.deepEqual([state.a, state.b], preFix(search), search);
+    }
+  }
+});
+
 test('TypeScript HeatSim produces stable finite statistics on the canonical grid', () => {
   const count = SIM_N * SIM_N;
   const layers = {

@@ -9,7 +9,7 @@ import { join } from 'node:path';
  * 2026-09-23 audit, item 5. 118 confidential files — client proposals, internal
  * planning documents, draft analyses, screen recordings, .env.production — sat
  * untracked but NOT ignored in this PUBLIC repository, so one `git add -A` would
- * have published them. Commit 4ce2585 shows it had happened before.
+ * have published them. It had happened before.
  *
  * THE RULES ARE TESTED IN ISOLATION. `git check-ignore` also reads
  * .git/info/exclude and the user's global excludes, and on the owner's machine
@@ -36,6 +36,7 @@ copyFileSync('.gitignore', join(repo, '.gitignore'));
 const ignored = (path) => {
   try {
     execFileSync('git', ['-C', repo, '-c', 'core.excludesFile=/dev/null',
+      '-c', 'core.ignorecase=false',
       'check-ignore', '--no-index', '-q', '--', path], { stdio: 'ignore', env });
     return true;   // exit 0: ignored
   } catch (error) {
@@ -58,6 +59,11 @@ const MUST_IGNORE = [
   'preview-obos/index.html',
   'attic/heat-fx/shader.ts',
   'docs/audits/some-audit/README.md',
+  'Proposal.DOCX',
+  'docs/a-recording.MOV',
+  'docs/deep/nested/clip.MP4',
+  'docs/research/Client-Review.PDF',
+  'docs/research/sub/folder/draft.pdf',
 ];
 
 const MUST_STAY_VISIBLE = [

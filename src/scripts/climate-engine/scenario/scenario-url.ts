@@ -19,6 +19,8 @@ const drawable = (key: AreaKey): boolean => {
   return isDrawable(country, city, area);
 };
 
+// drawable(b) here and .filter(drawable) below are defensive: no registered city mixes
+// drawable and undrawable areas today, so no test can observe them. They matter the day one does.
 /** Is `b` a valid partner for `a`: drawable, in a's own city, and not a itself? */
 const pairsWith = (a: AreaKey, b: AreaKey): boolean =>
   b !== a && drawable(b) && areaKeysInCity(a).includes(b);

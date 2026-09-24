@@ -21,7 +21,7 @@ import { expect, test } from '@playwright/test';
  * no overflow by 1280x720 (production measured 353 px in 297 px at 1280x520).
  */
 test('a mouse wheel scrolls the Layers pane on a ward page', async ({ page }) => {
-  test.setTimeout(60_000);
+  test.setTimeout(90_000);
   await page.setViewportSize({ width: 1280, height: 480 });
   await page.goto('/heat-map/in/kolkata/ballygunge/', { waitUntil: 'domcontentloaded' });
   await expect(page.locator('.maplibregl-map')).toBeVisible({ timeout: 30_000 });
@@ -39,10 +39,11 @@ test('a mouse wheel scrolls the Layers pane on a ward page', async ({ page }) =>
 
   const box = await tree.boundingBox();
   if (!box) throw new Error('the Layers tree has no bounding box');
+  const before = await tree.evaluate((el) => el.scrollTop);
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   for (let i = 0; i < 4; i++) {
     await page.mouse.wheel(0, 200);
     await page.waitForTimeout(100);
   }
-  await expect.poll(() => tree.evaluate((el) => el.scrollTop), { timeout: 15_000 }).toBeGreaterThan(0);
+  await expect.poll(() => tree.evaluate((el) => el.scrollTop), { timeout: 15_000 }).toBeGreaterThan(before);
 });

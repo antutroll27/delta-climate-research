@@ -20,9 +20,15 @@ test('every page that renders the OBOS stage opts out of Lenis', () => {
   const stages = astroFiles.filter((f) => readFileSync(f, 'utf8').includes('<HeatMapStage'));
   assert.ok(stages.length >= 1, `no page under ${PAGES} renders <HeatMapStage> — did the route move?`);
   for (const file of stages) {
-    const base = readFileSync(file, 'utf8').match(/<Base\b[^>]*>/s);
+    // The template only: past the frontmatter's closing ---, with template comments removed,
+    // so a <Base …> written in a comment can neither satisfy nor fail the check.
+    const template = readFileSync(file, 'utf8')
+      .replace(/^---\n[\s\S]*?\n---\n/, '')
+      .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+      .replace(/<!--[\s\S]*?-->/g, '');
+    const base = template.match(/<Base\b[^>]*>/s);
     assert.ok(base, `${file}: no <Base> element`);
-    assert.match(base[0], /\bnativeScroll(?:=\{true\})?(?=[\s/>])/,
+    assert.match(base[0], /\bnativeScroll(?:=\{\s*true\s*\})?(?=[\s/>])/,
       `${file}: <Base> lacks nativeScroll, so Lenis will swallow wheel events in the panels`);
   }
 });

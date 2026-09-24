@@ -95,16 +95,17 @@ docs/research/*.mov
 # Confidential and scratch material that lives in the working tree on purpose.
 # 2026-09-23 audit, item 5: 118 files — client proposals, internal planning documents,
 # draft analyses, screen recordings, .env.production — were one `git add -A` from this
-# PUBLIC repository, and 4ce2585 shows it has happened before. Generic patterns only:
+# PUBLIC repository, and it has happened before. Generic patterns only:
 # anything whose name would reveal a client or a plan is excluded in .git/info/exclude,
 # which is never published.
+# Extensions are bracketed so the rules hold where core.ignorecase is false (Linux clones).
 .env.*
 !.env.example
-*.docx
-docs/research/*.pdf
+*.[dD][oO][cC][xX]
+docs/research/**/*.[pP][dD][fF]
 docs/Ideas_and_Prototypes/
-docs/**/*.mov
-docs/**/*.mp4
+docs/**/*.[mM][oO][vV]
+docs/**/*.[mM][pP]4
 tmp/
 preview-obos/
 attic/heat-fx/
