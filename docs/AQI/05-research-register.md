@@ -48,6 +48,8 @@
 | AQI-R27 | Verified 26 Sep | OpenCity's Ballygunge resource labels pressure "BP (mmHg)" but holds values near 1,010, which can only be hPa | Check every archive column's unit before use |
 | AQI-R28 | Research snapshot 26 Sep | No government station lies inside the 3 km window of any Bengaluru area; the nearest live ones are 3.8–4.0 km away, and Whitefield has none within 8 km | Bengaluru parked for the first release |
 | AQI-R29 | Research snapshot 26 Sep | KSPCB runs 13 manual NAMP stations in Bengaluru and publishes a monthly AQI for each (August 2026 report); TERI Domlur is 1.7 km from Indiranagar | Candidate monthly source when Bengaluru resumes; official coordinates still needed |
+| AQI-R31 | Verified 26 Sep | OpenAQ mislabels the active Ballygunge sensors (since 2025-02-18): NO₂ and SO₂ labelled "ppb" are µg/m³, CO labelled "ppb" is mg/m³, NOx labelled "ppb" is ppm; values equal OpenCity's native-unit archive (2025-12-15). The µg/m³-labelled sensors are retired (last reading 2022-10-16) | Use a verified per-sensor unit table; never trust OpenAQ unit labels or convert ppb. Barrackpore inferred, to verify |
+| AQI-R32 | Research snapshot 26 Sep | Both Kolkata stations have no valid CPCB day on 2026-08-26 to 2026-08-28 (15, 1 and 7 of 16 required hours) | Real "too few hours" days; the history chart must show them as gaps with reasons |
 | AQI-R30 | Research snapshot 26 Sep | An AirGradient low-cost sensor in Koramangala reports live on OpenAQ under CC BY 4.0 | Not a government instrument; usable only as a separately labelled class, if ever |
 
 ## 3. Superseded assumptions

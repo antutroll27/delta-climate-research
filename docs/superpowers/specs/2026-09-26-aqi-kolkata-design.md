@@ -19,7 +19,7 @@
 
 - **Stations.** Ballygunge → OpenAQ `10918` (WBPCB-owned, CPCB-provided monitor; 22.53675 N, 88.36380 E; KMC Ward 69; 1.0 km from the OBOS centre; inside the 3 km window). Barrackpore → `3409509` SVSPA Campus (22.76056, 88.36176; 1.0 km; inside the 3 km window; reporting since 2025-02-18). Baruipur → no continuous government monitor.
 - **Values are faithful but incomplete.** OpenAQ's raw 15-minute PM2.5 at Ballygunge equals the OpenCity archive of the same station reading for reading (checked on 2025-12-15; OpenCity stamps each reading at the IST end of its 15 minutes). **OpenAQ omits one of every four quarter-hours** (the one ending at IST :45), so its own `/hours` means differ from the full data by about 6 µg/m³ an hour. The function therefore averages **raw** readings into **IST clock hours** itself and never uses `/hours`.
-- **Units.** CO, NO₂ and SO₂ each appear as two sensors (ppb and µg/m³). CPCB breakpoints use µg/m³ (mg/m³ for CO): the function selects by unit, never by parameter name alone.
+- **Units: OpenAQ's labels are wrong on the active sensors.** Since 2025-02-18 the live Ballygunge sensors are labelled "ppb" for NO₂, SO₂ and CO, but their values equal OpenCity's native-unit archive exactly: NO₂ and SO₂ are **µg/m³** (38/38 identical on 2025-12-15) and CO is **mg/m³**; NOx labelled "ppb" is ppm. The older µg/m³-labelled sensors stopped in 2022. The function therefore uses a **verified per-sensor table** (sensor id → parameter → true unit), never OpenAQ's unit label, and never converts ppb. Barrackpore's units are inferred from the same feed and must be verified before release (register AQI-R31).
 - **Outage.** Every CPCB monitor on OpenAQ (425 in India) stopped at 2026-09-24 17:30 UTC; data.gov.in's CPCB API returned 502/504 on the same day. The design must look right while the feed is down.
 
 ## 3. Contract (`src/lib/aqi/types.ts`, shared by function and UI)
@@ -64,6 +64,12 @@ Missing is `null`, never 0. Every state names the station (or its absence) and t
 - **Right-panel block** (`#aqiBlock`, under the colour key, folded by default like `#solBlock`): the AQI number, CPCB category in words and colour, dominant pollutant, one line for station and distance, one for the IST observation time. Stale is muted with its age. AQI never enters the heat legend or the heat physics.
 - **Left pane** (rail item **Air**, `data-pane="air"`, placed after Solar): current state as above; each pollutant with its value, unit and sub-index; a 30-day daily-AQI bar chart coloured by CPCB category (missing days drawn as gaps); the last 24 h of PM2.5 as a line; a method-and-source note (CPCB standard, "measured by WBPCB, via OpenAQ", 3 km rule).
 - Every state has its own designed treatment; no state falls back to an empty number.
+
+**Visual decisions (approved on the preview, 2026-09-26; `previews/aqi-kolkata/index.html` in the worktree):**
+- Typography follows the other OBOS panes: Noplato Mono for headings, table and chart labels, AQI number. **Units are always set in Mona Sans** (`µg/m³`, `mg/m³`): the brand mono is capitals-only and would print "MG/M³".
+- CPCB category colours, validated on the rail surface `#091416` (adjacent normal-vision ΔE ≥ 15.2, CVD ΔE ≥ 11.1, all ≥ 3:1 contrast): good `#2a8f6a`, satisfactory `#6fcf97`, moderate `#f2d03a`, poor `#f2912e`, very poor `#e0404f`, severe `#9b3fa0`. The category word is always printed; colour is never the only signal.
+- **Stale label:** solid Swiss red `#da291c`, white Mona Sans 500, title case, the age bold with a wide separator: "Not Live · **43 h** Old". The AQI number is muted in the stale state.
+- The pane repeats the card's state label; the 30-day chart draws days without an official AQI as hatched stubs with the reason in the tooltip; the 24 h PM2.5 line carries the 60 µg/m³ national 24-hour limit for scale.
 
 ## 6. Server function
 
