@@ -1,9 +1,9 @@
 # OBOS Air Quality Intelligence
 
 **Document set:** Product and engineering plan  
-**Version:** 1.1  
-**Date:** 25 September 2026  
-**Status:** Proposed for implementation  
+**Version:** 1.2  
+**Date:** 26 September 2026  
+**Status:** First release scoped to Kolkata; design approved, implementation not started  
 **Owners:** Delta Climate — OBOS product and engineering
 
 ## Purpose
@@ -23,6 +23,27 @@ The plan has four goals:
    and
 4. preserve observations as a credible, provenance-rich data asset for later
    sustainability analysis and carefully validated ML work.
+
+## Current state (26 September 2026)
+
+The first release is **Kolkata only**, specified in
+[`docs/superpowers/specs/2026-09-26-aqi-kolkata-design.md`](../superpowers/specs/2026-09-26-aqi-kolkata-design.md).
+Where that spec and these documents differ, the spec governs the first release.
+
+| Area | Decision (26 Sep) |
+|---|---|
+| Scope | Ballygunge, Baruipur, Barrackpore. Bengaluru parked: no government station lies within any of its areas' 3 km windows |
+| Station ↔ area rule | A station covers a place when it lies inside the place's **3 km window**; the distance is always shown |
+| Server boundary | TypeScript Vercel Function `api/air-quality.ts` beside `api/live.js` (FastAPI considered and declined) |
+| Feed late | Last valid AQI shown muted with its age for up to 7 days, then "Government feed unavailable" |
+| History | Last 30 days of daily CPCB AQI plus the last 24 h of PM2.5, from OpenAQ; no database |
+| Order of work | Contract → UI previews on fixtures → server function |
+
+Verified on 26 September (details in the [research register](./05-research-register.md), R19–R30):
+
+- The OpenAQ key works. Ballygunge (`10918`) and Barrackpore (`3409509`) are WBPCB monitors about 1.0 km from their OBOS centres, inside the 3 km windows. Baruipur has no station.
+- OpenAQ's raw values match the OpenCity archive reading for reading, but OpenAQ omits one quarter-hour in four. Hourly means must be built from raw data, never from OpenAQ's `/hours`.
+- **Every CPCB monitor in India stopped reporting to OpenAQ at 2026-09-24 17:30 UTC**, and data.gov.in's CPCB API returned 502/504. Nothing is live until the national feed resumes.
 
 ## Documents
 
@@ -47,6 +68,8 @@ The plan has four goals:
 | Historical storage | None required for the live pilot; add managed PostgreSQL when durable history is justified |
 | ESP32 transport | Deferred until after the government-station release |
 | Map representation | Station markers and explicit coverage states; no unsupported ward-wide AQI surface |
+| First-release scope | Kolkata only (decided 26 Sep 2026) |
+| Area coverage rule | Station inside the place's 3 km window, distance always shown (decided 26 Sep 2026) |
 | Missing live coverage | Display `no_station` or `insufficient_data`; never substitute zero or an invented value |
 | External ingestion cadence | On-demand with caching during the pilot; scheduled archival added when justified |
 | ML/RL use | Deferred until calibration, coverage, consent, provenance and evaluation gates are met |

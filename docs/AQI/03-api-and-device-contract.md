@@ -1,9 +1,22 @@
 # AQI API and Device Contract
 
-**Version:** Draft 0.2  
-**Date:** 25 September 2026  
+**Version:** Draft 0.3  
+**Date:** 26 September 2026  
 **Status:** Government-station API proposed; device contract deferred  
 **Related:** [System architecture](./02-system-architecture.md)
+
+> **Superseded in part on 26 September 2026.** For the Kolkata first release, the
+> contract in the [first-release spec](../superpowers/specs/2026-09-26-aqi-kolkata-design.md)
+> (§3) governs. It differs from this draft as follows:
+>
+> - States are `live`, `stale`, `unavailable`, `insufficient_data` and `no_station`;
+>   `nearby` is not used, because both Kolkata stations lie inside their 3 km windows.
+> - `stale` carries the last valid AQI and its age for up to 7 days.
+> - History is in scope: `GET /api/air-quality?area_id=…&view=history` returns 30 days
+>   of daily AQI and the last 24 h of PM2.5.
+> - Area IDs take the form `kolkata/ballygunge`.
+>
+> The device sections below remain deferred.
 
 The current delivery scope covers one same-origin TypeScript read endpoint backed by
 government monitoring stations. Sections concerning `/api/telemetry` and ESP32

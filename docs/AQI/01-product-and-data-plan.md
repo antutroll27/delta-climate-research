@@ -1,8 +1,8 @@
 # AQI Product and Data Plan
 
-**Version:** 1.1  
-**Date:** 25 September 2026  
-**Status:** Proposed  
+**Version:** 1.2  
+**Date:** 26 September 2026  
+**Status:** Kolkata scope approved; see the [first-release spec](../superpowers/specs/2026-09-26-aqi-kolkata-design.md)  
 **Related:** [Documentation index](./README.md)
 
 ## 1. Product objective
@@ -68,8 +68,15 @@ Implementation policy:
 - retain the upstream observation timestamp separately from the fetch timestamp;
 - discover stations from current coordinates rather than a permanent hard-coded
   station count;
-- cache normal reads for 10–15 minutes; and
-- treat provider limits as configuration and re-check them before launch.
+- cache normal reads for 10–15 minutes;
+- treat provider limits as configuration and re-check them before launch;
+- **build IST clock-hour means from OpenAQ's raw readings, never from its `/hours`
+  endpoint.** On 26 September 2026, OpenAQ's raw 15-minute values for Ballygunge
+  matched the OpenCity archive reading for reading, but OpenAQ omits one quarter-hour
+  in four (the one ending at IST :45), and its UTC hours straddle IST hours. Its own
+  hourly means therefore differ from the full data by about 6 µg/m³ per hour; and
+- **select sensors by unit, not by parameter name.** CO, NO₂ and SO₂ each appear as
+  two sensors (ppb and µg/m³); CPCB breakpoints need µg/m³ (mg/m³ for CO).
 
 The research snapshot on 25 September 2026 showed a free allowance of 60 requests
 per minute and 2,000 per hour. This is sufficient for a cached pilot, but the
@@ -100,6 +107,10 @@ The repository contains seven Kolkata station archives and a derived daily file.
 They are suitable for historical co-exposure and seasonality work. The builder
 preserves daily coverage counts and flags sparse days.
 
+OpenCity's detailed Ballygunge resource ends on 2025-12-31 and stamps each 15-minute
+reading at its IST end time. Its units need checking column by column: the pressure
+column is labelled "BP (mmHg)" but holds values near 1,010, which can only be hPa.
+
 The catalogue does not unambiguously state whether every published value is a
 concentration or an already-derived index. Consequently, this archive must retain
 its existing conservative unit description and must not be relabelled as CPCB AQI
@@ -127,11 +138,17 @@ point-in-polygon relationships must be refreshed during implementation.
 
 ### Kolkata areas currently represented in OBOS
 
-| OBOS area | Finding | Proposed product state |
-|---|---|---|
-| Ballygunge | OpenAQ location `10918` is a WBPCB/CPCB station reporting from the area | Candidate for direct measured coverage after coordinate containment and parameter-completeness checks |
-| Barrackpore | OpenAQ location `3409509`, SVSPA Campus, began reporting in the newer network around February 2025 | Candidate measured or nearby coverage; validate coordinates against the OBOS analysis boundary before assigning it |
-| Baruipur | Manual NAMP monitoring exists, but no continuous live CAAQMS feed was verified | `no_station` for live AQI; describe manual monitoring separately if surfaced |
+Verified on 26 September 2026 with the project's OpenAQ key, against the heat-history
+vector file (`kolkata-heat-history/vector-locations/`):
+
+| OBOS area | Station | Position and containment | Product state |
+|---|---|---|---|
+| Ballygunge | OpenAQ `10918`, "Ballygunge, Kolkata – WBPCB"; owner WBPCB, provider CPCB; reference monitor; reporting since 2020-01-02 | 22.53675 N, 88.36380 E; KMC Ward 69; 1.0 km from the OBOS centre; 268 m outside the 1.4 km box, **inside the 3 km window** | Covered |
+| Barrackpore | OpenAQ `3409509`, "SVSPA Campus, Barrackpore – WBPCB"; owner WBPCB, provider CPCB; reporting since 2025-02-18 | 22.76056 N, 88.36176 E; 1.0 km from the OBOS centre; 302 m outside the 1.4 km box, **inside the 3 km window** | Covered |
+| Baruipur | No continuous government monitor | — | `no_station` |
+
+Thirteen WBPCB stations lie within 25 km of central Kolkata; none is needed for the
+three OBOS areas in the first release.
 
 The older design's statement that Barrackpore has no station is therefore stale.
 The correct system behaviour is live spatial discovery with an auditable assignment,
@@ -139,11 +156,20 @@ not a static assumption that coverage will never change.
 
 ### Bengaluru areas currently represented in OBOS
 
-The current regulatory network contains multiple stations, but none should be
-assigned to Indiranagar, MG Road or Whitefield from city name alone. The AQI function
-must fetch current coordinates and apply the same boundary/distance rules used for
-Kolkata. Counts change as stations enter and leave service, so the UI should report
-the instruments actually selected for the request rather than claim a fixed total.
+**Parked on 26 September 2026.** No government station lies inside the 3 km window of
+Indiranagar, MG Road or Whitefield. Findings, for when Bengaluru is resumed:
+
+| Area | Nearest live government station | Nearest KSPCB manual station (monthly AQI) |
+|---|---|---|
+| Indiranagar | Kasturi Nagar (KSPCB), 3.8 km; silent since 2026-09-19 | TERI, Domlur II Stage (NAMP 672), 1.7 km |
+| MG Road | City Railway Station (KSPCB), 4.0 km | Govt SKSJ Technological Institute, Nrupathunga Road, ~1.9 km |
+| Whitefield | none within 8 km | Graphite India, EPIP/ITPL (NAMP 77); position to be confirmed |
+
+KSPCB publishes manual-station AQI monthly as PDFs at
+<https://kspcb.karnataka.gov.in/environmental-monitoring/air>; their positions above come
+from OpenStreetMap geocoding of the published addresses, not official coordinates. An
+AirGradient low-cost sensor in Koramangala (CC BY 4.0) is live but is not a government
+instrument. Genuinely live, area-level coverage in Bengaluru would need OBOS's own sensors.
 
 ## 5. Ward-to-station mapping policy
 
@@ -158,9 +184,11 @@ the instruments actually selected for the request rather than claim a fixed tota
 4. If the nearest instrument exceeds the configured contextual radius or is stale,
    return `no_station` or `stale` instead of an AQI for the area.
 
-The first implementation may use each area's existing analysis footprint while
-formal administrative polygons are prepared. The response must state which
-geometry version was used.
+**Decided 26 September 2026:** the boundary is each area's **3 km window**, the square
+of side 3,000 m on the OBOS centre defined in `scripts/_types.py` `ward_bounds` and
+exported in the heat-history vector file. Both Kolkata stations lie inside it; neither
+lies inside the 1.4 km box. The response must state which geometry version was used,
+and the UI always states the station's distance from the centre.
 
 ### 5.2 Coverage states
 

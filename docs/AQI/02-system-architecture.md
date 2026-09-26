@@ -1,8 +1,8 @@
 # AQI System Architecture
 
-**Version:** 1.1  
-**Date:** 25 September 2026  
-**Status:** Proposed  
+**Version:** 1.2  
+**Date:** 26 September 2026  
+**Status:** Approved for the Kolkata first release; TypeScript confirmed over FastAPI (26 Sep). A second view, `?view=history` (30 days, cached one hour), joins the route below  
 **Related:** [Product and data plan](./01-product-and-data-plan.md)
 
 ## 1. Architecture decision
@@ -82,7 +82,9 @@ flowchart LR
 3. It resolves the area's current government-station candidates and boundary version.
 4. It reads a cached result or requests the required OpenAQ measurements.
 5. Runtime schemas validate provider JSON before it reaches the calculation module.
-6. The CPCB module validates the observation window and calculates sub-indices.
+6. The function averages OpenAQ's raw readings into IST clock hours (never OpenAQ's
+   `/hours`, which omit data; register AQI-R23), then the CPCB module validates the
+   observation window and calculates sub-indices.
 7. The function returns a source-labelled result or a typed coverage failure.
 8. Vercel caches the public response for a short, documented interval.
 

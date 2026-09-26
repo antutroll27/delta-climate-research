@@ -1,7 +1,7 @@
 # Government Station API Assessment
 
-**Version:** 1.1  
-**Research date:** 25 September 2026  
+**Version:** 1.2  
+**Research date:** 25 September 2026; re-tested 26 September 2026  
 **Status:** Recommended source stack for the first AQI release  
 **Scope:** CPCB, WBPCB and KSPCB government monitoring stations; no OBOS devices
 
@@ -114,6 +114,19 @@ discovery. Do not accept a station because its display name merely contains “C
 Evidence: [Ballygunge station](https://explore.openaq.org/locations/10918) and
 [SVSPA Campus, Barrackpore](https://explore.openaq.org/locations/3409509).
 
+**Re-tested through the API on 26 September 2026:**
+
+- **Position.** Both locations sit about 1.0 km from their OBOS centres, inside the
+  3 km windows. They lie 268 m and 302 m respectively outside the 1.4 km boxes.
+- **Last report.** Both last reported at 2026-09-24 17:30 UTC, as did every other
+  CPCB-provided monitor in India (425 locations). The break is national, not
+  station-specific.
+- **Raw readings.** Raw 15-minute readings match the OpenCity archive exactly, but one
+  quarter-hour in four is missing. Build IST-hour means from `measurements`, and do not
+  use `hours` for CPCB windows.
+- **Licence.** The `licenses` field is empty for both locations, so the terms gate
+  below stays open.
+
 No continuous government station has yet been verified for Baruipur. The API must
 therefore return `no_station` unless live discovery produces a qualifying location.
 
@@ -183,7 +196,9 @@ freshness or reconstruct the complete CPCB 24-hour/8-hour calculation windows.
 ### Reliability observation
 
 On 25 September 2026, direct requests to the official endpoint produced a timeout,
-HTTP 504 and HTTP 500 during separate small probes. This does not invalidate the
+HTTP 504 and HTTP 500 during separate small probes. On 26 September 2026, the same
+endpoint returned HTTP 504 after 60 seconds and then HTTP 502, while the data.gov.in
+website itself responded normally. This does not invalidate the
 dataset, but it makes the endpoint unsuitable as OBOS's only live dependency.
 
 Required controls:
@@ -303,8 +318,8 @@ structured cache and error states
 ```
 
 Start with Ballygunge and Barrackpore. Baruipur should intentionally ship the
-`no_station` state. Add Bengaluru only after current station coordinates have been
-resolved against the three OBOS area geometries.
+`no_station` state. Bengaluru is parked (26 September 2026): its current coordinates
+were resolved, and no government station lies inside any of its areas' 3 km windows.
 
 ## 9. Release gates
 

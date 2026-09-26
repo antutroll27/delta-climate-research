@@ -1,7 +1,7 @@
 # AQI Research Register
 
-**Version:** 1.1  
-**Research cut-off:** 25 September 2026  
+**Version:** 1.2  
+**Research cut-off:** 26 September 2026  
 **Status:** Living register  
 **Purpose:** Separate verified findings, working decisions and unresolved validation
 
@@ -37,6 +37,18 @@
 | AQI-R16 | Decision | Future first-party ESP32-S3 devices will use authenticated HTTPS batches for their initial pilot | Defer all device ingestion until the government-station product is validated; defer MQTT until fleet requirements justify it |
 | AQI-R17 | Research snapshot | OpenCity's Kolkata and Bengaluru CKAN resources expose useful station history, but the verified Kolkata records end on 31 December 2025 | Use for research, fixtures and backfill; do not label it live |
 | AQI-R18 | Research snapshot | CPCB and KSPCB publish monitoring pages and reports, but no stable documented state-board JSON API was verified; the tested WBPCB hourly host did not resolve | Avoid reverse-engineering dashboards; revisit official interfaces periodically |
+| AQI-R19 | Verified 26 Sep | OpenAQ v3 rejects keyless requests (HTTP 401); the project key, stored server-side at `~/.config/delta-climate/openaq-key` for development, returns HTTP 200 | Every OpenAQ call needs `X-API-Key`; production uses the `OPENAQ_API_KEY` Vercel variable |
+| AQI-R20 | Verified 26 Sep | Ballygunge `10918` sits at 22.53675 N, 88.36380 E (KMC Ward 69), 1.0 km from the OBOS centre, inside the 3 km window but 268 m outside the 1.4 km box | Covered under the 3 km-window rule |
+| AQI-R21 | Verified 26 Sep | Barrackpore `3409509` (SVSPA Campus) sits at 22.76056 N, 88.36176 E, 1.0 km from the OBOS centre, inside the 3 km window but 302 m outside the 1.4 km box | Covered under the 3 km-window rule |
+| AQI-R22 | Verified 26 Sep | OpenAQ's raw 15-minute PM2.5 for Ballygunge equals the OpenCity archive reading for reading (2025-12-15); OpenCity stamps each reading at its IST end time | OpenAQ passes WBPCB values through faithfully |
+| AQI-R23 | Verified 26 Sep | OpenAQ omits one quarter-hour in four (the one ending at IST :45), so its `/hours` means differ from the full data by about 6 µg/m³ per hour (PM2.5, December 2025) | Build IST-hour means from raw readings; never use `/hours` |
+| AQI-R24 | Verified 26 Sep | CO, NO₂ and SO₂ appear as two sensors each at Ballygunge (ppb and µg/m³) | Select sensors by unit for CPCB breakpoints |
+| AQI-R25 | Research snapshot 26 Sep | All 425 CPCB-provided monitors on OpenAQ in India stopped at 2026-09-24 17:30 UTC; data.gov.in's CPCB API returned 504 after 60 s and 502 on retry | National outage upstream of OpenAQ; the UI must handle stale data; re-check before release |
+| AQI-R26 | Verified 26 Sep | OpenAQ returns an empty licence list for both Kolkata locations | The licence and attribution gate is not closed by the API; confirm terms with OpenAQ and the provider |
+| AQI-R27 | Verified 26 Sep | OpenCity's Ballygunge resource labels pressure "BP (mmHg)" but holds values near 1,010, which can only be hPa | Check every archive column's unit before use |
+| AQI-R28 | Research snapshot 26 Sep | No government station lies inside the 3 km window of any Bengaluru area; the nearest live ones are 3.8–4.0 km away, and Whitefield has none within 8 km | Bengaluru parked for the first release |
+| AQI-R29 | Research snapshot 26 Sep | KSPCB runs 13 manual NAMP stations in Bengaluru and publishes a monthly AQI for each (August 2026 report); TERI Domlur is 1.7 km from Indiranagar | Candidate monthly source when Bengaluru resumes; official coordinates still needed |
+| AQI-R30 | Research snapshot 26 Sep | An AirGradient low-cost sensor in Koramangala reports live on OpenAQ under CC BY 4.0 | Not a government instrument; usable only as a separately labelled class, if ever |
 
 ## 3. Superseded assumptions
 
@@ -48,6 +60,9 @@
 | Three pollutants including one PM pollutant is the complete validity rule | Minimum observation-hours requirements also apply | CPCB method review |
 | A WAQI URL supplied with permission is sufficient for production | Permission to use a token does not replace service licensing, and the supplied station is not Ballygunge | WAQI terms and feed identity check |
 | City-wide station count can be fixed in product copy | Stations change; discover and report selected instruments dynamically | New Barrackpore station and inconsistent historical counts |
+| OpenAQ's hourly aggregates can feed the CPCB calculation | Hourly means are built from raw readings in IST hours | AQI-R23 (26 Sep 2026) |
+| The first release covers Kolkata and Bengaluru | Kolkata only; Bengaluru parked | AQI-R28, founder decision 26 Sep 2026 |
+| Coverage is judged against the OBOS 1.4 km box | Coverage is judged against the 3 km window | Founder decision 26 Sep 2026; both Kolkata stations lie just outside the 1.4 km box |
 
 ## 4. Authoritative and supporting sources
 
@@ -58,6 +73,8 @@
 - [CPCB AQI calculator workbook](https://app.cpcbccr.com/ccr_docs/AQI-Calculator.xls)
 - [Government Open Data License — India](https://data.gov.in/government-open-data-license-india)
 - [OpenCity Kolkata hourly air-quality resource](https://data.opencity.in/dataset/kolkata-hourly-air-quality-reports/resource/ee55ee45-a774-4e91-81c7-6296d388e62d)
+- [KSPCB air-quality reports (monthly CAAQMS and manual)](https://kspcb.karnataka.gov.in/environmental-monitoring/air)
+- [CPCB NAMP manual network list](https://cpcb.gov.in/uploads/stations_namp.pdf)
 
 ### Provider and platform documentation
 
@@ -87,7 +104,8 @@
 |---|---|---|---|
 | P0 | Does the official workbook use the maximum of rolling 8-hour means for CO/O3, or another exact convention? | Reproduced workbook cases with documented inputs/outputs | CPCB engine |
 | P0 | How is the 16-hour rule applied to each pollutant and partial window? | Official report/workbook interpretation and fixtures | CPCB engine |
-| P0 | Are OpenAQ station coordinates inside the exact OBOS analysis boundaries? | Versioned polygons and point-in-polygon output | Public coverage labels |
+| ~~P0~~ Done 26 Sep | ~~Are OpenAQ station coordinates inside the exact OBOS analysis boundaries?~~ Both Kolkata stations are inside their 3 km windows (AQI-R20, R21) | Versioned polygons and point-in-polygon output | — |
+| P0 | Is the national CPCB feed back, and are the Kolkata stations reporting again? | A fresh `latest` reading from `10918` and `3409509` | Live display |
 | P0 | What attribution/licence metadata does each chosen OpenAQ-origin provider require? | Recorded provider metadata and terms | Production release |
 | P1 | What nearby radius is scientifically and product-appropriate? | Sensitivity analysis plus honest UX copy | Nearby-station UI |
 | P2 | Which particulate and environmental sensors pass the bench/co-location evaluation? | BOM comparison and reference-monitor data | Future ESP32 field pilot |

@@ -1,8 +1,8 @@
 # AQI Delivery Roadmap
 
-**Version:** 1.1  
-**Date:** 25 September 2026  
-**Status:** Proposed  
+**Version:** 1.2  
+**Date:** 26 September 2026  
+**Status:** Kolkata first release in design; Phase 0 open  
 **Constraint:** One technical lead; ship government-station AQI before device work
 
 ## 1. Delivery strategy
@@ -21,6 +21,15 @@ one verified source
 The first proof point is not the number of dashboard features. It is that OBOS can
 trace a displayed reading from instrument and timestamp through a reproducible
 calculation to a clear coverage claim.
+
+### Status on 26 September 2026
+
+- **Scope:** Kolkata only; Bengaluru parked.
+- **Work order:** contract → UI previews on fixtures → server function.
+- **Phase 0 progress:**
+  - done: the OpenAQ key is provisioned; the Kolkata stations' coordinates are verified against a versioned geometry (the 3 km windows); the coverage classification is reviewed for all three areas.
+  - open: the CPCB workbook fixtures, including the CO/O₃ 8-hour convention and the 16-hour rule; OpenAQ attribution and licence records (OpenAQ returns no licence for the two Kolkata locations); rotating the WAQI token.
+- **Blocking live display, not development:** the national CPCB feed has been down since 2026-09-24 17:30 UTC.
 
 ## 2. Phase 0 — scientific and contractual closure
 
@@ -208,10 +217,13 @@ has been validated and the first deployment has a defined research purpose.
 These questions do not block documentation, but each blocks the indicated phase:
 
 1. **CPCB CO/O3 calculation interpretation** — blocks Phase 1 calculation code.
-2. **Exact area geometry for station containment** — blocks production assignments.
+2. ~~Exact area geometry for station containment~~ — **decided 26 Sep 2026:** the
+   3 km window around each OBOS centre.
 3. **Initial sensor and reference/co-location access** — blocks the future Phase 5 device pilot.
 4. **Managed PostgreSQL provider and region** — blocks durable history, not the live pilot.
-5. **Public freshness threshold and nearby radius** — blocks final UI copy.
+5. ~~Public freshness threshold and nearby radius~~ — **decided 26 Sep 2026:** live
+   when the newest reading is ≤ 2 h old; stale up to 7 days, then unavailable. A
+   nearby radius is not needed for Kolkata; revisit it with Bengaluru.
 6. **Retention period for raw device payloads** — blocks production data policy.
 7. **Whether Google modelled AQ is legally compatible with the map and use case** —
    blocks only the optional modelled layer, not the measured pilot.
