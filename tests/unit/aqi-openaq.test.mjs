@@ -1,7 +1,7 @@
 // tests/unit/aqi-openaq.test.mjs
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { fetchSensorWindow, OpenAqError } from '../../src/lib/aqi/openaq.ts';
+import { DEFAULT_TIMEOUT_MS, fetchSensorWindow, OpenAqError } from '../../src/lib/aqi/openaq.ts';
 
 const page = (n, from) => ({ results: Array.from({ length: n }, (_, i) => ({ value: i, period: { datetimeTo: { utc: new Date(Date.parse(from) + i * 900_000).toISOString() } } })) });
 
@@ -88,4 +88,30 @@ test('error messages never carry the key or the URL', async () => {
       return true;
     });
   }
+});
+
+test('the page parameter advances: page 1 then page 2, every row unique', async () => {
+  const fake = async (url) => {
+    const n = new URL(url).searchParams.get('page');
+    if (n === '1') return new Response(JSON.stringify(page(1000, '2026-09-01T00:15:00Z')));
+    if (n === '2') return new Response(JSON.stringify(page(3, '2026-09-20T00:15:00Z')));
+    throw new Error(`unexpected page ${n}`);
+  };
+  const rows = await fetchSensorWindow(1, 'a', 'b', { key: 'k', fetch: fake });
+  assert.equal(rows.length, 1003);
+  assert.equal(new Set(rows.map((r) => r.end_utc)).size, 1003);
+});
+
+test('the default timeout is 10 seconds', () => {
+  assert.equal(DEFAULT_TIMEOUT_MS, 10_000);
+});
+
+test('rows repeated across pages are returned once, the later one winning', async () => {
+  const p1 = page(1000, '2026-09-01T00:15:00Z');
+  const p2 = page(3, p1.results[999].period.datetimeTo.utc); // first row of page 2 repeats the last of page 1
+  p2.results[0].value = 77;
+  const fake = async (url) => new Response(JSON.stringify(new URL(url).searchParams.get('page') === '1' ? p1 : p2));
+  const rows = await fetchSensorWindow(1, 'a', 'b', { key: 'k', fetch: fake });
+  assert.equal(rows.length, 1002);
+  assert.equal(rows.find((r) => r.end_utc === p1.results[999].period.datetimeTo.utc).value, 77);
 });

@@ -4,6 +4,7 @@ import test from 'node:test';
 import { buildPayload, LIVE_H, STALE_DAYS } from '../../src/lib/aqi/build.ts';
 import { isStampedUtc } from '../../src/lib/aqi/hours.ts';
 import { stationFor } from '../../src/lib/aqi/stations.ts';
+import { subIndex } from '../../src/lib/aqi/cpcb.ts';
 
 const KEY = 'in/kolkata/ballygunge';
 /** Every pollutant reporting every quarter-hour up to `lastEnd`, clean air. */
@@ -15,6 +16,20 @@ function rawUpTo(lastEnd, days = 31) {
   }
   return out;
 }
+/** Like rawUpTo, but each value is fn(pollutant, istDate 'YYYY-MM-DD', istHour) of the IST hour the reading closes within. */
+function series(lastEnd, fn, days = 31) {
+  const end = Date.parse(lastEnd), out = {};
+  for (const p of ['pm25', 'pm10', 'no2', 'so2', 'co', 'o3']) {
+    out[p] = [];
+    for (let t = end - days * 86_400_000; t <= end; t += 900_000) {
+      const startIst = new Date(t + 5.5 * 3_600_000 - 900_000);
+      out[p].push({ end_utc: new Date(t).toISOString(), value: fn(p, startIst.toISOString().slice(0, 10), startIst.getUTCHours()) });
+    }
+  }
+  return out;
+}
+const flat = (p) => (p === 'co' ? 0.5 : 20);
+const pol = (cur, p) => cur.result.pollutants.find((q) => q.parameter === p);
 const at = (iso, plusMs = 0) => new Date(Date.parse(iso) + plusMs);
 
 test('fresh complete data is live', () => {
@@ -129,4 +144,75 @@ test('zero readings do not count as fresh: CPCB treats 0 as missing', () => {
   const c = buildPayload(KEY, stationFor(KEY), raw, at(T, 3 * 3_600_000)).current;
   assert.equal(c.state, 'stale');
   assert.equal(c.observed_at, '2026-09-24T17:30:00.000Z');
+});
+
+/* ---- Review round: pin day windows, nulls, units and freshness bounds. ---- */
+
+test('each history day is exactly IST 00:00-24:00 of that date, and "today" is the IST date', () => {
+  // PM2.5 = 10 + 10*(IST hour) + 1000*(IST date odd); everything else flat, so PM2.5 dominates.
+  const raw = series('2026-09-24T18:30:00Z', (p, d, h) => (p === 'pm25' ? 10 + 10 * h + 1000 * (Number(d.slice(8)) % 2) : flat(p)));
+  const days = buildPayload(KEY, stationFor(KEY), raw, new Date('2026-09-24T18:31:00Z')).history.days;
+  // Mean of 10+10h over h = 0..23 is 125 (even day) and 1125 (odd day).
+  const even = subIndex('pm25', 125), odd = subIndex('pm25', 1125);
+  assert.deepEqual([even, odd], [304, 1073]); // 300+100*(125-120)/130 = 303.85; 400+100*(1125-250)/130 = 1073.08
+  assert.equal(days.find((d) => d.date_ist === '2026-09-24')?.aqi, even);
+  assert.equal(days.find((d) => d.date_ist === '2026-09-23')?.aqi, odd);
+});
+
+test('the current window closes at the end of the last reading\'s IST hour, in +05:30', () => {
+  // IST hour 22 on 24 Sep = readings ending 16:45..17:30Z.
+  const raw = series('2026-09-24T17:30:00Z', (p, d, h) => (p === 'pm25' && d === '2026-09-24' && h === 22 ? 500 : flat(p)));
+  const p = buildPayload(KEY, stationFor(KEY), raw, new Date('2026-09-24T18:00:00Z'));
+  assert.equal(p.current.state, 'live');
+  assert.equal(p.current.result.window_end_ist, '2026-09-24T23:00:00+05:30');
+  assert.equal(pol(p.current, 'pm25').value, (23 * 20 + 500) / 24);
+  assert.deepEqual(p.history.pm25_24h.at(-1), { hour_ist: '2026-09-24T22:00:00+05:30', value: 500 });
+});
+
+test('a pollutant with no rows in the window is null, 0 hours, no sub-index; the AQI still publishes', () => {
+  const raw = rawUpTo('2026-09-24T17:30:00Z');
+  raw.o3 = raw.o3.filter((r) => Date.parse(r.end_utc) <= Date.parse('2026-09-23T17:30:00Z'));
+  const c = buildPayload(KEY, stationFor(KEY), raw, new Date('2026-09-24T18:00:00Z')).current;
+  assert.equal(c.state, 'live');
+  assert.deepEqual((({ value, hours_present, sub_index }) => ({ value, hours_present, sub_index }))(pol(c, 'o3')), { value: null, hours_present: 0, sub_index: null });
+});
+
+test('a missing PM2.5 hour is null in pm25_24h, never 0', () => {
+  const raw = series('2026-09-24T17:30:00Z', (p, d, h) => (p === 'pm25' && d === '2026-09-24' && h === 15 ? -1 : flat(p)));
+  raw.pm25 = raw.pm25.filter((r) => r.value !== -1);
+  const h = buildPayload(KEY, stationFor(KEY), raw, new Date('2026-09-24T18:00:00Z')).history.pm25_24h;
+  assert.deepEqual(h.find((x) => x.hour_ist === '2026-09-24T15:00:00+05:30'), { hour_ist: '2026-09-24T15:00:00+05:30', value: null });
+});
+
+test('CO carries its verified unit, mg/m3, and its value unscaled', () => {
+  const co = pol(buildPayload(KEY, stationFor(KEY), rawUpTo('2026-09-24T17:30:00Z'), new Date('2026-09-24T18:00:00Z')).current, 'co');
+  assert.equal(co.unit, 'mg_m3');
+  assert.equal(co.value, 0.5);
+});
+
+test(`${STALE_DAYS} days old is still stale; one minute more is unavailable`, () => {
+  const T = '2026-09-24T17:30:00Z', raw = rawUpTo(T), D = STALE_DAYS * 86_400_000;
+  assert.equal(buildPayload(KEY, stationFor(KEY), raw, at(T, D)).current.state, 'stale');
+  assert.equal(buildPayload(KEY, stationFor(KEY), raw, at(T, D + 60_000)).current.state, 'unavailable');
+});
+
+test('CO is the maximum rolling 8-hour mean, over an 8-hour window', () => {
+  const raw = series('2026-09-24T17:30:00Z', (p, d, h) => (p === 'co' ? (d === '2026-09-24' && h >= 10 && h <= 17 ? 5 : 0.5) : flat(p)));
+  const co = pol(buildPayload(KEY, stationFor(KEY), raw, new Date('2026-09-24T18:00:00Z')).current, 'co');
+  assert.equal(co.value, 5);
+  assert.equal(co.window_h, 8);
+});
+
+test('a row stamped in the future is dropped: it neither freshens nor enters a window', () => {
+  const raw = rawUpTo('2026-09-24T17:30:00Z');
+  raw.so2.push({ end_utc: '2099-01-01T00:00:00Z', value: 20 });
+  const c = buildPayload(KEY, stationFor(KEY), raw, new Date('2026-09-24T18:00:00Z')).current;
+  assert.equal(c.state, 'live');
+  assert.equal(c.observed_at, '2026-09-24T17:30:00.000Z');
+});
+
+test('source.owner comes from the station entry', () => {
+  const st = { ...stationFor(KEY), owner: 'X' };
+  assert.equal(buildPayload(KEY, st, rawUpTo('2026-09-24T17:30:00Z'), new Date('2026-09-24T18:00:00Z')).current.source.owner, 'X');
+  assert.equal(buildPayload('in/kolkata/baruipur', null, {}, new Date()).current.source.owner, 'West Bengal Pollution Control Board');
 });

@@ -13,6 +13,8 @@ export interface OpenAqOptions { key: string; fetch?: typeof fetch; timeoutMs?: 
 
 const BASE = 'https://api.openaq.org/v3/sensors';
 const PAGE = 1000;
+/** Per-request timeout when the caller sets none, milliseconds. */
+export const DEFAULT_TIMEOUT_MS = 10_000;
 
 /** Maps anything thrown while talking to OpenAQ to a typed error. The original is deliberately NOT kept as `cause`. */
 function upstream(e: unknown, sensorId: number): OpenAqError {
@@ -27,7 +29,7 @@ async function fetchPage(f: typeof fetch, sensorId: number, fromUtc: string, toU
   u.searchParams.set('limit', String(PAGE)); u.searchParams.set('page', String(page));
   let body: unknown;
   try {
-    const res = await f(u, { headers: { 'X-API-Key': o.key, Accept: 'application/json' }, signal: AbortSignal.timeout(o.timeoutMs ?? 10_000) });
+    const res = await f(u, { headers: { 'X-API-Key': o.key, Accept: 'application/json' }, signal: AbortSignal.timeout(o.timeoutMs ?? DEFAULT_TIMEOUT_MS) });
     if (!res.ok) throw new OpenAqError(res.status, `OpenAQ ${res.status} for sensor ${sensorId}`);
     body = await res.json(); // the timeout signal also covers reading the body
   } catch (e) { throw upstream(e, sensorId); }
@@ -39,15 +41,16 @@ async function fetchPage(f: typeof fetch, sensorId: number, fromUtc: string, toU
 export async function fetchSensorWindow(sensorId: number, fromUtc: string, toUtc: string, o: OpenAqOptions): Promise<Raw[]> {
   const f = o.fetch ?? fetch;
   const maxPages = o.maxPages ?? 6;
-  const out: Raw[] = [];
+  /* Keyed by end stamp: a row repeated across pages (the window shifting between requests) counts once, the last seen winning. */
+  const out = new Map<string, Raw>();
   for (let page = 1; page <= maxPages; page++) {
     const results = await fetchPage(f, sensorId, fromUtc, toUtc, page, o);
     for (const m of results as { value?: unknown; period?: { datetimeTo?: { utc?: unknown } } }[]) {
       const end = m?.period?.datetimeTo?.utc;
       // Only real numbers: never Number()-coerce, which turns null and '' into 0 and '12' into 12.
-      if (typeof m?.value === 'number' && Number.isFinite(m.value) && typeof end === 'string') out.push({ end_utc: end, value: m.value });
+      if (typeof m?.value === 'number' && Number.isFinite(m.value) && typeof end === 'string') out.set(end, { end_utc: end, value: m.value });
     }
-    if (results.length < PAGE) return out;
+    if (results.length < PAGE) return [...out.values()];
   }
   // The last allowed page was full, so rows remain upstream. Returning what we have would silently drop
   // either the newest or the oldest readings, depending on sort order. Refuse instead.

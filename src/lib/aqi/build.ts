@@ -10,8 +10,11 @@ const HOUR_MS = 3_600_000;
 const DAY_MS = 86_400_000;
 const IST_MS = 5.5 * HOUR_MS;
 const HISTORY_DAYS = 30;
+/** A row stamped further than this after `now` is a clock or feed error, dropped before anything reads it. */
+const FUTURE_SLACK_MS = 15 * 60_000;
 const EIGHT_HOUR: ReadonlySet<Pollutant> = new Set(['co', 'o3']);
 
+/** The no-station default; with a station, `owner` comes from the station entry. */
 const SOURCE: SourceNote = { owner: 'West Bengal Pollution Control Board', via: 'CPCB via OpenAQ', standard: 'CPCB National AQI' };
 const keyToIso = (k: HourKey): string => `${k}:00:00+05:30`;
 
@@ -57,12 +60,15 @@ function historyDays(hours: Record<string, Map<HourKey, Hour>>, st: StationEntry
 
 export function buildPayload(areaKey: string, st: StationEntry | null, raw: Partial<Record<Pollutant, Raw[]>>, now: Date): AirQualityPayload {
   const served_at = now.toISOString();
-  const common = { schema: SCHEMA, area_id: areaKey, served_at, source: SOURCE } as const;
-  if (!st) return { current: { ...common, state: 'no_station', message: 'No government air monitor within 3 km of this area\'s centre.' }, history: null };
+  if (!st) return { current: { schema: SCHEMA, area_id: areaKey, served_at, source: SOURCE, state: 'no_station', message: 'No government air monitor within 3 km of this area\'s centre.' }, history: null };
 
+  const common = { schema: SCHEMA, area_id: areaKey, served_at, source: { ...SOURCE, owner: st.owner } } as const;
+  const horizon = now.getTime() + FUTURE_SLACK_MS;
+  /* Drop future-stamped rows once, so neither the freshness clock nor any window sees them. */
+  const rows = Object.fromEntries(POLLUTANTS.map((p) => [p, (raw[p] ?? []).filter((r) => !(Date.parse(r.end_utc) > horizon))])) as Partial<Record<Pollutant, Raw[]>>;
   const station: AqiStation = { id: st.id, name: st.name, lat: st.lat, lon: st.lon, distance_m: st.distance_m, inside: 'window_3km' };
-  const hours = Object.fromEntries(POLLUTANTS.map((p) => [p, istHours(raw[p] ?? [])])) as Record<string, Map<HourKey, Hour>>;
-  const lastMs = lastStampMs(raw);
+  const hours = Object.fromEntries(POLLUTANTS.map((p) => [p, istHours(rows[p] ?? [])])) as Record<string, Map<HourKey, Hour>>;
+  const lastMs = lastStampMs(rows);
   if (!Number.isFinite(lastMs)) return { current: { ...common, state: 'unavailable', station, last_observed_at: null }, history: null };
 
   const last = new Date(lastMs);

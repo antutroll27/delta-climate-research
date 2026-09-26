@@ -53,7 +53,7 @@ export interface AqiResult {
   category: CpcbCategory;
   dominant: Pollutant;
   pollutants: PollutantReading[];
-  /** End of the averaging window, IST, ISO 8601 with +05:30. */
+  /** End of the IST clock hour that contains the last reading; may be up to 45 min after `observed_at`. IST, ISO 8601 with +05:30. */
   window_end_ist: string;
   algorithm: 'cpcb-aqi-1';
 }
@@ -95,5 +95,6 @@ export interface HistoryResponse {
 /** What `GET /api/air-quality?area=in/kolkata/ballygunge` returns. */
 export interface AirQualityPayload {
   current: AirQualityResponse;
+  /** null when the area has no station or no usable readings at all. */
   history: HistoryResponse | null;
 }
