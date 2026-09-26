@@ -143,7 +143,7 @@ function polTable(c: Current): string {
     const w = si === null ? 0 : Math.min(100, si / 2);
     const bar = si === null ? 'transparent' : col(category(si));
     return `<tr><td>${pol(q.parameter)}${q.window_h === 8 ? '<br><span style="color:var(--faint);font-size:.5rem">8-h</span>' : ''}</td>
-      <td>${num(q.value)}<br><span class="unit">${unit(q.unit)}</span></td>
+      <td><span class="lv">${num(q.value)}</span><br><span class="unit">${unit(q.unit)}</span></td>
       <td><span class="si"><i style="width:${w}%;background:${bar}"></i>${num(q.sub_index)}</span></td>
       <td class="n">${num(q.hours_present)}</td></tr>`;
   }).join('');
