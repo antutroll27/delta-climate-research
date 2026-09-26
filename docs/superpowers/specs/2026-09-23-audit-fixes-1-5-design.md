@@ -99,8 +99,8 @@ comparison is invalid."
 ### 1.3 Item 5 — confidential files in a public repo
 
 **Defect.** 118 untracked files — client proposals, internal planning documents, draft analyses, screen
-recordings, `.env.production` — are not ignored, so one `git add -A` publishes them. It has happened before
-(`4ce2585`). The owner's decision: keep the files where they are and ignore them.
+recordings, `.env.production` — are not ignored, so one `git add -A` publishes them. It has happened before.
+The owner's decision: keep the files where they are and ignore them.
 
 **Fix, in two layers.**
 - **Local exclude, done first and never published** (`.git/info/exclude` lives in the common git dir, so it
@@ -115,16 +115,22 @@ recordings, `.env.production` — are not ignored, so one `git add -A` publishes
   ```
   .env.*
   !.env.example
-  *.docx
-  docs/research/*.pdf
+  *.[dD][oO][cC][xX]
+  docs/research/**/*.[pP][dD][fF]
   docs/Ideas_and_Prototypes/
-  docs/**/*.mov
-  docs/**/*.mp4
+  docs/**/*.[mM][oO][vV]
+  docs/**/*.[mM][pP]4
   tmp/
   preview-obos/
   attic/heat-fx/
   docs/audits/
   ```
+  *Amended 2026-09-24 after the post-implementation audit:*
+  - extensions are bracketed, so the rules hold where `core.ignorecase` is false (Linux clones, where the
+    lowercase forms let `Proposal.DOCX` or an iPhone `clip.MOV` through);
+  - PDFs nested under `docs/research/` are covered;
+  - the test judges the rules with `core.ignorecase=false`.
+
   Only `attic/heat-fx/`, not `attic/`: `main` tracks shelved code in `attic/hero-v1/` and
   `attic/color-schemes/` on purpose, and a blanket rule would silently ignore anything shelved there later.
   `docs/audits/` holds earlier audit evidence, and one of its READMEs links a confidential planning
@@ -146,7 +152,7 @@ Ignore rules never affect tracked files, so the 18 tracked PDFs stay tracked.
 `scripts/fetch-met.py:250-254` builds each NASA POWER lookup key from the pass's **UTC date** plus its
 **local solar hour**. POWER is stamped in local solar time, so a night pass after local midnight but before
 UTC midnight takes air temperature, humidity, wind and cloud from **24 hours earlier**. Example: the
-ECOSTRESS pass `…20260412T232834…` is 23:28 UTC on 12 April = 05:21 local on **13 April**; it used
+ECOSTRESS pass `…20260412T232834…` is 23:28 UTC on 12 April = 05:22 local on **13 April**; it used
 22.09 °C (stamp `2026041205`) instead of 24.68 °C (`2026041305`). These rows feed the night accuracy band the
 site labels "quantitative". The newer pipeline already has the correct rule: `power_key()` in
 `fetch-ecostress-history.py`, whose docstring names this bug.
@@ -168,6 +174,14 @@ site labels "quantitative". The newer pipeline already has the correct rule: `po
 
 ### 2.3 Rebuild — from the local cache, no network
 
+*Correction, 2026-09-24:*
+- **What was offline:** the POWER forcing and the ECOSTRESS granules came from the local caches, and
+  nothing was downloaded.
+- **What was not:** `build-ward-observations.py` queries NASA's CMR catalogue live for granule metadata
+  (it has no cache). If that query fails, the script silently drops the ward-scene.
+- **Effect here:** this rebuild lost no rows (P2 and P5 show the same set).
+- **Follow-up:** the step is not strictly offline, and removing the silent drop is left for later.
+
 1. `fetch-met.py` → `data/calibration/met-forcing.csv`
 2. `build-ward-observations.py` → `data/calibration/ward-observations.json`
 3. `measure-accuracy.py` → `data/calibration/model-accuracy.json`. It re-scores **the constants that ship**
@@ -179,6 +193,16 @@ site labels "quantitative". The newer pipeline already has the correct rule: `po
    remain the model error rounded up). The note and the file's header comment are rewritten from these numbers,
    which also corrects the bias sign (the note says +0.18 K; the artefact says −0.182 K). `ACCURACY.peak` is
    untouched (it is deliberately pending recalibration).
+
+*Found 2026-09-24, when the rebuild tripped P3.* `measure-accuracy.py` did not score the constants that
+ship. It picked the shipped candidate by matching `release_base` and `l_et`, then overlaid every fitted
+value, including the free-fit `q_day` of 0.5175. `types.ts` ships `Q` 0.419, the plateau value kept
+deliberately in the 2026-08-13 refit.
+
+So every re-run since that refit scored a model that does not ship; the committed artefact reproduced
+only at 0.419. PR 2 fixes the script to read `Q` from `types.ts` and to record the constants it scored,
+and a unit test pins them to what ships. At the shipped `Q` the forcing fix alone changes only night
+figures.
 
 **The other readers of `met-forcing.csv` were checked.** `build-dcurs-inputs.py` reads only surface
 columns, so its output does not move. `measure-canopy-blend-residual.py` uses night wind, but it refuses
@@ -195,12 +219,20 @@ describing the old forcing until then, and a note in the file says so.
 ### 2.4 Pre-registered expectations — recorded here, before any run
 
 Measured on 2026-09-23 from the local POWER cache, before any code change:
-- **21 of the 97 rows in `met-forcing.csv` change stamp, all of them night passes.** (A simple
-  "hour < 5.89" threshold would catch only 20; the UTC-time rule is exact.) No row changes hour, only date.
-- Corrected air is **warmer in 13 rows and colder in 7**, mean **+0.34 K**, range −1.36 to +2.59 K.
+- **20 of the 97 rows in `met-forcing.csv` change stamp, all of them night passes.** No row changes
+  hour, only date.
+- Corrected air is **warmer in 13 rows and colder in 7**, mean **+0.36 K**, range −1.36 to +2.59 K.
+- *Recount, 2026-09-24, before any rebuild ran.* This list first said 21 rows and a mean of +0.34 K,
+  and claimed an "hour < 5.89" threshold would catch only 20. Code review re-measured it:
+  - the 21st pass (2024-04-29T17:57:36, 23:51 local) already rolled to the right date under the old
+    code;
+  - the threshold and the UTC rule select the same 20 rows;
+  - +0.34 K was the 21-row mean, including that row's zero.
+
+  The predictions below use the corrected count.
 
 Predictions:
-- **P1.** Exactly those 21 rows change in the twelve columns `met-forcing.csv` had before this PR, and
+- **P1.** Exactly those 20 rows change in the twelve columns `met-forcing.csv` had before this PR, and
   only in the forcing columns; every other row is identical in those twelve. (The two new columns change
   every row's bytes, so byte-identity is judged on the original columns.)
 - **P2.** In `ward-observations.json`, only the matching night rows change, and within them only the forcing
@@ -210,6 +242,18 @@ Predictions:
   strata are byte-identical.
 - **P4.** The night bias (−0.182 K, model too cold) moves up, towards zero or positive.
 - **P5.** Night RMSE and leave-one-overpass-out RMSE stay flat or improve.
+
+*Result, 2026-09-24:* P1–P5 hold, with 20 rows moved and only forcing fields changed.
+
+| Night figure | Before | After |
+|---|---|---|
+| Bias | −0.182 K | +0.36 K |
+| RMSE | 2.943 K | 2.677 K |
+| Leave-one-overpass-out | 3.102 K | 2.801 K |
+| Ceiling | 2.336 K | 2.117 K |
+| n | 50 | 50 |
+
+The band rule therefore gives ±3.0 K, where it was ±3.5 K.
 
 **Decision rule.** Any violation of P1–P3 means the fix touched something it should not — stop and find out
 why. If P4 or P5 fails, first confirm the fix is right; if it is, the honest number ships anyway, and the
@@ -291,6 +335,11 @@ Three consequences, found while planning:
   so both are reworded.
 - The package guards eleven comparative absolutes ("every", "all", "only", …) in its README. New sentences,
   and the rewritten `TIME BASE.` paragraph of `fetch-met.py` that the README quotes, avoid them.
+- *Found in PR 2's code review (2026-09-24).* The package reads the POWER point with
+  `extract_py_assignment(FETCH_MET, "LAT, LON")` in `measure_met_point()`. After PR 2 that assignment reads
+  `_power.POWER_LAT, _power.POWER_LON`, so `float()` raises and the build aborts. Track B reads the point
+  from `_power`, and rewords the three places that name `fetch-met.py` as where the point lives: the label,
+  the README text, and the `FETCH_MET` comment.
 
 ### 3.4 Regenerate both packages
 
@@ -300,6 +349,11 @@ Regenerate each, review the diff (their forcing and night-accuracy statements ch
 to each README recording the rebuild and what moved. `fetch-ecostress-history.py`'s `power_key()` is already
 correct, but its docstring states that `fetch-met.py` is 24 h early, which PR 2 makes untrue; that sentence
 is corrected.
+
+*Found in PR 2's code review (2026-09-24).* `build-ward-heat-history.py`'s `methods_upstream()` rule
+`fetch-met-issue` hard-codes that `fetch-met.py` builds its POWER lookup from a scene's UTC date and that the
+fix awaits a decision. That rule is exempt from measurement, so a rebuild would republish the claim after
+the fix has merged. Track B rewrites it to say the key comes from each pass's UTC instant (PR 2).
 
 ### 3.5 Verify
 
@@ -322,6 +376,10 @@ with verified local commits.
 - Audit items 6–11 and the repo-hygiene list. Item 6 (the "perfect retrofit" in `dc-urs.ts`) is cheapest
   during Track B, since `dc-urs.ts` is pinned by the 2026-09-22 package, but only if the owner opts in.
 - `fetch-met.py`'s missing `curl` timeout and non-atomic write (the rebuild runs from cache).
+- `fetch-met.py` sizes its POWER request from the scenes' UTC dates, but POWER's stamps are local-solar,
+  so a pass late on the last UTC date falls past the fetched span. Today that is only the 2026-06-26 night
+  pass, which the old rule also dropped. Fixing it changes the request, so it needs a network fetch and
+  changes the row count; it is left for a later PR, which should size the span from the stamps.
 - Unifying `fetch-ecostress-history.power_key()` with the new `_power.power_stamp()`.
 
 ---
@@ -394,6 +452,10 @@ Each comes from a fact measured in the code, not a change of intent.
 | 1.1 | The e2e uses the Layers pane at 1280×480 | its `.tree` is an `overflow-y: auto` container that overflows there, with no solar computation |
 | 1.3 | `attic/heat-fx/`, not `attic/` | `main` tracks shelved code under `attic/` on purpose |
 | 1.3 | `docs/audits/` added | a README there links a confidential document by one of the six names |
+| 1.3 | Bracketed extensions; nested PDFs in `docs/research/` | the post-implementation audit found the rules leaked on case-sensitive clones |
+| 2.3 | The rebuild's CMR metadata query is live, not offline | found in PR 2's spec review; no rows were lost |
+| 2.3 | `measure-accuracy.py` scores the shipped `Q`, read from `types.ts` | the rebuild's P3 check caught it scoring the free-fit `q_day` |
+| 2.4 | Recount: 20 rows change, not 21; mean +0.36 K | the 21st pass already rolled correctly under the old code (re-measured in code review, before any rebuild) |
 | 2.2 | `power_stamp` lives in a new `scripts/_power.py`, with the POWER point | `_suhii.py` pulls numpy and network helpers into `fetch-met.py`; Track B needs an importable module |
 | 2.3 | The other `met-forcing.csv` readers are accounted for | the canopy-blend record refuses re-runs by design, so it is annotated, not rebuilt |
 | 2.4 | P1 is judged on the original twelve columns | the two new columns change every row's bytes |
