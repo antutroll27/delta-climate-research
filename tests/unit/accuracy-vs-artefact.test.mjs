@@ -12,11 +12,12 @@ import { skyTemperatureC } from '../../src/scripts/climate-engine/sky.ts';
    the published night band ended up BELOW the measured out-of-sample error.
    Nothing failed; an audit found it.
 
-   These tests do not demand equality — recalibrating peak would make daytime
-   out-measure night and qualify as quantitative, which model-accuracy.json's own
-   `pending_recalibration` reserves for a reviewed human change. They enforce the
-   SAFETY DIRECTION instead: whatever the artefact says, the published band may
-   overstate our error but must never understate it. */
+   Night is not pending recalibration, so its figures must EQUAL the artefact's and
+   its band must be exactly the smallest half-kelvin step covering both its errors.
+   Peak is held back — recalibrating it would make daytime out-measure night and
+   qualify as quantitative, which model-accuracy.json's own `pending_recalibration`
+   reserves for a reviewed human change — so for peak these tests enforce only the
+   SAFETY DIRECTION: its band may overstate our error but must never understate it. */
 const art = JSON.parse(readFileSync('data/calibration/model-accuracy.json', 'utf8')).ward_scale.strata;
 
 const PHASE_STRATUM = { night: 'night', peak: 'peak_ecostress' };
@@ -63,7 +64,7 @@ test('the accuracy artefact scores the constants that ship', () => {
   assert.ok(Math.abs(s.ratio - ratio) < 5e-5, `measure-accuracy scored kRad/h ${s.ratio}, but types.ts ships ${ratio}`);
   // The browser releases a flat STORE_NIGHT at night; it has no built-scaled term.
   assert.equal(s.release_built, 0, 'measure-accuracy scored a built-scaled night release the browser does not have');
-  assert.ok(Math.abs(s.release_base - STORE_NIGHT) < 5e-4,
+  assert.ok(Math.abs(s.release_base - STORE_NIGHT) < 5e-5,
     `measure-accuracy scored release_base ${s.release_base}, but STORE_NIGHT ships ${STORE_NIGHT}`);
   // The browser calls skyTemperatureC with its default Brutsaert c.
   assert.equal(skyTemperatureC(28, 80, 0.3, s.c), skyTemperatureC(28, 80, 0.3),
@@ -96,7 +97,9 @@ test('every number quoted in the night note is the field it quotes', () => {
   has(`over ${ACCURACY.night.n} ward-scenes`);
   has(`${ACCURACY.night.modelRmseK} K against a best-achievable ${ACCURACY.night.ceilingRmseK} K`);
   has(`bias ${bias >= 0 ? '+' : '−'}${Math.abs(bias).toFixed(2)} K`);
-  has(`${bias >= 0 ? 'warmer' : 'colder'} than the measured surface`);
+  const side = bias >= 0 ? 'warmer' : 'colder';
+  has(`${side} than the measured surface`);
+  has(`runs ${Math.abs(bias).toFixed(2)} K ${side}`);
   has(`+/-${ACCURACY.night.bandK.toFixed(1)} K`);
   has(`leave-one-overpass-out error of ${ACCURACY.night.looOverpassRmseK} K`);
 });

@@ -6,6 +6,11 @@
  * (2024-01 → 2026-07), produced by `scripts/fit-ward-scale.py` and mirrored here
  * from `data/calibration/ward-scale-fit.json`.
  *
+ * NIGHT IS THE EXCEPTION: its figures come from `data/calibration/model-accuracy.json`
+ * → `ward_scale.strata.night` (written by `scripts/measure-accuracy.py`). Do NOT copy
+ * `phases.night.reported_band_K` from that file — its 3.5 is the superseded
+ * mask-scale block, scoring a fit that does not ship.
+ *
  * MEASURED AT WARD SCALE, WHICH IS NEW. The previous figures scored the model
  * against two GHS-SMOD masks — 3,363 km² "urban" against 1,568 km² "rural".
  * Sampling both with Sentinel-2 showed they are the same landscape (FVC 0.678
@@ -60,11 +65,15 @@ export const ACCURACY: Record<'peak' | 'night', PhaseAccuracy> = {
      * Leave-one-overpass-out RMSE, from data/calibration/model-accuracy.json
      * ward_scale.strata.night. THIS is the number the band must cover.
      *
-     * An audit found the published ±3.0 K band sat BELOW it. `modelRmseK`
-     * (2.93 at the time) is the IN-SAMPLE fit; /uncertainty has always described
+     * HISTORY, not today's state. An earlier audit found the ±3.0 K band then
+     * published sat BELOW the out-of-sample error measured at the time. `modelRmseK`
+     * (2.93 then) is the IN-SAMPLE fit; /uncertainty has always described
      * the method as "leave-one-overpass-out", and the honest out-of-sample error
-     * under that method was 3.102 K. The guard below compared the band to the in-sample
-     * figure, so ±3.0 passed while understating the error the page named. Of
+     * under that method was then 3.102 K, so the band was widened to ±3.5. The guard
+     * compared the band to the in-sample figure, so ±3.0 had passed while
+     * understating the error the page named. Today's ±3.0 is a re-measurement, not a
+     * reversion: after the 2026-09-24 forcing-date correction the out-of-sample error
+     * is 2.801 K, which it covers (known-limitations §15). Of
      * every possible defect on a site whose product is its error bars, an error
      * bar that is too small is the worst one.
      */
@@ -299,6 +308,13 @@ export const SCALE_SKILL = Object.freeze({
  * 0.010 measured on the stale raster, not a narrower one. The gain was the
  * smoothing, not the physics — and the null below is now that like-for-like one,
  * not a raw layer.
+ */
+/*
+ * PRE-CORRECTION FORCING. The night and all-phase figures below
+ * (spatial-accuracy.json, shipped-amplitude.json) were computed before the
+ * 2026-09-24 forcing-date correction: 32 of their 50 night ward-scenes fall on
+ * passes whose forcing it changed. They are to be re-run in the follow-up re-fit
+ * (docs/evidence/known-limitations.md §15).
  */
 export const SPATIAL = {
   /** ward-scenes scored (3 wards x near-nadir scenes, after cloud/QC masking) */
