@@ -30,6 +30,15 @@ test('Severe is open-ended: the Very Poor slope continues with no cap', () => {
   assert.equal(subIndex('o3', 800), 410);    // 400 + 52 × 100/540 = 409.6 (not the workbook's defective 474)
 });
 
+test("ozone's declared deviation: 100/540 throughout the Very Poor band, not the workbook's 100/539", () => {
+  assert.equal(subIndex('o3', 264.6), 310); // the workbook's /539 gives 311
+});
+
+test('subIndex refuses non-finite or negative concentrations', () => {
+  assert.throws(() => subIndex('pm25', NaN), RangeError);
+  assert.throws(() => subIndex('pm25', -1), RangeError);
+});
+
 test('category follows the index bands; above 500 is still Severe', () => {
   assert.equal(category(50), 'good');
   assert.equal(category(51), 'satisfactory');
@@ -59,7 +68,14 @@ test('publishing needs three valid pollutants, one of them PM', () => {
   assert.match(noPm.ok ? '' : noPm.reasons.join(' '), /PM2\.5 or PM10/);
 });
 
-test(`a pollutant with fewer than ${MIN_HOURS} hours does not count`, () => {
-  const out = combine([r('pm25', 45, MIN_HOURS - 1, null), r('no2', 20, 24, 25), r('o3', 90, 24, 90), r('so2', 5, 24, 6)]);
+test(`a pollutant with fewer than ${MIN_HOURS} hours does not count, even with a sub-index already computed`, () => {
+  const out = combine([r('pm25', 45, MIN_HOURS - 1, 75), r('no2', 20, 24, 25), r('o3', 90, 24, 90), r('so2', 5, 24, 6)]);
   assert.equal(out.ok, false);
+  assert.match(out.ok ? '' : out.reasons.join(' '), /PM2\.5 had 15 of 16/);
+});
+
+test(`the same readings with exactly ${MIN_HOURS} hours for PM2.5 do count`, () => {
+  const out = combine([r('pm25', 45, MIN_HOURS, 75), r('no2', 20, 24, 25), r('o3', 90, 24, 90), r('so2', 5, 24, 6)]);
+  assert.equal(out.ok, true);
+  assert.equal(out.ok && out.aqi, 90);
 });
