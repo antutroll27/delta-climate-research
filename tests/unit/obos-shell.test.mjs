@@ -44,10 +44,12 @@ import {
 
 const RAIL = new URL('../../src/components/ClimateEngine/shell/IconRail.astro', import.meta.url);
 
-/** The six sections the design gives the rail. Not five, and not seven. Solar
+/** The seven sections the design gives the rail. Not six, and not eight. Solar
     joined on 2026-09-06 (spec 2026-09-05-solar-console-design.md §2.1): a pane
-    that ranks a ward's roofs, not a route. Sorted, because the test sorts. */
-const SECTION_IDS = ['analysis', 'layers', 'map', 'reports', 'scenarios', 'solar'];
+    that ranks a ward's roofs, not a route. Air joined on 2026-09-26 (spec
+    2026-09-26-aqi-kolkata-design.md §5): government-station air quality for the
+    area, also a pane. Sorted, because the test sorts. */
+const SECTION_IDS = ['air', 'analysis', 'layers', 'map', 'reports', 'scenarios', 'solar'];
 
 /** Comments are not code. An id, an `<a>` or a label in prose must not count. */
 const strip = (s) => s
@@ -122,20 +124,20 @@ function loopArms(template) {
   return end === -1 ? region : region.slice(0, end);
 }
 
-test('the rail carries all six sections, each declared exactly once', async () => {
+test('the rail carries all seven sections, each declared exactly once', async () => {
   const { frontmatter } = await railSource();
   const ids = sectionTable(frontmatter).map((s) => s.id);
-  assert.equal(ids.length, 6,
-    `the rail declares ${ids.length} sections, not 6: ${ids.join(', ') || '(none)'}`);
+  assert.equal(ids.length, 7,
+    `the rail declares ${ids.length} sections, not 7: ${ids.join(', ') || '(none)'}`);
   assert.deepEqual([...ids].sort(), SECTION_IDS,
-    'the rail must carry exactly Map, Layers, Analysis, Solar, Reports and Scenarios, '
+    'the rail must carry exactly Map, Layers, Analysis, Solar, Air, Reports and Scenarios, '
     + `each once -- it declares: ${ids.join(', ')}`);
 });
 
-test('the rail carries the mode: two sections navigate, four swap the pane', async () => {
+test('the rail carries the mode: two sections navigate, five swap the pane', async () => {
   /* Mixed verbs, deliberately. Map and Analysis are ROUTES -- the old Explore and
-     Compare tabs, which the rail replaces as the only navigation. Layers, Solar, Reports
-     and Scenarios swap the sidebar pane and go nowhere, so they declare no href
+     Compare tabs, which the rail replaces as the only navigation. Layers, Solar, Air,
+     Reports and Scenarios swap the sidebar pane and go nowhere, so they declare no href
      and can only ever be buttons. */
   const { frontmatter } = await railSource();
   const href = new Map(sectionTable(frontmatter).map((s) => [s.id, s.href]));
@@ -144,7 +146,7 @@ test('the rail carries the mode: two sections navigate, four swap the pane', asy
     'Map must navigate to the Explore route the page was given');
   assert.equal(href.get('analysis'), 'COMPARE_PATH',
     'Analysis must navigate to the compare route');
-  for (const id of ['layers', 'solar', 'reports', 'scenarios']) {
+  for (const id of ['layers', 'solar', 'air', 'reports', 'scenarios']) {
     assert.equal(href.get(id), 'null',
       `${id} swaps the sidebar pane -- it navigates nowhere, so it must declare `
       + 'no href and can only render as a button');
@@ -258,7 +260,7 @@ test('a pane section says whether its pane is open; a section with no pane does 
   const table = sectionTable(frontmatter);
   const body = new Map(table.map((s) => [s.id, s.body]));
 
-  for (const id of ['layers', 'solar', 'reports', 'scenarios']) {
+  for (const id of ['layers', 'solar', 'air', 'reports', 'scenarios']) {
     assert.equal(body.get(id), 'always',
       `${id} navigates nowhere, so its pane is rendered on every route the rail `
       + "appears on -- declaring 'own-route' would blank it on all of them, "

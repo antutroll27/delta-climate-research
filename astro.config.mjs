@@ -69,6 +69,10 @@ function devApiProxies() {
 
       mount('/api/live', () => import('./api/live.js'));
       mount('/api/climate-clock', () => import('./api/climate-clock.js'));
+      // A .ts handler must go through Vite, not Node's import(): Node's strip-only
+      // TypeScript rejects parameter properties (src/lib/aqi/openaq.ts), and the
+      // rejected import left the request hanging.
+      mount('/api/air-quality', () => /** @type {Promise<any>} */ (server.ssrLoadModule('/api/air-quality.ts')));
     },
   };
 }

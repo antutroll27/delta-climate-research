@@ -1,0 +1,141 @@
+# AQI Research Register
+
+**Version:** 1.4  
+**Research cut-off:** 26 September 2026  
+**Status:** Living register  
+**Purpose:** Separate verified findings, working decisions and unresolved validation
+
+## 1. Evidence-status vocabulary
+
+| Status | Meaning |
+|---|---|
+| Verified | Checked against an authoritative source or the repository artefact |
+| Research snapshot | Checked on the stated date; expected to change and must be refreshed |
+| Decision | Agreed implementation direction based on current evidence |
+| Open | Needs validation before the dependent feature ships |
+| Superseded | Earlier repo assumption replaced by newer evidence |
+
+## 2. Findings register
+
+| ID | Status | Finding | Consequence |
+|---|---|---|---|
+| AQI-R01 | Verified | CPCB is the appropriate named AQI standard for Indian OBOS cities | Do not show US EPA AQI as the default Indian index |
+| AQI-R02 | Verified | CPCB AQI is the maximum valid pollutant sub-index, subject to pollutant and completeness rules | Store sub-indices and dominant pollutant; do not average them |
+| AQI-R03 | Verified | The repository contains seven historical WBPCB/OpenCity station archives and a daily derivation script | Preserve as historical evidence, not a live feed |
+| AQI-R04 | Research snapshot | OpenAQ v3 exposes live station coordinates, timestamps, parameters, ownership and provider provenance | Use as the first live acquisition adapter and allowlist CPCB/WBPCB/KSPCB government monitors |
+| AQI-R05 | Research snapshot | OpenAQ location `10918` represents Ballygunge and was reporting through WBPCB/CPCB | Validate current status and boundary containment at implementation time |
+| AQI-R06 | Research snapshot | OpenAQ location `3409509` at SVSPA Campus provides newer Barrackpore-area coverage from around February 2025 | Supersedes the blanket “no Barrackpore station” assumption |
+| AQI-R07 | Research snapshot | No continuous live CAAQMS source was verified for Baruipur; manual NAMP monitoring exists | Show no continuous live coverage unless discovery changes |
+| AQI-R08 | Verified from supplied feed | WAQI station `A567541` is Sarsuna College, not Ballygunge | Do not map it to the Ballygunge ward |
+| AQI-R09 | Verified from published terms | WAQI's public API terms do not support the planned commercial production use without an agreement | Exclude it from production despite permission to use the shared token |
+| AQI-R10 | Research snapshot | data.gov.in's CPCB feed is commercially usable under GODL-India, but its advertised schema omits an observation timestamp, unit and averaging semantics; live probes also returned HTTP 500/504 | Retain as official fallback/cross-check, not the sole runtime dependency |
+| AQI-R11 | Research snapshot | Google Air Quality can provide a modelled `ind_cpcb` estimate at much denser resolution | If used, publish it as a separate modelled layer after legal/attribution review |
+| AQI-R12 | Verified from platform and repository evidence | Vercel deploys TypeScript functions from the existing project's `api` directory, and OBOS already uses this pattern for live weather and Climate Clock | Add AQI to the existing Astro/Vercel project rather than operating a separate FastAPI service |
+| AQI-R13 | Verified from platform docs | Vercel Functions do not provide durable local storage | The live cached pilot needs no database; use managed PostgreSQL when durable history is introduced |
+| AQI-R14 | Verified from platform docs | Hobby cron is too infrequent for hourly ingestion | Use on-demand reads with shared CDN caching first; add an external or upgraded scheduler only for durable archival |
+| AQI-R15 | Decision | Shared TypeScript domain types plus runtime schema parsing form the type-safety boundary | The function and Astro UI share one response union; malformed upstream payloads must fail validation |
+| AQI-R16 | Decision | Future first-party ESP32-S3 devices will use authenticated HTTPS batches for their initial pilot | Defer all device ingestion until the government-station product is validated; defer MQTT until fleet requirements justify it |
+| AQI-R17 | Research snapshot | OpenCity's Kolkata and Bengaluru CKAN resources expose useful station history, but the verified Kolkata records end on 31 December 2025 | Use for research, fixtures and backfill; do not label it live |
+| AQI-R18 | Research snapshot | CPCB and KSPCB publish monitoring pages and reports, but no stable documented state-board JSON API was verified; the tested WBPCB hourly host did not resolve | Avoid reverse-engineering dashboards; revisit official interfaces periodically |
+| AQI-R19 | Verified 26 Sep | OpenAQ v3 rejects keyless requests (HTTP 401); the project key, stored server-side at `~/.config/delta-climate/openaq-key` for development, returns HTTP 200 | Every OpenAQ call needs `X-API-Key`; production uses the `OPENAQ_API_KEY` Vercel variable |
+| AQI-R20 | Verified 26 Sep | Ballygunge `10918` sits at 22.53675 N, 88.36380 E (KMC Ward 69), 1.0 km from the OBOS centre, inside the 3 km window but 268 m outside the 1.4 km box | Covered under the 3 km-window rule |
+| AQI-R21 | Verified 26 Sep | Barrackpore `3409509` (SVSPA Campus) sits at 22.76056 N, 88.36176 E, 1.0 km from the OBOS centre, inside the 3 km window but 302 m outside the 1.4 km box | Covered under the 3 km-window rule |
+| AQI-R22 | Verified 26 Sep | OpenAQ's raw 15-minute PM2.5 for Ballygunge equals the OpenCity archive reading for reading (2025-12-15); OpenCity stamps each reading at its IST end time | OpenAQ passes WBPCB values through faithfully |
+| AQI-R23 | Verified 26 Sep | OpenAQ omits one quarter-hour in four (the one ending at IST :45), so its `/hours` means differ from the full data by about 6 µg/m³ per hour (PM2.5, December 2025) | Build IST-hour means from raw readings; never use `/hours` |
+| AQI-R24 | Verified 26 Sep | CO, NO₂ and SO₂ appear as two sensors each at Ballygunge (ppb and µg/m³) | Select sensors by unit for CPCB breakpoints |
+| AQI-R25 | Research snapshot 26 Sep | All 425 CPCB-provided monitors on OpenAQ in India stopped at 2026-09-24 17:30 UTC; data.gov.in's CPCB API returned 504 after 60 s and 502 on retry | National outage upstream of OpenAQ; the UI must handle stale data; re-check before release |
+| AQI-R26 | Verified 26 Sep | OpenAQ returns an empty licence list for both Kolkata locations | The licence and attribution gate is not closed by the API; confirm terms with OpenAQ and the provider |
+| AQI-R27 | Verified 26 Sep | OpenCity's Ballygunge resource labels pressure "BP (mmHg)" but holds values near 1,010, which can only be hPa | Check every archive column's unit before use |
+| AQI-R28 | Research snapshot 26 Sep | No government station lies inside the 3 km window of any Bengaluru area; the nearest live ones are 3.8–4.0 km away, and Whitefield has none within 8 km | Bengaluru parked for the first release |
+| AQI-R29 | Research snapshot 26 Sep | KSPCB runs 13 manual NAMP stations in Bengaluru and publishes a monthly AQI for each (August 2026 report); TERI Domlur is 1.7 km from Indiranagar | Candidate monthly source when Bengaluru resumes; official coordinates still needed |
+| AQI-R31 | Verified 26 Sep | OpenAQ mislabels the active Ballygunge sensors (since 2025-02-18): NO₂ and SO₂ labelled "ppb" are µg/m³, CO labelled "ppb" is mg/m³, NOx labelled "ppb" is ppm; values equal OpenCity's native-unit archive (2025-12-15). The µg/m³-labelled sensors are retired (last reading 2022-10-16) | Use a verified per-sensor unit table; never trust OpenAQ unit labels or convert ppb. Barrackpore: CO verified mg/m³ (median 0.71 vs Ballygunge 0.42); NO₂ verified µg/m³ by NOx closure (NOx·1000 / (NO/1.23 + NO₂/1.88) = 1.000, Ballygunge 0.987), despite a 1.97 magnitude ratio (11.6 vs 22.9); SO₂ µg/m³ inferred (10.49 vs 4.23, direction inconsistent with ppb); window 2026-09-01 to 09-08 UTC. Barrackpore SO₂ sits on a flat floor near 9.38 µg/m³ (likely an analyser baseline/offset); its sub-index (~12) cannot dominate the AQI, so this is recorded, not corrected. |
+| AQI-R32 | Research snapshot 26 Sep | Both Kolkata stations have no valid CPCB day on 2026-08-26 to 2026-08-28 (15, 1 and 7 of 16 required hours) | Real "too few hours" days; the history chart must show them as gaps with reasons |
+| AQI-R30 | Research snapshot 26 Sep | An AirGradient low-cost sensor in Koramangala reports live on OpenAQ under CC BY 4.0 | Not a government instrument; usable only as a separately labelled class, if ever |
+| AQI-R33 | Verified 26 Sep | **The `app.cpcbccr.com` copies are not CPCB's documents.** `ccr_docs/AQI-Calculator.xls` is an `.xlsx` generated by openpyxl on 2026-07-07 and saved in LibreOffice (its own cell A31 names `cpcb.nic.in/upload/national-air-quality-index/AQI-Calculator.xls` as the reference tool); `ccr_docs/FINAL-REPORT_AQI_.pdf` is an HTML summary page. The originals are at `cpcb.nic.in/upload/national-air-quality-index/`: `AQI-Calculator.xls` (Excel 97, created 2015-01-28, last saved 2022-10-10, SHA-256 `92eb788f7f61bd46edea1814a9e1b8f5dd75d05dfb88f34a460905bc07bd151a`) and `FINAL-REPORT_AQI_.pdf` (58 pp, Report CUPS/82/2014-15, SHA-256 `d2b0fd754a8f9fb36919ec8d5a41e85a81b471dc4ebcf7831e3a1172aee8db37`), plus the one-page `How_AQI_Calculated.pdf` and `About_AQI.pdf` linked from the CPCB NAQI page. Copies in `~/.cache/delta-climate/cpcb/` | Cite the `cpcb.nic.in` originals only. The reconstruction is not evidence: its Severe-band edges (e.g. PM2.5 251–380, PM10 431–510) appear in no CPCB document |
+| AQI-R34 | Verified 26 Sep | **Breakpoints.** The band edges for PM10, PM2.5, NO₂, SO₂, CO, O₃ and NH₃ in Good to Very Poor are identical in the workbook (Sheet1 formulas D8, D10, D12, D14, D16, D18, D20), the report (Table 3.11, PDF p. 37, printed 35) and `About_AQI.pdf`. The **Severe band is open-ended** in every source (Table 3.11: "430 +", "250+", "400+", "748+*", "34+", "1600+", "1800+"); the workbook extrapolates the Very Poor slope past the last edge with **no cap at 500** (D10: `IF(C10>250.0, 400.0+(C10-250.0)*100.0/130.0)`), and the report's worked tables print sub-indices up to 1765 (PDF p. 41, Anand Vihar 14-Nov-13, PM10). Workbook defects: O₃ above 748 is `400.0+(C18-400.0)*100.0/539.0` (jumps from 400 to 465 at 748), and the O₃ Very Poor slope divides by 539 where 748 − 208 = 540. Pb has no row in the workbook | Bands 1–5 as planned. Any upper edge for the Severe band, and a cap at 500, are OBOS choices with no CPCB source; they must be declared as such or dropped |
+| AQI-R35 | Verified 26 Sep | **A value between two published bands.** CPCB publishes two forms. The workbook is **continuous**: each band starts at the previous band's upper edge (D10: `IF(AND(C10>30.0,C10<=60.0), 50.0+(C10-30.0)*50.0/30.0, …)`), so PM2.5 30.5 → 50.83 and 31 → 51.67. The report's formula (PDF p. 39, printed 37) defines B_LO as "Breakpoint concentration smaller or equal to given concentration" and adds "subtract one from ILO, if ILO is greater than 50"; `About_AQI.pdf` item 3 gives "51 at concentration 31 µg/m3, 100 at concentration 60 µg/m3, and 75 at concentration of 45 µg/m3", which is the table-edge form (31 → 51). Measured on a 0.1 µg/m³ grid (0.01 mg/m³ for CO) up to the Very Poor edge, the two forms give different integers at 3–38 % of points, by at most 3 (PM2.5 61.1: 101 vs 104) and 4 for CO (1.09: 51 vs 55) | The choice between the calculator and the published table is a method decision to record in `ALGORITHM`; at PM2.5 30.5 both give 51 after rounding, so that test alone cannot tell them apart |
+| AQI-R36 | Verified 26 Sep | **Rounding.** No workbook formula rounds: D10 stores 56.666…, and cells D8–D20 and G11 carry the number format `0`, so the sheet displays integers while `G11 = MAX(D8,D10,…,D20)` takes the maximum of the unrounded sub-indices. The report states no rounding rule; its tables print integers | Round to the nearest integer for display. Rounding each sub-index before the maximum gives the same AQI as rounding after it, because rounding is monotone |
+| AQI-R37 | Verified 26 Sep | **CO and O₃ use the maximum 8-hour value of the day.** Workbook B16 and B18 read "max 8-hr". Report PDF pp. 40 and 41 (printed 38, 39): "The AQI for CO and O3 has been calculated for running 8-hr averages. This will give 23 AQI values, here maximum and minimum AQI of CO and O3 are presented"; in the same table Mandir Marg 31-Jul-13 has AQI 76 = CO (max) 76 while PM2.5 is 70 and PM10 62, so the day's AQI used the maximum. `How_AQI_Calculated.pdf` item 4: the real-time system "displays AQI based on running average values (e.g. AQI at 6am on a day will incorporate data from 6am on previous day to the current day)" | Maximum of the running 8-hour means inside the 24 hours, not the latest one. Not stated anywhere: which 8-hour windows count ("23 values" does not equal the 17 windows that fit inside 24 hours) |
+| AQI-R38 | Verified 26 Sep | **Hour minimums.** `How_AQI_Calculated.pdf` item 2 and report PDF p. 46 (printed 44): "a minimum of 16 hours' data is considered necessary for calculating sub-index", stated for every pollutant, CO and O₃ included. **No CPCB document gives a minimum inside one 8-hour window**; the workbook has no hour counts at all. Its validity check counts a pollutant only when the entered value is above zero (E8: `IF(OR(ISTEXT(C8),C8<=0.0),0.0,1.0)`) | 16 hours per pollutant in the 24 hours is verified. A per-8-hour-window minimum (6 of 8) is an OBOS choice with no CPCB source |
+| AQI-R39 | Verified 26 Sep | **Publish rule.** Workbook G11: `IF(AND(OR(E8=1.0,E10=1.0), E8+E10+E12+E14+E16+E18+E20>=3.0), MAX(D8,D10,D12,D14,D16,D18,D20), "Atleast 3 inputs*")`; A21: "Concentrations of minimum three pollutants are required; one of them should be PM10 or PM2.5". `How_AQI_Calculated.pdf` item 3: sub-indices are still disseminated when the AQI cannot be | At least three valid pollutants including PM2.5 or PM10; AQI is the maximum sub-index; show sub-indices in the insufficient-data state |
+| AQI-R40 | Decision 26 Sep | CPCB arithmetic for OBOS (`cpcb-aqi-1`) follows CPCB's official calculator: **continuous bands** (not the 31/51 table form); **Severe open-ended and uncapped**, continuing the Very Poor slope; ozone uses 100/540 throughout its Very Poor band and beyond, instead of the workbook's 100/539, and above 748 µg/m³ it continues that slope instead of the workbook's `400+(C-400)*100/539`; rounding only at the end; a reading of 0 counts as missing (workbook E8); 8-hour sub-windows need 6 of 8 hours, an OBOS choice since CPCB states none; 17 full 8-hour windows inside the 24 h; an IST hour counts as present if it has at least one valid quarter-hour reading, an OBOS choice since CPCB sets no per-hour minimum | Implemented in plan Task 2/3; any change is a new algorithm id with fixtures |
+| AQI-R41 | Research snapshot 26 Sep | **First live run of `/api/air-quality`** (dev server, real key, 26 Sep ~14:55 UTC). Ballygunge `stale`, `age_h` 45, AQI 38 Good, dominant O₃; Barrackpore `stale`, `age_h` 45, AQI 34 Good, dominant CO; both last observed 2026-09-24T17:30Z, every pollutant 24/24 hours in the final window, which is consistent with the national CPCB feed stopping then. Baruipur `no_station`, with no upstream call. History spans 2026-08-27 to 2026-09-25 (30 days) at both stations, with 26 AQIs and 4 nulls each: 27 Aug (15 of 16 hours), 28 Aug (1), 29 Aug (7), which is an upstream gap in both stations at once, and 25 Sep (`no readings`, the dead feed). Response times cold/warm: 7.5 s/7.3 s (Ballygunge), 8.1 s/6.6 s (Barrackpore), <1 ms (Baruipur); payloads 5,664 / 5,709 / 316 bytes; `Cache-Control: public, max-age=60, s-maxage=600, stale-while-revalidate=1800` on all three; key absent from bodies, headers and the server log. Separately, `vercel build` showed that @vercel/node keeps `.ts` import specifiers verbatim; fixed with `rewriteRelativeImportExtensions` | Stale is the correct state while CPCB is down. A cold miss costs about 7 s (6 sensors, paginated), so the CDN cache carries the load; re-check when the feed resumes |
+| AQI-R42 | Research snapshot 26 Sep | **OpenAQ completeness for Ballygunge PM2.5 (sensor 12236012) is variable, not a fixed one-in-four.** Re-measured 26 Sep with the OBOS client (`fetchSensorWindow`), counting rows with end stamps inside each window: 31 days to 2026-09-25T00:00Z, **2,648 of 2,976 quarter-hours (89.0 %)**; 31 days to the outage (2026-08-24T17:30Z to 09-24T17:30Z), 2,671 of 2,976 (89.8 %); the figure of about 2,656 quoted during the build falls between the two cut-offs. The losses are spread evenly over the four quarter-hours (UTC :00/:15/:30/:45 = 665/647/670/666), so there is no :45 IST pattern; they sit in whole-hour gaps (August IST month 67.8 %, 1–24 Sep 96.7 %). On **2025-12-15**, AQI-R23 found one quarter-hour in four missing (75 %); the same IST day re-fetched on 26 Sep returns 80 of 96 (83.3 %), with the IST :45 slot (UTC :15) at 15 of 24 against 20–23 for the others | The code relies on neither figure. Hours are built from whatever raw readings arrive, an IST hour counts if it has one valid quarter-hour (AQI-R40), and CPCB's 16-hour rule decides validity. Do not quote a completeness percentage in product copy |
+| AQI-R43 | Verified 26 Sep | **A cold fetch of `/api/air-quality` takes about 7 s** for a station area: 6 sensors × 3 pages of up to 1,000 rows (31 days × 96 quarter-hours = 2,976 rows at most per sensor), fetched in parallel across sensors and serially across pages. Measured on the first live run (AQI-R41): 7.5 s/7.3 s Ballygunge, 8.1 s/6.6 s Barrackpore, <1 ms Baruipur (`no_station`, no upstream call). `api/air-quality.ts` sets `Cache-Control: public, max-age=60, s-maxage=600, stale-while-revalidate=1800` on success and `s-maxage=60` on upstream failure | The Vercel CDN carries the load: at most one cold fetch per area per 10 minutes, and a revalidation is served stale for up to 30 minutes, so a viewer normally never waits the 7 s. Upstream use stays at worst about 18 requests per area per 10 minutes, inside OpenAQ's 60/min and 2,000/h |
+| AQI-R44 | Verified 26 Sep | **Vercel keeps `.ts` import specifiers verbatim.** `vercel build` showed that `@vercel/node` compiles each `api/*.ts` file on its own and emits `import … from '../src/lib/aqi/build.ts'` unchanged, which fails to resolve at runtime. Fixed in commit `25b88cc` by `"rewriteRelativeImportExtensions": true` in `tsconfig.json` (line 23), which rewrites relative `.ts` specifiers to `.js` on emit; `tests/unit/aqi-handler.test.mjs` (lines 50–51) fails if the option is removed. The Astro dev server (`devApiProxies`, `astro.config.mjs` line 75) loads the module through Vite and never showed the fault | Any new `api/*.ts` that imports from `src/` relies on this option. Confirm on the first Preview deployment that `/api/air-quality` returns 200, not a module-resolution 500 |
+| AQI-R45 | Verified 26 Sep | **27–29 Aug 2026: a simultaneous gap at both stations, upstream of OBOS.** Valid IST hours per day, measured 26 Sep from raw OpenAQ readings for PM2.5, PM10 and NO₂ at Ballygunge (10918) and Barrackpore (3409509): 26 Aug 24, **27 Aug 15, 28 Aug 1, 29 Aug 7**, 30 Aug 18, identical for all six sensors at both stations. Two separate monitors about 25 km apart losing the same hours points to the CPCB/OpenAQ ingestion path, not the monitors or OBOS code | The three days show as missing in the 30-day chart with CPCB's reason (fewer than 16 hours), which is correct. Not a defect to fix; do not back-fill |
+| AQI-R46 | Decision 26 Sep | **Which 8-hour windows count for CO and O₃ is an OBOS choice.** `window8` takes the 17 full 8-hour windows that lie inside the 24-hour window (each needing 6 of 8 hours). CPCB's report describes "running 8-hr averages" without saying whether windows may start before the 24-hour period (AQI-R37); the workbook takes one pre-computed "max 8-hr" value. A variant that lets windows reach back into the previous day would give up to 24 values and could raise a day's CO/O₃ sub-index. | Declared, not verified against CPCB's own implementation; revisit if CPCB publishes its code or a day-level CO/O₃ comparison against CPCB's published AQI disagrees. Final audit M5. |
+
+## 3. Superseded assumptions
+
+| Earlier assumption | Current position | Source of change |
+|---|---|---|
+| Barrackpore has no station | A newer continuous-monitoring candidate exists; exact assignment remains to be validated | Current OpenAQ station discovery |
+| AQI provider key may be placed in a `PUBLIC_*` variable | All provider credentials remain in server-only Vercel environment variables | Same-project server-function decision and credential-security requirements |
+| AQI requires a separate FastAPI deployment | A TypeScript Vercel Function in the existing Astro project supplies the required server boundary | Existing `api/*.js` pattern and reduced pilot operating scope |
+| Three pollutants including one PM pollutant is the complete validity rule | Minimum observation-hours requirements also apply | CPCB method review |
+| A WAQI URL supplied with permission is sufficient for production | Permission to use a token does not replace service licensing, and the supplied station is not Ballygunge | WAQI terms and feed identity check |
+| City-wide station count can be fixed in product copy | Stations change; discover and report selected instruments dynamically | New Barrackpore station and inconsistent historical counts |
+| OpenAQ's hourly aggregates can feed the CPCB calculation | Hourly means are built from raw readings in IST hours | AQI-R23 (26 Sep 2026) |
+| The first release covers Kolkata and Bengaluru | Kolkata only; Bengaluru parked | AQI-R28, founder decision 26 Sep 2026 |
+| Coverage is judged against the OBOS 1.4 km box | Coverage is judged against the 3 km window | Founder decision 26 Sep 2026; both Kolkata stations lie just outside the 1.4 km box |
+| CPCB's calculator and report are at `app.cpcbccr.com/ccr_docs/` | Those URLs serve an openpyxl reconstruction and an HTML summary; the originals are on `cpcb.nic.in` | AQI-R33 (26 Sep 2026) |
+
+## 4. Authoritative and supporting sources
+
+### Standards and government data
+
+- [CPCB National Air Quality Index](https://cpcb.nic.in/National-Air-Quality-Index/)
+- [CPCB AQI final report](https://cpcb.nic.in/upload/national-air-quality-index/FINAL-REPORT_AQI_.pdf) (Report CUPS/82/2014-15)
+- [CPCB AQI calculator workbook](https://cpcb.nic.in/upload/national-air-quality-index/AQI-Calculator.xls) (Excel 97)
+- [CPCB: How AQI is calculated](https://cpcb.nic.in/upload/national-air-quality-index/How_AQI_Calculated.pdf)
+- [CPCB: About National Air Quality Index](https://cpcb.nic.in/upload/national-air-quality-index/About_AQI.pdf)
+- [Government Open Data License — India](https://data.gov.in/government-open-data-license-india)
+- [OpenCity Kolkata hourly air-quality resource](https://data.opencity.in/dataset/kolkata-hourly-air-quality-reports/resource/ee55ee45-a774-4e91-81c7-6296d388e62d)
+- [KSPCB air-quality reports (monthly CAAQMS and manual)](https://kspcb.karnataka.gov.in/environmental-monitoring/air)
+- [CPCB NAMP manual network list](https://cpcb.gov.in/uploads/stations_namp.pdf)
+
+### Provider and platform documentation
+
+- [OpenAQ documentation](https://docs.openaq.org/)
+- [WAQI API terms](https://aqicn.org/api/terms/)
+- [Google Air Quality API overview](https://developers.google.com/maps/documentation/air-quality/overview)
+- [Vercel Functions](https://vercel.com/docs/functions)
+- [Vercel Cache-Control headers](https://vercel.com/docs/caching/cache-control-headers)
+- [Vercel environment variables](https://vercel.com/docs/environment-variables)
+- [Vercel Cron management](https://vercel.com/docs/cron-jobs/manage-cron-jobs)
+
+### Repository evidence
+
+- `docs/superpowers/specs/2026-08-13-aqi-overlay-design.md`
+- `docs/evidence/data-sources.md`
+- `docs/evidence/regulatory-and-licensing.md`
+- `scripts/build-aqi-daily.py`
+- `data/opencity/aqi-daily.json`
+- `src/data/cities.ts`
+- `api/live.js`
+- `astro.config.mjs`
+- `vercel.json`
+
+## 5. Validation backlog
+
+| Priority | Question | Required evidence | Blocks |
+|---|---|---|---|
+| ~~P0~~ Done 26 Sep | ~~Does the official workbook use the maximum of rolling 8-hour means for CO/O3?~~ Yes, the day's maximum running 8-hour value (AQI-R37); which windows count is not stated | — | — |
+| ~~P0~~ Done 26 Sep | ~~How is the 16-hour rule applied to each pollutant?~~ 16 hours for every pollutant (AQI-R38); CPCB sets no minimum inside an 8-hour window | — | — |
+| ~~P0~~ Done 26 Sep | ~~Which CPCB form does OBOS implement?~~ The calculator's continuous segments, Severe open-ended and uncapped (AQI-R40) | — | — |
+| ~~P0~~ Done 26 Sep | ~~Are OpenAQ station coordinates inside the exact OBOS analysis boundaries?~~ Both Kolkata stations are inside their 3 km windows (AQI-R20, R21) | Versioned polygons and point-in-polygon output | — |
+| P0 | Is the national CPCB feed back, and are the Kolkata stations reporting again? | A fresh `latest` reading from `10918` and `3409509` | Live display |
+| P0 | What attribution/licence metadata does each chosen OpenAQ-origin provider require? | Recorded provider metadata and terms | Production release |
+| P1 | What nearby radius is scientifically and product-appropriate? | Sensitivity analysis plus honest UX copy | Nearby-station UI |
+| P2 | Which particulate and environmental sensors pass the bench/co-location evaluation? | BOM comparison and reference-monitor data | Future ESP32 field pilot |
+| P2 | Which PostgreSQL provider/region minimizes latency and operational cost? | Small deployment benchmark and plan comparison | Future durable government-station history |
+| P2 | Can Google modelled AQ be displayed with MapLibre under current terms? | Legal/terms review and attribution design | Optional modelled layer |
+| P2 | When does HTTPS ingestion stop meeting fleet requirements? | Observed fleet throughput, reconnect and command requirements | MQTT/queue decision |
+
+## 6. Change-control rule
+
+When a dynamic fact changes, update this register and the affected product decision
+in the same pull request. Do not silently update a station mapping, AQI algorithm or
+licensing assumption in code alone. Changes to the calculation method require a new
+algorithm version and reproducibility fixtures.

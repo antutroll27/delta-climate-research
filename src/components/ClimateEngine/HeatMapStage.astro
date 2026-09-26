@@ -340,6 +340,24 @@ const newCity = scope.area.hasData
         </section>
       </div>
 
+      {/* AIR — government-station air quality for the area (spec
+          2026-09-26-aqi-kolkata-design.md §5). The script repaints the whole
+          section on every area load, heading included (air-panel.ts paneHtml);
+          what is written here is only the first paint, and the script overwrites
+          it on an in-place city switch as well. */}
+      <div class="pane" data-pane="air">
+        <section class="pane-body" id="airPane" aria-labelledby="pane-air-h">
+          <p class="pane-h" id="pane-air-h">Air · <span id="airPaneArea">{scope.area.name}</span></p>
+          <p class="pane-note" id="airPaneBody">{scope.city.id === 'kolkata' ? 'Loading air quality…' : 'Air quality covers Kolkata first; this city is not yet covered.'}</p>
+        </section>
+      </div>
+
+      {/* THE AIR PANE'S ONLY LIVE REGION: one line of state (air-panel.ts statusText),
+          set by paintAir. The pane itself is not live, so a repaint is never read
+          out whole; and this sits outside the pane, whose visibility:hidden would
+          silence it whenever another pane is open. */}
+      <p class="aq-sr" id="airStatus" role="status" aria-live="polite"></p>
+
       <div class="pane" data-pane="scenarios">
         <section class="pane-body" aria-labelledby="pane-scenarios-h">
           <p class="pane-h" id="pane-scenarios-h">Scenarios</p>
@@ -746,6 +764,10 @@ const newCity = scope.area.hasData
           </div>
         </div>
       </div>
+      {/* The area's air quality, painted by air-panel.ts cardHtml. Placed like the
+          solar block: above the colour key while the Air pane is open, above the
+          attribution otherwise. Hidden until a Kolkata payload (or its failure) lands. */}
+      <div class="aqblock legend-air" id="aqiBlock" role="region" aria-label="Air quality" hidden></div>
       <div class="attr">Basemap © OpenStreetMap · OpenFreeMap · Footprints © Overture Maps Foundation (ODbL) · Heights Google Open Buildings 2.5D (CC BY 4.0) · Water © OpenStreetMap (ODbL) · Ground SRTM via AWS terrain tiles, <span id="terrLab">indicative</span> · Live weather © Met Norway (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>) · Cloud deck drawn at 320 m, real base ~700 m · left-drag orbit · right-drag pan · scroll zoom</div>
       <button class="srcbtn" id="srcBtn" type="button" aria-expanded="false" aria-controls="srcPanel">Data receipts ↗</button>
       <div class="srcpanel" id="srcPanel" role="dialog" aria-label="Per-layer data provenance" hidden></div>
@@ -920,6 +942,13 @@ const newCity = scope.area.hasData
        canopy raster; --slate the dimmer grey that tells extruded heights from
        footprint outlines; --gold the one warm mark in the Ground-truth group. */
     --pine:#3f8f66; --slate:#6b7f81; --gold:#c9a227;
+    /* THE AIR PANE'S INKS (spec 2026-09-26-aqi-kolkata-design.md §5). The six CPCB
+       categories, validated on the rail surface (dataviz validator, dark): adjacent
+       normal-vision dE >= 15.2, CVD dE >= 11.1; colour is never alone, the word is
+       always printed. --aq-red is the Swiss red of the "Not Live" label, and
+       --aq-tip the chart tooltip's ground. */
+    --c-good:#2a8f6a; --c-satisfactory:#6fcf97; --c-moderate:#f2d03a; --c-poor:#f2912e; --c-very_poor:#e0404f; --c-severe:#9b3fa0;
+    --aq-red:#da291c; --aq-tip:#0d2224;
     /* The icon rail's ground — a fully saturated near-black at the cold end of
        this palette, and it sits ABOVE --base rather than under it.
 
@@ -2239,6 +2268,52 @@ const newCity = scope.area.hasData
   .cindex .ci{display:flex;align-items:center;gap:.6rem;font-size:.7rem;color:var(--paper)}
   .cindex .ci .d{width:15px;height:15px;border-radius:4px;flex:none}
   .legend .attr{font-family:var(--mono);font-size:.48rem;letter-spacing:.05em;color:var(--faint);margin-top:.8rem;line-height:1.75;text-transform:none}
+
+  /* ── THE AIR BLOCK AND PANE, as approved on the preview (previews/aqi-kolkata,
+     2026-09-26); painted by climate-engine/air/air-panel.ts. Every rule is scoped
+     to the right-panel block or the Air pane, and sits AFTER the .legend rules on
+     purpose: the block lives inside .legend, and `.legend .k` (same specificity)
+     would otherwise set its head in capitals mono. Units are Mona Sans (.unit):
+     the brand mono is capitals-only and would print "MG/M³". */
+  .aqblock{padding:10px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:8px}
+  .aqblock[hidden]{display:none}
+  .legend-air{margin-top:10px;border-bottom:0}
+  .legend-air:first-child{margin:0 0 10px;border-top:0;border-bottom:1px solid var(--line)}
+  :is(.aqblock,[data-pane="air"]) .k{font-family:var(--sans);font-size:.62rem;font-weight:450;letter-spacing:normal;text-transform:none;color:var(--ink);line-height:1.35;margin-bottom:0}
+  :is(.aqblock,[data-pane="air"]) .chip{font:400 .5rem var(--mono);letter-spacing:.12em;text-transform:uppercase;border:1px solid currentColor;border-radius:5px;padding:.22rem .45rem;white-space:nowrap}
+  :is(.aqblock,[data-pane="air"]) .chip.live{color:var(--cyan)}
+  :is(.aqblock,[data-pane="air"]) .chip.old{color:var(--white);background:var(--aq-red);border-color:var(--aq-red);font:500 .66rem var(--sans);letter-spacing:.01em;text-transform:none}
+  :is(.aqblock,[data-pane="air"]) .chip.old .sep{margin:0 .45em;opacity:.8}
+  :is(.aqblock,[data-pane="air"]) .chip.old b{font-weight:800}
+  :is(.aqblock,[data-pane="air"]) .chip.off{color:var(--faint)}
+  :is(.aqblock,[data-pane="air"]) .hero{display:flex;align-items:baseline;gap:10px}
+  :is(.aqblock,[data-pane="air"]) .num{font-family:var(--mono);font-size:2.2rem;line-height:1;letter-spacing:.01em}
+  :is(.aqblock,[data-pane="air"]) .num.muted{color:var(--ink)!important;opacity:.7}
+  :is(.aqblock,[data-pane="air"]) .cat{display:inline-flex;align-items:center;gap:6px;font-size:.8rem;font-weight:500}
+  :is(.aqblock,[data-pane="air"]) .dot{width:9px;height:9px;border-radius:50%;flex:none}
+  :is(.aqblock,[data-pane="air"]) .meta{margin:0;font-size:.68rem;line-height:1.5;color:var(--ink)}
+  :is(.aqblock,[data-pane="air"]) .meta b{font-weight:500;color:var(--paper)}
+  :is(.aqblock,[data-pane="air"]) .empty{font-size:.82rem;line-height:1.5;color:var(--paper);margin:0}
+  [data-pane="air"] table.pol{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:.64rem}
+  [data-pane="air"] table.pol th{text-align:left;font-weight:400;font-size:.46rem;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);padding:0 0 6px;border-bottom:1px solid var(--line-hi)}
+  [data-pane="air"] table.pol td{padding:6px 0;border-bottom:1px solid var(--line);color:var(--paper);vertical-align:middle}
+  [data-pane="air"] table.pol td.n{color:var(--ink);padding-left:8px}
+  [data-pane="air"] table.pol .lv{font-size:.74rem}
+  [data-pane="air"] .unit{font-family:var(--sans);font-size:.56rem;color:var(--faint);letter-spacing:0;text-transform:none}
+  [data-pane="air"] .si{display:flex;align-items:center;gap:6px}
+  [data-pane="air"] .si i{display:block;height:6px;border-radius:0 3px 3px 0;min-width:2px}
+  [data-pane="air"] .chart{position:relative}
+  [data-pane="air"] .chart svg{display:block;width:100%;height:auto;overflow:visible}
+  [data-pane="air"] .tip{position:absolute;pointer-events:none;background:var(--aq-tip);border:1px solid var(--line-hi);border-radius:7px;padding:6px 8px;font:400 .6rem/1.45 var(--mono);color:var(--paper);white-space:nowrap;transform:translate(-50%,-110%);opacity:0;transition:opacity .12s ease}
+  [data-pane="air"] .tip.on{opacity:1}
+  [data-pane="air"] .aq-legend{display:flex;flex-wrap:wrap;gap:6px 10px;font-size:.58rem;color:var(--ink)}
+  [data-pane="air"] .aq-legend span{display:inline-flex;align-items:center;gap:5px}
+  /* Keyboard: each bar's hit-rect takes focus and shows its tooltip; the ring is a stroke, which every engine draws on SVG. */
+  [data-pane="air"] .aq-bars rect.hit{outline:none}
+  [data-pane="air"] .aq-bars rect.hit:focus-visible{stroke:var(--cyan);stroke-width:1.5}
+  /* Visually hidden, still read: the 30-day list behind the chart and the #airStatus line. */
+  .aq-sr{position:absolute;width:1px;height:1px;margin:-1px;padding:0;border:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+  @media (prefers-reduced-motion: reduce){ [data-pane="air"] .tip{transition:none} }
 
   .strip{display:flex;gap:1px;background:var(--line);border-top:1px solid var(--line);position:relative;z-index:5}
   .ward{flex:1;background:rgb(5 6 6 /.85);padding:12px 20px;display:flex;align-items:center;gap:14px;cursor:pointer;transition:.2s}
