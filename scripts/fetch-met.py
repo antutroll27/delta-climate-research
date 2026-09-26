@@ -3,7 +3,7 @@
 Attach meteorological forcing to each ECOSTRESS calibration scene.
 
     python3 scripts/fetch-met.py
-    python3 scripts/fetch-met.py --check   # verify the committed CSV's stamps offline
+    python3 scripts/fetch-met.py --check   # verify the committed CSV's stamps (and values, if cached)
 
 The calibration CSV records what the surface WAS; the model predicts surface
 temperature GIVEN the atmosphere. Without air temperature, humidity and wind at
@@ -233,8 +233,9 @@ def _hour_gap(utc: str, local_solar_hour: str) -> float:
 def check() -> int:
     """Every committed forcing row read the POWER stamp its own UTC instant implies.
 
-    Offline and cache-free, so CI can run it: it re-derives each row's stamp from the
-    row's own `utc` column and compares. A row keyed the old way — UTC date plus local
+    Offline, so CI can run it: it re-derives each row's stamp from the row's own `utc`
+    column and compares, and where the POWER cache exists it also re-reads each row's
+    values at that stamp. A row keyed the old way — UTC date plus local
     solar hour — fails here for every pass after local midnight but before UTC midnight.
     """
     name = os.path.relpath(OUT, ROOT)
@@ -247,6 +248,15 @@ def check() -> int:
     if missing:
         print(f"  {name} lacks {', '.join(missing)} — rebuild it")
         return 1
+    # A right stamp does not prove the values beside it were read at that stamp, so when
+    # the POWER cache is here, re-read each row's four values at its stamp, formatted as
+    # main() writes them. Read only; CI has no cache and runs the stamp checks alone.
+    param: dict[str, dict[str, float]] | None = None
+    if os.path.exists(CACHE):
+        with open(CACHE) as fh:
+            param = cast(PowerBlob, json.load(fh))["properties"]["parameter"]
+    else:
+        print(f"  no POWER cache at {CACHE}: value check skipped, stamps only")
     bad = 0
     for r in rows:
         utc, got, where = r["utc"], r["power_stamp"], f"{r['date']} {r['phase']}"
@@ -269,10 +279,21 @@ def check() -> int:
         elif utc[:10] != r["date"] or not _hour_gap(utc, r["local_solar_hour"]) <= 0.1:
             print(f"  UTC DISAGREES {where}: utc {utc}, local solar hour {r['local_solar_hour']}")
             bad += 1
+        elif param is not None:
+            vals = reading(param, got) if all(n in param for n in POWER_PARAMS) else None
+            want_vals = None if vals is None else [
+                str(round(vals[0], 2)), str(round(vals[1], 2)),
+                str(round(vals[2], 2)), str(round(vals[3] / 100, 3))]
+            have = [r["tAir"], r["rh"], r["wind"], r["cloud"]]
+            if want_vals != have:
+                print(f"  VALUE DISAGREES {where}: tAir/rh/wind/cloud {have}, "
+                      f"POWER at {got} gives {want_vals}")
+                bad += 1
     if bad:
         print(f"  {bad} of {len(rows)} forcing rows fail")
         return 1
-    print(f"  {len(rows)} forcing rows: every POWER stamp matches the row's own UTC instant")
+    print(f"  {len(rows)} forcing rows: every POWER stamp matches the row's own UTC instant"
+          + ("" if param is None else ", and every value is POWER's at that stamp"))
     return 0
 
 
@@ -361,7 +382,8 @@ def main() -> None:
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(description="Attach NASA POWER hourly forcing to each calibration scene.")
     ap.add_argument("--check", action="store_true",
-                    help="verify the committed CSV's POWER stamps offline; fetches and writes nothing")
+                    help="verify the committed CSV's POWER stamps offline, and its values against "
+                         "the POWER cache when present; fetches and writes nothing")
     if ap.parse_args().check:
         sys.exit(check())
     main()

@@ -1003,3 +1003,20 @@ rested on, are unaffected. `fetch-met.py` sizes its POWER request from UTC dates
 last UTC date (2026-06-26 night) falls outside the fetched span and stays dropped, as it was before the fix.
 And `build-ward-observations.py` queries NASA's CMR catalogue live for granule metadata and drops a
 ward-scene silently if that query fails; this rebuild lost none.
+
+**Not rebuilt: everything else that reads the forcing through `scripts/_physics.py`.** That is
+`measure-spatial-accuracy.py`, `measure-shipped-amplitude.py`, `measure-scale-skill.py`,
+`measure-svf-signtest.py`, `measure-shadow-signtest.py`, `measure-term-fit.py`, `fit-physics.py`,
+`fit-ward-scale.py` (through `ward-observations.json`, which was rebuilt, but the fit was not re-run) and
+`experiment-model-structure.py`. Their committed artefacts reflect the pre-correction night forcing. In
+particular the SPATIAL figures on /uncertainty (n 87, r 0.297 against the vegetation-only 0.313, amplitude
+ratio 1.17, anomaly RMSE 1.59 K) include 50 night ward-scenes, 32 of which (13 passes) fall on passes this
+correction changed; counted by joining `spatial-accuracy.json` and `shipped-amplitude.json` rows on date
+and phase against the rows whose tAir, rh, wind or cloud differ from the pre-correction `met-forcing.csv`.
+Re-running needs the ECOSTRESS granules and an Earthdata token, so it belongs to the follow-up re-fit. The
+size of the shift is unknown: tAir moves every cell of a ward-scene equally (POWER is one point), but rh,
+wind and cloud can change within-ward contrast.
+
+**`model-accuracy.json` still carries `phases.night.reported_band_K: 3.5`.** That is the older mask-scale
+block: it scores the unshipped `fit-physics.py` point, and nothing reads it. The published night band comes
+from `ward_scale.strata.night`.

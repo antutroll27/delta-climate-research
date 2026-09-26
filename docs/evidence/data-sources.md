@@ -26,7 +26,7 @@ artefacts · **CC BY 4.0 — commercial with attribution** · anonymous AWS Open
 `https://registry.opendata.aws/dataforgood-fb-forests/` · **role:** Tier-2 canopy height —
 **render + PV screening (2026-09-05), never the temperature solve.** Drives tree placement/height for the render layer, and since 2026-09-05 casts shadows in the rooftop-PV shading pass (`scripts/measure-pv-tree-shading.py`, v2 read at 0.5 m, A1 connectedness mask — spec `2026-09-05-pv-tree-shading-design.md`, Amendments A1–A4). It still **does not enter the temperature
 solve** · status: **shipped to production 2026-08-11** for all three wards (8,896 / 4,413 / 6,797 trees);
-ward-mean accuracy unchanged throughout (night ±3.0K, day ±5.0K — the CHM has never affected it).
+the CHM has never affected ward-mean accuracy (current bands: night ±3.0 K (±3.5 K before the 2026-09-24 forcing correction, known-limitations §15), peak ±4.5 K).
 
 > **CORRECTION (2026-08-12) — the role above used to read "sharpens `veg[]` mean-neutrally".** That was
 > true of the code from 2026-08-10 to 2026-08-12 and is now false: `CANOPY_BLEND_STRENGTH` is **0**.
