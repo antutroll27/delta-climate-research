@@ -16,8 +16,8 @@ export type CpcbCategory = 'good' | 'satisfactory' | 'moderate' | 'poor' | 'very
 export type Pollutant = 'pm25' | 'pm10' | 'no2' | 'so2' | 'co' | 'o3' | 'nh3';
 
 export interface SourceNote {
-  /** Who measured it, e.g. "West Bengal Pollution Control Board". */
-  owner: string;
+  /** Who measured it, e.g. "West Bengal Pollution Control Board"; null when no station covers the area. */
+  owner: string | null;
   /** How it reached us, e.g. "CPCB via OpenAQ". */
   via: string;
   standard: 'CPCB National AQI';
@@ -58,6 +58,14 @@ export interface AqiResult {
   algorithm: 'cpcb-aqi-1';
 }
 
+/**
+ * Why there is no AQI. Each says something different about the station, so the UI must not collapse them:
+ * - `feed_quiet`: no reading for more than 7 days (or none at all in the 31-day window);
+ * - `no_valid_aqi`: the feed is stale (2 h to 7 d) and its window fails the CPCB validity rule;
+ * - `upstream_error`: we could not reach OpenAQ. This says nothing about the station, so `last_observed_at` is null.
+ */
+export type UnavailableReason = 'feed_quiet' | 'no_valid_aqi' | 'upstream_error';
+
 interface Common {
   schema: typeof SCHEMA;
   area_id: string;
@@ -68,7 +76,7 @@ interface Common {
 export type AirQualityResponse = Common & (
   | { state: 'live'; station: AqiStation; result: AqiResult; observed_at: string }
   | { state: 'stale'; station: AqiStation; result: AqiResult; observed_at: string; age_h: number }
-  | { state: 'unavailable'; station: AqiStation; last_observed_at: string | null }
+  | { state: 'unavailable'; station: AqiStation; last_observed_at: string | null; reason: UnavailableReason }
   | { state: 'insufficient_data'; station: AqiStation; pollutants: PollutantReading[]; reasons: string[]; observed_at: string }
   | { state: 'no_station'; message: string }
 );

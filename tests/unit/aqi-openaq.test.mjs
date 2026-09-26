@@ -115,3 +115,19 @@ test('rows repeated across pages are returned once, the later one winning', asyn
   assert.equal(rows.length, 1002);
   assert.equal(rows.find((r) => r.end_utc === p1.results[999].period.datetimeTo.utc).value, 77);
 });
+
+test('an external signal aborts the fetch, combined with the per-page timeout', async () => {
+  const ctl = new AbortController();
+  let seen;
+  const fake = (_url, init) => { seen = init.signal; return new Promise((_, reject) => { init.signal.addEventListener('abort', () => reject(init.signal.reason)); }); };
+  const p = fetchSensorWindow(1, 'a', 'b', { key: 'k', fetch: fake, timeoutMs: 60_000, signal: ctl.signal });
+  ctl.abort();
+  await assert.rejects(p, (e) => e instanceof OpenAqError && e.status === 504);
+  assert.equal(seen.aborted, true);
+});
+
+test('with an external signal, the per-page timeout still fires', async () => {
+  const fake = (_url, init) => new Promise((_, reject) => { init.signal.addEventListener('abort', () => reject(init.signal.reason)); });
+  await assert.rejects(fetchSensorWindow(1, 'a', 'b', { key: 'k', fetch: fake, timeoutMs: 20, signal: new AbortController().signal }),
+    (e) => e instanceof OpenAqError && e.status === 504);
+});

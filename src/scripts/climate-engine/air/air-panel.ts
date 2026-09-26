@@ -50,8 +50,8 @@ function demote(c: Current, now: Date): Current {
 
 const head = (title: string, chip: string): string => `<div class="k legend-head"><span>${title}</span>${chip}</div>`;
 
-function stationLine(s: AqiStation, owner: string, place: string): string {
-  return `<p class="meta"><b>${esc(s.name.replace(' – WBPCB', ''))}</b> · ${esc(OWNER_SHORT[owner] ?? owner)} monitor · ${km(s.distance_m)} from the ${esc(place)} centre</p>`;
+function stationLine(s: AqiStation, owner: string | null, place: string): string {
+  return `<p class="meta"><b>${esc(s.name.replace(' – WBPCB', ''))}</b> · ${esc((owner && OWNER_SHORT[owner]) ?? owner ?? '')} monitor · ${km(s.distance_m)} from the ${esc(place)} centre</p>`;
 }
 
 function hero(r: AqiResult, muted: boolean): string {
@@ -73,10 +73,12 @@ function block(c: Current, title: string, place: string, now: Date): string {
      <p class="meta">${esc(place)} has no continuous station, so OBOS shows no air-quality figure here rather than borrow one from elsewhere.</p>`;
     case 'unavailable': {
       const last = c.last_observed_at;
-      /* build.ts also lands here for a feed 2 h–7 d old whose window holds no valid AQI, so "more than 7 days" is said only when true. */
-      const why = last === null ? 'No reading from this station for more than 7 days.'
-        : now.getTime() - Date.parse(last) > 7 * 24 * HOUR_MS ? `No reading from this station for more than 7 days. Last reading ${esc(istFmt(last))}.`
-          : `Too few recent readings from this station for an official AQI. Last reading ${esc(istFmt(last))}.`;
+      /* build.ts also lands here for a feed 2 h–7 d old whose window holds no valid AQI, so "more than 7 days" is said only when true.
+         An upstream error says nothing about the station, so it gets the request-failed sentence. */
+      const why = c.reason === 'upstream_error' ? FAILED
+        : last === null ? 'No reading from this station for more than 7 days.'
+          : now.getTime() - Date.parse(last) > 7 * 24 * HOUR_MS ? `No reading from this station for more than 7 days. Last reading ${esc(istFmt(last))}.`
+            : `Too few recent readings from this station for an official AQI. Last reading ${esc(istFmt(last))}.`;
       return feedDown(title, why) + stationLine(c.station, c.source.owner, place);
     }
     case 'insufficient_data': {

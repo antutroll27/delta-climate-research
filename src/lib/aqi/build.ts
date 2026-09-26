@@ -14,8 +14,8 @@ const HISTORY_DAYS = 30;
 const FUTURE_SLACK_MS = 15 * 60_000;
 const EIGHT_HOUR: ReadonlySet<Pollutant> = new Set(['co', 'o3']);
 
-/** The no-station default; with a station, `owner` comes from the station entry. */
-const SOURCE: SourceNote = { owner: 'West Bengal Pollution Control Board', via: 'CPCB via OpenAQ', standard: 'CPCB National AQI' };
+/** The no-station source: nobody measured anything, so no owner. With a station, `owner` comes from the station entry. */
+const SOURCE: SourceNote = { owner: null, via: 'CPCB via OpenAQ', standard: 'CPCB National AQI' };
 const keyToIso = (k: HourKey): string => `${k}:00:00+05:30`;
 
 function readings(hours: Record<string, Map<HourKey, Hour>>, st: StationEntry, endKey: HourKey): PollutantReading[] {
@@ -69,7 +69,8 @@ export function buildPayload(areaKey: string, st: StationEntry | null, raw: Part
   const station: AqiStation = { id: st.id, name: st.name, lat: st.lat, lon: st.lon, distance_m: st.distance_m, inside: 'window_3km' };
   const hours = Object.fromEntries(POLLUTANTS.map((p) => [p, istHours(rows[p] ?? [])])) as Record<string, Map<HourKey, Hour>>;
   const lastMs = lastStampMs(rows);
-  if (!Number.isFinite(lastMs)) return { current: { ...common, state: 'unavailable', station, last_observed_at: null }, history: null };
+  /* Nothing usable in the whole 31-day window: the feed has been quiet far longer than 7 days. */
+  if (!Number.isFinite(lastMs)) return { current: { ...common, state: 'unavailable', station, last_observed_at: null, reason: 'feed_quiet' }, history: null };
 
   const last = new Date(lastMs);
   const ageMs = now.getTime() - lastMs;
@@ -88,12 +89,12 @@ export function buildPayload(areaKey: string, st: StationEntry | null, raw: Part
     pm25_24h: hoursBefore(nextHourKey).map((k) => ({ hour_ist: keyToIso(k), value: pm.has(k) ? Math.round(pm.get(k)!.mean * 10) / 10 : null })) };
 
   const observed_at = last.toISOString();
-  if (ageMs > STALE_DAYS * DAY_MS) return { current: { ...common, state: 'unavailable', station, last_observed_at: observed_at }, history };
+  if (ageMs > STALE_DAYS * DAY_MS) return { current: { ...common, state: 'unavailable', station, last_observed_at: observed_at, reason: 'feed_quiet' }, history };
   if (!c.ok) {
     /* insufficient_data is for FRESH data failing CPCB validity (spec §3). Stale with no valid AQI has nothing honest to show. */
     return fresh
       ? { current: { ...common, state: 'insufficient_data', station, pollutants: current, reasons: c.reasons, observed_at }, history }
-      : { current: { ...common, state: 'unavailable', station, last_observed_at: observed_at }, history };
+      : { current: { ...common, state: 'unavailable', station, last_observed_at: observed_at, reason: 'no_valid_aqi' }, history };
   }
   const result = { aqi: c.aqi, category: c.category, dominant: c.dominant, pollutants: current, window_end_ist: keyToIso(nextHourKey), algorithm: ALGORITHM };
   return fresh

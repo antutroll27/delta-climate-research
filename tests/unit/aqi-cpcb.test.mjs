@@ -79,3 +79,18 @@ test(`the same readings with exactly ${MIN_HOURS} hours for PM2.5 do count`, () 
   assert.equal(out.ok, true);
   assert.equal(out.ok && out.aqi, 90);
 });
+
+test('a pollutant with enough hours but no sub-index says why', () => {
+  const out = combine([r('pm25', 45, 24, 75), r('co', null, 20, null), r('so2', null, 18, null)]);
+  assert.equal(out.ok, false);
+  const why = out.ok ? [] : out.reasons;
+  assert.ok(why.includes('CO had no 8-hour window with 6 of 8 hours'), why.join(' | '));
+  assert.ok(why.includes('SO2 had no valid value'), why.join(' | '));
+});
+
+test('an 8-hour pollutant short of hours gets the hours reason only, not the window reason too', () => {
+  const out = combine([r('o3', null, 10, null)]);
+  const why = out.ok ? [] : out.reasons;
+  assert.ok(why.includes('O3 had 10 of 16 required hours'));
+  assert.ok(!why.some((w) => w.includes('8-hour window')));
+});

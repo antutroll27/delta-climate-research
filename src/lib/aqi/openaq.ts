@@ -9,7 +9,11 @@ import type { Raw } from './hours.ts';
 export class OpenAqError extends Error {
   constructor(readonly status: number, message: string) { super(message); this.name = 'OpenAqError'; }
 }
-export interface OpenAqOptions { key: string; fetch?: typeof fetch; timeoutMs?: number; maxPages?: number }
+export interface OpenAqOptions {
+  key: string; fetch?: typeof fetch; timeoutMs?: number; maxPages?: number;
+  /** Aborts every page request; combined with the per-page timeout, whichever fires first. */
+  signal?: AbortSignal;
+}
 
 const BASE = 'https://api.openaq.org/v3/sensors';
 const PAGE = 1000;
@@ -29,7 +33,9 @@ async function fetchPage(f: typeof fetch, sensorId: number, fromUtc: string, toU
   u.searchParams.set('limit', String(PAGE)); u.searchParams.set('page', String(page));
   let body: unknown;
   try {
-    const res = await f(u, { headers: { 'X-API-Key': o.key, Accept: 'application/json' }, signal: AbortSignal.timeout(o.timeoutMs ?? DEFAULT_TIMEOUT_MS) });
+    const timeout = AbortSignal.timeout(o.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+    const signal = o.signal ? AbortSignal.any([o.signal, timeout]) : timeout;
+    const res = await f(u, { headers: { 'X-API-Key': o.key, Accept: 'application/json' }, signal });
     if (!res.ok) throw new OpenAqError(res.status, `OpenAQ ${res.status} for sensor ${sensorId}`);
     body = await res.json(); // the timeout signal also covers reading the body
   } catch (e) { throw upstream(e, sensorId); }

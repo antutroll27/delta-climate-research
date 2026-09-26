@@ -214,5 +214,27 @@ test('a row stamped in the future is dropped: it neither freshens nor enters a w
 test('source.owner comes from the station entry', () => {
   const st = { ...stationFor(KEY), owner: 'X' };
   assert.equal(buildPayload(KEY, st, rawUpTo('2026-09-24T17:30:00Z'), new Date('2026-09-24T18:00:00Z')).current.source.owner, 'X');
-  assert.equal(buildPayload('in/kolkata/baruipur', null, {}, new Date()).current.source.owner, 'West Bengal Pollution Control Board');
+  /* No station, so nobody measured anything: the owner is null, not a board that has no monitor here. */
+  assert.equal(buildPayload('in/kolkata/baruipur', null, {}, new Date()).current.source.owner, null);
+});
+
+/* ---- Audit I1: every unavailable says why. ---- */
+
+test(`a feed quiet for more than ${STALE_DAYS} days is unavailable with reason feed_quiet`, () => {
+  const c = buildPayload(KEY, stationFor(KEY), rawUpTo('2026-09-24T17:30:00Z'), new Date('2026-10-02T18:00:00Z')).current;
+  assert.equal(c.state, 'unavailable');
+  assert.equal(c.reason, 'feed_quiet');
+  assert.equal(c.last_observed_at, '2026-09-24T17:30:00.000Z');
+});
+
+test('no readings at all in the 31-day window is feed_quiet', () => {
+  const c = buildPayload(KEY, stationFor(KEY), { pm25: [], pm10: [], no2: [], so2: [], co: [], o3: [] }, new Date()).current;
+  assert.equal(c.reason, 'feed_quiet');
+  assert.equal(c.last_observed_at, null);
+});
+
+test('stale and failing CPCB validity is unavailable with reason no_valid_aqi', () => {
+  const c = buildPayload(KEY, stationFor(KEY), rawUpTo('2026-09-24T17:30:00Z', 10 / 24), at('2026-09-24T17:30:00Z', 30 * 3_600_000)).current;
+  assert.equal(c.state, 'unavailable');
+  assert.equal(c.reason, 'no_valid_aqi');
 });

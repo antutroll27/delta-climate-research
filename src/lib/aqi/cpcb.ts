@@ -7,6 +7,7 @@
  * that slope instead of the workbook's `400+(C-400)*100/539`.
  * Pure: no I/O, no clocks. Changing a number here is an algorithm change.
  */
+import { MIN_8H } from './hours.ts';
 import type { CpcbCategory, Pollutant, PollutantReading } from './types.ts';
 
 export const ALGORITHM = 'cpcb-aqi-1' as const;
@@ -65,6 +66,13 @@ export function combine(readings: readonly PollutantReading[]): Combined {
   const reasons = readings
     .filter((q) => q.hours_present < MIN_HOURS)
     .map((q) => `${LABEL[q.parameter]} had ${q.hours_present} of ${MIN_HOURS} required hours`);
+  /* Enough hours but still no sub-index: say why, or the reasons list would be silent about it. */
+  for (const q of readings) {
+    if (q.sub_index !== null || q.hours_present < MIN_HOURS) continue;
+    reasons.push(q.parameter === 'co' || q.parameter === 'o3'
+      ? `${LABEL[q.parameter]} had no 8-hour window with ${MIN_8H} of 8 hours`
+      : `${LABEL[q.parameter]} had no valid value`);
+  }
   const valid = readings.filter(isValidReading);
   const hasPm = valid.some((q) => q.parameter === 'pm25' || q.parameter === 'pm10');
   if (!hasPm) reasons.push('no valid PM2.5 or PM10');
