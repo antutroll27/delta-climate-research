@@ -36,8 +36,11 @@ export interface AqiStation {
 
 export interface PollutantReading {
   parameter: Pollutant;
-  /** Concentration over the CPCB window: 24 h mean, or 8 h for CO and O3. */
-  value: number;
+  /**
+   * Concentration over the CPCB window: 24 h mean, or 8 h for CO and O3.
+   * `null` when the window holds no readings; missing is null, never 0.
+   */
+  value: number | null;
   unit: 'ug_m3' | 'mg_m3';
   window_h: 24 | 8;
   /** Valid IST hours in the window; CPCB needs at least 16. */
@@ -87,4 +90,10 @@ export interface HistoryResponse {
   station: AqiStation | null;
   days: HistoryDay[];
   pm25_24h: { hour_ist: string; value: number | null }[];
+}
+
+/** What `GET /api/air-quality?area=in/kolkata/ballygunge` returns. */
+export interface AirQualityPayload {
+  current: AirQualityResponse;
+  history: HistoryResponse | null;
 }

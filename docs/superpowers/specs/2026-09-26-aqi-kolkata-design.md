@@ -31,7 +31,7 @@ interface AqiStation { id: string; name: string; owner: string; provider: string
   lat: number; lon: number; distance_m: number; inside: 'window_3km' }
 
 interface PollutantReading { parameter: 'pm25'|'pm10'|'no2'|'so2'|'co'|'o3'|'nh3';
-  value: number; unit: 'ug_m3'|'mg_m3'; window_h: 24|8; hours_present: number;
+  value: number | null; unit: 'ug_m3'|'mg_m3'; window_h: 24|8; hours_present: number;
   sub_index: number | null }
 
 interface AqiResult { aqi: number; category: CpcbCategory; dominant: PollutantReading['parameter'];
@@ -46,9 +46,14 @@ type AirQualityResponse = { schema: 1; area_id: string; served_at: string; sourc
 
 interface HistoryResponse { area_id: string; days: { date_ist: string; aqi: number | null;
   category: CpcbCategory | null; reason?: string }[]; pm25_24h: { hour_ist: string; value: number | null }[] }
+
+/** What `GET /api/air-quality?area=in/kolkata/ballygunge` returns. */
+interface AirQualityPayload { current: AirQualityResponse; history: HistoryResponse | null }
 ```
 
-Missing is `null`, never 0. Every state names the station (or its absence) and the source.
+Missing is `null`, never 0: a pollutant with no readings in its window carries `value: null`. Every state names the station (or its absence) and the source.
+
+One fetch of 31 days serves both the current state and the history, so the endpoint returns both in one `AirQualityPayload`; `history` is `null` only when it cannot be built. Area ids use OBOS's existing `AreaKey` form (`in/kolkata/ballygunge`).
 
 **State rules:** `live` when the newest raw reading is ≤ 2 h old and CPCB validity passes; `stale` when older than 2 h and ≤ 7 days; `unavailable` beyond 7 days or on upstream failure with no usable cache; `insufficient_data` when fresh but CPCB validity fails; `no_station` for Baruipur.
 
@@ -73,7 +78,7 @@ Missing is `null`, never 0. Every state names the station (or its absence) and t
 
 ## 6. Server function
 
-- `GET /api/air-quality?area_id=kolkata/ballygunge` and `GET /api/air-quality?area_id=…&view=history`; unknown areas → 404; other methods → 405.
+- `GET /api/air-quality?area=in/kolkata/ballygunge`; the same response carries `history`. Unknown areas → 404; other methods → 405.
 - Station registry in `src/lib/aqi/stations.ts` (three Kolkata entries), each assignment re-checked by a unit test against `window_3km` from the heat-history vector file.
 - Upstream: OpenAQ with a 10 s timeout, one retry. Current view cached `s-maxage=600, stale-while-revalidate=1800`; history `s-maxage=3600` (completed days never change). Worst-case uncached history ≈ 7 sensors × 3 pages per area, kept under OpenAQ's 60 requests/minute by the cache.
 - The key never reaches the browser, the logs or a response.
