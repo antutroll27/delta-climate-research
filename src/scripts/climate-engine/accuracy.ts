@@ -75,7 +75,7 @@ export const ACCURACY: Record<'peak' | 'night', PhaseAccuracy> = {
         + 'night is the quantitative view: over 50 ward-scenes the model\'s error is '
         + '2.677 K against a best-achievable 2.117 K, and it runs 0.36 K warmer than '
         + 'the measured surface on average (bias +0.36 K). The displayed band is '
-        + '+/-3 K because it must cover the leave-one-overpass-out error of 2.801 K, '
+        + '+/-3.0 K because it must cover the leave-one-overpass-out error of 2.801 K, '
         + 'not the in-sample fit.',
   },
   peak: {

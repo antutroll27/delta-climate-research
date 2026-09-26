@@ -97,6 +97,6 @@ test('every number quoted in the night note is the field it quotes', () => {
   has(`${ACCURACY.night.modelRmseK} K against a best-achievable ${ACCURACY.night.ceilingRmseK} K`);
   has(`bias ${bias >= 0 ? '+' : '−'}${Math.abs(bias).toFixed(2)} K`);
   has(`${bias >= 0 ? 'warmer' : 'colder'} than the measured surface`);
-  has(`+/-${ACCURACY.night.bandK} K`);
+  has(`+/-${ACCURACY.night.bandK.toFixed(1)} K`);
   has(`leave-one-overpass-out error of ${ACCURACY.night.looOverpassRmseK} K`);
 });
