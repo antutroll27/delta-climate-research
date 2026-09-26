@@ -26,6 +26,8 @@ introduced by that work.
 > decision to switch the blend off* below. The published spatial figures are the strength-0 column, which
 > is also the best column.
 
+*Update, 2026-09-24: the headline night band is now ±3.0 K, after the forcing-date correction in §15; the ±3.5 K below is the band as it stood at discovery.*
+
 **What was wrong** *(everything from here to "What would close it" is the record as written at discovery,
 kept in the present tense it was found in)*. The engine's headline accuracy — **night ±3.5 K, day ±5.0 K**
 — is produced by the Python validation stack, which builds each ward's vegetation field from
@@ -967,3 +969,37 @@ stale (in CI via `npm run check:bangalore`); `verify-served-data.mjs` fails a st
 `data/bangalore/dcurs-lst-scenes.json` rows carry no orbit id, so the 14-day settle window is the **only**
 guard against a very late granule being counted as a second scene. The data is clean today: no two rows are
 within 10 minutes of each other.
+
+---
+
+## 15. Night forcing was read 24 hours early for 20 passes (corrected 2026-09-24)
+
+**Status:** fixed · **See:** `scripts/_power.py`, `scripts/fetch-met.py`, the audit spec
+(`docs/superpowers/specs/2026-09-23-audit-fixes-1-5-design.md`).
+
+`fetch-met.py` built each NASA POWER lookup key from the pass's UTC **date** plus its local solar **hour**.
+POWER is stamped in local solar time, so every night pass after local midnight but before UTC midnight
+read air temperature, humidity, wind and cloud from 24 hours earlier: 20 of the 97 forcing rows, all at
+night. The worst case, 12 April 2026, used 22.09 °C where the right reading was 24.68 °C.
+
+The key now comes from the pass's own UTC instant (`_power.power_stamp`), `met-forcing.csv` records each
+row's `utc` and `power_stamp`, and `fetch-met.py --check` audits every row offline in CI. The accuracy
+measurement was re-run on the corrected forcing, scoring the constants that ship; the model itself was
+not re-fitted. Night bias moved from −0.182 K to +0.36 K (model minus measured surface), night RMSE from
+2.943 K to 2.677 K, and the leave-one-overpass-out error from 3.102 K to 2.801 K, so the published night
+band narrows from ±3.5 K to ±3.0 K. Daytime figures did not move.
+
+**A second defect surfaced during the rebuild.** `measure-accuracy.py` had been scoring the calibration
+candidate's free-fit `q_day` (0.5175) rather than the `Q` that ships (0.419), so any re-run since the
+2026-08-13 refit described a model that is not on the site; the published figures were unaffected only
+because they predated that drift. It now reads `Q` from `types.ts`, records the constants it scored, and a
+unit test holds all six to what ships.
+
+**What is still open.** `ward-scale-fit.json` holds candidates fitted on the pre-correction forcing, and
+says so in its note, until a re-fit. `canopy-blend-residual.json` is a frozen record of the canopy blend at
+strength 0.5, and its script refuses to re-run while the shipped strength is 0 (§1), so its night
+coefficients keep the pre-correction wind for these passes; its day figures, which the strength decision
+rested on, are unaffected. `fetch-met.py` sizes its POWER request from UTC dates, so one pass late on the
+last UTC date (2026-06-26 night) falls outside the fetched span and stays dropped, as it was before the fix.
+And `build-ward-observations.py` queries NASA's CMR catalogue live for granule metadata and drops a
+ward-scene silently if that query fails; this rebuild lost none.
