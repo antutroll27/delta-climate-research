@@ -71,8 +71,8 @@ Expected: an Excel 97 file and a PDF. If either download fails, stop and report;
 ```bash
 python3 -m venv /tmp/xlsvenv && /tmp/xlsvenv/bin/pip -q install xlrd==2.0.1
 /tmp/xlsvenv/bin/python - <<'EOF'
-import xlrd
-b = xlrd.open_workbook("/Users/antarikshakumar/.cache/delta-climate/cpcb/AQI-Calculator.xls", formatting_info=False)
+import os, xlrd
+b = xlrd.open_workbook(os.path.expanduser("~/.cache/delta-climate/cpcb/AQI-Calculator.xls"), formatting_info=False)
 for sh in b.sheets():
     print("=== SHEET", sh.name, sh.nrows, "x", sh.ncols)
     for r in range(min(sh.nrows, 80)):

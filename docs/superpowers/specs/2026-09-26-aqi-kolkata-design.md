@@ -87,8 +87,8 @@ One fetch of 31 days serves both the current state and the history, so the endpo
 
 ## 5. UI
 
-- **Right-panel block** (`#aqiBlock`, under the colour key, folded by default like `#solBlock`): the AQI number, CPCB category in words and colour, dominant pollutant, one line for station and distance, one for the IST observation time. Stale is muted with its age. AQI never enters the heat legend or the heat physics.
-- **Left pane** (rail item **Air**, `data-pane="air"`, placed after Solar): current state as above; each pollutant with its value, unit and sub-index; a 30-day daily-AQI bar chart coloured by CPCB category (missing days drawn as gaps); the last 24 h of PM2.5 as a line; a method-and-source note (CPCB standard, "measured by WBPCB, via OpenAQ", 3 km rule).
+- **Right-panel block** (`#aqiBlock`, in the right panel; not folded — whether it should fold like `#solBlock` is an open founder design call): the AQI number, CPCB category in words and colour, dominant pollutant, one line for station and distance, one for the IST observation time. Stale is muted with its age. AQI never enters the heat legend or the heat physics.
+- **Left pane** (rail item **Air**, `data-pane="air"`, placed after Solar): current state as above; each pollutant with its value, unit and sub-index; a 30-day daily-AQI bar chart coloured by CPCB category (days without an official AQI drawn as hatched stubs, reason in the tooltip); the last 24 h of PM2.5 as a line; a method-and-source note (CPCB standard, "measured by WBPCB, via OpenAQ", 3 km rule).
 - Every state has its own designed treatment; no state falls back to an empty number.
 
 **Visual decisions (approved on the preview, 2026-09-26; `previews/aqi-kolkata/index.html` in the worktree):**
