@@ -92,7 +92,7 @@ function block(c: Current, title: string, place: string, now: Date): string {
       const stale = c.state === 'stale';
       const chip = stale ? `<span class="chip old">Not Live<span class="sep">·</span><b>${c.age_h} h</b> Old</span>` : '<span class="chip live">Live</span>';
       return head(title, chip) + hero(c.result, stale) + stationLine(c.station, c.source.owner, place) +
-        `<p class="meta">Readings to <b>${esc(istFmt(c.observed_at))}</b>${stale ? '. The national CPCB feed has not updated since.' : ''}</p>`;
+        `<p class="meta">Readings to <b>${esc(istFmt(c.observed_at))}</b>${stale ? '. This station has not reported since.' : ''}</p>`;
     }
   }
 }
