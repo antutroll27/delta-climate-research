@@ -42,7 +42,7 @@ type AirQualityResponse = { schema: 1; area_id: string; served_at: string; sourc
   | { state: 'stale'; station: AqiStation; result: AqiResult; observed_at: string; age_h: number }
   | { state: 'unavailable'; station: AqiStation; last_observed_at: string | null }
   | { state: 'insufficient_data'; station: AqiStation; pollutants: PollutantReading[]; reasons: string[]; observed_at: string }
-  | { state: 'no_station'; nearest_km: number | null });
+  | { state: 'no_station'; message: string });
 
 interface HistoryResponse { area_id: string; days: { date_ist: string; aqi: number | null;
   category: CpcbCategory | null; reason?: string }[]; pm25_24h: { hour_ist: string; value: number | null }[] }
@@ -80,7 +80,7 @@ One fetch of 31 days serves both the current state and the history, so the endpo
 
 - `GET /api/air-quality?area=in/kolkata/ballygunge`; the same response carries `history`. Unknown areas → 404; other methods → 405.
 - Station registry in `src/lib/aqi/stations.ts` (three Kolkata entries), each assignment re-checked by a unit test against `window_3km` from the heat-history vector file.
-- Upstream: OpenAQ with a 10 s timeout, one retry. Current view cached `s-maxage=600, stale-while-revalidate=1800`; history `s-maxage=3600` (completed days never change). Worst-case uncached history ≈ 7 sensors × 3 pages per area, kept under OpenAQ's 60 requests/minute by the cache.
+- Upstream: OpenAQ with a 10 s timeout. One 31-day fetch per area serves both current state and history, cached `public, max-age=60, s-maxage=600, stale-while-revalidate=1800`; failures cached `s-maxage=60` only. Worst case ≈ 6 sensors × 3 pages per area per 10 minutes, well inside OpenAQ's 60 requests/minute and 2,000/hour.
 - The key never reaches the browser, the logs or a response.
 
 ## 7. Testing
