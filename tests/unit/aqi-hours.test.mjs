@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
-import { istHours, istHourKey, window24, window8 } from '../../src/lib/aqi/hours.ts';
+import { istHours, istHourKey, window24, window8, hoursBefore } from '../../src/lib/aqi/hours.ts';
 
 const raw = JSON.parse(readFileSync(new URL('../fixtures/aqi/ballygunge-pm25-2025-12-15.json', import.meta.url)));
 
@@ -33,4 +33,27 @@ test('an 8-hour value is the maximum rolling 8-hour mean inside the 24 hours', (
   const hours = new Map();
   for (let i = 0; i < 24; i++) hours.set(`2025-12-15T${String(i).padStart(2, '0')}`, { mean: i < 8 ? 100 : 10, n: 3 });
   assert.deepEqual(window8(hours, '2025-12-16T00'), { value: 100, hours: 24 });
+});
+
+test('a timestamp with no zone offset, or that fails to parse, is skipped rather than guessed', () => {
+  const h = istHours([
+    { end_utc: '2025-12-15T00:30:00Z', value: 60.7 },
+    { end_utc: '2025-12-15 00:30:00', value: 60.7 },
+    { end_utc: 'garbage', value: 60.7 },
+  ]);
+  assert.equal(h.size, 1);
+});
+
+test('an 8-hour window with fewer than 6 hours cannot be the maximum; the 17th window counts', () => {
+  const d = hoursBefore('2025-12-16T00'); const h = new Map();
+  d.forEach((k, i) => h.set(k, { mean: i >= 16 ? 100 : 10, n: 3 }));
+  assert.equal(window8(h, '2025-12-16T00').value, 100);   // kills "only 16 windows"
+  h.delete(d[16]); h.delete(d[17]); h.delete(d[18]);      // last window now 5/8
+  assert.ok(window8(h, '2025-12-16T00').value < 100);     // kills "no 6-of-8 gate"
+});
+
+test('hoursBefore returns the 24 hours before endKey, oldest first', () => {
+  const hb = hoursBefore('2026-03-01T02');
+  assert.equal(hb.length, 24);
+  assert.deepEqual([hb[0], hb[23]], ['2026-02-28T02', '2026-03-01T01']);
 });
