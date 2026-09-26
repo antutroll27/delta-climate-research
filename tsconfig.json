@@ -19,6 +19,8 @@
     // climate-engine self-checks run under `node --experimental-strip-types`).
     // noEmit is required alongside it — Astro/Vite own emit, tsc only type-checks.
     "allowImportingTsExtensions": true,
+    // Vercel's @vercel/node compiles api/*.ts file-by-file and keeps import specifiers verbatim; without this, api/air-quality.ts ships imports of '../src/lib/aqi/*.ts' that do not exist at runtime (every request 500s).
+    "rewriteRelativeImportExtensions": true,
     "noEmit": true
   }
 }
