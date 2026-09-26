@@ -18,6 +18,15 @@ export function isStampedUtc(s: string): boolean {
   return HAS_ZONE_OFFSET.test(s) && !Number.isNaN(Date.parse(s));
 }
 
+/**
+ * True when a raw row counts at all: a finite value above 0 (CPCB's calculator counts 0 as missing,
+ * workbook E8) and a stamp with an offset that parses (never guess a zone). The one gate for
+ * `istHours` and for the builder's freshness clock, so the two can never disagree.
+ */
+export function isUsable(r: Raw): boolean {
+  return Number.isFinite(r.value) && r.value > 0 && isStampedUtc(r.end_utc);
+}
+
 export function istHourKey(endUtc: string): HourKey {
   const startIst = new Date(Date.parse(endUtc) + IST_MS - QUARTER_MS);
   return startIst.toISOString().slice(0, 13);
@@ -26,8 +35,7 @@ export function istHourKey(endUtc: string): HourKey {
 export function istHours(raw: readonly Raw[]): Map<HourKey, Hour> {
   const acc = new Map<HourKey, { sum: number; n: number }>();
   for (const r of raw) {
-    if (!Number.isFinite(r.value) || r.value <= 0) continue; // CPCB's calculator counts 0 as missing (workbook E8)
-    if (!isStampedUtc(r.end_utc)) continue; // no offset, or unparsable: skip, never guess a zone
+    if (!isUsable(r)) continue;
     const k = istHourKey(r.end_utc);
     const a = acc.get(k) ?? { sum: 0, n: 0 };
     a.sum += r.value; a.n += 1; acc.set(k, a);

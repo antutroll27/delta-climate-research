@@ -119,3 +119,14 @@ test('a stale window that fails CPCB validity is unavailable, not insufficient_d
   assert.equal(p.current.state, 'unavailable');
   assert.equal(p.current.last_observed_at, '2026-09-24T17:30:00.000Z');
 });
+
+test('zero readings do not count as fresh: CPCB treats 0 as missing', () => {
+  const T = '2026-09-24T17:30:00Z';
+  const raw = rawUpTo(T);
+  for (const p of Object.keys(raw)) {
+    for (let t = Date.parse(T) + 900_000; t <= Date.parse(T) + 3 * 3_600_000; t += 900_000) raw[p].push({ end_utc: new Date(t).toISOString(), value: 0 });
+  }
+  const c = buildPayload(KEY, stationFor(KEY), raw, at(T, 3 * 3_600_000)).current;
+  assert.equal(c.state, 'stale');
+  assert.equal(c.observed_at, '2026-09-24T17:30:00.000Z');
+});

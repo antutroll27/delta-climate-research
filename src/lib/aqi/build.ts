@@ -1,6 +1,6 @@
 /** Compose the payload from raw readings. Pure; the clock is a parameter. */
 import { ALGORITHM, combine, subIndex, MIN_HOURS } from './cpcb.ts';
-import { hoursBefore, istHourKey, istHours, isStampedUtc, window24, window8, type Hour, type HourKey, type Raw } from './hours.ts';
+import { hoursBefore, istHourKey, istHours, isUsable, window24, window8, type Hour, type HourKey, type Raw } from './hours.ts';
 import { POLLUTANTS, type StationEntry } from './stations.ts';
 import { SCHEMA, type AirQualityPayload, type AqiStation, type HistoryDay, type Pollutant, type PollutantReading, type SourceNote } from './types.ts';
 
@@ -24,12 +24,12 @@ function readings(hours: Record<string, Map<HourKey, Hour>>, st: StationEntry, e
   });
 }
 
-/** Newest end stamp across all pollutants, ms; -Infinity when none. Uses the same stamp gate as `istHours`, and a loop, not a spread (~18k rows). */
+/** Newest end stamp across all pollutants, ms; -Infinity when none. Counts only rows `istHours` counts (`isUsable`), and a loop, not a spread (~18k rows). */
 function lastStampMs(raw: Partial<Record<Pollutant, Raw[]>>): number {
   let last = -Infinity;
   for (const p of POLLUTANTS) {
     for (const r of raw[p] ?? []) {
-      if (!isStampedUtc(r.end_utc)) continue;
+      if (!isUsable(r)) continue;
       const t = Date.parse(r.end_utc);
       if (t > last) last = t;
     }
