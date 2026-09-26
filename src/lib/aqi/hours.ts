@@ -13,6 +13,11 @@ const QUARTER_MS = 15 * 60_000;
 /** A timestamp with an explicit zone offset (Z or ±HH:MM). Without one, Date.parse reads it as local time. */
 const HAS_ZONE_OFFSET = /(Z|[+-]\d\d:\d\d)$/;
 
+/** True when `s` carries an explicit zone offset and parses. The one gate for every consumer of `end_utc`. */
+export function isStampedUtc(s: string): boolean {
+  return HAS_ZONE_OFFSET.test(s) && !Number.isNaN(Date.parse(s));
+}
+
 export function istHourKey(endUtc: string): HourKey {
   const startIst = new Date(Date.parse(endUtc) + IST_MS - QUARTER_MS);
   return startIst.toISOString().slice(0, 13);
@@ -22,7 +27,7 @@ export function istHours(raw: readonly Raw[]): Map<HourKey, Hour> {
   const acc = new Map<HourKey, { sum: number; n: number }>();
   for (const r of raw) {
     if (!Number.isFinite(r.value) || r.value <= 0) continue; // CPCB's calculator counts 0 as missing (workbook E8)
-    if (!HAS_ZONE_OFFSET.test(r.end_utc) || Number.isNaN(Date.parse(r.end_utc))) continue; // no offset, or unparsable: skip, never guess a zone
+    if (!isStampedUtc(r.end_utc)) continue; // no offset, or unparsable: skip, never guess a zone
     const k = istHourKey(r.end_utc);
     const a = acc.get(k) ?? { sum: 0, n: 0 };
     a.sum += r.value; a.n += 1; acc.set(k, a);
