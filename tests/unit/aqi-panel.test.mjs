@@ -129,3 +129,9 @@ test('missing days are hatched stubs; a day with no readings says so in its tip'
   assert.ok(gap, 'the day after the feed died is missing');
   assert.match(barTipHtml(gap), /No official AQI[\s\S]*no readings/);
 });
+
+test('an area with no station never names a board as measuring it', () => {
+  const html = paneHtml(buildPayload('in/kolkata/baruipur', null, {}, new Date()), 'Baruipur');
+  assert.doesNotMatch(html, /Measured by/);
+  assert.match(html, /3 km window/);
+});

@@ -167,15 +167,16 @@ function line24(h: HistoryResponse['pm25_24h'], label: string): string {
 
 const HATCH_KEY = '<svg width="10" height="10" aria-hidden="true"><defs><pattern id="aqHatchKey" width="3" height="3" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="3" stroke="var(--faint)" stroke-width="1.2"/></pattern></defs><rect width="10" height="10" rx="2" fill="url(#aqHatchKey)" stroke="var(--faint)" stroke-width=".6"/></svg>';
 
-function method(owner: string): string {
-  return `<p class="pane-note">CPCB National AQI, the highest of the pollutant sub-indices. Measured by the ${esc(owner)}, received via CPCB and OpenAQ. A monitor counts for a place when it stands inside the 3 km window around the OBOS centre. Air quality is a separate layer: it does not enter the heat model.</p>`;
+function method(owner: string | null): string {
+  const who = owner ? ` Measured by the ${esc(owner)}, received via CPCB and OpenAQ.` : '';
+  return `<p class="pane-note">CPCB National AQI, the highest of the pollutant sub-indices.${who} A monitor counts for a place when it stands inside the 3 km window around the OBOS centre. Air quality is a separate layer: it does not enter the heat model.</p>`;
 }
 
 /** The Air pane: the card's state again, then pollutants, 30 days, the 24 h PM2.5 line and the method note. */
 export function paneHtml(p: AirQualityPayload, placeName: string, now: Date = new Date()): string {
   const c = demote(p.current, now);
   let s = `<p class="pane-h" id="pane-air-h">Air · ${esc(placeName)}</p><div class="aqblock">${block(c, '', placeName, now)}</div>`;
-  if (c.state === 'no_station') return s + method(c.source.owner);
+  if (c.state === 'no_station') return s + method(null);
   s += polTable(c);
   const h = p.history;
   if (h && h.days.length) {
