@@ -262,6 +262,9 @@ export function unmeasuredNote(fields: readonly string[], points: number): strin
  * empirical benchmark and the benchmark beat all 30.
  *
  * Regenerate with: python3 scripts/measure-scale-skill.py
+ *
+ * PRE-CORRECTION FORCING, like SPATIAL below: not re-run after the 2026-09-24
+ * forcing-date correction (docs/evidence/known-limitations.md §15).
  */
 export const SCALE_SKILL = Object.freeze({
   /** the published comparison: one ECOSTRESS cell */
