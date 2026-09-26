@@ -65,6 +65,7 @@ import { areaRefusal } from './scope/reachability.ts';
 import { isAreaKey, splitKey, type AreaKey } from './scope/registry.ts';
 import { toLegacyWard } from './scope/legacy.ts';
 import { prefetchPlan, runPrefetch, shouldPrefetch, type PrefetchConnection } from './ward-prefetch';
+import { loadAir, loadingPaneHtml, uncoveredPaneHtml, wireBarTips } from './air/air-panel.ts';
 
 // Ward set lives in src/data/wards.ts so widening beyond three is a data change,
 // not a code change (dc-urs-spec.md §1).
@@ -1094,10 +1095,54 @@ export function mountHeatMap(): () => void {
   }
   const onSolToggle = () => setSolarOpen(el('solBody')?.hasAttribute('hidden') ?? false);
   el('solToggle')?.addEventListener('click', onSolToggle);
-  const paneObs = new MutationObserver(() => placeSolarBlock());
+
+  /* ── air quality, the area's government monitor ──
+     The legend's air block moves exactly as the solar one does: above the colour key
+     while the Air pane is open, above the attribution otherwise. Off-pane it sits
+     ABOVE the solar block whenever that one is also at the bottom, so the two never
+     trade places depending on which observer ran last. It has no fold: the card is
+     already a header-sized summary. */
+  let lastAirPane: string | null = null;
+  function placeAirBlock() {
+    const legend = el('legend'), block = el('aqiBlock');
+    if (!legend || !block) return;
+    const pane = document.documentElement.getAttribute('data-open-pane') ?? '';
+    if (pane === lastAirPane) return;
+    lastAirPane = pane;
+    const attr = legend.querySelector(':scope > .attr'), sol = el('solBlock');
+    const below = sol && sol.nextElementSibling === attr ? sol : attr;
+    if (pane === 'air') { if (legend.firstElementChild !== block) legend.prepend(block); }
+    else if (block.nextElementSibling !== below) legend.insertBefore(block, below);
+  }
+  /* Kolkata only in the first release (spec 2026-09-26-aqi-kolkata-design.md §5).
+     The fetch is ~7 s cold (31 days from six sensors), so it never blocks the area
+     load: the pane says "Loading", the card stays hidden until an answer lands, and
+     an answer for an area the reader has already left is dropped (loadAir). */
+  let airAbort: AbortController | null = null;
+  function paintAir() {
+    airAbort?.abort();
+    airAbort = null;
+    const block = el('aqiBlock'), pane = el('airPane');
+    if (!block || !pane) return;
+    const area = state.ward, place = areaName();
+    block.hidden = true;
+    if (splitKey(area).city !== 'kolkata') { pane.innerHTML = uncoveredPaneHtml(place); return; }
+    pane.innerHTML = loadingPaneHtml(place);
+    const ctl = new AbortController();
+    airAbort = ctl;
+    void loadAir(area, place, { fetch: (u, i) => fetch(u, i), signal: ctl.signal, isCurrent: () => state.ward === area }).then((v) => {
+      if (!v || airAbort !== ctl) return;
+      pane.innerHTML = v.pane;
+      wireBarTips(pane, v.days);
+      if (v.block !== null) { block.innerHTML = v.block; block.hidden = false; }
+    });
+  }
+
+  const paneObs = new MutationObserver(() => { placeSolarBlock(); placeAirBlock(); });
   paneObs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-open-pane'] });
   placeSolarBlock(true);
-  cleanup.push(() => { el('solToggle')?.removeEventListener('click', onSolToggle); paneObs.disconnect(); });
+  placeAirBlock();
+  cleanup.push(() => { el('solToggle')?.removeEventListener('click', onSolToggle); paneObs.disconnect(); airAbort?.abort(); });
 
   /* ── the Solar pane ──
      The ten best roofs by yield, each row a building on the map; the download is
@@ -2119,6 +2164,7 @@ export function mountHeatMap(): () => void {
 
     currentWardSizeM = d.sizeM;
     paintSolarWard();
+    paintAir();
     const mc = maplibregl.MercatorCoordinate.fromLngLat([w.lon, w.lat], 0);
     /* The scale comes from ward-frame.ts, not from mc.meterInMercatorCoordinateUnits()
        alone: that number is MapLibre's sphere, and our data's metres are not its

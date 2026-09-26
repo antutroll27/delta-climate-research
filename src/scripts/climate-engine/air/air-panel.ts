@@ -102,9 +102,10 @@ export function cardHtml(p: AirQualityPayload, placeName: string, now: Date = ne
   return block(demote(p.current, now), `Air quality · ${esc(placeName)}`, placeName, now);
 }
 
+const FAILED = 'Air quality could not be loaded: the government feed or our service is not responding.';
 /** What the card and the pane show when the request itself failed: network, 5xx or not JSON. No number. */
 export function unavailableHtml(placeName: string): string {
-  return feedDown(`Air quality · ${esc(placeName)}`, 'Air quality could not be loaded: the government feed or our service is not responding.');
+  return feedDown(`Air quality · ${esc(placeName)}`, FAILED);
 }
 
 function polTable(c: Current): string {
@@ -194,6 +195,58 @@ export function barTipHtml(d: HistoryDay): string {
   return d.aqi === null || d.category === null || d.dominant === null
     ? `${esc(d.date_ist)}<br>No official AQI<br><span style="color:var(--faint)">${esc((d.reason ?? '').split(';')[0])}</span>`
     : `${esc(d.date_ist)}<br><b style="font-weight:400;color:${col(d.category)}">${d.aqi}</b> · ${WORD[d.category]}<br><span style="color:var(--faint)">led by ${POL[d.dominant]}</span>`;
+}
+
+/* ── the pane's two holding states, and the request itself ─────────────────── */
+
+const paneHead = (place: string): string => `<p class="pane-h" id="pane-air-h">Air · ${esc(place)}</p>`;
+
+/** While the request is in flight. The card stays hidden meanwhile: it appears once, with an answer. */
+export function loadingPaneHtml(place: string): string {
+  return paneHead(place) + '<p class="pane-note">Loading air quality…</p>';
+}
+
+/** A city the first release does not cover. Painted by script too, since the console switches areas in place. */
+export function uncoveredPaneHtml(place: string): string {
+  return paneHead(place) + '<p class="pane-note">Air quality covers Kolkata first; this city is not yet covered.</p>';
+}
+
+/** What `loadAir` hands the app: the card (null = keep it hidden), the whole pane, and the bars' days for `wireBarTips`. */
+export interface AirPaint { block: string | null; pane: string; days: readonly HistoryDay[] }
+
+export interface AirIo {
+  fetch: (url: string, init: { signal: AbortSignal }) => Promise<Pick<Response, 'ok' | 'json'>>;
+  signal: AbortSignal;
+  /** Asked AFTER the await: false once the reader has moved to another area. */
+  isCurrent: () => boolean;
+  now?: Date;
+}
+
+const isPayload = (b: unknown): b is AirQualityPayload => {
+  const c = typeof b === 'object' && b !== null ? (b as { current?: unknown }).current : null;
+  return typeof c === 'object' && c !== null && typeof (c as { state?: unknown }).state === 'string';
+};
+
+/**
+ * FETCH AND CHOOSE, with no DOM: what the reader should see after asking
+ * `/api/air-quality` about `area`. Null means PAINT NOTHING: the request was
+ * aborted, or its answer (success or failure alike) is for an area the reader has
+ * already left. Every failure (network, non-OK status, non-JSON, a body with no
+ * `current`) is the designed feed-down view in both places, never a silent hide.
+ */
+export async function loadAir(area: string, place: string, io: AirIo): Promise<AirPaint | null> {
+  let body: unknown = null, ok = false;
+  try {
+    const r = await io.fetch(`/api/air-quality?area=${encodeURIComponent(area)}`, { signal: io.signal });
+    /* A non-OK body is not trusted even when it parses. */
+    if (r.ok) { body = await r.json(); ok = true; }
+  } catch { ok = false; }
+  if (io.signal.aborted || !io.isCurrent()) return null;
+  if (!ok || !isPayload(body)) {
+    return { block: unavailableHtml(place), pane: paneHead(place) + `<div class="aqblock">${feedDown('', FAILED)}</div>`, days: [] };
+  }
+  const now = io.now ?? new Date();
+  return { block: cardHtml(body, place, now), pane: paneHtml(body, place, now), days: body.history?.days ?? [] };
 }
 
 /** The only DOM-touching export: hover tooltips on the 30-day chart painted by `paneHtml` into `root`. */
