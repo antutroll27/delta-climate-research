@@ -39,6 +39,7 @@ import argparse
 import csv
 import datetime as dt
 import json
+import math
 import os
 import subprocess
 import sys
@@ -218,9 +219,15 @@ def landsat_scenes() -> list[SuhiiRow]:
 
 
 def _hour_gap(utc: str, local_solar_hour: str) -> float:
-    """Hours between `utc` read on POWER's clock and a recorded local solar hour, mod 24."""
+    """Hours between `utc` read on POWER's clock and a recorded local solar hour, mod 24.
+
+    An empty or non-numeric hour gives nan, which check()'s pin fails."""
+    try:
+        hour = float(local_solar_hour)
+    except (TypeError, ValueError):
+        return math.nan
     t = dt.datetime.fromisoformat(utc.rstrip("Z")) + dt.timedelta(hours=LON / 15)
-    return abs((t.hour + t.minute / 60 + t.second / 3600 - float(local_solar_hour) + 12) % 24 - 12)
+    return abs((t.hour + t.minute / 60 + t.second / 3600 - hour + 12) % 24 - 12)
 
 
 def check() -> int:
