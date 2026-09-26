@@ -1122,10 +1122,11 @@ export function mountHeatMap(): () => void {
   function paintAir() {
     airAbort?.abort();
     airAbort = null;
-    const block = el('aqiBlock'), pane = el('airPane');
+    const block = el('aqiBlock'), pane = el('airPane'), status = el('airStatus');
     if (!block || !pane) return;
     const area = state.ward, place = areaName();
     block.hidden = true;
+    if (status) status.textContent = '';
     if (splitKey(area).city !== 'kolkata') { pane.innerHTML = uncoveredPaneHtml(place); return; }
     pane.innerHTML = loadingPaneHtml(place);
     const ctl = new AbortController();
@@ -1134,6 +1135,7 @@ export function mountHeatMap(): () => void {
       if (!v || airAbort !== ctl) return;
       pane.innerHTML = v.pane;
       wireBarTips(pane, v.days);
+      if (status) status.textContent = v.status;
       if (v.block !== null) { block.innerHTML = v.block; block.hidden = false; }
     });
   }

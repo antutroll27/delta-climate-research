@@ -76,3 +76,52 @@ test('the loading and not-covered panes name the place and keep the heading', ()
     assert.doesNotMatch(html, /<Road>/, 'the place is escaped');
   }
 });
+
+/* ── I5: the payload is validated at the boundary ──────────────────────────── */
+const clone = () => structuredClone(PAYLOAD);
+test('a hostile category is a load failure, never painted', async () => {
+  const p = clone(); p.current.result.category = 'good);"><img src=x onerror=alert(2)>';
+  assertFailed(await run(json(p)).out);
+});
+test('a malformed payload of any kind is a load failure', async () => {
+  const bad = [
+    (p) => { p.current.state = 'bogus'; },
+    (p) => { p.current.result.aqi = '<img src=x>'; },
+    (p) => { p.current.result.aqi = Number.NaN; },
+    (p) => { p.current.result.dominant = 'pm1'; },
+    (p) => { p.current.age_h = Infinity; },
+    (p) => { p.current.observed_at = 7; },
+    (p) => { p.current.result.pollutants = {}; },
+    (p) => { p.current.result.pollutants[0].sub_index = '12'; },
+    (p) => { p.current.result.pollutants[0].unit = 'ppb'; },
+    (p) => { p.current.station.distance_m = '993'; },
+    (p) => { p.current.station.name = 5; },
+    (p) => { p.history.days = 'x'; },
+    (p) => { p.history.days[0].aqi = '<b>'; },
+    (p) => { p.history.days[0].category = 'purple'; },
+    (p) => { p.history.pm25_24h[0].value = '1'; },
+  ];
+  for (const f of bad) { const p = clone(); f(p); assertFailed(await run(json(p)).out); }
+});
+test('isAirPayload accepts every state the builder emits', async () => {
+  const { isAirPayload } = await import('../../src/lib/aqi/valid.ts');
+  const now = NOW;
+  const short = raw('2026-09-26T08:15:00Z');
+  for (const p of Object.keys(short)) short[p] = short[p].filter((r) => Date.parse(r.end_utc) > now - 10 * 36e5);
+  const all = [
+    buildPayload(K, stationFor(K), raw('2026-09-26T08:15:00Z'), now),
+    PAYLOAD,
+    buildPayload(K, stationFor(K), raw('2026-09-10T00:00:00Z'), now),
+    buildPayload(K, stationFor(K), {}, now),
+    buildPayload(K, stationFor(K), short, now),
+    buildPayload('in/kolkata/baruipur', null, {}, now),
+  ];
+  assert.deepEqual(all.map((p) => p.current.state), ['live', 'stale', 'unavailable', 'unavailable', 'insufficient_data', 'no_station']);
+  for (const p of all) assert.equal(isAirPayload(JSON.parse(JSON.stringify(p))), true, p.current.state);
+});
+test('loadAir hands the app a status line', async () => {
+  const v = await run(json(PAYLOAD)).out;
+  assert.match(v.status, /^Air quality, Ballygunge: \d+ \w+, not live, \d+ hours old$/);
+  const f = await run(new TypeError('Failed to fetch')).out;
+  assert.equal(f.status, 'Air quality, Ballygunge: could not be loaded just now.');
+});

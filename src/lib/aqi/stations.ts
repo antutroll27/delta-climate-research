@@ -1,8 +1,10 @@
 // src/lib/aqi/stations.ts
 /**
  * The three Kolkata areas and their government monitors. Positions verified
- * 2026-09-26 (register AQI-R20, R21); UNITS VERIFIED AGAINST OpenCity's native-unit
- * archive, not taken from OpenAQ's labels, which are wrong (AQI-R31). A change here
+ * 2026-09-26 (register AQI-R20, R21). Units come from a per-sensor table, never
+ * from OpenAQ's labels, which are wrong (AQI-R31): Ballygunge's are verified against
+ * OpenCity's native-unit archive; Barrackpore's CO and NO₂ are verified (magnitude,
+ * NOx closure) but its SO₂ µg/m³ is INFERRED, not verified (AQI-R31). A change here
  * is a data claim: update the register in the same commit.
  */
 import type { AqiStation, Pollutant } from './types.ts';

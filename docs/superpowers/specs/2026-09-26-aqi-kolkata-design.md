@@ -11,7 +11,7 @@
 | D2 | A station counts as covering a place when it lies inside that place's **3 km window** (`window_3km` in the heat-history vector file). The UI always states the distance ("Station 1.0 km from the Ballygunge centre") and never calls it the ward's own air. |
 | D3 | Server boundary: one **TypeScript** Vercel Function, `api/air-quality.ts`, beside `api/live.js` and `api/climate-clock.js`, mounted in `devApiProxies()` for `npm run dev`. |
 | D4 | Source: **OpenAQ v3**, government locations only; key server-side in `OPENAQ_API_KEY`. No WAQI, no low-cost sensors. |
-| D5 | When the feed is late, the card shows the **last valid AQI, muted, with its age** for up to **7 days**; after that, "Government feed unavailable". |
+| D5 | When the feed is late, the card shows the **last valid AQI, muted, with its age** for up to **7 days**; after that, "No readings have reached us from this station for more than 7 days" (chip "No data"). The wording never says whose fault a gap is (§5). |
 | D6 | History = **last 30 days of daily CPCB AQI** plus **the last 24 h of PM2.5**, fetched from OpenAQ; no database. |
 | D7 | Order of work: contract → UI previews on fixtures → server function. |
 
@@ -46,7 +46,7 @@ interface AqiResult { aqi: number; category: CpcbCategory; dominant: Pollutant;
 type AirQualityResponse = { schema: 1; area_id: string; served_at: string; source: SourceNote } & (
   | { state: 'live'; station: AqiStation; result: AqiResult; observed_at: string }
   | { state: 'stale'; station: AqiStation; result: AqiResult; observed_at: string; age_h: number }
-  | { state: 'unavailable'; station: AqiStation; last_observed_at: string | null }
+  | { state: 'unavailable'; station: AqiStation; last_observed_at: string | null; reason: 'feed_quiet' | 'no_valid_aqi' | 'upstream_error' }
   | { state: 'insufficient_data'; station: AqiStation; pollutants: PollutantReading[]; reasons: string[]; observed_at: string }
   | { state: 'no_station'; message: string });
 
@@ -90,6 +90,8 @@ One fetch of 31 days serves both the current state and the history, so the endpo
 - **Right-panel block** (`#aqiBlock`, in the right panel; not folded — whether it should fold like `#solBlock` is an open founder design call): the AQI number, CPCB category in words and colour, dominant pollutant, one line for station and distance, one for the IST observation time. Stale is muted with its age. AQI never enters the heat legend or the heat physics.
 - **Left pane** (rail item **Air**, `data-pane="air"`, placed after Solar): current state as above; each pollutant with its value, unit and sub-index; a 30-day daily-AQI bar chart coloured by CPCB category (days without an official AQI drawn as hatched stubs, reason in the tooltip); the last 24 h of PM2.5 as a line; a method-and-source note (CPCB standard, "measured by WBPCB, via OpenAQ", 3 km rule).
 - Every state has its own designed treatment; no state falls back to an empty number.
+- **Wording is neutral about whose fault a gap is** (an outage can sit anywhere between the station and us): stale reads "No readings have reached us since {time}"; `unavailable` says one sentence per `reason` (chips "No data", "No AQI", "Not loaded"), and a failed request reads like `upstream_error`. The AQI is **calculated by OBOS with CPCB's method** and can differ slightly from CPCB's published figure; the hero names the dominant pollutant's window ("24-hour mean", or "maximum 8-hour mean" for O₃ and CO).
+- **Trust and access:** the UI paints only a body that passes `isAirPayload` (`src/lib/aqi/valid.ts`); each 30-day bar is keyboard-focusable with its own label, a visually hidden list repeats the 30 days, and one polite `#airStatus` line (not the whole pane) announces the state.
 
 **Visual decisions (approved on the preview, 2026-09-26; `previews/aqi-kolkata/index.html` in the worktree):**
 - Typography follows the other OBOS panes: Noplato Mono for headings, table and chart labels, AQI number. **Units are always set in Mona Sans** (`µg/m³`, `mg/m³`): the brand mono is capitals-only and would print "MG/M³".

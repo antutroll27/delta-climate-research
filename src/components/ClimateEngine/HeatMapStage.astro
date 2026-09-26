@@ -346,11 +346,17 @@ const newCity = scope.area.hasData
           what is written here is only the first paint, and the script overwrites
           it on an in-place city switch as well. */}
       <div class="pane" data-pane="air">
-        <section class="pane-body" id="airPane" aria-labelledby="pane-air-h" aria-live="polite">
+        <section class="pane-body" id="airPane" aria-labelledby="pane-air-h">
           <p class="pane-h" id="pane-air-h">Air · <span id="airPaneArea">{scope.area.name}</span></p>
           <p class="pane-note" id="airPaneBody">{scope.city.id === 'kolkata' ? 'Loading air quality…' : 'Air quality covers Kolkata first; this city is not yet covered.'}</p>
         </section>
       </div>
+
+      {/* THE AIR PANE'S ONLY LIVE REGION: one line of state (air-panel.ts statusText),
+          set by paintAir. The pane itself is not live, so a repaint is never read
+          out whole; and this sits outside the pane, whose visibility:hidden would
+          silence it whenever another pane is open. */}
+      <p class="aq-sr" id="airStatus" role="status" aria-live="polite"></p>
 
       <div class="pane" data-pane="scenarios">
         <section class="pane-body" aria-labelledby="pane-scenarios-h">
@@ -2291,7 +2297,7 @@ const newCity = scope.area.hasData
   [data-pane="air"] table.pol{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:.64rem}
   [data-pane="air"] table.pol th{text-align:left;font-weight:400;font-size:.46rem;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);padding:0 0 6px;border-bottom:1px solid var(--line-hi)}
   [data-pane="air"] table.pol td{padding:6px 0;border-bottom:1px solid var(--line);color:var(--paper);vertical-align:middle}
-  [data-pane="air"] table.pol td.n{color:var(--ink)}
+  [data-pane="air"] table.pol td.n{color:var(--ink);padding-left:8px}
   [data-pane="air"] .unit{font-family:var(--sans);font-size:.56rem;color:var(--faint);letter-spacing:0;text-transform:none}
   [data-pane="air"] .si{display:flex;align-items:center;gap:6px}
   [data-pane="air"] .si i{display:block;height:6px;border-radius:0 3px 3px 0;min-width:2px}
@@ -2301,6 +2307,11 @@ const newCity = scope.area.hasData
   [data-pane="air"] .tip.on{opacity:1}
   [data-pane="air"] .aq-legend{display:flex;flex-wrap:wrap;gap:6px 10px;font-size:.58rem;color:var(--ink)}
   [data-pane="air"] .aq-legend span{display:inline-flex;align-items:center;gap:5px}
+  /* Keyboard: each bar's hit-rect takes focus and shows its tooltip; the ring is a stroke, which every engine draws on SVG. */
+  [data-pane="air"] .aq-bars rect.hit{outline:none}
+  [data-pane="air"] .aq-bars rect.hit:focus-visible{stroke:var(--cyan);stroke-width:1.5}
+  /* Visually hidden, still read: the 30-day list behind the chart and the #airStatus line. */
+  .aq-sr{position:absolute;width:1px;height:1px;margin:-1px;padding:0;border:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
   @media (prefers-reduced-motion: reduce){ [data-pane="air"] .tip{transition:none} }
 
   .strip{display:flex;gap:1px;background:var(--line);border-top:1px solid var(--line);position:relative;z-index:5}
