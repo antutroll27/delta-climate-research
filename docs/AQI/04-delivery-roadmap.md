@@ -1,0 +1,217 @@
+# AQI Delivery Roadmap
+
+**Version:** 1.1  
+**Date:** 25 September 2026  
+**Status:** Proposed  
+**Constraint:** One technical lead; ship government-station AQI before device work
+
+## 1. Delivery strategy
+
+Build the smallest complete path before expanding coverage:
+
+```text
+one verified source
+→ one correct CPCB calculation
+→ one typed area endpoint
+→ one frontend card/marker
+→ one resilient government-station release
+→ one durable history
+```
+
+The first proof point is not the number of dashboard features. It is that OBOS can
+trace a displayed reading from instrument and timestamp through a reproducible
+calculation to a clear coverage claim.
+
+## 2. Phase 0 — scientific and contractual closure
+
+**Objective:** Remove ambiguity before application code depends on it.
+
+Tasks:
+
+- Transcribe CPCB pollutant and AQI breakpoints from the official workbook.
+- Verify the exact 8-hour treatment for CO and O3 against workbook outputs.
+- Verify the 16-hour completeness rule for every pollutant/window.
+- Produce calculation fixtures at breakpoints, just below/above breakpoints,
+  missing-data cases and dominant-pollutant changes.
+- Confirm OpenAQ attribution, provider metadata and production-use terms.
+- Rotate the exposed WAQI token and keep WAQI outside the production design.
+- Fetch current coordinates/status for candidate Kolkata and Bengaluru stations.
+- Version the OBOS area geometry used for point-in-polygon assignment.
+
+Exit criteria:
+
+- The calculation specification has no unresolved numerical ambiguity.
+- Golden fixtures reproduce official CPCB examples/workbook values.
+- Every selected live source has recorded licence and attribution requirements.
+- Ballygunge, Barrackpore and Baruipur each have a reviewed coverage classification.
+
+## 3. Phase 1 — typed AQI function
+
+**Objective:** Deliver a correct server-function response for a single area.
+
+Tasks:
+
+- Create `api/air-quality.ts` and the shared `src/lib/aqi` TypeScript modules.
+- Add server-only environment validation and a `GET`-only request boundary.
+- Implement an OpenAQ v3 client with timeouts, runtime-validated responses and fixtures.
+- Implement the pure CPCB calculation module.
+- Implement station/area mapping and explicit coverage states.
+- Add `GET /api/air-quality?area_id={area_id}`.
+- Add structured logging, request IDs and upstream-error handling.
+- Define and export the shared `AirQualityResponse` discriminated union.
+
+Exit criteria:
+
+- Unit tests cover every breakpoint and validity rule.
+- Contract tests cover inside, nearby, insufficient, stale and unavailable states.
+- No upstream secret reaches the browser, logs or response payload.
+- A cached request remains within the OpenAQ pilot allowance under expected traffic.
+
+## 4. Phase 2 — Astro integration
+
+**Objective:** Make one live measurement understandable inside OBOS.
+
+Tasks:
+
+- Add one typed fetch wrapper around `/api/air-quality`.
+- Add the area air-quality card and station marker.
+- Display standard, source, observation time, freshness and dominant pollutant.
+- Add honest `nearby`, `no_station`, `insufficient_data` and error states.
+- Keep AQI out of the thermal simulation and heat legend.
+- Add accessible text equivalents; do not rely on category colour alone.
+- Add analytics events for feature use without collecting precise user location.
+
+Exit criteria:
+
+- The UI never represents a nearby station as a ward measurement.
+- Empty and stale states are usable and visually tested.
+- The page passes existing accessibility and production-build checks.
+- A user can reach methodology and attribution from the displayed value.
+
+## 5. Phase 3 — government-station history
+
+**Objective:** Turn government-station snapshots into a reproducible recent history.
+
+Tasks:
+
+- Store normalized government-station readings and source metadata in PostgreSQL.
+- Add bounded history queries and a retention policy.
+- Record provider, owner, station, source licence and upstream observation time.
+- Preserve raw upstream payload hashes for reproducibility and debugging.
+- Add idempotent scheduled ingestion only after on-demand reads are stable.
+- Cross-check sampled OpenAQ observations against the CPCB/data.gov.in feed and
+  official state-board reports.
+
+Exit criteria:
+
+- A sampled chart point can be traced to its government instrument and raw input.
+- Duplicate ingestion does not create duplicate observations.
+- Gaps, stale values and upstream outages remain explicit.
+- Recalculation under a new algorithm version does not overwrite prior results.
+
+## 6. Phase 4 — operational tooling
+
+**Objective:** Turn snapshots into a reliable longitudinal dataset.
+
+Tasks:
+
+- Add provider archival only at a cadence justified by the product.
+- Add database backup and restore testing.
+- Add data exports with provenance and licence fields.
+- Add alert thresholds for upstream staleness and ingestion failure.
+
+Exit criteria:
+
+- A sampled chart point can be traced to raw input and algorithm version.
+- Restore testing meets the documented recovery objective.
+- Operational alerts distinguish provider failure, stale station data and invalid data.
+
+## 7. Phase 5 — future sensors, scale and research readiness
+
+**Objective:** Expand only after the pilot produces trustworthy evidence.
+
+Possible work:
+
+- Select, calibrate and deploy the first OBOS ESP32-S3 device in an under-covered
+  area after the government-station release is stable.
+- Implement the deferred telemetry and per-device authentication contract.
+- Introduce managed MQTT/IoT infrastructure if fleet behaviour requires it.
+- Add PostGIS spatial queries and more formal administrative boundaries.
+- Evaluate a clearly labelled modelled layer where measurements are absent.
+- Build calibrated exposure and intervention studies.
+- Prepare anonymized, consent-aware datasets for external research.
+
+ML/RL work begins only after a research protocol defines the target, causal limits,
+training/validation split, geographic transfer test, baseline and safety constraints.
+Sparse station data and early low-cost devices are not sufficient evidence for claims
+about improving neighbourhood or population outcomes.
+
+## 8. Pilot cost controls
+
+The initial plan is intended to fit a constrained prototype budget.
+
+| Component | Pilot approach | Spend trigger |
+|---|---|---|
+| Frontend | Existing Vercel project | Existing account limits become material |
+| AQI server function | Existing Vercel project and TypeScript runtime | Reliability or runtime limits require a dedicated service |
+| Live station data | OpenAQ free allowance with shared caching | Measured traffic approaches limits or commercial support is required |
+| Database | None for the cached live pilot | Durable hourly history or audit requirements justify managed PostgreSQL |
+| Scheduling | On-demand fetch with caching | Durable hourly external archive becomes a product requirement |
+| IoT messaging | Deferred | The future device fleet needs persistent commands, fan-out or sustained high throughput |
+| Monitoring | Platform logs plus minimal error monitoring | Operational pilot requires paging/SLA |
+
+Spend first on source correctness, calculation validation and reliable station-area
+mapping. Device hardware expenditure begins only after the government-station product
+has been validated and the first deployment has a defined research purpose.
+
+## 9. Acceptance metrics
+
+### Data correctness
+
+- 100% pass rate against approved CPCB golden fixtures.
+- Every public reading includes source, time, unit and quality status.
+- Zero silent conversions of missing readings to zero.
+
+### Reliability
+
+- API success rate and latency target set after one week of observed pilot traffic.
+- Upstream ingestion success, missing hours and latest-observation age are visible internally.
+- Provider, calculation and cache failures produce different, actionable states.
+
+### Coverage honesty
+
+- 100% of station assignments can be reproduced from a geometry version.
+- Every external-boundary station displays distance and `nearby` status.
+- No measured AQI polygon/interpolation ships in the pilot.
+
+### Product learning
+
+- Track which areas users inspect and whether they open methodology/history.
+- Collect pilot-user interviews about decisions the feature changes.
+- Measure repeat use; do not use raw social reach as evidence of data utility.
+
+## 10. Risks and mitigations
+
+| Risk | Consequence | Mitigation |
+|---|---|---|
+| Sparse or changing stations | Coverage claims become stale | Dynamic discovery, versioned assignments and explicit absence states |
+| CPCB method implemented incorrectly | Misleading public AQI | Official workbook fixtures and pure calculation tests |
+| Future low-cost sensor drift | First-party history becomes unreliable | Co-location, calibration records, QC flags and scheduled maintenance |
+| Token exposed in frontend or logs | Abuse and provider suspension | Server-only Vercel variables, redaction and rotation |
+| Serverless scheduling limits | Gaps in external history | On-demand cache first; dedicated scheduler only when needed |
+| Single developer bottleneck | Excess scope reduces correctness | Strict phase gates and one-area-first scope |
+| Modelled and measured values blended | False precision | Separate evidence classes and UI treatments |
+| Early ML claims outrun evidence | Reputational and scientific risk | Research-readiness gate and held-out geographic evaluation |
+
+## 11. Decisions still required
+
+These questions do not block documentation, but each blocks the indicated phase:
+
+1. **CPCB CO/O3 calculation interpretation** — blocks Phase 1 calculation code.
+2. **Exact area geometry for station containment** — blocks production assignments.
+3. **Initial sensor and reference/co-location access** — blocks the future Phase 5 device pilot.
+4. **Managed PostgreSQL provider and region** — blocks durable history, not the live pilot.
+5. **Public freshness threshold and nearby radius** — blocks final UI copy.
+6. **Retention period for raw device payloads** — blocks production data policy.
+7. **Whether Google modelled AQ is legally compatible with the map and use case** —
+   blocks only the optional modelled layer, not the measured pilot.
