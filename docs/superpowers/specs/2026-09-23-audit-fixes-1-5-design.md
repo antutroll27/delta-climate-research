@@ -204,12 +204,17 @@ only at 0.419. PR 2 fixes the script to read `Q` from `types.ts` and to record t
 and a unit test pins them to what ships. At the shipped `Q` the forcing fix alone changes only night
 figures.
 
-**The other readers of `met-forcing.csv` were checked.** `build-dcurs-inputs.py` reads only surface
+**The scripts that read `met-forcing.csv` directly were checked.** `build-dcurs-inputs.py` reads only surface
 columns, so its output does not move. `measure-canopy-blend-residual.py` uses night wind, but it refuses
 to re-run by design (the shipped blend strength is 0, so a re-run would overwrite a real strength-0.5
 measurement with zeros). Its committed record is therefore annotated, not rebuilt: its night coefficients
 were measured on the pre-correction forcing, and its day figures, the ones behind the strength decision,
 are unaffected.
+
+**The scripts that read it through `_physics.py` are not rebuilt.** They include
+`measure-spatial-accuracy.py` and `measure-shipped-amplitude.py`, whose within-ward figures `accuracy.ts`
+publishes as `SPATIAL`. Re-running them needs ECOSTRESS granules and a token, so their artefacts keep the
+pre-correction night forcing until the follow-up re-fit; known-limitations §15 lists them as open.
 
 **`fit-ward-scale.py` is not run.** The shipped model has two free parameters fitted on this forcing
 (`q_day` 0.5175, `release_base` 0.1043); re-fitting them would change every night temperature on the live
@@ -458,6 +463,7 @@ Each comes from a fact measured in the code, not a change of intent.
 | 2.4 | Recount: 20 rows change, not 21; mean +0.36 K | the 21st pass already rolled correctly under the old code (re-measured in code review, before any rebuild) |
 | 2.2 | `power_stamp` lives in a new `scripts/_power.py`, with the POWER point | `_suhii.py` pulls numpy and network helpers into `fetch-met.py`; Track B needs an importable module |
 | 2.3 | The other `met-forcing.csv` readers are accounted for | the canopy-blend record refuses re-runs by design, so it is annotated, not rebuilt |
+| 2.3 | The `_physics.py` readers of the forcing, including `SPATIAL`'s two scripts, are open, not checked | the post-implementation audit found the first check covered only direct readers |
 | 2.4 | P1 is judged on the original twelve columns | the two new columns change every row's bytes |
 | 3 | Track B also waits for the concurrent session's edit to `build-ward-heat-history.py` | that file was modified, uncommitted, when the plan was written |
 | 3.2 | The `inputs-committed` rule text is rewritten | it claims a check the build no longer makes |
