@@ -1,6 +1,6 @@
 # OBOS air quality — Kolkata live + 30-day history
 
-**Date:** 2026-09-26 · **Status:** design approved in conversation; awaiting spec review
+**Date:** 2026-09-26 · **Status:** built on branch `feat/aqi-kolkata`, not deployed; §2, §3 and §6 updated to match the build (release-readiness pass, 2026-09-26)
 **Background:** the plan set in `docs/AQI/01–06` (untracked in the main checkout as of this date). This spec narrows it to the first release and records the decisions and measurements made on 2026-09-26.
 
 ## 1. Decisions
@@ -19,22 +19,28 @@
 
 - **Stations.** Ballygunge → OpenAQ `10918` (WBPCB-owned, CPCB-provided monitor; 22.53675 N, 88.36380 E; KMC Ward 69; 1.0 km from the OBOS centre; inside the 3 km window). Barrackpore → `3409509` SVSPA Campus (22.76056, 88.36176; 1.0 km; inside the 3 km window; reporting since 2025-02-18). Baruipur → no continuous government monitor.
 - **Values are faithful but incomplete.** OpenAQ's raw 15-minute PM2.5 at Ballygunge equals the OpenCity archive of the same station reading for reading (checked on 2025-12-15; OpenCity stamps each reading at the IST end of its 15 minutes). **OpenAQ omits one of every four quarter-hours** (the one ending at IST :45), so its own `/hours` means differ from the full data by about 6 µg/m³ an hour. The function therefore averages **raw** readings into **IST clock hours** itself and never uses `/hours`.
-- **Units: OpenAQ's labels are wrong on the active sensors.** Since 2025-02-18 the live Ballygunge sensors are labelled "ppb" for NO₂, SO₂ and CO, but their values equal OpenCity's native-unit archive exactly: NO₂ and SO₂ are **µg/m³** (38/38 identical on 2025-12-15) and CO is **mg/m³**; NOx labelled "ppb" is ppm. The older µg/m³-labelled sensors stopped in 2022. The function therefore uses a **verified per-sensor table** (sensor id → parameter → true unit), never OpenAQ's unit label, and never converts ppb. Barrackpore's units are inferred from the same feed and must be verified before release (register AQI-R31).
+- **Units: OpenAQ's labels are wrong on the active sensors.** Since 2025-02-18 the live Ballygunge sensors are labelled "ppb" for NO₂, SO₂ and CO, but their values equal OpenCity's native-unit archive exactly: NO₂ and SO₂ are **µg/m³** (38/38 identical on 2025-12-15) and CO is **mg/m³**; NOx labelled "ppb" is ppm. The older µg/m³-labelled sensors stopped in 2022. The function therefore uses a **verified per-sensor table** (sensor id → parameter → true unit), never OpenAQ's unit label, and never converts ppb. Barrackpore's CO and NO₂ units are verified and its SO₂ unit is inferred (register AQI-R31).
 - **Outage.** Every CPCB monitor on OpenAQ (425 in India) stopped at 2026-09-24 17:30 UTC; data.gov.in's CPCB API returned 502/504 on the same day. The design must look right while the feed is down.
+- **Completeness is variable, and the code relies on no figure for it.** Ballygunge PM2.5 on OpenAQ held about 89 % of quarter-hours over the 31 days before the outage (register AQI-R42); the "one in four" drop was measured on 2025-12-15. Hours are built from whatever raw readings arrive, and CPCB's 16-hour rule decides validity.
+- **Vercel compiles `api/*.ts` file by file and keeps `.ts` import specifiers verbatim** (found with `vercel build`, register AQI-R44). `tsconfig.json` sets `rewriteRelativeImportExtensions: true` so the emitted function imports `.js`; `tests/unit/aqi-handler.test.mjs` pins the setting.
 
 ## 3. Contract (`src/lib/aqi/types.ts`, shared by function and UI)
 
 ```ts
-type AqiState = 'live' | 'stale' | 'unavailable' | 'insufficient_data' | 'no_station';
+// Copied from src/lib/aqi/types.ts (the file governs if the two ever differ).
+type CpcbCategory = 'good' | 'satisfactory' | 'moderate' | 'poor' | 'very_poor' | 'severe';
+type Pollutant = 'pm25' | 'pm10' | 'no2' | 'so2' | 'co' | 'o3' | 'nh3';
 
-interface AqiStation { id: string; name: string; owner: string; provider: string;
-  lat: number; lon: number; distance_m: number; inside: 'window_3km' }
+/** The station owner travels here, not on the station. */
+interface SourceNote { owner: string; via: string; standard: 'CPCB National AQI' }
 
-interface PollutantReading { parameter: 'pm25'|'pm10'|'no2'|'so2'|'co'|'o3'|'nh3';
-  value: number | null; unit: 'ug_m3'|'mg_m3'; window_h: 24|8; hours_present: number;
-  sub_index: number | null }
+interface AqiStation { id: string; name: string; lat: number; lon: number;
+  distance_m: number; inside: 'window_3km' }
 
-interface AqiResult { aqi: number; category: CpcbCategory; dominant: PollutantReading['parameter'];
+interface PollutantReading { parameter: Pollutant; value: number | null; unit: 'ug_m3' | 'mg_m3';
+  window_h: 24 | 8; hours_present: number; sub_index: number | null }
+
+interface AqiResult { aqi: number; category: CpcbCategory; dominant: Pollutant;
   pollutants: PollutantReading[]; window_end_ist: string; algorithm: 'cpcb-aqi-1' }
 
 type AirQualityResponse = { schema: 1; area_id: string; served_at: string; source: SourceNote } & (
@@ -44,8 +50,13 @@ type AirQualityResponse = { schema: 1; area_id: string; served_at: string; sourc
   | { state: 'insufficient_data'; station: AqiStation; pollutants: PollutantReading[]; reasons: string[]; observed_at: string }
   | { state: 'no_station'; message: string });
 
-interface HistoryResponse { area_id: string; days: { date_ist: string; aqi: number | null;
-  category: CpcbCategory | null; reason?: string }[]; pm25_24h: { hour_ist: string; value: number | null }[] }
+type AqiState = AirQualityResponse['state'];
+
+interface HistoryDay { date_ist: string; aqi: number | null; category: CpcbCategory | null;
+  dominant: Pollutant | null; reason?: string }
+
+interface HistoryResponse { schema: 1; area_id: string; station: AqiStation | null;
+  days: HistoryDay[]; pm25_24h: { hour_ist: string; value: number | null }[] }
 
 /** What `GET /api/air-quality?area=in/kolkata/ballygunge` returns. */
 interface AirQualityPayload { current: AirQualityResponse; history: HistoryResponse | null }
@@ -55,7 +66,17 @@ Missing is `null`, never 0: a pollutant with no readings in its window carries `
 
 One fetch of 31 days serves both the current state and the history, so the endpoint returns both in one `AirQualityPayload`; `history` is `null` only when it cannot be built. Area ids use OBOS's existing `AreaKey` form (`in/kolkata/ballygunge`).
 
-**State rules:** `live` when the newest raw reading is ≤ 2 h old and CPCB validity passes; `stale` when older than 2 h and ≤ 7 days; `unavailable` beyond 7 days or on upstream failure with no usable cache; `insufficient_data` when fresh but CPCB validity fails; `no_station` for Baruipur.
+**State rules** (as built in `src/lib/aqi/build.ts`):
+
+- `live` when the newest usable raw reading is **≤ 2 h old, compared in exact milliseconds** (`age_h` is floored for display only), and CPCB validity passes.
+- `stale` when older than 2 h and ≤ 7 days and CPCB validity passes on the last window.
+- **Stale but invalid becomes `unavailable`**, not `insufficient_data`: `insufficient_data` is only for fresh data that fails CPCB validity.
+- `unavailable` beyond 7 days, when there are no usable readings at all, or on upstream failure (`history: null`).
+- `no_station` for Baruipur, with no upstream call.
+- **History** is the **30 complete IST days ending yesterday**, anchored to the clock, not to the last reading, so days after a feed dies show as missing with a reason.
+- **`pm25_24h`** is the **last 24 h the station reported**, anchored to the IST hour holding the last reading, not to `now`.
+- **Rows stamped in the future** (more than 15 min after `now`) are dropped before the freshness clock or any window sees them.
+- **The client demotes a cached `live` to stale** when its `observed_at` is more than 2 h old by the viewer's clock (`demote` in `src/scripts/climate-engine/air/air-panel.ts`), because the CDN can serve a payload up to about 40 min old.
 
 ## 4. CPCB calculation (`src/lib/aqi/cpcb.ts`, pure)
 
@@ -81,7 +102,9 @@ One fetch of 31 days serves both the current state and the history, so the endpo
 - `GET /api/air-quality?area=in/kolkata/ballygunge`; the same response carries `history`. Unknown areas → 404; other methods → 405.
 - Station registry in `src/lib/aqi/stations.ts` (three Kolkata entries), each assignment re-checked by a unit test against `window_3km` from the heat-history vector file.
 - Upstream: OpenAQ with a 10 s timeout. One 31-day fetch per area serves both current state and history, cached `public, max-age=60, s-maxage=600, stale-while-revalidate=1800`; failures cached `s-maxage=60` only. Worst case ≈ 6 sensors × 3 pages per area per 10 minutes, well inside OpenAQ's 60 requests/minute and 2,000/hour.
-- The key never reaches the browser, the logs or a response.
+- The key never reaches the browser, the logs or a response. A missing key returns 503 with `Cache-Control: no-store`, so a misconfiguration is never cached.
+- A cold fetch takes about 7 s (6 sensors × 3 pages of 1,000 rows); the CDN cache above carries the load (register AQI-R43).
+- **Vercel note.** `@vercel/node` compiles each `api/*.ts` on its own and keeps relative `.ts` import specifiers verbatim, so the deployed function would fail to resolve `../src/lib/aqi/*.ts`. `tsconfig.json` sets `rewriteRelativeImportExtensions: true`; a unit test pins it. `OPENAQ_API_KEY` must be set in the Vercel project's Preview and Production environments before the feature can return data there.
 
 ## 7. Testing
 

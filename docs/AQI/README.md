@@ -3,7 +3,7 @@
 **Document set:** Product and engineering plan  
 **Version:** 1.2  
 **Date:** 26 September 2026  
-**Status:** First release scoped to Kolkata; design approved, implementation not started  
+**Status:** Kolkata first release built on branch `feat/aqi-kolkata`; not deployed  
 **Owners:** Delta Climate — OBOS product and engineering
 
 ## Purpose
@@ -30,20 +30,46 @@ The first release is **Kolkata only**, specified in
 [`docs/superpowers/specs/2026-09-26-aqi-kolkata-design.md`](../superpowers/specs/2026-09-26-aqi-kolkata-design.md).
 Where that spec and these documents differ, the spec governs the first release.
 
+### What shipped on the branch (not deployed)
+
+The work is on branch `feat/aqi-kolkata`. It is **not merged, not pushed to production and not deployed**.
+
+- `api/air-quality.ts` is a TypeScript Vercel Function. It reads `OPENAQ_API_KEY` on the server only. It fails closed with 503 and `no-store` when the key is missing, and it caches successful responses at the CDN (`s-maxage=600`, `stale-while-revalidate=1800`).
+- `src/lib/aqi/` holds the logic:
+  - the shared contract (`types.ts`);
+  - the CPCB arithmetic `cpcb-aqi-1`, which follows CPCB's calculator (AQI-R40);
+  - IST hour-building from raw quarter-hours;
+  - the station registry, with verified per-sensor units;
+  - the OpenAQ client, which sends the key only as a header;
+  - the payload builder, covering the five states `live`, `stale`, `unavailable`, `insufficient_data` and `no_station`.
+- OBOS has an **Air** rail section and pane, plus a right-panel block, for Ballygunge, Barrackpore and Baruipur. Baruipur shows `no_station`. A cached `live` payload is demoted to stale on the viewer's clock once it is more than 2 h old.
+- Release gates on the branch head all pass: `npm run check`, `npm run typecheck`, `npm run test:py`, `npm run test:unit` (935 of 935) and `npm run build`. The key does not appear in any branch commit or in `dist/`.
+
 | Area | Decision (26 Sep) |
 |---|---|
 | Scope | Ballygunge, Baruipur, Barrackpore. Bengaluru parked: no government station lies within any of its areas' 3 km windows |
 | Station ↔ area rule | A station covers a place when it lies inside the place's **3 km window**; the distance is always shown |
 | Server boundary | TypeScript Vercel Function `api/air-quality.ts` beside `api/live.js` (FastAPI considered and declined) |
 | Feed late | Last valid AQI shown muted with its age for up to 7 days, then "Government feed unavailable" |
-| History | Last 30 days of daily CPCB AQI plus the last 24 h of PM2.5, from OpenAQ; no database |
-| Order of work | Contract → UI previews on fixtures → server function |
+| History | The 30 complete IST days ending yesterday, as daily CPCB AQI, plus the last 24 h of PM2.5 the station reported, from OpenAQ; no database |
+| Order of work | Contract → UI previews on fixtures → server function (done in that order) |
 
-Verified on 26 September (details in the [research register](./05-research-register.md), R19–R30):
+### Feed state observed on 26 September 2026
 
-- The OpenAQ key works. Ballygunge (`10918`) and Barrackpore (`3409509`) are WBPCB monitors about 1.0 km from their OBOS centres, inside the 3 km windows. Baruipur has no station.
-- OpenAQ's raw values match the OpenCity archive reading for reading, but OpenAQ omits one quarter-hour in four. Hourly means must be built from raw data, never from OpenAQ's `/hours`.
-- **Every CPCB monitor in India stopped reporting to OpenAQ at 2026-09-24 17:30 UTC**, and data.gov.in's CPCB API returned 502/504. Nothing is live until the national feed resumes.
+- **Every CPCB monitor in India stopped reporting to OpenAQ at 2026-09-24 17:30 UTC.** On the same day, data.gov.in's CPCB API returned 502/504. The outage was still in place on 26 September.
+- As a result, **both stations are stale**. On the first live run, Ballygunge showed AQI 38 and Barrackpore AQI 34, both "Not Live · 45 h Old" (AQI-R41). If the outage passes 7 days (2026-10-01 17:30 UTC), both will show "Government feed unavailable". That is the designed behaviour, not a fault.
+- Ballygunge (`10918`) and Barrackpore (`3409509`) are WBPCB monitors about 1.0 km from their OBOS centres, inside the 3 km windows. Baruipur has no station.
+- OpenAQ's raw values match the OpenCity archive reading for reading, but its completeness varies. It was about 89 % of quarter-hours at Ballygunge over the 31 days before the outage (AQI-R42). Hourly means are built from raw data, never from OpenAQ's `/hours`.
+- Both stations lost the same hours on 27–29 Aug 2026. The gap was upstream of OBOS (AQI-R45).
+- A cold fetch takes about 7 s, and the CDN cache carries the load (AQI-R43).
+
+### Founder actions before release
+
+1. **Add `OPENAQ_API_KEY`** to the Vercel project's **Preview** and **Production** environments. Without it, the function returns 503 and the Air pane shows no data. Then confirm on the first Preview deployment that `/api/air-quality?area=in/kolkata/ballygunge` returns 200 (AQI-R44).
+2. **Decide when to open the PR.** One option is to wait for the CPCB feed to resume so that `live` can be seen end to end. The other is to ship now, with the stale treatment showing.
+3. **The repository is public.** Check that every document committed on this branch is fit to be public before the branch is pushed.
+
+Details are in the [research register](./05-research-register.md), R19–R45.
 
 ## Documents
 
