@@ -349,6 +349,8 @@ class MetRow(TypedDict):
     rh: str
     wind: str
     cloud: str
+    utc: str            # the pass's UTC instant, ISO-8601 without a zone suffix
+    power_stamp: str    # the POWER YYYYMMDDHH stamp its forcing was read at
 
 
 #: One ECOSTRESS acquisition measured for SUHII (scripts/ecostress-suhii.py).

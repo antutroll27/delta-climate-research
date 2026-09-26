@@ -1,5 +1,5 @@
 {
-  "note": "EXPERIMENT. Ward-scale calibration against ward-mean ECOSTRESS. Not shipped until a human has read the out-of-sample column.",
+  "note": "PRE-CORRECTION FORCING (2026-09-24): these candidates were fitted before the forcing-date correction, when 20 night rows read NASA POWER 24 h early; they are re-fitted on corrected forcing in a follow-up re-fit PR. measure-accuracy.py selects the shipped candidate from here by release_base and l_et and takes q_day from types.ts, none of which the correction changes. EXPERIMENT. Ward-scale calibration against ward-mean ECOSTRESS. Not shipped until a human has read the out-of-sample column.",
   "ship": false,
   "ward_scenes": 82,
   "wards": [

@@ -3,6 +3,8 @@ import test from 'node:test';
 import { readFileSync } from 'node:fs';
 
 import { ACCURACY } from '../../src/scripts/climate-engine/accuracy.ts';
+import { DEFAULT_PARAMS, STORE_NIGHT } from '../../src/scripts/climate-engine/types.ts';
+import { skyTemperatureC } from '../../src/scripts/climate-engine/sky.ts';
 
 /* accuracy.ts is hand-maintained, and it feeds the headline error bars on
    /uncertainty and every ward API payload. It had no artefact behind it and no
@@ -10,11 +12,12 @@ import { ACCURACY } from '../../src/scripts/climate-engine/accuracy.ts';
    the published night band ended up BELOW the measured out-of-sample error.
    Nothing failed; an audit found it.
 
-   These tests do not demand equality — recalibrating peak would make daytime
-   out-measure night and qualify as quantitative, which model-accuracy.json's own
-   `pending_recalibration` reserves for a reviewed human change. They enforce the
-   SAFETY DIRECTION instead: whatever the artefact says, the published band may
-   overstate our error but must never understate it. */
+   Night is not pending recalibration, so its figures must EQUAL the artefact's and
+   its band must be exactly the smallest half-kelvin step covering both its errors.
+   Peak is held back — recalibrating it would make daytime out-measure night and
+   qualify as quantitative, which model-accuracy.json's own `pending_recalibration`
+   reserves for a reviewed human change — so for peak these tests enforce only the
+   SAFETY DIRECTION: its band may overstate our error but must never understate it. */
 const art = JSON.parse(readFileSync('data/calibration/model-accuracy.json', 'utf8')).ward_scale.strata;
 
 const PHASE_STRATUM = { night: 'night', peak: 'peak_ecostress' };
@@ -44,4 +47,59 @@ test('a pending recalibration is declared, not silently carried', () => {
       'peak n disagrees with the artefact, so model-accuracy.json must declare pending_recalibration');
     assert.match(JSON.stringify(ws.pending_recalibration), /reviewed change/i);
   }
+});
+
+/* 2026-09-24. measure-accuracy.py overlaid the matched candidate's fitted values, its
+   free-fit q_day among them, on fit-ward-scale.py's SHIP defaults, so every re-run scored
+   a model that does not ship and nothing noticed. The artefact now records what it
+   scored; this pins every scored constant to what ships. ratio and release_built are
+   fitted too, and match only because both rail to bounds that coincide with types.ts. */
+test('the accuracy artefact scores the constants that ship', () => {
+  const s = JSON.parse(readFileSync('data/calibration/model-accuracy.json', 'utf8')).ward_scale.scored;
+  assert.ok(s, 'model-accuracy.json must record the constants it scored');
+  assert.equal(s.q_day, DEFAULT_PARAMS.Q, 'measure-accuracy scored a q_day that does not ship');
+  assert.equal(s.l_et, DEFAULT_PARAMS.L, 'measure-accuracy scored an ET coefficient that does not ship');
+  // The fit splits a held kRad + h by ratio = kRad/h, rounded to 4 dp in ward-scale-fit.json.
+  const ratio = DEFAULT_PARAMS.kRad / DEFAULT_PARAMS.h;
+  assert.ok(Math.abs(s.ratio - ratio) < 5e-5, `measure-accuracy scored kRad/h ${s.ratio}, but types.ts ships ${ratio}`);
+  // The browser releases a flat STORE_NIGHT at night; it has no built-scaled term.
+  assert.equal(s.release_built, 0, 'measure-accuracy scored a built-scaled night release the browser does not have');
+  assert.ok(Math.abs(s.release_base - STORE_NIGHT) < 5e-5,
+    `measure-accuracy scored release_base ${s.release_base}, but STORE_NIGHT ships ${STORE_NIGHT}`);
+  // The browser calls skyTemperatureC with its default Brutsaert c.
+  assert.equal(skyTemperatureC(28, 80, 0.3, s.c), skyTemperatureC(28, 80, 0.3),
+    `measure-accuracy scored Brutsaert c ${s.c}, which is not sky.ts's default`);
+});
+
+/* 2026-09-23 audit, item 3. The night band had drifted from its artefact in two
+   fields the tests above did not check — the ceiling (2.233 vs 2.336) and the RMSE
+   (2.93 vs 2.943) — and its tooltip quoted the bias with the wrong sign (+0.18 K
+   against the artefact's -0.182 K). Night is not pending recalibration, so every
+   published night figure must be the artefact's, and every number in the note must
+   be the field it quotes. */
+test('every published night figure is the one the artefact measured', () => {
+  const night = art.night;
+  assert.equal(ACCURACY.night.n, night.n_scenes, 'night n drifted from model-accuracy.json');
+  assert.equal(ACCURACY.night.ceilingRmseK, night.ceiling_rmse_K, 'night ceiling drifted');
+  assert.equal(ACCURACY.night.modelRmseK, night.rmse_K, 'night RMSE drifted');
+  assert.equal(ACCURACY.night.looOverpassRmseK, night.loo_overpass_rmse_K, 'night LOO drifted');
+});
+
+test('the night band is the smallest half-kelvin step that covers both errors', () => {
+  const need = Math.max(ACCURACY.night.modelRmseK, ACCURACY.night.looOverpassRmseK);
+  assert.equal(ACCURACY.night.bandK, Math.ceil(need * 2) / 2);
+});
+
+test('every number quoted in the night note is the field it quotes', () => {
+  const note = ACCURACY.night.note;
+  const has = (s) => assert.ok(note.includes(s), `the night note lacks "${s}":\n${note}`);
+  const bias = art.night.bias_K;
+  has(`over ${ACCURACY.night.n} ward-scenes`);
+  has(`${ACCURACY.night.modelRmseK} K against a best-achievable ${ACCURACY.night.ceilingRmseK} K`);
+  has(`bias ${bias >= 0 ? '+' : '−'}${Math.abs(bias).toFixed(2)} K`);
+  const side = bias >= 0 ? 'warmer' : 'colder';
+  has(`${side} than the measured surface`);
+  has(`runs ${Math.abs(bias).toFixed(2)} K ${side}`);
+  has(`+/-${ACCURACY.night.bandK.toFixed(1)} K`);
+  has(`leave-one-overpass-out error of ${ACCURACY.night.looOverpassRmseK} K`);
 });

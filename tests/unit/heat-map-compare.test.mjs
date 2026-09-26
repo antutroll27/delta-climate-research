@@ -265,6 +265,77 @@ test('the distinct-area fallback never leaves the city', () => {
   assert.equal(nextDistinctKey([], 'in/kolkata/ballygunge'), null);
 });
 
+/*
+ * 2026-09-23 audit, item 2. The ward page's Compare link carries only `a`, and the
+ * parser filled a missing `b` with DEFAULT.b — a Kolkata ward — whatever the city.
+ * Every Bengaluru ward therefore opened a cross-city pair, which fails the grid check
+ * and shows "Comparison unavailable". Reproduced on production: Whitefield opened as
+ * Whitefield vs Baruipur. A same-city Bengaluru pair settles in about 2.5 s.
+ */
+test('a Compare link from a Bengaluru ward pairs it with a Bengaluru ward', () => {
+  for (const key of areaKeysInCity('in/bengaluru/whitefield')) {
+    const state = parsePairedScenario(`?a=${encodeURIComponent(key)}&trees=0&roof=0&facades=0&phase=peak`);
+    assert.equal(state.a, key);
+    assert.notEqual(state.b, state.a);
+    assert.ok(state.b.startsWith('in/bengaluru/'), `${key} was paired with ${state.b}`);
+  }
+  // The exact link the Whitefield page writes, as captured on production.
+  const written = parsePairedScenario('?a=in%2Fbengaluru%2Fwhitefield&trees=0&roof=0&facades=0&phase=peak');
+  assert.deepEqual([written.a, written.b], ['in/bengaluru/whitefield', 'in/bengaluru/indiranagar']);
+  // …and it survives the round trip a shared link goes through.
+  assert.deepEqual(parsePairedScenario(`?${serializePairedScenario(written)}`), written);
+});
+
+test('an explicit cross-city partner is repaired within a\'s own city', () => {
+  const state = parsePairedScenario('?a=in/bengaluru/whitefield&b=baruipur');
+  assert.equal(state.a, 'in/bengaluru/whitefield');
+  assert.notEqual(state.b, state.a);
+  assert.ok(state.b.startsWith('in/bengaluru/'), state.b);
+  // …and a Kolkata `a` handed another city's ward takes DEFAULT.b, not the first other ward.
+  assert.equal(parsePairedScenario('?a=barrackpore&b=in/bengaluru/whitefield').b, DEFAULT_PAIRED_SCENARIO.b);
+});
+
+test('an area the instrument cannot draw falls back to the default pair', () => {
+  const dubai = parsePairedScenario('?a=ae/dubai/creek');
+  assert.deepEqual([dubai.a, dubai.b], [DEFAULT_PAIRED_SCENARIO.a, DEFAULT_PAIRED_SCENARIO.b]);
+  const both = parsePairedScenario('?a=ae/dubai/creek&b=ae/dubai/al-quoz');
+  assert.deepEqual([both.a, both.b], [DEFAULT_PAIRED_SCENARIO.a, DEFAULT_PAIRED_SCENARIO.b]);
+});
+
+test('Kolkata links resolve exactly as they did before', () => {
+  // DEFAULT.b is a valid partner for every Kolkata ward except itself…
+  assert.equal(parsePairedScenario('?a=barrackpore').b, 'in/kolkata/baruipur');
+  assert.equal(parsePairedScenario('?a=ballygunge').b, 'in/kolkata/baruipur');
+  // …and for Baruipur itself the first other ward in the city, as nextDistinctArea gave.
+  assert.equal(parsePairedScenario('?a=baruipur').b, nextDistinctArea('in/kolkata/baruipur'));
+  // A link naming one ward twice falls to the first other ward, as it always did,
+  // not to DEFAULT.b: this case is where the two orders differ.
+  assert.equal(parsePairedScenario('?a=barrackpore&b=barrackpore').b, nextDistinctArea('in/kolkata/barrackpore'));
+});
+
+test('every Kolkata-only link resolves exactly as the pre-fix parser did', () => {
+  // The pre-fix rule (e215f1e), reproduced: an unknown or missing `a` took DEFAULT.a, an
+  // unknown or missing `b` took DEFAULT.b, and a `b` equal to `a` fell to nextDistinctArea(a).
+  const preFix = (search) => {
+    const params = new URLSearchParams(search);
+    const a = fromLegacyWard(params.get('a')) ?? DEFAULT_PAIRED_SCENARIO.a;
+    const b = fromLegacyWard(params.get('b')) ?? DEFAULT_PAIRED_SCENARIO.b;
+    return [a, b === a ? (nextDistinctArea(a) ?? a) : b];
+  };
+  const values = [null, '', 'nonsense', 'ballygunge', 'baruipur', 'barrackpore',
+    'in/kolkata/ballygunge', 'in/kolkata/baruipur', 'in/kolkata/barrackpore'];
+  for (const a of values) {
+    for (const b of values) {
+      const query = new URLSearchParams();
+      if (a !== null) query.set('a', a);
+      if (b !== null) query.set('b', b);
+      const search = `?${query}`;
+      const state = parsePairedScenario(search);
+      assert.deepEqual([state.a, state.b], preFix(search), search);
+    }
+  }
+});
+
 test('TypeScript HeatSim produces stable finite statistics on the canonical grid', () => {
   const count = SIM_N * SIM_N;
   const layers = {
