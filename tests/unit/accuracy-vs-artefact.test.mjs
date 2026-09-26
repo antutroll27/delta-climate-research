@@ -69,3 +69,34 @@ test('the accuracy artefact scores the constants that ship', () => {
   assert.equal(skyTemperatureC(28, 80, 0.3, s.c), skyTemperatureC(28, 80, 0.3),
     `measure-accuracy scored Brutsaert c ${s.c}, which is not sky.ts's default`);
 });
+
+/* 2026-09-23 audit, item 3. The night band had drifted from its artefact in two
+   fields the tests above did not check — the ceiling (2.233 vs 2.336) and the RMSE
+   (2.93 vs 2.943) — and its tooltip quoted the bias with the wrong sign (+0.18 K
+   against the artefact's -0.182 K). Night is not pending recalibration, so every
+   published night figure must be the artefact's, and every number in the note must
+   be the field it quotes. */
+test('every published night figure is the one the artefact measured', () => {
+  const night = art.night;
+  assert.equal(ACCURACY.night.n, night.n_scenes, 'night n drifted from model-accuracy.json');
+  assert.equal(ACCURACY.night.ceilingRmseK, night.ceiling_rmse_K, 'night ceiling drifted');
+  assert.equal(ACCURACY.night.modelRmseK, night.rmse_K, 'night RMSE drifted');
+  assert.equal(ACCURACY.night.looOverpassRmseK, night.loo_overpass_rmse_K, 'night LOO drifted');
+});
+
+test('the night band is the smallest half-kelvin step that covers both errors', () => {
+  const need = Math.max(ACCURACY.night.modelRmseK, ACCURACY.night.looOverpassRmseK);
+  assert.equal(ACCURACY.night.bandK, Math.ceil(need * 2) / 2);
+});
+
+test('every number quoted in the night note is the field it quotes', () => {
+  const note = ACCURACY.night.note;
+  const has = (s) => assert.ok(note.includes(s), `the night note lacks "${s}":\n${note}`);
+  const bias = art.night.bias_K;
+  has(`over ${ACCURACY.night.n} ward-scenes`);
+  has(`${ACCURACY.night.modelRmseK} K against a best-achievable ${ACCURACY.night.ceilingRmseK} K`);
+  has(`bias ${bias >= 0 ? '+' : '−'}${Math.abs(bias).toFixed(2)} K`);
+  has(`${bias >= 0 ? 'warmer' : 'colder'} than the measured surface`);
+  has(`+/-${ACCURACY.night.bandK} K`);
+  has(`leave-one-overpass-out error of ${ACCURACY.night.looOverpassRmseK} K`);
+});

@@ -17,21 +17,23 @@
  * WHY DAY AND NIGHT DIFFER. `ceilingRmseK` is the error of the best possible
  * empirical predictor built from the same forcing AND the ward's own measured
  * surface, scored leave-one-out. It is an upper bound on what ANY model on
- * these inputs can achieve. At night it is 2.23 K; by day 3.34 K, because
+ * these inputs can achieve. At night it is 2.117 K; by day 3.34 K, because
  * daytime surface temperature turns on site-level insolation, cloud timing and
  * soil moisture that a 50 km reanalysis cell cannot resolve. No amount of
  * tuning moves the daytime ceiling — that limit is the forcing data.
  *
- * WHERE WE SIT AGAINST IT. Night is 0.70 K off its ceiling with a bias of
- * +0.18 K — and, more importantly, on the right side of air temperature at
- * last. Day is 1.08 K off, so the daytime structure is genuinely incomplete
- * and that gap is ours, not the data's. Two different situations; the notes
- * below say so rather than averaging them into one reassuring sentence.
+ * WHERE WE SIT AGAINST IT. Night is 0.56 K off its ceiling, and the model runs
+ * 0.36 K warmer than the measured surface on average (bias +0.36 K, model
+ * minus measured; re-measured 2026-09-24 after the forcing-date correction).
+ * Day is 1.08 K off, so the daytime structure is genuinely incomplete and
+ * that gap is ours, not the data's. Two different situations; the notes below
+ * say so rather than averaging them into one reassuring sentence.
  *
  * So the product reports night quantitatively and day as indicative.
  *
  * Regenerate with: python3 scripts/build-ward-observations.py
  *                  python3 scripts/fit-ward-scale.py
+ *                  python3 scripts/measure-accuracy.py   (ACCURACY.night is copied from its output)
  */
 export interface PhaseAccuracy {
   /** scenes the figure is measured over */
@@ -52,28 +54,29 @@ export interface PhaseAccuracy {
 export const ACCURACY: Record<'peak' | 'night', PhaseAccuracy> = {
   night: {
     n: 50,
-    ceilingRmseK: 2.233,
-    modelRmseK: 2.93,
+    ceilingRmseK: 2.117,
+    modelRmseK: 2.677,
     /**
      * Leave-one-overpass-out RMSE, from data/calibration/model-accuracy.json
      * ward_scale.strata.night. THIS is the number the band must cover.
      *
-     * An audit found the published ±3.0 K band sat BELOW it. `modelRmseK` 2.93 is
-     * the IN-SAMPLE fit; /uncertainty has always described the method as
-     * "leave-one-overpass-out", and the honest out-of-sample error under that
-     * method is 3.102 K. The guard below compared the band to the in-sample
+     * An audit found the published ±3.0 K band sat BELOW it. `modelRmseK`
+     * (2.93 at the time) is the IN-SAMPLE fit; /uncertainty has always described
+     * the method as "leave-one-overpass-out", and the honest out-of-sample error
+     * under that method was 3.102 K. The guard below compared the band to the in-sample
      * figure, so ±3.0 passed while understating the error the page named. Of
      * every possible defect on a site whose product is its error bars, an error
      * bar that is too small is the worst one.
      */
-    looOverpassRmseK: 3.102,
-    bandK: 3.5,
+    looOverpassRmseK: 2.801,
+    bandK: 3.0,
     confidence: 'quantitative',
-    note: 'Night surface temperature tracks air temperature closely, and the model now '
-        + 'reproduces the nocturnal heat island rather than inverting it — the modelled '
-        + 'surface sits above air as measured (bias +0.18 K; the previous structure was '
-        + '−1.54 K, i.e. the wrong side of air entirely). 2.93 K against a 2.233 K '
-        + 'ceiling, over 50 ward-scenes. The displayed band is +/-3.5 K because it must cover the leave-one-overpass-out error of 3.102 K, not the in-sample fit.',
+    note: 'Night surface temperature tracks air temperature closely, which is why '
+        + 'night is the quantitative view: over 50 ward-scenes the model\'s error is '
+        + '2.677 K against a best-achievable 2.117 K, and it runs 0.36 K warmer than '
+        + 'the measured surface on average (bias +0.36 K). The displayed band is '
+        + '+/-3 K because it must cover the leave-one-overpass-out error of 2.801 K, '
+        + 'not the in-sample fit.',
   },
   peak: {
     n: 29,
