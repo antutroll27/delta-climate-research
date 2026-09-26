@@ -125,6 +125,12 @@ Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 
 ### Task 2: CPCB arithmetic
 
+**Decisions from the Task 1 gate (register AQI-R33–R39), fixed here:**
+- **Continuous bands, as CPCB's official calculator computes them** (workbook Sheet1 D8–D20): each band starts at the previous band's top edge, so PM2.5 = 31 gives 51.67 → 52. The "31–60" style table edges are display rounding and are NOT used.
+- **Severe is open-ended and uncapped**, as in the calculator: above the last edge the Very Poor slope continues (PM2.5 300 → 438). Ozone uses its own Very Poor slope (100/540) above 748 µg/m³, not the workbook's defective `400+(C-400)*100/539` formula (register AQI-R34).
+- **Rounding** only at the end (`Math.round`), which matches the workbook's integer display and cannot change which sub-index is largest.
+- Algorithm id stays `cpcb-aqi-1` and means exactly the above.
+
 **Files:**
 - Create: `src/lib/aqi/cpcb.ts`
 - Test: `tests/unit/aqi-cpcb.test.mjs`
@@ -137,10 +143,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { subIndex, category, combine, MIN_HOURS } from '../../src/lib/aqi/cpcb.ts';
 
-test('sub-index hits every published band edge exactly', () => {
+test('sub-index hits every band edge exactly (calculator edges)', () => {
   assert.equal(subIndex('pm25', 0), 0);
   assert.equal(subIndex('pm25', 30), 50);
-  assert.equal(subIndex('pm25', 31), 51);
   assert.equal(subIndex('pm25', 60), 100);
   assert.equal(subIndex('pm25', 90), 200);
   assert.equal(subIndex('pm25', 120), 300);
@@ -153,40 +158,43 @@ test('sub-index hits every published band edge exactly', () => {
   assert.equal(subIndex('so2', 380), 200);
 });
 
-test('sub-index interpolates inside a band and rounds to an integer', () => {
-  assert.equal(subIndex('pm25', 45), 75);      // 51 + 49 × (45-31)/(60-31) = 74.66 → 75
+test('bands are continuous, as the CPCB calculator computes them (not the 31/51 table form)', () => {
+  assert.equal(subIndex('pm25', 31), 52);    // 50 + (31-30) × 50/30 = 51.67
+  assert.equal(subIndex('pm25', 45), 75);    // 50 + 15 × 50/30 = 75
+  assert.equal(subIndex('pm25', 61.1), 104); // 100 + 1.1 × 100/30 = 103.67
+  assert.equal(subIndex('co', 1.09), 55);    // 50 + 0.09 × 50/1 = 54.5 → 55 (round half up)
 });
 
-test('a value between two published bands takes the upper band floor', () => {
-  assert.equal(subIndex('pm25', 30.5), 51);
+test('Severe is open-ended: the Very Poor slope continues with no cap', () => {
+  assert.equal(subIndex('pm25', 300), 438);  // 400 + 50 × 100/130 = 438.46
+  assert.equal(subIndex('pm10', 600), 613);  // 400 + 170 × 100/80 = 612.5 → 613
+  assert.equal(subIndex('o3', 800), 410);    // 400 + 52 × 100/540 = 409.6 (not the workbook's defective 474)
 });
 
-test('beyond the last band the sub-index caps at 500', () => {
-  assert.equal(subIndex('pm25', 9999), 500);
-});
-
-test('category follows the sub-index bands', () => {
+test('category follows the index bands; above 500 is still Severe', () => {
   assert.equal(category(50), 'good');
   assert.equal(category(51), 'satisfactory');
+  assert.equal(category(100), 'satisfactory');
+  assert.equal(category(101), 'moderate');
   assert.equal(category(200), 'moderate');
   assert.equal(category(201), 'poor');
   assert.equal(category(400), 'very_poor');
   assert.equal(category(401), 'severe');
+  assert.equal(category(900), 'severe');
 });
 
 const r = (parameter, value, hours, sub) => ({ parameter, value, unit: parameter === 'co' ? 'mg_m3' : 'ug_m3',
   window_h: ['co', 'o3'].includes(parameter) ? 8 : 24, hours_present: hours, sub_index: sub });
 
 test('the AQI is the MAXIMUM valid sub-index, never an average', () => {
-  const out = combine([r('pm25', 45, 24, 74), r('no2', 20, 24, 25), r('o3', 90, 24, 90)]);
+  const out = combine([r('pm25', 45, 24, 75), r('no2', 20, 24, 25), r('o3', 90, 24, 90)]);
   assert.equal(out.ok, true);
   assert.equal(out.ok && out.aqi, 90);
   assert.equal(out.ok && out.dominant, 'o3');
 });
 
 test('publishing needs three valid pollutants, one of them PM', () => {
-  const two = combine([r('pm25', 45, 24, 74), r('no2', 20, 24, 25)]);
-  assert.equal(two.ok, false);
+  assert.equal(combine([r('pm25', 45, 24, 75), r('no2', 20, 24, 25)]).ok, false);
   const noPm = combine([r('no2', 20, 24, 25), r('so2', 5, 24, 6), r('o3', 90, 24, 90)]);
   assert.equal(noPm.ok, false);
   assert.match(noPm.ok ? '' : noPm.reasons.join(' '), /PM2\.5 or PM10/);
@@ -208,46 +216,49 @@ Expected: FAIL, `Cannot find module '.../src/lib/aqi/cpcb.ts'`.
 ```ts
 // src/lib/aqi/cpcb.ts
 /**
- * CPCB National AQI arithmetic. Pure: no I/O, no clocks.
- * Breakpoints and rules: CPCB AQI calculator workbook, verified in register
- * AQI-R33 onward (Task 1). Changing a number here is an algorithm change:
- * bump ALGORITHM and add a fixture.
+ * CPCB National AQI arithmetic, as CPCB's official AQI calculator computes it
+ * (cpcb.nic.in AQI-Calculator.xls, Sheet1 D8–D20; register AQI-R33–R39):
+ * continuous bands, an open-ended uncapped Severe band continuing the Very Poor
+ * slope, rounding only at the end. One deliberate deviation: ozone above 748 µg/m³
+ * continues its own Very Poor slope instead of the workbook's defective formula.
+ * Pure: no I/O, no clocks. Changing a number here is an algorithm change.
  */
 import type { CpcbCategory, Pollutant, PollutantReading } from './types.ts';
 
 export const ALGORITHM = 'cpcb-aqi-1' as const;
-/** Valid IST hours a pollutant needs in its window before it may count. */
+/** Valid IST hours a pollutant needs in its window (CPCB: "a minimum of 16 hours' data"). */
 export const MIN_HOURS = 16;
 
-const INDEX: readonly (readonly [number, number])[] = [[0, 50], [51, 100], [101, 200], [201, 300], [301, 400], [401, 500]];
+/** Sub-index value at each concentration edge below. */
+const INDEX_EDGES = [0, 50, 100, 200, 300, 400] as const;
 
-export const BREAKPOINTS: Readonly<Record<Pollutant, readonly (readonly [number, number])[]>> = {
-  pm10: [[0, 50], [51, 100], [101, 250], [251, 350], [351, 430], [431, 1000]],
-  pm25: [[0, 30], [31, 60], [61, 90], [91, 120], [121, 250], [251, 500]],
-  no2: [[0, 40], [41, 80], [81, 180], [181, 280], [281, 400], [401, 1000]],
-  so2: [[0, 40], [41, 80], [81, 380], [381, 800], [801, 1600], [1601, 3000]],
-  co: [[0, 1.0], [1.1, 2.0], [2.1, 10], [10.1, 17], [17.1, 34], [34.1, 50]],
-  o3: [[0, 50], [51, 100], [101, 168], [169, 208], [209, 748], [749, 1000]],
-  nh3: [[0, 200], [201, 400], [401, 800], [801, 1200], [1201, 1800], [1801, 3000]],
+/** Concentration edges: the tops of Good, Satisfactory, Moderate, Poor, Very Poor. µg/m³; CO in mg/m³. */
+export const EDGES: Readonly<Record<Pollutant, readonly [number, number, number, number, number, number]>> = {
+  pm10: [0, 50, 100, 250, 350, 430],
+  pm25: [0, 30, 60, 90, 120, 250],
+  no2: [0, 40, 80, 180, 280, 400],
+  so2: [0, 40, 80, 380, 800, 1600],
+  co: [0, 1, 2, 10, 17, 34],
+  o3: [0, 50, 100, 168, 208, 748],
+  nh3: [0, 200, 400, 800, 1200, 1800],
 };
 
 const CATEGORIES: readonly CpcbCategory[] = ['good', 'satisfactory', 'moderate', 'poor', 'very_poor', 'severe'];
 
 export function subIndex(p: Pollutant, c: number): number {
-  const bands = BREAKPOINTS[p];
-  for (let i = 0; i < bands.length; i++) {
-    const [blo, bhi] = bands[i]!;
-    const [ilo, ihi] = INDEX[i]!;
-    if (c <= bhi) {
-      const x = Math.max(c, blo); // a value between two published bands takes this band's floor
-      return Math.round(ilo + ((ihi - ilo) * (x - blo)) / (bhi - blo));
+  const e = EDGES[p];
+  for (let i = 0; i < 5; i++) {
+    if (c <= e[i + 1]!) {
+      const x = Math.max(c, e[i]!);
+      return Math.round(INDEX_EDGES[i]! + ((INDEX_EDGES[i + 1]! - INDEX_EDGES[i]!) * (x - e[i]!)) / (e[i + 1]! - e[i]!));
     }
   }
-  return 500;
+  // Severe: open-ended, the Very Poor slope continues with no cap.
+  return Math.round(400 + ((c - e[5]) * 100) / (e[5] - e[4]));
 }
 
 export function category(aqi: number): CpcbCategory {
-  const i = INDEX.findIndex(([, hi]) => aqi <= hi);
+  const i = [50, 100, 200, 300, 400].findIndex((hi) => aqi <= hi);
   return CATEGORIES[i === -1 ? 5 : i]!;
 }
 
@@ -257,7 +268,7 @@ export type Combined =
 
 const LABEL: Readonly<Record<Pollutant, string>> = { pm25: 'PM2.5', pm10: 'PM10', no2: 'NO2', so2: 'SO2', co: 'CO', o3: 'O3', nh3: 'NH3' };
 
-/** The CPCB publish rule: at least three valid pollutants including PM2.5 or PM10; AQI = maximum sub-index. */
+/** The CPCB publish rule (workbook G11/A21): at least three valid pollutants including PM2.5 or PM10; AQI = maximum sub-index. */
 export function combine(readings: readonly PollutantReading[]): Combined {
   const reasons = readings
     .filter((q) => q.hours_present < MIN_HOURS)
@@ -278,15 +289,18 @@ export function combine(readings: readonly PollutantReading[]): Combined {
 Run: `node --import tsx --test tests/unit/aqi-cpcb.test.mjs`
 Expected: all tests PASS.
 
-- [ ] **Step 5: Mutation proof** (a gate that cannot fail is not a gate)
+- [ ] **Step 5: Mutation proofs** (a gate that cannot fail is not a gate)
 
-Temporarily change `Math.max(c, blo)` to `c`, rerun: the "between two bands" test must FAIL. Temporarily make `combine` average the sub-indices: the "MAXIMUM" test must FAIL. Revert both; rerun: PASS.
+1. Replace the continuous interpolation with the table form (band start `e[i] + 1` above Good, index start `INDEX_EDGES[i] + 1`): the "continuous" test must FAIL.
+2. Replace the Severe line with `return 500`: the "Severe is open-ended" test must FAIL.
+3. Make `combine` average the sub-indices: the "MAXIMUM" test must FAIL.
+Revert all three; rerun: PASS. Paste each red run's failing assertion into the commit message body.
 
 - [ ] **Step 6: Commit**
 
 ```bash
 git add src/lib/aqi/cpcb.ts tests/unit/aqi-cpcb.test.mjs
-git commit -m "feat(aqi): CPCB sub-index, category and publish rule, workbook-verified
+git commit -m "feat(aqi): CPCB sub-index, category and publish rule, as CPCB's calculator computes them
 
 Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ```
@@ -335,6 +349,12 @@ test('the dropped quarter-hour does not shift or blank an hour', () => {
   assert.equal(Math.round(h.get('2025-12-15T06').mean * 100) / 100, 60.47);
 });
 
+test('a reading of 0 counts as missing, as in the CPCB calculator', () => {
+  const h = istHours([{ end_utc: '2025-12-15T00:30:00Z', value: 0 }, { end_utc: '2025-12-15T00:45:00Z', value: 5 }]);
+  assert.equal(h.has('2025-12-15T05'), false);
+  assert.equal(h.get('2025-12-15T06').n, 1);
+});
+
 test('a 24-hour window counts only hours present', () => {
   const hours = new Map([['2025-12-15T05', { mean: 10, n: 3 }], ['2025-12-15T06', { mean: 20, n: 3 }]]);
   assert.deepEqual(window24(hours, '2025-12-15T07'), { value: 15, hours: 2 });
@@ -377,7 +397,7 @@ export function istHourKey(endUtc: string): HourKey {
 export function istHours(raw: readonly Raw[]): Map<HourKey, Hour> {
   const acc = new Map<HourKey, { sum: number; n: number }>();
   for (const r of raw) {
-    if (!Number.isFinite(r.value) || r.value < 0) continue;
+    if (!Number.isFinite(r.value) || r.value <= 0) continue; // CPCB's calculator counts 0 as missing (workbook E8)
     const k = istHourKey(r.end_utc);
     const a = acc.get(k) ?? { sum: 0, n: 0 };
     a.sum += r.value; a.n += 1; acc.set(k, a);
@@ -396,7 +416,7 @@ export function window24(hours: ReadonlyMap<HourKey, Hour>, endKey: HourKey): { 
   return { value: vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null, hours: vals.length };
 }
 
-/** Minimum hours inside one 8-hour sub-window (Task 1 confirms; CPCB practice is 6 of 8). */
+/** Minimum hours inside one 8-hour sub-window. CPCB states none (register AQI-R38); 6 of 8 is an OBOS choice, declared. */
 export const MIN_8H = 6;
 
 export function window8(hours: ReadonlyMap<HourKey, Hour>, endKey: HourKey): { value: number | null; hours: number } {
