@@ -3,6 +3,7 @@
 Attach meteorological forcing to each ECOSTRESS calibration scene.
 
     python3 scripts/fetch-met.py
+    python3 scripts/fetch-met.py --check   # verify the committed CSV's stamps (and values, if cached)
 
 The calibration CSV records what the surface WAS; the model predicts surface
 temperature GIVEN the atmosphere. Without air temperature, humidity and wind at
@@ -21,19 +22,24 @@ the right quantity: the model takes regional air temperature as forcing and
 generates the local anomaly itself. Feeding it a ward-level air temperature
 would double-count the heat island.
 
-TIME BASE. POWER hourly is stamped in Local Solar Time, and the calibration CSV
-already carries local_solar_hour derived from centre longitude. The join is
-therefore direct, with no timezone arithmetic to get wrong — which is why the
-LST check below is a raised error rather than an assert: under `python3 -O`
-asserts vanish, and every scene would silently join to the wrong hour.
+TIME BASE. POWER hourly is stamped in Local Solar Time at the queried longitude,
+so each scene's reading is found by converting the pass's own UTC instant to that
+clock, date and hour together, in _power.power_stamp. The scene's local solar
+HOUR is not enough on its own: joined to the UTC DATE, it read POWER a day early
+for a pass after local midnight but before UTC midnight, which here is a night
+pass, until the correction recorded in _power.py. The LST check below is a raised
+error rather than an assert: under `python3 -O` asserts vanish, and every scene
+would silently join to the wrong hour.
 
 Output: data/calibration/met-forcing.csv
 """
 from __future__ import annotations
 
+import argparse
 import csv
-import datetime
+import datetime as dt
 import json
+import math
 import os
 import subprocess
 import sys
@@ -43,7 +49,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
-import _types  # noqa: E402  (path must be set first — the scripts are not a package)
+import _power  # noqa: E402  (path must be set first — the scripts are not a package)
+import _types  # noqa: E402
 
 ROOT = os.path.join(HERE, "..")
 SCENES = os.path.join(ROOT, "data", "calibration", "ecostress-suhii.csv")
@@ -51,7 +58,7 @@ LANDSAT = os.path.join(ROOT, "data", "calibration", "landsat-ward-lst.json")
 OUT = os.path.join(ROOT, "data", "calibration", "met-forcing.csv")
 CACHE = os.path.expanduser("~/.cache/delta-climate/power-hourly.json")
 
-LAT, LON = 22.55, 88.37                       # centre of the three-ward bbox
+LAT, LON = _power.POWER_LAT, _power.POWER_LON  # the one POWER query point; defined once, in _power.py
 POWER_PARAMS = ("T2M", "RH2M", "WS2M", "CLOUD_AMT")
 PARAMS = ",".join(POWER_PARAMS)               # one source for the request and the read
 FILL_MAX = -900.0                             # POWER fill value is -999
@@ -72,6 +79,7 @@ class SuhiiRow(TypedDict):
     date: str
     phase: str
     status: str
+    utc: str
     local_solar_hour: str
     view_delta: str
     usable_frac: str
@@ -96,6 +104,8 @@ class MetOutRow(TypedDict):
     rh: float
     wind: float
     cloud: float
+    utc: str
+    power_stamp: str
 
 
 class PowerHeader(TypedDict):
@@ -200,6 +210,7 @@ def landsat_scenes() -> list[SuhiiRow]:
         # overpass as two items, and they share one forcing hour.
         by_pass.setdefault(r["date"], cast("SuhiiRow", {
             "date": r["date"], "phase": "day", "status": "ok",
+            "utc": f'{r["date"]}T{r["time_utc"].rstrip("Z")}',
             "local_solar_hour": f'{r["hour_lst"]:.2f}',
             "view_delta": "", "usable_frac": "",
             "urban_mean": "", "rural_strict": "", "suhii": "",
@@ -207,15 +218,94 @@ def landsat_scenes() -> list[SuhiiRow]:
     return sorted(by_pass.values(), key=lambda r: r["date"])
 
 
+def _hour_gap(utc: str, local_solar_hour: str) -> float:
+    """Hours between `utc` read on POWER's clock and a recorded local solar hour, mod 24.
+
+    An empty or non-numeric hour gives nan, which check()'s pin fails."""
+    try:
+        hour = float(local_solar_hour)
+    except (TypeError, ValueError):
+        return math.nan
+    t = dt.datetime.fromisoformat(utc.rstrip("Z")) + dt.timedelta(hours=LON / 15)
+    return abs((t.hour + t.minute / 60 + t.second / 3600 - hour + 12) % 24 - 12)
+
+
+def check() -> int:
+    """Every committed forcing row read the POWER stamp its own UTC instant implies.
+
+    Offline, so CI can run it: it re-derives each row's stamp from the row's own `utc`
+    column and compares, and where the POWER cache exists it also re-reads each row's
+    values at that stamp. A row keyed the old way — UTC date plus local
+    solar hour — fails here for every pass after local midnight but before UTC midnight.
+    """
+    name = os.path.relpath(OUT, ROOT)
+    with open(OUT, newline="") as fh:
+        rows = cast(list[_types.MetRow], list(csv.DictReader(fh)))
+    if not rows:
+        print(f"  {name} has no rows")
+        return 1
+    missing = [c for c in ("utc", "power_stamp") if c not in rows[0]]
+    if missing:
+        print(f"  {name} lacks {', '.join(missing)} — rebuild it")
+        return 1
+    # A right stamp does not prove the values beside it were read at that stamp, so when
+    # the POWER cache is here, re-read each row's four values at its stamp, formatted as
+    # main() writes them. Read only; CI has no cache and runs the stamp checks alone.
+    param: dict[str, dict[str, float]] | None = None
+    if os.path.exists(CACHE):
+        with open(CACHE) as fh:
+            param = cast(PowerBlob, json.load(fh))["properties"]["parameter"]
+    else:
+        print(f"  no POWER cache at {CACHE}: value check skipped, stamps only")
+    bad = 0
+    for r in rows:
+        utc, got, where = r["utc"], r["power_stamp"], f"{r['date']} {r['phase']}"
+        try:
+            # a short row reads None and an empty cell "", neither of which is an instant
+            want = _power.power_stamp(utc, LON) if utc else None
+        except ValueError:
+            want = None
+        if want is None:
+            print(f"  BAD UTC {where}: {utc!r} is not an ISO-8601 instant")
+            bad += 1
+        elif got != want:
+            print(f"  WRONG STAMP {where}: the row read {got!r}, its UTC instant implies {want}")
+            bad += 1
+        # The stamp is only as good as `utc`, so pin `utc` to two columns the scene lists
+        # wrote before this script ran: its UTC date, and its local solar hour (computed at
+        # the scene's own meridian with seconds dropped, so a few minutes' slack; the
+        # largest gap on the 2026-09-24 rebuild is 63 s).
+        # `not <=` rather than `>`: a nan gap (a nan or infinite hour) must fail, not pass.
+        elif utc[:10] != r["date"] or not _hour_gap(utc, r["local_solar_hour"]) <= 0.1:
+            print(f"  UTC DISAGREES {where}: utc {utc}, local solar hour {r['local_solar_hour']}")
+            bad += 1
+        elif param is not None:
+            vals = reading(param, got) if all(n in param for n in POWER_PARAMS) else None
+            want_vals = None if vals is None else [
+                str(round(vals[0], 2)), str(round(vals[1], 2)),
+                str(round(vals[2], 2)), str(round(vals[3] / 100, 3))]
+            have = [r["tAir"], r["rh"], r["wind"], r["cloud"]]
+            if want_vals != have:
+                print(f"  VALUE DISAGREES {where}: tAir/rh/wind/cloud {have}, "
+                      f"POWER at {got} gives {want_vals}")
+                bad += 1
+    if bad:
+        print(f"  {bad} of {len(rows)} forcing rows fail")
+        return 1
+    print(f"  {len(rows)} forcing rows: every POWER stamp matches the row's own UTC instant"
+          + ("" if param is None else ", and every value is POWER's at that stamp"))
+    return 0
+
+
 def main() -> None:
     with open(SCENES, newline="") as fh:
         rows_in = cast(list[SuhiiRow], list(csv.DictReader(fh)))
     scenes = [r for r in rows_in if r["status"] == "ok"]
     n_ecostress = len(scenes)
-    # Landsat passes join through exactly the same LST-rounding path below. If
-    # the two sources ever disagree about what `local_solar_hour` means, this is
-    # where it would show up as forcing attached to the wrong hour, which is why
-    # both go through one loop rather than two.
+    # Landsat passes join through exactly the same UTC-instant path below. If
+    # the two sources ever disagree about what `utc` means, this is where it
+    # would show up as forcing attached to the wrong hour, which is why both go
+    # through one loop rather than two.
     scenes = scenes + landsat_scenes()
     print(f"  scenes: {n_ecostress} ECOSTRESS + {len(scenes) - n_ecostress} Landsat "
           f"overpasses = {len(scenes)}")
@@ -226,7 +316,8 @@ def main() -> None:
     blob = power_hourly(dates[0].replace("-", ""), dates[-1].replace("-", ""))
 
     # A raised error, not an assert: `python3 -O` strips asserts, and the whole
-    # timezone-free join rests on this one invariant.
+    # join rests on this one invariant — _power.power_stamp converts each pass's
+    # UTC instant to local solar time because that is the clock POWER stamps in.
     if blob["header"]["time_standard"] != "LST":
         sys.exit(f"POWER time base is {blob['header']['time_standard']!r}, not LST — "
                  f"the local-solar-hour join in this script is no longer valid")
@@ -242,16 +333,12 @@ def main() -> None:
     rows: list[MetOutRow] = []
     missing = 0
     for s in scenes:
-        # POWER keys are YYYYMMDDHH in local solar time; round the scene's solar
-        # hour to the nearest stamp rather than truncating, so a 13:50 overpass
-        # takes the 14:00 reading it is closest to. Rounding 23.84 up to 24 must
-        # roll the DATE forward too, or the scene silently takes a reading 24
-        # hours early.
-        hour = int(round(float(s["local_solar_hour"])))
-        day = datetime.date.fromisoformat(s["date"])
-        if hour >= 24:
-            hour, day = hour - 24, day + datetime.timedelta(days=1)
-        key = day.strftime("%Y%m%d") + f"{hour:02d}"
+        # The POWER stamp comes from the pass's own UTC instant, date and hour in one
+        # calculation (_power.power_stamp). Building it from the scene's UTC DATE plus
+        # its local solar HOUR read POWER 24 hours early for every pass after local
+        # midnight but before UTC midnight — 20 of 97 rows, all at night (2026-09-23
+        # audit, item 3).
+        key = _power.power_stamp(s["utc"], LON)
         vals = reading(param, key)
         if vals is None:
             missing += 1
@@ -266,6 +353,7 @@ def main() -> None:
             "suhii": s["suhii"],
             "tAir": round(t2m, 2), "rh": round(rh2m, 2),
             "wind": round(ws2m, 2), "cloud": round(cloud_pct / 100, 3),
+            "utc": s["utc"], "power_stamp": key,
         })
 
     # Guarded BEFORE the file is opened. Opening for write truncates it to zero
@@ -292,4 +380,10 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    ap = argparse.ArgumentParser(description="Attach NASA POWER hourly forcing to each calibration scene.")
+    ap.add_argument("--check", action="store_true",
+                    help="verify the committed CSV's POWER stamps offline, and its values against "
+                         "the POWER cache when present; fetches and writes nothing")
+    if ap.parse_args().check:
+        sys.exit(check())
     main()

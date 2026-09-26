@@ -29,6 +29,7 @@ from __future__ import annotations
 import json
 import math
 import os
+import re
 import sys
 from collections.abc import Sequence
 from typing import Any, Literal, TypedDict
@@ -45,6 +46,7 @@ import _types  # noqa: E402
 
 ROOT = os.path.join(HERE, "..")
 OUT = os.path.join(ROOT, "data", "calibration", "model-accuracy.json")
+TYPES_TS = os.path.join(ROOT, "src", "scripts", "climate-engine", "types.ts")
 
 # The fitted point from fit-physics.py. Recorded, not shipped — every parameter
 # pinned to a bound, which is why DEFAULT_PARAMS was left alone.
@@ -148,12 +150,35 @@ BOOTSTRAP_SEED = 7
 BOOTSTRAP_N = 4000
 
 
+def shipped_q() -> float:
+    """DEFAULT_PARAMS.Q as types.ts ships it, read from the TypeScript, never mirrored here.
+
+    Confined to the object literal: the SimParams interface above it declares `Q: number;`.
+    """
+    name = os.path.relpath(TYPES_TS, ROOT)
+    with open(TYPES_TS, encoding="utf-8") as fh:
+        text = fh.read()
+    # One declaration, or the search below reads whichever comes first: a commented-out
+    # copy of the literal at column 0 returned its own Q.
+    n = len(re.findall(r"^export const DEFAULT_PARAMS\b", text, re.M))
+    if n != 1:
+        sys.exit(f"  expected exactly one `export const DEFAULT_PARAMS` in {name}, found {n}")
+    lit = re.search(r"^export const DEFAULT_PARAMS\b[^=]*=\s*\{(.*?)^\};", text, re.M | re.S)
+    if lit is None:
+        sys.exit(f"  no DEFAULT_PARAMS object literal found in {name}")
+    qs = re.findall(r"^\s*Q:\s*([0-9.]+),", lit.group(1), re.M)
+    if len(qs) != 1:
+        sys.exit(f"  expected exactly one `Q:` in DEFAULT_PARAMS in {name}, found {len(qs)}")
+    return float(qs[0])
+
+
 def _ward_scale_validation() -> dict[str, Any] | None:
     """Stratified out-of-sample accuracy over the two-sensor ward-scale set.
 
     The machinery here was proven in scripts/experiment-validation-uncertainty.py
-    and is promoted, not reinvented; that script stays as an independent
-    cross-check which must agree with these numbers.
+    and is promoted, not reinvented; that script does not share the shipped-candidate
+    selection below (it still scores candidates[0], candidate A), so it is not yet a
+    cross-check of these numbers, and aligning it is follow-up work.
 
     LEAVE-ONE-OVERPASS-OUT IS THE ONLY SPLIT COMPUTED. Scene- and ward-level
     splits flatter the result, because one satellite pass covers all three wards
@@ -185,7 +210,12 @@ def _ward_scale_validation() -> dict[str, Any] | None:
     # describing a model nobody runs, and understating the real one by 0.23 K.
     #
     # So the candidate is now SELECTED BY MATCHING THE SHIPPED CONSTANTS rather
-    # than by position, and a mismatch is fatal instead of silent.
+    # than by position, and a mismatch is fatal instead of silent. The match checks
+    # release_base and l_et only, and G's fitted q_day is its free fit, not the Q
+    # that ships, so q_day is taken from types.ts below rather than from the fit.
+    # G's ratio and release_built are free fits too; they equal what ships only
+    # because both rail to bounds that coincide with it, and the unit test holds all
+    # six there.
     with open(fit_path) as fh:
         candidates = json.load(fh)["candidates"]
     shipped = [c for c in candidates
@@ -204,6 +234,12 @@ def _ward_scale_validation() -> dict[str, Any] | None:
     night_release = cand["fitted"].get("release_base", 0.0) > 0
     params = dict(fws.SHIP)
     params.update(cand["fitted"])
+    # The shipped Q lies inside the q_day interval the observations cannot reject and
+    # was kept deliberately rather than moved to the free fit (fit-ward-scale.py's
+    # q_plateau docstring; heat-map-validation's "the shipped constants match the
+    # calibration run they came from"). Scoring the free fit measured a model that
+    # does not ship; found 2026-09-24.
+    params["q_day"] = shipped_q()
 
     rows = fws.load_rows(sensors=None)      # validation spans BOTH instruments
     if len(rows) != len(raw):
@@ -380,6 +416,10 @@ def _ward_scale_validation() -> dict[str, Any] | None:
     return {
         "method": ("leave-one-OVERPASS-out; scene- and ward-level splits leak "
                    "through shared overpasses and are not published"),
+        # The constants these figures describe, so a test can hold them to what ships.
+        "scored": {k: params[k] for k in ("q_day", "ratio", "c", "l_et",
+                                          "release_base", "release_built")},
+        "q_day_source": "src/scripts/climate-engine/types.ts DEFAULT_PARAMS.Q",
         "pending_recalibration": pending,
         "bootstrap": {"seed": BOOTSTRAP_SEED, "resamples": BOOTSTRAP_N,
                       "unit": "overpass"},

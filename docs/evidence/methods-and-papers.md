@@ -353,7 +353,8 @@ population; MAE is the honest one.** Written up in
   [10.1007/s00704-010-0382-8](https://doi.org/10.1007/s00704-010-0382-8) — developed/validated SOLWEIG;
   Tmrt validation R²=0.91, RMSE=3.1 K over five days in Göteborg. **Engine use:** cited as a field
   calibration reference ("our 2.31 K peak / 2.93 K night LST error is not the embarrassment it feels like at
-  2 a.m."); its shadow/SVF *intermediates* (not the Tmrt model) are the candidate methods, since SOLWEIG
+  2 a.m."; figures as of 2026-08; night is 2.677 K since the 2026-09-24 forcing correction, known-limitations
+  §15, and 2.31 K is not the published peak, which is 4.42 K in `accuracy.ts`); its shadow/SVF *intermediates* (not the Tmrt model) are the candidate methods, since SOLWEIG
   computes a person-level comfort variable while this engine predicts satellite-view LST.
 - **Ratti, C. & Richens, P. (1990/1999)** — originated the shear-and-running-max shadow-volume algorithm
   later re-described in Lindberg & Grimmond 2011; MIT Senseable City Lab affiliation is **inferred, not

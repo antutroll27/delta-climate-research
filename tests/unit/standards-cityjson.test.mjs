@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFileSync } from 'node:fs';
 
 import { WARDS } from '../../src/data/wards.ts';
 import { buildCityJSON } from '../../src/scripts/standards/cityjson.ts';
@@ -70,7 +71,10 @@ test('the lineage block carries the measured confidence and the prototype status
   assert.ok(l.confidence.night.bandK > 0 && l.confidence.peak.n > 0);
   // the band must cover the OUT-OF-SAMPLE error, not the in-sample fit — the
   // audit found ±3.0 published against a 3.102 K leave-one-overpass-out error
-  assert.ok(l.confidence.night.bandK >= 3.5, `night band ${l.confidence.night.bandK} understates`);
+  const nightLoo = JSON.parse(readFileSync('data/calibration/model-accuracy.json', 'utf8'))
+    .ward_scale.strata.night.loo_overpass_rmse_K;
+  assert.ok(l.confidence.night.bandK >= nightLoo,
+    `night band ${l.confidence.night.bandK} understates the ${nightLoo} K leave-one-overpass-out error`);
   assert.equal(l.confidence.heights.verdict, 'underpowered');
   assert.match(cj.metadata.referenceSystem, /EPSG\/0\/4979$/)   // 3-D CRS; 4326 is 2-D;
   assert.equal(cj.metadata.pointOfContact.emailAddress, 'angad@deltaclimate.earth', 'contactDetails requires emailAddress');

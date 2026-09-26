@@ -6,6 +6,11 @@
  * (2024-01 → 2026-07), produced by `scripts/fit-ward-scale.py` and mirrored here
  * from `data/calibration/ward-scale-fit.json`.
  *
+ * NIGHT IS THE EXCEPTION: its figures come from `data/calibration/model-accuracy.json`
+ * → `ward_scale.strata.night` (written by `scripts/measure-accuracy.py`). Do NOT copy
+ * `phases.night.reported_band_K` from that file — its 3.5 is the superseded
+ * mask-scale block, scoring a fit that does not ship.
+ *
  * MEASURED AT WARD SCALE, WHICH IS NEW. The previous figures scored the model
  * against two GHS-SMOD masks — 3,363 km² "urban" against 1,568 km² "rural".
  * Sampling both with Sentinel-2 showed they are the same landscape (FVC 0.678
@@ -17,21 +22,23 @@
  * WHY DAY AND NIGHT DIFFER. `ceilingRmseK` is the error of the best possible
  * empirical predictor built from the same forcing AND the ward's own measured
  * surface, scored leave-one-out. It is an upper bound on what ANY model on
- * these inputs can achieve. At night it is 2.23 K; by day 3.34 K, because
+ * these inputs can achieve. At night it is 2.117 K; by day 3.34 K, because
  * daytime surface temperature turns on site-level insolation, cloud timing and
  * soil moisture that a 50 km reanalysis cell cannot resolve. No amount of
  * tuning moves the daytime ceiling — that limit is the forcing data.
  *
- * WHERE WE SIT AGAINST IT. Night is 0.70 K off its ceiling with a bias of
- * +0.18 K — and, more importantly, on the right side of air temperature at
- * last. Day is 1.08 K off, so the daytime structure is genuinely incomplete
- * and that gap is ours, not the data's. Two different situations; the notes
- * below say so rather than averaging them into one reassuring sentence.
+ * WHERE WE SIT AGAINST IT. Night is 0.56 K off its ceiling, and the model runs
+ * 0.36 K warmer than the measured surface on average (bias +0.36 K, model
+ * minus measured; re-measured 2026-09-24 after the forcing-date correction).
+ * Day is 1.08 K off, so the daytime structure is genuinely incomplete and
+ * that gap is ours, not the data's. Two different situations; the notes below
+ * say so rather than averaging them into one reassuring sentence.
  *
  * So the product reports night quantitatively and day as indicative.
  *
  * Regenerate with: python3 scripts/build-ward-observations.py
  *                  python3 scripts/fit-ward-scale.py
+ *                  python3 scripts/measure-accuracy.py   (ACCURACY.night is copied from its output)
  */
 export interface PhaseAccuracy {
   /** scenes the figure is measured over */
@@ -52,28 +59,33 @@ export interface PhaseAccuracy {
 export const ACCURACY: Record<'peak' | 'night', PhaseAccuracy> = {
   night: {
     n: 50,
-    ceilingRmseK: 2.233,
-    modelRmseK: 2.93,
+    ceilingRmseK: 2.117,
+    modelRmseK: 2.677,
     /**
      * Leave-one-overpass-out RMSE, from data/calibration/model-accuracy.json
      * ward_scale.strata.night. THIS is the number the band must cover.
      *
-     * An audit found the published ±3.0 K band sat BELOW it. `modelRmseK` 2.93 is
-     * the IN-SAMPLE fit; /uncertainty has always described the method as
-     * "leave-one-overpass-out", and the honest out-of-sample error under that
-     * method is 3.102 K. The guard below compared the band to the in-sample
-     * figure, so ±3.0 passed while understating the error the page named. Of
+     * HISTORY, not today's state. An earlier audit found the ±3.0 K band then
+     * published sat BELOW the out-of-sample error measured at the time. `modelRmseK`
+     * (2.93 then) is the IN-SAMPLE fit; /uncertainty has always described
+     * the method as "leave-one-overpass-out", and the honest out-of-sample error
+     * under that method was then 3.102 K, so the band was widened to ±3.5. The guard
+     * compared the band to the in-sample figure, so ±3.0 had passed while
+     * understating the error the page named. Today's ±3.0 is a re-measurement, not a
+     * reversion: after the 2026-09-24 forcing-date correction the out-of-sample error
+     * is 2.801 K, which it covers (known-limitations §15). Of
      * every possible defect on a site whose product is its error bars, an error
      * bar that is too small is the worst one.
      */
-    looOverpassRmseK: 3.102,
-    bandK: 3.5,
+    looOverpassRmseK: 2.801,
+    bandK: 3.0,
     confidence: 'quantitative',
-    note: 'Night surface temperature tracks air temperature closely, and the model now '
-        + 'reproduces the nocturnal heat island rather than inverting it — the modelled '
-        + 'surface sits above air as measured (bias +0.18 K; the previous structure was '
-        + '−1.54 K, i.e. the wrong side of air entirely). 2.93 K against a 2.233 K '
-        + 'ceiling, over 50 ward-scenes. The displayed band is +/-3.5 K because it must cover the leave-one-overpass-out error of 3.102 K, not the in-sample fit.',
+    note: 'Night surface temperature tracks air temperature closely, which is why '
+        + 'night is the quantitative view: over 50 ward-scenes the model\'s error is '
+        + '2.677 K against a best-achievable 2.117 K, and it runs 0.36 K warmer than '
+        + 'the measured surface on average (bias +0.36 K). The displayed band is '
+        + '+/-3.0 K because it must cover the leave-one-overpass-out error of 2.801 K, '
+        + 'not the in-sample fit.',
   },
   peak: {
     n: 29,
@@ -250,6 +262,9 @@ export function unmeasuredNote(fields: readonly string[], points: number): strin
  * empirical benchmark and the benchmark beat all 30.
  *
  * Regenerate with: python3 scripts/measure-scale-skill.py
+ *
+ * PRE-CORRECTION FORCING, like SPATIAL below: not re-run after the 2026-09-24
+ * forcing-date correction (docs/evidence/known-limitations.md §15).
  */
 export const SCALE_SKILL = Object.freeze({
   /** the published comparison: one ECOSTRESS cell */
@@ -296,6 +311,13 @@ export const SCALE_SKILL = Object.freeze({
  * 0.010 measured on the stale raster, not a narrower one. The gain was the
  * smoothing, not the physics — and the null below is now that like-for-like one,
  * not a raw layer.
+ */
+/*
+ * PRE-CORRECTION FORCING. The night and all-phase figures below
+ * (spatial-accuracy.json, shipped-amplitude.json) were computed before the
+ * 2026-09-24 forcing-date correction: 32 of their 50 night ward-scenes fall on
+ * passes whose forcing it changed. They are to be re-run in the follow-up re-fit
+ * (docs/evidence/known-limitations.md §15).
  */
 export const SPATIAL = {
   /** ward-scenes scored (3 wards x near-nadir scenes, after cloud/QC masking) */

@@ -2559,7 +2559,7 @@ export function mountHeatMap(): () => void {
 
   /**
    * Show how much to trust the number on screen. Night is calibratable against
-   * ECOSTRESS (data ceiling 2.18 K); daytime is not (3.33 K), because noon
+   * ECOSTRESS (data ceiling 1.87 K); daytime is not (3.33 K), because noon
    * surface temperature depends on local insolation, cloud timing and soil
    * moisture that 50 km reanalysis forcing cannot resolve. Presenting the
    * daytime figure as decision-grade would be the real inaccuracy, so it is
