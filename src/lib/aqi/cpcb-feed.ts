@@ -123,9 +123,12 @@ export function istStamp(s: string): string {
  * unclosed one runs to the end, as in XML: nothing after it is read.
  */
 function stripHidden(xml: string): string {
-  let out = '', i = 0;
+  /* Each opener's next position is kept and re-searched only once the pass has moved past it:
+     re-searching both on every step read the whole tail again per section (re-audit I-1: 78 s at 2 MB). */
+  let out = '', i = 0, c = xml.indexOf('<!--'), d = xml.indexOf('<![CDATA[');
   for (;;) {
-    const c = xml.indexOf('<!--', i), d = xml.indexOf('<![CDATA[', i);
+    if (c >= 0 && c < i) c = xml.indexOf('<!--', i);
+    if (d >= 0 && d < i) d = xml.indexOf('<![CDATA[', i);
     const at = c < 0 ? d : d < 0 ? c : Math.min(c, d);
     if (at < 0) return out + xml.slice(i);
     out += xml.slice(i, at);

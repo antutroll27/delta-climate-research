@@ -309,3 +309,18 @@ test("I1: CPCB's CO and O₃ values cover the last 8 hours, the others do not (7
     assert.ok(v.fits / v.n < 0.7 && v.impossible > 50, `${p} is not 8-hour: ${JSON.stringify(v)} (the check discriminates)`);
   }
 });
+
+/* ---- Re-audit I-1: stripping comments and CDATA is linear too. ---- */
+
+for (const [what, unit] of [['CDATA sections', '<![CDATA[x]]>'], ['comments', '<!--x-->']]) {
+  test(`I-1: 2 MB of closed ${what} strips in under 200 ms`, () => {
+    const ms = timed(HEAD + fill(unit, FEED_MAX_BYTES - HEAD.length - TAIL.length) + TAIL);
+    assert.ok(ms < HOSTILE_MS, `${ms.toFixed(0)} ms`);
+  });
+}
+
+test('I-1: interleaved comments and CDATA keep every station that follows them', () => {
+  const st = (n) => ST(n).replace('BODY', POLS + AQ38);
+  const xml = `<AqIndex><!--a--><![CDATA[b]]><!--c-->${st('A')}<![CDATA[<Station id="Ghost">]]><!-- ]]> -->${st('B')}<![CDATA[ --> ]]></AqIndex>`;
+  assert.deepEqual(parseFeed(xml).map((s) => s.name), ['A', 'B']);
+});
