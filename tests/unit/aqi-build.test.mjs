@@ -238,3 +238,10 @@ test('stale and failing CPCB validity is unavailable with reason no_valid_aqi', 
   assert.equal(c.state, 'unavailable');
   assert.equal(c.reason, 'no_valid_aqi');
 });
+
+test('the builder marks its own results origin obos, schema 2', () => {
+  const p = buildPayload('in/kolkata/ballygunge', stationFor('in/kolkata/ballygunge'), rawUpTo('2026-09-24T17:30:00Z'), new Date('2026-09-24T18:30:00Z'));
+  assert.equal(p.current.schema, 2);
+  assert.equal(p.current.result.origin, 'obos');
+  assert.equal(p.history.schema, 2);
+});

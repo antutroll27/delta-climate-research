@@ -93,10 +93,10 @@ export function buildPayload(areaKey: string, st: StationEntry | null, raw: Part
   if (!c.ok) {
     /* insufficient_data is for FRESH data failing CPCB validity (spec §3). Stale with no valid AQI has nothing honest to show. */
     return fresh
-      ? { current: { ...common, state: 'insufficient_data', station, pollutants: current, reasons: c.reasons, observed_at }, history }
+      ? { current: { ...common, state: 'insufficient_data', origin: 'obos' as const, station, pollutants: current, reasons: c.reasons, observed_at }, history }
       : { current: { ...common, state: 'unavailable', station, last_observed_at: observed_at, reason: 'no_valid_aqi' }, history };
   }
-  const result = { aqi: c.aqi, category: c.category, dominant: c.dominant, pollutants: current, window_end_ist: keyToIso(nextHourKey), algorithm: ALGORITHM };
+  const result = { origin: 'obos' as const, aqi: c.aqi, category: c.category, dominant: c.dominant, pollutants: current, window_end_ist: keyToIso(nextHourKey), algorithm: ALGORITHM };
   return fresh
     ? { current: { ...common, state: 'live', station, result, observed_at }, history }
     : { current: { ...common, state: 'stale', station, result, observed_at, age_h: ageH }, history };

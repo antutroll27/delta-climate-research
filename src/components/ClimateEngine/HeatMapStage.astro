@@ -2302,6 +2302,10 @@ const newCity = scope.area.hasData
   [data-pane="air"] .unit{font-family:var(--sans);font-size:.56rem;color:var(--faint);letter-spacing:0;text-transform:none}
   [data-pane="air"] .si{display:flex;align-items:center;gap:6px}
   [data-pane="air"] .si i{display:block;height:6px;border-radius:0 3px 3px 0;min-width:2px}
+  /* CPCB's sub-index table (previews/aqi-cpcb, approved 2026-09-27): the sub-index holding the AQI is bold, and the note keeps its distance.
+     Colour stays --paper, as rendered on the approved preview (its own white rule lost on specificity). */
+  [data-pane="air"] table.pol tr.aq-top .si{font-weight:700}
+  [data-pane="air"] table.pol + .pane-note{margin-top:6px}
   [data-pane="air"] .chart{position:relative}
   [data-pane="air"] .chart svg{display:block;width:100%;height:auto;overflow:visible}
   [data-pane="air"] .tip{position:absolute;pointer-events:none;background:var(--aq-tip);border:1px solid var(--line-hi);border-radius:7px;padding:6px 8px;font:400 .6rem/1.45 var(--mono);color:var(--paper);white-space:nowrap;transform:translate(-50%,-110%);opacity:0;transition:opacity .12s ease}

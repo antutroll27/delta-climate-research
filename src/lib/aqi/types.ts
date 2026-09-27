@@ -8,7 +8,7 @@
  * reads an AQI where the state carries none. Missing values are `null`, never 0.
  */
 
-export const SCHEMA = 1 as const;
+export const SCHEMA = 2 as const;
 
 /** CPCB National AQI categories, in order. The UI always prints the word; colour is never the only signal. */
 export type CpcbCategory = 'good' | 'satisfactory' | 'moderate' | 'poor' | 'very_poor' | 'severe';
@@ -49,6 +49,8 @@ export interface PollutantReading {
 }
 
 export interface AqiResult {
+  /** Computed by OBOS from OpenAQ's copy of the readings (the fallback since 2026-09-27). */
+  origin: 'obos';
   aqi: number;
   category: CpcbCategory;
   dominant: Pollutant;
@@ -57,6 +59,34 @@ export interface AqiResult {
   window_end_ist: string;
   algorithm: 'cpcb-aqi-1';
 }
+
+/**
+ * One pollutant's sub-indices as CPCB publishes them (not concentrations: register AQI-R47a).
+ * The window is 8 hours for CO and O₃ and 24 hours for every other pollutant (measured, AQI-R47a).
+ */
+export interface CpcbSubIndex {
+  parameter: Pollutant;
+  /** The window's mean sub-index; the largest across pollutants IS the AQI. */
+  avg: number | null;
+  /** The smallest and largest hourly sub-index in the window. */
+  min: number | null;
+  max: number | null;
+  /** The latest hour's sub-index. */
+  hourly: number | null;
+}
+
+/** CPCB's own published station AQI, read from its CAAQMS feed. */
+export interface CpcbResult {
+  origin: 'cpcb';
+  aqi: number;
+  category: CpcbCategory;
+  dominant: Pollutant;
+  /** The leading pollutant's window: 8 when CO or O₃ leads (CPCB's value is then the 8-hour mean), else 24. */
+  window_h: 24 | 8;
+  subindices: CpcbSubIndex[];
+}
+
+export type Result = AqiResult | CpcbResult;
 
 /**
  * Why there is no AQI. Each says something different about the station, so the UI must not collapse them:
@@ -74,10 +104,11 @@ interface Common {
 }
 
 export type AirQualityResponse = Common & (
-  | { state: 'live'; station: AqiStation; result: AqiResult; observed_at: string }
-  | { state: 'stale'; station: AqiStation; result: AqiResult; observed_at: string; age_h: number }
+  | { state: 'live'; station: AqiStation; result: Result; observed_at: string }
+  | { state: 'stale'; station: AqiStation; result: Result; observed_at: string; age_h: number }
   | { state: 'unavailable'; station: AqiStation; last_observed_at: string | null; reason: UnavailableReason }
-  | { state: 'insufficient_data'; station: AqiStation; pollutants: PollutantReading[]; reasons: string[]; observed_at: string }
+  | ({ state: 'insufficient_data'; station: AqiStation; reasons: string[]; observed_at: string }
+      & ({ origin: 'obos'; pollutants: PollutantReading[] } | { origin: 'cpcb'; subindices: CpcbSubIndex[] }))
   | { state: 'no_station'; message: string }
 );
 

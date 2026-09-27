@@ -34,6 +34,7 @@
     "@astrojs/sitemap": "^3.7.3",
     "@paper-design/shaders-react": "^0.0.76",
     "@vercel/analytics": "^2.0.1",
+    "@vercel/functions": "^3.9.9",
     "@vercel/speed-insights": "^2.0.0",
     "astro": "^7.1.6",
     "decimal.js": "^10.6.0",

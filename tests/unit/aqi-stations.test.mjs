@@ -30,3 +30,16 @@ test('no sensor is declared in ppb: units come from verification, never from Ope
     assert.equal(st.sensors.co.unit, 'mg_m3');
   }
 });
+
+import { readFileSync } from 'node:fs';
+import { gunzipSync } from 'node:zlib';
+
+test("each station's CPCB name is in CPCB's feed, within 100 m of the registered position", () => {
+  const xml = gunzipSync(readFileSync(new URL('../fixtures/aqi/cpcb-feed-2026-09-27T0500IST.xml.gz', import.meta.url))).toString('utf8');
+  for (const [key, st] of Object.entries(AREAS)) {
+    if (!st) continue;
+    const m = new RegExp(`<Station id="${st.cpcb_name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"[^>]*latitude="([\\d.]+)" longitude="([\\d.]+)"`).exec(xml);
+    assert.ok(m, `${key}: "${st.cpcb_name}" not in the feed`);
+    assert.ok(havM(st.lat, st.lon, Number(m[1]), Number(m[2])) <= 100, `${key}: feed position is more than 100 m from the registry`);
+  }
+});
