@@ -351,10 +351,10 @@ test('OBOS fallback is labelled as ours', () => {
 // Addition beyond the plan: the approved preview (previews/aqi-cpcb) marks the row holding the AQI.
 test('the sub-index row that holds the AQI is marked, and only when CPCB published one', () => {
   const pane = paneHtml(cp(C1), 'Ballygunge', C1);
-  assert.equal(pane.match(/<tr class="top">/g)?.length, 1);
-  assert.match(pane, /<tr class="top"><td>PM10<\/td>/);
+  assert.equal(pane.match(/<tr class="aq-top">/g)?.length, 1);
+  assert.match(pane, /<tr class="aq-top"><td>PM10<\/td>/);
   const f = { ...pick(FEED, SB), aqi: null, dominant: null };
-  assert.doesNotMatch(paneHtml({ current: currentFromFeed(f, KB, SB, C1), history: null }, 'Ballygunge', C1), /class="top"/);
+  assert.doesNotMatch(paneHtml({ current: currentFromFeed(f, KB, SB, C1), history: null }, 'Ballygunge', C1), /class="(aq-)?top"/);
 });
 
 test('an IST time never breaks across lines: the CPCB live card holds its time in a nowrap span', () => {

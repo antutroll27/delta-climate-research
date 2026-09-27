@@ -147,13 +147,13 @@ const failedPaneHtml = (place: string): string => paneHead(place) + `<div class=
 
 const SUB_ORDER: readonly Pollutant[] = ['pm25', 'pm10', 'no2', 'so2', 'co', 'o3', 'nh3'];
 
-/** CPCB's sub-indices (never concentrations: CPCB's feed carries none). The biggest bar is the AQI; `lead`'s row is marked (null: no AQI, no mark). */
+/** CPCB's sub-indices (never concentrations: CPCB's feed carries none). The biggest bar is the AQI; `lead`'s row is marked `aq-top`, prefixed because the stage's own top bar is `.top` (null: no AQI, no mark). */
 function subTable(subs: readonly CpcbSubIndex[], lead: Pollutant | null): string {
   const rows = SUB_ORDER.map((p) => subs.find((q) => q.parameter === p)).filter((q): q is CpcbSubIndex => !!q).map((q) => {
     const si = typeof q.avg === 'number' && Number.isFinite(q.avg) && q.avg >= 0 ? q.avg : null;
     const w = si === null ? 0 : Math.min(100, si / 2), bar = si === null ? 'transparent' : col(category(si));
     const range = q.min === null || q.max === null ? '—' : `${num(q.min)}–${num(q.max)}`;
-    return `<tr${q.parameter === lead ? ' class="top"' : ''}><td>${pol(q.parameter)}</td><td><span class="si"><i style="width:${w}%;background:${bar}"></i>${num(q.avg)}</span></td><td class="n">${range}</td><td class="n">${num(q.hourly)}</td></tr>`;
+    return `<tr${q.parameter === lead ? ' class="aq-top"' : ''}><td>${pol(q.parameter)}</td><td><span class="si"><i style="width:${w}%;background:${bar}"></i>${num(q.avg)}</span></td><td class="n">${range}</td><td class="n">${num(q.hourly)}</td></tr>`;
   }).join('');
   return `<p class="pane-h">Pollutants · CPCB sub-indices</p><table class="pol"><thead><tr><th>Pollutant</th><th>24-h sub-index</th><th>24-h range</th><th>Latest hour</th></tr></thead><tbody>${rows}</tbody></table>` +
     `<p class="pane-note">Sub-indices on the AQI scale, as CPCB publishes them. The largest is the AQI. CPCB's feed carries no concentrations.</p>`;
