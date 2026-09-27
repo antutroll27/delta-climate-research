@@ -82,6 +82,7 @@ type AqiResult = (existing fields) & { origin: 'obos' };   // unchanged otherwis
 - **Caching.**
   - A response with CPCB current **and** history gets today's `OK_CACHE`.
   - A response with `history: null` gets `public, max-age=0, s-maxage=60`, so the CDN does not keep a chart-less answer for 10 minutes.
+  - **A fallback answer (origin obos) for an area with a station also gets the 60 s header** (re-audit M-2). The server asks CPCB again after 60 s, so a CPCB blip must not pin OBOS's figure at the CDN for 10 minutes or more. Baruipur's `no_station` keeps `OK_CACHE`.
   - Full failures stay `no-store`.
 - **No OpenAQ key.** CPCB's current value is still served, with `history: null` and the 60 s partial cache; OpenAQ is never called. Only when CPCB has no usable current value does a missing key give today's 503 with `no-store`.
 - **Unchanged.** The key stays server-only, only `area` is accepted, `maxDuration` stays 30.
@@ -125,3 +126,8 @@ Each test is written first and proven with at least one mutation.
 - Bengaluru and Baruipur. No CPCB station lies within their 3 km windows: the nearest are Hombegowda Nagar at 4.3 km from MG Road, 7.1 km from Indiranagar and 15 km from Whitefield; Baruipur's nearest is Jadavpur at 16 km.
 - Any change to the 30-day chart's method.
 - Modelled air quality.
+
+## 10. Rollout and rollback
+
+- **Forward (safe).** The browser validator accepts schema 1 and schema 2, so a page loaded after the deploy renders any payload the CDN still holds from before it (up to about 40 minutes: `s-maxage=600` plus `stale-while-revalidate=1800`).
+- **Backward (known one-directional risk, re-audit M-5).** Code from before this change validates schema 1 only. After a revert, the CDN can go on serving schema-2 payloads for up to about 40 minutes, and the reverted page rejects them, so the card shows "Not loaded". **Rollback step: if the card shows "Not loaded" after a revert, purge the CDN cache for `/api/air-quality`.**

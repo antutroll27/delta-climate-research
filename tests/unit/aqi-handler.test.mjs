@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { handle } from '../../api/air-quality.ts';
+import { handle, GRACE_MS } from '../../api/air-quality.ts';
 
 const res = () => { const r = { code: 0, headers: {}, body: null, status(c) { r.code = c; return r; }, setHeader(k, v) { r.headers[k] = v; }, json(b) { r.body = b; } }; return r; };
 import { gunzipSync } from 'node:zlib';
@@ -100,7 +100,7 @@ test('I1: a 404 on the SO2 sensor is a missing pollutant, not a failure: the AQI
   assert.ok(['live', 'stale'].includes(r.body.current.state), r.body.current.state);
   const so2 = r.body.current.result.pollutants.find((q) => q.parameter === 'so2');
   assert.deepEqual({ value: so2.value, sub_index: so2.sub_index }, { value: null, sub_index: null });
-  assert.match(r.headers['Cache-Control'], /s-maxage=600/);
+  assert.equal(r.headers['Cache-Control'], 'public, max-age=0, s-maxage=60', 'a fallback answer lives 60 s at the CDN (re-audit M-2)');
 });
 
 test('I2: any query parameter other than area is 400, no-store, with no upstream call', async () => {
@@ -193,7 +193,7 @@ test('CPCB ok, OpenAQ fails: CPCB current, no history, 60 s cache, failure logge
 test('CPCB down, OpenAQ ok: today\'s path, origin obos', async () => {
   const r = await quiet(() => get(deps(async (u) => ok(u))));
   assert.equal(r.body.current.result.origin, 'obos');
-  assert.match(r.headers['Cache-Control'], /s-maxage=600/);
+  assert.equal(r.headers['Cache-Control'], 'public, max-age=0, s-maxage=60', 'a fallback answer lives 60 s at the CDN (re-audit M-2)');
 });
 
 test('no OpenAQ key but CPCB ok: CPCB current, no history, never an OpenAQ call', async () => {
@@ -247,4 +247,18 @@ test('M-g: after a feed failure CPCB is not asked again for 60 s; the fallback a
   t += 31_000;
   await quiet(() => get(d));
   assert.equal(cp, 2, 'CPCB is asked again after 60 s');
+});
+
+/* ---- Re-audit M-2, M-4. ---- */
+
+test('M-2: a fallback answer is cached 60 s at the CDN, so a CPCB blip is not pinned for 10 min; no_station keeps 10 min', async () => {
+  const fb = await quiet(() => get(deps(async (u) => ok(u), { now: () => CNOW })));
+  assert.equal(fb.body.current.result.origin, 'obos');
+  assert.equal(fb.headers['Cache-Control'], 'public, max-age=0, s-maxage=60');
+  const none = await get(deps(async () => { throw new Error('must not fetch'); }), { area: 'in/kolkata/baruipur' });
+  assert.equal(none.headers['Cache-Control'], 'public, max-age=60, s-maxage=600, stale-while-revalidate=1800');
+});
+
+test('M-4: the grace after CPCB settles is 1.5 s', () => {
+  assert.equal(GRACE_MS, 1_500);
 });

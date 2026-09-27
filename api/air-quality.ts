@@ -64,7 +64,11 @@ const FEED: FeedCache = { entry: null, inflight: null };
 export const GRACE_MS = 1_500;
 /** A failed feed is not refetched for this long, so an outage costs one 8 s wait a minute, not one per request. */
 export const FEED_RETRY_MS = 60_000;
-/** An answer without history must not sit at the CDN for 10 minutes: the next visitor should get the chart. */
+/**
+ * 60 s at the CDN, for any answer the next visitor may improve on: CPCB current without history (the chart
+ * should follow), and OBOS's fallback where a CPCB figure is expected (the server asks CPCB again after
+ * FEED_RETRY_MS, so a blip must not pin the fallback for 10 min: re-audit M-2).
+ */
 const PARTIAL_CACHE = 'public, max-age=0, s-maxage=60';
 
 /**
@@ -176,10 +180,10 @@ export async function handle(req: Req, res: Res, d: Deps): Promise<void> {
       const r = await Promise.race([rawP, late]).finally(() => clearTimeout(timer));
       if (r === null) {
         try { (d.waitUntil ?? waitUntil)(rawP); } catch { /* no request context (tests, dev): the fetch simply finishes on its own */ }
-      } else if (r.ok) {
+      } else if ('raw' in r) {
         history = buildPayload(area, st, r.raw, now).history;
       } else {
-        logUpstream(area, r.e);
+        logUpstream(area, r.e); // `in` narrows under Vercel's non-strict compile too (re-audit M-3)
       }
     }
     res.setHeader('Cache-Control', history ? OK_CACHE : PARTIAL_CACHE);
@@ -190,14 +194,15 @@ export async function handle(req: Req, res: Res, d: Deps): Promise<void> {
   // CPCB unusable: today's path. A misconfiguration must never be cached at the CDN: it would outlive the fix.
   if (!rawP) { res.setHeader('Cache-Control', 'no-store'); res.status(503).json({ error: 'air quality not configured' }); return; }
   const r = await rawP;
-  if (!r.ok) {
+  if ('e' in r) {
     // Never log `e` itself: only the area and the numeric status. OpenAqError messages carry no key.
     logUpstream(area, r.e);
     res.setHeader('Cache-Control', FAIL_CACHE);
     res.status(200).json(upstreamError(area, st, now));
     return;
   }
-  res.setHeader('Cache-Control', OK_CACHE);
+  /* A station is expected here (`st`), so this is a fallback: short-lived at the CDN (M-2). */
+  res.setHeader('Cache-Control', PARTIAL_CACHE);
   res.status(200).json(buildPayload(area, st, r.raw, now));
 }
 
