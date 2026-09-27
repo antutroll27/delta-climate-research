@@ -18,7 +18,7 @@
 import { category } from '../../../lib/aqi/cpcb.ts';
 import { LIVE_H } from '../../../lib/aqi/build.ts';
 import { AIR_STATES, isAirPayload } from '../../../lib/aqi/valid.ts';
-import type { AirQualityPayload, AqiResult, AqiStation, CpcbCategory, HistoryDay, HistoryResponse, Pollutant, PollutantReading } from '../../../lib/aqi/types.ts';
+import type { AirQualityPayload, AqiResult, AqiStation, CpcbCategory, HistoryDay, HistoryResponse, Pollutant, PollutantReading, Result } from '../../../lib/aqi/types.ts';
 
 type Current = AirQualityPayload['current'];
 
@@ -68,7 +68,8 @@ function stationLine(s: AqiStation, owner: string | null, place: string): string
 /** O₃ and CO are the maximum rolling 8-hour mean; every other pollutant the 24-hour mean. Read from the dominant reading itself. */
 const windowOf = (r: AqiResult): string => (r.pollutants.find((q) => q.parameter === r.dominant)?.window_h === 8 ? 'maximum 8-hour mean' : '24-hour mean');
 
-function hero(r: AqiResult, muted: boolean): string {
+function hero(r: Result, muted: boolean): string {
+  if (r.origin === 'cpcb') return ''; // Task 7 paints origin cpcb
   return `<div class="hero"><span class="num${muted ? ' muted' : ''}" style="color:${col(r.category)}">${num(r.aqi)}</span>
     <span class="cat"><span class="dot" style="background:${col(r.category)}"></span>${word(r.category)}</span></div>
     <p class="meta">Led by <b>${pol(r.dominant)}</b> · AQI by CPCB's method · <span style="white-space:nowrap">${windowOf(r)}</span></p>`;
@@ -96,6 +97,7 @@ function block(c: Current, title: string, place: string): string {
       return text + stationLine(c.station, c.source.owner, place);
     }
     case 'insufficient_data': {
+      if (c.origin === 'cpcb') return ''; // Task 7 paints origin cpcb
       const short = c.pollutants.filter((q) => q.hours_present < MIN_HOURS);
       const worst = short.find((q) => q.parameter === 'pm25') ?? short[0];
       const sent = worst ? `the station sent <b>${num(worst.hours_present)} of 16</b>${worst.parameter === 'pm25' ? '' : ` for ${pol(worst.parameter)}`}` : esc(c.reasons[0] ?? '');
@@ -134,10 +136,12 @@ const failedPaneHtml = (place: string): string => paneHead(place) + `<div class=
 
 function polTable(c: Current): string {
   if (c.state === 'insufficient_data') {
+    if (c.origin === 'cpcb') return ''; // Task 7 paints origin cpcb
     return `<p class="pane-h">Pollutants · 24-hour window</p><table class="pol"><thead><tr><th>Pollutant</th><th>Hours of 16</th></tr></thead><tbody>` +
       c.pollutants.filter((q) => q.hours_present < MIN_HOURS).map((q) => `<tr><td>${pol(q.parameter)}</td><td class="n">${num(q.hours_present)} of 16</td></tr>`).join('') + '</tbody></table>';
   }
   if (c.state !== 'live' && c.state !== 'stale') return '';
+  if (c.result.origin === 'cpcb') return ''; // Task 7 paints origin cpcb
   const rows = c.result.pollutants.map((q: PollutantReading) => {
     const si = typeof q.sub_index === 'number' && Number.isFinite(q.sub_index) && q.sub_index >= 0 ? q.sub_index : null;
     const w = si === null ? 0 : Math.min(100, si / 2);

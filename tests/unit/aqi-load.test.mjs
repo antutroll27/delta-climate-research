@@ -8,6 +8,7 @@ import test from 'node:test';
 import { loadAir, cardHtml, paneHtml, unavailableHtml, loadingPaneHtml, uncoveredPaneHtml } from '../../src/scripts/climate-engine/air/air-panel.ts';
 import { buildPayload } from '../../src/lib/aqi/build.ts';
 import { stationFor } from '../../src/lib/aqi/stations.ts';
+import { isAirPayload } from '../../src/lib/aqi/valid.ts';
 
 const raw = (lastEnd) => { const e = Date.parse(lastEnd), o = {}; for (const p of ['pm25','pm10','no2','so2','co','o3']) { o[p] = []; for (let t = e - 31*864e5; t <= e; t += 9e5) o[p].push({ end_utc: new Date(t).toISOString(), value: p === 'co' ? 0.5 : 20 }); } return o; };
 const K = 'in/kolkata/ballygunge';
@@ -124,4 +125,26 @@ test('loadAir hands the app a status line', async () => {
   assert.match(v.status, /^Air quality, Ballygunge: \d+ \w+, not live, \d+ hours old$/);
   const f = await run(new TypeError('Failed to fetch')).out;
   assert.equal(f.status, 'Air quality, Ballygunge: could not be loaded just now.');
+});
+
+const cpcbLive = () => ({ current: { schema: 2, area_id: 'in/kolkata/ballygunge', served_at: '2026-09-27T00:00:00.000Z',
+  source: { owner: 'West Bengal Pollution Control Board', via: 'CPCB', standard: 'CPCB National AQI' }, state: 'live',
+  station: { id: 'openaq:10918', name: 'Ballygunge, Kolkata', lat: 22.5, lon: 88.3, distance_m: 993, inside: 'window_3km' },
+  observed_at: '2026-09-26T23:30:00.000Z',
+  result: { origin: 'cpcb', aqi: 38, category: 'good', dominant: 'pm10', window_h: 24,
+    subindices: [{ parameter: 'pm10', avg: 38, min: 18, max: 53, hourly: 45 }, { parameter: 'pm25', avg: 24, min: 19, max: 37, hourly: null }] } }, history: null });
+
+test('a CPCB-origin payload validates; a bad sub-index or unknown origin does not', () => {
+  assert.equal(isAirPayload(cpcbLive()), true);
+  const bad = cpcbLive(); bad.current.result.subindices[0].avg = 'x'; assert.equal(isAirPayload(bad), false);
+  const odd = cpcbLive(); odd.current.result.origin = 'google'; assert.equal(isAirPayload(odd), false);
+  const ins = cpcbLive(); ins.current = { ...ins.current, state: 'insufficient_data', origin: 'cpcb', reasons: ['No valid PM2.5 or PM10 reading'], subindices: ins.current.result.subindices };
+  delete ins.current.result; assert.equal(isAirPayload(ins), true);
+});
+
+test('a schema-1 payload still validates (the CDN can serve pre-deploy answers for ~40 min)', () => {
+  const p = cpcbLive(); p.current.schema = 1;
+  p.current.result = { aqi: 28, category: 'good', dominant: 'o3', window_end_ist: '2026-09-24T23:00:00+05:30', algorithm: 'cpcb-aqi-1',
+    pollutants: [{ parameter: 'o3', value: 28.45, unit: 'ug_m3', window_h: 8, hours_present: 24, sub_index: 28 }] };
+  assert.equal(isAirPayload(p), true);
 });
