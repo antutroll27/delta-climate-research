@@ -230,7 +230,7 @@ const AQ38 = '<Air_Quality_Index Value="38" Predominant_Parameter="PM10"/>';
 
 test('M-d: with every field present, the reason says the fields show no cause', () => {
   const f = { ...bFeed(), aqi: null, dominant: null };
-  assert.deepEqual(currentFromFeed(f, B, stB, at('2026-09-27T00:00:00Z')).reasons, ["The feed's fields show no cause"]);
+  assert.deepEqual(currentFromFeed(f, B, stB, at('2026-09-27T00:00:00Z')).reasons, ['No cause is visible']);
 });
 
 test('M-e: pick rejects an AQI or any sub-index above 500 (off CPCB\'s scale), with or without a published AQI', () => {

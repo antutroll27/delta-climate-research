@@ -235,7 +235,7 @@ function cpcbReasons(f: FeedStation): string[] {
   const out: string[] = [];
   if (!has('pm25') && !has('pm10')) out.push('No valid PM2.5 or PM10 reading');
   if (valid < 3) out.push(`${valid} valid pollutants; CPCB needs 3`);
-  return out.length ? out : ["The feed's fields show no cause"];
+  return out.length ? out : ['No cause is visible'];
 }
 
 /**
