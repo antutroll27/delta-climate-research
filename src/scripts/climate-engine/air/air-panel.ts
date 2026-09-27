@@ -18,7 +18,7 @@
 import { category } from '../../../lib/aqi/cpcb.ts';
 import { LIVE_H } from '../../../lib/aqi/build.ts';
 import { AIR_STATES, isAirPayload } from '../../../lib/aqi/valid.ts';
-import type { AirQualityPayload, AqiResult, AqiStation, CpcbCategory, HistoryDay, HistoryResponse, Pollutant, PollutantReading, Result } from '../../../lib/aqi/types.ts';
+import type { AirQualityPayload, AqiResult, AqiStation, CpcbCategory, CpcbSubIndex, HistoryDay, HistoryResponse, Pollutant, PollutantReading, Result } from '../../../lib/aqi/types.ts';
 
 type Current = AirQualityPayload['current'];
 
@@ -69,10 +69,12 @@ function stationLine(s: AqiStation, owner: string | null, place: string): string
 const windowOf = (r: AqiResult): string => (r.pollutants.find((q) => q.parameter === r.dominant)?.window_h === 8 ? 'maximum 8-hour mean' : '24-hour mean');
 
 function hero(r: Result, muted: boolean): string {
-  if (r.origin === 'cpcb') return ''; // Task 7 paints origin cpcb
+  const meta = r.origin === 'cpcb'
+    ? `Led by <b>${pol(r.dominant)}</b> · CPCB published AQI · <span style="white-space:nowrap">${r.window_h === 8 ? '8-hour maximum' : '24-hour average'}</span>`
+    : `Led by <b>${pol(r.dominant)}</b> · AQI computed by OBOS from OpenAQ (CPCB feed unreachable) · <span style="white-space:nowrap">${windowOf(r)}</span>`;
   return `<div class="hero"><span class="num${muted ? ' muted' : ''}" style="color:${col(r.category)}">${num(r.aqi)}</span>
     <span class="cat"><span class="dot" style="background:${col(r.category)}"></span>${word(r.category)}</span></div>
-    <p class="meta">Led by <b>${pol(r.dominant)}</b> · AQI by CPCB's method · <span style="white-space:nowrap">${windowOf(r)}</span></p>`;
+    <p class="meta">${meta}</p>`;
 }
 
 /* NEUTRAL ABOUT WHOSE FAULT A GAP IS: a quiet feed may be the station, CPCB, OpenAQ
@@ -97,7 +99,11 @@ function block(c: Current, title: string, place: string): string {
       return text + stationLine(c.station, c.source.owner, place);
     }
     case 'insufficient_data': {
-      if (c.origin === 'cpcb') return ''; // Task 7 paints origin cpcb
+      if (c.origin === 'cpcb') {
+        return head(title, '<span class="chip old">No AQI</span>') +
+          `<p class="empty">CPCB published no AQI at ${esc(istFmt(c.observed_at))}.</p>
+     <p class="meta">${esc(c.reasons.join('; '))}.</p>` + stationLine(c.station, c.source.owner, place);
+      }
       const short = c.pollutants.filter((q) => q.hours_present < MIN_HOURS);
       const worst = short.find((q) => q.parameter === 'pm25') ?? short[0];
       const sent = worst ? `the station sent <b>${num(worst.hours_present)} of 16</b>${worst.parameter === 'pm25' ? '' : ` for ${pol(worst.parameter)}`}` : esc(c.reasons[0] ?? '');
@@ -110,8 +116,11 @@ function block(c: Current, title: string, place: string): string {
       const stale = c.state === 'stale';
       const chip = stale ? `<span class="chip old">Not Live<span class="sep">·</span><b>${num(c.age_h)} h</b> Old</span>` : '<span class="chip live">Live</span>';
       /* Stale: the station may still be reporting to CPCB; the outage can be in the relay. */
-      return head(title, chip) + hero(c.result, stale) + stationLine(c.station, c.source.owner, place) +
-        `<p class="meta">${stale ? 'No readings have reached us since' : 'Readings to'} <b>${esc(istFmt(c.observed_at))}</b>${stale ? '.' : ''}</p>`;
+      const t = `<b>${esc(istFmt(c.observed_at))}</b>`;
+      const when = c.result.origin === 'cpcb'
+        ? `Published by CPCB at ${t}${stale ? '. No update has reached us since.' : ''}`
+        : `${stale ? 'No readings have reached us since' : 'Readings to'} ${t}${stale ? '.' : ''}`;
+      return head(title, chip) + hero(c.result, stale) + stationLine(c.station, c.source.owner, place) + `<p class="meta">${when}</p>`;
     }
     default:
       return noFigure(title, 'Not loaded', FAILED);
@@ -134,14 +143,28 @@ export function unavailableHtml(placeName: string): string {
 /** The pane's failure view: the same words under the pane's own heading. */
 const failedPaneHtml = (place: string): string => paneHead(place) + `<div class="aqblock">${noFigure('', 'Not loaded', FAILED)}</div>`;
 
+const SUB_ORDER: readonly Pollutant[] = ['pm25', 'pm10', 'no2', 'so2', 'co', 'o3', 'nh3'];
+
+/** CPCB's sub-indices (never concentrations: CPCB's feed carries none). The biggest bar is the AQI; `lead`'s row is marked (null: no AQI, no mark). */
+function subTable(subs: readonly CpcbSubIndex[], lead: Pollutant | null): string {
+  const rows = SUB_ORDER.map((p) => subs.find((q) => q.parameter === p)).filter((q): q is CpcbSubIndex => !!q).map((q) => {
+    const si = typeof q.avg === 'number' && Number.isFinite(q.avg) && q.avg >= 0 ? q.avg : null;
+    const w = si === null ? 0 : Math.min(100, si / 2), bar = si === null ? 'transparent' : col(category(si));
+    const range = q.min === null || q.max === null ? '—' : `${num(q.min)}–${num(q.max)}`;
+    return `<tr${q.parameter === lead ? ' class="top"' : ''}><td>${pol(q.parameter)}</td><td><span class="si"><i style="width:${w}%;background:${bar}"></i>${num(q.avg)}</span></td><td class="n">${range}</td><td class="n">${num(q.hourly)}</td></tr>`;
+  }).join('');
+  return `<p class="pane-h">Pollutants · CPCB sub-indices</p><table class="pol"><thead><tr><th>Pollutant</th><th>24-h sub-index</th><th>24-h range</th><th>Latest hour</th></tr></thead><tbody>${rows}</tbody></table>` +
+    `<p class="pane-note">Sub-indices on the AQI scale, as CPCB publishes them. The largest is the AQI. CPCB's feed carries no concentrations.</p>`;
+}
+
 function polTable(c: Current): string {
+  if (c.state === 'insufficient_data' && c.origin === 'cpcb') return subTable(c.subindices, null);
   if (c.state === 'insufficient_data') {
-    if (c.origin === 'cpcb') return ''; // Task 7 paints origin cpcb
     return `<p class="pane-h">Pollutants · 24-hour window</p><table class="pol"><thead><tr><th>Pollutant</th><th>Hours of 16</th></tr></thead><tbody>` +
       c.pollutants.filter((q) => q.hours_present < MIN_HOURS).map((q) => `<tr><td>${pol(q.parameter)}</td><td class="n">${num(q.hours_present)} of 16</td></tr>`).join('') + '</tbody></table>';
   }
   if (c.state !== 'live' && c.state !== 'stale') return '';
-  if (c.result.origin === 'cpcb') return ''; // Task 7 paints origin cpcb
+  if (c.result.origin === 'cpcb') return subTable(c.result.subindices, c.result.dominant);
   const rows = c.result.pollutants.map((q: PollutantReading) => {
     const si = typeof q.sub_index === 'number' && Number.isFinite(q.sub_index) && q.sub_index >= 0 ? q.sub_index : null;
     const w = si === null ? 0 : Math.min(100, si / 2);
@@ -211,19 +234,28 @@ function line24(h: HistoryResponse['pm25_24h'], label: string): string {
 
 const HATCH_KEY = '<svg width="10" height="10" aria-hidden="true"><defs><pattern id="aqHatchKey" width="3" height="3" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="3" stroke="var(--faint)" stroke-width="1.2"/></pattern></defs><rect width="10" height="10" rx="2" fill="url(#aqHatchKey)" stroke="var(--faint)" stroke-width=".6"/></svg>';
 
-function method(owner: string | null): string {
-  /* OBOS computes the AQI; CPCB publishes its own figure, which can differ slightly. */
-  const who = owner ? `AQI calculated by OBOS with CPCB's National AQI method from the station's readings (received via CPCB and OpenAQ); it can differ slightly from CPCB's own published figure. Measured by the ${esc(owner)}. ` : '';
+function method(owner: string | null, origin: 'cpcb' | 'obos'): string {
+  const who = !owner ? ''
+    : origin === 'cpcb'
+      ? `The AQI is CPCB's own published figure for this station (source: CPCB). Measured by the ${esc(owner)}. The 30-day chart and the PM2.5 line are calculated by OBOS with CPCB's method from OpenAQ's copy of the station's readings. `
+      : `AQI calculated by OBOS with CPCB's National AQI method from the station's readings (received via CPCB and OpenAQ); it can differ slightly from CPCB's own published figure. Measured by the ${esc(owner)}. `;
   return `<p class="pane-note">${who}A monitor counts for a place when it stands inside the 3 km window around the OBOS centre. Air quality is a separate layer: it does not enter the heat model.</p>`;
 }
+
+const originOf = (c: Current): 'cpcb' | 'obos' =>
+  (c.state === 'live' || c.state === 'stale') && c.result.origin === 'cpcb' ? 'cpcb'
+    : c.state === 'insufficient_data' && c.origin === 'cpcb' ? 'cpcb' : 'obos';
 
 /** The Air pane: the card's state again, then pollutants, 30 days, the 24 h PM2.5 line and the method note. */
 export function paneHtml(p: AirQualityPayload, placeName: string, now: Date = new Date()): string {
   if (!knownState(p.current)) return failedPaneHtml(placeName);
   const c = demote(p.current, now);
   let s = `<p class="pane-h" id="pane-air-h">Air · ${esc(placeName)}</p><div class="aqblock">${block(c, '', placeName)}</div>`;
-  if (c.state === 'no_station') return s + method(null);
+  if (c.state === 'no_station') return s + method(null, 'obos');
   s += polTable(c);
+  if (!p.history && (c.state === 'live' || c.state === 'stale' || c.state === 'insufficient_data')) {
+    s += '<p class="pane-note">History is loading or unavailable; it comes from OpenAQ.</p>';
+  }
   const h = p.history;
   if (h && h.days.length) {
     s += `<p class="pane-h">Last 30 days · daily AQI</p>` + barChart(h.days) +
@@ -234,7 +266,7 @@ export function paneHtml(p: AirQualityPayload, placeName: string, now: Date = ne
     const label = c.state === 'stale' ? '24 hours to the last reading' : 'last 24 hours';
     s += `<p class="pane-h">PM2.5 · ${label}</p>` + line24(h.pm25_24h, label);
   }
-  return s + method(c.source.owner);
+  return s + method(c.source.owner, originOf(c));
 }
 
 /** One bar's tooltip. Exported so the escaping is testable without a DOM. */

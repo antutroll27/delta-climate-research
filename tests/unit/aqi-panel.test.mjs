@@ -145,11 +145,11 @@ test('I4: an O₃-led AQI names the maximum 8-hour mean, a PM-led one the 24-hou
   const o3 = buildPayload(K, st, rawWith('2026-09-24T17:30:00Z', { o3: 150 }), T);
   assert.equal(o3.current.result.dominant, 'o3');
   const card = cardHtml(o3, 'Ballygunge', T);
-  assert.match(card, /Led by <b>O₃<\/b> · AQI by CPCB's method · <span[^>]*>maximum 8-hour mean<\/span>/);
+  assert.match(card, /Led by <b>O₃<\/b> · AQI computed by OBOS from OpenAQ \(CPCB feed unreachable\) · <span[^>]*>maximum 8-hour mean<\/span>/);
   assert.doesNotMatch(card, /24-hour/);
   const pm = buildPayload(K, st, rawWith('2026-09-24T17:30:00Z', { pm25: 80 }), T);
   assert.equal(pm.current.result.dominant, 'pm25');
-  assert.match(cardHtml(pm, 'Ballygunge', T), /Led by <b>PM2\.5<\/b> · AQI by CPCB's method · <span[^>]*>24-hour mean<\/span>/);
+  assert.match(cardHtml(pm, 'Ballygunge', T), /Led by <b>PM2\.5<\/b> · AQI computed by OBOS from OpenAQ \(CPCB feed unreachable\) · <span[^>]*>24-hour mean<\/span>/);
   /* The table header must not call the whole table a 24-hour window while O₃ and CO rows are 8-hour. */
   assert.doesNotMatch(paneHtml(o3, 'Ballygunge', T), /Pollutants · 24-hour window/);
 });
@@ -283,4 +283,76 @@ test('I6f: a one-line status names the state for screen readers', async () => {
   assert.equal(statusText(s, 'Ballygunge', now), `Air quality, Ballygunge: ${s.current.result.aqi} Good, not live, 39 hours old`);
   const l = buildPayload(K, st, raw('2026-09-24T17:30:00Z'), T);
   assert.equal(statusText(l, 'Ballygunge', T), `Air quality, Ballygunge: ${l.current.result.aqi} Good, live`);
+});
+
+import { gunzipSync } from 'node:zlib';
+import { readFileSync } from 'node:fs';
+import { currentFromFeed, parseFeed, pick } from '../../src/lib/aqi/cpcb-feed.ts';
+
+const FEED = parseFeed(gunzipSync(readFileSync(new URL('../fixtures/aqi/cpcb-feed-2026-09-27T0500IST.xml.gz', import.meta.url))).toString('utf8'));
+const KB = 'in/kolkata/ballygunge', SB = stationFor(KB);
+const cp = (now, hist = null) => ({ current: currentFromFeed(pick(FEED, SB), KB, SB, now), history: hist });
+const C1 = new Date('2026-09-27T00:30:00Z');
+
+test('CPCB live: published line, 24-hour average, published time, no concentration anywhere', () => {
+  const card = cardHtml(cp(C1), 'Ballygunge', C1), pane = paneHtml(cp(C1), 'Ballygunge', C1);
+  assert.match(card, /Led by <b>PM10<\/b> · CPCB published AQI · <span[^>]*>24-hour average<\/span>/);
+  assert.match(card, /Published by CPCB at <b>27 Sept 05:00 IST<\/b>/);
+  assert.match(pane, /Pollutants · CPCB sub-indices/);
+  assert.match(pane, /<th>24-h sub-index<\/th><th>24-h range<\/th><th>Latest hour<\/th>/);
+  assert.doesNotMatch(pane, /µg\/m³|mg\/m³/);
+  assert.match(pane, /The largest is the AQI/);
+});
+
+test('CPCB table rows: PM10 38 with range 18–53 and latest 45; a null hourly is a dash', () => {
+  const pane = paneHtml(cp(C1), 'Ballygunge', C1);
+  assert.match(pane, /<td>PM10<\/td><td><span class="si">[^]*?38<\/span><\/td><td class="n">18–53<\/td><td class="n">45<\/td>/);
+  const p = cp(C1); p.current.result.subindices = p.current.result.subindices.map((q) => ({ ...q, hourly: null }));
+  assert.match(paneHtml(p, 'Ballygunge', C1), /<td class="n">—<\/td>/);
+});
+
+test('CPCB stale: red chip, muted number, "No update has reached us since"', () => {
+  const T = new Date('2026-09-27T04:40:00Z');
+  const card = cardHtml(cp(T), 'Ballygunge', T);
+  assert.match(card, /Not Live<span class="sep">·<\/span><b>5 h<\/b> Old/);
+  assert.match(card, /class="num muted"/);
+  assert.match(card, /No update has reached us since\./);
+});
+
+test('O3-led CPCB value reads 8-hour maximum', () => {
+  const p = cp(C1); p.current.result.dominant = 'o3'; p.current.result.window_h = 8;
+  assert.match(cardHtml(p, 'Ballygunge', C1), /CPCB published AQI · <span[^>]*>8-hour maximum<\/span>/);
+});
+
+test('CPCB insufficient: No AQI chip, the reason, the sub-index table', () => {
+  const f = { ...pick(FEED, SB), aqi: null, dominant: null };
+  const p = { current: currentFromFeed(f, KB, SB, C1), history: null };
+  const card = cardHtml(p, 'Ballygunge', C1), pane = paneHtml(p, 'Ballygunge', C1);
+  assert.match(card, /chip old">No AQI</);
+  assert.match(card, /CPCB published no AQI at/);
+  assert.match(pane, /Pollutants · CPCB sub-indices/);
+});
+
+test('method note names CPCB as the source of the AQI and OpenAQ as the source of the chart', () => {
+  const pane = paneHtml(cp(C1), 'Ballygunge', C1);
+  assert.match(pane, /The AQI is CPCB's own published figure for this station/);
+  assert.match(pane, /calculated by OBOS with CPCB's method from OpenAQ's copy/);
+});
+
+test('no history with a CPCB current says so instead of an empty chart', () => {
+  assert.match(paneHtml(cp(C1), 'Ballygunge', C1), /History is loading or unavailable; it comes from OpenAQ\./);
+});
+
+test('OBOS fallback is labelled as ours', () => {
+  const p = buildPayload(KB, SB, raw('2026-09-24T17:30:00Z'), new Date('2026-09-24T18:00:00Z'));
+  assert.match(cardHtml(p, 'Ballygunge', new Date('2026-09-24T18:00:00Z')), /AQI computed by OBOS from OpenAQ \(CPCB feed unreachable\)/);
+});
+
+// Addition beyond the plan: the approved preview (previews/aqi-cpcb) marks the row holding the AQI.
+test('the sub-index row that holds the AQI is marked, and only when CPCB published one', () => {
+  const pane = paneHtml(cp(C1), 'Ballygunge', C1);
+  assert.equal(pane.match(/<tr class="top">/g)?.length, 1);
+  assert.match(pane, /<tr class="top"><td>PM10<\/td>/);
+  const f = { ...pick(FEED, SB), aqi: null, dominant: null };
+  assert.doesNotMatch(paneHtml({ current: currentFromFeed(f, KB, SB, C1), history: null }, 'Ballygunge', C1), /class="top"/);
 });
