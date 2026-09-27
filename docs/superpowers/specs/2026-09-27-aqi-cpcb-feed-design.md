@@ -131,3 +131,12 @@ Each test is written first and proven with at least one mutation.
 
 - **Forward (safe).** The browser validator accepts schema 1 and schema 2, so a page loaded after the deploy renders any payload the CDN still holds from before it (up to about 40 minutes: `s-maxage=600` plus `stale-while-revalidate=1800`).
 - **Backward (known one-directional risk, re-audit M-5).** Code from before this change validates schema 1 only. After a revert, the CDN can go on serving schema-2 payloads for up to about 40 minutes, and the reverted page rejects them, so the card shows "Not loaded". **Rollback step: if the card shows "Not loaded" after a revert, purge the CDN cache for `/api/air-quality`.**
+
+## 11. Dormant release (founder decision, 28 Sep)
+
+- **Finding (measured on PR #34's Preview, register AQI-R48).** CPCB's feed does not answer cloud IPs. A probe function on Vercel, from bom1 (Mumbai, egress 43.205.110.180) and from iad1 (Washington, egress 44.210.242.28), got `UND_ERR_CONNECT_TIMEOUT` after about 10.5 s whatever the User-Agent, while data.gov.in and example.com answered from the same functions. From a residential connection in India the feed answers in about 0.4 s (AQI-R47). In production, then, every feed fetch would wait out the 8 s timeout and fall back: a latency cost with no gain. Pinning the function to bom1 does not help on its own.
+- **The switch.** The feed runs only when the environment variable `AIR_CPCB_FEED` is exactly `on` (`feedEnabled(env)` in `api/air-quality.ts`; `ON`, ` on`, `off` and unset are all off). **Off is the default and the production state.** Off, the function makes no CPCB request at all, not even a failed one, and behaves as main did before this change: OBOS's calculation from OpenAQ, cached with `OK_CACHE` (the 60 s fallback cache of §6 applies only when the feed is on and CPCB failed). Everything else built here (the parser, `pick`, the CPCB card, the 8-h marks, the PM2.5 label rule) ships and waits.
+- **Turning it on** needs a CPCB route that Vercel can reach: data.gov.in's CPCB dataset (a key, and a check that it carries the station AQI and sub-indices this build reads), or a relay in India. Then set `AIR_CPCB_FEED=on` for the Vercel environment and confirm on a Preview first.
+- **The bom1 region pin stays** (`vercel.json`), for lower latency to Indian sources.
+- **Local development.** `AIR_CPCB_FEED=on npm run dev` exercises the CPCB path from a machine in India, which the feed does answer; without it, dev runs the dormant (OpenAQ) path like production.
+

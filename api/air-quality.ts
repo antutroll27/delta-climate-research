@@ -13,6 +13,11 @@
  * SOURCES (spec 2026-09-27): CPCB's own feed gives the current value (origin cpcb); OpenAQ
  * gives the 30-day history and is the fallback (origin obos). They are fetched in parallel
  * and fail independently.
+ *
+ * DORMANT BY DEFAULT (spec §11, register AQI-R48): CPCB's feed does not answer cloud IPs
+ * (connect timeout from Vercel bom1 and iad1), so in production it would only add an 8 s
+ * wait before every fallback. The feed runs only when AIR_CPCB_FEED is exactly "on";
+ * otherwise this function is main's OpenAQ path, byte for byte in its caching.
  */
 import { waitUntil } from '@vercel/functions';
 import { buildPayload } from '../src/lib/aqi/build.ts';
@@ -43,7 +48,12 @@ interface Deps {
   graceMs?: number;
   /** Keeps work alive after the response (Vercel); injected by tests. */
   waitUntil?: (p: Promise<unknown>) => void;
+  /** Ask CPCB's feed at all. Off (the default): no CPCB request is made, not even a failed one. */
+  cpcbFeed?: boolean;
 }
+
+/** The CPCB feed switch: on only for exactly "on" (spec §11). */
+export const feedEnabled = (env: Readonly<Record<string, string | undefined>>): boolean => env['AIR_CPCB_FEED'] === 'on';
 
 const OK_CACHE = 'public, max-age=60, s-maxage=600, stale-while-revalidate=1800';
 /** A failure must not replace the CDN's last good payload: no-store lets stale-while-revalidate keep serving it. */
@@ -164,7 +174,7 @@ export async function handle(req: Req, res: Res, d: Deps): Promise<void> {
   if (!isAirArea(area)) { res.status(404).json({ error: 'unknown area' }); return; }
   const st = stationFor(area), now = (d.now ?? (() => new Date()))();
   if (!st) { res.setHeader('Cache-Control', OK_CACHE); res.status(200).json(buildPayload(area, null, {}, now)); return; }
-  const feedP = feedFor(now, d);
+  const feedP = d.cpcbFeed ? feedFor(now, d) : Promise.resolve(null);
   const rawP: Promise<Settled> | null = d.key
     ? rawFor(area, st, now, d).then((raw) => ({ ok: true as const, raw }), (e: unknown) => ({ ok: false as const, e }))
     : null;
@@ -201,11 +211,12 @@ export async function handle(req: Req, res: Res, d: Deps): Promise<void> {
     res.status(200).json(upstreamError(area, st, now));
     return;
   }
-  /* A station is expected here (`st`), so this is a fallback: short-lived at the CDN (M-2). */
-  res.setHeader('Cache-Control', PARTIAL_CACHE);
+  /* With the feed on, this is a fallback from a failed CPCB and lives 60 s at the CDN (M-2); with it off,
+     it is the only answer there is and keeps main's 10-minute cache. */
+  res.setHeader('Cache-Control', d.cpcbFeed ? PARTIAL_CACHE : OK_CACHE);
   res.status(200).json(buildPayload(area, st, r.raw, now));
 }
 
 export default async function handler(req: Req, res: Res): Promise<void> {
-  await handle(req, res, { key: process.env.OPENAQ_API_KEY ?? '' });
+  await handle(req, res, { key: process.env.OPENAQ_API_KEY ?? '', cpcbFeed: feedEnabled(process.env) });
 }

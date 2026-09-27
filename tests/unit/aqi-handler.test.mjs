@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { handle, GRACE_MS } from '../../api/air-quality.ts';
+import handler, { handle, GRACE_MS, feedEnabled } from '../../api/air-quality.ts';
 
 const res = () => { const r = { code: 0, headers: {}, body: null, status(c) { r.code = c; return r; }, setHeader(k, v) { r.headers[k] = v; }, json(b) { r.body = b; } }; return r; };
 import { gunzipSync } from 'node:zlib';
@@ -15,14 +15,14 @@ const freshFeed = () => ({ entry: null, inflight: null });
 test('only GET', async () => { const r = res(); await handle({ method: 'POST', query: {} }, r, { key: 'k' }); assert.equal(r.code, 405); assert.equal(r.headers.Allow, 'GET'); });
 test('unknown area is 404', async () => { const r = res(); await handle({ method: 'GET', query: { area: 'in/kolkata/nowhere' } }, r, { key: 'k' }); assert.equal(r.code, 404); });
 test('missing key fails closed, with no upstream call, never cached', async () => { let called = false; const r = res();
-  await handle({ method: 'GET', query: { area: 'in/kolkata/ballygunge' } }, r, { key: '', fetch: route(async () => { called = true; }), feedCache: freshFeed() }); assert.equal(r.code, 503); assert.equal(called, false);
+  await handle({ method: 'GET', query: { area: 'in/kolkata/ballygunge' } }, r, { key: '', fetch: route(async () => { called = true; }), feedCache: freshFeed(), cpcbFeed: true }); assert.equal(r.code, 503); assert.equal(called, false);
   assert.equal(r.headers['Cache-Control'], 'no-store'); });
 test('Baruipur answers no_station without calling OpenAQ, cacheable', async () => { const r = res();
   await handle({ method: 'GET', query: { area: 'in/kolkata/baruipur' } }, r, { key: 'k', fetch: async () => { throw new Error('must not fetch'); } });
   assert.equal(r.code, 200); assert.equal(r.body.current.state, 'no_station'); assert.match(r.headers['Cache-Control'], /s-maxage=600/); });
 test('upstream failure is 200 unavailable upstream_error, never stored, never a number', async () => { const r = res();
   const orig = console.error; console.error = () => {};
-  try { await handle({ method: 'GET', query: { area: 'in/kolkata/ballygunge' } }, r, { key: 'k', fetch: async () => new Response('x', { status: 503 }), cache: new Map(), inflight: new Map(), feedCache: freshFeed() }); }
+  try { await handle({ method: 'GET', query: { area: 'in/kolkata/ballygunge' } }, r, { key: 'k', fetch: async () => new Response('x', { status: 503 }), cache: new Map(), inflight: new Map(), feedCache: freshFeed(), cpcbFeed: true }); }
   finally { console.error = orig; }
   assert.equal(r.code, 200); assert.equal(r.body.current.state, 'unavailable'); assert.equal(r.body.current.reason, 'upstream_error');
   assert.equal(r.body.current.last_observed_at, null);
@@ -39,7 +39,7 @@ test('upstream failure is logged by area and status, and the key appears in no l
   console.error = (...a) => { logged.push(a); };
   const r = res();
   try {
-    await handle({ method: 'GET', query: { area: 'in/kolkata/barrackpore' } }, r, { key: KEY, cache: new Map(), inflight: new Map(), feedCache: freshFeed(),
+    await handle({ method: 'GET', query: { area: 'in/kolkata/barrackpore' } }, r, { key: KEY, cache: new Map(), inflight: new Map(), feedCache: freshFeed(), cpcbFeed: true,
       fetch: async (u, init) => new Response(`bad key ${init?.headers?.['X-API-Key']} at ${u}`, { status: 401 }) });
   } finally { console.error = orig; }
   assert.equal(r.body.current.state, 'unavailable');
@@ -71,7 +71,8 @@ const sensorOf = (u) => Number(/sensors\/(\d+)\//.exec(String(u))[1]);
 const rows = (sensor, lastEnd = '2026-09-24T13:00:00Z') => ({ results: Array.from({ length: 48 }, (_, i) => ({
   value: sensor === CO ? 0.5 : 20, period: { datetimeTo: { utc: new Date(Date.parse(lastEnd) - i * 3_600_000).toISOString() } } })) });
 const ok = (u) => new Response(JSON.stringify(rows(sensorOf(u))));
-const deps = (fetch, extra = {}) => ({ key: 'k', fetch: route(fetch), now: () => NOW, cache: new Map(), inflight: new Map(), feedCache: freshFeed(), ...extra });
+/* Every test here runs with the CPCB feed ON; the dormant default (off) has its own tests at the end. */
+const deps = (fetch, extra = {}) => ({ key: 'k', fetch: route(fetch), now: () => NOW, cache: new Map(), inflight: new Map(), feedCache: freshFeed(), cpcbFeed: true, ...extra });
 const quiet = async (fn) => { const orig = console.error; console.error = () => {}; try { return await fn(); } finally { console.error = orig; } };
 const get = (d, query = { area: BALLY }) => { const r = res(); return handle({ method: 'GET', query }, r, d).then(() => r); };
 
@@ -268,4 +269,53 @@ test('the air-quality function runs in Mumbai (bom1): CPCB\'s feed times out fro
   assert.deepEqual(cfg.functions?.['api/air-quality.ts']?.regions, ['bom1'],
     "Measured 2026-09-27 on PR #34's Preview: from iad1 (Washington) the CPCB feed fetch hit its 8 s timeout on every request, "
     + 'so Ballygunge fell back to OpenAQ; from India the same feed answers in ~0.4 s.');
+});
+
+/* ---- Dormant release: the CPCB feed is off unless AIR_CPCB_FEED is exactly 'on' (spec §11, register AQI-R48). ---- */
+
+const OK = 'public, max-age=60, s-maxage=600, stale-while-revalidate=1800';
+
+test('feed off: no request ever goes to CPCB, even one that would succeed; OBOS answers with the 10-min cache, as on main', async () => {
+  let cp = 0;
+  const r = await get(deps(null, { cpcbFeed: false, fetch: route(async (u) => ok(u), () => { cp++; return cpcbOk(); }), now: () => CNOW }));
+  assert.equal(cp, 0, 'no CPCB request');
+  assert.equal(r.body.current.result.origin, 'obos');
+  assert.ok(r.body.history, 'history as on main');
+  assert.equal(r.headers['Cache-Control'], OK);
+});
+
+test('feed off, no key: 503 no-store, with no request anywhere, as on main', async () => {
+  let calls = 0;
+  const r = await get(deps(null, { cpcbFeed: false, key: '', fetch: async () => { calls++; return cpcbOk(); } }));
+  assert.equal(r.code, 503);
+  assert.equal(r.headers['Cache-Control'], 'no-store');
+  assert.equal(calls, 0);
+});
+
+test('feedEnabled: only exactly "on" switches the feed on', () => {
+  assert.equal(feedEnabled({}), false, 'unset');
+  assert.equal(feedEnabled({ AIR_CPCB_FEED: 'off' }), false);
+  assert.equal(feedEnabled({ AIR_CPCB_FEED: 'ON' }), false);
+  assert.equal(feedEnabled({ AIR_CPCB_FEED: ' on' }), false);
+  assert.equal(feedEnabled({ AIR_CPCB_FEED: 'on' }), true);
+});
+
+test('the deployed handler reads AIR_CPCB_FEED: unset means no CPCB request, "on" means one', async () => {
+  const saved = { fetch: globalThis.fetch, key: process.env.OPENAQ_API_KEY, flag: process.env.AIR_CPCB_FEED };
+  let cp = 0;
+  globalThis.fetch = async (u) => (isCpcb(u) ? (cp++, cpcbOk()) : ok(u));
+  process.env.OPENAQ_API_KEY = 'k';
+  try {
+    delete process.env.AIR_CPCB_FEED;
+    const a = res(); await handler({ method: 'GET', query: { area: BALLY } }, a);
+    assert.equal(cp, 0, 'unset: no CPCB request');
+    assert.equal(a.body.current.result.origin, 'obos');
+    process.env.AIR_CPCB_FEED = 'on';
+    const b = res(); await handler({ method: 'GET', query: { area: 'in/kolkata/barrackpore' } }, b);
+    assert.equal(cp, 1, '"on": CPCB is asked');
+  } finally {
+    globalThis.fetch = saved.fetch;
+    if (saved.key === undefined) delete process.env.OPENAQ_API_KEY; else process.env.OPENAQ_API_KEY = saved.key;
+    if (saved.flag === undefined) delete process.env.AIR_CPCB_FEED; else process.env.AIR_CPCB_FEED = saved.flag;
+  }
 });

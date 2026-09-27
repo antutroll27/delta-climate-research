@@ -3,7 +3,7 @@
 **Document set:** Product and engineering plan  
 **Version:** 1.3  
 **Date:** 27 September 2026  
-**Status:** Kolkata first release merged (PR #33); CPCB-feed switch built on branch `feat/aqi-cpcb-feed`, not merged  
+**Status:** Kolkata first release merged (PR #33); CPCB feed built on branch `feat/aqi-cpcb-feed` (PR #34), dormant by default, not merged  
 **Owners:** Delta Climate — OBOS product and engineering
 
 ## Purpose
@@ -31,7 +31,11 @@ The first release is **Kolkata only**, specified in
 Its successor, [`2026-09-27-aqi-cpcb-feed-design.md`](../superpowers/specs/2026-09-27-aqi-cpcb-feed-design.md),
 changes where the current value comes from. Where the specs and these documents differ, the specs govern.
 
-### The current value now comes from CPCB's own feed (branch `feat/aqi-cpcb-feed`, not merged)
+### CPCB's own feed: built, dormant by default (PR #34, branch `feat/aqi-cpcb-feed`, not merged)
+
+- **Off in production.** CPCB's feed does not answer cloud IPs: from Vercel (bom1 and iad1) every request times out, while it answers a connection in India in about 0.4 s (AQI-R48). The feed therefore runs only when `AIR_CPCB_FEED=on`. Off, the function makes no CPCB request and production shows OBOS's calculation from OpenAQ, as before.
+- **Ways to switch it on:** a data.gov.in key for CPCB's dataset there (data.gov.in is reachable from Vercel; that it carries the station AQI and sub-indices this build reads is still to be checked), or a relay in India. Then set `AIR_CPCB_FEED=on`, and check a Preview first. Locally, `AIR_CPCB_FEED=on npm run dev` exercises the CPCB path.
+- **What waits behind the switch**, described below as it behaves when on:
 
 - **Current value: CPCB.** The headline AQI is CPCB's published station AQI, read from CPCB's CAAQMS feed (`airquality.cpcb.gov.in/caaqms/rss_feed`, no key). The card says "CPCB published AQI" and "Published by CPCB at …", and the pane's pollutant table shows CPCB's sub-indices only, never concentrations (AQI-R47a).
 - **History and fallback: OpenAQ.** The 30-day chart and the 24-hour PM2.5 line stay on OpenAQ. When CPCB has no current figure for the station (the feed is down, the station is missing from it, or its value is more than 7 days old), the card falls back to OBOS's own CPCB-method calculation from OpenAQ, labelled "AQI computed by OBOS from OpenAQ (no usable current CPCB figure for this station)".
