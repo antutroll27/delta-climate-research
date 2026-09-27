@@ -1,9 +1,9 @@
 # OBOS Air Quality Intelligence
 
 **Document set:** Product and engineering plan  
-**Version:** 1.2  
-**Date:** 26 September 2026  
-**Status:** Kolkata first release built on branch `feat/aqi-kolkata`; not deployed  
+**Version:** 1.3  
+**Date:** 27 September 2026  
+**Status:** Kolkata first release merged (PR #33); CPCB-feed switch built on branch `feat/aqi-cpcb-feed`, not merged  
 **Owners:** Delta Climate — OBOS product and engineering
 
 ## Purpose
@@ -24,15 +24,24 @@ The plan has four goals:
 4. preserve observations as a credible, provenance-rich data asset for later
    sustainability analysis and carefully validated ML work.
 
-## Current state (26 September 2026)
+## Current state (27 September 2026)
 
 The first release is **Kolkata only**, specified in
 [`docs/superpowers/specs/2026-09-26-aqi-kolkata-design.md`](../superpowers/specs/2026-09-26-aqi-kolkata-design.md).
-Where that spec and these documents differ, the spec governs the first release.
+Its successor, [`2026-09-27-aqi-cpcb-feed-design.md`](../superpowers/specs/2026-09-27-aqi-cpcb-feed-design.md),
+changes where the current value comes from. Where the specs and these documents differ, the specs govern.
 
-### What shipped on the branch (not deployed)
+### The current value now comes from CPCB's own feed (branch `feat/aqi-cpcb-feed`, not merged)
 
-The work is on branch `feat/aqi-kolkata`. It is **not merged, not pushed to production and not deployed**.
+- **Current value: CPCB.** The headline AQI is CPCB's published station AQI, read from CPCB's CAAQMS feed (`airquality.cpcb.gov.in/caaqms/rss_feed`, no key). The card says "CPCB published AQI" and "Published by CPCB at …", and the pane's pollutant table shows CPCB's sub-indices only, never concentrations (AQI-R47a).
+- **History and fallback: OpenAQ.** The 30-day chart and the 24-hour PM2.5 line stay on OpenAQ. When CPCB has no current figure for the station (the feed is down, the station is missing from it, or its value is more than 7 days old), the card falls back to OBOS's own CPCB-method calculation from OpenAQ, labelled "AQI computed by OBOS from OpenAQ (no current CPCB figure for this station)".
+- **Cadence.** The feed updates hourly on the IST hour and each update appears within about 10 minutes, so the 2-hour live rule stands (AQI-R47). CPCB can drop a station from the feed for hours while the feed is up: Barrackpore was absent for over 5 hours on 27 September and fell back as designed.
+- **No key.** Without `OPENAQ_API_KEY` the CPCB current value is still served, with `history: null`. Only a station with no current CPCB figure and no key answers 503.
+- **Future: an OBOS archive of the CPCB feed**, probably a dedicated PostgreSQL database, so the chart can come from CPCB too. Not part of this change.
+
+### What the first release shipped (PR #33)
+
+The work was built on branch `feat/aqi-kolkata` and merged to `main` in PR #33 on 27 September 2026.
 
 - `api/air-quality.ts` is a TypeScript Vercel Function. It reads `OPENAQ_API_KEY` on the server only. It fails closed with 503 and `no-store` when the key is missing, and it caches successful responses at the CDN (`s-maxage=600`, `stale-while-revalidate=1800`).
 - `src/lib/aqi/` holds the logic:
@@ -69,7 +78,7 @@ The work is on branch `feat/aqi-kolkata`. It is **not merged, not pushed to prod
 2. **Decide when to open the PR.** One option is to wait for the CPCB feed to resume so that `live` can be seen end to end. The other is to ship now, with the stale treatment showing.
 3. **The repository is public.** Check that every document committed on this branch is fit to be public before the branch is pushed.
 
-Details are in the [research register](./05-research-register.md), R19–R45.
+Details are in the [research register](./05-research-register.md), R19–R47a.
 
 ## Documents
 

@@ -1,6 +1,6 @@
 # OBOS air quality — CPCB's published AQI as the current value
 
-**Date:** 2026-09-27 · **Status:** design approved section by section in conversation; awaiting written-spec review
+**Date:** 2026-09-27 · **Status:** approved; built on branch `feat/aqi-cpcb-feed` (Tasks 1–9), not merged
 **Builds on:** `2026-09-26-aqi-kolkata-design.md` (shipped in PR #33). Everything there stands unless this document changes it.
 
 ## 1. Why
@@ -25,7 +25,8 @@ OBOS reads Kolkata's government monitors through OpenAQ. Since 2026-09-24 17:30 
 - **CPCB applies its own publish rule.** 39 stations have `Value=""`. Every example inspected lacked valid PM2.5 and PM10. CPCB still lists their other sub-indices.
 - **Dead stations are omitted.** Kasturi Nagar and City Railway Station (Bengaluru), both silent on OpenAQ, are absent from the feed.
 - **`lastupdate` is feed-wide.** All 481 stations carry the same value, and it is in IST.
-- **Update cadence and lag.** A recorder has been snapshotting the feed every 15 minutes since 2026-09-26 23:55 UTC (`~/.cache/delta-climate/cpcb-rss/`). **Gate before code:** its results (how often `lastupdate` advances, the lag behind the hour, the failure count) are written into register row AQI-R47. The plan's live threshold is then confirmed against them or changed.
+- **Update cadence and lag: measured, see AQI-R47.** Over 6 h (24 snapshots, 15 min apart, all HTTP 200) `lastupdate` advanced once an hour on the IST hour, and each update was first seen within 10 minutes of it, so a reading is at most about 70 minutes old. The 2 h live rule stands.
+- **Stations can drop out while the feed is up.** The station count moved between 472 and 481, and SVSPA Campus, Barrackpore was absent for over 5 hours on 27 September (AQI-R47). A missing station falls back to OBOS's calculation (D4).
 - **Licence.** Government of India data published by CPCB. OBOS credits it as "Source: CPCB".
 
 ## 4. Contract (`src/lib/aqi/types.ts`)
@@ -38,14 +39,16 @@ interface CpcbSubIndex { parameter: Pollutant; avg: number | null; min: number |
 interface CpcbResult { origin: 'cpcb'; aqi: number; category: CpcbCategory; dominant: Pollutant;
   /** Window of the dominant pollutant's value: 8 for CO and O₃, 24 otherwise. */
   window_h: 24 | 8;
-  subindices: CpcbSubIndex[]; published_at: string /* ISO, from lastupdate (IST) */ }
+  subindices: CpcbSubIndex[] }
 
 type AqiResult = (existing fields) & { origin: 'obos' };   // unchanged otherwise
 
 // live / stale carry `result: CpcbResult | AqiResult`.
 // insufficient_data carries either { origin:'obos', pollutants, reasons } (today's)
-// or { origin:'cpcb', subindices, reasons, published_at }.
+// or { origin:'cpcb', subindices, reasons }.
 ```
+
+- **No `published_at` field.** The state's `observed_at` carries CPCB's `lastupdate` (converted from IST to ISO UTC), as it carries the last reading for origin obos.
 
 - Category comes from `category(aqi)` in `cpcb.ts`, using the existing CPCB bands.
 - `"NA"` and empty strings become `null`. A number must match `^\d+$`. Anything else rejects the station, which then falls back.
@@ -57,7 +60,7 @@ type AqiResult = (existing fields) & { origin: 'obos' };   // unchanged otherwis
 |---|---|
 | Station present, numeric AQI, `lastupdate` ≤ 2 h before `now` | `live`, origin cpcb |
 | Station present, numeric AQI, `lastupdate` 2 h – 7 days old | `stale`, origin cpcb, `age_h` from `lastupdate` |
-| Station present, `Value=""` | `insufficient_data`, origin cpcb. Reasons come from the missing fields, e.g. "CPCB published no AQI: no valid PM2.5 or PM10". |
+| Station present, `Value=""` | `insufficient_data`, origin cpcb. Reasons come from the missing fields, e.g. "No valid PM2.5 or PM10 reading"; the card reads "CPCB published no AQI at …". |
 | Feed unreachable, over 2 MB, unparseable, station missing, station moved, or `lastupdate` more than 7 days old | today's OpenAQ path (`buildPayload`), origin obos, with all existing states and reasons |
 | Baruipur | `no_station` (unchanged) |
 
@@ -67,7 +70,7 @@ type AqiResult = (existing fields) & { origin: 'obos' };   // unchanged otherwis
 
 ## 6. Server (`api/air-quality.ts` + new `src/lib/aqi/cpcb-feed.ts`)
 
-- **`cpcb-feed.ts` (pure).** `parseFeed(xml) → Map<name, FeedStation>` and `pick(feed, station) → FeedStation | null`. It is a small strict reader for exactly the elements above: attribute values are read with entity decoding (`&amp;`, `&lt;`, `&gt;`, `&quot;`, `&apos;`), and no XML library is added. `fetchFeed({fetch, signal})` has an 8 s timeout, rejects bodies over 2 MB, and sends the identifying User-Agent.
+- **`cpcb-feed.ts` (pure).** `parseFeed(xml) → FeedStation[]` and `pick(feed, station) → FeedStation | null`; `pick` also requires CPCB's AQI to be the largest `Avg`, held by the named pollutant (AQI-R47a), and otherwise returns null so the station falls back. It is a small strict reader for exactly the elements above: attribute values are read with entity decoding (`&amp;`, `&lt;`, `&gt;`, `&quot;`, `&apos;`), and no XML library is added. `fetchFeed({fetch, signal})` has an 8 s timeout, rejects bodies over 2 MB, and sends the identifying User-Agent.
 - **Feed cache.** The whole parsed feed is cached in-process for 10 minutes and shared by both areas. Concurrent requests share one in-flight fetch. Failures are not cached.
 - **Two sources, fetched in parallel.**
   - CPCB has its 8 s budget.
@@ -78,6 +81,7 @@ type AqiResult = (existing fields) & { origin: 'obos' };   // unchanged otherwis
   - A response with CPCB current **and** history gets today's `OK_CACHE`.
   - A response with `history: null` gets `public, max-age=0, s-maxage=60`, so the CDN does not keep a chart-less answer for 10 minutes.
   - Full failures stay `no-store`.
+- **No OpenAQ key.** CPCB's current value is still served, with `history: null` and the 60 s partial cache; OpenAQ is never called. Only when CPCB has no usable current value does a missing key give today's 503 with `no-store`.
 - **Unchanged.** The key stays server-only, only `area` is accepted, `maxDuration` stays 30.
 
 ## 7. UI (`air-panel.ts`)
@@ -91,7 +95,8 @@ Approved on the preview `previews/aqi-cpcb/index.html` (git-ignored) on 2026-09-
   - Columns: Pollutant | 24-h sub-index (bar + number) | 24-h range | Latest hour.
   - Rows cover PM2.5, PM10, NO₂, SO₂, CO, O₃, NH₃. A `null` value shows "—".
   - Note: "Sub-indices on the AQI scale, as CPCB publishes them. The largest is the AQI. CPCB's feed carries no concentrations."
-- **Origin obos (fallback).** Today's card, with the meta line "AQI computed by OBOS from OpenAQ (CPCB feed unreachable)". Today's µg/m³ table is kept.
+- **Origin obos (fallback).** Today's card, with the meta line "AQI computed by OBOS from OpenAQ (no current CPCB figure for this station)". Today's µg/m³ table is kept.
+  - **The label is neutral about the cause.** It first read "(CPCB feed unreachable)", which the live run proved false: the feed was up but did not list Barrackpore (AQI-R47). The fallback can come from the feed being down, the station missing, a value more than 7 days old or stamped in the future, or the station moving more than 100 m, so the label names none of them.
 - **`history: null`.** The chart area says "History is loading or unavailable; it comes from OpenAQ." It does not show an empty chart.
 - **Validation and escaping.** `isAirPayload` validates the new shapes (every number finite or null, `origin` in its union), and every value goes through `num()` / `esc()` as today.
 
@@ -99,7 +104,7 @@ Approved on the preview `previews/aqi-cpcb/index.html` (git-ignored) on 2026-09-
 
 Each test is written first and proven with at least one mutation.
 
-- **Parser, against a real fixture.** `tests/fixtures/aqi/cpcb-feed-2026-09-27T0500IST.xml` is trimmed to the two Kolkata stations, three Bengaluru stations, the Guwahati NA station and one `&amp;` name.
+- **Parser, against a real fixture.** `tests/fixtures/aqi/cpcb-feed-2026-09-27T0500IST.xml.gz` is the full capture (481 stations, gzipped); edge cases (`NA`, blank AQI, `&amp;` names, malformed values) use small inline feeds.
   - It must give Ballygunge 38/PM10 and Barrackpore 46/PM10 with all 7 rows.
   - "NA" becomes null, and a blank AQI becomes insufficient with a reason.
   - Oversize, malformed, missing station and moved station (more than 100 m) each give a fallback.
