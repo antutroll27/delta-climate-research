@@ -218,8 +218,8 @@ function barChart(days: HistoryDay[]): string {
     <ul class="aq-sr" id="aqDays">${days.map((d) => `<li>${esc(dayLabel(d))}</li>`).join('')}</ul>`;
 }
 
-/** `h` holds at least one non-null value (the caller checks). */
-function line24(h: HistoryResponse['pm25_24h'], label: string): string {
+/** `h` holds at least one non-null value (the caller checks). `dated`: the end tick carries its day, because the line is old. */
+function line24(h: HistoryResponse['pm25_24h'], label: string, dated: boolean): string {
   const W = 272, H = 70, top = 6, left = 22, vals = h.map((p) => p.value).filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
   const max = Math.max(60, ...vals) * 1.1, x = (i: number): number => left + (W - left) * i / (h.length - 1), y = (v: number): number => top + (H - top) * (1 - v / max);
   let d = '', pen = false;
@@ -236,7 +236,7 @@ function line24(h: HistoryResponse['pm25_24h'], label: string): string {
     <circle cx="${x(last)}" cy="${y(h[last]!.value ?? 0)}" r="4" fill="var(--cyan)" stroke="var(--rail-ground)" stroke-width="2"/>
     <text x="${x(last) - 6}" y="${y(h[last]!.value ?? 0) - 8}" text-anchor="end" fill="var(--paper)" font-size="8" font-family="var(--mono)">${lv}<tspan font-family="var(--sans)" fill="var(--faint)"> µg/m³</tspan></text>
     <text x="${left}" y="${H + 11}" fill="var(--faint)" font-size="7" font-family="var(--mono)">${esc(h[0]!.hour_ist.slice(11, 16))}</text>
-    <text x="${W}" y="${H + 11}" text-anchor="end" fill="var(--faint)" font-size="7" font-family="var(--mono)">${esc(h[h.length - 1]!.hour_ist.slice(11, 16))} IST</text></svg></div>`;
+    <text x="${W}" y="${H + 11}" text-anchor="end" fill="var(--faint)" font-size="7" font-family="var(--mono)">${dated ? `${esc(istDay(h[h.length - 1]!.hour_ist))} ` : ''}${esc(h[h.length - 1]!.hour_ist.slice(11, 16))} IST</text></svg></div>`;
 }
 
 const HATCH_KEY = '<svg width="10" height="10" aria-hidden="true"><defs><pattern id="aqHatchKey" width="3" height="3" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="3" stroke="var(--faint)" stroke-width="1.2"/></pattern></defs><rect width="10" height="10" rx="2" fill="url(#aqHatchKey)" stroke="var(--faint)" stroke-width=".6"/></svg>';
@@ -275,9 +275,13 @@ export function paneHtml(p: AirQualityPayload, placeName: string, now: Date = ne
       `<div class="aq-legend">${(['good', 'satisfactory', 'moderate', 'poor', 'very_poor', 'severe'] as const).map((k) => `<span><span class="dot" style="background:${col(k)}"></span>${WORD[k]}</span>`).join('')}<span>${HATCH_KEY}No AQI: too few hours</span></div>`;
   }
   if (h && c.state !== 'unavailable' && h.pm25_24h.length > 1 && h.pm25_24h.some((q) => q.value !== null)) {
-    /* The line is the station's last 24 REPORTED hours, anchored to its last reading; stale, that is not "the last 24 hours". */
-    const label = c.state === 'stale' ? '24 hours to the last reading' : 'last 24 hours';
-    s += `<p class="pane-h">PM2.5 · ${label}</p>` + line24(h.pm25_24h, label);
+    /* The line is the station's last 24 REPORTED hours on OpenAQ, anchored to its last reading. It is labelled
+       by that reading's own age, never by the card's state: the card can be live from CPCB while OpenAQ's copy
+       is days old (re-audit I-2). `hour_ist` starts its hour, hence LIVE_H + 1. */
+    const lastIso = [...h.pm25_24h].reverse().find((q) => typeof q.value === 'number')?.hour_ist;
+    const old = lastIso !== undefined && now.getTime() - Date.parse(lastIso) > (LIVE_H + 1) * HOUR_MS;
+    const label = old ? '24 hours to the last OpenAQ reading' : 'last 24 hours';
+    s += `<p class="pane-h">PM2.5 · ${label}</p>` + line24(h.pm25_24h, label, old);
   }
   return s + method(c.source.owner, originOf(c));
 }

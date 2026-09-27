@@ -89,7 +89,7 @@ test('the 24 h PM2.5 label never implies "from now" when the feed is stale', () 
   const p = buildPayload(K, st, raw('2026-09-24T17:30:00Z'), new Date('2026-09-26T08:30:00Z'));
   assert.equal(p.current.state, 'stale');
   const stale = paneHtml(p, 'Ballygunge', new Date('2026-09-26T08:30:00Z'));
-  assert.match(stale, /PM2\.5 · 24 hours to the last reading/);
+  assert.match(stale, /PM2\.5 · 24 hours to the last OpenAQ reading/);
   assert.doesNotMatch(stale, /last 24 hours/);
   const live = buildPayload(K, st, raw('2026-09-24T17:30:00Z'), new Date('2026-09-24T18:00:00Z'));
   assert.match(paneHtml(live, 'Ballygunge', new Date('2026-09-24T18:00:00Z')), /PM2\.5 · last 24 hours/);
@@ -413,4 +413,33 @@ test('I1: the CPCB table marks CO and O₃ as 8-hour, as the OBOS table does, an
   const table = /<table class="pol">[^]*?<\/table>/.exec(pane)[0];
   assert.doesNotMatch(table, /24-h/, 'the table itself never says 24-h');
   assert.match(pane, /Sub-indices on the AQI scale, as CPCB publishes them: 24-hour window; CO and O₃ over the last 8 hours\. The largest is the AQI\. CPCB's feed carries no concentrations\./);
+});
+
+/* ---- Re-audit I-2: the PM2.5 line is labelled by its own last hour, not by the card's state. ---- */
+const N65 = new Date('2026-09-27T09:30:00Z'); // 15:00 IST; OpenAQ's last hour is 24 Sept 22:00 IST, 65 h earlier
+const cpcbLiveAt = (now, hist) => ({ current: currentFromFeed({ ...pick(FEED, SB), published_at: new Date(now.getTime() - 30 * 60_000).toISOString() }, KB, SB, now), history: hist });
+
+test('I-2: a CPCB-live card with 65-h-old OpenAQ history says the line ends at the last OpenAQ reading, and dates its end', () => {
+  const p = cpcbLiveAt(N65, buildPayload(K, st, raw('2026-09-24T17:30:00Z'), N65).history);
+  assert.equal(p.current.state, 'live');
+  const pane = paneHtml(p, 'Ballygunge', N65);
+  assert.match(pane, /PM2\.5 · 24 hours to the last OpenAQ reading/);
+  assert.doesNotMatch(pane, /PM2\.5 · last 24 hours/);
+  assert.match(pane, />24 Sept 22:00 IST<\/text>/);
+  assert.match(pane, /aria-label="PM2\.5, 24 hours to the last OpenAQ reading"/);
+});
+
+test('I-2: fresh OpenAQ history under a CPCB-live card stays "last 24 hours", with an undated end tick', () => {
+  const pane = paneHtml(cpcbLiveAt(N65, buildPayload(K, st, raw('2026-09-27T09:15:00Z'), N65).history), 'Ballygunge', N65);
+  assert.match(pane, /PM2\.5 · last 24 hours/);
+  assert.match(pane, />14:00 IST<\/text>/);
+  assert.doesNotMatch(pane, /Sept \d\d:\d\d IST<\/text>/);
+});
+
+test('I-2: the line turns old strictly after LIVE_H + 1 h from its last hour', () => {
+  const hist = buildPayload(K, st, raw('2026-09-27T09:15:00Z'), N65).history;
+  const lastHour = Date.parse([...hist.pm25_24h].reverse().find((q) => q.value !== null).hour_ist);
+  const at = (ms) => paneHtml(cpcbLiveAt(new Date(lastHour + ms), hist), 'Ballygunge', new Date(lastHour + ms));
+  assert.match(at(3 * 3_600_000), /PM2\.5 · last 24 hours/);
+  assert.match(at(3 * 3_600_000 + 60_000), /PM2\.5 · 24 hours to the last OpenAQ reading/);
 });
