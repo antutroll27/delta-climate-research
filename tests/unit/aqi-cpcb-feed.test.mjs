@@ -94,3 +94,43 @@ test('fetchFeed failures are FeedErrors: non-OK, oversize, network, timeout', as
   const ctl = new AbortController(); ctl.abort();
   await assert.rejects(fetchFeed({ signal: ctl.signal, fetch: async (_u, init) => { init.signal.throwIfAborted(); return new Response(FEED_XML); } }), FeedError);
 });
+
+import { currentFromFeed } from '../../src/lib/aqi/cpcb-feed.ts';
+
+const B = 'in/kolkata/ballygunge', stB = stationFor(B);
+const at = (iso) => new Date(iso);
+const bFeed = () => pick(parseFeed(FEED_XML), stB); // published 2026-09-26T23:30Z
+
+test('≤ 2 h after publication is live, origin cpcb, with CPCB source', () => {
+  const c = currentFromFeed(bFeed(), B, stB, at('2026-09-27T01:30:00Z'));
+  assert.equal(c.state, 'live');
+  assert.deepEqual({ o: c.result.origin, aqi: c.result.aqi, cat: c.result.category, dom: c.result.dominant, w: c.result.window_h }, { o: 'cpcb', aqi: 38, cat: 'good', dom: 'pm10', w: 24 });
+  assert.equal(c.observed_at, '2026-09-26T23:30:00.000Z');
+  assert.equal(c.source.via, 'CPCB');
+  assert.equal(c.schema, 2);
+});
+
+test('2 h + 1 min is stale with its age; 7 days + 1 min falls back (null)', () => {
+  const s = currentFromFeed(bFeed(), B, stB, at('2026-09-27T01:31:00Z'));
+  assert.deepEqual({ st: s.state, age: s.age_h }, { st: 'stale', age: 2 });
+  assert.equal(currentFromFeed(bFeed(), B, stB, at('2026-10-03T23:31:00Z')), null);
+});
+
+test('CO or O3 leading means an 8-hour window', () => {
+  const f = { ...bFeed(), dominant: 'o3' };
+  assert.equal(currentFromFeed(f, B, stB, at('2026-09-27T00:00:00Z')).result.window_h, 8);
+});
+
+test('a blank AQI is insufficient_data (origin cpcb) when fresh, unavailable no_valid_aqi when stale', () => {
+  const f = { ...bFeed(), aqi: null, dominant: null, subindices: bFeed().subindices.map((q) => (q.parameter.startsWith('pm') ? { ...q, avg: null } : q)) };
+  const fresh = currentFromFeed(f, B, stB, at('2026-09-27T00:00:00Z'));
+  assert.equal(fresh.state, 'insufficient_data');
+  assert.equal(fresh.origin, 'cpcb');
+  assert.deepEqual(fresh.reasons, ['No valid PM2.5 or PM10 reading']);
+  const stale = currentFromFeed(f, B, stB, at('2026-09-27T05:00:00Z'));
+  assert.deepEqual({ st: stale.state, r: stale.reason, at: stale.last_observed_at }, { st: 'unavailable', r: 'no_valid_aqi', at: '2026-09-26T23:30:00.000Z' });
+});
+
+test('a publication stamped more than 15 min in the future is not trusted (null)', () => {
+  assert.equal(currentFromFeed(bFeed(), B, stB, at('2026-09-26T23:00:00Z')), null);
+});

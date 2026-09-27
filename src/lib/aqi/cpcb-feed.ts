@@ -13,7 +13,9 @@
  * IST is the fixed +05:30 offset (obos-scope forbids naming a zone).
  */
 import type { StationEntry } from './stations.ts';
-import type { CpcbSubIndex, Pollutant } from './types.ts';
+import { category } from './cpcb.ts';
+import { LIVE_H, STALE_DAYS } from './build.ts';
+import { SCHEMA, type AirQualityResponse, type AqiStation, type CpcbResult, type CpcbSubIndex, type Pollutant } from './types.ts';
 
 export const FEED_URL = 'https://airquality.cpcb.gov.in/caaqms/rss_feed';
 export const FEED_TIMEOUT_MS = 8_000;
@@ -125,4 +127,40 @@ export async function fetchFeed(o: { fetch?: typeof fetch; signal?: AbortSignal 
     throw new FeedError(e instanceof Error && (e.name === 'TimeoutError' || e.name === 'AbortError') ? 'CPCB feed timed out' : 'CPCB feed unreachable');
   }
   return parseFeed(text);
+}
+
+const HOUR_MS = 3_600_000, DAY_MS = 86_400_000, FUTURE_SLACK_MS = 15 * 60_000;
+
+/** Why CPCB published no AQI, from what its own fields show. Plain sentences: the card prints the first. */
+function cpcbReasons(f: FeedStation): string[] {
+  const has = (p: Pollutant): boolean => f.subindices.some((q) => q.parameter === p && q.avg !== null);
+  const valid = f.subindices.filter((q) => q.avg !== null).length;
+  const out: string[] = [];
+  if (!has('pm25') && !has('pm10')) out.push('No valid PM2.5 or PM10 reading');
+  if (valid < 3) out.push(`${valid} valid pollutants; CPCB needs 3`);
+  return out.length ? out : ['CPCB gave no reason'];
+}
+
+/**
+ * The current state from CPCB's published values, or null when CPCB's answer
+ * cannot be used (published more than 7 days ago, or stamped in the future):
+ * the caller then falls back to OBOS's own calculation from OpenAQ.
+ */
+export function currentFromFeed(f: FeedStation, areaKey: string, st: StationEntry, now: Date): AirQualityResponse | null {
+  const ageMs = now.getTime() - Date.parse(f.published_at);
+  if (ageMs < -FUTURE_SLACK_MS || ageMs > STALE_DAYS * DAY_MS) return null;
+  const fresh = ageMs <= LIVE_H * HOUR_MS;
+  const station: AqiStation = { id: st.id, name: st.name, lat: st.lat, lon: st.lon, distance_m: st.distance_m, inside: 'window_3km' };
+  const common = { schema: SCHEMA, area_id: areaKey, served_at: now.toISOString(),
+    source: { owner: st.owner, via: 'CPCB', standard: 'CPCB National AQI' as const } };
+  if (f.aqi === null || f.dominant === null) {
+    return fresh
+      ? { ...common, state: 'insufficient_data', origin: 'cpcb', station, subindices: f.subindices, reasons: cpcbReasons(f), observed_at: f.published_at }
+      : { ...common, state: 'unavailable', station, last_observed_at: f.published_at, reason: 'no_valid_aqi' };
+  }
+  const result: CpcbResult = { origin: 'cpcb', aqi: f.aqi, category: category(f.aqi), dominant: f.dominant,
+    window_h: f.dominant === 'co' || f.dominant === 'o3' ? 8 : 24, subindices: f.subindices };
+  return fresh
+    ? { ...common, state: 'live', station, result, observed_at: f.published_at }
+    : { ...common, state: 'stale', station, result, observed_at: f.published_at, age_h: Math.floor(ageMs / HOUR_MS) };
 }
