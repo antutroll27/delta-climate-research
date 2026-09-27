@@ -155,6 +155,8 @@ export function parseFeed(xml: string): FeedStation[] {
       }
       const aq = selfClosing(body, 'Air_Quality_Index').next(), aa = aq.done ? {} : attrs(aq.value);
       const aqi = whole(aa['Value']), dominant = PARAM[aa['Predominant_Parameter'] ?? ''] ?? null;
+      /* A published AQI led by a pollutant we cannot name is not "no AQI": drop the station, so ours falls back (re-audit M-1). */
+      if (aqi !== null && !dominant) continue;
       out.push({ name: a['id'], published_at: istStamp(a['lastupdate'] ?? ''), lat, lon,
         aqi: aqi !== null && dominant ? aqi : null, dominant: aqi !== null ? dominant : null, subindices });
     } catch {
@@ -219,11 +221,14 @@ export async function fetchFeed(o: { fetch?: typeof fetch; signal?: AbortSignal 
   let text: string;
   try {
     const res = await f(FEED_URL, { headers: { 'User-Agent': UA, Accept: 'application/xml' }, signal });
-    if (!res.ok) throw new FeedError(`CPCB feed ${res.status}`);
-    if (Number(res.headers.get('content-length') ?? 0) > FEED_MAX_BYTES) throw new FeedError('CPCB feed too large');
+    /* A refused answer's body is cancelled, never left streaming (re-audit M-6). */
+    const refuse = async (why: string): Promise<never> => { await res.body?.cancel().catch(() => {}); throw new FeedError(why); };
+    if (!res.ok) await refuse(`CPCB feed ${res.status}`);
+    if (Number(res.headers.get('content-length') ?? 0) > FEED_MAX_BYTES) await refuse('CPCB feed too large');
     text = await readCapped(res);
   } catch (e) {
     if (e instanceof FeedError) throw e;
+    if (o.signal?.aborted) throw new FeedError('CPCB feed aborted');
     throw new FeedError(e instanceof Error && (e.name === 'TimeoutError' || e.name === 'AbortError') ? 'CPCB feed timed out' : 'CPCB feed unreachable');
   }
   return parseFeed(text);

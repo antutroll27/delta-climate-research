@@ -324,3 +324,28 @@ test('I-1: interleaved comments and CDATA keep every station that follows them',
   const xml = `<AqIndex><!--a--><![CDATA[b]]><!--c-->${st('A')}<![CDATA[<Station id="Ghost">]]><!-- ]]> -->${st('B')}<![CDATA[ --> ]]></AqIndex>`;
   assert.deepEqual(parseFeed(xml).map((s) => s.name), ['A', 'B']);
 });
+
+/* ---- Re-audit M-1, M-6. ---- */
+
+test('M-1: a published AQI with an unrecognised predominant pollutant drops the station (it falls back), never "no AQI"', () => {
+  const xml = one(ST() + ST('Other'), POLS + '<Air_Quality_Index Value="50" Predominant_Parameter="PM10"/>').replace('Value="50" Predominant_Parameter="PM10"', 'Value="50" Predominant_Parameter="PM 10"');
+  const feed = parseFeed(xml);
+  assert.deepEqual(feed.map((s) => s.name), ['Other']);
+  assert.equal(pick(feed, stB), null);
+});
+
+const streamBody = (onCancel) => new ReadableStream({ pull(c) { c.enqueue(new Uint8Array(1024)); }, cancel() { onCancel(); } });
+
+test('M-6: a non-OK answer, and an oversize content-length, cancel the body before throwing', async () => {
+  let cancelled = 0;
+  await assert.rejects(fetchFeed({ fetch: async () => new Response(streamBody(() => cancelled++), { status: 502 }) }), { name: 'FeedError', message: 'CPCB feed 502' });
+  assert.equal(cancelled, 1, 'the 502 body was cancelled');
+  await assert.rejects(fetchFeed({ fetch: async () => new Response(streamBody(() => cancelled++), { headers: { 'content-length': String(FEED_MAX_BYTES + 1) } }) }), { name: 'FeedError', message: 'CPCB feed too large' });
+  assert.equal(cancelled, 2, 'the oversize body was cancelled');
+});
+
+test('M-6: the caller aborting reads "aborted"; our own timeout reads "timed out"', async () => {
+  const ctl = new AbortController(); ctl.abort();
+  await assert.rejects(fetchFeed({ signal: ctl.signal, fetch: async (_u, init) => { init.signal.throwIfAborted(); return new Response(FEED_XML); } }), { name: 'FeedError', message: 'CPCB feed aborted' });
+  await assert.rejects(fetchFeed({ fetch: async () => { throw new DOMException('timed out', 'TimeoutError'); } }), { name: 'FeedError', message: 'CPCB feed timed out' });
+});
