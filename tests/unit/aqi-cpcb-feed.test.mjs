@@ -275,3 +275,37 @@ test('M-f: a body with no content-length is cut off at the byte cap while stream
   assert.ok(pulled <= Math.ceil(FEED_MAX_BYTES / chunk.length) + 2, `${pulled} of ${total} chunks read`);
   assert.ok(cancelled, 'the stream was cancelled');
 });
+
+/* ---- Audit I1 (founder: 8-h marks): CPCB's CO and O₃ sub-indices are 8-hour, the rest 24-hour. ---- */
+
+test("I1: CPCB's CO and O₃ values cover the last 8 hours, the others do not (7 hourly captures, 27 Sep 05:00–11:00 IST)", () => {
+  const caps = [FEED_XML, ...['0600', '0700', '0800', '0900', '1000', '1100'].map((h) =>
+    gunzipSync(readFileSync(new URL(`../fixtures/aqi/cpcb-hourly/cpcb-feed-2026-09-27T${h}IST.xml.gz`, import.meta.url))).toString('utf8'))].map(parseFeed);
+  assert.deepEqual(caps.map((c) => c[0].published_at.slice(11, 16)), ['23:30', '00:30', '01:30', '02:30', '03:30', '04:30', '05:30'], 'seven consecutive hours');
+  const byName = caps.map((c) => new Map(c.map((s) => [s.name, s])));
+  /* With 7 of an 8-hour window's hourly values known, the 8th (04:00 IST) is implied by the mean:
+     8 × Avg − Σ known. It must sit inside CPCB's own Min–Max (±4 for Avg's rounding), and Max above
+     every known value while Min is below every one is impossible with a single unknown. */
+  const verdict = (param) => {
+    let n = 0, fits = 0, impossible = 0;
+    for (const s of caps.at(-1)) {
+      const q = s.subindices.find((x) => x.parameter === param);
+      const hv = byName.map((m) => m.get(s.name)?.subindices.find((x) => x.parameter === param)?.hourly);
+      if (!q || q.avg === null || q.min === null || q.max === null || hv.some((v) => typeof v !== 'number')) continue;
+      n++;
+      const implied = 8 * q.avg - hv.reduce((a, b) => a + b, 0);
+      if (implied >= q.min - 4 && implied <= q.max + 4) fits++;
+      if (q.max > Math.max(...hv) && q.min < Math.min(...hv)) impossible++;
+    }
+    return { n, fits, impossible };
+  };
+  for (const p of ['co', 'o3']) {
+    const v = verdict(p);
+    assert.ok(v.n >= 400, `${p}: ${v.n} stations`);
+    assert.deepEqual({ fits: v.fits, impossible: v.impossible }, { fits: v.n, impossible: 0 }, `${p} is an 8-hour window at every station`);
+  }
+  for (const p of ['pm25', 'pm10', 'no2']) {
+    const v = verdict(p);
+    assert.ok(v.fits / v.n < 0.7 && v.impossible > 50, `${p} is not 8-hour: ${JSON.stringify(v)} (the check discriminates)`);
+  }
+});

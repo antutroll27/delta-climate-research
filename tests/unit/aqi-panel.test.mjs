@@ -299,7 +299,7 @@ test('CPCB live: published line, 24-hour average, published time, no concentrati
   assert.match(card, /Led by <b>PM10<\/b> · CPCB published AQI · <span[^>]*>24-hour average<\/span>/);
   assert.match(card, /Published by CPCB at <span style="white-space:nowrap"><b>27 Sept 05:00 IST<\/b><\/span>/);
   assert.match(pane, /Pollutants · CPCB sub-indices/);
-  assert.match(pane, /<th>24-h sub-index<\/th><th>24-h range<\/th><th>Latest hour<\/th>/);
+  assert.match(pane, /<th>Pollutant<\/th><th>Sub-index<\/th><th>Range<\/th><th>Latest hour<\/th>/);
   assert.doesNotMatch(pane, /µg\/m³|mg\/m³/);
   assert.match(pane, /The largest is the AQI/);
 });
@@ -319,9 +319,10 @@ test('CPCB stale: red chip, muted number, "No update has reached us since"', () 
   assert.match(card, /No update has reached us since\./);
 });
 
-test('O3-led CPCB value reads 8-hour maximum', () => {
+test('O3-led CPCB value reads 8-hour average (CPCB\'s O₃ Avg is the 8-hour mean: register AQI-R47a)', () => {
   const p = cp(C1); p.current.result.dominant = 'o3'; p.current.result.window_h = 8;
-  assert.match(cardHtml(p, 'Ballygunge', C1), /CPCB published AQI · <span[^>]*>8-hour maximum<\/span>/);
+  assert.match(cardHtml(p, 'Ballygunge', C1), /CPCB published AQI · <span[^>]*>8-hour average<\/span>/);
+  assert.doesNotMatch(cardHtml(p, 'Ballygunge', C1), /8-hour maximum/);
 });
 
 test('CPCB insufficient: No AQI chip, the reason, the sub-index table', () => {
@@ -399,4 +400,17 @@ test('M-b: the live-region line for CPCB insufficient gives the feed\'s own reas
 
 test('M-d: the card\'s reason line says it is read from the feed\'s fields', () => {
   assert.match(cardHtml(cpIns(), 'Ballygunge', C1), /<p class="meta">From the feed's fields: No valid PM2\.5 or PM10 reading\.<\/p>/);
+});
+
+/* ---- Audit I1 (founder: 8-h marks). ---- */
+
+test('I1: the CPCB table marks CO and O₃ as 8-hour, as the OBOS table does, and never calls them 24-hour', () => {
+  const pane = paneHtml(cp(C1), 'Ballygunge', C1);
+  const tag = '<br><span style="color:var\\(--faint\\);font-size:\\.5rem">8-h<\\/span>';
+  for (const p of ['CO', 'O₃']) assert.match(pane, new RegExp(`<td>${p}${tag}</td>`), p);
+  for (const p of ['PM2\\.5', 'PM10', 'NO₂', 'SO₂', 'NH₃']) assert.match(pane, new RegExp(`<td>${p}</td>`), p);
+  assert.equal(pane.match(/>8-h</g)?.length, 2, 'exactly two 8-h marks');
+  const table = /<table class="pol">[^]*?<\/table>/.exec(pane)[0];
+  assert.doesNotMatch(table, /24-h/, 'the table itself never says 24-h');
+  assert.match(pane, /Sub-indices on the AQI scale, as CPCB publishes them: 24-hour window; CO and O₃ over the last 8 hours\. The largest is the AQI\. CPCB's feed carries no concentrations\./);
 });

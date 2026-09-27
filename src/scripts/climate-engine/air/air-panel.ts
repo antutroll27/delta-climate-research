@@ -72,7 +72,7 @@ const windowOf = (r: AqiResult): string => (r.pollutants.find((q) => q.parameter
    or its published figure rejected by `pick` (off-scale, ambiguous, or not the largest sub-index). */
 function hero(r: Result, muted: boolean): string {
   const meta = r.origin === 'cpcb'
-    ? `Led by <b>${pol(r.dominant)}</b> · CPCB published AQI · <span style="white-space:nowrap">${r.window_h === 8 ? '8-hour maximum' : '24-hour average'}</span>`
+    ? `Led by <b>${pol(r.dominant)}</b> · CPCB published AQI · <span style="white-space:nowrap">${r.window_h === 8 ? '8-hour average' : '24-hour average'}</span>`
     : `Led by <b>${pol(r.dominant)}</b> · AQI computed by OBOS from OpenAQ (no usable current CPCB figure for this station) · <span style="white-space:nowrap">${windowOf(r)}</span>`;
   return `<div class="hero"><span class="num${muted ? ' muted' : ''}" style="color:${col(r.category)}">${num(r.aqi)}</span>
     <span class="cat"><span class="dot" style="background:${col(r.category)}"></span>${word(r.category)}</span></div>
@@ -149,16 +149,19 @@ const failedPaneHtml = (place: string): string => paneHead(place) + `<div class=
 
 const SUB_ORDER: readonly Pollutant[] = ['pm25', 'pm10', 'no2', 'so2', 'co', 'o3', 'nh3'];
 
-/** CPCB's sub-indices (never concentrations: CPCB's feed carries none). The biggest bar is the AQI; `lead`'s row is marked `aq-top`, prefixed because the stage's own top bar is `.top` (null: no AQI, no mark). */
+/** The small mark under CO and O₃, whose values cover 8 hours (CPCB's and OBOS's tables alike). */
+const EIGHT_H = '<br><span style="color:var(--faint);font-size:.5rem">8-h</span>';
+
+/** CPCB's sub-indices (never concentrations: CPCB's feed carries none). CO's and O₃'s Min/Max/Avg cover the last 8 hours, the rest 24 (AQI-R47a). The biggest bar is the AQI; `lead`'s row is marked `aq-top`, prefixed because the stage's own top bar is `.top` (null: no AQI, no mark). */
 function subTable(subs: readonly CpcbSubIndex[], lead: Pollutant | null): string {
   const rows = SUB_ORDER.map((p) => subs.find((q) => q.parameter === p)).filter((q): q is CpcbSubIndex => !!q).map((q) => {
     const si = typeof q.avg === 'number' && Number.isFinite(q.avg) && q.avg >= 0 ? q.avg : null;
     const w = si === null ? 0 : Math.min(100, si / 2), bar = si === null ? 'transparent' : col(category(si));
     const range = q.min === null || q.max === null ? '—' : `${num(q.min)}–${num(q.max)}`;
-    return `<tr${q.parameter === lead ? ' class="aq-top"' : ''}><td>${pol(q.parameter)}</td><td><span class="si"><i style="width:${w}%;background:${bar}"></i>${num(q.avg)}</span></td><td class="n">${range}</td><td class="n">${num(q.hourly)}</td></tr>`;
+    return `<tr${q.parameter === lead ? ' class="aq-top"' : ''}><td>${pol(q.parameter)}${q.parameter === 'co' || q.parameter === 'o3' ? EIGHT_H : ''}</td><td><span class="si"><i style="width:${w}%;background:${bar}"></i>${num(q.avg)}</span></td><td class="n">${range}</td><td class="n">${num(q.hourly)}</td></tr>`;
   }).join('');
-  return `<p class="pane-h">Pollutants · CPCB sub-indices</p><table class="pol"><thead><tr><th>Pollutant</th><th>24-h sub-index</th><th>24-h range</th><th>Latest hour</th></tr></thead><tbody>${rows}</tbody></table>` +
-    `<p class="pane-note">Sub-indices on the AQI scale, as CPCB publishes them. The largest is the AQI. CPCB's feed carries no concentrations.</p>`;
+  return `<p class="pane-h">Pollutants · CPCB sub-indices</p><table class="pol"><thead><tr><th>Pollutant</th><th>Sub-index</th><th>Range</th><th>Latest hour</th></tr></thead><tbody>${rows}</tbody></table>` +
+    `<p class="pane-note">Sub-indices on the AQI scale, as CPCB publishes them: 24-hour window; CO and O₃ over the last 8 hours. The largest is the AQI. CPCB's feed carries no concentrations.</p>`;
 }
 
 function polTable(c: Current): string {
@@ -173,7 +176,7 @@ function polTable(c: Current): string {
     const si = typeof q.sub_index === 'number' && Number.isFinite(q.sub_index) && q.sub_index >= 0 ? q.sub_index : null;
     const w = si === null ? 0 : Math.min(100, si / 2);
     const bar = si === null ? 'transparent' : col(category(si));
-    return `<tr><td>${pol(q.parameter)}${q.window_h === 8 ? '<br><span style="color:var(--faint);font-size:.5rem">8-h</span>' : ''}</td>
+    return `<tr><td>${pol(q.parameter)}${q.window_h === 8 ? EIGHT_H : ''}</td>
       <td><span class="lv">${num(q.value)}</span><br><span class="unit">${unit(q.unit)}</span></td>
       <td><span class="si"><i style="width:${w}%;background:${bar}"></i>${num(q.sub_index)}</span></td>
       <td class="n">${num(q.hours_present)}</td></tr>`;

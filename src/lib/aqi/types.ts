@@ -60,11 +60,15 @@ export interface AqiResult {
   algorithm: 'cpcb-aqi-1';
 }
 
-/** One pollutant's sub-indices as CPCB publishes them (not concentrations: register AQI-R47a). */
+/**
+ * One pollutant's sub-indices as CPCB publishes them (not concentrations: register AQI-R47a).
+ * The window is 8 hours for CO and O₃ and 24 hours for every other pollutant (measured, AQI-R47a).
+ */
 export interface CpcbSubIndex {
   parameter: Pollutant;
-  /** 24-hour sub-index; the largest across pollutants IS the AQI. */
+  /** The window's mean sub-index; the largest across pollutants IS the AQI. */
   avg: number | null;
+  /** The smallest and largest hourly sub-index in the window. */
   min: number | null;
   max: number | null;
   /** The latest hour's sub-index. */
@@ -77,7 +81,7 @@ export interface CpcbResult {
   aqi: number;
   category: CpcbCategory;
   dominant: Pollutant;
-  /** 8 when CO or O₃ leads (CPCB's value is then an 8-hour maximum), else 24. */
+  /** The leading pollutant's window: 8 when CO or O₃ leads (CPCB's value is then the 8-hour mean), else 24. */
   window_h: 24 | 8;
   subindices: CpcbSubIndex[];
 }

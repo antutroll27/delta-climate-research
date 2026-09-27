@@ -12,7 +12,7 @@ OBOS reads Kolkata's government monitors through OpenAQ. Since 2026-09-24 17:30 
 | # | Decision |
 |---|---|
 | D1 | The headline AQI is **CPCB's published station AQI** whenever the feed has it. OBOS's own calculation from OpenAQ is the fallback. |
-| D2 | When the value comes from CPCB, the pollutant table shows **CPCB's sub-indices only** (24-h value, 24-h range, latest hour). No concentrations, and no concentrations inferred backwards from sub-indices. |
+| D2 | When the value comes from CPCB, the pollutant table shows **CPCB's sub-indices only** (the window's value and range, and the latest hour; the window is 8 h for CO and O₃, 24 h otherwise). No concentrations, and no concentrations inferred backwards from sub-indices. |
 | D3 | The 30-day chart and the 24-h PM2.5 line **stay on OpenAQ**. An OBOS-owned archive of the CPCB feed (probably a dedicated PostgreSQL database) is future work, not part of this change. |
 | D4 | When the CPCB feed fails (unreachable, malformed, or our station missing), the card **falls back to today's OpenAQ path**, labelled as computed by OBOS. |
 | D5 | Architecture: **one endpoint, two independent sources** (`/api/air-quality`). |
@@ -21,7 +21,8 @@ OBOS reads Kolkata's government monitors through OpenAQ. Since 2026-09-24 17:30 
 
 - **Transport.** XML, about 359 KB, 0.4–0.5 s. No key. It is served with `Cache-Control: no-store`. It accepts an identifying User-Agent (`delta-climate-research/1.0 (https://deltaclimate.earth)` → 200).
 - **Shape.** `<Country><State><City><Station id="<name>" lastupdate="DD-MM-YYYY HH:MM:SS" latitude longitude>`, containing one `<Pollutant_Index id Min Max Avg Hourly_sub_index>` per pollutant (PM2.5, PM10, NO2, SO2, CO, OZONE, NH3) and one `<Air_Quality_Index Value Predominant_Parameter>`.
-- **The numbers are sub-indices, not concentrations.** For every one of the 442 stations with a numeric AQI, `Value` equals the largest `Avg` across its pollutants, and `Predominant_Parameter` names that pollutant (442/442). CO's `Avg` (for example 20 at Ballygunge) only makes sense as a sub-index. Min/Max are the 24-h range of the sub-index, and `Hourly_sub_index` is the latest hour's.
+- **The numbers are sub-indices, not concentrations.** For every one of the 442 stations with a numeric AQI, `Value` equals the largest `Avg` across its pollutants, and `Predominant_Parameter` names that pollutant (442/442). CO's `Avg` (for example 20 at Ballygunge) only makes sense as a sub-index. `Hourly_sub_index` is the latest hour's.
+- **The window is 8 hours for CO and O₃, 24 hours for the rest (measured; founder decision "8-h marks", 27 Sep).** For CO and O₃, `Min`, `Max` and `Avg` cover the last 8 hours and `Avg` is the 8-hour mean. The audit's 8 hourly snapshots of about 400 stations: `Avg` equalled the mean of the last 8 hourly sub-indices at 410/410 stations for CO and 413/413 for O₃; a 24-hour window broke at about 200 stations each, an 8-hour window at none. The other five pollutants are 24-hour. Our own 7 hourly captures (05:00–11:00 IST) replicate it (AQI-R47a).
 - **CPCB applies its own publish rule.** 39 stations have `Value=""`. Every example inspected lacked valid PM2.5 and PM10. CPCB still lists their other sub-indices.
 - **Dead stations are omitted.** Kasturi Nagar and City Railway Station (Bengaluru), both silent on OpenAQ, are absent from the feed.
 - **`lastupdate` is feed-wide.** All 481 stations carry the same value, and it is in IST.
@@ -89,13 +90,13 @@ type AqiResult = (existing fields) & { origin: 'obos' };   // unchanged otherwis
 
 Approved on the preview `previews/aqi-cpcb/index.html` (git-ignored) on 2026-09-27.
 
-- **Hero meta for origin cpcb.** "Led by **PM10** · CPCB published AQI · 24-hour average". It reads "8-hour maximum" when CO or O₃ leads.
+- **Hero meta for origin cpcb.** "Led by **PM10** · CPCB published AQI · 24-hour average". It reads "8-hour average" when CO or O₃ leads, because their `Avg` is the 8-hour mean.
 - **Time line.** "Published by CPCB at **27 Sept 05:00 IST**". When stale, it adds "No update has reached us since." and uses the approved red chip and the muted number.
 - **Pollutant table for origin cpcb.**
   - Header: "Pollutants · CPCB sub-indices".
-  - Columns: Pollutant | 24-h sub-index (bar + number) | 24-h range | Latest hour.
-  - Rows cover PM2.5, PM10, NO₂, SO₂, CO, O₃, NH₃. A `null` value shows "—".
-  - Note: "Sub-indices on the AQI scale, as CPCB publishes them. The largest is the AQI. CPCB's feed carries no concentrations."
+  - Columns: Pollutant | Sub-index (bar + number) | Range | Latest hour. The names are neutral because the window differs by pollutant.
+  - Rows cover PM2.5, PM10, NO₂, SO₂, CO, O₃, NH₃. A `null` value shows "—". CO and O₃ carry the small "8-h" mark under their name, exactly as in the OBOS table.
+  - Note: "Sub-indices on the AQI scale, as CPCB publishes them: 24-hour window; CO and O₃ over the last 8 hours. The largest is the AQI. CPCB's feed carries no concentrations."
 - **Origin obos (fallback).** Today's card, with the meta line "AQI computed by OBOS from OpenAQ (no usable current CPCB figure for this station)". Today's µg/m³ table is kept.
   - **The label is neutral about the cause.** It first read "(CPCB feed unreachable)", which the live run proved false: the feed was up but did not list Barrackpore (AQI-R47). The fallback can come from the feed being down, the station missing, a value more than 7 days old or stamped in the future, the station moving more than 100 m, or `pick` rejecting what CPCB published (off the 0–500 scale, two stations with our name, or an AQI that is not the largest sub-index), so the label names none of them. "Usable" covers that last case.
 - **`history: null`.** The chart area says "History is loading or unavailable; it comes from OpenAQ." It does not show an empty chart.
@@ -109,10 +110,10 @@ Each test is written first and proven with at least one mutation.
   - It must give Ballygunge 38/PM10 and Barrackpore 46/PM10 with all 7 rows.
   - "NA" becomes null, and a blank AQI becomes insufficient with a reason.
   - Oversize, malformed, missing station and moved station (more than 100 m) each give a fallback.
-- **The relied-on fact.** On the full-size fixture, for every station, `Value == max(Avg)` and `Predominant_Parameter == argmax`.
+- **The relied-on facts.** On the full-size fixture, for every station, `Value == max(Avg)` and `Predominant_Parameter == argmax`. On 7 consecutive hourly captures (`tests/fixtures/aqi/cpcb-hourly/`, byte-identical to the recorder's), CO's and O₃'s `Avg` is consistent with an 8-hour mean at every station, with 8 × Avg − Σ(7 known hourly values) inside CPCB's own Min–Max and no station whose Max and Min both lie outside the known values; PM2.5, PM10 and NO₂ fail the same check widely, so it discriminates.
 - **Freshness.** Tests at the 2 h and 7 d boundaries (7 d exactly is stale, 7 d + 1 ms falls back). `lastupdate` is parsed as IST with a fixed offset, and one test re-runs the parse and the card's IST time in child processes under `TZ=UTC`, `TZ=America/New_York` and `TZ=Pacific/Kiritimati`: in-process tests cannot catch a local-time parse on a machine that is itself in IST.
 - **Independence matrix.** CPCB ok / OpenAQ slow; CPCB ok / OpenAQ fails; CPCB fails / OpenAQ ok; both fail. Each checks the state, the origin, `history`, `Cache-Control`, and that `waitUntil` is called only when OpenAQ was cut off.
-- **Labels.** A CO- or O₃-led card says 8-hour maximum, and any other says 24-hour average.
+- **Labels.** A CO- or O₃-led card says 8-hour average, and any other says 24-hour average. The CPCB table marks CO and O₃ "8-h" and never says "24-h".
 - **UI.** The CPCB table contains no `µg/m³` or `mg/m³`. The fallback shows the OBOS label. Schema-1 payloads still validate.
 - **Gates.** `npm run check`, `typecheck`, `test:py`, `test:unit`, `build`, a real `vercel build`, and screenshots of every state.
 - **Preview.** The PR's Preview is queried through `vercel curl` for all three areas.
