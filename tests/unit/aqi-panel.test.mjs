@@ -361,3 +361,23 @@ test('the sub-index row that holds the AQI is marked, and only when CPCB publish
 test('an IST time never breaks across lines: the CPCB live card holds its time in a nowrap span', () => {
   assert.match(cardHtml(cp(C1), 'Ballygunge', C1), /Published by CPCB at <span style="white-space:nowrap"><b>27 Sept 05:00 IST<\/b><\/span>/);
 });
+
+/* ---- Audit I3: surviving mutations. ---- */
+
+test('M9: a cached CPCB live payload is demoted on the viewer\'s clock after 2 h', () => {
+  const p = cp(C1);
+  assert.equal(p.current.state, 'live');
+  assert.match(cardHtml(p, 'Ballygunge', new Date(C1.getTime() + 3 * 3_600_000)), /Not Live<span class="sep">·<\/span><b>4 h<\/b> Old/);
+});
+
+test('M11: every pollutant CPCB lists gets a row, NH₃ included', () => {
+  const pane = paneHtml(cp(C1), 'Ballygunge', C1);
+  for (const p of ['PM2\\.5', 'PM10', 'NO₂', 'SO₂', 'CO', 'O₃', 'NH₃']) assert.match(pane, new RegExp(`<td>${p}(<br>|</td>)`), p);
+});
+
+test('M17: a CPCB insufficient pane credits CPCB in its method note, never the OBOS calculation', () => {
+  const f = { ...pick(FEED, SB), aqi: null, dominant: null };
+  const pane = paneHtml({ current: currentFromFeed(f, KB, SB, C1), history: null }, 'Ballygunge', C1);
+  assert.match(pane, /\(source: CPCB\)/);
+  assert.doesNotMatch(pane, /AQI calculated by OBOS/);
+});

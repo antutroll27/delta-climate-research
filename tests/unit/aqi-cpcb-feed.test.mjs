@@ -173,3 +173,54 @@ test('I2: 2 MB of unterminated <Pollutant_Index> tags inside one station parses 
     assert.ok(ms < HOSTILE_MS, `${ms.toFixed(0)} ms (${body.endsWith('/>') ? 'with' : 'without'} a closing "/>")`);
   }
 });
+
+/* ---- Audit I3: one test per surviving mutation. ---- */
+import { execFileSync } from 'node:child_process';
+import { FEED_TIMEOUT_MS } from '../../src/lib/aqi/cpcb-feed.ts';
+
+test('M2: a blank CPCB AQI still picks our station, and becomes insufficient_data from CPCB', () => {
+  const f = pick(parseFeed(one(ST(), POLS + '<Air_Quality_Index Value="" Predominant_Parameter=""/>')), stB);
+  assert.ok(f, 'pick kept the station');
+  assert.equal(f.aqi, null);
+  const c = currentFromFeed(f, B, stB, at('2026-09-27T00:00:00Z'));
+  assert.deepEqual({ st: c.state, o: c.origin }, { st: 'insufficient_data', o: 'cpcb' });
+});
+
+test('M4: two valid pollutants are too few for CPCB, even with PM present', () => {
+  const f = { ...bFeed(), aqi: null, dominant: null, subindices: bFeed().subindices.map((q) => (['pm10', 'no2'].includes(q.parameter) ? q : { ...q, avg: null })) };
+  assert.deepEqual(currentFromFeed(f, B, stB, at('2026-09-27T00:00:00Z')).reasons, ['2 valid pollutants; CPCB needs 3']);
+});
+
+test('M6: exactly 7 days old is still stale; 7 days and 1 ms falls back', () => {
+  const pub = Date.parse('2026-09-26T23:30:00Z');
+  assert.equal(currentFromFeed(bFeed(), B, stB, new Date(pub + 7 * 864e5)).state, 'stale');
+  assert.equal(currentFromFeed(bFeed(), B, stB, new Date(pub + 7 * 864e5 + 1)), null);
+});
+
+test('M14: age_h is floored, never rounded up (2 h 50 min is 2 h)', () => {
+  assert.equal(currentFromFeed(bFeed(), B, stB, at('2026-09-27T02:20:00Z')).age_h, 2);
+});
+
+test('M18: the name must match exactly; a longer or shorter name at our position is not our station', () => {
+  for (const name of ['Ballygunge, Kolkata - WBPCB (old)', 'Ballygunge, Kolkata']) {
+    assert.equal(pick(parseFeed(one(ST(name), POLS + '<Air_Quality_Index Value="38" Predominant_Parameter="PM10"/>')), stB), null, name);
+  }
+});
+
+test('M19: the feed timeout is 8 s, so CPCB settles well inside the function\'s 30 s', () => {
+  assert.equal(FEED_TIMEOUT_MS, 8_000);
+});
+
+test('spec §8: the IST reading and the card\'s IST time hold in any machine zone (child processes under TZ)', () => {
+  const root = new URL('../../', import.meta.url);
+  const code = `const [f, p, s] = await Promise.all([import('./src/lib/aqi/cpcb-feed.ts'), import('./src/scripts/climate-engine/air/air-panel.ts'), import('./src/lib/aqi/stations.ts')]);
+    const st = s.stationFor('in/kolkata/ballygunge'), now = new Date('2026-09-27T00:30:00Z');
+    const one = '<AqIndex><Station id="Ballygunge, Kolkata - WBPCB" lastupdate="27-09-2026 05:00:00" latitude="22.5367507" longitude="88.3638022"><Pollutant_Index id="PM10" Min="18" Max="53" Avg="38" Hourly_sub_index="45"/><Air_Quality_Index Value="38" Predominant_Parameter="PM10"/></Station></AqIndex>';
+    const c = f.currentFromFeed(f.pick(f.parseFeed(one), st), 'in/kolkata/ballygunge', st, now);
+    const card = p.cardHtml({ current: c, history: null }, 'Ballygunge', now);
+    console.log(JSON.stringify({ stamp: f.istStamp('27-09-2026 05:00:00'), state: c.state, time: /Published by CPCB at .*?<b>([^<]*)<\\/b>/.exec(card)?.[1] }));`;
+  for (const TZ of ['UTC', 'America/New_York', 'Pacific/Kiritimati']) {
+    const out = execFileSync(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', code], { cwd: root, env: { ...process.env, TZ }, encoding: 'utf8' });
+    assert.deepEqual(JSON.parse(out), { stamp: '2026-09-26T23:30:00.000Z', state: 'live', time: '27 Sept 05:00 IST' }, TZ);
+  }
+});

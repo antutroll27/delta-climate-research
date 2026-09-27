@@ -211,3 +211,25 @@ test('the feed is fetched once per 10 minutes and shared by both areas', async (
   await get(d); await get(d, { area: 'in/kolkata/barrackpore' });
   assert.equal(cp, 1);
 });
+
+/* ---- Audit I3: surviving mutations. ---- */
+
+test('M3: the feed cache expires after 10 minutes', async () => {
+  let cp = 0, t = CNOW.getTime();
+  const d = deps(null, { fetch: route(async (u) => ok(u), () => { cp++; return cpcbOk(); }), now: () => new Date(t) });
+  await get(d); t += 9 * 60_000; await get(d);
+  assert.equal(cp, 1, 'within 10 min the feed is cached');
+  t += 2 * 60_000; await get(d);
+  assert.equal(cp, 2, 'after 10 min the feed is fetched again');
+});
+
+test('M16: a feed failure is never cached as an empty feed: a later request gets CPCB again', async () => {
+  let cp = 0, t = CNOW.getTime();
+  const d = deps(null, { fetch: route(async (u) => ok(u), () => (++cp === 1 ? new Response('down', { status: 503 }) : cpcbOk())), now: () => new Date(t) });
+  const a = await quiet(() => get(d));
+  assert.equal(a.body.current.result.origin, 'obos');
+  t += 2 * 60_000;
+  const b = await get(d);
+  assert.equal(b.body.current.result.origin, 'cpcb');
+  assert.equal(cp, 2);
+});

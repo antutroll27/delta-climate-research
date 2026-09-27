@@ -109,7 +109,7 @@ Each test is written first and proven with at least one mutation.
   - "NA" becomes null, and a blank AQI becomes insufficient with a reason.
   - Oversize, malformed, missing station and moved station (more than 100 m) each give a fallback.
 - **The relied-on fact.** On the full-size fixture, for every station, `Value == max(Avg)` and `Predominant_Parameter == argmax`.
-- **Freshness.** Tests at the 2 h and 7 d boundaries, with `lastupdate` parsed as IST under `TZ=UTC` and `TZ=America/New_York`.
+- **Freshness.** Tests at the 2 h and 7 d boundaries (7 d exactly is stale, 7 d + 1 ms falls back). `lastupdate` is parsed as IST with a fixed offset, and one test re-runs the parse and the card's IST time in child processes under `TZ=UTC`, `TZ=America/New_York` and `TZ=Pacific/Kiritimati`: in-process tests cannot catch a local-time parse on a machine that is itself in IST.
 - **Independence matrix.** CPCB ok / OpenAQ slow; CPCB ok / OpenAQ fails; CPCB fails / OpenAQ ok; both fail. Each checks the state, the origin, `history`, `Cache-Control`, and that `waitUntil` is called only when OpenAQ was cut off.
 - **Labels.** A CO- or O₃-led card says 8-hour maximum, and any other says 24-hour average.
 - **UI.** The CPCB table contains no `µg/m³` or `mg/m³`. The fallback shows the OBOS label. Schema-1 payloads still validate.

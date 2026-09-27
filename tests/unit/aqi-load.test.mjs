@@ -148,3 +148,14 @@ test('a schema-1 payload still validates (the CDN can serve pre-deploy answers f
     pollutants: [{ parameter: 'o3', value: 28.45, unit: 'ug_m3', window_h: 8, hours_present: 24, sub_index: 28 }] };
   assert.equal(isAirPayload(p), true);
 });
+
+test('M8: only undefined or "obos" passes as an OBOS origin, on a result and on insufficient_data', () => {
+  const bad = structuredClone(PAYLOAD); bad.current.result.origin = 'google';
+  assert.equal(isAirPayload(bad), false);
+  const v1 = structuredClone(PAYLOAD); delete v1.current.result.origin;
+  assert.equal(isAirPayload(v1), true, 'schema 1 has no origin');
+  const ins = (origin) => { const p = structuredClone(PAYLOAD); const { result, age_h, ...c } = p.current;
+    p.current = { ...c, state: 'insufficient_data', origin, pollutants: result.pollutants, reasons: ['PM2.5 had 11 of 16 required hours'] }; return p; };
+  assert.equal(isAirPayload(ins('obos')), true);
+  assert.equal(isAirPayload(ins('google')), false);
+});
