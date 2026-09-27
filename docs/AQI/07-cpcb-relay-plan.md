@@ -74,6 +74,26 @@ Alternatives considered:
 
 The software is free: Raspberry Pi OS Lite, Node LTS, and the relay script from `relay/`.
 
+### 4.2 Operating system: Raspberry Pi OS Lite (decided 2026-09-28)
+
+Considered and not chosen:
+- **balenaOS:** revisit if we run two or more relays, or one nobody can reach physically;
+- **DietPi, Alpine (RAM mode), Ubuntu Server:** no real gain for one relay.
+
+Set-up:
+1. **Raspberry Pi OS Lite (64-bit)**, flashed with Raspberry Pi Imager.
+   - Set the hostname, a non-default user, SSH keys only (no password login), and the Wi-Fi country.
+   - Use Ethernet, not Wi-Fi, for the relay.
+2. **Node LTS**, from the official Node binaries or NodeSource, with the version pinned. The relay script lives in `relay/`, deployed by `git pull`.
+3. **Relay timer:** a systemd `cpcb-relay.service` + `cpcb-relay.timer`, run every 15 min with `Persistent=true`, as a dedicated unprivileged user.
+4. **Tailscale** for remote SSH. It needs no router port-forwarding, and SSH is exposed only on the tailnet.
+5. **`unattended-upgrades`** for security patches, plus a weekly reboot window. Pick a quiet hour, not on the IST hour when CPCB updates.
+6. **Read-only overlay** (`raspi-config` → Performance → Overlay FS), switched on last, once everything works.
+   - It protects the card from wear and from power cuts.
+   - The relay's small state file (the last uploaded `lastupdate`) then lives in RAM. After a reboot the relay simply re-uploads the current feed once. That is harmless: archive files are never overwritten, and `latest` is idempotent.
+   - To change anything later: turn the overlay off, reboot, change, turn it back on.
+7. **Watchdog:** enable the hardware watchdog, so a hung Pi reboots itself.
+
 ## 5. Relay behaviour
 
 1. A **timer every 15 minutes** (systemd timer on the Pi; launchd on a Mac). CPCB updates hourly and appears within about 10 minutes of the IST hour (AQI-R47). Polling every 15 minutes means OBOS sees each update at most about 25 minutes late, well inside the 2 h "Live" rule.
@@ -167,7 +187,7 @@ These are the tasks for a later subagent-driven build. A full step-level plan wi
 
 | # | Question | Default proposed |
 |---|---|---|
-| 1 | Relay device and where it lives | **Decided 2026-09-28: Raspberry Pi.** Location still open (office proposed) |
+| 1 | Relay device and where it lives | **Decided 2026-09-28: Raspberry Pi on Raspberry Pi OS Lite.** Location still open (office proposed) |
 | 2 | Keep the hourly archive? | Yes: it seeds the PostgreSQL history |
 | 3 | Alerting channel | healthchecks.io email to the team |
 | 4 | Second relay for redundancy? | Not at first |
