@@ -111,5 +111,12 @@
         }
       ]
     }
-  ]
+  ],
+  "functions": {
+    "api/air-quality.ts": {
+      "regions": [
+        "bom1"
+      ]
+    }
+  }
 }

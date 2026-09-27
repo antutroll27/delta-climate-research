@@ -262,3 +262,10 @@ test('M-2: a fallback answer is cached 60 s at the CDN, so a CPCB blip is not pi
 test('M-4: the grace after CPCB settles is 1.5 s', () => {
   assert.equal(GRACE_MS, 1_500);
 });
+
+test('the air-quality function runs in Mumbai (bom1): CPCB\'s feed times out from Vercel\'s default US region', () => {
+  const cfg = JSON.parse(readFileSync(new URL('../../vercel.json', import.meta.url), 'utf8'));
+  assert.deepEqual(cfg.functions?.['api/air-quality.ts']?.regions, ['bom1'],
+    "Measured 2026-09-27 on PR #34's Preview: from iad1 (Washington) the CPCB feed fetch hit its 8 s timeout on every request, "
+    + 'so Ballygunge fell back to OpenAQ; from India the same feed answers in ~0.4 s.');
+});
