@@ -224,3 +224,54 @@ test('spec §8: the IST reading and the card\'s IST time hold in any machine zon
     assert.deepEqual(JSON.parse(out), { stamp: '2026-09-26T23:30:00.000Z', state: 'live', time: '27 Sept 05:00 IST' }, TZ);
   }
 });
+
+/* ---- Audit minors (M-d, M-e, M-f). ---- */
+const AQ38 = '<Air_Quality_Index Value="38" Predominant_Parameter="PM10"/>';
+
+test('M-d: with every field present, the reason says the fields show no cause', () => {
+  const f = { ...bFeed(), aqi: null, dominant: null };
+  assert.deepEqual(currentFromFeed(f, B, stB, at('2026-09-27T00:00:00Z')).reasons, ["The feed's fields show no cause"]);
+});
+
+test('M-e: pick rejects an AQI or any sub-index above 500 (off CPCB\'s scale), with or without a published AQI', () => {
+  assert.notEqual(pick(parseFeed(one(ST(), POLS.replace('Avg="38"', 'Avg="500"') + '<Air_Quality_Index Value="500" Predominant_Parameter="PM10"/>')), stB), null, '500 is on the scale');
+  assert.equal(pick(parseFeed(one(ST(), POLS.replace('Avg="38"', 'Avg="501"') + '<Air_Quality_Index Value="501" Predominant_Parameter="PM10"/>')), stB), null, 'AQI 501');
+  assert.equal(pick(parseFeed(one(ST(), POLS.replace('Max="53"', 'Max="501"') + AQ38)), stB), null, 'a 24-h max of 501');
+  assert.equal(pick(parseFeed(one(ST(), POLS.replace('Hourly_sub_index="16"', 'Hourly_sub_index="999"') + AQ38)), stB), null, 'a latest hour of 999');
+  assert.equal(pick(parseFeed(one(ST(), POLS.replace('Max="53"', 'Max="501"') + '<Air_Quality_Index Value="" Predominant_Parameter=""/>')), stB), null, 'no AQI, but a sub-index of 501');
+});
+
+test('M-e: istStamp rejects impossible dates and times instead of rolling them over', () => {
+  for (const s of ['31-02-2026 05:00:00', '30-02-2026 05:00:00', '27-09-2026 24:00:00', '27-13-2026 05:00:00', '27-09-2026 05:60:00']) assert.throws(() => istStamp(s), FeedError, s);
+  assert.equal(istStamp('29-02-2028 23:59:59'), '2028-02-29T18:29:59.000Z', 'a real leap day');
+});
+
+test('M-e: an empty latitude or longitude rejects the station (Number("") is 0, not missing)', () => {
+  for (const [lat, lon] of [['', '88.3638022'], ['22.5367507', ' ']]) {
+    assert.throws(() => parseFeed(one(ST('Ballygunge, Kolkata - WBPCB', lat, lon), POLS + AQ38)), FeedError, `lat "${lat}" lon "${lon}"`);
+  }
+});
+
+test('M-e: stations inside comments or CDATA are not stations; an unclosed one hides the rest, in linear time', () => {
+  const st = (n) => ST(n).replace('BODY', POLS + AQ38);
+  const xml = `<AqIndex><!-- ${st('Ghost')} --><![CDATA[${st('Ghost2')}]]>${st('Good')}</AqIndex>`;
+  assert.deepEqual(parseFeed(xml).map((s) => s.name), ['Good']);
+  assert.deepEqual(parseFeed(`<AqIndex>${st('Good')}<!-- ${st('Hidden')}</AqIndex>`).map((s) => s.name), ['Good'], 'an unclosed comment hides the rest');
+  for (const opener of ['<!--', '<![CDATA[']) {
+    const ms = timed(HEAD + fill(opener, FEED_MAX_BYTES - HEAD.length - TAIL.length) + TAIL);
+    assert.ok(ms < HOSTILE_MS, `${opener}: ${ms.toFixed(0)} ms`);
+  }
+});
+
+test('M-e: two stations with our exact name is ambiguous: fall back', () => {
+  assert.equal(pick(parseFeed(one(ST() + ST(), POLS + AQ38)), stB), null);
+});
+
+test('M-f: a body with no content-length is cut off at the byte cap while streaming, and the stream is cancelled', async () => {
+  let pulled = 0, cancelled = false;
+  const chunk = new Uint8Array(64 * 1024).fill(32), total = 128; // 8 MB if read to the end
+  const body = new ReadableStream({ pull(c) { if (++pulled > total) c.close(); else c.enqueue(chunk); }, cancel() { cancelled = true; } });
+  await assert.rejects(fetchFeed({ fetch: async () => new Response(body) }), { name: 'FeedError', message: 'CPCB feed too large' });
+  assert.ok(pulled <= Math.ceil(FEED_MAX_BYTES / chunk.length) + 2, `${pulled} of ${total} chunks read`);
+  assert.ok(cancelled, 'the stream was cancelled');
+});

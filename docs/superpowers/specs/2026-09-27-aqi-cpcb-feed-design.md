@@ -71,7 +71,8 @@ type AqiResult = (existing fields) & { origin: 'obos' };   // unchanged otherwis
 ## 6. Server (`api/air-quality.ts` + new `src/lib/aqi/cpcb-feed.ts`)
 
 - **`cpcb-feed.ts` (pure).** `parseFeed(xml) → FeedStation[]` and `pick(feed, station) → FeedStation | null`; `pick` also requires CPCB's AQI to be the largest `Avg`, held by the named pollutant (AQI-R47a), and otherwise returns null so the station falls back. It is a small strict reader for exactly the elements above: attribute values are read with entity decoding (`&amp;`, `&lt;`, `&gt;`, `&quot;`, `&apos;`), and no XML library is added. `fetchFeed({fetch, signal})` has an 8 s timeout, rejects bodies over 2 MB, and sends the identifying User-Agent.
-- **Feed cache.** The whole parsed feed is cached in-process for 10 minutes and shared by both areas. Concurrent requests share one in-flight fetch. Failures are not cached.
+- **Feed cache.** The whole parsed feed is cached in-process for 10 minutes and shared by both areas. Concurrent requests share one in-flight fetch. A failure is never cached as a feed, but CPCB is not asked again for 60 s (`FEED_RETRY_MS`); meanwhile the fallback answers at once.
+- **Hostile bodies.** The body is read as a stream and abandoned the moment it passes 2 MB. The parser is linear (forward-only `indexOf` scans, tags over 1 KB skipped, capped attribute pattern); comments and CDATA are stripped first. `pick` rejects any value above 500, two stations with our name, a blank coordinate and an impossible `lastupdate`.
 - **Two sources, fetched in parallel.**
   - CPCB has its 8 s budget.
   - OpenAQ keeps its 20 s budget, but the response waits for OpenAQ only until CPCB has settled **plus a 1.5 s grace**.
@@ -95,8 +96,8 @@ Approved on the preview `previews/aqi-cpcb/index.html` (git-ignored) on 2026-09-
   - Columns: Pollutant | 24-h sub-index (bar + number) | 24-h range | Latest hour.
   - Rows cover PM2.5, PM10, NO₂, SO₂, CO, O₃, NH₃. A `null` value shows "—".
   - Note: "Sub-indices on the AQI scale, as CPCB publishes them. The largest is the AQI. CPCB's feed carries no concentrations."
-- **Origin obos (fallback).** Today's card, with the meta line "AQI computed by OBOS from OpenAQ (no current CPCB figure for this station)". Today's µg/m³ table is kept.
-  - **The label is neutral about the cause.** It first read "(CPCB feed unreachable)", which the live run proved false: the feed was up but did not list Barrackpore (AQI-R47). The fallback can come from the feed being down, the station missing, a value more than 7 days old or stamped in the future, or the station moving more than 100 m, so the label names none of them.
+- **Origin obos (fallback).** Today's card, with the meta line "AQI computed by OBOS from OpenAQ (no usable current CPCB figure for this station)". Today's µg/m³ table is kept.
+  - **The label is neutral about the cause.** It first read "(CPCB feed unreachable)", which the live run proved false: the feed was up but did not list Barrackpore (AQI-R47). The fallback can come from the feed being down, the station missing, a value more than 7 days old or stamped in the future, the station moving more than 100 m, or `pick` rejecting what CPCB published (off the 0–500 scale, two stations with our name, or an AQI that is not the largest sub-index), so the label names none of them. "Usable" covers that last case.
 - **`history: null`.** The chart area says "History is loading or unavailable; it comes from OpenAQ." It does not show an empty chart.
 - **Validation and escaping.** `isAirPayload` validates the new shapes (every number finite or null, `origin` in its union), and every value goes through `num()` / `esc()` as today.
 

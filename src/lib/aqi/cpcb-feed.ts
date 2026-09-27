@@ -102,22 +102,49 @@ function whole(v: string | undefined): number | null {
   return Number(v);
 }
 
-/** "27-09-2026 05:00:00" (IST) → ISO UTC. */
+const IST_MS = 5.5 * 3_600_000;
+
+/**
+ * "27-09-2026 05:00:00" (IST) → ISO UTC. Impossible values ("31-02-2026", hour 24)
+ * are rejected, not rolled over as Date.parse does: the parts must read back unchanged.
+ */
 export function istStamp(s: string): string {
   const m = /^(\d{2})-(\d{2})-(\d{4}) (\d{2}):(\d{2}):(\d{2})$/.exec(s);
-  const t = m ? Date.parse(`${m[3]}-${m[2]}-${m[1]}T${m[4]}:${m[5]}:${m[6]}+05:30`) : NaN;
-  if (!Number.isFinite(t)) throw new FeedError(`bad lastupdate: ${s}`);
-  return new Date(t).toISOString();
+  if (!m) throw new FeedError(`bad lastupdate: ${s}`);
+  const [d, mo, y, h, mi, se] = [m[1], m[2], m[3], m[4], m[5], m[6]].map(Number) as [number, number, number, number, number, number];
+  const local = Date.UTC(y, mo - 1, d, h, mi, se), back = new Date(local);
+  if (back.getUTCFullYear() !== y || back.getUTCMonth() !== mo - 1 || back.getUTCDate() !== d
+    || back.getUTCHours() !== h || back.getUTCMinutes() !== mi || back.getUTCSeconds() !== se) throw new FeedError(`bad lastupdate: ${s}`);
+  return new Date(local - IST_MS).toISOString();
+}
+
+/**
+ * The text with every comment and CDATA section removed, in one forward pass. An
+ * unclosed one runs to the end, as in XML: nothing after it is read.
+ */
+function stripHidden(xml: string): string {
+  let out = '', i = 0;
+  for (;;) {
+    const c = xml.indexOf('<!--', i), d = xml.indexOf('<![CDATA[', i);
+    const at = c < 0 ? d : d < 0 ? c : Math.min(c, d);
+    if (at < 0) return out + xml.slice(i);
+    out += xml.slice(i, at);
+    const close = at === c ? '-->' : ']]>', end = xml.indexOf(close, at + (at === c ? 4 : 9));
+    if (end < 0) return out;
+    i = end + close.length;
+  }
 }
 
 export function parseFeed(xml: string): FeedStation[] {
   if (!xml.includes('<AqIndex')) throw new FeedError('not a CPCB AQI feed');
   const out: FeedStation[] = [];
-  for (const el of elements(xml, 'Station')) {
+  for (const el of elements(stripHidden(xml), 'Station')) {
     try {
       const a = attrs(el.tag), body = el.body;
-      const lat = Number(a['latitude']), lon = Number(a['longitude']);
-      if (!a['id'] || !Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+      /* Number('') and Number(' ') are 0, a real place: a blank coordinate is missing, not zero. */
+      const la = (a['latitude'] ?? '').trim(), lo = (a['longitude'] ?? '').trim();
+      const lat = Number(la), lon = Number(lo);
+      if (!a['id'] || !la || !lo || !Number.isFinite(lat) || !Number.isFinite(lon)) continue;
       const subindices: CpcbSubIndex[] = [];
       for (const tag of selfClosing(body, 'Pollutant_Index')) {
         const q = attrs(tag), parameter = PARAM[q['id'] ?? ''];
@@ -141,18 +168,44 @@ const havM = (a: number, b: number, c: number, d: number): number => {
   return 2 * R * Math.asin(Math.sqrt(x));
 };
 
+/** CPCB's AQI scale ends at 500; a larger AQI or sub-index is not a CPCB value. */
+export const AQI_MAX = 500;
+
 /**
- * Our station in the feed: exact name, within 100 m, and CPCB's AQI must be the
- * largest Avg held by the named pollutant (AQI-R47a). Otherwise null → fallback.
+ * Our station in the feed: exactly one station with its exact name, within 100 m,
+ * every value on CPCB's 0–500 scale, and CPCB's AQI the largest Avg held by the
+ * named pollutant (AQI-R47a). Otherwise null → fallback.
  */
 export function pick(feed: readonly FeedStation[], st: StationEntry): FeedStation | null {
-  const f = feed.find((s) => s.name === st.cpcb_name);
-  if (!f || havM(st.lat, st.lon, f.lat, f.lon) > MATCH_M) return null;
+  const same = feed.filter((s) => s.name === st.cpcb_name);
+  if (same.length !== 1) return null; // two stations with our name: we cannot say which is ours
+  const f = same[0]!;
+  if (havM(st.lat, st.lon, f.lat, f.lon) > MATCH_M) return null;
+  const vals = [f.aqi, ...f.subindices.flatMap((q) => [q.avg, q.min, q.max, q.hourly])];
+  if (vals.some((v) => v !== null && v > AQI_MAX)) return null;
   if (f.aqi === null) return f;
   const avgs = f.subindices.map((q) => q.avg).filter((v): v is number => v !== null);
   const max = avgs.length ? Math.max(...avgs) : -1;
   const held = f.subindices.some((q) => q.parameter === f.dominant && q.avg === max);
   return f.aqi === max && held ? f : null;
+}
+
+/** The body, read chunk by chunk and abandoned the moment it passes FEED_MAX_BYTES: nothing unbounded is ever buffered. */
+async function readCapped(res: Response): Promise<string> {
+  if (!res.body) return '';
+  const reader = res.body.getReader(), chunks: Uint8Array[] = [];
+  let n = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    n += value.byteLength;
+    if (n > FEED_MAX_BYTES) { await reader.cancel().catch(() => {}); throw new FeedError('CPCB feed too large'); }
+    chunks.push(value);
+  }
+  const all = new Uint8Array(n);
+  let at = 0;
+  for (const c of chunks) { all.set(c, at); at += c.byteLength; }
+  return new TextDecoder().decode(all);
 }
 
 /** One request, 8 s, 2 MB cap, identifying User-Agent. Every failure is a FeedError (its message carries no secret). */
@@ -165,9 +218,7 @@ export async function fetchFeed(o: { fetch?: typeof fetch; signal?: AbortSignal 
     const res = await f(FEED_URL, { headers: { 'User-Agent': UA, Accept: 'application/xml' }, signal });
     if (!res.ok) throw new FeedError(`CPCB feed ${res.status}`);
     if (Number(res.headers.get('content-length') ?? 0) > FEED_MAX_BYTES) throw new FeedError('CPCB feed too large');
-    const buf = await res.arrayBuffer(); // ponytail: read then measure; streaming cap only if CPCB ever lies about length
-    if (buf.byteLength > FEED_MAX_BYTES) throw new FeedError('CPCB feed too large');
-    text = new TextDecoder().decode(buf);
+    text = await readCapped(res);
   } catch (e) {
     if (e instanceof FeedError) throw e;
     throw new FeedError(e instanceof Error && (e.name === 'TimeoutError' || e.name === 'AbortError') ? 'CPCB feed timed out' : 'CPCB feed unreachable');
@@ -184,7 +235,7 @@ function cpcbReasons(f: FeedStation): string[] {
   const out: string[] = [];
   if (!has('pm25') && !has('pm10')) out.push('No valid PM2.5 or PM10 reading');
   if (valid < 3) out.push(`${valid} valid pollutants; CPCB needs 3`);
-  return out.length ? out : ['CPCB gave no reason'];
+  return out.length ? out : ["The feed's fields show no cause"];
 }
 
 /**

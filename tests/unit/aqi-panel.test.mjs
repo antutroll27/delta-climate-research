@@ -145,11 +145,11 @@ test('I4: an O₃-led AQI names the maximum 8-hour mean, a PM-led one the 24-hou
   const o3 = buildPayload(K, st, rawWith('2026-09-24T17:30:00Z', { o3: 150 }), T);
   assert.equal(o3.current.result.dominant, 'o3');
   const card = cardHtml(o3, 'Ballygunge', T);
-  assert.match(card, /Led by <b>O₃<\/b> · AQI computed by OBOS from OpenAQ \(no current CPCB figure for this station\) · <span[^>]*>maximum 8-hour mean<\/span>/);
+  assert.match(card, /Led by <b>O₃<\/b> · AQI computed by OBOS from OpenAQ \(no usable current CPCB figure for this station\) · <span[^>]*>maximum 8-hour mean<\/span>/);
   assert.doesNotMatch(card, /24-hour/);
   const pm = buildPayload(K, st, rawWith('2026-09-24T17:30:00Z', { pm25: 80 }), T);
   assert.equal(pm.current.result.dominant, 'pm25');
-  assert.match(cardHtml(pm, 'Ballygunge', T), /Led by <b>PM2\.5<\/b> · AQI computed by OBOS from OpenAQ \(no current CPCB figure for this station\) · <span[^>]*>24-hour mean<\/span>/);
+  assert.match(cardHtml(pm, 'Ballygunge', T), /Led by <b>PM2\.5<\/b> · AQI computed by OBOS from OpenAQ \(no usable current CPCB figure for this station\) · <span[^>]*>24-hour mean<\/span>/);
   /* The table header must not call the whole table a 24-hour window while O₃ and CO rows are 8-hour. */
   assert.doesNotMatch(paneHtml(o3, 'Ballygunge', T), /Pollutants · 24-hour window/);
 });
@@ -346,7 +346,7 @@ test('no history with a CPCB current says so instead of an empty chart', () => {
 test('OBOS fallback is labelled as ours', () => {
   /* Neutral about the cause: CPCB can drop a station while its feed is up (register AQI-R47, Barrackpore 27 Sep). */
   const p = buildPayload(KB, SB, raw('2026-09-24T17:30:00Z'), new Date('2026-09-24T18:00:00Z'));
-  assert.match(cardHtml(p, 'Ballygunge', new Date('2026-09-24T18:00:00Z')), /AQI computed by OBOS from OpenAQ \(no current CPCB figure for this station\)/);
+  assert.match(cardHtml(p, 'Ballygunge', new Date('2026-09-24T18:00:00Z')), /AQI computed by OBOS from OpenAQ \(no usable current CPCB figure for this station\)/);
 });
 
 // Addition beyond the plan: the approved preview (previews/aqi-cpcb) marks the row holding the AQI.
@@ -380,4 +380,23 @@ test('M17: a CPCB insufficient pane credits CPCB in its method note, never the O
   const pane = paneHtml({ current: currentFromFeed(f, KB, SB, C1), history: null }, 'Ballygunge', C1);
   assert.match(pane, /\(source: CPCB\)/);
   assert.doesNotMatch(pane, /AQI calculated by OBOS/);
+});
+
+/* ---- Audit minors (M-a, M-b, M-d). ---- */
+import { statusText } from '../../src/scripts/climate-engine/air/air-panel.ts';
+const cpIns = () => { const g = pick(FEED, SB); const f = { ...g, aqi: null, dominant: null, subindices: g.subindices.map((q) => (q.parameter.startsWith('pm') ? { ...q, avg: null } : q)) };
+  return { current: currentFromFeed(f, KB, SB, C1), history: null }; };
+
+test('M-a: a CPCB insufficient pane says CPCB published no AQI, never that the AQI is CPCB\'s figure', () => {
+  const pane = paneHtml(cpIns(), 'Ballygunge', C1);
+  assert.match(pane, /CPCB published no AQI for this hour \(source: CPCB\)\./);
+  assert.doesNotMatch(pane, /The AQI is CPCB's own published figure/);
+});
+
+test('M-b: the live-region line for CPCB insufficient gives the feed\'s own reason', () => {
+  assert.equal(statusText(cpIns(), 'Ballygunge', C1), 'Air quality, Ballygunge: CPCB published no AQI. No valid PM2.5 or PM10 reading.');
+});
+
+test('M-d: the card\'s reason line says it is read from the feed\'s fields', () => {
+  assert.match(cardHtml(cpIns(), 'Ballygunge', C1), /<p class="meta">From the feed's fields: No valid PM2\.5 or PM10 reading\.<\/p>/);
 });

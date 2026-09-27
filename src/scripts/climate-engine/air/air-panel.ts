@@ -68,11 +68,12 @@ function stationLine(s: AqiStation, owner: string | null, place: string): string
 /** O₃ and CO are the maximum rolling 8-hour mean; every other pollutant the 24-hour mean. Read from the dominant reading itself. */
 const windowOf = (r: AqiResult): string => (r.pollutants.find((q) => q.parameter === r.dominant)?.window_h === 8 ? 'maximum 8-hour mean' : '24-hour mean');
 
-/* The fallback names no cause: the feed may be down, the station missing from it (register AQI-R47), stale or moved. */
+/* The fallback names no cause: the feed may be down, the station missing from it (register AQI-R47), stale, moved,
+   or its published figure rejected by `pick` (off-scale, ambiguous, or not the largest sub-index). */
 function hero(r: Result, muted: boolean): string {
   const meta = r.origin === 'cpcb'
     ? `Led by <b>${pol(r.dominant)}</b> · CPCB published AQI · <span style="white-space:nowrap">${r.window_h === 8 ? '8-hour maximum' : '24-hour average'}</span>`
-    : `Led by <b>${pol(r.dominant)}</b> · AQI computed by OBOS from OpenAQ (no current CPCB figure for this station) · <span style="white-space:nowrap">${windowOf(r)}</span>`;
+    : `Led by <b>${pol(r.dominant)}</b> · AQI computed by OBOS from OpenAQ (no usable current CPCB figure for this station) · <span style="white-space:nowrap">${windowOf(r)}</span>`;
   return `<div class="hero"><span class="num${muted ? ' muted' : ''}" style="color:${col(r.category)}">${num(r.aqi)}</span>
     <span class="cat"><span class="dot" style="background:${col(r.category)}"></span>${word(r.category)}</span></div>
     <p class="meta">${meta}</p>`;
@@ -105,7 +106,7 @@ function block(c: Current, title: string, place: string): string {
       if (c.origin === 'cpcb') {
         return head(title, '<span class="chip old">No AQI</span>') +
           `<p class="empty">CPCB published no AQI at ${nowrap(esc(istFmt(c.observed_at)))}.</p>
-     <p class="meta">${esc(c.reasons.join('; '))}.</p>` + stationLine(c.station, c.source.owner, place);
+     <p class="meta">From the feed's fields: ${esc(c.reasons.join('; '))}.</p>` + stationLine(c.station, c.source.owner, place);
       }
       const short = c.pollutants.filter((q) => q.hours_present < MIN_HOURS);
       const worst = short.find((q) => q.parameter === 'pm25') ?? short[0];
@@ -237,17 +238,23 @@ function line24(h: HistoryResponse['pm25_24h'], label: string): string {
 
 const HATCH_KEY = '<svg width="10" height="10" aria-hidden="true"><defs><pattern id="aqHatchKey" width="3" height="3" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="3" stroke="var(--faint)" stroke-width="1.2"/></pattern></defs><rect width="10" height="10" rx="2" fill="url(#aqHatchKey)" stroke="var(--faint)" stroke-width=".6"/></svg>';
 
-function method(owner: string | null, origin: 'cpcb' | 'obos'): string {
+/** Whose figure the pane shows: CPCB's, CPCB's absence of one, or OBOS's own calculation. */
+type Origin = 'cpcb' | 'cpcb-none' | 'obos';
+
+function method(owner: string | null, origin: Origin): string {
+  const chart = `The 30-day chart and the PM2.5 line are calculated by OBOS with CPCB's method from OpenAQ's copy of the station's readings. `;
   const who = !owner ? ''
     : origin === 'cpcb'
-      ? `The AQI is CPCB's own published figure for this station (source: CPCB). Measured by the ${esc(owner)}. The 30-day chart and the PM2.5 line are calculated by OBOS with CPCB's method from OpenAQ's copy of the station's readings. `
+      ? `The AQI is CPCB's own published figure for this station (source: CPCB). Measured by the ${esc(owner)}. ${chart}`
+      : origin === 'cpcb-none'
+        ? `CPCB published no AQI for this hour (source: CPCB). Measured by the ${esc(owner)}. ${chart}`
       : `AQI calculated by OBOS with CPCB's National AQI method from the station's readings (received via CPCB and OpenAQ); it can differ slightly from CPCB's own published figure. Measured by the ${esc(owner)}. `;
   return `<p class="pane-note">${who}A monitor counts for a place when it stands inside the 3 km window around the OBOS centre. Air quality is a separate layer: it does not enter the heat model.</p>`;
 }
 
-const originOf = (c: Current): 'cpcb' | 'obos' =>
+const originOf = (c: Current): Origin =>
   (c.state === 'live' || c.state === 'stale') && c.result.origin === 'cpcb' ? 'cpcb'
-    : c.state === 'insufficient_data' && c.origin === 'cpcb' ? 'cpcb' : 'obos';
+    : c.state === 'insufficient_data' && c.origin === 'cpcb' ? 'cpcb-none' : 'obos';
 
 /** The Air pane: the card's state again, then pollutants, 30 days, the 24 h PM2.5 line and the method note. */
 export function paneHtml(p: AirQualityPayload, placeName: string, now: Date = new Date()): string {
@@ -304,7 +311,7 @@ export function statusText(p: AirQualityPayload, place: string, now: Date = new 
     case 'live': return `${at}${num(c.result.aqi)} ${word(c.result.category)}, live`;
     case 'stale': return `${at}${num(c.result.aqi)} ${word(c.result.category)}, not live, ${num(c.age_h)} hours old`;
     case 'unavailable': return at + (c.reason === 'feed_quiet' ? 'no readings for more than 7 days.' : c.reason === 'no_valid_aqi' ? 'too few recent readings for an official AQI.' : 'could not be loaded just now.');
-    case 'insufficient_data': return `${at}no official AQI, too few hours of readings.`;
+    case 'insufficient_data': return c.origin === 'cpcb' ? `${at}CPCB published no AQI. ${c.reasons[0] ?? ''}.` : `${at}no official AQI, too few hours of readings.`;
     case 'no_station': return `${at}no government monitor within 3 km.`;
     default: return `${at}could not be loaded just now.`;
   }

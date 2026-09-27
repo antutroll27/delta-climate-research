@@ -54,19 +54,30 @@ export const BUDGET_MS = 20_000;
 const CACHE = new Map<string, CacheEntry>();
 const INFLIGHT = new Map<string, Promise<RawSet>>();
 
-export interface FeedCache { entry: { at: number; stations: FeedStation[] } | null; inflight: Promise<FeedStation[]> | null }
+export interface FeedCache {
+  entry: { at: number; stations: FeedStation[] } | null;
+  inflight: Promise<FeedStation[]> | null;
+  /** When the last fetch failed; CPCB is not asked again for FEED_RETRY_MS (the fallback answers meanwhile). */
+  failedAt?: number;
+}
 const FEED: FeedCache = { entry: null, inflight: null };
 export const GRACE_MS = 1_500;
+/** A failed feed is not refetched for this long, so an outage costs one 8 s wait a minute, not one per request. */
+export const FEED_RETRY_MS = 60_000;
 /** An answer without history must not sit at the CDN for 10 minutes: the next visitor should get the chart. */
 const PARTIAL_CACHE = 'public, max-age=0, s-maxage=60';
 
-/** CPCB's whole feed, cached 10 min and shared by every area; null on any failure (logged, never cached). */
+/**
+ * CPCB's whole feed, cached 10 min and shared by every area; null on any failure
+ * (logged once; never cached as a feed, but not retried for FEED_RETRY_MS).
+ */
 function feedFor(now: Date, d: Deps): Promise<FeedStation[] | null> {
   const c = d.feedCache ?? FEED;
   if (c.entry && now.getTime() - c.entry.at < CACHE_TTL_MS) return Promise.resolve(c.entry.stations);
+  if (c.failedAt !== undefined && now.getTime() - c.failedAt < FEED_RETRY_MS) return Promise.resolve(null);
   if (!c.inflight) {
     c.inflight = fetchFeed({ fetch: d.fetch })
-      .then((stations) => { c.entry = { at: now.getTime(), stations }; return stations; })
+      .then((stations) => { c.entry = { at: now.getTime(), stations }; delete c.failedAt; return stations; }, (e: unknown) => { c.failedAt = now.getTime(); throw e; })
       .finally(() => { c.inflight = null; });
   }
   return c.inflight.catch((e: unknown) => {

@@ -233,3 +233,18 @@ test('M16: a feed failure is never cached as an empty feed: a later request gets
   assert.equal(b.body.current.result.origin, 'cpcb');
   assert.equal(cp, 2);
 });
+
+/* ---- Audit minor M-g: a short negative cache. ---- */
+
+test('M-g: after a feed failure CPCB is not asked again for 60 s; the fallback answers at once', async () => {
+  let cp = 0, t = CNOW.getTime();
+  const d = deps(null, { fetch: route(async (u) => ok(u), () => { cp++; return new Response('down', { status: 503 }); }), now: () => new Date(t) });
+  await quiet(() => get(d));
+  t += 30_000;
+  const b = await quiet(() => get(d));
+  assert.equal(cp, 1, 'no second CPCB request within 60 s');
+  assert.equal(b.body.current.result.origin, 'obos');
+  t += 31_000;
+  await quiet(() => get(d));
+  assert.equal(cp, 2, 'CPCB is asked again after 60 s');
+});
