@@ -9,8 +9,14 @@
  * 60 req/min key. So: any query parameter other than `area` is refused (it would bust the
  * CDN cache), the raw readings are held in-process for 10 minutes, and concurrent cold
  * requests on one instance share one upstream fetch. Failures are never cached.
+ *
+ * SOURCES (spec 2026-09-27): CPCB's own feed gives the current value (origin cpcb); OpenAQ
+ * gives the 30-day history and is the fallback (origin obos). They are fetched in parallel
+ * and fail independently.
  */
+import { waitUntil } from '@vercel/functions';
 import { buildPayload } from '../src/lib/aqi/build.ts';
+import { currentFromFeed, fetchFeed, FeedError, pick, type FeedStation } from '../src/lib/aqi/cpcb-feed.ts';
 import type { Raw } from '../src/lib/aqi/hours.ts';
 import { fetchSensorWindow, OpenAqError } from '../src/lib/aqi/openaq.ts';
 import { isAirArea, POLLUTANTS, stationFor, type StationEntry } from '../src/lib/aqi/stations.ts';
@@ -31,6 +37,12 @@ interface Deps {
   cache?: Map<string, CacheEntry>; inflight?: Map<string, Promise<RawSet>>;
   /** Whole-upstream budget, ms. */
   budgetMs?: number;
+  /** CPCB feed cache, injected by tests; production uses FEED below. */
+  feedCache?: FeedCache;
+  /** How long the answer waits for OpenAQ once CPCB has settled, ms. */
+  graceMs?: number;
+  /** Keeps work alive after the response (Vercel); injected by tests. */
+  waitUntil?: (p: Promise<unknown>) => void;
 }
 
 const OK_CACHE = 'public, max-age=60, s-maxage=600, stale-while-revalidate=1800';
@@ -41,6 +53,31 @@ export const BUDGET_MS = 20_000;
 
 const CACHE = new Map<string, CacheEntry>();
 const INFLIGHT = new Map<string, Promise<RawSet>>();
+
+export interface FeedCache { entry: { at: number; stations: FeedStation[] } | null; inflight: Promise<FeedStation[]> | null }
+const FEED: FeedCache = { entry: null, inflight: null };
+export const GRACE_MS = 1_500;
+/** An answer without history must not sit at the CDN for 10 minutes: the next visitor should get the chart. */
+const PARTIAL_CACHE = 'public, max-age=0, s-maxage=60';
+
+/** CPCB's whole feed, cached 10 min and shared by every area; null on any failure (logged, never cached). */
+function feedFor(now: Date, d: Deps): Promise<FeedStation[] | null> {
+  const c = d.feedCache ?? FEED;
+  if (c.entry && now.getTime() - c.entry.at < CACHE_TTL_MS) return Promise.resolve(c.entry.stations);
+  if (!c.inflight) {
+    c.inflight = fetchFeed({ fetch: d.fetch })
+      .then((stations) => { c.entry = { at: now.getTime(), stations }; return stations; })
+      .finally(() => { c.inflight = null; });
+  }
+  return c.inflight.catch((e: unknown) => {
+    console.error('air-quality cpcb feed failure', e instanceof FeedError ? e.message : 'unknown');
+    return null;
+  });
+}
+
+type Settled = { ok: true; raw: RawSet } | { ok: false; e: unknown };
+const logUpstream = (area: string, e: unknown): void =>
+  console.error('air-quality upstream failure', area, e instanceof OpenAqError ? e.status : 'unknown');
 
 /** Rejects when `signal` aborts, so a fetch that ignores its signal still cannot hold the handler past the budget. */
 const whenAborted = (signal: AbortSignal): Promise<never> => new Promise((_, reject) => {
@@ -112,20 +149,45 @@ export async function handle(req: Req, res: Res, d: Deps): Promise<void> {
   if (!isAirArea(area)) { res.status(404).json({ error: 'unknown area' }); return; }
   const st = stationFor(area), now = (d.now ?? (() => new Date()))();
   if (!st) { res.setHeader('Cache-Control', OK_CACHE); res.status(200).json(buildPayload(area, null, {}, now)); return; }
-  // A misconfiguration must never be cached at the CDN: it would outlive the fix.
-  if (!d.key) { res.setHeader('Cache-Control', 'no-store'); res.status(503).json({ error: 'air quality not configured' }); return; }
-  let raw: RawSet;
-  try {
-    raw = await rawFor(area, st, now, d);
-  } catch (e) {
+  const feedP = feedFor(now, d);
+  const rawP: Promise<Settled> | null = d.key
+    ? rawFor(area, st, now, d).then((raw) => ({ ok: true as const, raw }), (e: unknown) => ({ ok: false as const, e }))
+    : null;
+  const feed = await feedP;
+  const f = feed ? pick(feed, st) : null;
+  const current = f ? currentFromFeed(f, area, st, now) : null;
+
+  if (current) {
+    let history: AirQualityPayload['history'] = null;
+    if (rawP) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const late = new Promise<null>((r) => { timer = setTimeout(() => r(null), d.graceMs ?? GRACE_MS); });
+      const r = await Promise.race([rawP, late]).finally(() => clearTimeout(timer));
+      if (r === null) {
+        try { (d.waitUntil ?? waitUntil)(rawP); } catch { /* no request context (tests, dev): the fetch simply finishes on its own */ }
+      } else if (r.ok) {
+        history = buildPayload(area, st, r.raw, now).history;
+      } else {
+        logUpstream(area, r.e);
+      }
+    }
+    res.setHeader('Cache-Control', history ? OK_CACHE : PARTIAL_CACHE);
+    res.status(200).json({ current, history } satisfies AirQualityPayload);
+    return;
+  }
+
+  // CPCB unusable: today's path. A misconfiguration must never be cached at the CDN: it would outlive the fix.
+  if (!rawP) { res.setHeader('Cache-Control', 'no-store'); res.status(503).json({ error: 'air quality not configured' }); return; }
+  const r = await rawP;
+  if (!r.ok) {
     // Never log `e` itself: only the area and the numeric status. OpenAqError messages carry no key.
-    console.error('air-quality upstream failure', area, e instanceof OpenAqError ? e.status : 'unknown');
+    logUpstream(area, r.e);
     res.setHeader('Cache-Control', FAIL_CACHE);
     res.status(200).json(upstreamError(area, st, now));
     return;
   }
   res.setHeader('Cache-Control', OK_CACHE);
-  res.status(200).json(buildPayload(area, st, raw, now));
+  res.status(200).json(buildPayload(area, st, r.raw, now));
 }
 
 export default async function handler(req: Req, res: Res): Promise<void> {

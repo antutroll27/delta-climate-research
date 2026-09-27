@@ -5,18 +5,24 @@ import test from 'node:test';
 import { handle } from '../../api/air-quality.ts';
 
 const res = () => { const r = { code: 0, headers: {}, body: null, status(c) { r.code = c; return r; }, setHeader(k, v) { r.headers[k] = v; }, json(b) { r.body = b; } }; return r; };
+import { gunzipSync } from 'node:zlib';
+const FEED_XML = gunzipSync(readFileSync(new URL('../fixtures/aqi/cpcb-feed-2026-09-27T0500IST.xml.gz', import.meta.url))).toString('utf8');
+const isCpcb = (u) => String(u).includes('airquality.cpcb.gov.in');
+/** Routes CPCB's URL to `cpcb` (a Response factory; default: CPCB down, 503) and everything else to `openaq`. */
+const route = (openaq, cpcb = () => new Response('down', { status: 503 })) => (u, init) => (isCpcb(u) ? Promise.resolve(cpcb()) : openaq(u, init));
+const freshFeed = () => ({ entry: null, inflight: null });
 
 test('only GET', async () => { const r = res(); await handle({ method: 'POST', query: {} }, r, { key: 'k' }); assert.equal(r.code, 405); assert.equal(r.headers.Allow, 'GET'); });
 test('unknown area is 404', async () => { const r = res(); await handle({ method: 'GET', query: { area: 'in/kolkata/nowhere' } }, r, { key: 'k' }); assert.equal(r.code, 404); });
 test('missing key fails closed, with no upstream call, never cached', async () => { let called = false; const r = res();
-  await handle({ method: 'GET', query: { area: 'in/kolkata/ballygunge' } }, r, { key: '', fetch: async () => { called = true; } }); assert.equal(r.code, 503); assert.equal(called, false);
+  await handle({ method: 'GET', query: { area: 'in/kolkata/ballygunge' } }, r, { key: '', fetch: route(async () => { called = true; }), feedCache: freshFeed() }); assert.equal(r.code, 503); assert.equal(called, false);
   assert.equal(r.headers['Cache-Control'], 'no-store'); });
 test('Baruipur answers no_station without calling OpenAQ, cacheable', async () => { const r = res();
   await handle({ method: 'GET', query: { area: 'in/kolkata/baruipur' } }, r, { key: 'k', fetch: async () => { throw new Error('must not fetch'); } });
   assert.equal(r.code, 200); assert.equal(r.body.current.state, 'no_station'); assert.match(r.headers['Cache-Control'], /s-maxage=600/); });
 test('upstream failure is 200 unavailable upstream_error, never stored, never a number', async () => { const r = res();
   const orig = console.error; console.error = () => {};
-  try { await handle({ method: 'GET', query: { area: 'in/kolkata/ballygunge' } }, r, { key: 'k', fetch: async () => new Response('x', { status: 503 }), cache: new Map(), inflight: new Map() }); }
+  try { await handle({ method: 'GET', query: { area: 'in/kolkata/ballygunge' } }, r, { key: 'k', fetch: async () => new Response('x', { status: 503 }), cache: new Map(), inflight: new Map(), feedCache: freshFeed() }); }
   finally { console.error = orig; }
   assert.equal(r.code, 200); assert.equal(r.body.current.state, 'unavailable'); assert.equal(r.body.current.reason, 'upstream_error');
   assert.equal(r.body.current.last_observed_at, null);
@@ -33,12 +39,12 @@ test('upstream failure is logged by area and status, and the key appears in no l
   console.error = (...a) => { logged.push(a); };
   const r = res();
   try {
-    await handle({ method: 'GET', query: { area: 'in/kolkata/barrackpore' } }, r, { key: KEY, cache: new Map(), inflight: new Map(),
+    await handle({ method: 'GET', query: { area: 'in/kolkata/barrackpore' } }, r, { key: KEY, cache: new Map(), inflight: new Map(), feedCache: freshFeed(),
       fetch: async (u, init) => new Response(`bad key ${init?.headers?.['X-API-Key']} at ${u}`, { status: 401 }) });
   } finally { console.error = orig; }
   assert.equal(r.body.current.state, 'unavailable');
   assert.ok(logged.length >= 1, 'the failure was logged');
-  assert.deepEqual(logged[0], ['air-quality upstream failure', 'in/kolkata/barrackpore', 401]);
+  assert.deepEqual(logged.find((a) => a[0] === 'air-quality upstream failure'), ['air-quality upstream failure', 'in/kolkata/barrackpore', 401]);
   for (const args of logged) for (const a of args) {
     const s = typeof a === 'string' ? a : JSON.stringify(a) ?? String(a);
     assert.ok(!s.includes(KEY), 'key leaked into a log argument');
@@ -65,7 +71,7 @@ const sensorOf = (u) => Number(/sensors\/(\d+)\//.exec(String(u))[1]);
 const rows = (sensor, lastEnd = '2026-09-24T13:00:00Z') => ({ results: Array.from({ length: 48 }, (_, i) => ({
   value: sensor === CO ? 0.5 : 20, period: { datetimeTo: { utc: new Date(Date.parse(lastEnd) - i * 3_600_000).toISOString() } } })) });
 const ok = (u) => new Response(JSON.stringify(rows(sensorOf(u))));
-const deps = (fetch, extra = {}) => ({ key: 'k', fetch, now: () => NOW, cache: new Map(), inflight: new Map(), ...extra });
+const deps = (fetch, extra = {}) => ({ key: 'k', fetch: route(fetch), now: () => NOW, cache: new Map(), inflight: new Map(), feedCache: freshFeed(), ...extra });
 const quiet = async (fn) => { const orig = console.error; console.error = () => {}; try { return await fn(); } finally { console.error = orig; } };
 const get = (d, query = { area: BALLY }) => { const r = res(); return handle({ method: 'GET', query }, r, d).then(() => r); };
 
@@ -150,4 +156,58 @@ test('I3: a fetch that never resolves ends in upstream_error within the budget',
 test('I3: the function declares maxDuration 30', async () => {
   const mod = await import('../../api/air-quality.ts');
   assert.equal(mod.config?.maxDuration, 30);
+});
+
+const cpcbOk = () => new Response(FEED_XML);
+const CNOW = new Date('2026-09-27T00:30:00Z'); // CPCB published 23:30Z: 1 h old → live
+
+test('CPCB ok, OpenAQ ok within the grace: live from CPCB, history from OpenAQ, full cache', async () => {
+  const r = await get(deps(null, { fetch: route(async (u) => ok(u), cpcbOk), now: () => CNOW }));
+  assert.equal(r.body.current.state, 'live');
+  assert.equal(r.body.current.result.origin, 'cpcb');
+  assert.equal(r.body.current.result.aqi, 38);
+  assert.ok(r.body.history, 'history present');
+  assert.match(r.headers['Cache-Control'], /s-maxage=600/);
+});
+
+test('CPCB ok, OpenAQ slower than the grace: answer without history, waitUntil keeps the fetch, 60 s cache', async () => {
+  const kept = [];
+  const slow = (u) => new Promise((f) => setTimeout(() => f(ok(u)), 200));
+  const d = deps(null, { fetch: route(slow, cpcbOk), now: () => CNOW, graceMs: 20, waitUntil: (p) => kept.push(p) });
+  const r = await get(d);
+  assert.equal(r.body.current.result.origin, 'cpcb');
+  assert.equal(r.body.history, null);
+  assert.equal(r.headers['Cache-Control'], 'public, max-age=0, s-maxage=60');
+  assert.equal(kept.length, 1, 'the OpenAQ fetch was handed to waitUntil');
+  await kept[0];
+  assert.ok(d.cache.get('in/kolkata/ballygunge'), 'it filled the raw cache for the next visitor');
+});
+
+test('CPCB ok, OpenAQ fails: CPCB current, no history, 60 s cache, failure logged', async () => {
+  const r = await quiet(() => get(deps(null, { fetch: route(async () => new Response('x', { status: 503 }), cpcbOk), now: () => CNOW })));
+  assert.equal(r.body.current.result.origin, 'cpcb');
+  assert.equal(r.body.history, null);
+  assert.equal(r.headers['Cache-Control'], 'public, max-age=0, s-maxage=60');
+});
+
+test('CPCB down, OpenAQ ok: today\'s path, origin obos', async () => {
+  const r = await quiet(() => get(deps(async (u) => ok(u))));
+  assert.equal(r.body.current.result.origin, 'obos');
+  assert.match(r.headers['Cache-Control'], /s-maxage=600/);
+});
+
+test('no OpenAQ key but CPCB ok: CPCB current, no history, never an OpenAQ call', async () => {
+  let openaq = 0;
+  const r = await get(deps(null, { key: '', fetch: route(async (u) => { openaq++; return ok(u); }, cpcbOk), now: () => CNOW }));
+  assert.equal(r.code, 200);
+  assert.equal(r.body.current.result.origin, 'cpcb');
+  assert.equal(r.body.history, null);
+  assert.equal(openaq, 0);
+});
+
+test('the feed is fetched once per 10 minutes and shared by both areas', async () => {
+  let cp = 0;
+  const d = deps(null, { fetch: route(async (u) => ok(u), () => { cp++; return cpcbOk(); }), now: () => CNOW });
+  await get(d); await get(d, { area: 'in/kolkata/barrackpore' });
+  assert.equal(cp, 1);
 });
