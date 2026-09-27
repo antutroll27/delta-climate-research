@@ -82,7 +82,9 @@ function hero(r: Result, muted: boolean): string {
 const FAILED = 'Air-quality data could not be loaded just now. Try again shortly.';
 const noFigure = (title: string, chip: string, say: string, meta = ''): string =>
   head(title, `<span class="chip off">${chip}</span>`) + `<p class="empty">${say}</p>` + (meta ? `\n     <p class="meta">${meta}</p>` : '');
-const lastReading = (iso: string | null): string => (iso === null ? '' : `Last reading <b>${esc(istFmt(iso))}</b>.`);
+/** A date and its IST time never break apart on a narrow card. */
+const nowrap = (html: string): string => `<span style="white-space:nowrap">${html}</span>`;
+const lastReading = (iso: string | null): string => (iso === null ? '' : `Last reading ${nowrap(`<b>${esc(istFmt(iso))}</b>`)}.`);
 
 /** The card's content for one state; `title` is the head's label (empty in the pane, which has its own heading). */
 function block(c: Current, title: string, place: string): string {
@@ -101,7 +103,7 @@ function block(c: Current, title: string, place: string): string {
     case 'insufficient_data': {
       if (c.origin === 'cpcb') {
         return head(title, '<span class="chip old">No AQI</span>') +
-          `<p class="empty">CPCB published no AQI at ${esc(istFmt(c.observed_at))}.</p>
+          `<p class="empty">CPCB published no AQI at ${nowrap(esc(istFmt(c.observed_at)))}.</p>
      <p class="meta">${esc(c.reasons.join('; '))}.</p>` + stationLine(c.station, c.source.owner, place);
       }
       const short = c.pollutants.filter((q) => q.hours_present < MIN_HOURS);
@@ -116,7 +118,7 @@ function block(c: Current, title: string, place: string): string {
       const stale = c.state === 'stale';
       const chip = stale ? `<span class="chip old">Not Live<span class="sep">·</span><b>${num(c.age_h)} h</b> Old</span>` : '<span class="chip live">Live</span>';
       /* Stale: the station may still be reporting to CPCB; the outage can be in the relay. */
-      const t = `<b>${esc(istFmt(c.observed_at))}</b>`;
+      const t = nowrap(`<b>${esc(istFmt(c.observed_at))}</b>`);
       const when = c.result.origin === 'cpcb'
         ? `Published by CPCB at ${t}${stale ? '. No update has reached us since.' : ''}`
         : `${stale ? 'No readings have reached us since' : 'Readings to'} ${t}${stale ? '.' : ''}`;

@@ -13,7 +13,7 @@ test('stale shows the red label with the bold age and a muted number', () => {
   assert.match(html, /class="chip old">Not Live<span class="sep">·<\/span><b>39 h<\/b> Old/);
   assert.match(html, /class="num muted"/);
   /* IST by contract: 17:30 UTC is 23:00 IST, whatever the machine's zone. */
-  assert.match(html, /No readings have reached us since <b>24 Sept? 23:00 IST<\/b>/);
+  assert.match(html, /No readings have reached us since <span style="white-space:nowrap"><b>24 Sept? 23:00 IST<\/b><\/span>/);
 });
 test('no station never prints a number', () => {
   const html = cardHtml(buildPayload('in/kolkata/baruipur', null, {}, new Date()), 'Baruipur');
@@ -236,7 +236,7 @@ test('M1: each unavailable reason says its own thing, and blames no one', () => 
 test('M1: stale says no readings have reached us, not that the station stopped', () => {
   const now = new Date('2026-09-26T08:30:00Z');
   const html = cardHtml(buildPayload(K, st, raw('2026-09-24T17:30:00Z'), now), 'Ballygunge', now);
-  assert.match(html, /No readings have reached us since <b>24 Sept? 23:00 IST<\/b>\./);
+  assert.match(html, /No readings have reached us since <span style="white-space:nowrap"><b>24 Sept? 23:00 IST<\/b><\/span>\./);
   assert.doesNotMatch(html, /has not reported/);
 });
 
@@ -297,7 +297,7 @@ const C1 = new Date('2026-09-27T00:30:00Z');
 test('CPCB live: published line, 24-hour average, published time, no concentration anywhere', () => {
   const card = cardHtml(cp(C1), 'Ballygunge', C1), pane = paneHtml(cp(C1), 'Ballygunge', C1);
   assert.match(card, /Led by <b>PM10<\/b> · CPCB published AQI · <span[^>]*>24-hour average<\/span>/);
-  assert.match(card, /Published by CPCB at <b>27 Sept 05:00 IST<\/b>/);
+  assert.match(card, /Published by CPCB at <span style="white-space:nowrap"><b>27 Sept 05:00 IST<\/b><\/span>/);
   assert.match(pane, /Pollutants · CPCB sub-indices/);
   assert.match(pane, /<th>24-h sub-index<\/th><th>24-h range<\/th><th>Latest hour<\/th>/);
   assert.doesNotMatch(pane, /µg\/m³|mg\/m³/);
@@ -355,4 +355,8 @@ test('the sub-index row that holds the AQI is marked, and only when CPCB publish
   assert.match(pane, /<tr class="top"><td>PM10<\/td>/);
   const f = { ...pick(FEED, SB), aqi: null, dominant: null };
   assert.doesNotMatch(paneHtml({ current: currentFromFeed(f, KB, SB, C1), history: null }, 'Ballygunge', C1), /class="top"/);
+});
+
+test('an IST time never breaks across lines: the CPCB live card holds its time in a nowrap span', () => {
+  assert.match(cardHtml(cp(C1), 'Ballygunge', C1), /Published by CPCB at <span style="white-space:nowrap"><b>27 Sept 05:00 IST<\/b><\/span>/);
 });
