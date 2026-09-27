@@ -11,6 +11,12 @@
  * <Station>, <Pollutant_Index/> and <Air_Quality_Index/>; a station with any
  * value that is not a whole number, "NA" or "" is dropped (never coerced).
  * IST is the fixed +05:30 offset (obos-scope forbids naming a zone).
+ *
+ * LINEAR BY CONSTRUCTION (audit I2): the body is up to 2 MB of untrusted text, and
+ * lazy `[\s\S]*?` searches plus unanchored attribute patterns were O(n²): 22 s on a
+ * 200 KB body. Elements are found with `indexOf` scans that never revisit a byte,
+ * a tag longer than MAX_TAG is skipped whole, and the attribute pattern is anchored
+ * on whitespace with capped name and value lengths, so it only ever runs on ≤ 1 KB.
  */
 import type { StationEntry } from './stations.ts';
 import { category } from './cpcb.ts';
@@ -43,10 +49,50 @@ const PARAM: Readonly<Record<string, Pollutant>> = { 'PM2.5': 'pm25', PM10: 'pm1
 const ENT: Readonly<Record<string, string>> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" };
 const decode = (s: string): string => s.replace(/&(amp|lt|gt|quot|apos);/g, (_, e: string) => ENT[e]!);
 
+/** The longest opening tag read, in characters; a longer one is skipped whole. The real feed's longest is under 200. */
+const MAX_TAG = 1024;
+
+/** Attributes of one tag of at most MAX_TAG characters. Anchored on whitespace and capped, so it cannot backtrack. */
 function attrs(tag: string): Record<string, string> {
   const o: Record<string, string> = {};
-  for (const m of tag.matchAll(/([A-Za-z_][\w.-]*)="([^"]*)"/g)) o[m[1]!] = decode(m[2]!);
+  for (const m of tag.matchAll(/(?:^|\s)([A-Za-z_][\w.-]{0,63})="([^"]{0,512})"/g)) o[m[1]!] = decode(m[2]!);
   return o;
+}
+
+/** True when `s[i]` ends a tag name (what `\b` meant before): whitespace, `>` or `/`. */
+const ends = (s: string, i: number): boolean => i >= s.length || /[\s>/]/.test(s[i]!);
+
+/**
+ * Every `<name …>` element in `s` with its body up to the first `</name>`, in one
+ * forward pass: each scan starts where the last one stopped, so no byte is read
+ * twice. An element with no closing tag ends the pass, because no later one can close.
+ */
+function* elements(s: string, name: string): Generator<{ tag: string; body: string }> {
+  const open = `<${name}`, close = `</${name}>`;
+  let i = s.indexOf(open);
+  while (i >= 0) {
+    if (!ends(s, i + open.length)) { i = s.indexOf(open, i + open.length); continue; }
+    const gt = s.indexOf('>', i);
+    if (gt < 0) return;
+    if (gt - i > MAX_TAG) { i = s.indexOf(open, gt + 1); continue; }
+    const end = s.indexOf(close, gt + 1);
+    if (end < 0) return;
+    yield { tag: s.slice(i + open.length, gt), body: s.slice(gt + 1, end) };
+    i = s.indexOf(open, end + close.length);
+  }
+}
+
+/** Every self-closing `<name … />` in `s`, in one forward pass; an unterminated or over-long tag is skipped whole. */
+function* selfClosing(s: string, name: string): Generator<string> {
+  const open = `<${name}`;
+  let i = s.indexOf(open);
+  while (i >= 0) {
+    if (!ends(s, i + open.length)) { i = s.indexOf(open, i + open.length); continue; }
+    const gt = s.indexOf('>', i);
+    if (gt < 0) return;
+    if (gt - i <= MAX_TAG && s[gt - 1] === '/') yield s.slice(i + open.length, gt - 1);
+    i = s.indexOf(open, gt + 1);
+  }
 }
 
 /** "NA" and "" are missing; anything else must be a whole number. */
@@ -67,17 +113,17 @@ export function istStamp(s: string): string {
 export function parseFeed(xml: string): FeedStation[] {
   if (!xml.includes('<AqIndex')) throw new FeedError('not a CPCB AQI feed');
   const out: FeedStation[] = [];
-  for (const m of xml.matchAll(/<Station\b([^>]*)>([\s\S]*?)<\/Station>/g)) {
+  for (const el of elements(xml, 'Station')) {
     try {
-      const a = attrs(m[1]!), body = m[2]!;
+      const a = attrs(el.tag), body = el.body;
       const lat = Number(a['latitude']), lon = Number(a['longitude']);
       if (!a['id'] || !Number.isFinite(lat) || !Number.isFinite(lon)) continue;
       const subindices: CpcbSubIndex[] = [];
-      for (const p of body.matchAll(/<Pollutant_Index\b([^>]*)\/>/g)) {
-        const q = attrs(p[1]!), parameter = PARAM[q['id'] ?? ''];
+      for (const tag of selfClosing(body, 'Pollutant_Index')) {
+        const q = attrs(tag), parameter = PARAM[q['id'] ?? ''];
         if (parameter) subindices.push({ parameter, avg: whole(q['Avg']), min: whole(q['Min']), max: whole(q['Max']), hourly: whole(q['Hourly_sub_index']) });
       }
-      const aq = /<Air_Quality_Index\b([^>]*)\/>/.exec(body), aa = aq ? attrs(aq[1]!) : {};
+      const aq = selfClosing(body, 'Air_Quality_Index').next(), aa = aq.done ? {} : attrs(aq.value);
       const aqi = whole(aa['Value']), dominant = PARAM[aa['Predominant_Parameter'] ?? ''] ?? null;
       out.push({ name: a['id'], published_at: istStamp(a['lastupdate'] ?? ''), lat, lon,
         aqi: aqi !== null && dominant ? aqi : null, dominant: aqi !== null ? dominant : null, subindices });

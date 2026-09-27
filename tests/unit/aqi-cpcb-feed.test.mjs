@@ -134,3 +134,42 @@ test('a blank AQI is insufficient_data (origin cpcb) when fresh, unavailable no_
 test('a publication stamped more than 15 min in the future is not trusted (null)', () => {
   assert.equal(currentFromFeed(bFeed(), B, stB, at('2026-09-26T23:00:00Z')), null);
 });
+
+/* ---- Audit I2: the parser is linear. Every hostile body up to the 2 MB cap parses or throws in under 200 ms. ---- */
+
+const HOSTILE_MS = 200;
+const HEAD = '<?xml version="1.0"?><AqIndex><Country id="India"><State id="X"><City id="Y">';
+const TAIL = '</City></State></Country></AqIndex>';
+const fill = (unit, room) => unit.repeat(Math.max(0, Math.floor(room / unit.length)));
+const timed = (xml) => {
+  assert.ok(xml.length >= 1_900_000 && xml.length <= FEED_MAX_BYTES, `a ${xml.length}-byte body is not near the cap`);
+  const t = performance.now();
+  try { parseFeed(xml); } catch (e) { assert.ok(e instanceof FeedError, `threw ${e}`); }
+  return performance.now() - t;
+};
+
+test('the real capture parses exactly as it did before the linear rewrite (481 stations, deep-equal)', () => {
+  const golden = JSON.parse(gunzipSync(readFileSync(new URL('../fixtures/aqi/cpcb-feed-2026-09-27T0500IST.parsed.json.gz', import.meta.url))).toString('utf8'));
+  assert.deepEqual(parseFeed(FEED_XML), golden);
+});
+
+test('I2: a 2 MB opening tag with no "=" in it parses or throws in under 200 ms', () => {
+  const ms = timed(HEAD + '<Station ' + 'a'.repeat(FEED_MAX_BYTES - HEAD.length - TAIL.length - 30) + '></Station>' + TAIL);
+  assert.ok(ms < HOSTILE_MS, `${ms.toFixed(0)} ms`);
+});
+
+test('I2: 2 MB of unclosed <Station> elements parses or throws in under 200 ms', () => {
+  const u = '<Station id="S" lastupdate="27-09-2026 05:00:00" latitude="22.5" longitude="88.3">';
+  const ms = timed(HEAD + fill(u, FEED_MAX_BYTES - HEAD.length - TAIL.length) + TAIL);
+  assert.ok(ms < HOSTILE_MS, `${ms.toFixed(0)} ms`);
+});
+
+test('I2: 2 MB of unterminated <Pollutant_Index> tags inside one station parses or throws in under 200 ms', () => {
+  const open = '<Station id="S" lastupdate="27-09-2026 05:00:00" latitude="22.5" longitude="88.3">', close = '</Station>';
+  const junk = fill('<Pollutant_Index id' + 'x'.repeat(40) + ' ', FEED_MAX_BYTES - HEAD.length - TAIL.length - open.length - close.length - 2);
+  /* No ">" at all, and one distant "/>" that every unterminated tag would reach: both must stay linear. */
+  for (const body of [junk, junk + '/>']) {
+    const ms = timed(HEAD + open + body + close + TAIL);
+    assert.ok(ms < HOSTILE_MS, `${ms.toFixed(0)} ms (${body.endsWith('/>') ? 'with' : 'without'} a closing "/>")`);
+  }
+});
