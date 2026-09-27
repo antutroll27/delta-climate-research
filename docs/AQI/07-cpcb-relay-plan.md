@@ -2,7 +2,7 @@
 
 **Version:** 0.1 (plan, not built)
 **Date:** 28 September 2026
-**Status:** Planned. The founder decided on 28 Sep 2026 to build this later. Nothing in this document is implemented yet.
+**Status:** Planned. The founder decided on 28 Sep 2026 to build this later, **on a Raspberry Pi**. Nothing in this document is implemented yet.
 **Depends on:** PR #34 (merged, `3d8bc47`), which ships the CPCB feed reader and card **dormant** behind `AIR_CPCB_FEED`.
 
 ## 1. Why a relay
@@ -60,6 +60,19 @@ Alternatives considered:
 | GitHub Actions, AWS, GCP or Azure in India | free or cheap | cloud IP ranges, almost certainly blocked like Vercel | Rejected unless a probe passes |
 
 **Location.** Anywhere in India on an ordinary ISP (Jio, Airtel, ACT, BSNL and so on). A second relay at a different site is optional redundancy (§7).
+
+### 4.1 Shopping list (Raspberry Pi, decided 2026-09-28)
+
+| Item | Why | Approx. (INR) |
+|---|---|---|
+| Raspberry Pi 5 (4 GB), or Pi 4 (2–4 GB) | The relay; 4 GB is ample | 5,000–7,000 |
+| Official USB-C power supply (27 W for Pi 5) | Under-powered Pis corrupt their storage | 1,000–1,500 |
+| 32–64 GB microSD, A2 class (or a small USB SSD) | Raspberry Pi OS Lite; an SSD survives years of writes better | 500–2,500 |
+| Case with a fan or heatsink | Indian summers; keeps it from throttling | 500–1,000 |
+| Small DC mini-UPS for 5 V, or a UPS HAT | Rides through power cuts; the router needs one too | 1,000–2,500 |
+| Ethernet cable to the router | More reliable than Wi-Fi | 100–300 |
+
+The software is free: Raspberry Pi OS Lite, Node LTS, and the relay script from `relay/`.
 
 ## 5. Relay behaviour
 
@@ -154,7 +167,7 @@ These are the tasks for a later subagent-driven build. A full step-level plan wi
 
 | # | Question | Default proposed |
 |---|---|---|
-| 1 | Relay device and where it lives | Raspberry Pi + UPS at the office |
+| 1 | Relay device and where it lives | **Decided 2026-09-28: Raspberry Pi.** Location still open (office proposed) |
 | 2 | Keep the hourly archive? | Yes: it seeds the PostgreSQL history |
 | 3 | Alerting channel | healthchecks.io email to the team |
 | 4 | Second relay for redundancy? | Not at first |
