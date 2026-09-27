@@ -145,11 +145,11 @@ test('I4: an O₃-led AQI names the maximum 8-hour mean, a PM-led one the 24-hou
   const o3 = buildPayload(K, st, rawWith('2026-09-24T17:30:00Z', { o3: 150 }), T);
   assert.equal(o3.current.result.dominant, 'o3');
   const card = cardHtml(o3, 'Ballygunge', T);
-  assert.match(card, /Led by <b>O₃<\/b> · AQI computed by OBOS from OpenAQ \(CPCB feed unreachable\) · <span[^>]*>maximum 8-hour mean<\/span>/);
+  assert.match(card, /Led by <b>O₃<\/b> · AQI computed by OBOS from OpenAQ \(no current CPCB figure for this station\) · <span[^>]*>maximum 8-hour mean<\/span>/);
   assert.doesNotMatch(card, /24-hour/);
   const pm = buildPayload(K, st, rawWith('2026-09-24T17:30:00Z', { pm25: 80 }), T);
   assert.equal(pm.current.result.dominant, 'pm25');
-  assert.match(cardHtml(pm, 'Ballygunge', T), /Led by <b>PM2\.5<\/b> · AQI computed by OBOS from OpenAQ \(CPCB feed unreachable\) · <span[^>]*>24-hour mean<\/span>/);
+  assert.match(cardHtml(pm, 'Ballygunge', T), /Led by <b>PM2\.5<\/b> · AQI computed by OBOS from OpenAQ \(no current CPCB figure for this station\) · <span[^>]*>24-hour mean<\/span>/);
   /* The table header must not call the whole table a 24-hour window while O₃ and CO rows are 8-hour. */
   assert.doesNotMatch(paneHtml(o3, 'Ballygunge', T), /Pollutants · 24-hour window/);
 });
@@ -344,8 +344,9 @@ test('no history with a CPCB current says so instead of an empty chart', () => {
 });
 
 test('OBOS fallback is labelled as ours', () => {
+  /* Neutral about the cause: CPCB can drop a station while its feed is up (register AQI-R47, Barrackpore 27 Sep). */
   const p = buildPayload(KB, SB, raw('2026-09-24T17:30:00Z'), new Date('2026-09-24T18:00:00Z'));
-  assert.match(cardHtml(p, 'Ballygunge', new Date('2026-09-24T18:00:00Z')), /AQI computed by OBOS from OpenAQ \(CPCB feed unreachable\)/);
+  assert.match(cardHtml(p, 'Ballygunge', new Date('2026-09-24T18:00:00Z')), /AQI computed by OBOS from OpenAQ \(no current CPCB figure for this station\)/);
 });
 
 // Addition beyond the plan: the approved preview (previews/aqi-cpcb) marks the row holding the AQI.

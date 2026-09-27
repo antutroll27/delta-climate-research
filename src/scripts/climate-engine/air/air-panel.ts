@@ -68,10 +68,11 @@ function stationLine(s: AqiStation, owner: string | null, place: string): string
 /** O₃ and CO are the maximum rolling 8-hour mean; every other pollutant the 24-hour mean. Read from the dominant reading itself. */
 const windowOf = (r: AqiResult): string => (r.pollutants.find((q) => q.parameter === r.dominant)?.window_h === 8 ? 'maximum 8-hour mean' : '24-hour mean');
 
+/* The fallback names no cause: the feed may be down, the station missing from it (register AQI-R47), stale or moved. */
 function hero(r: Result, muted: boolean): string {
   const meta = r.origin === 'cpcb'
     ? `Led by <b>${pol(r.dominant)}</b> · CPCB published AQI · <span style="white-space:nowrap">${r.window_h === 8 ? '8-hour maximum' : '24-hour average'}</span>`
-    : `Led by <b>${pol(r.dominant)}</b> · AQI computed by OBOS from OpenAQ (CPCB feed unreachable) · <span style="white-space:nowrap">${windowOf(r)}</span>`;
+    : `Led by <b>${pol(r.dominant)}</b> · AQI computed by OBOS from OpenAQ (no current CPCB figure for this station) · <span style="white-space:nowrap">${windowOf(r)}</span>`;
   return `<div class="hero"><span class="num${muted ? ' muted' : ''}" style="color:${col(r.category)}">${num(r.aqi)}</span>
     <span class="cat"><span class="dot" style="background:${col(r.category)}"></span>${word(r.category)}</span></div>
     <p class="meta">${meta}</p>`;
