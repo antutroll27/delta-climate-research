@@ -34,7 +34,7 @@ changes where the current value comes from. Where the specs and these documents 
 ### CPCB's own feed: built, dormant by default (PR #34, branch `feat/aqi-cpcb-feed`, not merged)
 
 - **Off in production.** CPCB's feed does not answer cloud IPs: from Vercel (bom1 and iad1) every request times out, while it answers a connection in India in about 0.4 s (AQI-R48). The feed therefore runs only when `AIR_CPCB_FEED=on`. Off, the function makes no CPCB request and production shows OBOS's calculation from OpenAQ, as before.
-- **Ways to switch it on:** a data.gov.in key for CPCB's dataset there (data.gov.in is reachable from Vercel; that it carries the station AQI and sub-indices this build reads is still to be checked), or a relay in India. Then set `AIR_CPCB_FEED=on`, and check a Preview first. Locally, `AIR_CPCB_FEED=on npm run dev` exercises the CPCB path.
+- **Ways to switch it on:** a data.gov.in key for CPCB's dataset there (data.gov.in is reachable from Vercel; that it carries the station AQI and sub-indices this build reads is still to be checked), or a relay in India (planned: [07-cpcb-relay-plan.md](./07-cpcb-relay-plan.md); data.gov.in's CPCB dataset was itself failing on 28 Sep). Then set `AIR_CPCB_FEED=on`, and check a Preview first. Locally, `AIR_CPCB_FEED=on npm run dev` exercises the CPCB path.
 - **What waits behind the switch**, described below as it behaves when on:
 
 - **Current value: CPCB.** The headline AQI is CPCB's published station AQI, read from CPCB's CAAQMS feed (`airquality.cpcb.gov.in/caaqms/rss_feed`, no key). The card says "CPCB published AQI" and "Published by CPCB at …", and the pane's pollutant table shows CPCB's sub-indices only, never concentrations (AQI-R47a).
@@ -94,6 +94,7 @@ Details are in the [research register](./05-research-register.md), R19–R47a.
 | [04-delivery-roadmap.md](./04-delivery-roadmap.md) | Founders, product, engineering | Phases, acceptance gates, cost controls, risks and open decisions |
 | [05-research-register.md](./05-research-register.md) | Engineering, science, diligence | Verified findings, sources, superseded assumptions and validation backlog |
 | [06-government-station-api-assessment.md](./06-government-station-api-assessment.md) | Engineering, product, diligence | Ranked government-station APIs, tested limitations, request shapes and implementation recommendation |
+| [07-cpcb-relay-plan.md](./07-cpcb-relay-plan.md) | Founders, engineering, operations | Plan (not built) for a relay in India that carries CPCB's live feed past its cloud firewall to OBOS |
 
 ## Decision summary
 
