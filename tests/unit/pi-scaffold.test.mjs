@@ -15,6 +15,8 @@ test('pi/ is its own standard-library Go module (spec D1): no require, no go.sum
 
 test('the Pi binary is built static for linux/arm64, stripped and version-stamped', () => {
   const mk = read('pi/Makefile');
+  // Only pi-v* tags name a release; any other repo tag (such as bangalore-before-merge) must not.
+  assert.match(mk, /^VERSION \?= \$\(shell git describe --tags --match 'pi-v\*' --always --dirty 2>\/dev\/null \|\| echo dev\)$/m);
   assert.match(mk, /CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags "-s -w -X main\.version=\$\(VERSION\)" -o bin\/obos-india \.\/cmd\/obos-india/);
   for (const target of ['build:', 'test:', 'vet:', 'fmt-check:']) assert.match(mk, new RegExp(`^${target}`, 'm'), target);
   assert.match(read('pi/.gitignore'), /^\/bin\/$/m, 'the built binary is never committed');

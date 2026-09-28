@@ -1,5 +1,5 @@
 # obos-india: the Raspberry Pi service. Standard library only; see deploy/README.md.
-VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+VERSION ?= $(shell git describe --tags --match 'pi-v*' --always --dirty 2>/dev/null || echo dev)
 
 .PHONY: build test vet fmt-check
 
