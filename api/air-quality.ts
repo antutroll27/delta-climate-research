@@ -18,12 +18,17 @@
  * (connect timeout from Vercel bom1 and iad1), so in production it would only add an 8 s
  * wait before every fallback. The feed runs only when AIR_CPCB_FEED is exactly "on";
  * otherwise this function is main's OpenAQ path, byte for byte in its caching.
+ *
+ * RELAY SOURCE (spec 2026-09-29 §5): with AIR_CPCB_SOURCE exactly "relay", the feed is read from the
+ * Raspberry Pi relay's copy in private Vercel Blob (readRelayFeed) instead of from CPCB itself.
+ * Everything after the read (caches, negative cache, fallback, labels, freshness) is unchanged.
  */
 import { waitUntil } from '@vercel/functions';
 import { buildPayload } from '../src/lib/aqi/build.ts';
-import { currentFromFeed, fetchFeed, FeedError, pick, type FeedStation } from '../src/lib/aqi/cpcb-feed.ts';
+import { currentFromFeed, fetchFeed, FeedError, pick, readRelayFeed, type FeedStation } from '../src/lib/aqi/cpcb-feed.ts';
 import type { Raw } from '../src/lib/aqi/hours.ts';
 import { fetchSensorWindow, OpenAqError } from '../src/lib/aqi/openaq.ts';
+import { blobStore, type FeedStore } from '../src/lib/aqi/relay-store.ts';
 import { isAirArea, POLLUTANTS, stationFor, stationPayload, type StationEntry } from '../src/lib/aqi/stations.ts';
 import { SCHEMA, type AirQualityPayload, type Pollutant } from '../src/lib/aqi/types.ts';
 
@@ -50,7 +55,17 @@ interface Deps {
   waitUntil?: (p: Promise<unknown>) => void;
   /** Ask CPCB's feed at all. Off (the default): no CPCB request is made, not even a failed one. */
   cpcbFeed?: boolean;
+  /** Where CPCB's feed comes from when it is on (spec 2026-09-29 §5): the Pi relay's stored copy, or CPCB directly. */
+  source?: FeedSource;
+  /** The relay's store; injected by tests, production uses private Vercel Blob. */
+  store?: FeedStore;
 }
+
+export type FeedSource = 'relay' | 'direct';
+
+/** The feed's source: the relay only for exactly "relay" (spec 2026-09-29 §5); anything else is direct. */
+export const feedSource = (env: Readonly<Record<string, string | undefined>>): FeedSource =>
+  (env['AIR_CPCB_SOURCE'] === 'relay' ? 'relay' : 'direct');
 
 /** The CPCB feed switch: on only for exactly "on" (spec §11). */
 export const feedEnabled = (env: Readonly<Record<string, string | undefined>>): boolean => env['AIR_CPCB_FEED'] === 'on';
@@ -90,7 +105,8 @@ function feedFor(now: Date, d: Deps): Promise<FeedStation[] | null> {
   if (c.entry && now.getTime() - c.entry.at < CACHE_TTL_MS) return Promise.resolve(c.entry.stations);
   if (c.failedAt !== undefined && now.getTime() - c.failedAt < FEED_RETRY_MS) return Promise.resolve(null);
   if (!c.inflight) {
-    c.inflight = fetchFeed({ fetch: d.fetch })
+    const read = d.source === 'relay' ? readRelayFeed(d.store ?? blobStore()) : fetchFeed({ fetch: d.fetch });
+    c.inflight = read
       .then((stations) => { c.entry = { at: now.getTime(), stations }; delete c.failedAt; return stations; }, (e: unknown) => { c.failedAt = now.getTime(); throw e; })
       .finally(() => { c.inflight = null; });
   }
@@ -218,5 +234,5 @@ export async function handle(req: Req, res: Res, d: Deps): Promise<void> {
 }
 
 export default async function handler(req: Req, res: Res): Promise<void> {
-  await handle(req, res, { key: process.env.OPENAQ_API_KEY ?? '', cpcbFeed: feedEnabled(process.env) });
+  await handle(req, res, { key: process.env.OPENAQ_API_KEY ?? '', cpcbFeed: feedEnabled(process.env), source: feedSource(process.env) });
 }
