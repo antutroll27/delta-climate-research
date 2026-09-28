@@ -79,10 +79,7 @@ func (j *Job) RunOnce(ctx context.Context) Outcome {
 	if j.Clock != nil {
 		now = j.Clock
 	}
-	log := j.Log
-	if log == nil {
-		log = slog.Default()
-	}
+	log := j.logger()
 	maxAge := j.MaxFeedAge
 	if maxAge == 0 {
 		maxAge = DefaultMaxFeedAge
@@ -168,4 +165,33 @@ func truncate(s string, n int) string {
 		n--
 	}
 	return s[:n]
+}
+
+// Loop waits for a synchronised clock (waitClock bounds the wait and reports
+// whether it synced; a Pi has no clock battery), runs at once, then every tick,
+// until ctx ends. Runs never overlap.
+func (j *Job) Loop(ctx context.Context, every time.Duration, waitClock func(context.Context) bool) {
+	if !waitClock(ctx) {
+		if ctx.Err() != nil {
+			return
+		}
+		j.logger().Warn("clock not synchronised after waiting; relaying anyway")
+	}
+	tick := time.NewTicker(every)
+	defer tick.Stop()
+	for {
+		j.RunOnce(ctx)
+		select {
+		case <-ctx.Done():
+			return
+		case <-tick.C:
+		}
+	}
+}
+
+func (j *Job) logger() *slog.Logger {
+	if j.Log == nil {
+		return slog.Default()
+	}
+	return j.Log
 }

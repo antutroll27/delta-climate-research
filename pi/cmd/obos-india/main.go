@@ -38,9 +38,8 @@ import (
 var version = "dev"
 
 const (
-	clockWaitMax  = 10 * time.Minute
-	clockPoll     = 5 * time.Second
-	watchdogEvery = 30 * time.Second
+	clockWaitMax = 10 * time.Minute
+	clockPoll    = 5 * time.Second
 )
 
 func main() {
@@ -154,7 +153,9 @@ func serve(ctx context.Context, cfg config.Config, env map[string]string, log *s
 	relayDone := make(chan struct{})
 	go func() {
 		defer close(relayDone)
-		relayLoop(ctx, cfg.Interval, reader, job, log)
+		job.Loop(ctx, cfg.Interval, func(ctx context.Context) bool {
+			return reader.WaitClockSync(ctx, clockWaitMax, clockPoll)
+		})
 	}()
 
 	if err := notifier.Notify(sdnotify.Ready); err != nil {
@@ -162,7 +163,7 @@ func serve(ctx context.Context, cfg config.Config, env map[string]string, log *s
 	}
 	log.Info("obos-india started", "version", version, "interval", cfg.Interval.String())
 
-	watchdog := time.NewTicker(watchdogEvery)
+	watchdog := time.NewTicker(sdnotify.WatchdogInterval(env["WATCHDOG_USEC"]))
 	defer watchdog.Stop()
 	for {
 		select {
@@ -174,27 +175,6 @@ func serve(ctx context.Context, cfg config.Config, env map[string]string, log *s
 			return err
 		case <-watchdog.C:
 			_ = notifier.Notify(sdnotify.Watchdog)
-		}
-	}
-}
-
-// relayLoop waits for a synchronised clock (a Pi has no clock battery), runs the
-// relay at once, then on every tick. Runs never overlap.
-func relayLoop(ctx context.Context, every time.Duration, reader health.Reader, job *relay.Job, log *slog.Logger) {
-	if !reader.WaitClockSync(ctx, clockWaitMax, clockPoll) {
-		if ctx.Err() != nil {
-			return
-		}
-		log.Warn("clock not synchronised after waiting; relaying anyway", "waited", clockWaitMax.String())
-	}
-	tick := time.NewTicker(every)
-	defer tick.Stop()
-	for {
-		job.RunOnce(ctx)
-		select {
-		case <-ctx.Done():
-			return
-		case <-tick.C:
 		}
 	}
 }

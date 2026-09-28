@@ -326,3 +326,73 @@ func TestTruncateIsRuneSafe(t *testing.T) {
 		}
 	}
 }
+
+func TestLoopRunsAtOnceThenEveryTickUntilCancelled(t *testing.T) {
+	w := newWorld(t)
+	j := w.job()
+	pings := func() int { w.mu.Lock(); defer w.mu.Unlock(); return len(w.pings) }
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { j.Loop(ctx, time.Hour, func(context.Context) bool { return true }); close(done) }()
+	for deadline := time.Now().Add(3 * time.Second); pings() < 1; time.Sleep(5 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("no run at start: the first run must not wait for a tick")
+		}
+	}
+	cancel()
+	<-done
+	if pings() != 1 {
+		t.Errorf("an hour-long interval ran %d times", pings())
+	}
+
+	w2 := newWorld(t)
+	j2 := w2.job()
+	ctx2, cancel2 := context.WithCancel(context.Background())
+	done2 := make(chan struct{})
+	go func() { j2.Loop(ctx2, 20*time.Millisecond, func(context.Context) bool { return true }); close(done2) }()
+	for deadline := time.Now().Add(3 * time.Second); ; time.Sleep(5 * time.Millisecond) {
+		w2.mu.Lock()
+		n := len(w2.pings)
+		w2.mu.Unlock()
+		if n >= 3 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("only %d runs in 3 s at a 20 ms interval", n)
+		}
+	}
+	cancel2()
+	<-done2
+}
+
+func TestLoopClockWait(t *testing.T) {
+	t.Run("gives up, warns, relays anyway", func(t *testing.T) {
+		w := newWorld(t)
+		j := w.job()
+		ctx, cancel := context.WithCancel(context.Background())
+		j.Healthcheck.URL = "" // the only side effect left is the log
+		done := make(chan struct{})
+		go func() { j.Loop(ctx, time.Hour, func(context.Context) bool { return false }); close(done) }()
+		for deadline := time.Now().Add(3 * time.Second); j.State().LastRun.IsZero(); time.Sleep(5 * time.Millisecond) {
+			if time.Now().After(deadline) {
+				t.Fatal("an unsynchronised clock must not stop the relay")
+			}
+		}
+		cancel()
+		<-done
+		if !strings.Contains(w.logs.String(), "clock not synchronised") {
+			t.Errorf("no warning logged: %s", w.logs.String())
+		}
+	})
+	t.Run("shutdown while waiting runs nothing", func(t *testing.T) {
+		w := newWorld(t)
+		j := w.job()
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		j.Loop(ctx, time.Hour, func(context.Context) bool { return false })
+		if !j.State().LastRun.IsZero() || w.logs.Len() != 0 {
+			t.Errorf("ran or logged after shutdown: %+v %q", j.State(), w.logs.String())
+		}
+	})
+}

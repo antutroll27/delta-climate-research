@@ -6,6 +6,8 @@ package sdnotify
 import (
 	"fmt"
 	"net"
+	"strconv"
+	"time"
 )
 
 // The messages obos-india sends.
@@ -15,14 +17,14 @@ const (
 	Stopping = "STOPPING=1"
 )
 
+// DefaultWatchdogInterval is used when systemd sets no WATCHDOG_USEC.
+const DefaultWatchdogInterval = 30 * time.Second
+
 // Notifier sends to one socket. The zero value is a no-op.
 type Notifier struct {
-	Socket string // NOTIFY_SOCKET; a leading '@' names an abstract socket
-}
-
-// FromEnv reads NOTIFY_SOCKET through getenv (os.Getenv in production).
-func FromEnv(getenv func(string) string) Notifier {
-	return Notifier{Socket: getenv("NOTIFY_SOCKET")}
+	// Socket is NOTIFY_SOCKET. A leading '@' names an abstract socket, which the
+	// net package already maps to a leading NUL on Linux.
+	Socket string
 }
 
 // Notify sends state, such as Ready. It is a no-op when Socket is empty.
@@ -30,11 +32,7 @@ func (n Notifier) Notify(state string) error {
 	if n.Socket == "" {
 		return nil
 	}
-	name := n.Socket
-	if name[0] == '@' {
-		name = "\x00" + name[1:]
-	}
-	conn, err := net.DialUnix("unixgram", nil, &net.UnixAddr{Name: name, Net: "unixgram"})
+	conn, err := net.DialUnix("unixgram", nil, &net.UnixAddr{Name: n.Socket, Net: "unixgram"})
 	if err != nil {
 		return fmt.Errorf("sdnotify: dial: %w", err)
 	}
@@ -43,4 +41,14 @@ func (n Notifier) Notify(state string) error {
 		return fmt.Errorf("sdnotify: write: %w", err)
 	}
 	return nil
+}
+
+// WatchdogInterval is half of systemd's WATCHDOG_USEC (microseconds), as
+// sd_watchdog_enabled(3) advises, or DefaultWatchdogInterval if it is unset or bad.
+func WatchdogInterval(usec string) time.Duration {
+	n, err := strconv.ParseInt(usec, 10, 64)
+	if err != nil || n <= 0 {
+		return DefaultWatchdogInterval
+	}
+	return time.Duration(n) * time.Microsecond / 2
 }
