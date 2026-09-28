@@ -1,19 +1,26 @@
 # Raspberry Pi relay: hardware and operating system
 
 **Date:** 28 September 2026
-**Status:** Decided, not bought or built. The founder chose a Raspberry Pi on Raspberry Pi OS Lite on 28 Sep 2026.
+**Status:** Decided, not built. The founder chose a Raspberry Pi on Raspberry Pi OS Lite on 28 Sep 2026, and a **Raspberry Pi 4** on 29 Sep 2026.
 **Part of:** [the Raspberry Pi relay docs](./README.md). The plan it serves is [01-relay-plan.md](./01-relay-plan.md).
 
 ## 1. Shopping list
 
 | Item | Why | Approx. (INR) |
 |---|---|---|
-| Raspberry Pi 5 (4 GB), or Pi 4 (2–4 GB) | The relay; 4 GB is ample | 5,000–7,000 |
-| Official USB-C power supply (27 W for Pi 5) | Under-powered Pis corrupt their storage | 1,000–1,500 |
+| **Raspberry Pi 4 Model B, 4 GB** (8 GB if it will also run other India jobs) | The relay, plus light India-specific jobs | 5,500–8,000 |
+| Official Raspberry Pi 4 USB-C power supply (5.1 V, 3 A, 15 W) | Phone chargers under-power a Pi 4, causing random crashes and corrupted storage | 800–1,200 |
 | 32–64 GB microSD, A2 class (or a small USB SSD) | Raspberry Pi OS Lite; an SSD survives years of writes better | 500–2,500 |
 | Case with a fan or heatsink | Indian summers; keeps it from throttling | 500–1,000 |
 | Small DC mini-UPS for 5 V, or a UPS HAT | Rides through power cuts; the router needs one too | 1,000–2,500 |
 | Ethernet cable to the router | More reliable than Wi-Fi | 100–300 |
+
+**Pi 4 notes:**
+- **RAM.** 4 GB is plenty for the relay alone. Choose 8 GB if the Pi will also host other India-specific jobs.
+- **Cooling matters.** A Pi 4 throttles when hot, so use a case with a fan or an aluminium heatsink case.
+- **Storage.** A Pi 4 can boot from a USB 3 SSD, using the blue USB 3 ports. That is sturdier than a microSD for years of always-on use; a good A2 microSD is fine to start with.
+- **No display needed.** It runs headless. The micro-HDMI ports are only needed if you ever plug in a monitor to troubleshoot.
+- **Remote access.** Everything in [03-remote-access.md](./03-remote-access.md) (Tailscale, VS Code Remote-SSH, Raspberry Pi Connect) works the same on a Pi 4.
 
 The software is free: Raspberry Pi OS Lite, Node LTS, and the relay script from `relay/`.
 

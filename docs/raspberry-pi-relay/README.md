@@ -16,7 +16,7 @@
 | Decision | Choice | Date |
 |---|---|---|
 | Route for live CPCB data | Relay in India (data.gov.in retried later) | 28 Sep 2026 |
-| Device | Raspberry Pi (Pi 5 4 GB, or Pi 4) | 28 Sep 2026 |
+| Device | **Raspberry Pi 4 Model B** (4 GB; 8 GB if it also runs other India jobs) | 29 Sep 2026 |
 | Operating system | Raspberry Pi OS Lite (64-bit), read-only overlay | 28 Sep 2026 |
 | Remote access | VS Code Remote-SSH over Tailscale; Raspberry Pi Connect backup | 28 Sep 2026 |
 | Still open | Where the Pi lives; keep the hourly archive; alert channel; second relay; signed uploads | See [01-relay-plan.md](./01-relay-plan.md) §11 |
