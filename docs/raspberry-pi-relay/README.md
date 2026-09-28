@@ -10,6 +10,7 @@
 | [01-relay-plan.md](./01-relay-plan.md) | Founders, engineering | Why a relay; the architecture (Pi → Vercel Blob → `/api/air-quality`); relay behaviour; OBOS changes; operations; archive; implementation outline; open decisions |
 | [02-hardware-and-os.md](./02-hardware-and-os.md) | Whoever sets up the Pi | Shopping list (about ₹8–15k); Raspberry Pi OS Lite set-up; first-boot checklist, including the CPCB reachability check |
 | [03-remote-access.md](./03-remote-access.md) | Anyone who maintains the Pi | Using the Pi from a Mac: VS Code Remote-SSH over Tailscale (free), Raspberry Pi Connect as backup, and rehearsing in a UTM VM |
+| [04-readiness-checklist.md](./04-readiness-checklist.md) | Founder, engineering | Everything that must be ready so Pi day is: flash, plug in, one command, ✅. Covers software, accounts, hardware (incl. the forgotten items), self-care, failure drills, paperwork, and the Pi-day sequence |
 
 ## Decisions so far
 
