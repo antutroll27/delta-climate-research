@@ -195,3 +195,134 @@ func TestHealthcheckPingNeverLeaksTheURL(t *testing.T) {
 		t.Errorf("an empty URL must be a no-op, got %v", err)
 	}
 }
+
+func TestRunOnceStateBookkeeping(t *testing.T) {
+	w := newWorld(t)
+	w.set(func(w *world) { w.obos = 503 })
+	j := w.job()
+	j.RunOnce(context.Background())
+	if s := j.State(); !s.LastOK.IsZero() || s.LastError == "" {
+		t.Fatalf("after a first failure LastOK must be zero and LastError set: %+v", s)
+	}
+	w.set(func(w *world) { w.obos = 200 })
+	j.RunOnce(context.Background())
+	if s := j.State(); s.LastError != "" || !s.LastOK.Equal(s.LastRun) {
+		t.Fatalf("after a success LastError must clear and LastOK == LastRun: %+v", s)
+	}
+}
+
+// A rejection (say a 401 during key rotation) must be retried and keep alerting:
+// recording its lastupdate would make the next tick "unchanged" and ping green.
+func TestRunOnceRejectedIsRetriedAndStaysRed(t *testing.T) {
+	w := newWorld(t)
+	w.set(func(w *world) { w.obos = 401 })
+	j := w.job()
+	for i := range 2 {
+		if got := j.RunOnce(context.Background()); got != Rejected {
+			t.Fatalf("run %d = %s, want rejected", i+1, got)
+		}
+	}
+	if w.submits != 2 || len(w.pings) != 2 || w.pings[1] != "/uuid-secret/fail" {
+		t.Errorf("submits = %d, pings = %v", w.submits, w.pings)
+	}
+	if s := j.State(); !s.LastUpdate.IsZero() || s.Submitted != 0 {
+		t.Errorf("a rejected feed was recorded: %+v", s)
+	}
+}
+
+// Alerting and submitting are separate: an old feed is always Stale (red), a
+// changed old feed is still submitted so the archive stays whole, an unchanged
+// old feed is not.
+func TestRunOnceStaleFeed(t *testing.T) {
+	cases := []struct {
+		name    string
+		age     time.Duration // of the second feed at the second run; 0 keeps the first feed
+		want    Outcome
+		submits int
+		ping    string
+	}{
+		{"changed and fresh", 20 * time.Minute, Submitted, 2, "/uuid-secret"},
+		{"changed and old", 4 * time.Hour, Stale, 2, "/uuid-secret/fail"},
+		{"unchanged and old", 0, Stale, 1, "/uuid-secret/fail"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			w := newWorld(t)
+			j := w.job()
+			if got := j.RunOnce(context.Background()); got != Submitted {
+				t.Fatalf("first run = %s", got) // 05:00 IST, 30 min before the clock
+			}
+			second := time.Date(2026, 9, 27, 1, 0, 0, 0, time.UTC)
+			if tc.age == 0 {
+				second = second.Add(4 * time.Hour) // the first feed, now 5.5 h old
+			} else {
+				stamp := second.Add(-tc.age).In(time.FixedZone("IST", 19800))
+				w.set(func(w *world) { w.feed = feedAt(stamp.Format("02-01-2006 15:04:05")) })
+			}
+			j.Clock = func() time.Time { return second }
+			if got := j.RunOnce(context.Background()); got != tc.want {
+				t.Fatalf("second run = %s, want %s", got, tc.want)
+			}
+			if w.submits != tc.submits || w.pings[1] != tc.ping {
+				t.Errorf("submits = %d, pings = %v", w.submits, w.pings)
+			}
+			s := j.State()
+			if s.Submitted != tc.submits || s.LastOutcome != tc.want {
+				t.Errorf("state = %+v", s)
+			}
+			if tc.want == Stale && (s.LastError == "" || s.Failures != 1 || !s.LastOK.Before(s.LastRun)) {
+				t.Errorf("stale must count as a failure: %+v", s)
+			}
+		})
+	}
+}
+
+// A SIGTERM mid-run (the weekly reboot) is not a failure: no state, log or ping.
+func TestRunOnceCancelledLeavesNoTrace(t *testing.T) {
+	t.Run("before the fetch", func(t *testing.T) {
+		w := newWorld(t)
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		j := w.job()
+		if got := j.RunOnce(ctx); got != Cancelled {
+			t.Fatalf("outcome = %s, want cancelled", got)
+		}
+		if (j.State() != State{}) || len(w.pings) != 0 || w.logs.Len() != 0 {
+			t.Errorf("state %+v, pings %v, logs %q", j.State(), w.pings, w.logs.String())
+		}
+	})
+	t.Run("during the submit", func(t *testing.T) {
+		w := newWorld(t)
+		ctx, cancel := context.WithCancel(context.Background())
+		w.api.Config.Handler = http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+			io.ReadAll(r.Body)
+			cancel() // SIGTERM arrives while OBOS is answering
+			io.WriteString(rw, `{"stored":"new"}`)
+		})
+		j := w.job()
+		if got := j.RunOnce(ctx); got != Cancelled {
+			t.Fatalf("outcome = %s, want cancelled", got)
+		}
+		if (j.State() != State{}) || len(w.pings) != 0 || w.logs.Len() != 0 {
+			t.Errorf("state %+v, pings %v, logs %q", j.State(), w.pings, w.logs.String())
+		}
+	})
+}
+
+func TestTruncateIsRuneSafe(t *testing.T) {
+	cases := []struct {
+		s    string
+		n    int
+		want string
+	}{
+		{"abc", 5, "abc"},
+		{"abcdef", 3, "abc"},
+		{"ab€", 3, "ab"}, // € is 3 bytes; cutting inside it drops it whole
+		{"ab€", 5, "ab€"},
+	}
+	for _, tc := range cases {
+		if got := truncate(tc.s, tc.n); got != tc.want {
+			t.Errorf("truncate(%q, %d) = %q, want %q", tc.s, tc.n, got, tc.want)
+		}
+	}
+}

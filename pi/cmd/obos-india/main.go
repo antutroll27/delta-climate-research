@@ -119,6 +119,7 @@ func newJob(cfg config.Config, log *slog.Logger) *relay.Job {
 		Fetcher:     cpcb.Fetcher{URL: cfg.FeedURL, UserAgent: ua},
 		Client:      ingest.Client{URL: cfg.IngestURL, Key: cfg.HMACKey, UserAgent: ua},
 		Healthcheck: relay.Healthcheck{URL: cfg.HealthcheckURL},
+		MaxFeedAge:  cfg.MaxFeedAge,
 		Log:         log,
 	}
 }

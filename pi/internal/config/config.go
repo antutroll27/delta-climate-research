@@ -26,6 +26,8 @@ const (
 	DefaultFeedURL    = "https://airquality.cpcb.gov.in/caaqms/rss_feed"
 	DefaultInterval   = 15 * time.Minute
 	MinInterval       = 5 * time.Minute
+	DefaultMaxFeedAge = 3 * time.Hour
+	MinMaxFeedAge     = time.Hour // CPCB publishes hourly: less would alert every hour
 	DefaultListenAddr = "127.0.0.1:8787"
 	MinKeyBytes       = 32
 	MinAPITokenLen    = 32
@@ -39,6 +41,7 @@ type Config struct {
 	HMACKey        []byte        // RELAY_HMAC_KEY (hex), required, at least 32 bytes
 	FeedURL        string        // CPCB_FEED_URL
 	Interval       time.Duration // RELAY_INTERVAL, at least 5m
+	MaxFeedAge     time.Duration // MAX_FEED_AGE, at least 1h: an older CPCB feed alerts
 	HealthcheckURL string        // HEALTHCHECK_URL, optional, no trailing slash
 	ListenAddr     string        // LISTEN_ADDR, host:port
 	APIToken       string        // API_TOKEN, optional; /v1 stays closed without it
@@ -64,6 +67,7 @@ func Load(env map[string]string) (Config, error) {
 		IngestURL:      orDefault(env["OBOS_INGEST_URL"], DefaultIngestURL),
 		FeedURL:        orDefault(env["CPCB_FEED_URL"], DefaultFeedURL),
 		Interval:       DefaultInterval,
+		MaxFeedAge:     DefaultMaxFeedAge,
 		HealthcheckURL: strings.TrimRight(env["HEALTHCHECK_URL"], "/"),
 		ListenAddr:     orDefault(env["LISTEN_ADDR"], DefaultListenAddr),
 		APIToken:       env["API_TOKEN"],
@@ -95,15 +99,26 @@ func Load(env map[string]string) (Config, error) {
 		}
 	}
 
-	if s := env["RELAY_INTERVAL"]; s != "" {
-		d, err := time.ParseDuration(s)
+	for _, d := range []struct {
+		name string
+		min  time.Duration
+		dst  *time.Duration
+	}{
+		{"RELAY_INTERVAL", MinInterval, &c.Interval},
+		{"MAX_FEED_AGE", MinMaxFeedAge, &c.MaxFeedAge},
+	} {
+		s := env[d.name]
+		if s == "" {
+			continue
+		}
+		v, err := time.ParseDuration(s)
 		if err != nil {
-			return Config{}, &FieldError{"RELAY_INTERVAL", "must be a duration such as 15m"}
+			return Config{}, &FieldError{d.name, "must be a duration such as " + d.dst.String()}
 		}
-		if d < MinInterval {
-			return Config{}, &FieldError{"RELAY_INTERVAL", "must be at least " + MinInterval.String()}
+		if v < d.min {
+			return Config{}, &FieldError{d.name, "must be at least " + d.min.String()}
 		}
-		c.Interval = d
+		*d.dst = v
 	}
 
 	host, port, err := net.SplitHostPort(c.ListenAddr)

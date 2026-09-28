@@ -4,9 +4,11 @@ package relay
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"deltaclimate.earth/obos-india/internal/cpcb"
 	"deltaclimate.earth/obos-india/internal/ingest"
@@ -15,22 +17,30 @@ import (
 // Outcome is the result of one run.
 type Outcome string
 
-// The five outcomes of spec 2026-09-29 §6.
+// The outcomes of spec 2026-09-29 §6.
 const (
 	Submitted    Outcome = "submitted"     // OBOS accepted the feed (stored "new" or "duplicate")
 	Unchanged    Outcome = "unchanged"     // CPCB's lastupdate equals the last one submitted
+	Stale        Outcome = "stale"         // CPCB's lastupdate is older than MaxFeedAge (submitted anyway if changed)
 	FetchFailed  Outcome = "fetch_failed"  // CPCB unreachable, or its answer failed cpcb.Check
 	Rejected     Outcome = "rejected"      // OBOS answered 4xx
 	SubmitFailed Outcome = "submit_failed" // OBOS answered 5xx or not at all
+	Cancelled    Outcome = "cancelled"     // ctx ended mid-run (shutdown): not recorded, logged or pinged
 )
 
 // OK reports whether the outcome is healthy (healthcheck success).
 func (o Outcome) OK() bool { return o == Submitted || o == Unchanged }
 
+// DefaultMaxFeedAge is how old CPCB's lastupdate may be before a run is Stale.
+const DefaultMaxFeedAge = 3 * time.Hour
+
 // maxErrorLen caps State.LastError so /status stays small.
 const maxErrorLen = 200
 
 // State is the relay's memory since start, exposed by GET /status.
+//
+// LastUpdate and Submitted advance on every feed OBOS accepts, including a
+// changed but stale one, whose LastOutcome is still Stale.
 type State struct {
 	LastRun     time.Time `json:"last_run,omitzero"`
 	LastOK      time.Time `json:"last_ok,omitzero"`
@@ -47,6 +57,7 @@ type Job struct {
 	Fetcher     cpcb.Fetcher
 	Client      ingest.Client
 	Healthcheck Healthcheck
+	MaxFeedAge  time.Duration    // zero: DefaultMaxFeedAge
 	Clock       func() time.Time // nil: time.Now
 	Log         *slog.Logger     // nil: slog.Default()
 
@@ -62,7 +73,7 @@ func (j *Job) State() State {
 }
 
 // RunOnce performs one cycle and returns its outcome. It never retries: a failure
-// waits for the next tick. It logs exactly one line.
+// waits for the next tick. It logs exactly one line, except when Cancelled.
 func (j *Job) RunOnce(ctx context.Context) Outcome {
 	now := time.Now
 	if j.Clock != nil {
@@ -72,28 +83,42 @@ func (j *Job) RunOnce(ctx context.Context) Outcome {
 	if log == nil {
 		log = slog.Default()
 	}
+	maxAge := j.MaxFeedAge
+	if maxAge == 0 {
+		maxAge = DefaultMaxFeedAge
+	}
 	started := now().UTC()
 
 	var (
-		outcome Outcome
-		runErr  error
-		res     ingest.Result
+		outcome   Outcome
+		runErr    error
+		res       ingest.Result
+		submitted bool // OBOS accepted this feed
 	)
 	snap, err := j.Fetcher.Fetch(ctx)
-	switch {
-	case err != nil:
-		outcome, runErr = FetchFailed, err
-	case snap.Meta.LastUpdate.Equal(j.State().LastUpdate):
-		outcome = Unchanged
-	default:
+	if err == nil && !snap.Meta.LastUpdate.Equal(j.State().LastUpdate) {
 		res, err = j.Client.Submit(ctx, snap)
-		switch {
-		case errors.Is(err, ingest.ErrRejected):
-			outcome, runErr = Rejected, err
-		case err != nil:
-			outcome, runErr = SubmitFailed, err
-		default:
+		submitted = err == nil
+		if errors.Is(err, ingest.ErrRejected) {
+			outcome = Rejected
+		} else if err != nil {
+			outcome = SubmitFailed
+		}
+	} else if err != nil {
+		outcome = FetchFailed
+	}
+	if ctx.Err() != nil {
+		return Cancelled
+	}
+	runErr = err
+	if runErr == nil {
+		switch age := started.Sub(snap.Meta.LastUpdate); {
+		case age > maxAge:
+			outcome, runErr = Stale, fmt.Errorf("feed is %s old, over %s", age.Round(time.Minute), maxAge)
+		case submitted:
 			outcome = Submitted
+		default:
+			outcome = Unchanged
 		}
 	}
 
@@ -107,7 +132,7 @@ func (j *Job) RunOnce(ctx context.Context) Outcome {
 	} else {
 		j.state.LastOK = started
 	}
-	if outcome == Submitted {
+	if submitted {
 		j.state.LastUpdate = snap.Meta.LastUpdate
 		j.state.Submitted++
 	}
@@ -117,7 +142,7 @@ func (j *Job) RunOnce(ctx context.Context) Outcome {
 	if outcome != FetchFailed {
 		attrs = append(attrs, "lastupdate", snap.Meta.LastUpdate.Format(time.RFC3339), "stations", snap.Meta.Stations)
 	}
-	if outcome == Submitted {
+	if submitted {
 		attrs = append(attrs, "stored", res.Stored)
 	}
 	if runErr != nil {
@@ -134,9 +159,13 @@ func (j *Job) RunOnce(ctx context.Context) Outcome {
 	return outcome
 }
 
+// truncate cuts s to at most n bytes without splitting a UTF-8 character.
 func truncate(s string, n int) string {
 	if len(s) <= n {
 		return s
+	}
+	for n > 0 && !utf8.RuneStart(s[n]) {
+		n--
 	}
 	return s[:n]
 }

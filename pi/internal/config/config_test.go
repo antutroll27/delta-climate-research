@@ -26,7 +26,7 @@ func TestLoadDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if c.IngestURL != DefaultIngestURL || c.FeedURL != DefaultFeedURL || c.Interval != 15*time.Minute ||
+	if c.IngestURL != DefaultIngestURL || c.FeedURL != DefaultFeedURL || c.Interval != 15*time.Minute || c.MaxFeedAge != 3*time.Hour ||
 		c.ListenAddr != "127.0.0.1:8787" || c.HealthcheckURL != "" || c.APIToken != "" || len(c.HMACKey) != 32 {
 		t.Errorf("defaults wrong: %+v", c)
 	}
@@ -37,6 +37,7 @@ func TestLoadAcceptsValidOverrides(t *testing.T) {
 		"OBOS_INGEST_URL", "http://127.0.0.1:8788/api/air-quality-ingest",
 		"CPCB_FEED_URL", "http://localhost:9000/rss_feed",
 		"RELAY_INTERVAL", "5m",
+		"MAX_FEED_AGE", "1h",
 		"HEALTHCHECK_URL", "https://hc-ping.com/abc/",
 		"LISTEN_ADDR", "0.0.0.0:9090",
 		"API_TOKEN", strings.Repeat("t", 32),
@@ -44,7 +45,7 @@ func TestLoadAcceptsValidOverrides(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if c.Interval != 5*time.Minute || c.HealthcheckURL != "https://hc-ping.com/abc" || c.ListenAddr != "0.0.0.0:9090" {
+	if c.Interval != 5*time.Minute || c.MaxFeedAge != time.Hour || c.HealthcheckURL != "https://hc-ping.com/abc" || c.ListenAddr != "0.0.0.0:9090" {
 		t.Errorf("overrides wrong: %+v", c)
 	}
 }
@@ -65,6 +66,8 @@ func TestLoadRules(t *testing.T) {
 		{"healthcheck not https", "HEALTHCHECK_URL", env("HEALTHCHECK_URL", "http://hc-ping.com/abc")},
 		{"interval not a duration", "RELAY_INTERVAL", env("RELAY_INTERVAL", "15")},
 		{"interval below 5m", "RELAY_INTERVAL", env("RELAY_INTERVAL", "4m59s")},
+		{"feed age not a duration", "MAX_FEED_AGE", env("MAX_FEED_AGE", "3")},
+		{"feed age below 1h", "MAX_FEED_AGE", env("MAX_FEED_AGE", "59m")},
 		{"listen without port", "LISTEN_ADDR", env("LISTEN_ADDR", "127.0.0.1")},
 		{"listen without host", "LISTEN_ADDR", env("LISTEN_ADDR", ":8787")},
 		{"listen port 0", "LISTEN_ADDR", env("LISTEN_ADDR", "127.0.0.1:0")},
