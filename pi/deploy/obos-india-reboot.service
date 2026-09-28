@@ -1,0 +1,7 @@
+# The weekly maintenance reboot, started only by obos-india-reboot.timer. Installed by setup.sh.
+[Unit]
+Description=Weekly maintenance reboot (obos-india)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/systemctl --no-block reboot

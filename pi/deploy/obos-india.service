@@ -1,0 +1,48 @@
+# obos-india: CPCB relay and local API. Installed by setup.sh; spec 2026-09-29 §6-7.
+[Unit]
+Description=OBOS India service (CPCB relay and local API)
+Documentation=file:///usr/local/share/doc/obos-india/README.md
+Wants=network-online.target time-sync.target
+After=network-online.target time-sync.target
+# Never give up restarting: an outage only ages the card, a stopped service never recovers.
+StartLimitIntervalSec=0
+
+[Service]
+Type=notify
+NotifyAccess=main
+ExecStart=/usr/local/bin/obos-india serve
+EnvironmentFile=/etc/obos-india/env
+User=obos
+Group=obos
+Restart=always
+RestartSec=10
+WatchdogSec=120
+TimeoutStartSec=60
+TimeoutStopSec=20
+
+# Hardening: the service reads its config and the network, and writes nothing.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ReadOnlyPaths=/etc/obos-india
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+CapabilityBoundingSet=
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
