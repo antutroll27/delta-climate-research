@@ -10,13 +10,13 @@
 
 | # | Item | Owner | Status |
 |---|---|---|---|
-| 1 | **The Pi service (Go):** fetch CPCB, sanity-check, submit to OBOS, heartbeat; one static `linux/arm64` binary | Eng | To build |
-| 2 | **OBOS ingest endpoint:** accepts signed submissions from the Pi, validates them with the same parser as the site, and stores them in Vercel Blob | Eng | To build |
-| 3 | **OBOS relay source:** `AIR_CPCB_SOURCE=relay` makes `/api/air-quality` read the stored feed | Eng | To build |
-| 4 | ⭐ **One-command setup** (`setup.sh`): installs the service, timers, watchdog, automatic updates and the read-only mode. It is idempotent, so it is safe to re-run | Eng | To build |
-| 5 | ⭐ **Health check** (`obos-india doctor`): checks CPCB reachability, submission to OBOS, time sync, disk, temperature and the last run, and prints ✅ or ❌ per line | Eng | To build |
+| 1 | **The Pi service (Go):** fetch CPCB, sanity-check, submit to OBOS, heartbeat; one static `linux/arm64` binary | Eng | Built on `feat/pi-india-service`; not merged |
+| 2 | **OBOS ingest endpoint:** accepts signed submissions from the Pi, validates them with the same parser as the site, and stores them in Vercel Blob | Eng | Built on `feat/pi-india-service`; not merged |
+| 3 | **OBOS relay source:** `AIR_CPCB_SOURCE=relay` makes `/api/air-quality` read the stored feed | Eng | Built on `feat/pi-india-service`; not merged |
+| 4 | ⭐ **One-command setup** (`setup.sh`): installs the service, the weekly reboot timer, the watchdog and automatic updates, then offers the read-only mode (default No). It is idempotent, so it is safe to re-run | Eng | Built on `feat/pi-india-service`; not merged |
+| 5 | ⭐ **Health check** (`obos-india doctor`): checks the config, time sync, CPCB reachability, submission to OBOS (a signed ping), disk, temperature and that the service is active, and prints ✅ or ❌ per line. The last run is in `/status` | Eng | Built on `feat/pi-india-service`; not merged |
 | 6 | ⭐ **Dress rehearsal** in a UTM VM on the Mac running Raspberry Pi OS: the full setup and a full day's run before the Pi exists | Eng | To do |
-| 7 | Tests, mutation proofs, an independent audit, and a Preview check before production | Eng | To do |
+| 7 | Tests, mutation proofs, an independent audit, and a Preview check before production | Eng | Tests and mutation proofs done; audit and Preview to do |
 
 ## 2. Accounts and decisions (about 30 minutes)
 
@@ -51,15 +51,15 @@
 | 24 | Read-only overlay | A power cut cannot corrupt the SD card |
 | 25 | `unattended-upgrades` plus a weekly reboot at a quiet hour | Stays patched with nobody touching it |
 | 26 | ⭐ **Time-sync guard.** The Pi has no clock battery, so the service waits for a synchronised clock before its first run | A wrong clock would break the freshness checks |
-| 27 | Heartbeat to OBOS plus a healthchecks.io ping | The team hears about an outage before visitors notice |
-| 28 | ⭐ **Temperature and disk alarms** in the heartbeat | Catches slow failures |
+| 27 | A healthchecks.io ping after every run (success, or `/fail`) | The team hears about an outage before visitors notice |
+| 28 | ⭐ **Temperature and disk** in `/status` and checked by `obos-india doctor` (not pushed as alerts yet) | Catches slow failures when someone looks |
 | 29 | Tailscale, VS Code Remote-SSH and Pi Connect | Fix anything from anywhere ([03-remote-access.md](./03-remote-access.md)) |
 
 ## 5. Failure drills: planned, and each tested once in the rehearsal
 
 | Scenario | Expected behaviour |
 |---|---|
-| Power cut of 5 min | The next run after boot uploads; the card never leaves "Live" |
+| Power cut of 5 min | The next run after boot submits; the card never leaves "Live" |
 | Power cut of 5 h | The card ages to "Not Live · N h Old", then recovers by itself; alert after 2 h |
 | Internet down | Same as the 5 h cut |
 | CPCB changes its feed format | The Pi's sanity check or OBOS's validation rejects it; the site falls back; an alert fires |

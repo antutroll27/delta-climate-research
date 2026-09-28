@@ -22,7 +22,7 @@
 - **No display needed.** It runs headless. The micro-HDMI ports are only needed if you ever plug in a monitor to troubleshoot.
 - **Remote access.** Everything in [03-remote-access.md](./03-remote-access.md) (Tailscale, VS Code Remote-SSH, Raspberry Pi Connect) works the same on a Pi 4.
 
-The software is free: Raspberry Pi OS Lite, Node LTS, and the relay script from `relay/`.
+The software is free: Raspberry Pi OS Lite and the `obos-india` binary from `pi/` (built on the Mac; the Pi needs no toolchain).
 
 ## 2. Operating system: Raspberry Pi OS Lite
 
@@ -34,13 +34,13 @@ Set-up:
 1. **Raspberry Pi OS Lite (64-bit)**, flashed with Raspberry Pi Imager.
    - Set the hostname, a non-default user, SSH keys only (no password login), and the Wi-Fi country.
    - Use Ethernet, not Wi-Fi, for the relay.
-2. **Node LTS**, from the official Node binaries or NodeSource, with the version pinned. The relay script lives in `relay/`, deployed by `git pull`.
-3. **Relay timer:** a systemd `cpcb-relay.service` + `cpcb-relay.timer`, run every 15 min with `Persistent=true`, as a dedicated unprivileged user.
+2. **`obos-india`**, one static Go binary built on the Mac (`make -C pi build`) and copied over Tailscale. `pi/deploy/setup.sh` installs it; see `pi/deploy/README.md`.
+3. **The service:** `obos-india.service` (`Type=notify`, watchdog, restart always), running as the unprivileged user `obos`; its own ticker relays every 15 min.
 4. **Tailscale** for remote SSH. It needs no router port-forwarding, and SSH is exposed only on the tailnet. See [03-remote-access.md](./03-remote-access.md).
 5. **`unattended-upgrades`** for security patches, plus a weekly reboot window. Pick a quiet hour, not on the IST hour when CPCB updates.
 6. **Read-only overlay** (`raspi-config` → Performance → Overlay FS), switched on last, once everything works.
    - It protects the card from wear and from power cuts.
-   - The relay's small state file (the last uploaded `lastupdate`) then lives in RAM. After a reboot the relay simply re-uploads the current feed once. That is harmless: archive files are never overwritten, and `latest` is idempotent.
+   - The relay keeps its state (the last submitted `lastupdate`) in memory. After a reboot it submits the current feed once, and OBOS answers `duplicate`: archive files are never overwritten.
    - To change anything later: turn the overlay off, reboot, change, turn it back on.
 7. **Watchdog:** enable the hardware watchdog, so a hung Pi reboots itself.
 
@@ -55,6 +55,6 @@ Work through these in order:
    curl -s -o /dev/null -w '%{http_code} %{size_download}\n' https://airquality.cpcb.gov.in/caaqms/rss_feed
    ```
    It must print `200` and about 360000. If it doesn't, this connection is blocked too, so stop and choose another site.
-5. Install Node LTS; clone the repo; install the relay timer (built later, [01-relay-plan.md](./01-relay-plan.md) §10).
+5. Copy `obos-india` and `pi/deploy/` over, then run `sudo bash setup.sh ./obos-india` (`pi/deploy/README.md`).
 6. Turn on the watchdog and `unattended-upgrades`.
 7. Last, turn on the read-only overlay (`raspi-config` → Performance → Overlay FS) and reboot.

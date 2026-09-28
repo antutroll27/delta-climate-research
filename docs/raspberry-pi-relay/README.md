@@ -1,6 +1,6 @@
 # Raspberry Pi relay
 
-**Status (28 September 2026):** Planned, not built. The founder decided to build it later.
+**Status (29 September 2026):** Being built on `feat/pi-india-service`: the Go service `obos-india` (`pi/`), the signed ingest endpoint and the relay source. Design: [`docs/superpowers/specs/2026-09-29-pi-india-service-design.md`](../superpowers/specs/2026-09-29-pi-india-service-design.md).
 **Why it exists:** CPCB's live air-quality feed blocks cloud servers, including Vercel, where deltaclimate.earth runs. OpenAQ's Indian data froze on 24 Sep, and data.gov.in's CPCB dataset was failing on 28 Sep. A small always-on Raspberry Pi on an ordinary Indian connection can fetch CPCB's feed and hand it to OBOS. That is the only route that works today, and it gives CPCB's exact published numbers.
 
 ## Documents
@@ -20,7 +20,9 @@
 | Device | **Raspberry Pi 4 Model B** (4 GB; 8 GB if it also runs other India jobs) | 29 Sep 2026 |
 | Operating system | Raspberry Pi OS Lite (64-bit), read-only overlay | 28 Sep 2026 |
 | Remote access | VS Code Remote-SSH over Tailscale; Raspberry Pi Connect backup | 28 Sep 2026 |
-| Still open | Where the Pi lives; keep the hourly archive; alert channel; second relay; signed uploads | See [01-relay-plan.md](./01-relay-plan.md) §11 |
+| Pi software | **Go, standard library only:** one static `linux/arm64` binary, `obos-india`, supervised by systemd (founder: "clean, simple, typed structs, first-class") | 29 Sep 2026 |
+| Pi → OBOS | **Signed ingest:** the Pi holds only an HMAC key and submits to `/api/air-quality-ingest`; OBOS validates and writes private Blob; the Blob token never leaves Vercel (register AQI-R49) | 29 Sep 2026 |
+| Still open | Where the Pi lives; keep the hourly archive; alert channel; second relay | See [01-relay-plan.md](./01-relay-plan.md) §11 |
 
 ## Related
 

@@ -1,8 +1,8 @@
 # CPCB relay plan: getting CPCB's live feed past its cloud firewall
 
-**Version:** 0.2 (plan, not built)
-**Date:** 28 September 2026
-**Status:** Planned. The founder decided on 28 Sep 2026 to build this later, **on a Raspberry Pi**. Nothing in this document is implemented yet.
+**Version:** 0.3 (design approved; being built)
+**Date:** 29 September 2026 (v0.2: 28 September)
+**Status:** Being built on `feat/pi-india-service`: the Go service `obos-india`, the signed ingest endpoint and the relay source. Design: [`docs/superpowers/specs/2026-09-29-pi-india-service-design.md`](../superpowers/specs/2026-09-29-pi-india-service-design.md); step plan: [`docs/superpowers/plans/2026-09-29-pi-india-service.md`](../superpowers/plans/2026-09-29-pi-india-service.md). v0.3 replaces v0.2's Node script writing Blob directly (§5–§7).
 **Depends on:** PR #34 (merged, `3d8bc47`), which ships the CPCB feed reader and card **dormant** behind `AIR_CPCB_FEED`.
 
 ## 1. Why a relay
@@ -15,30 +15,35 @@ OBOS's air card should show CPCB's own published station AQI. PR #34 built every
 | OpenAQ (CPCB relay) | — | reachable, but Indian government data frozen since 2026-09-24 17:30 UTC | AQI-R41; likely the same firewall (AQI-R48, hypothesis) |
 | data.gov.in (CPCB dataset) | website 503 "Backend fetch failed" | API: "There was a problem proxying the request" (500, 36 s) on 2026-09-28 | this document, §9 |
 
-CPCB's firewall admits ordinary (residential/office) connections and drops cloud data-centre ranges. A **relay** is a small, always-on machine on an ordinary Indian connection. It fetches CPCB's feed on a schedule and hands it to OBOS through storage that Vercel *can* reach. It is the only route that works today, and it delivers CPCB's exact published figures, not a model.
+CPCB's firewall admits ordinary (residential/office) connections and drops cloud data-centre ranges. A **relay** is a small, always-on machine on an ordinary Indian connection. It fetches CPCB's feed on a schedule and submits it, signed, to an OBOS endpoint that Vercel serves, which stores it where Vercel *can* read it. It is the only route that works today, and it delivers CPCB's exact published figures, not a model.
 
 ## 2. What the relay is and is not
 
 - **It is** a courier. It fetches the feed, checks that it is a feed, and uploads it unchanged. All parsing and judgement stay in OBOS's existing, audited code (`src/lib/aqi/cpcb-feed.ts`: the linear parser, `pick()`'s sub-index guard, and the freshness states).
-- **It is not** a second implementation of the AQI logic, a database, or a public service. It never serves requests.
+- **It is not** a second implementation of the AQI logic, a database, or a public service. It serves no public requests: its small API (`/healthz`, `/status`) listens on localhost only.
 - **It fails honestly.** If the relay goes down, the card ages through the states that already exist, "Not Live · N h Old" and then fallback, exactly as it would if CPCB itself stopped.
 
 ## 3. Architecture
 
 ```
- CPCB feed ──(ordinary connection)──► RELAY (India, always on)
-                                        │ every 15 min: fetch → sanity check → gzip
+ CPCB feed ──(ordinary connection)──► RELAY: obos-india on the Pi (India, always on)
+                                        │ every 15 min: fetch → shape check → gzip → sign (HMAC)
+                                        ▼
+                    POST /api/air-quality-ingest (Vercel)   verify signature and clock (±300 s),
+                                        │                   cap 1 MB / 2 MB, parseFeed, ≥ 300 stations
                                         ▼
                                Vercel Blob (private)
                                  cpcb/latest.xml.gz
-                                 cpcb/archive/YYYY/MM/DD/HH.xml.gz   (one per new lastupdate)
+                                 cpcb/archive/YYYY/MM/DD/HH.xml.gz   (IST hour of lastupdate, written once)
                                         ▲
-                                        │ read (server-side, token)
- Visitor ──► /api/air-quality (bom1) ───┘  parseFeed → pick → currentFromFeed   (unchanged)
-                     └── OpenAQ for 30-day history + fallback                   (unchanged)
+                                        │ read (server-side; the token never leaves Vercel)
+ Visitor ──► /api/air-quality (bom1) ───┘  readRelayFeed → parseFeed → pick → currentFromFeed   (unchanged after the read)
+                     └── OpenAQ for 30-day history + fallback                                 (unchanged)
 ```
 
-**Push, not pull.** The relay makes only *outbound* HTTPS requests: to CPCB, then to Vercel Blob. So it works behind any home or office router, needs no open ports and no fixed IP, and exposes nothing to the internet.
+**Push, not pull.** The relay makes only *outbound* HTTPS requests: to CPCB, then to OBOS's ingest endpoint. So it works behind any home or office router, needs no open ports and no fixed IP, and exposes nothing to the internet.
+
+**The Pi never writes storage (design D2).** It holds one secret, `RELAY_HMAC_KEY`, which can do nothing but submit a feed. OBOS verifies the signature, then judges the feed with its own audited parser, and only then writes private Vercel Blob. The Blob token never leaves Vercel. Why: a Pi holding a Blob read-write token (v0.2) could, if stolen, overwrite `latest` with anything and delete the archive; with the key it can only submit something that already passes OBOS's parser, and archive files are write-once (register AQI-R49).
 
 **Why Vercel Blob.**
 - It is Vercel-native and one click to connect.
@@ -47,7 +52,7 @@ CPCB's firewall admits ordinary (residential/office) connections and drops cloud
 
 Alternatives considered:
 - **GitHub Gist or repo commits:** public, and they trigger deploys. Rejected.
-- **A custom upload endpoint on `/api`:** more code and a public write surface. Kept as the fallback if Blob is unsuitable.
+- **The relay writing Blob directly** (v0.2): puts a storage credential on a device in an office. Replaced by the signed ingest endpoint.
 
 ## 4. The relay machine
 
@@ -63,62 +68,57 @@ Alternatives considered:
 
 The chosen device (a Raspberry Pi on Raspberry Pi OS Lite), its shopping list and the OS set-up are in [02-hardware-and-os.md](./02-hardware-and-os.md). Remote access from a Mac is in [03-remote-access.md](./03-remote-access.md).
 
-## 5. Relay behaviour
+## 5. Relay behaviour (the Go service `obos-india`)
 
-1. A **timer every 15 minutes** (systemd timer on the Pi; launchd on a Mac). CPCB updates hourly and appears within about 10 minutes of the IST hour (AQI-R47). Polling every 15 minutes means OBOS sees each update at most about 25 minutes late, well inside the 2 h "Live" rule.
-2. **Fetch** `https://airquality.cpcb.gov.in/caaqms/rss_feed` with a 30 s timeout and the identifying User-Agent `delta-climate-research-relay/1.0 (https://deltaclimate.earth)`.
-3. **Sanity check before uploading**, rejecting and logging anything that fails. This is cheap and dumb on purpose; the real validation happens in OBOS.
+One static Go binary (standard library only, `linux/arm64`), built on the Mac and copied to the Pi; the Pi needs no toolchain. systemd runs `obos-india serve` (`Type=notify`, watchdog, restart always). Code: `pi/`; runbook: `pi/deploy/README.md`.
+
+1. **Schedule.** An internal ticker, every 15 minutes (`RELAY_INTERVAL`, minimum 5 min). CPCB updates hourly and appears within about 10 minutes of the IST hour (AQI-R47), so OBOS sees each update at most about 25 minutes late, well inside the 2 h "Live" rule. The first run waits (up to 10 min) for a synchronised clock: a Pi has no clock battery.
+2. **Fetch** `https://airquality.cpcb.gov.in/caaqms/rss_feed` with a 30 s timeout, a 2 MB cap enforced while reading, and the User-Agent `delta-climate-research-relay/<version> (+https://deltaclimate.earth)`.
+3. **Shape check before submitting** (`cpcb.Check`). Cheap and dumb on purpose; the real validation happens in OBOS:
    - HTTP 200;
-   - body under 2 MB;
-   - contains `<AqIndex`;
+   - at most 2 MB;
+   - contains `<AqIndex` and ends with `</AqIndex>` (not truncated);
    - at least 300 `<Station ` elements;
-   - exactly one distinct `lastupdate`.
-4. **Upload only when `lastupdate` changed** since the last successful upload (kept in a small state file):
-   - overwrite `cpcb/latest.xml.gz`;
-   - write `cpcb/archive/YYYY/MM/DD/HH.xml.gz`, keyed by the feed's IST `lastupdate`, never overwriting an existing file.
-   - Both uploads are **gzip** (about 43 KB each; the raw feed is about 360 KB).
-5. **Heartbeat.** After every run, success or not, write `cpcb/relay-status.json` with `{ relay_id, ran_at, last_ok_at, last_error, lastupdate, stations }`. OBOS can then tell "relay down" apart from "CPCB not updating".
-6. **Language: Node (TypeScript, one file).** Node matches the repo's toolchain, and the sanity check can import the constants it needs from `src/lib/aqi/cpcb-feed.ts` (`FEED_URL`, `FEED_MAX_BYTES`) so they cannot drift. It lives in `relay/cpcb-relay.ts` and runs as `node --experimental-strip-types relay/cpcb-relay.ts`. A Python version would also be acceptable, provided it passes strict mypy per repo rules.
+   - exactly one distinct `lastupdate`, a real IST date and time.
+4. **Submit only when `lastupdate` changed** since the last *submitted* feed. The body is the feed's XML, gzipped (about 43 KB), signed and POSTed to `/api/air-quality-ingest` with a 30 s timeout (the contract is in §6). A 4xx is `rejected`; a 5xx or network failure is `submit_failed` and is retried at the next tick, never in a loop.
+5. **State in memory only.** After a restart the relay submits the current feed once; OBOS answers `duplicate`. This suits the read-only overlay.
+6. **Heartbeat.** After every run, a ping to `HEALTHCHECK_URL` (healthchecks.io): success to the URL, failure to URL + `/fail`. One log line per run to journald; no secret is ever logged. `GET http://127.0.0.1:8787/status` shows the relay state and the Pi's temperature, free disk, clock sync and uptime.
+7. **`obos-india doctor`** prints ✅/❌ for: config, clock sync, CPCB reachable, OBOS reachable with the key accepted (a signed `ping`), disk ≥ 20% free, CPU < 75 °C, service active.
 
-## 6. OBOS changes (small)
+## 6. OBOS changes
 
-The whole card, parser and state machine already exist. Only the **source of the XML** changes.
+The whole card, parser and state machine already existed (PR #34). The relay adds one endpoint and one source.
 
-1. **A source switch.** A new env var selects where the XML comes from:
-   - `AIR_CPCB_SOURCE=relay`: read the latest relay file from Vercel Blob;
-   - `AIR_CPCB_SOURCE=direct`: fetch CPCB's feed directly, as today, for local development.
-
-   `AIR_CPCB_FEED=on` stays the master switch. `fetchFeed()` gains a `source` option; everything after it (`parseFeed`, `pick`, `currentFromFeed`, the caches) is untouched.
-2. **Reading from Blob.**
-   - Read with `@vercel/blob` (a new dependency) using a **read** token, or a private download URL.
-   - Send it through the same 8 s timeout, 2 MB cap, gunzip, and `parseFeed`.
-   - Freshness comes from the feed's own `lastupdate`, as now.
-3. **Relay-down wording.** When the relay heartbeat is older than 2 h and the feed is stale, the fallback line stays neutral, as today ("no usable current CPCB figure"). The team gets alerted instead (§7). No new UI.
-4. **Tests.** They mirror the existing suites, test-first with mutation proofs:
-   - relay source reads and parses the fixture;
-   - a stale relay file ages correctly;
-   - a missing, corrupt or oversize blob falls back;
-   - `AIR_CPCB_SOURCE` unset or unknown leaves the feed off;
-   - the relay's own sanity check rejects each bad input.
-5. **Pre-flight probe (mandatory, per AQI-R48).** Before any release, run a Preview-only probe that reads the Blob from Vercel `bom1`. Also run the relay's own fetch *on the relay machine* and confirm 200 and 480+ stations. Never assume reachability from a development Mac.
+1. **The signed ingest endpoint** `POST /api/air-quality-ingest` (`api/air-quality-ingest.ts`):
+   ```
+   X-OBOS-Kind:      cpcb-feed | ping
+   X-OBOS-Timestamp: <unix seconds>
+   X-OBOS-Signature: v1=<hex HMAC-SHA256(RELAY_HMAC_KEY, "<timestamp>.<hex SHA-256(body)>")>
+   body:             gzip(CPCB XML, unchanged)   (empty for ping)
+   ```
+   - 503 when `RELAY_HMAC_KEY` is unset or not 32+ bytes of hex (closed by default); 401 for a missing or wrong signature or a clock more than 300 s off; 413 above 1 MB, or above 2 MB inflated; 422 when `parseFeed` refuses it, it has fewer than 300 stations or more than one `lastupdate`, or it is more than 15 min ahead or 7 days old.
+   - A valid `ping` is 204 and stores nothing (the doctor's end-to-end key check).
+   - Otherwise the archive file is written if absent (`duplicate` if present, and `latest` is left alone), then `latest`: `200 {"stored":"new"|"duplicate","lastupdate","stations"}`.
+   - The Go and TypeScript signers are proven identical by `tests/fixtures/pi/hmac-vectors.json`, generated independently by Python.
+2. **The source switch.** `AIR_CPCB_SOURCE=relay` (exactly) makes `feedFor` call `readRelayFeed`: `getLatest` from private Blob (uncached, 8 s), gunzip under the same 2 MB cap, `parseFeed`. Anything else is `direct` (CPCB itself, for development). `AIR_CPCB_FEED=on` stays the master switch. Everything after the read (`pick`, `currentFromFeed`, the caches, the negative cache, the fallback) is untouched.
+3. **Freshness** comes only from the feed's own `lastupdate`. A dead relay therefore ages the card honestly: "Not Live · N h Old", then fallback. No new UI.
+4. **Tests,** test-first with mutation proofs: every ingest rejection path, duplicate versus new, the caps, the shared vectors, the relay source's read and fallbacks, and `feedSource` exact-match.
+5. **Pre-flight probe (mandatory, per AQI-R48).** Before production, a Preview with a Blob store, `RELAY_HMAC_KEY`, `AIR_CPCB_SOURCE=relay` and `AIR_CPCB_FEED=on` must show Ballygunge live from CPCB, verified with `vercel curl`. Run the relay's own fetch on the relay machine and confirm 200 and 480+ stations; never assume reachability from a development Mac.
 
 ## 7. Operations
 
 - **Secrets.**
-  - The relay holds a **write-only-scoped** Blob token (`BLOB_READ_WRITE_TOKEN` for a store used only by the relay).
-  - Vercel holds the read side.
-  - Neither goes in the repo or in logs.
-  - Rotate the token if the device is lost.
-- **Tampering.** Someone with the relay token could upload a fake feed. Mitigations:
-  - OBOS still applies every guard: the AQI must equal the largest sub-index, values must be ≤ 500, the station must be the exact name within 100 m, and the date must be possible.
-  - The archive makes any tampering auditable.
-  - Optional later: sign each upload with an HMAC key held only by the relay and Vercel.
-- **Monitoring.** Free choices:
-  - the relay pings **healthchecks.io** on each successful run; a missed ping for more than 2 h emails the team;
-  - or a Vercel Cron job reads `relay-status.json` hourly and alerts when it is stale.
-- **Power and network.** A small UPS on the Pi. The Pi reboots straight into the timer. An outage only ages the card; it never shows a wrong number.
-- **Redundancy (optional).** A second relay at another site, with its own `relay_id`. Both write, and each upload happens only when `lastupdate` is newer, so the two are harmless together.
-- **Updates.** The relay script is versioned in the repo (`relay/`) and deployed by `git pull` plus a restart. Pin the Node LTS version.
+  - The relay holds only `RELAY_HMAC_KEY` (32+ random bytes, hex), in `/etc/obos-india/env` (0640 root:obos). Vercel holds the same key (Production and Preview) and the Blob token, which never leaves Vercel.
+  - Neither goes in the repo or in logs. The healthchecks.io URL is treated as a secret too.
+  - Rotate the key if the device is lost: `pi/deploy/README.md` §5 (about 2 minutes; a Vercel env change needs a redeploy).
+- **Tampering.** Someone with the key could submit a fake feed. Mitigations:
+  - OBOS parses every submission before storing it: at least 300 stations, one `lastupdate`, not in the future, not older than 7 days.
+  - OBOS still applies every guard when serving: the AQI must equal the largest sub-index, values must be ≤ 500, the station must be the exact name within 100 m, and the date must be possible.
+  - Archive files are write-once, so an hour already stored cannot be replaced, and the archive makes any tampering auditable.
+- **Monitoring.** The relay pings **healthchecks.io** after every run (success, or `/fail`); a missed ping for more than 2 h emails the team. On the Pi, `GET http://127.0.0.1:8787/status` and `obos-india doctor` show the rest.
+- **Power and network.** A small UPS on the Pi. The Pi reboots straight into the service. An outage only ages the card; it never shows a wrong number.
+- **Redundancy (optional).** A second relay at another site, with its own key or the same one. Both submit; OBOS stores each IST hour once and answers the second `duplicate`, so the two are harmless together.
+- **Updates.** The service is versioned in the repo (`pi/`). Build a new binary on the Mac (`make -C pi build`), copy it over Tailscale, and re-run `sudo bash setup.sh ./obos-india`, which keeps the existing settings.
 
 ## 8. The archive becomes history
 
@@ -139,7 +139,7 @@ If it recovers and the founder gets a key, it could replace the relay with no ha
 
 ## 10. Implementation outline
 
-These are the tasks for a later subagent-driven build. A full step-level plan will be written when the work is started.
+Superseded for steps 2 and 3 by the step plan [`docs/superpowers/plans/2026-09-29-pi-india-service.md`](../superpowers/plans/2026-09-29-pi-india-service.md) (the Go service replaces `relay/cpcb-relay.ts`; the signed ingest replaces direct Blob uploads). The outline stays as the order of work.
 
 1. **Pre-flight (no code).**
    - Buy and set up the Pi ([02-hardware-and-os.md](./02-hardware-and-os.md)); set up remote access ([03-remote-access.md](./03-remote-access.md)).
@@ -160,7 +160,7 @@ These are the tasks for a later subagent-driven build. A full step-level plan wi
 | 2 | Keep the hourly archive? | Yes: it seeds the PostgreSQL history |
 | 3 | Alerting channel | healthchecks.io email to the team |
 | 4 | Second relay for redundancy? | Not at first |
-| 5 | Sign uploads (HMAC)? | Not at first; the OBOS-side guards and the archive suffice |
+| 5 | Sign uploads (HMAC)? | **Decided 2026-09-29: yes.** The Pi submits signed feeds to OBOS and never holds a storage credential (spec D2, register AQI-R49) |
 | 6 | Remote access from the Mac | **Decided 2026-09-28: VS Code Remote-SSH over Tailscale**, with Raspberry Pi Connect as the browser backup ([03-remote-access.md](./03-remote-access.md)) |
 
 ## 12. References
