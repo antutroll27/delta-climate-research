@@ -1,6 +1,6 @@
-# CPCB relay: getting CPCB's live feed past its cloud firewall
+# CPCB relay plan: getting CPCB's live feed past its cloud firewall
 
-**Version:** 0.1 (plan, not built)
+**Version:** 0.2 (plan, not built)
 **Date:** 28 September 2026
 **Status:** Planned. The founder decided on 28 Sep 2026 to build this later, **on a Raspberry Pi**. Nothing in this document is implemented yet.
 **Depends on:** PR #34 (merged, `3d8bc47`), which ships the CPCB feed reader and card **dormant** behind `AIR_CPCB_FEED`.
@@ -61,38 +61,7 @@ Alternatives considered:
 
 **Location.** Anywhere in India on an ordinary ISP (Jio, Airtel, ACT, BSNL and so on). A second relay at a different site is optional redundancy (§7).
 
-### 4.1 Shopping list (Raspberry Pi, decided 2026-09-28)
-
-| Item | Why | Approx. (INR) |
-|---|---|---|
-| Raspberry Pi 5 (4 GB), or Pi 4 (2–4 GB) | The relay; 4 GB is ample | 5,000–7,000 |
-| Official USB-C power supply (27 W for Pi 5) | Under-powered Pis corrupt their storage | 1,000–1,500 |
-| 32–64 GB microSD, A2 class (or a small USB SSD) | Raspberry Pi OS Lite; an SSD survives years of writes better | 500–2,500 |
-| Case with a fan or heatsink | Indian summers; keeps it from throttling | 500–1,000 |
-| Small DC mini-UPS for 5 V, or a UPS HAT | Rides through power cuts; the router needs one too | 1,000–2,500 |
-| Ethernet cable to the router | More reliable than Wi-Fi | 100–300 |
-
-The software is free: Raspberry Pi OS Lite, Node LTS, and the relay script from `relay/`.
-
-### 4.2 Operating system: Raspberry Pi OS Lite (decided 2026-09-28)
-
-Considered and not chosen:
-- **balenaOS:** revisit if we run two or more relays, or one nobody can reach physically;
-- **DietPi, Alpine (RAM mode), Ubuntu Server:** no real gain for one relay.
-
-Set-up:
-1. **Raspberry Pi OS Lite (64-bit)**, flashed with Raspberry Pi Imager.
-   - Set the hostname, a non-default user, SSH keys only (no password login), and the Wi-Fi country.
-   - Use Ethernet, not Wi-Fi, for the relay.
-2. **Node LTS**, from the official Node binaries or NodeSource, with the version pinned. The relay script lives in `relay/`, deployed by `git pull`.
-3. **Relay timer:** a systemd `cpcb-relay.service` + `cpcb-relay.timer`, run every 15 min with `Persistent=true`, as a dedicated unprivileged user.
-4. **Tailscale** for remote SSH. It needs no router port-forwarding, and SSH is exposed only on the tailnet.
-5. **`unattended-upgrades`** for security patches, plus a weekly reboot window. Pick a quiet hour, not on the IST hour when CPCB updates.
-6. **Read-only overlay** (`raspi-config` → Performance → Overlay FS), switched on last, once everything works.
-   - It protects the card from wear and from power cuts.
-   - The relay's small state file (the last uploaded `lastupdate`) then lives in RAM. After a reboot the relay simply re-uploads the current feed once. That is harmless: archive files are never overwritten, and `latest` is idempotent.
-   - To change anything later: turn the overlay off, reboot, change, turn it back on.
-7. **Watchdog:** enable the hardware watchdog, so a hung Pi reboots itself.
+The chosen device (a Raspberry Pi on Raspberry Pi OS Lite), its shopping list and the OS set-up are in [02-hardware-and-os.md](./02-hardware-and-os.md). Remote access from a Mac is in [03-remote-access.md](./03-remote-access.md).
 
 ## 5. Relay behaviour
 
@@ -173,7 +142,7 @@ If it recovers and the founder gets a key, it could replace the relay with no ha
 These are the tasks for a later subagent-driven build. A full step-level plan will be written when the work is started.
 
 1. **Pre-flight (no code).**
-   - Choose and set up the relay machine.
+   - Buy and set up the Pi ([02-hardware-and-os.md](./02-hardware-and-os.md)); set up remote access ([03-remote-access.md](./03-remote-access.md)).
    - Run the fetch on it: expect 200 and 480+ stations.
    - Connect a Vercel Blob store; issue the tokens.
 2. **Relay script** in `relay/cpcb-relay.ts`: fetch, sanity check, change detection, gzip upload of `latest` + `archive`, heartbeat. Unit tests with fake fetch and fake Blob. Timer units for systemd and launchd in `relay/`.
@@ -181,7 +150,7 @@ These are the tasks for a later subagent-driven build. A full step-level plan wi
 4. **Trial run.** Run the relay on the founder's Mac for 24 h, then point a Preview at it with `AIR_CPCB_FEED=on` and `AIR_CPCB_SOURCE=relay`. Verify Ballygunge is live from CPCB on the Preview, through `vercel curl`.
 5. **Production relay.** Install on the Pi. Set up the healthchecks.io ping. Let it run 48 h, then check `relay-status.json` and the archive for hourly files with no gaps.
 6. **Switch on.** Set `AIR_CPCB_FEED=on` and `AIR_CPCB_SOURCE=relay` for Production. Verify on deltaclimate.earth. Rollback is unsetting `AIR_CPCB_FEED`.
-7. **Docs.** Add register rows for the relay evidence; update the README "Current state".
+7. **Docs.** Add register rows for the relay evidence; update this folder's README and `docs/AQI/README.md` "Current state".
 
 ## 11. Decisions for the founder (when work starts)
 
@@ -192,6 +161,7 @@ These are the tasks for a later subagent-driven build. A full step-level plan wi
 | 3 | Alerting channel | healthchecks.io email to the team |
 | 4 | Second relay for redundancy? | Not at first |
 | 5 | Sign uploads (HMAC)? | Not at first; the OBOS-side guards and the archive suffice |
+| 6 | Remote access from the Mac | **Decided 2026-09-28: VS Code Remote-SSH over Tailscale**, with Raspberry Pi Connect as the browser backup ([03-remote-access.md](./03-remote-access.md)) |
 
 ## 12. References
 
