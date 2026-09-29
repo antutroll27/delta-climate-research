@@ -258,6 +258,17 @@ export async function readRelayFeed(store: FeedStore): Promise<FeedStation[]> {
   return parseFeed(xml);
 }
 
+/**
+ * A relayed feed must be live: older than LIVE_H, it is a failure, so the card falls
+ * back to OBOS's own OpenAQ reading instead of showing CPCB's value as stale (founder,
+ * 2026-09-29: a dead relay hands over after a few hours, not after 7 days).
+ */
+export function requireLive(stations: FeedStation[], now: Date): FeedStation[] {
+  const age = now.getTime() - Date.parse(stations[0]?.published_at ?? '');
+  if (!(age <= LIVE_H * HOUR_MS)) throw new FeedError('relay feed not live');
+  return stations;
+}
+
 const HOUR_MS = 3_600_000, DAY_MS = 86_400_000, FUTURE_SLACK_MS = 15 * 60_000;
 
 /** Why CPCB published no AQI, from what its own fields show. Plain sentences: the card prints the first. */

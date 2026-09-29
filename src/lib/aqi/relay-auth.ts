@@ -21,7 +21,8 @@ export type Verdict =
   | { ok: false; reason: 'no_key' | 'no_signature' | 'bad_timestamp' | 'skew' | 'mismatch' };
 
 const KEY_HEX = /^(?:[0-9a-fA-F]{2}){32,}$/;
-const TS = /^\d{1,12}$/;
+/* The decimal integer exactly as signed: no sign, no leading zero (the MAC covers Number(ts)). */
+const TS = /^(?:0|[1-9]\d{0,11})$/;
 const SIG = /^v1=([0-9a-f]{64})$/;
 
 /** True when keyHex is a usable key: hex, at least 32 bytes. */

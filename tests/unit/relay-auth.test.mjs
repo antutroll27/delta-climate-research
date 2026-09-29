@@ -56,6 +56,8 @@ test('missing or malformed headers are refused before any MAC is computed', () =
   assert.deepEqual(verifyV1(KEY, headers(TS, 'v2=' + good.slice(3)), BODY, NOW), { ok: false, reason: 'no_signature' });
   assert.deepEqual(verifyV1(KEY, headers('1.5e9', good), BODY, NOW), { ok: false, reason: 'bad_timestamp' });
   assert.deepEqual(verifyV1(KEY, headers('', good), BODY, NOW), { ok: false, reason: 'bad_timestamp' });
+  assert.deepEqual(verifyV1(KEY, headers('0' + TS, good), BODY, NOW), { ok: false, reason: 'bad_timestamp' },
+    'a leading zero: the MAC covers the decimal integer, so the header must be exactly that');
 });
 
 test('a key that is not at least 32 bytes of hex is no key at all', () => {

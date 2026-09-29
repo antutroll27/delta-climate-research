@@ -179,3 +179,52 @@ test('the ingest function declares maxDuration 30', async () => {
   const mod = await import('../../api/air-quality-ingest.ts');
   assert.equal(mod.config?.maxDuration, 30);
 });
+
+const FEED_06 = feedOf(300, '27-09-2026 06:00:00'); // NOW is 06:00 IST
+
+test('latest only moves forward: a later hour replaces it, an older hour is archived but never replaces it', async () => {
+  const d = deps();
+  await call(req(FEED_06), d);
+  const r = await call(req(FEED_GZ, { ts: NOW.getTime() / 1000 + 60 }), d); // 05:00 IST arrives late
+  assert.equal(r.status, 200);
+  assert.equal((await r.json()).stored, 'new', 'the older hour is still archived');
+  assert.ok(d.store.files.has(ARCHIVE));
+  assert.deepEqual(Buffer.from(d.store.files.get(LATEST_PATH)), Buffer.from(FEED_06), 'latest stays at 06:00');
+
+  const e = deps();
+  await call(req(FEED_GZ), e);
+  await call(req(FEED_06, { ts: NOW.getTime() / 1000 + 60 }), e);
+  assert.deepEqual(Buffer.from(e.store.files.get(LATEST_PATH)), Buffer.from(FEED_06), 'a later hour replaces latest');
+});
+
+test('an unreadable latest is replaced, so a corrupt blob heals at the next feed', async () => {
+  const d = deps();
+  d.store.files.set(LATEST_PATH, new Uint8Array([1, 2, 3]));
+  await call(req(FEED_GZ), d);
+  assert.deepEqual(Buffer.from(d.store.files.get(LATEST_PATH)), FEED_GZ);
+});
+
+test('a store failure logs its error class only, never its message', async () => {
+  class BlobStoreSuspendedError extends Error {}
+  const broken = { getLatest: async () => null, putLatest: async () => {},
+    putArchive: async () => { throw new BlobStoreSuspendedError('store sk_secret_details'); } };
+  const lines = [];
+  const w = console.warn, i = console.info;
+  console.warn = console.info = (...a) => lines.push(a.join(' '));
+  try {
+    assert.equal((await handleIngest(req(FEED_GZ), deps({ store: broken }))).status, 503);
+  } finally { console.warn = w; console.info = i; }
+  const out = lines.join('\n');
+  assert.match(out, /BlobStoreSuspendedError/);
+  assert.doesNotMatch(out, /sk_secret_details/);
+});
+
+test('a malformed signature header is refused before the body is read', async () => {
+  let pulled = false;
+  // highWaterMark 0: the stream is pulled only when someone reads it, not when it is built.
+  const body = new ReadableStream({ pull() { pulled = true; throw new Error('the body must not be read'); } }, { highWaterMark: 0 });
+  const r = new Request(URL_, { method: 'POST', body, duplex: 'half', headers: {
+    'X-OBOS-Kind': 'cpcb-feed', 'X-OBOS-Timestamp': String(NOW.getTime() / 1000), 'X-OBOS-Signature': 'v1=nothex' } });
+  assert.equal((await call(r)).status, 401);
+  assert.equal(pulled, false);
+});

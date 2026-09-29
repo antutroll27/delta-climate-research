@@ -8,13 +8,18 @@
  *
  * Checks, cheapest first:
  *   405 not POST · 400 unknown X-OBOS-Kind · 503 RELAY_HMAC_KEY unset or malformed (closed by default)
- *   401 signature header missing/malformed, timestamp > 300 s off   (before the body is read)
+ *   401 signature header missing/malformed, timestamp > 300 s off   (before the body is read; this
+ *       stops malformed and stale requests only: a well-formed forgery costs one capped 1 MB read)
  *   413 body > 1 MB (Content-Length or while reading)
  *   401 signature does not match the body as sent
  *   204 a valid ping (stores nothing) · 400 a ping with a body
  *   413 inflates past 2 MB · 400 not gzip
  *   422 not a feed, < 300 stations, more than one lastupdate, lastupdate > 15 min ahead or > 7 days old
  *   200 {"stored":"new"|"duplicate","lastupdate","stations"} · 503 the store failed (the Pi retries next tick)
+ *
+ * Latest only moves forward: a feed replaces it only when its lastupdate is later than the
+ * stored latest's (an absent or unreadable latest is replaced), so a late or replayed older
+ * hour is archived but never shown as current.
  *
  * A duplicate never rewrites latest. If the archive put succeeds and the latest put fails
  * (503), the Pi's retry comes back 'duplicate', so latest can lag by up to one hour until
@@ -24,7 +29,7 @@
  * Every response is Cache-Control: no-store.
  */
 import { gunzipSync } from 'node:zlib';
-import { FEED_MAX_BYTES, FeedError, parseFeed, type FeedStation } from '../src/lib/aqi/cpcb-feed.ts';
+import { FEED_MAX_BYTES, FeedError, parseFeed, readRelayFeed, type FeedStation } from '../src/lib/aqi/cpcb-feed.ts';
 import { readSigned, validKey, verifyV1 } from '../src/lib/aqi/relay-auth.ts';
 import { archivePath, blobStore, RELAY_MAX_GZ_BYTES, type FeedStore } from '../src/lib/aqi/relay-store.ts';
 
@@ -113,9 +118,12 @@ export async function handleIngest(request: Request, d: IngestDeps): Promise<Res
       console.info('air-quality-ingest duplicate', lastupdate);
       return answer(200, { stored: 'duplicate', lastupdate, stations: stations.length });
     }
-    await d.store.putLatest(body);
-  } catch {
-    return refuse(503, 'store_failed'); // the Blob error may carry store details: not logged
+    if (await laterThanLatest(d.store, lastupdate)) await d.store.putLatest(body);
+    else console.info('air-quality-ingest archived; latest is newer', lastupdate);
+  } catch (e) {
+    /* The class names the failure (a suspended store, a bad token, a timeout); the message may carry store details. */
+    console.warn('air-quality-ingest store failed', e instanceof Error ? e.constructor.name : typeof e);
+    return refuse(503, 'store_failed');
   }
   console.info('air-quality-ingest stored', lastupdate, stations.length);
   return answer(200, { stored: 'new', lastupdate, stations: stations.length });
@@ -124,4 +132,15 @@ export async function handleIngest(request: Request, d: IngestDeps): Promise<Res
 /** Vercel's fetch-style entry point. Every other method is answered 405 by handleIngest's first check. */
 export async function POST(request: Request): Promise<Response> {
   return handleIngest(request, { key: process.env.RELAY_HMAC_KEY ?? '', store: blobStore(), now: () => new Date() });
+}
+
+/** Whether `lastupdate` is later than the stored latest's. An absent or unreadable latest is replaced. */
+async function laterThanLatest(store: FeedStore, lastupdate: string): Promise<boolean> {
+  let current: string | undefined;
+  try {
+    current = (await readRelayFeed(store))[0]?.published_at;
+  } catch (e) {
+    if (!(e instanceof FeedError)) throw e;
+  }
+  return current === undefined || Date.parse(lastupdate) > Date.parse(current);
 }

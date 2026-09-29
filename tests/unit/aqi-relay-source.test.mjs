@@ -64,9 +64,13 @@ test('relay source: a missing, corrupt or oversize blob falls back to OBOS, with
   }
 });
 
-test('relay source ages honestly: the stored feed 2 h + 1 min old is stale, never re-stamped', async () => {
-  const r = await get(relayDeps(storeWith(FEED_GZ), counting(), { now: () => new Date('2026-09-27T01:31:00Z') }));
-  assert.deepEqual({ state: r.body.current.state, age: r.body.current.age_h, origin: r.body.current.result.origin }, { state: 'stale', age: 2, origin: 'cpcb' });
+test('relay source: a stored feed older than 2 h falls back to OBOS (founder 2026-09-29), never shown stale', async () => {
+  const live = await get(relayDeps(storeWith(FEED_GZ), counting(), { now: () => new Date('2026-09-27T01:30:00Z') }));
+  assert.deepEqual({ state: live.body.current.state, origin: live.body.current.result.origin }, { state: 'live', origin: 'cpcb' }, 'exactly 2 h is still live');
+  const c = counting();
+  const old = await quiet(() => get(relayDeps(storeWith(FEED_GZ), c, { now: () => new Date('2026-09-27T01:31:00Z') })));
+  assert.equal(old.body.current.result.origin, 'obos', '2 h + 1 min: a dead relay hands over to OpenAQ');
+  assert.equal(c.cpcb, 0);
 });
 
 test('relay source with the feed switched off: the store is never read', async () => {
