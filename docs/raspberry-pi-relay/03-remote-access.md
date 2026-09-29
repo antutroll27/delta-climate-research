@@ -6,7 +6,7 @@
 
 ## 1. What you will and won't see
 
-Raspberry Pi OS **Lite** has **no desktop**; it is a text terminal. That is deliberate: it is lighter and more reliable for an always-on relay. So there is no graphical "screen" to mirror. Instead, the Mac works on the Pi's files and terminal directly, which is everything this job needs: editing the relay script, reading logs, restarting the service.
+Raspberry Pi OS **Lite** has **no desktop**; it is a text terminal. That is deliberate: it is lighter and more reliable for an always-on relay. So there is no graphical "screen" to mirror. Instead, the Mac works on the Pi's files and terminal directly, which is everything this job needs: editing the config, reading logs, restarting the service.
 
 ## 2. The chosen set-up: VS Code Remote-SSH over Tailscale
 
@@ -34,17 +34,17 @@ Raspberry Pi OS **Lite** has **no desktop**; it is a text terminal. That is deli
 3. **VS Code**
    - Install the **Remote - SSH** extension.
    - Open the Command Palette and choose "Remote-SSH: Connect to Host…", then `<user>@obos-relay-1`.
-   - Open the relay folder; the terminal inside VS Code now runs on the Pi.
+   - Open the `~/obos-india` folder; the terminal inside VS Code now runs on the Pi.
 4. **Raspberry Pi Connect (backup)**
    - On the Pi, run `sudo apt install rpi-connect-lite`, then `rpi-connect signin`.
    - It then appears at connect.raspberrypi.com under "Remote shell".
 
 ## 4. If you ever want the Pi's desktop in a window
 
-That needs **Raspberry Pi OS with desktop** instead of Lite, plus **Raspberry Pi Connect screen sharing** (free) or VNC. A Pi 5 with 4 GB copes, but the relay then carries a desktop it never uses. It is not recommended for this job.
+That needs **Raspberry Pi OS with desktop** instead of Lite, plus **Raspberry Pi Connect screen sharing** (free) or VNC. A Pi 4 with 4 GB copes, but the relay then carries a desktop it never uses. It is not recommended for this job.
 
 ## 5. Rehearse on the Mac before the Pi arrives (optional)
 
-**UTM** (free, Apple Silicon) can run Raspberry Pi OS (Debian arm64) as a real VM on the Mac. It is good for practising the set-up and testing the relay script.
+**UTM** (free, Apple Silicon) can run Raspberry Pi OS (Debian arm64) as a real VM on the Mac. It is good for practising the set-up and testing the relay service.
 
 Caveat: the VM uses the Mac's internet connection. It will reach CPCB, so it proves the software but does not replace the always-on Pi.

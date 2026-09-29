@@ -16,7 +16,7 @@ ETC=/etc/obos-india
 ENV_FILE="$ETC/env"
 UNITS=/etc/systemd/system
 BOOT_CONFIG=/boot/firmware/config.txt
-SYSTEM_CONF=/etc/systemd/system.conf
+WATCHDOG_CONF=/etc/systemd/system.conf.d/obos-india-watchdog.conf
 AUTO_UPGRADES=/etc/apt/apt.conf.d/20auto-upgrades
 
 say() { printf '==> %s\n' "$*"; }
@@ -42,6 +42,12 @@ append_line() {
 
 [[ $EUID -eq 0 ]] || die "run as root: sudo bash setup.sh"
 [[ -f $BIN_SRC ]] || die "binary not found: $BIN_SRC"
+# With the read-only overlay on, everything below would vanish at the next reboot
+# (the weekly one at the latest), silently undoing an upgrade or a key rotation.
+if [[ $(findmnt -no FSTYPE / 2>/dev/null || true) == overlay ]]; then
+  die "the read-only overlay is on, so nothing installed now would survive a reboot.
+Turn it off first: sudo raspi-config nonint disable_overlayfs && sudo reboot, then re-run setup.sh"
+fi
 
 # install_file SRC DST MODE: copies only when different; reports either way.
 install_file() {
@@ -87,11 +93,16 @@ else
   say "RELAY_HMAC_KEY written"
 fi
 if has HEALTHCHECK_URL; then
-  say "HEALTHCHECK_URL kept"
+  say "HEALTHCHECK_URL kept (to change it: sudo sed -i '/^HEALTHCHECK_URL=/d' $ENV_FILE, then re-run)"
 else
-  # Hidden too: anyone holding the ping URL can fake the Pi's health.
-  read -r -s -p "HEALTHCHECK_URL (the healthchecks.io ping URL; empty for none; input hidden): " hc
-  echo
+  # Hidden too: anyone holding the ping URL can fake the Pi's health. Checked here,
+  # because a typo would stop the service and a re-run keeps what is written.
+  while :; do
+    read -r -s -p "HEALTHCHECK_URL (the healthchecks.io ping URL; Enter for none; input hidden): " hc
+    echo
+    [[ -z $hc || $hc =~ ^https://[^[:space:]/]+/[^[:space:]]+$ ]] && break
+    echo "That is not an https:// ping URL. Try again, or press Enter for none." >&2
+  done
   append_line "$ENV_FILE" "HEALTHCHECK_URL=$hc"
   unset hc
   say "HEALTHCHECK_URL written"
@@ -126,16 +137,13 @@ if [[ -f $BOOT_CONFIG ]]; then
     append_line "$BOOT_CONFIG" "dtparam=watchdog=on"
     say "added dtparam=watchdog=on to $BOOT_CONFIG (applies at the next boot)"
   fi
-  if grep -qx 'RuntimeWatchdogSec=15' "$SYSTEM_CONF"; then
-    say "RuntimeWatchdogSec=15 already set"
+  if [[ -f $WATCHDOG_CONF ]] && cmp -s "$HERE/obos-india-watchdog.conf" "$WATCHDOG_CONF"; then
+    say "$WATCHDOG_CONF unchanged"
   else
-    if grep -qE '^#?RuntimeWatchdogSec=' "$SYSTEM_CONF"; then
-      sed -i -E 's/^#?RuntimeWatchdogSec=.*/RuntimeWatchdogSec=15/' "$SYSTEM_CONF"
-    else
-      append_line "$SYSTEM_CONF" "RuntimeWatchdogSec=15"
-    fi
+    install -d -m 0755 "$(dirname "$WATCHDOG_CONF")"
+    install -m 0644 -o root -g root "$HERE/obos-india-watchdog.conf" "$WATCHDOG_CONF"
     systemctl daemon-reexec
-    say "set RuntimeWatchdogSec=15 in $SYSTEM_CONF"
+    say "installed $WATCHDOG_CONF (RuntimeWatchdogSec=15)"
   fi
 else
   say "no $BOOT_CONFIG: not a Raspberry Pi, hardware watchdog skipped"
@@ -181,5 +189,6 @@ fi
 if [[ $doctor_ok -eq 1 ]]; then
   say "done: every check passed"
 else
-  die "the doctor found a problem (see the ❌ lines above); fix it and re-run setup.sh"
+  die "the doctor found a problem (see the ❌ lines above); fix it and re-run setup.sh.
+A mistyped secret: delete its line (sudo sed -i '/^HEALTHCHECK_URL=/d' $ENV_FILE, or RELAY_HMAC_KEY) and re-run to be asked again."
 fi

@@ -56,5 +56,5 @@ Work through these in order:
    ```
    It must print `200` and about 360000. If it doesn't, this connection is blocked too, so stop and choose another site.
 5. Copy `obos-india` and `pi/deploy/` over, then run `sudo bash setup.sh ./obos-india` (`pi/deploy/README.md`).
-6. Turn on the watchdog and `unattended-upgrades`.
-7. Last, turn on the read-only overlay (`raspi-config` → Performance → Overlay FS) and reboot.
+6. `setup.sh` has already turned on the watchdog, `unattended-upgrades` and the weekly reboot.
+7. Optional, last: the read-only overlay (`setup.sh` offers it; default No). Read the trade-off with automatic updates in `pi/deploy/README.md` §7 first.

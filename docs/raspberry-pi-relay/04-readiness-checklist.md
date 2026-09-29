@@ -14,7 +14,7 @@
 | 2 | **OBOS ingest endpoint:** accepts signed submissions from the Pi, validates them with the same parser as the site, and stores them in Vercel Blob | Eng | Built on `feat/pi-india-service`; not merged |
 | 3 | **OBOS relay source:** `AIR_CPCB_SOURCE=relay` makes `/api/air-quality` read the stored feed | Eng | Built on `feat/pi-india-service`; not merged |
 | 4 | ⭐ **One-command setup** (`setup.sh`): installs the service, the weekly reboot timer, the watchdog and automatic updates, then offers the read-only mode (default No). It is idempotent, so it is safe to re-run | Eng | Built on `feat/pi-india-service`; not merged |
-| 5 | ⭐ **Health check** (`obos-india doctor`): checks the config, time sync, CPCB reachability, submission to OBOS (a signed ping), disk, temperature and that the service is active, and prints ✅ or ❌ per line. The last run is in `/status` | Eng | Built on `feat/pi-india-service`; not merged |
+| 5 | ⭐ **Health check** (`obos-india doctor`): checks the config, time sync, CPCB reachability, submission to OBOS (a signed ping), disk, temperature and that the service is active, and prints ✅ or ❌ per line. Run it with `sudo` (the config is readable only by root and the service) | Eng | Built on `feat/pi-india-service`; not merged |
 | 6 | ⭐ **Dress rehearsal** in a UTM VM on the Mac running Raspberry Pi OS: the full setup and a full day's run before the Pi exists | Eng | To do |
 | 7 | Tests, mutation proofs, an independent audit, and a Preview check before production | Eng | Tests and mutation proofs done; audit and Preview to do |
 
@@ -22,12 +22,14 @@
 
 | # | Item | Owner | Cost |
 |---|---|---|---|
-| 8 | Vercel Blob store connected to the project | Founder (1 click) | Free tier |
+| 8 | Vercel Blob store connected to the project, for **Production as well as Preview** (the Pi submits to Production) | Founder (1 click) | Free tier |
 | 9 | Tailscale account; sign in on the Mac | Founder | Free |
 | 10 | ⭐ healthchecks.io account, which emails the team if the Pi goes quiet for more than 2 h | Founder | Free |
 | 11 | Raspberry Pi Connect account (a browser backup for getting in) | Founder | Free |
 | 12 | ⭐ **Where the Pi lives**, and **who can walk over and power-cycle it** | Founder | — |
 | 13 | Optional: Cloudflare account, only needed later for public India APIs through a tunnel | Founder | Free |
+| 13a | ⭐ **Before Pi day:** the branch merged and live on deltaclimate.earth (the Pi's default target is Production; without it the doctor's OBOS line is ❌ and `setup.sh` stops) | Eng | — |
+| 13b | ⭐ **Before Pi day:** `RELAY_HMAC_KEY` set in Vercel **Production** and redeployed; the same value kept in the password manager for the Pi | Founder + Eng | — |
 
 ## 3. Hardware, including the things people forget
 
@@ -48,7 +50,7 @@
 | # | What | Covers |
 |---|---|---|
 | 23 | Hardware watchdog, plus systemd restart-on-failure | A frozen Pi or a crashed service recovers by itself |
-| 24 | Read-only overlay | A power cut cannot corrupt the SD card |
+| 24 | Read-only overlay, **offered** at the end (default No). With it on, `setup.sh` refuses to run, and updates last only until the weekly reboot (see `pi/deploy/README.md` §7) | A power cut cannot corrupt the SD card |
 | 25 | `unattended-upgrades` plus a weekly reboot at a quiet hour | Stays patched with nobody touching it |
 | 26 | ⭐ **Time-sync guard.** The Pi has no clock battery, so the service waits for a synchronised clock before its first run | A wrong clock would break the freshness checks |
 | 27 | A healthchecks.io ping after every run (success, or `/fail`) | The team hears about an outage before visitors notice |
@@ -60,7 +62,7 @@
 | Scenario | Expected behaviour |
 |---|---|
 | Power cut of 5 min | The next run after boot submits; the card never leaves "Live" |
-| Power cut of 5 h | The card ages to "Not Live · N h Old", then recovers by itself; alert after 2 h |
+| Power cut of 5 h | After 2 h the card switches to the OpenAQ reading, then returns to CPCB by itself; alert after 2 h |
 | Internet down | Same as the 5 h cut |
 | CPCB changes its feed format | The Pi's sanity check or OBOS's validation rejects it; the site falls back; an alert fires |
 | SD card dies | Swap in the spare card (or flash a new one and run `setup.sh`), back in about 15 min |
@@ -81,7 +83,7 @@
 1. Flash Raspberry Pi OS Lite (64-bit) with Raspberry Pi Imager. Set the hostname `obos-relay-1`, your user, SSH key and Wi-Fi country.
 2. Plug in Ethernet, then power.
 3. Install Tailscale and SSH in from the Mac ([03-remote-access.md](./03-remote-access.md)).
-4. Run `setup.sh`. It asks for the two secrets once.
-5. Run `obos-india doctor`. Every line should be ✅.
+4. Create the folder, copy the files and run `setup.sh` (`pi/deploy/README.md` §2–3). It asks for the two secrets once.
+5. Run `sudo obos-india doctor`. Every line should be ✅.
 6. Wait 24 h, then check that the healthchecks.io dashboard is green and the archive is filling hourly.
 7. Engineering sets `AIR_CPCB_SOURCE=relay` and `AIR_CPCB_FEED=on` on a Preview, verifies, then does the same in Production.

@@ -14,7 +14,7 @@ A Raspberry Pi 4 on an ordinary Indian connection runs one Go program, `obos-ind
 |---|---|
 | D1 | **Go, standard library only.** One module at `pi/`, separate from the heat-map `go/` module. Build with `CGO_ENABLED=0 GOOS=linux GOARCH=arm64`. No third-party modules. |
 | D2 | **The Pi submits to OBOS; it never writes storage directly.** It holds only an HMAC key, which can do nothing except submit feeds. OBOS validates every submission with its audited parser before storing anything. The Vercel Blob token never leaves Vercel. |
-| D3 | **One long-running service, `obos-india serve`.** It runs an internal scheduler (the relay every 15 min) and a small HTTP API bound to localhost and the tailnet. systemd supervises it: restart on failure, plus a watchdog via `sd_notify`. |
+| D3 | **One long-running service, `obos-india serve`.** It runs an internal scheduler (the relay every 15 min) and a small HTTP API bound to localhost only (the tailnet reaches it through `tailscale serve`). systemd supervises it: restart on failure, plus a watchdog via `sd_notify`. |
 | D4 | **Storage is Vercel Blob, private.** `cpcb/latest.xml.gz` is overwritten on each new hour. `cpcb/archive/YYYY/MM/DD/HH.xml.gz` is keyed by the feed's IST `lastupdate` and written only if absent. |
 | D5 | **The signing contract is identical in Go and TypeScript**, proven by one shared test vector file used by both test suites. |
 | D6 | **Setup is one idempotent script**, `pi/deploy/setup.sh`. The binary is built on the Mac and copied over, so the Pi needs no Go toolchain. |
@@ -50,9 +50,10 @@ body:               gzip(CPCB feed XML bytes, unchanged)
 - **Storing:**
   1. `putArchive(key, gz)` stores the file only if absent.
      - If it already exists, the answer is `200 {"stored":"duplicate", …}` and `latest` is **not** rewritten.
-     - If it is new, `putLatest(gz)` follows.
+     - If it is new, `putLatest(gz)` follows, but only when its `lastupdate` is later than the stored latest's (an absent or unreadable latest is replaced). A late or replayed older hour is archived, never shown as current.
   2. The answer is `200 {"stored":"new","lastupdate":"<ISO>","stations":<n>}`.
-- **Logging:** only the outcome and machine reason. Never the key, the signature or the body.
+- **Logging:** only the outcome and machine reason (a store failure: its error class). Never the key, the signature or the body.
+- **Timestamp:** the decimal integer exactly as signed: no sign, no leading zero.
 - **Caching:** `Cache-Control: no-store` on every response.
 
 ## 5. OBOS: the relay source
@@ -66,7 +67,7 @@ body:               gzip(CPCB feed XML bytes, unchanged)
   - `feedSource(env)` returns `'relay'` only for exactly `AIR_CPCB_SOURCE === 'relay'`; otherwise `'direct'`.
   - `feedFor` calls `readRelayFeed(store)` or `fetchFeed()` accordingly. The caching, negative cache, fallback and labels are all unchanged.
   - `AIR_CPCB_FEED=on` stays the master switch.
-- **Freshness** comes only from the feed's own `lastupdate`, which is the existing logic. A dead relay therefore ages the card honestly.
+- **Freshness** comes only from the feed's own `lastupdate`. **A relayed feed older than `LIVE_H` (2 h) is a failure** (`requireLive`; founder decision 2026-09-29), so a dead relay hands over to OBOS's own OpenAQ reading instead of showing CPCB's value as stale for up to 7 days.
 
 ## 6. The Pi program (`pi/`)
 
@@ -147,12 +148,12 @@ type State struct {         // exposed by /status; guarded by a mutex inside Job
 
 ## 7. Setup kit (`pi/deploy/setup.sh`)
 
-The script is idempotent, runs as root, and each step prints what it did:
+The script is idempotent, runs as root, refuses to run while the read-only overlay is on (nothing would survive the next reboot), and each step prints what it did:
 1. Create the system user `obos` (no login) and the directories `/etc/obos-india` (0750) and `/usr/local/bin`.
 2. Install the binary passed as `$1` (default `./obos-india`) with mode 0755. Verify it with `obos-india version`.
 3. Write `/etc/obos-india/env` (0640, root:obos), prompting only for values that are missing: `RELAY_HMAC_KEY` and `HEALTHCHECK_URL`, both hidden (the ping URL is a credential). Existing values are kept.
 4. Install and enable `obos-india.service`. It is not ordered after `time-sync.target` (see §6, Clock).
-5. Hardware watchdog: add `dtparam=watchdog=on` to `/boot/firmware/config.txt` (under an `[all]` section) and set `RuntimeWatchdogSec=15` in `/etc/systemd/system.conf`, each once.
+5. Hardware watchdog: add `dtparam=watchdog=on` to `/boot/firmware/config.txt` (under an `[all]` section) and install the drop-in `/etc/systemd/system.conf.d/obos-india-watchdog.conf` (`[Manager]` `RuntimeWatchdogSec=15`; newer images ship no `system.conf` to edit), each once.
 6. `unattended-upgrades` installed and enabled; an existing, customised `20auto-upgrades` is never overwritten (a warning is printed if it leaves updates off); a weekly reboot timer (Sunday 03:37 IST). Package lists are refreshed once before any install.
 7. Restart the service, then run `obos-india doctor`.
 8. Offer the read-only overlay last (`raspi-config nonint enable_overlayfs`). The default answer is **No** on the first install, so the rehearsal stays editable.
@@ -175,8 +176,15 @@ The script is idempotent, runs as root, and each step prints what it did:
 - **Rehearsal:**
   1. A UTM Debian arm64 VM on the Mac runs `setup.sh` and `serve` against a Preview's ingest endpoint.
   2. The Preview with `AIR_CPCB_SOURCE=relay` and `AIR_CPCB_FEED=on` shows Ballygunge live from CPCB, verified with `vercel curl`.
-  3. Drills: kill the process (it restarts), pull the network (the card ages, then recovers), rotate the key (401 until both sides match).
+  3. Drills: kill the process (it restarts), pull the network (after 2 h the card falls back to OpenAQ, then recovers), rotate the key (401 until both sides match).
 - **Gates:** `npm run check`, `typecheck`, `test:py`, `test:unit` and `build`, a real `vercel build`, `make -C pi test vet build`, and an independent audit before merge.
+
+## 8a. Known limits (audit 2026-09-29, accepted)
+
+- **The key is write power.** A holder of a leaked key can submit a well-formed fake feed stamped up to 15 min ahead and so pre-claim the coming hour: the genuine feed then answers `duplicate`. Rotating the key stops new writes but does not clean what was archived; delete a poisoned archive hour by hand.
+- **The doctor's OBOS line proves the key, not the store.** A `ping` stops before gunzip, parse and Blob, so a broken Blob token or a parser refusing every feed still shows ✅. The healthchecks.io `/fail` pings are what catch that.
+- **The clock check assumes `systemd-timesyncd`** (Raspberry Pi OS's default). With chrony the marker file never appears: the doctor shows ❌ and every start waits the full 10 min.
+- **The systemd watchdog proves the process is alive, not that the relay progresses.** Every network call is bounded (30 s, 30 s, 10 s), so a stuck run is caught by the missing healthchecks.io ping instead.
 
 ## 9. Out of scope (now)
 

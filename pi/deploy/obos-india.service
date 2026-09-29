@@ -7,7 +7,7 @@ After=network-online.target
 # Deliberately not After=time-sync.target: with NTP blocked that would hold the
 # unit forever (no READY, no /status, no /fail ping). obos-india waits for the
 # clock itself, for at most 10 minutes, then relays and alerts.
-# Never give up restarting: an outage only ages the card, a stopped service never recovers.
+# Never give up restarting: an outage only hands the card to OpenAQ, a stopped service never recovers.
 StartLimitIntervalSec=0
 
 [Service]

@@ -21,7 +21,7 @@ CPCB's firewall admits ordinary (residential/office) connections and drops cloud
 
 - **It is** a courier. It fetches the feed, checks that it is a feed, and uploads it unchanged. All parsing and judgement stay in OBOS's existing, audited code (`src/lib/aqi/cpcb-feed.ts`: the linear parser, `pick()`'s sub-index guard, and the freshness states).
 - **It is not** a second implementation of the AQI logic, a database, or a public service. It serves no public requests: its small API (`/healthz`, `/status`) listens on localhost only.
-- **It fails honestly.** If the relay goes down, the card ages through the states that already exist, "Not Live · N h Old" and then fallback, exactly as it would if CPCB itself stopped.
+- **It fails honestly.** If the relay goes down, the card switches to OBOS's own OpenAQ reading once the relayed feed is over 2 h old (founder decision, 29 Sep 2026), exactly as it does when CPCB itself is unreachable.
 
 ## 3. Architecture
 
@@ -101,7 +101,7 @@ The whole card, parser and state machine already existed (PR #34). The relay add
    - Otherwise the archive file is written if absent (`duplicate` if present, and `latest` is left alone), then `latest`: `200 {"stored":"new"|"duplicate","lastupdate","stations"}`.
    - The Go and TypeScript signers are proven identical by `tests/fixtures/pi/hmac-vectors.json`, generated independently by Python.
 2. **The source switch.** `AIR_CPCB_SOURCE=relay` (exactly) makes `feedFor` call `readRelayFeed`: `getLatest` from private Blob (uncached, 8 s), gunzip under the same 2 MB cap, `parseFeed`. Anything else is `direct` (CPCB itself, for development). `AIR_CPCB_FEED=on` stays the master switch. Everything after the read (`pick`, `currentFromFeed`, the caches, the negative cache, the fallback) is untouched.
-3. **Freshness** comes only from the feed's own `lastupdate`. A dead relay therefore ages the card honestly: "Not Live · N h Old", then fallback. No new UI.
+3. **Freshness** comes only from the feed's own `lastupdate`. A relayed feed over 2 h old counts as a failure, so the card switches to OBOS's own OpenAQ reading once the relayed feed is over 2 h old. No new UI.
 4. **Tests,** test-first with mutation proofs: every ingest rejection path, duplicate versus new, the caps, the shared vectors, the relay source's read and fallbacks, and `feedSource` exact-match.
 5. **Pre-flight probe (mandatory, per AQI-R48).** Before production, a Preview with a Blob store, `RELAY_HMAC_KEY`, `AIR_CPCB_SOURCE=relay` and `AIR_CPCB_FEED=on` must show Ballygunge live from CPCB, verified with `vercel curl`. Run the relay's own fetch on the relay machine and confirm 200 and 480+ stations; never assume reachability from a development Mac.
 
@@ -116,7 +116,7 @@ The whole card, parser and state machine already existed (PR #34). The relay add
   - OBOS still applies every guard when serving: the AQI must equal the largest sub-index, values must be ≤ 500, the station must be the exact name within 100 m, and the date must be possible.
   - Archive files are write-once, so an hour already stored cannot be replaced, and the archive makes any tampering auditable.
 - **Monitoring.** The relay pings **healthchecks.io** after every run (success, or `/fail`); a missed ping for more than 2 h emails the team. On the Pi, `GET http://127.0.0.1:8787/status` and `obos-india doctor` show the rest.
-- **Power and network.** A small UPS on the Pi. The Pi reboots straight into the service. An outage only ages the card; it never shows a wrong number.
+- **Power and network.** A small UPS on the Pi. The Pi reboots straight into the service. An outage only hands the card over to OpenAQ; it never shows a wrong number.
 - **Redundancy (optional).** A second relay at another site, with its own key or the same one. Both submit; OBOS stores each IST hour once and answers the second `duplicate`, so the two are harmless together.
 - **Updates.** The service is versioned in the repo (`pi/`). Build a new binary on the Mac (`make -C pi build`), copy it over Tailscale, and re-run `sudo bash setup.sh ./obos-india`, which keeps the existing settings.
 
@@ -148,7 +148,7 @@ Superseded for steps 2 and 3 by the step plan [`docs/superpowers/plans/2026-09-2
 2. **Relay script** in `relay/cpcb-relay.ts`: fetch, sanity check, change detection, gzip upload of `latest` + `archive`, heartbeat. Unit tests with fake fetch and fake Blob. Timer units for systemd and launchd in `relay/`.
 3. **Source switch** in OBOS: `AIR_CPCB_SOURCE` and the Blob reader in `cpcb-feed.ts`, with tests and mutation proofs.
 4. **Trial run.** Run the relay on the founder's Mac for 24 h, then point a Preview at it with `AIR_CPCB_FEED=on` and `AIR_CPCB_SOURCE=relay`. Verify Ballygunge is live from CPCB on the Preview, through `vercel curl`.
-5. **Production relay.** Install on the Pi. Set up the healthchecks.io ping. Let it run 48 h, then check `relay-status.json` and the archive for hourly files with no gaps.
+5. **Production relay.** Install on the Pi. Set up the healthchecks.io ping. Let it run 48 h, then check `/status` (`curl -s http://127.0.0.1:8787/status`) and the archive for hourly files with no gaps.
 6. **Switch on.** Set `AIR_CPCB_FEED=on` and `AIR_CPCB_SOURCE=relay` for Production. Verify on deltaclimate.earth. Rollback is unsetting `AIR_CPCB_FEED`.
 7. **Docs.** Add register rows for the relay evidence; update this folder's README and `docs/AQI/README.md` "Current state".
 

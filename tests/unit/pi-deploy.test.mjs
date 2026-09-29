@@ -1,6 +1,9 @@
 // tests/unit/pi-deploy.test.mjs
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
 
 const read = (p) => readFileSync(new URL(`../../pi/deploy/${p}`, import.meta.url), 'utf8');
@@ -46,7 +49,11 @@ test('setup.sh follows spec §7: strict bash, hidden key prompt, watchdog once, 
   assert.match(s, /read -r -s -p "RELAY_HMAC_KEY/, 'the key is read hidden');
   assert.match(s, /chmod 0640 "\$ENV_FILE"/);
   assert.match(s, /grep -qx 'dtparam=watchdog=on'/, 'added once');
-  assert.match(s, /RuntimeWatchdogSec=15/);
+  assert.match(s, /install -m 0644 -o root -g root "\$HERE\/obos-india-watchdog\.conf" "\$WATCHDOG_CONF"/, 'the watchdog is a drop-in');
+  assert.doesNotMatch(s, /\/etc\/systemd\/system\.conf\b(?!\.d)/, 'system.conf itself is never edited (newer images ship none)');
+  assert.match(s, /findmnt -no FSTYPE \/.*\n.*die "the read-only overlay is on/, 'refuses to install onto the overlay');
+  assert.ok(s.indexOf('findmnt') < s.indexOf('useradd'), 'the overlay check comes before any change');
+  assert.match(s, /\[\[ -z \$hc \|\| \$hc =~ \^https:\/\//, 'the ping URL is checked as it is typed');
   assert.match(s, /^systemctl enable obos-india\.service$/m);
   assert.match(s, /read -r -s -p "HEALTHCHECK_URL/, 'the ping URL is a credential: read hidden');
   assert.ok(s.indexOf('apt-get update') < s.indexOf('apt-get install'), 'package lists refreshed before any install');
@@ -58,4 +65,29 @@ test('setup.sh follows spec §7: strict bash, hidden key prompt, watchdog once, 
   assert.match(s, /\[\[ \$\{ans:-N\} =~ \^\[Yy\]\$ \]\]/, 'the overlay defaults to No');
   assert.ok(s.indexOf('enable_overlayfs') > s.indexOf('"$BIN" doctor'), 'the overlay is offered after the doctor');
   assert.doesNotMatch(s, /echo "\$key"|printf '%s\\n' "\$key"|set -x/, 'the key is never echoed');
+});
+
+test('the watchdog drop-in sets RuntimeWatchdogSec=15 inside [Manager]', () => {
+  const lines = read('obos-india-watchdog.conf').split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('#'));
+  assert.deepEqual(lines, ['[Manager]', 'RuntimeWatchdogSec=15']);
+});
+
+/** The reboot guard's shell, unescaped as systemd would ($$ → $, %% → %), reading uptime from `file`. */
+const rebootGuard = (file) => {
+  const line = read('obos-india-reboot.service').split('\n').find((l) => l.startsWith('ExecCondition='));
+  const m = /^ExecCondition=\/bin\/sh -c '(.*)'$/.exec(line ?? '');
+  assert.ok(m, 'ExecCondition=/bin/sh -c \'…\'');
+  return m[1].replaceAll('$$', '$').replaceAll('%%', '%').replace('/proc/uptime', file);
+};
+
+test('the weekly reboot never fires within 12 h of boot: no reboot loop on a corrected clock', () => {
+  const file = join(mkdtempSync(join(tmpdir(), 'up-')), 'uptime');
+  const runs = (uptime) => {
+    writeFileSync(file, `${uptime} 1234.56\n`);
+    try { execFileSync('/bin/sh', ['-c', rebootGuard(file)]); return true; } catch { return false; }
+  };
+  assert.equal(runs('95.12'), false, 'just booted: skipped');
+  assert.equal(runs('43199.99'), false);
+  assert.equal(runs('43200.00'), true);
+  assert.equal(runs('604800.50'), true, 'a week up: reboots');
 });
