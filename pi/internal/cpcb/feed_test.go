@@ -93,14 +93,13 @@ func TestCheckBoundary300Passes(t *testing.T) {
 
 func TestFetch(t *testing.T) {
 	real := realFeed(t)
-	fixed := time.Date(2026, 9, 27, 0, 0, 5, 0, time.UTC)
 	var gotUA string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotUA = r.Header.Get("User-Agent")
 		w.Write(real)
 	}))
 	defer srv.Close()
-	f := Fetcher{URL: srv.URL, UserAgent: "delta-climate-research-relay/test", Clock: func() time.Time { return fixed }}
+	f := Fetcher{URL: srv.URL, UserAgent: "delta-climate-research-relay/test"}
 	snap, err := f.Fetch(context.Background())
 	if err != nil {
 		t.Fatalf("Fetch: %v", err)
@@ -108,8 +107,8 @@ func TestFetch(t *testing.T) {
 	if gotUA != "delta-climate-research-relay/test" {
 		t.Errorf("User-Agent = %q", gotUA)
 	}
-	if !bytes.Equal(snap.Body, real) || snap.Meta.Stations != 481 || !snap.FetchedAt.Equal(fixed) {
-		t.Errorf("snapshot wrong: stations %d fetched %v", snap.Meta.Stations, snap.FetchedAt)
+	if !bytes.Equal(snap.Body, real) || snap.Meta.Stations != 481 {
+		t.Errorf("snapshot wrong: stations %d", snap.Meta.Stations)
 	}
 }
 
@@ -162,15 +161,16 @@ func (c *capReader) Read(p []byte) (int, error) {
 }
 func (c *capReader) Close() error { return nil }
 
-type bodyClient struct{ body *capReader }
+// bodyTransport answers every request with 200 and body.
+type bodyTransport struct{ body *capReader }
 
-func (b bodyClient) Do(*http.Request) (*http.Response, error) {
+func (b bodyTransport) RoundTrip(*http.Request) (*http.Response, error) {
 	return &http.Response{StatusCode: 200, Body: b.body, Header: http.Header{}}, nil
 }
 
 func TestFetchStopsReadingAtTheCap(t *testing.T) {
 	big := &capReader{}
-	f := Fetcher{URL: "http://cpcb.invalid/rss_feed", UserAgent: "ua", Client: bodyClient{big}}
+	f := Fetcher{URL: "http://cpcb.invalid/rss_feed", UserAgent: "ua", HTTP: &http.Client{Transport: bodyTransport{big}}}
 	if _, err := f.Fetch(context.Background()); !errors.Is(err, ErrTooLarge) {
 		t.Fatalf("want ErrTooLarge, got %v", err)
 	}

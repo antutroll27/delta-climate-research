@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -393,6 +394,35 @@ func TestLoopClockWait(t *testing.T) {
 		j.Loop(ctx, time.Hour, func(context.Context) bool { return false })
 		if !j.State().LastRun.IsZero() || w.logs.Len() != 0 {
 			t.Errorf("ran or logged after shutdown: %+v %q", j.State(), w.logs.String())
+		}
+	})
+}
+
+func TestHealthcheckPingFailures(t *testing.T) {
+	t.Run("non-2xx", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+			rw.WriteHeader(500)
+		}))
+		defer srv.Close()
+		err := Healthcheck{URL: srv.URL + "/uuid-secret"}.Ping(context.Background(), true, "x")
+		if !errors.Is(err, ErrPing) || strings.Contains(err.Error(), "uuid-secret") {
+			t.Fatalf("want a URL-free ErrPing, got %v", err)
+		}
+	})
+	t.Run("timeout", func(t *testing.T) {
+		release := make(chan struct{})
+		srv := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+			select {
+			case <-release:
+			case <-r.Context().Done():
+			}
+		}))
+		defer srv.Close()
+		defer close(release)
+		start := time.Now()
+		err := Healthcheck{URL: srv.URL, Timeout: 50 * time.Millisecond}.Ping(context.Background(), true, "x")
+		if !errors.Is(err, ErrPing) || time.Since(start) > 2*time.Second {
+			t.Fatalf("want ErrPing within the timeout, got %v after %v", err, time.Since(start))
 		}
 	})
 }

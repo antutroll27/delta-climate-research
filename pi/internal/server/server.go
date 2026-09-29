@@ -68,6 +68,18 @@ func (s *Server) requireToken(next http.Handler) http.Handler {
 	})
 }
 
+// httpServer bounds every phase of a request, so a slow client cannot hold a
+// connection (Slowloris).
+func (s *Server) httpServer() *http.Server {
+	return &http.Server{
+		Handler:           s.Handler(),
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      10 * time.Second,
+		IdleTimeout:       60 * time.Second,
+	}
+}
+
 // Serve answers on ln until ctx ends, then shuts down gracefully. It returns nil
 // after a clean shutdown.
 func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
@@ -75,13 +87,7 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 	if log == nil {
 		log = slog.Default()
 	}
-	srv := &http.Server{
-		Handler:           s.Handler(),
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       10 * time.Second,
-		WriteTimeout:      10 * time.Second,
-		IdleTimeout:       60 * time.Second,
-	}
+	srv := s.httpServer()
 	errc := make(chan error, 1)
 	go func() { errc <- srv.Serve(ln) }()
 	log.Info("server listening", "addr", ln.Addr().String())

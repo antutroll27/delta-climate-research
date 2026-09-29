@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -16,16 +17,11 @@ const DefaultPingTimeout = 10 * time.Second
 // transport error, whose text would carry the ping URL: that URL is a credential.
 var ErrPing = errors.New("relay: healthcheck ping failed")
 
-// HTTPClient is the one method of *http.Client that Healthcheck uses.
-type HTTPClient interface {
-	Do(*http.Request) (*http.Response, error)
-}
-
 // Healthcheck pings a healthchecks.io-style URL after every run: URL on success,
 // URL+"/fail" on failure. An empty URL makes Ping a no-op.
 type Healthcheck struct {
 	URL     string        // optional; no trailing slash
-	Client  HTTPClient    // nil: http.DefaultClient
+	HTTP    *http.Client  // nil: http.DefaultClient
 	Timeout time.Duration // zero: DefaultPingTimeout
 }
 
@@ -49,7 +45,7 @@ func (h Healthcheck) Ping(ctx context.Context, ok bool, body string) error {
 		return ErrPing
 	}
 	req.Header.Set("Content-Type", "text/plain; charset=utf-8")
-	client := h.Client
+	client := h.HTTP
 	if client == nil {
 		client = http.DefaultClient
 	}
@@ -57,6 +53,7 @@ func (h Healthcheck) Ping(ctx context.Context, ok bool, body string) error {
 	if err != nil {
 		return ErrPing
 	}
+	io.Copy(io.Discard, io.LimitReader(resp.Body, 512)) // lets the connection be reused
 	resp.Body.Close()
 	if resp.StatusCode/100 != 2 {
 		return fmt.Errorf("%w: HTTP %d", ErrPing, resp.StatusCode)

@@ -39,13 +39,13 @@ func TestLoadAcceptsValidOverrides(t *testing.T) {
 		"RELAY_INTERVAL", "5m",
 		"MAX_FEED_AGE", "1h",
 		"HEALTHCHECK_URL", "https://hc-ping.com/abc/",
-		"LISTEN_ADDR", "0.0.0.0:9090",
+		"LISTEN_ADDR", "[::1]:9090",
 		"API_TOKEN", strings.Repeat("t", 32),
 	))
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if c.Interval != 5*time.Minute || c.MaxFeedAge != time.Hour || c.HealthcheckURL != "https://hc-ping.com/abc" || c.ListenAddr != "0.0.0.0:9090" {
+	if c.Interval != 5*time.Minute || c.MaxFeedAge != time.Hour || c.HealthcheckURL != "https://hc-ping.com/abc" || c.ListenAddr != "[::1]:9090" {
 		t.Errorf("overrides wrong: %+v", c)
 	}
 }
@@ -72,6 +72,9 @@ func TestLoadRules(t *testing.T) {
 		{"listen without host", "LISTEN_ADDR", env("LISTEN_ADDR", ":8787")},
 		{"listen port 0", "LISTEN_ADDR", env("LISTEN_ADDR", "127.0.0.1:0")},
 		{"listen port 65536", "LISTEN_ADDR", env("LISTEN_ADDR", "127.0.0.1:65536")},
+		{"listen on every interface", "LISTEN_ADDR", env("LISTEN_ADDR", "0.0.0.0:8787")},
+		{"listen on the LAN", "LISTEN_ADDR", env("LISTEN_ADDR", "192.168.1.20:8787")},
+		{"listen on a hostname", "LISTEN_ADDR", env("LISTEN_ADDR", "obos-relay-1:8787")},
 		{"api token too short", "API_TOKEN", env("API_TOKEN", strings.Repeat("t", 31))},
 	}
 	for _, tc := range cases {
@@ -110,7 +113,7 @@ func TestUserAgent(t *testing.T) {
 func TestReadEnvFile(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "env")
-	body := "# written by setup.sh\n\nRELAY_HMAC_KEY=" + key64 + "\nHEALTHCHECK_URL=\"https://hc-ping.com/abc\"\nAPI_TOKEN=\n"
+	body := "# written by setup.sh\n\n; a systemd-style comment\nexport RELAY_HMAC_KEY=" + key64 + "\nHEALTHCHECK_URL=\"https://hc-ping.com/abc\"\nAPI_TOKEN=\n"
 	if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}

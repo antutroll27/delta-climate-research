@@ -132,3 +132,13 @@ func freeAddr(t *testing.T) string {
 	defer l.Close()
 	return l.Addr().String()
 }
+
+// Only a missing env file means "empty"; any other read error stops the program.
+func TestAnUnreadableEnvFileIsAnError(t *testing.T) {
+	dir := t.TempDir() // a directory opens but cannot be read as a file
+	env := map[string]string{"RELAY_HMAC_KEY": strings.Repeat("ab", 32)}
+	code, _, errOut := runArgs(t, env, "relay-once", "-env", dir)
+	if code != 1 || !strings.Contains(errOut, dir) {
+		t.Errorf("want exit 1 naming the file: %d %q", code, errOut)
+	}
+}

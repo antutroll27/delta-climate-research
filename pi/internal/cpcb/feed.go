@@ -44,9 +44,8 @@ type Meta struct {
 
 // Snapshot is one fetched, checked feed.
 type Snapshot struct {
-	Body      []byte // raw XML, unchanged
-	Meta      Meta
-	FetchedAt time.Time
+	Body []byte // raw XML, unchanged
+	Meta Meta
 }
 
 // Check verifies that body looks like a whole CPCB feed: at most MaxBytes, an
@@ -106,19 +105,13 @@ func uniqueLastUpdate(body []byte) (string, error) {
 	return string(first), nil
 }
 
-// HTTPClient is the one method of *http.Client that Fetcher uses.
-type HTTPClient interface {
-	Do(*http.Request) (*http.Response, error)
-}
-
 // Fetcher fetches and checks CPCB's feed. The zero value of each optional field
 // means the production default.
 type Fetcher struct {
-	URL       string           // required
-	UserAgent string           // required
-	Client    HTTPClient       // nil: http.DefaultClient
-	Timeout   time.Duration    // zero: DefaultTimeout
-	Clock     func() time.Time // nil: time.Now
+	URL       string        // required
+	UserAgent string        // required
+	HTTP      *http.Client  // nil: http.DefaultClient
+	Timeout   time.Duration // zero: DefaultTimeout
 }
 
 // Fetch makes one GET, reads at most MaxBytes (the cap is enforced while reading),
@@ -138,7 +131,7 @@ func (f Fetcher) Fetch(ctx context.Context) (Snapshot, error) {
 	req.Header.Set("User-Agent", f.UserAgent)
 	req.Header.Set("Accept", "application/xml")
 
-	client := f.Client
+	client := f.HTTP
 	if client == nil {
 		client = http.DefaultClient
 	}
@@ -158,9 +151,5 @@ func (f Fetcher) Fetch(ctx context.Context) (Snapshot, error) {
 	if err != nil {
 		return Snapshot{}, err
 	}
-	now := time.Now
-	if f.Clock != nil {
-		now = f.Clock
-	}
-	return Snapshot{Body: body, Meta: meta, FetchedAt: now().UTC()}, nil
+	return Snapshot{Body: body, Meta: meta}, nil
 }

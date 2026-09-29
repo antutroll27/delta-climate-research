@@ -86,6 +86,7 @@ func TestV1IsClosedBehindTheToken(t *testing.T) {
 		{"wrong token, same length", "Bearer " + strings.Repeat("u", 32), 401},
 		{"right token, last char wrong", "Bearer " + token[:31] + "x", 401},
 		{"token as Basic", "Basic " + token, 401},
+		{"bare token, no scheme", token, 401},
 		{"right token: no route yet", "Bearer " + token, 404},
 	}
 	for _, tc := range cases {
@@ -129,5 +130,31 @@ func TestServeShutsDownGracefully(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("Serve did not return after the context ended")
+	}
+}
+
+func TestHTTPServerBoundsEveryPhase(t *testing.T) {
+	srv := testServer().httpServer()
+	if srv.ReadHeaderTimeout <= 0 || srv.ReadTimeout <= 0 || srv.WriteTimeout <= 0 || srv.IdleTimeout <= 0 {
+		t.Errorf("unbounded phase: header %v read %v write %v idle %v",
+			srv.ReadHeaderTimeout, srv.ReadTimeout, srv.WriteTimeout, srv.IdleTimeout)
+	}
+}
+
+func TestServeReportsAListenerError(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ln.Close()
+	done := make(chan error, 1)
+	go func() { done <- testServer().Serve(context.Background(), ln) }()
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("a dead listener must be an error, not a clean stop")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Serve hung on a dead listener")
 	}
 }

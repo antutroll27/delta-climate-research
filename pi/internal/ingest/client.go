@@ -58,14 +58,7 @@ func (e *StatusError) Unwrap() error {
 
 // Result is OBOS's answer to an accepted feed.
 type Result struct {
-	Stored     string    `json:"stored"` // "new" or "duplicate"
-	LastUpdate time.Time `json:"lastupdate"`
-	Stations   int       `json:"stations"`
-}
-
-// HTTPClient is the one method of *http.Client that Client uses.
-type HTTPClient interface {
-	Do(*http.Request) (*http.Response, error)
+	Stored string `json:"stored"` // "new" or "duplicate"
 }
 
 // Client submits to OBOS's ingest endpoint. The zero value of each optional field
@@ -75,7 +68,7 @@ type Client struct {
 	URL       string           // required: the ingest endpoint
 	Key       []byte           // required: the shared HMAC key
 	UserAgent string           // required
-	HTTP      HTTPClient       // nil: http.DefaultClient
+	HTTP      *http.Client     // nil: http.DefaultClient; redirects are always refused
 	Timeout   time.Duration    // zero: DefaultTimeout
 	Clock     func() time.Time // nil: time.Now; supplies X-OBOS-Timestamp
 }
@@ -146,10 +139,13 @@ func (c Client) post(ctx context.Context, kind Kind, body []byte) (*http.Respons
 	req.Header.Set("X-OBOS-Timestamp", strconv.FormatInt(ts, 10))
 	req.Header.Set("X-OBOS-Signature", Sign(c.Key, ts, body))
 
-	client := c.HTTP
-	if client == nil {
-		client = http.DefaultClient
+	client := http.Client{}
+	if c.HTTP != nil {
+		client = *c.HTTP
 	}
+	// A redirect would turn the POST into a GET and carry the signature to
+	// another URL: take the 3xx as the answer, which statusError makes ErrUnavailable.
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	resp, err := client.Do(req)
 	if err != nil {
 		cancel()

@@ -53,9 +53,8 @@ func TestSubmitSendsASignedGzip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Submit: %v", err)
 	}
-	want := Result{Stored: "new", LastUpdate: time.Date(2026, 9, 26, 23, 30, 0, 0, time.UTC), Stations: 481}
-	if res.Stored != want.Stored || !res.LastUpdate.Equal(want.LastUpdate) || res.Stations != want.Stations {
-		t.Errorf("Result = %+v, want %+v", res, want)
+	if res != (Result{Stored: "new"}) {
+		t.Errorf("Result = %+v", res)
 	}
 	if got.method != "POST" || got.kind != "cpcb-feed" || got.ctype != "application/octet-stream" || got.ua != "relay/test" {
 		t.Errorf("headers wrong: %+v", got)
@@ -156,5 +155,29 @@ func TestErrorsNeverCarryTheKey(t *testing.T) {
 	msg := err.Error()
 	if strings.Contains(msg, hex.EncodeToString(testKey)) || strings.Contains(msg, got.sig) {
 		t.Errorf("error leaks a secret: %s", msg)
+	}
+}
+
+// A redirect must not be followed: it would turn the POST into a GET and carry
+// the signature to another URL. The 3xx is the answer, and it is retryable.
+func TestSubmitRefusesRedirects(t *testing.T) {
+	var hit bool
+	target := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { hit = true }))
+	defer target.Close()
+	for _, code := range []int{301, 302, 307, 308} {
+		redirect := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, target.URL, code)
+		}))
+		c := client(redirect.URL)
+		c.HTTP = &http.Client{} // a caller's client must not re-enable redirects
+		_, err := c.Submit(context.Background(), cpcb.Snapshot{Body: []byte("<AqIndex/>")})
+		redirect.Close()
+		var se *StatusError
+		if !errors.Is(err, ErrUnavailable) || !errors.As(err, &se) || se.Code != code {
+			t.Errorf("%d: want StatusError %d wrapping ErrUnavailable, got %v", code, code, err)
+		}
+	}
+	if hit {
+		t.Error("a redirect was followed")
 	}
 }

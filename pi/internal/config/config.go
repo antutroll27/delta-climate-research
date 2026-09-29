@@ -43,7 +43,7 @@ type Config struct {
 	Interval       time.Duration // RELAY_INTERVAL, at least 5m
 	MaxFeedAge     time.Duration // MAX_FEED_AGE, at least 1h: an older CPCB feed alerts
 	HealthcheckURL string        // HEALTHCHECK_URL, optional, no trailing slash
-	ListenAddr     string        // LISTEN_ADDR, host:port
+	ListenAddr     string        // LISTEN_ADDR, loopback host:port (/status is unauthenticated)
 	APIToken       string        // API_TOKEN, optional; /v1 stays closed without it
 }
 
@@ -128,6 +128,9 @@ func Load(env map[string]string) (Config, error) {
 	if n, err := strconv.Atoi(port); err != nil || n < 1 || n > 65535 {
 		return Config{}, &FieldError{"LISTEN_ADDR", "port must be 1-65535"}
 	}
+	if host != "localhost" && !net.ParseIP(host).IsLoopback() {
+		return Config{}, &FieldError{"LISTEN_ADDR", "host must be loopback (127.0.0.1, ::1 or localhost); reach it over Tailscale SSH"}
+	}
 
 	if c.APIToken != "" && len(c.APIToken) < MinAPITokenLen {
 		return Config{}, &FieldError{"API_TOKEN", fmt.Sprintf("must be at least %d characters", MinAPITokenLen)}
@@ -164,8 +167,9 @@ func orDefault(v, def string) string {
 
 var envKey = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
-// ReadEnvFile parses a systemd EnvironmentFile: KEY=VALUE lines, blank lines and
-// # comments ignored, one pair of surrounding quotes removed. A missing file is an
+// ReadEnvFile parses a systemd EnvironmentFile: KEY=VALUE lines, optionally
+// prefixed "export ", blank lines and # or ; comments ignored, one pair of
+// surrounding quotes removed. A missing file is an
 // error wrapping fs.ErrNotExist, so callers can treat it as empty.
 func ReadEnvFile(path string) (map[string]string, error) {
 	f, err := os.Open(path)
@@ -177,10 +181,10 @@ func ReadEnvFile(path string) (map[string]string, error) {
 	sc := bufio.NewScanner(f)
 	for n := 1; sc.Scan(); n++ {
 		line := strings.TrimSpace(sc.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
+		if line == "" || line[0] == '#' || line[0] == ';' {
 			continue
 		}
-		k, v, ok := strings.Cut(line, "=")
+		k, v, ok := strings.Cut(strings.TrimPrefix(line, "export "), "=")
 		k, v = strings.TrimSpace(k), strings.TrimSpace(v)
 		if !ok || !envKey.MatchString(k) {
 			return nil, fmt.Errorf("config: %s line %d: %w", path, n, ErrBadEnvLine)
