@@ -2,7 +2,7 @@
 
 **Version:** 0.3 (design approved; being built)
 **Date:** 29 September 2026 (v0.2: 28 September)
-**Status:** Being built on `feat/pi-india-service`: the Go service `obos-india`, the signed ingest endpoint and the relay source. Design: [`docs/superpowers/specs/2026-09-29-pi-india-service-design.md`](../superpowers/specs/2026-09-29-pi-india-service-design.md); step plan: [`docs/superpowers/plans/2026-09-29-pi-india-service.md`](../superpowers/plans/2026-09-29-pi-india-service.md). v0.3 replaces v0.2's Node script writing Blob directly (§5–§7).
+**Status:** Built, reviewed and independently audited on `feat/pi-india-service` (29 Sep 2026; not yet merged): the Go service `obos-india`, the signed ingest endpoint and the relay source. Design: [`docs/superpowers/specs/2026-09-29-pi-india-service-design.md`](../superpowers/specs/2026-09-29-pi-india-service-design.md); step plan: [`docs/superpowers/plans/2026-09-29-pi-india-service.md`](../superpowers/plans/2026-09-29-pi-india-service.md). v0.3 replaces v0.2's Node script writing Blob directly (§5–§7).
 **Depends on:** PR #34 (merged, `3d8bc47`), which ships the CPCB feed reader and card **dormant** behind `AIR_CPCB_FEED`.
 
 ## 1. Why a relay

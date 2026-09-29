@@ -15,8 +15,8 @@
 | 3 | **OBOS relay source:** `AIR_CPCB_SOURCE=relay` makes `/api/air-quality` read the stored feed | Eng | Built on `feat/pi-india-service`; not merged |
 | 4 | ⭐ **One-command setup** (`setup.sh`): installs the service, the weekly reboot timer, the watchdog and automatic updates, then offers the read-only mode (default No). It is idempotent, so it is safe to re-run | Eng | Built on `feat/pi-india-service`; not merged |
 | 5 | ⭐ **Health check** (`obos-india doctor`): checks the config, time sync, CPCB reachability, submission to OBOS (a signed ping), disk, temperature and that the service is active, and prints ✅ or ❌ per line. Run it with `sudo` (the config is readable only by root and the service) | Eng | Built on `feat/pi-india-service`; not merged |
-| 6 | ⭐ **Dress rehearsal** in a UTM VM on the Mac running Raspberry Pi OS: the full setup and a full day's run before the Pi exists | Eng | To do |
-| 7 | Tests, mutation proofs, an independent audit, and a Preview check before production | Eng | Tests and mutation proofs done; audit and Preview to do |
+| 6 | ⭐ **Dress rehearsal** in the Linux VM on the Mac (Debian 13 arm64, the base of current Raspberry Pi OS; kept on the portable SSD): the full setup and a full day's run before the Pi exists | Eng | VM built 29 Sep; Linux-only checks pass (systemd socket test, unit files verified, security score 1.7, reboot guard skips after boot). Full `setup.sh` run and end-to-end feed still to do |
+| 7 | Tests, mutation proofs, an independent audit, and a Preview check before production | Eng | Tests, mutation proofs and the independent audit done (29 Sep; every finding fixed or documented as a known limit); Preview to do |
 
 ## 2. Accounts and decisions (about 30 minutes)
 

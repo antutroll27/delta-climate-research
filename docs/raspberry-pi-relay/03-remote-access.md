@@ -45,6 +45,12 @@ That needs **Raspberry Pi OS with desktop** instead of Lite, plus **Raspberry Pi
 
 ## 5. Rehearse on the Mac before the Pi arrives (optional)
 
-**UTM** (free, Apple Silicon) can run Raspberry Pi OS (Debian arm64) as a real VM on the Mac. It is good for practising the set-up and testing the relay service.
+A Linux VM already exists for this: **Debian 13 arm64** (the base of current Raspberry Pi OS) under **Lima** (free, command line), stored on the portable SSD in `Pi Lab/PiLab.sparsebundle`. The SSD is exFAT, which cannot hold a VM directly, so the VM lives inside that Mac disk image.
 
-Caveat: the VM uses the Mac's internet connection. It will reach CPCB, so it proves the software but does not replace the always-on Pi.
+- Start: double-click the sparsebundle to mount `PiLab`, then `LIMA_HOME=/Volumes/PiLab/lima limactl start pi`, and `limactl shell pi` for a terminal.
+- Stop before unplugging the SSD: `LIMA_HOME=/Volumes/PiLab/lima limactl stop pi`, then eject `PiLab`.
+- The Mac's home folder is visible read-only inside the VM at its Mac path, so a binary built on the Mac runs there without copying.
+
+It is good for practising `setup.sh` and testing the service under real systemd. It is not a Pi: there is no `raspi-config`, read-only overlay or Pi hardware watchdog, so those are tried on Pi day. (UTM, a free app with a window, would also work.)
+
+Caveat: the VM uses the Mac's internet connection, which may or may not reach CPCB. It proves the software, not the Indian connection, and it does not replace the always-on Pi.
