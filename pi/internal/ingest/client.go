@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"time"
 
@@ -149,6 +150,10 @@ func (c Client) post(ctx context.Context, kind Kind, body []byte) (*http.Respons
 	resp, err := client.Do(req)
 	if err != nil {
 		cancel()
+		// *url.Error quotes the URL, query string included, which can carry a credential.
+		if ue, ok := errors.AsType[*url.Error](err); ok {
+			err = ue.Err
+		}
 		return nil, fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
 	resp.Body = cancelOnClose{resp.Body, cancel}

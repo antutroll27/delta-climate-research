@@ -253,9 +253,10 @@ func TestRunOnceStaleFeed(t *testing.T) {
 			if got := j.RunOnce(context.Background()); got != Submitted {
 				t.Fatalf("first run = %s", got) // 05:00 IST, 30 min before the clock
 			}
-			second := time.Date(2026, 9, 27, 1, 0, 0, 0, time.UTC)
+			first := time.Date(2026, 9, 26, 23, 30, 0, 0, time.UTC) // the first feed's lastupdate
+			second := first.Add(tc.age + time.Hour)                 // the second feed is an hour newer than the first
 			if tc.age == 0 {
-				second = second.Add(4 * time.Hour) // the first feed, now 5.5 h old
+				second = first.Add(5 * time.Hour) // the first feed, now 5 h old
 			} else {
 				stamp := second.Add(-tc.age).In(time.FixedZone("IST", 19800))
 				w.set(func(w *world) { w.feed = feedAt(stamp.Format("02-01-2006 15:04:05")) })
@@ -425,4 +426,29 @@ func TestHealthcheckPingFailures(t *testing.T) {
 			t.Fatalf("want ErrPing within the timeout, got %v after %v", err, time.Since(start))
 		}
 	})
+}
+
+// CPCB's servers can flap back to an hour-old copy. An older lastupdate is not
+// news: it is never resubmitted, and the state never moves backwards.
+func TestRunOnceAnOlderFeedIsUnchanged(t *testing.T) {
+	w := newWorld(t)
+	j := w.job()
+	j.RunOnce(context.Background()) // 05:00 IST
+	w.set(func(w *world) { w.feed = feedAt("27-09-2026 04:00:00") })
+	if got := j.RunOnce(context.Background()); got != Unchanged {
+		t.Fatalf("an older feed = %s, want unchanged", got)
+	}
+	if s := j.State(); w.submits != 1 || !s.LastUpdate.Equal(time.Date(2026, 9, 26, 23, 30, 0, 0, time.UTC)) {
+		t.Errorf("submits = %d, state = %+v", w.submits, s)
+	}
+}
+
+func TestLastErrorIsCapped(t *testing.T) {
+	w := newWorld(t)
+	j := w.job()
+	j.Fetcher.URL = "http://127.0.0.1:1/" + strings.Repeat("x", 400) // the dial error quotes the URL
+	j.RunOnce(context.Background())
+	if n := len(j.State().LastError); n == 0 || n > maxErrorLen {
+		t.Errorf("LastError is %d bytes, want 1-%d", n, maxErrorLen)
+	}
 }

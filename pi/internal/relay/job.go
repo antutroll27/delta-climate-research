@@ -20,7 +20,7 @@ type Outcome string
 // The outcomes of spec 2026-09-29 §6.
 const (
 	Submitted    Outcome = "submitted"     // OBOS accepted the feed (stored "new" or "duplicate")
-	Unchanged    Outcome = "unchanged"     // CPCB's lastupdate equals the last one submitted
+	Unchanged    Outcome = "unchanged"     // CPCB's lastupdate is not later than the last one submitted
 	Stale        Outcome = "stale"         // CPCB's lastupdate is older than MaxFeedAge (submitted anyway if changed)
 	FetchFailed  Outcome = "fetch_failed"  // CPCB unreachable, or its answer failed cpcb.Check
 	Rejected     Outcome = "rejected"      // OBOS answered 4xx
@@ -93,7 +93,8 @@ func (j *Job) RunOnce(ctx context.Context) Outcome {
 		submitted bool // OBOS accepted this feed
 	)
 	snap, err := j.Fetcher.Fetch(ctx)
-	if err == nil && !snap.Meta.LastUpdate.Equal(j.State().LastUpdate) {
+	// Only a later lastupdate is news: CPCB's servers can flap back to an hour-old copy.
+	if err == nil && snap.Meta.LastUpdate.After(j.State().LastUpdate) {
 		res, err = j.Client.Submit(ctx, snap)
 		submitted = err == nil
 		if errors.Is(err, ingest.ErrRejected) {

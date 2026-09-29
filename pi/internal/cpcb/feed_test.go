@@ -120,6 +120,8 @@ func TestFetchFailures(t *testing.T) {
 		want    error
 	}{
 		{"503", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusServiceUnavailable) }, ErrStatus},
+		{"404", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusNotFound) }, ErrStatus},
+		{"204", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusNoContent) }, ErrStatus},
 		{"oversize while reading", func(w http.ResponseWriter, r *http.Request) {
 			w.Write(real)
 			w.Write(bytes.Repeat([]byte(" "), MaxBytes))

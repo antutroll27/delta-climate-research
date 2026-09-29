@@ -181,3 +181,25 @@ func TestSubmitRefusesRedirects(t *testing.T) {
 		t.Error("a redirect was followed")
 	}
 }
+
+// A query string can carry a credential (a Vercel protection bypass): a transport
+// error must not quote the URL, because the error reaches /status and the journal.
+func TestNetworkErrorsNeverQuoteTheURL(t *testing.T) {
+	c := client("http://127.0.0.1:1/ingest?x-vercel-protection-bypass=SEKRIT")
+	_, err := c.Submit(context.Background(), cpcb.Snapshot{Body: []byte("<AqIndex/>")})
+	if !errors.Is(err, ErrUnavailable) || strings.Contains(err.Error(), "SEKRIT") {
+		t.Fatalf("want a URL-free ErrUnavailable, got %v", err)
+	}
+	if err := c.Ping(context.Background()); err == nil || strings.Contains(err.Error(), "SEKRIT") {
+		t.Fatalf("ping: want a URL-free error, got %v", err)
+	}
+}
+
+// Only OBOS's 204 proves the key: a catch-all page answering 200 must not pass the doctor.
+func TestPingNeedsExactly204(t *testing.T) {
+	var got received
+	srv := fakeOBOS(t, 200, "<html>welcome</html>", &got)
+	if err := client(srv.URL).Ping(context.Background()); err == nil {
+		t.Fatal("a 200 answer to a ping must be an error")
+	}
+}

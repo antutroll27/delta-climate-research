@@ -97,6 +97,11 @@ func TestFieldErrorNeverCarriesTheValue(t *testing.T) {
 	if err == nil || strings.Contains(err.Error(), secret) {
 		t.Fatalf("error must exist and must not contain the key: %v", err)
 	}
+	notHex := strings.Repeat("zq", 32)
+	_, err = Load(map[string]string{"RELAY_HMAC_KEY": notHex})
+	if err == nil || strings.Contains(err.Error(), notHex) {
+		t.Fatalf("error must exist and must not contain a non-hex key: %v", err)
+	}
 	token := strings.Repeat("s", 31)
 	_, err = Load(env("API_TOKEN", token))
 	if err == nil || strings.Contains(err.Error(), token) {

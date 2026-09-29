@@ -87,6 +87,8 @@ func TestV1IsClosedBehindTheToken(t *testing.T) {
 		{"right token, last char wrong", "Bearer " + token[:31] + "x", 401},
 		{"token as Basic", "Basic " + token, 401},
 		{"bare token, no scheme", token, 401},
+		{"right token plus a suffix", "Bearer " + token + "x", 401},
+		{"a prefix of the right token", "Bearer " + token[:16], 401},
 		{"right token: no route yet", "Bearer " + token, 404},
 	}
 	for _, tc := range cases {
