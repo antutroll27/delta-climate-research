@@ -78,11 +78,11 @@ pi/
   internal/config/config.go      type Config; Load(env map) (Config, error), validates everything
   internal/cpcb/feed.go          type Snapshot; type Fetcher; (Fetcher) Fetch(ctx) (Snapshot, error); Check(body) (Meta, error)
   internal/ingest/client.go      type Client; (Client) Submit(ctx, Snapshot) (Result, error); Sign(key, ts, body) string
-  internal/relay/job.go          type Job; type State; (Job) RunOnce(ctx) Outcome; skips an unchanged lastupdate
+  internal/relay/job.go          type Job; type State; (Job) RunOnce(ctx) Outcome, (Job) Loop(ctx, every, waitClock); skips an unchanged lastupdate
   internal/health/system.go      type System; Read() System: CPU temp, disk free, clock sync, uptime (Linux paths injectable)
   internal/server/server.go      type Server; routes GET /healthz, GET /status (JSON: State + System + version)
   internal/doctor/doctor.go      type Check; type Report; Run(ctx, cfg) Report; prints ✅/❌ lines, non-zero exit if any fail
-  internal/sdnotify/notify.go    READY=1, WATCHDOG=1 over NOTIFY_SOCKET (unixgram); a no-op when unset
+  internal/sdnotify/notify.go    READY=1, WATCHDOG=1 (every WATCHDOG_USEC/2), STOPPING=1 over NOTIFY_SOCKET (unixgram); a no-op when unset
   deploy/obos-india.service      systemd unit (Type=notify, WatchdogSec=120, Restart=always, hardening)
   deploy/setup.sh                idempotent installer (bash, set -euo pipefail)
   deploy/README.md               how to build, copy, install, rotate the key, uninstall
@@ -96,10 +96,12 @@ type Config struct {
     HMACKey       []byte        // RELAY_HMAC_KEY (hex), required, ≥32 bytes
     FeedURL       string        // CPCB_FEED_URL, default CPCB's rss_feed
     Interval      time.Duration // RELAY_INTERVAL, default 15m, min 5m
-    HealthcheckURL string       // HEALTHCHECK_URL, optional (healthchecks.io ping)
-    ListenAddr    string        // LISTEN_ADDR, default 127.0.0.1:8787
-    UserAgent     string        // fixed: delta-climate-research-relay/<version> (+https://deltaclimate.earth)
+    MaxFeedAge    time.Duration // MAX_FEED_AGE, default 3h, min 1h: an older CPCB lastupdate alerts
+    HealthcheckURL string       // HEALTHCHECK_URL, optional (healthchecks.io ping); a credential
+    ListenAddr    string        // LISTEN_ADDR, default 127.0.0.1:8787; loopback hosts only (/status is unauthenticated)
+    APIToken      string        // API_TOKEN, optional; /v1 stays closed without it
 }
+// The User-Agent is fixed: config.UserAgent(version) = delta-climate-research-relay/<version> (+https://deltaclimate.earth)
 
 type Meta struct {         // what Check learns from a feed without trusting it further
     LastUpdate time.Time    // the single, feed-wide lastupdate (IST parsed to UTC)
@@ -107,16 +109,15 @@ type Meta struct {         // what Check learns from a feed without trusting it 
 }
 
 type Snapshot struct {
-    Body      []byte        // raw XML, unchanged
-    Meta      Meta
-    FetchedAt time.Time
+    Body []byte             // raw XML, unchanged
+    Meta Meta
 }
 
 type State struct {         // exposed by /status; guarded by a mutex inside Job
     LastRun       time.Time
     LastOK        time.Time
-    LastUpdate    time.Time  // CPCB's, of the last submitted feed
-    LastOutcome   string     // "submitted" | "unchanged" | "fetch_failed" | "rejected" | "submit_failed"
+    LastUpdate    time.Time  // CPCB's, of the last feed OBOS accepted (a stale one included)
+    LastOutcome   string     // "submitted" | "unchanged" | "stale" | "fetch_failed" | "rejected" | "submit_failed"
     LastError     string     // short, no secrets
     Submitted     int        // counters since start
     Failures      int
@@ -127,10 +128,12 @@ type State struct {         // exposed by /status; guarded by a mutex inside Job
   - Fetch with a 30 s timeout and a 2 MB cap.
   - `Check` requires `<AqIndex`, ≥ 300 `<Station `, and exactly one distinct `lastupdate`, parsed as IST.
   - Skip if `Meta.LastUpdate` equals the last *submitted* one.
-  - Submit with a 30 s timeout. A 5xx or network failure is retried at the next tick, never in a tight loop.
-  - Ping `HEALTHCHECK_URL` after every run: success → `/`, failure → `/fail`.
+  - Submit with a 30 s timeout. A 5xx or network failure is retried at the next tick, never in a tight loop. A 4xx is also resubmitted every tick (its `lastupdate` is never recorded), so a bad key stays red until fixed. Redirects are never followed: a 3xx counts as a 5xx.
+  - **Stale:** a `lastupdate` older than `MAX_FEED_AGE` makes the run `stale` (red), whether or not the feed changed. Alerting and submitting are separate: a *changed* stale feed is still submitted, so the archive stays whole (OBOS applies its own 7-day limit); an unchanged one is not. `LastUpdate` and `Submitted` advance on the accepted submission while `LastOutcome` reads `stale`.
+  - **Shutdown:** if the context ends mid-run (SIGTERM, the weekly reboot), the run is `cancelled`: no state change, no log line, no ping.
+  - Ping `HEALTHCHECK_URL` after every run: success (`submitted`, `unchanged`) → `/`, anything else → `/fail`.
   - State lives in memory. After a restart the relay re-submits the current feed once, which is idempotent at OBOS.
-- **Clock:** the first run waits (up to 10 min) until the clock is synchronised: `/run/systemd/timesync/synchronized` exists. A Pi has no clock battery.
+- **Clock:** the first run waits (up to 10 min) until the clock is synchronised: `/run/systemd/timesync/synchronized` exists. A Pi has no clock battery. READY is sent before this wait, and the unit is deliberately **not** ordered after `time-sync.target`: with NTP blocked that ordering would hold the service forever, with no `/status` and no `/fail` ping. After 10 min the relay runs anyway and logs a warning.
 - **Server:** `GET /healthz` returns `200 ok`. `GET /status` returns JSON. Future India APIs register under `/v1/...` behind a bearer-token middleware (`API_TOKEN`); none exist yet. Graceful shutdown on SIGTERM.
 - **Doctor checks:**
   1. config valid;
@@ -147,17 +150,17 @@ type State struct {         // exposed by /status; guarded by a mutex inside Job
 The script is idempotent, runs as root, and each step prints what it did:
 1. Create the system user `obos` (no login) and the directories `/etc/obos-india` (0750) and `/usr/local/bin`.
 2. Install the binary passed as `$1` (default `./obos-india`) with mode 0755. Verify it with `obos-india version`.
-3. Write `/etc/obos-india/env` (0640, root:obos), prompting only for values that are missing: `RELAY_HMAC_KEY` (input hidden) and `HEALTHCHECK_URL`. Existing values are kept.
-4. Install and enable `obos-india.service`, and enable `systemd-time-wait-sync`.
-5. Hardware watchdog: add `dtparam=watchdog=on` to `/boot/firmware/config.txt` and set `RuntimeWatchdogSec=15` in `/etc/systemd/system.conf`, each once.
-6. `unattended-upgrades` installed and enabled; a weekly reboot timer (Sunday 03:37 IST).
+3. Write `/etc/obos-india/env` (0640, root:obos), prompting only for values that are missing: `RELAY_HMAC_KEY` and `HEALTHCHECK_URL`, both hidden (the ping URL is a credential). Existing values are kept.
+4. Install and enable `obos-india.service`. It is not ordered after `time-sync.target` (see §6, Clock).
+5. Hardware watchdog: add `dtparam=watchdog=on` to `/boot/firmware/config.txt` (under an `[all]` section) and set `RuntimeWatchdogSec=15` in `/etc/systemd/system.conf`, each once.
+6. `unattended-upgrades` installed and enabled; an existing, customised `20auto-upgrades` is never overwritten (a warning is printed if it leaves updates off); a weekly reboot timer (Sunday 03:37 IST). Package lists are refreshed once before any install.
 7. Restart the service, then run `obos-india doctor`.
 8. Offer the read-only overlay last (`raspi-config nonint enable_overlayfs`). The default answer is **No** on the first install, so the rehearsal stays editable.
 
 ## 8. Testing
 
 - **Go:**
-  - table tests for `Config.Load`, `Check` (the real fixture passes; truncated, oversize, no-AqIndex, too few stations and mixed-lastupdate inputs fail), `Sign` (the shared vectors), `Job.RunOnce` (fake CPCB and OBOS through `httptest`: submitted, unchanged, fetch_failed, rejected, submit_failed), the health readers (fake `/sys`, `/run` paths), the server routes and the doctor report;
+  - table tests for `Config.Load`, `Check` (the real fixture passes; truncated, oversize, no-AqIndex, too few stations and mixed-lastupdate inputs fail), `Sign` (the shared vectors), `Job.RunOnce` (fake CPCB and OBOS through `httptest`: submitted, unchanged, stale, fetch_failed, rejected, submit_failed, cancelled), `Job.Loop`, `serve` under a fake systemd notify socket, the health readers (fake `/sys`, `/run` paths), the server routes and the doctor report;
   - `go vet`, `gofmt -l` empty, `go test -race ./...`.
 - **TypeScript:**
   - ingest: every rejection path;

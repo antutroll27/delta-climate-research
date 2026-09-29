@@ -2,8 +2,11 @@
 [Unit]
 Description=OBOS India service (CPCB relay and local API)
 Documentation=file:///usr/local/share/doc/obos-india/README.md
-Wants=network-online.target time-sync.target
-After=network-online.target time-sync.target
+Wants=network-online.target
+After=network-online.target
+# Deliberately not After=time-sync.target: with NTP blocked that would hold the
+# unit forever (no READY, no /status, no /fail ping). obos-india waits for the
+# clock itself, for at most 10 minutes, then relays and alerts.
 # Never give up restarting: an outage only ages the card, a stopped service never recovers.
 StartLimitIntervalSec=0
 

@@ -65,7 +65,8 @@
 | CPCB changes its feed format | The Pi's sanity check or OBOS's validation rejects it; the site falls back; an alert fires |
 | SD card dies | Swap in the spare card (or flash a new one and run `setup.sh`), back in about 15 min |
 | The Pi's submission key leaks | Rotate the key in Vercel and on the Pi in about 2 min (the runbook covers this). A leaked key can only submit feeds, and OBOS validates every feed before storing it |
-| Clock wrong after boot | The time-sync guard holds the first run until the clock is synchronised |
+| Clock wrong after boot | The time-sync guard holds the first run until the clock is synchronised, for at most 10 minutes; then it relays anyway and warns |
+| CPCB's feed freezes (still served, never updated) | After 3 h the run turns "stale" and the healthcheck alert fires |
 
 ## 6. Paperwork
 

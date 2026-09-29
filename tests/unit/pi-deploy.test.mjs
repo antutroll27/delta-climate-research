@@ -13,9 +13,15 @@ test('the service unit: notify + watchdog, always restarted, runs as obos from t
   const u = read('obos-india.service');
   for (const [k, v] of [['Type', 'notify'], ['WatchdogSec', '120'], ['Restart', 'always'], ['RestartSec', '10'],
     ['EnvironmentFile', '/etc/obos-india/env'], ['User', 'obos'], ['ExecStart', '/usr/local/bin/obos-india serve'],
-    ['After', 'network-online.target time-sync.target'], ['StartLimitIntervalSec', '0']]) {
+    ['After', 'network-online.target'], ['StartLimitIntervalSec', '0']]) {
     assert.ok(has(u, k, v), `${k}=${v}`);
   }
+});
+
+test('the unit never waits on time-sync.target: blocked NTP would hold it forever; the Go wait is bounded', () => {
+  const u = read('obos-india.service');
+  assert.ok(!directives(u).some(([, v]) => v.includes('time-sync')), 'no directive names time-sync.target');
+  assert.doesNotMatch(read('setup.sh'), /time-wait-sync/);
 });
 
 test('the service unit is hardened', () => {
@@ -41,7 +47,12 @@ test('setup.sh follows spec §7: strict bash, hidden key prompt, watchdog once, 
   assert.match(s, /chmod 0640 "\$ENV_FILE"/);
   assert.match(s, /grep -qx 'dtparam=watchdog=on'/, 'added once');
   assert.match(s, /RuntimeWatchdogSec=15/);
-  assert.match(s, /systemctl enable obos-india\.service systemd-time-wait-sync\.service/);
+  assert.match(s, /^systemctl enable obos-india\.service$/m);
+  assert.match(s, /read -r -s -p "HEALTHCHECK_URL/, 'the ping URL is a credential: read hidden');
+  assert.ok(s.indexOf('apt-get update') < s.indexOf('apt-get install'), 'package lists refreshed before any install');
+  assert.doesNotMatch(s.replace(/^append_line\(\) \{[\s\S]*?^\}$/m, ''), />>"\$/, 'every append goes through append_line');
+  assert.match(s, /append_line "\$BOOT_CONFIG" "\[all\]"/, 'the watchdog line lands in the [all] section');
+  assert.match(s, /elif \[\[ ! -f \$AUTO_UPGRADES \]\]; then\n\s+printf .*>"\$AUTO_UPGRADES"/, '20auto-upgrades written only when absent');
   assert.match(s, /unattended-upgrades/);
   assert.match(s, /"\$BIN" doctor/);
   assert.match(s, /\[\[ \$\{ans:-N\} =~ \^\[Yy\]\$ \]\]/, 'the overlay defaults to No');

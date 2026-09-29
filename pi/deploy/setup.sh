@@ -22,6 +22,24 @@ AUTO_UPGRADES=/etc/apt/apt.conf.d/20auto-upgrades
 say() { printf '==> %s\n' "$*"; }
 die() { printf 'setup.sh: %s\n' "$*" >&2; exit 1; }
 
+# apt_install PKG...: refreshes the package lists once per run, then installs.
+apt_updated=0
+apt_install() {
+  if [[ $apt_updated -eq 0 ]]; then
+    apt-get update
+    apt_updated=1
+  fi
+  DEBIAN_FRONTEND=noninteractive apt-get install -y "$@"
+}
+
+# append_line FILE LINE: appends LINE, first ending FILE's last line if it lacks a newline.
+append_line() {
+  if [[ -s $1 && -n $(tail -c 1 "$1") ]]; then
+    printf '\n' >>"$1"
+  fi
+  printf '%s\n' "$2" >>"$1"
+}
+
 [[ $EUID -eq 0 ]] || die "run as root: sudo bash setup.sh"
 [[ -f $BIN_SRC ]] || die "binary not found: $BIN_SRC"
 
@@ -64,23 +82,26 @@ else
     [[ $key =~ ^([0-9a-fA-F]{2}){32,}$ ]] && break
     echo "That is not 32 or more bytes of hex. Try again." >&2
   done
-  printf 'RELAY_HMAC_KEY=%s\n' "$key" >>"$ENV_FILE"
+  append_line "$ENV_FILE" "RELAY_HMAC_KEY=$key"
   unset key
   say "RELAY_HMAC_KEY written"
 fi
 if has HEALTHCHECK_URL; then
   say "HEALTHCHECK_URL kept"
 else
-  read -r -p "HEALTHCHECK_URL (the healthchecks.io ping URL; empty for none): " hc
-  printf 'HEALTHCHECK_URL=%s\n' "$hc" >>"$ENV_FILE"
+  # Hidden too: anyone holding the ping URL can fake the Pi's health.
+  read -r -s -p "HEALTHCHECK_URL (the healthchecks.io ping URL; empty for none; input hidden): " hc
+  echo
+  append_line "$ENV_FILE" "HEALTHCHECK_URL=$hc"
+  unset hc
   say "HEALTHCHECK_URL written"
 fi
 
-# 4. The service, and the wait for a synchronised clock (a Pi has no clock battery).
+# 4. The service, and the NTP client it waits on (a Pi has no clock battery).
 if dpkg -s systemd-timesyncd >/dev/null 2>&1; then
   say "systemd-timesyncd present"
 else
-  apt-get install -y systemd-timesyncd
+  apt_install systemd-timesyncd
   say "installed systemd-timesyncd"
 fi
 install_file "$HERE/obos-india.service" "$UNITS/obos-india.service" 0644
@@ -89,15 +110,20 @@ install_file "$HERE/obos-india-reboot.timer" "$UNITS/obos-india-reboot.timer" 06
 install -d -m 0755 /usr/local/share/doc/obos-india
 install_file "$HERE/README.md" /usr/local/share/doc/obos-india/README.md 0644
 systemctl daemon-reload
-systemctl enable obos-india.service systemd-time-wait-sync.service
-say "enabled obos-india.service and systemd-time-wait-sync.service"
+systemctl enable obos-india.service
+say "enabled obos-india.service"
 
 # 5. The hardware watchdog: a hung Pi reboots itself. Pi only.
 if [[ -f $BOOT_CONFIG ]]; then
   if grep -qx 'dtparam=watchdog=on' "$BOOT_CONFIG"; then
     say "dtparam=watchdog=on already in $BOOT_CONFIG"
   else
-    printf 'dtparam=watchdog=on\n' >>"$BOOT_CONFIG"
+    # Appended lines belong to the last [section]; make sure that is [all].
+    last_section="$(grep -E '^\[' "$BOOT_CONFIG" | tail -n 1 || true)"
+    if [[ -n $last_section && $last_section != "[all]" ]]; then
+      append_line "$BOOT_CONFIG" "[all]"
+    fi
+    append_line "$BOOT_CONFIG" "dtparam=watchdog=on"
     say "added dtparam=watchdog=on to $BOOT_CONFIG (applies at the next boot)"
   fi
   if grep -qx 'RuntimeWatchdogSec=15' "$SYSTEM_CONF"; then
@@ -106,7 +132,7 @@ if [[ -f $BOOT_CONFIG ]]; then
     if grep -qE '^#?RuntimeWatchdogSec=' "$SYSTEM_CONF"; then
       sed -i -E 's/^#?RuntimeWatchdogSec=.*/RuntimeWatchdogSec=15/' "$SYSTEM_CONF"
     else
-      printf 'RuntimeWatchdogSec=15\n' >>"$SYSTEM_CONF"
+      append_line "$SYSTEM_CONF" "RuntimeWatchdogSec=15"
     fi
     systemctl daemon-reexec
     say "set RuntimeWatchdogSec=15 in $SYSTEM_CONF"
@@ -119,17 +145,18 @@ fi
 if dpkg -s unattended-upgrades >/dev/null 2>&1; then
   say "unattended-upgrades present"
 else
-  apt-get update
-  DEBIAN_FRONTEND=noninteractive apt-get install -y unattended-upgrades
+  apt_install unattended-upgrades
   say "installed unattended-upgrades"
 fi
-want='APT::Periodic::Update-Package-Lists "1";
-APT::Periodic::Unattended-Upgrade "1";'
-if [[ -f $AUTO_UPGRADES ]] && [[ "$(cat "$AUTO_UPGRADES")" == "$want" ]]; then
+# Judge the effective apt settings, not one file; never overwrite someone's own file.
+periodic() { apt-config dump "APT::Periodic::$1" | grep -qx "APT::Periodic::$1 \"1\";"; }
+if periodic Update-Package-Lists && periodic Unattended-Upgrade; then
   say "unattended-upgrades already enabled"
-else
-  printf '%s\n' "$want" >"$AUTO_UPGRADES"
+elif [[ ! -f $AUTO_UPGRADES ]]; then
+  printf '%s\n' 'APT::Periodic::Update-Package-Lists "1";' 'APT::Periodic::Unattended-Upgrade "1";' >"$AUTO_UPGRADES"
   say "enabled unattended-upgrades"
+else
+  say "WARNING: $AUTO_UPGRADES is customised and leaves automatic updates OFF; left as is"
 fi
 systemctl enable --now obos-india-reboot.timer
 say "weekly reboot timer on: Sunday 03:37 IST"
