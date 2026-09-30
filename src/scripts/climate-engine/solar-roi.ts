@@ -131,15 +131,16 @@ export function suggestedSize(unitsPerMonth: number, basis: SolarCostBasis): rea
   return band ? band.kw : [3, null];
 }
 
-/** The whole ward as one system (spec D1, D6): every roof at its floor capacity. Low
-    yield is the ward's published floor generation per kW; high is the bracket's top
-    under the ward's mean strict-mask loss. */
-export function wardInput(pv: Pick<PvFile, 'totals' | 'tiers'>): { readonly sizeKw: number; readonly kwhPerKw: readonly [number, number] } {
-  const kw = pv.totals.capacity_mwp * 1000;
-  return {
-    sizeKw: kw,
-    kwhPerKw: [pv.totals.generation_gwh_yr * 1e6 / kw, pv.tiers.yield_bracket_kwh_per_kwp[1] * (1 - pv.totals.mean_loss_strict)],
-  };
+/** The whole ward as one system (spec D1, D6): every roof at its floor capacity, and a
+    yield range that is exactly the capacity-weighted sum of the roofs' own ranges
+    (`roofKwhPerKw`), so the ward can never be more optimistic than its roofs. */
+export function wardInput(pv: Pick<PvFile, 'kwp' | 'loss' | 'loss_strict' | 'tiers'>): { readonly sizeKw: number; readonly kwhPerKw: readonly [number, number] } {
+  let kw = 0, lo = 0, hi = 0;
+  for (let i = 0; i < pv.kwp.length; i += 1) {
+    const [a, b] = roofKwhPerKw(pv, i);
+    kw += pv.kwp[i]; lo += pv.kwp[i] * a; hi += pv.kwp[i] * b;
+  }
+  return { sizeKw: kw, kwhPerKw: kw > 0 ? [lo / kw, hi / kw] : [0, 0] };
 }
 
 /** Year-by-year CSV of both scenarios, with the assumptions on every row so a sorted sheet keeps them. */

@@ -169,11 +169,18 @@ test('suggestedSize follows the official sizing table', () => {
   assert.deepEqual(suggestedSize(900, FLAT), [3, null]);
 });
 
-test('wardInput: every roof at the floor capacity; the floor yield low, the strict-floor yield high', () => {
+test('wardInput: the capacity-weighted aggregate of the roofs\' own ranges, so never more optimistic than they are', () => {
   const w = wardInput(PV);
-  assert.equal(w.sizeKw, 17494);
-  assert.ok(Math.abs(w.kwhPerKw[0] - 19.762e6 / 17494) < 1e-6);
-  assert.ok(Math.abs(w.kwhPerKw[1] - 1450 * (1 - 0.1282)) < 1e-9);
+  assert.ok(Math.abs(w.sizeKw - 7.8) < 1e-9);
+  const lo = (7.3 * 1200 * 0.91 + 0.5 * 1200 * 1) / 7.8;
+  const hi = (7.3 * 1450 * 0.96 + 0.5 * 1450 * 1) / 7.8;
+  assert.ok(Math.abs(w.kwhPerKw[0] - lo) < 1e-9);
+  assert.ok(Math.abs(w.kwhPerKw[1] - hi) < 1e-9);
+  /* a weighted average lies between the roofs it averages (1,092 and 1,200), nearer the bigger roof */
+  const [a] = roofKwhPerKw(PV, 0);
+  const [b] = roofKwhPerKw(PV, 1);
+  assert.ok(w.kwhPerKw[0] > a && w.kwhPerKw[0] < b);
+  assert.ok(w.kwhPerKw[0] - a < b - w.kwhPerKw[0]);
 });
 
 test('roiCsv: one row per year, both scenarios, the assumptions on every row', () => {
