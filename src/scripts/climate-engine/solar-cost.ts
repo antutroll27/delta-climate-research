@@ -7,9 +7,12 @@
  * price. A basis with any unsourced value is refused whole (`costBasisFor` returns
  * null), and the sheet's button is then hidden rather than computing on a guess.
  *
+ * Money values are whole units of the scope's `Costs.currency` (INR for Kolkata); the UI
+ * formats them through money.ts, never by hand.
+ *
  * Sources and search trails: docs/evidence/solar-payback-cost-basis.md.
  */
-export interface Sourced<T> {
+export interface Cited<T> {
   readonly value: T;
   readonly source: string;
   readonly as_of: string;
@@ -25,22 +28,23 @@ export interface SizingBand {
 export interface SolarCostBasis {
   readonly city: string;
   readonly subsidy: {
-    readonly home: Sourced<{ readonly perKwFirst2: number; readonly perKwThird: number; readonly cap: number }>;
-    readonly society: Sourced<{ readonly perKw: number; readonly capKw: number }>;
+    readonly home: Cited<{ readonly perKwFirst2: number; readonly perKwThird: number; readonly cap: number }>;
+    readonly society: Cited<{ readonly perKw: number; readonly capKw: number }>;
   };
   /** installed cost per kW before subsidy, [low, high], in whole units of the currency */
-  readonly costPerKw: Sourced<readonly [number, number]>;
+  readonly costPerKw: Cited<readonly [number, number]>;
   /** per kWh; also the solar pane's default tariff */
-  readonly tariff: Sourced<number>;
+  readonly tariff: Cited<number>;
   /** per kWh credited for generation beyond the household's own yearly use; 0 where it lapses */
-  readonly surplusCreditPerKwh: Sourced<number>;
+  readonly surplusCreditPerKwh: Cited<number>;
   /** fractions: 0.025 = 2.5 % */
-  readonly degradation: Sourced<{ readonly firstYear: number; readonly perYear: number }>;
+  readonly degradation: Cited<{ readonly firstYear: number; readonly perYear: number }>;
   /** fraction of gross installed cost per year: 0.01 = 1 % */
-  readonly upkeepPctPerYr: Sourced<number>;
-  readonly inverter: Sourced<{ readonly year: number; readonly perKw: number }>;
-  readonly horizonYears: Sourced<number>;
-  readonly sizingByUnits: Sourced<readonly SizingBand[]>;
+  readonly upkeepPerYear: Cited<number>;
+  readonly inverter: Cited<{ readonly year: number; readonly perKw: number }>;
+  readonly horizonYears: Cited<number>;
+  /** ascending by maxUnits, the null (no upper bound) band last; the first band whose maxUnits >= units wins */
+  readonly sizingByUnits: Cited<readonly SizingBand[]>;
 }
 
 const PSG_PDF = 'PM Surya Ghar CFA structure, official PDF 7 Mar 2024: '
@@ -60,7 +64,7 @@ export const SOLAR_COST: Readonly<Record<string, SolarCostBasis>> = {
       as_of: READ,
     },
     tariff: {
-      value: 8.0,
+      value: 8,
       source: 'Assumed. CESC domestic slabs run 4.07-9.21 per unit (2025-26 tariff order); a solar unit displaces the top of the bill',
       as_of: READ,
     },
@@ -74,7 +78,7 @@ export const SOLAR_COST: Readonly<Record<string, SolarCostBasis>> = {
       source: 'MNRE PM Surya Ghar guidelines (Jul 2025), module spec 1.9: more than 97 % output in year 1 and below 0.5 % degradation per annum; the minimum every subsidised module must meet',
       as_of: READ,
     },
-    upkeepPctPerYr: {
+    upkeepPerYear: {
       value: 0.01,
       source: 'KERC order KERC/S/F-32/V-29/2407 (25.08.2026) s.7: O&M at 1 % of capital cost (a Karnataka generator norm; no West Bengal or MNRE residential figure found); applied flat in constant rupees, like the tariff, so the 5.72 %/yr escalation in the norm is not modelled; PM Surya Ghar vendors maintain free for the first 5 years',
       as_of: READ,
@@ -97,13 +101,23 @@ export const SOLAR_COST: Readonly<Record<string, SolarCostBasis>> = {
   },
 };
 
+/** a real citation, not a placeholder like 'tbd' */
+const MIN_SOURCE_CHARS = 10;
+
 const sourced = (f: { source: string; as_of: string }): boolean =>
-  f.source.trim().length > 10 && /^\d{4}-\d{2}-\d{2}$/.test(f.as_of);
+  f.source.trim().length > MIN_SOURCE_CHARS && /^\d{4}-\d{2}-\d{2}$/.test(f.as_of);
+
+/* Every Cited leaf in the basis, however deep: a field added later is checked without anyone remembering to list it. The walk stops at a Cited (it has `source`), so it never descends into a value. */
+const citedLeaves = (o: object): Cited<unknown>[] =>
+  Object.values(o).flatMap((v): Cited<unknown>[] =>
+    typeof v !== 'object' || v === null ? []
+      : 'source' in v ? [v as Cited<unknown>]
+      : citedLeaves(v));
 
 /** True when every value carries a source and a date. */
 export function isComplete(b: SolarCostBasis): boolean {
-  return [b.subsidy.home, b.subsidy.society, b.costPerKw, b.tariff, b.surplusCreditPerKwh, b.degradation,
-    b.upkeepPctPerYr, b.inverter, b.horizonYears, b.sizingByUnits].every(sourced);
+  const leaves = citedLeaves(b);
+  return leaves.length > 0 && leaves.every(sourced);
 }
 
 /** The city's basis, or null: no basis, or an incomplete one, means no payback sheet. */
