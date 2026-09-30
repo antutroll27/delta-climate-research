@@ -2,8 +2,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { computeRoi, subsidyFor, degradationFactor } from '../../src/scripts/climate-engine/solar-roi.ts';
+import { SOLAR_COST } from '../../src/scripts/climate-engine/solar-cost.ts';
 
 const S = (value) => ({ value, source: 'test fixture source', as_of: '2026-09-30' });
+/* keep values integer-exact: paybackYear compares cumulative >= 0 exactly, and several goldens land on 0 */
 /* A flat basis: no degradation, no upkeep, no inverter inside the horizon, so a
    payback is a division a reader can do in their head. */
 const FLAT = {
@@ -90,7 +92,9 @@ test('the range: slow takes low yield and high cost, fast the opposite; pairs gi
   assert.equal(r.slow.upfront, 3 * 70000);
   assert.equal(r.fast.years[0].kwh, 3 * 1200);
   assert.equal(r.fast.upfront, 3 * 50000);
-  assert.ok(r.fast.paybackYear <= r.slow.paybackYear);
+  assert.notEqual(r.fast.paybackYear, null);
+  assert.notEqual(r.slow.paybackYear, null);
+  assert.ok((r.fast.paybackYear ?? Infinity) <= (r.slow.paybackYear ?? Infinity));
   assert.ok(r.fast.net >= r.slow.net);
 });
 
@@ -105,4 +109,35 @@ test('properties over a sweep: more subsidy never lengthens payback; bill mode n
     const bill = computeRoi(input({ ...base, owner: 'home', unitsPerMonth: 150 })).fast;
     assert.ok(bill.net <= home.net + 1e-6, `bill mode out-earned flat at size ${size}`);
   }
+});
+
+test('payback means paid back AND stays paid back: an inverter that dips the cumulative below zero postpones it', () => {
+  /* 1 kW business at 50k: 10k a year, so 0 at year 5; year 7 is 70k - 50k - 30k = -10k; year 8 is 0 again */
+  const basis = { ...FLAT, inverter: S({ year: 7, perKw: 30000 }) };
+  const r = computeRoi(input({ sizeKw: 1, owner: 'business', costPerKw: [50000, 50000], basis }));
+  assert.equal(r.fast.years[4].cumulative, 0);
+  assert.equal(r.fast.years[6].cumulative, -10000);
+  assert.equal(r.fast.years[7].cumulative, 0);
+  assert.equal(r.fast.paybackYear, 8);
+});
+
+test('invariant over both bases: paybackYear is null exactly when the horizon net is negative, and the cumulative never dips after it', () => {
+  for (const basis of [FLAT, SOLAR_COST.kolkata]) for (const owner of ['home', 'society', 'business'])
+    for (const size of [1, 2, 3, 5, 10]) for (const tariff of [4, 6, 8, 12]) for (const kwh of [700, 900, 1200, 1400])
+      for (const unitsPerMonth of [null, 150]) {
+        const r = computeRoi(input({ owner, sizeKw: size, tariff, kwhPerKw: [kwh, kwh], unitsPerMonth, basis }));
+        for (const s of [r.slow, r.fast]) {
+          const tag = `${basis.city} ${owner} ${size} kW tariff ${tariff} kwh ${kwh} units ${unitsPerMonth}`;
+          assert.equal(s.paybackYear === null, s.net < 0, tag);
+          if (s.paybackYear !== null) for (const y of s.years.slice(s.paybackYear - 1)) assert.ok(y.cumulative >= 0, `${tag} year ${y.year}`);
+        }
+      }
+});
+
+test("status 'ok' means the FAST scenario pays back; the SLOW one may still not", () => {
+  /* 3 kW business at 60k = 180k. Slow: 500 kWh/kW at 4 = 6k a year, 150k in 25 years, never. Fast: 1,300 kWh/kW = 15.6k a year, 11 × = 171.6k < 180k, 12 × = 187.2k */
+  const r = computeRoi(input({ owner: 'business', kwhPerKw: [500, 1300], tariff: 4 }));
+  assert.equal(r.status, 'ok');
+  assert.equal(r.slow.paybackYear, null);
+  assert.equal(r.fast.paybackYear, 12);
 });

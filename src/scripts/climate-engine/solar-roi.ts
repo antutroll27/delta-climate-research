@@ -38,13 +38,14 @@ export interface RoiYear {
 export interface ScenarioResult {
   readonly upfront: number;
   readonly subsidy: number;
-  /** first year the cumulative net is non-negative; null = not within the horizon */
+  /** first year from which the cumulative net stays non-negative to the horizon; null = never */
   readonly paybackYear: number | null;
   /** cumulative net at the horizon, upfront included */
   readonly net: number;
   readonly years: readonly RoiYear[];
 }
 
+/** status 'ok' means the FAST (optimistic) scenario pays back; SLOW may still be null, and the copy then prints 'N years to more than <horizon>'. */
 export type RoiResult =
   | { readonly status: 'too_small'; readonly slow: null; readonly fast: null }
   | { readonly status: 'ok' | 'no_payback'; readonly slow: ScenarioResult; readonly fast: ScenarioResult };
@@ -89,13 +90,14 @@ function runScenario(inp: RoiInput, kwhPerKw: number, costPerKw: number): Scenar
     const upkeep = gross * b.upkeepPerYear.value;
     const inverter = t === inv.year ? inp.sizeKw * inv.perKw : 0;
     cumulative += value - upkeep - inverter;
-    if (paybackYear === null && cumulative >= 0) paybackYear = t;
+    if (cumulative < 0) paybackYear = null; else paybackYear ??= t;
     years.push({ year: t, kwh, value, upkeep, inverter, cumulative });
   }
   return { upfront, subsidy, paybackYear, net: cumulative, years };
 }
 
 export function computeRoi(inp: RoiInput): RoiResult {
+  /* Only size is guarded here; the sheet's controller refuses non-positive or non-numeric tariff, cost and units before calling (a NaN elsewhere yields net NaN). */
   if (!(inp.sizeKw >= MIN_SYSTEM_KW)) return { status: 'too_small', slow: null, fast: null };
   const [k1, k2] = inp.kwhPerKw;
   const [c1, c2] = inp.costPerKw;
