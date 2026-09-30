@@ -108,7 +108,7 @@ const sourced = (f: { source: string; as_of: string }): boolean =>
   f.source.trim().length > MIN_SOURCE_CHARS && /^\d{4}-\d{2}-\d{2}$/.test(f.as_of);
 
 /* Every Cited leaf in the basis, however deep: a field added later is checked without anyone remembering to list it. The walk stops at a Cited (it has `source`), so it never descends into a value. */
-const citedLeaves = (o: object): Cited<unknown>[] =>
+export const citedLeaves = (o: object): Cited<unknown>[] =>
   Object.values(o).flatMap((v): Cited<unknown>[] =>
     typeof v !== 'object' || v === null ? []
       : 'source' in v ? [v as Cited<unknown>]

@@ -1,6 +1,6 @@
 import type { PvFile } from './types';
 import type { Owner, RoiResult } from './solar-roi.ts';
-import type { SolarCostBasis } from './solar-cost.ts';
+import { citedLeaves, type SolarCostBasis } from './solar-cost.ts';
 
 type Validated = NonNullable<PvFile['tiers']['validated']>;
 
@@ -59,24 +59,49 @@ export const BANNED_PAYBACK_WORDS = /guarantee|assured|\bROI of\b|\breturns?\b/i
 
 const OWNER_LABEL: Record<Owner, string> = { home: 'Home', society: 'Housing society', business: 'Business' };
 
-export function paybackText(r: RoiResult, horizon: number): string {
-  if (r.status === 'too_small') return 'Too small for a useful system';
-  if (r.status === 'no_payback') return `Does not pay back within ${horizon} years at these assumptions`;
-  const fast = r.fast.paybackYear as number;
-  const slow = r.slow.paybackYear;
-  if (slow === null) return `${fast} years to more than ${horizon}`;
-  return fast === slow ? `${fast} years` : `${fast}–${slow} years`;
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const;
+
+/** The OLDEST as_of across every cited value in the basis, as `Sep 2026`: the line is only as fresh as its stalest default. */
+export function oldestAsOf(basis: SolarCostBasis): string {
+  const dates = citedLeaves(basis).map((c) => c.as_of).sort();
+  const m = /^(\d{4})-(\d{2})-\d{2}$/.exec(dates[0] ?? '');
+  const name = m === null ? undefined : MONTHS[Number(m[2]) - 1];
+  return m === null || name === undefined ? (dates[0] ?? 'an unknown date') : `${name} ${m[1]}`;
 }
 
-export function savingText(r: RoiResult, money: (n: number) => string): string {
+/** A fraction as a percentage, trailing zeros trimmed, no space: 0.03 to `3%`, 0.005 to `0.5%`. */
+const pctText = (f: number): string => `${parseFloat((f * 100).toFixed(2))}%`;
+
+/** `3 kW`, `2.5 kW`: whole numbers print whole. */
+const kwText = (kw: number): string => `${Number.isInteger(kw) ? kw : kw.toFixed(1)} kW`;
+
+export function paybackText(r: RoiResult, horizon: number): string {
+  if (r.status === 'too_small') return 'Too small for a useful system';
+  if (r.status === 'no_payback') return `Does not pay back within ${plural(horizon, 'year')} at these assumptions`;
+  const fast = r.fast.paybackYear as number;
+  const slow = r.slow.paybackYear;
+  if (slow === null) return `${plural(fast, 'year')} at best; may not pay back within ${plural(horizon, 'year')}`;
+  return fast === slow ? plural(fast, 'year') : `${fast}–${plural(slow, 'year')}`;
+}
+
+export function savingText(r: RoiResult, money: (n: number) => string, horizon: number): string {
   if (r.status === 'too_small') return '';
+  if (r.fast.net < 0) return `A net loss over ${plural(horizon, 'year')} at these assumptions`;
+  if (r.slow.net < 0) return `a loss of ${money(-r.slow.net)} to a saving of ${money(r.fast.net)}`;
   return `${money(r.slow.net)} to ${money(r.fast.net)}`;
 }
 
 export function subsidyLine(owner: Owner, subsidy: number, money: (n: number) => string): string {
-  if (owner === 'home') return `Home: PM Surya Ghar subsidy ${money(subsidy)} applied`;
-  if (owner === 'society') return `Housing society: ${money(subsidy)} for common areas (assumes common-area use)`;
-  return 'Business: no subsidy';
+  if (owner === 'home') return `Home: assumes the PM Surya Ghar subsidy of ${money(subsidy)}, if eligible`;
+  if (owner === 'society') return `Housing society: assumes ${money(subsidy)} for common areas, if eligible`;
+  return 'Business: no subsidy assumed';
+}
+
+/** What flat valuation quietly assumes. Empty where it is not an assumption (business) or where surplus is paid. */
+export function flatCaveat(owner: Owner, basis: SolarCostBasis): string {
+  if (owner === 'business' || basis.surplusCreditPerKwh.value !== 0) return '';
+  return 'In West Bengal, power beyond your own yearly use earns nothing. '
+    + 'Add your monthly units under "Use my bill" to see the payback on what you actually use.';
 }
 
 export interface AssumptionInputs {
@@ -93,37 +118,37 @@ export interface AssumptionInputs {
 export function assumptionsLine(a: AssumptionInputs, money: (n: number) => string, rate: (n: number) => string): string {
   const b = a.basis;
   const [lo, hi] = [Math.min(...a.costPerKw), Math.max(...a.costPerKw)];
-  const bill = a.unitsPerMonth !== null;
   const d = b.degradation.value;
   const parts = [
     OWNER_LABEL[a.owner],
-    `${a.sizeKw.toFixed(1)} kW`,
-    `${money(lo)}–${money(hi)} per kW`,
+    kwText(a.sizeKw),
+    `installed cost ${money(lo)}–${money(hi)} per kW`,
     `subsidy ${money(a.subsidy)}`,
-    bill
+    a.unitsPerMonth !== null
       ? `${rate(a.tariff)} per kWh for your own use, ${a.unitsPerMonth} units a month, `
         + (b.surplusCreditPerKwh.value === 0 ? 'surplus not paid' : `surplus at ${rate(b.surplusCreditPerKwh.value)}`)
-      : `${rate(a.tariff)} per kWh flat`,
-    `degradation ${(d.firstYear * 100).toFixed(1)} % then ${(d.perYear * 100).toFixed(2)} %/yr`,
-    `upkeep ${(b.upkeepPerYear.value * 100).toFixed(1)} %/yr`,
+      : `every kWh valued at ${rate(a.tariff)} per unit (kWh), assuming you use all of it`,
+    `output falls ${pctText(d.firstYear)} in year 1, then ${pctText(d.perYear)} a year`,
+    `upkeep ${pctText(b.upkeepPerYear.value)} of cost a year`,
     `inverter replaced in year ${b.inverter.value.year}`,
-    `defaults as of ${b.costPerKw.as_of}`,
+    'today\'s prices, no tariff rise',
+    `reference defaults as of ${oldestAsOf(b)}`,
   ];
   return parts.join(' · ');
 }
 
 export function sizingText(unitsPerMonth: number, kw: readonly [number, number | null]): string {
   const band = kw[1] === null ? `above ${kw[0]} kW` : `${kw[0]}–${kw[1]} kW`;
-  return `Official sizing for ${unitsPerMonth} units a month: ${band}`;
+  return `PM Surya Ghar suggests ${band} for ${unitsPerMonth} units a month`;
 }
 
 export function surplusText(sizeKw: number, share: readonly [number, number], tariff: number, credit: number,
   rate: (n: number) => string): string {
   const [a, b] = [Math.round(share[0] * 100), Math.round(share[1] * 100)];
-  const pct = a === b ? `${a} %` : `${a}–${b} %`;
+  const pct = a === b ? `${a}%` : `${a}–${b}%`;
+  const lead = `At ${kwText(sizeKw)} about ${pct} of your generation is beyond your own yearly use`;
   if (credit === 0) {
-    return `At ${sizeKw.toFixed(1)} kW about ${pct} of your generation is surplus beyond your yearly use. `
-      + 'Under WBERC\'s 2025 rules it is reset to zero at the end of each year, not paid.';
+    return `${lead}. Under West Bengal's 2025 rooftop solar rules (WBERC), credit for it is set to zero at the end of each year and nothing is paid.`;
   }
-  return `At ${sizeKw.toFixed(1)} kW about ${pct} of your generation is surplus, credited at ${rate(credit)} per kWh, not your ${rate(tariff)} tariff.`;
+  return `${lead}, credited at ${rate(credit)} per kWh, not your ${rate(tariff)} tariff.`;
 }
