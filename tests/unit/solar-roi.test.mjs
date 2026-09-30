@@ -1,7 +1,10 @@
 // tests/unit/solar-roi.test.mjs
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { computeRoi, subsidyFor, degradationFactor } from '../../src/scripts/climate-engine/solar-roi.ts';
+import {
+  computeRoi, subsidyFor, degradationFactor,
+  roofKwhPerKw, roofMaxKw, defaultSizeKw, suggestedSize, wardInput, roiCsv,
+} from '../../src/scripts/climate-engine/solar-roi.ts';
 import { SOLAR_COST } from '../../src/scripts/climate-engine/solar-cost.ts';
 
 const S = (value) => ({ value, source: 'test fixture source', as_of: '2026-09-30' });
@@ -140,4 +143,45 @@ test("status 'ok' means the FAST scenario pays back; the SLOW one may still not"
   assert.equal(r.status, 'ok');
   assert.equal(r.slow.paybackYear, null);
   assert.equal(r.fast.paybackYear, 12);
+});
+
+const PV = { kwp: [7.3, 0.5], loss: [0.09, 0], loss_strict: [0.04, 0], packing_factor: 0.28,
+  tiers: { yield_bracket_kwh_per_kwp: [1200, 1450], packing_range: [0.28, 0.40] },
+  totals: { capacity_mwp: 17.494, generation_gwh_yr: 19.762, mean_loss_strict: 0.1282 } };
+
+test('roofKwhPerKw: low yield under the headline loss, high yield under the strict floor', () => {
+  const [lo, hi] = roofKwhPerKw(PV, 0);
+  assert.ok(Math.abs(lo - 1200 * 0.91) < 1e-9);
+  assert.ok(Math.abs(hi - 1450 * 0.96) < 1e-9);
+});
+
+test('roofMaxKw is the top of the packing interval; the default size is min(3, max) in half-kW steps', () => {
+  assert.equal(roofMaxKw(PV, 0), +(7.3 * 0.40 / 0.28).toFixed(2));
+  assert.equal(defaultSizeKw(10.43), 3);
+  assert.equal(defaultSizeKw(2.3), 2);
+  assert.equal(defaultSizeKw(0.7), 0.5);
+});
+
+test('suggestedSize follows the official sizing table', () => {
+  assert.deepEqual(suggestedSize(100, FLAT), [1, 2]);
+  assert.deepEqual(suggestedSize(150, FLAT), [1, 2]);
+  assert.deepEqual(suggestedSize(151, FLAT), [2, 3]);
+  assert.deepEqual(suggestedSize(900, FLAT), [3, null]);
+});
+
+test('wardInput: every roof at the floor capacity; the floor yield low, the strict-floor yield high', () => {
+  const w = wardInput(PV);
+  assert.equal(w.sizeKw, 17494);
+  assert.ok(Math.abs(w.kwhPerKw[0] - 19.762e6 / 17494) < 1e-6);
+  assert.ok(Math.abs(w.kwhPerKw[1] - 1450 * (1 - 0.1282)) < 1e-9);
+});
+
+test('roiCsv: one row per year, both scenarios, the assumptions on every row', () => {
+  const r = computeRoi(input());
+  const csv = roiCsv(r, 'Home · 3.0 kW');
+  const lines = csv.trim().split('\n');
+  assert.equal(lines[0], 'year,kwh_slow,value_slow,cumulative_slow,kwh_fast,value_fast,cumulative_fast,upkeep_slow,inverter,assumptions');
+  assert.equal(lines.length, 26);
+  assert.ok(lines.slice(1).every((l) => l.endsWith(',"Home · 3.0 kW"')));
+  assert.equal(roiCsv(computeRoi(input({ sizeKw: 0.5 })), 'x'), '');
 });

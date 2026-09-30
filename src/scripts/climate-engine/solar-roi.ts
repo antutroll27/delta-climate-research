@@ -6,6 +6,8 @@
  * arithmetic, not a confidence the laboratory never measured.
  */
 import type { SolarCostBasis } from './solar-cost.ts';
+import type { PvFile } from './types';
+import { pvRanges } from './solar-ranges.ts';
 
 export type Owner = 'home' | 'society' | 'business';
 
@@ -104,4 +106,51 @@ export function computeRoi(inp: RoiInput): RoiResult {
   const slow = runScenario(inp, Math.min(k1, k2), Math.max(c1, c2));
   const fast = runScenario(inp, Math.max(k1, k2), Math.min(c1, c2));
   return { status: fast.paybackYear === null ? 'no_payback' : 'ok', slow, fast };
+}
+
+/** Year-1 kWh per kW for roof i: the bracket's low under the headline loss, its high
+    under the strict-mask floor. The same bounds `pvRanges` uses, per kW. */
+export function roofKwhPerKw(pv: Pick<PvFile, 'loss' | 'loss_strict' | 'tiers'>, i: number): readonly [number, number] {
+  const [yLo, yHi] = pv.tiers.yield_bracket_kwh_per_kwp;
+  return [yLo * (1 - pv.loss[i]), yHi * (1 - pv.loss_strict[i])];
+}
+
+/** The most this roof can take: the top of the published packing interval. */
+export function roofMaxKw(pv: Pick<PvFile, 'kwp' | 'loss' | 'loss_strict' | 'tiers'>, i: number): number {
+  return pvRanges(pv, i).kwpHigh;
+}
+
+/** The slider's starting point: a household-sized 3 kW, or less if the roof is smaller, in half-kW steps. */
+export function defaultSizeKw(maxKw: number): number {
+  return Math.min(3, Math.floor(maxKw * 2) / 2);
+}
+
+/** The official sizing suggestion for a monthly consumption (PM Surya Ghar table). */
+export function suggestedSize(unitsPerMonth: number, basis: SolarCostBasis): readonly [number, number | null] {
+  const band = basis.sizingByUnits.value.find((b) => b.maxUnits === null || unitsPerMonth <= b.maxUnits);
+  return band ? band.kw : [3, null];
+}
+
+/** The whole ward as one system (spec D1, D6): every roof at its floor capacity. Low
+    yield is the ward's published floor generation per kW; high is the bracket's top
+    under the ward's mean strict-mask loss. */
+export function wardInput(pv: Pick<PvFile, 'totals' | 'tiers'>): { readonly sizeKw: number; readonly kwhPerKw: readonly [number, number] } {
+  const kw = pv.totals.capacity_mwp * 1000;
+  return {
+    sizeKw: kw,
+    kwhPerKw: [pv.totals.generation_gwh_yr * 1e6 / kw, pv.tiers.yield_bracket_kwh_per_kwp[1] * (1 - pv.totals.mean_loss_strict)],
+  };
+}
+
+/** Year-by-year CSV of both scenarios, with the assumptions on every row so a sorted sheet keeps them. */
+export function roiCsv(r: RoiResult, assumptions: string): string {
+  if (r.status === 'too_small') return '';
+  const q = `"${assumptions.replace(/"/g, '""')}"`;
+  const rows = ['year,kwh_slow,value_slow,cumulative_slow,kwh_fast,value_fast,cumulative_fast,upkeep_slow,inverter,assumptions'];
+  r.slow.years.forEach((s, k) => {
+    const f = r.fast.years[k];
+    rows.push([s.year, Math.round(s.kwh), Math.round(s.value), Math.round(s.cumulative),
+      Math.round(f.kwh), Math.round(f.value), Math.round(f.cumulative), Math.round(s.upkeep), Math.round(s.inverter), q].join(','));
+  });
+  return `${rows.join('\n')}\n`;
 }
