@@ -108,6 +108,8 @@ export function computeRoi(inp: RoiInput): RoiResult {
   return { status: fast.paybackYear === null ? 'no_payback' : 'ok', slow, fast };
 }
 
+type PvRoofs = Pick<PvFile, 'kwp' | 'loss' | 'loss_strict' | 'tiers'>;
+
 /** Year-1 kWh per kW for roof i: the bracket's low under the headline loss, its high
     under the strict-mask floor. The same bounds `pvRanges` uses, per kW. */
 export function roofKwhPerKw(pv: Pick<PvFile, 'loss' | 'loss_strict' | 'tiers'>, i: number): readonly [number, number] {
@@ -116,25 +118,28 @@ export function roofKwhPerKw(pv: Pick<PvFile, 'loss' | 'loss_strict' | 'tiers'>,
 }
 
 /** The most this roof can take: the top of the published packing interval. */
-export function roofMaxKw(pv: Pick<PvFile, 'kwp' | 'loss' | 'loss_strict' | 'tiers'>, i: number): number {
+export function roofMaxKw(pv: PvRoofs, i: number): number {
   return pvRanges(pv, i).kwpHigh;
 }
 
-/** The slider's starting point: a household-sized 3 kW, or less if the roof is smaller, in half-kW steps. */
+/** The slider's starting point: a household-sized 3 kW, or less if the roof is smaller, in half-kW steps.
+    The caller opens the sheet only when roofMaxKw >= MIN_SYSTEM_KW; below that this may return < 1. */
 export function defaultSizeKw(maxKw: number): number {
   return Math.min(3, Math.floor(maxKw * 2) / 2);
 }
 
 /** The official sizing suggestion for a monthly consumption (PM Surya Ghar table). */
 export function suggestedSize(unitsPerMonth: number, basis: SolarCostBasis): readonly [number, number | null] {
-  const band = basis.sizingByUnits.value.find((b) => b.maxUnits === null || unitsPerMonth <= b.maxUnits);
-  return band ? band.kw : [3, null];
+  const bands = basis.sizingByUnits.value;
+  /* the table guarantees a null-maxUnits band last, so the fallback is that band */
+  const band = bands.find((b) => b.maxUnits === null || unitsPerMonth <= b.maxUnits) ?? bands[bands.length - 1];
+  return band.kw;
 }
 
 /** The whole ward as one system (spec D1, D6): every roof at its floor capacity, and a
     yield range that is exactly the capacity-weighted sum of the roofs' own ranges
     (`roofKwhPerKw`), so the ward can never be more optimistic than its roofs. */
-export function wardInput(pv: Pick<PvFile, 'kwp' | 'loss' | 'loss_strict' | 'tiers'>): { readonly sizeKw: number; readonly kwhPerKw: readonly [number, number] } {
+export function wardInput(pv: PvRoofs): Pick<RoiInput, 'sizeKw' | 'kwhPerKw'> {
   let kw = 0, lo = 0, hi = 0;
   for (let i = 0; i < pv.kwp.length; i += 1) {
     const [a, b] = roofKwhPerKw(pv, i);
@@ -147,11 +152,11 @@ export function wardInput(pv: Pick<PvFile, 'kwp' | 'loss' | 'loss_strict' | 'tie
 export function roiCsv(r: RoiResult, assumptions: string): string {
   if (r.status === 'too_small') return '';
   const q = `"${assumptions.replace(/"/g, '""')}"`;
-  const rows = ['year,kwh_slow,value_slow,cumulative_slow,kwh_fast,value_fast,cumulative_fast,upkeep_slow,inverter,assumptions'];
+  const rows = ['year,kwh_slow,value_slow,cumulative_slow,kwh_fast,value_fast,cumulative_fast,upkeep_slow,upkeep_fast,inverter,assumptions'];
   r.slow.years.forEach((s, k) => {
     const f = r.fast.years[k];
     rows.push([s.year, Math.round(s.kwh), Math.round(s.value), Math.round(s.cumulative),
-      Math.round(f.kwh), Math.round(f.value), Math.round(f.cumulative), Math.round(s.upkeep), Math.round(s.inverter), q].join(','));
+      Math.round(f.kwh), Math.round(f.value), Math.round(f.cumulative), Math.round(s.upkeep), Math.round(f.upkeep), Math.round(s.inverter), q].join(','));
   });
   return `${rows.join('\n')}\n`;
 }

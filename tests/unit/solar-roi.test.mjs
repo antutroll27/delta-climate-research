@@ -155,10 +155,16 @@ test('roofKwhPerKw: low yield under the headline loss, high yield under the stri
   assert.ok(Math.abs(hi - 1450 * 0.96) < 1e-9);
 });
 
-test('roofMaxKw is the top of the packing interval; the default size is min(3, max) in half-kW steps', () => {
-  assert.equal(roofMaxKw(PV, 0), +(7.3 * 0.40 / 0.28).toFixed(2));
+test('roofMaxKw is the top of the published packing interval: 7.3 kW x 0.40 / 0.28', () => {
+  assert.equal(roofMaxKw(PV, 0), 10.43);
+});
+
+test('the default size is min(3, max) in half-kW steps', () => {
   assert.equal(defaultSizeKw(10.43), 3);
   assert.equal(defaultSizeKw(2.3), 2);
+});
+
+test("defaultSizeKw below 1 kW is the caller's to refuse", () => {
   assert.equal(defaultSizeKw(0.7), 0.5);
 });
 
@@ -167,6 +173,7 @@ test('suggestedSize follows the official sizing table', () => {
   assert.deepEqual(suggestedSize(150, FLAT), [1, 2]);
   assert.deepEqual(suggestedSize(151, FLAT), [2, 3]);
   assert.deepEqual(suggestedSize(900, FLAT), [3, null]);
+  assert.deepEqual(suggestedSize(300, FLAT), [2, 3]);
 });
 
 test('wardInput: the capacity-weighted aggregate of the roofs\' own ranges, so never more optimistic than they are', () => {
@@ -183,12 +190,22 @@ test('wardInput: the capacity-weighted aggregate of the roofs\' own ranges, so n
   assert.ok(w.kwhPerKw[0] - a < b - w.kwhPerKw[0]);
 });
 
+test('wardInput with no capacity is zero, not NaN', () => {
+  assert.deepEqual(wardInput({ ...PV, kwp: [0, 0] }), { sizeKw: 0, kwhPerKw: [0, 0] });
+});
+
 test('roiCsv: one row per year, both scenarios, the assumptions on every row', () => {
   const r = computeRoi(input());
   const csv = roiCsv(r, 'Home · 3.0 kW');
   const lines = csv.trim().split('\n');
-  assert.equal(lines[0], 'year,kwh_slow,value_slow,cumulative_slow,kwh_fast,value_fast,cumulative_fast,upkeep_slow,inverter,assumptions');
+  assert.equal(lines[0], 'year,kwh_slow,value_slow,cumulative_slow,kwh_fast,value_fast,cumulative_fast,upkeep_slow,upkeep_fast,inverter,assumptions');
   assert.equal(lines.length, 26);
   assert.ok(lines.slice(1).every((l) => l.endsWith(',"Home · 3.0 kW"')));
   assert.equal(roiCsv(computeRoi(input({ sizeKw: 0.5 })), 'x'), '');
+  assert.ok(csv.endsWith('\n'));
+  assert.equal(lines[1].split(',')[0], '1');
+  assert.equal(lines[1].split(',')[1], '3000');   // 3 kW x 1,000 kWh/kW, no degradation in FLAT
+  /* an embedded quote is doubled, and a comma inside the quotes stays in the last cell */
+  const quoted = roiCsv(r, 'a "b", c').trim().split('\n').slice(1);
+  assert.ok(quoted.every((l) => l.endsWith(',"a ""b"", c"')));
 });
