@@ -146,3 +146,15 @@ Pure functions with no DOM access. Types come from `types.ts`.
 1. The **CESC low-voltage domestic export rate** from the WBERC 2025 order; the only secondary figure found, ₹4.42, is for extra-high voltage.
 2. Sources for **upkeep %** and **inverter cost/year**.
 3. One **module datasheet** for the degradation figures.
+
+## 9. Amendment A1 (30 Sep 2026, after sourcing)
+
+Task 1's evidence (`docs/evidence/solar-payback-cost-basis.md`) changes one rule and settles the open defaults:
+
+- **Surplus is not paid in West Bengal.** WBERC's 2025 regulations (Regulation 81) reset any net amount receivable at the end of the settlement year (1 April to 31 March) to zero. The FY 2025-26 L&MV feed-in tariff of ₹4.80 (SM-40, 20.08.2025) only offsets imports within the year.
+  - Bill mode therefore values generation up to the household's own yearly use at the tariff, and credits the surplus at `surplusCreditPerKwh`, which is 0 for Kolkata.
+  - "Use my bill" no longer waits on a rate and ships in the first release.
+  - This replaces `export_rate` in §3.1 and the last row of §5.
+- **Degradation:** 3 % in year 1, then 0.5 %/yr, the MNRE PM Surya Ghar minimum for every subsidised module. This is more conservative than a premium datasheet.
+- **Upkeep:** 1 %/yr of capital cost (KERC 2026 norm), flat in constant rupees.
+- **Inverter:** ₹8,000/kW (store price plus installation), replaced in year 10, at the end of a 10-year warranty. The year is an assumption.
