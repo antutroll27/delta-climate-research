@@ -121,3 +121,14 @@ Source copies (PDFs, OCR text, page images) are kept outside the repo in `~/.cac
 - Autodesk University "Calculating Shaded Areas in Revit" (Phuc Le, Oct 2021): single-building shading of windows by projection, three dates; confirms our method, adds no data.
 - Mercom India, "WBERC Sets Net Billing and Gross Metering Feed-in Tariffs for Rooftop Solar" (28 Aug 2025): reports only the EHV row (CESC ₹4.42); secondary, superseded by the order itself.
 - KERC FY24 order (01.06.2023), SRTPV O&M ₹708/kW: superseded by the 25.08.2026 order.
+
+## Values adopted (Amendment A1, 30 Sep 2026)
+
+The table at the top is the research record. These are the values `solar-cost.ts` actually ships, and why they differ from it where they do.
+
+| Field | Shipped value | Why |
+|---|---|---|
+| surplusCreditPerKwh | 0 | Regulation 81 resets any net amount receivable, or net exported energy, to zero at the end of the settlement period (1 April to 31 March). The 4.80 feed-in tariff only offsets imports within the year, so surplus beyond the household's own yearly use earns nothing. |
+| degradation | 3 % in year 1, then 0.5 %/yr | The MNRE PM Surya Ghar floor that every subsidised module must meet. It is more conservative than the Waaree premium-line warranty (1.0 % then 0.4 %), which a cheaper module may not carry. |
+| upkeepPctPerYr | 1 % of gross installed cost per year, flat | The KERC norm, a Karnataka generator figure with no West Bengal or MNRE residential equivalent found. Applied flat in constant rupees, so its 5.72 %/yr escalation is not modelled. |
+| inverter | 8,000 per kW, replaced in year 10 | Waaree's 7,866 per kW store price excludes labour, so it is rounded up to 8,000 as a decision, not a quoted figure. Year 10 is the end of the Havells 10-year warranty, an assumption; no primary lifetime study was found. |

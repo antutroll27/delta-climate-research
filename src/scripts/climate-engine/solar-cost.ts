@@ -66,7 +66,7 @@ export const SOLAR_COST: Readonly<Record<string, SolarCostBasis>> = {
     },
     surplusCreditPerKwh: {
       value: 0,
-      source: 'WBERC Grid Interactive Rooftop Solar PV Regulations 2025, Regulation 81: a net amount receivable by the prosumer at the end of the settlement period (1 April to 31 March) is reset to zero; the FY 2025-26 L&MV feed-in tariff of 4.80 per kWh (WBERC SM-40, 20.08.2025, para 5.0) only offsets imports within the year',
+      source: 'WBERC Grid Interactive Rooftop Solar PV Regulations 2025 (notified as No. 81/WBERC, Kolkata Gazette 31 Jul 2025): under both net billing and net metering, a net amount receivable or net exported energy remaining at the end of the settlement period (1 April to 31 March) is reset to zero; the FY 2025-26 L&MV feed-in tariff of 4.80 per kWh (WBERC SM-40, 20.08.2025, para 5.0) only offsets imports within the year',
       as_of: READ,
     },
     degradation: {
@@ -76,12 +76,12 @@ export const SOLAR_COST: Readonly<Record<string, SolarCostBasis>> = {
     },
     upkeepPctPerYr: {
       value: 0.01,
-      source: 'KERC order KERC/S/F-32/V-29/2407 (25.08.2026) s.7: O&M at 1 % of capital cost; applied flat in constant rupees, like the tariff; PM Surya Ghar vendors maintain free for the first 5 years, so this is conservative',
+      source: 'KERC order KERC/S/F-32/V-29/2407 (25.08.2026) s.7: O&M at 1 % of capital cost (a Karnataka generator norm; no West Bengal or MNRE residential figure found); applied flat in constant rupees, like the tariff, so the 5.72 %/yr escalation in the norm is not modelled; PM Surya Ghar vendors maintain free for the first 5 years',
       as_of: READ,
     },
     inverter: {
       value: { year: 10, perKw: 8000 },
-      source: 'Waaree 3 kW on-grid inverter at 7,866 per kW incl. taxes (shop.waaree.com, 2026-09-30), rounded up for installation; replaced in year 10, the end of the Havells Enviro GTi 10-year warranty (assumption: no primary lifetime study found)',
+      source: 'Waaree 3 kW on-grid inverter at 7,866 per kW incl. taxes, excluding installation labour (shop.waaree.com, 2026-09-30); 8,000 per kW is that price rounded up to allow for labour (a decision, not a quoted figure); replaced in year 10, the end of the Havells Enviro GTi 10-year warranty (assumption: no primary lifetime study found)',
       as_of: READ,
     },
     horizonYears: { value: 25, source: 'Module performance warranty life; both Waaree and Vikram calculators use 25 years', as_of: READ },
@@ -108,6 +108,6 @@ export function isComplete(b: SolarCostBasis): boolean {
 
 /** The city's basis, or null: no basis, or an incomplete one, means no payback sheet. */
 export function costBasisFor(city: string): SolarCostBasis | null {
-  const b = SOLAR_COST[city];
+  const b = Object.hasOwn(SOLAR_COST, city) ? SOLAR_COST[city] : undefined;
   return b !== undefined && isComplete(b) ? b : null;
 }
