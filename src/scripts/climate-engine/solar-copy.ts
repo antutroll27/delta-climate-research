@@ -1,4 +1,6 @@
 import type { PvFile } from './types';
+import type { Owner, RoiResult } from './solar-roi.ts';
+import type { SolarCostBasis } from './solar-cost.ts';
 
 type Validated = NonNullable<PvFile['tiers']['validated']>;
 
@@ -44,4 +46,84 @@ export function noteFor(pv: Pick<PvFile, 'tiers'>, defaultNote: string): string 
   if (v === null) return defaultNote;
   return `Checked against ${plural(v.n, 'real rooftop')} · still a screening estimate · `
     + `${defaultNote.replace(/^Screening estimate · /, '')}`;
+}
+
+/* ── the payback sheet's sentences (spec 2026-09-30-solar-roi §4) ──
+   Money arrives as formatter functions, so this file never names a currency. */
+
+/** Printed beside every payback figure, on screen and on paper. */
+export const ESTIMATE_TAG = 'screened · estimate, not a quote';
+
+/** Words that turn an estimate into a promise. No payback sentence may use them. */
+export const BANNED_PAYBACK_WORDS = /guarantee|assured|\bROI of\b|\breturns?\b/i;
+
+const OWNER_LABEL: Record<Owner, string> = { home: 'Home', society: 'Housing society', business: 'Business' };
+
+export function paybackText(r: RoiResult, horizon: number): string {
+  if (r.status === 'too_small') return 'Too small for a useful system';
+  if (r.status === 'no_payback') return `Does not pay back within ${horizon} years at these assumptions`;
+  const fast = r.fast.paybackYear as number;
+  const slow = r.slow.paybackYear;
+  if (slow === null) return `${fast} years to more than ${horizon}`;
+  return fast === slow ? `${fast} years` : `${fast}–${slow} years`;
+}
+
+export function savingText(r: RoiResult, money: (n: number) => string): string {
+  if (r.status === 'too_small') return '';
+  return `${money(r.slow.net)} to ${money(r.fast.net)}`;
+}
+
+export function subsidyLine(owner: Owner, subsidy: number, money: (n: number) => string): string {
+  if (owner === 'home') return `Home: PM Surya Ghar subsidy ${money(subsidy)} applied`;
+  if (owner === 'society') return `Housing society: ${money(subsidy)} for common areas (assumes common-area use)`;
+  return 'Business: no subsidy';
+}
+
+export interface AssumptionInputs {
+  readonly owner: Owner;
+  readonly sizeKw: number;
+  readonly costPerKw: readonly [number, number];
+  readonly subsidy: number;
+  readonly tariff: number;
+  readonly unitsPerMonth: number | null;
+  readonly basis: SolarCostBasis;
+}
+
+/** Every input the result depends on, in one line. It travels with every figure. */
+export function assumptionsLine(a: AssumptionInputs, money: (n: number) => string, rate: (n: number) => string): string {
+  const b = a.basis;
+  const [lo, hi] = [Math.min(...a.costPerKw), Math.max(...a.costPerKw)];
+  const bill = a.unitsPerMonth !== null;
+  const d = b.degradation.value;
+  const parts = [
+    OWNER_LABEL[a.owner],
+    `${a.sizeKw.toFixed(1)} kW`,
+    `${money(lo)}–${money(hi)} per kW`,
+    `subsidy ${money(a.subsidy)}`,
+    bill
+      ? `${rate(a.tariff)} per kWh for your own use, ${a.unitsPerMonth} units a month, `
+        + (b.surplusCreditPerKwh.value === 0 ? 'surplus not paid' : `surplus at ${rate(b.surplusCreditPerKwh.value)}`)
+      : `${rate(a.tariff)} per kWh flat`,
+    `degradation ${(d.firstYear * 100).toFixed(1)} % then ${(d.perYear * 100).toFixed(2)} %/yr`,
+    `upkeep ${(b.upkeepPerYear.value * 100).toFixed(1)} %/yr`,
+    `inverter replaced in year ${b.inverter.value.year}`,
+    `defaults as of ${b.costPerKw.as_of}`,
+  ];
+  return parts.join(' · ');
+}
+
+export function sizingText(unitsPerMonth: number, kw: readonly [number, number | null]): string {
+  const band = kw[1] === null ? `above ${kw[0]} kW` : `${kw[0]}–${kw[1]} kW`;
+  return `Official sizing for ${unitsPerMonth} units a month: ${band}`;
+}
+
+export function surplusText(sizeKw: number, share: readonly [number, number], tariff: number, credit: number,
+  rate: (n: number) => string): string {
+  const [a, b] = [Math.round(share[0] * 100), Math.round(share[1] * 100)];
+  const pct = a === b ? `${a} %` : `${a}–${b} %`;
+  if (credit === 0) {
+    return `At ${sizeKw.toFixed(1)} kW about ${pct} of your generation is surplus beyond your yearly use. `
+      + 'Under WBERC\'s 2025 rules it is reset to zero at the end of each year, not paid.';
+  }
+  return `At ${sizeKw.toFixed(1)} kW about ${pct} of your generation is surplus, credited at ${rate(credit)} per kWh, not your ${rate(tariff)} tariff.`;
 }
