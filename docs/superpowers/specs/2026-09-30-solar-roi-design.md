@@ -1,7 +1,7 @@
 # Solar payback (ROI) sheet: design
 
 **Date:** 30 September 2026
-**Status:** Design agreed in brainstorming; awaiting spec review.
+**Status:** Implemented on `feat/solar-roi` (30 Sep to 1 Oct 2026); see §10 for what changed during implementation.
 **Branch:** `feat/solar-roi`.
 **Mockups:** `~/.cache/delta-climate/solar-roi/.superpowers/brainstorm/` (layout.html, sheet.html).
 
@@ -158,3 +158,21 @@ Task 1's evidence (`docs/evidence/solar-payback-cost-basis.md`) changes one rule
 - **Degradation:** 3 % in year 1, then 0.5 %/yr, the MNRE PM Surya Ghar minimum for every subsidised module. This is more conservative than a premium datasheet.
 - **Upkeep:** 1 %/yr of capital cost (KERC 2026 norm), flat in constant rupees.
 - **Inverter:** ₹8,000/kW (store price plus installation), replaced in year 10, at the end of a 10-year warranty. The year is an assumption.
+
+## 10. As implemented (1 Oct 2026)
+
+- **The cost basis** is a typed module, `src/scripts/climate-engine/solar-cost.ts`, not a JSON file. Every value is `Cited` with a source and an `as_of`. `isComplete` walks every cited leaf, so a new field cannot slip through unchecked.
+- **Payback means "stays paid back".** It is the first year from which the cumulative net stays non-negative to the horizon. The year-10 inverter can otherwise dip a system back into the red after it has crossed zero.
+- **The ward total** is the exact capacity-weighted sum of the per-roof ranges, so it is never more optimistic than its roofs. The ward line reads "Conservative city case: every roof at full size, no subsidy, every kWh at the tariff", followed by the as-of date and the tag.
+- **Flat mode states its assumption.** Every kWh is valued as if the household uses it. Homes and societies see a West Bengal caveat pointing to "Use my bill".
+- **Wording:**
+  - Subsidies read "assumes …, if eligible".
+  - Nothing is printed past the horizon ("N years at best; may not pay back within 25 years").
+  - Losses are named as losses.
+  - Sentence results use a plain text style (`is-words`).
+- **Size:** the slider covers 1 to min(roof max, 20) kW. A number box beside it covers 1 kW to the roof maximum, because the largest Ballygunge roof takes 714 kW and a slider is unusable at that scale.
+- **The sheet:**
+  - It is opaque.
+  - Escape closes only the sheet, and the roof stays selected.
+  - Inputs are validated with linked messages (`aria-describedby`, `aria-invalid`).
+  - A guard test keeps "quote" out of the sheet except in "not a quote".

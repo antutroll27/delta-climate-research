@@ -39,7 +39,7 @@ the owner leaves with a sheet a vendor's quote can be checked against.
    not exist yet, and the button must not pretend it does.
 5. **The installer brief** is a one-page printable view of the card, opened from it, saved to PDF by
    the browser. No server, no generator.
-6. **No payback and no capex**, still, pending the founder's decision recorded separately. The brief
+6. **No payback and no capex**, still, pending the founder's decision recorded separately. *(Decided 30 Sep 2026: a labelled payback range on the reader's own assumptions; see `2026-09-30-solar-roi-design.md`.)* The brief
    carries the tariff as a labelled assumption and the worth per year, exactly as the card does.
 7. **The wording of the rungs** stays neutral ("ask about an assessment") until the founder decides
    whether assessment and measurement are paid services.
