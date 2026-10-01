@@ -1700,6 +1700,11 @@ const newCity = scope.area.hasData
   .sp-assume{grid-column:1/-1;margin:.2rem 0 0;font-size:.68rem;color:var(--faint)}
   .sp-btns{display:flex;gap:.9rem;align-items:center;flex-wrap:wrap;padding-top:.4rem}
   .sp-btns .bc-brief{margin:0}
+  /* `.sb-x` is the brief's Close: pinned to the paper's corner in black ink. On the
+     dark sheet that corner is the estimate tag's, and black is invisible, so here it
+     joins the button row, on the right, in the sheet's own ink. */
+  .solpay .sb-x{position:static;margin-left:auto;color:var(--paper)}
+  .solpay .sb-x:focus-visible{outline-color:var(--paper)}
   /* `.bc-brief` sets display:block, which beats the UA's [hidden]; #bcPay must be
      able to hide (no cost basis for this city), so restore it here. */
   .bc-brief[hidden]{display:none}

@@ -59,7 +59,10 @@ import { resolve, requireCosts } from './scope/resolve.ts';
 import { areaPageTitle, areaPageDescription } from './scope/page-meta.ts';
 import { fmtMoney, fmtRate, currencyMark } from './money.ts';
 import { pvRanges, tierOf } from './solar-ranges.ts';
-import { wardSummary, validatedSentence, noteFor, sharePct } from './solar-copy.ts';
+import { wardSummary, validatedSentence, noteFor, sharePct, ESTIMATE_TAG, paybackText } from './solar-copy.ts';
+import { costBasisFor } from './solar-cost.ts';
+import { computeRoi, wardInput, roofMaxKw, MIN_SYSTEM_KW } from './solar-roi.ts';
+import { mountPaybackSheet, type PaybackSheet } from './solar-payback-sheet.ts';
 import { areaPath, paths, cityPaths } from './scope/paths.ts';
 import { areaRefusal } from './scope/reachability.ts';
 import { isAreaKey, splitKey, type AreaKey } from './scope/registry.ts';
@@ -770,7 +773,11 @@ export function mountHeatMap(): () => void {
      cell — the mask rule is the largest lever in the estimate (spec §2.4) — and
      it prints wherever the headline does. */
   const TARIFF_KEY = 'delta:hm-tariff';
-  const TARIFF_DEFAULT = 8.0;
+  /* The payback cost basis for this page's city (spec 2026-09-30-solar-roi §3.1),
+     or null: no basis means no payback sheet, and the tariff keeps its old default. */
+  const SOLAR_BASIS = costBasisFor(splitKey(INITIAL_AREA).city);
+  const TARIFF_DEFAULT = SOLAR_BASIS?.tariff.value ?? 8.0;
+  let paySheet: PaybackSheet | null = null;
   /* An ASSUMPTION the reader can change and the page remembers, like the clock
      format: a person's preference, not the visit's. Guarded because storage
      throws outright in some privacy modes. */
@@ -851,6 +858,18 @@ export function mountHeatMap(): () => void {
     box.querySelectorAll<HTMLElement>('.bc-ask').forEach((btn) => {
       btn.dataset.href = mailtoFor(btn.dataset.limit ?? '', i);
     });
+    /* THE PAYBACK DOOR. Hidden without a sourced cost basis; under 1 kW it stays
+       visible but disabled and says why, so the absence is explained rather than silent. */
+    const pay = el('bcPay') as HTMLButtonElement | null;
+    if (pay) {
+      if (!SOLAR_BASIS) pay.setAttribute('hidden', '');
+      else {
+        const small = roofMaxKw(pv, i) < MIN_SYSTEM_KW;
+        pay.textContent = small ? 'Too small for a useful system' : 'Work out payback';
+        pay.disabled = small;
+        pay.removeAttribute('hidden');
+      }
+    }
     box.removeAttribute('hidden');
   }
   /* One listener for five buttons and every rung the ladder grows: the painter only
@@ -903,6 +922,15 @@ export function mountHeatMap(): () => void {
     setText('brFloor', `${pct(pv.loss_strict[i])} · under a strict roof mask`);
     setText('brRaised', `${pct(pv.loss_raised[i])} · elevated mounting, what-if`);
     setText('brRs', `${fmtMoney(pv.kwh[i] * tariff, COSTS)}/yr at ${fmtRate(tariff, COSTS)} per kWh · assumed`);
+    /* THE PAYBACK, ON PAPER, NEVER WITHOUT ITS ASSUMPTIONS (spec §4 rule 2). */
+    const pay = paySheet?.summaryFor({ idx: i, pv }) ?? null;
+    const horizon = SOLAR_BASIS?.horizonYears.value ?? 25;
+    setText('brPay', pay ? `${pay.payback} · net over ${horizon} years: ${pay.saving}` : '—');
+    const payAssume = el('brPayAssume');
+    if (payAssume) {
+      if (pay) { payAssume.textContent = `${pay.assume} · ${ESTIMATE_TAG}`; payAssume.removeAttribute('hidden'); }
+      else payAssume.setAttribute('hidden', '');
+    }
     setText('brBasis', pv.basis);
     setText('brFoot', noteFor(pv, BRIEF_FOOT_DEFAULT));
     /* THE LADDER, COPIED OUT OF THE CARD. Each rung is cloned so the "Ask about
@@ -1059,6 +1087,23 @@ export function mountHeatMap(): () => void {
       setText(`${pre}BigK`, `Roofs ≥ ${s.threshold_kwp} kWp`);
       setHTML(`${pre}Big`, `${s.n.toLocaleString()}<small>${Math.round(100 * s.n / n)}% of ${n.toLocaleString()} roofs</small>`);
       setHTML(`${pre}Sh`, `${Math.round(s.share_losing_5pct * 100)}%<small>of those roofs</small>`);
+    }
+    /* The conservative city case (spec D1, D6): every roof at full size, no
+       subsidy, every kWh at the tariff. Only in the pane: the legend block stays lean. */
+    const wardPay = el('solPanePay');
+    if (wardPay) {
+      if (!SOLAR_BASIS) wardPay.setAttribute('hidden', '');
+      else {
+        const w = wardInput(pv);
+        const r = computeRoi({ sizeKw: w.sizeKw, kwhPerKw: w.kwhPerKw, owner: 'business', costPerKw: SOLAR_BASIS.costPerKw.value,
+          tariff, unitsPerMonth: null, basis: SOLAR_BASIS });
+        /* "pays back in" only when it does; otherwise the sentence already says what happens, in words (spec §4 rule 4). */
+        const said = paybackText(r, SOLAR_BASIS.horizonYears.value);
+        const verdict = r.status === 'ok' ? `pays back in ${said}` : `${said.charAt(0).toLowerCase()}${said.slice(1)}`;
+        wardPay.textContent = `Every roof at full size, no subsidy: ${verdict}`
+          + ` at ${fmtMoney(SOLAR_BASIS.costPerKw.value[0], COSTS)}–${fmtMoney(SOLAR_BASIS.costPerKw.value[1], COSTS)} per kW · ${ESTIMATE_TAG}`;
+        wardPay.removeAttribute('hidden');
+      }
     }
     paintSolarPane(pv);
     if (reseat) placeSolarBlock(true);
@@ -1272,6 +1317,27 @@ export function mountHeatMap(): () => void {
   el('solList')?.addEventListener('click', onRow);
   el('solList')?.addEventListener('keydown', onRow);
   tariffInput?.addEventListener('input', onTariff);
+  /* THE SHEET writes the tariff THROUGH the pane's own box and handler, so there is
+     one tariff and one repaint path, whichever box the reader typed in. */
+  if (SOLAR_BASIS) {
+    paySheet = mountPaybackSheet({
+      el,
+      basis: SOLAR_BASIS,
+      money: (n) => fmtMoney(n, COSTS),
+      rate: (n) => fmtRate(n, COSTS),
+      tariff: () => tariff,
+      setTariff: (v) => { if (tariffInput) { tariffInput.value = v; tariffInput.dispatchEvent(new Event('input')); } },
+      csvName: (idx) => `solar-payback-${areaOf(state.ward)}-${idx}.csv`,
+      printBrief: onBriefClick,
+    });
+  }
+  const onPayClick = (e: Event) => {
+    const pv = pvCache[state.ward];
+    if (!selected || !pv || !paySheet) return;
+    paySheet.open({ idx: selected.idx, pv }, e.currentTarget as HTMLElement);
+  };
+  el('bcPay')?.addEventListener('click', onPayClick);
+  cleanup.push(() => { el('bcPay')?.removeEventListener('click', onPayClick); paySheet?.destroy(); });
   cleanup.push(() => {
     el('solCsv')?.removeEventListener('click', onCsv);
     el('solList')?.removeEventListener('click', onRow);
