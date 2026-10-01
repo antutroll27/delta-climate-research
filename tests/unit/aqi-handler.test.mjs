@@ -303,7 +303,10 @@ test('feedEnabled: only exactly "on" switches the feed on', () => {
 test('the deployed handler reads AIR_CPCB_FEED: unset means no CPCB request, "on" means one', async () => {
   const saved = { fetch: globalThis.fetch, key: process.env.OPENAQ_API_KEY, flag: process.env.AIR_CPCB_FEED };
   let cp = 0;
-  globalThis.fetch = async (u) => (isCpcb(u) ? (cp++, cpcbOk()) : ok(u));
+  /* The deployed handler reads the REAL clock, so its OpenAQ rows must be recent on the real
+     clock too: rows pinned to 2026-09-24 went stale (STALE_DAYS) on 2026-10-01 and broke this test. */
+  const fresh = new Date(Date.now() - 2 * 3_600_000).toISOString();
+  globalThis.fetch = async (u) => (isCpcb(u) ? (cp++, cpcbOk()) : new Response(JSON.stringify(rows(sensorOf(u), fresh))));
   process.env.OPENAQ_API_KEY = 'k';
   try {
     delete process.env.AIR_CPCB_FEED;
