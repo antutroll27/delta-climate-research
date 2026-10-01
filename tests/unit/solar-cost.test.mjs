@@ -23,7 +23,7 @@ test('every Kolkata value is pinned', () => {
   const b = SOLAR_COST.kolkata;
   assert.deepEqual(b.subsidy.home.value, { perKwFirst2: 30000, perKwThird: 18000, cap: 78000 });
   assert.deepEqual(b.subsidy.society.value, { perKw: 18000, capKw: 500 });
-  assert.deepEqual(b.costPerKw.value, [55000, 65000]);
+  assert.deepEqual(b.costPerKw.value, [55000, 70000]);
   assert.equal(b.tariff.value, 8);
   assert.equal(b.surplusCreditPerKwh.value, 0);
   assert.deepEqual(b.degradation.value, { firstYear: 0.03, perYear: 0.005 });
@@ -42,6 +42,12 @@ test('the sources name the documents the values come from', () => {
   assert.match(b.subsidy.home.source, /CFA_structure20240307\.pdf/); // PM Surya Ghar CFA PDF, 7 Mar 2024
   assert.match(b.surplusCreditPerKwh.source, /81\/WBERC/); // WBERC 2025 rooftop regulations
   assert.match(b.surplusCreditPerKwh.source, /reset to zero/);
+  /* the installed-cost default names its documents, not "the market" (audit fix 5) */
+  assert.match(b.costPerKw.source, /202507081690964295\.pdf/); // MNRE PM Surya Ghar guidelines, clause 2(g) benchmark
+  assert.match(b.costPerKw.source, /SECONDARY/);
+  for (const site of ['myrsolar.com', 'vikramsolar.com', 'ushasolarindia.com', 'avaadaelectro.com']) {
+    assert.ok(b.costPerKw.source.includes(site), `the cost source does not name ${site}`);
+  }
 });
 
 test('costBasisFor: a known city, or null', () => {

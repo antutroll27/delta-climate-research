@@ -43,7 +43,7 @@ Every value has a `source` and an `as_of`. The loader refuses the file (and the 
 | `subsidy.home` | ₹30,000/kW up to 2 kW, ₹18,000 for the 3rd kW, cap ₹78,000 | PM Surya Ghar CFA structure, 7 Mar 2024 (official PDF) |
 | `subsidy.society` | ₹18,000/kW for common facilities, cap 500 kW | same PDF |
 | `subsidy.business` | 0 | the scheme covers residential only |
-| `cost_per_kw` | [55,000, 65,000] | 2026 market range; MNRE benchmark ₹50,000/kW (first 2 kW) and ₹45,000 thereafter, shown alongside |
+| `cost_per_kw` | [55,000, 70,000] (was 65,000 high; pre-ship audit 1 Oct 2026) | 2026 installer and manufacturer price guides, secondary, cited in the evidence file; MNRE benchmark ₹50,000/kW (first 2 kW) and ₹45,000 thereafter, shown alongside |
 | `tariff` | 8.00 ₹/kWh | the existing `TARIFF_DEFAULT`, which moves here; the CESC slab note stays |
 | `export_rate` | **pending** | the WBERC Grid Interactive Rooftop Solar Regulations 2025 order, CESC low-voltage domestic. Must be read from the order itself before "Use my bill" can ship (§5) |
 | `degradation` | 2.5 % in year 1, 0.7 %/yr after | typical module warranty (Vikram uses 2.5/0.67); cite one module datasheet |

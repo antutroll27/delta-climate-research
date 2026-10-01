@@ -93,7 +93,7 @@ export function mountPaybackSheet(d: SheetDeps): PaybackSheet {
     if (swapped) parts.push('Entered high to low, so the two were swapped.');
     if (lo < UNUSUAL_LO || hi > UNUSUAL_HI) parts.push('An unusual cost per kW; still computed.');
     else if (lo === def[0] && hi === def[1]) {
-      parts.push(`Default ${d.money(def[0])}–${d.money(def[1])} per kW, the 2026 market range. Edit it to match an installer's price.`);
+      parts.push(`Default ${d.money(def[0])}–${d.money(def[1])} per kW, from 2026 installer price guides. Edit it to match an installer's price.`);
     } else parts.push(`Your figures; the default was ${d.money(def[0])}–${d.money(def[1])} per kW.`);
     return parts.join(' ');
   }

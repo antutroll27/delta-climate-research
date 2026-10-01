@@ -7,7 +7,7 @@ Read 2026-09-30 for `src/scripts/climate-engine/solar-cost.ts` (spec `docs/super
 | subsidy.home | ₹30,000/kW to 2 kW; ₹18,000 3rd kW; cap ₹78,000 | PM Surya Ghar CFA structure (official PDF, 7 Mar 2024): https://pmsg-production-public.s3.ap-south-1.amazonaws.com/CFA_structure20240307.pdf | 2026-09-30 |
 | subsidy.society | ₹18,000/kW, common facilities, to 500 kW | same PDF | 2026-09-30 |
 | sizingByUnits | 0–150 → 1–2 kW; 150–300 → 2–3 kW; >300 → above 3 kW | same PDF | 2026-09-30 |
-| costPerKw | ₹55,000–65,000 | 2026 market range (installer price guides); MNRE benchmark ₹50,000/kW first 2 kW, ₹45,000 after (13 Feb 2024) | 2026-09-30 |
+| costPerKw | ₹55,000–70,000 (was ₹55,000–65,000 until the 2026-10-01 audit) | **Secondary:** 2026 installer and manufacturer price guides (myrsolar, Vikram Solar, Usha Shriram, Avaada; see "costPerKw" below). **Primary floor reference:** MNRE benchmark ₹50,000/kW for the first 2 kW and ₹45,000 after, from 13 Feb 2024, PM Surya Ghar guidelines (Jul 2025 edition) cl. 2(g): https://cdnbbsr.s3waas.gov.in/s3716e1b8c6cd17b771da77391355749f3/uploads/2025/07/202507081690964295.pdf | 2026-10-01 |
 | tariff | ₹8.00/kWh (assumed) | CESC domestic slabs 4.07–9.21 per unit, 2025-26 tariff order; a solar unit displaces the top of the bill | 2026-09-30 |
 | exportRate | ₹4.80/kWh (CESC, low & medium voltage, FY 2025-26). **Primary.** Applies to **net billing** (and gross metering) only; see the settlement caveat below | WBERC Suo-Motu Order, Case No. SM-40/25-26, dated 20.08.2025, para 5.0 table, row "Feed-in Tariff for L&MV", column CESC: https://wberc.gov.in/sites/default/files/SM-40.pdf. That CESC's domestic consumers are L&MV: CESC Tariff Order 2025-26 (Case TP-102), Annexure 4B, p. 26: https://wberc.gov.in/sites/default/files/TP102.pdf | 2026-09-30 |
 | upkeepPctPerYr | 1 % of capital cost per year. **Primary, but from Karnataka's regulator**, not West Bengal's (none found for WB) | KERC Order No. KERC/S/F-32/V-29/2407, dated 25.08.2026, §7 "Operation & Maintenance Cost": https://kerc.karnataka.gov.in/uploads/48561787653428.pdf | 2026-09-30 |
@@ -52,6 +52,41 @@ The WBERC order is a scanned image (HP Scan, 4 pages, no text layer). The number
 So under net billing, surplus × ₹4.80 is worth money only up to that financial year's import bill. Any credit beyond that is forfeited. Under net metering, surplus kWh offset imports at the retail tariff, and whatever is left at 31 March is forfeited.
 
 **Currency of the rate.** The order sets the rate for FY 2025-26. On 2026-09-30 WBERC's suo-motu and tariff-order listings showed no FY 2026-27 re-determination. The only later suo-motu order is SM-41 (1 Sep 2025), which only fixes the ninth control period as FY 2026-27 to 2030-31. CESC's own tariff page (https://www.cesc.co.in/tariff) still lists "2025-26" as its current tariff. If a FY 2026-27 CESC tariff order sets a new feed-in tariff, this row must be re-read.
+
+### costPerKw (read 2026-10-01, pre-ship audit)
+
+The audit found that the ₹55,000–65,000 default had no URL. These are the sources found for it. Every 2026 market figure is from an installer or manufacturer guide (**SECONDARY**). No 2026 survey by a government body or an independent analyst was found. None of the sources is specific to Kolkata.
+
+- **MNRE benchmark (PRIMARY).** PM Surya Ghar guidelines, Jul 2025 edition (the same PDF cited above for degradation), clause 2(g), PDF page 8 (printed page 6):
+  > "g) Benchmark Cost: The benchmark cost for 1 kW system is fixed at ₹ 50,000/kW for the first 2 kW of RTS capacity and ₹ 45,000 for the additional kW with effect from 13th February, 2024."
+
+  Clause 2(j) says it "will be revised at the time of midterm review of the scheme". No revision was found. For a 3 kW system it works out to ₹1,45,000, about ₹48,300/kW. It is the scheme's reference cost, not a market price, and the guidelines do not say whether it includes GST. It is shown as a floor, not used as the default.
+- **myrsolar.com (SECONDARY; installer, Madhya Pradesh).** https://myrsolar.com/solar-panel-installation-cost-india (dated 25 May 2026):
+  > "A residential solar installation in India costs roughly ₹55,000–₹65,000 per kW installed."
+
+  https://myrsolar.com/3kw-solar-system-india (published 25 May 2026, modified 14 Sep 2026):
+  > "A turnkey 3 kW residential solar installation in India costs ₹1.91 lakh in 2026 (a 3.27 kW system with six 545 W ALMM-approved panels, or roughly ₹58,000 per kW)."
+
+  The price is before subsidy, and its table is headed "Turnkey Cost (incl. GST)". The panels are DCR. This is the only source that states ₹55,000–65,000 word for word. Its line "The 2026 residential benchmark is approximately ₹50,000–₹55,000 per kW" does not match MNRE's wording and is not used.
+- **Vikram Solar (SECONDARY; manufacturer).** https://www.vikramsolar.com/solar-panel-installation-cost-per-kw-and-what-youre-actually-paying-for-in-2026/ (published 27 Apr 2026):
+  > "In 2026, the average installed cost is usually ₹55,000 to ₹85,000 per kW"
+- **Usha Shriram Solar (SECONDARY; manufacturer).** https://www.ushasolarindia.com/blog/rooftop-solar-cost-subsidy-in-india (published 24 Jan 2026, modified 27 Jul 2026), under "Below is an approximate price range before subsidy":
+  > "3 kW system: ₹1.7 – ₹2.1 lakh"
+
+  That is about ₹56,700–70,000/kW.
+- **Avaada Electro (SECONDARY; manufacturer).** https://avaadaelectro.com/blog/home-solar-panel-system-installation-cost-in-india/ (published 20 Nov 2025, modified 30 Sep 2026):
+  > "A 3 kW on-grid solar system typically costs ₹1,89,000 to ₹2,15,000 before the government subsidy."
+
+  That is about ₹63,000–71,700/kW. GST and DCR status are not stated.
+- **Also read, not cited in the code.**
+  - Fulminous Green Energy, an installer in Rajasthan: https://fulminousge.com/3kw-solar-system-cost/ (20 May 2026). It says "₹1,80,000 to ₹2,40,000 before subsidy", which is ₹60,000–80,000/kW.
+  - Bridgeway Power, Delhi NCR: https://bridgewaypower.in/blog/cost-of-solar-installation-delhi-ncr. It says "Up to 5 kW: ₹67,000 per kW", but its own 3 kW total of ₹2.40 lakh contradicts that, and the GST it quotes is the pre-cut rate.
+  - Anionline, Earthwave, Solaire Future and Bluebird Solar: undated, or inconsistent with themselves.
+- **GST context (PRIMARY).** PIB, 17 Sep 2025: https://www.pib.gov.in/PressReleasePage.aspx?PRID=2167486. GST on solar went from 12 % to 5 % with effect from 22 Sep 2025: "A typical 3 kW rooftop system will now be cheaper by about ₹9,000–10,500". Prices quoted before that date carry the higher GST.
+
+**Why the default moved to ₹55,000–70,000.** The low ends of the four cited ranges run from ₹55,000 to ₹63,000. The high ends run from ₹65,000 to ₹85,000, and three of the four reach about ₹70,000 or more. Only myrsolar stops at ₹65,000. The SLOW scenario takes the high cost, so a ₹65,000 ceiling would make it faster than most 2026 prices allow. ₹70,000 is the upper end that most of the guides reach; Vikram's ₹85,000 is the outlier. The low end stays at ₹55,000, the floor two guides state outright.
+
+Source copies (HTML, extracted text, the MNRE PDF and the PIB note) are in `~/.cache/delta-climate/solar-roi/sources/cost/`.
 
 ### upkeepPctPerYr
 
@@ -128,6 +163,7 @@ The table at the top is the research record. These are the values `solar-cost.ts
 
 | Field | Shipped value | Why |
 |---|---|---|
+| costPerKw | ₹55,000–70,000 (audit, 1 Oct 2026) | Every 2026 market figure found is from an installer or manufacturer guide (secondary). The high end is 70,000 because three of the four cited guides reach about that or more, and the SLOW scenario takes the high cost. The MNRE benchmark (about 48,300/kW for 3 kW) is the scheme's reference cost, not a market price. |
 | surplusCreditPerKwh | 0 | The 2025 Regulations (No. 81/WBERC) reset any net amount receivable, or net exported energy, to zero at the end of the settlement period (1 April to 31 March). The 4.80 feed-in tariff only offsets imports within the year, so surplus beyond the household's own yearly use earns nothing. |
 | degradation | 3 % in year 1, then 0.5 %/yr | The MNRE PM Surya Ghar floor that every subsidised module must meet. It is more conservative than the Waaree premium-line warranty (1.0 % then 0.4 %), which a cheaper module may not carry. |
 | upkeepPerYear | 1 % of gross installed cost per year, flat | The KERC norm, a Karnataka generator figure with no West Bengal or MNRE residential equivalent found. Applied flat in constant rupees, so its 5.72 %/yr escalation is not modelled. |
