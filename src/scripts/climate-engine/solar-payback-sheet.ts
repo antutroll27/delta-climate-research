@@ -44,6 +44,9 @@ export interface PaybackSheet {
 const UNUSUAL_LO = 20_000, UNUSUAL_HI = 150_000;
 /** spec §3.3: bill mode warns when more than this share of generation is surplus */
 const SURPLUS_WARN = 0.10;
+/** The slider spans the household and small-business band; the number box beside it
+    covers the whole roof (spec D5 refined: a 700 kW slider cannot be moved in half-kW). */
+const SLIDER_MAX_KW = 20;
 
 export function mountPaybackSheet(d: SheetDeps): PaybackSheet {
   const { el } = d;
@@ -59,6 +62,8 @@ export function mountPaybackSheet(d: SheetDeps): PaybackSheet {
   /** the units box holds text that is not a positive number (empty is not bad: it is simple mode) */
   let unitsBad = false;
   let size = 3;
+  /** the last size typed was outside [1, roof max] and was clamped */
+  let clamped = false;
   let roof: SheetRoof | null = null;
   let opener: HTMLElement | null = null;
   let csvUrl = '';
@@ -84,8 +89,8 @@ export function mountPaybackSheet(d: SheetDeps): PaybackSheet {
     if (swapped) parts.push('Entered high to low, so the two were swapped.');
     if (lo < UNUSUAL_LO || hi > UNUSUAL_HI) parts.push('An unusual cost per kW; still computed.');
     else if (lo === def[0] && hi === def[1]) {
-      parts.push(`Default ${d.money(def[0])}–${d.money(def[1])}: ${d.basis.costPerKw.source}. Edit it to your quote.`);
-    } else parts.push(`Your figures; the default was ${d.money(def[0])}–${d.money(def[1])}.`);
+      parts.push(`Default ${d.money(def[0])}–${d.money(def[1])} per kW, the 2026 market range. Edit it to your quote.`);
+    } else parts.push(`Your figures; the default was ${d.money(def[0])}–${d.money(def[1])} per kW.`);
     return parts.join(' ');
   }
 
@@ -93,12 +98,14 @@ export function mountPaybackSheet(d: SheetDeps): PaybackSheet {
     if (!roof) return;
     const max = roofMaxKw(roof.pv, roof.idx);
     const r = result(roof, size);
-    setText('spSizeOut', `${size.toFixed(1)} kW, of up to ${max.toFixed(1)} kW this roof can take`);
+    setText('spSizeOut', `${size.toFixed(1)} kW, of up to ${max.toFixed(1)} kW this roof can take`
+      + (clamped ? `; sizes run from ${MIN_SYSTEM_KW} kW to the roof's ${max.toFixed(1)} kW, so yours was clamped` : ''));
     setText('spSubsidy', subsidyLine(owner, r.status === 'too_small' ? 0 : r.fast.subsidy, d.money));
     setText('spPayback', paybackText(r, H));
     setText('spSaving', savingText(r, d.money, H));
     setText('spAssume', assume(r, size));
     setText('spCostNote', costNote());
+    el('spCostNote')?.setAttribute('title', d.basis.costPerKw.source);
     /* Flat mode flatters a home in West Bengal (surplus earns nothing): say so, and point at the bill box. */
     const bill = billUnits();
     const caveat = bill === null ? flatCaveat(owner, d.basis) : '';
@@ -126,7 +133,32 @@ export function mountPaybackSheet(d: SheetDeps): PaybackSheet {
     if (csvUrl) { URL.revokeObjectURL(csvUrl); csvUrl = ''; }
   }
 
-  const onSize = () => { size = Number(input('spSize')?.value) || size; paint(); };
+  /* One size, two controls. The slider stops at SLIDER_MAX_KW; a bigger size typed in
+     the box parks the thumb at its end while the box's value is what is computed. */
+  function setSize(v: number, from: 'slider' | 'box' | 'open'): void {
+    if (!roof) return;
+    const max = roofMaxKw(roof.pv, roof.idx);
+    const c = Math.min(max, Math.max(MIN_SYSTEM_KW, v));
+    clamped = from === 'box' && c !== v;
+    size = c;
+    const s = input('spSize'), n = input('spSizeNum');
+    if (s && from !== 'slider') s.value = String(Math.min(size, Number(s.max) || SLIDER_MAX_KW));
+    if (n && (from !== 'box' || clamped)) n.value = String(size);
+    n?.setAttribute('aria-invalid', 'false');
+  }
+  const onSize = () => {
+    const v = Number(input('spSize')?.value);
+    if (Number.isFinite(v) && v > 0) setSize(v, 'slider');
+    paint();
+  };
+  /* `change` (commit), not `input`: clamping a half-typed "5" for "50" would fight the reader */
+  const onSizeNum = () => {
+    const n = input('spSizeNum');
+    const v = Number(n?.value);
+    if (n?.value.trim() === '' || !Number.isFinite(v)) { n?.setAttribute('aria-invalid', 'true'); return; }
+    setSize(v, 'box');
+    paint();
+  };
   const onOwner = (e: Event) => {
     const v = (e.target as HTMLInputElement).value;
     if (v === 'home' || v === 'society' || v === 'business') { owner = v; paint(); }
@@ -188,6 +220,7 @@ export function mountPaybackSheet(d: SheetDeps): PaybackSheet {
   const onPrint = () => { close(); d.printBrief(); };
 
   input('spSize')?.addEventListener('input', onSize);
+  input('spSizeNum')?.addEventListener('change', onSizeNum);
   el('solPay')?.querySelectorAll<HTMLInputElement>('input[name="spOwner"]').forEach((r) => r.addEventListener('change', onOwner));
   input('spCostLo')?.addEventListener('change', onCost);
   input('spCostHi')?.addEventListener('change', onCost);
@@ -205,8 +238,12 @@ export function mountPaybackSheet(d: SheetDeps): PaybackSheet {
       if (!roof || roof.idx !== r.idx || roof.pv !== r.pv) size = defaultSizeKw(max);
       roof = r;
       opener = from;
-      const s = input('spSize');
-      if (s) { s.max = String(Math.floor(max * 2) / 2); s.value = String(size); }
+      const s = input('spSize'), n = input('spSizeNum');
+      if (s) s.max = String(Math.min(SLIDER_MAX_KW, Math.floor(max * 2) / 2));
+      if (n) n.max = String(max);
+      clamped = false;
+      setSize(size, 'open');
+      if (n) n.value = String(size);
       const lo = input('spCostLo'), hi = input('spCostHi');
       if (lo) lo.value = String(cost[0]);
       if (hi) hi.value = String(cost[1]);
@@ -232,6 +269,7 @@ export function mountPaybackSheet(d: SheetDeps): PaybackSheet {
     },
     destroy() {
       input('spSize')?.removeEventListener('input', onSize);
+      input('spSizeNum')?.removeEventListener('change', onSizeNum);
       el('solPay')?.querySelectorAll<HTMLInputElement>('input[name="spOwner"]').forEach((r) => r.removeEventListener('change', onOwner));
       input('spCostLo')?.removeEventListener('change', onCost);
       input('spCostHi')?.removeEventListener('change', onCost);

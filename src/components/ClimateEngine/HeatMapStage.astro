@@ -835,7 +835,8 @@ const newCity = scope.area.hasData
     </header>
     <div class="sp-sec">
       <label class="sp-k" for="spSize">System size</label>
-      <input id="spSize" type="range" min="1" step="0.5" value="3">
+      <span class="sp-size"><input id="spSize" type="range" min="1" step="0.5" value="3">
+        <input id="spSizeNum" type="number" inputmode="decimal" min="1" step="0.5" value="3" aria-label="System size in kW"> kW</span>
       <p class="sp-note" id="spSizeOut">—</p>
     </div>
     <fieldset class="sp-sec sp-owner">
@@ -1683,7 +1684,9 @@ const newCity = scope.area.hasData
   /* THE PAYBACK SHEET. Above the card (7) and below the print brief (80), which
      opens FROM it and must cover it. Full-screen on phones. */
   .solpay{position:fixed;z-index:75;inset:auto 16px 16px auto;width:min(430px,calc(100vw - 32px));
-    max-height:calc(100vh - 32px);overflow:auto;background:var(--panel-ground);color:var(--paper);
+    max-height:calc(100vh - 32px);overflow:auto;color:var(--paper);
+    /* --panel-ground is translucent; laid over black so no map shows through the figures */
+    background:linear-gradient(var(--panel-ground),var(--panel-ground)),var(--black);
     border:1px solid var(--line-hi);border-radius:10px;padding:16px 18px;font:400 .8rem/1.5 var(--sans)}
   .solpay[hidden]{display:none}
   .sp-head{display:flex;justify-content:space-between;align-items:baseline;gap:.6rem}
@@ -1693,7 +1696,12 @@ const newCity = scope.area.hasData
   .sp-note{margin:0;font-size:.7rem;color:var(--faint)}
   .sp-warn{color:var(--gold)}
   .sp-owner label{margin-right:.8rem}
-  .sp-pair input,#spTariff,#spUnits{width:7.5rem;font:450 .8rem var(--mono);background:var(--black);color:var(--paper);
+  .sp-size{display:flex;align-items:center;gap:.5rem}
+  .sp-size #spSize{flex:1 1 auto;min-width:0}
+  .sp-size #spSizeNum{width:5rem}
+  .solpay input[type="radio"],.solpay input[type="range"]{accent-color:var(--gold)}
+  #spBill label{display:block}
+  .sp-pair input,#spTariff,#spUnits,#spSizeNum{width:7.5rem;font:450 .8rem var(--mono);background:var(--black);color:var(--paper);
     border:1px solid var(--line-hi);border-radius:4px;padding:2px 6px}
   .sp-res{display:grid;grid-template-columns:1fr 1fr;gap:.4rem .8rem}
   .sp-big{display:block;font:450 1.35rem var(--mono);color:var(--gold)}
