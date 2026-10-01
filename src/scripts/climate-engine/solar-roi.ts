@@ -159,16 +159,28 @@ export function suggestedSize(unitsPerMonth: number, basis: SolarCostBasis): rea
   return band.kw;
 }
 
-/** The whole ward as one system (spec D1, D6): every roof at its floor capacity, and a
-    yield range that is exactly the capacity-weighted sum of the roofs' own ranges
-    (`roofKwhPerKw`), so the ward can never be more optimistic than its roofs. */
-export function wardInput(pv: PvRoofs): Pick<RoiInput, 'sizeKw' | 'kwhPerKw'> {
+/** The roofs as one system (spec D1, D6): each at its floor capacity, and a yield range
+    that is exactly the capacity-weighted sum of the roofs' own ranges (`roofKwhPerKw`),
+    so the aggregate can never be more optimistic than its roofs. `idx` picks the roofs;
+    omitted, it is every roof. */
+export function wardInput(pv: PvRoofs, idx?: readonly number[]): Pick<RoiInput, 'sizeKw' | 'kwhPerKw'> {
   let kw = 0, lo = 0, hi = 0;
-  for (let i = 0; i < pv.kwp.length; i += 1) {
+  for (const i of idx ?? pv.kwp.keys()) {
     const [a, b] = roofKwhPerKw(pv, i);
     kw += pv.kwp[i]; lo += pv.kwp[i] * a; hi += pv.kwp[i] * b;
   }
   return { sizeKw: kw, kwhPerKw: kw > 0 ? [lo / kw, hi / kw] : [0, 0] };
+}
+
+/** THE WARD LINE'S NUMBER (audit 2026-10-01). Only the roofs the sheet would open,
+    those that can take MIN_SYSTEM_KW or more (smaller ones it calls too small), each at
+    its floor capacity; owned as a business (no subsidy) and every kWh valued at the
+    tariff (`unitsPerMonth: null`). That last part flatters wherever surplus earns
+    nothing, so the line says "as if all of it is used" and never "conservative". */
+export function wardRoi(pv: PvRoofs, basis: SolarCostBasis, tariff: number): RoiResult {
+  const big = [...pv.kwp.keys()].filter((i) => roofMaxKw(pv, i) >= MIN_SYSTEM_KW);
+  return computeRoi({ ...wardInput(pv, big), owner: 'business', costPerKw: basis.costPerKw.value,
+    tariff, unitsPerMonth: null, basis });
 }
 
 /** Year-by-year CSV of both scenarios, with the assumptions on every row so a sorted sheet keeps them. */

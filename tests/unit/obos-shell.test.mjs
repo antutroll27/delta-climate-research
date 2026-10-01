@@ -3393,8 +3393,13 @@ test('the payback sheet says "quote" only to deny it, and the ward line carries 
   /* §4 rules 2, 5, 6: the ward line names the case, the valuation, the tariff and the
      as-of date beside the tag, and is hidden with the block it sits in. */
   const app = await readFile(new URL('../../src/scripts/climate-engine/heat-map-app.ts', import.meta.url), 'utf8');
-  assert.match(app, /Conservative city case: every roof at full size, no subsidy, every kWh at \$\{fmtRate\(tariff, COSTS\)\}/,
+  /* "Conservative" overclaimed: valuing every kWh flatters in West Bengal (audit fix 3). */
+  assert.doesNotMatch(app, /Conservative city case/, 'the ward line calls a flattering case conservative');
+  assert.match(app, /Whole-ward estimate: every roof of \$\{MIN_SYSTEM_KW\} kW or more at its floor capacity, no subsidy, every kWh valued at \$\{fmtRate\(tariff, COSTS\)\} as if all of it is used: \$\{verdict\}/,
     'the ward payback line no longer states its case, valuation and tariff');
+  assert.match(app, /per kW, today's prices`\s*\+ ` · reference defaults as of/, "the ward line drops \"today's prices\"");
+  assert.match(app, /const r = wardRoi\(pv, SOLAR_BASIS, tariff\);/, 'the ward line is computed in the app, not by the tested wardRoi');
+  assert.doesNotMatch(app, /wardInput\(/, 'the app builds the ward input itself again, outside the tested wardRoi');
   assert.match(app, /reference defaults as of \$\{oldestAsOf\(SOLAR_BASIS\)\} · \$\{ESTIMATE_TAG\}/,
     'the ward payback line no longer carries the as-of date and the estimate tag');
   assert.match(app, /if \(!has\) \{ show\('solPanePay', false\);/,

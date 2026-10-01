@@ -61,7 +61,7 @@ import { fmtMoney, fmtRate, currencyMark } from './money.ts';
 import { pvRanges, tierOf } from './solar-ranges.ts';
 import { wardSummary, validatedSentence, noteFor, sharePct, ESTIMATE_TAG, paybackText, oldestAsOf } from './solar-copy.ts';
 import { costBasisFor } from './solar-cost.ts';
-import { computeRoi, wardInput, roofMaxKw, MIN_SYSTEM_KW, tariffOk } from './solar-roi.ts';
+import { wardRoi, roofMaxKw, MIN_SYSTEM_KW, tariffOk } from './solar-roi.ts';
 import { mountPaybackSheet, type PaybackSheet } from './solar-payback-sheet.ts';
 import { areaPath, paths, cityPaths } from './scope/paths.ts';
 import { areaRefusal } from './scope/reachability.ts';
@@ -1087,22 +1087,22 @@ export function mountHeatMap(): () => void {
       setHTML(`${pre}Big`, `${s.n.toLocaleString()}<small>${Math.round(100 * s.n / n)}% of ${n.toLocaleString()} roofs</small>`);
       setHTML(`${pre}Sh`, `${Math.round(s.share_losing_5pct * 100)}%<small>of those roofs</small>`);
     }
-    /* The conservative city case (spec D1, D6): every roof at full size, no
-       subsidy, every kWh at the tariff. Only in the pane: the legend block stays lean. */
+    /* The whole-ward case (spec D1, D6; audit 2026-10-01): every roof the sheet would
+       open, at its floor capacity, no subsidy, every kWh valued at the tariff. Not
+       "conservative": valuing every kWh flatters where surplus earns nothing, and the
+       line says so. Only in the pane: the legend block stays lean. */
     const wardPay = el('solPanePay');
     if (wardPay) {
       if (!SOLAR_BASIS) wardPay.setAttribute('hidden', '');
       else {
-        const w = wardInput(pv);
-        const r = computeRoi({ sizeKw: w.sizeKw, kwhPerKw: w.kwhPerKw, owner: 'business', costPerKw: SOLAR_BASIS.costPerKw.value,
-          tariff, unitsPerMonth: null, basis: SOLAR_BASIS });
+        const r = wardRoi(pv, SOLAR_BASIS, tariff);
         /* "pays back in" only when it does; otherwise the sentence already says what happens, in words (spec §4 rule 4). */
         const said = paybackText(r, SOLAR_BASIS.horizonYears.value);
         const verdict = r.status === 'ok' ? `pays back in ${said}` : `${said.charAt(0).toLowerCase()}${said.slice(1)}`;
         /* Its own assumptions, not assumptionsLine's: that would name the owner ("Business"),
-           and this is a city case. Valuation, tariff, price and as-of all travel with it (§4 rules 2, 5, 6). */
-        wardPay.textContent = `Conservative city case: every roof at full size, no subsidy, every kWh at ${fmtRate(tariff, COSTS)}: ${verdict}`
-          + ` at ${fmtMoney(SOLAR_BASIS.costPerKw.value[0], COSTS)}–${fmtMoney(SOLAR_BASIS.costPerKw.value[1], COSTS)} per kW`
+           and this is a ward case. Valuation, tariff, price and as-of all travel with it (§4 rules 2, 5, 6). */
+        wardPay.textContent = `Whole-ward estimate: every roof of ${MIN_SYSTEM_KW} kW or more at its floor capacity, no subsidy, every kWh valued at ${fmtRate(tariff, COSTS)} as if all of it is used: ${verdict}`
+          + ` at ${fmtMoney(SOLAR_BASIS.costPerKw.value[0], COSTS)}–${fmtMoney(SOLAR_BASIS.costPerKw.value[1], COSTS)} per kW, today's prices`
           + ` · reference defaults as of ${oldestAsOf(SOLAR_BASIS)} · ${ESTIMATE_TAG}`;
         wardPay.removeAttribute('hidden');
       }

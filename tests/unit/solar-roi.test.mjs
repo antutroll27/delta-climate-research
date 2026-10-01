@@ -4,7 +4,7 @@ import test from 'node:test';
 import {
   computeRoi, subsidyFor, degradationFactor,
   roofKwhPerKw, roofMaxKw, defaultSizeKw, suggestedSize, wardInput, roiCsv,
-  tariffOk, costOk, unitsOk, roiFinite, TARIFF_MAX, COST_PER_KW_MAX, UNITS_MAX,
+  wardRoi, MIN_SYSTEM_KW, tariffOk, costOk, unitsOk, roiFinite, TARIFF_MAX, COST_PER_KW_MAX, UNITS_MAX,
 } from '../../src/scripts/climate-engine/solar-roi.ts';
 import { SOLAR_COST } from '../../src/scripts/climate-engine/solar-cost.ts';
 
@@ -231,4 +231,33 @@ test('roiFinite: an overflowing tariff is caught before it can paint "∞"', () 
   assert.equal(Number.isFinite(r.fast.net), false, 'the fixture must actually overflow');
   assert.equal(roiFinite(r), false);
   assert.equal(roiFinite(computeRoi(input({ tariff: NaN }))), false);
+});
+
+test('wardRoi: a business (no subsidy, every kWh valued) on the aggregate of the roofs of 1 kW or more only', () => {
+  assert.equal(MIN_SYSTEM_KW, 1);
+  /* roof 1 is 0.5 kWp, at most 0.5 x 0.40 / 0.28 = 0.71 kW: the sheet calls it too small, so the ward must too */
+  assert.ok(roofMaxKw(PV, 1) < MIN_SYSTEM_KW && roofMaxKw(PV, 0) >= MIN_SYSTEM_KW);
+  const basis = { ...FLAT, costPerKw: S([50000, 70000]) };
+  const r = wardRoi(PV, basis, 10);
+  const big = wardInput(PV, [0]);
+  assert.equal(big.sizeKw, 7.3);
+  const want = computeRoi({ ...big, owner: 'business', costPerKw: [50000, 70000], tariff: 10, unitsPerMonth: null, basis });
+  assert.deepEqual(r, want);
+  /* the sub-1 kW roof is out: 7.3 kW, not 7.8 */
+  assert.equal(r.fast.upfront, 7.3 * 50000);
+  assert.ok(Math.abs(r.fast.years[0].kwh - 7.3 * 1450 * 0.96) < 1e-6);
+  /* not a home: a home-subsidy ward is a different (better-looking) answer */
+  assert.equal(r.fast.subsidy, 0);
+  assert.notDeepEqual(r, computeRoi({ ...big, owner: 'home', costPerKw: [50000, 70000], tariff: 10, unitsPerMonth: null, basis }));
+  /* flat valuation: bill mode would cap what counts */
+  assert.notDeepEqual(r, computeRoi({ ...big, owner: 'business', costPerKw: [50000, 70000], tariff: 10, unitsPerMonth: 100, basis }));
+});
+
+test('wardRoi: a ward with no roof of 1 kW or more is too small, not a NaN', () => {
+  assert.equal(wardRoi({ ...PV, kwp: [0.5, 0.3] }, FLAT, 10).status, 'too_small');
+});
+
+test('wardInput takes an index list; without one it is every roof', () => {
+  assert.deepEqual(wardInput(PV, [0, 1]), wardInput(PV));
+  assert.deepEqual(wardInput(PV, []), { sizeKw: 0, kwhPerKw: [0, 0] });
 });

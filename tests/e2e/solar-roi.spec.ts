@@ -106,10 +106,12 @@ test.describe('the payback sheet', () => {
     await expect(page.locator('#brPayAssume')).toContainText('estimate, not a quote');
   });
 
-  test('the ward line states the conservative case', async ({ page }) => {
+  test('the ward line states its whole-ward case', async ({ page }) => {
     await page.locator('[data-rail="solar"]').click();
     await expect(page.locator('#solPanePay')).toBeVisible({ timeout: 15_000 });
-    await expect(page.locator('#solPanePay')).toContainText(/^Conservative city case:/);
+    await expect(page.locator('#solPanePay')).toContainText(/^Whole-ward estimate: every roof of 1 kW or more at its floor capacity,/);
+    await expect(page.locator('#solPanePay')).toContainText('as if all of it is used');
+    await expect(page.locator('#solPanePay')).not.toContainText('Conservative');
     await expect(page.locator('#solPanePay')).toContainText('no subsidy');
     await expect(page.locator('#solPanePay')).toContainText('estimate, not a quote');
   });
