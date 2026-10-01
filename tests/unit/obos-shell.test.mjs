@@ -3347,7 +3347,10 @@ test('the solar screen is wired end to end and never prints a headline without i
   for (const id of ['spPayback', 'spSaving', 'spAssume', 'spTag', 'spSize', 'spCostLo', 'spCostHi', 'spTariff', 'spClose']) {
     assert.ok(sheet.includes(`id="${id}"`), `the payback sheet lacks #${id}`);
   }
-  assert.ok(sheet.includes('screened · estimate, not a quote'), 'the sheet does not say it is an estimate, not a quote');
+  /* Comments stripped FIRST: a tag parked in an Astro or HTML comment is never on screen (audit fix 4). */
+  const sheetLive = sheet.replace(/\{\/\*[\s\S]*?\*\/\}/g, '').replace(/<!--[\s\S]*?-->/g, '');
+  assert.ok(sheetLive.includes('screened · estimate, not a quote'), 'the sheet does not say it is an estimate, not a quote');
+  assert.match(sheetLive, /id="spTag"[^>]*>screened · estimate, not a quote</, '#spTag does not carry the estimate tag');
   assert.match(stage, /id="brPay"/, 'the installer brief has no payback row');
   assert.match(stage, /id="brPayAssume"/, 'the brief prints a payback without its assumptions');
   assert.match(app, /ESTIMATE_TAG/, 'the app never prints the estimate tag beside a payback');
@@ -3437,4 +3440,14 @@ test('no infinity: the tariff is capped where it is typed and where it is rememb
   assert.match(stage, /id="spTariff"[^>]*aria-describedby="spTariffNote"/, '#spTariff points at no note saying when it is refused');
   assert.match(stage, /id="spTariffNote"/, 'the tariff note #spTariff points at does not exist');
   assert.match(controller, /setText\('spTariffNote', `[^`]*\$\{d\.rate\(TARIFF_MAX\)\}/, 'the tariff note does not name the ceiling the guard uses');
+});
+
+test('stronger payback guards: the brief tags its assumptions, the sheet paints them (audit fix 4)', async () => {
+  const app = await readFile(new URL('../../src/scripts/climate-engine/heat-map-app.ts', import.meta.url), 'utf8');
+  const controller = await readFile(new URL(
+    '../../src/scripts/climate-engine/solar-payback-sheet.ts', import.meta.url), 'utf8');
+  /* the expression itself, not the import: an imported tag nobody prints satisfies /ESTIMATE_TAG/ */
+  assert.match(app, /payAssume\.textContent = `\$\{pay\.assume\} · \$\{ESTIMATE_TAG\}`;/,
+    "the brief's #brPayAssume prints the assumptions without the estimate tag");
+  assert.match(controller, /setText\('spAssume', assume\(r, size\)\);/, 'the sheet never paints #spAssume');
 });

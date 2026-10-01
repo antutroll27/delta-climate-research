@@ -261,3 +261,11 @@ test('wardInput takes an index list; without one it is every roof', () => {
   assert.deepEqual(wardInput(PV, [0, 1]), wardInput(PV));
   assert.deepEqual(wardInput(PV, []), { sizeKw: 0, kwhPerKw: [0, 0] });
 });
+
+test('the subsidy is capped at the gross cost: a 1 kW home at 20,000/kW gets 20,000, not 30,000', () => {
+  const r = computeRoi(input({ sizeKw: 1, costPerKw: [20000, 20000] }));
+  assert.equal(subsidyFor('home', 1, FLAT), 30000);
+  assert.equal(r.fast.subsidy, 20000);
+  assert.equal(r.slow.subsidy, 20000);
+  assert.equal(r.fast.upfront, 0);
+});
