@@ -44,6 +44,10 @@ test.describe('the payback sheet', () => {
     await expect(page.locator('#solPay')).toBeVisible();
     await expect(page.locator('#spTag')).toHaveText('screened · estimate, not a quote');
     await expect(page.locator('#spPayback')).toHaveText(/years|Does not pay back/);
+    /* a figure is a figure: the default 3 kW home keeps the big-numeral style; only a
+       sentence result drops it (the is-words test below is the other half of this) */
+    await expect(page.locator('#spPayback')).not.toHaveClass(/is-words/);
+    await expect(page.locator('#spSaving')).not.toHaveClass(/is-words/);
     await expect(page.locator('#spAssume')).toContainText('3 kW');
     await expect(page.locator('#spAssume')).toContainText('reference defaults as of Sep 2026');
     /* a home with no bill: West Bengal pays nothing for surplus, and the sheet says so */
