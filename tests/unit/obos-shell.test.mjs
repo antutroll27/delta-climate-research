@@ -3374,3 +3374,34 @@ test('the solar screen is wired end to end and never prints a headline without i
   assert.match(app, /setText\('solPaneSure'/,
     'nothing paints the ward block\'s ladder summary -- the markup exists but is never filled');
 });
+
+test('the payback sheet says "quote" only to deny it, and the ward line carries its assumptions', async () => {
+  /* spec 2026-09-30-solar-roi §4 rule 3: "quote" appears only in "not a quote". A
+     cost note once said "Edit it to your quote", which turns the estimate into the
+     thing it is not. Checked on the sheet's markup and its controller. */
+  const stage = await stageSource();
+  const at = stage.indexOf('id="solPay"');
+  const sheetMarkup = stage.slice(at, stage.indexOf('</section>', at));
+  const controller = await readFile(new URL(
+    '../../src/scripts/climate-engine/solar-payback-sheet.ts', import.meta.url), 'utf8');
+  for (const [name, src] of [['#solPay markup', sheetMarkup], ['solar-payback-sheet.ts', controller]]) {
+    for (const m of src.matchAll(/quote/gi)) {
+      assert.equal(src.slice(m.index - 6, m.index + 5).toLowerCase(), 'not a quote',
+        `${name} says "quote" outside "not a quote": …${src.slice(m.index - 30, m.index + 20)}…`);
+    }
+  }
+  /* §4 rules 2, 5, 6: the ward line names the case, the valuation, the tariff and the
+     as-of date beside the tag, and is hidden with the block it sits in. */
+  const app = await readFile(new URL('../../src/scripts/climate-engine/heat-map-app.ts', import.meta.url), 'utf8');
+  assert.match(app, /Conservative city case: every roof at full size, no subsidy, every kWh at \$\{fmtRate\(tariff, COSTS\)\}/,
+    'the ward payback line no longer states its case, valuation and tariff');
+  assert.match(app, /reference defaults as of \$\{oldestAsOf\(SOLAR_BASIS\)\} · \$\{ESTIMATE_TAG\}/,
+    'the ward payback line no longer carries the as-of date and the estimate tag');
+  assert.match(app, /if \(!has\) \{ show\('solPanePay', false\);/,
+    'a ward with no solar file leaves a stale payback line beside a hidden block');
+  /* Escape on the sheet stops there; the app's window-level Escape would deselect the roof. */
+  assert.match(controller, /close\(\); e\.stopPropagation\(\);/,
+    "the sheet's Escape reaches the app and deselects the roof the reader is returning to");
+  assert.match(app, /if \(!b\) \{ closeBrief\(\); paySheet\?\.close\(\); \}/,
+    'deselecting a roof leaves its payback sheet open');
+});

@@ -89,7 +89,7 @@ export function mountPaybackSheet(d: SheetDeps): PaybackSheet {
     if (swapped) parts.push('Entered high to low, so the two were swapped.');
     if (lo < UNUSUAL_LO || hi > UNUSUAL_HI) parts.push('An unusual cost per kW; still computed.');
     else if (lo === def[0] && hi === def[1]) {
-      parts.push(`Default ${d.money(def[0])}–${d.money(def[1])} per kW, the 2026 market range. Edit it to your quote.`);
+      parts.push(`Default ${d.money(def[0])}–${d.money(def[1])} per kW, the 2026 market range. Edit it to match an installer's price.`);
     } else parts.push(`Your figures; the default was ${d.money(def[0])}–${d.money(def[1])} per kW.`);
     return parts.join(' ');
   }
@@ -148,6 +148,7 @@ export function mountPaybackSheet(d: SheetDeps): PaybackSheet {
     const s = input('spSize'), n = input('spSizeNum');
     if (s && from !== 'slider') s.value = String(Math.min(size, Number(s.max) || SLIDER_MAX_KW));
     if (n && (from !== 'box' || clamped)) n.value = String(size);
+    s?.setAttribute('aria-valuetext', `${size} kW`);
     n?.setAttribute('aria-invalid', 'false');
   }
   const onSize = () => {
@@ -159,7 +160,12 @@ export function mountPaybackSheet(d: SheetDeps): PaybackSheet {
   const onSizeNum = () => {
     const n = input('spSizeNum');
     const v = Number(n?.value);
-    if (n?.value.trim() === '' || !Number.isFinite(v)) { n?.setAttribute('aria-invalid', 'true'); return; }
+    /* `badInput`: the browser holds text it could not parse, and reports value as '' */
+    if (!n || n.validity.badInput || n.value.trim() === '' || !Number.isFinite(v)) {
+      n?.setAttribute('aria-invalid', 'true');
+      setText('spSizeOut', 'Size must be a number of kW; keeping the last good size.');
+      return;
+    }
     setSize(v, 'box');
     paint();
   };
@@ -191,11 +197,14 @@ export function mountPaybackSheet(d: SheetDeps): PaybackSheet {
     paint();
   };
   const onUnits = () => {
-    const raw = input('spUnits')?.value ?? '';
+    const box = input('spUnits');
+    const raw = box?.value ?? '';
     const v = Number(raw);
-    const ok = raw.trim() !== '' && Number.isFinite(v) && v > 0;
+    /* non-numeric text reads back as '' with validity.badInput set: that is bad input, not an empty box */
+    const garbled = box?.validity.badInput === true;
+    const ok = !garbled && raw.trim() !== '' && Number.isFinite(v) && v > 0;
     units = ok ? v : null;
-    unitsBad = raw.trim() !== '' && !ok;
+    unitsBad = garbled || (raw.trim() !== '' && !ok);
     invalid('spUnits', unitsBad);
     paint();
   };
@@ -220,7 +229,9 @@ export function mountPaybackSheet(d: SheetDeps): PaybackSheet {
     stageOthers().forEach((k) => k.removeAttribute('inert'));
     opener?.focus();
   }
-  const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && isOpen()) close(); };
+  /* Escape closes the sheet and stops there: the app's window-level Escape would
+     otherwise go on to deselect the roof the reader is returning to. */
+  const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && isOpen()) { close(); e.stopPropagation(); } };
   const onPrint = () => { close(); d.printBrief(); };
 
   input('spSize')?.addEventListener('input', onSize);
@@ -245,14 +256,13 @@ export function mountPaybackSheet(d: SheetDeps): PaybackSheet {
       const s = input('spSize'), n = input('spSizeNum');
       if (s) s.max = String(Math.min(SLIDER_MAX_KW, Math.floor(max * 2) / 2));
       if (n) n.max = String(max);
-      clamped = false;
       setSize(size, 'open');
-      if (n) n.value = String(size);
       const lo = input('spCostLo'), hi = input('spCostHi');
       if (lo) lo.value = String(cost[0]);
       if (hi) hi.value = String(cost[1]);
       invalid('spCostLo', false); invalid('spCostHi', false);
       costBad = false;
+      swapped = false;
       const t = input('spTariff');
       if (t) t.value = d.tariff().toFixed(2);
       invalid('spTariff', false);

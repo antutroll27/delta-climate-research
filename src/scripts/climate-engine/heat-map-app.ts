@@ -59,7 +59,7 @@ import { resolve, requireCosts } from './scope/resolve.ts';
 import { areaPageTitle, areaPageDescription } from './scope/page-meta.ts';
 import { fmtMoney, fmtRate, currencyMark } from './money.ts';
 import { pvRanges, tierOf } from './solar-ranges.ts';
-import { wardSummary, validatedSentence, noteFor, sharePct, ESTIMATE_TAG, paybackText } from './solar-copy.ts';
+import { wardSummary, validatedSentence, noteFor, sharePct, ESTIMATE_TAG, paybackText, oldestAsOf } from './solar-copy.ts';
 import { costBasisFor } from './solar-cost.ts';
 import { computeRoi, wardInput, roofMaxKw, MIN_SYSTEM_KW } from './solar-roi.ts';
 import { mountPaybackSheet, type PaybackSheet } from './solar-payback-sheet.ts';
@@ -923,9 +923,8 @@ export function mountHeatMap(): () => void {
     setText('brRaised', `${pct(pv.loss_raised[i])} · elevated mounting, what-if`);
     setText('brRs', `${fmtMoney(pv.kwh[i] * tariff, COSTS)}/yr at ${fmtRate(tariff, COSTS)} per kWh · assumed`);
     /* THE PAYBACK, ON PAPER, NEVER WITHOUT ITS ASSUMPTIONS (spec §4 rule 2). */
-    const pay = paySheet?.summaryFor({ idx: i, pv }) ?? null;
-    const horizon = SOLAR_BASIS?.horizonYears.value ?? 25;
-    setText('brPay', pay ? `${pay.payback} · net over ${horizon} years: ${pay.saving}` : '—');
+    const pay = SOLAR_BASIS && paySheet ? paySheet.summaryFor({ idx: i, pv }) : null;
+    setText('brPay', pay && SOLAR_BASIS ? `${pay.payback} · net over ${SOLAR_BASIS.horizonYears.value} years: ${pay.saving}` : '—');
     const payAssume = el('brPayAssume');
     if (payAssume) {
       if (pay) { payAssume.textContent = `${pay.assume} · ${ESTIMATE_TAG}`; payAssume.removeAttribute('hidden'); }
@@ -1061,7 +1060,7 @@ export function mountHeatMap(): () => void {
     const reseat = el('solBlock')?.hasAttribute('hidden') === true && has;
     show('solPaneBlock', has);
     show('solBlock', has);
-    if (!has) { setSolarOpen(false); paintSolarPane(null); return; }
+    if (!has) { show('solPanePay', false); setSolarOpen(false); paintSolarPane(null); return; }
     const t = pv.totals, s = pv.stratum, n = pv.kwp.length;
     /* The pane's own chip and summary: the card's tier is per-roof and cannot
        stand in for the whole ward, so these are painted independently rather than
@@ -1100,8 +1099,11 @@ export function mountHeatMap(): () => void {
         /* "pays back in" only when it does; otherwise the sentence already says what happens, in words (spec §4 rule 4). */
         const said = paybackText(r, SOLAR_BASIS.horizonYears.value);
         const verdict = r.status === 'ok' ? `pays back in ${said}` : `${said.charAt(0).toLowerCase()}${said.slice(1)}`;
-        wardPay.textContent = `Every roof at full size, no subsidy: ${verdict}`
-          + ` at ${fmtMoney(SOLAR_BASIS.costPerKw.value[0], COSTS)}–${fmtMoney(SOLAR_BASIS.costPerKw.value[1], COSTS)} per kW · ${ESTIMATE_TAG}`;
+        /* Its own assumptions, not assumptionsLine's: that would name the owner ("Business"),
+           and this is a city case. Valuation, tariff, price and as-of all travel with it (§4 rules 2, 5, 6). */
+        wardPay.textContent = `Conservative city case: every roof at full size, no subsidy, every kWh at ${fmtRate(tariff, COSTS)}: ${verdict}`
+          + ` at ${fmtMoney(SOLAR_BASIS.costPerKw.value[0], COSTS)}–${fmtMoney(SOLAR_BASIS.costPerKw.value[1], COSTS)} per kW`
+          + ` · reference defaults as of ${oldestAsOf(SOLAR_BASIS)} · ${ESTIMATE_TAG}`;
         wardPay.removeAttribute('hidden');
       }
     }
@@ -1533,7 +1535,7 @@ export function mountHeatMap(): () => void {
     selected = b;
     selectedLandmark = b ? landmark : null;
     paintLandmark(selectedLandmark);
-    if (!b) closeBrief();             // a sheet about a roof nobody has selected
+    if (!b) { closeBrief(); paySheet?.close(); }   // a sheet about a roof nobody has selected
     if (b) {
       /* b.ring so the walk is measured from the building's nearest corner, not
          from a point inside it — nobody sets off from the middle of a block. */
@@ -1584,6 +1586,7 @@ export function mountHeatMap(): () => void {
   const onPickKey = (e: KeyboardEvent) => {
     if (e.key !== 'Escape') return;
     closeBrief();                       // the sheet first: it is the topmost thing on screen
+    paySheet?.close();                  // normally already closed by its own Escape, which stops here
     if (selected) select(null);
     closeStreetView();
   };

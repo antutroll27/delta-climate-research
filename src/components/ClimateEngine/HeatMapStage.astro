@@ -835,8 +835,8 @@ const newCity = scope.area.hasData
     </header>
     <div class="sp-sec">
       <label class="sp-k" for="spSize">System size</label>
-      <span class="sp-size"><input id="spSize" type="range" min="1" step="0.5" value="3">
-        <input id="spSizeNum" type="number" inputmode="decimal" min="1" step="0.5" value="3" aria-label="System size in kW"> kW</span>
+      <span class="sp-size"><input id="spSize" type="range" min="1" step="0.5" value="3" aria-describedby="spSizeOut">
+        <input id="spSizeNum" type="number" inputmode="decimal" min="1" step="0.5" value="3" aria-label="System size in kW" aria-describedby="spSizeOut"> kW</span>
       <p class="sp-note" id="spSizeOut">—</p>
     </div>
     <fieldset class="sp-sec sp-owner">
@@ -848,15 +848,15 @@ const newCity = scope.area.hasData
     </fieldset>
     <div class="sp-sec">
       <span class="sp-k">Cost per kW, installed</span>
-      <span class="sp-pair"><input id="spCostLo" type="number" inputmode="numeric" min="0" step="1000" aria-label="Lowest cost per kW">
-        – <input id="spCostHi" type="number" inputmode="numeric" min="0" step="1000" aria-label="Highest cost per kW"></span>
+      <span class="sp-pair"><input id="spCostLo" type="number" inputmode="numeric" min="0" step="1000" aria-label="Lowest cost per kW" aria-describedby="spCostNote">
+        – <input id="spCostHi" type="number" inputmode="numeric" min="0" step="1000" aria-label="Highest cost per kW" aria-describedby="spCostNote"></span>
       <p class="sp-note" id="spCostNote">—</p>
       <label class="sp-k" for="spTariff">Your tariff, per kWh</label>
       <input id="spTariff" type="number" inputmode="decimal" min="0" step="0.25">
       <p class="sp-note sp-warn" id="spFlat" hidden></p>
       <div id="spBill">
         <label class="sp-k" for="spUnits">Use my bill (optional): units a month</label>
-        <input id="spUnits" type="number" inputmode="numeric" min="0" step="10">
+        <input id="spUnits" type="number" inputmode="numeric" min="0" step="10" aria-describedby="spSizing">
         <p class="sp-note" id="spSizing" hidden></p>
         <p class="sp-note sp-warn" id="spWarn" hidden></p>
       </div>
