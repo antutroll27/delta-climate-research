@@ -163,7 +163,12 @@ Task 1's evidence (`docs/evidence/solar-payback-cost-basis.md`) changes one rule
 
 - **The cost basis** is a typed module, `src/scripts/climate-engine/solar-cost.ts`, not a JSON file. Every value is `Cited` with a source and an `as_of`. `isComplete` walks every cited leaf, so a new field cannot slip through unchecked.
 - **Payback means "stays paid back".** It is the first year from which the cumulative net stays non-negative to the horizon. The year-10 inverter can otherwise dip a system back into the red after it has crossed zero.
-- **The ward total** is the exact capacity-weighted sum of the per-roof ranges, so it is never more optimistic than its roofs. The ward line reads "Conservative city case: every roof at full size, no subsidy, every kWh at the tariff", followed by the as-of date and the tag.
+- **The ward total** is the exact capacity-weighted sum of the per-roof ranges, so it is never more optimistic than its roofs. It is `wardRoi` in `solar-roi.ts`. It counts only the roofs that can take 1 kW or more, because the sheet calls smaller roofs too small. It is computed as a business, with no subsidy and every kWh valued at the tariff. The ward line reads "Whole-ward estimate: every roof of 1 kW or more at its floor capacity, no subsidy, every kWh valued at <rate> as if all of it is used: …", then "per kW, today's prices", the as-of date and the tag. The pre-ship audit (1 Oct 2026) dropped the earlier word "Conservative": valuing every kWh flatters the result in West Bengal, where surplus earns nothing.
+- **Input ceilings (audit, 1 Oct 2026).**
+  - The tariff must be above 0 and at most 100 per kWh. The pane's box, the sheet's box and the stored `delta:hm-tariff` are all checked against that range.
+  - Cost per kW must be at most 1,500,000, and units at most 100,000 a month.
+  - `roiFinite` refuses to paint a payback or saving that is not finite.
+  - The CSV and the brief carry the estimate tag beside their assumptions.
 - **Flat mode states its assumption.** Every kWh is valued as if the household uses it. Homes and societies see a West Bengal caveat pointing to "Use my bill".
 - **Wording:**
   - Subsidies read "assumes …, if eligible".
