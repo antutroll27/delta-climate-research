@@ -3338,8 +3338,21 @@ test('the solar screen is wired end to end and never prints a headline without i
     'the card paints points, not intervals -- pvRanges is the only place the published bands become a roof range');
   assert.match(app, /mailto:ant@deltaclimate\.earth\?subject=/,
     'no fix line can be asked about -- the ladder names limits and offers no way to close one');
-  assert.doesNotMatch(stage + bench + app, /payback/i,
-    'a payback figure has no place here: it needs capex and subsidy assumptions, and that is where liability lives');
+  /* PAYBACK, BUT NEVER BARE (spec 2026-09-30-solar-roi §4). The sheet and the brief
+     each carry the assumptions line and the estimate tag beside the figure; the ward
+     line prints the tag. A payback without them is a quote, and that is where the
+     liability the old guard named lives. */
+  assert.match(stage, /id="solPay"[^>]*role="dialog"/, 'the payback sheet is missing or is not a dialog');
+  const sheet = stage.slice(stage.indexOf('id="solPay"'), stage.indexOf('</section>', stage.indexOf('id="solPay"')));
+  for (const id of ['spPayback', 'spSaving', 'spAssume', 'spTag', 'spSize', 'spCostLo', 'spCostHi', 'spTariff', 'spClose']) {
+    assert.ok(sheet.includes(`id="${id}"`), `the payback sheet lacks #${id}`);
+  }
+  assert.ok(sheet.includes('screened · estimate, not a quote'), 'the sheet does not say it is an estimate, not a quote');
+  assert.match(stage, /id="brPay"/, 'the installer brief has no payback row');
+  assert.match(stage, /id="brPayAssume"/, 'the brief prints a payback without its assumptions');
+  assert.match(app, /ESTIMATE_TAG/, 'the app never prints the estimate tag beside a payback');
+  assert.match(stage, /\.bc-brief\[hidden\]\{display:none\}/,
+    '.bc-brief sets display:block, so without this rule #bcPay can never hide on a city with no cost basis');
   /* THE PANE AND THE CSV (Task 4, spec 2026-09-07-solar-guide §5). The ward block
      wears its own tier chip -- the card's is per-roof and cannot stand in for the
      whole ward -- and the CSV hands over the same ranges and tier the pane shows. */
