@@ -14,6 +14,22 @@ export type Owner = 'home' | 'society' | 'business';
 /** Below this the sheet does not open: panels, inverter and paperwork do not scale down. */
 export const MIN_SYSTEM_KW = 1;
 
+/* INPUT CEILINGS (pre-ship audit, 2026-10-01). Above these a figure is not a price
+   anyone pays but a typo, and 1e308 overflows the arithmetic to Infinity, which the
+   sheet would print as "∞". Each is far above any real Indian rooftop value, so a
+   real reader never meets one; the callers refuse a value outside (0, max] exactly
+   as they refuse a non-positive one. */
+export const TARIFF_MAX = 100;
+export const COST_PER_KW_MAX = 1_500_000;
+export const UNITS_MAX = 100_000;
+const inRange = (v: number, max: number): boolean => Number.isFinite(v) && v > 0 && v <= max;
+/** per kWh, in (0, TARIFF_MAX] */
+export const tariffOk = (v: number): boolean => inRange(v, TARIFF_MAX);
+/** installed cost per kW, in (0, COST_PER_KW_MAX] */
+export const costOk = (v: number): boolean => inRange(v, COST_PER_KW_MAX);
+/** average monthly units, in (0, UNITS_MAX] */
+export const unitsOk = (v: number): boolean => inRange(v, UNITS_MAX);
+
 export interface RoiInput {
   readonly sizeKw: number;
   /** year-1 generation per kW installed, net of shading, [low, high] in either order */
@@ -106,6 +122,13 @@ export function computeRoi(inp: RoiInput): RoiResult {
   const slow = runScenario(inp, Math.min(k1, k2), Math.max(c1, c2));
   const fast = runScenario(inp, Math.max(k1, k2), Math.min(c1, c2));
   return { status: fast.paybackYear === null ? 'no_payback' : 'ok', slow, fast };
+}
+
+/** False when any scenario's figures are not finite: the last line of defence before a
+    payback or saving is painted. The ceilings above should make it unreachable. */
+export function roiFinite(r: RoiResult): boolean {
+  return r.status === 'too_small'
+    || [r.slow, r.fast].every((s) => Number.isFinite(s.net) && Number.isFinite(s.upfront));
 }
 
 type PvRoofs = Pick<PvFile, 'kwp' | 'loss' | 'loss_strict' | 'tiers'>;

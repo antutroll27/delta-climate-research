@@ -6,13 +6,15 @@
  * card, the pane and the sheet can never disagree.
  *
  * Inputs are validated HERE, before solar-roi.ts sees them (it guards only size):
- * a cost must be > 0 (a high–low pair is swapped and the swap is said), units that
- * are not a positive number mean no bill mode (and the sheet says so), and the
- * tariff goes through the pane's own handler, which refuses non-positive values.
+ * a cost must be in (0, COST_PER_KW_MAX] (a high–low pair is swapped and the swap is
+ * said), units outside (0, UNITS_MAX] mean no bill mode (and the sheet says so), and
+ * the tariff goes through the pane's own handler, which refuses anything outside
+ * (0, TARIFF_MAX]. A result that is still not finite is not painted (`roiFinite`).
  */
 import type { PvFile } from './types';
 import type { SolarCostBasis } from './solar-cost.ts';
 import { computeRoi, roofKwhPerKw, roofMaxKw, defaultSizeKw, suggestedSize, roiCsv, MIN_SYSTEM_KW,
+  tariffOk, costOk, unitsOk, roiFinite, TARIFF_MAX, COST_PER_KW_MAX, UNITS_MAX,
   type Owner, type RoiResult, type ScenarioResult } from './solar-roi.ts';
 import { paybackText, savingText, subsidyLine, assumptionsLine, sizingText, surplusText, flatCaveat, ESTIMATE_TAG } from './solar-copy.ts';
 
@@ -47,6 +49,8 @@ const SURPLUS_WARN = 0.10;
 /** The slider spans the household and small-business band; the number box beside it
     covers the whole roof (spec D5 refined: a 700 kW slider cannot be moved in half-kW). */
 const SLIDER_MAX_KW = 20;
+/** painted in place of a payback that did not compute to a finite number */
+const OUT_OF_RANGE = 'Not computed: an input is out of range. Check the tariff, the cost and the units.';
 
 export function mountPaybackSheet(d: SheetDeps): PaybackSheet {
   const { el } = d;
@@ -85,7 +89,7 @@ export function mountPaybackSheet(d: SheetDeps): PaybackSheet {
     const [lo, hi] = cost;
     const def = d.basis.costPerKw.value;
     const parts: string[] = [];
-    if (costBad) parts.push('A cost must be a positive number; using the last good pair.');
+    if (costBad) parts.push(`A cost must be a positive number up to ${d.money(COST_PER_KW_MAX)} per kW; using the last good pair.`);
     if (swapped) parts.push('Entered high to low, so the two were swapped.');
     if (lo < UNUSUAL_LO || hi > UNUSUAL_HI) parts.push('An unusual cost per kW; still computed.');
     else if (lo === def[0] && hi === def[1]) {
@@ -101,10 +105,19 @@ export function mountPaybackSheet(d: SheetDeps): PaybackSheet {
     setText('spSizeOut', `${size.toFixed(1)} kW, of up to ${max.toFixed(1)} kW this roof can take`
       + (clamped ? `; sizes run from ${MIN_SYSTEM_KW} kW to the roof's ${max.toFixed(1)} kW, so yours was clamped` : ''));
     setText('spSubsidy', subsidyLine(owner, r.status === 'too_small' ? 0 : r.fast.subsidy, d.money));
-    setText('spPayback', paybackText(r, H));
-    setText('spSaving', savingText(r, d.money, H));
     /* A sentence, not a figure, drops the big gold numeral style: words in shouting caps are a wall. */
     const words = (id: string, on: boolean) => el(id)?.classList.toggle('is-words', on);
+    /* An overflowed figure is invalid input, never "∞": the ceilings should make this unreachable. */
+    if (!roiFinite(r)) {
+      setText('spPayback', OUT_OF_RANGE);
+      setText('spSaving', '');
+      words('spPayback', true); words('spSaving', true);
+      setText('spAssume', assume(r, size));
+      if (csvUrl) { URL.revokeObjectURL(csvUrl); csvUrl = ''; }
+      return;
+    }
+    setText('spPayback', paybackText(r, H));
+    setText('spSaving', savingText(r, d.money, H));
     words('spPayback', r.status !== 'ok' || r.slow.paybackYear === null);
     words('spSaving', r.status === 'too_small' || r.slow.net < 0);
     setText('spAssume', assume(r, size));
@@ -127,7 +140,7 @@ export function mountPaybackSheet(d: SheetDeps): PaybackSheet {
       setText('spWarn', surplusText(size, sh, d.tariff(), d.basis, d.rate));
       show('spWarn', Math.max(...sh) > SURPLUS_WARN);
     } else if (unitsBad) {
-      setText('spSizing', 'Units must be a positive number; showing the simple estimate.');
+      setText('spSizing', `Units must be a positive number up to ${UNITS_MAX.toLocaleString()} a month; showing the simple estimate.`);
       show('spSizing', true);
       show('spWarn', false);
     } else {
@@ -175,7 +188,7 @@ export function mountPaybackSheet(d: SheetDeps): PaybackSheet {
   };
   const onCost = () => {
     const a = Number(input('spCostLo')?.value), b = Number(input('spCostHi')?.value);
-    const okA = Number.isFinite(a) && a > 0, okB = Number.isFinite(b) && b > 0;
+    const okA = costOk(a), okB = costOk(b);
     invalid('spCostLo', !okA);
     invalid('spCostHi', !okB);
     costBad = !(okA && okB);
@@ -192,7 +205,7 @@ export function mountPaybackSheet(d: SheetDeps): PaybackSheet {
     const raw = input('spTariff')?.value ?? '';
     const v = Number(raw);
     /* the pane's handler refuses the same values; this only marks the sheet's own box */
-    invalid('spTariff', !(Number.isFinite(v) && v > 0));
+    invalid('spTariff', !tariffOk(v));
     d.setTariff(raw);
     paint();
   };
@@ -202,7 +215,7 @@ export function mountPaybackSheet(d: SheetDeps): PaybackSheet {
     const v = Number(raw);
     /* non-numeric text reads back as '' with validity.badInput set: that is bad input, not an empty box */
     const garbled = box?.validity.badInput === true;
-    const ok = !garbled && raw.trim() !== '' && Number.isFinite(v) && v > 0;
+    const ok = !garbled && raw.trim() !== '' && unitsOk(v);
     units = ok ? v : null;
     unitsBad = garbled || (raw.trim() !== '' && !ok);
     invalid('spUnits', unitsBad);
@@ -211,6 +224,7 @@ export function mountPaybackSheet(d: SheetDeps): PaybackSheet {
   const onCsv = (e: Event) => {
     if (!roof) { e.preventDefault(); return; }
     const r = result(roof, size);
+    if (!roiFinite(r)) { e.preventDefault(); return; }
     /* every row carries the tag too: a downloaded sheet travels without the page around it */
     const csv = roiCsv(r, `${assume(r, size)} · ${ESTIMATE_TAG}`);
     if (!csv) { e.preventDefault(); return; }
@@ -235,6 +249,8 @@ export function mountPaybackSheet(d: SheetDeps): PaybackSheet {
   const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && isOpen()) { close(); e.stopPropagation(); } };
   const onPrint = () => { close(); d.printBrief(); };
 
+  /* #spTariff's description: when its value is refused (the ceiling is the shared one) */
+  setText('spTariffNote', `Refused unless more than 0 and at most ${d.rate(TARIFF_MAX)} per kWh; the last good tariff then stands.`);
   input('spSize')?.addEventListener('input', onSize);
   input('spSizeNum')?.addEventListener('change', onSizeNum);
   el('solPay')?.querySelectorAll<HTMLInputElement>('input[name="spOwner"]').forEach((r) => r.addEventListener('change', onOwner));
@@ -280,6 +296,7 @@ export function mountPaybackSheet(d: SheetDeps): PaybackSheet {
       if (max < MIN_SYSTEM_KW) return null;
       const sz = roof && roof.idx === r.idx && roof.pv === r.pv ? size : defaultSizeKw(max);
       const res = result(r, sz);
+      if (!roiFinite(res)) return null;
       return { payback: paybackText(res, H), saving: savingText(res, d.money, H), assume: assume(res, sz) };
     },
     destroy() {

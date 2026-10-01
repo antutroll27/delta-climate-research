@@ -3414,3 +3414,22 @@ test('the payback CSV carries the estimate tag on every row (audit fix 1)', asyn
   assert.match(controller, /roiCsv\(r, `\$\{assume\(r, size\)\} · \$\{ESTIMATE_TAG\}`\)/,
     "the sheet's CSV is built without the estimate tag beside its assumptions");
 });
+
+test('no infinity: the tariff is capped where it is typed and where it is remembered (audit fix 2)', async () => {
+  const app = await readFile(new URL('../../src/scripts/climate-engine/heat-map-app.ts', import.meta.url), 'utf8');
+  const controller = await readFile(new URL(
+    '../../src/scripts/climate-engine/solar-payback-sheet.ts', import.meta.url), 'utf8');
+  /* the stored delta:hm-tariff is read through the same guard the box uses */
+  assert.match(app, /const t = Number\(localStorage\.getItem\(TARIFF_KEY\)\);\s*if \(tariffOk\(t\)\) tariff = t;/,
+    'a stored tariff of 1e308 is read back unguarded');
+  assert.match(app, /const bad = !tariffOk\(v\);/, "the pane's tariff box accepts any positive number, 1e308 included");
+  assert.match(controller, /invalid\('spTariff', !tariffOk\(v\)\)/, "the sheet's tariff box is marked by a different rule from the pane's");
+  assert.match(controller, /costOk\(a\)/, 'the sheet accepts any positive cost per kW');
+  assert.match(controller, /unitsOk\(v\)/, 'the sheet accepts any positive units a month');
+  assert.match(controller, /if \(!roiFinite\(r\)\)/, 'the sheet would paint a non-finite payback or saving');
+  /* the sheet's box says when it refuses, and the note it points at is painted from the shared ceiling */
+  const stage = await stageSource();
+  assert.match(stage, /id="spTariff"[^>]*aria-describedby="spTariffNote"/, '#spTariff points at no note saying when it is refused');
+  assert.match(stage, /id="spTariffNote"/, 'the tariff note #spTariff points at does not exist');
+  assert.match(controller, /setText\('spTariffNote', `[^`]*\$\{d\.rate\(TARIFF_MAX\)\}/, 'the tariff note does not name the ceiling the guard uses');
+});

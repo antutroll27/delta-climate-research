@@ -61,7 +61,7 @@ import { fmtMoney, fmtRate, currencyMark } from './money.ts';
 import { pvRanges, tierOf } from './solar-ranges.ts';
 import { wardSummary, validatedSentence, noteFor, sharePct, ESTIMATE_TAG, paybackText, oldestAsOf } from './solar-copy.ts';
 import { costBasisFor } from './solar-cost.ts';
-import { computeRoi, wardInput, roofMaxKw, MIN_SYSTEM_KW } from './solar-roi.ts';
+import { computeRoi, wardInput, roofMaxKw, MIN_SYSTEM_KW, tariffOk } from './solar-roi.ts';
 import { mountPaybackSheet, type PaybackSheet } from './solar-payback-sheet.ts';
 import { areaPath, paths, cityPaths } from './scope/paths.ts';
 import { areaRefusal } from './scope/reachability.ts';
@@ -784,7 +784,7 @@ export function mountHeatMap(): () => void {
   let tariff = TARIFF_DEFAULT;
   try {
     const t = Number(localStorage.getItem(TARIFF_KEY));
-    if (Number.isFinite(t) && t > 0) tariff = t;
+    if (tariffOk(t)) tariff = t;
   } catch { /* default stands */ }
   const pct = (f: number): string => (f < 0.005 ? 'none' : `−${Math.round(f * 100)}%`);
   /* THE FIFTH RUNG'S OTHER FACE. Captured from the server-rendered markup before
@@ -1306,7 +1306,8 @@ export function mountHeatMap(): () => void {
   tariffInput?.setAttribute('aria-label', `Tariff, ${currencyMark(COSTS)} per kilowatt-hour, assumed`);
   const onTariff = () => {
     const v = Number(tariffInput?.value);
-    const bad = !Number.isFinite(v) || v <= 0;
+    /* refused above TARIFF_MAX too: 1e308 would overflow every figure to "∞" */
+    const bad = !tariffOk(v);
     tariffInput?.setAttribute('aria-invalid', bad ? 'true' : 'false');
     if (bad) return;          // the figures keep the last good tariff; the box says so
     tariff = v;

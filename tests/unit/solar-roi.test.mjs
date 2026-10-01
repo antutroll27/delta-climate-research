@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
   computeRoi, subsidyFor, degradationFactor,
   roofKwhPerKw, roofMaxKw, defaultSizeKw, suggestedSize, wardInput, roiCsv,
+  tariffOk, costOk, unitsOk, roiFinite, TARIFF_MAX, COST_PER_KW_MAX, UNITS_MAX,
 } from '../../src/scripts/climate-engine/solar-roi.ts';
 import { SOLAR_COST } from '../../src/scripts/climate-engine/solar-cost.ts';
 
@@ -208,4 +209,26 @@ test('roiCsv: one row per year, both scenarios, the assumptions on every row', (
   /* an embedded quote is doubled, and a comma inside the quotes stays in the last cell */
   const quoted = roiCsv(r, 'a "b", c').trim().split('\n').slice(1);
   assert.ok(quoted.every((l) => l.endsWith(',"a ""b"", c"')));
+});
+
+test('input ceilings: tariff in (0, 100], cost per kW in (0, 1,500,000], units in (0, 100,000]', () => {
+  assert.equal(TARIFF_MAX, 100);
+  assert.equal(COST_PER_KW_MAX, 1_500_000);
+  assert.equal(UNITS_MAX, 100_000);
+  for (const [ok, max] of [[tariffOk, 100], [costOk, 1_500_000], [unitsOk, 100_000]]) {
+    assert.equal(ok(max), true, `${max} is the ceiling, and allowed`);
+    assert.equal(ok(max * 1.0001), false, `just above ${max} is refused`);
+    for (const bad of [0, -1, NaN, Infinity, 1e308]) assert.equal(ok(bad), false, `${bad} is refused`);
+  }
+  assert.equal(tariffOk(8), true);
+  assert.equal(tariffOk(0.01), true);
+});
+
+test('roiFinite: an overflowing tariff is caught before it can paint "∞"', () => {
+  assert.equal(roiFinite(computeRoi(input())), true);
+  assert.equal(roiFinite(computeRoi(input({ sizeKw: 0.5 }))), true);   // too small has no figures to overflow
+  const r = computeRoi(input({ tariff: 1e308 }));
+  assert.equal(Number.isFinite(r.fast.net), false, 'the fixture must actually overflow');
+  assert.equal(roiFinite(r), false);
+  assert.equal(roiFinite(computeRoi(input({ tariff: NaN }))), false);
 });

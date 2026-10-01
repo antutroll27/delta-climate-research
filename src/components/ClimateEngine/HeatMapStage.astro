@@ -852,7 +852,8 @@ const newCity = scope.area.hasData
         – <input id="spCostHi" type="number" inputmode="numeric" min="0" step="1000" aria-label="Highest cost per kW" aria-describedby="spCostNote"></span>
       <p class="sp-note" id="spCostNote">—</p>
       <label class="sp-k" for="spTariff">Your tariff, per kWh</label>
-      <input id="spTariff" type="number" inputmode="decimal" min="0" step="0.25">
+      <input id="spTariff" type="number" inputmode="decimal" min="0" step="0.25" aria-describedby="spTariffNote">
+      <p class="sp-note" id="spTariffNote">—</p>
       <p class="sp-note sp-warn" id="spFlat" hidden></p>
       <div id="spBill">
         <label class="sp-k" for="spUnits">Use my bill (optional): units a month</label>
