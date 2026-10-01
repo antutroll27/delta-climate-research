@@ -16,7 +16,7 @@ import type { SolarCostBasis } from './solar-cost.ts';
 import { computeRoi, roofKwhPerKw, roofMaxKw, defaultSizeKw, suggestedSize, roiCsv, MIN_SYSTEM_KW,
   tariffOk, costOk, unitsOk, roiFinite, TARIFF_MAX, COST_PER_KW_MAX, UNITS_MAX,
   type Owner, type RoiResult, type ScenarioResult } from './solar-roi.ts';
-import { paybackText, savingText, subsidyLine, assumptionsLine, sizingText, surplusText, flatCaveat, ESTIMATE_TAG } from './solar-copy.ts';
+import { paybackText, savingText, subsidyLine, assumptionsLine, sizingText, surplusText, flatCaveat, ESTIMATE_TAG, capFirst } from './solar-copy.ts';
 
 export interface SheetDeps {
   readonly el: (id: string) => HTMLElement | null;
@@ -117,7 +117,7 @@ export function mountPaybackSheet(d: SheetDeps): PaybackSheet {
       return;
     }
     setText('spPayback', paybackText(r, H));
-    setText('spSaving', savingText(r, d.money, H));
+    setText('spSaving', capFirst(savingText(r, d.money, H)));
     words('spPayback', r.status !== 'ok' || r.slow.paybackYear === null);
     words('spSaving', r.status === 'too_small' || r.slow.net < 0);
     setText('spAssume', assume(r, size));

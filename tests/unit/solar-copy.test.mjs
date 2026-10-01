@@ -3,7 +3,7 @@ import test from 'node:test';
 
 import {
   wardSummary, validatedSentence, noteFor, sharePct,
-  ESTIMATE_TAG, BANNED_PAYBACK_WORDS, paybackText, savingText, subsidyLine, assumptionsLine, sizingText, surplusText, flatCaveat, oldestAsOf,
+  ESTIMATE_TAG, BANNED_PAYBACK_WORDS, paybackText, savingText, capFirst, subsidyLine, assumptionsLine, sizingText, surplusText, flatCaveat, oldestAsOf,
 } from '../../src/scripts/climate-engine/solar-copy.ts';
 import { computeRoi } from '../../src/scripts/climate-engine/solar-roi.ts';
 import { SOLAR_COST } from '../../src/scripts/climate-engine/solar-cost.ts';
@@ -132,9 +132,23 @@ test('subsidyLine assumes, it does not promise, and speaks through the injected 
 
 test('assumptionsLine: flat mode declares that it assumes you use every kWh', () => {
   const s = assumptionsLine(home3, money, rate);
-  assert.equal(s, 'Home · 3 kW · installed cost M55000–M65000 per kW · subsidy M78000 · every kWh valued at R8.00 per unit (kWh), assuming you use all of it'
+  assert.equal(s, 'Home · 3 kW · installed cost M55000–M65000 per kW · subsidy M78000 if eligible · every kWh valued at R8.00 per unit (kWh), assuming you use all of it'
     + ' · output falls 3% in year 1, then 0.5% a year · upkeep 1% of cost a year · inverter replaced in year 10'
     + ' · today\'s prices, no tariff rise · reference defaults as of Sep 2026');
+});
+
+test('assumptionsLine: a subsidy is assumed only if eligible; a business with none says "no subsidy"', () => {
+  const biz = assumptionsLine({ ...home3, owner: 'business', subsidy: 0 }, money, rate);
+  assert.ok(biz.includes(' · no subsidy · '), biz);
+  assert.ok(!biz.includes('if eligible'), biz);
+  assert.ok(assumptionsLine({ ...home3, owner: 'society', subsidy: 54000 }, money, rate).includes(' · subsidy M54000 if eligible · '));
+});
+
+test('capFirst: a saving sentence that begins a cell begins with a capital', () => {
+  assert.equal(capFirst(savingText({ status: 'ok', slow: sc(9, -1000), fast: sc(6, 5000) }, money, 25)),
+    'A loss of M1000 to a saving of M5000');
+  assert.equal(capFirst('M1000 to M5000'), 'M1000 to M5000');
+  assert.equal(capFirst(''), '');
 });
 
 test('assumptionsLine: bill mode names the units and what happens to surplus; sizes print whole or to a half', () => {

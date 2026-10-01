@@ -3451,3 +3451,10 @@ test('stronger payback guards: the brief tags its assumptions, the sheet paints 
     "the brief's #brPayAssume prints the assumptions without the estimate tag");
   assert.match(controller, /setText\('spAssume', assume\(r, size\)\);/, 'the sheet never paints #spAssume');
 });
+
+test("the sheet's saving cell begins with a capital (audit fix 7)", async () => {
+  const controller = await readFile(new URL(
+    '../../src/scripts/climate-engine/solar-payback-sheet.ts', import.meta.url), 'utf8');
+  assert.match(controller, /setText\('spSaving', capFirst\(savingText\(r, d\.money, H\)\)\);/,
+    '#spSaving can begin "a loss of …" in lower case');
+});

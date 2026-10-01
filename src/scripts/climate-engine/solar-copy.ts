@@ -92,6 +92,9 @@ export function savingText(r: RoiResult, money: (n: number) => string, horizon: 
   return `${money(r.slow.net)} to ${money(r.fast.net)}`;
 }
 
+/** First letter up, for a sentence that begins a cell; the copy itself stays lower case so it can follow a colon. */
+export const capFirst = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
+
 export function subsidyLine(owner: Owner, subsidy: number, money: (n: number) => string): string {
   if (owner === 'home') return `Home: assumes the PM Surya Ghar subsidy of ${money(subsidy)}, if eligible`;
   if (owner === 'society') return `Housing society: assumes ${money(subsidy)} for common areas, if eligible`;
@@ -125,7 +128,8 @@ export function assumptionsLine(a: AssumptionInputs, money: (n: number) => strin
     OWNER_LABEL[a.owner],
     kwText(a.sizeKw),
     `installed cost ${money(lo)}–${money(hi)} per kW`,
-    `subsidy ${money(a.subsidy)}`,
+    /* assumed, never promised: eligibility is the scheme's to decide */
+    a.subsidy > 0 ? `subsidy ${money(a.subsidy)} if eligible` : 'no subsidy',
     a.unitsPerMonth !== null
       ? `${rate(a.tariff)} per unit (kWh) for your own use, ${plural(Math.round(a.unitsPerMonth), 'unit')} a month, `
         + (b.surplusCreditPerKwh.value === 0 ? 'surplus not paid' : `surplus at ${rate(b.surplusCreditPerKwh.value)}`)
