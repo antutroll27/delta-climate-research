@@ -14,7 +14,7 @@ import type { PvFile } from './types';
 import type { SolarCostBasis } from './solar-cost.ts';
 import { computeRoi, roofKwhPerKw, roofMaxKw, defaultSizeKw, suggestedSize, roiCsv, MIN_SYSTEM_KW,
   type Owner, type RoiResult, type ScenarioResult } from './solar-roi.ts';
-import { paybackText, savingText, subsidyLine, assumptionsLine, sizingText, surplusText, flatCaveat } from './solar-copy.ts';
+import { paybackText, savingText, subsidyLine, assumptionsLine, sizingText, surplusText, flatCaveat, ESTIMATE_TAG } from './solar-copy.ts';
 
 export interface SheetDeps {
   readonly el: (id: string) => HTMLElement | null;
@@ -211,7 +211,8 @@ export function mountPaybackSheet(d: SheetDeps): PaybackSheet {
   const onCsv = (e: Event) => {
     if (!roof) { e.preventDefault(); return; }
     const r = result(roof, size);
-    const csv = roiCsv(r, assume(r, size));
+    /* every row carries the tag too: a downloaded sheet travels without the page around it */
+    const csv = roiCsv(r, `${assume(r, size)} · ${ESTIMATE_TAG}`);
     if (!csv) { e.preventDefault(); return; }
     if (!csvUrl) csvUrl = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
     const a = e.currentTarget as HTMLAnchorElement;

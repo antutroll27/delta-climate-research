@@ -3405,3 +3405,12 @@ test('the payback sheet says "quote" only to deny it, and the ward line carries 
   assert.match(app, /if \(!b\) \{ closeBrief\(\); paySheet\?\.close\(\); \}/,
     'deselecting a roof leaves its payback sheet open');
 });
+
+test('the payback CSV carries the estimate tag on every row (audit fix 1)', async () => {
+  /* roiCsv puts its assumptions argument on every row; the controller must hand it the
+     assumptions AND the tag, or a downloaded year-by-year sheet travels as a bare figure. */
+  const controller = await readFile(new URL(
+    '../../src/scripts/climate-engine/solar-payback-sheet.ts', import.meta.url), 'utf8');
+  assert.match(controller, /roiCsv\(r, `\$\{assume\(r, size\)\} · \$\{ESTIMATE_TAG\}`\)/,
+    "the sheet's CSV is built without the estimate tag beside its assumptions");
+});
