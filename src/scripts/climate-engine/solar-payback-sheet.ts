@@ -103,6 +103,10 @@ export function mountPaybackSheet(d: SheetDeps): PaybackSheet {
     setText('spSubsidy', subsidyLine(owner, r.status === 'too_small' ? 0 : r.fast.subsidy, d.money));
     setText('spPayback', paybackText(r, H));
     setText('spSaving', savingText(r, d.money, H));
+    /* A sentence, not a figure, drops the big gold numeral style: words in shouting caps are a wall. */
+    const words = (id: string, on: boolean) => el(id)?.classList.toggle('is-words', on);
+    words('spPayback', r.status !== 'ok' || r.slow.paybackYear === null);
+    words('spSaving', r.status === 'too_small' || r.slow.net < 0);
     setText('spAssume', assume(r, size));
     setText('spCostNote', costNote());
     el('spCostNote')?.setAttribute('title', d.basis.costPerKw.source);
