@@ -70,11 +70,11 @@ The audit found that the ₹55,000–65,000 default had no URL. These are the so
   The price is before subsidy, and its table is headed "Turnkey Cost (incl. GST)". The panels are DCR. This is the only source that states ₹55,000–65,000 word for word. Its line "The 2026 residential benchmark is approximately ₹50,000–₹55,000 per kW" does not match MNRE's wording and is not used.
 - **Vikram Solar (SECONDARY; manufacturer).** https://www.vikramsolar.com/solar-panel-installation-cost-per-kw-and-what-youre-actually-paying-for-in-2026/ (published 27 Apr 2026):
   > "In 2026, the average installed cost is usually ₹55,000 to ₹85,000 per kW"
-- **Usha Shriram Solar (SECONDARY; manufacturer).** https://www.ushasolarindia.com/blog/rooftop-solar-cost-subsidy-in-india (published 24 Jan 2026, modified 27 Jul 2026), under "Below is an approximate price range before subsidy":
+- **Usha Shriram Solar (SECONDARY; manufacturer).** https://www.ushasolarindia.com/blog/rooftop-solar-cost-subsidy-in-india (published 24 Jan 2026, updated 27 Jul 2026), under "Below is an approximate price range before subsidy":
   > "3 kW system: ₹1.7 – ₹2.1 lakh"
 
   That is about ₹56,700–70,000/kW.
-- **Avaada Electro (SECONDARY; manufacturer).** https://avaadaelectro.com/blog/home-solar-panel-system-installation-cost-in-india/ (published 20 Nov 2025, modified 30 Sep 2026):
+- **Avaada Electro (SECONDARY; manufacturer).** https://avaadaelectro.com/blog/home-solar-panel-system-installation-cost-in-india/ (published 20 Nov 2025, updated 30 Sep 2026):
   > "A 3 kW on-grid solar system typically costs ₹1,89,000 to ₹2,15,000 before the government subsidy."
 
   That is about ₹63,000–71,700/kW. GST and DCR status are not stated.

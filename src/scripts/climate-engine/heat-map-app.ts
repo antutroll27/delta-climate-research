@@ -1101,7 +1101,7 @@ export function mountHeatMap(): () => void {
         const verdict = r.status === 'ok' ? `pays back in ${said}` : `${said.charAt(0).toLowerCase()}${said.slice(1)}`;
         /* Its own assumptions, not assumptionsLine's: that would name the owner ("Business"),
            and this is a ward case. Valuation, tariff, price and as-of all travel with it (§4 rules 2, 5, 6). */
-        wardPay.textContent = `Whole-ward estimate: every roof of ${MIN_SYSTEM_KW} kW or more at its floor capacity, no subsidy, every kWh valued at ${fmtRate(tariff, COSTS)} as if all of it is used: ${verdict}`
+        wardPay.textContent = `Whole-ward estimate: every roof that can take ${MIN_SYSTEM_KW} kW or more, at its floor capacity, no subsidy, every kWh valued at ${fmtRate(tariff, COSTS)} as if all of it is used: ${verdict}`
           + ` at ${fmtMoney(SOLAR_BASIS.costPerKw.value[0], COSTS)}–${fmtMoney(SOLAR_BASIS.costPerKw.value[1], COSTS)} per kW, today's prices`
           + ` · reference defaults as of ${oldestAsOf(SOLAR_BASIS)} · ${ESTIMATE_TAG}`;
         wardPay.removeAttribute('hidden');

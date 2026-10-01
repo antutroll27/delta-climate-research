@@ -3398,7 +3398,7 @@ test('the payback sheet says "quote" only to deny it, and the ward line carries 
   const app = await readFile(new URL('../../src/scripts/climate-engine/heat-map-app.ts', import.meta.url), 'utf8');
   /* "Conservative" overclaimed: valuing every kWh flatters in West Bengal (audit fix 3). */
   assert.doesNotMatch(app, /Conservative city case/, 'the ward line calls a flattering case conservative');
-  assert.match(app, /Whole-ward estimate: every roof of \$\{MIN_SYSTEM_KW\} kW or more at its floor capacity, no subsidy, every kWh valued at \$\{fmtRate\(tariff, COSTS\)\} as if all of it is used: \$\{verdict\}/,
+  assert.match(app, /Whole-ward estimate: every roof that can take \$\{MIN_SYSTEM_KW\} kW or more, at its floor capacity, no subsidy, every kWh valued at \$\{fmtRate\(tariff, COSTS\)\} as if all of it is used: \$\{verdict\}/,
     'the ward payback line no longer states its case, valuation and tariff');
   assert.match(app, /per kW, today's prices`\s*\+ ` · reference defaults as of/, "the ward line drops \"today's prices\"");
   assert.match(app, /const r = wardRoi\(pv, SOLAR_BASIS, tariff\);/, 'the ward line is computed in the app, not by the tested wardRoi');
@@ -3450,6 +3450,15 @@ test('stronger payback guards: the brief tags its assumptions, the sheet paints 
   assert.match(app, /payAssume\.textContent = `\$\{pay\.assume\} · \$\{ESTIMATE_TAG\}`;/,
     "the brief's #brPayAssume prints the assumptions without the estimate tag");
   assert.match(controller, /setText\('spAssume', assume\(r, size\)\);/, 'the sheet never paints #spAssume');
+  /* M3c: the FINITE path paints it too, not only the out-of-range branch above it */
+  const guardAt = controller.indexOf('if (!roiFinite(r)) {');
+  const finiteFrom = controller.indexOf('return;\n    }', guardAt);
+  const finitePath = controller.slice(finiteFrom, controller.indexOf('function setSize', finiteFrom));
+  assert.ok(guardAt > 0 && finiteFrom > guardAt, 'the sheet has no roiFinite branch to read past');
+  assert.match(finitePath, /setText\('spAssume', assume\(r, size\)\);/, 'the sheet paints a finite payback without #spAssume');
+  /* M3b: the brief SHOWS the assumptions it writes (the row is born hidden) */
+  assert.match(app, /if \(pay\) \{ payAssume\.textContent = `[^`]*`; payAssume\.removeAttribute\('hidden'\); \}/,
+    "the brief writes #brPayAssume but never un-hides it");
 });
 
 test("the sheet's saving cell begins with a capital (audit fix 7)", async () => {

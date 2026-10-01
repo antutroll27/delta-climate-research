@@ -62,8 +62,8 @@ export const SOLAR_COST: Readonly<Record<string, SolarCostBasis>> = {
       value: [55000, 70000],
       source: 'SECONDARY, 2026 installer and manufacturer price guides for an on-grid home system before subsidy: '
         + 'myrsolar.com (25 May 2026, 55,000-65,000 per kW installed, incl. GST, DCR panels), '
-        + 'vikramsolar.com (27 Apr 2026, 55,000-85,000 per kW), ushasolarindia.com (27 Jul 2026, 3 kW 170,000-210,000), '
-        + 'avaadaelectro.com (30 Sep 2026, 3 kW 189,000-215,000); 70,000 is the upper end most of them reach. '
+        + 'vikramsolar.com (27 Apr 2026, 55,000-85,000 per kW), ushasolarindia.com (updated 27 Jul 2026, 3 kW 170,000-210,000), '
+        + 'avaadaelectro.com (updated 30 Sep 2026, 3 kW 189,000-215,000); 70,000 is the upper end most of them reach. '
         + 'Floor reference, PRIMARY: MNRE PM Surya Ghar guidelines cl. 2(g), benchmark 50,000 per kW for the first 2 kW and 45,000 after, '
         + 'from 13 Feb 2024: https://cdnbbsr.s3waas.gov.in/s3716e1b8c6cd17b771da77391355749f3/uploads/2025/07/202507081690964295.pdf. '
         + 'None is Kolkata-specific',

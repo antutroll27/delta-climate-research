@@ -54,7 +54,7 @@ test.describe.serial('the payback sheet', () => {
     await expect(page.locator('#solTariff')).toHaveValue('8.00');
     const ward = page.locator('#solPanePay');
     await expect(ward).toBeVisible({ timeout: 15_000 });
-    await expect(ward).toContainText(/^Whole-ward estimate: every roof of 1 kW or more at its floor capacity,/);
+    await expect(ward).toContainText(/^Whole-ward estimate: every roof that can take 1 kW or more, at its floor capacity,/);
     await expect(ward).toContainText('no subsidy');
     await expect(ward).toContainText('as if all of it is used');
     await expect(ward).toContainText("per kW, today's prices");
@@ -69,8 +69,12 @@ test.describe.serial('the payback sheet', () => {
     await expect(page.locator('#solList tr')).toHaveCount(10, { timeout: 15_000 });
     await page.locator('#solList tr').first().evaluate((e) => (e as HTMLElement).click());
     await expect(page.locator('#bcPay')).toBeVisible({ timeout: 15_000 });
-    await tap(page, '#bcPay');
+    /* REAL actions from here on where it matters: an in-page dispatch would bypass
+       `inert` and anything covering the sheet, so the open, one click inside and one
+       typed field go through Playwright's actionability checks. */
+    await page.locator('#bcPay').click();
     await expect(page.locator('#solPay')).toBeVisible();
+    await expect(page.locator('#spClose')).toBeFocused();
     await expect(page.locator('#spTag')).toHaveText('screened · estimate, not a quote');
     await expect(page.locator('#spPayback')).toHaveText(/years|Does not pay back/);
     /* a figure is a figure: the default 3 kW home keeps the big-numeral style; only a
@@ -100,7 +104,7 @@ test.describe.serial('the payback sheet', () => {
 
   test('a business pays back no sooner than a home', async () => {
     const home = await firstYear(page);
-    await tap(page, 'input[name="spOwner"][value="business"]');
+    await page.locator('input[name="spOwner"][value="business"]').click();
     await expect(page.locator('#spSubsidy')).toHaveText('Business: no subsidy assumed');
     const biz = await firstYear(page);
     if (Number.isFinite(home) && Number.isFinite(biz)) expect(biz).toBeGreaterThanOrEqual(home);
@@ -109,7 +113,7 @@ test.describe.serial('the payback sheet', () => {
   });
 
   test('a bill shows the official size and the units', async () => {
-    await type(page, '#spUnits', '180');
+    await page.locator('#spUnits').fill('180');
     await expect(page.locator('#spSizing')).toContainText('2–3 kW');
     await expect(page.locator('#spAssume')).toContainText('180 units a month');
   });
