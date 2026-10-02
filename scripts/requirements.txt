@@ -34,6 +34,9 @@ duckdb==1.5.5
 earthengine-api==1.7.37
 matplotlib==3.11.1
 pvlib==0.15.2
+# WGS84 geodesic areas for the KMC ward shares (scripts/measure-ward-neighbours.py),
+# the method data/geometry/kmc-wards-around-ballygunge.geojson states for them.
+pyproj==3.8.0
 # CityJSON 2.0 schema validation (scripts/check-cityjson-schema.py). referencing
 # is jsonschema's $ref resolver and is what lets the six sub-schemas find each
 # other by bare filename.
