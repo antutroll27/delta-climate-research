@@ -74,7 +74,10 @@
     ],
     "generation_gwh_yr": 10.917,
     "shading_loss_gwh_yr": 1.556,
-    "mean_loss": 0.183
+    "mean_loss": 0.183,
+    "mean_loss_strict": 0.0919,
+    "mean_loss_trees": 0.1515,
+    "mean_loss_raised": 0.1317
   },
   "per_building_kwp": [
     1.954,
