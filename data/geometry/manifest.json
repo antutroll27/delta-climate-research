@@ -1,21 +1,21 @@
 {
-  "release": "2026-07-22.0",
-  "retrieved": "2026-08-04",
   "source": "Overture Maps Foundation (ODbL)",
   "wards": {
     "ballygunge": {
-      "count": 3527,
-      "sha256": "6db0d37147aa69cc7edef1a6a3ea25070d60a57b84af2211ca7c7b47c18aecfd",
+      "release": "2026-09-23.1",
+      "retrieved": "2026-10-02",
+      "count": 7931,
+      "sha256": "ee1a73c8058bed76d274d793ca3218bd96c6653527dc9dea1bbe8c3cc6e7c1db",
       "skipped": {
         "not_polygon": 0,
         "tiny": 0,
-        "outside": 64,
-        "holes_dropped": 17
+        "outside": 114,
+        "holes_dropped": 30
       },
       "raw": {
         "path": "data/geometry/raw/ballygunge.parquet",
-        "sha256": "f45191e59a3ef486ef7abf92acde1bc9f293ed6c58ba33c22161d9356db59762",
-        "bytes": 563840
+        "sha256": "f808c68dc040128a4bed7d0ecf5af49938ae40dffb3fe32cf34aa4d5854af9ff",
+        "bytes": 1129531
       }
     },
     "barrackpore": {
@@ -31,7 +31,9 @@
         "path": "data/geometry/raw/barrackpore.parquet",
         "sha256": "ebcf6f14fe16049c1a23a67959f846d0ac25cb913f39d6d161fee2b2e5f76bb6",
         "bytes": 643814
-      }
+      },
+      "release": "2026-07-22.0",
+      "retrieved": "2026-08-04"
     },
     "baruipur": {
       "count": 4538,
@@ -46,7 +48,9 @@
         "path": "data/geometry/raw/baruipur.parquet",
         "sha256": "70dbe8f606a9cf586bb7e1ea9f201a32ba1e84329fd0859daf156f3a2c2eeee1",
         "bytes": 625579
-      }
+      },
+      "release": "2026-07-22.0",
+      "retrieved": "2026-08-04"
     }
   }
 }

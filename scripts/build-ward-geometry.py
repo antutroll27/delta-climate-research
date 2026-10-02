@@ -12,6 +12,9 @@ import json
 import os
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _types  # noqa: E402
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.join(HERE, "..")
 GEOM = os.path.join(ROOT, "data", "geometry")
@@ -56,9 +59,14 @@ def main() -> int:
                 value = FLOOR_M
             fills += is_fill
             rows.append([value] + r["p"])
+        # THE FRAME COMES FROM THE WARD TABLE, not from the shipped file. It was
+        # copied from public/ while no ward ever moved; Ballygunge's move to the
+        # Ward 68 square (2026-10-02) would otherwise have stamped the NEW rings
+        # with the OLD centre, which is the frame bug in its quietest form.
+        w = _types.WARDS[ward]
         doc = {
             "name": shipped["name"], "type": shipped["type"],
-            "center": shipped["center"], "sizeM": shipped["sizeM"],
+            "center": [w.centre.lat, w.centre.lon], "sizeM": w.footprint_m,
             "count": len(rows),
             "source": (f"Overture Maps Foundation {foot['release']} (ODbL; OSM + Google + "
                        f"Microsoft, GERS-deduplicated) | heights: Google Open Buildings "
