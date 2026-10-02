@@ -56,11 +56,18 @@ import _types  # noqa: E402
 from _ecostress import align, band_url, cmr_search, fetch, target_grid, token  # noqa: E402
 from _sentinel import uniform_grid  # noqa: E402
 
-#: The Sentinel-2 surface grid, DERIVED from the ward footprint rather than read
-#: as a module constant baked at Kolkata's 1400 m. This script is Kolkata-only,
-#: and `uniform_grid` refuses the moment the ward table holds two footprints —
-#: which is exactly when one number for "the" grid stops being a fact.
-SURFACE_GRID = uniform_grid(_types.WARDS.values())
+def surface_grid() -> int:
+    """The Sentinel-2 surface grid, DERIVED from the ward footprint rather than read
+    as a module constant baked at Kolkata's 1400 m. This script is Kolkata-only,
+    and `uniform_grid` refuses the moment the ward table holds two footprints —
+    which is exactly when one number for "the" grid stops being a fact.
+
+    A function since 2026-10-02 (Ballygunge became an 1800 m square beside two
+    1400 m wards): the refusal now fires when a grid is NEEDED, not on import, so
+    the pure rules in this file (`physical_daytime`, which tests execute) stay
+    importable. Every measurement here still refuses a mixed ward table.
+    """
+    return uniform_grid(_types.WARDS.values())
 
 ROOT = os.path.join(HERE, "..")
 SURFACE_DIR = os.path.join(ROOT, "public", "heat-map", "data")
@@ -144,7 +151,7 @@ def _assert_built_cache_current(ward_id: str, path: str) -> None:
 def ward_surface(ward_id: str) -> tuple[float, float, float]:
     """(fvc, albedo, built) for one ward — the same values the browser runs on."""
     png = os.path.join(SURFACE_DIR, f"{ward_id}-surface.png")
-    built_f = os.path.join(BUILT_CACHE, f"{ward_id}-built-{SURFACE_GRID}.f32")
+    built_f = os.path.join(BUILT_CACHE, f"{ward_id}-built-{surface_grid()}.f32")
     for p, how in ((png, "scripts/export-surface-rasters.py"),
                    (built_f, "npx tsx scripts/export-built-raster.mjs")):
         if not os.path.exists(p):
