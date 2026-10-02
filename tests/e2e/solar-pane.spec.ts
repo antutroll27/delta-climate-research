@@ -97,7 +97,8 @@ test.describe('the solar screen', () => {
     const text = await readFile((await download.path()) as string, 'utf8');
     const lines = text.trim().split('\n');
     expect(lines[0]).toBe(HEADER);
-    expect(lines.length).toBe(1 + 3527);           // one row per Ballygunge building
+    // one row per Ballygunge building: 7,931 since it became the KMC Ward 68 square (2026-10-02)
+    expect(lines.length).toBe(1 + 7931);
     /* FIELD COUNT, WITHOUT A CSV PARSER. `basis` is the one quoted field and the
        only one that can carry a comma of its own, and it is always LAST -- so
        every field before it is comma-safe, and slicing there instead of counting
