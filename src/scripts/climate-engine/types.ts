@@ -370,6 +370,24 @@ export interface SimStats {
  * published yield bracket and packing interval the per-roof ranges scale by, plus
  * the `validated` slot — null until measure-pv-validation.py fills it (§6.3).
  */
+export interface PvTotals {
+  readonly capacity_mwp: number;
+  readonly capacity_mwp_range: readonly [number, number];
+  readonly generation_gwh_yr: number;
+  readonly shading_loss_gwh_yr: number;
+  readonly mean_loss: number;
+  readonly mean_loss_strict: number;
+  readonly mean_loss_trees: number;
+  readonly mean_loss_raised: number;
+}
+
+export interface PvStratum {
+  readonly threshold_kwp: number;
+  readonly n: number;
+  readonly share_losing_5pct: number;
+  readonly mean_loss: number;
+}
+
 export interface PvFile {
   readonly ward: string;
   readonly kwp: readonly number[];
@@ -382,22 +400,18 @@ export interface PvFile {
   readonly specific_yield: number;
   readonly packing_factor: number;
   readonly basis: string;
-  readonly totals: {
-    readonly capacity_mwp: number;
-    readonly capacity_mwp_range: readonly [number, number];
-    readonly generation_gwh_yr: number;
-    readonly shading_loss_gwh_yr: number;
-    readonly mean_loss: number;
-    readonly mean_loss_strict: number;
-    readonly mean_loss_trees: number;
-    readonly mean_loss_raised: number;
-  };
-  readonly stratum: {
-    readonly threshold_kwp: number;
-    readonly n: number;
-    readonly share_losing_5pct: number;
-    readonly mean_loss: number;
-  };
+  readonly totals: PvTotals;
+  readonly stratum: PvStratum;
+  /**
+   * THE WARD'S OWN FIGURES, for an area whose statistics are taken over an
+   * administrative polygon (ward-mask.ts). The arrays above still cover every roof
+   * in the compute square — context roofs shade and are shaded — so `totals` and
+   * `stratum` are the SQUARE's; these two are over the roofs whose footprint
+   * touches the polygon, `buildings` of them. Absent for an area without a polygon,
+   * where `totals` already is the area's. Written by scripts/build-pv-yield.py.
+   */
+  readonly totals_in_ward?: PvTotals & { readonly buildings: number };
+  readonly stratum_in_ward?: PvStratum;
   readonly tiers: {
     readonly screened: boolean;
     readonly yield_bracket_kwh_per_kwp: readonly [number, number];

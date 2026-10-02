@@ -45,7 +45,7 @@ import { exploreRuntimeBudget, nextFrameDelayMs, type ExploreDeviceTier } from '
 import {
   dayOfYearUtc, maplibreSky, representativeSolarHour, sunPlacement, wardMonthHour,
 } from './explore/sun-lighting';
-import { createCoreFieldLayer, CORE_FIELD_SOURCE } from './explore/core-field-layer';
+import { createCoreFieldLayer, CORE_FIELD_SOURCE, WARD_OUTLINE_SOURCE } from './explore/core-field-layer';
 import { CLASSIC, LAB_HOOK } from './explore/look';
 import { paperStyle } from './explore/look-paper';
 import type { ReliefRenderer, ReliefWardBundle, ReliefVisualState } from './explore/relief-contract';
@@ -65,7 +65,8 @@ import { wardSummary, validatedSentence, noteFor, sharePct, ESTIMATE_TAG, paybac
 import { costBasisFor } from './solar-cost.ts';
 import { wardRoi, roofMaxKw, MIN_SYSTEM_KW, tariffOk } from './solar-roi.ts';
 import { mountPaybackSheet, type PaybackSheet } from './solar-payback-sheet.ts';
-import { areaPath, paths, cityPaths } from './scope/paths.ts';
+import { areaPath, paths, cityPaths, wardMaskPath } from './scope/paths.ts';
+import { asWardMask, buildingInWard, fieldHistogram, fieldStats, wardRows, type WardMask } from './ward-mask.ts';
 import { areaRefusal } from './scope/reachability.ts';
 import { isAreaKey, splitKey, type AreaKey } from './scope/registry.ts';
 import { toLegacyWard } from './scope/legacy.ts';
@@ -769,6 +770,9 @@ export function mountHeatMap(): () => void {
       if (cooling) parts.push('No vegetated cooling surface of 0.77 ha or more in this ward');
     }
     parts.push('Block detail illustrative — within-ward pattern is not validated');
+    /* A context building is drawn, solved and selectable, and counted in nothing:
+       say so on the card rather than let its roof read as one of the ward's. */
+    if (wardMask && !buildingInWard(wardMask, b.idx)) parts.unshift(`Outside ${wardMask.name} · drawn as context, not in the ward figures`);
     setHTML('bcIns', parts.join('<br>'));
     paintSolarCard(b);
   }
@@ -1054,6 +1058,22 @@ export function mountHeatMap(): () => void {
      Solar pane (its home) and into the legend's folded block. The right panel no
      longer carries it — a block stacked there pushed the colour legend below the
      fold (2026-09-06). */
+  /**
+   * THE ROOFS A WARD FIGURE IS TAKEN OVER, and the laboratory's totals for them.
+   *
+   * With a polygon the arrays cover every roof in the square but the WARD is the
+   * roofs touching the polygon: `totals_in_ward`/`stratum_in_ward` are their
+   * figures (asPvFile refuses a polygon area's file without them), `rows` is their
+   * indices, and `label` names the ward wherever a figure is printed. Without a
+   * polygon it is every roof and the file's own `totals`, as before.
+   */
+  function pvScope(pv: PvFile): { t: PvFile['totals']; s: PvFile['stratum']; n: number; rows: readonly number[]; label: string } {
+    if (wardMask && pv.totals_in_ward && pv.stratum_in_ward) {
+      return { t: pv.totals_in_ward, s: pv.stratum_in_ward, n: wardMask.inWardCount, rows: wardRows(wardMask, pv.kwp.length), label: wardMask.name };
+    }
+    return { t: pv.totals, s: pv.stratum, n: pv.kwp.length, rows: [...pv.kwp.keys()], label: 'whole ward' };
+  }
+
   function paintSolarWard() {
     const pv = pvCache[state.ward];
     const has = pv != null;
@@ -1068,7 +1088,9 @@ export function mountHeatMap(): () => void {
     show('solPaneBlock', has);
     show('solBlock', has);
     if (!has) { show('solPanePay', false); setSolarOpen(false); paintSolarPane(null); return; }
-    const t = pv.totals, s = pv.stratum, n = pv.kwp.length;
+    const { t, s, n, rows, label } = pvScope(pv);
+    setText('solHead', `Rooftop solar · ${label}`);
+    setText('solPaneHead', `Rooftop solar · installable, ${label}`);
     /* The pane's own chip and summary: the card's tier is per-roof and cannot
        stand in for the whole ward, so these are painted independently rather than
        reusing the card's pattern -- but rewritten only when the ward's own
@@ -1102,13 +1124,13 @@ export function mountHeatMap(): () => void {
     if (wardPay) {
       if (!SOLAR_BASIS) wardPay.setAttribute('hidden', '');
       else {
-        const r = wardRoi(pv, SOLAR_BASIS, tariff);
+        const r = wardRoi(pv, SOLAR_BASIS, tariff, rows);
         /* "pays back in" only when it does; otherwise the sentence already says what happens, in words (spec §4 rule 4). */
         const said = paybackText(r, SOLAR_BASIS.horizonYears.value);
         const verdict = r.status === 'ok' ? `pays back in ${said}` : `${said.charAt(0).toLowerCase()}${said.slice(1)}`;
         /* Its own assumptions, not assumptionsLine's: that would name the owner ("Business"),
            and this is a ward case. Valuation, tariff, price and as-of all travel with it (§4 rules 2, 5, 6). */
-        wardPay.textContent = `Whole-ward estimate: every roof that can take ${MIN_SYSTEM_KW} kW or more, at its floor capacity, no subsidy, every kWh valued at ${fmtRate(tariff, COSTS)} as if all of it is used: ${verdict}`
+        wardPay.textContent = `${wardMask ? `${wardMask.name} estimate` : 'Whole-ward estimate'}: every roof${wardMask ? ' in the ward' : ''} that can take ${MIN_SYSTEM_KW} kW or more, at its floor capacity, no subsidy, every kWh valued at ${fmtRate(tariff, COSTS)} as if all of it is used: ${verdict}`
           + ` at ${fmtMoney(SOLAR_BASIS.costPerKw.value[0], COSTS)}–${fmtMoney(SOLAR_BASIS.costPerKw.value[1], COSTS)} per kW, today's prices`
           + ` · reference defaults as of ${oldestAsOf(SOLAR_BASIS)} · ${ESTIMATE_TAG}`;
         wardPay.removeAttribute('hidden');
@@ -1219,15 +1241,21 @@ export function mountHeatMap(): () => void {
       link.setAttribute('hidden', '');
       return;
     }
-    const t = pv.totals, s = pv.stratum, n = pv.kwp.length;
-    sum.innerHTML = `<b>${t.capacity_mwp.toFixed(1)} MWp</b> installable across <b>${n.toLocaleString()}</b> real roofs, `
+    const { t, s, n, rows } = pvScope(pv);
+    /* WITH A POLYGON THE SENTENCE NAMES IT, and says what the rest of the map is:
+       the roofs between the boundary and the square's edge are drawn, shaded and
+       shading, and are in no figure here. */
+    const where = wardMask ? ` in ${escHtml(wardMask.name)}` : '';
+    sum.innerHTML = `<b>${t.capacity_mwp.toFixed(1)} MWp</b> installable across <b>${n.toLocaleString()}</b> real roofs${where}, `
       + `the floor of a <b>${t.capacity_mwp_range[0].toFixed(1)}–${t.capacity_mwp_range[1].toFixed(1)} MWp</b> interval. `
       + `<b>${Math.round(s.share_losing_5pct * 100)}%</b> of the roofs that could carry ${s.threshold_kwp} kWp or more lose at least 5% of their yield to shade. `
       + `On the average roof, shading takes <b>${(t.mean_loss * 100).toFixed(1)}%</b> of the yield — <b>at least ${(t.mean_loss_strict * 100).toFixed(1)}%</b> `
       + `under a strict roof mask; trees are <b>${(t.mean_loss_trees * 100).toFixed(1)} points</b> of it. `
-      + `Across the ward that is <b>${t.shading_loss_gwh_yr.toFixed(1)} GWh</b> a year.`;
+      + `Across the ward that is <b>${t.shading_loss_gwh_yr.toFixed(1)} GWh</b> a year.`
+      + (wardMask ? ` The ${(pv.kwp.length - n).toLocaleString()} roofs outside the boundary are drawn as context and counted in none of this; the best-roofs list is the ward's, and the download marks every roof <code>in_ward</code>.` : '');
     const byIdx = new Map(registry.map((b) => [b.idx, b] as const));
-    const order = [...pv.kwh.keys()].sort((a, b) => pv.kwh[b] - pv.kwh[a]).slice(0, 10);
+    /* The ward's ten best, never a neighbour's: the list is "this ward's roofs". */
+    const order = [...rows].sort((a, b) => pv.kwh[b] - pv.kwh[a]).slice(0, 10);
     list.innerHTML = order.map((i) => {
       const meta = byIdx.get(i);
       const area = meta ? Math.round(meta.areaM2) : 0;
@@ -1279,6 +1307,10 @@ export function mountHeatMap(): () => void {
         ['currency', COSTS.currency],
         ['tier', tier],
         ['basis', basis],
+        /* Only where a polygon exists: there the square holds context roofs, and a
+           sheet that cannot tell them apart from the ward's would let the ward's
+           totals be re-summed over the neighbours'. Elsewhere every row is the area. */
+        ...(wardMask ? [['in_ward', buildingInWard(wardMask, i) ? 1 : 0] as [string, number]] : []),
       ];
     };
     const rows = [rowPairs(0).map(([name]) => name).join(',')];
@@ -1903,7 +1935,13 @@ export function mountHeatMap(): () => void {
      index with no id: a wrong-ward file would hand every roof a stranger's
      figures without a single error, and the card would print them in good faith. */
   const pvCache: Record<string, PvFile | null> = {};
-  function asPvFile(raw: unknown, buildings: number, area: string): PvFile | null {
+  /* THE WARD BOUNDARY, for an area whose statistics are taken over a polygon
+     (ward-mask.ts). `null` is "this area's square is its study area" — every
+     statistic below then reads the whole field, exactly as before. `wardMask` is
+     the OPEN area's, assigned with `state.ward` so the two can never disagree. */
+  const maskCache: Record<string, WardMask | null> = {};
+  let wardMask: WardMask | null = null;
+  function asPvFile(raw: unknown, buildings: number, area: string, mask: WardMask | null): PvFile | null {
     if (!raw || typeof raw !== 'object') return null;
     const f = raw as PvFile;
     const arrays = [f.kwp, f.kwh, f.loss, f.loss_buildings, f.loss_trees, f.loss_raised, f.loss_strict];
@@ -1936,7 +1974,17 @@ export function mountHeatMap(): () => void {
           && typeof f.tiers.validated?.months === 'number'
           && typeof f.tiers.validated?.median_ratio === 'number'
           && typeof f.tiers.validated?.within_15pct_share === 'number'
-          && typeof f.tiers.validated?.date === 'string'));
+          && typeof f.tiers.validated?.date === 'string'))
+      /* A WARD WITH A POLYGON MUST SHIP THE WARD'S OWN FIGURES. Without them the
+         panel would print the square's totals under the ward's name — the exact
+         defect the polygon exists to end — so the file is refused rather than
+         read. The roof count is checked against the boundary's own, because the
+         block and the mask are written by two scripts. */
+      && (mask === null
+        || (typeof f.totals_in_ward?.capacity_mwp === 'number' && Array.isArray(f.totals_in_ward?.capacity_mwp_range)
+          && typeof f.totals_in_ward?.mean_loss_strict === 'number'
+          && f.totals_in_ward?.buildings === mask.inWardCount
+          && typeof f.stratum_in_ward?.n === 'number' && typeof f.stratum_in_ward?.share_losing_5pct === 'number'));
     if (!ok) {
       console.warn(`solar screen "${String(f.ward ?? '?')}" does not match ${area} (${buildings} buildings) — ignored`);
       return null;
@@ -1995,6 +2043,8 @@ export function mountHeatMap(): () => void {
        layer is off and forgetting the mode — would leave the 2-D raster painted
        under the 3-D scene in relief mode. */
     coreField.setVisible(!showRelief && surfaceOn);
+    /* The 2-D outline whenever the 2-D path draws the map; the 3-D scene draws its own. */
+    coreField.setOutlineVisible(!showRelief);
     if (relief && map.getLayer(relief.layer.id)) {
       map.setLayoutProperty(relief.layer.id, 'visibility', showRelief ? 'visible' : 'none');
     }
@@ -2181,7 +2231,8 @@ export function mountHeatMap(): () => void {
       /* Fetch the complete immutable ward bundle before changing shared state. A
          superseded request therefore cannot replace geometry, labels, or metrics
          part way through a newer ward selection. */
-      const [d, terrain, water, wardSurface, roads, labels, provenance, canopy, trees, pvRaw] = await Promise.all([
+      const maskUrl = wardMaskPath(name);
+      const [d, terrain, water, wardSurface, roads, labels, provenance, canopy, trees, pvRaw, maskRaw] = await Promise.all([
         cache[name]
           ? Promise.resolve(cache[name])
           : fetch(P.ward, { signal: token.signal }).then(async (r) => {
@@ -2220,18 +2271,34 @@ export function mountHeatMap(): () => void {
           ? Promise.resolve(pvCache[name] as unknown)
           : optional(fetch(P.pv, { signal: token.signal })
             .then(async (r) => (r.ok ? await r.json() as unknown : null)), null as unknown),
+        /* NOT `optional`. An area that DECLARES a boundary and cannot load it must
+           not fall back to its square: every statistic would then be the square's,
+           printed under the ward's name. The load fails loudly instead. */
+        maskUrl === null || maskCache[name] !== undefined
+          ? Promise.resolve(null as unknown)
+          : fetch(maskUrl, { signal: token.signal }).then(async (r) => {
+            if (!r.ok) throw new Error(`Ward boundary unavailable (${r.status}).`);
+            return await r.json() as unknown;
+          }),
       ]);
       if (!wardSession.isCurrent(token)) return;
       cache[name] = d; terrainCache[name] = terrain; waterCache[name] = water;
       surfaceCache[name] = wardSurface; roadsCache[name] = roads; labelCache[name] = labels; provCache[name] = provenance;
       canopyCache[name] = canopy;
-      pvCache[name] = asPvFile(pvRaw, d.b.length, areaOf(name));
+      if (maskCache[name] === undefined) {
+        const mask = maskUrl === null ? null
+          : asWardMask(maskRaw, { area: areaOf(name), sizeM: d.sizeM, n: requireGrid(d.sizeM).n, buildings: d.b.length });
+        if (maskUrl !== null && mask === null) throw new Error(`${areaOf(name)}: the ward boundary does not match this ward's data.`);
+        maskCache[name] = mask;
+      }
+      if (pvCache[name] === undefined) pvCache[name] = asPvFile(pvRaw, d.b.length, areaOf(name), maskCache[name] ?? null);
       void loadDcUrs(name); void loadHeatwave(name);
       /* The scope moves WITH the area. `state.climate` is what `currentParams`
          and `applyInterventions` read, so leaving it behind would run the new
          city's geometry through the old city's fallback temperature and
          park-cooling radius — cleanly, and with a plausible number out. */
       state.ward = name; state.climate = resolve(name).climate;
+      wardMask = maskCache[name] ?? null;
       projectWard();
 
     /* Rebuild the pick registry from the SAME rows the extrusions come from, and
@@ -2256,8 +2323,9 @@ export function mountHeatMap(): () => void {
       mercatorOrigin: { x: mc.x, y: mc.y, z: mc.z ?? 0 },
       frame: wardMercatorScale(w.lat),
       veg: trees,
+      boundary: wardMask,
     };
-    coreField.attach(w, d.sizeM, relief && map.getLayer(relief.layer.id) ? relief.layer.id : undefined);
+    coreField.attach(w, d.sizeM, relief && map.getLayer(relief.layer.id) ? relief.layer.id : undefined, wardMask);
     relief?.setWard(reliefWard);
     /* `setWard` has just rebuilt the city mesh and the tree group, both of them
        new and therefore fully on. This was one line — the trees — for as long as
@@ -2311,7 +2379,12 @@ export function mountHeatMap(): () => void {
     resetSim();
 
     setHTML('pname', w.name); setText('pzone', w.zone); setText('coord', formatLatLon(w.lat, w.lon, ' · ', 3));
-    setText('bcount', `${d.count.toLocaleString()} real buildings`);
+    /* THE WARD'S COUNT FIRST, the drawn count beside it: with a polygon, most of the
+       buildings on screen are the neighbours' and are there as context. */
+    setText('bcount', wardMask
+      ? `${wardMask.inWardCount.toLocaleString()} buildings in ${wardMask.name} · ${d.count.toLocaleString()} drawn`
+      : `${d.count.toLocaleString()} real buildings`);
+    paintWardScope();
     /* `data-w` IS A BARE WARD ID in HeatMapStage.astro, so it is compared against
        the bare id and never against the key. Comparing it to `name` would match
        nothing at all: the strip would lose its highlight on the first switch and
@@ -2499,6 +2572,28 @@ export function mountHeatMap(): () => void {
    * stay hidden. The Mapillary token stays ANDed in for street view, so the
    * feature still disappears cleanly when it has tree-shaken out of the build.
    */
+  /**
+   * SAY WHAT THE WARD FIGURES ARE TAKEN OVER, and credit the boundary.
+   *
+   * With a polygon the readouts are the polygon's (refreshStats), the map shows the
+   * square, and nothing else on screen would tell a reader which of the two a
+   * number describes. The boundary is CC BY-SA, so wherever it is drawn its
+   * attribution is on screen too — written from the artefact, never typed here.
+   */
+  function paintWardScope(): void {
+    const scope = el('wardScope'), credit = el('attrWard');
+    if (scope) {
+      scope.hidden = wardMask === null;
+      scope.textContent = wardMask
+        ? `Inside ${wardMask.name} (${(wardMask.areaM2 / 1e6).toFixed(2)} km²) · the faint ground around it is context`
+        : '';
+    }
+    if (credit) {
+      credit.hidden = wardMask === null;
+      credit.textContent = wardMask ? `Ward boundary © DataMeet (${wardMask.licence}) · ` : '';
+    }
+  }
+
   function paintWardTools(): void {
     const ready = state.base !== null;
     const vegw = el('vegw');
@@ -2810,7 +2905,13 @@ export function mountHeatMap(): () => void {
 
   function refreshStats(snapshot: HeatSimSnapshot | null = latestSnapshot) {
     if (!snapshot) return;
-    const st = snapshot.stats, t = snapshot.field;
+    /* THE WARD'S STATISTICS, NOT THE SQUARE'S. The solver returns stats over its
+       whole domain; for an area with a polygon that domain is a square holding the
+       ward and its neighbours, so the mean, the share above 40 °C and the histogram
+       are re-taken over the polygon's cells (ward-mask.ts). Without a polygon the
+       solver's own figures stand, untouched — no second arithmetic, no drift. */
+    const t = snapshot.field;
+    const st = wardMask ? fieldStats(t, wardMask, snapshot.stats.thresholdC) : snapshot.stats;
     const lst = el('lst');
     if (lst) {
       // The band is measured, not decorative: it is this model's out-of-sample
@@ -2828,8 +2929,7 @@ export function mountHeatMap(): () => void {
     const uhi = greenReferenceContrastC(st.meanC, p);
     setText('uhi', `${uhi >= 0 ? '+' : ''}${uhi.toFixed(1)}°`);
     setText('area', `${(st.fracAbove * 100).toFixed(0)}%`);
-    const bins = new Array(12).fill(0);
-    for (let i = 0; i < t.length; i++) { const b = Math.min(11, Math.max(0, ((t[i] - ramp[0]) / (ramp[1] - ramp[0]) * 12) | 0)); bins[b]++; }
+    const bins = fieldHistogram(t, wardMask, ramp[0], ramp[1], 12);
     const mx = Math.max(...bins, 1);
     /* AN EMPTY BIN DRAWS NOTHING, AND THAT IS THE POINT OF A DISTRIBUTION.
        This was `Math.max(4, …)`, which gave every bin a floor whether or not any
@@ -3672,9 +3772,12 @@ export function mountHeatMap(): () => void {
       source: CORE_FIELD_SOURCE,
       restore: () => {
         const wardData = cache[state.ward];
-        if (wardData) coreField.rehydrate(wardOf(state.ward), wardData.sizeM);
+        if (wardData) coreField.rehydrate(wardOf(state.ward), wardData.sizeM, undefined, wardMask);
       },
     },
+    /* The ward outline on the 2-D path. After the field, so the line sits over it;
+       before relief, which hides it whenever the 3-D scene draws its own. */
+    { source: WARD_OUTLINE_SOURCE, restore: () => coreField.restoreOutline() },
     { source: null, restore: () => { attachReliefLayer(); syncRendererVisibility(); } },
     {
       /* Our own street names, in the BASEMAP's frame. */

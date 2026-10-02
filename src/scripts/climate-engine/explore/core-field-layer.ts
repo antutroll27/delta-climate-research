@@ -1,9 +1,26 @@
 import type maplibregl from 'maplibre-gl';
 import { wardLatLon, type Ward } from '../../../data/wards.ts';
 import { requireGrid } from '../types.ts';
+import type { WardMask } from '../ward-mask.ts';
+import { CLAY, WARD } from './look.ts';
 
 export const CORE_FIELD_SOURCE = 'delta-core-field-source';
 export const CORE_FIELD_LAYER = 'delta-core-field';
+/** The ward polygon's outline on the 2-D path: one source, a halo layer under a core layer. */
+export const WARD_OUTLINE_SOURCE = 'delta-ward-outline-source';
+const WARD_OUTLINE_HALO = 'delta-ward-outline-halo';
+const WARD_OUTLINE_CORE = 'delta-ward-outline';
+
+/** The ward ring (ward metres, x east / y north) as a closed lon/lat GeoJSON line. */
+export function wardOutlineGeoJson(ward: Ward, ring: readonly number[]): { type: 'Feature'; properties: Record<string, never>; geometry: { type: 'LineString'; coordinates: [number, number][] } } {
+  const coordinates: [number, number][] = [];
+  for (let i = 0; i + 1 < ring.length; i += 2) {
+    const p = wardLatLon(ward, ring[i], ring[i + 1]);
+    coordinates.push([p.lon, p.lat]);
+  }
+  if (coordinates.length && (coordinates[0][0] !== coordinates[coordinates.length - 1][0] || coordinates[0][1] !== coordinates[coordinates.length - 1][1])) coordinates.push(coordinates[0]);
+  return { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates } };
+}
 
 const STOPS = [
   [0.435, 0.792, 0.839],
@@ -46,14 +63,19 @@ export function wardFieldCoordinates(ward: Ward, sizeM: number): [[number, numbe
 /** The analytical field as a MapLibre canvas raster — the Three-free renderer that
  *  is the whole picture on tier 0 and stays valid while relief downloads. */
 export interface CoreFieldLayer {
-  /** Idempotent: adds the source/layer once, then only moves the corner coordinates. */
-  attach(ward: Ward, sizeM: number, beforeId?: string): void;
+  /** Idempotent: adds the source/layer once, then only moves the corner coordinates.
+   *  `boundary`, when given, veils the field outside the polygon and outlines it. */
+  attach(ward: Ward, sizeM: number, beforeId?: string, boundary?: WardMask | null): void;
   /** Repaints the canvas from a south-row-major field. Row order is FLIPPED here —
    *  the grid's first row is the south edge, the canvas's first row is the north. */
   update(field: Float32Array, min: number, max: number): void;
   setVisible(visible: boolean): void;
+  /** The ward outline's own switch: it shows whenever this path draws the map, field on or off. */
+  setOutlineVisible(visible: boolean): void;
   /** Re-adds source and layer after a basemap style swap discards them. */
-  rehydrate(ward: Ward, sizeM: number, beforeId?: string): void;
+  rehydrate(ward: Ward, sizeM: number, beforeId?: string, boundary?: WardMask | null): void;
+  /** Re-adds the outline alone after a style swap — its own STYLE_ADDITIONS entry. */
+  restoreOutline(): void;
   dispose(): void;
 }
 
@@ -66,6 +88,10 @@ export function createCoreFieldLayer(map: maplibregl.Map, gridSize: number): Cor
   let n = gridSize;
   /** One pending `idle` listener at most — see `pushToGpu`. */
   let settling = false;
+  /** The open ward's boundary and frame, or null: read by `update` (the veil) and `restoreOutline`. */
+  let boundary: WardMask | null = null;
+  let boundaryWard: Ward | null = null;
+  let outlineVisible = false;
 
   /**
    * PUSH THE PAINTED CANVAS TO THE GPU. Without this the field is never seen.
@@ -132,7 +158,29 @@ export function createCoreFieldLayer(map: maplibregl.Map, gridSize: number): Cor
   const context = canvas.getContext('2d', { alpha: true });
   if (!context) throw new Error('The analytical field canvas is unavailable.');
 
-  function attach(ward: Ward, sizeM: number, beforeId?: string): void {
+  /**
+   * The outline on the 2-D path. Paper halo under an ink core, fixed in both
+   * basemaps — the pair reads on either, and this path is the fallback while the
+   * 3-D scene (which draws its own, look-aware outline) is absent.
+   */
+  function restoreOutline(): void {
+    const data = boundary && boundaryWard ? wardOutlineGeoJson(boundaryWard, boundary.ring) : { type: 'FeatureCollection' as const, features: [] };
+    const source = map.getSource(WARD_OUTLINE_SOURCE) as maplibregl.GeoJSONSource | undefined;
+    if (source) source.setData(data as never);
+    else map.addSource(WARD_OUTLINE_SOURCE, { type: 'geojson', data: data as never });
+    const visibility = outlineVisible ? 'visible' : 'none';
+    if (!map.getLayer(WARD_OUTLINE_HALO)) {
+      map.addLayer({ id: WARD_OUTLINE_HALO, type: 'line', source: WARD_OUTLINE_SOURCE, layout: { 'line-join': 'round', visibility },
+        paint: { 'line-color': CLAY.hazeCol, 'line-width': 5, 'line-opacity': 0.85 } });
+    }
+    if (!map.getLayer(WARD_OUTLINE_CORE)) {
+      map.addLayer({ id: WARD_OUTLINE_CORE, type: 'line', source: WARD_OUTLINE_SOURCE, layout: { 'line-join': 'round', visibility },
+        paint: { 'line-color': WARD.ink, 'line-width': 2 } });
+    }
+  }
+
+  function attach(ward: Ward, sizeM: number, beforeId?: string, wardBoundary: WardMask | null = null): void {
+    boundary = wardBoundary; boundaryWard = ward;
     const wardN = requireGrid(sizeM).n;
     if (wardN !== n) { n = wardN; canvas.width = canvas.height = n; }
     const coordinates = wardFieldCoordinates(ward, sizeM);
@@ -151,6 +199,7 @@ export function createCoreFieldLayer(map: maplibregl.Map, gridSize: number): Cor
         paint: { 'raster-opacity': 0.5, 'raster-fade-duration': 0 },
       }, beforeId);
     }
+    restoreOutline();
     attached = true;
     /* AND AFTER A RE-ATTACH, because that is the other way the texture goes stale.
        `rehydrate` runs after a basemap style swap, which discards the source and
@@ -167,13 +216,24 @@ export function createCoreFieldLayer(map: maplibregl.Map, gridSize: number): Cor
     update(field, min, max) {
       if (field.length !== n * n) throw new RangeError(`Core field of ${field.length} cells does not match this ward's ${n}×${n} admitted grid.`);
       const image = context.createImageData(n, n);
+      /* THE VEIL (look.ts WARD): outside the polygon the ramp colour is desaturated
+         and thinned; inside it is written exactly as before. A mask for another
+         grid is ignored rather than misread. */
+      const cells = boundary && boundary.cells.length === n * n ? boundary.cells : null;
+      const keep = 1 - WARD.veilDesat, alphaOut = Math.round(210 * WARD.veilAlpha);
       for (let southRow = 0; southRow < n; southRow++) {
         const canvasRow = n - 1 - southRow;
         for (let x = 0; x < n; x++) {
           const source = southRow * n + x;
           const target = (canvasRow * n + x) * 4;
-          const [r, g, b] = heatRampRgb(field[source], min, max);
-          image.data[target] = r; image.data[target + 1] = g; image.data[target + 2] = b; image.data[target + 3] = 210;
+          let [r, g, b] = heatRampRgb(field[source], min, max);
+          let alpha = 210;
+          if (cells && cells[source] === 0) {
+            const grey = 0.299 * r + 0.587 * g + 0.114 * b;
+            r = Math.round(grey + (r - grey) * keep); g = Math.round(grey + (g - grey) * keep); b = Math.round(grey + (b - grey) * keep);
+            alpha = alphaOut;
+          }
+          image.data[target] = r; image.data[target + 1] = g; image.data[target + 2] = b; image.data[target + 3] = alpha;
         }
       }
       context.putImageData(image, 0, 0);
@@ -186,11 +246,22 @@ export function createCoreFieldLayer(map: maplibregl.Map, gridSize: number): Cor
       if (map.getLayer(CORE_FIELD_LAYER)) map.setLayoutProperty(CORE_FIELD_LAYER, 'visibility', visible ? 'visible' : 'none');
     },
 
-    rehydrate(ward, sizeM, beforeId) { attach(ward, sizeM, beforeId); },
+    setOutlineVisible(visible) {
+      outlineVisible = visible;
+      for (const id of [WARD_OUTLINE_HALO, WARD_OUTLINE_CORE]) {
+        if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', visible ? 'visible' : 'none');
+      }
+    },
+
+    rehydrate(ward, sizeM, beforeId, wardBoundary = null) { attach(ward, sizeM, beforeId, wardBoundary); },
+
+    restoreOutline,
 
     dispose() {
       if (map.getLayer(CORE_FIELD_LAYER)) map.removeLayer(CORE_FIELD_LAYER);
       if (map.getSource(CORE_FIELD_SOURCE)) map.removeSource(CORE_FIELD_SOURCE);
+      for (const id of [WARD_OUTLINE_CORE, WARD_OUTLINE_HALO]) if (map.getLayer(id)) map.removeLayer(id);
+      if (map.getSource(WARD_OUTLINE_SOURCE)) map.removeSource(WARD_OUTLINE_SOURCE);
       attached = false;
     },
   };

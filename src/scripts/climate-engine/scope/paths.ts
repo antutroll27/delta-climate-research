@@ -75,6 +75,22 @@ export function modelPath(areaId: string): string | null {
 }
 
 /**
+ * THE AREAS WHOSE STATISTICS ARE TAKEN OVER AN ADMINISTRATIVE POLYGON rather than
+ * over their square, by full area key. Ballygunge is KMC Ward 68 (founder,
+ * 2026-10-02); the boundary artefact is written by scripts/build-ward-mask.py.
+ *
+ * NOT A KEY OF `AreaPaths`, on purpose, and in `modelPath`'s shape: the boundary is
+ * optional per area, while every walker of `AreaPaths` (the on-disk check, the
+ * prefetch plan, the layer registry) treats each key as a file every published
+ * area ships. Null means the area's square IS its study area.
+ */
+export const WARD_MASK_AREAS: readonly string[] = ['in/kolkata/ballygunge'];
+
+export function wardMaskPath(key: AreaKey): string | null {
+  return WARD_MASK_AREAS.includes(key) ? `${DATA}${splitKey(key).area}-ward.json` : null;
+}
+
+/**
  * The surface-raster sidecar — ONE file for every area, not one per area.
  *
  * It belongs here rather than in `paths()` or `cityPaths()` because it is

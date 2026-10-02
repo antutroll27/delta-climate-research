@@ -297,7 +297,7 @@ const newCity = scope.area.hasData
               pushed the colour legend off-screen (2026-09-06). Same numbers, same
               painter, pane-prefixed ids. */}
           <div class="solblock" id="solPaneBlock">
-            <div class="k legend-head"><span>Rooftop solar · installable, whole ward</span><span id="solPaneTier" class="bc-tier">screened</span></div>
+            <div class="k legend-head"><span id="solPaneHead">Rooftop solar · installable, whole ward</span><span id="solPaneTier" class="bc-tier">screened</span></div>
             <div class="big" id="solPaneKwp">—<span class="u">MWp</span></div>
             <div class="conf screening" id="solPaneConf"></div>
             <p class="solfloor" id="solPaneFloor"></p>
@@ -717,6 +717,11 @@ const newCity = scope.area.hasData
         <div class="k">Mean surface temp · <span id="lstPhase">modelled now</span></div>
         <div class="lst" id="lst" style="color:var(--red)">—<span class="u">°C</span></div>
         <div class="conf" id="conf"></div>
+        {/* WHAT THE FIGURES BELOW ARE TAKEN OVER, for an area with an administrative
+            boundary (ward-mask.ts): the mean, the share above 40 °C and the
+            histogram are the polygon's, not the square's. Painted by the instrument;
+            hidden for an area whose square is its study area. */}
+        <p class="ward-scope" id="wardScope" hidden></p>
       </div>
       <div class="mrow">
         <div><div class="k" title="Modelled land-cover thermal contrast: this ward's mean surface temperature minus a fully-vegetated reference cell under identical forcing. NOT a measured urban heat island — published Kolkata surface UHI is 0.85–1.5 °C from 1 km satellite data, a different quantity.">Δ vs all-green ref</div><div class="val" style="color:var(--cyan)" id="uhi">—</div></div>
@@ -758,7 +763,7 @@ const newCity = scope.area.hasData
           receipts button so the receipts panel's anchor never moves. Hidden until a
           solar screen ships. */}
       <div class="solblock legend-solar" id="solBlock" role="region" aria-label="Rooftop solar, whole ward" hidden>
-        <div class="k legend-head"><span>Rooftop solar · whole ward</span><button class="solbtn" id="solToggle" type="button" aria-expanded="false" aria-controls="solBody">Show ▾</button></div>
+        <div class="k legend-head"><span id="solHead">Rooftop solar · whole ward</span><button class="solbtn" id="solToggle" type="button" aria-expanded="false" aria-controls="solBody">Show ▾</button></div>
         <div class="solbody" id="solBody" hidden>
           <div class="big" id="solKwp">—<span class="u">MWp</span></div>
           <div class="conf screening" id="solConf"></div>
@@ -775,7 +780,7 @@ const newCity = scope.area.hasData
           solar block: above the colour key while the Air pane is open, above the
           attribution otherwise. Hidden until a Kolkata payload (or its failure) lands. */}
       <div class="aqblock legend-air" id="aqiBlock" role="region" aria-label="Air quality" hidden></div>
-      <div class="attr">Basemap © OpenStreetMap · OpenFreeMap · Footprints © Overture Maps Foundation (ODbL) · Heights Google Open Buildings 2.5D (CC BY 4.0) · Water © OpenStreetMap (ODbL) · Ground SRTM via AWS terrain tiles, <span id="terrLab">indicative</span> · Live weather © Met Norway (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>) · Cloud deck drawn at 320 m, real base ~700 m · left-drag orbit · right-drag pan · scroll zoom</div>
+      <div class="attr">Basemap © OpenStreetMap · OpenFreeMap · Footprints © Overture Maps Foundation (ODbL) · Heights Google Open Buildings 2.5D (CC BY 4.0) · Water © OpenStreetMap (ODbL) · Ground SRTM via AWS terrain tiles, <span id="terrLab">indicative</span> · Live weather © Met Norway (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>) · <span id="attrWard" hidden></span>Cloud deck drawn at 320 m, real base ~700 m · left-drag orbit · right-drag pan · scroll zoom</div>
       <button class="srcbtn" id="srcBtn" type="button" aria-expanded="false" aria-controls="srcPanel">Data receipts ↗</button>
       <div class="srcpanel" id="srcPanel" role="dialog" aria-label="Per-layer data provenance" hidden></div>
     </div>
@@ -1966,6 +1971,10 @@ const newCity = scope.area.hasData
   .stamp-slot .con-stamp{opacity:1;background:rgb(6 14 16 /.94);backdrop-filter:blur(8px)}
   /* The within-ward caveat. Bronze, like every other provenance statement on
      this page, and directly under the colour ramp it qualifies. */
+  /* The ward-boundary scope line under the mean: a statement of WHAT the figure
+     is taken over, in the quiet ink, not a caveat in bronze. */
+  .ward-scope{margin:.4rem 0 0;font-family:var(--mono);font-size:.5rem;line-height:1.6;
+              letter-spacing:.06em;color:var(--faint)}
   .pattern-note{margin:.32rem 0 0;font-family:var(--mono);font-size:.5rem;line-height:1.75;
                 letter-spacing:.09em;color:var(--bronze);text-transform:uppercase;
                 border-top:1px solid rgb(176 141 87 /.22);padding-top:.42rem;white-space:nowrap}

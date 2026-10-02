@@ -22,8 +22,10 @@ import { terrainDrawAt } from '../terrain.ts';
 import { requireGrid } from '../types.ts';
 import { createVegetationLayer, type VegetationLayer } from '../vegetation-layer.ts';
 import { createWaterLayer, type WaterLayer } from '../water-layer.ts';
-import { CLASSIC, CLAY, clayFor, DARK, glintSun, isPhone, lookAmounts, STUDIO_LIGHT, watchPhone } from './look.ts';
+import { CLASSIC, CLAY, clayFor, DARK, glintSun, isPhone, lookAmounts, STUDIO_LIGHT, watchPhone, WARD } from './look.ts';
 import { makeHeatOverlay } from './heat-overlay.ts';
+import { buildRibbonMesh } from '../road-ribbon.ts';
+import { densifyRing } from '../ward-mask.ts';
 import { displayColor, HAZE_GLSL, makeContactAO, srgbLinear } from './look-shading.ts';
 import { hasBuildingModel, loadBuildingModel, type LandmarkNode } from './building-model.ts';
 import { buildRegistry, pickBuilding, projectWard, type BuildingMeta } from './building-pick.ts';
@@ -95,6 +97,10 @@ export class ThreeReliefRenderer implements ReliefRenderer {
   private veg: VegetationLayer | null = null;
   private rings: THREE.Group | null = null;
   private coolingLine: THREE.Line | null = null;
+  /** The ward polygon's outline: a halo ribbon under a core ribbon, draped on the ground. Null without a boundary. */
+  private outline: THREE.Group | null = null;
+  /** The open ward's boundary, or null; its cells ride in the heat texture's alpha (see `updateField`). */
+  private boundary: ReliefWardBundle['boundary'] = null;
   private ward: ReliefWardBundle | null = null;
   private registry: BuildingMeta[] = [];
   private disposed = false;
@@ -220,6 +226,7 @@ export class ThreeReliefRenderer implements ReliefRenderer {
     this.registry = buildRegistry(bundle.wardData.b);
     this.modelTransform = { ...bundle.mercatorOrigin, frame: bundle.frame };
     this.size.value = bundle.wardData.sizeM;
+    this.boundary = bundle.boundary;
     /* THE FIELD BUFFERS FOLLOW THE WARD, not the chunk-load order. They were
        sized once in the constructor, from whichever ward was open when the Three
        chunk resolved, so opening a 2800 m Bengaluru ward after a 1400 m Kolkata
@@ -246,10 +253,16 @@ export class ThreeReliefRenderer implements ReliefRenderer {
       }
       this.blur[y * n + x] = sum / count;
     }
+    /* ALPHA IS THE WARD: 1 inside the polygon (or everywhere, without one), 0 in the
+       context. It rides in the same texture as the field so it cannot mirror or
+       shift against it — same texels, same flip, same filtering — and the overlay
+       veils by it. A mask for a different grid is ignored rather than misread. */
+    const cells = this.boundary && this.boundary.cells.length === this.blur.length ? this.boundary.cells : null;
     for (let index = 0; index < this.blur.length; index++) {
       this.heatData[index * 4] = this.blur[index];
       this.heatData[index * 4 + 1] = update.field[index];
       this.heatData[index * 4 + 2] = update.coolingMask?.[index] ?? 0;
+      this.heatData[index * 4 + 3] = cells ? cells[index] : 1;
     }
     this.heatMin.value = update.ramp[0];
     this.heatMax.value = update.ramp[1];
@@ -409,6 +422,7 @@ export class ThreeReliefRenderer implements ReliefRenderer {
     });
     this.coolingLine?.geometry.dispose();
     (this.coolingLine?.material as THREE.Material | undefined)?.dispose?.();
+    this.disposeOutline();
     this.facade.dispose(); this.heatTexture.dispose(); this.aoTex.value.dispose();
     this.pendingSky?.texture.dispose(); this.pendingSky = null;
     for (const target of this.convolved.values()) target.dispose();
@@ -553,6 +567,7 @@ export class ThreeReliefRenderer implements ReliefRenderer {
     if (this.veg) { this.scene.remove(this.veg.group); this.veg.dispose(); this.veg = null; }
     const veg = createVegetationLayer(bundle.veg, this.grow, (x, y) => terrainDrawAt(bundle.terrain, x, y), look);
     if (veg) { this.veg = veg; this.scene.add(veg.group); veg.setStudio?.(this.studio.value > 0.5); }
+    this.buildOutline(bundle);
     /* LAST, AND IT HAS TO BE LAST. Everything above is newly constructed and
        therefore visible and full height; this is where the switches the layer
        tree owns are put back on. Without it every ward switch silently resets
@@ -633,7 +648,8 @@ export class ThreeReliefRenderer implements ReliefRenderer {
   private extrudeBuildings(bundle: ReliefWardBundle): THREE.BufferGeometry | null {
     const geometries: THREE.BufferGeometry[] = [];
     const half = bundle.wardData.sizeM / 2;
-    for (const building of bundle.wardData.b) {
+    const inWard = bundle.boundary?.inWard ?? null;
+    for (const [row, building] of bundle.wardData.b.entries()) {
       const shape = new THREE.Shape(); shape.moveTo(building[1], -building[2]);
       for (let index = 3; index < building.length; index += 2) shape.lineTo(building[index], -building[index + 1]);
       let geometry: THREE.ExtrudeGeometry;
@@ -657,6 +673,9 @@ export class ThreeReliefRenderer implements ReliefRenderer {
       /* Editorial look: the ground under the block, so contact shading is height
          ABOVE GROUND rather than above sea level — on relief those differ by metres. */
       if (!CLASSIC) geometry.setAttribute('aG', new THREE.BufferAttribute(new Float32Array(vertices).fill(elevation), 1));
+      /* 1 for a building in the ward (or every building, without a boundary), 0 for
+         context: the editorial facade dims the context ones. Row-aligned, as `inWard` is. */
+      if (!CLASSIC) geometry.setAttribute('aIn', new THREE.BufferAttribute(new Float32Array(vertices).fill(inWard ? inWard[row] : 1), 1));
       geometries.push(geometry);
     }
     const merged = mergeGeometries(geometries, false);
@@ -680,6 +699,65 @@ export class ThreeReliefRenderer implements ReliefRenderer {
       position.setZ(index, terrainDrawAt(field, position.getX(index) * sizeM, -position.getY(index) * sizeM));
     }
     position.needsUpdate = true; this.overlay.geometry.computeVertexNormals();
+  }
+
+  /**
+   * THE WARD OUTLINE: the polygon as two ribbons draped on the ground — a wide
+   * halo and a narrow core in opposite values (look.ts WARD), so it reads over
+   * the paper, the asphalt and every heat colour alike. Depth-tested, so a roof
+   * standing on the line hides it as a roof would; never written to depth, so
+   * nothing behind it is cut. Rebuilt per ward, like every layer here.
+   */
+  private buildOutline(bundle: ReliefWardBundle): void {
+    this.disposeOutline();
+    if (!this.scene || !bundle.boundary) return;
+    const pts = densifyRing(bundle.boundary.ring, 8);
+    const ground = (x: number, y: number): number => terrainDrawAt(bundle.terrain, x, y);
+    const group = new THREE.Group();
+    const make = (halfM: number, lift: number, order: number): void => {
+      const mesh = buildRibbonMesh([{ p: pts }], () => halfM, ground, lift);
+      if (!mesh) return;
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute('position', new THREE.BufferAttribute(mesh.positions, 3));
+      geometry.setIndex(new THREE.BufferAttribute(mesh.indices, 1));
+      const material = new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, side: THREE.DoubleSide });
+      const ribbon = new THREE.Mesh(geometry, material);
+      ribbon.renderOrder = order;
+      group.add(ribbon);
+    };
+    make(WARD.haloM / 2, WARD.liftM, 1);
+    make(WARD.lineM / 2, WARD.liftM + 0.05, 2);
+    this.outline = group;
+    this.scene.add(group);
+    this.paintOutline();
+  }
+
+  /** Ink core on a paper halo in Clay; paper core on an ink halo in Dark. */
+  private paintOutline(): void {
+    if (!this.outline) return;
+    const studio = this.studio.value > 0.5;
+    /* srgbLinear, not displayColor: a MeshBasicMaterial passes through three's colour
+       management, so the hex must enter linear to come out as itself. */
+    const ink = srgbLinear(WARD.ink), paper = srgbLinear(CLAY.hazeCol);
+    const [halo, core] = this.outline.children as THREE.Mesh[];
+    const set = (mesh: THREE.Mesh | undefined, colour: THREE.Color, opacity: number): void => {
+      if (!mesh) return;
+      const material = mesh.material as THREE.MeshBasicMaterial;
+      material.color.copy(colour); material.opacity = opacity;
+    };
+    set(halo, studio ? paper : ink, studio ? 0.85 : 0.7);
+    set(core, studio ? ink : paper, 0.95);
+  }
+
+  private disposeOutline(): void {
+    if (!this.outline) return;
+    this.scene?.remove(this.outline);
+    for (const child of this.outline.children) {
+      const mesh = child as THREE.Mesh;
+      mesh.geometry.dispose();
+      (mesh.material as THREE.Material).dispose();
+    }
+    this.outline = null;
   }
 
   private buildCoolingLine(): void {
@@ -720,6 +798,7 @@ export class ThreeReliefRenderer implements ReliefRenderer {
     const studio = environment === 'studio'; this.studio.value = studio ? 1 : 0;
     if (!this.scene) return;
     if (!CLASSIC) { this.applyLook(studio); this.veg?.setStudio?.(studio); this.roads?.setStudio?.(studio); }
+    this.paintOutline();
     if (studio) {
       /* STUDIO_LIGHT is the editorial Clay light, or the classic one under
          `?look=classic` (look.ts holds both). */
@@ -957,10 +1036,10 @@ export class ThreeReliefRenderer implements ReliefRenderer {
       shader.uniforms.tAO = this.aoTex; shader.uniforms.uHaze = this.haze; shader.uniforms.uHazeCol = this.hazeCol;
       shader.uniforms.uClayK = this.clayK;
       if (kind === 'model') { shader.uniforms.uSelR = this.selRadius; shader.uniforms.uExtrude = this.modelExtrude; }
-      const varyings = 'varying vec3 vFp; varying vec3 vFn; varying float vTop; varying float vT; varying float vSel; varying float vH; varying float vRnd;\n';
+      const varyings = 'varying vec3 vFp; varying vec3 vFn; varying float vTop; varying float vT; varying float vSel; varying float vH; varying float vRnd; varying float vIn;\n';
       const declare = kind === 'model'
         ? varyings + 'uniform float uGrow; uniform float uSize; uniform sampler2D tField; uniform vec2 uSelCtr; uniform float uSelR; attribute float aGround; uniform float uExtrude;\nfloat mdh(vec2 p){float h=sin(p.x*127.1+p.y*311.7)*43758.5453;return h-floor(h);}\n'
-        : 'attribute float aDelay; attribute float aH; attribute vec2 aCtr; attribute float aG;\n' + varyings + 'uniform float uGrow; uniform float uSize; uniform sampler2D tField; uniform vec2 uSelCtr;\n';
+        : 'attribute float aDelay; attribute float aH; attribute vec2 aCtr; attribute float aG; attribute float aIn;\n' + varyings + 'uniform float uGrow; uniform float uSize; uniform sampler2D tField; uniform vec2 uSelCtr;\n';
       /* Per-block tone. The extrusion has a centroid per block; the merged glTF has
          none, so it takes a smooth 40 m value noise instead — no seams, gentler. */
       const place = kind === 'model'
@@ -971,10 +1050,10 @@ export class ThreeReliefRenderer implements ReliefRenderer {
           vec2 q=position.xz/40.;vec2 qi=floor(q),qf=fract(q);qf=qf*qf*(3.-2.*qf);
           vRnd=mix(mix(mdh(qi),mdh(qi+vec2(1,0)),qf.x),mix(mdh(qi+vec2(0,1)),mdh(qi+vec2(1,1)),qf.x),qf.y);
           vT=texture2D(tField,clamp(position.xz/uSize+.5,0.,1.)).g;
-          vSel=uSelR>0.?1.-step(uSelR,distance(position.xz,uSelCtr)):0.;`
+          vSel=uSelR>0.?1.-step(uSelR,distance(position.xz,uSelCtr)):0.;vIn=1.;`
         : `#include <begin_vertex>
           float gT=clamp((uGrow-aDelay*.55)/.45,0.,1.); float gE=1.+2.70158*pow(gT-1.,3.)+1.70158*pow(gT-1.,2.);
-          transformed.y*=gE;vFp=transformed;vFn=normal;vTop=position.y/max(aH,.001);vH=(position.y-aG)*gE;
+          transformed.y*=gE;vFp=transformed;vFn=normal;vTop=position.y/max(aH,.001);vH=(position.y-aG)*gE;vIn=aIn;
           vRnd=fract(sin(dot(aCtr,vec2(12.9898,78.233)))*43758.5453);
           vT=texture2D(tField,clamp(aCtr/uSize+.5,0.,1.)).g;vSel=1.-step(.5,distance(aCtr,uSelCtr));`;
       shader.vertexShader = declare + shader.vertexShader.replace('#include <begin_vertex>', place);
@@ -994,6 +1073,7 @@ export class ThreeReliefRenderer implements ReliefRenderer {
             body*=mix(stu?uClayK.w:.50,1.,1.-exp(-hgt/(stu?4.:5.)));
             float nb=texture2D(tAO,clamp((vFp.xz+fn.xz*3.)/uSize+.5,0.,1.)).g;body*=1.-nb*(stu?.30:.38)*(1.-smoothstep(0.,24.,hgt));}
           else{body=stu?mix(body,${v3(roof)}*tone,${CLAY.roofMix.toFixed(3)}*(1.-heatW)):body*.90;}
+          if(vIn<.5){body=mix(body,vec3(dot(body,vec3(.299,.587,.114))),${WARD.buildingDesat.toFixed(3)});body=stu?mix(body,uHazeCol,${WARD.buildingFadeClay.toFixed(3)}):body*${WARD.buildingDimDark.toFixed(3)};}
           if(vSel>.5){body=mix(body,vec3(.027,.788,.992),.42);body+=vec3(.10,.16,.18)*smoothstep(.90,.99,vTop);}diffuseColor.rgb=body;`)
           .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor*=mix(.86,1.08,vRnd);')
           .replace('#include <dithering_fragment>', 'gl_FragColor.rgb=mix(gl_FragColor.rgb,uHazeCol,lookHaze()*uHaze);\n#include <dithering_fragment>');

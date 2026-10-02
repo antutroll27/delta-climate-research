@@ -29,14 +29,24 @@
  *     `c·a` carries no k, and the ground drifts (≤ 3 %, Clay) toward a hazeCol
  *     that is within a few units of the paper.
  *
+ * THE WARD VEIL (KMC Ward 68, 2026-10-03; look.ts WARD). The heat texture's
+ * alpha is the ward mask — 1 inside the polygon, and 1 everywhere for an area
+ * without one — so `wIn` is exactly 1 wherever a statistic is taken. Outside it
+ * the context is held back: its tint desaturated by WARD.veilDesat and its alpha
+ * scaled by WARD.veilAlpha. Inside, both factors are exactly 1, so not one in-ward
+ * pixel moves; outside, the colour is deliberately NOT a heat reading any more
+ * (the context is in no figure), and the two rules above still hold there too.
+ *
  * tests/unit/obos-look-correctness.test.mjs EVALUATES this shader's own
- * statements, from `float a=` to `gl_FragColor`, and holds both rules.
+ * statements, from `float a=` to `gl_FragColor`, and holds both rules — with the
+ * veil's factor, inside the ward and outside it.
  *
  * Kept out of relief-renderer.ts so the material can be built and checked under
  * node without a map or a GL context.
  */
 import * as THREE from 'three';
 import { HAZE_GLSL } from './look-shading.ts';
+import { WARD } from './look.ts';
 
 /** The renderer's shared uniform holders the overlay reads. */
 export interface HeatOverlayHolders {
@@ -69,7 +79,8 @@ export const OVERLAY_FRAG = /* glsl */ `varying vec2 vUv; uniform sampler2D tT,t
         void main(){ vec2 fuv=vec2(vUv.x, 1.0-vUv.y); vec4 F=texture2D(tT, fuv); float t=clamp((F.r-uMin)/(uMax-uMin),-0.5,1.);
           float edge=smoothstep(0.0,0.16,min(min(vUv.x,1.0-vUv.x),min(vUv.y,1.0-vUv.y)));
           float cool=F.b*uCool; vec3 col=mix(ramp(t),vec3(.353,.722,.541),cool*.62);
-          float a=min(.92,uOp*uOpK+cool*.16)*edge;
+          float wIn=F.a; col=mix(mix(col,vec3(dot(col,vec3(.299,.587,.114))),${WARD.veilDesat.toFixed(3)}),col,wIn);
+          float a=min(.92,uOp*uOpK+cool*.16)*edge*(1.-(1.-wIn)*${(1 - WARD.veilAlpha).toFixed(3)});
           vec2 ao2=texture2D(tAO, fuv).rg; float ao=clamp(ao2.r*uAOW.x+ao2.g*uAOW.y,0.,1.)*uAOAmt*edge*(1.-smoothstep(0.,.08,a));
           float hz=lookHaze()*uHaze*edge;
           float k=(1.-ao)*(1.-hz);
