@@ -11,6 +11,20 @@ rejection; it is the diligence trail, not a scrap heap.
 
 ## Datasets in use
 
+**KMC ward boundaries (DataMeet, 141-ward scheme)** — DataMeet *Municipal_Spatial_Data*, `Kolkata/kolkata.geojson`
+at commit `cd528915e5f69c54b6d3ca858feb5ae56e3e7b3b` (file sha256 `397a9317…cdbc`), originally shared with the
+DataMeet community by Justin Elliot Meyers · vector polygons, older 141-ward numbering (KMC now has 144) · **CC BY-SA
+2.5 India — attribution AND share-alike**: `http://creativecommons.org/licenses/by-sa/2.5/in/` · committed copy
+`data/geometry/kmc-wards-around-ballygunge.geojson` (Ward 68 and its neighbours, geometries unchanged from
+DataMeet) · **role (2026-10-02):** defines Ballygunge as the real **KMC Ward 68**. The compute domain is a 1,800 m
+square centred on the Ward 68 bounding-box centre (22.522704 N, 88.369173 E), leaving ≥150 m between the ward and
+every edge; ward statistics are masked to this polygon, and buildings inside the square but outside the ward stay
+as context. The polygon is aligned to the street network to within about 10 m (measured 2026-10-02 by counting the
+Overture footprints its boundary cuts over a ±60 m shift grid) · **share-alike note:** the polygon and anything
+derived *from the polygon itself* (the ward mask `public/heat-map/data/ballygunge-ward.json`) carry CC BY-SA 2.5 IN;
+statistics merely *masked by* it are not adaptations of the boundary file · status: in the pipeline on
+`feat/ballygunge-ward68`.
+
 **Sentinel-2 L2A (NDVI)** — Copernicus/ESA optical · 10 m, ~5-day revisit, current · **Copernicus open
 licence — commercial use explicitly permitted** · via Element84 earth-search STAC API (`sentinel-2-l2a`
 collection), `https://earth-search.aws.element84.com/v1`; terms
