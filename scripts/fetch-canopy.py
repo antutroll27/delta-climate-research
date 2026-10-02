@@ -79,10 +79,20 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import _types  # noqa: E402
 import _trees  # noqa: E402
-from _types import WARDS, Ward  # noqa: E402
+from _sentinel import grid_for  # noqa: E402
+from _types import WARDS, LatLon, Ward  # noqa: E402
 
 RETRIEVED = "2026-08-10"          # constant, not date.today() -- byte-stable regeneration
-GRID = 140                        # served canopy grid (matches surface: FOOTPRINT_M // 10)
+#: The served canopy grid is PER WARD, at 10 m -- `grid_for(ward.footprint_m)`,
+#: the surface raster's grid. It was `GRID = 140` while every ward was 1400 m;
+#: Ballygunge's 1800 m Ward 68 square is 180 x 180. Holding the CELL at 10 m
+#: rather than the count at 140 is what keeps DENSITY_MAX trees-per-cell meaning
+#: the same density in every ward.
+#:
+#: The SELF-TEST still runs on a 1400 m / 140-cell ward (TEST_WARD below): its
+#: golden placement pins the hash and the lattice, which a ward's size must not
+#: be allowed to move.
+TEST_WARD = Ward("ballygunge", LatLon(22.528, 88.3659), 1400)
 CANOPY_HI = 30.0                  # metres; quantisation ceiling for the PNG
 MIN_TREE_H = 2.0                  # metres; below this a cell is not "canopy"
 JITTER = 0.80                     # cell-size fraction for position jitter -- tuned live 2026-08-11, spec sec.2
@@ -297,7 +307,7 @@ def document(ward: Ward, trees: list[_types.TreeInstanceJSON]) -> _types.TreesFi
     freshly generated artefact failing its own --check.
     """
     return {
-        "ward": ward.id, "grid": GRID, "sizeM": float(ward.footprint_m),
+        "ward": ward.id, "grid": grid_for(ward.footprint_m), "sizeM": float(ward.footprint_m),
         "retrieved": RETRIEVED, "source": CHM_PREFIX, "densityRefM": DENSITY_REF_H,
         "cols": list(_trees.COLS), "speciesNames": list(_trees.SPECIES_NAMES),
         "trees": _trees.encode_trees(trees),
@@ -305,7 +315,8 @@ def document(ward: Ward, trees: list[_types.TreeInstanceJSON]) -> _types.TreesFi
 
 
 def build_ward(ward: Ward) -> None:
-    grid = read_chm_grid(ward, GRID)
+    n = grid_for(ward.footprint_m)
+    grid = read_chm_grid(ward, n)
     if grid is None:
         raise SystemExit(f"CHM read failed for {ward.id}")
     write_canopy_png(ward.id, grid)
@@ -313,7 +324,7 @@ def build_ward(ward: Ward) -> None:
     doc = document(ward, trees)
     with open(os.path.join(DATA, f"{ward.id}-trees.json"), "w", encoding="utf-8") as fh:
         fh.write(serialise(cast("dict[str, Any]", doc)))
-    print(f"{ward.id}: {len(trees)} trees, canopy grid {GRID}x{GRID}")
+    print(f"{ward.id}: {len(trees)} trees, canopy grid {n}x{n}")
 
 
 def check_provenance(wid: str, doc: _types.TreesFileJSON) -> None:
@@ -370,7 +381,11 @@ def check(data_dir: str = DATA) -> None:
         with open(tp, encoding="utf-8") as fh:
             doc = cast(_types.TreesFileJSON, json.load(fh))
         assert doc["ward"] == wid, f"{wid}: ward mismatch"
-        assert doc["grid"] == GRID, f"{wid}: grid must be {GRID}"
+        want_n = grid_for(WARDS[wid].footprint_m)
+        assert doc["sizeM"] == WARDS[wid].footprint_m, (
+            f"{wid}: artefact covers {doc['sizeM']} m, the ward is "
+            f"{WARDS[wid].footprint_m} m -- regenerate it")
+        assert doc["grid"] == want_n, f"{wid}: grid must be {want_n}"
         check_provenance(wid, doc)
         # A pre-row-format artefact has neither key, and must say "regenerate"
         # rather than die on a KeyError -- same reasoning as check_provenance.
@@ -421,8 +436,8 @@ def _self_test() -> None:
     mean = sum(draws) / len(draws)
     assert 0.45 < mean < 0.55, f"hash draws should average ~0.5, got {mean:.3f}"
     # placement invariants on a synthetic ward-sized grid
-    ward = WARDS["ballygunge"]
-    n = GRID
+    ward = TEST_WARD
+    n = grid_for(ward.footprint_m)
     cell_m = ward.footprint_m / n
     grid = np.zeros((n, n), dtype=np.float32)
     grid[0, 0] = 30.0          # exactly DENSITY_REF_H -> 4*30/30 = 4.0 -> int(4.5) = 4
@@ -573,7 +588,7 @@ def _self_test() -> None:
     # dead code that no green test could distinguish from a live one. Round-trips a
     # real artefact pair through a temp DATA dir -- offline, and it touches nothing
     # under public/.
-    _self_test_check_wiring(ward)
+    _self_test_check_wiring(WARDS["ballygunge"])
     print("  fetch-canopy self-test OK")
 
 
@@ -581,7 +596,7 @@ def _self_test_check_wiring(ward: Ward) -> None:
     """Prove check() enforces the provenance stamp, against a temp artefact pair."""
     import tempfile
     from PIL import Image
-    n = GRID
+    n = grid_for(ward.footprint_m)
     g = np.zeros((n, n), dtype=np.float32)
     g[8:12, 8:12] = 20.0        # 4*20/30 = 2.67 -> 3 trees a cell; all well under CANOPY_HI
     doc = document(ward, derive_trees(ward, g))
