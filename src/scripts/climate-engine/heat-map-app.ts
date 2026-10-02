@@ -366,8 +366,9 @@ export function mountHeatMap(): () => void {
      the camera and drives the perf orbit. Never set on the production host. */
   const labWindow = window as unknown as { __obosMap?: maplibregl.Map };
   if (LAB_HOOK) labWindow.__obosMap = map;
-  /* A distance reference. The instrument shows a 1.4 km window at a pitch that
-     foreshortens it, and until now nothing on screen said how big anything was. */
+  /* A distance reference. The instrument shows the open area's square (1.4 km, or
+     1.8 km around KMC Ward 68) at a pitch that foreshortens it, and until now
+     nothing on screen said how big anything was. */
   map.addControl(new maplibregl.ScaleControl({ maxWidth: 104, unit: 'metric' }), 'bottom-left');
 
   /* The analytical core is intentionally Three-free. Its canvas raster remains

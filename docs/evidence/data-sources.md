@@ -15,15 +15,23 @@ rejection; it is the diligence trail, not a scrap heap.
 at commit `cd528915e5f69c54b6d3ca858feb5ae56e3e7b3b` (file sha256 `397a9317…cdbc`), originally shared with the
 DataMeet community by Justin Elliot Meyers · vector polygons, older 141-ward numbering (KMC now has 144) · **CC BY-SA
 2.5 India — attribution AND share-alike**: `http://creativecommons.org/licenses/by-sa/2.5/in/` · committed copy
-`data/geometry/kmc-wards-around-ballygunge.geojson` (Ward 68 and its neighbours, geometries unchanged from
-DataMeet) · **role (2026-10-02):** defines Ballygunge as the real **KMC Ward 68**. The compute domain is a 1,800 m
+`data/geometry/kmc-wards-around-ballygunge.geojson` (Ward 68 and the nine wards its compute square touches —
+65, 66, 67, 69, 85, 86, 90, 91, 92 — geometries unchanged from DataMeet; each ward's share of the square
+re-measured 2026-10-03 by `scripts/measure-ward-neighbours.py`, shares summing to 1.0) · **role (2026-10-02):** defines Ballygunge as the real **KMC Ward 68**. The compute domain is a 1,800 m
 square centred on the Ward 68 bounding-box centre (22.522704 N, 88.369173 E), leaving ≥150 m between the ward and
 every edge; ward statistics are masked to this polygon, and buildings inside the square but outside the ward stay
 as context. The polygon is aligned to the street network to within about 10 m (measured 2026-10-02 by counting the
 Overture footprints its boundary cuts over a ±60 m shift grid) · **share-alike note:** the polygon and anything
 derived *from the polygon itself* (the ward mask `public/heat-map/data/ballygunge-ward.json`) carry CC BY-SA 2.5 IN;
-statistics merely *masked by* it are not adaptations of the boundary file · status: in the pipeline on
-`feat/ballygunge-ward68`.
+statistics merely *masked by* it are not adaptations of the boundary file · **attribution (required, CC BY-SA):**
+"Ward boundary: DataMeet Municipal_Spatial_Data, Kolkata/kolkata.geojson (KMC 141-ward scheme), commit cd52891;
+CC BY-SA 2.5 India" — carried in the mask artefact, printed on the map's attribution line wherever the boundary is
+drawn ("Ward boundary © DataMeet (CC BY-SA 2.5 India)"), listed on `/attribution` (generated from the ward
+records, which now carry a `ward boundary` layer), and in the ward record's `boundary` block, which also ships
+the polygon itself · **used in the app (2026-10-03):** the Ward 68 outline (3-D and 2-D), the veil over the
+context, and every Ballygunge ward statistic (field statistics by solver-cell centre inside the polygon,
+per-building statistics by footprint intersecting it) · status: shipped on `feat/ballygunge-ward68`, not yet
+merged.
 
 **Sentinel-2 L2A (NDVI)** — Copernicus/ESA optical · 10 m, ~5-day revisit, current · **Copernicus open
 licence — commercial use explicitly permitted** · via Element84 earth-search STAC API (`sentinel-2-l2a`
@@ -109,9 +117,12 @@ lever, the raster is; **heights unvalidated with a suspected low bias** — no i
 comparison came back `underpowered` (n=28 vs bar of 30), so no correction/statistic applied.
 
 **Overture Maps footprints** — Overture Maps Foundation (merges OSM + Google Open Buildings + Microsoft
-ML) · release pinned `2026-07-22.0` · **ODbL** (in-repo attribution: "Footprints © Overture Maps
+ML) · release pinned **per ward**: Ballygunge **`2026-09-23.1`** (re-fetched 2026-10-02 for the 1,800 m Ward 68
+square; `2026-07-22.0` no longer exists in Overture's bucket), Barrackpore and Baruipur `2026-07-22.0` (their
+committed parquets are now the only copy of that release and cannot be re-downloaded) · **ODbL** (in-repo attribution: "Footprints © Overture Maps
 Foundation (ODbL)") · GeoParquet via DuckDB · **role:** **the shipped footprint source** for all three wards
-since 2026-08-04 (commit `6151975`; 3,527 / 4,702 / 4,538 = 12,767 buildings, GERS-deduplicated) · status:
+since 2026-08-04 (commit `6151975`; then 3,527 / 4,702 / 4,538 = 12,767 buildings, GERS-deduplicated; since
+2026-10-02 Ballygunge's 1,800 m square holds 7,931, of which 2,207 touch KMC Ward 68, so 17,171 are drawn) · status:
 **production, shipped**. One overlapping pair survived dedup in Barrackpore and produced a spurious 100 %
 rooftop-PV shading loss — guarded by `OVERLAP_TOL` in `scripts/measure-pv-shading.py`. The earlier
 "stopped at its parity gate" note (also in `heat-map-feature.md`) predates the ship commit.
