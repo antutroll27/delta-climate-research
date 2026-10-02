@@ -129,3 +129,21 @@ test('assertPairedResult refusing the same ward on both sides is a bad request',
 test('an error from no known throw site still falls through to calculation-failed', () => {
   assert.equal(classifyPairedFailure(new Error('the solver diverged')).code, 'calculation-failed');
 });
+
+/* ── KMC Ward 68 (2026-10-02): two areas of one city on different admitted pairs ── */
+
+test('a Ballygunge (1800 m, 247 cells) and Baruipur (1400 m, 192) pair is accepted: same physical cell', () => {
+  /* The default Compare pair. Sizing B against A's grid refused it outright once
+     Ballygunge moved to its 1800 m square; each field is now checked against its own
+     ward's grid, and the shared contract is the cell size (7.2874 vs 7.2917 m). */
+  const result = pairedResult();
+  const n = requireGrid(1800).n;
+  result.a = { ...result.a, wardData: { ...result.a.wardData, sizeM: 1800 }, field: new Float32Array(n * n).fill(33),
+    evidence: { ...result.a.evidence, gridVersion: gridVersion(1800) } };
+  assert.doesNotThrow(() => assertPairedResult(result));
+  /* Each side is still held to ITS OWN grid. */
+  const wrong = { ...result, b: { ...result.b, field: new Float32Array(n * n) } };
+  const error = thrownBy(() => assertPairedResult(wrong));
+  assert.match(error.message, /1400 m ward's admitted grid/);
+  assert.equal(classifyPairedFailure(error).code, 'invalid-request');
+});

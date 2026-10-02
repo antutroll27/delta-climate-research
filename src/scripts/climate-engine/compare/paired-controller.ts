@@ -262,6 +262,10 @@ export function mountPairedBench(): () => void {
       setText(`[data-value="${slot}-cost"]`, fmtMoney(ward.capitalCost, requireCosts(scope)));
       setText(`[data-value="${slot}-delivered"]`, formatDelivered(ward));
       setText(`[data-value="${slot}-pattern"]`, thermalPatternSummary(ward.field));
+      /* The square each field is drawn over, and — for a ward with a boundary — what
+         the figures above are taken over. The two squares are no longer equal. */
+      const km = (ward.wardData.sizeM / 1000).toFixed(1);
+      setText(`[data-value="${slot}-extent"]`, `${km} km × ${km} km${ward.statsOver ? ` · figures inside ${ward.statsOver}` : ''}`);
       const threeCanvas = one<HTMLCanvasElement>(`[data-map-three="${slot}"]`);
       threeCanvas?.setAttribute(
         'aria-label',
