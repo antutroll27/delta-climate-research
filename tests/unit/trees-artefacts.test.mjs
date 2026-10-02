@@ -20,7 +20,10 @@ const mixOf = (file) => file.trees.reduce((m, t) => ({ ...m, [t.species]: (m[t.s
 const EXPECTED = {
   /* Kolkata's mixes pinned too: counts alone let a species-index swap through, and
      fetch-canopy --check only tests membership in SPECIES. */
-  ballygunge: { count: 12159, mix: { neem: 6101, palm: 3065, gulmohar: 2993 } },
+  /* Ballygunge re-pinned 2026-10-02 (was 12159: neem 6101, palm 3065, gulmohar 2993): the
+     1800 m Ward 68 square on a 180 x 180 canopy grid. The generator is unchanged -- run on
+     the OLD window it reproduces the old file row for row (12,159 of 12,159). */
+  ballygunge: { count: 15045, mix: { neem: 7477, palm: 3752, gulmohar: 3816 } },
   baruipur: { count: 8415, mix: { neem: 4182, palm: 2112, gulmohar: 2121 } },
   barrackpore: { count: 6811, mix: { neem: 3396, palm: 1688, gulmohar: 1727 } },
   indiranagar: { count: 23565, mix: { neem: 11779, palm: 5930, gulmohar: 5856 } },
