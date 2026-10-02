@@ -87,7 +87,8 @@ test('five decimals, and the hemisphere is stated', () => {
    a duplicate must not move text a visitor can see. */
 test('deriving the ward coordinate labels reproduces the six shipped strings', async () => {
   const shipped = {
-    ballygunge: '22.528° N · 88.366° E',
+    // Re-pinned 2026-10-02: Ballygunge's centre is now KMC Ward 68's bbox centre.
+    ballygunge: '22.523° N · 88.369° E',
     baruipur: '22.365° N · 88.432° E',
     barrackpore: '22.762° N · 88.371° E',
     indiranagar: '12.978° N · 77.641° E',
