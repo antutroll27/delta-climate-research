@@ -12,12 +12,13 @@ idiom. The roads artefacts were committed WITHOUT their generator (a standing
 debt noted in docs/heat-map-implementation.md); this is the first committed OSM
 fetcher, and regenerating roads through the same shape is possible later.
 
-Rings are clipped to +/-CLIP_M so a river that continues for kilometres past the
+Rings are clipped to +/-osm_clip_m(ward) so a river that continues for kilometres past the
 study window cannot bloat the artefact; roads carry coordinates to ~755 m, so the
 clip box deliberately sits past the 700 m half-width rather than at it.
 
     python3 scripts/fetch-water.py            # all three wards
     python3 scripts/fetch-water.py --check    # asserts over the committed files
+    python3 scripts/fetch-water.py --ward ballygunge   # one ward
 """
 from __future__ import annotations
 
@@ -43,10 +44,11 @@ OUT_DIR = os.path.join(ROOT, "public", "heat-map", "data")
 OVERPASS = "https://overpass-api.de/api/interpreter"
 SOURCE = "OpenStreetMap via Overpass (ODbL)"
 
-#: Half-width of the emitted frame, metres. Past the 700 m study half-width on
-#: purpose — the roads artefacts carry vertices to ~755 m and the renderer lets
-#: geometry run slightly past the window edge rather than shaving it flush.
-CLIP_M = 760.0
+#: Half-width of the emitted frame is `_types.osm_clip_m(ward)`: 60 m past the
+#: ward's half-width on purpose — the roads artefacts carry vertices that far and
+#: the renderer lets geometry run slightly past the window edge rather than
+#: shaving it flush. 760 m for a 1400 m ward; it was this constant until
+#: Ballygunge became an 1800 m square (960 m).
 
 #: Ring area floor after clipping, m². A 20 m² puddle is one ripple wide at this
 #: scale and only adds vertices.
@@ -63,7 +65,7 @@ def classify(tags: dict[str, str]) -> str:
 
 
 def query(ward: _types.Ward) -> dict[str, Any]:
-    w, s, e, n = _types.ward_bounds(ward, pad_m=CLIP_M - ward.footprint_m / 2)
+    w, s, e, n = _types.ward_bounds(ward, pad_m=_types.OSM_CLIP_PAD_M)
     bbox = f"{s},{w},{n},{e}"
     q = f"""[out:json][timeout:90];
 (
@@ -178,7 +180,7 @@ def fetch_ward(ward: _types.Ward) -> dict[str, Any]:
             rings.extend(stitch_outers(el.get("members", [])))
         for ring in rings:
             m = [to_metres(ward, lon, lat) for lon, lat in ring]
-            m = clip_box(m, CLIP_M)
+            m = clip_box(m, _types.osm_clip_m(ward))
             if len(m) >= 3 and ring_area(m) >= MIN_RING_M2:
                 flat: list[float] = []
                 for x, y in m:
@@ -201,7 +203,8 @@ def check() -> int:
             p = poly["p"]
             assert poly["k"] in ("water", "river", "pool")
             assert len(p) >= 6 and len(p) % 2 == 0
-            assert all(abs(v) <= CLIP_M + 0.1 for v in p), "vertex escapes the clip box"
+            clip = _types.osm_clip_m(_types.WARDS[wid])
+            assert all(abs(v) <= clip + 0.1 for v in p), "vertex escapes the clip box"
             ring = [(p[i], p[i + 1]) for i in range(0, len(p), 2)]
             area += ring_area(ring)
         print(f"  {wid}: {d['count']} polys · {area / 10_000:.2f} ha in frame")
@@ -211,10 +214,13 @@ def check() -> int:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--check", action="store_true")
-    if ap.parse_args().check:
+    ap.add_argument("--ward", choices=sorted(_types.WARDS), default=None)
+    args = ap.parse_args()
+    if args.check:
         return check()
     os.makedirs(OUT_DIR, exist_ok=True)
-    for wid, ward in _types.WARDS.items():
+    todo = {args.ward: _types.WARDS[args.ward]} if args.ward else _types.WARDS
+    for wid, ward in todo.items():
         print(f"  {wid} …")
         data = fetch_ward(ward)
         out = os.path.join(OUT_DIR, f"{wid}-water.json")
