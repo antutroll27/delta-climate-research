@@ -96,7 +96,7 @@ export interface CityRecord {
 const KOLKATA_WARDS: readonly WardRecord[] = [
   { id: 'ballygunge', name: 'Bally<em>gunge</em>', zone: 'Urban Core · Ward 68',
     body: 'Kolkata Municipal Corporation, Ward 68',
-    lat: 22.528, lon: 88.3659, veg: 0.12, footprintM: 1400,
+    lat: 22.522704, lon: 88.369173, veg: 0.12, footprintM: 1800,
     swatch: 'radial-gradient(circle at 40% 40%,#e5484d,#b08d57 55%,#093a3e)' },
   { id: 'baruipur', name: 'Baru<em>ipur</em>', zone: 'Peri-Urban Fringe',
     body: 'Baruipur Municipality',

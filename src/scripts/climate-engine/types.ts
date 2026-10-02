@@ -58,6 +58,19 @@ export const ADMITTED_GRIDS: readonly AdmittedGrid[] = [
      measurement. */
   { n: 192, sizeM: 1400, version: 'hm-grid-192-v1' },
   { n: 384, sizeM: 2800, version: 'hm-grid-384-2800-v1' },
+  /* BALLYGUNGE AS KMC WARD 68 (founder decision 2026-10-02): a 1800 m square
+     centred on the Ward 68 bounding box. 247 cells is 7.2874 m, 0.057 % finer
+     than 1400/192 = 7.2917 m — the nearest whole n to the shared cell size.
+
+     WHY NOT AN EXACT MULTIPLE. 7.2917 m is 175/24 m, so an exact pair needs a
+     size that is a multiple of 175 m: 1750 m (240 cells) or 1925 m (264). 1750 m
+     leaves only 148 m between Ward 68 and the north and south edges, under the
+     150 m margin the founder set; 1925 m is not the 1.8 km domain the founder
+     accepted, and buys 14 % more cells for no physical gain. The physics runs in
+     CELL units (GridSpec.cellMeters is a label), so a 0.057 % shorter cell is a
+     0.057 % change in what one cell of diffusion means — two orders of magnitude
+     inside any calibration uncertainty this repo records. */
+  { n: 247, sizeM: 1800, version: 'hm-grid-247-1800-v1' },
 ];
 
 /** Cells per side for a ward of this size, or undefined if unsupported. */
