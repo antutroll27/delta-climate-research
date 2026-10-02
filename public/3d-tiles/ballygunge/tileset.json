@@ -3,36 +3,36 @@
     "version": "1.1",
     "tilesetVersion": "delta-climate-prototype"
   },
-  "geometricError": 17.42,
+  "geometricError": 17.53,
   "root": {
     "boundingVolume": {
       "region": [
-        1.5421547058247989,
-        0.3930754968585018,
-        1.5423961895801048,
-        0.3933002603595736,
+        1.5421783724894558,
+        0.3929500076852834,
+        1.542489686868134,
+        0.3932411809643936,
         0.0,
         86.9
       ]
     },
-    "geometricError": 17.42,
+    "geometricError": 17.53,
     "refine": "REPLACE",
     "transform": [
-      -0.9995933072973795,
-      0.028517012576472142,
+      -0.9995949761651085,
+      0.028458454376092106,
       0.0,
       0.0,
-      -0.010925864931709784,
-      -0.38297915789338044,
-      0.9236923676716027,
+      -0.010901003326790103,
+      -0.3828945879004843,
+      0.923727721075311,
       0.0,
-      0.026340946865682422,
-      0.9233167087262044,
-      0.38313497609227587,
+      0.026287863206153273,
+      0.9233535893313255,
+      0.38304973217196275,
       0.0,
-      168088.77720915776,
-      5891936.1303890245,
-      2428521.9235110926,
+      167749.99916893084,
+      5892170.186228869,
+      2427981.068965292,
       1.0
     ],
     "content": {
@@ -61,10 +61,10 @@
       "restrictions": "none \u2014 static files, no authentication, no rate limiting, no technological restriction (\u00a74.7).",
       "disclaimer": "A compliance posture implemented in code, not legal advice. Formal review precedes any production or commercial deployment."
     },
-    "buildings": 3527,
+    "buildings": 7931,
     "inputsHash": {
-      "data/geometry/ballygunge-footprints.json": "6db0d37147aa69cc7edef1a6a3ea25070d60a57b84af2211ca7c7b47c18aecfd",
-      "data/geometry/heights-overture.json": "81e2750f86d750803704c0f188e41f877d9a90194ac40c9b5c68691fc37fa478",
+      "data/geometry/ballygunge-footprints.json": "ee1a73c8058bed76d274d793ca3218bd96c6653527dc9dea1bbe8c3cc6e7c1db",
+      "data/geometry/heights-overture.json": "4953cff12f9cef0d47800680a5e759f0015567696913037a12429e3cb472d4da",
       "scripts/_gltf.py": "764cce725db055542e6c608c864d4ad6a326df3b708015bfb0ae3b5568535cfd",
       "scripts/build-3d-tiles.py": "0ea053b819abce13723d1a5dbdf8713ce67bfa8179fef8a5d5c1888256894835"
     }
