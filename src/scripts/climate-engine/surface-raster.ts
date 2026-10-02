@@ -73,11 +73,45 @@ export interface SurfaceRaster {
   readonly albedo: Float32Array;
 }
 
-/** Mean of a Float32Array — used only to verify the pinned ward level. */
-function mean(a: Float32Array): number {
-  let total = 0;
-  for (let i = 0; i < a.length; i++) total += a[i];
-  return a.length ? total / a.length : 0;
+/** Mean of a Float32Array — used only to verify the pinned ward level. With
+ *  `cells`, only where cells[i] is non-zero: the cells the exporter pinned. */
+function mean(a: Float32Array, cells?: Uint8Array | null): number {
+  let total = 0, count = 0;
+  for (let i = 0; i < a.length; i++) {
+    if (cells && !cells[i]) continue;
+    total += a[i];
+    count++;
+  }
+  return count ? total / count : 0;
+}
+
+/**
+ * The cells a ward's surface was PINNED over, in the decoded raster's own row
+ * order (SOUTH-up, after `loadSurfaceRaster`'s flip), or null for the whole square.
+ *
+ * WHY THIS EXISTS (2026-10-02). Ballygunge became KMC Ward 68: its DC-URS scalars
+ * are statistics of the ward POLYGON, and the exporter now pins the raster so its
+ * mean over the polygon's cells reproduces them — pinning the whole 1800 m square
+ * to a polygon scalar would slide every context cell by the ward-vs-square gap
+ * (0.029 in FVC), a distortion of measured ground. The exporter records those
+ * cells as `pinCells` (north-up run lengths, first run OUTSIDE) beside the raster
+ * in surface-meta.json, and this check must take its mean over the SAME cells or
+ * it discards a correct texture. Wards without a polygon carry no `pinCells` and
+ * are checked over the whole square exactly as before.
+ */
+export function pinCellsSouthUp(rle: readonly number[] | undefined, n: number): Uint8Array | null {
+  if (!rle) return null;
+  const northUp = new Uint8Array(n * n);
+  let pos = 0, inside = false;
+  for (const run of rle) {
+    if (inside) northUp.fill(1, pos, pos + run);
+    pos += run;
+    inside = !inside;
+  }
+  if (pos !== n * n) return null;               // malformed: fall back to the whole square
+  const out = new Uint8Array(n * n);
+  for (let row = 0; row < n; row++) out.set(northUp.subarray(row * n, row * n + n), (n - 1 - row) * n);
+  return out;
 }
 
 /**
@@ -194,18 +228,19 @@ export function assertSurfaceMatches(
   fvcTarget: number,
   albedoTarget: number,
   tolerance = 0.01,
+  cells: Uint8Array | null = null,
 ): void {
-  const vegError = Math.abs(mean(surface.veg) - fvcTarget);
-  const albedoError = Math.abs(mean(surface.albedo) - albedoTarget);
+  const vegError = Math.abs(mean(surface.veg, cells) - fvcTarget);
+  const albedoError = Math.abs(mean(surface.albedo, cells) - albedoTarget);
   if (vegError > tolerance) {
     throw new Error(
-      `surface texture vegetation mean ${mean(surface.veg).toFixed(4)} differs from the DC-URS `
+      `surface texture vegetation mean ${mean(surface.veg, cells).toFixed(4)} differs from the DC-URS `
       + `input ${fvcTarget.toFixed(4)} by ${vegError.toFixed(4)}. The map and the score are `
       + `reading different measurements — re-run scripts/export-surface-rasters.py.`);
   }
   if (albedoError > tolerance) {
     throw new Error(
-      `surface texture albedo mean ${mean(surface.albedo).toFixed(4)} differs from the DC-URS `
+      `surface texture albedo mean ${mean(surface.albedo, cells).toFixed(4)} differs from the DC-URS `
       + `input ${albedoTarget.toFixed(4)} by ${albedoError.toFixed(4)}. Re-run `
       + `scripts/export-surface-rasters.py.`);
   }
@@ -270,6 +305,8 @@ interface SurfaceMetaEntry {
   readonly level?: string;
   readonly fvc_mean?: number;
   readonly albedo_mean?: number;
+  /** the cells the level was pinned over — see `pinCellsSouthUp` */
+  readonly pinCells?: { readonly rows?: string; readonly rle?: readonly number[] };
 }
 
 /** Same one-file-per-session cache as `loadInputs`, for the same reason. */
@@ -358,7 +395,9 @@ export async function loadAreaSurface(key: AreaKey, signal?: AbortSignal): Promi
     : measured ?? { fvc: 0, albedo: DEFAULT_ALBEDO };
   if (!surface || (!record && !measured)) return { means, surface: null };
   try {
-    assertSurfaceMatches(surface, means.fvc, means.albedo);
+    const pin = meta?.[areaId]?.pinCells;
+    const cells = pin?.rows === 'north-up' ? pinCellsSouthUp(pin.rle, surface.n) : null;
+    assertSurfaceMatches(surface, means.fvc, means.albedo, 0.01, cells);
     return { means, surface };
   } catch (error) {
     console.error(error);
@@ -493,4 +532,18 @@ export function assertSurfaceLogic(): void {
   let threw = false;
   try { assertSurfaceMatches(fake, 0.9, 0.2); } catch { threw = true; }
   a(threw, 'a drifted vegetation mean must throw, not pass quietly');
+
+  // Pinned over a mask: the mean is taken over the pinned cells only, and the
+  // north-up run lengths land on the SOUTH-up rows the decoded raster uses.
+  // 2x2, north-up mask = top row only -> south-up = the second row.
+  const cells = pinCellsSouthUp([0, 2, 2], 2);
+  a(cells !== null && cells[0] === 0 && cells[2] === 1 && cells[3] === 1,
+    'north-up pin cells must flip onto the south-up rows');
+  const split: SurfaceRaster = { n: 2, veg: new Float32Array([0.1, 0.1, 0.5, 0.5]),
+                                 albedo: new Float32Array([0.2, 0.2, 0.2, 0.2]) };
+  assertSurfaceMatches(split, 0.5, 0.2, 0.01, cells);
+  threw = false;
+  try { assertSurfaceMatches(split, 0.5, 0.2); } catch { threw = true; }
+  a(threw, 'over the whole square the same texture must still be checked against the whole square');
+  a(pinCellsSouthUp([1, 2], 2) === null, 'runs that do not cover the grid must not be trusted');
 }

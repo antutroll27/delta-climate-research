@@ -47,6 +47,15 @@ blocks, and no building-scale information because the source contains none.
 ECOSTRESS is the right instrument for VALIDATING the field at 70 m, which is a
 separate job (see docs/heat-map-feature.md).
 
+WARD 68 (2026-10-02). For a ward with an administrative polygon
+(scripts/_wardmask.py) the DC-URS scalars are statistics of the POLYGON, so the
+raster is pinned so that its POLYGON mean — the cells whose centre lies inside
+Ward 68 — reproduces them. The shift is still additive and still solved by
+bisection; only the cells the mean is taken over change. Pinning the WHOLE
+square to a polygon scalar would instead slide every context cell by the
+ward-vs-square difference, which is a distortion of measured ground, not a pin.
+The full-square means are recorded beside the pinned ones (`*_square_mean`).
+
 Output: public/heat-map/data/<ward>-surface.png   (2 channels in RGB: R=veg, G=albedo)
         public/heat-map/data/surface-meta.json    (scale/offset per ward + provenance)
 """
@@ -68,6 +77,7 @@ if HERE not in sys.path:
 
 import _bangalore as blr  # noqa: E402
 import _types  # noqa: E402
+import _wardmask  # noqa: E402
 
 # One copy of the measurement, shared with fetch-sentinel-composites. A second
 # copy of the BOA offset rule or the albedo coefficients would be a second thing
@@ -134,7 +144,13 @@ def composite(ward: _types.Ward, years: list[int]) -> tuple[npt.NDArray[np.float
     undetected cloud edge pull a cell several degrees' worth of albedo.
     """
     os.makedirs(COMPOSITE_CACHE, exist_ok=True)
-    key = os.path.join(COMPOSITE_CACHE, f"{ward.id}-{min(years)}-{max(years)}.npz")
+    # A ward with a polygon has moved (Ballygunge, 2026-10-02), so its cache name
+    # carries the window: the old name would hand back the OLD window's composite,
+    # correctly shaped only by luck. Wards that never moved keep the name their
+    # committed rasters were built under.
+    stem = (ward.id if not _wardmask.has_polygon(ward.id) else
+            f"{ward.id}-{ward.footprint_m}m-{ward.centre.lat:.6f}-{ward.centre.lon:.6f}")
+    key = os.path.join(COMPOSITE_CACHE, f"{stem}-{min(years)}-{max(years)}.npz")
     if os.path.exists(key):
         cached = np.load(key)
         print(f"    {ward.id}: composite from cache ({os.path.relpath(key, os.path.expanduser('~'))})")
@@ -176,7 +192,8 @@ def fill_gaps(a: npt.NDArray[np.float32], fallback: float) -> npt.NDArray[np.flo
     return out
 
 
-def rescale_to(a: npt.NDArray[np.float32], target: float) -> npt.NDArray[np.float32]:
+def rescale_to(a: npt.NDArray[np.float32], target: float,
+               mask: _types.Mask | None = None) -> npt.NDArray[np.float32]:
     """Shift the field so its CLIPPED ward mean equals `target`, preserving structure.
 
     THE INVARIANT. DC-URS scores on the ward scalar in inputs.json; that number
@@ -202,9 +219,10 @@ def rescale_to(a: npt.NDArray[np.float32], target: float) -> npt.NDArray[np.floa
     floor and costs nothing next to the fetch.
     """
     lo, hi = -1.0, 1.0
+    sel = a if mask is None else a[mask]          # the cells the scalar describes
     for _ in range(60):
         mid = (lo + hi) / 2
-        if float(np.clip(a + mid, 0.0, 1.0).mean()) < target:
+        if float(np.clip(sel + mid, 0.0, 1.0).mean()) < target:
             lo = mid
         else:
             hi = mid
@@ -306,9 +324,11 @@ def main() -> None:
         ).astype(np.float32)
         albedo = fill_gaps(albedo_raw, FALLBACK_ALBEDO if targets is None else targets[1])
 
+        # north-up, like the PNG: the scalar's cells, or None for the whole square
+        mask = _wardmask.mask_grid(ward, n, rows="north-up")
         if targets is not None:
-            fvc = rescale_to(fvc, targets[0])
-            albedo = rescale_to(albedo, targets[1])
+            fvc = rescale_to(fvc, targets[0], mask)
+            albedo = rescale_to(albedo, targets[1], mask)
 
         r = quantise(fvc, *VEG_RANGE)
         g = quantise(albedo, *ALBEDO_RANGE)
@@ -319,8 +339,9 @@ def main() -> None:
         # Measure what the BROWSER will see, which is the quantised value — not
         # the float we just computed. Quantisation is the last step that can
         # break the invariant, so it is the one that must be measured.
-        veg_mean = float(dequantise(r, *VEG_RANGE).mean())
-        alb_mean = float(dequantise(g, *ALBEDO_RANGE).mean())
+        veg_q, alb_q = dequantise(r, *VEG_RANGE), dequantise(g, *ALBEDO_RANGE)
+        veg_mean = float(veg_q.mean() if mask is None else veg_q[mask].mean())
+        alb_mean = float(alb_q.mean() if mask is None else alb_q[mask].mean())
         kb = os.path.getsize(path) / 1024
         entry: dict[str, Any] = {
             "grid": n,
@@ -328,6 +349,17 @@ def main() -> None:
             "veg_std": round(float(fvc.std()), 4),
             "albedo_std": round(float(albedo.std()), 4),
         }
+        if mask is not None:
+            entry |= {
+                "mask": (f"KMC Ward {_wardmask.POLYGONS[ward_id][1]} polygon: "
+                         f"{int(mask.sum()):,} of {mask.size:,} cells by centre"),
+                # The cells the level is pinned over, for the browser-side half of
+                # the invariant (surface-raster.ts pinCellsSouthUp): north-up, like
+                # the PNG; run lengths starting with a run OUTSIDE (_wardmask.rle).
+                "pinCells": {"rows": "north-up", "rle": _wardmask.rle(mask)},
+                "fvc_square_mean": round(float(veg_q.mean()), 4),
+                "albedo_square_mean": round(float(alb_q.mean()), 4),
+            }
         if targets is not None:
             fvc_target, albedo_target = targets
             entry |= {
