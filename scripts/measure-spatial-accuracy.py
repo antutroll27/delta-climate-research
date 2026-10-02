@@ -91,11 +91,20 @@ import _water  # noqa: E402
 from _ecostress import align, band_url, cmr_search, fetch, target_grid, token  # noqa: E402
 from _sentinel import uniform_grid  # noqa: E402
 
-#: The Sentinel-2 surface grid, DERIVED from the ward footprint rather than read
-#: as a module constant baked at Kolkata's 1400 m. This script is Kolkata-only,
-#: and `uniform_grid` refuses the moment the ward table holds two footprints —
-#: which is exactly when one number for "the" grid stops being a fact.
-SURFACE_GRID = uniform_grid(_types.WARDS.values())
+def surface_grid() -> int:
+    """The Sentinel-2 surface grid, DERIVED from the ward footprint rather than read
+    as a module constant baked at Kolkata's 1400 m. This script is Kolkata-only,
+    and `uniform_grid` refuses the moment the ward table holds two footprints —
+    which is exactly when one number for "the" grid stops being a fact.
+
+    A FUNCTION, NOT A MODULE CONSTANT, since 2026-10-02, when Ballygunge became an
+    1800 m square beside two 1400 m wards. The refusal is unchanged — every
+    measurement in this script still refuses a mixed ward table — but it now fires
+    when a grid is NEEDED, not when the module is IMPORTED: measure-shadow-signtest
+    (and through it the PV chain) imports this file only for its sun and its
+    scene machinery, and must not inherit a refusal about grids it never uses.
+    """
+    return uniform_grid(_types.WARDS.values())
 
 ROOT = os.path.join(HERE, "..")
 SURFACE_DIR = os.path.join(ROOT, "public", "heat-map", "data")
@@ -203,7 +212,8 @@ def built_layer(ward_id: str) -> npt.NDArray[np.float32]:
     odd layer out is `built`. Both put the layers on the same ground; they differ
     only in which convention they adopt to do it.
     """
-    path = os.path.join(BUILT_CACHE, f"{ward_id}-built-{SURFACE_GRID}.f32")
+    grid = surface_grid()
+    path = os.path.join(BUILT_CACHE, f"{ward_id}-built-{grid}.f32")
     if not os.path.exists(path):
         sys.exit(f"{os.path.relpath(path, os.path.expanduser('~'))} is missing — run "
                  f"`npx tsx scripts/export-built-raster.mjs` first. It is written by the "
@@ -211,7 +221,7 @@ def built_layer(ward_id: str) -> npt.NDArray[np.float32]:
                  f"and the drift would look like the model failing validation.")
     _assert_built_cache_current(ward_id, path)
     a = np.fromfile(path, dtype=np.float32)
-    return np.flipud(a.reshape(SURFACE_GRID, SURFACE_GRID)).copy()
+    return np.flipud(a.reshape(grid, grid)).copy()
 
 
 def _assert_built_cache_current(ward_id: str, path: str) -> None:
@@ -249,7 +259,7 @@ def _assert_built_cache_current(ward_id: str, path: str) -> None:
                  f"{stamp.get('geometrySha256')}, shipped {len(live['b'])} / {want}) -- {hint}")
 
 
-def water_coverage(ward_id: str, n: int = SURFACE_GRID) -> npt.NDArray[np.float32]:
+def water_coverage(ward_id: str, n: int | None = None) -> npt.NDArray[np.float32]:
     """Open-water AREA FRACTION per cell, north-up, from the shipped OSM polygons.
 
     THE GEOMETRY, UNGATED — what the ward actually contains, whether or not the solver is
@@ -283,10 +293,11 @@ def water_coverage(ward_id: str, n: int = SURFACE_GRID) -> npt.NDArray[np.float3
     and scripts/check-water-oracle.py on every `npm run test:py`.
     """
     size_m = float(_types.WARDS[ward_id].footprint_m)
-    return _water.water_north_up(_water.load_ward_water(ward_id), size_m, n)
+    return _water.water_north_up(_water.load_ward_water(ward_id), size_m,
+                                 surface_grid() if n is None else n)
 
 
-def water_layer(ward_id: str, n: int = SURFACE_GRID) -> npt.NDArray[np.float32]:
+def water_layer(ward_id: str, n: int | None = None) -> npt.NDArray[np.float32]:
     """The water layer AS THE SOLVER RECEIVES IT — which is currently all zeros.
 
     `WATER_LAYER_ENABLED` is false in types.ts, so `rasterWardBase` hands the solver a
@@ -303,7 +314,8 @@ def water_layer(ward_id: str, n: int = SURFACE_GRID) -> npt.NDArray[np.float32]:
     spatial amplitude.
     """
     if not _water.LAYER_ENABLED:
-        return np.zeros((n, n), dtype=np.float32)
+        grid = surface_grid() if n is None else n
+        return np.zeros((grid, grid), dtype=np.float32)
     return water_coverage(ward_id, n)
 
 
