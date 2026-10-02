@@ -583,7 +583,7 @@ def main() -> None:
         raise SystemExit(f"ward geometry missing in {GEOM}: {', '.join(missing)}")
 
     out: FarFile = {
-        "source": "Microsoft ML Building Footprints (ODbL) + Google Open Buildings 2.5D heights (CC BY 4.0)",
+        "source": "Overture Maps buildings (OSM + Google + Microsoft footprints, ODbL) + Google Open Buildings 2.5D heights (CC BY 4.0)",
         "method": "FAR = Σ(footprint area × floors) / land area; shoelace polygon area",
         "assumption": f"floors = round(height / {STOREY_M} m), min {MIN_FLOORS}. "
                       "3.2 m floor-to-floor is the midpoint of the 3.0–3.3 m typical range implied "
