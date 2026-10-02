@@ -27,6 +27,8 @@ if HERE not in sys.path:
 
 import _provenance as prov  # noqa: E402
 import _types  # noqa: E402
+import _wardmask  # noqa: E402
+from _sentinel import grid_for  # noqa: E402
 from _provenance import LayerKind, LayerRecord, Licence  # noqa: E402
 
 ROOT = os.path.join(HERE, "..")
@@ -93,6 +95,18 @@ def build(ward_id: str, sentinel: dict[str, object]) -> prov.LayerManifest:
         parts = [f"{k}: {v}" for k, v in counts.items()]
         count_note = "per-source count — " + ", ".join(parts)
     release = _s(footprints, "release")
+    # The window and grids are READ from the ward table and the terrain artefact,
+    # not typed: these sentences said "1400 m" and "140x140" for every ward, which
+    # stopped being true of Ballygunge on 2026-10-02. For the 1400 m wards the
+    # sentences come out character for character as they were.
+    size_m = _types.WARDS[ward_id].footprint_m
+    surface_n = grid_for(size_m)
+    terrain_n = terrain.get("n")
+    mask_note = ""
+    if _wardmask.has_polygon(ward_id):
+        mask_note = (f"ward statistics are masked to KMC Ward {_wardmask.POLYGONS[ward_id][1]} "
+                     f"({_wardmask.ATTRIBUTION}); buildings inside the {size_m} m square but "
+                     f"outside the ward are drawn as context")
 
     sentinel_years = sentinel.get("years_requested")
     year_span = ""
@@ -113,6 +127,7 @@ def build(ward_id: str, sentinel: dict[str, object]) -> prov.LayerManifest:
                 count_note,
                 "placed within 2.4 cm of the source coordinate after the 2026-08-05 frame fix; "
                 "residual positional error is inherited, not corrected",
+                mask_note,
             ) if n],
             collection="overture:buildings", vintage=release,
             confidence="per-building receipt in {ward}-provenance.json (human-traced vs model, "
@@ -153,7 +168,8 @@ def build(ward_id: str, sentinel: dict[str, object]) -> prov.LayerManifest:
              "a MODEL upgrade, not fresher data: roughly 80% of v2's source imagery is the same "
              "~2018-2020 epoch as v1's -- this is a better height regression on old-ish imagery, not a "
              "newer observation, and must not be read as one",
-             "clipped to the 1400 m ward window and resampled (area-average) to the 140x140 served grid",
+             f"clipped to the {size_m} m ward window and resampled (area-average) to the "
+             f"{surface_n}x{surface_n} served grid",
              "tree instances scattered from the canopy field (density-weighted by height against a fixed "
              "30 m reference -- the tallest canopy measured anywhere across the three wards, so the scale "
              "spans exactly the measured range; this is a DISPLAY SCALING for cross-ward comparability, "
@@ -176,8 +192,8 @@ def build(ward_id: str, sentinel: dict[str, object]) -> prov.LayerManifest:
             _s(terrain, "source", "AWS Open Data terrain tiles (terrarium; SRTM-derived)"),
             {"name": _s(terrain, "licence", "public domain (SRTM/NASA)")},
             [n for n in (
-                "terrarium z15 tiles cropped to the 1400 m window, ~40 m median-filtered, "
-                "clamped to ±12 m, baked to a 128² heightfield",
+                f"terrarium z15 tiles cropped to the {size_m} m window, ~40 m median-filtered, "
+                f"clamped to ±12 m, baked to a {terrain_n}² heightfield",
                 _s(terrain, "crossCheck"),
             ) if n],
             resolution="~30 m (SRTM class)", vintage=_s(terrain, "retrieved"),
