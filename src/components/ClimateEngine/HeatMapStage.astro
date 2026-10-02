@@ -309,6 +309,9 @@ const newCity = scope.area.hasData
               <div><div class="k">Losing ≥ 5 %, of those</div><div class="val sun" id="solPaneSh">—</div></div>
             </div>
           </div>
+          {/* The ward's conservative city case (spec D1, D6): every roof at full
+              size, no subsidy, every kWh at the tariff. Painted by paintSolarWard. */}
+          <p class="pane-note sol-small" id="solPanePay" hidden></p>
           <div class="sol-tariff">
             <label for="solTariff">Tariff · assumed · change it</label>
             <span><span id="solCur" aria-hidden="true"></span><input id="solTariff" type="number" inputmode="decimal" min="0" step="0.25" value="8.00" aria-describedby="solTariffNote"> / kWh</span>
@@ -670,6 +673,10 @@ const newCity = scope.area.hasData
               It was born `hidden`, because a styled button that does nothing is a lie
               the reader can click; the renderer exists now, so it does not stay one. */}
           <button class="bc-brief" id="bcBrief" type="button">Print the installer brief</button>
+          {/* THE PAYBACK SHEET'S DOOR (spec 2026-09-30-solar-roi D7). Painted by
+              paintSolarCard: hidden when the city has no sourced cost basis, disabled
+              with its own reason when the roof takes under 1 kW. */}
+          <button class="bc-brief" id="bcPay" type="button" hidden>Work out payback</button>
         </div>
         <div class="sv-thumb" id="svThumb" hidden></div>
         <p class="bc-rings" id="bcRings"></p>
@@ -817,6 +824,55 @@ const newCity = scope.area.hasData
   )}
   </div>
 
+  {/* THE PAYBACK SHEET (spec 2026-09-30-solar-roi §3.3). A modal over the map,
+      opened from one roof's card. Every figure is computed by solar-roi.ts from the
+      city's sourced cost basis and the reader's own edits, and prints beside the
+      assumptions it used. The tag says what this is: an estimate, never a quote. */}
+  <section class="solpay" id="solPay" hidden role="dialog" aria-modal="true" aria-labelledby="spHead">
+    <header class="sp-head">
+      <h2 id="spHead">Payback for this roof</h2>
+      <span class="bc-tier" id="spTag">screened · estimate, not a quote</span>
+    </header>
+    <div class="sp-sec">
+      <label class="sp-k" for="spSize">System size</label>
+      <span class="sp-size"><input id="spSize" type="range" min="1" step="0.5" value="3" aria-describedby="spSizeOut">
+        <input id="spSizeNum" type="number" inputmode="decimal" min="1" step="0.5" value="3" aria-label="System size in kW" aria-describedby="spSizeOut"> kW</span>
+      <p class="sp-note" id="spSizeOut">—</p>
+    </div>
+    <fieldset class="sp-sec sp-owner">
+      <legend class="sp-k">Who owns the roof</legend>
+      <label><input type="radio" name="spOwner" value="home" checked> Home</label>
+      <label><input type="radio" name="spOwner" value="society"> Housing society</label>
+      <label><input type="radio" name="spOwner" value="business"> Business</label>
+      <p class="sp-note" id="spSubsidy">—</p>
+    </fieldset>
+    <div class="sp-sec">
+      <span class="sp-k">Cost per kW, installed</span>
+      <span class="sp-pair"><input id="spCostLo" type="number" inputmode="numeric" min="0" step="1000" aria-label="Lowest cost per kW" aria-describedby="spCostNote">
+        – <input id="spCostHi" type="number" inputmode="numeric" min="0" step="1000" aria-label="Highest cost per kW" aria-describedby="spCostNote"></span>
+      <p class="sp-note" id="spCostNote">—</p>
+      <label class="sp-k" for="spTariff">Your tariff, per kWh</label>
+      <input id="spTariff" type="number" inputmode="decimal" min="0" step="0.25" aria-describedby="spTariffNote">
+      <p class="sp-note" id="spTariffNote">—</p>
+      <p class="sp-note sp-warn" id="spFlat" hidden></p>
+      <div id="spBill">
+        <label class="sp-k" for="spUnits">Use my bill (optional): units a month</label>
+        <input id="spUnits" type="number" inputmode="numeric" min="0" step="10" aria-describedby="spSizing">
+        <p class="sp-note" id="spSizing" hidden></p>
+        <p class="sp-note sp-warn" id="spWarn" hidden></p>
+      </div>
+    </div>
+    <div class="sp-sec sp-res">
+      <div><span class="sp-k">Pays back in</span><output class="sp-big" id="spPayback">—</output></div>
+      <div><span class="sp-k">Net saving, 25 years</span><output class="sp-big" id="spSaving">—</output></div>
+      <p class="sp-assume" id="spAssume">—</p>
+    </div>
+    <div class="sp-btns">
+      <button class="bc-brief" id="spPrint" type="button">Print the installer brief</button>
+      <a class="bc-brief" id="spCsv" href="#" download>Year-by-year CSV</a>
+      <button class="sb-x" id="spClose" type="button">Close ✕</button>
+    </div>
+  </section>
   {/* ── THE INSTALLER BRIEF (spec 2026-09-07-solar-guide §6) ──
       One A4 page the reader hands to whoever quotes them: what the roof is, what we
       think it can do and how wide that is, and the six questions a quote has to
@@ -854,8 +910,10 @@ const newCity = scope.area.hasData
         <dt>At least</dt><dd id="brFloor">—</dd>
         <dt>Raised 2 m</dt><dd id="brRaised">—</dd>
         <dt>Worth at tariff</dt><dd id="brRs">—</dd>
+        <dt>Payback</dt><dd id="brPay">—</dd>
       </dl>
     </div>
+    <p class="sb-basis" id="brPayAssume" hidden>—</p>
     <h2 class="sb-h2">How sure, and what would make it surer</h2>
     {/* Filled from the card's own ladder at render time, never retyped: two copies
         of five sentences would disagree the first time one of them was edited. */}
@@ -1624,6 +1682,44 @@ const newCity = scope.area.hasData
 
      THE PAGE HAD NO @media print UNTIL NOW. Printing the console printed a
      screenshot of a fixed-position WebGL instrument, which is to say nothing. */
+  /* THE PAYBACK SHEET. Above the card (7) and below the print brief (80), which
+     opens FROM it and must cover it. Full-screen on phones. */
+  .solpay{position:fixed;z-index:75;inset:auto 16px 16px auto;width:min(430px,calc(100vw - 32px));
+    max-height:calc(100vh - 32px);overflow:auto;color:var(--paper);
+    /* --panel-ground is translucent; laid over black so no map shows through the figures */
+    background:linear-gradient(var(--panel-ground),var(--panel-ground)),var(--black);
+    border:1px solid var(--line-hi);border-radius:10px;padding:16px 18px;font:400 .8rem/1.5 var(--sans)}
+  .solpay[hidden]{display:none}
+  .sp-head{display:flex;justify-content:space-between;align-items:baseline;gap:.6rem}
+  .sp-head h2{margin:0;font:550 .95rem var(--sans)}
+  .sp-sec{border:0;border-top:1px solid var(--line);margin:0;padding:.6rem 0;display:flex;flex-direction:column;gap:.3rem}
+  .sp-k{font:450 .62rem var(--sans);letter-spacing:.07em;text-transform:uppercase;color:var(--faint)}
+  .sp-note{margin:0;font-size:.7rem;color:var(--faint)}
+  .sp-warn{color:var(--gold)}
+  .sp-owner label{margin-right:.8rem}
+  .sp-size{display:flex;align-items:center;gap:.5rem}
+  .sp-size #spSize{flex:1 1 auto;min-width:0}
+  .sp-size #spSizeNum{width:5rem}
+  .solpay input[type="radio"],.solpay input[type="range"]{accent-color:var(--gold)}
+  #spBill label{display:block}
+  .sp-pair input,#spTariff,#spUnits,#spSizeNum{width:7.5rem;font:450 .8rem var(--mono);background:var(--black);color:var(--paper);
+    border:1px solid var(--line-hi);border-radius:4px;padding:2px 6px}
+  .sp-res{display:grid;grid-template-columns:1fr 1fr;gap:.4rem .8rem}
+  .sp-big{display:block;font:450 1.35rem var(--mono);color:var(--gold)}
+  .sp-big.is-words{font:450 .85rem/1.4 var(--sans);text-transform:none;color:var(--paper)}
+  .sp-assume{grid-column:1/-1;margin:.2rem 0 0;font-size:.68rem;color:var(--faint)}
+  .sp-btns{display:flex;gap:.9rem;align-items:center;flex-wrap:wrap;padding-top:.4rem}
+  .sp-btns .bc-brief{margin:0}
+  /* `.sb-x` is the brief's Close: pinned to the paper's corner in black ink. On the
+     dark sheet that corner is the estimate tag's, and black is invisible, so here it
+     joins the button row, on the right, in the sheet's own ink. */
+  .solpay .sb-x{position:static;margin-left:auto;color:var(--paper)}
+  .solpay .sb-x:focus-visible{outline-color:var(--paper)}
+  /* `.bc-brief` sets display:block, which beats the UA's [hidden]; #bcPay must be
+     able to hide (no cost basis for this city), so restore it here. */
+  .bc-brief[hidden]{display:none}
+  @media (max-width: 700px){ .solpay{inset:0;width:auto;max-height:none;border-radius:0} }
+  @media print{ .solpay{display:none !important} }
   /* ABOVE EVERYTHING ELSE THE CONSOLE CAN RAISE. The street-view modal is 40, the
      rotate nudge 60 and the phone entry note 70, and a sheet the reader is about to
      print must not come up underneath any of them. */

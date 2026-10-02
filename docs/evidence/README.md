@@ -22,6 +22,7 @@ shows the diligence.
 | [digital-twin-references.md](digital-twin-references.md) | City-twin precedents and provenance/standards frameworks — what to steal from each, and the anti-patterns to avoid. |
 | [funding-landscape.md](funding-landscape.md) | Grants, credits, accelerators, climate/adaptation VC, dev-finance, commercial wedges — plus the verified dead-ends and the raise strategy. |
 | [regulatory-and-licensing.md](regulatory-and-licensing.md) | Why we use the data we use — India's 1 m/3 m geospatial threshold, the licence traps that caught us, and the licences we rely on. Most "why don't you just buy sharper data" questions have a legal answer, not a budget one. |
+| [solar-payback-cost-basis.md](solar-payback-cost-basis.md) | Where every default in the rooftop-solar payback sheet comes from: subsidy, cost, tariff, the CESC export rate (WBERC order SM-40), upkeep, inverter and degradation. Verbatim quotes, and which rows are assumptions. |
 | [known-limitations.md](known-limitations.md) | What is wrong with, or unproven about, this engine — written down by us before someone else finds it. Each entry states how we know, what it does and does not invalidate, and what would close it. |
 
 ## Rules for this library

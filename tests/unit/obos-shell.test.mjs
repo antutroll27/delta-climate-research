@@ -3338,8 +3338,24 @@ test('the solar screen is wired end to end and never prints a headline without i
     'the card paints points, not intervals -- pvRanges is the only place the published bands become a roof range');
   assert.match(app, /mailto:ant@deltaclimate\.earth\?subject=/,
     'no fix line can be asked about -- the ladder names limits and offers no way to close one');
-  assert.doesNotMatch(stage + bench + app, /payback/i,
-    'a payback figure has no place here: it needs capex and subsidy assumptions, and that is where liability lives');
+  /* PAYBACK, BUT NEVER BARE (spec 2026-09-30-solar-roi §4). The sheet and the brief
+     each carry the assumptions line and the estimate tag beside the figure; the ward
+     line prints the tag. A payback without them is a quote, and that is where the
+     liability the old guard named lives. */
+  assert.match(stage, /id="solPay"[^>]*role="dialog"/, 'the payback sheet is missing or is not a dialog');
+  const sheet = stage.slice(stage.indexOf('id="solPay"'), stage.indexOf('</section>', stage.indexOf('id="solPay"')));
+  for (const id of ['spPayback', 'spSaving', 'spAssume', 'spTag', 'spSize', 'spCostLo', 'spCostHi', 'spTariff', 'spClose']) {
+    assert.ok(sheet.includes(`id="${id}"`), `the payback sheet lacks #${id}`);
+  }
+  /* Comments stripped FIRST: a tag parked in an Astro or HTML comment is never on screen (audit fix 4). */
+  const sheetLive = sheet.replace(/\{\/\*[\s\S]*?\*\/\}/g, '').replace(/<!--[\s\S]*?-->/g, '');
+  assert.ok(sheetLive.includes('screened · estimate, not a quote'), 'the sheet does not say it is an estimate, not a quote');
+  assert.match(sheetLive, /id="spTag"[^>]*>screened · estimate, not a quote</, '#spTag does not carry the estimate tag');
+  assert.match(stage, /id="brPay"/, 'the installer brief has no payback row');
+  assert.match(stage, /id="brPayAssume"/, 'the brief prints a payback without its assumptions');
+  assert.match(app, /ESTIMATE_TAG/, 'the app never prints the estimate tag beside a payback');
+  assert.match(stage, /\.bc-brief\[hidden\]\{display:none\}/,
+    '.bc-brief sets display:block, so without this rule #bcPay can never hide on a city with no cost basis');
   /* THE PANE AND THE CSV (Task 4, spec 2026-09-07-solar-guide §5). The ward block
      wears its own tier chip -- the card's is per-roof and cannot stand in for the
      whole ward -- and the CSV hands over the same ranges and tier the pane shows. */
@@ -3360,4 +3376,94 @@ test('the solar screen is wired end to end and never prints a headline without i
     'the ward block carries no one-line ladder summary -- spec §5 asks for the chip AND a summary, not the chip alone');
   assert.match(app, /setText\('solPaneSure'/,
     'nothing paints the ward block\'s ladder summary -- the markup exists but is never filled');
+});
+
+test('the payback sheet says "quote" only to deny it, and the ward line carries its assumptions', async () => {
+  /* spec 2026-09-30-solar-roi §4 rule 3: "quote" appears only in "not a quote". A
+     cost note once said "Edit it to your quote", which turns the estimate into the
+     thing it is not. Checked on the sheet's markup and its controller. */
+  const stage = await stageSource();
+  const at = stage.indexOf('id="solPay"');
+  const sheetMarkup = stage.slice(at, stage.indexOf('</section>', at));
+  const controller = await readFile(new URL(
+    '../../src/scripts/climate-engine/solar-payback-sheet.ts', import.meta.url), 'utf8');
+  for (const [name, src] of [['#solPay markup', sheetMarkup], ['solar-payback-sheet.ts', controller]]) {
+    for (const m of src.matchAll(/quote/gi)) {
+      assert.equal(src.slice(m.index - 6, m.index + 5).toLowerCase(), 'not a quote',
+        `${name} says "quote" outside "not a quote": …${src.slice(m.index - 30, m.index + 20)}…`);
+    }
+  }
+  /* §4 rules 2, 5, 6: the ward line names the case, the valuation, the tariff and the
+     as-of date beside the tag, and is hidden with the block it sits in. */
+  const app = await readFile(new URL('../../src/scripts/climate-engine/heat-map-app.ts', import.meta.url), 'utf8');
+  /* "Conservative" overclaimed: valuing every kWh flatters in West Bengal (audit fix 3). */
+  assert.doesNotMatch(app, /Conservative city case/, 'the ward line calls a flattering case conservative');
+  assert.match(app, /Whole-ward estimate: every roof that can take \$\{MIN_SYSTEM_KW\} kW or more, at its floor capacity, no subsidy, every kWh valued at \$\{fmtRate\(tariff, COSTS\)\} as if all of it is used: \$\{verdict\}/,
+    'the ward payback line no longer states its case, valuation and tariff');
+  assert.match(app, /per kW, today's prices`\s*\+ ` · reference defaults as of/, "the ward line drops \"today's prices\"");
+  assert.match(app, /const r = wardRoi\(pv, SOLAR_BASIS, tariff\);/, 'the ward line is computed in the app, not by the tested wardRoi');
+  assert.doesNotMatch(app, /wardInput\(/, 'the app builds the ward input itself again, outside the tested wardRoi');
+  assert.match(app, /reference defaults as of \$\{oldestAsOf\(SOLAR_BASIS\)\} · \$\{ESTIMATE_TAG\}/,
+    'the ward payback line no longer carries the as-of date and the estimate tag');
+  assert.match(app, /if \(!has\) \{ show\('solPanePay', false\);/,
+    'a ward with no solar file leaves a stale payback line beside a hidden block');
+  /* Escape on the sheet stops there; the app's window-level Escape would deselect the roof. */
+  assert.match(controller, /close\(\); e\.stopPropagation\(\);/,
+    "the sheet's Escape reaches the app and deselects the roof the reader is returning to");
+  assert.match(app, /if \(!b\) \{ closeBrief\(\); paySheet\?\.close\(\); \}/,
+    'deselecting a roof leaves its payback sheet open');
+});
+
+test('the payback CSV carries the estimate tag on every row (audit fix 1)', async () => {
+  /* roiCsv puts its assumptions argument on every row; the controller must hand it the
+     assumptions AND the tag, or a downloaded year-by-year sheet travels as a bare figure. */
+  const controller = await readFile(new URL(
+    '../../src/scripts/climate-engine/solar-payback-sheet.ts', import.meta.url), 'utf8');
+  assert.match(controller, /roiCsv\(r, `\$\{assume\(r, size\)\} · \$\{ESTIMATE_TAG\}`\)/,
+    "the sheet's CSV is built without the estimate tag beside its assumptions");
+});
+
+test('no infinity: the tariff is capped where it is typed and where it is remembered (audit fix 2)', async () => {
+  const app = await readFile(new URL('../../src/scripts/climate-engine/heat-map-app.ts', import.meta.url), 'utf8');
+  const controller = await readFile(new URL(
+    '../../src/scripts/climate-engine/solar-payback-sheet.ts', import.meta.url), 'utf8');
+  /* the stored delta:hm-tariff is read through the same guard the box uses */
+  assert.match(app, /const t = Number\(localStorage\.getItem\(TARIFF_KEY\)\);\s*if \(tariffOk\(t\)\) tariff = t;/,
+    'a stored tariff of 1e308 is read back unguarded');
+  assert.match(app, /const bad = !tariffOk\(v\);/, "the pane's tariff box accepts any positive number, 1e308 included");
+  assert.match(controller, /invalid\('spTariff', !tariffOk\(v\)\)/, "the sheet's tariff box is marked by a different rule from the pane's");
+  assert.match(controller, /costOk\(a\)/, 'the sheet accepts any positive cost per kW');
+  assert.match(controller, /unitsOk\(v\)/, 'the sheet accepts any positive units a month');
+  assert.match(controller, /if \(!roiFinite\(r\)\)/, 'the sheet would paint a non-finite payback or saving');
+  /* the sheet's box says when it refuses, and the note it points at is painted from the shared ceiling */
+  const stage = await stageSource();
+  assert.match(stage, /id="spTariff"[^>]*aria-describedby="spTariffNote"/, '#spTariff points at no note saying when it is refused');
+  assert.match(stage, /id="spTariffNote"/, 'the tariff note #spTariff points at does not exist');
+  assert.match(controller, /setText\('spTariffNote', `[^`]*\$\{d\.rate\(TARIFF_MAX\)\}/, 'the tariff note does not name the ceiling the guard uses');
+});
+
+test('stronger payback guards: the brief tags its assumptions, the sheet paints them (audit fix 4)', async () => {
+  const app = await readFile(new URL('../../src/scripts/climate-engine/heat-map-app.ts', import.meta.url), 'utf8');
+  const controller = await readFile(new URL(
+    '../../src/scripts/climate-engine/solar-payback-sheet.ts', import.meta.url), 'utf8');
+  /* the expression itself, not the import: an imported tag nobody prints satisfies /ESTIMATE_TAG/ */
+  assert.match(app, /payAssume\.textContent = `\$\{pay\.assume\} · \$\{ESTIMATE_TAG\}`;/,
+    "the brief's #brPayAssume prints the assumptions without the estimate tag");
+  assert.match(controller, /setText\('spAssume', assume\(r, size\)\);/, 'the sheet never paints #spAssume');
+  /* M3c: the FINITE path paints it too, not only the out-of-range branch above it */
+  const guardAt = controller.indexOf('if (!roiFinite(r)) {');
+  const finiteFrom = controller.indexOf('return;\n    }', guardAt);
+  const finitePath = controller.slice(finiteFrom, controller.indexOf('function setSize', finiteFrom));
+  assert.ok(guardAt > 0 && finiteFrom > guardAt, 'the sheet has no roiFinite branch to read past');
+  assert.match(finitePath, /setText\('spAssume', assume\(r, size\)\);/, 'the sheet paints a finite payback without #spAssume');
+  /* M3b: the brief SHOWS the assumptions it writes (the row is born hidden) */
+  assert.match(app, /if \(pay\) \{ payAssume\.textContent = `[^`]*`; payAssume\.removeAttribute\('hidden'\); \}/,
+    "the brief writes #brPayAssume but never un-hides it");
+});
+
+test("the sheet's saving cell begins with a capital (audit fix 7)", async () => {
+  const controller = await readFile(new URL(
+    '../../src/scripts/climate-engine/solar-payback-sheet.ts', import.meta.url), 'utf8');
+  assert.match(controller, /setText\('spSaving', capFirst\(savingText\(r, d\.money, H\)\)\);/,
+    '#spSaving can begin "a loss of …" in lower case');
 });
