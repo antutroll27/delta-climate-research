@@ -6,9 +6,11 @@
  *   data/geometry/{id}-footprints.json   `lonlat` rings, already EPSG:4326, closed
  *   data/geometry/heights-overture.json  per-building p65 / mean / fill
  *   public/heat-map/data/{id}-provenance.json   per-building source + confidence
- * All three are 3,527 rows for ballygunge and indexed by the same row — asserted
- * here, because a silent misalignment would put the wrong height on the wrong
- * building with no error.
+ * All three are 7,931 rows for ballygunge (the 1,800 m square around KMC Ward 68,
+ * since 2026-10-02) and indexed by the same row — asserted here, because a silent
+ * misalignment would put the wrong height on the wrong building with no error.
+ * Where the footprints carry `inWard` (a ward with a polygon) every Building says
+ * `in_ward`, so a reuser can tell the ward's buildings from the context ones.
  *
  * LoD1 = footprint extruded to one height, six faces per building. That is what
  * the engine actually knows (one height, no roof shape), so LoD2 would be a
@@ -30,7 +32,7 @@ import type { Ward } from '../../data/wards.ts';
 import { LICENCE_BLOCK } from './odbl.ts';
 import { wardBbox, wardRecord } from './ward-record.ts';
 
-interface FootprintFile { readonly ward: string; readonly count: number; readonly b: readonly { readonly gers: string; readonly lonlat: readonly (readonly [number, number])[] }[] }
+interface FootprintFile { readonly ward: string; readonly count: number; readonly b: readonly { readonly gers: string; readonly lonlat: readonly (readonly [number, number])[]; readonly inWard?: boolean }[] }
 interface HeightsFile   { readonly wards: Readonly<Record<string, readonly { readonly id: string; readonly p65: number; readonly mean: number; readonly fill: boolean }[]>> }
 interface ProvFile      { readonly src: readonly string[]; readonly confidence: readonly number[]; readonly datasets: Readonly<Record<string, { readonly key: string }>> }
 
@@ -176,6 +178,7 @@ export function buildCityJSON(w: Ward): CityJSON {
         footprint_source: keyToName[srcKey] ?? srcKey,
         footprint_confidence: pv.confidence[i] ?? -1,
         gers_id: row.gers,
+        ...(typeof row.inWard === 'boolean' ? { in_ward: row.inWard } : {}),
       },
       geometry: [{ type: 'Solid', lod: '1', boundaries: [[[bottom], [top], ...walls.map((f) => [f])]] }],
     };
