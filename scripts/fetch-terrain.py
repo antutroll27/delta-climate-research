@@ -57,6 +57,16 @@ RETRIEVED = "2026-08-04"     # constant, not date.today() -- byte-stable regener
 WARDS = _types.WARDS
 
 
+#: The windows the GLO-30 cross-check (`crossCheck` below) was MEASURED on,
+#: 2026-08. A ward whose window has since moved says so in its artefact rather
+#: than carrying a comparison of ground it no longer covers.
+CROSS_CHECKED: dict[str, tuple[float, float, int]] = {
+    "ballygunge": (22.528, 88.3659, 1400),
+    "barrackpore": (22.7621, 88.3713, 1400),
+    "baruipur": (22.3654, 88.4319, 1400),
+}
+
+
 def grid_n(ward: str) -> int:
     """Texels per side for this ward: 128 at 1400 m, 165 at 1800 m."""
     return round(WARDS[ward].footprint_m / TEXEL_M)
@@ -141,6 +151,19 @@ def fetch_window(lat: float, lon: float, size_m: float, n: int) -> list[float]:
     return field
 
 
+def cross_check(ward: str) -> str:
+    """The GLO-30 comparison sentence, or that sentence plus where it was measured."""
+    text = ("vs Copernicus GLO-30 over the same window: shape agreement "
+            "r=0.49/0.48/0.67, per-cell RMSE 1.5-2.1 m against a 4.9-7.7 m "
+            "relief. Two instruments disagree by ~a quarter of the signal.")
+    w = WARDS[ward]
+    lat, lon, size = CROSS_CHECKED[ward]
+    if (w.centre.lat, w.centre.lon, w.footprint_m) == (lat, lon, size):
+        return text
+    return (text + f" MEASURED 2026-08 on the earlier {size} m window centred {lat} N, "
+            f"{lon} E; not re-measured for this {w.footprint_m} m window.")
+
+
 def build_artefact(ward: str) -> dict[str, Any]:
     w = WARDS[ward]
     size_m, n = float(w.footprint_m), grid_n(ward)
@@ -168,9 +191,7 @@ def build_artefact(ward: str) -> dict[str, Any]:
         "confidence": "indicative",
         "note": "smoothed surface model, indicative broad-scale form -- NOT surveyed "
                 "ground and NOT used by the simulation",
-        "crossCheck": "vs Copernicus GLO-30 over the same window: shape agreement "
-                      "r=0.49/0.48/0.67, per-cell RMSE 1.5-2.1 m against a 4.9-7.7 m "
-                      "relief. Two instruments disagree by ~a quarter of the signal.",
+        "crossCheck": cross_check(ward),
         "h": h,
     }
 
