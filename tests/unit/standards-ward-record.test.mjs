@@ -10,7 +10,9 @@ import { LICENCES, allWardRecords, utmEpsg, wardBbox, wardRecord } from '../../s
    a centre or _types.py changes m_per_deg, ONE of them changes and this fails —
    which is the point: the two must be changed together or not at all. */
 const PY_ORACLE = {
-  ballygunge:  [88.3590923461, 22.5216674507, 88.3727076539, 22.5343325493],
+  /* Ballygunge re-captured 2026-10-02 from _types.ward_bounds after it became the
+     1800 m square around KMC Ward 68 — both sides moved together, as required. */
+  ballygunge:  [88.3604206377, 22.5145621509, 88.3779253623, 22.5308458491],
   baruipur:    [88.4251003228, 22.3590674507, 88.4386996772, 22.3717325493],
   barrackpore: [88.3644807323, 22.7557674507, 88.3781192677, 22.7684325493],
 };
