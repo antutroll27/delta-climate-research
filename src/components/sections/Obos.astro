@@ -8,8 +8,12 @@
 // Uses only the page's existing scroll system — data-reveal for the header and
 // rows, data-clip for the frame's wipe — and one static WebP. No new JS.
 //
-// EVERY NUMBER HERE IS ONE WE HAVE PUBLISHED ELSEWHERE IN THE REPO: 12,767
-// buildings (accuracy.ts), three wards (wards.ts), 87 ECOSTRESS ward-scenes
+// EVERY NUMBER HERE IS ONE WE HAVE PUBLISHED ELSEWHERE IN THE REPO, and
+// tests/unit/ward68-copy.test.mjs re-derives them: 11,447 buildings = the WARD
+// figures of the three study areas (2,207 inside KMC Ward 68 from
+// ballygunge-ward.json, plus Barrackpore's 4,702 and Baruipur's 4,538 from their
+// provenance files; the 5,724 context buildings around Ward 68 are drawn but are
+// in no ward figure), three wards (wards.ts), 87 ECOSTRESS ward-scenes
 // (accuracy.ts SPATIAL.n). Change them there first.
 import { DEFAULT_AREA_PATH } from '../../scripts/climate-engine/scope/paths.ts';
 
@@ -18,7 +22,7 @@ import { DEFAULT_AREA_PATH } from '../../scripts/climate-engine/scope/paths.ts';
 const INDEX = '02';
 
 const rows = [
-  { k: 'Measured, not rendered', v: '12,767 real buildings across three Kolkata wards, heights from satellite, the heat field validated against 87 ECOSTRESS thermal scenes.' },
+  { k: 'Measured, not rendered', v: '11,447 real buildings across three Kolkata study areas, heights from satellite, the heat field validated against 87 ECOSTRESS thermal scenes.' },
   { k: 'Says what it doesn’t know', v: 'Every readout carries its band. When the model is outside validation, the screen says so — in the same type, at the same size.' },
   { k: 'Built for the Global South', v: 'One radiation station, seven air monitors, fifteen million people. Kolkata first, on purpose. Dubai next, same engine.' },
 ];
@@ -56,7 +60,7 @@ const rows = [
       </picture>
       <span class="scrim" aria-hidden="true"></span>
       <span class="call" aria-hidden="true">Open the instrument <i>↗</i></span>
-      <span class="cap" aria-hidden="true">Ballygunge · Ward 68 &nbsp;·&nbsp; 3,527 real buildings &nbsp;·&nbsp; heat field modelled &nbsp;·&nbsp; band on screen</span>
+      <span class="cap" aria-hidden="true">Ballygunge · KMC Ward 68 &nbsp;·&nbsp; 2,207 real buildings &nbsp;·&nbsp; heat field modelled &nbsp;·&nbsp; band on screen</span>
     </a>
   </div>
 
