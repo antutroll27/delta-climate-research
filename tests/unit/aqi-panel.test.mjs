@@ -443,3 +443,39 @@ test('I-2: the line turns old strictly after LIVE_H + 1 h from its last hour', (
   assert.match(at(3 * 3_600_000), /PM2\.5 · last 24 hours/);
   assert.match(at(3 * 3_600_000 + 60_000), /PM2\.5 · 24 hours to the last OpenAQ reading/);
 });
+
+/* ── Ballygunge as KMC Ward 68 (founder, 2026-10-03): the monitor stays, labelled ─ */
+
+import { isAirPayload } from '../../src/lib/aqi/valid.ts';
+
+test('a monitor outside its window is printed as the nearest official one, with its true distance and where it stands', () => {
+  const now = new Date('2026-09-24T18:00:00Z');
+  const p = buildPayload(K, st, raw('2026-09-24T17:30:00Z'), now);
+  assert.equal(p.current.station.inside, 'outside_window');
+  for (const html of [cardHtml(p, 'Ballygunge', now), paneHtml(p, 'Ballygunge', now)]) {
+    assert.match(html, /nearest official WBPCB monitor · 1\.7 km from the Ballygunge centre, in KMC Ward 69, outside Ward 68/);
+    assert.doesNotMatch(html, /1\.0 km/, 'the old 993 m claim is back');
+  }
+  /* The method note says no monitor stands in the window, instead of implying this one does. */
+  assert.match(paneHtml(p, 'Ballygunge', now), /No monitor stands inside the 3 km window[\s\S]*nearest official one, 1\.7 km away in KMC Ward 69/);
+  assert.equal(isAirPayload(JSON.parse(JSON.stringify(p))), true);
+});
+
+test('an inside monitor keeps the plain line and the window sentence', () => {
+  const B = 'in/kolkata/barrackpore', now = new Date('2026-09-24T18:00:00Z');
+  const html = paneHtml(buildPayload(B, stationFor(B), raw('2026-09-24T17:30:00Z'), now), 'Barrackpore', now);
+  assert.match(html, /· WBPCB monitor · 1\.0 km from the Barrackpore centre<\/p>/);
+  assert.doesNotMatch(html, /nearest official/);
+  assert.match(html, /A monitor counts for a place when it stands inside the 3 km window/);
+});
+
+test('a payload claiming a monitor outside its window without saying where is refused', () => {
+  const p = JSON.parse(JSON.stringify(buildPayload(K, st, raw('2026-09-24T17:30:00Z'), new Date('2026-09-24T18:00:00Z'))));
+  delete p.current.station.placement;
+  assert.equal(isAirPayload(p), false);
+  p.current.station.placement = '';
+  assert.equal(isAirPayload(p), false);
+  p.current.station.inside = 'somewhere';
+  p.current.station.placement = 'x';
+  assert.equal(isAirPayload(p), false);
+});

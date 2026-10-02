@@ -1,7 +1,7 @@
 /** Compose the payload from raw readings. Pure; the clock is a parameter. */
 import { ALGORITHM, combine, subIndex, MIN_HOURS } from './cpcb.ts';
 import { hoursBefore, istHourKey, istHours, isUsable, window24, window8, type Hour, type HourKey, type Raw } from './hours.ts';
-import { POLLUTANTS, type StationEntry } from './stations.ts';
+import { POLLUTANTS, stationPayload, type StationEntry } from './stations.ts';
 import { SCHEMA, type AirQualityPayload, type AqiStation, type HistoryDay, type Pollutant, type PollutantReading, type SourceNote } from './types.ts';
 
 export const LIVE_H = 2;
@@ -66,7 +66,7 @@ export function buildPayload(areaKey: string, st: StationEntry | null, raw: Part
   const horizon = now.getTime() + FUTURE_SLACK_MS;
   /* Drop future-stamped rows once, so neither the freshness clock nor any window sees them. */
   const rows = Object.fromEntries(POLLUTANTS.map((p) => [p, (raw[p] ?? []).filter((r) => !(Date.parse(r.end_utc) > horizon))])) as Partial<Record<Pollutant, Raw[]>>;
-  const station: AqiStation = { id: st.id, name: st.name, lat: st.lat, lon: st.lon, distance_m: st.distance_m, inside: 'window_3km' };
+  const station: AqiStation = stationPayload(st);
   const hours = Object.fromEntries(POLLUTANTS.map((p) => [p, istHours(rows[p] ?? [])])) as Record<string, Map<HourKey, Hour>>;
   const lastMs = lastStampMs(rows);
   /* Nothing usable in the whole 31-day window: the feed has been quiet far longer than 7 days. */

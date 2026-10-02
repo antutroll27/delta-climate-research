@@ -30,8 +30,16 @@ export interface AqiStation {
   lon: number;
   /** Geodesic distance from the OBOS area centre, metres. Always shown. */
   distance_m: number;
-  /** The geometry the station was tested against. First release: the 3 km window. */
-  inside: 'window_3km';
+  /**
+   * Where the monitor stands against the OBOS area, as tested from its coordinates
+   * (tests/unit/aqi-stations.test.mjs). `window_3km`: inside the 3 km window around
+   * the area centre. `outside_window`: not inside it — shown only as the area's
+   * NEAREST OFFICIAL MONITOR, with its true distance and `placement` saying where it
+   * is, so nothing claims it stands in the area (Ballygunge, founder 2026-10-03).
+   */
+  inside: 'window_3km' | 'outside_window';
+  /** Where an `outside_window` monitor stands, in words (e.g. "in KMC Ward 69, outside Ward 68"). Absent when inside. */
+  placement?: string;
 }
 
 export interface PollutantReading {
