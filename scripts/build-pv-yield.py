@@ -447,6 +447,33 @@ def main() -> None:
     print(f"  lost to shading      : {(kwp*y).sum()/1e6 - kwh.sum()/1e6:.2f} GWh/yr "
           f"({loss.mean()*100:.2f}% mean)")
 
+    # WARD 68 (2026-10-02): for a ward with an administrative polygon the per-building
+    # arrays still cover every roof in the compute square (context roofs shade and are
+    # shaded), but the WARD total is over the roofs that touch the polygon -- the
+    # `inWard` flag fetch-buildings.py writes, row-aligned with these arrays.
+    in_ward_block: dict[str, Any] = {}
+    fp_path = os.path.join(ROOT, "data", "geometry", f"{args.ward}-footprints.json")
+    with open(fp_path) as fh:
+        fp_rows = json.load(fh)["b"]
+    if fp_rows and "inWard" in fp_rows[0]:
+        if len(fp_rows) != len(area):
+            sys.exit(f"  {len(fp_rows)} footprints vs {len(area)} shaded roofs — the inWard "
+                     f"flags would not line up")
+        sel = np.asarray([bool(r["inWard"]) for r in fp_rows])
+        in_ward_block = {"totals_in_ward": {
+            "rule": "roofs whose footprint INTERSECTS the ward polygon (inWard)",
+            "buildings": int(sel.sum()),
+            "gross_roof_ha": round(float(area[sel].sum()) / 1e4, 2),
+            "usable_roof_ha": round(float(usable[sel].sum()) / 1e4, 2),
+            "capacity_mwp": round(float(kwp[sel].sum()) / 1000, 3),
+            "capacity_mwp_range": [round(float(kwp[sel].sum()) / PACKING_FACTOR * pf / 1000, 3)
+                                   for pf in PACKING_RANGE],
+            "generation_gwh_yr": round(float(kwh[sel].sum()) / 1e6, 3),
+            "shading_loss_gwh_yr": round(float((kwp[sel] * y).sum() - kwh[sel].sum()) / 1e6, 3),
+            "mean_loss": round(float(loss[sel].mean()), 4)}}
+        print(f"  in the ward polygon  : {int(sel.sum())} roofs · "
+              f"{kwp[sel].sum()/1000:.2f} MWp · {kwh[sel].sum()/1e6:.2f} GWh/yr")
+
     if args.check:
         print("\n  --check: not written")
         return
@@ -497,6 +524,7 @@ def main() -> None:
                        "capacity_mwp": round(float(kwp.sum()) / 1000, 3),
                        "generation_gwh_yr": round(float(kwh.sum()) / 1e6, 3),
                        "shading_loss_gwh_yr": round(float((kwp * y).sum() - kwh.sum()) / 1e6, 3)},
+            **in_ward_block,
             "per_building_kwp": [round(float(v), 3) for v in kwp],
             "per_building_kwh_yr": [round(float(v), 0) for v in kwh],
         }, fh, indent=2)
