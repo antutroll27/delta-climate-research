@@ -191,6 +191,11 @@ class FarWard(TypedDict):
     floor_m2: float
     height_m: dict[str, float]
     floors: dict[str, float]
+    #: Present only for a ward with an administrative polygon (scripts/_wardmask.py):
+    #: what the fields above are a statistic OF ("KMC Ward 68 polygon"), and the
+    #: same quantities over the whole compute square, kept for comparison.
+    domain: NotRequired[str]
+    square: NotRequired[dict[str, float]]
 
 
 class FarFile(TypedDict):
@@ -276,6 +281,11 @@ class TraWard(TypedDict):
     min_patch_ha: float
     refuge_classes_present: dict[str, int]
     cells: int
+    #: Present only for a ward with an administrative polygon (scripts/_wardmask.py):
+    #: what the fields above are a statistic OF ("KMC Ward 68 polygon"), and the
+    #: same quantities over the whole compute square, kept for comparison.
+    domain: NotRequired[str]
+    square: NotRequired[dict[str, float]]
 
 
 class TraFile(TypedDict):
@@ -302,6 +312,11 @@ class SentinelWard(TypedDict):
     years: int
     scenes_total: int
     per_year: dict[str, SentinelYear]
+    #: Present only for a ward with an administrative polygon (scripts/_wardmask.py):
+    #: what the fields above are a statistic OF ("KMC Ward 68 polygon"), and the
+    #: same quantities over the whole compute square, kept for comparison.
+    domain: NotRequired[str]
+    square: NotRequired[dict[str, float]]
 
 
 class SentinelFile(TypedDict):
@@ -320,6 +335,11 @@ class PopWard(TypedDict):
     population: int
     cells: int
     area_km2: float
+    #: Present only for a ward with an administrative polygon (scripts/_wardmask.py):
+    #: what the fields above are a statistic OF ("KMC Ward 68 polygon"), and the
+    #: same quantities over the whole compute square, kept for comparison.
+    domain: NotRequired[str]
+    square: NotRequired[dict[str, float]]
 
 
 class PopFile(TypedDict):

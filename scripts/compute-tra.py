@@ -33,18 +33,26 @@ access — mean(exp(−λ·d)), not exp(−λ·mean(d)). Those differ, and the m
 decay is the right one: it is the average accessibility experienced across the
 ward, not the accessibility of the average distance.
 
+WARD 68 (2026-10-02). For a ward with an administrative polygon
+(scripts/_wardmask.py) every reported statistic is over the cells whose centre
+lies inside the POLYGON; the distance transform still runs over the whole padded
+window, because the nearest refuge to a ward cell may be outside the ward. The
+square's figures are kept under `square`.
+
 Output: data/dc-urs/tra.json
 """
 import json, os, sys
 
 import numpy as np
 import rasterio
+import shapely
 from rasterio.io import DatasetReader
 from rasterio.windows import from_bounds
 from scipy.ndimage import distance_transform_edt, label
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _types import WARDS, F64, Mask, TraFile, TraWard, Ward, m_per_deg, ward_bounds
+import _wardmask
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.join(HERE, "..")
@@ -149,6 +157,43 @@ def ward_tra(src: DatasetReader, w: Ward) -> TraWard:
     lab_ward = np.where(refuge_ward, lab[py:-py or None, px:-px or None], 0)
     ward_sizes = np.bincount(lab_ward.ravel())
     ward_sizes[0] = 0
+    poly = _wardmask.polygon_lonlat(ward)
+    if poly is not None:
+        # Cell centres of the CORE in lon/lat, from the window's own transform, so
+        # the mask lands on the same cells the distances were computed for.
+        tf = src.window_transform(win)
+        rows, cols = np.mgrid[py:py + core.shape[0], px:px + core.shape[1]]
+        lon = tf.c + (cols + 0.5) * tf.a
+        lat = tf.f + (rows + 0.5) * tf.e
+        inside: Mask = np.asarray(shapely.contains_xy(poly, lon, lat), dtype=np.bool_)
+        if not inside.any():
+            sys.exit(f"{ward}: the ward polygon covers no WorldCover cell in the core")
+        cover_in = cover_ward[inside]
+        lab_in = np.where(refuge_ward & inside, lab_ward, 0)
+        in_sizes = np.bincount(lab_in.ravel(), minlength=1)
+        in_sizes[0] = 0
+        kmc = _wardmask.POLYGONS[ward][1]
+        return {
+            "tra": round(float(decay[inside].mean()), 4),
+            "median_dist_m": round(float(np.median(core[inside])), 1),
+            "max_dist_m": round(float(core[inside].max()), 1),
+            "refuge_cell_fraction": round(float(refuge_ward[inside].mean()), 4),
+            "refuge_patches_in_ward": int((in_sizes > 0).sum()),
+            "largest_patch_in_ward_ha": round(float(in_sizes.max() * cell_area_m2 / 10_000), 2),
+            "refuge_patches_in_search_window": int(keep.size),
+            "min_patch_ha": MIN_REFUGE_HA,
+            "refuge_classes_present": {CLASS_NAME[c]: int((cover_in == c).sum())
+                                       for c in sorted(REFUGE_CLASSES) if (cover_in == c).any()},
+            "cells": int(inside.sum()),
+            "domain": f"KMC Ward {kmc} polygon (cells whose centre lies inside it)",
+            "square": {
+                "tra": round(float(decay.mean()), 4),
+                "median_dist_m": round(float(np.median(core)), 1),
+                "max_dist_m": round(float(core.max()), 1),
+                "refuge_cell_fraction": round(float(refuge_ward.mean()), 4),
+                "cells": float(core.size),
+            },
+        }
     return {
         "tra": round(float(decay.mean()), 4),
         "median_dist_m": round(float(np.median(core)), 1),

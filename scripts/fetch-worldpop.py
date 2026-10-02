@@ -29,8 +29,16 @@ everything after 2020 is a projection. Probing "newest first" fetched E2030 and
 labelled a forecast as a measurement; 2020 is the last epoch grounded in observed
 built-up surface. A later epoch requires provenance "modelled", not a silent swap.
 
+WARD 68 (2026-10-02). For a ward with an administrative polygon
+(scripts/_wardmask.py) the reported figure is the POLYGON's: each 100 m cell's
+count is weighted by the share of its area inside the ward, summed, and divided
+by the polygon's own area. The square's figure is kept beside it under
+`square`, so the two are never confused.
+
 Output: data/dc-urs/worldpop.json
 """
+from __future__ import annotations
+
 import json, math, os, subprocess, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -38,23 +46,24 @@ if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
 import _types  # noqa: E402  (path must be set first — the scripts are not a package)
+import _wardmask  # noqa: E402
 
 import numpy as np
 import rasterio
 from rasterio.windows import from_bounds
+from rasterio.io import DatasetReader
+from rasterio.warp import transform_geom
+from shapely.geometry import Polygon, box, mapping, shape
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.join(HERE, "..")
 OUT = os.path.join(ROOT, "data", "dc-urs", "worldpop.json")
 CACHE = os.path.expanduser("~/.cache/delta-climate/worldpop")
 
-FOOTPRINT_M = 1400
-
-WARDS = {
-    "ballygunge":  (22.528,  88.3659),
-    "baruipur":    (22.3654, 88.4319),
-    "barrackpore": (22.7621, 88.3713),
-}
+#: The ward table, footprints included: _types.WARDS. This file carried a
+#: private centre table and a FOOTPRINT_M = 1400 until Ballygunge's domain
+#: became the 1800 m square around KMC Ward 68.
+WARDS = _types.WARDS
 
 # Candidate products, newest first. The constrained UN-adjusted series is the
 # right one: "constrained" restricts population to cells satellite imagery shows
@@ -110,6 +119,44 @@ def ensure() -> tuple[str, str]:
     sys.exit("no GHS-POP tile reachable — every candidate epoch failed")
 
 
+def polygon_pop(src: DatasetReader, poly_ll: Polygon, ward_id: str) -> _types.PopWard:
+    """Population of the ward POLYGON: area-weighted cell counts over the polygon area.
+
+    Each 100 m Mollweide cell contributes count x (share of the cell inside the
+    polygon). Mollweide is EQUAL-AREA, so both the shares and the polygon's own
+    area are true areas there, which is why the intersection is done in the
+    raster's CRS rather than in lon/lat.
+    """
+    projected = transform_geom("EPSG:4326", src.crs, mapping(poly_ll))
+    assert isinstance(projected, dict), "one geometry in, one geometry out"
+    poly = shape(projected)
+    l, b, r_, t = poly.bounds
+    win = from_bounds(l, b, r_, t, src.transform).round_offsets().round_lengths()
+    win = rasterio.windows.Window(win.col_off - 1, win.row_off - 1, win.width + 2, win.height + 2)
+    arr = src.read(1, window=win, boundless=True, fill_value=0).astype("float64")
+    arr = np.where(arr < 0, 0, arr)
+    tf = src.window_transform(win)
+    total, touched = 0.0, 0
+    for row in range(arr.shape[0]):
+        for col in range(arr.shape[1]):
+            x0, y0 = tf * (col, row)
+            x1, y1 = tf * (col + 1, row + 1)
+            cell = box(min(x0, x1), min(y0, y1), max(x0, x1), max(y0, y1))
+            share = cell.intersection(poly).area / cell.area
+            if share > 0:
+                touched += 1
+                total += float(arr[row, col]) * share
+    area_km2 = poly.area / 1e6
+    kmc = _wardmask.POLYGONS[ward_id][1]
+    return _types.PopWard(
+        density=round(total / area_km2, 1),
+        population=round(total),
+        cells=touched,
+        area_km2=round(area_km2, 3),
+        domain=f"KMC Ward {kmc} polygon (cells area-weighted by their share inside it)",
+    )
+
+
 def main() -> None:
     year, path = ensure()
 
@@ -120,7 +167,10 @@ def main() -> None:
         "method": "Sum of per-cell population counts over the ward footprint, divided by "
                   "footprint area. GHS-POP cells are COUNTS, not densities, so they are summed "
                   "and then divided — averaging the cells would give persons per cell, which is "
-                  "a different and wrong quantity.",
+                  "a different and wrong quantity. A ward with an administrative polygon "
+                  "(its record carries `domain`) is the polygon: each cell weighted by its "
+                  "area share inside the ward, over the polygon's own area; the square "
+                  "around it is kept under `square`.",
         "caveat": "Modelled, not enumerated. India's last completed census is 2011 (the 2021 "
                   "round was deferred to Census 2027), so no current enumerated figure exists. "
                   "GHS-POP disaggregates census counts using satellite-observed built-up surface, "
@@ -134,11 +184,12 @@ def main() -> None:
         "wards": {},
     }
 
-    area_km2 = (FOOTPRINT_M / 1000.0) ** 2
     with rasterio.open(path) as src:
         from rasterio.warp import transform_bounds
-        for w, (lat, lon) in WARDS.items():
-            half = FOOTPRINT_M / 2
+        for w, ward in WARDS.items():
+            lat, lon = ward.centre.lat, ward.centre.lon
+            area_km2 = (ward.footprint_m / 1000.0) ** 2
+            half = ward.footprint_m / 2
             dlat = half / 110_540.0
             dlon = half / (111_320.0 * math.cos(math.radians(lat)))
             # GHS-POP is Mollweide (ESRI:54009), not geographic — project the box
@@ -148,12 +199,18 @@ def main() -> None:
             arr = src.read(1, window=win, boundless=True, fill_value=0).astype("float64")
             arr = np.where(arr < 0, 0, arr)          # GHS-POP nodata is negative
             total = float(arr.sum())
-            out["wards"][w] = _types.PopWard(
+            rec = _types.PopWard(
                 density=round(total / area_km2, 1),
                 population=round(total),
                 cells=int(arr.size),
                 area_km2=round(area_km2, 3),
             )
+            poly_ll = _wardmask.polygon_lonlat(w)
+            if poly_ll is not None:
+                rec = polygon_pop(src, poly_ll, w) | {"square": {
+                    "density": rec["density"], "population": float(rec["population"]),
+                    "cells": float(rec["cells"]), "area_km2": rec["area_km2"]}}
+            out["wards"][w] = rec
 
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     with open(OUT, "w") as fh:

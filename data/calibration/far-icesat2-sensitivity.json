@@ -27,12 +27,12 @@
   },
   "wards": {
     "ballygunge": {
-      "far_baseline": 1.1595,
-      "far_committed": 1.1595,
+      "far_baseline": 1.0385,
+      "far_committed": 1.0385,
       "baseline_abs_diff": 0.0,
-      "buildings": 3527,
-      "n_at_fill_value": 465,
-      "fill_fraction": 0.1318,
+      "buildings": 7931,
+      "n_at_fill_value": 827,
+      "fill_fraction": 0.1043,
       "far_corrected": null,
       "delta_far": null,
       "delta_pct": null,

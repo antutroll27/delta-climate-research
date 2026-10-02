@@ -5,25 +5,34 @@
   "provenance": "measured",
   "wards": {
     "ballygunge": {
-      "far": 1.1595,
-      "built_fraction": 0.3188,
-      "buildings": 3527,
+      "far": 1.0718,
+      "built_fraction": 0.364,
+      "buildings": 2207,
       "degenerate_polygons": 0,
-      "land_m2": 1960000.0,
-      "footprint_m2": 624772,
-      "floor_m2": 2272640,
+      "land_m2": 926334,
+      "footprint_m2": 337206,
+      "floor_m2": 992814,
       "height_m": {
         "min": 2.6,
-        "median": 7.6,
-        "max": 86.9,
-        "n_measured": 3062,
+        "median": 7.5,
+        "max": 40.1,
+        "n_measured": 2037,
         "fill_value": 2.5,
-        "n_at_fill_value": 465,
+        "n_at_fill_value": 170,
         "n_nonpositive": 0
       },
       "floors": {
         "median": 2,
-        "max": 27
+        "max": 13
+      },
+      "domain": "KMC Ward 68 polygon: footprints that intersect it, counted by their area inside it, over the polygon's area",
+      "square": {
+        "far": 1.0385,
+        "built_fraction": 0.3483,
+        "buildings": 7931.0,
+        "land_m2": 3240000.0,
+        "footprint_m2": 1128527,
+        "floor_m2": 3364663
       }
     },
     "barrackpore": {

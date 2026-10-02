@@ -29,12 +29,20 @@ PROCESSING BASELINE. From 2022-01-25 Sentinel-2 L2A carries BOA_ADD_OFFSET =
 -1000. Ignoring it inflates reflectance by 0.1 and would silently bias every
 index computed from post-2022 scenes. Handled per scene from its own metadata.
 
+WARD 68 (2026-10-02). For a ward with an administrative polygon
+(scripts/_wardmask.py) each scene is reduced over the 10 m cells whose centre
+lies inside the POLYGON — the same median, the same masking, only the cells
+differ — and the ward record is built from those. The square's record is kept
+under `square`. The per-ward cache is keyed by the window and the mask, so a
+ward that moves can never be served the old window's annual medians.
+
 Output: data/dc-urs/sentinel.json
 """
 import argparse
 import json
 import os
 import sys
+from typing import cast
 
 import numpy as np
 
@@ -43,6 +51,7 @@ if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
 import _types  # noqa: E402
+import _wardmask  # noqa: E402
 # Search, the windowed reader and the per-scene arrays now live in _sentinel,
 # shared with export-surface-rasters.py. This file owns one thing: the reduction
 # of those arrays to the ward scalars DC-URS scores on.
@@ -51,7 +60,7 @@ import _types  # noqa: E402
 # _sentinel's own copy was a third one and is gone; see the note in its place.
 from _sentinel import (  # noqa: E402
     ALBEDO_W, CACHE, MAX_CLOUD, NDVI_BARE, NDVI_VEG, SCENES_PER_YEAR,
-    scene_metrics, search,
+    grid_for, scene_arrays, scene_metrics, search,
 )
 
 ROOT = os.path.join(HERE, "..")
@@ -60,7 +69,13 @@ OUT = os.path.join(ROOT, "data", "dc-urs", "sentinel.json")
 def ward(name: str, lat: float, lon: float, footprint_m: int,
          years: list[int]) -> _types.SentinelWard:
     os.makedirs(CACHE, exist_ok=True)
-    cache = os.path.join(CACHE, f"{name}.json")
+    w = _types.WARDS[name]
+    mask = _wardmask.mask_grid(w, grid_for(footprint_m), rows="north-up")
+    # A ward without a polygon keeps its historical cache name, so its committed
+    # medians stay reproducible from the cache that made them; a masked ward's
+    # name carries its window and the mask, so a moved ward misses and refetches.
+    key = name if mask is None else f"{name}-{footprint_m}m-{lat:.6f}-{lon:.6f}-polygon"
+    cache = os.path.join(CACHE, f"{key}.json")
     if os.path.exists(cache):
         with open(cache) as fh:
             annual = json.load(fh)
@@ -71,17 +86,32 @@ def ward(name: str, lat: float, lon: float, footprint_m: int,
         if str(y) in annual:
             continue
         feats = search(lat, lon, y, footprint_m)
-        vals = []
+        vals: list[tuple[float, float]] = []
+        sq: list[tuple[float, float]] = []
         for f in feats:
-            m = scene_metrics(f, lat, lon, footprint_m)
-            if m:
-                vals.append(m)
+            if mask is None:
+                m = scene_metrics(f, lat, lon, footprint_m)
+                if m:
+                    vals.append(m)
+                continue
+            # ONE read per scene, reduced twice: the polygon and the square.
+            got = scene_arrays(f, lat, lon, footprint_m)
+            if got is None:
+                continue
+            ndvi_a, alb_a = got
+            if not np.isfinite(ndvi_a[mask]).any():
+                continue
+            vals.append((float(np.nanmedian(ndvi_a[mask])), float(np.nanmedian(alb_a[mask]))))
+            sq.append((float(np.nanmedian(ndvi_a)), float(np.nanmedian(alb_a))))
         if vals:
             annual[str(y)] = {
                 "ndvi": float(np.median([v[0] for v in vals])),
                 "albedo": float(np.median([v[1] for v in vals])),
                 "scenes": len(vals),
             }
+            if sq:
+                annual[str(y)]["square_ndvi"] = float(np.median([v[0] for v in sq]))
+                annual[str(y)]["square_albedo"] = float(np.median([v[1] for v in sq]))
             print(f"    {name} {y}: {len(vals)} scenes  NDVI {annual[str(y)]['ndvi']:.3f}"
                   f"  albedo {annual[str(y)]['albedo']:.3f}")
         else:
@@ -97,7 +127,21 @@ def ward(name: str, lat: float, lon: float, footprint_m: int,
     ndvis = np.array([u["ndvi"] for u in used])
     ndvi_mean = float(ndvis.mean())
     fvc = float(np.clip((ndvi_mean - NDVI_BARE) / (NDVI_VEG - NDVI_BARE), 0, 1))
-    return {
+    extra: dict[str, object] = {}
+    if mask is not None:
+        sq_ndvi = np.array([u["square_ndvi"] for u in used])
+        sq_mean = float(sq_ndvi.mean())
+        extra = {
+            "domain": (f"KMC Ward {_wardmask.POLYGONS[name][1]} polygon "
+                       f"({int(mask.sum()):,} of {mask.size:,} 10 m cells, by cell centre)"),
+            "square": {
+                "ndvi_mean": round(sq_mean, 4),
+                "ndvi_std": round(float(sq_ndvi.std(ddof=1)), 4),
+                "fvc": round(float(np.clip((sq_mean - NDVI_BARE) / (NDVI_VEG - NDVI_BARE), 0, 1)), 4),
+                "albedo": round(float(np.median([u["square_albedo"] for u in used])), 4),
+            },
+        }
+    rec: _types.SentinelWard = {
         "ndvi_mean": round(ndvi_mean, 4),
         "ndvi_std": round(float(ndvis.std(ddof=1)), 4),
         "fvc": round(fvc, 4),
@@ -114,6 +158,10 @@ def ward(name: str, lat: float, lon: float, footprint_m: int,
             scenes=int(annual[str(y)]["scenes"]),
         ) for y in years if str(y) in annual},
     }
+    if extra:
+        rec["domain"] = str(extra["domain"])
+        rec["square"] = cast(dict[str, float], extra["square"])
+    return rec
 
 
 def main() -> None:
